@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { EngineClient } from '@neko/neko-client';
 import type {
+  ContentAccessRequest,
+  ContentEngineSource,
   EngineSceneNodeSnapshot,
   EngineSceneSnapshot,
   EngineVec3,
@@ -30,6 +32,7 @@ import {
 } from '@neko/shared';
 import {
   createProjectSnapshotPackage,
+  createHostContentAccessRuntime,
   createFocusedWebviewRegistry,
   generateDefaultCubeGlb,
   generateHumanoidGlb,
@@ -38,6 +41,7 @@ import {
   normalizeVSCodeProjectSourceAddRequest,
   updateWebviewKeyboardEditableOwner,
   type FocusedWebviewDisposable,
+  type ContentAccessService,
   type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
 import {
@@ -109,6 +113,7 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<
   private panelGeneration = 0;
   private lastSceneSnapshot: EngineSceneSnapshot | undefined;
   private activeModelPath: string | undefined;
+  private modelContentAccess: ContentAccessService | undefined;
   private readonly focusedWebviews: IFocusedWebviewRegistry;
 
   constructor(
@@ -1093,11 +1098,14 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<
     if (!this.isPanelCurrent(webviewPanel, generation)) return false;
 
     try {
-      const data = await client.withRegisteredFile({ filePath, purpose: 'model' }, (registered) =>
-        client.loadModel({ token: registered.token }),
-      );
+      const source = await this.resolveModelEngineSource(filePath, {
+        purpose: 'model',
+        caller: 'neko-model.load-model',
+        mimeHint: modelMimeHint(filePath),
+      });
+      const data = await client.loadModel({ token: source.token });
       if (!this.rememberSceneSnapshot(data, 'loadModel')) return false;
-      this.activeModelPath = filePath;
+      this.activeModelPath = source.sourcePath ?? filePath;
       void this.postToPanel(webviewPanel, generation, {
         type: 'sceneSnapshot',
         snapshot: data,
@@ -1428,9 +1436,8 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<
   private async registerEnvironmentSource(
     placement: EnvironmentPlacement,
   ): Promise<NonNullable<EnvironmentPatch['source']>> {
-    const client = await this.ensureEngineClient();
     const uri = vscode.Uri.parse(placement.sourceUri ?? placement.sourceAssetId);
-    if (!client || uri.scheme !== 'file') {
+    if (uri.scheme !== 'file') {
       return {
         id: placement.sourceAssetId,
         uri: placement.sourceUri,
@@ -1439,14 +1446,14 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<
     }
 
     try {
-      const registered = await client.registerFile({
-        filePath: uri.fsPath,
+      const source = await this.resolveModelEngineSource(uri.fsPath, {
         purpose: 'preview',
+        caller: 'neko-model.environment-source',
         mimeHint: 'image/*',
       });
       return {
-        id: registered.token,
-        uri: registered.rangeUrl,
+        id: source.token,
+        uri: source.uri,
         kind: 'file-token',
       };
     } catch (error) {
@@ -1457,6 +1464,70 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<
         kind: 'asset-handle',
       };
     }
+  }
+
+  private async resolveModelEngineSource(
+    filePath: string,
+    options: {
+      readonly purpose: 'model' | 'preview';
+      readonly caller: string;
+      readonly mimeHint?: string;
+    },
+  ): Promise<ContentEngineSource> {
+    const contentAccess = this.getModelContentAccess(filePath);
+    const result = await contentAccess.resolve({
+      ref: { kind: 'file', path: filePath },
+      intent: 'interactive-preview',
+      target: 'engine-source',
+      caller: options.caller,
+      metadata: {
+        enginePurpose: options.purpose,
+        ...(options.mimeHint ? { mimeType: options.mimeHint } : {}),
+      },
+    });
+    if (result.status !== 'ready' || !result.engineSource) {
+      throw new Error(result.error ?? 'Model source could not be registered with the engine.');
+    }
+    return result.engineSource;
+  }
+
+  private getModelContentAccess(filePath: string): ContentAccessService {
+    if (this.modelContentAccess) return this.modelContentAccess;
+    this.modelContentAccess = createHostContentAccessRuntime({
+      workspaceRoot:
+        vscode.workspace.getWorkspaceFolder?.(vscode.Uri.file(filePath))?.uri.fsPath ??
+        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
+        path.dirname(filePath),
+      sourceFileProvider: {
+        engineSourceResolver: ({ request, path: resolvedPath }) =>
+          this.createModelEngineSource(request, resolvedPath),
+      },
+      documentEntryProvider: { enabled: false },
+      ingest: { enabled: false },
+      logger,
+    }).contentAccess;
+    return this.modelContentAccess;
+  }
+
+  private async createModelEngineSource(
+    request: ContentAccessRequest,
+    filePath: string,
+  ): Promise<ContentEngineSource> {
+    const client = await this.ensureEngineClient();
+    if (!client) {
+      throw new Error('Neko Engine is not available for model source registration.');
+    }
+    const registered = await client.registerFile({
+      filePath,
+      purpose: readModelEnginePurpose(request),
+      mimeHint: readStringMetadata(request.metadata, 'mimeType'),
+    });
+    return {
+      token: registered.token,
+      sourcePath: filePath,
+      uri: registered.rangeUrl,
+      runtimeOnly: true,
+    };
   }
 
   private rememberSceneSnapshot(
@@ -1881,6 +1952,27 @@ function normalizeModelEditorState(value: unknown): Record<string, unknown> {
 
 function isModelEditorLevelKeyboardAction(action: string): boolean {
   return MODEL_EDITOR_LEVEL_KEYBOARD_ACTIONS.has(action);
+}
+
+function modelMimeHint(filePath: string): string | undefined {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.glb') return 'model/gltf-binary';
+  if (ext === '.gltf') return 'model/gltf+json';
+  if (ext === '.vrm') return 'model/vrm';
+  return undefined;
+}
+
+function readModelEnginePurpose(request: ContentAccessRequest): 'model' | 'preview' {
+  const purpose = readStringMetadata(request.metadata, 'enginePurpose');
+  return purpose === 'preview' ? 'preview' : 'model';
+}
+
+function readStringMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function normalizeViteAssetPath(value: string | undefined): string | undefined {

@@ -16,7 +16,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import type { AssetEntity, AssetVariant, VariantComparisonResult } from '@neko/shared';
 import {
-  createDefaultLocalResourceAccessService,
+  createHostContentAccessRuntime,
   injectLocaleAttribute,
   type LocalResourceAccessService,
 } from '@neko/shared/vscode/extension';
@@ -108,10 +108,17 @@ export class AssetVariantDiffEditorProvider implements vscode.CustomReadonlyEdit
     sessionFactory?: IAssetVariantDiffSessionFactory,
   ) {
     this.sessionFactory = sessionFactory ?? new AssetVariantDiffSessionFactory(compareVariants);
-    this.localResourceAccess = createDefaultLocalResourceAccessService({
+    const contentRuntime = createHostContentAccessRuntime({
       extensionUri: context.extensionUri,
       context,
+      sourceFileProvider: { enabled: false },
+      documentEntryProvider: { enabled: false },
+      ingest: { enabled: false },
     });
+    if (!contentRuntime.localResourceAccess) {
+      throw new Error('Asset variant diff editor requires LocalResourceAccessService.');
+    }
+    this.localResourceAccess = contentRuntime.localResourceAccess;
     // Restore persisted comparison states
     this.restoreComparisonStates();
   }

@@ -10,8 +10,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import type { EngineClient } from '@neko/neko-client';
 import {
-  HostContentAccessService,
-  SourceFileContentAccessProvider,
+  createHostContentAccessRuntime,
   type ContentAccessService,
   type LocalResourceAccessService,
 } from '@neko/shared/vscode/extension';
@@ -804,7 +803,9 @@ function isStructuredCloneByteRecord(data: unknown): data is Record<string, numb
 }
 
 function createFileRangeContentAccessService(projectRoot: string): ContentAccessService {
-  return new HostContentAccessService({
-    providers: [new SourceFileContentAccessProvider({ projectRoot })],
-  });
+  return createHostContentAccessRuntime({
+    workspaceRoot: projectRoot,
+    documentEntryProvider: { enabled: false },
+    ingest: { enabled: false },
+  }).contentAccess;
 }

@@ -342,7 +342,8 @@ describe('intent-aware engine and export boundaries', () => {
   it('keeps export source resolution and output staging behind content services', () => {
     expect(exportServiceSource).toContain("intent: 'final-export'");
     expect(exportServiceSource).toContain("mode: 'stage-export'");
-    expect(exportServiceSource).toContain('ExportStagingContentIngestProvider');
+    expect(exportServiceSource).toContain('createHostContentAccessRuntime');
+    expect(exportServiceSource).toContain('includeGeneratedOutput: false');
   });
 });
 

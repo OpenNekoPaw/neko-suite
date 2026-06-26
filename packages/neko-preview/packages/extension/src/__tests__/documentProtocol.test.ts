@@ -422,7 +422,10 @@ describe('PreviewFileServer retry logic source contract (NKP-006)', () => {
     expect(source).toContain('private async withClientRetry');
     // Retry logic: invalidates port on connection failure
     expect(source).toContain('this.invalidatePort()');
-    // PreviewFileServer is now a compatibility wrapper around EngineClient file access.
+    // PreviewFileServer resolves source files through shared content access before
+    // registering Engine-owned runtime tokens.
+    expect(source).toContain('createHostContentAccessRuntime');
+    expect(source).toContain("target: 'engine-source'");
     expect(source).toContain('client.registerFile');
     expect(source).toContain('client.readFileRange');
     expect(source).toContain('client.readFileEntry');

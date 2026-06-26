@@ -12,7 +12,7 @@ import {
   type ProjectFileSaveReason,
 } from '@neko/shared';
 import {
-  createDefaultLocalResourceAccessService,
+  createHostContentAccessRuntime,
   requestWebviewProjectSnapshot,
   createProjectSnapshotPackage,
   type LocalResourceAccessService,
@@ -56,11 +56,18 @@ export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoPro
   private readonly localResourceAccess: LocalResourceAccessService;
 
   constructor(private readonly context: vscode.ExtensionContext) {
-    this.localResourceAccess = createDefaultLocalResourceAccessService({
+    const contentRuntime = createHostContentAccessRuntime({
       extensionUri: context.extensionUri,
       context,
+      sourceFileProvider: { enabled: false },
+      documentEntryProvider: { enabled: false },
+      ingest: { enabled: false },
       logger,
     });
+    if (!contentRuntime.localResourceAccess) {
+      throw new Error('Cut video editor requires LocalResourceAccessService.');
+    }
+    this.localResourceAccess = contentRuntime.localResourceAccess;
     this.context.subscriptions.push(this.onDidRegisterExportServiceEmitter);
   }
 

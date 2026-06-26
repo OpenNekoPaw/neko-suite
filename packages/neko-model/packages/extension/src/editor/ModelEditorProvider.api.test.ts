@@ -471,13 +471,14 @@ describe('ModelEditorProvider model API mapping', () => {
       {} as never,
     );
     const loadModel = vi.fn(async () => createSceneSnapshot());
-    const withRegisteredFile = vi.fn(async (_file, callback) =>
-      callback({ token: 'registered-model' }),
-    );
+    const registerFile = vi.fn(async () => ({
+      token: 'registered-model',
+      rangeUrl: 'http://127.0.0.1/files/registered-model',
+    }));
     internals.activeWebviewPanel = panel;
     internals.activeDocument = document;
     internals.panelGeneration = 1;
-    internals.engineClient = { loadModel, withRegisteredFile };
+    internals.engineClient = { loadModel, registerFile };
 
     await provider.importAsset(createUri('/workspace/assets/hero.glb') as never);
 
@@ -488,11 +489,23 @@ describe('ModelEditorProvider model API mapping', () => {
     expect(readProjectJson('/workspace/scenes/shot.nkm')).toMatchObject({
       model: { src: null },
     });
-    expect(withRegisteredFile).toHaveBeenCalledWith(
-      { filePath: '/workspace/assets/hero.glb', purpose: 'model' },
-      expect.any(Function),
-    );
+    expect(registerFile).toHaveBeenCalledWith({
+      filePath: '/workspace/assets/hero.glb',
+      purpose: 'model',
+      mimeHint: 'model/gltf-binary',
+    });
     expect(loadModel).toHaveBeenCalledWith({ token: 'registered-model' });
+  });
+
+  it('routes model and environment source registration through shared content access', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const source = fs.readFileSync(path.join(__dirname, 'ModelEditorProvider.ts'), 'utf-8');
+
+    expect(source).toContain('createHostContentAccessRuntime');
+    expect(source).toContain("target: 'engine-source'");
+    expect(source).toContain('resolveModelEngineSource');
+    expect(source).toContain('engineSourceResolver');
   });
 });
 
@@ -508,10 +521,11 @@ interface ModelEditorProviderInternals {
           snapshot: EngineSceneSnapshot;
           editorState: unknown;
         }>;
-        withRegisteredFile?: (
-          file: { filePath: string; purpose: string },
-          callback: (registered: { token: string }) => Promise<EngineSceneSnapshot>,
-        ) => Promise<EngineSceneSnapshot>;
+        registerFile?: (file: {
+          filePath: string;
+          purpose: string;
+          mimeHint?: string;
+        }) => Promise<{ token: string; rangeUrl?: string }>;
         loadModel?: (input: { token: string }) => Promise<EngineSceneSnapshot>;
         updateEditorCamera?: (
           position: [number, number, number],

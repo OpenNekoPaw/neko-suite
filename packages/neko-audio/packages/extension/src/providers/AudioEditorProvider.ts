@@ -19,7 +19,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import {
-  createDefaultLocalResourceAccessService,
+  createHostContentAccessRuntime,
   createFocusedWebviewRegistry,
   createProjectSnapshotPackage,
   type IFocusedWebviewRegistry,
@@ -135,10 +135,17 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
     });
 
     // Configure webview
-    await createDefaultLocalResourceAccessService({
+    const contentRuntime = createHostContentAccessRuntime({
       extensionUri: this._extensionUri,
-      includeExtensionCache: false,
-    }).configureWebview(webviewPanel.webview, {
+      localResourceAccessOptions: { includeExtensionCache: false },
+      sourceFileProvider: { enabled: false },
+      documentEntryProvider: { enabled: false },
+      ingest: { enabled: false },
+    });
+    if (!contentRuntime.localResourceAccess) {
+      throw new Error('Audio editor requires LocalResourceAccessService.');
+    }
+    await contentRuntime.localResourceAccess.configureWebview(webviewPanel.webview, {
       enableScripts: true,
     });
 

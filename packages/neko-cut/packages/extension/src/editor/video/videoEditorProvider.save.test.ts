@@ -77,9 +77,20 @@ vi.mock('@neko/shared/vscode/extension', async () => {
   );
   return {
     ...actual,
-    createDefaultLocalResourceAccessService: vi.fn(() => ({
-      configureWebview: vi.fn(async () => undefined),
-      createSyncProjector: vi.fn(),
+    createHostContentAccessRuntime: vi.fn(() => ({
+      localResourceAccess: {
+        configureWebview: vi.fn(async () => undefined),
+        createSyncProjector: vi.fn(),
+      },
+      contentAccess: {
+        resolve: vi.fn(async () => ({ status: 'unsupported-source' })),
+      },
+      contentIngest: {
+        ingest: vi.fn(async () => ({ status: 'unsupported-destination' })),
+      },
+      registerAccessProvider: vi.fn(),
+      registerIngestProvider: vi.fn(),
+      registerResourceCacheProvider: vi.fn(),
     })),
     requestWebviewProjectSnapshot: vi.fn(),
   };

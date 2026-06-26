@@ -315,8 +315,8 @@ describe('canvasEditorProvider message contracts', () => {
 
   describe('NKV-014: intent-aware content access boundaries', () => {
     it('routes resource preview projection through ContentAccessService', () => {
-      expect(providerSource).toContain('HostContentAccessService');
-      expect(providerSource).toContain('ResourceCacheContentAccessProvider');
+      expect(providerSource).toContain('createHostContentAccessRuntime');
+      expect(providerSource).toContain('this.createCanvasResourceCacheProviders(workspaceRoot)');
       expect(providerSource).toContain("intent: 'interactive-preview'");
       expect(providerSource).toContain("target: 'webview-uri'");
       expect(providerSource).toContain("materialization: 'if-missing'");
@@ -788,7 +788,7 @@ describe('canvasEditorProvider message contracts', () => {
 
   describe('NKV-013: document resource preview variants', () => {
     it('projects document resource refs before using authorized local-resource or Preview variant fallbacks', () => {
-      expect(providerSource).toContain('VSCodeResourceCacheService');
+      expect(providerSource).toContain('createHostContentAccessRuntime');
       expect(providerSource).not.toContain('LegacyResourceCacheProvider');
       expect(providerSource).toContain('os.homedir() || workspaceRoot');
       expect(providerSource).not.toContain('process.env.HOME');

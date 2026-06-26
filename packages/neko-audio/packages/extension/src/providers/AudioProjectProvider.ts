@@ -55,7 +55,7 @@ import {
   type WorkspaceMediaPathContext,
 } from '@neko/shared';
 import {
-  createDefaultLocalResourceAccessService,
+  createHostContentAccessRuntime,
   createFocusedWebviewRegistry,
   createProjectSnapshotPackage,
   createVSCodeProjectFileIoAdapter,
@@ -425,10 +425,17 @@ export class AudioProjectProvider
     });
 
     // Configure webview
-    await createDefaultLocalResourceAccessService({
+    const contentRuntime = createHostContentAccessRuntime({
       extensionUri: this._extensionUri,
-      includeExtensionCache: false,
-    }).configureWebview(webviewPanel.webview, {
+      localResourceAccessOptions: { includeExtensionCache: false },
+      sourceFileProvider: { enabled: false },
+      documentEntryProvider: { enabled: false },
+      ingest: { enabled: false },
+    });
+    if (!contentRuntime.localResourceAccess) {
+      throw new Error('Audio project editor requires LocalResourceAccessService.');
+    }
+    await contentRuntime.localResourceAccess.configureWebview(webviewPanel.webview, {
       enableScripts: true,
     });
 

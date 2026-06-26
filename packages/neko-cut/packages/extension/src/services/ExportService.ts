@@ -20,12 +20,9 @@ import * as path from 'path';
 import { EngineClient, type ActionRequest, type ActionResponse } from '@neko/neko-client';
 import type { ProjectData } from '@neko/shared';
 import {
-  HostContentAccessService,
-  HostContentIngestService,
-  SourceFileContentAccessProvider,
+  createHostContentAccessRuntime,
   type ContentAccessService,
   type ContentIngestService,
-  ExportStagingContentIngestProvider,
 } from '@neko/shared/vscode/extension';
 import { resolveMediaPath as resolveMediaPathHelper } from './tools/helpers';
 import { getLogger } from '../base';
@@ -1067,13 +1064,23 @@ export class ExportService implements vscode.Disposable {
 }
 
 function createExportContentAccessService(projectRoot: string): ContentAccessService {
-  return new HostContentAccessService({
-    providers: [new SourceFileContentAccessProvider({ projectRoot })],
-  });
+  return createHostContentAccessRuntime({
+    workspaceRoot: projectRoot,
+    documentEntryProvider: { enabled: false },
+    ingest: { enabled: false },
+  }).contentAccess;
 }
 
 function createExportContentIngestService(projectRoot: string): ContentIngestService {
-  return new HostContentIngestService({
-    providers: [new ExportStagingContentIngestProvider({ projectRoot })],
-  });
+  return createHostContentAccessRuntime({
+    workspaceRoot: projectRoot,
+    sourceFileProvider: { enabled: false },
+    documentEntryProvider: { enabled: false },
+    ingest: {
+      includeImportSource: false,
+      includeRegisterExistingSource: false,
+      includeGeneratedOutput: false,
+      includeCacheArtifact: false,
+    },
+  }).contentIngest;
 }

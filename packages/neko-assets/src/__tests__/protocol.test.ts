@@ -129,6 +129,15 @@ describe('extension.ts -- entity integration boundary', () => {
   });
 });
 
+describe('extension.ts -- content access cache boundary', () => {
+  it('exposes ResourceRef-backed thumbnail visuals in addition to legacy path lookup', () => {
+    expect(extensionSource).toContain('createThumbnailResourceRef: async');
+    expect(extensionSource).toContain('getThumbnailVisual: async');
+    expect(extensionSource).toContain('createFileThumbnailResourceRef');
+    expect(extensionSource).toContain("status: generated?.path ? 'ready' : 'missing'");
+  });
+});
+
 describe('extension.ts -- baseline command function exists', () => {
   it('defines registerBaselineCommands as a function', () => {
     expect(extensionSource).toMatch(/function registerBaselineCommands/);

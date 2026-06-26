@@ -12,8 +12,11 @@
  *   await server.unregisterFile(token);
  */
 
+import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { EngineClient, type RegisteredFile } from '@neko/neko-client';
+import { EngineClient } from '@neko/neko-client';
+import type { ContentAccessRequest, ContentEngineSource } from '@neko/shared';
+import { createHostContentAccessRuntime } from '@neko/shared/vscode/extension';
 import { getLogger } from '../../utils/logger';
 import {
   getPreviewAllowedRoots,
@@ -262,10 +265,61 @@ class PreviewFileServer {
   private async registerEngineFile(
     filePath: string,
     purpose: 'document' | 'preview',
-  ): Promise<RegisteredFile> {
-    return this.withClientRetry((client) => client.registerFile({ filePath, purpose }));
+  ): Promise<{ readonly token: string }> {
+    const access = createHostContentAccessRuntime({
+      workspaceRoot:
+        vscode.workspace.getWorkspaceFolder?.(vscode.Uri.file(filePath))?.uri.fsPath ??
+        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
+        path.dirname(filePath),
+      sourceFileProvider: {
+        engineSourceResolver: ({ request, path: resolvedPath }) =>
+          this.createEngineSource(request, resolvedPath, purpose),
+      },
+      documentEntryProvider: { enabled: false },
+      ingest: { enabled: false },
+      logger,
+    });
+    const result = await access.contentAccess.resolve({
+      ref: { kind: 'file', path: filePath },
+      intent: 'interactive-preview',
+      target: 'engine-source',
+      caller: 'neko-preview.document-file-server',
+      metadata: { enginePurpose: purpose },
+    });
+    if (result.status !== 'ready' || !result.engineSource?.token) {
+      throw new Error(result.error ?? 'Preview file could not be registered with the engine.');
+    }
+    return { token: result.engineSource.token };
+  }
+
+  private async createEngineSource(
+    request: ContentAccessRequest,
+    filePath: string,
+    purpose: 'document' | 'preview',
+  ): Promise<ContentEngineSource> {
+    const registered = await this.withClientRetry((client) =>
+      client.registerFile({
+        filePath,
+        purpose,
+        mimeHint: readStringMetadata(request.metadata, 'mimeType'),
+      }),
+    );
+    return {
+      token: registered.token,
+      sourcePath: filePath,
+      uri: registered.rangeUrl,
+      runtimeOnly: true,
+    };
   }
 }
 
 /** Singleton shared across all document providers in this extension host. */
 export const previewFileServer = new PreviewFileServer();
+
+function readStringMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}

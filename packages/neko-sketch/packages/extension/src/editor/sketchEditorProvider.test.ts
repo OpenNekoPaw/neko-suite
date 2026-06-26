@@ -100,6 +100,18 @@ vi.mock('vscode', () => ({
 
 vi.mock('@neko/shared/vscode/extension', () => ({
   injectLocaleAttribute: () => '',
+  createHostContentAccessRuntime: () => ({
+    localResourceAccess: {
+      configureWebview: vi.fn(async (webview: { options?: Record<string, unknown> }) => {
+        webview.options = { ...(webview.options ?? {}), enableScripts: true };
+      }),
+    },
+    contentAccess: { resolve: vi.fn() },
+    contentIngest: { ingest: vi.fn() },
+    registerAccessProvider: vi.fn(),
+    registerIngestProvider: vi.fn(),
+    registerResourceCacheProvider: vi.fn(),
+  }),
   createVSCodeProjectSourceAddRequest: (input: {
     requestId: string;
     kind: string;
@@ -321,6 +333,16 @@ describe('SketchEditorProvider AI context snapshot', () => {
     expect(postMessage).toHaveBeenCalledWith({ type: 'ai:cancel', runId: 'run-3' });
     expect(mockState.deletedUris).toContain('file:///tmp/neko-sketch/sketch-ai/run-3');
     await expect(provider.cancelAIRun('run-3')).resolves.toBe(false);
+  });
+
+  it('routes Sketch AI runtime cache roots through shared content access runtime', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const source = fs.readFileSync(path.join(__dirname, 'sketchEditorProvider.ts'), 'utf-8');
+
+    expect(source).toContain('createHostContentAccessRuntime');
+    expect(source).toContain('neko-sketch-ai-runtime-cache');
+    expect(source).toContain('configureWebview(webviewPanel.webview');
   });
 
   it('reports an AI error when cancelling an unknown run', async () => {

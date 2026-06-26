@@ -9,14 +9,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'path';
 import {
-  createDefaultLocalResourceAccessService,
   createDocumentResourceRefFromArchiveRef,
+  createHostContentAccessRuntime,
   createFocusedWebviewRegistry,
   DocumentResourceCacheProvider,
   GeneratedAssetResourceCacheProvider,
-  HostContentAccessService,
   PreviewVariantResourceCacheProvider,
-  ResourceCacheContentAccessProvider,
   ThumbnailResourceCacheProvider,
   createVSCodeWorkspaceMediaPathContext,
   createProjectSnapshotPackage,
@@ -30,11 +28,11 @@ import {
   createVSCodeProjectSourceAddRequest,
   normalizeVSCodeProjectSourceAddRequest,
   updateWebviewKeyboardEditableOwner,
-  VSCodeResourceCacheService,
   type IFocusedWebviewRegistry,
   type ContentAccessService,
   type LocalResourceAccessService,
   type PreviewVariantResourceApi,
+  type ResourceCacheProvider,
   type ResourceCacheService,
 } from '@neko/shared/vscode/extension';
 import {
@@ -769,13 +767,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         localResourceRoots: [...this.getNarrativePreviewLocalResourceRoots(sourceCanvasUri)],
       }),
     });
-    this.localResourceAccess = createDefaultLocalResourceAccessService({
-      extensionUri: context.extensionUri,
-      context,
-      logger,
-    });
-    this.resourceCache = this.createProjectResourceCacheService();
-    this.contentAccess = this.createContentAccessService();
+    const contentRuntime = this.createCanvasContentAccessRuntime(context);
+    this.localResourceAccess = contentRuntime.localResourceAccess;
+    this.resourceCache = contentRuntime.resourceCache;
+    this.contentAccess = contentRuntime.contentAccess;
     this.subscribeToEntityChangeEvents();
   }
 
@@ -792,77 +787,90 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     this._onDidChangeCustomDocument.dispose();
   }
 
-  private createProjectResourceCacheService(): ResourceCacheService | undefined {
+  private createCanvasContentAccessRuntime(context: vscode.ExtensionContext): {
+    readonly localResourceAccess: LocalResourceAccessService;
+    readonly resourceCache?: ResourceCacheService;
+    readonly contentAccess: ContentAccessService;
+  } {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!workspaceRoot) {
-      return undefined;
-    }
-    const layout = resolveStorageLayout(workspaceRoot, os.homedir() || workspaceRoot);
-    return new VSCodeResourceCacheService({
-      cacheRoot: layout.project.local.cache.resources,
-      manifestPath: layout.project.local.cache.resourceManifest,
-      projectRoot: workspaceRoot,
-      localResourceAccess: this.localResourceAccess,
-      providers: [
-        new GeneratedAssetResourceCacheProvider({
-          pathResolver: createWorkspacePathResolver(workspaceRoot),
-          projectRoot: workspaceRoot,
-        }),
-        new ThumbnailResourceCacheProvider({
-          generator: {
-            generate: async (filePath, options) => {
-              const api = await this.getNekoAssetsApi();
-              const visual = await api?.getThumbnailVisual?.(filePath, {
-                role: 'thumbnail',
-                width: options.maxWidth,
-                height: options.maxHeight,
-                mimeType: 'image/jpeg',
-              });
-              const thumbnailPath =
-                visual?.projectedUri && !isWebviewOrRemoteUri(visual.projectedUri)
-                  ? visual.projectedUri
-                  : await api?.getThumbnailPath(filePath);
-              return thumbnailPath
-                ? {
-                    path: thumbnailPath,
-                    width: options.maxWidth,
-                    height: options.maxHeight,
-                    mimeType: 'image/jpeg',
-                  }
-                : null;
-            },
-          },
-        }),
-        new PreviewVariantResourceCacheProvider({
-          preview: this.createLazyPreviewVariantResourceApi(),
-        }),
-        new DocumentResourceCacheProvider({
-          reader: {
-            readRange: async () => {
-              throw new Error('Canvas document range reader is unavailable.');
-            },
-          },
-          entryReader: createCanvasDocumentEntryReader(workspaceRoot),
-          enableRangeFallback: false,
-        }),
-      ],
+    const layout = workspaceRoot
+      ? resolveStorageLayout(workspaceRoot, os.homedir() || workspaceRoot)
+      : undefined;
+    const runtime = createHostContentAccessRuntime({
+      extensionUri: context.extensionUri,
+      context,
+      workspaceRoot,
+      resourceCacheOptions:
+        workspaceRoot && layout
+          ? {
+              cacheRoot: layout.project.local.cache.resources,
+              manifestPath: layout.project.local.cache.resourceManifest,
+              projectRoot: workspaceRoot,
+              providers: this.createCanvasResourceCacheProviders(workspaceRoot),
+            }
+          : undefined,
+      sourceFileProvider: { enabled: false },
+      documentEntryProvider: { enabled: false },
+      ingest: { enabled: false },
+      webviewResolver: (request) => this.resolveContentAccessWebview(request),
       logger,
     });
+    if (!runtime.localResourceAccess) {
+      throw new Error('Canvas content access runtime requires LocalResourceAccessService.');
+    }
+    return {
+      localResourceAccess: runtime.localResourceAccess,
+      ...(runtime.resourceCache ? { resourceCache: runtime.resourceCache } : {}),
+      contentAccess: runtime.contentAccess,
+    };
   }
 
-  private createContentAccessService(): ContentAccessService | undefined {
-    if (!this.resourceCache) {
-      return undefined;
-    }
-    return new HostContentAccessService({
-      providers: [
-        new ResourceCacheContentAccessProvider({
-          resourceCache: this.resourceCache,
-          webviewResolver: (request) => this.resolveContentAccessWebview(request),
-        }),
-      ],
-      logger,
-    });
+  private createCanvasResourceCacheProviders(
+    workspaceRoot: string,
+  ): readonly ResourceCacheProvider[] {
+    return [
+      new GeneratedAssetResourceCacheProvider({
+        pathResolver: createWorkspacePathResolver(workspaceRoot),
+        projectRoot: workspaceRoot,
+      }),
+      new ThumbnailResourceCacheProvider({
+        generator: {
+          generate: async (filePath, options) => {
+            const api = await this.getNekoAssetsApi();
+            const visual = await api?.getThumbnailVisual?.(filePath, {
+              role: 'thumbnail',
+              width: options.maxWidth,
+              height: options.maxHeight,
+              mimeType: 'image/jpeg',
+            });
+            const thumbnailPath =
+              visual?.projectedUri && !isWebviewOrRemoteUri(visual.projectedUri)
+                ? visual.projectedUri
+                : await api?.getThumbnailPath(filePath);
+            return thumbnailPath
+              ? {
+                  path: thumbnailPath,
+                  width: options.maxWidth,
+                  height: options.maxHeight,
+                  mimeType: 'image/jpeg',
+                }
+              : null;
+          },
+        },
+      }),
+      new PreviewVariantResourceCacheProvider({
+        preview: this.createLazyPreviewVariantResourceApi(),
+      }),
+      new DocumentResourceCacheProvider({
+        reader: {
+          readRange: async () => {
+            throw new Error('Canvas document range reader is unavailable.');
+          },
+        },
+        entryReader: createCanvasDocumentEntryReader(workspaceRoot),
+        enableRangeFallback: false,
+      }),
+    ];
   }
 
   private resolveContentAccessWebview(request: ContentAccessRequest): vscode.Webview | undefined {

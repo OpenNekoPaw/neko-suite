@@ -18,6 +18,7 @@ import {
 } from '@neko/shared';
 import {
   createProjectSnapshotPackage,
+  createHostContentAccessRuntime,
   createFocusedWebviewRegistry,
   createVSCodeProjectSourceAddRequest,
   createVSCodeProjectFileIoAdapter,
@@ -255,13 +256,35 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
     this.context.subscriptions.push(focusedRegistration);
 
-    webviewPanel.webview.options = {
+    const contentRuntime = createHostContentAccessRuntime({
+      extensionUri: this.context.extensionUri,
+      context: this.context,
+      localResourceAccessOptions: {
+        includeWorkspaceCache: false,
+        extraRootProviders: [
+          {
+            id: 'neko-sketch-ai-runtime-cache',
+            getRoots: () => [
+              {
+                uri: this.getAIResultCacheRoot(),
+                kind: 'extension-cache' as const,
+                providerId: 'neko-sketch-ai-runtime-cache',
+              },
+            ],
+          },
+        ],
+      },
+      sourceFileProvider: { enabled: false },
+      documentEntryProvider: { enabled: false },
+      ingest: { enabled: false },
+      logger,
+    });
+    if (!contentRuntime.localResourceAccess) {
+      throw new Error('Sketch editor requires LocalResourceAccessService.');
+    }
+    await contentRuntime.localResourceAccess.configureWebview(webviewPanel.webview, {
       enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview'),
-        this.getAIResultCacheRoot(),
-      ],
-    };
+    });
 
     webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview, document.uri);
 
@@ -772,6 +795,8 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     const fileUri = vscode.Uri.joinPath(runDir, fileName);
     await vscode.workspace.fs.writeFile(fileUri, source.bytes);
 
+    // Runtime-only extension-private cache: Webview applies the image and the
+    // Extension deletes the run directory after apply/cancel/dispose.
     return {
       kind: 'webviewUri',
       ref: webview.asWebviewUri(fileUri).toString(),
@@ -796,6 +821,8 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     const fileUri = vscode.Uri.joinPath(runDir, createAIResultFileName(params.name, mimeType));
     await vscode.workspace.fs.writeFile(fileUri, Buffer.from(params.base64Data, 'base64'));
 
+    // Runtime-only provider input for external AI calls. It must not be written
+    // into .nks project facts or downstream durable payloads.
     return {
       kind: 'fileUri',
       ref: fileUri.toString(),
