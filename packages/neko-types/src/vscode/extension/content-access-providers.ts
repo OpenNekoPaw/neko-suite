@@ -29,6 +29,7 @@ import {
   type ResourceVariantRequest,
 } from '../../types';
 import type { LocalResourceAccessService } from './local-resource-access';
+import { readStringMetadata } from './metadata';
 import type { ResourceCacheService } from './resource-cache-service';
 
 export interface ContentAccessFileOps {
@@ -1178,14 +1179,6 @@ function contractDurableSourcePath(
 
 function normalizePath(filePath: string): string {
   return filePath.replace(/\\/g, '/').replace(/\/+$/g, '');
-}
-
-function readStringMetadata(
-  metadata: Record<string, unknown> | undefined,
-  key: string,
-): string | undefined {
-  const value = metadata?.[key];
-  return typeof value === 'string' ? value : undefined;
 }
 
 function assertNever(value: never): never {

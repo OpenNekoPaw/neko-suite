@@ -494,6 +494,43 @@ describe('resource cache service', () => {
     });
   });
 
+  it('flushes queued touches on dispose', async () => {
+    let now = '2026-06-05T00:00:00.000Z';
+    const absolutePath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
+    const provider = createProvider(async (input) => {
+      fsOps.files.set(absolutePath, 'image-bytes');
+      return {
+        status: 'ready',
+        ref: input.ref,
+        variant: input.variant,
+        absolutePath,
+        sizeBytes: 128,
+      };
+    });
+    const service = createService({
+      providers: [provider],
+      now: () => now,
+      touchFlushIntervalMs: 60_000,
+    });
+
+    await service.ensure(ref, variant);
+    const writeCountAfterEnsure = fsOps.writeCalls.length;
+    now = '2026-06-05T00:00:01.000Z';
+    await service.resolve(ref, variant);
+
+    expect(fsOps.writeCalls).toHaveLength(writeCountAfterEnsure);
+
+    await service.dispose();
+
+    expect(fsOps.writeCalls).toHaveLength(writeCountAfterEnsure + 1);
+    const manifest = JSON.parse(
+      fsOps.files.get('/workspace/.neko/.cache/resources/manifest.json') ?? '{}',
+    );
+    expect(manifest.entries[ref.id].variants[0]).toMatchObject({
+      lastAccessedAt: '2026-06-05T00:00:01.000Z',
+    });
+  });
+
   it('does not write the manifest when queued touches no longer match entries', async () => {
     const absolutePath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
     const provider = createProvider(async (input) => {

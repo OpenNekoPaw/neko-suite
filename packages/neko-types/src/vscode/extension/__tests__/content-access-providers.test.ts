@@ -778,6 +778,7 @@ function createResourceCache(input: {
       skippedCount: 0,
       skippedReasons: {},
     })),
+    dispose: vi.fn(async () => undefined),
   };
 }
 

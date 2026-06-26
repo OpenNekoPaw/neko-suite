@@ -17,6 +17,7 @@ import {
 import {
   createDocumentResourceRefFromArchiveRef,
   createHostContentAccessRuntime,
+  readStringMetadata,
   type ContentAccessService,
   type LocalResourceAccessService,
   type ResourceCacheService,
@@ -633,7 +634,7 @@ function extractSourcePath(ref: ContentSourceRef): string | undefined {
     case 'runtime':
       return ref.source ? extractSourcePath(ref.source) : undefined;
     default:
-      return undefined;
+      return assertNever(ref);
   }
 }
 
@@ -737,14 +738,6 @@ function readEnginePurpose(request: ContentAccessRequest): FileAccessPurpose {
     : 'agent-attachment';
 }
 
-function readStringMetadata(
-  metadata: Record<string, unknown> | undefined,
-  key: string,
-): string | undefined {
-  const value = metadata?.[key];
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
-}
-
 function createDocumentEntryVariant(ref: DocumentArchiveResourceRef): ResourceVariantRequest {
   return {
     role: 'document-entry',
@@ -786,6 +779,10 @@ function readDocumentArchiveRef(source: ContentSourceRef): DocumentArchiveResour
 
 function isContentDocumentSourceRef(source: ContentSourceRef): source is ContentDocumentSourceRef {
   return !isResourceRef(source) && source.kind === 'document';
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled content source ref kind: ${JSON.stringify(value)}`);
 }
 
 function sanitizeDocumentContentMetadata(

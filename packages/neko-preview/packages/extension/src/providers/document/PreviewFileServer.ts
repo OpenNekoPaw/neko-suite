@@ -16,7 +16,11 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { EngineClient } from '@neko/neko-client';
 import type { ContentAccessRequest, ContentEngineSource } from '@neko/shared';
-import { createHostContentAccessRuntime } from '@neko/shared/vscode/extension';
+import {
+  createHostContentAccessRuntime,
+  readStringMetadata,
+  type ContentAccessService,
+} from '@neko/shared/vscode/extension';
 import { getLogger } from '../../utils/logger';
 import {
   getPreviewAllowedRoots,
@@ -51,6 +55,7 @@ export class UnresolvedPathVariableError extends Error {
 class PreviewFileServer {
   private _port: number | null = null;
   private _client: EngineClient | null = null;
+  private readonly _contentAccessByWorkspaceRoot = new Map<string, ContentAccessService>();
 
   /**
    * Resolve path variables via neko-assets command.
@@ -266,20 +271,7 @@ class PreviewFileServer {
     filePath: string,
     purpose: 'document' | 'preview',
   ): Promise<{ readonly token: string }> {
-    const access = createHostContentAccessRuntime({
-      workspaceRoot:
-        vscode.workspace.getWorkspaceFolder?.(vscode.Uri.file(filePath))?.uri.fsPath ??
-        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
-        path.dirname(filePath),
-      sourceFileProvider: {
-        engineSourceResolver: ({ request, path: resolvedPath }) =>
-          this.createEngineSource(request, resolvedPath, purpose),
-      },
-      documentEntryProvider: { enabled: false },
-      ingest: { enabled: false },
-      logger,
-    });
-    const result = await access.contentAccess.resolve({
+    const result = await this.getContentAccess(filePath).resolve({
       ref: { kind: 'file', path: filePath },
       intent: 'interactive-preview',
       target: 'engine-source',
@@ -292,15 +284,40 @@ class PreviewFileServer {
     return { token: result.engineSource.token };
   }
 
+  private getContentAccess(filePath: string): ContentAccessService {
+    const workspaceRoot = this.resolveWorkspaceRoot(filePath);
+    const existing = this._contentAccessByWorkspaceRoot.get(workspaceRoot);
+    if (existing) return existing;
+    const contentAccess = createHostContentAccessRuntime({
+      workspaceRoot,
+      sourceFileProvider: {
+        engineSourceResolver: ({ request, path: resolvedPath }) =>
+          this.createEngineSource(request, resolvedPath),
+      },
+      documentEntryProvider: { enabled: false },
+      ingest: { enabled: false },
+      logger,
+    }).contentAccess;
+    this._contentAccessByWorkspaceRoot.set(workspaceRoot, contentAccess);
+    return contentAccess;
+  }
+
+  private resolveWorkspaceRoot(filePath: string): string {
+    return (
+      vscode.workspace.getWorkspaceFolder?.(vscode.Uri.file(filePath))?.uri.fsPath ??
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
+      path.dirname(filePath)
+    );
+  }
+
   private async createEngineSource(
     request: ContentAccessRequest,
     filePath: string,
-    purpose: 'document' | 'preview',
   ): Promise<ContentEngineSource> {
     const registered = await this.withClientRetry((client) =>
       client.registerFile({
         filePath,
-        purpose,
+        purpose: readPreviewEnginePurpose(request),
         mimeHint: readStringMetadata(request.metadata, 'mimeType'),
       }),
     );
@@ -316,10 +333,7 @@ class PreviewFileServer {
 /** Singleton shared across all document providers in this extension host. */
 export const previewFileServer = new PreviewFileServer();
 
-function readStringMetadata(
-  metadata: Record<string, unknown> | undefined,
-  key: string,
-): string | undefined {
-  const value = metadata?.[key];
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+function readPreviewEnginePurpose(request: ContentAccessRequest): 'document' | 'preview' {
+  const purpose = readStringMetadata(request.metadata, 'enginePurpose');
+  return purpose === 'preview' ? 'preview' : 'document';
 }

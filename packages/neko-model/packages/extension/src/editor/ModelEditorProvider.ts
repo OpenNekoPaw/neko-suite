@@ -39,6 +39,7 @@ import {
   hasWebviewKeyboardEditableOwner,
   injectLocaleAttribute,
   normalizeVSCodeProjectSourceAddRequest,
+  readStringMetadata,
   updateWebviewKeyboardEditableOwner,
   type FocusedWebviewDisposable,
   type ContentAccessService,
@@ -1965,14 +1966,6 @@ function modelMimeHint(filePath: string): string | undefined {
 function readModelEnginePurpose(request: ContentAccessRequest): 'model' | 'preview' {
   const purpose = readStringMetadata(request.metadata, 'enginePurpose');
   return purpose === 'preview' ? 'preview' : 'model';
-}
-
-function readStringMetadata(
-  metadata: Record<string, unknown> | undefined,
-  key: string,
-): string | undefined {
-  const value = metadata?.[key];
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function normalizeViteAssetPath(value: string | undefined): string | undefined {

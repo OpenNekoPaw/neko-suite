@@ -425,8 +425,11 @@ describe('PreviewFileServer retry logic source contract (NKP-006)', () => {
     // PreviewFileServer resolves source files through shared content access before
     // registering Engine-owned runtime tokens.
     expect(source).toContain('createHostContentAccessRuntime');
+    expect(source).toContain('_contentAccessByWorkspaceRoot');
+    expect(source).toContain('this._contentAccessByWorkspaceRoot.get(workspaceRoot)');
     expect(source).toContain("target: 'engine-source'");
     expect(source).toContain('client.registerFile');
+    expect(source).toContain('purpose: readPreviewEnginePurpose(request)');
     expect(source).toContain('client.readFileRange');
     expect(source).toContain('client.readFileEntry');
     const retryCount = (source.match(/this\.withClientRetry/g) ?? []).length;

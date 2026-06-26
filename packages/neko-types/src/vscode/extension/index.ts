@@ -169,6 +169,7 @@ export {
   createVSCodeWorkspacePathResolver,
 } from './workspace-media-path';
 export type { VSCodeWorkspaceMediaPathContextInput } from './workspace-media-path';
+export { readStringMetadata } from './metadata';
 export { createVSCodeProjectFileIoAdapter } from './project-file-io';
 export type {
   VSCodeProjectFileContextInput,

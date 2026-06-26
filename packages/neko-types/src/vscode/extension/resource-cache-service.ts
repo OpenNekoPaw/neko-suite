@@ -119,6 +119,7 @@ export interface ResourceCacheService {
   invalidateManifestCache(): void;
   stats(): Promise<ResourceCacheStats>;
   gc(policy: ResourceCacheQuotaPolicy): Promise<ResourceCacheGcResult>;
+  dispose(): Promise<void>;
 }
 
 export interface ResourceCacheOperationOptions {
@@ -747,6 +748,12 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
 
     const skippedCount = Object.values(skippedReasons).reduce((sum, count) => sum + count, 0);
     return { removedCount, removedBytes, skippedCount, skippedReasons };
+  }
+
+  async dispose(): Promise<void> {
+    await this.flushTouches();
+    this.inFlightEnsures.clear();
+    this.ensureQueue.splice(0);
   }
 
   private resolveGcMaxBytes(policy: ResourceCacheQuotaPolicy): number | undefined {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   createResourceFingerprint,
   createResourceRef,
@@ -76,11 +76,7 @@ describe('agent content access runtime contracts', () => {
     );
   });
 
-  it('provides a narrow fake runtime that can poison legacy direct reads in tests', async () => {
-    const request = createBytesRequest();
-    const directBinaryRead = vi.fn(async () => {
-      throw new Error('legacy direct binary read should not be called');
-    });
+  it('routes binary helper requests through content access runtime resolve', async () => {
     const fakeRuntime = createRecordingAgentContentAccessRuntime({
       resolve: async ({ request: contentRequest }) => ({
         status: 'ready',
@@ -90,15 +86,25 @@ describe('agent content access runtime contracts', () => {
       }),
     });
 
-    const result = await fakeRuntime.resolve({
-      caller: 'read-image',
-      request,
+    const result = await fakeRuntime.loadProviderAsset({
+      caller: 'perception-asset-loader',
+      source: sourceResource,
+      preferredTarget: 'bytes',
+      mimeTypeHint: 'image/png',
     });
 
     expect(result.status).toBe('ready');
     expect(result.bytes).toEqual(new Uint8Array([1, 2, 3]));
-    expect(fakeRuntime.calls).toEqual([{ caller: 'read-image', request }]);
-    expect(directBinaryRead).not.toHaveBeenCalled();
+    expect(fakeRuntime.calls).toEqual([
+      {
+        caller: 'perception-asset-loader',
+        request: {
+          ref: sourceResource,
+          intent: 'agent-context',
+          target: 'bytes',
+        },
+      },
+    ]);
   });
 
   it('normalizes shared content access diagnostics for Agent call sites', () => {

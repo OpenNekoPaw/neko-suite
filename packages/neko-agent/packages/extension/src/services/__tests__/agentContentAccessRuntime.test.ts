@@ -7,28 +7,29 @@ import { createResourceFingerprint, createResourceRef } from '@neko/shared';
 import type { IEngineClientProvider } from '../engineClientProvider';
 import { createExtensionAgentContentAccessRuntime } from '../agentContentAccessRuntime';
 
+vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
+
 const PNG_1X1 = new Uint8Array([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
   0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
 ]);
 
 describe('createExtensionAgentContentAccessRuntime', () => {
-  let workspaceFoldersSpy: ReturnType<typeof vi.spyOn> | undefined;
   const tempDirs: string[] = [];
 
   afterEach(async () => {
-    workspaceFoldersSpy?.mockRestore();
-    workspaceFoldersSpy = undefined;
+    vscode.workspace.workspaceFolders = [
+      { uri: { fsPath: '/mock/workspace' } as vscode.Uri, name: 'mock', index: 0 },
+    ];
     await Promise.all(
       tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
     );
   });
 
   it('loads path-backed provider assets through Engine file access', async () => {
-    workspaceFoldersSpy = vi.spyOn(vscode.workspace, 'workspaceFolders', 'get');
-    workspaceFoldersSpy.mockReturnValue([
+    vscode.workspace.workspaceFolders = [
       { uri: { fsPath: '/workspace/demo' } as vscode.Uri, name: 'demo', index: 0 },
-    ]);
+    ];
     const engine = createEngine(PNG_1X1);
     const engineClientProvider = createEngineClientProvider(engine);
     const { runtime } = createExtensionAgentContentAccessRuntime({
