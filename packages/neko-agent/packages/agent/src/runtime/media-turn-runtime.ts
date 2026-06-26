@@ -68,7 +68,7 @@ export interface AgentMediaTurnExecutionInput<
   ) => void;
 }
 
-export interface RunAgentMediaTurnForWebviewInput<
+export interface RunAgentMediaTurnInput<
   TTaskView extends AgentMediaTaskView = AgentMediaTaskView,
   TSourceTask = unknown,
 > {
@@ -92,17 +92,15 @@ export interface RunAgentMediaTurnForWebviewInput<
   ) => void;
 }
 
-export type RunAgentMediaTurnForWebviewResult =
+export type RunAgentMediaTurnResult =
   | { readonly status: 'submitted' }
   | { readonly status: 'unavailable' }
   | { readonly status: 'failed'; readonly error: unknown };
 
-export async function runAgentMediaTurnForWebview<
+export async function runAgentMediaTurn<
   TTaskView extends AgentMediaTaskView = AgentMediaTaskView,
   TSourceTask = unknown,
->(
-  input: RunAgentMediaTurnForWebviewInput<TTaskView, TSourceTask>,
-): Promise<RunAgentMediaTurnForWebviewResult> {
+>(input: RunAgentMediaTurnInput<TTaskView, TSourceTask>): Promise<RunAgentMediaTurnResult> {
   const publishErrorMessage = (message: string): void => {
     const errorMessageInput = input.buildErrorMessageInput?.(message) ?? {
       id: `media-error-${Date.now()}`,

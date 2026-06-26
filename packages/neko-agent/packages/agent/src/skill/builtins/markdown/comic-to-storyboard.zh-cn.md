@@ -12,13 +12,13 @@
 
 1. 当上下文没有图片时，请用户提供漫画图片。
    - EPUB/CBZ/CBR/PDF 漫画文件先使用 ReadDocument。
-   - 优先用 mode="manifest" 查看页数/章节，再用 mode="range" 和 image_path_limit 读取要分析的页。
+   - 优先用 mode="manifest" 查看页数/章节，再用 mode="range" 和 max_images 读取要分析的页。
    - 当文档或图片批次暴露稳定 source ref 和 range 时，先调用 QuerySemanticCoverage，再进行昂贵的页面/分格分析。新分析只覆盖 missing 或 stale 范围，fresh matched ranges 作为上下文复用，并在说明中保留 coverage diagnostics。
    - 如果没有稳定 source ref 或 locator，继续正常使用 ReadDocument/ReadImage 分析，并明确说明该输入无法复用语义覆盖。
    - 不要检查 `.neko/.cache`、`.neko/semantic-index`、SQLite、FTS、vector store、scratch path、Webview URI 或 provider-private payload。语义复用只能通过 QuerySemanticCoverage 或其他 host facade。
    - 使用 ReadDocument.imageInfo 获取宽、高、mimeType、byteSize 和页面比例。不要为了探测图片元数据去运行 Python/PIL、file、sips、identify、unzip、unrar、7z 或其他外部命令。
-   - 同一页/同一批图片只能选择一个图片资源工具：ReadDocument 已返回 imageInfo/images 时，使用 ReadImage mode="metadata"，并优先把对应 `imageInfo[]` 条目作为结构化 `images[]` 传入，以保留 `resourceRef`、`cacheResourceRef`、alias、locator 和页面标签；只有仍持有文档 locator/page index 且需要工具解析成图片时，才使用 ReadDocumentImage mode="metadata"。
-   - 不要对同一张图先 ReadImage 再 ReadDocumentImage，也不要因为 ReadDocument 已返回 imageInfo/imagePaths 就再调用 ReadDocumentImage。
+   - 同一页/同一批图片只能选择一个图片资源工具：ReadDocument 已返回 imageInfo/images 时，使用 ReadImage mode="metadata"，并优先把对应 `imageInfo[]` 条目作为结构化 `images[]` 传入，以保留 `resourceRef`、alias、locator 和页面标签；只有仍持有文档 locator/page index 且需要工具解析成图片时，才使用 ReadDocumentImage mode="metadata"。
+   - 不要对同一张图先 ReadImage 再 ReadDocumentImage，也不要因为 ReadDocument 已返回结构化 imageInfo 引用就再调用 ReadDocumentImage。
    - 用这一次资源调用暴露页面图片后，再由当前原生多模态对话模型分析返回的图片；在此之前不要判断角色、对白/OCR、分格数量、动作或镜头。
    - 当请求页数超过单次读取工具可暴露上限时，明确分批处理，并基于已检查证据继续产出分镜。不要重复读取同一批页面，也不要切换工具来强行凑齐完美批次。
 2. 用当前原生多模态对话模型分析版面：
@@ -28,7 +28,7 @@
    - 统计分格数量。
    - 一页或一张图可能对应多个 storyboard shot。不要因为多个分格来自同一个图片文件，就把它们合并成一个 shot。
 3. 在分镜结构化前，先建立图片索引和分格映射：
-   - 记录每张可引用图片的真实工具结果定位：`toolCallId`、`assetIndex`、mimeType、页码/章节/标签；如果工具结果里有 `resourceRef` 或 `cacheResourceRef`，保留在图片索引中用于 Canvas 和后续资源解析。
+   - 记录每张可引用图片的真实工具结果定位：`toolCallId`、`assetIndex`、mimeType、页码/章节/标签；如果工具结果里有 `resourceRef`，保留在图片索引中用于 Canvas 和后续资源解析。
    - 记录每一批图片的 alias scope（`toolCallId`、源文档 id 或 `aliasScope`）。`page_1`、`P1`、`image_1` 这类 alias 只在该 scope 内有意义。
    - 为每个页面按阅读顺序标注 panel index；如果工具只返回整页图，也要记录“page image -> panels”的映射，不要假装已有独立分格图。
    - 后续每个 shot 必须引用这个索引中的真实图片；不要在生成分镜后再凭顺序补图片。

@@ -197,6 +197,11 @@ export class SubAgentRuntimeCoordinator {
                     externalProcessorRuntime: runtime.capabilityRuntime.externalProcessorRuntime,
                   }
                 : {}),
+              ...(runtime.capabilityRuntime?.contentAccessRuntime
+                ? {
+                    contentAccessRuntime: runtime.capabilityRuntime.contentAccessRuntime,
+                  }
+                : {}),
               ...(runtime.operationToolAdapterRegistry
                 ? { operationToolAdapterRegistry: runtime.operationToolAdapterRegistry }
                 : {}),

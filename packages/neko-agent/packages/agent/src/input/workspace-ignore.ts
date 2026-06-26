@@ -62,6 +62,7 @@ export function normalizeRelativePath(filePath: string): string {
 
 const DEFAULT_WORKSPACE_MANAGED_DIRECTORY_SEGMENTS = [
   '.neko/.cache',
+  '.neko/.runtime',
   '.neko/logs',
   '.neko/tmp',
   '.neko/semantic-index',

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mocked } from 'vitest';
 import type { AgentMediaTaskView } from '@neko-agent/types';
 import type { Task, TaskStatus } from '@neko/shared';
 import {
@@ -16,25 +16,24 @@ import {
 describe('task runtime', () => {
   let taskManager: MockTaskManager;
   let media: MockMediaGateway;
-  let postMessage: ReturnType<typeof vi.fn>;
-  let openTaskResult: ReturnType<typeof vi.fn>;
-  let onRejectedAction: ReturnType<typeof vi.fn>;
-  let onRetryFailed: ReturnType<typeof vi.fn>;
+  let postMessage: MockPostMessage;
+  let openTaskResult: MockOpenTaskResult;
+  let onRejectedAction: MockRejectedAction;
+  let onRetryFailed: MockRetryFailed;
   let effects: TaskRuntimeEffects;
 
   beforeEach(() => {
     taskManager = createTaskManager();
     media = createMediaGateway();
-    postMessage = vi.fn();
-    openTaskResult = vi.fn();
-    onRejectedAction = vi.fn();
-    onRetryFailed = vi.fn();
+    postMessage = vi.fn<MockPostMessage>();
+    openTaskResult = vi.fn<MockOpenTaskResult>();
+    onRejectedAction = vi.fn<MockRejectedAction>();
+    onRetryFailed = vi.fn<MockRetryFailed>();
     effects = {
       postMessage,
       openTaskResult,
       onRejectedAction,
       onRetryFailed,
-      resolveLocalPath: (path) => `webview://${path}`,
     };
   });
 
@@ -220,13 +219,12 @@ describe('task runtime', () => {
   });
 });
 
-type MockTaskManager = {
-  [K in keyof TaskRuntimeTaskManager]: ReturnType<typeof vi.fn>;
-};
-
-type MockMediaGateway = {
-  [K in keyof TaskRuntimeMediaGateway]: ReturnType<typeof vi.fn>;
-};
+type MockTaskManager = Mocked<TaskRuntimeTaskManager>;
+type MockMediaGateway = Mocked<TaskRuntimeMediaGateway>;
+type MockPostMessage = TaskRuntimeEffects['postMessage'];
+type MockOpenTaskResult = NonNullable<TaskRuntimeEffects['openTaskResult']>;
+type MockRejectedAction = NonNullable<TaskRuntimeEffects['onRejectedAction']>;
+type MockRetryFailed = NonNullable<TaskRuntimeEffects['onRetryFailed']>;
 
 function createTaskManager(): MockTaskManager & TaskRuntimeTaskManager {
   return {

@@ -16,6 +16,9 @@ export interface SkillInjectionMessage {
   toolDefinitions?: SkillToolDefinition[];
 }
 
+export type SkillsHostMessage = SkillsListMessage;
+export type SkillInjectionHostMessage = SkillInjectionMessage;
+
 export function buildSkillsListMessage(skills: readonly Skill[] = []): SkillsListMessage {
   return {
     type: 'skillsList',

@@ -1094,7 +1094,6 @@ export {
   type BackgroundTaskProgressPatch,
   type BackgroundTaskFailureUpdateOptions,
   type BackgroundTaskToolResultProjectionOptions,
-  type BackgroundTaskViewProjectorOptions,
   type BackgroundTaskViewStatus,
   type BackgroundTaskViewType,
 } from './task';

@@ -39,7 +39,7 @@ Example:
 \`\`\`json
 {
   "scenes": [
-    { "index": 0, "mediaPath": "\${WORKSPACE}/.neko/.cache/resources/generated/scene-0.png", "prompt": "A sunset over mountains" }
+    { "index": 0, "mediaPath": "generated-assets/scene-0.png", "prompt": "A sunset over mountains" }
   ],
   "minScore": 70,
   "style": "cinematic"
@@ -102,6 +102,7 @@ Summarize results in a clear table:
 - **Audio evaluation is free** — uses Engine technical metrics (LUFS, true peak, silence), no LLM
 - QualityCheck never regenerates media; failed scenes remain evidence for Agent rationale
 - Audio scenes never retry — issues are fixed deterministically via ToolSet tools after approval
+- Do not pass .neko/.cache, Webview URI, blob URL, or scratch paths as media identity; use stable generated asset refs, source refs, or host-resolved media refs.
 - Show concrete scores, issue categories, and specific remediation steps — don't be vague
 `,
   allowedTools: [

@@ -1260,7 +1260,8 @@ export function shouldPersistAgentAssistantStream(stream: AgentStreamPersistence
     stream.accumulatedResponse ||
     stream.accumulatedThinking ||
     (stream.hasError && stream.errorMessage) ||
-    stream.collectedToolCalls.length > 0,
+    stream.collectedToolCalls.length > 0 ||
+    stream.contentBlocks.length > 0,
   );
 }
 

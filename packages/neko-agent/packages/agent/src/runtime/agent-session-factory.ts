@@ -398,6 +398,9 @@ function buildAgentRuntimeConfig(
       ...(config.capabilityRuntime?.externalProcessorRuntime
         ? { externalProcessorRuntime: config.capabilityRuntime.externalProcessorRuntime }
         : {}),
+      ...(config.capabilityRuntime?.contentAccessRuntime
+        ? { contentAccessRuntime: config.capabilityRuntime.contentAccessRuntime }
+        : {}),
       ...(config.operationToolAdapterRegistry
         ? { operationToolAdapterRegistry: config.operationToolAdapterRegistry }
         : {}),

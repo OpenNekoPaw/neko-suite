@@ -48,7 +48,7 @@ export interface AgentStreamMessageIdOptions {
   prefix?: string;
 }
 
-export type AgentStreamWebviewMessage =
+export type AgentStreamProjectionMessage =
   | {
       type: 'streamThinking';
       conversationId: string;
@@ -125,12 +125,19 @@ export type AgentStreamWebviewMessage =
       tokenCount: number;
     };
 
-export interface ProjectAgentStreamEventToWebviewMessagesInput {
+export interface ProjectAgentStreamEventToHostMessagesInput {
   conversationId: string;
   messageId: string;
   event: AgentEvent;
   plan?: Plan;
 }
+
+/** Migration alias. Prefer AgentStreamProjectionMessage. */
+export type AgentStreamWebviewMessage = AgentStreamProjectionMessage;
+
+/** Migration alias. Prefer ProjectAgentStreamEventToHostMessagesInput. */
+export type ProjectAgentStreamEventToWebviewMessagesInput =
+  ProjectAgentStreamEventToHostMessagesInput;
 
 export function createAgentStreamProjectionState(): AgentStreamProjectionState {
   return {
@@ -152,9 +159,9 @@ export function createAgentStreamMessageId(options: AgentStreamMessageIdOptions 
   return `${prefix}-${timestamp}-${suffix}`;
 }
 
-export function projectAgentStreamEventToWebviewMessages(
-  input: ProjectAgentStreamEventToWebviewMessagesInput,
-): AgentStreamWebviewMessage[] {
+export function projectAgentStreamEventToHostMessages(
+  input: ProjectAgentStreamEventToHostMessagesInput,
+): AgentStreamProjectionMessage[] {
   const { conversationId, messageId, event, plan } = input;
 
   switch (event.type) {
@@ -263,6 +270,13 @@ export function projectAgentStreamEventToWebviewMessages(
   }
 }
 
+/** Migration alias. Prefer projectAgentStreamEventToHostMessages. */
+export function projectAgentStreamEventToWebviewMessages(
+  input: ProjectAgentStreamEventToWebviewMessagesInput,
+): AgentStreamWebviewMessage[] {
+  return projectAgentStreamEventToHostMessages(input);
+}
+
 export function applyAgentStreamEventToState(
   state: AgentStreamProjectionState,
   event: AgentEvent,
@@ -320,7 +334,7 @@ export function buildStreamCompleteProjectionMessage(input: {
   readonly conversationId: string;
   readonly messageId: string;
   readonly contentBlocks: readonly ContentBlock[];
-}): AgentStreamWebviewMessage {
+}): AgentStreamProjectionMessage {
   return {
     type: 'streamComplete',
     conversationId: input.conversationId,

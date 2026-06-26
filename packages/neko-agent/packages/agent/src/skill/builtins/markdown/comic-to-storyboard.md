@@ -12,13 +12,13 @@ Use this skill only when the user explicitly asks for a storyboard, StoryboardTa
 
 1. Request comic images from the user when none are available.
    - For EPUB/CBZ/CBR/PDF comic files, use ReadDocument first.
-   - Prefer mode="manifest" to inspect page/chapter count, then mode="range" with image_path_limit for the pages being analyzed.
+   - Prefer mode="manifest" to inspect page/chapter count, then mode="range" with max_images for the pages being analyzed.
    - When the document or image batch exposes a stable source ref and range, call QuerySemanticCoverage before expensive page or panel analysis. Reuse fresh matched ranges as context, analyze only missing or stale ranges, and include coverage diagnostics in the notes.
    - If no stable source ref or locator is available, continue with normal ReadDocument/ReadImage analysis and state that semantic coverage reuse was unavailable for that input.
    - Do not inspect `.neko/.cache`, `.neko/semantic-index`, SQLite, FTS, vector stores, scratch paths, Webview URIs, or provider-private payloads. Semantic reuse must come through QuerySemanticCoverage or another host facade.
    - Use ReadDocument.imageInfo for width, height, mimeType, byteSize, and aspect ratio. Do not run Python/PIL, file, sips, identify, unzip, unrar, 7z, or other external commands just to probe image metadata.
-   - Choose exactly one image resource tool for the same page/batch: use ReadImage with mode="metadata" when ReadDocument already returned imageInfo/images, and prefer passing matching `imageInfo[]` entries as structured `images[]` so `resourceRef`, `cacheResourceRef`, aliases, locators, and page labels are preserved; use ReadDocumentImage with mode="metadata" only when you still have document locators/page indexes and need the tool to resolve them to images.
-   - Do not call ReadDocumentImage after ReadImage for the same image, and do not call ReadDocumentImage just because ReadDocument already returned imageInfo/imagePaths.
+   - Choose exactly one image resource tool for the same page/batch: use ReadImage with mode="metadata" when ReadDocument already returned imageInfo/images, and prefer passing matching `imageInfo[]` entries as structured `images[]` so `resourceRef`, aliases, locators, and page labels are preserved; use ReadDocumentImage with mode="metadata" only when you still have document locators/page indexes and need the tool to resolve them to images.
+   - Do not call ReadDocumentImage after ReadImage for the same image, and do not call ReadDocumentImage just because ReadDocument already returned structured imageInfo refs.
    - Use that single resource call to expose page images, then analyze the returned images with the current native multimodal chat model before making claims about characters, dialogue/OCR, panel count, actions, or camera.
    - When the requested page set is larger than one read call can expose, process pages in explicit batches and keep producing the storyboard from inspected evidence. Do not loop over the same pages or switch tools trying to force a perfect batch.
 2. Analyze panel layout with the current native multimodal chat model:
@@ -28,7 +28,7 @@ Use this skill only when the user explicitly asks for a storyboard, StoryboardTa
    - Count panels.
    - Treat one page or one image as a possible source for multiple storyboard shots. Do not collapse multiple panels into a single shot only because they came from the same image file.
 3. Before structuring the storyboard, build an image index and panel mapping:
-   - Record every referenceable image with its real tool-result locator: `toolCallId`, `assetIndex`, mimeType, page/chapter/label; preserve `resourceRef` or `cacheResourceRef` in the image index when the tool result provides them for Canvas and later resource resolution.
+   - Record every referenceable image with its real tool-result locator: `toolCallId`, `assetIndex`, mimeType, page/chapter/label; preserve `resourceRef` in the image index when the tool result provides it for Canvas and later resource resolution.
    - Record the alias scope for each batch (`toolCallId`, source document id, or `aliasScope`). Aliases such as `page_1`, `P1`, and `image_1` are only meaningful inside that scope.
    - Assign panel indexes per page in reading order. If the tool only returned full-page images, record the page image -> panels mapping and do not pretend separate panel images already exist.
    - Every later shot must reference an image from this index; do not add images after the storyboard by guessing from order.

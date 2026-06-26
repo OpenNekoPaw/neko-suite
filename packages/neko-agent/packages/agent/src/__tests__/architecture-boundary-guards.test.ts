@@ -109,6 +109,92 @@ describe('agent architecture boundary guards', () => {
     );
   });
 
+  it('keeps host-specific projection names quarantined away from runtime production callers', () => {
+    const sourceFiles = listFiles(packageRoot)
+      .filter(
+        (file) =>
+          (file.endsWith('.ts') || file.endsWith('.tsx')) &&
+          !isTestFile(file) &&
+          !relative(repoRoot, file).includes('__tests__/'),
+      )
+      .map((file) => ({
+        file,
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+
+    const allowedShimFiles = new Set([
+      'packages/agent/src/runtime/agent-stream-state.ts',
+      'packages/agent/src/runtime/backfill-coordinator.ts',
+      'packages/agent/src/runtime/context-webview-presenter.ts',
+      'packages/agent/src/runtime/index.ts',
+      'packages/neko-agent/packages/agent/src/runtime/agent-stream-state.ts',
+      'packages/neko-agent/packages/agent/src/runtime/backfill-coordinator.ts',
+      'packages/neko-agent/packages/agent/src/runtime/context-webview-presenter.ts',
+      'packages/neko-agent/packages/agent/src/runtime/index.ts',
+    ]);
+    const allowedAdapterFiles = new Set([
+      'packages/extension/src/chat/message/agentTurnBridge.ts',
+      'packages/extension/src/services/mediaTurnBridge.ts',
+      'packages/neko-agent/packages/extension/src/chat/message/agentTurnBridge.ts',
+      'packages/neko-agent/packages/extension/src/services/mediaTurnBridge.ts',
+    ]);
+    const forbiddenPatterns = [
+      /\brunAgentTurnForWebviewRuntime\b/,
+      /\bbuildAgentTurnForWebviewRuntimeInput\b/,
+      /\brunAgentMediaTurnForWebview\b/,
+      /\bprojectAgentStreamEventToWebviewMessages\b/,
+      /\bAgentStreamWebviewMessage\b/,
+      /\bAgentTurnForWebviewRuntimeMessage\b/,
+      /\bRunAgentTurnForWebviewRuntime(?:Input|Result)\b/,
+      /\bRunAgentMediaTurnForWebview(?:Input|Result)\b/,
+      /\bBackfillCoordinatorWebviewPort\b/,
+      /\bContextWebviewMessage\b/,
+    ];
+
+    const violations = sourceFiles.flatMap(({ relativePath, source }) => {
+      if (allowedShimFiles.has(relativePath) || allowedAdapterFiles.has(relativePath)) {
+        return [];
+      }
+      return forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps Webview-generated asset DTOs and render handles out of host-neutral contracts', () => {
+    const hostNeutralRoots = [
+      join(packageRoot, 'agent-types/src'),
+      join(packageRoot, 'agent/src'),
+      join(packageRoot, 'platform/src'),
+    ];
+    const allowedSanitizers = new Set([
+      'packages/agent/src/runtime/message-resource-projector.ts',
+      'packages/agent/src/session/working-memory.ts',
+      'packages/neko-agent/packages/agent/src/runtime/message-resource-projector.ts',
+      'packages/neko-agent/packages/agent/src/session/working-memory.ts',
+    ]);
+    const violations = hostNeutralRoots.flatMap((root) =>
+      listFiles(root)
+        .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+        .filter((file) => !isTestFile(file) && !relative(repoRoot, file).includes('__tests__/'))
+        .flatMap((file) => {
+          const relativePath = relative(repoRoot, file).replace(/\\/g, '/');
+          if (allowedSanitizers.has(relativePath)) {
+            return [];
+          }
+          const source = stripTypeScriptComments(readFileSync(file, 'utf-8'));
+          return [/\bWebviewGeneratedAsset\b/, /\bwebviewUri\b/, /\bimagePathWebviewUris\b/]
+            .filter((pattern) => pattern.test(source))
+            .map((pattern) => `${relativePath} matches ${pattern}`);
+        }),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps Agent Extension from re-owning project search aggregation policy', () => {
     const sourceFiles = listFiles(extensionSrc)
       .filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file))
@@ -329,6 +415,9 @@ function listFiles(dir: string): string[] {
   const entries = readdirSync(dir);
   const files: string[] = [];
   for (const entry of entries) {
+    if (excludedScanDirectories.has(entry)) {
+      continue;
+    }
     const fullPath = join(dir, entry);
     const stats = statSync(fullPath);
     if (stats.isDirectory()) {
@@ -339,6 +428,8 @@ function listFiles(dir: string): string[] {
   }
   return files;
 }
+
+const excludedScanDirectories = new Set(['node_modules', 'dist', '.turbo', 'coverage']);
 
 function isTestFile(file: string): boolean {
   const name = basename(file);

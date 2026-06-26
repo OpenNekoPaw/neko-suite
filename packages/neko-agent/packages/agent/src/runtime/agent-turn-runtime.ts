@@ -251,13 +251,13 @@ export interface ExecuteAgentTurnInput<
   readonly workflow?: AgentWorkflowIdentity;
 }
 
-export type AgentTurnForWebviewRuntimeMessage =
+export type AgentTurnHostMessage =
   | AgentPhaseMessage
   | ErrorMessage
   | MessageQueuedMessage
   | ToolConfirmationMessage;
 
-export interface RunAgentTurnForWebviewRuntimeInput<
+export interface RunAgentTurnRuntimeInput<
   TPlatform,
   TContext extends object,
   THistoryMessage,
@@ -270,7 +270,7 @@ export interface RunAgentTurnForWebviewRuntimeInput<
   readonly agentManager?:
     | AgentTurnAgentManager<TPlatform, TContext, THistoryMessage, TRunner>
     | undefined;
-  readonly postMessage: (message: AgentTurnForWebviewRuntimeMessage) => void | Promise<void>;
+  readonly postMessage: (message: AgentTurnHostMessage) => void | Promise<void>;
   readonly onPhaseChange?: ExecuteAgentTurnInput<
     TPlatform,
     TContext,
@@ -282,7 +282,7 @@ export interface RunAgentTurnForWebviewRuntimeInput<
   readonly onExecutionError?: (error: unknown) => void;
 }
 
-export type RunAgentTurnForWebviewRuntimeResult =
+export type RunAgentTurnRuntimeResult =
   | AgentTurnExecutionResult
   | {
       readonly status: 'failed';
@@ -314,23 +314,17 @@ const RUNNING_TURN_CONFIG_KEYS = [
   'operationToolAdapterRegistry',
 ] as const satisfies readonly (keyof AgentTurnRunnerConfigureInput<unknown>)[];
 
-export async function runAgentTurnForWebviewRuntime<
+export async function runAgentTurnRuntime<
   TPlatform,
   TContext extends object,
   THistoryMessage,
   TProvider extends AgentProviderCandidate,
   TRunner extends AgentTurnRunner<TPlatform, TContext> = AgentTurnRunner<TPlatform, TContext>,
 >(
-  input: RunAgentTurnForWebviewRuntimeInput<
-    TPlatform,
-    TContext,
-    THistoryMessage,
-    TProvider,
-    TRunner
-  >,
-): Promise<RunAgentTurnForWebviewRuntimeResult> {
+  input: RunAgentTurnRuntimeInput<TPlatform, TContext, THistoryMessage, TProvider, TRunner>,
+): Promise<RunAgentTurnRuntimeResult> {
   const now = input.now ?? Date.now;
-  const postMessage = (message: AgentTurnForWebviewRuntimeMessage): void => {
+  const postMessage = (message: AgentTurnHostMessage): void => {
     void input.postMessage(message);
   };
   const publishErrorMessage = (message: string): void => {
@@ -762,11 +756,18 @@ async function executeAgentTurnMessage<
     },
   });
 
-  const assistantMessage = buildAgentAssistantMessageFromStream({
-    id: assistantMessageId,
-    timestamp: input.now(),
-    stream,
-  });
+  const assistantMessage =
+    buildAgentAssistantMessageFromStream({
+      id: assistantMessageId,
+      timestamp: input.now(),
+      stream,
+    }) ??
+    buildEmptyAgentTurnErrorMessage({
+      id: assistantMessageId,
+      timestamp: input.now(),
+      providerId: input.turnConfig.providerId,
+      modelId: input.turnConfig.modelId,
+    });
   if (assistantMessage) {
     input.input.conversations.addAssistantMessage(input.input.conversationId, assistantMessage);
   }
@@ -786,6 +787,25 @@ async function executeAgentTurnMessage<
   });
 
   return assistantMessage ?? undefined;
+}
+
+function buildEmptyAgentTurnErrorMessage(input: {
+  readonly id: string;
+  readonly timestamp: number;
+  readonly providerId?: string;
+  readonly modelId?: string;
+}): Message {
+  const modelLabel =
+    input.providerId && input.modelId
+      ? ` (${input.providerId}/${input.modelId})`
+      : input.modelId
+        ? ` (${input.modelId})`
+        : '';
+  return buildAgentErrorAssistantMessage({
+    id: input.id,
+    timestamp: input.timestamp,
+    message: `The selected chat model${modelLabel} completed without returning text, tool calls, thinking, or an error. Please retry or choose another model.`,
+  });
 }
 
 function assertCompatibleRunningTurnConfig<TPlatform>(

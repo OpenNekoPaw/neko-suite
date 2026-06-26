@@ -264,7 +264,6 @@ describe('plugin transfer runtime', () => {
       kind: 'document-entry',
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
       entryPath: 'image/page-1.jpg',
-      cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
       versionPolicy: 'versioned-export',
     };
 

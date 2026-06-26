@@ -25,6 +25,7 @@ import type {
   PerceptionTranscribeClient,
 } from '../tools/perception';
 import type { AgentExternalProcessorRuntime } from '../runtime/external-processor-runtime';
+import type { AgentContentAccessRuntime } from '../runtime/agent-content-access-runtime';
 
 // Re-export validation types
 export type { ValidationError, ValidationWarning } from '../validation/types';
@@ -240,6 +241,15 @@ export interface AgentSessionConfig {
    * must not read processor source directories or Market/extension internals.
    */
   externalProcessorRuntime?: AgentExternalProcessorRuntime;
+
+  /**
+   * Optional Host-owned content access runtime.
+   *
+   * Agent-facing tools and provider asset loading use this boundary for
+   * binary/media/document resource access. Cache paths and runtime handles
+   * remain owned by Host content access/cache services.
+   */
+  contentAccessRuntime?: AgentContentAccessRuntime;
 
   /**
    * Optional clients for Agent-first perception evidence tools.

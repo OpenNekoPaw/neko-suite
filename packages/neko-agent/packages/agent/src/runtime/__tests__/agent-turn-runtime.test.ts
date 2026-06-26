@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildAgentTurnForWebviewRuntimeInput } from '../agent-turn-assembly';
+import { buildAgentTurnRuntimeInput } from '../agent-turn-assembly';
 import {
   AGENT_TURN_PRECONDITION_MESSAGE,
   executeAgentTurn,
   getAgentTurnPreconditionMessage,
-  runAgentTurnForWebviewRuntime,
+  runAgentTurnRuntime,
   type AgentTurnRunner,
   type ExecuteAgentTurnInput,
 } from '../agent-turn-runtime';
@@ -564,6 +564,38 @@ describe('executeAgentTurn', () => {
     });
   });
 
+  it('persists a visible error when the provider returns an empty stream', async () => {
+    const { input } = createBaseInput({
+      processStream: vi.fn(async () => ({
+        accumulatedResponse: '',
+        accumulatedThinking: '',
+        hasError: false,
+        collectedToolCalls: [],
+        contentBlocks: [],
+      })),
+    });
+
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'completed',
+      assistantMessage: {
+        id: 'assistant-1',
+        role: 'assistant',
+        content:
+          'The selected chat model (openai/gpt-4.1) completed without returning text, tool calls, thinking, or an error. Please retry or choose another model.',
+        timestamp: 123,
+        isError: true,
+      },
+    });
+    expect(input.conversations.addAssistantMessage).toHaveBeenCalledWith('conv-1', {
+      id: 'assistant-1',
+      role: 'assistant',
+      content:
+        'The selected chat model (openai/gpt-4.1) completed without returning text, tool calls, thinking, or an error. Please retry or choose another model.',
+      timestamp: 123,
+      isError: true,
+    });
+  });
+
   it('uses the same assistant id for stream projection and final persistence', async () => {
     const processStream = vi.fn(async () => ({
       accumulatedResponse: 'done',
@@ -760,14 +792,14 @@ describe('executeAgentTurn', () => {
   });
 });
 
-describe('runAgentTurnForWebviewRuntime', () => {
+describe('runAgentTurnRuntime', () => {
   it('posts a scoped precondition error when no agent manager is available', async () => {
     const { input } = createBaseInput();
     const postMessage = vi.fn();
     const onErrorMessage = vi.fn();
 
     await expect(
-      runAgentTurnForWebviewRuntime({
+      runAgentTurnRuntime({
         ...input,
         agentManager: undefined,
         postMessage,
@@ -800,7 +832,7 @@ describe('runAgentTurnForWebviewRuntime', () => {
     const onErrorMessage = vi.fn();
 
     await expect(
-      runAgentTurnForWebviewRuntime({
+      runAgentTurnRuntime({
         ...input,
         postMessage,
         onErrorMessage,
@@ -837,7 +869,7 @@ describe('runAgentTurnForWebviewRuntime', () => {
       }),
     });
 
-    await runAgentTurnForWebviewRuntime({
+    await runAgentTurnRuntime({
       ...input,
       postMessage,
       onPhaseChange,
@@ -888,7 +920,7 @@ describe('runAgentTurnForWebviewRuntime', () => {
     });
 
     await expect(
-      runAgentTurnForWebviewRuntime({
+      runAgentTurnRuntime({
         ...input,
         postMessage,
         onPhaseChange,
@@ -924,8 +956,8 @@ describe('runAgentTurnForWebviewRuntime', () => {
   });
 });
 
-describe('buildAgentTurnForWebviewRuntimeInput', () => {
-  it('assembles webview turn runtime input from host adapters without VSCode dependencies', async () => {
+describe('buildAgentTurnRuntimeInput', () => {
+  it('assembles host-neutral turn runtime input from host adapters without VSCode dependencies', async () => {
     const activeEditor = {
       type: 'video',
       capabilities: { hasTimeline: true },
@@ -957,7 +989,7 @@ describe('buildAgentTurnForWebviewRuntimeInput', () => {
       workflowNodeId: 'apply',
     };
 
-    const runtimeInput = buildAgentTurnForWebviewRuntimeInput({
+    const runtimeInput = buildAgentTurnRuntimeInput({
       conversationId: 'conv-1',
       message: 'cut the selected clip',
       platform: { name: 'platform' },

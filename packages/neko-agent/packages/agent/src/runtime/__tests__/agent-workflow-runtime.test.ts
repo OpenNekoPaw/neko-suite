@@ -5,7 +5,7 @@ import {
   createIdcWorkflowDefinition,
   selectIdcWorkflowEntryNode,
 } from '../agent-workflow-runtime';
-import { runAgentMediaTurnForWebview } from '../media-turn-webview-runtime';
+import { runAgentMediaTurn } from '../media-turn-runtime';
 import { createSubAgentEventRuntime } from '../subagent-event-runtime';
 
 describe('AgentWorkflowRuntime', () => {
@@ -131,7 +131,7 @@ describe('AgentWorkflowRuntime', () => {
       nodeId: 'apply',
     });
 
-    await runAgentMediaTurnForWebview({
+    await runAgentMediaTurn({
       conversationId: 'conv-1',
       prompt: 'Generate clip',
       workflow,

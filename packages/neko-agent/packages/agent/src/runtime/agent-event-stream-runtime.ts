@@ -11,8 +11,8 @@ import {
   createAgentStreamMessageId,
   createAgentStreamProjectionState,
   finalizeAgentStreamProjectionState,
-  projectAgentStreamEventToWebviewMessages,
-  type AgentStreamWebviewMessage,
+  projectAgentStreamEventToHostMessages,
+  type AgentStreamProjectionMessage,
 } from './agent-stream-state';
 import {
   startAgentStreamBackgroundTaskObserver,
@@ -26,7 +26,7 @@ import type { AgentStreamBackgroundTaskPersistInput } from './agent-stream-backg
 import { buildAgentAssistantMessageFromStream } from './message-runtime';
 
 export type AgentEventStreamRuntimeMessage =
-  | AgentStreamWebviewMessage
+  | AgentStreamProjectionMessage
   | TaskCreatedMessage
   | TaskUpdatedMessage;
 
@@ -104,7 +104,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
         input.onPhaseChange?.(stateUpdate.phaseChange.phase, stateUpdate.phaseChange.toolName);
       }
 
-      const messages = projectAgentStreamEventToWebviewMessages({
+      const messages = projectAgentStreamEventToHostMessages({
         conversationId: input.conversationId,
         messageId: streamingMessageId,
         event,

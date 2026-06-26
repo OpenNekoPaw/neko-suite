@@ -3,9 +3,9 @@ import type { AgentEvent } from '../session/types';
 import type { ToolResultPatchResult } from '../session/types';
 import {
   applyAgentStreamEventToState,
-  projectAgentStreamEventToWebviewMessages,
+  projectAgentStreamEventToHostMessages,
   type AgentStreamProjectionState,
-  type AgentStreamWebviewMessage,
+  type AgentStreamProjectionMessage,
 } from './agent-stream-state';
 
 export interface BackfillCoordinatorSessionPort {
@@ -18,14 +18,19 @@ export interface BackfillCoordinatorStreamPort {
   readonly messageId: string;
 }
 
-export interface BackfillCoordinatorWebviewPort {
-  postMessage(message: AgentStreamWebviewMessage): void | Promise<void>;
+export interface BackfillCoordinatorHostPort {
+  postMessage(message: AgentStreamProjectionMessage): void | Promise<void>;
 }
+
+/** Migration alias. Prefer BackfillCoordinatorHostPort. */
+export type BackfillCoordinatorWebviewPort = BackfillCoordinatorHostPort;
 
 export interface BackfillCoordinatorConfig {
   readonly session?: BackfillCoordinatorSessionPort;
   readonly stream?: BackfillCoordinatorStreamPort;
-  readonly webview?: BackfillCoordinatorWebviewPort;
+  readonly host?: BackfillCoordinatorHostPort;
+  /** Migration alias. Prefer host. */
+  readonly webview?: BackfillCoordinatorHostPort;
   readonly recordDiagnostic?: (diagnostic: ToolResultBackfillDiagnostic) => void;
 }
 
@@ -41,13 +46,13 @@ export interface BackfillCoordinatorApplyResult {
 export class BackfillCoordinator {
   private readonly session?: BackfillCoordinatorSessionPort;
   private readonly stream?: BackfillCoordinatorStreamPort;
-  private readonly webview?: BackfillCoordinatorWebviewPort;
+  private readonly host?: BackfillCoordinatorHostPort;
   private readonly recordDiagnostic?: (diagnostic: ToolResultBackfillDiagnostic) => void;
 
   constructor(config: BackfillCoordinatorConfig = {}) {
     this.session = config.session;
     this.stream = config.stream;
-    this.webview = config.webview;
+    this.host = config.host ?? config.webview;
     this.recordDiagnostic = config.recordDiagnostic;
   }
 
@@ -60,7 +65,7 @@ export class BackfillCoordinator {
     const errors: unknown[] = [];
     const streamPatched = this.applyStreamBackfill(event, payload.toolCallId, errors);
     const sessionResult = await this.patchSession(payload, errors);
-    const webviewNotified = await this.notifyWebview(event, errors);
+    const hostNotified = await this.notifyHost(event, errors);
     const diagnostics = collectCoordinatorDiagnostics({
       payload,
       streamPatched,
@@ -74,7 +79,7 @@ export class BackfillCoordinator {
     return {
       streamPatched,
       sessionPatched: sessionResult?.patched === true,
-      webviewNotified,
+      webviewNotified: hostNotified,
       diagnostics,
       errors,
       ...(sessionResult?.eventId ? { eventId: sessionResult.eventId } : {}),
@@ -113,12 +118,12 @@ export class BackfillCoordinator {
     }
   }
 
-  private async notifyWebview(event: AgentEvent, errors: unknown[]): Promise<boolean> {
-    if (!this.stream || !this.webview) {
+  private async notifyHost(event: AgentEvent, errors: unknown[]): Promise<boolean> {
+    if (!this.stream || !this.host) {
       return false;
     }
 
-    const messages = projectAgentStreamEventToWebviewMessages({
+    const messages = projectAgentStreamEventToHostMessages({
       conversationId: this.stream.conversationId,
       messageId: this.stream.messageId,
       event,
@@ -127,7 +132,7 @@ export class BackfillCoordinator {
     let notified = false;
     for (const message of messages) {
       try {
-        await this.webview.postMessage(message);
+        await this.host.postMessage(message);
         notified = true;
       } catch (error) {
         errors.push(error);

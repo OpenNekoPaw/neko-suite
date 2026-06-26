@@ -105,7 +105,7 @@ describe('task view projector', () => {
     expect(toBackgroundTaskViewStatus('cancelled')).toBe('cancelled');
   });
 
-  it('rebuilds webview-safe urls from persisted local paths via host adapter', () => {
+  it('ignores legacy local paths and uses persisted public result urls', () => {
     const task = createTask({
       output: {
         data: {
@@ -117,40 +117,25 @@ describe('task view projector', () => {
       },
     });
 
-    expect(
-      toBackgroundTaskView(task, {
-        resolveLocalPath: (path) => `vscode-webview://${path}`,
-      }).result,
-    ).toEqual({
-      localPaths: ['/tmp/a.png', '/tmp/b.png'],
-      urls: ['vscode-webview:///tmp/a.png', 'vscode-webview:///tmp/b.png'],
-      thumbnailUrl: 'vscode-webview:///tmp/a.png',
+    expect(toBackgroundTaskView(task).result).toEqual({
+      urls: ['https://old.example/a.png'],
+      thumbnailUrl: 'https://old.example/thumb.png',
       width: 1024,
     });
   });
 
-  it('falls back to persisted urls when the host adapter cannot resolve local paths', () => {
+  it('does not expose legacy local paths when no public result url exists', () => {
     const task = createTask({
       output: {
         data: {
           localPaths: ['/tmp/a.png'],
-          urls: ['https://persisted.example/a.png'],
-          thumbnailUrl: 'https://persisted.example/thumb.png',
+          urls: ['/workspace/.neko/.cache/generated/a.png'],
+          thumbnailUrl: '/workspace/.neko/.cache/generated/a.png',
         },
       },
     });
 
-    expect(
-      toBackgroundTaskView(task, {
-        resolveLocalPath: () => {
-          throw new Error('bad uri');
-        },
-      }).result,
-    ).toEqual({
-      localPaths: ['/tmp/a.png'],
-      urls: ['https://persisted.example/a.png'],
-      thumbnailUrl: 'https://persisted.example/thumb.png',
-    });
+    expect(toBackgroundTaskView(task).result).toBeUndefined();
   });
 
   it('extracts the primary result url from task output data', () => {
@@ -168,6 +153,24 @@ describe('task view projector', () => {
         }),
       ),
     ).toBe('https://example.test/single.png');
+    expect(
+      getTaskResultUrl(
+        createTask({
+          output: {
+            data: {
+              urls: ['/workspace/.neko/.cache/generated/a.png', 'generated-assets/asset-1.png'],
+            },
+          },
+        }),
+      ),
+    ).toBe('generated-assets/asset-1.png');
+    expect(
+      getTaskResultUrl(
+        createTask({
+          output: { data: { url: '/workspace/.neko/.cache/generated/a.png' } },
+        }),
+      ),
+    ).toBeUndefined();
     expect(getTaskResultUrl(createTask({ output: { data: 'not-object' } }))).toBeUndefined();
   });
 
@@ -217,7 +220,6 @@ describe('task view projector', () => {
         progress: 100,
         result: {
           urls: ['webview://video.mp4'],
-          localPaths: ['/tmp/video.mp4'],
           thumbnailUrl: 'webview://video.mp4',
         },
         updatedAt: '2026-01-01T00:00:02.000Z',
@@ -228,10 +230,63 @@ describe('task view projector', () => {
       progress: 100,
       result: {
         urls: ['webview://video.mp4'],
-        localPaths: ['/tmp/video.mp4'],
         thumbnailUrl: 'webview://video.mp4',
       },
       updatedAt: '2026-01-01T00:00:02.000Z',
+    });
+  });
+
+  it('strips generated asset paths including nested storyboard shot paths', () => {
+    const task = createTask({
+      output: {
+        data: {
+          urls: ['generated-assets/storyboard-1.json'],
+          assets: [
+            {
+              id: 'storyboard-1',
+              type: 'generated-storyboard',
+              path: '/workspace/.neko/.cache/generated/storyboard/storyboard-1.json',
+              mimeType: 'application/json',
+              generatedAt: '2026-01-01T00:00:00.000Z',
+              renderUri: 'webview://storyboard-1',
+              scenes: [
+                {
+                  sceneIndex: 1,
+                  heading: 'INT. ROOM - DAY',
+                  shots: [
+                    {
+                      id: 'shot-1',
+                      type: 'generated-image',
+                      path: '/workspace/.neko/.cache/generated/image/shot-1.png',
+                      mimeType: 'image/png',
+                      generatedAt: '2026-01-01T00:00:00.000Z',
+                      width: 1024,
+                      height: 1024,
+                      ratio: '1:1',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(JSON.stringify(toBackgroundTaskView(task).result)).not.toContain('.neko/.cache');
+    expect(toBackgroundTaskView(task).result?.assets?.[0]).toMatchObject({
+      id: 'storyboard-1',
+      type: 'generated-storyboard',
+      scenes: [
+        {
+          shots: [
+            {
+              id: 'shot-1',
+              type: 'generated-image',
+            },
+          ],
+        },
+      ],
     });
   });
 

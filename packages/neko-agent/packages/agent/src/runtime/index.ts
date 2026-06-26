@@ -24,6 +24,31 @@ export type {
 } from './types';
 
 export {
+  createAgentContentAccessDiagnostic,
+  createAgentContentAccessFailureResult,
+  isAgentContentAccessReady,
+  toAgentContentAccessDiagnostics,
+  type AgentContentAccessRuntime,
+  type AgentContentAccessRuntimeRequest,
+  type AgentContentAccessCaller,
+  type AgentContentAccessDiagnostic,
+  type AgentContentAccessDiagnosticCode,
+  type AgentContentAccessBaseInput,
+  type AgentContentAccessOperationResult,
+  type AgentDocumentContentInput,
+  type AgentDocumentContentResult,
+  type AgentDocumentImageResource,
+  type AgentDocumentImagesInput,
+  type AgentDocumentImagesResult,
+  type AgentImageMetadataInput,
+  type AgentImageMetadataResult,
+  type AgentProviderAssetInput,
+  type AgentProviderAssetResult,
+  type AgentResourceProjectionInput,
+  type AgentResourceProjectionResult,
+} from './agent-content-access-runtime';
+
+export {
   buildAgentSessionConfigWithRuntime,
   createAgentSessionWithRuntime,
   type AgentSessionRuntimeBootstrapConfig,
@@ -258,7 +283,7 @@ export {
 } from './timeline-context-runtime';
 
 export {
-  buildAgentTurnForWebviewRuntimeInput,
+  buildAgentTurnRuntimeInput,
   createAgentTurnHostContextAdapters,
   type AgentTurnActiveSkillState,
   type AgentTurnAssemblyInput,
@@ -275,8 +300,8 @@ export {
   AGENT_TURN_PRECONDITION_MESSAGE,
   executeAgentTurn,
   getAgentTurnPreconditionMessage,
-  runAgentTurnForWebviewRuntime,
-  type AgentTurnForWebviewRuntimeMessage,
+  runAgentTurnRuntime,
+  type AgentTurnHostMessage,
   type AgentTurnAgentManager,
   type AgentTurnConfirmationRequest,
   type AgentTurnContextFactoryInput,
@@ -291,8 +316,8 @@ export {
   type AgentTurnStreamProcessorInput,
   type AgentTurnTimelineContextInput,
   type ExecuteAgentTurnInput,
-  type RunAgentTurnForWebviewRuntimeInput,
-  type RunAgentTurnForWebviewRuntimeResult,
+  type RunAgentTurnRuntimeInput,
+  type RunAgentTurnRuntimeResult,
 } from './agent-turn-runtime';
 
 export {
@@ -548,13 +573,16 @@ export {
   createAgentStreamMessageId,
   createAgentStreamProjectionState,
   finalizeAgentStreamProjectionState,
+  projectAgentStreamEventToHostMessages,
   projectAgentStreamEventToWebviewMessages,
+  type AgentStreamProjectionMessage,
   type AgentStreamProjectionState,
   type AgentStreamMessageIdOptions,
   type AgentStreamStateOptions,
   type AgentStreamStateUpdate,
   type AgentStreamWebviewMessage,
   type CollectedToolCall,
+  type ProjectAgentStreamEventToHostMessagesInput,
   type ProjectAgentStreamEventToWebviewMessagesInput,
 } from './agent-stream-state';
 
@@ -689,15 +717,15 @@ export {
 } from './agent-stream-task-observer';
 
 export {
-  runAgentMediaTurnForWebview,
+  runAgentMediaTurn,
   type AgentMediaTurnExecutionInput,
   type AgentMediaTurnIgnoredTaskEvent,
   type AgentMediaTurnProgressErrorEvent,
   type AgentMediaTurnRuntimeMessage,
   type AgentMediaTurnTaskEvent,
-  type RunAgentMediaTurnForWebviewInput,
-  type RunAgentMediaTurnForWebviewResult,
-} from './media-turn-webview-runtime';
+  type RunAgentMediaTurnInput,
+  type RunAgentMediaTurnResult,
+} from './media-turn-runtime';
 
 export {
   buildActiveConversationMessage,

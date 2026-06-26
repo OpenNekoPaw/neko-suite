@@ -1,4 +1,4 @@
-import type { Task, TaskStatus } from '@neko/shared';
+import { isPublicGeneratedAssetResultUri, type Task, type TaskStatus } from '@neko/shared';
 import {
   getTaskConversationId,
   getTaskResultUrl,
@@ -211,7 +211,7 @@ export function buildViewTaskResultActionPlan(input: {
     return rejectTaskAction(input, 'wrong-conversation', input.media?.conversationId);
   }
 
-  if (mediaOwnership === 'match' && input.media?.resultUrl) {
+  if (mediaOwnership === 'match' && isPublicTaskResultUrl(input.media?.resultUrl)) {
     return {
       kind: 'open-url',
       taskId: input.taskId,
@@ -294,6 +294,10 @@ function isRetryableStatus(status: TaskStatus): boolean {
 
 function isAbsoluteLocalPath(value: string): boolean {
   return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value);
+}
+
+function isPublicTaskResultUrl(value: string | undefined): value is string {
+  return typeof value === 'string' && isPublicGeneratedAssetResultUri(value);
 }
 
 function rejectTaskAction(

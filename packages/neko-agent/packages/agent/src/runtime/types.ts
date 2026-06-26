@@ -15,6 +15,7 @@ import type { IArtifactService } from './artifact-service';
 import type { IFeedbackCoordinator } from '../feedback';
 import type { IControlPlane } from '../control-plane';
 import type { AgentExternalProcessorRuntime } from './external-processor-runtime';
+import type { AgentContentAccessRuntime } from './agent-content-access-runtime';
 
 /**
  * Minimal journal-writer contract exposed at the runtime bootstrap layer.
@@ -114,6 +115,7 @@ export interface ICapabilityRuntime {
   readonly promptFragments?: readonly PromptFragment[];
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
   readonly externalProcessorRuntime?: AgentExternalProcessorRuntime;
+  readonly contentAccessRuntime?: AgentContentAccessRuntime;
 }
 
 /**

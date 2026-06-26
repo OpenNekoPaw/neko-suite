@@ -27,6 +27,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     const operationToolAdapterRegistry = {
       list: vi.fn(() => []),
     } as unknown as IOperationToolAdapterRegistry;
+    const contentAccessRuntime = { resolve: vi.fn() } as never;
     const idcTaskProjection = { kind: 'idc-task-projection' } as never;
 
     const runtime: AgentRuntimeConfig = {
@@ -60,6 +61,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
         providerCardRegistry,
         promptFragments,
         operationToolAdapterRegistry,
+        contentAccessRuntime,
       },
       feedbackLoop: {
         projectMemoryManager,
@@ -104,6 +106,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     expect(config.feedbackCoordinator).toBe(feedbackCoordinator);
     expect(config.controlPlane).toBe(controlPlane);
     expect(config.operationToolAdapterRegistry).toBe(operationToolAdapterRegistry);
+    expect(config.contentAccessRuntime).toBe(contentAccessRuntime);
     expect(config.compactLogging).toBe(false);
     expect(config.autoMemoryExtraction).toBe(false);
     expect(config.memoryRecall).toBe(false);

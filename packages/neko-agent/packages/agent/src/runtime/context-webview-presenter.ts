@@ -18,10 +18,13 @@ export interface CompressionErrorMessage {
   error: string;
 }
 
-export type ContextWebviewMessage =
+export type ContextHostMessage =
   | ContextTokenCountMessage
   | CompressionResultMessage
   | CompressionErrorMessage;
+
+/** Migration alias. Prefer ContextHostMessage. */
+export type ContextWebviewMessage = ContextHostMessage;
 
 export interface CompressionResultData {
   originalTokens: number;

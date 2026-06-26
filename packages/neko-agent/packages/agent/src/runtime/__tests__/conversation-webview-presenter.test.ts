@@ -72,7 +72,7 @@ describe('conversation-webview-presenter', () => {
                 arguments: {},
                 result: {
                   success: true,
-                  data: { url: 'webview:///tmp/out.png', localPath: '/tmp/out.png' },
+                  data: { url: 'webview:///tmp/out.png' },
                 },
               },
             ],

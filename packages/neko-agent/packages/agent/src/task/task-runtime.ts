@@ -29,7 +29,6 @@ import {
   buildBackgroundTaskFailureUpdateView,
   filterTasksForConversation,
   toBackgroundTaskView,
-  type BackgroundTaskViewProjectorOptions,
 } from './task-view-projector';
 
 export type TaskRuntimeMessage =
@@ -59,8 +58,9 @@ export interface TaskRuntimeDeps {
   media?: TaskRuntimeMediaGateway;
 }
 
-export interface TaskRuntimeEffects extends BackgroundTaskViewProjectorOptions {
+export interface TaskRuntimeEffects {
   postMessage(message: TaskRuntimeMessage): void | Promise<void>;
+  now?(): number;
   openTaskResult?(plan: TaskResultOpenPlan): void | Promise<void>;
   onRejectedAction?(input: { action: TaskRuntimeAction; plan: TaskActionRejectPlan }): void;
   onNoopAction?(input: { action: TaskRuntimeAction; plan: TaskActionNoopPlan }): void;
@@ -101,7 +101,7 @@ export async function runSendTasksRuntime(
 
   const tasks = await deps.taskManager.list();
   const taskViews = filterTasksForConversation(tasks, input.conversationId).map((task) =>
-    toBackgroundTaskView(task, effects),
+    toBackgroundTaskView(task),
   );
   const workItems = projectBackgroundTasksToWorkItems({
     conversationId: input.conversationId,
@@ -195,7 +195,7 @@ export async function runRetryTaskRuntime(
           conversationId: input.conversationId,
           workItem: projectBackgroundTaskToWorkItem({
             conversationId: input.conversationId,
-            task: buildBackgroundTaskFailureUpdateView(task, error, effects),
+            task: buildBackgroundTaskFailureUpdateView(task, error, { now: effects.now }),
           }),
         }),
       );

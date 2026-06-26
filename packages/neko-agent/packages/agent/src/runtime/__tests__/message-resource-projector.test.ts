@@ -16,7 +16,7 @@ describe('message resource projector', () => {
     expect(isLocalMediaFilePath('https://example.test/image.png')).toBe(false);
   });
 
-  it('projects single url fields and preserves the original localPath', () => {
+  it('projects single url fields without preserving raw local paths', () => {
     expect(
       projectResourceValue(
         {
@@ -27,12 +27,11 @@ describe('message resource projector', () => {
       ),
     ).toEqual({
       url: 'webview:///tmp/image.png',
-      localPath: '/tmp/image.png',
       thumbnailUrl: 'webview:///tmp/thumb.png',
     });
   });
 
-  it('projects urls arrays and preserves localPaths', () => {
+  it('projects urls arrays without preserving raw local paths', () => {
     expect(
       projectResourceValue(
         {
@@ -42,11 +41,10 @@ describe('message resource projector', () => {
       ),
     ).toEqual({
       urls: ['webview:///tmp/a.png', 'https://example.test/b.png', 'webview:///tmp/c.jpg'],
-      localPaths: ['/tmp/a.png', '/tmp/c.jpg'],
     });
   });
 
-  it('does not rewrite explicit localPath and localPaths fields', () => {
+  it('strips runtime-only localPath and localPaths fields', () => {
     expect(
       projectResourceValue(
         {
@@ -55,13 +53,10 @@ describe('message resource projector', () => {
         },
         { resolveLocalMediaPath: (path) => `webview://${path}` },
       ),
-    ).toEqual({
-      localPath: '/tmp/image.png',
-      localPaths: ['/tmp/a.png'],
-    });
+    ).toEqual({});
   });
 
-  it('does not project runtime-only document scratch fields', () => {
+  it('strips runtime-only document scratch fields while preserving stable document refs', () => {
     expect(
       projectResourceValue(
         {
@@ -69,19 +64,24 @@ describe('message resource projector', () => {
           runtimeImagePaths: ['/tmp/neko_epub/page-1.jpg'],
           cachePath: '/tmp/neko_epub/page-1.jpg',
           path: '/workspace/.neko/.cache/resources/documents/page-1.jpg',
+          resourceRef: {
+            kind: 'document-entry',
+            source: { filePath: '/books/a.epub', format: 'epub' },
+            entryPath: 'OPS/page-1.jpg',
+          },
         },
         { resolveLocalMediaPath: (path) => `webview://${path}` },
       ),
     ).toEqual({
-      runtimePath: '/tmp/neko_epub/page-1.jpg',
-      runtimeImagePaths: ['/tmp/neko_epub/page-1.jpg'],
-      cachePath: '/tmp/neko_epub/page-1.jpg',
-      path: '/workspace/.neko/.cache/resources/documents/page-1.jpg',
-      webviewUri: 'webview:///workspace/.neko/.cache/resources/documents/page-1.jpg',
+      resourceRef: {
+        kind: 'document-entry',
+        source: { filePath: '/books/a.epub', format: 'epub' },
+        entryPath: 'OPS/page-1.jpg',
+      },
     });
   });
 
-  it('adds webview URI siblings for document image paths without replacing local paths', () => {
+  it('strips legacy document image path arrays and sanitizes image info', () => {
     expect(
       projectResourceValue(
         {
@@ -91,12 +91,8 @@ describe('message resource projector', () => {
         { resolveLocalMediaPath: (path) => `webview://${path}` },
       ),
     ).toEqual({
-      imagePaths: ['/tmp/page-1.jpg'],
-      imagePathWebviewUris: ['webview:///tmp/page-1.jpg'],
       imageInfo: [
         {
-          path: '/tmp/page-1.jpg',
-          webviewUri: 'webview:///tmp/page-1.jpg',
           width: 1494,
           height: 2133,
         },
@@ -104,7 +100,7 @@ describe('message resource projector', () => {
     });
   });
 
-  it('adds webview URI siblings for snake_case image path arguments', () => {
+  it('leaves explicit snake_case image path inputs unprojected', () => {
     expect(
       projectResourceValue(
         {
@@ -114,11 +110,32 @@ describe('message resource projector', () => {
       ),
     ).toEqual({
       image_paths: ['/tmp/page-1.jpg'],
-      imagePathWebviewUris: ['webview:///tmp/page-1.jpg'],
     });
   });
 
-  it('projects structured image argument paths without replacing local paths', () => {
+  it('strips managed cache paths from explicit image path inputs', () => {
+    expect(
+      projectResourceValue(
+        {
+          image_paths: ['/workspace/.neko/.cache/resources/documents/page-1.jpg'],
+        },
+        { resolveLocalMediaPath: (path) => `webview://${path}` },
+      ),
+    ).toEqual({
+      resourceProjectionDiagnostics: [
+        {
+          code: 'resource-projection-denied',
+          severity: 'error',
+          field: 'image_paths',
+          source: '/workspace/.neko/.cache/resources/documents/page-1.jpg',
+          message:
+            'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or adapter-projected render descriptors.',
+        },
+      ],
+    });
+  });
+
+  it('projects structured image argument paths without adding webview handles', () => {
     expect(
       projectResourceValue(
         {
@@ -127,9 +144,7 @@ describe('message resource projector', () => {
         { resolveLocalMediaPath: (path) => `webview://${path}` },
       ),
     ).toEqual({
-      images: [
-        { label: 'Page 1', path: '/tmp/page-1.jpg', webviewUri: 'webview:///tmp/page-1.jpg' },
-      ],
+      images: [{ label: 'Page 1', path: 'webview:///tmp/page-1.jpg' }],
     });
   });
 
@@ -174,7 +189,7 @@ describe('message resource projector', () => {
               arguments: {},
               result: {
                 success: true,
-                data: { urls: ['webview:///tmp/video.mp4'], localPaths: ['/tmp/video.mp4'] },
+                data: { urls: ['webview:///tmp/video.mp4'] },
               },
             },
           },
@@ -262,13 +277,11 @@ describe('message resource projector', () => {
                 attachments: [
                   {
                     type: 'image',
-                    path: '/tmp/page-1.jpg',
-                    webviewUri: 'webview:///tmp/page-1.jpg',
+                    path: 'webview:///tmp/page-1.jpg',
                     mimeType: 'image/jpeg',
                     assetRef: {
                       assetId: 'read-image-page-1',
                       uri: 'webview:///tmp/page-1.jpg',
-                      localPath: '/tmp/page-1.jpg',
                       mimeType: 'image/jpeg',
                     },
                   },
@@ -286,7 +299,6 @@ describe('message resource projector', () => {
                         {
                           assetId: 'read-image-page-1',
                           uri: 'webview:///tmp/page-1.jpg',
-                          localPath: '/tmp/page-1.jpg',
                           mimeType: 'image/jpeg',
                         },
                       ],
@@ -342,8 +354,7 @@ describe('message resource projector', () => {
                 images: [
                   {
                     label: 'Page 1',
-                    path: '/tmp/block-page.jpg',
-                    webviewUri: 'webview:///tmp/block-page.jpg',
+                    path: 'webview:///tmp/block-page.jpg',
                   },
                 ],
               },
@@ -369,7 +380,6 @@ describe('message resource projector', () => {
         },
       ),
     ).toEqual({
-      imagePaths: ['/tmp/page-1.jpg'],
       resourceProjectionDiagnostics: [
         {
           code: 'resource-projection-denied',
@@ -377,32 +387,44 @@ describe('message resource projector', () => {
           field: 'url',
           source: '/tmp/image.png',
           message:
-            'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or managed resource cache output.',
-        },
-        {
-          code: 'resource-projection-denied',
-          severity: 'error',
-          field: 'imagePaths',
-          source: '/tmp/page-1.jpg',
-          message:
-            'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or managed resource cache output.',
+            'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or adapter-projected render descriptors.',
         },
       ],
       imageInfo: [
         {
-          path: '/tmp/page-1.jpg',
-          resourceProjectionDiagnostics: [
-            {
-              code: 'resource-projection-denied',
-              severity: 'error',
-              field: 'path',
-              source: '/tmp/page-1.jpg',
-              message:
-                'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or managed resource cache output.',
-            },
-          ],
           width: 1494,
           height: 2133,
+        },
+      ],
+    });
+  });
+
+  it('strips legacy runtime/cache projection fields from successful resource payloads', () => {
+    expect(
+      projectResourceValue(
+        {
+          images: [
+            {
+              label: 'Page 1',
+              path: '/tmp/page-1.jpg',
+              runtimePath: '/tmp/neko_epub/page-1.jpg',
+              runtimeKind: 'scratch-path',
+              cachePath: '/workspace/.neko/.cache/resources/documents/page-1.jpg',
+              cacheResourceRef: {
+                cachePath: '/workspace/.neko/.cache/resources/documents/page-1.jpg',
+              },
+              webviewUri: 'vscode-webview://page-1.jpg',
+              imagePathWebviewUris: ['vscode-webview://page-1.jpg'],
+            },
+          ],
+        },
+        { resolveLocalMediaPath: (path) => `webview://${path}` },
+      ),
+    ).toEqual({
+      images: [
+        {
+          label: 'Page 1',
+          path: 'webview:///tmp/page-1.jpg',
         },
       ],
     });
@@ -443,8 +465,6 @@ describe('message resource projector', () => {
       status: 'completed',
       url: '/tmp/output.png',
       urls: ['/tmp/output.png'],
-      localPath: '/tmp/output.png',
-      localPaths: ['/tmp/output.png'],
     });
   });
 

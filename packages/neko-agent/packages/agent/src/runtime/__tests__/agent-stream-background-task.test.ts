@@ -119,7 +119,6 @@ describe('agent stream background task runtime', () => {
         progress: 100,
         result: {
           urls: ['webview://cat.png'],
-          localPaths: ['/tmp/cat.png'],
         },
       },
       message: {
@@ -132,11 +131,12 @@ describe('agent stream background task runtime', () => {
           progress: 100,
           result: {
             urls: ['webview://cat.png'],
-            localPaths: ['/tmp/cat.png'],
           },
         },
       },
     });
+    expect(projection.task.result).not.toHaveProperty('localPaths');
+    expect(projection.message.workItem.result).not.toHaveProperty('localPaths');
   });
 
   it('persists result urls into matching tool result data', () => {

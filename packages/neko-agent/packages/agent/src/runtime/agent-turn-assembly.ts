@@ -25,11 +25,11 @@ import type {
   AgentStreamPersistenceSnapshot,
 } from './message-runtime';
 import type {
+  AgentTurnHostMessage,
   AgentTurnAgentManager,
-  AgentTurnForWebviewRuntimeMessage,
   AgentTurnRunner,
   AgentTurnTimelineContextInput,
-  RunAgentTurnForWebviewRuntimeInput,
+  RunAgentTurnRuntimeInput,
 } from './agent-turn-runtime';
 import type { TimelineContextEditorLike, TimelineContextRuntime } from './timeline-context-runtime';
 import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
@@ -111,7 +111,7 @@ export interface AgentTurnHostAdapters<
     readonly conversationId: string;
     readonly agentRunner: TRunner;
   }) => void;
-  readonly postMessage: (message: AgentTurnForWebviewRuntimeMessage) => void | Promise<void>;
+  readonly postMessage: (message: AgentTurnHostMessage) => void | Promise<void>;
   readonly onPhaseChange?: (event: {
     readonly conversationId: string;
     readonly phase: AgentPhase;
@@ -179,7 +179,7 @@ export function createAgentTurnHostContextAdapters<TActiveEditor extends AgentTu
   };
 }
 
-export function buildAgentTurnForWebviewRuntimeInput<
+export function buildAgentTurnRuntimeInput<
   TPlatform,
   TActiveEditor extends AgentTurnActiveEditorLike,
   THistoryMessage,
@@ -187,7 +187,7 @@ export function buildAgentTurnForWebviewRuntimeInput<
   TRunner extends AgentTurnRunner<TPlatform, AgentTurnContext<TActiveEditor>>,
 >(
   input: AgentTurnAssemblyInput<TPlatform, TActiveEditor, THistoryMessage, TProvider, TRunner>,
-): RunAgentTurnForWebviewRuntimeInput<
+): RunAgentTurnRuntimeInput<
   TPlatform,
   AgentTurnContext<TActiveEditor>,
   THistoryMessage,

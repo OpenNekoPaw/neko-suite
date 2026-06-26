@@ -283,8 +283,8 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
           collector,
         );
         if (event.type === 'tool_result') {
-          subscribeToMediaSave(platform, event, config.workDir, (taskId, localPaths) => {
-            onOutput?.(`\n[media] Saved ${localPaths.length} file(s) to .neko/.cache/generated/\n`);
+          subscribeToMediaSave(platform, event, config.workDir, (taskId, savedOutputPaths) => {
+            onOutput?.(`\n${formatCliMediaSaveSummary(taskId, savedOutputPaths.length)}\n`);
           });
         }
       }
@@ -336,6 +336,10 @@ function createEventCollector(): EventCollector {
   return { steps: [], iterations: 0, totalTokens: 0 };
 }
 
+export function formatCliMediaSaveSummary(taskId: string, fileCount: number): string {
+  return `[media] Generated ${fileCount} file(s) for task ${taskId}; managed output is tracked by Neko.`;
+}
+
 /**
  * Subscribe to a background media task and save outputs to local disk when complete.
  * Called on every tool_result event that carries { backgroundMode: true, taskId }.
@@ -345,7 +349,7 @@ function subscribeToMediaSave(
   platform: Platform | undefined,
   event: AgentEvent,
   workDir: string,
-  onSaved?: (taskId: string, localPaths: string[]) => void,
+  onSaved?: (taskId: string, savedOutputPaths: string[]) => void,
 ): void {
   if (!platform?.media) return;
 
@@ -358,9 +362,9 @@ function subscribeToMediaSave(
   const unsubscribe = platform.media.onProgress(taskId, async (task) => {
     if (task.status === 'completed' && task.outputs && task.outputs.length > 0) {
       // No transcodeFile needed for TUI (terminal renders paths, not Electron webview)
-      const localPaths = await platform.media!.saveOutputs(taskId, outputDir);
-      if (localPaths.length > 0) {
-        onSaved?.(taskId, localPaths);
+      const savedOutputPaths = await platform.media!.saveOutputs(taskId, outputDir);
+      if (savedOutputPaths.length > 0) {
+        onSaved?.(taskId, savedOutputPaths);
       }
     }
 
@@ -540,8 +544,8 @@ export async function runAgentWithContext(
         collector,
       );
       if (event.type === 'tool_result') {
-        subscribeToMediaSave(platform, event, config.workDir, (taskId, localPaths) => {
-          onOutput?.(`\n[media] Saved ${localPaths.length} file(s) to .neko/.cache/generated/\n`);
+        subscribeToMediaSave(platform, event, config.workDir, (taskId, savedOutputPaths) => {
+          onOutput?.(`\n${formatCliMediaSaveSummary(taskId, savedOutputPaths.length)}\n`);
         });
       }
     }
@@ -1081,10 +1085,16 @@ export async function runInteractive(
               onThinking: (thought) => console.log(theme.muted(`\n[Thinking] ${thought}`)),
             });
             if (event.type === 'tool_result') {
-              subscribeToMediaSave(state!.platform, event, sessionConfig.workDir, (_id, paths) => {
-                console.log(theme.success(`\n[media] Saved ${paths.length} file(s):`));
-                for (const p of paths) console.log(theme.muted(`  ${p}`));
-              });
+              subscribeToMediaSave(
+                state!.platform,
+                event,
+                sessionConfig.workDir,
+                (taskId, paths) => {
+                  console.log(
+                    theme.success(`\n${formatCliMediaSaveSummary(taskId, paths.length)}`),
+                  );
+                },
+              );
             }
           }
           console.log('\n');

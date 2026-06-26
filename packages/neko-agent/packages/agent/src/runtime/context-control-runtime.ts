@@ -3,14 +3,14 @@ import {
   buildCompressionResultMessage,
   buildContextTokenCountMessage,
   type CompressionResultData,
-  type ContextWebviewMessage,
+  type ContextHostMessage,
 } from './context-webview-presenter';
 
 export type AgentContextControlAction = 'getTokenCount' | 'compressContext';
 
 export interface AgentContextControlBaseInput {
   readonly conversationId: string;
-  readonly postMessage: (message: ContextWebviewMessage) => void;
+  readonly postMessage: (message: ContextHostMessage) => void;
   readonly onMissingConversationId?: (action: AgentContextControlAction) => void;
 }
 

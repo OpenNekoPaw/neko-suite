@@ -110,7 +110,6 @@ describe('work-item-projector', () => {
         outputs: [{ url: 'https://remote.test/image.png', width: 1024, height: 1024 }],
         result: {
           urls: ['webview://local-image.png'],
-          localPaths: ['/tmp/local-image.png'],
           thumbnailUrl: 'webview://local-image.png',
           creativeEntity: {
             characterIds: ['char_linxia'],
@@ -139,8 +138,7 @@ describe('work-item-projector', () => {
             {
               id: 'asset-1',
               type: 'generated-image',
-              path: '/tmp/local-image.png',
-              webviewUri: 'webview://local-image.png',
+              renderUri: 'webview://local-image.png',
             } as any,
           ],
         },
@@ -149,7 +147,6 @@ describe('work-item-projector', () => {
     ).toMatchObject({
       result: {
         urls: ['webview://local-image.png'],
-        localPaths: ['/tmp/local-image.png'],
         thumbnailUrl: 'webview://local-image.png',
         creativeEntity: {
           characterIds: ['char_linxia'],
@@ -170,7 +167,7 @@ describe('work-item-projector', () => {
         assets: [
           {
             id: 'asset-1',
-            webviewUri: 'webview://local-image.png',
+            renderUri: 'webview://local-image.png',
           },
         ],
       },

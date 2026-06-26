@@ -5,7 +5,7 @@
  * local file paths into webview-safe URIs. Display and routing rules live here.
  */
 
-import type { Task, TaskStatus } from '@neko/shared';
+import { isPublicGeneratedAssetResultUri, type Task, type TaskStatus } from '@neko/shared';
 import type { AgentBackgroundTask } from '@neko-agent/types';
 
 export type BackgroundTaskViewType = 'image' | 'video' | 'audio';
@@ -31,10 +31,6 @@ export interface BackgroundTaskView {
   error?: string;
 }
 
-export interface BackgroundTaskViewProjectorOptions {
-  resolveLocalPath?: (path: string) => string | undefined;
-}
-
 export interface BackgroundTaskToolResultProjectionOptions {
   now?: () => number;
 }
@@ -49,7 +45,7 @@ export interface BackgroundTaskProgressPatch {
   updatedAt?: string;
 }
 
-export interface BackgroundTaskFailureUpdateOptions extends BackgroundTaskViewProjectorOptions {
+export interface BackgroundTaskFailureUpdateOptions {
   now?: () => number;
 }
 
@@ -71,10 +67,7 @@ export function filterTasksForConversation(tasks: readonly Task[], conversationI
   return tasks.filter((task) => matchesTaskConversation(task, conversationId));
 }
 
-export function toBackgroundTaskView(
-  task: Task,
-  options: BackgroundTaskViewProjectorOptions = {},
-): BackgroundTaskView {
+export function toBackgroundTaskView(task: Task): BackgroundTaskView {
   const payload = task.input.payload;
   const prompt = getStringValue(payload, 'prompt');
 
@@ -89,7 +82,7 @@ export function toBackgroundTaskView(
     progress: task.progress,
     createdAt: new Date(task.createdAt).toISOString(),
     updatedAt: new Date(task.updatedAt).toISOString(),
-    result: projectTaskResult(task.output?.data, options),
+    result: projectTaskResult(task.output?.data),
     error: task.error,
   };
 }
@@ -123,10 +116,11 @@ export function getTaskResultUrl(task: Task | undefined): string | undefined {
   const data = task?.output?.data;
   if (!isRecord(data)) return undefined;
 
-  const firstUrl = getStringArray(data, 'urls')[0];
+  const firstUrl = getStringArray(data, 'urls').find(isStableTaskResultUrl);
   if (firstUrl) return firstUrl;
 
-  return getStringValue(data, 'url');
+  const url = getStringValue(data, 'url');
+  return url && isStableTaskResultUrl(url) ? url : undefined;
 }
 
 export function createBackgroundTaskViewFromToolResultData(
@@ -170,7 +164,7 @@ export function mergeBackgroundTaskProgressView(
     type: progress.type ?? task.type,
     status: progress.status ?? task.status,
     progress: progress.progress ?? task.progress,
-    result: progress.result ?? task.result,
+    result: sanitizeBackgroundTaskResult(progress.result ?? task.result),
     error: progress.error ?? task.error,
     updatedAt: progress.updatedAt ?? task.updatedAt,
   };
@@ -182,7 +176,7 @@ export function buildBackgroundTaskFailureUpdateView(
   options: BackgroundTaskFailureUpdateOptions = {},
 ): BackgroundTaskView {
   return {
-    ...toBackgroundTaskView(task, options),
+    ...toBackgroundTaskView(task),
     status: 'failed',
     error: formatTaskFailureMessage(error),
     updatedAt: new Date(options.now?.() ?? Date.now()).toISOString(),
@@ -213,56 +207,32 @@ function getDisplayName(
   return formatTaskType(task.type);
 }
 
-function projectTaskResult(
-  resultData: unknown,
-  options: BackgroundTaskViewProjectorOptions,
-): AgentBackgroundTask['result'] | undefined {
+function projectTaskResult(resultData: unknown): AgentBackgroundTask['result'] | undefined {
   if (!isRecord(resultData)) return undefined;
 
-  const localPaths = getStringArray(resultData, 'localPaths');
-  const urls = localPaths
-    .map((path) => resolveLocalPath(path, options.resolveLocalPath))
-    .filter((url): url is string => typeof url === 'string' && url.length > 0);
-  const persistedUrls = getStringArray(resultData, 'urls');
+  const persistedUrls = getStringArray(resultData, 'urls').filter(isStableTaskResultUrl);
   const singleUrl = getStringValue(resultData, 'url');
-  const outputUrls = urls.length > 0 ? urls : persistedUrls.length > 0 ? persistedUrls : [];
-  if (singleUrl && outputUrls.length === 0) {
+  const outputUrls = persistedUrls.length > 0 ? persistedUrls : [];
+  if (singleUrl && isStableTaskResultUrl(singleUrl) && outputUrls.length === 0) {
     outputUrls.push(singleUrl);
   }
 
-  const thumbnailPath = localPaths[0];
-  const resolvedThumbnailUrl =
-    thumbnailPath !== undefined
-      ? resolveLocalPath(thumbnailPath, options.resolveLocalPath)
-      : undefined;
-  const thumbnailUrl = resolvedThumbnailUrl ?? getStringValue(resultData, 'thumbnailUrl');
+  const rawThumbnailUrl = getStringValue(resultData, 'thumbnailUrl');
+  const thumbnailUrl =
+    rawThumbnailUrl && isStableTaskResultUrl(rawThumbnailUrl) ? rawThumbnailUrl : undefined;
   const width = getNumberValue(resultData, 'width');
   const height = getNumberValue(resultData, 'height');
   const duration = getNumberValue(resultData, 'duration');
-  const assets = getWebviewGeneratedAssets(resultData, 'assets');
+  const assets = getRenderableGeneratedAssets(resultData, 'assets');
 
-  return {
+  return sanitizeBackgroundTaskResult({
     urls: outputUrls,
-    ...(localPaths.length > 0 ? { localPaths } : {}),
     ...(thumbnailUrl !== undefined ? { thumbnailUrl } : {}),
     ...(width !== undefined ? { width } : {}),
     ...(height !== undefined ? { height } : {}),
     ...(duration !== undefined ? { duration } : {}),
     ...(assets !== undefined ? { assets } : {}),
-  };
-}
-
-function resolveLocalPath(
-  path: string,
-  resolveLocalPathFn: BackgroundTaskViewProjectorOptions['resolveLocalPath'],
-): string | undefined {
-  if (!resolveLocalPathFn) return undefined;
-
-  try {
-    return resolveLocalPathFn(path);
-  } catch {
-    return undefined;
-  }
+  });
 }
 
 function formatTaskType(type: string): string {
@@ -297,29 +267,87 @@ function getNumberValue(record: Record<string, unknown>, key: string): number | 
   return typeof value === 'number' ? value : undefined;
 }
 
-function getWebviewGeneratedAssets(
+function getRenderableGeneratedAssets(
   record: Record<string, unknown>,
   key: string,
 ): NonNullable<AgentBackgroundTask['result']>['assets'] | undefined {
   const value = record[key];
   if (!Array.isArray(value)) return undefined;
 
-  const assets = value.filter(isWebviewGeneratedAsset);
+  const assets = value.filter(isRenderableGeneratedAsset).map(stripRenderableAssetPath);
   return assets.length > 0 ? assets : undefined;
 }
 
-function isWebviewGeneratedAsset(
+function isRenderableGeneratedAsset(
   value: unknown,
 ): value is NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number] {
   return (
     isRecord(value) &&
     typeof value.id === 'string' &&
     typeof value.type === 'string' &&
-    typeof value.path === 'string' &&
     typeof value.mimeType === 'string' &&
     typeof value.generatedAt === 'string' &&
-    typeof value.webviewUri === 'string'
+    typeof value.renderUri === 'string'
   );
+}
+
+function sanitizeBackgroundTaskResult(
+  result: AgentBackgroundTask['result'] | undefined,
+): AgentBackgroundTask['result'] | undefined {
+  if (!result) return undefined;
+
+  const urls = result.urls.filter(isStableTaskResultUrl);
+  const thumbnailUrl =
+    result.thumbnailUrl && isStableTaskResultUrl(result.thumbnailUrl)
+      ? result.thumbnailUrl
+      : undefined;
+  const assets = result.assets?.map(stripRenderableAssetPath) ?? [];
+  if (urls.length === 0 && !thumbnailUrl && assets.length === 0 && !result.creativeEntity) {
+    return undefined;
+  }
+
+  return {
+    urls,
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
+    ...(result.width !== undefined ? { width: result.width } : {}),
+    ...(result.height !== undefined ? { height: result.height } : {}),
+    ...(result.duration !== undefined ? { duration: result.duration } : {}),
+    ...(assets.length > 0 ? { assets } : {}),
+    ...(result.creativeEntity ? { creativeEntity: result.creativeEntity } : {}),
+  };
+}
+
+function stripRenderableAssetPath(
+  asset: NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number],
+): NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number] {
+  if (!('path' in asset)) return stripNestedRenderableAssetPaths(asset);
+  const { path: _path, ...assetWithoutPath } = asset as typeof asset & {
+    readonly path?: unknown;
+  };
+  return stripNestedRenderableAssetPaths(assetWithoutPath);
+}
+
+function stripNestedRenderableAssetPaths<
+  T extends NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number],
+>(asset: T): T {
+  if (asset.type !== 'generated-storyboard') return asset;
+  return {
+    ...asset,
+    scenes: asset.scenes.map((scene) => ({
+      ...scene,
+      shots: scene.shots.map((shot) => {
+        if (!('path' in shot)) return shot;
+        const { path: _path, ...shotWithoutPath } = shot as typeof shot & {
+          readonly path?: unknown;
+        };
+        return shotWithoutPath;
+      }),
+    })),
+  };
+}
+
+function isStableTaskResultUrl(value: string): boolean {
+  return isPublicGeneratedAssetResultUri(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

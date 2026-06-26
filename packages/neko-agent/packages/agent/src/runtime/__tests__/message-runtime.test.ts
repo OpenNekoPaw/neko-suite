@@ -960,6 +960,47 @@ describe('message runtime helpers', () => {
     ).toBeNull();
   });
 
+  it('persists content-block-only agent stream results', () => {
+    const stream = {
+      accumulatedResponse: '',
+      accumulatedThinking: '',
+      hasError: false,
+      collectedToolCalls: [],
+      contentBlocks: [
+        {
+          id: 'block-1',
+          type: 'text' as const,
+          timestamp: 123,
+          content: 'Rendered from block',
+          isStreaming: false,
+        },
+      ],
+    };
+
+    expect(shouldPersistAgentAssistantStream(stream)).toBe(true);
+    expect(
+      buildAgentAssistantMessageFromStream({
+        id: 'msg-block-only',
+        timestamp: 123,
+        stream,
+      }),
+    ).toEqual({
+      id: 'msg-block-only',
+      role: 'assistant',
+      content: '',
+      timestamp: 123,
+      contentBlocks: [
+        {
+          id: 'block-1',
+          type: 'text',
+          timestamp: 123,
+          content: 'Rendered from block',
+          isStreaming: false,
+        },
+      ],
+    });
+  });
+
   it('persists partial failed agent stream results as error messages', () => {
     expect(
       buildAgentAssistantMessageFromStream({

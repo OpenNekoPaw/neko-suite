@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  runAgentMediaTurnForWebview,
-  type AgentMediaTurnExecutionInput,
-} from '../media-turn-webview-runtime';
+import { runAgentMediaTurn, type AgentMediaTurnExecutionInput } from '../media-turn-runtime';
 import { projectMediaTaskToWorkItem } from '@neko-agent/types';
 
 const mediaModel = {
@@ -23,12 +20,12 @@ const task = {
   request: { prompt: 'Generate a cat' },
 };
 
-describe('media turn webview runtime', () => {
+describe('media turn runtime', () => {
   it('posts unavailable error when media execution is not injected', async () => {
     const postMessage = vi.fn();
     const persistErrorMessage = vi.fn();
 
-    const result = await runAgentMediaTurnForWebview({
+    const result = await runAgentMediaTurn({
       conversationId: 'conv-1',
       prompt: 'Generate a cat',
       mediaModel,
@@ -58,7 +55,7 @@ describe('media turn webview runtime', () => {
       | AgentMediaTurnExecutionInput<typeof task, { readonly id: string }>
       | undefined;
 
-    const result = await runAgentMediaTurnForWebview<typeof task, { readonly id: string }>({
+    const result = await runAgentMediaTurn<typeof task, { readonly id: string }>({
       conversationId: 'conv-1',
       prompt: 'Generate a cat',
       mediaModel,
@@ -106,7 +103,7 @@ describe('media turn webview runtime', () => {
     const postMessage = vi.fn();
     const onIgnoredConversationTask = vi.fn();
 
-    await runAgentMediaTurnForWebview<typeof task, { readonly id: string }>({
+    await runAgentMediaTurn<typeof task, { readonly id: string }>({
       conversationId: 'conv-1',
       prompt: 'Generate a cat',
       mediaModel,
@@ -129,12 +126,12 @@ describe('media turn webview runtime', () => {
     });
   });
 
-  it('posts execution errors through the webview protocol', async () => {
+  it('posts execution errors through host messages', async () => {
     const postMessage = vi.fn();
     const persistErrorMessage = vi.fn();
     const error = new Error('Provider failed');
 
-    const result = await runAgentMediaTurnForWebview({
+    const result = await runAgentMediaTurn({
       conversationId: 'conv-1',
       prompt: 'Generate a cat',
       mediaModel,
