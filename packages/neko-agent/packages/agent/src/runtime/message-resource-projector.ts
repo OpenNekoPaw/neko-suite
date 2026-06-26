@@ -221,37 +221,7 @@ function projectResourceValueInternal(
       continue;
     }
 
-    if (LOCAL_MEDIA_PATH_KEYS.has(key) && typeof item === 'string' && isLocalMediaFilePath(item)) {
-      if (hasStableDocumentResourceRef(value)) {
-        continue;
-      }
-      if (isManagedRuntimeMediaPath(item)) {
-        appendProjectionDiagnostic(projected, item, key);
-        continue;
-      }
-      const resolved = resolveLocalMediaPath(item, options);
-      if (resolved) {
-        projected[key] = resolved;
-      } else {
-        appendProjectionDiagnostic(projected, item, key);
-      }
-      continue;
-    }
-
-    if (SINGLE_URL_KEYS.has(key) && typeof item === 'string' && isLocalMediaFilePath(item)) {
-      if (hasStableDocumentResourceRef(value)) {
-        continue;
-      }
-      if (isManagedRuntimeMediaPath(item)) {
-        appendProjectionDiagnostic(projected, item, key);
-        continue;
-      }
-      const resolved = resolveLocalMediaPath(item, options);
-      if (resolved) {
-        projected[key] = resolved;
-      } else {
-        appendProjectionDiagnostic(projected, item, key);
-      }
+    if (projectLocalMediaStringField({ key, item, owner: value, projected, options })) {
       continue;
     }
 
@@ -275,6 +245,36 @@ function projectResourceValueInternal(
   }
 
   return projected;
+}
+
+function projectLocalMediaStringField(input: {
+  readonly key: string;
+  readonly item: unknown;
+  readonly owner: object;
+  readonly projected: Record<string, unknown>;
+  readonly options: MessageResourceProjectionOptions;
+}): boolean {
+  if (!isProjectableLocalMediaStringField(input.key, input.item)) return false;
+  if (hasStableDocumentResourceRef(input.owner)) return true;
+  if (isManagedRuntimeMediaPath(input.item)) {
+    appendProjectionDiagnostic(input.projected, input.item, input.key);
+    return true;
+  }
+  const resolved = resolveLocalMediaPath(input.item, input.options);
+  if (resolved) {
+    input.projected[input.key] = resolved;
+  } else {
+    appendProjectionDiagnostic(input.projected, input.item, input.key);
+  }
+  return true;
+}
+
+function isProjectableLocalMediaStringField(key: string, item: unknown): item is string {
+  return (
+    (LOCAL_MEDIA_PATH_KEYS.has(key) || SINGLE_URL_KEYS.has(key)) &&
+    typeof item === 'string' &&
+    isLocalMediaFilePath(item)
+  );
 }
 
 function hasStableDocumentResourceRef(value: object): boolean {
