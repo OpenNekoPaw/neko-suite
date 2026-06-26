@@ -934,7 +934,7 @@ function collectReadImageCandidates(
       index,
       info,
       path: readString(image, 'path') ?? readString(documentImage, 'path'),
-      webviewUri:
+      renderUri:
         readRenderableUri(image) ??
         readRenderableUri(documentImage) ??
         readString(documentImage, 'webviewUri'),
@@ -949,14 +949,15 @@ function projectDocumentImageCandidate(input: {
   readonly index: number;
   readonly info?: Record<string, unknown>;
   readonly path?: string;
-  readonly webviewUri?: string;
+  readonly renderUri?: string;
   readonly allowLocalPath: boolean;
   readonly label?: string;
 }): MediaCandidate | null {
   const mimeType = readString(input.info, 'mimeType') ?? inferImageMimeType(input.path);
-  const src = input.webviewUri && isRenderableUri(input.webviewUri) ? input.webviewUri : undefined;
+  const renderUri =
+    input.renderUri && isRenderableUri(input.renderUri) ? input.renderUri : undefined;
   const resourceRef = parseStableDocumentArchiveResourceRef(input.info?.['resourceRef']);
-  if (!resourceRef && (!input.allowLocalPath || (!input.path && !src))) return null;
+  if (!resourceRef && (!input.allowLocalPath || (!input.path && !renderUri))) return null;
   const pageNumber = readDocumentImagePageNumber(input.info) ?? readPageNumberFromText(input.label);
   const alias = normalizeStoryboardAlias(readString(input.info, 'alias'));
   const sourceDocumentId =
@@ -965,7 +966,7 @@ function projectDocumentImageCandidate(input: {
   return {
     assetIndex: input.index,
     type: 'image',
-    ...(src && !resourceRef ? { src } : {}),
+    ...(renderUri && !resourceRef ? { src: renderUri, renderUri } : {}),
     ...(!resourceRef && readPortableSourcePath(input.path)
       ? { localPath: readPortableSourcePath(input.path) }
       : {}),
