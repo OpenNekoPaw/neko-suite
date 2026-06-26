@@ -31,6 +31,11 @@ import { AgentRunnerVscodeEventBridge } from './agentRunnerVscodeEventBridge';
 import { loadAuthorizedMediaLibraryReadRoots } from '../services/documentPathResolver';
 import { loadWorkspaceFileIgnoreRules } from '../services/workspaceIgnoreFilter';
 import { setDocumentAuthorizedReadRoots } from '../tools/documentToolRuntime';
+import {
+  getCapabilityRuntimeBindings,
+  setCapabilityRuntimeContentAccessRuntime,
+} from '../bootstrap/capabilityBootstrap';
+import { createExtensionAgentContentAccessRuntime } from '../services/agentContentAccessRuntime';
 
 const logger = getLogger('AgentRunner');
 
@@ -57,6 +62,7 @@ export interface IAgentRunner extends AgentRunnerPort<IAgentConfig, IAgentContex
 export interface AgentRunnerDeps {
   engineClientProvider?: IEngineClientProvider;
   subAgentRuntime: SubAgentRuntimeCoordinator;
+  extensionContext?: vscode.ExtensionContext;
   createRuntimeController?: (
     target: AgentRuntimeSessionControllerTarget,
   ) => AgentRuntimeSessionController;
@@ -67,11 +73,23 @@ export class AgentRunner implements IAgentRunner {
   private readonly eventBridge: AgentRunnerVscodeEventBridge;
 
   constructor(deps: AgentRunnerDeps) {
+    const engineClientProvider = deps.engineClientProvider ?? getEngineClientProvider();
+    const agentContentAccess =
+      getCapabilityRuntimeBindings().contentAccessRuntime ??
+      (deps.extensionContext
+        ? createExtensionAgentContentAccessRuntime({
+            context: deps.extensionContext,
+            engineClientProvider,
+          }).runtime
+        : undefined);
+    if (agentContentAccess && !getCapabilityRuntimeBindings().contentAccessRuntime) {
+      setCapabilityRuntimeContentAccessRuntime(agentContentAccess);
+    }
     this.port = new AgentRunnerRuntimeAdapter({
-      engineClientProvider: deps.engineClientProvider ?? getEngineClientProvider(),
+      engineClientProvider,
       subAgentRuntime: deps.subAgentRuntime,
       createRuntimeController: deps.createRuntimeController,
-      perceptionAssetLoader: createLocalPerceptionAssetLoader(),
+      perceptionAssetLoader: createLocalPerceptionAssetLoader(agentContentAccess),
       logger,
     });
     this.eventBridge = new AgentRunnerVscodeEventBridge(this.port.onDidRunnerEvent);

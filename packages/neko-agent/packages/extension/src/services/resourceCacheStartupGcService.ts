@@ -3,9 +3,8 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { resolveStorageLayout, type ResourceCacheSettings } from '@neko/shared';
 import {
-  createDefaultLocalResourceAccessService,
+  createHostContentAccessRuntime,
   resolveResourceCacheQuotaPolicy,
-  VSCodeResourceCacheService,
   type ResourceCacheGcResult,
   type ResourceCacheService,
 } from '@neko/shared/vscode/extension';
@@ -101,19 +100,26 @@ function createDefaultStartupGcCacheService(
   context: vscode.ExtensionContext,
   target: ResourceCacheStartupGcTarget,
 ): ResourceCacheService {
-  return new VSCodeResourceCacheService({
-    cacheRoot: target.cacheRoot,
-    manifestPath: target.manifestPath,
-    ...(target.projectRoot ? { projectRoot: target.projectRoot } : {}),
-    ...(target.extensionPrivateRoot ? { extensionPrivateRoot: target.extensionPrivateRoot } : {}),
-    localResourceAccess: createDefaultLocalResourceAccessService({
-      extensionUri: context.extensionUri,
-      context,
-      logger,
-    }),
-    providers: [],
+  const runtime = createHostContentAccessRuntime({
+    extensionUri: context.extensionUri,
+    context,
+    workspaceRoot: target.projectRoot,
+    resourceCacheOptions: {
+      cacheRoot: target.cacheRoot,
+      manifestPath: target.manifestPath,
+      ...(target.projectRoot ? { projectRoot: target.projectRoot } : {}),
+      ...(target.extensionPrivateRoot ? { extensionPrivateRoot: target.extensionPrivateRoot } : {}),
+      providers: [],
+    },
+    sourceFileProvider: { enabled: false },
+    documentEntryProvider: { enabled: false },
+    ingest: { enabled: false },
     logger,
   });
+  if (!runtime.resourceCache) {
+    throw new Error('Resource cache startup GC requires ResourceCacheService.');
+  }
+  return runtime.resourceCache;
 }
 
 function dedupeTargetsByRoot(

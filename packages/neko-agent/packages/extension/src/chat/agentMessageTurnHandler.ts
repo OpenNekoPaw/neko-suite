@@ -63,6 +63,7 @@ import {
   formatAgentLlmConfigDiagnostics,
   resolveAgentLlmConfigForTurn,
 } from './agentLlmConfigResolver';
+import { getCapabilityRuntimeBindings } from '../bootstrap/capabilityBootstrap';
 
 const logger = getLogger('AgentMessageTurnHandler');
 
@@ -108,7 +109,9 @@ export class AgentMessageTurnHandler {
     private readonly _localResourceAccess?: AgentLocalResourceAccess,
     private readonly _options: AgentMessageTurnHandlerOptions = {},
   ) {
-    this._attachmentProcessor = new AttachmentProcessor();
+    this._attachmentProcessor = new AttachmentProcessor({
+      contentAccessRuntime: getCapabilityRuntimeBindings().contentAccessRuntime,
+    });
 
     this._mediaDeliveryHost = new MediaTaskDeliveryHost({
       platform: this._platform,
@@ -207,7 +210,10 @@ export class AgentMessageTurnHandler {
       processAttachments: (attachments) =>
         this._attachmentProcessor.processAttachments(attachments ? [...attachments] : undefined),
       createReferencedMediaProcessor: async () =>
-        new MediaPreprocessor(await this._engineClientProvider.getOptionalClient()),
+        new MediaPreprocessor(
+          await this._engineClientProvider.getOptionalClient(),
+          getCapabilityRuntimeBindings().contentAccessRuntime,
+        ),
       onReferenceError: (error) => {
         logger.warn(`Could not read file: ${error.reference}`, error.error);
       },

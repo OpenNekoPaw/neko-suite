@@ -24,6 +24,26 @@ export function createDocumentLowLevelAccess(
 
   return {
     ...access,
+    async readFile(filePath) {
+      const engine = await engineClientProvider.getOptionalClient();
+      if (!engine) {
+        throw new Error('Engine file access is unavailable for document binary reads');
+      }
+
+      const resolvedPath = await resolveDocumentPath(filePath);
+      return engine.withRegisteredFile(
+        { filePath: resolvedPath, purpose: 'document' },
+        async (registered) => {
+          if (registered.fileSizeBytes === 0) {
+            return new Uint8Array();
+          }
+          return new Uint8Array(
+            await engine.readFileRange(registered.token, 0, registered.fileSizeBytes - 1),
+          );
+        },
+      );
+    },
+
     async readRange(filePath, start, end) {
       const engine = await engineClientProvider.getOptionalClient();
       if (!engine) {

@@ -212,7 +212,12 @@ export class AgentStreamProcessor {
             progress: delivery.view,
             deliveryPlan: delivery.deliveryPlan,
             ...(delivery.deliveryPlan.shouldPersistResultUrls
-              ? { persistResultUrls: delivery.deliveryPlan.resultUrls }
+              ? {
+                  persistResultUrls: toPersistableMediaTaskResultUrls(
+                    delivery.deliveryPlan.generatedAssets,
+                    delivery.deliveryPlan.resultUrls,
+                  ),
+                }
               : {}),
           };
         },
@@ -415,7 +420,20 @@ function toPerceptualAssetRef(asset: GeneratedAsset): import('@neko/shared').Per
 }
 
 function toStableGeneratedAssetUri(asset: GeneratedAsset): string {
-  return toPlatformStableGeneratedAssetUri(asset.path);
+  return toPlatformStableGeneratedAssetUri(asset.path, asset.id);
+}
+
+function toPersistableMediaTaskResultUrls(
+  assets: readonly GeneratedAsset[],
+  fallbackUrls: readonly string[],
+): string[] {
+  const assetUrls = assets
+    .map((asset) => toPerceptualAssetRef(asset).uri)
+    .filter((uri): uri is string => typeof uri === 'string' && uri.length > 0);
+  if (assetUrls.length > 0) {
+    return assetUrls;
+  }
+  return fallbackUrls.filter((url) => url.startsWith('http://') || url.startsWith('https://'));
 }
 
 function toAttachmentType(asset: GeneratedAsset): 'image' | 'video' | 'audio' {

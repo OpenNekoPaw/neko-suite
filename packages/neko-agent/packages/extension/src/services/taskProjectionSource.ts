@@ -1,7 +1,5 @@
-import * as path from 'path';
 import {
   clampDashboardTaskProgress,
-  normalizeDashboardLocalRef,
   toDashboardTaskId,
   type DashboardTask,
   type DashboardTaskAction,
@@ -66,13 +64,6 @@ export class AgentTaskProjectionSource {
     }
 
     const outputs: DashboardTaskOutputRef[] = [];
-    for (const localPath of item.task.result?.localPaths ?? []) {
-      const ref = this.toWorkspaceRelativeRef(localPath);
-      if (ref) {
-        outputs.push({ kind: 'file', ref, label: path.basename(ref) });
-      }
-    }
-
     for (const url of item.task.result?.urls ?? []) {
       if (url.startsWith('http://') || url.startsWith('https://')) {
         outputs.push({ kind: 'url', ref: url, label: 'Generated output' });
@@ -84,23 +75,6 @@ export class AgentTaskProjectionSource {
     }
 
     return dedupeOutputs(outputs);
-  }
-
-  private toWorkspaceRelativeRef(localPath: string): string | undefined {
-    if (!localPath) return undefined;
-    if (!path.isAbsolute(localPath)) {
-      return normalizeDashboardLocalRef(localPath);
-    }
-
-    const folders = this.options.host.workspaceFolders ?? [];
-    for (const folder of folders) {
-      const relative = path.relative(folder.uri.fsPath, localPath);
-      if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
-        return normalizeDashboardLocalRef(relative);
-      }
-    }
-
-    return undefined;
   }
 }
 

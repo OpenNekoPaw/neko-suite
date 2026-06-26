@@ -140,7 +140,7 @@ export async function bootstrapCoreServices(
   // ==========================================================================
   // 5. Agent Manager
   // ==========================================================================
-  const agentManager = new AgentManager();
+  const agentManager = new AgentManager(context);
   services.set(IAgentManager, agentManager);
 
   const taskLifecycleCoordinator = new TaskLifecycleCoordinator({

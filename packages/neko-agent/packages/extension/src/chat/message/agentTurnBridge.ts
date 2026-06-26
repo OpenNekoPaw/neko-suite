@@ -17,9 +17,9 @@ import type {
   ModelRef,
 } from '@neko-agent/types';
 import {
-  buildAgentTurnForWebviewRuntimeInput,
+  buildAgentTurnRuntimeInput,
   createTimelineContextRuntime,
-  runAgentTurnForWebviewRuntime,
+  runAgentTurnRuntime,
   type AgentLlmRuntimeOptions,
   type AgentMessageExecutionOverrides,
   type AgentTurnAgentManager,
@@ -119,8 +119,8 @@ export class AgentTurnBridge {
         }
       : undefined;
 
-    await runAgentTurnForWebviewRuntime(
-      buildAgentTurnForWebviewRuntimeInput({
+    await runAgentTurnRuntime(
+      buildAgentTurnRuntimeInput({
         conversationId: input.conversationId,
         message: input.message,
         platform: this.deps.platform,

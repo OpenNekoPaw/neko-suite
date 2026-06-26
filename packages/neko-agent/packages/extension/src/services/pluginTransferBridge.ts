@@ -14,9 +14,8 @@ import {
   type ResourceRef,
 } from '@neko/shared';
 import {
+  createHostContentAccessRuntime,
   createGeneratedAssetResourceRef,
-  GeneratedOutputContentIngestProvider,
-  HostContentIngestService,
   type ContentIngestService,
 } from '@neko/shared/vscode/extension';
 import type {
@@ -261,17 +260,22 @@ function createGeneratedOutputIngestService(
   workspaceRoot: string,
   pathResolver = createWorkspacePathResolver(workspaceRoot),
 ): ContentIngestService {
-  return new HostContentIngestService({
-    providers: [
-      new GeneratedOutputContentIngestProvider({
-        projectRoot: workspaceRoot,
-        pathResolver,
-      }),
-    ],
-    guardOptions: {
+  return createHostContentAccessRuntime({
+    workspaceRoot,
+    sourceFileProvider: { enabled: false },
+    documentEntryProvider: { enabled: false },
+    ingest: {
+      pathResolver,
       projectRoot: workspaceRoot,
+      includeImportSource: false,
+      includeRegisterExistingSource: false,
+      includeExportStaging: false,
+      includeCacheArtifact: false,
+      guardOptions: {
+        projectRoot: workspaceRoot,
+      },
     },
-  });
+  }).contentIngest;
 }
 
 function createWorkspacePathResolver(workspaceRoot: string): PathResolver {

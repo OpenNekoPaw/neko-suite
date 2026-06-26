@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
 import { createMediaTaskView, runMediaTurn } from '@neko/platform';
 import type { MediaModelCategory, ModelRef } from '@neko-agent/types';
-import { runAgentMediaTurnForWebview } from '@neko/agent/runtime';
+import { runAgentMediaTurn } from '@neko/agent/runtime';
 import { getLogger } from '../base';
 import { MediaTaskDeliveryHost } from './mediaTaskDeliveryHost';
 import type { AgentDashboardWorkItemSource } from './dashboardWorkItemSource';
@@ -41,7 +41,7 @@ export class MediaTurnBridge {
   async execute(input: ExecuteMediaTurnForWebviewInput): Promise<void> {
     const media = this.deps.platform?.media;
 
-    await runAgentMediaTurnForWebview({
+    await runAgentMediaTurn({
       conversationId: input.conversationId,
       prompt: input.prompt,
       mediaModel: input.mediaModel,

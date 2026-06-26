@@ -11,6 +11,7 @@ import {
   type AgentBase64ImageAttachment,
   type AgentProcessedAttachments,
 } from '@neko/agent/runtime';
+import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import {
   isVisionImageMime,
   planVisionImagePreprocess,
@@ -26,6 +27,10 @@ const logger = getLogger('AttachmentProcessor');
  */
 export type ProcessedAttachments = AgentProcessedAttachments;
 
+export interface AttachmentProcessorDeps {
+  readonly contentAccessRuntime?: AgentContentAccessRuntime;
+}
+
 /**
  * Bridge for message attachments.
  *
@@ -33,6 +38,8 @@ export type ProcessedAttachments = AgentProcessedAttachments;
  * and image encoding capabilities from the extension host.
  */
 export class AttachmentProcessor {
+  constructor(private readonly deps: AttachmentProcessorDeps = {}) {}
+
   /**
    * Process attachments using agent-owned projection rules.
    */
@@ -58,17 +65,37 @@ export class AttachmentProcessor {
   } | null> {
     try {
       const resolvedPath = await resolveDocumentPath(filePath);
-      const buffer = await fs.promises.readFile(resolvedPath);
       const mediaType = resolveVisionImageAttachmentMediaType(resolvedPath);
+      const contentAccessRuntime = this.deps.contentAccessRuntime;
+      if (!contentAccessRuntime) {
+        throw new Error('Image attachment reading requires AgentContentAccessRuntime.');
+      }
+      const loaded = await contentAccessRuntime.loadProviderAsset({
+        caller: 'attachment-processor',
+        source: {
+          kind: 'file',
+          path: resolvedPath,
+        },
+        preferredTarget: 'bytes',
+        mimeTypeHint: mediaType,
+      });
+      if (loaded.status !== 'ready' || !loaded.bytes) {
+        throw new Error(
+          loaded.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+            `Image attachment is not ready: ${loaded.status}`,
+        );
+      }
+      const buffer = Buffer.from(loaded.bytes);
+      const outputMediaType = loaded.mimeType ?? mediaType;
 
-      if (isVisionImageMime(mediaType)) {
+      if (isVisionImageMime(outputMediaType)) {
         const encoded = await this.maybeEncodeVisionImage(buffer);
         if (encoded) {
           return encoded;
         }
       }
 
-      return { type: 'base64', media_type: mediaType, data: buffer.toString('base64') };
+      return { type: 'base64', media_type: outputMediaType, data: buffer.toString('base64') };
     } catch (err) {
       logger.error('Failed to read file as base64:', err);
       return null;

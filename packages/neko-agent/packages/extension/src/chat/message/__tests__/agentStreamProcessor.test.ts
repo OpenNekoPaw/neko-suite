@@ -600,7 +600,7 @@ describe('AgentStreamProcessor', () => {
       });
     });
 
-    it('projects document image paths to webview URIs only for webview delivery', async () => {
+    it('does not project legacy document image paths into webview URI contracts', async () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
       };
@@ -633,26 +633,13 @@ describe('AgentStreamProcessor', () => {
         imagePaths: ['/tmp/page-1.jpg'],
         imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
       });
-      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
-        webview,
-        '/tmp/page-1.jpg',
-        'neko-agent.stream-tool-result',
-      );
+      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'toolResult',
           data: {
             source: { filePath: '/books/a.epub', format: 'epub' },
-            imagePaths: ['/tmp/page-1.jpg'],
-            imagePathWebviewUris: ['webview-uri:/tmp/page-1.jpg'],
-            imageInfo: [
-              {
-                path: '/tmp/page-1.jpg',
-                webviewUri: 'webview-uri:/tmp/page-1.jpg',
-                width: 1494,
-                height: 2133,
-              },
-            ],
+            imageInfo: [{ width: 1494, height: 2133 }],
           },
         }),
       );
@@ -696,12 +683,10 @@ describe('AgentStreamProcessor', () => {
           toolCallId: 'tc-read-image',
           arguments: {
             image_paths: ['/tmp/page-1.jpg'],
-            imagePathWebviewUris: ['webview-uri:/tmp/page-1.jpg'],
             images: [
               {
                 label: 'Page 1',
-                path: '/tmp/page-1.jpg',
-                webviewUri: 'webview-uri:/tmp/page-1.jpg',
+                path: 'webview-uri:/tmp/page-1.jpg',
               },
             ],
           },
@@ -709,7 +694,7 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
-    it('leaves unauthorized document image paths unresolved when unified access rejects them', async () => {
+    it('strips legacy document image paths when unified access would reject them', async () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn(() => undefined),
       };
@@ -732,33 +717,13 @@ describe('AgentStreamProcessor', () => {
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
-      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
-        webview,
-        '/tmp/page-1.jpg',
-        'neko-agent.stream-tool-result',
-      );
+      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'toolResult',
           data: {
-            imagePaths: ['/tmp/page-1.jpg'],
-            resourceProjectionDiagnostics: [
-              expect.objectContaining({
-                code: 'resource-projection-denied',
-                field: 'imagePaths',
-                source: '/tmp/page-1.jpg',
-              }),
-            ],
             imageInfo: [
               {
-                path: '/tmp/page-1.jpg',
-                resourceProjectionDiagnostics: [
-                  expect.objectContaining({
-                    code: 'resource-projection-denied',
-                    field: 'path',
-                    source: '/tmp/page-1.jpg',
-                  }),
-                ],
                 width: 1494,
                 height: 2133,
               },
@@ -768,7 +733,7 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
-    it('returns projection diagnostics for macOS system temp image paths instead of display URIs', async () => {
+    it('strips macOS system temp image paths instead of emitting display URIs', async () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn(() => undefined),
       };
@@ -793,33 +758,15 @@ describe('AgentStreamProcessor', () => {
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
-      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
-        webview,
-        tempImagePath,
-        'neko-agent.stream-tool-result',
-      );
+      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'toolResult',
           data: expect.objectContaining({
-            imagePaths: [tempImagePath],
-            resourceProjectionDiagnostics: [
-              expect.objectContaining({
-                code: 'resource-projection-denied',
-                field: 'imagePaths',
-                source: tempImagePath,
-              }),
-            ],
             imageInfo: [
               expect.objectContaining({
-                path: tempImagePath,
-                resourceProjectionDiagnostics: [
-                  expect.objectContaining({
-                    code: 'resource-projection-denied',
-                    field: 'path',
-                    source: tempImagePath,
-                  }),
-                ],
+                width: 1494,
+                height: 2133,
               }),
             ],
           }),
@@ -834,7 +781,7 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
-    it('projects managed resource cache paths in tool stream results', async () => {
+    it('does not project managed document cache paths in tool stream results', async () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
       };
@@ -858,25 +805,12 @@ describe('AgentStreamProcessor', () => {
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
-      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
-        webview,
-        managedPath,
-        'neko-agent.stream-tool-result',
-      );
+      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'toolResult',
           data: {
-            imagePaths: [managedPath],
-            imagePathWebviewUris: [`webview-uri:${managedPath}`],
-            imageInfo: [
-              {
-                path: managedPath,
-                webviewUri: `webview-uri:${managedPath}`,
-                width: 1494,
-                height: 2133,
-              },
-            ],
+            imageInfo: [{ width: 1494, height: 2133 }],
           },
         }),
       );
@@ -944,11 +878,9 @@ describe('AgentStreamProcessor', () => {
           type: 'toolResult',
           attachments: [
             expect.objectContaining({
-              path: imagePath,
-              webviewUri: `webview-uri:${imagePath}`,
+              path: `webview-uri:${imagePath}`,
               assetRef: expect.objectContaining({
                 uri: `webview-uri:${imagePath}`,
-                localPath: imagePath,
               }),
             }),
           ],
@@ -958,7 +890,6 @@ describe('AgentStreamProcessor', () => {
                 keyframeRefs: [
                   expect.objectContaining({
                     uri: `webview-uri:${imagePath}`,
-                    localPath: imagePath,
                   }),
                 ],
               }),
@@ -1228,6 +1159,11 @@ describe('AgentStreamProcessor', () => {
                 id: 'asset-1',
                 type: 'generated-image',
                 path: '/workspace/.neko/generated/image/out.png',
+                assetRef: {
+                  assetId: 'asset-1',
+                  uri: 'generated-assets/asset-1.png',
+                  mimeType: 'image/png',
+                },
                 mimeType: 'image/png',
                 generatedAt: '2026-01-01T00:00:01.000Z',
                 width: 1024,
@@ -1290,7 +1226,7 @@ describe('AgentStreamProcessor', () => {
             taskId: 'task-media',
             resultAssetRefs: [
               expect.objectContaining({
-                uri: '${WORKSPACE}/.neko/generated/image/out.png',
+                uri: 'generated-assets/asset-1.png',
                 mimeType: 'image/png',
               }),
             ],
@@ -1298,7 +1234,7 @@ describe('AgentStreamProcessor', () => {
           attachments: [
             expect.objectContaining({
               type: 'image',
-              path: '${WORKSPACE}/.neko/generated/image/out.png',
+              path: 'generated-assets/asset-1.png',
             }),
           ],
         }),
@@ -1307,7 +1243,7 @@ describe('AgentStreamProcessor', () => {
         expect.objectContaining({
           asset: expect.objectContaining({
             ref: expect.objectContaining({
-              uri: '${WORKSPACE}/.neko/generated/image/out.png',
+              uri: 'generated-assets/asset-1.png',
             }),
           }),
           sourceToolCallId: 'tc-media',

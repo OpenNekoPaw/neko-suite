@@ -53,7 +53,7 @@ describe('documentPathResolver', () => {
     await expect(loadAuthorizedMediaLibraryReadRoots()).resolves.toEqual([overrideRoot]);
   });
 
-  it('treats an available assets API result as authoritative even when empty', async () => {
+  it('keeps project settings roots when an available assets API result is empty', async () => {
     await fs.writeFile(
       path.join(workspaceRoot, 'neko', 'settings.json'),
       JSON.stringify({
@@ -68,6 +68,26 @@ describe('documentPathResolver', () => {
       },
     } as never);
 
-    await expect(loadAuthorizedMediaLibraryReadRoots()).resolves.toEqual([]);
+    await expect(loadAuthorizedMediaLibraryReadRoots()).resolves.toEqual([mediaRoot]);
+  });
+
+  it('merges available assets API roots with project settings roots', async () => {
+    const apiRoot = path.join(fixtureRoot, 'api-media');
+    await fs.mkdir(apiRoot, { recursive: true });
+    await fs.writeFile(
+      path.join(workspaceRoot, 'neko', 'settings.json'),
+      JSON.stringify({
+        mediaLibraries: [{ variable: 'EPUBS', path: mediaRoot, enabled: true }],
+      }),
+      'utf-8',
+    );
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      isActive: true,
+      exports: {
+        getMediaLibraryRoots: vi.fn(async () => [apiRoot, mediaRoot]),
+      },
+    } as never);
+
+    await expect(loadAuthorizedMediaLibraryReadRoots()).resolves.toEqual([apiRoot, mediaRoot]);
   });
 });

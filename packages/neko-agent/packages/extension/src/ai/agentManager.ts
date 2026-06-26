@@ -184,9 +184,13 @@ export class AgentManager implements IAgentManager {
     new vscode.EventEmitter<AgentConversationInterruptedEvent>();
   private readonly _runtime: AgentRuntimeManager<AgentRunner>;
 
-  constructor() {
+  constructor(private readonly extensionContext?: vscode.ExtensionContext) {
     this._runtime = createAgentRuntimeManager<AgentRunner>({
-      createAgent: ({ subAgentRuntime }) => new AgentRunner({ subAgentRuntime }),
+      createAgent: ({ subAgentRuntime }) =>
+        new AgentRunner({
+          subAgentRuntime,
+          extensionContext: this.extensionContext,
+        }),
       onAgentStart: (event) => this._onDidAgentStart.fire(event),
       onAgentStop: (event) => this._onDidAgentStop.fire(event),
       logger,

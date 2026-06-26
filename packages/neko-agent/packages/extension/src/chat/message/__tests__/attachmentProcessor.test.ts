@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import { AttachmentProcessor } from '../attachmentProcessor';
+import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 
 // Mock fs.promises for file reading
 vi.mock('fs', () => ({
@@ -31,10 +32,12 @@ vi.mock('../../../services/documentPathResolver', () => ({
 
 describe('AttachmentProcessor', () => {
   let processor: AttachmentProcessor;
+  let contentAccessRuntime: AgentContentAccessRuntime;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    processor = new AttachmentProcessor();
+    contentAccessRuntime = createContentAccessRuntime();
+    processor = new AttachmentProcessor({ contentAccessRuntime });
   });
 
   describe('processAttachments', () => {
@@ -73,7 +76,16 @@ describe('AttachmentProcessor', () => {
 
     it('should process image attachment from file path', async () => {
       const mockBuffer = Buffer.from('fake-image-data');
-      vi.mocked(fs.promises.readFile).mockResolvedValue(mockBuffer);
+      vi.mocked(contentAccessRuntime.loadProviderAsset).mockResolvedValueOnce({
+        status: 'ready',
+        diagnostics: [],
+        bytes: mockBuffer,
+        mimeType: 'image/jpeg',
+        sizeBytes: mockBuffer.byteLength,
+      });
+      vi.mocked(fs.promises.readFile).mockRejectedValue(
+        new Error('legacy binary image read must not be used'),
+      );
 
       const attachments = [
         {
@@ -85,7 +97,13 @@ describe('AttachmentProcessor', () => {
 
       const result = await processor.processAttachments(attachments);
 
-      expect(fs.promises.readFile).toHaveBeenCalledWith('/tmp/photo.jpg');
+      expect(contentAccessRuntime.loadProviderAsset).toHaveBeenCalledWith({
+        caller: 'attachment-processor',
+        source: { kind: 'file', path: '/tmp/photo.jpg' },
+        preferredTarget: 'bytes',
+        mimeTypeHint: 'image/jpeg',
+      });
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
       expect(result.imageAttachments).toHaveLength(1);
       expect(result.imageAttachments[0]).toEqual({
         type: 'base64',
@@ -95,7 +113,19 @@ describe('AttachmentProcessor', () => {
     });
 
     it('should handle image read failure gracefully', async () => {
-      vi.mocked(fs.promises.readFile).mockRejectedValue(new Error('ENOENT'));
+      vi.mocked(contentAccessRuntime.loadProviderAsset).mockResolvedValueOnce({
+        status: 'unauthorized',
+        diagnostics: [
+          {
+            code: 'unauthorized',
+            severity: 'error',
+            message: 'Unauthorized image source',
+          },
+        ],
+      });
+      vi.mocked(fs.promises.readFile).mockRejectedValue(
+        new Error('legacy binary image read must not be used'),
+      );
 
       const attachments = [
         {
@@ -107,6 +137,13 @@ describe('AttachmentProcessor', () => {
 
       const result = await processor.processAttachments(attachments);
 
+      expect(contentAccessRuntime.loadProviderAsset).toHaveBeenCalledWith({
+        caller: 'attachment-processor',
+        source: { kind: 'file', path: '/tmp/missing.png' },
+        preferredTarget: 'bytes',
+        mimeTypeHint: 'image/png',
+      });
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
       expect(result.imageAttachments).toHaveLength(0);
     });
 
@@ -205,11 +242,26 @@ describe('AttachmentProcessor', () => {
   describe('readFileAsBase64', () => {
     it('should read and convert to base64 with correct mime type', async () => {
       const mockBuffer = Buffer.from('test');
-      vi.mocked(fs.promises.readFile).mockResolvedValue(mockBuffer);
+      vi.mocked(contentAccessRuntime.loadProviderAsset).mockResolvedValueOnce({
+        status: 'ready',
+        diagnostics: [],
+        bytes: mockBuffer,
+        mimeType: 'image/webp',
+        sizeBytes: mockBuffer.byteLength,
+      });
+      vi.mocked(fs.promises.readFile).mockRejectedValue(
+        new Error('legacy binary image read must not be used'),
+      );
 
       const result = await processor.readFileAsBase64('/path/to/image.webp');
 
-      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/image.webp');
+      expect(contentAccessRuntime.loadProviderAsset).toHaveBeenCalledWith({
+        caller: 'attachment-processor',
+        source: { kind: 'file', path: '/path/to/image.webp' },
+        preferredTarget: 'bytes',
+        mimeTypeHint: 'image/webp',
+      });
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
       expect(result).toEqual({
         type: 'base64',
         media_type: 'image/webp',
@@ -219,7 +271,13 @@ describe('AttachmentProcessor', () => {
 
     it('should default to image/png for unknown extensions', async () => {
       const mockBuffer = Buffer.from('test');
-      vi.mocked(fs.promises.readFile).mockResolvedValue(mockBuffer);
+      vi.mocked(contentAccessRuntime.loadProviderAsset).mockResolvedValueOnce({
+        status: 'ready',
+        diagnostics: [],
+        bytes: mockBuffer,
+        mimeType: 'image/png',
+        sizeBytes: mockBuffer.byteLength,
+      });
 
       const result = await processor.readFileAsBase64('/path/to/image.xyz');
 
@@ -227,11 +285,49 @@ describe('AttachmentProcessor', () => {
     });
 
     it('should return null on read failure', async () => {
-      vi.mocked(fs.promises.readFile).mockRejectedValue(new Error('ENOENT'));
+      vi.mocked(contentAccessRuntime.loadProviderAsset).mockResolvedValueOnce({
+        status: 'missing-source',
+        diagnostics: [
+          {
+            code: 'missing-source',
+            severity: 'error',
+            message: 'Image source is missing',
+          },
+        ],
+      });
 
       const result = await processor.readFileAsBase64('/nonexistent.png');
 
       expect(result).toBeNull();
     });
+
+    it('returns null when image runtime is unavailable instead of using direct fs reads', async () => {
+      processor = new AttachmentProcessor();
+      vi.mocked(fs.promises.readFile).mockRejectedValue(
+        new Error('legacy binary image read must not be used'),
+      );
+
+      const result = await processor.readFileAsBase64('/path/to/image.png');
+
+      expect(result).toBeNull();
+      expect(fs.promises.readFile).not.toHaveBeenCalled();
+    });
   });
 });
+
+function createContentAccessRuntime(): AgentContentAccessRuntime {
+  return {
+    resolve: vi.fn(),
+    resolveImageMetadata: vi.fn(),
+    resolveDocumentContent: vi.fn(),
+    resolveDocumentImages: vi.fn(),
+    loadProviderAsset: vi.fn(async () => ({
+      status: 'ready' as const,
+      diagnostics: [],
+      bytes: new Uint8Array(Buffer.from('image-bytes')),
+      mimeType: 'image/png',
+      sizeBytes: 'image-bytes'.length,
+    })),
+    projectResource: vi.fn(),
+  } as unknown as AgentContentAccessRuntime;
+}

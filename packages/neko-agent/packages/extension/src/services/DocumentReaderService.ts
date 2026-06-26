@@ -17,7 +17,6 @@ import type {
   DocumentReadResult,
   DocumentSourceRef,
 } from '@neko/shared';
-import { resolveStorageLayout } from '@neko/shared';
 import { getLogger } from '../base';
 import { createDocumentLowLevelAccess } from './documentLowLevelAccess';
 import { resolveDocumentPath } from './documentPathResolver';
@@ -38,10 +37,16 @@ export class DocumentReaderService implements IDocumentReaderService {
   private readonly access: IDocumentAccessService;
 
   constructor(lowLevelAccess?: DocumentLowLevelAccess, options: DocumentReaderServiceOptions = {}) {
+    const documentAccess = lowLevelAccess ?? createDocumentLowLevelAccess();
     const tempDir = options.tempDir ?? resolveDefaultDocumentRuntimeCacheDir();
     const runtimeDeps: DocumentReaderRuntimeDeps = {
       readTextFile: async (filePath) => fs.readFile(await resolveDocumentPath(filePath), 'utf-8'),
-      readBinaryFile: async (filePath) => fs.readFile(await resolveDocumentPath(filePath)),
+      readBinaryFile: async (filePath) => {
+        if (!documentAccess.readFile) {
+          throw new Error('Engine file access is unavailable for document binary reads');
+        }
+        return documentAccess.readFile(await resolveDocumentPath(filePath));
+      },
       writeBinaryFile: async (filePath, data) =>
         fs.writeFile(await resolveDocumentPath(filePath), data),
       makeDir: async (filePath, options) =>
@@ -54,7 +59,7 @@ export class DocumentReaderService implements IDocumentReaderService {
     this.access = createDocumentAccessService({
       reader: this.runtime,
       runtime: runtimeDeps,
-      lowLevelAccess: lowLevelAccess ?? createDocumentLowLevelAccess(),
+      lowLevelAccess: documentAccess,
     });
   }
 
@@ -135,13 +140,10 @@ export function createDocumentReaderService(
 export function resolveDocumentRuntimeCacheDir(context?: vscode.ExtensionContext): string {
   const workspaceRoot = readWorkspaceRoot();
   if (workspaceRoot) {
-    return path.join(
-      resolveStorageLayout(workspaceRoot, readHomeDir(workspaceRoot)).project.local.cache.resources,
-      'document-runtime',
-    );
+    return path.join(workspaceRoot, '.neko', '.runtime', 'document-reader');
   }
   if (context?.globalStorageUri && isFileUriLike(context.globalStorageUri)) {
-    return path.join(context.globalStorageUri.fsPath, 'resources', 'document-runtime');
+    return path.join(context.globalStorageUri.fsPath, 'runtime', 'document-reader');
   }
   throw new Error(
     'DocumentReaderService requires a workspace or file-backed extension context for document image cache storage.',
@@ -156,11 +158,6 @@ function readWorkspaceRoot(): string | undefined {
   const folders = vscode.workspace.workspaceFolders;
   const root = folders?.[0]?.uri;
   return root && isFileUriLike(root) ? root.fsPath : undefined;
-}
-
-function readHomeDir(fallback: string): string {
-  const home = process.env['HOME'];
-  return home && home.trim().length > 0 ? home : fallback;
 }
 
 function isFileUriLike(uri: vscode.Uri): boolean {

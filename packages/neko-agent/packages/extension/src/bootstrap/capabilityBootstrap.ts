@@ -22,7 +22,7 @@ import {
   createCapabilityRuntimeBindingStore,
   type CapabilityRuntimeBindings,
 } from '@neko/agent/runtime';
-import type { AgentExternalProcessorRuntime } from '@neko/agent/runtime';
+import type { AgentContentAccessRuntime, AgentExternalProcessorRuntime } from '@neko/agent/runtime';
 import {
   ProviderCardRegistry,
   registerRuntimeProviderCardDirectories,
@@ -142,4 +142,10 @@ export function setCapabilityRuntimeExternalProcessorRuntime(
   externalProcessorRuntime: AgentExternalProcessorRuntime | undefined,
 ): void {
   runtimeBindingStore.update({ externalProcessorRuntime });
+}
+
+export function setCapabilityRuntimeContentAccessRuntime(
+  contentAccessRuntime: AgentContentAccessRuntime | undefined,
+): void {
+  runtimeBindingStore.update({ contentAccessRuntime });
 }

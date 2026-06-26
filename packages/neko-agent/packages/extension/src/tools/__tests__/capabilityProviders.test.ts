@@ -2,20 +2,42 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import {
-  TOOL_NAMES_SYSTEM,
-  createResourceFingerprint,
-  createResourceRef,
-  type ToolResult,
-} from '@neko/shared';
+import { TOOL_NAMES_SYSTEM, type ToolResult } from '@neko/shared';
 import { createDocumentReadCapabilityProvider } from '../documentCapabilityProvider';
 import { createMediaReadCapabilityProvider } from '../mediaCapabilityProvider';
 import { createSemanticCoverageCapabilityProvider } from '../searchCapabilityProvider';
 
 const mocks = vi.hoisted(() => ({
+  png1x1: new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+  ]),
   createDocumentReaderService: vi.fn(() => ({})),
   getEngineClientProvider: vi.fn(() => ({})),
   createDocumentResourceCacheService: vi.fn(),
+  contentAccessRuntime: {
+    resolve: vi.fn(),
+    resolveImageMetadata: vi.fn(async (input: { source: unknown }) => ({
+      status: 'ready' as const,
+      source: input.source,
+      diagnostics: [],
+      mimeType: 'image/png',
+      width: 1,
+      height: 1,
+      sizeBytes: 25,
+    })),
+    resolveDocumentContent: vi.fn(),
+    resolveDocumentImages: vi.fn(),
+    loadProviderAsset: vi.fn(async (input: { source: unknown }) => ({
+      status: 'ready' as const,
+      source: input.source,
+      diagnostics: [],
+      bytes: mocks.png1x1,
+      mimeType: 'image/png',
+      sizeBytes: mocks.png1x1.byteLength,
+    })),
+    projectResource: vi.fn(),
+  },
 }));
 
 vi.mock('../../services/DocumentReaderService', () => ({
@@ -30,10 +52,11 @@ vi.mock('../../services/documentResourceCacheService', () => ({
   createDocumentResourceCacheService: mocks.createDocumentResourceCacheService,
 }));
 
-const PNG_1X1 = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-]);
+vi.mock('../../bootstrap/capabilityBootstrap', () => ({
+  getCapabilityRuntimeBindings: vi.fn(() => ({
+    contentAccessRuntime: mocks.contentAccessRuntime,
+  })),
+}));
 
 describe('extension tool capability providers', () => {
   const tempDirs: string[] = [];
@@ -45,6 +68,12 @@ describe('extension tool capability providers', () => {
     mocks.createDocumentReaderService.mockClear();
     mocks.getEngineClientProvider.mockClear();
     mocks.createDocumentResourceCacheService.mockReset();
+    mocks.contentAccessRuntime.resolve.mockClear();
+    mocks.contentAccessRuntime.resolveImageMetadata.mockClear();
+    mocks.contentAccessRuntime.resolveDocumentContent.mockClear();
+    mocks.contentAccessRuntime.resolveDocumentImages.mockClear();
+    mocks.contentAccessRuntime.loadProviderAsset.mockClear();
+    mocks.contentAccessRuntime.projectResource.mockClear();
     await Promise.all(
       tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
     );
@@ -66,7 +95,7 @@ describe('extension tool capability providers', () => {
   });
 
   it('exposes image read through the media-owned provider', () => {
-    const provider = createMediaReadCapabilityProvider({});
+    const provider = createMediaReadCapabilityProvider();
     const tools = provider.getTools({ extensionContext: {} }).map((tool) => tool.name);
 
     expect(provider.id).toBe('neko-agent-platform-media');
@@ -80,7 +109,7 @@ describe('extension tool capability providers', () => {
     ]);
   });
 
-  it('wires the document resource cache into the media-owned image reader', async () => {
+  it('wires shared content access runtime into the media-owned image reader without local cache service', async () => {
     const workspaceRoot = path.resolve(
       process.cwd(),
       '.test-workspaces',
@@ -91,52 +120,7 @@ describe('extension tool capability providers', () => {
     workspaceFoldersSpy.mockReturnValue([
       { uri: { fsPath: workspaceRoot } as vscode.Uri, name: 'fixture', index: 0 },
     ]);
-    const cachePath = path.join(
-      workspaceRoot,
-      '.neko/.cache/resources/documents/doc_comic/OPS/images/page-1.png',
-    );
-    await fs.mkdir(path.dirname(cachePath), { recursive: true });
-    await fs.writeFile(cachePath, PNG_1X1);
-    const cacheResourceRef = createResourceRef({
-      id: 'res_page_1',
-      scope: 'project',
-      provider: 'document-archive',
-      kind: 'document',
-      source: {
-        kind: 'document',
-        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
-        filePath: '${BOOKS}/comic.epub',
-      },
-      locator: { kind: 'document', entryPath: 'OPS/images/page-1.png' },
-      fingerprint: createResourceFingerprint({
-        strategy: 'provider',
-        value: 'comic-v1',
-        providerId: 'document-archive',
-      }),
-    });
-    const resourceCache = {
-      findByLocalPath: vi.fn(async () => ({
-        ref: cacheResourceRef,
-        entry: {
-          resource: cacheResourceRef,
-          status: 'ready' as const,
-          createdAt: '2026-06-05T00:00:00.000Z',
-          updatedAt: '2026-06-05T00:00:00.000Z',
-          variants: [],
-        },
-        variantEntry: {
-          key: 'variant',
-          role: 'document-entry' as const,
-          status: 'ready' as const,
-          absolutePath: cachePath,
-          createdAt: '2026-06-05T00:00:00.000Z',
-          updatedAt: '2026-06-05T00:00:00.000Z',
-        },
-        absolutePath: cachePath,
-      })),
-    };
-    mocks.createDocumentResourceCacheService.mockReturnValue(resourceCache);
-    const provider = createMediaReadCapabilityProvider({});
+    const provider = createMediaReadCapabilityProvider();
     const [tool] = provider.getTools({
       extensionContext: {
         extensionUri: { fsPath: path.join(workspaceRoot, '.extension') },
@@ -145,28 +129,33 @@ describe('extension tool capability providers', () => {
     });
 
     const result = (await tool!.execute({
-      image_paths: [cachePath],
+      image_paths: [path.join(workspaceRoot, 'images/page-1.png')],
       mode: 'metadata',
     })) as ToolResult;
 
     expect(result.success).toBe(true);
-    expect(mocks.createDocumentResourceCacheService).toHaveBeenCalledOnce();
-    expect(resourceCache.findByLocalPath).toHaveBeenCalledWith(cachePath);
+    expect(mocks.createDocumentResourceCacheService).not.toHaveBeenCalled();
+    expect(mocks.contentAccessRuntime.loadProviderAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caller: 'read-image',
+        preferredTarget: 'bytes',
+        source: { kind: 'file', path: path.join(workspaceRoot, 'images/page-1.png') },
+      }),
+    );
     expect(result.data).toEqual(
       expect.objectContaining({
         images: [
           expect.objectContaining({
-            path: cachePath,
-            runtimeKind: 'managed-cache',
-            resourceRef: expect.objectContaining({
-              kind: 'document-entry',
-              entryPath: 'OPS/images/page-1.png',
-            }),
-            cacheResourceRef,
+            mimeType: 'image/png',
+            width: 1,
+            height: 1,
           }),
         ],
       }),
     );
+    expect(JSON.stringify(result.data)).not.toContain('"cacheResourceRef"');
+    expect(JSON.stringify(result.data)).not.toContain('"runtimeKind"');
+    expect(JSON.stringify(result.data)).not.toContain('"path"');
   });
 
   it('exposes semantic coverage through the search-owned provider', () => {

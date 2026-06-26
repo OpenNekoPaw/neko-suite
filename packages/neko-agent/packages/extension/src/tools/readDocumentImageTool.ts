@@ -9,12 +9,12 @@ import {
   type Tool,
   type ToolResult,
 } from '@neko/shared';
-import type { ResourceCacheService } from '@neko/shared/vscode/extension';
+import { createDocumentResourceRefFromArchiveRef } from '@neko/shared/vscode/extension';
 import { createNoWorkspaceFileAccessPolicy, type CoreFileAccessPolicy } from '@neko/agent/tools';
 import type { IDocumentReaderService } from '../services/DocumentReaderService';
-import { createDocumentResourceRefFromArchiveRef } from '../services/documentResourceCacheProvider';
 import { resolveDocumentPath } from '../services/documentPathResolver';
 import {
+  READ_IMAGE_MODEL_ANALYSIS_UNSUPPORTED,
   executeReadImage,
   type ReadImageAnalysisKind,
   type ReadImageMode,
@@ -26,7 +26,6 @@ export const MAX_READ_DOCUMENT_IMAGE_LIMIT = 16;
 
 export interface ReadDocumentImageToolDeps extends ReadImageToolDeps {
   readonly reader: IDocumentReaderService;
-  readonly resourceCache?: ResourceCacheService;
   readonly fileAccessPolicy?: CoreFileAccessPolicy;
   readonly resolveResourceScope?: () => ResourceRef['scope'];
 }
@@ -36,17 +35,21 @@ interface SelectedDocumentImage {
   readonly index: number;
 }
 
-type DocumentImageInfoWithCacheResourceRef = DocumentImageInfo & {
-  readonly cacheResourceRef?: ResourceRef;
+type DocumentImageInfoWithManagedResourceRef = DocumentImageInfo & {
+  readonly managedResourceRef?: ResourceRef;
 };
+
+type SanitizedDocumentImageInfo = Omit<
+  DocumentImageInfoWithManagedResourceRef,
+  'path' | 'managedResourceRef'
+>;
 
 export function createReadDocumentImageTool(deps: ReadDocumentImageToolDeps): Tool {
   return createTool({
     name: TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
     description:
       'Resolve selected image pages from a document and expose them as native multimodal Agent resources. ' +
-      'Use this when you have document locators or page indexes and still need to resolve them to image files. ' +
-      'If ReadDocument already returned image_paths/imagePaths, call ReadImage directly instead of this tool. ' +
+      'Use this when you have document locators or page indexes and still need to expose them to the native multimodal turn. ' +
       'This is a document-page adapter over ReadImage; it does not call a separate vision model.',
     category: 'document',
     isReadOnly: true,
@@ -61,12 +64,6 @@ export function createReadDocumentImageTool(deps: ReadDocumentImageToolDeps): To
         source: {
           type: 'object',
           description: 'Optional DocumentSourceRef returned by ReadDocument.',
-        },
-        image_paths: {
-          type: 'array',
-          description:
-            'Optional specific image paths returned by ReadDocument. Prefer passing these to ReadImage directly; this compatibility path does not re-read the document.',
-          items: { type: 'string' },
         },
         page_indexes: {
           type: 'array',
@@ -117,6 +114,13 @@ export async function executeReadDocumentImage(
   if (!filePath) {
     return { success: false, error: 'Missing required field: file_path' };
   }
+  if (Object.prototype.hasOwnProperty.call(args, 'image_paths')) {
+    return {
+      success: false,
+      error:
+        'ReadDocumentImage image_paths was removed. Use page_indexes, locators, or ReadDocument imageInfo.resourceRef.',
+    };
+  }
   const authorization = await authorizeLocalDocumentPath(deps.fileAccessPolicy, filePath);
   if (!authorization.allowed) {
     return { success: false, error: authorization.error };
@@ -134,44 +138,40 @@ export async function executeReadDocumentImage(
   );
   const mode = readMode(args['mode']);
   const analysis = readAnalysisKind(args['analysis']);
-  const directImagePaths = readStringArray(args['image_paths']);
+  if (mode === 'vision') {
+    return { success: false, error: READ_IMAGE_MODEL_ANALYSIS_UNSUPPORTED };
+  }
 
   try {
     const source = await authorizeDocumentImageSource(
       deps.fileAccessPolicy,
       readDocumentSource(args['source']) ?? resolvedFilePath,
     );
-    const selected =
-      directImagePaths.length > 0
-        ? directImagePaths.slice(0, maxImages).map((path, index) => ({
-            index,
-            info: { path },
-          }))
-        : await selectImagesFromDocument(deps.reader, source, args, maxImages);
+    const selected = await selectImagesFromDocument(deps.reader, source, args, maxImages);
 
     if (selected.length === 0) {
       return {
         success: false,
         error:
-          'No matching document images found. Provide image_paths, page_indexes, or locators from ReadDocument.',
+          'No matching document images found. Provide page_indexes or locators from ReadDocument.',
       };
     }
     const projectedSelected = await Promise.all(
       selected.map(async (image) => ({
         ...image,
-        info: await withCacheResourceRef(image.info, deps.resourceCache, deps.resolveResourceScope),
+        info: withManagedResourceRef(image.info, deps.resolveResourceScope),
       })),
     );
 
     const readImageResult = await executeReadImage(deps, {
       images: projectedSelected.map((image) => ({
-        path: image.info.path,
-        runtimePath: image.info.path,
-        runtimeKind: image.info.runtimeKind ?? 'scratch-cache',
         alias: image.info.alias ?? formatDocumentImageAlias(image.info.locator, image.index),
         ...(image.info.aliasScope ? { aliasScope: image.info.aliasScope } : {}),
         ...(image.info.sourceDocumentId ? { sourceDocumentId: image.info.sourceDocumentId } : {}),
         ...(image.info.entryPath ? { entryPath: image.info.entryPath } : {}),
+        ...(image.info.width !== undefined ? { width: image.info.width } : {}),
+        ...(image.info.height !== undefined ? { height: image.info.height } : {}),
+        ...(image.info.mimeType ? { mimeType: image.info.mimeType } : {}),
         ...(image.info.portableForTransfer !== undefined
           ? { portableForTransfer: image.info.portableForTransfer }
           : {}),
@@ -184,7 +184,6 @@ export async function executeReadDocumentImage(
           ...(image.info.locator ? { locator: image.info.locator } : {}),
         },
         ...(image.info.resourceRef ? { resourceRef: image.info.resourceRef } : {}),
-        ...(image.info.cacheResourceRef ? { cacheResourceRef: image.info.cacheResourceRef } : {}),
       })),
       mode,
       analysis,
@@ -205,15 +204,10 @@ export async function executeReadDocumentImage(
         images: await Promise.all(
           extractImagesFromReadImageData(readImageResult.data).map(async (image, index) => {
             const documentImage = projectedSelected[index]?.info;
-            const nextPath = documentImage?.path;
             return {
               ...image,
-              ...(nextPath ? { path: nextPath } : {}),
               ...(documentImage
                 ? { documentImage: selectTransferDocumentImageInfo(documentImage) }
-                : {}),
-              ...(documentImage?.cacheResourceRef
-                ? { cacheResourceRef: documentImage.cacheResourceRef }
                 : {}),
             };
           }),
@@ -229,11 +223,21 @@ export async function executeReadDocumentImage(
 }
 
 function selectTransferDocumentImageInfo(
-  image: DocumentImageInfoWithCacheResourceRef,
-): DocumentImageInfoWithCacheResourceRef {
+  image: DocumentImageInfoWithManagedResourceRef,
+): SanitizedDocumentImageInfo {
   return {
-    ...image,
-    runtimePath: image.path,
+    width: image.width,
+    height: image.height,
+    mimeType: image.mimeType,
+    byteSize: image.byteSize,
+    locator: image.locator,
+    alias: image.alias,
+    aliasScope: image.aliasScope,
+    sourceDocumentId: image.sourceDocumentId,
+    entryPath: image.entryPath,
+    portableForTransfer: image.portableForTransfer,
+    nonPortableReason: image.nonPortableReason,
+    resourceRef: image.resourceRef,
   };
 }
 
@@ -323,79 +327,43 @@ async function selectImagesFromDocument(
     return selected;
   }
 
-  return (range.imagePaths ?? [])
-    .map((path, index) => ({ index, info: imageInfo[index] ?? { path } }))
-    .slice(0, maxImages);
+  return [];
 }
 
 function extractImagesFromReadImageData(data: unknown): readonly Record<string, unknown>[] {
   return isRecord(data) && Array.isArray(data['images']) ? data['images'].filter(isRecord) : [];
 }
 
-async function withCacheResourceRef(
+function withManagedResourceRef(
   image: DocumentImageInfo,
-  resourceCache: ResourceCacheService | undefined,
   resolveResourceScope: (() => ResourceRef['scope']) | undefined,
-): Promise<DocumentImageInfoWithCacheResourceRef> {
+): DocumentImageInfoWithManagedResourceRef {
   if (!image.resourceRef) return image;
-  const { cachePath: _cachePath, ...stableResourceRef } = image.resourceRef;
-  const archiveRef = {
-    ...stableResourceRef,
+  const archiveRef: DocumentArchiveResourceRef = {
+    kind: 'document-entry',
+    source: image.resourceRef.source,
+    ...(image.resourceRef.entryPath ? { entryPath: image.resourceRef.entryPath } : {}),
     ...(image.locator && !image.resourceRef.locator ? { locator: image.locator } : {}),
+    ...(image.resourceRef.locator ? { locator: image.resourceRef.locator } : {}),
+    ...(image.resourceRef.versionPolicy ? { versionPolicy: image.resourceRef.versionPolicy } : {}),
   };
-  const cacheResourceRef = createDocumentResourceRefFromArchiveRef(
+  const managedResourceRef = createDocumentResourceRefFromArchiveRef(
     archiveRef,
     resolveResourceScope?.() ?? 'project',
   );
-  const materializedPath = await materializeDocumentResource(
-    resourceCache,
-    cacheResourceRef,
-    image,
-  );
-  const nextPath = materializedPath ?? image.path;
-  const nextCacheResourceRef = cacheResourceRef;
   return {
     ...image,
-    path: nextPath,
-    runtimePath: image.runtimePath ?? image.path,
-    runtimeKind: nextPath === image.path ? 'scratch-cache' : 'managed-cache',
     alias: image.alias ?? formatDocumentImageAlias(image.locator),
     aliasScope: image.aliasScope ?? formatDocumentAliasScope(archiveRef),
     sourceDocumentId: image.sourceDocumentId ?? formatDocumentSourceId(archiveRef.source),
     entryPath: image.entryPath ?? archiveRef.entryPath,
-    portableForTransfer: nextCacheResourceRef.scope === 'project',
-    ...(nextCacheResourceRef.scope === 'project'
+    portableForTransfer: managedResourceRef.scope === 'project',
+    ...(managedResourceRef.scope === 'project'
       ? {}
       : { nonPortableReason: 'no-workspace-or-extension-private-scratch' }),
     resourceRef: archiveRef,
-    cacheResourceRef: nextCacheResourceRef,
+    managedResourceRef,
   };
-}
-
-async function materializeDocumentResource(
-  resourceCache: ResourceCacheService | undefined,
-  resourceRef: ResourceRef,
-  image: DocumentImageInfo,
-): Promise<string | undefined> {
-  if (!resourceCache || resourceRef.scope !== 'project') {
-    return undefined;
-  }
-  try {
-    const result = await resourceCache.resolve(
-      resourceRef,
-      {
-        role: 'document-entry',
-        ...(image.mimeType ? { mimeType: image.mimeType } : {}),
-        ...(image.width !== undefined ? { width: image.width } : {}),
-        ...(image.height !== undefined ? { height: image.height } : {}),
-      },
-      { materializeIfMissing: true },
-    );
-    return result.status === 'ready' ? result.absolutePath : undefined;
-  } catch {
-    // Keep the stable ref in the tool result even when prewarming the shared cache fails.
-    return undefined;
-  }
 }
 
 function readDocumentSource(value: unknown): DocumentSourceRef | null {
@@ -473,11 +441,6 @@ function formatDocumentAliasScope(resourceRef: DocumentArchiveResourceRef): stri
 
 function formatDocumentSourceId(source: DocumentSourceRef): string {
   return source.identity?.hash ?? source.identity?.fileId ?? source.fileId ?? source.filePath;
-}
-
-function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
 }
 
 function readNonNegativeIntegerArray(value: unknown): number[] {

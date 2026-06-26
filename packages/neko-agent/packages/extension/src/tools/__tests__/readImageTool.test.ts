@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   TOOL_NAMES_SYSTEM,
-  createResourceFingerprint,
-  createResourceRef,
+  type ContentSourceRef,
+  type ResourceVariantRequest,
   type ToolResult,
 } from '@neko/shared';
 import { createWorkspaceFileAccessPolicy } from '@neko/agent/tools';
+import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import { READ_IMAGE_MODEL_ANALYSIS_UNSUPPORTED, createReadImageTool } from '../readImageTool';
 
 const WORKSPACE_ROOT = '/workspace';
@@ -30,8 +31,7 @@ describe('createReadImageTool', () => {
     expect(tool.category).toBe('analysis');
     expect(tool.isReadOnly).toBe(true);
     expect(tool.isConcurrencySafe).toBe(true);
-    expect(tool.description).toContain('ReadDocument imagePaths');
-    expect(tool.description).toContain('use this tool directly instead of ReadDocumentImage');
+    expect(tool.description).toContain('structured imageInfo resource refs from ReadDocument');
     expect(tool.parameters).not.toHaveProperty('anyOf');
     expect(tool.parameters).not.toHaveProperty('oneOf');
     expect(tool.parameters).not.toHaveProperty('allOf');
@@ -40,22 +40,33 @@ describe('createReadImageTool', () => {
         items: expect.objectContaining({
           properties: expect.objectContaining({
             path: { type: 'string' },
-            runtimePath: { type: 'string' },
-            runtimeKind: expect.objectContaining({
-              enum: ['local-path', 'webview-uri', 'scratch-cache', 'managed-cache'],
-            }),
             resourceRef: expect.objectContaining({ type: 'object' }),
-            cacheResourceRef: expect.objectContaining({ type: 'object' }),
+            width: { type: 'integer' },
+            height: { type: 'integer' },
+            mimeType: { type: 'string' },
           }),
         }),
       }),
     );
+    expect(tool.parameters.properties?.['images']?.items?.properties).not.toHaveProperty(
+      'runtimePath',
+    );
+    expect(tool.parameters.properties?.['images']?.items?.properties).not.toHaveProperty(
+      'runtimeKind',
+    );
+    expect(tool.parameters.properties?.['images']?.items?.properties).not.toHaveProperty(
+      'cacheResourceRef',
+    );
   });
 
   it('reads local image metadata without invoking vision', async () => {
-    const readFile = vi.fn(async () => PNG_1X1);
+    const readFile = vi.fn(async () => {
+      throw new Error('legacy direct read should not run');
+    });
+    const contentAccessRuntime = createContentAccessRuntime();
     const tool = createReadImageTool({
       readFile,
+      contentAccessRuntime,
       now: () => 1234,
       fileAccessPolicy: createFileAccessPolicy(),
     });
@@ -66,7 +77,20 @@ describe('createReadImageTool', () => {
     })) as ToolResult;
 
     expect(result.success).toBe(true);
-    expect(readFile).toHaveBeenCalledWith('/workspace/images/page.png');
+    expect(readFile).not.toHaveBeenCalled();
+    expect(contentAccessRuntime.loadProviderAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caller: 'read-image',
+        source: { kind: 'file', path: '/workspace/images/page.png' },
+        preferredTarget: 'bytes',
+      }),
+    );
+    expect(contentAccessRuntime.resolveImageMetadata).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caller: 'read-image',
+        source: { kind: 'file', path: '/workspace/images/page.png' },
+      }),
+    );
     expect(result.attachments).toEqual([
       expect.objectContaining({
         type: 'image',
@@ -106,7 +130,6 @@ describe('createReadImageTool', () => {
         mode: 'metadata',
         images: [
           expect.objectContaining({
-            path: '/workspace/images/page.png',
             width: 1,
             height: 1,
             mimeType: 'image/png',
@@ -119,7 +142,8 @@ describe('createReadImageTool', () => {
 
   it('fails closed for local images when no authorized workspace policy is provided', async () => {
     const readFile = vi.fn(async () => PNG_1X1);
-    const tool = createReadImageTool({ readFile });
+    const contentAccessRuntime = createContentAccessRuntime();
+    const tool = createReadImageTool({ readFile, contentAccessRuntime });
 
     const result = (await tool.execute({
       image_paths: ['/workspace/images/page.png'],
@@ -129,107 +153,79 @@ describe('createReadImageTool', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('no authorized workspace root');
     expect(readFile).not.toHaveBeenCalled();
+    expect(contentAccessRuntime.loadProviderAsset).not.toHaveBeenCalled();
   });
 
   it('preserves document resource refs from structured image inputs', async () => {
-    const readFile = vi.fn(async () => PNG_1X1);
-    const tool = createReadImageTool({ readFile, fileAccessPolicy: createFileAccessPolicy() });
+    const readFile = vi.fn(async () => {
+      throw new Error('legacy direct read should not run');
+    });
+    const contentAccessRuntime = createContentAccessRuntime();
+    const tool = createReadImageTool({
+      readFile,
+      contentAccessRuntime,
+      fileAccessPolicy: createFileAccessPolicy(),
+    });
     const resourceRef = {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/images/moe-018893.jpg',
-      cachePath: '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/images/moe-018893.jpg',
-    };
-    const cacheResourceRef = {
-      id: 'res_stable',
-      scope: 'project' as const,
-      provider: 'document-archive',
-      kind: 'document' as const,
-      source: {
-        kind: 'document' as const,
-        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
-      },
-      locator: { kind: 'document' as const, entryPath: 'OPS/images/moe-018893.jpg' },
-      fingerprint: { strategy: 'provider' as const, value: 'comic-v1' },
     };
 
     const result = (await tool.execute({
       images: [
         {
-          path: '/workspace/.neko/.cache/resources/documents/page_1.jpg',
           label: 'page_1',
+          width: 1,
+          height: 1,
+          mimeType: 'image/png',
           resourceRef,
-          cacheResourceRef,
         },
       ],
       mode: 'metadata',
     })) as ToolResult;
 
     expect(result.success).toBe(true);
+    expect(readFile).not.toHaveBeenCalled();
     expect(result.data).toEqual(
       expect.objectContaining({
         images: [
           expect.objectContaining({
-            path: '/workspace/.neko/.cache/resources/documents/page_1.jpg',
             label: 'page_1',
             resourceRef: {
               kind: 'document-entry',
               source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
               entryPath: 'OPS/images/moe-018893.jpg',
             },
-            cacheResourceRef,
           }),
         ],
       }),
     );
+    expect(contentAccessRuntime.loadProviderAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caller: 'read-image',
+        source: expect.objectContaining({
+          scope: 'project',
+          provider: 'document-archive',
+          kind: 'document',
+          locator: expect.objectContaining({ entryPath: 'OPS/images/moe-018893.jpg' }),
+        }),
+        preferredTarget: 'bytes',
+        variant: { role: 'document-entry', mimeType: 'image/png', width: 1, height: 1 },
+      }),
+    );
     expect(JSON.stringify(result.data)).not.toContain('"cachePath"');
+    expect(JSON.stringify(result.data)).not.toContain('"cacheResourceRef"');
   });
 
-  it('restores document resource refs from unified cache image paths', async () => {
+  it('rejects unified cache image paths as durable image identity', async () => {
     const readFile = vi.fn(async () => PNG_1X1);
+    const contentAccessRuntime = createContentAccessRuntime();
     const cachePath =
       '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/images/moe-018893.jpg';
-    const cacheResourceRef = createResourceRef({
-      id: 'res_x',
-      scope: 'project',
-      provider: 'document-archive',
-      kind: 'document',
-      source: {
-        kind: 'document',
-        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
-        filePath: '${BOOKS}/comic.epub',
-      },
-      locator: { kind: 'document', entryPath: 'OPS/images/moe-018893.jpg' },
-      fingerprint: createResourceFingerprint({
-        strategy: 'provider',
-        value: 'comic-v1',
-        providerId: 'document-archive',
-      }),
-    });
-    const resourceCache = {
-      findByLocalPath: vi.fn(async () => ({
-        ref: cacheResourceRef,
-        entry: {
-          resource: cacheResourceRef,
-          status: 'ready' as const,
-          createdAt: '2026-06-05T00:00:00.000Z',
-          updatedAt: '2026-06-05T00:00:00.000Z',
-          variants: [],
-        },
-        variantEntry: {
-          key: 'variant',
-          role: 'document-entry' as const,
-          status: 'ready' as const,
-          absolutePath: cachePath,
-          createdAt: '2026-06-05T00:00:00.000Z',
-          updatedAt: '2026-06-05T00:00:00.000Z',
-        },
-        absolutePath: cachePath,
-      })),
-    };
     const tool = createReadImageTool({
       readFile,
-      resourceCache: resourceCache as never,
+      contentAccessRuntime,
       fileAccessPolicy: createFileAccessPolicy(),
     });
 
@@ -238,37 +234,22 @@ describe('createReadImageTool', () => {
       mode: 'metadata',
     })) as ToolResult;
 
-    expect(result.success).toBe(true);
-    expect(resourceCache.findByLocalPath).toHaveBeenCalledWith(cachePath);
-    expect(result.data).toEqual(
-      expect.objectContaining({
-        images: [
-          expect.objectContaining({
-            path: cachePath,
-            runtimePath: cachePath,
-            runtimeKind: 'managed-cache',
-            alias: 'image_1',
-            aliasScope: 'document:${BOOKS}/comic.epub',
-            sourceDocumentId: '${BOOKS}/comic.epub',
-            entryPath: 'OPS/images/moe-018893.jpg',
-            portableForTransfer: true,
-            resourceRef: {
-              kind: 'document-entry',
-              source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
-              entryPath: 'OPS/images/moe-018893.jpg',
-              versionPolicy: 'versioned-export',
-            },
-            cacheResourceRef,
-          }),
-        ],
-      }),
-    );
-    expect(JSON.stringify(result.data)).not.toContain('"cachePath"');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('does not accept managed cache paths');
+    expect(readFile).not.toHaveBeenCalled();
+    expect(contentAccessRuntime.loadProviderAsset).not.toHaveBeenCalled();
   });
 
   it('marks authorized plain local image paths as runtime-only for cross-package transfer', async () => {
-    const readFile = vi.fn(async () => PNG_1X1);
-    const tool = createReadImageTool({ readFile, fileAccessPolicy: createFileAccessPolicy() });
+    const readFile = vi.fn(async () => {
+      throw new Error('legacy direct read should not run');
+    });
+    const contentAccessRuntime = createContentAccessRuntime();
+    const tool = createReadImageTool({
+      readFile,
+      contentAccessRuntime,
+      fileAccessPolicy: createFileAccessPolicy(),
+    });
 
     const result = (await tool.execute({
       image_paths: ['/workspace/scratch/page.png'],
@@ -276,13 +257,11 @@ describe('createReadImageTool', () => {
     })) as ToolResult;
 
     expect(result.success).toBe(true);
+    expect(readFile).not.toHaveBeenCalled();
     expect(result.data).toEqual(
       expect.objectContaining({
         images: [
           expect.objectContaining({
-            path: '/workspace/scratch/page.png',
-            runtimePath: '/workspace/scratch/page.png',
-            runtimeKind: 'local-path',
             portableForTransfer: false,
           }),
         ],
@@ -292,7 +271,12 @@ describe('createReadImageTool', () => {
 
   it('rejects system temp image paths even with a workspace policy', async () => {
     const readFile = vi.fn(async () => PNG_1X1);
-    const tool = createReadImageTool({ readFile, fileAccessPolicy: createFileAccessPolicy() });
+    const contentAccessRuntime = createContentAccessRuntime();
+    const tool = createReadImageTool({
+      readFile,
+      contentAccessRuntime,
+      fileAccessPolicy: createFileAccessPolicy(),
+    });
 
     const result = (await tool.execute({
       image_paths: ['/tmp/scratch/page.png'],
@@ -302,11 +286,17 @@ describe('createReadImageTool', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('system temp');
     expect(readFile).not.toHaveBeenCalled();
+    expect(contentAccessRuntime.loadProviderAsset).not.toHaveBeenCalled();
   });
 
-  it('keeps runtime scratch paths out of multimodal attachment refs', async () => {
+  it('rejects runtime scratch paths before multimodal attachment projection', async () => {
     const readFile = vi.fn(async () => PNG_1X1);
-    const tool = createReadImageTool({ readFile, fileAccessPolicy: createFileAccessPolicy() });
+    const contentAccessRuntime = createContentAccessRuntime();
+    const tool = createReadImageTool({
+      readFile,
+      contentAccessRuntime,
+      fileAccessPolicy: createFileAccessPolicy(),
+    });
     const managedPath = '/workspace/.neko/.cache/resources/documents/page-1.png';
     const runtimePath = '/var/folders/T/neko_epub_1/page-1.png';
 
@@ -314,23 +304,13 @@ describe('createReadImageTool', () => {
       images: [
         {
           path: managedPath,
-          runtimePath,
-          runtimeKind: 'managed-cache',
         },
       ],
       mode: 'metadata',
     })) as ToolResult;
 
-    expect(result.success).toBe(true);
-    expect(result.attachments?.[0]).toEqual(
-      expect.objectContaining({
-        path: managedPath,
-        assetRef: expect.objectContaining({ uri: managedPath }),
-      }),
-    );
-    expect(result.perceptionCards?.[0]?.perceptual?.keyframeRefs?.[0]).toEqual(
-      expect.objectContaining({ uri: managedPath }),
-    );
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('does not accept managed cache paths');
     const multimodalRefs = JSON.stringify({
       attachments: result.attachments,
       perceptionCards: result.perceptionCards,
@@ -340,7 +320,8 @@ describe('createReadImageTool', () => {
 
   it('rejects model-backed vision mode without invoking platform services', async () => {
     const readFile = vi.fn(async () => PNG_1X1);
-    const tool = createReadImageTool({ readFile });
+    const contentAccessRuntime = createContentAccessRuntime();
+    const tool = createReadImageTool({ readFile, contentAccessRuntime });
 
     const result = (await tool.execute({
       images: [{ path: '/images/page.png', label: 'P1' }],
@@ -352,3 +333,40 @@ describe('createReadImageTool', () => {
     expect(result.error).toBe(READ_IMAGE_MODEL_ANALYSIS_UNSUPPORTED);
   });
 });
+
+function createContentAccessRuntime(): AgentContentAccessRuntime & {
+  readonly loadProviderAsset: ReturnType<typeof vi.fn>;
+  readonly resolveImageMetadata: ReturnType<typeof vi.fn>;
+} {
+  return {
+    resolve: vi.fn(async (request) => ({
+      status: 'ready' as const,
+      request,
+    })),
+    resolveImageMetadata: vi.fn(async (input: { source: ContentSourceRef }) => ({
+      status: 'ready' as const,
+      source: input.source.kind === 'runtime' ? undefined : input.source,
+      diagnostics: [],
+      mimeType: 'image/png',
+      width: 1,
+      height: 1,
+      sizeBytes: PNG_1X1.byteLength,
+    })),
+    resolveDocumentContent: vi.fn(),
+    resolveDocumentImages: vi.fn(),
+    loadProviderAsset: vi.fn(
+      async (input: { source: ContentSourceRef; variant?: ResourceVariantRequest }) => ({
+        status: 'ready' as const,
+        source: input.source.kind === 'runtime' ? undefined : input.source,
+        diagnostics: [],
+        bytes: PNG_1X1,
+        mimeType: input.variant?.mimeType ?? 'image/png',
+        sizeBytes: PNG_1X1.byteLength,
+      }),
+    ),
+    projectResource: vi.fn(),
+  } as unknown as AgentContentAccessRuntime & {
+    readonly loadProviderAsset: ReturnType<typeof vi.fn>;
+    readonly resolveImageMetadata: ReturnType<typeof vi.fn>;
+  };
+}

@@ -40,13 +40,13 @@ describe('DocumentReaderService', () => {
   });
 
   describe('supports', () => {
-    it('uses the project resource cache for default document image extraction', () => {
+    it('uses project-private document reader scratch for default image extraction', () => {
       expect(resolveDocumentRuntimeCacheDir()).toBe(
-        '/mock/workspace/.neko/.cache/resources/document-runtime',
+        '/mock/workspace/.neko/.runtime/document-reader',
       );
     });
 
-    it('uses extension-private resource cache when no workspace is open', () => {
+    it('uses extension-private document reader scratch when no workspace is open', () => {
       const previousFolders = vscode.workspace.workspaceFolders;
       vscode.workspace.workspaceFolders = [];
       try {
@@ -55,13 +55,13 @@ describe('DocumentReaderService', () => {
             extensionUri: vscode.Uri.file('/ext/neko-agent'),
             globalStorageUri: vscode.Uri.file('/global/neko-agent'),
           } as vscode.ExtensionContext),
-        ).toBe('/global/neko-agent/resources/document-runtime');
+        ).toBe('/global/neko-agent/runtime/document-reader');
       } finally {
         vscode.workspace.workspaceFolders = previousFolders;
       }
     });
 
-    it('wires createDocumentReaderService to the managed document runtime cache', async () => {
+    it('wires createDocumentReaderService to document reader scratch', async () => {
       const fs = await import('fs/promises');
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
@@ -91,7 +91,7 @@ describe('DocumentReaderService', () => {
       const result = await reader.read('/path/to/comic.cbz');
 
       expect(result.imagePaths?.[0]).toMatch(
-        /^\/mock\/workspace\/\.neko\/\.cache\/resources\/document-runtime\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/,
+        /^\/mock\/workspace\/\.neko\/\.runtime\/document-reader\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/,
       );
       expect(JSON.stringify(result)).not.toContain('/tmp/');
     });
@@ -157,18 +157,20 @@ describe('DocumentReaderService', () => {
     });
 
     it('should detect DRM in PDF files', async () => {
-      const fs = await import('fs/promises');
-      vi.mocked(fs.readFile).mockResolvedValue(Buffer.from('PDF header with /Encrypt flag'));
+      const binaryService = new DocumentReaderService({
+        readFile: vi.fn(async () => new TextEncoder().encode('PDF header with /Encrypt flag')),
+      });
 
-      const result = await service.hasDRM('/path/to/protected.pdf');
+      const result = await binaryService.hasDRM('/path/to/protected.pdf');
       expect(result).toBe(true);
     });
 
     it('should return false for DRM-free files', async () => {
-      const fs = await import('fs/promises');
-      vi.mocked(fs.readFile).mockResolvedValue(Buffer.from('PDF header without encryption'));
+      const binaryService = new DocumentReaderService({
+        readFile: vi.fn(async () => new TextEncoder().encode('PDF header without encryption')),
+      });
 
-      const result = await service.hasDRM('/path/to/free.pdf');
+      const result = await binaryService.hasDRM('/path/to/free.pdf');
       expect(result).toBe(false);
     });
 

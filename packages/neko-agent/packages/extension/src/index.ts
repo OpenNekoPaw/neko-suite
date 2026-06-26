@@ -42,6 +42,7 @@ import { createAgentCapabilityRuntimeRegistries } from '@neko/agent/runtime';
 import { registerEntityContributionAutomationCommand } from '@neko/entity/host-vscode';
 import {
   bootstrapCapabilities,
+  setCapabilityRuntimeContentAccessRuntime,
   setCapabilityRuntimeExternalProcessorRuntime,
 } from './bootstrap/capabilityBootstrap';
 import { createDocumentReadCapabilityProvider } from './tools/documentCapabilityProvider';
@@ -59,6 +60,8 @@ import { getSkillFileService } from './services/SkillFileService';
 import { createSkillCatalogProvider } from './services/skillCatalogProvider';
 import { ExternalProcessorRegistryService } from './services/externalProcessorRegistryService';
 import { runResourceCacheStartupGc } from './services/resourceCacheStartupGcService';
+import { getEngineClientProvider } from './services/engineClientProvider';
+import { createExtensionAgentContentAccessRuntime } from './services/agentContentAccessRuntime';
 
 type SkillLocaleMap = Readonly<Record<string, SkillLocalizedText>>;
 
@@ -221,6 +224,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   // Platform services are injected into context so providers can use media/config/embed
   // without depending on @neko/platform directly.
   const capabilityRegistries = createAgentCapabilityRuntimeRegistries();
+  const agentContentAccess = createExtensionAgentContentAccessRuntime({
+    context,
+    engineClientProvider: getEngineClientProvider(),
+    workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+  });
+  setCapabilityRuntimeContentAccessRuntime(agentContentAccess.runtime);
 
   // Register neko-agent host tools.
   registerExtensionTools(bootstrapResult.toolRegistry, bootstrapResult.platform, context);
@@ -248,7 +257,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
     agentOwnedCapabilityContext,
   );
   capabilityDiscovery.registerProvider(
-    createMediaReadCapabilityProvider({}),
+    createMediaReadCapabilityProvider(),
     agentOwnedCapabilityContext,
   );
   capabilityDiscovery.registerProvider(

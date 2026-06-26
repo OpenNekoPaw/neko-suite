@@ -130,7 +130,6 @@ export class TaskHandler {
         this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
         await webview?.postMessage(message);
       },
-      resolveLocalPath: webview ? (path) => this.toWebviewUri(webview, path) : undefined,
       openTaskResult: (plan: TaskResultOpenPlan) => this.executeOpenPlan(plan),
       onRejectedAction: ({ action, plan }) => this.logRejectedTaskAction(action, plan),
       onTaskRetried: ({ taskId, newTaskId }) => {

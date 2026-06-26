@@ -8,6 +8,7 @@ import {
 import { createDocumentToolRuntime } from './documentToolRuntime';
 import { createReadDocumentImageTool } from './readDocumentImageTool';
 import { createReadDocumentTool } from './readDocumentTool';
+import { getCapabilityRuntimeBindings } from '../bootstrap/capabilityBootstrap';
 
 export function createDocumentReadCapabilityProvider(): AgentCapabilityProvider {
   return new DocumentReadCapabilityProvider();
@@ -18,23 +19,20 @@ class DocumentReadCapabilityProvider implements AgentCapabilityProvider {
   readonly version = '1.0.0';
 
   getTools(context: AgentCapabilityContext): Tool[] {
-    const {
-      documentReader,
-      documentResourceCache,
-      fileAccessPolicy,
-      resolveDocumentResourceScope,
-    } = createDocumentToolRuntime(context);
+    const { documentReader, fileAccessPolicy, resolveDocumentResourceScope } =
+      createDocumentToolRuntime(context);
+    const contentAccessRuntime = getCapabilityRuntimeBindings().contentAccessRuntime;
 
     return [
       createReadDocumentTool({
         reader: documentReader,
-        resourceCache: documentResourceCache,
+        contentAccessRuntime,
         fileAccessPolicy,
         resolveResourceScope: resolveDocumentResourceScope,
       }),
       createReadDocumentImageTool({
         reader: documentReader,
-        resourceCache: documentResourceCache,
+        contentAccessRuntime,
         fileAccessPolicy,
         resolveResourceScope: resolveDocumentResourceScope,
       }),

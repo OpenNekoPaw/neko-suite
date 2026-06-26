@@ -263,7 +263,7 @@ describe('ConversationBridge', () => {
       );
     });
 
-    it('projects managed resource cache paths when restoring active conversation', () => {
+    it('strips managed resource cache paths when restoring active conversation', () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
       };
@@ -297,11 +297,7 @@ describe('ConversationBridge', () => {
 
       bridge.sendActiveConversation(webview as any);
 
-      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
-        webview,
-        managedPath,
-        'neko-agent.conversation',
-      );
+      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalled();
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'activeConversation',
@@ -311,16 +307,26 @@ describe('ConversationBridge', () => {
                 toolCalls: [
                   expect.objectContaining({
                     arguments: {
-                      image_paths: [managedPath],
-                      imagePathWebviewUris: [`webview-uri:${managedPath}`],
+                      resourceProjectionDiagnostics: [
+                        expect.objectContaining({
+                          code: 'resource-projection-denied',
+                          field: 'image_paths',
+                          source: managedPath,
+                        }),
+                      ],
                     },
                     result: expect.objectContaining({
                       data: {
                         images: [
                           {
-                            path: managedPath,
                             label: 'P1 cached',
-                            webviewUri: `webview-uri:${managedPath}`,
+                            resourceProjectionDiagnostics: [
+                              expect.objectContaining({
+                                code: 'resource-projection-denied',
+                                field: 'path',
+                                source: managedPath,
+                              }),
+                            ],
                           },
                         ],
                       },
@@ -332,6 +338,18 @@ describe('ConversationBridge', () => {
           }),
         }),
       );
+      const posted = webview.postMessage.mock.calls[0]?.[0] as {
+        conversation?: {
+          messages?: Array<{ toolCalls?: Array<{ arguments?: unknown; result?: unknown }> }>;
+        };
+      };
+      const postedToolCall = posted.conversation?.messages?.[0]?.toolCalls?.[0];
+      expect(postedToolCall?.arguments).not.toHaveProperty('image_paths');
+      const resultData = (postedToolCall?.result as { data?: { images?: unknown[] } } | undefined)
+        ?.data;
+      expect(resultData?.images?.[0]).not.toHaveProperty('path');
+      expect(JSON.stringify(postedToolCall)).not.toContain('webviewUri');
+      expect(JSON.stringify(postedToolCall)).not.toContain('imagePathWebviewUris');
     });
   });
 

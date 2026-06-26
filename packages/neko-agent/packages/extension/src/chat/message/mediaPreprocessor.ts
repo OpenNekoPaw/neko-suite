@@ -9,9 +9,10 @@
  * Degrades gracefully when engine is unavailable.
  */
 
-import * as fs from 'fs';
 import { getLogger } from '../../base';
 import type { EngineClient } from '@neko/neko-client/EngineClient';
+import { getMimeType } from '@neko/shared';
+import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import {
   VisionPreprocessor,
   type VisionMediaProcessOptions,
@@ -33,9 +34,12 @@ export type MediaProcessOptions = VisionMediaProcessOptions;
 export class MediaPreprocessor {
   private readonly preprocessor: VisionPreprocessor;
 
-  constructor(engineClient: EngineClient | null) {
+  constructor(
+    engineClient: EngineClient | null,
+    private readonly contentAccessRuntime?: AgentContentAccessRuntime,
+  ) {
     this.preprocessor = new VisionPreprocessor({
-      readFile: (filePath) => fs.promises.readFile(filePath),
+      readFile: (filePath) => this.readImageBytes(filePath),
       imageProcessor: createSharpVisionImageProcessor(),
       videoProcessor: createEngineVideoProcessor(engineClient),
       logger,
@@ -63,6 +67,29 @@ export class MediaPreprocessor {
    */
   async processVideo(filePath: string, opts?: MediaProcessOptions): Promise<ProcessedMedia> {
     return this.preprocessor.processVideo(await resolveDocumentPath(filePath), opts);
+  }
+
+  private async readImageBytes(filePath: string): Promise<Uint8Array> {
+    if (!this.contentAccessRuntime) {
+      throw new Error('Media image preprocessing requires AgentContentAccessRuntime.');
+    }
+    const mimeType = getMimeType(filePath);
+    const loaded = await this.contentAccessRuntime.loadProviderAsset({
+      caller: 'media-preprocessor',
+      source: {
+        kind: 'file',
+        path: filePath,
+      },
+      preferredTarget: 'bytes',
+      mimeTypeHint: mimeType,
+    });
+    if (loaded.status !== 'ready' || !loaded.bytes) {
+      throw new Error(
+        loaded.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+          `Media image is not ready: ${loaded.status}`,
+      );
+    }
+    return loaded.bytes;
   }
 }
 

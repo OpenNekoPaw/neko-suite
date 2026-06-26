@@ -6,11 +6,12 @@ import {
   type ToolResult,
 } from '@neko/shared';
 import { isDocumentUrl } from '@neko/platform/document';
-import { createDocumentResourceRefFromArchiveRef } from '../services/documentResourceCacheProvider';
+import { createDocumentResourceRefFromArchiveRef } from '@neko/shared/vscode/extension';
 import { resolveDocumentPath } from '../services/documentPathResolver';
 import type {
   DocumentBatchCursor,
   DocumentArchiveResourceRef,
+  DocumentExcerpt,
   DocumentImageInfo,
   DocumentLocator,
   DocumentManifest,
@@ -20,18 +21,18 @@ import type {
   DocumentSourceRef,
   ResourceRef,
 } from '@neko/shared';
-import type { ResourceCacheService } from '@neko/shared/vscode/extension';
 import { createNoWorkspaceFileAccessPolicy, type CoreFileAccessPolicy } from '@neko/agent/tools';
+import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import type { DocumentContent, IDocumentReaderService } from '../services/DocumentReaderService';
 
 export const DEFAULT_READ_DOCUMENT_MAX_CHARS = 20000;
 export const MAX_READ_DOCUMENT_CHARS = 100000;
-export const DEFAULT_READ_DOCUMENT_IMAGE_PATH_LIMIT = 50;
-export const MAX_READ_DOCUMENT_IMAGE_PATH_LIMIT = 500;
+export const DEFAULT_READ_DOCUMENT_IMAGE_LIMIT = 50;
+export const MAX_READ_DOCUMENT_IMAGE_LIMIT = 500;
 
 export interface ReadDocumentToolDeps {
   readonly reader: IDocumentReaderService;
-  readonly resourceCache?: ResourceCacheService;
+  readonly contentAccessRuntime?: AgentContentAccessRuntime;
   readonly fileAccessPolicy?: CoreFileAccessPolicy;
   readonly resolveResourceScope?: () => ResourceRef['scope'];
 }
@@ -44,30 +45,39 @@ interface ReadDocumentToolData {
   readonly truncated: boolean;
   readonly pageCount?: number;
   readonly metadata?: Record<string, unknown>;
-  readonly imagePaths?: readonly string[];
-  readonly runtimeImagePaths?: readonly string[];
-  readonly imageInfo?: readonly DocumentImageInfo[];
-  readonly imagePathCount?: number;
-  readonly imagePathsTruncated?: boolean;
+  readonly imageInfo?: readonly SanitizedDocumentImageInfo[];
+  readonly imageCount?: number;
+  readonly imagesTruncated?: boolean;
 }
 
-type DocumentImageInfoWithCacheResourceRef = DocumentImageInfo & {
-  readonly cacheResourceRef?: import('@neko/shared').ResourceRef;
+type DocumentImageInfoWithManagedResourceRef = DocumentImageInfo & {
+  readonly managedResourceRef?: import('@neko/shared').ResourceRef;
+};
+
+type SanitizedDocumentImageInfo = Omit<
+  DocumentImageInfoWithManagedResourceRef,
+  'path' | 'managedResourceRef'
+>;
+
+type SanitizedDocumentExcerpt = Omit<DocumentExcerpt, 'imagePaths' | 'imageInfo'>;
+
+type SanitizedDocumentReadResult = Omit<
+  DocumentReadResult,
+  'imagePaths' | 'imageInfo' | 'excerpt'
+> & {
+  readonly imageInfo?: readonly SanitizedDocumentImageInfo[];
+  readonly excerpt?: SanitizedDocumentExcerpt;
 };
 
 interface ProjectedDocumentImages {
-  readonly imagePaths: readonly string[];
-  readonly runtimeImagePaths: readonly string[];
-  readonly imageInfo: readonly DocumentImageInfoWithCacheResourceRef[];
+  readonly imageInfo: readonly SanitizedDocumentImageInfo[];
 }
 
 interface ProjectDocumentImagesOptions {
   readonly imageInfo: readonly DocumentImageInfo[] | undefined;
-  readonly visibleImagePaths: readonly string[];
-  readonly imagePathLimit: number;
-  readonly resourceCache?: ResourceCacheService;
+  readonly imageLimit: number;
+  readonly contentAccessRuntime?: AgentContentAccessRuntime;
   readonly resolveResourceScope?: () => ResourceRef['scope'];
-  readonly fileAccessPolicy?: CoreFileAccessPolicy;
 }
 
 type ReadDocumentMode = 'content' | 'manifest' | 'range' | 'next';
@@ -131,16 +141,16 @@ export function createReadDocumentTool(deps: ReadDocumentToolDeps): Tool {
           description:
             'Whether range/next results should include the full document manifest. Default false; use mode="manifest" when structure is needed.',
         },
-        include_image_paths: {
+        include_images: {
           type: 'boolean',
           description:
-            'Whether to include extracted image page paths and matching image metadata when the reader produces them. Default true.',
+            'Whether to include extracted document image metadata and stable document resource refs when available. Default true.',
         },
-        image_path_limit: {
+        max_images: {
           type: 'integer',
-          description: `Maximum image paths to return. Default ${DEFAULT_READ_DOCUMENT_IMAGE_PATH_LIMIT}; max ${MAX_READ_DOCUMENT_IMAGE_PATH_LIMIT}.`,
+          description: `Maximum document images to return. Default ${DEFAULT_READ_DOCUMENT_IMAGE_LIMIT}; max ${MAX_READ_DOCUMENT_IMAGE_LIMIT}.`,
           minimum: 1,
-          maximum: MAX_READ_DOCUMENT_IMAGE_PATH_LIMIT,
+          maximum: MAX_READ_DOCUMENT_IMAGE_LIMIT,
         },
       },
       required: ['file_path'],
@@ -176,12 +186,25 @@ async function executeReadDocument(
   );
   const includeMetadata = readBoolean(args['include_metadata'], true);
   const includeManifest = readBoolean(args['include_manifest'], false);
-  const includeImagePaths = readBoolean(args['include_image_paths'], true);
-  const imagePathLimit = readBoundedInteger(
-    args['image_path_limit'],
-    DEFAULT_READ_DOCUMENT_IMAGE_PATH_LIMIT,
+  if (Object.prototype.hasOwnProperty.call(args, 'include_image_paths')) {
+    return {
+      success: false,
+      error:
+        'ReadDocument include_image_paths was removed. Use include_images with structured imageInfo refs.',
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(args, 'image_path_limit')) {
+    return {
+      success: false,
+      error: 'ReadDocument image_path_limit was removed. Use max_images.',
+    };
+  }
+  const includeImages = readBoolean(args['include_images'], true);
+  const imageLimit = readBoundedInteger(
+    args['max_images'],
+    DEFAULT_READ_DOCUMENT_IMAGE_LIMIT,
     1,
-    MAX_READ_DOCUMENT_IMAGE_PATH_LIMIT,
+    MAX_READ_DOCUMENT_IMAGE_LIMIT,
   );
   const mode = readMode(args['mode']);
 
@@ -208,7 +231,7 @@ async function executeReadDocument(
     if (mode === 'range') {
       const range =
         args['range'] === undefined
-          ? createDefaultRangeFromManifest(await reader.getManifest(source), imagePathLimit)
+          ? createDefaultRangeFromManifest(await reader.getManifest(source), imageLimit)
           : readDocumentRange(args['range']);
       if (!range) {
         return { success: false, error: 'Missing or invalid required field for range mode: range' };
@@ -221,17 +244,16 @@ async function executeReadDocument(
             limit: {
               ...range.limit,
               maxChars,
-              maxImages: imagePathLimit,
+              maxImages: imageLimit,
             },
           }),
           {
             includeMetadata,
             includeManifest,
-            includeImagePaths,
-            imagePathLimit,
-            resourceCache: deps.resourceCache,
+            includeImages,
+            imageLimit,
+            contentAccessRuntime: deps.contentAccessRuntime,
             resolveResourceScope,
-            fileAccessPolicy: deps.fileAccessPolicy,
           },
         ),
       };
@@ -248,11 +270,10 @@ async function executeReadDocument(
         data: await formatDocumentReadResult(await reader.readNext(authorizedCursor), {
           includeMetadata,
           includeManifest,
-          includeImagePaths,
-          imagePathLimit,
-          resourceCache: deps.resourceCache,
+          includeImages,
+          imageLimit,
+          contentAccessRuntime: deps.contentAccessRuntime,
           resolveResourceScope,
-          fileAccessPolicy: deps.fileAccessPolicy,
         }),
       };
     }
@@ -265,11 +286,10 @@ async function executeReadDocument(
         filePath: resolvedFilePath,
         maxChars,
         includeMetadata,
-        includeImagePaths,
-        imagePathLimit,
-        resourceCache: deps.resourceCache,
+        includeImages,
+        imageLimit,
+        contentAccessRuntime: deps.contentAccessRuntime,
         resolveResourceScope,
-        fileAccessPolicy: deps.fileAccessPolicy,
       }),
     };
   } catch (error) {
@@ -337,34 +357,30 @@ async function formatDocumentReadResult(
   options: {
     readonly includeMetadata: boolean;
     readonly includeManifest: boolean;
-    readonly includeImagePaths: boolean;
-    readonly imagePathLimit: number;
-    readonly resourceCache?: ResourceCacheService;
+    readonly includeImages: boolean;
+    readonly imageLimit: number;
+    readonly contentAccessRuntime?: AgentContentAccessRuntime;
     readonly resolveResourceScope?: () => ResourceRef['scope'];
-    readonly fileAccessPolicy?: CoreFileAccessPolicy;
   },
-): Promise<DocumentReadResult> {
-  const imagePaths = result.imagePaths ?? [];
-  const visibleImagePaths = options.includeImagePaths
-    ? imagePaths.slice(0, options.imagePathLimit)
-    : [];
-  const visibleImages = await projectVisibleDocumentImages({
-    imageInfo: result.imageInfo,
-    visibleImagePaths,
-    imagePathLimit: options.imagePathLimit,
-    resourceCache: options.resourceCache,
-    resolveResourceScope: options.resolveResourceScope,
-    fileAccessPolicy: options.fileAccessPolicy,
-  });
+): Promise<SanitizedDocumentReadResult> {
+  const imageCount = Math.max(result.imagePaths?.length ?? 0, result.imageInfo?.length ?? 0);
+  const visibleImages = options.includeImages
+    ? await projectVisibleDocumentImages({
+        imageInfo: result.imageInfo,
+        imageLimit: options.imageLimit,
+        contentAccessRuntime: options.contentAccessRuntime,
+        resolveResourceScope: options.resolveResourceScope,
+      })
+    : { imageInfo: [] };
 
   const metadata =
-    options.includeMetadata && (result.metadata || imagePaths.length > 0)
+    options.includeMetadata && (result.metadata || imageCount > 0)
       ? {
           ...result.metadata,
-          ...(imagePaths.length > 0
+          ...(imageCount > 0
             ? {
-                imagePathCount: imagePaths.length,
-                imagePathsTruncated: visibleImagePaths.length < imagePaths.length,
+                imageCount,
+                imagesTruncated: visibleImages.imageInfo.length < imageCount,
               }
             : {}),
         }
@@ -373,18 +389,15 @@ async function formatDocumentReadResult(
   const excerpt = result.excerpt
     ? stripUndefinedProperties({
         ...result.excerpt,
-        ...(Object.prototype.hasOwnProperty.call(result.excerpt, 'imagePaths')
-          ? { imagePaths: visibleImagePaths }
-          : {}),
+        imagePaths: undefined,
         imageInfo: undefined,
       })
     : result.excerpt;
 
   return stripUndefinedProperties({
     ...result,
-    imagePaths: imagePaths.length > 0 ? visibleImages.imagePaths : undefined,
-    runtimeImagePaths: imagePaths.length > 0 ? visibleImages.runtimeImagePaths : undefined,
-    imageInfo: imagePaths.length > 0 ? visibleImages.imageInfo : undefined,
+    imagePaths: undefined,
+    imageInfo: visibleImages.imageInfo.length > 0 ? visibleImages.imageInfo : undefined,
     excerpt,
     metadata,
     manifest: options.includeManifest ? result.manifest : undefined,
@@ -394,114 +407,103 @@ async function formatDocumentReadResult(
 async function projectVisibleDocumentImages(
   options: ProjectDocumentImagesOptions,
 ): Promise<ProjectedDocumentImages> {
-  const {
-    imageInfo,
-    visibleImagePaths,
-    imagePathLimit,
-    resourceCache,
-    resolveResourceScope,
-    fileAccessPolicy,
-  } = options;
-  if (!imageInfo || imageInfo.length === 0 || visibleImagePaths.length === 0) {
-    const authorized = authorizeVisibleImagePaths(visibleImagePaths, fileAccessPolicy);
-    return { imagePaths: authorized, runtimeImagePaths: authorized, imageInfo: [] };
+  const { imageInfo, imageLimit, contentAccessRuntime, resolveResourceScope } = options;
+  if (!imageInfo || imageInfo.length === 0) {
+    return { imageInfo: [] };
   }
-  const visiblePathSet = new Set(visibleImagePaths);
-  const byPath = imageInfo.filter((image) => visiblePathSet.has(image.path));
-  const visible =
-    byPath.length > 0
-      ? byPath.slice(0, visibleImagePaths.length)
-      : imageInfo.slice(0, Math.min(imagePathLimit, visibleImagePaths.length));
+  const visible = imageInfo.slice(0, imageLimit);
   const projectedInfo = await Promise.all(
     visible.map(async (image, index) =>
       enrichRuntimeDocumentImageInfo(
-        await withCacheResourceRef(image, resourceCache, resolveResourceScope),
+        await withManagedResourceRef(image, contentAccessRuntime, resolveResourceScope),
         index,
-        fileAccessPolicy,
       ),
     ),
   );
   return {
-    imagePaths: mergeProjectedImagePaths(visibleImagePaths, visible, projectedInfo),
-    runtimeImagePaths: projectedInfo.map((image) => image.runtimePath ?? image.path),
     imageInfo: projectedInfo,
   };
 }
 
-async function withCacheResourceRef(
+async function withManagedResourceRef(
   image: DocumentImageInfo,
-  resourceCache: ResourceCacheService | undefined,
+  contentAccessRuntime: AgentContentAccessRuntime | undefined,
   resolveResourceScope: (() => ResourceRef['scope']) | undefined,
-): Promise<DocumentImageInfoWithCacheResourceRef> {
+): Promise<DocumentImageInfoWithManagedResourceRef> {
   const archiveRef = normalizeDocumentArchiveResourceRef(image);
   if (!archiveRef) return image;
-  const cacheResourceRef = createDocumentResourceRefFromArchiveRef(
+  const managedResourceRef = createDocumentResourceRefFromArchiveRef(
     archiveRef,
     resolveResourceScope?.() ?? 'project',
   );
-  const materializedPath = await materializeDocumentResource(
-    resourceCache,
-    cacheResourceRef,
-    image,
-  );
-  const nextPath = materializedPath ?? image.path;
-  const nextCacheResourceRef = cacheResourceRef;
+  await prewarmDocumentImageResource(contentAccessRuntime, archiveRef, image);
   return {
     ...image,
-    path: nextPath,
-    runtimePath: image.runtimePath ?? image.path,
-    runtimeKind: nextPath === image.path ? 'scratch-cache' : 'managed-cache',
     alias: image.alias ?? formatDocumentImageAlias(image.locator),
     aliasScope: image.aliasScope ?? formatDocumentAliasScope(archiveRef),
     sourceDocumentId: image.sourceDocumentId ?? formatDocumentSourceId(archiveRef.source),
     entryPath: image.entryPath ?? archiveRef.entryPath,
-    portableForTransfer: nextCacheResourceRef.scope === 'project',
-    ...(nextCacheResourceRef.scope === 'project'
+    portableForTransfer: managedResourceRef.scope === 'project',
+    ...(managedResourceRef.scope === 'project'
       ? {}
       : { nonPortableReason: 'no-workspace-or-extension-private-scratch' }),
     resourceRef: archiveRef,
-    cacheResourceRef: nextCacheResourceRef,
+    managedResourceRef,
   };
 }
 
-async function materializeDocumentResource(
-  resourceCache: ResourceCacheService | undefined,
-  resourceRef: ResourceRef,
+async function prewarmDocumentImageResource(
+  contentAccessRuntime: AgentContentAccessRuntime | undefined,
+  archiveRef: DocumentArchiveResourceRef,
   image: DocumentImageInfo,
-): Promise<string | undefined> {
-  if (!resourceCache || resourceRef.scope !== 'project') {
-    return undefined;
-  }
-  try {
-    const result = await resourceCache.resolve(
-      resourceRef,
-      {
-        role: 'document-entry',
-        ...(image.mimeType ? { mimeType: image.mimeType } : {}),
-        ...(image.width !== undefined ? { width: image.width } : {}),
-        ...(image.height !== undefined ? { height: image.height } : {}),
-      },
-      { materializeIfMissing: true },
+): Promise<void> {
+  if (!contentAccessRuntime) {
+    throw new Error(
+      'Document images must be resolved through AgentContentAccessRuntime before use.',
     );
-    return result.status === 'ready' ? result.absolutePath : undefined;
-  } catch {
-    // The document result still carries the stable ref; Canvas can materialize it later.
-    return undefined;
+  }
+  const result = await contentAccessRuntime.resolveDocumentImages({
+    caller: 'read-document',
+    source: {
+      kind: 'document',
+      source: {
+        kind: 'document',
+        filePath: archiveRef.source.filePath,
+        document: archiveRef.source,
+      },
+      entryPath: archiveRef.entryPath,
+      locator: {
+        kind: 'document',
+        ...(archiveRef.entryPath ? { entryPath: archiveRef.entryPath } : {}),
+        ...(archiveRef.locator ? { locator: archiveRef.locator } : {}),
+      },
+    },
+    locators: [archiveRef],
+    variant: {
+      role: 'document-entry',
+      ...(image.mimeType ? { mimeType: image.mimeType } : {}),
+      ...(image.width !== undefined ? { width: image.width } : {}),
+      ...(image.height !== undefined ? { height: image.height } : {}),
+    },
+  });
+  if (result.status !== 'ready') {
+    throw new Error(
+      result.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+        `Document image resource could not be resolved through content access: ${result.status}`,
+    );
   }
 }
 
 function enrichRuntimeDocumentImageInfo(
-  image: DocumentImageInfoWithCacheResourceRef,
+  image: DocumentImageInfoWithManagedResourceRef,
   index: number,
-  fileAccessPolicy: CoreFileAccessPolicy | undefined,
-): DocumentImageInfoWithCacheResourceRef {
-  const displayPath = image.path;
-  const authorizedPath = authorizeImageOutputPath(displayPath, fileAccessPolicy);
+): SanitizedDocumentImageInfo {
   return stripUndefinedProperties({
-    ...image,
-    path: authorizedPath,
-    runtimePath: authorizedPath,
-    runtimeKind: image.runtimeKind ?? inferDocumentImageRuntimeKind(image),
+    width: image.width,
+    height: image.height,
+    mimeType: image.mimeType,
+    byteSize: image.byteSize,
+    locator: image.locator,
     alias: image.alias ?? formatDocumentImageAlias(image.locator, index),
     aliasScope:
       image.aliasScope ??
@@ -510,55 +512,28 @@ function enrichRuntimeDocumentImageInfo(
       image.sourceDocumentId ??
       (image.resourceRef ? formatDocumentSourceId(image.resourceRef.source) : undefined),
     entryPath: image.entryPath ?? image.resourceRef?.entryPath,
-    portableForTransfer: image.portableForTransfer ?? image.cacheResourceRef?.scope === 'project',
+    portableForTransfer: image.portableForTransfer ?? image.managedResourceRef?.scope === 'project',
     ...(image.nonPortableReason
       ? { nonPortableReason: image.nonPortableReason }
-      : image.cacheResourceRef && image.cacheResourceRef.scope !== 'project'
+      : image.managedResourceRef && image.managedResourceRef.scope !== 'project'
         ? { nonPortableReason: 'no-workspace-or-extension-private-scratch' }
         : {}),
+    ...(image.resourceRef ? { resourceRef: image.resourceRef } : {}),
   });
-}
-
-function authorizeVisibleImagePaths(
-  imagePaths: readonly string[],
-  fileAccessPolicy: CoreFileAccessPolicy | undefined,
-): readonly string[] {
-  return imagePaths.map((imagePath) => authorizeImageOutputPath(imagePath, fileAccessPolicy));
-}
-
-function authorizeImageOutputPath(
-  imagePath: string,
-  fileAccessPolicy: CoreFileAccessPolicy | undefined,
-): string {
-  const authorization = (fileAccessPolicy ?? createNoWorkspaceFileAccessPolicy()).authorize(
-    imagePath,
-    'read',
-  );
-  if (!authorization.allowed) {
-    throw new Error(
-      authorization.message ??
-        `Document image output is not in an authorized resource cache: ${imagePath}`,
-    );
-  }
-  return authorization.path;
 }
 
 function normalizeDocumentArchiveResourceRef(
   image: DocumentImageInfo,
 ): DocumentArchiveResourceRef | undefined {
   if (!image.resourceRef) return undefined;
-  const { cachePath: _cachePath, ...stableResourceRef } = image.resourceRef;
   return {
-    ...stableResourceRef,
+    kind: 'document-entry',
+    source: image.resourceRef.source,
+    ...(image.resourceRef.entryPath ? { entryPath: image.resourceRef.entryPath } : {}),
     ...(image.locator && !image.resourceRef.locator ? { locator: image.locator } : {}),
+    ...(image.resourceRef.locator ? { locator: image.resourceRef.locator } : {}),
+    ...(image.resourceRef.versionPolicy ? { versionPolicy: image.resourceRef.versionPolicy } : {}),
   };
-}
-
-function inferDocumentImageRuntimeKind(
-  image: DocumentImageInfoWithCacheResourceRef,
-): NonNullable<DocumentImageInfo['runtimeKind']> {
-  if (image.cacheResourceRef?.scope === 'project') return 'managed-cache';
-  return 'scratch-cache';
 }
 
 function formatDocumentImageAlias(locator: DocumentLocator | undefined, defaultIndex = 0): string {
@@ -587,14 +562,14 @@ function formatDocumentSourceId(source: DocumentSourceRef): string {
 
 function createDefaultRangeFromManifest(
   manifest: DocumentManifest,
-  imagePathLimit: number,
+  imageLimit: number,
 ): DocumentRange | null {
   const firstUnit = manifest.units[0];
   if (!firstUnit) {
     return null;
   }
 
-  const boundedUnitCount = Math.max(1, Math.min(imagePathLimit, manifest.units.length));
+  const boundedUnitCount = Math.max(1, Math.min(imageLimit, manifest.units.length));
   const endUnit = manifest.units[boundedUnitCount - 1];
   const endLocator =
     endUnit && sameDocumentLocatorKind(firstUnit.locator, endUnit.locator)
@@ -639,27 +614,25 @@ async function formatReadDocumentData(input: {
   readonly filePath: string;
   readonly maxChars: number;
   readonly includeMetadata: boolean;
-  readonly includeImagePaths: boolean;
-  readonly imagePathLimit: number;
-  readonly resourceCache?: ResourceCacheService;
+  readonly includeImages: boolean;
+  readonly imageLimit: number;
+  readonly contentAccessRuntime?: AgentContentAccessRuntime;
   readonly resolveResourceScope?: () => ResourceRef['scope'];
-  readonly fileAccessPolicy?: CoreFileAccessPolicy;
 }): Promise<ReadDocumentToolData> {
   const text = input.content.text ?? '';
   const truncatedText = truncateText(text, input.maxChars);
-  const imagePaths = input.content.imagePaths ?? [];
-  const visibleImagePaths =
-    input.includeImagePaths && imagePaths.length > 0
-      ? imagePaths.slice(0, input.imagePathLimit)
-      : [];
-  const visibleImages = await projectVisibleDocumentImages({
-    imageInfo: input.content.imageInfo,
-    visibleImagePaths,
-    imagePathLimit: input.imagePathLimit,
-    resourceCache: input.resourceCache,
-    resolveResourceScope: input.resolveResourceScope,
-    fileAccessPolicy: input.fileAccessPolicy,
-  });
+  const imageCount = Math.max(
+    input.content.imagePaths?.length ?? 0,
+    input.content.imageInfo?.length ?? 0,
+  );
+  const visibleImages = input.includeImages
+    ? await projectVisibleDocumentImages({
+        imageInfo: input.content.imageInfo,
+        imageLimit: input.imageLimit,
+        contentAccessRuntime: input.contentAccessRuntime,
+        resolveResourceScope: input.resolveResourceScope,
+      })
+    : { imageInfo: [] };
 
   return {
     filePath: input.filePath,
@@ -671,37 +644,14 @@ async function formatReadDocumentData(input: {
     ...(input.includeMetadata && input.content.metadata
       ? { metadata: input.content.metadata }
       : {}),
-    ...(imagePaths.length > 0
+    ...(imageCount > 0
       ? {
-          imagePaths: visibleImages.imagePaths,
-          runtimeImagePaths: visibleImages.runtimeImagePaths,
           ...(visibleImages.imageInfo.length > 0 ? { imageInfo: visibleImages.imageInfo } : {}),
-          imagePathCount: imagePaths.length,
-          imagePathsTruncated: visibleImagePaths.length < imagePaths.length,
+          imageCount,
+          imagesTruncated: visibleImages.imageInfo.length < imageCount,
         }
       : {}),
   };
-}
-
-function mergeProjectedImagePaths(
-  visibleImagePaths: readonly string[],
-  originalInfo: readonly DocumentImageInfo[],
-  projectedInfo: readonly DocumentImageInfo[],
-): readonly string[] {
-  if (projectedInfo.length === 0) {
-    return visibleImagePaths;
-  }
-  const byOriginalPath = new Map<string, string>();
-  for (let index = 0; index < originalInfo.length; index += 1) {
-    const originalPath = originalInfo[index]?.path;
-    const projectedPath = projectedInfo[index]?.path;
-    if (originalPath && projectedPath) {
-      byOriginalPath.set(originalPath, projectedPath);
-    }
-  }
-  return visibleImagePaths.map((imagePath, index) => {
-    return byOriginalPath.get(imagePath) ?? projectedInfo[index]?.path ?? imagePath;
-  });
 }
 
 function truncateText(text: string, maxChars: number): { text: string; truncated: boolean } {

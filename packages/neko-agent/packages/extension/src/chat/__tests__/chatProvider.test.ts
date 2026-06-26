@@ -264,7 +264,7 @@ describe('chatProvider', () => {
     provider.dispose();
   });
 
-  it('configures unified chat roots for extension assets, caches, workspace, and media libraries', async () => {
+  it('configures chat roots for extension assets, workspace, workspace cache, and media libraries', async () => {
     vi.mocked(vscode.extensions.getExtension).mockReturnValue({
       id: 'neko.neko-assets',
       extensionUri: vscode.Uri.file('/ext/neko-assets'),
@@ -290,7 +290,6 @@ describe('chatProvider', () => {
 
     expect(roots).toEqual([
       '/ext/neko-agent/dist/webview',
-      '/global/neko-agent/resources/document-runtime',
       '/mock/workspace',
       '/external/media-library',
       '/mock/workspace/.neko/.cache',
@@ -327,7 +326,7 @@ describe('chatProvider', () => {
     access.dispose();
   });
 
-  it('authorizes extension-private document runtime cache paths only', async () => {
+  it('does not authorize extension-private document reader scratch paths', async () => {
     const extensionUri = vscode.Uri.file('/ext/neko-agent');
     const context = {
       globalStorageUri: vscode.Uri.file('/global/neko-agent'),
@@ -340,14 +339,13 @@ describe('chatProvider', () => {
     const access = createChatLocalResourceAccess(extensionUri, context);
     const uri = access.toWebviewUri(
       webview as any,
-      '/global/neko-agent/resources/document-runtime/neko_epub_1/page.jpg',
+      '/global/neko-agent/runtime/document-reader/neko_epub_1/page.jpg',
       'test',
     );
 
-    expect(uri).toBe('file:///global/neko-agent/resources/document-runtime/neko_epub_1/page.jpg');
+    expect(uri).toBeUndefined();
     expect(webview.options.localResourceRoots?.map((root) => root.fsPath)).toEqual([
       '/ext/neko-agent/dist/webview',
-      '/global/neko-agent/resources/document-runtime',
     ]);
 
     access.dispose();

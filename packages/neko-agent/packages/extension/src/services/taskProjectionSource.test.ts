@@ -19,7 +19,6 @@ describe('AgentTaskProjectionSource', () => {
           progress: 100,
           result: {
             urls: ['https://example.test/out.png'],
-            localPaths: ['/workspace/generated/out.png', '../outside.png'],
             assets: [],
           },
         }),
@@ -28,9 +27,8 @@ describe('AgentTaskProjectionSource', () => {
       expect.objectContaining({
         taskId: 'neko-agent:media-1',
         status: 'done',
-        actions: ['reveal-output'],
+        actions: [],
         outputs: expect.arrayContaining([
-          { kind: 'file', ref: 'generated/out.png', label: 'out.png' },
           { kind: 'url', ref: 'https://example.test/out.png', label: 'Generated output' },
         ]),
       }),

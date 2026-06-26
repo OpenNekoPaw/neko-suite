@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TOOL_NAMES_SYSTEM, type ResourceRef, type ToolResult } from '@neko/shared';
-import type { ResourceCacheService } from '@neko/shared/vscode/extension';
+import { TOOL_NAMES_SYSTEM, type ToolResult } from '@neko/shared';
 import { createWorkspaceFileAccessPolicy } from '@neko/agent/tools';
+import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import { createReadDocumentTool } from '../readDocumentTool';
 import type { IDocumentReaderService } from '../../services/DocumentReaderService';
 
@@ -175,19 +175,19 @@ describe('createReadDocumentTool', () => {
     );
   });
 
-  it('limits image paths returned by archive readers', async () => {
+  it('limits image metadata returned by archive readers without exposing cache paths', async () => {
     const reader = createReader({
       read: vi.fn(async () => ({
         text: 'Comic archive with 3 pages',
         pageCount: 3,
         imagePaths: [
-          '/workspace/.neko/.cache/resources/document-runtime/1.png',
-          '/workspace/.neko/.cache/resources/document-runtime/2.png',
-          '/workspace/.neko/.cache/resources/document-runtime/3.png',
+          '/workspace/.neko/.cache/resources/documents/doc_test/1.png',
+          '/workspace/.neko/.cache/resources/documents/doc_test/2.png',
+          '/workspace/.neko/.cache/resources/documents/doc_test/3.png',
         ],
         imageInfo: [
           {
-            path: '/workspace/.neko/.cache/resources/document-runtime/1.png',
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/1.png',
             width: 100,
             height: 200,
             mimeType: 'image/png',
@@ -196,18 +196,17 @@ describe('createReadDocumentTool', () => {
               kind: 'document-entry',
               source: { filePath: '/workspace/books/comic.cbz', format: 'cbz' },
               entryPath: '1.png',
-              cachePath: '/workspace/.neko/.cache/resources/document-runtime/1.png',
             },
           },
           {
-            path: '/workspace/.neko/.cache/resources/document-runtime/2.png',
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/2.png',
             width: 110,
             height: 210,
             mimeType: 'image/png',
             byteSize: 11,
           },
           {
-            path: '/workspace/.neko/.cache/resources/document-runtime/3.png',
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/3.png',
             width: 120,
             height: 220,
             mimeType: 'image/png',
@@ -216,51 +215,45 @@ describe('createReadDocumentTool', () => {
         ],
       })),
     });
-    const tool = createReadDocumentTestTool({ reader });
+    const contentAccessRuntime = createContentAccessRuntime();
+    const tool = createReadDocumentTestTool({ reader, contentAccessRuntime });
 
     const result = (await tool.execute({
       file_path: '/workspace/books/comic.cbz',
-      image_path_limit: 2,
+      max_images: 2,
     })) as ToolResult;
 
     expect(result.success).toBe(true);
+    expect(contentAccessRuntime.resolveDocumentImages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caller: 'read-document',
+        locators: [expect.objectContaining({ entryPath: '1.png' })],
+        variant: { role: 'document-entry', mimeType: 'image/png', width: 100, height: 200 },
+        source: expect.objectContaining({
+          kind: 'document',
+          entryPath: '1.png',
+          source: expect.objectContaining({
+            kind: 'document',
+            filePath: '/workspace/books/comic.cbz',
+          }),
+        }),
+      }),
+    );
     expect(result.data).toEqual(
       expect.objectContaining({
-        imagePaths: [
-          '/workspace/.neko/.cache/resources/document-runtime/1.png',
-          '/workspace/.neko/.cache/resources/document-runtime/2.png',
-        ],
-        runtimeImagePaths: [
-          '/workspace/.neko/.cache/resources/document-runtime/1.png',
-          '/workspace/.neko/.cache/resources/document-runtime/2.png',
-        ],
         imageInfo: [
           expect.objectContaining({
-            path: '/workspace/.neko/.cache/resources/document-runtime/1.png',
-            runtimePath: '/workspace/.neko/.cache/resources/document-runtime/1.png',
-            runtimeKind: 'scratch-cache',
             alias: 'image_1',
             aliasScope: 'document:/workspace/books/comic.cbz',
             sourceDocumentId: '/workspace/books/comic.cbz',
             entryPath: '1.png',
             portableForTransfer: true,
-            resourceRef: expect.not.objectContaining({
-              cachePath: expect.any(String),
-            }),
             width: 100,
             height: 200,
             mimeType: 'image/png',
             byteSize: 10,
-            cacheResourceRef: expect.objectContaining({
-              provider: 'document-archive',
-              kind: 'document',
-              locator: expect.objectContaining({ entryPath: '1.png' }),
-            }),
           }),
           expect.objectContaining({
-            path: '/workspace/.neko/.cache/resources/document-runtime/2.png',
-            runtimePath: '/workspace/.neko/.cache/resources/document-runtime/2.png',
-            runtimeKind: 'scratch-cache',
             alias: 'image_2',
             portableForTransfer: false,
             width: 110,
@@ -269,13 +262,18 @@ describe('createReadDocumentTool', () => {
             byteSize: 11,
           }),
         ],
-        imagePathCount: 3,
-        imagePathsTruncated: true,
+        imageCount: 3,
+        imagesTruncated: true,
       }),
     );
+    expect(JSON.stringify(result.data)).not.toContain('/workspace/.neko/.cache/resources/');
+    expect(JSON.stringify(result.data)).not.toContain('"path"');
+    expect(JSON.stringify(result.data)).not.toContain('"runtimePath"');
+    expect(JSON.stringify(result.data)).not.toContain('"runtimeKind"');
+    expect(JSON.stringify(result.data)).not.toContain('"cacheResourceRef"');
   });
 
-  it('rejects system temp image outputs from document readers', async () => {
+  it('hides system temp image outputs from document readers', async () => {
     const tempImagePath =
       '/var/folders/26/b9fmn08x6mv2bcl771rnjyt80000gn/T/neko_epub_1vehc43/0001_moe-017905.jpg';
     const reader = createReader({
@@ -291,18 +289,19 @@ describe('createReadDocumentTool', () => {
       file_path: '/workspace/books/comic.cbz',
     })) as ToolResult;
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('system temp');
+    expect(result.success).toBe(true);
+    expect(JSON.stringify(result.data)).not.toContain(tempImagePath);
+    expect(JSON.stringify(result.data)).not.toContain('"path"');
   });
 
   it('prewarms project document image refs in the unified resource cache', async () => {
     const reader = createReader({
       read: vi.fn(async () => ({
         text: 'Comic archive',
-        imagePaths: ['/workspace/.neko/.cache/resources/document-runtime/1.png'],
+        imagePaths: ['/workspace/.neko/.cache/resources/documents/doc_test/1.png'],
         imageInfo: [
           {
-            path: '/workspace/.neko/.cache/resources/document-runtime/1.png',
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/1.png',
             width: 100,
             height: 200,
             mimeType: 'image/png',
@@ -310,37 +309,36 @@ describe('createReadDocumentTool', () => {
               kind: 'document-entry',
               source: { filePath: '/workspace/books/comic.cbz', format: 'cbz' },
               entryPath: '1.png',
-              cachePath: '/workspace/.neko/.cache/resources/document-runtime/1.png',
             },
           },
         ],
       })),
     });
-    const resourceCache = createResourceCache();
-    const tool = createReadDocumentTestTool({ reader, resourceCache });
+    const contentAccessRuntime = createContentAccessRuntime();
+    const tool = createReadDocumentTestTool({ reader, contentAccessRuntime });
 
     const result = (await tool.execute({ file_path: '/workspace/books/comic.cbz' })) as ToolResult;
 
     expect(result.success).toBe(true);
-    expect(resourceCache.resolve).toHaveBeenCalledWith(
+    expect(contentAccessRuntime.resolveDocumentImages).toHaveBeenCalledWith(
       expect.objectContaining({
-        scope: 'project',
-        provider: 'document-archive',
-        kind: 'document',
-        locator: expect.objectContaining({ entryPath: '1.png' }),
+        caller: 'read-document',
+        locators: [expect.objectContaining({ entryPath: '1.png' })],
+        variant: { role: 'document-entry', mimeType: 'image/png', width: 100, height: 200 },
+        source: expect.objectContaining({
+          kind: 'document',
+          entryPath: '1.png',
+          source: expect.objectContaining({
+            kind: 'document',
+            filePath: '/workspace/books/comic.cbz',
+          }),
+        }),
       }),
-      { role: 'document-entry', mimeType: 'image/png', width: 100, height: 200 },
-      { materializeIfMissing: true },
     );
     expect(result.data).toEqual(
       expect.objectContaining({
-        imagePaths: ['/workspace/.neko/.cache/resources/documents/page.png'],
-        runtimeImagePaths: ['/workspace/.neko/.cache/resources/documents/page.png'],
         imageInfo: [
           expect.objectContaining({
-            path: '/workspace/.neko/.cache/resources/documents/page.png',
-            runtimePath: '/workspace/.neko/.cache/resources/documents/page.png',
-            runtimeKind: 'managed-cache',
             alias: 'image_1',
             aliasScope: 'document:/workspace/books/comic.cbz',
             sourceDocumentId: '/workspace/books/comic.cbz',
@@ -351,39 +349,80 @@ describe('createReadDocumentTool', () => {
               source: { filePath: '/workspace/books/comic.cbz', format: 'cbz' },
               entryPath: '1.png',
             },
-            cacheResourceRef: expect.objectContaining({
-              provider: 'document-archive',
-            }),
           }),
         ],
       }),
     );
     expect(JSON.stringify(result.data)).not.toContain('legacyCachePath');
+    expect(JSON.stringify(result.data)).not.toContain('/workspace/.neko/.cache/resources/');
     expect(JSON.stringify(result.data)).not.toContain('"cachePath"');
+    expect(JSON.stringify(result.data)).not.toContain('"cacheResourceRef"');
+    expect(JSON.stringify(result.data)).not.toContain('"runtimeKind"');
+    expect(JSON.stringify(result.data)).not.toContain('"path"');
+  });
+
+  it('fails visibly when document image content access cannot rebuild cache resources', async () => {
+    const reader = createReader({
+      read: vi.fn(async () => ({
+        text: 'Comic archive',
+        imagePaths: ['/workspace/.neko/.cache/resources/documents/doc_test/1.png'],
+        imageInfo: [
+          {
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/1.png',
+            width: 100,
+            height: 200,
+            mimeType: 'image/png',
+            resourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '/workspace/books/comic.cbz', format: 'cbz' },
+              entryPath: '1.png',
+            },
+          },
+        ],
+      })),
+    });
+    const contentAccessRuntime = createContentAccessRuntime();
+    contentAccessRuntime.resolveDocumentImages.mockResolvedValueOnce({
+      status: 'failed',
+      diagnostics: [
+        {
+          code: 'resource-cache-unavailable',
+          severity: 'error',
+          message: 'document image cache rebuild failed',
+        },
+      ],
+      images: [],
+    });
+    const tool = createReadDocumentTestTool({ reader, contentAccessRuntime });
+
+    const result = (await tool.execute({ file_path: '/workspace/books/comic.cbz' })) as ToolResult;
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('document image cache rebuild failed');
+    expect(JSON.stringify(result)).not.toContain('/workspace/.neko/.cache/resources/');
   });
 
   it('marks no-workspace document image refs as extension-private and non-portable', async () => {
     const reader = createReader({
       read: vi.fn(async () => ({
         text: 'Comic archive',
-        imagePaths: ['/workspace/.neko/.cache/resources/document-runtime/1.png'],
+        imagePaths: ['/workspace/.neko/.cache/resources/documents/doc_test/1.png'],
         imageInfo: [
           {
-            path: '/workspace/.neko/.cache/resources/document-runtime/1.png',
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/1.png',
             resourceRef: {
               kind: 'document-entry',
               source: { filePath: '/workspace/books/comic.cbz', format: 'cbz' },
               entryPath: '1.png',
-              cachePath: '/workspace/.neko/.cache/resources/document-runtime/1.png',
             },
           },
         ],
       })),
     });
-    const resourceCache = createResourceCache();
+    const contentAccessRuntime = createContentAccessRuntime();
     const tool = createReadDocumentTestTool({
       reader,
-      resourceCache,
+      contentAccessRuntime,
       resolveResourceScope: () => 'extension-private',
     });
 
@@ -396,21 +435,32 @@ describe('createReadDocumentTool', () => {
       expect.objectContaining({
         imageInfo: [
           expect.objectContaining({
-            cacheResourceRef: expect.objectContaining({
-              scope: 'extension-private',
-              source: expect.objectContaining({
-                metadata: expect.objectContaining({
-                  nonPortable: true,
-                  nonPortableReason: 'no-workspace-or-extension-private-scratch',
-                }),
-              }),
-            }),
+            portableForTransfer: false,
+            nonPortableReason: 'no-workspace-or-extension-private-scratch',
+            resourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '/workspace/books/comic.cbz', format: 'cbz' },
+              entryPath: '1.png',
+            },
           }),
         ],
       }),
     );
-    expect(resourceCache.resolve).not.toHaveBeenCalled();
-    expect(resourceCache.ensure).not.toHaveBeenCalled();
+    expect(contentAccessRuntime.resolveDocumentImages).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caller: 'read-document',
+        locators: [expect.objectContaining({ entryPath: '1.png' })],
+        variant: { role: 'document-entry' },
+        source: expect.objectContaining({
+          kind: 'document',
+          entryPath: '1.png',
+        }),
+      }),
+    );
+    expect(JSON.stringify(result.data)).not.toContain('/workspace/.neko/.cache/resources/');
+    expect(JSON.stringify(result.data)).not.toContain('"cacheResourceRef"');
+    expect(JSON.stringify(result.data)).not.toContain('"runtimeKind"');
+    expect(JSON.stringify(result.data)).not.toContain('"path"');
   });
 
   it('returns document manifests without full content reads', async () => {
@@ -477,27 +527,27 @@ describe('createReadDocumentTool', () => {
         locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 },
         text: 'EPUB chapter range with 3 image pages',
         imagePaths: [
-          '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
-          '/workspace/.neko/.cache/resources/document-runtime/2.jpg',
-          '/workspace/.neko/.cache/resources/document-runtime/3.jpg',
+          '/workspace/.neko/.cache/resources/documents/doc_test/1.jpg',
+          '/workspace/.neko/.cache/resources/documents/doc_test/2.jpg',
+          '/workspace/.neko/.cache/resources/documents/doc_test/3.jpg',
         ],
         imageInfo: [
           {
-            path: '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/1.jpg',
             width: 100,
             height: 200,
             mimeType: 'image/jpeg',
             byteSize: 10,
           },
           {
-            path: '/workspace/.neko/.cache/resources/document-runtime/2.jpg',
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/2.jpg',
             width: 110,
             height: 210,
             mimeType: 'image/jpeg',
             byteSize: 11,
           },
           {
-            path: '/workspace/.neko/.cache/resources/document-runtime/3.jpg',
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/3.jpg',
             width: 120,
             height: 220,
             mimeType: 'image/jpeg',
@@ -507,27 +557,27 @@ describe('createReadDocumentTool', () => {
         excerpt: {
           contentKind: 'image',
           imagePaths: [
-            '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
-            '/workspace/.neko/.cache/resources/document-runtime/2.jpg',
-            '/workspace/.neko/.cache/resources/document-runtime/3.jpg',
+            '/workspace/.neko/.cache/resources/documents/doc_test/1.jpg',
+            '/workspace/.neko/.cache/resources/documents/doc_test/2.jpg',
+            '/workspace/.neko/.cache/resources/documents/doc_test/3.jpg',
           ],
           imageInfo: [
             {
-              path: '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
+              path: '/workspace/.neko/.cache/resources/documents/doc_test/1.jpg',
               width: 100,
               height: 200,
               mimeType: 'image/jpeg',
               byteSize: 10,
             },
             {
-              path: '/workspace/.neko/.cache/resources/document-runtime/2.jpg',
+              path: '/workspace/.neko/.cache/resources/documents/doc_test/2.jpg',
               width: 110,
               height: 210,
               mimeType: 'image/jpeg',
               byteSize: 11,
             },
             {
-              path: '/workspace/.neko/.cache/resources/document-runtime/3.jpg',
+              path: '/workspace/.neko/.cache/resources/documents/doc_test/3.jpg',
               width: 120,
               height: 220,
               mimeType: 'image/jpeg',
@@ -545,26 +595,15 @@ describe('createReadDocumentTool', () => {
     const result = (await tool.execute({
       file_path: '/workspace/books/demo.epub',
       mode: 'range',
-      image_path_limit: 2,
+      max_images: 2,
       range: { locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 } },
     })) as ToolResult;
 
     expect(result.success).toBe(true);
     expect(result.data).toEqual(
       expect.objectContaining({
-        imagePaths: [
-          '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
-          '/workspace/.neko/.cache/resources/document-runtime/2.jpg',
-        ],
-        runtimeImagePaths: [
-          '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
-          '/workspace/.neko/.cache/resources/document-runtime/2.jpg',
-        ],
         imageInfo: [
           expect.objectContaining({
-            path: '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
-            runtimePath: '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
-            runtimeKind: 'scratch-cache',
             alias: 'image_1',
             portableForTransfer: false,
             width: 100,
@@ -573,9 +612,6 @@ describe('createReadDocumentTool', () => {
             byteSize: 10,
           }),
           expect.objectContaining({
-            path: '/workspace/.neko/.cache/resources/document-runtime/2.jpg',
-            runtimePath: '/workspace/.neko/.cache/resources/document-runtime/2.jpg',
-            runtimeKind: 'scratch-cache',
             alias: 'image_2',
             portableForTransfer: false,
             width: 110,
@@ -584,18 +620,21 @@ describe('createReadDocumentTool', () => {
             byteSize: 11,
           }),
         ],
-        excerpt: expect.objectContaining({
-          imagePaths: [
-            '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
-            '/workspace/.neko/.cache/resources/document-runtime/2.jpg',
-          ],
+        excerpt: expect.not.objectContaining({
+          imagePaths: expect.any(Array),
+          imageInfo: expect.any(Array),
         }),
         metadata: expect.objectContaining({
-          imagePathCount: 3,
-          imagePathsTruncated: true,
+          imageCount: 3,
+          imagesTruncated: true,
         }),
       }),
     );
+    expect(JSON.stringify(result.data)).not.toContain('/workspace/.neko/.cache/resources/');
+    expect(JSON.stringify(result.data)).not.toContain('"path"');
+    expect(JSON.stringify(result.data)).not.toContain('"runtimePath"');
+    expect(JSON.stringify(result.data)).not.toContain('"runtimeKind"');
+    expect(JSON.stringify(result.data)).not.toContain('"cacheResourceRef"');
   });
 
   it('hides image metadata when image paths are excluded', async () => {
@@ -603,10 +642,10 @@ describe('createReadDocumentTool', () => {
       readRange: vi.fn(async () => ({
         source: { filePath: '/workspace/books/demo.epub', format: 'epub', fileId: 'book-1' },
         text: 'EPUB chapter range with 1 image pages',
-        imagePaths: ['/workspace/.neko/.cache/resources/document-runtime/1.jpg'],
+        imagePaths: ['/workspace/.neko/.cache/resources/documents/doc_test/1.jpg'],
         imageInfo: [
           {
-            path: '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/1.jpg',
             width: 100,
             height: 200,
             mimeType: 'image/jpeg',
@@ -615,10 +654,10 @@ describe('createReadDocumentTool', () => {
         ],
         excerpt: {
           contentKind: 'image',
-          imagePaths: ['/workspace/.neko/.cache/resources/document-runtime/1.jpg'],
+          imagePaths: ['/workspace/.neko/.cache/resources/documents/doc_test/1.jpg'],
           imageInfo: [
             {
-              path: '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
+              path: '/workspace/.neko/.cache/resources/documents/doc_test/1.jpg',
               width: 100,
               height: 200,
               mimeType: 'image/jpeg',
@@ -635,20 +674,26 @@ describe('createReadDocumentTool', () => {
     const result = (await tool.execute({
       file_path: '/workspace/books/demo.epub',
       mode: 'range',
-      include_image_paths: false,
+      include_images: false,
       range: { locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 } },
     })) as ToolResult;
 
     expect(result.success).toBe(true);
     expect(result.data).toEqual(
+      expect.not.objectContaining({
+        imagePaths: expect.any(Array),
+        imageInfo: expect.any(Array),
+      }),
+    );
+    expect(result.data).toEqual(
       expect.objectContaining({
-        imagePaths: [],
-        imageInfo: [],
-        excerpt: expect.objectContaining({
-          imagePaths: [],
+        excerpt: expect.not.objectContaining({
+          imagePaths: expect.any(Array),
+          imageInfo: expect.any(Array),
         }),
       }),
     );
+    expect(JSON.stringify(result.data)).not.toContain('/workspace/.neko/.cache/resources/');
   });
 
   it('omits range manifests by default and honors include_metadata=false', async () => {
@@ -657,10 +702,10 @@ describe('createReadDocumentTool', () => {
         source: { filePath: '/workspace/books/demo.epub', format: 'epub', fileId: 'book-1' },
         locator: { kind: 'chapter', chapterHref: 'chapter-1', spineIndex: 0 },
         text: 'Chapter range',
-        imagePaths: ['/workspace/.neko/.cache/resources/document-runtime/1.jpg'],
+        imagePaths: ['/workspace/.neko/.cache/resources/documents/doc_test/1.jpg'],
         imageInfo: [
           {
-            path: '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/1.jpg',
             width: 100,
             height: 200,
           },
@@ -701,13 +746,8 @@ describe('createReadDocumentTool', () => {
     expect(result.data).toEqual(
       expect.objectContaining({
         text: 'Chapter range',
-        imagePaths: ['/workspace/.neko/.cache/resources/document-runtime/1.jpg'],
-        runtimeImagePaths: ['/workspace/.neko/.cache/resources/document-runtime/1.jpg'],
         imageInfo: [
           expect.objectContaining({
-            path: '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
-            runtimePath: '/workspace/.neko/.cache/resources/document-runtime/1.jpg',
-            runtimeKind: 'scratch-cache',
             alias: 'image_1',
             portableForTransfer: false,
             width: 100,
@@ -718,6 +758,9 @@ describe('createReadDocumentTool', () => {
     );
     expect(result.data).not.toHaveProperty('metadata');
     expect(result.data).not.toHaveProperty('manifest');
+    expect(JSON.stringify(result.data)).not.toContain('/workspace/.neko/.cache/resources/');
+    expect(JSON.stringify(result.data)).not.toContain('"path"');
+    expect(JSON.stringify(result.data)).not.toContain('"runtimeKind"');
   });
 
   it('can explicitly include range manifests when requested', async () => {
@@ -798,7 +841,7 @@ describe('createReadDocumentTool', () => {
     const result = (await tool.execute({
       file_path: '/workspace/books/demo.epub',
       mode: 'range',
-      image_path_limit: 2,
+      max_images: 2,
     })) as ToolResult;
 
     expect(result.success).toBe(true);
@@ -823,7 +866,7 @@ describe('createReadDocumentTool', () => {
         start: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
         end: { kind: 'chapter', chapterHref: 'Page_10', spineIndex: 10 },
       },
-      image_path_limit: 10,
+      max_images: 10,
     })) as ToolResult;
 
     expect(result.success).toBe(true);
@@ -896,10 +939,10 @@ describe('createReadDocumentTool', () => {
       readNext: vi.fn(async (cursor) => ({
         source: cursor.source,
         text: 'Next batch',
-        imagePaths: ['/workspace/.neko/.cache/resources/document-runtime/page-1.jpg'],
+        imagePaths: ['/workspace/.neko/.cache/resources/documents/doc_test/page-1.jpg'],
         imageInfo: [
           {
-            path: '/workspace/.neko/.cache/resources/document-runtime/page-1.jpg',
+            path: '/workspace/.neko/.cache/resources/documents/doc_test/page-1.jpg',
             width: 100,
             height: 200,
           },
@@ -954,13 +997,8 @@ describe('createReadDocumentTool', () => {
     expect(result.data).toEqual(
       expect.objectContaining({
         text: 'Next batch',
-        imagePaths: ['/workspace/.neko/.cache/resources/document-runtime/page-1.jpg'],
-        runtimeImagePaths: ['/workspace/.neko/.cache/resources/document-runtime/page-1.jpg'],
         imageInfo: [
           expect.objectContaining({
-            path: '/workspace/.neko/.cache/resources/document-runtime/page-1.jpg',
-            runtimePath: '/workspace/.neko/.cache/resources/document-runtime/page-1.jpg',
-            runtimeKind: 'scratch-cache',
             alias: 'image_1',
             portableForTransfer: false,
             width: 100,
@@ -970,65 +1008,39 @@ describe('createReadDocumentTool', () => {
         cursor: expect.objectContaining({ done: true }),
         metadata: expect.objectContaining({
           title: 'Book',
-          imagePathCount: 1,
-          imagePathsTruncated: false,
+          imageCount: 1,
+          imagesTruncated: false,
         }),
       }),
     );
     expect(result.data).not.toHaveProperty('manifest');
+    expect(JSON.stringify(result.data)).not.toContain('/workspace/.neko/.cache/resources/');
+    expect(JSON.stringify(result.data)).not.toContain('"path"');
+    expect(JSON.stringify(result.data)).not.toContain('"runtimeKind"');
   });
 });
 
-function createResourceCache(): ResourceCacheService {
+function createContentAccessRuntime(): AgentContentAccessRuntime & {
+  readonly resolveDocumentImages: ReturnType<typeof vi.fn>;
+} {
   return {
-    registerProvider: vi.fn(),
-    findByLocalPath: vi.fn(async () => undefined),
-    ensure: vi.fn(async (ref: ResourceRef, variant) => ({
-      status: 'ready',
-      ref,
-      variant: { resource: ref, ...variant },
-      absolutePath: '/workspace/.neko/.cache/resources/documents/page.png',
-    })),
-    resolve: vi.fn(async (ref: ResourceRef, variant) => ({
-      status: 'ready',
-      ref,
-      variant: { resource: ref, ...variant },
-      absolutePath: '/workspace/.neko/.cache/resources/documents/page.png',
-    })),
-    record: vi.fn(async (record) => ({
-      status: record.status ?? 'ready',
-      ref: record.ref,
-      variant: { resource: record.ref, ...record.variant },
-      absolutePath: record.absolutePath,
-      relativePath: record.relativePath,
-    })),
-    updateLifecycle: vi.fn(async (record) => ({
-      status: 'ready',
-      ref: record.ref,
-      variant: { resource: record.ref, ...record.variant },
-    })),
-    project: vi.fn(async (_webview, ref: ResourceRef, variant) => ({
-      status: 'missing',
-      ref,
-      variant: { resource: ref, ...variant },
-    })),
-    invalidate: vi.fn(async () => undefined),
-    invalidateManifestCache: vi.fn(),
-    stats: vi.fn(async () => ({
-      totalSizeBytes: 0,
-      entryCount: 0,
-      variantCount: 0,
-      staleCount: 0,
-      missingCount: 0,
-      scopeCounts: {},
-      providerCounts: {},
-      providerBytes: {},
-    })),
-    gc: vi.fn(async () => ({
-      removedCount: 0,
-      removedBytes: 0,
-      skippedCount: 0,
-      skippedReasons: {},
-    })),
+    resolve: vi.fn(),
+    resolveImageMetadata: vi.fn(),
+    resolveDocumentContent: vi.fn(),
+    resolveDocumentImages: vi.fn(
+      async (input: { source: unknown; locators?: readonly unknown[] }) => ({
+        status: 'ready' as const,
+        source: input.source,
+        diagnostics: [],
+        images: (input.locators ?? []).map((documentResourceRef) => ({
+          documentResourceRef,
+          metadata: { status: 'ready' },
+        })),
+      }),
+    ),
+    loadProviderAsset: vi.fn(),
+    projectResource: vi.fn(),
+  } as unknown as AgentContentAccessRuntime & {
+    readonly resolveDocumentImages: ReturnType<typeof vi.fn>;
   };
 }

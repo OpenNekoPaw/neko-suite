@@ -2,13 +2,13 @@ import * as vscode from 'vscode';
 import * as path from 'node:path';
 import {
   NEKO_EXTENSION_IDS,
+  stripGeneratedAssetPath,
   type NekoAssetsAPI,
-  type WebviewGeneratedAsset,
+  type RenderableGeneratedAsset,
   type GeneratedAsset,
 } from '@neko/shared';
 import {
   VSCodeLocalResourceAccessService,
-  createExtensionCacheLocalResourceRootProvider,
   createExtensionAssetLocalResourceRootProvider,
   createWorkspaceCacheLocalResourceRootProvider,
   createWorkspaceLocalResourceRootProvider,
@@ -31,7 +31,7 @@ export interface AgentLocalResourceAccess {
   toWebviewAsset<T extends GeneratedAsset>(
     webview: vscode.Webview,
     asset: T,
-  ): WebviewGeneratedAsset<T>;
+  ): RenderableGeneratedAsset<T>;
   dispose(): void;
 }
 
@@ -48,18 +48,14 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
   private readonly disposables: vscode.Disposable[] = [];
   private readonly projectors = new Map<vscode.Webview, (source: string) => string | undefined>();
   private readonly webviews = new Set<vscode.Webview>();
-  private readonly requiredRuntimeCacheRoots: readonly vscode.Uri[];
+  private readonly requiredWorkspaceCacheRoots: readonly vscode.Uri[];
 
   constructor(extensionUri: vscode.Uri, context: vscode.ExtensionContext) {
-    this.requiredRuntimeCacheRoots = [
-      ...getWorkspaceCacheRoots(),
-      ...getExtensionDocumentRuntimeRoots(context),
-    ];
+    this.requiredWorkspaceCacheRoots = getWorkspaceCacheRoots();
     this.service = new VSCodeLocalResourceAccessService({
       logger,
       rootProviders: [
         createExtensionAssetLocalResourceRootProvider(extensionUri, 'dist', 'webview'),
-        createExtensionDocumentRuntimeLocalResourceRootProvider(context),
         createWorkspaceLocalResourceRootProvider(),
         this.mediaLibraryRoots,
         createWorkspaceCacheLocalResourceRootProvider(),
@@ -100,7 +96,7 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
   }
 
   toWebviewUri(webview: vscode.Webview, source: string, caller: string): string | undefined {
-    const roots = this.ensureRequiredRuntimeCacheRoots(webview, source);
+    const roots = this.ensureRequiredWorkspaceCacheRoots(webview, source);
     const projector = this.service.createSyncProjector(webview, roots, { caller });
     this.projectors.set(webview, projector);
     const uri = projector(source);
@@ -113,12 +109,15 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
   toWebviewAsset<T extends GeneratedAsset>(
     webview: vscode.Webview,
     asset: T,
-  ): WebviewGeneratedAsset<T> {
+  ): RenderableGeneratedAsset<T> {
+    const renderUri = this.toWebviewUri(webview, asset.path, 'neko-agent.generated-asset');
+    if (!renderUri) {
+      throw new Error(`Unable to project generated asset for Webview display: ${asset.id}`);
+    }
     return {
-      ...asset,
-      webviewUri:
-        this.toWebviewUri(webview, asset.path, 'neko-agent.generated-asset') ?? asset.path,
-    };
+      ...stripGeneratedAssetPath(asset),
+      renderUri,
+    } as unknown as RenderableGeneratedAsset<T>;
   }
 
   dispose(): void {
@@ -139,7 +138,7 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
     await this.configureChatWebview(webview);
   }
 
-  private ensureRequiredRuntimeCacheRoots(
+  private ensureRequiredWorkspaceCacheRoots(
     webview: vscode.Webview,
     source: string,
   ): readonly vscode.Uri[] {
@@ -147,7 +146,7 @@ class VSCodeAgentLocalResourceAccess implements AgentLocalResourceAccess {
     const localPath = normalizeLocalFilePath(source);
     if (!localPath) return currentRoots;
 
-    const matchingRoots = this.requiredRuntimeCacheRoots.filter((root) =>
+    const matchingRoots = this.requiredWorkspaceCacheRoots.filter((root) =>
       isPathInsideRoot(localPath, root),
     );
     if (matchingRoots.length === 0) return currentRoots;
@@ -225,22 +224,10 @@ async function getNekoAssetsApi(): Promise<NekoAssetsAPI | undefined> {
   }
 }
 
-function createExtensionDocumentRuntimeLocalResourceRootProvider(
-  context: vscode.ExtensionContext,
-): LocalResourceRootProvider {
-  return createExtensionCacheLocalResourceRootProvider(context, 'resources', 'document-runtime');
-}
-
 function getWorkspaceCacheRoots(): readonly vscode.Uri[] {
   return (vscode.workspace.workspaceFolders ?? []).map((folder) =>
     vscode.Uri.joinPath(folder.uri, '.neko', '.cache'),
   );
-}
-
-function getExtensionDocumentRuntimeRoots(context: vscode.ExtensionContext): vscode.Uri[] {
-  return context.globalStorageUri.scheme === 'file'
-    ? [vscode.Uri.joinPath(context.globalStorageUri, 'resources', 'document-runtime')]
-    : [];
 }
 
 function dedupeUris(uris: readonly vscode.Uri[]): vscode.Uri[] {

@@ -8,7 +8,7 @@
 
 import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
-import type { GeneratedAsset } from '@neko/shared';
+import { resolveStorageLayout, type GeneratedAsset } from '@neko/shared';
 import {
   DEFAULT_MEDIA_TASK_CONFIGURED_OUTPUT_DIR,
   DEFAULT_MEDIA_TASK_SHOW_SAVE_NOTIFICATION,
@@ -33,11 +33,7 @@ import {
   createMediaTaskView,
   toMediaBackgroundTaskType,
 } from '@neko/platform/media/media-task-view';
-import {
-  GeneratedAssetIndex,
-  generateAssetId,
-  resolveGeneratedDir,
-} from '@neko/platform/media/generated-asset-index';
+import { GeneratedAssetIndex, generateAssetId } from '@neko/platform/media/generated-asset-index';
 import { getLogger } from '../base';
 import type { AgentLocalResourceAccess } from './localResourceAccess';
 
@@ -125,9 +121,9 @@ export class MediaTaskDeliveryHost {
         filePath,
       });
       return undefined;
-    } catch {
-      logger.warn('Failed to convert path to webview URI:', filePath);
-      return filePath;
+    } catch (error) {
+      logger.warn('Failed to convert path to webview URI:', { filePath, error });
+      return undefined;
     }
   }
 
@@ -140,6 +136,9 @@ export class MediaTaskDeliveryHost {
     const mediaConfig = vscode.workspace.getConfiguration(MEDIA_TASK_DELIVERY_CONFIG_SECTION);
     const settingsPlan = buildMediaTaskDeliverySettingsPlan({
       workspaceRoot: workspaceFolder?.uri.fsPath,
+      defaultOutputDir: workspaceFolder
+        ? resolveGeneratedOutputDir(workspaceFolder.uri.fsPath)
+        : undefined,
       configuredOutputDir: mediaConfig.get<string>(
         MEDIA_TASK_OUTPUT_DIR_SETTING_KEY,
         DEFAULT_MEDIA_TASK_CONFIGURED_OUTPUT_DIR,
@@ -163,11 +162,25 @@ export class MediaTaskDeliveryHost {
       workspaceRoot: settingsPlan.workspaceRoot,
       showSaveNotification: settingsPlan.showSaveNotification,
       resolveResultUrl: (url: string) => this.toWebviewMediaUri(webview, url),
-      toViewAsset: (asset: GeneratedAsset) =>
-        this.deps.localResourceAccess?.toWebviewAsset(webview, asset) ?? {
-          ...asset,
-          webviewUri: this.toWebviewMediaUri(webview, asset.path) ?? asset.path,
-        },
+      toViewAsset: (asset: GeneratedAsset) => {
+        if (!this.deps.localResourceAccess) {
+          logger.warn('Local resource access service unavailable for generated asset projection', {
+            assetId: asset.id,
+            path: asset.path,
+          });
+          return undefined;
+        }
+        try {
+          return this.deps.localResourceAccess.toWebviewAsset(webview, asset);
+        } catch (error) {
+          logger.warn('Failed to project generated asset for Webview display', {
+            assetId: asset.id,
+            path: asset.path,
+            error,
+          });
+          return undefined;
+        }
+      },
     };
   }
 }
@@ -179,7 +192,7 @@ function createWorkspaceGeneratedAssetIndex(): GeneratedAssetIndex | undefined {
   }
 
   try {
-    const generatedDir = resolveGeneratedDir(workspaceFolder.uri.fsPath);
+    const generatedDir = resolveGeneratedOutputDir(workspaceFolder.uri.fsPath);
     const assetIndex = new GeneratedAssetIndex(generatedDir);
     void assetIndex.load();
     return assetIndex;
@@ -187,4 +200,8 @@ function createWorkspaceGeneratedAssetIndex(): GeneratedAssetIndex | undefined {
     logger.warn('Failed to initialize GeneratedAssetIndex — asset tracking disabled');
     return undefined;
   }
+}
+
+function resolveGeneratedOutputDir(workspaceRoot: string): string {
+  return resolveStorageLayout(workspaceRoot, workspaceRoot).project.local.cache.generated;
 }

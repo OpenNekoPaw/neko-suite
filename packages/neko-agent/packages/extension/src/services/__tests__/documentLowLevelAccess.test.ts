@@ -63,4 +63,38 @@ describe('documentLowLevelAccess', () => {
     );
     expect(engine.readFileRange).toHaveBeenCalledWith('token-1', 0, 1);
   });
+
+  it('reads whole binary files through engine file access', async () => {
+    vi.mocked(vscode.commands.executeCommand).mockResolvedValue('/library/books/book.pdf');
+    const engine = {
+      withRegisteredFile: vi.fn(async (_request, task) =>
+        task({
+          token: 'token-1',
+          fileSizeBytes: 4,
+          mimeType: 'application/pdf',
+          purpose: 'document',
+          rangeUrl: '/v1/files/token-1',
+        }),
+      ),
+      readFileRange: vi.fn(async () => new Uint8Array([1, 2, 3, 4]).buffer),
+    };
+    const provider: IEngineClientProvider = {
+      getOptionalClient: vi.fn(async () => engine as any),
+      getRequiredClient: vi.fn(async () => engine as any),
+      transcodeFile: vi.fn(async () => true),
+      createPerceptionClient: vi.fn(() => ({ perception: {} }) as any),
+      createPerceptionClients: vi.fn(() => ({})),
+    };
+
+    const access = createDocumentLowLevelAccess(provider);
+    await expect(access.readFile?.('${A}/books/book.pdf')).resolves.toEqual(
+      new Uint8Array([1, 2, 3, 4]),
+    );
+
+    expect(engine.withRegisteredFile).toHaveBeenCalledWith(
+      { filePath: '/library/books/book.pdf', purpose: 'document' },
+      expect.any(Function),
+    );
+    expect(engine.readFileRange).toHaveBeenCalledWith('token-1', 0, 3);
+  });
 });

@@ -50,7 +50,6 @@ describe('AgentDashboardWorkItemSource', () => {
         progress: 45,
         result: {
           urls: ['https://example.test/out.png'],
-          localPaths: ['/workspace/generated/out.png'],
           assets: [],
         },
       }),
@@ -62,9 +61,8 @@ describe('AgentDashboardWorkItemSource', () => {
         kind: 'media-task',
         status: 'running',
         progress: 45,
-        actions: ['cancel', 'reveal-output'],
+        actions: ['cancel'],
         outputs: expect.arrayContaining([
-          { kind: 'file', ref: 'generated/out.png', label: 'out.png' },
           { kind: 'url', ref: 'https://example.test/out.png', label: 'Generated output' },
         ]),
       }),
@@ -72,7 +70,7 @@ describe('AgentDashboardWorkItemSource', () => {
     source.dispose();
   });
 
-  it('clamps progress and drops unsafe relative local outputs', async () => {
+  it('clamps progress and omits raw local output refs', async () => {
     const source = new AgentDashboardWorkItemSource();
     source.acceptWebviewMessage({
       type: 'mediaTaskProgress',
@@ -84,7 +82,6 @@ describe('AgentDashboardWorkItemSource', () => {
         progress: 150,
         result: {
           urls: [],
-          localPaths: ['../outside.png', 'nested\\safe.png'],
           assets: [],
         },
       }),
@@ -94,9 +91,9 @@ describe('AgentDashboardWorkItemSource', () => {
     expect(snapshot[0]).toEqual(
       expect.objectContaining({
         progress: 100,
-        outputs: [{ kind: 'file', ref: 'nested/safe.png', label: 'safe.png' }],
       }),
     );
+    expect(snapshot[0]).not.toHaveProperty('outputs');
     source.dispose();
   });
 
@@ -203,7 +200,6 @@ describe('AgentDashboardWorkItemSource', () => {
         progress: 100,
         result: {
           urls: ['https://example.test/out.png'],
-          localPaths: ['/workspace/generated/out.png'],
           assets: [],
         },
       }),

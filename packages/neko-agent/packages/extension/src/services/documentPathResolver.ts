@@ -86,14 +86,18 @@ async function loadWorkspacePathVariables(): Promise<PathVariableMap> {
 
 export async function loadAuthorizedMediaLibraryReadRoots(): Promise<string[]> {
   const apiRoots = await loadMediaLibraryRootsFromAssetsApi();
-  if (apiRoots) {
-    return apiRoots;
+  const workspaceRoots = await filterReadableDirectories(
+    dedupePaths(
+      (await loadWorkspaceMediaLibraryRoots()).map((root) =>
+        normalizeConfiguredPath(root.path, root.workspaceRoot),
+      ),
+    ),
+  );
+  if (!apiRoots) {
+    return workspaceRoots;
   }
 
-  const roots = await loadWorkspaceMediaLibraryRoots();
-  return filterReadableDirectories(
-    dedupePaths(roots.map((root) => normalizeConfiguredPath(root.path, root.workspaceRoot))),
-  );
+  return dedupePaths([...apiRoots, ...workspaceRoots]);
 }
 
 async function loadWorkspaceMediaLibraryRoots(): Promise<ResolvedMediaLibraryRoot[]> {

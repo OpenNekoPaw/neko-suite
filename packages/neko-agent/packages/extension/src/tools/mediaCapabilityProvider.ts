@@ -5,37 +5,26 @@ import {
   type Tool,
   type ToolGroup,
 } from '@neko/shared';
-import type { ResourceCacheService } from '@neko/shared/vscode/extension';
-import { createDocumentFileAccessPolicy, createDocumentToolRuntime } from './documentToolRuntime';
+import { createDocumentToolRuntime } from './documentToolRuntime';
 import { createReadImageTool } from './readImageTool';
+import { getCapabilityRuntimeBindings } from '../bootstrap/capabilityBootstrap';
 
-export interface MediaReadCapabilityProviderOptions {
-  readonly resourceCache?: ResourceCacheService;
-}
-
-export function createMediaReadCapabilityProvider(
-  options: MediaReadCapabilityProviderOptions,
-): AgentCapabilityProvider {
-  return new MediaReadCapabilityProvider(options);
+export function createMediaReadCapabilityProvider(): AgentCapabilityProvider {
+  return new MediaReadCapabilityProvider();
 }
 
 class MediaReadCapabilityProvider implements AgentCapabilityProvider {
   readonly id = 'neko-agent-platform-media';
   readonly version = '1.0.0';
 
-  constructor(private readonly options: MediaReadCapabilityProviderOptions) {}
-
   getTools(context: AgentCapabilityContext): Tool[] {
-    const documentRuntime = this.options.resourceCache
-      ? undefined
-      : createDocumentToolRuntime(context);
-    const resourceCache = this.options.resourceCache ?? documentRuntime?.documentResourceCache;
-    const fileAccessPolicy = documentRuntime?.fileAccessPolicy ?? createDocumentFileAccessPolicy();
+    const documentToolRuntime = createDocumentToolRuntime(context);
 
     return [
       createReadImageTool({
-        resourceCache,
-        fileAccessPolicy,
+        contentAccessRuntime: getCapabilityRuntimeBindings().contentAccessRuntime,
+        fileAccessPolicy: documentToolRuntime.fileAccessPolicy,
+        resolveResourceScope: documentToolRuntime.resolveDocumentResourceScope,
       }),
     ];
   }

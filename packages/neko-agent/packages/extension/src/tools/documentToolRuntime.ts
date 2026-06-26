@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import type { AgentCapabilityContext, ResourceRef } from '@neko/shared';
-import type { ResourceCacheService } from '@neko/shared/vscode/extension';
 import {
   type CoreFileAccessDecision,
   createNoWorkspaceFileAccessPolicy,
@@ -12,13 +11,11 @@ import {
   createDocumentReaderService,
   type IDocumentReaderService,
 } from '../services/DocumentReaderService';
-import { createDocumentResourceCacheService } from '../services/documentResourceCacheService';
 import { getEngineClientProvider } from '../services/engineClientProvider';
 import { loadAuthorizedMediaLibraryReadRoots } from '../services/documentPathResolver';
 
 export interface DocumentToolRuntime {
   readonly documentReader: IDocumentReaderService;
-  readonly documentResourceCache?: ResourceCacheService;
   readonly fileAccessPolicy: CoreFileAccessPolicy;
   readonly resolveDocumentResourceScope: () => ResourceRef['scope'];
 }
@@ -26,17 +23,9 @@ export interface DocumentToolRuntime {
 export function createDocumentToolRuntime(context: AgentCapabilityContext): DocumentToolRuntime {
   const extensionContext = readExtensionContext(context.extensionContext);
   const documentReader = createDocumentReaderService(getEngineClientProvider(), extensionContext);
-  const documentResourceCache =
-    extensionContext !== undefined
-      ? createDocumentResourceCacheService({
-          reader: documentReader,
-          context: extensionContext,
-        })
-      : undefined;
 
   return {
     documentReader,
-    documentResourceCache,
     fileAccessPolicy: createDocumentFileAccessPolicy(),
     resolveDocumentResourceScope,
   };
