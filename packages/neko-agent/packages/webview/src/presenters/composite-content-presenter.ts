@@ -1319,10 +1319,6 @@ function parsePositiveInteger(value: string | undefined): number | undefined {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-function readAbsolutePath(value: string | undefined): string | undefined {
-  return value && isAbsolutePath(value) ? value : undefined;
-}
-
 function readPortableSourcePath(value: string | undefined): string | undefined {
   if (!value) return undefined;
   if (value.startsWith('blob:') || value.startsWith('file:')) return undefined;

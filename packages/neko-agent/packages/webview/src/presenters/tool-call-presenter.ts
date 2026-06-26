@@ -486,13 +486,6 @@ function isStableGeneratedAssetMediaUri(url: string, extensions: readonly string
   return extensions.some((ext) => lowerUrl.endsWith(ext));
 }
 
-function extractToolLocalPath(data: unknown): string | undefined {
-  const result = asRecord(data);
-  if (!result) return undefined;
-  const url = readString(result, 'url');
-  return url && isAbsolutePath(url) ? url : undefined;
-}
-
 function formatReadDocumentCopyText(data: unknown): string | null {
   const result = asRecord(data);
   if (!result) return null;
