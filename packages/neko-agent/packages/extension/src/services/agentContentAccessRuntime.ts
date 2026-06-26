@@ -523,11 +523,12 @@ class ExtensionAgentContentAccessRuntime implements AgentContentAccessRuntime {
           ),
         };
       }
-      const resolvedPath = await resolveSourcePath(sourcePath);
+      const resolvedPath = resolveSourcePath(sourcePath);
       const bytes = await readWholeFileThroughEngine(
         engine,
         resolvedPath,
         this.services.maxProviderAssetBytes,
+        input.signal,
       );
       return {
         status: 'ready',
@@ -636,7 +637,7 @@ function extractSourcePath(ref: ContentSourceRef): string | undefined {
   }
 }
 
-async function resolveSourcePath(sourcePath: string): Promise<string> {
+function resolveSourcePath(sourcePath: string): string {
   const resolver = new PathResolver();
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
   const resolved = resolver.resolveSource(sourcePath, workspaceRoot);
@@ -674,10 +675,14 @@ async function readWholeFileThroughEngine(
   engine: EngineClient,
   filePath: string,
   maxBytes: number,
+  signal: AbortSignal | undefined,
 ): Promise<Uint8Array> {
   return engine.withRegisteredFile(
     { filePath, purpose: 'agent-attachment' },
     async (registered) => {
+      if (signal?.aborted) {
+        throw new Error('Operation aborted.');
+      }
       if (registered.fileSizeBytes > maxBytes) {
         throw new Error(`Provider asset is too large: ${registered.fileSizeBytes} bytes.`);
       }
@@ -685,7 +690,7 @@ async function readWholeFileThroughEngine(
         return new Uint8Array();
       }
       return new Uint8Array(
-        await engine.readFileRange(registered.token, 0, registered.fileSizeBytes - 1),
+        await engine.readFileRange(registered.token, 0, registered.fileSizeBytes - 1, signal),
       );
     },
   );

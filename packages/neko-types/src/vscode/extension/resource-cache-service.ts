@@ -705,7 +705,9 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
 
     for (const candidate of candidates) {
       if (totalBytes <= maxBytes) break;
-      await this.fsOps.rm(candidate.path!, { force: true });
+      const candidatePath = candidate.path;
+      if (!candidatePath) continue;
+      await this.fsOps.rm(candidatePath, { force: true });
       removedCount += 1;
       removedBytes += candidate.sizeBytes;
       totalBytes -= candidate.sizeBytes;

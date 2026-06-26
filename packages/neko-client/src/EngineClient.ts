@@ -3228,12 +3228,18 @@ export class EngineClient {
   }
 
   /** Read a byte range from a registered generic file token. */
-  async readFileRange(token: string, start: number, end: number): Promise<ArrayBuffer> {
+  async readFileRange(
+    token: string,
+    start: number,
+    end: number,
+    signal?: AbortSignal,
+  ): Promise<ArrayBuffer> {
     if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
       throw new Error(`Invalid engine file byte range: ${start}-${end}`);
     }
     const res = await fetch(this.getFileTokenUrl(token), {
       headers: { Range: `bytes=${start}-${end}` },
+      ...(signal ? { signal } : {}),
     });
     if (res.status !== 206) {
       throw new Error(`files:readRange failed: ${res.status}`);

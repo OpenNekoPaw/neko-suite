@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
 import { PathResolver, type ResolvedPath } from '../../path';
@@ -362,15 +363,19 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
             'content-engine-source-resolver-missing',
           );
         }
-        return {
-          status: 'ready',
-          request,
-          providerId: this.id,
-          source: stableSourceOrUndefined(request.ref),
-          localPath: resolved.path,
-          engineSource: await this.engineSourceResolver({ request, path: resolved.path }),
-          role: request.role ?? request.variant?.role,
-        };
+        try {
+          return {
+            status: 'ready',
+            request,
+            providerId: this.id,
+            source: stableSourceOrUndefined(request.ref),
+            localPath: resolved.path,
+            engineSource: await this.engineSourceResolver({ request, path: resolved.path }),
+            role: request.role ?? request.variant?.role,
+          };
+        } catch (error) {
+          return providerResolverFailure(request, this.id, error);
+        }
       case 'webview-uri': {
         const webview = this.webviewResolver?.(request);
         if (!webview || !this.localResourceAccess) {
@@ -482,11 +487,16 @@ export class DocumentEntryContentAccessProvider implements ContentAccessProvider
       if (resolved.type !== 'local' || this.pathResolver.hasVariable(resolved.path)) {
         return missingSource(request, this.id, 'Document entry source path cannot be resolved.');
       }
-      const bytes = await this.entryReader({
-        request,
-        sourcePath: resolved.path,
-        entryPath: documentRef.entryPath,
-      });
+      let bytes: Uint8Array;
+      try {
+        bytes = await this.entryReader({
+          request,
+          sourcePath: resolved.path,
+          entryPath: documentRef.entryPath,
+        });
+      } catch (error) {
+        return providerResolverFailure(request, this.id, error);
+      }
       return {
         status: 'ready',
         request,
@@ -521,7 +531,12 @@ export class VideoProxyContentAccessProvider implements ContentAccessProvider {
   }
 
   async resolve({ request }: ContentAccessProviderRequest): Promise<ContentAccessResult> {
-    const resolved = await this.proxyResolver(request);
+    let resolved: Awaited<ReturnType<VideoProxyContentAccessProviderOptions['proxyResolver']>>;
+    try {
+      resolved = await this.proxyResolver(request);
+    } catch (error) {
+      return providerResolverFailure(request, this.id, error);
+    }
     if (request.target === 'runtime-stream' && resolved.runtimeStream) {
       return {
         status: 'ready',
@@ -599,7 +614,17 @@ export class PreviewVariantContentAccessProvider implements ContentAccessProvide
   }
 
   async resolve({ request }: ContentAccessProviderRequest): Promise<ContentAccessResult> {
-    const resolved = await this.variantResolver(request);
+    let resolved: Awaited<
+      ReturnType<PreviewVariantContentAccessProviderOptions['variantResolver']>
+    >;
+    try {
+      resolved = await this.variantResolver(request);
+    } catch (error) {
+      return providerResolverFailure(request, this.id, error);
+    }
+    if (!hasPreviewVariantTargetData(resolved)) {
+      return missingSource(request, this.id, 'Preview variant resolver did not return content.');
+    }
     return {
       status: 'ready',
       request,
@@ -859,7 +884,7 @@ function extractSourcePath(ref: ContentSourceRef): string | undefined {
     case 'runtime':
       return ref.source ? extractSourcePath(ref.source) : undefined;
     default:
-      return undefined;
+      return assertNever(ref);
   }
 }
 
@@ -1023,6 +1048,38 @@ function missingSource(
   };
 }
 
+function providerResolverFailure(
+  request: ContentAccessRequest,
+  providerId: string,
+  error: unknown,
+): ContentAccessResult {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    status: 'failed',
+    request,
+    providerId,
+    error: message,
+    diagnostics: [
+      {
+        code: 'content-provider-resolver-failed',
+        severity: 'error',
+        message,
+        providerId,
+        intent: request.intent,
+        target: request.target,
+      },
+    ],
+  };
+}
+
+function hasPreviewVariantTargetData(
+  resolved: Awaited<ReturnType<PreviewVariantContentAccessProviderOptions['variantResolver']>>,
+): boolean {
+  return (
+    resolved.uri !== undefined || resolved.localPath !== undefined || resolved.bytes !== undefined
+  );
+}
+
 function ingestFailure(
   request: ContentIngestRequest,
   providerId: string,
@@ -1041,11 +1098,9 @@ function ingestFailure(
 
 function resolveIngestOutputPath(request: ContentIngestRequest, projectRoot: string): string {
   if (request.destination.copyMode === 'register' && request.sourcePath) return request.sourcePath;
+  const fileName = resolveIngestFileName(request);
   if (request.destination.directory) {
-    return path.join(
-      request.destination.directory,
-      request.fileName ?? (request.sourcePath ? path.basename(request.sourcePath) : 'content.bin'),
-    );
+    return path.join(request.destination.directory, fileName);
   }
   if (request.sourcePath) return request.sourcePath;
   if (
@@ -1053,18 +1108,20 @@ function resolveIngestOutputPath(request: ContentIngestRequest, projectRoot: str
     request.mode === 'create-asset' ||
     request.destination.kind === 'generated-assets'
   ) {
-    return path.join(
-      projectRoot,
-      '.neko',
-      '.cache',
-      'generated',
-      request.fileName ?? 'content.bin',
-    );
+    return path.join(projectRoot, '.neko', '.cache', 'generated', fileName);
   }
   if (request.mode === 'stage-export' || request.destination.kind === 'export-output') {
-    return path.join(projectRoot, '.neko', '.cache', 'exports', request.fileName ?? 'content.bin');
+    return path.join(projectRoot, '.neko', '.cache', 'exports', fileName);
   }
-  return path.join(projectRoot, '.neko', '.cache', 'content', request.fileName ?? 'content.bin');
+  return path.join(projectRoot, '.neko', '.cache', 'content', fileName);
+}
+
+function resolveIngestFileName(request: ContentIngestRequest): string {
+  if (request.fileName) return request.fileName;
+  if (request.sourcePath) return path.basename(request.sourcePath);
+  if (request.bytes)
+    return `content-${createHash('sha256').update(request.bytes).digest('hex').slice(0, 16)}.bin`;
+  return 'content.bin';
 }
 
 function createFileIngestResult(
@@ -1129,4 +1186,8 @@ function readStringMetadata(
 ): string | undefined {
   const value = metadata?.[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled content source ref kind: ${JSON.stringify(value)}`);
 }

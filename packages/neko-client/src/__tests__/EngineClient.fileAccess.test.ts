@@ -170,11 +170,12 @@ describe('EngineClient file access helpers', () => {
       .mockResolvedValueOnce(new Response(rangeBytes, { status: 206 }))
       .mockResolvedValueOnce(new Response(entryBytes, { status: 200 }));
     const client = new EngineClient(3456);
+    const signal = new AbortController().signal;
 
-    await expect(client.readFileRange('token/1', 4, 6)).resolves.toEqual(rangeBytes);
+    await expect(client.readFileRange('token/1', 4, 6, signal)).resolves.toEqual(rangeBytes);
     expect(fetchMock).toHaveBeenLastCalledWith(
       'http://127.0.0.1:3456/v1/files/token%2F1',
-      expect.objectContaining({ headers: { Range: 'bytes=4-6' } }),
+      expect.objectContaining({ headers: { Range: 'bytes=4-6' }, signal }),
     );
 
     await expect(client.readFileEntry('token/1', '/OPS/chapter 1.xhtml')).resolves.toEqual(

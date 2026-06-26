@@ -47,6 +47,7 @@ export interface HostContentAccessRuntime {
   readonly resourceCache?: ResourceCacheService;
   readonly contentAccess: ContentAccessService;
   readonly contentIngest: ContentIngestService;
+  hasResourceCache(): boolean;
   registerAccessProvider(provider: ContentAccessProvider): void;
   registerIngestProvider(provider: ContentIngestProvider): void;
   registerResourceCacheProvider(provider: ResourceCacheProvider): void;
@@ -167,6 +168,9 @@ export function createHostContentAccessRuntime(
     ...(resourceCache ? { resourceCache } : {}),
     contentAccess,
     contentIngest,
+    hasResourceCache() {
+      return resourceCache !== undefined;
+    },
     registerAccessProvider(provider) {
       contentAccess.registerProvider(provider);
     },

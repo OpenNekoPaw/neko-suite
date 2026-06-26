@@ -4,13 +4,11 @@ import {
   createResourceFingerprint,
   createResourceRef,
   type ContentAccessProvider,
-  type ContentAccessRequest,
   type ResourceRef,
   type ResourceVariantRequest,
 } from '../../../types';
 import { createHostContentAccessRuntime } from '../content-access-runtime';
 import type { LocalResourceAccessService } from '../local-resource-access';
-import type { ResourceCacheService } from '../resource-cache-service';
 
 vi.mock('vscode', () => ({
   Uri: {
@@ -92,12 +90,32 @@ describe('createHostContentAccessRuntime', () => {
 
     expect(runtime.localResourceAccess).toBeDefined();
     expect(runtime.resourceCache).toBeDefined();
+    expect(runtime.hasResourceCache()).toBe(true);
     expect(runtime.contentIngest).toBeDefined();
     expect(result).toMatchObject({
       status: 'ready',
       providerId: 'resource-cache-content-access',
       localPath: '/workspace/demo/.neko/.cache/resources/page.jpg',
     });
+  });
+
+  it('exposes resource cache availability before provider registration', () => {
+    const runtime = createHostContentAccessRuntime({
+      workspaceRoot: '/workspace/demo',
+      sourceFileProvider: { enabled: false },
+      documentEntryProvider: { enabled: false },
+      ingest: { enabled: false },
+    });
+
+    expect(runtime.resourceCache).toBeUndefined();
+    expect(runtime.hasResourceCache()).toBe(false);
+    expect(() =>
+      runtime.registerResourceCacheProvider({
+        id: 'document-archive',
+        supports: () => true,
+        ensure: vi.fn(),
+      }),
+    ).toThrow('Cannot register a resource cache provider without ResourceCacheService.');
   });
 
   it('keeps provider registration and duplicate replacement on the shared runtime boundary', async () => {

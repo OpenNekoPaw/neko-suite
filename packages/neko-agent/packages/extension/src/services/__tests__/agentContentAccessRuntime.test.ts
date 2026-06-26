@@ -35,12 +35,14 @@ describe('createExtensionAgentContentAccessRuntime', () => {
       engineClientProvider,
       workspaceRoot: '/workspace/demo',
     });
+    const signal = new AbortController().signal;
 
     const result = await runtime.loadProviderAsset({
       caller: 'perception-asset-loader',
       source: { kind: 'file', path: 'assets/page.png' },
       preferredTarget: 'bytes',
       mimeTypeHint: 'image/png',
+      signal,
     });
 
     expect(result.status).toBe('ready');
@@ -49,7 +51,12 @@ describe('createExtensionAgentContentAccessRuntime', () => {
       filePath: '/workspace/demo/assets/page.png',
       purpose: 'agent-attachment',
     });
-    expect(engine.readFileRange).toHaveBeenCalledWith('engine-token-1', 0, PNG_1X1.byteLength - 1);
+    expect(engine.readFileRange).toHaveBeenCalledWith(
+      'engine-token-1',
+      0,
+      PNG_1X1.byteLength - 1,
+      signal,
+    );
     expect(engine.unregisterFile).toHaveBeenCalledWith('engine-token-1');
   });
 
