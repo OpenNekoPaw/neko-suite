@@ -10,37 +10,41 @@ describe('buildMediaTaskProgressViewDelivery', () => {
     const assetIndex = { add: vi.fn() };
     const saveOutputs = vi.fn().mockResolvedValue(['/repo/.neko/.cache/generated/video.mp4']);
 
-    await expect(
-      buildMediaTaskProgressViewDelivery({
-        task: createMediaTask(),
-        taskType: 'video',
-        outputDir: '/repo/.neko/.cache/generated',
-        workspaceRoot: '/repo',
-        showSaveNotification: true,
-        saveOutputs,
-        assetIndex,
-        generateAssetId: () => 'asset-1',
-        resolveResultUrl: (url) => `webview://${url}`,
-        toViewAsset: (asset) => ({ ...asset, webviewUri: `webview://${asset.path}` }),
-        now: () => new Date('2026-01-01T00:00:02.000Z'),
+    const delivery = await buildMediaTaskProgressViewDelivery({
+      task: createMediaTask(),
+      taskType: 'video',
+      outputDir: '/repo/.neko/.cache/generated',
+      workspaceRoot: '/repo',
+      showSaveNotification: true,
+      saveOutputs,
+      assetIndex,
+      generateAssetId: () => 'asset-1',
+      resolveResultUrl: (url) =>
+        url.startsWith('generated-assets/')
+          ? `webview://media/task-1/${url.split('/').pop()}`
+          : undefined,
+      toViewAsset: ({ path: _path, ...asset }) => ({
+        ...asset,
+        renderUri: `webview://generated/${asset.id}`,
       }),
-    ).resolves.toEqual({
+      now: () => new Date('2026-01-01T00:00:02.000Z'),
+    });
+
+    expect(delivery).toEqual({
       view: {
         id: 'task-1',
         type: 'video',
         status: 'completed',
         progress: 100,
         result: {
-          urls: ['webview:///repo/.neko/.cache/generated/video.mp4'],
-          thumbnailUrl: 'webview:///repo/.neko/.cache/generated/video.mp4',
-          localPaths: ['/repo/.neko/.cache/generated/video.mp4'],
+          urls: ['webview://media/task-1/asset-1.mp4'],
+          thumbnailUrl: 'webview://media/task-1/asset-1.mp4',
           assets: [
             expect.objectContaining({
               id: 'asset-1',
-              path: '/repo/.neko/.cache/generated/video.mp4',
               characterIds: ['char_linxia'],
               sourceNodeId: 'node-shot-1',
-              webviewUri: 'webview:///repo/.neko/.cache/generated/video.mp4',
+              renderUri: 'webview://generated/asset-1',
             }),
           ],
           creativeEntity: expect.objectContaining({
@@ -67,22 +71,27 @@ describe('buildMediaTaskProgressViewDelivery', () => {
         updatedAt: '2026-01-01T00:00:02.000Z',
       },
       deliveryPlan: expect.objectContaining({
-        resultUrls: ['/repo/.neko/.cache/generated/video.mp4'],
-        thumbnailUrl: '/repo/.neko/.cache/generated/video.mp4',
-        localPaths: ['/repo/.neko/.cache/generated/video.mp4'],
+        resultUrls: ['generated-assets/asset-1.mp4'],
+        thumbnailUrl: 'generated-assets/asset-1.mp4',
+        hostOutputPaths: ['/repo/.neko/.cache/generated/video.mp4'],
         shouldPersistResultUrls: true,
         shouldUnsubscribe: true,
         notification: expect.objectContaining({
           filePath: '/repo/.neko/.cache/generated/video.mp4',
+          displayRef: 'generated-assets/asset-1.mp4',
+          message: 'Video saved as generated-assets/asset-1.mp4',
         }),
       }),
     });
+    expect(delivery.deliveryPlan.notification?.message).not.toContain('.neko/.cache/generated');
     expect(saveOutputs).toHaveBeenCalledWith('task-1', '/repo/.neko/.cache/generated', {
       transcodeFile: undefined,
     });
     expect(assetIndex.add).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'asset-1', path: '/repo/.neko/.cache/generated/video.mp4' }),
     );
+    expect(JSON.stringify(delivery.view.result?.assets)).not.toContain('.neko/.cache/generated');
+    expect(delivery.view.result?.assets?.[0]).not.toHaveProperty('path');
   });
 
   it('projects finalized outputs into a full media task view', async () => {
@@ -94,8 +103,14 @@ describe('buildMediaTaskProgressViewDelivery', () => {
         workspaceRoot: '/repo',
         saveOutputs: vi.fn().mockResolvedValue(['/repo/.neko/.cache/generated/video.mp4']),
         generateAssetId: () => 'asset-1',
-        resolveResultUrl: (url) => `webview://${url}`,
-        toViewAsset: (asset) => ({ ...asset, webviewUri: `webview://${asset.path}` }),
+        resolveResultUrl: (url) =>
+          url.startsWith('generated-assets/')
+            ? `webview://media/task-1/${url.split('/').pop()}`
+            : undefined,
+        toViewAsset: ({ path: _path, ...asset }) => ({
+          ...asset,
+          renderUri: `webview://generated/${asset.id}`,
+        }),
       }),
     ).resolves.toEqual({
       view: expect.objectContaining({
@@ -103,14 +118,13 @@ describe('buildMediaTaskProgressViewDelivery', () => {
         type: 'video',
         status: 'completed',
         result: {
-          urls: ['webview:///repo/.neko/.cache/generated/video.mp4'],
-          thumbnailUrl: 'webview:///repo/.neko/.cache/generated/video.mp4',
-          localPaths: ['/repo/.neko/.cache/generated/video.mp4'],
+          urls: ['webview://media/task-1/asset-1.mp4'],
+          thumbnailUrl: 'webview://media/task-1/asset-1.mp4',
           assets: [
             expect.objectContaining({
               id: 'asset-1',
               characterIds: ['char_linxia'],
-              webviewUri: 'webview:///repo/.neko/.cache/generated/video.mp4',
+              renderUri: 'webview://generated/asset-1',
             }),
           ],
           creativeEntity: expect.objectContaining({
@@ -128,10 +142,38 @@ describe('buildMediaTaskProgressViewDelivery', () => {
         },
       }),
       deliveryPlan: expect.objectContaining({
-        resultUrls: ['/repo/.neko/.cache/generated/video.mp4'],
+        resultUrls: ['generated-assets/asset-1.mp4'],
         shouldPersistResultUrls: true,
       }),
     });
+  });
+
+  it('omits renderable URLs and assets when host projection fails', async () => {
+    const delivery = await buildMediaTaskProgressViewDelivery({
+      task: createMediaTask(),
+      taskType: 'video',
+      outputDir: '/repo/.neko/.cache/generated',
+      workspaceRoot: '/repo',
+      saveOutputs: vi.fn().mockResolvedValue(['/repo/.neko/.cache/generated/video.mp4']),
+      generateAssetId: () => 'asset-1',
+      resolveResultUrl: () => undefined,
+      toViewAsset: () => undefined,
+    });
+
+    expect(delivery).toMatchObject({
+      view: {
+        id: 'task-1',
+        result: {
+          urls: [],
+        },
+      },
+      deliveryPlan: {
+        resultUrls: ['generated-assets/asset-1.mp4'],
+      },
+    });
+    expect(delivery.view.result).not.toHaveProperty('assets');
+    expect(JSON.stringify(delivery.view)).not.toContain('renderUri');
+    expect(JSON.stringify(delivery.view.result?.urls)).not.toContain('.neko/.cache/generated');
   });
 });
 

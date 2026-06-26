@@ -21,7 +21,7 @@ describe('media generated asset helpers', () => {
   it('builds generated image assets with lineage metadata', () => {
     expect(
       buildGeneratedMediaAssets({
-        localPaths: ['/tmp/image.png'],
+        hostOutputPaths: ['/tmp/image.png'],
         outputs: [
           { type: 'image', url: 'https://example.test/image.png', width: 768, height: 512 },
         ],
@@ -49,7 +49,7 @@ describe('media generated asset helpers', () => {
         characterIds: ['char-1'],
         assetRef: {
           assetId: 'asset-1',
-          uri: 'generated-assets/image.png',
+          uri: 'generated-assets/asset-1.png',
           mimeType: 'image/png',
         },
         type: 'generated-image',
@@ -63,7 +63,7 @@ describe('media generated asset helpers', () => {
   it('builds generated video and audio assets with safe defaults', () => {
     expect(
       buildGeneratedMediaAssets({
-        localPaths: ['/tmp/video.mp4'],
+        hostOutputPaths: ['/tmp/video.mp4'],
         outputs: [{ type: 'video', url: 'https://example.test/video.mp4' }],
         taskType: 'video',
         generateAssetId: () => 'video-1',
@@ -81,7 +81,7 @@ describe('media generated asset helpers', () => {
 
     expect(
       buildGeneratedMediaAssets({
-        localPaths: ['/tmp/audio.mp3'],
+        hostOutputPaths: ['/tmp/audio.mp3'],
         outputs: [{ type: 'audio', url: 'https://example.test/audio.mp3' }],
         taskType: 'audio',
         generateAssetId: () => 'audio-1',
@@ -99,10 +99,13 @@ describe('media generated asset helpers', () => {
 
   it('normalizes generated asset paths through one stable URI helper', () => {
     expect(toStableGeneratedAssetUri('/repo/.neko/.cache/generated/image.png')).toBe(
-      '${WORKSPACE}/.neko/.cache/generated/image.png',
+      'generated-assets/image.png',
+    );
+    expect(toStableGeneratedAssetUri('/repo/.neko/.cache/generated/image.png', 'asset-1')).toBe(
+      'generated-assets/asset-1.png',
     );
     expect(toStableGeneratedAssetUri('/repo/.neko/generated/image.png')).toBe(
-      '${WORKSPACE}/.neko/generated/image.png',
+      'generated-assets/image.png',
     );
     expect(toStableGeneratedAssetUri('/tmp/image.png')).toBe('generated-assets/image.png');
   });

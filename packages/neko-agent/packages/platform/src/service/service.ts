@@ -21,7 +21,12 @@ import type {
   EmbeddingOptions,
   EmbeddingResponse,
 } from '../types/service';
-import { deriveAgentTraceContext, withAgentTrace } from '@neko/shared';
+import {
+  calculateBackoff,
+  deriveAgentTraceContext,
+  sleepWithAbort,
+  withAgentTrace,
+} from '@neko/shared';
 import type { IService } from '../types/interfaces';
 import { ConfigManager } from '../config/config-manager';
 import { ProviderRegistry } from '../provider/provider-registry';
@@ -29,6 +34,8 @@ import { ModelSelector } from './model-selector';
 import { PlatformError } from '../provider/platform-error';
 import { createStreamCollector } from '../llm/adapter/stream-aggregator';
 import { getLogger } from '../utils/logger';
+import { HttpClientError } from '../core/http-client';
+import type { PlatformErrorCategory, RetryPolicy, RetryTimeoutPreset } from '../types/error';
 
 /**
  * AI Service configuration
@@ -273,48 +280,65 @@ export class Service implements IService {
     const { model, provider, adapter } = this.resolveResources(routing);
 
     const chatOptions: ChatOptions = { ...options, model: model.name, stream: true };
-    const rawStream = createProjectedChatStream({
-      messages,
-      options: chatOptions,
-      providerId: routing.providerId,
-      modelId: routing.modelId,
-      onProjected: (projectedMessages) => {
-        logger.debug(
-          'neko.agent.llm.request',
-          withAgentTrace(
-            trace,
-            createModelCallRequestLog({
-              requestId,
-              stream: true,
-              routing,
-              options: chatOptions,
-              originalMessages: messages,
-              projectedMessages,
-            }),
-          ),
-        );
-        logger.debug(
-          'neko.agent.llm.request.raw',
-          withAgentTrace(
-            trace,
-            createModelCallRequestDebugLog({
-              requestId,
-              stream: true,
-              routing,
-              options: chatOptions,
-              originalMessages: messages,
-              projectedMessages,
-            }),
-          ),
-        );
-      },
-      start: (projectedMessages) =>
-        adapter.chatStream(projectedMessages, chatOptions, model, provider),
-    });
-
     // Apply stream timeout if configured
     const timeoutMs = this.getStreamTimeout();
-    const stream = timeoutMs ? this.withStreamTimeout(rawStream, timeoutMs) : rawStream;
+    const createStream = () => {
+      const rawStream = createProjectedChatStream({
+        messages,
+        options: chatOptions,
+        providerId: routing.providerId,
+        modelId: routing.modelId,
+        onProjected: (projectedMessages) => {
+          logger.debug(
+            'neko.agent.llm.request',
+            withAgentTrace(
+              trace,
+              createModelCallRequestLog({
+                requestId,
+                stream: true,
+                routing,
+                options: chatOptions,
+                originalMessages: messages,
+                projectedMessages,
+              }),
+            ),
+          );
+          logger.debug(
+            'neko.agent.llm.request.raw',
+            withAgentTrace(
+              trace,
+              createModelCallRequestDebugLog({
+                requestId,
+                stream: true,
+                routing,
+                options: chatOptions,
+                originalMessages: messages,
+                projectedMessages,
+              }),
+            ),
+          );
+        },
+        start: (projectedMessages) =>
+          adapter.chatStream(projectedMessages, chatOptions, model, provider),
+      });
+
+      return timeoutMs ? this.withStreamTimeout(rawStream, timeoutMs) : rawStream;
+    };
+    const retryPreset = shouldUseServiceManagedStreamRetry(adapter)
+      ? this.getModelCallRetryPreset()
+      : undefined;
+    const stream = retryPreset
+      ? this.withInitialStreamRetry({
+          createStream,
+          retryPolicy: retryPreset.retry,
+          totalTimeoutMs: retryPreset.timeout.totalTimeout,
+          signal: options.signal,
+          routing,
+          requestId,
+          logger,
+          trace,
+        })
+      : createStream();
 
     const { stream: collectedStream, response: responsePromise } = createStreamCollector(stream);
 
@@ -537,6 +561,82 @@ export class Service implements IService {
     return preset?.timeout?.streamTimeout;
   }
 
+  private getModelCallRetryPreset(): RetryTimeoutPreset | undefined {
+    return this.config.configManager.getRetryTimeoutPreset('modelCall');
+  }
+
+  /**
+   * Retry model streams only before the first provider chunk is emitted.
+   * Once a provider has emitted text, reasoning, usage, or tool calls, replaying
+   * the request can duplicate user-visible output or side effects.
+   */
+  private async *withInitialStreamRetry(input: {
+    readonly createStream: () => AsyncIterable<ChatChunk>;
+    readonly retryPolicy?: RetryPolicy;
+    readonly totalTimeoutMs?: number;
+    readonly signal?: AbortSignal;
+    readonly routing: RoutingResult;
+    readonly requestId: string;
+    readonly logger: ReturnType<typeof getServiceLogger>;
+    readonly trace: ReturnType<typeof deriveAgentTraceContext>;
+  }): AsyncIterable<ChatChunk> {
+    const startTime = Date.now();
+    let retries = 0;
+
+    while (true) {
+      let emittedChunk = false;
+      try {
+        for await (const chunk of input.createStream()) {
+          emittedChunk = true;
+          yield chunk;
+        }
+        return;
+      } catch (error) {
+        const normalized = normalizeModelCallStreamError(error, input.routing);
+        if (
+          emittedChunk ||
+          !canRetryInitialModelCall({
+            error: normalized,
+            retryPolicy: input.retryPolicy,
+            retries,
+            signal: input.signal,
+          })
+        ) {
+          throw retries > 0
+            ? createModelCallRetryExhaustedError(normalized, input.routing, retries + 1)
+            : normalized;
+        }
+
+        const delayMs = getModelCallRetryDelayMs(normalized, input.retryPolicy, retries);
+        if (
+          input.totalTimeoutMs !== undefined &&
+          Date.now() - startTime + delayMs > input.totalTimeoutMs
+        ) {
+          throw retries > 0
+            ? createModelCallRetryExhaustedError(normalized, input.routing, retries + 1)
+            : normalized;
+        }
+
+        input.logger.warn(
+          'neko.agent.llm.retry',
+          withAgentTrace(input.trace, {
+            requestId: input.requestId,
+            providerId: input.routing.providerId,
+            modelId: input.routing.modelId,
+            stream: true,
+            retry: retries + 1,
+            maxRetries: input.retryPolicy?.maxRetries,
+            nextAttempt: retries + 2,
+            delayMs,
+            error: summarizeError(normalized),
+          }),
+        );
+        await sleepWithAbort(delayMs, input.signal);
+        retries += 1;
+      }
+    }
+  }
+
   /**
    * Wrap stream with timeout detection (detects stalled streams)
    */
@@ -626,6 +726,10 @@ function createProjectedChatStream(input: {
   };
 }
 
+function shouldUseServiceManagedStreamRetry(adapter: import('../types/adapter').Adapter): boolean {
+  return adapter.type === 'generic' || adapter.type === 'azure' || adapter.type === 'ollama';
+}
+
 interface ChatMessageSummary {
   readonly messageCount: number;
   readonly roleCounts: Record<MessageRole, number>;
@@ -661,6 +765,12 @@ interface ModelCallOptionsSummary {
 interface ErrorSummary {
   readonly name: string;
   readonly message: string;
+  readonly code?: string;
+  readonly category?: string;
+  readonly retryable?: boolean;
+  readonly statusCode?: number;
+  readonly url?: string;
+  readonly cause?: ErrorSummary;
 }
 
 interface RawMessageSnapshot {
@@ -997,9 +1107,21 @@ function countContentChars(content: ChatMessage['content']): number {
 
 function summarizeError(error: unknown): ErrorSummary {
   if (error instanceof Error) {
+    const cause = readUnknownObjectField(error, 'cause');
+    const code = firstString(readUnknownObjectField(error, 'code'));
+    const category = firstString(readUnknownObjectField(error, 'category'));
+    const retryable = readUnknownObjectField(error, 'retryable');
+    const statusCode = readUnknownObjectField(error, 'statusCode');
+    const url = firstString(readUnknownObjectField(error, 'url'));
     return {
       name: error.name,
       message: truncateForLog(error.message),
+      ...(code ? { code } : {}),
+      ...(category ? { category } : {}),
+      ...(typeof retryable === 'boolean' ? { retryable } : {}),
+      ...(typeof statusCode === 'number' ? { statusCode } : {}),
+      ...(url ? { url } : {}),
+      ...(cause instanceof Error ? { cause: summarizeError(cause) } : {}),
     };
   }
 
@@ -1007,6 +1129,184 @@ function summarizeError(error: unknown): ErrorSummary {
     name: typeof error,
     message: truncateForLog(String(error)),
   };
+}
+
+function canRetryInitialModelCall(input: {
+  readonly error: PlatformError;
+  readonly retryPolicy?: RetryPolicy;
+  readonly retries: number;
+  readonly signal?: AbortSignal;
+}): boolean {
+  if (input.signal?.aborted || !input.retryPolicy) {
+    return false;
+  }
+  if (input.retries >= input.retryPolicy.maxRetries || !input.error.retryable) {
+    return false;
+  }
+  return input.retryPolicy.retryableCategories.includes(input.error.category);
+}
+
+function getModelCallRetryDelayMs(
+  error: PlatformError,
+  retryPolicy: RetryPolicy | undefined,
+  retries: number,
+): number {
+  if (error.retryAfter !== undefined) {
+    return error.retryAfter;
+  }
+  if (!retryPolicy) {
+    return 0;
+  }
+  return calculateBackoff(retryPolicy.backoffStrategy, retries);
+}
+
+function normalizeModelCallStreamError(error: unknown, routing: RoutingResult): PlatformError {
+  if (error instanceof PlatformError) {
+    return error;
+  }
+
+  if (error instanceof HttpClientError) {
+    const statusCode = error.statusCode;
+    const category = classifyModelCallHttpError(error);
+    return new PlatformError({
+      category,
+      code: `MODEL_CALL_${error.code.replace(/[^a-zA-Z0-9]+/g, '_').toUpperCase()}`,
+      message: error.message,
+      retryable: isModelCallHttpErrorRetryable(error, category),
+      ...(error.retryAfterMs !== undefined ? { retryAfter: error.retryAfterMs } : {}),
+      cause: error,
+      context: {
+        providerId: routing.providerId,
+        modelId: routing.modelId,
+        url: error.url,
+        ...(statusCode !== undefined ? { statusCode } : {}),
+      },
+    });
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  const category = classifyModelCallMessage(message);
+  return new PlatformError({
+    category,
+    code: `MODEL_CALL_${category.toUpperCase()}`,
+    message,
+    retryable: isModelCallMessageRetryable(message, category),
+    ...(error instanceof Error ? { cause: error } : {}),
+    context: {
+      providerId: routing.providerId,
+      modelId: routing.modelId,
+    },
+  });
+}
+
+function classifyModelCallHttpError(error: HttpClientError): PlatformErrorCategory {
+  const statusCode = error.statusCode;
+  if (statusCode === 0 || statusCode === undefined) return 'network';
+  if (statusCode === 400) return 'validation';
+  if (statusCode === 401 || statusCode === 403) return 'authentication';
+  if (statusCode === 408) return 'timeout';
+  if (statusCode === 404) return 'not_found';
+  if (statusCode === 429) return 'rate_limit';
+  if (statusCode >= 500) return 'server';
+  return 'unknown';
+}
+
+function isModelCallHttpErrorRetryable(
+  error: HttpClientError,
+  category: PlatformErrorCategory,
+): boolean {
+  if (category === 'network' || category === 'timeout' || category === 'server') {
+    return error.retryable;
+  }
+  if (category === 'rate_limit') {
+    return true;
+  }
+  return false;
+}
+
+function classifyModelCallMessage(message: string): PlatformErrorCategory {
+  const normalized = message.toLowerCase();
+  if (normalized.includes('abort') || normalized.includes('cancel')) return 'validation';
+  if (normalized.includes('timeout') || normalized.includes('timed out')) return 'timeout';
+  if (
+    normalized.includes('fetch failed') ||
+    normalized.includes('network') ||
+    normalized.includes('econnreset') ||
+    normalized.includes('econnrefused') ||
+    normalized.includes('enotfound') ||
+    normalized.includes('etimedout')
+  ) {
+    return 'network';
+  }
+  return 'unknown';
+}
+
+function isModelCallMessageRetryable(message: string, category: PlatformErrorCategory): boolean {
+  if (category === 'timeout' || category === 'network') {
+    return !message.toLowerCase().includes('abort');
+  }
+  return false;
+}
+
+function createModelCallRetryExhaustedError(
+  error: PlatformError,
+  routing: RoutingResult,
+  attempts: number,
+): PlatformError {
+  return new PlatformError({
+    category: toPlatformErrorCategory(error.category),
+    code: `${error.code}_RETRY_EXHAUSTED`,
+    message: `Model request failed after ${attempts} attempts for ${routing.providerId}/${routing.modelId}: ${error.message}`,
+    retryable: false,
+    cause: error,
+    context: {
+      ...error.context,
+      providerId: routing.providerId,
+      modelId: routing.modelId,
+      attempts,
+    },
+  });
+}
+
+function toPlatformErrorCategory(category: string): PlatformErrorCategory {
+  switch (category) {
+    case 'authentication':
+    case 'rate_limit':
+    case 'timeout':
+    case 'network':
+    case 'server':
+    case 'validation':
+    case 'not_found':
+    case 'context_length':
+    case 'content_filter':
+    case 'unknown':
+      return category;
+    default:
+      return 'unknown';
+  }
+}
+
+function readUnknownObjectField(value: unknown, key: string): unknown {
+  if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {
+    return undefined;
+  }
+  try {
+    return Reflect.get(value, key);
+  } catch {
+    return undefined;
+  }
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.length > 0) {
+      return truncateForLog(value);
+    }
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+      return String(value);
+    }
+  }
+  return undefined;
 }
 
 function truncateForLog(value: string, maxLength = 500): string {

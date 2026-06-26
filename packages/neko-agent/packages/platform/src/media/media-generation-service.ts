@@ -126,8 +126,9 @@ export class MediaGenerationService {
   /**
    * Download completed task outputs to a local directory.
    *
-   * Retrieves outputs from the task, calls the shared downloader, then updates
-   * the task's stored output URLs to point to the local paths.
+   * Retrieves outputs from the task and calls the shared downloader. The
+   * returned filesystem paths are host-internal side-effect data for reveal/open
+   * flows; task output URLs keep their provider or stable result identity.
    *
    * @param taskId    - Task whose outputs should be saved
    * @param outputDir - Absolute path to target directory (created if absent)
@@ -142,23 +143,7 @@ export class MediaGenerationService {
     const task = await this.getTask(taskId);
     if (!task?.outputs || task.outputs.length === 0) return [];
 
-    const localPaths = await downloadMediaOutputs(
-      taskId,
-      task.type,
-      task.outputs,
-      outputDir,
-      options,
-    );
-
-    if (localPaths.length > 0) {
-      const updatedOutputs = task.outputs.map((output, i) => ({
-        ...output,
-        url: localPaths[i] ?? output.url,
-      }));
-      await this.updateTaskOutputs(taskId, updatedOutputs);
-    }
-
-    return localPaths;
+    return downloadMediaOutputs(taskId, task.type, task.outputs, outputDir, options);
   }
 
   /**

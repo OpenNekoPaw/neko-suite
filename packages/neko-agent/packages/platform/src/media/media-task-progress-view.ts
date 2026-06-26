@@ -1,4 +1,4 @@
-import type { GeneratedAsset, WebviewGeneratedAsset } from '@neko/shared';
+import type { GeneratedAsset, RenderableGeneratedAsset } from '@neko/shared';
 import {
   finalizeCompletedMediaTaskOutputs,
   type FinalizeCompletedMediaTaskOutputsInput,
@@ -26,7 +26,7 @@ export interface BuildMediaTaskProgressViewDeliveryInput extends Omit<
   readonly workspaceRoot?: string;
   readonly showSaveNotification?: boolean;
   readonly resolveResultUrl?: (url: string) => string | undefined;
-  readonly toViewAsset?: (asset: GeneratedAsset) => WebviewGeneratedAsset;
+  readonly toViewAsset?: (asset: GeneratedAsset) => RenderableGeneratedAsset | undefined;
   readonly now?: () => Date;
 }
 
@@ -55,7 +55,6 @@ export async function buildMediaTaskViewDelivery(
     view: createMediaTaskView(input.task, {
       urls,
       thumbnailUrl,
-      localPaths: deliveryPlan.localPaths,
       assets,
       creativeEntity,
     }),
@@ -79,7 +78,6 @@ export async function buildMediaTaskProgressViewDelivery(
       task: input.task,
       urls,
       thumbnailUrl,
-      localPaths: deliveryPlan.localPaths,
       assets,
       creativeEntity,
       now: input.now,
@@ -119,16 +117,20 @@ function projectDeliveryPresentation(
 ): {
   readonly urls: string[];
   readonly thumbnailUrl?: string;
-  readonly assets: WebviewGeneratedAsset[];
+  readonly assets: RenderableGeneratedAsset[];
 } {
   const urls = deliveryPlan.resultUrls
-    .map((url) => input.resolveResultUrl?.(url) ?? url)
+    .map((url) => (input.resolveResultUrl ? input.resolveResultUrl(url) : url))
     .filter((url): url is string => typeof url === 'string' && url.length > 0);
   const thumbnailUrl = deliveryPlan.thumbnailUrl
-    ? (input.resolveResultUrl?.(deliveryPlan.thumbnailUrl) ?? deliveryPlan.thumbnailUrl)
+    ? input.resolveResultUrl
+      ? input.resolveResultUrl(deliveryPlan.thumbnailUrl)
+      : deliveryPlan.thumbnailUrl
     : undefined;
   const assets = input.toViewAsset
-    ? deliveryPlan.generatedAssets.map((asset) => input.toViewAsset!(asset))
+    ? deliveryPlan.generatedAssets
+        .map((asset) => input.toViewAsset!(asset))
+        .filter((asset): asset is RenderableGeneratedAsset => asset !== undefined)
     : [];
 
   return {

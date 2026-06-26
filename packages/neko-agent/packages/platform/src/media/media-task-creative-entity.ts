@@ -8,7 +8,7 @@ import {
   buildEntityAssetRequirementsFromGeneratedMediaLineage,
   buildVisualIdentityDraftsFromGeneratedMediaLineage,
   type GeneratedAsset,
-  type WebviewGeneratedAsset,
+  type RenderableGeneratedAsset,
 } from '@neko/shared';
 import type { GeneratedMediaTaskType } from './media-generated-asset';
 import type { MediaGenerationType, MediaTask } from './types';
@@ -61,7 +61,7 @@ export interface MediaTaskCreativeEntityContext {
 export interface BuildMediaTaskCreativeEntityContextInput {
   readonly task: Pick<MediaTask, 'request'> & Partial<Pick<MediaTask, 'type' | 'outputs'>>;
   readonly taskType?: GeneratedMediaTaskType;
-  readonly assets?: readonly (GeneratedAsset | WebviewGeneratedAsset)[];
+  readonly assets?: readonly (GeneratedAsset | RenderableGeneratedAsset)[];
 }
 
 export function buildMediaTaskCreativeEntityContext(
@@ -150,7 +150,7 @@ function inferGeneratedMediaTaskTypeFromOutputs(
 
 function collectCharacterIds(
   metadata: Record<string, unknown> | undefined,
-  assets: readonly (GeneratedAsset | WebviewGeneratedAsset)[],
+  assets: readonly (GeneratedAsset | RenderableGeneratedAsset)[],
 ): readonly string[] {
   const ids = new Set<string>();
   const metadataIds = metadata?.['characterIds'];
@@ -175,7 +175,7 @@ function collectCharacterIds(
 
 function collectSourceNodeId(
   metadata: Record<string, unknown> | undefined,
-  assets: readonly (GeneratedAsset | WebviewGeneratedAsset)[],
+  assets: readonly (GeneratedAsset | RenderableGeneratedAsset)[],
 ): string | undefined {
   const metadataSourceNodeId = metadata?.['sourceNodeId'];
   if (typeof metadataSourceNodeId === 'string' && metadataSourceNodeId.length > 0) {
@@ -216,7 +216,7 @@ function getBindingRolesForTaskType(
 }
 
 function buildBindingCandidates(
-  assets: readonly (GeneratedAsset | WebviewGeneratedAsset)[],
+  assets: readonly (GeneratedAsset | RenderableGeneratedAsset)[],
   taskType: GeneratedMediaTaskType | undefined,
 ): readonly MediaTaskCreativeEntityBindingCandidate[] {
   const roles = getBindingRolesForTaskType(taskType);

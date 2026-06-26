@@ -46,6 +46,7 @@ export class DocumentAccessError extends Error {
 
 export interface DocumentLowLevelAccess {
   identify?(filePath: string): Promise<{ fileId?: string; sizeBytes?: number; mtimeMs?: number }>;
+  readFile?(filePath: string): Promise<Uint8Array>;
   readRange?(filePath: string, start: number, end: number): Promise<Uint8Array>;
   readEntry?(filePath: string, entryPath: string): Promise<Uint8Array>;
 }
@@ -1283,7 +1284,6 @@ function createImageInfo(
     source: resource?.source,
     locator: resource?.locator,
     entryPath: resource?.entryPath,
-    cachePath: filePath,
   });
   return {
     path: filePath,

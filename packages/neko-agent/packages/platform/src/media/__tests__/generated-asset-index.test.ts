@@ -1,15 +1,9 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { GeneratedAsset } from '@neko/shared';
-import {
-  GeneratedAssetIndex,
-  generateAssetId,
-  resolveAssetSubDir,
-  resolveGeneratedDir,
-} from '../generated-asset-index';
+import { GeneratedAssetIndex, generateAssetId } from '../generated-asset-index';
 
 const tempDirs: string[] = [];
 
@@ -96,17 +90,6 @@ describe('GeneratedAssetIndex', () => {
     await writeFile(path.join(dir, 'index.json'), '{bad json', 'utf-8');
     await index.load();
     expect(index.size).toBe(0);
-  });
-
-  it('resolves standard generated directories and creates them', async () => {
-    const workspaceRoot = await createTempDir();
-    const generatedDir = resolveGeneratedDir(workspaceRoot);
-    expect(generatedDir).toBe(path.join(workspaceRoot, '.neko', '.cache', 'generated'));
-    expect(existsSync(generatedDir)).toBe(true);
-
-    const imageDir = resolveAssetSubDir(generatedDir, 'images');
-    expect(imageDir).toBe(path.join(generatedDir, 'images'));
-    expect(existsSync(imageDir)).toBe(true);
   });
 
   it('generates unique asset ids', () => {

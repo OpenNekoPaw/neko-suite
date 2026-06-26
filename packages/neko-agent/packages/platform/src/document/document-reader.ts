@@ -1006,7 +1006,6 @@ function createImageInfo(
         }
       : undefined,
     entryPath: resource?.entryPath,
-    cachePath: filePath,
   });
   return {
     path: filePath,

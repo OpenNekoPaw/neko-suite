@@ -48,6 +48,39 @@ export interface HttpError {
  */
 export type HttpResult<T> = { success: true; data: T } | { success: false; error: HttpError };
 
+export interface HttpClientErrorInfo {
+  readonly code: string;
+  readonly message: string;
+  readonly method: HttpRequestConfig['method'];
+  readonly url: string;
+  readonly retryable: boolean;
+  readonly statusCode?: number;
+  readonly retryAfterMs?: number;
+  readonly cause?: Error;
+}
+
+export class HttpClientError extends Error {
+  readonly code: string;
+  readonly method: HttpRequestConfig['method'];
+  readonly url: string;
+  readonly retryable: boolean;
+  readonly statusCode?: number;
+  readonly retryAfterMs?: number;
+  declare readonly cause?: Error;
+
+  constructor(info: HttpClientErrorInfo) {
+    super(info.message);
+    this.name = 'HttpClientError';
+    this.code = info.code;
+    this.method = info.method;
+    this.url = info.url;
+    this.retryable = info.retryable;
+    this.statusCode = info.statusCode;
+    this.retryAfterMs = info.retryAfterMs;
+    this.cause = info.cause;
+  }
+}
+
 /**
  * Shared HTTP client with common functionality
  */
@@ -61,7 +94,7 @@ export class HttpClient {
 
     if (!response.ok) {
       const error = await this.parseError(response);
-      throw new Error(`${errorPrefix}: ${error.statusCode} ${error.code} - ${error.message}`);
+      throw createHttpResponseError(errorPrefix, config, response.url, error);
     }
 
     const data = (await response.json()) as T;
@@ -88,6 +121,19 @@ export class HttpClient {
       const data = (await response.json()) as T;
       return { success: true, data };
     } catch (err) {
+      if (err instanceof HttpClientError) {
+        return {
+          success: false,
+          error: {
+            code: err.code,
+            message: err.message,
+            statusCode: err.statusCode ?? 0,
+            retryable: err.retryable,
+            ...(err.retryAfterMs !== undefined ? { retryAfterMs: err.retryAfterMs } : {}),
+          },
+        };
+      }
+
       // Handle timeout/abort errors
       if (err instanceof Error && err.name === 'AbortError') {
         return {
@@ -138,7 +184,7 @@ export class HttpClient {
 
     if (!response.ok) {
       const error = await this.parseError(response);
-      throw new Error(`${errorPrefix}: ${error.statusCode} ${error.code} - ${error.message}`);
+      throw createHttpResponseError(errorPrefix, config, response.url, error);
     }
 
     logger.debug('Stream started', {
@@ -326,6 +372,11 @@ export class HttpClient {
         body: body ? JSON.stringify(body) : undefined,
         signal: fetchSignal,
       });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+      throw createHttpNetworkError(config, error);
     } finally {
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -354,4 +405,107 @@ export function getHttpClient(): HttpClient {
  */
 export function createHttpClient(): HttpClient {
   return new HttpClient();
+}
+
+function createHttpResponseError(
+  errorPrefix: string,
+  config: HttpRequestConfig,
+  responseUrl: string,
+  error: HttpError,
+): HttpClientError {
+  const safeUrl = sanitizeRequestUrl(responseUrl || config.url);
+  return new HttpClientError({
+    code: error.code,
+    message: `${errorPrefix} for ${config.method} ${safeUrl}: ${error.statusCode} ${error.code} - ${error.message}`,
+    method: config.method,
+    url: safeUrl,
+    retryable: error.retryable,
+    statusCode: error.statusCode,
+    ...(error.retryAfterMs !== undefined ? { retryAfterMs: error.retryAfterMs } : {}),
+  });
+}
+
+function createHttpNetworkError(config: HttpRequestConfig, error: unknown): HttpClientError {
+  const safeUrl = sanitizeRequestUrl(config.url);
+  const baseMessage = getErrorMessage(error) ?? 'Network error';
+  const causeMessage = formatNetworkCause(error);
+  return new HttpClientError({
+    code: 'NETWORK_ERROR',
+    message: `Network request failed for ${config.method} ${safeUrl}: ${baseMessage}${
+      causeMessage ? ` (${causeMessage})` : ''
+    }`,
+    method: config.method,
+    url: safeUrl,
+    retryable: true,
+    statusCode: 0,
+    cause: error instanceof Error ? error : undefined,
+  });
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+function formatNetworkCause(error: unknown): string | undefined {
+  const cause = error instanceof Error ? readObjectField(error, 'cause') : undefined;
+  const code = firstString(readObjectField(cause, 'code'), readObjectField(error, 'code'));
+  const message = getErrorMessage(cause);
+  if (code && message) {
+    return message.includes(code) ? `cause=${message}` : `cause=${code}: ${message}`;
+  }
+  if (code) {
+    return `cause=${code}`;
+  }
+  if (message && message !== getErrorMessage(error)) {
+    return `cause=${message}`;
+  }
+  return undefined;
+}
+
+function sanitizeRequestUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    const authFreeOrigin = `${url.protocol}//${url.host}`;
+    return `${authFreeOrigin}${url.pathname}${url.search ? '?<redacted>' : ''}`;
+  } catch {
+    const queryIndex = value.indexOf('?');
+    return queryIndex >= 0 ? `${value.slice(0, queryIndex)}?<redacted>` : value;
+  }
+}
+
+function getErrorMessage(error: unknown): string | undefined {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  const message = firstString(readObjectField(error, 'message'));
+  if (message) {
+    return message;
+  }
+  if (typeof error === 'string' && error) {
+    return error;
+  }
+  return undefined;
+}
+
+function readObjectField(value: unknown, key: string): unknown {
+  if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {
+    return undefined;
+  }
+  try {
+    return Reflect.get(value, key);
+  } catch {
+    return undefined;
+  }
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.length > 0) {
+      return value;
+    }
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+      return String(value);
+    }
+  }
+  return undefined;
 }

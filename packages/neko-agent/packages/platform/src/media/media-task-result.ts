@@ -34,6 +34,7 @@ export interface FinalizeCompletedMediaTaskOutputsInput {
 export interface FinalizedMediaTaskOutputs {
   resultUrls: string[];
   thumbnailUrl?: string;
+  hostOutputPaths: string[];
   generatedAssets: GeneratedAsset[];
 }
 
@@ -44,6 +45,7 @@ export async function finalizeCompletedMediaTaskOutputs(
   const remoteOnlyResult = {
     resultUrls: outputs.map((output) => output.url).filter(Boolean),
     thumbnailUrl: outputs[0]?.url,
+    hostOutputPaths: [],
     generatedAssets: [],
   };
 
@@ -57,15 +59,15 @@ export async function finalizeCompletedMediaTaskOutputs(
   }
 
   try {
-    const localPaths = await input.saveOutputs(input.task.id, input.outputDir, {
+    const hostOutputPaths = await input.saveOutputs(input.task.id, input.outputDir, {
       transcodeFile: input.transcodeFile,
     });
-    if (localPaths.length === 0) {
+    if (hostOutputPaths.length === 0) {
       return remoteOnlyResult;
     }
 
     const generatedAssets = buildGeneratedMediaAssets({
-      localPaths,
+      hostOutputPaths,
       outputs,
       taskType: input.taskType,
       prompt: input.task.request?.prompt,
@@ -82,8 +84,11 @@ export async function finalizeCompletedMediaTaskOutputs(
     }
 
     return {
-      resultUrls: localPaths,
-      thumbnailUrl: localPaths[0],
+      resultUrls: generatedAssets
+        .map((asset) => asset.assetRef?.uri)
+        .filter((uri): uri is string => typeof uri === 'string' && uri.length > 0),
+      thumbnailUrl: generatedAssets[0]?.assetRef?.uri,
+      hostOutputPaths,
       generatedAssets,
     };
   } catch (error) {

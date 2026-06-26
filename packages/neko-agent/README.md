@@ -228,7 +228,7 @@ NekoAgent 支持读取多种文档格式用于 AI 内容分析和视频生成工
 | **演示/表格** | PPT/PPTX, XLS/XLSX | 读取文本/表格数据，提取内嵌图片 |
 | **专业剧本** | Final Draft (FDX) | 影视行业标准格式 |
 
-解析由扩展内部库完成，不要求创作者安装 Python、unzip、unrar 等外部命令行工具。图片页基础元数据通过 `ReadDocument.imageInfo` 返回，Skill 不应再调用外部命令探测尺寸。文档图片会物化到 `.neko/.cache/resources` 或 extension 私有资源缓存，并通过结构化 `resourceRef` / `cacheResourceRef` 跨包传递；`imagePaths` 只作为当前读取/视觉分析的运行时句柄。
+解析由扩展内部库完成，不要求创作者安装 Python、unzip、unrar 等外部命令行工具。图片页基础元数据通过 `ReadDocument.imageInfo` 返回，Skill 不应再调用外部命令探测尺寸。文档图片缓存对上层透明：跨包传递使用结构化 `imageInfo.resourceRef` / `documentResourceRef`，统一 documents resource cache 负责按需物化、MD5 去重和缓存重建。
 
 ### 法律声明
 

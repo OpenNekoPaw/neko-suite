@@ -12,13 +12,19 @@ describe('media-task-progress-plan', () => {
       taskType: 'video',
       workspaceRoot: '/repo',
       finalized: {
-        resultUrls: ['/repo/.neko/.cache/generated/video.mp4'],
-        thumbnailUrl: '/repo/.neko/.cache/generated/video.mp4',
+        resultUrls: ['generated-assets/asset-1.mp4'],
+        thumbnailUrl: 'generated-assets/asset-1.mp4',
+        hostOutputPaths: ['/repo/.neko/.cache/generated/video.mp4'],
         generatedAssets: [
           {
             id: 'asset-1',
             type: 'generated-video',
             path: '/repo/.neko/.cache/generated/video.mp4',
+            assetRef: {
+              assetId: 'asset-1',
+              uri: 'generated-assets/asset-1.mp4',
+              mimeType: 'video/mp4',
+            },
             mimeType: 'video/mp4',
             generatedAt: '2026-01-01T00:00:00.000Z',
             duration: 5,
@@ -32,20 +38,21 @@ describe('media-task-progress-plan', () => {
 
     expect(plan).toEqual(
       expect.objectContaining({
-        resultUrls: ['/repo/.neko/.cache/generated/video.mp4'],
-        thumbnailUrl: '/repo/.neko/.cache/generated/video.mp4',
-        localPaths: ['/repo/.neko/.cache/generated/video.mp4'],
+        resultUrls: ['generated-assets/asset-1.mp4'],
+        thumbnailUrl: 'generated-assets/asset-1.mp4',
+        hostOutputPaths: ['/repo/.neko/.cache/generated/video.mp4'],
         shouldPersistResultUrls: true,
         shouldUnsubscribe: true,
         notification: {
           label: 'Video',
           filePath: '/repo/.neko/.cache/generated/video.mp4',
-          relativePath: '.neko/.cache/generated/video.mp4',
-          message: 'Video saved to .neko/.cache/generated/video.mp4',
+          displayRef: 'generated-assets/asset-1.mp4',
+          message: 'Video saved as generated-assets/asset-1.mp4',
           actionLabel: MEDIA_TASK_SAVE_NOTIFICATION_ACTION,
         },
       }),
     );
+    expect(plan.notification?.message).not.toContain('.neko/.cache/generated');
   });
 
   it('does not notify for remote fallback results or disabled notifications', () => {
@@ -55,6 +62,7 @@ describe('media-task-progress-plan', () => {
       workspaceRoot: '/repo',
       finalized: {
         resultUrls: ['https://example.test/image.png'],
+        hostOutputPaths: [],
         generatedAssets: [],
       },
     };
@@ -65,7 +73,8 @@ describe('media-task-progress-plan', () => {
         ...baseInput,
         showSaveNotification: false,
         finalized: {
-          resultUrls: ['/repo/.neko/.cache/generated/image.png'],
+          resultUrls: ['generated-assets/asset-1.png'],
+          hostOutputPaths: ['/repo/.neko/.cache/generated/image.png'],
           generatedAssets: [
             {
               id: 'asset-1',
@@ -90,13 +99,14 @@ describe('media-task-progress-plan', () => {
       finalized: {
         resultUrls: ['https://example.test/audio.mp3'],
         thumbnailUrl: 'https://example.test/audio.mp3',
+        hostOutputPaths: [],
         generatedAssets: [],
       },
     });
 
     expect(plan.shouldPersistResultUrls).toBe(false);
     expect(plan.shouldUnsubscribe).toBe(false);
-    expect(plan.localPaths).toEqual([]);
+    expect(plan.hostOutputPaths).toEqual([]);
     expect(plan.notification).toBeUndefined();
   });
 

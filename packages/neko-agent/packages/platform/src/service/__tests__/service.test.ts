@@ -13,10 +13,13 @@ import type { IUserConfigManager } from '../../config/user-config';
 import type { ConfigReadResult } from '@neko/shared/config/config-reader';
 
 // Mock adapter
-const createMockAdapter = (responses: ChatResponse[] = []): Partial<Adapter> => {
+const createMockAdapter = (
+  responses: ChatResponse[] = [],
+  type: string = 'mock',
+): Partial<Adapter> => {
   let callIndex = 0;
   return {
-    type: 'mock',
+    type,
     supportsStreaming: () => true,
     supportsCapability: () => true,
     chat: vi.fn().mockImplementation(async () => {
@@ -569,6 +572,119 @@ describe('Service', () => {
         expect.objectContaining({ id: 'gpt-4' }),
         expect.objectContaining({ id: 'openai' }),
       );
+    });
+
+    it('retries retryable stream failures before the first provider chunk', async () => {
+      vi.useFakeTimers();
+      const adapter = createMockAdapter([], 'generic');
+      (adapter.chatStream as ReturnType<typeof vi.fn>)
+        .mockImplementationOnce(async function* () {
+          if (Date.now() < 0) {
+            yield { id: 'unreachable', model: 'gpt-4', delta: {} };
+          }
+          throw Object.assign(new Error('fetch failed'), { code: 'ECONNRESET' });
+        })
+        .mockImplementationOnce(async function* () {
+          yield { id: 'stream-2', model: 'gpt-4', delta: { content: 'Recovered' } };
+          yield { id: 'stream-2', model: 'gpt-4', delta: {}, finishReason: 'stop' };
+        });
+      const config = createMockConfig(adapter);
+      const service = new Service(config);
+
+      const { stream, response } = service.chatStream([{ role: 'user', content: 'Hello' }], {
+        providerId: 'openai',
+        modelId: 'gpt-4',
+      });
+
+      const drain = (async () => {
+        const chunks: ChatChunk[] = [];
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+        }
+        return chunks;
+      })();
+
+      await vi.advanceTimersByTimeAsync(10);
+      const chunks = await drain;
+      const finalResponse = await response;
+
+      expect(adapter.chatStream).toHaveBeenCalledTimes(2);
+      expect(chunks[0]?.delta.content).toBe('Recovered');
+      expect(finalResponse.message.content).toBe('Recovered');
+      vi.useRealTimers();
+    });
+
+    it('does not retry stream failures after a provider chunk was emitted', async () => {
+      const adapter = createMockAdapter([], 'generic');
+      (adapter.chatStream as ReturnType<typeof vi.fn>).mockImplementation(async function* () {
+        yield { id: 'stream-1', model: 'gpt-4', delta: { content: 'Partial' } };
+        throw Object.assign(new Error('fetch failed'), { code: 'ECONNRESET' });
+      });
+      const config = createMockConfig(adapter);
+      const service = new Service(config);
+
+      const { stream, response } = service.chatStream([{ role: 'user', content: 'Hello' }], {
+        providerId: 'openai',
+        modelId: 'gpt-4',
+      });
+      const responseError = response.catch((error: unknown) => error);
+
+      const chunks: ChatChunk[] = [];
+      await expect(async () => {
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+        }
+      }).rejects.toThrow('fetch failed');
+      await expect(responseError).resolves.toMatchObject({
+        message: expect.stringContaining('fetch failed'),
+      });
+
+      expect(adapter.chatStream).toHaveBeenCalledTimes(1);
+      expect(chunks[0]?.delta.content).toBe('Partial');
+    });
+
+    it('surfaces detailed error after configured initial stream retries are exhausted', async () => {
+      vi.useFakeTimers();
+      const adapter = createMockAdapter([], 'generic');
+      (adapter.chatStream as ReturnType<typeof vi.fn>).mockImplementation(async function* () {
+        if (Date.now() < 0) {
+          yield { id: 'unreachable', model: 'gpt-4', delta: {} };
+        }
+        throw Object.assign(
+          new Error(
+            'Network request failed for POST https://gateway.example.test/v1/chat/completions: fetch failed (cause=ECONNRESET: socket hang up)',
+          ),
+          { code: 'NETWORK_ERROR' },
+        );
+      });
+      const config = createMockConfig(adapter);
+      const service = new Service(config);
+
+      const { stream, response } = service.chatStream([{ role: 'user', content: 'Hello' }], {
+        providerId: 'openai',
+        modelId: 'gpt-4',
+      });
+      const responseError = response.catch((error: unknown) => error);
+
+      const drain = (async () => {
+        for await (const _chunk of stream) {
+          // Drain stream.
+        }
+      })();
+      const drainError = drain.catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(10);
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(drainError).resolves.toMatchObject({
+        message: expect.stringContaining('Model request failed after 3 attempts'),
+      });
+      await expect(responseError).resolves.toMatchObject({
+        message: expect.stringContaining('cause=ECONNRESET'),
+      });
+
+      expect(adapter.chatStream).toHaveBeenCalledTimes(3);
+      vi.useRealTimers();
     });
 
     it('rejects streams without explicit provider/model before model fallback', () => {

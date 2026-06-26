@@ -5,7 +5,7 @@ import type { MediaGenerationRequestBase, MediaOutput } from './types';
 export type GeneratedMediaTaskType = 'image' | 'video' | 'audio';
 
 export interface BuildGeneratedMediaAssetsInput {
-  localPaths: readonly string[];
+  hostOutputPaths: readonly string[];
   outputs: readonly MediaOutput[];
   taskType: GeneratedMediaTaskType;
   prompt?: string;
@@ -20,15 +20,15 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
   const assets: GeneratedAsset[] = [];
   const lineage = extractGeneratedAssetLineage(input.request?.metadata);
 
-  for (let i = 0; i < input.localPaths.length; i++) {
-    const localPath = input.localPaths[i];
-    if (!localPath) continue;
+  for (let i = 0; i < input.hostOutputPaths.length; i++) {
+    const hostOutputPath = input.hostOutputPaths[i];
+    if (!hostOutputPath) continue;
 
     const output = input.outputs[i];
     const base = {
       id: input.generateAssetId(),
-      path: localPath,
-      mimeType: output?.mimeType ?? inferGeneratedMediaMimeType(localPath),
+      path: hostOutputPath,
+      mimeType: output?.mimeType ?? inferGeneratedMediaMimeType(hostOutputPath),
       generatedAt,
       prompt: input.prompt,
       model: input.model,
@@ -36,7 +36,7 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
     };
     const assetRef = {
       assetId: base.id,
-      uri: toStableGeneratedAssetUri(localPath),
+      uri: toStableGeneratedAssetUri(hostOutputPath, base.id),
       mimeType: base.mimeType,
     };
 
@@ -86,16 +86,9 @@ export function buildGeneratedMediaAssets(input: BuildGeneratedMediaAssetsInput)
   return assets;
 }
 
-export function toStableGeneratedAssetUri(filePath: string): string {
-  const normalized = filePath.replace(/\\/g, '/');
-  const markers = ['/.neko/.cache/generated/', '/.neko/generated/'];
-  for (const marker of markers) {
-    const markerIndex = normalized.lastIndexOf(marker);
-    if (markerIndex >= 0) {
-      return `\${WORKSPACE}${normalized.slice(markerIndex)}`;
-    }
-  }
-  return `generated-assets/${path.basename(filePath)}`;
+export function toStableGeneratedAssetUri(filePath: string, assetId?: string): string {
+  const extension = path.extname(filePath);
+  return `generated-assets/${assetId ?? path.basename(filePath)}${assetId ? extension : ''}`;
 }
 
 export function inferGeneratedMediaMimeType(filePath: string): string {

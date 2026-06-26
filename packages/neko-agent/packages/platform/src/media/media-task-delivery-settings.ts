@@ -1,5 +1,3 @@
-import { resolveStorageLayout } from '@neko/shared';
-
 export const MEDIA_TASK_DELIVERY_CONFIG_SECTION = 'neko.agent.media';
 export const MEDIA_TASK_OUTPUT_DIR_SETTING_KEY = 'outputDir';
 export const MEDIA_TASK_SHOW_SAVE_NOTIFICATION_SETTING_KEY = 'showSaveNotification';
@@ -9,6 +7,7 @@ export const DEFAULT_MEDIA_TASK_SHOW_SAVE_NOTIFICATION = true;
 export interface MediaTaskDeliverySettingsInput {
   readonly workspaceRoot?: string;
   readonly configuredOutputDir?: string;
+  readonly defaultOutputDir?: string;
   readonly configuredShowSaveNotification?: boolean;
 }
 
@@ -22,7 +21,7 @@ export function buildMediaTaskDeliverySettingsPlan(
   input: MediaTaskDeliverySettingsInput,
 ): MediaTaskDeliverySettingsPlan {
   const outputDir = input.workspaceRoot
-    ? input.configuredOutputDir || resolveProjectGeneratedDir(input.workspaceRoot)
+    ? input.configuredOutputDir || input.defaultOutputDir
     : undefined;
 
   return {
@@ -31,8 +30,4 @@ export function buildMediaTaskDeliverySettingsPlan(
     showSaveNotification:
       input.configuredShowSaveNotification ?? DEFAULT_MEDIA_TASK_SHOW_SAVE_NOTIFICATION,
   };
-}
-
-function resolveProjectGeneratedDir(workspaceRoot: string): string {
-  return resolveStorageLayout(workspaceRoot, workspaceRoot).project.local.cache.generated;
 }

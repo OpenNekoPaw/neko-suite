@@ -1,4 +1,4 @@
-import type { WebviewGeneratedAsset } from '@neko/shared';
+import { isPublicGeneratedAssetResultUri, type RenderableGeneratedAsset } from '@neko/shared';
 import {
   buildMediaTaskCreativeEntityContext,
   type MediaTaskCreativeEntityContext,
@@ -35,8 +35,8 @@ export function toMediaBackgroundTaskStatus(status: MediaTaskStatus): MediaBackg
   return status === 'pending' ? 'queued' : status;
 }
 
-export function filterLocalMediaPaths(urls: readonly string[]): string[] {
-  return urls.filter((url) => url.startsWith('/') || /^[A-Za-z]:[\\/]/.test(url));
+export function isStableMediaTaskResultUrl(value: string): boolean {
+  return isPublicGeneratedAssetResultUri(value);
 }
 
 export function getMediaTaskConversationId(task: MediaTask | undefined): string | undefined {
@@ -64,7 +64,7 @@ export function createMediaTaskActionCandidate(
   if (!task) return null;
 
   const conversationId = getMediaTaskConversationId(task);
-  const resultUrl = task.outputs?.find((output) => output.url.length > 0)?.url;
+  const resultUrl = task.outputs?.find((output) => isStableMediaTaskResultUrl(output.url))?.url;
   const creativeEntity = buildMediaTaskCreativeEntityContext({ task });
   return {
     id: task.id,
@@ -78,8 +78,7 @@ export interface MediaTaskProgressViewInput {
   task: MediaTask;
   urls?: readonly string[];
   thumbnailUrl?: string;
-  localPaths?: readonly string[];
-  assets?: readonly WebviewGeneratedAsset[];
+  assets?: readonly RenderableGeneratedAsset[];
   creativeEntity?: MediaTaskCreativeEntityContext;
   now?: () => Date;
 }
@@ -92,8 +91,7 @@ export interface MediaTaskProgressView {
   result?: {
     urls: string[];
     thumbnailUrl?: string;
-    localPaths?: string[];
-    assets?: WebviewGeneratedAsset[];
+    assets?: RenderableGeneratedAsset[];
     creativeEntity?: MediaTaskCreativeEntityContext;
   };
   error?: string;
@@ -110,17 +108,15 @@ export interface MediaTaskOutputView {
 
 export interface MediaTaskResultView {
   urls: string[];
-  localPaths?: string[];
   thumbnailUrl?: string;
-  assets?: WebviewGeneratedAsset[];
+  assets?: RenderableGeneratedAsset[];
   creativeEntity?: MediaTaskCreativeEntityContext;
 }
 
 export interface MediaTaskViewOptions {
   urls?: readonly string[];
   thumbnailUrl?: string;
-  localPaths?: readonly string[];
-  assets?: readonly WebviewGeneratedAsset[];
+  assets?: readonly RenderableGeneratedAsset[];
   creativeEntity?: MediaTaskCreativeEntityContext;
 }
 
@@ -150,7 +146,7 @@ export function createMediaTaskView(
 ): MediaTaskView {
   const outputs = task.outputs
     ?.map(toMediaTaskOutputView)
-    .filter((output) => output.url.length > 0);
+    .filter((output): output is MediaTaskOutputView => output !== undefined);
   const result = createMediaTaskResultView(task, options);
 
   return {
@@ -182,9 +178,8 @@ function createMediaTaskResultView(
   task: MediaTask,
   options: MediaTaskViewOptions,
 ): MediaTaskResultView | undefined {
-  const urls = options.urls?.filter((url) => url.length > 0) ?? [];
-  const localPaths = options.localPaths?.filter((filePath) => filePath.length > 0) ?? [];
-  const assets = options.assets ?? [];
+  const urls = options.urls?.filter(isStableMediaTaskResultUrl) ?? [];
+  const assets = stripRenderableAssetPaths(options.assets ?? []);
   const creativeEntity =
     options.creativeEntity ??
     buildMediaTaskCreativeEntityContext({
@@ -192,12 +187,13 @@ function createMediaTaskResultView(
       assets,
     });
 
-  if (urls.length === 0 && !creativeEntity) return undefined;
+  if (urls.length === 0 && assets.length === 0 && !creativeEntity) return undefined;
 
   return {
     urls: [...urls],
-    ...(options.thumbnailUrl ? { thumbnailUrl: options.thumbnailUrl } : {}),
-    ...(localPaths.length > 0 ? { localPaths: [...localPaths] } : {}),
+    ...(options.thumbnailUrl && isStableMediaTaskResultUrl(options.thumbnailUrl)
+      ? { thumbnailUrl: options.thumbnailUrl }
+      : {}),
     ...(assets.length > 0 ? { assets: [...assets] } : {}),
     ...(creativeEntity ? { creativeEntity } : {}),
   };
@@ -206,9 +202,8 @@ function createMediaTaskResultView(
 export function createMediaTaskProgressView(
   input: MediaTaskProgressViewInput,
 ): MediaTaskProgressView {
-  const urls = input.urls?.filter((url) => url.length > 0) ?? [];
-  const localPaths = input.localPaths?.filter((filePath) => filePath.length > 0) ?? [];
-  const assets = input.assets ?? [];
+  const urls = input.urls?.filter(isStableMediaTaskResultUrl) ?? [];
+  const assets = stripRenderableAssetPaths(input.assets ?? []);
   const creativeEntity =
     input.creativeEntity ??
     buildMediaTaskCreativeEntityContext({
@@ -222,11 +217,12 @@ export function createMediaTaskProgressView(
     status: toMediaBackgroundTaskStatus(input.task.status),
     progress: input.task.progress,
     result:
-      urls.length > 0 || creativeEntity
+      urls.length > 0 || assets.length > 0 || creativeEntity
         ? {
             urls: [...urls],
-            ...(input.thumbnailUrl ? { thumbnailUrl: input.thumbnailUrl } : {}),
-            ...(localPaths.length > 0 ? { localPaths: [...localPaths] } : {}),
+            ...(input.thumbnailUrl && isStableMediaTaskResultUrl(input.thumbnailUrl)
+              ? { thumbnailUrl: input.thumbnailUrl }
+              : {}),
             ...(assets.length > 0 ? { assets: [...assets] } : {}),
             ...(creativeEntity ? { creativeEntity } : {}),
           }
@@ -236,13 +232,18 @@ export function createMediaTaskProgressView(
   };
 }
 
-function toMediaTaskOutputView(output: MediaOutput): MediaTaskOutputView {
+function toMediaTaskOutputView(output: MediaOutput): MediaTaskOutputView | undefined {
+  if (!isStableMediaTaskResultUrl(output.url)) return undefined;
+  const thumbnailUrl =
+    output.thumbnailUrl && isStableMediaTaskResultUrl(output.thumbnailUrl)
+      ? output.thumbnailUrl
+      : undefined;
   return {
     url: output.url,
     ...(output.width !== undefined ? { width: output.width } : {}),
     ...(output.height !== undefined ? { height: output.height } : {}),
     ...(output.duration !== undefined ? { duration: output.duration } : {}),
-    ...(output.thumbnailUrl ? { thumbnailUrl: output.thumbnailUrl } : {}),
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
   };
 }
 
@@ -250,4 +251,16 @@ function toIsoString(value: Date | string | undefined): string {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'string') return value;
   return new Date().toISOString();
+}
+
+function stripRenderableAssetPaths(
+  assets: readonly RenderableGeneratedAsset[],
+): RenderableGeneratedAsset[] {
+  return assets.map((asset) => {
+    if (!('path' in asset)) return asset;
+    const { path: _path, ...assetWithoutPath } = asset as RenderableGeneratedAsset & {
+      readonly path?: unknown;
+    };
+    return assetWithoutPath;
+  });
 }

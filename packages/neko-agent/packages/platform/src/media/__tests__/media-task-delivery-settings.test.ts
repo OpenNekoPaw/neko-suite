@@ -17,8 +17,13 @@ describe('media-task-delivery-settings', () => {
     expect(DEFAULT_MEDIA_TASK_SHOW_SAVE_NOTIFICATION).toBe(true);
   });
 
-  it('uses workspace generated output dir and enables save notifications by default', () => {
-    expect(buildMediaTaskDeliverySettingsPlan({ workspaceRoot: '/repo' })).toEqual({
+  it('uses host-provided default output dir and enables save notifications by default', () => {
+    expect(
+      buildMediaTaskDeliverySettingsPlan({
+        workspaceRoot: '/repo',
+        defaultOutputDir: '/repo/.neko/.cache/generated',
+      }),
+    ).toEqual({
       workspaceRoot: '/repo',
       outputDir: '/repo/.neko/.cache/generated',
       showSaveNotification: true,

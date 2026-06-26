@@ -52,6 +52,7 @@ export {
   detectMediaExtension,
   type DownloadMediaOptions,
 } from './media-file-downloader';
+export type { MediaRequestAssetMaterializer } from './media-request-assets';
 export {
   buildGeneratedMediaAssets,
   computeAspectRatioLabel,
@@ -63,7 +64,6 @@ export {
 export {
   createMediaTaskActionCandidate,
   createMediaTaskView,
-  filterLocalMediaPaths,
   createMediaTaskProgressView,
   getMediaTaskConversationId,
   matchesMediaTaskConversation,
@@ -119,13 +119,7 @@ export {
   type MediaTaskDeliverySettingsInput,
   type MediaTaskDeliverySettingsPlan,
 } from './media-task-delivery-settings';
-export {
-  GeneratedAssetIndex,
-  generateAssetId,
-  resolveAssetSubDir,
-  resolveGeneratedDir,
-  type AssetFilter,
-} from './generated-asset-index';
+export { GeneratedAssetIndex, generateAssetId, type AssetFilter } from './generated-asset-index';
 export {
   DEFAULT_VISION_PREPROCESS_POLICY,
   VISION_IMAGE_OUTPUT_MEDIA_TYPE,
@@ -179,6 +173,7 @@ import { MediaRoutingManager } from './routing/media-routing-manager';
 import { MediaTaskExecutor } from './media-task-executor';
 import { MediaGenerationService } from './media-generation-service';
 import type { MediaTaskManagerDeps } from './types';
+import type { MediaRequestAssetMaterializer } from './media-request-assets';
 
 /**
  * Media platform dependencies
@@ -187,6 +182,7 @@ export interface MediaPlatformDeps {
   configManager: ConfigManager;
   providerRegistry: ProviderRegistry;
   taskManager: MediaTaskManagerDeps;
+  requestAssetMaterializer?: MediaRequestAssetMaterializer;
 }
 
 /**
@@ -231,7 +227,9 @@ export function createMediaPlatform(deps: MediaPlatformDeps): MediaPlatform {
   const routingManager = new MediaRoutingManager(deps.providerRegistry, deps.configManager);
 
   // Create task executor
-  const taskExecutor = new MediaTaskExecutor(deps.providerRegistry, deps.configManager);
+  const taskExecutor = new MediaTaskExecutor(deps.providerRegistry, deps.configManager, {
+    requestAssetMaterializer: deps.requestAssetMaterializer,
+  });
 
   // Register executor with task manager
   taskExecutor.registerWith(deps.taskManager);

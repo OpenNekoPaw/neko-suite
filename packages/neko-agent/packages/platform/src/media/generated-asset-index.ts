@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import { promises as fsp } from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'node:crypto';
-import type { GeneratedAsset, GeneratedAssetType, GENERATED_ASSET_DIRS } from '@neko/shared';
+import type { GeneratedAsset, GeneratedAssetType } from '@neko/shared';
 
 export interface AssetFilter {
   readonly type?: GeneratedAssetType;
@@ -154,21 +154,6 @@ export class GeneratedAssetIndex {
       // The index is reconstructible from generated files.
     }
   }
-}
-
-export function resolveGeneratedDir(workspaceRoot: string): string {
-  const dir = path.join(workspaceRoot, '.neko', '.cache', 'generated');
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-export function resolveAssetSubDir(
-  generatedDir: string,
-  subDir: (typeof GENERATED_ASSET_DIRS)[keyof typeof GENERATED_ASSET_DIRS],
-): string {
-  const dir = path.join(generatedDir, subDir);
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
 }
 
 export function generateAssetId(): string {

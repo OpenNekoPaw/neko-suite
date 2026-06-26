@@ -1,6 +1,6 @@
 # 文档格式支持
 
-NekoAgent 的 `ReadDocument` 用于把创作者已有资料转成 Agent 可继续处理的文本、结构和图片页路径。实现上使用扩展内部的 TypeScript/JavaScript/WASM 解析库，不要求创作者安装 Python、unzip、sips、unrar、7z 等命令行程序。
+NekoAgent 的 `ReadDocument` 用于把创作者已有资料转成 Agent 可继续处理的文本、结构和文档图片引用。实现上使用扩展内部的 TypeScript/JavaScript/WASM 解析库，不要求创作者安装 Python、unzip、sips、unrar、7z 等命令行程序。
 
 ## 必须支持的格式
 
@@ -20,10 +20,10 @@ NekoAgent 的 `ReadDocument` 用于把创作者已有资料转成 Agent 可继�
 
 ## 创作者可预期行为
 
-- 图像型 EPUB、CBZ、CBR 会返回 `imagePaths`，这些路径只是当前 Agent 视觉分析可读取的运行时句柄；同时返回 `runtimeImagePaths` 和 `imageInfo`，包含当前投影路径、原始运行时路径、宽高、MIME 类型、字节大小、文档 locator、alias/aliasScope，以及可用于跨包传递的稳定 `resourceRef` / `cacheResourceRef`。Canvas、分镜和 composite artifact 必须优先使用结构化引用。
+- 图像型 EPUB、CBZ、CBR 会返回 `imageInfo`，包含宽高、MIME 类型、字节大小、文档 locator、alias/aliasScope，以及可用于跨包传递和缓存重建的稳定 `resourceRef`。Canvas、分镜和 composite artifact 必须使用结构化引用，不依赖缓存路径。
 - 文本型 EPUB、PDF、DOCX、FDX、Markdown 等会优先返回 `text`，并在可用时附带 `metadata`。
 - 大文档优先使用 `mode: "manifest"` 查看结构，再用 `mode: "range"` 读取指定页、章节、幻灯片或文本范围。
-- 如果 `mode: "range"` 没有传入 `range`，工具会基于 manifest 读取开头一段，图片数量受 `image_path_limit` 限制，避免创作者只想预览时误触发整本读取。
+- 如果 `mode: "range"` 没有传入 `range`，工具会基于 manifest 读取开头一段，图片数量受 `max_images` 限制，避免创作者只想预览时误触发整本读取。
 - `ReadDocument` 不负责直接读取单张 `.jpg/.png/.webp` 图片文件；图片分析应使用图像类工具。
 
 ## 图片能力边界
@@ -43,15 +43,15 @@ NekoAgent 的 `ReadDocument` 用于把创作者已有资料转成 Agent 可继�
 
 ## ZIP/容器资源引用策略
 
-EPUB、CBZ、CBR、DOCX、PPTX、XLSX 这类文件本质上是容器文档。当前策略是“原始容器只读、图片写入受管文档运行缓存或统一资源缓存、操作携带结构化引用”：
+EPUB、CBZ、CBR、DOCX、PPTX、XLSX 这类文件本质上是容器文档。当前策略是“原始容器只读、图片由统一 documents 资源缓存透明物化、操作携带结构化引用”：
 
 - 不注册 `zip://`、`epub://` 等 VSCode 虚拟路径作为主数据通道。VSCode Webview、Canvas `<img>`、ReadImage 和文件跳转都需要可授权的实体路径或明确的 Extension Host 命令，虚拟路径容易在 Webview CSP、粘贴、调试和跨插件传递中断开。
-- `imageInfo.path` 和 `imagePaths` 是运行时读/预览句柄：在项目工作区内应优先指向 `.neko/.cache/resources/...` 的统一资源缓存或 `.neko/.cache/resources/document-runtime/...` 的受管文档运行缓存；没有工作区时只能使用扩展私有 `globalStorageUri/resources/document-runtime/...`。它们可以给 `ReadImage` 读取，但不能作为 Canvas、Preview、导出或打包的持久身份。
-- `runtimeImagePaths` / `imageInfo.runtimePath` 表示最初从文档读取器得到的运行时文件，主要用于兼容旧工具链和调试，不应复制到项目数据。
-- `imageInfo.resourceRef` 表示原始容器来源，包含 `source`、容器内 `entryPath`、可选 `locator` 和可能来自旧数据的迁移用 `cachePath`。`cachePath` 只是 legacy/migration metadata，新工具结果、引用 JSON、Canvas send 和分镜生成写出前必须剥离。
-- `imageInfo.cacheResourceRef` 表示统一资源缓存身份，通常带有 `scope: "project"`、`provider: "document-archive"`、文档 source 和 entry locator。发送到 Canvas、Preview、包导出前，应优先传递 `cacheResourceRef` / `resourceRef`，并保留 `resourceRef`、`source`、`locator`、`entryPath`、`alias`、`aliasScope`、`sourceDocumentId`。
+- Agent、Skill、Webview presenter、Canvas 传递和 artifact 不能感知或保存缓存路径。`imageInfo.path`、`imagePaths`、`runtimeImagePaths`、`runtimePath`、`cacheResourceRef`、`runtimeKind` 和旧 `cachePath` 不属于公开工具合约；若旧数据里出现这些字段，转发前必须剥离。
+- `imageInfo.resourceRef` 表示原始容器来源，包含 `source`、容器内 `entryPath` 和可选 `locator`。统一缓存服务会在需要读取、预览或传递时把它转换成内部 `ResourceRef` 并按 documents 缓存规则物化。
+- documents 缓存路径由统一资源缓存服务管理，形态为 `.neko/.cache/resources/documents/doc_<stableRefHash>/<contentMd5>.<ext>`，按内容 MD5 去重，manifest 可重建。无工作区时使用 extension-private resource cache，但会标记为不可跨项目持久传递。
+- `.neko/.runtime/document-reader` 或 extension `globalStorageUri/runtime/document-reader` 只是文档读取器内部 scratch，用于临时解包/解码。它不是业务缓存目录，不参与 Canvas、Preview、导出、打包或长期引用。
 - 工具引用 JSON 使用 `protocolVersion: 2` 时，durable body 只包含结构化引用；当前 Webview 需要展示的 path/webview URI 放在 `display: { runtimeOnly: true, ... }`。`display` 字段不能被转发为 Canvas 或 Storyboard 图片身份。
-- 粘贴时如果只有路径，Agent 只能把它当作普通本地文件；如果 JSON 引用里带 `resourceRef` 或 `cacheResourceRef`，Agent 可以继续跳转、定位 entry、解释来源，并通过统一内容访问服务重新物化缺失缓存。
+- 粘贴时如果只有路径，Agent 只能把它当作普通本地文件；如果 JSON 引用里带 `resourceRef`，Agent 可以继续跳转、定位 entry、解释来源，并通过统一缓存服务重新物化缺失缓存。
 - 跳转到资产库或文档索引页应使用 `navigationData` 中的 `source/filePath/entryPath`，由 Extension Host 或对应资源库命令解析；不要尝试让 Webview 直接打开容器内虚拟文件。
 
 重新打包不做原地修改。后续写回或替换容器内图片时，应生成带版本的新导出文件，例如 `comic.v2.epub` 或工作区管理的导出副本，再把引用切换到新 `DocumentSourceRef` / `entryPath`。`versionPolicy: "versioned-export"` 表示当前引用遵循这种版本化导出策略；旧缓存路径只作为本次读取的实体副本或迁移线索，不作为长期数据源。
@@ -92,7 +92,7 @@ await readDocument({
   file_path: '/path/to/book.epub',
   mode: 'range',
   range: { locator: { kind: 'chapter', chapterHref: 'chapter-1.xhtml', spineIndex: 0 } },
-  image_path_limit: 10,
+  max_images: 10,
 });
 
 await readDocument({ file_path: '/path/to/book.epub', mode: 'next', cursor });
@@ -114,7 +114,7 @@ NekoAgent 只处理 DRM-free 内容：
 - 超大文件可能带来性能压力，优先用 manifest/range 分段读取。
 - 复杂 PDF 版式可能只得到文本层结果；扫描版 PDF 没有 OCR 文本时暂不能提取正文。
 - 密码保护文件不支持。
-- 文档读取器默认图片缓存必须使用受管目录：工作区内位于 `.neko/.cache/resources/document-runtime`；无工作区时仅可使用扩展私有 `globalStorageUri/resources/document-runtime`。项目绑定的跨包预览应物化到 `.neko/.cache/resources`，并通过 `resourceRef` / `documentResourceRef` 传递。
+- 文档图片公开读取结果只暴露结构化 `resourceRef` 和语义元数据。缓存物化、去重和重建由统一 documents resource cache 完成；内部 scratch 目录可以被删除并重建，不作为功能合约。
 
 ## 开发者实现说明
 

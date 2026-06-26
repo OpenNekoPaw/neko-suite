@@ -3,7 +3,7 @@ import type {
   EntityAssetRequirement,
   RepresentationKind,
   VisualIdentityDraft,
-  WebviewGeneratedAsset,
+  RenderableGeneratedAsset,
 } from '@neko/shared';
 import type { AgentWorkflowIdentity } from './workflow';
 export type AgentWorkItemTaskStatus =
@@ -39,12 +39,11 @@ export interface AgentBackgroundTask {
   updatedAt: string;
   result?: {
     urls: string[];
-    localPaths?: string[];
     thumbnailUrl?: string;
     width?: number;
     height?: number;
     duration?: number;
-    assets?: WebviewGeneratedAsset[];
+    assets?: RenderableGeneratedAsset[];
     creativeEntity?: AgentMediaTaskCreativeEntityContext;
   };
   error?: string;

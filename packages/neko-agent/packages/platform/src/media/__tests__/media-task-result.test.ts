@@ -28,6 +28,7 @@ describe('media-task-result', () => {
 
     expect(result.resultUrls).toEqual(['https://example.com/image.png']);
     expect(result.thumbnailUrl).toBe('https://example.com/image.png');
+    expect(result.hostOutputPaths).toEqual([]);
     expect(result.generatedAssets).toEqual([]);
   });
 
@@ -47,12 +48,13 @@ describe('media-task-result', () => {
     expect(saveOutputs).toHaveBeenCalledWith('task-1', '/repo/.neko/.cache/generated', {
       transcodeFile: undefined,
     });
-    expect(result.resultUrls).toEqual(['/repo/.neko/.cache/generated/image.png']);
-    expect(result.thumbnailUrl).toBe('/repo/.neko/.cache/generated/image.png');
+    expect(result.resultUrls).toEqual(['generated-assets/asset-1.png']);
+    expect(result.thumbnailUrl).toBe('generated-assets/asset-1.png');
+    expect(result.hostOutputPaths).toEqual(['/repo/.neko/.cache/generated/image.png']);
     expect(result.generatedAssets).toHaveLength(1);
     expect(result.generatedAssets[0]?.assetRef).toEqual({
       assetId: 'asset-1',
-      uri: '${WORKSPACE}/.neko/.cache/generated/image.png',
+      uri: 'generated-assets/asset-1.png',
       mimeType: 'image/png',
     });
     expect(assetIndex.add).toHaveBeenCalledWith(
@@ -77,6 +79,7 @@ describe('media-task-result', () => {
     });
 
     expect(result.resultUrls).toEqual(['https://example.com/image.png']);
+    expect(result.hostOutputPaths).toEqual([]);
     expect(result.generatedAssets).toEqual([]);
     expect(warn).toHaveBeenCalled();
   });

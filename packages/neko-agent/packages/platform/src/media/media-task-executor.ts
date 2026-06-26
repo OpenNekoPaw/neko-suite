@@ -33,6 +33,7 @@ import { generateImage, experimental_generateVideo, experimental_generateSpeech 
 import {
   materializeImageRequestFileUris,
   materializeVideoRequestFileUris,
+  type MediaRequestAssetMaterializer,
 } from './media-request-assets';
 import {
   formatMediaGenerationErrorSummary,
@@ -78,6 +79,11 @@ export interface MediaTaskExecutorOptions {
    * Keep scoped to migration rows; unsupported providers fail visibly.
    */
   allowLegacyBridgeProviderTypes?: readonly string[];
+  /**
+   * Host-owned content access adapter for request assets such as source images,
+   * masks, and control images. Platform does not read these files directly.
+   */
+  requestAssetMaterializer?: MediaRequestAssetMaterializer;
 }
 
 /**
@@ -88,6 +94,7 @@ export class MediaTaskExecutor {
   private configManager: ConfigManager;
   private taskManager?: MediaTaskManagerDeps;
   private readonly allowLegacyBridgeProviderTypes: ReadonlySet<string>;
+  private readonly requestAssetMaterializer?: MediaRequestAssetMaterializer;
 
   constructor(
     providerRegistry: ProviderRegistry,
@@ -99,6 +106,7 @@ export class MediaTaskExecutor {
     this.allowLegacyBridgeProviderTypes = new Set(
       options.allowLegacyBridgeProviderTypes ?? AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES,
     );
+    this.requestAssetMaterializer = options.requestAssetMaterializer;
   }
 
   /**
@@ -338,7 +346,10 @@ export class MediaTaskExecutor {
         const imageModel = resolved.image(model.name);
         if (!imageModel) return null;
 
-        const imgReq = await materializeImageRequestFileUris(request as ImageGenerationRequest);
+        const imgReq = await materializeImageRequestFileUris(
+          request as ImageGenerationRequest,
+          this.requestAssetMaterializer,
+        );
         const size =
           imgReq.width && imgReq.height ? (`${imgReq.width}x${imgReq.height}` as const) : undefined;
 
@@ -408,7 +419,10 @@ export class MediaTaskExecutor {
         const videoModel = resolved.video(model.name);
         if (!videoModel) return null;
 
-        const vidReq = await materializeVideoRequestFileUris(request as VideoGenerationRequest);
+        const vidReq = await materializeVideoRequestFileUris(
+          request as VideoGenerationRequest,
+          this.requestAssetMaterializer,
+        );
         const resolution = vidReq.resolution
           ? this.parseResolutionToSize(vidReq.resolution)
           : undefined;

@@ -3,7 +3,6 @@ import {
   createMediaTaskActionCandidate,
   createMediaTaskView,
   createMediaTaskProgressView,
-  filterLocalMediaPaths,
   getMediaTaskConversationId,
   matchesMediaTaskConversation,
   toMediaBackgroundTaskStatus,
@@ -23,12 +22,6 @@ describe('media task view helpers', () => {
     expect(toMediaBackgroundTaskStatus('pending')).toBe('queued');
     expect(toMediaBackgroundTaskStatus('processing')).toBe('processing');
     expect(toMediaBackgroundTaskStatus('completed')).toBe('completed');
-  });
-
-  it('filters local filesystem paths from result urls', () => {
-    expect(
-      filterLocalMediaPaths(['/tmp/a.png', 'https://example.test/a.png', 'C:\\tmp\\b.png']),
-    ).toEqual(['/tmp/a.png', 'C:\\tmp\\b.png']);
   });
 
   it('reads conversation id from media task metadata', () => {
@@ -81,6 +74,22 @@ describe('media task view helpers', () => {
     });
   });
 
+  it('does not expose managed cache paths as task action result urls', () => {
+    expect(
+      createMediaTaskActionCandidate({
+        id: 'task-1',
+        request: {
+          prompt: 'cat',
+          metadata: { conversationId: 'conv-1' },
+        },
+        outputs: [{ type: 'image', url: '/repo/.neko/.cache/generated/image.png' }],
+      } as any),
+    ).toEqual({
+      id: 'task-1',
+      conversationId: 'conv-1',
+    });
+  });
+
   it('projects media task progress into a background task update view', () => {
     expect(
       createMediaTaskProgressView({
@@ -101,17 +110,15 @@ describe('media task view helpers', () => {
         } as any,
         urls: ['webview://video.mp4'],
         thumbnailUrl: 'webview://thumb.jpg',
-        localPaths: ['/tmp/video.mp4'],
         assets: [
           {
             id: 'asset-1',
             type: 'generated-video',
-            path: '/tmp/video.mp4',
             mimeType: 'video/mp4',
             generatedAt: '2026-01-01T00:00:00.000Z',
             characterIds: ['char_linxia'],
             sourceNodeId: 'node-1',
-            webviewUri: 'webview://video.mp4',
+            renderUri: 'webview://video.mp4',
           } as any,
         ],
         now: () => new Date('2026-01-01T00:00:02.000Z'),
@@ -124,17 +131,15 @@ describe('media task view helpers', () => {
       result: {
         urls: ['webview://video.mp4'],
         thumbnailUrl: 'webview://thumb.jpg',
-        localPaths: ['/tmp/video.mp4'],
         assets: [
           {
             id: 'asset-1',
             type: 'generated-video',
-            path: '/tmp/video.mp4',
             mimeType: 'video/mp4',
             generatedAt: '2026-01-01T00:00:00.000Z',
             characterIds: ['char_linxia'],
             sourceNodeId: 'node-1',
-            webviewUri: 'webview://video.mp4',
+            renderUri: 'webview://video.mp4',
           },
         ],
         creativeEntity: expect.objectContaining({
@@ -218,16 +223,14 @@ describe('media task view helpers', () => {
         {
           urls: ['webview://local-image.png'],
           thumbnailUrl: 'webview://local-image.png',
-          localPaths: ['/tmp/local-image.png'],
           assets: [
             {
               id: 'asset-1',
               type: 'generated-image',
-              path: '/tmp/local-image.png',
               mimeType: 'image/png',
               generatedAt: '2026-01-01T00:00:00.000Z',
               characterIds: ['char_linxia'],
-              webviewUri: 'webview://local-image.png',
+              renderUri: 'webview://local-image.png',
             } as any,
           ],
         },
@@ -237,11 +240,10 @@ describe('media task view helpers', () => {
       result: {
         urls: ['webview://local-image.png'],
         thumbnailUrl: 'webview://local-image.png',
-        localPaths: ['/tmp/local-image.png'],
         assets: [
           {
             id: 'asset-1',
-            webviewUri: 'webview://local-image.png',
+            renderUri: 'webview://local-image.png',
           },
         ],
         creativeEntity: expect.objectContaining({
@@ -263,5 +265,42 @@ describe('media task view helpers', () => {
         }),
       },
     });
+  });
+
+  it('filters managed cache paths from raw outputs and result urls', () => {
+    const view = createMediaTaskView(
+      {
+        id: 'task-1',
+        type: 'text-to-image',
+        status: 'completed',
+        progress: 100,
+        providerId: 'openai',
+        modelId: 'gpt-image-1',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:01.000Z'),
+        request: { prompt: 'cat' },
+        outputs: [{ type: 'image', url: '/repo/.neko/.cache/generated/image.png' }],
+      } as any,
+      {
+        urls: ['/repo/.neko/.cache/generated/image.png'],
+        thumbnailUrl: '/repo/.neko/.cache/generated/image.png',
+        assets: [
+          {
+            id: 'asset-1',
+            type: 'generated-image',
+            mimeType: 'image/png',
+            generatedAt: '2026-01-01T00:00:00.000Z',
+            renderUri: 'webview://local-image.png',
+          } as any,
+        ],
+      },
+    );
+
+    expect(view.outputs).toBeUndefined();
+    expect(view.result).toMatchObject({
+      urls: [],
+      assets: [{ id: 'asset-1', renderUri: 'webview://local-image.png' }],
+    });
+    expect(JSON.stringify(view)).not.toContain('.neko/.cache');
   });
 });

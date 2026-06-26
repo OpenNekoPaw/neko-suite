@@ -1,5 +1,7 @@
+import { isPublicGeneratedAssetResultUri } from '@neko/shared';
 import type {
   AgentBackgroundTask,
+  AgentMediaTaskResult,
   AgentMediaTaskView,
   AgentWorkItem,
   AgentWorkItemBase,
@@ -42,6 +44,8 @@ export function backgroundTaskToWorkItem(
   links: Partial<Pick<AgentWorkItemBase, 'parentMessageId' | 'parentToolCallId'>> = {},
   workflow?: AgentWorkflowIdentity,
 ): TaskWorkItem {
+  const result = sanitizeAgentMediaTaskResult(task.result);
+  const { result: _discardedResult, ...taskWithoutResult } = task;
   return {
     id: task.id,
     conversationId,
@@ -55,11 +59,11 @@ export function backgroundTaskToWorkItem(
     progress: task.progress,
     steps: task.steps,
     currentStepId: task.currentStepId,
-    result: task.result,
+    ...(result ? { result } : {}),
     error: task.error,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
-    task,
+    task: result ? { ...taskWithoutResult, result } : taskWithoutResult,
   };
 }
 
@@ -85,7 +89,7 @@ export function projectMediaTaskToBackgroundTask(task: AgentMediaTaskView): Agen
           duration: firstOutput.duration,
         }
       : undefined;
-  const result = task.result ?? outputResult;
+  const result = sanitizeAgentMediaTaskResult(task.result ?? outputResult);
 
   const promptText = task.request.prompt;
   const name = promptText.length > 50 ? `${promptText.slice(0, 47)}...` : promptText;
@@ -101,7 +105,7 @@ export function projectMediaTaskToBackgroundTask(task: AgentMediaTaskView): Agen
     progress: task.progress,
     createdAt: toDateString(task.createdAt),
     updatedAt: toDateString(task.updatedAt),
-    result,
+    ...(result ? { result } : {}),
     error: task.error?.message,
   };
 }
@@ -301,4 +305,59 @@ function toSubAgentProgress(eventType: string, progressText: string | undefined)
 function toDateString(value: string | Date): string {
   if (typeof value === 'string') return value;
   return value.toISOString();
+}
+
+function sanitizeAgentMediaTaskResult(
+  result: AgentBackgroundTask['result'] | undefined,
+): AgentMediaTaskResult | undefined {
+  if (!result) return undefined;
+
+  const urls = result.urls.filter(
+    (url) => typeof url === 'string' && isPublicGeneratedAssetResultUri(url),
+  );
+  const thumbnailUrl =
+    result.thumbnailUrl && isPublicGeneratedAssetResultUri(result.thumbnailUrl)
+      ? result.thumbnailUrl
+      : undefined;
+  const assets =
+    result.assets?.map((asset) => {
+      if (!('path' in asset)) return stripNestedRenderableAssetPaths(asset);
+      const { path: _path, ...assetWithoutPath } = asset as typeof asset & {
+        readonly path?: unknown;
+      };
+      return stripNestedRenderableAssetPaths(assetWithoutPath);
+    }) ?? [];
+
+  if (urls.length === 0 && !thumbnailUrl && assets.length === 0 && !result.creativeEntity) {
+    return undefined;
+  }
+
+  return {
+    urls,
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
+    ...(result.width !== undefined ? { width: result.width } : {}),
+    ...(result.height !== undefined ? { height: result.height } : {}),
+    ...(result.duration !== undefined ? { duration: result.duration } : {}),
+    ...(assets.length > 0 ? { assets } : {}),
+    ...(result.creativeEntity ? { creativeEntity: result.creativeEntity } : {}),
+  };
+}
+
+function stripNestedRenderableAssetPaths(
+  asset: NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number],
+): NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number] {
+  if (asset.type !== 'generated-storyboard') return asset;
+  return {
+    ...asset,
+    scenes: asset.scenes.map((scene) => ({
+      ...scene,
+      shots: scene.shots.map((shot) => {
+        if (!('path' in shot)) return shot;
+        const { path: _path, ...shotWithoutPath } = shot as typeof shot & {
+          readonly path?: unknown;
+        };
+        return shotWithoutPath;
+      }),
+    })),
+  };
 }

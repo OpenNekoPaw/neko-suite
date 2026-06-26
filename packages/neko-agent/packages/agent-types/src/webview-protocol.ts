@@ -1958,7 +1958,23 @@ function parseOptionalPluginTransferProvenance(
 
 function parseJsonMetadataRecord(value: unknown): Record<string, unknown> | null {
   if (!isRecord(value)) return null;
-  return value;
+  const metadata: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (key === 'documentResourceRef') {
+      const resourceRef = parseDocumentArchiveResourceRef(item);
+      if (!resourceRef) return null;
+      metadata[key] = resourceRef;
+      continue;
+    }
+    if (isRecord(item)) {
+      const parsed = parseJsonMetadataRecord(item);
+      if (parsed === null) return null;
+      metadata[key] = parsed;
+      continue;
+    }
+    metadata[key] = item;
+  }
+  return metadata;
 }
 
 function parseOptionalPluginTransferContentFormat(

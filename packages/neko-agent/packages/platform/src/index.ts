@@ -284,6 +284,7 @@ export {
   detectMediaExtension,
   type DownloadMediaOptions,
 } from './media/media-file-downloader';
+export type { MediaRequestAssetMaterializer } from './media/media-request-assets';
 export {
   createMediaTaskActionCandidate,
   createMediaTaskView,
@@ -323,8 +324,6 @@ export {
 export {
   GeneratedAssetIndex,
   generateAssetId,
-  resolveAssetSubDir,
-  resolveGeneratedDir,
   type AssetFilter,
 } from './media/generated-asset-index';
 export type {
@@ -380,6 +379,7 @@ import { PromptManager } from './service/prompt-manager';
 import { MediaGenerationService } from './media/media-generation-service';
 import { createMediaPlatform } from './media';
 import { registerMediaAgentTools } from './media/media-agent-tools';
+import type { MediaRequestAssetMaterializer } from './media/media-request-assets';
 import { SkillMarketService, type SkillMarketServiceOptions } from './market';
 import { getLogger } from './utils/logger';
 
@@ -420,6 +420,11 @@ export interface PlatformOptions {
    * skill rescanning; platform owns marketplace business rules.
    */
   skillMarket?: SkillMarketServiceOptions;
+  /**
+   * Host-owned content access adapter for media request assets.
+   * Platform must not read local binary files directly.
+   */
+  requestAssetMaterializer?: MediaRequestAssetMaterializer;
 }
 
 /**
@@ -477,6 +482,7 @@ export function createPlatform(options: PlatformOptions): Platform {
       configManager,
       providerRegistry,
       taskManager: mediaTaskManager,
+      requestAssetMaterializer: options.requestAssetMaterializer,
     });
 
     mediaGenerationService = mediaPlatform.service;
