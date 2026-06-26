@@ -262,6 +262,35 @@ describe('PermissionHooks', () => {
       expect(onToolAllowed).toHaveBeenCalledWith(toolCall, expect.any(String));
     });
 
+    it('auto-allows read-only tools in ask mode without requesting confirmation', async () => {
+      const onConfirmTool = vi.fn();
+      const onToolAllowed = vi.fn();
+      const hooks = new PermissionHooks({
+        config: makeConfig({ mode: 'ask', rules: {} }),
+        onConfirmTool,
+        onToolAllowed,
+      });
+
+      const readOnlyCalls = [
+        makeToolCall('Read', { file_path: '/tmp/test.txt' }, 'call_read'),
+        makeToolCall('ReadDocument', { file_path: '/tmp/book.epub' }, 'call_doc'),
+        makeToolCall('ReadImage', { image_paths: ['/tmp/page.png'] }, 'call_image'),
+        makeToolCall(
+          'ReadDocumentImage',
+          { file_path: '/tmp/book.epub', page: 1 },
+          'call_doc_image',
+        ),
+        makeToolCall('Grep', { pattern: 'needle' }, 'call_grep'),
+      ];
+
+      for (const toolCall of readOnlyCalls) {
+        await expect(hooks.onToolCall(toolCall, vi.fn())).resolves.toBeNull();
+      }
+
+      expect(onConfirmTool).not.toHaveBeenCalled();
+      expect(onToolAllowed).toHaveBeenCalledTimes(readOnlyCalls.length);
+    });
+
     it('allows read-only tools in plan mode', async () => {
       const hooks = new PermissionHooks({
         config: makeConfig({ mode: 'plan', rules: {} }),
@@ -318,6 +347,67 @@ describe('PermissionHooks', () => {
         }),
       );
       expect(result).toBeNull();
+    });
+
+    it('continues to ask for write, shell, and generation tools in ask mode', async () => {
+      const onConfirmTool = vi.fn().mockResolvedValue({
+        confirmationToken: 'token_1',
+        approved: true,
+      });
+      const hooks = new PermissionHooks({
+        config: makeConfig({ mode: 'ask', rules: {} }),
+        onConfirmTool,
+      });
+
+      const gatedCalls = [
+        makeToolCall('Write', { file_path: '/tmp/output.txt' }, 'call_write'),
+        makeToolCall('Bash', { command: 'ls' }, 'call_bash'),
+        makeToolCall('GenerateImage', { prompt: 'rain' }, 'call_generate'),
+      ];
+
+      for (const toolCall of gatedCalls) {
+        await expect(hooks.onToolCall(toolCall, vi.fn())).resolves.toBeNull();
+      }
+
+      expect(onConfirmTool).toHaveBeenCalledTimes(gatedCalls.length);
+    });
+
+    it('lets explicit ask rules override read-only auto-allow in ask mode', async () => {
+      const onConfirmTool = vi.fn().mockResolvedValue({
+        confirmationToken: 'token_1',
+        approved: true,
+      });
+      const hooks = new PermissionHooks({
+        config: makeConfig({ mode: 'ask', rules: { ask: ['ReadDocument'] } }),
+        onConfirmTool,
+      });
+
+      const toolCall = makeToolCall('ReadDocument', { file_path: '/tmp/book.epub' });
+
+      await expect(hooks.onToolCall(toolCall, vi.fn())).resolves.toBeNull();
+
+      expect(onConfirmTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolCall,
+          action: 'Execute ReadDocument',
+        }),
+      );
+    });
+
+    it('lets explicit deny rules block read-only tools in ask mode', async () => {
+      const onConfirmTool = vi.fn();
+      const hooks = new PermissionHooks({
+        config: makeConfig({ mode: 'ask', rules: { deny: ['ReadDocument'] } }),
+        onConfirmTool,
+      });
+
+      const toolCall = makeToolCall('ReadDocument', { file_path: '/tmp/book.epub' });
+      const result = await hooks.onToolCall(toolCall, vi.fn());
+
+      expect(result).not.toBeNull();
+      expect(result?.success).toBe(false);
+      expect(result?.error).toContain('denied');
+      expect(onConfirmTool).not.toHaveBeenCalled();
     });
 
     it('returns error result when user denies via callback', async () => {
@@ -584,7 +674,7 @@ describe('PermissionHooks', () => {
         config: makeConfig({ mode: 'ask', rules: {} }),
       });
 
-      const toolCall = makeToolCall('Read', { path: 'README.md' });
+      const toolCall = makeToolCall('Write', { path: 'draft.md' });
       const execute = vi.fn();
 
       const resultPromise = hooks.onToolCall(toolCall, execute);
@@ -597,7 +687,7 @@ describe('PermissionHooks', () => {
       await resultPromise;
 
       const rules = hooks.getRules();
-      expect(rules.allow).toContain('Read(README.md)');
+      expect(rules.allow).toContain('Write(draft.md)');
     });
 
     it('does not add allow rule when denied with allowAlways', async () => {
@@ -791,7 +881,7 @@ describe('PermissionHooks', () => {
     it('generates correct description for Read tool', async () => {
       const onToolAskStarted = vi.fn();
       const hooks = new PermissionHooks({
-        config: makeConfig({ mode: 'ask', rules: {} }),
+        config: makeConfig({ mode: 'ask', rules: { ask: ['Read'] } }),
         onToolAskStarted,
       });
 
@@ -869,7 +959,7 @@ describe('PermissionHooks', () => {
     it('generates correct description for WebFetch tool', async () => {
       const onToolAskStarted = vi.fn();
       const hooks = new PermissionHooks({
-        config: makeConfig({ mode: 'ask', rules: {} }),
+        config: makeConfig({ mode: 'ask', rules: { ask: ['WebFetch'] } }),
         onToolAskStarted,
       });
 

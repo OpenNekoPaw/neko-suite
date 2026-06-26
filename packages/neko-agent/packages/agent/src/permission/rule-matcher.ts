@@ -196,7 +196,15 @@ export class PermissionRuleMatcher {
       };
     }
 
-    // Step 5: Apply mode-based default
+    // Step 5: Apply mode-based defaults
+    if (mode === 'ask' && isReadOnlyTool(toolCall, readOnlyTools, readOnlyMcpPrefixes)) {
+      return {
+        decision: 'allow',
+        reason: `Ask mode: read-only tool '${normalizedTool}' auto-allowed`,
+        toolCall,
+      };
+    }
+
     if (mode === 'auto') {
       // Creative conditional auto: use traits when available
       if (this.traitsRegistry) {
@@ -227,7 +235,7 @@ export class PermissionRuleMatcher {
       };
     }
 
-    // Default: ask mode requires confirmation for everything not explicitly allowed
+    // Default: ask mode requires confirmation for non-read-only tools not explicitly allowed
     return {
       decision: 'ask',
       reason: `Ask mode: tool '${normalizedTool}' requires confirmation`,
