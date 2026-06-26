@@ -251,6 +251,96 @@ describe('projectRouteStoryboardMatrix', () => {
     });
   });
 
+  it('projects safe thumbnails from playback metadata and source nodes', () => {
+    const canvas = storyboardCanvas([
+      scene('scene-a', ['shot-a', 'shot-b', 'shot-c', 'media-d']),
+      shot('shot-a', 1, 'scene-a'),
+      shot('shot-b', 2, 'scene-a', {
+        generatedImage: 'data:image/png;base64,node-generated',
+      }),
+      shot('shot-c', 3, 'scene-a', {
+        thumbnailData: 'bm9kZS10aHVtYg==',
+      }),
+      media('media-d', 'scene-a', {
+        thumbnailPath: 'assets/thumbs/media-d.png',
+        runtimeThumbnailPath:
+          'https://file+.vscode-resource.vscode-cdn.net/workspace/thumbs/media-d.png',
+      }),
+    ]);
+    const plan = playbackPlan({
+      units: [
+        unit('unit-a', {
+          sourceNodeId: 'shot-a',
+          label: 'Metadata preview',
+          metadata: {
+            previewUrl: 'data:image/png;base64,metadata-preview',
+          },
+        }),
+        unit('unit-b', { sourceNodeId: 'shot-b', label: 'Generated image' }),
+        unit('unit-c', { sourceNodeId: 'shot-c', label: 'Document cover' }),
+        unit('unit-d', {
+          sourceNodeId: 'media-d',
+          label: 'Media poster',
+          kind: 'media',
+          metadata: {
+            previewUrl: 'assets/unresolved-preview.png',
+            sourceRange: { startMs: 12_000, endMs: 18_000 },
+          },
+        }),
+      ],
+      routeCandidates: [route('entry:shot-a', ['unit-a', 'unit-b', 'unit-c', 'unit-d'])],
+    });
+
+    const matrix = projectRouteStoryboardMatrix({ plan, canvas });
+    const thumbnails = (matrix.rows[0]?.cells ?? []).map((cell) =>
+      cell.kind === 'playable' ? cell.thumbnail : undefined,
+    );
+
+    expect(thumbnails).toEqual([
+      { src: 'data:image/png;base64,metadata-preview', alt: 'Metadata preview' },
+      { src: 'data:image/png;base64,node-generated', alt: 'Generated image' },
+      { src: 'data:image/png;base64,bm9kZS10aHVtYg==', alt: 'Document cover' },
+      {
+        src: 'https://file+.vscode-resource.vscode-cdn.net/workspace/thumbs/media-d.png',
+        alt: 'Media poster',
+      },
+    ]);
+    expect(matrix.rows[0]?.cells[3]).toMatchObject({
+      kind: 'playable',
+      sourceRange: { startMs: 12_000, endMs: 18_000, durationMs: 6_000 },
+    });
+  });
+
+  it('does not expose unresolved relative thumbnail paths to matrix image cells', () => {
+    const canvas = storyboardCanvas([
+      scene('scene-a', ['media-a']),
+      media('media-a', 'scene-a', {
+        thumbnailPath: 'assets/thumbs/media-a.png',
+        runtimeThumbnailPath: 'vscode-webview-resource://panel/media-a.mp4',
+      }),
+    ]);
+    const plan = playbackPlan({
+      units: [
+        unit('unit-a', {
+          sourceNodeId: 'media-a',
+          label: 'Relative media',
+          kind: 'media',
+          metadata: {
+            previewUrl: 'assets/unresolved-preview.png',
+            posterUrl: 'https://example.test/clip.mp4',
+          },
+        }),
+      ],
+      routeCandidates: [route('entry:media-a', ['unit-a'])],
+    });
+
+    const matrix = projectRouteStoryboardMatrix({ plan, canvas });
+    const cell = matrix.rows[0]?.cells[0];
+
+    expect(cell).toMatchObject({ kind: 'playable', mediaState: 'playable' });
+    expect(cell?.kind === 'playable' ? cell.thumbnail : undefined).toBeUndefined();
+  });
+
   it('highlights unit-property filters without hiding alignment slots', () => {
     const plan = playbackPlan({
       units: [
@@ -343,7 +433,12 @@ function scene(id: string, childIds: readonly string[]): CanvasNode {
   };
 }
 
-function shot(id: string, shotNumber: number, parentId: string): CanvasNode {
+function shot(
+  id: string,
+  shotNumber: number,
+  parentId: string,
+  dataOverrides: Readonly<Record<string, unknown>> = {},
+): CanvasNode {
   return {
     id,
     type: 'shot',
@@ -362,6 +457,27 @@ function shot(id: string, shotNumber: number, parentId: string): CanvasNode {
       sceneTags: [],
       generationStatus: 'idle',
       generationHistory: [],
+      ...dataOverrides,
+    },
+  };
+}
+
+function media(
+  id: string,
+  parentId: string,
+  dataOverrides: Readonly<Record<string, unknown>> = {},
+): CanvasNode {
+  return {
+    id,
+    type: 'media',
+    parentId,
+    position: { x: 0, y: 0 },
+    size: { width: 200, height: 120 },
+    zIndex: 0,
+    data: {
+      assetPath: '',
+      mediaType: 'video',
+      ...dataOverrides,
     },
   };
 }

@@ -22,6 +22,10 @@ export interface InlineAudioPlayerProps {
   onSeek: (time: number) => void;
   onTimeUpdate?: (currentTime: number) => void;
   onStop: (currentTime: number) => void;
+  playbackState?: 'playing' | 'paused';
+  playbackRequestId?: string;
+  playbackStartTime?: number;
+  onEnded?: (currentTime: number) => void;
 }
 
 export function InlineAudioPlayer({
@@ -33,6 +37,10 @@ export function InlineAudioPlayer({
   onSeek,
   onTimeUpdate,
   onStop,
+  playbackState,
+  playbackRequestId,
+  playbackStartTime,
+  onEnded,
 }: InlineAudioPlayerProps) {
   const audioClientRef = useRef<EngineAvAudioStreamClient | null>(null);
   const lifecycleRef = useRef<EngineAvStreamLifecycle | null>(null);
@@ -41,6 +49,10 @@ export function InlineAudioPlayer({
   const playWallTimeRef = useRef(0);
   const clockSourceRef = useRef<'wall' | 'audio'>('wall');
   const currentTimeRef = useRef(startTime);
+  const handledPlaybackRequestRef = useRef<string | undefined>();
+  const handledPlaybackStateRef = useRef<'playing' | 'paused' | undefined>();
+  const completedRef = useRef(false);
+  const completePlaybackRef = useRef<(() => void) | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(startTime);
@@ -52,6 +64,9 @@ export function InlineAudioPlayer({
       callbacks: {
         onClientsChanged: ({ audioClient }) => {
           audioClientRef.current = audioClient;
+        },
+        onStreamEnd: () => {
+          completePlaybackRef.current?.();
         },
       },
     });
@@ -65,7 +80,25 @@ export function InlineAudioPlayer({
   // Playback loop
   // =========================================================================
 
+  const completePlayback = useCallback(() => {
+    if (completedRef.current) return;
+    completedRef.current = true;
+    const endedAt = duration;
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = 0;
+    }
+    setIsPlaying(false);
+    setCurrentTime(endedAt);
+    currentTimeRef.current = endedAt;
+    onStop(endedAt);
+    onEnded?.(endedAt);
+  }, [duration, onEnded, onStop]);
+  completePlaybackRef.current = completePlayback;
+
   const updatePlaybackTime = useCallback(() => {
+    if (completedRef.current) return;
+
     const audioClient = audioClientRef.current;
 
     let newTime: number;
@@ -80,16 +113,14 @@ export function InlineAudioPlayer({
     }
 
     if (newTime >= duration) {
-      setIsPlaying(false);
-      setCurrentTime(duration);
-      onStop(duration);
+      completePlayback();
       return;
     }
 
     setCurrentTime(newTime);
     onTimeUpdate?.(newTime);
     animFrameRef.current = requestAnimationFrame(updatePlaybackTime);
-  }, [duration, onStop, onTimeUpdate]);
+  }, [completePlayback, duration, onTimeUpdate]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -120,6 +151,7 @@ export function InlineAudioPlayer({
     playStartTimeRef.current = startTime;
     playWallTimeRef.current = performance.now();
     clockSourceRef.current = 'wall';
+    completedRef.current = false;
 
     return () => {
       audioClientRef.current?.setVolume(0);
@@ -140,6 +172,7 @@ export function InlineAudioPlayer({
         audioClientRef.current?.pause();
         onPause(currentTimeRef.current);
       } else {
+        completedRef.current = false;
         setIsPlaying(true);
         audioClientRef.current?.resume();
         playStartTimeRef.current = currentTimeRef.current;
@@ -153,6 +186,7 @@ export function InlineAudioPlayer({
 
   const handleSeekCommit = useCallback(
     (time: number) => {
+      completedRef.current = false;
       setCurrentTime(time);
       currentTimeRef.current = time;
       onTimeUpdate?.(time);
@@ -164,6 +198,52 @@ export function InlineAudioPlayer({
     },
     [onSeek, onTimeUpdate],
   );
+
+  const applyControlledPlaybackState = useCallback(
+    (nextState: 'playing' | 'paused') => {
+      if (nextState === 'paused') {
+        if (!isPlaying) return;
+        setIsPlaying(false);
+        audioClientRef.current?.pause();
+        onPause(currentTimeRef.current);
+        return;
+      }
+      if (isPlaying) return;
+      completedRef.current = false;
+      setIsPlaying(true);
+      audioClientRef.current?.resume();
+      playStartTimeRef.current = currentTimeRef.current;
+      playWallTimeRef.current = performance.now();
+      clockSourceRef.current = 'wall';
+      onResume();
+    },
+    [isPlaying, onPause, onResume],
+  );
+
+  useEffect(() => {
+    const requestChanged =
+      playbackRequestId !== undefined && handledPlaybackRequestRef.current !== playbackRequestId;
+    const stateChanged =
+      playbackState !== undefined && handledPlaybackStateRef.current !== playbackState;
+    if (!requestChanged && !stateChanged) return;
+
+    if (requestChanged) {
+      handledPlaybackRequestRef.current = playbackRequestId;
+    }
+    if (requestChanged && playbackStartTime !== undefined) {
+      handleSeekCommit(playbackStartTime);
+    }
+    const nextState = playbackState ?? (requestChanged ? 'playing' : undefined);
+    if (!nextState) return;
+    handledPlaybackStateRef.current = nextState;
+    applyControlledPlaybackState(nextState);
+  }, [
+    applyControlledPlaybackState,
+    handleSeekCommit,
+    playbackRequestId,
+    playbackStartTime,
+    playbackState,
+  ]);
 
   const handleSeeking = useCallback((time: number) => {
     setCurrentTime(time);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createCanvasPlaybackPlan,
   resolveEffectiveCanvasPlaybackRoutes,
@@ -19,8 +19,17 @@ import { useCanvasStore } from '../../stores/canvasStore';
 import { usePlaybackStore } from '../../stores/playbackStore';
 import { useRuntimeViewportStore } from '../../stores/runtimeViewportStore';
 import { PreviewSurface } from '../../preview/PreviewRendererRegistry';
-import type { PreviewSourceDescriptor } from '../../preview/types';
-import { CanvasPlaybackController } from './CanvasPlaybackController';
+import type {
+  PreviewPlaybackControl,
+  PreviewPlaybackEndedEvent,
+  PreviewPlaybackProgressEvent,
+  PreviewSourceDescriptor,
+} from '../../preview/types';
+import {
+  CanvasPlaybackController,
+  type CanvasPlaybackRequest,
+  type PlaybackCompletionSignal,
+} from './CanvasPlaybackController';
 import { getGlobalVSCodeApi } from '../../utils/vscode';
 import { RouteStoryboardMatrix } from './RouteStoryboardMatrixView';
 import {
@@ -78,6 +87,10 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
     readonly error?: string;
   }>({ plan: null, stale: false });
   const [matrixRuntimeDiagnostics, setMatrixRuntimeDiagnostics] = useState<readonly string[]>([]);
+  const [playbackRequest, setPlaybackRequest] = useState<CanvasPlaybackRequest | undefined>();
+  const [playbackCompletionSignal, setPlaybackCompletionSignal] = useState<
+    PlaybackCompletionSignal | undefined
+  >();
   const plan = hostPlanState.plan ?? localPlan;
   const routeResolution = useMemo(
     () => (plan ? resolveEffectiveCanvasPlaybackRoutes(plan) : null),
@@ -345,10 +358,14 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
   const selectPlaybackTime = (targetMs: number) => {
     const segment = resolveRouteTimeSegment(routeTimeSegments, targetMs);
     if (!segment) return;
-    selectPlaybackUnit(
-      segment.unit.id,
-      clampNumber(targetMs - segment.startMs, 0, segment.durationMs),
-    );
+    const unitPlayheadMs = clampNumber(targetMs - segment.startMs, 0, segment.durationMs);
+    selectPlaybackUnit(segment.unit.id, unitPlayheadMs);
+    setPlaybackRequest((prev) => ({
+      unitId: segment.unit.id,
+      startTimeMs: unitPlayheadMs,
+      state: session.playbackState === 'playing' ? 'playing' : 'paused',
+      requestId: `route-seek-${Date.now()}-${prev?.requestId ?? 'initial'}`,
+    }));
   };
   const selectMatrixRow = (row: RouteStoryboardMatrixRow) => {
     setRoute(row.routeId, row.unitIds[0]);
@@ -402,6 +419,41 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
       sourceRevision: readFiniteNumber(plan.metadata['sourceRevision']),
     });
   };
+  const handlePreviewPlaybackTimeUpdate = useCallback(
+    (event: PreviewPlaybackProgressEvent) => {
+      const unitId = readPlaybackSourceUnitId(event.sourceId);
+      if (!unitId || unitId !== (currentUnit?.id ?? session.currentUnitId)) return;
+      setCurrentUnit(unitId, Math.round(event.currentTime * 1000));
+    },
+    [currentUnit?.id, session.currentUnitId, setCurrentUnit],
+  );
+  const handlePreviewPlaybackEnded = useCallback(
+    (event: PreviewPlaybackEndedEvent) => {
+      const unitId = readPlaybackSourceUnitId(event.sourceId);
+      if (!unitId || unitId !== (currentUnit?.id ?? session.currentUnitId)) return;
+      setCurrentUnit(unitId, Math.round(event.duration * 1000));
+      setPlaybackCompletionSignal((previous) => ({
+        unitId,
+        nonce: (previous?.nonce ?? 0) + 1,
+      }));
+    },
+    [currentUnit?.id, session.currentUnitId, setCurrentUnit],
+  );
+  const previewPlaybackControl = useMemo<PreviewPlaybackControl | undefined>(() => {
+    if (!currentUnit || playbackRequest?.unitId !== currentUnit.id) return undefined;
+    return {
+      requestId: playbackRequest.requestId,
+      state: playbackRequest.state,
+      startTimeSeconds: playbackRequest.startTimeMs / 1000,
+      onTimeUpdate: handlePreviewPlaybackTimeUpdate,
+      onEnded: handlePreviewPlaybackEnded,
+    };
+  }, [
+    currentUnit?.id,
+    handlePreviewPlaybackEnded,
+    handlePreviewPlaybackTimeUpdate,
+    playbackRequest,
+  ]);
 
   return (
     <section
@@ -468,6 +520,7 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
               playheadMs={session.playheadMs}
               diagnostics={routeResolution?.diagnostics ?? []}
               previewError={hostPlanState.error}
+              playbackControl={previewPlaybackControl}
             />
             <CanvasPlaybackController
               plan={plan}
@@ -476,11 +529,23 @@ export function PlaybackWorkspace({ canvasPane, className }: PlaybackWorkspacePr
               isPlaying={session.playbackState === 'playing'}
               currentTimeMs={absoluteRoutePlayheadMs}
               durationMs={routeDurationMs}
+              playbackCompletionSignal={playbackCompletionSignal}
               onActiveUnitChange={(unitId) => {
                 selectPlaybackUnit(unitId, 0);
               }}
-              onPlayingChange={(playing) => setPlaybackState(playing ? 'playing' : 'paused')}
+              onPlayingChange={(playing) => {
+                setPlaybackState(playing ? 'playing' : 'paused');
+                if (!playing && currentUnit) {
+                  setPlaybackRequest((previous) => ({
+                    unitId: currentUnit.id,
+                    startTimeMs: session.playheadMs,
+                    state: 'paused',
+                    requestId: `route-pause-${Date.now()}-${previous?.requestId ?? 'initial'}`,
+                  }));
+                }
+              }}
               onSeek={selectPlaybackTime}
+              onPlaybackRequest={setPlaybackRequest}
             />
           </div>
         ) : null}
@@ -548,12 +613,14 @@ function PlaybackStage({
   playheadMs,
   diagnostics,
   previewError,
+  playbackControl,
 }: {
   readonly plan: CanvasPlaybackPlan | null;
   readonly unit: CanvasPlaybackUnit | undefined;
   readonly playheadMs: number;
   readonly diagnostics: readonly CanvasPlaybackDiagnostic[];
   readonly previewError?: string;
+  readonly playbackControl?: PreviewPlaybackControl;
 }) {
   if (!plan || !unit) {
     return (
@@ -573,7 +640,7 @@ function PlaybackStage({
     >
       <div className="canvas-playback-stage-preview">
         {source ? (
-          <PreviewSurface source={source} surfaceKind="overlay" />
+          <PreviewSurface source={source} surfaceKind="overlay" playbackControl={playbackControl} />
         ) : (
           <PlaybackUnitSummary unit={unit} />
         )}
@@ -977,6 +1044,10 @@ function createPreviewSourceForUnit(unit: CanvasPlaybackUnit): PreviewSourceDesc
       ...(documentResourceRef ? { documentResourceRef } : {}),
     },
   };
+}
+
+function readPlaybackSourceUnitId(sourceId: string): string | undefined {
+  return sourceId.startsWith('playback:') ? sourceId.slice('playback:'.length) : undefined;
 }
 
 function previewRoleForUnit(

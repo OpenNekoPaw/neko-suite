@@ -165,6 +165,54 @@ describe('CanvasPlaybackController', () => {
     vi.useRealTimers();
   });
 
+  it('keeps media sequence playback active until media completion advances the route', () => {
+    const requests: unknown[] = [];
+    const plan = mediaSequencePlan();
+
+    act(() => {
+      root.render(
+        <CanvasPlaybackController
+          plan={plan}
+          routeUnitIds={['media-a', 'media-b']}
+          activeUnitId="media-a"
+          isPlaying={false}
+          onPlaybackRequest={(request) => requests.push(request)}
+        />,
+      );
+    });
+
+    const playButton = host.querySelector<HTMLButtonElement>('button[title="Play"]');
+    act(() => {
+      playButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(requests).toEqual([
+      expect.objectContaining({
+        unitId: 'media-a',
+        startTimeMs: 0,
+        state: 'playing',
+      }),
+    ]);
+
+    act(() => {
+      root.render(
+        <CanvasPlaybackController
+          plan={plan}
+          routeUnitIds={['media-a', 'media-b']}
+          activeUnitId="media-a"
+          isPlaying
+          playbackCompletionSignal={{ unitId: 'media-a', nonce: 1 }}
+          onPlaybackRequest={(request) => requests.push(request)}
+        />,
+      );
+    });
+
+    expect(requests).toEqual([
+      expect.objectContaining({ unitId: 'media-a', state: 'playing' }),
+      expect.objectContaining({ unitId: 'media-b', state: 'playing' }),
+    ]);
+  });
+
   it('starts interactive routes at the entry unit instead of precomputing a default branch', () => {
     expect(
       buildInitialPlaybackRoute({
@@ -264,6 +312,55 @@ function durationCanvas(): CanvasData {
   };
   data.connections = [connection('next', 'a', 'b', 'sequence', { priority: 0 })];
   return data;
+}
+
+function mediaSequencePlan() {
+  return {
+    adapterId: 'media-sequence' as const,
+    requestedAdapterId: 'media-sequence' as const,
+    behaviorMode: 'linear' as const,
+    advancePolicy: 'media-ended' as const,
+    entryUnitIds: ['media-a'],
+    units: [
+      {
+        id: 'media-a',
+        sourceNodeId: 'media-a',
+        kind: 'media' as const,
+        renderMode: 'media-playback' as const,
+        assetPath: 'assets/a.mp4',
+        durationMs: 1000,
+      },
+      {
+        id: 'media-b',
+        sourceNodeId: 'media-b',
+        kind: 'media' as const,
+        renderMode: 'media-playback' as const,
+        assetPath: 'assets/b.mp4',
+        durationMs: 1000,
+      },
+    ],
+    transitions: [
+      {
+        id: 'media-a-b',
+        sourceUnitId: 'media-a',
+        targetUnitId: 'media-b',
+        type: 'sequence' as const,
+        priority: 0,
+      },
+    ],
+    routeCandidates: [
+      {
+        id: 'auto-entry:media-a',
+        title: 'Media route',
+        entryUnitId: 'media-a',
+        unitIds: ['media-a', 'media-b'],
+        sourceKind: 'auto-entry' as const,
+        sourceNodeId: 'media-a',
+      },
+    ],
+    diagnostics: [],
+    metadata: {},
+  };
 }
 
 function scene(id: string, childIds: readonly string[]): CanvasNode {

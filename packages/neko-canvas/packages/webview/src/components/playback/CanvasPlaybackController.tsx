@@ -29,10 +29,24 @@ export interface CanvasPlaybackControllerProps {
   readonly isPlaying?: boolean;
   readonly currentTimeMs?: number;
   readonly durationMs?: number;
+  readonly playbackCompletionSignal?: PlaybackCompletionSignal;
   readonly onActiveUnitChange?: (unitId: string | undefined) => void;
   readonly onPlayingChange?: (isPlaying: boolean) => void;
   readonly onSeek?: (playheadMs: number) => void;
   readonly onRouteChange?: (routeUnitIds: readonly string[]) => void;
+  readonly onPlaybackRequest?: (request: CanvasPlaybackRequest) => void;
+}
+
+export interface CanvasPlaybackRequest {
+  readonly unitId: string;
+  readonly requestId: string;
+  readonly startTimeMs: number;
+  readonly state: 'playing' | 'paused';
+}
+
+export interface PlaybackCompletionSignal {
+  readonly unitId: string;
+  readonly nonce: number;
 }
 
 export function CanvasPlaybackController({
@@ -42,10 +56,12 @@ export function CanvasPlaybackController({
   isPlaying: controlledIsPlaying,
   currentTimeMs,
   durationMs,
+  playbackCompletionSignal,
   onActiveUnitChange,
   onPlayingChange,
   onSeek,
   onRouteChange,
+  onPlaybackRequest,
 }: CanvasPlaybackControllerProps = {}) {
   const canvasData = useCanvasStore((state) => state.canvasData);
   const selectedNodeId = useCanvasStore((state) => state.selection.nodeIds[0]);
@@ -53,6 +69,8 @@ export function CanvasPlaybackController({
   const [uncontrolledActiveUnitId, setUncontrolledActiveUnitId] = useState<string | null>(null);
   const [uncontrolledIsPlaying, setUncontrolledIsPlaying] = useState(false);
   const timerRef = useRef<number | null>(null);
+  const playbackRequestCounterRef = useRef(0);
+  const handledCompletionSignalRef = useRef<number | null>(null);
 
   const plan = useMemo(
     () =>
@@ -74,11 +92,13 @@ export function CanvasPlaybackController({
   const onPlayingChangeRef = useRef(onPlayingChange);
   const onSeekRef = useRef(onSeek);
   const onRouteChangeRef = useRef(onRouteChange);
+  const onPlaybackRequestRef = useRef(onPlaybackRequest);
 
   onActiveUnitChangeRef.current = onActiveUnitChange;
   onPlayingChangeRef.current = onPlayingChange;
   onSeekRef.current = onSeek;
   onRouteChangeRef.current = onRouteChange;
+  onPlaybackRequestRef.current = onPlaybackRequest;
 
   useEffect(() => () => clearTimer(), []);
   useEffect(() => {
@@ -90,6 +110,14 @@ export function CanvasPlaybackController({
     onPlayingChangeRef.current?.(false);
     clearTimer();
   }, [planResetKey, selectedNodeId]);
+
+  useEffect(() => {
+    if (!playbackCompletionSignal || !isPlaying || !plan) return;
+    if (handledCompletionSignalRef.current === playbackCompletionSignal.nonce) return;
+    if (playbackCompletionSignal.unitId !== state.currentUnitId) return;
+    handledCompletionSignalRef.current = playbackCompletionSignal.nonce;
+    continueFromUnit(plan, playbackCompletionSignal.unitId, route);
+  }, [isPlaying, plan, playbackCompletionSignal, route, state.currentUnitId]);
 
   if (!plan || plan.units.length === 0 || state.canPlay === false) {
     return null;
@@ -114,6 +142,9 @@ export function CanvasPlaybackController({
     if (!plan) return;
     if (isPlaying) {
       clearTimer();
+      if (state.currentUnitId) {
+        requestUnitPlayback(state.currentUnitId, currentUnitPlaybackOffsetMs(), 'paused');
+      }
       commitPlaying(false);
       return;
     }
@@ -124,9 +155,10 @@ export function CanvasPlaybackController({
     const committedRoute = route.length > 0 ? route : [startUnitId];
     commitRoute(committedRoute);
     moveToUnit(startUnitId);
+    requestUnitPlayback(startUnitId, 0, 'playing');
 
     if (activePlan.advancePolicy !== 'timer') {
-      commitPlaying(false);
+      commitPlaying(activePlan.advancePolicy === 'media-ended');
       return;
     }
 
@@ -142,6 +174,7 @@ export function CanvasPlaybackController({
     if (!nextStep) return;
     commitRoute(nextStep.route);
     moveToUnit(nextStep.unitId);
+    requestUnitPlayback(nextStep.unitId, 0, 'paused');
   }
 
   function handleSeek(timeSeconds: number) {
@@ -155,6 +188,7 @@ export function CanvasPlaybackController({
       appendTargetToRoute(route, state.currentIndex, state.currentUnitId, transition.targetUnitId),
     );
     moveToUnit(transition.targetUnitId);
+    requestUnitPlayback(transition.targetUnitId, 0, 'paused');
   }
 
   function scheduleNextStep(
@@ -184,10 +218,41 @@ export function CanvasPlaybackController({
         commitRoute(nextStep.route);
         commitActiveUnit(unit.id);
         setActivePlayingNode(unit.sourceNodeId);
+        requestUnitPlayback(unit.id, 0, 'playing');
         scheduleNextStep(activePlan, unit.id, nextStep.route);
       },
       resolveUnitDurationMs(activePlan, currentUnitId),
     );
+  }
+
+  function continueFromUnit(
+    activePlan: CanvasPlaybackPlan,
+    currentUnitId: string,
+    currentRoute: readonly string[],
+  ) {
+    clearTimer();
+    const nextStep = resolveNextRouteStep(
+      activePlan,
+      currentRoute,
+      currentRoute.indexOf(currentUnitId),
+      currentUnitId,
+    );
+    if (!nextStep) {
+      commitPlaying(false);
+      return;
+    }
+    const unit = activePlan.units.find((candidate) => candidate.id === nextStep.unitId);
+    if (!unit) {
+      commitPlaying(false);
+      return;
+    }
+    commitRoute(nextStep.route);
+    commitActiveUnit(unit.id);
+    setActivePlayingNode(unit.sourceNodeId);
+    requestUnitPlayback(unit.id, 0, 'playing');
+    if (activePlan.advancePolicy === 'timer') {
+      scheduleNextStep(activePlan, unit.id, nextStep.route);
+    }
   }
 
   function clearTimer() {
@@ -219,6 +284,34 @@ export function CanvasPlaybackController({
     }
     setUncontrolledRouteUnitIds(nextRouteUnitIds);
     onRouteChangeRef.current?.(nextRouteUnitIds);
+  }
+
+  function requestUnitPlayback(
+    unitId: string,
+    startTimeMs: number,
+    requestState: CanvasPlaybackRequest['state'],
+  ) {
+    playbackRequestCounterRef.current += 1;
+    onPlaybackRequestRef.current?.({
+      unitId,
+      startTimeMs,
+      state: requestState,
+      requestId: `route-playback-${playbackRequestCounterRef.current}`,
+    });
+  }
+
+  function currentUnitPlaybackOffsetMs(): number {
+    if (!state.currentUnitId || currentTimeMs === undefined) return 0;
+    let cursor = 0;
+    for (const unitId of route) {
+      const unit = plan?.units.find((candidate) => candidate.id === unitId);
+      const durationMs = plan && unit ? resolveUnitDurationMs(plan, unit.id) : TIMER_INTERVAL_MS;
+      if (unitId === state.currentUnitId) {
+        return clampNumber(currentTimeMs - cursor, 0, durationMs);
+      }
+      cursor += durationMs;
+    }
+    return 0;
   }
 
   return (
@@ -402,6 +495,11 @@ function resolveUnitDurationMs(plan: CanvasPlaybackPlan, unitId: string): number
   return typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0
     ? durationMs
     : TIMER_INTERVAL_MS;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
 }
 
 function areRouteUnitIdsEqual(

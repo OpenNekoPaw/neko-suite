@@ -104,6 +104,8 @@ export interface RouteStoryboardMatrixPlayableCell extends RouteStoryboardMatrix
   readonly sourceNodeId: string;
   readonly stableIdentity: string;
   readonly label: string;
+  readonly thumbnail?: RouteStoryboardMatrixThumbnail;
+  readonly sourceRange?: RouteStoryboardMatrixSourceRange;
   readonly unitKind: CanvasPlaybackUnitKind;
   readonly durationMs: number;
   readonly startMs: number;
@@ -111,6 +113,17 @@ export interface RouteStoryboardMatrixPlayableCell extends RouteStoryboardMatrix
   readonly mediaState: RouteStoryboardMatrixMediaState;
   readonly highlight: boolean;
   readonly diagnostics: readonly CanvasPlaybackDiagnostic[];
+}
+
+export interface RouteStoryboardMatrixThumbnail {
+  readonly src: string;
+  readonly alt: string;
+}
+
+export interface RouteStoryboardMatrixSourceRange {
+  readonly startMs: number;
+  readonly endMs: number;
+  readonly durationMs: number;
 }
 
 export interface RouteStoryboardMatrixEmptyCell extends RouteStoryboardMatrixBaseCell {
@@ -188,6 +201,9 @@ interface MatrixContainerDraft extends MatrixContainerIdentity {
 const ROOT_CONTAINER_ID = 'container:__root__';
 const DEFAULT_UNIT_DURATION_MS = 1200;
 const PRIMARY_FAMILY_ID = 'family:primary';
+const NON_IMAGE_MEDIA_SOURCE_RE =
+  /\.(?:mp4|m4v|mov|webm|mkv|avi|wmv|mp3|m4a|wav|flac|aac|ogg|opus)(?:[?#]|$)/i;
+const SAFE_IMAGE_SOURCE_RE = /^(?:data:image\/|blob:|https?:)/i;
 const PRIMARY_SOURCE_KINDS = new Set<CanvasPlaybackRouteSourceKind>([
   'entry',
   'auto-entry',
@@ -256,6 +272,7 @@ export function projectRouteStoryboardMatrix(
       foldedContainerIds,
       containerColumnStart,
       filters: input.filters,
+      nodeById,
     }),
   );
 
@@ -523,6 +540,7 @@ function buildMatrixRow({
   foldedContainerIds,
   containerColumnStart,
   filters,
+  nodeById,
 }: {
   readonly row: MatrixRowDraft;
   readonly containers: readonly MatrixContainerDraft[];
@@ -530,6 +548,7 @@ function buildMatrixRow({
   readonly foldedContainerIds: ReadonlySet<string>;
   readonly containerColumnStart: ReadonlyMap<string, number>;
   readonly filters?: RouteStoryboardMatrixFilters;
+  readonly nodeById: ReadonlyMap<string, CanvasNode>;
 }): RouteStoryboardMatrixRow {
   const cells: RouteStoryboardMatrixCell[] = [];
   for (const container of containers) {
@@ -558,6 +577,7 @@ function buildMatrixRow({
               entry,
               columnStart: columnStart + slotIndex,
               filters,
+              nodeById,
             })
           : buildEmptyCell({
               row,
@@ -592,12 +612,17 @@ function buildPlayableCell({
   entry,
   columnStart,
   filters,
+  nodeById,
 }: {
   readonly row: MatrixRowDraft;
   readonly entry: MatrixUnitEntry;
   readonly columnStart: number;
   readonly filters?: RouteStoryboardMatrixFilters;
+  readonly nodeById: ReadonlyMap<string, CanvasNode>;
 }): RouteStoryboardMatrixPlayableCell {
+  const label = entry.unit.label ?? entry.unit.id;
+  const thumbnail = resolveMatrixThumbnail({ unit: entry.unit, label, nodeById });
+  const sourceRange = resolveMatrixSourceRange(entry.unit);
   return {
     kind: 'playable',
     id: `cell:${row.route.id}:${entry.container.id}:${entry.stableIdentity}`,
@@ -609,7 +634,9 @@ function buildPlayableCell({
     unitId: entry.unit.id,
     sourceNodeId: entry.unit.sourceNodeId,
     stableIdentity: entry.stableIdentity,
-    label: entry.unit.label ?? entry.unit.id,
+    label,
+    ...(thumbnail ? { thumbnail } : {}),
+    ...(sourceRange ? { sourceRange } : {}),
     unitKind: entry.unit.kind,
     durationMs: entry.durationMs,
     startMs: entry.startMs,
@@ -831,6 +858,162 @@ function resolveMatrixMediaState(unit: CanvasPlaybackUnit): RouteStoryboardMatri
   return 'metadata-only';
 }
 
+function resolveMatrixSourceRange(
+  unit: CanvasPlaybackUnit,
+): RouteStoryboardMatrixSourceRange | undefined {
+  const metadata = unit.metadata;
+  if (!metadata) return undefined;
+  return (
+    readSourceRangeObject(metadata['sourceRange']) ??
+    readSourceRangeObject(metadata['playbackSourceRange']) ??
+    readSourceRangeFields(metadata, 'sourceStartMs', 'sourceEndMs') ??
+    readSourceRangeFields(metadata, 'sourceInMs', 'sourceOutMs') ??
+    readSourceRangeFields(metadata, 'mediaStartMs', 'mediaEndMs') ??
+    readSourceRangeFields(metadata, 'rangeStartMs', 'rangeEndMs') ??
+    readSourceRangeFields(metadata, 'inMs', 'outMs') ??
+    readSourceRangeSecondFields(metadata, 'sourceStartSeconds', 'sourceEndSeconds') ??
+    readSourceRangeSecondFields(metadata, 'mediaStartSeconds', 'mediaEndSeconds')
+  );
+}
+
+function readSourceRangeObject(value: unknown): RouteStoryboardMatrixSourceRange | undefined {
+  if (!isRecord(value)) return undefined;
+  return (
+    normalizeSourceRange(readFiniteNumber(value['startMs']), readFiniteNumber(value['endMs'])) ??
+    normalizeSourceRange(readFiniteNumber(value['inMs']), readFiniteNumber(value['outMs'])) ??
+    normalizeSourceRange(
+      readSecondsAsMs(value['startSeconds']),
+      readSecondsAsMs(value['endSeconds']),
+    ) ??
+    normalizeSourceRange(readSecondsAsMs(value['inSeconds']), readSecondsAsMs(value['outSeconds']))
+  );
+}
+
+function readSourceRangeFields(
+  metadata: Readonly<Record<string, unknown>>,
+  startKey: string,
+  endKey: string,
+): RouteStoryboardMatrixSourceRange | undefined {
+  return normalizeSourceRange(
+    readFiniteNumber(metadata[startKey]),
+    readFiniteNumber(metadata[endKey]),
+  );
+}
+
+function readSourceRangeSecondFields(
+  metadata: Readonly<Record<string, unknown>>,
+  startKey: string,
+  endKey: string,
+): RouteStoryboardMatrixSourceRange | undefined {
+  return normalizeSourceRange(
+    readSecondsAsMs(metadata[startKey]),
+    readSecondsAsMs(metadata[endKey]),
+  );
+}
+
+function normalizeSourceRange(
+  startMs: number | undefined,
+  endMs: number | undefined,
+): RouteStoryboardMatrixSourceRange | undefined {
+  if (startMs === undefined || endMs === undefined || startMs < 0 || endMs <= startMs) {
+    return undefined;
+  }
+  return {
+    startMs,
+    endMs,
+    durationMs: endMs - startMs,
+  };
+}
+
+function resolveMatrixThumbnail({
+  unit,
+  label,
+  nodeById,
+}: {
+  readonly unit: CanvasPlaybackUnit;
+  readonly label: string;
+  readonly nodeById: ReadonlyMap<string, CanvasNode>;
+}): RouteStoryboardMatrixThumbnail | undefined {
+  const sourceNode = nodeById.get(unit.sourceNodeId);
+  const src =
+    readFirstSafeImageUrl(unit.metadata, [
+      'previewUrl',
+      'previewThumbnailUrl',
+      'thumbnailUrl',
+      'posterUrl',
+      'generatedImage',
+    ]) ??
+    readGeneratedAssetImageUrl(unit.metadata?.['generatedAsset']) ??
+    readGeneratedAssetImageUrl(unit.metadata?.['generatedVideoAsset']) ??
+    readNodeThumbnailUrl(sourceNode);
+
+  return src ? { src, alt: label } : undefined;
+}
+
+function readNodeThumbnailUrl(node: CanvasNode | undefined): string | undefined {
+  if (!node) return undefined;
+  const data: Readonly<Record<string, unknown>> = isRecord(node.data as unknown)
+    ? (node.data as Readonly<Record<string, unknown>>)
+    : {};
+
+  return (
+    readFirstSafeImageUrl(data, [
+      'previewUrl',
+      'previewThumbnailUrl',
+      'thumbnailUrl',
+      'posterUrl',
+      'generatedImage',
+      'runtimeThumbnailPath',
+      'runtimeAssetPath',
+      'runtimeReferenceImagePath',
+    ]) ??
+    readGeneratedAssetImageUrl(data['generatedAsset']) ??
+    readThumbnailDataUrl(data['thumbnailData'])
+  );
+}
+
+function readFirstSafeImageUrl(
+  record: Readonly<Record<string, unknown>> | undefined,
+  keys: readonly string[],
+): string | undefined {
+  if (!record) return undefined;
+  for (const key of keys) {
+    const src = readSafeImageUrl(record[key]);
+    if (src) return src;
+  }
+  return undefined;
+}
+
+function readGeneratedAssetImageUrl(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  return readFirstSafeImageUrl(value, ['url', 'path', 'thumbnailUrl', 'previewUrl']);
+}
+
+function readThumbnailDataUrl(value: unknown): string | undefined {
+  const src = readString(value);
+  if (!src) return undefined;
+  if (src.startsWith('data:')) {
+    return src.startsWith('data:image/') ? src : undefined;
+  }
+  return /^[a-z0-9+/]+={0,2}$/i.test(src) ? `data:image/png;base64,${src}` : undefined;
+}
+
+function readSafeImageUrl(value: unknown): string | undefined {
+  const src = readString(value);
+  if (!src) return undefined;
+  return isAuthorizedImageSource(src) ? src : undefined;
+}
+
+function isAuthorizedImageSource(src: string): boolean {
+  return (
+    (SAFE_IMAGE_SOURCE_RE.test(src) && !NON_IMAGE_MEDIA_SOURCE_RE.test(src)) ||
+    ((src.startsWith('vscode-resource:') ||
+      src.startsWith('vscode-webview-resource:') ||
+      src.includes('vscode-resource.vscode-cdn.net')) &&
+      !NON_IMAGE_MEDIA_SOURCE_RE.test(src))
+  );
+}
+
 function collectInitialDiagnostics(
   diagnostics: readonly CanvasPlaybackDiagnostic[],
 ): RouteStoryboardMatrixDiagnostic[] {
@@ -866,6 +1049,15 @@ function readNodeTitle(node: CanvasNode | undefined): string | undefined {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+function readFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function readSecondsAsMs(value: unknown): number | undefined {
+  const seconds = readFiniteNumber(value);
+  return seconds === undefined ? undefined : seconds * 1000;
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

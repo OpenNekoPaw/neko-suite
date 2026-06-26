@@ -83,6 +83,8 @@ describe('RouteStoryboardMatrix', () => {
     expect(host.textContent).toContain('Alt routes');
     expect(host.textContent).toContain('Scene A');
     expect(host.textContent).toContain('Shot A');
+    expect(host.textContent).toContain('0:01-0:05');
+    expect(host.textContent).toContain('0:12-0:18');
     expect(host.textContent).toContain('Folded Scene');
     expect(host.textContent).toContain('Empty');
     expect(host.textContent).toContain('Missing preview metadata');
@@ -111,6 +113,12 @@ describe('RouteStoryboardMatrix', () => {
         .querySelector('.canvas-route-storyboard-matrix-cell-playable')
         ?.getAttribute('data-focused'),
     ).toBe('true');
+    expect(
+      host.querySelector<HTMLImageElement>('.canvas-route-storyboard-matrix-thumb img'),
+    ).toMatchObject({
+      src: 'data:image/png;base64,fixture-preview',
+      alt: 'Shot A',
+    });
     expect(
       host.querySelector('.canvas-route-storyboard-matrix-container')?.getAttribute('data-folded'),
     ).toBe('true');
@@ -323,6 +331,15 @@ function matrixFixture(): RouteStoryboardMatrixViewModel {
             sourceNodeId: 'shot-a',
             stableIdentity: 'shot-a',
             label: 'Shot A',
+            thumbnail: {
+              src: 'data:image/png;base64,fixture-preview',
+              alt: 'Shot A',
+            },
+            sourceRange: {
+              startMs: 12_000,
+              endMs: 18_000,
+              durationMs: 6_000,
+            },
             unitKind: 'shot',
             durationMs: 1000,
             startMs: 0,
@@ -355,7 +372,7 @@ function matrixFixture(): RouteStoryboardMatrixViewModel {
         title: 'Route B',
         sourceKind: 'entry',
         unitIds: ['unit-b'],
-        totalDurationMs: 1000,
+        totalDurationMs: 5000,
         diagnostics: [],
         cells: [
           {

@@ -8,29 +8,37 @@
 
 :root {
   /* ── Canvas ─────────────────────────────────────────────────────────────── */
-  --canvas-bg:         color-mix(in srgb, var(--vscode-editor-background, #1c1c1e) 94%, var(--neko-surface) 6%);
-  --canvas-grid:       color-mix(in srgb, var(--neko-fg) 10%, transparent);
+  --canvas-bg: color-mix(
+    in srgb,
+    var(--vscode-editor-background, #1c1c1e) 94%,
+    var(--neko-surface) 6%
+  );
+  --canvas-grid: color-mix(in srgb, var(--neko-fg) 10%, transparent);
   --canvas-grid-major: color-mix(in srgb, var(--neko-fg) 18%, transparent);
-  --canvas-vignette:   radial-gradient(circle at 50% 24%, color-mix(in srgb, var(--neko-accent) 8%, transparent), transparent 32%);
+  --canvas-vignette: radial-gradient(
+    circle at 50% 24%,
+    color-mix(in srgb, var(--neko-accent) 8%, transparent),
+    transparent 32%
+  );
 
   /* ── Toolbar / Panel ─────────────────────────────────────────────────────── */
-  --toolbar-bg:           color-mix(in srgb, var(--neko-surface) 94%, var(--neko-elevated) 6%);
-  --toolbar-border:       var(--neko-border);
-  --toolbar-fg:           var(--neko-fg);
+  --toolbar-bg: color-mix(in srgb, var(--neko-surface) 94%, var(--neko-elevated) 6%);
+  --toolbar-border: var(--neko-border);
+  --toolbar-fg: var(--neko-fg);
   --toolbar-fg-secondary: var(--neko-fg-secondary);
 
   /* ── Glassmorphism surface ───────────────────────────────────────────────── */
-  --glass-bg:        var(--neko-glass-bg);
-  --glass-bg-light:  color-mix(in srgb, var(--neko-glass-bg) 82%, transparent);
-  --glass-border:    var(--neko-glass-border);
+  --glass-bg: var(--neko-glass-bg);
+  --glass-bg-light: color-mix(in srgb, var(--neko-glass-bg) 82%, transparent);
+  --glass-border: var(--neko-glass-border);
   --glass-highlight: color-mix(in srgb, var(--neko-fg) 6%, transparent);
-  --glass-shadow:    var(--neko-glass-shadow);
+  --glass-shadow: var(--neko-glass-shadow);
   --glass-shadow-sm: var(--neko-shadow-md);
-  --glass-blur:      var(--neko-glass-blur);
+  --glass-blur: var(--neko-glass-blur);
 
   /* ── Title bar ───────────────────────────────────────────────────────────── */
-  --titlebar-bg:     var(--toolbar-bg);
-  --titlebar-fg:     var(--toolbar-fg);
+  --titlebar-bg: var(--toolbar-bg);
+  --titlebar-fg: var(--toolbar-fg);
   --titlebar-border: var(--toolbar-border);
 
   /* ── Status bar ──────────────────────────────────────────────────────────── */
@@ -38,105 +46,113 @@
   --statusbar-fg: #ffffff;
 
   /* ── Nodes ───────────────────────────────────────────────────────────────── */
-  --node-bg:         color-mix(in srgb, var(--neko-surface) 78%, var(--neko-elevated) 22%);
-  --node-border:     color-mix(in srgb, var(--neko-fg) 16%, transparent);
-  --node-selected:   var(--neko-accent);
-  --node-header-bg:  linear-gradient(180deg, color-mix(in srgb, var(--node-bg) 88%, var(--neko-fg) 9%), color-mix(in srgb, var(--node-bg) 96%, var(--neko-fg) 4%));
-  --node-divider:    color-mix(in srgb, var(--neko-fg) 12%, transparent);
-  --node-radius:     10px;
-  --node-shadow:     0 10px 30px color-mix(in srgb, black 22%, transparent), 0 1px 0 color-mix(in srgb, white 34%, transparent) inset;
-  --node-shadow-sel: 0 0 0 1.5px var(--node-selected), 0 16px 38px var(--neko-accent-soft), 0 1px 0 color-mix(in srgb, white 38%, transparent) inset;
-  --node-fg:         var(--neko-fg);
+  --node-bg: color-mix(in srgb, var(--neko-surface) 78%, var(--neko-elevated) 22%);
+  --node-border: color-mix(in srgb, var(--neko-fg) 16%, transparent);
+  --node-selected: var(--neko-accent);
+  --node-header-bg: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--node-bg) 88%, var(--neko-fg) 9%),
+    color-mix(in srgb, var(--node-bg) 96%, var(--neko-fg) 4%)
+  );
+  --node-divider: color-mix(in srgb, var(--neko-fg) 12%, transparent);
+  --node-radius: 10px;
+  --node-shadow:
+    0 10px 30px color-mix(in srgb, black 22%, transparent),
+    0 1px 0 color-mix(in srgb, white 34%, transparent) inset;
+  --node-shadow-sel:
+    0 0 0 1.5px var(--node-selected), 0 16px 38px var(--neko-accent-soft),
+    0 1px 0 color-mix(in srgb, white 38%, transparent) inset;
+  --node-fg: var(--neko-fg);
   --node-fg-secondary: var(--neko-fg-secondary);
-  --selection-bg:      var(--neko-accent-soft);
-  --selection-border:  color-mix(in srgb, var(--node-selected) 36%, transparent);
-  --selection-strong:  color-mix(in srgb, var(--node-selected) 30%, transparent);
-  --hover-border:      color-mix(in srgb, var(--neko-fg) 16%, transparent);
+  --selection-bg: var(--neko-accent-soft);
+  --selection-border: color-mix(in srgb, var(--node-selected) 36%, transparent);
+  --selection-strong: color-mix(in srgb, var(--node-selected) 30%, transparent);
+  --hover-border: color-mix(in srgb, var(--neko-fg) 16%, transparent);
 
   /* ── Controls ────────────────────────────────────────────────────────────── */
-  --control-bg:         var(--neko-elevated);
-  --control-border:     color-mix(in srgb, var(--neko-fg) 14%, transparent);
-  --control-shadow:     none;
-  --control-hover:      var(--neko-hover);
-  --control-active:     var(--neko-accent-soft);
-  --control-fg:         var(--neko-fg);
-  --control-radius:     8px;
+  --control-bg: var(--neko-elevated);
+  --control-border: color-mix(in srgb, var(--neko-fg) 14%, transparent);
+  --control-shadow: none;
+  --control-hover: var(--neko-hover);
+  --control-active: var(--neko-accent-soft);
+  --control-fg: var(--neko-fg);
+  --control-radius: 8px;
   --control-focus-ring: color-mix(in srgb, var(--node-selected) 22%, transparent);
-  --panel-divider:      var(--neko-divider);
-  --panel-fg:           var(--neko-fg);
+  --panel-divider: var(--neko-divider);
+  --panel-fg: var(--neko-fg);
   --panel-fg-secondary: var(--neko-fg-secondary);
 
   /* ── Buttons ─────────────────────────────────────────────────────────────── */
-  --button-bg:           var(--neko-accent);
-  --button-fg:           #ffffff;
-  --button-hover:        color-mix(in srgb, var(--button-bg) 86%, #ffffff 14%);
-  --button-gradient:     linear-gradient(
+  --button-bg: var(--neko-accent);
+  --button-fg: #ffffff;
+  --button-hover: color-mix(in srgb, var(--button-bg) 86%, #ffffff 14%);
+  --button-gradient: linear-gradient(
     180deg,
     color-mix(in srgb, var(--button-bg) 84%, #ffffff 16%) 0%,
     var(--button-bg) 100%
   );
-  --button-shadow:       0 2px 12px var(--neko-accent-glow);
+  --button-shadow: 0 2px 12px var(--neko-accent-glow);
   --button-secondary-bg: color-mix(in srgb, var(--neko-fg) 7%, transparent);
   --button-secondary-fg: var(--neko-fg);
   --button-secondary-border: var(--control-border);
   --button-secondary-hover: color-mix(in srgb, var(--neko-fg) 11%, transparent);
-  --button-radius:       7px;
+  --button-radius: 7px;
 
   /* ── Badge ───────────────────────────────────────────────────────────────── */
-  --badge-bg:           var(--neko-accent-soft);
-  --badge-fg:           color-mix(in srgb, var(--neko-accent) 78%, var(--neko-fg) 22%);
-  --badge-border:       color-mix(in srgb, var(--neko-accent) 32%, transparent);
-  --badge-neutral-bg:   color-mix(in srgb, var(--neko-fg) 7%, transparent);
+  --badge-bg: var(--neko-accent-soft);
+  --badge-fg: color-mix(in srgb, var(--neko-accent) 78%, var(--neko-fg) 22%);
+  --badge-border: color-mix(in srgb, var(--neko-accent) 32%, transparent);
+  --badge-neutral-bg: color-mix(in srgb, var(--neko-fg) 7%, transparent);
   --badge-neutral-border: color-mix(in srgb, var(--neko-fg) 10%, transparent);
 
   /* ── Status / Danger helpers ─────────────────────────────────────────────── */
-  --danger-soft:         color-mix(in srgb, var(--neko-danger) 14%, transparent);
-  --danger-hover:        color-mix(in srgb, var(--neko-danger) 24%, transparent);
-  --danger-active:       color-mix(in srgb, var(--neko-danger) 32%, transparent);
-  --danger-border:       color-mix(in srgb, var(--neko-danger) 30%, transparent);
+  --danger-soft: color-mix(in srgb, var(--neko-danger) 14%, transparent);
+  --danger-hover: color-mix(in srgb, var(--neko-danger) 24%, transparent);
+  --danger-active: color-mix(in srgb, var(--neko-danger) 32%, transparent);
+  --danger-border: color-mix(in srgb, var(--neko-danger) 30%, transparent);
   --danger-border-strong: color-mix(in srgb, var(--neko-danger) 55%, transparent);
 
   /* ── Connections ─────────────────────────────────────────────────────────── */
-  --connection-default:   color-mix(in srgb, var(--neko-fg-secondary) 64%, transparent);
-  --connection-sequence:  #30d158;
+  --connection-default: color-mix(in srgb, var(--neko-fg-secondary) 64%, transparent);
+  --connection-sequence: #30d158;
   --connection-reference: #ff9f0a;
-  --connection-choice:    #f97316;
-  --connection-transition:#38bdf8;
-  --connection-association:#a855f7;
+  --connection-choice: #f97316;
+  --connection-transition: #38bdf8;
+  --connection-association: #a855f7;
 
   /* ── Scrollbar ───────────────────────────────────────────────────────────── */
-  --scrollbar-bg:   color-mix(in srgb, var(--neko-fg) 12%, transparent);
-  --scrollbar-hover:color-mix(in srgb, var(--neko-fg) 20%, transparent);
+  --scrollbar-bg: color-mix(in srgb, var(--neko-fg) 12%, transparent);
+  --scrollbar-hover: color-mix(in srgb, var(--neko-fg) 20%, transparent);
 
   /* ── Accent / System colors — 略微降饱和，与深色背景协调 ──────────────── */
-  --accent-blue:   var(--neko-accent);
-  --accent-green:  #34c759;
+  --accent-blue: var(--neko-accent);
+  --accent-green: #34c759;
   --accent-orange: #f59e0b;
-  --accent-red:    #ef4444;
+  --accent-red: #ef4444;
   --accent-purple: #a855f7;
-  --accent-teal:   #38bdf8;
+  --accent-teal: #38bdf8;
 
   /* ── Radius scale ────────────────────────────────────────────────────────── */
-  --radius-xs:  4px;
-  --radius-sm:  6px;
-  --radius-md:  10px;
-  --radius-lg:  14px;
-  --radius-xl:  18px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
   --radius-2xl: 24px;
 }
 
 body.vscode-high-contrast,
-body[data-vscode-theme-kind="vscode-high-contrast"] {
-  --canvas-grid:         var(--neko-border);
-  --canvas-grid-major:   var(--neko-border);
-  --glass-bg-light:      var(--glass-bg);
-  --node-bg:             var(--neko-elevated);
-  --node-header-bg:      var(--node-bg);
-  --node-border:         var(--neko-border);
-  --control-bg:          var(--neko-elevated);
-  --control-border:      var(--neko-border);
-  --button-gradient:     var(--button-bg);
-  --button-shadow:       none;
+body[data-vscode-theme-kind='vscode-high-contrast'] {
+  --canvas-grid: var(--neko-border);
+  --canvas-grid-major: var(--neko-border);
+  --glass-bg-light: var(--glass-bg);
+  --node-bg: var(--neko-elevated);
+  --node-header-bg: var(--node-bg);
+  --node-border: var(--neko-border);
+  --control-bg: var(--neko-elevated);
+  --control-border: var(--neko-border);
+  --button-gradient: var(--button-bg);
+  --button-shadow: none;
   --button-secondary-bg: transparent;
 }
 
@@ -222,8 +238,7 @@ body,
   background: color-mix(in srgb, var(--control-hover) 74%, transparent);
 }
 
-#canvas-right-node-tree-panel
-  .canvas-node-library-group[data-node-library-group-expanded="true"] {
+#canvas-right-node-tree-panel .canvas-node-library-group[data-node-library-group-expanded='true'] {
   background: color-mix(in srgb, var(--control-active) 54%, transparent);
 }
 
@@ -308,7 +323,7 @@ body,
   overflow: hidden;
 }
 
-#canvas-right-node-tree-panel [role="treeitem"] {
+#canvas-right-node-tree-panel [role='treeitem'] {
   border-radius: var(--radius-sm);
   color: var(--toolbar-fg);
   padding-left: 0 !important;
@@ -318,21 +333,21 @@ body,
     color 150ms ease;
 }
 
-#canvas-right-node-tree-panel [role="treeitem"] > button:first-child {
+#canvas-right-node-tree-panel [role='treeitem'] > button:first-child {
   width: 6px;
   min-width: 6px;
   margin-right: 0;
 }
 
-#canvas-right-node-tree-panel [role="treeitem"] > button:first-child.invisible {
+#canvas-right-node-tree-panel [role='treeitem'] > button:first-child.invisible {
   display: none;
 }
 
-#canvas-right-node-tree-panel [role="treeitem"]:hover {
+#canvas-right-node-tree-panel [role='treeitem']:hover {
   background: var(--control-hover);
 }
 
-#canvas-right-node-tree-panel [role="treeitem"] > span {
+#canvas-right-node-tree-panel [role='treeitem'] > span {
   min-width: 0;
   gap: 6px;
 }
@@ -383,13 +398,13 @@ body,
   color: var(--toolbar-fg-secondary);
 }
 
-.canvas-node-library-subsystem-badge[data-node-library-subsystem-state="active"] {
+.canvas-node-library-subsystem-badge[data-node-library-subsystem-state='active'] {
   border: 1px solid var(--badge-border);
   background: var(--badge-bg);
   color: var(--badge-fg);
 }
 
-.canvas-node-library-subsystem-badge[data-node-library-subsystem-state="available"] {
+.canvas-node-library-subsystem-badge[data-node-library-subsystem-state='available'] {
   border: 1px solid var(--badge-neutral-border);
   background: var(--badge-neutral-bg);
   color: var(--toolbar-fg-secondary);
@@ -415,7 +430,11 @@ body,
   flex-direction: column;
   background:
     var(--canvas-vignette),
-    linear-gradient(180deg, color-mix(in srgb, var(--canvas-bg) 96%, var(--neko-fg) 2%), var(--canvas-bg));
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--canvas-bg) 96%, var(--neko-fg) 2%),
+      var(--canvas-bg)
+    );
 }
 
 .canvas-main-surface::after {
@@ -475,16 +494,14 @@ body,
   min-width: 280px;
   max-width: 760px;
   flex-direction: column;
-  gap: 8px;
+  gap: 9px;
   overflow: hidden;
   border-left: 1px solid var(--toolbar-border);
-  background:
-    radial-gradient(
-      circle at 50% 0%,
-      color-mix(in srgb, var(--node-selected) 10%, transparent),
-      transparent 36%
-    ),
-    color-mix(in srgb, var(--toolbar-bg) 90%, var(--canvas-bg) 10%);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--toolbar-bg) 94%, var(--neko-fg) 3%),
+    color-mix(in srgb, var(--toolbar-bg) 88%, var(--canvas-bg) 12%)
+  );
   padding: 10px;
 }
 
@@ -555,24 +572,20 @@ body,
   flex: 0 0 auto;
   flex-direction: column;
   align-self: center;
-  width: min(100%, 560px);
-  gap: 8px;
+  width: min(100%, 520px);
+  gap: 7px;
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--toolbar-border) 76%, transparent);
-  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--control-border) 82%, transparent);
+  border-radius: var(--radius-sm);
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--neko-fg) 5%, transparent),
-      color-mix(in srgb, var(--canvas-bg) 8%, transparent)
+      color-mix(in srgb, var(--toolbar-bg) 92%, var(--neko-fg) 4%),
+      color-mix(in srgb, var(--control-bg) 88%, var(--canvas-bg) 12%)
     ),
-    color-mix(in srgb, var(--control-bg) 88%, var(--canvas-bg) 12%);
-  padding: 8px 10px;
-  box-shadow:
-    0 14px 34px color-mix(in srgb, black 18%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 18%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(1.1);
-  backdrop-filter: blur(18px) saturate(1.1);
+    var(--control-bg);
+  padding: 7px 9px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
 }
 
 .canvas-playback-controller-row {
@@ -584,7 +597,7 @@ body,
 }
 
 .canvas-playback-controller-label {
-  max-width: 112px;
+  max-width: 118px;
   min-width: 0;
   overflow: hidden;
   color: var(--toolbar-fg-secondary);
@@ -606,8 +619,8 @@ body,
   gap: 6px;
   justify-self: center;
   border: 1px solid color-mix(in srgb, var(--control-border) 72%, transparent);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--canvas-bg) 22%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--toolbar-bg) 82%, var(--canvas-bg) 18%);
   padding: 3px;
 }
 
@@ -646,27 +659,25 @@ body,
 }
 
 .canvas-playback-controller-button[data-variant='primary'] {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-color: color-mix(in srgb, var(--node-selected) 62%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--node-selected) 78%, white 18%),
-      color-mix(in srgb, var(--node-selected) 90%, black 10%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--node-selected) 78%, white 18%),
+    color-mix(in srgb, var(--node-selected) 90%, black 10%)
+  );
   color: var(--button-fg);
-  box-shadow: 0 7px 18px color-mix(in srgb, var(--node-selected) 28%, transparent);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--node-selected) 20%, transparent);
 }
 
 .canvas-playback-controller-button[data-variant='primary']:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--node-selected) 78%, white 12%);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--node-selected) 72%, white 28%),
-      color-mix(in srgb, var(--node-selected) 88%, black 8%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--node-selected) 72%, white 28%),
+    color-mix(in srgb, var(--node-selected) 88%, black 8%)
+  );
 }
 
 .canvas-playback-controller-button:disabled {
@@ -698,6 +709,7 @@ body,
 .canvas-playback-controller-branches {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 4px;
 }
 
@@ -724,16 +736,18 @@ body,
 .canvas-playback-unit-summary {
   align-items: center;
   justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--control-border) 74%, transparent);
-  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--control-border) 82%, transparent);
+  border-radius: var(--radius-sm);
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, black 20%, transparent),
-      color-mix(in srgb, black 8%, transparent)
+      color-mix(in srgb, black 16%, transparent),
+      color-mix(in srgb, black 7%, transparent)
     ),
-    color-mix(in srgb, var(--canvas-bg) 80%, black 20%);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
+    color-mix(in srgb, var(--canvas-bg) 82%, var(--toolbar-bg) 18%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 10%, transparent),
+    0 1px 0 color-mix(in srgb, black 12%, transparent);
 }
 
 .canvas-playback-stage-preview {
@@ -746,7 +760,10 @@ body,
 
 .canvas-playback-stage-details {
   flex: 0 0 auto;
-  padding: 1px 2px 0;
+  border: 1px solid color-mix(in srgb, var(--control-border) 72%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--control-bg) 74%, transparent);
+  padding: 7px 9px;
 }
 
 .canvas-playback-stage-kicker,
@@ -911,11 +928,11 @@ body,
   border-radius: 0;
   background:
     linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--toolbar-fg-secondary) 6%, transparent) 1px,
-      transparent 1px
-    )
-    0 30px / 48px calc(100% - 30px),
+        90deg,
+        color-mix(in srgb, var(--toolbar-fg-secondary) 6%, transparent) 1px,
+        transparent 1px
+      )
+      0 30px / 48px calc(100% - 30px),
     color-mix(in srgb, var(--control-bg) 92%, var(--canvas-bg) 8%);
 }
 
@@ -1113,6 +1130,8 @@ body,
 }
 
 .canvas-route-storyboard-matrix {
+  --matrix-bottom-gutter: 148px;
+  --matrix-row-height: 72px;
   display: flex;
   min-height: 0;
   flex: 1 1 auto;
@@ -1134,12 +1153,11 @@ body,
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--toolbar-border) 82%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--toolbar-bg) 96%, var(--neko-fg) 4%),
-      color-mix(in srgb, var(--toolbar-bg) 92%, var(--canvas-bg) 8%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--toolbar-bg) 96%, var(--neko-fg) 4%),
+    color-mix(in srgb, var(--toolbar-bg) 92%, var(--canvas-bg) 8%)
+  );
   padding: 9px 12px;
 }
 
@@ -1185,7 +1203,7 @@ body,
 
 .canvas-route-storyboard-matrix-stat {
   display: flex;
-  min-width: 54px;
+  min-width: 58px;
   height: 34px;
   flex-direction: column;
   justify-content: center;
@@ -1287,6 +1305,7 @@ body,
   flex: 1 1 auto;
   flex-direction: column;
   overflow: auto;
+  padding-bottom: var(--matrix-bottom-gutter);
   scrollbar-gutter: stable;
   border-top: 0;
   background:
@@ -1319,8 +1338,8 @@ body,
 .canvas-route-storyboard-matrix-body {
   min-height: 0;
   flex: 1 1 auto;
-  grid-auto-rows: minmax(64px, 1fr);
-  align-content: stretch;
+  grid-auto-rows: var(--matrix-row-height, 72px);
+  align-content: start;
   overflow: visible;
 }
 
@@ -1440,14 +1459,15 @@ body,
 .canvas-route-storyboard-matrix-row-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 30px;
-  min-height: 64px;
-  height: 100%;
+  min-height: 0;
+  height: var(--matrix-row-height, 72px);
   border-right: 1px solid var(--toolbar-border);
   border-bottom: 1px solid var(--toolbar-border);
   background: color-mix(in srgb, var(--toolbar-bg) 95%, var(--canvas-bg) 5%);
 }
 
-.canvas-route-storyboard-matrix-row[data-selected='true'] .canvas-route-storyboard-matrix-row-header {
+.canvas-route-storyboard-matrix-row[data-selected='true']
+  .canvas-route-storyboard-matrix-row-header {
   background: color-mix(in srgb, var(--control-active) 72%, var(--toolbar-bg) 28%);
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--node-selected) 78%, transparent);
 }
@@ -1507,17 +1527,17 @@ body,
 }
 
 .canvas-route-storyboard-matrix-cells {
-  height: 100%;
+  height: var(--matrix-row-height, 72px);
   min-width: max-content;
-  grid-auto-rows: minmax(0, 1fr);
+  grid-auto-rows: var(--matrix-row-height, 72px);
   align-items: stretch;
   border-bottom: 1px solid var(--toolbar-border);
 }
 
 .canvas-route-storyboard-matrix-cell {
   min-width: 0;
-  min-height: 64px;
-  height: 100%;
+  min-height: 0;
+  height: var(--matrix-row-height, 72px);
   border-right: 1px solid color-mix(in srgb, var(--toolbar-border) 78%, transparent);
   background: color-mix(in srgb, var(--control-bg) 90%, var(--canvas-bg) 10%);
 }
@@ -1557,6 +1577,18 @@ body,
   color: var(--toolbar-fg);
   font-size: 13px;
   font-weight: 700;
+  overflow: hidden;
+}
+
+.canvas-route-storyboard-matrix-thumb[data-has-image='true'] {
+  background: color-mix(in srgb, var(--control-bg) 82%, var(--canvas-bg) 18%);
+}
+
+.canvas-route-storyboard-matrix-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .canvas-route-storyboard-matrix-cell-title,
@@ -1579,7 +1611,7 @@ body,
   align-self: start;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 5px;
   color: var(--toolbar-fg-secondary);
   font-size: 9px;
   font-variant-numeric: tabular-nums;
@@ -1590,6 +1622,12 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.canvas-route-storyboard-matrix-cell-meta span:last-child {
+  flex: 0 1 auto;
+  max-width: 100%;
+  text-align: right;
 }
 
 .canvas-route-storyboard-matrix-cell-empty,
@@ -1779,7 +1817,13 @@ body,
 input,
 textarea,
 select {
-  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif);
+  font-family: var(
+    --vscode-font-family,
+    -apple-system,
+    BlinkMacSystemFont,
+    'SF Pro Text',
+    sans-serif
+  );
   font-size: 12px;
   line-height: 1.5;
   background-color: var(--control-bg);
@@ -1787,7 +1831,9 @@ select {
   border-radius: var(--radius-sm);
   color: var(--control-fg);
   box-shadow: var(--control-shadow);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
   outline: none;
 }
 
@@ -1873,7 +1919,10 @@ select:focus {
   box-shadow: var(--node-shadow);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  transition: box-shadow 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+  transition:
+    box-shadow 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease;
 }
 
 .node-card.selected {
@@ -1932,7 +1981,9 @@ select:focus {
   font-size: 13px;
   color: var(--toolbar-fg);
   cursor: pointer;
-  transition: background 0.1s ease, color 0.1s ease;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease;
   user-select: none;
 }
 
@@ -1991,7 +2042,9 @@ select:focus {
   cursor: pointer;
   border: none;
   background: transparent;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .zoom-pill-btn:hover:not(:disabled) {
@@ -2003,7 +2056,7 @@ select:focus {
 }
 
 .zoom-pill-btn:disabled {
-  opacity: 0.30;
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
@@ -2058,7 +2111,9 @@ select:focus {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   box-shadow: var(--control-shadow);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .prop-input:focus {
@@ -2085,7 +2140,9 @@ select:focus {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: filter 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    filter 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .btn-primary:hover {
@@ -2130,7 +2187,9 @@ select:focus {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .btn-destructive:hover {
@@ -2236,32 +2295,60 @@ select:focus {
    ============================================================================= */
 
 @keyframes neko-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes neko-scale-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to   { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes neko-slide-in-r {
-  from { opacity: 0; transform: translateX(10px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 /* 用独立前缀避免与 Tailwind animate-* 冲突 */
-.neko-fade-in    { animation: neko-fade-in    0.18s ease both; }
-.neko-scale-in   { animation: neko-scale-in   0.18s ease both; }
-.neko-slide-in-r { animation: neko-slide-in-r 0.18s ease both; }
+.neko-fade-in {
+  animation: neko-fade-in 0.18s ease both;
+}
+.neko-scale-in {
+  animation: neko-scale-in 0.18s ease both;
+}
+.neko-slide-in-r {
+  animation: neko-slide-in-r 0.18s ease both;
+}
 
 /* =============================================================================
    Canvas connection animation
    ============================================================================= */
 
 @keyframes flowDot {
-  0%   { offset-distance: 0%; }
-  100% { offset-distance: 100%; }
+  0% {
+    offset-distance: 0%;
+  }
+  100% {
+    offset-distance: 100%;
+  }
 }
 
 .connection-group:hover path[stroke-opacity] {
@@ -2272,13 +2359,29 @@ select:focus {
    Semantic color helpers — 仅保留 Tailwind 没有的语义别名
    ============================================================================= */
 
-.text-canvas-secondary { color: var(--toolbar-fg-secondary); }
-.text-canvas-accent    { color: var(--accent-blue); }
-.text-canvas-danger    { color: var(--accent-red); }
-.text-canvas-success   { color: var(--accent-green); }
+.text-canvas-secondary {
+  color: var(--toolbar-fg-secondary);
+}
+.text-canvas-accent {
+  color: var(--accent-blue);
+}
+.text-canvas-danger {
+  color: var(--accent-red);
+}
+.text-canvas-success {
+  color: var(--accent-green);
+}
 
 /* canvas 特有圆角别名（覆盖 Tailwind 默认值，与 --radius-* 对齐） */
-.rounded-canvas-sm { border-radius: var(--radius-sm); }
-.rounded-canvas-md { border-radius: var(--radius-md); }
-.rounded-canvas-lg { border-radius: var(--radius-lg); }
-.rounded-canvas-xl { border-radius: var(--radius-xl); }
+.rounded-canvas-sm {
+  border-radius: var(--radius-sm);
+}
+.rounded-canvas-md {
+  border-radius: var(--radius-md);
+}
+.rounded-canvas-lg {
+  border-radius: var(--radius-lg);
+}
+.rounded-canvas-xl {
+  border-radius: var(--radius-xl);
+}

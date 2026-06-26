@@ -14,6 +14,24 @@ export interface PreviewSourceDescriptor {
   metadata?: Record<string, unknown>;
 }
 
+export interface PreviewPlaybackProgressEvent {
+  sourceId: string;
+  currentTime: number;
+  duration: number;
+}
+
+export interface PreviewPlaybackEndedEvent extends PreviewPlaybackProgressEvent {
+  mediaType: PreviewPlaybackKind;
+}
+
+export interface PreviewPlaybackControl {
+  requestId?: string;
+  state?: 'playing' | 'paused';
+  startTimeSeconds?: number;
+  onTimeUpdate?: (event: PreviewPlaybackProgressEvent) => void;
+  onEnded?: (event: PreviewPlaybackEndedEvent) => void;
+}
+
 export interface RuntimePreviewVariant extends CanvasPreviewVariant {
   runtimeUrl?: string;
   runtimeToken?: string;

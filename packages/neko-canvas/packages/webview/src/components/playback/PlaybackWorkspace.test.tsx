@@ -34,8 +34,43 @@ vi.mock('@neko/ui/icons', () => ({
 }));
 
 vi.mock('../../preview/PreviewRendererRegistry', () => ({
-  PreviewSurface: ({ source }: { source: { id: string } }) => (
-    <div data-testid="preview-surface">{source.id}</div>
+  PreviewSurface: ({
+    source,
+    playbackControl,
+  }: {
+    source: { id: string };
+    playbackControl?: {
+      requestId?: string;
+      state?: 'playing' | 'paused';
+      onEnded?: (event: {
+        sourceId: string;
+        mediaType: 'video';
+        currentTime: number;
+        duration: number;
+      }) => void;
+    };
+  }) => (
+    <div
+      data-testid="preview-surface"
+      data-playback-request-id={playbackControl?.requestId}
+      data-playback-state={playbackControl?.state}
+    >
+      {source.id}
+      <button
+        type="button"
+        data-testid="preview-ended"
+        onClick={() =>
+          playbackControl?.onEnded?.({
+            sourceId: source.id,
+            mediaType: 'video',
+            currentTime: 2,
+            duration: 2,
+          })
+        }
+      >
+        ended
+      </button>
+    </div>
   ),
 }));
 
@@ -291,6 +326,40 @@ describe('PlaybackWorkspace', () => {
     expect(useCanvasStore.getState().selection.nodeIds).toEqual(['shot-a2']);
   });
 
+  it('continues a media route when the current preview media ends', () => {
+    act(() => {
+      useCanvasStore.setState({
+        canvasData: mediaRouteCanvas(),
+        selection: { nodeIds: ['media-a'], connectionIds: [] },
+      });
+      usePlaybackStore.getState().revealPlaybackWorkspace();
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    const playButton = host.querySelector<HTMLButtonElement>('button[title="Play"]');
+    act(() => {
+      playButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(host.querySelector('[data-testid="preview-surface"]')?.textContent).toContain(
+      'playback:media-a',
+    );
+    expect(
+      host.querySelector<HTMLElement>('[data-testid="preview-surface"]')?.dataset.playbackState,
+    ).toBe('playing');
+
+    act(() => {
+      host
+        .querySelector<HTMLButtonElement>('[data-testid="preview-ended"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(usePlaybackStore.getState().playbackSession.currentUnitId).toBe('media-b');
+    expect(host.querySelector('[data-testid="preview-surface"]')?.textContent).toContain(
+      'playback:media-b',
+    );
+  });
+
   it('requests and renders host-enriched preview plans inside the same Webview', async () => {
     vscodeApi = { postMessage: vi.fn() };
     (window as unknown as { vscodeApi?: unknown }).vscodeApi = vscodeApi;
@@ -325,7 +394,7 @@ describe('PlaybackWorkspace', () => {
       await Promise.resolve();
     });
 
-    expect(host.querySelector('[data-testid="preview-surface"]')?.textContent).toBe(
+    expect(host.querySelector('[data-testid="preview-surface"]')?.firstChild?.textContent).toBe(
       'playback:shot-host',
     );
     expect(host.textContent).toContain('Host Shot');
@@ -553,6 +622,39 @@ function storyboardCanvas(): CanvasData {
       shot('shot-a2', 2, 'scene-a', 'assets/shot-a2.png'),
     ],
     connections: [],
+  };
+}
+
+function mediaRouteCanvas(): CanvasData {
+  return {
+    version: '2.1',
+    name: 'Media route',
+    nodes: [mediaNode('media-a', 'assets/a.mp4'), mediaNode('media-b', 'assets/b.mp4')],
+    connections: [
+      {
+        id: 'media-a-b',
+        sourceId: 'media-a',
+        targetId: 'media-b',
+        sourceEndpoint: { nodeId: 'media-a', scope: 'node' },
+        targetEndpoint: { nodeId: 'media-b', scope: 'node' },
+        type: 'sequence',
+      },
+    ],
+  };
+}
+
+function mediaNode(id: string, assetPath: string): CanvasNode {
+  return {
+    id,
+    type: 'media',
+    position: { x: 0, y: 0 },
+    size: { width: 200, height: 120 },
+    zIndex: 0,
+    data: {
+      assetPath,
+      mediaType: 'video',
+      duration: 2,
+    },
   };
 }
 

@@ -95,7 +95,8 @@ const DEFAULT_PLAYBACK_SESSION: PlaybackSessionState = {
 };
 
 export interface PlaybackHandoffRequest {
-  assetPath: string;
+  sourceKey?: string;
+  assetPath?: string;
   mediaType: 'video' | 'audio';
   fromSurfaceId: string;
   toKind: PlaybackSurfaceKind;
@@ -103,7 +104,8 @@ export interface PlaybackHandoffRequest {
 }
 
 interface ActivePlaybackState {
-  assetPath: string;
+  sourceKey: string;
+  assetPath?: string;
   mediaType: 'video' | 'audio';
   surfaceId: string;
   surfaceKind: PlaybackSurfaceKind;
@@ -141,16 +143,22 @@ interface PlaybackStore {
   getPlayback: (assetPath: string) => NodePlaybackState | undefined;
   clearPlayback: (assetPath: string) => void;
   startActivePlayback: (
-    state: Omit<ActivePlaybackState, 'updatedAt' | 'isPlaying'> & { isPlaying?: boolean },
+    state: Omit<ActivePlaybackState, 'sourceKey' | 'updatedAt' | 'isPlaying'> & {
+      sourceKey?: string;
+      isPlaying?: boolean;
+    },
   ) => void;
   updateActivePlayback: (
-    assetPath: string,
+    sourceKey: string,
     surfaceId: string,
     patch: Partial<Pick<ActivePlaybackState, 'currentTime' | 'duration' | 'isPlaying'>>,
   ) => void;
-  stopActivePlayback: (assetPath: string, surfaceId: string, currentTime: number) => void;
+  stopActivePlayback: (sourceKey: string, surfaceId: string, currentTime: number) => void;
   requestHandoff: (request: PlaybackHandoffRequest) => void;
-  consumeHandoff: (assetPath: string, toKind: PlaybackSurfaceKind) => PlaybackHandoffRequest | null;
+  consumeHandoff: (
+    sourceKey: string | undefined,
+    toKind: PlaybackSurfaceKind,
+  ) => PlaybackHandoffRequest | null;
 }
 
 export interface ReconcilePlaybackMatrixStateInput {
@@ -401,19 +409,24 @@ export const usePlaybackStore = create<PlaybackStore>((set, get) => ({
   },
 
   startActivePlayback: (state) => {
+    const sourceKey = state.sourceKey ?? state.assetPath;
+    if (!sourceKey) {
+      throw new Error('Active playback requires a source key or asset path.');
+    }
     set({
       activePlayback: {
         ...state,
+        sourceKey,
         isPlaying: state.isPlaying ?? true,
         updatedAt: Date.now(),
       },
     });
   },
 
-  updateActivePlayback: (assetPath, surfaceId, patch) => {
+  updateActivePlayback: (sourceKey, surfaceId, patch) => {
     set((prev) => {
       const active = prev.activePlayback;
-      if (!active || active.assetPath !== assetPath || active.surfaceId !== surfaceId) {
+      if (!active || active.sourceKey !== sourceKey || active.surfaceId !== surfaceId) {
         return {};
       }
       return {
@@ -426,15 +439,15 @@ export const usePlaybackStore = create<PlaybackStore>((set, get) => ({
     });
   },
 
-  stopActivePlayback: (assetPath, surfaceId, currentTime) => {
+  stopActivePlayback: (sourceKey, surfaceId, currentTime) => {
     set((prev) => {
       const active = prev.activePlayback;
-      if (!active || active.assetPath !== assetPath || active.surfaceId !== surfaceId) {
+      if (!active || active.sourceKey !== sourceKey || active.surfaceId !== surfaceId) {
         return {};
       }
       return {
         activePlayback: null,
-        playbacks: withSavedPlayback(prev.playbacks, assetPath, {
+        playbacks: withSavedPlayback(prev.playbacks, sourceKey, {
           currentTime,
           duration: active.duration,
           wasPlaying: false,
@@ -444,12 +457,18 @@ export const usePlaybackStore = create<PlaybackStore>((set, get) => ({
   },
 
   requestHandoff: (request) => {
-    set({ handoffRequest: request });
+    const sourceKey = request.sourceKey ?? request.assetPath;
+    if (!sourceKey) {
+      throw new Error('Playback handoff requires a source key or asset path.');
+    }
+    set({ handoffRequest: { ...request, sourceKey } });
   },
 
-  consumeHandoff: (assetPath, toKind) => {
+  consumeHandoff: (sourceKey, toKind) => {
+    if (!sourceKey) return null;
     const request = get().handoffRequest;
-    if (!request || request.assetPath !== assetPath || request.toKind !== toKind) {
+    const requestSourceKey = request?.sourceKey ?? request?.assetPath;
+    if (!request || requestSourceKey !== sourceKey || request.toKind !== toKind) {
       return null;
     }
     set({ handoffRequest: null });

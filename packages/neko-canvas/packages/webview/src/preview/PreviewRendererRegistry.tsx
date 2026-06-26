@@ -3,7 +3,11 @@ import { isResourceRef, type DelegateAction, type ResourceRef } from '@neko/shar
 import { dispatchPreviewDelegate } from './previewDelegates';
 import { isImagePreviewUrl, isSafeWebviewUrl, WebviewPreviewResolver } from './previewResolver';
 import { PreviewRuntime } from './previewRuntime';
-import type { PreviewSourceDescriptor, RuntimePreviewVariant } from './types';
+import type {
+  PreviewPlaybackControl,
+  PreviewSourceDescriptor,
+  RuntimePreviewVariant,
+} from './types';
 import { InlineVideoPlayer } from '../components/media/InlineVideoPlayer';
 import { InlineAudioPlayer } from '../components/media/InlineAudioPlayer';
 import { usePlaybackStore } from '../stores/playbackStore';
@@ -16,6 +20,7 @@ export interface PreviewRendererProps {
   runtime?: PreviewRuntime;
   delegateActions?: DelegateAction[];
   surfaceKind?: PlaybackSurfaceKind;
+  playbackControl?: PreviewPlaybackControl;
 }
 
 export type PreviewRenderer = (props: PreviewRendererProps) => React.ReactNode;
@@ -44,7 +49,7 @@ function createPreviewRendererRegistry(): PreviewRendererRegistry {
 export function PreviewSurface(props: PreviewRendererProps) {
   const registry = useMemo(() => createPreviewRendererRegistry(), []);
   const Renderer = registry[props.source.role] ?? renderFallbackPreview;
-  return <Renderer {...props} />;
+  return <Renderer key={props.source.id} {...props} />;
 }
 
 // =============================================================================
@@ -125,6 +130,7 @@ interface MediaStreamState {
   height: number;
   fps: number;
   duration: number;
+  startTime: number;
 }
 
 const PLAYBACK_PROGRESS_SYNC_INTERVAL_MS = 250;
@@ -153,14 +159,16 @@ function useMediaStream(
   const isPausedRef = useRef(false);
   const listenerRef = useRef<((e: MessageEvent) => void) | null>(null);
   const streamDurationRef = useRef(0);
+  const stoppedPlaybackRef = useRef(true);
 
   const [savedStartTime] = useState(() => {
-    if (!assetPath) return 0;
+    const sourceKey = createMediaPlaybackSourceKey(assetPath, resourceRef);
+    if (!sourceKey) return 0;
     const playbackStore = usePlaybackStore.getState();
     return (
-      (playbackStore.activePlayback?.assetPath === assetPath
+      (playbackStore.activePlayback?.sourceKey === sourceKey
         ? playbackStore.activePlayback.currentTime
-        : playbackStore.getPlayback(assetPath)?.currentTime) ?? 0
+        : playbackStore.getPlayback(sourceKey)?.currentTime) ?? 0
     );
   });
   const currentTimeRef = useRef(savedStartTime);
@@ -172,13 +180,15 @@ function useMediaStream(
   const startPlayback = useCallback(
     (resumeFromTime?: number) => {
       const vscode = getGlobalVSCodeApi();
-      if (!vscode || !assetPath) return;
+      const sourceKey = createMediaPlaybackSourceKey(assetPath, resourceRef);
+      if (!vscode || !sourceKey) return;
 
       const playbackStore = usePlaybackStore.getState();
       const active = playbackStore.activePlayback;
-      if (active && active.assetPath === assetPath && active.surfaceId !== surfaceId) {
+      if (active && active.sourceKey === sourceKey && active.surfaceId !== surfaceId) {
         playbackStore.requestHandoff({
-          assetPath,
+          sourceKey,
+          ...(assetPath ? { assetPath } : {}),
           mediaType,
           fromSurfaceId: active.surfaceId,
           toKind: surfaceKind,
@@ -189,12 +199,13 @@ function useMediaStream(
 
       setProbing(true);
       isPausedRef.current = false;
+      stoppedPlaybackRef.current = false;
 
-      const handoff = playbackStore.consumeHandoff(assetPath, surfaceKind);
+      const sourceHandoff = playbackStore.consumeHandoff(sourceKey, surfaceKind);
       const startTime =
         resumeFromTime ??
-        handoff?.startTime ??
-        playbackStore.getPlayback(assetPath)?.currentTime ??
+        sourceHandoff?.startTime ??
+        playbackStore.getPlayback(sourceKey)?.currentTime ??
         savedStartTime;
 
       const handleMessage = (event: MessageEvent) => {
@@ -208,7 +219,7 @@ function useMediaStream(
           vscode.postMessage({
             type: 'media:play',
             nodeId: surfaceId,
-            assetPath,
+            ...(assetPath ? { assetPath } : {}),
             ...(resourceRef ? { resourceRef } : {}),
             mediaInfo,
             mediaType,
@@ -223,7 +234,8 @@ function useMediaStream(
           const dur = (mediaInfo?.duration as number) ?? 0;
           streamDurationRef.current = dur;
           usePlaybackStore.getState().startActivePlayback({
-            assetPath,
+            sourceKey,
+            ...(assetPath ? { assetPath } : {}),
             mediaType,
             surfaceId,
             surfaceKind,
@@ -242,6 +254,7 @@ function useMediaStream(
             height: (mediaInfo?.height as number) ?? 360,
             fps: (mediaInfo?.fps as number) ?? 30,
             duration: dur,
+            startTime,
           });
         }
       };
@@ -251,7 +264,7 @@ function useMediaStream(
       vscode.postMessage({
         type: 'media:probe',
         nodeId: surfaceId,
-        assetPath,
+        ...(assetPath ? { assetPath } : {}),
         ...(resourceRef ? { resourceRef } : {}),
         mediaType,
       });
@@ -262,85 +275,93 @@ function useMediaStream(
   const pausePlayback = useCallback(
     (currentTime: number) => {
       const vscode = getGlobalVSCodeApi();
-      if (!vscode || !assetPath) return;
+      const sourceKey = createMediaPlaybackSourceKey(assetPath, resourceRef);
+      if (!vscode || !sourceKey) return;
       vscode.postMessage({ type: 'media:pause', nodeId: surfaceId });
       isPausedRef.current = true;
       lastProgressSyncRef.current = {
         currentTime,
         updatedAtMs: getMonotonicTimeMs(),
       };
-      usePlaybackStore.getState().savePlayback(assetPath, {
+      usePlaybackStore.getState().savePlayback(sourceKey, {
         currentTime,
         duration: streamDurationRef.current,
         wasPlaying: true,
       });
-      usePlaybackStore.getState().updateActivePlayback(assetPath, surfaceId, {
+      usePlaybackStore.getState().updateActivePlayback(sourceKey, surfaceId, {
         currentTime,
         isPlaying: false,
       });
       currentTimeRef.current = currentTime;
     },
-    [assetPath, surfaceId],
+    [assetPath, resourceRef, surfaceId],
   );
 
   const resumePlayback = useCallback(() => {
     const vscode = getGlobalVSCodeApi();
-    if (!vscode || !assetPath) return;
+    const sourceKey = createMediaPlaybackSourceKey(assetPath, resourceRef);
+    if (!vscode || !sourceKey) return;
     vscode.postMessage({ type: 'media:resume', nodeId: surfaceId });
     isPausedRef.current = false;
-    usePlaybackStore.getState().updateActivePlayback(assetPath, surfaceId, { isPlaying: true });
-  }, [assetPath, surfaceId]);
+    usePlaybackStore.getState().updateActivePlayback(sourceKey, surfaceId, { isPlaying: true });
+  }, [assetPath, resourceRef, surfaceId]);
 
   const seekPlayback = useCallback(
     (time: number) => {
       const vscode = getGlobalVSCodeApi();
-      if (!vscode || !assetPath) return;
+      const sourceKey = createMediaPlaybackSourceKey(assetPath, resourceRef);
+      if (!vscode || !sourceKey) return;
       vscode.postMessage({ type: 'media:seek', nodeId: surfaceId, time });
       lastProgressSyncRef.current = {
         currentTime: time,
         updatedAtMs: getMonotonicTimeMs(),
       };
-      usePlaybackStore.getState().updateActivePlayback(assetPath, surfaceId, { currentTime: time });
+      usePlaybackStore.getState().updateActivePlayback(sourceKey, surfaceId, { currentTime: time });
       currentTimeRef.current = time;
     },
-    [assetPath, surfaceId],
+    [assetPath, resourceRef, surfaceId],
   );
 
   const updatePlaybackProgress = useCallback(
     (currentTime: number) => {
-      if (!assetPath) return;
+      const sourceKey = createMediaPlaybackSourceKey(assetPath, resourceRef);
+      if (!sourceKey) return false;
       currentTimeRef.current = currentTime;
       const now = getMonotonicTimeMs();
       const last = lastProgressSyncRef.current;
       const shouldSync =
         Math.abs(currentTime - last.currentTime) >= PLAYBACK_PROGRESS_SYNC_DELTA_SECONDS ||
         now - last.updatedAtMs >= PLAYBACK_PROGRESS_SYNC_INTERVAL_MS;
-      if (!shouldSync) return;
+      if (!shouldSync) return false;
 
       lastProgressSyncRef.current = { currentTime, updatedAtMs: now };
-      usePlaybackStore.getState().updateActivePlayback(assetPath, surfaceId, {
+      usePlaybackStore.getState().updateActivePlayback(sourceKey, surfaceId, {
         currentTime,
         duration: streamDurationRef.current,
       });
+      return true;
     },
-    [assetPath, surfaceId],
+    [assetPath, resourceRef, surfaceId],
   );
 
   const getCurrentTime = useCallback(() => currentTimeRef.current, []);
 
   const stopPlayback = useCallback(
     (currentTime: number) => {
+      if (stoppedPlaybackRef.current) return;
+      stoppedPlaybackRef.current = true;
       if (listenerRef.current) {
         window.removeEventListener('message', listenerRef.current);
         listenerRef.current = null;
       }
       const vscode = getGlobalVSCodeApi();
-      if (vscode && assetPath) {
+      if (vscode && createMediaPlaybackSourceKey(assetPath, resourceRef)) {
         vscode.postMessage({ type: 'media:stop', nodeId: surfaceId });
       }
-      if (assetPath) {
+      const sourceKey = createMediaPlaybackSourceKey(assetPath, resourceRef);
+      if (sourceKey) {
         const playbackStore = usePlaybackStore.getState();
-        playbackStore.savePlayback(assetPath, {
+        playbackStore.savePlayback(sourceKey, {
           currentTime,
           duration: streamDurationRef.current,
           wasPlaying: false,
@@ -349,16 +370,17 @@ function useMediaStream(
           currentTime,
           updatedAtMs: getMonotonicTimeMs(),
         };
-        playbackStore.stopActivePlayback(assetPath, surfaceId, currentTime);
+        playbackStore.stopActivePlayback(sourceKey, surfaceId, currentTime);
       }
       setStream(null);
       isPausedRef.current = false;
     },
-    [assetPath, surfaceId],
+    [assetPath, resourceRef, surfaceId],
   );
 
   usePlaybackHandoff({
     assetPath,
+    resourceRef,
     mediaType,
     surfaceId,
     surfaceKind,
@@ -381,7 +403,6 @@ function useMediaStream(
     stream,
     probing,
     isPaused: isPausedRef.current,
-    savedStartTime,
     surfaceId,
     startPlayback,
     pausePlayback,
@@ -392,8 +413,18 @@ function useMediaStream(
   };
 }
 
+function createMediaPlaybackSourceKey(
+  assetPath: string | undefined,
+  resourceRef: ResourceRef | undefined,
+): string | undefined {
+  if (assetPath) return assetPath;
+  if (resourceRef) return `resource:${resourceRef.id}`;
+  return undefined;
+}
+
 interface PlaybackHandoffOptions {
   assetPath: string | undefined;
+  resourceRef: ResourceRef | undefined;
   mediaType: 'video' | 'audio';
   surfaceId: string;
   surfaceKind: PlaybackSurfaceKind;
@@ -406,6 +437,7 @@ interface PlaybackHandoffOptions {
 
 function usePlaybackHandoff({
   assetPath,
+  resourceRef,
   mediaType,
   surfaceId,
   surfaceKind,
@@ -415,16 +447,17 @@ function usePlaybackHandoff({
   startPlayback,
   stopPlayback,
 }: PlaybackHandoffOptions): void {
+  const sourceKey = createMediaPlaybackSourceKey(assetPath, resourceRef);
   const requestedMountHandoffRef = useRef(false);
   const handledHandoffRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!assetPath || !stream) return;
+    if (!sourceKey || !stream) return;
     const unsubscribe = usePlaybackStore.subscribe((state) => {
       const request = state.handoffRequest;
       const requestKey = request ? handoffRequestKey(request) : null;
       if (
-        request?.assetPath === assetPath &&
+        request?.sourceKey === sourceKey &&
         request.fromSurfaceId === surfaceId &&
         requestKey &&
         handledHandoffRef.current !== requestKey
@@ -434,46 +467,47 @@ function usePlaybackHandoff({
       }
     });
     return unsubscribe;
-  }, [assetPath, stopPlayback, stream, surfaceId]);
+  }, [sourceKey, stopPlayback, stream, surfaceId]);
 
   useEffect(() => {
-    if (!assetPath || stream || probing) return;
+    if (!sourceKey || stream || probing) return;
     const unsubscribe = usePlaybackStore.subscribe((state) => {
       const request = state.handoffRequest;
       if (
-        request?.assetPath === assetPath &&
+        request?.sourceKey === sourceKey &&
         request.toKind === surfaceKind &&
         state.activePlayback === null
       ) {
-        const consumed = usePlaybackStore.getState().consumeHandoff(assetPath, surfaceKind);
+        const consumed = usePlaybackStore.getState().consumeHandoff(sourceKey, surfaceKind);
         if (consumed) {
           startPlayback(consumed.startTime);
         }
       }
     });
     return unsubscribe;
-  }, [assetPath, probing, startPlayback, stream, surfaceKind]);
+  }, [probing, sourceKey, startPlayback, stream, surfaceKind]);
 
   useEffect(() => {
-    if (surfaceKind !== 'overlay' || !assetPath || stream || probing) return;
+    if (surfaceKind !== 'overlay' || !sourceKey || stream || probing) return;
     if (requestedMountHandoffRef.current) return;
     const active = usePlaybackStore.getState().activePlayback;
     if (
       active &&
-      active.assetPath === assetPath &&
+      active.sourceKey === sourceKey &&
       active.surfaceId !== surfaceId &&
       active.isPlaying
     ) {
       requestedMountHandoffRef.current = true;
       usePlaybackStore.getState().requestHandoff({
-        assetPath,
+        sourceKey,
+        ...(assetPath ? { assetPath } : {}),
         mediaType,
         fromSurfaceId: active.surfaceId,
         toKind: 'overlay',
         startTime: active.currentTime,
       });
     }
-  }, [assetPath, mediaType, probing, stream, surfaceId, surfaceKind]);
+  }, [assetPath, mediaType, probing, sourceKey, stream, surfaceId, surfaceKind]);
 
   useEffect(() => {
     if (!stream) return;
@@ -481,13 +515,14 @@ function usePlaybackHandoff({
       const active = usePlaybackStore.getState().activePlayback;
       if (
         surfaceKind === 'overlay' &&
-        assetPath &&
-        active?.assetPath === assetPath &&
+        sourceKey &&
+        active?.sourceKey === sourceKey &&
         active.surfaceId === surfaceId &&
         active.isPlaying
       ) {
         usePlaybackStore.getState().requestHandoff({
-          assetPath,
+          sourceKey,
+          ...(assetPath ? { assetPath } : {}),
           mediaType,
           fromSurfaceId: surfaceId,
           toKind: 'inline',
@@ -496,15 +531,25 @@ function usePlaybackHandoff({
       }
       stopPlayback(getCurrentTime());
     };
-  }, [assetPath, getCurrentTime, mediaType, stopPlayback, stream, surfaceId, surfaceKind]);
+  }, [
+    assetPath,
+    getCurrentTime,
+    mediaType,
+    sourceKey,
+    stopPlayback,
+    stream,
+    surfaceId,
+    surfaceKind,
+  ]);
 }
 
 function handoffRequestKey(request: {
   readonly fromSurfaceId: string;
+  readonly sourceKey?: string;
   readonly toKind: PlaybackSurfaceKind;
   readonly startTime: number;
 }): string {
-  return `${request.fromSurfaceId}:${request.toKind}:${request.startTime}`;
+  return `${request.sourceKey ?? ''}:${request.fromSurfaceId}:${request.toKind}:${request.startTime}`;
 }
 
 // =============================================================================
@@ -552,6 +597,7 @@ function getVisualPreviewImageClassName(surfaceKind: PlaybackSurfaceKind): strin
 function renderVideoPreview({
   source,
   surfaceKind = 'inline',
+  playbackControl,
 }: PreviewRendererProps): React.ReactNode {
   const variant = useResolvedVariant(source, 'video-poster');
   const thumbnailUrl =
@@ -559,10 +605,10 @@ function renderVideoPreview({
   const assetPath = source.asset?.path;
   const resourceRef = readPreviewSourceResourceRef(source);
   const capturedFrame = useCaptureFrame(assetPath, source.id, resourceRef);
+  const canStartPlayback = Boolean(assetPath || resourceRef);
   const {
     stream,
     probing,
-    savedStartTime,
     startPlayback,
     pausePlayback,
     resumePlayback,
@@ -572,10 +618,59 @@ function renderVideoPreview({
   } = useMediaStream(assetPath, 'video', surfaceKind, resourceRef);
 
   const posterUrl = capturedFrame ?? thumbnailUrl;
+  const consumedPlaybackRequestRef = useRef<string | undefined>();
+
+  useEffect(() => {
+    if (
+      !playbackControl?.requestId ||
+      consumedPlaybackRequestRef.current === playbackControl.requestId ||
+      playbackControl.state !== 'playing' ||
+      stream ||
+      probing ||
+      !canStartPlayback
+    ) {
+      return;
+    }
+    consumedPlaybackRequestRef.current = playbackControl.requestId;
+    startPlayback(playbackControl.startTimeSeconds);
+  }, [
+    canStartPlayback,
+    playbackControl?.requestId,
+    playbackControl?.startTimeSeconds,
+    playbackControl?.state,
+    probing,
+    startPlayback,
+    stream,
+  ]);
+
+  const handleTimeUpdate = useCallback(
+    (currentTime: number) => {
+      const synced = updatePlaybackProgress(currentTime);
+      if (!synced || !stream) return;
+      playbackControl?.onTimeUpdate?.({
+        sourceId: source.id,
+        currentTime,
+        duration: stream.duration,
+      });
+    },
+    [playbackControl?.onTimeUpdate, source.id, stream, updatePlaybackProgress],
+  );
+
+  const handleEnded = useCallback(
+    (currentTime: number) => {
+      playbackControl?.onEnded?.({
+        sourceId: source.id,
+        mediaType: 'video',
+        currentTime,
+        duration: stream?.duration ?? currentTime,
+      });
+    },
+    [playbackControl?.onEnded, source.id, stream?.duration],
+  );
 
   if (stream) {
     return (
-      <div className="relative min-h-[90px] overflow-hidden rounded border border-[var(--node-border)] bg-black">
+      <div className="relative min-h-[90px] overflow-hidden rounded-[var(--radius-sm)] border border-[var(--control-border)] bg-black">
         <InlineVideoPlayer
           videoStreamUrl={stream.videoStreamUrl}
           audioStreamUrl={stream.audioStreamUrl}
@@ -583,19 +678,23 @@ function renderVideoPreview({
           height={stream.height}
           fps={stream.fps}
           duration={stream.duration}
-          startTime={savedStartTime}
+          startTime={stream.startTime}
           onPause={pausePlayback}
           onResume={resumePlayback}
           onSeek={seekPlayback}
-          onTimeUpdate={updatePlaybackProgress}
+          onTimeUpdate={handleTimeUpdate}
           onStop={stopPlayback}
+          playbackState={playbackControl?.state}
+          playbackRequestId={playbackControl?.requestId}
+          playbackStartTime={playbackControl?.startTimeSeconds}
+          onEnded={handleEnded}
         />
       </div>
     );
   }
 
   return (
-    <div className="relative min-h-[90px] overflow-hidden rounded border border-[var(--node-border)] bg-black/30">
+    <div className="relative min-h-[90px] overflow-hidden rounded-[var(--radius-sm)] border border-[var(--control-border)] bg-black/30">
       {posterUrl ? (
         <img
           src={posterUrl}
@@ -611,7 +710,7 @@ function renderVideoPreview({
           e.stopPropagation();
           startPlayback();
         }}
-        disabled={probing || !assetPath}
+        disabled={probing || !canStartPlayback}
       >
         {probing ? '...' : '▶'}
       </button>
@@ -627,13 +726,14 @@ function renderAudioPreview({
   source,
   delegateActions,
   surfaceKind = 'inline',
+  playbackControl,
 }: PreviewRendererProps): React.ReactNode {
   const assetPath = source.asset?.path;
   const resourceRef = readPreviewSourceResourceRef(source);
+  const canStartPlayback = Boolean(assetPath || resourceRef);
   const {
     stream,
     probing,
-    savedStartTime,
     startPlayback,
     pausePlayback,
     resumePlayback,
@@ -641,26 +741,79 @@ function renderAudioPreview({
     updatePlaybackProgress,
     stopPlayback,
   } = useMediaStream(assetPath, 'audio', surfaceKind, resourceRef);
+  const consumedPlaybackRequestRef = useRef<string | undefined>();
+
+  useEffect(() => {
+    if (
+      !playbackControl?.requestId ||
+      consumedPlaybackRequestRef.current === playbackControl.requestId ||
+      playbackControl.state !== 'playing' ||
+      stream ||
+      probing ||
+      !canStartPlayback
+    ) {
+      return;
+    }
+    consumedPlaybackRequestRef.current = playbackControl.requestId;
+    startPlayback(playbackControl.startTimeSeconds);
+  }, [
+    canStartPlayback,
+    playbackControl?.requestId,
+    playbackControl?.startTimeSeconds,
+    playbackControl?.state,
+    probing,
+    startPlayback,
+    stream,
+  ]);
+
+  const handleTimeUpdate = useCallback(
+    (currentTime: number) => {
+      const synced = updatePlaybackProgress(currentTime);
+      if (!synced || !stream) return;
+      playbackControl?.onTimeUpdate?.({
+        sourceId: source.id,
+        currentTime,
+        duration: stream.duration,
+      });
+    },
+    [playbackControl?.onTimeUpdate, source.id, stream, updatePlaybackProgress],
+  );
+
+  const handleEnded = useCallback(
+    (currentTime: number) => {
+      playbackControl?.onEnded?.({
+        sourceId: source.id,
+        mediaType: 'audio',
+        currentTime,
+        duration: stream?.duration ?? currentTime,
+      });
+    },
+    [playbackControl?.onEnded, source.id, stream?.duration],
+  );
 
   if (stream && stream.audioStreamUrl) {
     return (
-      <div className="rounded border border-[var(--node-border)] bg-black/20">
+      <div className="rounded-[var(--radius-sm)] border border-[var(--control-border)] bg-black/20">
         <InlineAudioPlayer
           audioStreamUrl={stream.audioStreamUrl}
           duration={stream.duration}
-          startTime={savedStartTime}
+          startTime={stream.startTime}
           onPause={pausePlayback}
           onResume={resumePlayback}
           onSeek={seekPlayback}
-          onTimeUpdate={updatePlaybackProgress}
+          onTimeUpdate={handleTimeUpdate}
           onStop={stopPlayback}
+          playbackState={playbackControl?.state}
+          playbackRequestId={playbackControl?.requestId}
+          playbackStartTime={playbackControl?.startTimeSeconds}
+          onEnded={handleEnded}
         />
       </div>
     );
   }
 
   return (
-    <div className="rounded border border-[var(--node-border)] bg-black/20 p-2">
+    <div className="rounded-[var(--radius-sm)] border border-[var(--control-border)] bg-black/20 p-2">
       <div className="mb-2 flex h-8 items-end gap-0.5">
         {Array.from({ length: 24 }).map((_, index) => (
           <div
@@ -673,15 +826,15 @@ function renderAudioPreview({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="rounded bg-[var(--node-selected)] px-2 py-1 text-xs text-white"
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--control-border)] bg-[var(--node-selected)] text-xs text-white"
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             startPlayback();
           }}
-          disabled={probing || !assetPath}
+          disabled={probing || !canStartPlayback}
         >
-          {probing ? '...' : '▶ Play'}
+          {probing ? '...' : '▶'}
         </button>
         <span className="truncate text-xs text-[var(--node-fg-secondary)]">
           {source.title ?? source.asset?.path ?? source.id}

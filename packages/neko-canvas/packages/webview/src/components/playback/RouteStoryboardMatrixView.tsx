@@ -76,10 +76,12 @@ export function RouteStoryboardMatrix({
   const routeSummary = t('playback.matrix.summary', {
     rows: matrix.rows.length,
     columns: matrix.columns.length,
+    durationRange: formatRouteDurationRange(matrix.rows),
   });
   const containerSummary = t('playback.matrix.containerCount', {
     count: matrix.containerGroups.length,
   });
+  const durationRange = useMemo(() => formatRouteDurationRange(matrix.rows), [matrix.rows]);
 
   const focusCell = (cell: RouteStoryboardMatrixCell) => {
     setLocalFocusedCellId(cell.id);
@@ -148,6 +150,7 @@ export function RouteStoryboardMatrix({
             <MatrixStat value={matrix.rows.length} label={t('playback.matrix.statRoutes')} />
             <MatrixStat value={matrix.columns.length} label={t('playback.matrix.statSteps')} />
             <MatrixStat value={visibleUnitCount} label={t('playback.matrix.statVisibleUnits')} />
+            <MatrixStat value={durationRange} label={t('playback.matrix.statDurationRange')} />
           </div>
         </div>
         <div
@@ -262,7 +265,7 @@ export function RouteStoryboardMatrix({
   );
 }
 
-function MatrixStat({ value, label }: { readonly value: number; readonly label: string }) {
+function MatrixStat({ value, label }: { readonly value: number | string; readonly label: string }) {
   return (
     <span className="canvas-route-storyboard-matrix-stat">
       <strong>{value}</strong>
@@ -423,11 +426,20 @@ function MatrixCell({
   const cellTitle = t('playback.matrix.cellTitle', {
     label: cell.label,
     kind: formatUnitKind(cell.unitKind),
-    start: formatDurationMs(cell.startMs),
-    end: formatDurationMs(cell.endMs),
-    duration: formatDurationMs(cell.durationMs),
+    timing: cell.sourceRange
+      ? formatSourceRange(cell.sourceRange)
+      : t('playback.matrix.routeTiming', {
+          range: formatTimelineRange(cell.startMs, cell.endMs),
+          duration: formatDurationMs(cell.durationMs),
+        }),
     state: formatMediaState(cell.mediaState),
   });
+  const timingLabel = cell.sourceRange
+    ? t('playback.matrix.sourceRangeShort', {
+        range: formatTimelineRange(cell.sourceRange.startMs, cell.sourceRange.endMs),
+        duration: formatDurationMs(cell.sourceRange.durationMs),
+      })
+    : formatDurationMs(cell.durationMs);
 
   return (
     <button
@@ -449,15 +461,20 @@ function MatrixCell({
         onSelectCell(cell);
       }}
     >
-      <span className="canvas-route-storyboard-matrix-thumb">
-        {cell.label.slice(0, 1).toUpperCase()}
+      <span
+        className="canvas-route-storyboard-matrix-thumb"
+        data-has-image={cell.thumbnail ? 'true' : 'false'}
+      >
+        {cell.thumbnail ? (
+          <img src={cell.thumbnail.src} alt={cell.thumbnail.alt} draggable={false} />
+        ) : (
+          cell.label.slice(0, 1).toUpperCase()
+        )}
       </span>
       <span className="canvas-route-storyboard-matrix-cell-title">{cell.label}</span>
       <span className="canvas-route-storyboard-matrix-cell-meta">
         <span>{formatUnitKind(cell.unitKind)}</span>
-        <span>
-          {formatDurationMs(cell.startMs)}-{formatDurationMs(cell.endMs)}
-        </span>
+        <span>{timingLabel}</span>
       </span>
     </button>
   );
@@ -634,6 +651,40 @@ function resolveDefaultFocusedCellId(
 function clampIndex(index: number, length: number): number {
   if (length <= 0) return 0;
   return Math.max(0, Math.min(length - 1, index));
+}
+
+function formatRouteDurationRange(rows: readonly RouteStoryboardMatrixRow[]): string {
+  const durations = rows
+    .map((row) => row.totalDurationMs)
+    .filter((duration) => Number.isFinite(duration) && duration >= 0);
+  if (durations.length === 0) return formatDurationMs(0);
+  const min = Math.min(...durations);
+  const max = Math.max(...durations);
+  if (min === max) return formatDurationMs(max);
+  return `${formatDurationMs(min)}-${formatDurationMs(max)}`;
+}
+
+function formatSourceRange(range: RouteStoryboardMatrixPlayableCell['sourceRange']): string {
+  if (!range) return '';
+  return t('playback.matrix.sourceRangeShort', {
+    range: formatTimelineRange(range.startMs, range.endMs),
+    duration: formatDurationMs(range.durationMs),
+  });
+}
+
+function formatTimelineRange(startMs: number, endMs: number): string {
+  return `${formatTimelinePointMs(startMs)}-${formatTimelinePointMs(endMs)}`;
+}
+
+function formatTimelinePointMs(ms: number): string {
+  const totalTenths = Math.max(0, Math.round(ms / 100));
+  const totalSeconds = Math.floor(totalTenths / 10);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const tenths = totalTenths % 10;
+  const base = `${minutes}:${String(seconds).padStart(2, '0')}`;
+  if (tenths === 0) return base;
+  return `${base}.${tenths}`;
 }
 
 function formatDurationMs(durationMs: number): string {
