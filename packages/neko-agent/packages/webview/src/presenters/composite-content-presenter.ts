@@ -12,12 +12,11 @@ import type {
   StoryboardValidationDiagnostic,
   DocumentArchiveResourceRef,
   EntityMemoryContribution,
-  ResourceRef,
   ToolResultAttachment,
 } from '@neko/shared';
 import {
+  isPublicGeneratedAssetResultUri,
   isEntityMemoryContribution,
-  isResourceRef,
   normalizeStoryboardPlanOverlay,
   normalizeStoryboardTable,
   parseDocumentArchiveResourceRef,
@@ -50,11 +49,11 @@ export interface ResolvedCompositeMedia {
   readonly assetIndex: number;
   readonly type: CompositeMediaType;
   readonly src: string;
+  readonly renderUri?: string;
   readonly assetId?: string;
   readonly stableUri?: string;
   readonly localPath?: string;
   readonly resourceRef?: DocumentArchiveResourceRef;
-  readonly cacheResourceRef?: ResourceRef;
   readonly mimeType?: string;
   readonly caption?: string;
   readonly role?: string;
@@ -120,11 +119,11 @@ interface MediaCandidate {
   readonly assetIndex: number;
   readonly type: CompositeMediaType;
   readonly src?: string;
+  readonly renderUri?: string;
   readonly assetId?: string;
   readonly stableUri?: string;
   readonly localPath?: string;
   readonly resourceRef?: DocumentArchiveResourceRef;
-  readonly cacheResourceRef?: ResourceRef;
   readonly mimeType?: string;
   readonly label?: string;
   readonly alias?: string;
@@ -146,7 +145,6 @@ interface InferredStoryboardImageRef {
   readonly mimeType?: string;
   readonly pageNumber?: number;
   readonly resourceRef?: DocumentArchiveResourceRef;
-  readonly cacheResourceRef?: ResourceRef;
 }
 
 interface StoryboardImageAliasIndex {
@@ -418,9 +416,7 @@ function selectExplicitStoryboardImageRef(
     }
 
     if (locator.type === 'asset' && locator.uri) {
-      const stableMatch = imageIndex.refs.find(
-        (ref) => ref.cacheResourceRef?.id === locator.assetId || ref.entryPath === locator.uri,
-      );
+      const stableMatch = imageIndex.refs.find((ref) => ref.entryPath === locator.uri);
       if (stableMatch) return stableMatch;
     }
 
@@ -447,6 +443,7 @@ function projectInferredImageRefToStoryboardMediaRef(
     },
     ...((imageRef.label ?? imageRef.alias) ? { label: imageRef.label ?? imageRef.alias } : {}),
     ...(imageRef.mimeType ? { mimeType: imageRef.mimeType } : {}),
+    ...(imageRef.resourceRef ? { documentResourceRef: imageRef.resourceRef } : {}),
   };
 }
 
@@ -484,7 +481,6 @@ function collectSequentialStoryboardImageRefs(
         ...(candidate.mimeType ? { mimeType: candidate.mimeType } : {}),
         ...(pageNumber !== undefined ? { pageNumber } : {}),
         ...(candidate.resourceRef ? { resourceRef: candidate.resourceRef } : {}),
-        ...(candidate.cacheResourceRef ? { cacheResourceRef: candidate.cacheResourceRef } : {}),
       });
     }
   }
@@ -606,7 +602,7 @@ function isStoryboardImageSourceTool(toolName: string): boolean {
 }
 
 function isImageCandidateResolvable(candidate: MediaCandidate): boolean {
-  return Boolean(candidate.src || candidate.resourceRef || candidate.cacheResourceRef);
+  return Boolean(candidate.src || candidate.renderUri || candidate.resourceRef);
 }
 
 function maybeAlignStoryboardSectionMediaRefs(
@@ -740,7 +736,7 @@ function resolveCompositeMediaRef(
   }
 
   const candidates = collectMediaCandidates(toolCall);
-  const candidate = candidates[assetIndex];
+  const candidate = resolveMediaCandidateByAssetIndex(candidates, assetIndex);
   if (!candidate) {
     return {
       diagnostic: {
@@ -752,19 +748,24 @@ function resolveCompositeMediaRef(
     };
   }
 
-  if (candidate.type === 'model' && !candidate.localPath) {
+  if (candidate.type === 'model' && !candidate.src && !candidate.renderUri) {
     return {
       diagnostic: {
         code: 'missing-uri',
         toolCallId: mediaRef.toolCallId,
         assetIndex,
         ...(candidate.assetId ? { assetId: candidate.assetId } : {}),
-        message: `Asset ${assetIndex} does not have a local model path`,
+        message: `Asset ${assetIndex} does not have an adapter-provided model URI`,
       },
     };
   }
 
-  if (!candidate.src && candidate.type !== 'model' && !isImageCandidateResolvable(candidate)) {
+  if (
+    !candidate.src &&
+    !candidate.renderUri &&
+    candidate.type !== 'model' &&
+    !isImageCandidateResolvable(candidate)
+  ) {
     return {
       diagnostic: {
         code: 'missing-uri',
@@ -782,23 +783,20 @@ function resolveCompositeMediaRef(
         mediaRef.toolCallId,
         assetIndex,
         candidate.assetId ??
-          candidate.cacheResourceRef?.id ??
           createDocumentResourceCandidateKey(candidate.resourceRef) ??
           candidate.stableUri ??
+          candidate.renderUri ??
           candidate.src,
       ].join(':'),
       toolCallId: mediaRef.toolCallId,
       assetIndex,
       type: candidate.type,
-      src:
-        candidate.src ??
-        (candidate.type === 'model' ? (candidate.localPath ?? candidate.stableUri) : undefined) ??
-        '',
+      src: candidate.src ?? candidate.renderUri ?? '',
+      ...(candidate.renderUri ? { renderUri: candidate.renderUri } : {}),
       ...(candidate.assetId ? { assetId: candidate.assetId } : {}),
       ...(candidate.stableUri ? { stableUri: candidate.stableUri } : {}),
       ...(candidate.localPath ? { localPath: candidate.localPath } : {}),
       ...(candidate.resourceRef ? { resourceRef: candidate.resourceRef } : {}),
-      ...(candidate.cacheResourceRef ? { cacheResourceRef: candidate.cacheResourceRef } : {}),
       ...(candidate.mimeType ? { mimeType: candidate.mimeType } : {}),
       ...(mediaRef.caption || candidate.label
         ? { caption: mediaRef.caption ?? candidate.label }
@@ -807,6 +805,16 @@ function resolveCompositeMediaRef(
       ...(candidate.label ? { label: candidate.label } : {}),
     },
   };
+}
+
+function resolveMediaCandidateByAssetIndex(
+  candidates: readonly MediaCandidate[],
+  assetIndex: number,
+): MediaCandidate | undefined {
+  const exact = candidates.find((candidate) => candidate.assetIndex === assetIndex);
+  if (exact) return exact;
+  const positional = candidates[assetIndex];
+  return positional?.assetIndex === assetIndex ? positional : undefined;
 }
 
 function collectToolCalls(
@@ -833,9 +841,9 @@ function collectMediaCandidates(toolCall: ToolCall): readonly MediaCandidate[] {
   const addCandidate = (candidate: MediaCandidate): void => {
     const key =
       candidate.assetId ??
-      candidate.cacheResourceRef?.id ??
       createDocumentResourceCandidateKey(candidate.resourceRef) ??
       candidate.stableUri ??
+      candidate.renderUri ??
       candidate.src ??
       candidate.localPath;
     if (!key || seen.has(key)) return;
@@ -873,11 +881,14 @@ function collectMediaCandidates(toolCall: ToolCall): readonly MediaCandidate[] {
   }
 
   for (const [index, url] of collectResultUrls(data).entries()) {
+    const renderUri = isRenderableUri(url) ? url : undefined;
+    const stableUri = isGeneratedAssetResultMediaUri(url) ? url : undefined;
     addCandidate({
       assetIndex: index,
-      src: isRenderableUri(url) ? url : undefined,
+      src: renderUri ?? stableUri,
+      ...(renderUri ? { renderUri } : {}),
+      ...(stableUri ? { stableUri } : {}),
       type: inferMediaType(readString(data, 'mimeType'), url),
-      localPath: readAbsolutePath(readStringArray(data, 'localPaths')[index]),
       label: `Asset ${index + 1}`,
     });
   }
@@ -891,18 +902,14 @@ function collectDocumentImageCandidates(
   if (!data) return [];
 
   const imageInfo = readRecordArray(data, 'imageInfo');
-  const imagePaths = readStringArray(data, 'imagePaths');
-  const imagePathWebviewUris = readStringArray(data, 'imagePathWebviewUris');
   const candidates: MediaCandidate[] = [];
-  const maxLength = Math.max(imageInfo.length, imagePaths.length, imagePathWebviewUris.length);
 
-  for (let index = 0; index < maxLength; index += 1) {
+  for (let index = 0; index < imageInfo.length; index += 1) {
     const info = imageInfo[index];
     const candidate = projectDocumentImageCandidate({
       index,
       info,
-      path: readString(info, 'path') ?? imagePaths[index],
-      webviewUri: readRenderableUri(info) ?? imagePathWebviewUris[index],
+      allowLocalPath: false,
       label: readString(info, 'label') ?? formatDocumentImageCandidateLabel(info, index),
     });
     if (candidate) candidates.push(candidate);
@@ -919,9 +926,6 @@ function collectReadImageCandidates(
     const info = {
       ...(documentImage ?? {}),
       ...image,
-      ...(documentImage?.['cacheResourceRef'] !== undefined
-        ? { cacheResourceRef: documentImage['cacheResourceRef'] }
-        : {}),
       ...(documentImage?.['resourceRef'] !== undefined
         ? { resourceRef: documentImage['resourceRef'] }
         : {}),
@@ -934,6 +938,7 @@ function collectReadImageCandidates(
         readRenderableUri(image) ??
         readRenderableUri(documentImage) ??
         readString(documentImage, 'webviewUri'),
+      allowLocalPath: true,
       label: readString(image, 'label') ?? formatDocumentImageCandidateLabel(documentImage, index),
     });
     return candidate ? [candidate] : [];
@@ -945,15 +950,13 @@ function projectDocumentImageCandidate(input: {
   readonly info?: Record<string, unknown>;
   readonly path?: string;
   readonly webviewUri?: string;
+  readonly allowLocalPath: boolean;
   readonly label?: string;
 }): MediaCandidate | null {
   const mimeType = readString(input.info, 'mimeType') ?? inferImageMimeType(input.path);
   const src = input.webviewUri && isRenderableUri(input.webviewUri) ? input.webviewUri : undefined;
   const resourceRef = parseStableDocumentArchiveResourceRef(input.info?.['resourceRef']);
-  const cacheResourceRef = isResourceRef(input.info?.['cacheResourceRef'])
-    ? input.info.cacheResourceRef
-    : undefined;
-  if (!input.path && !input.webviewUri && !resourceRef && !cacheResourceRef) return null;
+  if (!resourceRef && (!input.allowLocalPath || (!input.path && !src))) return null;
   const pageNumber = readDocumentImagePageNumber(input.info) ?? readPageNumberFromText(input.label);
   const alias = normalizeStoryboardAlias(readString(input.info, 'alias'));
   const sourceDocumentId =
@@ -962,10 +965,11 @@ function projectDocumentImageCandidate(input: {
   return {
     assetIndex: input.index,
     type: 'image',
-    ...(src ? { src } : {}),
-    ...(readAbsolutePath(input.path) ? { localPath: readAbsolutePath(input.path) } : {}),
+    ...(src && !resourceRef ? { src } : {}),
+    ...(!resourceRef && readPortableSourcePath(input.path)
+      ? { localPath: readPortableSourcePath(input.path) }
+      : {}),
     ...(resourceRef ? { resourceRef } : {}),
-    ...(cacheResourceRef ? { cacheResourceRef } : {}),
     ...(mimeType ? { mimeType } : {}),
     ...(input.label ? { label: input.label } : {}),
     ...(alias ? { alias } : {}),
@@ -1020,20 +1024,20 @@ function projectGeneratedAssetCandidate(
 ): MediaCandidate {
   const assetRef = asRecord(asset['assetRef']);
   const mimeType = readString(asset, 'mimeType') ?? readString(assetRef, 'mimeType');
-  const src = readRenderableUri(asset) ?? readRenderableUri(assetRef);
+  const renderUri = readRenderableUri(asset) ?? readRenderableUri(assetRef);
   const stableUri = readString(assetRef, 'uri');
+  const src =
+    renderUri ?? readGeneratedAssetResultUri(asset) ?? readGeneratedAssetResultUri(assetRef);
 
   return {
     assetIndex: index,
     type: inferGeneratedAssetType(readString(asset, 'type'), mimeType),
     ...(src ? { src } : {}),
+    ...(renderUri ? { renderUri } : {}),
     ...((readString(asset, 'id') ?? readString(assetRef, 'assetId'))
       ? { assetId: readString(asset, 'id') ?? readString(assetRef, 'assetId') }
       : {}),
     ...(stableUri ? { stableUri } : {}),
-    ...(readAbsolutePath(readString(asset, 'path'))
-      ? { localPath: readAbsolutePath(readString(asset, 'path')) }
-      : {}),
     ...(mimeType ? { mimeType } : {}),
     ...(readString(asset, 'label') ? { label: readString(asset, 'label') } : {}),
   };
@@ -1046,12 +1050,14 @@ function projectAssetRefCandidate(
 ): MediaCandidate {
   const mimeType = readString(assetRef, 'mimeType');
   const stableUri = readString(assetRef, 'uri');
-  const src = readRenderableUri(assetRef);
+  const renderUri = readRenderableUri(assetRef);
+  const src = renderUri ?? readGeneratedAssetResultUri(assetRef);
 
   return {
     assetIndex: index,
     type: inferMediaType(mimeType, stableUri),
     ...(src ? { src } : {}),
+    ...(renderUri ? { renderUri } : {}),
     ...(readString(assetRef, 'assetId') ? { assetId: readString(assetRef, 'assetId') } : {}),
     ...(stableUri ? { stableUri } : {}),
     ...(mimeType ? { mimeType } : {}),
@@ -1068,16 +1074,23 @@ function projectAttachmentCandidate(
   const attachmentRecord = asRecord(attachment);
   const assetRef = asRecord(attachmentRecord?.['assetRef']);
   const mimeType = attachment.mimeType ?? readString(assetRef, 'mimeType');
-  const src = readRenderableUri(attachmentRecord) ?? readRenderableUri(assetRef);
-  const stableUri = readString(assetRef, 'uri') ?? attachment.path;
+  const renderUri = readRenderableUri(attachmentRecord) ?? readRenderableUri(assetRef);
+  const src =
+    renderUri ??
+    readGeneratedAssetResultUri(attachmentRecord) ??
+    readGeneratedAssetResultUri(assetRef);
+  const stableUri = readString(assetRef, 'uri') ?? readPortableSourcePath(attachment.path);
 
   return {
     assetIndex: index,
     type: inferMediaType(mimeType, stableUri, attachment.type),
     ...(src ? { src } : {}),
+    ...(renderUri ? { renderUri } : {}),
     ...(readString(assetRef, 'assetId') ? { assetId: readString(assetRef, 'assetId') } : {}),
     ...(stableUri ? { stableUri } : {}),
-    ...(readAbsolutePath(attachment.path) ? { localPath: readAbsolutePath(attachment.path) } : {}),
+    ...(readPortableSourcePath(attachment.path)
+      ? { localPath: readPortableSourcePath(attachment.path) }
+      : {}),
     ...(mimeType ? { mimeType } : {}),
     label: `Attachment ${index + 1}`,
   };
@@ -1095,9 +1108,17 @@ function collectResultUrls(data: Record<string, unknown> | undefined): readonly 
   return Array.from(urls);
 }
 
+function readGeneratedAssetResultUri(
+  record: Record<string, unknown> | undefined,
+): string | undefined {
+  const uri = readString(record, 'uri') ?? readString(record, 'url') ?? readString(record, 'src');
+  return uri && isGeneratedAssetResultMediaUri(uri) ? uri : undefined;
+}
+
 function readRenderableUri(record: Record<string, unknown> | undefined): string | undefined {
   if (!record) return undefined;
   for (const key of [
+    'renderUri',
     'webviewUri',
     'previewUri',
     'preview',
@@ -1230,9 +1251,14 @@ function isRenderableUri(value: string): boolean {
   if (value.startsWith('${')) return false;
   if (isAbsolutePath(value)) return false;
   if (value.startsWith('http://') || value.startsWith('https://')) return true;
-  if (value.startsWith('blob:')) return true;
   if (value.startsWith('webview://')) return true;
   return value.includes('vscode-resource') || value.includes('vscode-webview');
+}
+
+function isGeneratedAssetResultMediaUri(value: string): boolean {
+  if (!value.startsWith('generated-assets/')) return false;
+  if (!isPublicGeneratedAssetResultUri(value)) return false;
+  return inferMediaType(undefined, value) !== 'unknown';
 }
 
 function pushDiagnostic(
@@ -1268,8 +1294,7 @@ function parseStableDocumentArchiveResourceRef(
 ): DocumentArchiveResourceRef | undefined {
   const ref = parseDocumentArchiveResourceRef(value);
   if (!ref) return undefined;
-  const { cachePath: _cachePath, ...stableRef } = ref;
-  return stableRef;
+  return ref;
 }
 
 function readFiniteNumber(
@@ -1296,6 +1321,15 @@ function parsePositiveInteger(value: string | undefined): number | undefined {
 
 function readAbsolutePath(value: string | undefined): string | undefined {
   return value && isAbsolutePath(value) ? value : undefined;
+}
+
+function readPortableSourcePath(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value.startsWith('blob:') || value.startsWith('file:')) return undefined;
+  const normalized = value.replace(/\\/g, '/').toLowerCase();
+  if (normalized.includes('/.neko/.cache/')) return undefined;
+  if (isAbsolutePath(value)) return undefined;
+  return value;
 }
 
 function isAbsolutePath(value: string): boolean {

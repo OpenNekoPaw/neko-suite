@@ -288,7 +288,6 @@ describe('work-item-presenter', () => {
         name: 'Render shot',
         result: {
           urls: ['webview://video.mp4'],
-          localPaths: ['/tmp/video.mp4'],
           thumbnailUrl: 'webview://poster.jpg',
           duration: 12,
         },
@@ -299,10 +298,8 @@ describe('work-item-presenter', () => {
         src: 'webview://video.mp4',
         poster: 'webview://poster.jpg',
         title: 'Render shot',
-        localPath: '/tmp/video.mp4',
       },
       displayDuration: 12,
-      firstLocalPath: '/tmp/video.mp4',
       mediaType: 'video',
     });
 
@@ -311,17 +308,14 @@ describe('work-item-presenter', () => {
         ...createBackgroundTask('image-1', 'Render stills'),
         result: {
           urls: ['webview://a.png', 'webview://b.png'],
-          localPaths: ['/tmp/a.png', '/tmp/b.png'],
         },
       }),
     ).toMatchObject({
       contentKind: 'image-grid',
       contentData: {
         urls: ['webview://a.png', 'webview://b.png'],
-        localPaths: ['/tmp/a.png', '/tmp/b.png'],
         name: 'Render stills',
       },
-      firstLocalPath: '/tmp/a.png',
       mediaType: 'image',
     });
   });
@@ -332,15 +326,13 @@ describe('work-item-presenter', () => {
         ...createBackgroundTask('image-1', 'Render asset'),
         result: {
           urls: ['webview://remote.png'],
-          localPaths: ['/tmp/remote.png'],
           width: 512,
           height: 512,
           assets: [
             {
               id: 'asset-1',
               type: 'generated-image',
-              path: '/tmp/asset.png',
-              webviewUri: 'webview://asset.png',
+              renderUri: 'webview://asset.png',
               mimeType: 'image/png',
               generatedAt: '2026-01-01T00:00:00.000Z',
               width: 1024,
@@ -355,11 +347,9 @@ describe('work-item-presenter', () => {
       contentData: {
         src: 'webview://asset.png',
         name: 'Render asset',
-        localPath: '/tmp/asset.png',
       },
       displayWidth: 1024,
       displayHeight: 768,
-      firstLocalPath: '/tmp/asset.png',
     });
   });
 
@@ -368,8 +358,7 @@ describe('work-item-presenter', () => {
       projectBackgroundTaskResultContent({
         ...createBackgroundTask('image-360', 'Render skybox'),
         result: {
-          urls: ['webview://skybox.jpg'],
-          localPaths: ['/tmp/skybox_360.jpg'],
+          urls: ['webview://skybox_360.jpg'],
           thumbnailUrl: 'webview://skybox-fov.jpg',
         },
       }),
@@ -377,7 +366,6 @@ describe('work-item-presenter', () => {
       contentKind: 'panoramic-image',
       contentData: {
         src: 'webview://skybox-fov.jpg',
-        localPath: '/tmp/skybox_360.jpg',
         kind: 'image',
       },
     });
@@ -389,8 +377,7 @@ describe('work-item-presenter', () => {
         ...createBackgroundTask('video-360', 'Render tour'),
         type: 'video',
         result: {
-          urls: ['webview://tour.mp4'],
-          localPaths: ['/tmp/tour_360.mp4'],
+          urls: ['webview://tour_360.mp4'],
           thumbnailUrl: 'webview://tour-poster.jpg',
         },
       }),
@@ -398,7 +385,6 @@ describe('work-item-presenter', () => {
       contentKind: 'panoramic-video',
       contentData: {
         src: 'webview://tour-poster.jpg',
-        localPath: '/tmp/tour_360.mp4',
         kind: 'video',
       },
     });
@@ -409,7 +395,6 @@ describe('work-item-presenter', () => {
       ...createBackgroundTask('image-360-runtime', 'Render skybox'),
       result: {
         urls: ['blob:runtime-preview'],
-        localPaths: ['/tmp/skybox_360.jpg'],
         thumbnailUrl: 'webview://skybox-fov.jpg',
       },
     });
@@ -421,11 +406,10 @@ describe('work-item-presenter', () => {
     expect(serialized).not.toContain('pitchDeg');
     expect(serialized).not.toContain('fovDeg');
     expect(projection).toMatchObject({
-      contentKind: 'panoramic-image',
+      contentKind: 'image',
       contentData: {
         src: 'webview://skybox-fov.jpg',
-        localPath: '/tmp/skybox_360.jpg',
-        kind: 'image',
+        name: 'Render skybox',
       },
     });
   });

@@ -480,12 +480,12 @@ describe('composite rich content renderers', () => {
                 heading: 'Shot 1',
                 media: [
                   {
-                    id: 'read-image:0:/repo/page-1.jpg',
+                    id: 'read-image:0:${WORKSPACE}/page-1.jpg',
                     toolCallId: 'read-image',
                     assetIndex: 0,
                     type: 'image',
                     src: 'webview://page-1.jpg',
-                    localPath: '/repo/page-1.jpg',
+                    localPath: '${WORKSPACE}/page-1.jpg',
                     mimeType: 'image/jpeg',
                   },
                 ],

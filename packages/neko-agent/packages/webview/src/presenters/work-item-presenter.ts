@@ -24,7 +24,6 @@ export interface AgentTaskResultContentProjection {
   displayWidth?: number;
   displayHeight?: number;
   displayDuration?: number;
-  firstLocalPath?: string;
   mediaType: AgentWorkItemTaskType;
 }
 
@@ -229,29 +228,18 @@ export function projectBackgroundTaskResultContent(
   const result = task.result;
   const assets = result?.assets;
   const displayUrls =
-    assets && assets.length > 0 ? assets.map((asset) => asset.webviewUri) : result?.urls;
-  const displayLocalPaths =
-    assets && assets.length > 0
-      ? assets.flatMap((asset) => (asset.path ? [asset.path] : []))
-      : result?.localPaths;
-  const firstLocalPath = displayLocalPaths?.[0];
+    assets && assets.length > 0 ? assets.map((asset) => asset.renderUri) : result?.urls;
   const firstAsset = assets?.[0];
   const displayWidth = readNumberField(firstAsset, 'width') ?? result?.width;
   const displayHeight = readNumberField(firstAsset, 'height') ?? result?.height;
   const displayDuration = readNumberField(firstAsset, 'duration') ?? result?.duration;
-  const richContent = projectTaskRichContent(
-    task,
-    displayUrls,
-    displayLocalPaths,
-    result?.thumbnailUrl,
-  );
+  const richContent = projectTaskRichContent(task, displayUrls, result?.thumbnailUrl);
 
   return {
     ...richContent,
     ...(displayWidth !== undefined ? { displayWidth } : {}),
     ...(displayHeight !== undefined ? { displayHeight } : {}),
     ...(displayDuration !== undefined ? { displayDuration } : {}),
-    ...(firstLocalPath !== undefined ? { firstLocalPath } : {}),
     mediaType: task.type,
   };
 }
@@ -307,25 +295,20 @@ export function projectSubAgentCard(item: SubAgentWorkItem): SubAgentCardProject
 function projectTaskRichContent(
   task: AgentBackgroundTask,
   displayUrls: readonly string[] | undefined,
-  displayLocalPaths: readonly string[] | undefined,
   thumbnailUrl: string | undefined,
 ): Pick<AgentTaskResultContentProjection, 'contentKind' | 'contentData'> {
   const firstUrl = displayUrls?.[0];
-  const firstLocalPath = displayLocalPaths?.[0];
 
   switch (task.type) {
     case 'video':
       if (!firstUrl) return EMPTY_TASK_RESULT_CONTENT;
-      const isPanoramicVideo =
-        firstLocalPath && getPanoramicPreviewRoute({ filePath: firstLocalPath })?.kind === 'video';
-      if (isPanoramicVideo) {
+      if (isPanoramicRenderUri(firstUrl, 'video')) {
         return {
           contentKind: 'panoramic-video',
           contentData: {
             src: thumbnailUrl ?? firstUrl,
             poster: thumbnailUrl,
             name: task.name,
-            localPath: firstLocalPath,
             kind: 'video',
           },
         };
@@ -336,14 +319,13 @@ function projectTaskRichContent(
           src: firstUrl,
           poster: thumbnailUrl,
           title: task.name,
-          localPath: firstLocalPath,
         },
       };
     case 'audio':
       if (!firstUrl) return EMPTY_TASK_RESULT_CONTENT;
       return {
         contentKind: 'audio',
-        contentData: { src: firstUrl, title: task.name, localPath: firstLocalPath },
+        contentData: { src: firstUrl, title: task.name },
       };
     case 'image': {
       if (displayUrls && displayUrls.length > 1) {
@@ -351,24 +333,21 @@ function projectTaskRichContent(
           contentKind: 'image-grid',
           contentData: {
             urls: [...displayUrls],
-            localPaths: displayLocalPaths ? [...displayLocalPaths] : undefined,
             name: task.name,
           },
         };
       }
       const imgSrc = thumbnailUrl || firstUrl;
       if (!imgSrc) return EMPTY_TASK_RESULT_CONTENT;
-      const isPanoramicImage =
-        firstLocalPath && getPanoramicPreviewRoute({ filePath: firstLocalPath })?.kind === 'image';
-      if (isPanoramicImage) {
+      if (firstUrl && isPanoramicRenderUri(firstUrl, 'image')) {
         return {
           contentKind: 'panoramic-image',
-          contentData: { src: imgSrc, name: task.name, localPath: firstLocalPath, kind: 'image' },
+          contentData: { src: imgSrc, name: task.name, kind: 'image' },
         };
       }
       return {
         contentKind: 'image',
-        contentData: { src: imgSrc, name: task.name, localPath: firstLocalPath },
+        contentData: { src: imgSrc, name: task.name },
       };
     }
   }
@@ -378,6 +357,10 @@ const EMPTY_TASK_RESULT_CONTENT = {
   contentKind: null,
   contentData: null,
 } satisfies Pick<AgentTaskResultContentProjection, 'contentKind' | 'contentData'>;
+
+function isPanoramicRenderUri(uri: string, kind: 'image' | 'video'): boolean {
+  return getPanoramicPreviewRoute({ filePath: uri })?.kind === kind;
+}
 
 function readNumberField(value: unknown, key: string): number | undefined {
   if (!value || typeof value !== 'object') return undefined;

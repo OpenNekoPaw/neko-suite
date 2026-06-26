@@ -88,49 +88,36 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
                   <span className="text-[9px] font-medium leading-none">i</span>
                 </ThumbnailActionButton>
               </div>
-              {pluginsAvailable?.canvas &&
-                (thumbnail.resourceRef || thumbnail.cacheResourceRef) && (
-                  <div className="border-t border-[var(--agent-input-border)] px-1 py-1">
-                    <SendToMenu
-                      payload={{
-                        kind: 'singleAsset',
-                        asset: {
-                          mediaType: 'image',
-                          name: getFileName(thumbnail.path),
-                          ...(thumbnail.resourceRef
-                            ? { documentResourceRef: thumbnail.resourceRef }
-                            : {}),
-                          ...(thumbnail.cacheResourceRef
-                            ? { resourceRef: thumbnail.cacheResourceRef }
-                            : {}),
+              {pluginsAvailable?.canvas && thumbnail.resourceRef && (
+                <div className="border-t border-[var(--agent-input-border)] px-1 py-1">
+                  <SendToMenu
+                    payload={{
+                      kind: 'singleAsset',
+                      asset: {
+                        mediaType: 'image',
+                        name: getFileName(thumbnail.path),
+                        documentResourceRef: thumbnail.resourceRef,
+                      },
+                      target: projectCanvasContentTransferTarget({
+                        ambientNodes,
+                        contextChips,
+                      }),
+                      provenance: {
+                        source: 'webview',
+                        label: `document-image:${thumbnail.label}`,
+                        metadata: {
+                          documentResourceRef: thumbnail.resourceRef,
                         },
-                        target: projectCanvasContentTransferTarget({
-                          ambientNodes,
-                          contextChips,
-                        }),
-                        provenance: {
-                          source: 'webview',
-                          label: `document-image:${thumbnail.label}`,
-                          ...(thumbnail.resourceRef
-                            ? {
-                                metadata: {
-                                  documentResourceRef: thumbnail.resourceRef,
-                                  ...(thumbnail.cacheResourceRef
-                                    ? { resourceRef: thumbnail.cacheResourceRef }
-                                    : {}),
-                                },
-                              }
-                            : {}),
-                        },
-                      }}
-                      mediaType="image"
-                      plugins={pluginsAvailable}
-                      allowedTargets={['canvas']}
-                      hidePrefixLabel
-                      className="justify-center"
-                    />
-                  </div>
-                )}
+                      },
+                    }}
+                    mediaType="image"
+                    plugins={pluginsAvailable}
+                    allowedTargets={['canvas']}
+                    hidePrefixLabel
+                    className="justify-center"
+                  />
+                </div>
+              )}
             </div>
           );
         })}
@@ -172,7 +159,6 @@ function formatThumbnailSummary(thumbnail: DocumentImageThumbnailProjection): st
     `Reference: ${formatLocatorReference(thumbnail)}`,
     `Location: ${thumbnail.locator ? formatLocator(thumbnail.locator) : thumbnail.label}`,
   ];
-  if (thumbnail.cacheResourceRef) parts.push(`Resource: ${thumbnail.cacheResourceRef.id}`);
   if (thumbnail.resourceRef?.entryPath) parts.push(`Entry: ${thumbnail.resourceRef.entryPath}`);
   const dimensions = formatDimensions(thumbnail.width, thumbnail.height);
   if (dimensions) parts.push(`Dimensions: ${dimensions}`);

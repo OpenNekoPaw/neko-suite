@@ -1,15 +1,14 @@
 /**
  * TaskCard - Inline task status card displayed in conversation
  *
- * ADR-3: Enhanced with multi-image grid (ImageGridCard) and
- * cross-plugin "Send to" buttons (SendToMenu, ADR-5 P0).
+ * ADR-3: Enhanced with multi-image grid (ImageGridCard).
  */
 
 import { useState, useCallback, type ReactNode } from 'react';
 import type { BackgroundTask } from '@/components/TaskListView';
 import { useTranslation } from '@/i18n/I18nContext';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
-import { SendToMenu, type PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import {
   type AgentWorkItemStatusTone,
   projectBackgroundTaskCard,
@@ -42,7 +41,7 @@ interface TaskCardProps {
 const compactActionClass =
   'inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded border border-[var(--agent-input-border)] bg-[var(--agent-surface)] px-2 text-[10px] font-medium text-[var(--agent-fg)] transition-colors hover:border-[var(--agent-accent)] hover:bg-[var(--agent-hover)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-[var(--agent-accent)]';
 
-export function TaskCard({ task, onCancel, onRetry, onViewResult, plugins }: TaskCardProps) {
+export function TaskCard({ task, onCancel, onRetry, onViewResult }: TaskCardProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -210,7 +209,7 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult, plugins }: Tas
             )}
 
             {/* Result preview (for completed tasks) — ADR-3 enhanced */}
-            {projection.showResultPreview && <ResultPreview task={task} plugins={plugins} />}
+            {projection.showResultPreview && <ResultPreview task={task} />}
 
             {/* Provider info */}
             <div className="border-t border-[var(--agent-divider)] pt-1.5 text-[var(--agent-fg-secondary)]">
@@ -233,22 +232,15 @@ function toInlineToneClass(tone: AgentWorkItemStatusTone): string {
 // ---------------------------------------------------------------------------
 // ResultPreview - Completed task result display (ADR-3/4 enhanced)
 //
-// When `result.assets` (GeneratedAsset[]) is available, uses asset metadata
-// (webviewUri, width, height, duration, path) as the authoritative source.
-// Otherwise uses protocol-level `result.urls / localPaths`.
+// When `result.assets` is available, uses host-projected render URIs plus
+// stable asset metadata as the authoritative display source.
+// Otherwise uses protocol-level `result.urls`.
 // ---------------------------------------------------------------------------
 
-function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: PluginsAvailable }) {
+function ResultPreview({ task }: { task: BackgroundTask }) {
   const projection = projectBackgroundTaskResultContent(task);
-  const {
-    contentKind,
-    contentData,
-    displayWidth,
-    displayHeight,
-    displayDuration,
-    firstLocalPath,
-    mediaType,
-  } = projection;
+  const { contentKind, contentData, displayWidth, displayHeight, displayDuration, mediaType } =
+    projection;
 
   return (
     <div className="mb-2 rounded border border-[var(--agent-divider)] bg-[color-mix(in_srgb,var(--agent-surface)_70%,transparent)] p-2">
@@ -268,26 +260,7 @@ function ResultPreview({ task, plugins }: { task: BackgroundTask; plugins?: Plug
         {displayDuration && displayDuration > 0 && (
           <ResultBadge>{formatDuration(displayDuration)}</ResultBadge>
         )}
-        {firstLocalPath && (
-          <span
-            className="min-w-[120px] flex-1 truncate text-right text-[10px] text-[var(--agent-fg-secondary)]"
-            title={firstLocalPath}
-          >
-            {firstLocalPath.split(/[\\/]/).pop()}
-          </span>
-        )}
       </div>
-
-      {/* "Send to" cross-plugin buttons (ADR-5 P0) */}
-      {firstLocalPath && plugins && (
-        <SendToMenu
-          assetPath={firstLocalPath}
-          mediaType={mediaType}
-          plugins={plugins}
-          hideExplorerTarget
-          className="mt-1.5"
-        />
-      )}
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { createResourceFingerprint, createResourceRef } from '@neko/shared';
 import {
   projectStoryboardScenesAssetBatch,
   projectStoryboardScenesCutTimelinePayload,
@@ -11,26 +10,6 @@ import {
   projectStoryboardTableTransferPayload,
 } from '../storyboard-transfer-presenter';
 import type { StoryboardTableRichData } from '../composite-content-presenter';
-
-const cacheResourceRef = createResourceRef({
-  scope: 'project',
-  provider: 'document-archive',
-  kind: 'document',
-  source: {
-    kind: 'document',
-    document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
-    filePath: '${BOOKS}/comic.epub',
-  },
-  locator: {
-    kind: 'document',
-    entryPath: 'image/panel-1.jpg',
-  },
-  fingerprint: createResourceFingerprint({
-    strategy: 'provider',
-    value: 'comic:panel-1',
-    providerId: 'document-archive',
-  }),
-});
 
 describe('storyboard transfer presenter', () => {
   it('projects scene-grouped storyboard content to a canvas storyboard payload', () => {
@@ -84,15 +63,49 @@ describe('storyboard transfer presenter', () => {
           sceneIndex: 2,
           heading: 'EXT. STREET - NIGHT',
           shots: [
-            { url: 'webview://shot-1.png', localPath: '/repo/shot-1.png', shotIndex: 1 },
+            {
+              url: 'webview://shot-1.png',
+              localPath: '${WORKSPACE}/shots/shot-1.png',
+              shotIndex: 1,
+            },
             { url: 'webview://shot-2.png', shotIndex: 2 },
           ],
         },
       ]),
     ).toEqual({
       kind: 'assetBatch',
-      assets: [{ path: '/repo/shot-1.png', mediaType: 'image', name: 'scene-2-shot-1' }],
+      assets: [
+        {
+          path: '${WORKSPACE}/shots/shot-1.png',
+          mediaType: 'image',
+          name: 'scene-2-shot-1',
+        },
+      ],
     });
+  });
+
+  it('does not transfer scene cache paths as image assets or cut shots', () => {
+    const scenes = [
+      {
+        sceneIndex: 2,
+        heading: 'EXT. STREET - NIGHT',
+        shots: [
+          {
+            url: 'webview://shot-1.png',
+            localPath: '/repo/.neko/.cache/generated/shot-1.png',
+            shotIndex: 1,
+          },
+          {
+            url: 'webview://shot-2.png',
+            localPath: 'blob:webview-shot-2',
+            shotIndex: 2,
+          },
+        ],
+      },
+    ];
+
+    expect(projectStoryboardScenesAssetBatch(scenes)).toBeNull();
+    expect(projectStoryboardScenesCutTimelinePayload(scenes)).toBeNull();
   });
 
   it('projects storyboard scenes to a cut storyboard timeline payload', () => {
@@ -104,7 +117,7 @@ describe('storyboard transfer presenter', () => {
           shots: [
             {
               url: 'webview://shot-1.png',
-              localPath: '/repo/shot-1.png',
+              localPath: '${WORKSPACE}/shots/shot-1.png',
               shotScale: 'LS',
               shotIndex: 1,
             },
@@ -121,7 +134,7 @@ describe('storyboard transfer presenter', () => {
             id: 'agent-scene-2-shot-1',
             shotNumber: 1,
             duration: 3,
-            imagePath: '/repo/shot-1.png',
+            imagePath: '${WORKSPACE}/shots/shot-1.png',
             label: '#001 LS',
           },
         ],
@@ -146,7 +159,7 @@ describe('storyboard transfer presenter', () => {
               assetIndex: 0,
               type: 'image',
               src: 'webview://asset.png',
-              localPath: '/repo/asset.png',
+              localPath: '${WORKSPACE}/assets/asset.png',
               caption: 'Wide',
             },
           ],
@@ -176,7 +189,7 @@ describe('storyboard transfer presenter', () => {
                 characterAction: 'Wide establishing frame',
                 emotion: [],
                 sceneTags: ['Wide'],
-                referenceImagePath: '/repo/asset.png',
+                referenceImagePath: '${WORKSPACE}/assets/asset.png',
               },
             ],
           },
@@ -186,7 +199,7 @@ describe('storyboard transfer presenter', () => {
 
     expect(projectStoryboardTableAssetBatch(data)).toEqual({
       kind: 'assetBatch',
-      assets: [{ path: '/repo/asset.png', mediaType: 'image', name: 'Wide' }],
+      assets: [{ path: '${WORKSPACE}/assets/asset.png', mediaType: 'image', name: 'Wide' }],
     });
 
     expect(projectStoryboardTableCutTimelinePayload(data)).toEqual({
@@ -198,7 +211,7 @@ describe('storyboard transfer presenter', () => {
             id: 'media-1',
             shotNumber: 1,
             duration: 3,
-            imagePath: '/repo/asset.png',
+            imagePath: '${WORKSPACE}/assets/asset.png',
             dialogue: 'Wide establishing frame',
             label: 'Wide',
           },
@@ -357,7 +370,6 @@ describe('storyboard transfer presenter', () => {
                 entryPath: 'image/panel-1.jpg',
                 versionPolicy: 'versioned-export',
               },
-              cacheResourceRef,
             },
           ],
           diagnostics: [],
@@ -379,7 +391,6 @@ describe('storyboard transfer presenter', () => {
                   entryPath: 'image/panel-1.jpg',
                   versionPolicy: 'versioned-export',
                 },
-                referenceResourceRef: cacheResourceRef,
               },
             ],
           },
@@ -395,7 +406,6 @@ describe('storyboard transfer presenter', () => {
             kind: 'document-entry',
             entryPath: 'image/panel-1.jpg',
           },
-          resourceRef: cacheResourceRef,
         },
       ],
     });
@@ -822,38 +832,6 @@ describe('storyboard transfer presenter', () => {
       entryPath: 'OPS/panel-b.jpg',
       versionPolicy: 'read-only-source' as const,
     };
-    const firstCacheRef = createResourceRef({
-      scope: 'project',
-      provider: 'document-archive',
-      kind: 'document',
-      source: {
-        kind: 'document',
-        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
-        filePath: '${BOOKS}/comic.epub',
-      },
-      locator: { kind: 'document', entryPath: 'OPS/panel-a.jpg' },
-      fingerprint: createResourceFingerprint({
-        strategy: 'provider',
-        value: 'comic:panel-a',
-        providerId: 'document-archive',
-      }),
-    });
-    const secondCacheRef = createResourceRef({
-      scope: 'project',
-      provider: 'document-archive',
-      kind: 'document',
-      source: {
-        kind: 'document',
-        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
-        filePath: '${BOOKS}/comic.epub',
-      },
-      locator: { kind: 'document', entryPath: 'OPS/panel-b.jpg' },
-      fingerprint: createResourceFingerprint({
-        strategy: 'provider',
-        value: 'comic:panel-b',
-        providerId: 'document-archive',
-      }),
-    });
     const data: StoryboardTableRichData = {
       template: 'storyboard-table',
       title: 'Opening',
@@ -914,7 +892,6 @@ describe('storyboard transfer presenter', () => {
               src: 'webview://panel-a.jpg',
               localPath: '/tmp/neko-cache/panel-a.jpg',
               resourceRef: firstDocumentRef,
-              cacheResourceRef: firstCacheRef,
               mimeType: 'image/jpeg',
             },
             {
@@ -925,7 +902,6 @@ describe('storyboard transfer presenter', () => {
               src: 'webview://panel-b.jpg',
               localPath: '/tmp/neko-cache/panel-b.jpg',
               resourceRef: secondDocumentRef,
-              cacheResourceRef: secondCacheRef,
               mimeType: 'image/jpeg',
             },
           ],
@@ -944,13 +920,15 @@ describe('storyboard transfer presenter', () => {
     expect(shotPlans).toHaveLength(2);
     expect(shotPlans[0]).toMatchObject({
       referenceImageResourceRef: firstDocumentRef,
-      referenceResourceRef: firstCacheRef,
     });
     expect(shotPlans[1]).toMatchObject({
       referenceImageResourceRef: secondDocumentRef,
-      referenceResourceRef: secondCacheRef,
     });
-    expect(shotPlans[0]?.referenceResourceRef?.id).not.toBe(shotPlans[1]?.referenceResourceRef?.id);
+    expect(shotPlans[0]?.referenceImageResourceRef?.entryPath).not.toBe(
+      shotPlans[1]?.referenceImageResourceRef?.entryPath,
+    );
+    expect(shotPlans[0]).not.toHaveProperty('referenceResourceRef');
+    expect(shotPlans[1]).not.toHaveProperty('referenceResourceRef');
     expect(shotPlans[0]).not.toHaveProperty('referenceImagePath');
     expect(shotPlans[1]).not.toHaveProperty('referenceImagePath');
   });
@@ -1109,39 +1087,6 @@ describe('storyboard transfer presenter', () => {
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'OPS/page-7.jpg',
     };
-    const page6CacheRef = createResourceRef({
-      scope: 'project',
-      provider: 'document-archive',
-      kind: 'document',
-      source: {
-        kind: 'document',
-        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
-        filePath: '${BOOKS}/comic.epub',
-      },
-      locator: { kind: 'document', entryPath: 'OPS/page-6.jpg' },
-      fingerprint: createResourceFingerprint({
-        strategy: 'provider',
-        value: 'comic:page-6',
-        providerId: 'document-archive',
-      }),
-    });
-    const page7CacheRef = createResourceRef({
-      scope: 'project',
-      provider: 'document-archive',
-      kind: 'document',
-      source: {
-        kind: 'document',
-        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
-        filePath: '${BOOKS}/comic.epub',
-      },
-      locator: { kind: 'document', entryPath: 'OPS/page-7.jpg' },
-      fingerprint: createResourceFingerprint({
-        strategy: 'provider',
-        value: 'comic:page-7',
-        providerId: 'document-archive',
-      }),
-    });
-
     const payload = projectMarkdownStoryboardTransferPayload(
       `
 ## 前十页分镜
@@ -1167,14 +1112,12 @@ describe('storyboard transfer presenter', () => {
                     label: 'Page 6',
                     locator: { kind: 'page', pageNumber: 6 },
                     resourceRef: page6DocumentRef,
-                    cacheResourceRef: page6CacheRef,
                   },
                   {
                     path: '/cache/page-7.jpg',
                     label: 'Page 7',
                     locator: { kind: 'page', pageNumber: 7 },
                     resourceRef: page7DocumentRef,
-                    cacheResourceRef: page7CacheRef,
                   },
                 ],
               },
@@ -1192,15 +1135,12 @@ describe('storyboard transfer presenter', () => {
             shotPlans: [
               {
                 referenceImageResourceRef: page6DocumentRef,
-                referenceResourceRef: page6CacheRef,
               },
               {
                 referenceImageResourceRef: page6DocumentRef,
-                referenceResourceRef: page6CacheRef,
               },
               {
                 referenceImageResourceRef: page7DocumentRef,
-                referenceResourceRef: page7CacheRef,
               },
             ],
           },

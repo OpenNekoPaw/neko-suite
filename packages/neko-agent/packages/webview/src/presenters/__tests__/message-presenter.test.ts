@@ -243,11 +243,15 @@ describe('message presenter', () => {
           providerName: 'sora',
           result: {
             urls: ['webview://video.mp4'],
-            localPaths: ['/tmp/video.mp4'],
           },
         },
       },
     ]);
+    const workItem = result.workItems[0];
+    expect(workItem?.kind).toBe('tool-background-task');
+    expect(workItem && 'task' in workItem ? workItem.task.result : undefined).not.toHaveProperty(
+      'localPaths',
+    );
   });
 
   it('projects tool confirmations into the matching tool call', () => {

@@ -33,7 +33,6 @@ describe('composite content presenter', () => {
             src: 'webview://asset-1.png',
             assetId: 'asset-1',
             stableUri: '${WORKSPACE}/.neko/generated/image/out.png',
-            localPath: '/repo/.neko/generated/image/out.png',
             caption: 'Wide',
             role: 'shot',
           },
@@ -41,6 +40,7 @@ describe('composite content presenter', () => {
         diagnostics: [],
       },
     ]);
+    expect(projection.data.sections[0]?.media[0]).not.toHaveProperty('localPath');
   });
 
   it('preserves semantic storyboard diagnostics for rich rendering and transfer gating', () => {
@@ -158,11 +158,11 @@ describe('composite content presenter', () => {
         toolCallId: 'read-image',
         type: 'image',
         src: 'webview://page-1.jpg',
-        localPath: '/cache/page-1.jpg',
         caption: 'Page 1',
         role: 'source',
       }),
     ]);
+    expect(projection.data.sections[0]?.media[0]).not.toHaveProperty('localPath');
 
     const payload = projectStoryboardTableTransferPayload(projection.data);
     expect(payload).toMatchObject({
@@ -172,16 +172,28 @@ describe('composite content presenter', () => {
           {
             shotPlans: [
               {
-                referenceImagePath: '/cache/page-1.jpg',
+                sourceMediaRefs: [
+                  {
+                    locator: {
+                      type: 'tool-result',
+                      toolCallId: 'read-image',
+                      assetIndex: 0,
+                    },
+                  },
+                ],
               },
             ],
           },
         ],
       },
     });
+    const shot =
+      payload?.kind === 'canvasStoryboard' ? payload.storyboard.scenes[0]?.shotPlans[0] : undefined;
+    expect(shot).not.toHaveProperty('referenceImagePath');
   });
 
   it('projects composite artifact storyboard, entity contribution, and source images together', () => {
+    const documentResourceRef = makeDocumentResourceRef('OPS/page-1.jpg');
     const contribution = {
       contributionId: 'contribution-page-1',
       sourcePackage: 'neko-agent',
@@ -247,6 +259,7 @@ describe('composite content presenter', () => {
                           },
                           label: 'Original panel',
                           mimeType: 'image/jpeg',
+                          documentResourceRef,
                         },
                       ],
                     },
@@ -273,10 +286,9 @@ describe('composite content presenter', () => {
             data: {
               imageInfo: [
                 {
-                  path: '/cache/page-1.jpg',
-                  webviewUri: 'webview://page-1.jpg',
                   label: 'Page 1',
                   mimeType: 'image/jpeg',
+                  resourceRef: documentResourceRef,
                 },
               ],
             },
@@ -300,11 +312,11 @@ describe('composite content presenter', () => {
     });
     expect(projection.data.sections[0]?.media).toEqual([
       expect.objectContaining({
-        src: 'webview://page-1.jpg',
-        localPath: '/cache/page-1.jpg',
+        resourceRef: documentResourceRef,
         role: 'source',
       }),
     ]);
+    expect(projection.data.sections[0]?.media[0]).not.toHaveProperty('localPath');
   });
 
   it('keeps page aliases bound to stable document resources when transferring inferred storyboard refs', () => {
@@ -386,8 +398,8 @@ describe('composite content presenter', () => {
     const shot = payload.storyboard.scenes[0]?.shotPlans[0];
     expect(shot).toMatchObject({
       referenceImageResourceRef: documentResourceRef,
-      referenceResourceRef: cacheResourceRef,
     });
+    expect(shot).not.toHaveProperty('referenceResourceRef');
     expect(shot).not.toHaveProperty('referenceImagePath');
   });
 
@@ -478,8 +490,8 @@ describe('composite content presenter', () => {
     const shot = payload.storyboard.scenes[0]?.shotPlans[0];
     expect(shot).toMatchObject({
       referenceImageResourceRef: documentResourceRef,
-      referenceResourceRef: cacheResourceRef,
     });
+    expect(shot).not.toHaveProperty('referenceResourceRef');
     expect(shot).not.toHaveProperty('referenceImagePath');
   });
 
@@ -574,9 +586,9 @@ describe('composite content presenter', () => {
       expect.objectContaining({
         toolCallId: 'read-image',
         src: 'webview://page-1.jpg',
-        localPath: '/cache/page-1.jpg',
       }),
     ]);
+    expect(projection.data.sections[0]?.media[0]).not.toHaveProperty('localPath');
   });
 
   it('uses page labels to infer repeated storyboard media refs from real image results', () => {
@@ -651,20 +663,14 @@ describe('composite content presenter', () => {
             data: {
               imageInfo: [
                 {
-                  path: '/cache/page-1.jpg',
-                  webviewUri: 'webview://page-1.jpg',
                   mimeType: 'image/jpeg',
                   locator: { kind: 'page', pageNumber: 1 },
                 },
                 {
-                  path: '/cache/page-2.jpg',
-                  webviewUri: 'webview://page-2.jpg',
                   mimeType: 'image/jpeg',
                   locator: { kind: 'page', pageNumber: 2 },
                 },
                 {
-                  path: '/cache/page-3.jpg',
-                  webviewUri: 'webview://page-3.jpg',
                   mimeType: 'image/jpeg',
                   locator: { kind: 'page', pageNumber: 3 },
                   resourceRef: documentResourceRef,
@@ -689,9 +695,13 @@ describe('composite content presenter', () => {
       { type: 'tool-result', toolCallId: 'read-doc', assetIndex: 2 },
       { type: 'tool-result', toolCallId: 'read-doc', assetIndex: 2 },
     ]);
+    expect(projection.data.sections.map((section) => section.media[0]?.resourceRef)).toEqual([
+      documentResourceRef,
+      documentResourceRef,
+    ]);
     expect(projection.data.sections.map((section) => section.media[0]?.localPath)).toEqual([
-      '/cache/page-3.jpg',
-      '/cache/page-3.jpg',
+      undefined,
+      undefined,
     ]);
 
     const payload = projectStoryboardTableTransferPayload(projection.data);
@@ -703,11 +713,9 @@ describe('composite content presenter', () => {
             shotPlans: [
               {
                 referenceImageResourceRef: documentResourceRef,
-                referenceResourceRef: cacheResourceRef,
               },
               {
                 referenceImageResourceRef: documentResourceRef,
-                referenceResourceRef: cacheResourceRef,
               },
             ],
           },
@@ -815,22 +823,17 @@ describe('composite content presenter', () => {
             data: {
               imageInfo: [
                 {
-                  path: '/cache/page-1.jpg',
-                  webviewUri: 'webview://page-1.jpg',
                   label: 'Page 1',
                   locator: { kind: 'page', pageNumber: 1 },
+                  resourceRef: makeDocumentResourceRef('OPS/page-1.jpg'),
                 },
                 {
-                  path: '/cache/page-6.jpg',
-                  webviewUri: 'webview://page-6.jpg',
                   label: 'Page 6',
                   locator: { kind: 'page', pageNumber: 6 },
                   resourceRef: page6DocumentRef,
                   cacheResourceRef: page6CacheRef,
                 },
                 {
-                  path: '/cache/page-7.jpg',
-                  webviewUri: 'webview://page-7.jpg',
                   label: 'Page 7',
                   locator: { kind: 'page', pageNumber: 7 },
                   resourceRef: page7DocumentRef,
@@ -853,11 +856,9 @@ describe('composite content presenter', () => {
     expect(shotPlans).toMatchObject([
       {
         referenceImageResourceRef: page6DocumentRef,
-        referenceResourceRef: page6CacheRef,
       },
       {
         referenceImageResourceRef: page7DocumentRef,
-        referenceResourceRef: page7CacheRef,
       },
     ]);
   });
@@ -989,16 +990,14 @@ describe('composite content presenter', () => {
             data: {
               imageInfo: [
                 {
-                  path: '/cache/page-1.jpg',
-                  webviewUri: 'webview://page-1.jpg',
                   mimeType: 'image/jpeg',
                   locator: { kind: 'page', pageNumber: 1 },
+                  resourceRef: makeDocumentResourceRef('OPS/page-1.jpg'),
                 },
                 {
-                  path: '/cache/page-2.jpg',
-                  webviewUri: 'webview://page-2.jpg',
                   mimeType: 'image/jpeg',
                   locator: { kind: 'page', pageNumber: 2 },
+                  resourceRef: makeDocumentResourceRef('OPS/page-2.jpg'),
                 },
               ],
             },
@@ -1034,9 +1033,9 @@ describe('composite content presenter', () => {
     expect(projection.data.sections[0]?.media[0]).toMatchObject({
       toolCallId: 'read-doc',
       assetIndex: 1,
-      localPath: '/cache/page-2.jpg',
-      src: 'webview://page-2.jpg',
+      resourceRef: makeDocumentResourceRef('OPS/page-2.jpg'),
     });
+    expect(projection.data.sections[0]?.media[0]).not.toHaveProperty('localPath');
   });
 
   it('diagnoses duplicate page aliases across image batches instead of binding the first match', () => {
@@ -1077,12 +1076,11 @@ describe('composite content presenter', () => {
             data: {
               imageInfo: [
                 {
-                  path: '/cache/a/page-1.jpg',
-                  webviewUri: 'webview://a/page-1.jpg',
                   alias: 'page_1',
                   aliasScope: 'document:comic-a',
                   sourceDocumentId: 'comic-a',
                   mimeType: 'image/jpeg',
+                  resourceRef: makeDocumentResourceRef('OPS/a/page-1.jpg', '${BOOKS}/comic-a.epub'),
                 },
               ],
             },
@@ -1097,12 +1095,11 @@ describe('composite content presenter', () => {
             data: {
               imageInfo: [
                 {
-                  path: '/cache/b/page-1.jpg',
-                  webviewUri: 'webview://b/page-1.jpg',
                   alias: 'page_1',
                   aliasScope: 'document:comic-b',
                   sourceDocumentId: 'comic-b',
                   mimeType: 'image/jpeg',
+                  resourceRef: makeDocumentResourceRef('OPS/b/page-1.jpg', '${BOOKS}/comic-b.epub'),
                 },
               ],
             },
@@ -1186,12 +1183,11 @@ describe('composite content presenter', () => {
             data: {
               imageInfo: [
                 {
-                  path: '/cache/a/page-1.jpg',
-                  webviewUri: 'webview://a/page-1.jpg',
                   alias: 'page_1',
                   aliasScope: 'document:comic-a',
                   sourceDocumentId: 'comic-a',
                   mimeType: 'image/jpeg',
+                  resourceRef: makeDocumentResourceRef('OPS/a/page-1.jpg', '${BOOKS}/comic-a.epub'),
                 },
               ],
             },
@@ -1206,12 +1202,11 @@ describe('composite content presenter', () => {
             data: {
               imageInfo: [
                 {
-                  path: '/cache/b/page-1.jpg',
-                  webviewUri: 'webview://b/page-1.jpg',
                   alias: 'page_1',
                   aliasScope: 'document:comic-b',
                   sourceDocumentId: 'comic-b',
                   mimeType: 'image/jpeg',
+                  resourceRef: makeDocumentResourceRef('OPS/b/page-1.jpg', '${BOOKS}/comic-b.epub'),
                 },
               ],
             },
@@ -1236,8 +1231,9 @@ describe('composite content presenter', () => {
     expect(projection.data.sections[0]?.media[0]).toMatchObject({
       toolCallId: 'read-doc-b',
       assetIndex: 0,
-      localPath: '/cache/b/page-1.jpg',
+      resourceRef: makeDocumentResourceRef('OPS/b/page-1.jpg', '${BOOKS}/comic-b.epub'),
     });
+    expect(projection.data.sections[0]?.media[0]).not.toHaveProperty('localPath');
     expect(projection.data.diagnostics).toEqual([]);
   });
 
@@ -1290,11 +1286,10 @@ describe('composite content presenter', () => {
             data: {
               imageInfo: [
                 {
-                  path: '/cache/a/page-1.jpg',
-                  webviewUri: 'webview://a/page-1.jpg',
                   alias: 'page_1',
                   aliasScope: 'document:comic-a',
                   mimeType: 'image/jpeg',
+                  resourceRef: makeDocumentResourceRef('OPS/a/page-1.jpg', '${BOOKS}/comic-a.epub'),
                 },
               ],
             },
@@ -1309,11 +1304,10 @@ describe('composite content presenter', () => {
             data: {
               imageInfo: [
                 {
-                  path: '/cache/b/page-1.jpg',
-                  webviewUri: 'webview://b/page-1.jpg',
                   alias: 'page_1',
                   aliasScope: 'document:comic-b',
                   mimeType: 'image/jpeg',
+                  resourceRef: makeDocumentResourceRef('OPS/b/page-1.jpg', '${BOOKS}/comic-b.epub'),
                 },
               ],
             },
@@ -1443,10 +1437,10 @@ describe('composite content presenter', () => {
       expect.objectContaining({
         toolCallId: 'read-image-real',
         assetIndex: 1,
-        localPath: '/cache/page-2.jpg',
         src: 'webview://page-2.jpg',
       }),
     ]);
+    expect(projection.data.sections[0]?.media[0]).not.toHaveProperty('localPath');
     expect(projection.data.diagnostics).toEqual([]);
   });
 
@@ -1524,11 +1518,11 @@ describe('composite content presenter', () => {
         toolCallId: 'read-image',
         type: 'image',
         src: 'webview://page-1.jpg',
-        localPath: '/cache/page-1.jpg',
         caption: 'Page 1',
         role: 'source',
       }),
     ]);
+    expect(projection.data.sections[0]?.media[0]).not.toHaveProperty('localPath');
   });
 
   it('projects comparison variants from ordered media refs', () => {
@@ -1557,6 +1551,7 @@ describe('composite content presenter', () => {
   });
 
   it('projects storyboard media refs from document image pages and generated variants', () => {
+    const documentResourceRef = makeDocumentResourceRef('OPS/Page_1.jpg', '/books/story.epub');
     const projection = projectCompositeBlockRichContent({
       composite: {
         template: 'storyboard-table',
@@ -1596,15 +1591,13 @@ describe('composite content presenter', () => {
             success: true,
             data: {
               filePath: '/books/story.epub',
-              imagePaths: ['/cache/page-1.jpg'],
-              imagePathWebviewUris: ['webview://page-1.jpg'],
               imageInfo: [
                 {
-                  path: '/cache/page-1.jpg',
                   width: 1493,
                   height: 2133,
                   mimeType: 'image/jpeg',
                   locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
+                  resourceRef: documentResourceRef,
                 },
               ],
             },
@@ -1620,8 +1613,7 @@ describe('composite content presenter', () => {
       {
         toolCallId: 'read-doc',
         type: 'image',
-        src: 'webview://page-1.jpg',
-        localPath: '/cache/page-1.jpg',
+        resourceRef: documentResourceRef,
         mimeType: 'image/jpeg',
         caption: '原始页图',
         role: 'original',
@@ -1681,10 +1673,10 @@ describe('composite content presenter', () => {
         toolCallId: 'read-image',
         type: 'image',
         src: 'webview://reference.png',
-        localPath: '/images/reference.png',
         caption: 'reference',
       }),
     ]);
+    expect(projection.data.sections[0]?.media[0]).not.toHaveProperty('localPath');
   });
 
   it('projects gallery assets and bounds missing media diagnostics', () => {
@@ -1707,7 +1699,7 @@ describe('composite content presenter', () => {
     });
   });
 
-  it('projects local 3D model assets without requiring a renderable preview URI', () => {
+  it('diagnoses generated 3D model assets until an adapter provides a render URI', () => {
     const projection = projectCompositeBlockRichContent({
       composite: {
         template: 'gallery',
@@ -1742,13 +1734,15 @@ describe('composite content presenter', () => {
     });
 
     expect(projection.kind).toBe('asset-gallery');
-    expect(projection.data.sections[0]?.media).toEqual([
-      expect.objectContaining({
-        type: 'model',
-        src: '/repo/.neko/generated/model/character.glb',
-        localPath: '/repo/.neko/generated/model/character.glb',
+    expect(projection.data.sections[0]?.media).toEqual([]);
+    expect(projection.data.sections[0]?.diagnostics).toEqual([
+      {
+        code: 'missing-uri',
+        toolCallId: 'call-model',
+        assetIndex: 0,
         assetId: 'model-1',
-      }),
+        message: 'Asset 0 does not have an adapter-provided model URI',
+      },
     ]);
     expect(projection.data.plugins).toEqual({ model: true });
   });
@@ -1833,6 +1827,46 @@ describe('composite content presenter', () => {
     expect(projection.data.sections[0]?.media).toEqual([
       expect.objectContaining({ src: 'webview://safe.png' }),
     ]);
+  });
+
+  it('does not turn localPaths into composite media or transfer identity', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        sections: [
+          {
+            content: 'Shot from generated cache',
+            mediaRefs: [{ toolCallId: 'generate-image', assetIndex: 0 }],
+          },
+        ],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'generate-image',
+          name: 'GenerateImage',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              urls: ['generated-assets/asset-1.png'],
+              localPaths: ['/repo/.neko/.cache/generated/asset-1.png'],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    expect(JSON.stringify(projection)).not.toContain('.neko/.cache');
+    expect(projection.data.sections[0]?.media[0]).not.toHaveProperty('localPath');
+
+    const payload = projectStoryboardTableTransferPayload(projection.data);
+    const shot =
+      payload?.kind === 'canvasStoryboard' ? payload.storyboard.scenes[0]?.shotPlans[0] : undefined;
+    expect(shot).not.toHaveProperty('referenceImagePath');
   });
 
   it('projects AnimationPlan domain blocks as storyboard shot overlays', () => {
@@ -1956,5 +1990,20 @@ function toolBlock(toolCall: ToolCall): ContentBlock {
     type: 'tool_call',
     timestamp: 1,
     toolCall,
+  };
+}
+
+function makeDocumentResourceRef(
+  entryPath: string,
+  filePath = '${BOOKS}/comic.epub',
+): {
+  readonly kind: 'document-entry';
+  readonly source: { readonly filePath: string; readonly format: 'epub' };
+  readonly entryPath: string;
+} {
+  return {
+    kind: 'document-entry',
+    source: { filePath, format: 'epub' },
+    entryPath,
   };
 }

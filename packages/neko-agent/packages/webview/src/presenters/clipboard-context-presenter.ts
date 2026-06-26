@@ -3,7 +3,7 @@ import type {
   DocumentArchiveResourceRef,
   DocumentLocator,
 } from '@neko/shared';
-import { isResourceRef, parseDocumentArchiveResourceRef } from '@neko/shared';
+import { parseDocumentArchiveResourceRef } from '@neko/shared';
 
 export function projectClipboardTextToContextPayload(text: string): AgentContextPayload | null {
   const value = parseJsonObject(text);
@@ -34,22 +34,13 @@ function projectDocumentImageReference(value: Record<string, unknown>): AgentCon
   const resourceRef =
     parseStableDocumentArchiveResourceRef(image.resourceRef) ??
     parseStableDocumentArchiveResourceRef(document.resourceRef);
-  const cacheResourceRef = isResourceRef(image.cacheResourceRef)
-    ? image.cacheResourceRef
-    : isResourceRef(document.cacheResourceRef)
-      ? document.cacheResourceRef
-      : undefined;
-  const display = asRecord(value.display);
-  const imagePath = readString(display?.path) ?? readString(image.path);
-  if (!filePath || (!resourceRef && !cacheResourceRef && !imagePath)) return null;
+  if (!filePath || !resourceRef) return null;
 
   const label = locator
     ? formatDocumentLocator(locator)
     : resourceRef?.entryPath
       ? basename(resourceRef.entryPath)
-      : cacheResourceRef
-        ? cacheResourceRef.id
-        : basename(imagePath ?? filePath);
+      : basename(filePath);
   const sourceFormat = readString(source?.format);
   const data = {
     kind: 'document-image-reference',
@@ -58,7 +49,6 @@ function projectDocumentImageReference(value: Record<string, unknown>): AgentCon
       ...(source ? { source } : {}),
       ...(locator ? { locator } : {}),
       ...(resourceRef ? { resourceRef } : {}),
-      ...(cacheResourceRef ? { cacheResourceRef } : {}),
     },
     image: {
       ...optionalNumberField('index', image.index),
@@ -67,25 +57,17 @@ function projectDocumentImageReference(value: Record<string, unknown>): AgentCon
       ...optionalNumberField('byteSize', image.byteSize),
       ...optionalStringField('mimeType', image.mimeType),
       ...(resourceRef ? { resourceRef } : {}),
-      ...(cacheResourceRef ? { cacheResourceRef } : {}),
     },
     navigationData: {
       source: sourceFormat ?? 'document',
       filePath,
-      ...(imagePath ? { imagePath } : {}),
       ...(resourceRef?.entryPath ? { entryPath: resourceRef.entryPath } : {}),
-      ...(cacheResourceRef ? { resourceRef: cacheResourceRef } : {}),
     },
   };
 
   return {
     type: 'image',
-    id: stableContextId(
-      'document-image',
-      filePath,
-      cacheResourceRef?.id ?? resourceRef?.entryPath ?? imagePath ?? label,
-      label,
-    ),
+    id: stableContextId('document-image', filePath, resourceRef.entryPath ?? label, label),
     label,
     summary: `Document image: ${basename(filePath)}#${label}`,
     data,
@@ -175,8 +157,7 @@ function parseStableDocumentArchiveResourceRef(
 ): DocumentArchiveResourceRef | undefined {
   const ref = parseDocumentArchiveResourceRef(value);
   if (!ref) return undefined;
-  const { cachePath: _cachePath, ...stableRef } = ref;
-  return stableRef;
+  return ref;
 }
 
 function parseDocumentLocator(value: unknown): DocumentLocator | undefined {

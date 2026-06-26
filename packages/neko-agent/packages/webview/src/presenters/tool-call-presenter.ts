@@ -1,12 +1,7 @@
 import type { ToolCall } from '@neko-agent/types';
-import type {
-  DocumentArchiveResourceRef,
-  DocumentLocator,
-  DocumentSourceRef,
-  ResourceRef,
-} from '@neko/shared';
+import type { DocumentArchiveResourceRef, DocumentLocator, DocumentSourceRef } from '@neko/shared';
 import {
-  isResourceRef,
+  isPublicGeneratedAssetResultUri,
   parseDocumentArchiveResourceRef,
   parseDocumentLocator,
   parseDocumentSourceRef,
@@ -36,7 +31,6 @@ export interface DocumentImageThumbnailProjection {
   mimeType?: string;
   locator?: DocumentLocator;
   resourceRef?: DocumentArchiveResourceRef;
-  cacheResourceRef?: ResourceRef;
   label: string;
   referenceJson: string;
 }
@@ -54,7 +48,6 @@ export interface ToolCallDisplayProjection {
   videoUrls: string[];
   isAudioTool: boolean;
   audioUrls: string[];
-  localPaths: string[];
   documentThumbnails: DocumentImageThumbnailProjection[];
   copyText: string | null;
   isFileTool: boolean;
@@ -68,9 +61,10 @@ export interface ToolCallDisplayProjection {
 
 export function projectToolCallDisplayState(toolCall: ToolCall): ToolCallDisplayProjection {
   const argsJson = JSON.stringify(toolCall.arguments, null, 2);
+  const sanitizedResultData = sanitizeToolResultData(toolCall.result?.data);
   const resultJson =
-    toolCall.result?.data !== undefined ? JSON.stringify(toolCall.result.data, null, 2) : null;
-  const resultData = asRecord(toolCall.result?.data);
+    sanitizedResultData !== undefined ? JSON.stringify(sanitizedResultData, null, 2) : null;
+  const resultData = asRecord(sanitizedResultData);
   const isBackgroundMode = resultData?.backgroundMode === true;
   const backgroundTaskStatus = readString(resultData, 'status');
   const shouldShowMediaPreview = !isBackgroundMode || backgroundTaskStatus === 'completed';
@@ -99,7 +93,6 @@ export function projectToolCallDisplayState(toolCall: ToolCall): ToolCallDisplay
     isAudioTool: isAudioGenerationTool(toolCall.name),
     audioUrls:
       resultSuccess && shouldShowMediaPreview ? extractToolAudioUrls(toolCall.result?.data) : [],
-    localPaths: resultSuccess ? extractToolLocalPaths(toolCall.result?.data) : [],
     documentThumbnails,
     copyText,
     isFileTool: isFileTool(toolCall.name),
@@ -121,28 +114,21 @@ function extractDocumentImageThumbnails(data: unknown): DocumentImageThumbnailPr
 
   const source = parseDocumentSourceRef(result.source);
   const imageInfo = Array.isArray(result.imageInfo) ? result.imageInfo : [];
-  const imagePaths = Array.isArray(result.imagePaths) ? result.imagePaths : [];
-  const imagePathWebviewUris = Array.isArray(result.imagePathWebviewUris)
-    ? result.imagePathWebviewUris
-    : [];
 
   const thumbnails: DocumentImageThumbnailProjection[] = [];
-  const maxLength = Math.max(imageInfo.length, imagePaths.length);
-  for (let index = 0; index < maxLength; index += 1) {
+  for (let index = 0; index < imageInfo.length; index += 1) {
     const info = asRecord(imageInfo[index]);
-    const path = readString(info, 'path') ?? readStringFromArray(imagePaths, index);
-    const src = readString(info, 'webviewUri') ?? readStringFromArray(imagePathWebviewUris, index);
-    if (!path) continue;
-
     const locator = parseDocumentLocator(info?.locator);
     const width = readFiniteNumber(info, 'width');
     const height = readFiniteNumber(info, 'height');
     const byteSize = readFiniteNumber(info, 'byteSize');
     const mimeType = readString(info, 'mimeType');
     const resourceRef = parseStableDocumentArchiveResourceRef(info?.resourceRef);
-    const cacheResourceRef = isResourceRef(info?.cacheResourceRef)
-      ? info.cacheResourceRef
-      : undefined;
+    if (!resourceRef) continue;
+    const path =
+      resourceRef.entryPath ??
+      readString(info, 'entryPath') ??
+      (locator ? formatDocumentLocator(locator) : `#${index + 1}`);
     const documentFilePath = resolveDocumentThumbnailFilePath(filePath, resourceRef);
     const documentSource = resolveDocumentThumbnailSource(source, resourceRef);
     thumbnails.push({
@@ -151,20 +137,17 @@ function extractDocumentImageThumbnails(data: unknown): DocumentImageThumbnailPr
       filePath: documentFilePath,
       ...(documentSource ? { source: documentSource } : {}),
       path,
-      src,
       ...(width !== undefined ? { width } : {}),
       ...(height !== undefined ? { height } : {}),
       ...(byteSize !== undefined ? { byteSize } : {}),
       ...(mimeType ? { mimeType } : {}),
       ...(locator ? { locator } : {}),
       ...(resourceRef ? { resourceRef } : {}),
-      ...(cacheResourceRef ? { cacheResourceRef } : {}),
       label: formatDocumentThumbnailLabel(locator, index),
       referenceJson: formatDocumentImageReferenceJson({
         filePath: documentFilePath,
         source: documentSource,
         path,
-        src,
         index,
         width,
         height,
@@ -172,7 +155,6 @@ function extractDocumentImageThumbnails(data: unknown): DocumentImageThumbnailPr
         mimeType,
         locator,
         resourceRef,
-        cacheResourceRef,
       }),
     });
   }
@@ -196,8 +178,6 @@ function extractReadDocumentImageThumbnails(data: unknown): DocumentImageThumbna
 
     const documentImage = asRecord(image.documentImage);
     const metadata = asRecord(image.metadata);
-    const path = readString(image, 'path') ?? readString(documentImage, 'path');
-    const src = readString(image, 'webviewUri') ?? readString(documentImage, 'webviewUri');
 
     const locator =
       parseDocumentLocator(metadata?.locator) ?? parseDocumentLocator(documentImage?.locator);
@@ -209,12 +189,11 @@ function extractReadDocumentImageThumbnails(data: unknown): DocumentImageThumbna
     const resourceRef =
       parseStableDocumentArchiveResourceRef(documentImage?.resourceRef) ??
       parseStableDocumentArchiveResourceRef(image.resourceRef);
-    const cacheResourceRef = isResourceRef(documentImage?.cacheResourceRef)
-      ? documentImage.cacheResourceRef
-      : isResourceRef(image.cacheResourceRef)
-        ? image.cacheResourceRef
-        : undefined;
-    if (!path || (!src && !resourceRef && !cacheResourceRef)) return [];
+    const src = resourceRef
+      ? undefined
+      : (readString(image, 'webviewUri') ?? readString(documentImage, 'webviewUri'));
+    const displayPath = resourceRef?.entryPath ?? readString(image, 'entryPath');
+    if (!displayPath || (!src && !resourceRef)) return [];
 
     const documentFilePath = resolveDocumentThumbnailFilePath(filePath, resourceRef);
     const documentSource = resolveDocumentThumbnailSource(source, resourceRef);
@@ -222,25 +201,24 @@ function extractReadDocumentImageThumbnails(data: unknown): DocumentImageThumbna
 
     return [
       {
-        id: `${path}:${index}`,
+        id: `${displayPath}:${index}`,
         index,
         filePath: documentFilePath,
         ...(documentSource ? { source: documentSource } : {}),
-        path,
-        src,
+        path: displayPath,
+        ...(src ? { src } : {}),
         ...(width !== undefined ? { width } : {}),
         ...(height !== undefined ? { height } : {}),
         ...(byteSize !== undefined ? { byteSize } : {}),
         ...(mimeType ? { mimeType } : {}),
         ...(locator ? { locator } : {}),
         ...(resourceRef ? { resourceRef } : {}),
-        ...(cacheResourceRef ? { cacheResourceRef } : {}),
         label,
         referenceJson: formatDocumentImageReferenceJson({
           filePath: documentFilePath,
           source: documentSource,
-          path,
-          src,
+          path: displayPath,
+          ...(src ? { src } : {}),
           index,
           width,
           height,
@@ -248,7 +226,7 @@ function extractReadDocumentImageThumbnails(data: unknown): DocumentImageThumbna
           mimeType,
           locator,
           resourceRef,
-          cacheResourceRef,
+          ...(resourceRef ? {} : { displayPath }),
         }),
       },
     ];
@@ -261,10 +239,6 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
 
   const filePath = extractDocumentFilePath(result);
   const source = parseDocumentSourceRef(result.source);
-  const imagePathWebviewUris = readStringArray(result, 'imagePathWebviewUris');
-  const snakeCaseImagePaths = readStringArray(result, 'image_paths');
-  const imagePaths =
-    snakeCaseImagePaths.length > 0 ? snakeCaseImagePaths : readStringArray(result, 'imagePaths');
   const locators = Array.isArray(result.locators) ? result.locators : [];
   const images = Array.isArray(result.images) ? result.images : [];
 
@@ -275,15 +249,6 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
 
       const documentImage = asRecord(image.documentImage);
       const metadata = asRecord(image.metadata);
-      const path =
-        readString(image, 'path') ??
-        readString(documentImage, 'path') ??
-        readStringFromArray(imagePaths, index);
-      const src =
-        readString(image, 'webviewUri') ??
-        readString(documentImage, 'webviewUri') ??
-        readStringFromArray(imagePathWebviewUris, index) ??
-        readRenderableImageSrc(path);
 
       const locator =
         parseDocumentLocator(metadata?.locator) ??
@@ -297,38 +262,43 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
       const resourceRef =
         parseStableDocumentArchiveResourceRef(documentImage?.resourceRef) ??
         parseStableDocumentArchiveResourceRef(image.resourceRef);
-      const cacheResourceRef = isResourceRef(documentImage?.cacheResourceRef)
-        ? documentImage.cacheResourceRef
-        : isResourceRef(image.cacheResourceRef)
-          ? image.cacheResourceRef
+      const path =
+        resourceRef === undefined
+          ? (readString(image, 'path') ?? readString(documentImage, 'path'))
           : undefined;
-      if (!path || (!src && !resourceRef && !cacheResourceRef)) return [];
+      const src = resourceRef
+        ? undefined
+        : (readString(image, 'webviewUri') ?? readString(documentImage, 'webviewUri'));
+      const displayPath = resourceRef?.entryPath ?? readString(image, 'entryPath') ?? path;
+      if (!displayPath || (!src && !resourceRef)) return [];
 
-      const thumbnailFilePath = resolveDocumentThumbnailFilePath(filePath ?? path, resourceRef);
+      const thumbnailFilePath = resolveDocumentThumbnailFilePath(
+        filePath ?? displayPath,
+        resourceRef,
+      );
       const thumbnailSource = resolveDocumentThumbnailSource(source, resourceRef);
       const label = readString(image, 'label') ?? formatDocumentThumbnailLabel(locator, index);
 
       return [
         {
-          id: `${path}:${index}`,
+          id: `${displayPath}:${index}`,
           index,
           filePath: thumbnailFilePath,
           ...(thumbnailSource ? { source: thumbnailSource } : {}),
-          path,
-          src,
+          path: displayPath,
+          ...(src ? { src } : {}),
           ...(width !== undefined ? { width } : {}),
           ...(height !== undefined ? { height } : {}),
           ...(byteSize !== undefined ? { byteSize } : {}),
           ...(mimeType ? { mimeType } : {}),
           ...(locator ? { locator } : {}),
           ...(resourceRef ? { resourceRef } : {}),
-          ...(cacheResourceRef ? { cacheResourceRef } : {}),
           label,
           referenceJson: formatDocumentImageReferenceJson({
             filePath: thumbnailFilePath,
             source: thumbnailSource,
-            path,
-            src,
+            path: displayPath,
+            ...(src ? { src } : {}),
             index,
             width,
             height,
@@ -336,42 +306,14 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
             mimeType,
             locator,
             resourceRef,
-            cacheResourceRef,
+            ...(resourceRef ? {} : { displayPath }),
           }),
         },
       ];
     });
   }
 
-  return imagePaths.flatMap((path, index) => {
-    const src = readStringFromArray(imagePathWebviewUris, index) ?? readRenderableImageSrc(path);
-    if (!src) return [];
-
-    const locator = parseDocumentLocator(locators[index]);
-    const thumbnailFilePath = filePath ?? path;
-    const label = formatDocumentThumbnailLabel(locator, index);
-
-    return [
-      {
-        id: `${path}:${index}`,
-        index,
-        filePath: thumbnailFilePath,
-        ...(source ? { source } : {}),
-        path,
-        src,
-        ...(locator ? { locator } : {}),
-        label,
-        referenceJson: formatDocumentImageReferenceJson({
-          filePath: thumbnailFilePath,
-          source,
-          path,
-          src,
-          index,
-          locator,
-        }),
-      },
-    ];
-  });
+  return [];
 }
 
 function extractToolDocumentThumbnails(
@@ -404,7 +346,7 @@ function formatDocumentImageReferenceJson(input: {
   readonly mimeType?: string;
   readonly locator?: DocumentLocator;
   readonly resourceRef?: DocumentArchiveResourceRef;
-  readonly cacheResourceRef?: ResourceRef;
+  readonly displayPath?: string;
 }): string {
   return JSON.stringify(
     {
@@ -415,7 +357,6 @@ function formatDocumentImageReferenceJson(input: {
         ...(input.source ? { source: input.source } : {}),
         ...(input.locator ? { locator: input.locator } : {}),
         ...(input.resourceRef ? { resourceRef: input.resourceRef } : {}),
-        ...(input.cacheResourceRef ? { cacheResourceRef: input.cacheResourceRef } : {}),
       },
       image: {
         index: input.index,
@@ -424,13 +365,16 @@ function formatDocumentImageReferenceJson(input: {
         ...(input.byteSize !== undefined ? { byteSize: input.byteSize } : {}),
         ...(input.mimeType ? { mimeType: input.mimeType } : {}),
         ...(input.resourceRef ? { resourceRef: input.resourceRef } : {}),
-        ...(input.cacheResourceRef ? { cacheResourceRef: input.cacheResourceRef } : {}),
       },
-      display: {
-        runtimeOnly: true,
-        path: input.path,
-        ...(input.src ? { webviewUri: input.src } : {}),
-      },
+      ...(input.displayPath || input.src
+        ? {
+            display: {
+              runtimeOnly: true,
+              ...(input.displayPath ? { path: input.displayPath } : {}),
+              ...(input.src ? { webviewUri: input.src } : {}),
+            },
+          }
+        : {}),
     },
     null,
     2,
@@ -460,26 +404,6 @@ function extractToolVideoUrls(data: unknown): string[] {
 
 function extractToolAudioUrls(data: unknown): string[] {
   return Array.from(collectUrls(data, 'audioUrl', 'audios')).filter(isValidAudioUrl);
-}
-
-function extractToolLocalPaths(data: unknown): string[] {
-  const result = asRecord(data);
-  if (!result) return [];
-
-  if (Array.isArray(result.localPaths)) {
-    return result.localPaths.filter((path): path is string => typeof path === 'string');
-  }
-
-  const singlePath = extractToolLocalPath(data);
-  if (singlePath) return [singlePath];
-
-  if (Array.isArray(result.urls)) {
-    return result.urls.filter(
-      (url): url is string => typeof url === 'string' && isAbsolutePath(url),
-    );
-  }
-
-  return [];
 }
 
 function extractToolCopyText(toolName: string, data: unknown): string | null {
@@ -547,6 +471,7 @@ function isValidMediaUrl(url: string, extensions: readonly string[]): boolean {
   if (url.includes('vscode-webview-resource://') || url.includes('vscode-resource')) return true;
   if (url.startsWith('webview://')) return true;
   if (url.startsWith('data:')) return true;
+  if (isStableGeneratedAssetMediaUri(url, extensions)) return true;
   if (isAbsolutePath(url)) {
     const lowerUrl = url.toLowerCase();
     return extensions.some((ext) => lowerUrl.endsWith(ext));
@@ -554,11 +479,16 @@ function isValidMediaUrl(url: string, extensions: readonly string[]): boolean {
   return false;
 }
 
+function isStableGeneratedAssetMediaUri(url: string, extensions: readonly string[]): boolean {
+  if (!url.startsWith('generated-assets/')) return false;
+  if (!isPublicGeneratedAssetResultUri(url)) return false;
+  const lowerUrl = url.toLowerCase();
+  return extensions.some((ext) => lowerUrl.endsWith(ext));
+}
+
 function extractToolLocalPath(data: unknown): string | undefined {
   const result = asRecord(data);
   if (!result) return undefined;
-  const localPath = readString(result, 'localPath');
-  if (localPath) return localPath;
   const url = readString(result, 'url');
   return url && isAbsolutePath(url) ? url : undefined;
 }
@@ -583,7 +513,9 @@ function formatReadDocumentCopyText(data: unknown): string | null {
       ...thumbnails.map((thumbnail) => {
         const dimensions = formatDimensions(thumbnail.width, thumbnail.height);
         const byteSize = formatByteSize(thumbnail.byteSize);
-        return [thumbnail.label, dimensions, byteSize, thumbnail.path].filter(Boolean).join(' · ');
+        return [thumbnail.label, dimensions, byteSize, thumbnail.resourceRef?.entryPath]
+          .filter(Boolean)
+          .join(' · ');
       }),
     );
   }
@@ -637,21 +569,6 @@ function readString(obj: Record<string, unknown> | undefined, key: string): stri
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function readStringArray(obj: Record<string, unknown> | undefined, key: string): string[] {
-  const value = obj?.[key];
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
-}
-
-function readStringFromArray(values: unknown[], index: number): string | undefined {
-  const value = values[index];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function readRenderableImageSrc(value: string | undefined): string | undefined {
-  return value && isValidImageUrl(value) && !isAbsolutePath(value) ? value : undefined;
-}
-
 function readFiniteNumber(
   obj: Record<string, unknown> | undefined,
   key: string,
@@ -664,13 +581,60 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
 }
 
+function sanitizeToolResultData(data: unknown): unknown {
+  return stripRuntimeOnlyResultFields(data, new WeakSet<object>());
+}
+
+function stripRuntimeOnlyResultFields(value: unknown, seen: WeakSet<object>): unknown {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  if (seen.has(value)) {
+    return undefined;
+  }
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => stripRuntimeOnlyResultFields(item, seen))
+      .filter((item): item is unknown => item !== undefined);
+  }
+
+  const record = value as Record<string, unknown>;
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(record)) {
+    if (isRuntimeOnlyResultField(key)) {
+      continue;
+    }
+    const sanitizedChild = stripRuntimeOnlyResultFields(child, seen);
+    if (sanitizedChild !== undefined) {
+      sanitized[key] = sanitizedChild;
+    }
+  }
+  return sanitized;
+}
+
+function isRuntimeOnlyResultField(key: string): boolean {
+  return (
+    key === 'cachePath' ||
+    key === 'runtimePath' ||
+    key === 'cacheResourceRef' ||
+    key === 'localPath' ||
+    key === 'localPaths' ||
+    key === 'webviewUri' ||
+    key === 'webviewUris' ||
+    key === 'imagePaths' ||
+    key === 'imagePathWebviewUris'
+  );
+}
+
 function parseStableDocumentArchiveResourceRef(
   value: unknown,
 ): DocumentArchiveResourceRef | undefined {
   const ref = parseDocumentArchiveResourceRef(value);
   if (!ref) return undefined;
-  const { cachePath: _cachePath, ...stableRef } = ref;
-  return stableRef;
+  return ref;
 }
 
 function extractDocumentFilePath(result: Record<string, unknown>): string | null {

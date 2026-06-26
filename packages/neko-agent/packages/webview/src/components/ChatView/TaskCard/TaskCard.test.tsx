@@ -23,7 +23,7 @@ vi.mock('@/i18n/I18nContext', () => ({
 }));
 
 describe('TaskCard result actions', () => {
-  it('renders creative target buttons without the redundant Explorer action', () => {
+  it('renders result previews without path-backed transfer actions', () => {
     render(
       <TaskCard
         task={createCompletedImageTask()}
@@ -35,11 +35,12 @@ describe('TaskCard result actions', () => {
     fireEvent.click(screen.getByText('tasks.imageGeneration'));
 
     expect(screen.getByTestId('result-preview')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Timeline/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Sketch/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Timeline/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Sketch/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Explorer|Folder/ })).toBeNull();
     expect(screen.queryByText('tasks.revealInExplorer')).toBeNull();
+    expect(screen.queryByText(/frame\.png/)).toBeNull();
   });
 });
 
@@ -57,7 +58,6 @@ function createCompletedImageTask(): BackgroundTask {
     updatedAt: '2026-06-20T00:00:01.000Z',
     result: {
       urls: ['webview-uri:/workspace/.neko/generated/image/frame.png'],
-      localPaths: ['/workspace/.neko/generated/image/frame.png'],
       width: 1024,
       height: 1024,
     },

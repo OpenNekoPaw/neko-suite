@@ -1,13 +1,11 @@
 import {
   hasBlockingStoryboardDiagnostics,
-  isResourceRef,
   parseDocumentArchiveResourceRef,
   projectStoryboardTableToCanvasPayload as projectSemanticStoryboardTableToCanvasPayload,
   projectStoryboardTableToCutPayload as projectSemanticStoryboardTableToCutPayload,
   type CanvasStoryboardPayload,
   type CanvasStoryboardShotPlan,
   type DocumentArchiveResourceRef,
-  type ResourceRef,
   type ShotImagePrepOperation,
   type ShotImagePrepPlan,
   type ShotScale,
@@ -90,7 +88,6 @@ interface MarkdownToolResultImageRef {
   readonly mimeType?: string;
   readonly pageNumber?: number;
   readonly resourceRef?: DocumentArchiveResourceRef;
-  readonly cacheResourceRef?: ResourceRef;
 }
 
 export function projectStoryboardScenesTransferPayload(
@@ -105,17 +102,18 @@ export function projectStoryboardScenesAssetBatch(
   scenes: readonly StoryboardScene[],
 ): PluginTransferPayload | null {
   const assets = scenes.flatMap((scene) =>
-    scene.shots.flatMap((shot) =>
-      shot.localPath
+    scene.shots.flatMap((shot) => {
+      const portablePath = readPortableTransferPath(shot.localPath);
+      return portablePath
         ? [
             {
-              path: shot.localPath,
+              path: portablePath,
               mediaType: 'image' as const,
               name: `scene-${scene.sceneIndex}-shot-${shot.shotIndex}`,
             },
           ]
-        : [],
-    ),
+        : [];
+    }),
   );
   return assets.length > 0 ? { kind: 'assetBatch', assets } : null;
 }
@@ -214,8 +212,6 @@ function projectStoryboardTableWithPlanOverlaysToCanvasPayload(
       sourceScriptUri: 'agent://rich-content/storyboard-table',
       resolveImagePath: ({ mediaRef }) => resolveStoryboardMediaPath(data, mediaRef),
       resolveImageResourceRef: ({ mediaRef }) => resolveStoryboardMediaResourceRef(data, mediaRef),
-      resolveImageUnifiedResourceRef: ({ mediaRef }) =>
-        resolveStoryboardMediaUnifiedResourceRef(data, mediaRef),
     }),
     data.storyboardPlanOverlays,
   );
@@ -462,6 +458,7 @@ function sanitizeStoryboardTableReferenceImagePaths(
 
 function isPortableCanvasReferenceImagePath(value: string): boolean {
   if (!value || value.startsWith('blob:') || value.startsWith('file:')) return false;
+  if (value.startsWith('generated-assets/')) return false;
   if (/^(?:p|page|image|img|panel)[_-]?\d{1,4}$/i.test(value.trim())) return false;
   if (/^p\d{1,4}$/i.test(value.trim())) return false;
   const normalized = value.replace(/\\/g, '/').toLowerCase();
@@ -474,14 +471,10 @@ function resolveStoryboardMediaResourceRef(
   data: StoryboardTableRichData,
   mediaRef: StoryboardMediaRef,
 ): DocumentArchiveResourceRef | undefined {
-  return toStableDocumentArchiveResourceRef(resolveStoryboardMedia(data, mediaRef)?.resourceRef);
-}
-
-function resolveStoryboardMediaUnifiedResourceRef(
-  data: StoryboardTableRichData,
-  mediaRef: StoryboardMediaRef,
-): ResourceRef | undefined {
-  return resolveStoryboardMedia(data, mediaRef)?.cacheResourceRef;
+  return (
+    toStableDocumentArchiveResourceRef(mediaRef.documentResourceRef) ??
+    toStableDocumentArchiveResourceRef(resolveStoryboardMedia(data, mediaRef)?.resourceRef)
+  );
 }
 
 function resolveStoryboardMedia(
@@ -527,16 +520,24 @@ function doesStoryboardMediaMatchRef(
 }
 
 function getCanvasImageMediaPath(media: ResolvedCompositeMedia | undefined): string | undefined {
-  if (media?.resourceRef || media?.cacheResourceRef) return undefined;
-  return (
-    media?.localPath ??
-    media?.stableUri ??
-    (media?.src && isCanvasPortableImageUrl(media.src) ? media.src : undefined)
-  );
+  if (media?.resourceRef) return undefined;
+  if (media?.stableUri && isPortableCanvasReferenceImagePath(media.stableUri)) {
+    return media.stableUri;
+  }
+  if (media?.src && isCanvasPortableImageUrl(media.src)) {
+    return media.src;
+  }
+  return readPortableTransferPath(media?.localPath);
 }
 
 function getLocalImageMediaPath(media: ResolvedCompositeMedia | undefined): string | undefined {
-  return media?.localPath ?? media?.stableUri ?? media?.src;
+  return (
+    readPortableTransferPath(media?.localPath) ??
+    (media?.stableUri && isPortableCanvasReferenceImagePath(media.stableUri)
+      ? media.stableUri
+      : undefined) ??
+    (media?.src && isCanvasPortableImageUrl(media.src) ? media.src : undefined)
+  );
 }
 
 function isCanvasPortableImageUrl(value: string): boolean {
@@ -597,7 +598,6 @@ function projectStoryboardTableToCanvasPayload(
         ...(media?.resourceRef
           ? { referenceImageResourceRef: toStableDocumentArchiveResourceRef(media.resourceRef) }
           : {}),
-        ...(media?.cacheResourceRef ? { referenceResourceRef: media.cacheResourceRef } : {}),
       };
     });
 
@@ -620,13 +620,14 @@ function projectStoryboardScenesToCutPayload(
   let nextShotNumber = 1;
   for (const scene of scenes) {
     for (const shot of scene.shots) {
-      if (!shot.localPath) continue;
+      const imagePath = readPortableTransferPath(shot.localPath);
+      if (!imagePath) continue;
       const shotNumber = nextShotNumber++;
       shots.push({
         id: `agent-scene-${scene.sceneIndex}-shot-${shot.shotIndex}`,
         shotNumber,
         duration: DEFAULT_SHOT_DURATION_SECONDS,
-        imagePath: shot.localPath,
+        imagePath,
         label: `#${String(shotNumber).padStart(3, '0')} ${shot.shotScale ?? ''}`.trim(),
       });
     }
@@ -929,16 +930,12 @@ function resolveMarkdownStoryboardReferenceImage(
   rowIndex: number,
 ): {
   readonly referenceImagePath?: string;
-  readonly referenceResourceRef?: ResourceRef;
   readonly referenceImageResourceRef?: DocumentArchiveResourceRef;
 } {
   const inferredRef = selectMarkdownToolResultImageRef(row, imageRefs, rowIndex);
-  if (inferredRef?.resourceRef || inferredRef?.cacheResourceRef) {
+  if (inferredRef?.resourceRef) {
     return {
-      ...(inferredRef.cacheResourceRef
-        ? { referenceResourceRef: inferredRef.cacheResourceRef }
-        : {}),
-      ...(inferredRef.resourceRef ? { referenceImageResourceRef: inferredRef.resourceRef } : {}),
+      referenceImageResourceRef: inferredRef.resourceRef,
     };
   }
 
@@ -1033,16 +1030,11 @@ function collectMarkdownImageRefsFromToolCall(
         ...(documentImage?.['resourceRef'] !== undefined
           ? { resourceRef: documentImage['resourceRef'] }
           : {}),
-        ...(documentImage?.['cacheResourceRef'] !== undefined
-          ? { cacheResourceRef: documentImage['cacheResourceRef'] }
-          : {}),
       }),
     );
   }
   if (refs.length > 0) return dedupeMarkdownImageRefs(refs);
-  return readStringArray(data, 'imagePaths').map((imagePath, index) =>
-    projectMarkdownImageRef(toolCall.id, index, { path: imagePath }),
-  );
+  return [];
 }
 
 function projectMarkdownImageRef(
@@ -1052,11 +1044,7 @@ function projectMarkdownImageRef(
 ): MarkdownToolResultImageRef {
   const locator = asRecord(image['locator']);
   const resourceRef = parseStableDocumentArchiveResourceRef(image['resourceRef']);
-  const cacheResourceRef = isResourceRef(image['cacheResourceRef'])
-    ? image['cacheResourceRef']
-    : undefined;
   const label = readString(image, 'label');
-  const path = readString(image, 'path');
   const alias = normalizeStoryboardAlias(readString(image, 'alias'));
   const sourceDocumentId =
     readString(image, 'sourceDocumentId') ?? readDocumentResourceSourceId(resourceRef);
@@ -1073,7 +1061,6 @@ function projectMarkdownImageRef(
     toolCallId,
     assetIndex,
     batchKey: sourceDocumentId ?? aliasScope ?? toolCallId,
-    ...(path ? { path } : {}),
     ...(label ? { label } : {}),
     ...(alias ? { alias } : {}),
     ...(aliasScope ? { aliasScope } : {}),
@@ -1082,7 +1069,6 @@ function projectMarkdownImageRef(
     ...(readString(image, 'mimeType') ? { mimeType: readString(image, 'mimeType') } : {}),
     ...(pageNumber !== undefined ? { pageNumber } : {}),
     ...(resourceRef ? { resourceRef } : {}),
-    ...(cacheResourceRef ? { cacheResourceRef } : {}),
   };
 }
 
@@ -1093,7 +1079,6 @@ function dedupeMarkdownImageRefs(
   const deduped: MarkdownToolResultImageRef[] = [];
   for (const ref of refs) {
     const key =
-      ref.cacheResourceRef?.id ??
       (ref.resourceRef
         ? `${ref.resourceRef.source.filePath}:${ref.resourceRef.entryPath ?? JSON.stringify(ref.resourceRef.locator)}`
         : undefined) ??
@@ -1145,6 +1130,7 @@ function resolveStoryboardSourceImageNumber(value: string | undefined): number |
 
 function isCanvasReferenceImagePathUsable(value: string): boolean {
   if (!value || value.startsWith('blob:') || value.startsWith('file:')) return false;
+  if (value.startsWith('generated-assets/')) return false;
   if (/^(?:p|page|image|img|panel)[_-]?\d{1,4}$/i.test(value.trim())) return false;
   if (/^p\d{1,4}$/i.test(value.trim())) return false;
   const normalized = value.replace(/\\/g, '/').toLowerCase();
@@ -1164,13 +1150,6 @@ function readRecordArray(
   return Array.isArray(value) ? value.filter(isRecord) : [];
 }
 
-function readStringArray(record: Record<string, unknown> | undefined, key: string): string[] {
-  const value = record?.[key];
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
-    : [];
-}
-
 function readString(record: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = record?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
@@ -1181,8 +1160,7 @@ function parseStableDocumentArchiveResourceRef(
 ): DocumentArchiveResourceRef | undefined {
   const ref = parseDocumentArchiveResourceRef(value);
   if (!ref) return undefined;
-  const { cachePath: _cachePath, ...stableRef } = ref;
-  return stableRef;
+  return ref;
 }
 
 function readFinitePositiveInteger(value: unknown): number | undefined {
@@ -1244,9 +1222,10 @@ function projectCompositeMediaAssetRef(
   mediaIndex: number,
 ): PluginTransferAssetRef | null {
   if (media.type === 'unknown') return null;
-  if (!media.localPath && !media.resourceRef && !media.cacheResourceRef) return null;
+  const portablePath = readPortableTransferPath(media.localPath);
+  if (!portablePath && !media.resourceRef) return null;
   return {
-    ...(media.resourceRef || media.cacheResourceRef ? {} : { path: media.localPath }),
+    ...(media.resourceRef ? {} : { path: portablePath }),
     mediaType: media.type,
     name:
       media.caption ??
@@ -1256,16 +1235,18 @@ function projectCompositeMediaAssetRef(
     ...(media.resourceRef
       ? { documentResourceRef: toStableDocumentArchiveResourceRef(media.resourceRef) }
       : {}),
-    ...(media.cacheResourceRef ? { resourceRef: media.cacheResourceRef } : {}),
   };
+}
+
+function readPortableTransferPath(value: string | undefined): string | undefined {
+  return value && isCanvasReferenceImagePathUsable(value) ? value : undefined;
 }
 
 function toStableDocumentArchiveResourceRef(
   ref: DocumentArchiveResourceRef | undefined,
 ): DocumentArchiveResourceRef | undefined {
   if (!ref) return undefined;
-  const { cachePath: _cachePath, ...stableRef } = ref;
-  return stableRef;
+  return ref;
 }
 
 function normalizeShotScale(value: string | undefined): ShotScale {

@@ -85,7 +85,6 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
     videoUrls,
     isAudioTool,
     audioUrls,
-    localPaths,
     documentThumbnails,
     copyText,
     isFileTool,
@@ -339,7 +338,6 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
                 src: url,
                 alt: `Generated image ${index + 1}`,
                 name: `generated_${index + 1}.png`,
-                localPath: localPaths[index] || localPaths[0],
               }}
             />
           ))}
@@ -354,7 +352,6 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
               data={{
                 src: url,
                 title: `generated_${index + 1}.mp4`,
-                localPath: localPaths[index] || localPaths[0],
               }}
             />
           ))}
@@ -369,7 +366,6 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
               data={{
                 src: url,
                 title: `generated_${index + 1}.mp3`,
-                localPath: localPaths[index] || localPaths[0],
               }}
             />
           ))}

@@ -67,11 +67,32 @@ describe('clipboard-context-presenter', () => {
         navigationData: {
           source: 'epub',
           filePath: '/books/a.epub',
-          imagePath: '/tmp/page-1.jpg',
           entryPath: 'image/Page_1.jpg',
         },
       },
     });
+  });
+
+  it('rejects document image display paths without stable resource refs', () => {
+    const payload = projectClipboardTextToContextPayload(
+      JSON.stringify({
+        kind: 'document-image-reference',
+        protocolVersion: 2,
+        document: {
+          filePath: '/books/a.epub',
+          source: { filePath: '/books/a.epub', format: 'epub' },
+        },
+        image: {
+          index: 0,
+          path: '/tmp/page-1.jpg',
+          width: 1494,
+          height: 2133,
+          mimeType: 'image/jpeg',
+        },
+      }),
+    );
+
+    expect(payload).toBeNull();
   });
 
   it('projects media library reference JSON while preserving portable paths', () => {

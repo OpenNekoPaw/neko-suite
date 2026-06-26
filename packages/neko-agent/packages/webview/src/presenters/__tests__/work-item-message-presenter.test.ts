@@ -292,11 +292,15 @@ describe('work-item-message-presenter', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
         result: {
           urls: ['webview://video.mp4'],
-          localPaths: ['/tmp/video.mp4'],
           thumbnailUrl: 'webview://video.mp4',
         },
       },
     ]);
+    expect(
+      rehydrateBackgroundTasksFromMessages(messages, {
+        now: () => Date.parse('2026-01-01T00:00:00.000Z'),
+      })[0]?.result,
+    ).not.toHaveProperty('localPaths');
   });
 
   it('rehydrates subagent work items with parent message and tool call links', () => {

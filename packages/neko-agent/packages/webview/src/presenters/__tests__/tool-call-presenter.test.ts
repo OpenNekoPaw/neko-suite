@@ -1,30 +1,44 @@
 import { describe, expect, it } from 'vitest';
-import { createResourceFingerprint, createResourceRef } from '@neko/shared';
 import { projectToolCallDisplayState } from '../tool-call-presenter';
 
-const cacheResourceRef = createResourceRef({
-  scope: 'project',
-  provider: 'document-archive',
-  kind: 'document',
-  source: {
-    kind: 'document',
-    document: { filePath: '/books/a.epub', format: 'epub' },
-    filePath: '/books/a.epub',
-  },
-  locator: {
-    kind: 'document',
-    locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
-    entryPath: 'image/Page_1.jpg',
-  },
-  fingerprint: createResourceFingerprint({
-    strategy: 'provider',
-    value: 'book-a:Page_1',
-    providerId: 'document-archive',
-  }),
-});
-
 describe('tool-call-presenter', () => {
-  it('does not project ReadDocument image metadata into thumbnail view models', () => {
+  it('sanitizes legacy runtime fields from successful result details', () => {
+    const projection = projectToolCallDisplayState({
+      id: 'tool-media',
+      name: 'GenerateImage',
+      arguments: { prompt: 'cat' },
+      result: {
+        success: true,
+        data: {
+          url: 'generated-assets/asset-1.png',
+          localPath: '/repo/.neko/.cache/generated/asset-1.png',
+          localPaths: ['/repo/.neko/.cache/generated/asset-1.png'],
+          imageInfo: [
+            {
+              resourceRef: {
+                kind: 'document-entry',
+                source: { filePath: '/books/a.epub', format: 'epub' },
+                entryPath: 'image/Page_1.jpg',
+                cachePath: '/repo/.neko/.cache/resources/page-1.jpg',
+              },
+              webviewUri: 'vscode-webview://page-1.jpg',
+              runtimePath: '/tmp/neko/page-1.jpg',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(projection.imageUrls).toEqual(['generated-assets/asset-1.png']);
+    expect(projection.resultJson).not.toContain('localPath');
+    expect(projection.resultJson).not.toContain('localPaths');
+    expect(projection.resultJson).not.toContain('cachePath');
+    expect(projection.resultJson).not.toContain('runtimePath');
+    expect(projection.resultJson).not.toContain('webviewUri');
+    expect(projection.resultJson).not.toContain('.neko/.cache');
+  });
+
+  it('projects ReadDocument image refs into thumbnail view models without cache paths', () => {
     const projection = projectToolCallDisplayState({
       id: 'tool-1',
       name: 'ReadDocument',
@@ -62,7 +76,8 @@ describe('tool-call-presenter', () => {
 
     expect(projection.documentThumbnails).toEqual([]);
     expect(projection.copyText).toContain('Document: /books/a.epub');
-    expect(projection.copyText).toContain('C2 · 1494 x 2133 · 1 KB · /tmp/page-1.jpg');
+    expect(projection.copyText).toContain('C2 · 1494 x 2133 · 1 KB · image/Page_1.jpg');
+    expect(projection.copyText).not.toContain('/tmp/page-1.jpg');
   });
 
   it('projects ReadDocumentImage result images into thumbnail view models', () => {
@@ -78,8 +93,6 @@ describe('tool-call-presenter', () => {
           analysis: 'custom',
           images: [
             {
-              path: '/tmp/page-1.jpg',
-              webviewUri: 'vscode-webview://page-1.jpg',
               label: 'Page 1',
               width: 1494,
               height: 2133,
@@ -94,7 +107,6 @@ describe('tool-call-presenter', () => {
                 },
               },
               documentImage: {
-                path: '/tmp/page-1.jpg',
                 locator: {
                   kind: 'chapter',
                   chapterHref: 'Page_1',
@@ -107,7 +119,6 @@ describe('tool-call-presenter', () => {
                   cachePath: '/tmp/page-1.jpg',
                   versionPolicy: 'versioned-export',
                 },
-                cacheResourceRef,
               },
             },
           ],
@@ -119,8 +130,7 @@ describe('tool-call-presenter', () => {
     expect(projection.documentThumbnails).toEqual([
       expect.objectContaining({
         filePath: '/books/a.epub',
-        path: '/tmp/page-1.jpg',
-        src: 'vscode-webview://page-1.jpg',
+        path: 'image/Page_1.jpg',
         width: 1494,
         height: 2133,
         byteSize: 2048,
@@ -137,7 +147,6 @@ describe('tool-call-presenter', () => {
           entryPath: 'image/Page_1.jpg',
           versionPolicy: 'versioned-export',
         },
-        cacheResourceRef,
       }),
     ]);
     expect(projection.copyText).toBeNull();
@@ -160,7 +169,6 @@ describe('tool-call-presenter', () => {
           entryPath: 'image/Page_1.jpg',
           versionPolicy: 'versioned-export',
         },
-        cacheResourceRef,
       },
       image: {
         index: 0,
@@ -174,15 +182,11 @@ describe('tool-call-presenter', () => {
           entryPath: 'image/Page_1.jpg',
           versionPolicy: 'versioned-export',
         },
-        cacheResourceRef,
-      },
-      display: {
-        runtimeOnly: true,
-        path: '/tmp/page-1.jpg',
-        webviewUri: 'vscode-webview://page-1.jpg',
       },
     });
     expect(projection.documentThumbnails[0]!.referenceJson).not.toContain('"cachePath"');
+    expect(projection.documentThumbnails[0]!.referenceJson).not.toContain('"cacheResourceRef"');
+    expect(projection.documentThumbnails[0]!.referenceJson).not.toContain('/tmp/page-1.jpg');
   });
 
   it('projects ReadImage argument images into thumbnails while pending', () => {
@@ -222,7 +226,6 @@ describe('tool-call-presenter', () => {
         data: {
           images: [
             {
-              path: '/mock/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-1.jpg',
               label: 'Page 1',
               width: 1494,
               height: 2133,
@@ -233,7 +236,6 @@ describe('tool-call-presenter', () => {
                 entryPath: 'image/Page_1.jpg',
                 versionPolicy: 'versioned-export',
               },
-              cacheResourceRef,
             },
           ],
         },
@@ -243,8 +245,7 @@ describe('tool-call-presenter', () => {
     expect(projection.documentThumbnails).toEqual([
       expect.objectContaining({
         filePath: '/books/a.epub',
-        path: '/mock/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-1.jpg',
-        src: undefined,
+        path: 'image/Page_1.jpg',
         width: 1494,
         height: 2133,
         mimeType: 'image/jpeg',
@@ -255,15 +256,16 @@ describe('tool-call-presenter', () => {
           entryPath: 'image/Page_1.jpg',
           versionPolicy: 'versioned-export',
         },
-        cacheResourceRef,
       }),
     ]);
     expect(JSON.parse(projection.documentThumbnails[0]!.referenceJson).image).not.toHaveProperty(
       'webviewUri',
     );
+    expect(projection.documentThumbnails[0]!.referenceJson).not.toContain('cacheResourceRef');
+    expect(projection.documentThumbnails[0]!.referenceJson).not.toContain('.neko/.cache');
   });
 
-  it('projects ReadImage image_paths arguments into thumbnails when failed', () => {
+  it('does not project legacy ReadImage image_paths arguments into thumbnails when failed', () => {
     const projection = projectToolCallDisplayState({
       id: 'tool-4',
       name: 'ReadImage',
@@ -279,14 +281,7 @@ describe('tool-call-presenter', () => {
     });
 
     expect(projection.isFailed).toBe(true);
-    expect(projection.documentThumbnails).toEqual([
-      expect.objectContaining({
-        filePath: '/tmp/page-1.jpg',
-        path: '/tmp/page-1.jpg',
-        src: 'vscode-webview://page-1.jpg',
-        label: '#1',
-      }),
-    ]);
+    expect(projection.documentThumbnails).toEqual([]);
   });
 
   it('projects ReadDocumentImage argument images into thumbnails when failed', () => {

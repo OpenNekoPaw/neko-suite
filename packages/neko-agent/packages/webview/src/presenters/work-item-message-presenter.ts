@@ -423,12 +423,6 @@ function projectCompletedBackgroundTaskFromToolResult(
   const thumbnailUrl = dedupedUrls[0];
   if (!thumbnailUrl) return null;
 
-  const localPaths = readStringArray(data, 'localPaths');
-  const singleLocalPath = readString(data, 'localPath');
-  if (singleLocalPath) {
-    localPaths.push(singleLocalPath);
-  }
-
   const routedTo = asRecord(data.routedTo);
   const prompt =
     readString(data, 'prompt') ??
@@ -454,7 +448,6 @@ function projectCompletedBackgroundTaskFromToolResult(
     updatedAt: timestamp,
     result: {
       urls: dedupedUrls,
-      ...(localPaths.length > 0 ? { localPaths: dedupeStrings(localPaths) } : {}),
       thumbnailUrl,
     },
   };
