@@ -33,7 +33,7 @@ const compatibilityExceptions = [
     previousExpiresAt: '2026-06-04',
     expiresAt: '2026-07-04',
     sunsetMilestone: 'runtime-workflow-closure',
-    replacement: 'AgentTurnHostAdapters + runAgentTurnForWebviewRuntime',
+    replacement: 'AgentTurnHostAdapters + runAgentTurnRuntime',
     severityAfterExpiry: 'failure',
     renewalRationale:
       'Boundary cleanup moved character dialogue, evidence, entity contribution, and search policy first; turn bridge host adapter closure remains a follow-up under the same runtime workflow closure milestone.',
@@ -84,27 +84,35 @@ const compatibilityExceptions = [
     id: 'quality-check-tool-bridge',
     file: 'packages/neko-agent/packages/extension/src/tools/qualityCheckTools.ts',
     reason:
-      'Tool bridge: Extension supplies VSCode file access; @neko/agent validation owns quality business rules.',
+      'Tool bridge: Extension hosts legacy quality-check command wiring while Agent validation owns quality business rules.',
     owner: 'neko-agent-tools',
-    tracking: 'openspec:harden-neko-agent-runtime-workflow-closure:3',
+    tracking: 'openspec:unify-agent-content-access-cache:8.2',
     introducedAt: '2026-05-04',
-    expiresAt: '2026-06-18',
-    sunsetMilestone: 'multimodal-evidence-feedback',
-    replacement: 'AgentMultimodalHostAdapter payload loader + runtime validation tools',
+    previousExpiresAt: '2026-06-18',
+    expiresAt: '2026-07-10',
+    sunsetMilestone: 'agent-content-access-tool-bridge-cleanup',
+    replacement:
+      'AgentContentAccessRuntime/AgentMultimodalHostAdapter payload loader + runtime validation tools without direct binary reads or cache-path recovery',
     severityAfterExpiry: 'warning',
+    renewalRationale:
+      'The unified content-access migration moved image/document/provider paths first; this remaining tool bridge must be resolved or removed under the content-access cleanup milestone and must not mask direct binary/cache fallback regressions.',
   },
   {
     id: 'consistency-check-tool-bridge',
     file: 'packages/neko-agent/packages/extension/src/tools/consistencyCheckTools.ts',
     reason:
-      'Tool bridge: Extension supplies logger/dependency adapters; @neko/agent validation owns consistency business rules.',
+      'Tool bridge: Extension supplies logger/dependency adapters while Agent validation owns consistency business rules.',
     owner: 'neko-agent-tools',
-    tracking: 'openspec:harden-neko-agent-runtime-workflow-closure:3',
+    tracking: 'openspec:unify-agent-content-access-cache:8.2',
     introducedAt: '2026-05-04',
-    expiresAt: '2026-06-18',
-    sunsetMilestone: 'multimodal-evidence-feedback',
-    replacement: 'AgentMultimodalHostAdapter payload loader + runtime validation tools',
+    previousExpiresAt: '2026-06-18',
+    expiresAt: '2026-07-10',
+    sunsetMilestone: 'agent-content-access-tool-bridge-cleanup',
+    replacement:
+      'AgentContentAccessRuntime/AgentMultimodalHostAdapter payload loader + runtime validation tools without direct binary reads or cache-path recovery',
     severityAfterExpiry: 'warning',
+    renewalRationale:
+      'The unified content-access migration moved image/document/provider paths first; this remaining tool bridge must be resolved or removed under the content-access cleanup milestone and must not mask direct binary/cache fallback regressions.',
   },
   {
     id: 'puppet-face-tool-bridge',
@@ -271,6 +279,7 @@ function runBoundaryCheck() {
       findings.push(...findImportViolations(scope, file, content));
       findings.push(...findRunnerIndividualEventUsageViolations(scope, file, content));
       findings.push(...findWebviewReExportShimViolations(scope, file, content));
+      findings.push(...findHostNeutralResidualViolations(scope, file, content));
     }
   }
   findings.push(...findLegacyCentralizedToolRegistrationViolations());
@@ -374,6 +383,20 @@ function runSelfTest() {
       content: "export { addToolCallBlock } from '../presenters/message-presenter';\n",
       expectedRuleIds: ['webview-no-re-export-compat-shim'],
     },
+    {
+      name: 'host-neutral ForWebview canonical export fails',
+      scope: 'agent',
+      file: fakeFile('agent', 'src/runtime/turn.ts'),
+      content: 'export function runAgentTurnForWebviewRuntime() {}\n',
+      expectedRuleIds: ['host-neutral-no-webview-runtime-contract'],
+    },
+    {
+      name: 'platform localPaths successful DTO field fails',
+      scope: 'platform',
+      file: fakeFile('platform', 'src/media/result.ts'),
+      content: 'export interface Result { localPaths: string[]; }\n',
+      expectedRuleIds: ['host-neutral-no-local-path-contract'],
+    },
   ];
 
   const failures = [];
@@ -382,6 +405,7 @@ function runSelfTest() {
       ...findImportViolations(testCase.scope, testCase.file, testCase.content),
       ...findRunnerIndividualEventUsageViolations(testCase.scope, testCase.file, testCase.content),
       ...findWebviewReExportShimViolations(testCase.scope, testCase.file, testCase.content),
+      ...findHostNeutralResidualViolations(testCase.scope, testCase.file, testCase.content),
     ];
     const actualIds = [...new Set(violations.map((violation) => violation.ruleId))].sort();
     const expectedIds = [...testCase.expectedRuleIds].sort();
@@ -1167,6 +1191,58 @@ function isWebviewCompatibilityShimCandidate(relativeFile) {
     'packages/neko-agent/packages/webview/src/components/ChatView/ToolCallDisplay/media-extractors.ts',
     'packages/neko-agent/packages/webview/src/components/ChatView/ToolCallDisplay/tool-constants.ts',
   ].includes(relativeFile);
+}
+
+function findHostNeutralResidualViolations(scope, file, content) {
+  if (!hostAgnosticScopes.has(scope)) {
+    return [];
+  }
+
+  const relativeFile = relative(repoRoot, file);
+  if (isTestOrFixtureFile(relativeFile)) {
+    return [];
+  }
+
+  const source = stripComments(content);
+  const violations = [];
+
+  if (
+    /\b[A-Za-z0-9_]*ForWebview[A-Za-z0-9_]*\b/.test(source) &&
+    !/context-webview-presenter|agent-stream-state|backfill-coordinator/.test(relativeFile)
+  ) {
+    violations.push({
+      ruleId: 'host-neutral-no-webview-runtime-contract',
+      file: relativeFile,
+      reason:
+        'Host-neutral Agent/Platform/types code must not expose Webview-named canonical runtime contracts.',
+    });
+  }
+
+  if (
+    /\blocalPaths\s*[?:]?\s*:/.test(source) &&
+    !/working-memory|message-resource-projector/.test(relativeFile)
+  ) {
+    violations.push({
+      ruleId: 'host-neutral-no-local-path-contract',
+      file: relativeFile,
+      reason:
+        'Host-neutral successful DTOs must not expose localPaths; use stable refs or Host-internal hostOutputPaths.',
+    });
+  }
+
+  return violations;
+}
+
+function isTestOrFixtureFile(relativeFile) {
+  return (
+    relativeFile.includes('/__tests__/') ||
+    /\.test\.(ts|tsx|js|jsx|mjs|cjs)$/.test(relativeFile) ||
+    relativeFile.includes('/fixtures/')
+  );
+}
+
+function stripComments(content) {
+  return content.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1');
 }
 
 function findLegacyCentralizedToolRegistrationViolations() {

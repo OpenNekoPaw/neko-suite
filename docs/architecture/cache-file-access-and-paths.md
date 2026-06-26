@@ -1,6 +1,6 @@
 # 缓存、文件读写服务与路径变量
 
-更新日期：2026-06-24
+更新日期：2026-06-26
 
 本文定义 Neko Suite 中路径变量、文件读写边界、内容访问意图、Webview 资源投影和派生缓存的横切设计。它不定义统一实体语义，也不定义素材库业务模型；相关设计分别见 [`unified-entity.md`](unified-entity.md) 和 [`asset-library.md`](asset-library.md)。
 
@@ -20,6 +20,7 @@
 - Webview `File`、blob、bytes、粘贴截图和 AI 生成内容必须先经 Host 侧 Create Asset 获得对应二进制文件或资产对象，不能直接写入 `.nk*`。
 - Webview 不直接读取文件系统，不扫描 `.neko/.cache/`，不保存 `asWebviewUri(...)` 结果。
 - 文件读写属于 Extension Host、平台层或 Engine 受控接口；Webview 和纯 UI 包只消费投影 DTO。
+- `neko-engine` 是二进制/媒体数据读取、Range、container entry、sibling resource、解码和预览派生的权威入口；纯文本、配置和 JSON `nk*` 项目文件不经 Engine 读写。
 - 交互预览 cache-first，离线导出、打包、校验 source-first。
 - 缓存是派生物，删除缓存不得删除项目文件、素材事实、实体事实或用户确认绑定。
 - runtime handle 只在当前会话有效，包括 Webview URI、blob URL、Engine token、stream id、preview URL。
@@ -41,8 +42,8 @@ Path and source resolution
         |
         v
 File access services
-  Host fs adapter
-  Engine file access
+  ProjectFileStore / Host fs adapter for text and project facts
+  Engine file access for binary and media sources
   Document entry provider
   Media library provider
         |
@@ -135,6 +136,91 @@ Agent Webview 的工具引用 JSON 使用 `protocolVersion: 2` 时，durable bod
 
 文件读写服务按 intent 和信任边界分工。
 
+### 跨领域内容访问分工
+
+`ContentAccessService` / `ContentIngestService` 是跨领域的公共编排层。各领域不应分别实现自己的“文件读取服务”“缓存服务”“路径转换服务”或“Webview URI 服务”；领域只提供 provider、adapter 和领域语义。
+
+Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostContentAccessRuntime(...)` 装配公共能力。这个 factory 负责组合 `LocalResourceAccessService`、`ResourceCacheService`、`ContentAccessService`、`ContentIngestService`、Webview resolver、Engine source resolver hook 和 provider registration。Feature package 不应直接 `new HostContentAccessService`、`new HostContentIngestService`、`new VSCodeResourceCacheService` 或调用 `createDefaultLocalResourceAccessService` 来重新实现一套规则；需要领域差异时，只传入 provider/adapter。
+
+公共层统一管理：
+
+- source/ref 解析、`${VAR}` 和 workspace-relative 路径转换；
+- workspace、媒体库、extension-private、Webview roots 和 Engine file access 授权；
+- cache root、variant key、fingerprint、MD5/内容去重、manifest、重建、失效和 GC；
+- `ResourceRef`、document source ref、generated asset ref 与 Webview URI、Engine source、bytes、local runtime path 之间的投影；
+- fail-visible diagnostics，包括 unresolved、unauthorized、unsupported、missing、stale、non-portable 和 service-unavailable。
+
+领域层保留：
+
+- 领域 source 类型、节点/时间线/图层/模型/文档/字幕等业务语义；
+- provider 能力声明和 materialize/probe/preview/proxy 的领域适配；
+- Webview 交互、渲染、控件、状态投影和用户动作；
+- 最终导入、导出、保存和 “reveal/open” 等用户可见副作用。
+
+判断规则：
+
+| 内容类型或动作 | 默认入口 | 说明 |
+| --- | --- | --- |
+| 纯文本、配置、Markdown、JSON/TOML/YAML、`nk*` 项目事实 | `ProjectFileStore`、domain codec、Host text adapter | 不经 Engine，不进入资源缓存；需要 schema、诊断、路径收缩和原子保存。 |
+| 图片、音频、视频、模型、Puppet、PSD、PDF/EPUB/CBZ/Office 等二进制或容器源 | `ContentAccessService`，底层走 Engine file access 或领域 provider | 统一授权、路径转换和 source/ref 诊断；需要 Range、entry、probe、decode 或大文件读取时由 Engine 执行。 |
+| 文档页图、缩略图、preview variant、proxy、FOV crop、OCR/ASR/metadata sidecar | `ResourceCacheService` provider，通过 `ContentAccessService` 访问 | 属于可重建派生物。上层只持有 `ResourceRef` 和 variant，不依赖 materialized path。 |
+| 播放、流、GPU/媒体计算、导出编码、waveform、模型 viewport stream | `@neko/neko-client` / `EngineClient`，由 Extension Host 授权和注册 source | 可直接使用 Engine client，但 source 注册、权限、token 生命周期和路径收缩仍归 Host/content-access 边界。 |
+| Webview 展示 URI | `LocalResourceAccessService` 或 `ResourceCacheService.project()` | 只产生当前 Webview runtime handle；不能进入项目事实、Agent memory 或跨包 payload。 |
+| 用户选择的最终导出路径、正式导入资产路径 | Domain save/import service + `ContentIngestService` | 这是用户事实或项目事实，不是缓存；不得用 `.neko/.cache` 作为成功合约。 |
+
+当前实现边界：
+
+| 层级 | 入口 | 可扩展点 | 禁止 |
+| --- | --- | --- | --- |
+| Shared Host runtime | `createHostContentAccessRuntime(...)` | `accessProviders`、`ingestProviders`、`resourceCacheOptions.providers`、`webviewResolver`、`engineSourceResolver` | 了解 Canvas/Cut/Preview/Agent 业务语义 |
+| Resource providers | `DocumentResourceCacheProvider`、`ThumbnailResourceCacheProvider`、`PreviewVariantResourceCacheProvider`、`GeneratedAssetResourceCacheProvider` 等 | `ensure/probe/materialize` adapter | 决定项目事实、Webview UI 或 durable source identity |
+| Feature package | Canvas/Cut/Preview/Agent/Assets/Audio/Model/Sketch provider adapter | source/ref shaping、variant intent、UI workflow | 直接管理 cache root、manifest、Webview URI fallback、Engine source path policy |
+
+按领域的期望分工：
+
+| 领域 | 需要支持的内容 | 统一内容访问边界 | 可直接走 `@neko/neko-client` 的场景 | 不需要资源缓存的场景 |
+| --- | --- | --- | --- | --- |
+| `neko-canvas` | 文本、图片、音视频、文档页图、模型、generated assets | 节点引用、预览资源、document resource、generated asset、thumbnail/proxy/FOV crop 通过 `ContentAccessService` 和 `ResourceCacheService` | Canvas 播放工作区、音视频流、模型/预览 stream、Engine-backed preview route | `.nkc` 项目事实、节点文本、布局、用户确认保存的画布文件 |
+| `neko-preview` | 文档、图片、音视频、全景媒体 | Custom editor 打开前的 source 授权、document entry/page image、轻量预览投影走统一服务 | 视频/音频/全景播放、Range/seek、decode/probe、engine-backed panoramic preview | 纯文本 outline、当前 Webview UI 状态、用户打开的原始 source identity |
+| `neko-cut` | 字幕、图片、音视频、LUT、proxy、thumbnail、导出 | source ingest、proxy/thumbnail/preview variant、素材引用和 export source resolution 走统一服务 | 播放、probe、frame extraction、waveform、proxy generation、export/transcode | `.nkv` 时间线事实、用户可编辑字幕 cue、最终导出文件 |
+| `neko-model` | GLB/GLTF/VRM、贴图、环境图、scene stream | 模型 source、sibling textures、environment preview/thumbnail 走统一服务或 provider | viewport/scene stream、GPU render、model preprocess/probe、texture decode | `.nkm` scene/project facts、transform/material 参数、用户确认导入后的模型引用 |
+| `neko-sketch` | PSD、图片、NKS 图层、参考图、generated art | PSD source、PSD preview、参考图、外部 raster source 和派生缩略图走统一服务 | 将来 Engine-backed PSD/raster decode、GPU filter/export、large image preprocess | `.nks` 图层/笔刷/向量事实、Webview 内部编辑状态、用户保存的正式图像文件 |
+| `neko-agent` | 文档、图片、附件、感知资产、generated media | Agent tool、attachment、perception、document image、generated asset 投影全部走 Agent content runtime backed by shared services | provider 需要 Engine-backed bytes/source、视频预处理、媒体 probe/decode | prompt 文本、配置、skill metadata、工作记忆中的稳定 ref/text 摘要 |
+| `neko-assets` | asset file、thumbnail、metadata、media library | Asset visual、thumbnail、metadata sidecar 可作为 resource/cache provider；路径变量和媒体库 root 进入统一 content boundary | engine thumbnail/probe/extract metadata | asset/entity/library facts、用户正式导入的 source 文件记录 |
+
+结论：公共规则由统一内容访问服务管理，领域只实现 provider/adapter。只要两个以上领域需要相同的路径、权限、缓存、projection 或 Engine source 规则，就应放入 `@neko/shared` / `@neko/shared/vscode/extension` 或 `@neko/neko-client` 边界；只有领域语义、UI 行为、项目格式和用户工作流留在 owning package。
+
+当前迁移和分类快照：
+
+| 领域 | 当前规则 | 后续边界 |
+| --- | --- | --- |
+| Preview document | PDF/EPUB/CBZ/DOCX 打开时通过 `createHostContentAccessRuntime(...)` 解析 path-backed source，并只向 Engine 注册 runtime token；Webview 只拿 Engine HTTP/Range URL。 | 文档页图、entry image 和缩略图需要复用时继续进入 `DocumentResourceCacheProvider` / `ResourceCacheService`，不得把 Engine token 或 URL 写入文档事实。 |
+| Model | GLB/GLTF/VRM 和环境图进入 Engine 前先经 shared content access 的 `engine-source` target；`.nkm` JSON 仍走 `ProjectFileStore`。 | sibling texture、环境预览和 model preview variant 只注册 provider/adapter；Viewport stream、GPU render、model preprocess 继续直接走 `@neko/neko-client`。 |
+| Assets | `AssetEntity`、variant file、正式 `thumbnailPath` 是素材事实或正式资产文件引用；media-library 缩略图、metadata、search index 是可重建/可丢弃的 bounded runtime cache。`NekoAssetsAPI.createThumbnailResourceRef()` 和 `getThumbnailVisual()` 是跨包 ResourceRef/visual 入口，`getThumbnailPath()` 是 legacy/TreeView 兼容路径。 | 新跨包消费者必须请求 ResourceRef/visual 或 content-access provider，不读取 Assets 私有 thumbnail/metadata/index 文件。旧 TreeView tooltip/icon 可暂时使用本地路径，但不能写入项目事实。 |
+| Sketch | `.nks` 项目事实、PSD/raster source add 和正式导入走 `ProjectFileStore` / add-source；AI result/context 文件位于 extension-private runtime cache，并通过 shared local resource runtime 授权 Webview 投影或 Host/provider `fileUri` 临时输入。 | `SketchAIAssetRef.webviewUri/fileUri` 仅限当前 AI run，必须在 apply/cancel/dispose 后清理；不得进入 `.nks`、Agent durable memory、Canvas/storyboard payload 或 package manifest。PSD layer preview、reference image 和 generated art 长期引用应提升为 ResourceRef/asset ref。 |
+
+### Engine、文件读写与缓存边界
+
+`ContentAccessService` 是上层业务的统一内容访问编排入口。Agent、Canvas、Storyboard、Preview、Assets 和 Webview host handler 不应直接决定“读源文件、读缓存、注册 Engine token、投影 Webview URI”这些细节；它们应声明 intent、source/ref、target 和 caller，由 Host 侧服务路由。
+
+文件读写按数据性质分流：
+
+| 数据类型 | 权威入口 | 说明 |
+| --- | --- | --- |
+| 纯文本、配置、JSON/TOML/Markdown、`nk*` 项目事实 | `ProjectFileStore`、domain codec、Host fs adapter / `workspace.fs` | 负责 schema、诊断、路径收缩、原子写入和项目事实生命周期；不经 Engine。 |
+| 图片、视频、音频、模型、Puppet、PDF/EPUB/CBZ/CBR/Office 等二进制或容器源 | `neko-engine` file access / preview API | 负责 path authorization 后的 token、Range、container entry、sibling resource、probe、decode、preview/proxy/thumbnail 生成。 |
+| 文档页图、缩略图、preview variant、proxy、OCR/ASR/metadata sidecar 等派生物 | `ResourceCacheService` + provider | 缓存只保存可重建 artifact 和 manifest，不成为 source identity。 |
+| Webview 展示资源 | `LocalResourceAccessService` 或 `ResourceCacheService.project()` | 只产生当前 Webview 可用的 URI/projection，不写入项目事实。 |
+
+`ResourceCacheService` 决定缓存规则、variant key、fingerprint、MD5/内容去重、manifest、重建、失效和 GC；它不决定原始文件身份，也不替代 Engine 的二进制读取。`neko-engine` 负责二进制/媒体数据的实际读取和派生计算，但不决定长期缓存目录、cache manifest 或项目事实写入。两者由 `ContentAccessService` 按 intent 编排。
+
+因此：
+
+- `ReadImage`、文档图片读取、媒体预览和缩略图生成属于二进制/媒体路径，源字节和派生计算应经 Engine 或 Preview provider；结果需要复用时再进入 `ResourceCacheService`。
+- `ReadDocument` 对纯文本文件可以走文本/项目文件入口；对 PDF、EPUB、CBZ/CBR、DOCX/PPTX/XLSX 等容器或二进制文档，range、entry、内嵌资源和页图应经 Engine file access 或文档 entry provider。
+- Agent、Skill、Webview presenter、Canvas 和 artifact 只持有 `ResourceRef`、document source ref、workspace-relative path、`${VAR}/path` 或 asset/entity ID；不得持有缓存路径、Engine token、Webview URI、blob URL 或 scratch path 作为 durable identity。
+- 缓存路径由缓存服务透明处理。业务层不得根据 `.neko/.cache/resources`、`documents/`、`thumbnails/`、`previews/` 等目录结构分支，也不得把 materialized path 当作成功合约。
+
 | 服务                         | 负责                                                                      | 不负责                                    |
 | ---------------------------- | ------------------------------------------------------------------------- | ----------------------------------------- |
 | `PathResolver`               | `${VAR}/path`、workspace-relative、运行时绝对路径之间的转换               | 缓存选择、Webview 投影、导出语义          |
@@ -142,7 +228,7 @@ Agent Webview 的工具引用 JSON 使用 `protocolVersion: 2` 时，durable bod
 | `ContentIngestService`       | 执行 Host 侧 Add/Link/Create Asset、注册 durable source、落盘 byte-only 输入 | Webview 展示、低层 range 读取、隐式复制未纳管文件 |
 | `ResourceCacheService`       | `ResourceRef`/variant 的 materialize、resolve、project、invalidate、gc    | 原始素材身份、最终导出输入                |
 | `LocalResourceAccessService` | Webview roots 授权和 `asWebviewUri(...)` 投影                             | 缓存物化、source fingerprint、离线读取    |
-| Engine File Access           | 大型二进制、range、container entry、Engine 可读 source token              | 项目路径身份、Webview URI、cache manifest |
+| Engine File Access           | 二进制/媒体源、range、container entry、sibling resource、Engine 可读 source token | 纯文本项目文件、项目路径身份、Webview URI、cache manifest |
 | Project fact stores          | JSON/project 文件的原子读写、schema guard、锁或串行化                     | 派生缩略图、搜索排序、runtime token       |
 
 ### 项目文件 I/O

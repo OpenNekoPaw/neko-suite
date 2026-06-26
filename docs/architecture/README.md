@@ -13,6 +13,7 @@
 
 | 文档                                                                   | 内容                                                               |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| [`adr-agent-idc-skill-planmode-trigger-boundary.md`](adr-agent-idc-skill-planmode-trigger-boundary.md) | Agent IDC、Skill 与 Plan Mode 的触发边界、冲突风险和验证要求      |
 | [`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md) | Agent Skill catalog、用户新增 Skill metadata 和激活权威边界       |
 | [`adr-agent-command-skill-trigger-boundary.md`](adr-agent-command-skill-trigger-boundary.md) | Agent `/` 命令、`$` 技能和 `@` 上下文引用的触发入口边界            |
 | [`adr-agent-sandbox-and-external-processing-boundary.md`](adr-agent-sandbox-and-external-processing-boundary.md) | Agent 资源沙箱、外部处理器、命令执行和审批边界                   |

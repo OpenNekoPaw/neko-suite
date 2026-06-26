@@ -48,6 +48,7 @@
 - 主入口不得导出 React UI 组件。
 - `PathResolver` 是路径变量、相对路径和运行时绝对路径解析的统一入口。
 - `@neko/shared/project-file-io` 是 JSON `nk*` 项目文件 host 持久化、codec registry、诊断和 portable source policy 的共享入口；domain codec 仍归各领域格式所有。
+- `@neko/shared/vscode/extension` 的 `createHostContentAccessRuntime(...)` 是 Extension Host 侧内容访问、透明缓存、Webview projection、Engine source resolver hook 和 ingest provider 装配入口；功能包只传 provider/adapter，不直接装配底层 cache/content/local-resource service。
 - `ResourceRef` 是持久跨包 payload 的优先引用形式，不要把 blob URL、Webview URI、preview token、stream ID 或 engine token 写成持久事实。
 - `ENTITY_FACADE_COMMANDS` 是实体跨包 facade 的命令契约，功能包通过命令或 adapter 访问实体能力。
 - `@neko/shared/vscode`、`@neko/shared/vscode/extension`、`@neko/shared/i18n/react`、`@neko/shared/components` 是分层 subpath，不等同于主入口 L0。
@@ -59,6 +60,7 @@
 - 可复用但缺少小能力时，优先扩展公共契约、公共 adapter、公共 hook/primitive 或 domain service，再由 owning package 注入业务差异。
 - 只有当能力只服务单一领域、包含明确业务语义、或提升到公共层会倒置依赖时，才保留在 owning package。
 - 不得在功能包内并行实现 package-local design system、theme token、i18n runtime、logger/error 类型、项目文件 IO、cache manager、path resolver、Engine HTTP/WS client 或共享 DTO。
+- 不得在功能包内直接 `new HostContentAccessService`、`new HostContentIngestService`、`new VSCodeResourceCacheService`、使用 `ResourceCacheContentAccessProvider` / `SourceFileContentAccessProvider` / `DocumentEntryContentAccessProvider` 等公共底层 provider 重新拼装 runtime，或调用 `createDefaultLocalResourceAccessService` 形成第二套 Webview root 规则。跨领域内容访问必须从 `createHostContentAccessRuntime(...)` 进入；`scripts/check-content-access-boundaries.mjs` 会阻止回退。
 - 若决定不更新公共层，需在 OpenSpec、PR 或交付说明中记录审计结论、保留原因、后续提取条件和验证命令。
 
 ### 跨子包能力复用
@@ -184,7 +186,7 @@ Webview 包负责浏览器沙箱内的交互体验。
 - 新 Engine 能力先定义 proto/API/descriptor，再补 client，再接 Extension/Webview。
 - GPU-first 和 zero-copy 是媒体与渲染路径的优先方向；确需 CPU fallback 时要有明确边界和测试。
 - 低延迟交互 Scene stream 优先短 GOP，必要时 GOP=1；不要把 GOP=1 写成所有流的全局规则，因为 Timeline/Puppet/Preview 等路径存在不同编码目标。
-- Engine file access 是大型媒体、container entry、sibling resource 和需要 Range/seek 的源文件访问权威路径。
+- Engine file access 是二进制/媒体源、大型媒体、container entry、sibling resource 和需要 Range/seek 的源文件访问权威路径；纯文本、配置和 JSON `nk*` 项目事实仍由 `ProjectFileStore`、domain codec 和 Host fs adapter 管理，不经 Engine。
 - 3D Route A 中 Extension Host 不代理视频帧/PCM，不 relay 高频 scene delta；Webview 消费 Engine canvas/stream/control，authoring panels 编译为 Engine commands。
 - `runtime-puppet` 只拥有 `.nkp` Live2D/native Puppet character runtime；当前 `live2d-moc3-compat` 是 clean-room MOC3 compatibility，不是官方 Cubism SDK。官方 `live2d-cubism` 只能作为 optional adapter，公共 DTO、Proto、EngineClient、Webview message 和项目文件不暴露 SDK handle/type。
 - `runtime-scene` 拥有 `.nkm profile: 2d | 3d | live` Scene runtime；generic 2D Scene creation（sprite/tilemap/camera/light/parallax/particle/scene graph）归 `neko-model`，不能回退到 `neko-puppet`。
