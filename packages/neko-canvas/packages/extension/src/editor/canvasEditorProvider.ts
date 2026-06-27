@@ -142,7 +142,7 @@ import type { PlaybackHandle, PlaybackMediaType } from '@neko/neko-client';
 import { getLogger } from '../utils/logger';
 import { handleError } from '../utils/errorHandler';
 import { BatchGenerationScheduler } from '../services/batchGenerationScheduler';
-import { createCanvasDocumentEntryReader } from '../services/documentEntryReader';
+import { createCanvasEngineDocumentEntryReader } from '../services/engineDocumentEntryReader';
 import {
   createCanvasPlaybackPlanFromCanvasData,
   createNarrativeGraphSnapshotFromCanvasData,
@@ -862,13 +862,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
         preview: this.createLazyPreviewVariantResourceApi(),
       }),
       new DocumentResourceCacheProvider({
-        reader: {
-          readRange: async () => {
-            throw new Error('Canvas document range reader is unavailable.');
-          },
-        },
-        entryReader: createCanvasDocumentEntryReader(workspaceRoot),
-        enableRangeFallback: false,
+        entryReader: createCanvasEngineDocumentEntryReader(),
       }),
     ];
   }
@@ -4503,7 +4497,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return;
     }
 
-    if (documentResourceRef?.cachePath) {
+    if (documentResourceRef) {
       this.markDocumentResourceUnavailable(nodeData, 'cache-missing');
     }
   }
@@ -4542,7 +4536,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return;
     }
 
-    if (referenceImageResourceRef?.cachePath) {
+    if (referenceImageResourceRef) {
       this.markDocumentResourceUnavailable(nodeData, 'cache-missing');
     }
   }
@@ -5354,9 +5348,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
     if (isResourceRef(record['resourceRef'])) {
       return record['resourceRef'];
-    }
-    if (isResourceRef(record['cacheResourceRef'])) {
-      return record['cacheResourceRef'];
     }
     return undefined;
   }

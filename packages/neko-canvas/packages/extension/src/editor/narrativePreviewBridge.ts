@@ -2208,11 +2208,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         : undefined;
       const resourceRef =
         readResourceLike(value.resourceRef) ||
-        readResourceLike(value.cacheResourceRef) ||
         readResourceLike(assetRef?.resourceRef) ||
-        readResourceLike(assetRef?.cacheResourceRef) ||
-        readResourceLike(metadata?.resourceRef) ||
-        readResourceLike(metadata?.cacheResourceRef);
+        readResourceLike(metadata?.resourceRef);
       const documentResourceRef =
         readDocumentResourceLike(value.documentResourceRef) ||
         readDocumentResourceLike(value.referenceImageResourceRef) ||
@@ -2242,7 +2239,6 @@ export class NarrativePreviewBridge implements vscode.Disposable {
     function readDocumentResourceLike(value) {
       return value && typeof value === 'object' && !Array.isArray(value) && value.kind === 'document-entry' && (
         value.source !== undefined ||
-        value.cachePath !== undefined ||
         value.entryPath !== undefined ||
         value.locator !== undefined
       )

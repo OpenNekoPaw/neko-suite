@@ -447,7 +447,8 @@ describe('canvasEditorProvider message contracts', () => {
 
     it('registers document resources so stable document refs can be materialized in Canvas', () => {
       expect(providerSource).toContain('DocumentResourceCacheProvider');
-      expect(providerSource).toContain('createCanvasDocumentEntryReader(workspaceRoot)');
+      expect(providerSource).toContain('createCanvasEngineDocumentEntryReader()');
+      expect(providerSource).not.toContain('findUniqueEntryByBasename');
       expect(providerSource).toContain("preferredRole === 'source'");
       expect(providerSource).toContain("? 'page-image'");
       expect(providerSource).toContain(": 'document-entry'");

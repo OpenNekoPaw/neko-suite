@@ -44,6 +44,7 @@ let runtimeState: NekoEngineRuntimeState = 'idle';
 /** Cached frame server port for the current extension session (null = not connected) */
 let frameServerPort: number | null = null;
 let ensureFrameServerPromise: Promise<{ port: number } | null> | null = null;
+let pendingPreviewAllowedRoots: readonly string[] | undefined;
 
 const FRAME_SERVER_HEALTH_ATTEMPTS = 3;
 const FRAME_SERVER_HEALTH_TIMEOUT_MS = 1000;
@@ -299,10 +300,17 @@ function registerCommands(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand(
       'neko.engine.ensureFrameServer',
       async (previewAllowedRoots?: readonly string[]): Promise<{ port: number } | null> => {
+        pendingPreviewAllowedRoots = mergePreviewAllowedRootRequests(
+          pendingPreviewAllowedRoots,
+          previewAllowedRoots,
+        );
         if (!ensureFrameServerPromise) {
-          ensureFrameServerPromise = ensureFrameServer(previewAllowedRoots).finally(() => {
-            ensureFrameServerPromise = null;
-          });
+          ensureFrameServerPromise = ensureFrameServer(() => pendingPreviewAllowedRoots).finally(
+            () => {
+              ensureFrameServerPromise = null;
+              pendingPreviewAllowedRoots = undefined;
+            },
+          );
         }
         return ensureFrameServerPromise;
       },
@@ -717,19 +725,22 @@ async function getOrStartEngine(): Promise<NativeMediaEngine | null> {
 }
 
 async function ensureFrameServer(
-  requestedPreviewAllowedRoots?: readonly string[],
+  getRequestedPreviewAllowedRoots?: () => readonly string[] | undefined,
 ): Promise<{ port: number } | null> {
   try {
     const engine = await getOrStartEngine();
     if (!engine?.engine) return null;
     const nativeEngine = engine.engine as NativeEngineWithPreviewRoots;
-    const previewRoots = previewAllowedRoots(requestedPreviewAllowedRoots);
+    const previewRoots = previewAllowedRoots(getRequestedPreviewAllowedRoots?.());
 
     // Reuse a healthy embedded server when possible, but self-heal stale cache state.
     const existingPort = frameServerPort ?? engine.engine.getFrameServerPort();
     if (existingPort !== null) {
       if (await isFrameServerHealthy(existingPort)) {
-        updatePreviewAllowedRoots(nativeEngine, previewRoots);
+        updatePreviewAllowedRoots(
+          nativeEngine,
+          previewAllowedRoots(getRequestedPreviewAllowedRoots?.()),
+        );
         frameServerPort = existingPort;
         return { port: existingPort };
       }
@@ -746,6 +757,10 @@ async function ensureFrameServer(
 
     // Start frame server with auto-assigned port and a workspace-scoped preview allow-list.
     const port = await startFrameServer(nativeEngine, previewRoots);
+    updatePreviewAllowedRoots(
+      nativeEngine,
+      previewAllowedRoots(getRequestedPreviewAllowedRoots?.()),
+    );
     frameServerPort = port;
     log(`Frame server started on port ${port}`);
     return { port };
@@ -797,6 +812,15 @@ function previewAllowedRoots(requestedRoots?: readonly string[]): string[] {
     }
   }
   return [...new Set(previewRoots)];
+}
+
+function mergePreviewAllowedRootRequests(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+): readonly string[] | undefined {
+  if (!left || left.length === 0) return right;
+  if (!right || right.length === 0) return left;
+  return [...new Set([...left, ...right])];
 }
 
 function updatePreviewAllowedRoots(

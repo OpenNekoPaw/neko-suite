@@ -26,6 +26,7 @@ const mockState = vi.hoisted(() => {
     getFrameServerPort: vi.fn(() => null as number | null),
     startFrameServer: vi.fn(async () => 0),
     startFrameServerWithPreviewRoots: vi.fn(async () => 0),
+    setPreviewAllowedRoots: vi.fn(),
     stopFrameServer: vi.fn(async () => undefined),
     dispatchAction: vi.fn(async () => '{"status":"ok"}'),
   };
@@ -247,6 +248,7 @@ describe('neko-engine extension command bridge', () => {
     mockState.nativeEngine.startFrameServer.mockResolvedValue(1234);
     mockState.nativeEngine.startFrameServerWithPreviewRoots.mockReset();
     mockState.nativeEngine.startFrameServerWithPreviewRoots.mockResolvedValue(1234);
+    mockState.nativeEngine.setPreviewAllowedRoots.mockReset();
     mockState.nativeEngine.stopFrameServer.mockReset();
     mockState.nativeEngine.stopFrameServer.mockResolvedValue(undefined);
     mockState.nativeEngine.dispatchAction.mockReset();
@@ -306,6 +308,42 @@ describe('neko-engine extension command bridge', () => {
     expect(third).toEqual({ port: 1234 });
     expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).toHaveBeenCalledTimes(1);
     expect(mockState.nativeEngine.stopFrameServer).not.toHaveBeenCalled();
+  });
+
+  it('merges preview roots from coalesced ensure calls before serving files', async () => {
+    let releaseStart!: () => void;
+    mockState.nativeEngine.startFrameServerWithPreviewRoots.mockImplementation(
+      () =>
+        new Promise<number>((resolve) => {
+          releaseStart = () => resolve(1234);
+        }),
+    );
+
+    await activateExtension();
+
+    const first = mockState.executeCommand('neko.engine.ensureFrameServer', [
+      '/workspace',
+      '/media/a',
+    ]);
+    const second = mockState.executeCommand('neko.engine.ensureFrameServer', ['/media/b']);
+
+    await vi.waitFor(() =>
+      expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).toHaveBeenCalledTimes(1),
+    );
+    releaseStart?.();
+
+    await expect(Promise.all([first, second])).resolves.toEqual([{ port: 1234 }, { port: 1234 }]);
+    expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).toHaveBeenCalledTimes(1);
+    expect(mockState.nativeEngine.startFrameServerWithPreviewRoots).toHaveBeenCalledWith(0, [
+      '/workspace',
+      '/media/a',
+      '/media/b',
+    ]);
+    expect(mockState.nativeEngine.setPreviewAllowedRoots).toHaveBeenLastCalledWith([
+      '/workspace',
+      '/media/a',
+      '/media/b',
+    ]);
   });
 
   it('retries frame server health before restarting an existing port', async () => {
