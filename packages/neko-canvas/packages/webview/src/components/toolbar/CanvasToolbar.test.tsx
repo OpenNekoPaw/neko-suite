@@ -16,6 +16,7 @@ vi.mock('@neko/ui/icons', () => ({
   RightPanelOffIcon: ({ size = 16 }: { size?: number }) => (
     <span data-icon="right-panel-off">{size}</span>
   ),
+  SettingsIcon: ({ size = 16 }: { size?: number }) => <span data-icon="settings">{size}</span>,
   UndoIcon: ({ size = 16 }: { size?: number }) => <span data-icon="undo">{size}</span>,
 }));
 
@@ -47,11 +48,51 @@ describe('CanvasToolbar', () => {
       'Canvas tools',
     );
     expect(host.querySelectorAll('.neko-toolbar-btn').length).toBeGreaterThan(0);
+    expect(host.querySelector('[data-creative-left-rail-action="select-tool"]')).not.toBeNull();
     expect(host.querySelector('[data-creative-left-rail-action="toggle-pan-mode"]')).not.toBeNull();
     expect(
       host.querySelector('[data-creative-left-rail-action="open-add-node-popover"]'),
     ).toBeNull();
     expect(host.querySelector('[data-creative-left-rail-action="import-file"]')).toBeNull();
+  });
+
+  it('switches between select and hand tool modes from the first toolbar group', () => {
+    const onSelectTool = vi.fn();
+    const onTogglePanMode = vi.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          onUndo={() => undefined}
+          onRedo={() => undefined}
+          isSelectMode={true}
+          onSelectTool={onSelectTool}
+          isPanMode={false}
+          onTogglePanMode={onTogglePanMode}
+        />,
+      );
+    });
+
+    const selectButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="select-tool"]',
+    );
+    const handButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="toggle-pan-mode"]',
+    );
+
+    expect(selectButton?.getAttribute('aria-label')).toBe('Select Tool (V)');
+    expect(selectButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(selectButton?.getAttribute('data-creative-left-rail-kind')).toBe('tool-mode');
+    expect(handButton?.getAttribute('aria-label')).toBe('Hand Tool (H)');
+    expect(handButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(handButton?.getAttribute('data-creative-left-rail-kind')).toBe('tool-mode');
+
+    act(() => {
+      selectButton?.click();
+      handButton?.click();
+    });
+    expect(onSelectTool).toHaveBeenCalledTimes(1);
+    expect(onTogglePanMode).toHaveBeenCalledTimes(1);
   });
 
   it('controls the right node tree panel from the left toolbar', () => {
@@ -254,5 +295,82 @@ describe('CanvasToolbar', () => {
       toggleButton?.click();
     });
     expect(onToggleHud).toHaveBeenCalledTimes(1);
+  });
+
+  it('places frequent canvas actions in functional groups and keeps HUD/settings at the bottom', () => {
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          onUndo={() => undefined}
+          onRedo={() => undefined}
+          isSelectMode={false}
+          onSelectTool={() => undefined}
+          isNodeLibraryVisible={true}
+          onToggleNodeLibrary={() => undefined}
+          workspaceSurfaceState={{ canvas: true, stage: false, route: false }}
+          onToggleWorkspaceSurface={() => undefined}
+          onOpenExport={() => undefined}
+          onOpenPackage={() => undefined}
+          isHudVisible={true}
+          onToggleHud={() => undefined}
+          isCanvasSettingsVisible={false}
+          onToggleCanvasSettings={() => undefined}
+          isPanMode={true}
+          onTogglePanMode={() => undefined}
+        />,
+      );
+    });
+
+    const actions = Array.from(
+      host.querySelectorAll<HTMLButtonElement>('[data-creative-left-rail-action]'),
+    ).map((button) => button.getAttribute('data-creative-left-rail-action'));
+
+    expect(actions).toEqual([
+      'select-tool',
+      'toggle-pan-mode',
+      'toggle-right-node-tree',
+      'undo',
+      'redo',
+      'toggle-playback-canvas-pane',
+      'toggle-playback-stage-pane',
+      'toggle-playback-route-pane',
+      'open-export',
+      'open-package',
+      'toggle-hud-controls',
+      'toggle-canvas-settings',
+    ]);
+
+    expect(actions.slice(-2)).toEqual(['toggle-hud-controls', 'toggle-canvas-settings']);
+  });
+
+  it('controls the canvas settings panel from the bottom visibility cluster', () => {
+    const onToggleCanvasSettings = vi.fn();
+
+    act(() => {
+      root.render(
+        <CanvasToolbar
+          onUndo={() => undefined}
+          onRedo={() => undefined}
+          isCanvasSettingsVisible={true}
+          onToggleCanvasSettings={onToggleCanvasSettings}
+        />,
+      );
+    });
+
+    const settingsButton = host.querySelector<HTMLButtonElement>(
+      '[data-creative-left-rail-action="toggle-canvas-settings"]',
+    );
+    expect(settingsButton?.getAttribute('aria-label')).toBe('Hide Canvas Settings');
+    expect(settingsButton?.getAttribute('aria-controls')).toBe('canvas-settings-panel');
+    expect(settingsButton?.getAttribute('aria-expanded')).toBe('true');
+    expect(settingsButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(settingsButton?.getAttribute('data-creative-left-rail-kind')).toBe('visibility-toggle');
+    expect(settingsButton?.getAttribute('data-creative-left-rail-target')).toBe('canvas-settings');
+    expect(settingsButton?.querySelector('[data-icon="settings"]')).not.toBeNull();
+
+    act(() => {
+      settingsButton?.click();
+    });
+    expect(onToggleCanvasSettings).toHaveBeenCalledTimes(1);
   });
 });

@@ -2,9 +2,11 @@
  * CanvasToolbar - Left vertical toolbar
  *
  * Provides quick access to:
+ * - Select / Hand tools
  * - Right node tree/library panel toggle
  * - Undo / Redo
- * - Canvas settings
+ * - Canvas workspace surfaces
+ * - Canvas HUD / settings
  *
  * Uses shared ToolbarButton for consistent active state and hover styling.
  */
@@ -27,6 +29,7 @@ import {
   PackageIcon,
   RightPanelIcon,
   RightPanelOffIcon,
+  SettingsIcon,
 } from '@neko/ui/icons';
 import type { PlaybackWorkspacePane } from '../../stores/playbackStore';
 
@@ -37,6 +40,9 @@ import type { PlaybackWorkspacePane } from '../../stores/playbackStore';
 export interface CanvasToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
+  /** Select tool mode */
+  isSelectMode?: boolean;
+  onSelectTool?: () => void;
   /** Node tree/library panel visibility */
   isNodeLibraryVisible?: boolean;
   onToggleNodeLibrary?: () => void;
@@ -50,6 +56,9 @@ export interface CanvasToolbarProps {
   /** Canvas HUD visibility (minimap, zoom controls) */
   isHudVisible?: boolean;
   onToggleHud?: () => void;
+  /** Canvas settings panel visibility */
+  isCanvasSettingsVisible?: boolean;
+  onToggleCanvasSettings?: () => void;
   /** Hand tool (drag-to-pan) mode */
   isPanMode?: boolean;
   onTogglePanMode?: () => void;
@@ -62,6 +71,8 @@ export interface CanvasToolbarProps {
 export function CanvasToolbar({
   onUndo,
   onRedo,
+  isSelectMode = true,
+  onSelectTool,
   isNodeLibraryVisible = true,
   onToggleNodeLibrary,
   workspaceSurfaceState,
@@ -70,6 +81,8 @@ export function CanvasToolbar({
   onOpenPackage,
   isHudVisible = true,
   onToggleHud,
+  isCanvasSettingsVisible = false,
+  onToggleCanvasSettings,
   isPanMode = false,
   onTogglePanMode,
 }: CanvasToolbarProps) {
@@ -79,7 +92,10 @@ export function CanvasToolbar({
     ? t('toolbar.hideRightNodeTree')
     : t('toolbar.showRightNodeTree');
   const hudTitle = isHudVisible ? t('toolbar.hideHudControls') : t('toolbar.showHudControls');
-  const hasVisibilityToggles = onToggleHud !== undefined || onToggleNodeLibrary !== undefined;
+  const settingsTitle = isCanvasSettingsVisible
+    ? t('settings.hideCanvasSettings')
+    : t('toolbar.canvasSettings');
+  const hasBottomControls = onToggleHud !== undefined || onToggleCanvasSettings !== undefined;
   const canControlPlaybackPanes =
     workspaceSurfaceState !== undefined && onToggleWorkspaceSurface !== undefined;
 
@@ -95,22 +111,67 @@ export function CanvasToolbar({
         ownedKeys: ['Enter', 'Escape', 'Space', 'Tab', 'ArrowUp', 'ArrowDown'],
       })}
     >
-      {/* Hand Tool (drag-to-pan) */}
+      <ToolbarButton
+        data-creative-left-rail-action="select-tool"
+        data-creative-left-rail-kind="tool-mode"
+        icon={<SelectToolIcon />}
+        title={`${t('toolbar.selectTool')} (V)`}
+        active={isSelectMode}
+        onClick={onSelectTool}
+      />
+
       <ToolbarButton
         data-creative-left-rail-action="toggle-pan-mode"
-        data-creative-left-rail-kind="common-action"
-        icon={
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M10 15V6a1.5 1.5 0 0 1 3 0v5a1.5 1.5 0 0 1 3 0v1a1.5 1.5 0 0 1 3 0v5a6 6 0 0 1-6 6h-1a6 6 0 0 1-4.243-1.757l-3.5-3.5a1.5 1.5 0 0 1 2.121-2.121L8 17V6" />
-          </svg>
-        }
+        data-creative-left-rail-kind="tool-mode"
+        icon={<HandToolIcon />}
         title={`${t('toolbar.handTool') ?? '移动工具'} (H)`}
         active={isPanMode}
         onClick={onTogglePanMode}
       />
 
+      {onToggleNodeLibrary && (
+        <>
+          <ToolbarSeparator />
+          <ToolbarButton
+            aria-controls="canvas-right-node-tree-panel"
+            aria-expanded={isNodeLibraryVisible}
+            data-creative-left-rail-action="toggle-right-node-tree"
+            data-creative-left-rail-kind="visibility-toggle"
+            data-creative-left-rail-target="right-panel"
+            icon={
+              isNodeLibraryVisible ? <RightPanelIcon size={18} /> : <RightPanelOffIcon size={18} />
+            }
+            title={nodeLibraryTitle}
+            active={isNodeLibraryVisible}
+            onClick={onToggleNodeLibrary}
+          />
+        </>
+      )}
+
+      <ToolbarSeparator />
+
+      <ToolbarButton
+        data-creative-left-rail-action="undo"
+        data-creative-left-rail-kind="common-action"
+        icon={<UndoIcon size={18} />}
+        title={`${t('toolbar.undo')} (⌘Z)`}
+        onClick={onUndo}
+        disabled={!canUndo}
+      />
+
+      <ToolbarButton
+        data-creative-left-rail-action="redo"
+        data-creative-left-rail-kind="common-action"
+        icon={<RedoIcon size={18} />}
+        title={`${t('toolbar.redo')} (⇧⌘Z)`}
+        onClick={onRedo}
+        disabled={!canRedo}
+      />
+
       {canControlPlaybackPanes ? (
         <>
+          <ToolbarSeparator />
+
           <ToolbarButton
             aria-controls="canvas-playback-canvas-pane"
             aria-expanded={workspaceSurfaceState.canvas}
@@ -159,6 +220,8 @@ export function CanvasToolbar({
         </>
       ) : null}
 
+      {(onOpenExport || onOpenPackage) && <ToolbarSeparator />}
+
       {onOpenExport && (
         <ToolbarButton
           data-creative-left-rail-action="open-export"
@@ -179,49 +242,11 @@ export function CanvasToolbar({
         />
       )}
 
-      <ToolbarSeparator />
-
-      {/* Undo */}
-      <ToolbarButton
-        data-creative-left-rail-action="undo"
-        data-creative-left-rail-kind="common-action"
-        icon={<UndoIcon size={18} />}
-        title={`${t('toolbar.undo')} (⌘Z)`}
-        onClick={onUndo}
-        disabled={!canUndo}
-      />
-
-      {/* Redo */}
-      <ToolbarButton
-        data-creative-left-rail-action="redo"
-        data-creative-left-rail-kind="common-action"
-        icon={<RedoIcon size={18} />}
-        title={`${t('toolbar.redo')} (⇧⌘Z)`}
-        onClick={onRedo}
-        disabled={!canRedo}
-      />
-
-      {hasVisibilityToggles && (
+      {hasBottomControls && (
         <>
           <ToolbarSpacer />
           <ToolbarSeparator />
         </>
-      )}
-
-      {onToggleNodeLibrary && (
-        <ToolbarButton
-          aria-controls="canvas-right-node-tree-panel"
-          aria-expanded={isNodeLibraryVisible}
-          data-creative-left-rail-action="toggle-right-node-tree"
-          data-creative-left-rail-kind="visibility-toggle"
-          data-creative-left-rail-target="right-panel"
-          icon={
-            isNodeLibraryVisible ? <RightPanelIcon size={18} /> : <RightPanelOffIcon size={18} />
-          }
-          title={nodeLibraryTitle}
-          active={isNodeLibraryVisible}
-          onClick={onToggleNodeLibrary}
-        />
       )}
 
       {onToggleHud && (
@@ -237,6 +262,40 @@ export function CanvasToolbar({
           onClick={onToggleHud}
         />
       )}
+
+      {onToggleCanvasSettings && (
+        <ToolbarButton
+          aria-controls="canvas-settings-panel"
+          aria-expanded={isCanvasSettingsVisible}
+          data-creative-left-rail-action="toggle-canvas-settings"
+          data-creative-left-rail-kind="visibility-toggle"
+          data-creative-left-rail-target="canvas-settings"
+          icon={<SettingsIcon size={18} />}
+          title={settingsTitle}
+          active={isCanvasSettingsVisible}
+          onClick={onToggleCanvasSettings}
+        />
+      )}
     </VerticalToolbar>
+  );
+}
+
+function SelectToolIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+      <path
+        d="M5 3l12 9-5 1.2 3.4 5.9-2.5 1.4-3.3-5.8L6 18z"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function HandToolIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M10 15V6a1.5 1.5 0 0 1 3 0v5a1.5 1.5 0 0 1 3 0v1a1.5 1.5 0 0 1 3 0v5a6 6 0 0 1-6 6h-1a6 6 0 0 1-4.243-1.757l-3.5-3.5a1.5 1.5 0 0 1 2.121-2.121L8 17V6" />
+    </svg>
   );
 }

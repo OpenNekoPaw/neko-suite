@@ -66,6 +66,8 @@ export interface InfiniteCanvasProps {
   isPanMode?: boolean;
   /** Spacebar-hold pan mode, owned by the Canvas root keyboard dispatcher. */
   isSpacePanActive?: boolean;
+  /** Background grid visibility, controlled by Canvas settings. */
+  isGridVisible?: boolean;
 
   // ── ScriptNode callbacks ───────────────────────────────────────────────────
   /** Called to load scene TOC from neko-story */
@@ -123,6 +125,7 @@ export function InfiniteCanvas({
   onModelCheckInstalled,
   onRemoveContainerChild,
   expandedNodeId,
+  isGridVisible = true,
 }: InfiniteCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -377,8 +380,9 @@ export function InfiniteCanvas({
       }}
       onMouseLeave={viewportHandlers.onMouseLeave}
     >
-      {/* Background grid */}
-      <CanvasGrid viewport={viewport} width={containerSize.width} height={containerSize.height} />
+      {isGridVisible && (
+        <CanvasGrid viewport={viewport} width={containerSize.width} height={containerSize.height} />
+      )}
 
       {/* Viewport transform layer */}
       <CanvasViewport viewport={viewport}>

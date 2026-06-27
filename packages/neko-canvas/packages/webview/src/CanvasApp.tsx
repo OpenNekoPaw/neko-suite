@@ -35,6 +35,7 @@ import { CanvasToolbar } from './components/toolbar/CanvasToolbar';
 import { PlaybackWorkspace } from './components/playback/PlaybackWorkspace';
 import { NodeLibraryPanel } from './components/panels/NodeLibraryPanel';
 import { FloatingPanelHost } from './components/panels/FloatingPanelHost';
+import { CanvasSettingsPanel } from './components/panels/CanvasSettingsPanel';
 import { MIN_ZOOM, MAX_ZOOM } from './hooks';
 import { useNodeExpand } from './hooks/useNodeExpand';
 import { useVSCodeMessages } from './hooks/useVSCodeMessages';
@@ -205,6 +206,8 @@ export function CanvasApp() {
   const [isRightNodeTreeVisible, setIsRightNodeTreeVisible] = useState(false);
   const [rightDockMode, setRightDockMode] = useState<CanvasRightDockMode>('basic');
   const [isHudVisible, setIsHudVisible] = useState(true);
+  const [isGridVisible, setIsGridVisible] = useState(true);
+  const [isCanvasSettingsVisible, setIsCanvasSettingsVisible] = useState(false);
   // Minimap width tracks ZoomControls width for alignment
   const zoomControlsRef = useRef<HTMLDivElement | null>(null);
   const [zoomControlsElement, setZoomControlsElement] = useState<HTMLDivElement | null>(null);
@@ -304,6 +307,7 @@ export function CanvasApp() {
     () => setInteractionTool((tool) => (tool === 'pan' ? 'select' : 'pan')),
     [],
   );
+  const selectInteractionTool = useCallback(() => setInteractionTool('select'), []);
   const nodeTypeSummary = useMemo(
     () => WEBVIEW_SUBSYSTEM_REGISTRY.getNodeTypeSummary({ nodes }),
     [nodes],
@@ -1109,12 +1113,17 @@ export function CanvasApp() {
       closeContentOverlay();
       return true;
     }
+    if (isCanvasSettingsVisible) {
+      setIsCanvasSettingsVisible(false);
+      return true;
+    }
     return false;
   }, [
     closeContentOverlay,
     closeGenerationPanel,
     contentOverlayState.visible,
     generationPanelState.visible,
+    isCanvasSettingsVisible,
   ]);
 
   // =========================================================================
@@ -1527,6 +1536,8 @@ export function CanvasApp() {
           <CanvasToolbar
             onUndo={undo}
             onRedo={redo}
+            isSelectMode={interactionTool === 'select'}
+            onSelectTool={selectInteractionTool}
             isNodeLibraryVisible={isRightNodeTreeVisible}
             onToggleNodeLibrary={() => setIsRightNodeTreeVisible((visible) => !visible)}
             workspaceSurfaceState={workspaceSurfaceState}
@@ -1539,6 +1550,8 @@ export function CanvasApp() {
             }}
             isHudVisible={isHudVisible}
             onToggleHud={() => setIsHudVisible((visible) => !visible)}
+            isCanvasSettingsVisible={isCanvasSettingsVisible}
+            onToggleCanvasSettings={() => setIsCanvasSettingsVisible((visible) => !visible)}
             isPanMode={isPanMode}
             onTogglePanMode={togglePanMode}
           />
@@ -1598,6 +1611,7 @@ export function CanvasApp() {
                   expandedNodeId={expandedNodeId}
                   isPanMode={isPanMode}
                   isSpacePanActive={isSpacePanActive}
+                  isGridVisible={isGridVisible}
                 />
 
                 {nodes.length === 0 && (
@@ -1660,6 +1674,24 @@ export function CanvasApp() {
                 )}
 
                 <FloatingPanelHost panels={floatingPanels} />
+
+                {canvasData && isCanvasSettingsVisible && (
+                  <CanvasSettingsPanel
+                    canvasData={canvasData}
+                    viewportZoom={viewport.zoom}
+                    nodeTypeSummary={nodeTypeSummary}
+                    activeSubsystemIds={activeSubsystemIds}
+                    isGridVisible={isGridVisible}
+                    onGridVisibleChange={setIsGridVisible}
+                    isHudVisible={isHudVisible}
+                    onHudVisibleChange={setIsHudVisible}
+                    isNodeTreeVisible={isRightNodeTreeVisible}
+                    onNodeTreeVisibleChange={setIsRightNodeTreeVisible}
+                    nodeTreeMode={rightDockMode}
+                    onNodeTreeModeChange={setRightDockMode}
+                    onClose={() => setIsCanvasSettingsVisible(false)}
+                  />
+                )}
 
                 <GenerationPromptPanel
                   visible={generationPanelState.visible}

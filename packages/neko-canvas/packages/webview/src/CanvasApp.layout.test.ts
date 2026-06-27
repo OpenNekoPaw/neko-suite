@@ -16,6 +16,10 @@ describe('Canvas creative workbench layout boundary', () => {
     resolve(__dirname, 'components/panels/NodeLibraryPanel.tsx'),
     'utf8',
   );
+  const canvasSettingsPanelSource = readFileSync(
+    resolve(__dirname, 'components/panels/CanvasSettingsPanel.tsx'),
+    'utf8',
+  );
   const cssSource = readFileSync(resolve(__dirname, 'index.css'), 'utf8');
   const baseNodeSource = readFileSync(resolve(__dirname, 'components/nodes/BaseNode.tsx'), 'utf8');
   const canvasStoreSource = readFileSync(resolve(__dirname, 'stores/canvasStore.ts'), 'utf8');
@@ -123,6 +127,9 @@ describe('Canvas creative workbench layout boundary', () => {
     }
     expect(appSource).toMatch(/id="canvas-hud-controls"/);
     expect(appSource).toMatch(/isHudVisible && \(/);
+    expect(appSource).toMatch(/<CanvasSettingsPanel/);
+    expect(canvasSettingsPanelSource).toMatch(/id="canvas-settings-panel"/);
+    expect(appSource).toMatch(/isCanvasSettingsVisible && \(/);
   });
 
   it('does not duplicate the document title as a canvas scope chip', () => {
@@ -163,6 +170,52 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).toMatch(/revealPlaybackWorkspace\(\{\s*focusOwner: pane/);
     expect(appSource).toMatch(/stage: pane === 'stage'/);
     expect(appSource).toMatch(/route: pane === 'route'/);
+  });
+
+  it('keeps left toolbar actions grouped by canvas workflow frequency', () => {
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="select-tool"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-kind="tool-mode"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-pan-mode"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-canvas-settings"/);
+    expect(toolbarSource).toMatch(/aria-controls="canvas-settings-panel"/);
+
+    const orderedActions = [
+      'select-tool',
+      'toggle-pan-mode',
+      'toggle-right-node-tree',
+      'undo',
+      'redo',
+      'toggle-playback-canvas-pane',
+      'toggle-playback-stage-pane',
+      'toggle-playback-route-pane',
+      'open-export',
+      'open-package',
+      'toggle-hud-controls',
+      'toggle-canvas-settings',
+    ];
+    const positions = orderedActions.map((action) =>
+      toolbarSource.indexOf(`data-creative-left-rail-action="${action}"`),
+    );
+    expect(positions.every((position) => position > -1)).toBe(true);
+    expect(positions).toEqual([...positions].sort((left, right) => left - right));
+    expect(toolbarSource.indexOf('<ToolbarSpacer />')).toBeLessThan(
+      toolbarSource.indexOf('data-creative-left-rail-action="toggle-hud-controls"'),
+    );
+    expect(
+      toolbarSource.indexOf('data-creative-left-rail-action="toggle-hud-controls"'),
+    ).toBeLessThan(
+      toolbarSource.indexOf('data-creative-left-rail-action="toggle-canvas-settings"'),
+    );
+  });
+
+  it('keeps grid visibility as a canvas view setting instead of a separate rail action', () => {
+    expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="toggle-grid"/);
+    expect(appSource).toMatch(/const \[isGridVisible, setIsGridVisible\] = useState\(true\)/);
+    expect(appSource).toMatch(/isGridVisible=\{isGridVisible\}/);
+    expect(appSource).toMatch(/onGridVisibleChange=\{setIsGridVisible\}/);
+    expect(infiniteCanvasSource).toMatch(/isGridVisible\?: boolean/);
+    expect(infiniteCanvasSource).toMatch(/isGridVisible = true/);
+    expect(infiniteCanvasSource).toMatch(/\{isGridVisible && \(/);
   });
 
   it('keeps playback highlight as visual state separate from selection props', () => {
