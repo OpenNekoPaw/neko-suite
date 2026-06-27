@@ -10,7 +10,6 @@ const WORKSPACE_ROOT = '/workspace';
 function createFileAccessPolicy() {
   return createWorkspaceFileAccessPolicy({
     workspaceRoot: WORKSPACE_ROOT,
-    ignoredPathExemptRoots: [`${WORKSPACE_ROOT}/.neko/.cache/resources`],
   });
 }
 
@@ -865,6 +864,31 @@ describe('createReadDocumentTool', () => {
         kind: 'chapterRange',
         start: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
         end: { kind: 'chapter', chapterHref: 'Page_10', spineIndex: 10 },
+      },
+      max_images: 10,
+    })) as ToolResult;
+
+    expect(result.success).toBe(true);
+    expect(reader.readRange).toHaveBeenCalledWith('/workspace/books/demo.epub', {
+      locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
+      endLocator: { kind: 'chapter', chapterHref: 'Page_10', spineIndex: 10 },
+      limit: { maxChars: 20000, maxImages: 10 },
+    });
+  });
+
+  it('normalizes nested chapter-range locator arguments from model tool calls', async () => {
+    const reader = createReader();
+    const tool = createReadDocumentTestTool({ reader });
+
+    const result = (await tool.execute({
+      file_path: '/workspace/books/demo.epub',
+      mode: 'range',
+      range: {
+        locator: {
+          kind: 'chapter-range',
+          start: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
+          end: { kind: 'chapter', chapterHref: 'Page_10', spineIndex: 10 },
+        },
       },
       max_images: 10,
     })) as ToolResult;

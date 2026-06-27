@@ -34,6 +34,7 @@ export type EnginePerceptionClient = PerceptionTranscribeClient &
 export interface IEngineClientProvider {
   getOptionalClient(): Promise<EngineClient | null>;
   getRequiredClient(): Promise<EngineClient>;
+  setAuthorizedReadRoots?(roots: readonly string[]): Promise<void>;
   transcodeFile(
     inputPath: string,
     outputPath: string,
@@ -47,6 +48,8 @@ export interface IEngineClientProvider {
 
 class VSCodeEngineClientProvider implements IEngineClientProvider {
   private _engineClient?: EngineClient;
+  private authorizedReadRoots: readonly string[] = [];
+  private configuredReadRootsKey = '';
 
   async getOptionalClient(): Promise<EngineClient | null> {
     try {
@@ -72,6 +75,7 @@ class VSCodeEngineClientProvider implements IEngineClientProvider {
 
     const result = await vscode.commands.executeCommand<unknown>(
       NEKO_ENGINE_ENSURE_FRAME_SERVER_COMMAND,
+      this.authorizedReadRoots,
     );
     if (!isNekoEngineFrameServerResult(result)) {
       throw new Error('Failed to start neko-engine Frame Server');
@@ -80,7 +84,21 @@ class VSCodeEngineClientProvider implements IEngineClientProvider {
     this._engineClient = await this.configureClient(
       new EngineClient(result.port, { timeout: NEKO_ENGINE_CLIENT_TIMEOUT_MS }),
     );
+    this.configuredReadRootsKey = createReadRootsKey(this.authorizedReadRoots);
     return this._engineClient;
+  }
+
+  async setAuthorizedReadRoots(roots: readonly string[]): Promise<void> {
+    this.authorizedReadRoots = dedupePaths(roots);
+    const rootsKey = createReadRootsKey(this.authorizedReadRoots);
+    if (!this._engineClient || rootsKey === this.configuredReadRootsKey) {
+      return;
+    }
+    await vscode.commands.executeCommand<unknown>(
+      NEKO_ENGINE_ENSURE_FRAME_SERVER_COMMAND,
+      this.authorizedReadRoots,
+    );
+    this.configuredReadRootsKey = rootsKey;
   }
 
   async transcodeFile(
@@ -158,4 +176,19 @@ let singleton: IEngineClientProvider | undefined;
 export function getEngineClientProvider(): IEngineClientProvider {
   singleton ??= new VSCodeEngineClientProvider();
   return singleton;
+}
+
+function createReadRootsKey(roots: readonly string[]): string {
+  return JSON.stringify(dedupePaths(roots));
+}
+
+function dedupePaths(paths: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of paths) {
+    if (!item || seen.has(item)) continue;
+    seen.add(item);
+    result.push(item);
+  }
+  return result;
 }

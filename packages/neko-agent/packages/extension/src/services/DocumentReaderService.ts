@@ -1,5 +1,4 @@
 import * as fs from 'fs/promises';
-import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
   createDocumentAccessService,
@@ -28,17 +27,13 @@ export type { DocumentContent };
 
 export interface IDocumentReaderService extends IDocumentReader, IDocumentAccessService {}
 
-export interface DocumentReaderServiceOptions {
-  readonly tempDir?: string;
-}
-
 export class DocumentReaderService implements IDocumentReaderService {
   private readonly runtime: IDocumentReader;
   private readonly access: IDocumentAccessService;
 
-  constructor(lowLevelAccess?: DocumentLowLevelAccess, options: DocumentReaderServiceOptions = {}) {
+  constructor(lowLevelAccess?: DocumentLowLevelAccess) {
     const documentAccess = lowLevelAccess ?? createDocumentLowLevelAccess();
-    const tempDir = options.tempDir ?? resolveDefaultDocumentRuntimeCacheDir();
+    const readEntry = documentAccess.readEntry;
     const runtimeDeps: DocumentReaderRuntimeDeps = {
       readTextFile: async (filePath) => fs.readFile(await resolveDocumentPath(filePath), 'utf-8'),
       readBinaryFile: async (filePath) => {
@@ -47,11 +42,12 @@ export class DocumentReaderService implements IDocumentReaderService {
         }
         return documentAccess.readFile(await resolveDocumentPath(filePath));
       },
-      writeBinaryFile: async (filePath, data) =>
-        fs.writeFile(await resolveDocumentPath(filePath), data),
-      makeDir: async (filePath, options) =>
-        fs.mkdir(await resolveDocumentPath(filePath), options).then(() => undefined),
-      tempDir: () => tempDir,
+      ...(readEntry
+        ? {
+            readEntry: async (filePath, entryPath) =>
+              readEntry(await resolveDocumentPath(filePath), entryPath),
+          }
+        : {}),
       loadModule: <T>(packageName: string) => this.tryImport<T>(packageName),
       logger,
     };
@@ -130,36 +126,7 @@ export class DocumentReaderService implements IDocumentReaderService {
 
 export function createDocumentReaderService(
   engineClientProvider?: IEngineClientProvider,
-  context?: vscode.ExtensionContext,
+  _context?: vscode.ExtensionContext,
 ): IDocumentReaderService {
-  return new DocumentReaderService(createDocumentLowLevelAccess(engineClientProvider), {
-    tempDir: resolveDocumentRuntimeCacheDir(context),
-  });
-}
-
-export function resolveDocumentRuntimeCacheDir(context?: vscode.ExtensionContext): string {
-  const workspaceRoot = readWorkspaceRoot();
-  if (workspaceRoot) {
-    return path.join(workspaceRoot, '.neko', '.runtime', 'document-reader');
-  }
-  if (context?.globalStorageUri && isFileUriLike(context.globalStorageUri)) {
-    return path.join(context.globalStorageUri.fsPath, 'runtime', 'document-reader');
-  }
-  throw new Error(
-    'DocumentReaderService requires a workspace or file-backed extension context for document image cache storage.',
-  );
-}
-
-function resolveDefaultDocumentRuntimeCacheDir(): string {
-  return resolveDocumentRuntimeCacheDir();
-}
-
-function readWorkspaceRoot(): string | undefined {
-  const folders = vscode.workspace.workspaceFolders;
-  const root = folders?.[0]?.uri;
-  return root && isFileUriLike(root) ? root.fsPath : undefined;
-}
-
-function isFileUriLike(uri: vscode.Uri): boolean {
-  return Boolean(uri.fsPath && (uri.scheme === undefined || uri.scheme === 'file'));
+  return new DocumentReaderService(createDocumentLowLevelAccess(engineClientProvider));
 }

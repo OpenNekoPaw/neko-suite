@@ -189,6 +189,27 @@ describe('createCoreTools', () => {
     });
   });
 
+  it('does not reveal managed cache entries through recursive workspace listing or search', async () => {
+    const tools = createCoreTools({ defaultCwd: workspaceRoot });
+
+    const listing = await getTool(tools, 'ListDirectory').execute({
+      path: '.',
+      recursive: true,
+    });
+    expect(listing.success).toBe(true);
+    expect(JSON.stringify(listing.data)).toContain('src/story.txt');
+    expect(JSON.stringify(listing.data)).not.toContain('.neko/.cache');
+    expect(JSON.stringify(listing.data)).not.toContain('page.txt');
+
+    const grep = await getTool(tools, 'Grep').execute({
+      pattern: 'cache',
+      path: '.',
+    });
+    expect(grep.success).toBe(true);
+    expect(JSON.stringify(grep.data)).not.toContain('.neko/.cache');
+    expect(JSON.stringify(grep.data)).not.toContain('page.txt');
+  });
+
   it('keeps project memory reachable while hiding managed .neko runtime subtrees', async () => {
     const read = getTool(createCoreTools({ defaultCwd: workspaceRoot }), 'Read');
 

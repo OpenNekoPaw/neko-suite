@@ -34,7 +34,6 @@ export interface WorkspaceFileAccessPolicyOptions {
   readonly readRoots?: readonly string[];
   readonly writeRoots?: readonly string[];
   readonly ignoreRules?: WorkspaceFileIgnoreRules;
-  readonly ignoredPathExemptRoots?: readonly string[];
 }
 
 export function createWorkspaceFileAccessPolicy(
@@ -52,14 +51,12 @@ class WorkspaceFileAccessPolicy implements CoreFileAccessPolicy {
   private readonly readRoots: readonly string[];
   private readonly writeRoots: readonly string[];
   private readonly ignoreRules: WorkspaceFileIgnoreRules;
-  private readonly ignoredPathExemptRoots: readonly string[];
 
   constructor(options: WorkspaceFileAccessPolicyOptions) {
     this.workspaceRoot = path.resolve(options.workspaceRoot);
     this.readRoots = normalizeAccessRoots(options.readRoots ?? [this.workspaceRoot]);
     this.writeRoots = normalizeAccessRoots(options.writeRoots ?? [this.workspaceRoot]);
     this.ignoreRules = options.ignoreRules ?? {};
-    this.ignoredPathExemptRoots = normalizeAccessRoots(options.ignoredPathExemptRoots ?? []);
   }
 
   authorize(filePath: string, accessKind: FileAccessKind): CoreFileAccessDecision {
@@ -93,10 +90,7 @@ class WorkspaceFileAccessPolicy implements CoreFileAccessPolicy {
     }
 
     const relativePath = toWorkspaceRelativePath(resolved, this.workspaceRoot);
-    if (
-      relativePath &&
-      !this.ignoredPathExemptRoots.some((root) => isPathInsideRoot(resolved, root))
-    ) {
+    if (relativePath) {
       const ignoreDecision = shouldIgnoreWorkspaceFile(relativePath, this.ignoreRules);
       if (ignoreDecision.ignored) {
         return {

@@ -114,7 +114,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
         if (message.type === 'streamComplete') {
           continue;
         }
-        input.postMessage(message);
+        await input.postMessage(message);
       }
 
       if (event.type === 'tool_result') {
@@ -153,7 +153,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     }
 
     finalizeAgentStreamProjectionState(streamState);
-    input.postMessage(
+    await input.postMessage(
       buildStreamCompleteProjectionMessage({
         conversationId: input.conversationId,
         messageId: streamingMessageId,

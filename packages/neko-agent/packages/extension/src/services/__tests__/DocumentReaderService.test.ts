@@ -4,11 +4,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as vscode from 'vscode';
-import {
-  DocumentReaderService,
-  createDocumentReaderService,
-  resolveDocumentRuntimeCacheDir,
-} from '../DocumentReaderService';
+import { DocumentReaderService, createDocumentReaderService } from '../DocumentReaderService';
+import type { IEngineClientProvider } from '../engineClientProvider';
 
 vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
 
@@ -30,6 +27,56 @@ vi.mock('../../base', () => ({
   }),
 }));
 
+function makeJpeg(width: number, height: number): Uint8Array {
+  return new Uint8Array([
+    0xff,
+    0xd8,
+    0xff,
+    0xc0,
+    0x00,
+    0x08,
+    0x08,
+    (height >>> 8) & 0xff,
+    height & 0xff,
+    (width >>> 8) & 0xff,
+    width & 0xff,
+    0x03,
+    0xff,
+    0xd9,
+  ]);
+}
+
+function createEngineClientProviderForEntry(bytes: Uint8Array): {
+  readonly provider: IEngineClientProvider;
+  readonly engine: {
+    readonly withRegisteredFile: ReturnType<typeof vi.fn>;
+    readonly readFileEntry: ReturnType<typeof vi.fn>;
+  };
+} {
+  const engine = {
+    withRegisteredFile: vi.fn(async (_request, task) =>
+      task({
+        token: 'token-1',
+        fileSizeBytes: bytes.byteLength,
+        mimeType: 'application/zip',
+        purpose: 'document',
+        rangeUrl: '/v1/files/token-1',
+      }),
+    ),
+    readFileEntry: vi.fn(async () => bytes.buffer.slice(0)),
+  };
+  return {
+    engine,
+    provider: {
+      getOptionalClient: vi.fn(async () => engine as any),
+      getRequiredClient: vi.fn(async () => engine as any),
+      transcodeFile: vi.fn(async () => true),
+      createPerceptionClient: vi.fn(() => ({ perception: {} }) as any),
+      createPerceptionClients: vi.fn(() => ({})),
+    },
+  };
+}
+
 describe('DocumentReaderService', () => {
   let service: DocumentReaderService;
 
@@ -40,32 +87,12 @@ describe('DocumentReaderService', () => {
   });
 
   describe('supports', () => {
-    it('uses project-private document reader scratch for default image extraction', () => {
-      expect(resolveDocumentRuntimeCacheDir()).toBe(
-        '/mock/workspace/.neko/.runtime/document-reader',
-      );
-    });
-
-    it('uses extension-private document reader scratch when no workspace is open', () => {
-      const previousFolders = vscode.workspace.workspaceFolders;
-      vscode.workspace.workspaceFolders = [];
-      try {
-        expect(
-          resolveDocumentRuntimeCacheDir({
-            extensionUri: vscode.Uri.file('/ext/neko-agent'),
-            globalStorageUri: vscode.Uri.file('/global/neko-agent'),
-          } as vscode.ExtensionContext),
-        ).toBe('/global/neko-agent/runtime/document-reader');
-      } finally {
-        vscode.workspace.workspaceFolders = previousFolders;
-      }
-    });
-
-    it('wires createDocumentReaderService to document reader scratch', async () => {
+    it('wires createDocumentReaderService without exposing document reader scratch paths', async () => {
       const fs = await import('fs/promises');
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
-      const reader = createDocumentReaderService();
+      const { provider, engine } = createEngineClientProviderForEntry(makeJpeg(2, 3));
+      const reader = createDocumentReaderService(provider);
       vi.spyOn(reader, 'hasDRM').mockResolvedValue(false);
       vi.spyOn(
         reader as unknown as { tryImport(packageName: string): Promise<unknown | null> },
@@ -77,11 +104,9 @@ describe('DocumentReaderService', () => {
             return [
               {
                 name: 'page-1.jpg',
-                getData: () =>
-                  new Uint8Array([
-                    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x08, 0x08, 0x00, 0x02, 0x00, 0x03, 0x03, 0xff,
-                    0xd9,
-                  ]),
+                getData: () => {
+                  throw new Error('legacy zip entry fallback should not be used');
+                },
               },
             ];
           }
@@ -90,10 +115,22 @@ describe('DocumentReaderService', () => {
 
       const result = await reader.read('/path/to/comic.cbz');
 
-      expect(result.imagePaths?.[0]).toMatch(
-        /^\/mock\/workspace\/\.neko\/\.runtime\/document-reader\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/,
+      expect(result.imagePaths).toBeUndefined();
+      expect(result.imageInfo?.[0]).toEqual(
+        expect.objectContaining({
+          entryPath: 'page-1.jpg',
+          resourceRef: {
+            kind: 'document-entry',
+            source: { filePath: '/path/to/comic.cbz', format: 'cbz' },
+            entryPath: 'page-1.jpg',
+            versionPolicy: 'versioned-export',
+          },
+        }),
       );
-      expect(JSON.stringify(result)).not.toContain('/tmp/');
+      expect(fs.mkdir).not.toHaveBeenCalled();
+      expect(fs.writeFile).not.toHaveBeenCalled();
+      expect(engine.readFileEntry).toHaveBeenCalledWith('token-1', 'page-1.jpg');
+      expect(JSON.stringify(result)).not.toContain('document-reader');
     });
 
     it('should support PDF files', () => {
@@ -238,12 +275,20 @@ describe('DocumentReaderService', () => {
       expect(fs.readFile).toHaveBeenCalledWith('/library/books/book.txt', 'utf-8');
     });
 
-    it('writes extracted document images under the configured temp directory', async () => {
+    it('does not write archive document images under a configured temp directory', async () => {
       const fs = await import('fs/promises');
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);
-      const cachedService = new DocumentReaderService(undefined, {
-        tempDir: '/agent-temp/document-reader',
+      const { provider, engine } = createEngineClientProviderForEntry(makeJpeg(2, 3));
+      const cachedService = new DocumentReaderService({
+        readEntry: async (filePath, entryPath) => {
+          const client = await provider.getRequiredClient();
+          return client.withRegisteredFile(
+            { filePath, purpose: 'document' },
+            async (registered) =>
+              new Uint8Array(await client.readFileEntry(registered.token, entryPath)),
+          );
+        },
       });
       vi.spyOn(cachedService, 'hasDRM').mockResolvedValue(false);
       vi.spyOn(
@@ -256,11 +301,9 @@ describe('DocumentReaderService', () => {
             return [
               {
                 name: 'page-1.jpg',
-                getData: () =>
-                  new Uint8Array([
-                    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x08, 0x08, 0x00, 0x02, 0x00, 0x03, 0x03, 0xff,
-                    0xd9,
-                  ]),
+                getData: () => {
+                  throw new Error('legacy zip entry fallback should not be used');
+                },
               },
             ];
           }
@@ -269,17 +312,17 @@ describe('DocumentReaderService', () => {
 
       const result = await cachedService.read('/path/to/comic.cbz');
 
-      expect(result.imagePaths?.[0]).toMatch(
-        /^\/agent-temp\/document-reader\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/,
+      expect(result.imagePaths).toBeUndefined();
+      expect(result.imageInfo?.[0]?.resourceRef).toEqual(
+        expect.objectContaining({
+          kind: 'document-entry',
+          entryPath: 'page-1.jpg',
+        }),
       );
-      expect(fs.mkdir).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/agent-temp\/document-reader\/neko_cbz_[a-z0-9]+$/),
-        { recursive: true },
-      );
-      expect(fs.writeFile).toHaveBeenCalledWith(
-        expect.stringMatching(/^\/agent-temp\/document-reader\/neko_cbz_[a-z0-9]+\/page-1\.jpg$/),
-        expect.any(Uint8Array),
-      );
+      expect(fs.mkdir).not.toHaveBeenCalled();
+      expect(fs.writeFile).not.toHaveBeenCalled();
+      expect(engine.readFileEntry).toHaveBeenCalledWith('token-1', 'page-1.jpg');
+      expect(JSON.stringify(result)).not.toContain('document-reader');
     });
 
     it('should throw error for unsupported formats', async () => {

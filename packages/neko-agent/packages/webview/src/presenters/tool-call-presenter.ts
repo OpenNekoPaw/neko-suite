@@ -189,9 +189,14 @@ function extractReadDocumentImageThumbnails(data: unknown): DocumentImageThumbna
     const resourceRef =
       parseStableDocumentArchiveResourceRef(documentImage?.resourceRef) ??
       parseStableDocumentArchiveResourceRef(image.resourceRef);
-    const src = resourceRef
-      ? undefined
-      : (readString(image, 'webviewUri') ?? readString(documentImage, 'webviewUri'));
+    const src =
+      readString(image, 'renderUri') ??
+      readString(documentImage, 'renderUri') ??
+      readString(image, 'src') ??
+      readString(documentImage, 'src') ??
+      (resourceRef
+        ? undefined
+        : (readString(image, 'webviewUri') ?? readString(documentImage, 'webviewUri')));
     const displayPath = resourceRef?.entryPath ?? readString(image, 'entryPath');
     if (!displayPath || (!src && !resourceRef)) return [];
 
@@ -266,9 +271,14 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
         resourceRef === undefined
           ? (readString(image, 'path') ?? readString(documentImage, 'path'))
           : undefined;
-      const src = resourceRef
-        ? undefined
-        : (readString(image, 'webviewUri') ?? readString(documentImage, 'webviewUri'));
+      const src =
+        readString(image, 'renderUri') ??
+        readString(documentImage, 'renderUri') ??
+        readString(image, 'src') ??
+        readString(documentImage, 'src') ??
+        (resourceRef
+          ? undefined
+          : (readString(image, 'webviewUri') ?? readString(documentImage, 'webviewUri')));
       const displayPath = resourceRef?.entryPath ?? readString(image, 'entryPath') ?? path;
       if (!displayPath || (!src && !resourceRef)) return [];
 
@@ -366,12 +376,11 @@ function formatDocumentImageReferenceJson(input: {
         ...(input.mimeType ? { mimeType: input.mimeType } : {}),
         ...(input.resourceRef ? { resourceRef: input.resourceRef } : {}),
       },
-      ...(input.displayPath || input.src
+      ...(input.displayPath
         ? {
             display: {
               runtimeOnly: true,
-              ...(input.displayPath ? { path: input.displayPath } : {}),
-              ...(input.src ? { webviewUri: input.src } : {}),
+              path: input.displayPath,
             },
           }
         : {}),
@@ -615,6 +624,8 @@ function isRuntimeOnlyResultField(key: string): boolean {
     key === 'cacheResourceRef' ||
     key === 'localPath' ||
     key === 'localPaths' ||
+    key === 'renderUri' ||
+    key === 'renderUris' ||
     key === 'webviewUri' ||
     key === 'webviewUris' ||
     key === 'imagePaths' ||

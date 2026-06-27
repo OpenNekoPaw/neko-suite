@@ -1,4 +1,5 @@
 import type { ChatMessage } from '@neko/shared';
+import { sanitizeToolResultValueForHistory } from './tool-result-sanitizer';
 
 export interface AgentHistoryToolCallContext {
   readonly id: string;
@@ -53,7 +54,7 @@ export function formatToolResultContext(result: AgentHistoryToolResultContext): 
 
 function stringifyToolResultData(data: unknown): string {
   try {
-    const serialized = JSON.stringify(data, null, 2);
+    const serialized = JSON.stringify(sanitizeToolResultValueForHistory(data), null, 2);
     return serialized === undefined ? String(data) : serialized;
   } catch {
     return '[Unserializable tool result data]';

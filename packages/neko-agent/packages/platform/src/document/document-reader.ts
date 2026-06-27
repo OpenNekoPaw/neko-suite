@@ -1,9 +1,10 @@
 import * as path from 'node:path';
 import {
   createDocumentEntryResourceRef,
-  hashStableValue,
   type DocumentFormat,
   type DocumentImageInfo,
+  type DocumentLocator,
+  type DocumentSourceRef,
 } from '@neko/shared';
 import { probeImageMetadata } from './image-metadata';
 
@@ -30,9 +31,7 @@ export interface DocumentReaderLogger {
 export interface DocumentReaderRuntimeDeps {
   readTextFile(filePath: string): Promise<string>;
   readBinaryFile(filePath: string): Promise<Uint8Array>;
-  writeBinaryFile(filePath: string, data: Uint8Array): Promise<void>;
-  makeDir(filePath: string, options: { recursive: boolean }): Promise<void>;
-  tempDir(): string;
+  readEntry?(filePath: string, entryPath: string): Promise<Uint8Array | null>;
   loadModule<T>(packageName: string): Promise<T | null>;
   logger?: DocumentReaderLogger;
   now?: () => Date;
@@ -120,12 +119,6 @@ interface OfficeParserAst {
 
 type OfficeReader = (filePath: string) => Promise<DocumentContent>;
 type UnknownFunction = (...args: unknown[]) => unknown;
-
-interface ExtractedImage {
-  readonly path: string;
-  readonly entryName?: string;
-  readonly info: DocumentImageInfo;
-}
 
 interface EpubChapter {
   id: string;
@@ -239,6 +232,20 @@ interface XmlParserConstructor {
 
 interface FastXmlParserModule {
   XMLParser?: XmlParserConstructor | null;
+}
+
+class DocumentImageEntryReadError extends Error {
+  constructor(
+    readonly entryPath: string,
+    cause?: unknown,
+  ) {
+    super(
+      `Document image entry could not be read: ${entryPath}${
+        cause instanceof Error ? ` (${cause.message})` : ''
+      }`,
+    );
+    this.name = 'DocumentImageEntryReadError';
+  }
 }
 
 export class DocumentReaderRuntime implements IDocumentReader {
@@ -360,16 +367,13 @@ export class DocumentReaderRuntime implements IDocumentReader {
       }
 
       const result = await mammoth.extractRawText({ path: filePath });
-      const images = await this.extractZipImages(filePath, 'docx', (entryPath) =>
+      const imageInfo = await this.readZipImageInfo(filePath, 'docx', (entryPath) =>
         entryPath.startsWith('word/media/'),
       );
-      const imagePaths = images.map((image) => image.path);
-      const imageInfo = images.map((image) => image.info);
       return {
         text: result.value,
-        ...(imagePaths.length > 0 ? { imagePaths } : {}),
         ...(imageInfo.length > 0 ? { imageInfo } : {}),
-        ...(imagePaths.length > 0 ? { metadata: { imageCount: imagePaths.length } } : {}),
+        ...(imageInfo.length > 0 ? { metadata: { imageCount: imageInfo.length } } : {}),
       };
     } catch (error) {
       if (error instanceof Error && error.message.includes('Word document reader')) {
@@ -390,20 +394,17 @@ export class DocumentReaderRuntime implements IDocumentReader {
       }
 
       const content = await officeReader(filePath);
-      const images = await this.extractZipImages(filePath, 'pptx', (entryPath) =>
+      const imageInfo = await this.readZipImageInfo(filePath, 'pptx', (entryPath) =>
         entryPath.startsWith('ppt/media/'),
       );
-      const imagePaths = images.map((image) => image.path);
-      const imageInfo = images.map((image) => image.info);
       return {
         ...content,
-        ...(imagePaths.length > 0 ? { imagePaths } : {}),
         ...(imageInfo.length > 0 ? { imageInfo } : {}),
-        ...(imagePaths.length > 0
+        ...(imageInfo.length > 0
           ? {
               metadata: {
                 ...content.metadata,
-                imageCount: imagePaths.length,
+                imageCount: imageInfo.length,
               },
             }
           : {}),
@@ -445,15 +446,16 @@ export class DocumentReaderRuntime implements IDocumentReader {
               );
             }
 
-            const images = await this.extractEpubImages(filePath, dedupeStrings(imageEntryPaths));
-            const imagePaths = images.map((image) => image.path);
-            const imageInfo = images.map((image) => image.info);
+            const imageInfo = await this.readEpubImageInfo(
+              filePath,
+              dedupeStrings(imageEntryPaths),
+            );
             const rawText = texts.join('\n\n');
             const text =
               rawText.trim().length > 0
                 ? rawText
-                : imagePaths.length > 0
-                  ? `EPUB image document with ${imagePaths.length} image pages`
+                : imageInfo.length > 0
+                  ? `EPUB image document with ${imageInfo.length} image pages`
                   : rawText;
             const metadata: Record<string, unknown> = {
               title: epub.metadata.title,
@@ -461,14 +463,13 @@ export class DocumentReaderRuntime implements IDocumentReader {
               publisher: epub.metadata.publisher,
               language: epub.metadata.language,
             };
-            if (imagePaths.length > 0) {
-              metadata.imageCount = imagePaths.length;
+            if (imageInfo.length > 0) {
+              metadata.imageCount = imageInfo.length;
             }
 
             resolve({
               text,
               pageCount: epub.flow.length,
-              ...(imagePaths.length > 0 ? { imagePaths } : {}),
               ...(imageInfo.length > 0 ? { imageInfo } : {}),
               metadata,
             });
@@ -491,10 +492,10 @@ export class DocumentReaderRuntime implements IDocumentReader {
     }
   }
 
-  private async extractEpubImages(
+  private async readEpubImageInfo(
     filePath: string,
     entryPaths: readonly string[],
-  ): Promise<ExtractedImage[]> {
+  ): Promise<DocumentImageInfo[]> {
     if (entryPaths.length === 0) {
       return [];
     }
@@ -508,10 +509,7 @@ export class DocumentReaderRuntime implements IDocumentReader {
     }
 
     const zip = new AdmZip(filePath);
-    const tmpDir = createStableExtractionDir(this.deps.tempDir(), 'epub', filePath, entryPaths);
-    await this.deps.makeDir(tmpDir, { recursive: true });
-
-    const images: ExtractedImage[] = [];
+    const images: DocumentImageInfo[] = [];
     for (let index = 0; index < entryPaths.length; index += 1) {
       const entryPath = entryPaths[index];
       if (!entryPath) {
@@ -523,30 +521,23 @@ export class DocumentReaderRuntime implements IDocumentReader {
         continue;
       }
 
-      const imgPath = path.join(
-        tmpDir,
-        `${String(index + 1).padStart(4, '0')}_${path.basename(entryPath)}`,
-      );
-      const imageBytes = entry.getData();
-      await this.deps.writeBinaryFile(imgPath, imageBytes);
+      const imageBytes = await this.readEntryBytes(filePath, entryPath);
       images.push(
-        createExtractedImage(imgPath, imageBytes, {
-          sourceFilePath: filePath,
-          sourceFormat: 'epub',
-          entryPath,
-        }),
+        createArchiveImageInfo(
+          imageBytes,
+          createDocumentImageResource(filePath, 'epub', entryPath),
+        ),
       );
     }
 
-    this.deps.logger?.info('Extracted EPUB images', { images: images.length, tmpDir });
     return images;
   }
 
-  private async extractZipImages(
+  private async readZipImageInfo(
     filePath: string,
-    tmpPrefix: DocumentFormat,
+    sourceFormat: DocumentFormat,
     includeEntry: (entryPath: string) => boolean,
-  ): Promise<ExtractedImage[]> {
+  ): Promise<DocumentImageInfo[]> {
     try {
       const AdmZip = await this.deps.loadModule<AdmZipConstructor>('adm-zip');
       if (!AdmZip) {
@@ -565,48 +556,49 @@ export class DocumentReaderRuntime implements IDocumentReader {
         return [];
       }
 
-      const tmpDir = createStableExtractionDir(
-        this.deps.tempDir(),
-        tmpPrefix,
-        filePath,
-        entries.map((entry) => entry.name),
-      );
-      await this.deps.makeDir(tmpDir, { recursive: true });
-
-      const images: ExtractedImage[] = [];
-      for (let index = 0; index < entries.length; index += 1) {
-        const entry = entries[index];
-        if (!entry) {
-          continue;
-        }
-        const imgPath = path.join(
-          tmpDir,
-          `${String(index + 1).padStart(4, '0')}_${path.basename(entry.name)}`,
-        );
-        const imageBytes = entry.getData();
-        await this.deps.writeBinaryFile(imgPath, imageBytes);
+      const images: DocumentImageInfo[] = [];
+      for (const entry of entries) {
+        const imageBytes = await this.readEntryBytes(filePath, entry.name);
         images.push(
-          createExtractedImage(imgPath, imageBytes, {
-            sourceFilePath: filePath,
-            sourceFormat: tmpPrefix,
-            entryPath: entry.name,
-          }),
+          createArchiveImageInfo(
+            imageBytes,
+            createDocumentImageResource(filePath, sourceFormat, entry.name),
+          ),
         );
       }
 
-      this.deps.logger?.info('Extracted document images', {
-        format: tmpPrefix,
-        images: images.length,
-        tmpDir,
-      });
       return images;
     } catch (error) {
-      this.deps.logger?.warn('Failed to extract document images', {
+      if (error instanceof DocumentImageEntryReadError) {
+        throw error;
+      }
+      this.deps.logger?.warn('Failed to read document image entries', {
         path: filePath,
-        format: tmpPrefix,
+        format: sourceFormat,
         error,
       });
       return [];
+    }
+  }
+
+  private async readEntryBytes(filePath: string, entryPath: string): Promise<Uint8Array> {
+    if (!this.deps.readEntry) {
+      throw new DocumentImageEntryReadError(
+        entryPath,
+        new Error('document entry reader is unavailable'),
+      );
+    }
+    try {
+      const bytes = await this.deps.readEntry(filePath, entryPath);
+      if (!bytes) {
+        throw new DocumentImageEntryReadError(entryPath);
+      }
+      return bytes;
+    } catch (error) {
+      if (error instanceof DocumentImageEntryReadError) {
+        throw error;
+      }
+      throw new DocumentImageEntryReadError(entryPath, error);
     }
   }
 
@@ -622,39 +614,18 @@ export class DocumentReaderRuntime implements IDocumentReader {
         .filter((entry) => COMIC_IMAGE_PATTERN.test(entry.name))
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
-      const tmpDir = createStableExtractionDir(
-        this.deps.tempDir(),
-        'cbz',
-        filePath,
-        entries.map((entry) => entry.name),
-      );
-      await this.deps.makeDir(tmpDir, { recursive: true });
-
-      const imagePaths: string[] = [];
       const imageInfo: DocumentImageInfo[] = [];
       for (const entry of entries) {
-        const imgPath = path.join(tmpDir, path.basename(entry.name));
-        const imageBytes = entry.getData();
-        await this.deps.writeBinaryFile(imgPath, imageBytes);
-        imagePaths.push(imgPath);
+        const imageBytes = await this.readEntryBytes(filePath, entry.name);
         imageInfo.push(
-          createImageInfo(imgPath, imageBytes, {
-            sourceFilePath: filePath,
-            sourceFormat: 'cbz',
-            entryPath: entry.name,
-          }),
+          createArchiveImageInfo(
+            imageBytes,
+            createDocumentImageResource(filePath, 'cbz', entry.name),
+          ),
         );
       }
 
-      this.deps.logger?.info('Extracted CBZ archive', { pages: entries.length, tmpDir });
-      return this.createComicContent(
-        'cbz',
-        filePath,
-        entries.length,
-        tmpDir,
-        imagePaths,
-        imageInfo,
-      );
+      return this.createComicContent('cbz', filePath, entries.length, imageInfo);
     } catch (error) {
       if (error instanceof Error && error.message.includes('CBZ image reader')) {
         throw error;
@@ -681,49 +652,23 @@ export class DocumentReaderRuntime implements IDocumentReader {
         .fileHeaders.filter((file) => COMIC_IMAGE_PATTERN.test(file.name))
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
-      const tmpDir = createStableExtractionDir(
-        this.deps.tempDir(),
-        'cbr',
-        filePath,
-        imageFiles.map((file) => file.name),
-      );
-      await this.deps.makeDir(tmpDir, { recursive: true });
-
       const filesByName = new Map(
         extractor
           .extract()
           .files.filter((file) => COMIC_IMAGE_PATTERN.test(file.fileHeader.name))
           .map((file) => [file.fileHeader.name, file]),
       );
-      const imagePaths: string[] = [];
       const imageInfo: DocumentImageInfo[] = [];
       for (const fileHeader of imageFiles) {
         const file = filesByName.get(fileHeader.name);
         if (!file) {
           continue;
         }
-        const imgPath = path.join(tmpDir, path.basename(file.fileHeader.name));
         const imageBytes = file.extract[1];
-        await this.deps.writeBinaryFile(imgPath, imageBytes);
-        imagePaths.push(imgPath);
-        imageInfo.push(
-          createImageInfo(imgPath, imageBytes, {
-            sourceFilePath: filePath,
-            sourceFormat: 'cbr',
-            entryPath: file.fileHeader.name,
-          }),
-        );
+        imageInfo.push(createImageInfoFromBytes(imageBytes));
       }
 
-      this.deps.logger?.info('Extracted CBR archive', { pages: imageFiles.length, tmpDir });
-      return this.createComicContent(
-        'cbr',
-        filePath,
-        imageFiles.length,
-        tmpDir,
-        imagePaths,
-        imageInfo,
-      );
+      return this.createComicContent('cbr', filePath, imageFiles.length, imageInfo);
     } catch (error) {
       if (error instanceof Error && error.message.includes('CBR image reader')) {
         throw error;
@@ -807,22 +752,19 @@ export class DocumentReaderRuntime implements IDocumentReader {
         allData.push(...data);
         sheets.push(`Sheet: ${sheetName}\n${data.map((row) => row.join('\t')).join('\n')}`);
       }
-      const images = await this.extractZipImages(filePath, 'xlsx', (entryPath) =>
+      const imageInfo = await this.readZipImageInfo(filePath, 'xlsx', (entryPath) =>
         entryPath.startsWith('xl/media/'),
       );
-      const imagePaths = images.map((image) => image.path);
-      const imageInfo = images.map((image) => image.info);
 
       return {
         text: sheets.join('\n\n'),
-        ...(imagePaths.length > 0 ? { imagePaths } : {}),
         ...(imageInfo.length > 0 ? { imageInfo } : {}),
         metadata: {
           format: 'xlsx',
           sheetCount: workbook.SheetNames.length,
           sheets: workbook.SheetNames,
           rowCount: allData.length,
-          ...(imagePaths.length > 0 ? { imageCount: imagePaths.length } : {}),
+          ...(imageInfo.length > 0 ? { imageCount: imageInfo.length } : {}),
         },
       };
     } catch (error) {
@@ -870,19 +812,16 @@ export class DocumentReaderRuntime implements IDocumentReader {
     format: 'cbz' | 'cbr',
     filePath: string,
     pageCount: number,
-    tmpDir: string,
-    imagePaths: string[],
     imageInfo: DocumentImageInfo[] = [],
   ): DocumentContent {
     return {
       text: `Comic archive with ${pageCount} pages`,
       pageCount,
-      imagePaths,
-      imageInfo,
+      ...(imageInfo.length > 0 ? { imageInfo } : {}),
       metadata: {
         format,
         fileName: path.basename(filePath),
-        tmpDir,
+        ...(imageInfo.length > 0 ? { imageCount: imageInfo.length } : {}),
       },
     };
   }
@@ -975,65 +914,50 @@ export function dedupeStrings(values: readonly string[]): string[] {
 }
 
 interface DocumentImageResourceInput {
-  readonly sourceFilePath: string;
-  readonly sourceFormat: DocumentFormat;
+  readonly source: DocumentSourceRef;
+  readonly locator?: DocumentLocator;
   readonly entryPath?: string;
 }
 
-function createExtractedImage(
-  filePath: string,
+function createArchiveImageInfo(
   bytes: Uint8Array,
-  resource?: DocumentImageResourceInput,
-): ExtractedImage {
-  return {
-    path: filePath,
-    ...(resource?.entryPath ? { entryName: resource.entryPath } : {}),
-    info: createImageInfo(filePath, bytes, resource),
-  };
-}
-
-function createImageInfo(
-  filePath: string,
-  bytes: Uint8Array,
-  resource?: DocumentImageResourceInput,
+  resource: DocumentImageResourceInput,
 ): DocumentImageInfo {
-  const metadata = probeImageMetadata(bytes);
   const resourceRef = createDocumentEntryResourceRef({
-    source: resource
-      ? {
-          filePath: resource.sourceFilePath,
-          format: resource.sourceFormat,
-        }
-      : undefined,
-    entryPath: resource?.entryPath,
+    source: resource.source,
+    locator: resource.locator,
+    entryPath: resource.entryPath,
   });
   return {
-    path: filePath,
-    byteSize: metadata?.byteSize ?? bytes.length,
-    ...(metadata?.mimeType ? { mimeType: metadata.mimeType } : {}),
-    ...(metadata?.width !== undefined ? { width: metadata.width } : {}),
-    ...(metadata?.height !== undefined ? { height: metadata.height } : {}),
+    ...createImageInfoFromBytes(bytes),
+    ...(resource.entryPath ? { entryPath: resource.entryPath } : {}),
+    ...(resource.locator ? { locator: resource.locator } : {}),
     ...(resourceRef ? { resourceRef } : {}),
   };
 }
 
-function createStableExtractionDir(
-  tempRoot: string,
-  format: string,
-  filePath: string,
-  entryPaths: readonly string[],
-): string {
-  return path.join(
-    tempRoot,
-    `neko_${sanitizeExtractionPathPart(format)}_${hashStableValue({
-      filePath,
-      entryPaths,
-    })}`,
-  );
+function createImageInfoFromBytes(bytes: Uint8Array): DocumentImageInfo {
+  const metadata = probeImageMetadata(bytes);
+  return {
+    byteSize: metadata?.byteSize ?? bytes.length,
+    ...(metadata?.mimeType ? { mimeType: metadata.mimeType } : {}),
+    ...(metadata?.width !== undefined ? { width: metadata.width } : {}),
+    ...(metadata?.height !== undefined ? { height: metadata.height } : {}),
+  };
 }
 
-function sanitizeExtractionPathPart(value: string): string {
-  return value.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'document';
+function createDocumentImageResource(
+  filePath: string,
+  format: DocumentFormat,
+  entryPath: string,
+): DocumentImageResourceInput {
+  return {
+    source: {
+      filePath,
+      format,
+    },
+    entryPath,
+  };
 }
 
 function normalizeLocalImageReference(resourceHref: string): string | null {

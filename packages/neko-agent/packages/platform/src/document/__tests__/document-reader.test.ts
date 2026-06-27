@@ -65,9 +65,6 @@ function createDeps(overrides: Partial<DocumentReaderRuntimeDeps> = {}): Documen
   return {
     readTextFile: vi.fn(async () => ''),
     readBinaryFile: vi.fn(async () => new Uint8Array()),
-    writeBinaryFile: vi.fn(async () => undefined),
-    makeDir: vi.fn(async () => undefined),
-    tempDir: () => '/tmp',
     loadModule: vi.fn(async () => null),
     now: () => new Date('2026-04-27T00:00:00.000Z'),
     ...overrides,
@@ -78,6 +75,16 @@ function createModuleLoader(loader: (packageName: string) => unknown): ModuleLoa
   return async <T>(packageName: string): Promise<T | null> => {
     return loader(packageName) as T | null;
   };
+}
+
+function createEntryReader(
+  entries: Record<string, Uint8Array>,
+): DocumentReaderRuntimeDeps['readEntry'] {
+  return vi.fn(async (_filePath, entryPath) => entries[entryPath] ?? null);
+}
+
+function poisonLegacyEntryData(): Uint8Array {
+  throw new Error('legacy archive entry byte fallback should not be used');
 }
 
 describe('document-reader runtime', () => {
@@ -276,8 +283,7 @@ describe('document-reader runtime', () => {
     ).toEqual(['./a.png', 'images/cover.jpg']);
   });
 
-  it('extracts image-only EPUB chapters to temporary image paths', async () => {
-    const writes: Array<{ path: string; data: Uint8Array }> = [];
+  it('extracts image-only EPUB chapters to stable document entry refs', async () => {
     class FakeEpub {
       readonly flow = [{ id: 'page-1', title: 'html/page-1.xhtml' }];
       readonly metadata = { title: 'Comic', creator: 'Author' };
@@ -299,20 +305,19 @@ describe('document-reader runtime', () => {
       constructor(_filePath: string) {}
 
       getEntry(name: string): { getData(): Uint8Array } | null {
-        return name === 'image/page-1.jpg' ? { getData: () => makeJpeg(1494, 2133) } : null;
+        return name === 'image/page-1.jpg' ? { getData: poisonLegacyEntryData } : null;
       }
     }
 
     const reader = createDocumentReaderRuntime(
       createDeps({
+        readEntry: createEntryReader({
+          'image/page-1.jpg': makeJpeg(1494, 2133),
+        }),
         loadModule: createModuleLoader((packageName) => {
           if (packageName === 'epub2') return { EPub: FakeEpub };
           if (packageName === 'adm-zip') return FakeZip;
           return null;
-        }),
-        makeDir: vi.fn(async () => undefined),
-        writeBinaryFile: vi.fn(async (filePath, data) => {
-          writes.push({ path: filePath, data });
         }),
       }),
     );
@@ -321,11 +326,10 @@ describe('document-reader runtime', () => {
 
     expect(result.text).toBe('EPUB image document with 1 image pages');
     expect(result.pageCount).toBe(1);
-    const pagePath = result.imagePaths?.[0];
-    expect(pagePath).toMatch(/^\/tmp\/neko_epub_[a-z0-9]+\/0001_page-1\.jpg$/);
+    expect(result.imagePaths).toBeUndefined();
     expect(result.imageInfo).toEqual([
       {
-        path: pagePath,
+        entryPath: 'image/page-1.jpg',
         width: 1494,
         height: 2133,
         mimeType: 'image/jpeg',
@@ -339,23 +343,121 @@ describe('document-reader runtime', () => {
       },
     ]);
     expect(result.metadata?.['imageCount']).toBe(1);
-    expect(writes).toEqual([
-      {
-        path: pagePath,
-        data: makeJpeg(1494, 2133),
-      },
-    ]);
   });
 
-  it('extracts DOCX embedded images when present', async () => {
-    const writes: Array<{ path: string; data: Uint8Array }> = [];
+  it('reads archive image bytes through the entry reader before ZIP fallbacks', async () => {
+    const readEntry = vi.fn(async (_filePath: string, entryPath: string) => {
+      if (entryPath === '001.jpg') {
+        return makeJpeg(1001, 2001);
+      }
+      return null;
+    });
     class FakeZip {
       constructor(_filePath: string) {}
 
       getEntries(): Array<{ name: string; getData(): Uint8Array }> {
         return [
-          { name: 'word/media/image2.png', getData: () => makePng(800, 600) },
-          { name: 'word/media/image1.jpg', getData: () => makeJpeg(320, 240) },
+          {
+            name: '001.jpg',
+            getData: () => {
+              throw new Error('legacy zip entry fallback should not be used');
+            },
+          },
+        ];
+      }
+    }
+
+    const reader = createDocumentReaderRuntime(
+      createDeps({
+        readEntry,
+        loadModule: createModuleLoader((packageName) =>
+          packageName === 'adm-zip' ? FakeZip : null,
+        ),
+      }),
+    );
+
+    const result = await reader.read('/doc/comic.cbz');
+
+    expect(readEntry).toHaveBeenCalledWith('/doc/comic.cbz', '001.jpg');
+    expect(result.imagePaths).toBeUndefined();
+    expect(result.imageInfo?.[0]).toEqual({
+      entryPath: '001.jpg',
+      width: 1001,
+      height: 2001,
+      mimeType: 'image/jpeg',
+      byteSize: makeJpeg(1001, 2001).length,
+      resourceRef: {
+        kind: 'document-entry',
+        source: { filePath: '/doc/comic.cbz', format: 'cbz' },
+        entryPath: '001.jpg',
+        versionPolicy: 'versioned-export',
+      },
+    });
+  });
+
+  it('fails visible when the configured entry reader cannot return archive bytes', async () => {
+    class FakeZip {
+      constructor(_filePath: string) {}
+
+      getEntries(): Array<{ name: string; getData(): Uint8Array }> {
+        return [
+          {
+            name: '001.jpg',
+            getData: () => makeJpeg(1001, 2001),
+          },
+        ];
+      }
+    }
+
+    const reader = createDocumentReaderRuntime(
+      createDeps({
+        readEntry: vi.fn(async () => null),
+        loadModule: createModuleLoader((packageName) =>
+          packageName === 'adm-zip' ? FakeZip : null,
+        ),
+      }),
+    );
+
+    await expect(reader.read('/doc/comic.cbz')).rejects.toThrow(
+      'Document image entry could not be read: 001.jpg',
+    );
+  });
+
+  it('fails visible instead of using ZIP entry bytes when no entry reader is configured', async () => {
+    class FakeZip {
+      constructor(_filePath: string) {}
+
+      getEntries(): Array<{ name: string; getData(): Uint8Array }> {
+        return [
+          {
+            name: '001.jpg',
+            getData: () => makeJpeg(1001, 2001),
+          },
+        ];
+      }
+    }
+
+    const reader = createDocumentReaderRuntime(
+      createDeps({
+        loadModule: createModuleLoader((packageName) =>
+          packageName === 'adm-zip' ? FakeZip : null,
+        ),
+      }),
+    );
+
+    await expect(reader.read('/doc/comic.cbz')).rejects.toThrow(
+      'document entry reader is unavailable',
+    );
+  });
+
+  it('extracts DOCX embedded images when present', async () => {
+    class FakeZip {
+      constructor(_filePath: string) {}
+
+      getEntries(): Array<{ name: string; getData(): Uint8Array }> {
+        return [
+          { name: 'word/media/image2.png', getData: poisonLegacyEntryData },
+          { name: 'word/media/image1.jpg', getData: poisonLegacyEntryData },
           { name: 'docProps/thumbnail.jpeg', getData: () => new Uint8Array([9]) },
         ];
       }
@@ -363,13 +465,14 @@ describe('document-reader runtime', () => {
 
     const reader = createDocumentReaderRuntime(
       createDeps({
+        readEntry: createEntryReader({
+          'word/media/image1.jpg': makeJpeg(320, 240),
+          'word/media/image2.png': makePng(800, 600),
+        }),
         loadModule: createModuleLoader((packageName) => {
           if (packageName === 'mammoth') return { extractRawText: async () => ({ value: 'Body' }) };
           if (packageName === 'adm-zip') return FakeZip;
           return null;
-        }),
-        writeBinaryFile: vi.fn(async (filePath, data) => {
-          writes.push({ path: filePath, data });
         }),
       }),
     );
@@ -377,13 +480,10 @@ describe('document-reader runtime', () => {
     const result = await reader.read('/doc/report.docx');
 
     expect(result.text).toBe('Body');
-    const firstPath = result.imagePaths?.[0];
-    const secondPath = result.imagePaths?.[1];
-    expect(firstPath).toMatch(/^\/tmp\/neko_docx_[a-z0-9]+\/0001_image1\.jpg$/);
-    expect(secondPath).toMatch(/^\/tmp\/neko_docx_[a-z0-9]+\/0002_image2\.png$/);
+    expect(result.imagePaths).toBeUndefined();
     expect(result.imageInfo).toEqual([
       {
-        path: firstPath,
+        entryPath: 'word/media/image1.jpg',
         width: 320,
         height: 240,
         mimeType: 'image/jpeg',
@@ -396,7 +496,7 @@ describe('document-reader runtime', () => {
         },
       },
       {
-        path: secondPath,
+        entryPath: 'word/media/image2.png',
         width: 800,
         height: 600,
         mimeType: 'image/png',
@@ -410,7 +510,6 @@ describe('document-reader runtime', () => {
       },
     ]);
     expect(result.metadata?.['imageCount']).toBe(2);
-    expect(writes).toHaveLength(2);
   });
 
   it('extracts PPTX and XLSX embedded media images', async () => {
@@ -419,12 +518,16 @@ describe('document-reader runtime', () => {
 
       getEntries(): Array<{ name: string; getData(): Uint8Array }> {
         const mediaDir = this.filePath.endsWith('.pptx') ? 'ppt/media' : 'xl/media';
-        return [{ name: `${mediaDir}/image1.png`, getData: () => makePng(1024, 768) }];
+        return [{ name: `${mediaDir}/image1.png`, getData: poisonLegacyEntryData }];
       }
     }
 
     const reader = createDocumentReaderRuntime(
       createDeps({
+        readEntry: createEntryReader({
+          'ppt/media/image1.png': makePng(1024, 768),
+          'xl/media/image1.png': makePng(1024, 768),
+        }),
         loadModule: createModuleLoader((packageName) => {
           if (packageName === 'officeparser') {
             return {
@@ -450,12 +553,10 @@ describe('document-reader runtime', () => {
     const pptx = await reader.read('/doc/deck.pptx');
     const xlsx = await reader.read('/doc/sheet.xlsx');
 
-    const pptxPath = pptx.imagePaths?.[0];
-    const xlsxPath = xlsx.imagePaths?.[0];
-    expect(pptxPath).toMatch(/^\/tmp\/neko_pptx_[a-z0-9]+\/0001_image1\.png$/);
-    expect(xlsxPath).toMatch(/^\/tmp\/neko_xlsx_[a-z0-9]+\/0001_image1\.png$/);
+    expect(pptx.imagePaths).toBeUndefined();
+    expect(xlsx.imagePaths).toBeUndefined();
     expect(pptx.imageInfo?.[0]).toEqual({
-      path: pptxPath,
+      entryPath: 'ppt/media/image1.png',
       width: 1024,
       height: 768,
       mimeType: 'image/png',
@@ -468,7 +569,7 @@ describe('document-reader runtime', () => {
       },
     });
     expect(xlsx.imageInfo?.[0]).toEqual({
-      path: xlsxPath,
+      entryPath: 'xl/media/image1.png',
       width: 1024,
       height: 768,
       mimeType: 'image/png',
@@ -658,7 +759,6 @@ describe('document access service', () => {
   });
 
   it('reads EPUB chapter ranges with image entry paths', async () => {
-    const writes: Array<{ path: string; data: Uint8Array }> = [];
     class FakeEpub {
       readonly flow = [
         { id: 'Page_1', title: 'html/page-1.xhtml' },
@@ -683,7 +783,7 @@ describe('document access service', () => {
       constructor(_filePath: string) {}
 
       getEntry(name: string): { name: string; getData(): Uint8Array } | null {
-        return name.startsWith('image/') ? { name, getData: () => makeJpeg(1494, 2133) } : null;
+        return name.startsWith('image/') ? { name, getData: poisonLegacyEntryData } : null;
       }
 
       getEntries(): Array<{ name: string; getData(): Uint8Array }> {
@@ -692,13 +792,14 @@ describe('document access service', () => {
     }
 
     const deps = createDeps({
+      readEntry: createEntryReader({
+        'image/Page_1.jpg': makeJpeg(1494, 2133),
+        'image/Page_2.jpg': makeJpeg(1494, 2133),
+      }),
       loadModule: createModuleLoader((packageName) => {
         if (packageName === 'epub2') return { EPub: FakeEpub };
         if (packageName === 'adm-zip') return FakeZip;
         return null;
-      }),
-      writeBinaryFile: vi.fn(async (filePath, data) => {
-        writes.push({ path: filePath, data });
       }),
     });
     const runtime = createDocumentReaderRuntime(deps);
@@ -711,11 +812,9 @@ describe('document access service', () => {
     });
 
     expect(result.text).toBe('EPUB chapter range with 1 image pages');
-    const pagePath = result.imagePaths?.[0];
-    expect(pagePath).toMatch(/^\/tmp\/neko_epub_[a-z0-9]+\/0001_Page_1\.jpg$/);
+    expect(result.imagePaths).toBeUndefined();
     expect(result.imageInfo).toEqual([
       {
-        path: pagePath,
         width: 1494,
         height: 2133,
         mimeType: 'image/jpeg',
@@ -747,7 +846,6 @@ describe('document access service', () => {
     expect(result.excerpt).toEqual(
       expect.objectContaining({
         contentKind: 'image',
-        imagePaths: [pagePath],
         imageInfo: [
           expect.objectContaining({
             width: 1494,
@@ -757,12 +855,6 @@ describe('document access service', () => {
         ],
       }),
     );
-    expect(writes).toEqual([
-      {
-        path: pagePath,
-        data: makeJpeg(1494, 2133),
-      },
-    ]);
   });
 
   it('passes content-backed image paths through range reads', async () => {
@@ -817,8 +909,7 @@ describe('document access service', () => {
     );
   });
 
-  it('reads CBZ page ranges as local temporary images', async () => {
-    const writes: Array<{ path: string; data: Uint8Array }> = [];
+  it('reads CBZ page ranges as stable document entry refs', async () => {
     class FakeZip {
       constructor(_filePath: string) {}
 
@@ -828,18 +919,19 @@ describe('document access service', () => {
 
       getEntries(): Array<{ name: string; getData(): Uint8Array }> {
         return [
-          { name: '002.jpg', getData: () => makeJpeg(1002, 2002) },
-          { name: '001.jpg', getData: () => makeJpeg(1001, 2001) },
+          { name: '002.jpg', getData: poisonLegacyEntryData },
+          { name: '001.jpg', getData: poisonLegacyEntryData },
           { name: 'notes.txt', getData: () => new Uint8Array([9]) },
         ];
       }
     }
 
     const deps = createDeps({
-      loadModule: createModuleLoader((packageName) => (packageName === 'adm-zip' ? FakeZip : null)),
-      writeBinaryFile: vi.fn(async (filePath, data) => {
-        writes.push({ path: filePath, data });
+      readEntry: createEntryReader({
+        '001.jpg': makeJpeg(1001, 2001),
+        '002.jpg': makeJpeg(1002, 2002),
       }),
+      loadModule: createModuleLoader((packageName) => (packageName === 'adm-zip' ? FakeZip : null)),
     });
     const runtime = createDocumentReaderRuntime(deps);
     const service = createDocumentAccessService({ reader: runtime, runtime: deps });
@@ -851,13 +943,10 @@ describe('document access service', () => {
     });
 
     expect(result.text).toBe('CBZ page range 1-2: 2 image pages');
-    const firstPath = result.imagePaths?.[0];
-    const secondPath = result.imagePaths?.[1];
-    expect(firstPath).toMatch(/^\/tmp\/neko_cbz_[a-z0-9]+\/0001_001\.jpg$/);
-    expect(secondPath).toMatch(/^\/tmp\/neko_cbz_[a-z0-9]+\/0002_002\.jpg$/);
+    expect(result.imagePaths).toBeUndefined();
     expect(result.imageInfo).toEqual([
       {
-        path: firstPath,
+        entryPath: '001.jpg',
         width: 1001,
         height: 2001,
         mimeType: 'image/jpeg',
@@ -876,7 +965,7 @@ describe('document access service', () => {
         },
       },
       {
-        path: secondPath,
+        entryPath: '002.jpg',
         width: 1002,
         height: 2002,
         mimeType: 'image/jpeg',
@@ -895,10 +984,34 @@ describe('document access service', () => {
         },
       },
     ]);
-    expect(writes).toHaveLength(2);
   });
 
-  it('reuses stable extraction paths for the same document entries', async () => {
+  it('fails CBZ ranges visibly when the configured entry reader returns no bytes', async () => {
+    class FakeZip {
+      constructor(_filePath: string) {}
+
+      getEntries(): Array<{ name: string; getData(): Uint8Array }> {
+        return [{ name: '001.jpg', getData: () => makeJpeg(1001, 2001) }];
+      }
+    }
+
+    const deps = createDeps({
+      readEntry: vi.fn(async () => null),
+      loadModule: createModuleLoader((packageName) => (packageName === 'adm-zip' ? FakeZip : null)),
+    });
+    const runtime = createDocumentReaderRuntime(deps);
+    const service = createDocumentAccessService({ reader: runtime, runtime: deps });
+
+    await expect(
+      service.readRange('/doc/comic.cbz', {
+        locator: { kind: 'page', pageNumber: 1, pageIndex: 0 },
+      }),
+    ).rejects.toThrow(
+      'Document entry could not be read through the configured entry reader: 001.jpg',
+    );
+  });
+
+  it('uses stable document entry refs for the same document entries', async () => {
     class FakeZip {
       constructor(_filePath: string) {}
 
@@ -907,13 +1020,16 @@ describe('document access service', () => {
       }
 
       getEntries(): Array<{ name: string; getData(): Uint8Array }> {
-        return [{ name: '001.jpg', getData: () => makeJpeg(1001, 2001) }];
+        return [{ name: '001.jpg', getData: poisonLegacyEntryData }];
       }
     }
 
     const createService = (now: Date) => {
       const deps = createDeps({
         now: () => now,
+        readEntry: createEntryReader({
+          '001.jpg': makeJpeg(1001, 2001),
+        }),
         loadModule: createModuleLoader((packageName) =>
           packageName === 'adm-zip' ? FakeZip : null,
         ),
@@ -931,10 +1047,12 @@ describe('document access service', () => {
       { locator: { kind: 'page', pageNumber: 1, pageIndex: 0 } },
     );
 
-    expect(first.imagePaths?.[0]).toBe(second.imagePaths?.[0]);
+    expect(first.imagePaths).toBeUndefined();
+    expect(second.imagePaths).toBeUndefined();
+    expect(first.imageInfo?.[0]?.resourceRef).toEqual(second.imageInfo?.[0]?.resourceRef);
   });
 
-  it('builds CBR manifests and reads one page by locator as a local temporary image', async () => {
+  it('builds CBR manifests without exposing non-rebuildable temporary image paths', async () => {
     const deps = createDeps({
       readBinaryFile: vi.fn(async () => new Uint8Array([1, 2])),
       loadModule: createModuleLoader((packageName) =>
@@ -970,29 +1088,8 @@ describe('document access service', () => {
     });
 
     expect(manifest.entryCount).toBe(2);
-    const pagePath = result.imagePaths?.[0];
-    expect(pagePath).toMatch(/^\/tmp\/neko_cbr_[a-z0-9]+\/0001_002\.jpg$/);
-    expect(result.imageInfo).toEqual([
-      {
-        path: pagePath,
-        width: 1002,
-        height: 2002,
-        mimeType: 'image/jpeg',
-        byteSize: makeJpeg(1002, 2002).length,
-        locator: { kind: 'page', pageNumber: 2, pageIndex: 1, entryName: '002.jpg' },
-        resourceRef: {
-          kind: 'document-entry',
-          source: {
-            filePath: '/doc/comic.cbr',
-            format: 'cbr',
-            fileId: '/doc/comic.cbr',
-          },
-          entryPath: '002.jpg',
-          locator: { kind: 'page', pageNumber: 2, pageIndex: 1, entryName: '002.jpg' },
-          versionPolicy: 'versioned-export',
-        },
-      },
-    ]);
+    expect(result.imagePaths).toBeUndefined();
+    expect(result.imageInfo).toBeUndefined();
     expect(result.metadata?.['format']).toBe('cbr');
   });
 

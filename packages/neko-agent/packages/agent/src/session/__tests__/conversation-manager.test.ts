@@ -99,6 +99,63 @@ describe('ConversationManager', () => {
     ]);
   });
 
+  it('does not hydrate legacy document image cache paths into agent history', () => {
+    const manager = new ConversationManager(undefined, undefined, { generateId: () => 'conv-1' });
+    const id = manager.create();
+    const legacyCachePath =
+      '/Users/feng/Git/neko-test/.neko/.cache/document-image-cache/neko_epub_1/page-1.jpg';
+
+    manager.addMessage(id, {
+      id: 'msg-1',
+      role: 'assistant',
+      content: 'I read the document.',
+      timestamp: 1,
+      contentBlocks: [
+        {
+          id: 'block-tool-1',
+          type: 'tool_call',
+          timestamp: 1,
+          toolCall: {
+            id: 'tool-1',
+            name: 'ReadDocument',
+            arguments: {
+              file_path: '/books/a.epub',
+              cachePath: legacyCachePath,
+              image_paths: [legacyCachePath],
+            },
+            result: {
+              success: true,
+              data: {
+                text: 'EPUB chapter range with 1 image pages',
+                imagePaths: [legacyCachePath],
+                imageInfo: [
+                  {
+                    path: legacyCachePath,
+                    resourceRef: {
+                      kind: 'document-entry',
+                      source: { filePath: '/books/a.epub', format: 'epub' },
+                      entryPath: 'OPS/page-1.jpg',
+                      cachePath: legacyCachePath,
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    const json = JSON.stringify(manager.toAgentHistory(id));
+
+    expect(json).not.toContain('document-image-cache');
+    expect(json).not.toContain('.neko/.cache');
+    expect(json).not.toContain('imagePaths');
+    expect(json).not.toContain('cachePath');
+    expect(json).toContain('resourceRef');
+    expect(json).toContain('OPS/page-1.jpg');
+  });
+
   it('persists non-empty conversations and active id on flush', () => {
     const storage = createMemoryStorage();
     const manager = new ConversationManager(storage, undefined, { generateId: () => 'conv-1' });

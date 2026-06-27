@@ -1,7 +1,6 @@
 import * as path from 'node:path';
 import {
   createDocumentEntryResourceRef,
-  hashStableValue,
   type DocumentBatchCursor,
   type DocumentFormat,
   type DocumentImageInfo,
@@ -93,9 +92,8 @@ interface ComicRangeSelection<
 }
 
 interface ExtractedImage {
-  readonly path: string;
   readonly entryName?: string;
-  readonly bytes: Uint8Array;
+  readonly info?: DocumentImageInfo;
 }
 
 interface PdfParserWithPartial {
@@ -574,48 +572,30 @@ export class DocumentAccessService implements IDocumentAccessService {
         ),
       ),
     ).slice(0, range.limit?.maxImages);
-    const images = await this.extractZipEntriesToTemp(
-      source.filePath,
-      imageRefs.map((image) => image.entryPath),
-      'epub',
+    const imageInfo = await Promise.all(
+      imageRefs.map((image) => this.readZipEntryImageInfo(source, image.entryPath, image.locator)),
     );
-    const locatorByEntryPath = new Map(
-      imageRefs.map((image) => [image.entryPath, image.locator] as const),
-    );
-    const imagePaths = images.map((image) => image.path);
-    const imageInfo = images.map((image, index) => {
-      const locator = image.entryName
-        ? locatorByEntryPath.get(image.entryName)
-        : imageRefs[index]?.locator;
-      return createImageInfo(image.path, image.bytes, {
-        source,
-        locator,
-        entryPath: image.entryName,
-      });
-    });
     const readableText = text.trim().length > 0 ? text : '';
     const result = this.makeTextResult(source, range, readableText, range.limit?.maxChars, {
       metadata: data.metadata,
     });
-    const contentKind = imagePaths.length > 0 ? (readableText ? 'mixed' : 'image') : 'text';
+    const contentKind = imageInfo.length > 0 ? (readableText ? 'mixed' : 'image') : 'text';
     const resultText = result.text ?? '';
     const rangeText =
       resultText.trim().length > 0
         ? resultText
-        : imagePaths.length > 0
-          ? `EPUB chapter range with ${imagePaths.length} image pages`
+        : imageInfo.length > 0
+          ? `EPUB chapter range with ${imageInfo.length} image pages`
           : resultText;
 
     return {
       ...result,
       text: rangeText,
-      imagePaths,
       imageInfo,
       excerpt: {
         ...result.excerpt,
         contentKind,
         text: rangeText,
-        ...(imagePaths.length > 0 ? { imagePaths } : {}),
         ...(imageInfo.length > 0 ? { imageInfo } : {}),
       },
       returnedTextChars: rangeText.length,
@@ -635,7 +615,7 @@ export class DocumentAccessService implements IDocumentAccessService {
 
     const entries = await this.readCbzEntries(source.filePath);
     const selection = selectComicRangeEntries(entries, range, 'CBZ');
-    const images = await this.writeZipEntriesToTemp(selection.entries, 'cbz', source.filePath);
+    const images = await this.readZipEntryImages(source, selection);
     return this.makeComicRangeResult(
       source,
       range,
@@ -657,15 +637,11 @@ export class DocumentAccessService implements IDocumentAccessService {
 
     const entries = await this.readCbrEntries(source.filePath);
     const selection = selectComicRangeEntries(entries, range, 'CBR');
-    const images = await this.extractCbrEntriesToTemp(
-      source.filePath,
-      selection.entries.map((entry) => entry.name),
-    );
     return this.makeComicRangeResult(
       source,
       range,
       selection,
-      images,
+      [],
       'CBR',
       entries.length,
       this.makeComicManifest(source, entries, 'cbr'),
@@ -682,11 +658,10 @@ export class DocumentAccessService implements IDocumentAccessService {
     manifest: DocumentManifest,
   ): DocumentReadResult {
     const entryNames = selection.entries.map((entry) => entry.name);
-    const imagePaths = images.map((image) => image.path);
     const selectedIndexByEntryName = new Map(
       selection.entries.map((entry, index) => [entry.name, selection.startPageIndex + index]),
     );
-    const imageInfo = images.map((image, index) => {
+    const imageInfo = images.flatMap((image, index) => {
       const pageIndex =
         selectedIndexByEntryName.get(image.entryName ?? '') ?? selection.startPageIndex + index;
       const entryName = image.entryName ?? selection.entries[index]?.name;
@@ -696,11 +671,22 @@ export class DocumentAccessService implements IDocumentAccessService {
         pageIndex,
         ...(entryName ? { entryName } : {}),
       };
-      return createImageInfo(image.path, image.bytes, {
-        source,
-        locator,
-        entryPath: entryName,
-      });
+      return image.info
+        ? [
+            {
+              ...image.info,
+              locator,
+              ...(entryName && !image.info.entryPath ? { entryPath: entryName } : {}),
+              resourceRef:
+                image.info.resourceRef ??
+                createDocumentEntryResourceRef({
+                  source,
+                  locator,
+                  entryPath: entryName,
+                }),
+            },
+          ]
+        : [];
     });
     const text =
       selection.entries.length === 1
@@ -713,12 +699,11 @@ export class DocumentAccessService implements IDocumentAccessService {
       range,
       locator: range.locator,
       text,
-      imagePaths,
-      imageInfo,
+      ...(imageInfo.length > 0 ? { imageInfo } : {}),
       excerpt: {
-        contentKind: 'image',
-        imagePaths,
-        imageInfo,
+        contentKind: imageInfo.length > 0 ? 'image' : 'text',
+        text,
+        ...(imageInfo.length > 0 ? { imageInfo } : {}),
         truncated: false,
       },
       returnedTextChars: text.length,
@@ -864,120 +849,55 @@ export class DocumentAccessService implements IDocumentAccessService {
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   }
 
-  private async extractZipEntriesToTemp(
-    filePath: string,
-    entryPaths: readonly string[],
-    tmpPrefix: string,
+  private async readZipEntryImages(
+    source: DocumentSourceRef,
+    selection: ComicRangeSelection<ZipEntryLike>,
   ): Promise<ExtractedImage[]> {
-    if (entryPaths.length === 0) {
-      return [];
-    }
-
-    const AdmZip = await this.deps.runtime.loadModule<AdmZipConstructorLike>('adm-zip');
-    if (!AdmZip) {
-      this.deps.runtime.logger?.warn('Internal ZIP image reader is unavailable', {
-        path: filePath,
-      });
-      return [];
-    }
-
-    const zip = new AdmZip(filePath);
-    const entries = entryPaths
-      .map((entryPath) => zip.getEntry(entryPath))
-      .filter((entry): entry is ZipEntryLike => entry !== null);
-    return this.writeZipEntriesToTemp(entries, tmpPrefix, filePath);
-  }
-
-  private async writeZipEntriesToTemp(
-    entries: readonly ZipEntryLike[],
-    tmpPrefix: string,
-    sourceKey: string,
-  ): Promise<ExtractedImage[]> {
-    if (entries.length === 0) {
-      return [];
-    }
-
-    const tmpDir = createStableExtractionDir(
-      this.deps.runtime.tempDir(),
-      tmpPrefix,
-      sourceKey,
-      entries.map((entry) => entry.name),
+    return Promise.all(
+      selection.entries.map(async (entry, index) => {
+        const pageIndex = selection.startPageIndex + index;
+        const locator: DocumentLocator = {
+          kind: 'page',
+          pageNumber: pageIndex + 1,
+          pageIndex,
+          entryName: entry.name,
+        };
+        return {
+          entryName: entry.name,
+          info: await this.readZipEntryImageInfo(source, entry.name, locator),
+        };
+      }),
     );
-    await this.deps.runtime.makeDir(tmpDir, { recursive: true });
-
-    const images: ExtractedImage[] = [];
-    for (let index = 0; index < entries.length; index += 1) {
-      const entry = entries[index];
-      if (!entry) {
-        continue;
-      }
-      const imagePath = path.join(
-        tmpDir,
-        `${String(index + 1).padStart(4, '0')}_${path.basename(entry.name)}`,
-      );
-      const imageBytes = entry.getData();
-      await this.deps.runtime.writeBinaryFile(imagePath, imageBytes);
-      images.push({ path: imagePath, entryName: entry.name, bytes: imageBytes });
-    }
-    return images;
   }
 
-  private async extractCbrEntriesToTemp(
-    filePath: string,
-    entryNames: readonly string[],
-  ): Promise<ExtractedImage[]> {
-    if (entryNames.length === 0) {
-      return [];
-    }
-
-    const unrar = await this.deps.runtime.loadModule<UnrarModuleLike>('node-unrar-js');
-    if (!unrar) {
-      throw new DocumentAccessError(
-        'unsupported-format',
-        'CBR image reader is unavailable in this NekoAgent build',
-      );
-    }
-
-    const selectedNames = new Set(entryNames);
-    const extractor = unrar.createExtractorFromData({
-      data: await this.deps.runtime.readBinaryFile(filePath),
+  private async readZipEntryImageInfo(
+    source: DocumentSourceRef,
+    entryPath: string,
+    locator: DocumentLocator,
+  ): Promise<DocumentImageInfo> {
+    const bytes = await this.readZipEntryBytes(source.filePath, entryPath);
+    return createImageInfo(bytes, {
+      source,
+      locator,
+      entryPath,
     });
-    const filesByName = new Map(
-      extractor
-        .extract()
-        .files.filter((file) => selectedNames.has(file.fileHeader.name))
-        .map((file) => [file.fileHeader.name, file]),
-    );
-    const files = entryNames
-      .map((entryName) => filesByName.get(entryName))
-      .filter((file): file is UnrarExtractedFileLike => file !== undefined);
-    if (files.length === 0) {
-      return [];
-    }
+  }
 
-    const tmpDir = createStableExtractionDir(
-      this.deps.runtime.tempDir(),
-      'cbr',
-      filePath,
-      entryNames,
-    );
-    await this.deps.runtime.makeDir(tmpDir, { recursive: true });
-
-    const images: ExtractedImage[] = [];
-    for (let index = 0; index < files.length; index += 1) {
-      const file = files[index];
-      if (!file) {
-        continue;
+  private async readZipEntryBytes(filePath: string, entryPath: string): Promise<Uint8Array> {
+    if (this.deps.runtime.readEntry) {
+      const bytes = await this.deps.runtime.readEntry(filePath, entryPath);
+      if (!bytes) {
+        throw new DocumentAccessError(
+          'engine-access-unavailable',
+          `Document entry could not be read through the configured entry reader: ${entryPath}`,
+        );
       }
-      const imagePath = path.join(
-        tmpDir,
-        `${String(index + 1).padStart(4, '0')}_${path.basename(file.fileHeader.name)}`,
-      );
-      const imageBytes = file.extract[1];
-      await this.deps.runtime.writeBinaryFile(imagePath, imageBytes);
-      images.push({ path: imagePath, entryName: file.fileHeader.name, bytes: imageBytes });
+      return bytes;
     }
-    return images;
+    throw new DocumentAccessError(
+      'engine-access-unavailable',
+      `Document entry reader is unavailable for ZIP-backed document entry: ${entryPath}`,
+    );
   }
 
   private makeTextResult(
@@ -1271,7 +1191,6 @@ function dedupeEpubImageRefs(
 }
 
 function createImageInfo(
-  filePath: string,
   bytes: Uint8Array,
   resource?: {
     readonly source?: DocumentSourceRef;
@@ -1286,7 +1205,6 @@ function createImageInfo(
     entryPath: resource?.entryPath,
   });
   return {
-    path: filePath,
     byteSize: metadata?.byteSize ?? bytes.length,
     ...(metadata?.mimeType ? { mimeType: metadata.mimeType } : {}),
     ...(metadata?.width !== undefined ? { width: metadata.width } : {}),
@@ -1294,26 +1212,6 @@ function createImageInfo(
     ...(resource?.locator ? { locator: resource.locator } : {}),
     ...(resourceRef ? { resourceRef } : {}),
   };
-}
-
-function createStableExtractionDir(
-  tempRoot: string,
-  format: string,
-  sourceKey: string,
-  entryPaths: readonly string[],
-): string {
-  return path.join(
-    tempRoot,
-    `neko_${sanitizeExtractionPathPart(format)}_${hashStableValue({
-      format,
-      sourceKey,
-      entryPaths,
-    })}`,
-  );
-}
-
-function sanitizeExtractionPathPart(value: string): string {
-  return value.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'document';
 }
 
 function findManifestUnitIndex(

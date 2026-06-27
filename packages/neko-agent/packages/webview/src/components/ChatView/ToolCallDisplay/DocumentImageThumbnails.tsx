@@ -149,7 +149,7 @@ function ThumbnailActionButton({ children, title, onClick }: ThumbnailActionButt
 }
 
 function formatLocatorReference(thumbnail: DocumentImageThumbnailProjection): string {
-  const locator = thumbnail.locator ? formatLocator(thumbnail.locator) : thumbnail.label;
+  const locator = formatThumbnailLocation(thumbnail);
   return `${thumbnail.filePath}#${locator}`;
 }
 
@@ -157,7 +157,7 @@ function formatThumbnailSummary(thumbnail: DocumentImageThumbnailProjection): st
   const parts = [
     `Document: ${thumbnail.filePath}`,
     `Reference: ${formatLocatorReference(thumbnail)}`,
-    `Location: ${thumbnail.locator ? formatLocator(thumbnail.locator) : thumbnail.label}`,
+    `Location: ${formatThumbnailLocation(thumbnail)}`,
   ];
   if (thumbnail.resourceRef?.entryPath) parts.push(`Entry: ${thumbnail.resourceRef.entryPath}`);
   const dimensions = formatDimensions(thumbnail.width, thumbnail.height);
@@ -166,6 +166,12 @@ function formatThumbnailSummary(thumbnail: DocumentImageThumbnailProjection): st
   if (byteSize) parts.push(`Size: ${byteSize}`);
   if (thumbnail.mimeType) parts.push(`MIME: ${thumbnail.mimeType}`);
   return parts.join('\n');
+}
+
+function formatThumbnailLocation(thumbnail: DocumentImageThumbnailProjection): string {
+  if (thumbnail.locator) return formatLocator(thumbnail.locator);
+  if (thumbnail.resourceRef?.entryPath) return `entry:${thumbnail.resourceRef.entryPath}`;
+  return thumbnail.label;
 }
 
 function formatLocator(locator: DocumentImageThumbnailProjection['locator']): string {

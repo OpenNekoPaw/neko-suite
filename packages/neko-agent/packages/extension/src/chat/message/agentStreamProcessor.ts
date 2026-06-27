@@ -21,8 +21,17 @@ import {
   type CollectedToolCall,
   type IPerceptionPipeline,
 } from '@neko/agent/runtime';
+import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import type { AgentEvent } from '@neko/agent';
-import type { GeneratedAsset, ToolResultBackfillPayload } from '@neko/shared';
+import { createDocumentResourceRefFromArchiveRef } from '@neko/shared/vscode/extension';
+import {
+  parseDocumentArchiveResourceRef,
+  type DocumentArchiveResourceRef,
+  type GeneratedAsset,
+  type ResourceRef,
+  type ResourceVariantRequest,
+  type ToolResultBackfillPayload,
+} from '@neko/shared';
 import { type AgentPhase, type ContentBlock, type Message } from '@neko-agent/types';
 import type { ConversationBridge } from '../conversationBridge';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
@@ -87,6 +96,8 @@ export interface AgentStreamProcessorDeps {
   dashboardWorkItems?: AgentDashboardWorkItemSource;
   /** Unified local resource access for Webview URI projection. */
   localResourceAccess?: AgentLocalResourceAccess;
+  /** Unified content access runtime for stable ResourceRef projection. */
+  contentAccessRuntime?: AgentContentAccessRuntime;
   /** Reads the current estimated conversation context tokens after stream completion. */
   getContextTokenCount?: (conversationId: string) => number;
   /** Optional host-side automation for reviewable entity memory contribution envelopes. */
@@ -123,14 +134,13 @@ export class AgentStreamProcessor {
     callbacks: StreamCallbacks,
   ): Promise<StreamProcessingResult> {
     const media = this.deps.platform?.media;
-    const postProjectedMessage = (message: AgentEventStreamRuntimeMessage) => {
-      const projectedMessage = projectStreamMessageResourcesForWebview(
-        webview,
-        message,
-        this.deps.localResourceAccess,
-      );
+    const postProjectedMessage = async (message: AgentEventStreamRuntimeMessage) => {
+      const projectedMessage = await projectStreamMessageResourcesForWebview(webview, message, {
+        localResourceAccess: this.deps.localResourceAccess,
+        contentAccessRuntime: this.deps.contentAccessRuntime,
+      });
       this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
-      void webview.postMessage(projectedMessage);
+      await webview.postMessage(projectedMessage);
     };
 
     const result = await this.streamRuntime.process({
@@ -244,7 +254,7 @@ export class AgentStreamProcessor {
       try {
         const tokenCount = this.deps.getContextTokenCount(conversationId);
         if (Number.isFinite(tokenCount) && tokenCount >= 0) {
-          postProjectedMessage({
+          await postProjectedMessage({
             type: 'contextTokenCount',
             conversationId,
             tokenCount,
@@ -339,68 +349,222 @@ export class AgentStreamProcessor {
 function projectStreamMessageResourcesForWebview(
   webview: vscode.Webview,
   message: AgentEventStreamRuntimeMessage,
-  localResourceAccess?: AgentLocalResourceAccess,
-): AgentEventStreamRuntimeMessage {
+  options: {
+    readonly localResourceAccess?: AgentLocalResourceAccess;
+    readonly contentAccessRuntime?: AgentContentAccessRuntime;
+  },
+): Promise<AgentEventStreamRuntimeMessage> {
   const resolveLocalMediaPath = (filePath: string): string | undefined => {
-    return localResourceAccess?.toWebviewUri(webview, filePath, 'neko-agent.stream-tool-result');
+    return options.localResourceAccess?.toWebviewUri(
+      webview,
+      filePath,
+      'neko-agent.stream-tool-result',
+    );
+  };
+  const projector = {
+    resolveLocalMediaPath,
+    projectDocumentResourceRef: (
+      ref: DocumentArchiveResourceRef,
+      variant: ResourceVariantRequest,
+    ) =>
+      projectDocumentResourceRefForWebview(
+        webview,
+        options.contentAccessRuntime,
+        options.localResourceAccess,
+        ref,
+        variant,
+      ),
   };
 
   if (message.type === 'toolCall' && message.arguments !== undefined) {
-    const projectedArguments = projectResourceValue(message.arguments, { resolveLocalMediaPath });
-    return {
-      ...message,
-      arguments: isRecord(projectedArguments) ? projectedArguments : message.arguments,
-    };
+    return projectResourceValueForWebview(message.arguments, projector).then(
+      (projectedArguments) => ({
+        ...message,
+        arguments: isRecord(projectedArguments) ? projectedArguments : message.arguments,
+      }),
+    );
   }
 
   if (message.type === 'toolResult') {
-    const data =
+    return Promise.all([
       message.data !== undefined
-        ? projectResourceValue(message.data, { resolveLocalMediaPath })
-        : undefined;
-    return {
+        ? projectResourceValueForWebview(message.data, projector)
+        : undefined,
+      message.attachments
+        ? projectResourceValueForWebview(message.attachments, projector)
+        : undefined,
+      message.perceptionCards
+        ? projectResourceValueForWebview(message.perceptionCards, projector)
+        : undefined,
+    ]).then(([data, attachments, perceptionCards]) => ({
       ...message,
       ...(data !== undefined ? { data } : {}),
-      ...(message.attachments
-        ? {
-            attachments: projectResourceValue(message.attachments, {
-              resolveLocalMediaPath,
-            }) as typeof message.attachments,
-          }
+      ...(attachments ? { attachments: attachments as typeof message.attachments } : {}),
+      ...(perceptionCards
+        ? { perceptionCards: perceptionCards as typeof message.perceptionCards }
         : {}),
-      ...(message.perceptionCards
-        ? {
-            perceptionCards: projectResourceValue(message.perceptionCards, {
-              resolveLocalMediaPath,
-            }) as typeof message.perceptionCards,
-          }
-        : {}),
-    };
+    }));
   }
 
   if (message.type === 'toolResultBackfill') {
-    const dataPatch = projectResourceValue(message.dataPatch, { resolveLocalMediaPath });
-    return {
+    return Promise.all([
+      projectResourceValueForWebview(message.dataPatch, projector),
+      message.attachments
+        ? projectResourceValueForWebview(message.attachments, projector)
+        : undefined,
+      message.perceptionCards
+        ? projectResourceValueForWebview(message.perceptionCards, projector)
+        : undefined,
+    ]).then(([dataPatch, attachments, perceptionCards]) => ({
       ...message,
       dataPatch: isRecord(dataPatch) ? dataPatch : message.dataPatch,
-      ...(message.attachments
-        ? {
-            attachments: projectResourceValue(message.attachments, {
-              resolveLocalMediaPath,
-            }) as typeof message.attachments,
-          }
+      ...(attachments ? { attachments: attachments as typeof message.attachments } : {}),
+      ...(perceptionCards
+        ? { perceptionCards: perceptionCards as typeof message.perceptionCards }
         : {}),
-      ...(message.perceptionCards
-        ? {
-            perceptionCards: projectResourceValue(message.perceptionCards, {
-              resolveLocalMediaPath,
-            }) as typeof message.perceptionCards,
-          }
-        : {}),
-    };
+    }));
   }
 
-  return message;
+  if (message.type === 'streamComplete' && message.contentBlocks) {
+    return projectResourceValueForWebview(message.contentBlocks, projector).then(
+      (contentBlocks) => ({
+        ...message,
+        contentBlocks: Array.isArray(contentBlocks) ? contentBlocks : message.contentBlocks,
+      }),
+    );
+  }
+
+  return Promise.resolve(message);
+}
+
+interface AsyncResourceProjector {
+  readonly resolveLocalMediaPath: (filePath: string) => string | undefined;
+  readonly projectDocumentResourceRef: (
+    ref: DocumentArchiveResourceRef,
+    variant: ResourceVariantRequest,
+  ) => Promise<string | undefined>;
+}
+
+async function projectResourceValueForWebview(
+  value: unknown,
+  projector: AsyncResourceProjector,
+): Promise<unknown> {
+  const projected = projectResourceValue(value, {
+    resolveLocalMediaPath: projector.resolveLocalMediaPath,
+  });
+  return projectDocumentRefsForWebview(projected, projector, new WeakSet<object>());
+}
+
+async function projectDocumentRefsForWebview(
+  value: unknown,
+  projector: AsyncResourceProjector,
+  visited: WeakSet<object>,
+): Promise<unknown> {
+  if (!isRecordOrArray(value)) return value;
+  if (visited.has(value)) return value;
+  visited.add(value);
+
+  if (Array.isArray(value)) {
+    return Promise.all(
+      value.map((item) => projectDocumentRefsForWebview(item, projector, visited)),
+    );
+  }
+
+  const projected: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    projected[key] = await projectDocumentRefsForWebview(child, projector, visited);
+  }
+
+  const documentResource = readDocumentArchiveResourceProjection(projected);
+  if (
+    !documentResource ||
+    typeof projected['renderUri'] === 'string' ||
+    typeof projected['src'] === 'string'
+  ) {
+    return projected;
+  }
+
+  const renderUri = await projector.projectDocumentResourceRef(
+    documentResource.ref,
+    documentResource.variant,
+  );
+  if (renderUri) {
+    projected['renderUri'] = renderUri;
+    projected['src'] = renderUri;
+    return projected;
+  }
+
+  appendResourceProjectionDiagnostic(projected, 'documentResourceRef');
+  return projected;
+}
+
+async function projectDocumentResourceRefForWebview(
+  webview: vscode.Webview,
+  contentAccessRuntime: AgentContentAccessRuntime | undefined,
+  localResourceAccess: AgentLocalResourceAccess | undefined,
+  ref: DocumentArchiveResourceRef,
+  variant: ResourceVariantRequest,
+): Promise<string | undefined> {
+  if (!contentAccessRuntime || !localResourceAccess) return undefined;
+  const managedRef = createDocumentResourceRefFromArchiveRef(ref, resolveDocumentResourceScope());
+  try {
+    const result = await contentAccessRuntime.loadProviderAsset({
+      caller: 'message-resource-projection',
+      source: managedRef,
+      preferredTarget: 'local-path',
+      variant,
+    });
+    if (result.status !== 'ready' || !result.uri) return undefined;
+    return localResourceAccess.toWebviewUri(webview, result.uri, 'neko-agent.document-resource');
+  } catch (error) {
+    logger.warn('Failed to project document resource for Webview display', { error });
+    return undefined;
+  }
+}
+
+function readDocumentArchiveResourceProjection(
+  value: Record<string, unknown>,
+):
+  | { readonly ref: DocumentArchiveResourceRef; readonly variant: ResourceVariantRequest }
+  | undefined {
+  const ref =
+    parseDocumentArchiveResourceRef(value['documentResourceRef']) ??
+    parseDocumentArchiveResourceRef(value['resourceRef']);
+  if (!ref) return undefined;
+  return {
+    ref,
+    variant: {
+      role: 'document-entry',
+      ...(typeof value['mimeType'] === 'string' ? { mimeType: value['mimeType'] } : {}),
+      ...(typeof value['width'] === 'number' ? { width: value['width'] } : {}),
+      ...(typeof value['height'] === 'number' ? { height: value['height'] } : {}),
+    },
+  };
+}
+
+function appendResourceProjectionDiagnostic(
+  projected: Record<string, unknown>,
+  field: string,
+): void {
+  const diagnostics = Array.isArray(projected['resourceProjectionDiagnostics'])
+    ? [...projected['resourceProjectionDiagnostics']]
+    : [];
+  diagnostics.push({
+    code: 'resource-projection-denied',
+    severity: 'error',
+    field,
+    message:
+      'Document resource could not be projected for Webview display. Use ResourceRef through unified content access.',
+  });
+  projected['resourceProjectionDiagnostics'] = diagnostics;
+}
+
+function resolveDocumentResourceScope(): ResourceRef['scope'] {
+  return vscode.workspace.workspaceFolders?.[0] ? 'project' : 'extension-private';
+}
+
+function isRecordOrArray(value: unknown): value is object {
+  return typeof value === 'object' && value !== null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

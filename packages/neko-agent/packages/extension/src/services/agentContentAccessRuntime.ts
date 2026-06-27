@@ -87,8 +87,8 @@ export function createExtensionAgentContentAccessRuntime(
     options.resourceCache ??
     (options.context && documentReader
       ? createDocumentResourceCacheService({
-          reader: documentReader,
           context: options.context,
+          engineClientProvider: options.engineClientProvider,
         })
       : undefined);
 

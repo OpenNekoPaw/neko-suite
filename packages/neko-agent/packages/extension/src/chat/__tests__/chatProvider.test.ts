@@ -326,7 +326,7 @@ describe('chatProvider', () => {
     access.dispose();
   });
 
-  it('does not authorize extension-private document reader scratch paths', async () => {
+  it('rejects legacy extension-private document reader scratch paths', async () => {
     const extensionUri = vscode.Uri.file('/ext/neko-agent');
     const context = {
       globalStorageUri: vscode.Uri.file('/global/neko-agent'),
@@ -335,13 +335,10 @@ describe('chatProvider', () => {
     webview.options = {
       localResourceRoots: [vscode.Uri.file('/ext/neko-agent/dist/webview')],
     };
+    const legacyScratchPath = '/global/neko-agent/runtime/document-reader/neko_epub_1/page.jpg';
 
     const access = createChatLocalResourceAccess(extensionUri, context);
-    const uri = access.toWebviewUri(
-      webview as any,
-      '/global/neko-agent/runtime/document-reader/neko_epub_1/page.jpg',
-      'test',
-    );
+    const uri = access.toWebviewUri(webview as any, legacyScratchPath, 'test');
 
     expect(uri).toBeUndefined();
     expect(webview.options.localResourceRoots?.map((root) => root.fsPath)).toEqual([

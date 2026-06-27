@@ -60,15 +60,14 @@ describe('createWorkspaceFileAccessPolicy', () => {
     });
   });
 
-  it('keeps explicitly exempt resource cache roots readable for scoped document tools', () => {
+  it('rejects managed cache roots even when callers try to expose them as ordinary paths', () => {
     const policy = createWorkspaceFileAccessPolicy({
       workspaceRoot,
-      ignoredPathExemptRoots: ['/workspace/project/.neko/.cache/resources'],
     });
 
     expect(policy.authorize('.neko/.cache/resources/documents/page.png', 'read')).toMatchObject({
-      allowed: true,
-      path: '/workspace/project/.neko/.cache/resources/documents/page.png',
+      allowed: false,
+      reason: 'ignored-workspace-path',
     });
     expect(policy.authorize('.neko/.cache/generated/shot.png', 'read')).toMatchObject({
       allowed: false,

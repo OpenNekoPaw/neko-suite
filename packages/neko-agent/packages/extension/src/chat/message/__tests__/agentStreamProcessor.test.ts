@@ -816,6 +816,133 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
+    it('projects document resource refs through unified content access without exposing cache paths', async () => {
+      const cachePath = '/workspace/.neko/.cache/resources/documents/doc_1/page-1.jpg';
+      const archiveRef = {
+        kind: 'document-entry',
+        source: { filePath: '/books/a.epub', format: 'epub' },
+        entryPath: 'image/Page_1.jpg',
+        versionPolicy: 'versioned-export',
+      };
+      const localResourceAccess = {
+        toWebviewUri: vi.fn((_webview, filePath: string) =>
+          filePath === cachePath ? 'vscode-webview://page-1.jpg' : undefined,
+        ),
+      };
+      const contentAccessRuntime = {
+        loadProviderAsset: vi.fn(async () => ({
+          status: 'ready',
+          source: { kind: 'file', path: cachePath },
+          diagnostics: [],
+          uri: cachePath,
+          mimeType: 'image/jpeg',
+          sizeBytes: 2048,
+        })),
+      };
+      const dashboardWorkItems = {
+        acceptWebviewMessage: vi.fn(),
+      };
+      processor = new AgentStreamProcessor({
+        localResourceAccess: localResourceAccess as any,
+        contentAccessRuntime: contentAccessRuntime as any,
+        dashboardWorkItems: dashboardWorkItems as any,
+      });
+      const events = toAsyncIterable([
+        {
+          type: 'tool_call',
+          toolCall: {
+            id: 'tc-read-doc-image',
+            name: 'ReadDocumentImage',
+            arguments: { file_path: '/books/a.epub' },
+          },
+        },
+        {
+          type: 'tool_result',
+          toolResult: {
+            toolCallId: 'tc-read-doc-image',
+            success: true,
+            data: {
+              source: { filePath: '/books/a.epub', format: 'epub' },
+              images: [
+                {
+                  label: 'Page 1',
+                  width: 1494,
+                  height: 2133,
+                  mimeType: 'image/jpeg',
+                  resourceRef: archiveRef,
+                  documentImage: {
+                    resourceRef: archiveRef,
+                  },
+                },
+              ],
+            },
+          },
+        },
+      ]);
+
+      const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
+
+      expect(result.collectedToolCalls[0]!.result?.data).toEqual({
+        source: { filePath: '/books/a.epub', format: 'epub' },
+        images: [
+          {
+            label: 'Page 1',
+            width: 1494,
+            height: 2133,
+            mimeType: 'image/jpeg',
+            resourceRef: archiveRef,
+            documentImage: {
+              resourceRef: archiveRef,
+            },
+          },
+        ],
+      });
+      expect(contentAccessRuntime.loadProviderAsset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          caller: 'message-resource-projection',
+          preferredTarget: 'local-path',
+          variant: expect.objectContaining({ role: 'document-entry', mimeType: 'image/jpeg' }),
+        }),
+      );
+      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
+        webview,
+        cachePath,
+        'neko-agent.document-resource',
+      );
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'toolResult',
+          data: expect.objectContaining({
+            images: [
+              expect.objectContaining({
+                renderUri: 'vscode-webview://page-1.jpg',
+                src: 'vscode-webview://page-1.jpg',
+                resourceRef: archiveRef,
+                documentImage: expect.objectContaining({
+                  renderUri: 'vscode-webview://page-1.jpg',
+                  src: 'vscode-webview://page-1.jpg',
+                  resourceRef: archiveRef,
+                }),
+              }),
+            ],
+          }),
+        }),
+      );
+      expect(JSON.stringify(webview.postMessage.mock.calls)).not.toContain(cachePath);
+      expect(dashboardWorkItems.acceptWebviewMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'toolResult',
+          data: expect.objectContaining({
+            images: [
+              expect.not.objectContaining({
+                renderUri: expect.any(String),
+              }),
+            ],
+          }),
+        }),
+      );
+    });
+
     it('projects top-level tool result media fields for webview delivery', async () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),

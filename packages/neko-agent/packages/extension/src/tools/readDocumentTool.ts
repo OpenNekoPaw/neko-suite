@@ -114,7 +114,7 @@ export function createReadDocumentTool(deps: ReadDocumentToolDeps): Tool {
         range: {
           type: 'object',
           description:
-            'Semantic document range for mode="range", e.g. { locator: { kind: "page", pageNumber: 1, pageIndex: 0 } } or chapter/text-range locators.',
+            'Semantic document range for mode="range". Use { locator: <DocumentLocator>, endLocator?: <DocumentLocator> } or { kind: "chapterRange", start: <chapter locator>, end: <chapter locator> }. Do not nest a chapter range inside range.locator.',
         },
         cursor: {
           type: 'object',
@@ -724,23 +724,17 @@ function readDocumentRange(value: unknown): DocumentRange | null {
     return null;
   }
 
+  const nestedRangeLocator = value['locator'];
+  if (
+    isRecord(nestedRangeLocator) &&
+    (nestedRangeLocator['kind'] === 'chapter-range' ||
+      nestedRangeLocator['kind'] === 'chapterRange')
+  ) {
+    return readChapterRangeShorthand(nestedRangeLocator, value['limit']);
+  }
+
   if (value['kind'] === 'chapterRange') {
-    const start = readDocumentLocator(value['start']);
-    const end = readDocumentLocator(value['end']);
-    if (!start || start.kind !== 'chapter' || !end || end.kind !== 'chapter') {
-      return null;
-    }
-
-    const limit = readDocumentLimit(value['limit']);
-    if (limit === null) {
-      return null;
-    }
-
-    return {
-      locator: start,
-      endLocator: end,
-      ...(limit ? { limit } : {}),
-    };
+    return readChapterRangeShorthand(value, value['limit']);
   }
 
   const locator = readDocumentLocator(value['locator']);
@@ -762,6 +756,28 @@ function readDocumentRange(value: unknown): DocumentRange | null {
   return {
     locator,
     ...(endLocator ? { endLocator } : {}),
+    ...(limit ? { limit } : {}),
+  };
+}
+
+function readChapterRangeShorthand(
+  value: Record<string, unknown>,
+  limitValue: unknown,
+): DocumentRange | null {
+  const start = readDocumentLocator(value['start']);
+  const end = readDocumentLocator(value['end']);
+  if (!start || start.kind !== 'chapter' || !end || end.kind !== 'chapter') {
+    return null;
+  }
+
+  const limit = readDocumentLimit(limitValue);
+  if (limit === null) {
+    return null;
+  }
+
+  return {
+    locator: start,
+    endLocator: end,
     ...(limit ? { limit } : {}),
   };
 }

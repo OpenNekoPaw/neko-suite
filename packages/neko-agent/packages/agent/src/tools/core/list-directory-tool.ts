@@ -106,6 +106,10 @@ export class ListDirectoryTool extends BuiltinTool {
 
       const fullPath = path.join(dirPath, dirent.name);
       const displayName = prefix ? `${prefix}/${dirent.name}` : dirent.name;
+      const authorization = this.fileAccessPolicy?.authorize(fullPath, 'read');
+      if (authorization && !authorization.allowed) {
+        continue;
+      }
 
       if (dirent.isDirectory()) {
         results.push({ name: displayName, type: 'directory' });

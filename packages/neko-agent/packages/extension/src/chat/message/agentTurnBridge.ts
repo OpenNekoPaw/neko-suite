@@ -103,7 +103,7 @@ export class AgentTurnBridge {
     const workspaceIgnoreRules = workspaceRoot
       ? await loadWorkspaceFileIgnoreRules(workspaceRoot)
       : undefined;
-    setDocumentAuthorizedReadRoots(authorizedReadRoots);
+    await setDocumentAuthorizedReadRoots(authorizedReadRoots);
     const agentManagerBridge:
       | AgentTurnAgentManager<
           Platform,

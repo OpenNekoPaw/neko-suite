@@ -17,6 +17,51 @@ vi.mock('@neko/shared/vscode', () => ({
 }));
 
 describe('DocumentImageThumbnails', () => {
+  it('copies document entry locations when a thumbnail has no page locator', async () => {
+    const writeText = vi.fn();
+    Object.assign(navigator, {
+      clipboard: { writeText },
+    });
+
+    render(
+      <MessageActionsProvider pluginsAvailable={{ canvas: true }}>
+        <DocumentImageThumbnails
+          thumbnails={[
+            {
+              id: 'image/moe-018893.jpg:0',
+              index: 0,
+              filePath: '/books/a.epub',
+              path: 'image/moe-018893.jpg',
+              width: 1494,
+              height: 2133,
+              byteSize: 84992,
+              mimeType: 'image/jpeg',
+              label: '#1',
+              resourceRef: {
+                kind: 'document-entry',
+                source: { filePath: '/books/a.epub', format: 'epub' },
+                entryPath: 'image/moe-018893.jpg',
+                versionPolicy: 'versioned-export',
+              },
+              referenceJson: '{}',
+            },
+          ]}
+        />
+      </MessageActionsProvider>,
+    );
+
+    fireEvent.click(screen.getByTitle('Copy thumbnail summary'));
+
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Entry: image/moe-018893.jpg'));
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('Reference: /books/a.epub#entry:image/moe-018893.jpg'),
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('Location: entry:image/moe-018893.jpg'),
+    );
+    expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining('/books/a.epub##1'));
+  });
+
   it('renders a Send to Canvas action for document image thumbnails', () => {
     render(
       <MessageActionsProvider pluginsAvailable={{ canvas: true }}>

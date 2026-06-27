@@ -127,9 +127,66 @@ describe('message resource projector', () => {
           code: 'resource-projection-denied',
           severity: 'error',
           field: 'image_paths',
-          source: '/workspace/.neko/.cache/resources/documents/page-1.jpg',
+          sourceKind: 'managed-runtime-path',
           message:
             'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or adapter-projected render descriptors.',
+        },
+      ],
+    });
+  });
+
+  it('strips legacy document-image-cache paths from explicit image path inputs', () => {
+    const legacyCachePath =
+      '/Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/document-image-cache/neko_epub_1/page-1.jpg';
+
+    expect(
+      projectResourceValue(
+        {
+          image_paths: [legacyCachePath],
+        },
+        { resolveLocalMediaPath: (path) => `webview://${path}` },
+      ),
+    ).toEqual({
+      resourceProjectionDiagnostics: [
+        {
+          code: 'resource-projection-denied',
+          severity: 'error',
+          field: 'image_paths',
+          sourceKind: 'managed-runtime-path',
+          message:
+            'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or adapter-projected render descriptors.',
+        },
+      ],
+    });
+  });
+
+  it('does not project legacy document-image-cache path fields into Webview messages', () => {
+    const legacyCachePath =
+      '/Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/document-image-cache/neko_epub_1/page-1.jpg';
+
+    const projected = projectResourceValue(
+      {
+        images: [{ label: 'Page 1', path: legacyCachePath }],
+      },
+      { resolveLocalMediaPath: (path) => `webview://${path}` },
+    );
+
+    expect(JSON.stringify(projected)).not.toContain('document-image-cache');
+    expect(JSON.stringify(projected)).not.toContain('webview://');
+    expect(projected).toEqual({
+      images: [
+        {
+          label: 'Page 1',
+          resourceProjectionDiagnostics: [
+            {
+              code: 'resource-projection-denied',
+              severity: 'error',
+              field: 'path',
+              sourceKind: 'managed-runtime-path',
+              message:
+                'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or adapter-projected render descriptors.',
+            },
+          ],
         },
       ],
     });
@@ -385,7 +442,7 @@ describe('message resource projector', () => {
           code: 'resource-projection-denied',
           severity: 'error',
           field: 'url',
-          source: '/tmp/image.png',
+          sourceKind: 'local-media-path',
           message:
             'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or adapter-projected render descriptors.',
         },

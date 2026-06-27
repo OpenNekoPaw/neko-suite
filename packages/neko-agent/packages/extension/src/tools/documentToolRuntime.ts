@@ -39,11 +39,17 @@ export function createDocumentFileAccessPolicy(): CoreFileAccessPolicy {
 export async function refreshDocumentAuthorizedReadRoots(): Promise<void> {
   documentAuthorizedReadRoots = await loadAuthorizedMediaLibraryReadRoots();
   documentAuthorizedReadRootsRevision += 1;
+  await syncEngineAuthorizedReadRoots(documentAuthorizedReadRoots);
 }
 
-export function setDocumentAuthorizedReadRoots(roots: readonly string[]): void {
+export async function setDocumentAuthorizedReadRoots(roots: readonly string[]): Promise<void> {
   documentAuthorizedReadRoots = [...roots];
   documentAuthorizedReadRootsRevision += 1;
+  await syncEngineAuthorizedReadRoots(documentAuthorizedReadRoots);
+}
+
+async function syncEngineAuthorizedReadRoots(roots: readonly string[]): Promise<void> {
+  await getEngineClientProvider().setAuthorizedReadRoots?.(roots);
 }
 
 function resolveDocumentResourceScope(): ResourceRef['scope'] {
@@ -88,7 +94,6 @@ class DocumentFileAccessPolicy implements CoreFileAccessPolicy {
   private cachedPolicy:
     | {
         readonly workspaceRoot: string;
-        readonly cacheRoot: string | undefined;
         readonly rootsRevision: number;
         readonly policy: CoreFileAccessPolicy;
       }
@@ -105,12 +110,8 @@ class DocumentFileAccessPolicy implements CoreFileAccessPolicy {
       return createNoWorkspaceFileAccessPolicy();
     }
 
-    const cacheRoot = workspaceRoot
-      ? vscode.Uri.joinPath(vscode.Uri.file(workspaceRoot), '.neko', '.cache', 'resources').fsPath
-      : undefined;
     if (
       this.cachedPolicy?.workspaceRoot === workspaceRoot &&
-      this.cachedPolicy.cacheRoot === cacheRoot &&
       this.cachedPolicy.rootsRevision === documentAuthorizedReadRootsRevision
     ) {
       return this.cachedPolicy.policy;
@@ -120,11 +121,9 @@ class DocumentFileAccessPolicy implements CoreFileAccessPolicy {
       workspaceRoot,
       readRoots: [workspaceRoot, ...documentAuthorizedReadRoots],
       writeRoots: [workspaceRoot],
-      ignoredPathExemptRoots: cacheRoot ? [cacheRoot] : [],
     });
     this.cachedPolicy = {
       workspaceRoot,
-      cacheRoot,
       rootsRevision: documentAuthorizedReadRootsRevision,
       policy,
     };

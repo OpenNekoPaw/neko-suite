@@ -234,7 +234,7 @@ async function projectHostFileAccessPolicy(config: IAgentConfig): Promise<IAgent
     config.workspaceIgnoreRules ??
     (config.workspaceRoot ? await loadWorkspaceFileIgnoreRules(config.workspaceRoot) : undefined);
 
-  setDocumentAuthorizedReadRoots(authorizedReadRoots);
+  await setDocumentAuthorizedReadRoots(authorizedReadRoots);
 
   if (authorizedReadRoots.length === 0 && workspaceIgnoreRules === config.workspaceIgnoreRules) {
     return config;

@@ -370,7 +370,13 @@ function isHiddenDocumentImageInfoKey(key: string): boolean {
 
 function isManagedRuntimeMediaPath(value: string): boolean {
   const normalized = value.replace(/\\/g, '/').toLowerCase();
-  return normalized.includes('/.neko/.cache/') || normalized.startsWith('.neko/.cache/');
+  return (
+    normalized.includes('/.neko/.cache/') ||
+    normalized.startsWith('.neko/.cache/') ||
+    normalized.includes('/document-image-cache/') ||
+    normalized.includes('/document-reader/') ||
+    normalized.includes('/neko_epub_')
+  );
 }
 
 function appendProjectionDiagnostic(
@@ -385,11 +391,15 @@ function appendProjectionDiagnostic(
     code: 'resource-projection-denied',
     severity: 'error',
     field,
-    source,
+    sourceKind: classifyDeniedProjectionSource(source),
     message:
       'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or adapter-projected render descriptors.',
   });
   projected['resourceProjectionDiagnostics'] = diagnostics;
+}
+
+function classifyDeniedProjectionSource(source: string): string {
+  return isManagedRuntimeMediaPath(source) ? 'managed-runtime-path' : 'local-media-path';
 }
 
 function resolveLocalMediaPath(

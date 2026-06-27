@@ -2,6 +2,10 @@ import type { Message, ToolCall } from '@neko-agent/types';
 import type { ConversationRecord, ConversationSource } from './conversation-record';
 import type { AgentHistoryWithToolContextMessage } from './history-hydration';
 import { hydrateAgentHistoryWithToolResults } from './history-hydration';
+import {
+  sanitizeToolCallArgumentsForHistory,
+  sanitizeToolResultFieldsForHistory,
+} from './tool-result-sanitizer';
 
 export interface ConversationRecordProjectionConversation {
   id: string;
@@ -79,7 +83,7 @@ export function projectConversationMessagesToAgentHistory(
       const toolCalls = messageToolCalls.map((toolCall) => ({
         id: toolCall.id,
         name: toolCall.name,
-        arguments: toolCall.arguments,
+        arguments: sanitizeToolCallArgumentsForHistory(toolCall.arguments),
       }));
 
       const toolResults = messageToolCalls.flatMap((toolCall) => {
@@ -87,11 +91,12 @@ export function projectConversationMessagesToAgentHistory(
           return [];
         }
 
+        const sanitizedResult = sanitizeToolResultFieldsForHistory(toolCall.result);
         return [
           {
             callId: toolCall.id,
             success: toolCall.result.success,
-            data: toolCall.result.data,
+            data: sanitizedResult.data,
           },
         ];
       });

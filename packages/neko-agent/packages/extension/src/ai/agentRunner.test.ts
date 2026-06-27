@@ -39,7 +39,7 @@ const {
 } = vi.hoisted(() => ({
   loadAuthorizedMediaLibraryReadRootsMock: vi.fn(async () => [] as string[]),
   loadWorkspaceFileIgnoreRulesMock: vi.fn(async () => ({ gitignoreRules: [] })),
-  setDocumentAuthorizedReadRootsMock: vi.fn(),
+  setDocumentAuthorizedReadRootsMock: vi.fn(async () => undefined),
 }));
 
 // Mock vscode (already handled by __mocks__/vscode.ts, but ensure EventEmitter works)

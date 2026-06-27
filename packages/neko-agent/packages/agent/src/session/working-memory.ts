@@ -12,6 +12,7 @@ import {
   applyToolResultBackfillToResult,
   type BackfillableToolResult,
 } from '../runtime/tool-result-backfill';
+import { sanitizeToolResultFieldsForHistory } from './tool-result-sanitizer';
 
 const TOOL_RESULT_ENVELOPE_SCHEMA = 'neko.tool-result.v1';
 
@@ -373,14 +374,11 @@ function applyToolResultBackfillToHistory(
 function serializeToolResultMessageContent(
   result: BackfillableToolResult | NonNullable<AgentEvent['toolResult']>,
 ): string {
-  const data = sanitizeToolResultForModel(result.data);
-  const attachments = sanitizeToolResultForModel(result.attachments) as
-    | typeof result.attachments
-    | undefined;
-  const perceptionCards = sanitizeToolResultForModel(result.perceptionCards) as
-    | typeof result.perceptionCards
-    | undefined;
-  const artifacts = sanitizeToolResultForModel(result.artifacts) as typeof result.artifacts;
+  const sanitizedFields = sanitizeToolResultFieldsForHistory(result);
+  const data = sanitizedFields.data;
+  const attachments = sanitizedFields.attachments;
+  const perceptionCards = sanitizedFields.perceptionCards;
+  const artifacts = sanitizedFields.artifacts;
   const hasExtendedFields =
     (attachments?.length ?? 0) > 0 ||
     (perceptionCards?.length ?? 0) > 0 ||
@@ -415,67 +413,6 @@ function serializeToolResultMessageContent(
     backfillDiagnostics: result.backfillDiagnostics,
     artifacts,
   });
-}
-
-function sanitizeToolResultForModel(value: unknown): unknown {
-  return sanitizeToolResultForModelInternal(value, new WeakSet<object>());
-}
-
-function sanitizeToolResultForModelInternal(value: unknown, visited: WeakSet<object>): unknown {
-  if (value === null || value === undefined) return value;
-  if (typeof value !== 'object') return value;
-  if (visited.has(value)) return undefined;
-  visited.add(value);
-
-  if (Array.isArray(value)) {
-    return value.flatMap((item) => {
-      const sanitized = sanitizeToolResultForModelInternal(item, visited);
-      return sanitized === undefined ? [] : [sanitized];
-    });
-  }
-
-  const record = value as Record<string, unknown>;
-  const sanitized: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(record)) {
-    if (isModelHiddenPathKey(key)) {
-      continue;
-    }
-    if (key === 'uri' && typeof item === 'string' && shouldHideToolResultUri(item, record)) {
-      continue;
-    }
-    const next = sanitizeToolResultForModelInternal(item, visited);
-    if (next !== undefined) {
-      sanitized[key] = next;
-    }
-  }
-  return sanitized;
-}
-
-function isModelHiddenPathKey(key: string): boolean {
-  return (
-    key === 'path' ||
-    key === 'paths' ||
-    key === 'imagePath' ||
-    key === 'imagePaths' ||
-    key === 'image_paths' ||
-    key === 'runtimePath' ||
-    key === 'runtimeImagePaths' ||
-    key === 'runtimeKind' ||
-    key === 'cachePath' ||
-    key === 'cacheResourceRef' ||
-    key === 'localPath' ||
-    key === 'localPaths' ||
-    key === 'webviewUri' ||
-    key === 'webviewUris' ||
-    key === 'imagePathWebviewUris'
-  );
-}
-
-function shouldHideToolResultUri(uri: string, owner: Record<string, unknown>): boolean {
-  if (uri.startsWith('data:') || uri.startsWith('http://') || uri.startsWith('https://')) {
-    return false;
-  }
-  return owner['resourceRef'] !== undefined || owner['documentResourceRef'] !== undefined;
 }
 
 function parseToolMessageResult(message: ChatMessage): BackfillableToolResult {

@@ -20,7 +20,6 @@ const PNG_1X1 = new Uint8Array([
 function createFileAccessPolicy() {
   return createWorkspaceFileAccessPolicy({
     workspaceRoot: WORKSPACE_ROOT,
-    ignoredPathExemptRoots: [`${WORKSPACE_ROOT}/.neko/.cache/resources`],
   });
 }
 

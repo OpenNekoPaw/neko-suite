@@ -138,6 +138,7 @@ export class AgentMessageTurnHandler {
       mediaDeliveryHost: this._mediaDeliveryHost,
       dashboardWorkItems: this._dashboardWorkItems,
       localResourceAccess: this._localResourceAccess,
+      contentAccessRuntime: getCapabilityRuntimeBindings().contentAccessRuntime,
       ...(agentManager
         ? {
             getContextTokenCount: (conversationId) =>

@@ -202,6 +202,10 @@ export class GrepTool extends BuiltinTool {
       if (dirent.name === 'node_modules' || dirent.name === 'dist') continue;
 
       const fullPath = path.join(dirPath, dirent.name);
+      const authorization = this.fileAccessPolicy?.authorize(fullPath, 'read');
+      if (authorization && !authorization.allowed) {
+        continue;
+      }
 
       if (dirent.isDirectory()) {
         await this.searchDir(fullPath, regex, include, contextLines, matches);

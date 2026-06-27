@@ -13,14 +13,14 @@ NekoAgent 的 `ReadDocument` 用于把创作者已有资料转成 Agent 可继�
 | 演示文稿 | PPT/PPTX | 读取幻灯片文本；PPTX 会把内嵌图片物化到受管资源缓存并返回结构化引用 |
 | 表格 | XLS/XLSX | 读取工作表数据；XLSX 会把内嵌图片物化到受管资源缓存并返回结构化引用 |
 | 电子书 | EPUB | 读取章节文本；图像型漫画 EPUB 会把页面图片物化到受管资源缓存并返回结构化引用 |
-| 漫画档案 | CBZ/CBR | 读取图片页，按阅读顺序返回受管 `ResourceRef` / 文档 source ref |
+| 漫画档案 | CBZ/CBR | CBZ 读取图片页并按阅读顺序返回可重建文档 entry 引用；CBR 当前读取清单/页顺序，不通过临时路径暴露图片 |
 | 剧本 | FDX | 读取 Final Draft 场景、动作和对白 |
 | 文本剧本 | TXT/Markdown/Fountain | 读取纯文本；Markdown 会识别本地图片引用 |
 | 工具输入 | HTML/URL/JSON/YAML | 读取网页或结构化文本；HTML/URL 会识别图片引用 |
 
 ## 创作者可预期行为
 
-- 图像型 EPUB、CBZ、CBR 会返回 `imageInfo`，包含宽高、MIME 类型、字节大小、文档 locator、alias/aliasScope，以及可用于跨包传递和缓存重建的稳定 `resourceRef`。Canvas、分镜和 composite artifact 必须使用结构化引用，不依赖缓存路径。
+- 图像型 EPUB、CBZ 以及 DOCX/PPTX/XLSX 内嵌图片会返回 `imageInfo`，包含宽高、MIME 类型、字节大小、文档 locator、alias/aliasScope，以及可用于跨包传递和缓存重建的稳定 `resourceRef`。Canvas、分镜和 composite artifact 必须使用结构化引用，不依赖缓存路径。CBR 在统一容器 entry provider 支持前不会返回不可重建的临时图片路径。
 - 文本型 EPUB、PDF、DOCX、FDX、Markdown 等会优先返回 `text`，并在可用时附带 `metadata`。
 - 大文档优先使用 `mode: "manifest"` 查看结构，再用 `mode: "range"` 读取指定页、章节、幻灯片或文本范围。
 - 如果 `mode: "range"` 没有传入 `range`，工具会基于 manifest 读取开头一段，图片数量受 `max_images` 限制，避免创作者只想预览时误触发整本读取。
@@ -34,7 +34,7 @@ NekoAgent 的 `ReadDocument` 用于把创作者已有资料转成 Agent 可继�
 | --- | --- |
 | EPUB | 解析章节 HTML 中的图片引用，并从 EPUB 包内物化受管资源 |
 | CBZ | 从 ZIP 包内按文件名自然排序物化受管资源 |
-| CBR | 使用扩展内部 RAR/WASM 读取器物化受管资源 |
+| CBR | 读取清单和页顺序；不通过临时 scratch 路径暴露图片，后续由统一容器 entry provider 接管图片物化 |
 | DOCX/PPTX/XLSX | 从 Office Open XML 包的 media 目录物化内嵌图片受管资源 |
 | HTML/Markdown/URL | 返回文档中出现的图片引用 |
 | PDF | 当前读取文本层；扫描版或纯图片 PDF 需要后续接入渲染/OCR 后端 |
@@ -43,18 +43,18 @@ NekoAgent 的 `ReadDocument` 用于把创作者已有资料转成 Agent 可继�
 
 ## ZIP/容器资源引用策略
 
-EPUB、CBZ、CBR、DOCX、PPTX、XLSX 这类文件本质上是容器文档。当前策略是“原始容器只读、图片由统一 documents 资源缓存透明物化、操作携带结构化引用”：
+EPUB、CBZ、CBR、DOCX、PPTX、XLSX 这类文件本质上是容器文档。当前策略是“原始容器只读、图片由统一 documents 资源缓存透明物化、操作携带结构化引用”。解析库可以枚举 entry、章节和文本结构；图片或其它二进制 entry 字节必须经 Engine-backed entry reader 读取，再由统一 `ResourceCacheService` 按 documents 缓存规则物化。尚未接入统一 entry provider 的容器格式必须 fail-visible 或只返回清单/文本，不允许通过临时路径伪装成可缓存资源：
 
 - 不注册 `zip://`、`epub://` 等 VSCode 虚拟路径作为主数据通道。VSCode Webview、Canvas `<img>`、ReadImage 和文件跳转都需要可授权的实体路径或明确的 Extension Host 命令，虚拟路径容易在 Webview CSP、粘贴、调试和跨插件传递中断开。
 - Agent、Skill、Webview presenter、Canvas 传递和 artifact 不能感知或保存缓存路径。`imageInfo.path`、`imagePaths`、`runtimeImagePaths`、`runtimePath`、`cacheResourceRef`、`runtimeKind` 和旧 `cachePath` 不属于公开工具合约；若旧数据里出现这些字段，转发前必须剥离。
 - `imageInfo.resourceRef` 表示原始容器来源，包含 `source`、容器内 `entryPath` 和可选 `locator`。统一缓存服务会在需要读取、预览或传递时把它转换成内部 `ResourceRef` 并按 documents 缓存规则物化。
 - documents 缓存路径由统一资源缓存服务管理，形态为 `.neko/.cache/resources/documents/doc_<stableRefHash>/<contentMd5>.<ext>`，按内容 MD5 去重，manifest 可重建。无工作区时使用 extension-private resource cache，但会标记为不可跨项目持久传递。
-- `.neko/.runtime/document-reader` 或 extension `globalStorageUri/runtime/document-reader` 只是文档读取器内部 scratch，用于临时解包/解码。它不是业务缓存目录，不参与 Canvas、Preview、导出、打包或长期引用。
-- 工具引用 JSON 使用 `protocolVersion: 2` 时，durable body 只包含结构化引用；当前 Webview 需要展示的 path/webview URI 放在 `display: { runtimeOnly: true, ... }`。`display` 字段不能被转发为 Canvas 或 Storyboard 图片身份。
+- `.neko/.runtime/document-reader`、extension `globalStorageUri/runtime/document-reader` 和 `/tmp/neko_epub_*` / `/tmp/neko_cbz_*` 这类旧 document-reader scratch 目录已经废弃。正常 `ReadDocument`、`ReadDocumentImage`、Canvas/Preview 传递和 Agent 工具结果都不应创建、返回或依赖这些路径；若日志中出现，视为残留实现或迁移 bug。
+- 工具引用 JSON 使用 `protocolVersion: 2` 时，durable body 只包含结构化引用；当前 Webview 需要展示的 `renderUri`/`src` 只存在于 Host 投影后的消息或组件状态，不能写入复制引用、Canvas 或 Storyboard 图片身份。
 - 粘贴时如果只有路径，Agent 只能把它当作普通本地文件；如果 JSON 引用里带 `resourceRef`，Agent 可以继续跳转、定位 entry、解释来源，并通过统一缓存服务重新物化缺失缓存。
 - 跳转到资产库或文档索引页应使用 `navigationData` 中的 `source/filePath/entryPath`，由 Extension Host 或对应资源库命令解析；不要尝试让 Webview 直接打开容器内虚拟文件。
 
-重新打包不做原地修改。后续写回或替换容器内图片时，应生成带版本的新导出文件，例如 `comic.v2.epub` 或工作区管理的导出副本，再把引用切换到新 `DocumentSourceRef` / `entryPath`。`versionPolicy: "versioned-export"` 表示当前引用遵循这种版本化导出策略；旧缓存路径只作为本次读取的实体副本或迁移线索，不作为长期数据源。
+重新打包不做原地修改。后续写回或替换容器内图片时，应生成带版本的新导出文件，例如 `comic.v2.epub` 或工作区管理的导出副本，再把引用切换到新 `DocumentSourceRef` / `entryPath`。`versionPolicy: "versioned-export"` 表示当前引用遵循这种版本化导出策略；旧缓存路径或旧 scratch 路径只能作为拒绝/诊断/迁移输入，不能作为成功读取或长期数据源。
 
 ## 分镜和 Canvas 传递
 
@@ -114,11 +114,12 @@ NekoAgent 只处理 DRM-free 内容：
 - 超大文件可能带来性能压力，优先用 manifest/range 分段读取。
 - 复杂 PDF 版式可能只得到文本层结果；扫描版 PDF 没有 OCR 文本时暂不能提取正文。
 - 密码保护文件不支持。
-- 文档图片公开读取结果只暴露结构化 `resourceRef` 和语义元数据。缓存物化、去重和重建由统一 documents resource cache 完成；内部 scratch 目录可以被删除并重建，不作为功能合约。
+- 文档图片公开读取结果只暴露结构化 `resourceRef` 和语义元数据。缓存物化、去重和重建由统一 documents resource cache 完成；agent/platform 业务层不创建、不读取、不返回 document-reader scratch 目录。
 
 ## 开发者实现说明
 
 - 格式解析集中在 `@neko/platform/document`，Extension 工具层只负责参数、schema 和结果适配。
+- `@neko/platform/document` 不决定缓存目录，也不直接读取容器图片字节作为成功路径；它只产出 `DocumentArchiveResourceRef`、locator 和元数据，二进制 entry bytes 由 Extension 注入的 Engine file access 读取。
 - 运行时依赖通过 `DocumentReaderRuntimeDeps.loadModule()` 注入，保持平台层可测试，不直接依赖 VSCode API。
 - 不通过 shell 调用外部解析程序；禁止把 Python、系统 `unzip`、`sips`、`unrar` 等命令作为生产读取路径。
 - 新增格式时先扩展共享契约和 manifest/range 能力，再补具体解析器和单元测试。

@@ -38,7 +38,7 @@ describe('history hydration', () => {
     ]);
   });
 
-  it('uses a safe fallback when tool result data cannot be serialized', () => {
+  it('sanitizes circular tool result data before hydrating history', () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
 
@@ -48,6 +48,36 @@ describe('history hydration', () => {
         success: false,
         data: circular,
       }),
-    ).toBe('[Tool Result for call-circular]: Failed\n[Unserializable tool result data]');
+    ).toBe('[Tool Result for call-circular]: Failed\n{}');
+  });
+
+  it('does not hydrate legacy document image cache paths into model context', () => {
+    const legacyCachePath =
+      '/Users/feng/Library/Application Support/Code/User/globalStorage/neko.neko-agent/document-image-cache/neko_epub_1/page-1.jpg';
+
+    const content = formatToolResultContext({
+      callId: 'call-doc',
+      success: true,
+      data: {
+        imagePaths: [legacyCachePath],
+        imageInfo: [
+          {
+            path: legacyCachePath,
+            resourceRef: {
+              kind: 'document-entry',
+              source: { filePath: '/books/a.epub', format: 'epub' },
+              entryPath: 'OPS/page-1.jpg',
+              cachePath: legacyCachePath,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(content).not.toContain('document-image-cache');
+    expect(content).not.toContain('imagePaths');
+    expect(content).not.toContain('cachePath');
+    expect(content).toContain('resourceRef');
+    expect(content).toContain('OPS/page-1.jpg');
   });
 });
