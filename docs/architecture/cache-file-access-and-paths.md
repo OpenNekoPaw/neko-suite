@@ -114,7 +114,7 @@ Runtime projection
 
 `allowedInputRoots = ["mediaLibrary"]` 只授权 enabled、accessible、已解析的媒体库 root。它不授权 `Downloads`、`Desktop`、系统 temp、未声明外部目录，也不授权 Webview 直接读取媒体库。Webview 展示仍必须通过 `LocalResourceAccessService` 和 `asWebviewUri(...)`；大型视频/音频仍优先走 Engine file access。
 
-Processor 或 Agent 产物写入媒体库不是默认行为。默认输出 root 是 `.neko/.cache/resources` 或 extension `globalStorageUri/resources`；用户明确选择把结果长期放入媒体库时，应先由 Host 创建/移动文件，再写入 `${VAR}/path` 或 AssetEntity，并记录 provenance。
+Processor 或 Agent 产物写入媒体库不是默认行为。未保存 generated draft 可以落在 Host 管理的 session/cache 投影区，但只能作为当前会话 render projection；用户点击保留、发送到 Canvas/Storyboard、绑定实体、加入素材库、导出或打包前，Host 必须先 Promote/Create Asset，把 source 写入 `neko/generated/<kind>/`、媒体库、AssetStore 或其他 durable root，再写入 workspace-relative path、`${VAR}/path`、`ResourceRef` 或 AssetEntity，并记录 provenance。
 
 ### Agent / Canvas / Storyboard 资源交接
 
@@ -132,6 +132,8 @@ Agent 工具结果、Canvas send、Storyboard generation 和 `neko-composite` ar
 
 Agent Webview 的工具引用 JSON 使用 `protocolVersion: 2` 时，durable body 只保存结构化 refs。投影给当前 Webview 的 `renderUri` 只能存在于当前消息投影/组件状态，发送到 Canvas、Storyboard 或剪贴板稳定引用前必须移除。旧会话如果只有 temp/cache 路径而没有结构化引用，应展示诊断和文本上下文，不能伪装为可点击图片。
 
+Promoted generated asset 如果带有 `.neko/.cache/generated` 或 `.neko/.cache/resources` path，必须视为 legacy/migration candidate，并返回 `generated-cache-source-not-durable` 诊断；文件仍存在也不能证明它是 durable source。迁移只能通过 Host Promote/Create Asset 显式执行。
+
 ## 文件读写服务
 
 文件读写服务按 intent 和信任边界分工。
@@ -141,6 +143,8 @@ Agent Webview 的工具引用 JSON 使用 `protocolVersion: 2` 时，durable bod
 `ContentAccessService` / `ContentIngestService` 是跨领域的公共编排层。各领域不应分别实现自己的“文件读取服务”“缓存服务”“路径转换服务”或“Webview URI 服务”；领域只提供 provider、adapter 和领域语义。
 
 Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostContentAccessRuntime(...)` 装配公共能力。这个 factory 负责组合 `LocalResourceAccessService`、`ResourceCacheService`、`ContentAccessService`、`ContentIngestService`、Webview resolver、Engine source resolver hook 和 provider registration。Feature package 不应直接 `new HostContentAccessService`、`new HostContentIngestService`、`new VSCodeResourceCacheService` 或调用 `createDefaultLocalResourceAccessService` 来重新实现一套规则；需要领域差异时，只传入 provider/adapter。
+
+跨领域内容语义放在中立 domain service，而不是放在 Agent。`@neko/content` 承载 Canvas、Cut、Preview、Agent 等领域都会用到的文档解析、manifest/range、locator、图片元数据探测等内容语义；它只依赖共享契约和注入的 runtime deps，不拥有 VSCode API、缓存目录、Webview URI 或 Engine client。Extension Host 负责把 `@neko/content` 的读取需求接到 `ContentAccessService`、`ResourceCacheService` 和 `@neko/neko-client` 的 Engine file access adapter。
 
 公共层统一管理：
 
@@ -162,7 +166,7 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 | 内容类型或动作 | 默认入口 | 说明 |
 | --- | --- | --- |
 | 纯文本、配置、Markdown、JSON/TOML/YAML、`nk*` 项目事实 | `ProjectFileStore`、domain codec、Host text adapter | 不经 Engine，不进入资源缓存；需要 schema、诊断、路径收缩和原子保存。 |
-| 图片、音频、视频、模型、Puppet、PSD、PDF/EPUB/CBZ/Office 等二进制或容器源 | `ContentAccessService`，底层走 Engine file access 或领域 provider | 统一授权、路径转换和 source/ref 诊断；需要 Range、entry、probe、decode 或大文件读取时由 Engine 执行。 |
+| 图片、音频、视频、模型、Puppet、PSD、PDF/EPUB/CBZ/Office 等二进制或容器源 | `ContentAccessService`，底层走 Engine file access 或领域 provider | 统一授权、路径转换和 source/ref 诊断；需要 Range、entry、probe、decode 或大文件读取时由 Engine 执行；文档语义解析由 `@neko/content` 提供。 |
 | 文档页图、缩略图、preview variant、proxy、FOV crop、OCR/ASR/metadata sidecar | `ResourceCacheService` provider，通过 `ContentAccessService` 访问 | 属于可重建派生物。上层只持有 `ResourceRef` 和 variant，不依赖 materialized path。 |
 | 播放、流、GPU/媒体计算、导出编码、waveform、模型 viewport stream | `@neko/neko-client` / `EngineClient`，由 Extension Host 授权和注册 source | 可直接使用 Engine client，但 source 注册、权限、token 生命周期和路径收缩仍归 Host/content-access 边界。 |
 | Webview 展示 URI | `LocalResourceAccessService` 或 `ResourceCacheService.project()` | 只产生当前 Webview runtime handle；不能进入项目事实、Agent memory 或跨包 payload。 |
@@ -173,7 +177,9 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 | 层级 | 入口 | 可扩展点 | 禁止 |
 | --- | --- | --- | --- |
 | Shared Host runtime | `createHostContentAccessRuntime(...)` | `accessProviders`、`ingestProviders`、`resourceCacheOptions.providers`、`webviewResolver`、`engineSourceResolver` | 了解 Canvas/Cut/Preview/Agent 业务语义 |
-| Resource providers | `DocumentResourceCacheProvider`、`ThumbnailResourceCacheProvider`、`PreviewVariantResourceCacheProvider`、`GeneratedAssetResourceCacheProvider` 等 | `ensure/probe/materialize` adapter | 决定项目事实、Webview UI 或 durable source identity |
+| Content domain service | `@neko/content/document` | document reader runtime deps、manifest/range/locator、image metadata probe | 管理 cache root、Webview URI、Engine token、VSCode extension lifecycle |
+| Engine file adapter | `@neko/neko-client/engine-file-access` | Engine register/range/entry/source adapter | 路径变量、cache manifest、Webview projection、领域 UI |
+| Resource providers | `DocumentResourceCacheProvider`、`ThumbnailResourceCacheProvider`、`PreviewVariantResourceCacheProvider`、`GeneratedAssetDerivativeResourceCacheProvider` 等 | `ensure/probe/materialize` adapter | 决定项目事实、Webview UI 或 durable source identity |
 | Feature package | Canvas/Cut/Preview/Agent/Assets/Audio/Model/Sketch provider adapter | source/ref shaping、variant intent、UI workflow | 直接管理 cache root、manifest、Webview URI fallback、Engine source path policy |
 
 按领域的期望分工：
@@ -188,7 +194,7 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 | `neko-agent` | 文档、图片、附件、感知资产、generated media | Agent tool、attachment、perception、document image、generated asset 投影全部走 Agent content runtime backed by shared services | provider 需要 Engine-backed bytes/source、视频预处理、媒体 probe/decode | prompt 文本、配置、skill metadata、工作记忆中的稳定 ref/text 摘要 |
 | `neko-assets` | asset file、thumbnail、metadata、media library | Asset visual、thumbnail、metadata sidecar 可作为 resource/cache provider；路径变量和媒体库 root 进入统一 content boundary | engine thumbnail/probe/extract metadata | asset/entity/library facts、用户正式导入的 source 文件记录 |
 
-结论：公共规则由统一内容访问服务管理，领域只实现 provider/adapter。只要两个以上领域需要相同的路径、权限、缓存、projection 或 Engine source 规则，就应放入 `@neko/shared` / `@neko/shared/vscode/extension` 或 `@neko/neko-client` 边界；只有领域语义、UI 行为、项目格式和用户工作流留在 owning package。
+结论：公共规则由统一内容访问服务管理，领域只实现 provider/adapter。只要两个以上领域需要相同的路径、权限、缓存、projection 或 Engine source 规则，就应放入 `@neko/shared` / `@neko/shared/vscode/extension` 或 `@neko/neko-client` 边界；两个以上领域共享的内容语义放入 `@neko/content` 这类中立 domain service；只有 UI 行为、项目格式和用户工作流留在 owning package。
 
 当前迁移和分类快照：
 
@@ -208,7 +214,8 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 | 数据类型 | 权威入口 | 说明 |
 | --- | --- | --- |
 | 纯文本、配置、JSON/TOML/Markdown、`nk*` 项目事实 | `ProjectFileStore`、domain codec、Host fs adapter / `workspace.fs` | 负责 schema、诊断、路径收缩、原子写入和项目事实生命周期；不经 Engine。 |
-| 图片、视频、音频、模型、Puppet、PDF/EPUB/CBZ/CBR/Office 等二进制或容器源 | `neko-engine` file access / preview API | 负责 path authorization 后的 token、Range、container entry、sibling resource、probe、decode、preview/proxy/thumbnail 生成。 |
+| PDF/EPUB/CBZ/CBR/Office 等文档语义 | `@neko/content/document` + 注入的 Host runtime deps | 负责 document format、manifest/range、locator、entry refs、图片元数据；不决定缓存目录和 Engine token。 |
+| 图片、视频、音频、模型、Puppet、PSD 等二进制或媒体源 | `neko-engine` file access / preview API | 负责 path authorization 后的 token、Range、container entry、sibling resource、probe、decode、preview/proxy/thumbnail 生成。 |
 | 文档页图、缩略图、preview variant、proxy、OCR/ASR/metadata sidecar 等派生物 | `ResourceCacheService` + provider | 缓存只保存可重建 artifact 和 manifest，不成为 source identity。 |
 | Webview 展示资源 | `LocalResourceAccessService` 或 `ResourceCacheService.project()` | 只产生当前 Webview 可用的 URI/projection，不写入项目事实。 |
 
@@ -280,7 +287,20 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 | cache、proxy、thumbnail                       | 诊断                    | 不提升为 source，不作为项目事实         |
 | Webview URI、blob URL、Engine token、stream id | 诊断                    | 仅为当前会话 runtime handle            |
 
-未 Create Asset 的 generated output 仍是 scratch/runtime 语义。它可以展示在当前会话，但不能进入 Canvas、Cut、Audio、Sketch、Puppet、Model、Agent durable result、package manifest 或最终导出输入。
+### Generated 输出保存路径
+
+Generated 输出需要先按“用户是否可见、是否确认保留、删除后是否损坏结果”分类，再决定保存位置。不能把所有生成文件都放进 `.neko/.cache`，也不能让 cache 文件存在本身表示用户成果已保存。
+
+| 分类 | 保存位置 | 是否用户可感知 | 是否可进入项目事实 | 删除后语义 |
+| --- | --- | --- | --- | --- |
+| 运行中 scratch / provider 临时文件 | system temp、provider 私有目录或 extension-private runtime dir | 否，只用于一次调用 | 否 | 可删除，调用失败或重试自行处理 |
+| 未确认但已展示的生成结果 | 有 workspace 时可落 `.neko/.cache/resources/generated-drafts/`；无 workspace 时落 `globalStorageUri/resources/generated-drafts/` | 是，出现在当前会话/任务结果中 | 否，只能用 `ResourceRef`/assetRef 投影 | 可被 TTL/GC 删除；UI 必须提示“未保存/可清理” |
+| 用户点击保存、发送到 Canvas、绑定实体、加入素材库或用于导出/打包的生成结果 | workspace `neko/generated/<media-kind>/`、workspace/media-library `assets/generated/`，或 AssetStore 管理的正式文件目录 | 是 | 是，保存 AssetRef、GeneratedAssetRef、`${VAR}/path` 或 workspace-relative path | 不能因清理 cache 删除 |
+| 已保存生成结果的缩略图、预览图、代理、metadata | `.neko/.cache/resources` 或 `.neko/.cache/neko-cache.db` 中的 variant/metadata | 间接可见 | 否 | 可删除并由正式 source/ref 重建 |
+
+因此，`generated-assets/...` 这种返回给 Agent/Webview/Canvas 的稳定 URI 必须指向“已登记的生成资产身份”，不能是 `.neko/.cache/generated/...` 的路径别名。若生成结果还未保存，只能作为 session/runtime projection 展示，并在跨包交付前执行 Promote/Create Asset。
+
+未 Promote/Create Asset 的 generated output 仍是 scratch/runtime 语义。它可以展示在当前会话，但不能进入 Canvas、Cut、Audio、Sketch、Puppet、Model、Agent durable result、package manifest 或最终导出输入。
 
 各领域的 Add handler 只保存引用和领域编辑事实，不把大型二进制封装进 `.nk*`：
 
@@ -292,7 +312,7 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 | PSD                          | 可 Link 原始 PSD；作为 Sketch 可编辑层时，保存 source ref、图层记录和派生资产 |
 | `.glb`、`.gltf`、`.vrm`      | Link durable model source；贴图和 sibling resources 通过 locator/解析服务读取 |
 | `.moc3`、Live2D 目录或 zip   | Link durable puppet source；zip 只解析 index/locator，不嵌入二进制          |
-| raster layer / generated art | 长期使用 asset/dataRef；避免把大块 base64 写入 `.nks`                       |
+| raster layer / generated art | 长期使用 asset/dataRef；避免把大块 base64 或 cache path 写入 `.nks`         |
 
 ## ResourceRef 与缓存变体
 
@@ -301,7 +321,7 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 | 概念           | 设计含义                  | 示例                                                                      |
 | -------------- | ------------------------- | ------------------------------------------------------------------------- |
 | `scope`        | 资源可携带范围            | `project`, `global`, `extension-private`                                  |
-| `provider`     | 谁能 materialize 或 probe | document provider、preview provider、generated provider                   |
+| `provider`     | 谁能 materialize 或 probe | document provider、thumbnail provider、proxy provider、generated-derivative provider |
 | `kind`         | 资源大类                  | `document`, `media`, `generated`, `preview`, `storyboard-reference`       |
 | `source`       | 原始来源                  | file、document、media-library、generated-asset、preview-asset、remote-url |
 | `locator`      | source 内部位置           | document page、archive entry、storyboard shot、preview route              |
@@ -309,6 +329,8 @@ Extension Host 侧统一通过 `@neko/shared/vscode/extension` 的 `createHostCo
 | `variant role` | 派生表现用途              | `thumbnail`, `page-image`, `preview`, `proxy`, `fov-crop`                 |
 
 同一 `ResourceRef` 可以有多个 variant。比如一个 PDF 页面可以派生 `thumbnail`、`page-image` 和 OCR sidecar；一个视频 source 可以派生 `thumbnail`、`proxy` 和 preview clip。variant 可以删除和重建，source identity 不能被 variant path 替代。
+
+Generated source asset 本身不是 ResourceCache variant。ResourceCache 只允许保存 generated source 的派生 variant，例如 thumbnail、preview、proxy 或 probe metadata。需要长期使用的 generated source 必须先成为 AssetStore/GeneratedAssetStore 管理的正式 source，再通过该 source 创建派生 variant。
 
 ## 缓存生命周期
 

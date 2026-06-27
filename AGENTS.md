@@ -155,7 +155,7 @@
 
 - 项目尚未发布时，可以对未发布的内部 API、DTO、Webview message、Agent workflow payload、测试 fixture 和 nk\* 草稿格式做显式破坏性调整，用于清理 legacy debt 或收敛到更清晰的架构。
 - “未发布”不等于忽略版本兼容性。破坏性变更必须说明影响范围，以及旧数据是迁移、重建、重新导入、忽略还是有意丢弃。
-- 新路径开发默认必须清理旧 compatibility shim、legacy adapter、fallback branch、dual-read/dual-write、旧字段映射和旧命令入口，避免验证继续走旧路径。
+- 预发布重构的默认顺序是：先限定本次替换的最小目标边界，再清理该边界内旧 compatibility shim、legacy adapter、fallback branch、dual-read/dual-write、旧字段映射和旧命令入口，并断开旧调用链路；确认旧路径不能继续返回成功后，再定义新设计/新契约、开发新 canonical path 并接入验证。不要在旧路径仍可兜底成功时继续修补旧路径问题或把新功能接在新旧并行路径上。
 - 只有为保护有价值本地数据、已发布契约或外部信任边界时，才允许临时保留兼容逻辑；必须有 owner、replacement、验证命令、移除条件和到期任务。
 - 开发和测试新路径时默认禁用兼容 fallback；若执行流命中旧路径，必须立即抛错、返回 fail-closed diagnostic 或触发可断言的 telemetry/log failure，不得继续返回旧路径成功结果；仅在明确标记为迁移、拒绝或诊断测试时可观测旧路径。
 - 不得用过度兜底或兼容逻辑隐藏代码缺陷：缺失新实现、contract mismatch、非法状态、未知消息、错误配置、未注册 handler/renderer/adapter 时，应 fail-visible 并暴露问题；不能回退旧实现、默认空数据、默认成功状态或 no-op。

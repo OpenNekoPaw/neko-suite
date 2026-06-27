@@ -19,7 +19,7 @@
 
 - `.neko/.cache/resources/manifest.json`
 - `.neko/.cache/proxies/manifest.json`
-- `.neko/.cache/generated/index.json`
+- `.neko/.cache/generated/index.json`（待迁移为 generated draft/projection 索引，不能作为已保存生成资产事实源）
 - `.neko/.cache/media-metadata.json`
 - `.neko/.cache/search-index.json`
 - `.neko/.cache/asset-graph.json`
@@ -65,7 +65,7 @@ SQLite 存的是本地账本和索引，不是项目事实本身。业务层必�
 | Resource cache manifest | `resource_cache_entries`、`resource_cache_variants`、`cache_files` | 替代 `.neko/.cache/resources/manifest.json`；记录 `ResourceRef`、variant、fingerprint、status、size、provider、materialized path relative to cache root。 |
 | 文档页图、缩略图、preview variant、proxy 记录 | `resource_cache_variants`、`resource_cache_jobs` | 统一记录 page-image、thumbnail、proxy、preview、fov-crop 等变体状态。 |
 | Proxy manifest | `proxy_variants` 或并入 `resource_cache_variants` | 替代 `.neko/.cache/proxies/manifest.json`，避免媒体代理单独维护一套 manifest。 |
-| Generated runtime index | `generated_resources` | 替代 `.neko/.cache/generated/index.json` 中未 promoted 的运行时资源索引；已提升为资产的事实仍写 `neko/assets/library.json`。 |
+| Generated draft index | `generated_drafts`、`generated_asset_projection` | 替代 `.neko/.cache/generated/index.json` 中未保存草稿的运行时索引；只记录会话可见草稿、retention、诊断和投影。已保存/提升的生成资产事实写 AssetStore 或 `neko/assets/library.json`，不能以 cache 路径作为事实。 |
 | Media probe metadata | `media_metadata` | 替代 `.neko/.cache/media-metadata.json`；记录 Engine/provider version、source fingerprint、duration、dimension、codec、diagnostics。 |
 | Search index 和 FTS/read model | `search_documents`、`search_terms`、`search_partitions` | 替代 `.neko/.cache/search-index.json`；Search 仍只暴露 service API，不暴露 DB。 |
 | Asset graph projection | `asset_graph_edges`、`asset_graph_nodes` | 替代 `.neko/.cache/asset-graph.json`；仅保存关系投影，不拥有 Asset/Entity 事实。 |
@@ -171,7 +171,7 @@ SQLite 存的是本地账本和索引，不是项目事实本身。业务层必�
   resources/
   thumbnails/
   proxies/
-  generated/
+  generated-drafts/
   vectors/
 ```
 
@@ -180,7 +180,7 @@ SQLite 存的是本地账本和索引，不是项目事实本身。业务层必�
 - resource cache entries / variants / files
 - media metadata
 - proxy metadata
-- generated runtime index
+- generated draft/projection index
 - search partitions and FTS/read models
 - asset/entity graph projections
 - provider diagnostics
@@ -193,7 +193,7 @@ SQLite 存的是本地账本和索引，不是项目事实本身。业务层必�
 - 缩略图
 - proxy media
 - preview/fov-crop
-- generated runtime images/audio/video
+- 未保存 generated 草稿的预览/投影文件；已保存生成资产的 thumbnail/preview/proxy 派生物
 - embedding/vector sidecar 文件
 
 规则：
@@ -210,7 +210,7 @@ SQLite 存的是本地账本和索引，不是项目事实本身。业务层必�
 - no-workspace resource cache metadata。
 - extension-private Market cache/index。
 - provider catalog cache。
-- extension-private generated resources metadata。
+- extension-private generated draft/projection metadata。
 - extension session/read model。
 
 继续文件管理：
@@ -264,7 +264,7 @@ ADR 不指定具体库。实现提案必须先验证 VS Code Extension Host 的�
 
 1. `ResourceCacheService` manifest：从 `.neko/.cache/resources/manifest.json` 迁到 `.neko/.cache/neko-cache.db`。
 2. proxy / thumbnail / document page / preview variant metadata：并入 resource cache variants。
-3. media metadata、generated runtime index、GC touch 状态。
+3. media metadata、generated draft/projection index、GC touch 状态。
 4. Search index、asset graph、entity occurrence / binding projection。
 5. 用户级 catalog/search projection，例如 Skill catalog、Market cache、conversation index。
 

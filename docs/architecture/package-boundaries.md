@@ -49,6 +49,7 @@
 - `PathResolver` 是路径变量、相对路径和运行时绝对路径解析的统一入口。
 - `@neko/shared/project-file-io` 是 JSON `nk*` 项目文件 host 持久化、codec registry、诊断和 portable source policy 的共享入口；domain codec 仍归各领域格式所有。
 - `@neko/shared/vscode/extension` 的 `createHostContentAccessRuntime(...)` 是 Extension Host 侧内容访问、透明缓存、Webview projection、Engine source resolver hook 和 ingest provider 装配入口；功能包只传 provider/adapter，不直接装配底层 cache/content/local-resource service。
+- `@neko/content` 是跨领域内容语义 domain service；Canvas、Cut、Preview、Agent 等共享的 document reader、manifest/range、locator 和 image metadata probe 放在这里，不放在 Agent platform。
 - `ResourceRef` 是持久跨包 payload 的优先引用形式，不要把 blob URL、Webview URI、preview token、stream ID 或 engine token 写成持久事实。
 - `ENTITY_FACADE_COMMANDS` 是实体跨包 facade 的命令契约，功能包通过命令或 adapter 访问实体能力。
 - `@neko/shared/vscode`、`@neko/shared/vscode/extension`、`@neko/shared/i18n/react`、`@neko/shared/components` 是分层 subpath，不等同于主入口 L0。
@@ -60,6 +61,7 @@
 - 可复用但缺少小能力时，优先扩展公共契约、公共 adapter、公共 hook/primitive 或 domain service，再由 owning package 注入业务差异。
 - 只有当能力只服务单一领域、包含明确业务语义、或提升到公共层会倒置依赖时，才保留在 owning package。
 - 不得在功能包内并行实现 package-local design system、theme token、i18n runtime、logger/error 类型、项目文件 IO、cache manager、path resolver、Engine HTTP/WS client 或共享 DTO。
+- 不得在 Agent、Canvas、Cut、Preview 等功能包内拥有跨领域 document/content parser、manifest/range reader、image metadata probe 或 container locator 规则；需要扩展时进入 `@neko/content`，通过 provider/adapter 注入 Host 读写和 Engine 文件访问。
 - 不得在功能包内直接 `new HostContentAccessService`、`new HostContentIngestService`、`new VSCodeResourceCacheService`、使用 `ResourceCacheContentAccessProvider` / `SourceFileContentAccessProvider` / `DocumentEntryContentAccessProvider` 等公共底层 provider 重新拼装 runtime，或调用 `createDefaultLocalResourceAccessService` 形成第二套 Webview root 规则。跨领域内容访问必须从 `createHostContentAccessRuntime(...)` 进入；`scripts/check-content-access-boundaries.mjs` 会阻止回退。
 - 若决定不更新公共层，需在 OpenSpec、PR 或交付说明中记录审计结论、保留原因、后续提取条件和验证命令。
 
@@ -91,6 +93,17 @@
 - 普通媒体时间标签应使用 `formatTime`、`formatMediaTime`、`formatMediaTimeFromMilliseconds` 或 `formatMediaTimeCentiseconds`。字幕 timecode、bar/beat、导出 ETA、聊天相对时间和领域 prose 可以保留在 owning package，但命名要表达领域语义。
 - Webview 可以在 Extension 授权后使用 Engine client 或 stream client，但不能自己发现、启动或授权 Engine。
 - Extension Host 负责权限、端口、token、资源 URI 和生命周期代理；高频视频帧、PCM 包和 scene delta 不应经 Extension Host 中继。
+
+### `@neko/content`
+
+`packages/neko-content` 是跨领域内容语义服务边界，当前公共入口包括 `@neko/content/document`。
+
+约束：
+
+- 可依赖 `@neko/shared` 的类型和契约，但不得依赖 VSCode、Webview、React、Agent runtime、Canvas/Cut/Preview 内部实现或 `@neko/neko-client`。
+- 文档解析、manifest/range、locator、entry ref、图片元数据探测和格式识别放在这里；Host 侧通过 runtime deps 注入文本读取、二进制读取、container entry 读取和 parser module loading。
+- 不管理 cache root、manifest、Webview URI、Engine token、authorized roots、workspace lifecycle 或 UI 状态。这些由 `@neko/shared/vscode/extension`、`ResourceCacheService`、`LocalResourceAccessService` 和 `@neko/neko-client` 负责。
+- Agent 只能把它作为内容语义服务使用，不得在 Agent platform 或 extension 下重新实现 document reader/cache/path/media 目录。
 
 ### `@neko/ui`
 

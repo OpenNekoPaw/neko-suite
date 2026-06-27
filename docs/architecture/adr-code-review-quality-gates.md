@@ -96,7 +96,7 @@ L3/L4 变更在大规模实现前必须先证明关键路径可行：可以通�
 - proposal/design 说明了破坏内容、原因和影响面。
 - 旧数据处理策略明确：迁移、重建、重新导入、忽略或有意丢弃。
 - load/save、contract fixture、失败 diagnostic、迁移或重建路径有验证任务。
-- 新路径引入时，旧 compatibility shim、legacy adapter、fallback branch、dual-read/dual-write、旧字段映射和旧命令入口默认删除或改为 fail-closed，避免验证继续走旧路径。
+- Prelaunch 重构必须先限定本次替换的最小目标边界，然后优先清理该边界内旧 compatibility shim、legacy adapter、fallback branch、dual-read/dual-write、旧字段映射和旧命令入口，并断开旧调用链路。Review 必须先确认旧路径不能继续返回成功，再接受新设计/新契约、新 canonical path 接入和验证证据；不得在旧路径仍可兜底成功时继续修补旧路径问题或把新功能接在新旧并行路径上。
 - 兼容 shim 只有在保护有价值本地数据、已记录公共契约或外部信任边界时才保留，并且有 owner、replacement、验证命令、移除条件和到期任务。
 - 开发和测试新路径时默认禁用兼容 fallback；若执行流命中旧路径，必须立即抛错、返回 fail-closed diagnostic 或触发可断言的 telemetry/log failure，不得继续返回旧路径成功结果；只有明确标记为迁移、拒绝或诊断测试时才可观测旧路径。
 - 代码缺陷不得被兜底或兼容逻辑吞掉：缺失新实现、contract mismatch、非法状态、未知消息、错误配置、未注册 handler/renderer/adapter 时，应 fail-visible；不能回退旧实现、默认空数据、默认成功状态或 no-op。
@@ -149,6 +149,7 @@ Webview/React 变更新增组件前，review 必须确认已经做过组件复�
 - 调用方是否只声明 intent、source/ref、target 和 caller，由 Host 侧统一内容访问边界选择 source、cache、proxy、bytes、Engine source 或 Webview projection。
 - 二进制/媒体/container entry 是否经 Engine-backed content access 或注册 provider；纯文本、配置和 `nk*` 项目事实是否经项目文件/text 服务，且没有误进资源缓存。
 - 缓存路径、manifest、document-reader scratch、system temp、Webview URI、blob/object URL、Engine token 和 preview URL 是否只存在于 runtime/projection/diagnostic，不进入 durable payload、Agent memory、Canvas node、Storyboard row、artifact 或剪贴板稳定引用。
+- generated 输出是否按 scratch / draft / promoted source / derivative 分类：draft 只能作为当前会话 projection；promoted source 必须在 `.neko/.cache` 外；ResourceCache 只能保存 thumbnail/preview/proxy/metadata 等可重建 derivative，不能保存 generated source variant。
 - Webview 展示是否通过 `LocalResourceAccessService` 或 `ResourceCacheService.project()` 生成授权 URI；失败时是否 fail-visible，而不是返回 raw local path、cache path 或未验证 source URL。
 - 新增 provider/adapter 是否接入 `@neko/shared/vscode/extension` 的 content-access/resource-cache/local-resource factory，或明确说明为什么 owning package 是唯一合理边界。
 - 测试是否是路径级验收：断言 canonical service/provider/message/adapter 被命中，并证明 direct fs read、cache-path lookup、legacy field fallback、package-local path conversion 或 Webview URI fallback 没有参与。

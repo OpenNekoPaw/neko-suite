@@ -336,7 +336,7 @@ node scripts/smoke-webview-builds.mjs --list  # 仅列出将被构建的 webview
 
 当前项目仍处于发布前阶段，可以有意破坏尚未发布的内部 API、DTO、Webview message、Agent workflow payload、测试 fixture 或 `nk*` 草稿格式，以减少长期兼容包袱。但这种破坏必须在 proposal、design、tasks 或 PR 说明中写清楚影响范围、原因，以及旧数据是迁移、重建、重新导入、忽略还是明确丢弃。
 
-新路径开发默认清理旧 compatibility shim、legacy adapter、fallback branch、dual-read/dual-write、旧字段映射和旧命令入口，避免开发和测试仍然命中旧路径。测试新路径时默认禁用兼容 fallback；若执行流命中旧路径，必须立即抛错、返回 fail-closed diagnostic 或触发可断言的 telemetry/log failure，不得继续返回旧路径成功结果；只有明确标记为迁移、拒绝或诊断测试时才可观测旧路径。新路径验收必须是路径级验收，不得只断言最终结果成功；必须断言 canonical path、新 handler、新 renderer、新 adapter 或新 contract 被命中，并通过 spy、counter、log assertion，或将 legacy path poison 成抛错来证明旧路径未参与。代码缺陷不得被兜底或兼容逻辑吞掉：缺失新实现、contract mismatch、非法状态、未知消息、错误配置、未注册 handler/renderer/adapter 时，应 fail-visible，不能回退旧实现、默认空数据、默认成功状态或 no-op。只有保护有价值本地数据、已发布契约或外部信任边界时，才允许临时保留兼容逻辑，并且必须有 owner、replacement、验证命令、移除条件和到期任务。预发布也不能忽略 VS Code、Node、pnpm、Rust、OS、Webview sandbox、CSP、codec、Range、Engine、Proto、marketplace trust 等运行/安全/信任边界，不能静默删除或损坏有价值的本地项目数据、设置、信任状态、权益、安装记录或生成产物。
+新路径开发默认先限定本次替换的最小目标边界，然后优先清理该边界内旧 compatibility shim、legacy adapter、fallback branch、dual-read/dual-write、旧字段映射和旧命令入口，并断开旧调用链路；确认旧路径不能继续返回成功后，再定义新设计/新契约、开发新 canonical path 并接入验证。不要在旧路径仍可兜底成功时继续修补旧路径问题，也不要把新功能接在新旧并行路径上。测试新路径时默认禁用兼容 fallback；若执行流命中旧路径，必须立即抛错、返回 fail-closed diagnostic 或触发可断言的 telemetry/log failure，不得继续返回旧路径成功结果；只有明确标记为迁移、拒绝或诊断测试时才可观测旧路径。新路径验收必须是路径级验收，不得只断言最终结果成功；必须断言 canonical path、新 handler、新 renderer、新 adapter 或新 contract 被命中，并通过 spy、counter、log assertion，或将 legacy path poison 成抛错来证明旧路径未参与。代码缺陷不得被兜底或兼容逻辑吞掉：缺失新实现、contract mismatch、非法状态、未知消息、错误配置、未注册 handler/renderer/adapter 时，应 fail-visible，不能回退旧实现、默认空数据、默认成功状态或 no-op。只有保护有价值本地数据、已发布契约或外部信任边界时，才允许临时保留兼容逻辑，并且必须有 owner、replacement、验证命令、移除条件和到期任务。预发布也不能忽略 VS Code、Node、pnpm、Rust、OS、Webview sandbox、CSP、codec、Range、Engine、Proto、marketplace trust 等运行/安全/信任边界，不能静默删除或损坏有价值的本地项目数据、设置、信任状态、权益、安装记录或生成产物。
 
 代码审查流程、风险分级、功能/UX/性能检查和合并规则遵循 [AGENTS.md](./AGENTS.md) 与 [ARCHITECTURE_CN.md](./ARCHITECTURE_CN.md) 中的验证要求。
 
@@ -514,7 +514,7 @@ docs: update ARCHITECTURE.md with streaming flow
 - [ ] 新功能涉及样式、主题、i18n、日志、错误、文件 IO、缓存、配置、路径或 DTO 时，已做公共基础能力审计
 - [ ] 新功能涉及 provider、registry、bridge、protocol、status/tree/history/selection 等可复用能力时，已做跨子包能力复用审计
 - [ ] 新增 Webview/React 组件前已做复用审计，并说明为何不能增强既有组件或抽到 `@neko/ui`
-- [ ] 新路径开发已删除或隔离旧兼容逻辑，验收断言 canonical path 被命中且 legacy path 未参与；若旧路径被命中会 fail-closed，而不会返回旧路径成功结果
+- [ ] 新路径开发已先限定替换边界并断开旧调用链路，旧兼容逻辑已删除、隔离或 fail-closed；验收断言 canonical path 被命中且 legacy path 未参与，若旧路径被命中不会返回旧路径成功结果
 - [ ] 涉及架构变更：更新对应 ADR 或 package README
 - [ ] 无 `any` 类型、无 `console.log`、无 `as Type` 强制断言
 
@@ -528,7 +528,8 @@ docs: update ARCHITECTURE.md with streaming flow
 6. 新增组件是否先审计并优先增强了既有 `@neko/ui` 或包内组件
 7. 是否按本地 VSCode 客户端 + 本地 Rust Engine 的边界控制复杂度，避免云端多租户/分布式服务式的过度设计
 8. 防御性代码是否只覆盖真实边界，避免宽泛 try/catch、静默默认值、fallback、兼容分支或重复校验掩盖开发错误
-9. Rust 代码是否有 `unwrap()` 隐患
+9. Prelaunch 重构是否先在目标边界内清理旧成功路径并断开旧调用链路，再定义和接入新 canonical path
+10. Rust 代码是否有 `unwrap()` 隐患
 
 ---
 

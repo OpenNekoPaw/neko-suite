@@ -38,6 +38,8 @@ Core shared packages:
 
 - `packages/neko-engine`: Rust sidecar, host HTTP/WS/N-API/CLI, runtime crates.
 - `packages/neko-types`: `@neko/shared`, Layer 0 contracts and utilities.
+- `packages/neko-content`: `@neko/content`, cross-domain content semantics such
+  as document parsing, manifest/range, locators, and image metadata probes.
 - `packages/neko-client`: `@neko/neko-client`, EngineClient and stream clients.
 - `packages/neko-proto`: Protobuf IDL, engine communication SSOT.
 - `packages/neko-ui`: shared Webview React UI primitives and creative controls.
@@ -139,14 +141,22 @@ break unreleased internal compatibility deliberately when it simplifies the
 architecture, but keep every breaking change diagnosable, reviewable, and
 recoverable.
 
+Within a scoped replacement, the preferred sequence is to disconnect old success
+paths first: define the smallest target boundary, remove or fail-close legacy
+adapters and fallback call chains inside that boundary, prove the old path cannot
+return success, then define the new design/contract, implement the new canonical
+path, and validate that the canonical path is hit. This prevents teams from
+spending the change fixing old-path defects while the new path remains unproven.
+
 Allowed prelaunch breaking changes:
 
 - Replace internal APIs, DTOs, commands, Webview messages, Agent workflow
   payloads, and fixtures without long-lived compatibility shims.
 - Delete old compatibility shims, legacy adapters, fallback branches,
   dual-read/dual-write paths, old field mappings, and legacy command aliases
-  when a canonical replacement is introduced, so validation exercises the new
-  path instead of silently falling back to the old path.
+  inside the target replacement boundary before wiring the new canonical path, so
+  validation exercises the new path instead of silently falling back to the old
+  path.
 - Revise unreleased `nk*` project drafts, local test fixtures, package manifests,
   or runtime payloads when old data can be rebuilt, reimported, regenerated, or
   intentionally discarded.
@@ -166,6 +176,8 @@ Not allowed under the name of prelaunch cleanup:
 - Keeping legacy paths as default fallbacks after a canonical replacement exists,
   because this hides broken new behavior and creates conflicting sources of
   truth.
+- Continuing to repair old-path behavior or route new functionality through
+  parallel old/new paths after the target replacement boundary has been selected.
 
 Breaking migrations must be explicit, not incidental:
 
@@ -177,6 +189,9 @@ Breaking migrations must be explicit, not incidental:
   intentionally discarded.
 - Add validation tasks for load/save, contract fixtures, failure diagnostics,
   and any migration or rebuild path.
+- Order implementation tasks so obsolete successful call chains are removed,
+  isolated, or made fail-closed before new contracts and new canonical adapters
+  are accepted.
 - Remove obsolete compatibility code in the same change when possible. If a shim
   remains, state the owner, replacement path, validation command, removal
   condition, and follow-up task.
@@ -449,6 +464,15 @@ Review and design expectations:
   source refs plus locators/entry paths, workspace-relative paths, `${VAR}/path`,
   promoted generated asset refs, or asset/entity IDs. Runtime projections may be
   returned only as current-session display data.
+- Promoted generated source assets must live outside `.neko/.cache`, such as
+  `neko/generated/<kind>/`, a media-library root, AssetStore, or an explicit user
+  save destination. Unsaved generated drafts may use session/cache projection
+  storage, but they must not become `resultUrls`, attachments, Canvas nodes,
+  Storyboard refs, package entries, or search facts without Promote/Create Asset.
+- ResourceCache may cache generated derivatives such as thumbnails, previews,
+  proxies, and metadata keyed by promoted generated source refs. It must reject
+  generated source variants as durable ownership; cache deletion must rebuild
+  derivatives, not delete promoted generated sources.
 - Path conversion belongs at the Host boundary. Feature packages should pass
   source/ref plus intent and caller; the shared runtime resolves workspace roots,
   media-library variables, extension-private roots, Engine-registered sources,
@@ -553,8 +577,13 @@ metadata for cataloging, permissions, trust, and allowed tools. Keep creative
 ordering and guidance in Markdown unless a separate runtime workflow contract is
 explicitly designed.
 
-Generated binary assets should be stored on disk or in managed resource cache and
-passed as JSON refs/projections. Do not move base64 payloads through chat,
+Generated binary outputs that are visible to the user must be classified before
+storage. Unsaved generated drafts may live in host-managed session/cache storage
+and be exposed only through runtime projections. Generated outputs that are sent
+to Canvas, bound to entities, added to an asset library, used by export/package,
+or otherwise retained by the user must be promoted into an AssetStore,
+workspace/media-library file, or generated asset store and passed as stable
+JSON refs/projections. Do not move base64 payloads or cache paths through chat,
 Webview messages, Canvas nodes, or package manifests as durable data.
 
 ### Entity, Search, And Cache
@@ -597,8 +626,10 @@ Cache constraints:
   evidence identities, asset libraries, story/document facts, or user-confirmed
   choices.
 - Cache databases, search indexes, embeddings, thumbnails, document page images,
-  generated previews, projected Canvas layout caches, and media metadata are
-  accelerators or projections, never the source of truth.
+  generated previews/drafts, projected Canvas layout caches, and media metadata
+  are accelerators or projections, never the source of truth. Promoted
+  generated source assets are user-visible artifacts and must not be represented
+  by `.neko/.cache` paths.
 - Resource cache owns cache identity, materialization, variants, projection
   readiness, freshness, quota, and garbage collection for cache-backed resources.
   Consumers pass `ResourceRef`/`ResourceVariantRef` and host APIs, not cache file

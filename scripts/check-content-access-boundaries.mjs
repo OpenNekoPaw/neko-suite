@@ -6,6 +6,19 @@ import { resolve, relative } from 'node:path';
 const repoRoot = process.cwd();
 
 const checkedRoots = [
+  'packages/neko-types/src',
+  'packages/neko-agent/packages/extension/src',
+  'packages/neko-canvas/packages/extension/src',
+  'packages/neko-cut/packages/extension/src',
+  'packages/neko-preview/packages/extension/src',
+  'packages/neko-assets/src',
+  'packages/neko-audio/packages/extension/src',
+  'packages/neko-model/packages/extension/src',
+  'packages/neko-sketch/packages/extension/src',
+  'packages/neko-tools/packages/extension/src',
+];
+
+const featurePackageRoots = [
   'packages/neko-agent/packages/extension/src',
   'packages/neko-canvas/packages/extension/src',
   'packages/neko-cut/packages/extension/src',
@@ -29,6 +42,17 @@ const blockedSymbols = [
   'createDefaultLocalResourceAccessService',
 ];
 
+const durableGeneratedCachePathPatterns = [
+  '.neko/.cache/generated',
+  '.neko/.cache/resources',
+];
+
+const generatedCacheDiagnosticTestMarkers = [
+  'rejects promoted generated outputs in cache scope',
+  'generated-cache-source-not-durable',
+  'ingest-cache-output',
+];
+
 const allowedFiles = new Set([
   'packages/neko-agent/packages/extension/src/__mocks__/vscode.ts',
 ]);
@@ -46,7 +70,6 @@ function runCheck() {
   for (const root of checkedRoots) {
     for (const file of walk(resolve(repoRoot, root))) {
       const rel = normalizePath(relative(repoRoot, file));
-      if (allowedFiles.has(rel) || isTestFile(rel)) continue;
       checkedFiles += 1;
       findings.push(...findViolations(rel, readFileSync(file, 'utf8')));
     }
@@ -87,11 +110,25 @@ function runSelfTest() {
       content: "expect(source).not.toContain('VSCodeResourceCacheService');\n",
       expectedSymbols: [],
     },
+    {
+      name: 'durable generated cache path fails',
+      file: 'packages/neko-agent/packages/extension/src/generated.ts',
+      content:
+        "const asset = { kind: 'generated-asset', path: '.neko/.cache/generated/shot.png', promoted: true };\n",
+      expectedSymbols: ['.neko/.cache/generated'],
+    },
+    {
+      name: 'diagnostic generated cache test passes',
+      file: 'packages/neko-types/src/types/__tests__/content-access.test.ts',
+      content:
+        "it('rejects promoted generated outputs in cache scope', () => { expect(code).toBe('ingest-cache-output'); const path = '.neko/.cache/generated/shot.png'; });\n",
+      expectedSymbols: [],
+    },
   ];
 
   const failures = [];
   for (const testCase of cases) {
-    const findings = isTestFile(testCase.file) ? [] : findViolations(testCase.file, testCase.content);
+    const findings = findViolations(testCase.file, testCase.content);
     const actualSymbols = findings.map((finding) => finding.symbol).sort();
     const expectedSymbols = [...testCase.expectedSymbols].sort();
     if (JSON.stringify(actualSymbols) !== JSON.stringify(expectedSymbols)) {
@@ -113,19 +150,67 @@ function runSelfTest() {
 
 function findViolations(file, content) {
   const findings = [];
-  for (const symbol of blockedSymbols) {
-    const index = content.indexOf(symbol);
-    if (index < 0) continue;
-    findings.push({
-      ruleId: 'feature-packages-use-shared-content-runtime-factory',
-      file,
-      symbol,
-      line: lineForIndex(content, index),
-      message:
-        'Feature packages must use createHostContentAccessRuntime and domain providers/adapters instead of directly assembling shared cache/content/projection services.',
-    });
+  if (!isTestFile(file) && isFeaturePackageFile(file)) {
+    for (const symbol of blockedSymbols) {
+      const index = content.indexOf(symbol);
+      if (index < 0) continue;
+      findings.push({
+        ruleId: 'feature-packages-use-shared-content-runtime-factory',
+        file,
+        symbol,
+        line: lineForIndex(content, index),
+        message:
+          'Feature packages must use createHostContentAccessRuntime and domain providers/adapters instead of directly assembling shared cache/content/projection services.',
+      });
+    }
+  }
+  findings.push(...findDurableGeneratedCachePathViolations(file, content));
+  return findings;
+}
+
+function isFeaturePackageFile(file) {
+  return featurePackageRoots.some((root) => file.startsWith(`${root}/`));
+}
+
+function findDurableGeneratedCachePathViolations(file, content) {
+  if (isAllowedGeneratedCacheDiagnosticTest(file, content)) {
+    return [];
+  }
+  const findings = [];
+  for (const symbol of durableGeneratedCachePathPatterns) {
+    let start = 0;
+    while (start < content.length) {
+      const index = content.indexOf(symbol, start);
+      if (index < 0) break;
+      start = index + symbol.length;
+      const window = content.slice(Math.max(0, index - 400), Math.min(content.length, index + 400));
+      if (!looksLikeDurableGeneratedIdentity(window)) continue;
+      findings.push({
+        ruleId: 'generated-assets-must-not-use-cache-paths-as-durable-identity',
+        file,
+        symbol,
+        line: lineForIndex(content, index),
+        message:
+          'Generated assets retained by users must use promoted asset/generated refs outside .neko/.cache; cache paths are only allowed in migration or diagnostic tests.',
+      });
+    }
   }
   return findings;
+}
+
+function isAllowedGeneratedCacheDiagnosticTest(file, content) {
+  if (!isTestFile(file)) return false;
+  return generatedCacheDiagnosticTestMarkers.some((marker) => content.includes(marker));
+}
+
+function looksLikeDurableGeneratedIdentity(content) {
+  return (
+    /promoted\s*:\s*true/.test(content) ||
+    /generatedAsset\s*[:=]/.test(content) ||
+    /generatedMediaRefs\s*[:=]/.test(content) ||
+    /generated-assets\//.test(content) ||
+    /ContentGeneratedAssetSourceRef/.test(content)
+  );
 }
 
 function* walk(root) {

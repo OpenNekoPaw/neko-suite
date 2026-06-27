@@ -20,6 +20,7 @@ const packageDirs = {
 };
 
 const hostAgnosticScopes = new Set(['agent', 'platform', 'ai-sdk', 'agent-types']);
+const agentContentAccessResidualScopes = new Set(['extension', 'agent', 'agent-types', 'webview']);
 
 const compatibilityExceptions = [
   {
@@ -197,6 +198,27 @@ const runnerIndividualEventAllowedFiles = new Set([
   'packages/neko-agent/packages/extension/src/ai/agentRunnerVscodeEventBridge.test.ts',
 ]);
 
+const forbiddenAgentContentAccessResiduals = [
+  'DocumentReaderService',
+  '@neko/platform/document',
+  'documentPathResolver',
+  'documentLowLevelAccess',
+  'documentResourceCacheService',
+  'resolveDocumentPath',
+  'loadAuthorizedMediaLibraryReadRoots',
+  'setDocumentAuthorizedReadRoots',
+  'createDocumentPathResolver',
+  'image_paths',
+  'include_image_paths',
+  'image_path_limit',
+  'cachePath',
+  'runtimePath',
+  'imagePaths',
+  'document-reader',
+  'document-image-cache',
+  'neko_epub_',
+];
+
 const rules = [
   {
     id: 'webview-no-direct-vscode',
@@ -280,6 +302,7 @@ function runBoundaryCheck() {
       findings.push(...findRunnerIndividualEventUsageViolations(scope, file, content));
       findings.push(...findWebviewReExportShimViolations(scope, file, content));
       findings.push(...findHostNeutralResidualViolations(scope, file, content));
+      findings.push(...findAgentContentAccessResidualViolations(scope, file, content));
     }
   }
   findings.push(...findLegacyCentralizedToolRegistrationViolations());
@@ -397,6 +420,13 @@ function runSelfTest() {
       content: 'export interface Result { localPaths: string[]; }\n',
       expectedRuleIds: ['host-neutral-no-local-path-contract'],
     },
+    {
+      name: 'agent content access residual fields fail in tests too',
+      scope: 'extension',
+      file: fakeFile('extension', 'src/tools/__tests__/read-image.test.ts'),
+      content: "const args = { image_paths: ['/tmp/page.png'] };\n",
+      expectedRuleIds: ['agent-no-content-access-residuals'],
+    },
   ];
 
   const failures = [];
@@ -406,6 +436,7 @@ function runSelfTest() {
       ...findRunnerIndividualEventUsageViolations(testCase.scope, testCase.file, testCase.content),
       ...findWebviewReExportShimViolations(testCase.scope, testCase.file, testCase.content),
       ...findHostNeutralResidualViolations(testCase.scope, testCase.file, testCase.content),
+      ...findAgentContentAccessResidualViolations(testCase.scope, testCase.file, testCase.content),
     ];
     const actualIds = [...new Set(violations.map((violation) => violation.ruleId))].sort();
     const expectedIds = [...testCase.expectedRuleIds].sort();
@@ -1230,6 +1261,29 @@ function findHostNeutralResidualViolations(scope, file, content) {
     });
   }
 
+  return violations;
+}
+
+function findAgentContentAccessResidualViolations(scope, file, content) {
+  if (!agentContentAccessResidualScopes.has(scope)) {
+    return [];
+  }
+
+  const relativeFile = relative(repoRoot, file);
+  const source = stripComments(content);
+  const violations = [];
+  for (const symbol of forbiddenAgentContentAccessResiduals) {
+    if (!source.includes(symbol)) {
+      continue;
+    }
+    violations.push({
+      ruleId: 'agent-no-content-access-residuals',
+      file: relativeFile,
+      specifier: symbol,
+      reason:
+        'Agent content access code and tests must use stable refs plus unified content access; old cache/path/document-reader fields and services are forbidden.',
+    });
+  }
   return violations;
 }
 
