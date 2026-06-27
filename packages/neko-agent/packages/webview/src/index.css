@@ -955,6 +955,20 @@ body {
   white-space: nowrap;
 }
 
+.agent-composer-popover-badges {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 152px;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.agent-composer-popover-badges .agent-composer-popover-badge {
+  min-width: 0;
+}
+
 .agent-composer-popover-row.is-selected .agent-composer-popover-badge {
   background: color-mix(in srgb, var(--agent-bg) 58%, transparent);
   color: var(--agent-fg);

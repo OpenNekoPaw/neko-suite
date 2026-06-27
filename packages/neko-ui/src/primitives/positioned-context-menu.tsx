@@ -1,6 +1,15 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getKeyboardBoundaryMetadata } from '../keyboard';
+import {
+  MENU_ACTION_DANGER_INTERACTIVE_STYLE,
+  MENU_ACTION_DANGER_STYLE,
+  MENU_ACTION_DISABLED_STYLE,
+  MENU_ACTION_INTERACTIVE_STYLE,
+  MENU_SEPARATOR_STYLE,
+  MENU_SHORTCUT_STYLE,
+  MENU_SURFACE_STYLE,
+} from './menu-theme';
 
 export type MenuSeparator = { readonly separator: true };
 
@@ -113,6 +122,7 @@ export function PositionedContextMenu({
           />
         ) : (
           <PositionedContextMenuItem
+            className={className}
             key={index}
             item={item}
             menuGroupId={groupId}
@@ -126,10 +136,12 @@ export function PositionedContextMenu({
 }
 
 function PositionedContextMenuItem({
+  className,
   item,
   menuGroupId,
   onClose,
 }: {
+  readonly className: string | undefined;
   readonly item: MenuAction;
   readonly menuGroupId: string;
   readonly onClose: () => void;
@@ -186,10 +198,10 @@ function PositionedContextMenuItem({
         onFocus={() => setInteractive(true)}
         style={{
           ...MENU_ITEM_STYLE,
-          ...(interactive ? MENU_ITEM_INTERACTIVE_STYLE : null),
-          ...(item.danger ? MENU_ITEM_DANGER_STYLE : null),
-          ...(interactive && item.danger ? MENU_ITEM_DANGER_INTERACTIVE_STYLE : null),
-          ...(item.disabled ? MENU_ITEM_DISABLED_STYLE : null),
+          ...(interactive ? MENU_ACTION_INTERACTIVE_STYLE : null),
+          ...(item.danger ? MENU_ACTION_DANGER_STYLE : null),
+          ...(interactive && item.danger ? MENU_ACTION_DANGER_INTERACTIVE_STYLE : null),
+          ...(item.disabled ? MENU_ACTION_DISABLED_STYLE : null),
         }}
       >
         {item.icon !== undefined ? (
@@ -204,7 +216,7 @@ function PositionedContextMenuItem({
           <span
             className="neko-menu-item-shortcut neko-shortcut-hint"
             data-neko-shortcut-hint="true"
-            style={MENU_ITEM_SHORTCUT_STYLE}
+            style={POSITIONED_MENU_SHORTCUT_STYLE}
           >
             {item.shortcut}
           </span>
@@ -218,6 +230,7 @@ function PositionedContextMenuItem({
 
       {submenuOpen && hasSubmenu ? (
         <PositionedContextMenu
+          className={className}
           items={item.submenu ?? []}
           menuGroupId={menuGroupId}
           x={submenuPosition.x}
@@ -247,22 +260,9 @@ function cssEscape(value: string): string {
 }
 
 const POSITIONED_MENU_STYLE: React.CSSProperties = {
+  ...MENU_SURFACE_STYLE,
   position: 'fixed',
   zIndex: 10_000,
-  minWidth: 200,
-  padding: 5,
-  border:
-    '1px solid var(--glass-border, var(--neko-glass-border, var(--neko-border, rgba(255, 255, 255, 0.16))))',
-  borderRadius: 'var(--radius-lg, var(--neko-radius-md, 10px))',
-  background:
-    'var(--glass-bg, var(--neko-glass-bg, var(--vscode-menu-background, var(--vscode-editorWidget-background, rgba(32, 32, 36, 0.88)))))',
-  backdropFilter: 'var(--glass-blur, var(--neko-glass-blur, blur(22px) saturate(180%)))',
-  WebkitBackdropFilter: 'var(--glass-blur, var(--neko-glass-blur, blur(22px) saturate(180%)))',
-  boxShadow:
-    'var(--glass-shadow, var(--neko-glass-shadow, 0 16px 52px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.24)))',
-  color:
-    'var(--toolbar-fg, var(--neko-fg, var(--vscode-menu-foreground, var(--vscode-foreground, inherit))))',
-  outline: 'none',
 };
 
 const MENU_ITEM_STYLE: React.CSSProperties = {
@@ -284,28 +284,6 @@ const MENU_ITEM_STYLE: React.CSSProperties = {
   userSelect: 'none',
 };
 
-const MENU_ITEM_INTERACTIVE_STYLE: React.CSSProperties = {
-  background:
-    'var(--button-bg, var(--vscode-menu-selectionBackground, var(--neko-accent, #0a84ff)))',
-  color: 'var(--button-fg, var(--vscode-menu-selectionForeground, #ffffff))',
-  outline: 'none',
-};
-
-const MENU_ITEM_DANGER_STYLE: React.CSSProperties = {
-  color: 'var(--vscode-errorForeground, var(--neko-danger, #ff453a))',
-};
-
-const MENU_ITEM_DANGER_INTERACTIVE_STYLE: React.CSSProperties = {
-  background: 'var(--neko-danger, var(--vscode-errorForeground, #ff453a))',
-  color: '#ffffff',
-};
-
-const MENU_ITEM_DISABLED_STYLE: React.CSSProperties = {
-  cursor: 'not-allowed',
-  opacity: 0.38,
-  pointerEvents: 'none',
-};
-
 const MENU_ITEM_ICON_STYLE: React.CSSProperties = {
   display: 'inline-flex',
   flexShrink: 0,
@@ -322,23 +300,13 @@ const MENU_ITEM_LABEL_STYLE: React.CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-const MENU_ITEM_SHORTCUT_STYLE: React.CSSProperties = {
-  flexShrink: 0,
-  marginLeft: 12,
-  color:
-    'var(--vscode-menu-selectionForeground, var(--vscode-descriptionForeground, currentColor))',
-  opacity: 0.72,
-};
-
 const MENU_ITEM_ARROW_STYLE: React.CSSProperties = {
   flexShrink: 0,
   marginLeft: 8,
   opacity: 0.72,
 };
 
-const MENU_SEPARATOR_STYLE: React.CSSProperties = {
-  height: 1,
-  margin: '4px 5px',
-  background:
-    'var(--panel-divider, var(--neko-divider, var(--neko-border, rgba(255, 255, 255, 0.12))))',
+const POSITIONED_MENU_SHORTCUT_STYLE: React.CSSProperties = {
+  ...MENU_SHORTCUT_STYLE,
+  marginLeft: 12,
 };

@@ -1548,8 +1548,6 @@ export function CanvasApp() {
             onOpenPackage={() => {
               reportAction('openPackage', t('toolbar.package'), undefined, canvasData);
             }}
-            isHudVisible={isHudVisible}
-            onToggleHud={() => setIsHudVisible((visible) => !visible)}
             isCanvasSettingsVisible={isCanvasSettingsVisible}
             onToggleCanvasSettings={() => setIsCanvasSettingsVisible((visible) => !visible)}
             isPanMode={isPanMode}

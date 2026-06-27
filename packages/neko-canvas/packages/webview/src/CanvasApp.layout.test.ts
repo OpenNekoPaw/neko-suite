@@ -190,7 +190,6 @@ describe('Canvas creative workbench layout boundary', () => {
       'toggle-playback-route-pane',
       'open-export',
       'open-package',
-      'toggle-hud-controls',
       'toggle-canvas-settings',
     ];
     const positions = orderedActions.map((action) =>
@@ -199,13 +198,9 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(positions.every((position) => position > -1)).toBe(true);
     expect(positions).toEqual([...positions].sort((left, right) => left - right));
     expect(toolbarSource.indexOf('<ToolbarSpacer />')).toBeLessThan(
-      toolbarSource.indexOf('data-creative-left-rail-action="toggle-hud-controls"'),
-    );
-    expect(
-      toolbarSource.indexOf('data-creative-left-rail-action="toggle-hud-controls"'),
-    ).toBeLessThan(
       toolbarSource.indexOf('data-creative-left-rail-action="toggle-canvas-settings"'),
     );
+    expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="toggle-hud-controls"/);
   });
 
   it('keeps grid visibility as a canvas view setting instead of a separate rail action', () => {
@@ -299,9 +294,8 @@ describe('Canvas creative workbench layout boundary', () => {
     );
     expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-right-node-tree"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-kind="visibility-toggle"/);
-    expect(toolbarSource).toMatch(/data-creative-left-rail-target="hud"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-target="right-panel"/);
-    expect(toolbarSource).toMatch(/aria-controls="canvas-hud-controls"/);
+    expect(toolbarSource).not.toMatch(/aria-controls="canvas-hud-controls"/);
     expect(toolbarSource).toMatch(/aria-controls="canvas-right-node-tree-panel"/);
   });
 });

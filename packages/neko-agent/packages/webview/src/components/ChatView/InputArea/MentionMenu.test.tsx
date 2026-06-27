@@ -11,8 +11,10 @@ const translations: Record<string, string> = {
   'chat.input.mentionSections.asset': 'Assets',
   'chat.input.mentionSections.entity': 'Entities',
   'chat.input.mentionTags.media.image': 'Image',
+  'chat.input.mentionTags.media.document': 'Document',
   'chat.input.mentionTags.source.workspace': 'Workspace',
   'chat.input.mentionTags.source.assetLibrary': 'Assets',
+  'chat.input.mentionTags.source.mediaLibrary': 'Media',
   'chat.input.mentionTags.entity.character': 'Character',
 };
 
@@ -171,7 +173,7 @@ describe('MentionMenu icon projection', () => {
     const panel = container.firstElementChild as HTMLElement;
 
     expect(screen.getByText('Files')).toBeTruthy();
-    expect(screen.getByText('Assets')).toBeTruthy();
+    expect(screen.getAllByText('Assets').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('Entities')).toBeTruthy();
     expect(screen.getByText('neko/assets/library.json')).toBeTruthy();
     expect(screen.getByText('assets/hero.png')).toBeTruthy();
@@ -190,6 +192,38 @@ describe('MentionMenu icon projection', () => {
     const filePath = screen.getByText('neko/assets/library.json');
     expect(fileName.parentElement).toBe(filePath.parentElement);
     expect(fileName.parentElement?.className).toContain('agent-composer-mention-main');
+  });
+
+  it('renders source and file type as separate tags for media library results', () => {
+    render(
+      <MentionMenu
+        isOpen
+        filter=""
+        items={[
+          mention({
+            id: 'media',
+            kind: 'media',
+            label: 'book.epub',
+            filePath: '${EPUBS}/Blame/book.epub',
+            mediaType: 'document',
+            source: 'media-library',
+            navigationData: {
+              partition: 'media-library',
+              filePath: '${EPUBS}/Blame/book.epub',
+              variable: 'EPUBS',
+            },
+          }),
+        ]}
+        selectedIndex={0}
+        onSelectFile={vi.fn()}
+        onSelectContext={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Media')).toBeTruthy();
+    expect(screen.getByText('Document')).toBeTruthy();
+    expect(screen.getByText('${EPUBS}/Blame/book.epub')).toBeTruthy();
   });
 
   it('selects path-backed asset mentions as file references', () => {

@@ -1,21 +1,11 @@
-/**
- * ContextMenu - Canvas right-click context menu
- *
- * Re-exports the shared macOS glass ContextMenu.
- */
-
-export {
-  PositionedContextMenu as ContextMenu,
-  type MenuItem,
-  type MenuAction,
-  type MenuSeparator,
-} from '@neko/ui/primitives';
-export type {
-  PositionedContextMenuProps,
-  PositionedContextMenuProps as ContextMenuProps,
-} from '@neko/ui/primitives';
 import type { ReactElement } from 'react';
-import type { MenuItem } from '@neko/ui/primitives';
+import {
+  PositionedContextMenu,
+  type MenuAction,
+  type MenuItem,
+  type MenuSeparator,
+  type PositionedContextMenuProps,
+} from '@neko/ui/primitives';
 import {
   CameraIcon,
   CopyIcon,
@@ -35,8 +25,21 @@ import {
 import { t } from '../../i18n';
 
 export type MenuEntry = MenuItem;
+export type ContextMenuProps = PositionedContextMenuProps;
+export type { MenuAction, MenuItem, MenuSeparator, PositionedContextMenuProps };
 
 const MENU_ICON_SIZE = 13;
+const CANVAS_CONTEXT_MENU_CLASS_NAME = 'canvas-context-menu';
+
+export function ContextMenu({
+  className,
+  ...props
+}: PositionedContextMenuProps): ReactElement {
+  const menuClassName = className
+    ? `${CANVAS_CONTEXT_MENU_CLASS_NAME} ${className}`
+    : CANVAS_CONTEXT_MENU_CLASS_NAME;
+  return <PositionedContextMenu {...props} className={menuClassName} />;
+}
 
 function menuIcon(icon: ReactElement): ReactElement {
   return icon;

@@ -934,11 +934,8 @@ function collectReadImageCandidates(
       index,
       info,
       path: readString(image, 'path') ?? readString(documentImage, 'path'),
-      renderUri:
-        readRenderableUri(image) ??
-        readRenderableUri(documentImage) ??
-        readString(documentImage, 'webviewUri'),
-      allowLocalPath: true,
+      renderUri: readRenderableUri(image) ?? readRenderableUri(documentImage),
+      allowLocalPath: false,
       label: readString(image, 'label') ?? formatDocumentImageCandidateLabel(documentImage, index),
     });
     return candidate ? [candidate] : [];
@@ -957,7 +954,7 @@ function projectDocumentImageCandidate(input: {
   const renderUri =
     input.renderUri && isRenderableUri(input.renderUri) ? input.renderUri : undefined;
   const resourceRef = parseStableDocumentArchiveResourceRef(input.info?.['resourceRef']);
-  if (!resourceRef && (!input.allowLocalPath || (!input.path && !renderUri))) return null;
+  if (!resourceRef && !renderUri) return null;
   const pageNumber = readDocumentImagePageNumber(input.info) ?? readPageNumberFromText(input.label);
   const alias = normalizeStoryboardAlias(readString(input.info, 'alias'));
   const sourceDocumentId =
@@ -967,9 +964,6 @@ function projectDocumentImageCandidate(input: {
     assetIndex: input.index,
     type: 'image',
     ...(renderUri && !resourceRef ? { src: renderUri, renderUri } : {}),
-    ...(!resourceRef && readPortableSourcePath(input.path)
-      ? { localPath: readPortableSourcePath(input.path) }
-      : {}),
     ...(resourceRef ? { resourceRef } : {}),
     ...(mimeType ? { mimeType } : {}),
     ...(input.label ? { label: input.label } : {}),
@@ -1089,9 +1083,6 @@ function projectAttachmentCandidate(
     ...(renderUri ? { renderUri } : {}),
     ...(readString(assetRef, 'assetId') ? { assetId: readString(assetRef, 'assetId') } : {}),
     ...(stableUri ? { stableUri } : {}),
-    ...(readPortableSourcePath(attachment.path)
-      ? { localPath: readPortableSourcePath(attachment.path) }
-      : {}),
     ...(mimeType ? { mimeType } : {}),
     label: `Attachment ${index + 1}`,
   };
@@ -1120,7 +1111,6 @@ function readRenderableUri(record: Record<string, unknown> | undefined): string 
   if (!record) return undefined;
   for (const key of [
     'renderUri',
-    'webviewUri',
     'previewUri',
     'preview',
     'thumbnailUrl',
@@ -1213,10 +1203,12 @@ function readDocumentImagePageNumber(
 function readPageNumberFromText(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const patterns = [
+    /\[\s*(?:image|img|图|图片)\s*#?\s*(\d{1,4})\s*\]/i,
     /\b(?:page|image|panel)[_-](\d{1,4})\b/i,
-    /\b(?:image|panel)\s*[:#-]?\s*(\d{1,4})\b/i,
+    /\b(?:image|img|panel)\s*[:#-]?\s*(\d{1,4})\b/i,
     /\bpage\s*[:#-]?\s*(\d{1,4})\b/i,
     /\bp\s*[:#-]?\s*(\d{1,4})\b/i,
+    /(?:图|图片)\s*[:：#-]?\s*(\d{1,4})/,
     /第\s*(\d{1,4})\s*页/,
     /页\s*[:#-]?\s*(\d{1,4})/,
   ];

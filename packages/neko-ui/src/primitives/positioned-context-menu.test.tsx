@@ -57,6 +57,49 @@ describe('@neko/ui positioned context menu', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('allows caller menu tokens before VS Code, glass, and toolbar tokens', () => {
+    act(() => {
+      root.render(
+        <PositionedContextMenu
+          x={12}
+          y={24}
+          items={[
+            { label: 'Rename', shortcut: 'Enter', onClick: vi.fn() },
+            { separator: true },
+          ]}
+          onClose={vi.fn()}
+        />,
+      );
+    });
+
+    const menu = document.body.querySelector<HTMLElement>('.neko-menu');
+    const item = document.body.querySelector<HTMLButtonElement>('.neko-menu-item');
+    const shortcut = document.body.querySelector<HTMLElement>('.neko-menu-item-shortcut');
+    const separator = document.body.querySelector<HTMLElement>('.neko-menu-sep');
+
+    expect(menu?.style.background).toBe(
+      'var(--neko-menu-background, var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--glass-bg, var(--neko-glass-bg, rgba(32, 32, 36, 0.88))))))',
+    );
+    expect(menu?.style.color).toBe(
+      'var(--neko-menu-foreground, var(--vscode-menu-foreground, var(--vscode-foreground, var(--toolbar-fg, var(--neko-fg, inherit)))))',
+    );
+
+    act(() => {
+      item?.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    });
+
+    expect(item?.style.background).toBe(
+      'var(--neko-menu-selectionBackground, var(--vscode-menu-selectionBackground, var(--button-bg, var(--neko-accent, #0a84ff))))',
+    );
+    expect(item?.style.color).toBe(
+      'var(--neko-menu-selectionForeground, var(--vscode-menu-selectionForeground, var(--button-fg, #ffffff)))',
+    );
+    expect(shortcut?.style.color).toBe('currentcolor');
+    expect(separator?.style.background).toBe(
+      'var(--neko-menu-separatorBackground, var(--vscode-menu-separatorBackground, var(--panel-divider, var(--neko-divider, var(--neko-border, rgba(255, 255, 255, 0.12))))))',
+    );
+  });
+
   it('closes on outside pointer down and Escape', () => {
     const onClose = vi.fn();
 

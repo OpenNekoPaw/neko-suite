@@ -37,8 +37,6 @@ export const en = {
   'toolbar.narrativePreview': 'Playback Workspace',
   'toolbar.export': 'Export',
   'toolbar.package': 'Package',
-  'toolbar.showHudControls': 'Show canvas HUD',
-  'toolbar.hideHudControls': 'Hide canvas HUD',
   'toolbar.layers': 'Layers',
   'toolbar.toggleProperties': 'Toggle Properties',
   'toolbar.undo': 'Undo',

@@ -282,7 +282,7 @@ describe('canvasEditorProvider message contracts', () => {
     it('registers provider adapters instead of guessing package cache roots', () => {
       expect(providerSource).toContain('new ThumbnailResourceCacheProvider');
       expect(providerSource).toContain('new PreviewVariantResourceCacheProvider');
-      expect(providerSource).toContain('new GeneratedAssetResourceCacheProvider');
+      expect(providerSource).toContain('new GeneratedAssetDerivativeResourceCacheProvider');
       expect(providerSource).toContain('new DocumentResourceCacheProvider');
       expect(providerSource).not.toContain('new LegacyResourceCacheProvider');
     });
@@ -485,7 +485,7 @@ describe('canvasEditorProvider message contracts', () => {
     });
 
     it('resolves generated asset resource refs with workspace path variables', () => {
-      expect(providerSource).toContain('new GeneratedAssetResourceCacheProvider({');
+      expect(providerSource).toContain('new GeneratedAssetDerivativeResourceCacheProvider({');
       expect(providerSource).toContain('pathResolver: createWorkspacePathResolver(workspaceRoot)');
       expect(providerSource).toContain("['WORKSPACE', workspaceRoot]");
       expect(providerSource).toContain("['PROJECT', workspaceRoot]");

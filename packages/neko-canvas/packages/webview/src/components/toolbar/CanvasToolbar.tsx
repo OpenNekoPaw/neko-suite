@@ -6,7 +6,7 @@
  * - Right node tree/library panel toggle
  * - Undo / Redo
  * - Canvas workspace surfaces
- * - Canvas HUD / settings
+ * - Canvas settings
  *
  * Uses shared ToolbarButton for consistent active state and hover styling.
  */
@@ -53,9 +53,6 @@ export interface CanvasToolbarProps {
   onOpenExport?: () => void;
   /** Opens the Extension Host-owned no-engine project package flow */
   onOpenPackage?: () => void;
-  /** Canvas HUD visibility (minimap, zoom controls) */
-  isHudVisible?: boolean;
-  onToggleHud?: () => void;
   /** Canvas settings panel visibility */
   isCanvasSettingsVisible?: boolean;
   onToggleCanvasSettings?: () => void;
@@ -79,8 +76,6 @@ export function CanvasToolbar({
   onToggleWorkspaceSurface,
   onOpenExport,
   onOpenPackage,
-  isHudVisible = true,
-  onToggleHud,
   isCanvasSettingsVisible = false,
   onToggleCanvasSettings,
   isPanMode = false,
@@ -91,11 +86,9 @@ export function CanvasToolbar({
   const nodeLibraryTitle = isNodeLibraryVisible
     ? t('toolbar.hideRightNodeTree')
     : t('toolbar.showRightNodeTree');
-  const hudTitle = isHudVisible ? t('toolbar.hideHudControls') : t('toolbar.showHudControls');
   const settingsTitle = isCanvasSettingsVisible
     ? t('settings.hideCanvasSettings')
     : t('toolbar.canvasSettings');
-  const hasBottomControls = onToggleHud !== undefined || onToggleCanvasSettings !== undefined;
   const canControlPlaybackPanes =
     workspaceSurfaceState !== undefined && onToggleWorkspaceSurface !== undefined;
 
@@ -242,25 +235,11 @@ export function CanvasToolbar({
         />
       )}
 
-      {hasBottomControls && (
+      {onToggleCanvasSettings && (
         <>
           <ToolbarSpacer />
           <ToolbarSeparator />
         </>
-      )}
-
-      {onToggleHud && (
-        <ToolbarButton
-          aria-controls="canvas-hud-controls"
-          aria-expanded={isHudVisible}
-          data-creative-left-rail-action="toggle-hud-controls"
-          data-creative-left-rail-kind="visibility-toggle"
-          data-creative-left-rail-target="hud"
-          icon={<LayersIcon size={18} />}
-          title={hudTitle}
-          active={isHudVisible}
-          onClick={onToggleHud}
-        />
       )}
 
       {onToggleCanvasSettings && (

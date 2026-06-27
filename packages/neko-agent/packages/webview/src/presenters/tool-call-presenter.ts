@@ -193,10 +193,7 @@ function extractReadDocumentImageThumbnails(data: unknown): DocumentImageThumbna
       readString(image, 'renderUri') ??
       readString(documentImage, 'renderUri') ??
       readString(image, 'src') ??
-      readString(documentImage, 'src') ??
-      (resourceRef
-        ? undefined
-        : (readString(image, 'webviewUri') ?? readString(documentImage, 'webviewUri')));
+      readString(documentImage, 'src');
     const displayPath = resourceRef?.entryPath ?? readString(image, 'entryPath');
     if (!displayPath || (!src && !resourceRef)) return [];
 
@@ -275,10 +272,7 @@ function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjec
         readString(image, 'renderUri') ??
         readString(documentImage, 'renderUri') ??
         readString(image, 'src') ??
-        readString(documentImage, 'src') ??
-        (resourceRef
-          ? undefined
-          : (readString(image, 'webviewUri') ?? readString(documentImage, 'webviewUri')));
+        readString(documentImage, 'src');
       const displayPath = resourceRef?.entryPath ?? readString(image, 'entryPath') ?? path;
       if (!displayPath || (!src && !resourceRef)) return [];
 
@@ -619,17 +613,10 @@ function stripRuntimeOnlyResultFields(value: unknown, seen: WeakSet<object>): un
 
 function isRuntimeOnlyResultField(key: string): boolean {
   return (
-    key === 'cachePath' ||
-    key === 'runtimePath' ||
-    key === 'cacheResourceRef' ||
     key === 'localPath' ||
     key === 'localPaths' ||
     key === 'renderUri' ||
-    key === 'renderUris' ||
-    key === 'webviewUri' ||
-    key === 'webviewUris' ||
-    key === 'imagePaths' ||
-    key === 'imagePathWebviewUris'
+    key === 'renderUris'
   );
 }
 

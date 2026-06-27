@@ -37,8 +37,6 @@ export const zhCN = {
   'toolbar.narrativePreview': '播放工作区',
   'toolbar.export': '导出',
   'toolbar.package': '打包',
-  'toolbar.showHudControls': '显示画布 HUD',
-  'toolbar.hideHudControls': '隐藏画布 HUD',
   'toolbar.layers': '图层',
   'toolbar.toggleProperties': '切换属性面板',
   'toolbar.undo': '撤销',

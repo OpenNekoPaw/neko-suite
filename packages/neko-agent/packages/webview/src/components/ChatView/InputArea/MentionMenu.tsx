@@ -106,6 +106,7 @@ interface MentionLocalizedLabel {
 }
 
 interface MentionBadgeProjection {
+  key: string;
   label: MentionLocalizedLabel;
   style: CSSProperties;
 }
@@ -181,7 +182,7 @@ export function MentionMenu({
                   const isSelected = flatIdx === selectedIndex;
                   const glyph = getMentionGlyph(item, isSelected);
                   const inlineMeta = getMentionInlineMeta(item);
-                  const badge = getMentionBadge(item, isSelected);
+                  const badges = getMentionBadges(item, isSelected);
 
                   return (
                     <button
@@ -217,9 +218,17 @@ export function MentionMenu({
                           </span>
                         )}
                       </span>
-                      {badge && (
-                        <span className="agent-composer-popover-badge" style={badge.style}>
-                          {resolveMentionLabel(badge.label, t)}
+                      {badges.length > 0 && (
+                        <span className="agent-composer-popover-badges">
+                          {badges.map((badge) => (
+                            <span
+                              key={badge.key}
+                              className="agent-composer-popover-badge"
+                              style={badge.style}
+                            >
+                              {resolveMentionLabel(badge.label, t)}
+                            </span>
+                          ))}
                         </span>
                       )}
                     </button>
@@ -338,24 +347,51 @@ function getMentionRowTitle(item: MentionItem, inlineMeta: string | undefined): 
   return item.label;
 }
 
-function getMentionBadge(
-  item: MentionItem,
-  isSelected: boolean,
-): MentionBadgeProjection | undefined {
-  const label = getMentionBadgeLabel(item);
-  if (!label) return undefined;
-  return {
-    label,
-    style: getToneStyle(getMentionBadgeToneKey(item), isSelected, 'badge'),
-  };
+function getMentionBadges(item: MentionItem, isSelected: boolean): MentionBadgeProjection[] {
+  return getMentionBadgeSpecs(item).map((spec) => ({
+    ...spec,
+    style: getToneStyle(spec.toneKey, isSelected, 'badge'),
+  }));
 }
 
-function getMentionBadgeLabel(item: MentionItem): MentionLocalizedLabel | undefined {
-  if (item.mediaType) return MEDIA_TYPE_TAG_LABELS[item.mediaType];
-  if (item.source) return SOURCE_TAG_LABELS[item.source];
-  if (item.entityType) return getMentionEntityTypeLabel(item.entityType);
-  if (item.kind !== 'file') return KIND_TAG_LABELS[item.kind];
-  return undefined;
+function getMentionBadgeSpecs(
+  item: MentionItem,
+): Array<{ key: string; label: MentionLocalizedLabel; toneKey: string }> {
+  const specs: Array<{ key: string; label: MentionLocalizedLabel; toneKey: string }> = [];
+
+  if (item.source) {
+    specs.push({
+      key: `source:${item.source}`,
+      label: SOURCE_TAG_LABELS[item.source],
+      toneKey: item.source,
+    });
+  }
+
+  if (item.mediaType) {
+    specs.push({
+      key: `media:${item.mediaType}`,
+      label: MEDIA_TYPE_TAG_LABELS[item.mediaType],
+      toneKey: item.mediaType,
+    });
+  }
+
+  if (item.entityType && !item.mediaType) {
+    specs.push({
+      key: `entity:${item.entityType}`,
+      label: getMentionEntityTypeLabel(item.entityType),
+      toneKey: item.entityType,
+    });
+  }
+
+  if (specs.length === 0 && item.kind !== 'file') {
+    specs.push({
+      key: `kind:${item.kind}`,
+      label: KIND_TAG_LABELS[item.kind],
+      toneKey: item.kind,
+    });
+  }
+
+  return specs;
 }
 
 function getMentionEntityTypeLabel(entityType: string): MentionLocalizedLabel {
@@ -413,10 +449,6 @@ function getMentionToneKey(item: MentionItem): string {
     }
   }
   return item.mediaType ?? item.source ?? item.kind;
-}
-
-function getMentionBadgeToneKey(item: MentionItem): string {
-  return item.mediaType ?? item.source ?? item.entityType ?? item.kind;
 }
 
 function getToneStyle(key: string, isSelected: boolean, surface: 'badge' | 'glyph'): CSSProperties {

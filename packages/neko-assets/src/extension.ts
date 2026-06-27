@@ -477,6 +477,8 @@ export async function activate(
     },
     getMediaLibraryRoots: async () =>
       mediaSettingsService ? mediaSettingsService.getWebviewResourceRoots() : [],
+    getPathVariables: async () =>
+      mediaSettingsService ? [...(await mediaSettingsService.getPathVariableMap()).entries()] : [],
     resolveEntityUri: async (uri) => {
       if (!library) return undefined;
       const parsed = parseEntityUri(uri);

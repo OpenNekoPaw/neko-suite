@@ -105,8 +105,6 @@ describe('CanvasToolbar', () => {
           onRedo={() => undefined}
           isNodeLibraryVisible={true}
           onToggleNodeLibrary={onToggleNodeLibrary}
-          isHudVisible={true}
-          onToggleHud={() => undefined}
         />,
       );
     });
@@ -133,8 +131,6 @@ describe('CanvasToolbar', () => {
           onRedo={() => undefined}
           isNodeLibraryVisible={false}
           onToggleNodeLibrary={onToggleNodeLibrary}
-          isHudVisible={true}
-          onToggleHud={() => undefined}
         />,
       );
     });
@@ -267,37 +263,7 @@ describe('CanvasToolbar', () => {
     expect(onToggleWorkspaceSurface.mock.calls).toEqual([['stage'], ['route']]);
   });
 
-  it('controls canvas HUD visibility from the bottom visibility cluster', () => {
-    const onToggleHud = vi.fn();
-
-    act(() => {
-      root.render(
-        <CanvasToolbar
-          onUndo={() => undefined}
-          onRedo={() => undefined}
-          isHudVisible={false}
-          onToggleHud={onToggleHud}
-        />,
-      );
-    });
-
-    const toggleButton = host.querySelector<HTMLButtonElement>(
-      '[data-creative-left-rail-action="toggle-hud-controls"]',
-    );
-    expect(toggleButton?.getAttribute('aria-label')).toBe('Show canvas HUD');
-    expect(toggleButton?.getAttribute('aria-controls')).toBe('canvas-hud-controls');
-    expect(toggleButton?.getAttribute('aria-expanded')).toBe('false');
-    expect(toggleButton?.getAttribute('aria-pressed')).toBe('false');
-    expect(toggleButton?.getAttribute('data-creative-left-rail-kind')).toBe('visibility-toggle');
-    expect(toggleButton?.getAttribute('data-creative-left-rail-target')).toBe('hud');
-
-    act(() => {
-      toggleButton?.click();
-    });
-    expect(onToggleHud).toHaveBeenCalledTimes(1);
-  });
-
-  it('places frequent canvas actions in functional groups and keeps HUD/settings at the bottom', () => {
+  it('places frequent canvas actions in functional groups and keeps settings at the bottom', () => {
     act(() => {
       root.render(
         <CanvasToolbar
@@ -311,8 +277,6 @@ describe('CanvasToolbar', () => {
           onToggleWorkspaceSurface={() => undefined}
           onOpenExport={() => undefined}
           onOpenPackage={() => undefined}
-          isHudVisible={true}
-          onToggleHud={() => undefined}
           isCanvasSettingsVisible={false}
           onToggleCanvasSettings={() => undefined}
           isPanMode={true}
@@ -336,11 +300,11 @@ describe('CanvasToolbar', () => {
       'toggle-playback-route-pane',
       'open-export',
       'open-package',
-      'toggle-hud-controls',
       'toggle-canvas-settings',
     ]);
 
-    expect(actions.slice(-2)).toEqual(['toggle-hud-controls', 'toggle-canvas-settings']);
+    expect(actions.slice(-1)).toEqual(['toggle-canvas-settings']);
+    expect(host.querySelector('[data-creative-left-rail-action="toggle-hud-controls"]')).toBeNull();
   });
 
   it('controls the canvas settings panel from the bottom visibility cluster', () => {

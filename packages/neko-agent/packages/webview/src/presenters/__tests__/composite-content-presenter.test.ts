@@ -125,7 +125,7 @@ describe('composite content presenter', () => {
               images: [
                 {
                   path: '/cache/page-1.jpg',
-                  webviewUri: 'webview://page-1.jpg',
+                  renderUri: 'webview://page-1.jpg',
                   label: 'Page 1',
                   mimeType: 'image/jpeg',
                 },
@@ -190,6 +190,92 @@ describe('composite content presenter', () => {
     const shot =
       payload?.kind === 'canvasStoryboard' ? payload.storyboard.scenes[0]?.shotPlans[0] : undefined;
     expect(shot).not.toHaveProperty('referenceImagePath');
+  });
+
+  it('resolves model image-order labels like Image #2 into source media refs', () => {
+    const projection = projectCompositeBlockRichContent({
+      composite: {
+        template: 'storyboard-table',
+        title: 'Ordered Images',
+        storyboardTable: {
+          schemaVersion: 1,
+          kind: 'storyboard-table',
+          title: 'Ordered Images',
+          scenes: [
+            {
+              sceneId: 'scene-1',
+              sceneTitle: 'Opening',
+              shots: [
+                {
+                  shotNumber: 1,
+                  duration: 2,
+                  visualDescription: 'Use the second provided image as reference. [Image #2]',
+                  characterAction: 'Static reference frame.',
+                  imageStrategy: 'use-as-reference',
+                },
+              ],
+            },
+          ],
+        },
+        sections: [
+          {
+            heading: 'Shot 1',
+            content: 'Reference: [Image #2]',
+            layout: 'table-row',
+          },
+        ],
+      },
+      siblingBlocks: [
+        toolBlock({
+          id: 'read-image-current-result',
+          name: 'ReadImage',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              images: [
+                {
+                  renderUri: 'webview://image-1.jpg',
+                  label: 'Image #1',
+                  mimeType: 'image/jpeg',
+                },
+                {
+                  renderUri: 'webview://image-2.jpg',
+                  label: 'Image #2',
+                  mimeType: 'image/jpeg',
+                },
+              ],
+            },
+          },
+        }),
+      ],
+    });
+
+    expect(projection.kind).toBe('storyboard-table');
+    if (projection.kind !== 'storyboard-table') {
+      throw new Error('expected storyboard table projection');
+    }
+    expect(projection.data.storyboardTable?.scenes[0]?.shots[0]?.sourceMediaRefs).toEqual([
+      {
+        refId: 'tool-result:read-image-current-result:1',
+        role: 'source',
+        locator: {
+          type: 'tool-result',
+          toolCallId: 'read-image-current-result',
+          assetIndex: 1,
+        },
+        label: 'Image #2',
+        mimeType: 'image/jpeg',
+      },
+    ]);
+    expect(projection.data.sections[0]?.media).toEqual([
+      expect.objectContaining({
+        toolCallId: 'read-image-current-result',
+        assetIndex: 1,
+        src: 'webview://image-2.jpg',
+      }),
+    ]);
+    expect(projection.data.diagnostics).toEqual([]);
   });
 
   it('projects composite artifact storyboard, entity contribution, and source images together', () => {
@@ -374,7 +460,7 @@ describe('composite content presenter', () => {
               images: [
                 {
                   path: '/cache/page_1.jpg',
-                  webviewUri: 'webview://page_1.jpg',
+                  renderUri: 'webview://page_1.jpg',
                   label: 'page_1',
                   mimeType: 'image/jpeg',
                   resourceRef: documentResourceRef,
@@ -552,7 +638,7 @@ describe('composite content presenter', () => {
               images: [
                 {
                   path: '/cache/page-1.jpg',
-                  webviewUri: 'webview://page-1.jpg',
+                  renderUri: 'webview://page-1.jpg',
                   label: 'Page 1',
                   mimeType: 'image/jpeg',
                 },
@@ -1399,13 +1485,13 @@ describe('composite content presenter', () => {
               images: [
                 {
                   path: '/cache/page-1.jpg',
-                  webviewUri: 'webview://page-1.jpg',
+                  renderUri: 'webview://page-1.jpg',
                   label: 'Page 1',
                   mimeType: 'image/jpeg',
                 },
                 {
                   path: '/cache/page-2.jpg',
-                  webviewUri: 'webview://page-2.jpg',
+                  renderUri: 'webview://page-2.jpg',
                   label: 'Page 2',
                   mimeType: 'image/jpeg',
                 },
@@ -1501,7 +1587,7 @@ describe('composite content presenter', () => {
               images: [
                 {
                   path: '/cache/page-1.jpg',
-                  webviewUri: 'webview://page-1.jpg',
+                  renderUri: 'webview://page-1.jpg',
                   label: 'Page 1',
                   mimeType: 'image/jpeg',
                 },
@@ -1656,7 +1742,7 @@ describe('composite content presenter', () => {
               images: [
                 {
                   path: '/images/reference.png',
-                  webviewUri: 'webview://reference.png',
+                  renderUri: 'webview://reference.png',
                   label: 'reference',
                   mimeType: 'image/png',
                   byteSize: 100,
@@ -1941,7 +2027,7 @@ describe('composite content presenter', () => {
 function makeImageToolCall(
   id = 'call-1',
   assetId = 'asset-1',
-  webviewUri = 'webview://asset-1.png',
+  renderUri = 'webview://asset-1.png',
 ): ToolCall {
   return {
     id,
@@ -1955,7 +2041,7 @@ function makeImageToolCall(
             id: assetId,
             type: 'generated-image',
             path: '/repo/.neko/generated/image/out.png',
-            webviewUri,
+            renderUri,
             mimeType: 'image/png',
             generatedAt: '2026-01-01T00:00:00.000Z',
             width: 1024,
@@ -1971,7 +2057,7 @@ function makeImageToolCall(
             id: 'asset-2',
             type: 'generated-image',
             path: '/repo/.neko/generated/image/out-2.png',
-            webviewUri: 'webview://asset-2.png',
+            renderUri: 'webview://asset-2.png',
             mimeType: 'image/png',
             generatedAt: '2026-01-01T00:00:00.000Z',
             width: 1024,

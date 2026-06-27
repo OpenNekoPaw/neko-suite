@@ -1961,6 +1961,16 @@ select:focus {
    Context / dropdown menu — macOS popover
    ============================================================================= */
 
+.canvas-context-menu {
+  --neko-menu-background: color-mix(in srgb, var(--toolbar-bg) 96%, var(--canvas-bg) 4%);
+  --neko-menu-border: var(--toolbar-border);
+  --neko-menu-foreground: var(--toolbar-fg);
+  --neko-menu-selectionBackground: var(--control-hover);
+  --neko-menu-selectionForeground: var(--toolbar-fg);
+  --neko-menu-separatorBackground: var(--toolbar-border);
+  --glass-shadow: var(--neko-shadow-lg);
+}
+
 .mac-menu {
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);

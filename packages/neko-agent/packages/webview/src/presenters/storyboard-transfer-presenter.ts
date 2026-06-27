@@ -514,8 +514,7 @@ function doesStoryboardMediaMatchRef(
     media.assetId === mediaRef.refId ||
     media.stableUri === mediaRef.refId ||
     (locator.type === 'asset' &&
-      (media.assetId === locator.assetId || media.stableUri === locator.uri)) ||
-    (locator.type === 'workspace-path' && media.localPath === locator.path)
+      (media.assetId === locator.assetId || media.stableUri === locator.uri))
   );
 }
 
@@ -527,12 +526,11 @@ function getCanvasImageMediaPath(media: ResolvedCompositeMedia | undefined): str
   if (media?.src && isCanvasPortableImageUrl(media.src)) {
     return media.src;
   }
-  return readPortableTransferPath(media?.localPath);
+  return undefined;
 }
 
 function getLocalImageMediaPath(media: ResolvedCompositeMedia | undefined): string | undefined {
   return (
-    readPortableTransferPath(media?.localPath) ??
     (media?.stableUri && isPortableCanvasReferenceImagePath(media.stableUri)
       ? media.stableUri
       : undefined) ??
@@ -1222,7 +1220,10 @@ function projectCompositeMediaAssetRef(
   mediaIndex: number,
 ): PluginTransferAssetRef | null {
   if (media.type === 'unknown') return null;
-  const portablePath = readPortableTransferPath(media.localPath);
+  const portablePath =
+    media.stableUri && isCanvasReferenceImagePathUsable(media.stableUri)
+      ? media.stableUri
+      : undefined;
   if (!portablePath && !media.resourceRef) return null;
   return {
     ...(media.resourceRef ? {} : { path: portablePath }),

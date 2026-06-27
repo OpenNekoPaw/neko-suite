@@ -13,7 +13,7 @@ import {
   createHostContentAccessRuntime,
   createFocusedWebviewRegistry,
   DocumentResourceCacheProvider,
-  GeneratedAssetResourceCacheProvider,
+  GeneratedAssetDerivativeResourceCacheProvider,
   PreviewVariantResourceCacheProvider,
   ThumbnailResourceCacheProvider,
   createVSCodeWorkspaceMediaPathContext,
@@ -829,7 +829,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     workspaceRoot: string,
   ): readonly ResourceCacheProvider[] {
     return [
-      new GeneratedAssetResourceCacheProvider({
+      new GeneratedAssetDerivativeResourceCacheProvider({
         pathResolver: createWorkspacePathResolver(workspaceRoot),
         projectRoot: workspaceRoot,
       }),

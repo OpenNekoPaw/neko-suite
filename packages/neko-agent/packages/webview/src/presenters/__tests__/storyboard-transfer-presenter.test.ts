@@ -159,7 +159,7 @@ describe('storyboard transfer presenter', () => {
               assetIndex: 0,
               type: 'image',
               src: 'webview://asset.png',
-              localPath: '${WORKSPACE}/assets/asset.png',
+              stableUri: '${WORKSPACE}/assets/asset.png',
               caption: 'Wide',
             },
           ],
@@ -220,7 +220,39 @@ describe('storyboard transfer presenter', () => {
     });
   });
 
-  it('prefers semantic storyboard table projection over legacy section inference', () => {
+  it('does not transfer composite media localPath as a content identity', () => {
+    const data: StoryboardTableRichData = {
+      template: 'storyboard-table',
+      sections: [
+        {
+          id: 'section-0',
+          index: 0,
+          content: 'Local path only.',
+          media: [
+            {
+              id: 'media-1',
+              toolCallId: 'call-1',
+              assetIndex: 0,
+              type: 'image',
+              src: 'webview://asset.png',
+              localPath: '${WORKSPACE}/assets/asset.png',
+            },
+          ],
+          diagnostics: [],
+        },
+      ],
+      diagnostics: [],
+    };
+
+	    const payload = projectStoryboardTableTransferPayload(data);
+	    const shotPlans =
+	      payload?.kind === 'canvasStoryboard' ? (payload.storyboard.scenes[0]?.shotPlans ?? []) : [];
+	    expect(shotPlans[0]).not.toHaveProperty('referenceImagePath');
+	    expect(projectStoryboardTableAssetBatch(data)).toBeNull();
+	    expect(projectStoryboardTableCutTimelinePayload(data)).toBeNull();
+	  });
+
+	  it('prefers semantic storyboard table projection over legacy section inference', () => {
     const data: StoryboardTableRichData = {
       template: 'storyboard-table',
       title: 'Opening',
