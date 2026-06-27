@@ -38,4 +38,4 @@ Coordinate media-to-video work through focused skills and existing tools. This i
 
 ## Tool Use
 
-Use QuerySemanticCoverage before expensive long-range analysis when stable source refs and ranges are available. Use ReadDocument, ReadImage, or ReadDocumentImage for missing/stale evidence. Use generation tools only after approval. Use Canvas/Cut tools only after the structured payload validates and the target capability exists.
+Use QuerySemanticCoverage before expensive long-range analysis when stable source refs and ranges are available. Use ReadDocument, ReadImage, for missing/stale evidence. Use generation tools only after approval. Use Canvas/Cut tools only after the structured payload validates and the target capability exists.

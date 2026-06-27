@@ -682,13 +682,9 @@ describe('AgentStreamProcessor', () => {
           type: 'tool_call',
           toolCall: {
             id: 'tc-read-doc-image',
-            name: 'ReadDocumentImage',
+            name: 'ReadImage',
             arguments: {
-              source: {
-                kind: 'document',
-                source: { filePath: '/books/a.epub', format: 'epub' },
-              },
-              locators: [archiveRef],
+              images: [{ label: 'Page 1', resourceRef: archiveRef }],
             },
           },
         },

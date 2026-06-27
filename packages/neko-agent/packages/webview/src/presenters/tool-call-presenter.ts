@@ -162,79 +162,6 @@ function extractDocumentImageThumbnails(data: unknown): DocumentImageThumbnailPr
   return thumbnails;
 }
 
-function extractReadDocumentImageThumbnails(data: unknown): DocumentImageThumbnailProjection[] {
-  const result = asRecord(data);
-  if (!result) return [];
-
-  const filePath = extractDocumentFilePath(result);
-  if (!filePath) return [];
-
-  const source = parseDocumentSourceRef(result.source);
-  const images = Array.isArray(result.images) ? result.images : [];
-
-  return images.flatMap((value, index) => {
-    const image = asRecord(value);
-    if (!image) return [];
-
-    const documentImage = asRecord(image.documentImage);
-    const metadata = asRecord(image.metadata);
-
-    const locator =
-      parseDocumentLocator(metadata?.locator) ?? parseDocumentLocator(documentImage?.locator);
-    const width = readFiniteNumber(image, 'width') ?? readFiniteNumber(documentImage, 'width');
-    const height = readFiniteNumber(image, 'height') ?? readFiniteNumber(documentImage, 'height');
-    const byteSize =
-      readFiniteNumber(image, 'byteSize') ?? readFiniteNumber(documentImage, 'byteSize');
-    const mimeType = readString(image, 'mimeType') ?? readString(documentImage, 'mimeType');
-    const resourceRef =
-      parseStableDocumentArchiveResourceRef(documentImage?.resourceRef) ??
-      parseStableDocumentArchiveResourceRef(image.resourceRef);
-    const src =
-      readString(image, 'renderUri') ??
-      readString(documentImage, 'renderUri') ??
-      readString(image, 'src') ??
-      readString(documentImage, 'src');
-    const displayPath = resourceRef?.entryPath ?? readString(image, 'entryPath');
-    if (!displayPath || (!src && !resourceRef)) return [];
-
-    const documentFilePath = resolveDocumentThumbnailFilePath(filePath, resourceRef);
-    const documentSource = resolveDocumentThumbnailSource(source, resourceRef);
-    const label = readString(image, 'label') ?? formatDocumentThumbnailLabel(locator, index);
-
-    return [
-      {
-        id: `${displayPath}:${index}`,
-        index,
-        filePath: documentFilePath,
-        ...(documentSource ? { source: documentSource } : {}),
-        path: displayPath,
-        ...(src ? { src } : {}),
-        ...(width !== undefined ? { width } : {}),
-        ...(height !== undefined ? { height } : {}),
-        ...(byteSize !== undefined ? { byteSize } : {}),
-        ...(mimeType ? { mimeType } : {}),
-        ...(locator ? { locator } : {}),
-        ...(resourceRef ? { resourceRef } : {}),
-        label,
-        referenceJson: formatDocumentImageReferenceJson({
-          filePath: documentFilePath,
-          source: documentSource,
-          path: displayPath,
-          ...(src ? { src } : {}),
-          index,
-          width,
-          height,
-          byteSize,
-          mimeType,
-          locator,
-          resourceRef,
-          ...(resourceRef ? {} : { displayPath }),
-        }),
-      },
-    ];
-  });
-}
-
 function extractReadImageThumbnails(data: unknown): DocumentImageThumbnailProjection[] {
   const result = asRecord(data);
   if (!result) return [];
@@ -325,11 +252,6 @@ function extractToolDocumentThumbnails(
   args: unknown,
   resultData: unknown,
 ): DocumentImageThumbnailProjection[] {
-  if (toolName === 'ReadDocumentImage') {
-    const resultThumbnails = resultData ? extractReadDocumentImageThumbnails(resultData) : [];
-    return resultThumbnails.length > 0 ? resultThumbnails : extractReadImageThumbnails(args);
-  }
-
   if (toolName === 'ReadImage') {
     const resultThumbnails = resultData ? extractReadImageThumbnails(resultData) : [];
     return resultThumbnails.length > 0 ? resultThumbnails : extractReadImageThumbnails(args);

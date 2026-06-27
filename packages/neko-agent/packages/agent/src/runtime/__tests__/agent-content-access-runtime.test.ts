@@ -195,29 +195,6 @@ function createRecordingAgentContentAccessRuntime(handlers: {
         ),
       };
     },
-    async resolveDocumentImages(input) {
-      const result = await this.resolve({
-        caller: input.caller ?? 'read-document-image',
-        request: {
-          ref: input.source,
-          intent: input.intent ?? 'agent-context',
-          target: 'bytes',
-          ...(input.variant ? { variant: input.variant } : {}),
-          ...(input.signal ? { signal: input.signal } : {}),
-          ...(input.metadata ? { metadata: input.metadata } : {}),
-        },
-      });
-      return {
-        status: result.status,
-        source: result.source,
-        contentAccess: result,
-        diagnostics: toAgentContentAccessDiagnostics(
-          result.diagnostics,
-          input.caller ?? 'read-document-image',
-        ),
-        images: [],
-      };
-    },
     async loadProviderAsset(input) {
       const result = await this.resolve({
         caller: input.caller ?? 'perception-asset-loader',

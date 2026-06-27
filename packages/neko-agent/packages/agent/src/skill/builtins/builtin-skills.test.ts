@@ -199,13 +199,13 @@ describe('Builtin Skills', () => {
 
     it('should avoid duplicate image resource reads for the same comic image batch', () => {
       expect(comicToStoryboardSkill.content).toContain(
-        'Choose exactly one image resource tool for the same page/batch',
+        'Use ReadImage with mode="metadata" for page images after ReadDocument returns',
       );
       expect(comicToStoryboardSkill.content).toContain(
-        'use ReadImage with mode="metadata" when ReadDocument already returned',
+        'pass matching `imageInfo[]` entries as structured `images[]`',
       );
       expect(comicToStoryboardSkill.content).toContain(
-        'Do not call ReadDocumentImage after ReadImage',
+        'Do not invent another document image access path',
       );
       expect(comicToStoryboardSkill.content).toContain(
         'analyze the returned images with the current native multimodal chat model',
@@ -215,7 +215,6 @@ describe('Builtin Skills', () => {
     it('should have required tools', () => {
       expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.READ_DOCUMENT);
       expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.READ_IMAGE);
-      expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE);
       expect(comicToStoryboardSkill.allowedTools).toContain(
         TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
       );
@@ -414,7 +413,7 @@ describe('Builtin Skills', () => {
       expect(zhComic?.content).toContain('一页或一张图可能对应多个 storyboard shot');
       expect(zhComic?.content).toContain('neko.comicImageAudit');
       expect(zhComic?.content).toContain('sourceMediaRefs');
-      expect(zhComic?.content).toContain('不要对同一张图先 ReadImage 再 ReadDocumentImage');
+      expect(zhComic?.content).toContain('不要为同一张图编造第二个文档图片工具调用');
       expect(zhComic?.content).toContain('QuerySemanticCoverage');
       expect(zhComic?.content).toContain('fresh matched ranges');
       expect(zhComic?.content).toContain('不要检查 `.neko/.cache`');

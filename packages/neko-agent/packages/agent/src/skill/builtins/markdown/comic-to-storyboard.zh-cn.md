@@ -17,8 +17,8 @@
    - 如果没有稳定 source ref 或 locator，继续正常使用 ReadDocument/ReadImage 分析，并明确说明该输入无法复用语义覆盖。
    - 不要检查 `.neko/.cache`、`.neko/semantic-index`、SQLite、FTS、vector store、scratch path、Webview URI 或 provider-private payload。语义复用只能通过 QuerySemanticCoverage 或其他 host facade。
    - 使用 ReadDocument.imageInfo 获取宽、高、mimeType、byteSize 和页面比例。不要为了探测图片元数据去运行 Python/PIL、file、sips、identify、unzip、unrar、7z 或其他外部命令。
-   - 同一页/同一批图片只能选择一个图片资源工具：ReadDocument 已返回 imageInfo/images 时，使用 ReadImage mode="metadata"，并优先把对应 `imageInfo[]` 条目作为结构化 `images[]` 传入，以保留 `resourceRef`、alias、locator 和页面标签；只有仍持有文档 locator/page index 且需要工具解析成图片时，才使用 ReadDocumentImage mode="metadata"。
-   - 不要对同一张图先 ReadImage 再 ReadDocumentImage，也不要因为 ReadDocument 已返回结构化 imageInfo 引用就再调用 ReadDocumentImage。
+   - ReadDocument 返回 imageInfo/images 后，使用 ReadImage mode="metadata" 暴露页面图片；优先把对应 `imageInfo[]` 条目作为结构化 `images[]` 传入，以保留 `resourceRef`、alias、locator 和页面标签。
+   - 不要为同一张图编造第二个文档图片工具调用。ReadDocument 提供文档图片引用，ReadImage 把这些引用暴露给原生多模态对话模型。
    - 用这一次资源调用暴露页面图片后，再由当前原生多模态对话模型分析返回的图片；在此之前不要判断角色、对白/OCR、分格数量、动作或镜头。
    - 当请求页数超过单次读取工具可暴露上限时，明确分批处理，并基于已检查证据继续产出分镜。不要重复读取同一批页面，也不要切换工具来强行凑齐完美批次。
 2. 用当前原生多模态对话模型分析版面：

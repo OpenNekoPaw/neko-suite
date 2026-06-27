@@ -461,7 +461,7 @@ describe('ReActLoopRunner hooks', () => {
 
       const results = [
         { success: true, data: {}, callId: 'c1', name: 'ReadDocument' },
-        { success: true, data: {}, callId: 'c2', name: 'ReadDocumentImage' },
+        { success: true, data: {}, callId: 'c2', name: 'ReadImage' },
         { success: true, data: {}, callId: 'c3', name: 'GenerateImage' },
       ] as unknown as ToolResultWithMeta[];
       await hooks.afterAct?.(results);

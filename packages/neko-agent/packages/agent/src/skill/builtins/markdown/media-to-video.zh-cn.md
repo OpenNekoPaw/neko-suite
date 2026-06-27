@@ -38,4 +38,4 @@
 
 ## 工具使用
 
-当存在稳定 source ref 和 range 时，在昂贵的长范围分析前先使用 QuerySemanticCoverage。missing/stale 证据再通过 ReadDocument、ReadImage 或 ReadDocumentImage 获取。只有在用户确认后再使用生成工具。只有结构化 payload 校验通过且目标能力存在时，才使用 Canvas/Cut 工具。
+当存在稳定 source ref 和 range 时，在昂贵的长范围分析前先使用 QuerySemanticCoverage。missing/stale 证据再通过 ReadDocument、ReadImage 或  获取。只有在用户确认后再使用生成工具。只有结构化 payload 校验通过且目标能力存在时，才使用 Canvas/Cut 工具。

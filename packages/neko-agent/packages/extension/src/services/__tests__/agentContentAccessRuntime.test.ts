@@ -122,7 +122,7 @@ describe('createExtensionAgentContentAccessRuntime', () => {
     });
 
     const result = await runtime.loadProviderAsset({
-      caller: 'read-document-image',
+      caller: 'read-image',
       source: ref,
       preferredTarget: 'bytes',
       variant: { role: 'document-entry', mimeType: 'image/png' },

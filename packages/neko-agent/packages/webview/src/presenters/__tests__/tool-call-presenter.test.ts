@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { projectToolCallDisplayState } from '../tool-call-presenter';
 
 describe('tool-call-presenter', () => {
-  it('projects ReadDocumentImage result images into thumbnail view models', () => {
+  it('projects ReadImage result images into thumbnail view models', () => {
     const projection = projectToolCallDisplayState({
       id: 'tool-2',
-      name: 'ReadDocumentImage',
+      name: 'ReadImage',
       arguments: {},
       result: {
         success: true,
@@ -191,10 +191,10 @@ describe('tool-call-presenter', () => {
     expect(projection.documentThumbnails[0]!.referenceJson).not.toContain('.neko/.cache');
   });
 
-  it('projects ReadDocumentImage argument images into thumbnails when failed', () => {
+  it('projects ReadImage argument images into thumbnails when failed', () => {
     const projection = projectToolCallDisplayState({
       id: 'tool-5',
-      name: 'ReadDocumentImage',
+      name: 'ReadImage',
       arguments: {
         file_path: '/books/a.epub',
         source: { filePath: '/books/a.epub', format: 'epub' },

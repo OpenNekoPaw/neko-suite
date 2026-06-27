@@ -42,7 +42,7 @@ Neko Agent 采用“产品级资源/工具沙箱优先，执行级沙箱分阶�
 
 Agent 应优先调用 typed domain tools：
 
-- 文档/图片读取：`ReadDocument`、`ReadImage`、`ReadDocumentImage`。
+- 文档/图片读取：`ReadDocument`、`ReadImage`。
 - Canvas/Timeline 修改：typed intent 或领域工具。
 - 媒体生成和转码：`neko-engine`、media provider adapter 或受管 external processor。
 - 产物交付：`ResourceRef`、artifact transfer、workspace-relative path 或 `${VAR}/path`。
@@ -366,7 +366,7 @@ Developer Mode 可以允许本地命令和更宽的 processor 调试能力，但
 
 - 普通创作 Agent 默认无法调用 `Bash` 或任意 shell command。
 - `Read`、`Grep`、`ListDirectory`、`ReadImage`、`ReadDocument`、`Write` 对未授权绝对路径返回 fail-visible diagnostic。
-- 普通 `Read`、`Grep`、`ListDirectory`、`Write` 默认隐藏 `.neko/.cache`、`.neko/logs`、`.neko/tmp` 等 managed runtime 目录；`ReadImage`、`ReadDocument`、`ReadDocumentImage` 不按路径豁免 cache，只能通过结构化 `ResourceRef`/`DocumentArchiveResourceRef` 让 Host 内部统一内容访问服务物化受管资源。
+- 普通 `Read`、`Grep`、`ListDirectory`、`Write` 默认隐藏 `.neko/.cache`、`.neko/logs`、`.neko/tmp` 等 managed runtime 目录；`ReadImage`、`ReadDocument` 不按路径豁免 cache，只能通过结构化 `ResourceRef`/`DocumentArchiveResourceRef` 让 Host 内部统一内容访问服务物化受管资源。
 - `.gitignore` 规则只能收窄 Agent 文件可见范围；测试必须覆盖常见 ignore、managed directory 和 `!` negation 不重新授权的行为。
 - processor 输出只能写入授权 output root，默认进入 `.neko/.cache/resources` 或 extension `globalStorageUri/resources`。
 - Webview 只接收 `asWebviewUri(...)` projection 或 stable `ResourceRef`，不展示系统 temp 路径。

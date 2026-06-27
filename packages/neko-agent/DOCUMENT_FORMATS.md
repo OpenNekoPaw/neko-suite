@@ -49,7 +49,7 @@ EPUB、CBZ、CBR、DOCX、PPTX、XLSX 这类文件本质上是容器文档。当
 - Agent、Skill、Webview presenter、Canvas 传递和 artifact 不能感知或保存缓存路径。`imageInfo.path`、`imagePaths`、`runtimeImagePaths`、`runtimePath`、`cacheResourceRef`、`runtimeKind` 和旧 `cachePath` 不属于公开工具合约；若旧数据里出现这些字段，转发前必须剥离。
 - `imageInfo.resourceRef` 表示原始容器来源，包含 `source`、容器内 `entryPath` 和可选 `locator`。统一缓存服务会在需要读取、预览或传递时把它转换成内部 `ResourceRef` 并按 documents 缓存规则物化。
 - documents 缓存路径由统一资源缓存服务管理，形态为 `.neko/.cache/resources/documents/doc_<stableRefHash>/<contentMd5>.<ext>`，按内容 MD5 去重，manifest 可重建。无工作区时使用 extension-private resource cache，但会标记为不可跨项目持久传递。
-- `.neko/.runtime/document-reader`、extension `globalStorageUri/runtime/document-reader` 和 `/tmp/neko_epub_*` / `/tmp/neko_cbz_*` 这类旧 document-reader scratch 目录已经废弃。正常 `ReadDocument`、`ReadDocumentImage`、Canvas/Preview 传递和 Agent 工具结果都不应创建、返回或依赖这些路径；若日志中出现，视为残留实现或迁移 bug。
+- `.neko/.runtime/document-reader`、extension `globalStorageUri/runtime/document-reader` 和 `/tmp/neko_epub_*` / `/tmp/neko_cbz_*` 这类旧 document-reader scratch 目录已经废弃。正常 `ReadDocument`、`ReadImage`、Canvas/Preview 传递和 Agent 工具结果都不应创建、返回或依赖这些路径；若日志中出现，视为残留实现或迁移 bug。
 - 工具引用 JSON 使用 `protocolVersion: 2` 时，durable body 只包含结构化引用；当前 Webview 需要展示的 `renderUri`/`src` 只存在于 Host 投影后的消息或组件状态，不能写入复制引用、Canvas 或 Storyboard 图片身份。
 - 粘贴时如果只有路径，Agent 只能把它当作普通本地文件；如果 JSON 引用里带 `resourceRef`，Agent 可以继续跳转、定位 entry、解释来源，并通过统一缓存服务重新物化缺失缓存。
 - 跳转到资产库或文档索引页应使用 `navigationData` 中的 `source/filePath/entryPath`，由 Extension Host 或对应资源库命令解析；不要尝试让 Webview 直接打开容器内虚拟文件。

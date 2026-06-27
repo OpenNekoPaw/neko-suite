@@ -6,7 +6,6 @@ import {
   type ToolGroup,
 } from '@neko/shared';
 import { createDocumentToolRuntime } from './documentToolRuntime';
-import { createReadDocumentImageTool } from './readDocumentImageTool';
 import { createReadDocumentTool } from './readDocumentTool';
 import { getCapabilityRuntimeBindings } from '../bootstrap/capabilityBootstrap';
 
@@ -27,10 +26,6 @@ class DocumentReadCapabilityProvider implements AgentCapabilityProvider {
         contentAccessRuntime,
         resolveResourceScope: resolveDocumentResourceScope,
       }),
-      createReadDocumentImageTool({
-        contentAccessRuntime,
-        resolveResourceScope: resolveDocumentResourceScope,
-      }),
     ];
   }
 
@@ -39,8 +34,8 @@ class DocumentReadCapabilityProvider implements AgentCapabilityProvider {
       {
         name: 'document-reading',
         description:
-          'Document and document-image reading tools for EPUB, PDF, DOC/DOCX, PPT/PPTX, Excel, text, Final Draft, comic archives, and image pages',
-        tools: [TOOL_NAMES_SYSTEM.READ_DOCUMENT, TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE],
+          'Document reading tools for EPUB, PDF, DOC/DOCX, PPT/PPTX, Excel, text, Final Draft, comic archives, and image pages',
+        tools: [TOOL_NAMES_SYSTEM.READ_DOCUMENT],
         alwaysActive: true,
         priority: 100,
         loadingTier: 'resident' as const,

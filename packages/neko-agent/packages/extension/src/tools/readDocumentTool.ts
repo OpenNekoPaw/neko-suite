@@ -19,8 +19,8 @@ import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 
 export const DEFAULT_READ_DOCUMENT_MAX_CHARS = 20000;
 export const MAX_READ_DOCUMENT_CHARS = 100000;
-export const DEFAULT_READ_DOCUMENT_IMAGE_LIMIT = 50;
-export const MAX_READ_DOCUMENT_IMAGE_LIMIT = 500;
+export const DEFAULT_DOCUMENT_IMAGE_INFO_LIMIT = 50;
+export const MAX_DOCUMENT_IMAGE_INFO_LIMIT = 500;
 
 const CONTENT_SOURCE_REF_PARAMETER: ToolParameterProperty = {
   type: 'object',
@@ -122,9 +122,9 @@ export function createReadDocumentTool(deps: ReadDocumentToolDeps): Tool {
         },
         max_images: {
           type: 'integer',
-          description: `Maximum document image refs to return. Default ${DEFAULT_READ_DOCUMENT_IMAGE_LIMIT}; max ${MAX_READ_DOCUMENT_IMAGE_LIMIT}.`,
+          description: `Maximum document image refs to return. Default ${DEFAULT_DOCUMENT_IMAGE_INFO_LIMIT}; max ${MAX_DOCUMENT_IMAGE_INFO_LIMIT}.`,
           minimum: 1,
-          maximum: MAX_READ_DOCUMENT_IMAGE_LIMIT,
+          maximum: MAX_DOCUMENT_IMAGE_INFO_LIMIT,
         },
       },
       required: ['source'],
@@ -158,9 +158,9 @@ async function executeReadDocument(
   );
   const maxImages = readBoundedInteger(
     args['max_images'],
-    DEFAULT_READ_DOCUMENT_IMAGE_LIMIT,
+    DEFAULT_DOCUMENT_IMAGE_INFO_LIMIT,
     1,
-    MAX_READ_DOCUMENT_IMAGE_LIMIT,
+    MAX_DOCUMENT_IMAGE_INFO_LIMIT,
   );
   const mode = readMode(args['mode']);
   const range = args['range'] === undefined ? undefined : readDocumentRange(args['range']);

@@ -36,7 +36,6 @@ export const comicToStoryboardSkill: Skill = {
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_SYSTEM.READ_DOCUMENT,
     TOOL_NAMES_SYSTEM.READ_IMAGE,
-    TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
     TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
@@ -79,7 +78,6 @@ export const comicToStoryboardSkill: Skill = {
     validationRequirements: ['CompositeArtifact', 'StoryboardTable'],
     optionalTools: [
       TOOL_NAMES_SYSTEM.READ_IMAGE,
-      TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE,
       TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
     ],
   },

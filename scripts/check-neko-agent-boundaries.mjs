@@ -1313,7 +1313,6 @@ function findLegacyCentralizedToolRegistrationViolationsFromContent(content, rel
     'LegacyCentralizedToolRegistrationMetadata',
     'createReadDocumentTool(',
     'createReadImageTool(',
-    'createReadDocumentImageTool(',
     'createSemanticCoverageTool(',
   ];
   for (const pattern of forbiddenPatterns) {

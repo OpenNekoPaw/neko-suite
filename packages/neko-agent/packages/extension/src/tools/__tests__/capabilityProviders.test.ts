@@ -22,7 +22,6 @@ const mocks = vi.hoisted(() => ({
       sizeBytes: 25,
     })),
     resolveDocumentContent: vi.fn(),
-    resolveDocumentImages: vi.fn(),
     loadProviderAsset: vi.fn(async (input: { source: unknown }) => ({
       status: 'ready' as const,
       source: input.source,
@@ -51,11 +50,11 @@ describe('extension tool capability providers', () => {
     const tools = provider.getTools({ extensionContext: {} }).map((tool) => tool.name);
 
     expect(provider.id).toBe('neko-agent-platform-document');
-    expect(tools).toEqual([TOOL_NAMES_SYSTEM.READ_DOCUMENT, TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE]);
+    expect(tools).toEqual([TOOL_NAMES_SYSTEM.READ_DOCUMENT]);
     expect(provider.getToolGroups?.()).toEqual([
       expect.objectContaining({
         name: 'document-reading',
-        tools: [TOOL_NAMES_SYSTEM.READ_DOCUMENT, TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE],
+        tools: [TOOL_NAMES_SYSTEM.READ_DOCUMENT],
         loadingTier: 'resident',
       }),
     ]);

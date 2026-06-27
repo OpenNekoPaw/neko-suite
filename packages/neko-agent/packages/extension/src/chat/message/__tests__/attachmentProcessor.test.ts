@@ -314,7 +314,6 @@ function createContentAccessRuntime(): AgentContentAccessRuntime {
     resolve: vi.fn(),
     resolveImageMetadata: vi.fn(),
     resolveDocumentContent: vi.fn(),
-    resolveDocumentImages: vi.fn(),
     loadProviderAsset: vi.fn(async () => ({
       status: 'ready' as const,
       diagnostics: [],

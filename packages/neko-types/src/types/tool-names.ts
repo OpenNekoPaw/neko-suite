@@ -237,7 +237,6 @@ export const TOOL_NAMES_SYSTEM = {
   LIST_PLUGIN_SKILLS: 'ListPluginSkills',
   READ_DOCUMENT: 'ReadDocument',
   READ_IMAGE: 'ReadImage',
-  READ_DOCUMENT_IMAGE: 'ReadDocumentImage',
   QUERY_SEMANTIC_COVERAGE: 'QuerySemanticCoverage',
   // Core file tools (registered by agent core, not extension)
   READ: 'Read',

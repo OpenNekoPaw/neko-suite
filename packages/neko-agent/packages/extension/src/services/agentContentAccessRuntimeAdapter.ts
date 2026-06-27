@@ -23,8 +23,6 @@ import {
   type AgentContentAccessRuntimeRequest,
   type AgentDocumentContentInput,
   type AgentDocumentContentResult,
-  type AgentDocumentImagesInput,
-  type AgentDocumentImagesResult,
   type AgentImageMetadataInput,
   type AgentImageMetadataResult,
   type AgentProviderAssetInput,
@@ -190,49 +188,6 @@ class ExtensionAgentContentAccessRuntime implements AgentContentAccessRuntime {
         ),
       };
     }
-  }
-
-  async resolveDocumentImages(input: AgentDocumentImagesInput): Promise<AgentDocumentImagesResult> {
-    const caller = input.caller ?? 'read-document-image';
-    const result = await this.documentRuntime.resolveDocumentImages({
-      ...input,
-      caller,
-    });
-    if (result.images.length === 0) {
-      const request = createRequest(input.source, {
-        caller,
-        intent: input.intent ?? 'cache-materialize',
-        target: 'local-path',
-        variant: input.variant,
-        signal: input.signal,
-        metadata: input.metadata,
-      });
-      return {
-        ...operationFromContentAccess(
-          createAgentContentAccessFailureResult({
-            request,
-            caller,
-            code: 'unsupported-source',
-            message: 'Document image access requires DocumentArchiveResourceRef locators.',
-            status: 'unsupported-source',
-          }),
-          caller,
-        ),
-        images: [],
-      };
-    }
-    const diagnostics = toAgentContentAccessDiagnostics(result.diagnostics, caller);
-    return {
-      status: diagnostics.some((diagnostic) => diagnostic.severity === 'error') ? 'failed' : 'ready',
-      ...(result.source ? { source: result.source } : {}),
-      diagnostics,
-      images: result.images.map((image) => ({
-        label: image.label,
-        resourceRef: image.resourceRef,
-        documentResourceRef: image.documentResourceRef,
-      })),
-      ...(result.metadata ? { metadata: result.metadata } : {}),
-    };
   }
 
   async loadProviderAsset(input: AgentProviderAssetInput): Promise<AgentProviderAssetResult> {

@@ -307,7 +307,6 @@ describe('Standalone Mode', () => {
       expect(DEFAULT_READ_ONLY_TOOLS).toContain('Read');
       expect(DEFAULT_READ_ONLY_TOOLS).toContain('ReadDocument');
       expect(DEFAULT_READ_ONLY_TOOLS).toContain('ReadImage');
-      expect(DEFAULT_READ_ONLY_TOOLS).toContain('ReadDocumentImage');
       expect(DEFAULT_READ_ONLY_TOOLS).toContain('Glob');
       expect(DEFAULT_READ_ONLY_TOOLS).toContain('Grep');
     });

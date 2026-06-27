@@ -141,7 +141,7 @@ interface ContentBlockHeaderMetadata {
   tone: ContentBlockHeaderTone;
 }
 
-const USER_FACING_TOOL_NAMES = new Set(['ReadImage', 'ReadDocumentImage']);
+const USER_FACING_TOOL_NAMES = new Set(['ReadImage']);
 
 const CONTENT_BLOCK_HEADER_METADATA: Record<ContentBlock['type'], ContentBlockHeaderMetadata> = {
   thinking: {

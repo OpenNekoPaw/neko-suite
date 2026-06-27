@@ -977,7 +977,7 @@ function collectMarkdownToolResultImageRefs(
   for (const toolCall of collectMarkdownToolCalls(options)) {
     if (
       toolCall.result?.success !== true ||
-      !['ReadImage', 'ReadDocumentImage', 'ReadDocument'].includes(toolCall.name)
+      !['ReadImage', 'ReadDocument'].includes(toolCall.name)
     ) {
       continue;
     }

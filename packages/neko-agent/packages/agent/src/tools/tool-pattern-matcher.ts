@@ -53,7 +53,7 @@ export function normalizeToolCall(toolCall: ToolCallLike): string {
     }
   }
 
-  if (name === 'ReadDocument' || name === 'ReadDocumentImage' || name === 'ReadImage') {
+  if (name === 'ReadDocument' || name === 'ReadImage') {
     const sourcePath = extractSourcePath(args?.source);
     if (sourcePath) {
       return `${name}(${sourcePath})`;

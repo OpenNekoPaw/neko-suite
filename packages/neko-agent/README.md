@@ -143,7 +143,7 @@ provider_id = "neko-gateway"
 model_id = "neko-gateway-tts"
 ```
 
-每个默认值显式绑定 `provider_id + model_id`。Webview 启动时自动应用 broad type 默认值；用户在 AgentMediaBar 中手动切换后，运行时选择优先。LLM 对话、ReadImage/ReadDocumentImage 暴露的原生多模态资源、角色扮演、Canvas 提示生成、质量检查、跨扩展 `internalChat` 和生成工具都必须拿到明确的当前模型路由；缺少 provider/model 时直接返回可见错误或降级为调用方的本地策略，不会从 direct/local 配置转到 NewAPI gateway。`ModelConfig.type` 字段（`llm` / `image` / `video` / `audio`）控制模型在选择器中的分组。`capabilities` 继续支持 `chat`、`function_calling`、`streaming`、`json_mode`、`code`、`vision`、`text_to_image`、`text_to_video`、`text_to_audio`、`text_to_music` 等现有模型元数据字段；`llm.chat`、`video.generate`、`audio.music.generate` 等产品用途由 Neko 内部注册表管理，不在用户 TOML 中配置 alias 或 workflow。
+每个默认值显式绑定 `provider_id + model_id`。Webview 启动时自动应用 broad type 默认值；用户在 AgentMediaBar 中手动切换后，运行时选择优先。LLM 对话、ReadImage 暴露的原生多模态资源、角色扮演、Canvas 提示生成、质量检查、跨扩展 `internalChat` 和生成工具都必须拿到明确的当前模型路由；缺少 provider/model 时直接返回可见错误或降级为调用方的本地策略，不会从 direct/local 配置转到 NewAPI gateway。`ModelConfig.type` 字段（`llm` / `image` / `video` / `audio`）控制模型在选择器中的分组。`capabilities` 继续支持 `chat`、`function_calling`、`streaming`、`json_mode`、`code`、`vision`、`text_to_image`、`text_to_video`、`text_to_audio`、`text_to_music` 等现有模型元数据字段；`llm.chat`、`video.generate`、`audio.music.generate` 等产品用途由 Neko 内部注册表管理，不在用户 TOML 中配置 alias 或 workflow。
 
 **配置格式**：`config.toml` 是当前唯一读取的用户配置文件。旧的 `~/.neko/config.json` 不再作为运行时输入、迁移源或冲突诊断来源；如需保留旧配置，请手动迁移为 TOML。
 

@@ -172,10 +172,6 @@ export const DEFAULT_CREATIVE_TOOL_TRAITS: ReadonlyArray<{ name: string; traits:
     traits: { cost: 'cheap', reversible: true, locality: 'hybrid', impactLevel: 'none' },
   },
   {
-    name: 'ReadDocumentImage',
-    traits: { cost: 'cheap', reversible: true, locality: 'hybrid', impactLevel: 'none' },
-  },
-  {
     name: 'Write',
     traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'low' },
   },

@@ -36,7 +36,6 @@ describe('toolBootstrap', () => {
     expect(registered).toEqual([TOOL_NAMES_SYSTEM.LIST_PLUGIN_SKILLS]);
     expect(registered).not.toContain(TOOL_NAMES_SYSTEM.READ_DOCUMENT);
     expect(registered).not.toContain(TOOL_NAMES_SYSTEM.READ_IMAGE);
-    expect(registered).not.toContain(TOOL_NAMES_SYSTEM.READ_DOCUMENT_IMAGE);
     expect(registered).not.toContain(TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE);
   });
 

@@ -190,7 +190,7 @@ export const DEFAULT_TOOL_CATEGORIES: ToolCategoryInfo[] = [
  * Creative-session core tools that are always injected (always layer).
  * These correspond to all tools in resident-tier ToolSets + meta-tools.
  *
- * - core-system: Read, ReadDocument, ReadImage, ReadDocumentImage, ListDirectory, Glob, Grep, WebSearch
+ * - core-system: Read, ReadDocument, ReadImage, ListDirectory, Glob, Grep, WebSearch
  * - file-editing: Write, Edit, CreateDirectory, DeleteFile
  * - plan-mode: EnterPlanMode, ExitPlanMode
  * - meta-tools: ActivateSkill, DeactivateSkill, GetContext

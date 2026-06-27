@@ -597,7 +597,7 @@ function readStoryboardSourceImageNumber(
 
 function isStoryboardImageSourceTool(toolName: string): boolean {
   return (
-    toolName === 'ReadImage' || toolName === 'ReadDocumentImage' || toolName === 'ReadDocument'
+    toolName === 'ReadImage' || toolName === 'ReadDocument'
   );
 }
 

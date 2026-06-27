@@ -20,7 +20,6 @@ import type {
 export type AgentContentAccessCaller =
   | 'read-image'
   | 'read-document'
-  | 'read-document-image'
   | 'perception-asset-loader'
   | 'attachment-processor'
   | 'media-preprocessor'
@@ -81,15 +80,6 @@ export interface AgentDocumentContentInput extends AgentContentAccessBaseInput {
   readonly textOnly?: boolean;
 }
 
-export interface AgentDocumentImagesInput extends AgentContentAccessBaseInput {
-  readonly intent?: Extract<
-    ContentAccessIntent,
-    'agent-context' | 'interactive-preview' | 'cache-materialize'
-  >;
-  readonly variant?: ResourceVariantRequest;
-  readonly locators?: readonly DocumentArchiveResourceRef[];
-}
-
 export interface AgentProviderAssetInput extends AgentContentAccessBaseInput {
   readonly preferredTarget?: Extract<ContentAccessTarget, 'bytes' | 'local-path' | 'engine-source'>;
   readonly variant?: ResourceVariantRequest;
@@ -136,18 +126,6 @@ export interface AgentDocumentContentResult extends AgentContentAccessOperationR
   readonly truncated?: boolean;
 }
 
-export interface AgentDocumentImageResource {
-  readonly label?: string;
-  readonly resourceRef?: ResourceRef;
-  readonly documentResourceRef?: DocumentArchiveResourceRef;
-  readonly providerAsset?: AgentProviderAssetResult;
-  readonly metadata?: Record<string, unknown>;
-}
-
-export interface AgentDocumentImagesResult extends AgentContentAccessOperationResult {
-  readonly images: readonly AgentDocumentImageResource[];
-}
-
 export interface AgentProviderAssetResult extends AgentContentAccessOperationResult {
   readonly bytes?: Uint8Array;
   readonly uri?: string;
@@ -166,7 +144,6 @@ export interface AgentContentAccessRuntime {
   resolve(input: AgentContentAccessRuntimeRequest): Promise<ContentAccessResult>;
   resolveImageMetadata(input: AgentImageMetadataInput): Promise<AgentImageMetadataResult>;
   resolveDocumentContent(input: AgentDocumentContentInput): Promise<AgentDocumentContentResult>;
-  resolveDocumentImages(input: AgentDocumentImagesInput): Promise<AgentDocumentImagesResult>;
   loadProviderAsset(input: AgentProviderAssetInput): Promise<AgentProviderAssetResult>;
   projectResource(input: AgentResourceProjectionInput): Promise<AgentResourceProjectionResult>;
 }

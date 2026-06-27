@@ -7,7 +7,6 @@ import {
 } from '@neko/shared';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import { createReadDocumentTool } from '../readDocumentTool';
-import { createReadDocumentImageTool } from '../readDocumentImageTool';
 import { createReadImageTool } from '../readImageTool';
 
 const documentSource = {
@@ -142,74 +141,6 @@ describe('content access tools', () => {
     });
   });
 
-  it('routes ReadDocumentImage through document image and image content access', async () => {
-    const runtime = createRuntime();
-    runtime.resolveDocumentImages.mockResolvedValueOnce({
-      status: 'ready',
-      source: documentContentSource,
-      diagnostics: [],
-      images: [{ label: 'page-1', resourceRef, documentResourceRef: archiveRef }],
-    });
-    runtime.loadProviderAsset.mockResolvedValue({
-      status: 'ready',
-      source: resourceRef,
-      diagnostics: [],
-      bytes: pngBytes(),
-      mimeType: 'image/png',
-      sizeBytes: pngBytes().byteLength,
-    });
-    runtime.resolveImageMetadata.mockResolvedValue({
-      status: 'ready',
-      source: resourceRef,
-      diagnostics: [],
-      mimeType: 'image/png',
-      width: 1,
-      height: 1,
-      sizeBytes: pngBytes().byteLength,
-    });
-
-    const result = await createReadDocumentImageTool({
-      contentAccessRuntime: runtime,
-      resolveResourceScope: () => 'project',
-    }).execute({
-      source: documentContentSource,
-      locators: [archiveRef],
-    });
-
-    expect(result.success).toBe(true);
-    expect(runtime.resolveDocumentImages).toHaveBeenCalledWith({
-      caller: 'read-document-image',
-      source: documentContentSource,
-      locators: [archiveRef],
-      intent: 'cache-materialize',
-    });
-    expect(runtime.loadProviderAsset).toHaveBeenCalled();
-    expect(runtime.loadProviderAsset).toHaveBeenCalledWith(
-      expect.objectContaining({
-        caller: 'read-image',
-        source: resourceRef,
-      }),
-    );
-    expect(runtime.resolveImageMetadata).toHaveBeenCalled();
-  });
-
-  it('requires ReadDocumentImage locators', async () => {
-    const runtime = createRuntime();
-
-    const result = await createReadDocumentImageTool({
-      contentAccessRuntime: runtime,
-      resolveResourceScope: () => 'project',
-    }).execute({
-      source: { kind: 'file', path: '${A}/books/book.epub' },
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('Missing required field: locators');
-    expect(result.error).toContain('ReadDocument.imageInfo[].resourceRef');
-    expect(result.error).toContain('Do not inspect cache directories');
-    expect(runtime.resolveDocumentImages).not.toHaveBeenCalled();
-  });
-
   it('routes ReadImage through provider asset and metadata content access', async () => {
     const runtime = createRuntime();
     runtime.loadProviderAsset.mockResolvedValueOnce({
@@ -267,14 +198,12 @@ describe('content access tools', () => {
 
 function createRuntime(): AgentContentAccessRuntime & {
   readonly resolveDocumentContent: ReturnType<typeof vi.fn>;
-  readonly resolveDocumentImages: ReturnType<typeof vi.fn>;
   readonly loadProviderAsset: ReturnType<typeof vi.fn>;
   readonly resolveImageMetadata: ReturnType<typeof vi.fn>;
 } {
   return {
     resolve: vi.fn(),
     resolveDocumentContent: vi.fn(),
-    resolveDocumentImages: vi.fn(),
     loadProviderAsset: vi.fn(),
     resolveImageMetadata: vi.fn(),
     projectResource: vi.fn(),

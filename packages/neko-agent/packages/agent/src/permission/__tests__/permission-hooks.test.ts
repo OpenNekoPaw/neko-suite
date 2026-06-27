@@ -299,24 +299,6 @@ describe('PermissionHooks', () => {
           },
           'call_image',
         ),
-        makeToolCall(
-          'ReadDocumentImage',
-          {
-            source: {
-              kind: 'file',
-              path: '/tmp/book.epub',
-            },
-            locators: [
-              {
-                kind: 'document-entry',
-                source: { filePath: '/tmp/book.epub', format: 'epub' },
-                entryPath: 'OPS/page.png',
-                versionPolicy: 'versioned-export',
-              },
-            ],
-          },
-          'call_doc_image',
-        ),
         makeToolCall('Grep', { pattern: 'needle' }, 'call_grep'),
       ];
 
