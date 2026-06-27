@@ -39,9 +39,10 @@ export function normalizeImportedGeneratedAsset(
     typeof asset.name === 'string' && asset.name
       ? asset.name
       : getImportedAssetFileName(
-          typeof asset.originalPath === 'string' && asset.originalPath
-            ? asset.originalPath
-            : path || linkedPath || 'document-resource',
+          linkedPath ||
+            (typeof asset.originalPath === 'string' && asset.originalPath
+              ? asset.originalPath
+              : path || 'document-resource'),
         );
 
   return {

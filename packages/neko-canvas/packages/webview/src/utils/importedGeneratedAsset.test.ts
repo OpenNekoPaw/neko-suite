@@ -39,7 +39,6 @@ describe('imported generated asset normalization', () => {
       kind: 'document-entry',
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
       entryPath: 'image/page-1.jpg',
-      cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
       versionPolicy: 'versioned-export',
     };
     const resourceRef = createResourceRef({
@@ -61,17 +60,19 @@ describe('imported generated asset normalization', () => {
 
     expect(
       normalizeImportedGeneratedAsset({
-        path: 'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
-        originalPath: '/tmp/neko_epub_1/0001_page-1.jpg',
+        path: 'https://file+.vscode-resource.vscode-cdn.net/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
+        originalPath:
+          '/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
         type: 'image',
         documentResourceRef,
         resourceRef,
       }),
     ).toEqual({
-      path: 'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
-      originalPath: '/tmp/neko_epub_1/0001_page-1.jpg',
+      path: 'https://file+.vscode-resource.vscode-cdn.net/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
+      originalPath:
+        '/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
       mediaType: 'image',
-      name: '0001_page-1.jpg',
+      name: 'page-1.jpg',
       documentResourceRef,
       resourceRef,
     });
@@ -95,8 +96,9 @@ describe('imported generated asset normalization', () => {
       }),
     });
     const asset = normalizeImportedGeneratedAsset({
-      path: 'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
-      originalPath: '/tmp/neko_epub_1/0001_page-1.jpg',
+      path: 'https://file+.vscode-resource.vscode-cdn.net/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
+      originalPath:
+        '/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
       type: 'image',
       resourceRef,
     });
@@ -106,7 +108,7 @@ describe('imported generated asset normalization', () => {
     expect(getImportedGeneratedAssetNodeInput(asset)).toEqual({
       assetPath: '',
       runtimeAssetPath:
-        'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+        'https://file+.vscode-resource.vscode-cdn.net/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
       resourceRef,
     });
   });

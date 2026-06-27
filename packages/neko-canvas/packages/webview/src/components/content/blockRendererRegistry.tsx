@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  isResourceRef,
   parseDocumentArchiveResourceRef,
   type CanvasBlock,
   type FieldBinding,
@@ -333,9 +334,7 @@ function getAssetPreviewValue(context: BlockRendererContext): unknown {
     return value;
   }
 
-  const hasDocumentResourceRef = Boolean(
-    resolvePreviewSourceMetadata(context)?.documentResourceRef,
-  );
+  const hasStructuredResourceRef = hasPreviewSourceResourceMetadata(context);
   for (const path of getStringArrayMetadata(context.block, 'alternateAssetPaths')) {
     if (!isJsonPointerPath(path)) continue;
     const { value: alternateValue } = readNodeBinding(context.node, {
@@ -344,7 +343,7 @@ function getAssetPreviewValue(context: BlockRendererContext): unknown {
     });
     if (
       isPresentAssetValue(alternateValue) &&
-      (!hasDocumentResourceRef || path.includes('runtime') || alternateValue.startsWith('data:'))
+      (!hasStructuredResourceRef || path.includes('runtime') || alternateValue.startsWith('data:'))
     ) {
       return alternateValue;
     }
@@ -373,6 +372,14 @@ function createPreviewSource(
   );
   const path = typeof value === 'string' ? value : assetCapability?.path;
   const role = previewCapability?.preferredRole ?? previewCapability?.roles[0] ?? 'unavailable';
+  const metadata = resolvePreviewSourceMetadata(context);
+  const hasStructuredResourceRef = Boolean(
+    metadata?.['documentResourceRef'] || metadata?.['resourceRef'],
+  );
+  const directAssetPath = hasStructuredResourceRef ? assetCapability?.path : path;
+  const directAssetUri = hasStructuredResourceRef
+    ? assetCapability?.uri
+    : (assetCapability?.uri ?? path);
 
   const variants = previewCapability?.variants ? [...previewCapability.variants] : [];
   if (typeof path === 'string' && isSafeWebviewUrl(path)) {
@@ -382,12 +389,14 @@ function createPreviewSource(
   return {
     id: `${context.node.id}:${context.block.id}`,
     asset: assetCapability
-      ? { ...assetCapability, path: assetCapability.path ?? path, uri: assetCapability.uri ?? path }
-      : { kind: 'asset-identity', path },
+      ? { ...assetCapability, path: directAssetPath, uri: directAssetUri }
+      : hasStructuredResourceRef
+        ? undefined
+        : { kind: 'asset-identity', path },
     role,
     variants: variants.length > 0 ? variants : undefined,
     title: resolvePreviewSourceTitle(context, path),
-    metadata: resolvePreviewSourceMetadata(context),
+    metadata,
   };
 }
 
@@ -407,26 +416,36 @@ function resolvePreviewSourceTitle(
 function resolvePreviewSourceMetadata(
   context: BlockRendererContext,
 ): Record<string, unknown> | undefined {
+  const metadata: Record<string, unknown> = {};
   if (context.node.type === 'project') {
-    return { projectType: context.node.data.projectType };
+    metadata['projectType'] = context.node.data.projectType;
   }
 
-  const alternateResourceRefPath = getStringArrayMetadata(
+  for (const alternateResourceRefPath of getStringArrayMetadata(
     context.block,
     'alternateResourceRefPaths',
-  )[0];
-  if (alternateResourceRefPath && isJsonPointerPath(alternateResourceRefPath)) {
+  )) {
+    if (!isJsonPointerPath(alternateResourceRefPath)) continue;
     const { value } = readNodeBinding(context.node, {
       path: alternateResourceRefPath,
       valueType: 'object',
     });
     const documentResourceRef = parseDocumentArchiveResourceRef(value);
     if (documentResourceRef) {
-      return { documentResourceRef };
+      metadata['documentResourceRef'] = documentResourceRef;
+      continue;
+    }
+    if (isResourceRef(value)) {
+      metadata['resourceRef'] = value;
     }
   }
 
-  return undefined;
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+function hasPreviewSourceResourceMetadata(context: BlockRendererContext): boolean {
+  const metadata = resolvePreviewSourceMetadata(context);
+  return Boolean(metadata?.['documentResourceRef'] || metadata?.['resourceRef']);
 }
 
 function updateBinding(context: BlockRendererContext, value: unknown): void {

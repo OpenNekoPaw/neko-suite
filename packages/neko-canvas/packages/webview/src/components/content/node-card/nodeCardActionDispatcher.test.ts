@@ -54,7 +54,6 @@ describe('node card action dispatcher', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'image/page-1.jpg',
-      cachePath: '/cache/page-1.jpg',
       versionPolicy: 'versioned-export' as const,
     };
 
@@ -84,7 +83,6 @@ describe('node card action dispatcher', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'image/page-1.jpg',
-      cachePath: '/cache/page-1.jpg',
       versionPolicy: 'versioned-export' as const,
     };
     const resourceRef = {

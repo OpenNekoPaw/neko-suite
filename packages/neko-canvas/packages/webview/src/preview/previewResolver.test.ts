@@ -172,7 +172,6 @@ describe('WebviewPreviewResolver', () => {
       kind: 'document-entry',
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
       entryPath: 'image/page-1.jpg',
-      cachePath: '/cache/page-1.jpg',
       versionPolicy: 'versioned-export',
     };
 
@@ -189,9 +188,9 @@ describe('WebviewPreviewResolver', () => {
 
     expect(request).toMatchObject({
       type: 'preview:resolveVariant',
-      assetPath: 'image/page-1.jpg',
       documentResourceRef,
     });
+    expect(request).not.toHaveProperty('assetPath');
     await expect(promise).resolves.toMatchObject({ sourcePath: 'image/page-1.jpg' });
   });
 
@@ -203,7 +202,6 @@ describe('WebviewPreviewResolver', () => {
       kind: 'document-entry',
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
       entryPath: 'image/page-1.jpg',
-      cachePath: '/cache/page-1.jpg',
       versionPolicy: 'versioned-export',
     };
 

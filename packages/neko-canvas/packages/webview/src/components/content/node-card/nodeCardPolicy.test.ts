@@ -47,7 +47,7 @@ describe('node card policies', () => {
         versionPolicy: 'versioned-export',
       },
       runtimeAssetPath:
-        'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+        'https://file+.vscode-resource.vscode-cdn.net/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
       mediaType: 'image',
     });
 
@@ -63,7 +63,7 @@ describe('node card policies', () => {
             id: 'stable-source',
             role: 'image',
             sourcePath:
-              'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+              'https://file+.vscode-resource.vscode-cdn.net/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
           },
         ],
         metadata: { documentResourceRef: expect.objectContaining({ kind: 'document-entry' }) },
@@ -134,8 +134,12 @@ describe('node card policies', () => {
     if (source.renderForm !== 'asset-thumbnail') {
       throw new Error('Expected asset thumbnail preview');
     }
-    expect(JSON.stringify(source.source.asset) ?? '').not.toContain('/tmp/neko_epub_1');
-    expect(JSON.stringify(source.source.variants) ?? '').not.toContain('/tmp/neko_epub_1');
+    expect(JSON.stringify(source.source.asset) ?? '').not.toContain(
+      '/workspace/.neko/.cache/resources/documents/doc_demo',
+    );
+    expect(JSON.stringify(source.source.variants) ?? '').not.toContain(
+      '/workspace/.neko/.cache/resources/documents/doc_demo',
+    );
   });
 
   it('maps video media to media-poster and audio to waveform', () => {
@@ -439,7 +443,7 @@ describe('action condition evaluator', () => {
         node: createMediaNode('media-2', {
           assetPath: '',
           runtimeAssetPath:
-            'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+            'https://file+.vscode-resource.vscode-cdn.net/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
         }),
         selection: { nodeIds: [] },
       }),

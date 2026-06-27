@@ -52,13 +52,14 @@ export class WebviewPreviewResolver implements PreviewResolver {
     const mediaType = variantSourcePath ? 'image' : request.source.asset?.mediaType;
     const documentResourceRef = request.source.metadata?.['documentResourceRef'];
     const resourceRef = request.source.metadata?.['resourceRef'];
+    const hasStructuredResourceRef = Boolean(documentResourceRef || resourceRef);
     if (!sourcePath && !documentResourceRef && !resourceRef) {
       return createUnavailableVariant(request, 'No preview source');
     }
 
     const runtimeUrl = await this.requestRuntimeVariant({
       sourceId: request.source.id,
-      assetPath: sourcePath,
+      assetPath: hasStructuredResourceRef ? undefined : sourcePath,
       role,
       mediaType,
       documentResourceRef,

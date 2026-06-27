@@ -981,6 +981,9 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
                   path: assetBindingPath,
                   valueType: 'asset',
                 },
+                metadata: {
+                  alternateResourceRefPaths: ['/documentResourceRef', '/resourceRef'],
+                },
                 capabilities: [
                   {
                     kind: 'preview',
@@ -1015,6 +1018,15 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
     createPreview: (node) => {
       const data = node.type === 'media' ? node.data : undefined;
       const persistentPath = data?.assetPath || data?.documentResourceRef?.entryPath;
+      const resourceMetadata =
+        data?.documentResourceRef || data?.resourceRef
+          ? {
+              ...(data.documentResourceRef
+                ? { documentResourceRef: data.documentResourceRef }
+                : {}),
+              ...(data.resourceRef ? { resourceRef: data.resourceRef } : {}),
+            }
+          : undefined;
       return {
         title: extractBasename(persistentPath || data?.runtimeAssetPath) || 'Media',
         subtitle: data?.mediaType,
@@ -1024,7 +1036,6 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           {
             kind: 'asset-identity',
             path: data?.assetPath || undefined,
-            uri: data?.assetPath ? undefined : data?.documentResourceRef?.entryPath,
             mediaType: data?.mediaType,
           },
           {
@@ -1033,6 +1044,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
             preferredRole: getMediaPreviewRole(node),
           },
         ],
+        metadata: resourceMetadata,
       };
     },
     createPorts: () => MEDIA_NODE_PORTS,

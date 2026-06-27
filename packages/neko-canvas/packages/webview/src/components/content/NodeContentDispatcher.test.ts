@@ -16,6 +16,8 @@ import type { NodeRendererContext } from '../nodes/nodeRendererTypes';
 import { buildCanvasNode } from '../../utils/nodeFactory';
 import { setLocale } from '../../i18n';
 
+(globalThis as { React?: typeof React }).React = React;
+
 const viewport: CanvasViewport = { pan: { x: 0, y: 0 }, zoom: 1 };
 const imagePrepPlan = {
   schemaVersion: 1,
@@ -261,7 +263,6 @@ describe('NodeContentDispatcher', () => {
             kind: 'document-entry',
             source: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
             entryPath: 'OPS/page-1.jpg',
-            cachePath: '/cache/page-1.jpg',
             versionPolicy: 'read-only-source',
           },
           runtimeReferenceImagePath:

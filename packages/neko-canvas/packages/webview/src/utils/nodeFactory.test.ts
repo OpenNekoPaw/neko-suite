@@ -492,7 +492,6 @@ describe('nodeFactory composable presets', () => {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
       entryPath: 'image/page-1.jpg',
-      cachePath: '/tmp/neko_epub_1/0001_page-1.jpg',
       versionPolicy: 'versioned-export' as const,
     };
     const resourceRef = createResourceRef({
@@ -523,7 +522,7 @@ describe('nodeFactory composable presets', () => {
           documentResourceRef,
           resourceRef,
           runtimeAssetPath:
-            'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+            'https://file+.vscode-resource.vscode-cdn.net/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
           mediaType: 'image',
         },
       }),
@@ -535,7 +534,7 @@ describe('nodeFactory composable presets', () => {
       documentResourceRef,
       resourceRef,
       runtimeAssetPath:
-        'https://file+.vscode-resource.vscode-cdn.net/tmp/neko_epub_1/0001_page-1.jpg',
+        'https://file+.vscode-resource.vscode-cdn.net/workspace/.neko/.cache/resources/documents/doc_demo/5289df737df57326fcdd22597afb1fac.jpg',
     });
     expect(media.preview).toMatchObject({
       title: 'page-1.jpg',
@@ -543,11 +542,12 @@ describe('nodeFactory composable presets', () => {
         expect.objectContaining({
           kind: 'asset-identity',
           path: undefined,
-          uri: 'image/page-1.jpg',
         }),
         expect.objectContaining({ kind: 'preview' }),
       ],
+      metadata: { documentResourceRef, resourceRef },
     });
+    expect(media.preview?.capabilities?.[0]).not.toHaveProperty('uri');
     expect(JSON.stringify(media.preview)).not.toContain('vscode-resource.vscode-cdn.net');
   });
 
@@ -569,6 +569,9 @@ describe('nodeFactory composable presets', () => {
       id: 'media-asset-preview',
       kind: 'asset-preview',
       binding: { path: '/assetPath' },
+      metadata: {
+        alternateResourceRefPaths: ['/documentResourceRef', '/resourceRef'],
+      },
     });
     expect(node.preview).toMatchObject({
       title: 'ref.png',
