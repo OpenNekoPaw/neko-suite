@@ -8,7 +8,7 @@
 
 import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
-import { resolveStorageLayout, type GeneratedAsset } from '@neko/shared';
+import { resolveWorkspaceGeneratedAssetRelativeDirectory, type GeneratedAsset } from '@neko/shared';
 import {
   DEFAULT_MEDIA_TASK_CONFIGURED_OUTPUT_DIR,
   DEFAULT_MEDIA_TASK_SHOW_SAVE_NOTIFICATION,
@@ -203,5 +203,8 @@ function createWorkspaceGeneratedAssetIndex(): GeneratedAssetIndex | undefined {
 }
 
 function resolveGeneratedOutputDir(workspaceRoot: string): string {
-  return resolveStorageLayout(workspaceRoot, workspaceRoot).project.local.cache.generated;
+  return vscode.Uri.joinPath(
+    vscode.Uri.file(workspaceRoot),
+    resolveWorkspaceGeneratedAssetRelativeDirectory({ mediaKind: 'file' }),
+  ).fsPath;
 }

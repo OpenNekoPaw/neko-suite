@@ -33,13 +33,9 @@ const { executeCommandMock, activateEngineExtensionMock } = vi.hoisted(() => ({
 }));
 
 const {
-  loadAuthorizedMediaLibraryReadRootsMock,
   loadWorkspaceFileIgnoreRulesMock,
-  setDocumentAuthorizedReadRootsMock,
 } = vi.hoisted(() => ({
-  loadAuthorizedMediaLibraryReadRootsMock: vi.fn(async () => [] as string[]),
   loadWorkspaceFileIgnoreRulesMock: vi.fn(async () => ({ gitignoreRules: [] })),
-  setDocumentAuthorizedReadRootsMock: vi.fn(async () => undefined),
 }));
 
 // Mock vscode (already handled by __mocks__/vscode.ts, but ensure EventEmitter works)
@@ -85,20 +81,8 @@ vi.mock('../base', () => ({
   createServiceId: vi.fn((name: string) => name),
 }));
 
-vi.mock('../services/documentPathResolver', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    loadAuthorizedMediaLibraryReadRoots: loadAuthorizedMediaLibraryReadRootsMock,
-  };
-});
-
 vi.mock('../services/workspaceIgnoreFilter', () => ({
   loadWorkspaceFileIgnoreRules: loadWorkspaceFileIgnoreRulesMock,
-}));
-
-vi.mock('../tools/documentToolRuntime', () => ({
-  setDocumentAuthorizedReadRoots: setDocumentAuthorizedReadRootsMock,
 }));
 
 // Mock @neko/platform — toSharedService
@@ -428,9 +412,7 @@ describe('AgentRunner', () => {
     syncToolCategoriesMock.mockReset();
     executeCommandMock.mockReset();
     activateEngineExtensionMock.mockReset();
-    loadAuthorizedMediaLibraryReadRootsMock.mockResolvedValue([]);
     loadWorkspaceFileIgnoreRulesMock.mockResolvedValue({ gitignoreRules: [] });
-    setDocumentAuthorizedReadRootsMock.mockReset();
     vi.restoreAllMocks();
     latestCreateSessionConfig = undefined;
     latestRuntimeAssemblyInput = undefined;
@@ -470,50 +452,6 @@ describe('AgentRunner', () => {
         authorizedReadRoots: ['/Users/feng/Assets/epub/animation/浪客行'],
         workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
       });
-    });
-
-    it('loads media library read roots into runtime session assembly by default', async () => {
-      loadAuthorizedMediaLibraryReadRootsMock.mockResolvedValue([
-        '/Users/feng/Assets/epub/animation/浪客行',
-      ]);
-      loadWorkspaceFileIgnoreRulesMock.mockResolvedValue({ gitignoreRules: ['tmp/'] });
-
-      await runner.configure({
-        platform: mockPlatform,
-        workspaceRoot: '/workspace/project',
-      });
-
-      expect(latestRuntimeAssemblyInput).toMatchObject({
-        workspaceRoot: '/workspace/project',
-        authorizedReadRoots: ['/Users/feng/Assets/epub/animation/浪客行'],
-        workspaceIgnoreRules: { gitignoreRules: ['tmp/'] },
-      });
-      expect(setDocumentAuthorizedReadRootsMock).toHaveBeenCalledWith([
-        '/Users/feng/Assets/epub/animation/浪客行',
-      ]);
-    });
-
-    it('merges explicit and host media library read roots without duplicates', async () => {
-      loadAuthorizedMediaLibraryReadRootsMock.mockResolvedValue([
-        '/Users/feng/Assets/epub/animation/浪客行',
-        '/library/media',
-      ]);
-
-      await runner.configure({
-        platform: mockPlatform,
-        workspaceRoot: '/workspace/project',
-        authorizedReadRoots: ['/library/media'],
-        workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
-      });
-
-      expect(latestRuntimeAssemblyInput).toMatchObject({
-        authorizedReadRoots: ['/library/media', '/Users/feng/Assets/epub/animation/浪客行'],
-        workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
-      });
-      expect(setDocumentAuthorizedReadRootsMock).toHaveBeenCalledWith([
-        '/library/media',
-        '/Users/feng/Assets/epub/animation/浪客行',
-      ]);
     });
 
     it('未配置时 getConfig 应该返回 undefined', () => {

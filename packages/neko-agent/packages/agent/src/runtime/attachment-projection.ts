@@ -59,7 +59,7 @@ export function formatMediaAttachmentReference(
 }
 
 export function formatDocumentAttachmentReference(name: string, path: string): string {
-  return `\n\n[Attached document: ${name}] (path: ${path})\nUse ReadDocument with file_path="${path}" and mode="manifest" or mode="range" before analyzing this document. Do not inline the whole document as chat context.`;
+  return `\n\n[Attached document: ${name}] (path: ${path})\nUse ReadDocument with source={"kind":"file","path":"${path}"} before analyzing this document. Do not inline the whole document as chat context.`;
 }
 
 export function extractFileReferencePaths(message: string): string[] {

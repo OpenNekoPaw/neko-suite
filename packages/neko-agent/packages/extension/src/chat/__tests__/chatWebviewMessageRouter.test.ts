@@ -547,7 +547,8 @@ describe('handleChatWebviewMessage', () => {
         contextId: 'media-1',
         navigationData: {
           partition: 'media-library',
-          filePath: '/refs/hero.png',
+          filePath: '${REFS}/hero.png',
+          resolvedPath: '/refs/hero.png',
         },
       },
       deps,

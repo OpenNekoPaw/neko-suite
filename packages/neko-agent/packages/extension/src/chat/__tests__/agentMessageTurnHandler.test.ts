@@ -1154,64 +1154,70 @@ describe('AgentMessageTurnHandler', () => {
       const handler = buildHandler({ localResourceAccess });
 
       (vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: '/workspace' } }];
-      vi.mocked(vscode.commands.executeCommand).mockResolvedValue({
-        items: [
-          {
-            id: 'asset:asset-hero',
-            kind: 'asset',
-            label: 'Hero portrait',
-            description: 'Asset',
-            icon: 'IMG',
-            source: {
-              partition: 'asset-library',
-              sourceId: 'asset-hero',
-              sourceKind: 'character',
+      vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command: string) => {
+        if (command === 'neko.assets.contractPath') {
+          return '${FOOTAGE}/hero-shot.mp4';
+        }
+        return {
+          items: [
+            {
+              id: 'asset:asset-hero',
+              kind: 'asset',
+              label: 'Hero portrait',
+              description: 'Asset',
+              icon: 'IMG',
+              source: {
+                partition: 'asset-library',
+                sourceId: 'asset-hero',
+                sourceKind: 'character',
+              },
+              projectRoot: '/workspace',
+              filePath: 'assets/hero.png',
+              thumbnailUri: '/workspace/thumbs/hero.png',
+              searchText: 'Hero portrait',
+              freshness: 'fresh',
+              metadata: { mediaType: 'image', entityType: 'character' },
             },
-            projectRoot: '/workspace',
-            filePath: 'assets/hero.png',
-            thumbnailUri: '/workspace/thumbs/hero.png',
-            searchText: 'Hero portrait',
-            freshness: 'fresh',
-            metadata: { mediaType: 'image', entityType: 'character' },
-          },
-          {
-            id: 'media:/library/hero-shot.mp4',
-            kind: 'media',
-            label: 'hero-shot.mp4',
-            description: 'Footage',
-            source: {
-              partition: 'media-library',
-              sourceId: '/library/hero-shot.mp4',
-              sourceKind: 'video',
+            {
+              id: 'media:/library/hero-shot.mp4',
+              kind: 'media',
+              label: 'hero-shot.mp4',
+              description: 'Footage',
+              source: {
+                partition: 'media-library',
+                sourceId: '/library/hero-shot.mp4',
+                sourceKind: 'video',
+              },
+              projectRoot: '/workspace',
+              filePath: '/library/hero-shot.mp4',
+              thumbnailUri: '/library/thumbs/hero-shot.jpg',
+              searchText: 'hero-shot',
+              freshness: 'fresh',
+              metadata: { mediaType: 'video' },
+              navigationData: { filePath: '/library/hero-shot.mp4' },
             },
-            projectRoot: '/workspace',
-            filePath: '/library/hero-shot.mp4',
-            thumbnailUri: '/library/thumbs/hero-shot.jpg',
-            searchText: 'hero-shot',
-            freshness: 'fresh',
-            metadata: { mediaType: 'video' },
-          },
-          {
-            id: 'entity:char-hero',
-            kind: 'creative-entity',
-            label: 'Hero',
-            description: 'Character',
-            source: {
-              partition: 'creative-entities',
-              sourceId: 'char-hero',
-              sourceKind: 'character',
+            {
+              id: 'entity:char-hero',
+              kind: 'creative-entity',
+              label: 'Hero',
+              description: 'Character',
+              source: {
+                partition: 'creative-entities',
+                sourceId: 'char-hero',
+                sourceKind: 'character',
+              },
+              projectRoot: '/workspace',
+              thumbnailUri: '/workspace/entities/hero.png',
+              searchText: 'Hero character',
+              freshness: 'fresh',
+              metadata: { entityType: 'character' },
             },
-            projectRoot: '/workspace',
-            thumbnailUri: '/workspace/entities/hero.png',
-            searchText: 'Hero character',
-            freshness: 'fresh',
-            metadata: { entityType: 'character' },
-          },
-        ],
-        partitions: [],
-        freshness: 'fresh',
-        context: { projectRoot: '/workspace' },
-        query: { text: 'hero' },
+          ],
+          partitions: [],
+          freshness: 'fresh',
+          context: { projectRoot: '/workspace' },
+          query: { text: 'hero' },
+        };
       });
 
       await handler.searchProjectFiles(webview as any, 'hero', 'conv-search');
@@ -1253,7 +1259,12 @@ describe('AgentMessageTurnHandler', () => {
             label: 'hero-shot.mp4',
             source: 'media-library',
             mediaType: 'video',
-            filePath: '/library/hero-shot.mp4',
+            filePath: '${FOOTAGE}/hero-shot.mp4',
+            navigationData: expect.objectContaining({
+              filePath: '${FOOTAGE}/hero-shot.mp4',
+              portablePath: '${FOOTAGE}/hero-shot.mp4',
+              resolvedPath: '/library/hero-shot.mp4',
+            }),
             thumbnailUri: 'webview:/library/thumbs/hero-shot.jpg',
           }),
           expect.objectContaining({

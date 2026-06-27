@@ -22,9 +22,9 @@ describe('attachment projection helpers', () => {
   it('formats file and media attachment text consistently', () => {
     expect(formatFileAttachmentContent('code.ts', 'const x = 1;')).toContain('### File: code.ts');
     expect(formatUnreadableFileAttachment('secret.txt')).toContain('Failed to read file');
-    expect(formatDocumentAttachmentReference('book.epub', '/books/book.epub')).toContain(
-      'Use ReadDocument',
-    );
+    const documentReference = formatDocumentAttachmentReference('book.epub', '${A}/books/book.epub');
+    expect(documentReference).toContain('Use ReadDocument');
+    expect(documentReference).toContain('source={"kind":"file","path":"${A}/books/book.epub"}');
     expect(
       formatMediaAttachmentReference({
         type: 'video',
@@ -101,6 +101,9 @@ describe('attachment projection helpers', () => {
     expect(readTextFile).not.toHaveBeenCalled();
     expect(result.textContent).toContain('[Attached document: book.epub]');
     expect(result.textContent).toContain('Use ReadDocument');
+    expect(result.textContent).toContain(
+      'source={"kind":"file","path":"${A}/books/book.epub"}',
+    );
     expect(result.textContent).not.toContain('document should not be read');
   });
 

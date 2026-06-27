@@ -22,7 +22,6 @@ import {
   isNekoEngineFrameServerResult,
 } from '@neko-agent/types';
 import { getLogger } from '../base';
-import { createDocumentPathResolver, resolveDocumentPath } from './documentPathResolver';
 
 const logger = getLogger('EngineClientProvider');
 
@@ -81,9 +80,7 @@ class VSCodeEngineClientProvider implements IEngineClientProvider {
       throw new Error('Failed to start neko-engine Frame Server');
     }
 
-    this._engineClient = await this.configureClient(
-      new EngineClient(result.port, { timeout: NEKO_ENGINE_CLIENT_TIMEOUT_MS }),
-    );
+    this._engineClient = new EngineClient(result.port, { timeout: NEKO_ENGINE_CLIENT_TIMEOUT_MS });
     this.configuredReadRootsKey = createReadRootsKey(this.authorizedReadRoots);
     return this._engineClient;
   }
@@ -110,14 +107,12 @@ class VSCodeEngineClientProvider implements IEngineClientProvider {
     if (!client) return false;
 
     try {
-      const source = await resolveDocumentPath(inputPath);
-      const output = await resolveDocumentPath(outputPath);
       const group = mediaType === 'audio' ? 'audios' : 'videos';
       const codec = mediaType === 'audio' ? 'mp3' : 'h264';
       const response = await client.dispatch({
         group,
         action: 'transcode',
-        options: { source, output, codec },
+        options: { source: inputPath, output: outputPath, codec },
       });
       return response.status === 'ok';
     } catch (error) {
@@ -163,11 +158,6 @@ class VSCodeEngineClientProvider implements IEngineClientProvider {
       classify: perceptionClient,
       detectShots: perceptionClient,
     };
-  }
-
-  private async configureClient(client: EngineClient): Promise<EngineClient> {
-    client.setPathResolver(await createDocumentPathResolver());
-    return client;
   }
 }
 

@@ -8,6 +8,11 @@ import type {
   ContentAccessTarget,
   ContentStableSourceRef,
   DocumentArchiveResourceRef,
+  DocumentBatchCursor,
+  DocumentImageInfo,
+  DocumentManifest,
+  DocumentRange,
+  DocumentReadResult,
   ResourceRef,
   ResourceVariantRequest,
 } from '@neko/shared';
@@ -65,6 +70,14 @@ export interface AgentImageMetadataInput extends AgentContentAccessBaseInput {
 
 export interface AgentDocumentContentInput extends AgentContentAccessBaseInput {
   readonly intent?: Extract<ContentAccessIntent, 'agent-context' | 'verify'>;
+  readonly mode?: 'content' | 'manifest' | 'range' | 'next';
+  readonly range?: DocumentRange;
+  readonly cursor?: DocumentBatchCursor;
+  readonly startBatch?: boolean;
+  readonly includeManifest?: boolean;
+  readonly includeImages?: boolean;
+  readonly maxChars?: number;
+  readonly maxImages?: number;
   readonly textOnly?: boolean;
 }
 
@@ -109,6 +122,18 @@ export interface AgentDocumentContentResult extends AgentContentAccessOperationR
   readonly text?: string;
   readonly documentResourceRef?: DocumentArchiveResourceRef;
   readonly resourceRef?: ResourceRef;
+  readonly manifest?: DocumentManifest;
+  readonly range?: DocumentRange;
+  readonly locator?: DocumentReadResult['locator'];
+  readonly excerpt?: DocumentReadResult['excerpt'];
+  readonly cursor?: DocumentBatchCursor;
+  readonly imageInfo?: readonly DocumentImageInfo[];
+  readonly imageCount?: number;
+  readonly imagesTruncated?: boolean;
+  readonly pageCount?: number;
+  readonly totalTextChars?: number;
+  readonly returnedTextChars?: number;
+  readonly truncated?: boolean;
 }
 
 export interface AgentDocumentImageResource {

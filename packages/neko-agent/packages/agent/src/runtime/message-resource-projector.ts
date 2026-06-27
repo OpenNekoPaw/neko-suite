@@ -200,27 +200,6 @@ function projectResourceValueInternal(
 
   const projected: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
-    if (isRuntimeOnlyLocalPathKey(key)) {
-      continue;
-    }
-    if (isExplicitToolInputImagePathArrayKey(key)) {
-      const projectedInputPaths = sanitizeExplicitToolInputImagePaths(item, projected, key);
-      if (projectedInputPaths !== undefined) {
-        projected[key] = projectedInputPaths;
-      }
-      continue;
-    }
-    if (isRuntimeOnlyDocumentImagePathArrayKey(key)) {
-      continue;
-    }
-    if (isRuntimeOnlyProjectionKey(key)) {
-      continue;
-    }
-    if (key === 'imageInfo' && Array.isArray(item)) {
-      projected[key] = sanitizeDocumentImageInfoArray(item, visited);
-      continue;
-    }
-
     if (projectLocalMediaStringField({ key, item, owner: value, projected, options })) {
       continue;
     }
@@ -228,10 +207,6 @@ function projectResourceValueInternal(
     if (key === 'urls' && Array.isArray(item)) {
       projected[key] = item.flatMap((url) => {
         if (typeof url === 'string' && isLocalMediaFilePath(url)) {
-          if (isManagedRuntimeMediaPath(url)) {
-            appendProjectionDiagnostic(projected, url, key);
-            return [];
-          }
           const resolved = resolveLocalMediaPath(url, options);
           if (!resolved) appendProjectionDiagnostic(projected, url, key);
           return resolved ? [resolved] : [];
@@ -256,10 +231,6 @@ function projectLocalMediaStringField(input: {
 }): boolean {
   if (!isProjectableLocalMediaStringField(input.key, input.item)) return false;
   if (hasStableDocumentResourceRef(input.owner)) return true;
-  if (isManagedRuntimeMediaPath(input.item)) {
-    appendProjectionDiagnostic(input.projected, input.item, input.key);
-    return true;
-  }
   const resolved = resolveLocalMediaPath(input.item, input.options);
   if (resolved) {
     input.projected[input.key] = resolved;
@@ -284,101 +255,6 @@ function hasStableDocumentResourceRef(value: object): boolean {
   );
 }
 
-function isRuntimeOnlyLocalPathKey(key: string): boolean {
-  return (
-    key === 'localPath' ||
-    key === 'localPaths' ||
-    key === 'runtimePath' ||
-    key === 'runtimeImagePaths' ||
-    key === 'cachePath'
-  );
-}
-
-function isRuntimeOnlyDocumentImagePathArrayKey(key: string): boolean {
-  return key === 'imagePaths';
-}
-
-function isExplicitToolInputImagePathArrayKey(key: string): boolean {
-  return key === 'image_paths';
-}
-
-function sanitizeExplicitToolInputImagePaths(
-  value: unknown,
-  projected: Record<string, unknown>,
-  field: string,
-): readonly string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const paths = value.filter((item): item is string => typeof item === 'string');
-  const portablePaths = paths.filter((path) => {
-    if (!isManagedRuntimeMediaPath(path)) return true;
-    appendProjectionDiagnostic(projected, path, field);
-    return false;
-  });
-  return portablePaths.length > 0 ? portablePaths : undefined;
-}
-
-function isRuntimeOnlyProjectionKey(key: string): boolean {
-  return (
-    key === 'runtimeKind' ||
-    key === 'cacheResourceRef' ||
-    key === 'webviewUri' ||
-    key === 'webviewUris' ||
-    key === 'imagePathWebviewUris'
-  );
-}
-
-function sanitizeDocumentImageInfoArray(
-  value: readonly unknown[],
-  visited: WeakSet<object>,
-): readonly unknown[] {
-  return value.flatMap((item) => {
-    const sanitized = sanitizeDocumentImageInfo(item, visited);
-    return sanitized === undefined ? [] : [sanitized];
-  });
-}
-
-function sanitizeDocumentImageInfo(value: unknown, visited: WeakSet<object>): unknown {
-  if (!isRecord(value)) return undefined;
-  const sanitized: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (isHiddenDocumentImageInfoKey(key)) {
-      continue;
-    }
-    const projected = projectResourceValueInternal(item, {}, visited);
-    if (projected !== undefined) {
-      sanitized[key] = projected;
-    }
-  }
-  return sanitized;
-}
-
-function isHiddenDocumentImageInfoKey(key: string): boolean {
-  return (
-    key === 'path' ||
-    key === 'paths' ||
-    key === 'runtimePath' ||
-    key === 'runtimeImagePaths' ||
-    key === 'runtimeKind' ||
-    key === 'cachePath' ||
-    key === 'cacheResourceRef' ||
-    key === 'localPath' ||
-    key === 'localPaths' ||
-    key === 'webviewUri' ||
-    key === 'imagePathWebviewUris'
-  );
-}
-
-function isManagedRuntimeMediaPath(value: string): boolean {
-  const normalized = value.replace(/\\/g, '/').toLowerCase();
-  return (
-    normalized.includes('/.neko/.cache/') ||
-    normalized.startsWith('.neko/.cache/') ||
-    normalized.includes('/document-image-cache/') ||
-    normalized.includes('/document-reader/') ||
-    normalized.includes('/neko_epub_')
-  );
-}
-
 function appendProjectionDiagnostic(
   projected: Record<string, unknown>,
   source: string,
@@ -391,15 +267,11 @@ function appendProjectionDiagnostic(
     code: 'resource-projection-denied',
     severity: 'error',
     field,
-    sourceKind: classifyDeniedProjectionSource(source),
+    sourceKind: 'local-media-path',
     message:
       'Local media path could not be projected for Webview display. Use ResourceRef, source refs, workspace-relative paths, or adapter-projected render descriptors.',
   });
   projected['resourceProjectionDiagnostics'] = diagnostics;
-}
-
-function classifyDeniedProjectionSource(source: string): string {
-  return isManagedRuntimeMediaPath(source) ? 'managed-runtime-path' : 'local-media-path';
 }
 
 function resolveLocalMediaPath(

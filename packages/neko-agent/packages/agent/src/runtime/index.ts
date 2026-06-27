@@ -839,17 +839,6 @@ export {
 } from './multimodal-context-packet';
 
 export {
-  resolveTimelinePerceptionInputs,
-  resolveTimelineVideoFrameInputs,
-  type AudioSegmentExtractionClient,
-  type FrameExtractionClient,
-  type ImageCaptureClient,
-  type PerceptionInputResolverFsOps,
-  type ResolvePerceptionInputsOptions,
-  type TimelinePerceptionInputClient,
-} from './perception-input-resolver';
-
-export {
   createCanvasNodeUpdateAdapter,
   createDefaultOperationToolAdapterRegistry,
   createModelElementUpdateAdapter,

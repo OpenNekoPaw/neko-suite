@@ -1,4 +1,4 @@
-import { isPublicGeneratedAssetResultUri } from '@neko/shared';
+import { isGeneratedDraftRef, isPublicGeneratedAssetResultUri } from '@neko/shared';
 import type {
   AgentBackgroundTask,
   AgentMediaTaskResult,
@@ -327,8 +327,23 @@ function sanitizeAgentMediaTaskResult(
       };
       return stripNestedRenderableAssetPaths(assetWithoutPath);
     }) ?? [];
+  const drafts =
+    result.drafts?.flatMap((draft) => {
+      if (!isGeneratedDraftRef(draft.draftRef)) return [];
+      if (!('path' in draft)) return [draft];
+      const { path: _path, ...draftWithoutPath } = draft as typeof draft & {
+        readonly path?: unknown;
+      };
+      return [draftWithoutPath];
+    }) ?? [];
 
-  if (urls.length === 0 && !thumbnailUrl && assets.length === 0 && !result.creativeEntity) {
+  if (
+    urls.length === 0 &&
+    !thumbnailUrl &&
+    assets.length === 0 &&
+    drafts.length === 0 &&
+    !result.creativeEntity
+  ) {
     return undefined;
   }
 
@@ -339,6 +354,7 @@ function sanitizeAgentMediaTaskResult(
     ...(result.height !== undefined ? { height: result.height } : {}),
     ...(result.duration !== undefined ? { duration: result.duration } : {}),
     ...(assets.length > 0 ? { assets } : {}),
+    ...(drafts.length > 0 ? { drafts } : {}),
     ...(result.creativeEntity ? { creativeEntity: result.creativeEntity } : {}),
   };
 }

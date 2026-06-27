@@ -19,21 +19,16 @@ class DocumentReadCapabilityProvider implements AgentCapabilityProvider {
   readonly version = '1.0.0';
 
   getTools(context: AgentCapabilityContext): Tool[] {
-    const { documentReader, fileAccessPolicy, resolveDocumentResourceScope } =
-      createDocumentToolRuntime(context);
+    const { resolveDocumentResourceScope } = createDocumentToolRuntime(context);
     const contentAccessRuntime = getCapabilityRuntimeBindings().contentAccessRuntime;
 
     return [
       createReadDocumentTool({
-        reader: documentReader,
         contentAccessRuntime,
-        fileAccessPolicy,
         resolveResourceScope: resolveDocumentResourceScope,
       }),
       createReadDocumentImageTool({
-        reader: documentReader,
         contentAccessRuntime,
-        fileAccessPolicy,
         resolveResourceScope: resolveDocumentResourceScope,
       }),
     ];

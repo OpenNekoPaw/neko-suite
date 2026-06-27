@@ -1,12 +1,12 @@
 import type { MultimodalContextPacket } from '@neko/shared';
 import {
+  resolvePerceptionContextPacket,
+  type PerceptionInputMaterializer,
+} from '@neko/content';
+import {
   createTimelineContextPacketFromEditor,
   type TimelineEditorContextInput,
 } from './multimodal-context-packet';
-import {
-  resolveTimelinePerceptionInputs,
-  type TimelinePerceptionInputClient,
-} from './perception-input-resolver';
 
 export interface TimelineContextEditorLike {
   readonly capabilities: {
@@ -24,7 +24,7 @@ export interface TimelineContextEditorLike {
 }
 
 export interface TimelineContextRuntimeOptions {
-  readonly getPerceptionClient?: () => Promise<TimelinePerceptionInputClient | null | undefined>;
+  readonly getPerceptionMaterializer?: () => Promise<PerceptionInputMaterializer | null | undefined>;
 }
 
 export interface BuildTimelineContextPacketInput {
@@ -63,17 +63,17 @@ class DefaultTimelineContextRuntime implements TimelineContextRuntime {
       userAnnotation: input.message,
     });
 
-    if (!packet || !input.workspaceRoot || !this.options.getPerceptionClient) {
+    if (!packet || !this.options.getPerceptionMaterializer) {
       return packet;
     }
 
-    const perceptionClient = await this.options.getPerceptionClient();
-    if (!perceptionClient) {
+    const materializer = await this.options.getPerceptionMaterializer();
+    if (!materializer) {
       return packet;
     }
 
-    return resolveTimelinePerceptionInputs(packet, {
-      engineClient: perceptionClient,
+    return resolvePerceptionContextPacket(packet, {
+      materializer,
       workspaceRoot: input.workspaceRoot,
     });
   }

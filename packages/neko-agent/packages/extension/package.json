@@ -16,6 +16,7 @@
     "@neko-agent/types": "workspace:*",
     "@neko/agent": "workspace:*",
     "@neko/ai-sdk": "workspace:*",
+    "@neko/content": "workspace:*",
     "@neko/entity": "workspace:*",
     "@neko/neko-client": "workspace:*",
     "@neko/platform": "workspace:*",

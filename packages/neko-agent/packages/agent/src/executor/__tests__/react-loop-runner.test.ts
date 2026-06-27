@@ -447,6 +447,28 @@ describe('ReActLoopRunner hooks', () => {
       expect(events).toEqual(['tool:GenerateImage']);
     });
 
+    it('does not emit apply committed for read-only tools', async () => {
+      const bus = createEventBus();
+      const { hooks } = createReActLoopRunner({
+        runStore: store,
+        getMode: () => 'auto',
+        eventBus: bus,
+      });
+      await hooks.onExecuteStart?.('input', ctx(0));
+
+      const events: string[] = [];
+      bus.on(EXECUTION_CHANNELS.APPLY_COMMITTED, (event) => events.push(event.kind));
+
+      const results = [
+        { success: true, data: {}, callId: 'c1', name: 'ReadDocument' },
+        { success: true, data: {}, callId: 'c2', name: 'ReadDocumentImage' },
+        { success: true, data: {}, callId: 'c3', name: 'GenerateImage' },
+      ] as unknown as ToolResultWithMeta[];
+      await hooks.afterAct?.(results);
+
+      expect(events).toEqual(['tool:GenerateImage']);
+    });
+
     it('no emission without an event bus', async () => {
       const { hooks } = createReActLoopRunner({
         runStore: store,

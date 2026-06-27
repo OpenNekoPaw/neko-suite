@@ -273,11 +273,48 @@ describe('PermissionHooks', () => {
 
       const readOnlyCalls = [
         makeToolCall('Read', { file_path: '/tmp/test.txt' }, 'call_read'),
-        makeToolCall('ReadDocument', { file_path: '/tmp/book.epub' }, 'call_doc'),
-        makeToolCall('ReadImage', { image_paths: ['/tmp/page.png'] }, 'call_image'),
+        makeToolCall(
+          'ReadDocument',
+          {
+            source: {
+              kind: 'file',
+              path: '/tmp/book.epub',
+            },
+          },
+          'call_doc',
+        ),
+        makeToolCall(
+          'ReadImage',
+          {
+            images: [
+              {
+                resourceRef: {
+                  kind: 'document-entry',
+                  source: { filePath: '/tmp/book.epub', format: 'epub' },
+                  entryPath: 'OPS/page.png',
+                  versionPolicy: 'versioned-export',
+                },
+              },
+            ],
+          },
+          'call_image',
+        ),
         makeToolCall(
           'ReadDocumentImage',
-          { file_path: '/tmp/book.epub', page: 1 },
+          {
+            source: {
+              kind: 'file',
+              path: '/tmp/book.epub',
+            },
+            locators: [
+              {
+                kind: 'document-entry',
+                source: { filePath: '/tmp/book.epub', format: 'epub' },
+                entryPath: 'OPS/page.png',
+                versionPolicy: 'versioned-export',
+              },
+            ],
+          },
           'call_doc_image',
         ),
         makeToolCall('Grep', { pattern: 'needle' }, 'call_grep'),
@@ -382,7 +419,9 @@ describe('PermissionHooks', () => {
         onConfirmTool,
       });
 
-      const toolCall = makeToolCall('ReadDocument', { file_path: '/tmp/book.epub' });
+      const toolCall = makeToolCall('ReadDocument', {
+        source: { kind: 'file', path: '/tmp/book.epub' },
+      });
 
       await expect(hooks.onToolCall(toolCall, vi.fn())).resolves.toBeNull();
 
@@ -401,7 +440,9 @@ describe('PermissionHooks', () => {
         onConfirmTool,
       });
 
-      const toolCall = makeToolCall('ReadDocument', { file_path: '/tmp/book.epub' });
+      const toolCall = makeToolCall('ReadDocument', {
+        source: { kind: 'file', path: '/tmp/book.epub' },
+      });
       const result = await hooks.onToolCall(toolCall, vi.fn());
 
       expect(result).not.toBeNull();

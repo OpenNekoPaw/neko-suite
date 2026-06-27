@@ -54,14 +54,19 @@ import {
   createVSCodeSemanticCoverageProvider,
   registerProjectSearchService,
 } from '@neko/search/host-vscode';
-import { resolveDocumentPath } from './services/documentPathResolver';
 import { createAgentProjectSearchAdapters } from './services/agentProjectSearchAdapters';
 import { getSkillFileService } from './services/SkillFileService';
 import { createSkillCatalogProvider } from './services/skillCatalogProvider';
 import { ExternalProcessorRegistryService } from './services/externalProcessorRegistryService';
 import { runResourceCacheStartupGc } from './services/resourceCacheStartupGcService';
 import { getEngineClientProvider } from './services/engineClientProvider';
-import { createExtensionAgentContentAccessRuntime } from './services/agentContentAccessRuntime';
+import {
+  createExtensionAgentContentAccessRuntime,
+} from './services/agentContentAccessRuntime';
+import {
+  createHostContentPathResolver,
+  getHostContentAuthorizedReadRoots,
+} from '@neko/shared/vscode/extension';
 
 type SkillLocaleMap = Readonly<Record<string, SkillLocalizedText>>;
 
@@ -224,10 +229,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   // Platform services are injected into context so providers can use media/config/embed
   // without depending on @neko/platform directly.
   const capabilityRegistries = createAgentCapabilityRuntimeRegistries();
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const engineClientProvider = getEngineClientProvider();
+  await engineClientProvider.setAuthorizedReadRoots?.(
+    await getHostContentAuthorizedReadRoots({
+      workspaceRoot,
+      getExtension: vscode.extensions.getExtension,
+      logger,
+    }),
+  );
   const agentContentAccess = createExtensionAgentContentAccessRuntime({
     context,
-    engineClientProvider: getEngineClientProvider(),
-    workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    engineClientProvider,
+    workspaceRoot,
+    pathResolver: await createHostContentPathResolver({
+      workspaceRoot,
+      getExtension: vscode.extensions.getExtension,
+      logger,
+    }),
   });
   setCapabilityRuntimeContentAccessRuntime(agentContentAccess.runtime);
 
@@ -295,7 +314,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   // Project cache/search service — host-side facade for Agent mention search.
   const projectSearchLogger = getRootLogger().child('ProjectSearch');
   registerProjectSearchService(context, {
-    resolvePath: resolveDocumentPath,
     logger: projectSearchLogger,
     adapters: createAgentProjectSearchAdapters({
       logger: projectSearchLogger,

@@ -327,16 +327,16 @@
     {
       "id": "LCD-012",
       "package": "neko-agent",
-      "surface": "packages/neko-agent/packages/extension/package.json document parser dependencies",
+      "surface": "packages/neko-content package document parser backends",
       "kind": "static-analysis-false-positive",
       "semanticClass": "false-positive-word",
       "status": "active",
-      "owner": "neko-agent-platform-document",
-      "replacement": "Runtime import() parser backends used by document-reader and document-access-service",
+      "owner": "neko-content-document",
+      "replacement": "Runtime import() parser backends used by @neko/content document-reader and document-access-service",
       "removeAfter": "Only remove a parser dependency after the corresponding document format support and tests are intentionally deleted.",
       "tests": [
         "pnpm check:unused",
-        "pnpm --dir packages/neko-agent exec vitest run packages/platform/src/document/__tests__/document-reader.test.ts"
+        "pnpm --filter @neko/content exec vitest --run src/document/__tests__/document-reader.test.ts"
       ],
       "dependencies": [
         "epub2",
@@ -345,7 +345,7 @@
         "node-unrar-js",
         "xlsx"
       ],
-      "notes": "Knip cannot reliably trace these dynamic parser backends from the extension package manifest."
+      "notes": "Knip cannot reliably trace these dynamic parser backends from the content domain service runtime module loader."
     },
     {
       "id": "LCD-013",
@@ -374,7 +374,7 @@
       "replacement": "Canonical AgentWorkflowRuntime, .neko/.cache/artifact-index.json, explicit document read modes, AgentCapabilityProvider registry identity, and object-shaped feedback.pendingGuidance snapshots.",
       "removeAfter": "Removed by cleanup-remaining-legacy-debt-surfaces Agent 7.x after repo scans found no current production caller for the compatibility paths.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/agent-workflow-runtime.test.ts packages/agent/src/runtime/__tests__/artifact-service.test.ts packages/agent/src/runtime/__tests__/capability-registry-runtime.test.ts packages/agent/src/workspace/__tests__/idc-runtime-state-reader.test.ts packages/extension/src/tools/__tests__/readDocumentTool.test.ts packages/extension/src/tools/__tests__/readDocumentImageTool.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/agent-workflow-runtime.test.ts packages/agent/src/runtime/__tests__/artifact-service.test.ts packages/agent/src/runtime/__tests__/capability-registry-runtime.test.ts packages/agent/src/workspace/__tests__/idc-runtime-state-reader.test.ts packages/extension/src/tools/__tests__/contentAccessTools.test.ts",
         "rg -n \"createLegacyWorkflowUsageRecorder|AgentLegacyWorkflow|readArtifactRestoreEntriesWithLegacyFallback|toLegacyArtifactIndexPath|legacyToolNames|normalizeLegacyResourceRef|legacyContent|content preserves legacy full read\" packages/neko-agent/packages/agent packages/neko-agent/packages/agent-types packages/neko-agent/packages/extension",
         "pnpm check:agent-boundaries"
       ],
@@ -399,16 +399,16 @@
     {
       "id": "LCD-016",
       "package": "neko-agent",
-      "surface": "packages/neko-agent/packages/platform/src/document/document-reader.ts pdf-parse function/default parser and officeparser parseOfficeAsync readers",
+      "surface": "packages/neko-content/src/document/document-reader.ts pdf-parse function/default parser and officeparser parseOfficeAsync readers",
       "kind": "canonical-compatibility",
       "semanticClass": "migrate-now",
       "status": "removed",
-      "owner": "neko-agent-platform-document",
+      "owner": "neko-content-document",
       "replacement": "Current parser APIs: pdf-parse v2 PDFParse class and officeparser v6 parseOffice AST reader.",
       "removeAfter": "Removed after current package versions and tests confirmed canonical parser APIs cover PDF/PPTX document reads.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/platform/src/document/__tests__/document-reader.test.ts",
-        "rg -n \"legacyParser|parseOfficeAsync|numpages\" packages/neko-agent/packages/platform/src/document packages/neko-agent/packages/platform/src/document/__tests__"
+        "pnpm --filter @neko/content exec vitest --run src/document/__tests__/document-reader.test.ts",
+        "rg -n \"legacyParser|parseOfficeAsync|numpages\" packages/neko-content/src/document packages/neko-content/src/document/__tests__"
       ],
       "notes": "Dynamic parser dependencies remain current and are covered by LCD-012; this entry only removes obsolete third-party API shapes."
     },

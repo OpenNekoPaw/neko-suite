@@ -20,7 +20,6 @@ import {
   type VisionVideoProcessor,
 } from '@neko/platform/media';
 import { createSharpVisionImageProcessor } from '../../services/visionImageProcessor';
-import { resolveDocumentPath } from '../../services/documentPathResolver';
 
 const logger = getLogger('MediaPreprocessor');
 
@@ -51,14 +50,14 @@ export class MediaPreprocessor {
    * Returns processed images or 'unsupported' if not a media file.
    */
   async process(filePath: string, opts?: MediaProcessOptions): Promise<ProcessedMedia> {
-    return this.preprocessor.process(await resolveDocumentPath(filePath), opts);
+    return this.preprocessor.process(filePath, opts);
   }
 
   /**
    * Process an image file: resize if exceeding vision thresholds.
    */
   async processImage(filePath: string): Promise<ProcessedMedia> {
-    return this.preprocessor.processImage(await resolveDocumentPath(filePath));
+    return this.preprocessor.processImage(filePath);
   }
 
   /**
@@ -66,7 +65,7 @@ export class MediaPreprocessor {
    * Requires engine to be available.
    */
   async processVideo(filePath: string, opts?: MediaProcessOptions): Promise<ProcessedMedia> {
-    return this.preprocessor.processVideo(await resolveDocumentPath(filePath), opts);
+    return this.preprocessor.processVideo(filePath, opts);
   }
 
   private async readImageBytes(filePath: string): Promise<Uint8Array> {

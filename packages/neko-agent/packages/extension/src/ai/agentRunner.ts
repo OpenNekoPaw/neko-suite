@@ -28,14 +28,15 @@ import type { IAgentContext } from './agentContext';
 import { type IAgentConfig, type ExecutionMode } from './agentRunnerContracts';
 import { AgentRunnerRuntimeAdapter } from './agentRunnerRuntimeAdapter';
 import { AgentRunnerVscodeEventBridge } from './agentRunnerVscodeEventBridge';
-import { loadAuthorizedMediaLibraryReadRoots } from '../services/documentPathResolver';
 import { loadWorkspaceFileIgnoreRules } from '../services/workspaceIgnoreFilter';
-import { setDocumentAuthorizedReadRoots } from '../tools/documentToolRuntime';
 import {
   getCapabilityRuntimeBindings,
   setCapabilityRuntimeContentAccessRuntime,
 } from '../bootstrap/capabilityBootstrap';
-import { createExtensionAgentContentAccessRuntime } from '../services/agentContentAccessRuntime';
+import {
+  createExtensionAgentContentAccessRuntime,
+} from '../services/agentContentAccessRuntime';
+import { createWorkspaceContentPathResolver } from '@neko/shared/vscode/extension';
 
 const logger = getLogger('AgentRunner');
 
@@ -80,6 +81,9 @@ export class AgentRunner implements IAgentRunner {
         ? createExtensionAgentContentAccessRuntime({
             context: deps.extensionContext,
             engineClientProvider,
+            pathResolver: createWorkspaceContentPathResolver({
+              workspaceRoot: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+            }),
           }).runtime
         : undefined);
     if (agentContentAccess && !getCapabilityRuntimeBindings().contentAccessRuntime) {
@@ -225,16 +229,10 @@ export class AgentRunner implements IAgentRunner {
 }
 
 async function projectHostFileAccessPolicy(config: IAgentConfig): Promise<IAgentConfig> {
-  const hostReadRoots = await loadAuthorizedMediaLibraryReadRoots();
-  const authorizedReadRoots = dedupePaths([
-    ...(config.authorizedReadRoots ?? []),
-    ...hostReadRoots,
-  ]);
+  const authorizedReadRoots = dedupePaths(config.authorizedReadRoots ?? []);
   const workspaceIgnoreRules =
     config.workspaceIgnoreRules ??
     (config.workspaceRoot ? await loadWorkspaceFileIgnoreRules(config.workspaceRoot) : undefined);
-
-  await setDocumentAuthorizedReadRoots(authorizedReadRoots);
 
   if (authorizedReadRoots.length === 0 && workspaceIgnoreRules === config.workspaceIgnoreRules) {
     return config;

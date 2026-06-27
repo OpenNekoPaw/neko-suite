@@ -34,8 +34,7 @@ export interface ToolCallLike {
  * @example
  * { name: 'Bash', arguments: { command: 'git status' } } → 'Bash(git status)'
  * { name: 'Read', arguments: { file_path: 'src/index.ts' } } → 'Read(src/index.ts)'
- * { name: 'ReadDocument', arguments: { file_path: 'book.epub' } } → 'ReadDocument(book.epub)'
- * { name: 'ReadImage', arguments: { image_paths: ['page.png'] } } → 'ReadImage(page.png)'
+ * { name: 'ReadDocument', arguments: { source: { kind: 'file', path: '${A}/book.epub' } } } → 'ReadDocument(${A}/book.epub)'
  * { name: 'WebFetch', arguments: { url: 'https://github.com' } } → 'WebFetch(domain:github.com)'
  */
 export function normalizeToolCall(toolCall: ToolCallLike): string {
@@ -47,21 +46,17 @@ export function normalizeToolCall(toolCall: ToolCallLike): string {
   }
 
   // Handle filesystem tools - extract path/pattern
-  if (
-    [
-      'Read',
-      'ReadDocument',
-      'ReadImage',
-      'ReadDocumentImage',
-      'Edit',
-      'Write',
-      'Glob',
-      'Grep',
-    ].includes(name)
-  ) {
-    const path = args?.file_path || args?.path || args?.pattern || firstString(args?.image_paths);
+  if (['Read', 'Edit', 'Write', 'Glob', 'Grep'].includes(name)) {
+    const path = args?.file_path || args?.path || args?.pattern;
     if (path) {
       return `${name}(${String(path)})`;
+    }
+  }
+
+  if (name === 'ReadDocument' || name === 'ReadDocumentImage' || name === 'ReadImage') {
+    const sourcePath = extractSourcePath(args?.source);
+    if (sourcePath) {
+      return `${name}(${sourcePath})`;
     }
   }
 
@@ -83,8 +78,19 @@ export function normalizeToolCall(toolCall: ToolCallLike): string {
   return name;
 }
 
-function firstString(value: unknown): string | undefined {
-  return Array.isArray(value) && typeof value[0] === 'string' ? value[0] : undefined;
+function extractSourcePath(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record['path'] === 'string') return record['path'];
+  const source = record['source'];
+  if (!source || typeof source !== 'object') return undefined;
+  const nested = source as Record<string, unknown>;
+  if (typeof nested['filePath'] === 'string') return nested['filePath'];
+  if (typeof nested['projectRelativePath'] === 'string') return nested['projectRelativePath'];
+  const document = nested['document'];
+  if (!document || typeof document !== 'object') return undefined;
+  const documentRecord = document as Record<string, unknown>;
+  return typeof documentRecord['filePath'] === 'string' ? documentRecord['filePath'] : undefined;
 }
 
 /**

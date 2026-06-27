@@ -211,7 +211,16 @@ describe('message runtime helpers', () => {
           excerpt: { contentKind: 'text', text: 'selected paragraph', truncated: false },
         },
       }),
-    ).toContain('Follow-up: use ReadDocument with mode="manifest" or mode="range"');
+    ).toContain('Follow-up: use ReadDocument with the structured source ref shown above');
+  });
+
+  it('instructs document reads through canonical source refs', () => {
+    const enhanced = buildEnhancedAgentMessage({
+      message: 'analyze this',
+      documentReferences: [{ path: '${A}/books/book.epub' }],
+    });
+
+    expect(enhanced).toContain('source={"kind":"file","path":"${A}/books/book.epub"}');
   });
 
   it('prepares referenced file contents with injected input processor', async () => {

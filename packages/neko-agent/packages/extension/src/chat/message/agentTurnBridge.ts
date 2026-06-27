@@ -35,15 +35,12 @@ import type { IAgentRunner } from '../../ai/agentRunner';
 import type { IAgentContext } from '../../ai/agentContext';
 import type { IEditorRegistry } from '../../editor/common/editorRegistry';
 import { getCanvasSelection } from '../../services/canvasAmbientContext';
-import type { IEngineClientProvider } from '../../services/engineClientProvider';
 import type { ConversationBridge } from '../conversationBridge';
 import type { ProviderManager } from '../providerManager';
 import type { SettingsManager } from '../settingsManager';
 import type { AgentStreamProcessor } from './agentStreamProcessor';
 import type { AccountAiCatalogCache } from '../../services/accountAiCatalogCache';
-import { loadAuthorizedMediaLibraryReadRoots } from '../../services/documentPathResolver';
 import { loadWorkspaceFileIgnoreRules } from '../../services/workspaceIgnoreFilter';
-import { setDocumentAuthorizedReadRoots } from '../../tools/documentToolRuntime';
 
 export interface AgentTurnBridgeDeps {
   settings: SettingsManager;
@@ -56,7 +53,6 @@ export interface AgentTurnBridgeDeps {
   platform?: Platform;
   taskManager?: IRuntimeTaskManager;
   getActiveSkillState?: (conversationId: string) => ActiveSkillState | undefined;
-  engineClientProvider: IEngineClientProvider;
   accountAiCatalog?: AccountAiCatalogCache;
   streamProcessor: AgentStreamProcessor;
   onPhaseChange: (event: {
@@ -91,19 +87,15 @@ export class AgentTurnBridge {
   private readonly timelineContextRuntime: TimelineContextRuntime;
 
   constructor(private readonly deps: AgentTurnBridgeDeps) {
-    this.timelineContextRuntime = createTimelineContextRuntime({
-      getPerceptionClient: () => this.deps.engineClientProvider.getOptionalClient(),
-    });
+    this.timelineContextRuntime = createTimelineContextRuntime();
   }
 
   async execute(input: ExecuteAgentTurnForWebviewInput): Promise<void> {
     await this.refreshAccountCatalogForTurn(input.chatModel?.providerId);
-    const authorizedReadRoots = await loadAuthorizedMediaLibraryReadRoots();
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const workspaceIgnoreRules = workspaceRoot
       ? await loadWorkspaceFileIgnoreRules(workspaceRoot)
       : undefined;
-    await setDocumentAuthorizedReadRoots(authorizedReadRoots);
     const agentManagerBridge:
       | AgentTurnAgentManager<
           Platform,
@@ -159,7 +151,6 @@ export class AgentTurnBridge {
         host: {
           agentManager: agentManagerBridge,
           getWorkspaceRoot: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
-          getAuthorizedReadRoots: () => authorizedReadRoots,
           ...(workspaceIgnoreRules ? { getWorkspaceIgnoreRules: () => workspaceIgnoreRules } : {}),
           getActiveEditor: () => this.deps.editorRegistry?.getActiveEditor(),
           getAmbientCanvas: (id) => getCanvasSelection(id),

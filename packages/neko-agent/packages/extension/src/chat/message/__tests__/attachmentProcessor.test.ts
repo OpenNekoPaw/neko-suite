@@ -24,12 +24,6 @@ vi.mock('../../../base', () => ({
   }),
 }));
 
-vi.mock('../../../services/documentPathResolver', () => ({
-  resolveDocumentPath: vi.fn(async (filePath: string) =>
-    filePath.replace('${A}', '/Volumes/assets'),
-  ),
-}));
-
 describe('AttachmentProcessor', () => {
   let processor: AttachmentProcessor;
   let contentAccessRuntime: AgentContentAccessRuntime;

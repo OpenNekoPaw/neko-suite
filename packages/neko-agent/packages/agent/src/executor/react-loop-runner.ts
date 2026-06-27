@@ -36,6 +36,7 @@ import {
 } from '@neko/shared';
 import type { IdcStage, StageActivationDecision, StageTaskShape } from '@neko-agent/types';
 import { CREATION_CHANNELS, EXECUTION_CHANNELS } from '@neko-agent/types';
+import { DEFAULT_READ_ONLY_TOOLS } from '../permission/types';
 
 import { planStages, type StageEntrySignal } from '../skill/activation/stage-planner';
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
@@ -278,6 +279,7 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
           const at = Date.now();
           for (const result of results) {
             if ('success' in result && !result.success) continue;
+            if (isReadOnlyApplySubject(result)) continue;
             deps.eventBus.emit({
               channel: EXECUTION_CHANNELS.APPLY_COMMITTED,
               runId: activeRunId,
@@ -449,6 +451,10 @@ export function defaultClassifyEntrySignal(
 function getSubject(result: ToolResultWithMeta): string {
   const r = result as ToolResultWithMeta & { name?: string };
   return r.name && r.name.length > 0 ? r.name : 'unknown';
+}
+
+function isReadOnlyApplySubject(result: ToolResultWithMeta): boolean {
+  return DEFAULT_READ_ONLY_TOOLS.includes(getSubject(result));
 }
 
 /**

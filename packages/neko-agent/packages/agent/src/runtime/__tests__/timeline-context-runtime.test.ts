@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { MultimodalContextPacket } from '@neko/shared';
 import type { TimelineContextEditorLike } from '../timeline-context-runtime';
 import { createTimelineContextRuntime } from '../timeline-context-runtime';
 
@@ -19,14 +20,14 @@ function createTimelineEditor(
     getState: () => ({
       ...(overrides.currentTime !== undefined ? { currentTime: overrides.currentTime } : {}),
     }),
-    getContent: () => ({}),
+    getContent: <T = unknown>() => ({}) as T,
   };
 }
 
 describe('timeline-context-runtime', () => {
   it('returns null when active editor does not support timeline', async () => {
-    const getPerceptionClient = vi.fn();
-    const runtime = createTimelineContextRuntime({ getPerceptionClient });
+    const getPerceptionMaterializer = vi.fn();
+    const runtime = createTimelineContextRuntime({ getPerceptionMaterializer });
 
     await expect(
       runtime.build({
@@ -35,7 +36,7 @@ describe('timeline-context-runtime', () => {
         workspaceRoot: '/workspace',
       }),
     ).resolves.toBeNull();
-    expect(getPerceptionClient).not.toHaveBeenCalled();
+    expect(getPerceptionMaterializer).not.toHaveBeenCalled();
   });
 
   it('builds a timeline context packet from editor selection and state', async () => {
@@ -66,9 +67,8 @@ describe('timeline-context-runtime', () => {
     );
   });
 
-  it('does not request perception client when workspace root is missing', async () => {
-    const getPerceptionClient = vi.fn();
-    const runtime = createTimelineContextRuntime({ getPerceptionClient });
+  it('passes packets through when no perception materializer is registered', async () => {
+    const runtime = createTimelineContextRuntime();
 
     const packet = await runtime.build({
       activeEditor: createTimelineEditor(),
@@ -76,14 +76,19 @@ describe('timeline-context-runtime', () => {
     });
 
     expect(packet).not.toBeNull();
-    expect(getPerceptionClient).not.toHaveBeenCalled();
+    expect(JSON.stringify(packet)).not.toContain('.neko/.cache');
   });
 
-  it('resolves perception inputs when workspace root and client are available', async () => {
-    const getPerceptionClient = vi.fn(async () => ({
-      extractFrame: vi.fn(async () => null),
+  it('delegates perception materialization to the registered content service', async () => {
+    const materialize = vi.fn(async (packet: MultimodalContextPacket) => ({
+      ...packet,
+      perceptionInputs: packet.perceptionInputs.map((input) => ({
+        ...input,
+        metadata: { ...input.metadata, materializedBy: 'content-service' },
+      })),
     }));
-    const runtime = createTimelineContextRuntime({ getPerceptionClient });
+    const getPerceptionMaterializer = vi.fn(async () => ({ materialize }));
+    const runtime = createTimelineContextRuntime({ getPerceptionMaterializer });
 
     const packet = await runtime.build({
       activeEditor: createTimelineEditor(),
@@ -92,6 +97,13 @@ describe('timeline-context-runtime', () => {
     });
 
     expect(packet).not.toBeNull();
-    expect(getPerceptionClient).toHaveBeenCalledOnce();
+    expect(getPerceptionMaterializer).toHaveBeenCalledOnce();
+    expect(materialize).toHaveBeenCalledWith(
+      expect.objectContaining({ id: expect.stringMatching(/^ctx-timeline-/) }),
+      { workspaceRoot: '/workspace' },
+    );
+    expect(packet?.perceptionInputs[0]?.metadata).toEqual(
+      expect.objectContaining({ materializedBy: 'content-service' }),
+    );
   });
 });

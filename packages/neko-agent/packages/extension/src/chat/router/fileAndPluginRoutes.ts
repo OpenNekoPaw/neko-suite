@@ -44,6 +44,7 @@ export function tryHandleFileAndPluginRoute(
     case 'revealContextSource': {
       const nav = message.navigationData;
       const filePath = nav?.['filePath'] ?? nav?.['path'];
+      const resolvedPath = nav?.['resolvedPath'];
       const assetId =
         message.contextType === 'asset'
           ? (nav?.['assetId'] ??
@@ -57,9 +58,12 @@ export function tryHandleFileAndPluginRoute(
         nav?.['partition'] === 'media-library' &&
         filePath
       ) {
-        void vscode.commands.executeCommand('neko.assets.revealMediaLibraryFile', filePath);
+        void vscode.commands.executeCommand(
+          'neko.assets.revealMediaLibraryFile',
+          resolvedPath ?? filePath,
+        );
       } else if (filePath) {
-        deps.fileOperationHandler.handleOpenFile(filePath);
+        deps.fileOperationHandler.handleOpenFile(resolvedPath ?? filePath);
       } else if (message.contextType === 'canvas-node' && nav?.['nodeId']) {
         void vscode.commands.executeCommand('neko.canvas.selectNodeFromOutline', nav['nodeId']);
       }

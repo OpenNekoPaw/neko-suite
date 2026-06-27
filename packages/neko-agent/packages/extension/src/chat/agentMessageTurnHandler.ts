@@ -158,7 +158,6 @@ export class AgentMessageTurnHandler {
       platform: this._platform,
       taskManager: this._taskManager,
       getActiveSkillState: this._getActiveSkillState,
-      engineClientProvider: this._engineClientProvider,
       accountAiCatalog: this._options.accountAiCatalog,
       streamProcessor: this._streamProcessor,
       onPhaseChange: ({ conversationId, phase, toolName, timestamp }) =>

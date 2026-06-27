@@ -14,84 +14,89 @@ describe('projectMentionSearch', () => {
   });
 
   it('queries the project search service and maps shared items to mention candidates', async () => {
-    vi.mocked(vscode.commands.executeCommand).mockResolvedValue({
-      items: [
-        {
-          id: 'script-role:/workspace/cases/test.fountain:小橘',
-          kind: 'script-role',
-          label: '小橘',
-          description: 'Script role',
-          icon: '@',
-          source: {
-            partition: 'story-symbols',
-            sourceId: '小橘',
-            sourceKind: 'script-role',
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command: string) => {
+      if (command === 'neko.assets.contractPath') {
+        throw new Error('Unexpected contractPath call for workspace-relative fixture.');
+      }
+      return {
+        items: [
+          {
+            id: 'script-role:/workspace/cases/test.fountain:小橘',
+            kind: 'script-role',
+            label: '小橘',
+            description: 'Script role',
+            icon: '@',
+            source: {
+              partition: 'story-symbols',
+              sourceId: '小橘',
+              sourceKind: 'script-role',
+            },
+            projectRoot: '/workspace',
+            filePath: '/workspace/cases/test.fountain',
+            searchText: '小橘',
+            freshness: 'fresh',
           },
-          projectRoot: '/workspace',
-          filePath: '/workspace/cases/test.fountain',
-          searchText: '小橘',
-          freshness: 'fresh',
-        },
-        {
-          id: 'asset:asset-1',
-          kind: 'asset',
-          label: '橘猫参考图',
-          description: 'Asset',
-          icon: '🎭',
-          source: {
-            partition: 'asset-library',
-            sourceId: 'asset-1',
-            sourceKind: 'character',
+          {
+            id: 'asset:asset-1',
+            kind: 'asset',
+            label: '橘猫参考图',
+            description: 'Asset',
+            icon: '🎭',
+            source: {
+              partition: 'asset-library',
+              sourceId: 'asset-1',
+              sourceKind: 'character',
+            },
+            projectRoot: '/workspace',
+            filePath: 'assets/xiaoju.png',
+            searchText: '橘猫参考图 小橘',
+            freshness: 'fresh',
+            metadata: { mediaType: 'image', entityType: 'character' },
+            visualResource: {
+              projectedUri: 'webview:/workspace/.neko/.cache/resources/thumbnails/asset-1.jpg',
+              status: 'ready',
+              alt: '橘猫参考图',
+            },
           },
-          projectRoot: '/workspace',
-          filePath: 'assets/xiaoju.png',
-          searchText: '橘猫参考图 小橘',
-          freshness: 'fresh',
-          metadata: { mediaType: 'image', entityType: 'character' },
-          visualResource: {
-            projectedUri: 'webview:/workspace/.neko/.cache/resources/thumbnails/asset-1.jpg',
-            status: 'ready',
-            alt: '橘猫参考图',
+          {
+            id: 'entity-requirement:req-1',
+            kind: 'entity-candidate',
+            label: '小灰',
+            description: 'Missing portrait',
+            source: {
+              partition: 'creative-entities',
+              sourceId: 'req-1',
+              sourceKind: 'entity-asset-requirement',
+            },
+            projectRoot: '/workspace',
+            searchText: '小灰 portrait',
+            freshness: 'fresh',
+            metadata: { entityType: 'character' },
           },
-        },
-        {
-          id: 'entity-requirement:req-1',
-          kind: 'entity-candidate',
-          label: '小灰',
-          description: 'Missing portrait',
-          source: {
-            partition: 'creative-entities',
-            sourceId: 'req-1',
-            sourceKind: 'entity-asset-requirement',
+          {
+            id: 'entity:scene:scene-narration',
+            kind: 'creative-entity',
+            label: '讲述',
+            description: 'scene · confirmed',
+            source: {
+              partition: 'creative-entities',
+              sourceId: 'neko-entity',
+              sourceKind: 'registry',
+              refId: 'scene-narration',
+              metadata: { entityKind: 'scene', status: 'confirmed' },
+            },
+            projectRoot: '/workspace',
+            canonicalName: '讲述',
+            aliases: ['旁白段落'],
+            searchText: '讲述 旁白段落 scene confirmed',
+            freshness: 'fresh',
           },
-          projectRoot: '/workspace',
-          searchText: '小灰 portrait',
-          freshness: 'fresh',
-          metadata: { entityType: 'character' },
-        },
-        {
-          id: 'entity:scene:scene-narration',
-          kind: 'creative-entity',
-          label: '讲述',
-          description: 'scene · confirmed',
-          source: {
-            partition: 'creative-entities',
-            sourceId: 'neko-entity',
-            sourceKind: 'registry',
-            refId: 'scene-narration',
-            metadata: { entityKind: 'scene', status: 'confirmed' },
-          },
-          projectRoot: '/workspace',
-          canonicalName: '讲述',
-          aliases: ['旁白段落'],
-          searchText: '讲述 旁白段落 scene confirmed',
-          freshness: 'fresh',
-        },
-      ],
-      partitions: [],
-      freshness: 'fresh',
-      context: { projectRoot: '/workspace' },
-      query: { text: '小橘' },
+        ],
+        partitions: [],
+        freshness: 'fresh',
+        context: { projectRoot: '/workspace' },
+        query: { text: '小橘' },
+      };
     });
 
     const candidates = await searchProjectMentionCandidates({
@@ -113,6 +118,11 @@ describe('projectMentionSearch', () => {
           type: 'character',
           label: '小橘',
           source: 'story',
+          filePath: 'cases/test.fountain',
+          navigationData: expect.objectContaining({
+            filePath: 'cases/test.fountain',
+            resolvedPath: '/workspace/cases/test.fountain',
+          }),
         }),
         expect.objectContaining({
           type: 'asset',
@@ -234,5 +244,138 @@ describe('projectMentionSearch', () => {
         entityType: 'character',
       }),
     ]);
+  });
+
+  it('contracts media library absolute paths before exposing path-backed mention candidates', async () => {
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(
+      async (command: string, arg: unknown) => {
+        if (command === 'neko.assets.contractPath') {
+          expect(arg).toBe('/Users/feng/Assets/epub/Blame/book.epub');
+          return '${EPUBS}/Blame/book.epub';
+        }
+        if (command === PROJECT_SEARCH_QUERY_COMMAND) {
+          return {
+            items: [
+              {
+                id: 'media:/Users/feng/Assets/epub/Blame/book.epub',
+                kind: 'document',
+                label: 'book.epub',
+                description: 'Media: EPUBS',
+                source: {
+                  partition: 'media-library',
+                  sourceId: '/Users/feng/Assets/epub/Blame/book.epub',
+                  sourceKind: 'document',
+                  filePath: '/Users/feng/Assets/epub/Blame/book.epub',
+                },
+                projectRoot: '/workspace',
+                filePath: '/Users/feng/Assets/epub/Blame/book.epub',
+                searchText: 'book.epub EPUBS document',
+                freshness: 'fresh',
+                metadata: { mediaType: 'document' },
+                navigationData: {
+                  filePath: '/Users/feng/Assets/epub/Blame/book.epub',
+                  libraryName: 'EPUBS',
+                },
+              },
+            ],
+            partitions: [],
+            freshness: 'fresh',
+            context: { projectRoot: '/workspace' },
+            query: { text: 'book' },
+          };
+        }
+        return undefined;
+      },
+    );
+
+    const candidates = await searchProjectMentionCandidates(
+      {
+        includePattern: '**/*book*',
+        excludePattern: '**/node_modules/**',
+        limit: 30,
+      },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        type: 'media',
+        label: 'book.epub',
+        source: 'media-library',
+        mediaType: 'document',
+        filePath: '${EPUBS}/Blame/book.epub',
+        navigationData: expect.objectContaining({
+          partition: 'media-library',
+          filePath: '${EPUBS}/Blame/book.epub',
+          portablePath: '${EPUBS}/Blame/book.epub',
+          resolvedPath: '/Users/feng/Assets/epub/Blame/book.epub',
+          sourceId: '${EPUBS}/Blame/book.epub',
+          variable: 'EPUBS',
+        }),
+      }),
+    ]);
+  });
+
+  it('does not expose unmanaged absolute paths as successful file mention paths', async () => {
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(
+      async (command: string, arg: unknown) => {
+        if (command === 'neko.assets.contractPath') {
+          expect(arg).toBe('/tmp/random.png');
+          return '/tmp/random.png';
+        }
+        if (command === PROJECT_SEARCH_QUERY_COMMAND) {
+          return {
+            items: [
+              {
+                id: 'media:/tmp/random.png',
+                kind: 'media',
+                label: 'random.png',
+                source: {
+                  partition: 'media-library',
+                  sourceId: '/tmp/random.png',
+                  sourceKind: 'image',
+                  filePath: '/tmp/random.png',
+                },
+                projectRoot: '/workspace',
+                filePath: '/tmp/random.png',
+                searchText: 'random.png',
+                freshness: 'fresh',
+                metadata: { mediaType: 'image' },
+                navigationData: { filePath: '/tmp/random.png' },
+              },
+            ],
+            partitions: [],
+            freshness: 'fresh',
+            context: { projectRoot: '/workspace' },
+            query: { text: 'random' },
+          };
+        }
+        return undefined;
+      },
+    );
+
+    const candidates = await searchProjectMentionCandidates(
+      {
+        includePattern: '**/*random*',
+        excludePattern: '**/node_modules/**',
+        limit: 30,
+      },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        type: 'media',
+        label: 'random.png',
+        mediaType: 'image',
+        navigationData: expect.objectContaining({
+          partition: 'media-library',
+        }),
+      }),
+    ]);
+    expect(candidates[0]).not.toHaveProperty('filePath');
+    expect(candidates[0]?.navigationData).not.toHaveProperty('filePath');
+    expect(candidates[0]?.navigationData).not.toHaveProperty('resolvedPath');
+    expect(candidates[0]?.navigationData).not.toHaveProperty('sourceId');
   });
 });

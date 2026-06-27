@@ -25,25 +25,13 @@ describe('normalizeToolCall', () => {
     );
   });
 
-  it('should normalize ReadDocument tool with file_path', () => {
-    expect(normalizeToolCall({ name: 'ReadDocument', arguments: { file_path: 'book.epub' } })).toBe(
-      'ReadDocument(book.epub)',
-    );
-  });
-
-  it('should normalize ReadImage tool with first image path', () => {
-    expect(normalizeToolCall({ name: 'ReadImage', arguments: { image_paths: ['page.png'] } })).toBe(
-      'ReadImage(page.png)',
-    );
-  });
-
-  it('should normalize ReadDocumentImage tool with file_path', () => {
+  it('should normalize content access tools with canonical source refs', () => {
     expect(
       normalizeToolCall({
-        name: 'ReadDocumentImage',
-        arguments: { file_path: 'book.epub', page_indexes: [1] },
+        name: 'ReadDocument',
+        arguments: { source: { kind: 'file', path: '${A}/books/book.epub' } },
       }),
-    ).toBe('ReadDocumentImage(book.epub)');
+    ).toBe('ReadDocument(${A}/books/book.epub)');
   });
 
   it('should normalize Edit tool with file_path', () => {

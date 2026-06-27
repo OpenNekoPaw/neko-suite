@@ -7,6 +7,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 import type { ProjectSearchItem, ProjectSearchItemKind, ProjectSearchResult } from '@neko/shared';
 import type { AgentProjectFileSearchPlan, AgentProjectMentionCandidate } from '@neko/agent/runtime';
 import type {
@@ -35,6 +36,10 @@ const ROLEPLAY_SEARCH_KINDS: readonly ProjectSearchItemKind[] = [
   'asset',
   'generated-asset',
 ];
+
+const ASSETS_CONTRACT_PATH_COMMAND = 'neko.assets.contractPath';
+const WINDOWS_DRIVE_RE = /^[A-Za-z]:[\\/]/;
+const WINDOWS_UNC_RE = /^\\\\/;
 
 interface ProjectMentionSearchOptions {
   readonly contextFilePath?: string;
@@ -67,8 +72,10 @@ export async function searchProjectMentionCandidates(
   );
 
   const items = result?.items ?? [];
-  return (isRoleplaySearch ? items.filter(isRoleplayProjectSearchItem) : items).map(
-    projectSearchItemToMentionCandidate,
+  return Promise.all(
+    (isRoleplaySearch ? items.filter(isRoleplayProjectSearchItem) : items).map(
+      projectSearchItemToMentionCandidate,
+    ),
   );
 }
 
@@ -93,9 +100,9 @@ function isCharacterLikeString(value: string | undefined): boolean {
   return ['character', 'role', '角色'].includes(value.trim().toLowerCase());
 }
 
-function projectSearchItemToMentionCandidate(
+async function projectSearchItemToMentionCandidate(
   item: ProjectSearchItem,
-): AgentProjectMentionCandidate {
+): Promise<AgentProjectMentionCandidate> {
   const type = mentionTypeForProjectItem(item);
   const source = mentionSourceForProjectItem(item);
   const mediaType = readMentionMediaType(item.metadata?.['mediaType']);
@@ -105,6 +112,7 @@ function projectSearchItemToMentionCandidate(
     readString(item.metadata?.['entityType']) ??
     readString(item.metadata?.['category']) ??
     item.source.sourceKind;
+  const referencePath = await projectMentionReferencePath(item);
   return {
     type,
     id: item.id,
@@ -115,21 +123,125 @@ function projectSearchItemToMentionCandidate(
     ...(item.searchText ? { searchText: item.searchText } : {}),
     ...(source ? { source } : {}),
     ...(item.icon ? { icon: item.icon } : {}),
-    ...(item.filePath ? { filePath: item.filePath } : {}),
+    ...(referencePath ? { filePath: referencePath } : {}),
     ...(mediaType ? { mediaType } : {}),
     ...(entityType ? { entityType } : {}),
     ...(thumbnailUri ? { thumbnailUri } : {}),
-    navigationData: stringifyNavigationData({
-      ...item.navigationData,
-      ...(type === 'asset' ? { assetId: assetIdForProjectItem(item) } : {}),
-      projectRoot: item.projectRoot,
-      partition: item.source.partition,
-      sourceId: item.source.sourceId,
-      sourceKind: item.source.sourceKind,
-      refId: item.source.refId,
-      freshness: item.freshness,
-    }),
+    navigationData: projectMentionNavigationData(item, referencePath, type),
   };
+}
+
+async function projectMentionReferencePath(item: ProjectSearchItem): Promise<string | undefined> {
+  const filePath = readString(item.filePath);
+  if (!filePath) return undefined;
+
+  const normalizedPath = normalizeMentionPath(filePath);
+  if (!isLocalAbsolutePath(filePath)) {
+    return normalizedPath;
+  }
+
+  const projectRelativePath = contractWithProjectRoot(filePath, item.projectRoot);
+  if (projectRelativePath) {
+    return projectRelativePath;
+  }
+
+  const contractedPath = await contractPathWithAssets(filePath, item);
+  if (contractedPath && !isLocalAbsolutePath(contractedPath)) {
+    return normalizeMentionPath(contractedPath);
+  }
+
+  return undefined;
+}
+
+async function contractPathWithAssets(
+  filePath: string,
+  item: ProjectSearchItem,
+): Promise<string | undefined> {
+  let contracted: unknown;
+  try {
+    contracted = await vscode.commands.executeCommand<unknown>(
+      ASSETS_CONTRACT_PATH_COMMAND,
+      filePath,
+      {
+        owningWorkspaceRoot: item.projectRoot,
+        workspaceRoots: [item.projectRoot],
+      },
+    );
+  } catch {
+    return undefined;
+  }
+  return typeof contracted === 'string' && contracted.length > 0 ? contracted : undefined;
+}
+
+function projectMentionNavigationData(
+  item: ProjectSearchItem,
+  referencePath: string | undefined,
+  type: ProjectMentionExtraType,
+): Record<string, string> {
+  const navigationData: Record<string, unknown> = { ...item.navigationData };
+  const rawFilePath = readString(item.filePath) ?? readString(navigationData['filePath']);
+  const rawSourceId = readString(item.source.sourceId);
+  const sourceId =
+    rawSourceId && isLocalAbsolutePath(rawSourceId) ? (referencePath ?? undefined) : rawSourceId;
+
+  if (referencePath) {
+    navigationData['path'] = referencePath;
+    navigationData['filePath'] = referencePath;
+    navigationData['portablePath'] = referencePath;
+    const variable = extractPathVariable(referencePath);
+    if (variable) {
+      navigationData['variable'] = variable;
+    }
+  } else {
+    removeAbsoluteNavigationPath(navigationData, 'path');
+    removeAbsoluteNavigationPath(navigationData, 'filePath');
+    removeAbsoluteNavigationPath(navigationData, 'portablePath');
+  }
+
+  if (referencePath && rawFilePath && isLocalAbsolutePath(rawFilePath)) {
+    navigationData['resolvedPath'] = normalizeMentionPath(rawFilePath);
+  }
+
+  return stringifyNavigationData({
+    ...navigationData,
+    ...(type === 'asset' ? { assetId: assetIdForProjectItem(item) } : {}),
+    projectRoot: item.projectRoot,
+    partition: item.source.partition,
+    ...(sourceId ? { sourceId } : {}),
+    sourceKind: item.source.sourceKind,
+    refId: item.source.refId,
+    freshness: item.freshness,
+  });
+}
+
+function removeAbsoluteNavigationPath(data: Record<string, unknown>, key: string): void {
+  const value = readString(data[key]);
+  if (value && isLocalAbsolutePath(value)) {
+    delete data[key];
+  }
+}
+
+function contractWithProjectRoot(filePath: string, projectRoot: string): string | undefined {
+  if (!projectRoot) return undefined;
+  const relativePath = path.relative(projectRoot, filePath);
+  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return undefined;
+  }
+  return normalizeMentionPath(relativePath);
+}
+
+function isLocalAbsolutePath(filePath: string): boolean {
+  return (
+    path.isAbsolute(filePath) || WINDOWS_DRIVE_RE.test(filePath) || WINDOWS_UNC_RE.test(filePath)
+  );
+}
+
+function normalizeMentionPath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
+
+function extractPathVariable(filePath: string): string | undefined {
+  return /^\$\{([^}]+)\}(?:\/|$)/.exec(filePath)?.[1];
 }
 
 function assetIdForProjectItem(item: ProjectSearchItem): string | undefined {

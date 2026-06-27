@@ -118,8 +118,8 @@ NekoAgent 只处理 DRM-free 内容：
 
 ## 开发者实现说明
 
-- 格式解析集中在 `@neko/platform/document`，Extension 工具层只负责参数、schema 和结果适配。
-- `@neko/platform/document` 不决定缓存目录，也不直接读取容器图片字节作为成功路径；它只产出 `DocumentArchiveResourceRef`、locator 和元数据，二进制 entry bytes 由 Extension 注入的 Engine file access 读取。
+- 格式解析集中在跨领域 domain service `@neko/content/document`，Extension 工具层只负责参数、schema 和结果适配。
+- `@neko/content/document` 不决定缓存目录，也不直接读取容器图片字节作为成功路径；它只产出 `DocumentArchiveResourceRef`、locator 和元数据，二进制 entry bytes 由 Extension 注入的 Engine file access 读取。
 - 运行时依赖通过 `DocumentReaderRuntimeDeps.loadModule()` 注入，保持平台层可测试，不直接依赖 VSCode API。
 - 不通过 shell 调用外部解析程序；禁止把 Python、系统 `unzip`、`sips`、`unrar` 等命令作为生产读取路径。
 - 新增格式时先扩展共享契约和 manifest/range 能力，再补具体解析器和单元测试。

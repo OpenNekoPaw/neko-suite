@@ -88,11 +88,11 @@ describe('ToolRegistry provider schema projection', () => {
         isReadOnly: true,
         parameters: {
           type: 'object',
-          anyOf: [{ required: ['image_paths'] }, { required: ['images'] }],
+          required: ['images'],
           properties: {
-            image_paths: {
+            images: {
               type: 'array',
-              items: { type: 'string' },
+              items: { type: 'object' },
             },
             mode: {
               type: 'string',

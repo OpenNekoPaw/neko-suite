@@ -5,7 +5,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { DEFAULT_MENTION_EXCLUDE_GLOB, type IFileReader } from '@neko/agent';
-import { resolveDocumentPath } from './documentPathResolver';
 import { createWorkspaceMentionIgnoreFilter } from './workspaceIgnoreFilter';
 
 export interface VSCodeWorkspaceFileReaderOptions {
@@ -20,7 +19,7 @@ export function createVSCodeWorkspaceFileReader(
   let lazyIgnoreFilter: Promise<
     Awaited<ReturnType<typeof createWorkspaceMentionIgnoreFilter>>
   > | null = ignoreFilter ? Promise.resolve(ignoreFilter) : null;
-  const resolvePath = options.resolvePath ?? resolveDocumentPath;
+  const resolvePath = options.resolvePath ?? ((filePath: string) => Promise.resolve(filePath));
   const toUri = (filePath: string): vscode.Uri =>
     path.isAbsolute(filePath)
       ? vscode.Uri.file(filePath)

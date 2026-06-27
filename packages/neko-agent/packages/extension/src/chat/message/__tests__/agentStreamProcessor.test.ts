@@ -384,7 +384,7 @@ describe('AgentStreamProcessor', () => {
             toolCall: {
               id: 'tc-memory',
               name: 'ReadImage',
-              arguments: { image_paths: ['/tmp/page-1.jpg'] },
+              arguments: makeReadImageArguments(),
             },
           },
           {
@@ -392,7 +392,7 @@ describe('AgentStreamProcessor', () => {
             toolResult: {
               toolCallId: 'tc-memory',
               success: true,
-              data: { imagePaths: ['/tmp/page-1.jpg'] },
+              data: makeReadImageResultData(),
             },
           },
           { type: 'text', content: text },
@@ -513,7 +513,7 @@ describe('AgentStreamProcessor', () => {
             toolCall: {
               id: 'tc-memory',
               name: 'ReadImage',
-              arguments: { image_paths: ['/tmp/page-1.jpg'] },
+              arguments: makeReadImageArguments(),
             },
           },
           {
@@ -521,7 +521,7 @@ describe('AgentStreamProcessor', () => {
             toolResult: {
               toolCallId: 'tc-memory',
               success: true,
-              data: { imagePaths: ['/tmp/page-1.jpg'] },
+              data: makeReadImageResultData(),
             },
           },
           { type: 'text', content: text },
@@ -576,7 +576,7 @@ describe('AgentStreamProcessor', () => {
             toolCall: {
               id: 'tc-memory',
               name: 'ReadImage',
-              arguments: { image_paths: ['/tmp/page-1.jpg'] },
+              arguments: makeReadImageArguments(),
             },
           },
           {
@@ -584,7 +584,7 @@ describe('AgentStreamProcessor', () => {
             toolResult: {
               toolCallId: 'tc-memory',
               success: true,
-              data: { imagePaths: ['/tmp/page-1.jpg'] },
+              data: makeReadImageResultData(),
             },
           },
           { type: 'text', content: text },
@@ -598,51 +598,6 @@ describe('AgentStreamProcessor', () => {
         toolCallId: 'tc-memory',
         sourceArtifactId: 'comic-storyboard-plan',
       });
-    });
-
-    it('does not project legacy document image paths into webview URI contracts', async () => {
-      const localResourceAccess = {
-        toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
-      };
-      processor = new AgentStreamProcessor({
-        localResourceAccess: localResourceAccess as any,
-      });
-      const events = toAsyncIterable([
-        {
-          type: 'tool_call',
-          toolCall: { id: 'tc-1', name: 'ReadDocument', arguments: { file_path: '/books/a.epub' } },
-        },
-        {
-          type: 'tool_result',
-          toolResult: {
-            toolCallId: 'tc-1',
-            success: true,
-            data: {
-              source: { filePath: '/books/a.epub', format: 'epub' },
-              imagePaths: ['/tmp/page-1.jpg'],
-              imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
-            },
-          },
-        },
-      ]);
-
-      const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
-
-      expect(result.collectedToolCalls[0]!.result?.data).toEqual({
-        source: { filePath: '/books/a.epub', format: 'epub' },
-        imagePaths: ['/tmp/page-1.jpg'],
-        imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
-      });
-      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalled();
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'toolResult',
-          data: {
-            source: { filePath: '/books/a.epub', format: 'epub' },
-            imageInfo: [{ width: 1494, height: 2133 }],
-          },
-        }),
-      );
     });
 
     it('projects ReadImage arguments to webview URIs when the tool call starts', async () => {
@@ -659,7 +614,6 @@ describe('AgentStreamProcessor', () => {
             id: 'tc-read-image',
             name: 'ReadImage',
             arguments: {
-              image_paths: ['/tmp/page-1.jpg'],
               images: [{ label: 'Page 1', path: '/tmp/page-1.jpg' }],
             },
           },
@@ -669,7 +623,6 @@ describe('AgentStreamProcessor', () => {
       const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
       expect(result.collectedToolCalls[0]!.arguments).toEqual({
-        image_paths: ['/tmp/page-1.jpg'],
         images: [{ label: 'Page 1', path: '/tmp/page-1.jpg' }],
       });
       expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
@@ -682,7 +635,6 @@ describe('AgentStreamProcessor', () => {
           type: 'toolCall',
           toolCallId: 'tc-read-image',
           arguments: {
-            image_paths: ['/tmp/page-1.jpg'],
             images: [
               {
                 label: 'Page 1',
@@ -694,130 +646,8 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
-    it('strips legacy document image paths when unified access would reject them', async () => {
-      const localResourceAccess = {
-        toWebviewUri: vi.fn(() => undefined),
-      };
-      processor = new AgentStreamProcessor({
-        localResourceAccess: localResourceAccess as any,
-      });
-      const events = toAsyncIterable([
-        {
-          type: 'tool_result',
-          toolResult: {
-            toolCallId: 'tc-1',
-            success: true,
-            data: {
-              imagePaths: ['/tmp/page-1.jpg'],
-              imageInfo: [{ path: '/tmp/page-1.jpg', width: 1494, height: 2133 }],
-            },
-          },
-        },
-      ]);
-
-      await processor.processStream(webview as any, 'conv-1', events, callbacks);
-
-      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalled();
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'toolResult',
-          data: {
-            imageInfo: [
-              {
-                width: 1494,
-                height: 2133,
-              },
-            ],
-          },
-        }),
-      );
-    });
-
-    it('strips macOS system temp image paths instead of emitting display URIs', async () => {
-      const localResourceAccess = {
-        toWebviewUri: vi.fn(() => undefined),
-      };
-      processor = new AgentStreamProcessor({
-        localResourceAccess: localResourceAccess as any,
-      });
-      const tempImagePath =
-        '/var/folders/26/b9fmn08x6mv2bcl771rnjyt80000gn/T/neko_epub_1vehc43/0001_moe-017905.jpg';
-      const events = toAsyncIterable([
-        {
-          type: 'tool_result',
-          toolResult: {
-            toolCallId: 'tc-1',
-            success: true,
-            data: {
-              imagePaths: [tempImagePath],
-              imageInfo: [{ path: tempImagePath, width: 1494, height: 2133 }],
-            },
-          },
-        },
-      ]);
-
-      await processor.processStream(webview as any, 'conv-1', events, callbacks);
-
-      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalled();
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'toolResult',
-          data: expect.objectContaining({
-            imageInfo: [
-              expect.objectContaining({
-                width: 1494,
-                height: 2133,
-              }),
-            ],
-          }),
-        }),
-      );
-      expect(webview.postMessage).not.toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            imagePathWebviewUris: expect.any(Array),
-          }),
-        }),
-      );
-    });
-
-    it('does not project managed document cache paths in tool stream results', async () => {
-      const localResourceAccess = {
-        toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),
-      };
-      processor = new AgentStreamProcessor({
-        localResourceAccess: localResourceAccess as any,
-      });
-      const managedPath = '/workspace/.neko/.cache/resources/documents/doc_comic/OPS/page-1.jpg';
-      const events = toAsyncIterable([
-        {
-          type: 'tool_result',
-          toolResult: {
-            toolCallId: 'tc-1',
-            success: true,
-            data: {
-              imagePaths: [managedPath],
-              imageInfo: [{ path: managedPath, width: 1494, height: 2133 }],
-            },
-          },
-        },
-      ]);
-
-      await processor.processStream(webview as any, 'conv-1', events, callbacks);
-
-      expect(localResourceAccess.toWebviewUri).not.toHaveBeenCalled();
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'toolResult',
-          data: {
-            imageInfo: [{ width: 1494, height: 2133 }],
-          },
-        }),
-      );
-    });
-
-    it('projects document resource refs through unified content access without exposing cache paths', async () => {
-      const cachePath = '/workspace/.neko/.cache/resources/documents/doc_1/page-1.jpg';
+    it('projects document resource refs through unified content access without exposing host paths', async () => {
+      const materializedPath = '/workspace/.neko-runtime/resources/documents/doc_1/page-1.jpg';
       const archiveRef = {
         kind: 'document-entry',
         source: { filePath: '/books/a.epub', format: 'epub' },
@@ -826,15 +656,15 @@ describe('AgentStreamProcessor', () => {
       };
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) =>
-          filePath === cachePath ? 'vscode-webview://page-1.jpg' : undefined,
+          filePath === materializedPath ? 'vscode-webview://page-1.jpg' : undefined,
         ),
       };
       const contentAccessRuntime = {
         loadProviderAsset: vi.fn(async () => ({
           status: 'ready',
-          source: { kind: 'file', path: cachePath },
+          source: { kind: 'file', path: materializedPath },
           diagnostics: [],
-          uri: cachePath,
+          uri: materializedPath,
           mimeType: 'image/jpeg',
           sizeBytes: 2048,
         })),
@@ -853,7 +683,13 @@ describe('AgentStreamProcessor', () => {
           toolCall: {
             id: 'tc-read-doc-image',
             name: 'ReadDocumentImage',
-            arguments: { file_path: '/books/a.epub' },
+            arguments: {
+              source: {
+                kind: 'document',
+                source: { filePath: '/books/a.epub', format: 'epub' },
+              },
+              locators: [archiveRef],
+            },
           },
         },
         {
@@ -906,7 +742,7 @@ describe('AgentStreamProcessor', () => {
       );
       expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
         webview,
-        cachePath,
+        materializedPath,
         'neko-agent.document-resource',
       );
       expect(webview.postMessage).toHaveBeenCalledWith(
@@ -928,7 +764,7 @@ describe('AgentStreamProcessor', () => {
           }),
         }),
       );
-      expect(JSON.stringify(webview.postMessage.mock.calls)).not.toContain(cachePath);
+      expect(JSON.stringify(webview.postMessage.mock.calls)).not.toContain(materializedPath);
       expect(dashboardWorkItems.acceptWebviewMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'toolResult',
@@ -1379,6 +1215,104 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
+    it('should not backfill cache-local generated assets without stable refs', async () => {
+      let progressCallback: ((task: any) => Promise<void>) | undefined;
+      const backfillSink = { applyBackfill: vi.fn().mockResolvedValue(undefined) };
+      const perceptionPipeline = { perceive: vi.fn().mockResolvedValue({ card: {} }) };
+      const platform = {
+        media: {
+          onProgress: vi.fn((_taskId: string, callback: (task: any) => Promise<void>) => {
+            progressCallback = callback;
+            return vi.fn();
+          }),
+        },
+      };
+      const mediaDeliveryHost = {
+        createProgressViewDelivery: vi.fn(async () => ({
+          view: {
+            id: 'task-media',
+            type: 'image',
+            status: 'completed',
+            progress: 100,
+            result: { urls: ['webview-uri:/workspace/.neko/.cache/generated/image/out.png'] },
+            updatedAt: '2026-01-01T00:00:01.000Z',
+          },
+          deliveryPlan: {
+            resultUrls: ['/workspace/.neko/.cache/generated/image/out.png'],
+            thumbnailUrl: '/workspace/.neko/.cache/generated/image/out.png',
+            localPaths: ['/workspace/.neko/.cache/generated/image/out.png'],
+            shouldPersistResultUrls: true,
+            shouldUnsubscribe: true,
+            generatedAssets: [
+              {
+                id: 'draft-asset-1',
+                type: 'generated-image',
+                path: '/workspace/.neko/.cache/generated/image/out.png',
+                mimeType: 'image/png',
+                generatedAt: '2026-01-01T00:00:01.000Z',
+                width: 1024,
+                height: 1024,
+                ratio: '1:1',
+              },
+            ],
+          },
+        })),
+      };
+      processor = new AgentStreamProcessor({
+        platform: platform as any,
+        mediaDeliveryHost: mediaDeliveryHost as any,
+        mediaBackfill: {
+          backfillSink,
+          perceptionPipeline: perceptionPipeline as any,
+        },
+      });
+
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc-media',
+              success: true,
+              data: {
+                backgroundMode: true,
+                taskId: 'task-media',
+                type: 'image',
+                message: 'Generate a cat',
+                routedTo: { provider: 'openai' },
+              },
+            },
+          },
+        ]),
+        callbacks,
+      );
+
+      await progressCallback?.({
+        id: 'task-media',
+        type: 'text-to-image',
+        status: 'completed',
+        progress: 100,
+        providerId: 'openai',
+        modelId: 'gpt-image-1',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:01.000Z'),
+        outputs: [{ type: 'image', url: 'https://example.com/image.png', mimeType: 'image/png' }],
+        request: { prompt: 'Generate a cat', metadata: { conversationId: 'conv-1' } },
+      });
+
+      expect(backfillSink.applyBackfill).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dataPatch: expect.objectContaining({
+            resultAssetRefs: [],
+          }),
+          attachments: [],
+        }),
+      );
+      expect(perceptionPipeline.perceive).not.toHaveBeenCalled();
+    });
+
     it('should ignore background task progress from another conversation', async () => {
       let progressCallback: ((task: any) => Promise<void>) | undefined;
       const unsubscribe = vi.fn();
@@ -1638,6 +1572,38 @@ function makeEntityMemoryContribution(): EntityMemoryContribution {
           },
         ],
         confidence: 0.84,
+      },
+    ],
+  };
+}
+
+function makeReadImageArguments(): Record<string, unknown> {
+  return {
+    images: [
+      {
+        label: 'Page 1',
+        resourceRef: {
+          kind: 'document-entry',
+          source: { filePath: '/books/a.epub', format: 'epub' },
+          entryPath: 'OPS/page-1.jpg',
+          versionPolicy: 'versioned-export',
+        },
+      },
+    ],
+  };
+}
+
+function makeReadImageResultData(): Record<string, unknown> {
+  return {
+    images: [
+      {
+        label: 'Page 1',
+        resourceRef: {
+          kind: 'document-entry',
+          source: { filePath: '/books/a.epub', format: 'epub' },
+          entryPath: 'OPS/page-1.jpg',
+          versionPolicy: 'versioned-export',
+        },
       },
     ],
   };

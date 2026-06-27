@@ -72,13 +72,8 @@ describe('semantic coverage tool', () => {
     );
   });
 
-  it('falls back clearly when stable source refs are missing', async () => {
+  it('falls back clearly when source refs are missing', async () => {
     const toolResult = (await executeSemanticCoverageQuery({
-      sourceRef: {
-        kind: 'runtime',
-        runtimeKind: 'cache-path',
-        value: '${PROJECT}/.neko/.cache/document/page-1.json',
-      },
       analysisKind: 'ocr',
       range: { startLine: 1, endLine: 10 },
     })) as ToolResult;
@@ -97,7 +92,6 @@ describe('semantic coverage tool', () => {
         }),
       }),
     );
-    expect(JSON.stringify(toolResult.data)).not.toContain('.neko/.cache');
   });
 
   it('does not mutate confirmed entities or accepted observations', async () => {

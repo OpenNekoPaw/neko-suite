@@ -8,7 +8,6 @@
 import * as vscode from 'vscode';
 import type { MediaTask, Platform } from '@neko/platform';
 import { observeMediaTaskProgress } from '@neko/platform';
-import { toStableGeneratedAssetUri as toPlatformStableGeneratedAssetUri } from '@neko/platform/media';
 import { createMediaTaskProgressView } from '@neko/platform/media/media-task-view';
 import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import {
@@ -23,12 +22,13 @@ import {
 } from '@neko/agent/runtime';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import type { AgentEvent } from '@neko/agent';
-import { createDocumentResourceRefFromArchiveRef } from '@neko/shared/vscode/extension';
 import {
-  parseDocumentArchiveResourceRef,
+  createManagedDocumentResourceRef,
+  projectDocumentResourceRefsInValue,
+} from '@neko/content/document';
+import {
   type DocumentArchiveResourceRef,
   type GeneratedAsset,
-  type ResourceRef,
   type ResourceVariantRequest,
   type ToolResultBackfillPayload,
 } from '@neko/shared';
@@ -300,7 +300,10 @@ export class AgentStreamProcessor {
       return;
     }
 
-    const assetRefs = input.assets.map((asset) => toPerceptualAssetRef(asset));
+    const assetRefs = input.assets.flatMap((asset) => {
+      const ref = toPerceptualAssetRef(asset);
+      return ref ? [ref] : [];
+    });
     const payload: ToolResultBackfillPayload = {
       toolCallId: input.toolCallId,
       timestamp: Date.now(),
@@ -310,12 +313,18 @@ export class AgentStreamProcessor {
         resultAssetRefs: assetRefs,
         ...(assetRefs[0] ? { thumbnailAssetRef: assetRefs[0] } : {}),
       },
-      attachments: input.assets.map((asset) => ({
-        type: toAttachmentType(asset),
-        path: assetRefs.find((ref) => ref.assetId === asset.id)?.uri ?? asset.path,
-        mimeType: asset.mimeType,
-        assetRef: toPerceptualAssetRef(asset),
-      })),
+      attachments: input.assets.flatMap((asset) => {
+        const assetRef = toPerceptualAssetRef(asset);
+        if (!assetRef) return [];
+        return [
+          {
+            type: toAttachmentType(asset),
+            path: assetRef.uri,
+            mimeType: asset.mimeType,
+            assetRef,
+          },
+        ];
+      }),
     };
 
     await sink?.applyBackfill(payload);
@@ -325,8 +334,12 @@ export class AgentStreamProcessor {
     }
 
     for (const asset of input.assets) {
+      const assetRef = toPerceptualAssetRef(asset);
+      if (!assetRef) {
+        continue;
+      }
       await pipeline.perceive({
-        asset: { assetId: asset.id, ref: toPerceptualAssetRef(asset) },
+        asset: { assetId: asset.id, ref: assetRef },
         sourceToolCallId: input.toolCallId,
         policy: {
           timing: 'on-completion',
@@ -452,50 +465,10 @@ async function projectResourceValueForWebview(
   const projected = projectResourceValue(value, {
     resolveLocalMediaPath: projector.resolveLocalMediaPath,
   });
-  return projectDocumentRefsForWebview(projected, projector, new WeakSet<object>());
-}
-
-async function projectDocumentRefsForWebview(
-  value: unknown,
-  projector: AsyncResourceProjector,
-  visited: WeakSet<object>,
-): Promise<unknown> {
-  if (!isRecordOrArray(value)) return value;
-  if (visited.has(value)) return value;
-  visited.add(value);
-
-  if (Array.isArray(value)) {
-    return Promise.all(
-      value.map((item) => projectDocumentRefsForWebview(item, projector, visited)),
-    );
-  }
-
-  const projected: Record<string, unknown> = {};
-  for (const [key, child] of Object.entries(value)) {
-    projected[key] = await projectDocumentRefsForWebview(child, projector, visited);
-  }
-
-  const documentResource = readDocumentArchiveResourceProjection(projected);
-  if (
-    !documentResource ||
-    typeof projected['renderUri'] === 'string' ||
-    typeof projected['src'] === 'string'
-  ) {
-    return projected;
-  }
-
-  const renderUri = await projector.projectDocumentResourceRef(
-    documentResource.ref,
-    documentResource.variant,
-  );
-  if (renderUri) {
-    projected['renderUri'] = renderUri;
-    projected['src'] = renderUri;
-    return projected;
-  }
-
-  appendResourceProjectionDiagnostic(projected, 'documentResourceRef');
-  return projected;
+  return projectDocumentResourceRefsInValue(projected, {
+    project: (ref, variant) => projector.projectDocumentResourceRef(ref, variant),
+    onMissingProjection: appendResourceProjectionDiagnostic,
+  });
 }
 
 async function projectDocumentResourceRefForWebview(
@@ -506,7 +479,7 @@ async function projectDocumentResourceRefForWebview(
   variant: ResourceVariantRequest,
 ): Promise<string | undefined> {
   if (!contentAccessRuntime || !localResourceAccess) return undefined;
-  const managedRef = createDocumentResourceRefFromArchiveRef(ref, resolveDocumentResourceScope());
+  const managedRef = createManagedDocumentResourceRef(ref, resolveDocumentResourceScope());
   try {
     const result = await contentAccessRuntime.loadProviderAsset({
       caller: 'message-resource-projection',
@@ -520,26 +493,6 @@ async function projectDocumentResourceRefForWebview(
     logger.warn('Failed to project document resource for Webview display', { error });
     return undefined;
   }
-}
-
-function readDocumentArchiveResourceProjection(
-  value: Record<string, unknown>,
-):
-  | { readonly ref: DocumentArchiveResourceRef; readonly variant: ResourceVariantRequest }
-  | undefined {
-  const ref =
-    parseDocumentArchiveResourceRef(value['documentResourceRef']) ??
-    parseDocumentArchiveResourceRef(value['resourceRef']);
-  if (!ref) return undefined;
-  return {
-    ref,
-    variant: {
-      role: 'document-entry',
-      ...(typeof value['mimeType'] === 'string' ? { mimeType: value['mimeType'] } : {}),
-      ...(typeof value['width'] === 'number' ? { width: value['width'] } : {}),
-      ...(typeof value['height'] === 'number' ? { height: value['height'] } : {}),
-    },
-  };
 }
 
 function appendResourceProjectionDiagnostic(
@@ -559,32 +512,21 @@ function appendResourceProjectionDiagnostic(
   projected['resourceProjectionDiagnostics'] = diagnostics;
 }
 
-function resolveDocumentResourceScope(): ResourceRef['scope'] {
+function resolveDocumentResourceScope(): 'project' | 'extension-private' {
   return vscode.workspace.workspaceFolders?.[0] ? 'project' : 'extension-private';
-}
-
-function isRecordOrArray(value: unknown): value is object {
-  return typeof value === 'object' && value !== null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function toPerceptualAssetRef(asset: GeneratedAsset): import('@neko/shared').PerceptualAssetRef {
+function toPerceptualAssetRef(
+  asset: GeneratedAsset,
+): import('@neko/shared').PerceptualAssetRef | undefined {
   if (asset.assetRef) {
     return asset.assetRef;
   }
-
-  return {
-    assetId: asset.id,
-    uri: toStableGeneratedAssetUri(asset),
-    mimeType: asset.mimeType,
-  };
-}
-
-function toStableGeneratedAssetUri(asset: GeneratedAsset): string {
-  return toPlatformStableGeneratedAssetUri(asset.path, asset.id);
+  return undefined;
 }
 
 function toPersistableMediaTaskResultUrls(
@@ -592,7 +534,10 @@ function toPersistableMediaTaskResultUrls(
   fallbackUrls: readonly string[],
 ): string[] {
   const assetUrls = assets
-    .map((asset) => toPerceptualAssetRef(asset).uri)
+    .flatMap((asset) => {
+      const ref = toPerceptualAssetRef(asset);
+      return ref ? [ref.uri] : [];
+    })
     .filter((uri): uri is string => typeof uri === 'string' && uri.length > 0);
   if (assetUrls.length > 0) {
     return assetUrls;

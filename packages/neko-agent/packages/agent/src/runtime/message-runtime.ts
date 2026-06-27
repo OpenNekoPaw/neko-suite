@@ -987,7 +987,7 @@ export function buildEnhancedAgentMessage(input: BuildEnhancedAgentMessageInput)
   if (documentReferences.length > 0) {
     enhancedMessage += '\n\n--- Referenced Documents ---';
     for (const document of documentReferences) {
-      enhancedMessage += `\n\n[Document: ${document.path}]\nUse ReadDocument with file_path="${document.path}" and mode="manifest" or mode="range" before analyzing this document. Do not inline the whole document as chat context.`;
+      enhancedMessage += `\n\n[Document: ${document.path}]\nUse ReadDocument with source={"kind":"file","path":"${document.path}"} before analyzing this document. Do not inline the whole document as chat context.`;
     }
   }
 
@@ -1024,7 +1024,7 @@ export function formatAgentContextPayload(payload: AgentContextPayload): string 
       lines.push('[Image attached]');
     }
     lines.push(
-      'Follow-up: use ReadDocument with mode="manifest" or mode="range" and this source/locator when more document context is needed.',
+      'Follow-up: use ReadDocument with the structured source ref shown above when more document context is needed.',
     );
     return lines.join('\n');
   }

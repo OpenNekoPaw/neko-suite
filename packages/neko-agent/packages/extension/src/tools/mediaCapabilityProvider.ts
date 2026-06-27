@@ -23,7 +23,6 @@ class MediaReadCapabilityProvider implements AgentCapabilityProvider {
     return [
       createReadImageTool({
         contentAccessRuntime: getCapabilityRuntimeBindings().contentAccessRuntime,
-        fileAccessPolicy: documentToolRuntime.fileAccessPolicy,
         resolveResourceScope: documentToolRuntime.resolveDocumentResourceScope,
       }),
     ];

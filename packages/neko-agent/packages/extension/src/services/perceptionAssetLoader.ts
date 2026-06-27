@@ -1,6 +1,6 @@
 import type { PerceptionAssetLoader, ProviderReadyAssetPayload } from '@neko/ai-sdk';
 import { getMimeType, type ContentSourceRef, type PerceptualAssetRef } from '@neko/shared';
-import { createDocumentResourceRefFromArchiveRef } from '@neko/shared/vscode/extension';
+import { createManagedDocumentResourceRef } from '@neko/content/document';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 
 export function createLocalPerceptionAssetLoader(
@@ -49,7 +49,7 @@ async function loadPerceptionAsset(
 
 function createPerceptionAssetSource(ref: PerceptualAssetRef): ContentSourceRef {
   if (ref.documentResourceRef) {
-    return createDocumentResourceRefFromArchiveRef(ref.documentResourceRef, 'project');
+    return createManagedDocumentResourceRef(ref.documentResourceRef, 'project');
   }
   return {
     kind: 'file',

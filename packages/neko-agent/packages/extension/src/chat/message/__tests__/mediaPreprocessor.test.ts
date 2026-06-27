@@ -40,12 +40,6 @@ vi.mock('../../../services/visionImageProcessor', () => ({
   createSharpVisionImageProcessor: vi.fn(() => ({})),
 }));
 
-vi.mock('../../../services/documentPathResolver', () => ({
-  resolveDocumentPath: vi.fn(async (filePath: string) =>
-    filePath.replace('${A}', '/Volumes/assets'),
-  ),
-}));
-
 vi.mock('../../../base', () => ({
   getLogger: () => ({
     debug: vi.fn(),
@@ -62,22 +56,13 @@ describe('MediaPreprocessor', () => {
     readImageBytesDuringProcess.enabled = false;
   });
 
-  it('resolves PathResolver variables before auto media preprocessing', async () => {
-    processMock.mockResolvedValue({ type: 'unsupported', images: [] });
-
-    const processor = new MediaPreprocessor(null);
-    await processor.process('${A}/video/clip.mp4');
-
-    expect(processMock).toHaveBeenCalledWith('/Volumes/assets/video/clip.mp4', undefined);
-  });
-
-  it('resolves PathResolver variables before image and video preprocessing', async () => {
+  it('passes media paths to the platform preprocessor unchanged', async () => {
     processImageMock.mockResolvedValue({ type: 'unsupported', images: [] });
     processVideoMock.mockResolvedValue({ type: 'unsupported', images: [] });
 
     const processor = new MediaPreprocessor(null);
-    await processor.processImage('${A}/image/ref.png');
-    await processor.processVideo('${A}/video/ref.mp4', { maxFrames: 3 });
+    await processor.processImage('/Volumes/assets/image/ref.png');
+    await processor.processVideo('/Volumes/assets/video/ref.mp4', { maxFrames: 3 });
 
     expect(processImageMock).toHaveBeenCalledWith('/Volumes/assets/image/ref.png');
     expect(processVideoMock).toHaveBeenCalledWith('/Volumes/assets/video/ref.mp4', {
@@ -91,7 +76,7 @@ describe('MediaPreprocessor', () => {
     const contentAccessRuntime = createContentAccessRuntime(new Uint8Array([1, 2, 3]));
 
     const processor = new MediaPreprocessor(null, contentAccessRuntime);
-    await processor.processImage('${A}/image/ref.png');
+    await processor.processImage('/Volumes/assets/image/ref.png');
 
     expect(contentAccessRuntime.loadProviderAsset).toHaveBeenCalledWith({
       caller: 'media-preprocessor',
@@ -111,7 +96,7 @@ describe('MediaPreprocessor', () => {
     });
 
     const processor = new MediaPreprocessor(null, contentAccessRuntime);
-    await processor.processVideo('${A}/video/ref.mp4', { maxFrames: 3 });
+    await processor.processVideo('/Volumes/assets/video/ref.mp4', { maxFrames: 3 });
 
     expect(visionDeps[0]?.videoProcessor).toBeNull();
     expect(contentAccessRuntime.loadProviderAsset).not.toHaveBeenCalled();

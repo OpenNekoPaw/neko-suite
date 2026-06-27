@@ -73,11 +73,11 @@ describe('createExtensionAgentContentAccessRuntime', () => {
       preferredTarget: 'bytes',
     });
 
-    expect(result.status).toBe('failed');
+    expect(result.status).toBe('missing-source');
     expect(result.bytes).toBeUndefined();
     expect(result.diagnostics).toEqual([
       expect.objectContaining({
-        code: 'engine-file-access-unavailable',
+        code: 'content-provider-missing-source',
         caller: 'attachment-processor',
       }),
     ]);
@@ -86,9 +86,9 @@ describe('createExtensionAgentContentAccessRuntime', () => {
   it('loads ResourceRef provider assets through ResourceCacheService', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-agent-content-access-'));
     tempDirs.push(tempDir);
-    const cachePath = path.join(tempDir, '.neko/.cache/resources/page-1.png');
-    await fs.mkdir(path.dirname(cachePath), { recursive: true });
-    await fs.writeFile(cachePath, PNG_1X1);
+    const materializedPath = path.join(tempDir, 'resources/page-1.png');
+    await fs.mkdir(path.dirname(materializedPath), { recursive: true });
+    await fs.writeFile(materializedPath, PNG_1X1);
     const ref = createResourceRef({
       id: 'res-page-1',
       scope: 'project',
@@ -111,7 +111,7 @@ describe('createExtensionAgentContentAccessRuntime', () => {
         status: 'ready' as const,
         ref,
         variant: { resource: ref, role: 'document-entry' as const, mimeType: 'image/png' },
-        absolutePath: cachePath,
+        absolutePath: materializedPath,
         variantEntry: { sizeBytes: PNG_1X1.byteLength },
       })),
     };
@@ -130,9 +130,20 @@ describe('createExtensionAgentContentAccessRuntime', () => {
 
     expect(result.status).toBe('ready');
     expect(Array.from(result.bytes ?? [])).toEqual(Array.from(PNG_1X1));
-    expect(result.source).toBe(ref);
+    expect(result.source).toMatchObject({
+      provider: 'document-archive',
+      source: {
+        kind: 'document',
+        document: { filePath: '/workspace/demo/book.epub', format: 'epub' },
+      },
+    });
     expect(resourceCache.resolve).toHaveBeenCalledWith(
-      ref,
+      expect.objectContaining({
+        provider: 'document-archive',
+        source: expect.objectContaining({
+          document: expect.objectContaining({ filePath: '/workspace/demo/book.epub' }),
+        }),
+      }),
       { role: 'document-entry', mimeType: 'image/png' },
       { materializeIfMissing: true },
     );
@@ -148,8 +159,8 @@ describe('createExtensionAgentContentAccessRuntime', () => {
       caller: 'perception-asset-loader',
       source: {
         kind: 'runtime',
-        runtimeKind: 'cache-path',
-        value: '/workspace/demo/.neko/.cache/resources/page-1.png',
+        runtimeKind: 'transient-preview-uri',
+        value: 'vscode-resource://preview/page-1.png',
       },
       preferredTarget: 'bytes',
     });

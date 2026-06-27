@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import {
   buildRuntimePluginTransferPlan,
   buildRuntimePluginsAvailableMessage,
@@ -9,7 +8,7 @@ import {
 import type { PluginTransferAssetRef, PluginTransferPayload } from '@neko-agent/types';
 import {
   PathResolver,
-  resolveStorageLayout,
+  isPrivateCachePath,
   type ContentIngestResult,
   type ResourceRef,
 } from '@neko/shared';
@@ -141,12 +140,25 @@ async function prepareTransferPayload(
 
   if (payload.kind === 'singleAsset') {
     const promoted = await promoteCanvasAsset(payload.asset, deps);
+    if (!promoted && requiresCanvasAssetPromotion(payload.asset, deps)) {
+      throw new Error(
+        'generated-draft-requires-promotion: Save or Create Asset before sending this generated draft to Canvas.',
+      );
+    }
     return promoted ? { ...payload, asset: promoted } : payload;
   }
 
   if (payload.kind === 'assetBatch') {
     const assets = await Promise.all(
-      payload.assets.map(async (asset) => (await promoteCanvasAsset(asset, deps)) ?? asset),
+      payload.assets.map(async (asset) => {
+        const promoted = await promoteCanvasAsset(asset, deps);
+        if (!promoted && requiresCanvasAssetPromotion(asset, deps)) {
+          throw new Error(
+            'generated-draft-requires-promotion: Save or Create Asset before sending this generated draft to Canvas.',
+          );
+        }
+        return promoted ?? asset;
+      }),
     );
     return { ...payload, assets };
   }
@@ -202,14 +214,13 @@ async function promoteCanvasAsset(
   asset: PluginTransferAssetRef,
   deps: PluginTransferBridgeDeps,
 ): Promise<PluginTransferAssetRef | undefined> {
-  if (
-    asset.resourceRef ||
-    asset.documentResourceRef ||
-    !asset.path ||
-    !isPromotableLocalPath(asset.path)
-  ) {
+  if (asset.documentResourceRef) {
     return undefined;
   }
+  if (asset.resourceRef && !isCacheBackedGeneratedResourceRef(asset.resourceRef, deps)) {
+    return undefined;
+  }
+  if (!asset.path || !isPromotableLocalPath(asset.path)) return undefined;
 
   const workspaceRoot = deps.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) {
@@ -219,9 +230,7 @@ async function promoteCanvasAsset(
 
   const ingestService =
     deps.ingestService ?? createGeneratedOutputIngestService(workspaceRoot, deps.pathResolver);
-  const generatedCacheDir = resolveStorageLayout(workspaceRoot, os.homedir() || workspaceRoot)
-    .project.local.cache.generated;
-  const generatedDir = path.join(generatedCacheDir, mediaDir(asset));
+  const generatedDir = path.join(workspaceRoot, 'neko', 'generated', mediaDir(asset));
   const result = await ingestService.ingest({
     mode: 'generated-output',
     sourcePath: asset.path,
@@ -254,6 +263,33 @@ async function promoteCanvasAsset(
     path: result.outputPath,
     resourceRef: createPromotedGeneratedResourceRef(asset, result),
   };
+}
+
+function requiresCanvasAssetPromotion(
+  asset: PluginTransferAssetRef,
+  deps: PluginTransferBridgeDeps,
+): boolean {
+  if (asset.documentResourceRef) return false;
+  if (asset.resourceRef && !isCacheBackedGeneratedResourceRef(asset.resourceRef, deps)) {
+    return false;
+  }
+  return Boolean(asset.path && isPromotableLocalPath(asset.path));
+}
+
+function isCacheBackedGeneratedResourceRef(
+  resourceRef: ResourceRef,
+  deps: PluginTransferBridgeDeps,
+): boolean {
+  if (resourceRef.provider !== 'generated-asset' || resourceRef.source.kind !== 'generated-asset') {
+    return false;
+  }
+  const filePath = resourceRef.source.filePath;
+  return (
+    typeof filePath === 'string' &&
+    isPrivateCachePath(filePath, {
+      projectRoot: deps.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    })
+  );
 }
 
 function createGeneratedOutputIngestService(

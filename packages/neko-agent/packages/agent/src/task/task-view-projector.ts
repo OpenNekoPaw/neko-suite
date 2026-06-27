@@ -5,7 +5,12 @@
  * local file paths into webview-safe URIs. Display and routing rules live here.
  */
 
-import { isPublicGeneratedAssetResultUri, type Task, type TaskStatus } from '@neko/shared';
+import {
+  isGeneratedDraftRef,
+  isPublicGeneratedAssetResultUri,
+  type Task,
+  type TaskStatus,
+} from '@neko/shared';
 import type { AgentBackgroundTask } from '@neko-agent/types';
 
 export type BackgroundTaskViewType = 'image' | 'video' | 'audio';
@@ -224,6 +229,7 @@ function projectTaskResult(resultData: unknown): AgentBackgroundTask['result'] |
   const height = getNumberValue(resultData, 'height');
   const duration = getNumberValue(resultData, 'duration');
   const assets = getRenderableGeneratedAssets(resultData, 'assets');
+  const drafts = getRenderableGeneratedDrafts(resultData, 'drafts');
 
   return sanitizeBackgroundTaskResult({
     urls: outputUrls,
@@ -232,6 +238,7 @@ function projectTaskResult(resultData: unknown): AgentBackgroundTask['result'] |
     ...(height !== undefined ? { height } : {}),
     ...(duration !== undefined ? { duration } : {}),
     ...(assets !== undefined ? { assets } : {}),
+    ...(drafts !== undefined ? { drafts } : {}),
   });
 }
 
@@ -278,6 +285,17 @@ function getRenderableGeneratedAssets(
   return assets.length > 0 ? assets : undefined;
 }
 
+function getRenderableGeneratedDrafts(
+  record: Record<string, unknown>,
+  key: string,
+): NonNullable<AgentBackgroundTask['result']>['drafts'] | undefined {
+  const value = record[key];
+  if (!Array.isArray(value)) return undefined;
+
+  const drafts = value.filter(isRenderableGeneratedDraft).map(stripRenderableDraftPath);
+  return drafts.length > 0 ? drafts : undefined;
+}
+
 function isRenderableGeneratedAsset(
   value: unknown,
 ): value is NonNullable<NonNullable<AgentBackgroundTask['result']>['assets']>[number] {
@@ -288,6 +306,16 @@ function isRenderableGeneratedAsset(
     typeof value.mimeType === 'string' &&
     typeof value.generatedAt === 'string' &&
     typeof value.renderUri === 'string'
+  );
+}
+
+function isRenderableGeneratedDraft(
+  value: unknown,
+): value is NonNullable<NonNullable<AgentBackgroundTask['result']>['drafts']>[number] {
+  return (
+    isRenderableGeneratedAsset(value) &&
+    isRecord(value.draftRef) &&
+    isGeneratedDraftRef(value.draftRef)
   );
 }
 
@@ -302,7 +330,14 @@ function sanitizeBackgroundTaskResult(
       ? result.thumbnailUrl
       : undefined;
   const assets = result.assets?.map(stripRenderableAssetPath) ?? [];
-  if (urls.length === 0 && !thumbnailUrl && assets.length === 0 && !result.creativeEntity) {
+  const drafts = result.drafts?.map(stripRenderableDraftPath) ?? [];
+  if (
+    urls.length === 0 &&
+    !thumbnailUrl &&
+    assets.length === 0 &&
+    drafts.length === 0 &&
+    !result.creativeEntity
+  ) {
     return undefined;
   }
 
@@ -313,6 +348,7 @@ function sanitizeBackgroundTaskResult(
     ...(result.height !== undefined ? { height: result.height } : {}),
     ...(result.duration !== undefined ? { duration: result.duration } : {}),
     ...(assets.length > 0 ? { assets } : {}),
+    ...(drafts.length > 0 ? { drafts } : {}),
     ...(result.creativeEntity ? { creativeEntity: result.creativeEntity } : {}),
   };
 }
@@ -325,6 +361,16 @@ function stripRenderableAssetPath(
     readonly path?: unknown;
   };
   return stripNestedRenderableAssetPaths(assetWithoutPath);
+}
+
+function stripRenderableDraftPath(
+  draft: NonNullable<NonNullable<AgentBackgroundTask['result']>['drafts']>[number],
+): NonNullable<NonNullable<AgentBackgroundTask['result']>['drafts']>[number] {
+  if (!('path' in draft)) return draft;
+  const { path: _path, ...draftWithoutPath } = draft as typeof draft & {
+    readonly path?: unknown;
+  };
+  return draftWithoutPath;
 }
 
 function stripNestedRenderableAssetPaths<

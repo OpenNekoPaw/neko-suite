@@ -4,6 +4,7 @@ import type {
   RepresentationKind,
   VisualIdentityDraft,
   RenderableGeneratedAsset,
+  RenderableGeneratedDraft,
 } from '@neko/shared';
 import type { AgentWorkflowIdentity } from './workflow';
 export type AgentWorkItemTaskStatus =
@@ -44,6 +45,7 @@ export interface AgentBackgroundTask {
     height?: number;
     duration?: number;
     assets?: RenderableGeneratedAsset[];
+    drafts?: RenderableGeneratedDraft[];
     creativeEntity?: AgentMediaTaskCreativeEntityContext;
   };
   error?: string;
