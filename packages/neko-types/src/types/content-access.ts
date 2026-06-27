@@ -419,8 +419,24 @@ export function isRuntimeOnlyContentRef(ref: ContentSourceRef): ref is ContentRu
 export function isCacheOrRuntimeOnlyContentRef(ref: ContentSourceRef): boolean {
   if (isRuntimeOnlyContentRef(ref)) return ref.source === undefined;
   if (isResourceRef(ref) && ref.scope === 'extension-private') return true;
-  if ('kind' in ref && ref.kind === 'generated-asset') return ref.promoted !== true;
+  if ('kind' in ref && ref.kind === 'generated-asset') {
+    return ref.promoted !== true || isGeneratedCacheBackedSourceRef(ref);
+  }
   return false;
+}
+
+export function isGeneratedCacheBackedSourceRef(ref: ContentSourceRef): boolean {
+  if (!('kind' in ref) || ref.kind !== 'generated-asset') return false;
+  return typeof ref.path === 'string' && isGeneratedCachePath(ref.path);
+}
+
+function isGeneratedCachePath(value: string): boolean {
+  const normalized = normalizePath(value);
+  return (
+    normalized.includes('/.neko/.cache/') ||
+    normalized.startsWith('.neko/.cache/') ||
+    isPrivateCachePath(value)
+  );
 }
 
 export function isContentRuntimeRefKind(value: unknown): value is ContentRuntimeRefKind {
@@ -456,6 +472,18 @@ export function validateContentAccessRequest(
   const role = request.role ?? request.variant?.role;
 
   if (isOfflineContentAccessIntent(request.intent)) {
+    if (isGeneratedCacheBackedSourceRef(request.ref)) {
+      diagnostics.push({
+        code: 'generated-cache-source-not-durable',
+        severity: 'error',
+        message:
+          'Promoted generated assets cannot use private cache paths as durable source identity.',
+        intent: request.intent,
+        target: request.target,
+        qualityMode: request.qualityMode,
+      });
+    }
+
     if (request.qualityMode !== 'draft-proxy' && isCacheOrRuntimeOnlyContentRef(request.ref)) {
       diagnostics.push({
         code: 'offline-runtime-ref',
@@ -503,6 +531,49 @@ export function validateContentAccessRequest(
   return diagnostics;
 }
 
+export function validateContentIngestRequest(
+  request: ContentIngestRequest,
+  options: {
+    readonly projectRoot?: string;
+    readonly globalRoot?: string;
+    readonly extensionPrivateRoot?: string;
+  } = {},
+): readonly ContentAccessDiagnostic[] {
+  const diagnostics: ContentAccessDiagnostic[] = [];
+  if (request.destination.kind !== 'generated-assets') return diagnostics;
+
+  if (request.destination.copyMode === 'register' && request.sourcePath) {
+    return diagnostics;
+  }
+
+  if (request.destination.directory) {
+    if (isPrivateCachePath(request.destination.directory, options)) {
+      diagnostics.push({
+        code: 'generated-assets-destination-cache',
+        severity: 'error',
+        message:
+          'Generated assets retained by users must be written to durable generated asset roots outside private cache.',
+        destination: request.destination,
+        ingestAction: request.mode,
+      });
+    }
+    return diagnostics;
+  }
+
+  if (!request.destination.projectRoot && !options.projectRoot) {
+    diagnostics.push({
+      code: 'generated-assets-destination-missing-root',
+      severity: 'error',
+      message:
+        'Generated asset ingest requires a durable workspace, media-library, asset-store, or explicit promote destination.',
+      destination: request.destination,
+      ingestAction: request.mode,
+    });
+  }
+
+  return diagnostics;
+}
+
 export function validateContentIngestResult(
   result: ContentIngestResult,
   options: {
@@ -512,7 +583,9 @@ export function validateContentIngestResult(
     readonly pathWasContracted?: boolean;
   } = {},
 ): readonly ContentAccessDiagnostic[] {
-  const diagnostics: ContentAccessDiagnostic[] = [];
+  const diagnostics: ContentAccessDiagnostic[] = [
+    ...validateContentIngestRequest(result.request, options),
+  ];
   const outputPath = result.outputPath ?? result.contractedPath;
 
   if (outputPath && isWebviewLikeRuntimeValue(outputPath)) {
@@ -528,8 +601,7 @@ export function validateContentIngestResult(
   if (
     result.outputPath &&
     result.request.mode !== 'cache-artifact' &&
-    isPrivateCachePath(result.outputPath, options) &&
-    !isGeneratedAssetCacheOutput(result, options)
+    isPrivateCachePath(result.outputPath, options)
   ) {
     diagnostics.push({
       code: 'ingest-cache-output',
@@ -559,23 +631,6 @@ export function validateContentIngestResult(
   }
 
   return diagnostics;
-}
-
-function isGeneratedAssetCacheOutput(
-  result: ContentIngestResult,
-  options: { readonly projectRoot?: string },
-): boolean {
-  if (
-    !isCreateAssetIngestMode(result.request.mode) ||
-    result.request.destination.kind !== 'generated-assets' ||
-    !result.outputPath ||
-    !options.projectRoot
-  ) {
-    return false;
-  }
-  const generatedRoot = normalizePath(`${options.projectRoot}/.neko/.cache/generated`);
-  const outputPath = normalizePath(result.outputPath);
-  return outputPath === generatedRoot || outputPath.startsWith(`${generatedRoot}/`);
 }
 
 export function isDurableSourceIngestMode(mode: ContentIngestMode): boolean {

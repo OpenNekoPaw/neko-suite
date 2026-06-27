@@ -112,6 +112,15 @@ export {
 } from './formatTime';
 
 export {
+  createEngineContentAccessAdapter,
+  readEnginePurpose,
+  type CreateEngineContentAccessAdapterOptions,
+  type EngineClientProviderLike,
+  type EngineContentAccessAdapter,
+  type EngineDocumentLowLevelAccess,
+} from './engine-file-access';
+
+export {
   EngineAvStreamLifecycle,
   type EngineAvAudioStreamClient,
   type EngineAvFrameScheduler,

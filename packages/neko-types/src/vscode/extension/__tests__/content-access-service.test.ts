@@ -212,6 +212,30 @@ describe('content ingest service', () => {
     ]);
   });
 
+  it('rejects cache-backed generated asset destinations before provider execution', async () => {
+    const provider = createIngestProvider('generated', true, {
+      outputPath: '/workspace/demo/neko/generated/image/shot.png',
+      contractedPath: 'neko/generated/image/shot.png',
+    });
+    const service = new HostContentIngestService({
+      providers: [provider],
+      guardOptions: { projectRoot: '/workspace/demo' },
+    });
+
+    const result = await service.ingest({
+      ...ingestRequest,
+      destination: {
+        kind: 'generated-assets',
+        projectRoot: '/workspace/demo',
+        directory: '/workspace/demo/.neko/.cache/generated',
+      },
+    });
+
+    expect(result.status).toBe('unsupported-destination');
+    expect(result.diagnostics?.[0]?.code).toBe('generated-assets-destination-cache');
+    expect(provider.ingest).not.toHaveBeenCalled();
+  });
+
   it('turns ingest provider failures into structured failed results', async () => {
     const provider: ContentIngestProvider = {
       id: 'broken-ingest',

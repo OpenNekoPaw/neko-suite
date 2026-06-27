@@ -83,7 +83,7 @@ export type {
 } from './resource-cache-service';
 export {
   GENERATED_RESOURCE_CACHE_PROVIDER_ID,
-  GeneratedAssetResourceCacheProvider,
+  GeneratedAssetDerivativeResourceCacheProvider,
   PREVIEW_RESOURCE_CACHE_PROVIDER_ID,
   PreviewVariantResourceCacheProvider,
   THUMBNAIL_RESOURCE_CACHE_PROVIDER_ID,
@@ -96,7 +96,7 @@ export type {
   CreateFileThumbnailResourceRefInput,
   CreateGeneratedAssetResourceRefInput,
   CreatePreviewAssetResourceRefInput,
-  GeneratedAssetResourceCacheProviderOptions,
+  GeneratedAssetDerivativeResourceCacheProviderOptions,
   GeneratedAssetResourceResolverResult,
   PreviewVariantResourceApi,
   PreviewVariantResourceCacheProviderOptions,
@@ -150,6 +150,12 @@ export type {
   SourceFileContentAccessProviderOptions,
   VideoProxyContentAccessProviderOptions,
 } from './content-access-providers';
+export {
+  createHostContentPathResolver,
+  createWorkspaceContentPathResolver,
+  getHostContentAuthorizedReadRoots,
+} from './content-path-resolver';
+export type { HostContentPathResolverOptions } from './content-path-resolver';
 export {
   createExtensionPrivateResourceCacheOptions,
   createHostContentAccessRuntime,

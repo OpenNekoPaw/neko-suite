@@ -77,6 +77,7 @@ export interface HostContentAccessRuntimeSourceProviderOptions {
   readonly pathResolver?: PathResolver;
   readonly fileOps?: Pick<ContentAccessFileOps, 'readFile'>;
   readonly engineSourceResolver?: SourceFileContentAccessProviderOptions['engineSourceResolver'];
+  readonly bytesResolver?: SourceFileContentAccessProviderOptions['bytesResolver'];
 }
 
 export interface HostContentAccessRuntimeDocumentProviderOptions {
@@ -313,6 +314,9 @@ function createDefaultAccessProviders(input: {
         webviewResolver: options.webviewResolver,
         ...(sourceProviderOptions?.engineSourceResolver
           ? { engineSourceResolver: sourceProviderOptions.engineSourceResolver }
+          : {}),
+        ...(sourceProviderOptions?.bytesResolver
+          ? { bytesResolver: sourceProviderOptions.bytesResolver }
           : {}),
       }),
     );

@@ -5,7 +5,7 @@ import {
   createFileThumbnailResourceRef,
   createGeneratedAssetResourceRef,
   createPreviewAssetResourceRef,
-  GeneratedAssetResourceCacheProvider,
+  GeneratedAssetDerivativeResourceCacheProvider,
   PreviewVariantResourceCacheProvider,
   ThumbnailResourceCacheProvider,
   type ResourceCacheFileOps,
@@ -123,14 +123,14 @@ describe('resource cache provider adapters', () => {
 
   it('maps generated asset metadata into source, preview, or thumbnail variants', async () => {
     const fsOps = new FakeFileOps({
-      '/workspace/.neko/.cache/generated/image/shot.png': 'generated',
+      '/workspace/neko/generated/image/shot.png': 'generated',
     });
     const ref = createGeneratedAssetResourceRef({
       assetId: 'asset-1',
-      path: '/workspace/.neko/.cache/generated/image/shot.png',
+      path: '/workspace/neko/generated/image/shot.png',
       mimeType: 'image/png',
     });
-    const provider = new GeneratedAssetResourceCacheProvider({ fsOps });
+    const provider = new GeneratedAssetDerivativeResourceCacheProvider({ fsOps });
 
     const result = await provider.ensure({
       ref,
@@ -146,21 +146,45 @@ describe('resource cache provider adapters', () => {
       height: 1024,
     });
     expect(fsOps.copyCalls[0]).toEqual({
-      source: '/workspace/.neko/.cache/generated/image/shot.png',
+      source: '/workspace/neko/generated/image/shot.png',
       target: expect.stringContaining('/workspace/.neko/.cache/resources/generated/'),
     });
   });
 
-  it('expands generated asset variable paths before materializing previews', async () => {
+  it('rejects generated source variants because ResourceCache only stores derivatives', async () => {
     const fsOps = new FakeFileOps({
-      '/workspace/.neko/.cache/generated/image/shot.png': 'generated',
+      '/workspace/neko/generated/image/shot.png': 'generated',
     });
     const ref = createGeneratedAssetResourceRef({
       assetId: 'asset-1',
-      path: '${WORKSPACE}/.neko/.cache/generated/image/shot.png',
+      path: '/workspace/neko/generated/image/shot.png',
       mimeType: 'image/png',
     });
-    const provider = new GeneratedAssetResourceCacheProvider({
+    const provider = new GeneratedAssetDerivativeResourceCacheProvider({ fsOps });
+
+    const result = await provider.ensure({
+      ref,
+      variant: { role: 'source', mimeType: 'image/png' },
+      cacheRoot: '/workspace/.neko/.cache/resources',
+    });
+
+    expect(result).toMatchObject({
+      status: 'unsupported',
+      error: 'Generated asset provider does not support this variant.',
+    });
+    expect(fsOps.copyCalls).toEqual([]);
+  });
+
+  it('expands generated asset variable paths before materializing previews', async () => {
+    const fsOps = new FakeFileOps({
+      '/workspace/neko/generated/image/shot.png': 'generated',
+    });
+    const ref = createGeneratedAssetResourceRef({
+      assetId: 'asset-1',
+      path: '${WORKSPACE}/neko/generated/image/shot.png',
+      mimeType: 'image/png',
+    });
+    const provider = new GeneratedAssetDerivativeResourceCacheProvider({
       fsOps,
       pathResolver: new PathResolver(new Map([['WORKSPACE', '/workspace']])),
       projectRoot: '/workspace',
@@ -173,7 +197,75 @@ describe('resource cache provider adapters', () => {
     });
 
     expect(result.status).toBe('ready');
-    expect(fsOps.copyCalls[0]?.source).toBe('/workspace/.neko/.cache/generated/image/shot.png');
+    expect(fsOps.copyCalls[0]?.source).toBe('/workspace/neko/generated/image/shot.png');
+  });
+
+  it('keys generated derivatives by promoted generated source refs', async () => {
+    const fsOps = new FakeFileOps({
+      '/workspace/neko/generated/image/shot-a.png': 'generated-a',
+      '/workspace/neko/generated/image/shot-b.png': 'generated-b',
+    });
+    const provider = new GeneratedAssetDerivativeResourceCacheProvider({ fsOps });
+    const firstRef = createGeneratedAssetResourceRef({
+      assetId: 'asset-a',
+      path: '/workspace/neko/generated/image/shot-a.png',
+      mimeType: 'image/png',
+    });
+    const secondRef = createGeneratedAssetResourceRef({
+      assetId: 'asset-b',
+      path: '/workspace/neko/generated/image/shot-b.png',
+      mimeType: 'image/png',
+    });
+
+    const first = await provider.ensure({
+      ref: firstRef,
+      variant: { role: 'thumbnail', width: 256, mimeType: 'image/png' },
+      cacheRoot: '/workspace/.neko/.cache/resources',
+    });
+    const second = await provider.ensure({
+      ref: secondRef,
+      variant: { role: 'thumbnail', width: 256, mimeType: 'image/png' },
+      cacheRoot: '/workspace/.neko/.cache/resources',
+    });
+
+    expect(first.status).toBe('ready');
+    expect(second.status).toBe('ready');
+    expect(first.relativePath).not.toBe(second.relativePath);
+    expect(first.relativePath).toContain(firstRef.id);
+    expect(second.relativePath).toContain(secondRef.id);
+  });
+
+  it('rebuilds generated derivatives after cache deletion without deleting promoted sources', async () => {
+    const sourcePath = '/workspace/neko/generated/image/shot.png';
+    const fsOps = new FakeFileOps({
+      [sourcePath]: 'generated-source',
+    });
+    const ref = createGeneratedAssetResourceRef({
+      assetId: 'asset-1',
+      path: sourcePath,
+      mimeType: 'image/png',
+    });
+    const provider = new GeneratedAssetDerivativeResourceCacheProvider({ fsOps });
+    const input = {
+      ref,
+      variant: { role: 'preview' as const, width: 512, mimeType: 'image/png' },
+      cacheRoot: '/workspace/.neko/.cache/resources',
+    };
+
+    const first = await provider.ensure(input);
+    expect(first.status).toBe('ready');
+    expect(first.absolutePath).toBeDefined();
+    fsOps.files.delete(first.absolutePath!);
+
+    const second = await provider.ensure(input);
+
+    expect(fsOps.files.get(sourcePath)).toBe('generated-source');
+    expect(second).toMatchObject({
+      status: 'ready',
+      absolutePath: first.absolutePath,
+      relativePath: first.relativePath,
+    });
+    expect(fsOps.copyCalls.filter((call) => call.source === sourcePath)).toHaveLength(2);
   });
 });
 

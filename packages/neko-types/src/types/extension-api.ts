@@ -879,6 +879,9 @@ export interface NekoAssetsAPI {
   /** Get resolved, enabled, and accessible media library roots for Webview authorization. */
   getMediaLibraryRoots(): Promise<string[]>;
 
+  /** Get path variables used by shared PathResolver for portable media/library refs. */
+  getPathVariables?(): Promise<ReadonlyArray<readonly [string, string]>>;
+
   /** Resolve an entity:// URI to a concrete variant file and absolute path. */
   resolveEntityUri(
     uri: string,

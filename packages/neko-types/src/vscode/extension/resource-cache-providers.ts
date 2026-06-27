@@ -73,7 +73,7 @@ export interface GeneratedAssetResourceResolverResult {
   readonly sizeBytes?: number;
 }
 
-export interface GeneratedAssetResourceCacheProviderOptions {
+export interface GeneratedAssetDerivativeResourceCacheProviderOptions {
   readonly resolveAsset?: (
     ref: ResourceRef,
   ) => Promise<GeneratedAssetResourceResolverResult | undefined>;
@@ -209,15 +209,15 @@ export class PreviewVariantResourceCacheProvider implements ResourceCacheProvide
   }
 }
 
-export class GeneratedAssetResourceCacheProvider implements ResourceCacheProvider {
+export class GeneratedAssetDerivativeResourceCacheProvider implements ResourceCacheProvider {
   readonly id = GENERATED_RESOURCE_CACHE_PROVIDER_ID;
 
-  private readonly resolveAsset?: GeneratedAssetResourceCacheProviderOptions['resolveAsset'];
+  private readonly resolveAsset?: GeneratedAssetDerivativeResourceCacheProviderOptions['resolveAsset'];
   private readonly fsOps: ResourceCacheFileOps;
   private readonly pathResolver?: PathResolver;
   private readonly projectRoot?: string;
 
-  constructor(options: GeneratedAssetResourceCacheProviderOptions = {}) {
+  constructor(options: GeneratedAssetDerivativeResourceCacheProviderOptions = {}) {
     this.resolveAsset = options.resolveAsset;
     this.fsOps = options.fsOps ?? nodeFileOps;
     this.pathResolver = options.pathResolver;
@@ -229,7 +229,7 @@ export class GeneratedAssetResourceCacheProvider implements ResourceCacheProvide
       ref.provider === this.id &&
       ref.kind === 'generated' &&
       ref.source.kind === 'generated-asset' &&
-      (variant.role === 'source' || variant.role === 'thumbnail' || variant.role === 'preview')
+      (variant.role === 'thumbnail' || variant.role === 'preview')
     );
   }
 

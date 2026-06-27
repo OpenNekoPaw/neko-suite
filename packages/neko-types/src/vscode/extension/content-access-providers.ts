@@ -28,6 +28,7 @@ import {
   type ResourceCacheStatus,
   type ResourceVariantRequest,
 } from '../../types';
+import { resolveWorkspaceGeneratedAssetRelativeDirectory } from '../../types/generated-asset';
 import type { LocalResourceAccessService } from './local-resource-access';
 import { readStringMetadata } from './metadata';
 import type { ResourceCacheService } from './resource-cache-service';
@@ -61,6 +62,14 @@ export interface SourceFileContentAccessProviderOptions {
     readonly request: ContentAccessRequest;
     readonly path: string;
   }) => Promise<ContentEngineSource>;
+  readonly bytesResolver?: (input: {
+    readonly request: ContentAccessRequest;
+    readonly path: string;
+  }) => Promise<{
+    readonly bytes: Uint8Array;
+    readonly mimeType?: string;
+    readonly sizeBytes?: number;
+  }>;
 }
 
 export interface DocumentEntryContentAccessProviderOptions {
@@ -278,6 +287,7 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
   private readonly localResourceAccess?: LocalResourceAccessService;
   private readonly webviewResolver?: ContentAccessWebviewResolver;
   private readonly engineSourceResolver?: SourceFileContentAccessProviderOptions['engineSourceResolver'];
+  private readonly bytesResolver?: SourceFileContentAccessProviderOptions['bytesResolver'];
 
   constructor(options: SourceFileContentAccessProviderOptions) {
     this.id = options.id ?? 'source-file-content-access';
@@ -287,17 +297,29 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
     this.localResourceAccess = options.localResourceAccess;
     this.webviewResolver = options.webviewResolver;
     this.engineSourceResolver = options.engineSourceResolver;
+    this.bytesResolver = options.bytesResolver;
   }
 
   supports(request: ContentAccessRequest): boolean {
+    if (getDocumentRef(request.ref)) {
+      return false;
+    }
     const supportsRuntimeEngineAccess =
       request.target === 'engine-source' &&
       (isPreviewLikeContentAccessIntent(request.intent) || request.intent === 'verify');
+    const supportsAgentBytesAccess =
+      request.target === 'bytes' &&
+      request.intent === 'agent-context' &&
+      this.bytesResolver !== undefined;
+    const supportsAgentLocalPathAccess =
+      request.target === 'local-path' && request.intent === 'agent-context';
     return (
       extractSourcePath(request.ref) !== undefined &&
       (isOfflineContentAccessIntent(request.intent) ||
         request.intent === 'cache-materialize' ||
-        supportsRuntimeEngineAccess)
+        supportsRuntimeEngineAccess ||
+        supportsAgentBytesAccess ||
+        supportsAgentLocalPathAccess)
     );
   }
 
@@ -337,13 +359,18 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
         };
       case 'bytes':
         try {
+          const resolvedBytes = this.bytesResolver
+            ? await this.bytesResolver({ request, path: resolved.path })
+            : { bytes: await this.fileOps.readFile(resolved.path) };
           return {
             status: 'ready',
             request,
             providerId: this.id,
             source: stableSourceOrUndefined(request.ref),
             localPath: resolved.path,
-            bytes: await this.fileOps.readFile(resolved.path),
+            bytes: resolvedBytes.bytes,
+            mimeType: resolvedBytes.mimeType,
+            sizeBytes: resolvedBytes.sizeBytes ?? resolvedBytes.bytes.byteLength,
             role: request.role ?? request.variant?.role,
           };
         } catch (error) {
@@ -453,7 +480,19 @@ export class DocumentEntryContentAccessProvider implements ContentAccessProvider
   }
 
   supports(request: ContentAccessRequest): boolean {
-    return getDocumentRef(request.ref) !== undefined;
+    const documentRef = getDocumentRef(request.ref);
+    if (!documentRef) return false;
+    if (isPreviewLikeContentAccessIntent(request.intent) && this.resourceCacheProvider) {
+      return isResourceRef(request.ref) || documentRef.resource !== undefined;
+    }
+    if (
+      request.intent === 'agent-context' &&
+      request.target === 'local-path' &&
+      documentRef.entryPath === undefined
+    ) {
+      return true;
+    }
+    return request.intent === 'package' && request.target === 'bytes';
   }
 
   async resolve(input: ContentAccessProviderRequest): Promise<ContentAccessResult> {
@@ -472,7 +511,23 @@ export class DocumentEntryContentAccessProvider implements ContentAccessProvider
       }
     }
 
+    if (
+      request.intent === 'agent-context' &&
+      request.target === 'local-path' &&
+      !documentRef.entryPath
+    ) {
+      return this.sourceProvider.resolve(input);
+    }
+
     if (request.intent === 'package' && request.target === 'bytes') {
+      if (!documentRef.entryPath) {
+        return unsupportedDestination(
+          request,
+          this.id,
+          'Document package entry bytes require a stable document entry path.',
+          'content-document-entry-path-missing',
+        );
+      }
       if (!this.entryReader) {
         return unsupportedDestination(
           request,
@@ -507,7 +562,12 @@ export class DocumentEntryContentAccessProvider implements ContentAccessProvider
       };
     }
 
-    return this.sourceProvider.resolve(input);
+    return unsupportedDestination(
+      request,
+      this.id,
+      'Document archive sources cannot be resolved as whole-file provider assets. Use a ResourceRef with a stable document entry path.',
+      'content-document-whole-archive-read-rejected',
+    );
   }
 }
 
@@ -747,6 +807,13 @@ export class GeneratedOutputContentIngestProvider implements ContentIngestProvid
       this.pathResolver,
       this.projectRoot,
     );
+    if (isAbsoluteLocalPath(contractedPath)) {
+      return ingestFailure(
+        request,
+        this.id,
+        'Generated asset output path must be contracted before promotion.',
+      );
+    }
     const assetId = readStringMetadata(request.metadata, 'assetId') ?? path.basename(outputPath);
     const source: ContentGeneratedAssetSourceRef = {
       kind: 'generated-asset',
@@ -1109,7 +1176,14 @@ function resolveIngestOutputPath(request: ContentIngestRequest, projectRoot: str
     request.mode === 'create-asset' ||
     request.destination.kind === 'generated-assets'
   ) {
-    return path.join(projectRoot, '.neko', '.cache', 'generated', fileName);
+    return path.join(
+      projectRoot,
+      resolveWorkspaceGeneratedAssetRelativeDirectory({
+        mediaKind: readStringMetadata(request.metadata, 'mediaKind'),
+        mimeType: request.mimeType ?? readStringMetadata(request.metadata, 'mimeType'),
+      }),
+      fileName,
+    );
   }
   if (request.mode === 'stage-export' || request.destination.kind === 'export-output') {
     return path.join(projectRoot, '.neko', '.cache', 'exports', fileName);
@@ -1175,6 +1249,10 @@ function contractDurableSourcePath(
   const variablePath = pathResolver.contract(filePath);
   if (variablePath !== filePath) return variablePath;
   return toProjectRelativePath(filePath, projectRoot) ?? filePath;
+}
+
+function isAbsoluteLocalPath(filePath: string): boolean {
+  return filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath);
 }
 
 function normalizePath(filePath: string): string {

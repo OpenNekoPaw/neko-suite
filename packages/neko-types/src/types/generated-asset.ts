@@ -211,6 +211,33 @@ export type RenderableGeneratedAsset<T extends BaseGeneratedAsset = GeneratedAss
     renderUri: string;
   };
 
+export interface GeneratedDraftRef {
+  readonly kind: 'generated-draft';
+  readonly draftId: string;
+  readonly sessionId?: string;
+  readonly mediaKind: GeneratedAssetMediaKind;
+  readonly mimeType?: string;
+  readonly createdAt?: string;
+}
+
+export type RenderableGeneratedDraft<T extends BaseGeneratedAsset = GeneratedAsset> =
+  GeneratedAssetWithoutPath<T> & {
+    readonly draftRef: GeneratedDraftRef;
+    readonly renderUri: string;
+    readonly promoted: false;
+  };
+
+export function isGeneratedDraftRef(value: unknown): value is GeneratedDraftRef {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record['kind'] === 'generated-draft' &&
+    typeof record['draftId'] === 'string' &&
+    typeof record['mediaKind'] === 'string' &&
+    isGeneratedAssetMediaKind(record['mediaKind'])
+  );
+}
+
 export function stripGeneratedAssetPath(asset: GeneratedImage): GeneratedImageWithoutPath;
 export function stripGeneratedAssetPath(asset: GeneratedAudio): GeneratedAudioWithoutPath;
 export function stripGeneratedAssetPath(asset: GeneratedVideo): GeneratedVideoWithoutPath;
@@ -257,13 +284,56 @@ export function isPublicGeneratedAssetResultUri(value: string): boolean {
 }
 
 // -----------------------------------------------------------------------------
-// Sub-directory constants
+// Durable generated asset roots
 // -----------------------------------------------------------------------------
 
-/** Standard sub-directory names under `.neko/.cache/generated/` */
+export type GeneratedAssetMediaKind = 'image' | 'audio' | 'video' | 'storyboard' | 'file';
+
+export interface ResolveGeneratedAssetMediaKindInput {
+  readonly mediaKind?: string;
+  readonly mimeType?: string;
+}
+
+export const WORKSPACE_GENERATED_ASSET_ROOT = 'neko/generated';
+
+/** Standard durable generated asset sub-directory names under `neko/generated/`. */
 export const GENERATED_ASSET_DIRS = {
   image: 'image',
   audio: 'audio',
   video: 'video',
   storyboard: 'storyboard',
+  file: 'file',
 } as const;
+
+export function resolveGeneratedAssetMediaKind(
+  input: ResolveGeneratedAssetMediaKindInput,
+): GeneratedAssetMediaKind {
+  if (input.mediaKind) {
+    const sanitized = sanitizeGeneratedAssetPathSegment(input.mediaKind);
+    if (isGeneratedAssetMediaKind(sanitized)) return sanitized;
+  }
+  if (input.mimeType?.startsWith('image/')) return 'image';
+  if (input.mimeType?.startsWith('audio/')) return 'audio';
+  if (input.mimeType?.startsWith('video/')) return 'video';
+  if (input.mimeType === 'application/vnd.neko.storyboard+json') return 'storyboard';
+  return 'file';
+}
+
+export function resolveWorkspaceGeneratedAssetRelativeDirectory(
+  input: ResolveGeneratedAssetMediaKindInput,
+): string {
+  return `${WORKSPACE_GENERATED_ASSET_ROOT}/${resolveGeneratedAssetMediaKind(input)}`;
+}
+
+export function sanitizeGeneratedAssetPathSegment(value: string): string {
+  const sanitized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return sanitized || 'file';
+}
+
+function isGeneratedAssetMediaKind(value: string): value is GeneratedAssetMediaKind {
+  return Object.hasOwn(GENERATED_ASSET_DIRS, value);
+}

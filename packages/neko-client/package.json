@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./EngineClient": "./src/EngineClient.ts",
+    "./engine-file-access": "./src/engine-file-access.ts",
     "./device": "./src/device/index.ts",
     "./vscode/device": "./src/vscode/device/index.ts",
     "./*": "./src/*"

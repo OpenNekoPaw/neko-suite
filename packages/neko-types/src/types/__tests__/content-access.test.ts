@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   isCacheOrRuntimeOnlyContentRef,
+  isGeneratedCacheBackedSourceRef,
   isContentAccessRequest,
   isContentIngestRequest,
   isOfflineContentAccessIntent,
   isPreviewLikeContentAccessIntent,
   validateContentAccessRequest,
+  validateContentIngestRequest,
   validateContentIngestResult,
   type ContentAccessRequest,
   type ContentIngestRequest,
@@ -225,6 +227,31 @@ describe('content access contracts', () => {
         promoted: true,
       }),
     ).toBe(false);
+    const cacheBackedPromotedRef = {
+      kind: 'generated-asset' as const,
+      assetId: 'agent-cache-backed',
+      path: '.neko/.cache/generated/promoted.png',
+      promoted: true,
+    };
+    expect(isGeneratedCacheBackedSourceRef(cacheBackedPromotedRef)).toBe(true);
+    expect(isCacheOrRuntimeOnlyContentRef(cacheBackedPromotedRef)).toBe(true);
+  });
+
+  it('diagnoses cache-backed promoted generated refs for durable access', () => {
+    const diagnostics = validateContentAccessRequest({
+      ref: {
+        kind: 'generated-asset',
+        assetId: 'agent-cache-backed',
+        path: '.neko/.cache/generated/promoted.png',
+        promoted: true,
+      },
+      intent: 'package',
+      target: 'local-path',
+    });
+
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      'generated-cache-source-not-durable',
+    );
   });
 
   it('flags durable ingest results that expose cache paths or uncontracted source paths', () => {
@@ -280,7 +307,7 @@ describe('content access contracts', () => {
     ).toEqual(['ingest-cache-output', 'ingest-uncontracted-path']);
   });
 
-  it('allows promoted generated outputs in generated cache scope but still rejects resource cache outputs', () => {
+  it('rejects promoted generated outputs in cache scope', () => {
     const request: ContentIngestRequest = {
       mode: 'generated-output',
       destination: { kind: 'generated-assets', projectRoot: '/workspace/demo' },
@@ -302,8 +329,8 @@ describe('content access contracts', () => {
           },
         },
         { projectRoot: '/workspace/demo' },
-      ),
-    ).toEqual([]);
+      ).map((diagnostic) => diagnostic.code),
+    ).toContain('ingest-cache-output');
 
     expect(
       validateContentIngestResult(
@@ -317,6 +344,42 @@ describe('content access contracts', () => {
         { projectRoot: '/workspace/demo' },
       ).map((diagnostic) => diagnostic.code),
     ).toContain('ingest-cache-output');
+  });
+
+  it('rejects generated asset ingest destinations that are cache-backed or missing durable roots', () => {
+    const cacheDestinationRequest: ContentIngestRequest = {
+      mode: 'generated-output',
+      destination: {
+        kind: 'generated-assets',
+        projectRoot: '/workspace/demo',
+        directory: '/workspace/demo/.neko/.cache/generated',
+      },
+      mimeType: 'image/png',
+    };
+    const missingRootRequest: ContentIngestRequest = {
+      mode: 'generated-output',
+      destination: { kind: 'generated-assets' },
+      mimeType: 'image/png',
+    };
+    const durableRootRequest: ContentIngestRequest = {
+      mode: 'generated-output',
+      destination: {
+        kind: 'generated-assets',
+        projectRoot: '/workspace/demo',
+        directory: '/workspace/demo/neko/generated/image',
+      },
+      mimeType: 'image/png',
+    };
+
+    expect(
+      validateContentIngestRequest(cacheDestinationRequest, {
+        projectRoot: '/workspace/demo',
+      }).map((diagnostic) => diagnostic.code),
+    ).toEqual(['generated-assets-destination-cache']);
+    expect(
+      validateContentIngestRequest(missingRootRequest).map((diagnostic) => diagnostic.code),
+    ).toEqual(['generated-assets-destination-missing-root']);
+    expect(validateContentIngestRequest(durableRootRequest)).toEqual([]);
   });
 
   it('accepts contracted durable ingest results and export staging outputs', () => {

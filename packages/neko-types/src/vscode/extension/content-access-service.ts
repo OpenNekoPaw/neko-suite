@@ -10,6 +10,7 @@ import type {
 } from '../../types/content-access';
 import {
   validateContentAccessRequest,
+  validateContentIngestRequest,
   validateContentIngestResult,
 } from '../../types/content-access';
 
@@ -134,6 +135,11 @@ export class HostContentIngestService implements ContentIngestService {
   }
 
   async ingest(request: ContentIngestRequest): Promise<ContentIngestResult> {
+    const requestGuardDiagnostics = validateContentIngestRequest(request, this.guardOptions);
+    if (hasErrorDiagnostic(requestGuardDiagnostics)) {
+      return createIngestFailure('unsupported-destination', request, requestGuardDiagnostics);
+    }
+
     const provider = this.providers.find((candidate) => safelySupportsIngest(candidate, request));
     if (!provider) {
       return createIngestFailure('unsupported-destination', request, [

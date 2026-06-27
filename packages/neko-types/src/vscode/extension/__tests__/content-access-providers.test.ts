@@ -209,6 +209,43 @@ describe('content access providers', () => {
     });
   });
 
+  it('resolves agent document context local paths through PathResolver', async () => {
+    const provider = new SourceFileContentAccessProvider({
+      projectRoot: '/workspace/demo',
+      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+    });
+
+    await expect(
+      provider.resolve({
+        request: {
+          ref: { kind: 'file', path: '${BOOKS}/comic.epub' },
+          intent: 'agent-context',
+          target: 'local-path',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'ready',
+      localPath: '/media/books/comic.epub',
+    });
+  });
+
+  it('does not support document resource refs as whole source files', async () => {
+    const fileOps = createFileOps({ '/media/books/comic.epub': bytes('whole-archive') });
+    const provider = new SourceFileContentAccessProvider({
+      projectRoot: '/workspace/demo',
+      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      fileOps,
+    });
+
+    expect(
+      provider.supports({
+        ref: resource,
+        intent: 'agent-context',
+        target: 'bytes',
+      }),
+    ).toBe(false);
+  });
+
   it('returns structured diagnostics when engine source resolution fails', async () => {
     const provider = new SourceFileContentAccessProvider({
       projectRoot: '/workspace/demo',
@@ -287,6 +324,59 @@ describe('content access providers', () => {
     });
 
     expect(text(result.bytes)).toBe('/media/books/comic.epub:OPS/page-1.jpg');
+  });
+
+  it('rejects whole document archive bytes instead of falling back to source-file reads', async () => {
+    const fileOps = createFileOps({ '/media/books/comic.epub': bytes('whole-archive') });
+    const readFile = vi.fn(fileOps.readFile);
+    const provider = new DocumentEntryContentAccessProvider({
+      projectRoot: '/workspace/demo',
+      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      fileOps: { ...fileOps, readFile },
+      entryReader: async () => bytes('entry'),
+    });
+
+    const result = await provider.resolve({
+      request: { ref: resource, intent: 'agent-context', target: 'bytes' },
+    });
+
+    expect(result).toMatchObject({
+      status: 'unsupported-destination',
+      providerId: 'document-entry-content-access',
+      error:
+        'Document archive sources cannot be resolved as whole-file provider assets. Use a ResourceRef with a stable document entry path.',
+    });
+    expect(result.diagnostics?.[0]?.code).toBe('content-document-whole-archive-read-rejected');
+    expect(readFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects package entry reads without a stable document entry path', async () => {
+    const provider = new DocumentEntryContentAccessProvider({
+      projectRoot: '/workspace/demo',
+      entryReader: async () => bytes('entry'),
+    });
+    const locatorOnlyResource = createResourceRef({
+      scope: resource.scope,
+      provider: resource.provider,
+      kind: resource.kind,
+      source: resource.source,
+      fingerprint: resource.fingerprint,
+      locator: {
+        kind: 'document',
+        locator: { kind: 'chapter', chapterHref: 'OPS/page-1.xhtml' },
+      },
+    });
+
+    const result = await provider.resolve({
+      request: { ref: locatorOnlyResource, intent: 'package', target: 'bytes' },
+    });
+
+    expect(result).toMatchObject({
+      status: 'unsupported-destination',
+      providerId: 'document-entry-content-access',
+      error: 'Document package entry bytes require a stable document entry path.',
+    });
+    expect(result.diagnostics?.[0]?.code).toBe('content-document-entry-path-missing');
   });
 
   it('returns structured diagnostics when document entry reading fails', async () => {
@@ -582,7 +672,7 @@ describe('content ingest providers', () => {
     expect(result.contractedPath).toBe('neko/generated/image/created.png');
   });
 
-  it('falls back generated outputs to project cache when no destination directory is provided', async () => {
+  it('defaults generated outputs to durable project generated root when no directory is provided', async () => {
     const fileOps = createFileOps({});
     const provider = new GeneratedOutputContentIngestProvider({
       projectRoot: '/workspace/demo',
@@ -600,11 +690,79 @@ describe('content ingest providers', () => {
 
     const result = await provider.ingest({ request });
 
-    expect(result.outputPath).toBe('/workspace/demo/.neko/.cache/generated/agent-shot.png');
-    expect(result.contractedPath).toBe('.neko/.cache/generated/agent-shot.png');
-    expect(fileOps.files.get('/workspace/demo/.neko/.cache/generated/agent-shot.png')).toEqual(
+    expect(result.outputPath).toBe('/workspace/demo/neko/generated/file/agent-shot.png');
+    expect(result.contractedPath).toBe('neko/generated/file/agent-shot.png');
+    expect(fileOps.files.get('/workspace/demo/neko/generated/file/agent-shot.png')).toEqual(
       bytes('generated'),
     );
+  });
+
+  it.each([
+    ['image', 'image/png', 'shot.png', '/workspace/demo/neko/generated/image/shot.png'],
+    ['audio', 'audio/wav', 'shot.wav', '/workspace/demo/neko/generated/audio/shot.wav'],
+    ['video', 'video/mp4', 'shot.mp4', '/workspace/demo/neko/generated/video/shot.mp4'],
+    [
+      'storyboard',
+      'application/vnd.neko.storyboard+json',
+      'shot.json',
+      '/workspace/demo/neko/generated/storyboard/shot.json',
+    ],
+  ])(
+    'defaults %s generated outputs to durable project generated roots',
+    async (_kind, mimeType, fileName, expectedPath) => {
+      const fileOps = createFileOps({});
+      const provider = new GeneratedOutputContentIngestProvider({
+        projectRoot: '/workspace/demo',
+        fileOps,
+      });
+      const request: ContentIngestRequest = {
+        mode: 'generated-output',
+        bytes: bytes('generated'),
+        destination: {
+          kind: 'generated-assets',
+          projectRoot: '/workspace/demo',
+        },
+        fileName,
+        mimeType,
+      };
+
+      const result = await provider.ingest({ request });
+
+      expect(result.outputPath).toBe(expectedPath);
+      expect(result.contractedPath).toBe(expectedPath.replace('/workspace/demo/', ''));
+      expect(result.source).toMatchObject({
+        kind: 'generated-asset',
+        path: expectedPath.replace('/workspace/demo/', ''),
+        promoted: true,
+      });
+    },
+  );
+
+  it('rejects generated promotion when output path cannot be contracted', async () => {
+    const fileOps = createFileOps({});
+    const provider = new GeneratedOutputContentIngestProvider({
+      projectRoot: '/workspace/demo',
+      fileOps,
+    });
+    const request: ContentIngestRequest = {
+      mode: 'generated-output',
+      bytes: bytes('generated'),
+      destination: {
+        kind: 'generated-assets',
+        projectRoot: '/workspace/demo',
+        directory: '/external/generated/image',
+      },
+      fileName: 'agent-shot.png',
+    };
+
+    const result = await provider.ingest({ request });
+
+    expect(result).toMatchObject({
+      status: 'missing-source',
+      providerId: 'generated-output-content-ingest',
+      error: 'Generated asset output path must be contracted before promotion.',
+    });
+    expect(result.source).toBeUndefined();
   });
 
   it('derives deterministic generated byte names when callers do not provide fileName', async () => {
@@ -625,9 +783,9 @@ describe('content ingest providers', () => {
     const result = await provider.ingest({ request });
 
     expect(result.outputPath).toMatch(
-      /^\/workspace\/demo\/\.neko\/\.cache\/generated\/content-[a-f0-9]{16}\.bin$/,
+      /^\/workspace\/demo\/neko\/generated\/file\/content-[a-f0-9]{16}\.bin$/,
     );
-    expect(result.outputPath).not.toBe('/workspace/demo/.neko/.cache/generated/content.bin');
+    expect(result.outputPath).not.toBe('/workspace/demo/neko/generated/file/content.bin');
     expect(fileOps.files.get(result.outputPath ?? '')).toEqual(bytes('generated'));
   });
 

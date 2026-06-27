@@ -772,16 +772,16 @@ describe('resource cache service', () => {
     });
   });
 
-  it('preserves debug and promoted processor outputs during GC', async () => {
+  it('preserves debug processor outputs during GC', async () => {
     const service = createService([]);
     const debugVariant = { role: 'thumbnail' as const, width: 64 };
-    const promotedVariant = { role: 'preview' as const, width: 128 };
+    const previewVariant = { role: 'preview' as const, width: 128 };
     const evictableVariant = { role: 'proxy' as const, width: 256 };
     const debugRef = { ...ref, id: `${ref.id}-debug` };
-    const promotedRef = { ...ref, id: `${ref.id}-promoted` };
+    const previewRef = { ...ref, id: `${ref.id}-preview` };
     const evictableRef = { ...ref, id: `${ref.id}-evictable` };
     fsOps.files.set('/workspace/.neko/.cache/resources/debug.png', 'debug-cache');
-    fsOps.files.set('/workspace/.neko/.cache/resources/promoted.png', 'promoted-cache');
+    fsOps.files.set('/workspace/.neko/.cache/resources/preview.png', 'preview-cache');
     fsOps.files.set('/workspace/.neko/.cache/resources/evictable.png', 'evictable-cache');
     await service.record({
       ref: debugRef,
@@ -792,12 +792,11 @@ describe('resource cache service', () => {
       lifecycle: { retentionHint: 'debug', processorRunId: 'run-debug' },
     });
     await service.record({
-      ref: promotedRef,
-      variant: promotedVariant,
-      absolutePath: '/workspace/.neko/.cache/resources/promoted.png',
+      ref: previewRef,
+      variant: previewVariant,
+      absolutePath: '/workspace/.neko/.cache/resources/preview.png',
       sizeBytes: 128,
-      retentionHint: 'promoted',
-      lifecycle: { retentionHint: 'promoted', promoted: true },
+      retentionHint: 'intermediate',
     });
     await service.record({
       ref: evictableRef,
@@ -810,14 +809,13 @@ describe('resource cache service', () => {
     const gc = await service.gc({ projectMaxBytes: 1 });
 
     expect(gc).toMatchObject({
-      removedCount: 1,
+      removedCount: 2,
       skippedReasons: {
         debug: 1,
-        promoted: 1,
       },
     });
     expect(fsOps.files.has('/workspace/.neko/.cache/resources/debug.png')).toBe(true);
-    expect(fsOps.files.has('/workspace/.neko/.cache/resources/promoted.png')).toBe(true);
+    expect(fsOps.files.has('/workspace/.neko/.cache/resources/preview.png')).toBe(false);
     expect(fsOps.files.has('/workspace/.neko/.cache/resources/evictable.png')).toBe(false);
   });
 
