@@ -335,5 +335,5 @@ export function sanitizeGeneratedAssetPathSegment(value: string): string {
 }
 
 function isGeneratedAssetMediaKind(value: string): value is GeneratedAssetMediaKind {
-  return Object.hasOwn(GENERATED_ASSET_DIRS, value);
+  return Object.prototype.hasOwnProperty.call(GENERATED_ASSET_DIRS, value);
 }

@@ -467,7 +467,7 @@ function isSerializedToolResultEnvelope(value: unknown): value is SerializedTool
     return false;
   }
 
-  return Object.hasOwn(value, 'data');
+  return Object.prototype.hasOwnProperty.call(value, 'data');
 }
 
 function stringifyToolResultContent(value: unknown): string {

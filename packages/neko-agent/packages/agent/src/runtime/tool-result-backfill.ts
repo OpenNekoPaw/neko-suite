@@ -127,13 +127,13 @@ function mergeDataPatch(
 
   for (const [key, incoming] of Object.entries(dataPatch)) {
     if (preserveKeys.has(key)) {
-      if (Object.hasOwn(existing, key) && existing[key] !== incoming) {
+      if (hasOwn(existing, key) && existing[key] !== incoming) {
         diagnostics.push({ path: key, reason: 'conflict', existing: existing[key], incoming });
       }
       continue;
     }
 
-    if (!Object.hasOwn(existing, key) || overwriteKeys.has(key)) {
+    if (!hasOwn(existing, key) || overwriteKeys.has(key)) {
       data[key] = incoming;
       continue;
     }
@@ -218,4 +218,8 @@ function getArtifactTransferKey(artifact: ToolResultArtifactTransfer): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }

@@ -125,7 +125,7 @@ function mergeDataPatch(
   const diagnostics: ToolResultBackfillDiagnostic[] = [];
 
   for (const [key, incoming] of Object.entries(dataPatch)) {
-    if (!Object.hasOwn(existing, key) || overwriteKeys.has(key)) {
+    if (!hasOwn(existing, key) || overwriteKeys.has(key)) {
       data[key] = incoming;
       continue;
     }
@@ -202,4 +202,8 @@ function findMessageIndexByToolCallId(messages: readonly Message[], toolCallId: 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }
