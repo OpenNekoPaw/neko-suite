@@ -104,6 +104,10 @@ Always check:
 - Extension host code does not import React/ReactDOM.
 - TypeScript does not duplicate Rust engine authoritative computation.
 - Paths are relative or `${VAR}/path`, not hard-coded absolute paths.
+- File/document/media/model/thumbnail/preview/proxy/import/export/transfer changes use the owning shared boundary: content access, resource cache, local resource access, EngineClient/file access, path resolver, ingest, or project-file service. Feature packages provide provider/adapter/domain semantics; they do not create package-local cache managers, path resolvers, Webview URI projectors, Engine file-token policies, or cache manifest readers.
+- Cache is transparent and rebuildable: business logic, Agent tools, Webviews, Canvas nodes, Storyboard rows, composite artifacts, clipboard payloads, and cross-plugin transfer payloads must not use `.neko/.cache` layout, cache manifests, materialized cache paths, `cachePath`, `runtimePath`, `cacheResourceRef`, Webview URI, blob/object URL, Engine token, preview token, or scratch/temp paths as durable identity.
+- Webview-safe URIs are produced only by `LocalResourceAccessService` or `ResourceCacheService.project()` after authorization. Projection failure returns typed diagnostics, omits renderable projection, or fails closed; it does not fall back to raw local/cache/source paths.
+- Content-path acceptance is path-level acceptance: tests should assert the canonical service/provider/message/adapter was hit and prove direct fs reads, cache-path lookup, legacy field fallback, package-local path conversion, or Webview URI fallback did not produce a successful result.
 - Async flows handle errors, cancellation, resource disposal, and races.
 - Public contracts include tests or clear validation evidence.
 - Residual/debt terms are scanned and classified: `legacy`, `fallback`, `deprecated`, `compat`, `shim`, `dirty`, `hack`, `temporary`, `workaround`, `dead code`, `unused`, and `duplicate`. New matches are removed, renamed, or recorded in the appropriate debt ledger with owner, replacement, validation, and removal criteria.
@@ -126,6 +130,7 @@ Add domain checks as needed:
 - Engine/media: `cargo test`, CLI smoke, `serve` integration, performance before/after when relevant.
 - Proto/shared: generated types are synchronized and callers are migrated.
 - Agent/AI: tool contracts, permissions, Journal/traceability, failure recovery.
+- Content access/cache/path: intent-aware access, transparent resource cache, path variable resolution, Engine-backed binary/media reads, Host text/project-file reads, authorized Webview projection, and stable `ResourceRef`/source-ref transfer.
 - Assets/market: manifest/schema compatibility, path safety, cache invalidation, trust boundaries.
 
 ## Output Format

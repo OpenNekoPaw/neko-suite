@@ -48,6 +48,9 @@ Neko Suite 采用“架构优先、契约优先、风险分级、证据驱动”
 - TypeScript 不重复 Rust Engine 已拥有的权威计算。
 - Protobuf 和共享契约仍是跨层类型单一事实来源。
 - 持久项目数据使用相对路径、`${VAR}/path`、stable refs、asset/entity ID 或 document locator，不保存 Webview URI、blob URL、stream ID、preview token 或 engine token。
+- 文件、文档、媒体、模型、缩略图、preview/proxy、导入、导出或跨包传递必须经过统一内容访问、资源缓存、LocalResourceAccess、EngineClient、路径解析、ingest 或项目文件服务中对应的 owning boundary；功能包只实现 provider/adapter 和领域语义，不重新实现 cache manager、path resolver、Webview URI 投影或 Engine file-token policy。
+- 缓存是透明、可重建的派生状态；业务逻辑、Agent 工具、Webview、Canvas 节点、Storyboard、Composite artifact 和跨插件 payload 不得把 `.neko/.cache` 目录结构、cache manifest、materialized path、`cachePath`、`runtimePath`、`cacheResourceRef`、Webview URI、blob/object URL、Engine token、preview token 或 scratch path 当作 durable identity。
+- Webview 可访问 URI 只能由 `LocalResourceAccessService` 或 `ResourceCacheService.project()` 在授权后生成；投影失败必须返回明确 diagnostic、缺省 renderable projection 或 fail closed，不能回退为 raw local/cache/source path。
 - 异步流程处理错误、取消、超时、资源释放和竞态边界。
 - 公共契约、关键分支和失败路径有测试或明确残余风险。
 - 影响行为、架构、配置、包入口或公共契约时同步更新对应文档。
@@ -138,6 +141,19 @@ Webview/React 变更新增组件前，review 必须确认已经做过组件复�
 - 如果能力留在 owning package，是否说明了业务边界、依赖方向、后续提取条件和验证命令。
 
 缺少公共基础能力审计的新横切能力，应视为架构风险；若影响多个包或公共契约，应进入 OpenSpec proposal/design 后再实现。
+
+### 内容访问、透明缓存与路径解析审计
+
+当变更涉及文件、文档、媒体、模型、PSD、字幕、附件、缩略图、preview variant、proxy、OCR/ASR/metadata sidecar、导入、导出、Send to Canvas/Storyboard、Agent 工具或跨包资源传递时，review 必须额外确认：
+
+- 调用方是否只声明 intent、source/ref、target 和 caller，由 Host 侧统一内容访问边界选择 source、cache、proxy、bytes、Engine source 或 Webview projection。
+- 二进制/媒体/container entry 是否经 Engine-backed content access 或注册 provider；纯文本、配置和 `nk*` 项目事实是否经项目文件/text 服务，且没有误进资源缓存。
+- 缓存路径、manifest、document-reader scratch、system temp、Webview URI、blob/object URL、Engine token 和 preview URL 是否只存在于 runtime/projection/diagnostic，不进入 durable payload、Agent memory、Canvas node、Storyboard row、artifact 或剪贴板稳定引用。
+- Webview 展示是否通过 `LocalResourceAccessService` 或 `ResourceCacheService.project()` 生成授权 URI；失败时是否 fail-visible，而不是返回 raw local path、cache path 或未验证 source URL。
+- 新增 provider/adapter 是否接入 `@neko/shared/vscode/extension` 的 content-access/resource-cache/local-resource factory，或明确说明为什么 owning package 是唯一合理边界。
+- 测试是否是路径级验收：断言 canonical service/provider/message/adapter 被命中，并证明 direct fs read、cache-path lookup、legacy field fallback、package-local path conversion 或 Webview URI fallback 没有参与。
+
+缺少这组审计的内容路径变更，应至少视为 L2；涉及 Engine file access、media stream、document container、Agent tool 或跨包 payload 时，默认按 L3 review。
 
 ## 跨子包能力复用审计
 

@@ -19,6 +19,7 @@
 | [`adr-agent-sandbox-and-external-processing-boundary.md`](adr-agent-sandbox-and-external-processing-boundary.md) | Agent 资源沙箱、外部处理器、命令执行和审批边界                   |
 | [`adr-code-debt-redundancy-governance.md`](adr-code-debt-redundancy-governance.md) | 重复、冗余、兼容桥和 fallback 代码的分类、清理优先级与验证规则 |
 | [`adr-code-review-quality-gates.md`](adr-code-review-quality-gates.md) | 代码审查、风险分级、验证矩阵和功能偏离检查                         |
+| [`adr-local-metadata-store-sqlite.md`](adr-local-metadata-store-sqlite.md) | SQLite 本地元数据 Store、JSON 事实文件和缓存索引边界                 |
 | [`adr-canvas-cut-playback-route-and-timeline-boundary.md`](adr-canvas-cut-playback-route-and-timeline-boundary.md) | Canvas 预览路线矩阵、Cut 剪辑时间线、Agent 顺序感知和跨包协议边界       |
 | [`adr-ui-domain-panels-and-shared-primitives.md`](adr-ui-domain-panels-and-shared-primitives.md) | 创作领域面板与共享 UI 原语的复用边界                               |
 | [`agent.md`](agent.md)                                                 | Agent-first、IDC、skill/prompt/tool/provider 控制面和宿主分层      |

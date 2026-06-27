@@ -92,11 +92,11 @@ Agent、Webview、Canvas 和 Storyboard 的图片交接必须分清 stable ident
 | --- | --- | --- |
 | `ResourceRef` / `cacheResourceRef` / `documentResourceRef` | 是 | 受管资源身份；Canvas、Storyboard、Composite artifact 和工具引用优先传递这些结构化引用。 |
 | workspace-relative path / `${VAR}/path` | 是 | 已纳管 source；由 Host 解析和授权。 |
-| `display.runtimeOnly` 下的 Webview URI 或 materialized path | 否 | 当前 Webview 展示、调试和用户可见预览；不能复制到 Canvas 或项目事实。 |
+| 当前消息投影中的 `renderUri` / `src` 或 `display.runtimeOnly` diagnostic | 否 | 当前 Webview 展示或诊断；不能复制到 Canvas、剪贴板稳定引用或项目事实。Host 内部 materialized path 不进入 Webview/Agent payload。 |
 | legacy `cachePath` | 否 | 只允许作为迁移/诊断 metadata；新 payload 写出前必须剥离。 |
 | `/tmp`、`/var/folders/...`、Downloads、Desktop、`file:`、blob/object URL | 否 | 未纳管或会话态路径；作为 Agent/Webview/Canvas/storyboard 成功路径时必须返回 diagnostic。 |
 
-`neko-agent` 工具结果引用 JSON 使用 `protocolVersion: 2` 时，durable body 只放结构化 resource/source refs；展示所需的 Webview URI、materialized local path 或文本路径必须放在 `display: { runtimeOnly: true, ... }`。从旧会话、剪贴板或工具结果恢复数据时，presenter 必须剥离 `cachePath`，并在缺少结构化引用时降级为文字诊断，而不是把运行时路径当作图片身份发送给 Canvas 或生成分镜。
+`neko-agent` 工具结果引用 JSON 使用 `protocolVersion: 2` 时，durable body 只放结构化 resource/source refs；当前 Webview 展示所需的 `renderUri`/`src` 只存在于 Host 投影后的消息或组件状态，不能进入复制引用、Canvas payload 或项目事实。从旧会话、剪贴板或工具结果恢复数据时，presenter 必须剥离 `cachePath`，并在缺少结构化引用时降级为文字诊断，而不是把运行时路径当作图片身份发送给 Canvas 或生成分镜。
 
 ### 3. 外部工具通过 ExternalProcessor manifest 暴露
 
@@ -366,7 +366,7 @@ Developer Mode 可以允许本地命令和更宽的 processor 调试能力，但
 
 - 普通创作 Agent 默认无法调用 `Bash` 或任意 shell command。
 - `Read`、`Grep`、`ListDirectory`、`ReadImage`、`ReadDocument`、`Write` 对未授权绝对路径返回 fail-visible diagnostic。
-- 普通 `Read`、`Grep`、`ListDirectory`、`Write` 默认隐藏 `.neko/.cache`、`.neko/logs`、`.neko/tmp` 等 managed runtime 目录；`ReadImage`、`ReadDocument`、`ReadDocumentImage` 只可 scoped 豁免 `.neko/.cache/resources` 中的受管资源输出。
+- 普通 `Read`、`Grep`、`ListDirectory`、`Write` 默认隐藏 `.neko/.cache`、`.neko/logs`、`.neko/tmp` 等 managed runtime 目录；`ReadImage`、`ReadDocument`、`ReadDocumentImage` 不按路径豁免 cache，只能通过结构化 `ResourceRef`/`DocumentArchiveResourceRef` 让 Host 内部统一内容访问服务物化受管资源。
 - `.gitignore` 规则只能收窄 Agent 文件可见范围；测试必须覆盖常见 ignore、managed directory 和 `!` negation 不重新授权的行为。
 - processor 输出只能写入授权 output root，默认进入 `.neko/.cache/resources` 或 extension `globalStorageUri/resources`。
 - Webview 只接收 `asWebviewUri(...)` projection 或 stable `ResourceRef`，不展示系统 temp 路径。

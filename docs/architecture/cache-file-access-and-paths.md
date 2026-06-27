@@ -124,13 +124,13 @@ Agent 工具结果、Canvas send、Storyboard generation 和 `neko-composite` ar
 | --- | --- | --- |
 | `ResourceRef`、`cacheResourceRef`、`documentResourceRef`、source ref | 稳定 | 可以进入 Agent session、Canvas 节点、Storyboard 行、Composite artifact 和项目事实。 |
 | workspace-relative path、`${VAR}/path` | 稳定 | 可以作为 source identity；Host 负责解析和授权。 |
-| `display.runtimeOnly` 下的 Webview URI、materialized path、runtime path | 运行时 | 只能用于当前 Webview 展示、复制调试文本或日志；不能被 downstream payload 当图片身份。 |
+| `display.runtimeOnly` 下的 Webview URI、renderUri 或 runtime diagnostic | 运行时 | 只能用于当前 Webview 展示或诊断；不能被 downstream payload 当图片身份。Host 内部 materialized path 不写入 Webview/clipboard 稳定引用。 |
 | legacy `cachePath` | 迁移/诊断 | 读取旧数据时可识别，写出新 payload 前必须剥离；不能作为 durable identity。 |
 | 系统 temp、`/var/folders/...`、`/tmp`、Downloads、Desktop、`file:`、blob/object URL | 非法 | 不能作为 Webview/Canvas/storyboard 成功路径；应返回 unauthorized/non-portable diagnostic。 |
 
 `cachePath` 与 `.neko/.cache/resources` 的区别很重要：前者是旧工具链暴露的实体副本路径字段，后者是当前受管资源缓存 root。即使某个运行时路径实际位于 `.neko/.cache/resources`，也不能把它直接写成项目事实；长期 payload 仍应保存 `ResourceRef`、source ref 或可移植 source path。
 
-Agent Webview 的工具引用 JSON 使用 `protocolVersion: 2` 时，durable body 只保存结构化 refs。投影给当前 Webview 的 URI/path 必须放在 `display: { runtimeOnly: true, ... }`，并在发送到 Canvas、Storyboard 或剪贴板稳定引用前移除。旧会话如果只有 temp/cache 路径而没有结构化引用，应展示诊断和文本上下文，不能伪装为可点击图片。
+Agent Webview 的工具引用 JSON 使用 `protocolVersion: 2` 时，durable body 只保存结构化 refs。投影给当前 Webview 的 `renderUri` 只能存在于当前消息投影/组件状态，发送到 Canvas、Storyboard 或剪贴板稳定引用前必须移除。旧会话如果只有 temp/cache 路径而没有结构化引用，应展示诊断和文本上下文，不能伪装为可点击图片。
 
 ## 文件读写服务
 
@@ -430,6 +430,16 @@ project format refs
 | 把大型媒体整体转成 data URI 或无界 blob         | 内存膨胀，无法证明生产性能   | bounded fixture 或 Engine proxy/stream          |
 | Search 或 UI 直接读取私有 cache JSON            | read model 与缓存格式耦合    | 走 Search/Cache service                         |
 | Engine stream token 写入项目格式                | 会话结束即失效               | 保存 source ref，运行时重新申请 token           |
+
+## Review Gate
+
+涉及文件、文档、媒体、模型、附件、缩略图、preview/proxy、导入、导出或跨包资源传递的变更，review 必须按路径级别确认：
+
+- 上层业务只传递 intent、source/ref、target 和 caller，没有直接选择 cache 目录、cache manifest、Webview URI、Engine token 或 scratch path。
+- 二进制/媒体/container entry 通过 Engine-backed content access 或注册 provider；纯文本、配置和 `nk*` 项目事实通过项目文件/text 服务。
+- Webview projection 只由 `LocalResourceAccessService` 或 `ResourceCacheService.project()` 生成；失败时返回 diagnostic、缺省 renderable projection 或 fail closed。
+- durable payload 只保存 `ResourceRef`、source ref、workspace-relative path、`${VAR}/path`、asset/entity ID 或 document locator，不保存 materialized cache path、`cachePath`、runtime path、Webview URI、blob/object URL 或 token。
+- 测试断言 canonical service/provider/message/adapter 被命中，不能只断言最终图片、缩略图或预览显示成功。
 
 ## 与其他架构文档的关系
 

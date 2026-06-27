@@ -424,6 +424,49 @@ All content that becomes a durable project asset, generated result, package
 entry, or media-library item must go through ingest/import/promotion. Export
 outputs do not automatically replace project sources.
 
+### Unified Content Access, Transparent Cache, And Path Resolution
+
+Content access rules are shared product architecture, not feature-package
+implementation detail. Any change that reads, previews, thumbnails, proxies,
+imports, exports, or transfers files, documents, media, models, generated
+assets, or archive/container entries must use the shared Host content-access
+boundary unless it is pure text/project-fact I/O handled by the owning project
+file service.
+
+Review and design expectations:
+
+- Feature packages may provide domain providers/adapters, but must not create a
+  package-local file access service, cache manager, path resolver, Webview URI
+  projector, Engine file-token policy, or cache manifest reader when the shared
+  content-access/resource-cache/local-resource services can own the rule.
+- Cache is transparent, rebuildable derived state. Business logic, Agent tools,
+  Webviews, Canvas nodes, Storyboard rows, composite artifacts, and cross-plugin
+  transfer payloads must not depend on cache directory layout, cache manifest
+  shape, materialized cache paths, `cachePath`, `runtimePath`, `cacheResourceRef`,
+  Webview URI, blob/object URL, Engine token, preview token, or system scratch
+  path as durable identity.
+- Durable references should be `ResourceRef`/`ResourceVariantRef`, document
+  source refs plus locators/entry paths, workspace-relative paths, `${VAR}/path`,
+  promoted generated asset refs, or asset/entity IDs. Runtime projections may be
+  returned only as current-session display data.
+- Path conversion belongs at the Host boundary. Feature packages should pass
+  source/ref plus intent and caller; the shared runtime resolves workspace roots,
+  media-library variables, extension-private roots, Engine-registered sources,
+  Webview roots, and authorization diagnostics.
+- Binary/media/container operations use Engine-backed content access or a
+  registered provider for source bytes, ranges, entries, sibling resources,
+  probe/decode, preview, proxy, and thumbnail work. Pure text/config/project
+  facts use the Host/project-file text path and do not go through Engine or the
+  resource cache.
+- Webview-safe URIs must be produced by `LocalResourceAccessService` or
+  `ResourceCacheService.project()` after authorization. A projection failure must
+  return a typed diagnostic, omit the renderable projection, or fail closed; it
+  must not fall back to returning a raw local/cache/source path as a URI.
+- New acceptance tests for content paths must prove the canonical content-access
+  route was used. Result-only tests are insufficient when the same result could
+  be produced by direct filesystem reads, cache-path lookup, legacy fields,
+  package-local path conversion, or Webview URI fallback.
+
 ### Project Formats
 
 Neko custom formats use the `nk*` JSON family. Durable files are human-readable,
@@ -618,6 +661,11 @@ Before review, answer:
    layers were audited before adding package-local capability code?
 6. For Webview/React changes, which existing components, hooks, shared
    primitives, or tests were audited before adding any new component?
+7. For file/document/media/model/thumbnail/preview/proxy/import/export/transfer
+   changes, which shared content-access, resource-cache, local-resource,
+   EngineClient, path resolver, ingest, or project-file service owns the rule?
+   Did tests assert the canonical service path rather than only the final
+   rendered result?
 
 Validation expectations:
 
