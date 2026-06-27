@@ -156,7 +156,7 @@ export interface CreateDocumentEntryResourceRefInput {
 }
 
 export interface DocumentImageInfo {
-  readonly path: string;
+  readonly path?: string;
   readonly alias?: string;
   readonly aliasScope?: string;
   readonly sourceDocumentId?: string;

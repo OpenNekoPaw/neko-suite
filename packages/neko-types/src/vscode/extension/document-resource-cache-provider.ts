@@ -6,10 +6,7 @@ import {
   createResourceRef,
   hashStableValue,
   type DocumentArchiveResourceRef,
-  type DocumentImageInfo,
   type DocumentLocator,
-  type DocumentRange,
-  type DocumentReadResult,
   type DocumentSourceRef,
   type ResourceRef,
   type ResourceSourceRef,
@@ -23,23 +20,16 @@ import type {
 
 export const DOCUMENT_RESOURCE_CACHE_PROVIDER_ID = 'document-archive';
 
-export interface DocumentRangeReader {
-  readRange(source: DocumentSourceRef | string, range: DocumentRange): Promise<DocumentReadResult>;
-}
-
 export interface DocumentEntryReader {
   readEntry(source: DocumentSourceRef, entryPath: string): Promise<Uint8Array | null>;
 }
 
 export interface DocumentResourceCacheProviderOptions {
-  readonly reader: DocumentRangeReader;
   readonly entryReader?: DocumentEntryReader;
-  readonly enableRangeFallback?: boolean;
   readonly fsOps?: DocumentResourceCacheFsOps;
 }
 
 export interface DocumentResourceCacheFsOps {
-  readFile(filePath: string): Promise<Uint8Array>;
   writeFile(filePath: string, data: Uint8Array): Promise<void>;
   mkdir(filePath: string, options: { recursive: boolean }): Promise<void>;
   stat(filePath: string): Promise<{ readonly size: number }>;
@@ -55,15 +45,11 @@ export interface CreateDocumentResourceRefInput {
 export class DocumentResourceCacheProvider implements ResourceCacheProvider {
   readonly id = DOCUMENT_RESOURCE_CACHE_PROVIDER_ID;
 
-  private readonly reader: DocumentRangeReader;
   private readonly entryReader?: DocumentEntryReader;
-  private readonly enableRangeFallback: boolean;
   private readonly fsOps: DocumentResourceCacheFsOps;
 
   constructor(options: DocumentResourceCacheProviderOptions) {
-    this.reader = options.reader;
     this.entryReader = options.entryReader;
-    this.enableRangeFallback = options.enableRangeFallback ?? true;
     this.fsOps = options.fsOps ?? nodeFsOps;
   }
 
@@ -104,16 +90,6 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
       };
     }
 
-    const rangeLocator = locator ?? createFallbackLocator(entryPath);
-    if (!rangeLocator) {
-      return {
-        status: 'unsupported',
-        ref: input.ref,
-        variant: input.variant,
-        error: 'Document resource ref cannot be materialized without a stable locator.',
-      };
-    }
-
     const directEntry = entryPath
       ? await this.materializeDirectEntry(input, source, entryPath)
       : undefined;
@@ -121,58 +97,13 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
       return directEntry;
     }
 
-    if (!this.enableRangeFallback) {
-      return {
-        status: 'missing',
-        ref: input.ref,
-        variant: input.variant,
-        error: entryPath
-          ? `Document image entry could not be materialized directly: ${entryPath}`
-          : 'Document resource ref cannot be materialized without a direct entry.',
-      };
-    }
-
-    const result = await this.reader.readRange(source, {
-      locator: rangeLocator,
-      limit: { maxImages: 32 },
-    });
-    const image = selectImage(result.imageInfo ?? [], entryPath);
-    if (!image) {
-      return {
-        status: 'missing',
-        ref: input.ref,
-        variant: input.variant,
-        error: entryPath
-          ? `Document image entry was not found: ${entryPath}`
-          : 'Document range did not return an image.',
-      };
-    }
-
-    const bytes = await this.fsOps.readFile(image.path);
-    const targetRelativePath = createDocumentResourceRelativePath(
-      input.ref,
-      image.path,
-      entryPath,
-      {
-        contentMd5: createContentMd5(bytes),
-      },
-    );
-    const targetPath = path.join(input.cacheRoot, targetRelativePath);
-    await this.fsOps.mkdir(path.dirname(targetPath), { recursive: true });
-    await this.fsOps.writeFile(targetPath, bytes);
-    const stat = await this.fsOps.stat(targetPath);
-
     return {
-      status: 'ready',
+      status: 'missing',
       ref: input.ref,
       variant: input.variant,
-      absolutePath: targetPath,
-      relativePath: targetRelativePath,
-      mimeType: image.mimeType ?? input.variant.mimeType,
-      width: image.width ?? input.variant.width,
-      height: image.height ?? input.variant.height,
-      sizeBytes: image.byteSize ?? stat.size,
-      rebuildable: true,
+      error: entryPath
+        ? `Document image entry could not be materialized directly: ${entryPath}`
+        : 'Document resource ref cannot be materialized without a direct entry.',
     };
   }
 
@@ -346,29 +277,6 @@ export function createDocumentResourceRefFromArchiveRef(
   });
 }
 
-function selectImage(
-  images: readonly DocumentImageInfo[],
-  entryPath: string | undefined,
-): DocumentImageInfo | undefined {
-  if (entryPath) {
-    return (
-      images.find((image) => image.resourceRef?.entryPath === entryPath) ??
-      images.find((image) => path.basename(image.path) === path.basename(entryPath))
-    );
-  }
-  return images[0];
-}
-
-function createFallbackLocator(entryPath: string | undefined): DocumentLocator | undefined {
-  if (!entryPath) return undefined;
-  return {
-    kind: 'page',
-    pageNumber: 1,
-    pageIndex: 0,
-    entryName: entryPath,
-  };
-}
-
 function readLocatorEntryName(locator: DocumentLocator | undefined): string | undefined {
   if (!locator) return undefined;
   if (locator.kind === 'page' || locator.kind === 'region') {
@@ -457,7 +365,6 @@ function inferMimeType(filePath: string): string | undefined {
 }
 
 const nodeFsOps: DocumentResourceCacheFsOps = {
-  readFile: (filePath) => fs.readFile(filePath),
   writeFile: (filePath, data) => fs.writeFile(filePath, data),
   mkdir: (filePath, options) => fs.mkdir(filePath, options).then(() => undefined),
   stat: async (filePath) => {

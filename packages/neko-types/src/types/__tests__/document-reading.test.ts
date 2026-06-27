@@ -104,7 +104,7 @@ describe('document reading contracts', () => {
     expect(result.returnedTextChars).toBe(12);
   });
 
-  it('keeps archive entry references separate from extracted cache paths', () => {
+  it('keeps archive entry references separate from cache paths', () => {
     const source: DocumentSourceRef = {
       filePath: '${BOOKS}/comic.epub',
       format: 'epub',
@@ -118,12 +118,11 @@ describe('document reading contracts', () => {
       versionPolicy: 'versioned-export',
     };
     const imageInfo: DocumentImageInfo = {
-      path: '/tmp/neko_epub_1777248000000/0001_page-1.jpg',
       mimeType: 'image/jpeg',
       resourceRef,
     };
 
-    expect(imageInfo.path).toBe('/tmp/neko_epub_1777248000000/0001_page-1.jpg');
+    expect(imageInfo.path).toBeUndefined();
     expect(imageInfo.resourceRef?.source.filePath).toBe('${BOOKS}/comic.epub');
     expect(imageInfo.resourceRef?.entryPath).toBe('image/page-1.jpg');
     expect(imageInfo.resourceRef?.versionPolicy).toBe('versioned-export');

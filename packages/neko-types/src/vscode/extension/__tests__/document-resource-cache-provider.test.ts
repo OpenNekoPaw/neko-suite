@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DocumentReadResult, DocumentSourceRef } from '../../../types';
+import type { DocumentSourceRef } from '../../../types';
 import {
   createDocumentResourceRef,
   createDocumentResourceRefFromArchiveRef,
   DocumentResourceCacheProvider,
-  type DocumentRangeReader,
 } from '../document-resource-cache-provider';
 
 describe('DocumentResourceCacheProvider', () => {
@@ -102,26 +101,9 @@ describe('DocumentResourceCacheProvider', () => {
     });
   });
 
-  it('materializes a matching document image into the resource cache', async () => {
+  it('does not materialize reader-returned scratch paths by default', async () => {
     const fsOps = createFsOps();
-    const reader = createReader({
-      source,
-      imageInfo: [
-        {
-          path: '/tmp/neko_epub/page-1.jpg',
-          mimeType: 'image/jpeg',
-          width: 640,
-          height: 960,
-          byteSize: 123,
-          resourceRef: {
-            kind: 'document-entry',
-            source,
-            entryPath: 'OPS/page-1.jpg',
-          },
-        },
-      ],
-    });
-    const provider = new DocumentResourceCacheProvider({ reader, fsOps });
+    const provider = new DocumentResourceCacheProvider({ fsOps });
     const ref = createDocumentResourceRef({
       source,
       entryPath: 'OPS/page-1.jpg',
@@ -135,35 +117,18 @@ describe('DocumentResourceCacheProvider', () => {
     });
 
     expect(result).toMatchObject({
-      status: 'ready',
-      relativePath: expect.stringMatching(/^documents\/doc_.+\/[a-f0-9]{32}\.jpg$/),
-      mimeType: 'image/jpeg',
-      width: 640,
-      height: 960,
-      sizeBytes: 123,
-      rebuildable: true,
+      status: 'missing',
+      error: 'Document image entry could not be materialized directly: OPS/page-1.jpg',
     });
-    expect(reader.readRange).toHaveBeenCalledWith(source, {
-      locator: { kind: 'chapter', chapterHref: 'OPS/page-1.xhtml', spineIndex: 0 },
-      limit: { maxImages: 32 },
-    });
-    expect(result.relativePath).toEqual(
-      expect.stringContaining('/30bc93c6e5fb81fc894780d053feff40.jpg'),
-    );
-    expect(fsOps.readFile).toHaveBeenCalledWith('/tmp/neko_epub/page-1.jpg');
-    expect(fsOps.writeFile).toHaveBeenCalledWith(
-      expect.stringContaining('/workspace/.neko/.cache/resources/documents/'),
-      new Uint8Array(Buffer.from('page-1')),
-    );
+    expect(fsOps.writeFile).not.toHaveBeenCalled();
   });
 
   it('materializes document entries directly from source without scratch paths', async () => {
     const fsOps = createFsOps();
-    const reader = createReader({ source, imageInfo: [] });
     const entryReader = {
       readEntry: vi.fn(async () => new Uint8Array([1, 2, 3])),
     };
-    const provider = new DocumentResourceCacheProvider({ reader, entryReader, fsOps });
+    const provider = new DocumentResourceCacheProvider({ entryReader, fsOps });
     const ref = createDocumentResourceRef({
       source,
       entryPath: 'OPS/page-1.jpg',
@@ -186,21 +151,15 @@ describe('DocumentResourceCacheProvider', () => {
       rebuildable: true,
     });
     expect(entryReader.readEntry).toHaveBeenCalledWith(source, 'OPS/page-1.jpg');
-    expect(reader.readRange).not.toHaveBeenCalled();
     expect(fsOps.writeFile).toHaveBeenCalledWith(
       expect.stringContaining('/workspace/.neko/.cache/resources/documents/'),
       new Uint8Array([1, 2, 3]),
     );
   });
 
-  it('does not call range reader when range fallback is disabled', async () => {
+  it('requires a direct entry reader for locator-only document resources', async () => {
     const fsOps = createFsOps();
-    const reader = createReader({ source, imageInfo: [] });
-    const provider = new DocumentResourceCacheProvider({
-      reader,
-      fsOps,
-      enableRangeFallback: false,
-    });
+    const provider = new DocumentResourceCacheProvider({ fsOps });
     const ref = createDocumentResourceRef({
       source,
       locator: { kind: 'chapter', chapterHref: 'OPS/page-1.xhtml', spineIndex: 0 },
@@ -216,17 +175,15 @@ describe('DocumentResourceCacheProvider', () => {
       status: 'missing',
       error: 'Document resource ref cannot be materialized without a direct entry.',
     });
-    expect(reader.readRange).not.toHaveBeenCalled();
     expect(fsOps.writeFile).not.toHaveBeenCalled();
   });
 
   it('stores entries from the same source document under one document cache directory', async () => {
     const fsOps = createFsOps();
-    const reader = createReader({ source, imageInfo: [] });
     const entryReader = {
       readEntry: vi.fn(async () => new Uint8Array([1])),
     };
-    const provider = new DocumentResourceCacheProvider({ reader, entryReader, fsOps });
+    const provider = new DocumentResourceCacheProvider({ entryReader, fsOps });
     const firstRef = createDocumentResourceRef({
       source,
       entryPath: 'OPS/images/page-1.jpg',
@@ -269,11 +226,10 @@ describe('DocumentResourceCacheProvider', () => {
       fileId: source.fileId,
       identity: source.identity,
     };
-    const reader = createReader({ source, imageInfo: [] });
     const entryReader = {
       readEntry: vi.fn(async () => new Uint8Array([1])),
     };
-    const provider = new DocumentResourceCacheProvider({ reader, entryReader, fsOps });
+    const provider = new DocumentResourceCacheProvider({ entryReader, fsOps });
     const variablePathRef = createDocumentResourceRef({
       source,
       entryPath: 'OPS/images/page-1.jpg',
@@ -306,29 +262,8 @@ describe('DocumentResourceCacheProvider', () => {
   });
 });
 
-function createReader(
-  result: Pick<DocumentReadResult, 'source' | 'imageInfo'>,
-): DocumentRangeReader {
-  return {
-    readRange: vi.fn(
-      async (_source, range): Promise<DocumentReadResult> => ({
-        source: result.source,
-        range,
-        imageInfo: result.imageInfo,
-        imagePaths: result.imageInfo?.map((image) => image.path),
-        returnedTextChars: 0,
-        truncated: false,
-      }),
-    ),
-  };
-}
-
 function createFsOps() {
   return {
-    readFile: vi.fn(
-      async (filePath: string) =>
-        new Uint8Array(Buffer.from(filePath.split('/').pop()?.split('.').shift() ?? 'image')),
-    ),
     writeFile: vi.fn(async () => undefined),
     mkdir: vi.fn(async () => undefined),
     stat: vi.fn(async () => ({ size: 456 })),

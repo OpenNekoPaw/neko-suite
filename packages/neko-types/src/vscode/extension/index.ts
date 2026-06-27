@@ -114,7 +114,6 @@ export {
 export type {
   CreateDocumentResourceRefInput,
   DocumentEntryReader,
-  DocumentRangeReader,
   DocumentResourceCacheFsOps,
   DocumentResourceCacheProviderOptions,
 } from './document-resource-cache-provider';
