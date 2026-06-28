@@ -921,6 +921,14 @@ describe('useChatActions', () => {
     });
 
     expect(setMessages).toHaveBeenCalledTimes(1);
+    const updater = setMessages.mock.calls[0]?.[0] as (messages: unknown[]) => unknown[];
+    expect(updater([])).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: '继续这个方向',
+        isQueued: true,
+      }),
+    ]);
     expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         conversationId: 'conv-queue',
@@ -1004,6 +1012,14 @@ describe('useChatActions', () => {
         message: 'Continue from selection',
       }),
     );
+    const updater = setMessages.mock.calls[0]?.[0] as (messages: unknown[]) => unknown[];
+    expect(updater([])).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: 'Continue from selection',
+        isQueued: true,
+      }),
+    ]);
     expect(setStreamingMessageId).not.toHaveBeenCalled();
     expect(streamingMessageIdRef.current).toBe('assistant-streaming');
     expect(setIsThinking).not.toHaveBeenCalled();

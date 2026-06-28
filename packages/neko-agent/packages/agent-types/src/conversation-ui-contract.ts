@@ -1,11 +1,14 @@
 import type { Message } from './message';
 import type { OpenTab, TabType } from './ui';
 import type { AgentWorkItem } from './work-item';
+import type { AgentQueuedMessageItem } from './webview-protocol';
 
 export interface ConversationStreamingState {
   streamingMessageId: string | null;
   isThinking: boolean;
   queuedMessageCount?: number;
+  queuedMessages?: readonly AgentQueuedMessageItem[];
+  messageQueueVersion?: number;
 }
 
 export interface ActiveConversationPayload {

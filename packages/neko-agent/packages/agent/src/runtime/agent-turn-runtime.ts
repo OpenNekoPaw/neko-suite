@@ -3,6 +3,8 @@ import type {
   AgentPhaseMessage,
   ErrorMessage,
   MessageQueuedMessage,
+  AgentMessageQueueSnapshot,
+  AgentQueuedMessageItem,
   AgentModelSlots,
   AgentMediaModelSelections,
   AgentPhase,
@@ -18,11 +20,13 @@ import {
   buildToolConfirmationMessage,
 } from '@neko-agent/types';
 import type { Skill, SkillInjection } from '@neko/shared';
+import type { SkillLifecycleProjection } from '@neko/shared';
 import type { AgentEvent } from '../session/types';
 import {
   AGENT_SESSION_BUSY_MESSAGE,
   AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
 } from './agent-session-runner';
+import type { AgentPendingMessageItem, EnqueuePendingMessageInput } from './agent-runner-port';
 import type { IRuntimeTaskManager } from '../task';
 import type { IOperationToolAdapterRegistry } from '@neko/shared';
 import {
@@ -49,6 +53,7 @@ import {
 } from './multimodal-context-packet';
 import { getLogger } from '../utils/logger';
 import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
+import { hasBlockingLifecycleProjectionDiagnostic } from '../skill/skill-lifecycle-projection';
 
 function getAgentTurnRuntimeLogger() {
   return getLogger('AgentTurnRuntime');
@@ -95,9 +100,14 @@ export interface AgentTurnRunner<TPlatform, TContext extends object> {
   configure(config: AgentTurnRunnerConfigureInput<TPlatform>): Promise<void>;
   execute(input: string, context: TContext): AsyncIterable<AgentEvent>;
   isRunning(): boolean;
-  appendMessage(input: string): boolean;
+  enqueuePendingMessage(input: EnqueuePendingMessageInput): AgentPendingMessageItem | null;
+  getPendingMessageQueue(): readonly AgentPendingMessageItem[];
+  removePendingMessage(queueItemId: string): AgentPendingMessageItem;
+  updatePendingMessage(queueItemId: string, content: string, now?: number): AgentPendingMessageItem;
+  promotePendingMessage(queueItemId: string): AgentPendingMessageItem;
   getPendingMessagesCount(): number;
-  drainPendingMessages(): string[];
+  dequeuePendingMessage(): AgentPendingMessageItem | null;
+  drainPendingMessageQueue(): readonly AgentPendingMessageItem[];
   applySkillInjection?(injection: SkillInjection, skill?: Skill): void;
   getActiveSkill?(): Skill | undefined;
   clearActiveSkill?(): void;
@@ -114,6 +124,7 @@ export interface AgentTurnAgentManager<
 > {
   getOrCreate(conversationId: string): TRunner;
   loadHistoryWithContext(conversationId: string, messages: readonly THistoryMessage[]): void;
+  nextMessageQueueSnapshotVersion?(conversationId: string): number;
 }
 
 export interface AgentTurnConversationStore<THistoryMessage> {
@@ -139,6 +150,10 @@ export interface AgentTurnRuntimeSettings {
 export interface AgentTurnActiveSkillState {
   readonly skill: Skill;
   readonly injection: SkillInjection;
+}
+
+export interface AgentTurnSkillLifecycleState {
+  readonly projection: SkillLifecycleProjection;
 }
 
 export interface AgentTurnContextFactoryInput {
@@ -201,6 +216,7 @@ export interface ExecuteAgentTurnInput<
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
   readonly executionOverrides?: AgentMessageExecutionOverrides;
   readonly activeSkill?: AgentTurnActiveSkillState | null;
+  readonly skillLifecycle?: AgentTurnSkillLifecycleState | null;
   readonly settings: AgentTurnRuntimeSettings;
   readonly providerSource: AgentTurnProviderSource<TProvider>;
   readonly agentManager: AgentTurnAgentManager<TPlatform, TContext, THistoryMessage, TRunner>;
@@ -244,6 +260,8 @@ export interface ExecuteAgentTurnInput<
     readonly conversationId: string;
     readonly content?: string;
     readonly pendingCount: number;
+    readonly item?: AgentQueuedMessageItem;
+    readonly snapshot?: AgentMessageQueueSnapshot;
   }) => void;
   readonly generateMessageId: () => string;
   readonly now?: () => number;
@@ -252,10 +270,7 @@ export interface ExecuteAgentTurnInput<
 }
 
 export type AgentTurnHostMessage =
-  | AgentPhaseMessage
-  | ErrorMessage
-  | MessageQueuedMessage
-  | ToolConfirmationMessage;
+  AgentPhaseMessage | ErrorMessage | MessageQueuedMessage | ToolConfirmationMessage;
 
 export interface RunAgentTurnRuntimeInput<
   TPlatform,
@@ -268,8 +283,7 @@ export interface RunAgentTurnRuntimeInput<
   'agentManager' | 'onToolConfirmation' | 'onPhaseChange'
 > {
   readonly agentManager?:
-    | AgentTurnAgentManager<TPlatform, TContext, THistoryMessage, TRunner>
-    | undefined;
+    AgentTurnAgentManager<TPlatform, TContext, THistoryMessage, TRunner> | undefined;
   readonly postMessage: (message: AgentTurnHostMessage) => void | Promise<void>;
   readonly onPhaseChange?: ExecuteAgentTurnInput<
     TPlatform,
@@ -370,6 +384,8 @@ export async function runAgentTurnRuntime<
           conversationId: event.conversationId,
           content: event.content,
           pendingCount: event.pendingCount,
+          item: event.item,
+          snapshot: event.snapshot,
         });
       },
       now,
@@ -474,9 +490,35 @@ export async function executeAgentTurn<
   const authorizedReadRoots = input.getAuthorizedReadRoots?.();
   const workspaceIgnoreRules = input.getWorkspaceIgnoreRules?.();
   const ambientCanvas = input.getAmbientCanvas?.(input.conversationId) ?? [];
+  const blockingLifecycleMessage = buildBlockingLifecycleProjectionMessage(input.skillLifecycle);
+  if (blockingLifecycleMessage) {
+    logger.warn('neko.agent.turn.execute.failed', {
+      conversationId: input.conversationId,
+      durationMs: Date.now() - startTime,
+      reason: 'skill-lifecycle-projection-blocked',
+      diagnostics: input.skillLifecycle?.projection.diagnostics,
+    });
+    const errorMessage = buildAgentErrorAssistantMessage({
+      id: input.generateMessageId(),
+      timestamp: now(),
+      message: blockingLifecycleMessage,
+    });
+    input.conversations.addAssistantMessage(input.conversationId, errorMessage);
+    return { status: 'completed', assistantMessage: errorMessage };
+  }
   const agentRunner = input.agentManager.getOrCreate(input.conversationId);
   const llmRuntimeOptions = input.llmRuntimeOptions;
   const usesProjectedLlmOptions = llmRuntimeOptions?.projected === true;
+  let localQueueSnapshotVersion = 0;
+  const nextQueueSnapshotVersion = (): number =>
+    input.agentManager.nextMessageQueueSnapshotVersion?.(input.conversationId) ??
+    ++localQueueSnapshotVersion;
+  const createQueueSnapshot = (): AgentMessageQueueSnapshot =>
+    buildAgentMessageQueueSnapshot({
+      conversationId: input.conversationId,
+      items: agentRunner.getPendingMessageQueue(),
+      version: nextQueueSnapshotVersion(),
+    });
 
   const turnConfig = buildAgentTurnConfigurationPlan({
     conversationId: input.conversationId,
@@ -536,14 +578,22 @@ export async function executeAgentTurn<
   if (agentRunner.isRunning()) {
     assertCompatibleRunningTurnConfig(agentRunner.getConfig(), runnerConfig);
     assertQueueableRunningTurn({ input, ambientCanvas });
-    if (!agentRunner.appendMessage(input.message)) {
+    const queuedItem = agentRunner.enqueuePendingMessage({
+      conversationId: input.conversationId,
+      content: input.message,
+      now: now(),
+    });
+    if (!queuedItem) {
       throw new Error(AGENT_SESSION_BUSY_MESSAGE);
     }
-    const pendingCount = agentRunner.getPendingMessagesCount();
+    const snapshot = createQueueSnapshot();
+    const pendingCount = snapshot.pendingCount;
     input.onMessageQueued?.({
       conversationId: input.conversationId,
       content: buildQueuedAgentMessageNotice(pendingCount),
       pendingCount,
+      item: projectPendingMessageItem(queuedItem),
+      snapshot,
     });
     logger.debug('neko.agent.turn.execute.queued', {
       conversationId: input.conversationId,
@@ -562,7 +612,11 @@ export async function executeAgentTurn<
     conversations: input.conversations,
   });
 
-  synchronizeAgentTurnSkillState(agentRunner, input.activeSkill ?? null);
+  synchronizeAgentTurnSkillState(
+    agentRunner,
+    input.activeSkill ?? null,
+    input.skillLifecycle ?? null,
+  );
 
   let confirmationDisposable: AgentTurnDisposable | undefined;
   try {
@@ -596,29 +650,29 @@ export async function executeAgentTurn<
     });
 
     for (;;) {
-      const queuedMessages = agentRunner.drainPendingMessages();
-      if (queuedMessages.length === 0) {
+      const queuedMessage = agentRunner.dequeuePendingMessage();
+      if (!queuedMessage) {
         break;
       }
 
-      for (const [index, queuedMessage] of queuedMessages.entries()) {
-        input.onMessageQueued?.({
-          conversationId: input.conversationId,
-          pendingCount: queuedMessages.length - index - 1 + agentRunner.getPendingMessagesCount(),
-        });
+      const snapshot = createQueueSnapshot();
+      input.onMessageQueued?.({
+        conversationId: input.conversationId,
+        pendingCount: snapshot.pendingCount,
+        snapshot,
+      });
 
-        assistantMessage = await executeAgentTurnMessage({
-          input,
-          agentRunner,
-          logger,
-          startTime,
-          workspaceRoot,
-          ambientCanvas,
-          turnConfig,
-          now,
-          message: queuedMessage,
-        });
-      }
+      assistantMessage = await executeAgentTurnMessage({
+        input,
+        agentRunner,
+        logger,
+        startTime,
+        workspaceRoot,
+        ambientCanvas,
+        turnConfig,
+        now,
+        message: queuedMessage.content,
+      });
     }
 
     if (assistantMessage) {
@@ -875,6 +929,31 @@ function buildQueuedAgentMessageNotice(pendingCount: number): string {
   return `Message queued (${pendingCount} pending)`;
 }
 
+function buildAgentMessageQueueSnapshot(input: {
+  readonly conversationId: string;
+  readonly items: readonly AgentPendingMessageItem[];
+  readonly version: number;
+}): AgentMessageQueueSnapshot {
+  const items = input.items.map(projectPendingMessageItem);
+  return {
+    conversationId: input.conversationId,
+    items,
+    pendingCount: items.length,
+    version: input.version,
+  };
+}
+
+function projectPendingMessageItem(item: AgentPendingMessageItem): AgentQueuedMessageItem {
+  return {
+    id: item.id,
+    conversationId: item.conversationId,
+    content: item.content,
+    createdAt: item.createdAt,
+    ...(item.updatedAt !== undefined ? { updatedAt: item.updatedAt } : {}),
+    source: item.source,
+  };
+}
+
 function hydrateAgentHistoryIfNeeded<
   TPlatform,
   TContext extends object,
@@ -920,9 +999,22 @@ function isHydrationCandidateMessage(
 function synchronizeAgentTurnSkillState<TPlatform, TContext extends object>(
   agentRunner: AgentTurnRunner<TPlatform, TContext>,
   activeSkill: AgentTurnActiveSkillState | null,
+  skillLifecycle: AgentTurnSkillLifecycleState | null,
 ): void {
   const runnerKey = agentRunner as object;
   const previousTurnSkillName = turnManagedSkillNames.get(runnerKey);
+
+  if (skillLifecycle) {
+    const lifecycleSkill = projectLifecycleAsTurnSkill(skillLifecycle.projection);
+    if (lifecycleSkill) {
+      agentRunner.applySkillInjection?.(lifecycleSkill.injection, lifecycleSkill.skill);
+      turnManagedSkillNames.set(runnerKey, lifecycleSkill.skill.name);
+      return;
+    }
+    clearPreviousTurnManagedSkill(agentRunner, previousTurnSkillName);
+    turnManagedSkillNames.delete(runnerKey);
+    return;
+  }
 
   if (activeSkill) {
     agentRunner.applySkillInjection?.(activeSkill.injection, activeSkill.skill);
@@ -930,15 +1022,66 @@ function synchronizeAgentTurnSkillState<TPlatform, TContext extends object>(
     return;
   }
 
+  clearPreviousTurnManagedSkill(agentRunner, previousTurnSkillName);
+  turnManagedSkillNames.delete(runnerKey);
+}
+
+function clearPreviousTurnManagedSkill<TPlatform, TContext extends object>(
+  agentRunner: AgentTurnRunner<TPlatform, TContext>,
+  previousTurnSkillName: string | undefined,
+): void {
   if (!previousTurnSkillName) {
     return;
   }
-
   const currentSkillName = agentRunner.getActiveSkill?.()?.name;
   if (!currentSkillName || currentSkillName === previousTurnSkillName) {
     agentRunner.clearActiveSkill?.();
   }
-  turnManagedSkillNames.delete(runnerKey);
+}
+
+function projectLifecycleAsTurnSkill(
+  projection: SkillLifecycleProjection,
+): AgentTurnActiveSkillState | null {
+  if (projection.promptSections.length === 0 && projection.toolPolicy.mode === 'unrestricted') {
+    return null;
+  }
+
+  const skillName = 'lifecycle-projection';
+  return {
+    skill: {
+      name: skillName,
+      description: 'Projected active Skill lifecycle records',
+      content: projection.promptSections.map((section) => section.content).join('\n\n'),
+      source: 'builtin',
+      enabled: true,
+    },
+    injection: {
+      name: skillName,
+      type: 'skill',
+      systemPrompt: projection.promptSections.map((section) => section.content).join('\n\n'),
+      ...(projection.toolPolicy.allowedTools
+        ? { allowedTools: [...projection.toolPolicy.allowedTools] }
+        : {}),
+      ...(projection.modelOverride ? { model: projection.modelOverride.model } : {}),
+    },
+  };
+}
+
+function buildBlockingLifecycleProjectionMessage(
+  skillLifecycle: AgentTurnSkillLifecycleState | null | undefined,
+): string | null {
+  if (!skillLifecycle) {
+    return null;
+  }
+  if (!hasBlockingLifecycleProjectionDiagnostic(skillLifecycle.projection)) {
+    return null;
+  }
+  const diagnostics = skillLifecycle.projection.diagnostics
+    .map((diagnostic) => diagnostic.message)
+    .join('; ');
+  return diagnostics
+    ? `Skill lifecycle projection failed: ${diagnostics}`
+    : 'Skill lifecycle projection failed.';
 }
 
 function buildRequiredTurnCapabilities(input: {
@@ -1041,8 +1184,7 @@ function applyAgentTurnContextPatch<TContext extends object>(
   context: TContext,
   patch: ReturnType<typeof buildAgentTurnContextPatch>,
   applyContextPatch:
-    | ((context: TContext, patch: ReturnType<typeof buildAgentTurnContextPatch>) => void)
-    | undefined,
+    ((context: TContext, patch: ReturnType<typeof buildAgentTurnContextPatch>) => void) | undefined,
 ): void {
   if (applyContextPatch) {
     applyContextPatch(context, patch);

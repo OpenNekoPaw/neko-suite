@@ -17,6 +17,35 @@ export interface AgentRunnerConfirmationRequest {
   readonly details: Record<string, unknown>;
 }
 
+export interface AgentPendingMessageItem {
+  readonly id: string;
+  readonly conversationId: string;
+  readonly content: string;
+  readonly createdAt: number;
+  readonly updatedAt?: number;
+  readonly source: 'composer';
+}
+
+export interface EnqueuePendingMessageInput {
+  readonly conversationId: string;
+  readonly content: string;
+  readonly now?: number;
+}
+
+export type AgentPendingMessageQueueErrorCode =
+  'stale-item' | 'invalid-queue-operation' | 'not-queueable';
+
+export class AgentPendingMessageQueueError extends Error {
+  constructor(
+    readonly code: AgentPendingMessageQueueErrorCode,
+    message: string,
+    readonly queueItemId?: string,
+  ) {
+    super(message);
+    this.name = 'AgentPendingMessageQueueError';
+  }
+}
+
 export type AgentRunnerPortEvent =
   | {
       readonly type: 'start';
@@ -50,8 +79,13 @@ export interface AgentRunnerPort<TConfig, TContext> extends DisposableLike {
   execute(input: string, context: TContext): AsyncIterable<AgentEvent>;
   cancel(): void;
   isRunning(): boolean;
-  appendMessage(input: string): boolean;
-  drainPendingMessages(): string[];
+  enqueuePendingMessage(input: EnqueuePendingMessageInput): AgentPendingMessageItem | null;
+  getPendingMessageQueue(): readonly AgentPendingMessageItem[];
+  removePendingMessage(queueItemId: string): AgentPendingMessageItem;
+  updatePendingMessage(queueItemId: string, content: string, now?: number): AgentPendingMessageItem;
+  promotePendingMessage(queueItemId: string): AgentPendingMessageItem;
+  dequeuePendingMessage(): AgentPendingMessageItem | null;
+  drainPendingMessageQueue(): readonly AgentPendingMessageItem[];
   getPendingMessagesCount(): number;
   clearPendingMessages(): void;
   getContextTokenCount(): number;

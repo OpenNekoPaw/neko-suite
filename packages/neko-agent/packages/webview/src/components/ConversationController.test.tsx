@@ -16,6 +16,7 @@ const vscodeMocks = vi.hoisted(() => ({
   getContextTokenCount: vi.fn(),
   getTasks: vi.fn(),
   getPromptMode: vi.fn(),
+  getMessageQueue: vi.fn(),
 }));
 
 vi.mock('@/messages', () => ({

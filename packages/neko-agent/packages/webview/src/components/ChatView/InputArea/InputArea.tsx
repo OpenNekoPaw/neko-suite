@@ -3,8 +3,8 @@
  * Codex-style design with inline action buttons
  */
 
-import { useRef, useState, useCallback, useEffect } from 'react';
-import { SendIcon, StopIcon, PlusIcon } from '@neko/shared/icons';
+import { useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { SendIcon, StopIcon, PlusIcon, InfoIcon, EditIcon, CloseIcon } from '@neko/shared/icons';
 import { ModeConfigBar } from './ModeConfigBar';
 import { ModeSelector } from './ModeSelector';
 import { EntryPromptMenu as ComposerEntryPromptMenu } from './EntryPromptMenu';
@@ -43,6 +43,7 @@ import { useTranslation } from '@/i18n/I18nContext';
 import { useInputHistory } from '@/hooks/useInputHistory';
 import { useInputAreaContext } from '@/components/ChatView/InputAreaContext';
 import { projectInputAreaUi } from '@/presenters/input-area-presenter';
+import { isOptimisticQueuedMessageItem } from '@/presenters/message-queue-presenter';
 import { projectComposerModeConfig } from '@/presenters/composer-mode-config-presenter';
 import { projectClipboardTextToContextPayload } from '@/presenters/clipboard-context-presenter';
 import type { AgentContextPayload, ChatModelOption } from '@neko/shared';
@@ -50,6 +51,7 @@ import { VSCodeMessages } from '@/messages';
 import type {
   AgentLlmConfig,
   AgentModelSlots,
+  AgentQueuedMessageItem,
   ConversationKind,
   ModelRef,
   SessionMode,
@@ -59,9 +61,13 @@ interface InputAreaProps {
   inputValue: string;
   isThinking: boolean;
   queuedMessageCount?: number;
+  queuedMessages?: readonly AgentQueuedMessageItem[];
   droppedFiles?: MessageAttachment[];
   onDroppedFilesProcessed?: () => void;
   onInputChange: (value: string) => void;
+  onPromoteQueuedMessage?: (queueItemId: string) => void;
+  onCancelQueuedMessage?: (queueItemId: string) => void;
+  onEditQueuedMessage?: (queueItemId: string) => void;
   onSend: (input?: {
     messageText?: string;
     displayMessageText?: string;
@@ -85,13 +91,19 @@ interface InputAreaProps {
   onSelectedFileReferencesChange?: (references: SelectedFileReference[]) => void;
 }
 
+type InputAreaTranslator = (key: string, params?: Record<string, string | number>) => string;
+
 export function InputArea({
   inputValue,
   isThinking,
   queuedMessageCount = 0,
+  queuedMessages = [],
   droppedFiles,
   onDroppedFilesProcessed,
   onInputChange,
+  onPromoteQueuedMessage,
+  onCancelQueuedMessage,
+  onEditQueuedMessage,
   onSend,
   onCancel,
   entryPromptMenu,
@@ -164,6 +176,7 @@ export function InputArea({
     verbosityPreset: 'standard',
     creativityPreset: 'creative',
   });
+  const [isQueueExpanded, setIsQueueExpanded] = useState(false);
 
   // Attached files - use external state if provided (for conversation isolation)
   const [internalAttachedFiles, setInternalAttachedFiles] = useState<MessageAttachment[]>([]);
@@ -192,8 +205,7 @@ export function InputArea({
   const updateSelectedFileReferences = useCallback(
     (
       updater:
-        | SelectedFileReference[]
-        | ((prev: SelectedFileReference[]) => SelectedFileReference[]),
+        SelectedFileReference[] | ((prev: SelectedFileReference[]) => SelectedFileReference[]),
     ) => {
       if (onSelectedFileReferencesChange) {
         const newValue =
@@ -729,6 +741,7 @@ export function InputArea({
     textareaRef.current?.focus();
   };
 
+  const projectedQueuedMessageCount = Math.max(queuedMessageCount, queuedMessages.length);
   const inputAreaProjection = projectInputAreaUi({
     inputValue,
     attachedFileCount: attachedFiles.length + selectedFileReferences.length,
@@ -736,7 +749,7 @@ export function InputArea({
     ambientNodeCount: ambientNodes.length,
     mediaModelCallCount,
     isThinking,
-    queuedMessageCount,
+    queuedMessageCount: projectedQueuedMessageCount,
     disabled,
     sessionMode,
     conversationKind,
@@ -748,6 +761,7 @@ export function InputArea({
     inputAreaProjection.showChatModelSelector ||
     inputAreaProjection.showSessionMediaModelSelector;
   const showControlRow = showModeControlGroup || inputAreaProjection.showGenerationParams;
+  const queuePanelCount = inputAreaProjection.queuedMessageCount;
   const composerModeConfig = projectComposerModeConfig({
     sessionMode,
     selectedModel,
@@ -844,6 +858,19 @@ export function InputArea({
             onSelectRoleplayEntity={handleEntryRoleplaySelect}
             onClose={closeEntryPromptMenu}
           />
+
+          {inputAreaProjection.showQueuedMessages && (
+            <MessageQueueControls
+              items={queuedMessages}
+              pendingCount={queuePanelCount}
+              expanded={isQueueExpanded}
+              onExpandedChange={setIsQueueExpanded}
+              onPromote={onPromoteQueuedMessage}
+              onCancel={onCancelQueuedMessage}
+              onEdit={onEditQueuedMessage}
+              t={t}
+            />
+          )}
 
           {/* Agent context chips — shown above textarea when context is attached */}
           {inputAreaProjection.showContextChips && (
@@ -947,17 +974,6 @@ export function InputArea({
             {/* Execution mode — runtime control belongs with send/tools, not model config. */}
             {inputAreaProjection.showExecutionModeSelector && (
               <ModeSelector mode={executionMode} onChange={onExecutionModeChange} />
-            )}
-
-            {inputAreaProjection.showQueuedMessages && (
-              <div
-                className="agent-composer-queue-count"
-                title={t('chat.input.queuedMessages', {
-                  count: inputAreaProjection.queuedMessageCount,
-                })}
-              >
-                {inputAreaProjection.queuedMessageCount}
-              </div>
             )}
 
             {/* Send */}
@@ -1106,6 +1122,165 @@ function buildAgentLlmSendConfig(
     ...(primaryModel ? { agentModels: { primary: primaryModel } } : {}),
     llmConfig: filterLlmConfigForModel(selectedModel, availableModels, llmConfig),
   };
+}
+
+function MessageQueueControls({
+  items,
+  pendingCount,
+  expanded,
+  onExpandedChange,
+  onPromote,
+  onCancel,
+  onEdit,
+  t,
+}: {
+  items: readonly AgentQueuedMessageItem[];
+  pendingCount: number;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  onPromote?: (queueItemId: string) => void;
+  onCancel?: (queueItemId: string) => void;
+  onEdit?: (queueItemId: string) => void;
+  t: InputAreaTranslator;
+}) {
+  const visibleItems = expanded ? items : items.slice(0, 1);
+  const hasRuntimeItems = items.length > 0;
+  const canExpand = items.length > 1;
+
+  return (
+    <div
+      className="agent-composer-queue-panel"
+      role="status"
+      aria-live="polite"
+      title={t('chat.input.queuedMessages', {
+        count: pendingCount,
+      })}
+    >
+      <div className="agent-composer-queue-header">
+        <InfoIcon className="agent-composer-queue-icon" size={14} strokeWidth={2.1} />
+        <span className="agent-composer-queue-title">
+          {t('chat.input.queuedMessages', {
+            count: pendingCount,
+          })}
+        </span>
+        {canExpand && (
+          <button
+            type="button"
+            className="agent-composer-queue-toggle"
+            onClick={() => onExpandedChange(!expanded)}
+            aria-expanded={expanded}
+            title={t(expanded ? 'chat.input.queueCollapse' : 'chat.input.queueExpand')}
+          >
+            {t(expanded ? 'chat.input.queueCollapse' : 'chat.input.queueExpand')}
+          </button>
+        )}
+      </div>
+
+      {hasRuntimeItems ? (
+        <div className="agent-composer-queue-list">
+          {visibleItems.map((item, index) => (
+            <QueuedMessageRow
+              key={item.id}
+              item={item}
+              position={index + 1}
+              onPromote={onPromote}
+              onCancel={onCancel}
+              onEdit={onEdit}
+              t={t}
+            />
+          ))}
+          {!expanded && items.length > 1 && (
+            <div className="agent-composer-queue-more">
+              {t('chat.input.queueMore', { count: items.length - 1 })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="agent-composer-queue-pending">{t('chat.input.queueAwaitingSnapshot')}</div>
+      )}
+    </div>
+  );
+}
+
+function QueuedMessageRow({
+  item,
+  position,
+  onPromote,
+  onCancel,
+  onEdit,
+  t,
+}: {
+  item: AgentQueuedMessageItem;
+  position: number;
+  onPromote?: (queueItemId: string) => void;
+  onCancel?: (queueItemId: string) => void;
+  onEdit?: (queueItemId: string) => void;
+  t: InputAreaTranslator;
+}) {
+  const label = t('chat.input.queueItemLabel', { index: position });
+  const isOptimistic = isOptimisticQueuedMessageItem(item);
+
+  return (
+    <div className="agent-composer-queue-row">
+      <span className="agent-composer-queue-index" aria-hidden="true">
+        {position}
+      </span>
+      <span className="agent-composer-queue-text" title={item.content}>
+        {item.content}
+      </span>
+      <div className="agent-composer-queue-actions" aria-label={label}>
+        <QueueActionButton
+          title={t('chat.input.queueSendNext')}
+          disabled={isOptimistic || !onPromote}
+          onClick={() => onPromote?.(item.id)}
+        >
+          <SendIcon size={13} strokeWidth={2.1} />
+        </QueueActionButton>
+        <QueueActionButton
+          title={t('chat.input.queueEdit')}
+          disabled={isOptimistic || !onEdit}
+          onClick={() => onEdit?.(item.id)}
+        >
+          <EditIcon size={13} strokeWidth={2.1} />
+        </QueueActionButton>
+        <QueueActionButton
+          title={t('chat.input.queueCancel')}
+          disabled={isOptimistic || !onCancel}
+          danger
+          onClick={() => onCancel?.(item.id)}
+        >
+          <CloseIcon size={13} strokeWidth={2.1} />
+        </QueueActionButton>
+      </div>
+    </div>
+  );
+}
+
+function QueueActionButton({
+  title,
+  disabled = false,
+  danger = false,
+  onClick,
+  children,
+}: {
+  title: string;
+  disabled?: boolean;
+  danger?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`agent-composer-queue-action${danger ? ' is-danger' : ''}`}
+      title={title}
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
 }
 
 function filterLlmConfigForModel(

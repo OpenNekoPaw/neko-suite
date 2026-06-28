@@ -19,8 +19,7 @@ vi.mock('../../services/pluginTransferBridge', () => ({
 }));
 
 type RoutedWebviewMessageType =
-  | (typeof CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES)[number]
-  | (typeof CONFIG_BRIDGE_MESSAGE_TYPES)[number];
+  (typeof CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES)[number] | (typeof CONFIG_BRIDGE_MESSAGE_TYPES)[number];
 type UnroutedWebviewMessageType = Exclude<
   WebviewToExtensionMessage['type'],
   RoutedWebviewMessageType
@@ -102,6 +101,10 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       sendConversationList: vi.fn(),
       sendActiveConversation: vi.fn(),
       sendAgentStateSnapshot: vi.fn(),
+      sendMessageQueueSnapshot: vi.fn(),
+      handlePromoteQueuedMessage: vi.fn(),
+      handleCancelQueuedMessage: vi.fn(),
+      handleEditQueuedMessage: vi.fn(),
       handleClearHistory: vi.fn(),
       handleClearAllConversations: vi.fn(),
     } as any,
@@ -183,6 +186,56 @@ describe('handleChatWebviewMessage', () => {
     expect(deps.messages?.handleUserMessage).toHaveBeenCalledTimes(1);
     expect(deps.slashCommandHandler.handleCommand).not.toHaveBeenCalled();
     expect(deps.taskHandler.sendTasks).not.toHaveBeenCalled();
+  });
+
+  it('routes message queue commands with explicit conversation scope', () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage({ type: 'getMessageQueue', conversationId: 'conv-1' }, deps);
+    handleChatWebviewMessage(
+      {
+        type: 'promoteQueuedMessage',
+        conversationId: 'conv-1',
+        queueItemId: 'queue-1',
+      },
+      deps,
+    );
+    handleChatWebviewMessage(
+      {
+        type: 'cancelQueuedMessage',
+        conversationId: 'conv-1',
+        queueItemId: 'queue-1',
+      },
+      deps,
+    );
+    handleChatWebviewMessage(
+      {
+        type: 'editQueuedMessage',
+        conversationId: 'conv-1',
+        queueItemId: 'queue-1',
+      },
+      deps,
+    );
+
+    expect(deps.conversationMessageHandler.sendMessageQueueSnapshot).toHaveBeenCalledWith(
+      deps.webview,
+      'conv-1',
+    );
+    expect(deps.conversationMessageHandler.handlePromoteQueuedMessage).toHaveBeenCalledWith(
+      deps.webview,
+      'conv-1',
+      'queue-1',
+    );
+    expect(deps.conversationMessageHandler.handleCancelQueuedMessage).toHaveBeenCalledWith(
+      deps.webview,
+      'conv-1',
+      'queue-1',
+    );
+    expect(deps.conversationMessageHandler.handleEditQueuedMessage).toHaveBeenCalledWith(
+      deps.webview,
+      'conv-1',
+      'queue-1',
+    );
   });
 
   it('routes Character Dialogue sendMessage to the Character Dialogue controller without ordinary conversation persistence', () => {
@@ -601,8 +654,13 @@ describe('handleChatWebviewMessage', () => {
   it('routes clearActiveSkill with explicit conversation context', () => {
     const deps = createDeps();
 
-    handleChatWebviewMessage({ type: 'clearActiveSkill', conversationId: 'conv-1' }, deps);
+    handleChatWebviewMessage(
+      { type: 'clearActiveSkill', conversationId: 'conv-1', recordId: 'record-1' },
+      deps,
+    );
 
-    expect(deps.skillHandler.clearActiveSkill).toHaveBeenCalledWith('conv-1');
+    expect(deps.skillHandler.clearActiveSkill).toHaveBeenCalledWith('conv-1', {
+      recordId: 'record-1',
+    });
   });
 });

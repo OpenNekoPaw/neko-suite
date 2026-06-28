@@ -24,6 +24,10 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'getConversations',
   'getActiveConversation',
   'getAgentStates',
+  'getMessageQueue',
+  'promoteQueuedMessage',
+  'cancelQueuedMessage',
+  'editQueuedMessage',
   'clearHistory',
   'clearAllConversations',
   'planApprove',
@@ -66,8 +70,7 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
 type RoutedWebviewMessageType =
-  | (typeof CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES)[number]
-  | (typeof CONFIG_BRIDGE_MESSAGE_TYPES)[number];
+  (typeof CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES)[number] | (typeof CONFIG_BRIDGE_MESSAGE_TYPES)[number];
 type UnroutedWebviewMessageType = Exclude<
   WebviewToExtensionMessage['type'],
   RoutedWebviewMessageType

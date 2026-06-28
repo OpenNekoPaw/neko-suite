@@ -12,6 +12,7 @@ import {
 import { SubAgentRuntimeCoordinator } from './subagent-runtime';
 import type {
   AgentRunnerEventSource,
+  AgentPendingMessageItem,
   AgentRunnerPortEvent,
   DisposableLike,
 } from './agent-runner-port';
@@ -29,6 +30,11 @@ export interface AgentRuntimeManagerAgent extends ManagedAgentRuntime {
   confirmTool(toolCallId: string, approved: boolean): void;
   loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void;
   clearHistory(): void;
+  getPendingMessageQueue(): readonly AgentPendingMessageItem[];
+  removePendingMessage(queueItemId: string): AgentPendingMessageItem;
+  updatePendingMessage(queueItemId: string, content: string, now?: number): AgentPendingMessageItem;
+  promotePendingMessage(queueItemId: string): AgentPendingMessageItem;
+  dequeuePendingMessage(): AgentPendingMessageItem | null;
   clearPendingMessages(): void;
   getContextTokenCount(): number;
   compressContext(): Promise<AgentRuntimeCompressionResult>;
@@ -85,7 +91,18 @@ export interface AgentRuntimeManager<TAgent extends AgentRuntimeManagerAgent> {
     messages: readonly AgentHistoryWithToolContextMessage[],
   ): void;
   clearHistory(conversationId: string): void;
+  getPendingMessageQueue(conversationId: string): readonly AgentPendingMessageItem[];
+  removePendingMessage(conversationId: string, queueItemId: string): AgentPendingMessageItem;
+  updatePendingMessage(
+    conversationId: string,
+    queueItemId: string,
+    content: string,
+    now?: number,
+  ): AgentPendingMessageItem;
+  promotePendingMessage(conversationId: string, queueItemId: string): AgentPendingMessageItem;
+  dequeuePendingMessage(conversationId: string): AgentPendingMessageItem | null;
   clearPendingMessages(conversationId: string): void;
+  nextMessageQueueSnapshotVersion(conversationId: string): number;
   getContextTokenCount(conversationId: string): number;
   compressContext(conversationId: string): Promise<AgentRuntimeCompressionResult>;
   applySkillInjection(conversationId: string, injection: SkillInjection, skill?: Skill): void;
@@ -109,6 +126,7 @@ class DefaultAgentRuntimeManager<
   private readonly subAgentRuntime: SubAgentRuntimeCoordinator;
   private readonly disposeSubAgentRuntime: boolean;
   private readonly agentDisposables = new Map<string, AgentRuntimeManagerDisposable[]>();
+  private readonly messageQueueSnapshotVersions = new Map<string, number>();
   private readonly pool: AgentRuntimePool<TAgent>;
   private skillProviderFactory?: SkillProviderFactory;
 
@@ -185,8 +203,39 @@ class DefaultAgentRuntimeManager<
     this.pool.get(conversationId)?.clearHistory();
   }
 
+  getPendingMessageQueue(conversationId: string): readonly AgentPendingMessageItem[] {
+    return this.pool.get(conversationId)?.getPendingMessageQueue() ?? [];
+  }
+
+  removePendingMessage(conversationId: string, queueItemId: string): AgentPendingMessageItem {
+    return this.requireAgent(conversationId).removePendingMessage(queueItemId);
+  }
+
+  updatePendingMessage(
+    conversationId: string,
+    queueItemId: string,
+    content: string,
+    now?: number,
+  ): AgentPendingMessageItem {
+    return this.requireAgent(conversationId).updatePendingMessage(queueItemId, content, now);
+  }
+
+  promotePendingMessage(conversationId: string, queueItemId: string): AgentPendingMessageItem {
+    return this.requireAgent(conversationId).promotePendingMessage(queueItemId);
+  }
+
+  dequeuePendingMessage(conversationId: string): AgentPendingMessageItem | null {
+    return this.pool.get(conversationId)?.dequeuePendingMessage() ?? null;
+  }
+
   clearPendingMessages(conversationId: string): void {
     this.pool.get(conversationId)?.clearPendingMessages();
+  }
+
+  nextMessageQueueSnapshotVersion(conversationId: string): number {
+    const nextVersion = (this.messageQueueSnapshotVersions.get(conversationId) ?? 0) + 1;
+    this.messageQueueSnapshotVersions.set(conversationId, nextVersion);
+    return nextVersion;
   }
 
   getContextTokenCount(conversationId: string): number {
@@ -254,6 +303,14 @@ class DefaultAgentRuntimeManager<
       conversationId,
       this.createAgentEventDisposables(conversationId, agent),
     );
+    return agent;
+  }
+
+  private requireAgent(conversationId: string): TAgent {
+    const agent = this.pool.get(conversationId);
+    if (!agent) {
+      throw new Error(`Agent runtime not found for conversation: ${conversationId}`);
+    }
     return agent;
   }
 

@@ -63,6 +63,54 @@ export function tryHandleConversationRoute(
       deps.conversationMessageHandler.sendAgentStateSnapshot(webview);
       return true;
 
+    case 'getMessageQueue': {
+      const conversationId = resolveRequiredConversationId(webview, message, 'get message queue');
+      if (!conversationId) return true;
+      deps.conversationMessageHandler.sendMessageQueueSnapshot(webview, conversationId);
+      return true;
+    }
+
+    case 'promoteQueuedMessage': {
+      const conversationId = resolveRequiredConversationId(
+        webview,
+        message,
+        'promote queued message',
+      );
+      if (!conversationId) return true;
+      deps.conversationMessageHandler.handlePromoteQueuedMessage(
+        webview,
+        conversationId,
+        message.queueItemId,
+      );
+      return true;
+    }
+
+    case 'cancelQueuedMessage': {
+      const conversationId = resolveRequiredConversationId(
+        webview,
+        message,
+        'cancel queued message',
+      );
+      if (!conversationId) return true;
+      deps.conversationMessageHandler.handleCancelQueuedMessage(
+        webview,
+        conversationId,
+        message.queueItemId,
+      );
+      return true;
+    }
+
+    case 'editQueuedMessage': {
+      const conversationId = resolveRequiredConversationId(webview, message, 'edit queued message');
+      if (!conversationId) return true;
+      deps.conversationMessageHandler.handleEditQueuedMessage(
+        webview,
+        conversationId,
+        message.queueItemId,
+      );
+      return true;
+    }
+
     case 'clearHistory': {
       const conversationId = resolveRequiredConversationId(webview, message, 'clear history');
       if (!conversationId) return true;

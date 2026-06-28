@@ -26,6 +26,7 @@ import type {
 } from '../tools/perception';
 import type { AgentExternalProcessorRuntime } from '../runtime/external-processor-runtime';
 import type { AgentContentAccessRuntime } from '../runtime/agent-content-access-runtime';
+import type { AgentMessageQueueSnapshot, AgentQueuedMessageItem } from '@neko-agent/types';
 
 // Re-export validation types
 export type { ValidationError, ValidationWarning } from '../validation/types';
@@ -361,6 +362,12 @@ export interface AgentSessionConfig {
      * skipped.
      */
     skillService?: import('../skill/skill-service').SkillService;
+    /**
+     * Canonical lifecycle runtime for IDC-owned stage persona records.
+     * When supplied, stage persona activation writes lifecycle records instead
+     * of mutating the single active injection adapter slot.
+     */
+    skillLifecycleRuntime?: import('../skill/skill-lifecycle-runtime').SkillLifecycleRuntime;
     /** Initial IDC stage (default: none — tracker stays uninitialised). */
     initialStage?: import('@neko-agent/types').IdcStage;
     /**
@@ -452,6 +459,12 @@ export interface AgentEvent {
 
   /** Number of user messages waiting behind the active run. */
   pendingCount?: number;
+
+  /** Pending queue item accepted or affected by this event. */
+  queuedMessageItem?: AgentQueuedMessageItem;
+
+  /** Authoritative pending message queue snapshot. */
+  messageQueueSnapshot?: AgentMessageQueueSnapshot;
 
   /** Extended thinking content */
   thinking?: string;
@@ -767,6 +780,8 @@ export interface IAgentSession {
 
   /**
    * Apply skill injection (reversible via removeSkillInjection)
+   * Request-time projection adapter. Canonical active Skill records live in
+   * SkillLifecycleRuntime when that runtime is supplied.
    * @param injection The injection payload
    * @param skill Optional full Skill object for active skill tracking + Track D (ToolSets)
    */
@@ -781,14 +796,12 @@ export interface IAgentSession {
   removeSkillInjection(name: string): void;
 
   /**
-   * Get the currently active skill (if any).
-   * Delegates to SkillInjectionCoordinator.
+   * Get the currently projected Skill adapter payload, if any.
    */
   getActiveSkill(): import('@neko/shared').Skill | undefined;
 
   /**
-   * Clear the active skill — reverses all injection tracks.
-   * Delegates to SkillInjectionCoordinator.clearActive().
+   * Clear the projected Skill adapter payload.
    */
   clearActiveSkill(): void;
 

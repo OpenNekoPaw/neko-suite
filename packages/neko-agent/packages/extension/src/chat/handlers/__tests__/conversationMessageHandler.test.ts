@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { AgentPendingMessageQueueError } from '@neko/agent/runtime';
 import { ConversationMessageHandler } from '../conversationHandler';
 
 function createMockWebview() {
@@ -28,12 +29,88 @@ function createMockConversations() {
 }
 
 function createMockAgentManager() {
+  let queueSnapshotVersion = 0;
+  let queueItems = [
+    {
+      id: 'queue-1',
+      conversationId: 'conv-a',
+      content: '继续优化',
+      createdAt: 10,
+      source: 'composer' as const,
+    },
+    {
+      id: 'queue-2',
+      conversationId: 'conv-a',
+      content: '再补一条',
+      createdAt: 11,
+      source: 'composer' as const,
+    },
+  ];
   return {
     confirmTool: vi.fn(),
     get: vi.fn().mockReturnValue({ isRunning: vi.fn().mockReturnValue(false) }),
     cancel: vi.fn(),
     remove: vi.fn(),
     clearHistory: vi.fn(),
+    getPendingMessageQueue: vi.fn().mockImplementation(() => queueItems),
+    promotePendingMessage: vi
+      .fn()
+      .mockImplementation((conversationId: string, queueItemId: string) => {
+        const itemIndex = queueItems.findIndex(
+          (candidate) =>
+            candidate.conversationId === conversationId && candidate.id === queueItemId,
+        );
+        if (itemIndex < 0) {
+          throw new AgentPendingMessageQueueError(
+            'stale-item',
+            `Queued message is no longer pending: ${queueItemId}`,
+            queueItemId,
+          );
+        }
+        const item = queueItems[itemIndex];
+        if (!item) {
+          throw new AgentPendingMessageQueueError(
+            'stale-item',
+            `Queued message is no longer pending: ${queueItemId}`,
+            queueItemId,
+          );
+        }
+        queueItems.splice(itemIndex, 1);
+        queueItems.unshift(item);
+        return item;
+      }),
+    removePendingMessage: vi
+      .fn()
+      .mockImplementation((conversationId: string, queueItemId: string) => {
+        const itemIndex = queueItems.findIndex(
+          (candidate) =>
+            candidate.conversationId === conversationId && candidate.id === queueItemId,
+        );
+        if (itemIndex < 0) {
+          throw new AgentPendingMessageQueueError(
+            'stale-item',
+            `Queued message is no longer pending: ${queueItemId}`,
+            queueItemId,
+          );
+        }
+        const item = queueItems[itemIndex];
+        if (!item) {
+          throw new AgentPendingMessageQueueError(
+            'stale-item',
+            `Queued message is no longer pending: ${queueItemId}`,
+            queueItemId,
+          );
+        }
+        queueItems.splice(itemIndex, 1);
+        return item;
+      }),
+    clearPendingMessages: vi.fn().mockImplementation((conversationId: string) => {
+      queueItems = queueItems.filter((item) => item.conversationId !== conversationId);
+    }),
+    nextMessageQueueSnapshotVersion: vi.fn().mockImplementation(() => {
+      queueSnapshotVersion += 1;
+      return queueSnapshotVersion;
+    }),
   };
 }
 
@@ -106,7 +183,10 @@ describe('ConversationMessageHandler', () => {
     await handler.handleCancelMessage(webview as any, 'conv-a');
 
     expect(agentManager.cancel).toHaveBeenCalledWith('conv-a');
-    expect(webview.postMessage).not.toHaveBeenCalled();
+    expect(webview.postMessage).not.toHaveBeenCalledWith({
+      type: 'messageCancelled',
+      conversationId: 'conv-a',
+    });
 
     runnerEventListener?.({ type: 'stop' });
 
@@ -162,6 +242,114 @@ describe('ConversationMessageHandler', () => {
     expect(webview.postMessage).toHaveBeenCalledWith({
       type: 'historyCleared',
       conversationId: 'conv-a',
+    });
+    expect(agentManager.clearPendingMessages).toHaveBeenCalledWith('conv-a');
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'messageQueueSnapshot',
+        snapshot: expect.objectContaining({ conversationId: 'conv-a', pendingCount: 0 }),
+      }),
+    );
+  });
+
+  it('sends an authoritative queue snapshot for an explicit conversation', () => {
+    handler.sendMessageQueueSnapshot(webview as any, 'conv-a');
+
+    expect(agentManager.getPendingMessageQueue).toHaveBeenCalledWith('conv-a');
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'messageQueueSnapshot',
+      snapshot: {
+        conversationId: 'conv-a',
+        pendingCount: 2,
+        version: 1,
+        items: [
+          {
+            id: 'queue-1',
+            conversationId: 'conv-a',
+            content: '继续优化',
+            createdAt: 10,
+            source: 'composer',
+          },
+          {
+            id: 'queue-2',
+            conversationId: 'conv-a',
+            content: '再补一条',
+            createdAt: 11,
+            source: 'composer',
+          },
+        ],
+      },
+    });
+  });
+
+  it('promotes and cancels queued messages then publishes snapshots', () => {
+    handler.handlePromoteQueuedMessage(webview as any, 'conv-a', 'queue-2');
+    handler.handleCancelQueuedMessage(webview as any, 'conv-a', 'queue-1');
+
+    expect(agentManager.promotePendingMessage).toHaveBeenCalledWith('conv-a', 'queue-2');
+    expect(agentManager.removePendingMessage).toHaveBeenCalledWith('conv-a', 'queue-1');
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'messageQueueSnapshot',
+        snapshot: expect.objectContaining({
+          conversationId: 'conv-a',
+          version: 1,
+          items: [
+            expect.objectContaining({ id: 'queue-2' }),
+            expect.objectContaining({ id: 'queue-1' }),
+          ],
+        }),
+      }),
+    );
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'messageQueueSnapshot',
+        snapshot: expect.objectContaining({
+          conversationId: 'conv-a',
+          pendingCount: 1,
+          version: 2,
+          items: [expect.objectContaining({ id: 'queue-2' })],
+        }),
+      }),
+    );
+  });
+
+  it('removes a queued message for re-edit and sends the removed item content', () => {
+    handler.handleEditQueuedMessage(webview as any, 'conv-a', 'queue-1');
+
+    expect(agentManager.removePendingMessage).toHaveBeenCalledWith('conv-a', 'queue-1');
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'queuedMessageEditRequested',
+      conversationId: 'conv-a',
+      item: {
+        id: 'queue-1',
+        conversationId: 'conv-a',
+        content: '继续优化',
+        createdAt: 10,
+        source: 'composer',
+      },
+      snapshot: expect.objectContaining({
+        conversationId: 'conv-a',
+        pendingCount: 1,
+        version: 1,
+      }),
+    });
+  });
+
+  it('reports stale queue item errors with a refreshed snapshot', () => {
+    handler.handleCancelQueuedMessage(webview as any, 'conv-a', 'missing');
+
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'messageQueueError',
+      conversationId: 'conv-a',
+      code: 'stale-item',
+      message: 'Queued message is no longer pending: missing',
+      queueItemId: 'missing',
+      snapshot: expect.objectContaining({
+        conversationId: 'conv-a',
+        pendingCount: 2,
+        version: 1,
+      }),
     });
   });
 

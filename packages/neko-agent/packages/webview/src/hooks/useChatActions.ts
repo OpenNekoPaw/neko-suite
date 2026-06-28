@@ -212,6 +212,7 @@ export function useChatActions({
         role: 'user',
         content: displayMessageText.trim(),
         timestamp: Date.now(),
+        ...(isQueueingSend ? { isQueued: true } : {}),
         ...(outboundAttachments.length > 0 ? { attachments: outboundAttachments } : {}),
         ...(contextReferences ? { contextReferences } : {}),
       };
@@ -319,6 +320,7 @@ export function useChatActions({
         role: 'user',
         content: messageText,
         timestamp: Date.now(),
+        ...(isQueueingSend ? { isQueued: true } : {}),
       };
 
       setMessages((prev) => [...prev, userMessage]);

@@ -5,12 +5,11 @@ import {
   type AgentPhaseMessage,
   type HistoryClearedMessage,
   type MessageCancelledMessage,
+  type MessageQueueSnapshotMessage,
 } from '@neko-agent/types';
 
 export type ConversationControlRuntimeMessage =
-  | HistoryClearedMessage
-  | MessageCancelledMessage
-  | AgentPhaseMessage;
+  HistoryClearedMessage | MessageCancelledMessage | AgentPhaseMessage | MessageQueueSnapshotMessage;
 
 export interface ConversationControlDisposable {
   dispose(): void;
@@ -30,6 +29,7 @@ export interface ConversationControlRuntimeEffects {
   removeAgent?(conversationId: string): void;
   clearAgentState?(conversationId: string): void;
   clearAgentHistory?(conversationId: string): void;
+  clearPendingMessages?(conversationId: string): void;
   clearPromptMode?(conversationId: string): void;
   clearAllPromptModes?(): void;
   updateConversationMessages?(conversationId: string, messages: []): void;
@@ -46,8 +46,7 @@ export interface ConversationControlRuntimeEffects {
 }
 
 export type ConversationControlRuntimeWarningCode =
-  | 'missing-conversation-id'
-  | 'missing-agent-manager';
+  'missing-conversation-id' | 'missing-agent-manager';
 
 export interface ConversationControlRuntimeWarning {
   code: ConversationControlRuntimeWarningCode;
@@ -137,6 +136,7 @@ export async function runDeleteConversationRuntime(
 
   effects.removeAgent?.(input.conversationId);
   effects.clearAgentState?.(input.conversationId);
+  effects.clearPendingMessages?.(input.conversationId);
   effects.clearPromptMode?.(input.conversationId);
   const activateNext = input.activateNext ?? true;
   effects.deleteConversation?.(input.conversationId, { activateNext });
@@ -161,6 +161,7 @@ export async function runClearHistoryRuntime(
   }
 
   effects.clearAgentHistory?.(input.conversationId);
+  effects.clearPendingMessages?.(input.conversationId);
   effects.updateConversationMessages?.(input.conversationId, []);
   await effects.postMessage?.(buildConversationHistoryClearedMessage(input.conversationId));
 
@@ -178,6 +179,7 @@ export async function runClearAllConversationsRuntime(
   for (const conversationId of conversationIds) {
     effects.removeAgent?.(conversationId);
     effects.clearAgentState?.(conversationId);
+    effects.clearPendingMessages?.(conversationId);
   }
   if (effects.clearAllPromptModes) {
     effects.clearAllPromptModes();
@@ -240,6 +242,7 @@ export async function runCancelMessageRuntime(
       void effects.postMessage?.(buildMessageCancelledMessage(input.conversationId));
     });
     effects.cancelAgent(input.conversationId);
+    effects.clearPendingMessages?.(input.conversationId);
     if (!disposableRef.current) {
       await effects.postMessage?.(buildMessageCancelledMessage(input.conversationId));
     }
@@ -247,6 +250,7 @@ export async function runCancelMessageRuntime(
   }
 
   effects.cancelAgent(input.conversationId);
+  effects.clearPendingMessages?.(input.conversationId);
   await effects.postMessage?.(buildMessageCancelledMessage(input.conversationId));
 
   return {

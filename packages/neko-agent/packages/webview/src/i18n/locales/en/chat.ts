@@ -61,16 +61,28 @@ export const chat = {
     'Choose image, video, or sound generation after the tab opens.',
   'chat.emptyState.entry.roleplayHelper':
     'Choose a character after the tab opens; your text becomes the opening line.',
-  'chat.skill.active': 'Skill active',
+  'chat.skill.active': 'Active Skill records',
   'chat.skill.toolLimit': 'Tool limit: {count}',
-  'chat.skill.clear': 'Clear',
+  'chat.skill.clear': 'Clear record',
+  'chat.skill.locked': 'Locked by lifecycle policy',
+  'chat.skill.expires': 'Expires: {expires}',
   'chat.structuredArtifact.generating': 'Generating structured content...',
 
   'chat.input.placeholder':
     'Ask anything... (/ for commands, @ for files, Shift+Enter for new line)',
   'chat.input.thinkingPlaceholder': 'Responding... wait or cancel before sending again',
   'chat.input.queuePlaceholder': 'Responding... {count} queued message(s)',
-  'chat.input.queuedMessages': '{count} queued message(s)',
+  'chat.input.queuedMessages': 'Message queue ({count} pending)',
+  'chat.input.queueItemLabel': 'Queued message {index}',
+  'chat.input.queueSendNext': 'Send next',
+  'chat.input.queueCancel': 'Cancel queued message',
+  'chat.input.queueEdit': 'Re-edit queued message',
+  'chat.input.queueExpand': 'Expand',
+  'chat.input.queueCollapse': 'Collapse',
+  'chat.input.queueMore': '{count} more',
+  'chat.input.queueAwaitingSnapshot': 'Syncing queue...',
+  'chat.input.queueEditDraftConflict':
+    'The composer already has a draft. The queued message was removed but did not overwrite it.',
   'chat.input.clearAll': 'Clear all',
   'chat.input.clearQueue': 'Clear queued messages',
   'chat.input.removeQueued': 'Remove from queue',
@@ -425,7 +437,7 @@ export const chat = {
   'chat.commands.source.community': 'Community',
 
   'chat.helpMessage':
-    '**Available Commands:**\n- `/clear` - Clear conversation history\n- `/new` - Start a new conversation\n- `/resume` - Resume a previous conversation\n- `/help` - Show this help message\n- `/compact` - Compress conversation to save context\n- `/status` - Show status information\n- `/model` - Select AI model\n- `/plan` - Enter plan mode\n- `/mcp` - Manage MCP servers\n- `/tasks` - Manage background tasks\n- `/settings` - Open settings\n\n**Skills:**\n- Use `$skill-name` to explicitly activate a Skill\n- Use `/skills` to list, inspect, or clear Skills\n\n**Tips:**\n- Use `@` to reference files\n- Attach files using the 📎 button\n- Press Enter to send, Shift+Enter for new line',
+    '**Available Commands:**\n- `/clear` - Clear conversation history\n- `/new` - Start a new conversation\n- `/resume` - Resume a previous conversation\n- `/help` - Show this help message\n- `/compact` - Compress conversation to save context\n- `/status` - Show status information\n- `/model` - Select AI model\n- `/plan` - Enter plan mode\n- `/mcp` - Manage MCP servers\n- `/tasks` - Manage background tasks\n- `/settings` - Open settings\n\n**Skills:**\n- Use `$skill-name` to explicitly activate a Skill lifecycle record\n- Active records show slot, owner, clearability, locks, and expiry\n- Use `/skills` to list or inspect Skills; clear actions only remove records allowed by policy\n\n**Tips:**\n- Use `@` to reference files\n- Attach files using the 📎 button\n- Press Enter to send, Shift+Enter for new line',
   'chat.attachFile': 'Attach file',
   'chat.referenceFile': 'Reference file with @',
   'chat.usage.tokens': 'Context estimate',

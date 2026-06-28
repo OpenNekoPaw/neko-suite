@@ -124,7 +124,7 @@ describe('AgentSessionRunner', () => {
     await collect(first);
   });
 
-  it('queues appended messages while execution is running', async () => {
+  it('queues pending message items while execution is running', async () => {
     const session = createSession();
     const runner = new AgentSessionRunner({
       buildExecutionContext: () => ({}),
@@ -134,24 +134,103 @@ describe('AgentSessionRunner', () => {
     const first = runner.execute('first', {});
     await iterator(first).next();
 
-    expect(runner.appendMessage('second')).toBe(true);
-    expect(runner.appendMessage('third')).toBe(true);
+    const second = runner.enqueuePendingMessage({
+      conversationId: 'conv-1',
+      content: 'second',
+      now: 1000,
+    });
+    const third = runner.enqueuePendingMessage({
+      conversationId: 'conv-1',
+      content: 'third',
+      now: 1001,
+    });
+    expect(second).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        content: 'second',
+        createdAt: 1000,
+        source: 'composer',
+      }),
+    );
+    expect(third).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        content: 'third',
+        createdAt: 1001,
+        source: 'composer',
+      }),
+    );
     expect(runner.getPendingMessagesCount()).toBe(2);
-    expect(runner.drainPendingMessages()).toEqual(['second', 'third']);
+    expect(runner.dequeuePendingMessage()).toEqual(expect.objectContaining({ content: 'second' }));
+    expect(runner.getPendingMessagesCount()).toBe(1);
+    expect(runner.drainPendingMessageQueue()).toEqual([
+      expect.objectContaining({ content: 'third' }),
+    ]);
     expect(runner.getPendingMessagesCount()).toBe(0);
 
     await collect(first);
   });
 
-  it('does not queue appended messages when idle', () => {
+  it('does not queue pending messages when idle', () => {
     const session = createSession();
     const runner = new AgentSessionRunner({
       buildExecutionContext: () => ({}),
     });
     runner.setSession(session);
 
-    expect(runner.appendMessage('idle')).toBe(false);
+    expect(
+      runner.enqueuePendingMessage({
+        conversationId: 'conv-1',
+        content: 'idle',
+      }),
+    ).toBeNull();
     expect(runner.getPendingMessagesCount()).toBe(0);
+  });
+
+  it('edits, promotes, removes, and rejects stale pending message items', async () => {
+    const session = createSession();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+    });
+    runner.setSession(session);
+
+    const first = runner.execute('first', {});
+    await iterator(first).next();
+
+    const second = runner.enqueuePendingMessage({
+      conversationId: 'conv-1',
+      content: 'second',
+      now: 1000,
+    });
+    const third = runner.enqueuePendingMessage({
+      conversationId: 'conv-1',
+      content: 'third',
+      now: 1001,
+    });
+    expect(second).toBeTruthy();
+    expect(third).toBeTruthy();
+
+    const updated = runner.updatePendingMessage(second!.id, 'second revised', 1002);
+    expect(updated).toEqual(
+      expect.objectContaining({ content: 'second revised', updatedAt: 1002 }),
+    );
+
+    const promoted = runner.promotePendingMessage(third!.id);
+    expect(promoted.id).toBe(third!.id);
+    expect(runner.getPendingMessageQueue().map((item) => item.id)).toEqual([third!.id, second!.id]);
+
+    const removed = runner.removePendingMessage(third!.id);
+    expect(removed.id).toBe(third!.id);
+    expect(runner.getPendingMessageQueue().map((item) => item.id)).toEqual([second!.id]);
+
+    expect(() => runner.removePendingMessage(third!.id)).toThrow(
+      'Queued message is no longer pending',
+    );
+    expect(() => runner.updatePendingMessage(second!.id, '   ')).toThrow(
+      'Queued message content cannot be empty',
+    );
+
+    await collect(first);
   });
 
   it('rejects configuration changes while execution is running', async () => {

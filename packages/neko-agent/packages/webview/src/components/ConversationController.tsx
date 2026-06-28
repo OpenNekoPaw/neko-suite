@@ -18,6 +18,7 @@ import type { AgentContextPayload } from '@neko/shared';
 import type {
   SettingsState,
   AgentState,
+  AgentQueuedMessageItem,
   Message,
   OpenTab,
   PromptMode,
@@ -36,6 +37,7 @@ import type {
 import { EmptyState, type EmptyStateEntryAction } from '@/components/ChatView/EmptyState';
 import { InputArea } from '@/components/ChatView/InputArea';
 import { InputAreaProvider, type MediaCategory } from '@/components/ChatView/InputAreaContext';
+import { useTranslation } from '@/i18n/I18nContext';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import {
   getWorkItemsForConversation,
@@ -67,6 +69,7 @@ import {
   projectHistoryConversationItems,
   type HistoryConversationItem,
 } from '@/presenters/history-menu-presenter';
+import { projectOptimisticQueuedMessageItem } from '@/presenters/message-queue-presenter';
 import {
   projectChatWorkspaceModelState,
   projectMediaModelSelectionForSessionModeChange,
@@ -137,6 +140,7 @@ export function ConversationController({
   setShowOnboarding,
   renderHeader,
 }: ConversationControllerProps) {
+  const { t } = useTranslation();
   // ---- Conversation state ----
   const conversation = useConversationState();
   const {
@@ -148,6 +152,8 @@ export function ConversationController({
     setStreamingMessageId,
     queuedMessageCount,
     setQueuedMessageCount,
+    queuedMessages,
+    setQueuedMessages,
     streamingMessageIdRef,
     conversations,
     setConversations,
@@ -275,6 +281,12 @@ export function ConversationController({
     messageText: string;
   } | null>(null);
   const [entryPromptMenu, setEntryPromptMenu] = useState<EntryPromptMenu | null>(null);
+  const nextQueuedEditRequestIdRef = useRef(0);
+  const [queuedEditRequest, setQueuedEditRequest] = useState<{
+    id: number;
+    conversationId: string;
+    item: AgentQueuedMessageItem;
+  } | null>(null);
 
   // ---- Context chips & ambient nodes ----
   const [contextChipsByConversation, setContextChipsByConversation] = useState<
@@ -461,6 +473,7 @@ export function ConversationController({
     VSCodeMessages.getContextTokenCount(conversationId);
     VSCodeMessages.getTasks(conversationId);
     VSCodeMessages.getPromptMode(conversationId);
+    VSCodeMessages.getMessageQueue(conversationId);
   }, []);
 
   const handleUserMessageSent = useCallback(
@@ -473,12 +486,28 @@ export function ConversationController({
         : [...cachedMessages, event.message];
 
       conversationMessagesRef.current.set(event.conversationId, nextMessages);
+      const currentStreaming = conversationStreamingRef.current.get(event.conversationId);
+      const optimisticQueuedItem = projectOptimisticQueuedMessageItem(event);
+      const nextQueuedMessages =
+        currentStreaming?.queuedMessages && currentStreaming.queuedMessages.length > 0
+          ? currentStreaming.queuedMessages
+          : optimisticQueuedItem
+            ? [optimisticQueuedItem]
+            : queuedMessages;
       conversationStreamingRef.current.set(event.conversationId, {
-        streamingMessageId: null,
+        ...(currentStreaming ?? {}),
+        streamingMessageId: event.message.isQueued
+          ? (currentStreaming?.streamingMessageId ?? streamingMessageIdRef.current)
+          : null,
         isThinking: true,
-        queuedMessageCount:
-          conversationStreamingRef.current.get(event.conversationId)?.queuedMessageCount ?? 0,
+        queuedMessageCount: currentStreaming?.queuedMessageCount ?? (optimisticQueuedItem ? 1 : 0),
+        queuedMessages: nextQueuedMessages,
+        messageQueueVersion: currentStreaming?.messageQueueVersion,
       });
+      if (event.conversationId === activeConversationIdRef.current && optimisticQueuedItem) {
+        setQueuedMessageCount((currentCount) => Math.max(currentCount, nextQueuedMessages.length));
+        setQueuedMessages(nextQueuedMessages);
+      }
 
       setOpenTabs((prev) =>
         applyUserMessageToOpenTabs({
@@ -502,7 +531,10 @@ export function ConversationController({
       conversationMessagesRef,
       conversationStreamingRef,
       messages,
+      queuedMessages,
       setConversations,
+      setQueuedMessageCount,
+      setQueuedMessages,
       setOpenTabs,
       triggerForceUpdate,
     ],
@@ -512,10 +544,13 @@ export function ConversationController({
     const conversationId = activeConversationIdRef.current;
     if (!conversationId) return;
     conversationMessagesRef.current.set(conversationId, messages);
+    const currentStreaming = conversationStreamingRef.current.get(conversationId);
     conversationStreamingRef.current.set(conversationId, {
+      ...(currentStreaming ?? {}),
       streamingMessageId: streamingMessageIdRef.current,
       isThinking,
       queuedMessageCount,
+      queuedMessages,
     });
   }, [
     activeConversationIdRef,
@@ -523,6 +558,7 @@ export function ConversationController({
     conversationStreamingRef,
     isThinking,
     queuedMessageCount,
+    queuedMessages,
     messages,
     streamingMessageIdRef,
   ]);
@@ -580,6 +616,7 @@ export function ConversationController({
       streamingMessageIdRef.current = projection.streaming.streamingMessageId;
       setIsThinking(projection.streaming.isThinking);
       setQueuedMessageCount(projection.streaming.queuedMessageCount ?? 0);
+      setQueuedMessages(projection.streaming.queuedMessages ?? []);
       activeConversationIdRef.current = projection.activeConversationId;
       setActiveConversationId(projection.activeConversationId);
       setActiveTab('chat');
@@ -592,6 +629,7 @@ export function ConversationController({
       setIsThinking,
       setMessages,
       setQueuedMessageCount,
+      setQueuedMessages,
       setStreamingMessageId,
       streamingMessageIdRef,
     ],
@@ -604,11 +642,20 @@ export function ConversationController({
     activeConversationId,
     streamingMessageId,
     queuedMessageCount,
+    queuedMessages,
     openTabs,
     activeTabId,
     isTablessConversationViewRef,
     pendingForegroundConversationActivationRef,
     completeForegroundConversationActivation,
+    requestQueuedMessageEdit: (request) => {
+      nextQueuedEditRequestIdRef.current += 1;
+      setQueuedEditRequest({
+        id: nextQueuedEditRequestIdRef.current,
+        conversationId: request.conversationId,
+        item: request.item,
+      });
+    },
     requestConfigSnapshot,
     activeConversationIdRef,
     streamingMessageIdRef,
@@ -618,6 +665,7 @@ export function ConversationController({
     setIsThinking,
     setStreamingMessageId,
     setQueuedMessageCount,
+    setQueuedMessages,
     setConversations,
     setActiveConversationId,
     setOpenTabs,
@@ -1033,6 +1081,7 @@ export function ConversationController({
           streamingMessageId,
           isThinking,
           queuedMessageCount,
+          queuedMessages,
         },
         messagesByConversation: conversationMessagesRef.current,
         streamingByConversation: conversationStreamingRef.current,
@@ -1046,6 +1095,7 @@ export function ConversationController({
       streamingMessageId,
       isThinking,
       queuedMessageCount,
+      queuedMessages,
       projectionVersion,
     ],
   );
@@ -1059,6 +1109,7 @@ export function ConversationController({
           streamingMessageId,
           isThinking,
           queuedMessageCount,
+          queuedMessages,
         },
         streamingByConversation: conversationStreamingRef.current,
         agentStateByConversation: conversationAgentStateRef.current,
@@ -1070,6 +1121,7 @@ export function ConversationController({
       streamingMessageId,
       isThinking,
       queuedMessageCount,
+      queuedMessages,
       projectionVersion,
     ],
   );
@@ -1158,6 +1210,7 @@ export function ConversationController({
             setIsThinking={setIsThinking}
             streamingMessageId={streamingMessageId}
             queuedMessageCount={queuedMessageCount}
+            queuedMessages={queuedMessages}
             setStreamingMessageId={setStreamingMessageId}
             streamingMessageIdRef={streamingMessageIdRef}
             activeConversationId={activeConversationId}
@@ -1217,6 +1270,13 @@ export function ConversationController({
             onInitialInputRequestConsumed={handleInitialInputRequestConsumed}
             initialEntryPromptMenuRequest={initialEntryPromptMenuRequest}
             onInitialEntryPromptMenuRequestConsumed={handleInitialEntryPromptMenuRequestConsumed}
+            queuedEditRequest={queuedEditRequest}
+            onQueuedEditRequestConsumed={(id) => {
+              setQueuedEditRequest((current) => (current?.id === id ? null : current));
+            }}
+            onQueuedEditConflict={() => {
+              setGlobalError(t('chat.input.queueEditDraftConflict'));
+            }}
             // Session cleanup registration
             sessionCleanupRef={sessionCleanupRef}
           />

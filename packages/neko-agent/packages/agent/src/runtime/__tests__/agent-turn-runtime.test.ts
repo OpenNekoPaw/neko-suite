@@ -8,6 +8,7 @@ import {
   type AgentTurnRunner,
   type ExecuteAgentTurnInput,
 } from '../agent-turn-runtime';
+import type { AgentPendingMessageItem } from '../agent-runner-port';
 import { createTimelineSelectionContextPacket } from '../multimodal-context-packet';
 import type { AgentEvent } from '../../session/types';
 
@@ -38,20 +39,60 @@ function createAgentRunner(
   } = {},
 ): AgentTurnRunner<TestPlatform, TestContext> {
   let activeSkillName = overrides.activeSkillName;
-  const pendingMessages: string[] = [];
+  const pendingMessages: AgentPendingMessageItem[] = [];
+  let pendingSequence = 0;
   return {
     getHistory: vi.fn(() => overrides.history ?? []),
     getConfig: vi.fn(() => overrides.config),
     configure: vi.fn(async () => undefined),
     execute: vi.fn(() => overrides.events ?? emptyEvents()),
     isRunning: vi.fn(() => overrides.isRunning ?? false),
-    appendMessage: vi.fn((message) => {
-      if (!(overrides.isRunning ?? false)) return false;
-      pendingMessages.push(message);
-      return true;
+    enqueuePendingMessage: vi.fn((input) => {
+      if (!(overrides.isRunning ?? false)) return null;
+      pendingSequence += 1;
+      const item: AgentPendingMessageItem = {
+        id: `queue-${pendingSequence}`,
+        conversationId: input.conversationId,
+        content: input.content,
+        createdAt: input.now ?? 1000 + pendingSequence,
+        source: 'composer',
+      };
+      pendingMessages.push(item);
+      return item;
+    }),
+    getPendingMessageQueue: vi.fn(() => pendingMessages.map((item) => ({ ...item }))),
+    removePendingMessage: vi.fn((queueItemId) => {
+      const index = pendingMessages.findIndex((item) => item.id === queueItemId);
+      if (index < 0) throw new Error('missing queue item');
+      const item = pendingMessages[index];
+      if (!item) throw new Error('missing queue item');
+      pendingMessages.splice(index, 1);
+      return { ...item };
+    }),
+    updatePendingMessage: vi.fn((queueItemId, content, now) => {
+      const index = pendingMessages.findIndex((item) => item.id === queueItemId);
+      if (index < 0) throw new Error('missing queue item');
+      const item = pendingMessages[index];
+      if (!item) throw new Error('missing queue item');
+      const updated = { ...item, content, updatedAt: now ?? 1000 };
+      pendingMessages[index] = updated;
+      return { ...updated };
+    }),
+    promotePendingMessage: vi.fn((queueItemId) => {
+      const index = pendingMessages.findIndex((item) => item.id === queueItemId);
+      if (index < 0) throw new Error('missing queue item');
+      const item = pendingMessages[index];
+      if (!item) throw new Error('missing queue item');
+      pendingMessages.splice(index, 1);
+      pendingMessages.unshift(item);
+      return { ...item };
     }),
     getPendingMessagesCount: vi.fn(() => pendingMessages.length),
-    drainPendingMessages: vi.fn(() => pendingMessages.splice(0)),
+    dequeuePendingMessage: vi.fn(() => {
+      const item = pendingMessages.shift();
+      return item ? { ...item } : null;
+    }),
+    drainPendingMessageQueue: vi.fn(() => pendingMessages.splice(0).map((item) => ({ ...item }))),
     applySkillInjection: vi.fn((_injection, skill) => {
       activeSkillName = skill?.name;
     }),
@@ -84,6 +125,7 @@ function createBaseInput(
     { role: 'assistant', content: 'previous answer' },
     { role: 'user', content: 'current request' },
   ];
+  let queueSnapshotVersion = 6;
 
   const input = {
     conversationId: 'conv-1',
@@ -101,6 +143,10 @@ function createBaseInput(
     agentManager: {
       getOrCreate: vi.fn(() => agentRunner),
       loadHistoryWithContext: vi.fn(),
+      nextMessageQueueSnapshotVersion: vi.fn(() => {
+        queueSnapshotVersion += 1;
+        return queueSnapshotVersion;
+      }),
     },
     conversations: {
       getConversationMessageCount: vi.fn(() => fullHistory.length),
@@ -129,7 +175,7 @@ function createBaseInput(
 }
 
 describe('executeAgentTurn', () => {
-  it('provides a shared fallback message for host adapters', () => {
+  it('provides a shared default precondition message for host adapters', () => {
     expect(getAgentTurnPreconditionMessage('no-provider-configured')).toBe(
       AGENT_TURN_PRECONDITION_MESSAGE,
     );
@@ -330,6 +376,97 @@ describe('executeAgentTurn', () => {
     );
   });
 
+  it('keeps Plan Mode above lifecycle Skill tool policy', async () => {
+    const { input, agentRunner } = createBaseInput({
+      isPlanMode: vi.fn(() => true),
+      skillLifecycle: {
+        projection: {
+          promptSections: [
+            {
+              id: 'skill:domainSkill:review:record-1',
+              layer: 'skill',
+              content: 'Review prompt',
+              priority: 20,
+              recordId: 'record-1',
+              slot: 'domainSkill',
+              skillName: 'review',
+            },
+          ],
+          toolPolicy: {
+            mode: 'allowlist',
+            allowedTools: ['WriteDocument'],
+            contributingRecordIds: ['record-1'],
+            diagnostics: [],
+          },
+          diagnostics: [],
+          visibleIndicators: [],
+        },
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.configure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executionMode: 'plan',
+        autoExecuteTools: true,
+      }),
+    );
+    expect(agentRunner.applySkillInjection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowedTools: ['WriteDocument'],
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('keeps approval gating above lifecycle Skill allowlists', async () => {
+    const { input, agentRunner } = createBaseInput({
+      settings: {
+        executionMode: 'ask',
+        autoExecuteTools: false,
+      },
+      skillLifecycle: {
+        projection: {
+          promptSections: [
+            {
+              id: 'skill:domainSkill:review:record-1',
+              layer: 'skill',
+              content: 'Review prompt',
+              priority: 20,
+              recordId: 'record-1',
+              slot: 'domainSkill',
+              skillName: 'review',
+            },
+          ],
+          toolPolicy: {
+            mode: 'allowlist',
+            allowedTools: ['WriteDocument'],
+            contributingRecordIds: ['record-1'],
+            diagnostics: [],
+          },
+          diagnostics: [],
+          visibleIndicators: [],
+        },
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.configure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executionMode: 'ask',
+        autoExecuteTools: false,
+      }),
+    );
+    expect(agentRunner.applySkillInjection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowedTools: ['WriteDocument'],
+      }),
+      expect.any(Object),
+    );
+  });
+
   it('queues same-config text input while the runner is already processing', async () => {
     const platform = { name: 'platform' };
     const agentRunner = createAgentRunner({
@@ -354,6 +491,7 @@ describe('executeAgentTurn', () => {
       agentManager: {
         getOrCreate: vi.fn(() => agentRunner),
         loadHistoryWithContext: vi.fn(),
+        nextMessageQueueSnapshotVersion: vi.fn(() => 7),
       },
       onMessageQueued,
     });
@@ -363,13 +501,29 @@ describe('executeAgentTurn', () => {
       pendingCount: 1,
     });
 
-    expect(agentRunner.appendMessage).toHaveBeenCalledWith('current request');
+    expect(agentRunner.enqueuePendingMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        content: 'current request',
+      }),
+    );
     expect(agentRunner.configure).not.toHaveBeenCalled();
     expect(agentRunner.execute).not.toHaveBeenCalled();
     expect(onMessageQueued).toHaveBeenCalledWith({
       conversationId: 'conv-1',
       content: 'Message queued (1 pending)',
       pendingCount: 1,
+      item: expect.objectContaining({
+        id: 'queue-1',
+        conversationId: 'conv-1',
+        content: 'current request',
+      }),
+      snapshot: expect.objectContaining({
+        conversationId: 'conv-1',
+        pendingCount: 1,
+        version: 7,
+        items: [expect.objectContaining({ id: 'queue-1', content: 'current request' })],
+      }),
     });
   });
 
@@ -479,6 +633,169 @@ describe('executeAgentTurn', () => {
     expect(applySkillInjection).toHaveBeenCalledWith(activeSkill.injection, activeSkill.skill);
     expect(vi.mocked(applySkillInjection!).mock.invocationCallOrder[0] ?? 0).toBeGreaterThan(
       vi.mocked(agentRunner.configure).mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('replays lifecycle projection before retired active skill state can apply', async () => {
+    const retiredSkill = {
+      skill: {
+        name: 'retired',
+        description: 'Retired skill',
+        content: 'Retired prompt',
+        source: 'project' as const,
+        enabled: true,
+      },
+      injection: {
+        name: 'retired',
+        systemPrompt: 'Retired prompt',
+        type: 'skill' as const,
+        allowedTools: ['retired_tool'],
+      },
+    };
+    const { input, agentRunner } = createBaseInput({
+      activeSkill: retiredSkill,
+      skillLifecycle: {
+        projection: {
+          promptSections: [
+            {
+              id: 'skill:stagePersona:persona:record-1',
+              layer: 'skill',
+              content: 'Stage persona prompt',
+              priority: 10,
+              recordId: 'record-1',
+              slot: 'stagePersona',
+              skillName: 'persona',
+            },
+            {
+              id: 'skill:domainSkill:review:record-2',
+              layer: 'skill',
+              content: 'Review prompt',
+              priority: 20,
+              recordId: 'record-2',
+              slot: 'domainSkill',
+              skillName: 'review',
+            },
+          ],
+          toolPolicy: {
+            mode: 'intersection',
+            allowedTools: ['ReadDocument'],
+            contributingRecordIds: ['record-1', 'record-2'],
+            diagnostics: [],
+          },
+          diagnostics: [],
+          visibleIndicators: [],
+        },
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.applySkillInjection).toHaveBeenCalledWith(
+      {
+        name: 'lifecycle-projection',
+        type: 'skill',
+        systemPrompt: 'Stage persona prompt\n\nReview prompt',
+        allowedTools: ['ReadDocument'],
+      },
+      expect.objectContaining({
+        name: 'lifecycle-projection',
+        content: 'Stage persona prompt\n\nReview prompt',
+      }),
+    );
+  });
+
+  it('does not apply retired active skill state when lifecycle projection is empty', async () => {
+    const retiredSkill = {
+      skill: {
+        name: 'retired',
+        description: 'Retired skill',
+        content: 'Retired prompt',
+        source: 'project' as const,
+        enabled: true,
+      },
+      injection: {
+        name: 'retired',
+        systemPrompt: 'Retired prompt',
+        type: 'skill' as const,
+        allowedTools: ['retired_tool'],
+      },
+    };
+    const { input, agentRunner } = createBaseInput({
+      activeSkill: retiredSkill,
+      skillLifecycle: {
+        projection: {
+          promptSections: [],
+          toolPolicy: {
+            mode: 'unrestricted',
+            contributingRecordIds: [],
+            diagnostics: [],
+          },
+          diagnostics: [],
+          visibleIndicators: [],
+        },
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.applySkillInjection).not.toHaveBeenCalled();
+  });
+
+  it('fails visibly on blocking lifecycle projection diagnostics before retired state can mask it', async () => {
+    const retiredSkill = {
+      skill: {
+        name: 'retired',
+        description: 'Retired skill',
+        content: 'Retired prompt',
+        source: 'project' as const,
+        enabled: true,
+      },
+      injection: {
+        name: 'retired',
+        systemPrompt: 'Retired prompt',
+        type: 'skill' as const,
+      },
+    };
+    const { input } = createBaseInput({
+      activeSkill: retiredSkill,
+      skillLifecycle: {
+        projection: {
+          promptSections: [],
+          toolPolicy: {
+            mode: 'conflict',
+            contributingRecordIds: ['record-1', 'record-2'],
+            diagnostics: [
+              {
+                code: 'tool-policy-conflict',
+                message: 'Active Skill lifecycle records have incompatible tool policies',
+                conversationId: 'conv-1',
+              },
+            ],
+          },
+          diagnostics: [
+            {
+              code: 'tool-policy-conflict',
+              message: 'Active Skill lifecycle records have incompatible tool policies',
+              conversationId: 'conv-1',
+            },
+          ],
+          visibleIndicators: [],
+        },
+      },
+    });
+
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'completed',
+      assistantMessage: expect.objectContaining({
+        isError: true,
+        content:
+          'Skill lifecycle projection failed: Active Skill lifecycle records have incompatible tool policies',
+      }),
+    });
+    expect(input.agentManager.getOrCreate).not.toHaveBeenCalled();
+    expect(input.conversations.addAssistantMessage).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({ isError: true }),
     );
   });
 
@@ -1092,6 +1409,7 @@ describe('buildAgentTurnRuntimeInput', () => {
     expect(runtimeInput.getWorkspaceRoot?.()).toBe('/repo');
     expect(runtimeInput.getWorkspaceIgnoreRules?.()).toEqual({ gitignoreRules: ['ignored/'] });
     expect(runtimeInput.agentManager).toBe(agentManager);
+    expect(runtimeInput.agentManager?.nextMessageQueueSnapshotVersion?.('conv-1')).toBeUndefined();
     expect(runtimeInput.taskManager).toBe(taskManager);
     expect(runtimeInput.workflow).toBe(workflow);
     runtimeInput.onErrorMessage?.({

@@ -26,7 +26,15 @@ const translations: Record<string, string> = {
   'chat.input.queue': '加入队列',
   'chat.input.skills': '技能',
   'chat.input.queuePlaceholder': '正在回答... {count} 条排队消息待处理',
-  'chat.input.queuedMessages': '{count} 条排队消息',
+  'chat.input.queuedMessages': '消息队列（{count} 条待处理）',
+  'chat.input.queueItemLabel': '排队消息 {index}',
+  'chat.input.queueSendNext': '设为下一条发送',
+  'chat.input.queueCancel': '取消排队消息',
+  'chat.input.queueEdit': '重新编辑排队消息',
+  'chat.input.queueExpand': '展开',
+  'chat.input.queueCollapse': '收起',
+  'chat.input.queueMore': '还有 {count} 条',
+  'chat.input.queueAwaitingSnapshot': '正在同步队列...',
   'chat.input.cancel': '取消 (Esc)',
   'chat.input.commands': '命令',
   'chat.input.canvasContext.kicker': '画布选中上下文',
@@ -1114,6 +1122,9 @@ describe('InputArea composer controls', () => {
   it('queues plain text while a response is running and keeps stop available', () => {
     const onSend = vi.fn();
     const onCancel = vi.fn();
+    const onPromoteQueuedMessage = vi.fn();
+    const onCancelQueuedMessage = vi.fn();
+    const onEditQueuedMessage = vi.fn();
 
     render(
       <Harness>
@@ -1121,7 +1132,19 @@ describe('InputArea composer controls', () => {
           inputValue="继续处理"
           isThinking={true}
           queuedMessageCount={2}
+          queuedMessages={[
+            {
+              id: 'queued-1',
+              conversationId: 'conv-1',
+              content: '消息队列功能是否完善',
+              createdAt: 1,
+              source: 'composer',
+            },
+          ]}
           onInputChange={vi.fn()}
+          onPromoteQueuedMessage={onPromoteQueuedMessage}
+          onCancelQueuedMessage={onCancelQueuedMessage}
+          onEditQueuedMessage={onEditQueuedMessage}
           onSend={onSend}
           onCancel={onCancel}
         />
@@ -1131,8 +1154,18 @@ describe('InputArea composer controls', () => {
     const textarea = screen.getByPlaceholderText('正在回答... 2 条排队消息待处理');
     expect(textarea).toBeTruthy();
     expect(screen.getByTitle('取消 (Esc)').className).toContain('agent-composer-stop');
-    expect(document.querySelector('.agent-composer-queue-count')?.textContent).toBe('2');
+    expect(document.querySelector('.agent-composer-queue-count')).toBeNull();
+    const queuePanel = document.querySelector('.agent-composer-queue-panel');
+    expect(queuePanel?.textContent).toContain('消息队列（2 条待处理）');
+    expect(queuePanel?.textContent).toContain('消息队列功能是否完善');
     expect(screen.getByTitle('加入队列').className).toContain('agent-composer-queue');
+
+    fireEvent.click(screen.getByTitle('设为下一条发送'));
+    expect(onPromoteQueuedMessage).toHaveBeenCalledWith('queued-1');
+    fireEvent.click(screen.getByTitle('重新编辑排队消息'));
+    expect(onEditQueuedMessage).toHaveBeenCalledWith('queued-1');
+    fireEvent.click(screen.getByTitle('取消排队消息'));
+    expect(onCancelQueuedMessage).toHaveBeenCalledWith('queued-1');
 
     fireEvent.click(screen.getByTitle('加入队列'));
     expect(onSend).toHaveBeenCalledWith(
@@ -1143,6 +1176,184 @@ describe('InputArea composer controls', () => {
 
     fireEvent.click(screen.getByTitle('取消 (Esc)'));
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows locally queued message text before the runtime pending count arrives', () => {
+    render(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={true}
+          queuedMessages={[
+            {
+              id: 'queued-1',
+              conversationId: 'conv-1',
+              content: '要求后续变更',
+              createdAt: 1,
+              source: 'composer',
+            },
+          ]}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      </Harness>,
+    );
+
+    expect(screen.getByText('消息队列（1 条待处理）')).toBeTruthy();
+    expect(screen.getByText('要求后续变更')).toBeTruthy();
+  });
+
+  it('keeps queued items collapsed above the composer and can expand multiple items', () => {
+    render(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={true}
+          queuedMessages={[
+            {
+              id: 'queued-1',
+              conversationId: 'conv-1',
+              content: '第一条很长的排队消息内容',
+              createdAt: 1,
+              source: 'composer',
+            },
+            {
+              id: 'queued-2',
+              conversationId: 'conv-1',
+              content: '第二条排队消息',
+              createdAt: 2,
+              source: 'composer',
+            },
+          ]}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      </Harness>,
+    );
+
+    const queuePanel = document.querySelector('.agent-composer-queue-panel');
+    const textarea = screen.getByRole('textbox');
+    expect(queuePanel).toBeTruthy();
+    expect(
+      textarea.compareDocumentPosition(queuePanel as Node) & Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
+    expect(screen.getByText('第一条很长的排队消息内容')).toBeTruthy();
+    expect(screen.queryByText('第二条排队消息')).toBeNull();
+    expect(screen.getByText('还有 1 条')).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle('展开'));
+    expect(screen.getByText('第二条排队消息')).toBeTruthy();
+    expect(screen.getByTitle('收起')).toBeTruthy();
+  });
+
+  it('keeps long queued prompts in a stable truncation row', () => {
+    const longPrompt = '请把这段很长很长的排队提示词保持在输入框上方的单行队列里不要撑开布局';
+
+    render(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={true}
+          queuedMessages={[
+            {
+              id: 'queued-long',
+              conversationId: 'conv-1',
+              content: longPrompt,
+              createdAt: 1,
+              source: 'composer',
+            },
+          ]}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      </Harness>,
+    );
+
+    const text = screen.getByTitle(longPrompt);
+    expect(text.className).toContain('agent-composer-queue-text');
+  });
+
+  it('keeps queued item actions keyboard focusable with accessible labels', () => {
+    render(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={true}
+          queuedMessages={[
+            {
+              id: 'queued-1',
+              conversationId: 'conv-1',
+              content: '继续优化',
+              createdAt: 1,
+              source: 'composer',
+            },
+          ]}
+          onInputChange={vi.fn()}
+          onPromoteQueuedMessage={vi.fn()}
+          onCancelQueuedMessage={vi.fn()}
+          onEditQueuedMessage={vi.fn()}
+          onSend={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      </Harness>,
+    );
+
+    const promoteButton = screen.getByRole('button', { name: '设为下一条发送' });
+    promoteButton.focus();
+    expect(document.activeElement).toBe(promoteButton);
+  });
+
+  it('hides the queue panel when there are no queued items or pending count', () => {
+    render(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={true}
+          queuedMessageCount={0}
+          queuedMessages={[]}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      </Harness>,
+    );
+
+    expect(document.querySelector('.agent-composer-queue-panel')).toBeNull();
+  });
+
+  it('shows optimistic queued text but waits for runtime ids before enabling item actions', () => {
+    const onPromoteQueuedMessage = vi.fn();
+
+    render(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={true}
+          queuedMessages={[
+            {
+              id: 'optimistic:queued-local',
+              conversationId: 'conv-1',
+              content: '等待运行时确认',
+              createdAt: 1,
+              source: 'composer',
+            },
+          ]}
+          onInputChange={vi.fn()}
+          onPromoteQueuedMessage={onPromoteQueuedMessage}
+          onSend={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      </Harness>,
+    );
+
+    expect(screen.getByText('等待运行时确认')).toBeTruthy();
+    const promoteButton = screen.getByTitle('设为下一条发送');
+    expect(promoteButton.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(promoteButton);
+    expect(onPromoteQueuedMessage).not.toHaveBeenCalled();
   });
 
   it('does not queue rich context while a response is running', () => {

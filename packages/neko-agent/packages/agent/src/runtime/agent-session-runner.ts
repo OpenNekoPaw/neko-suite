@@ -8,6 +8,11 @@ import type {
   IAgentSession,
 } from '../session/types';
 import type { ISkillProvider } from '../tools/core/meta-tools';
+import {
+  AgentPendingMessageQueueError,
+  type AgentPendingMessageItem,
+  type EnqueuePendingMessageInput,
+} from './agent-runner-port';
 
 export interface AgentSessionRunnerTimer {
   set(callback: () => void, ms: number): unknown;
@@ -59,7 +64,8 @@ export function createAgentSessionRunner<TContext>(
 export class AgentSessionRunner<TContext> {
   private _session?: IAgentSession;
   private _isRunning = false;
-  private _pendingMessages: string[] = [];
+  private _pendingMessages: AgentPendingMessageItem[] = [];
+  private _pendingMessageSequence = 0;
   private readonly _pendingConfirmations = new Map<string, PendingConfirmation>();
   private readonly _confirmationTimers = new Map<string, unknown>();
 
@@ -144,18 +150,75 @@ export class AgentSessionRunner<TContext> {
     return this._isRunning;
   }
 
-  appendMessage(input: string): boolean {
+  enqueuePendingMessage(input: EnqueuePendingMessageInput): AgentPendingMessageItem | null {
     if (!this._isRunning) {
-      return false;
+      return null;
     }
-    this._pendingMessages.push(input);
-    return true;
+    const content = normalizePendingMessageContent(input.content);
+    const item: AgentPendingMessageItem = {
+      id: this._createPendingMessageId(input.conversationId),
+      conversationId: input.conversationId,
+      content,
+      createdAt: input.now ?? Date.now(),
+      source: 'composer',
+    };
+    this._pendingMessages.push(item);
+    return item;
   }
 
-  drainPendingMessages(): string[] {
+  getPendingMessageQueue(): readonly AgentPendingMessageItem[] {
+    return this._pendingMessages.map((item) => ({ ...item }));
+  }
+
+  removePendingMessage(queueItemId: string): AgentPendingMessageItem {
+    const index = this._findPendingMessageIndex(queueItemId);
+    const item = this._pendingMessages[index];
+    if (!item) {
+      throw new Error(`Pending message queue index invariant violated: ${queueItemId}`);
+    }
+    this._pendingMessages.splice(index, 1);
+    return clonePendingMessageItem(item);
+  }
+
+  updatePendingMessage(
+    queueItemId: string,
+    content: string,
+    now: number = Date.now(),
+  ): AgentPendingMessageItem {
+    const index = this._findPendingMessageIndex(queueItemId);
+    const item = this._pendingMessages[index];
+    if (!item) {
+      throw new Error(`Pending message queue index invariant violated: ${queueItemId}`);
+    }
+    const updated: AgentPendingMessageItem = {
+      ...item,
+      content: normalizePendingMessageContent(content),
+      updatedAt: now,
+    };
+    this._pendingMessages[index] = updated;
+    return clonePendingMessageItem(updated);
+  }
+
+  promotePendingMessage(queueItemId: string): AgentPendingMessageItem {
+    const index = this._findPendingMessageIndex(queueItemId);
+    const item = this._pendingMessages[index];
+    if (!item) {
+      throw new Error(`Pending message queue index invariant violated: ${queueItemId}`);
+    }
+    this._pendingMessages.splice(index, 1);
+    this._pendingMessages.unshift(item);
+    return clonePendingMessageItem(item);
+  }
+
+  dequeuePendingMessage(): AgentPendingMessageItem | null {
+    const item = this._pendingMessages.shift();
+    return item ? clonePendingMessageItem(item) : null;
+  }
+
+  drainPendingMessageQueue(): readonly AgentPendingMessageItem[] {
     const pendingMessages = this._pendingMessages;
     this._pendingMessages = [];
-    return pendingMessages;
+    return pendingMessages.map(clonePendingMessageItem);
   }
 
   getPendingMessagesCount(): number {
@@ -263,6 +326,23 @@ export class AgentSessionRunner<TContext> {
     this._isRunning = false;
   }
 
+  private _findPendingMessageIndex(queueItemId: string): number {
+    const index = this._pendingMessages.findIndex((item) => item.id === queueItemId);
+    if (index < 0) {
+      throw new AgentPendingMessageQueueError(
+        'stale-item',
+        `Queued message is no longer pending: ${queueItemId}`,
+        queueItemId,
+      );
+    }
+    return index;
+  }
+
+  private _createPendingMessageId(conversationId: string): string {
+    this._pendingMessageSequence += 1;
+    return `${conversationId}:queue:${Date.now().toString(36)}:${this._pendingMessageSequence.toString(36)}`;
+  }
+
   private _scheduleConfirmationTimeout(pending: PendingConfirmation): void {
     const timer = this._options.timer;
     const timeoutMs = this._options.confirmationTimeoutMs;
@@ -297,4 +377,19 @@ export class AgentSessionRunner<TContext> {
     }
     this._confirmationTimers.clear();
   }
+}
+
+function normalizePendingMessageContent(content: string): string {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new AgentPendingMessageQueueError(
+      'invalid-queue-operation',
+      'Queued message content cannot be empty.',
+    );
+  }
+  return trimmed;
+}
+
+function clonePendingMessageItem(item: AgentPendingMessageItem): AgentPendingMessageItem {
+  return { ...item };
 }

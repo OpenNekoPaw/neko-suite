@@ -23,6 +23,36 @@ class MockAgent implements AgentRuntimeManagerAgent {
   readonly confirmTool = vi.fn();
   readonly cancel = vi.fn();
   readonly clearHistory = vi.fn();
+  readonly getPendingMessageQueue = vi.fn(() => []);
+  readonly removePendingMessage = vi.fn((queueItemId: string) => ({
+    id: queueItemId,
+    conversationId: 'conversation-1',
+    content: 'queued',
+    createdAt: 1000,
+    source: 'composer' as const,
+  }));
+  readonly updatePendingMessage = vi.fn((queueItemId: string, content: string) => ({
+    id: queueItemId,
+    conversationId: 'conversation-1',
+    content,
+    createdAt: 1000,
+    updatedAt: 1001,
+    source: 'composer' as const,
+  }));
+  readonly promotePendingMessage = vi.fn((queueItemId: string) => ({
+    id: queueItemId,
+    conversationId: 'conversation-1',
+    content: 'queued',
+    createdAt: 1000,
+    source: 'composer' as const,
+  }));
+  readonly dequeuePendingMessage = vi.fn(() => ({
+    id: 'queue-1',
+    conversationId: 'conversation-1',
+    content: 'queued',
+    createdAt: 1000,
+    source: 'composer' as const,
+  }));
   readonly clearPendingMessages = vi.fn();
   readonly getContextTokenCount = vi.fn(() => 128);
   readonly compressContext = vi.fn(async () => ({
@@ -181,6 +211,11 @@ describe('AgentRuntimeManager', () => {
     manager.confirmTool('conversation-1', 'tool-1', true);
     manager.loadHistory('conversation-1', [makeMessage('hello')], [['event-1']]);
     manager.clearHistory('conversation-1');
+    manager.getPendingMessageQueue('conversation-1');
+    manager.removePendingMessage('conversation-1', 'queue-1');
+    manager.updatePendingMessage('conversation-1', 'queue-1', 'queued revised', 1001);
+    manager.promotePendingMessage('conversation-1', 'queue-1');
+    manager.dequeuePendingMessage('conversation-1');
     manager.clearPendingMessages('conversation-1');
     manager.applySkillInjection('conversation-1', injection, skill);
     manager.clearActiveSkill('conversation-1');
@@ -195,9 +230,23 @@ describe('AgentRuntimeManager', () => {
     expect(agent.confirmTool).toHaveBeenCalledWith('tool-1', true);
     expect(agent.loadHistory).toHaveBeenCalledWith([makeMessage('hello')], [['event-1']]);
     expect(agent.clearHistory).toHaveBeenCalledOnce();
+    expect(agent.getPendingMessageQueue).toHaveBeenCalledOnce();
+    expect(agent.removePendingMessage).toHaveBeenCalledWith('queue-1');
+    expect(agent.updatePendingMessage).toHaveBeenCalledWith('queue-1', 'queued revised', 1001);
+    expect(agent.promotePendingMessage).toHaveBeenCalledWith('queue-1');
+    expect(agent.dequeuePendingMessage).toHaveBeenCalledOnce();
     expect(agent.clearPendingMessages).toHaveBeenCalledOnce();
     expect(agent.applySkillInjection).toHaveBeenCalledWith(injection, skill);
     expect(agent.clearActiveSkill).toHaveBeenCalledOnce();
     expect(agent.refreshCapabilityRuntime).toHaveBeenCalledOnce();
+  });
+
+  it('issues monotonic message queue snapshot versions per conversation', () => {
+    const manager = createAgentRuntimeManager({ createAgent: () => new MockAgent() });
+
+    expect(manager.nextMessageQueueSnapshotVersion('conversation-1')).toBe(1);
+    expect(manager.nextMessageQueueSnapshotVersion('conversation-1')).toBe(2);
+    expect(manager.nextMessageQueueSnapshotVersion('conversation-2')).toBe(1);
+    expect(manager.nextMessageQueueSnapshotVersion('conversation-1')).toBe(3);
   });
 });
