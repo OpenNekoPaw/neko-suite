@@ -263,7 +263,27 @@ describe('SkillHandler', () => {
   });
 
   describe('autoActivateSkill', () => {
-    it('should not activate natural-language matches or send injection', async () => {
+    it('does not activate high-confidence discovered skills from natural language', async () => {
+      const mockSkill = {
+        name: 'comic-to-storyboard',
+        description: 'Convert manga pages into StoryboardTable storyboards',
+        content: 'Storyboard instructions',
+        enabled: true,
+      };
+      skillService.discover.mockReturnValue({
+        found: true,
+        matches: [{ skill: mockSkill, relevance: 0.95, reason: 'artifact match' }],
+        topMatch: { skill: mockSkill, relevance: 0.95, reason: 'artifact match' },
+        requiresConfirmation: false,
+      });
+      skillService.registry.getSkill.mockReturnValue(mockSkill);
+      skillService.registry.ensureLoaded.mockResolvedValue(mockSkill);
+      skillService.apply.mockResolvedValue({
+        name: 'comic-to-storyboard',
+        systemPrompt: 'Storyboard instructions',
+        allowedTools: ['ReadDocument', 'ReadImage'],
+        type: 'skill' as const,
+      });
       handler = new SkillHandler({ skillService: skillService as any });
 
       const result = await handler.autoActivateSkill(webview as any, {

@@ -1,9 +1,13 @@
 /**
- * Skill Injection Coordinator — Atomic multi-track skill injection/removal
+ * Skill Injection Coordinator — request-time projection adapter
  *
- * Responsibility: Coordinate all injection tracks when a skill is applied or
- * removed, ensuring atomicity and proper cleanup. Single source of truth for
- * active skill state.
+ * Responsibility: apply the current request-time Skill projection to
+ * prompt/permission/tool-guard tracks that expect a single injected
+ * payload. The canonical active Skill source of truth is SkillLifecycleRecord[]
+ * owned by SkillLifecycleRuntime. This class is still the bridge that writes
+ * the projected payload into those adapter tracks until AgentSession consumes
+ * lifecycle prompt sections and tool policy directly; do not add new lifecycle
+ * state here.
  *
  * Tracks:
  * - Track A: System prompt section (via SystemPromptComposer)
@@ -75,7 +79,7 @@ export interface SkillInjectionCoordinatorDeps {
 }
 
 /**
- * Internal state for a single active injection
+ * Internal state for the current projected injection adapter payload.
  */
 interface ActiveInjection {
   name: string;

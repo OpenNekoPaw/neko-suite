@@ -8,6 +8,7 @@ import {
   createAgentSessionRunner,
   type AgentRunnerConfirmationRequest,
   type AgentRunnerEventEmitter,
+  type AgentPendingMessageItem,
   type AgentRunnerPort,
   type AgentRunnerPortEvent,
   type AgentRuntimeSessionAssemblyInput,
@@ -134,12 +135,40 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
     return this.sessionRunner.isRunning();
   }
 
-  appendMessage(input: string): boolean {
-    return this.sessionRunner.appendMessage(input);
+  enqueuePendingMessage(input: {
+    readonly conversationId: string;
+    readonly content: string;
+    readonly now?: number;
+  }): AgentPendingMessageItem | null {
+    return this.sessionRunner.enqueuePendingMessage(input);
   }
 
-  drainPendingMessages(): string[] {
-    return this.sessionRunner.drainPendingMessages();
+  getPendingMessageQueue(): readonly AgentPendingMessageItem[] {
+    return this.sessionRunner.getPendingMessageQueue();
+  }
+
+  removePendingMessage(queueItemId: string): AgentPendingMessageItem {
+    return this.sessionRunner.removePendingMessage(queueItemId);
+  }
+
+  updatePendingMessage(
+    queueItemId: string,
+    content: string,
+    now?: number,
+  ): AgentPendingMessageItem {
+    return this.sessionRunner.updatePendingMessage(queueItemId, content, now);
+  }
+
+  promotePendingMessage(queueItemId: string): AgentPendingMessageItem {
+    return this.sessionRunner.promotePendingMessage(queueItemId);
+  }
+
+  dequeuePendingMessage(): AgentPendingMessageItem | null {
+    return this.sessionRunner.dequeuePendingMessage();
+  }
+
+  drainPendingMessageQueue(): readonly AgentPendingMessageItem[] {
+    return this.sessionRunner.drainPendingMessageQueue();
   }
 
   getPendingMessagesCount(): number {

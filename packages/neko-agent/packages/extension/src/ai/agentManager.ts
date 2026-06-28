@@ -13,7 +13,11 @@ import { getLogger } from '../base';
 
 const logger = getLogger('AgentManager');
 import type { ChatMessage } from '@neko/shared';
-import { createAgentRuntimeManager, type AgentRuntimeManager } from '@neko/agent/runtime';
+import {
+  createAgentRuntimeManager,
+  type AgentPendingMessageItem,
+  type AgentRuntimeManager,
+} from '@neko/agent/runtime';
 import { type AgentHistoryWithToolContextMessage, type SkillInjection } from '@neko/agent';
 import { AgentRunner, IAgentRunner } from './agentRunner';
 
@@ -101,7 +105,18 @@ export interface IAgentManager extends vscode.Disposable {
   /**
    * 清空指定会话的待处理消息队列
    */
+  getPendingMessageQueue(conversationId: string): readonly AgentPendingMessageItem[];
+  removePendingMessage(conversationId: string, queueItemId: string): AgentPendingMessageItem;
+  updatePendingMessage(
+    conversationId: string,
+    queueItemId: string,
+    content: string,
+    now?: number,
+  ): AgentPendingMessageItem;
+  promotePendingMessage(conversationId: string, queueItemId: string): AgentPendingMessageItem;
+  dequeuePendingMessage(conversationId: string): AgentPendingMessageItem | null;
   clearPendingMessages(conversationId: string): void;
+  nextMessageQueueSnapshotVersion(conversationId: string): number;
 
   /**
    * 获取指定会话的上下文 token 数量
@@ -290,8 +305,37 @@ export class AgentManager implements IAgentManager {
     this._runtime.clearHistory(conversationId);
   }
 
+  getPendingMessageQueue(conversationId: string): readonly AgentPendingMessageItem[] {
+    return this._runtime.getPendingMessageQueue(conversationId);
+  }
+
+  removePendingMessage(conversationId: string, queueItemId: string): AgentPendingMessageItem {
+    return this._runtime.removePendingMessage(conversationId, queueItemId);
+  }
+
+  updatePendingMessage(
+    conversationId: string,
+    queueItemId: string,
+    content: string,
+    now?: number,
+  ): AgentPendingMessageItem {
+    return this._runtime.updatePendingMessage(conversationId, queueItemId, content, now);
+  }
+
+  promotePendingMessage(conversationId: string, queueItemId: string): AgentPendingMessageItem {
+    return this._runtime.promotePendingMessage(conversationId, queueItemId);
+  }
+
+  dequeuePendingMessage(conversationId: string): AgentPendingMessageItem | null {
+    return this._runtime.dequeuePendingMessage(conversationId);
+  }
+
   clearPendingMessages(conversationId: string): void {
     this._runtime.clearPendingMessages(conversationId);
+  }
+
+  nextMessageQueueSnapshotVersion(conversationId: string): number {
+    return this._runtime.nextMessageQueueSnapshotVersion(conversationId);
   }
 
   getContextTokenCount(conversationId: string): number {

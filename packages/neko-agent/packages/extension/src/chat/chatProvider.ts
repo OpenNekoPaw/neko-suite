@@ -73,6 +73,7 @@ import {
   getCapabilityDiscoveryService,
   getCapabilityRuntimeBindings,
   setCapabilityRuntimeSkillService,
+  setCapabilityRuntimeSkillLifecycleRuntime,
 } from '../bootstrap/capabilityBootstrap';
 import {
   NEKO_AI_ASSISTANT_FOCUS_COMMAND,
@@ -337,6 +338,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           project: { skills: [], commands: [] },
         });
         setCapabilityRuntimeSkillService(skillService);
+        this._skillHandler.setDependencies({
+          skillService,
+          agentManager: this._agentManager,
+        });
+        setCapabilityRuntimeSkillLifecycleRuntime(
+          this._skillHandler.getRuntime().getSkillLifecycleRuntime() ?? undefined,
+        );
 
         this._providers = new ProviderManager(this._platform, this._accountAiCatalog);
         this._messages = new AgentMessageTurnHandler(
@@ -352,6 +360,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           this._platform,
           this._taskManager,
           (conversationId) => this._skillHandler.getActiveSkill(conversationId),
+          this._skillHandler,
           undefined,
           this._dashboardWorkItems,
           this._localResourceAccess,
@@ -386,17 +395,26 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         } catch {
           // Capability discovery is optional in tests / partial bootstraps.
         }
-        this._skillHandler.setDependencies({
-          skillService,
-          agentManager: this._agentManager,
-        });
-
         // Bridge host effects into per-conversation skill providers for meta tools.
         if (this._agentManager) {
           const skillRuntime = this._skillHandler.getRuntime();
           this._agentManager.setSkillProviderFactory(
             skillRuntimeBootstrap.createSkillProviderFactory({
               getActiveSkill: (conversationId) => skillRuntime.getActiveSkill(conversationId),
+              getActiveSkillLifecycle: (conversationId) => ({
+                conversationId,
+                records: skillRuntime.projectSkillLifecycle(conversationId).visibleIndicators,
+                diagnostics: skillRuntime.projectSkillLifecycle(conversationId).diagnostics,
+              }),
+              activateLifecycleSkill: (conversationId, skillName) =>
+                skillRuntime.activateDomainSkill({ conversationId, skillName }),
+              deactivateLifecycleSkill: (conversationId, input) =>
+                skillRuntime.deactivateLifecycleSkill({
+                  conversationId,
+                  ...(input?.recordId ? { recordId: input.recordId } : {}),
+                  ...(input?.slot ? { slot: input.slot } : {}),
+                  ...(input?.skillName ? { skillName: input.skillName } : {}),
+                }),
               applySkillInjection: (conversationId, injection, skill) =>
                 skillRuntime.applySkillInjection(conversationId, injection, skill),
               clearActiveSkill: (conversationId) => skillRuntime.clearActiveSkill(conversationId),

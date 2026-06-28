@@ -24,6 +24,7 @@ import {
   type InputProcessor,
   type SystemPromptBuilder,
   type SkillService,
+  type SkillLifecycleRuntime,
   type IRuntimeTaskManager,
 } from '@neko/agent';
 import { createAgentSessionWithRuntime } from '@neko/agent/runtime';
@@ -46,6 +47,13 @@ import {
   createTuiSlashCommandCatalog,
   type TuiSlashCommandOption,
 } from '../core/slash-command-catalog';
+import {
+  activateCliDomainSkill,
+  type CliSkillLifecycleSessionBridge,
+  createCliSkillLifecycleRuntime,
+  deactivateCliSkillLifecycle,
+  wireCliSkillLifecycleSession,
+} from '../core/skill-lifecycle-session';
 
 export interface UseAgentSessionOptions {
   readonly config: CLIConfig;
@@ -72,9 +80,13 @@ export interface AgentSessionHandle {
   /** Switch execution mode and rebuild system prompt */
   updateMode: (mode: ExecutionMode) => void;
   /** Activate a skill by name; returns false if skill not found */
-  activateSkill: (name: string) => Promise<boolean>;
-  /** Deactivate the currently active skill */
-  deactivateSkill: () => void;
+  activateSkill: (name: string, args?: string) => Promise<boolean>;
+  /** Deactivate the currently active skill or a scoped lifecycle record. */
+  deactivateSkill: (input?: {
+    readonly recordId?: string;
+    readonly slot?: import('@neko/shared').SkillLifecycleSlot;
+    readonly skillName?: string;
+  }) => boolean;
   /** Skill service (for slash commands) */
   readonly getSkillService: () => SkillService | undefined;
   /** Tool registry (for slash commands) */
@@ -109,7 +121,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const platformRef = useRef<Platform | null>(null);
   const promptBuilderRef = useRef<SystemPromptBuilder | null>(null);
   const skillServiceRef = useRef<ReturnType<typeof createSkillService> | null>(null);
+  const skillLifecycleRuntimeRef = useRef<SkillLifecycleRuntime | null>(null);
+  const skillLifecycleBridgeRef = useRef<CliSkillLifecycleSessionBridge | null>(null);
   const toolRegistryRef = useRef<ToolRegistry | null>(null);
+  const conversationIdRef = useRef(createCliConversationId());
   const isReadyRef = useRef(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const [slashCommands, setSlashCommands] = useState<readonly TuiSlashCommandOption[]>(
@@ -210,6 +225,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           setSlashCommands(createTuiSlashCommandCatalog());
         }
 
+        const skillLifecycleRuntime = skillService
+          ? ensureHookSkillLifecycleRuntime(skillService, skillLifecycleRuntimeRef)
+          : undefined;
+
         // 4. LLM Service — use Platform for multi-provider routing
         let llmService: IService;
         const taskManager = providedTaskManager ?? createCLITaskManager();
@@ -254,8 +273,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             workspaceRoot: config.workDir,
             taskManager,
             ...(skillService ? { skillService } : {}),
+            ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
             projectMemoryManager,
           }),
+          conversationId: conversationIdRef.current,
           onConfirmTool: async (request) => {
             // Show approval UI and wait for user decision
             return new Promise<boolean>((resolve) => {
@@ -272,32 +293,14 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         sessionRef.current = session;
 
         // Wire skill provider to meta tools
-        if (skillService) {
-          session.setSkillProvider({
-            listSkills: () =>
-              skillService!.registry
-                .listSkills()
-                .filter((s) => s.enabled !== false)
-                .map((s) => ({ name: s.name, description: s.description || '' })),
-            getActiveSkill: () => {
-              const skill = session.getActiveSkill();
-              return skill ? { name: skill.name, description: skill.description || '' } : null;
-            },
-            activateSkill: (name: string) => {
-              const skill = skillService!.registry.getSkill(name);
-              if (!skill) return { success: false, message: `Skill "${name}" not found` };
-              // apply() is async (shell execution), fire-and-forget for sync callback
-              void skillService!.apply(skill).then((injection) => {
-                session.applySkillInjection(injection, skill);
-              });
-              return {
-                success: true,
-                message: `Activated skill "${name}"`,
-              };
-            },
-            deactivateSkill: () => {
-              session.clearActiveSkill();
-              return { success: true, message: 'Skill deactivated' };
+        if (skillService && skillLifecycleRuntime) {
+          skillLifecycleBridgeRef.current = wireCliSkillLifecycleSession({
+            session,
+            skillService,
+            conversationId: conversationIdRef.current,
+            lifecycleRuntime: skillLifecycleRuntime,
+            onProjection: (projection) => {
+              useAgentStore.getState().setActiveSkillLifecycleRecords(projection.visibleIndicators);
             },
           });
         }
@@ -422,26 +425,66 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     }
   }, []);
 
-  const activateSkill = useCallback(async (name: string): Promise<boolean> => {
+  const activateSkill = useCallback(async (name: string, args?: string): Promise<boolean> => {
     const skillService = skillServiceRef.current;
     const session = sessionRef.current;
     if (!skillService || !session) return false;
 
-    const skill = skillService.registry.getSkill(name);
-    if (!skill) return false;
-
-    const injection = await skillService.apply(skill);
-    session.applySkillInjection(injection, skill);
-    useAgentStore.getState().setActiveSkill(name);
+    const lifecycleRuntime = ensureHookSkillLifecycleRuntime(
+      skillService,
+      skillLifecycleRuntimeRef,
+    );
+    const result = await activateCliDomainSkill({
+      lifecycleRuntime,
+      conversationId: conversationIdRef.current,
+      skillName: name,
+      ...(args !== undefined ? { args } : {}),
+      actor: 'user',
+      syncProjection: () =>
+        skillLifecycleBridgeRef.current?.syncProjection() ??
+        lifecycleRuntime.project(conversationIdRef.current),
+    });
+    if (!result.ok) {
+      useConversationStore
+        .getState()
+        .addSystemMessage(result.message ?? `Skill "${name}" was not activated`);
+      return false;
+    }
     return true;
   }, []);
 
-  const deactivateSkill = useCallback(() => {
-    const session = sessionRef.current;
-    if (!session) return;
-    session.clearActiveSkill();
-    useAgentStore.getState().setActiveSkill(null);
-  }, []);
+  const deactivateSkill = useCallback(
+    (_input?: {
+      readonly recordId?: string;
+      readonly slot?: import('@neko/shared').SkillLifecycleSlot;
+      readonly skillName?: string;
+    }): boolean => {
+      const skillService = skillServiceRef.current;
+      const session = sessionRef.current;
+      if (!skillService || !session) return false;
+      const lifecycleRuntime = ensureHookSkillLifecycleRuntime(
+        skillService,
+        skillLifecycleRuntimeRef,
+      );
+      const result = deactivateCliSkillLifecycle({
+        lifecycleRuntime,
+        conversationId: conversationIdRef.current,
+        actor: 'user',
+        target: _input,
+        syncProjection: () =>
+          skillLifecycleBridgeRef.current?.syncProjection() ??
+          lifecycleRuntime.project(conversationIdRef.current),
+      });
+      if (!result.ok) {
+        useConversationStore
+          .getState()
+          .addSystemMessage(result.message ?? 'Skill lifecycle clear rejected');
+        return false;
+      }
+      return true;
+    },
+    [],
+  );
 
   const updateMode = useCallback((mode: ExecutionMode) => {
     const session = sessionRef.current;
@@ -502,4 +545,18 @@ function buildSystemPromptWithContext(builder: SystemPromptBuilder, config: CLIC
     `- Provider: ${config.provider}`,
   ];
   return base + context.join('\n');
+}
+
+function createCliConversationId(): string {
+  return `cli:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function ensureHookSkillLifecycleRuntime(
+  skillService: SkillService,
+  ref: import('react').MutableRefObject<SkillLifecycleRuntime | null>,
+): SkillLifecycleRuntime {
+  if (!ref.current) {
+    ref.current = createCliSkillLifecycleRuntime(skillService);
+  }
+  return ref.current;
 }

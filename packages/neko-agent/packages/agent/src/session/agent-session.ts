@@ -61,7 +61,7 @@ import {
   createNdjsonEventSink,
   readIdcRuntimeState,
 } from '../workspace';
-import { createArtifactWatcher, type IArtifactWatcher } from '../artifact';
+import type { IArtifactWatcher } from '../artifact';
 import type { IAutohealChain } from '../autoheal';
 import { createAutohealChain } from '../autoheal';
 import type { IApprovalEngine } from '../approval';
@@ -265,8 +265,7 @@ export class AgentSession implements IAgentSession {
   private _feedbackCoordinator: IFeedbackCoordinator | null = null;
   private _controlPlane: import('../control-plane').IControlPlane | null = null;
   private _operationToolAdapterRegistry:
-    | import('@neko/shared').IOperationToolAdapterRegistry
-    | null = null;
+    import('@neko/shared').IOperationToolAdapterRegistry | null = null;
   // Loaded user preferences (ADR §9.3). null when workspace.fsOps
   // didn't provide readFile, or when both layers are absent.
   private _preferencesReady: Promise<void> | null = null;
@@ -379,6 +378,8 @@ export class AgentSession implements IAgentSession {
           getRunStore: () => this._runStore,
           getStageTracker: () => this._stageTracker,
           getStageGuardian: () => this._stageGuardian,
+          getSkillLifecycleRuntime: () => this._config.stageTracking?.skillLifecycleRuntime ?? null,
+          getConversationId: () => this._config.conversationId ?? null,
           onPersist: () => this._persistIdcRuntimeState(),
         },
         artifacts: {
@@ -499,10 +500,13 @@ export class AgentSession implements IAgentSession {
           stageTracker: this._stageTracker,
           skillRegistry: config.stageTracking.skillRegistry,
           skillService: config.stageTracking.skillService,
-          coordinator: this._skillCoordinator,
+          ...(config.stageTracking.skillLifecycleRuntime
+            ? { lifecycleRuntime: config.stageTracking.skillLifecycleRuntime }
+            : { coordinator: this._skillCoordinator }),
           // Resolve `{runId}` in creation-persona's artifact-file contract
           // lazily so re-applies after a new IdcRun pick up the fresh id.
           getRunId: () => this._runStore?.getActive()?.id ?? null,
+          getConversationId: () => this._config.conversationId ?? null,
         });
         void this._stagePersonaBinding.syncCurrent();
       }
@@ -530,10 +534,9 @@ export class AgentSession implements IAgentSession {
         this._eventSink.attach(this._eventBus);
       }
 
-      // ArtifactWatcher (Phase B) — fire-and-forget start. Prefer the
-      // runtime artifact-plane factory when one is supplied so host
-      // bootstraps control how Draft/Plan/Task watch/validate is wired.
-      // Use the workspace-backed watcher when the host does not supply one.
+      // Creation document persistence is host-owned. Only start a watcher when
+      // an explicit runtime factory is supplied; the session must not create
+      // hidden managed creation-document directories by default.
       this._artifactWatcher = this._createConfiguredArtifactWatcher();
       void this._artifactWatcher?.start();
 
@@ -1290,7 +1293,8 @@ export class AgentSession implements IAgentSession {
 
   /**
    * Apply a skill injection to the active session.
-   * Delegates to SkillInjectionCoordinator for atomic multi-track injection.
+   * Request-time projection adapter for callers that provide a single
+   * projected Skill payload.
    *
    * @param injection The injection payload
    * @param skill Optional full Skill object for active skill tracking + Track D (ToolSets)
@@ -1301,30 +1305,31 @@ export class AgentSession implements IAgentSession {
 
   /**
    * Remove a previously injected skill prompt (reversible injection).
-   * Delegates to SkillInjectionCoordinator for atomic 3-track cleanup.
+   * Request-time projection adapter cleanup for callers that provide a single
+   * projected Skill payload.
    */
   removeSkillInjection(name: string): void {
     this._skillCoordinator.remove(name);
   }
 
   /**
-   * Get the currently active skill (if any).
-   * Delegates to SkillInjectionCoordinator — the sole state owner.
+   * Get the currently projected Skill adapter payload, if any.
+   * Canonical active Skill records live in SkillLifecycleRuntime.
    */
   getActiveSkill(): Skill | undefined {
     return this._skillCoordinator.getActiveSkill();
   }
 
   /**
-   * Clear the active skill — reverses all injection tracks (prompt, permissions, ToolSets).
-   * Delegates to SkillInjectionCoordinator.clearActive().
+   * Clear the projected Skill adapter payload.
+   * Canonical deactivation must go through SkillLifecycleRuntime.
    */
   clearActiveSkill(): void {
     this._skillCoordinator.clearActive();
   }
 
   /**
-   * Check if a tool is allowed by the active skill.
+   * Check if a tool is allowed by the current projected Skill adapter payload.
    * Uses ToolGuard pattern matching via Coordinator.
    * Returns true if no skill restrictions are active.
    */
@@ -1797,22 +1802,19 @@ export class AgentSession implements IAgentSession {
     }
 
     const getRunId = (): string | null => this._runStore?.getActive()?.id ?? null;
+    const getCreationId = (): string | null => {
+      const runId = getRunId();
+      return runId ? this._artifactFacade.getCreationIdForRun(runId) : null;
+    };
     if (this._config.artifactWatcherFactory) {
       return this._config.artifactWatcherFactory({
         eventBus: this._eventBus,
         getRunId,
+        getCreationId,
       });
     }
 
-    if (!this._nekoPaths) {
-      return null;
-    }
-
-    return createArtifactWatcher({
-      paths: this._nekoPaths,
-      eventBus: this._eventBus,
-      getRunId,
-    });
+    return null;
   }
 
   private _composeRunnerHooks(

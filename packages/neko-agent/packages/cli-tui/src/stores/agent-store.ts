@@ -7,6 +7,7 @@
 
 import { create } from 'zustand';
 import type { AgentStatus, ExecutionMode, TokenUsage, IterationProgress } from '../types/state';
+import type { ActiveSkillLifecycleRecordProjection } from '@neko/shared';
 
 export interface AgentSlice {
   // State
@@ -18,6 +19,8 @@ export interface AgentSlice {
   readonly error: Error | null;
   /** Currently active skill name (null if none) */
   readonly activeSkill: string | null;
+  /** Active Skill lifecycle records projected for CLI/TUI surfaces. */
+  readonly activeSkillLifecycleRecords: readonly ActiveSkillLifecycleRecordProjection[];
 
   // Actions
   setRunning: () => void;
@@ -28,6 +31,9 @@ export interface AgentSlice {
   updateUsage: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
   setExecutionMode: (mode: ExecutionMode) => void;
   setActiveSkill: (name: string | null) => void;
+  setActiveSkillLifecycleRecords: (
+    records: readonly ActiveSkillLifecycleRecordProjection[],
+  ) => void;
   reset: () => void;
 }
 
@@ -39,6 +45,7 @@ const initialState = {
   startTime: null as number | null,
   error: null as Error | null,
   activeSkill: null as string | null,
+  activeSkillLifecycleRecords: [] as readonly ActiveSkillLifecycleRecordProjection[],
 };
 
 export const useAgentStore = create<AgentSlice>((set) => ({
@@ -80,6 +87,13 @@ export const useAgentStore = create<AgentSlice>((set) => ({
 
   setActiveSkill: (name) => {
     set({ activeSkill: name });
+  },
+
+  setActiveSkillLifecycleRecords: (records) => {
+    set({
+      activeSkillLifecycleRecords: [...records],
+      activeSkill: records[0]?.skillName ?? null,
+    });
   },
 
   reset: () => {

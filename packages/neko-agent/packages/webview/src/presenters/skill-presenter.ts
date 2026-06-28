@@ -1,5 +1,6 @@
 import type { SkillSummary } from '@/components/ChatView/InputArea/types';
 import type { BoundActiveSkillIndicator } from '@/handlers/types';
+import type { ActiveSkillLifecycleIndicator } from '@/components/ChatView/SkillIndicator';
 
 export interface ProtocolSkillSummaryForUi {
   name: string;
@@ -41,11 +42,29 @@ export function projectSkillInjectionState(input: {
   conversationId: string;
   skillName: string;
   allowedTools?: readonly string[];
+  lifecycle?: {
+    records?: readonly ActiveSkillLifecycleIndicator[];
+  };
 }): SkillInjectionProjection {
+  const records =
+    input.lifecycle?.records && input.lifecycle.records.length > 0
+      ? input.lifecycle.records.map((record) => ({ ...record }))
+      : [
+          {
+            id: input.skillName,
+            skillName: input.skillName,
+            slot: 'domainSkill',
+            owner: 'user',
+            clearable: true,
+            ...(input.allowedTools ? { allowedTools: [...input.allowedTools] } : {}),
+          },
+        ];
+
   return {
     activeSkill: {
       skillName: input.skillName,
       allowedTools: input.allowedTools ? [...input.allowedTools] : undefined,
+      records,
       conversationId: input.conversationId,
     },
   };

@@ -19,6 +19,7 @@ import type {
   SkillApplicationResult,
   SkillService,
 } from '@neko/agent';
+import type { SkillLifecycleProjection } from '@neko/shared';
 import { ConversationSkillRuntime } from '@neko/agent';
 import { getLogger } from '../../base';
 
@@ -163,11 +164,28 @@ export class SkillHandler {
     return this._runtime.getActiveSkill(conversationId);
   }
 
+  projectSkillLifecycle(conversationId: string): SkillLifecycleProjection {
+    return this._runtime.projectSkillLifecycle(conversationId);
+  }
+
   /**
    * Clear the active skill (e.g., when conversation ends).
    * Delegates to AgentManager → AgentSession → SkillInjectionCoordinator.
    */
-  clearActiveSkill(conversationId: string): void {
+  clearActiveSkill(
+    conversationId: string,
+    input?: { readonly recordId?: string; readonly slot?: string; readonly skillName?: string },
+  ): void {
+    if (input?.recordId || input?.slot || input?.skillName) {
+      void this._runtime.deactivateLifecycleSkill({
+        conversationId,
+        ...(input.recordId ? { recordId: input.recordId } : {}),
+        ...(isSkillLifecycleSlot(input.slot) ? { slot: input.slot } : {}),
+        ...(input.skillName ? { skillName: input.skillName } : {}),
+        actor: 'user',
+      });
+      return;
+    }
     this._runtime.clearActiveSkill(conversationId);
   }
 
@@ -207,4 +225,16 @@ export class SkillHandler {
       logger,
     } satisfies ConstructorParameters<typeof ConversationSkillRuntime>[0];
   }
+}
+
+function isSkillLifecycleSlot(
+  value: string | undefined,
+): value is import('@neko/shared').SkillLifecycleSlot {
+  return (
+    value === 'stagePersona' ||
+    value === 'domainSkill' ||
+    value === 'referenceSkill' ||
+    value === 'ephemeralSkill' ||
+    value === 'workflowSkill'
+  );
 }

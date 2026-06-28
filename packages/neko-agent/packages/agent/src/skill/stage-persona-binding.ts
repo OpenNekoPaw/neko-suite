@@ -5,8 +5,8 @@
  * See: docs/architecture/agent-unified-workflow.md §4, §6.5
  *
  * Replaces FlowBinding. Listens to StageTracker.onEntered and, for each
- * stage, applies the corresponding persona Skill via SkillService +
- * SkillInjectionCoordinator.
+ * stage, activates the corresponding persona Skill through the Skill lifecycle
+ * runtime when supplied, or through the request-time projection adapter.
  *
  * Default mapping (matches the two builtin persona Skills shipped today):
  *   draft / plan  → creation-persona  (discussion + draft persona)
@@ -16,17 +16,17 @@
  * `skillNameForStage` — e.g. the 4-persona split the ADR hints at.
  *
  * Intentional scope limits:
- *   - Handles persona Skills only. Business Skills (canvas, cut, etc.) are
- *     still applied via SkillService.apply() + session.applySkillInjection.
- *   - SkillInjectionCoordinator currently has a single active slot, so
- *     applying a persona evicts the previous injection — same constraint
- *     that FlowBinding had.
+ *   - Handles persona Skills only. Business/domain Skills should enter through
+ *     explicit lifecycle activation paths.
+ *   - When lifecycleRuntime is supplied, stagePersona records coexist with
+ *     domainSkill records and projection decides the final request prompt.
  */
 
 import type { Skill, SkillInjection, ISkillRegistry } from '@neko/shared';
 import type { IdcStage } from '@neko-agent/types';
 import type { SkillInjectionCoordinator } from './skill-injection-coordinator';
 import type { SkillService } from './skill-service';
+import type { SkillLifecycleRuntime } from './skill-lifecycle-runtime';
 import type { StageTracker } from './stage-tracker';
 import { getLogger } from '../utils/logger';
 
@@ -62,7 +62,9 @@ export interface StagePersonaBindingDeps {
   /** Prepares the SkillInjection payload from a Skill. */
   skillService: SkillService;
   /** Applies / removes the injection across the 4 tracks atomically. */
-  coordinator: SkillInjectionCoordinator;
+  coordinator?: SkillInjectionCoordinator;
+  /** Canonical lifecycle runtime for IDC-owned stage persona records. */
+  lifecycleRuntime?: SkillLifecycleRuntime;
   /**
    * Override for the stage → skill-name mapping. Defaults to
    * `defaultSkillNameForStage` (draft/plan → creation-persona,
@@ -72,12 +74,13 @@ export interface StagePersonaBindingDeps {
   /**
    * Optional provider of the active IdcRun id. When supplied, the binding
    * substitutes `{runId}` occurrences in the persona prompt at activation
-   * time so the creation-persona's artifact-file contract renders with
-   * concrete paths (e.g. `.neko/drafts/draft-tiktok-001.md`). Null → the
-   * `{runId}` literal is left in place and the AI must derive the id from
-   * the session context.
+   * time so the creation-persona can name the current review context. Null
+   * leaves `{runId}` literal in place and the AI must derive the id from the
+   * session context.
    */
   getRunId?: () => string | null;
+  /** Conversation that owns the lifecycle record. Defaults to run id for older callers. */
+  getConversationId?: () => string | null;
 }
 
 export interface IStagePersonaBinding {
@@ -95,15 +98,26 @@ export interface IStagePersonaBinding {
 
 class StagePersonaBinding implements IStagePersonaBinding {
   private _unsubscribe: (() => void) | null = null;
+  private _unsubscribeExit: (() => void) | null = null;
   private _activeStage: IdcStage | null = null;
   private readonly _skillNameForStage: (stage: IdcStage) => string;
   private readonly _getRunId: (() => string | null) | null;
+  private readonly _getConversationId: (() => string | null) | null;
 
   constructor(private readonly _deps: StagePersonaBindingDeps) {
     this._skillNameForStage = _deps.skillNameForStage ?? defaultSkillNameForStage;
     this._getRunId = _deps.getRunId ?? null;
+    this._getConversationId = _deps.getConversationId ?? null;
     this._unsubscribe = this._deps.stageTracker.onEntered((event) => {
       void this._onEntered(event.stage);
+    });
+    this._unsubscribeExit = this._deps.stageTracker.onExited((event) => {
+      this._deps.lifecycleRuntime?.expire({
+        conversationId: this._conversationId(),
+        reason: 'stage-exited',
+        runId: this._runId(),
+        stage: event.stage,
+      });
     });
   }
 
@@ -120,6 +134,10 @@ class StagePersonaBinding implements IStagePersonaBinding {
     if (this._unsubscribe) {
       this._unsubscribe();
       this._unsubscribe = null;
+    }
+    if (this._unsubscribeExit) {
+      this._unsubscribeExit();
+      this._unsubscribeExit = null;
     }
   }
 
@@ -141,7 +159,7 @@ class StagePersonaBinding implements IStagePersonaBinding {
     // needed — draft→plan both map to creation-persona, so those stage
     // transitions are actually persona no-ops.
     const currentSkillName = this._activeStage ? this._skillNameForStage(this._activeStage) : null;
-    if (currentSkillName === skillName) {
+    if (!this._deps.lifecycleRuntime && currentSkillName === skillName) {
       this._activeStage = stage;
       return;
     }
@@ -154,7 +172,7 @@ class StagePersonaBinding implements IStagePersonaBinding {
 
     const injection: SkillInjection = await this._deps.skillService.apply(skill);
     const resolved = this._applyRuntimeContext(injection, stage);
-    this._applyViaCoordinator(resolved, skill);
+    this._applyViaCoordinator(resolved, skill, stage);
     this._activeStage = stage;
   }
 
@@ -178,8 +196,34 @@ class StagePersonaBinding implements IStagePersonaBinding {
     return { ...injection, systemPrompt: prompt };
   }
 
-  private _applyViaCoordinator(injection: SkillInjection, skill: Skill): void {
-    this._deps.coordinator.apply(injection, skill);
+  private _applyViaCoordinator(injection: SkillInjection, skill: Skill, stage: IdcStage): void {
+    const lifecycleRuntime = this._deps.lifecycleRuntime;
+    if (lifecycleRuntime) {
+      lifecycleRuntime.activatePrepared({
+        conversationId: this._conversationId(),
+        skill,
+        injection,
+        slot: 'stagePersona',
+        owner: 'idc',
+        lifetime: {
+          kind: 'idc-stage',
+          runId: this._runId(),
+          stage,
+        },
+        source: 'idc-stage',
+      });
+      return;
+    }
+
+    this._deps.coordinator?.apply(injection, skill);
+  }
+
+  private _conversationId(): string {
+    return this._getConversationId?.() ?? this._runId();
+  }
+
+  private _runId(): string {
+    return this._getRunId?.() ?? 'idc-run';
   }
 }
 

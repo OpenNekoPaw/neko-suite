@@ -32,9 +32,7 @@ const { executeCommandMock, activateEngineExtensionMock } = vi.hoisted(() => ({
   activateEngineExtensionMock: vi.fn(),
 }));
 
-const {
-  loadWorkspaceFileIgnoreRulesMock,
-} = vi.hoisted(() => ({
+const { loadWorkspaceFileIgnoreRulesMock } = vi.hoisted(() => ({
   loadWorkspaceFileIgnoreRulesMock: vi.fn(async () => ({ gitignoreRules: [] })),
 }));
 
@@ -1225,19 +1223,38 @@ describe('AgentRunner', () => {
   // ---------------------------------------------------------------------------
 
   describe('消息队列', () => {
-    it('appendMessage 在未运行时返回 false', () => {
-      expect(runner.appendMessage('test')).toBe(false);
+    it('enqueuePendingMessage 在未运行时返回 null', () => {
+      expect(
+        runner.enqueuePendingMessage({
+          conversationId: 'conv-1',
+          content: 'test',
+        }),
+      ).toBeNull();
     });
 
-    it('appendMessage 在运行时追加到队列', async () => {
+    it('enqueuePendingMessage 在运行时追加到队列', async () => {
       await runner.configure({ platform: mockPlatform, maxIterations: 10 });
 
       const iterable = runner.execute('task', {});
       await toIterator(iterable).next(); // start running
 
-      expect(runner.appendMessage('queued')).toBe(true);
+      const item = runner.enqueuePendingMessage({
+        conversationId: 'conv-1',
+        content: 'queued',
+        now: 1000,
+      });
+      expect(item).toEqual(
+        expect.objectContaining({
+          conversationId: 'conv-1',
+          content: 'queued',
+          createdAt: 1000,
+          source: 'composer',
+        }),
+      );
       expect(runner.getPendingMessagesCount()).toBe(1);
-      expect(runner.drainPendingMessages()).toEqual(['queued']);
+      expect(runner.drainPendingMessageQueue()).toEqual([
+        expect.objectContaining({ content: 'queued' }),
+      ]);
       expect(runner.getPendingMessagesCount()).toBe(0);
 
       runner.cancel();
@@ -1252,8 +1269,8 @@ describe('AgentRunner', () => {
       const iterable = runner.execute('task', {});
       await toIterator(iterable).next();
 
-      runner.appendMessage('msg1');
-      runner.appendMessage('msg2');
+      runner.enqueuePendingMessage({ conversationId: 'conv-1', content: 'msg1' });
+      runner.enqueuePendingMessage({ conversationId: 'conv-1', content: 'msg2' });
       expect(runner.getPendingMessagesCount()).toBe(2);
 
       runner.clearPendingMessages();

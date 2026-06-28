@@ -120,6 +120,9 @@ export * from './memory';
 // Skill types (Claude-compatible skills and slash commands)
 export * from './skill';
 
+// Skill lifecycle types (activation records and request-time projection)
+export * from './skill-lifecycle';
+
 // ToolGroup types (dynamic tool injection)
 export * from './tool-group';
 

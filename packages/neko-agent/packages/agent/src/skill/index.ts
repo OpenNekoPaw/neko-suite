@@ -153,6 +153,31 @@ export {
   type SkillInjectionCoordinatorDeps,
 } from './skill-injection-coordinator';
 
+export {
+  SkillLifecycleStore,
+  compareLifecycleRecords,
+  type SkillLifecycleCreateRecordInput,
+  type SkillLifecycleExpireInput,
+  type SkillLifecycleRenewRecordInput,
+  type SkillLifecycleStoreOptions,
+} from './skill-lifecycle-store';
+
+export {
+  buildLifecyclePromptSectionId,
+  hasBlockingLifecycleProjectionDiagnostic,
+  projectSkillLifecycle,
+  type SkillLifecycleProjectionInput,
+} from './skill-lifecycle-projection';
+
+export {
+  SkillLifecycleRuntime,
+  defaultDeactivationPolicy,
+  defaultSkillLifecycleRequest,
+  projectSkillSummary,
+  type SkillLifecyclePreparedActivationInput,
+  type SkillLifecycleRuntimeOptions,
+} from './skill-lifecycle-runtime';
+
 // Skill Conflict Resolver
 export { SkillConflictResolver, createSkillConflictResolver } from './skill-conflict-resolver';
 
@@ -277,6 +302,7 @@ export {
   type ConversationSkillRuntimeDeps,
   type ConversationSkillRuntimeLogger,
   type ExecuteSkillInput,
+  type AutoActivateSkillInput,
 } from './conversation-skill-runtime';
 
 // Meta-tool skill provider

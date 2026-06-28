@@ -12,6 +12,7 @@ import { createServiceId, getLogger } from '../base';
 import type { ChatMessage, ConfiguredToolGroup } from '@neko/shared';
 import type {
   AgentRunnerConfirmationRequest,
+  AgentPendingMessageItem,
   AgentRunnerPort,
   AgentRunnerPortEvent,
   AgentRuntimeSessionController,
@@ -33,9 +34,7 @@ import {
   getCapabilityRuntimeBindings,
   setCapabilityRuntimeContentAccessRuntime,
 } from '../bootstrap/capabilityBootstrap';
-import {
-  createExtensionAgentContentAccessRuntime,
-} from '../services/agentContentAccessRuntime';
+import { createExtensionAgentContentAccessRuntime } from '../services/agentContentAccessRuntime';
 import { createWorkspaceContentPathResolver } from '@neko/shared/vscode/extension';
 
 const logger = getLogger('AgentRunner');
@@ -139,12 +138,40 @@ export class AgentRunner implements IAgentRunner {
     return this.port.isRunning();
   }
 
-  appendMessage(input: string): boolean {
-    return this.port.appendMessage(input);
+  enqueuePendingMessage(input: {
+    readonly conversationId: string;
+    readonly content: string;
+    readonly now?: number;
+  }): AgentPendingMessageItem | null {
+    return this.port.enqueuePendingMessage(input);
   }
 
-  drainPendingMessages(): string[] {
-    return this.port.drainPendingMessages();
+  getPendingMessageQueue(): readonly AgentPendingMessageItem[] {
+    return this.port.getPendingMessageQueue();
+  }
+
+  removePendingMessage(queueItemId: string): AgentPendingMessageItem {
+    return this.port.removePendingMessage(queueItemId);
+  }
+
+  updatePendingMessage(
+    queueItemId: string,
+    content: string,
+    now?: number,
+  ): AgentPendingMessageItem {
+    return this.port.updatePendingMessage(queueItemId, content, now);
+  }
+
+  promotePendingMessage(queueItemId: string): AgentPendingMessageItem {
+    return this.port.promotePendingMessage(queueItemId);
+  }
+
+  dequeuePendingMessage(): AgentPendingMessageItem | null {
+    return this.port.dequeuePendingMessage();
+  }
+
+  drainPendingMessageQueue(): readonly AgentPendingMessageItem[] {
+    return this.port.drainPendingMessageQueue();
   }
 
   getPendingMessagesCount(): number {
