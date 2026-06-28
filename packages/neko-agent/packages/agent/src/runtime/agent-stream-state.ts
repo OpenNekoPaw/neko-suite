@@ -1,7 +1,9 @@
 import {
   extractCompositeContentBlocks,
   type AgentArtifactTransferPayload,
+  type AgentMessageQueueSnapshot,
   type AgentPhase,
+  type AgentQueuedMessageItem,
   type ContentBlock,
   type Plan,
   type ToolCall,
@@ -112,6 +114,8 @@ export type AgentStreamProjectionMessage =
       conversationId: string;
       content?: string;
       pendingCount?: number;
+      item?: AgentQueuedMessageItem;
+      snapshot?: AgentMessageQueueSnapshot;
     }
   | {
       type: 'streamComplete';
@@ -254,6 +258,8 @@ export function projectAgentStreamEventToHostMessages(
           conversationId,
           content: event.content,
           pendingCount: event.pendingCount,
+          item: event.queuedMessageItem,
+          snapshot: event.messageQueueSnapshot,
         },
       ];
     case 'done': {

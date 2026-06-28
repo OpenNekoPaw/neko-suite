@@ -37,6 +37,8 @@ export interface AgentStreamBackgroundTaskProgressInput<TDeliveryPlan = unknown>
   readonly conversationId: string;
   readonly baseTask: BackgroundTaskView;
   readonly progress: BackgroundTaskProgressPatch;
+  readonly parentMessageId?: string;
+  readonly parentToolCallId?: string;
   readonly deliveryPlan?: TDeliveryPlan;
   readonly persistResultUrls?: readonly string[];
 }
@@ -76,21 +78,23 @@ export function projectAgentStreamBackgroundTaskStart(
   if (!task) return null;
 
   const toolCallId = input.event.toolResult?.toolCallId;
+  if (!toolCallId) return null;
+
   const backgroundTask = toAgentBackgroundTask(task);
   return {
     taskId: task.id,
     taskType: task.type,
     task,
-    ...(toolCallId !== undefined ? { toolCallId } : {}),
+    toolCallId,
     message: buildTaskCreatedMessage({
       conversationId: input.conversationId,
       messageId: input.messageId,
-      ...(toolCallId !== undefined ? { toolCallId } : {}),
+      toolCallId,
       workItem: projectBackgroundTaskToWorkItem({
         conversationId: input.conversationId,
         task: backgroundTask,
         parentMessageId: input.messageId,
-        parentToolCallId: toolCallId ?? null,
+        parentToolCallId: toolCallId,
       }),
     }),
   };
@@ -112,6 +116,8 @@ export function projectAgentStreamBackgroundTaskProgress<TDeliveryPlan = unknown
       workItem: projectBackgroundTaskToWorkItem({
         conversationId: input.conversationId,
         task: toAgentBackgroundTask(task),
+        parentMessageId: input.parentMessageId,
+        parentToolCallId: input.parentToolCallId,
       }),
     }),
   };

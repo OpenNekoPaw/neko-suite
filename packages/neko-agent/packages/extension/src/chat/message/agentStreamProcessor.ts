@@ -447,6 +447,23 @@ function projectStreamMessageResourcesForWebview(
     );
   }
 
+  if (message.type === 'agentTurnTimeline') {
+    return Promise.all([
+      projectResourceValueForWebview(message.events, projector),
+      message.finalContentBlocks
+        ? projectResourceValueForWebview(message.finalContentBlocks, projector)
+        : undefined,
+    ]).then(([events, finalContentBlocks]) => ({
+      ...message,
+      events: Array.isArray(events) ? (events as typeof message.events) : message.events,
+      ...(finalContentBlocks && Array.isArray(finalContentBlocks)
+        ? { finalContentBlocks: finalContentBlocks as typeof message.finalContentBlocks }
+        : message.finalContentBlocks
+          ? { finalContentBlocks: message.finalContentBlocks }
+          : {}),
+    }));
+  }
+
   return Promise.resolve(message);
 }
 

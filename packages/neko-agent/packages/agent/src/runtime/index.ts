@@ -106,12 +106,16 @@ export {
 } from './agent-runtime-manager';
 
 export {
+  AgentPendingMessageQueueError,
   createAgentRunnerEventEmitter,
+  type AgentPendingMessageItem,
+  type AgentPendingMessageQueueErrorCode,
   type AgentRunnerEventEmitter,
   type AgentRunnerConfirmationRequest,
   type AgentRunnerEventSource,
   type AgentRunnerPort,
   type AgentRunnerPortEvent,
+  type EnqueuePendingMessageInput,
   type DisposableLike,
 } from './agent-runner-port';
 

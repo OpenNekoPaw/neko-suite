@@ -1,9 +1,15 @@
 import type {
   AgentPhase,
+  AgentTurnTimelineItemStatus,
+  AgentTurnTimelineItem,
+  AgentTurnTimelineMessage,
+  AgentWorkItem,
+  ContentBlock,
   Message,
   TaskCreatedMessage,
   TaskUpdatedMessage,
 } from '@neko-agent/types';
+import { buildAgentTurnTimelineMessage } from '@neko-agent/types';
 import type { AgentEvent } from '../session/types';
 import {
   applyAgentStreamEventToState,
@@ -23,12 +29,11 @@ import {
 } from './agent-stream-task-observer';
 import type { AgentStreamPersistenceSnapshot } from './message-runtime';
 import type { AgentStreamBackgroundTaskPersistInput } from './agent-stream-background-task';
+import { applyToolResultBackfillToResult } from './tool-result-backfill';
 import { buildAgentAssistantMessageFromStream } from './message-runtime';
 
 export type AgentEventStreamRuntimeMessage =
-  | AgentStreamProjectionMessage
-  | TaskCreatedMessage
-  | TaskUpdatedMessage;
+  AgentStreamProjectionMessage | AgentTurnTimelineMessage | TaskCreatedMessage | TaskUpdatedMessage;
 
 export interface AgentEventStreamRuntimeBackgroundTasks<
   TSourceTask = unknown,
@@ -93,6 +98,11 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     const streamState = createAgentStreamProjectionState();
     const partialSnapshotIntervalMs =
       input.partialAssistantSnapshotIntervalMs ?? DEFAULT_PARTIAL_ASSISTANT_SNAPSHOT_INTERVAL_MS;
+    const timeline = createAgentTurnTimelineProjection({
+      conversationId: input.conversationId,
+      messageId: streamingMessageId,
+      now: input.now,
+    });
     let lastPartialSnapshotAt = 0;
 
     for await (const event of input.events) {
@@ -102,6 +112,11 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
       });
       if (stateUpdate.phaseChange) {
         input.onPhaseChange?.(stateUpdate.phaseChange.phase, stateUpdate.phaseChange.toolName);
+      }
+
+      const timelineMessage = timeline.project(event, eventTime);
+      if (timelineMessage) {
+        await input.postMessage(timelineMessage);
       }
 
       const messages = projectAgentStreamEventToHostMessages({
@@ -114,11 +129,14 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
         if (message.type === 'streamComplete') {
           continue;
         }
+        if (!shouldPostProjectionMessageToWebview(message)) {
+          continue;
+        }
         await input.postMessage(message);
       }
 
       if (event.type === 'tool_result') {
-        this.subscribeToBackgroundTaskProgress(input, streamingMessageId, event);
+        this.subscribeToBackgroundTaskProgress(input, streamingMessageId, event, timeline);
       }
 
       if (
@@ -153,6 +171,10 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     }
 
     finalizeAgentStreamProjectionState(streamState);
+    const finalTimelineMessage = timeline.complete(streamState.contentBlocks);
+    if (finalTimelineMessage) {
+      await input.postMessage(finalTimelineMessage);
+    }
     await input.postMessage(
       buildStreamCompleteProjectionMessage({
         conversationId: input.conversationId,
@@ -193,6 +215,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     input: ProcessAgentEventStreamRuntimeInput<TSourceTask, TDeliveryPlan>,
     streamingMessageId: string,
     event: AgentEvent,
+    timeline: AgentTurnTimelineProjection,
   ): void {
     const backgroundTasks = input.backgroundTasks;
     if (!backgroundTasks) {
@@ -212,8 +235,11 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
       conversationId: input.conversationId,
       messageId: streamingMessageId,
       event,
-      postMessage: (message) => {
-        input.postMessage(message);
+      postMessage: async (message) => {
+        const timelineMessage = timeline.projectWorkItem(message.workItem);
+        if (timelineMessage) {
+          await input.postMessage(timelineMessage);
+        }
       },
       observeProgress: backgroundTasks.observeProgress,
       createRecoveryProgress: backgroundTasks.createRecoveryProgress,
@@ -270,6 +296,340 @@ function shouldEmitPartialAssistantSnapshot(input: {
     return true;
   }
   return input.eventTime - input.lastPartialSnapshotAt >= input.partialSnapshotIntervalMs;
+}
+
+function shouldPostProjectionMessageToWebview(message: AgentStreamProjectionMessage): boolean {
+  switch (message.type) {
+    case 'messageQueued':
+    case 'contextTokenCount':
+    case 'streamComplete':
+      return true;
+    case 'streamThinking':
+    case 'streamText':
+    case 'toolCall':
+    case 'toolResult':
+    case 'toolResultBackfill':
+    case 'toolConfirmation':
+    case 'error':
+      return false;
+  }
+}
+
+function createAgentTurnTimelineProjection(input: {
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly now?: () => number;
+}): AgentTurnTimelineProjection {
+  const turnId = `turn-${input.messageId}`;
+  let sequence = 0;
+  let activeTextItem: AgentTurnTimelineItem | null = null;
+  let activeThinkingItem: AgentTurnTimelineItem | null = null;
+  const toolItemsByToolCallId = new Map<string, AgentTurnTimelineItem>();
+  const workItemsById = new Map<string, AgentTurnTimelineItem>();
+
+  const nextSequence = () => {
+    sequence += 1;
+    return sequence;
+  };
+
+  const closeText = (eventTime: number): AgentTurnTimelineItem[] => {
+    const events: AgentTurnTimelineItem[] = [];
+    if (activeTextItem?.kind === 'assistant_text' && activeTextItem.status === 'streaming') {
+      activeTextItem = { ...activeTextItem, status: 'complete', updatedAt: eventTime };
+      events.push(activeTextItem);
+      activeTextItem = null;
+    }
+    if (activeThinkingItem?.kind === 'thinking' && activeThinkingItem.status === 'streaming') {
+      activeThinkingItem = { ...activeThinkingItem, status: 'complete', updatedAt: eventTime };
+      events.push(activeThinkingItem);
+      activeThinkingItem = null;
+    }
+    return events;
+  };
+
+  const buildMessage = (
+    events: readonly AgentTurnTimelineItem[],
+    finalContentBlocks?: readonly ContentBlock[],
+  ): AgentTurnTimelineMessage | null => {
+    if (events.length === 0 && (!finalContentBlocks || finalContentBlocks.length === 0)) {
+      return null;
+    }
+    return buildAgentTurnTimelineMessage({
+      conversationId: input.conversationId,
+      turnId,
+      messageId: input.messageId,
+      events,
+      ...(finalContentBlocks ? { finalContentBlocks } : {}),
+    });
+  };
+
+  return {
+    project(event, eventTime) {
+      switch (event.type) {
+        case 'thinking_content': {
+          if (activeThinkingItem?.kind === 'thinking') {
+            activeThinkingItem = {
+              ...activeThinkingItem,
+              payload: {
+                ...activeThinkingItem.payload,
+                content: `${activeThinkingItem.payload.content}${event.thinking ?? ''}`,
+              },
+              updatedAt: eventTime,
+            };
+          } else {
+            activeThinkingItem = {
+              conversationId: input.conversationId,
+              turnId,
+              messageId: input.messageId,
+              itemId: `thinking-${nextSequence()}`,
+              sequence,
+              kind: 'thinking',
+              status: 'streaming',
+              payload: { content: event.thinking ?? '' },
+              createdAt: eventTime,
+              updatedAt: eventTime,
+            };
+          }
+          return buildMessage([activeThinkingItem]);
+        }
+        case 'text':
+        case 'text_delta': {
+          const closedThinking = closeThinking(activeThinkingItem, eventTime);
+          if (closedThinking) activeThinkingItem = null;
+          const events: AgentTurnTimelineItem[] = closedThinking ? [closedThinking] : [];
+          if (activeTextItem?.kind === 'assistant_text') {
+            activeTextItem = {
+              ...activeTextItem,
+              payload: {
+                ...activeTextItem.payload,
+                content: `${activeTextItem.payload.content}${event.content ?? ''}`,
+              },
+              updatedAt: eventTime,
+            };
+          } else {
+            activeTextItem = {
+              conversationId: input.conversationId,
+              turnId,
+              messageId: input.messageId,
+              itemId: `text-${nextSequence()}`,
+              sequence,
+              kind: 'assistant_text',
+              status: 'streaming',
+              payload: { content: event.content ?? '', format: 'markdown' },
+              createdAt: eventTime,
+              updatedAt: eventTime,
+            };
+          }
+          events.push(activeTextItem);
+          return buildMessage(events);
+        }
+        case 'tool_call': {
+          const events = closeText(eventTime);
+          const toolCall = event.toolCall;
+          if (!toolCall) {
+            return buildMessage(events);
+          }
+          const item: AgentTurnTimelineItem = {
+            conversationId: input.conversationId,
+            turnId,
+            messageId: input.messageId,
+            itemId: `tool-${toolCall.id}`,
+            sequence: nextSequence(),
+            kind: 'tool_call',
+            status: 'pending',
+            payload: { toolCall },
+            createdAt: eventTime,
+            updatedAt: eventTime,
+          };
+          toolItemsByToolCallId.set(toolCall.id, item);
+          return buildMessage([...events, item]);
+        }
+        case 'tool_result': {
+          const result = event.toolResult;
+          if (!result?.toolCallId) {
+            return null;
+          }
+          const existingItem = toolItemsByToolCallId.get(result.toolCallId);
+          if (!existingItem || existingItem.kind !== 'tool_call') {
+            return null;
+          }
+          const existingToolCall = existingItem.payload.toolCall;
+          const item: AgentTurnTimelineItem = {
+            conversationId: input.conversationId,
+            turnId,
+            messageId: input.messageId,
+            itemId: existingItem.itemId,
+            sequence: existingItem.sequence,
+            kind: 'tool_call',
+            status: result.success ? 'succeeded' : 'failed',
+            payload: {
+              toolCall: {
+                id: result.toolCallId,
+                name: existingToolCall.name,
+                arguments: existingToolCall.arguments,
+                result: {
+                  success: result.success,
+                  data: result.data,
+                  error: result.error,
+                  ...(result.attachments ? { attachments: result.attachments } : {}),
+                  ...(result.perceptionCards ? { perceptionCards: result.perceptionCards } : {}),
+                  ...(result.backfillDiagnostics
+                    ? { backfillDiagnostics: result.backfillDiagnostics }
+                    : {}),
+                  ...(result.artifacts ? { artifacts: result.artifacts } : {}),
+                },
+              },
+            },
+            createdAt: existingItem.createdAt,
+            updatedAt: eventTime,
+          };
+          toolItemsByToolCallId.set(result.toolCallId, item);
+          return buildMessage([item]);
+        }
+        case 'tool_result_backfill': {
+          const backfill = event.toolResultBackfill;
+          if (!backfill?.toolCallId) {
+            return null;
+          }
+          const existingItem = toolItemsByToolCallId.get(backfill.toolCallId);
+          if (!existingItem || existingItem.kind !== 'tool_call') {
+            return null;
+          }
+          const existingToolCall = existingItem.payload.toolCall;
+          const mergedResult = applyToolResultBackfillToResult(existingToolCall.result, backfill);
+          const item: AgentTurnTimelineItem = {
+            ...existingItem,
+            status: mergedResult.result.success ? 'succeeded' : 'failed',
+            payload: {
+              toolCall: {
+                ...existingToolCall,
+                result: mergedResult.result,
+              },
+            },
+            updatedAt: eventTime,
+          };
+          toolItemsByToolCallId.set(backfill.toolCallId, item);
+          return buildMessage([item]);
+        }
+        case 'tool_confirmation': {
+          const toolCall = event.toolConfirmation?.toolCall;
+          if (!toolCall?.id) {
+            return null;
+          }
+          const existingItem = toolItemsByToolCallId.get(toolCall.id);
+          if (!existingItem || existingItem.kind !== 'tool_call') {
+            return null;
+          }
+          const item: AgentTurnTimelineItem = {
+            ...existingItem,
+            status: 'pending',
+            payload: {
+              toolCall: {
+                ...existingItem.payload.toolCall,
+                pendingConfirmation: true,
+                confirmation: {
+                  action: event.toolConfirmation?.action ?? '',
+                  description: event.toolConfirmation?.description ?? '',
+                  details: event.toolConfirmation?.details ?? {},
+                },
+              },
+            },
+            updatedAt: eventTime,
+          };
+          toolItemsByToolCallId.set(toolCall.id, item);
+          return buildMessage([item]);
+        }
+        case 'error': {
+          const events = closeText(eventTime);
+          const item: AgentTurnTimelineItem = {
+            conversationId: input.conversationId,
+            turnId,
+            messageId: input.messageId,
+            itemId: `error-${nextSequence()}`,
+            sequence,
+            kind: 'error',
+            status: 'failed',
+            payload: { message: event.error?.message ?? 'An error occurred' },
+            createdAt: eventTime,
+            updatedAt: eventTime,
+          };
+          return buildMessage([...events, item]);
+        }
+        case 'done':
+          return null;
+        default:
+          return null;
+      }
+    },
+    complete(contentBlocks) {
+      const eventTime = input.now?.() ?? Date.now();
+      const events = closeText(eventTime);
+      return buildMessage(events, contentBlocks);
+    },
+    projectWorkItem(workItem) {
+      const eventTime = input.now?.() ?? Date.now();
+      const existing = workItemsById.get(workItem.id);
+      const sequenceValue = existing?.sequence ?? nextSequence();
+      const core = {
+        conversationId: input.conversationId,
+        turnId,
+        messageId: input.messageId,
+        itemId: `${workItem.kind}-${workItem.id}`,
+        sequence: sequenceValue,
+        status: toTimelineStatus(workItem.status),
+        createdAt: existing?.createdAt ?? eventTime,
+        updatedAt: eventTime,
+      };
+      const anchor = workItem.parentToolCallId
+        ? { parentAnchor: 'tool_call' as const, parentToolCallId: workItem.parentToolCallId }
+        : { parentAnchor: 'turn' as const };
+      const item: AgentTurnTimelineItem =
+        workItem.kind === 'media-task'
+          ? {
+              ...core,
+              ...anchor,
+              kind: 'media',
+              payload: { workItem },
+            }
+          : {
+              ...core,
+              ...anchor,
+              kind: 'task',
+              payload: { workItem },
+            };
+      workItemsById.set(workItem.id, item);
+      return buildMessage([item]);
+    },
+  };
+}
+
+interface AgentTurnTimelineProjection {
+  readonly project: (event: AgentEvent, eventTime: number) => AgentTurnTimelineMessage | null;
+  readonly complete: (contentBlocks: readonly ContentBlock[]) => AgentTurnTimelineMessage | null;
+  readonly projectWorkItem: (workItem: AgentWorkItem) => AgentTurnTimelineMessage | null;
+}
+
+function toTimelineStatus(status: AgentWorkItem['status']): AgentTurnTimelineItemStatus {
+  switch (status) {
+    case 'completed':
+      return 'succeeded';
+    case 'failed':
+    case 'cancelled':
+      return 'failed';
+    case 'queued':
+    case 'processing':
+      return 'pending';
+  }
+}
+
+function closeThinking(
+  item: AgentTurnTimelineItem | null,
+  eventTime: number,
+): AgentTurnTimelineItem | null {
+  if (item?.kind !== 'thinking' || item.status !== 'streaming') {
+    return null;
+  }
+  return { ...item, status: 'complete', updatedAt: eventTime };
 }
 
 function isPersistablePartialEvent(event: AgentEvent): boolean {

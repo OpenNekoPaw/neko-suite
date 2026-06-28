@@ -4,6 +4,7 @@ import {
   buildAmbientCanvasUpdateMessage,
   buildAgentPhaseMessage,
   buildAgentStateSnapshotMessage,
+  buildAgentTurnTimelineMessage,
   buildErrorMessage,
   buildExternalInputMessage,
   buildHistoryClearedMessage,
@@ -11,6 +12,9 @@ import {
   buildMediaTaskCreatedMessage,
   buildMediaTaskProgressMessage,
   buildMessageCancelledMessage,
+  buildMessageQueueErrorMessage,
+  buildMessageQueueSnapshotMessage,
+  buildQueuedMessageEditRequestedMessage,
   buildPluginCommandsMessage,
   buildPluginSlashCommandInvocation,
   buildPluginsAvailableMessage,
@@ -23,7 +27,9 @@ import {
   buildToolConfirmationMessage,
   parseSendMessageWebviewMessage,
   parseWebviewToExtensionMessage,
+  validateAgentTurnTimelineMessage,
 } from '../webview-protocol';
+import type { AgentTurnTimelineItem } from '../agent-turn-timeline';
 
 const cacheResourceRef = createResourceRef({
   scope: 'project',
@@ -43,6 +49,158 @@ const cacheResourceRef = createResourceRef({
 });
 
 describe('webview protocol parser', () => {
+  it('builds valid agent turn timeline event batches', () => {
+    const textItem = makeTimelineTextItem({
+      itemId: 'text-1',
+      sequence: 1,
+      content: 'I will inspect the file.',
+    });
+    const toolItem = makeTimelineToolItem({
+      itemId: 'tool-item-1',
+      sequence: 2,
+      toolCallId: 'tool-1',
+    });
+    const taskItem = makeTimelineTaskItem({
+      itemId: 'task-item-1',
+      sequence: 3,
+      parentToolCallId: 'tool-1',
+    });
+
+    expect(
+      buildAgentTurnTimelineMessage({
+        conversationId: 'conv-1',
+        turnId: 'turn-1',
+        messageId: 'msg-1',
+        events: [textItem, toolItem, taskItem],
+      }),
+    ).toEqual({
+      type: 'agentTurnTimeline',
+      conversationId: 'conv-1',
+      turnId: 'turn-1',
+      messageId: 'msg-1',
+      events: [textItem, toolItem, taskItem],
+    });
+    expect(
+      validateAgentTurnTimelineMessage({
+        type: 'agentTurnTimeline',
+        conversationId: 'conv-1',
+        turnId: 'turn-1',
+        messageId: 'msg-1',
+        events: [textItem, toolItem, taskItem],
+      }),
+    ).toEqual({ ok: true, diagnostics: [] });
+  });
+
+  it('rejects invalid agent turn timeline events visibly', () => {
+    const result = validateAgentTurnTimelineMessage({
+      type: 'agentTurnTimeline',
+      conversationId: 'conv-1',
+      turnId: 'turn-1',
+      messageId: 'msg-1',
+      events: [
+        {
+          ...makeTimelineTextItem({
+            itemId: '',
+            sequence: -1,
+            content: 'bad',
+          }),
+          kind: 'unknown',
+          status: 'paused',
+          payload: {},
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
+      expect.arrayContaining([
+        'missing-item-id',
+        'invalid-sequence',
+        'invalid-kind',
+        'invalid-status',
+      ]),
+    );
+  });
+
+  it('rejects duplicate timeline item ids for different items', () => {
+    const result = validateAgentTurnTimelineMessage({
+      type: 'agentTurnTimeline',
+      conversationId: 'conv-1',
+      turnId: 'turn-1',
+      messageId: 'msg-1',
+      events: [
+        makeTimelineTextItem({ itemId: 'item-1', sequence: 1, content: 'first' }),
+        makeTimelineToolItem({ itemId: 'item-1', sequence: 2, toolCallId: 'tool-1' }),
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'duplicate-item-id',
+          itemId: 'item-1',
+        }),
+      ]),
+    );
+  });
+
+  it('rejects parentless task and media events unless they are explicitly turn scoped', () => {
+    const missingParent = validateAgentTurnTimelineMessage({
+      type: 'agentTurnTimeline',
+      conversationId: 'conv-1',
+      turnId: 'turn-1',
+      messageId: 'msg-1',
+      events: [makeParentlessTimelineTaskFixture({ itemId: 'task-1', sequence: 1 })],
+    });
+    const explicitParentless = validateAgentTurnTimelineMessage({
+      type: 'agentTurnTimeline',
+      conversationId: 'conv-1',
+      turnId: 'turn-1',
+      messageId: 'msg-1',
+      events: [
+        {
+          ...makeParentlessTimelineTaskFixture({ itemId: 'task-1', sequence: 1 }),
+          parentAnchor: 'turn',
+        },
+      ],
+    });
+
+    expect(missingParent.ok).toBe(false);
+    expect(missingParent.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'missing-parent-anchor',
+          itemId: 'task-1',
+        }),
+      ]),
+    );
+    expect(explicitParentless).toEqual({ ok: true, diagnostics: [] });
+  });
+
+  it('rejects non-monotonic timeline event batches', () => {
+    const result = validateAgentTurnTimelineMessage({
+      type: 'agentTurnTimeline',
+      conversationId: 'conv-1',
+      turnId: 'turn-1',
+      messageId: 'msg-1',
+      events: [
+        makeTimelineTextItem({ itemId: 'text-2', sequence: 2, content: 'second' }),
+        makeTimelineToolItem({ itemId: 'tool-1', sequence: 1, toolCallId: 'tool-1' }),
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'non-monotonic-sequence',
+          sequence: 1,
+        }),
+      ]),
+    );
+  });
+
   it('accepts tabless project search purposes and rejects unknown search purposes', () => {
     expect(
       parseWebviewToExtensionMessage({
@@ -92,6 +250,77 @@ describe('webview protocol parser', () => {
       type: 'startCharacterDialogueFromSlash',
       args: 'entity:char-xiaoju --roleplay',
     });
+  });
+
+  it('accepts message queue commands with explicit conversation and item scope', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'getMessageQueue',
+        conversationId: 'conv-1',
+      }),
+    ).toEqual({
+      type: 'getMessageQueue',
+      conversationId: 'conv-1',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'promoteQueuedMessage',
+        conversationId: 'conv-1',
+        queueItemId: 'queue-1',
+      }),
+    ).toEqual({
+      type: 'promoteQueuedMessage',
+      conversationId: 'conv-1',
+      queueItemId: 'queue-1',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'cancelQueuedMessage',
+        conversationId: 'conv-1',
+        queueItemId: 'queue-1',
+      }),
+    ).toEqual({
+      type: 'cancelQueuedMessage',
+      conversationId: 'conv-1',
+      queueItemId: 'queue-1',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'editQueuedMessage',
+        conversationId: 'conv-1',
+        queueItemId: 'queue-1',
+      }),
+    ).toEqual({
+      type: 'editQueuedMessage',
+      conversationId: 'conv-1',
+      queueItemId: 'queue-1',
+    });
+  });
+
+  it('rejects message queue commands without required explicit scope', () => {
+    expect(parseWebviewToExtensionMessage({ type: 'getMessageQueue' })).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'promoteQueuedMessage',
+        queueItemId: 'queue-1',
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'cancelQueuedMessage',
+        conversationId: 'conv-1',
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'editQueuedMessage',
+        conversationId: 'conv-1',
+        queueItemId: '',
+      }),
+    ).toBeNull();
   });
 
   it('accepts agent-mode multimedia model selections as explicit model refs', () => {
@@ -498,6 +727,142 @@ describe('webview protocol parser', () => {
   });
 });
 
+function makeTimelineTextItem(input: {
+  itemId: string;
+  sequence: number;
+  content: string;
+}): AgentTurnTimelineItem {
+  return {
+    conversationId: 'conv-1',
+    turnId: 'turn-1',
+    messageId: 'msg-1',
+    itemId: input.itemId,
+    sequence: input.sequence,
+    kind: 'assistant_text',
+    status: 'streaming',
+    payload: {
+      content: input.content,
+      format: 'markdown',
+    },
+    createdAt: 1777392000000 + input.sequence,
+    updatedAt: 1777392000000 + input.sequence,
+  };
+}
+
+function makeTimelineToolItem(input: {
+  itemId: string;
+  sequence: number;
+  toolCallId: string;
+}): AgentTurnTimelineItem {
+  return {
+    conversationId: 'conv-1',
+    turnId: 'turn-1',
+    messageId: 'msg-1',
+    itemId: input.itemId,
+    sequence: input.sequence,
+    kind: 'tool_call',
+    status: 'pending',
+    payload: {
+      toolCall: {
+        id: input.toolCallId,
+        name: 'ReadDocument',
+        arguments: { path: '${A}/book.epub' },
+      },
+    },
+    createdAt: 1777392000000 + input.sequence,
+    updatedAt: 1777392000000 + input.sequence,
+  };
+}
+
+function makeTimelineTaskItem(input: {
+  itemId: string;
+  sequence: number;
+  parentToolCallId: string;
+}): AgentTurnTimelineItem {
+  return {
+    conversationId: 'conv-1',
+    turnId: 'turn-1',
+    messageId: 'msg-1',
+    itemId: input.itemId,
+    sequence: input.sequence,
+    kind: 'task',
+    status: 'pending',
+    parentAnchor: 'tool_call',
+    parentToolCallId: input.parentToolCallId,
+    payload: {
+      workItem: {
+        id: 'task-1',
+        conversationId: 'conv-1',
+        kind: 'tool-background-task',
+        parentMessageId: 'msg-1',
+        parentToolCallId: input.parentToolCallId,
+        title: 'Read document',
+        status: 'processing',
+        progress: 10,
+        createdAt: '2026-04-29T00:00:00.000Z',
+        updatedAt: '2026-04-29T00:00:01.000Z',
+        task: {
+          id: 'task-1',
+          type: 'image',
+          name: 'Read document',
+          prompt: 'Read document',
+          providerId: 'local',
+          providerName: 'Neko',
+          status: 'processing',
+          progress: 10,
+          createdAt: '2026-04-29T00:00:00.000Z',
+          updatedAt: '2026-04-29T00:00:01.000Z',
+        },
+      },
+    },
+    createdAt: 1777392000000 + input.sequence,
+    updatedAt: 1777392000000 + input.sequence,
+  };
+}
+
+function makeParentlessTimelineTaskFixture(input: {
+  itemId: string;
+  sequence: number;
+}): Omit<AgentTurnTimelineItem, 'parentAnchor' | 'parentItemId' | 'parentToolCallId'> {
+  return {
+    conversationId: 'conv-1',
+    turnId: 'turn-1',
+    messageId: 'msg-1',
+    itemId: input.itemId,
+    sequence: input.sequence,
+    kind: 'task',
+    status: 'pending',
+    payload: {
+      workItem: {
+        id: 'task-1',
+        conversationId: 'conv-1',
+        kind: 'tool-background-task',
+        parentMessageId: 'msg-1',
+        parentToolCallId: null,
+        title: 'Read document',
+        status: 'processing',
+        progress: 10,
+        createdAt: '2026-04-29T00:00:00.000Z',
+        updatedAt: '2026-04-29T00:00:01.000Z',
+        task: {
+          id: 'task-1',
+          type: 'image',
+          name: 'Read document',
+          prompt: 'Read document',
+          providerId: 'local',
+          providerName: 'Neko',
+          status: 'processing',
+          progress: 10,
+          createdAt: '2026-04-29T00:00:00.000Z',
+          updatedAt: '2026-04-29T00:00:01.000Z',
+        },
+      },
+    },
+    createdAt: 1777392000000 + input.sequence,
+    updatedAt: 1777392000000 + input.sequence,
+  };
+}
+
 describe('webview protocol projectors', () => {
   it('builds common extension-to-webview bridge messages', () => {
     expect(buildThinkingMessage('conv-1')).toEqual({
@@ -516,6 +881,51 @@ describe('webview protocol projectors', () => {
     expect(buildMessageCancelledMessage('conv-1')).toEqual({
       type: 'messageCancelled',
       conversationId: 'conv-1',
+    });
+    const queueItem = {
+      id: 'queue-1',
+      conversationId: 'conv-1',
+      content: '继续分析',
+      createdAt: 1777392000000,
+      source: 'composer' as const,
+    };
+    const queueSnapshot = {
+      conversationId: 'conv-1',
+      pendingCount: 1,
+      version: 3,
+      items: [queueItem],
+    };
+    expect(buildMessageQueueSnapshotMessage(queueSnapshot)).toEqual({
+      type: 'messageQueueSnapshot',
+      snapshot: queueSnapshot,
+    });
+    expect(
+      buildQueuedMessageEditRequestedMessage({
+        conversationId: 'conv-1',
+        item: queueItem,
+        snapshot: { ...queueSnapshot, pendingCount: 0, version: 4, items: [] },
+      }),
+    ).toEqual({
+      type: 'queuedMessageEditRequested',
+      conversationId: 'conv-1',
+      item: queueItem,
+      snapshot: { conversationId: 'conv-1', pendingCount: 0, version: 4, items: [] },
+    });
+    expect(
+      buildMessageQueueErrorMessage({
+        conversationId: 'conv-1',
+        code: 'stale-item',
+        message: 'Queued message is no longer pending.',
+        queueItemId: 'queue-1',
+        snapshot: queueSnapshot,
+      }),
+    ).toEqual({
+      type: 'messageQueueError',
+      conversationId: 'conv-1',
+      code: 'stale-item',
+      message: 'Queued message is no longer pending.',
+      queueItemId: 'queue-1',
+      snapshot: queueSnapshot,
     });
     expect(
       buildAgentPhaseMessage({

@@ -18,9 +18,7 @@ import {
 } from '@neko-agent/types';
 
 export type AgentMediaTurnRuntimeMessage =
-  | ErrorMessage
-  | MediaTaskCreatedMessage
-  | MediaTaskProgressMessage;
+  ErrorMessage | MediaTaskCreatedMessage | MediaTaskProgressMessage;
 
 export interface AgentMediaTurnTaskEvent<
   TTaskView extends AgentMediaTaskView = AgentMediaTaskView,
@@ -138,6 +136,7 @@ export async function runAgentMediaTurn<
         input.postMessage(
           buildMediaTaskCreatedMessage({
             conversationId: input.conversationId,
+            parentScope: 'turn',
             workItem: projectMediaTaskToWorkItem({
               conversationId: input.conversationId,
               task: event.task,
@@ -158,6 +157,7 @@ export async function runAgentMediaTurn<
         input.postMessage(
           buildMediaTaskProgressMessage({
             conversationId: input.conversationId,
+            parentScope: 'turn',
             workItem: projectMediaTaskToWorkItem({
               conversationId: input.conversationId,
               task: event.task,

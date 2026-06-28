@@ -124,6 +124,51 @@ describe('AgentDashboardWorkItemSource', () => {
     source.dispose();
   });
 
+  it('mirrors task work items from active turn timeline events', async () => {
+    const source = new AgentDashboardWorkItemSource();
+    const workItem = createTaskWorkItem({
+      id: 'tool-timeline-1',
+      kind: 'tool-background-task',
+      status: 'processing',
+      progress: 45,
+      parentToolCallId: 'tool-call-1',
+    });
+
+    source.acceptWebviewMessage({
+      type: 'agentTurnTimeline',
+      conversationId: 'conv-1',
+      turnId: 'turn-1',
+      messageId: 'msg-1',
+      events: [
+        {
+          conversationId: 'conv-1',
+          turnId: 'turn-1',
+          messageId: 'msg-1',
+          itemId: 'tool-background-task-tool-timeline-1',
+          sequence: 2,
+          kind: 'task',
+          status: 'pending',
+          parentAnchor: 'tool_call',
+          parentToolCallId: 'tool-call-1',
+          payload: { workItem },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+
+    const snapshot = await source.getSnapshot();
+    expect(snapshot[0]).toEqual(
+      expect.objectContaining({
+        taskId: 'neko-agent:tool-timeline-1',
+        kind: 'tool-background-task',
+        status: 'running',
+        progress: 45,
+      }),
+    );
+    source.dispose();
+  });
+
   it('maps subagent work items without source actions', async () => {
     const source = new AgentDashboardWorkItemSource();
     source.acceptWebviewMessage({
@@ -238,8 +283,8 @@ function createTaskWorkItem(
     id: overrides.id,
     conversationId: 'conv-1',
     kind: overrides.kind,
-    parentMessageId: null,
-    parentToolCallId: null,
+    parentMessageId: overrides.parentMessageId ?? null,
+    parentToolCallId: overrides.parentToolCallId ?? null,
     title: task.name,
     summary: task.prompt,
     status: task.status,

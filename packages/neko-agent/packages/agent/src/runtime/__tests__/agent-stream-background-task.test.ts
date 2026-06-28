@@ -74,6 +74,27 @@ describe('agent stream background task runtime', () => {
     ).toBeNull();
   });
 
+  it('rejects background task projections without a tool parent', () => {
+    expect(
+      projectAgentStreamBackgroundTaskStart({
+        conversationId: 'conv-1',
+        messageId: 'msg-stream',
+        event: {
+          type: 'tool_result',
+          toolResult: {
+            success: true,
+            data: {
+              backgroundMode: true,
+              taskId: 'task-1',
+              type: 'image',
+              message: 'Generate a cat',
+            },
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
   it('merges progress patches and carries persistable result urls', () => {
     const start = projectAgentStreamBackgroundTaskStart({
       conversationId: 'conv-1',
@@ -109,6 +130,8 @@ describe('agent stream background task runtime', () => {
         },
       },
       persistResultUrls: ['/tmp/cat.png'],
+      parentMessageId: 'msg-stream',
+      parentToolCallId: 'tool-1',
     });
 
     expect(projection).toMatchObject({
@@ -129,6 +152,8 @@ describe('agent stream background task runtime', () => {
           kind: 'tool-background-task',
           status: 'completed',
           progress: 100,
+          parentMessageId: 'msg-stream',
+          parentToolCallId: 'tool-1',
           result: {
             urls: ['webview://cat.png'],
           },

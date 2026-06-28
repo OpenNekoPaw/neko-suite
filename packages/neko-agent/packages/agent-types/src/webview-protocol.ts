@@ -51,6 +51,9 @@ import type {
 import type { DashboardTask } from '@neko/shared/types/dashboard-task';
 import type { AgentWorkflowRun } from './workflow';
 import type { AgentArtifactTransferPayload } from './artifact-transfer';
+import type { AgentTurnTimelineItem, AgentTurnTimelineMessage } from './agent-turn-timeline';
+import { assertValidAgentTurnTimelineMessage } from './agent-turn-timeline';
+export { validateAgentTurnTimelineMessage } from './agent-turn-timeline';
 import type {
   PluginTransferAssetRef,
   PluginTransferContentFormat,
@@ -153,9 +156,27 @@ export interface ConversationOnlyWebviewMessage {
     | 'getTasks'
     | 'getContextTokenCount'
     | 'compressContext'
-    | 'clearActiveSkill'
     | 'getPromptMode';
   conversationId: string;
+}
+
+export interface ClearActiveSkillWebviewMessage {
+  type: 'clearActiveSkill';
+  conversationId: string;
+  recordId?: string;
+  slot?: string;
+  skillName?: string;
+}
+
+export interface GetMessageQueueWebviewMessage {
+  type: 'getMessageQueue';
+  conversationId: string;
+}
+
+export interface QueuedMessageActionWebviewMessage {
+  type: 'promoteQueuedMessage' | 'cancelQueuedMessage' | 'editQueuedMessage';
+  conversationId: string;
+  queueItemId: string;
 }
 
 export interface DeleteConversationWebviewMessage {
@@ -337,7 +358,10 @@ export type WebviewToExtensionMessage =
   | SendMessageWebviewMessage
   | SearchProjectFilesWebviewMessage
   | ConfirmToolWebviewMessage
+  | ClearActiveSkillWebviewMessage
   | ConversationOnlyWebviewMessage
+  | GetMessageQueueWebviewMessage
+  | QueuedMessageActionWebviewMessage
   | DeleteConversationWebviewMessage
   | EmptyWebviewMessage
   | PlanActionWebviewMessage
@@ -376,28 +400,13 @@ export interface ProjectFileMentionInfo {
 }
 
 export type ProjectMentionExtraType =
-  | 'canvas-node'
-  | 'character'
-  | 'scene'
-  | 'asset'
-  | 'media'
-  | 'entity';
+  'canvas-node' | 'character' | 'scene' | 'asset' | 'media' | 'entity';
 
 export type ProjectMentionSource =
-  | 'workspace'
-  | 'asset-library'
-  | 'media-library'
-  | 'entity-graph'
-  | 'story'
-  | 'canvas';
+  'workspace' | 'asset-library' | 'media-library' | 'entity-graph' | 'story' | 'canvas';
 
 export type ProjectMentionMediaType =
-  | 'video'
-  | 'audio'
-  | 'image'
-  | 'sequence'
-  | 'text'
-  | 'document';
+  'video' | 'audio' | 'image' | 'sequence' | 'text' | 'document';
 
 export interface ProjectMentionExtra {
   type: ProjectMentionExtraType;
@@ -461,11 +470,54 @@ export interface MessageCancelledMessage {
   conversationId: string;
 }
 
+export interface AgentQueuedMessageItem {
+  id: string;
+  conversationId: string;
+  content: string;
+  createdAt: number;
+  updatedAt?: number;
+  source: 'composer';
+}
+
+export interface AgentMessageQueueSnapshot {
+  conversationId: string;
+  items: readonly AgentQueuedMessageItem[];
+  pendingCount: number;
+  /** Conversation-local monotonic version used to ignore stale Webview queue snapshots. */
+  version: number;
+}
+
+export type AgentMessageQueueErrorCode =
+  'stale-item' | 'invalid-queue-operation' | 'not-queueable' | 'conversation-not-found';
+
 export interface MessageQueuedMessage {
   type: 'messageQueued';
   content?: string;
   conversationId: string;
   pendingCount?: number;
+  item?: AgentQueuedMessageItem;
+  snapshot?: AgentMessageQueueSnapshot;
+}
+
+export interface MessageQueueSnapshotMessage {
+  type: 'messageQueueSnapshot';
+  snapshot: AgentMessageQueueSnapshot;
+}
+
+export interface QueuedMessageEditRequestedMessage {
+  type: 'queuedMessageEditRequested';
+  conversationId: string;
+  item: AgentQueuedMessageItem;
+  snapshot: AgentMessageQueueSnapshot;
+}
+
+export interface MessageQueueErrorMessage {
+  type: 'messageQueueError';
+  conversationId: string;
+  code: AgentMessageQueueErrorCode;
+  message: string;
+  queueItemId?: string;
+  snapshot?: AgentMessageQueueSnapshot;
 }
 
 export interface AgentPhaseMessage {
@@ -745,6 +797,19 @@ export interface SkillInjectionMessage {
   skillName: string;
   allowedTools?: string[];
   conversationId: string;
+  lifecycle?: {
+    records: Array<{
+      id: string;
+      skillName: string;
+      slot: string;
+      owner: string;
+      clearable: boolean;
+      lockedReason?: string;
+      expires?: string;
+      status?: string;
+      allowedTools?: string[];
+    }>;
+  };
 }
 
 export interface ContextTokenCountMessage {
@@ -768,12 +833,18 @@ export interface CompressionErrorMessage {
 export interface MediaTaskCreatedMessage {
   type: 'mediaTaskCreated';
   conversationId: string;
+  messageId?: string;
+  toolCallId?: string;
+  parentScope?: 'turn';
   workItem: TaskWorkItem;
 }
 
 export interface MediaTaskProgressMessage {
   type: 'mediaTaskProgress';
   conversationId: string;
+  messageId?: string;
+  toolCallId?: string;
+  parentScope?: 'turn';
   workItem: TaskWorkItem;
 }
 
@@ -811,6 +882,8 @@ export interface AmbientCanvasUpdateMessage {
   nodes?: Array<{ nodeId: string; type: string; summary: string }>;
 }
 
+export type { AgentTurnTimelineMessage };
+
 export type ExtensionToWebviewMessage =
   | ThinkingMessage
   | StreamTextMessage
@@ -818,6 +891,9 @@ export type ExtensionToWebviewMessage =
   | StreamThinkingMessage
   | MessageCancelledMessage
   | MessageQueuedMessage
+  | MessageQueueSnapshotMessage
+  | QueuedMessageEditRequestedMessage
+  | MessageQueueErrorMessage
   | AgentPhaseMessage
   | AgentStateSnapshotMessage
   | ErrorMessage
@@ -865,7 +941,8 @@ export type ExtensionToWebviewMessage =
   | ExternalMessage
   | PrefillInputMessage
   | InjectContextMessage
-  | AmbientCanvasUpdateMessage;
+  | AmbientCanvasUpdateMessage
+  | AgentTurnTimelineMessage;
 
 export type MessageOfType<T extends ExtensionToWebviewMessage['type']> = Extract<
   ExtensionToWebviewMessage,
@@ -908,7 +985,6 @@ const CONVERSATION_ONLY_MESSAGE_TYPES: readonly ConversationOnlyWebviewMessage['
   'getTasks',
   'getContextTokenCount',
   'compressContext',
-  'clearActiveSkill',
   'getPromptMode',
 ];
 const EMPTY_MESSAGE_TYPES: readonly EmptyWebviewMessage['type'][] = [
@@ -940,11 +1016,19 @@ const TASK_ACTION_MESSAGE_TYPES: readonly TaskActionWebviewMessage['type'][] = [
   'retryTask',
   'viewTaskResult',
 ];
+const QUEUED_MESSAGE_ACTION_TYPES: readonly QueuedMessageActionWebviewMessage['type'][] = [
+  'promoteQueuedMessage',
+  'cancelQueuedMessage',
+  'editQueuedMessage',
+];
 export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'sendMessage',
   'searchProjectFiles',
   'confirmTool',
+  'clearActiveSkill',
   ...CONVERSATION_ONLY_MESSAGE_TYPES,
+  'getMessageQueue',
+  ...QUEUED_MESSAGE_ACTION_TYPES,
   ...EMPTY_MESSAGE_TYPES,
   ...PLAN_ACTION_MESSAGE_TYPES,
   ...PLAN_STEP_ACTION_MESSAGE_TYPES,
@@ -1019,6 +1103,27 @@ export function buildStreamCompleteMessage(input: {
   };
 }
 
+export function buildAgentTurnTimelineMessage(input: {
+  readonly conversationId: string;
+  readonly turnId: string;
+  readonly messageId: string;
+  readonly events: readonly AgentTurnTimelineItem[];
+  readonly finalContentBlocks?: readonly ContentBlock[];
+}): AgentTurnTimelineMessage {
+  const message: AgentTurnTimelineMessage = {
+    type: 'agentTurnTimeline',
+    conversationId: input.conversationId,
+    turnId: input.turnId,
+    messageId: input.messageId,
+    events: input.events,
+    ...(input.finalContentBlocks && input.finalContentBlocks.length > 0
+      ? { finalContentBlocks: input.finalContentBlocks }
+      : {}),
+  };
+  assertValidAgentTurnTimelineMessage(message);
+  return message;
+}
+
 export function buildErrorMessage(input: {
   readonly conversationId: string;
   readonly message?: string;
@@ -1036,6 +1141,47 @@ export function buildHistoryClearedMessage(conversationId: string): HistoryClear
 
 export function buildMessageCancelledMessage(conversationId: string): MessageCancelledMessage {
   return { type: 'messageCancelled', conversationId };
+}
+
+export function buildMessageQueueSnapshotMessage(
+  snapshot: AgentMessageQueueSnapshot,
+): MessageQueueSnapshotMessage {
+  return {
+    type: 'messageQueueSnapshot',
+    snapshot: cloneAgentMessageQueueSnapshot(snapshot),
+  };
+}
+
+export function buildQueuedMessageEditRequestedMessage(input: {
+  readonly conversationId: string;
+  readonly item: AgentQueuedMessageItem;
+  readonly snapshot: AgentMessageQueueSnapshot;
+}): QueuedMessageEditRequestedMessage {
+  return {
+    type: 'queuedMessageEditRequested',
+    conversationId: input.conversationId,
+    item: { ...input.item },
+    snapshot: cloneAgentMessageQueueSnapshot(input.snapshot),
+  };
+}
+
+export function buildMessageQueueErrorMessage(input: {
+  readonly conversationId: string;
+  readonly code: AgentMessageQueueErrorCode;
+  readonly message: string;
+  readonly queueItemId?: string;
+  readonly snapshot?: AgentMessageQueueSnapshot;
+}): MessageQueueErrorMessage {
+  return {
+    type: 'messageQueueError',
+    conversationId: input.conversationId,
+    code: input.code,
+    message: input.message,
+    ...(input.queueItemId !== undefined ? { queueItemId: input.queueItemId } : {}),
+    ...(input.snapshot !== undefined
+      ? { snapshot: cloneAgentMessageQueueSnapshot(input.snapshot) }
+      : {}),
+  };
 }
 
 export function buildAgentPhaseMessage(input: {
@@ -1192,10 +1338,16 @@ export function buildTaskRemovedMessage(input: {
 export function buildMediaTaskCreatedMessage(input: {
   readonly conversationId: string;
   readonly workItem: TaskWorkItem;
+  readonly messageId?: string;
+  readonly toolCallId?: string;
+  readonly parentScope?: 'turn';
 }): MediaTaskCreatedMessage {
   return {
     type: 'mediaTaskCreated',
     conversationId: input.conversationId,
+    ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
+    ...(input.toolCallId !== undefined ? { toolCallId: input.toolCallId } : {}),
+    ...(input.parentScope !== undefined ? { parentScope: input.parentScope } : {}),
     workItem: input.workItem,
   };
 }
@@ -1203,10 +1355,16 @@ export function buildMediaTaskCreatedMessage(input: {
 export function buildMediaTaskProgressMessage(input: {
   readonly conversationId: string;
   readonly workItem: TaskWorkItem;
+  readonly messageId?: string;
+  readonly toolCallId?: string;
+  readonly parentScope?: 'turn';
 }): MediaTaskProgressMessage {
   return {
     type: 'mediaTaskProgress',
     conversationId: input.conversationId,
+    ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
+    ...(input.toolCallId !== undefined ? { toolCallId: input.toolCallId } : {}),
+    ...(input.parentScope !== undefined ? { parentScope: input.parentScope } : {}),
     workItem: input.workItem,
   };
 }
@@ -1245,6 +1403,31 @@ export function buildSubAgentEventMessage(input: {
   };
 }
 
+function cloneAgentMessageQueueSnapshot(
+  snapshot: AgentMessageQueueSnapshot,
+): AgentMessageQueueSnapshot {
+  return {
+    conversationId: snapshot.conversationId,
+    pendingCount: snapshot.pendingCount,
+    version: snapshot.version,
+    items: snapshot.items.map((item) => ({ ...item })),
+  };
+}
+
+function parseClearActiveSkillMessage(
+  raw: Record<string, unknown>,
+): ClearActiveSkillWebviewMessage | null {
+  const conversationId = requiredString(raw.conversationId);
+  if (!conversationId) return null;
+  return {
+    type: 'clearActiveSkill',
+    conversationId,
+    ...(typeof raw.recordId === 'string' && raw.recordId ? { recordId: raw.recordId } : {}),
+    ...(typeof raw.slot === 'string' && raw.slot ? { slot: raw.slot } : {}),
+    ...(typeof raw.skillName === 'string' && raw.skillName ? { skillName: raw.skillName } : {}),
+  };
+}
+
 export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtensionMessage | null {
   if (!isRecord(raw) || typeof raw.type !== 'string') return null;
 
@@ -1258,6 +1441,16 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
   if (isConversationOnlyMessageType(type)) {
     const conversationId = requiredString(raw.conversationId);
     return conversationId ? { type, conversationId } : null;
+  }
+  if (type === 'clearActiveSkill') {
+    return parseClearActiveSkillMessage(raw);
+  }
+  if (type === 'getMessageQueue') {
+    const conversationId = requiredString(raw.conversationId);
+    return conversationId ? { type, conversationId } : null;
+  }
+  if (isQueuedMessageActionType(type)) {
+    return parseQueuedMessageActionMessage(type, raw);
   }
   if (isPlanActionMessageType(type)) {
     return parsePlanActionMessage(type, raw);
@@ -1608,6 +1801,15 @@ function parseTaskActionMessage(
   const taskId = requiredString(raw.taskId);
   const conversationId = requiredString(raw.conversationId);
   return taskId && conversationId ? { type, taskId, conversationId } : null;
+}
+
+function parseQueuedMessageActionMessage(
+  type: QueuedMessageActionWebviewMessage['type'],
+  raw: Record<string, unknown>,
+): QueuedMessageActionWebviewMessage | null {
+  const conversationId = requiredString(raw.conversationId);
+  const queueItemId = requiredString(raw.queueItemId);
+  return conversationId && queueItemId ? { type, conversationId, queueItemId } : null;
 }
 
 function parseOpenFileMessage(raw: Record<string, unknown>): OpenFileWebviewMessage | null {
@@ -2651,6 +2853,12 @@ function isPlanStepActionMessageType(value: string): value is PlanStepActionWebv
 
 function isTaskActionMessageType(value: string): value is TaskActionWebviewMessage['type'] {
   return includesString(TASK_ACTION_MESSAGE_TYPES, value);
+}
+
+function isQueuedMessageActionType(
+  value: string,
+): value is QueuedMessageActionWebviewMessage['type'] {
+  return includesString(QUEUED_MESSAGE_ACTION_TYPES, value);
 }
 
 function isPromptMode(value: unknown): value is SetPromptModeWebviewMessage['mode'] {

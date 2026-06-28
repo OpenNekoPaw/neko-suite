@@ -8,7 +8,7 @@ import type {
   Message,
   ModelRef,
 } from '@neko-agent/types';
-import type { Skill, SkillInjection } from '@neko/shared';
+import type { Skill, SkillInjection, SkillLifecycleProjection } from '@neko/shared';
 import type { AgentEvent } from '../session/types';
 import type { IRuntimeTaskManager } from '../task';
 import {
@@ -59,6 +59,9 @@ export interface AgentTurnRuntimeServices<THistoryMessage> {
   readonly getBaseSystemPrompt: (conversationId: string) => string;
   readonly isPlanMode: (conversationId: string) => boolean;
   readonly getActiveSkillState?: (conversationId: string) => AgentTurnActiveSkillState | undefined;
+  readonly getSkillLifecycleProjection?: (
+    conversationId: string,
+  ) => SkillLifecycleProjection | undefined;
   readonly taskManager?: IRuntimeTaskManager;
   readonly workflow?: AgentWorkflowIdentity;
 }
@@ -196,6 +199,9 @@ export function buildAgentTurnRuntimeInput<
 > {
   const contextAdapters = createAgentTurnHostContextAdapters(input.host);
   const activeSkill = input.runtime.getActiveSkillState?.(input.conversationId);
+  const skillLifecycleProjection = input.runtime.getSkillLifecycleProjection?.(
+    input.conversationId,
+  );
 
   return {
     conversationId: input.conversationId,
@@ -211,6 +217,9 @@ export function buildAgentTurnRuntimeInput<
     imageAttachments: input.imageAttachments,
     executionOverrides: input.executionOverrides,
     activeSkill,
+    ...(skillLifecycleProjection
+      ? { skillLifecycle: { projection: skillLifecycleProjection } }
+      : {}),
     settings: {
       customSystemPrompt: input.settings.customSystemPrompt,
       executionMode: input.settings.executionMode,

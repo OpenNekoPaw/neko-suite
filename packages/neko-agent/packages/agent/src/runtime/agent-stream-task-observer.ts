@@ -80,7 +80,7 @@ export interface StartAgentStreamBackgroundTaskObserverInput<
   readonly conversationId: string;
   readonly messageId: string;
   readonly event: AgentEvent;
-  readonly postMessage: (message: TaskCreatedMessage | TaskUpdatedMessage) => void;
+  readonly postMessage: (message: TaskCreatedMessage | TaskUpdatedMessage) => void | Promise<void>;
   readonly observeProgress?: (
     input: ObserveAgentStreamBackgroundTaskProgressInput<TSourceTask, TDeliveryPlan>,
   ) => void | (() => void);
@@ -128,7 +128,7 @@ export function startAgentStreamBackgroundTaskObserver<
   });
   if (!start) return { started: false };
 
-  input.postMessage(start.message);
+  void input.postMessage(start.message);
 
   const observeProgress = input.observeProgress;
   if (!observeProgress) {
@@ -156,7 +156,7 @@ export function startAgentStreamBackgroundTaskObserver<
     createTaskView: (task) => input.createProgressDelivery(task, context),
     onIgnoredConversationTask: input.onIgnoredConversationTask,
     onProgressDeliveryError: input.onProgressDeliveryError,
-    onTaskProgress: ({ conversationId, task, sourceTask }) => {
+    onTaskProgress: async ({ conversationId, task, sourceTask }) => {
       if (conversationId !== input.conversationId) {
         input.onIgnoredConversationTask?.({
           taskId: start.taskId,
@@ -170,10 +170,12 @@ export function startAgentStreamBackgroundTaskObserver<
         conversationId: input.conversationId,
         baseTask: start.task,
         progress: task.progress,
+        parentMessageId: input.messageId,
+        parentToolCallId: start.toolCallId,
         deliveryPlan: task.deliveryPlan,
         persistResultUrls: task.persistResultUrls,
       });
-      input.postMessage(projection.message);
+      await input.postMessage(projection.message);
 
       if (projection.persistResultUrls) {
         input.persistResultUrls?.({

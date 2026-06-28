@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentStreamProcessor } from '../agentStreamProcessor';
+import type { AgentTurnTimelineMessage } from '@neko-agent/types';
 import type { EntityMemoryContribution } from '@neko/shared';
 
 vi.mock('vscode', () => ({
@@ -46,6 +47,24 @@ function createMockCallbacks() {
     messageId: 'assistant-stream',
     onPhaseChange: vi.fn(),
   };
+}
+
+function getPostedTimelineMessages(
+  webview: ReturnType<typeof createMockWebview>,
+): AgentTurnTimelineMessage[] {
+  return webview.postMessage.mock.calls
+    .map(([message]) => message)
+    .filter((message): message is AgentTurnTimelineMessage => message.type === 'agentTurnTimeline');
+}
+
+function getPostedTimelineToolResult(
+  webview: ReturnType<typeof createMockWebview>,
+  toolCallId: string,
+) {
+  return getPostedTimelineMessages(webview)
+    .flatMap((message) => message.events)
+    .filter((item) => item.kind === 'tool_call' && item.payload.toolCall.id === toolCallId)
+    .at(-1)?.payload.toolCall.result;
 }
 
 /**
@@ -95,9 +114,12 @@ describe('AgentStreamProcessor', () => {
       expect(result.contentBlocks[0]!.thinking).toBe('Let me think... about this.');
       expect(callbacks.onPhaseChange).toHaveBeenCalledWith('thinking', undefined);
 
-      // Should have sent streamThinking messages
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'streamThinking', content: 'Let me think...' }),
+      expect(getPostedTimelineMessages(webview)[0]?.events[0]).toMatchObject({
+        kind: 'thinking',
+        payload: { content: 'Let me think...' },
+      });
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'streamThinking' }),
       );
     });
 
@@ -158,8 +180,7 @@ describe('AgentStreamProcessor', () => {
       const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
       const composite = result.contentBlocks.find((block) => block.type === 'composite')?.composite;
       const contribution = composite?.extensions?.['neko.entityMemoryContributionPayload'] as
-        | EntityMemoryContribution
-        | undefined;
+        EntityMemoryContribution | undefined;
 
       expect(contribution).toMatchObject({
         contributionId: 'character-analysis-opening',
@@ -253,8 +274,21 @@ describe('AgentStreamProcessor', () => {
         error: undefined,
       });
 
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'toolResult', toolCallId: 'tc-1', success: true }),
+      expect(getPostedTimelineMessages(webview).flatMap((message) => message.events)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool_call',
+            payload: {
+              toolCall: expect.objectContaining({
+                id: 'tc-1',
+                result: expect.objectContaining({ success: true, data: 'file content' }),
+              }),
+            },
+          }),
+        ]),
+      );
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'toolResult' }),
       );
     });
 
@@ -323,16 +357,13 @@ describe('AgentStreamProcessor', () => {
           }),
         },
       ]);
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'toolResultBackfill',
-          toolCallId: 'tc-memory',
-          dataPatch: expect.objectContaining({
-            entityMemoryAutomation: expect.objectContaining({
-              contributionId: 'contribution-page-1',
-            }),
-          }),
+      expect(getPostedTimelineToolResult(webview, 'tc-memory')?.data).toMatchObject({
+        entityMemoryAutomation: expect.objectContaining({
+          contributionId: 'contribution-page-1',
         }),
+      });
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'toolResultBackfill' }),
       );
     });
 
@@ -417,20 +448,17 @@ describe('AgentStreamProcessor', () => {
           ],
         },
       });
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'toolResultBackfill',
-          toolCallId: 'tc-memory',
-          artifacts: [
-            {
-              type: 'artifactExecutionSummary',
-              summary: expect.objectContaining({
-                artifactId: 'comic-storyboard-plan',
-                status: 'succeeded',
-              }),
-            },
-          ],
-        }),
+      expect(getPostedTimelineToolResult(webview, 'tc-memory')?.artifacts).toEqual([
+        {
+          type: 'artifactExecutionSummary',
+          summary: expect.objectContaining({
+            artifactId: 'comic-storyboard-plan',
+            status: 'succeeded',
+          }),
+        },
+      ]);
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'toolResultBackfill' }),
       );
     });
 
@@ -630,19 +658,28 @@ describe('AgentStreamProcessor', () => {
         '/tmp/page-1.jpg',
         'neko-agent.stream-tool-result',
       );
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'toolCall',
-          toolCallId: 'tc-read-image',
-          arguments: {
-            images: [
-              {
-                label: 'Page 1',
-                path: 'webview-uri:/tmp/page-1.jpg',
-              },
-            ],
-          },
-        }),
+      expect(getPostedTimelineMessages(webview).flatMap((message) => message.events)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool_call',
+            payload: {
+              toolCall: expect.objectContaining({
+                id: 'tc-read-image',
+                arguments: {
+                  images: [
+                    {
+                      label: 'Page 1',
+                      path: 'webview-uri:/tmp/page-1.jpg',
+                    },
+                  ],
+                },
+              }),
+            },
+          }),
+        ]),
+      );
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'toolCall' }),
       );
     });
 
@@ -741,36 +778,44 @@ describe('AgentStreamProcessor', () => {
         materializedPath,
         'neko-agent.document-resource',
       );
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'toolResult',
-          data: expect.objectContaining({
-            images: [
-              expect.objectContaining({
-                renderUri: 'vscode-webview://page-1.jpg',
-                src: 'vscode-webview://page-1.jpg',
-                resourceRef: archiveRef,
-                documentImage: expect.objectContaining({
-                  renderUri: 'vscode-webview://page-1.jpg',
-                  src: 'vscode-webview://page-1.jpg',
-                  resourceRef: archiveRef,
-                }),
-              }),
-            ],
+      expect(getPostedTimelineToolResult(webview, 'tc-read-doc-image')?.data).toMatchObject({
+        images: [
+          expect.objectContaining({
+            renderUri: 'vscode-webview://page-1.jpg',
+            src: 'vscode-webview://page-1.jpg',
+            resourceRef: archiveRef,
+            documentImage: expect.objectContaining({
+              renderUri: 'vscode-webview://page-1.jpg',
+              src: 'vscode-webview://page-1.jpg',
+              resourceRef: archiveRef,
+            }),
           }),
-        }),
-      );
+        ],
+      });
       expect(JSON.stringify(webview.postMessage.mock.calls)).not.toContain(materializedPath);
       expect(dashboardWorkItems.acceptWebviewMessage).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'toolResult',
-          data: expect.objectContaining({
-            images: [
-              expect.not.objectContaining({
-                renderUri: expect.any(String),
-              }),
-            ],
-          }),
+          type: 'agentTurnTimeline',
+          events: expect.arrayContaining([
+            expect.objectContaining({
+              kind: 'tool_call',
+              payload: {
+                toolCall: expect.objectContaining({
+                  result: {
+                    data: expect.objectContaining({
+                      images: [
+                        expect.not.objectContaining({
+                          renderUri: expect.any(String),
+                        }),
+                      ],
+                    }),
+                    success: true,
+                    error: undefined,
+                  },
+                }),
+              },
+            }),
+          ]),
         }),
       );
     });
@@ -784,6 +829,14 @@ describe('AgentStreamProcessor', () => {
       });
       const imagePath = '/tmp/page-1.jpg';
       const events = toAsyncIterable([
+        {
+          type: 'tool_call',
+          toolCall: {
+            id: 'tc-read-image',
+            name: 'ReadImage',
+            arguments: {},
+          },
+        },
         {
           type: 'tool_result',
           toolResult: {
@@ -832,34 +885,48 @@ describe('AgentStreamProcessor', () => {
         imagePath,
         'neko-agent.stream-tool-result',
       );
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'toolResult',
-          attachments: [
-            expect.objectContaining({
-              path: `webview-uri:${imagePath}`,
-              assetRef: expect.objectContaining({
-                uri: `webview-uri:${imagePath}`,
-              }),
-            }),
-          ],
-          perceptionCards: [
-            expect.objectContaining({
-              perceptual: expect.objectContaining({
-                keyframeRefs: [
-                  expect.objectContaining({
+      const timelineTool = getPostedTimelineMessages(webview)
+        .flatMap((message) => message.events)
+        .filter((item) => item.kind === 'tool_call' && item.payload.toolCall.id === 'tc-read-image')
+        .at(-1);
+      expect(timelineTool).toMatchObject({
+        payload: {
+          toolCall: {
+            result: {
+              attachments: [
+                expect.objectContaining({
+                  path: `webview-uri:${imagePath}`,
+                  assetRef: expect.objectContaining({
                     uri: `webview-uri:${imagePath}`,
                   }),
-                ],
-              }),
-            }),
-          ],
-        }),
+                }),
+              ],
+              perceptionCards: [
+                expect.objectContaining({
+                  perceptual: expect.objectContaining({
+                    keyframeRefs: [
+                      expect.objectContaining({
+                        uri: `webview-uri:${imagePath}`,
+                      }),
+                    ],
+                  }),
+                }),
+              ],
+            },
+          },
+        },
+      });
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'toolResult' }),
       );
     });
 
     it('should handle tool_confirmation events', async () => {
       const events = toAsyncIterable([
+        {
+          type: 'tool_call',
+          toolCall: { id: 'tc-1', name: 'write_file', arguments: {} },
+        },
         {
           type: 'tool_confirmation',
           toolConfirmation: {
@@ -873,12 +940,22 @@ describe('AgentStreamProcessor', () => {
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'toolConfirmation',
-          toolName: 'write_file',
-          action: 'confirm',
-        }),
+      expect(getPostedTimelineMessages(webview).flatMap((message) => message.events)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool_call',
+            payload: {
+              toolCall: expect.objectContaining({
+                id: 'tc-1',
+                name: 'write_file',
+                pendingConfirmation: true,
+              }),
+            },
+          }),
+        ]),
+      );
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'toolConfirmation' }),
       );
     });
 
@@ -894,8 +971,16 @@ describe('AgentStreamProcessor', () => {
       expect(result.hasError).toBe(true);
       expect(result.errorMessage).toBe('Rate limited');
       expect(callbacks.onPhaseChange).toHaveBeenCalledWith('idle', undefined);
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'error', message: 'Rate limited' }),
+      expect(getPostedTimelineMessages(webview).flatMap((message) => message.events)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'error',
+            payload: { message: 'Rate limited' },
+          }),
+        ]),
+      );
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'error' }),
       );
     });
 
@@ -1016,6 +1101,74 @@ describe('AgentStreamProcessor', () => {
       expect(result.contentBlocks).toHaveLength(4);
     });
 
+    it('posts anchored turn timeline messages without non-timeline stream and tool display messages', async () => {
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          { type: 'text', content: 'Before tool.' },
+          {
+            type: 'tool_call',
+            toolCall: { id: 'tc-1', name: 'read', arguments: { path: 'a.md' } },
+          },
+          {
+            type: 'tool_result',
+            toolResult: { toolCallId: 'tc-1', success: true, data: { text: 'A' } },
+          },
+          { type: 'text_delta', content: ' After tool.' },
+          { type: 'done' },
+        ]),
+        callbacks,
+      );
+
+      const posted = webview.postMessage.mock.calls.map(([message]) => message);
+      expect(posted.map((message) => message.type)).toEqual([
+        'agentTurnTimeline',
+        'agentTurnTimeline',
+        'agentTurnTimeline',
+        'agentTurnTimeline',
+        'agentTurnTimeline',
+        'streamComplete',
+      ]);
+
+      const timelineMessages = posted.filter(
+        (message): message is AgentTurnTimelineMessage => message.type === 'agentTurnTimeline',
+      );
+      expect(timelineMessages.map((message) => message.events.map((item) => item.itemId))).toEqual([
+        ['text-1'],
+        ['text-1', 'tool-tc-1'],
+        ['tool-tc-1'],
+        ['text-3'],
+        ['text-3'],
+      ]);
+      expect(
+        timelineMessages[1]!.events.map((item) => ({
+          itemId: item.itemId,
+          sequence: item.sequence,
+          status: item.status,
+        })),
+      ).toEqual([
+        { itemId: 'text-1', sequence: 1, status: 'complete' },
+        { itemId: 'tool-tc-1', sequence: 2, status: 'pending' },
+      ]);
+      expect(timelineMessages[2]!.events[0]).toMatchObject({
+        itemId: 'tool-tc-1',
+        sequence: 2,
+        status: 'succeeded',
+        payload: {
+          toolCall: {
+            id: 'tc-1',
+            result: { success: true, data: { text: 'A' } },
+          },
+        },
+      });
+      expect(timelineMessages[4]!.finalContentBlocks?.map((block) => block.type)).toEqual([
+        'text',
+        'tool_call',
+        'text',
+      ]);
+    });
+
     it('should send full background task views for task progress updates', async () => {
       let progressCallback: ((task: any) => Promise<void>) | undefined;
       const unsubscribe = vi.fn();
@@ -1034,6 +1187,10 @@ describe('AgentStreamProcessor', () => {
         webview as any,
         'conv-1',
         toAsyncIterable([
+          {
+            type: 'tool_call',
+            toolCall: { id: 'tc-media', name: 'GenerateVideo', arguments: {} },
+          },
           {
             type: 'tool_result',
             toolResult: {
@@ -1064,24 +1221,23 @@ describe('AgentStreamProcessor', () => {
         request: { prompt: 'Generate a city flythrough', metadata: { conversationId: 'conv-1' } },
       });
 
-      expect(webview.postMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'taskUpdated',
-          conversationId: 'conv-1',
-          workItem: expect.objectContaining({
-            id: 'task-media',
-            kind: 'tool-background-task',
-            status: 'processing',
-            progress: 45,
-            task: expect.objectContaining({
-              type: 'video',
-              name: 'Generate a city flythrough',
-              prompt: 'Generate a city flythrough',
-              providerId: 'runway',
-              providerName: 'runway',
-            }),
+      expect(getPostedTimelineMessages(webview).flatMap((message) => message.events)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'task',
+            parentAnchor: 'tool_call',
+            parentToolCallId: 'tc-media',
+            payload: {
+              workItem: expect.objectContaining({
+                id: 'task-media',
+                kind: 'tool-background-task',
+              }),
+            },
           }),
-        }),
+        ]),
+      );
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'taskUpdated' }),
       );
     });
 

@@ -30,6 +30,7 @@ import type {
   AgentHistoryWithToolContextMessage,
   IRuntimeTaskManager,
 } from '@neko/agent';
+import type { SkillLifecycleProjection } from '@neko/shared';
 import type { IAgentManager } from '../../ai/agentManager';
 import type { IAgentRunner } from '../../ai/agentRunner';
 import type { IAgentContext } from '../../ai/agentContext';
@@ -53,6 +54,7 @@ export interface AgentTurnBridgeDeps {
   platform?: Platform;
   taskManager?: IRuntimeTaskManager;
   getActiveSkillState?: (conversationId: string) => ActiveSkillState | undefined;
+  getSkillLifecycleProjection?: (conversationId: string) => SkillLifecycleProjection | undefined;
   accountAiCatalog?: AccountAiCatalogCache;
   streamProcessor: AgentStreamProcessor;
   onPhaseChange: (event: {
@@ -108,6 +110,8 @@ export class AgentTurnBridge {
           getOrCreate: (id) => this.deps.agentManager!.getOrCreate(id),
           loadHistoryWithContext: (id, history) =>
             this.deps.agentManager!.loadHistoryWithContext(id, history),
+          nextMessageQueueSnapshotVersion: (id) =>
+            this.deps.agentManager!.nextMessageQueueSnapshotVersion(id),
         }
       : undefined;
 
@@ -146,6 +150,7 @@ export class AgentTurnBridge {
           getBaseSystemPrompt: this.deps.getSystemPrompt,
           isPlanMode: this.deps.isPlanMode,
           getActiveSkillState: this.deps.getActiveSkillState,
+          getSkillLifecycleProjection: this.deps.getSkillLifecycleProjection,
           ...(this.deps.taskManager ? { taskManager: this.deps.taskManager } : {}),
         },
         host: {

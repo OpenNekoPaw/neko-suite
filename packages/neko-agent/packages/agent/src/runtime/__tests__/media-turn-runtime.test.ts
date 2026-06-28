@@ -52,8 +52,7 @@ describe('media turn runtime', () => {
   it('posts task created and progress messages from execution callbacks', async () => {
     const postMessage = vi.fn();
     let executionInput:
-      | AgentMediaTurnExecutionInput<typeof task, { readonly id: string }>
-      | undefined;
+      AgentMediaTurnExecutionInput<typeof task, { readonly id: string }> | undefined;
 
     const result = await runAgentMediaTurn<typeof task, { readonly id: string }>({
       conversationId: 'conv-1',
@@ -84,6 +83,7 @@ describe('media turn runtime', () => {
     expect(postMessage).toHaveBeenCalledWith({
       type: 'mediaTaskCreated',
       conversationId: 'conv-1',
+      parentScope: 'turn',
       workItem: projectMediaTaskToWorkItem({
         conversationId: 'conv-1',
         task,
@@ -92,6 +92,7 @@ describe('media turn runtime', () => {
     expect(postMessage).toHaveBeenCalledWith({
       type: 'mediaTaskProgress',
       conversationId: 'conv-1',
+      parentScope: 'turn',
       workItem: projectMediaTaskToWorkItem({
         conversationId: 'conv-1',
         task: { ...task, status: 'completed', progress: 100 },
