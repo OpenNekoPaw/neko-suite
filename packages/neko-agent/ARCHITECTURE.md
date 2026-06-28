@@ -200,6 +200,20 @@ React 对话界面，通过 postMessage 与 Extension Host 通信。117 个源�
 | `config/` | 预设配置（providers/prompts/MCP servers） |
 | `i18n/` | 国际化 |
 
+### Agent Webview 回合时间线
+
+Agent Webview 的活动回合使用 `agentTurnTimeline` 作为实时展示顺序的权威来源。Runtime/Extension 为同一回合生成稳定的 `turnId`、`messageId`、`itemId` 和单调 `sequence`，并通过 `@neko-agent/types` 中的 timeline DTO 传递文本、thinking、工具、后台任务、媒体、结构化内容和错误事件。
+
+活动回合内的展示规则：
+
+- 流式 Markdown 按当前 timeline 游标即时渲染；工具、任务、媒体、错误等结构事件会关闭前一个文本段，后续文本创建新的 response 段。
+- 工具调用、结果、确认、失败和 backfill 更新同一个 tool timeline item；未知 `toolCallId` 或未知父锚点必须 fail-visible，不能猜测最后一条 assistant message。
+- 工具触发的后台任务和媒体任务通过 `parentToolCallId` 锚定到来源工具；真正无工具来源的媒体/任务必须显式标记为 turn-level。
+- `streamComplete.contentBlocks` 只作为完成历史与 reload 快照保存，不再重新拥有活动回合的可视顺序。
+- Webview handler 将 timeline 投影成普通 assistant `Message.contentBlocks` 供现有 `MessageList`、`ContentBlockItem`、`ToolCallDisplay`、`TaskCard`、`RichContentRenderer` 和 `ProcessRecordsGroup` 渲染；完成历史仍可直接从持久化 `contentBlocks` 渲染。
+
+这个时间线是 `neko-agent` 本地 Extension/Webview 边界内的展示契约，不是跨包通用 timeline 框架。只有当其他包出现相同的回合、工具、异步任务生命周期语义时，才考虑提取公共抽象。
+
 ### @neko/cli — 命令行界面
 
 独立可执行 CLI，直接复用 `@neko/agent` + `@neko/platform`。52 个源文件。

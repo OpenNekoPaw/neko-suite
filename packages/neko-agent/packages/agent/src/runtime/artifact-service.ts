@@ -8,6 +8,7 @@ import type {
 import {
   createArtifactIndexStore,
   createNekoPaths,
+  createCreationArtifactPaths,
   parseDraft,
   parseExecutionPlan,
   parseTask,
@@ -16,7 +17,7 @@ import {
   serializeTask,
   type ArtifactIndexEntry,
   type IArtifactIndexStore,
-  type INekoPaths,
+  type ICreationArtifactPaths,
 } from '../workspace';
 import { getLogger } from '../utils/logger';
 
@@ -47,9 +48,7 @@ export interface ArtifactRecord<K extends ArtifactKind = ArtifactKind> extends A
 }
 
 export type AnyArtifactRecord =
-  | ArtifactRecord<'draft'>
-  | ArtifactRecord<'plan'>
-  | ArtifactRecord<'task'>;
+  ArtifactRecord<'draft'> | ArtifactRecord<'plan'> | ArtifactRecord<'task'>;
 
 export interface ArtifactWriteInput<K extends ArtifactKind = ArtifactKind> {
   readonly kind: K;
@@ -58,9 +57,7 @@ export interface ArtifactWriteInput<K extends ArtifactKind = ArtifactKind> {
 }
 
 export type AnyArtifactWriteInput =
-  | ArtifactWriteInput<'draft'>
-  | ArtifactWriteInput<'plan'>
-  | ArtifactWriteInput<'task'>;
+  ArtifactWriteInput<'draft'> | ArtifactWriteInput<'plan'> | ArtifactWriteInput<'task'>;
 
 export interface ArtifactObservedInput<K extends ArtifactKind = ArtifactKind> {
   readonly kind: K;
@@ -70,9 +67,7 @@ export interface ArtifactObservedInput<K extends ArtifactKind = ArtifactKind> {
 }
 
 export type AnyArtifactObservedInput =
-  | ArtifactObservedInput<'draft'>
-  | ArtifactObservedInput<'plan'>
-  | ArtifactObservedInput<'task'>;
+  ArtifactObservedInput<'draft'> | ArtifactObservedInput<'plan'> | ArtifactObservedInput<'task'>;
 
 export interface IArtifactService {
   write(input: ArtifactWriteInput<'draft'>): Promise<ArtifactRecord<'draft'>>;
@@ -87,6 +82,7 @@ export interface IArtifactService {
   getByRunId(runId: string, kind: 'draft'): ArtifactRecord<'draft'> | null;
   getByRunId(runId: string, kind: 'plan'): ArtifactRecord<'plan'> | null;
   getByRunId(runId: string, kind: 'task'): ArtifactRecord<'task'> | null;
+  getCreationIdByRunId(runId: string): string | null;
   listRunIds(): readonly string[];
   listByRunId(runId: string): readonly AnyArtifactRecord[];
   restore?(): Promise<readonly AnyArtifactRecord[]>;
@@ -109,19 +105,23 @@ interface ArtifactValueByKind {
 const ARTIFACT_ORDER: readonly ArtifactKind[] = ['draft', 'plan', 'task'];
 
 class WorkspaceArtifactService implements IArtifactService {
-  private readonly _paths: INekoPaths;
+  private readonly _creationPaths: ICreationArtifactPaths;
+  private readonly _indexPath: string;
   private readonly _fsOps: ArtifactServiceFsOps;
   private readonly _indexStore: IArtifactIndexStore;
   private readonly _recordsByRun = new Map<string, Map<ArtifactKind, AnyArtifactRecord>>();
+  private readonly _creationIdsByRun = new Map<string, string>();
 
   constructor(config: ArtifactServiceConfig) {
     if (!config.workspaceRoot) {
       throw new Error('ArtifactService: workspaceRoot is required');
     }
-    this._paths = createNekoPaths(config.workspaceRoot);
+    const nekoPaths = createNekoPaths(config.workspaceRoot);
+    this._creationPaths = createCreationArtifactPaths(config.workspaceRoot);
+    this._indexPath = nekoPaths.cache('artifactIndex');
     this._fsOps = config.fsOps;
     this._indexStore = createArtifactIndexStore({
-      filePath: this._paths.cache('artifactIndex'),
+      filePath: this._indexPath,
       fsOps: {
         mkdir: this._fsOps.mkdir,
         writeFile: this._fsOps.writeFile,
@@ -136,8 +136,9 @@ class WorkspaceArtifactService implements IArtifactService {
     switch (input.kind) {
       case 'draft': {
         const content = serializeDraft(input.value);
-        const path = resolveArtifactPath(this._paths, 'draft', input.runId);
-        await this._fsOps.mkdir(resolveArtifactDir(this._paths, 'draft'), { recursive: true });
+        const creationId = this._creationIdForWrite(input);
+        const path = this._creationPaths.file('draft', creationId);
+        await this._fsOps.mkdir(this._creationPaths.creationDir(creationId), { recursive: true });
         await this._fsOps.writeFile(path, content, 'utf-8');
         const record: ArtifactRecord<'draft'> = {
           kind: 'draft',
@@ -154,8 +155,9 @@ class WorkspaceArtifactService implements IArtifactService {
       }
       case 'plan': {
         const content = serializeExecutionPlan(input.value);
-        const path = resolveArtifactPath(this._paths, 'plan', input.runId);
-        await this._fsOps.mkdir(resolveArtifactDir(this._paths, 'plan'), { recursive: true });
+        const creationId = this._creationIdForWrite(input);
+        const path = this._creationPaths.file('plan', creationId);
+        await this._fsOps.mkdir(this._creationPaths.creationDir(creationId), { recursive: true });
         await this._fsOps.writeFile(path, content, 'utf-8');
         const record: ArtifactRecord<'plan'> = {
           kind: 'plan',
@@ -172,8 +174,9 @@ class WorkspaceArtifactService implements IArtifactService {
       }
       case 'task': {
         const content = serializeTask(input.value);
-        const path = resolveArtifactPath(this._paths, 'task', input.runId);
-        await this._fsOps.mkdir(resolveArtifactDir(this._paths, 'task'), { recursive: true });
+        const creationId = this._creationIdForWrite(input);
+        const path = this._creationPaths.file('task', creationId);
+        await this._fsOps.mkdir(this._creationPaths.creationDir(creationId), { recursive: true });
         await this._fsOps.writeFile(path, content, 'utf-8');
         const record: ArtifactRecord<'task'> = {
           kind: 'task',
@@ -211,7 +214,7 @@ class WorkspaceArtifactService implements IArtifactService {
       return [];
     }
 
-    const entries = await readArtifactRestoreEntries(this._paths.cache('artifactIndex'), readFile);
+    const entries = await readArtifactRestoreEntries(this._indexPath, readFile);
     if (!entries || entries.length === 0) {
       return [];
     }
@@ -304,6 +307,10 @@ class WorkspaceArtifactService implements IArtifactService {
     return record;
   }
 
+  getCreationIdByRunId(runId: string): string | null {
+    return this._creationIdsByRun.get(runId) ?? null;
+  }
+
   listRunIds(): readonly string[] {
     return Array.from(this._recordsByRun.keys()).sort((left, right) => left.localeCompare(right));
   }
@@ -329,6 +336,10 @@ class WorkspaceArtifactService implements IArtifactService {
   }
 
   private _remember(record: AnyArtifactRecord, options?: { writeIndex?: boolean }): void {
+    const creationId = extractCreationIdFromPath(this._creationPaths.root, record.path);
+    if (creationId) {
+      this._creationIdsByRun.set(record.runId, creationId);
+    }
     const existing =
       this._recordsByRun.get(record.runId) ?? new Map<ArtifactKind, AnyArtifactRecord>();
     existing.set(record.kind, record);
@@ -352,6 +363,17 @@ class WorkspaceArtifactService implements IArtifactService {
   private _listAllRecords(): readonly AnyArtifactRecord[] {
     return this.listRunIds().flatMap((runId) => this.listByRunId(runId));
   }
+
+  private _creationIdForWrite(input: AnyArtifactWriteInput): string {
+    const existing = this._creationIdsByRun.get(input.runId);
+    if (existing) {
+      return existing;
+    }
+
+    const creationId = normalizeCreationId(creationIdSourceFor(input));
+    this._creationIdsByRun.set(input.runId, creationId);
+    return creationId;
+  }
 }
 
 export function createWorkspaceArtifactService(config: ArtifactServiceConfig): IArtifactService {
@@ -365,32 +387,6 @@ export function toIdcRunArtifactBinding(binding: ArtifactBinding): IdcRunArtifac
     path: binding.path,
     updatedAt: binding.updatedAt,
   };
-}
-
-function resolveArtifactDir(paths: INekoPaths, kind: ArtifactKind): string {
-  switch (kind) {
-    case 'draft':
-      return paths.dir('drafts');
-    case 'plan':
-      return paths.dir('plans');
-    case 'task':
-      return paths.dir('tasks');
-    default:
-      throw new Error(`Unsupported artifact kind: ${String(kind)}`);
-  }
-}
-
-function resolveArtifactPath(paths: INekoPaths, kind: ArtifactKind, runId: string): string {
-  switch (kind) {
-    case 'draft':
-      return paths.file('drafts', runId);
-    case 'plan':
-      return paths.file('plans', runId);
-    case 'task':
-      return paths.file('tasks', runId);
-    default:
-      throw new Error(`Unsupported artifact kind: ${String(kind)}`);
-  }
 }
 
 function toArtifactIndexEntry(runId: string, record: AnyArtifactRecord): ArtifactIndexEntry {
@@ -428,6 +424,53 @@ function toArtifactIndexEntry(runId: string, record: AnyArtifactRecord): Artifac
         counts: countTaskItemStatuses(record.value),
       };
   }
+}
+
+function creationIdSourceFor(input: AnyArtifactWriteInput): string {
+  switch (input.kind) {
+    case 'draft':
+      return `${input.value.domain} ${input.value.title} ${input.value.id}`;
+    case 'plan':
+      return `${input.value.title} ${input.value.draftId}`;
+    case 'task':
+      return input.value.id;
+  }
+}
+
+function normalizeCreationId(value: string): string {
+  const normalized = value
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-')
+    .slice(0, 80)
+    .replace(/-+$/g, '');
+
+  return normalized || `creation-${shortStableHash(value)}`;
+}
+
+function shortStableHash(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36).padStart(6, '0').slice(0, 8);
+}
+
+function extractCreationIdFromPath(root: string, path: string): string | undefined {
+  const normalizedRoot = root.replace(/\\/g, '/').replace(/\/+$/, '');
+  const normalizedPath = path.replace(/\\/g, '/');
+  const prefix = `${normalizedRoot}/`;
+  if (!normalizedPath.startsWith(prefix)) {
+    return undefined;
+  }
+
+  const rest = normalizedPath.slice(prefix.length);
+  const firstSegment = rest.split('/')[0];
+  return firstSegment && !firstSegment.includes('\0') ? firstSegment : undefined;
 }
 
 function countTaskItemStatuses(task: Task): Record<Task['items'][number]['status'], number> {
@@ -517,8 +560,21 @@ function toArtifactRestoreEntry(value: unknown): ArtifactRestoreIndexEntry | nul
   if (!kind || !runId || !path) {
     return null;
   }
+  if (isRetiredManagedArtifactPath(path)) {
+    logger.warn(`ignoring retired managed artifact path from index: ${path}`);
+    return null;
+  }
 
   return { kind, runId, path };
+}
+
+function isRetiredManagedArtifactPath(path: string): boolean {
+  const normalized = path.replace(/\\/g, '/');
+  return (
+    normalized.includes('/.neko/drafts/') ||
+    normalized.includes('/.neko/plans/') ||
+    normalized.includes('/.neko/tasks/')
+  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

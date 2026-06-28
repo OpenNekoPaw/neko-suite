@@ -3,7 +3,7 @@ import type { Draft, ExecutionPlan, Task } from '@neko-agent/types';
 import { createWorkspaceArtifactService, toIdcRunArtifactBinding } from '../artifact-service';
 
 describe('createWorkspaceArtifactService', () => {
-  it('writes draft / plan / task artifacts to canonical .neko paths and indexes them by run', async () => {
+  it('writes draft / plan / task creation documents to creator-facing paths and indexes them by run', async () => {
     const writes: Array<{ path: string; data: string }> = [];
     const dirs: string[] = [];
     const service = createWorkspaceArtifactService({
@@ -57,23 +57,24 @@ describe('createWorkspaceArtifactService', () => {
     const taskRecord = await service.writeTask('run-1', task);
 
     expect(dirs).toEqual([
-      '/workspace/demo/.neko/drafts',
+      '/workspace/demo/neko/creations/cut-launch-teaser-draft-1',
       '/workspace/demo/.neko/.cache',
-      '/workspace/demo/.neko/plans',
-      '/workspace/demo/.neko/tasks',
+      '/workspace/demo/neko/creations/cut-launch-teaser-draft-1',
+      '/workspace/demo/neko/creations/cut-launch-teaser-draft-1',
     ]);
     expect(writes.map((entry) => entry.path)).toEqual([
-      '/workspace/demo/.neko/drafts/draft-run-1.md',
+      '/workspace/demo/neko/creations/cut-launch-teaser-draft-1/brief.md',
       '/workspace/demo/.neko/.cache/artifact-index.json',
-      '/workspace/demo/.neko/plans/plan-run-1.md',
+      '/workspace/demo/neko/creations/cut-launch-teaser-draft-1/plan.md',
       '/workspace/demo/.neko/.cache/artifact-index.json',
-      '/workspace/demo/.neko/tasks/task-run-1.md',
+      '/workspace/demo/neko/creations/cut-launch-teaser-draft-1/checklist.md',
       '/workspace/demo/.neko/.cache/artifact-index.json',
     ]);
     expect(draftRecord.content).toContain('# Launch teaser');
     expect(planRecord.content).toContain('## Steps');
     expect(taskRecord.content).toContain('# Tasks');
     expect(service.listRunIds()).toEqual(['run-1']);
+    expect(service.getCreationIdByRunId('run-1')).toBe('cut-launch-teaser-draft-1');
     expect(service.listByRunId('run-1')).toEqual([draftRecord, planRecord, taskRecord]);
     expect(service.getByRunId('run-1', 'plan')).toEqual(planRecord);
     const cacheSnapshot = JSON.parse(
@@ -91,7 +92,7 @@ describe('createWorkspaceArtifactService', () => {
     expect(toIdcRunArtifactBinding(taskRecord)).toEqual({
       kind: 'task',
       artifactId: 'task-1',
-      path: '/workspace/demo/.neko/tasks/task-run-1.md',
+      path: '/workspace/demo/neko/creations/cut-launch-teaser-draft-1/checklist.md',
       updatedAt: 6,
     });
   });
@@ -111,7 +112,7 @@ describe('createWorkspaceArtifactService', () => {
     const record = service.ingestObservedArtifact({
       kind: 'draft',
       runId: 'run-observed',
-      path: '/workspace/demo/.neko/drafts/draft-run-observed.md',
+      path: '/workspace/demo/neko/creations/observed-creation/brief.md',
       content: [
         '---',
         'id: observed-draft',
@@ -176,7 +177,7 @@ describe('createWorkspaceArtifactService', () => {
               kind: 'draft',
               runId: 'run-restore',
               artifactId: 'draft-restore',
-              path: '/workspace/demo/.neko/drafts/draft-run-restore.md',
+              path: '/workspace/demo/neko/creations/restored-creation/brief.md',
               updatedAt: 2,
               title: 'Restored draft',
               status: 'pending_review',
@@ -186,7 +187,7 @@ describe('createWorkspaceArtifactService', () => {
               kind: 'task',
               runId: 'run-restore',
               artifactId: 'task-restore',
-              path: '/workspace/demo/.neko/tasks/task-run-restore.md',
+              path: '/workspace/demo/neko/creations/restored-creation/checklist.md',
               updatedAt: 6,
               itemCount: 1,
               counts: {
@@ -200,7 +201,7 @@ describe('createWorkspaceArtifactService', () => {
         }),
       ],
       [
-        '/workspace/demo/.neko/drafts/draft-run-restore.md',
+        '/workspace/demo/neko/creations/restored-creation/brief.md',
         [
           '---',
           'id: draft-restore',
@@ -229,7 +230,7 @@ describe('createWorkspaceArtifactService', () => {
         ].join('\n'),
       ],
       [
-        '/workspace/demo/.neko/tasks/task-run-restore.md',
+        '/workspace/demo/neko/creations/restored-creation/checklist.md',
         [
           '---',
           'id: task-restore',
@@ -281,5 +282,52 @@ describe('createWorkspaceArtifactService', () => {
     expect(service.listByRunId('run-restore')).toEqual(restored);
     expect(service.listRunIds()).toEqual(['run-restore']);
     expect(writes).toEqual([]);
+  });
+
+  it('does not restore retired managed .neko creation document paths from stale index entries', async () => {
+    const files = new Map<string, string>([
+      [
+        '/workspace/demo/.neko/.cache/artifact-index.json',
+        JSON.stringify({
+          schemaVersion: 1,
+          updatedAt: 9,
+          entries: [
+            {
+              kind: 'draft',
+              runId: 'run-retired',
+              artifactId: 'draft-retired',
+              path: '/workspace/demo/.neko/drafts/draft-run-retired.md',
+              updatedAt: 2,
+              title: 'Retired draft',
+              status: 'pending_review',
+              domain: 'cut',
+            },
+          ],
+        }),
+      ],
+      ['/workspace/demo/.neko/drafts/draft-run-retired.md', 'retired path should not be read'],
+    ]);
+    const readPaths: string[] = [];
+    const service = createWorkspaceArtifactService({
+      workspaceRoot: '/workspace/demo',
+      fsOps: {
+        async mkdir(): Promise<void> {},
+        async writeFile(): Promise<void> {},
+        async readFile(path: string): Promise<string> {
+          readPaths.push(path);
+          const match = files.get(path);
+          if (!match) {
+            throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
+          }
+          return match;
+        },
+      },
+    });
+
+    const restored = await service.restore?.();
+
+    expect(restored).toEqual([]);
+    expect(readPaths).toEqual(['/workspace/demo/.neko/.cache/artifact-index.json']);
+    expect(service.listRunIds()).toEqual([]);
   });
 });

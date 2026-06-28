@@ -100,7 +100,7 @@ const logger = getLogger('SubpackageGuard');
  *
  * Returns silently when all required deps are satisfied. Throws
  * `SkillActivationError` on blocking failures. Degrades via warn-log
- * for optional-deps that are missing — the fallback message is
+ * for optional-deps that are missing — the degradation message is
  * propagated to the logger so the UI can surface it if desired.
  */
 export function assertSubpackagesAvailable(
@@ -128,7 +128,7 @@ export function assertSubpackagesAvailable(
     if (dep.required) {
       blocking.push(issue);
     } else {
-      // Optional dep: log + fallback message, never block.
+      // Optional dep: log + degradation message, never block.
       const msg = dep.fallback?.message ?? `optional subpackage ${dep.id} unavailable`;
       logger.warn(`Skill "${skill.name}": ${_describeIssue(issue)} — degrading (${msg})`);
     }
