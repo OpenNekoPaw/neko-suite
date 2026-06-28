@@ -21,15 +21,37 @@ import {
 import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-presenter';
 import { findActiveTab, isCharacterRoleTab } from '@/presenters/character-role-session-presenter';
 import { shouldActivateForegroundConversation } from './foreground-activation';
+import { projectQueuedMessagesCleared } from '@/presenters/message-queue-presenter';
+import {
+  getActiveTimelineForMessage,
+  rejectActiveTimelineNonTimelineMessage,
+} from './timeline-handlers';
 
 /**
  * Handle 'error' message - Error occurred
  */
 const handleError: MessageHandler<'error'> = (message: ErrorMessage, context) => {
+  const activeTimeline = getActiveTimelineForMessage(context, message.conversationId, undefined);
+  if (activeTimeline) {
+    const hasMatchingError = activeTimeline.items.some(
+      (item) =>
+        item.kind === 'error' && (!message.message || item.payload.message === message.message),
+    );
+    if (hasMatchingError) {
+      return;
+    }
+    rejectActiveTimelineNonTimelineMessage({
+      context,
+      messageType: message.type,
+      reason: 'active timeline errors must arrive as agentTurnTimeline',
+    });
+    return;
+  }
+
   if (context.isCurrentConversation(message.conversationId)) {
     context.setMessages((prev) => [
       ...projectConversationError({
-        messages: prev,
+        messages: projectQueuedMessagesCleared(prev),
         errorMessage: message.message,
       }).messages,
     ]);
@@ -40,7 +62,7 @@ const handleError: MessageHandler<'error'> = (message: ErrorMessage, context) =>
   } else if (message.conversationId) {
     context.updateNonCurrentConversation(message.conversationId, (msgs, _streaming) => ({
       ...projectConversationError({
-        messages: msgs,
+        messages: projectQueuedMessagesCleared(msgs),
         errorMessage: message.message,
       }),
     }));

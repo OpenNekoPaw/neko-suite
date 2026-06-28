@@ -2,8 +2,11 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { describe, expect, it } from 'vitest';
 import type {
   AgentBackgroundTask,
+  AgentTurnTimelineMessage,
   AgentMediaTaskView,
+  AgentQueuedMessageItem,
   ExtensionToWebviewMessage,
+  Message,
   SubAgentWorkItemEvent,
 } from '@neko-agent/types';
 import {
@@ -15,12 +18,14 @@ import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { MentionItem } from '@/components/ChatView/InputArea/types';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
-import type { Message } from '@neko-agent/types';
 import { configHandlers } from '../config-handlers';
+import { conversationHandlers } from '../conversation-handlers';
 import { mediaHandlers } from '../media-handlers';
 import { subAgentHandlers } from '../subagent-handlers';
 import { streamingHandlers } from '../streaming-handlers';
 import { taskHandlers } from '../task-handlers';
+import { timelineHandlers } from '../timeline-handlers';
+import { toolHandlers } from '../tool-handlers';
 import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
 
 describe('work item message handlers', () => {
@@ -371,6 +376,439 @@ describe('work item message handlers', () => {
     expect(harness.workItems().get('conv-a')).toBeUndefined();
   });
 
+  it('anchors active timeline media tasks from canonical timeline events', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([
+        {
+          conversationId: 'conv-a',
+          turnId: 'turn-msg-a',
+          messageId: 'msg-a',
+          itemId: 'tool-tool-a',
+          sequence: 1,
+          kind: 'tool_call',
+          status: 'pending',
+          payload: {
+            toolCall: { id: 'tool-a', name: 'GenerateImage', arguments: {} },
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        mediaTimelineItem('media-task-media-a', 2, 'tool-a', 'media-a'),
+      ]),
+      harness.context,
+    );
+
+    expect(harness.messages().map((message) => message.id)).toEqual(['msg-a']);
+    expect(harness.messages()[0]?.workItemIds).toEqual(['media-a']);
+    expect(harness.messages()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'media-task-media-a' })]),
+    );
+    expect(harness.workItems().get('conv-a')?.get('media-a')).toMatchObject({
+      kind: 'media-task',
+      parentToolCallId: 'tool-a',
+    });
+    expect(harness.globalError()).toBeNull();
+  });
+
+  it('rejects active non-timeline media creation when canonical timeline media is missing', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([
+        {
+          conversationId: 'conv-a',
+          turnId: 'turn-msg-a',
+          messageId: 'msg-a',
+          itemId: 'tool-tool-a',
+          sequence: 1,
+          kind: 'tool_call',
+          status: 'pending',
+          payload: {
+            toolCall: { id: 'tool-a', name: 'GenerateImage', arguments: {} },
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]),
+      harness.context,
+    );
+    dispatch(
+      mediaHandlers,
+      {
+        type: 'mediaTaskCreated',
+        conversationId: 'conv-a',
+        messageId: 'msg-a',
+        workItem: createMediaWorkItem('conv-a', 'media-a', {
+          parentMessageId: 'msg-a',
+          parentToolCallId: 'tool-a',
+        }),
+      },
+      harness.context,
+    );
+
+    expect(harness.globalError()).toContain(
+      'active timeline media updates must arrive as agentTurnTimeline',
+    );
+    expect(harness.messages()[0]?.workItemIds).toBeUndefined();
+    expect(harness.messages()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'media-task-media-a' })]),
+    );
+    expect(harness.workItems().get('conv-a')?.get('media-a')).toBeUndefined();
+  });
+
+  it('ignores duplicate active media messages after canonical timeline media arrived', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([
+        {
+          conversationId: 'conv-a',
+          turnId: 'turn-msg-a',
+          messageId: 'msg-a',
+          itemId: 'tool-tool-a',
+          sequence: 1,
+          kind: 'tool_call',
+          status: 'pending',
+          payload: {
+            toolCall: { id: 'tool-a', name: 'GenerateImage', arguments: {} },
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        mediaTimelineItem('media-task-media-a', 2, 'tool-a', 'media-a'),
+      ]),
+      harness.context,
+    );
+    dispatch(
+      mediaHandlers,
+      {
+        type: 'mediaTaskProgress',
+        conversationId: 'conv-a',
+        messageId: 'msg-a',
+        workItem: createMediaWorkItem('conv-a', 'media-a', {
+          parentMessageId: 'msg-a',
+          parentToolCallId: 'tool-a',
+        }),
+      },
+      harness.context,
+    );
+
+    expect(harness.globalError()).toBeNull();
+    expect(harness.messages()[0]?.workItemIds).toEqual(['media-a']);
+  });
+
+  it('does not let streamComplete content blocks reorder an active timeline turn', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([
+        textTimelineItem('text-before', 1, 'Before.'),
+        {
+          conversationId: 'conv-a',
+          turnId: 'turn-msg-a',
+          messageId: 'msg-a',
+          itemId: 'tool-tool-a',
+          sequence: 2,
+          kind: 'tool_call',
+          status: 'succeeded',
+          payload: {
+            toolCall: {
+              id: 'tool-a',
+              name: 'ReadDocument',
+              arguments: {},
+              result: { success: true, data: { title: 'Book' } },
+            },
+          },
+          createdAt: 2,
+          updatedAt: 2,
+        },
+        textTimelineItem('text-after', 3, ' After.'),
+      ]),
+      harness.context,
+    );
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'streamComplete',
+        conversationId: 'conv-a',
+        messageId: 'msg-a',
+        contentBlocks: [
+          { id: 'text-before', type: 'text', timestamp: 1, content: 'Before.', isStreaming: false },
+          { id: 'text-after', type: 'text', timestamp: 3, content: ' After.', isStreaming: false },
+          {
+            id: 'tool-tool-a',
+            type: 'tool_call',
+            timestamp: 2,
+            toolCall: {
+              id: 'tool-a',
+              name: 'ReadDocument',
+              arguments: {},
+              result: { success: true, data: { title: 'Book' } },
+            },
+          },
+        ],
+      },
+      harness.context,
+    );
+
+    expect(harness.messages()[0]?.isStreaming).toBe(false);
+    expect(harness.messages()[0]?.contentBlocks?.map((block) => block.id)).toEqual([
+      'text-before',
+      'tool-tool-a',
+      'text-after',
+    ]);
+  });
+
+  it('rejects active timeline tool results with unknown parents', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([textTimelineItem('text-before', 1, 'Before.')]),
+      harness.context,
+    );
+    dispatch(
+      toolHandlers,
+      {
+        type: 'toolResult',
+        conversationId: 'conv-a',
+        messageId: 'msg-a',
+        toolCallId: 'missing-tool',
+        success: false,
+        error: 'boom',
+      },
+      harness.context,
+    );
+
+    expect(harness.globalError()).toContain(
+      'active timeline toolResult must arrive as agentTurnTimeline (unknown toolCallId missing-tool)',
+    );
+    expect(harness.messages()[0]?.contentBlocks?.map((block) => block.id)).toEqual(['text-before']);
+  });
+
+  it('ignores duplicate active tool results after canonical timeline result arrived', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([
+        {
+          conversationId: 'conv-a',
+          turnId: 'turn-msg-a',
+          messageId: 'msg-a',
+          itemId: 'tool-tool-a',
+          sequence: 1,
+          kind: 'tool_call',
+          status: 'succeeded',
+          payload: {
+            toolCall: {
+              id: 'tool-a',
+              name: 'ReadDocument',
+              arguments: {},
+              result: { success: true, data: { title: 'Book' } },
+            },
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]),
+      harness.context,
+    );
+    dispatch(
+      toolHandlers,
+      {
+        type: 'toolResult',
+        conversationId: 'conv-a',
+        messageId: 'msg-a',
+        toolCallId: 'tool-a',
+        success: true,
+        data: { title: 'Book' },
+      },
+      harness.context,
+    );
+
+    expect(harness.globalError()).toBeNull();
+    expect(harness.messages()[0]?.contentBlocks?.[0]?.toolCall?.result).toMatchObject({
+      success: true,
+      data: { title: 'Book' },
+    });
+  });
+
+  it('rejects active timeline media tasks without an explicit parent scope', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([textTimelineItem('text-before', 1, 'Before.')]),
+      harness.context,
+    );
+    dispatch(
+      mediaHandlers,
+      {
+        type: 'mediaTaskCreated',
+        conversationId: 'conv-a',
+        messageId: 'msg-a',
+        workItem: createMediaWorkItem('conv-a', 'media-a', {
+          parentMessageId: 'msg-a',
+        }),
+      },
+      harness.context,
+    );
+
+    expect(harness.globalError()).toContain(
+      'active timeline media updates must arrive as agentTurnTimeline',
+    );
+    expect(harness.messages()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'media-task-media-a' })]),
+    );
+  });
+
+  it('rejects active timeline task updates with unknown parents', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([textTimelineItem('text-before', 1, 'Before.')]),
+      harness.context,
+    );
+    dispatch(
+      taskHandlers,
+      {
+        type: 'taskUpdated',
+        conversationId: 'conv-a',
+        workItem: createTaskWorkItem(
+          'conv-a',
+          {
+            ...createBackgroundTask('task-a', 'Generate A'),
+            status: 'processing',
+            progress: 50,
+          },
+          { parentMessageId: 'msg-a', parentToolCallId: 'missing-tool' },
+        ),
+      },
+      harness.context,
+    );
+
+    expect(harness.globalError()).toContain(
+      'active timeline task updates must arrive as agentTurnTimeline',
+    );
+    expect(harness.messages()[0]?.contentBlocks?.map((block) => block.id)).toEqual(['text-before']);
+    expect(harness.workItems().get('conv-a')?.get('task-a')).toBeUndefined();
+  });
+
+  it('renders explicit turn-level active timeline media tasks from canonical timeline events', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([
+        textTimelineItem('text-before', 1, 'Before.'),
+        turnMediaTimelineItem('media-task-media-a', 2, 'media-a'),
+      ]),
+      harness.context,
+    );
+
+    expect(harness.globalError()).toBeNull();
+    expect(harness.messages()[0]?.workItemIds).toEqual(['media-a']);
+    expect(harness.messages()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 'media-task-media-a' })]),
+    );
+    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'media',
+          parentAnchor: 'turn',
+          payload: {
+            workItem: expect.objectContaining({ id: 'media-a' }),
+          },
+        }),
+      ]),
+    );
+  });
+
+  it('renders active timeline conversation errors immediately from canonical timeline events', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([
+        textTimelineItem('text-before', 1, 'Before.'),
+        errorTimelineItem('error-provider', 2, 'Provider failed'),
+      ]),
+      harness.context,
+    );
+
+    expect(harness.messages()[0]?.contentBlocks).toMatchObject([
+      { id: 'text-before', content: 'Before.' },
+      { type: 'text', content: 'Error: Provider failed' },
+    ]);
+  });
+
+  it('rejects active non-timeline conversation errors when canonical timeline error is missing', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([textTimelineItem('text-before', 1, 'Before.')]),
+      harness.context,
+    );
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'error',
+        conversationId: 'conv-a',
+        message: 'Provider failed',
+      },
+      harness.context,
+    );
+
+    expect(harness.globalError()).toContain(
+      'active timeline errors must arrive as agentTurnTimeline',
+    );
+    expect(harness.messages()[0]?.contentBlocks).toMatchObject([
+      { id: 'text-before', content: 'Before.' },
+    ]);
+  });
+
   it('stores queued message count from streaming events', () => {
     const harness = createContextHarness({ activeConversationId: 'conv-a' });
 
@@ -390,13 +828,7 @@ describe('work item message handlers', () => {
       streamingMessageId: null,
       queuedMessageCount: 2,
     });
-    expect(harness.messages()).toEqual([
-      expect.objectContaining({
-        role: 'system',
-        isQueued: true,
-        content: 'Message queued (2 pending)',
-      }),
-    ]);
+    expect(harness.messages()).toEqual([]);
 
     dispatch(
       streamingHandlers,
@@ -422,6 +854,228 @@ describe('work item message handlers', () => {
     );
 
     expect(harness.streaming().queuedMessageCount).toBe(0);
+  });
+
+  it('replaces hidden optimistic queued messages with authoritative queue snapshots', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '生成分镜表',
+          timestamp: 1,
+        },
+        {
+          id: 'queued-1',
+          role: 'user',
+          content: '要求后续变更',
+          timestamp: 2,
+          isQueued: true,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '初稿完成',
+          timestamp: 3,
+        },
+        {
+          id: 'queued-2',
+          role: 'user',
+          content: '再补充镜头',
+          timestamp: 4,
+          isQueued: true,
+        },
+      ],
+      currentStreaming: {
+        isThinking: true,
+        streamingMessageId: 'assistant-1',
+        queuedMessageCount: 2,
+        queuedMessages: [],
+        messageQueueVersion: 0,
+      },
+    });
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'messageQueueSnapshot',
+        snapshot: {
+          conversationId: 'conv-a',
+          pendingCount: 2,
+          version: 1,
+          items: [
+            {
+              id: 'runtime-1',
+              conversationId: 'conv-a',
+              content: '要求后续变更',
+              createdAt: 10,
+              source: 'composer',
+            },
+            {
+              id: 'runtime-2',
+              conversationId: 'conv-a',
+              content: '再补充镜头',
+              createdAt: 11,
+              source: 'composer',
+            },
+          ],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming().queuedMessageCount).toBe(2);
+    expect(harness.streaming().queuedMessages?.map((item) => item.id)).toEqual([
+      'runtime-1',
+      'runtime-2',
+    ]);
+    expect(harness.messages()).toEqual([
+      expect.objectContaining({ id: 'user-1' }),
+      expect.objectContaining({ id: 'assistant-1' }),
+    ]);
+  });
+
+  it('ignores stale queue snapshots by conversation-local version', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentStreaming: {
+        isThinking: true,
+        streamingMessageId: 'assistant-1',
+        queuedMessageCount: 1,
+        queuedMessages: [
+          {
+            id: 'runtime-current',
+            conversationId: 'conv-a',
+            content: '当前排队消息',
+            createdAt: 10,
+            source: 'composer',
+          },
+        ],
+        messageQueueVersion: 3,
+      },
+    });
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'messageQueueSnapshot',
+        snapshot: {
+          conversationId: 'conv-a',
+          pendingCount: 0,
+          version: 2,
+          items: [],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming().queuedMessageCount).toBe(1);
+    expect(harness.streaming().queuedMessages?.map((item) => item.id)).toEqual(['runtime-current']);
+  });
+
+  it('applies queued edit requests and asks the composer layer to restore content', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [
+        {
+          id: 'queued-optimistic',
+          role: 'user',
+          content: '重新编辑我',
+          timestamp: 2,
+          isQueued: true,
+        },
+      ],
+      currentStreaming: {
+        isThinking: true,
+        streamingMessageId: 'assistant-1',
+        queuedMessageCount: 1,
+        queuedMessages: [
+          {
+            id: 'runtime-1',
+            conversationId: 'conv-a',
+            content: '重新编辑我',
+            createdAt: 10,
+            source: 'composer',
+          },
+        ],
+        messageQueueVersion: 1,
+      },
+    });
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'queuedMessageEditRequested',
+        conversationId: 'conv-a',
+        item: {
+          id: 'runtime-1',
+          conversationId: 'conv-a',
+          content: '重新编辑我',
+          createdAt: 10,
+          source: 'composer',
+        },
+        snapshot: {
+          conversationId: 'conv-a',
+          pendingCount: 0,
+          version: 2,
+          items: [],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming().queuedMessageCount).toBe(0);
+    expect(harness.streaming().queuedMessages).toEqual([]);
+    expect(harness.messages()).toEqual([]);
+    expect(harness.queuedEditRequest()).toEqual({
+      conversationId: 'conv-a',
+      item: expect.objectContaining({ id: 'runtime-1', content: '重新编辑我' }),
+    });
+  });
+
+  it('does not release local queue items on queue acknowledgement events', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [
+        {
+          id: 'queued-1',
+          role: 'user',
+          content: '第一条后续消息',
+          timestamp: 1,
+          isQueued: true,
+        },
+        {
+          id: 'queued-2',
+          role: 'user',
+          content: '第二条后续消息',
+          timestamp: 2,
+          isQueued: true,
+        },
+      ],
+      currentStreaming: {
+        isThinking: true,
+        streamingMessageId: 'assistant-1',
+        queuedMessageCount: 0,
+      },
+    });
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'messageQueued',
+        conversationId: 'conv-a',
+        content: 'Message queued (1 pending)',
+        pendingCount: 1,
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming().queuedMessageCount).toBe(1);
+    expect(harness.messages()).toEqual([
+      expect.objectContaining({ id: 'queued-1', isQueued: true }),
+      expect.objectContaining({ id: 'queued-2', isQueued: true }),
+    ]);
   });
 
   it('drops media task events when the route conversation does not match the work item', () => {
@@ -656,11 +1310,116 @@ function createMediaTask(id: string): AgentMediaTaskView {
   };
 }
 
-function createMediaWorkItem(conversationId: string, id: string) {
+function createMediaWorkItem(
+  conversationId: string,
+  id: string,
+  links: { parentMessageId?: string; parentToolCallId?: string } = {},
+) {
   return projectMediaTaskToWorkItem({
     conversationId,
     task: createMediaTask(id),
+    parentMessageId: links.parentMessageId,
+    parentToolCallId: links.parentToolCallId,
   });
+}
+
+function timelineMessage(events: AgentTurnTimelineMessage['events']): AgentTurnTimelineMessage {
+  return {
+    type: 'agentTurnTimeline',
+    conversationId: 'conv-a',
+    turnId: 'turn-msg-a',
+    messageId: 'msg-a',
+    events,
+  };
+}
+
+function textTimelineItem(
+  itemId: string,
+  sequence: number,
+  content: string,
+): AgentTurnTimelineMessage['events'][number] {
+  return {
+    conversationId: 'conv-a',
+    turnId: 'turn-msg-a',
+    messageId: 'msg-a',
+    itemId,
+    sequence,
+    kind: 'assistant_text',
+    status: 'streaming',
+    payload: { content, format: 'markdown' },
+    createdAt: sequence,
+    updatedAt: sequence,
+  };
+}
+
+function mediaTimelineItem(
+  itemId: string,
+  sequence: number,
+  parentToolCallId: string,
+  workItemId: string,
+): AgentTurnTimelineMessage['events'][number] {
+  return {
+    conversationId: 'conv-a',
+    turnId: 'turn-msg-a',
+    messageId: 'msg-a',
+    itemId,
+    sequence,
+    kind: 'media',
+    status: 'pending',
+    parentAnchor: 'tool_call',
+    parentToolCallId,
+    payload: {
+      workItem: createMediaWorkItem('conv-a', workItemId, {
+        parentMessageId: 'msg-a',
+        parentToolCallId,
+      }),
+    },
+    createdAt: sequence,
+    updatedAt: sequence,
+  };
+}
+
+function turnMediaTimelineItem(
+  itemId: string,
+  sequence: number,
+  workItemId: string,
+): AgentTurnTimelineMessage['events'][number] {
+  return {
+    conversationId: 'conv-a',
+    turnId: 'turn-msg-a',
+    messageId: 'msg-a',
+    itemId,
+    sequence,
+    kind: 'media',
+    status: 'pending',
+    parentAnchor: 'turn',
+    payload: {
+      workItem: createMediaWorkItem('conv-a', workItemId, {
+        parentMessageId: 'msg-a',
+      }),
+    },
+    createdAt: sequence,
+    updatedAt: sequence,
+  };
+}
+
+function errorTimelineItem(
+  itemId: string,
+  sequence: number,
+  message: string,
+): AgentTurnTimelineMessage['events'][number] {
+  return {
+    conversationId: 'conv-a',
+    turnId: 'turn-msg-a',
+    messageId: 'msg-a',
+    itemId,
+    sequence,
+    kind: 'error',
+    status: 'failed',
+    payload: { message },
+    createdAt: sequence,
+    updatedAt: sequence,
+  };
 }
 
 interface ContextHarnessOptions {
@@ -682,14 +1441,22 @@ interface ContextHarness {
   pluginsAvailable(): PluginsAvailable;
   projectFiles(): ProjectFileInfo[];
   mentionItems(): MentionItem[];
+  queuedEditRequest(): {
+    conversationId: string;
+    item: AgentQueuedMessageItem;
+  } | null;
+  globalError(): string | null;
 }
 
 function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   let messages = options.currentMessages ?? [];
+  let queuedEditRequest: { conversationId: string; item: AgentQueuedMessageItem } | null = null;
+  let globalError: string | null = null;
   let streaming: StreamingState & { queuedMessageCount: number } = {
     isThinking: false,
     streamingMessageId: null,
     queuedMessageCount: 0,
+    queuedMessages: [],
     ...options.currentStreaming,
   };
   let workItems: AgentWorkItemStore = new Map();
@@ -703,6 +1470,10 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   const conversationStreamingRef = ref(
     new Map<string, StreamingState>(options.nonCurrentStreaming ?? []),
   );
+  if (options.activeConversationId) {
+    conversationMessagesRef.current.set(options.activeConversationId, messages);
+    conversationStreamingRef.current.set(options.activeConversationId, streaming);
+  }
 
   const setMessages = createSetter(
     () => messages,
@@ -730,6 +1501,13 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     (next) => {
       streaming = { ...streaming, queuedMessageCount: next };
       context.queuedMessageCount = next;
+    },
+  );
+  const setQueuedMessages = createSetter(
+    () => streaming.queuedMessages ?? [],
+    (next) => {
+      streaming = { ...streaming, queuedMessages: next };
+      context.queuedMessages = next;
     },
   );
   const setWorkItemsByConversation = createSetter(
@@ -764,8 +1542,10 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     setIsThinking,
     setStreamingMessageId,
     setQueuedMessageCount,
+    setQueuedMessages,
     streamingMessageId: streaming.streamingMessageId,
     queuedMessageCount: streaming.queuedMessageCount,
+    queuedMessages: streaming.queuedMessages,
     streamingMessageIdRef,
     activeConversationId: options.activeConversationId,
     activeConversationIdRef,
@@ -787,7 +1567,15 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     forceAgentStateUpdate: () => undefined,
     setSkills: noopDispatch(),
     setActiveSkill: noopDispatch(),
-    setGlobalError: noopDispatch(),
+    setGlobalError: createSetter(
+      () => globalError,
+      (next) => {
+        globalError = next;
+      },
+    ),
+    requestQueuedMessageEdit: (request) => {
+      queuedEditRequest = request;
+    },
     conversationTokenCountRef: ref(new Map()),
     conversationCompressingRef: ref(new Map()),
     forceUpdate: () => undefined,
@@ -825,6 +1613,8 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     pluginsAvailable: () => pluginsAvailable,
     projectFiles: () => projectFiles,
     mentionItems: () => mentionItems,
+    queuedEditRequest: () => queuedEditRequest,
+    globalError: () => globalError,
   };
 }
 

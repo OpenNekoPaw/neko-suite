@@ -16,6 +16,9 @@ import type {
   StreamThinkingMessage,
   MessageCancelledMessage,
   MessageQueuedMessage,
+  MessageQueueErrorMessage,
+  MessageQueueSnapshotMessage,
+  QueuedMessageEditRequestedMessage,
   AgentPhaseMessage,
   AgentStateSnapshotMessage,
 } from './messages';
@@ -24,11 +27,20 @@ import { updateConversation } from './message-updater';
 import type { MessageHandlerContext } from './types';
 import {
   projectMessageCancelledIntoMessages,
-  projectQueuedMessageIntoMessages,
   projectStreamingCompleteIntoMessages,
   projectStreamingTextIntoMessages,
   projectStreamingThinkingIntoMessages,
 } from '../presenters/message-presenter';
+import {
+  hasQueuedUserMessages,
+  projectQueuedMessagesCleared,
+  projectQueuedMessagesForPendingCount,
+} from '../presenters/message-queue-presenter';
+import {
+  completeActiveTurnTimeline,
+  projectMessagesWithActiveTurnTimeline,
+} from '@/presenters/active-turn-timeline-presenter';
+import { getActiveTimelineForMessage } from './timeline-handlers';
 import {
   projectAgentPhaseToStateStore,
   projectAgentStateSnapshot,
@@ -48,6 +60,15 @@ const handleThinking: MessageHandler<'thinking'> = (message: ThinkingMessage, co
  * Handle 'streamText' message - Streaming text chunk
  */
 const handleStreamText: MessageHandler<'streamText'> = (message: StreamTextMessage, context) => {
+  const activeTimeline = getActiveTimelineForMessage(
+    context,
+    message.conversationId,
+    message.messageId,
+  );
+  if (activeTimeline) {
+    return;
+  }
+
   updateConversation(context, message.conversationId, (msgs, streamingId) => {
     const projection = projectStreamingTextIntoMessages({
       messages: msgs,
@@ -71,19 +92,54 @@ const handleStreamComplete: MessageHandler<'streamComplete'> = (
   message: StreamCompleteMessage,
   context,
 ) => {
-  updateConversation(context, message.conversationId, (msgs, streamingId) => {
+  updateConversation(context, message.conversationId, (msgs, streamingId, streaming) => {
+    const previousQueuedMessageCount = getPreviousQueuedMessageCount(
+      context,
+      message.conversationId,
+    );
+    const activeTimeline =
+      streaming.activeTurnTimeline?.messageId === (message.messageId ?? streamingId)
+        ? completeActiveTurnTimeline(streaming.activeTurnTimeline, {
+            finalContentBlocks: message.contentBlocks,
+          })
+        : (streaming.activeTurnTimeline ?? null);
+    if (activeTimeline && activeTimeline.messageId === (message.messageId ?? streamingId)) {
+      const projectedMessages = projectMessagesWithActiveTurnTimeline(msgs, activeTimeline);
+      const hasOptimisticQueuedMessages = hasQueuedUserMessages(projectedMessages);
+      const nextQueuedMessageCount = hasOptimisticQueuedMessages
+        ? Math.max(previousQueuedMessageCount, 1)
+        : 0;
+
+      return {
+        messages: hasOptimisticQueuedMessages
+          ? projectedMessages
+          : projectQueuedMessagesCleared(projectedMessages),
+        streamingMessageId: streamingId === activeTimeline.messageId ? null : streamingId,
+        isThinking: hasOptimisticQueuedMessages,
+        queuedMessageCount: nextQueuedMessageCount,
+        activeTurnTimeline: activeTimeline,
+      };
+    }
+
     const projection = projectStreamingCompleteIntoMessages({
       messages: msgs,
       streamingMessageId: streamingId,
       messageId: message.messageId,
       contentBlocks: message.contentBlocks,
     });
+    const hasOptimisticQueuedMessages = hasQueuedUserMessages(projection.messages);
+    const nextQueuedMessageCount = hasOptimisticQueuedMessages
+      ? Math.max(previousQueuedMessageCount, 1)
+      : 0;
 
     return {
-      messages: projection.messages,
+      messages: hasOptimisticQueuedMessages
+        ? projection.messages
+        : projectQueuedMessagesCleared(projection.messages),
       streamingMessageId: projection.streamingMessageId,
-      isThinking: projection.isThinking,
-      queuedMessageCount: 0,
+      isThinking: hasOptimisticQueuedMessages ? true : projection.isThinking,
+      queuedMessageCount: nextQueuedMessageCount,
+      activeTurnTimeline: activeTimeline,
     };
   });
 };
@@ -95,6 +151,15 @@ const handleStreamThinking: MessageHandler<'streamThinking'> = (
   message: StreamThinkingMessage,
   context,
 ) => {
+  const activeTimeline = getActiveTimelineForMessage(
+    context,
+    message.conversationId,
+    message.messageId,
+  );
+  if (activeTimeline) {
+    return;
+  }
+
   updateConversation(context, message.conversationId, (msgs, streamingId) => {
     const projection = projectStreamingThinkingIntoMessages({
       messages: msgs,
@@ -118,15 +183,59 @@ const handleMessageQueued: MessageHandler<'messageQueued'> = (
   message: MessageQueuedMessage,
   context,
 ) => {
-  updateConversation(context, message.conversationId, (msgs) => ({
-    messages: message.content
-      ? projectQueuedMessageIntoMessages({
-          messages: msgs,
-          content: message.content,
-        }).messages
-      : msgs,
-    queuedMessageCount: Math.max(0, message.pendingCount ?? 0),
-  }));
+  if (message.snapshot) {
+    applyMessageQueueSnapshot(message.snapshot, context);
+    return;
+  }
+
+  updateConversation(context, message.conversationId, (msgs) => {
+    const previousQueuedMessageCount = Math.max(
+      getPreviousQueuedMessageCount(context, message.conversationId),
+      hasQueuedUserMessages(msgs) ? 1 : 0,
+    );
+    const nextQueuedMessageCount = Math.max(0, message.pendingCount ?? 0);
+    const isQueueAcknowledgement = message.content !== undefined;
+
+    return {
+      messages: isQueueAcknowledgement
+        ? msgs
+        : projectQueuedMessagesForPendingCount({
+            messages: msgs,
+            previousQueuedMessageCount,
+            nextQueuedMessageCount,
+          }),
+      queuedMessageCount: nextQueuedMessageCount,
+    };
+  });
+};
+
+const handleMessageQueueSnapshot: MessageHandler<'messageQueueSnapshot'> = (
+  message: MessageQueueSnapshotMessage,
+  context,
+) => {
+  applyMessageQueueSnapshot(message.snapshot, context);
+};
+
+const handleMessageQueueError: MessageHandler<'messageQueueError'> = (
+  message: MessageQueueErrorMessage,
+  context,
+) => {
+  if (message.snapshot) {
+    applyMessageQueueSnapshot(message.snapshot, context);
+  }
+  context.setGlobalError(message.message);
+};
+
+const handleQueuedMessageEditRequested: MessageHandler<'queuedMessageEditRequested'> = (
+  message: QueuedMessageEditRequestedMessage,
+  context,
+) => {
+  applyMessageQueueSnapshot(message.snapshot, context);
+  context.setGlobalError(null);
+  context.requestQueuedMessageEdit?.({
+    conversationId: message.conversationId,
+    item: message.item,
+  });
 };
 
 /**
@@ -143,7 +252,7 @@ const handleMessageCancelled: MessageHandler<'messageCancelled'> = (
     });
 
     return {
-      messages: projection.messages,
+      messages: projectQueuedMessagesCleared(projection.messages),
       streamingMessageId: projection.streamingMessageId,
       isThinking: projection.isThinking,
       queuedMessageCount: 0,
@@ -167,6 +276,56 @@ const handleAgentPhase: MessageHandler<'agentPhase'> = (message: AgentPhaseMessa
     }),
   );
 };
+
+function getPreviousQueuedMessageCount(
+  context: MessageHandlerContext,
+  conversationId: string | undefined,
+): number {
+  if (!conversationId) {
+    return 0;
+  }
+
+  const cachedCount =
+    context.conversationStreamingRef.current.get(conversationId)?.queuedMessageCount ?? 0;
+  if (!context.isCurrentConversation(conversationId)) {
+    return cachedCount;
+  }
+
+  return Math.max(cachedCount, context.queuedMessageCount ?? 0);
+}
+
+function applyMessageQueueSnapshot(
+  snapshot: MessageQueueSnapshotMessage['snapshot'],
+  context: MessageHandlerContext,
+): void {
+  if (isStaleMessageQueueSnapshot(snapshot, context)) {
+    return;
+  }
+
+  updateConversation(context, snapshot.conversationId, (msgs, streamingId) => ({
+    messages: projectQueuedMessagesCleared(msgs),
+    streamingMessageId: streamingId,
+    isThinking:
+      snapshot.items.length > 0
+        ? true
+        : (context.conversationStreamingRef.current.get(snapshot.conversationId)?.isThinking ??
+          context.isThinking),
+    queuedMessageCount: snapshot.pendingCount,
+    queuedMessages: snapshot.items,
+    messageQueueVersion: snapshot.version,
+  }));
+}
+
+function isStaleMessageQueueSnapshot(
+  snapshot: MessageQueueSnapshotMessage['snapshot'],
+  context: MessageHandlerContext,
+): boolean {
+  const currentVersion = context.isCurrentConversation(snapshot.conversationId)
+    ? (context.conversationStreamingRef.current.get(snapshot.conversationId)?.messageQueueVersion ??
+      undefined)
+    : context.conversationStreamingRef.current.get(snapshot.conversationId)?.messageQueueVersion;
+  return currentVersion !== undefined && snapshot.version < currentVersion;
+}
 
 /**
  * Handle 'agentStateSnapshot' message - restore agent states after webview reload
@@ -204,6 +363,9 @@ export const streamingHandlers: HandlerRegistration[] = [
   defineHandler('streamThinking', handleStreamThinking),
   defineHandler('messageCancelled', handleMessageCancelled),
   defineHandler('messageQueued', handleMessageQueued),
+  defineHandler('messageQueueSnapshot', handleMessageQueueSnapshot),
+  defineHandler('messageQueueError', handleMessageQueueError),
+  defineHandler('queuedMessageEditRequested', handleQueuedMessageEditRequested),
   defineHandler('agentPhase', handleAgentPhase),
   defineHandler('agentStateSnapshot', handleAgentStateSnapshot),
 ];

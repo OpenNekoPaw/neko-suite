@@ -3,7 +3,8 @@
  *
  * Handles: mediaTaskCreated, mediaTaskProgress
  *
- * On creation: merges the projected work item + synthetic assistant message + stops thinking indicator.
+ * On creation outside an active timeline: merges the projected work item,
+ * appends the assistant TaskCard host message, and stops the thinking indicator.
  * On progress: updates task in the per-conversation work item store.
  */
 
@@ -12,6 +13,11 @@ import type { MessageHandler, HandlerRegistration } from './types';
 import type { MediaTaskCreatedMessage, MediaTaskProgressMessage } from './messages';
 import { appendMediaTaskMessageToMessages } from '@/presenters/work-item-message-presenter';
 import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-presenter';
+import {
+  getActiveTimelineForMessage,
+  hasActiveTimelineWorkItem,
+  rejectActiveTimelineNonTimelineMessage,
+} from './timeline-handlers';
 
 // ---------------------------------------------------------------------------
 // Handlers
@@ -19,8 +25,8 @@ import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-pre
 
 /**
  * Handle 'mediaTaskCreated' — task just submitted to the provider.
- * Stops the thinking indicator, adds a work item, and appends a synthetic
- * assistant message so the TaskCard renders inline.
+ * Stops the thinking indicator, adds a work item, and appends an assistant
+ * message so the TaskCard renders inline when no active timeline owns placement.
  */
 const handleMediaTaskCreated: MessageHandler<'mediaTaskCreated'> = (
   message: MediaTaskCreatedMessage,
@@ -30,6 +36,23 @@ const handleMediaTaskCreated: MessageHandler<'mediaTaskCreated'> = (
   const workItem = message.workItem;
 
   if (!conversationId || workItem.conversationId !== conversationId) return;
+
+  const activeTimeline = getActiveTimelineForMessage(
+    context,
+    conversationId,
+    message.messageId ?? workItem.parentMessageId ?? undefined,
+  );
+  if (activeTimeline) {
+    if (hasActiveTimelineWorkItem(activeTimeline.items, workItem.id)) {
+      return;
+    }
+    rejectActiveTimelineNonTimelineMessage({
+      context,
+      messageType: message.type,
+      reason: 'active timeline media updates must arrive as agentTurnTimeline',
+    });
+    return;
+  }
 
   context.setWorkItemsByConversation((prev) =>
     upsertWorkItemsForConversation(prev, conversationId, [workItem]),
@@ -41,7 +64,7 @@ const handleMediaTaskCreated: MessageHandler<'mediaTaskCreated'> = (
     context.setStreamingMessageId(null);
     context.setQueuedMessageCount?.(0);
 
-    // Append synthetic assistant message that embeds the TaskCard
+    // Append an assistant message that embeds the TaskCard for non-timeline placement.
     context.setMessages((prev) => appendMediaTaskMessageToMessages(prev, workItem.id));
   } else if (conversationId) {
     // Non-current conversation: update refs only
@@ -68,6 +91,23 @@ const handleMediaTaskProgress: MessageHandler<'mediaTaskProgress'> = (
   const conversationId = message.conversationId;
   const workItem = message.workItem;
   if (!conversationId || workItem.conversationId !== conversationId) return;
+
+  const activeTimeline = getActiveTimelineForMessage(
+    context,
+    conversationId,
+    message.messageId ?? workItem.parentMessageId ?? undefined,
+  );
+  if (activeTimeline) {
+    if (hasActiveTimelineWorkItem(activeTimeline.items, workItem.id)) {
+      return;
+    }
+    rejectActiveTimelineNonTimelineMessage({
+      context,
+      messageType: message.type,
+      reason: 'active timeline media updates must arrive as agentTurnTimeline',
+    });
+    return;
+  }
 
   context.setWorkItemsByConversation((prev) =>
     upsertWorkItemsForConversation(prev, conversationId, [workItem]),

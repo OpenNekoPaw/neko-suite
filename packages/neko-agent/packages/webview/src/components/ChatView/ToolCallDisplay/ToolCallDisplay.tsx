@@ -17,6 +17,7 @@ import type { AgentArtifactTransferPayload } from '@neko-agent/types';
 import type { CompositeArtifactPageRichData } from '@/components/ChatView/RichContent/renderers';
 import { getTaskWorkItemById, selectRelatedSubAgentWorkItems } from '@/components/AgentWorkItem';
 import { projectToolCallDisplayState } from '@/presenters/tool-call-presenter';
+import { isTaskWorkItem } from '@/presenters/work-item-projection-presenter';
 import { getLogger } from '../../../utils/logger';
 import { CopyIcon } from '@neko/shared/icons';
 import {
@@ -97,7 +98,7 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
   } = projection;
   const liveTask = backgroundTaskId
     ? getTaskWorkItemById(workItems, backgroundTaskId)?.task
-    : undefined;
+    : selectAnchoredTask(workItems, workItemIds, toolCall.id);
   const relatedSubAgents = selectRelatedSubAgentWorkItems({
     toolCallId: toolCall.id,
     toolResultData: toolCall.result?.data,
@@ -308,7 +309,7 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
       </div>
 
       {/* Inline task progress card for background media tasks */}
-      {isBackgroundMode && liveTask && (
+      {(isBackgroundMode || liveTask) && liveTask && (
         <TaskCard
           task={liveTask}
           onCancel={onCancelTask}
@@ -442,3 +443,18 @@ function getArtifactTransferKey(artifact: AgentArtifactTransferPayload): string 
 }
 
 export const ToolCallDisplay = memo(ToolCallDisplayComponent);
+
+function selectAnchoredTask(
+  workItems: readonly import('@neko-agent/types').AgentWorkItem[] | undefined,
+  workItemIds: readonly string[] | undefined,
+  toolCallId: string,
+) {
+  if (!workItems || !workItemIds || workItemIds.length === 0) {
+    return undefined;
+  }
+  const linkedIds = new Set(workItemIds);
+  const anchoredItem = workItems.find((item) => {
+    return isTaskWorkItem(item) && linkedIds.has(item.id) && item.parentToolCallId === toolCallId;
+  });
+  return anchoredItem && isTaskWorkItem(anchoredItem) ? anchoredItem.task : undefined;
+}

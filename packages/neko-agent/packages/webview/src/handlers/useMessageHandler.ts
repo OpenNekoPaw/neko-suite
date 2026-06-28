@@ -9,6 +9,7 @@ import {
   createConfiguredRegistry,
   type MessageHandlerContext,
   type PendingForegroundConversationActivation,
+  type QueuedMessageEditRequest,
   type StreamingState,
   type NonCurrentConversationUpdater,
 } from '@/handlers';
@@ -21,6 +22,7 @@ import type {
   TabType,
   SettingsState,
   AgentState,
+  AgentQueuedMessageItem,
 } from '@neko-agent/types';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
@@ -46,11 +48,13 @@ export interface UseMessageHandlerProps {
   activeConversationId: string | null;
   streamingMessageId: string | null;
   queuedMessageCount: number;
+  queuedMessages: readonly AgentQueuedMessageItem[];
   openTabs: OpenTab[];
   activeTabId: string | null;
   isTablessConversationViewRef: MutableRefObject<boolean>;
   pendingForegroundConversationActivationRef?: MutableRefObject<PendingForegroundConversationActivation | null>;
   completeForegroundConversationActivation?: (conversationId: string) => void;
+  requestQueuedMessageEdit?: (request: QueuedMessageEditRequest) => void;
   requestConfigSnapshot?: () => void;
 
   // Refs
@@ -64,6 +68,7 @@ export interface UseMessageHandlerProps {
   setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
   setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
   setQueuedMessageCount: React.Dispatch<React.SetStateAction<number>>;
+  setQueuedMessages: React.Dispatch<React.SetStateAction<readonly AgentQueuedMessageItem[]>>;
 
   // State setters - Conversation
   setConversations: React.Dispatch<React.SetStateAction<ConversationSummary[]>>;
@@ -131,11 +136,13 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     activeConversationId,
     streamingMessageId,
     queuedMessageCount,
+    queuedMessages,
     openTabs,
     activeTabId,
     isTablessConversationViewRef,
     pendingForegroundConversationActivationRef,
     completeForegroundConversationActivation,
+    requestQueuedMessageEdit,
     requestConfigSnapshot,
     activeConversationIdRef,
     streamingMessageIdRef,
@@ -145,6 +152,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     setIsThinking,
     setStreamingMessageId,
     setQueuedMessageCount,
+    setQueuedMessages,
     setConversations,
     setActiveConversationId,
     setOpenTabs,
@@ -197,6 +205,8 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
         streamingMessageId: null,
         isThinking: false,
         queuedMessageCount: 0,
+        queuedMessages: [],
+        activeTurnTimeline: null,
       };
       const updated = updater(currentMessages, currentStreaming);
       conversationMessagesRef.current.set(conversationId, updated.messages);
@@ -225,8 +235,10 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setIsThinking,
       setStreamingMessageId,
       setQueuedMessageCount,
+      setQueuedMessages,
       streamingMessageId,
       queuedMessageCount,
+      queuedMessages,
       streamingMessageIdRef,
       setConversations,
       setActiveConversationId,
@@ -266,6 +278,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       updateNonCurrentConversation,
       pendingForegroundConversationActivationRef,
       completeForegroundConversationActivation,
+      requestQueuedMessageEdit,
     }),
     [
       activeConversationId,
@@ -279,8 +292,10 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       setStreamingMessageId,
       streamingMessageId,
       queuedMessageCount,
+      queuedMessages,
       streamingMessageIdRef,
       setQueuedMessageCount,
+      setQueuedMessages,
       setConversations,
       setActiveConversationId,
       openTabs,
@@ -319,6 +334,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       updateNonCurrentConversation,
       pendingForegroundConversationActivationRef,
       completeForegroundConversationActivation,
+      requestQueuedMessageEdit,
     ],
   );
 

@@ -14,7 +14,9 @@ import type {
   TabType,
   SettingsState,
   AgentState,
+  AgentQueuedMessageItem,
 } from '@neko-agent/types';
+import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
@@ -38,6 +40,9 @@ export interface StreamingState {
   streamingMessageId: string | null;
   isThinking: boolean;
   queuedMessageCount?: number;
+  queuedMessages?: readonly AgentQueuedMessageItem[];
+  messageQueueVersion?: number;
+  activeTurnTimeline?: ActiveTurnTimelineState | null;
 }
 
 export type PendingForegroundConversationActivation =
@@ -70,8 +75,10 @@ export interface ChatStateContext {
   setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
   setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
   setQueuedMessageCount?: React.Dispatch<React.SetStateAction<number>>;
+  setQueuedMessages?: React.Dispatch<React.SetStateAction<readonly AgentQueuedMessageItem[]>>;
   streamingMessageId: string | null;
   queuedMessageCount?: number;
+  queuedMessages?: readonly AgentQueuedMessageItem[];
   streamingMessageIdRef: MutableRefObject<string | null>;
 }
 
@@ -123,6 +130,11 @@ export interface GlobalNotificationContext {
   setGlobalError: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
+export interface QueuedMessageEditRequest {
+  readonly conversationId: string;
+  readonly item: AgentQueuedMessageItem;
+}
+
 /** Context window token tracking and compression */
 export interface ContextManagementContext {
   conversationTokenCountRef: MutableRefObject<Map<string, number>>;
@@ -139,6 +151,7 @@ export interface HelperContext {
   ) => void;
   pendingForegroundConversationActivationRef?: MutableRefObject<PendingForegroundConversationActivation | null>;
   completeForegroundConversationActivation?: (conversationId: string) => void;
+  requestQueuedMessageEdit?: (request: QueuedMessageEditRequest) => void;
 }
 
 // =============================================================================

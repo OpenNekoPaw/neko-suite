@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { Message, ToolCall } from '@neko-agent/types';
 import {
   projectMessageCancelledIntoMessages,
-  projectQueuedMessageIntoMessages,
   projectStreamingCompleteIntoMessages,
   projectStreamingTextIntoMessages,
   projectStreamingThinkingIntoMessages,
@@ -422,6 +421,56 @@ describe('message presenter', () => {
     });
   });
 
+  it('closes the active response block before inserting a tool call', () => {
+    const firstText = projectStreamingTextIntoMessages({
+      messages: [],
+      streamingMessageId: null,
+      messageId: 'assistant-stream',
+      content: 'I will inspect the file.',
+      now: () => 1000,
+    });
+
+    const withTool = projectToolCallIntoMessages({
+      messages: firstText.messages,
+      streamingMessageId: 'assistant-stream',
+      messageId: 'assistant-stream',
+      toolCallId: 'tool-read',
+      toolName: 'ReadDocument',
+      arguments: { path: '${A}/book.epub' },
+      now: () => 1001,
+    });
+
+    const secondText = projectStreamingTextIntoMessages({
+      messages: withTool.messages,
+      streamingMessageId: 'assistant-stream',
+      messageId: 'assistant-stream',
+      content: ' I found the manifest.',
+      now: () => 1002,
+      randomId: () => 'after-tool',
+    });
+
+    expect(secondText.messages[0]?.content).toBe('I will inspect the file. I found the manifest.');
+    expect(secondText.messages[0]?.contentBlocks).toMatchObject([
+      {
+        type: 'text',
+        content: 'I will inspect the file.',
+        isStreaming: false,
+      },
+      {
+        type: 'tool_call',
+        toolCall: {
+          id: 'tool-read',
+          name: 'ReadDocument',
+        },
+      },
+      {
+        type: 'text',
+        content: ' I found the manifest.',
+        isStreaming: true,
+      },
+    ]);
+  });
+
   it('projects streaming thinking into new and existing assistant messages', () => {
     const created = projectStreamingThinkingIntoMessages({
       messages: [],
@@ -523,6 +572,92 @@ describe('message presenter', () => {
         },
       ],
     });
+  });
+
+  it('merges final content blocks without reordering the active streamed timeline', () => {
+    const messages: Message[] = [
+      {
+        id: 'assistant-stream',
+        role: 'assistant',
+        content: 'Before. After.',
+        timestamp: 1,
+        isStreaming: true,
+        contentBlocks: [
+          {
+            id: 'block-before',
+            type: 'text',
+            timestamp: 1,
+            content: 'Before.',
+            isStreaming: false,
+          },
+          {
+            id: 'block-tool-tool-1',
+            type: 'tool_call',
+            timestamp: 2,
+            toolCall: {
+              id: 'tool-1',
+              name: 'ReadDocument',
+              arguments: { path: '${A}/book.epub' },
+            },
+          },
+          {
+            id: 'block-after',
+            type: 'text',
+            timestamp: 3,
+            content: ' After.',
+            isStreaming: true,
+          },
+        ],
+      },
+    ];
+
+    const completed = projectStreamingCompleteIntoMessages({
+      messages,
+      streamingMessageId: 'assistant-stream',
+      contentBlocks: [
+        {
+          id: 'block-before',
+          type: 'text',
+          timestamp: 1,
+          content: 'Before.',
+          isStreaming: false,
+        },
+        {
+          id: 'block-after',
+          type: 'text',
+          timestamp: 3,
+          content: ' After.',
+          isStreaming: false,
+        },
+        {
+          id: 'block-tool-tool-1',
+          type: 'tool_call',
+          timestamp: 2,
+          toolCall: {
+            id: 'tool-1',
+            name: 'ReadDocument',
+            arguments: { path: '${A}/book.epub' },
+            result: {
+              success: true,
+              data: { title: 'book' },
+            },
+          },
+        },
+      ],
+    });
+
+    expect(completed.messages[0]?.contentBlocks).toMatchObject([
+      { id: 'block-before', type: 'text', content: 'Before.', isStreaming: false },
+      {
+        id: 'block-tool-tool-1',
+        type: 'tool_call',
+        toolCall: {
+          id: 'tool-1',
+          result: { success: true, data: { title: 'book' } },
+        },
+      },
+      { id: 'block-after', type: 'text', content: ' After.', isStreaming: false },
+    ]);
   });
 
   it('projects fenced composite content into content blocks when streaming completes', () => {
@@ -656,24 +791,6 @@ describe('message presenter', () => {
         },
       ],
     });
-  });
-
-  it('appends queued system messages', () => {
-    expect(
-      projectQueuedMessageIntoMessages({
-        messages: [],
-        content: 'Queued',
-        now: () => 1000,
-      }).messages,
-    ).toEqual([
-      {
-        id: 'queued-1000',
-        role: 'system',
-        content: 'Queued',
-        timestamp: 1000,
-        isQueued: true,
-      },
-    ]);
   });
 });
 

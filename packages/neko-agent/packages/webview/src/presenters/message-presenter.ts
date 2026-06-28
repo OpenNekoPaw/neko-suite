@@ -103,11 +103,6 @@ export interface MessageCancelledProjectionInput {
   streamingMessageId: string | null;
 }
 
-export interface MessageQueuedProjectionInput extends MessageProjectorIdOptions {
-  messages: readonly Message[];
-  content?: string;
-}
-
 export interface StreamingMessageProjectionResult {
   messages: Message[];
   streamingMessageId?: string | null;
@@ -163,7 +158,11 @@ export function projectToolCallIntoMessages(
 
     updated = true;
     resolvedTargetMessageId = message.id;
-    const contentBlocks = addToolCallBlock(message.contentBlocks ?? [], toolCall, timestamp);
+    const contentBlocks = addToolCallBlock(
+      closeStreamingTextBlocks(message.contentBlocks ?? []),
+      toolCall,
+      timestamp,
+    );
     return {
       ...message,
       contentBlocks,
@@ -469,7 +468,10 @@ export function projectStreamingCompleteIntoMessages(
 
     updated = true;
     return input.contentBlocks && input.contentBlocks.length > 0
-      ? completeStreamingMessageWithContentBlocks(message, input.contentBlocks)
+      ? completeStreamingMessageWithContentBlocks(
+          message,
+          mergeCompletionContentBlocks(message.contentBlocks ?? [], input.contentBlocks),
+        )
       : completeStreamingMessage(message);
   });
 
@@ -513,28 +515,6 @@ export function projectMessageCancelledIntoMessages(
   };
 }
 
-export function projectQueuedMessageIntoMessages(
-  input: MessageQueuedProjectionInput,
-): StreamingMessageProjectionResult {
-  const timestamp = input.now?.() ?? Date.now();
-  const messageId = `queued-${timestamp}`;
-
-  return {
-    updated: true,
-    targetMessageId: messageId,
-    messages: [
-      ...input.messages,
-      {
-        id: messageId,
-        role: 'system',
-        content: input.content || 'Message queued - will be processed after current response',
-        timestamp,
-        isQueued: true,
-      },
-    ],
-  };
-}
-
 export function toPlanStatus(value: unknown): PlanStatus | null {
   switch (value) {
     case 'pending':
@@ -564,6 +544,12 @@ function addToolCallBlock(
       toolCall,
     },
   ];
+}
+
+function closeStreamingTextBlocks(blocks: readonly ContentBlock[]): ContentBlock[] {
+  return blocks.map((block) =>
+    block.type === 'text' && block.isStreaming === true ? { ...block, isStreaming: false } : block,
+  );
 }
 
 export function updateToolCallInBlocks(
@@ -657,6 +643,46 @@ function completeStreamingMessageWithContentBlocks(
       .join(''),
     contentBlocks: completedBlocks,
   };
+}
+
+function mergeCompletionContentBlocks(
+  currentBlocks: readonly ContentBlock[],
+  finalBlocks: readonly ContentBlock[],
+): ContentBlock[] {
+  if (currentBlocks.length === 0) {
+    return [...finalBlocks];
+  }
+
+  const finalById = new Map(finalBlocks.map((block) => [block.id, block]));
+  const finalByToolCallId = new Map(
+    finalBlocks.flatMap((block) =>
+      block.type === 'tool_call' && block.toolCall?.id ? [[block.toolCall.id, block]] : [],
+    ),
+  );
+  const usedFinalIds = new Set<string>();
+
+  const merged = currentBlocks.map((block) => {
+    const replacement =
+      finalById.get(block.id) ??
+      (block.type === 'tool_call' && block.toolCall?.id
+        ? finalByToolCallId.get(block.toolCall.id)
+        : undefined);
+
+    if (!replacement) {
+      return block;
+    }
+
+    usedFinalIds.add(replacement.id);
+    return replacement;
+  });
+
+  for (const block of finalBlocks) {
+    if (!usedFinalIds.has(block.id)) {
+      merged.push(block);
+    }
+  }
+
+  return merged;
 }
 
 function completeStreamingContentBlock(block: ContentBlock): ContentBlock[] {

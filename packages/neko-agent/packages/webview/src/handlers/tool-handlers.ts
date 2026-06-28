@@ -3,8 +3,8 @@
  *
  * Handles: toolCall, toolResult, toolConfirmation, planStepStatusUpdate, planStatusUpdate
  *
- * Uses ContentBlock as the single source of truth for tool call data.
- * toolCalls[] is auto-derived from contentBlocks[] for backward compatibility.
+ * Active Agent turns render tool lifecycle updates through agentTurnTimeline.
+ * Completed history and non-active conversations continue to use ContentBlock data.
  */
 
 import { defineHandler } from './types';
@@ -29,15 +29,41 @@ import {
   type ToolResultMessageProjectionResult,
 } from '../presenters/message-presenter';
 import { projectToolResultBackfillIntoMessages } from '../presenters/tool-result-backfill-presenter';
+import {
+  findActiveTimelineToolCall,
+  getActiveTimelineForMessage,
+  hasActiveTimelineForMessage,
+  rejectActiveTimelineNonTimelineMessage,
+} from './timeline-handlers';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ToolHandlers');
 
 /**
  * Handle 'toolCall' message - Tool invocation
- * Creates a tool_call content block; toolCalls[] is auto-derived
+ * Creates a tool_call content block outside active timeline-owned turns.
  */
 const handleToolCall: MessageHandler<'toolCall'> = (message: ToolCallMessage, context) => {
+  const activeTimeline = getActiveTimelineForMessage(
+    context,
+    message.conversationId,
+    message.messageId,
+  );
+  if (activeTimeline) {
+    if (
+      message.toolCallId &&
+      findActiveTimelineToolCall(activeTimeline.items, message.toolCallId)
+    ) {
+      return;
+    }
+    rejectActiveTimelineNonTimelineMessage({
+      context,
+      messageType: message.type,
+      reason: 'active timeline toolCall must arrive as agentTurnTimeline',
+    });
+    return;
+  }
+
   logger.debug('handleToolCall received:', {
     conversationId: message.conversationId,
     messageId: message.messageId,
@@ -71,10 +97,43 @@ const handleToolCall: MessageHandler<'toolCall'> = (message: ToolCallMessage, co
 
 /**
  * Handle 'toolResult' message - Tool execution result
- * Updates the corresponding tool_call content block; toolCalls[] is auto-derived
+ * Updates the corresponding tool_call content block outside active timeline-owned turns.
  */
 const handleToolResult: MessageHandler<'toolResult'> = (message: ToolResultMessage, context) => {
   let projection: ToolResultMessageProjectionResult | undefined;
+  const activeTimeline = getActiveTimelineForMessage(
+    context,
+    message.conversationId,
+    message.messageId,
+  );
+  if (activeTimeline) {
+    if (!message.toolCallId) {
+      rejectActiveTimelineNonTimelineMessage({
+        context,
+        messageType: message.type,
+        reason: 'active timeline toolResult must arrive as agentTurnTimeline',
+      });
+      return;
+    }
+    const existingTool = findActiveTimelineToolCall(activeTimeline.items, message.toolCallId);
+    if (!existingTool) {
+      rejectActiveTimelineNonTimelineMessage({
+        context,
+        messageType: message.type,
+        reason: `active timeline toolResult must arrive as agentTurnTimeline (unknown toolCallId ${message.toolCallId})`,
+      });
+      return;
+    }
+    if (existingTool.payload.toolCall.result) {
+      return;
+    }
+    rejectActiveTimelineNonTimelineMessage({
+      context,
+      messageType: message.type,
+      reason: 'active timeline toolResult must arrive as agentTurnTimeline',
+    });
+    return;
+  }
 
   logger.debug('toolResult received:', {
     success: message.success,
@@ -129,6 +188,21 @@ const handleToolResultBackfill: MessageHandler<'toolResultBackfill'> = (
   message: ToolResultBackfillMessage,
   context,
 ) => {
+  if (
+    hasActiveTimelineForMessage({
+      context,
+      conversationId: message.conversationId,
+      messageId: message.messageId,
+    })
+  ) {
+    rejectActiveTimelineNonTimelineMessage({
+      context,
+      messageType: message.type,
+      reason: 'active timeline backfills must arrive as agentTurnTimeline events',
+    });
+    return;
+  }
+
   logger.debug('toolResultBackfill received:', {
     messageId: message.messageId,
     toolCallId: message.toolCallId,
@@ -158,6 +232,27 @@ const handleToolConfirmation: MessageHandler<'toolConfirmation'> = (
   context,
 ) => {
   const toolCallId = message.toolCallId;
+  const activeTimeline = getActiveTimelineForMessage(context, message.conversationId, undefined);
+  if (activeTimeline) {
+    const existingTool = findActiveTimelineToolCall(activeTimeline.items, toolCallId);
+    if (!existingTool) {
+      rejectActiveTimelineNonTimelineMessage({
+        context,
+        messageType: message.type,
+        reason: `active timeline toolConfirmation must arrive as agentTurnTimeline (unknown toolCallId ${toolCallId})`,
+      });
+      return;
+    }
+    if (existingTool.payload.toolCall.pendingConfirmation === true) {
+      return;
+    }
+    rejectActiveTimelineNonTimelineMessage({
+      context,
+      messageType: message.type,
+      reason: 'active timeline toolConfirmation must arrive as agentTurnTimeline',
+    });
+    return;
+  }
 
   logger.debug('toolConfirmation received:', {
     conversationId: message.conversationId,

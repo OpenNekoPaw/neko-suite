@@ -30,7 +30,7 @@ interface MessageListProps {
   activeConversationId: string | null;
   identities?: MessageIdentityMap;
   activeSkillNotice?: ActiveSkillIndicator | null;
-  onClearActiveSkill?: () => void;
+  onClearActiveSkill?: (recordId?: string) => void;
 }
 
 export function MessageList({

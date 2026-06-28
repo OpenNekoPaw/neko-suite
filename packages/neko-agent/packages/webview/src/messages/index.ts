@@ -140,6 +140,26 @@ export const VSCodeMessages = {
     postWebviewMessage({ type: 'cancelMessage', conversationId });
   },
 
+  /** Request the authoritative pending message queue for a conversation. */
+  getMessageQueue: (conversationId: string) => {
+    postWebviewMessage({ type: 'getMessageQueue', conversationId });
+  },
+
+  /** Promote a queued message so it runs next after the active turn. */
+  promoteQueuedMessage: (conversationId: string, queueItemId: string) => {
+    postWebviewMessage({ type: 'promoteQueuedMessage', conversationId, queueItemId });
+  },
+
+  /** Cancel a queued message without cancelling the active response. */
+  cancelQueuedMessage: (conversationId: string, queueItemId: string) => {
+    postWebviewMessage({ type: 'cancelQueuedMessage', conversationId, queueItemId });
+  },
+
+  /** Remove a queued message and ask Webview to restore it into the composer. */
+  editQueuedMessage: (conversationId: string, queueItemId: string) => {
+    postWebviewMessage({ type: 'editQueuedMessage', conversationId, queueItemId });
+  },
+
   /** Exit an active Embody Character feedback session */
   exitEmbodyCharacterSession: (sessionId: string) => {
     postWebviewMessage({ type: 'exitEmbodyCharacterSession', sessionId });
@@ -196,8 +216,17 @@ export const VSCodeMessages = {
   // ==========================================================================
 
   /** Clear active skill for the current conversation */
-  clearActiveSkill: (conversationId: string) => {
-    postWebviewMessage({ type: 'clearActiveSkill', conversationId });
+  clearActiveSkill: (
+    conversationId: string,
+    options?: { recordId?: string; slot?: string; skillName?: string },
+  ) => {
+    postWebviewMessage({
+      type: 'clearActiveSkill',
+      conversationId,
+      ...(options?.recordId ? { recordId: options.recordId } : {}),
+      ...(options?.slot ? { slot: options.slot } : {}),
+      ...(options?.skillName ? { skillName: options.skillName } : {}),
+    });
   },
 
   // ==========================================================================

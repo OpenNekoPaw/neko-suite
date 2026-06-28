@@ -9,11 +9,7 @@ import {
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 
 export type MessageListItemKind =
-  | 'message'
-  | 'content_block'
-  | 'process_group'
-  | 'skill_notice'
-  | 'thinking_indicator';
+  'message' | 'content_block' | 'process_group' | 'skill_notice' | 'thinking_indicator';
 
 export type MessageListProjectionItem =
   | MessageListMessageItemProjection
@@ -64,6 +60,17 @@ export interface MessageListThinkingItemProjection {
 export interface MessageListSkillNoticeProjection {
   skillName: string;
   allowedTools?: readonly string[];
+  records?: readonly {
+    id: string;
+    skillName: string;
+    slot: string;
+    owner: string;
+    clearable: boolean;
+    lockedReason?: string;
+    expires?: string;
+    status?: string;
+    allowedTools?: readonly string[];
+  }[];
 }
 
 export interface MessageListSkillNoticeItemProjection {
@@ -127,6 +134,10 @@ export function projectMessageListItems(
   }
 
   for (const message of messages) {
+    if (message.isQueued) {
+      continue;
+    }
+
     const timeDiff = message.timestamp - prevTimestamp;
     const isGrouped = prevRole === message.role && timeDiff < 2 * 60 * 1000;
 

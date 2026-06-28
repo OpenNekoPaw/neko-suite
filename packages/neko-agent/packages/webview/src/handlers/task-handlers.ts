@@ -18,6 +18,11 @@ import {
   mergeBackgroundTaskSnapshotForConversation,
   upsertWorkItemsForConversation,
 } from '@/presenters/work-item-state-presenter';
+import {
+  getActiveTimelineForMessage,
+  hasActiveTimelineWorkItem,
+  rejectActiveTimelineNonTimelineMessage,
+} from './timeline-handlers';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('TaskHandlers');
@@ -54,6 +59,19 @@ const handleTaskCreated: MessageHandler<'taskCreated'> = (message: TaskCreatedMe
     return;
   }
 
+  const activeTimeline = getActiveTimelineForMessage(context, conversationId, message.messageId);
+  if (activeTimeline) {
+    if (hasActiveTimelineWorkItem(activeTimeline.items, message.workItem.id)) {
+      return;
+    }
+    rejectActiveTimelineNonTimelineMessage({
+      context,
+      messageType: message.type,
+      reason: 'active timeline task updates must arrive as agentTurnTimeline',
+    });
+    return;
+  }
+
   context.setWorkItemsByConversation((prev) =>
     upsertWorkItemsForConversation(prev, conversationId, [message.workItem]),
   );
@@ -67,6 +85,19 @@ const handleTaskUpdated: MessageHandler<'taskUpdated'> = (message: TaskUpdatedMe
   const conversationId = message.conversationId;
   if (!conversationId) {
     logger.warn('Ignoring taskUpdated without conversationId', message.workItem);
+    return;
+  }
+
+  const activeTimeline = getActiveTimelineForMessage(context, conversationId, undefined);
+  if (activeTimeline) {
+    if (hasActiveTimelineWorkItem(activeTimeline.items, message.workItem.id)) {
+      return;
+    }
+    rejectActiveTimelineNonTimelineMessage({
+      context,
+      messageType: message.type,
+      reason: 'active timeline task updates must arrive as agentTurnTimeline',
+    });
     return;
   }
 

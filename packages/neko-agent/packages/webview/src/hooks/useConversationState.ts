@@ -5,7 +5,13 @@
  */
 
 import { useState, useRef, useEffect, useCallback, type MutableRefObject } from 'react';
-import type { Message, ConversationSummary, OpenTab } from '@neko-agent/types';
+import type {
+  AgentQueuedMessageItem,
+  Message,
+  ConversationSummary,
+  OpenTab,
+} from '@neko-agent/types';
+import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 
 /**
  * Streaming state for a conversation
@@ -13,7 +19,10 @@ import type { Message, ConversationSummary, OpenTab } from '@neko-agent/types';
 export interface StreamingState {
   streamingMessageId: string | null;
   isThinking: boolean;
-  queuedMessageCount: number;
+  queuedMessageCount?: number;
+  queuedMessages?: readonly AgentQueuedMessageItem[];
+  messageQueueVersion?: number;
+  activeTurnTimeline?: ActiveTurnTimelineState | null;
 }
 
 /**
@@ -26,6 +35,7 @@ export interface ConversationState {
   isThinking: boolean;
   streamingMessageId: string | null;
   queuedMessageCount: number;
+  queuedMessages: readonly AgentQueuedMessageItem[];
   // Conversation management
   conversations: ConversationSummary[];
   activeConversationId: string | null;
@@ -52,6 +62,7 @@ export interface ConversationStateActions {
   setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
   setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
   setQueuedMessageCount: React.Dispatch<React.SetStateAction<number>>;
+  setQueuedMessages: React.Dispatch<React.SetStateAction<readonly AgentQueuedMessageItem[]>>;
   setConversations: React.Dispatch<React.SetStateAction<ConversationSummary[]>>;
   setActiveConversationId: React.Dispatch<React.SetStateAction<string | null>>;
   setOpenTabs: React.Dispatch<React.SetStateAction<OpenTab[]>>;
@@ -79,6 +90,7 @@ export function useConversationState(): UseConversationStateReturn {
   const [isThinking, setIsThinking] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [queuedMessageCount, setQueuedMessageCount] = useState(0);
+  const [queuedMessages, setQueuedMessages] = useState<readonly AgentQueuedMessageItem[]>([]);
   // Ref for immediate access (fixes race condition with async state updates)
   const streamingMessageIdRef = useRef<string | null>(null);
 
@@ -106,12 +118,21 @@ export function useConversationState(): UseConversationStateReturn {
     if (activeConversationId) {
       conversationMessagesRef.current.set(activeConversationId, messages);
       conversationStreamingRef.current.set(activeConversationId, {
+        ...(conversationStreamingRef.current.get(activeConversationId) ?? {}),
         streamingMessageId,
         isThinking,
         queuedMessageCount,
+        queuedMessages,
       });
     }
-  }, [activeConversationId, messages, streamingMessageId, isThinking, queuedMessageCount]);
+  }, [
+    activeConversationId,
+    messages,
+    streamingMessageId,
+    isThinking,
+    queuedMessageCount,
+    queuedMessages,
+  ]);
 
   // Helper: add a single message
   const addMessage = useCallback((message: Message) => {
@@ -124,6 +145,7 @@ export function useConversationState(): UseConversationStateReturn {
     setStreamingMessageId(null);
     setIsThinking(false);
     setQueuedMessageCount(0);
+    setQueuedMessages([]);
     if (activeConversationIdRef.current) {
       conversationMessagesRef.current.delete(activeConversationIdRef.current);
       conversationStreamingRef.current.delete(activeConversationIdRef.current);
@@ -136,6 +158,7 @@ export function useConversationState(): UseConversationStateReturn {
     isThinking,
     streamingMessageId,
     queuedMessageCount,
+    queuedMessages,
     conversations,
     activeConversationId,
     openTabs,
@@ -150,6 +173,7 @@ export function useConversationState(): UseConversationStateReturn {
     setIsThinking,
     setStreamingMessageId,
     setQueuedMessageCount,
+    setQueuedMessages,
     setConversations,
     setActiveConversationId,
     setOpenTabs,

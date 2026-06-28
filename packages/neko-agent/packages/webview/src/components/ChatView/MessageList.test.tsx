@@ -156,11 +156,13 @@ describe('MessageList auto-scroll lifecycle', () => {
       </MessageActionsProvider>,
     );
 
-    expect(screen.getByText('Skill active')).toBeTruthy();
+    expect(screen.getByText('Active Skill records')).toBeTruthy();
     expect(screen.getByText('comic-to-storyboard')).toBeTruthy();
     expect(screen.getByText('Tool limit: 1')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Clear record: comic-to-storyboard (domainSkill)' }),
+    );
     expect(onClearActiveSkill).toHaveBeenCalledOnce();
   });
 });

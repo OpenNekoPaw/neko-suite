@@ -27,6 +27,45 @@ describe('message-list-presenter', () => {
     ]);
   });
 
+  it('keeps multiple active lifecycle records in the skill notice projection', () => {
+    const projection = projectMessageList({
+      messages: [],
+      isThinking: false,
+      streamingMessageId: null,
+      activeSkillNotice: {
+        skillName: 'creation-persona',
+        records: [
+          {
+            id: 'record-1',
+            skillName: 'creation-persona',
+            slot: 'stagePersona',
+            owner: 'idc',
+            clearable: false,
+            lockedReason: 'stage owned',
+          },
+          {
+            id: 'record-2',
+            skillName: 'quality-review',
+            slot: 'domainSkill',
+            owner: 'user',
+            clearable: true,
+            allowedTools: ['ReadDocument'],
+          },
+        ],
+      },
+    });
+
+    expect(projection.items[0]).toMatchObject({
+      kind: 'skill_notice',
+      notice: {
+        records: [
+          expect.objectContaining({ id: 'record-1', clearable: false }),
+          expect.objectContaining({ id: 'record-2', clearable: true }),
+        ],
+      },
+    });
+  });
+
   it('projects repeated assistant tool blocks as a single grouped list item', () => {
     const items = projectMessageListItems(
       [
@@ -53,6 +92,43 @@ describe('message-list-presenter', () => {
         toolName: 'ReadDocument',
         count: 3,
         targetLabel: '/books/a.epub',
+      },
+    });
+  });
+
+  it('keeps queued notices out of the transcript projection', () => {
+    const items = projectMessageListItems(
+      [
+        {
+          id: 'queued-1',
+          role: 'system',
+          content: 'Message queued (1 pending)',
+          timestamp: 1,
+          isQueued: true,
+        },
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: 'Generate a shot list',
+          timestamp: 2,
+          isQueued: true,
+        },
+        {
+          id: 'msg-2',
+          role: 'user',
+          content: 'Visible user message',
+          timestamp: 3,
+        },
+      ],
+      false,
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: 'message',
+      message: {
+        id: 'msg-2',
+        role: 'user',
       },
     });
   });

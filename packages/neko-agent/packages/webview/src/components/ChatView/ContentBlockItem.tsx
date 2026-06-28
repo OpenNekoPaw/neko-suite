@@ -16,7 +16,12 @@ import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
-import { projectAssistantMarkdownCanvasTransferPayload } from '@/presenters/storyboard-transfer-presenter';
+import { projectMarkdownStoryboardDraft } from '@/presenters/markdown-storyboard-draft-presenter';
+import {
+  projectAssistantMarkdownCanvasDraftPayload,
+  projectAssistantMarkdownCanvasTransferPayload,
+  projectMarkdownStoryboardResourceProjection,
+} from '@/presenters/storyboard-transfer-presenter';
 import {
   CodeIcon,
   EditIcon,
@@ -193,10 +198,20 @@ function renderBlockContent(
       );
 
     case 'markdown': {
+      const storyboardResources = !projection.renderStreaming
+        ? projectMarkdownStoryboardResourceProjection({
+            siblingBlocks: projection.siblingBlocks,
+            toolCalls: projection.toolCalls,
+          })
+        : undefined;
+      const storyboardDraft = !projection.renderStreaming
+        ? projectMarkdownStoryboardDraft(projection.content, storyboardResources)
+        : undefined;
       const canvasPayload =
         !projection.renderStreaming && callbacks.pluginsAvailable?.canvas
           ? projectAssistantMarkdownCanvasTransferPayload({
               content: projection.content,
+              storyboardDraft,
               siblingBlocks: projection.siblingBlocks,
               toolCalls: projection.toolCalls,
               target: projectCanvasContentTransferTarget({
@@ -206,18 +221,48 @@ function renderBlockContent(
               provenance: { source: 'webview', label: 'assistant-storyboard-block' },
             })
           : null;
+      const canvasDraftPayload =
+        !projection.renderStreaming &&
+        callbacks.pluginsAvailable?.canvas &&
+        storyboardDraft?.status !== 'none'
+          ? projectAssistantMarkdownCanvasDraftPayload({
+              content: projection.content,
+              storyboardDraft,
+              target: projectCanvasContentTransferTarget({
+                ambientNodes: callbacks.ambientNodes,
+                contextChips: callbacks.contextChips,
+              }),
+              provenance: { source: 'webview', label: 'assistant-storyboard-draft-block' },
+            })
+          : null;
 
       return (
         <div className="agent-bubble agent-bubble-assistant block w-fit max-w-full min-w-0 rounded-2xl rounded-tl-md px-2.5 py-1.5 text-[13px] leading-relaxed">
-          <MarkdownRenderer content={projection.content} isStreaming={projection.renderStreaming} />
-          {canvasPayload && callbacks.pluginsAvailable && (
-            <div className="mt-1.5 border-t border-[var(--agent-divider)] pt-1">
-              <SendToMenu
-                payload={canvasPayload}
-                mediaType="image"
-                plugins={callbacks.pluginsAvailable}
-                allowedTargets={['canvas']}
-              />
+          <MarkdownRenderer
+            content={projection.content}
+            isStreaming={projection.renderStreaming}
+            storyboardDraft={storyboardDraft}
+          />
+          {(canvasPayload || canvasDraftPayload) && callbacks.pluginsAvailable && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-[var(--agent-divider)] pt-1">
+              {canvasPayload ? (
+                <SendToMenu
+                  payload={canvasPayload}
+                  mediaType="image"
+                  plugins={callbacks.pluginsAvailable}
+                  allowedTargets={['canvas']}
+                />
+              ) : null}
+              {canvasDraftPayload ? (
+                <SendToMenu
+                  payload={canvasDraftPayload}
+                  mediaType="image"
+                  plugins={callbacks.pluginsAvailable}
+                  allowedTargets={['canvas']}
+                  hidePrefixLabel={Boolean(canvasPayload)}
+                  labelOverride="Add draft to"
+                />
+              ) : null}
             </div>
           )}
         </div>

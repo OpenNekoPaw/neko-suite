@@ -6,8 +6,9 @@
  * in every handler.
  */
 
-import type { MessageHandlerContext } from './types';
-import type { Message } from '@neko-agent/types';
+import type { MessageHandlerContext, StreamingState } from './types';
+import type { AgentQueuedMessageItem, Message } from '@neko-agent/types';
+import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 
 /**
  * Result of a conversation update that may change streaming state.
@@ -21,6 +22,12 @@ export interface ConversationUpdateResult {
   isThinking?: boolean;
   /** If provided, update queued user messages behind the active run */
   queuedMessageCount?: number;
+  /** If provided, update authoritative queued user message items */
+  queuedMessages?: readonly AgentQueuedMessageItem[];
+  /** If provided, update queue snapshot version */
+  messageQueueVersion?: number;
+  /** If provided, update active Agent turn timeline state */
+  activeTurnTimeline?: ActiveTurnTimelineState | null;
 }
 
 /**
@@ -30,6 +37,7 @@ export interface ConversationUpdateResult {
 export type ConversationUpdater = (
   messages: Message[],
   streamingMessageId: string | null,
+  streaming: StreamingState,
 ) => ConversationUpdateResult;
 
 /**
@@ -55,8 +63,11 @@ export function updateConversation(
       streamingMessageId: context.streamingMessageIdRef.current,
       isThinking: context.isThinking,
       queuedMessageCount: context.queuedMessageCount ?? 0,
+      queuedMessages: context.queuedMessages ?? [],
+      messageQueueVersion: undefined,
+      activeTurnTimeline: null,
     };
-    const result = updater(currentMessages, currentStreaming.streamingMessageId);
+    const result = updater(currentMessages, currentStreaming.streamingMessageId, currentStreaming);
     const nextStreaming = {
       streamingMessageId:
         result.streamingMessageId !== undefined
@@ -67,6 +78,18 @@ export function updateConversation(
         result.queuedMessageCount !== undefined
           ? result.queuedMessageCount
           : currentStreaming.queuedMessageCount,
+      queuedMessages:
+        result.queuedMessages !== undefined
+          ? result.queuedMessages
+          : (currentStreaming.queuedMessages ?? []),
+      messageQueueVersion:
+        result.messageQueueVersion !== undefined
+          ? result.messageQueueVersion
+          : currentStreaming.messageQueueVersion,
+      activeTurnTimeline:
+        result.activeTurnTimeline !== undefined
+          ? result.activeTurnTimeline
+          : (currentStreaming.activeTurnTimeline ?? null),
     };
 
     context.conversationMessagesRef.current.set(conversationId, result.messages);
@@ -76,9 +99,10 @@ export function updateConversation(
     context.setStreamingMessageId(nextStreaming.streamingMessageId);
     context.setIsThinking(nextStreaming.isThinking);
     context.setQueuedMessageCount?.(nextStreaming.queuedMessageCount ?? 0);
+    context.setQueuedMessages?.(nextStreaming.queuedMessages ?? []);
   } else if (conversationId) {
     context.updateNonCurrentConversation(conversationId, (msgs, streaming) => {
-      const result = updater(msgs, streaming.streamingMessageId);
+      const result = updater(msgs, streaming.streamingMessageId, streaming);
       return {
         messages: result.messages,
         streaming: {
@@ -91,6 +115,18 @@ export function updateConversation(
             result.queuedMessageCount !== undefined
               ? result.queuedMessageCount
               : streaming.queuedMessageCount,
+          queuedMessages:
+            result.queuedMessages !== undefined
+              ? result.queuedMessages
+              : (streaming.queuedMessages ?? []),
+          messageQueueVersion:
+            result.messageQueueVersion !== undefined
+              ? result.messageQueueVersion
+              : streaming.messageQueueVersion,
+          activeTurnTimeline:
+            result.activeTurnTimeline !== undefined
+              ? result.activeTurnTimeline
+              : (streaming.activeTurnTimeline ?? null),
         },
       };
     });
