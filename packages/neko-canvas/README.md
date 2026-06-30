@@ -19,7 +19,7 @@
 - **核心功能**：富文本编辑、分组管理、连接标签、图层面板、画板导出（PNG/SVG）、原地粘贴、分镜候选审阅、场景容器排序、输入引用节点投放
 - **布局**：Webview 使用 Creative Workbench Shell：左侧 CanvasToolbar 承接 Pan/Add/Import/Undo/Redo 等全局画布工具，底部显隐组承接 HUD（MiniMap/ZoomControls）与右侧 NodeLibrary 显隐；FloatingPanelHost、PlaybackControllerHost、GenerationPromptPanel、ContentOverlay 保留为主面板控件或 overlay；NodeLibrary 作为右侧创建面板。
 - **状态显示**：subsystem summary 与 projection state 由 Extension 侧 CanvasStatusBar 显示，Webview 不再在无限画布左下角渲染状态徽章。
-- **已落地 AI / 编排能力**：GenerationPromptPanel、BatchGenerationScheduler、ScriptNode TOC、Document/Model/CanvasEmbed 引用、`NekoCanvasAPI.storyboard.import()` + `neko.canvas.importStoryboard` 命令（story/agent 语义分镜导入）、`NekoCanvasAPI.storyboard.getExecutionSummary()` 只读执行摘要
+- **已落地 AI / 编排能力**：GenerationPromptPanel、BatchGenerationScheduler、ScriptNode TOC、Document/Model/CanvasEmbed 引用、`NekoCanvasAPI.storyboard.import()` 内部 API、Canvas Markdown ingest lifecycle capability（`canvas.ingestMarkdown`，分镜为内置 creative table profile）、`NekoCanvasAPI.storyboard.getExecutionSummary()` 只读执行摘要
 
 ## Architecture
 

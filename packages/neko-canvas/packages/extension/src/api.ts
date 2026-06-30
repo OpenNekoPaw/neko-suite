@@ -19,6 +19,8 @@ import type {
   CanvasExtractStructuredContentRequest,
   CanvasExtractStructuredContentResult,
   CanvasChangeEvent as SharedCanvasChangeEvent,
+  CanvasMarkdownCapabilityInput,
+  CanvasMarkdownCapabilityResult,
   CanvasNode,
   CanvasNodeType,
   CanvasPlaybackCreateCutDraftRequest,
@@ -178,6 +180,14 @@ export interface NekoCanvasAPI {
     getExecutionSummary(
       request?: CanvasStoryboardExecutionSummaryRequest,
     ): Promise<CanvasStoryboardExecutionSummary>;
+  };
+
+  /**
+   * Markdown capability operations — Canvas owns validation, resource binding,
+   * and node creation for Markdown authoring requests.
+   */
+  markdown: {
+    invoke(input: CanvasMarkdownCapabilityInput): Promise<CanvasMarkdownCapabilityResult>;
   };
 
   /**

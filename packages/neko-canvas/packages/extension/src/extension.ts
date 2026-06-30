@@ -9,7 +9,6 @@ import * as path from 'path';
 import {
   applyStoryboardPayloadToCanvas,
   type CanvasCreativeScope,
-  type CanvasAgentContentPayload,
   getPanoramicPreviewRoute,
   type ApplyCanvasStoryboardOptions,
   type CanvasStoryboardExecutionSummary,
@@ -36,6 +35,7 @@ import { CanvasOutlineProvider, CanvasStatusBar } from './views';
 import type { NekoCanvasAPI, CanvasConfig } from './api';
 import type { ISkillProvider, SkillDef } from '@neko/shared';
 import { createNekoCanvasCapabilityProvider } from './agentCapabilityProvider';
+import { invokeCanvasMarkdownCapability } from './markdownCapabilities';
 import {
   NARRATIVE_PREVIEW_CONFIG_SECTION,
   readNarrativePreviewFeatureToggles,
@@ -274,6 +274,16 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       },
       getExecutionSummary: (request) => canvasEditorProvider.getStoryboardExecutionSummary(request),
     },
+    markdown: {
+      invoke: (input) =>
+        invokeCanvasMarkdownCapability(input, {
+          applyAgentContent: (payload) => canvasEditorProvider.applyAgentContent(payload),
+          createNode: (type, position, data, preset) =>
+            canvasEditorProvider.createNode(type, position, data, preset),
+          updateNode: (nodeId, data) => canvasEditorProvider.updateNode(nodeId, data),
+          createComposite: (request) => canvasEditorProvider.createComposite(request),
+        }),
+    },
     playback: {
       getPlan: async (sourceCanvasUri) => canvasEditorProvider.getPlaybackPlan(sourceCanvasUri),
       getRoutes: async (sourceCanvasUri) => canvasEditorProvider.getPlaybackRoutes(sourceCanvasUri),
@@ -368,12 +378,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
   };
 
   // Register commands
-  registerCommands(
-    context,
-    api.storyboard.import,
-    api.storyboard.getExecutionSummary,
-    getNarrativePreviewFeatureToggles,
-  );
+  registerCommands(context, api.storyboard.getExecutionSummary, getNarrativePreviewFeatureToggles);
 
   // Register plugin slash commands into neko-agent chat panel
   registerAgentSlashCommands(context);
@@ -418,10 +423,6 @@ function getCanvasTemplate(
  */
 function registerCommands(
   context: vscode.ExtensionContext,
-  importStoryboard: (
-    payload: CanvasStoryboardPayload,
-    options?: ApplyCanvasStoryboardOptions,
-  ) => Promise<CreatedCanvasStoryboard>,
   getExecutionSummary: (
     request?: CanvasStoryboardExecutionSummaryRequest,
   ) => Promise<CanvasStoryboardExecutionSummary>,
@@ -542,42 +543,6 @@ function registerCommands(
         getRootLogger().info(
           `importAsset: received ${asset.path ?? asset.resourceRef?.id ?? asset.documentResourceRef?.entryPath ?? 'linked-resource'} (${asset.type ?? 'unknown'})`,
         );
-      },
-    ),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'neko.canvas.importStoryboard',
-      async (
-        payload?: CanvasStoryboardPayload,
-        options?: ApplyCanvasStoryboardOptions,
-      ): Promise<CreatedCanvasStoryboard> => {
-        if (!payload) {
-          throw new Error('neko.canvas.importStoryboard: missing storyboard payload');
-        }
-
-        const created = await importStoryboard(payload, options);
-        getRootLogger().info(
-          `importStoryboard: mode=${created.mode} scenes=${created.scenesCreated} shots=${created.totalShots}`,
-        );
-        return created;
-      },
-    ),
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      'neko.canvas.importAgentContent',
-      async (payload?: CanvasAgentContentPayload) => {
-        if (!payload) {
-          throw new Error('neko.canvas.importAgentContent: missing content payload');
-        }
-        const result = await canvasEditorProvider.applyAgentContent(payload);
-        getRootLogger().info(
-          `importAgentContent: kind=${payload.kind} mode=${result.mode} changed=${String(result.changed)}`,
-        );
-        return result;
       },
     ),
   );

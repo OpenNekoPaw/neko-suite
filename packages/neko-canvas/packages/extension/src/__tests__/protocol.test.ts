@@ -601,13 +601,17 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("case 'requestSave':");
       expect(providerSource).toContain('private async requestDocumentSave(');
       expect(providerSource).toContain('await vscode.workspace.save(document.uri)');
+      expect(providerSource).toContain('async saveCustomDocument(');
+      expect(providerSource).toContain('await requestCanvasProjectSnapshot');
+      expect(providerSource).toContain('this.projectFileSession.save({');
       expect(providerSource).toContain("webviewPanel.webview.postMessage({ type: 'saved' })");
       const requestSaveBody = readMethodBody(providerSource, 'private async requestDocumentSave');
       expect(requestSaveBody).not.toContain("postMessage({ type: 'saved' })");
       expect(providerSource).toContain('CustomDocumentContentChangeEvent<vscode.CustomDocument>');
       expect(providerSource).not.toContain('CustomDocumentEditEvent<vscode.CustomDocument>');
       expect(providerSource).not.toContain('private async persistCanvasSnapshot(');
-      expect(canvasAppSource).toContain("type: 'requestSave'");
+      expect(canvasAppSource).not.toContain("type: 'requestSave'");
+      expect(canvasAppSource).not.toContain('useCanvasAutoSave');
       expect(canvasAppSource).not.toContain("type: 'save', data");
       expect(webviewSource).toContain("case 'saved':");
       expect(webviewSource).toContain('onSavedRef.current?.()');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CanvasNode, GalleryCanvasNode } from '@neko/shared';
+import type { CanvasNode, GalleryCanvasNode, TableCanvasNode } from '@neko/shared';
 import {
   CANVAS_AGENT_CHILD_PRESETS,
   CANVAS_AGENT_CONTAINER_PRESETS,
@@ -58,6 +58,34 @@ describe('nodeFactory gallery container', () => {
 });
 
 describe('nodeFactory composable presets', () => {
+  it('preserves Canvas-owned Markdown table review metadata', () => {
+    const node = buildCanvasNode({
+      type: 'table',
+      position: { x: 0, y: 0 },
+      zIndex: 0,
+      preset: 'table.basic',
+      data: {
+        label: 'Storyboard Draft',
+        columnCount: 2,
+        rowCount: 1,
+        showHeader: true,
+        markdown: {
+          sourceFormat: 'gfm-table',
+          rows: [{ rowIndex: 0, cells: { scene: 'Opening', prompt: 'neon door' } }],
+          diagnostics: [{ severity: 'info', code: 'review', message: 'Needs review' }],
+        },
+      },
+    });
+
+    expect(node.type).toBe('table');
+    const tableNode = node as TableCanvasNode;
+    expect(tableNode.data.markdown).toEqual({
+      sourceFormat: 'gfm-table',
+      rows: [{ rowIndex: 0, cells: { scene: 'Opening', prompt: 'neon door' } }],
+      diagnostics: [{ severity: 'info', code: 'review', message: 'Needs review' }],
+    });
+  });
+
   it('creates narrative start and ending nodes with default data', () => {
     const start = buildCanvasNode({
       type: 'narrative-start',

@@ -125,7 +125,7 @@ export interface CanvasStore {
 
   // ==================== Data Actions ====================
   setCanvasData: (data: CanvasData) => void;
-  updateCanvasData: (updates: Partial<CanvasData>) => void;
+  updateCanvasData: (updates: Partial<CanvasData>, options?: { dirty?: boolean }) => void;
   setPlaybackEntry: (nodeId: string) => void;
 
   // ==================== Node Actions ====================
@@ -268,6 +268,10 @@ function normalizeCanvasConnectionInput(
 function recordHistory(canvasData: CanvasData | null): void {
   if (!canvasData) return;
   useHistoryStore.getState().pushState(canvasData);
+}
+
+function recordCanvasDirty(description: string): void {
+  useCanvasOperationStore.getState().recordDirty(description);
 }
 
 function arePositionsEqual(
@@ -509,7 +513,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set({ canvasData: withSubsystemMetadataDefaults(data) });
   },
 
-  updateCanvasData: (updates) => {
+  updateCanvasData: (updates, options) => {
     const { canvasData } = get();
     if (!canvasData) return;
     set({
@@ -518,6 +522,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ...updates,
       }),
     });
+    if (options?.dirty !== false) {
+      recordCanvasDirty('Update canvas data');
+    }
   },
 
   setPlaybackEntry: (nodeId) => {
@@ -541,6 +548,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         },
       }),
     });
+    recordCanvasDirty('Update canvas playback entry');
   },
 
   // ==================== Node Actions ====================
@@ -1015,6 +1023,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         connections: nextConnections,
       },
     });
+    recordCanvasDirty('Remove child from container');
   },
 
   ungroupNodes: (groupId) => {
@@ -1076,17 +1085,20 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   updateConnection: (id, updates) => {
     const { canvasData } = get();
     if (!canvasData) return;
+    const oldConnection = canvasData.connections.find((conn) => conn.id === id);
+    if (!oldConnection) return;
+    const nextConnection = { ...oldConnection, ...updates };
+    if (JSON.stringify(oldConnection) === JSON.stringify(nextConnection)) return;
 
     recordHistory(canvasData);
 
     set({
       canvasData: {
         ...canvasData,
-        connections: canvasData.connections.map((conn) =>
-          conn.id === id ? { ...conn, ...updates } : conn,
-        ),
+        connections: canvasData.connections.map((conn) => (conn.id === id ? nextConnection : conn)),
       },
     });
+    recordCanvasDirty('Update connection');
   },
 
   removeConnection: (id) => {
@@ -1094,6 +1106,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (!canvasData) return;
 
     const removedConnection = canvasData.connections.find((c) => c.id === id);
+    if (!removedConnection) return;
     recordHistory(canvasData);
 
     set({
@@ -1107,9 +1120,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       },
     });
 
-    if (removedConnection) {
-      useCanvasOperationStore.getState().recordConnectionRemove(id, removedConnection);
-    }
+    useCanvasOperationStore.getState().recordConnectionRemove(id, removedConnection);
   },
 
   startConnection: (nodeId, handleId) => {
@@ -1494,6 +1505,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   deleteSelected: () => {
     const { selection, canvasData } = get();
     if (!canvasData) return;
+    if (selection.nodeIds.length === 0 && selection.connectionIds.length === 0) return;
 
     recordHistory(canvasData);
 
@@ -1515,6 +1527,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       selection: { nodeIds: [], connectionIds: [] },
       expandedNodeId: null,
     });
+    recordCanvasDirty('Delete selection');
   },
 
   // ==================== Media Playback ====================
@@ -1542,6 +1555,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         canvasData: previousState,
         selection: { nodeIds: [], connectionIds: [] },
       });
+      recordCanvasDirty('Undo canvas edit');
     }
   },
 
@@ -1555,6 +1569,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         canvasData: nextState,
         selection: { nodeIds: [], connectionIds: [] },
       });
+      recordCanvasDirty('Redo canvas edit');
     }
   },
 }));

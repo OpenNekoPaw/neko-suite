@@ -79,16 +79,20 @@ function createConnection(
 
 describe('canvasStore scene container actions', () => {
   let recordNodeUpdateSpy: ReturnType<typeof vi.spyOn>;
+  let recordDirtySpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     recordNodeUpdateSpy = vi.spyOn(useCanvasOperationStore.getState(), 'recordNodeUpdate');
+    recordDirtySpy = vi.spyOn(useCanvasOperationStore.getState(), 'recordDirty');
     useCanvasStore.setState({
       canvasData: null,
       selection: { nodeIds: [], connectionIds: [] },
       isConnecting: false,
       pendingConnectionSource: null,
       activePlayingNodeId: null,
+      expandedNodeId: null,
       generationPanelState: { visible: false, nodeId: null, childNodeId: null },
+      contentOverlayState: { visible: false, nodeId: null },
     });
     useHistoryStore.setState({ undoStack: [], redoStack: [], maxHistory: 50 });
   });
@@ -225,10 +229,37 @@ describe('canvasStore scene container actions', () => {
       nodeOverrides: { 'shot-1': { durationMs: 2500 } },
     });
     expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(recordDirtySpy).toHaveBeenCalledWith('Update canvas playback entry');
 
     useCanvasStore.getState().setPlaybackEntry('scene-1');
 
     expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(recordDirtySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks semantic canvas data updates dirty while allowing runtime sync updates', () => {
+    useCanvasStore.getState().setCanvasData(createCanvasData([createSceneNode()]));
+
+    useCanvasStore.getState().updateCanvasData({
+      narrative: {
+        variables: [{ id: 'var-1', name: 'mood', value: 'calm' }],
+      },
+    });
+
+    expect(useCanvasStore.getState().canvasData?.narrative?.variables).toHaveLength(1);
+    expect(recordDirtySpy).toHaveBeenCalledWith('Update canvas data');
+
+    useCanvasStore.getState().updateCanvasData(
+      {
+        projectionStatus: { state: 'clean', updatedAt: 123 },
+      } as Partial<CanvasData>,
+      { dirty: false },
+    );
+
+    expect(useCanvasStore.getState().canvasData).toMatchObject({
+      projectionStatus: { state: 'clean', updatedAt: 123 },
+    });
+    expect(recordDirtySpy).toHaveBeenCalledTimes(1);
   });
 
   it('does not record resize or rotation gestures when the committed value is unchanged', () => {
@@ -379,6 +410,7 @@ describe('canvasStore scene container actions', () => {
     expect(state?.connections).toEqual([
       createConnection('shot-link', 'shot-1', 'shot-2', 'reference'),
     ]);
+    expect(recordDirtySpy).toHaveBeenCalledWith('Remove child from container');
   });
 
   it('removes gallery child nodes and their connections for delete-subtree gallery policy', () => {
@@ -412,6 +444,68 @@ describe('canvasStore scene container actions', () => {
     const state = useCanvasStore.getState().canvasData;
     expect(state?.nodes.some((node) => node.id === 'media-1')).toBe(false);
     expect(state?.connections).toEqual([]);
+    expect(recordDirtySpy).toHaveBeenCalledWith('Remove child from container');
+  });
+
+  it('marks connection metadata updates dirty without writing immediately', () => {
+    useCanvasStore.getState().setCanvasData({
+      ...createCanvasData([createShotNode('shot-1', 0, 0), createShotNode('shot-2', 260, 0)]),
+      connections: [createConnection('connection-1', 'shot-1', 'shot-2')],
+    });
+
+    useCanvasStore.getState().updateConnection('connection-1', { label: 'Beat link' });
+
+    expect(useCanvasStore.getState().canvasData?.connections[0]).toMatchObject({
+      id: 'connection-1',
+      label: 'Beat link',
+    });
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(recordDirtySpy).toHaveBeenCalledWith('Update connection');
+
+    useCanvasStore.getState().updateConnection('connection-1', { label: 'Beat link' });
+
+    expect(useHistoryStore.getState().undoStack).toHaveLength(1);
+    expect(recordDirtySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks selection deletion and undo/redo dirty through the operation bridge', () => {
+    useCanvasStore
+      .getState()
+      .setCanvasData(
+        createCanvasData([createShotNode('shot-1', 0, 0), createShotNode('shot-2', 260, 0)]),
+      );
+    useCanvasStore.getState().selectNode('shot-1');
+
+    useCanvasStore.getState().deleteSelected();
+
+    expect(useCanvasStore.getState().canvasData?.nodes.map((node) => node.id)).toEqual(['shot-2']);
+    expect(recordDirtySpy).toHaveBeenCalledWith('Delete selection');
+
+    useCanvasStore.getState().undo();
+
+    expect(useCanvasStore.getState().canvasData?.nodes.map((node) => node.id)).toEqual([
+      'shot-1',
+      'shot-2',
+    ]);
+    expect(recordDirtySpy).toHaveBeenCalledWith('Undo canvas edit');
+
+    useCanvasStore.getState().redo();
+
+    expect(useCanvasStore.getState().canvasData?.nodes.map((node) => node.id)).toEqual(['shot-2']);
+    expect(recordDirtySpy).toHaveBeenCalledWith('Redo canvas edit');
+  });
+
+  it('does not mark missing connection removal dirty', () => {
+    useCanvasStore
+      .getState()
+      .setCanvasData(
+        createCanvasData([createShotNode('shot-1', 0, 0), createShotNode('shot-2', 260, 0)]),
+      );
+
+    useCanvasStore.getState().removeConnection('missing-connection');
+
+    expect(useHistoryStore.getState().undoStack).toHaveLength(0);
+    expect(recordDirtySpy).not.toHaveBeenCalled();
   });
 
   it('deletes release-children containers while preserving released child connections', () => {

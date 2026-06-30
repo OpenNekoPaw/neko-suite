@@ -84,6 +84,23 @@ function createApi(): NekoCanvasAPI {
       import: vi.fn(),
       getExecutionSummary: vi.fn(),
     },
+    markdown: {
+      invoke: vi.fn(async (input) => ({
+        capabilityId: input.capabilityId,
+        status:
+          input.capabilityId === 'canvas.validateMarkdownStoryboard' ? 'validated' : 'blocked',
+        diagnostics:
+          input.capabilityId === 'canvas.validateMarkdownStoryboard'
+            ? []
+            : [
+                {
+                  severity: 'warning',
+                  code: 'canvas-markdown-capability-not-implemented',
+                  message: 'Not implemented in test mock.',
+                },
+              ],
+      })),
+    },
     playback: {
       getPlan: vi.fn(async () => plan),
       getRoutes: vi.fn(async () => plan.routeCandidates),
@@ -132,15 +149,14 @@ function createApi(): NekoCanvasAPI {
 }
 
 describe('agentCapabilityProvider storyboard export contracts', () => {
-  it('registers the target-aware Agent content command and editor provider bridge', () => {
+  it('keeps target-aware Agent content behind Canvas APIs instead of legacy commands', () => {
     const extensionSource = readFileSync(join(__dirname, '../extension.ts'), 'utf-8');
     const editorProviderSource = readFileSync(
       join(__dirname, '../editor/canvasEditorProvider.ts'),
       'utf-8',
     );
 
-    expect(extensionSource).toContain("'neko.canvas.importAgentContent'");
-    expect(extensionSource).toContain('canvasEditorProvider.applyAgentContent(payload)');
+    expect(extensionSource).not.toContain("'neko.canvas.importAgentContent'");
     expect(editorProviderSource).toContain("'nodes.getActiveContext'");
     expect(editorProviderSource).toContain("'nodes.applyAgentContent'");
     expect(editorProviderSource).toContain("operationType: 'nodes.applyAgentContent'");
@@ -221,15 +237,13 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('projection adapters');
   });
 
-  it('registers review-only artifact facets for storyboard projection and Canvas import', () => {
+  it('registers review-only artifact rendering and lifecycle Canvas Markdown facets', () => {
     expect(providerSource).toContain('getArtifactFacets(');
     expect(providerSource).toContain('renderer:neko-canvas:generic-artifact-preview');
     expect(providerSource).toContain("'CompositeArtifact', 'GenericTable', 'StoryboardTable'");
-    expect(providerSource).toContain('projector:storyboard-to-canvas');
-    expect(providerSource).toContain("accepts: ['StoryboardTable']");
-    expect(providerSource).toContain("produces: ['CanvasStoryboardPayload']");
-    expect(providerSource).toContain("capabilityId: 'canvas.importStoryboard'");
-    expect(providerSource).toContain("accepts: ['CanvasStoryboardPayload']");
+    expect(providerSource).not.toContain('projector:storyboard-to-canvas');
+    expect(providerSource).not.toContain("capabilityId: 'canvas.importStoryboard'");
+    expect(providerSource).toContain("capabilityId: 'canvas.ingestMarkdown'");
     expect(providerSource).toContain('requiresApproval: true');
   });
 
@@ -257,6 +271,173 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_REVEAL_PLAYBACK_WORKSPACE');
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_CREATE_CUT_DRAFT_FROM_ROUTE');
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_REORDER_PLAYBACK_UNITS');
+  });
+
+  it('registers Canvas Markdown capability tool names and artifact facets', () => {
+    expect(toolNamesSource).toContain("CANVAS_INGEST_MARKDOWN: 'canvas.ingestMarkdown'");
+    expect(toolNamesSource).toContain("CANVAS_CREATE_MARKDOWN_NOTE: 'canvas.createMarkdownNote'");
+    expect(toolNamesSource).toContain(
+      "CANVAS_CREATE_TABLE_FROM_MARKDOWN: 'canvas.createTableFromMarkdown'",
+    );
+    expect(toolNamesSource).toContain(
+      "CANVAS_CREATE_STORYBOARD_DRAFT_FROM_MARKDOWN: 'canvas.createStoryboardDraftFromMarkdown'",
+    );
+    expect(toolNamesSource).toContain(
+      "CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN: 'canvas.createStoryboardFromMarkdown'",
+    );
+    expect(toolNamesSource).toContain("CANVAS_ATTACH_RESOURCE: 'canvas.attachResource'");
+    expect(toolNamesSource).toContain(
+      "CANVAS_VALIDATE_MARKDOWN_STORYBOARD: 'canvas.validateMarkdownStoryboard'",
+    );
+    expect(providerSource).toContain('CANVAS_MARKDOWN_TOOL_DEFINITIONS');
+    expect(providerSource).toContain("capabilityId: 'canvas.ingestMarkdown'");
+    expect(providerSource).toContain("capabilityId: 'canvas.validateMarkdownStoryboard'");
+    expect(providerSource).toContain("accepts: ['Markdown', 'GfmTable']");
+
+    const provider = createNekoCanvasCapabilityProvider(createApi());
+    const facets = provider.getArtifactFacets({ extensionContext: {} });
+    expect(facets.lifecycleCapabilities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          capabilityId: 'canvas.ingestMarkdown',
+          providerId: 'neko-canvas',
+          displayName: 'Ingest Markdown to Canvas',
+          phases: ['review'],
+          inputSchema: { id: 'canvas.markdown.input', version: 1 },
+          resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+          requiresApproval: true,
+          safetyKind: 'confirmation-gated',
+        }),
+        expect.objectContaining({
+          capabilityId: 'canvas.validateMarkdownStoryboard',
+          displayName: 'Validate Markdown Storyboard',
+          phases: ['validate'],
+          requiresApproval: false,
+          safetyKind: 'read-only-query',
+        }),
+      ]),
+    );
+  });
+
+  it('executes Markdown capability tools through the Canvas Markdown API', async () => {
+    const api = createApi();
+    const provider = createNekoCanvasCapabilityProvider(api);
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+
+    const validateTool = tools.find(
+      (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD,
+    );
+    const ingestTool = tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN);
+
+    expect(validateTool).toMatchObject({
+      isReadOnly: true,
+      safetyKind: 'read-only-query',
+    });
+    expect(ingestTool).toMatchObject({
+      requiresConfirmation: true,
+      safetyKind: 'confirmation-gated',
+    });
+
+    await expect(
+      validateTool!.execute({
+        markdown: '| image | visual |\n| --- | --- |\n| P1 | shot |',
+        sourceFormat: 'gfm-table',
+      }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        capabilityId: 'canvas.validateMarkdownStoryboard',
+        phase: 'validate',
+        status: 'validated',
+        data: {
+          capabilityId: 'canvas.validateMarkdownStoryboard',
+          status: 'validated',
+        },
+      },
+    });
+    expect(api.markdown.invoke).toHaveBeenCalledWith({
+      capabilityId: 'canvas.validateMarkdownStoryboard',
+      markdown: '| image | visual |\n| --- | --- |\n| P1 | shot |',
+      sourceFormat: 'gfm-table',
+    });
+
+    await expect(
+      ingestTool!.execute({
+        markdown: '| image | visual |\n| --- | --- |\n| P1 | shot |',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
+        resources: [{ token: 'P1', sourcePath: 'assets/page-1.png' }],
+      }),
+    ).resolves.toMatchObject({
+      success: false,
+      data: {
+        capabilityId: 'canvas.ingestMarkdown',
+        phase: 'review',
+        status: 'blocked',
+        data: {
+          capabilityId: 'canvas.ingestMarkdown',
+          status: 'blocked',
+        },
+      },
+    });
+  });
+
+  it('projects Canvas Markdown lifecycle actions through capability definitions', async () => {
+    const api = createApi();
+    api.markdown.invoke = vi.fn(async (input) => ({
+      capabilityId: input.capabilityId,
+      status: 'needs-review',
+      draftNodeId: 'draft-node-1',
+      diagnostics: [],
+      actions: [
+        {
+          actionId: 'create-storyboard-nodes',
+          label: 'Create storyboard nodes',
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+        },
+      ],
+    }));
+    const provider = createNekoCanvasCapabilityProvider(api);
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const ingestTool = tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN);
+
+    await expect(
+      ingestTool!.execute({
+        markdown: '| image | visual |\n| --- | --- |\n| P1 | shot |',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
+      }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        capabilityId: 'canvas.ingestMarkdown',
+        phase: 'review',
+        status: 'needs-review',
+        actions: [
+          {
+            actionId: 'create-storyboard-nodes',
+            capabilityId: 'canvas.createStoryboardFromMarkdown',
+            phase: 'apply',
+            requiresApproval: true,
+            sourceRef: {
+              kind: 'node',
+              id: 'draft-node-1',
+              packageId: 'neko-canvas',
+            },
+          },
+        ],
+      },
+    });
   });
 
   it('keeps playback display and reveal read-only while import/reorder are confirmation-gated', () => {

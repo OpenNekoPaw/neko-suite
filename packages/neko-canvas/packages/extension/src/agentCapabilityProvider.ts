@@ -31,6 +31,14 @@ import type {
   CanvasPlaybackReorderUnitsRequest,
   ReferenceDescriptor,
   StoryboardMediaRef,
+  CanvasMarkdownCapabilityId,
+  CanvasMarkdownCapabilityInput,
+  CanvasMarkdownCapabilityResult,
+  CanvasMarkdownCapabilityTarget,
+  CanvasMarkdownResourceRef,
+  AgentCapabilityInvocationInput,
+  AgentCapabilityInvocationResult,
+  AgentCapabilityLifecycleDescriptor,
 } from '@neko/shared';
 import {
   TOOL_NAMES_CANVAS,
@@ -158,6 +166,258 @@ function readPlaybackReorderApprovalContext(
   return 'agent-inferred';
 }
 
+function buildCanvasMarkdownCapabilityInput(
+  capabilityId: CanvasMarkdownCapabilityId,
+  args: Record<string, unknown>,
+): CanvasMarkdownCapabilityInput {
+  if (capabilityId === 'canvas.attachResource') {
+    return {
+      capabilityId,
+      target: (isRecord(args.target) ? args.target : {}) as CanvasMarkdownCapabilityTarget,
+      resource: (isRecord(args.resource) ? args.resource : {}) as CanvasMarkdownResourceRef,
+      ...(typeof args.role === 'string' ? { role: args.role } : {}),
+      ...(isRecord(args.provenance) ? { provenance: args.provenance } : {}),
+    };
+  }
+
+  return {
+    capabilityId,
+    markdown: typeof args.markdown === 'string' ? args.markdown : '',
+    ...(typeof args.title === 'string' ? { title: args.title } : {}),
+    ...(typeof args.sourceFormat === 'string' ? { sourceFormat: args.sourceFormat } : {}),
+    ...(Array.isArray(args.resources) ? { resources: args.resources } : {}),
+    ...(isRecord(args.target) ? { target: args.target } : {}),
+    ...(isRecord(args.provenance) ? { provenance: args.provenance } : {}),
+    ...(typeof args.intentHint === 'string' ? { intentHint: args.intentHint } : {}),
+    ...(typeof args.profileHint === 'string' ? { profileHint: args.profileHint } : {}),
+    ...(typeof args.tableTitle === 'string' ? { tableTitle: args.tableTitle } : {}),
+    ...(typeof args.mode === 'string' ? { mode: args.mode } : {}),
+    ...(isRecord(args.approval) ? { approval: args.approval } : {}),
+  } as CanvasMarkdownCapabilityInput;
+}
+
+function createMarkdownCapabilityTool(
+  api: NekoCanvasAPI,
+  definition: CanvasMarkdownToolDefinition,
+): Tool {
+  return {
+    name: definition.name,
+    description: definition.description,
+    category: 'project',
+    isReadOnly: definition.isReadOnly,
+    isConcurrencySafe: definition.isReadOnly,
+    requiresConfirmation: definition.requiresConfirmation,
+    safetyKind: definition.requiresConfirmation ? 'confirmation-gated' : 'read-only-query',
+    parameters: {
+      type: 'object',
+      properties:
+        definition.capabilityId === 'canvas.attachResource'
+          ? {
+              target: {
+                type: 'object',
+                description: 'Canvas target for the resource attachment.',
+              },
+              resource: {
+                type: 'object',
+                description: 'Stable ResourceRef or DocumentArchiveResourceRef wrapper.',
+              },
+              role: { type: 'string', description: 'Optional resource role.' },
+              provenance: { type: 'object', description: 'Optional Agent provenance.' },
+            }
+          : {
+              markdown: {
+                type: 'string',
+                description: 'Original Markdown content. Do not pass rendered HTML.',
+              },
+              title: { type: 'string', description: 'Optional title.' },
+              sourceFormat: {
+                type: 'string',
+                enum: ['markdown', 'markdown-table', 'gfm-table', 'resource-reference-markdown'],
+                description: 'Optional source format hint.',
+              },
+              resources: {
+                type: 'array',
+                items: { type: 'object' },
+                description: 'Stable resource refs keyed by Markdown tokens.',
+              },
+              target: { type: 'object', description: 'Optional Canvas insertion target.' },
+              provenance: { type: 'object', description: 'Optional Agent provenance.' },
+              intentHint: {
+                type: 'string',
+                enum: ['auto', 'note', 'table', 'creative-table'],
+                description:
+                  'Optional advisory ingest intent. Canvas remains the parsing authority.',
+              },
+              profileHint: { type: 'string', description: 'Optional Canvas-owned profile hint.' },
+              tableTitle: { type: 'string', description: 'Optional table title.' },
+              mode: {
+                type: 'string',
+                enum: ['review-first', 'create-nodes'],
+                description: 'Optional storyboard creation mode.',
+              },
+              approval: {
+                type: 'object',
+                description: 'Required approval context for production apply mutations.',
+              },
+            },
+      required: definition.capabilityId === 'canvas.attachResource' ? ['target', 'resource'] : [],
+    } satisfies ToolParameters,
+    async execute(args) {
+      try {
+        const input = buildCanvasMarkdownCapabilityInput(definition.capabilityId, args);
+        const data = await api.markdown.invoke(input);
+        const lifecycle = toCanvasMarkdownLifecycleResult(definition, input, data);
+        return { success: lifecycle.status !== 'blocked', data: lifecycle };
+      } catch (err) {
+        return {
+          success: false,
+          error: `Failed to invoke Canvas Markdown capability: ${String(err)}`,
+        };
+      }
+    },
+  };
+}
+
+function createCanvasMarkdownLifecycleInvocationInput(
+  definition: CanvasMarkdownToolDefinition,
+  input: CanvasMarkdownCapabilityInput,
+): AgentCapabilityInvocationInput {
+  return {
+    capabilityId: definition.capabilityId,
+    phase: definition.phase,
+    payload: input,
+    ...(input.capabilityId === 'canvas.attachResource'
+      ? { target: projectCanvasMarkdownLifecycleTarget(input.target) }
+      : input.target
+        ? { target: projectCanvasMarkdownLifecycleTarget(input.target) }
+        : {}),
+    ...('provenance' in input && input.provenance
+      ? {
+          provenance: {
+            source: input.provenance.source,
+            conversationId: input.provenance.conversationId,
+            messageId: input.provenance.messageId,
+            toolCallId: input.provenance.toolCallId,
+            label: input.provenance.label,
+          },
+        }
+      : {}),
+  };
+}
+
+function toCanvasMarkdownLifecycleResult(
+  definition: CanvasMarkdownToolDefinition,
+  input: CanvasMarkdownCapabilityInput,
+  result: CanvasMarkdownCapabilityResult,
+): AgentCapabilityInvocationResult {
+  const lifecycleInput = createCanvasMarkdownLifecycleInvocationInput(definition, input);
+  return {
+    capabilityId: definition.capabilityId,
+    phase: lifecycleInput.phase,
+    status: toLifecycleStatus(definition.phase, result.status),
+    diagnostics: result.diagnostics.map((diagnostic) => ({
+      severity: diagnostic.severity,
+      code: diagnostic.code,
+      message: diagnostic.message,
+      ...(diagnostic.fieldKey ? { fieldKey: diagnostic.fieldKey } : {}),
+      ...(diagnostic.token ? { token: diagnostic.token } : {}),
+      ...(diagnostic.line !== undefined ? { line: diagnostic.line } : {}),
+      ...(diagnostic.column !== undefined ? { column: diagnostic.column } : {}),
+    })),
+    ...(result.draftNodeId
+      ? {
+          reviewArtifact: {
+            kind: 'node',
+            id: result.draftNodeId,
+            packageId: 'neko-canvas',
+            artifactKind: 'canvas.table',
+            profile: readCanvasMarkdownProfileFromResult(result) ?? 'storyboard',
+          },
+        }
+      : {}),
+    ...(result.nodeIds?.length
+      ? {
+          changedRefs: result.nodeIds.map((nodeId) => ({
+            kind: 'node' as const,
+            id: nodeId,
+            packageId: 'neko-canvas',
+          })),
+        }
+      : {}),
+    ...(result.actions?.length
+      ? {
+          actions: result.actions.map((action) => {
+            const capabilityId = action.capabilityId ?? definition.capabilityId;
+            const actionDefinition = findCanvasMarkdownToolDefinition(capabilityId);
+            return {
+              actionId: action.actionId,
+              ...(action.label ? { label: action.label } : {}),
+              capabilityId,
+              phase: actionDefinition?.phase ?? definition.phase,
+              requiresApproval:
+                actionDefinition?.requiresConfirmation ??
+                capabilityId !== 'canvas.validateMarkdownStoryboard',
+              ...(result.draftNodeId
+                ? {
+                    sourceRef: {
+                      kind: 'node' as const,
+                      id: result.draftNodeId,
+                      packageId: 'neko-canvas',
+                    },
+                  }
+                : {}),
+              ...(lifecycleInput.target ? { target: lifecycleInput.target } : {}),
+              payload: input,
+            };
+          }),
+        }
+      : {}),
+    data: result,
+  };
+}
+
+function readCanvasMarkdownProfileFromResult(
+  result: CanvasMarkdownCapabilityResult,
+): string | undefined {
+  if (result.profileId) return result.profileId;
+  return result.preview?.table?.profileId ?? result.preview?.profileId;
+}
+
+function findCanvasMarkdownToolDefinition(
+  capabilityId: CanvasMarkdownCapabilityId,
+): CanvasMarkdownToolDefinition | undefined {
+  return CANVAS_MARKDOWN_TOOL_DEFINITIONS.find(
+    (definition) => definition.capabilityId === capabilityId,
+  );
+}
+
+function toLifecycleStatus(
+  phase: AgentCapabilityLifecycleDescriptor['phases'][number],
+  status: CanvasMarkdownCapabilityResult['status'],
+): AgentCapabilityInvocationResult['status'] {
+  if (status === 'blocked') return 'blocked';
+  if (status === 'needs-review') return 'needs-review';
+  if (phase === 'validate') return 'validated';
+  if (phase === 'apply') return 'applied';
+  if (phase === 'execute') return 'executed';
+  if (phase === 'describe') return 'described';
+  return status === 'created' || status === 'changed' ? 'needs-review' : 'validated';
+}
+
+function projectCanvasMarkdownLifecycleTarget(
+  target: CanvasMarkdownCapabilityTarget,
+): AgentCapabilityInvocationInput['target'] {
+  return {
+    packageId: 'neko-canvas',
+    ...(target.canvasId ? { canvasId: target.canvasId } : {}),
+    ...(target.nodeId ? { nodeId: target.nodeId } : {}),
+    ...(target.containerId ? { containerId: target.containerId } : {}),
+    ...(target.slotId ? { slotId: target.slotId } : {}),
+    ...(target.fieldPath ? { fieldPath: target.fieldPath } : {}),
+    ...(target.insertionPoint ? { insertionPoint: target.insertionPoint } : {}),
+  };
+}
+
 function collectShotKeyframeReferenceDescriptors(
   nodeId: string,
   data: Record<string, unknown>,
@@ -170,24 +430,22 @@ function collectShotKeyframeReferenceDescriptors(
         : undefined,
     ),
   ];
-  return mediaRefs.map(
-    (ref, index): ReferenceDescriptor => ({
-      schemaVersion: 1,
-      kind: 'reference-descriptor',
-      referenceId: `${nodeId}:keyframeRefs:${index}:${ref.refId}`,
-      sourceKind: 'canvas-node',
-      sourceId: nodeId,
-      referenceKind: ref.locator.type === 'asset' ? 'generated-asset' : 'custom',
-      role: ref.role === 'generated' || ref.role === 'derived' ? 'keyframe' : 'reference',
-      modality: ref.mimeType?.startsWith('video/') ? 'video' : 'image',
-      payload: storyboardMediaRefPayloadForReference(ref),
-      metadata: {
-        storyboardRefId: ref.refId,
-        ...(ref.label ? { label: ref.label } : {}),
-        ...(ref.mimeType ? { mimeType: ref.mimeType } : {}),
-      },
-    }),
-  );
+  return mediaRefs.map((ref, index): ReferenceDescriptor => ({
+    schemaVersion: 1,
+    kind: 'reference-descriptor',
+    referenceId: `${nodeId}:keyframeRefs:${index}:${ref.refId}`,
+    sourceKind: 'canvas-node',
+    sourceId: nodeId,
+    referenceKind: ref.locator.type === 'asset' ? 'generated-asset' : 'custom',
+    role: ref.role === 'generated' || ref.role === 'derived' ? 'keyframe' : 'reference',
+    modality: ref.mimeType?.startsWith('video/') ? 'video' : 'image',
+    payload: storyboardMediaRefPayloadForReference(ref),
+    metadata: {
+      storyboardRefId: ref.refId,
+      ...(ref.label ? { label: ref.label } : {}),
+      ...(ref.mimeType ? { mimeType: ref.mimeType } : {}),
+    },
+  }));
 }
 
 function readStoryboardMediaRefs(value: unknown): readonly StoryboardMediaRef[] {
@@ -292,6 +550,83 @@ function readShotGeneratedImageFallback(data: Record<string, unknown>): string |
   );
 }
 
+interface CanvasMarkdownToolDefinition {
+  readonly name: string;
+  readonly capabilityId: CanvasMarkdownCapabilityId;
+  readonly displayName: string;
+  readonly description: string;
+  readonly phase: AgentCapabilityLifecycleDescriptor['phases'][number];
+  readonly requiresConfirmation: boolean;
+  readonly isReadOnly?: boolean;
+}
+
+const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] = [
+  {
+    name: TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN,
+    capabilityId: 'canvas.ingestMarkdown',
+    displayName: 'Ingest Markdown to Canvas',
+    phase: 'review',
+    description:
+      'Ingest Markdown into Canvas as a note, generic table, or creative table. Canvas owns parsing, profile resolution, resource binding, diagnostics, and follow-up actions.',
+    requiresConfirmation: true,
+  },
+  {
+    name: TOOL_NAMES_CANVAS.CANVAS_CREATE_MARKDOWN_NOTE,
+    capabilityId: 'canvas.createMarkdownNote',
+    displayName: 'Create Markdown Note',
+    phase: 'review',
+    description:
+      'Create a Canvas Markdown note from reviewed Markdown. Canvas validates target and resources before mutating state.',
+    requiresConfirmation: true,
+  },
+  {
+    name: TOOL_NAMES_CANVAS.CANVAS_CREATE_TABLE_FROM_MARKDOWN,
+    capabilityId: 'canvas.createTableFromMarkdown',
+    displayName: 'Create Markdown Table',
+    phase: 'review',
+    description:
+      'Create a Canvas table/draft node from a Markdown or GFM table. Canvas owns parsing and diagnostics.',
+    requiresConfirmation: true,
+  },
+  {
+    name: TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_DRAFT_FROM_MARKDOWN,
+    capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+    displayName: 'Create Storyboard Review Table',
+    phase: 'review',
+    description:
+      'Create a review-first Canvas storyboard draft from Markdown. Does not create production storyboard nodes by default.',
+    requiresConfirmation: true,
+  },
+  {
+    name: TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN,
+    capabilityId: 'canvas.createStoryboardFromMarkdown',
+    displayName: 'Create Storyboard Nodes',
+    phase: 'apply',
+    description:
+      'Create production Canvas storyboard nodes from validated Markdown after explicit confirmation.',
+    requiresConfirmation: true,
+  },
+  {
+    name: TOOL_NAMES_CANVAS.CANVAS_ATTACH_RESOURCE,
+    capabilityId: 'canvas.attachResource',
+    displayName: 'Attach Canvas Resource',
+    phase: 'apply',
+    description:
+      'Attach a stable ResourceRef or DocumentArchiveResourceRef to an existing Canvas target.',
+    requiresConfirmation: true,
+  },
+  {
+    name: TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD,
+    capabilityId: 'canvas.validateMarkdownStoryboard',
+    displayName: 'Validate Markdown Storyboard',
+    phase: 'validate',
+    description:
+      'Validate a Markdown storyboard draft and return diagnostics without mutating Canvas state.',
+    requiresConfirmation: false,
+    isReadOnly: true,
+  },
+] as const;
+
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
   readonly id = 'neko-canvas';
   readonly version = '1.0.0';
@@ -310,13 +645,6 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
       ],
       projectors: [
         {
-          id: 'projector:storyboard-to-canvas',
-          accepts: ['StoryboardTable'],
-          produces: ['CanvasStoryboardPayload'],
-          profiles: ['manga-to-video'],
-          lazy: true,
-        },
-        {
           id: 'projector:canvas-playback-route-card',
           accepts: ['CanvasPlaybackPlan'],
           produces: ['CompositeArtifact'],
@@ -325,15 +653,6 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         },
       ],
       capabilities: [
-        {
-          capabilityId: 'canvas.importStoryboard',
-          packageId: 'neko-canvas',
-          accepts: ['CanvasStoryboardPayload'],
-          produces: ['canvas-node-ref'],
-          actions: ['canvas.importStoryboard'],
-          risk: 'medium',
-          requiresApproval: true,
-        },
         {
           capabilityId: 'canvas.getPlaybackPlan',
           packageId: 'neko-canvas',
@@ -369,7 +688,98 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
           risk: 'medium',
           requiresApproval: true,
         },
+        {
+          capabilityId: 'canvas.ingestMarkdown',
+          packageId: 'neko-canvas',
+          accepts: ['Markdown', 'GfmTable'],
+          produces: ['canvas-node-ref'],
+          actions: ['canvas.ingestMarkdown'],
+          risk: 'medium',
+          requiresApproval: true,
+        },
+        {
+          capabilityId: 'canvas.createMarkdownNote',
+          packageId: 'neko-canvas',
+          accepts: ['Markdown'],
+          produces: ['canvas-node-ref'],
+          actions: ['canvas.createMarkdownNote'],
+          risk: 'medium',
+          requiresApproval: true,
+        },
+        {
+          capabilityId: 'canvas.createTableFromMarkdown',
+          packageId: 'neko-canvas',
+          accepts: ['MarkdownTable', 'GfmTable'],
+          produces: ['canvas-node-ref'],
+          actions: ['canvas.createTableFromMarkdown'],
+          risk: 'medium',
+          requiresApproval: true,
+        },
+        {
+          capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+          packageId: 'neko-canvas',
+          accepts: ['MarkdownStoryboardDraft', 'GfmTable'],
+          produces: ['canvas-node-ref'],
+          actions: ['canvas.createStoryboardDraftFromMarkdown'],
+          risk: 'medium',
+          requiresApproval: true,
+        },
+        {
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+          packageId: 'neko-canvas',
+          accepts: ['MarkdownStoryboardDraft'],
+          produces: ['canvas-node-ref'],
+          actions: ['canvas.createStoryboardFromMarkdown'],
+          risk: 'medium',
+          requiresApproval: true,
+        },
+        {
+          capabilityId: 'canvas.attachResource',
+          packageId: 'neko-canvas',
+          accepts: ['ResourceRef', 'DocumentArchiveResourceRef'],
+          produces: ['canvas-node-ref'],
+          actions: ['canvas.attachResource'],
+          risk: 'medium',
+          requiresApproval: true,
+        },
+        {
+          capabilityId: 'canvas.validateMarkdownStoryboard',
+          packageId: 'neko-canvas',
+          accepts: ['MarkdownStoryboardDraft', 'GfmTable'],
+          produces: ['CanvasMarkdownCapabilityDiagnostics'],
+          actions: ['canvas.validateMarkdownStoryboard'],
+          risk: 'low',
+          requiresApproval: false,
+        },
       ],
+      lifecycleCapabilities: CANVAS_MARKDOWN_TOOL_DEFINITIONS.map((definition) => ({
+        capabilityId: definition.capabilityId,
+        providerId: 'neko-canvas',
+        displayName: definition.displayName,
+        description: definition.description,
+        phases:
+          definition.capabilityId === 'canvas.createStoryboardFromMarkdown'
+            ? ['validate', 'review', 'apply']
+            : definition.capabilityId === 'canvas.validateMarkdownStoryboard'
+              ? ['validate']
+              : [definition.phase],
+        inputSchema: { id: 'canvas.markdown.input', version: 1 },
+        resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+        accepts:
+          definition.capabilityId === 'canvas.attachResource'
+            ? ['ResourceRef', 'DocumentArchiveResourceRef']
+            : ['Markdown', 'GfmTable'],
+        produces:
+          definition.capabilityId === 'canvas.validateMarkdownStoryboard'
+            ? ['CanvasMarkdownCapabilityDiagnostics']
+            : ['canvas-node-ref'],
+        risk: definition.isReadOnly ? 'low' : 'medium',
+        requiresApproval: definition.requiresConfirmation,
+        safetyKind: definition.requiresConfirmation ? 'confirmation-gated' : 'read-only-query',
+        targetRequirements: definition.requiresConfirmation
+          ? { allowedFallbacks: ['viewport-insertion', 'explicit-user-input'] }
+          : undefined,
+      })),
     };
   }
 
@@ -395,6 +805,9 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
     const mediaService = context.mediaService;
 
     const tools: Tool[] = [
+      ...CANVAS_MARKDOWN_TOOL_DEFINITIONS.map((definition) =>
+        createMarkdownCapabilityTool(api, definition),
+      ),
       // -----------------------------------------------------------------------
       // Canvas playback route tools
       // -----------------------------------------------------------------------
@@ -1872,11 +2285,9 @@ function createVideoKeyframeTool(
 
         // Build prompt from target node's visual description
         const visualDesc = (targetNode.data as Record<string, unknown>)['visualDescription'] as
-          | string
-          | undefined;
+          string | undefined;
         const shotNumber = (targetNode.data as Record<string, unknown>)['shotNumber'] as
-          | number
-          | undefined;
+          number | undefined;
         const prompt = visualDesc?.trim() || `Shot ${shotNumber ?? ''} video clip`;
         const lineage = extractCanvasNodeGenerationLineage(targetNode);
         const metadata: Record<string, unknown> = {

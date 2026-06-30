@@ -288,6 +288,9 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             rowCount: asNumber(data.rowCount, 3),
             columnCount,
             showHeader: typeof data.showHeader === 'boolean' ? data.showHeader : true,
+            markdown: isRecord(data.markdown)
+              ? toCanvasSerializableRecord(data.markdown)
+              : undefined,
           },
         },
         preset,

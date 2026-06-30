@@ -68,6 +68,7 @@ export interface CanvasOperationStore {
   recordNodeUngroup: (groupId: string, groupNode: CanvasNode, childIds: string[]) => void;
   recordConnectionAdd: (connection: CanvasConnection) => void;
   recordConnectionRemove: (connectionId: string, connection: CanvasConnection) => void;
+  recordDirty: (description: string) => void;
 }
 
 export const useCanvasOperationStore = create<CanvasOperationStore>((set, get) => ({
@@ -164,6 +165,14 @@ export const useCanvasOperationStore = create<CanvasOperationStore>((set, get) =
       meta: createMeta('user', 'Remove connection'),
       payload: { connectionId },
       before: { connection },
+    });
+  },
+
+  recordDirty: (description) => {
+    get().recordOperation({
+      type: 'batch',
+      meta: createMeta('user', description),
+      payload: { operations: [] },
     });
   },
 }));

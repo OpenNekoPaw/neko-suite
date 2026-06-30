@@ -15,8 +15,8 @@ describe('canvas storyboard import contracts', () => {
     expect(extensionSource).toContain('return created;');
   });
 
-  it('registers a public command for storyboard payload import', () => {
-    expect(extensionSource).toContain("'neko.canvas.importStoryboard'");
+  it('does not register the legacy public command for storyboard payload import', () => {
+    expect(extensionSource).not.toContain("'neko.canvas.importStoryboard'");
   });
 
   it('publishes storyboard import write-back events to external subscribers', () => {

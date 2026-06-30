@@ -45,7 +45,6 @@ import {
   useCanvasKeyboardController,
   type CanvasKeyboardState,
 } from './hooks/useCanvasKeyboardController';
-import { useCanvasAutoSave } from './hooks/useCanvasAutoSave';
 import { useKeyboardActions } from './hooks/useKeyboardActions';
 import {
   applyCanvasAddSourceResult,
@@ -271,8 +270,6 @@ export function CanvasApp() {
     (state) => state.seedViewportFromDocument,
   );
   const viewportSnapshotPolicyRef = useRef<ViewportSnapshotPolicy | null>(null);
-  const pendingLoadedCanvasBaselineRef = useRef<CanvasData | null>(null);
-  const markAutoSaveSavedRef = useRef<((canvasData: CanvasData) => void) | null>(null);
   const canvasProjectSourceAddClientRef = useRef<CanvasProjectSourceAddClient | null>(null);
 
   // Derive computed values from canvasData
@@ -643,7 +640,6 @@ export function CanvasApp() {
       revealPlaybackWorkspace({ routeId, currentUnitId, focusOwner: 'stage' });
     },
     onCanvasDataLoaded: (data) => {
-      pendingLoadedCanvasBaselineRef.current = useCanvasStore.getState().canvasData ?? data;
       const documentKey = createCanvasViewportSnapshotKey(data);
       seedViewportFromDocument(
         documentKey,
@@ -651,12 +647,6 @@ export function CanvasApp() {
           data.viewport ??
           DEFAULT_RUNTIME_VIEWPORT,
       );
-    },
-    onSaved: () => {
-      const latestCanvasData = useCanvasStore.getState().canvasData;
-      if (latestCanvasData) {
-        markAutoSaveSavedRef.current?.(latestCanvasData);
-      }
     },
     onImportGeneratedAsset: (asset) => {
       const nodeInput = getImportedGeneratedAssetNodeInput(asset);
@@ -675,25 +665,31 @@ export function CanvasApp() {
     onProjectionStatus: (status: ProjectedCanvasStatus) => {
       const state = useCanvasStore.getState();
       if (!state.canvasData) return;
-      state.updateCanvasData({
-        projectionStatus: {
-          ...((state.canvasData as { projectionStatus?: ProjectedCanvasStatus })
-            .projectionStatus ?? { state: 'clean' }),
-          ...status,
-        },
-      } as Partial<CanvasData>);
+      state.updateCanvasData(
+        {
+          projectionStatus: {
+            ...((state.canvasData as { projectionStatus?: ProjectedCanvasStatus })
+              .projectionStatus ?? { state: 'clean' }),
+            ...status,
+          },
+        } as Partial<CanvasData>,
+        { dirty: false },
+      );
     },
     onProjectionSourceChanged: () => {
       const state = useCanvasStore.getState();
       if (!state.canvasData?.projected) return;
-      state.updateCanvasData({
-        projectionStatus: {
-          ...((state.canvasData as { projectionStatus?: ProjectedCanvasStatus })
-            .projectionStatus ?? { state: 'clean' }),
-          state: 'source-changed',
-          updatedAt: Date.now(),
-        },
-      } as Partial<CanvasData>);
+      state.updateCanvasData(
+        {
+          projectionStatus: {
+            ...((state.canvasData as { projectionStatus?: ProjectedCanvasStatus })
+              .projectionStatus ?? { state: 'clean' }),
+            state: 'source-changed',
+            updatedAt: Date.now(),
+          },
+        } as Partial<CanvasData>,
+        { dirty: false },
+      );
     },
     onGenerationProgress: ({ nodeId, childNodeId, status, dataUrl }) => {
       const node = useCanvasStore.getState().canvasData?.nodes.find((n) => n.id === nodeId);
@@ -1158,28 +1154,6 @@ export function CanvasApp() {
     isComposingRef,
   });
 
-  const { markSaved } = useCanvasAutoSave({
-    canvasData,
-    isReady,
-    onBeforeSave: () => viewportSnapshotPolicyRef.current?.flush('save'),
-    onSave: (data) => vscode?.postMessage({ type: 'requestSave', saveReason: 'autosave', data }),
-  });
-
-  useEffect(() => {
-    markAutoSaveSavedRef.current = markSaved;
-    return () => {
-      markAutoSaveSavedRef.current = null;
-    };
-  }, [markSaved]);
-
-  useEffect(() => {
-    if (!isReady) return;
-    const baseline = pendingLoadedCanvasBaselineRef.current;
-    if (!baseline) return;
-    markSaved(baseline);
-    pendingLoadedCanvasBaselineRef.current = null;
-  }, [isReady, markSaved]);
-
   const keyboardState = useMemo<CanvasKeyboardState>(
     () => ({
       canDeleteSelection: selectedNodeIds.length > 0 || selectedConnectionIds.length > 0,
@@ -1314,18 +1288,24 @@ export function CanvasApp() {
     if (!projectionHealthKey) return;
     void requestProjectionWriteBack([]).then(
       () => {
-        useCanvasStore.getState().updateCanvasData({
-          projectionStatus: { state: 'clean', updatedAt: Date.now() },
-        } as Partial<CanvasData>);
+        useCanvasStore.getState().updateCanvasData(
+          {
+            projectionStatus: { state: 'clean', updatedAt: Date.now() },
+          } as Partial<CanvasData>,
+          { dirty: false },
+        );
       },
       (error) => {
-        useCanvasStore.getState().updateCanvasData({
-          projectionStatus: {
-            state: 'writeback-error',
-            message: error instanceof Error ? error.message : String(error),
-            updatedAt: Date.now(),
-          },
-        } as Partial<CanvasData>);
+        useCanvasStore.getState().updateCanvasData(
+          {
+            projectionStatus: {
+              state: 'writeback-error',
+              message: error instanceof Error ? error.message : String(error),
+              updatedAt: Date.now(),
+            },
+          } as Partial<CanvasData>,
+          { dirty: false },
+        );
       },
     );
   }, [projectionHealthKey, requestProjectionWriteBack]);
