@@ -169,7 +169,7 @@ describe('canvas cut draft contract', () => {
     expect(validation.valid).toBe(false);
     expect(validation.diagnostics).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ code: 'draft-runtime-media-ref' }),
+        expect.objectContaining({ code: 'draft-invalid-media-reference' }),
         expect.objectContaining({ code: 'draft-unmanaged-path' }),
       ]),
     );

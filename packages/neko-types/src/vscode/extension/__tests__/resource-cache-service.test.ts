@@ -281,6 +281,88 @@ describe('resource cache service', () => {
     expect(calls).toBe(1);
   });
 
+  it('keeps document entry variants canonical across metadata-shaped requests', async () => {
+    const documentVariant = { role: 'document-entry' as const };
+    const documentEntryPath = '/workspace/.neko/.cache/resources/documents/doc/page-1.jpg';
+    let calls = 0;
+    const provider: ResourceCacheProvider = {
+      id: 'document-archive',
+      supports: (resource, request) =>
+        resource.provider === 'document-archive' && request.role === 'document-entry',
+      ensure: vi.fn(async (input) => {
+        calls += 1;
+        fsOps.files.set(documentEntryPath, 'image-bytes');
+        return {
+          status: 'ready',
+          ref: input.ref,
+          variant: input.variant,
+          absolutePath: documentEntryPath,
+          mimeType: 'image/jpeg',
+          width: 1511,
+          height: 2160,
+          sizeBytes: 341346,
+          rebuildable: true,
+        };
+      }),
+    };
+    const service = createService([provider]);
+
+    await expect(service.ensure(ref, documentVariant)).resolves.toMatchObject({
+      status: 'ready',
+      absolutePath: documentEntryPath,
+    });
+    await expect(
+      service.ensure(ref, {
+        role: 'document-entry',
+        format: 'epub',
+        mimeType: 'image/jpeg',
+        width: 1511,
+        height: 2160,
+      }),
+    ).resolves.toMatchObject({
+      status: 'ready',
+      absolutePath: documentEntryPath,
+    });
+    await expect(service.ensure(ref, { role: 'preview' })).resolves.toMatchObject({
+      status: 'unsupported',
+      error: 'No provider supports this variant.',
+    });
+
+    const manifest = JSON.parse(
+      fsOps.files.get('/workspace/.neko/.cache/resources/manifest.json') ?? '{}',
+    );
+    expect(manifest.entries[ref.id]).toMatchObject({
+      status: 'ready',
+    });
+    expect(manifest.entries[ref.id].variants).toHaveLength(2);
+    expect(manifest.entries[ref.id].variants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: createResourceVariantKey({ resource: ref, role: 'document-entry' }),
+          role: 'document-entry',
+          status: 'ready',
+          relativePath: 'documents/doc/page-1.jpg',
+          mimeType: 'image/jpeg',
+          width: 1511,
+          height: 2160,
+          sizeBytes: 341346,
+        }),
+        expect.objectContaining({
+          key: createResourceVariantKey({ resource: ref, role: 'preview' }),
+          role: 'preview',
+          status: 'unsupported',
+        }),
+      ]),
+    );
+    expect(
+      manifest.entries[ref.id].variants.filter(
+        (candidate: { readonly role: string }) => candidate.role === 'document-entry',
+      ),
+    ).toHaveLength(1);
+    expect(manifest.entries[ref.id].variants[0]).not.toHaveProperty('absolutePath');
+    expect(calls).toBe(2);
+  });
+
   it('finds cached resource variants by local filesystem path', async () => {
     const absolutePath = '/workspace/.neko/.cache/resources/documents/page-1.jpg';
     const provider = createProvider(async (input) => {

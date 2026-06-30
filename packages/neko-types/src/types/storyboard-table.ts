@@ -1,19 +1,10 @@
-import type { CameraAngle, CameraMovement, ShotCharacter, ShotScale } from './canvas';
+import type { CameraAngle, CameraMovement, ShotScale } from './canvas';
 import type { CreativeEntityRef, RepresentationKind } from './creative-entity-asset-composition';
 import {
   parseDocumentArchiveResourceRef,
   type DocumentArchiveResourceRef,
 } from './document-reading';
-import type { ResourceRef } from './resource-cache';
-import type { CanvasStoryboardPayload, StoryboardImportMode } from './storyboard-planner';
-import {
-  SHOT_IMAGE_PREP_KIND,
-  SHOT_IMAGE_PREP_OPERATIONS,
-  SHOT_IMAGE_PREP_SCHEMA_VERSION,
-  SHOT_IMAGE_PREP_STATUSES,
-  type ShotImagePrepOperation,
-  type ShotImagePrepPlan,
-} from './shot-image-prep';
+import { isResourceRef, type ResourceRef } from './resource-cache';
 
 export const STORYBOARD_TABLE_SCHEMA_VERSION = 1 as const;
 export const STORYBOARD_TABLE_KIND = 'storyboard-table' as const;
@@ -255,15 +246,12 @@ export interface StoryboardMediaRef {
   readonly label?: string;
   readonly mimeType?: string;
   readonly documentResourceRef?: DocumentArchiveResourceRef;
+  readonly resourceRef?: ResourceRef;
   readonly metadata?: StoryboardSerializableRecord;
 }
 
 export type StoryboardMediaIdentityKind =
-  | 'stable'
-  | 'runtime-only'
-  | 'unsafe-cache-path'
-  | 'ambiguous-alias'
-  | 'unresolved-tool-result';
+  'stable' | 'runtime-only' | 'unsafe-cache-path' | 'ambiguous-alias' | 'unresolved-tool-result';
 
 export interface StoryboardMediaIdentityClassification {
   readonly kind: StoryboardMediaIdentityKind;
@@ -285,10 +273,7 @@ export type StoryboardSceneRequiredField = (typeof STORYBOARD_SCENE_REQUIRED_FIE
 export type StoryboardShotRequiredField = (typeof STORYBOARD_SHOT_REQUIRED_FIELDS)[number];
 
 export type StoryboardValidationDiagnosticSeverity =
-  | 'error'
-  | 'warning'
-  | 'suggestion'
-  | 'profileHint';
+  'error' | 'warning' | 'suggestion' | 'profileHint';
 
 export type StoryboardValidationDiagnosticCode =
   | 'invalid-root'
@@ -339,28 +324,6 @@ export interface StoryboardValidationResult {
 }
 
 export interface StoryboardValidationOptions extends StoryboardMediaIdentityClassificationOptions {}
-
-export interface ProjectStoryboardTableToCanvasOptions {
-  readonly mode?: StoryboardImportMode;
-  readonly sourceScriptUri?: string;
-  readonly defaultShotScale?: ShotScale;
-  readonly resolveImagePath?: (context: StoryboardMediaResolverContext) => string | undefined;
-  readonly resolveImageResourceRef?: (
-    context: StoryboardMediaResolverContext,
-  ) => DocumentArchiveResourceRef | undefined;
-  readonly resolveImageUnifiedResourceRef?: (
-    context: StoryboardMediaResolverContext,
-  ) => ResourceRef | undefined;
-  readonly resolvePlaceholderImagePath?: (
-    context: StoryboardShotResolverContext,
-  ) => string | undefined;
-  readonly resolvePlaceholderImageResourceRef?: (
-    context: StoryboardShotResolverContext,
-  ) => DocumentArchiveResourceRef | undefined;
-  readonly resolvePlaceholderImageUnifiedResourceRef?: (
-    context: StoryboardShotResolverContext,
-  ) => ResourceRef | undefined;
-}
 
 export interface StoryboardCutStoryboardShotBase {
   readonly id: string;
@@ -424,10 +387,7 @@ export interface StoryboardImageStrategyOverride {
 }
 
 export type StoryboardImageToolName =
-  | 'GenerateImage'
-  | 'TransformImage'
-  | 'ResolveMediaRef'
-  | (string & {});
+  'GenerateImage' | 'TransformImage' | 'ResolveMediaRef' | (string & {});
 
 export interface StoryboardImageToolCapability {
   readonly toolName: StoryboardImageToolName;
@@ -442,9 +402,7 @@ export interface StoryboardImageStrategyInterpreterInput {
 }
 
 export type StoryboardImageStrategyActionKind =
-  | 'reuse-original'
-  | 'generate-image'
-  | 'transform-image';
+  'reuse-original' | 'generate-image' | 'transform-image';
 
 export interface StoryboardImageStrategyAction {
   readonly kind: StoryboardImageStrategyActionKind;
@@ -550,6 +508,13 @@ export function classifyStoryboardMediaIdentity(
   mediaRef: StoryboardMediaRef,
   options: StoryboardMediaIdentityClassificationOptions = {},
 ): StoryboardMediaIdentityClassification {
+  if (mediaRef.resourceRef) {
+    return {
+      kind: 'stable',
+      reason: 'Storyboard media references a stable resource ref.',
+    };
+  }
+
   const ambiguousAliases = new Set(
     (options.ambiguousAliases ?? []).flatMap((value) => {
       const normalized = normalizeStoryboardAlias(value);
@@ -670,234 +635,6 @@ export function splitStoryboardMediaRefsByRole(
   }
 
   return { sourceMediaRefs, generatedMediaRefs, diagnostics };
-}
-
-export function projectStoryboardTableToCanvasPayload(
-  table: StoryboardTable,
-  options: ProjectStoryboardTableToCanvasOptions = {},
-): CanvasStoryboardPayload {
-  const sourceScriptUri =
-    options.sourceScriptUri ??
-    table.source?.sourceUri ??
-    `agent://storyboard-table/v${table.schemaVersion}`;
-  const scenes = table.scenes.map((scene, sceneIndex) => ({
-    sceneId: scene.sceneId,
-    sceneTitle: scene.sceneTitle,
-    sceneNumber: scene.sceneNumber ?? sceneIndex + 1,
-    ...(scene.location ? { location: scene.location } : {}),
-    ...(scene.timeOfDay ? { timeOfDay: scene.timeOfDay } : {}),
-    shotPlans: scene.shots.map((shot) => ({
-      ...(shot.shotId ? { shotId: shot.shotId } : {}),
-      shotNumber: shot.shotNumber,
-      duration: shot.duration,
-      visualDescription: shot.visualDescription,
-      characters: projectStoryboardCharactersToCanvas(shot.characters),
-      shotScale: shot.shotScale ?? options.defaultShotScale ?? 'MS',
-      ...(shot.cameraMovement ? { cameraMovement: shot.cameraMovement } : {}),
-      ...(shot.cameraAngle ? { cameraAngle: shot.cameraAngle } : {}),
-      characterAction: shot.characterAction,
-      emotion: shot.emotion ?? [],
-      sceneTags: shot.sceneTags ?? [],
-      ...(shot.dialogue ? { dialogue: shot.dialogue } : {}),
-      ...(shot.voiceOver ? { voiceOver: shot.voiceOver } : {}),
-      ...(shot.soundCue ? { soundCue: shot.soundCue } : {}),
-      ...(shot.textCues ? { textCues: shot.textCues } : {}),
-      ...(shot.voiceCues ? { voiceCues: shot.voiceCues } : {}),
-      ...(shot.generationPrompt ? { generationPrompt: shot.generationPrompt } : {}),
-      ...(shot.visualStyle ? { visualStyle: shot.visualStyle } : {}),
-      ...resolveCanvasStoryboardReferenceImagePath(table, scene, shot, options),
-      ...(shot.vfx ? { vfx: shot.vfx } : {}),
-      ...(shot.sourceMediaRefs ? { sourceMediaRefs: shot.sourceMediaRefs } : {}),
-      ...(shot.generatedMediaRefs ? { generatedMediaRefs: shot.generatedMediaRefs } : {}),
-      ...(shot.mediaRefs ? { mediaRefs: shot.mediaRefs } : {}),
-      ...projectCanvasShotImagePrepPlan(scene, shot),
-    })),
-  }));
-  return {
-    mode: options.mode ?? 'semantic',
-    sourceScriptUri,
-    creativeScope: createCanvasScopeForStoryboardPayload(sourceScriptUri, table.title, scenes),
-    scenes,
-  };
-}
-
-function createCanvasScopeForStoryboardPayload(
-  sourceScriptUri: string,
-  title: string,
-  scenes: CanvasStoryboardPayload['scenes'],
-): CanvasStoryboardPayload['creativeScope'] {
-  if (scenes.length === 1) {
-    const scene = scenes[0];
-    return scene
-      ? {
-          kind: 'scene',
-          workId: scene.sceneId,
-          title: scene.sceneTitle,
-          sceneIds: [scene.sceneId],
-          shotIds: scene.shotPlans.map(
-            (shot) => shot.shotId ?? `${scene.sceneId}-shot-${shot.shotNumber}`,
-          ),
-          sourceStoryboardRef: sourceScriptUri,
-        }
-      : undefined;
-  }
-  if (scenes.length > 1) {
-    return {
-      kind: 'sequence',
-      workId: sourceScriptUri,
-      title,
-      sceneIds: scenes.map((scene) => scene.sceneId),
-      shotIds: scenes.flatMap((scene) =>
-        scene.shotPlans.map((shot) => shot.shotId ?? `${scene.sceneId}-shot-${shot.shotNumber}`),
-      ),
-      sourceStoryboardRef: sourceScriptUri,
-    };
-  }
-  return undefined;
-}
-
-function projectCanvasShotImagePrepPlan(
-  scene: StoryboardSceneRow,
-  shot: StoryboardShotRow,
-): {
-  readonly shotImagePrepPlan?: ShotImagePrepPlan;
-} {
-  const plan = shot.extensions?.['neko.shotImagePrep'];
-  if (isShotImagePrepPlanLike(plan)) {
-    return { shotImagePrepPlan: plan };
-  }
-  return { shotImagePrepPlan: createDerivedShotImagePrepPlan(scene, shot) };
-}
-
-function createDerivedShotImagePrepPlan(
-  scene: StoryboardSceneRow,
-  shot: StoryboardShotRow,
-): ShotImagePrepPlan {
-  const shotId = shot.shotId ?? `${scene.sceneId}-shot-${shot.shotNumber}`;
-  return {
-    schemaVersion: SHOT_IMAGE_PREP_SCHEMA_VERSION,
-    kind: SHOT_IMAGE_PREP_KIND,
-    planId: `${shotId}-image-prep`,
-    sceneId: scene.sceneId,
-    shotId,
-    sourceMediaRefs: [...(shot.sourceMediaRefs ?? [])],
-    imageStrategy: shot.imageStrategy,
-    operationPlan: inferShotImagePrepOperations(shot.imageStrategy),
-    ...(shot.visualStyle ? { targetStyle: shot.visualStyle } : {}),
-    ...(shot.generationPrompt ? { generationPrompt: shot.generationPrompt } : {}),
-    ...(shot.decisionReason ? { editInstruction: shot.decisionReason } : {}),
-    status: shot.imageStrategy === 'reuse-original' ? 'skipped' : 'planned',
-    ...(shot.decisionReason
-      ? {
-          metadata: {
-            regenerationRecommendation: {
-              decision: imageStrategyRecommendationDecision(shot.imageStrategy),
-              label: shot.decisionReason,
-              reason: shot.decisionReason,
-            },
-          },
-        }
-      : {}),
-  };
-}
-
-function inferShotImagePrepOperations(
-  imageStrategy: StoryboardShotImageStrategy,
-): readonly ShotImagePrepOperation[] {
-  switch (imageStrategy) {
-    case 'generate-new':
-      return ['generate-keyframe'];
-    case 'transform-original':
-      return ['generate-keyframe'];
-    case 'reuse-original':
-    case 'use-as-reference':
-      return [];
-  }
-}
-
-function imageStrategyRecommendationDecision(
-  imageStrategy: StoryboardShotImageStrategy,
-): 'not-needed' | 'transform-source' | 'regenerate' {
-  switch (imageStrategy) {
-    case 'reuse-original':
-      return 'not-needed';
-    case 'generate-new':
-      return 'regenerate';
-    case 'use-as-reference':
-    case 'transform-original':
-      return 'transform-source';
-  }
-}
-
-function isShotImagePrepPlanLike(value: unknown): value is ShotImagePrepPlan {
-  const record = readStoryboardRecord(value);
-  return Boolean(
-    record &&
-    record['kind'] === 'shot-image-prep-plan' &&
-    record['schemaVersion'] === 1 &&
-    typeof record['planId'] === 'string' &&
-    typeof record['sceneId'] === 'string' &&
-    typeof record['shotId'] === 'string' &&
-    isStoryboardImageStrategy(record['imageStrategy']) &&
-    Array.isArray(record['sourceMediaRefs']) &&
-    Array.isArray(record['operationPlan']) &&
-    record['operationPlan'].every(isShotImagePrepOperationLike) &&
-    isShotImagePrepStatusLike(record['status']),
-  );
-}
-
-function isShotImagePrepOperationLike(value: unknown): boolean {
-  return (
-    typeof value === 'string' && (SHOT_IMAGE_PREP_OPERATIONS as readonly string[]).includes(value)
-  );
-}
-
-function isShotImagePrepStatusLike(value: unknown): boolean {
-  return (
-    typeof value === 'string' && (SHOT_IMAGE_PREP_STATUSES as readonly string[]).includes(value)
-  );
-}
-
-function resolveCanvasStoryboardReferenceImagePath(
-  table: StoryboardTable,
-  scene: StoryboardSceneRow,
-  shot: StoryboardShotRow,
-  options: ProjectStoryboardTableToCanvasOptions,
-): {
-  readonly referenceImagePath?: string;
-  readonly referenceResourceRef?: ResourceRef;
-  readonly referenceImageResourceRef?: DocumentArchiveResourceRef;
-} {
-  const mediaRef = selectStoryboardShotImageRef(shot);
-  const shotContext = { table, scene, shot };
-  const mediaContext = mediaRef ? { ...shotContext, mediaRef } : undefined;
-  const referenceImageResourceRef = mediaContext
-    ? (mediaContext.mediaRef.documentResourceRef ?? options.resolveImageResourceRef?.(mediaContext))
-    : options.resolvePlaceholderImageResourceRef?.(shotContext);
-  const referenceResourceRef = mediaContext
-    ? options.resolveImageUnifiedResourceRef?.(mediaContext)
-    : options.resolvePlaceholderImageUnifiedResourceRef?.(shotContext);
-  const stableRefs = {
-    ...(referenceResourceRef ? { referenceResourceRef } : {}),
-    ...(referenceImageResourceRef ? { referenceImageResourceRef } : {}),
-  };
-  if (referenceResourceRef || referenceImageResourceRef) {
-    return stableRefs;
-  }
-
-  if (shot.referenceImagePath) {
-    return {
-      referenceImagePath: shot.referenceImagePath,
-    };
-  }
-
-  const imagePath =
-    (mediaContext ? options.resolveImagePath?.(mediaContext) : undefined) ??
-    (mediaRef ? resolveStoryboardWorkspacePath(mediaRef) : undefined) ??
-    options.resolvePlaceholderImagePath?.(shotContext);
-  return {
-    ...(imagePath ? { referenceImagePath: imagePath } : {}),
-  };
 }
 
 export function projectStoryboardTableToCutPayload(
@@ -1980,22 +1717,6 @@ function validateMediaLocator(
   }
 }
 
-function projectStoryboardCharactersToCanvas(
-  characters: readonly StoryboardShotCharacter[] | undefined,
-): readonly ShotCharacter[] {
-  return (characters ?? []).map((character) => ({
-    ...(character.characterId ? { characterId: character.characterId } : {}),
-    ...(character.entityRef ? { entityRef: character.entityRef } : {}),
-    ...(character.candidateId ? { candidateId: character.candidateId } : {}),
-    characterName: character.name,
-    ...(character.role ? { role: character.role } : {}),
-    ...(character.action ? { action: character.action } : {}),
-    ...(character.emotion ? { emotion: character.emotion } : {}),
-    ...(character.continuityNotes ? { continuityNotes: character.continuityNotes } : {}),
-    ...(character.appearanceNotes ? { appearanceNotes: character.appearanceNotes } : {}),
-  }));
-}
-
 function selectStoryboardShotImageRef(shot: StoryboardShotRow): StoryboardMediaRef | undefined {
   const preferred = [
     ...(shot.generatedMediaRefs ?? []),
@@ -2005,6 +1726,7 @@ function selectStoryboardShotImageRef(shot: StoryboardShotRow): StoryboardMediaR
   return preferred.find(
     (ref) =>
       Boolean(ref.documentResourceRef) ||
+      Boolean(ref.resourceRef) ||
       ref.mimeType?.startsWith('image/') ||
       ref.locator.type === 'workspace-path',
   );
@@ -2166,6 +1888,7 @@ function normalizeMediaRef(
   const label = readTrimmedString(record['label']) ?? readTrimmedString(record['caption']);
   const mimeType = readTrimmedString(record['mimeType']);
   const documentResourceRef = normalizeDocumentArchiveResourceRef(record['documentResourceRef']);
+  const resourceRef = normalizeResourceRef(record['resourceRef']);
   const metadata = normalizeSerializableRecord(record['metadata']);
 
   if (!refId) {
@@ -2212,8 +1935,13 @@ function normalizeMediaRef(
     ...(label ? { label } : {}),
     ...(mimeType ? { mimeType } : {}),
     ...(documentResourceRef ? { documentResourceRef } : {}),
+    ...(resourceRef ? { resourceRef } : {}),
     ...(metadata ? { metadata } : {}),
   };
+}
+
+function normalizeResourceRef(value: unknown): ResourceRef | undefined {
+  return isResourceRef(value) ? value : undefined;
 }
 
 function normalizeDocumentArchiveResourceRef(

@@ -33,6 +33,10 @@ import type {
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
 } from './canvas-agent-operations';
+import type {
+  CanvasMarkdownCapabilityInput,
+  CanvasMarkdownCapabilityResult,
+} from './canvas-markdown-capabilities';
 import type { CanvasCutDraftPayload } from './canvas-cut-draft';
 import type { CanvasCutDraftDiagnostic } from './canvas-cut-draft';
 import type { CanvasTimelineSyncPayload } from './canvas-timeline-sync';
@@ -395,6 +399,15 @@ export interface NekoCanvasAPI {
     getExecutionSummary(
       request?: CanvasStoryboardExecutionSummaryRequest,
     ): Promise<CanvasStoryboardExecutionSummary>;
+  };
+
+  markdown: {
+    /**
+     * Invoke a Canvas-owned Markdown capability. Callers provide Markdown,
+     * stable resource refs, target, and intent; Canvas owns validation and
+     * node creation.
+     */
+    invoke(input: CanvasMarkdownCapabilityInput): Promise<CanvasMarkdownCapabilityResult>;
   };
 
   playback: {

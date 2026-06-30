@@ -101,9 +101,7 @@ export function isCanvasNodeType(value: unknown): value is CanvasNodeType {
 }
 
 export type DocumentResourceStatusReason =
-  | 'cache-missing'
-  | 'unauthorized-cache-root'
-  | 'projection-failed';
+  'cache-missing' | 'unauthorized-cache-root' | 'projection-failed';
 
 export interface DocumentResourceStatus {
   state: 'unavailable';
@@ -371,6 +369,12 @@ export interface TableCanvasNode extends CanvasNodeBase {
     rowCount: number;
     columnCount: number;
     showHeader: boolean;
+    /**
+     * Canvas-owned Markdown review metadata. This keeps parsed rows, original
+     * Markdown, resource status, and diagnostics behind the Canvas node boundary
+     * without making the shared capability DTO a fixed storyboard-row protocol.
+     */
+    markdown?: CanvasSerializableRecord;
   };
 }
 

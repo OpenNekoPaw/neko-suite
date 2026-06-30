@@ -110,6 +110,7 @@ export * from './platform';
 
 // Agent interface types
 export * from './agent';
+export * from './agent-capability-lifecycle';
 
 // Agent execution trace contracts
 export * from './agent-trace';
@@ -189,6 +190,7 @@ export * from './canvas-layered';
 export * from './canvas-serializable';
 export * from './canvas-presets';
 export * from './canvas-agent-operations';
+export * from './canvas-markdown-capabilities';
 export * from './canvas-drop';
 export * from './canvas-subsystem';
 export * from './canvas-projection';

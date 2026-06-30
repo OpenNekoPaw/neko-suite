@@ -40,6 +40,10 @@ export class OutputChannelTransport implements ILogTransport {
   }
 }
 
+export interface VSCodeLoggerOptions {
+  readonly showOutputCommand?: string;
+}
+
 /**
  * Create a logger backed by a VSCode OutputChannel
  *
@@ -62,9 +66,17 @@ export function createVSCodeLogger(
   source: string,
   context: vscode.ExtensionContext,
   level: LogLevel = LogLevel.Info,
+  options: VSCodeLoggerOptions = {},
 ): ConsoleLogger {
   const channel = vscode.window.createOutputChannel(channelName);
   context.subscriptions.push(channel);
+  if (options.showOutputCommand) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(options.showOutputCommand, () => {
+        channel.show(true);
+      }),
+    );
+  }
   return new ConsoleLogger(source, level, [new OutputChannelTransport(channel)]);
 }
 
@@ -74,6 +86,18 @@ const LOG_LEVEL_MAP: Record<string, LogLevel> = {
   warn: LogLevel.Warn,
   error: LogLevel.Error,
 };
+
+export interface LogLevelSettingSnapshot {
+  readonly level: LogLevel;
+  readonly source: 'workspaceFolder' | 'workspace' | 'global' | 'extensionMode';
+  readonly value: string | undefined;
+  readonly valid: boolean;
+  readonly defaultValue: string | undefined;
+  readonly globalValue: string | undefined;
+  readonly workspaceValue: string | undefined;
+  readonly workspaceFolderValue: string | undefined;
+  readonly extensionMode: vscode.ExtensionMode | undefined;
+}
 
 const RUST_LOG_MAP: Record<LogLevel, string> = {
   [LogLevel.Debug]: 'debug',
@@ -93,26 +117,68 @@ const RUST_LOG_MAP: Record<LogLevel, string> = {
  * An explicit user setting (global / workspace / folder) always wins.
  */
 export function resolveLogLevelSetting(extensionMode?: vscode.ExtensionMode): LogLevel {
+  return inspectLogLevelSetting(extensionMode).level;
+}
+
+/**
+ * Resolve `neko.logLevel` and expose the exact VSCode configuration source.
+ * Useful for diagnostics when an Extension Development Host inherits user or
+ * workspace settings from a different window than the repository under test.
+ */
+export function inspectLogLevelSetting(
+  extensionMode?: vscode.ExtensionMode,
+): LogLevelSettingSnapshot {
   const config = vscode.workspace.getConfiguration('neko');
   const inspection = config.inspect<string>('logLevel');
 
-  const explicit =
-    inspection?.globalValue ?? inspection?.workspaceValue ?? inspection?.workspaceFolderValue;
+  const candidates = [
+    ['workspaceFolder', inspection?.workspaceFolderValue],
+    ['workspace', inspection?.workspaceValue],
+    ['global', inspection?.globalValue],
+  ] as const;
 
-  if (explicit !== undefined) {
-    return LOG_LEVEL_MAP[explicit] ?? LogLevel.Info;
+  for (const [source, value] of candidates) {
+    if (value === undefined) continue;
+    const level = parseLogLevelValue(value);
+    return {
+      level: level ?? LogLevel.Info,
+      source,
+      value,
+      valid: level !== undefined,
+      defaultValue: inspection?.defaultValue,
+      globalValue: inspection?.globalValue,
+      workspaceValue: inspection?.workspaceValue,
+      workspaceFolderValue: inspection?.workspaceFolderValue,
+      extensionMode,
+    };
   }
 
   // ExtensionMode enum: Production = 1, Development = 2, Test = 3
+  let level: LogLevel;
   switch (extensionMode) {
     case 2:
-      return LogLevel.Debug;
+      level = LogLevel.Debug;
+      break;
     case 1:
     case 3:
-      return LogLevel.Warn;
+      level = LogLevel.Warn;
+      break;
     default:
-      return LogLevel.Info;
+      level = LogLevel.Info;
+      break;
   }
+
+  return {
+    level,
+    source: 'extensionMode',
+    value: undefined,
+    valid: true,
+    defaultValue: inspection?.defaultValue,
+    globalValue: inspection?.globalValue,
+    workspaceValue: inspection?.workspaceValue,
+    workspaceFolderValue: inspection?.workspaceFolderValue,
+    extensionMode,
+  };
 }
 
 /**
@@ -173,6 +239,10 @@ function createLogDataReplacer(): (key: string, value: unknown) => unknown {
 
     return value;
   };
+}
+
+function parseLogLevelValue(value: string): LogLevel | undefined {
+  return LOG_LEVEL_MAP[value.trim().toLowerCase()];
 }
 
 function syncRustLogEnv(level: LogLevel): void {

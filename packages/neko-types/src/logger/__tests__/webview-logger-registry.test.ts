@@ -37,6 +37,39 @@ describe('Webview logger registries', () => {
     );
   });
 
+  it('routes existing child loggers through the latest root logger', () => {
+    const initialTransport = new CapturedLogTransport();
+    const injectedTransport = new CapturedLogTransport();
+    const registry = createLoggerRegistry('NekoAgent', LogLevel.Debug);
+    const logger = registry.getLogger('AgentSession');
+
+    registry.setRootLogger(new ConsoleLogger('BeforeInject', LogLevel.Debug, [initialTransport]));
+    logger.debug('before.inject');
+    registry.setRootLogger(new ConsoleLogger('AfterInject', LogLevel.Debug, [injectedTransport]));
+    logger.debug('after.inject');
+
+    expect(initialTransport.findByMessage('before.inject')?.source).toBe(
+      'BeforeInject:AgentSession',
+    );
+    expect(initialTransport.findByMessage('after.inject')).toBeUndefined();
+    expect(injectedTransport.findByMessage('after.inject')?.source).toBe(
+      'AfterInject:AgentSession',
+    );
+  });
+
+  it('routes nested child loggers through the latest root logger', () => {
+    const transport = new CapturedLogTransport();
+    const registry = createLoggerRegistry('NekoAgent', LogLevel.Debug);
+    const logger = registry.getLogger('AgentSession').child('Executor');
+
+    registry.setRootLogger(new ConsoleLogger('InjectedAgent', LogLevel.Debug, [transport]));
+    logger.info('nested.child');
+
+    expect(transport.findByMessage('nested.child')?.source).toBe(
+      'InjectedAgent:AgentSession:Executor',
+    );
+  });
+
   it('propagates root ConsoleLogger level changes through registry children', () => {
     const transport = new CapturedLogTransport();
     const registry = createLoggerRegistry('NekoAudio', LogLevel.Debug);
@@ -50,5 +83,13 @@ describe('Webview logger registries', () => {
 
     expect(transport.findByMessage('hidden')).toBeUndefined();
     expect(transport.findByMessage('visible')?.source).toBe('NekoAudio:TransportBar');
+  });
+
+  it('rejects setting a registry proxy as its own root logger', () => {
+    const registry = createLoggerRegistry('NekoAgent', LogLevel.Debug);
+
+    expect(() => registry.setRootLogger(registry.getRootLogger())).toThrow(
+      'Logger registry root cannot be set to one of its own proxy loggers.',
+    );
   });
 });

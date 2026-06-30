@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { createResourceFingerprint, createResourceRef } from '../resource-cache';
 import type {
   StoryboardTableProfile,
   StoryboardTable,
@@ -15,7 +14,6 @@ import {
   classifyStoryboardMediaIdentity,
   interpretStoryboardImageStrategies,
   normalizeStoryboardTable,
-  projectStoryboardTableToCanvasPayload,
   projectStoryboardTableToCutPayload,
   validateStoryboardTable,
 } from '../storyboard-table';
@@ -973,7 +971,7 @@ describe('storyboard table contract', () => {
     );
   });
 
-  it('projects valid semantic tables to Canvas and Cut payloads', () => {
+  it('projects valid semantic tables to Cut payloads', () => {
     const table: StoryboardTable = {
       schemaVersion: 1,
       kind: 'storyboard-table',
@@ -1072,110 +1070,6 @@ describe('storyboard table contract', () => {
       ],
     };
 
-    expect(projectStoryboardTableToCanvasPayload(table)).toEqual({
-      mode: 'semantic',
-      sourceScriptUri: 'agent://storyboard-table/v1',
-      creativeScope: {
-        kind: 'scene',
-        workId: 'scene-1',
-        title: 'Scene',
-        sceneIds: ['scene-1'],
-        shotIds: ['shot-1'],
-        sourceStoryboardRef: 'agent://storyboard-table/v1',
-      },
-      scenes: [
-        {
-          sceneId: 'scene-1',
-          sceneTitle: 'Scene',
-          sceneNumber: 1,
-          shotPlans: [
-            {
-              shotId: 'shot-1',
-              shotNumber: 1,
-              duration: 4,
-              visualDescription: 'Rin looks up.',
-              characters: [
-                {
-                  characterId: 'char-rin',
-                  entityRef: { entityId: 'char-rin', entityKind: 'character' },
-                  candidateId: 'candidate-rin',
-                  characterName: 'Rin',
-                  role: 'primary',
-                  action: 'Looks up',
-                  emotion: 'curious',
-                  continuityNotes: 'Keep the blue scarf.',
-                  appearanceNotes: 'Short hair, blue scarf.',
-                },
-              ],
-              shotScale: 'CU',
-              characterAction: 'Rin looks up.',
-              emotion: ['curious'],
-              sceneTags: ['signal'],
-              dialogue: 'What is that?',
-              textCues: [
-                {
-                  cueId: 'shot-1-text-1',
-                  kind: 'dialogue',
-                  text: 'What is that?',
-                  speakerName: 'Rin',
-                  speakerCharacterId: 'char-rin',
-                  speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
-                  sourceRefId: 'panel-1',
-                  confidence: 0.9,
-                  emotion: 'curious',
-                  delivery: 'quietly',
-                },
-                {
-                  cueId: 'shot-1-text-2',
-                  kind: 'sfx',
-                  text: 'Zzz',
-                  sourceRefId: 'panel-1',
-                },
-              ],
-              voiceCues: [
-                {
-                  cueId: 'shot-1-dialogue-1',
-                  kind: 'dialogue',
-                  text: 'What is that?',
-                  speakerName: 'Rin',
-                  speakerCharacterId: 'char-rin',
-                  speakerEntityRef: { entityId: 'char-rin', entityKind: 'character' },
-                  emotion: 'curious',
-                  delivery: 'quietly',
-                },
-              ],
-              voiceOver: 'The signal returns.',
-              soundCue: 'Radio static.',
-              generationPrompt: 'close-up anime frame',
-              shotImagePrepPlan: {
-                schemaVersion: 1,
-                kind: 'shot-image-prep-plan',
-                planId: 'shot-1-image-prep',
-                sceneId: 'scene-1',
-                shotId: 'shot-1',
-                sourceMediaRefs: [],
-                imageStrategy: 'generate-new',
-                operationPlan: ['generate-keyframe'],
-                status: 'planned',
-              },
-              referenceImagePath: '${WORKSPACE}/.neko/generated/image/shot-1.png',
-              generatedMediaRefs: [
-                {
-                  refId: 'asset-1',
-                  role: 'generated',
-                  locator: {
-                    type: 'workspace-path',
-                    path: '${WORKSPACE}/.neko/generated/image/shot-1.png',
-                  },
-                  mimeType: 'image/png',
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    });
-
     expect(projectStoryboardTableToCutPayload(table)).toEqual({
       projectName: 'Projection',
       shots: [
@@ -1261,88 +1155,9 @@ describe('storyboard table contract', () => {
         name: 'Rin',
       },
     ]);
-    expect(
-      projectStoryboardTableToCanvasPayload(result.table!).scenes[0]?.shotPlans[0]?.characters,
-    ).toEqual([
-      {
-        candidateId: 'candidate-rin',
-        characterName: 'Rin',
-      },
-    ]);
   });
 
-  it('uses canvas placeholder image resolvers when a semantic shot has no media refs', () => {
-    const table: StoryboardTable = {
-      schemaVersion: 1,
-      kind: 'storyboard-table',
-      title: 'Projection',
-      scenes: [
-        {
-          sceneId: 'scene-1',
-          sceneTitle: 'Scene',
-          shots: [
-            {
-              shotNumber: 1,
-              duration: 4,
-              visualDescription: 'Rin looks up.',
-              characterAction: 'Rin looks up.',
-              imageStrategy: 'generate-new',
-              generationPrompt: 'close-up anime frame',
-            },
-          ],
-        },
-      ],
-    };
-    const resourceRef = {
-      kind: 'document-entry' as const,
-      source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
-      entryPath: 'OPS/page-1.jpg',
-      cachePath: '/tmp/neko-cache/page-1.jpg',
-      versionPolicy: 'read-only-source' as const,
-    };
-    const cacheResourceRef = createResourceRef({
-      scope: 'project',
-      provider: 'document-archive',
-      kind: 'document',
-      source: {
-        kind: 'document',
-        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
-        filePath: '${BOOKS}/comic.epub',
-      },
-      locator: { kind: 'document', entryPath: 'OPS/page-1.jpg' },
-      fingerprint: createResourceFingerprint({
-        strategy: 'provider',
-        value: 'comic:OPS/page-1.jpg',
-        providerId: 'document-archive',
-      }),
-    });
-
-    expect(
-      projectStoryboardTableToCanvasPayload(table, {
-        resolvePlaceholderImagePath: ({ shot }) =>
-          shot.shotNumber === 1 ? '/tmp/neko-cache/page-1.jpg' : undefined,
-        resolvePlaceholderImageResourceRef: ({ shot }) =>
-          shot.shotNumber === 1 ? resourceRef : undefined,
-        resolvePlaceholderImageUnifiedResourceRef: ({ shot }) =>
-          shot.shotNumber === 1 ? cacheResourceRef : undefined,
-      }).scenes[0]?.shotPlans[0],
-    ).toMatchObject({
-      referenceImageResourceRef: resourceRef,
-      referenceResourceRef: cacheResourceRef,
-    });
-    expect(
-      projectStoryboardTableToCanvasPayload(table, {
-        resolvePlaceholderImagePath: ({ shot }) =>
-          shot.shotNumber === 1 ? '/tmp/neko-cache/page-1.jpg' : undefined,
-        resolvePlaceholderImageResourceRef: ({ shot }) =>
-          shot.shotNumber === 1 ? resourceRef : undefined,
-        resolvePlaceholderImageUnifiedResourceRef: ({ shot }) =>
-          shot.shotNumber === 1 ? cacheResourceRef : undefined,
-      }).scenes[0]?.shotPlans[0],
-    ).not.toHaveProperty('referenceImagePath');
-  });
-
-  it('accepts stable document and resource refs as projectable storyboard image identity', () => {
+  it('accepts stable document and resource refs as storyboard image identity', () => {
     const documentResourceRef = {
       kind: 'document-entry' as const,
       source: { filePath: '${BOOKS}/comic.epub', format: 'epub' as const },
@@ -1350,22 +1165,6 @@ describe('storyboard table contract', () => {
       cachePath: '/tmp/neko-cache/page-1.jpg',
       versionPolicy: 'read-only-source' as const,
     };
-    const cacheResourceRef = createResourceRef({
-      scope: 'project',
-      provider: 'document-archive',
-      kind: 'document',
-      source: {
-        kind: 'document',
-        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
-        filePath: '${BOOKS}/comic.epub',
-      },
-      locator: { kind: 'document', entryPath: 'OPS/page-1.jpg' },
-      fingerprint: createResourceFingerprint({
-        strategy: 'provider',
-        value: 'comic:OPS/page-1.jpg',
-        providerId: 'document-archive',
-      }),
-    });
     const table = storyboardTable({
       imageStrategy: 'reuse-original',
       sourceMediaRefs: [
@@ -1374,22 +1173,15 @@ describe('storyboard table contract', () => {
           role: 'source',
           locator: { type: 'tool-result', toolCallId: 'read-document-1', assetIndex: 0 },
           mimeType: 'image/jpeg',
+          documentResourceRef,
         },
       ],
     });
 
     expect(validateStoryboardTable(table, { knownToolCallIds: ['read-document-1'] }).ok).toBe(true);
-    expect(
-      projectStoryboardTableToCanvasPayload(table, {
-        resolveImageResourceRef: ({ mediaRef }) =>
-          mediaRef.refId === 'page-1' ? documentResourceRef : undefined,
-        resolveImageUnifiedResourceRef: ({ mediaRef }) =>
-          mediaRef.refId === 'page-1' ? cacheResourceRef : undefined,
-      }).scenes[0]?.shotPlans[0],
-    ).toMatchObject({
-      referenceImageResourceRef: documentResourceRef,
-      referenceResourceRef: cacheResourceRef,
-    });
+    expect(table.scenes[0]?.shots[0]?.sourceMediaRefs?.[0]?.documentResourceRef).toEqual(
+      documentResourceRef,
+    );
   });
 
   it('interprets image strategies without scheduling generation for reuse-original', () => {

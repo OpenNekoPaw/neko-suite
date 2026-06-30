@@ -854,8 +854,7 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
         role: result.variant.role,
         status: result.status,
         ...(relativePath ? { relativePath } : {}),
-        ...(absolutePath ? { absolutePath } : {}),
-        ...(result.variant.format ? { format: result.variant.format } : {}),
+        ...(shouldStoreVariantFormat(result.variant) ? { format: result.variant.format } : {}),
         ...((result.mimeType ?? result.variant.mimeType)
           ? { mimeType: result.mimeType ?? result.variant.mimeType }
           : {}),
@@ -879,13 +878,14 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
         rebuildable: result.rebuildable ?? true,
         ...(result.error ? { error: result.error } : {}),
       };
+      const variants = [...previousVariants, nextVariant];
       const nextEntry: ResourceCacheEntry = {
         resource: result.ref,
-        status: result.status,
+        status: deriveEntryStatus(variants),
         createdAt: previous?.createdAt ?? now,
         updatedAt: now,
-        lastAccessedAt: result.status === 'ready' ? now : previous?.lastAccessedAt,
-        variants: [...previousVariants, nextVariant],
+        lastAccessedAt: readLatestAccessTime(variants),
+        variants,
         lifecycle: lifecycle?.lifecycle
           ? { ...lifecycle.lifecycle, updatedAt: now }
           : previous?.lifecycle,
@@ -920,7 +920,7 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
         key: variantKey,
         role: variant.role,
         status,
-        ...(variant.format ? { format: variant.format } : {}),
+        ...(shouldStoreVariantFormat(variant) ? { format: variant.format } : {}),
         ...(variant.mimeType ? { mimeType: variant.mimeType } : {}),
         ...(variant.width !== undefined ? { width: variant.width } : {}),
         ...(variant.height !== undefined ? { height: variant.height } : {}),
@@ -929,13 +929,14 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
         rebuildable: true,
         ...(error ? { error } : {}),
       };
+      const variants = [...previousVariants, nextVariant];
       const nextEntry: ResourceCacheEntry = {
         resource: ref,
-        status,
+        status: deriveEntryStatus(variants),
         createdAt: previous?.createdAt ?? now,
         updatedAt: now,
-        lastAccessedAt: previous?.lastAccessedAt,
-        variants: [...previousVariants, nextVariant],
+        lastAccessedAt: readLatestAccessTime(variants) ?? previous?.lastAccessedAt,
+        variants,
         providerMetadata: previous?.providerMetadata,
       };
       const entries = { ...manifest.entries, [ref.id]: nextEntry };
@@ -1204,6 +1205,30 @@ function createEmptyManifest(now: string, projectRoot: string | undefined): Reso
 
 function createEnsureKey(ref: ResourceRef, variant: ResourceVariantRequest): string {
   return `${ref.id}:${createResourceVariantKey({ resource: ref, ...variant })}`;
+}
+
+function deriveEntryStatus(variants: readonly ResourceCacheVariantEntry[]): ResourceCacheStatus {
+  if (variants.some((variant) => variant.status === 'ready')) return 'ready';
+  if (variants.some((variant) => variant.status === 'materializing')) return 'materializing';
+  if (variants.some((variant) => variant.status === 'stale')) return 'stale';
+  if (variants.some((variant) => variant.status === 'missing')) return 'missing';
+  if (variants.some((variant) => variant.status === 'failed')) return 'failed';
+  if (variants.some((variant) => variant.status === 'unauthorized')) return 'unauthorized';
+  if (variants.some((variant) => variant.status === 'non-portable')) return 'non-portable';
+  return variants[0]?.status ?? 'missing';
+}
+
+function readLatestAccessTime(variants: readonly ResourceCacheVariantEntry[]): string | undefined {
+  return variants.reduce<string | undefined>((latest, variant) => {
+    if (!variant.lastAccessedAt) return latest;
+    return latest && latest > variant.lastAccessedAt ? latest : variant.lastAccessedAt;
+  }, undefined);
+}
+
+function shouldStoreVariantFormat(
+  variant: ResourceVariantRequest,
+): variant is ResourceVariantRequest & { readonly format: string } {
+  return variant.role !== 'document-entry' && typeof variant.format === 'string';
 }
 
 function matchesSourceFingerprint(

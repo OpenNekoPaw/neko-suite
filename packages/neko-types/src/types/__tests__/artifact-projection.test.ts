@@ -1,40 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import type { CompositeArtifact, StoryboardTable } from '../index';
+import * as artifactProjection from '../artifact-projection';
 import {
-  projectCompositeArtifactToCanvasStoryboardPayload,
   projectCompositeArtifactToCutStoryboardPayload,
   projectCompositeArtifactToStoryboardTable,
 } from '../artifact-projection';
+import * as storyboardTableContract from '../storyboard-table';
 
 describe('artifact storyboard projection', () => {
-  it('projects a StoryboardTable domain block into Canvas and Cut payloads', () => {
+  it('does not expose shared Canvas storyboard compiler/projector paths', () => {
+    expect(artifactProjection).not.toHaveProperty('ARTIFACT_PROJECTOR_STORYBOARD_TO_CANVAS');
+    expect(artifactProjection).not.toHaveProperty(
+      'projectCompositeArtifactToCanvasStoryboardPayload',
+    );
+    expect(storyboardTableContract).not.toHaveProperty('projectStoryboardTableToCanvasPayload');
+  });
+
+  it('projects a StoryboardTable domain block into review data and Cut payloads', () => {
     const artifact = makeArtifact(makeStoryboardTable());
 
     expect(projectCompositeArtifactToStoryboardTable({ artifact })).toMatchObject({
       table: { kind: 'storyboard-table', title: 'Artifact Storyboard' },
       diagnostics: [],
-    });
-    expect(projectCompositeArtifactToCanvasStoryboardPayload({ artifact }).payload).toMatchObject({
-      mode: 'semantic',
-      scenes: [
-        {
-          sceneId: 'scene-1',
-          shotPlans: [
-            {
-              shotNumber: 1,
-              referenceImagePath: '${WORKSPACE}/comic/panel-1.png',
-              characters: [
-                expect.objectContaining({
-                  characterId: 'char-rin',
-                  characterName: 'Rin',
-                  role: 'primary',
-                  continuityNotes: 'Keep scarf.',
-                }),
-              ],
-            },
-          ],
-        },
-      ],
     });
     expect(projectCompositeArtifactToCutStoryboardPayload({ artifact }).payload).toEqual({
       projectName: 'Artifact Storyboard',
@@ -58,7 +45,7 @@ describe('artifact storyboard projection', () => {
   });
 
   it('diagnoses missing storyboard domain blocks without producing execution payloads', () => {
-    const result = projectCompositeArtifactToCanvasStoryboardPayload({
+    const result = projectCompositeArtifactToCutStoryboardPayload({
       artifact: {
         schemaVersion: 1,
         kind: 'composite-artifact',
@@ -132,7 +119,7 @@ describe('artifact storyboard projection', () => {
       ],
     });
 
-    const result = projectCompositeArtifactToCanvasStoryboardPayload({ artifact });
+    const result = projectCompositeArtifactToCutStoryboardPayload({ artifact });
 
     expect(result.payload).toBeUndefined();
     expect(result.diagnostics).toEqual([

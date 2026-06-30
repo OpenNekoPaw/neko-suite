@@ -28,7 +28,7 @@ export type CanvasCutDraftDiagnosticCode =
   | 'draft-invalid-route'
   | 'draft-missing-unit'
   | 'draft-missing-media-source'
-  | 'draft-runtime-media-ref'
+  | 'draft-invalid-media-reference'
   | 'draft-unmanaged-path'
   | 'draft-invalid-extension-namespace'
   | 'draft-forbidden-extension-field'
@@ -68,13 +68,7 @@ export interface CanvasCutDraftRoute {
 }
 
 export type CanvasCutDraftMediaRole =
-  | 'source'
-  | 'reference'
-  | 'thumbnail'
-  | 'poster'
-  | 'proxy'
-  | 'generated'
-  | 'unknown';
+  'source' | 'reference' | 'thumbnail' | 'poster' | 'proxy' | 'generated' | 'unknown';
 
 export interface CanvasCutDraftMediaRef {
   readonly role: CanvasCutDraftMediaRole;
@@ -87,12 +81,7 @@ export interface CanvasCutDraftMediaRef {
 }
 
 export type CanvasCutDraftCueKind =
-  | 'dialogue'
-  | 'voiceOver'
-  | 'soundCue'
-  | 'text'
-  | 'caption'
-  | 'narration';
+  'dialogue' | 'voiceOver' | 'soundCue' | 'text' | 'caption' | 'narration';
 
 export type CanvasCutDraftCueSource = 'canvas-node' | 'story-projection' | 'agent-projection';
 
@@ -730,7 +719,7 @@ function validateMediaRefs(
   }
   if (!Array.isArray(value)) {
     diagnostics.push(
-      diagnostic('draft-runtime-media-ref', 'error', 'Draft unit media must be an array.', {
+      diagnostic('draft-invalid-media-reference', 'error', 'Draft unit media must be an array.', {
         unitId,
         path,
       }),
@@ -749,10 +738,15 @@ function validateMediaRefs(
     const mediaPath = [...path, index] as const;
     if (!isRecord(media)) {
       diagnostics.push(
-        diagnostic('draft-runtime-media-ref', 'error', 'Draft media reference must be an object.', {
-          unitId,
-          path: mediaPath,
-        }),
+        diagnostic(
+          'draft-invalid-media-reference',
+          'error',
+          'Draft media reference must be an object.',
+          {
+            unitId,
+            path: mediaPath,
+          },
+        ),
       );
       continue;
     }
@@ -889,7 +883,7 @@ function validateNoRuntimeValues(
     if (isRuntimeMediaValue(value)) {
       diagnostics.push(
         diagnostic(
-          'draft-runtime-media-ref',
+          'draft-invalid-media-reference',
           'error',
           'Draft payload contains a runtime media value.',
           {
@@ -909,7 +903,7 @@ function validateNoRuntimeValues(
     if (!Array.isArray(value) && isRuntimeFieldName(segment)) {
       diagnostics.push(
         diagnostic(
-          'draft-runtime-media-ref',
+          'draft-invalid-media-reference',
           'error',
           `Draft payload contains runtime field "${segment}".`,
           {
@@ -947,10 +941,15 @@ function validateAssetPath(
 ): void {
   if (isRuntimeMediaValue(assetPath)) {
     diagnostics.push(
-      diagnostic('draft-runtime-media-ref', 'error', 'Draft assetPath must not be a runtime URI.', {
-        unitId,
-        path: [...path, 'assetPath'],
-      }),
+      diagnostic(
+        'draft-invalid-media-reference',
+        'error',
+        'Draft assetPath must not be a runtime URI.',
+        {
+          unitId,
+          path: [...path, 'assetPath'],
+        },
+      ),
     );
     return;
   }

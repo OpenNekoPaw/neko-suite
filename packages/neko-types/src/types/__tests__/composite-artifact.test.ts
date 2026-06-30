@@ -186,7 +186,7 @@ describe('composite artifact contracts', () => {
           schemaRef: 'neko.other-plan.v1',
         },
       ],
-      actions: [{ actionId: 'canvas.importStoryboard', kind: 'execute' }],
+      actions: [{ actionId: 'canvas.createStoryboardDraftFromMarkdown', kind: 'review' }],
       rows: [
         {
           rowId: 'row-1',

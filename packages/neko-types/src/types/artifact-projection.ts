@@ -4,21 +4,17 @@ import type {
   CompositeArtifact,
 } from './composite-artifact';
 import type {
-  ProjectStoryboardTableToCanvasOptions,
   ProjectStoryboardTableToCutOptions,
   StoryboardCutStoryboardPayload,
   StoryboardTable,
   StoryboardValidationDiagnostic,
 } from './storyboard-table';
-import type { CanvasStoryboardPayload } from './storyboard-planner';
 import {
   normalizeStoryboardTable,
-  projectStoryboardTableToCanvasPayload,
   projectStoryboardTableToCutPayload,
   validateStoryboardTable,
 } from './storyboard-table';
 
-export const ARTIFACT_PROJECTOR_STORYBOARD_TO_CANVAS = 'projector:storyboard-to-canvas' as const;
 export const ARTIFACT_PROJECTOR_STORYBOARD_TO_CUT = 'projector:storyboard-to-cut' as const;
 export const ARTIFACT_DOMAIN_STORYBOARD_TABLE = 'StoryboardTable' as const;
 
@@ -30,14 +26,6 @@ export interface ArtifactStoryboardDomainProjectionResult {
   readonly table?: StoryboardTable;
   readonly block?: CompositeArtifactDomainBlock;
   readonly diagnostics: readonly ArtifactDiagnostic[];
-}
-
-export interface ArtifactCanvasStoryboardProjectionInput extends ArtifactStoryboardDomainProjectionInput {
-  readonly options?: ProjectStoryboardTableToCanvasOptions;
-}
-
-export interface ArtifactCanvasStoryboardProjectionResult extends ArtifactStoryboardDomainProjectionResult {
-  readonly payload?: CanvasStoryboardPayload;
 }
 
 export interface ArtifactCutStoryboardProjectionInput extends ArtifactStoryboardDomainProjectionInput {
@@ -82,20 +70,6 @@ export function projectCompositeArtifactToStoryboardTable(
       [...normalized.diagnostics, ...validation.diagnostics],
       block.blockId,
     ),
-  };
-}
-
-export function projectCompositeArtifactToCanvasStoryboardPayload(
-  input: ArtifactCanvasStoryboardProjectionInput,
-): ArtifactCanvasStoryboardProjectionResult {
-  const storyboard = projectCompositeArtifactToStoryboardTable(input);
-  if (!storyboard.table || hasArtifactProjectionErrors(storyboard.diagnostics)) {
-    return storyboard;
-  }
-
-  return {
-    ...storyboard,
-    payload: projectStoryboardTableToCanvasPayload(storyboard.table, input.options),
   };
 }
 

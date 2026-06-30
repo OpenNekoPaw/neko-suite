@@ -101,6 +101,19 @@ describe('resource cache contracts', () => {
     expect(createResourceVariantKey({ role: 'thumbnail', width: 256, height: 256 })).toBe(
       createResourceVariantKey({ height: 256, role: 'thumbnail', width: 256 }),
     );
+    expect(createResourceVariantKey({ resource, role: 'document-entry' })).toBe(
+      createResourceVariantKey({
+        resource,
+        role: 'document-entry',
+        format: 'epub',
+        mimeType: 'image/jpeg',
+        width: 1511,
+        height: 2160,
+      }),
+    );
+    expect(createResourceVariantKey({ resource, role: 'thumbnail', width: 256 })).not.toBe(
+      createResourceVariantKey({ resource, role: 'thumbnail', width: 512 }),
+    );
     expect(isResourceVariantRef(variant)).toBe(true);
     expect(isResourceVariantRef({ ...variant, role: 'poster' })).toBe(false);
   });

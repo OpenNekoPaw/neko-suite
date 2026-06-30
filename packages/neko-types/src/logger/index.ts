@@ -22,7 +22,7 @@ export {
 // Logger registry factory — eliminates boilerplate in each package
 import type { ILogger } from './types';
 import { LogLevel } from './types';
-import { ConsoleLogger, type LogLevelRef } from './console-logger';
+import { ConsoleLogger } from './console-logger';
 
 export interface LoggerRegistry {
   readonly setRootLogger: (logger: ILogger) => void;
@@ -36,6 +36,57 @@ export interface CreateWebviewLoggerRegistryOptions {
   readonly rootLogger?: ILogger;
 }
 
+class DelegatingLogger implements ILogger {
+  constructor(
+    private readonly registryToken: object,
+    private readonly resolveRootLogger: () => ILogger,
+    private readonly sourcePath: readonly string[],
+  ) {}
+
+  get source(): string {
+    return this.resolveLogger().source;
+  }
+
+  debug(message: string, data?: unknown): void {
+    this.resolveLogger().debug(message, data);
+  }
+
+  info(message: string, data?: unknown): void {
+    this.resolveLogger().info(message, data);
+  }
+
+  warn(message: string, data?: unknown): void {
+    this.resolveLogger().warn(message, data);
+  }
+
+  error(message: string, errorOrData?: Error | unknown): void {
+    this.resolveLogger().error(message, errorOrData);
+  }
+
+  child(subSource: string): ILogger {
+    return new DelegatingLogger(this.registryToken, this.resolveRootLogger, [
+      ...this.sourcePath,
+      subSource,
+    ]);
+  }
+
+  setLevel(level: LogLevel): void {
+    this.resolveLogger().setLevel(level);
+  }
+
+  isFromRegistry(registryToken: object): boolean {
+    return this.registryToken === registryToken;
+  }
+
+  private resolveLogger(): ILogger {
+    let logger = this.resolveRootLogger();
+    for (const source of this.sourcePath) {
+      logger = logger.child(source);
+    }
+    return logger;
+  }
+}
+
 /**
  * Create a logger registry for a package.
  *
@@ -43,7 +94,7 @@ export interface CreateWebviewLoggerRegistryOptions {
  * functions, backed by a module-scoped root logger instance.
  *
  * When setRootLogger replaces the root, any loggers already created via getLogger()
- * are bridged to the new root's level ref so that setLevel() propagates to all.
+ * delegate to the new root logger and transport.
  *
  * @param packageName Default root logger source name (e.g., 'Agent', 'Platform')
  * @param defaultLevel Default log level (defaults to Info)
@@ -52,24 +103,25 @@ export function createLoggerRegistry(
   packageName: string,
   defaultLevel = LogLevel.Info,
 ): LoggerRegistry {
-  const sharedRef: LogLevelRef = { level: defaultLevel };
-  let rootLogger: ILogger = new ConsoleLogger(packageName, sharedRef);
+  const registryToken = {};
+  let rootLogger: ILogger = new ConsoleLogger(packageName, defaultLevel);
+  const rootProxy = new DelegatingLogger(registryToken, () => rootLogger, []);
+
+  const createProxy = (sourcePath: readonly string[]): ILogger =>
+    new DelegatingLogger(registryToken, () => rootLogger, sourcePath);
+
   return {
     setRootLogger(logger: ILogger) {
-      rootLogger = logger;
-      if (logger instanceof ConsoleLogger) {
-        // Adopt the shared ref so that pre-existing children (created before
-        // setRootLogger) and the new root + its future children all share
-        // the same level. setLevel() on the new root propagates everywhere.
-        sharedRef.level = logger._levelRef.level;
-        logger._levelRef = sharedRef;
+      if (logger instanceof DelegatingLogger && logger.isFromRegistry(registryToken)) {
+        throw new Error('Logger registry root cannot be set to one of its own proxy loggers.');
       }
+      rootLogger = logger;
     },
     getRootLogger() {
-      return rootLogger;
+      return rootProxy;
     },
     getLogger(source: string) {
-      return rootLogger.child(source);
+      return createProxy([source]);
     },
   };
 }

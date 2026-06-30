@@ -19,13 +19,7 @@ export type ResourceScope = 'project' | 'global' | 'extension-private';
 export type ResourceKind = 'document' | 'media' | 'generated' | 'preview' | 'storyboard-reference';
 
 export type ResourceVariantRole =
-  | 'source'
-  | 'thumbnail'
-  | 'page-image'
-  | 'document-entry'
-  | 'preview'
-  | 'proxy'
-  | 'fov-crop';
+  'source' | 'thumbnail' | 'page-image' | 'document-entry' | 'preview' | 'proxy' | 'fov-crop';
 
 export type ResourceCacheStatus =
   | 'ready'
@@ -40,12 +34,7 @@ export type ResourceCacheStatus =
 export type ResourceRetentionHint = 'intermediate' | 'debug' | 'pinned' | 'promoted';
 
 export type ResourceSourceKind =
-  | 'document'
-  | 'file'
-  | 'media-library'
-  | 'generated-asset'
-  | 'preview-asset'
-  | 'remote-url';
+  'document' | 'file' | 'media-library' | 'generated-asset' | 'preview-asset' | 'remote-url';
 
 export type ResourceLocator =
   | { readonly kind: 'document'; readonly locator?: DocumentLocator; readonly entryPath?: string }
@@ -290,7 +279,7 @@ export function createResourceRefId(
 export function createResourceVariantKey(
   variant: ResourceVariantRef | ResourceVariantRequest,
 ): string {
-  const request =
+  const request = normalizeResourceVariantKeyInput(
     'resource' in variant
       ? {
           resourceId: variant.resource.id,
@@ -300,8 +289,28 @@ export function createResourceVariantKey(
           width: variant.width,
           height: variant.height,
         }
-      : variant;
+      : variant,
+  );
   return `variant_${hashStableValue(request)}`;
+}
+
+function normalizeResourceVariantKeyInput(
+  variant: (ResourceVariantRequest | ResourceVariantRef) & { readonly resourceId?: string },
+): Record<string, unknown> {
+  if (variant.role === 'document-entry') {
+    return {
+      resourceId: variant.resourceId,
+      role: variant.role,
+    };
+  }
+  return {
+    resourceId: variant.resourceId,
+    role: variant.role,
+    format: variant.format,
+    mimeType: variant.mimeType,
+    width: variant.width,
+    height: variant.height,
+  };
 }
 
 export function createResourceFingerprint(input: {
