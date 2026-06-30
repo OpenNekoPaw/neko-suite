@@ -123,6 +123,40 @@ describe('AgentWorkflowRuntime', () => {
     });
   });
 
+  it('expires workflow-scoped Skill lifecycle records on completion and cancellation', () => {
+    const skillLifecycleRuntime = { expire: vi.fn() };
+    const runtime = createAgentWorkflowRuntime({
+      now: () => 100,
+      generateRunId: (_definition, conversationId) => `run-${conversationId}`,
+      skillLifecycleRuntime: skillLifecycleRuntime as never,
+    });
+    const definition = createIdcWorkflowDefinition();
+    const completedRun = runtime.createRun({
+      definition,
+      conversationId: 'conv-complete',
+      initialNodeId: 'draft',
+    });
+    const cancelledRun = runtime.createRun({
+      definition,
+      conversationId: 'conv-cancel',
+      initialNodeId: 'apply',
+    });
+
+    runtime.complete(completedRun.id);
+    runtime.cancel(cancelledRun.id);
+
+    expect(skillLifecycleRuntime.expire).toHaveBeenCalledWith({
+      conversationId: 'conv-complete',
+      reason: 'workflow-ended',
+      runId: completedRun.id,
+    });
+    expect(skillLifecycleRuntime.expire).toHaveBeenCalledWith({
+      conversationId: 'conv-cancel',
+      reason: 'workflow-ended',
+      runId: cancelledRun.id,
+    });
+  });
+
   it('links media task projections to workflow identity', async () => {
     const postMessage = vi.fn();
     const workflow = buildWorkflowIdentity({

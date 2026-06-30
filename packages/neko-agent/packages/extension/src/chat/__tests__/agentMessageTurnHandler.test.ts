@@ -326,6 +326,12 @@ function createMockConversations() {
   return {
     ensureActive: vi.fn().mockReturnValue('conv-1'),
     addMessageToConversation: vi.fn((_id: string, msg: unknown) => msgs.push(msg)),
+    removeMessageFromConversation: vi.fn((_id: string, messageId: string) => {
+      const index = msgs.findIndex((item) => (item as { id?: string }).id === messageId);
+      if (index !== -1) {
+        msgs.splice(index, 1);
+      }
+    }),
     upsertMessageToConversation: vi.fn((_id: string, msg: unknown) => {
       const message = msg as { id?: string };
       const index = msgs.findIndex((item) => (item as { id?: string }).id === message.id);
@@ -338,6 +344,7 @@ function createMockConversations() {
     addMessage: vi.fn(),
     getActiveId: vi.fn().mockReturnValue('conv-1'),
     get: vi.fn().mockReturnValue({ id: 'conv-1', messages: msgs }),
+    getMessages: () => msgs,
     toAgentHistory: vi.fn().mockReturnValue([]),
     manager: {
       toAgentHistory: vi.fn().mockReturnValue([]),
@@ -348,27 +355,46 @@ function createMockConversations() {
 /** Minimal IAgentRunner — returned by agentManager.getOrCreate */
 function createMockAgentRunner() {
   let runnerEventListener:
-    | ((event: { type: 'subagent'; event: SubAgentEvent } | { type: 'stop' }) => void)
-    | undefined;
+    ((event: { type: 'subagent'; event: SubAgentEvent } | { type: 'stop' }) => void) | undefined;
   const subAgentEventDisposable = {
     dispose: vi.fn(() => {
       runnerEventListener = undefined;
     }),
   };
 
-  const pendingMessages: string[] = [];
+  const pendingMessages: Array<{
+    id: string;
+    conversationId: string;
+    content: string;
+    createdAt: number;
+    source: 'composer';
+  }> = [];
   return {
     getHistory: vi.fn().mockReturnValue([]),
     getConfig: vi.fn(),
     configure: vi.fn().mockResolvedValue(undefined),
     execute: vi.fn().mockReturnValue((async function* () {})()),
     isRunning: vi.fn().mockReturnValue(false),
-    appendMessage: vi.fn((message: string) => {
-      pendingMessages.push(message);
-      return true;
-    }),
+    enqueuePendingMessage: vi.fn(
+      (input: { conversationId: string; content: string; now?: number }) => {
+        const item = {
+          id: `queue-${pendingMessages.length + 1}`,
+          conversationId: input.conversationId,
+          content: input.content,
+          createdAt: input.now ?? 1000 + pendingMessages.length,
+          source: 'composer' as const,
+        };
+        pendingMessages.push(item);
+        return item;
+      },
+    ),
+    getPendingMessageQueue: vi.fn(() => pendingMessages.map((item) => ({ ...item }))),
+    removePendingMessage: vi.fn(),
+    updatePendingMessage: vi.fn(),
+    promotePendingMessage: vi.fn(),
     getPendingMessagesCount: vi.fn(() => pendingMessages.length),
-    drainPendingMessages: vi.fn(() => pendingMessages.splice(0)),
+    dequeuePendingMessage: vi.fn(() => pendingMessages.shift() ?? null),
+    drainPendingMessageQueue: vi.fn(() => pendingMessages.splice(0)),
     abort: vi.fn(),
     onDidRequestConfirmation: vi.fn().mockReturnValue({ dispose: vi.fn() }),
     onDidSubAgentEvent: vi.fn().mockReturnValue({ dispose: vi.fn() }),
@@ -383,9 +409,14 @@ function createMockAgentRunner() {
 
 /** Minimal IAgentManager-shaped object */
 function createMockAgentManager(agentRunner = createMockAgentRunner()) {
+  let queueSnapshotVersion = 0;
   return {
     getOrCreate: vi.fn().mockReturnValue(agentRunner),
     loadHistoryWithContext: vi.fn(),
+    nextMessageQueueSnapshotVersion: vi.fn(() => {
+      queueSnapshotVersion += 1;
+      return queueSnapshotVersion;
+    }),
     dispose: vi.fn(),
   };
 }
@@ -435,6 +466,7 @@ function buildHandler(
     () => 'mock system prompt',
     () => overrides.isPlanMode ?? false,
     platform as any,
+    undefined,
     undefined,
     undefined,
     undefined,
@@ -692,6 +724,7 @@ describe('AgentMessageTurnHandler', () => {
       const webview = createMockWebview();
       const platform = createMockPlatform();
       const providers = createMockProviders(true);
+      const conversations = createMockConversations();
       const agentManager = createMockAgentManager();
       const agentRunner = agentManager.getOrCreate();
       vi.mocked(agentRunner.isRunning).mockReturnValue(true);
@@ -712,6 +745,7 @@ describe('AgentMessageTurnHandler', () => {
         agentManager,
         providers,
         platform,
+        conversations,
       });
 
       await handler.handleUserMessage(
@@ -719,20 +753,85 @@ describe('AgentMessageTurnHandler', () => {
         createChatModelRequest('继续', { conversationId: 'conv-1' }),
       );
 
-      expect(agentRunner.appendMessage).toHaveBeenCalledWith('继续');
+      expect(agentRunner.enqueuePendingMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: 'conv-1',
+          content: '继续',
+        }),
+      );
       expect(agentRunner.configure).not.toHaveBeenCalled();
       expect(agentRunner.execute).not.toHaveBeenCalled();
+      expect(conversations.removeMessageFromConversation).toHaveBeenCalledWith(
+        'conv-1',
+        expect.any(String),
+      );
+      expect(conversations.getMessages()).toEqual([]);
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'messageQueued',
           conversationId: 'conv-1',
           pendingCount: 1,
+          item: expect.objectContaining({ id: 'queue-1', content: '继续' }),
+          snapshot: expect.objectContaining({
+            conversationId: 'conv-1',
+            pendingCount: 1,
+            items: [expect.objectContaining({ id: 'queue-1', content: '继续' })],
+          }),
         }),
       );
       expect(webview.postMessage).not.toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'error',
           message: expect.stringContaining('Agent configuration cannot change'),
+        }),
+      );
+    });
+
+    it('persists a released queued item when the queued turn begins executing', async () => {
+      const webview = createMockWebview();
+      const platform = createMockPlatform();
+      const providers = createMockProviders(true);
+      const conversations = createMockConversations();
+      const agentRunner = createMockAgentRunner();
+      vi.mocked(agentRunner.dequeuePendingMessage)
+        .mockReturnValueOnce({
+          id: 'queue-1',
+          conversationId: 'conv-1',
+          content: '继续润色',
+          createdAt: 456,
+          source: 'composer',
+        })
+        .mockReturnValueOnce(null);
+      vi.mocked(agentRunner.getPendingMessageQueue).mockReturnValue([]);
+      const agentManager = createMockAgentManager(agentRunner);
+      const handler = buildHandler({
+        agentManager,
+        providers,
+        platform,
+        conversations,
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createChatModelRequest('开始生成', { conversationId: 'conv-1' }),
+      );
+
+      expect(conversations.upsertMessageToConversation).toHaveBeenCalledWith('conv-1', {
+        id: 'released:queue-1',
+        role: 'user',
+        content: '继续润色',
+        timestamp: 456,
+      });
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'messageQueued',
+          conversationId: 'conv-1',
+          pendingCount: 0,
+          releasedItem: expect.objectContaining({ id: 'queue-1', content: '继续润色' }),
+          snapshot: expect.objectContaining({
+            pendingCount: 0,
+            items: [],
+          }),
         }),
       );
     });

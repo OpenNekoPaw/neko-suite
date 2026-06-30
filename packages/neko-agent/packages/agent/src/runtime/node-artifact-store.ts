@@ -1,11 +1,9 @@
 import * as nodeFs from 'node:fs/promises';
 import * as nodeOs from 'node:os';
 import * as nodePath from 'node:path';
-import { createArtifactWatcher } from '../artifact';
 import { createNodeJournalStorage } from '../session/journal-storage';
-import { createNekoPaths } from '../workspace';
 import { createWorkspaceArtifactService, type ArtifactServiceFsOps } from './artifact-service';
-import type { ArtifactWatcherFactory, IArtifactStore, IRuntimeWorkspaceFsOps } from './types';
+import type { IArtifactStore, IRuntimeWorkspaceFsOps } from './types';
 
 export interface NodeArtifactStoreConfig {
   readonly workspaceRoot?: string;
@@ -33,19 +31,12 @@ export function createNodeArtifactStore(config: NodeArtifactStoreConfig = {}): I
   }
 
   const fsOps = createNodeRuntimeWorkspaceFsOps();
-  const nekoPaths = createNekoPaths(config.workspaceRoot);
   const workspace = {
     root: config.workspaceRoot,
     fsOps,
     globalPreferencesPath:
       config.globalPreferencesPath ?? nodePath.join(nodeOs.homedir(), '.neko', 'preferences.md'),
   };
-  const artifactWatcherFactory: ArtifactWatcherFactory = ({ eventBus, getRunId }) =>
-    createArtifactWatcher({
-      paths: nekoPaths,
-      eventBus,
-      getRunId,
-    });
 
   return {
     workspace,
@@ -54,6 +45,5 @@ export function createNodeArtifactStore(config: NodeArtifactStoreConfig = {}): I
       fsOps,
     }),
     createJournalWriter: (conversationId) => journalStorage.createWriter(conversationId),
-    createArtifactWatcher: artifactWatcherFactory,
   };
 }

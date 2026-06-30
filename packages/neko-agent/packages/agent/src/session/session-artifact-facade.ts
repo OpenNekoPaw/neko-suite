@@ -115,6 +115,10 @@ export class SessionArtifactFacade {
     return this._artifactService?.listByRunId(runId) ?? [];
   }
 
+  getCreationIdForRun(runId: string): string | null {
+    return this._artifactService?.getCreationIdByRunId(runId) ?? null;
+  }
+
   listRunIds(): readonly string[] {
     return this._artifactService?.listRunIds() ?? [];
   }

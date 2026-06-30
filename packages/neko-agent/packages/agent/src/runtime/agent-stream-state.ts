@@ -115,6 +115,7 @@ export type AgentStreamProjectionMessage =
       content?: string;
       pendingCount?: number;
       item?: AgentQueuedMessageItem;
+      releasedItem?: AgentQueuedMessageItem;
       snapshot?: AgentMessageQueueSnapshot;
     }
   | {
@@ -259,6 +260,7 @@ export function projectAgentStreamEventToHostMessages(
           content: event.content,
           pendingCount: event.pendingCount,
           item: event.queuedMessageItem,
+          releasedItem: event.releasedQueuedMessageItem,
           snapshot: event.messageQueueSnapshot,
         },
       ];

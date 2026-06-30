@@ -178,23 +178,20 @@ describe('agent-capability-injection-runtime', () => {
             lazy: true,
           },
         ],
-        projectors: [
+        lifecycleCapabilities: [
           {
-            id: 'projector:storyboard-to-canvas',
-            accepts: ['StoryboardTable'],
-            produces: ['CanvasStoryboardPayload'],
-            lazy: true,
-          },
-        ],
-        capabilities: [
-          {
-            capabilityId: 'canvas.importStoryboard',
-            packageId: 'neko-canvas',
-            accepts: ['CanvasStoryboardPayload'],
-            produces: ['canvas-node-ref'],
-            actions: ['canvas.importStoryboard'],
+            capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+            providerId: 'neko-canvas',
+            displayName: 'Create storyboard draft',
+            description: 'Create a review-first storyboard draft from Markdown.',
+            phases: ['validate', 'review', 'apply'],
+            inputSchema: { id: 'canvas.markdown.input', version: 1 },
+            resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+            accepts: ['markdown', 'gfm-table'],
+            produces: ['canvas.table', 'canvas.storyboard'],
             risk: 'medium',
             requiresApproval: true,
+            safetyKind: 'confirmation-gated',
           },
         ],
       },
@@ -203,12 +200,12 @@ describe('agent-capability-injection-runtime', () => {
     expect(projection.artifactFacets?.protocols?.map((item) => item.id)).toEqual([
       'protocol:CompositeArtifact',
     ]);
-    expect(runtime.getArtifactFacets().projectors?.map((item) => item.id)).toEqual([
-      'projector:storyboard-to-canvas',
-    ]);
-    expect(runtime.findArtifactCapabilities('canvas.importStoryboard')).toEqual([
+    expect(runtime.getArtifactFacets().projectors).toEqual([]);
+    expect(runtime.findArtifactCapabilities('canvas.importStoryboard')).toEqual([]);
+    expect(runtime.getArtifactFacets().lifecycleCapabilities).toEqual([
       expect.objectContaining({
-        capabilityId: 'canvas.importStoryboard',
+        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        phases: ['validate', 'review', 'apply'],
         requiresApproval: true,
       }),
     ]);
@@ -233,10 +230,10 @@ describe('agent-capability-injection-runtime', () => {
         artifactFacets: {
           capabilities: [
             {
-              capabilityId: 'canvas.importStoryboard',
-              packageId: 'neko-canvas',
-              accepts: ['CanvasStoryboardPayload'],
-              actions: ['canvas.importStoryboard'],
+              capabilityId: 'timeline.importStoryboard',
+              packageId: 'neko-cut',
+              accepts: ['CutStoryboardImportPayload'],
+              actions: ['timeline.importStoryboard'],
               risk: 'medium',
               requiresApproval: true,
             },
@@ -265,11 +262,11 @@ describe('agent-capability-injection-runtime', () => {
       },
     ]);
 
-    expect(runtime.findArtifactCapabilities('canvas.importStoryboard', { host: 'cli' })).toEqual(
+    expect(runtime.findArtifactCapabilities('timeline.importStoryboard', { host: 'cli' })).toEqual(
       [],
     );
     expect(
-      runtime.findArtifactCapabilities('canvas.importStoryboard', {
+      runtime.findArtifactCapabilities('timeline.importStoryboard', {
         host: 'vscode',
         permissionPolicy: { approvedContributionIds: ['provider:canvas'] },
       }),
@@ -313,6 +310,19 @@ describe('agent-capability-injection-runtime', () => {
             requiresApproval: 'yes' as never,
           },
         ],
+        lifecycleCapabilities: [
+          {
+            capabilityId: 'canvas.badLifecycle',
+            providerId: 'neko-canvas',
+            displayName: 'Bad lifecycle',
+            description: 'Invalid lifecycle descriptor',
+            phases: ['review', 'publish' as never],
+            inputSchema: { id: '' },
+            resultSchema: { id: 'result' },
+            risk: 'unsafe' as never,
+            requiresApproval: 'yes' as never,
+          },
+        ],
       },
     });
 
@@ -323,6 +333,11 @@ describe('agent-capability-injection-runtime', () => {
         'invalid-string-array-field',
         'invalid-artifact-risk',
         'invalid-artifact-approval',
+        'invalid-lifecycle-phases',
+        'invalid-lifecycle-input-schema',
+        'invalid-lifecycle-risk',
+        'invalid-lifecycle-approval',
+        'invalid-lifecycle-descriptor',
       ]),
     );
   });
@@ -341,14 +356,16 @@ describe('agent-capability-injection-runtime', () => {
         mediaWorkflow: {
           producedArtifacts: ['CompositeArtifact'],
           artifactProfiles: ['comic-shot-asset-prep'],
-          referencedCapabilities: ['canvas.importStoryboard'],
-          suggestedProjectors: ['projector:storyboard-to-canvas'],
+          referencedCapabilities: ['canvas.createStoryboardDraftFromMarkdown'],
+          suggestedProjectors: ['capability:canvas.createStoryboardDraftFromMarkdown'],
         },
       },
     });
 
     expect(runtime.getArtifactFacets().capabilities).toEqual([]);
-    expect(runtime.findArtifactCapabilities('canvas.importStoryboard')).toEqual([]);
+    expect(runtime.findArtifactCapabilities('canvas.createStoryboardDraftFromMarkdown')).toEqual(
+      [],
+    );
   });
 
   it('registers entity memory and semantic index facets as discoverable metadata', () => {

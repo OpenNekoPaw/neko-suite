@@ -91,7 +91,7 @@ export function createDefaultArtifactRegistry(): IArtifactRegistry {
       label: 'Apply',
       stageId: 'apply',
       storageKind: 'task',
-      description: 'Apply-stage task projection. Storage remains .neko/tasks for compatibility.',
+      description: 'Apply-stage task projection persisted as a visible creation document.',
       schemaId: 'idc.task',
       enabled: true,
     },

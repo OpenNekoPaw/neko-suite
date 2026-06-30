@@ -39,6 +39,7 @@ export const handleSkills: CommandHandler = (args, context) => {
       '',
       'Available Skills:',
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+      'Use $skill-name to activate a domain Skill lifecycle record.',
       '',
     ];
 
@@ -92,13 +93,13 @@ export const handleSkills: CommandHandler = (args, context) => {
         return {
           handled: true,
           continueExecution: true,
-          output: `Active skill: ${activeSkill.name}`,
+          output: `Active domain Skill lifecycle record: ${activeSkill.name}`,
         };
       }
       return {
         handled: true,
         continueExecution: true,
-        output: 'No active skill.',
+        output: 'No active domain Skill lifecycle record.',
       };
     }
 
@@ -107,7 +108,7 @@ export const handleSkills: CommandHandler = (args, context) => {
       return {
         handled: true,
         continueExecution: true,
-        output: 'Active skill cleared.',
+        output: 'Clear requested for the active domain Skill lifecycle record.',
       };
 
     default:

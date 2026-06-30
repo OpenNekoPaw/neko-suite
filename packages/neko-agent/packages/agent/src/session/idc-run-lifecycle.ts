@@ -1,5 +1,6 @@
 import type { IdcRun } from '@neko-agent/types';
 import type { IStageGuardian, StageTracker } from '../skill';
+import type { SkillLifecycleRuntime } from '../skill/skill-lifecycle-runtime';
 import type { AnyArtifactRecord } from '../runtime/artifact-service';
 import type { IIdcRunStore } from '../executor';
 
@@ -7,6 +8,8 @@ export interface IdcRunRuntimePort {
   readonly getRunStore: () => IIdcRunStore | null;
   readonly getStageTracker: () => StageTracker | null;
   readonly getStageGuardian: () => IStageGuardian | null;
+  readonly getSkillLifecycleRuntime?: () => SkillLifecycleRuntime | null;
+  readonly getConversationId?: () => string | null;
   readonly onPersist: () => void;
 }
 
@@ -65,6 +68,7 @@ export class IdcRunLifecycle {
     const activeRun = runStore?.getActive();
     if (!runStore || !activeRun) return;
     runStore.endRun(status, error);
+    this._expireWorkflowSkills(activeRun.id);
     this._options.ports.artifacts.queueTaskProjectionClear(activeRun.id, activeRun.startedAt);
   }
 
@@ -181,6 +185,20 @@ export class IdcRunLifecycle {
         activeCandidate.startedAt,
       );
     }
+  }
+
+  private _expireWorkflowSkills(runId: string): void {
+    const lifecycleRuntime = this._options.ports.runtime.getSkillLifecycleRuntime?.();
+    const conversationId = this._options.ports.runtime.getConversationId?.();
+    if (!lifecycleRuntime || !conversationId) {
+      return;
+    }
+
+    lifecycleRuntime.expire({
+      conversationId,
+      reason: 'workflow-ended',
+      runId,
+    });
   }
 }
 

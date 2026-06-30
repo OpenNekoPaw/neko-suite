@@ -241,15 +241,39 @@ export interface AgentMessageTurnAgentExecutionInput {
   readonly executionOverrides?: AgentMessageExecutionOverrides;
 }
 
+export type AgentMessageTurnAgentExecutionResult =
+  | {
+      readonly status: 'queued';
+      readonly pendingCount: number;
+    }
+  | {
+      readonly status: 'completed';
+    }
+  | {
+      readonly status: 'precondition-unmet';
+      readonly reason: AgentMessageTurnPreconditionReason;
+    }
+  | {
+      readonly status: 'failed';
+      readonly error: unknown;
+    };
+
 export interface RunAgentMessageTurnRuntimeInput {
   readonly request: AgentMessageRuntimeRequest;
+  readonly beforePrepareAgentTurn?: (input: {
+    readonly conversationId: string;
+    readonly userInput: string;
+  }) => Promise<void> | void;
   readonly inputProcessor?: AgentMessageFileReferenceProcessor | null;
   readonly processAttachments: PrepareAgentMessageDispatchInput['processAttachments'];
   readonly createReferencedMediaProcessor?: PrepareAgentMessageDispatchInput['createReferencedMediaProcessor'];
   readonly persistUserMessage: (conversationId: string, message: Message) => void;
+  readonly removeUserMessage?: (conversationId: string, messageId: string) => void;
   readonly persistErrorMessage?: (conversationId: string, message: Message) => void;
   readonly executeMediaTurn?: (input: AgentMessageTurnMediaExecutionInput) => Promise<void>;
-  readonly executeAgentTurn?: (input: AgentMessageTurnAgentExecutionInput) => Promise<void>;
+  readonly executeAgentTurn?: (
+    input: AgentMessageTurnAgentExecutionInput,
+  ) => Promise<AgentMessageTurnAgentExecutionResult | void>;
   readonly postMessage: (message: AgentMessageTurnRuntimeMessage) => void;
   readonly onMissingConversationId?: () => void;
   readonly onReferenceError?: PrepareAgentMessageDispatchInput['onReferenceError'];
@@ -269,6 +293,18 @@ export type RunAgentMessageTurnRuntimeResult =
     }
   | {
       readonly status: 'agent-dispatched';
+    }
+  | {
+      readonly status: 'agent-queued';
+      readonly pendingCount: number;
+    }
+  | {
+      readonly status: 'agent-precondition-unmet';
+      readonly reason: AgentMessageTurnPreconditionReason;
+    }
+  | {
+      readonly status: 'agent-failed';
+      readonly error: unknown;
     }
   | {
       readonly status: 'precondition-unmet';
@@ -905,6 +941,11 @@ export async function runAgentMessageTurnRuntime(
     return { status: 'rejected-missing-conversation' };
   }
 
+  await input.beforePrepareAgentTurn?.({
+    conversationId,
+    userInput: input.request.messageText,
+  });
+
   const prepared = await prepareAgentMessageDispatch({
     request: input.request,
     inputProcessor: input.inputProcessor,
@@ -931,7 +972,7 @@ export async function runAgentMessageTurnRuntime(
   }
 
   if (input.executeAgentTurn) {
-    await input.executeAgentTurn({
+    const result = await input.executeAgentTurn({
       conversationId,
       message: prepared.enhancedMessage,
       chatModel: input.request.chatModel,
@@ -943,6 +984,19 @@ export async function runAgentMessageTurnRuntime(
       mediaModels: input.request.mediaModels,
       executionOverrides: input.request.executionOverrides,
     });
+    if (result?.status === 'queued') {
+      input.removeUserMessage?.(conversationId, prepared.userMessage.id);
+      return { status: 'agent-queued', pendingCount: result.pendingCount };
+    }
+    if (result?.status === 'precondition-unmet') {
+      return {
+        status: 'agent-precondition-unmet',
+        reason: result.reason,
+      };
+    }
+    if (result?.status === 'failed') {
+      return { status: 'agent-failed', error: result.error };
+    }
     return { status: 'agent-dispatched' };
   }
 

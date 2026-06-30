@@ -17,6 +17,8 @@ import type {
   IToolInjectionManager,
   RelatedSkill,
   SkillMediaWorkflowHint,
+  ActiveSkillLifecycleRecordProjection,
+  SkillLifecycleDiagnostic,
 } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 
@@ -41,12 +43,30 @@ export interface ISkillProvider {
   listSkills(): SkillProviderMaybePromise<SkillContextSummary[]>;
   /** Get active skill info */
   getActiveSkill(): SkillProviderMaybePromise<SkillContextSummary | null>;
+  /** Get active lifecycle records for prompt/tool/UI projection. */
+  getActiveSkillLifecycle?(): SkillProviderMaybePromise<{
+    records: readonly ActiveSkillLifecycleRecordProjection[];
+    diagnostics: readonly SkillLifecycleDiagnostic[];
+  }>;
   /** Activate a skill by name. Returns injection result or error. */
-  activateSkill(
-    name: string,
-  ): SkillProviderMaybePromise<{ success: boolean; message: string; allowedTools?: string[] }>;
+  activateSkill(name: string): SkillProviderMaybePromise<{
+    success: boolean;
+    message: string;
+    allowedTools?: string[];
+    lifecycleRecordId?: string;
+    diagnostics?: readonly SkillLifecycleDiagnostic[];
+  }>;
   /** Deactivate the current active skill */
-  deactivateSkill(): SkillProviderMaybePromise<{ success: boolean; message: string }>;
+  deactivateSkill(input?: {
+    readonly recordId?: string;
+    readonly slot?: string;
+    readonly skillName?: string;
+  }): SkillProviderMaybePromise<{
+    success: boolean;
+    message: string;
+    removedRecordIds?: readonly string[];
+    diagnostics?: readonly SkillLifecycleDiagnostic[];
+  }>;
 }
 
 export type SkillProviderFactory = (conversationId: string) => ISkillProvider;
@@ -99,6 +119,10 @@ export class GetContextTool extends BuiltinTool {
     // Active skill
     if (this._skillProvider) {
       result.activeSkill = await this._skillProvider.getActiveSkill();
+      const lifecycle = await this._skillProvider.getActiveSkillLifecycle?.();
+      if (lifecycle) {
+        result.activeSkillLifecycle = lifecycle;
+      }
       result.registeredSkills = await this._skillProvider.listSkills();
     }
 
@@ -177,6 +201,8 @@ export class ActivateSkillTool extends BuiltinTool {
       skillName,
       message: result.message,
       allowedTools: result.allowedTools,
+      lifecycleRecordId: result.lifecycleRecordId,
+      diagnostics: result.diagnostics,
     });
   }
 }
@@ -194,7 +220,20 @@ export class DeactivateSkillTool extends BuiltinTool {
     'Deactivate the currently active skill, removing its specialized instructions.';
   readonly parameters: ToolParameters = {
     type: 'object',
-    properties: {},
+    properties: {
+      recordId: {
+        type: 'string',
+        description: 'Optional lifecycle record id to deactivate',
+      },
+      slot: {
+        type: 'string',
+        description: 'Optional lifecycle slot to clear',
+      },
+      skillName: {
+        type: 'string',
+        description: 'Optional skill name to clear when unambiguous',
+      },
+    },
   };
   readonly category: ToolCategory = 'system';
 
@@ -209,7 +248,11 @@ export class DeactivateSkillTool extends BuiltinTool {
       return this.error('Skill system not initialized');
     }
 
-    const result = await this._skillProvider.deactivateSkill();
+    const result = await this._skillProvider.deactivateSkill({
+      ...(typeof _args.recordId === 'string' ? { recordId: _args.recordId } : {}),
+      ...(typeof _args.slot === 'string' ? { slot: _args.slot } : {}),
+      ...(typeof _args.skillName === 'string' ? { skillName: _args.skillName } : {}),
+    });
 
     if (!result.success) {
       return this.error(result.message);
@@ -218,6 +261,8 @@ export class DeactivateSkillTool extends BuiltinTool {
     return this.success({
       deactivated: true,
       message: result.message,
+      removedRecordIds: result.removedRecordIds,
+      diagnostics: result.diagnostics,
     });
   }
 }

@@ -29,6 +29,7 @@ import {
   parseWebviewToExtensionMessage,
   validateAgentTurnTimelineMessage,
 } from '../webview-protocol';
+import type { MessageQueuedMessage } from '../webview-protocol';
 import type { AgentTurnTimelineItem } from '../agent-turn-timeline';
 
 const cacheResourceRef = createResourceRef({
@@ -899,6 +900,20 @@ describe('webview protocol projectors', () => {
       type: 'messageQueueSnapshot',
       snapshot: queueSnapshot,
     });
+    const releasedMessageQueued: MessageQueuedMessage = {
+      type: 'messageQueued',
+      conversationId: 'conv-1',
+      pendingCount: 0,
+      releasedItem: queueItem,
+      snapshot: { ...queueSnapshot, pendingCount: 0, version: 4, items: [] },
+    };
+    expect(releasedMessageQueued).toEqual({
+      type: 'messageQueued',
+      conversationId: 'conv-1',
+      pendingCount: 0,
+      releasedItem: queueItem,
+      snapshot: { conversationId: 'conv-1', pendingCount: 0, version: 4, items: [] },
+    });
     expect(
       buildQueuedMessageEditRequestedMessage({
         conversationId: 'conv-1',
@@ -1252,22 +1267,6 @@ describe('webview protocol projectors', () => {
     expect(
       parseWebviewToExtensionMessage({
         type: 'sendToPlugin',
-        target: 'canvas',
-        payload: {
-          kind: 'canvasPrompt',
-          prompt: 'invalid target path',
-          target: {
-            nodeId: 'shot-1',
-            fieldPath: 'generationPrompt',
-            mode: 'replace',
-          },
-        },
-      }),
-    ).toBeNull();
-
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'sendToPlugin',
         target: 'cut',
         payload: {
           kind: 'cutStoryboard',
@@ -1475,44 +1474,20 @@ describe('webview protocol projectors', () => {
       },
     });
 
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'sendToPlugin',
-        target: 'canvas',
-        payload: {
-          kind: 'canvasStoryboard',
-          storyboard: {
-            mode: 'semantic',
-            sourceScriptUri: 'agent://rich-content/storyboard',
-            scenes: [
-              {
-                sceneId: 'scene-1',
-                sceneTitle: 'Opening',
-                sceneNumber: 1,
-                shotPlans: [
-                  {
-                    shotNumber: 1,
-                    duration: 3,
-                    visualDescription: 'Wide shot',
-                    characters: [],
-                    shotScale: 'MS',
-                    characterAction: '',
-                    emotion: [],
-                    sceneTags: [],
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      }),
-    ).toEqual(
-      expect.objectContaining({
-        type: 'sendToPlugin',
-        target: 'canvas',
-        payload: expect.objectContaining({ kind: 'canvasStoryboard' }),
-      }),
-    );
+    for (const payload of [
+      { kind: 'canvasStoryboard', storyboard: {} },
+      { kind: 'canvasPrompt', prompt: 'legacy prompt' },
+      { kind: 'canvasText', text: 'legacy text' },
+      { kind: 'canvasStructuredContent', content: { beats: ['opening'] } },
+    ]) {
+      expect(
+        parseWebviewToExtensionMessage({
+          type: 'sendToPlugin',
+          target: 'canvas',
+          payload,
+        }),
+      ).toBeNull();
+    }
 
     expect(
       parseWebviewToExtensionMessage({
@@ -1623,175 +1598,70 @@ describe('webview protocol projectors', () => {
     ).toBeNull();
   });
 
-  it('parses target-aware Canvas content transfer payloads', () => {
+  it('parses Canvas Markdown capability invocations through the typed bridge', () => {
     expect(
       parseWebviewToExtensionMessage({
-        type: 'sendToPlugin',
-        target: 'canvas',
-        payload: {
-          kind: 'canvasPrompt',
-          prompt: 'soft rim light, cinematic close-up',
-          title: 'Optimized prompt',
-          target: {
-            plugin: 'canvas',
-            nodeId: 'shot-1',
-            fieldPath: '/generationPrompt',
-            mode: 'replace',
-          },
-          provenance: {
-            source: 'agent',
-            conversationId: 'conv-1',
-            messageId: 'msg-1',
-            metadata: {
-              documentResourceRef: {
-                kind: 'document-entry',
-                source: { filePath: '/books/a.epub', format: 'epub' },
-                entryPath: 'image/Page_1.jpg',
-                versionPolicy: 'versioned-export',
-              },
+        type: 'invokeCanvasMarkdownCapability',
+        requestId: 'req-1',
+        conversationId: 'conv-1',
+        input: {
+          capabilityId: 'canvas.ingestMarkdown',
+          markdown:
+            '| Scene | Shot | Visual | Image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
+          sourceFormat: 'gfm-table',
+          intentHint: 'creative-table',
+          profileHint: 'storyboard',
+          resources: [
+            {
+              token: 'P1',
+              label: 'Panel 1',
+              sourcePath: '${PROJECT}/assets/panel-1.png',
             },
-          },
+          ],
+          target: { nodeId: 'board-1', mode: 'append' },
+          provenance: { source: 'webview', label: 'assistant-storyboard-block' },
         },
       }),
     ).toEqual({
-      type: 'sendToPlugin',
-      target: 'canvas',
-      payload: {
-        kind: 'canvasPrompt',
-        prompt: 'soft rim light, cinematic close-up',
-        title: 'Optimized prompt',
-        target: {
-          plugin: 'canvas',
-          nodeId: 'shot-1',
-          fieldPath: '/generationPrompt',
-          mode: 'replace',
-        },
-        provenance: {
-          source: 'agent',
-          conversationId: 'conv-1',
-          messageId: 'msg-1',
-          metadata: {
-            documentResourceRef: {
-              kind: 'document-entry',
-              source: { filePath: '/books/a.epub', format: 'epub' },
-              entryPath: 'image/Page_1.jpg',
-              versionPolicy: 'versioned-export',
-            },
+      type: 'invokeCanvasMarkdownCapability',
+      requestId: 'req-1',
+      conversationId: 'conv-1',
+      input: {
+        capabilityId: 'canvas.ingestMarkdown',
+        markdown:
+          '| Scene | Shot | Visual | Image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
+        sourceFormat: 'gfm-table',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
+        resources: [
+          {
+            token: 'P1',
+            label: 'Panel 1',
+            sourcePath: '${PROJECT}/assets/panel-1.png',
           },
-        },
-      },
-    });
-
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'sendToPlugin',
-        target: 'canvas',
-        payload: {
-          kind: 'canvasText',
-          text: 'Storyboard note',
-          format: 'markdown',
-          target: {
-            containerId: 'scene-1',
-            mode: 'create-child',
-            insertionPoint: { x: 100, y: 200 },
-          },
-        },
-      }),
-    ).toEqual({
-      type: 'sendToPlugin',
-      target: 'canvas',
-      payload: {
-        kind: 'canvasText',
-        text: 'Storyboard note',
-        format: 'markdown',
-        target: {
-          containerId: 'scene-1',
-          mode: 'create-child',
-          insertionPoint: { x: 100, y: 200 },
-        },
-      },
-    });
-
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'sendToPlugin',
-        target: 'canvas',
-        payload: {
-          kind: 'canvasStructuredContent',
-          content: { beats: ['opening'] },
-          format: 'json',
-        },
-      }),
-    ).toEqual({
-      type: 'sendToPlugin',
-      target: 'canvas',
-      payload: {
-        kind: 'canvasStructuredContent',
-        content: { beats: ['opening'] },
-        format: 'json',
+        ],
+        target: { nodeId: 'board-1', mode: 'append' },
+        provenance: { source: 'webview', label: 'assistant-storyboard-block' },
       },
     });
   });
 
-  it('rejects malformed Canvas content transfer targets', () => {
+  it('rejects Canvas Markdown capability invocations with runtime-only resource identity', () => {
     expect(
       parseWebviewToExtensionMessage({
-        type: 'sendToPlugin',
-        target: 'canvas',
-        payload: {
-          kind: 'canvasText',
-          text: 'Prompt-only format is invalid for plain text payloads',
-          format: 'prompt',
-        },
-      }),
-    ).toBeNull();
-
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'sendToPlugin',
-        target: 'canvas',
-        payload: {
-          kind: 'canvasStructuredContent',
-          content: undefined,
-        },
-      }),
-    ).toBeNull();
-
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'sendToPlugin',
-        target: 'canvas',
-        payload: {
-          kind: 'canvasPrompt',
-          prompt: 'hello',
-          target: { mode: 'erase' },
-        },
-      }),
-    ).toBeNull();
-
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'sendToPlugin',
-        target: 'canvas',
-        payload: {
-          kind: 'canvasPrompt',
-          prompt: 'hello',
-          target: { insertionPoint: { x: Number.NaN, y: 10 } },
-        },
-      }),
-    ).toBeNull();
-
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'sendToPlugin',
-        target: 'canvas',
-        payload: {
-          kind: 'canvasPrompt',
-          prompt: 'hello',
-          provenance: {
-            source: 'agent',
-            metadata: ['not', 'a', 'record'],
-          },
+        type: 'invokeCanvasMarkdownCapability',
+        requestId: 'req-1',
+        conversationId: 'conv-1',
+        input: {
+          capabilityId: 'canvas.createTableFromMarkdown',
+          markdown: '| Image |\\n| --- |\\n| P1 |',
+          sourceFormat: 'gfm-table',
+          resources: [
+            {
+              token: 'P1',
+              sourcePath: 'vscode-webview://panel/read-image-cover.jpg',
+            },
+          ],
         },
       }),
     ).toBeNull();

@@ -42,7 +42,7 @@ describe('idc-runtime-state-reader', () => {
                   {
                     kind: 'draft',
                     artifactId: 'draft-1',
-                    path: '/tmp/proj/.neko/drafts/draft-run-1.md',
+                    path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/brief.md',
                     updatedAt: 4,
                   },
                 ],

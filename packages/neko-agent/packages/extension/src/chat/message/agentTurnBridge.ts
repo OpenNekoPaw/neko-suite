@@ -23,6 +23,7 @@ import {
   type AgentLlmRuntimeOptions,
   type AgentMessageExecutionOverrides,
   type AgentTurnAgentManager,
+  type RunAgentTurnRuntimeResult,
   type TimelineContextRuntime,
 } from '@neko/agent/runtime';
 import type {
@@ -92,7 +93,7 @@ export class AgentTurnBridge {
     this.timelineContextRuntime = createTimelineContextRuntime();
   }
 
-  async execute(input: ExecuteAgentTurnForWebviewInput): Promise<void> {
+  async execute(input: ExecuteAgentTurnForWebviewInput): Promise<RunAgentTurnRuntimeResult> {
     await this.refreshAccountCatalogForTurn(input.chatModel?.providerId);
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const workspaceIgnoreRules = workspaceRoot
@@ -115,7 +116,7 @@ export class AgentTurnBridge {
         }
       : undefined;
 
-    await runAgentTurnRuntime(
+    const result = await runAgentTurnRuntime(
       buildAgentTurnRuntimeInput({
         conversationId: input.conversationId,
         message: input.message,
@@ -144,6 +145,8 @@ export class AgentTurnBridge {
           conversations: {
             getMessageCount: (id) => this.deps.conversations.get(id)?.messages.length ?? 0,
             getFullHistory: (id) => this.deps.conversations.toAgentHistory(id),
+            addUserMessage: (id, userMessage) =>
+              this.deps.conversations.upsertMessageToConversation(id, userMessage),
             addAssistantMessage: (id, assistantMessage) =>
               this.deps.conversations.upsertMessageToConversation(id, assistantMessage),
           },
@@ -179,6 +182,7 @@ export class AgentTurnBridge {
         },
       }),
     );
+    return result;
   }
 
   private async refreshAccountCatalogForTurn(providerId?: string): Promise<void> {

@@ -9,6 +9,7 @@ import {
   type ExecuteAgentTurnInput,
 } from '../agent-turn-runtime';
 import type { AgentPendingMessageItem } from '../agent-runner-port';
+import type { TimelineContextRuntime } from '../timeline-context-runtime';
 import { createTimelineSelectionContextPacket } from '../multimodal-context-packet';
 import type { AgentEvent } from '../../session/types';
 
@@ -96,17 +97,18 @@ function createAgentRunner(
     applySkillInjection: vi.fn((_injection, skill) => {
       activeSkillName = skill?.name;
     }),
-    getActiveSkill: vi.fn(() =>
-      activeSkillName
-        ? {
-            name: activeSkillName,
-            description: `${activeSkillName} description`,
-            content: '',
-            source: 'builtin',
-            enabled: true,
-          }
-        : undefined,
-    ),
+    getActiveSkill: vi.fn(() => {
+      if (!activeSkillName) {
+        return undefined;
+      }
+      return {
+        name: activeSkillName,
+        description: `${activeSkillName} description`,
+        content: '',
+        source: 'builtin' as const,
+        enabled: true,
+      };
+    }),
     clearActiveSkill: vi.fn(() => {
       activeSkillName = undefined;
     }),
@@ -151,6 +153,7 @@ function createBaseInput(
     conversations: {
       getConversationMessageCount: vi.fn(() => fullHistory.length),
       getFullHistory: vi.fn(() => fullHistory),
+      addUserMessage: vi.fn(),
       addAssistantMessage: vi.fn(),
     },
     getBaseSystemPrompt: vi.fn(() => 'base system prompt'),
@@ -243,7 +246,7 @@ describe('executeAgentTurn', () => {
         getProvider: vi.fn(() => ({
           id: 'neko-account-gateway',
           isConfigured: true,
-          source: 'account-gateway',
+          source: 'account-gateway' as const,
           accountCatalogAvailable: true,
           modelIds: ['text-only'],
           entitledModelIds: ['text-only'],
@@ -270,7 +273,7 @@ describe('executeAgentTurn', () => {
         getProvider: vi.fn(() => ({
           id: 'neko-account-gateway',
           isConfigured: true,
-          source: 'account-gateway',
+          source: 'account-gateway' as const,
           accountCatalogAvailable: true,
           modelIds: ['official-denied'],
           entitledModelIds: ['official-chat'],
@@ -525,6 +528,61 @@ describe('executeAgentTurn', () => {
         items: [expect.objectContaining({ id: 'queue-1', content: 'current request' })],
       }),
     });
+  });
+
+  it('publishes the released queue item when a pending message starts executing', async () => {
+    const agentRunner = createAgentRunner();
+    const queuedMessage = {
+      id: 'queue-1',
+      conversationId: 'conv-1',
+      content: 'queued follow-up',
+      createdAt: 456,
+      source: 'composer' as const,
+    };
+    vi.mocked(agentRunner.dequeuePendingMessage)
+      .mockReturnValueOnce(queuedMessage)
+      .mockReturnValueOnce(null);
+    vi.mocked(agentRunner.getPendingMessageQueue).mockReturnValue([]);
+    const onMessageQueued = vi.fn();
+    const { input } = createBaseInput({
+      agentManager: {
+        getOrCreate: vi.fn(() => agentRunner),
+        loadHistoryWithContext: vi.fn(),
+        nextMessageQueueSnapshotVersion: vi.fn().mockReturnValueOnce(7),
+      },
+      onMessageQueued,
+    });
+
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'completed',
+      assistantMessage: expect.any(Object),
+    });
+
+    expect(onMessageQueued).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      pendingCount: 0,
+      releasedItem: {
+        id: 'queue-1',
+        conversationId: 'conv-1',
+        content: 'queued follow-up',
+        createdAt: 456,
+        source: 'composer',
+      },
+      snapshot: {
+        conversationId: 'conv-1',
+        pendingCount: 0,
+        version: 7,
+        items: [],
+      },
+    });
+    expect(input.conversations.addUserMessage).toHaveBeenCalledWith('conv-1', {
+      id: 'released:queue-1',
+      role: 'user',
+      content: 'queued follow-up',
+      timestamp: 456,
+    });
+    expect(agentRunner.execute).toHaveBeenNthCalledWith(1, 'current request', expect.any(Object));
+    expect(agentRunner.execute).toHaveBeenNthCalledWith(2, 'queued follow-up', expect.any(Object));
   });
 
   it('lets normalized per-turn LLM options override global settings for runner configuration', async () => {
@@ -1282,8 +1340,12 @@ describe('buildAgentTurnRuntimeInput', () => {
       getState: vi.fn(() => ({ currentTime: 12 })),
       getContent: vi.fn(() => ({ clips: ['clip-1'] })),
     };
-    const timelineContextRuntime = {
-      build: vi.fn(async () => ({ kind: 'timeline-packet' })),
+    const timelinePacket = createTimelineSelectionContextPacket([{ elementId: 'clip-1' }], {
+      createdAt: 321,
+      userAnnotation: 'cut the selected clip',
+    });
+    const timelineContextRuntime: TimelineContextRuntime = {
+      build: vi.fn(async () => timelinePacket),
     };
     const agentManager = {
       getOrCreate: vi.fn(() => createAgentRunner()),
@@ -1444,7 +1506,7 @@ describe('buildAgentTurnRuntimeInput', () => {
         message: 'cut the selected clip',
         workspaceRoot: '/repo',
       }),
-    ).resolves.toEqual({ kind: 'timeline-packet' });
+    ).resolves.toBe(timelinePacket);
     expect(timelineContextRuntime.build).toHaveBeenCalledWith({
       activeEditor,
       message: 'cut the selected clip',

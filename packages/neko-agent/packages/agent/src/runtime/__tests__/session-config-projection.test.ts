@@ -18,6 +18,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     ];
     const skillRegistry = { kind: 'skill-registry' } as never;
     const skillService = { kind: 'skill-service' } as never;
+    const skillLifecycleRuntime = { kind: 'skill-lifecycle-runtime' } as never;
     const toolGroupRegistry = { kind: 'tool-group-registry' } as never;
     const toolCategoryRegistry = { kind: 'tool-category-registry' } as never;
     const providerCardRegistry = { kind: 'provider-card-registry' } as never;
@@ -56,6 +57,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
       capabilityRuntime: {
         skillRegistry,
         skillService,
+        skillLifecycleRuntime,
         toolGroupRegistry,
         toolCategoryRegistry,
         providerCardRegistry,
@@ -86,6 +88,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
         guardian: false,
         skillRegistry,
         skillService,
+        skillLifecycleRuntime,
       }),
     );
     expect(config.idcTaskProjection).toBe(idcTaskProjection);
@@ -102,6 +105,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     expect(config.toolCategoryRegistry).toBe(toolCategoryRegistry);
     expect(config.providerCardRegistry).toBe(providerCardRegistry);
     expect(config.skillService).toBe(skillService);
+    expect(config.stageTracking?.skillLifecycleRuntime).toBe(skillLifecycleRuntime);
     expect(config.projectMemoryManager).toBe(projectMemoryManager);
     expect(config.feedbackCoordinator).toBe(feedbackCoordinator);
     expect(config.controlPlane).toBe(controlPlane);

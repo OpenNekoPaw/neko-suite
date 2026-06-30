@@ -61,6 +61,15 @@ const resourceRef = createResourceRef({
 });
 
 describe('content access tools', () => {
+  it('publishes ReadImage resourceRef as a required image item field', () => {
+    const tool = createReadImageTool({ contentAccessRuntime: createRuntime() });
+    const images = tool.parameters.properties['images'] as {
+      readonly items?: { readonly required?: readonly string[] };
+    };
+
+    expect(images.items?.required).toContain('resourceRef');
+  });
+
   it('routes ReadDocument through AgentContentAccessRuntime', async () => {
     const runtime = createRuntime();
     runtime.resolveDocumentContent.mockResolvedValueOnce({
@@ -141,6 +150,80 @@ describe('content access tools', () => {
     });
   });
 
+  it('passes ReadDocument imageInfo entries to ReadImage through unified content refs', async () => {
+    const runtime = createRuntime();
+    runtime.resolveDocumentContent.mockResolvedValueOnce({
+      status: 'ready',
+      source: { kind: 'file', path: '${A}/books/book.epub' },
+      diagnostics: [],
+      text: '',
+      imageInfo: [
+        {
+          label: 'page 1',
+          entryPath: archiveRef.entryPath,
+          locator: archiveRef.locator,
+          width: 1,
+          height: 1,
+          mimeType: 'image/png',
+          resourceRef: archiveRef,
+        },
+      ],
+      imageCount: 1,
+      imagesTruncated: false,
+    });
+    runtime.loadProviderAsset.mockResolvedValueOnce({
+      status: 'ready',
+      source: resourceRef,
+      diagnostics: [],
+      bytes: pngBytes(),
+      mimeType: 'image/png',
+      sizeBytes: pngBytes().byteLength,
+    });
+    runtime.resolveImageMetadata.mockResolvedValueOnce({
+      status: 'ready',
+      source: resourceRef,
+      diagnostics: [],
+      mimeType: 'image/png',
+      width: 1,
+      height: 1,
+      sizeBytes: pngBytes().byteLength,
+    });
+
+    const documentResult = await createReadDocumentTool({ contentAccessRuntime: runtime }).execute({
+      source: { kind: 'file', path: '${A}/books/book.epub' },
+      mode: 'range',
+      range: {
+        locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
+      },
+      max_images: 1,
+    });
+    const imageInfo = (
+      documentResult.data as {
+        readonly imageInfo: readonly [{ readonly resourceRef: DocumentArchiveResourceRef }];
+      }
+    ).imageInfo;
+
+    const imageResult = await createReadImageTool({ contentAccessRuntime: runtime }).execute({
+      images: imageInfo,
+    });
+
+    expect(documentResult.success).toBe(true);
+    expect(imageResult.success).toBe(true);
+    expect(runtime.loadProviderAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caller: 'read-image',
+        preferredTarget: 'bytes',
+        source: expect.objectContaining({
+          provider: 'document-archive',
+          locator: expect.objectContaining({
+            kind: 'document',
+            entryPath: archiveRef.entryPath,
+          }),
+        }),
+      }),
+    );
+  });
+
   it('routes ReadImage through provider asset and metadata content access', async () => {
     const runtime = createRuntime();
     runtime.loadProviderAsset.mockResolvedValueOnce({
@@ -212,8 +295,8 @@ function createRuntime(): AgentContentAccessRuntime & {
 
 function pngBytes(): Uint8Array {
   return new Uint8Array([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
-    0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06,
-    0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89,
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    0x89,
   ]);
 }

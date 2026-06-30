@@ -134,6 +134,7 @@ describe('session runtime collaborators', () => {
     const onPersist = vi.fn();
     const queueTaskProjectionClear = vi.fn();
     const replayRestoredTaskProjection = vi.fn();
+    const skillLifecycleRuntime = { expire: vi.fn() };
     const lifecycle = new IdcRunLifecycle({
       maxPersistedStageTransitions: 2,
       ports: {
@@ -141,6 +142,8 @@ describe('session runtime collaborators', () => {
           getRunStore: () => runStore,
           getStageTracker: () => stageTracker,
           getStageGuardian: () => guardian,
+          getSkillLifecycleRuntime: () => skillLifecycleRuntime as never,
+          getConversationId: () => 'conv-1',
           onPersist,
         },
         artifacts: {
@@ -185,6 +188,11 @@ describe('session runtime collaborators', () => {
     lifecycle.closeActiveRun('completed');
     expect(runStore.getActive()).toBeNull();
     expect(queueTaskProjectionClear).toHaveBeenCalledWith('run-1', 100);
+    expect(skillLifecycleRuntime.expire).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      reason: 'workflow-ended',
+      runId: 'run-1',
+    });
 
     const restoredStore = createIdcRunStore({ now: () => 300 });
     const restoredTracker = new StageTracker({ now: () => 300 });
@@ -269,7 +277,7 @@ describe('session runtime collaborators', () => {
     await facade.flush();
 
     expect(bindArtifact).toHaveBeenCalledWith(expect.objectContaining({ kind: 'task' }));
-    expect(service.ingestObservedArtifact).toHaveBeenCalledWith(
+    expect(service.ingestObservedArtifactMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'task',
         runId: 'run-1',
@@ -286,7 +294,9 @@ describe('session runtime collaborators', () => {
     const onWarn = vi.fn();
     const service = new MemoryArtifactService();
     service.restore.mockRejectedValueOnce(new Error('restore failed'));
-    service.writePlan.mockRejectedValueOnce(new Error('write failed'));
+    service.writePlanMock.mockImplementationOnce(() => {
+      throw new Error('write failed');
+    });
     const facade = createArtifactFacade({
       onWarn,
       activeRun: createRun('run-error', 100),
@@ -342,7 +352,7 @@ describe('session runtime collaborators', () => {
     facade.queueTaskProjectionClear('run-queue', 100);
     await expect(facade.flush()).resolves.toBeUndefined();
 
-    expect(service.ingestObservedArtifact).toHaveBeenCalledWith(
+    expect(service.ingestObservedArtifactMock).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'task', runId: 'run-queue', content: 'recovered content' }),
     );
     expect(projection.clearRun).toHaveBeenCalledWith('run-queue', 100);
@@ -570,7 +580,8 @@ describe('session runtime collaborators', () => {
     const nextEventIds = facade.syncSystemPrompt({ history, historyEventIds: [] });
 
     expect(history[0]?.content).toContain('Base prompt');
-    expect(history[0]?.content).toContain('Artifact file contract');
+    expect(history[0]?.content).toContain('Creation document contract');
+    expect(history[0]?.content).not.toContain('.neko/drafts');
     expect(history[0]?.content).toContain('Guidance prompt');
     expect(history[0]?.content).toContain('Memory prompt');
     expect(history[0]?.content).toContain('Version summary');
@@ -790,7 +801,35 @@ async function flushMicrotasks(): Promise<void> {
 }
 
 class MemoryArtifactService implements IArtifactService {
-  readonly write = vi.fn(async (input: ArtifactWriteInput) => {
+  readonly writeMock = vi.fn();
+  readonly writeDraftMock = vi.fn();
+  readonly writePlanMock = vi.fn();
+  readonly writeTaskMock = vi.fn();
+  readonly ingestObservedArtifactMock = vi.fn();
+  readonly getByRunIdMock = vi.fn();
+  readonly listRunIdsMock = vi.fn();
+  readonly listByRunIdMock = vi.fn();
+  readonly getCreationIdByRunIdMock = vi.fn();
+  readonly restore = vi.fn(async () =>
+    Array.from(this._records.values()).flatMap((records) => [...records.values()]),
+  );
+  readonly flush = vi.fn(async () => {});
+  readonly dispose = vi.fn(async () => {});
+
+  private readonly _records = new Map<string, Map<AnyArtifactRecord['kind'], AnyArtifactRecord>>();
+  private readonly _creationIdsByRun = new Map<string, string>();
+
+  constructor(records: readonly AnyArtifactRecord[] = []) {
+    for (const record of records) {
+      this._remember(record);
+    }
+  }
+
+  write(input: ArtifactWriteInput<'draft'>): Promise<ArtifactRecord<'draft'>>;
+  write(input: ArtifactWriteInput<'plan'>): Promise<ArtifactRecord<'plan'>>;
+  write(input: ArtifactWriteInput<'task'>): Promise<ArtifactRecord<'task'>>;
+  async write(input: ArtifactWriteInput): Promise<AnyArtifactRecord> {
+    this.writeMock(input);
     switch (input.kind) {
       case 'draft':
         return this.writeDraft(input.runId, input.value);
@@ -799,17 +838,52 @@ class MemoryArtifactService implements IArtifactService {
       case 'task':
         return this.writeTask(input.runId, input.value);
     }
-  });
-  readonly writeDraft = vi.fn(async (runId: string, draft: Draft) =>
-    this._remember(createArtifactRecord('draft', runId, draft, draft.updatedAt)),
-  );
-  readonly writePlan = vi.fn(async (runId: string, plan: ExecutionPlan) =>
-    this._remember(createArtifactRecord('plan', runId, plan, plan.updatedAt)),
-  );
-  readonly writeTask = vi.fn(async (runId: string, task: Task) =>
-    this._remember(createArtifactRecord('task', runId, task, task.updatedAt)),
-  );
-  readonly ingestObservedArtifact = vi.fn((input: ArtifactObservedInput) => {
+  }
+
+  async writeDraft(runId: string, draft: Draft): Promise<ArtifactRecord<'draft'>> {
+    this.writeDraftMock(runId, draft);
+    return this._remember(
+      createArtifactRecord(
+        'draft',
+        runId,
+        draft,
+        draft.updatedAt,
+        this._creationIdForRun(runId, draft.id),
+      ),
+    );
+  }
+
+  async writePlan(runId: string, plan: ExecutionPlan): Promise<ArtifactRecord<'plan'>> {
+    this.writePlanMock(runId, plan);
+    return this._remember(
+      createArtifactRecord(
+        'plan',
+        runId,
+        plan,
+        plan.updatedAt,
+        this._creationIdForRun(runId, plan.draftId),
+      ),
+    );
+  }
+
+  async writeTask(runId: string, task: Task): Promise<ArtifactRecord<'task'>> {
+    this.writeTaskMock(runId, task);
+    return this._remember(
+      createArtifactRecord(
+        'task',
+        runId,
+        task,
+        task.updatedAt,
+        this._creationIdForRun(runId, task.id),
+      ),
+    );
+  }
+
+  ingestObservedArtifact(input: ArtifactObservedInput<'draft'>): ArtifactRecord<'draft'>;
+  ingestObservedArtifact(input: ArtifactObservedInput<'plan'>): ArtifactRecord<'plan'>;
+  ingestObservedArtifact(input: ArtifactObservedInput<'task'>): ArtifactRecord<'task'>;
+  ingestObservedArtifact(input: ArtifactObservedInput): AnyArtifactRecord {
+    this.ingestObservedArtifactMock(input);
     const now = 200;
     switch (input.kind) {
       case 'draft':
@@ -825,33 +899,50 @@ class MemoryArtifactService implements IArtifactService {
           createArtifactRecord('task', input.runId, createTask('observed-task', now), now),
         );
     }
-  });
-  readonly getByRunId = vi.fn(
-    (runId: string, kind: AnyArtifactRecord['kind']) => this._records.get(runId)?.get(kind) ?? null,
-  );
-  readonly listRunIds = vi.fn(() => Array.from(this._records.keys()));
-  readonly listByRunId = vi.fn((runId: string) =>
-    Array.from(this._records.get(runId)?.values() ?? []),
-  );
-  readonly restore = vi.fn(async () =>
-    Array.from(this._records.values()).flatMap((records) => [...records.values()]),
-  );
-  readonly flush = vi.fn(async () => {});
-  readonly dispose = vi.fn(async () => {});
+  }
 
-  private readonly _records = new Map<string, Map<AnyArtifactRecord['kind'], AnyArtifactRecord>>();
+  getByRunId(runId: string, kind: 'draft'): ArtifactRecord<'draft'> | null;
+  getByRunId(runId: string, kind: 'plan'): ArtifactRecord<'plan'> | null;
+  getByRunId(runId: string, kind: 'task'): ArtifactRecord<'task'> | null;
+  getByRunId(runId: string, kind: AnyArtifactRecord['kind']): AnyArtifactRecord | null {
+    this.getByRunIdMock(runId, kind);
+    return this._records.get(runId)?.get(kind) ?? null;
+  }
 
-  constructor(records: readonly AnyArtifactRecord[] = []) {
-    for (const record of records) {
-      this._remember(record);
-    }
+  listRunIds(): readonly string[] {
+    this.listRunIdsMock();
+    return Array.from(this._records.keys());
+  }
+
+  listByRunId(runId: string): readonly AnyArtifactRecord[] {
+    this.listByRunIdMock(runId);
+    return Array.from(this._records.get(runId)?.values() ?? []);
+  }
+
+  getCreationIdByRunId(runId: string): string | null {
+    this.getCreationIdByRunIdMock(runId);
+    return this._creationIdsByRun.get(runId) ?? null;
   }
 
   private _remember<T extends AnyArtifactRecord>(record: T): T {
+    const creationId = extractCreationId(record.path);
+    if (creationId) {
+      this._creationIdsByRun.set(record.runId, creationId);
+    }
     const records = this._records.get(record.runId) ?? new Map();
     records.set(record.kind, record);
     this._records.set(record.runId, records);
     return record;
+  }
+
+  private _creationIdForRun(runId: string, seed: string): string {
+    const existing = this._creationIdsByRun.get(runId);
+    if (existing) {
+      return existing;
+    }
+    const creationId = `creation-${seed}`;
+    this._creationIdsByRun.set(runId, creationId);
+    return creationId;
   }
 }
 
@@ -870,35 +961,55 @@ function createArtifactRecord(
   runId: string,
   value: Draft,
   updatedAt: number,
+  creationId?: string,
 ): ArtifactRecord<'draft'>;
 function createArtifactRecord(
   kind: 'plan',
   runId: string,
   value: ExecutionPlan,
   updatedAt: number,
+  creationId?: string,
 ): ArtifactRecord<'plan'>;
 function createArtifactRecord(
   kind: 'task',
   runId: string,
   value: Task,
   updatedAt: number,
+  creationId?: string,
 ): ArtifactRecord<'task'>;
 function createArtifactRecord(
   kind: AnyArtifactRecord['kind'],
   runId: string,
   value: Draft | ExecutionPlan | Task,
   updatedAt: number,
+  creationId?: string,
 ): AnyArtifactRecord {
   const artifactId = 'id' in value ? value.id : `${kind}-${runId}`;
   return {
     kind,
     runId,
     artifactId,
-    path: `.neko/${kind}s/${artifactId}.md`,
+    path: `neko/creations/${creationId ?? `creation-${artifactId}`}/${creationFileName(kind)}`,
     updatedAt,
     content: artifactId,
     value,
   } as AnyArtifactRecord;
+}
+
+function creationFileName(kind: AnyArtifactRecord['kind']): string {
+  switch (kind) {
+    case 'draft':
+      return 'brief.md';
+    case 'plan':
+      return 'plan.md';
+    case 'task':
+      return 'checklist.md';
+  }
+}
+
+function extractCreationId(path: string): string | null {
+  const match = /(?:^|\/)neko\/creations\/([^/]+)\//.exec(path);
+  return match?.[1] ?? null;
 }
 
 function createArtifactWrittenEvent(
@@ -910,7 +1021,7 @@ function createArtifactWrittenEvent(
     runId,
     kind,
     artifactId: `${kind}-observed`,
-    path: `.neko/${kind}s/${kind}-observed.md`,
+    path: `neko/creations/observed-creation/${creationFileName(kind)}`,
     at: 300,
   };
 }

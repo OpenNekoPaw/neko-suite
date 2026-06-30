@@ -53,6 +53,5 @@ export {
 } from './file-access-policy';
 export type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
 export { MemoryWriteTool } from './memory-write-tool';
-// Phase B (2026-04-22): DraftWrite / PlanWrite / TaskWrite deleted. AI uses
-// the generic `Write` tool against `.neko/drafts|plans|tasks/*.md` now; the
-// ArtifactWatcher validates frontmatter post-write (see artifact/index.ts).
+// Draft/Plan/Task review documents are host-owned and are not written through
+// the generic file tools.

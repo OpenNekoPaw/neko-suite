@@ -6,6 +6,7 @@ import {
   NEKO_STATE_FILES,
   NEKO_SUBDIRS,
 } from '../neko-paths';
+import { createCreationArtifactPaths } from '../creation-artifact-paths';
 
 describe('NekoPaths', () => {
   it('root is <projectRoot>/.neko', () => {
@@ -24,9 +25,6 @@ describe('NekoPaths', () => {
 
   it('dir() returns canonical subdir paths', () => {
     const p = createNekoPaths('/r');
-    expect(p.dir('drafts')).toBe(`/r/.neko/${NEKO_SUBDIRS.drafts}`);
-    expect(p.dir('plans')).toBe(`/r/.neko/${NEKO_SUBDIRS.plans}`);
-    expect(p.dir('tasks')).toBe(`/r/.neko/${NEKO_SUBDIRS.tasks}`);
     expect(p.dir('sessions')).toBe(`/r/.neko/${NEKO_SUBDIRS.sessions}`);
     expect(p.dir('logs')).toBe(`/r/.neko/${NEKO_SUBDIRS.logs}`);
     expect(p.dir('cache')).toBe(`/r/.neko/${NEKO_SUBDIRS.cache}`);
@@ -34,25 +32,31 @@ describe('NekoPaths', () => {
     expect(p.dir('archives')).toBe(`/r/.neko/${NEKO_SUBDIRS.archives}`);
   });
 
-  it('file() uses the `<kind>-<runId>.md` convention for each AI family', () => {
+  it('file() uses managed runtime naming for session files only', () => {
     const p = createNekoPaths('/r');
-    expect(p.file('drafts', 'tiktok-001')).toBe('/r/.neko/drafts/draft-tiktok-001.md');
-    expect(p.file('plans', 'tiktok-001')).toBe('/r/.neko/plans/plan-tiktok-001.md');
-    expect(p.file('tasks', 'tiktok-001')).toBe('/r/.neko/tasks/task-tiktok-001.md');
     expect(p.file('sessions', 'run-a')).toBe('/r/.neko/sessions/session-run-a.md');
     expect(p.file('archives', '2026-04')).toBe('/r/.neko/archives/2026-04.md');
   });
 
-  it('file() strips a duplicate prefix / extension from the basename', () => {
+  it('file() strips a duplicate session prefix / extension from the basename', () => {
     const p = createNekoPaths('/r');
-    expect(p.file('drafts', 'draft-tiktok-001')).toBe('/r/.neko/drafts/draft-tiktok-001.md');
-    expect(p.file('drafts', 'draft-tiktok-001.md')).toBe('/r/.neko/drafts/draft-tiktok-001.md');
-    expect(p.file('tasks', 'task-tiktok-001.md')).toBe('/r/.neko/tasks/task-tiktok-001.md');
+    expect(p.file('sessions', 'session-run-a')).toBe('/r/.neko/sessions/session-run-a.md');
+    expect(p.file('sessions', 'session-run-a.md')).toBe('/r/.neko/sessions/session-run-a.md');
   });
 
   it('file() rejects empty basename', () => {
     const p = createNekoPaths('/r');
-    expect(() => p.file('drafts', '')).toThrow(/basename is required/);
+    expect(() => p.file('sessions', '')).toThrow(/basename is required/);
+  });
+
+  it('keeps Draft / Plan / Task creation documents outside managed .neko paths', () => {
+    const p = createCreationArtifactPaths('/r');
+    expect(p.root).toBe('/r/neko/creations');
+    expect(p.creationDir('launch-teaser')).toBe('/r/neko/creations/launch-teaser');
+    expect(p.file('draft', 'launch-teaser')).toBe('/r/neko/creations/launch-teaser/brief.md');
+    expect(p.file('plan', 'launch-teaser')).toBe('/r/neko/creations/launch-teaser/plan.md');
+    expect(p.file('task', 'launch-teaser')).toBe('/r/neko/creations/launch-teaser/checklist.md');
+    expect(() => p.file('draft', '../bad')).toThrow(/invalid path segment/);
   });
 
   it('log() returns canonical JSONL paths', () => {

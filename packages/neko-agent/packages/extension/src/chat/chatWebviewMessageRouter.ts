@@ -55,6 +55,7 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'revealContextSource',
   'downloadSvg',
   'sendToPlugin',
+  'invokeCanvasMarkdownCapability',
   'dnd:start',
   'invokePluginSlashCommand',
   'exitCharacterDialogueSession',

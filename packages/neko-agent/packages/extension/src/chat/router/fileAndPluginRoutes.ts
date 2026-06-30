@@ -1,5 +1,24 @@
 import * as vscode from 'vscode';
-import { type WebviewToExtensionMessage } from '@neko-agent/types';
+import {
+  NEKO_PLUGIN_EXTENSION_IDS,
+  buildCanvasMarkdownCapabilityResultMessage,
+  type WebviewToExtensionMessage,
+} from '@neko-agent/types';
+import {
+  createAgentCapabilityLifecycleDiagnostic,
+  isAgentCapabilityInvocationResult,
+  validateAgentCapabilityInvocationInput,
+  validateAgentCapabilityInvocationResult,
+  validateCanvasMarkdownCapabilityInput,
+  type CanvasMarkdownCapabilityResult,
+  type CanvasMarkdownCapabilityInput,
+  type NekoCanvasAPI,
+  type AgentCapabilityInvocationInput,
+  type AgentCapabilityInvocationResult,
+  type AgentCapabilityLifecycleDescriptor,
+  type AgentCapabilityLifecyclePhase,
+  type AgentCapabilityLifecycleTargetRef,
+} from '@neko/shared';
 import { buildRuntimePluginSlashCommandDispatch } from '@neko/agent/runtime';
 import { getLogger } from '../../base';
 import { sendGeneratedAssetToPlugin } from '../../services/pluginTransferBridge';
@@ -7,6 +26,103 @@ import type { ChatWebviewMessageRouterDeps } from './types';
 import { resolveRequiredConversationId } from './conversationId';
 
 const logger = getLogger('ChatWebviewMessageRouter');
+
+const CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS: readonly AgentCapabilityLifecycleDescriptor[] = [
+  {
+    capabilityId: 'canvas.ingestMarkdown',
+    providerId: 'neko-canvas',
+    displayName: 'canvas.ingestMarkdown',
+    description: 'Ingest Agent Markdown into Canvas as a note, generic table, or creative table.',
+    phases: ['review'],
+    inputSchema: { id: 'canvas.markdown.input', version: 1 },
+    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+    accepts: ['Markdown', 'GfmTable'],
+    produces: ['canvas-node-ref'],
+    risk: 'medium',
+    requiresApproval: false,
+  },
+  {
+    capabilityId: 'canvas.createMarkdownNote',
+    providerId: 'neko-canvas',
+    displayName: 'canvas.createMarkdownNote',
+    description: 'Create a Canvas Markdown note from reviewed Markdown.',
+    phases: ['review'],
+    inputSchema: { id: 'canvas.markdown.input', version: 1 },
+    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+    accepts: ['Markdown'],
+    produces: ['canvas-node-ref'],
+    risk: 'medium',
+    requiresApproval: false,
+  },
+  {
+    capabilityId: 'canvas.createTableFromMarkdown',
+    providerId: 'neko-canvas',
+    displayName: 'canvas.createTableFromMarkdown',
+    description: 'Create a Canvas generic table node from Markdown.',
+    phases: ['review'],
+    inputSchema: { id: 'canvas.markdown.input', version: 1 },
+    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+    accepts: ['Markdown', 'GfmTable'],
+    produces: ['canvas-node-ref'],
+    risk: 'medium',
+    requiresApproval: false,
+  },
+  {
+    capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+    providerId: 'neko-canvas',
+    displayName: 'canvas.createStoryboardDraftFromMarkdown',
+    description: 'Create a review-first Canvas storyboard draft from Markdown.',
+    phases: ['review'],
+    inputSchema: { id: 'canvas.markdown.input', version: 1 },
+    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+    accepts: ['MarkdownStoryboardDraft', 'GfmTable'],
+    produces: ['canvas-node-ref'],
+    risk: 'medium',
+    requiresApproval: false,
+  },
+  {
+    capabilityId: 'canvas.createStoryboardFromMarkdown',
+    providerId: 'neko-canvas',
+    displayName: 'canvas.createStoryboardFromMarkdown',
+    description: 'Create production Canvas storyboard nodes from approved Markdown.',
+    phases: ['validate', 'review', 'apply'],
+    inputSchema: { id: 'canvas.markdown.input', version: 1 },
+    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+    accepts: ['MarkdownStoryboardDraft'],
+    produces: ['canvas-node-ref'],
+    risk: 'medium',
+    requiresApproval: true,
+    safetyKind: 'confirmation-gated',
+  },
+  {
+    capabilityId: 'canvas.attachResource',
+    providerId: 'neko-canvas',
+    displayName: 'canvas.attachResource',
+    description: 'Attach a stable resource reference to an existing Canvas target.',
+    phases: ['apply'],
+    inputSchema: { id: 'canvas.markdown.input', version: 1 },
+    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+    accepts: ['ResourceRef', 'DocumentArchiveResourceRef'],
+    produces: ['canvas-node-ref'],
+    risk: 'medium',
+    requiresApproval: true,
+    safetyKind: 'confirmation-gated',
+  },
+  {
+    capabilityId: 'canvas.validateMarkdownStoryboard',
+    providerId: 'neko-canvas',
+    displayName: 'canvas.validateMarkdownStoryboard',
+    description: 'Validate a Markdown storyboard draft without mutating Canvas state.',
+    phases: ['validate'],
+    inputSchema: { id: 'canvas.markdown.input', version: 1 },
+    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+    accepts: ['MarkdownStoryboardDraft', 'GfmTable'],
+    produces: ['CanvasMarkdownCapabilityDiagnostics'],
+    risk: 'low',
+    requiresApproval: false,
+    safetyKind: 'read-only-query',
+  },
+];
 
 export function tryHandleFileAndPluginRoute(
   message: WebviewToExtensionMessage,
@@ -83,6 +199,10 @@ export function tryHandleFileAndPluginRoute(
       );
       return true;
 
+    case 'invokeCanvasMarkdownCapability':
+      void invokeCanvasMarkdownCapability(message, deps);
+      return true;
+
     case 'dnd:start':
       deps.dndBroker.setPayload(message.asset);
       return true;
@@ -104,6 +224,356 @@ export function tryHandleFileAndPluginRoute(
     default:
       return false;
   }
+}
+
+async function invokeCanvasMarkdownCapability(
+  message: Extract<WebviewToExtensionMessage, { type: 'invokeCanvasMarkdownCapability' }>,
+  deps: ChatWebviewMessageRouterDeps,
+): Promise<void> {
+  try {
+    const inputDiagnostics = validateCanvasMarkdownCapabilityInput(message.input);
+    if (inputDiagnostics.length > 0) {
+      const lifecycleResult = createBlockedCanvasMarkdownLifecycleResultFromDiagnostics(
+        message.input.capabilityId,
+        readCanvasMarkdownLifecyclePhase(message.input),
+        inputDiagnostics,
+      );
+      await deps.webview.postMessage(
+        buildCanvasMarkdownCapabilityResultMessage({
+          requestId: message.requestId,
+          conversationId: message.conversationId,
+          success: false,
+          lifecycleResult,
+        }),
+      );
+      return;
+    }
+
+    const canvasApi = await getCanvasApi();
+    const lifecycleResult = await invokeCanvasMarkdownLifecycleCapability(canvasApi, message.input);
+    const canvasResult = isCanvasMarkdownCapabilityResultData(lifecycleResult.data)
+      ? lifecycleResult.data
+      : undefined;
+    await deps.webview.postMessage(
+      buildCanvasMarkdownCapabilityResultMessage({
+        requestId: message.requestId,
+        conversationId: message.conversationId,
+        success:
+          lifecycleResult.status !== 'blocked' && lifecycleResult.status !== 'waiting-approval',
+        lifecycleResult,
+        ...(canvasResult ? { result: canvasResult } : {}),
+      }),
+    );
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.warn('Canvas Markdown capability invocation failed', { error });
+    await deps.webview.postMessage(
+      buildCanvasMarkdownCapabilityResultMessage({
+        requestId: message.requestId,
+        conversationId: message.conversationId,
+        success: false,
+        error: reason,
+        lifecycleResult: createBlockedCanvasMarkdownLifecycleResult(
+          message.input.capabilityId,
+          readCanvasMarkdownLifecyclePhase(message.input),
+          reason,
+        ),
+      }),
+    );
+  }
+}
+
+async function invokeCanvasMarkdownLifecycleCapability(
+  canvasApi: NekoCanvasAPI,
+  input: CanvasMarkdownCapabilityInput,
+): Promise<AgentCapabilityInvocationResult> {
+  const descriptor = getCanvasMarkdownLifecycleDescriptor(input.capabilityId);
+  if (!descriptor) {
+    return createBlockedCanvasMarkdownLifecycleResult(
+      input.capabilityId,
+      readCanvasMarkdownLifecyclePhase(input),
+      'Canvas Markdown lifecycle descriptor is not registered.',
+      'agent-capability-lifecycle-unknown-capability',
+      'capabilityId',
+    );
+  }
+
+  const invocation = createCanvasMarkdownLifecycleInvocationInput(descriptor, input);
+  const inputDiagnostics = validateAgentCapabilityInvocationInput(invocation);
+  if (inputDiagnostics.length > 0) {
+    return {
+      capabilityId: invocation.capabilityId,
+      phase: invocation.phase,
+      status: 'blocked',
+      diagnostics: inputDiagnostics,
+    };
+  }
+
+  if (!descriptor.phases.includes(invocation.phase)) {
+    return createBlockedCanvasMarkdownLifecycleResult(
+      invocation.capabilityId,
+      invocation.phase,
+      'Canvas Markdown lifecycle descriptor does not support the requested phase.',
+      'agent-capability-lifecycle-unsupported-phase',
+      'phase',
+    );
+  }
+
+  if (
+    isMutatingLifecyclePhase(invocation.phase) &&
+    descriptor.requiresApproval &&
+    !invocation.approval
+  ) {
+    return {
+      capabilityId: invocation.capabilityId,
+      phase: invocation.phase,
+      status: 'waiting-approval',
+      diagnostics: [
+        createAgentCapabilityLifecycleDiagnostic(
+          'warning',
+          'agent-capability-lifecycle-approval-required',
+          'Agent capability lifecycle mutation requires approval before execution.',
+          'approval',
+        ),
+      ],
+    };
+  }
+
+  const canvasResult = await canvasApi.markdown.invoke(input);
+  const lifecycleResult = toCanvasMarkdownLifecycleResult(descriptor, invocation, canvasResult);
+  if (isAgentCapabilityInvocationResult(lifecycleResult)) {
+    return lifecycleResult;
+  }
+  return {
+    capabilityId: invocation.capabilityId,
+    phase: invocation.phase,
+    status: 'blocked',
+    diagnostics: [
+      ...validateAgentCapabilityInvocationResult(lifecycleResult),
+      createAgentCapabilityLifecycleDiagnostic(
+        'error',
+        'agent-capability-lifecycle-result-mismatch',
+        'Canvas Markdown lifecycle facade returned an invalid result.',
+      ),
+    ],
+  };
+}
+
+function createCanvasMarkdownLifecycleInvocationInput(
+  descriptor: AgentCapabilityLifecycleDescriptor,
+  input: CanvasMarkdownCapabilityInput,
+): AgentCapabilityInvocationInput {
+  const phase = readCanvasMarkdownLifecyclePhase(input);
+  const target =
+    'target' in input && input.target
+      ? projectCanvasMarkdownLifecycleTarget(input.target)
+      : undefined;
+  const provenance =
+    'provenance' in input && input.provenance
+      ? {
+          source: input.provenance.source,
+          conversationId: input.provenance.conversationId,
+          messageId: input.provenance.messageId,
+          toolCallId: input.provenance.toolCallId,
+          label: input.provenance.label,
+        }
+      : undefined;
+  return {
+    capabilityId: descriptor.capabilityId,
+    phase,
+    payload: input,
+    ...(target ? { target } : {}),
+    ...('approval' in input && input.approval ? { approval: input.approval } : {}),
+    ...(provenance ? { provenance } : {}),
+  };
+}
+
+function toCanvasMarkdownLifecycleResult(
+  descriptor: AgentCapabilityLifecycleDescriptor,
+  invocation: AgentCapabilityInvocationInput,
+  result: CanvasMarkdownCapabilityResult,
+): AgentCapabilityInvocationResult {
+  return {
+    capabilityId: invocation.capabilityId,
+    phase: invocation.phase,
+    status: toCanvasMarkdownLifecycleStatus(invocation.phase, result.status),
+    diagnostics: result.diagnostics.map((diagnostic) => ({
+      severity: diagnostic.severity,
+      code: diagnostic.code,
+      message: diagnostic.message,
+      ...(diagnostic.fieldKey ? { fieldKey: diagnostic.fieldKey } : {}),
+      ...(diagnostic.token ? { token: diagnostic.token } : {}),
+      ...(diagnostic.line !== undefined ? { line: diagnostic.line } : {}),
+      ...(diagnostic.column !== undefined ? { column: diagnostic.column } : {}),
+    })),
+    ...(result.draftNodeId
+      ? {
+          reviewArtifact: {
+            kind: 'node' as const,
+            id: result.draftNodeId,
+            packageId: 'neko-canvas',
+            artifactKind: 'canvas.table',
+            profile: readCanvasMarkdownProfileFromResult(result) ?? 'storyboard',
+          },
+        }
+      : {}),
+    ...(result.nodeIds?.length
+      ? {
+          changedRefs: result.nodeIds.map((nodeId) => ({
+            kind: 'node' as const,
+            id: nodeId,
+            packageId: 'neko-canvas',
+          })),
+        }
+      : {}),
+    ...(result.actions?.length
+      ? {
+          actions: result.actions.map((action) => ({
+            actionId: action.actionId,
+            ...(action.label ? { label: action.label } : {}),
+            capabilityId: action.capabilityId ?? descriptor.capabilityId,
+            phase:
+              action.capabilityId === 'canvas.createStoryboardFromMarkdown' ? 'apply' : 'review',
+            requiresApproval: action.capabilityId !== 'canvas.validateMarkdownStoryboard',
+            ...(result.draftNodeId
+              ? {
+                  sourceRef: {
+                    kind: 'node' as const,
+                    id: result.draftNodeId,
+                    packageId: 'neko-canvas',
+                  },
+                }
+              : {}),
+            ...(invocation.target ? { target: invocation.target } : {}),
+            payload: invocation.payload,
+          })),
+        }
+      : {}),
+    data: result,
+  };
+}
+
+function readCanvasMarkdownLifecyclePhase(
+  input: CanvasMarkdownCapabilityInput,
+): AgentCapabilityLifecyclePhase {
+  if (input.capabilityId === 'canvas.validateMarkdownStoryboard') return 'validate';
+  if (input.capabilityId === 'canvas.createStoryboardFromMarkdown') return 'apply';
+  if (input.capabilityId === 'canvas.attachResource') return 'apply';
+  return 'review';
+}
+
+function toCanvasMarkdownLifecycleStatus(
+  phase: AgentCapabilityLifecyclePhase,
+  status: CanvasMarkdownCapabilityResult['status'],
+): AgentCapabilityInvocationResult['status'] {
+  if (status === 'blocked') return 'blocked';
+  if (status === 'needs-review') return 'needs-review';
+  if (phase === 'validate') return 'validated';
+  if (phase === 'apply') return 'applied';
+  if (phase === 'execute') return 'executed';
+  if (phase === 'describe') return 'described';
+  return status === 'created' || status === 'changed' ? 'needs-review' : 'validated';
+}
+
+function projectCanvasMarkdownLifecycleTarget(
+  target: NonNullable<CanvasMarkdownCapabilityInput['target']>,
+): AgentCapabilityLifecycleTargetRef {
+  return {
+    packageId: 'neko-canvas',
+    ...(target.canvasId ? { canvasId: target.canvasId } : {}),
+    ...(target.nodeId ? { nodeId: target.nodeId } : {}),
+    ...(target.containerId ? { containerId: target.containerId } : {}),
+    ...(target.slotId ? { slotId: target.slotId } : {}),
+    ...(target.fieldPath ? { fieldPath: target.fieldPath } : {}),
+    ...(target.insertionPoint ? { insertionPoint: target.insertionPoint } : {}),
+  };
+}
+
+function getCanvasMarkdownLifecycleDescriptor(
+  capabilityId: CanvasMarkdownCapabilityInput['capabilityId'],
+): AgentCapabilityLifecycleDescriptor | undefined {
+  return CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS.find(
+    (descriptor) => descriptor.capabilityId === capabilityId,
+  );
+}
+
+function isMutatingLifecyclePhase(phase: AgentCapabilityLifecyclePhase): boolean {
+  return phase === 'apply' || phase === 'execute';
+}
+
+function readCanvasMarkdownProfileFromResult(
+  result: CanvasMarkdownCapabilityResult,
+): string | undefined {
+  if (typeof result.profileId === 'string') return result.profileId;
+  const previewProfile = result.preview?.table?.profileId ?? result.preview?.profileId;
+  if (typeof previewProfile === 'string') return previewProfile;
+  const data = isRecord(result) ? result['data'] : undefined;
+  return isRecord(data) && typeof data['tableProfile'] === 'string'
+    ? data['tableProfile']
+    : undefined;
+}
+
+function createBlockedCanvasMarkdownLifecycleResult(
+  capabilityId: string,
+  phase: AgentCapabilityLifecyclePhase,
+  message: string,
+  code = 'canvas-markdown-capability-invocation-failed',
+  fieldKey?: string,
+): AgentCapabilityInvocationResult {
+  return {
+    capabilityId,
+    phase,
+    status: 'blocked',
+    diagnostics: [createAgentCapabilityLifecycleDiagnostic('error', code, message, fieldKey)],
+  };
+}
+
+function createBlockedCanvasMarkdownLifecycleResultFromDiagnostics(
+  capabilityId: string,
+  phase: AgentCapabilityLifecyclePhase,
+  diagnostics: readonly CanvasMarkdownCapabilityResult['diagnostics'][number][],
+): AgentCapabilityInvocationResult {
+  return {
+    capabilityId,
+    phase,
+    status: 'blocked',
+    diagnostics: diagnostics.map((diagnostic) => ({
+      severity: diagnostic.severity,
+      code: diagnostic.code,
+      message: diagnostic.message,
+      ...(diagnostic.fieldKey ? { fieldKey: diagnostic.fieldKey } : {}),
+      ...(diagnostic.token ? { token: diagnostic.token } : {}),
+      ...(diagnostic.line !== undefined ? { line: diagnostic.line } : {}),
+      ...(diagnostic.column !== undefined ? { column: diagnostic.column } : {}),
+    })),
+  };
+}
+
+function isCanvasMarkdownCapabilityResultData(
+  value: unknown,
+): value is CanvasMarkdownCapabilityResult {
+  return (
+    isRecord(value) &&
+    typeof value['capabilityId'] === 'string' &&
+    typeof value['status'] === 'string' &&
+    Array.isArray(value['diagnostics'])
+  );
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+async function getCanvasApi(): Promise<NekoCanvasAPI> {
+  const extension = vscode.extensions.getExtension<NekoCanvasAPI>(NEKO_PLUGIN_EXTENSION_IDS.canvas);
+  if (!extension) {
+    throw new Error('Canvas extension is not installed.');
+  }
+  const api = extension.isActive ? extension.exports : await extension.activate();
+  if (!api?.markdown?.invoke) {
+    throw new Error('Canvas Markdown capability API is unavailable.');
+  }
+  return api;
 }
 
 function stripAssetIdPrefix(contextId: string): string | undefined {

@@ -1,9 +1,9 @@
 /**
- * ArtifactWatcher — watches `.neko/drafts|plans|tasks/` and emits artifact
- * lifecycle events onto the EventBus after validating frontmatter.
+ * ArtifactWatcher — optional host hook for visible creation documents.
  *
- * See: docs/architecture/agent-unified-workflow.md §6.2 (EventBus), §6.5
- *      (Guardians / plumbing), §7.4 (project layout)
+ * Creation documents live in project-owned creation directories, not hidden
+ * managed runtime paths. This watcher is not wired by default; hosts may opt
+ * in when they need to observe user edits.
  *
  * Design rules:
  * - **Non-blocking**: the watcher fires *after* the file is on disk. Invalid
@@ -12,17 +12,15 @@
  * - **Debounced**: 300ms, so rapid rewrites (e.g. editor auto-save during AI
  *   authoring) collapse to one event per file.
  * - **Pure event side** only — the watcher does not read the IdcRunStore or
- *   inject runId into files. Caller supplies `getRunId()` so the emitted event
- *   can carry the current run for correlation. Returns 'unknown' placeholder
- *   when no run is active.
+ *   inject runId into files. Caller supplies `getRunId()` for correlation and
+ *   `getCreationId()` for the visible directory. With no active creation at
+ *   startup the watcher does not create or observe a directory.
  * - **Test-friendly**: `fsOps` is injectable so a test runner can spy on
  *   fs.watch without touching the real filesystem.
  *
  * What the watcher does NOT do:
- * - No index rebuild (future `.neko/.cache/artifact-index.json` consumer listens
- *   on the event instead).
- * - No permission enforcement; the generic Write tool already gates on
- *   workspace root.
+ * - No index rebuild; the runtime artifact service owns the rebuildable index.
+ * - No permission enforcement; host approval gates own creation-document writes.
  */
 
 import * as nodeFs from 'node:fs';
@@ -35,7 +33,8 @@ import type {
 } from '@neko-agent/types';
 import { EXECUTION_CHANNELS } from '@neko-agent/types';
 import type { IEventBus } from '../events/event-bus';
-import type { INekoPaths, NekoSubdir } from '../workspace/neko-paths';
+import type { ICreationArtifactPaths } from '../workspace/creation-artifact-paths';
+import { CREATION_ARTIFACT_FILES } from '../workspace/creation-artifact-paths';
 import { getLogger } from '../utils/logger';
 import { validateArtifact, type ArtifactIssue } from './artifact-validator';
 
@@ -60,10 +59,12 @@ export interface ArtifactWatcherHandle {
 }
 
 export interface ArtifactWatcherConfig {
-  paths: INekoPaths;
+  paths: ICreationArtifactPaths;
   eventBus: IEventBus;
-  /** Returns the active IdcRun id. `null` → 'unknown' placeholder on events. */
+  /** Returns the active IdcRun id. `null` skips watcher startup. */
   getRunId: () => string | null;
+  /** Returns the active creator-facing creation id. `null` skips watcher startup. */
+  getCreationId: () => string | null;
   /** Clock injection for deterministic tests. Defaults to Date.now. */
   now?: () => number;
   /** Debounce window (ms). Defaults to 300. */
@@ -83,16 +84,11 @@ export interface IArtifactWatcher {
 // Kind resolution
 // =============================================================================
 
-/** Subdir → ArtifactKind mapping (only the three IDC families are watched). */
-const WATCHED_KIND_BY_SUBDIR: Readonly<Record<string, ArtifactKind>> = {
-  drafts: 'draft',
-  plans: 'plan',
-  tasks: 'task',
-};
-
-function subdirsToWatch(): NekoSubdir[] {
-  return ['drafts', 'plans', 'tasks'];
-}
+const WATCHED_KIND_BY_FILENAME: Readonly<Record<string, ArtifactKind>> = Object.freeze({
+  [CREATION_ARTIFACT_FILES.draft]: 'draft',
+  [CREATION_ARTIFACT_FILES.plan]: 'plan',
+  [CREATION_ARTIFACT_FILES.task]: 'task',
+});
 
 // =============================================================================
 // FS ops default (node:fs)
@@ -136,9 +132,10 @@ interface Pending {
 }
 
 class ArtifactWatcher implements IArtifactWatcher {
-  private readonly _paths: INekoPaths;
+  private readonly _paths: ICreationArtifactPaths;
   private readonly _eventBus: IEventBus;
   private readonly _getRunId: () => string | null;
+  private readonly _getCreationId: () => string | null;
   private readonly _now: () => number;
   private readonly _debounceMs: number;
   private readonly _fs: ArtifactWatcherFsOps;
@@ -151,6 +148,7 @@ class ArtifactWatcher implements IArtifactWatcher {
     this._paths = config.paths;
     this._eventBus = config.eventBus;
     this._getRunId = config.getRunId;
+    this._getCreationId = config.getCreationId;
     this._now = config.now ?? (() => Date.now());
     this._debounceMs = config.debounceMs ?? 300;
     this._fs = config.fsOps ?? defaultFsOps();
@@ -159,9 +157,12 @@ class ArtifactWatcher implements IArtifactWatcher {
   async start(): Promise<void> {
     if (this._started || this._disposed) return;
     this._started = true;
-    for (const subdir of subdirsToWatch()) {
-      await this._watchSubdir(subdir);
+    const creationId = this._getCreationId();
+    if (!creationId) {
+      logger.debug('Creation document watcher skipped because no active creation is available');
+      return;
     }
+    await this._watchCreationDir(creationId);
   }
 
   async dispose(): Promise<void> {
@@ -183,14 +184,11 @@ class ArtifactWatcher implements IArtifactWatcher {
   // Private
   // ---------------------------------------------------------------------------
 
-  private async _watchSubdir(subdir: NekoSubdir): Promise<void> {
-    const dir = this._paths.dir(subdir);
-    const kind = WATCHED_KIND_BY_SUBDIR[subdir];
-    if (!kind) return;
+  private async _watchCreationDir(creationId: string): Promise<void> {
+    const dir = this._paths.creationDir(creationId);
 
-    // Ensure the directory exists before watching — fs.watch on a missing dir
-    // throws synchronously on some platforms. Creating it lazily is cheap and
-    // keeps first-run callers from having to pre-provision the layout.
+    // Ensure the visible creation directory exists before watching. This creates
+    // `neko/creations/<creationId>`, never a managed `.neko` creation directory.
     if (!(await this._fs.exists(dir))) {
       try {
         await this._fs.mkdirP(dir);
@@ -204,7 +202,8 @@ class ArtifactWatcher implements IArtifactWatcher {
       const handle = this._fs.watch(dir, (event, filename) => {
         if (this._disposed) return;
         if (!filename) return;
-        if (!this._isArtifactFilename(filename, kind)) return;
+        const kind = this._kindForFilename(filename);
+        if (!kind) return;
         const absPath = path.join(dir, filename);
         this._schedule(absPath, kind);
       });
@@ -214,16 +213,11 @@ class ArtifactWatcher implements IArtifactWatcher {
     }
   }
 
-  private _isArtifactFilename(filename: string, kind: ArtifactKind): boolean {
-    // Convention from NekoPaths: `<kind>-<runId>.md`. Accept any `.md` file
-    // under the watched dir so hand-edited artifacts also flow through, but
-    // skip obvious non-artifacts (dotfiles, swap files).
-    if (!filename.endsWith('.md')) return false;
-    if (filename.startsWith('.')) return false;
-    if (filename.endsWith('.swp') || filename.endsWith('~')) return false;
-    // Soft prefix check — warn if the prefix doesn't match; don't reject.
-    void kind;
-    return true;
+  private _kindForFilename(filename: string): ArtifactKind | null {
+    if (!filename.endsWith('.md')) return null;
+    if (filename.startsWith('.')) return null;
+    if (filename.endsWith('.swp') || filename.endsWith('~')) return null;
+    return WATCHED_KIND_BY_FILENAME[filename] ?? null;
   }
 
   private _schedule(absPath: string, kind: ArtifactKind): void {

@@ -220,6 +220,17 @@ export class ConversationBridge {
   }
 
   /**
+   * Remove a specific message from a conversation.
+   */
+  removeMessageFromConversation(conversationId: string, messageId: string): void {
+    const conversation = this._conversationManager.get(conversationId);
+    if (!conversation) return;
+    const messages = conversation.messages.filter((message) => message.id !== messageId);
+    if (messages.length === conversation.messages.length) return;
+    this.updateMessagesForConversation(conversationId, messages);
+  }
+
+  /**
    * Add a message or replace the existing message with the same id.
    */
   upsertMessageToConversation(conversationId: string, message: Message): void {

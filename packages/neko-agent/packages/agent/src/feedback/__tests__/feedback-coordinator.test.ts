@@ -90,7 +90,7 @@ describe('FeedbackCoordinator', () => {
       channel: EXECUTION_CHANNELS.ARTIFACT_INVALID,
       runId: 'run-1',
       kind: 'plan',
-      path: '/tmp/proj/.neko/plans/plan-run-1.md',
+      path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/plan.md',
       issues: [
         {
           code: 'missing-field',
@@ -116,7 +116,7 @@ describe('FeedbackCoordinator', () => {
           observedAt: 7,
           runId: 'run-1',
           artifactKind: 'plan',
-          path: '/tmp/proj/.neko/plans/plan-run-1.md',
+          path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/plan.md',
           issues: [
             {
               code: 'missing-field',
@@ -132,7 +132,7 @@ describe('FeedbackCoordinator', () => {
           signalKind: 'artifact-invalid',
           runId: 'run-1',
           artifactKind: 'plan',
-          path: '/tmp/proj/.neko/plans/plan-run-1.md',
+          path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/plan.md',
           issueCount: 1,
         },
       ],
@@ -140,7 +140,7 @@ describe('FeedbackCoordinator', () => {
         {
           kind: 'set-guidance',
           guidance:
-            '- Repair the plan artifact at /tmp/proj/.neko/plans/plan-run-1.md. ' +
+            '- Repair the plan artifact at /tmp/proj/neko/creations/cut-launch-teaser-draft-1/plan.md. ' +
             'Resolve 1 validation issue(s) before the next write.',
           signalKinds: ['artifact-invalid'],
         },

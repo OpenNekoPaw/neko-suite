@@ -524,6 +524,120 @@ describe('message runtime helpers', () => {
     );
   });
 
+  it('removes the prewritten user message when the agent turn is queued', async () => {
+    const removeUserMessage = vi.fn();
+    const executeAgentTurn = vi.fn(async () => ({ status: 'queued' as const, pendingCount: 1 }));
+
+    await expect(
+      runAgentMessageTurnRuntime({
+        request: {
+          conversationId: 'conv-1',
+          messageText: 'continue after current turn',
+          sessionMode: 'agent',
+        },
+        processAttachments: async () => ({
+          textContent: '',
+          imageAttachments: [],
+        }),
+        persistUserMessage: vi.fn(),
+        removeUserMessage,
+        postMessage: vi.fn(),
+        executeAgentTurn,
+        generateMessageId: () => 'user-queued',
+        now: () => 123,
+      }),
+    ).resolves.toEqual({ status: 'agent-queued', pendingCount: 1 });
+
+    expect(removeUserMessage).toHaveBeenCalledWith('conv-1', 'user-queued');
+  });
+
+  it('returns the agent turn precondition result without reporting dispatch success', async () => {
+    await expect(
+      runAgentMessageTurnRuntime({
+        request: {
+          conversationId: 'conv-1',
+          messageText: 'hello',
+          sessionMode: 'agent',
+        },
+        processAttachments: async () => ({
+          textContent: '',
+          imageAttachments: [],
+        }),
+        persistUserMessage: vi.fn(),
+        postMessage: vi.fn(),
+        executeAgentTurn: async () => ({
+          status: 'precondition-unmet',
+          reason: 'chat-provider-not-configured',
+        }),
+        generateMessageId: () => 'user-1',
+      }),
+    ).resolves.toEqual({
+      status: 'agent-precondition-unmet',
+      reason: 'chat-provider-not-configured',
+    });
+  });
+
+  it('returns the agent turn failure result without reporting dispatch success', async () => {
+    const error = new Error('stream failed');
+
+    await expect(
+      runAgentMessageTurnRuntime({
+        request: {
+          conversationId: 'conv-1',
+          messageText: 'hello',
+          sessionMode: 'agent',
+        },
+        processAttachments: async () => ({
+          textContent: '',
+          imageAttachments: [],
+        }),
+        persistUserMessage: vi.fn(),
+        postMessage: vi.fn(),
+        executeAgentTurn: async () => ({ status: 'failed', error }),
+        generateMessageId: () => 'user-1',
+      }),
+    ).resolves.toEqual({ status: 'agent-failed', error });
+  });
+
+  it('runs turn preflight before preparing and dispatching the agent message', async () => {
+    const events: string[] = [];
+
+    await expect(
+      runAgentMessageTurnRuntime({
+        request: {
+          conversationId: 'conv-1',
+          messageText: '分析前10页，生成分镜表',
+          sessionMode: 'agent',
+        },
+        beforePrepareAgentTurn: async ({ conversationId, userInput }) => {
+          events.push(`preflight:${conversationId}:${userInput}`);
+        },
+        processAttachments: async () => {
+          events.push('prepare-attachments');
+          return { textContent: '', imageAttachments: [] };
+        },
+        persistUserMessage: () => {
+          events.push('persist-user');
+        },
+        postMessage: (message) => {
+          events.push(`post:${message.type}`);
+        },
+        executeAgentTurn: async () => {
+          events.push('execute-agent');
+        },
+        generateMessageId: () => 'user-1',
+      }),
+    ).resolves.toEqual({ status: 'agent-dispatched' });
+
+    expect(events).toEqual([
+      'preflight:conv-1:分析前10页，生成分镜表',
+      'prepare-attachments',
+      'persist-user',
+      'post:thinking',
+      'execute-agent',
+    ]);
+  });
+
   it('dispatches non-agent media turns when a media runtime is available', async () => {
     const executeMediaTurn = vi.fn(async () => undefined);
     const executeAgentTurn = vi.fn(async () => undefined);

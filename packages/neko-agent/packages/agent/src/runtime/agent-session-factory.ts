@@ -360,7 +360,9 @@ function buildAgentRuntimeConfig(
 ): AgentRuntimeConfig {
   return {
     workflowRuntime: {
-      ...(config.capabilityRuntime?.skillRegistry || config.capabilityRuntime?.skillService
+      ...(config.capabilityRuntime?.skillRegistry ||
+      config.capabilityRuntime?.skillService ||
+      config.capabilityRuntime?.skillLifecycleRuntime
         ? {
             stageTracking: {
               ...(config.capabilityRuntime.skillRegistry
@@ -368,6 +370,9 @@ function buildAgentRuntimeConfig(
                 : {}),
               ...(config.capabilityRuntime.skillService
                 ? { skillService: config.capabilityRuntime.skillService }
+                : {}),
+              ...(config.capabilityRuntime.skillLifecycleRuntime
+                ? { skillLifecycleRuntime: config.capabilityRuntime.skillLifecycleRuntime }
                 : {}),
             },
           }
@@ -383,6 +388,9 @@ function buildAgentRuntimeConfig(
     capabilityRuntime: {
       ...(config.capabilityRuntime?.skillService
         ? { skillService: config.capabilityRuntime.skillService }
+        : {}),
+      ...(config.capabilityRuntime?.skillLifecycleRuntime
+        ? { skillLifecycleRuntime: config.capabilityRuntime.skillLifecycleRuntime }
         : {}),
       ...(config.capabilityRuntime?.skillRegistry
         ? { skillRegistry: config.capabilityRuntime.skillRegistry }

@@ -9,11 +9,13 @@ import type {
   IdcStage,
   StageTaskShape,
 } from '@neko-agent/types';
+import type { SkillLifecycleRuntime } from '../skill/skill-lifecycle-runtime';
 
 export interface AgentWorkflowRuntimeOptions {
   readonly now?: () => number;
   readonly generateRunId?: (definition: AgentWorkflowDefinition, conversationId: string) => string;
   readonly onProjection?: (projection: AgentWorkflowProjection) => void;
+  readonly skillLifecycleRuntime?: SkillLifecycleRuntime;
 }
 
 export interface CreateAgentWorkflowRunInput {
@@ -204,7 +206,7 @@ class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
   cancel(runId: string, reason = 'cancelled'): AgentWorkflowRun {
     const current = this.requireRun(runId);
     const now = this.now();
-    return this.updateRun({
+    const run = this.updateRun({
       ...current,
       status: 'cancelled',
       nodes: current.nodes.map((node) =>
@@ -226,12 +228,14 @@ class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
       cancelledAt: now,
       updatedAt: now,
     });
+    this.expireWorkflowSkills(run);
+    return run;
   }
 
   complete(runId: string): AgentWorkflowRun {
     const current = this.requireRun(runId);
     const now = this.now();
-    return this.updateRun({
+    const run = this.updateRun({
       ...current,
       status: 'completed',
       nodes: current.nodes.map((node) =>
@@ -240,6 +244,8 @@ class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
       completedAt: now,
       updatedAt: now,
     });
+    this.expireWorkflowSkills(run);
+    return run;
   }
 
   fail(
@@ -279,6 +285,14 @@ class DefaultAgentWorkflowRuntime implements AgentWorkflowRuntime {
     this.runs.set(run.id, run);
     this.emit(run);
     return run;
+  }
+
+  private expireWorkflowSkills(run: AgentWorkflowRun): void {
+    this.options.skillLifecycleRuntime?.expire({
+      conversationId: run.conversationId,
+      reason: 'workflow-ended',
+      runId: run.id,
+    });
   }
 
   private requireRun(runId: string): AgentWorkflowRun {

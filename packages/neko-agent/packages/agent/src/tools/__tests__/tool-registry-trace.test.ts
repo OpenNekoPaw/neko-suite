@@ -75,6 +75,116 @@ describe('ToolRegistry trace isolation', () => {
   });
 });
 
+describe('ToolRegistry argument normalization', () => {
+  it('unwraps valid raw JSON object arguments before schema validation', async () => {
+    const { ToolRegistry } = await import('../tool-registry');
+    const execute = vi.fn(async () => ({ success: true, data: 'ok' }));
+    const registry = new ToolRegistry();
+    registry.register(
+      createTool({
+        name: 'ReadDocument',
+        description: 'Read a document',
+        category: 'document',
+        isConcurrencySafe: true,
+        isReadOnly: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            source: { type: 'object' },
+          },
+          required: ['source'],
+        },
+        execute,
+      }),
+    );
+
+    const result = await registry.execute('ReadDocument', {
+      _raw: '{"source":{"kind":"file","path":"${A}/book.epub"},"mode":"manifest"}',
+    });
+
+    expect(result.success).toBe(true);
+    expect(execute).toHaveBeenCalledWith(
+      {
+        source: { kind: 'file', path: '${A}/book.epub' },
+        mode: 'manifest',
+      },
+      undefined,
+    );
+  });
+
+  it('keeps malformed raw arguments fail-visible', async () => {
+    const { ToolRegistry } = await import('../tool-registry');
+    const execute = vi.fn(async () => ({ success: true, data: 'ok' }));
+    const registry = new ToolRegistry();
+    registry.register(
+      createTool({
+        name: 'ReadDocument',
+        description: 'Read a document',
+        category: 'document',
+        isConcurrencySafe: true,
+        isReadOnly: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            source: { type: 'object' },
+          },
+          required: ['source'],
+        },
+        execute,
+      }),
+    );
+
+    const result = await registry.execute('ReadDocument', { _raw: 'not json' });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Missing required field: "source"');
+    expect(execute).not.toHaveBeenCalled();
+  });
+});
+
+describe('ToolRegistry nested schema validation', () => {
+  it('rejects array object items that miss required fields before execution', async () => {
+    const { ToolRegistry } = await import('../tool-registry');
+    const execute = vi.fn(async () => ({ success: true, data: 'ok' }));
+    const registry = new ToolRegistry();
+    registry.register(
+      createTool({
+        name: 'ReadImage',
+        description: 'Read image content',
+        category: 'analysis',
+        isConcurrencySafe: true,
+        isReadOnly: true,
+        parameters: {
+          type: 'object',
+          required: ['images'],
+          properties: {
+            images: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['resourceRef'],
+                properties: {
+                  entryPath: { type: 'string' },
+                  resourceRef: { type: 'object' },
+                },
+              },
+            },
+          },
+        },
+        execute,
+      }),
+    );
+
+    const result = await registry.execute('ReadImage', {
+      images: [{ entryPath: 'OPS/page-1.jpg' }],
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Missing required field: "images[0].resourceRef"');
+    expect(execute).not.toHaveBeenCalled();
+  });
+});
+
 describe('ToolRegistry provider schema projection', () => {
   it('keeps provider tool parameters as top-level object schemas', async () => {
     const { ToolRegistry } = await import('../tool-registry');

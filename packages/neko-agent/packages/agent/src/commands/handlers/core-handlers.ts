@@ -113,7 +113,10 @@ export function generateExtensionHelpText(skillCommands?: string[]): string {
   }
 
   lines.push('\n**Tips:**');
-  lines.push('- Use `$skill-name` to activate a Skill explicitly');
+  lines.push('- Use `$skill-name` to activate a clearable domain Skill lifecycle record');
+  lines.push(
+    '- Active Skill records may be locked, scoped, or expired by runtime lifecycle policy',
+  );
   lines.push('- Use `@` to reference files');
   lines.push('- Attach files using the 📎 button');
   lines.push('- Press Enter to send, Shift+Enter for new line');

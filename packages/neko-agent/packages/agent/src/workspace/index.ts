@@ -47,6 +47,13 @@ export {
 } from './artifact-index-store';
 
 export {
+  createCreationArtifactPaths,
+  CREATION_ARTIFACT_FILES,
+  CREATION_ARTIFACT_ROOT,
+  type ICreationArtifactPaths,
+} from './creation-artifact-paths';
+
+export {
   createSessionLock,
   type ISessionLock,
   type SessionLockConfig,

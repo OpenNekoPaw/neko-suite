@@ -106,6 +106,71 @@ describe('core meta tools', () => {
     });
     expect(deactivateSkill).toHaveBeenCalled();
   });
+
+  it('returns locked IDC stage persona diagnostics through GetContext and DeactivateSkill', async () => {
+    const deactivateSkill = vi.fn(async () => ({
+      success: false,
+      message: 'IDC stage persona is cleared when its owning stage exits',
+      diagnostics: [
+        {
+          code: 'locked-deactivation' as const,
+          message: 'IDC stage persona is cleared when its owning stage exits',
+          conversationId: 'conv-1',
+          recordId: 'record-stage',
+          skillName: 'creation-persona',
+          slot: 'stagePersona' as const,
+        },
+      ],
+    }));
+    const provider = {
+      listSkills: vi.fn(async () => []),
+      getActiveSkill: vi.fn(async () => null),
+      getActiveSkillLifecycle: vi.fn(async () => ({
+        records: [
+          {
+            id: 'record-stage',
+            skillName: 'creation-persona',
+            slot: 'stagePersona' as const,
+            owner: 'idc' as const,
+            clearable: false,
+            lockedReason: 'IDC stage persona is cleared when its owning stage exits',
+            status: 'active' as const,
+          },
+        ],
+        diagnostics: [],
+      })),
+      activateSkill: vi.fn(),
+      deactivateSkill,
+    };
+    const contextTool = new GetContextTool(createCategoryRegistryMock());
+    contextTool.setSkillProvider(provider);
+    const deactivateTool = new DeactivateSkillTool();
+    deactivateTool.setSkillProvider(provider);
+
+    await expect(contextTool.execute({})).resolves.toEqual(
+      expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({
+          activeSkillLifecycle: {
+            records: [
+              expect.objectContaining({
+                id: 'record-stage',
+                slot: 'stagePersona',
+                clearable: false,
+                lockedReason: 'IDC stage persona is cleared when its owning stage exits',
+              }),
+            ],
+            diagnostics: [],
+          },
+        }),
+      }),
+    );
+    await expect(deactivateTool.execute({ recordId: 'record-stage' })).resolves.toEqual({
+      success: false,
+      error: 'IDC stage persona is cleared when its owning stage exits',
+    });
+    expect(deactivateSkill).toHaveBeenCalledWith({ recordId: 'record-stage' });
+  });
 });
 
 function createCategoryRegistryMock(): IToolCategoryRegistry {

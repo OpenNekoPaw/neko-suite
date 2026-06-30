@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import {
   CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES,
@@ -17,6 +17,10 @@ vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
 vi.mock('../../services/pluginTransferBridge', () => ({
   sendGeneratedAssetToPlugin: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 type RoutedWebviewMessageType =
   (typeof CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES)[number] | (typeof CONFIG_BRIDGE_MESSAGE_TYPES)[number];
@@ -116,6 +120,10 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     updateTabState: vi.fn(),
     syncCanvasAmbientScopeFromActiveConversation: vi.fn(),
   };
+}
+
+async function flushAsyncWork(): Promise<void> {
+  await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
 describe('handleChatWebviewMessage', () => {
@@ -537,6 +545,209 @@ describe('handleChatWebviewMessage', () => {
     );
 
     expect(sendGeneratedAssetToPlugin).toHaveBeenCalledWith('cut', undefined, undefined, payload);
+  });
+
+  it('routes Markdown Send to Canvas through Canvas lifecycle facade, not plugin transfer fallback', async () => {
+    const deps = createDeps();
+    const invoke = vi.fn().mockResolvedValue({
+      capabilityId: 'canvas.ingestMarkdown',
+      status: 'needs-review',
+      resolvedKind: 'creative-table',
+      profileId: 'storyboard',
+      diagnostics: [],
+      draftNodeId: 'draft-1',
+      actions: [
+        {
+          actionId: 'create-storyboard',
+          label: 'Create storyboard nodes',
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+        },
+      ],
+    });
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      id: 'neko.neko-canvas',
+      isActive: true,
+      exports: {
+        markdown: { invoke },
+      },
+      activate: vi.fn(),
+    } as any);
+
+    handleChatWebviewMessage(
+      {
+        type: 'invokeCanvasMarkdownCapability',
+        requestId: 'req-1',
+        conversationId: 'conv-1',
+        input: {
+          capabilityId: 'canvas.ingestMarkdown',
+          markdown:
+            '| scene | shot id | visual | image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
+          sourceFormat: 'gfm-table',
+          intentHint: 'creative-table',
+          profileHint: 'storyboard',
+          resources: [{ token: 'P1', sourcePath: '${PROJECT}/assets/panel-1.png' }],
+          provenance: { source: 'webview', label: 'assistant-markdown-block' },
+        },
+      },
+      deps,
+    );
+
+    await flushAsyncWork();
+
+    expect(invoke).toHaveBeenCalledWith({
+      capabilityId: 'canvas.ingestMarkdown',
+      markdown:
+        '| scene | shot id | visual | image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
+      sourceFormat: 'gfm-table',
+      intentHint: 'creative-table',
+      profileHint: 'storyboard',
+      resources: [{ token: 'P1', sourcePath: '${PROJECT}/assets/panel-1.png' }],
+      provenance: { source: 'webview', label: 'assistant-markdown-block' },
+    });
+    expect(sendGeneratedAssetToPlugin).not.toHaveBeenCalled();
+    expect(deps.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'canvasMarkdownCapabilityResult',
+        requestId: 'req-1',
+        conversationId: 'conv-1',
+        success: true,
+        lifecycleResult: expect.objectContaining({
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          status: 'needs-review',
+          reviewArtifact: expect.objectContaining({
+            kind: 'node',
+            id: 'draft-1',
+            packageId: 'neko-canvas',
+            profile: 'storyboard',
+          }),
+          actions: [
+            expect.objectContaining({
+              actionId: 'create-storyboard',
+              capabilityId: 'canvas.createStoryboardFromMarkdown',
+              phase: 'apply',
+              requiresApproval: true,
+            }),
+          ],
+        }),
+        result: expect.objectContaining({
+          capabilityId: 'canvas.ingestMarkdown',
+          status: 'needs-review',
+        }),
+      }),
+    );
+  });
+
+  it('blocks unapproved Markdown production apply before Canvas API mutation', async () => {
+    const deps = createDeps();
+    const invoke = vi.fn();
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      id: 'neko.neko-canvas',
+      isActive: true,
+      exports: {
+        markdown: { invoke },
+      },
+      activate: vi.fn(),
+    } as any);
+
+    handleChatWebviewMessage(
+      {
+        type: 'invokeCanvasMarkdownCapability',
+        requestId: 'req-apply',
+        conversationId: 'conv-1',
+        input: {
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+          markdown: '| visual |\\n| --- |\\n| open |',
+          sourceFormat: 'gfm-table',
+          mode: 'create-nodes',
+        },
+      },
+      deps,
+    );
+
+    await flushAsyncWork();
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(deps.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'canvasMarkdownCapabilityResult',
+        requestId: 'req-apply',
+        conversationId: 'conv-1',
+        success: false,
+        lifecycleResult: expect.objectContaining({
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+          phase: 'apply',
+          status: 'waiting-approval',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'agent-capability-lifecycle-approval-required',
+              fieldKey: 'approval',
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it('routes approved Markdown production apply through Canvas lifecycle backend', async () => {
+    const deps = createDeps();
+    const invoke = vi.fn().mockResolvedValue({
+      capabilityId: 'canvas.createStoryboardFromMarkdown',
+      status: 'created',
+      diagnostics: [],
+      nodeIds: ['scene-1', 'shot-1'],
+    });
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      id: 'neko.neko-canvas',
+      isActive: true,
+      exports: {
+        markdown: { invoke },
+      },
+      activate: vi.fn(),
+    } as any);
+
+    handleChatWebviewMessage(
+      {
+        type: 'invokeCanvasMarkdownCapability',
+        requestId: 'req-apply-approved',
+        conversationId: 'conv-1',
+        input: {
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+          markdown: '| visual |\\n| --- |\\n| open |',
+          sourceFormat: 'gfm-table',
+          mode: 'create-nodes',
+          approval: { source: 'user-confirmation', approvedAt: 123 },
+        },
+      },
+      deps,
+    );
+
+    await flushAsyncWork();
+
+    expect(invoke).toHaveBeenCalledWith({
+      capabilityId: 'canvas.createStoryboardFromMarkdown',
+      markdown: '| visual |\\n| --- |\\n| open |',
+      sourceFormat: 'gfm-table',
+      mode: 'create-nodes',
+      approval: { source: 'user-confirmation', approvedAt: 123 },
+    });
+    expect(deps.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'canvasMarkdownCapabilityResult',
+        requestId: 'req-apply-approved',
+        conversationId: 'conv-1',
+        success: true,
+        lifecycleResult: expect.objectContaining({
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+          phase: 'apply',
+          status: 'applied',
+          changedRefs: [
+            expect.objectContaining({ kind: 'node', id: 'scene-1', packageId: 'neko-canvas' }),
+            expect.objectContaining({ kind: 'node', id: 'shot-1', packageId: 'neko-canvas' }),
+          ],
+        }),
+      }),
+    );
   });
 
   it('routes document locator reveals to the file operation handler', () => {

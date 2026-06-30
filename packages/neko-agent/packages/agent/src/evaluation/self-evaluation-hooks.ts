@@ -3,7 +3,7 @@
  * "AI self-evaluation three-piece kit", specifically piece ② (guidance).
  *
  * The kit is:
- *   ① Visibility    — AI can Read / .neko/drafts / inspect observations
+ *   ① Visibility    — AI can inspect approved creation documents / observations
  *   ② Guidance      — something nudges the AI at the right moment
  *   ③ Accumulation  — conclusions feed back into memory
  *

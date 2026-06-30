@@ -484,8 +484,7 @@ describe('AgentSession', () => {
 
       // Executor should receive skipUserMessage: true
       const callArgs = mockExec.executeStream.mock.calls[0] as
-        | [string, { skipUserMessage?: boolean }]
-        | undefined;
+        [string, { skipUserMessage?: boolean }] | undefined;
       expect(callArgs?.[1]?.skipUserMessage).toBe(true);
     });
   });
@@ -771,7 +770,7 @@ describe('AgentSession', () => {
         {
           type: 'act',
           content: 'Executed 1 tool(s)',
-          toolCalls: [{ id: 'call-write', name: 'Write', arguments: { path: 'draft.md' } }],
+          toolCalls: [{ id: 'call-write', name: 'Write', arguments: { path: 'brief.md' } }],
           toolResults: [
             {
               callId: 'call-write',
@@ -1128,6 +1127,14 @@ describe('AgentSession', () => {
       );
 
       expect(artifactWatcherFactory).toHaveBeenCalledTimes(1);
+      expect(artifactWatcherFactory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          getRunId: expect.any(Function),
+          getCreationId: expect.any(Function),
+        }),
+      );
+      const watcherConfig = artifactWatcherFactory.mock.calls[0]?.[0];
+      expect(watcherConfig?.getCreationId()).toBeNull();
       expect(start).toHaveBeenCalledTimes(1);
 
       session.dispose();
@@ -1292,7 +1299,7 @@ describe('AgentSession', () => {
         {
           type: 'act',
           content: 'Executed 1 tool(s)',
-          toolCalls: [{ id: 'call-write', name: 'Write', arguments: { path: 'draft.md' } }],
+          toolCalls: [{ id: 'call-write', name: 'Write', arguments: { path: 'brief.md' } }],
           toolResults: [
             {
               callId: 'call-write',
@@ -2100,7 +2107,7 @@ describe('AgentSession', () => {
         {
           type: 'act',
           content: 'Executed 1 tool(s)',
-          toolCalls: [{ id: 'call-write', name: 'Write', arguments: { path: 'draft.md' } }],
+          toolCalls: [{ id: 'call-write', name: 'Write', arguments: { path: 'brief.md' } }],
           toolResults: [
             {
               callId: 'call-write',
@@ -2424,13 +2431,20 @@ describe('AgentSession', () => {
       await session.flushWorkspaceSink();
 
       expect(
-        writes.filter((entry) => entry.path === '/tmp/proj/.neko/drafts/draft-run-1.md'),
+        writes.filter(
+          (entry) => entry.path === '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/brief.md',
+        ),
       ).toHaveLength(1);
       expect(
-        writes.filter((entry) => entry.path === '/tmp/proj/.neko/plans/plan-run-1.md'),
+        writes.filter(
+          (entry) => entry.path === '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/plan.md',
+        ),
       ).toHaveLength(1);
       expect(
-        writes.filter((entry) => entry.path === '/tmp/proj/.neko/tasks/task-run-1.md'),
+        writes.filter(
+          (entry) =>
+            entry.path === '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/checklist.md',
+        ),
       ).toHaveLength(1);
       expect(session.getArtifactsForRun('run-1').map((record) => record.kind)).toEqual([
         'draft',
@@ -2447,19 +2461,19 @@ describe('AgentSession', () => {
             {
               kind: 'draft',
               artifactId: 'draft-1',
-              path: '/tmp/proj/.neko/drafts/draft-run-1.md',
+              path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/brief.md',
               updatedAt: 2,
             },
             {
               kind: 'plan',
               artifactId: 'plan-1',
-              path: '/tmp/proj/.neko/plans/plan-run-1.md',
+              path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/plan.md',
               updatedAt: 4,
             },
             {
               kind: 'task',
               artifactId: 'task-1',
-              path: '/tmp/proj/.neko/tasks/task-run-1.md',
+              path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/checklist.md',
               updatedAt: 6,
             },
           ],
@@ -2480,19 +2494,19 @@ describe('AgentSession', () => {
         {
           kind: 'draft',
           artifactId: 'draft-1',
-          path: '/tmp/proj/.neko/drafts/draft-run-1.md',
+          path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/brief.md',
           updatedAt: 2,
         },
         {
           kind: 'plan',
           artifactId: 'plan-1',
-          path: '/tmp/proj/.neko/plans/plan-run-1.md',
+          path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/plan.md',
           updatedAt: 4,
         },
         {
           kind: 'task',
           artifactId: 'task-1',
-          path: '/tmp/proj/.neko/tasks/task-run-1.md',
+          path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/checklist.md',
           updatedAt: 6,
         },
       ]);
@@ -2514,7 +2528,7 @@ describe('AgentSession', () => {
         kind: 'task',
         runId: 'run-restore',
         artifactId: 'task-restore',
-        path: '/tmp/proj/.neko/tasks/task-run-restore.md',
+        path: '/tmp/proj/neko/creations/restored-creation/checklist.md',
         updatedAt: 6,
         content: '# Tasks',
         value: restoredTask,
@@ -2562,7 +2576,7 @@ describe('AgentSession', () => {
         artifact: {
           kind: 'task',
           artifactId: 'task-restore',
-          path: '/tmp/proj/.neko/tasks/task-run-restore.md',
+          path: '/tmp/proj/neko/creations/restored-creation/checklist.md',
           updatedAt: 6,
         },
       });
@@ -2587,7 +2601,7 @@ describe('AgentSession', () => {
         kind: 'draft',
         runId: 'run-active',
         artifactId: 'draft-active',
-        path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+        path: '/tmp/proj/neko/creations/active-creation/brief.md',
         updatedAt: 11,
         content: '# Draft',
         value: restoredDraft,
@@ -2652,13 +2666,13 @@ describe('AgentSession', () => {
                   {
                     kind: 'draft',
                     artifactId: 'draft-active',
-                    path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+                    path: '/tmp/proj/neko/creations/active-creation/brief.md',
                     updatedAt: 11,
                   },
                   {
                     kind: 'task',
                     artifactId: 'task-missing',
-                    path: '/tmp/proj/.neko/tasks/task-run-active.md',
+                    path: '/tmp/proj/neko/creations/active-creation/checklist.md',
                     updatedAt: 31,
                   },
                 ],
@@ -2698,13 +2712,13 @@ describe('AgentSession', () => {
             {
               kind: 'draft',
               artifactId: 'draft-active',
-              path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+              path: '/tmp/proj/neko/creations/active-creation/brief.md',
               updatedAt: 11,
             },
             {
               kind: 'task',
               artifactId: 'task-missing',
-              path: '/tmp/proj/.neko/tasks/task-run-active.md',
+              path: '/tmp/proj/neko/creations/active-creation/checklist.md',
               updatedAt: 31,
               stale: true,
             },
@@ -2729,13 +2743,13 @@ describe('AgentSession', () => {
         {
           kind: 'draft',
           artifactId: 'draft-active',
-          path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+          path: '/tmp/proj/neko/creations/active-creation/brief.md',
           updatedAt: 11,
         },
         {
           kind: 'task',
           artifactId: 'task-missing',
-          path: '/tmp/proj/.neko/tasks/task-run-active.md',
+          path: '/tmp/proj/neko/creations/active-creation/checklist.md',
           updatedAt: 31,
           stale: true,
         },
@@ -2777,7 +2791,7 @@ describe('AgentSession', () => {
         kind: 'draft',
         runId: 'run-active',
         artifactId: 'draft-active',
-        path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+        path: '/tmp/proj/neko/creations/active-creation/brief.md',
         updatedAt: 11,
         content: '# Draft',
         value: restoredDraft,
@@ -2786,7 +2800,7 @@ describe('AgentSession', () => {
         kind: 'plan',
         runId: 'run-done',
         artifactId: 'plan-done',
-        path: '/tmp/proj/.neko/plans/plan-run-done.md',
+        path: '/tmp/proj/neko/creations/done-creation/plan.md',
         updatedAt: 21,
         content: '# Plan',
         value: restoredPlan,
@@ -2795,7 +2809,7 @@ describe('AgentSession', () => {
         kind: 'task',
         runId: 'run-active',
         artifactId: 'task-active',
-        path: '/tmp/proj/.neko/tasks/task-run-active.md',
+        path: '/tmp/proj/neko/creations/active-creation/checklist.md',
         updatedAt: 31,
         content: '# Tasks',
         value: restoredTask,
@@ -2864,13 +2878,13 @@ describe('AgentSession', () => {
                   {
                     kind: 'draft',
                     artifactId: 'draft-active',
-                    path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+                    path: '/tmp/proj/neko/creations/active-creation/brief.md',
                     updatedAt: 11,
                   },
                   {
                     kind: 'task',
                     artifactId: 'task-active',
-                    path: '/tmp/proj/.neko/tasks/task-run-active.md',
+                    path: '/tmp/proj/neko/creations/active-creation/checklist.md',
                     updatedAt: 31,
                   },
                 ],
@@ -2895,7 +2909,7 @@ describe('AgentSession', () => {
                   {
                     kind: 'plan',
                     artifactId: 'plan-done',
-                    path: '/tmp/proj/.neko/plans/plan-run-done.md',
+                    path: '/tmp/proj/neko/creations/done-creation/plan.md',
                     updatedAt: 21,
                   },
                 ],
@@ -2930,7 +2944,7 @@ describe('AgentSession', () => {
         artifact: {
           kind: 'task',
           artifactId: 'task-active',
-          path: '/tmp/proj/.neko/tasks/task-run-active.md',
+          path: '/tmp/proj/neko/creations/active-creation/checklist.md',
           updatedAt: 31,
         },
       });
@@ -2968,13 +2982,13 @@ describe('AgentSession', () => {
             {
               kind: 'draft',
               artifactId: 'draft-active',
-              path: '/tmp/proj/.neko/drafts/draft-run-active.md',
+              path: '/tmp/proj/neko/creations/active-creation/brief.md',
               updatedAt: 11,
             },
             {
               kind: 'task',
               artifactId: 'task-active',
-              path: '/tmp/proj/.neko/tasks/task-run-active.md',
+              path: '/tmp/proj/neko/creations/active-creation/checklist.md',
               updatedAt: 31,
             },
           ],
@@ -2996,7 +3010,7 @@ describe('AgentSession', () => {
             {
               kind: 'plan',
               artifactId: 'plan-done',
-              path: '/tmp/proj/.neko/plans/plan-run-done.md',
+              path: '/tmp/proj/neko/creations/done-creation/plan.md',
               updatedAt: 21,
             },
           ],
@@ -3061,7 +3075,7 @@ describe('AgentSession', () => {
         kind: 'task',
         runId: 'run-done',
         artifactId: 'task-done',
-        path: '/tmp/proj/.neko/tasks/task-run-done.md',
+        path: '/tmp/proj/neko/creations/done-creation/checklist.md',
         updatedAt: 61,
         content: '# Tasks',
         value: completedTask,
@@ -3147,7 +3161,7 @@ describe('AgentSession', () => {
         artifact: {
           kind: 'task',
           artifactId: 'task-done',
-          path: '/tmp/proj/.neko/tasks/task-run-done.md',
+          path: '/tmp/proj/neko/creations/done-creation/checklist.md',
           updatedAt: 61,
         },
       });
@@ -3203,7 +3217,7 @@ describe('AgentSession', () => {
             {
               kind: 'draft',
               artifactId: 'draft-reuse',
-              path: '/tmp/proj/.neko/drafts/draft-run-reuse.md',
+              path: '/tmp/proj/neko/creations/reuse-creation/brief.md',
               updatedAt: 11,
             },
           ],
@@ -3252,7 +3266,7 @@ describe('AgentSession', () => {
       );
       session.startIdcRun('wf-observed', 'run-observed');
 
-      const observedPath = '/tmp/proj/.neko/plans/plan-run-observed.md';
+      const observedPath = '/tmp/proj/neko/creations/observed-creation/plan.md';
       files.set(
         observedPath,
         [
@@ -3465,7 +3479,7 @@ describe('AgentSession', () => {
         artifact: {
           kind: 'task',
           artifactId: 'task-1',
-          path: '/tmp/proj/.neko/tasks/task-run-1.md',
+          path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/checklist.md',
           updatedAt: 6,
         },
       });

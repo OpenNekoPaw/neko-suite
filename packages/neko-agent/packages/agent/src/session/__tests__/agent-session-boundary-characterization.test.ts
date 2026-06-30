@@ -117,6 +117,7 @@ class CapturingJournalWriter implements IJournalWriter {
 
 class MemoryArtifactService implements IArtifactService {
   readonly records = new Map<string, Map<AnyArtifactRecord['kind'], AnyArtifactRecord>>();
+  readonly creationIdsByRun = new Map<string, string>();
   readonly restore = vi.fn(async () => []);
   readonly flush = vi.fn(async () => {});
   readonly dispose = vi.fn(async () => {});
@@ -136,11 +137,12 @@ class MemoryArtifactService implements IArtifactService {
   }
 
   async writeDraft(runId: string, draft: Draft): Promise<ArtifactRecord<'draft'>> {
+    const creationId = this.creationIdForRun(runId, draft.id);
     return this.remember({
       kind: 'draft',
       runId,
       artifactId: draft.id,
-      path: `.neko/drafts/draft-${runId}.md`,
+      path: `neko/creations/${creationId}/brief.md`,
       updatedAt: draft.updatedAt,
       content: draft.title,
       value: draft,
@@ -148,11 +150,12 @@ class MemoryArtifactService implements IArtifactService {
   }
 
   async writePlan(runId: string, plan: ExecutionPlan): Promise<ArtifactRecord<'plan'>> {
+    const creationId = this.creationIdForRun(runId, plan.draftId);
     return this.remember({
       kind: 'plan',
       runId,
       artifactId: plan.id,
-      path: `.neko/plans/plan-${runId}.md`,
+      path: `neko/creations/${creationId}/plan.md`,
       updatedAt: plan.updatedAt,
       content: plan.title,
       value: plan,
@@ -160,11 +163,12 @@ class MemoryArtifactService implements IArtifactService {
   }
 
   async writeTask(runId: string, task: Task): Promise<ArtifactRecord<'task'>> {
+    const creationId = this.creationIdForRun(runId, task.id);
     return this.remember({
       kind: 'task',
       runId,
       artifactId: task.id,
-      path: `.neko/tasks/task-${runId}.md`,
+      path: `neko/creations/${creationId}/checklist.md`,
       updatedAt: task.updatedAt,
       content: task.id,
       value: task,
@@ -225,12 +229,35 @@ class MemoryArtifactService implements IArtifactService {
     return Array.from(this.records.get(runId)?.values() ?? []);
   }
 
+  getCreationIdByRunId(runId: string): string | null {
+    return this.creationIdsByRun.get(runId) ?? null;
+  }
+
   private remember<T extends AnyArtifactRecord>(record: T): T {
+    const creationId = extractCreationId(record.path);
+    if (creationId) {
+      this.creationIdsByRun.set(record.runId, creationId);
+    }
     const byKind = this.records.get(record.runId) ?? new Map();
     byKind.set(record.kind, record);
     this.records.set(record.runId, byKind);
     return record;
   }
+
+  private creationIdForRun(runId: string, seed: string): string {
+    const existing = this.creationIdsByRun.get(runId);
+    if (existing) {
+      return existing;
+    }
+    const creationId = `creation-${seed}`;
+    this.creationIdsByRun.set(runId, creationId);
+    return creationId;
+  }
+}
+
+function extractCreationId(path: string): string | null {
+  const match = /(?:^|\/)neko\/creations\/([^/]+)\//.exec(path);
+  return match?.[1] ?? null;
 }
 
 class OneShotFeedbackCoordinator implements IFeedbackCoordinator {

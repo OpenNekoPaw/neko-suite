@@ -3,20 +3,14 @@
  *
  * See: docs/architecture/agent-unified-workflow.md §7.4 (project workspace)
  *
- * Single source of truth for where IDC artifacts land on disk. Callers
- * pass the project root; NekoPaths returns the canonical subpath for
- * each artifact family. The resolver is platform-agnostic (no Node `fs`
- * imports) — the caller's fsOps actually creates/writes files. This
- * keeps the agent package free of vscode / node wiring at L0.
+ * NekoPaths — managed `.neko/` runtime layout resolver.
  *
- * Naming convention (2026-04-22 revision): artifacts use prefix + `.md`
- * rather than custom `.nk*.md` extensions. The prefix matches the IDC
- * stage vocabulary (draft / plan / task):
+ * User-creation documents such as Draft / Plan / Task do not live under `.neko`;
+ * they use visible project-owned creation paths resolved by creation-artifact-paths.ts.
+ * This module only owns managed runtime state, logs, rebuildable indexes, and
+ * preferences.
  *
  *   <root>/.neko/
- *     drafts/          AI-produced draft-<runId>.md
- *     plans/           AI-produced plan-<runId>.md
- *     tasks/           AI-produced task-<runId>.md
  *     sessions/        AI-produced session-<runId>.md
  *     logs/            Program-produced .jsonl (events / audits / steps)
  *     .cache/          Program-produced .json (indices, derivable)
@@ -37,9 +31,6 @@ export const NEKO_DIR = '.neko' as const;
 
 /** Subdirectories under `.neko/`. Values are relative paths. */
 export const NEKO_SUBDIRS = {
-  drafts: 'drafts',
-  plans: 'plans',
-  tasks: 'tasks',
   sessions: 'sessions',
   logs: 'logs',
   cache: '.cache',
@@ -86,13 +77,9 @@ export const NEKO_STATE_FILES = {
 export type NekoStateFile = keyof typeof NEKO_STATE_FILES;
 
 /**
- * Canonical filename prefixes for AI-produced markdown artifacts.
- * Files are named `<prefix>-<runId>.md` under the matching subdirectory.
+ * Canonical filename prefixes for managed markdown runtime files.
  */
 export const NEKO_MD_PREFIXES = {
-  draft: 'draft',
-  plan: 'plan',
-  task: 'task',
   session: 'session',
 } as const;
 
@@ -105,13 +92,7 @@ export interface INekoPaths {
   readonly root: string;
   /** Absolute path to `<root>/.neko/<subdir>/`. */
   dir(subdir: NekoSubdir): string;
-  /**
-   * Absolute path to an AI-produced artifact given its family.
-   * Example: `file('drafts', 'tiktok-001')` → `<root>/.neko/drafts/draft-tiktok-001.md`
-   */
-  file(subdir: 'drafts', basename: string): string;
-  file(subdir: 'plans', basename: string): string;
-  file(subdir: 'tasks', basename: string): string;
+  /** Absolute path to a managed markdown runtime file. */
   file(subdir: 'sessions', basename: string): string;
   file(subdir: Extract<NekoSubdir, 'archives'>, basename: string): string;
   /** Absolute path to a canonical JSONL log. */
@@ -151,12 +132,6 @@ export function createNekoPaths(projectRoot: string): INekoPaths {
 
   function prefixFor(subdir: NekoSubdir): string | null {
     switch (subdir) {
-      case 'drafts':
-        return NEKO_MD_PREFIXES.draft;
-      case 'plans':
-        return NEKO_MD_PREFIXES.plan;
-      case 'tasks':
-        return NEKO_MD_PREFIXES.task;
       case 'sessions':
         return NEKO_MD_PREFIXES.session;
       case 'archives':

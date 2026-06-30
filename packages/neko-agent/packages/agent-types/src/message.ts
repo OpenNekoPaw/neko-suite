@@ -5,6 +5,7 @@
  */
 
 import type {
+  AgentCapabilityInvocationResult,
   AgentContextType,
   ArtifactExtensionMap,
   MessageAttachment,
@@ -55,12 +56,7 @@ export interface ToolCall {
  * Allows thinking, tool calls, text, and code diffs to be rendered in chronological order.
  */
 export type ContentBlockType =
-  | 'thinking'
-  | 'text'
-  | 'tool_call'
-  | 'code_diff'
-  | 'plan'
-  | 'composite';
+  'thinking' | 'text' | 'tool_call' | 'code_diff' | 'plan' | 'composite' | 'canvas_lifecycle';
 
 export type CompositeTemplate = 'storyboard-table' | 'comparison' | 'gallery' | 'report';
 
@@ -87,6 +83,13 @@ export interface CompositeBlockData {
   readonly storyboardDiagnostics?: readonly StoryboardValidationDiagnostic[];
   readonly sections: readonly CompositeSection[];
   readonly extensions?: ArtifactExtensionMap;
+}
+
+export interface CanvasLifecycleBlockData {
+  readonly requestId: string;
+  readonly success: boolean;
+  readonly result: AgentCapabilityInvocationResult;
+  readonly error?: string;
 }
 
 /**
@@ -119,6 +122,8 @@ export interface ContentBlock {
   plan?: Plan;
   /** For composite blocks — structured multimodal presentation intent. */
   composite?: CompositeBlockData;
+  /** For Canvas lifecycle capability results and follow-up actions. */
+  canvasLifecycle?: CanvasLifecycleBlockData;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,20 +145,10 @@ export interface MessageContextReference {
 // ---------------------------------------------------------------------------
 
 export type AgentFileReferenceSource =
-  | 'workspace'
-  | 'asset-library'
-  | 'media-library'
-  | 'entity-graph'
-  | 'story'
-  | 'canvas';
+  'workspace' | 'asset-library' | 'media-library' | 'entity-graph' | 'story' | 'canvas';
 
 export type AgentFileReferenceMediaType =
-  | 'video'
-  | 'audio'
-  | 'image'
-  | 'sequence'
-  | 'text'
-  | 'document';
+  'video' | 'audio' | 'image' | 'sequence' | 'text' | 'document';
 
 export interface AgentFileReference {
   id: string;

@@ -184,17 +184,16 @@ export interface ExecutionQualityEvaluatedEvent {
 }
 
 // -----------------------------------------------------------------------------
-// Artifact lifecycle (Phase B — AI uses generic Write tool + post-write hooks)
+// Artifact lifecycle (optional host creation-document observation)
 // -----------------------------------------------------------------------------
 
 /** Kind of IDC artifact a file represents. */
 export type ArtifactKind = 'draft' | 'plan' | 'task';
 
 /**
- * A new/updated artifact file was written to `.neko/drafts/` / `.neko/plans/` /
- * `.neko/tasks/` and its frontmatter parsed successfully against the per-kind
- * schema. Emitted by the ArtifactWatcher once the file has settled
- * (300ms debounce).
+ * A new/updated visible creation document was written and its frontmatter parsed
+ * successfully against the per-kind schema. Emitted only when a host opts into
+ * ArtifactWatcher observation for creation documents.
  */
 export interface ExecutionArtifactWrittenEvent {
   channel: typeof EXECUTION_CHANNELS.ARTIFACT_WRITTEN;

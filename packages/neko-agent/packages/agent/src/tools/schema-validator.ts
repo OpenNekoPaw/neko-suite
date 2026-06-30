@@ -4,7 +4,7 @@
  * Validates tool arguments against their parameter schema before execution.
  * Returns structured errors that LLMs can use to self-correct on retry.
  *
- * Supports: type, required, enum, minimum, maximum, pattern, items.type
+ * Supports: type, required, enum, minimum, maximum, pattern, items.type, items.required
  * Does NOT depend on Zod to keep @neko/agent lightweight.
  */
 
@@ -122,7 +122,8 @@ function validateProperty(
 
   // Array items type check
   if (Array.isArray(value) && prop.items) {
-    const itemType = (prop.items as { type?: string }).type;
+    const itemSchema = prop.items as { type?: string; required?: readonly string[] };
+    const itemType = itemSchema.type;
     if (itemType) {
       for (let i = 0; i < value.length; i++) {
         if (!checkType(value[i], itemType)) {
@@ -132,12 +133,29 @@ function validateProperty(
             actual: value[i],
             message: `Field "${field}[${i}]" expected type "${itemType}", got ${typeof value[i]}`,
           });
+          continue;
+        }
+        if (itemType === 'object' && itemSchema.required && isRecord(value[i])) {
+          for (const requiredField of itemSchema.required) {
+            if (value[i][requiredField] === undefined || value[i][requiredField] === null) {
+              errors.push({
+                field: `${field}[${i}].${requiredField}`,
+                expected: 'required field',
+                actual: undefined,
+                message: `Missing required field: "${field}[${i}].${requiredField}"`,
+              });
+            }
+          }
         }
       }
     }
   }
 
   return errors;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**

@@ -1,9 +1,6 @@
 import type {
-  CanvasAgentContentPayload,
   CanvasAgentTargetRef,
-  CanvasStoryboardPayload,
   DocumentArchiveResourceRef,
-  EntityMemoryContribution,
   ResourceRef,
   StoryboardTextCue,
   StoryboardVoiceCue,
@@ -21,8 +18,6 @@ export type NekoPluginKey = keyof typeof NEKO_PLUGIN_EXTENSION_IDS;
 export type PluginTransferTarget = NekoPluginKey | 'explorer';
 
 export type PluginTransferMediaType = 'image' | 'video' | 'audio' | 'model';
-
-export type PluginTransferContentFormat = 'plain' | 'markdown' | 'json' | 'prompt';
 
 export type PluginTransferTargetMode = 'insert' | 'append' | 'replace' | 'apply' | 'create-child';
 
@@ -95,38 +90,8 @@ export type PluginTransferPayload =
       readonly provenance?: PluginTransferProvenance;
     }
   | {
-      readonly kind: 'canvasStoryboard';
-      readonly storyboard: CanvasStoryboardPayload;
-      readonly entityMemoryContribution?: EntityMemoryContribution;
-      readonly target?: PluginTransferTargetRef;
-      readonly provenance?: PluginTransferProvenance;
-    }
-  | {
       readonly kind: 'cutStoryboard';
       readonly storyboard: PluginTransferCutStoryboardPayload;
-      readonly target?: PluginTransferTargetRef;
-      readonly provenance?: PluginTransferProvenance;
-    }
-  | {
-      readonly kind: 'canvasText';
-      readonly text: string;
-      readonly title?: string;
-      readonly format?: Exclude<PluginTransferContentFormat, 'prompt'>;
-      readonly target?: PluginTransferTargetRef;
-      readonly provenance?: PluginTransferProvenance;
-    }
-  | {
-      readonly kind: 'canvasPrompt';
-      readonly prompt: string;
-      readonly title?: string;
-      readonly target?: PluginTransferTargetRef;
-      readonly provenance?: PluginTransferProvenance;
-    }
-  | {
-      readonly kind: 'canvasStructuredContent';
-      readonly content: unknown;
-      readonly title?: string;
-      readonly format?: PluginTransferContentFormat;
       readonly target?: PluginTransferTargetRef;
       readonly provenance?: PluginTransferProvenance;
     };
@@ -154,12 +119,8 @@ export interface PluginTransferPathImportAssetPayload {
   readonly name?: string;
 }
 
-export type PluginTransferCanvasAgentContentPayload = CanvasAgentContentPayload;
-
 export interface PluginTransferCommandPlanMap {
   readonly 'neko.canvas.importAsset': PluginTransferCanvasImportAssetPayload;
-  readonly 'neko.canvas.importStoryboard': CanvasStoryboardPayload;
-  readonly 'neko.canvas.importAgentContent': PluginTransferCanvasAgentContentPayload;
   readonly 'neko.sketch.importAsset': PluginTransferPathImportAssetPayload;
   readonly 'neko.model.importAsset': PluginTransferPathImportAssetPayload;
   readonly 'neko.cut.importStoryboard': PluginTransferCutStoryboardPayload;

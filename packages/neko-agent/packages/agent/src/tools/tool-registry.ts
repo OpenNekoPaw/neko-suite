@@ -121,6 +121,7 @@ export class ToolRegistry implements IToolRegistry {
     args: Record<string, unknown>,
     options?: ToolExecuteOptions,
   ): Promise<ToolResult> {
+    const normalizedArgs = normalizeToolArguments(args);
     const requestId = createToolExecutionRequestId();
     const startedAt = Date.now();
     const logger = getToolRegistryLogger();
@@ -132,7 +133,7 @@ export class ToolRegistry implements IToolRegistry {
       ...withAgentTrace(trace, {
         requestId,
         toolName: name,
-        argSummary: summarizeRecordShape(args),
+        argSummary: summarizeRecordShape(normalizedArgs),
         hasOptions: options !== undefined,
         metadataSummary: summarizeRecordShape(options?.metadata),
       }),
@@ -141,7 +142,7 @@ export class ToolRegistry implements IToolRegistry {
       ...withAgentTrace(trace, {
         requestId,
         toolName: name,
-        args,
+        args: normalizedArgs,
         options: summarizeToolExecuteOptionsForDebug(options),
       }),
     });
@@ -165,7 +166,7 @@ export class ToolRegistry implements IToolRegistry {
 
     // Schema validation: catch parameter errors before execution
     if (tool.parameters) {
-      const validationErrors = validateSchema(args, tool.parameters);
+      const validationErrors = validateSchema(normalizedArgs, tool.parameters);
       if (validationErrors.length > 0) {
         logger.warn('neko.agent.tool.execute.failed', {
           ...withAgentTrace(trace, {
@@ -187,7 +188,7 @@ export class ToolRegistry implements IToolRegistry {
     }
 
     try {
-      const result = await tool.execute(args, options);
+      const result = await tool.execute(normalizedArgs, options);
       const duration = Date.now() - startedAt;
       const resultWithDuration = {
         ...result,
@@ -403,6 +404,23 @@ function summarizeUnknownError(error: unknown): Record<string, unknown> {
     name: typeof error,
     message: String(error),
   };
+}
+
+function normalizeToolArguments(args: Record<string, unknown>): Record<string, unknown> {
+  if (Object.keys(args).length !== 1 || typeof args['_raw'] !== 'string') {
+    return args;
+  }
+
+  try {
+    const parsed = JSON.parse(args['_raw']);
+    return isPlainRecord(parsed) ? parsed : args;
+  } catch {
+    return args;
+  }
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**

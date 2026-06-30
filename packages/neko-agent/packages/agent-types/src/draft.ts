@@ -3,15 +3,16 @@
  *
  * The declarative "what" of IDC. Produced by creation-persona at the
  * end of the Draft stage; reviewed by the user; compiled into an
- * ExecutionPlan + Task checklist at the Plan stage. Persisted as
- * `.neko/drafts/draft-<runId>.md`.
+ * ExecutionPlan + Task checklist at the Plan stage. Persisted by the host
+ * creation-document service as a visible project document, typically
+ * `neko/creations/<creation-id>/brief.md`.
  *
  * Shape mirrors ADR §5 "three layers" — intent / approach / artifact —
  * plus §7.5 frontmatter minimum (id / kind / status / domain / timestamps).
  *
- * The AI writes the entire artifact (frontmatter + body). Programs
- * don't mutate fields; they read the file, parse the frontmatter for
- * indexing, and surface the body verbatim.
+ * The AI proposes the artifact body. Programs persist approved creation
+ * documents, parse the frontmatter for indexing, and surface the body
+ * verbatim.
  *
  * Renamed from `Proposal` (2026-04-22, ADR §4 revision) to align stage
  * and artifact naming: the Draft stage produces a Draft.

@@ -22,7 +22,7 @@ function invalid(
     channel: EXECUTION_CHANNELS.ARTIFACT_INVALID,
     runId: 'run-1',
     kind: 'draft',
-    path: '/tmp/.neko/drafts/draft-xyz.md',
+    path: '/tmp/neko/creations/xyz/brief.md',
     issues: [
       {
         code: 'invalid-status',

@@ -27,6 +27,7 @@ import {
   ProviderCardRegistry,
   registerRuntimeProviderCardDirectories,
   ToolCategoryRegistry,
+  type SkillLifecycleRuntime,
   type SkillService,
   type SkillRegistry,
   type ToolGroupRegistry,
@@ -136,6 +137,12 @@ export function getCapabilityRuntimeBindings(): Readonly<CapabilityRuntimeBindin
  */
 export function setCapabilityRuntimeSkillService(skillService: SkillService | undefined): void {
   runtimeBindingStore.setSkillService(skillService);
+}
+
+export function setCapabilityRuntimeSkillLifecycleRuntime(
+  skillLifecycleRuntime: SkillLifecycleRuntime | undefined,
+): void {
+  runtimeBindingStore.setSkillLifecycleRuntime(skillLifecycleRuntime);
 }
 
 export function setCapabilityRuntimeExternalProcessorRuntime(

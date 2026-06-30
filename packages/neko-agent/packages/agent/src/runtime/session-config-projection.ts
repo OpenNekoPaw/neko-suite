@@ -105,12 +105,17 @@ function mergeStageTracking(
     explicit?.skillRegistry ?? runtimeStageTracking?.skillRegistry ?? capability?.skillRegistry;
   const skillService =
     explicit?.skillService ?? runtimeStageTracking?.skillService ?? capability?.skillService;
+  const skillLifecycleRuntime =
+    explicit?.skillLifecycleRuntime ??
+    runtimeStageTracking?.skillLifecycleRuntime ??
+    capability?.skillLifecycleRuntime;
 
   return {
     ...(runtimeStageTracking ?? {}),
     ...(explicit ?? {}),
     ...(skillRegistry ? { skillRegistry } : {}),
     ...(skillService ? { skillService } : {}),
+    ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
   };
 }
 

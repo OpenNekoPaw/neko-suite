@@ -1,6 +1,7 @@
 import type { IProviderCardRegistry } from '@neko/shared';
 import type { SkillRegistry } from '../skill/skill-registry';
 import type { SkillService } from '../skill/skill-service';
+import type { SkillLifecycleRuntime } from '../skill/skill-lifecycle-runtime';
 import type { ToolGroupRegistry } from '../skill/tool-group-registry';
 import type { ToolCategoryRegistry } from '../tools/tool-category-registry';
 import type { AgentExternalProcessorRuntime } from './external-processor-runtime';
@@ -11,6 +12,7 @@ const CAPABILITY_RUNTIME_BINDING_KEYS = [
   'toolGroupRegistry',
   'toolCategoryRegistry',
   'skillService',
+  'skillLifecycleRuntime',
   'providerCardRegistry',
   'externalProcessorRuntime',
   'contentAccessRuntime',
@@ -21,6 +23,7 @@ export interface CapabilityRuntimeBindings {
   toolGroupRegistry?: ToolGroupRegistry;
   toolCategoryRegistry?: ToolCategoryRegistry;
   skillService?: SkillService;
+  skillLifecycleRuntime?: SkillLifecycleRuntime;
   providerCardRegistry?: IProviderCardRegistry;
   externalProcessorRuntime?: AgentExternalProcessorRuntime;
   contentAccessRuntime?: AgentContentAccessRuntime;
@@ -34,6 +37,9 @@ export interface CapabilityRuntimeBindingStore {
   get(): Readonly<CapabilityRuntimeBindings>;
   update(next: Partial<CapabilityRuntimeBindings>): Readonly<CapabilityRuntimeBindings>;
   setSkillService(skillService: SkillService | undefined): Readonly<CapabilityRuntimeBindings>;
+  setSkillLifecycleRuntime(
+    skillLifecycleRuntime: SkillLifecycleRuntime | undefined,
+  ): Readonly<CapabilityRuntimeBindings>;
 }
 
 export function mergeCapabilityRuntimeBindings(
@@ -112,6 +118,12 @@ class DefaultCapabilityRuntimeBindingStore implements CapabilityRuntimeBindingSt
 
   setSkillService(skillService: SkillService | undefined): Readonly<CapabilityRuntimeBindings> {
     return this.update({ skillService });
+  }
+
+  setSkillLifecycleRuntime(
+    skillLifecycleRuntime: SkillLifecycleRuntime | undefined,
+  ): Readonly<CapabilityRuntimeBindings> {
+    return this.update({ skillLifecycleRuntime });
   }
 }
 

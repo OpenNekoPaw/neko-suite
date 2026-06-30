@@ -63,7 +63,7 @@ export {
   type FileAccessKind,
   type WorkspaceFileAccessPolicyOptions,
   type WorkspaceFileIgnoreRules,
-  // Draft/Plan/Task write tools removed in Phase B — AI uses generic Write.
+  // Draft/Plan/Task review documents are persisted by the host artifact service.
 } from './core';
 
 // Perception evidence tools

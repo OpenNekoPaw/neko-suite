@@ -2,7 +2,7 @@
  * Task markdown serialiser.
  *
  * See: docs/architecture/agent-unified-workflow.md §7.3 (AI → Markdown),
- *      §7.4 (`.neko/tasks/task-<runId>.md`).
+ *      §7.4 (`neko/creations/<creation-id>/checklist.md`).
  *
  * Canonical shape for the Task artifact file:
  *
@@ -72,7 +72,7 @@ function escapeInline(text: string): string {
 // =============================================================================
 
 /**
- * Render a full Task checklist as the canonical `task-<runId>.md` contents.
+ * Render a full Task checklist as the canonical `checklist.md` contents.
  *
  * Timestamps are serialised with `toISOString()` so diffs across runs
  * stay stable and human-readable. The caller supplies the task's

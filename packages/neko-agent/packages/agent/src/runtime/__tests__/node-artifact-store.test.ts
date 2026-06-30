@@ -35,7 +35,7 @@ describe('createNodeArtifactStore', () => {
       }),
     );
     expect(store.artifactService).toBeDefined();
-    expect(store.createArtifactWatcher).toEqual(expect.any(Function));
+    expect(store.createArtifactWatcher).toBeUndefined();
   });
 
   it('always exposes a journal writer factory for conversation-scoped persistence', () => {

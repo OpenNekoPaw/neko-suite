@@ -51,6 +51,7 @@ export interface AgentTurnProviderHost<TProvider extends AgentProviderCandidate>
 export interface AgentTurnConversationHost<THistoryMessage> {
   getMessageCount(conversationId: string): number;
   getFullHistory(conversationId: string): readonly THistoryMessage[];
+  addUserMessage?(conversationId: string, userMessage: Message): void;
   addAssistantMessage(conversationId: string, assistantMessage: Message): void;
 }
 
@@ -238,6 +239,13 @@ export function buildAgentTurnRuntimeInput<
         input.runtime.conversations.getMessageCount(conversationId),
       getFullHistory: (conversationId) =>
         input.runtime.conversations.getFullHistory(conversationId),
+      ...(input.runtime.conversations.addUserMessage
+        ? {
+            addUserMessage: (conversationId, userMessage) => {
+              input.runtime.conversations.addUserMessage?.(conversationId, userMessage);
+            },
+          }
+        : {}),
       addAssistantMessage: (conversationId, assistantMessage) => {
         input.runtime.conversations.addAssistantMessage(conversationId, assistantMessage);
       },

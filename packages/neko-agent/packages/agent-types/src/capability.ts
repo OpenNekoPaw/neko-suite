@@ -1,6 +1,7 @@
 import type {
   AgentCapabilityHost,
   AgentCapabilityHostRequirement,
+  AgentCapabilityLifecycleDescriptor,
   AgentCapabilityTrustLevel,
   ComicAnimationIndexTask,
   PerceptionCachePolicy,
@@ -64,6 +65,8 @@ export interface AgentCapabilityWorkflowFragmentContribution {
 }
 
 export type AgentArtifactCapabilityRisk = 'low' | 'medium' | 'high' | 'destructive';
+
+export type AgentLifecycleCapabilityContribution = AgentCapabilityLifecycleDescriptor;
 
 export interface AgentArtifactProtocolContribution {
   readonly id: string;
@@ -187,6 +190,7 @@ export interface AgentArtifactFacetsContribution {
   readonly renderers?: readonly AgentArtifactRendererContribution[];
   readonly projectors?: readonly AgentArtifactProjectorContribution[];
   readonly capabilities?: readonly AgentArtifactExecutionCapabilityContribution[];
+  readonly lifecycleCapabilities?: readonly AgentLifecycleCapabilityContribution[];
   readonly entityProviders?: readonly AgentEntityProviderFacetContribution[];
   readonly entityMemoryContributors?: readonly AgentEntityMemoryContributorFacetContribution[];
   readonly mediaTextExtractors?: readonly AgentMediaTextExtractorFacetContribution[];

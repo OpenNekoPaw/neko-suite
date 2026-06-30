@@ -17,10 +17,10 @@ import {
 import {
   createVSCodeLogger,
   VSCodeErrorHandler,
-  resolveLogLevelSetting,
+  inspectLogLevelSetting,
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
-import { withTimeout, type ISkillProvider, type SkillLocalizedText } from '@neko/shared';
+import { LogLevel, withTimeout, type ISkillProvider, type SkillLocalizedText } from '@neko/shared';
 import { getBuiltinSkills } from '@neko/agent/skill';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { ITaskManager } from './bootstrap';
@@ -60,9 +60,7 @@ import { createSkillCatalogProvider } from './services/skillCatalogProvider';
 import { ExternalProcessorRegistryService } from './services/externalProcessorRegistryService';
 import { runResourceCacheStartupGc } from './services/resourceCacheStartupGcService';
 import { getEngineClientProvider } from './services/engineClientProvider';
-import {
-  createExtensionAgentContentAccessRuntime,
-} from './services/agentContentAccessRuntime';
+import { createExtensionAgentContentAccessRuntime } from './services/agentContentAccessRuntime';
 import {
   createHostContentPathResolver,
   getHostContentAuthorizedReadRoots,
@@ -192,17 +190,26 @@ const BUILTIN_SKILL_LOCALES: Readonly<Record<string, SkillLocaleMap>> = {
   },
 };
 
+const LOG_LEVEL_NAMES: Record<LogLevel, string> = {
+  [LogLevel.Debug]: 'debug',
+  [LogLevel.Info]: 'info',
+  [LogLevel.Warn]: 'warn',
+  [LogLevel.Error]: 'error',
+  [LogLevel.Off]: 'off',
+};
+
+const SHOW_LOGS_COMMAND = 'neko.agent.showLogs';
+
 /**
  * Activate the extension
  */
 export async function activate(context: vscode.ExtensionContext): Promise<ISkillProvider> {
   // Initialize logger
-  const logger = createVSCodeLogger(
-    'Neko Agent',
-    'NekoAgent',
-    context,
-    resolveLogLevelSetting(context.extensionMode),
-  );
+  const logLevelSetting = inspectLogLevelSetting(context.extensionMode);
+  const resolvedLogLevel = logLevelSetting.level;
+  const logger = createVSCodeLogger('Neko Agent', 'NekoAgent', context, resolvedLogLevel, {
+    showOutputCommand: SHOW_LOGS_COMMAND,
+  });
   setRootLogger(logger);
   setPlatformRootLogger(logger.child('Platform'));
   setAgentRootLogger(logger.child('Agent'));
@@ -212,6 +219,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   watchLogLevel(logger, context);
 
   logger.info('Activating extension...');
+  logger.info('Logger configured', {
+    level: LOG_LEVEL_NAMES[resolvedLogLevel],
+    extensionMode: context.extensionMode,
+    extensionPath: context.extensionUri.fsPath,
+    agentRuntimeLogger: logger.child('Agent').source,
+    platformRuntimeLogger: logger.child('Platform').source,
+    setting: {
+      source: logLevelSetting.source,
+      value: logLevelSetting.value,
+      valid: logLevelSetting.valid,
+      defaultValue: logLevelSetting.defaultValue,
+      globalValue: logLevelSetting.globalValue,
+      workspaceValue: logLevelSetting.workspaceValue,
+      workspaceFolderValue: logLevelSetting.workspaceFolderValue,
+    },
+  });
+  if (
+    context.extensionMode === vscode.ExtensionMode.Development &&
+    resolvedLogLevel !== LogLevel.Debug
+  ) {
+    logger.warn('Agent debug traces are disabled in the development extension host', {
+      level: LOG_LEVEL_NAMES[resolvedLogLevel],
+      setting: 'neko.logLevel',
+      expected: 'debug',
+    });
+  }
 
   // Initialize service collection
   const services = new ServiceCollection();

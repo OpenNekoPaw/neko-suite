@@ -11,6 +11,7 @@ import type { AgentWorkflowIdentity, IdcStage } from '@neko-agent/types';
 import type { IArtifactWatcher } from '../artifact';
 import type { IEventBus } from '../events';
 import type { SkillService } from '../skill/skill-service';
+import type { SkillLifecycleRuntime } from '../skill/skill-lifecycle-runtime';
 import type { IArtifactService } from './artifact-service';
 import type { IFeedbackCoordinator } from '../feedback';
 import type { IControlPlane } from '../control-plane';
@@ -62,6 +63,7 @@ export interface IWorkflowRuntime {
   readonly stageTracking?: {
     readonly skillRegistry?: ISkillRegistry;
     readonly skillService?: SkillService;
+    readonly skillLifecycleRuntime?: SkillLifecycleRuntime;
     readonly initialStage?: IdcStage;
     readonly guardian?: false | Record<string, unknown>;
   };
@@ -96,6 +98,7 @@ export interface IArtifactStore {
 export interface ArtifactWatcherRuntimeConfig {
   readonly eventBus: IEventBus;
   readonly getRunId: () => string | null;
+  readonly getCreationId: () => string | null;
 }
 
 export type ArtifactWatcherFactory = (config: ArtifactWatcherRuntimeConfig) => IArtifactWatcher;
@@ -108,6 +111,7 @@ export type ArtifactWatcherFactory = (config: ArtifactWatcherRuntimeConfig) => I
  */
 export interface ICapabilityRuntime {
   readonly skillService?: SkillService;
+  readonly skillLifecycleRuntime?: SkillLifecycleRuntime;
   readonly skillRegistry?: ISkillRegistry;
   readonly toolGroupRegistry?: IToolGroupRegistry;
   readonly toolCategoryRegistry?: IToolCategoryRegistry;

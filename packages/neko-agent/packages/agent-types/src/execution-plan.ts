@@ -2,8 +2,9 @@
  * ExecutionPlan — Plan-stage artifact (ADR §4.2, §5, §7.5).
  *
  * The imperative "how" of IDC. Compiled by the AI from an approved
- * Draft at the Plan stage; executed by the Apply stage as an
- * ordered tool-call list. Persisted as `.neko/plans/plan-<runId>.md`.
+ * Draft at the Plan stage; executed by the Apply stage as an ordered tool-call
+ * list. Persisted by the host creation-document service as a visible project
+ * document, typically `neko/creations/<creation-id>/plan.md`.
  *
  * Distinct from `Plan` in plan.ts — that type is the parsed shape of
  * plan-mode markdown (think / user-review UI artifact). ExecutionPlan
@@ -30,12 +31,7 @@
  *   aborted      — user or policy cancelled mid-run
  */
 export type ExecutionPlanStatus =
-  | 'draft'
-  | 'ready'
-  | 'in_progress'
-  | 'completed'
-  | 'failed'
-  | 'aborted';
+  'draft' | 'ready' | 'in_progress' | 'completed' | 'failed' | 'aborted';
 
 // =============================================================================
 // Step

@@ -130,6 +130,7 @@ export interface AgentTurnAgentManager<
 export interface AgentTurnConversationStore<THistoryMessage> {
   getConversationMessageCount(conversationId: string): number;
   getFullHistory(conversationId: string): readonly THistoryMessage[];
+  addUserMessage?(conversationId: string, message: Message): void;
   addAssistantMessage(conversationId: string, message: Message): void;
 }
 
@@ -261,6 +262,7 @@ export interface ExecuteAgentTurnInput<
     readonly content?: string;
     readonly pendingCount: number;
     readonly item?: AgentQueuedMessageItem;
+    readonly releasedItem?: AgentQueuedMessageItem;
     readonly snapshot?: AgentMessageQueueSnapshot;
   }) => void;
   readonly generateMessageId: () => string;
@@ -385,6 +387,7 @@ export async function runAgentTurnRuntime<
           content: event.content,
           pendingCount: event.pendingCount,
           item: event.item,
+          releasedItem: event.releasedItem,
           snapshot: event.snapshot,
         });
       },
@@ -659,8 +662,16 @@ export async function executeAgentTurn<
       input.onMessageQueued?.({
         conversationId: input.conversationId,
         pendingCount: snapshot.pendingCount,
+        releasedItem: projectPendingMessageItem(queuedMessage),
         snapshot,
       });
+      input.conversations.addUserMessage?.(
+        input.conversationId,
+        buildReleasedQueuedUserMessage({
+          item: queuedMessage,
+          id: `released:${queuedMessage.id}`,
+        }),
+      );
 
       assistantMessage = await executeAgentTurnMessage({
         input,
@@ -951,6 +962,18 @@ function projectPendingMessageItem(item: AgentPendingMessageItem): AgentQueuedMe
     createdAt: item.createdAt,
     ...(item.updatedAt !== undefined ? { updatedAt: item.updatedAt } : {}),
     source: item.source,
+  };
+}
+
+function buildReleasedQueuedUserMessage(input: {
+  readonly item: AgentPendingMessageItem;
+  readonly id: string;
+}): Message {
+  return {
+    id: input.id,
+    role: 'user',
+    content: input.item.content,
+    timestamp: input.item.createdAt,
   };
 }
 

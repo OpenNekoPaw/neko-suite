@@ -58,6 +58,7 @@ import { createVSCodeWorkspaceFileReader } from '../services/workspaceFileReader
 import { searchVSCodeProjectFiles } from '../services/workspaceProjectSearch';
 import { searchProjectMentionCandidates } from '../services/projectMentionSearch';
 import { AgentTurnBridge } from './message/agentTurnBridge';
+import type { SkillHandler } from './handlers/skillHandler';
 import type { AccountAiCatalogCache } from '../services/accountAiCatalogCache';
 import {
   formatAgentLlmConfigDiagnostics,
@@ -104,6 +105,7 @@ export class AgentMessageTurnHandler {
     private readonly _getActiveSkillState?: (
       conversationId: string,
     ) => ActiveSkillState | undefined,
+    private readonly _skillHandler?: SkillHandler,
     private readonly _engineClientProvider: IEngineClientProvider = getEngineClientProvider(),
     private readonly _dashboardWorkItems?: AgentDashboardWorkItemSource,
     private readonly _localResourceAccess?: AgentLocalResourceAccess,
@@ -158,6 +160,8 @@ export class AgentMessageTurnHandler {
       platform: this._platform,
       taskManager: this._taskManager,
       getActiveSkillState: this._getActiveSkillState,
+      getSkillLifecycleProjection: (conversationId) =>
+        this._skillHandler?.projectSkillLifecycle(conversationId),
       accountAiCatalog: this._options.accountAiCatalog,
       streamProcessor: this._streamProcessor,
       onPhaseChange: ({ conversationId, phase, toolName, timestamp }) =>
@@ -209,6 +213,8 @@ export class AgentMessageTurnHandler {
       inputProcessor: this._getInputProcessor(),
       processAttachments: (attachments) =>
         this._attachmentProcessor.processAttachments(attachments ? [...attachments] : undefined),
+      beforePrepareAgentTurn: ({ conversationId, userInput }) =>
+        this._autoActivateSkillForTurn(webview, conversationId, userInput),
       createReferencedMediaProcessor: async () =>
         new MediaPreprocessor(
           await this._engineClientProvider.getOptionalClient(),
@@ -230,6 +236,9 @@ export class AgentMessageTurnHandler {
       },
       persistUserMessage: (conversationId, message) => {
         this._conversations.addMessageToConversation(conversationId, message);
+      },
+      removeUserMessage: (conversationId, messageId) => {
+        this._conversations.removeMessageFromConversation(conversationId, messageId);
       },
       persistErrorMessage: (conversationId, message) => {
         this._conversations.addMessageToConversation(conversationId, message);
@@ -280,6 +289,22 @@ export class AgentMessageTurnHandler {
       generateMessageId: () => createAgentMessageId(),
       now: () => Date.now(),
     });
+  }
+
+  private async _autoActivateSkillForTurn(
+    webview: vscode.Webview,
+    conversationId: string,
+    userInput: string,
+  ): Promise<void> {
+    const skillHandler = this._skillHandler;
+    if (!skillHandler) {
+      return;
+    }
+
+    const result = await skillHandler.autoActivateSkill(webview, { conversationId, userInput });
+    if (!result?.applied) {
+      return;
+    }
   }
 
   private _resolveAgentTurnRequest(

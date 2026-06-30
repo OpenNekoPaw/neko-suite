@@ -7,8 +7,10 @@
 
 import type {
   AgentContextPayload,
+  AgentCapabilityInvocationResult,
   AgentContextType,
-  CanvasStoryboardPayload,
+  CanvasMarkdownCapabilityInput,
+  CanvasMarkdownCapabilityResult,
   ChatModelOption,
   DocumentLocator,
   DocumentSourceRef,
@@ -20,7 +22,7 @@ import type {
 import type { StoryboardTextCue, StoryboardVoiceCue } from '@neko/shared';
 import {
   STORYBOARD_TEXT_CUE_KINDS,
-  isEntityMemoryContribution,
+  isCanvasMarkdownCapabilityInput,
   isResourceRef,
   parseDocumentArchiveResourceRef,
   parseDocumentLocator,
@@ -56,7 +58,6 @@ import { assertValidAgentTurnTimelineMessage } from './agent-turn-timeline';
 export { validateAgentTurnTimelineMessage } from './agent-turn-timeline';
 import type {
   PluginTransferAssetRef,
-  PluginTransferContentFormat,
   PluginTransferCutStoryboardPayload,
   PluginTransferCutStoryboardShot,
   PluginTransferPayload,
@@ -68,12 +69,6 @@ import type { AgentConfigDiagnostic } from './config-diagnostic';
 
 export type ProtocolModelCategory = ModelType;
 
-const ALL_PLUGIN_TRANSFER_CONTENT_FORMATS = [
-  'plain',
-  'markdown',
-  'json',
-  'prompt',
-] as const satisfies readonly PluginTransferContentFormat[];
 export type MediaModelCategory = Exclude<ProtocolModelCategory, 'llm'>;
 export type AgentMediaModelCategory = Extract<MediaModelCategory, 'image' | 'video' | 'audio'>;
 export type AgentModelSlot = 'primary' | 'fast' | 'deep' | 'summarizer' | 'vision';
@@ -276,6 +271,13 @@ export interface SendToPluginWebviewMessage {
   payload?: PluginTransferPayload;
 }
 
+export interface InvokeCanvasMarkdownCapabilityWebviewMessage {
+  type: 'invokeCanvasMarkdownCapability';
+  requestId: string;
+  conversationId: string;
+  input: CanvasMarkdownCapabilityInput;
+}
+
 export interface DragStartWebviewMessage {
   type: 'dnd:start';
   asset: { path: string; mediaType: 'image' | 'video' | 'audio'; name: string };
@@ -376,6 +378,7 @@ export type WebviewToExtensionMessage =
   | OpenUrlWebviewMessage
   | SetPromptModeWebviewMessage
   | SendToPluginWebviewMessage
+  | InvokeCanvasMarkdownCapabilityWebviewMessage
   | DragStartWebviewMessage
   | MermaidErrorWebviewMessage
   | DownloadSvgWebviewMessage
@@ -496,6 +499,7 @@ export interface MessageQueuedMessage {
   conversationId: string;
   pendingCount?: number;
   item?: AgentQueuedMessageItem;
+  releasedItem?: AgentQueuedMessageItem;
   snapshot?: AgentMessageQueueSnapshot;
 }
 
@@ -761,6 +765,16 @@ export interface SlashCommandResultMessage {
   data?: Record<string, unknown>;
 }
 
+export interface CanvasMarkdownCapabilityResultMessage {
+  type: 'canvasMarkdownCapabilityResult';
+  requestId: string;
+  conversationId: string;
+  success: boolean;
+  lifecycleResult?: AgentCapabilityInvocationResult;
+  result?: CanvasMarkdownCapabilityResult;
+  error?: string;
+}
+
 export interface CharacterDialogueSessionStartedMessage {
   type: 'characterDialogueSessionStarted';
   tab: OpenTab;
@@ -925,6 +939,7 @@ export type ExtensionToWebviewMessage =
   | SubAgentEventMessage
   | TabStateMessage
   | SlashCommandResultMessage
+  | CanvasMarkdownCapabilityResultMessage
   | CharacterDialogueSessionStartedMessage
   | CharacterDialogueSessionExitedMessage
   | EmbodyCharacterSessionStartedMessage
@@ -1042,6 +1057,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'openUrl',
   'setPromptMode',
   'sendToPlugin',
+  'invokeCanvasMarkdownCapability',
   'dnd:start',
   'mermaidError',
   'downloadSvg',
@@ -1235,6 +1251,25 @@ export function buildAmbientCanvasUpdateMessage(input: {
     type: 'ambientCanvasUpdate',
     ...(input.nodes !== undefined ? { nodes: input.nodes } : {}),
     ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+  };
+}
+
+export function buildCanvasMarkdownCapabilityResultMessage(input: {
+  readonly requestId: string;
+  readonly conversationId: string;
+  readonly success: boolean;
+  readonly lifecycleResult?: AgentCapabilityInvocationResult;
+  readonly result?: CanvasMarkdownCapabilityResult;
+  readonly error?: string;
+}): CanvasMarkdownCapabilityResultMessage {
+  return {
+    type: 'canvasMarkdownCapabilityResult',
+    requestId: input.requestId,
+    conversationId: input.conversationId,
+    success: input.success,
+    ...(input.lifecycleResult !== undefined ? { lifecycleResult: input.lifecycleResult } : {}),
+    ...(input.result !== undefined ? { result: input.result } : {}),
+    ...(input.error !== undefined ? { error: input.error } : {}),
   };
 }
 
@@ -1487,6 +1522,8 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseSetPromptModeMessage(raw);
     case 'sendToPlugin':
       return parseSendToPluginMessage(raw);
+    case 'invokeCanvasMarkdownCapability':
+      return parseInvokeCanvasMarkdownCapabilityMessage(raw);
     case 'dnd:start':
       return parseDragStartMessage(raw);
     case 'mermaidError':
@@ -1876,6 +1913,20 @@ function parseSendToPluginMessage(raw: Record<string, unknown>): SendToPluginWeb
   };
 }
 
+function parseInvokeCanvasMarkdownCapabilityMessage(
+  raw: Record<string, unknown>,
+): InvokeCanvasMarkdownCapabilityWebviewMessage | null {
+  const requestId = requiredString(raw.requestId);
+  const conversationId = requiredString(raw.conversationId);
+  if (!requestId || !conversationId || !isCanvasMarkdownCapabilityInput(raw.input)) return null;
+  return {
+    type: 'invokeCanvasMarkdownCapability',
+    requestId,
+    conversationId,
+    input: raw.input,
+  };
+}
+
 function parsePluginTransferPayload(value: unknown): PluginTransferPayload | null {
   if (!isRecord(value)) return null;
 
@@ -1911,26 +1962,6 @@ function parsePluginTransferPayload(value: unknown): PluginTransferPayload | nul
     };
   }
 
-  if (value.kind === 'canvasStoryboard') {
-    if (!isCanvasStoryboardPayload(value.storyboard)) return null;
-    const entityMemoryContribution =
-      value.entityMemoryContribution === undefined
-        ? undefined
-        : isEntityMemoryContribution(value.entityMemoryContribution)
-          ? value.entityMemoryContribution
-          : null;
-    const target = parseOptionalPluginTransferTargetRef(value.target);
-    const provenance = parseOptionalPluginTransferProvenance(value.provenance);
-    if (entityMemoryContribution === null || target === null || provenance === null) return null;
-    return {
-      kind: 'canvasStoryboard',
-      storyboard: value.storyboard,
-      ...(entityMemoryContribution !== undefined ? { entityMemoryContribution } : {}),
-      ...(target !== undefined ? { target } : {}),
-      ...(provenance !== undefined ? { provenance } : {}),
-    };
-  }
-
   if (value.kind === 'cutStoryboard') {
     const storyboard = parseCutStoryboardPayload(value.storyboard);
     const target = parseOptionalPluginTransferTargetRef(value.target);
@@ -1939,69 +1970,6 @@ function parsePluginTransferPayload(value: unknown): PluginTransferPayload | nul
     return {
       kind: 'cutStoryboard',
       storyboard,
-      ...(target !== undefined ? { target } : {}),
-      ...(provenance !== undefined ? { provenance } : {}),
-    };
-  }
-
-  if (value.kind === 'canvasText') {
-    const text = requiredString(value.text);
-    const title = optionalStringStrict(value.title);
-    const format = parseOptionalPluginTransferContentFormat(value.format, [
-      'plain',
-      'markdown',
-      'json',
-    ] as const);
-    const target = parseOptionalPluginTransferTargetRef(value.target);
-    const provenance = parseOptionalPluginTransferProvenance(value.provenance);
-    if (!text || title === null || format === null || target === null || provenance === null) {
-      return null;
-    }
-    return {
-      kind: 'canvasText',
-      text,
-      ...(title !== undefined ? { title } : {}),
-      ...(format !== undefined ? { format } : {}),
-      ...(target !== undefined ? { target } : {}),
-      ...(provenance !== undefined ? { provenance } : {}),
-    };
-  }
-
-  if (value.kind === 'canvasPrompt') {
-    const prompt = requiredString(value.prompt);
-    const title = optionalStringStrict(value.title);
-    const target = parseOptionalPluginTransferTargetRef(value.target);
-    const provenance = parseOptionalPluginTransferProvenance(value.provenance);
-    if (!prompt || title === null || target === null || provenance === null) return null;
-    return {
-      kind: 'canvasPrompt',
-      prompt,
-      ...(title !== undefined ? { title } : {}),
-      ...(target !== undefined ? { target } : {}),
-      ...(provenance !== undefined ? { provenance } : {}),
-    };
-  }
-
-  if (value.kind === 'canvasStructuredContent') {
-    const title = optionalStringStrict(value.title);
-    const format = parseOptionalPluginTransferContentFormat(value.format);
-    const target = parseOptionalPluginTransferTargetRef(value.target);
-    const provenance = parseOptionalPluginTransferProvenance(value.provenance);
-    if (
-      !('content' in value) ||
-      value.content === undefined ||
-      title === null ||
-      format === null ||
-      target === null ||
-      provenance === null
-    ) {
-      return null;
-    }
-    return {
-      kind: 'canvasStructuredContent',
-      content: value.content,
-      ...(title !== undefined ? { title } : {}),
-      ...(format !== undefined ? { format } : {}),
       ...(target !== undefined ? { target } : {}),
       ...(provenance !== undefined ? { provenance } : {}),
     };
@@ -2179,23 +2147,6 @@ function parseJsonMetadataRecord(value: unknown): Record<string, unknown> | null
   return metadata;
 }
 
-function parseOptionalPluginTransferContentFormat(
-  value: unknown,
-): PluginTransferContentFormat | undefined | null;
-function parseOptionalPluginTransferContentFormat<TFormat extends PluginTransferContentFormat>(
-  value: unknown,
-  allowed: readonly TFormat[],
-): TFormat | undefined | null;
-function parseOptionalPluginTransferContentFormat<TFormat extends PluginTransferContentFormat>(
-  value: unknown,
-  allowed?: readonly TFormat[],
-): TFormat | undefined | null {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string') return null;
-  const formats = allowed ?? ALL_PLUGIN_TRANSFER_CONTENT_FORMATS;
-  return (formats as readonly string[]).includes(value) ? (value as TFormat) : null;
-}
-
 function isPluginTransferTarget(
   value: string,
 ): value is NonNullable<PluginTransferTargetRef['plugin']> {
@@ -2233,44 +2184,6 @@ function isPluginTransferProvenanceSource(
     value === 'tool' ||
     value === 'user' ||
     value === 'plugin'
-  );
-}
-
-function isCanvasStoryboardPayload(value: unknown): value is CanvasStoryboardPayload {
-  if (!isRecord(value)) return false;
-  if (value.mode !== 'mechanical' && value.mode !== 'semantic') return false;
-  if (typeof value.sourceScriptUri !== 'string') return false;
-  if (!Array.isArray(value.scenes)) return false;
-  return value.scenes.every(isCanvasStoryboardScenePlan);
-}
-
-function isCanvasStoryboardScenePlan(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.sceneId === 'string' &&
-    typeof value.sceneTitle === 'string' &&
-    typeof value.sceneNumber === 'number' &&
-    Number.isFinite(value.sceneNumber) &&
-    Array.isArray(value.shotPlans) &&
-    value.shotPlans.every(isCanvasStoryboardShotPlan)
-  );
-}
-
-function isCanvasStoryboardShotPlan(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    typeof value.shotNumber === 'number' &&
-    Number.isFinite(value.shotNumber) &&
-    typeof value.duration === 'number' &&
-    Number.isFinite(value.duration) &&
-    typeof value.visualDescription === 'string' &&
-    Array.isArray(value.characters) &&
-    typeof value.shotScale === 'string' &&
-    typeof value.characterAction === 'string' &&
-    Array.isArray(value.emotion) &&
-    value.emotion.every((item) => typeof item === 'string') &&
-    Array.isArray(value.sceneTags) &&
-    value.sceneTags.every((item) => typeof item === 'string')
   );
 }
 

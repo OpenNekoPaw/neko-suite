@@ -6,17 +6,15 @@
  *      (EventBus), §6.5 (non-blocking guardians)
  *
  * Why this exists:
- *   The ArtifactWatcher fires *after* the generic Write tool already
- *   returned success to the AI. The AI's context has moved past the write
- *   by the time validation runs; without a bridge, the structured issues
- *   just pile up in events.jsonl where the AI can't see them.
+ *   When a host opts into creation-document watching, validation can fail after
+ *   the user-visible document is saved. Without a bridge, the structured
+ *   issues just pile up in events.jsonl where the AI can't see them.
  *
  *   This hook closes that loop: it subscribes to
  *   `execution.artifact.invalid` on the EventBus, buffers issues, and on
- *   the next `beforeThink` drains the buffer into a system message
- *   appended to the context. The AI reads the issues and re-writes the
- *   offending file on its next turn — completing the "AI owns the
- *   artifact, validator is a soft net" model of Phase B.
+ *   the next `beforeThink` drains the buffer into a system message appended
+ *   to the context. The AI explains the issue and proposes corrected creation
+ *   content; the host remains responsible for persistence.
  *
  * Non-goals:
  *   - No automatic file repair. Issues are surfaced as prose; the AI
@@ -139,11 +137,11 @@ export function createArtifactObservationHooks(
 
 function renderObservation(entries: readonly BufferedInvalidation[], dropped: number): string {
   if (entries.length === 0 && dropped > 0) {
-    return `⚠️ ArtifactWatcher dropped ${dropped} invalid-artifact events (buffer overflow). Re-check recently written draft/plan/task files.`;
+    return `⚠️ ArtifactWatcher dropped ${dropped} invalid-artifact events (buffer overflow). Re-check recently persisted creation documents.`;
   }
 
   const lines: string[] = [
-    '⚠️ ArtifactWatcher reported validation issues on your last artifact write(s). Fix the listed frontmatter and re-write the file(s).',
+    '⚠️ ArtifactWatcher reported validation issues on recently persisted creation document(s). Explain the listed frontmatter issue(s) and provide corrected creation content.',
     '',
   ];
   for (const entry of entries) {

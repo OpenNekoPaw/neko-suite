@@ -463,6 +463,9 @@ export interface AgentEvent {
   /** Pending queue item accepted or affected by this event. */
   queuedMessageItem?: AgentQueuedMessageItem;
 
+  /** Queue item removed from pending state because it began execution. */
+  releasedQueuedMessageItem?: AgentQueuedMessageItem;
+
   /** Authoritative pending message queue snapshot. */
   messageQueueSnapshot?: AgentMessageQueueSnapshot;
 

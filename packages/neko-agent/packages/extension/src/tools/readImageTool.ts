@@ -91,7 +91,8 @@ export function createReadImageTool(deps: ReadImageToolDeps = {}): Tool {
     name: TOOL_NAMES_SYSTEM.READ_IMAGE,
     description:
       'Read local image metadata and expose selected images as native multimodal Agent resources. ' +
-      'Use this for structured imageInfo resource refs from ReadDocument, media libraries, generated assets, screenshots, and attachments. ' +
+      'Use this only with structured imageInfo entries returned by ReadDocument or ResourceRef values returned by unified content access. ' +
+      'Do not pass document locators, EPUB entry paths, cache paths, Webview URIs, or whole document sources, and do not fabricate resourceRef objects. ' +
       'The selected chat model performs visual analysis in the next Agent reasoning step; this tool does not call a separate vision model.',
     category: 'analysis',
     isReadOnly: true,
@@ -105,6 +106,7 @@ export function createReadImageTool(deps: ReadImageToolDeps = {}): Tool {
             'Structured image inputs with stable resourceRef values returned by ReadDocument or unified content access.',
           items: {
             type: 'object',
+            required: ['resourceRef'],
             properties: {
               width: { type: 'integer' },
               height: { type: 'integer' },
@@ -123,7 +125,7 @@ export function createReadImageTool(deps: ReadImageToolDeps = {}): Tool {
               resourceRef: {
                 type: 'object',
                 description:
-                  'Stable DocumentArchiveResourceRef or ResourceRef returned by unified content access.',
+                  'Stable DocumentArchiveResourceRef copied exactly from ReadDocument.imageInfo[].resourceRef, or a ResourceRef returned by unified content access.',
               },
             },
           },
@@ -384,7 +386,9 @@ function readInputImages(args: Record<string, unknown>): ReadImageInputImage[] {
   return [];
 }
 
-function parseReadImageResourceRef(value: unknown): DocumentArchiveResourceRef | ResourceRef | undefined {
+function parseReadImageResourceRef(
+  value: unknown,
+): DocumentArchiveResourceRef | ResourceRef | undefined {
   return parseDocumentArchiveResourceRef(value) ?? (isResourceRef(value) ? value : undefined);
 }
 

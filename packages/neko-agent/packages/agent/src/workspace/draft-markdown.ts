@@ -51,7 +51,7 @@ const BODY_SECTIONS: Array<{ heading: string; field: keyof Draft }> = [
 ];
 
 /**
- * Serialise a Draft into its canonical `draft-<runId>.md` form.
+ * Serialise a Draft into its canonical `brief.md` form.
  *
  * Timestamps go through `toISOString()` so diffs stay stable.
  * `referenceChain` is omitted from frontmatter when empty / absent

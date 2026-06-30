@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { createEventBus } from '../../events/event-bus';
-import { createNekoPaths } from '../../workspace';
+import { createCreationArtifactPaths } from '../../workspace';
 import {
   createArtifactWatcher,
   type ArtifactWatcherFsOps,
@@ -80,18 +80,17 @@ const badDraft = () =>
 
 describe('ArtifactWatcher (fake fs)', () => {
   const tmpRoot = '/tmp/neko-watcher-fake';
+  const creationId = 'launch-teaser';
   let bus: ReturnType<typeof createEventBus>;
-  let paths: ReturnType<typeof createNekoPaths>;
+  let paths: ReturnType<typeof createCreationArtifactPaths>;
   let fake: ReturnType<typeof makeFakeFsOps>;
 
   beforeEach(() => {
     bus = createEventBus();
-    paths = createNekoPaths(tmpRoot);
+    paths = createCreationArtifactPaths(tmpRoot);
     fake = makeFakeFsOps();
-    // Pre-populate all subdirs so the watcher skips mkdirP.
-    for (const subdir of ['drafts', 'plans', 'tasks'] as const) {
-      fake.dirs.add(paths.dir(subdir));
-    }
+    // Pre-populate the visible creation dir so the watcher skips mkdirP.
+    fake.dirs.add(paths.creationDir(creationId));
   });
 
   it('emits artifact.written for a valid draft after debounce', async () => {
@@ -104,15 +103,16 @@ describe('ArtifactWatcher (fake fs)', () => {
         paths,
         eventBus: bus,
         getRunId: () => 'run-1',
+        getCreationId: () => creationId,
         now: () => 1_700_000_000_000,
         debounceMs: 100,
         fsOps: fake,
       });
       await watcher.start();
 
-      const absPath = path.join(paths.dir('drafts'), 'draft-d1.md');
+      const absPath = path.join(paths.creationDir(creationId), 'brief.md');
       fake.files.set(absPath, goodDraft());
-      fake.trigger(paths.dir('drafts'), 'draft-d1.md');
+      fake.trigger(paths.creationDir(creationId), 'brief.md');
 
       // Before debounce fires: no events.
       expect(observed).toHaveLength(0);
@@ -144,14 +144,15 @@ describe('ArtifactWatcher (fake fs)', () => {
         paths,
         eventBus: bus,
         getRunId: () => 'run-1',
+        getCreationId: () => creationId,
         debounceMs: 50,
         fsOps: fake,
       });
       await watcher.start();
 
-      const absPath = path.join(paths.dir('drafts'), 'draft-d1.md');
+      const absPath = path.join(paths.creationDir(creationId), 'brief.md');
       fake.files.set(absPath, badDraft());
-      fake.trigger(paths.dir('drafts'), 'draft-d1.md');
+      fake.trigger(paths.creationDir(creationId), 'brief.md');
 
       await vi.advanceTimersByTimeAsync(100);
 
@@ -181,18 +182,19 @@ describe('ArtifactWatcher (fake fs)', () => {
         paths,
         eventBus: bus,
         getRunId: () => 'run-1',
+        getCreationId: () => creationId,
         debounceMs: 200,
         fsOps: fake,
       });
       await watcher.start();
 
-      const absPath = path.join(paths.dir('drafts'), 'draft-d1.md');
+      const absPath = path.join(paths.creationDir(creationId), 'brief.md');
       fake.files.set(absPath, goodDraft());
-      fake.trigger(paths.dir('drafts'), 'draft-d1.md');
+      fake.trigger(paths.creationDir(creationId), 'brief.md');
       await vi.advanceTimersByTimeAsync(50);
-      fake.trigger(paths.dir('drafts'), 'draft-d1.md');
+      fake.trigger(paths.creationDir(creationId), 'brief.md');
       await vi.advanceTimersByTimeAsync(50);
-      fake.trigger(paths.dir('drafts'), 'draft-d1.md');
+      fake.trigger(paths.creationDir(creationId), 'brief.md');
 
       // Still inside a single debounce window — no events yet.
       expect(observed).toHaveLength(0);
@@ -217,14 +219,15 @@ describe('ArtifactWatcher (fake fs)', () => {
         paths,
         eventBus: bus,
         getRunId: () => null,
+        getCreationId: () => null,
         debounceMs: 20,
         fsOps: fake,
       });
       await watcher.start();
 
-      fake.trigger(paths.dir('drafts'), 'draft-d1.txt');
-      fake.trigger(paths.dir('drafts'), '.hidden');
-      fake.trigger(paths.dir('drafts'), 'draft-d1.md.swp');
+      fake.trigger(paths.creationDir(creationId), 'draft-d1.txt');
+      fake.trigger(paths.creationDir(creationId), '.hidden');
+      fake.trigger(paths.creationDir(creationId), 'brief.md.swp');
 
       await vi.advanceTimersByTimeAsync(50);
       expect(observed).toHaveLength(0);
@@ -235,7 +238,7 @@ describe('ArtifactWatcher (fake fs)', () => {
     }
   });
 
-  it('substitutes runId="unknown" when no active run', async () => {
+  it('does not watch or emit events when no active run exists at startup', async () => {
     vi.useFakeTimers();
     try {
       const observed: DualFlowEvent[] = [];
@@ -245,21 +248,19 @@ describe('ArtifactWatcher (fake fs)', () => {
         paths,
         eventBus: bus,
         getRunId: () => null,
+        getCreationId: () => null,
         debounceMs: 20,
         fsOps: fake,
       });
       await watcher.start();
 
-      const absPath = path.join(paths.dir('drafts'), 'draft-d1.md');
+      const absPath = path.join(paths.creationDir(creationId), 'brief.md');
       fake.files.set(absPath, goodDraft());
-      fake.trigger(paths.dir('drafts'), 'draft-d1.md');
+      fake.trigger(paths.creationDir(creationId), 'brief.md');
 
       await vi.advanceTimersByTimeAsync(50);
-      expect(observed).toHaveLength(1);
-      const event = observed[0]!;
-      if (event.channel === 'execution.artifact.written') {
-        expect(event.runId).toBe('unknown');
-      }
+      expect(observed).toHaveLength(0);
+      expect(fake.listeners.size).toBe(0);
 
       await watcher.dispose();
     } finally {
@@ -277,14 +278,15 @@ describe('ArtifactWatcher (fake fs)', () => {
         paths,
         eventBus: bus,
         getRunId: () => 'run-1',
+        getCreationId: () => creationId,
         debounceMs: 100,
         fsOps: fake,
       });
       await watcher.start();
 
-      const absPath = path.join(paths.dir('drafts'), 'draft-d1.md');
+      const absPath = path.join(paths.creationDir(creationId), 'brief.md');
       fake.files.set(absPath, goodDraft());
-      fake.trigger(paths.dir('drafts'), 'draft-d1.md');
+      fake.trigger(paths.creationDir(creationId), 'brief.md');
 
       await watcher.dispose();
       await vi.advanceTimersByTimeAsync(500);
@@ -313,7 +315,7 @@ describe('ArtifactWatcher (real fs smoke test)', () => {
   // skips on platforms where fs.watch returns no events.
   it('default fsOps wires fs.watch + validator + bus', async () => {
     const bus = createEventBus();
-    const paths = createNekoPaths(tmpRoot);
+    const paths = createCreationArtifactPaths(tmpRoot);
     const observed: DualFlowEvent[] = [];
     bus.onAny((e) => observed.push(e));
 
@@ -321,11 +323,12 @@ describe('ArtifactWatcher (real fs smoke test)', () => {
       paths,
       eventBus: bus,
       getRunId: () => 'smoke-1',
+      getCreationId: () => 'smoke-creation',
       debounceMs: 30,
     });
     await watcher.start();
 
-    const absPath = paths.file('drafts', 'smoke');
+    const absPath = paths.file('draft', 'smoke-creation');
     await fs.writeFile(absPath, goodDraft(), 'utf-8');
 
     // Poll up to 2s for the fsevents signal to surface. On platforms where

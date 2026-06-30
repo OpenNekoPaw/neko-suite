@@ -174,6 +174,15 @@ export {
 } from './agent-capability-injection-runtime';
 
 export {
+  AgentCapabilityLifecycleRuntimeError,
+  createAgentCapabilityLifecycleRuntime,
+  toAgentCapabilityToolResult,
+  type AgentCapabilityLifecycleHandler,
+  type AgentCapabilityLifecycleHandlerContext,
+  type AgentCapabilityLifecycleRuntime,
+} from './agent-capability-lifecycle-runtime';
+
+export {
   createAgentPromptSchemaGenerator,
   type AgentPromptSchemaGenerator,
 } from './agent-prompt-schema-generator';

@@ -986,7 +986,18 @@ describe('AgentStreamProcessor', () => {
 
     it('should handle messageQueued events', async () => {
       const events = toAsyncIterable([
-        { type: 'messageQueued', content: 'Queued message', pendingCount: 2 },
+        {
+          type: 'messageQueued',
+          content: 'Queued message',
+          pendingCount: 2,
+          releasedQueuedMessageItem: {
+            id: 'queue-1',
+            conversationId: 'conv-1',
+            content: 'Queued prompt',
+            createdAt: 123,
+            source: 'composer',
+          },
+        },
       ]);
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
@@ -996,6 +1007,10 @@ describe('AgentStreamProcessor', () => {
           type: 'messageQueued',
           content: 'Queued message',
           pendingCount: 2,
+          releasedItem: expect.objectContaining({
+            id: 'queue-1',
+            content: 'Queued prompt',
+          }),
         }),
       );
     });

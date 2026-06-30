@@ -78,50 +78,6 @@ describe('plugin transfer runtime', () => {
     ).toEqual({ status: 'unsupported', target: 'model' });
   });
 
-  it('builds structured canvas storyboard transfer plans', () => {
-    const storyboard = {
-      mode: 'semantic' as const,
-      sourceScriptUri: 'agent://rich-content/storyboard',
-      scenes: [
-        {
-          sceneId: 'scene-1',
-          sceneTitle: 'Opening',
-          sceneNumber: 1,
-          shotPlans: [
-            {
-              shotNumber: 1,
-              duration: 3,
-              visualDescription: 'Wide establishing frame',
-              characters: [],
-              shotScale: 'MS' as const,
-              characterAction: '',
-              emotion: [],
-              sceneTags: [],
-            },
-          ],
-        },
-      ],
-    };
-
-    expect(
-      buildRuntimePluginTransferPlan({
-        target: 'canvas',
-        payload: { kind: 'canvasStoryboard', storyboard },
-      }),
-    ).toEqual({
-      status: 'execute-command',
-      command: 'neko.canvas.importStoryboard',
-      payload: storyboard,
-    });
-
-    expect(
-      buildRuntimePluginTransferPlan({
-        target: 'cut',
-        payload: { kind: 'canvasStoryboard', storyboard },
-      }),
-    ).toEqual({ status: 'unsupported', target: 'cut', reason: 'unsupported-structured-target' });
-  });
-
   it('builds structured cut storyboard transfer plans', () => {
     const storyboard = {
       projectName: 'Opening',
@@ -159,104 +115,20 @@ describe('plugin transfer runtime', () => {
     });
   });
 
-  it('routes Canvas text, prompt, and structured content payloads to importAgentContent', () => {
-    const target = {
-      plugin: 'canvas' as const,
-      nodeId: 'shot-1',
-      fieldPath: '/generationPrompt',
-      mode: 'replace' as const,
-    };
-    const provenance = { source: 'agent' as const, messageId: 'msg-1' };
-
-    expect(
+  it('throws visibly when removed Canvas structured payloads bypass typed parsing', () => {
+    expect(() =>
       buildRuntimePluginTransferPlan({
         target: 'canvas',
-        payload: {
-          kind: 'canvasPrompt',
-          prompt: 'soft rim light, cinematic',
-          title: 'Optimized prompt',
-          target,
-          provenance,
-        },
+        payload: { kind: 'canvasPrompt', prompt: 'legacy prompt' } as never,
       }),
-    ).toEqual({
-      status: 'execute-command',
-      command: 'neko.canvas.importAgentContent',
-      payload: {
-        kind: 'prompt',
-        prompt: 'soft rim light, cinematic',
-        title: 'Optimized prompt',
-        target,
-        provenance,
-      },
-    });
+    ).toThrow('Unsupported plugin transfer payload kind: canvasPrompt');
 
-    expect(
+    expect(() =>
       buildRuntimePluginTransferPlan({
         target: 'canvas',
-        payload: {
-          kind: 'canvasText',
-          text: 'Beat note',
-          format: 'markdown',
-          target: { mode: 'insert', insertionPoint: { x: 120, y: 240 } },
-        },
+        payload: { kind: 'canvasStoryboard', storyboard: {} } as never,
       }),
-    ).toEqual({
-      status: 'execute-command',
-      command: 'neko.canvas.importAgentContent',
-      payload: {
-        kind: 'text',
-        text: 'Beat note',
-        format: 'markdown',
-        target: { mode: 'insert', insertionPoint: { x: 120, y: 240 } },
-      },
-    });
-
-    expect(
-      buildRuntimePluginTransferPlan({
-        target: 'canvas',
-        payload: {
-          kind: 'canvasStructuredContent',
-          content: { shots: [{ id: 'shot-a' }] },
-          format: 'json',
-        },
-      }),
-    ).toEqual({
-      status: 'execute-command',
-      command: 'neko.canvas.importAgentContent',
-      payload: {
-        kind: 'structured',
-        content: { shots: [{ id: 'shot-a' }] },
-        format: 'json',
-      },
-    });
-  });
-
-  it('rejects unsupported content targets and targetless replace payloads', () => {
-    expect(
-      buildRuntimePluginTransferPlan({
-        target: 'cut',
-        payload: {
-          kind: 'canvasPrompt',
-          prompt: 'timeline prompt',
-        },
-      }),
-    ).toEqual({ status: 'unsupported', target: 'cut', reason: 'unsupported-content-target' });
-
-    expect(
-      buildRuntimePluginTransferPlan({
-        target: 'canvas',
-        payload: {
-          kind: 'canvasText',
-          text: 'Replace something',
-          target: { mode: 'replace' },
-        },
-      }),
-    ).toEqual({
-      status: 'unsupported',
-      target: 'canvas',
-      reason: 'replace-mode-requires-explicit-target',
-    });
+    ).toThrow('Unsupported plugin transfer payload kind: canvasStoryboard');
   });
 
   it('preserves Canvas target metadata on asset imports', () => {

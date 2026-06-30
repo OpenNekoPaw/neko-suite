@@ -18,12 +18,18 @@ import type {
   AgentInjectedCapabilitySet,
 } from '@neko-agent/types';
 import type {
+  AgentCapabilityLifecycleDescriptor,
   AgentCapabilityHostRequirement,
   AgentCapabilityManifest,
   AgentCapabilityTrustLevel,
   PromptFragment,
   Skill,
   SkillSource,
+} from '@neko/shared';
+import {
+  isAgentCapabilityLifecyclePhase,
+  isAgentCapabilityLifecycleRisk,
+  isAgentCapabilityLifecycleDescriptor,
 } from '@neko/shared';
 
 export interface NormalizeSkillCapabilityInput {
@@ -761,6 +767,7 @@ function mergeArtifactFacets(
     NonNullable<AgentArtifactFacetsContribution['projectors']>[number]
   >();
   const capabilities = new Map<string, AgentArtifactExecutionCapabilityContribution>();
+  const lifecycleCapabilities = new Map<string, AgentCapabilityLifecycleDescriptor>();
   const entityProviders = new Map<
     string,
     NonNullable<AgentArtifactFacetsContribution['entityProviders']>[number]
@@ -818,6 +825,9 @@ function mergeArtifactFacets(
     for (const capability of contribution.artifactFacets?.capabilities ?? []) {
       capabilities.set(capability.capabilityId, capability);
     }
+    for (const capability of contribution.artifactFacets?.lifecycleCapabilities ?? []) {
+      lifecycleCapabilities.set(capability.capabilityId, capability);
+    }
     for (const facet of contribution.artifactFacets?.entityProviders ?? []) {
       entityProviders.set(facet.id, facet);
     }
@@ -850,6 +860,7 @@ function mergeArtifactFacets(
     renderers: Array.from(renderers.values()),
     projectors: Array.from(projectors.values()),
     capabilities: Array.from(capabilities.values()),
+    lifecycleCapabilities: Array.from(lifecycleCapabilities.values()),
     entityProviders: Array.from(entityProviders.values()),
     entityMemoryContributors: Array.from(entityMemoryContributors.values()),
     mediaTextExtractors: Array.from(mediaTextExtractors.values()),
@@ -1121,6 +1132,103 @@ function validateArtifactFacets(
           contribution.identity.id,
           'invalid-artifact-approval',
           'artifactFacets.capabilities.requiresApproval',
+        ),
+      );
+    }
+  }
+
+  for (const capability of facets.lifecycleCapabilities ?? []) {
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      capability.capabilityId,
+      'artifactFacets.lifecycleCapabilities.capabilityId',
+    );
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      capability.providerId,
+      'artifactFacets.lifecycleCapabilities.providerId',
+    );
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      capability.displayName,
+      'artifactFacets.lifecycleCapabilities.displayName',
+    );
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contribution.identity.id,
+      capability.description,
+      'artifactFacets.lifecycleCapabilities.description',
+    );
+    if (
+      !Array.isArray(capability.phases) ||
+      capability.phases.length === 0 ||
+      !capability.phases.every(isAgentCapabilityLifecyclePhase)
+    ) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-lifecycle-phases',
+          'artifactFacets.lifecycleCapabilities.phases',
+        ),
+      );
+    }
+    if (!capability.inputSchema?.id?.trim()) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-lifecycle-input-schema',
+          'artifactFacets.lifecycleCapabilities.inputSchema',
+        ),
+      );
+    }
+    if (!capability.resultSchema?.id?.trim()) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-lifecycle-result-schema',
+          'artifactFacets.lifecycleCapabilities.resultSchema',
+        ),
+      );
+    }
+    validateOptionalStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      capability.accepts,
+      'artifactFacets.lifecycleCapabilities.accepts',
+    );
+    validateOptionalStringArrayField(
+      diagnostics,
+      contribution.identity.id,
+      capability.produces,
+      'artifactFacets.lifecycleCapabilities.produces',
+    );
+    if (!isAgentCapabilityLifecycleRisk(capability.risk)) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-lifecycle-risk',
+          'artifactFacets.lifecycleCapabilities.risk',
+        ),
+      );
+    }
+    if (typeof capability.requiresApproval !== 'boolean') {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-lifecycle-approval',
+          'artifactFacets.lifecycleCapabilities.requiresApproval',
+        ),
+      );
+    }
+    if (!isAgentCapabilityLifecycleDescriptor(capability)) {
+      diagnostics.push(
+        validationDiagnostic(
+          contribution.identity.id,
+          'invalid-lifecycle-descriptor',
+          'artifactFacets.lifecycleCapabilities',
         ),
       );
     }
@@ -1662,6 +1770,7 @@ function hasArtifactFacets(facets: AgentArtifactFacetsContribution | undefined):
     (facets?.renderers?.length ?? 0) > 0 ||
     (facets?.projectors?.length ?? 0) > 0 ||
     (facets?.capabilities?.length ?? 0) > 0 ||
+    (facets?.lifecycleCapabilities?.length ?? 0) > 0 ||
     (facets?.entityProviders?.length ?? 0) > 0 ||
     (facets?.entityMemoryContributors?.length ?? 0) > 0 ||
     (facets?.mediaTextExtractors?.length ?? 0) > 0 ||

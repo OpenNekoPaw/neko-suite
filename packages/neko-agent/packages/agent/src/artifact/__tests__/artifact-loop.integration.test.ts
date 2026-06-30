@@ -9,9 +9,9 @@
  * surfaces it to the next think.
  *
  * What this proves that the unit tests cannot:
- *   - The kind-by-subdir mapping on the watcher lines up with the schema
- *     expectations on the validator (e.g. a file in `drafts/` gets
- *     `kind: 'draft'` validated).
+ *   - The filename mapping on the watcher lines up with the schema
+ *     expectations on the validator (e.g. `brief.md` gets `kind: 'draft'`
+ *     validated).
  *   - The event payload the watcher emits matches the shape the
  *     observation hook expects (channel + kind + path + issues[]).
  *   - Issues render into the injected system message in a form the AI
@@ -27,7 +27,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { AgentContext, ChatMessage } from '@neko/shared';
 import { createEventBus } from '../../events/event-bus';
-import { createNekoPaths } from '../../workspace';
+import { createCreationArtifactPaths } from '../../workspace';
 import { createArtifactObservationHooks } from '../artifact-observation-hooks';
 import { createArtifactWatcher } from '../artifact-watcher';
 
@@ -76,7 +76,7 @@ const BAD_DRAFT = [
 const KIND_MISMATCH = [
   '---',
   'id: confused',
-  'kind: plan', // file lives in drafts/ → wrong-kind
+  'kind: plan', // brief.md is a draft creation document → wrong-kind
   'title: Confused artifact',
   'status: ready',
   'draftId: some-draft',
@@ -87,9 +87,10 @@ const KIND_MISMATCH = [
 ].join('\n');
 
 describe('artifact loop — Watcher + Validator + ObservationHooks (real fs)', () => {
+  const creationId = 'tiktok-hero-cut';
   let tmpRoot: string;
   let bus: ReturnType<typeof createEventBus>;
-  let paths: ReturnType<typeof createNekoPaths>;
+  let paths: ReturnType<typeof createCreationArtifactPaths>;
   let watcher: ReturnType<typeof createArtifactWatcher>;
   let hooks: ReturnType<typeof createArtifactObservationHooks>;
   let fsWatchSupported = true;
@@ -97,12 +98,13 @@ describe('artifact loop — Watcher + Validator + ObservationHooks (real fs)', (
   beforeEach(async () => {
     tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-artifact-loop-'));
     bus = createEventBus();
-    paths = createNekoPaths(tmpRoot);
+    paths = createCreationArtifactPaths(tmpRoot);
     hooks = createArtifactObservationHooks({ eventBus: bus });
     watcher = createArtifactWatcher({
       paths,
       eventBus: bus,
       getRunId: () => 'run-integration',
+      getCreationId: () => creationId,
       debounceMs: 30,
     });
     await watcher.start();
@@ -125,7 +127,7 @@ describe('artifact loop — Watcher + Validator + ObservationHooks (real fs)', (
   }
 
   it('invalid draft: write → watcher fires → issues reach the next think', async () => {
-    const draftPath = paths.file('drafts', 'broken');
+    const draftPath = paths.file('draft', creationId);
     await fs.writeFile(draftPath, BAD_DRAFT, 'utf-8');
 
     // Poll for bus activity with generous deadline — real fs.watch on macOS
@@ -153,7 +155,7 @@ describe('artifact loop — Watcher + Validator + ObservationHooks (real fs)', (
     expect(injected?.role).toBe('system');
 
     const content = String(injected?.content);
-    expect(content).toContain('broken.md');
+    expect(content).toContain('brief.md');
     expect(content).toContain('invalid-status');
     expect(content).toContain('status');
     // At least one of the three missing fields surfaces. We don't assert all
@@ -165,7 +167,7 @@ describe('artifact loop — Watcher + Validator + ObservationHooks (real fs)', (
   });
 
   it('valid draft: watcher still fires but observation stays silent', async () => {
-    const draftPath = paths.file('drafts', 'tiktok-001');
+    const draftPath = paths.file('draft', creationId);
     await fs.writeFile(draftPath, GOOD_DRAFT, 'utf-8');
 
     const deadline = Date.now() + 2000;
@@ -186,8 +188,8 @@ describe('artifact loop — Watcher + Validator + ObservationHooks (real fs)', (
     expect(result).toBeUndefined();
   });
 
-  it('kind mismatch: drafts/ file declaring kind: plan surfaces wrong-kind', async () => {
-    const draftPath = paths.file('drafts', 'confused');
+  it('kind mismatch: brief.md declaring kind: plan surfaces wrong-kind', async () => {
+    const draftPath = paths.file('draft', creationId);
     await fs.writeFile(draftPath, KIND_MISMATCH, 'utf-8');
 
     const deadline = Date.now() + 2000;
@@ -206,11 +208,11 @@ describe('artifact loop — Watcher + Validator + ObservationHooks (real fs)', (
     const result = (await hooks.beforeThink(emptyContext())) as AgentContext;
     const content = String(result.messages[1]?.content);
     expect(content).toContain('wrong-kind');
-    expect(content).toContain('confused.md');
+    expect(content).toContain('brief.md');
   });
 
   it('rewrite cycle: bad → inject → good → next think is silent', async () => {
-    const draftPath = paths.file('drafts', 'fixme');
+    const draftPath = paths.file('draft', creationId);
 
     // Round 1 — bad write.
     await fs.writeFile(draftPath, BAD_DRAFT, 'utf-8');

@@ -100,6 +100,51 @@ describe('parseWebviewToExtensionMessage', () => {
     ).toEqual({ type: 'cancelTask', taskId: 'task-1', conversationId: 'conv-1' });
   });
 
+  it('accepts conversation-scoped message queue commands', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'getMessageQueue',
+        conversationId: 'conv-1',
+      }),
+    ).toEqual({ type: 'getMessageQueue', conversationId: 'conv-1' });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'promoteQueuedMessage',
+        conversationId: 'conv-1',
+        queueItemId: 'queue-1',
+      }),
+    ).toEqual({
+      type: 'promoteQueuedMessage',
+      conversationId: 'conv-1',
+      queueItemId: 'queue-1',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'cancelQueuedMessage',
+        conversationId: 'conv-1',
+        queueItemId: 'queue-1',
+      }),
+    ).toEqual({
+      type: 'cancelQueuedMessage',
+      conversationId: 'conv-1',
+      queueItemId: 'queue-1',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'editQueuedMessage',
+        conversationId: 'conv-1',
+        queueItemId: 'queue-1',
+      }),
+    ).toEqual({
+      type: 'editQueuedMessage',
+      conversationId: 'conv-1',
+      queueItemId: 'queue-1',
+    });
+  });
+
   it('accepts conversation-scoped plugin slash commands', () => {
     expect(
       parseWebviewToExtensionMessage({
@@ -123,6 +168,23 @@ describe('parseWebviewToExtensionMessage', () => {
       parseWebviewToExtensionMessage({
         type: 'cancelTask',
         taskId: 'task-1',
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'getMessageQueue',
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'promoteQueuedMessage',
+        queueItemId: 'queue-1',
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'cancelQueuedMessage',
+        conversationId: 'conv-1',
       }),
     ).toBeNull();
   });

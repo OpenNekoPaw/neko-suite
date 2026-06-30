@@ -1,7 +1,7 @@
 /**
  * ExecutionPlan markdown serialiser (ADR §4.2, §7.5).
  *
- * Canonical layout (file: `.neko/plans/plan-<runId>.md`):
+ * Canonical layout (creation file: `neko/creations/<creation-id>/plan.md`):
  *
  *   ---
  *   id: cut-tiktok-001-plan

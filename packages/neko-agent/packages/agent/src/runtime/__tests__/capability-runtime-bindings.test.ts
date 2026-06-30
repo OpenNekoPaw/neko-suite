@@ -63,6 +63,23 @@ describe('capability-runtime-bindings', () => {
     );
   });
 
+  it('stores late-bound skill lifecycle runtime without clearing it on undefined', () => {
+    const logger = { warn: vi.fn() };
+    const store = createCapabilityRuntimeBindingStore(logger);
+    const skillLifecycleRuntime = { id: 'skill-lifecycle-runtime' } as never;
+
+    store.setSkillLifecycleRuntime(skillLifecycleRuntime);
+    store.setSkillLifecycleRuntime(undefined);
+
+    expect(store.get().skillLifecycleRuntime).toBe(skillLifecycleRuntime);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Ignoring undefined capability runtime binding update to avoid clearing shared singleton state.',
+      expect.objectContaining({
+        code: 'extension.capability-runtime.binding-update-ignored',
+      }),
+    );
+  });
+
   it('stores external processor runtime as a shared capability binding', () => {
     const logger = { warn: vi.fn() };
     const store = createCapabilityRuntimeBindingStore(logger);
