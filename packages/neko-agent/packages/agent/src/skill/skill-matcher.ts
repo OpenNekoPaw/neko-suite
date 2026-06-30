@@ -49,6 +49,23 @@ export class KeywordSkillMatcher extends SkillMatcher {
   };
 
   private artifactKeywords: Record<string, string[]> = {
+    CreativeTable: [
+      'storyboard',
+      'storyboard table',
+      'shot list',
+      'shot breakdown',
+      'comic storyboard',
+      'manga storyboard',
+      '分镜',
+      '分镜表',
+      '故事板',
+      '镜头表',
+      '镜头拆解',
+      '漫画分镜',
+      '生成分镜表',
+      '制作分镜表',
+      '输出分镜表',
+    ],
     StoryboardTable: [
       'storyboard',
       'storyboard table',

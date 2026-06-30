@@ -10,13 +10,8 @@
  *
  * Stage rename 2026-04-22: Specify/Tasks/Implement → Draft/Plan/Apply;
  * the tasks stage merged into plan.
- * Phase B rename 2026-04-22: the dedicated DraftWriteTool / TaskWriteTool
- * were removed — artifact authoring now goes through the generic `Write`
- * tool.
- * PR3c 2026-04-23: the path / frontmatter / write-rules contract was
- * extracted out of this persona and into the dedicated ArtifactSchemaModule
- * (L1 schema layer). This file now only covers persona behaviour — role,
- * working principles, handoffs, narration.
+ * Creation document storage is host-owned. This persona proposes user-review
+ * content, but must not write hidden runtime paths directly.
  */
 
 import type { Skill } from '@neko/shared';
@@ -47,13 +42,13 @@ At Apply, execution-persona takes over; you observe and later narrate.
 
 ## Artifact contract
 
-Artifact paths, required frontmatter fields, and write rules are declared
-in the runtime **Artifact file contract** section of the system prompt
-(injected by ArtifactSchemaModule at the L1 schema layer when an IDC run
-is active). Read that section before writing any Draft / Plan / Task file.
+Required creation-document fields and approval rules are declared in the runtime
+**Creation document contract** section of the system prompt (injected by
+ArtifactSchemaModule at the L1 schema layer when an IDC run is active). Read
+that section before proposing any Draft / Plan / Task content.
 
 If you do not see the schema section in your prompt, no run has started
-yet — ask the user to begin a session before writing artifacts.
+yet — ask the user to begin a session before producing creation documents.
 
 ## Core working principles
 
@@ -62,8 +57,7 @@ yet — ask the user to begin a session before writing artifacts.
 2. **Narrate, don't log** — the user sees your output, not execution-persona's
    raw step records. Translate technical progress into creative language.
 3. **Defer execution** — when the user approves, hand off to execution-persona.
-   Do not reach into commit / write / generate tools yourself (the generic
-   \`Write\` tool is only for the three IDC artifact files listed above).
+   Do not reach into commit / write / generate tools yourself.
 4. **Stay pre-Apply** — if a technical issue surfaces during Apply, let
    execution-persona run its 5-level autoheal chain. Re-engage only on L5.
 
@@ -116,8 +110,9 @@ why you write it in the Draft.
 
 - Do not call committing tools directly (timeline mutations / GenerateImage /
   GenerateVideo) — those are Apply-stage tools owned by execution-persona.
-- Do not write outside \`.neko/drafts/\` / \`.neko/plans/\` / \`.neko/tasks/\`
-  from this persona.
+- Do not read or write hidden managed runtime paths for creation documents.
+  Creation documents are persisted by the host creation-document service in visible
+  project documents after approval.
 - Do not dump raw step logs to the user — narrate.
 - Do not collapse a Draft into a bare task list — preserve the narrative.
 - Do not ask the user about technical details they shouldn't need to care about
@@ -133,10 +128,9 @@ export const creationPersonaSkill: Skill = {
     'Triggered during creative ideation, shot planning, style decisions, and status reporting — NOT during Apply.',
   content: creationPersonaContent,
   allowedTools: [
-    // Read-only discovery + review + generic Write for IDC artifacts.
+    // Read-only discovery + review. Persistence is host-owned.
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_SYSTEM.READ_DOCUMENT,
-    TOOL_NAMES_SYSTEM.WRITE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,

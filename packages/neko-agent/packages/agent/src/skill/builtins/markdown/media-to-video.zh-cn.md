@@ -4,24 +4,25 @@
 
 ## 工作流指引
 
-1. 先判断输入来源：漫画、文档、图片、图片序列、包含 StoryboardTable domain block 的 CompositeArtifact、动画计划或已生成媒体。
+1. 先判断输入来源：漫画、文档、图片、图片序列、已审阅的分镜 creative table、Canvas 分镜节点、动画计划或已生成媒体。
 2. 激活生产类 Skill 前先判断意图：
    - 仅内容理解（描述、OCR、总结、提取文字、分格顺序、人物/场景分析、质量诊断、“阅读/分析前 N 页”）应停留在普通读取/分析工具调用，不激活 media-to-video、comic-to-animation、comic-to-storyboard 或 storyboard-to-animation-plan。
-   - 仅分镜请求激活 comic-to-storyboard，并在 StoryboardTable 完成后停止，除非用户同时要求动画、视频、生成媒体、Canvas/Cut 交接或导出。
+   - 仅分镜请求激活 comic-to-storyboard，并在可审阅 Markdown 分镜草稿完成后停止，除非用户同时要求动画、视频、生成媒体、Canvas/Cut 交接或导出。
    - 明确的视频/动画/生成/导出请求才激活本协调器或聚焦生产 Skill。
 3. 用 GetContext 查看可用相关 Skill，只在需要详细规则时激活聚焦子 Skill。
 4. EPUB/PDF/CBZ/CBR 漫画页只有在用户请求分镜 artifact 时才优先使用 comic-to-storyboard；用户明确请求动画/视频生产时优先使用 comic-to-animation。
 5. 静态图片或图片序列在用户请求镜头/分镜规划或媒体生成时优先使用 image-to-shot。
-6. 已有包含 StoryboardTable domain block 的 CompositeArtifact 时，在生成或进入 Cut 前优先使用 storyboard-to-animation-plan。
-7. 将 AnimationPlan 视为按稳定 `shotId` 绑定到 StoryboardTable 的 overlay，不要把它当作第二张分镜表。缺少稳定 shot id 时，先停止并请求或修正稳定 id，再规划生成。
+6. 已有已审阅的分镜 creative table、Canvas 分镜节点或动画计划草稿时，在生成或进入 Cut 前优先使用 storyboard-to-animation-plan。
+7. 将 AnimationPlan 视为按稳定 `shotId` 绑定的镜头级 overlay，不要把它当作第二张分镜表。缺少稳定 shot id 时，先停止并请求或修正稳定 id，再规划生成。
 8. 已有动画计划 overlay 且目标是 Cut 时，优先使用 animation-plan-to-cut。
 9. 已有生成素材时，根据需要使用 generated-shot-assembly 和 export-video-package。
 10. 当缺少生成提供方、目标插件、审批或安全媒体引用时，停留在计划阶段。
 
 ## 结构化产物规则
 
-- Markdown 只用于展示。分镜、动画、Canvas、Cut、生成媒体或执行总结都必须输出可校验的结构化 payload。
-- StoryboardTable 仍是创作镜头内容来源。AnimationPlan 只在 `shotOverlays[]` 中保存 provider-neutral 执行意图；运行状态属于 Agent async task 或 execution summary。
+- Markdown 分镜草稿是可审阅的 authoring artifact。生产动画、Cut、生成媒体、导出或执行总结必须先调用可校验的 lifecycle capability，才能声称交付成功。
+- 对 Markdown 表格做 Canvas 审阅时，优先使用 lifecycle-backed `canvas.ingestMarkdown`，并由本地 UI/tool adapter 传递原始 Markdown 和稳定 resource ref；分镜 creative table 使用 advisory `intentHint: "creative-table"` 和 `profileHint: "storyboard"`。不要输出 Canvas node JSON、transfer payload JSON 或项目内部交接对象。Canvas table profile 会把未知列保留为审阅 metadata。
+- 已审阅的分镜 creative table 仍是创作镜头内容来源。AnimationPlan 只在 `shotOverlays[]` 中保存 provider-neutral 执行意图；运行状态属于 Agent async task 或 execution summary。
 - 媒体引用必须来自真实 tool-result 或 generated-asset，不要编造 id。
 - 不要嵌入 base64、blob URL、localhost URL 或绝对本地缓存路径。
 - 不要检查 `.neko/.cache`、`.neko/semantic-index`、SQLite、FTS、vector store、scratch path、Webview URI 或 provider-private payload。聚焦 Skill 需要复用稳定来源范围的语义证据时，使用 QuerySemanticCoverage。
@@ -29,7 +30,7 @@
 
 ## 相关 Skill 选择
 
-- comic-to-storyboard：读取漫画页、分格/OCR 证据、输出包含 StoryboardTable domain block 的 CompositeArtifact。
+- comic-to-storyboard：读取漫画页、分格/OCR 证据，输出包含提示词、资源 token、review status 和 next action 的 Markdown creative table。
 - image-to-shot：将静态图片引用转为镜头或分镜计划。
 - storyboard-to-animation-plan：把分镜行转换为按镜头绑定的运动、镜头和生成 overlay 计划。
 - animation-plan-to-cut：把动画计划转换为 Cut 时间线 payload。
@@ -38,4 +39,4 @@
 
 ## 工具使用
 
-当存在稳定 source ref 和 range 时，在昂贵的长范围分析前先使用 QuerySemanticCoverage。missing/stale 证据再通过 ReadDocument、ReadImage 或  获取。只有在用户确认后再使用生成工具。只有结构化 payload 校验通过且目标能力存在时，才使用 Canvas/Cut 工具。
+当存在稳定 source ref 和 range 时，在昂贵的长范围分析前先使用 QuerySemanticCoverage。missing/stale 证据再通过 ReadDocument 和 ReadImage 获取。只有在用户确认后再使用生成工具。只有校验通过且目标能力存在时，才使用 Canvas/Cut 工具。

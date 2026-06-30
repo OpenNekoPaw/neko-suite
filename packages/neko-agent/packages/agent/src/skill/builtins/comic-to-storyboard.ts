@@ -1,8 +1,8 @@
 /**
- * Comic to Storyboard Skill - Convert manga/comic pages to structured storyboards
+ * Comic to Storyboard Skill - Convert manga/comic pages to reviewable storyboard drafts
  *
- * Provides comic panel analysis, OCR, shot-local character cues, and artifact-backed StoryboardTable output.
- * Triggered when user explicitly asks for a structured comic storyboard or StoryboardTable.
+ * Provides comic panel analysis, OCR, shot-local character cues, and Markdown storyboard draft output.
+ * Triggered when user explicitly asks for a comic storyboard or shot breakdown.
  */
 
 import type { Skill } from '@neko/shared';
@@ -19,14 +19,14 @@ const localizedComicToStoryboardContent = {
 };
 
 /**
- * Comic to Storyboard skill - Convert manga/comic pages to structured storyboards
+ * Comic to Storyboard skill - Convert manga/comic pages to reviewable storyboard drafts
  *
- * Triggered when user explicitly asks for a structured comic storyboard or StoryboardTable.
+ * Triggered when user explicitly asks for a comic storyboard or shot breakdown.
  */
 export const comicToStoryboardSkill: Skill = {
   name: 'comic-to-storyboard',
   description:
-    'Convert manga/comic pages into CompositeArtifact storyboards with StoryboardTable domain payloads. ' +
+    'Convert manga/comic pages into reviewable Markdown storyboard drafts with prompts, resource tokens, and next actions. ' +
     'Use only when the user asks to create or update a comic storyboard table, shot breakdown, ' +
     'comic adaptation storyboard, or webtoon storyboard; not for content-only EPUB/comic analysis. ' +
     'Keywords: comic storyboard, storyboard table, shot breakdown, 漫画分镜, 分镜表, 生成分镜表.',
@@ -52,8 +52,8 @@ export const comicToStoryboardSkill: Skill = {
   ],
   mediaWorkflow: {
     useCases: [
-      'Create a structured storyboard table from comic, manga, webtoon, PDF, or image pages',
-      'Convert panel analysis and OCR evidence into a CompositeArtifact StoryboardTable',
+      'Create a reviewable Markdown storyboard draft from comic, manga, webtoon, PDF, or image pages',
+      'Convert panel analysis and OCR evidence into a Markdown storyboard table with prompts, resource tokens, and next actions',
       'Build a shot breakdown for comic adaptation before animation or Cut handoff',
     ],
     nonGoals: [
@@ -63,23 +63,16 @@ export const comicToStoryboardSkill: Skill = {
     ],
     acceptedModalities: ['comic', 'document', 'image-sequence'],
     inputArtifacts: ['comic', 'manga', 'webtoon', 'PDF', 'image-sequence', 'MediaTextSegment'],
-    producedArtifacts: ['CompositeArtifact', 'StoryboardTable'],
-    artifactProfiles: ['comic-to-animation-plan'],
-    referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
-    suggestedProjectors: [
-      'projector:comic-shot-plan-to-storyboard',
-      'projector:storyboard-to-canvas',
-      'projector:storyboard-to-cut',
-    ],
+    producedArtifacts: ['CreativeTable'],
+    artifactProfiles: ['storyboard', 'creative-table.storyboard'],
+    referencedCapabilities: ['canvas.ingestMarkdown', 'canvas.validateMarkdownStoryboard'],
+    suggestedProjectors: ['capability:canvas.ingestMarkdown'],
     tags: ['comic', 'manga', 'storyboard'],
     operations: ['create-storyboard', 'shot-breakdown', 'panel-analysis', 'ocr-to-storyboard'],
     costLevel: 'low',
     riskLevel: 'low',
-    validationRequirements: ['CompositeArtifact', 'StoryboardTable'],
-    optionalTools: [
-      TOOL_NAMES_SYSTEM.READ_IMAGE,
-      TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
-    ],
+    validationRequirements: ['CreativeTable', 'CanvasMarkdownCapabilityInput'],
+    optionalTools: [TOOL_NAMES_SYSTEM.READ_IMAGE, TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE],
   },
 };
 

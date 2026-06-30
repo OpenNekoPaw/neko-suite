@@ -53,6 +53,28 @@ describe('prompt golden snapshots', () => {
     expect(composeBaseOnly(BUILTIN_DEFAULT_PROMPT_ZH)).toMatchSnapshot();
   });
 
+  it('base prompts route Markdown storyboard drafts through Canvas Markdown capabilities', () => {
+    for (const prompt of [BUILTIN_DEFAULT_PROMPT_EN, BUILTIN_DEFAULT_PROMPT_ZH]) {
+      expect(prompt).toContain('canvas.ingestMarkdown');
+      expect(prompt).toContain('intentHint: "creative-table"');
+      expect(prompt).toContain('profileHint: "storyboard"');
+      expect(prompt).toContain('canvas.createStoryboardFromMarkdown');
+      expect(prompt).toContain('lifecycle-backed');
+      expect(prompt).toContain('old plugin-transfer payload');
+      expect(prompt).toContain('Webview URI');
+      expect(prompt).toContain('blob URL');
+      expect(prompt).toContain('Engine token');
+      expect(prompt).toContain('Canvas node JSON');
+      expect(prompt).toMatch(/unknown columns|未知列/);
+      expect(prompt).toMatch(/review metadata|审阅 metadata/);
+      expect(prompt).not.toContain('storyboard draft runtime');
+      expect(prompt).not.toContain('compile through the local storyboard draft runtime');
+      expect(prompt).not.toContain('本地 storyboard draft runtime');
+    }
+    expect(BUILTIN_DEFAULT_PROMPT_EN).toContain('stable resource refs');
+    expect(BUILTIN_DEFAULT_PROMPT_ZH).toContain('稳定 resource ref');
+  });
+
   it('plan mode EN base', () => {
     expect(composeBaseOnly(BUILTIN_PLAN_PROMPT_EN)).toMatchSnapshot();
   });

@@ -11,6 +11,6 @@
 
 ## 指引
 
-- 优先使用已有 generatedMediaRefs。
+- 优先使用已有 generated asset refs 或 `resultRef`。
 - 缺少媒体时，输出 Cut payload 草稿并清楚标注缺失素材。
 - 替换现有时间线或一次添加大量元素前必须询问。

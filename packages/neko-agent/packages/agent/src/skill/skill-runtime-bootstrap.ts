@@ -1,4 +1,8 @@
 import type { ISkillRegistry, IToolRegistry, Skill, SkillInjection } from '@neko/shared';
+import type {
+  ActiveSkillLifecycleProjection,
+  SkillLifecycleDeactivationRequest,
+} from '@neko/shared';
 import { SkillRegistry } from './skill-registry';
 import { createSkillService, type SkillService } from './skill-service';
 import {
@@ -70,6 +74,30 @@ export interface RuntimeSkillBootstrapOptions {
 
 export interface RuntimeSkillProviderState {
   getActiveSkill(conversationId: string): { readonly skill: Skill } | undefined;
+  getActiveSkillLifecycle?(conversationId: string): ActiveSkillLifecycleProjection;
+  activateLifecycleSkill?(
+    conversationId: string,
+    skillName: string,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    allowedTools?: string[];
+    lifecycleRecordId?: string;
+    diagnostics?: ActiveSkillLifecycleProjection['diagnostics'];
+  }>;
+  deactivateLifecycleSkill?(
+    conversationId: string,
+    input?: {
+      readonly recordId?: string;
+      readonly slot?: SkillLifecycleDeactivationRequest['slot'];
+      readonly skillName?: string;
+    },
+  ): Promise<{
+    success: boolean;
+    message: string;
+    removedRecordIds?: readonly string[];
+    diagnostics?: ActiveSkillLifecycleProjection['diagnostics'];
+  }>;
   applySkillInjection(
     conversationId: string,
     injection: SkillInjection,
@@ -208,16 +236,38 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
   }
 
   createSkillProviderFactory(state: RuntimeSkillProviderState): SkillProviderFactory {
-    return (conversationId) =>
-      createConversationSkillProvider({
+    return (conversationId) => {
+      const getActiveSkillLifecycle = state.getActiveSkillLifecycle;
+      const activateLifecycleSkill = state.activateLifecycleSkill;
+      const deactivateLifecycleSkill = state.deactivateLifecycleSkill;
+
+      return createConversationSkillProvider({
         skillService: this.skillService,
         effects: {
           getActiveSkill: () => state.getActiveSkill(conversationId)?.skill,
+          ...(getActiveSkillLifecycle
+            ? {
+                getActiveSkillLifecycle: () => getActiveSkillLifecycle(conversationId),
+              }
+            : {}),
+          ...(activateLifecycleSkill
+            ? {
+                activateLifecycleSkill: (skillName) =>
+                  activateLifecycleSkill(conversationId, skillName),
+              }
+            : {}),
+          ...(deactivateLifecycleSkill
+            ? {
+                deactivateLifecycleSkill: (input) =>
+                  deactivateLifecycleSkill(conversationId, input),
+              }
+            : {}),
           applySkillInjection: (injection, skill) =>
             state.applySkillInjection(conversationId, injection, skill),
           clearActiveSkill: () => state.clearActiveSkill(conversationId),
         },
         logger: this.logger,
       });
+    };
   }
 }

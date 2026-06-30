@@ -1,17 +1,19 @@
 # 图片转镜头
 
-将一张或多张静态图片转换为可用于视频制作的镜头计划。先用 ReadImage 检查图片，描述可见证据，再输出结构化分镜或动画计划。
+将一张或多张静态图片转换为可审阅的镜头计划表。先用 ReadImage 检查图片，描述可见证据；当用户需要分镜或镜头规划时，输出可被 Canvas 摄入的 Markdown creative table。
 
-## 结构化产物规则
+## Lifecycle 交接规则
 
-- Markdown 只用于展示。分镜、动画、Canvas、Cut、生成媒体或执行总结都必须输出可校验的结构化 payload。
-- 媒体引用必须来自真实 tool-result 或 generated-asset，不要编造 id。
-- 不要嵌入 base64、blob URL、localhost URL 或绝对本地缓存路径。
-- 批量生成、上色、破坏性替换时间线或长时间导出前必须请求用户确认，除非用户明确要求自动执行且策略允许。
+- Markdown 表格是审阅界面。Canvas、生成、Cut 或导出交接必须走 lifecycle capability。
+- 媒体引用使用稳定 resource token 或 host 提供的 resource ref。不要编造 id，也不要依赖聊天附件顺序。
+- 不要把 Webview URI、blob URL、base64、localhost URL、临时路径、缓存路径或绝对私有路径写进 Markdown。
+- 生成、上色、破坏性时间线修改或长时间导出前必须请求用户审批，除非用户明确要求自动执行且策略允许。
 
 ## 指引
 
-- 原始图片必须放在 sourceMediaRefs 中，并使用真实 tool-result locator。
-- 默认使用 imageStrategy "use-as-reference"，除非用户要求复用、转换或生成新图。
+- 先描述可见证据，再规划镜头。
+- 图片序列默认保持输入顺序，除非用户要求重排。
+- 如果一张图包含多个可用节拍，可以创建多行并复用同一个 `source` token，用 `sourcePanel` 区分裁切或分格。
+- 分镜表使用与 comic-to-storyboard 相同的核心表头：`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `prompt`, `reviewStatus`, `nextAction`。
+- 需要时追加 `decisionReason`、`referenceImage`、`styleRef`、`requiresInpaint`、`requiresOutpaint` 或 `risk` 等扩展列。
 - 生成工具返回结果前，不要声称图片或视频已经生成。
-- 多图输入时保持原顺序，除非用户要求重排。

@@ -278,19 +278,19 @@
         {
           "severity": "warning",
           "code": "provider-unavailable",
-          "path": ["suggestedActions", "canvas.importStoryboard"],
-          "message": "Canvas import is review-only until a registered provider is available."
+          "path": ["suggestedActions", "canvas.ingestMarkdown"],
+          "message": "Canvas review is lifecycle-backed and requires a registered Canvas Markdown provider."
         }
       ]
     }
   ],
   "suggestedActions": [
     {
-      "actionId": "canvas.importStoryboard",
-      "kind": "execute",
-      "label": "Import to Canvas",
-      "capabilityId": "canvas.importStoryboard",
-      "projectorId": "projector:storyboard-to-canvas",
+      "actionId": "canvas.ingestMarkdown",
+      "kind": "review",
+      "label": "Review in Canvas",
+      "capabilityId": "canvas.ingestMarkdown",
+      "projectorId": "capability:canvas.ingestMarkdown",
       "risk": "medium",
       "requiresApproval": true,
       "disabled": true,

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   isEntityMemoryContribution,
-  projectCompositeArtifactToCanvasStoryboardPayload,
   projectCompositeArtifactToCutStoryboardPayload,
   validateCompositeArtifact,
   type ArtifactProfileDescriptor,
@@ -148,16 +147,22 @@ describe('comic-to-animation composite artifact sample', () => {
         mediaWorkflow: {
           producedArtifacts: ['CompositeArtifact', 'GenericTable'],
           artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
-          referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
+          referencedCapabilities: ['canvas.ingestMarkdown', 'cut.importStoryboard'],
         },
       },
     });
 
-    expect(runtime.findArtifactCapabilities('canvas.importStoryboard')).toEqual([]);
+    expect(
+      runtime
+        .getArtifactFacets()
+        .lifecycleCapabilities?.find(
+          (capability) => capability.capabilityId === 'canvas.ingestMarkdown',
+        ),
+    ).toBeUndefined();
     expect(sampleArtifact.suggestedActions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          actionId: 'canvas.importStoryboard',
+          actionId: 'canvas.ingestMarkdown',
           disabled: true,
           disabledReason: 'Provider unavailable',
         }),
@@ -165,7 +170,7 @@ describe('comic-to-animation composite artifact sample', () => {
     );
   });
 
-  it('projects the reviewed storyboard domain block when Canvas and Cut providers are registered', () => {
+  it('projects the reviewed storyboard domain block for Cut while Canvas uses lifecycle review', () => {
     const runtime = createAgentCapabilityInjectionRuntime();
     runtime.registerMany([
       {
@@ -176,24 +181,20 @@ describe('comic-to-animation composite artifact sample', () => {
           trustLevel: 'core',
         },
         artifactFacets: {
-          projectors: [
+          lifecycleCapabilities: [
             {
-              id: 'projector:storyboard-to-canvas',
-              accepts: ['StoryboardTable'],
-              produces: ['CanvasStoryboardPayload'],
-              profiles: ['manga-to-video'],
-              lazy: true,
-            },
-          ],
-          capabilities: [
-            {
-              capabilityId: 'canvas.importStoryboard',
-              packageId: 'neko-canvas',
-              accepts: ['CanvasStoryboardPayload'],
-              produces: ['canvas-node-ref'],
-              actions: ['canvas.importStoryboard'],
+              capabilityId: 'canvas.ingestMarkdown',
+              providerId: 'neko-canvas',
+              displayName: 'Ingest Markdown into Canvas',
+              description: 'Create a Canvas Markdown note, generic table, or creative table.',
+              phases: ['review'],
+              inputSchema: { id: 'canvas.markdown.input', version: 1 },
+              resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+              accepts: ['markdown', 'gfm-table'],
+              produces: ['canvas.table', 'canvas.storyboard'],
               risk: 'medium',
               requiresApproval: true,
+              safetyKind: 'confirmation-gated',
             },
           ],
         },
@@ -230,11 +231,16 @@ describe('comic-to-animation composite artifact sample', () => {
       },
     ]);
 
-    expect(runtime.findArtifactCapabilities('canvas.importStoryboard')).toHaveLength(1);
+    expect(
+      runtime
+        .getArtifactFacets()
+        .lifecycleCapabilities?.find(
+          (capability) => capability.capabilityId === 'canvas.ingestMarkdown',
+        ),
+    ).toBeDefined();
     expect(runtime.findArtifactCapabilities('cut.importStoryboard')).toHaveLength(1);
 
     const artifact = sampleArtifact as CompositeArtifact;
-    const canvasProjection = projectCompositeArtifactToCanvasStoryboardPayload({ artifact });
     const cutProjection = projectCompositeArtifactToCutStoryboardPayload({
       artifact,
       options: {
@@ -242,22 +248,6 @@ describe('comic-to-animation composite artifact sample', () => {
       },
     });
 
-    expect(canvasProjection.diagnostics).toEqual([]);
-    expect(canvasProjection.payload?.scenes[0]?.shotPlans[0]).toMatchObject({
-      shotNumber: 1,
-      dialogue: 'We have to run.',
-      characters: [
-        expect.objectContaining({
-          characterId: 'char-rin',
-          characterName: 'Rin',
-          role: 'primary',
-          action: 'Looks back while running',
-          emotion: 'urgent',
-          continuityNotes: 'Keep the hooded jacket and messenger bag from the source panel.',
-          appearanceNotes: 'Short dark hair, hooded jacket, messenger bag.',
-        }),
-      ],
-    });
     expect(cutProjection.diagnostics).toEqual([]);
     expect(cutProjection.payload?.shots[0]).toMatchObject({
       id: 'shot-1',

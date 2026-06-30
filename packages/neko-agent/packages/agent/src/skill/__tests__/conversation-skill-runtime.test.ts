@@ -35,14 +35,12 @@ function createSkillService(
       ),
       ensureLoaded: vi.fn(async (name: string) => skills.find((skill) => skill.name === name)),
     },
-    apply: vi.fn(
-      async (skill: Skill, args?: string): Promise<SkillInjection> => ({
-        name: skill.name,
-        systemPrompt: args ? `${skill.content}: ${args}` : skill.content,
-        type: 'skill',
-        allowedTools: ['read'],
-      }),
-    ),
+    apply: vi.fn(async (skill: Skill, args?: string): Promise<SkillInjection> => ({
+      name: skill.name,
+      systemPrompt: args ? `${skill.content}: ${args}` : skill.content,
+      type: 'skill',
+      allowedTools: ['read'],
+    })),
     discover: vi.fn(() => discoverResult),
   };
 }
@@ -82,11 +80,13 @@ describe('ConversationSkillRuntime', () => {
       appliedAt: 42,
     });
     expect(runtime.getActiveSkill('conv-2')).toBeUndefined();
-    expect(bridge.applySkillInjection).toHaveBeenCalledWith(
-      'conv-1',
-      expect.objectContaining({ name: 'commit' }),
-      commit,
-    );
+    expect(runtime.projectSkillLifecycle('conv-1').promptSections).toEqual([
+      expect.objectContaining({
+        skillName: 'commit',
+        content: 'commit instructions: fix bug',
+      }),
+    ]);
+    expect(bridge.applySkillInjection).not.toHaveBeenCalled();
   });
 
   it('reports legacy slash skill aliases as migration-only diagnostics', async () => {
@@ -213,10 +213,19 @@ describe('ConversationSkillRuntime', () => {
       skillName: 'review',
       systemPrompt: 'review instructions',
       allowedTools: ['read'],
+      lifecycle: {
+        records: [
+          expect.objectContaining({
+            skillName: 'review',
+            slot: 'domainSkill',
+            clearable: true,
+          }),
+        ],
+      },
     });
   });
 
-  it('does not auto-activate high-confidence discovered skills for a conversation', async () => {
+  it('does not auto-activate high-confidence matches before the turn executes', async () => {
     const storyboard = createSkill('comic-to-storyboard');
     const skillService = createSkillService([storyboard], {
       found: true,
@@ -240,6 +249,7 @@ describe('ConversationSkillRuntime', () => {
     });
 
     expect(result).toBeNull();
+    expect(skillService.discover).not.toHaveBeenCalled();
     expect(skillService.registry.ensureLoaded).not.toHaveBeenCalled();
     expect(runtime.getActiveSkill('conv-1')).toBeUndefined();
     expect(bridge.applySkillInjection).not.toHaveBeenCalled();

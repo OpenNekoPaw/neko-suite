@@ -67,3 +67,25 @@ metadata 只帮助 Agent 理解 Skill。它不会自动激活 Skill，也不会�
 - Agent 调用 `ActivateSkill`。
 
 自然语言命中 metadata 后，Agent 可以继续普通回答、询问澄清问题，或在判断确实需要专业指导时调用 `ActivateSkill`。
+
+## 生命周期、槽位与清理
+
+激活后的 Skill 会成为会话内的生命周期记录，而不是直接成为一段需要手工拼接/拆除的 prompt。运行时会在每轮请求前从这些记录投影出 prompt、工具策略、模型覆盖和 UI 指示器。
+
+当前运行时槽位包括：
+
+- `domainSkill`：用户 `$skill-name`、Webview `invokeSkill`、Agent `ActivateSkill` 的默认槽位。默认同一时间只有一个，可由用户或 Agent 清理。
+- `stagePersona`：IDC 阶段人格槽位，由运行时创建和清理；通常锁定，用户不能手工清除。
+- `referenceSkill`：参考型指导槽位，可多记录共存，适合后续用于只读背景指导。
+- `ephemeralSkill`：回合级临时槽位，运行时在回合结束后清理。
+- `workflowSkill`：工作流/run 级槽位，工作流完成或取消时清理。
+
+Skill 作者不要在 `SKILL.md` 中假设自己总是唯一活跃 Skill，也不要依赖清理时反向撤销上一轮 prompt。`allowedTools` 应描述该 Skill 自身需要的最小工具集合；多个 Skill 共存时，运行时会按生命周期策略组合或拒绝冲突，不能靠某个 Skill 声明来扩大更高优先级的 Plan Mode、审批模式、workspace trust 或 IDC 阶段限制。
+
+现阶段 Skill frontmatter 不声明默认 `slot`、`lifetime` 或 `clearable`。这些由激活来源和运行时策略决定：
+
+- 显式用户/Agent 激活通常是 `domainSkill` + `conversation untilCleared`。
+- IDC stage persona 是 `stagePersona` + `idc-stage` lifetime。
+- workflow/run 记录是 `workflowSkill` + `workflow` lifetime。
+
+如果未来允许 manifest 声明生命周期偏好，也必须先经过运行时策略校验；未知槽位、锁定记录清理、同名多记录清理和工具/model 冲突都应 fail-visible。

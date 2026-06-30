@@ -86,19 +86,29 @@ EPUB、CBZ、CBR、DOCX、PPTX、XLSX 这类文件本质上是容器文档。当
 `ReadDocument` 保留全文读取模式，也支持结构化模式：
 
 ```typescript
-await readDocument({ file_path: '/path/to/book.epub', mode: 'manifest' });
+await readDocument({
+  source: { kind: 'file', path: '${A}/book.epub' },
+  mode: 'manifest',
+});
 
 await readDocument({
-  file_path: '/path/to/book.epub',
+  source: { kind: 'file', path: '${A}/book.epub' },
   mode: 'range',
   range: { locator: { kind: 'chapter', chapterHref: 'chapter-1.xhtml', spineIndex: 0 } },
   max_images: 10,
 });
 
-await readDocument({ file_path: '/path/to/book.epub', mode: 'next', cursor });
+await readDocument({
+  source: { kind: 'file', path: '${A}/book.epub' },
+  mode: 'next',
+  cursor,
+});
+
+const pageImages = result.imageInfo ?? [];
+await readImage({ images: pageImages });
 ```
 
-预览面板传入的 `DocumentSourceRef`、`DocumentLocator` 和 excerpt 可以让 Agent 从同一页、同一章或同一条目继续，而不是重新读取并截断整个文件。
+预览面板传入的 `ContentSourceRef`、`DocumentLocator` 和 excerpt 可以让 Agent 从同一页、同一章或同一条目继续，而不是重新读取并截断整个文件。文档图片必须通过 `ReadDocument.imageInfo[].resourceRef` 传给 `ReadImage.images[]`；不要传缓存路径、EPUB entry path、整本文档 source 或 Webview URI。
 
 ## 法律与版权边界
 

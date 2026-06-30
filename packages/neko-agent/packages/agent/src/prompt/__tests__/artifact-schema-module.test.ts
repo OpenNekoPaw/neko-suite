@@ -35,25 +35,26 @@ describe('ArtifactSchemaModule', () => {
     expect(section.priority).toBe(50);
   });
 
-  it('substitutes {runId} into all three artifact paths', () => {
+  it('projects the active run into the creation-document contract without legacy paths', () => {
     const mod = new ArtifactSchemaModule();
     const sections = mod.renderSync(makeCtx({ runId: 'abc-123' }));
     const content = sections![0]!.content;
-    expect(content).toContain('.neko/drafts/draft-abc-123.md');
-    expect(content).toContain('.neko/plans/plan-abc-123.md');
-    expect(content).toContain('.neko/tasks/task-abc-123.md');
+    expect(content).toContain('The active IDC run id is `abc-123`');
+    expect(content).toContain('neko/creations/<creation-id>/brief.md');
+    expect(content).toContain('neko/creations/<creation-id>/plan.md');
+    expect(content).toContain('neko/creations/<creation-id>/checklist.md');
     expect(content).not.toContain('{runId}');
+    expect(content).not.toContain('.neko/drafts');
+    expect(content).not.toContain('.neko/plans');
+    expect(content).not.toContain('.neko/tasks');
+    expect(content).not.toContain('generic `Write` tool');
   });
 
-  it('keeps the literal `{runId}` in the UX fallback paragraph', () => {
-    // The template mentions "{runId} as a literal" as guidance for the
-    // agent — but after regex replacement the runId is interpolated, so
-    // that guidance should NOT contain an unsubstituted placeholder
-    // either. The sentence itself is preserved verbatim.
+  it('tells the agent that persistence is host-owned', () => {
     const mod = new ArtifactSchemaModule();
     const content = mod.renderSync(makeCtx({ runId: 'r1' }))![0]!.content;
-    expect(content).toContain('If you still');
-    expect(content).toContain('as a literal');
+    expect(content).toContain('host creation-document service owns storage');
+    expect(content).toContain('Do not create, read, or repair creation document files yourself');
   });
 
   it('different runIds produce different content', () => {
@@ -61,8 +62,8 @@ describe('ArtifactSchemaModule', () => {
     const s1 = mod.renderSync(makeCtx({ runId: 'foo' }))![0]!.content;
     const s2 = mod.renderSync(makeCtx({ runId: 'bar' }))![0]!.content;
     expect(s1).not.toBe(s2);
-    expect(s1).toContain('draft-foo.md');
-    expect(s2).toContain('draft-bar.md');
+    expect(s1).toContain('`foo`');
+    expect(s2).toContain('`bar`');
   });
 
   it('manifest declares schema layer + runId requirement', () => {

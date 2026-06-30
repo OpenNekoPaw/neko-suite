@@ -14,8 +14,29 @@ import type {
   SkillPriority,
   ISkillConflictResolver,
   Skill,
+  SkillInjection,
+  SkillLifecycleDiagnostic,
+  SkillLifecycleRecord,
+  SkillLifecycleSlot,
 } from '@neko/shared';
 import { DEFAULT_SKILL_CONFLICT_CONFIG } from '@neko/shared';
+
+export interface SkillLifecycleActivationConflictInput {
+  readonly conversationId: string;
+  readonly requestedSkill: Skill;
+  readonly requestedInjection: SkillInjection;
+  readonly requestedSlot: SkillLifecycleSlot;
+  readonly activeRecords: readonly SkillLifecycleRecord[];
+  readonly getConflictConfig?: (skillName: string) => SkillConflictConfig | undefined;
+}
+
+export interface SkillLifecycleActivationConflictResult {
+  readonly ok: boolean;
+  readonly replacedRecordIds: readonly string[];
+  readonly diagnostics: readonly SkillLifecycleDiagnostic[];
+}
+
+const MULTI_RECORD_SLOTS = new Set<SkillLifecycleSlot>(['referenceSkill', 'ephemeralSkill']);
 
 /**
  * Skill conflict resolver implementation
@@ -352,6 +373,15 @@ export class SkillConflictResolver implements ISkillConflictResolver {
     return this.conflictConfigs.get(skillName);
   }
 
+  resolveLifecycleActivationConflict(
+    input: Omit<SkillLifecycleActivationConflictInput, 'getConflictConfig'>,
+  ): SkillLifecycleActivationConflictResult {
+    return resolveSkillLifecycleActivationConflict({
+      ...input,
+      getConflictConfig: (skillName) => this.getConflictConfig(skillName),
+    });
+  }
+
   /**
    * Set default resolution strategy
    */
@@ -390,4 +420,140 @@ export function createSkillConflictResolver(options?: {
   maxConcurrentSkills?: number;
 }): ISkillConflictResolver {
   return new SkillConflictResolver(options);
+}
+
+export function resolveSkillLifecycleActivationConflict(
+  input: SkillLifecycleActivationConflictInput,
+): SkillLifecycleActivationConflictResult {
+  const slotConflicts = resolveSameSlotLifecycleConflict(input);
+  if (!slotConflicts.ok) {
+    return slotConflicts;
+  }
+
+  const explicitConflict = findExplicitLifecycleConflict(input);
+  if (explicitConflict) {
+    return {
+      ok: false,
+      replacedRecordIds: [],
+      diagnostics: [
+        {
+          code: 'skill-conflict',
+          message: `Cannot activate "${input.requestedSkill.name}" because it conflicts with active Skill "${explicitConflict.skillName}"`,
+          conversationId: input.conversationId,
+          skillName: input.requestedSkill.name,
+          slot: input.requestedSlot,
+          details: {
+            conflictingRecordIds: [explicitConflict.id],
+            reason: 'explicit-conflict',
+          },
+        },
+      ],
+    };
+  }
+
+  const modelConflict = findLifecycleModelConflict(input);
+  if (modelConflict) {
+    return {
+      ok: false,
+      replacedRecordIds: [],
+      diagnostics: [
+        {
+          code: 'skill-conflict',
+          message: `Cannot activate "${input.requestedSkill.name}" because model overrides conflict with active Skill "${modelConflict.skillName}"`,
+          conversationId: input.conversationId,
+          skillName: input.requestedSkill.name,
+          slot: input.requestedSlot,
+          details: {
+            conflictingRecordIds: [modelConflict.id],
+            reason: 'model-override-conflict',
+          },
+        },
+      ],
+    };
+  }
+
+  return {
+    ok: true,
+    replacedRecordIds: slotConflicts.replacedRecordIds,
+    diagnostics: slotConflicts.diagnostics,
+  };
+}
+
+function resolveSameSlotLifecycleConflict(
+  input: SkillLifecycleActivationConflictInput,
+): SkillLifecycleActivationConflictResult {
+  const sameSlot = input.activeRecords.filter((record) => record.slot === input.requestedSlot);
+
+  if (sameSlot.length === 0 || MULTI_RECORD_SLOTS.has(input.requestedSlot)) {
+    return { ok: true, replacedRecordIds: [], diagnostics: [] };
+  }
+
+  const replaceable = sameSlot.filter((record) => record.deactivation.clearableByRuntime);
+  if (replaceable.length === sameSlot.length) {
+    const replacedRecordIds = replaceable.map((record) => record.id);
+    return {
+      ok: true,
+      replacedRecordIds,
+      diagnostics: [
+        {
+          code: 'skill-conflict',
+          message: `Replaced active ${input.requestedSlot} Skill lifecycle record`,
+          conversationId: input.conversationId,
+          skillName: input.requestedSkill.name,
+          slot: input.requestedSlot,
+          details: {
+            replacedRecordIds,
+            reason: 'same-slot-replace',
+          },
+        },
+      ],
+    };
+  }
+
+  return {
+    ok: false,
+    replacedRecordIds: [],
+    diagnostics: [
+      {
+        code: 'skill-conflict',
+        message: `Cannot activate "${input.requestedSkill.name}" because ${input.requestedSlot} already has a locked record`,
+        conversationId: input.conversationId,
+        skillName: input.requestedSkill.name,
+        slot: input.requestedSlot,
+        details: {
+          conflictingRecordIds: sameSlot.map((record) => record.id),
+          reason: 'same-slot-locked',
+        },
+      },
+    ],
+  };
+}
+
+function findExplicitLifecycleConflict(
+  input: SkillLifecycleActivationConflictInput,
+): SkillLifecycleRecord | undefined {
+  const requestedConfig = input.getConflictConfig?.(input.requestedSkill.name);
+  for (const record of input.activeRecords) {
+    const activeConfig = input.getConflictConfig?.(record.skillName);
+    if (
+      requestedConfig?.conflicts?.includes(record.skillName) ||
+      activeConfig?.conflicts?.includes(input.requestedSkill.name)
+    ) {
+      return record;
+    }
+  }
+  return undefined;
+}
+
+function findLifecycleModelConflict(
+  input: SkillLifecycleActivationConflictInput,
+): SkillLifecycleRecord | undefined {
+  const requestedModel = input.requestedInjection.model;
+  if (!requestedModel) {
+    return undefined;
+  }
+
+  return input.activeRecords.find(
+    (record) => record.injection.model !== undefined && record.injection.model !== requestedModel,
+  );
 }

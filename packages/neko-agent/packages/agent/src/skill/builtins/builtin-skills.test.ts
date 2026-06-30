@@ -117,61 +117,81 @@ describe('Builtin Skills', () => {
     });
 
     it('should have content with workflow instructions', () => {
-      expect(comicToStoryboardSkill.content).toContain('Comic Analysis');
+      expect(comicToStoryboardSkill.content).toContain('Gather Visual Evidence');
       expect(comicToStoryboardSkill.content).toContain('Panel');
       expect(comicToStoryboardSkill.content).toContain('OCR');
+      expect(comicToStoryboardSkill.content).toContain('Markdown creative table');
+      expect(comicToStoryboardSkill.content).toContain('Canvas Handoff');
+      expect(comicToStoryboardSkill.content).toContain('Field Roles');
     });
 
-    it('should request artifact-backed StoryboardTable semantic output without fake media claims', () => {
-      expect(comicToStoryboardSkill.content).toContain('CompositeArtifact');
-      expect(comicToStoryboardSkill.content).toContain('StoryboardTable');
-      expect(comicToStoryboardSkill.content).toContain('structured payload');
-      expect(comicToStoryboardSkill.content).toContain('"schemaVersion": 1');
-      expect(comicToStoryboardSkill.content).toContain('"kind": "composite-artifact"');
-      expect(comicToStoryboardSkill.content).toContain('"profile": "comic-to-animation-plan"');
-      expect(comicToStoryboardSkill.content).toContain('"kind": "domain"');
-      expect(comicToStoryboardSkill.content).toContain('"domainKind": "StoryboardTable"');
-      expect(comicToStoryboardSkill.content).toContain('"payload"');
-      expect(comicToStoryboardSkill.content).toContain('"kind": "storyboard-table"');
-      expect(comicToStoryboardSkill.content).toContain('imageStrategy');
-      expect(comicToStoryboardSkill.content).toContain('generatedMediaRefs');
-      expect(comicToStoryboardSkill.content).toContain('build an image index and panel mapping');
+    it('should request one Canvas-ingestable creative table without legacy production prompts', () => {
+      expect(comicToStoryboardSkill.content).toContain('Markdown creative table');
+      expect(comicToStoryboardSkill.content).toContain('Canvas-ingestable Markdown creative table');
+      expect(comicToStoryboardSkill.content).toContain('exactly one Canvas-ingestable');
+      expect(comicToStoryboardSkill.content).toContain(
+        '`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `prompt`, `reviewStatus`, `nextAction`',
+      );
+      expect(comicToStoryboardSkill.content).toContain('display-only headers');
+      expect(comicToStoryboardSkill.content).toContain('`read-image-*.jpg`');
+      expect(comicToStoryboardSkill.content).toContain('![cover](P1)');
+      expect(comicToStoryboardSkill.content).toContain('Resource References');
+      expect(comicToStoryboardSkill.content).toContain('CommonMark images');
+      expect(comicToStoryboardSkill.content).toContain('resource-reference');
+      expect(comicToStoryboardSkill.content).toContain('needs-resource-binding');
+      expect(comicToStoryboardSkill.content).toContain('placement/crop intent');
+      expect(comicToStoryboardSkill.content).toContain('canvas.ingestMarkdown');
+      expect(comicToStoryboardSkill.content).toContain('intentHint: "creative-table"');
+      expect(comicToStoryboardSkill.content).toContain('profileHint: "storyboard"');
+      expect(comicToStoryboardSkill.content).toContain('lifecycle-backed');
+      expect(comicToStoryboardSkill.content).toContain('Canvas creative table profiles');
+      expect(comicToStoryboardSkill.content).toContain('unknown columns as review metadata');
+      expect(comicToStoryboardSkill.content).toContain('Approval fields');
+      expect(comicToStoryboardSkill.content).toContain('Plan fields');
+      expect(comicToStoryboardSkill.content).toContain('Execution fields');
+      expect(comicToStoryboardSkill.content).toContain('reviewStatus');
+      expect(comicToStoryboardSkill.content).toContain('nextAction');
+      expect(comicToStoryboardSkill.content).toContain('Canvas node JSON');
+      expect(comicToStoryboardSkill.content).toContain('transfer payload JSON');
+      expect(comicToStoryboardSkill.content).toContain(
+        'build an internal image index and panel mapping',
+      );
       expect(comicToStoryboardSkill.content).toContain('needs rotation');
       expect(comicToStoryboardSkill.content).toContain('one image as a possible source');
-      expect(comicToStoryboardSkill.content).toContain('neko.comicImageAudit');
-      expect(comicToStoryboardSkill.content).toContain('sourceMediaRefs');
       expect(comicToStoryboardSkill.content).toContain(
-        'only reference images from the image index',
+        'Do not treat chat attachment order as resource identity',
       );
-      expect(comicToStoryboardSkill.content).toContain('Do not invent image ids');
+      expect(comicToStoryboardSkill.content).toContain('Do not write render URIs');
+      expect(comicToStoryboardSkill.content).toContain('Webview URIs');
+      expect(comicToStoryboardSkill.content).toContain('blob URLs');
+      expect(comicToStoryboardSkill.content).toContain('system temp paths');
+      expect(comicToStoryboardSkill.content).toContain('Engine tokens');
       expect(comicToStoryboardSkill.content).toContain(
-        'Do not ask the user to copy or edit the JSON',
+        'Do not claim Canvas success unless a Canvas capability/tool returns success',
       );
-      expect(comicToStoryboardSkill.content).toContain(
-        'Do not claim images have already been generated',
-      );
-      expect(comicToStoryboardSkill.content).toContain('Do not embed base64 image data');
-      expect(comicToStoryboardSkill.content).toContain(
-        'Do not report Canvas success from this skill unless an actual Canvas tool result exists',
-      );
-      expect(comicToStoryboardSkill.content).toContain('script-breakdown');
-      expect(comicToStoryboardSkill.content).toContain('manga-to-video');
-      expect(comicToStoryboardSkill.content).toContain('image-sequence');
-      expect(comicToStoryboardSkill.content).toContain('ad-storyboard');
-      expect(comicToStoryboardSkill.content).toContain('short-video');
-      expect(comicToStoryboardSkill.content).toContain('character-design');
-      expect(comicToStoryboardSkill.content).toContain('Character and Text Cues');
-      expect(comicToStoryboardSkill.content).toContain('textCues');
-      expect(comicToStoryboardSkill.content).toContain('OCR/text fragment');
+      expect(comicToStoryboardSkill.content).toContain('Character And Text Notes');
+      expect(comicToStoryboardSkill.content).toContain('OCR evidence');
       expect(comicToStoryboardSkill.content).toContain('QuerySemanticCoverage');
-      expect(comicToStoryboardSkill.content).toContain('Reuse fresh matched ranges');
-      expect(comicToStoryboardSkill.content).toContain('analyze only missing or stale ranges');
+      expect(comicToStoryboardSkill.content).toContain('must not replace ReadImage');
+      expect(comicToStoryboardSkill.content).toContain('is not visual analysis');
       expect(comicToStoryboardSkill.content).toContain('Do not inspect `.neko/.cache`');
       expect(comicToStoryboardSkill.content).toContain('`dialogue`');
-      expect(comicToStoryboardSkill.content).toContain('`narration`');
-      expect(comicToStoryboardSkill.content).toContain('`backgroundText`');
-      expect(comicToStoryboardSkill.content).toContain('Do not put narration, caption boxes');
+      expect(comicToStoryboardSkill.content).toContain('narration');
+      expect(comicToStoryboardSkill.content).toContain('background text');
+      expect(comicToStoryboardSkill.content).toContain('Only character speech bubbles');
       expect(comicToStoryboardSkill.content).toContain('speaker binding');
+      expect(comicToStoryboardSkill.content).not.toContain('CompositeArtifact');
+      expect(comicToStoryboardSkill.content).not.toContain('StoryboardTable');
+      expect(comicToStoryboardSkill.content).not.toContain('neko-composite');
+      expect(comicToStoryboardSkill.content).not.toContain('sourceMediaRefs');
+      expect(comicToStoryboardSkill.content).not.toContain('generatedMediaRefs');
+      expect(comicToStoryboardSkill.content).not.toContain('imageStrategy');
+      expect(comicToStoryboardSkill.content).not.toContain('schemaVersion');
+      expect(comicToStoryboardSkill.content).not.toContain('domainKind');
+      expect(comicToStoryboardSkill.content).not.toContain('storyboard-table');
+      expect(comicToStoryboardSkill.content).not.toContain('old plugin-transfer');
+      expect(comicToStoryboardSkill.content).not.toContain('@neko/draft-runtime');
+      expect(comicToStoryboardSkill.content).not.toContain('compile-storyboard-table');
     });
 
     it('should keep entity memory and image prep outside comic-to-storyboard', () => {
@@ -190,25 +210,28 @@ describe('Builtin Skills', () => {
     });
 
     it('should group storyboard shots into coarser scenes', () => {
-      expect(comicToStoryboardSkill.content).toContain('Scene/shot granularity is important');
-      expect(comicToStoryboardSkill.content).toContain('Do not create one scene per shot');
-      expect(comicToStoryboardSkill.content).toContain('group multiple panels');
-      expect(comicToStoryboardSkill.content).toContain('from the same page or continuous action');
-      expect(comicToStoryboardSkill.content).toContain('shotNumber');
+      expect(comicToStoryboardSkill.content).toContain(
+        'Every row represents a narrative shot or video beat',
+      );
+      expect(comicToStoryboardSkill.content).toContain(
+        'The same `source` may appear in multiple rows',
+      );
+      expect(comicToStoryboardSkill.content).toContain('scene');
+      expect(comicToStoryboardSkill.content).toContain('shot');
     });
 
     it('should avoid duplicate image resource reads for the same comic image batch', () => {
       expect(comicToStoryboardSkill.content).toContain(
-        'Use ReadImage with mode="metadata" for page images after ReadDocument returns',
+        'Use ReadImage with mode="metadata" for page images only after ReadDocument returns',
       );
       expect(comicToStoryboardSkill.content).toContain(
-        'pass matching `imageInfo[]` entries as structured `images[]`',
+        'pass those entries unchanged as structured `images[]`',
       );
       expect(comicToStoryboardSkill.content).toContain(
-        'Do not invent another document image access path',
+        'Do not invent another image access path for the same document image',
       );
       expect(comicToStoryboardSkill.content).toContain(
-        'analyze the returned images with the current native multimodal chat model',
+        'Analyze returned images with the current native multimodal model',
       );
     });
 
@@ -234,23 +257,19 @@ describe('Builtin Skills', () => {
     it('should expose media workflow metadata and related skills', () => {
       expect(comicToStoryboardSkill.mediaWorkflow).toMatchObject({
         useCases: expect.arrayContaining([
-          'Create a structured storyboard table from comic, manga, webtoon, PDF, or image pages',
+          'Create a reviewable Markdown storyboard draft from comic, manga, webtoon, PDF, or image pages',
         ]),
         nonGoals: expect.arrayContaining([
           'Analyze, summarize, OCR, describe, or read comic pages without creating a storyboard artifact',
         ]),
         acceptedModalities: ['comic', 'document', 'image-sequence'],
         inputArtifacts: expect.arrayContaining(['MediaTextSegment', 'comic']),
-        producedArtifacts: expect.arrayContaining(['CompositeArtifact', 'StoryboardTable']),
+        producedArtifacts: expect.arrayContaining(['CreativeTable']),
         operations: expect.arrayContaining(['create-storyboard']),
-        artifactProfiles: ['comic-to-animation-plan'],
-        referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
-        suggestedProjectors: [
-          'projector:comic-shot-plan-to-storyboard',
-          'projector:storyboard-to-canvas',
-          'projector:storyboard-to-cut',
-        ],
-        validationRequirements: ['CompositeArtifact', 'StoryboardTable'],
+        artifactProfiles: ['storyboard', 'creative-table.storyboard'],
+        referencedCapabilities: ['canvas.ingestMarkdown', 'canvas.validateMarkdownStoryboard'],
+        suggestedProjectors: ['capability:canvas.ingestMarkdown'],
+        validationRequirements: ['CreativeTable', 'CanvasMarkdownCapabilityInput'],
       });
       expect(comicToStoryboardSkill.referencedSkills).toEqual(
         expect.arrayContaining([
@@ -262,11 +281,29 @@ describe('Builtin Skills', () => {
         'EntityMemoryContribution',
       );
       expect(comicToStoryboardSkill.mediaWorkflow?.producedArtifacts).not.toContain('GenericTable');
+      expect(comicToStoryboardSkill.mediaWorkflow?.producedArtifacts).not.toContain(
+        'CompositeArtifact',
+      );
+      expect(comicToStoryboardSkill.mediaWorkflow?.producedArtifacts).not.toContain(
+        'StoryboardTable',
+      );
       expect(comicToStoryboardSkill.mediaWorkflow?.artifactProfiles).not.toContain(
         'comic-shot-asset-prep',
       );
       expect(comicToStoryboardSkill.mediaWorkflow?.referencedCapabilities).not.toContain(
         'comic-image-prep-pipeline',
+      );
+      expect(comicToStoryboardSkill.mediaWorkflow?.referencedCapabilities).not.toContain(
+        'canvas.importStoryboard',
+      );
+      expect(comicToStoryboardSkill.mediaWorkflow?.referencedCapabilities).not.toContain(
+        'canvas.createStoryboardFromMarkdown',
+      );
+      expect(comicToStoryboardSkill.mediaWorkflow?.referencedCapabilities).not.toContain(
+        'cut.importStoryboard',
+      );
+      expect(comicToStoryboardSkill.mediaWorkflow?.referencedCapabilities).toContain(
+        'canvas.ingestMarkdown',
       );
     });
 
@@ -293,8 +330,8 @@ describe('Builtin Skills', () => {
         expect(builtinSkills.find((item) => item.name === skill.name)).toBe(skill);
         expect(skill.domain).toBe('media');
         expect(skill.mediaWorkflow).toBeDefined();
-        expect(skill.content).toContain('Structured Artifact Rules');
         expect(skill.content).not.toContain('${structuredArtifactRules}');
+        expect(skill.content).not.toContain('old plugin-transfer');
       }
     });
 
@@ -322,24 +359,38 @@ describe('Builtin Skills', () => {
         nonGoals: expect.arrayContaining([
           'Analyze, summarize, OCR, describe, or read source media without creating production artifacts',
         ]),
-        inputArtifacts: expect.arrayContaining(['CompositeArtifact', 'GenericTable']),
+        inputArtifacts: expect.arrayContaining(['CreativeTable', 'GenericTable']),
         producedArtifacts: expect.arrayContaining([
-          'CompositeArtifact',
+          'CreativeTable',
           'GenericTable',
           'EntityMemoryContribution',
         ]),
-        artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
-        referencedCapabilities: ['canvas.importStoryboard', 'cut.importStoryboard'],
+        artifactProfiles: ['storyboard', 'creative-table.storyboard', 'comic-shot-asset-prep'],
+        referencedCapabilities: ['canvas.ingestMarkdown', 'canvas.validateMarkdownStoryboard'],
         operations: expect.arrayContaining(['coordinate-media-production']),
       });
+      expect(mediaToVideoSkill.content).toContain('Markdown storyboard drafts');
+      expect(mediaToVideoSkill.content).toContain('canvas.ingestMarkdown');
+      expect(mediaToVideoSkill.content).toContain('intentHint: "creative-table"');
+      expect(mediaToVideoSkill.content).toContain('profileHint: "storyboard"');
+      expect(mediaToVideoSkill.content).toMatch(/do not output Canvas node JSON/i);
+      expect(mediaToVideoSkill.content).toContain('lifecycle-backed');
+      expect(mediaToVideoSkill.content).toContain('transfer payload JSON');
+      expect(mediaToVideoSkill.content).toContain('unknown columns as review metadata');
       expect(storyboardToAnimationPlanSkill.mediaWorkflow).toMatchObject({
-        inputArtifacts: ['CompositeArtifact', 'StoryboardTable'],
+        inputArtifacts: ['CreativeTable', 'CanvasStoryboardReviewNode'],
         operations: expect.arrayContaining(['storyboard-to-animation-plan']),
-        validationRequirements: ['CompositeArtifact', 'StoryboardTable'],
+        validationRequirements: ['CreativeTable', 'AnimationPlan'],
       });
-      expect(storyboardToAnimationPlanSkill.content).toContain('domainKind: "StoryboardTable"');
-      expect(storyboardToAnimationPlanSkill.content).toContain('domainKind: "AnimationPlan"');
-      expect(storyboardToAnimationPlanSkill.content).toContain('preparedKeyframeRefs');
+      expect(storyboardToAnimationPlanSkill.content).toContain(
+        'reviewed storyboard creative table',
+      );
+      expect(storyboardToAnimationPlanSkill.content).toContain('animation plan');
+      expect(storyboardToAnimationPlanSkill.content).toContain('preparedKeyframe');
+      expect(storyboardToAnimationPlanSkill.content).not.toContain('CompositeArtifact');
+      expect(storyboardToAnimationPlanSkill.content).not.toContain('StoryboardTable');
+      expect(storyboardToAnimationPlanSkill.content).not.toContain('sourceMediaRefs');
+      expect(storyboardToAnimationPlanSkill.content).not.toContain('imageStrategy');
       expect(comicToAnimationSkill.referencedSkills).toEqual(
         expect.arrayContaining([
           { id: 'media-to-video', relationship: 'collaborator' },
@@ -348,33 +399,38 @@ describe('Builtin Skills', () => {
         ]),
       );
       expect(comicToAnimationSkill.mediaWorkflow).toMatchObject({
-        artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
-        validationRequirements: expect.arrayContaining(['ShotImagePrepPlan']),
+        artifactProfiles: ['storyboard', 'creative-table.storyboard', 'comic-shot-asset-prep'],
+        validationRequirements: expect.arrayContaining([
+          'CreativeTable',
+          'CanvasMarkdownCapabilityInput',
+          'AnimationPlan',
+          'ShotImagePrepPlan',
+        ]),
       });
       expect(comicToAnimationSkill.mediaWorkflow?.producedArtifacts).toEqual(
-        expect.arrayContaining(['StoryboardTable', 'EntityMemoryContribution']),
+        expect.arrayContaining(['CreativeTable', 'AnimationPlan', 'EntityMemoryContribution']),
       );
-      expect(comicToAnimationSkill.content).toContain('Storyboard And Entity Output Contract');
-      expect(comicToAnimationSkill.content).toContain('neko.entityMemoryContributionPayload');
-      expect(comicToAnimationSkill.content).toContain('storyboardCharacterId');
-      expect(comicToAnimationSkill.content).toContain('candidate-ambiguous');
-      expect(comicToAnimationSkill.content).toContain('metadata.regenerationRecommendation');
-      expect(comicToAnimationSkill.content).toContain('metadata.imageAudit');
+      expect(comicToAnimationSkill.content).toContain('Lifecycle Artifact Rules');
+      expect(comicToAnimationSkill.content).toContain('Entity memory and character evidence');
+      expect(comicToAnimationSkill.content).toContain('review evidence');
+      expect(comicToAnimationSkill.content).toContain('diagnostics');
+      expect(comicToAnimationSkill.content).toContain('review recommendation');
+      expect(comicToAnimationSkill.content).toContain('imageAudit');
       expect(comicToAnimationSkill.content).toContain('split-panels');
       expect(comicToAnimationSkill.content).toContain('rotate');
       expect(comicToAnimationSkill.content).toContain('A single source image may create multiple');
       expect(comicToAnimationSkill.content).toContain('QuerySemanticCoverage');
-      expect(comicToAnimationSkill.content).toContain('MediaTextSegment');
-      expect(comicToAnimationSkill.content).toContain('Do not inspect `.neko/.cache`');
-      expect(comicToAnimationSkill.content).toContain(
-        'must not replace the contribution extension',
-      );
+      expect(comicToAnimationSkill.content).toContain('cache paths');
       expect(comicToAnimationSkill.allowedTools).toContain(
         TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
       );
-      expect(comicToAnimationSkill.content).toContain('"domainKind": "AnimationPlan"');
       expect(comicToAnimationSkill.content).toContain('TransformImage');
       expect(comicToAnimationSkill.content).toContain('GenerateVideo');
+      expect(comicToAnimationSkill.content).not.toContain('CompositeArtifact');
+      expect(comicToAnimationSkill.content).not.toContain('StoryboardTable');
+      expect(comicToAnimationSkill.content).not.toContain('neko-composite');
+      expect(comicToAnimationSkill.content).not.toContain('sourceMediaRefs');
+      expect(comicToAnimationSkill.content).not.toContain('imageStrategy');
     });
   });
 
@@ -392,7 +448,7 @@ describe('Builtin Skills', () => {
       const defaultMediaSkill = getMediaToVideoSkill();
 
       expect(defaultComicSkill).toBe(comicToStoryboardSkill);
-      expect(defaultComicSkill.content).toContain('Comic Analysis');
+      expect(defaultComicSkill.content).toContain('Gather Visual Evidence');
       expect(defaultMediaSkill).toBe(mediaToVideoSkill);
       expect(defaultMediaSkill.content).toContain('Media to Video Coordinator');
     });
@@ -403,42 +459,85 @@ describe('Builtin Skills', () => {
       const zhComicAnimation = zhSkills.find((skill) => skill.name === 'comic-to-animation');
       const zhMedia = zhSkills.find((skill) => skill.name === 'media-to-video');
 
-      expect(zhComic?.content).toContain('漫画分析');
-      expect(zhComic?.content).toContain('CompositeArtifact');
-      expect(zhComic?.content).toContain('StoryboardTable');
-      expect(zhComic?.content).toContain('"kind": "composite-artifact"');
-      expect(zhComic?.content).toContain('"domainKind": "StoryboardTable"');
-      expect(zhComic?.content).toContain('图片索引和分格映射');
+      expect(zhComic?.content).toContain('获取视觉证据');
+      expect(zhComic?.content).toContain('Markdown creative table');
+      expect(zhComic?.content).toContain('Canvas-ingestable Markdown creative table');
+      expect(zhComic?.content).toContain('这张表就是分镜表');
+      expect(zhComic?.content).toContain('表头也必须使用上面的英文字段 id');
+      expect(zhComic?.content).toContain(
+        '`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `prompt`, `reviewStatus`, `nextAction`',
+      );
+      expect(zhComic?.content).toContain('`read-image-*.jpg`');
+      expect(zhComic?.content).toContain('![cover](P1)');
+      expect(zhComic?.content).toContain('Canvas 交接');
+      expect(zhComic?.content).toContain('CommonMark 图片');
+      expect(zhComic?.content).toContain('resource-reference');
+      expect(zhComic?.content).toContain('needs-resource-binding');
+      expect(zhComic?.content).toContain('分格/裁切意图');
+      expect(zhComic?.content).toContain('canvas.ingestMarkdown');
+      expect(zhComic?.content).toContain('intentHint: "creative-table"');
+      expect(zhComic?.content).toContain('profileHint: "storyboard"');
+      expect(zhComic?.content).toContain('lifecycle-backed');
+      expect(zhComic?.content).toContain('Canvas creative table profile');
+      expect(zhComic?.content).toContain('未知列保留为审阅 metadata');
+      expect(zhComic?.content).toContain('内部图片索引和分格映射');
       expect(zhComic?.content).toContain('需要旋转');
       expect(zhComic?.content).toContain('一页或一张图可能对应多个 storyboard shot');
-      expect(zhComic?.content).toContain('neko.comicImageAudit');
-      expect(zhComic?.content).toContain('sourceMediaRefs');
-      expect(zhComic?.content).toContain('不要为同一张图编造第二个文档图片工具调用');
+      expect(zhComic?.content).toContain('不要把聊天附件顺序当成资源身份');
+      expect(zhComic?.content).toContain('不要为同一张文档图片编造第二个图片访问路径');
       expect(zhComic?.content).toContain('QuerySemanticCoverage');
-      expect(zhComic?.content).toContain('fresh matched ranges');
+      expect(zhComic?.content).toContain('不能替代 ReadImage');
+      expect(zhComic?.content).toContain('不是视觉分析');
       expect(zhComic?.content).toContain('不要检查 `.neko/.cache`');
-      expect(zhComic?.content).toContain('不要在表格中嵌入 base64');
-      expect(zhComic?.content).toContain('人物和文字线索');
+      expect(zhComic?.content).toContain('base64 图片数据');
+      expect(zhComic?.content).toContain('Webview URI');
+      expect(zhComic?.content).toContain('blob URL');
+      expect(zhComic?.content).toContain('系统临时路径');
+      expect(zhComic?.content).toContain('Engine token');
+      expect(zhComic?.content).toContain('Canvas node JSON');
+      expect(zhComic?.content).toContain('人物和文字说明');
       expect(zhComic?.content).toContain('不创建或确认项目统一实体');
-      expect(zhComic?.content).toContain('不要在本 Skill 输出统一实体贡献 payload');
+      expect(zhComic?.content).toContain('不要从本 Skill 输出实体贡献 payload');
+      expect(zhComic?.content).not.toContain('CompositeArtifact');
+      expect(zhComic?.content).not.toContain('StoryboardTable');
+      expect(zhComic?.content).not.toContain('neko-composite');
+      expect(zhComic?.content).not.toContain('sourceMediaRefs');
+      expect(zhComic?.content).not.toContain('generatedMediaRefs');
+      expect(zhComic?.content).not.toContain('imageStrategy');
+      expect(zhComic?.content).not.toContain('schemaVersion');
+      expect(zhComic?.content).not.toContain('domainKind');
+      expect(zhComic?.content).not.toContain('storyboard-table');
+      expect(zhComic?.content).not.toContain('old plugin-transfer');
       expect(zhComic?.content).not.toContain('neko.entityMemoryContributionPayload');
       expect(zhComic?.content).not.toContain('candidate-ambiguous');
+      expect(zhComic?.content).not.toContain('@neko/draft-runtime');
+      expect(zhComic?.content).not.toContain('compile-storyboard-table');
       expect(zhMedia?.content).toContain('媒体转视频协调器');
       expect(zhMedia?.content).toContain('结构化产物规则');
+      expect(zhMedia?.content).toContain('canvas.ingestMarkdown');
+      expect(zhMedia?.content).toContain('intentHint: "creative-table"');
+      expect(zhMedia?.content).toContain('profileHint: "storyboard"');
+      expect(zhMedia?.content).toContain('不要输出 Canvas node JSON');
+      expect(zhMedia?.content).toContain('transfer payload JSON');
+      expect(zhMedia?.content).toContain('未知列保留为审阅 metadata');
       expect(zhMedia?.content).toContain('不要嵌入 base64');
       expect(zhMedia?.content).toContain('QuerySemanticCoverage');
       expect(zhComicAnimation?.content).toContain('漫画转动画');
-      expect(zhComicAnimation?.content).toContain('分镜与实体输出契约');
-      expect(zhComicAnimation?.content).toContain('neko.entityMemoryContributionPayload');
-      expect(zhComicAnimation?.content).toContain('MediaTextSegment');
-      expect(zhComicAnimation?.content).toContain('metadata.imageAudit');
+      expect(zhComicAnimation?.content).toContain('Lifecycle Artifact 规则');
+      expect(zhComicAnimation?.content).toContain('实体记忆和人物证据');
+      expect(zhComicAnimation?.content).toContain('review status');
+      expect(zhComicAnimation?.content).toContain('imageAudit');
       expect(zhComicAnimation?.content).toContain('split-panels');
       expect(zhComicAnimation?.content).toContain('rotate');
       expect(zhComicAnimation?.content).toContain('一张来源图可以生成多个 storyboard shot');
-      expect(zhComicAnimation?.content).toContain('不要检查 `.neko/.cache`');
-      expect(zhComicAnimation?.content).toContain('不能替代 contribution extension');
-      expect(zhComicAnimation?.content).toContain('AnimationPlan');
+      expect(zhComicAnimation?.content).toContain('缓存路径');
+      expect(zhComicAnimation?.content).toContain('动画计划');
       expect(zhComicAnimation?.content).toContain('GenerateVideo');
+      expect(zhComicAnimation?.content).not.toContain('CompositeArtifact');
+      expect(zhComicAnimation?.content).not.toContain('StoryboardTable');
+      expect(zhComicAnimation?.content).not.toContain('neko-composite');
+      expect(zhComicAnimation?.content).not.toContain('sourceMediaRefs');
+      expect(zhComicAnimation?.content).not.toContain('imageStrategy');
     });
 
     it('keeps machine-facing skill contracts stable across locales', () => {

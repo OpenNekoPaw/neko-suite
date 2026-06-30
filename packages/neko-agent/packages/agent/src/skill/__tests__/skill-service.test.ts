@@ -172,9 +172,9 @@ describe('SkillService', () => {
     expect(service.skillCount).toBe(0);
   });
 
-  // --- discover compatibility shell ---
+  // --- discover ---
 
-  it('discover does not route natural-language requests to Skill matches', () => {
+  it('discover returns matches without applying skills', () => {
     const skill = makeSkill({
       name: 'commit-helper',
       description: 'Help with git commits',
@@ -188,12 +188,15 @@ describe('SkillService', () => {
 
     registry.registerSkill(skill);
 
-    const service = new SkillService({ registry });
+    const matcher = { match: vi.fn(() => [{ skill, relevance: 0.95, reason: 'test match' }]) };
+    const service = new SkillService({ registry, matcher });
     const result = service.discover('commit my changes');
 
+    expect(matcher.match).toHaveBeenCalledWith('commit my changes', [skill]);
     expect(result).toEqual({
-      found: false,
-      matches: [],
+      found: true,
+      matches: [{ skill, relevance: 0.95, reason: 'test match' }],
+      topMatch: { skill, relevance: 0.95, reason: 'test match' },
       requiresConfirmation: false,
     });
   });
@@ -287,7 +290,7 @@ describe('SkillService', () => {
       expect(result.requiresConfirmation).toBe(false);
     });
 
-    it('re-enabling discovery does not restore code-side natural-language routing', () => {
+    it('re-enabling discovery restores discovery but not direct application', () => {
       const skill = makeSkill({
         name: 'commit-helper',
         description: 'Help with git commits',
@@ -295,15 +298,16 @@ describe('SkillService', () => {
       });
       const registry = makeMockRegistry();
       registry.registerSkill(skill);
-      const service = new SkillService({ registry });
+      const matcher = { match: vi.fn(() => [{ skill, relevance: 0.95, reason: 'test match' }]) };
+      const service = new SkillService({ registry, matcher });
 
       service.setDiscoveryEnabled(false);
       expect(service.discover('git commits').found).toBe(false);
 
       service.setDiscoveryEnabled(true);
       const result = service.discover('git commits');
-      expect(result.found).toBe(false);
-      expect(result.matches).toEqual([]);
+      expect(result.found).toBe(true);
+      expect(result.matches).toEqual([{ skill, relevance: 0.95, reason: 'test match' }]);
     });
 
     it('default state is enabled', () => {
@@ -331,9 +335,9 @@ describe('KeywordSkillMatcher', () => {
       makeSkill({
         name: 'comic-to-storyboard',
         description:
-          'Convert manga/comic pages into structured StoryboardTable storyboards. Use only for storyboard table or shot breakdown requests, not content-only EPUB analysis.',
+          'Convert manga/comic pages into reviewable CreativeTable storyboards. Use only for storyboard table or shot breakdown requests, not content-only EPUB analysis.',
         mediaWorkflow: {
-          producedArtifacts: ['StoryboardTable'],
+          producedArtifacts: ['CreativeTable'],
           tags: ['comic', 'manga', 'storyboard'],
         },
       }),
@@ -372,9 +376,9 @@ describe('KeywordSkillMatcher', () => {
     const matcher = new KeywordSkillMatcher();
     const storyboardSkill = makeSkill({
       name: 'comic-to-storyboard',
-      description: 'Convert manga/comic pages into structured StoryboardTable storyboards.',
+      description: 'Convert manga/comic pages into reviewable CreativeTable storyboards.',
       mediaWorkflow: {
-        producedArtifacts: ['StoryboardTable'],
+        producedArtifacts: ['CreativeTable'],
         tags: ['comic', 'manga', 'storyboard'],
       },
     });
@@ -385,7 +389,7 @@ describe('KeywordSkillMatcher', () => {
       expect.objectContaining({
         skill: storyboardSkill,
         relevance: 0.95,
-        reason: expect.stringContaining("Matched artifact 'StoryboardTable'"),
+        reason: expect.stringContaining("Matched artifact 'CreativeTable'"),
       }),
     );
   });
@@ -402,9 +406,9 @@ describe('KeywordSkillMatcher', () => {
     });
     const focusedSkill = makeSkill({
       name: 'comic-to-storyboard',
-      description: 'Convert manga/comic pages into structured StoryboardTable storyboards.',
+      description: 'Convert manga/comic pages into reviewable CreativeTable storyboards.',
       mediaWorkflow: {
-        producedArtifacts: ['StoryboardTable'],
+        producedArtifacts: ['CreativeTable'],
         tags: ['comic', 'manga', 'storyboard'],
       },
     });
@@ -459,7 +463,7 @@ describe('KeywordSkillMatcher', () => {
     const matches = matcher.match('把这个 EPUB 前10页生成分镜表', makeMediaWorkflowSkills());
 
     expect(matches[0]?.skill.name).toBe('comic-to-storyboard');
-    expect(matches[0]?.reason).toContain("Matched artifact 'StoryboardTable'");
+    expect(matches[0]?.reason).toContain("Matched artifact 'CreativeTable'");
   });
 
   it('routes explicit EPUB animation requests to comic-to-animation before broad media skills', () => {

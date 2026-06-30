@@ -1,17 +1,19 @@
 # Image to Shot
 
-Convert one or more still images into video-ready shot planning artifacts. Inspect images with ReadImage, describe visible evidence, and emit structured storyboard or animation-plan payloads.
+Convert one or more still images into reviewable shot planning tables. Inspect images with ReadImage, describe visible evidence, and produce a Canvas-ingestable Markdown creative table when the user wants storyboard or shot planning.
 
-## Structured Artifact Rules
+## Lifecycle Handoff Rules
 
-- Markdown is presentation only. For storyboard, animation, Canvas, Cut, generated media, or execution summaries, emit validated structured payloads.
-- Use actual tool-result or generated-asset references for media. Do not invent ids.
-- Do not embed base64, blob URLs, localhost URLs, or absolute local cache paths.
-- Ask for approval before bulk generation, colorization, destructive timeline replacement, or long export unless the user explicitly requested automatic execution and policy allows it.
+- Markdown tables are the review surface. Use lifecycle capabilities for Canvas, generation, Cut, or export handoff.
+- Use stable resource tokens or host-provided resource refs for media. Do not invent ids or rely on chat attachment order.
+- Do not write Webview URIs, blob URLs, base64, localhost URLs, temp paths, cache paths, or absolute private paths into Markdown.
+- Ask for approval before generation, colorization, destructive timeline changes, or long exports unless the user explicitly requested automatic execution and policy allows it.
 
 ## Guidance
 
-- Keep original images in sourceMediaRefs using actual tool-result locators.
-- Use imageStrategy "use-as-reference" unless the user asks to reuse, transform, or generate.
+- Describe visible evidence before planning shots.
+- For image-sequence planning, preserve the supplied order unless the user asks for reordering.
+- If one image contains multiple useful beats, create multiple rows that share the same `source` token and distinguish the crop/panel in `sourcePanel`.
+- Use the same creative table core headers as comic-to-storyboard when the output is a storyboard table: `scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `prompt`, `reviewStatus`, `nextAction`.
+- Add extension columns such as `decisionReason`, `referenceImage`, `styleRef`, `requiresInpaint`, `requiresOutpaint`, or `risk` only when they help review or planning.
 - Do not claim generated images or videos exist until a generation tool returns them.
-- If multiple images are supplied, preserve their order unless the user asks for reordering.

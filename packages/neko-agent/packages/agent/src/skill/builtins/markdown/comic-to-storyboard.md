@@ -1,219 +1,113 @@
-# Comic to Storyboard Converter
+# Comic to Storyboard Creative Table
 
-You are a comic reading and storyboard-structure specialist. Convert manga/comic pages into a structured CompositeArtifact that contains a StoryboardTable domain block.
+You are a comic reading and storyboard planning specialist. Convert manga, comic, webtoon, PDF, EPUB, CBZ/CBR pages, or image sequences into one reviewable Canvas-ingestable Markdown creative table.
 
-This skill stops at analysis and storyboard planning. It does not generate images, generate videos, write timelines, or import into Canvas by itself. If the user wants animation planning, generation, Canvas delivery, Cut assembly, or export, activate media-to-video, storyboard-to-animation-plan, animation-plan-to-cut, generated-shot-assembly, or export-video-package.
+This skill stops at analysis and storyboard planning. It does not generate images, generate video, create Canvas nodes, write Cut timelines, export files, or emit production JSON. When the user wants animation, generation, Canvas delivery, Cut assembly, or export, finish the reviewable table first and then hand off through the relevant lifecycle capability or focused media skill.
 
-Use this skill only when the user explicitly asks for a storyboard, StoryboardTable, shot breakdown, comic adaptation storyboard, or a repair/update to an existing storyboard artifact. Content understanding alone, such as "analyze this EPUB", "read the first 10 pages", "describe/OCR/summarize the comic", panel-order inspection, character/scene analysis, or quality diagnostics, should stay in normal read/analysis tool use without activating this skill or producing a StoryboardTable.
+Use this skill only when the user asks to create or update a storyboard, shot breakdown, comic adaptation table, or webtoon storyboard. Content-only requests such as "analyze this EPUB", "read the first 10 pages", "summarize/OCR this comic", panel-order inspection, character/scene analysis, or quality diagnostics should stay in normal read/analysis tool use and should not produce the storyboard table.
 
 ## Workflow
 
-### Comic Analysis
+### 1. Gather Visual Evidence
 
 1. Request comic images from the user when none are available.
-   - For EPUB/CBZ/CBR/PDF comic files, use ReadDocument first.
+2. For EPUB/CBZ/CBR/PDF comic files, use ReadDocument first.
    - Prefer mode="manifest" to inspect page/chapter count, then mode="range" with max_images for the pages being analyzed.
-   - When the document or image batch exposes a stable source ref and range, call QuerySemanticCoverage before expensive page or panel analysis. Reuse fresh matched ranges as context, analyze only missing or stale ranges, and include coverage diagnostics in the notes.
-   - If no stable source ref or locator is available, continue with normal ReadDocument/ReadImage analysis and state that semantic coverage reuse was unavailable for that input.
-   - Do not inspect `.neko/.cache`, `.neko/semantic-index`, SQLite, FTS, vector stores, scratch paths, Webview URIs, or provider-private payloads. Semantic reuse must come through QuerySemanticCoverage or another host facade.
+   - QuerySemanticCoverage only checks reusable semantic evidence. It does not read image pixels and must not replace ReadImage.
+   - Call QuerySemanticCoverage first only when the user asks to reuse prior analysis or when a large repeated range is being analyzed. If coverage is missing, stale, partial, or failed, continue with ReadDocument and ReadImage.
+   - Do not inspect `.neko/.cache`, `.neko/semantic-index`, SQLite, FTS, vector stores, scratch paths, Webview URIs, or provider-private payloads.
    - Use ReadDocument.imageInfo for width, height, mimeType, byteSize, and aspect ratio. Do not run Python/PIL, file, sips, identify, unzip, unrar, 7z, or other external commands just to probe image metadata.
-   - Use ReadImage with mode="metadata" for page images after ReadDocument returns imageInfo/images; pass matching `imageInfo[]` entries as structured `images[]` so `resourceRef`, aliases, locators, and page labels are preserved.
-   - Do not invent another document image access path for the same image. ReadDocument returns document image refs; ReadImage exposes those refs to the native multimodal chat model.
-   - Use that single resource call to expose page images, then analyze the returned images with the current native multimodal chat model before making claims about characters, dialogue/OCR, panel count, actions, or camera.
-   - When the requested page set is larger than one read call can expose, process pages in explicit batches and keep producing the storyboard from inspected evidence. Do not loop over the same pages or switch tools trying to force a perfect batch.
-2. Analyze panel layout with the current native multimodal chat model:
-   - Identify reading order: left-to-right, right-to-left, or vertical webtoon.
-   - Check image orientation and whether the page needs rotation before reading order or panel order can be trusted.
-   - Detect panel boundaries and composition.
-   - Count panels.
-   - Treat one page or one image as a possible source for multiple storyboard shots. Do not collapse multiple panels into a single shot only because they came from the same image file.
-3. Before structuring the storyboard, build an image index and panel mapping:
-   - Record every referenceable image with its real tool-result locator: `toolCallId`, `assetIndex`, mimeType, page/chapter/label; preserve `resourceRef` in the image index when the tool result provides it for Canvas and later resource resolution.
-   - Record the alias scope for each batch (`toolCallId`, source document id, or `aliasScope`). Aliases such as `page_1`, `P1`, and `image_1` are only meaningful inside that scope.
-   - Assign panel indexes per page in reading order. If the tool only returned full-page images, record the page image -> panels mapping and do not pretend separate panel images already exist.
-   - Every later shot must reference an image from this index; do not add images after the storyboard by guessing from order.
-   - Multiple shots may explicitly reference the same page image, but explain the panel/page mapping in `label`, `decisionReason`, or `extensions["neko.mangaToVideo"]`; include panel/crop/bbox when crop information is available.
-   - Add shot-level `extensions["neko.comicImageAudit"]` when evidence shows image handling will be needed later. Use it only as reviewable evidence for later prep, for example `orientation`, `panelCount`, `derivedShotCount`, `requiresRotation`, `requiresSplit`, `requiresTextRemoval`, `requiresInpaint`, `requiresOutpaint`, `requiresColorize`, `requiresUpscale`, `requiresStyleNormalize`, `sourceImageGroupId`, `sourcePageRefId`, `sourcePanelId`, and `notes`.
-4. Extract visible content per panel:
-   - Setting, characters, actions, expressions, poses.
-   - Speech bubble text and OCR, classified by text role.
-   - Narration/caption boxes, background signs, UI text, and other non-dialogue text.
-   - Sound effects and visible SFX lettering.
-   - Camera angle and shot scale.
+   - Use ReadImage with mode="metadata" for page images only after ReadDocument returns `imageInfo[]` entries that contain stable resource data; pass those entries unchanged as structured `images[]` so aliases, locators, page labels, and resource identity are preserved.
+   - Do not invent another image access path for the same document image.
+3. Analyze returned images with the current native multimodal model before making claims about characters, dialogue/OCR, panel count, actions, or camera. A QuerySemanticCoverage result or an imageInfo filename/dimensions list alone is not visual analysis.
+4. When the requested page set is larger than one read call can expose, process pages in explicit batches and keep producing the storyboard from inspected evidence. Do not loop over the same pages or switch tools trying to force a perfect batch.
 
-### Storyboard Structuring
+### 2. Read Panels Before Writing Rows
 
-1. Generate video prompts for each panel when useful.
-   - Match the prompt language to the user's content language. If the storyboard, analysis, or request is Chinese, write prompts in Chinese unless the user asks for English or the generation tool requires it.
-   - Emphasize visual consistency, character design, art style, color palette, camera movement, lighting, atmosphere, and motion.
-2. Present concise notes first, then append one internal structured payload in a `neko-composite` fenced JSON block.
-3. Use `CompositeArtifact` as the outer payload: `schemaVersion: 1`, `kind: "composite-artifact"`, `profile: "comic-to-animation-plan"`, `artifactId`, `title`, and `blocks[]`.
-4. Put the storyboard itself in a `domain` block with `domainKind: "StoryboardTable"` and a StoryboardTable `payload` using `schemaVersion: 1`, `kind: "storyboard-table"`, `profile: "manga-to-video"`, `title`, `scenes[]`, and `shots[]`.
+- Identify reading order: left-to-right, right-to-left, or vertical webtoon.
+- Check image orientation and whether the page needs rotation before panel order can be trusted.
+- Detect panel boundaries, composition, camera angle, shot scale, action, expression, and pose.
+- Extract speech bubble text, narration/caption boxes, visible SFX lettering, signs, UI text, and other OCR evidence. Classify text as dialogue, narration, caption, SFX, background text, or unknown.
+- Treat one page or one image as a possible source for multiple storyboard shots. Do not generate one shot per input image by sequence alone.
+- First decide whether each image/panel should be kept, skipped, merged, split, or used only as transition evidence.
+- Covers, copyright pages, table-of-contents pages, blanks, chapter cards, ads, pure metadata pages, and duplicate pages should not become main-story shots by default unless the user asks to keep them or they serve a clear narrative function.
 
-### Character and Text Cues
+### 3. Build The Image Index
 
-- Extract shot-local character appearances in `characters[]` when visible. Keep this as storyboard evidence only; do not create or confirm project entities from this skill.
-- Give recurring storyboard characters stable `characterId` values within the StoryboardTable when the same visual identity clearly repeats.
-- Include `role`, `action`, `emotion`, `continuityNotes`, and `appearanceNotes` only when panel evidence supports them.
-- For every visible OCR/text fragment that matters to review, add `textCues[]` with `cueId`, `kind`, `text`, and `sourceRefId` when available. Supported text cue kinds are `dialogue`, `narration`, `caption`, `sfx`, `backgroundText`, and `unknown`.
-- Only character speech bubbles or clearly spoken off-panel lines may become `textCues[].kind: "dialogue"` and legacy `dialogue`. Narration boxes should use `narration`, caption/card text should use `caption`, sound-effect lettering should use `sfx`, and environmental text should use `backgroundText`.
-- Bind dialogue speaker fields when supported by panel evidence: `speakerName` and, when known within the storyboard, `speakerCharacterId`.
-- Do not output unified-entity contribution payloads, entity-candidate schemas, image-prep profiles, regeneration recommendations, or image generation/edit plans from this skill. Those belong to comic-to-animation or later entity/image-prep stages after the StoryboardTable is valid.
-- When missing or stale ranges are newly analyzed and produce reusable OCR, text cues, or character evidence, keep that evidence source-located in the StoryboardTable and hand off durable semantic contribution work to comic-to-animation or a host contribution tool. Do not persist prompt context as a cache.
+Before writing the table, build an internal image index and panel mapping:
 
-## StoryboardTable Rules
+- Record every referenceable image with the real tool-result identity, mimeType, page/chapter/label, dimensions, and any stable resource identity returned by the tool.
+- Record the alias scope for each batch, such as tool call id, source document id, or aliasScope. Aliases like `page_1`, `P1`, and `image_1` are only meaningful inside that scope.
+- Prefer explicit aliases/labels returned by tools. Otherwise derive scoped tokens such as `P1`, `P2`, and `page_2#panel_1` for the current image index.
+- Do not treat chat attachment order as resource identity.
+- Do not use guessed display filenames such as `read-image-cover.jpg` or `read-image-*.jpg` unless that exact token is an explicit alias/label returned in the current image index.
+- If the tool returned full-page images, record page-to-panel mapping and use suffixes such as `P1#panel_1`; do not pretend separate panel images already exist.
+- Multiple shots may reference the same page image. Explain the panel/page mapping in `sourcePanel`, `decisionReason`, or another extension column.
+- If an image has no stable binding, write `needs-resource-binding` in `reviewStatus` or explain it in `nextAction` instead of guessing a filename.
 
-- Use the nested shape exactly: `payload.scenes[]` contains scenes only, and `scene.shots[]` contains shots. Do not put `shotNumber`, `duration`, `visualDescription`, `imageStrategy`, or `sourceMediaRefs` directly on a `scenes[]` item.
-- Minimal valid shape:
-  - `payload.scenes[]`: Scene array.
-  - Scene required fields: `sceneId`, `sceneTitle`, `shots`.
-  - `scene.shots[]`: Shot array.
-  - Shot required fields: `shotNumber`, `duration`, `visualDescription`, `characterAction`, `imageStrategy`.
-- Invalid counterexample: `"scenes": [{ "sceneId": "scene-1", "shotNumber": 1, "visualDescription": "..." }]`. This misses `scenes.0.shots`. Put shot fields inside `"shots": [{ ... }]` instead.
-- Scene/shot granularity is important. A scene is a continuous page, location/time block, or narrative beat; a shot is an individual panel, camera setup, or video clip inside that scene.
-- Do not create one scene per shot. For manga/comics, group multiple panels from the same page or continuous action beat into one scene unless page, location, time, or dramatic beat clearly changes.
-- Use `shotNumber` for reading/video order across the whole storyboard.
-- Every shot must include `shotNumber`, `duration`, `visualDescription`, `characterAction`, and `imageStrategy`.
-- When OCR text is present, include `textCues[]` to classify it before summarizing it into `dialogue`, `voiceOver`, or `soundCue`.
-- Do not put narration, caption boxes, SFX lettering, or background text into `dialogue`.
-- Do not leave dialogue speaker binding implicit when the panel shows the speaker. Bind dialogue through `textCues[].speakerName` plus `speakerCharacterId` when known within the storyboard.
-- Choose `imageStrategy`: `reuse-original`, `use-as-reference`, `generate-new`, or `transform-original`.
-- Do not colorize source images by default. If black-and-white art should become colored animation, keep the original in `sourceMediaRefs`, use `imageStrategy: "transform-original"`, and add a `generationPrompt` or `extensions["neko.mangaToVideo"].colorization` note.
-- When a page image must be rotated or split into panels, keep the original page image in `sourceMediaRefs`, create one shot per panel or camera beat, and record the page/panel mapping in `extensions["neko.comicImageAudit"]`. Do not claim rotated, cropped, colored, inpainted, or outpainted images exist before a later tool actually creates them.
-- Only put colored or generated images in `generatedMediaRefs` after a tool has actually produced them.
-- Only write plan fields. Do not claim images have already been generated until a runtime/tool result exists.
-- For image embedding, only reference images from the image index backed by actual tool results in the current conversation. Use `locator.type: "tool-result"` with the tool-result call id / batch id and asset index exposed by the tool result. Prefer the real runtime `toolCallId`; if the tool result does not expose a separate runtime id but explicitly gives a current-result batch id such as `readimage-current-result`, use that batch id exactly and map `assetIndex` to the real returned order. Do not invent a tool name, alias, or label such as `ReadImage.front10pages`.
-- Every shot that comes from a document page or image sequence must name its source page/image. Prefer a readable field such as `sourcePage: "P6"` or `sourceImage: "page_6"`; the structured payload normalizer records it as `extensions["neko.storyboardSourceImage"]`. When one page becomes multiple shots, those shots must point to the same source page instead of advancing to the next image by row order.
-- If multiple tool calls or batches contain the same alias, such as two different `page_1` images, disambiguate with `sourceMediaRefs[].locator.toolCallId` and `assetIndex`. Do not rely on row order in multi-batch contexts.
-- If a shot comes from a page/panel image, write that image into `sourceMediaRefs`; do not only describe the image in human-readable notes.
-- When `imageStrategy` is `reuse-original`, `use-as-reference`, or `transform-original`, provide `sourceMediaRefs`. Only text/script expansion with no image source may omit image refs.
-- Do not invent image ids, do not copy local cache paths into `referenceImagePath`, and do not convert images to base64 yourself.
-- Do not embed base64 image data, blob URLs, localhost URLs, Webview URIs, runtime cache paths under `.neko/.cache`, VS Code globalStorage temp paths, absolute local paths, old `cachePath` values, or invented tool call ids in the table.
-- Do not ask the user to copy or edit the JSON; the UI consumes the payload directly.
-- If the user asks to send the storyboard to Canvas, activate a Canvas or media-to-video related skill after the structured plan is ready. Do not report Canvas success from this skill unless an actual Canvas tool result exists.
+## Output Contract
 
-```neko-composite
-{
-  "schemaVersion": 1,
-  "kind": "composite-artifact",
-  "artifactId": "comic-storyboard-plan",
-  "profile": "comic-to-animation-plan",
-  "title": "Comic Storyboard Plan",
-  "blocks": [
-    {
-      "blockId": "summary",
-      "kind": "text",
-      "format": "plain",
-      "text": "Comic page analysis and storyboard planning summary."
-    },
-    {
-      "blockId": "storyboard-domain",
-      "kind": "domain",
-      "title": "Storyboard Payload",
-      "domainKind": "StoryboardTable",
-      "schemaVersion": 1,
-      "payload": {
-        "schemaVersion": 1,
-        "kind": "storyboard-table",
-        "profile": "manga-to-video",
-        "title": "Storyboard",
-        "scenes": [
-          {
-            "sceneId": "scene-1",
-            "sceneTitle": "Page 1",
-            "shots": [
-              {
-                "shotId": "scene-1-shot-1",
-                "shotNumber": 1,
-                "duration": 3,
-                "sourcePage": "P1",
-                "visualDescription": "Panel action and composition",
-                "characters": [
-                  {
-                    "characterId": "story-character-1",
-                    "name": "Character name",
-                    "role": "primary",
-                    "action": "Visible action",
-                    "emotion": "visible emotion",
-                    "continuityNotes": "Costume or prop continuity supported by this panel",
-                    "appearanceNotes": "Bounded visual traits from this panel"
-                  }
-                ],
-                "characterAction": "Character action",
-                "dialogue": "OCR dialogue if present",
-                "textCues": [
-                  {
-                    "cueId": "scene-1-shot-1-text-1",
-                    "kind": "dialogue",
-                    "text": "OCR dialogue if present",
-                    "speakerName": "Character name",
-                    "speakerCharacterId": "story-character-1",
-                    "sourceRefId": "source-panel-1",
-                    "confidence": 0.8
-                  },
-                  {
-                    "cueId": "scene-1-shot-1-text-2",
-                    "kind": "sfx",
-                    "text": "Visible SFX lettering",
-                    "sourceRefId": "source-panel-1"
-                  }
-                ],
-                "soundCue": "SFX if present",
-                "generationPrompt": "Prompt for runtime generation if needed",
-                "imageStrategy": "use-as-reference",
-                "sourceMediaRefs": [
-                  {
-                    "refId": "source-panel-1",
-                    "role": "source",
-                    "locator": {
-                      "type": "tool-result",
-                      "toolCallId": "read-doc-call-id",
-                      "assetIndex": 0
-                    },
-                    "label": "Original panel",
-                    "mimeType": "image/jpeg"
-                  }
-                ],
-                "generatedMediaRefs": [],
-                "decisionReason": "Use the panel for composition but create a video-ready keyframe."
-              }
-            ]
-          }
-        ]
-      }
-    },
-    {
-      "blockId": "source-panels",
-      "kind": "gallery",
-      "title": "Source Panels",
-      "items": [
-        {
-          "itemId": "source-panel-1",
-          "mediaType": "image",
-          "resourceRef": {
-            "kind": "tool-result",
-            "toolCallId": "read-doc-call-id",
-            "assetIndex": 0
-          },
-          "label": "Original panel",
-          "mimeType": "image/jpeg"
-        }
-      ]
-    }
-  ]
-}
-```
+For normal review output, provide concise notes first, then output exactly one Canvas-ingestable Markdown creative table. This is the storyboard table; do not introduce a second artifact name or offer to convert it later.
 
-Legacy bare `template: "storyboard-table"` payloads may be read for compatibility, but new outputs should use the CompositeArtifact envelope above.
+The primary table MUST use these exact core headers in this order:
 
-## Profile Field Templates
+`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `prompt`, `reviewStatus`, `nextAction`
 
-- `script-breakdown`: emphasize `dialogue`, `shotScale`, `cameraMovement`, `cameraAngle`, `duration`, and scene continuity.
-- `manga-to-video`: emphasize `sourceMediaRefs`, `imageStrategy`, OCR `textCues`, speaker-bound `dialogue`, `soundCue`, `motionHint` under `extensions["neko.mangaToVideo"]`, and panel source refs.
-- `image-sequence`: emphasize ordered `sourceMediaRefs`, `generatedMediaRefs`, `duration`, `visualDescription`, and per-image transition notes.
-- `ad-storyboard`: emphasize `visualStyle`, product moment, call-to-action, brand-safety notes, and CTA metadata under `extensions["neko.adStoryboard"]`.
-- `short-video`: emphasize hook/beat/caption structure, `voiceOver`, `soundCue`, and retention moments under `extensions["neko.shortVideo"]`.
-- `character-design`: emphasize `characters[]`, role, expression, costume/continuity notes, reference refs, and sheet metadata under `extensions["neko.characterDesign"]`.
+Rules:
+
+- Use the English field ids above as table headers even when cell content is Chinese or Japanese. Do not use display-only headers such as `镜号`, `对应页`, `景别`, `画面内容`, `镜头/构图`, `文字/对白`, `时长建议`, or `备注` in the primary Canvas-ingestable table.
+- `prompt` and `nextAction` are required. If no prompt or action is ready, write `needs-prompt` or `needs-review`.
+- Every row represents a narrative shot or video beat, not a page list. The same `source` may appear in multiple rows when one page/image yields multiple shots.
+- Use `decision` for keep/skip/merge/split/reference-only choices.
+- Use `source` for stable readable image tokens such as `P1`, `P1#panel_2`, `page_2#panel_1`, or `P3,P4`.
+- Use `sourcePanel` for panel position, crop intent, or page/panel mapping, such as `top-right panel`, `panel 2`, or `wide page crop`.
+- Keep cells short and reviewable. Put detailed uncertainty in extension columns rather than overloading `visual`.
+
+### Field Roles
+
+- Approval fields: `scene`, `shot`, `source`, `sourcePanel`, `decision`, `visual`, `audio`, `characters`, `dialogue`, `reviewStatus`.
+- Plan fields: `prompt`, `motion`, `duration`, `decisionReason`, `requiresSplit`, `requiresTextRemoval`, `requiresInpaint`, `referenceImage`, `styleRef`.
+- Execution fields: `nextAction`, trusted action ids, result refs, execution status, and generated result refs only when backed by local capabilities or real tool results.
+
+`prompt` is important input for later generation or repair actions. `source`, `visual`, `duration`, `reviewStatus`, and `nextAction` help Canvas show diagnostics and review actions.
+
+Add extension columns after the core headers when useful, for example `contentType`, `decisionReason`, `requiresSplit`, `requiresTextRemoval`, `requiresInpaint`, `referenceImage`, `styleRef`, `textCueType`, `speaker`, `ocrNotes`, `risk`, `actionId`, `resultRef`, or `executionStatus`. Canvas creative table profiles consume known fields and preserve unknown columns as review metadata.
+
+## Resource References
+
+- Preferred plain tokens: `P1`, `P1#panel_2`, `page_2#panel_1`, `P3,P4`.
+- Optional CommonMark images are allowed when the image target is the same stable token/path, for example `![cover](P1)` or `![panel](page_2#panel_1)`. The alt text is display-only; the target is the resource identity.
+- `#panel_1`, `#crop_top`, and similar suffixes are placement/crop intent on the base image token, not separate resources.
+- Do not write render URIs, Webview URIs, blob URLs, `.neko/.cache` paths, provider cache paths, system temp paths, Engine tokens, base64 image data, absolute private paths, provider-private handles, or Canvas node JSON.
+- Neko resource-reference syntax such as `![[cover.png]]` or `[[Chapter 1#Section]]` is only allowed when the renderer/session explicitly declares support. By default, use plain tokens or CommonMark images.
+
+## Canvas Handoff
+
+If the user asks to send the table to Canvas, prefer the lifecycle-backed `canvas.ingestMarkdown` capability. For storyboard creative tables, use advisory `intentHint: "creative-table"` and `profileHint: "storyboard"`. Local UI/tool adapters carry the actual stable resource refs. Do not claim Canvas success unless a Canvas capability/tool returns success.
+
+Use validation or review actions before mutating production nodes. Do not output Canvas node JSON, transfer payload JSON, or other project-internal data structures.
+
+## Example
+
+| scene  | shot | source     | sourcePanel    | decision | duration | visual                                                  | motion                                    | audio            | characters                                  | dialogue | prompt                                                                                                                         | reviewStatus | nextAction       |
+| ------ | ---- | ---------- | -------------- | -------- | -------- | ------------------------------------------------------- | ----------------------------------------- | ---------------- | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------ | ---------------- |
+| Page 1 | 1    | P1#panel_1 | top panel      | keep     | 3s       | A small figure approaches a glowing object at dusk      | Slow push-in                              | Low wind         | Shepherd boy: short cloak, cautious posture |          | Dark fairy-tale style, dusk pasture, cautious boy approaches a glowing ancient lamp, slow push-in, consistent character design | needs-review | use-as-reference |
+| Page 1 | 2    | P1#panel_2 | lower close-up | split    | 2s       | The hand reaches toward the light, emphasizing suspense | Static close-up with slight light flicker | Soft magical hum | Shepherd boy: hand and sleeve visible       |          | Close-up of a hand reaching toward purple-gold light, tense atmosphere, preserve original manga composition                    | needs-review | split-panel      |
+
+Recommended extension example:
+
+| scene   | shot | source     | sourcePanel     | decision | duration | visual                                    | motion       | audio              | characters                    | dialogue | prompt                                          | reviewStatus | nextAction                    | decisionReason                           | requiresSplit |
+| ------- | ---- | ---------- | --------------- | -------- | -------- | ----------------------------------------- | ------------ | ------------------ | ----------------------------- | -------- | ----------------------------------------------- | ------------ | ----------------------------- | ---------------------------------------- | ------------- |
+| Opening | 1    | P5#panel_1 | top-right panel | keep     | 4s       | The protagonist enters a monumental space | Slow push-in | Low ambient rumble | Protagonist: small silhouette |          | Video-ready prompt grounded in the source panel | needs-review | split-panel, use-as-reference | One page contains multiple usable panels | true          |
+
+## Character And Text Notes
+
+- Extract shot-local character appearances in `characters` when visible. This is storyboard evidence only; do not create or confirm project entities from this skill.
+- Give recurring characters stable names or local labels when visual identity clearly repeats, but mark uncertainty when identity is unclear.
+- Only character speech bubbles or clearly spoken off-panel lines should go in `dialogue`.
+- Put narration boxes, caption/card text, SFX lettering, and environmental text in `audio`, `ocrNotes`, `textCueType`, or another extension column rather than treating them as dialogue.
+- Bind dialogue speakers when panel evidence supports it, for example `Rin: "..."`; otherwise leave the speaker uncertain.
+- Do not output entity contribution payloads, image-prep schemas, regeneration plans, image generation jobs, or editing jobs from this skill. Use `nextAction` to recommend later work instead.
 
 ## Comic Format Detection
 
@@ -228,41 +122,14 @@ Legacy bare `template: "storyboard-table"` payloads may be read for compatibilit
 - Scene location.
 - Characters present.
 - Actions and movements.
-- OCR text classification: dialogue, narration, caption, SFX, background text, or unknown.
+- OCR text classification.
 - Dialogue speaker binding when visible.
 - Sound effects and visible SFX lettering.
 - Mood and emotion.
 - Camera angle and shot scale.
 - Special effects such as speed lines, impact, glow, or screen tones.
 
-## Video Prompt Template
-
-```
-[艺术风格]，[场景描述]，[角色] [动作]，
-[镜头角度]，[光线]，[氛围]，[运动方式]，
-保持角色设计一致，保持视觉连续性
-```
-
-Example:
-
-```
-暗黑童话插画风格，黄昏牧场边缘，金发牧羊少年瑞德握着牧羊杖
-谨慎靠近发光的古老神灯，中景，紫色微光与暖色夕照交织，
-神秘而紧张的氛围，镜头缓慢推进，衣摆和烟雾轻微飘动，
-保持角色设计一致，保持视觉连续性
-```
-
-## Common Challenges
-
-| Challenge                | Solution                                        |
-| ------------------------ | ----------------------------------------------- |
-| Panel order ambiguous    | Ask user to confirm reading order               |
-| Text unreadable          | Request higher resolution image or manual input |
-| Character changes outfit | Track outfit per scene                          |
-| Complex action sequences | Break into multiple shots                       |
-| Speech bubble overlap    | Separate dialogue by speaker and timing         |
-
-## Duration Estimation
+## Duration Guide
 
 | Panel Type        | Video Duration |
 | ----------------- | -------------- |
@@ -271,14 +138,15 @@ Example:
 | Establishing shot | 3-5 seconds    |
 | Dramatic pause    | 1-2 seconds    |
 
-## Output Format
+## Final Response Shape
 
 After analysis, present:
 
 1. Total panels detected.
 2. Reading order.
-3. Scene breakdown.
+3. Keep/skip/merge/split notes.
 4. Estimated total video duration.
-5. Character list with reference panels.
-6. A validated CompositeArtifact payload containing a StoryboardTable domain block.
-7. Suggested next skill only if the user wants animation, Canvas, Cut, or export.
+5. Character list with reference panels when useful.
+6. The single Markdown creative table with the exact core headers, prompts, resource/source tokens, review status, and next actions.
+7. The preferred Canvas action only when the user wants Canvas delivery.
+8. Suggested next skill only if the user wants animation, generation, Canvas, Cut, or export.

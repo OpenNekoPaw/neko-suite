@@ -1,4 +1,10 @@
-import type { Skill, SkillInjection, SkillSummary, SkillToolDefinition } from '@neko/shared';
+import type {
+  Skill,
+  SkillInjection,
+  SkillLifecycleProjection,
+  SkillSummary,
+  SkillToolDefinition,
+} from '@neko/shared';
 import { toSkillSummary } from '@neko/shared';
 
 export interface SkillsListMessage {
@@ -14,6 +20,19 @@ export interface SkillInjectionMessage {
   allowedTools?: string[];
   model?: string;
   toolDefinitions?: SkillToolDefinition[];
+  lifecycle?: {
+    records: Array<{
+      id: string;
+      skillName: string;
+      slot: string;
+      owner: string;
+      clearable: boolean;
+      lockedReason?: string;
+      expires?: string;
+      status?: string;
+      allowedTools?: string[];
+    }>;
+  };
 }
 
 export type SkillsHostMessage = SkillsListMessage;
@@ -34,6 +53,7 @@ export function buildSkillInjectionMessage(input: {
   injection: SkillInjection;
   skill?: Skill;
   conversationId?: string;
+  lifecycle?: SkillLifecycleProjection;
 }): SkillInjectionMessage {
   return {
     type: 'skillInjection',
@@ -43,5 +63,25 @@ export function buildSkillInjectionMessage(input: {
     ...(input.injection.allowedTools ? { allowedTools: input.injection.allowedTools } : {}),
     ...(input.injection.model ? { model: input.injection.model } : {}),
     ...(input.skill?.toolDefinitions ? { toolDefinitions: input.skill.toolDefinitions } : {}),
+    ...(input.lifecycle
+      ? {
+          lifecycle: {
+            records: input.lifecycle.visibleIndicators.map((record) => ({
+              id: record.id,
+              skillName: record.skillName,
+              slot: record.slot,
+              owner: record.owner,
+              clearable: record.clearable,
+              ...(record.lockedReason ? { lockedReason: record.lockedReason } : {}),
+              ...(record.expires ? { expires: record.expires } : {}),
+              ...(record.status ? { status: record.status } : {}),
+              ...(record.id === input.lifecycle?.toolPolicy.contributingRecordIds[0] &&
+              input.lifecycle.toolPolicy.allowedTools
+                ? { allowedTools: [...input.lifecycle.toolPolicy.allowedTools] }
+                : {}),
+            })),
+          },
+        }
+      : {}),
   };
 }

@@ -55,9 +55,10 @@ describe('ArtifactSchemaModule runtime activation pattern', () => {
     expect(composer.hasSection('artifact-schema')).toBe(true);
     const section = composer.getSection('artifact-schema');
     expect(section?.layer).toBe('schema');
-    expect(section?.content).toContain('draft-tiktok-001.md');
-    expect(section?.content).toContain('plan-tiktok-001.md');
-    expect(section?.content).toContain('task-tiktok-001.md');
+    expect(section?.content).toContain('Creation document contract');
+    expect(section?.content).toContain('`tiktok-001`');
+    expect(section?.content).toContain('neko/creations/<creation-id>/brief.md');
+    expect(section?.content).not.toContain('.neko/drafts');
   });
 
   it('leaves the composer untouched when ctx has no runId', () => {
@@ -72,12 +73,12 @@ describe('ArtifactSchemaModule runtime activation pattern', () => {
     const mod = new ArtifactSchemaModule();
 
     syncSchema(composer, mod, makeCtx('run-A'));
-    expect(composer.getSection('artifact-schema')?.content).toContain('draft-run-A.md');
+    expect(composer.getSection('artifact-schema')?.content).toContain('`run-A`');
 
     syncSchema(composer, mod, makeCtx('run-B'));
     const swapped = composer.getSection('artifact-schema')?.content ?? '';
-    expect(swapped).toContain('draft-run-B.md');
-    expect(swapped).not.toContain('draft-run-A.md');
+    expect(swapped).toContain('`run-B`');
+    expect(swapped).not.toContain('`run-A`');
   });
 
   it('removes the section when transitioning from active run to no run', () => {

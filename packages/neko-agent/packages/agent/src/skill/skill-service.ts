@@ -17,11 +17,13 @@ import type {
   ISkillRegistry,
   IToolRegistry,
   ISkillInjector,
+  ISkillMatcher,
   SkillDiscoveryResult,
   SkillApplicationResult,
 } from '@neko/shared';
 import { SkillRegistry } from './skill-registry';
 import { SkillInjector } from './skill-injector';
+import { createDefaultMatcher } from './skill-matcher';
 import { assertSubpackagesAvailable, type ISubpackageResolver } from './subpackage-guard';
 import { getLogger } from '../utils/logger';
 
@@ -36,6 +38,7 @@ export type ConfirmSkillCallback = (skill: Skill, match: SkillMatch) => Promise<
 export interface SkillServiceConfig {
   registry?: ISkillRegistry;
   injector?: ISkillInjector;
+  matcher?: ISkillMatcher;
   /** Optional tool registry for validating skill allowedTools references */
   toolRegistry?: IToolRegistry;
   /**
@@ -54,6 +57,7 @@ export class SkillService {
   readonly registry: ISkillRegistry;
 
   private readonly _injector: ISkillInjector;
+  private readonly _matcher: ISkillMatcher;
   private readonly _toolRegistry: IToolRegistry | undefined;
   private readonly _subpackageResolver: ISubpackageResolver | null;
   private _discoveryEnabled: boolean = true;
@@ -62,6 +66,7 @@ export class SkillService {
   constructor(config: SkillServiceConfig = {}) {
     this.registry = config.registry || new SkillRegistry();
     this._injector = config.injector || new SkillInjector();
+    this._matcher = config.matcher || createDefaultMatcher();
     this._toolRegistry = config.toolRegistry;
     this._subpackageResolver = config.subpackageResolver ?? null;
   }
@@ -127,11 +132,28 @@ export class SkillService {
   // ===========================================================================
 
   discover(userInput: string): SkillDiscoveryResult {
-    void userInput;
+    if (!this._discoveryEnabled) {
+      return {
+        found: false,
+        matches: [],
+        requiresConfirmation: false,
+      };
+    }
+
+    const matches = this._matcher.match(userInput, this.registry.listSkills());
+    if (matches.length === 0) {
+      return {
+        found: false,
+        matches: [],
+        requiresConfirmation: false,
+      };
+    }
+
     return {
-      found: false,
-      matches: [],
-      requiresConfirmation: false,
+      found: true,
+      matches,
+      topMatch: matches[0],
+      requiresConfirmation: (matches[0]?.relevance ?? 0) < 0.8,
     };
   }
 

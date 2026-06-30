@@ -1,26 +1,9 @@
 /**
- * ArtifactSchemaModule — projects the IDC artifact file contract into the
- * L1 schema layer. Previously embedded verbatim in creation-persona.ts
- * (L45-111 before PR3c); extracted here so all personas implicitly inherit
- * the contract without duplicating ~67 lines of schema text, and so new
- * personas that touch Draft / Plan / Task artifacts don't need to repeat
- * the contract boilerplate.
+ * ArtifactSchemaModule — projects the IDC creation-document contract into the
+ * L1 schema layer.
  *
- * The content mirrors the field / enum definitions owned by
- * ArtifactValidator (DRAFT_SCHEMA / PLAN_SCHEMA / TASK_SCHEMA, see
- * src/artifact/artifact-validator.ts). Keep both sides in sync when
- * either side changes — validator is the machine-check SSOT, this module
- * is the LLM-facing narrative of the same rules.
- *
- * Activation: requires a runId on the context. Without an active IDC run
- * the schema section is suppressed — consistent with the prior UX where
- * the persona prompt told the agent to ask the user to start a session
- * before writing artifacts.
- *
- * Not yet runtime-wired: PR3c introduces the module and the layer; the
- * session-level driver that flips it on/off as IdcRuns come and go lives
- * in PR3d. Tests here use renderSync with a crafted PromptContext to
- * verify the projection contract is correct in isolation.
+ * Draft / Plan / Task are creator-facing documents. Agent may propose their
+ * content, but host/runtime services own persistence, approval, and paths.
  */
 import type {
   PromptModule,
@@ -29,29 +12,27 @@ import type {
 } from '../../registry/module-manifest';
 import type { PromptContext } from '../../context';
 
-/**
- * Template for the schema section. The `{runId}` placeholder is replaced
- * with the active IdcRun id at render time.
- */
-const SCHEMA_TEMPLATE = `## Artifact file contract (required)
+const SCHEMA_TEMPLATE = `## Creation document contract (required)
 
-You write the three IDC artifacts through the generic \`Write\` tool.
-There is no dedicated DraftWrite / PlanWrite / TaskWrite tool anymore.
-The ArtifactWatcher parses and validates every file you write; emit invalid
-frontmatter and you'll see an \`artifact.invalid\` observation next turn.
+The active IDC run id is \`{runId}\`.
 
-### File paths
+Draft / Plan / Task are creator-facing documents. Do not call generic \`Read\`,
+\`Write\`, shell commands, or cache/runtime paths to inspect or persist them.
+The host creation-document service owns storage, approval gates, and path
+selection.
 
-- Draft:  \`.neko/drafts/draft-{runId}.md\`
-- Plan:   \`.neko/plans/plan-{runId}.md\`
-- Task:   \`.neko/tasks/task-{runId}.md\`
+When a user asks for a proposal, requirement, plan, task list, storyboard
+draft, or other creator-facing artifact, write the content in the chat
+using the structure below. The runtime may persist approved creation documents
+in a project-owned visible directory such as
+\`neko/creations/<creation-id>/brief.md\`,
+\`neko/creations/<creation-id>/plan.md\`, and
+\`neko/creations/<creation-id>/checklist.md\`.
 
-The paths above are rendered for the currently active run. If you still
-see \`{runId}\` as a literal, no run has started yet — ask the user to
-begin a session before writing artifacts. Never hand-edit the prefix or
-the \`.md\` extension.
+Do not write or read hidden managed runtime directories for creation documents.
+Managed runtime/cache paths are not a valid creation-document surface.
 
-### Required frontmatter (all artifacts)
+### Required frontmatter when the runtime persists creation documents
 
 \`\`\`yaml
 ---
@@ -88,18 +69,13 @@ Task only requires the shared fields (id / kind / createdAt / updatedAt).
 
 ### Write rules
 
-1. **Full-file overwrite** — always write the entire file. Do not use \`append\`.
-2. **Preserve createdAt** — read the existing file first; keep its \`createdAt\`.
-   First write seeds \`createdAt\` with the current time.
-3. **Update updatedAt** — stamp the current ISO 8601 timestamp on every write.
-4. **kind matches the directory** — a file in \`drafts/\` must declare
-   \`kind: draft\`; same for \`plans/\` / \`tasks/\`. Mismatches surface as
-   \`wrong-kind\` validation issues.
-5. **No block scalars** (\`|\` / \`>\`) in frontmatter — use single-line values.
-6. **Quote values containing \`: \`** so the parser does not split them.
-
-If you see an \`artifact.invalid\` observation after a write, read the listed
-\`issues\` and re-write the same file with the fixes on the next turn.`;
+1. Do not create, read, or repair creation document files yourself.
+2. Do not preserve \`createdAt\` by reading a file path; the runtime service
+   preserves metadata when it persists a revised document.
+3. Do not invent hidden paths, cache paths, Webview URIs, or provider-private
+   paths for creation documents.
+4. If the host reports a creation-document diagnostic, explain the diagnostic and
+   provide a corrected artifact body in chat.`;
 
 export class ArtifactSchemaModule implements PromptModule {
   readonly manifest: PromptModuleManifest = {
