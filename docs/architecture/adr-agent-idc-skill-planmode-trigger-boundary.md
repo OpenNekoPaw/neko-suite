@@ -109,12 +109,13 @@ Webview 的 `setPromptMode`、`invokeSkill`、`invokeSlashCommand`、plan approv
 
 ## Artifact 完整性边界
 
-Draft、Plan、Task 文档的路径、frontmatter 和写入规则由 schema/prompt contract 与 runtime validator 共同约束。文档完整性不是 Skill 自己保证的：
+Draft、Plan、Task 是需要用户审阅/审批的可见项目文档，不属于隐藏 `.neko` runtime/cache。路径、frontmatter 和写入规则由 creation-document service、schema/prompt contract 与 runtime validator 共同约束。文档完整性不是 Skill 自己保证的：
 
-- `ArtifactSchemaModule` 将 IDC artifact contract 注入 schema 层。
+- `ArtifactSchemaModule` 将 creation document contract 注入 schema 层，并禁止 Agent 通过通用文件工具直接读写隐藏 runtime/cache 路径。
+- `ArtifactService` 将 Draft/Plan/Task 持久化为项目可见文档，例如 `neko/creations/<creation-id>/brief.md`、`plan.md`、`checklist.md`。
 - `ArtifactValidator` 校验 Draft/Plan/Task frontmatter 的结构完整性。
-- `ArtifactWatcher` 在写入后观察 `.neko/drafts`、`.neko/plans`、`.neko/tasks` 并发出 invalid event。
-- `ArtifactObservationHooks` 将 `artifact.invalid` 反馈给 Agent 下一轮修复。
+- `ArtifactWatcher` 仅作为 host 显式 opt-in 的可见 creation document 观察器，不是默认 `.neko` 目录监听器。
+- `ArtifactObservationHooks` 可将 `artifact.invalid` 反馈给 Agent，由 Agent 解释诊断并提供修正文档内容，持久化仍由 host service 处理。
 
 这些机制保证基础结构和可观测修复，不等同于完整语义审查。漫画转动画等领域 artifact 还需要领域 payload validator 或 Skill/Tool 层 preflight 来检查 narrative continuity、stable shot id、character identity、source refs、generation readiness 和 tool availability。
 
@@ -127,7 +128,7 @@ Draft、Plan、Task 文档的路径、frontmatter 和写入规则由 schema/prom
 - Plan Mode 下即使 active Skill 允许生成工具，也不能执行 Apply-stage 生成、写入、Canvas/Cut 交付或导出。
 - Stage persona 与 domain Skill 不应互相覆盖；若当前实现仍为单槽，应有 characterization test 暴露该风险或阻止误报成功。
 - Apply-stage 高成本或不可逆工具必须经过 permission/approval gate；测试应断言 canonical IDC/approval path 被命中。
-- Draft/Plan/Task 写入后必须被 watcher/validator 观察；无效 frontmatter 应产生可见 diagnostic 或 `artifact.invalid` observation。
+- Draft/Plan/Task creation document 必须走 creation-document service 或显式 host watcher；无效 frontmatter 应产生可见 diagnostic 或 `artifact.invalid` observation，不得由 Agent 直接修补隐藏路径。
 - Webview `setPromptMode`、`invokeSkill` 和自然语言发送路径不得在 Webview 侧直接推导 Skill 或 IDC stage。
 
 ## 后续收敛

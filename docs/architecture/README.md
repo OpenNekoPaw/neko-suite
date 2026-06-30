@@ -14,12 +14,16 @@
 | 文档                                                                   | 内容                                                               |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [`adr-agent-idc-skill-planmode-trigger-boundary.md`](adr-agent-idc-skill-planmode-trigger-boundary.md) | Agent IDC、Skill 与 Plan Mode 的触发边界、冲突风险和验证要求      |
+| [`adr-agent-autonomous-filmmaking-creation-boundary.md`](adr-agent-autonomous-filmmaking-creation-boundary.md) | Agent 自主影视创作流程、文本/媒体身份、iteration 与 ResourceRef 边界 |
+| [`adr-agent-message-task-queue-boundary.md`](adr-agent-message-task-queue-boundary.md) | Agent 消息队列、任务队列与任务卡的展示位置、权威来源和操作边界 |
 | [`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md) | Agent Skill catalog、用户新增 Skill metadata 和激活权威边界       |
+| [`adr-agent-skill-creator-and-validation.md`](adr-agent-skill-creator-and-validation.md) | Agent Skill Creator、标准化技能创作、确定性校验和激活边界 |
 | [`adr-agent-command-skill-trigger-boundary.md`](adr-agent-command-skill-trigger-boundary.md) | Agent `/` 命令、`$` 技能和 `@` 上下文引用的触发入口边界            |
 | [`adr-agent-sandbox-and-external-processing-boundary.md`](adr-agent-sandbox-and-external-processing-boundary.md) | Agent 资源沙箱、外部处理器、命令执行和审批边界                   |
 | [`adr-code-debt-redundancy-governance.md`](adr-code-debt-redundancy-governance.md) | 重复、冗余、兼容桥和 fallback 代码的分类、清理优先级与验证规则 |
 | [`adr-code-review-quality-gates.md`](adr-code-review-quality-gates.md) | 代码审查、风险分级、验证矩阵和功能偏离检查                         |
 | [`adr-local-metadata-store-sqlite.md`](adr-local-metadata-store-sqlite.md) | SQLite 本地元数据 Store、JSON 事实文件和缓存索引边界                 |
+| [`adr-unified-markdown-resource-rendering.md`](adr-unified-markdown-resource-rendering.md) | Canvas MCP 式能力、Markdown 扩展语法、资源增强渲染和 Send to Canvas 边界 |
 | [`adr-canvas-cut-playback-route-and-timeline-boundary.md`](adr-canvas-cut-playback-route-and-timeline-boundary.md) | Canvas 预览路线矩阵、Cut 剪辑时间线、Agent 顺序感知和跨包协议边界       |
 | [`adr-ui-domain-panels-and-shared-primitives.md`](adr-ui-domain-panels-and-shared-primitives.md) | 创作领域面板与共享 UI 原语的复用边界                               |
 | [`agent.md`](agent.md)                                                 | Agent-first、IDC、skill/prompt/tool/provider 控制面和宿主分层      |
@@ -33,6 +37,12 @@
 | [`ui-theme-i18n-error-logging.md`](ui-theme-i18n-error-logging.md)     | UI 公共层、主题 token、国际化、错误处理、日志和诊断边界            |
 | [`unified-entity.md`](unified-entity.md)                               | 统一实体、候选、实体素材绑定、视觉草案、展示投影和搜索投影         |
 | [`webview-media-security.md`](webview-media-security.md)               | VS Code Webview CSP、媒体格式兼容、Range 和 Engine 媒体访问约束    |
+
+## 历史/已取代 ADR
+
+| 文档 | 取代说明 |
+| --- | --- |
+| [`adr-markdown-storyboard-draft-protocol.md`](adr-markdown-storyboard-draft-protocol.md) | 已被 [`adr-unified-markdown-resource-rendering.md`](adr-unified-markdown-resource-rendering.md) 和 Canvas `canvas.ingestMarkdown` / Creative Table profile 方案取代；仅保留为历史背景，不作为新实现入口 |
 
 机器可读的质量门禁输入放在 [`../../quality/`](../../quality/)，例如代码债务台账和 Agent 边界 LCD register；本目录只保留人类可读的架构决策和规则说明。
 
