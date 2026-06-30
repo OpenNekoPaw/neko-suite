@@ -2,6 +2,7 @@
   "neko.aiAssistant.name": "AI Assistant",
   "neko.aiAssistant.contextualTitle": "Neko AI Assistant",
   "neko.ai.chat.title": "Open AI Chat",
+  "neko.agent.showLogs.title": "Show Agent Logs",
   "neko.ai.generateImage.title": "Generate Image",
   "neko.ai.generateVideo.title": "Generate Video",
   "neko.ai.generateTTS.title": "Generate TTS",

@@ -1,16 +1,16 @@
-import { ConsoleLogger, LogLevel } from '@neko/shared';
 import type { ILogger } from '@neko/shared';
+import { createLoggerRegistry } from '@neko/shared';
 
-let rootLogger: ILogger = new ConsoleLogger('NekoAudio', LogLevel.Info);
+const registry = createLoggerRegistry('NekoAudio');
 
 export function setRootLogger(logger: ILogger): void {
-  rootLogger = logger;
+  registry.setRootLogger(logger);
 }
 
 export function getRootLogger(): ILogger {
-  return rootLogger;
+  return registry.getRootLogger();
 }
 
 export function getLogger(source: string): ILogger {
-  return rootLogger.child(source);
+  return registry.getLogger(source);
 }

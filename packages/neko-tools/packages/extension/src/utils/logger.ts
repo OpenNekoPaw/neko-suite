@@ -5,19 +5,19 @@
  * All modules use getLogger('ModuleName') for scoped logging.
  */
 
-import { ConsoleLogger, LogLevel } from '@neko/shared';
 import type { ILogger } from '@neko/shared';
+import { createLoggerRegistry } from '@neko/shared';
 
-let _rootLogger: ILogger = new ConsoleLogger('NekoTools', LogLevel.Info);
+const registry = createLoggerRegistry('NekoTools');
 
 export function setRootLogger(logger: ILogger): void {
-  _rootLogger = logger;
+  registry.setRootLogger(logger);
 }
 
 export function getLogger(source: string): ILogger {
-  return _rootLogger.child(source);
+  return registry.getLogger(source);
 }
 
 export function getRootLogger(): ILogger {
-  return _rootLogger;
+  return registry.getRootLogger();
 }

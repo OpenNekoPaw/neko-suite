@@ -99,6 +99,12 @@
         "category": "NekoAgent"
       },
       {
+        "command": "neko.agent.showLogs",
+        "title": "%neko.agent.showLogs.title%",
+        "icon": "$(output)",
+        "category": "NekoAgent"
+      },
+      {
         "command": "neko.ai.generateImage",
         "title": "%neko.ai.generateImage.title%",
         "category": "NekoAgent: AI"
