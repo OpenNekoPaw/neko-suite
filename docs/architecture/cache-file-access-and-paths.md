@@ -1,6 +1,6 @@
 # 缓存、文件读写服务与路径变量
 
-更新日期：2026-06-26
+更新日期：2026-06-28
 
 本文定义 Neko Suite 中路径变量、文件读写边界、内容访问意图、Webview 资源投影和派生缓存的横切设计。它不定义统一实体语义，也不定义素材库业务模型；相关设计分别见 [`unified-entity.md`](unified-entity.md) 和 [`asset-library.md`](asset-library.md)。
 
@@ -133,6 +133,25 @@ Agent 工具结果、Canvas send、Storyboard generation 和 `neko-composite` ar
 Agent Webview 的工具引用 JSON 使用 `protocolVersion: 2` 时，durable body 只保存结构化 refs。投影给当前 Webview 的 `renderUri` 只能存在于当前消息投影/组件状态，发送到 Canvas、Storyboard 或剪贴板稳定引用前必须移除。旧会话如果只有 temp/cache 路径而没有结构化引用，应展示诊断和文本上下文，不能伪装为可点击图片。
 
 Promoted generated asset 如果带有 `.neko/.cache/generated` 或 `.neko/.cache/resources` path，必须视为 legacy/migration candidate，并返回 `generated-cache-source-not-durable` 诊断；文件仍存在也不能证明它是 durable source。迁移只能通过 Host Promote/Create Asset 显式执行。
+
+### 文档内容定位协议
+
+文档内容定位分成 source、locator 和 resource 三层，不允许用缓存路径或容器内部文件名代替任意一层：
+
+| 层级 | Canonical contract | 用途 | 禁止替代 |
+| --- | --- | --- | --- |
+| 文档源 | `ContentSourceRef`，例如 `{ kind: "file", path: "${A}/book.epub" }` | 标识 EPUB/PDF/CBZ/Office 等原始文档来源，进入 `ReadDocument.source`、Preview open、Canvas add-source | 绝对路径、Engine token、Webview URI、cache path、document-reader scratch path |
+| 文档位置 | `DocumentLocator` / `DocumentRange` / `DocumentBatchCursor` | 表达章节、spine、页、entry、范围和批处理游标 | EPUB entry path 字符串、页图缓存文件名、临时 HTML 路径 |
+| 文档图片资源 | `DocumentArchiveResourceRef`，由 `ReadDocument.imageInfo[].resourceRef` 返回 | 标识某个文档 entry/page image，可传给 `ReadImage.images[].resourceRef`、Canvas、Storyboard、artifact | 整本 EPUB/PDF、`imageInfo.path`、`cachePath`、`.neko/.cache/...`、`/tmp/...`、`webviewUri` |
+
+Agent 工具链必须使用两步协议读取文档图片：
+
+1. `ReadDocument({ source, mode: "manifest" | "range" | "next", include_images: true })` 返回文本、manifest/range/cursor、`imageInfo[]` 和 `imageInfo[].resourceRef`。
+2. `ReadImage({ images: ReadDocument.imageInfo[] })` 根据结构化 `resourceRef` 经统一内容访问和资源缓存物化 bytes/metadata，并把图片作为 native multimodal attachment 暴露给当前 Agent turn。
+
+`ReadDocument` 不返回可复用图片路径，`ReadImage` 不接受图片路径、EPUB entry path、整本文档 source 或缓存目录。若工具调用参数被平台适配层包成 `_raw` JSON 字符串，ToolRegistry 只允许在 schema 校验前恢复合法 JSON object；恢复失败必须保留校验错误，不得进入旧字段兼容链路。
+
+文档图片缓存由 `ResourceCacheService` 和 document provider 透明处理。缓存 key 可以由 source identity、locator、entryPath、variant 和内容 fingerprint 重建；上层业务只持有 `DocumentArchiveResourceRef` 或 `ResourceRef`，不能查询 manifest、扫描 cache root、反查物理路径，或把 materialized path 当作成功输出。缓存被清空时，下一次 `ReadImage`、Preview projection 或 Canvas render 应通过 provider 重建，而不是要求 Agent 传入旧路径。
 
 ## 文件读写服务
 

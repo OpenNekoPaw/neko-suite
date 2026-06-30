@@ -153,19 +153,19 @@ describe('IdcRunStore', () => {
     store.setDraft(draft, {
       kind: 'draft',
       artifactId: 'draft-1',
-      path: '/tmp/.neko/drafts/draft-run-1.md',
+      path: '/tmp/neko/creations/cut-launch-teaser-draft-1/brief.md',
       updatedAt: 2,
     });
     store.setPlan(plan, {
       kind: 'plan',
       artifactId: 'plan-1',
-      path: '/tmp/.neko/plans/plan-run-1.md',
+      path: '/tmp/neko/creations/cut-launch-teaser-draft-1/plan.md',
       updatedAt: 4,
     });
     store.setTask(task, {
       kind: 'task',
       artifactId: 'task-1',
-      path: '/tmp/.neko/tasks/task-run-1.md',
+      path: '/tmp/neko/creations/cut-launch-teaser-draft-1/checklist.md',
       updatedAt: 6,
     });
 
@@ -178,19 +178,19 @@ describe('IdcRunStore', () => {
           {
             kind: 'draft',
             artifactId: 'draft-1',
-            path: '/tmp/.neko/drafts/draft-run-1.md',
+            path: '/tmp/neko/creations/cut-launch-teaser-draft-1/brief.md',
             updatedAt: 2,
           },
           {
             kind: 'plan',
             artifactId: 'plan-1',
-            path: '/tmp/.neko/plans/plan-run-1.md',
+            path: '/tmp/neko/creations/cut-launch-teaser-draft-1/plan.md',
             updatedAt: 4,
           },
           {
             kind: 'task',
             artifactId: 'task-1',
-            path: '/tmp/.neko/tasks/task-run-1.md',
+            path: '/tmp/neko/creations/cut-launch-teaser-draft-1/checklist.md',
             updatedAt: 6,
           },
         ],
@@ -211,7 +211,7 @@ describe('IdcRunStore', () => {
         {
           kind: 'draft',
           artifactId: 'draft-active',
-          path: '/tmp/.neko/drafts/draft-run-active.md',
+          path: '/tmp/neko/creations/active-creation/brief.md',
           updatedAt: 3,
         },
       ],

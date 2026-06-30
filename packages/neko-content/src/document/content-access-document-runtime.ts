@@ -1,4 +1,3 @@
-import * as path from 'node:path';
 import {
   createDocumentEntryResourceRef,
   createResourceFingerprint,
@@ -35,15 +34,6 @@ export interface DocumentContentAccessInput {
   readonly metadata?: Record<string, unknown>;
 }
 
-export interface DocumentImagesAccessInput {
-  readonly caller?: string;
-  readonly source: ContentSourceRef;
-  readonly locators?: readonly DocumentArchiveResourceRef[];
-  readonly variant?: ResourceVariantRequest;
-  readonly signal?: AbortSignal;
-  readonly metadata?: Record<string, unknown>;
-}
-
 export interface DocumentContentAccessResult {
   readonly contentAccess: ContentAccessResult;
   readonly source?: Exclude<ContentSourceRef, { readonly kind: 'runtime' }>;
@@ -65,19 +55,6 @@ export interface DocumentContentAccessResult {
   readonly metadata?: Record<string, unknown>;
 }
 
-export interface DocumentImageAccessResource {
-  readonly label?: string;
-  readonly resourceRef: ResourceRef;
-  readonly documentResourceRef: DocumentArchiveResourceRef;
-}
-
-export interface DocumentImagesAccessResult {
-  readonly source?: Exclude<ContentSourceRef, { readonly kind: 'runtime' }>;
-  readonly images: readonly DocumentImageAccessResource[];
-  readonly diagnostics?: NonNullable<ContentAccessResult['diagnostics']>;
-  readonly metadata?: Record<string, unknown>;
-}
-
 export interface DocumentContentAccessRuntimeDeps {
   readonly contentAccess: {
     resolve(request: ContentAccessRequest): Promise<ContentAccessResult>;
@@ -85,7 +62,7 @@ export interface DocumentContentAccessRuntimeDeps {
   readonly documentAccess: IDocumentAccessService;
   readonly resolveDocumentResourceScope: () => ResourceRef['scope'];
   readonly loadProviderAsset: (input: {
-    readonly caller: 'read-document' | 'read-document-image';
+    readonly caller: 'read-document';
     readonly source: ContentSourceRef;
     readonly preferredTarget: 'bytes';
     readonly variant?: ResourceVariantRequest;
@@ -135,57 +112,17 @@ export class DocumentContentAccessRuntime {
     };
   }
 
-  async resolveDocumentImages(input: DocumentImagesAccessInput): Promise<DocumentImagesAccessResult> {
-    const sourceDocumentRef = readDocumentArchiveRef(input.source);
-    const documentResourceRefs = [
-      ...(input.locators ?? []),
-      ...(sourceDocumentRef ? [sourceDocumentRef] : []),
-    ];
-    if (documentResourceRefs.length === 0) {
-      return { source: stableSource(input.source), images: [] };
-    }
-
-    const images = await Promise.all(
-      documentResourceRefs.map(async (documentResourceRef) => {
-        const resolvedDocumentResourceRef = await this.resolveDocumentArchiveRefForRuntime(
-          documentResourceRef,
-          input,
-        );
-        const managedRef = this.toManagedDocumentResourceRef(resolvedDocumentResourceRef);
-        const providerAsset = await this.deps.loadProviderAsset({
-          caller: 'read-document-image',
-          source: managedRef,
-          preferredTarget: 'bytes',
-          variant: input.variant ?? createDocumentEntryVariant(resolvedDocumentResourceRef),
-          signal: input.signal,
-          metadata: input.metadata,
-        });
-        return {
-          ...(documentResourceRef.entryPath
-            ? { label: path.basename(documentResourceRef.entryPath) }
-            : {}),
-          resourceRef: managedRef,
-          documentResourceRef,
-          providerAsset,
-        };
-      }),
-    );
-
-    return {
-      source: stableSource(input.source),
-      images: images.map(({ providerAsset: _providerAsset, ...image }) => image),
-      diagnostics: images.flatMap((image) => image.providerAsset.diagnostics ?? []),
-      ...(input.metadata ? { metadata: input.metadata } : {}),
-    };
-  }
-
   private async readDocumentContent(
     source: DocumentSourceRef,
     stableDocumentSource: DocumentSourceRef,
     input: DocumentContentAccessInput,
   ): Promise<Omit<DocumentContentAccessResult, 'contentAccess' | 'source'>> {
     const content = await this.deps.documentAccess.readContent(source.filePath);
-    const imageProjection = await this.projectDocumentImages(content.imageInfo, input);
+    const imageProjection = await this.projectDocumentImages(
+      content.imageInfo,
+      stableDocumentSource,
+      input,
+    );
     return {
       text: content.text,
       totalTextChars: content.text.length,
@@ -193,7 +130,9 @@ export class DocumentContentAccessRuntime {
       truncated: false,
       ...(content.pageCount !== undefined ? { pageCount: content.pageCount } : {}),
       ...imageProjection,
-      ...(content.metadata ? { metadata: { ...content.metadata, source: stableDocumentSource } } : {}),
+      ...(content.metadata
+        ? { metadata: { ...content.metadata, source: stableDocumentSource } }
+        : {}),
     };
   }
 
@@ -263,7 +202,11 @@ export class DocumentContentAccessRuntime {
     result: Awaited<ReturnType<IDocumentAccessService['readRange']>>,
     input: DocumentContentAccessInput,
   ): Promise<Omit<DocumentContentAccessResult, 'contentAccess' | 'source'>> {
-    const imageProjection = await this.projectDocumentImages(result.imageInfo, input);
+    const imageProjection = await this.projectDocumentImages(
+      result.imageInfo,
+      result.source,
+      input,
+    );
     return {
       text: result.text,
       ...(result.range ? { range: result.range } : {}),
@@ -273,7 +216,9 @@ export class DocumentContentAccessRuntime {
       ...(result.cursor ? { cursor: result.cursor } : {}),
       ...(result.pageCount !== undefined ? { pageCount: result.pageCount } : {}),
       ...(result.totalTextChars !== undefined ? { totalTextChars: result.totalTextChars } : {}),
-      ...(result.returnedTextChars !== undefined ? { returnedTextChars: result.returnedTextChars } : {}),
+      ...(result.returnedTextChars !== undefined
+        ? { returnedTextChars: result.returnedTextChars }
+        : {}),
       ...(result.truncated !== undefined ? { truncated: result.truncated } : {}),
       ...imageProjection,
       ...(result.metadata ? { metadata: result.metadata } : {}),
@@ -282,6 +227,7 @@ export class DocumentContentAccessRuntime {
 
   private async projectDocumentImages(
     imageInfo: readonly DocumentImageInfo[] | undefined,
+    source: DocumentSourceRef,
     input: DocumentContentAccessInput,
   ): Promise<Pick<DocumentContentAccessResult, 'imageInfo' | 'imageCount' | 'imagesTruncated'>> {
     if (input.includeImages === false || !imageInfo || imageInfo.length === 0) {
@@ -290,7 +236,7 @@ export class DocumentContentAccessRuntime {
     const limit = input.maxImages ?? imageInfo.length;
     const visible = imageInfo.slice(0, limit);
     const projected = await Promise.all(
-      visible.map(async (image) => this.projectDocumentImage(image, input)),
+      visible.map(async (image) => this.projectDocumentImage(image, source, input)),
     );
     return {
       imageInfo: projected,
@@ -301,9 +247,10 @@ export class DocumentContentAccessRuntime {
 
   private async projectDocumentImage(
     image: DocumentImageInfo,
+    source: DocumentSourceRef,
     input: DocumentContentAccessInput,
   ): Promise<DocumentImageInfo> {
-    const archiveRef = readDocumentImageArchiveRef(image);
+    const archiveRef = readDocumentImageArchiveRef(image, source);
     if (!archiveRef) {
       return stripDocumentImageRuntimeFields(image);
     }
@@ -313,7 +260,7 @@ export class DocumentContentAccessRuntime {
       caller: 'read-document',
       source: managedRef,
       preferredTarget: 'bytes',
-      variant: createDocumentEntryVariant(resolvedArchiveRef),
+      variant: createDocumentEntryVariant(),
       metadata: input.metadata,
       signal: input.signal,
     });
@@ -331,7 +278,7 @@ export class DocumentContentAccessRuntime {
 
   private async resolveDocumentArchiveRefForRuntime(
     ref: DocumentArchiveResourceRef,
-    input: DocumentContentAccessInput | DocumentImagesAccessInput,
+    input: DocumentContentAccessInput,
   ): Promise<DocumentArchiveResourceRef> {
     const resolved = await this.resolveDocumentSourceForRuntime(ref.source, input);
     return {
@@ -342,9 +289,12 @@ export class DocumentContentAccessRuntime {
 
   private async resolveDocumentSourceForRuntime(
     source: DocumentSourceRef,
-    input: DocumentContentAccessInput | DocumentImagesAccessInput,
+    input: DocumentContentAccessInput,
   ): Promise<DocumentSourceRef> {
-    const request = createDocumentLocalPathRequest(createFileSourceFromDocumentSource(source), input);
+    const request = createDocumentLocalPathRequest(
+      createFileSourceFromDocumentSource(source),
+      input,
+    );
     const resolved = await this.deps.contentAccess.resolve(request);
     if (resolved.status !== 'ready' || !resolved.localPath) {
       throw new Error(
@@ -371,7 +321,13 @@ export class DocumentContentAccessRuntime {
         metadata: { format: ref.source.format },
       },
       ...(ref.entryPath || ref.locator
-        ? { locator: { kind: 'document', ...(ref.entryPath ? { entryPath: ref.entryPath } : {}), ...(ref.locator ? { locator: ref.locator } : {}) } }
+        ? {
+            locator: {
+              kind: 'document',
+              ...(ref.entryPath ? { entryPath: ref.entryPath } : {}),
+              ...(ref.locator ? { locator: ref.locator } : {}),
+            },
+          }
         : {}),
       fingerprint: createResourceFingerprint({
         strategy: ref.source.identity ? 'identity' : 'provider',
@@ -454,10 +410,9 @@ function readSourcePath(ref: ContentSourceRef): string | undefined {
   }
 }
 
-function createDocumentEntryVariant(ref: DocumentArchiveResourceRef): ResourceVariantRequest {
+function createDocumentEntryVariant(): ResourceVariantRequest {
   return {
     role: 'document-entry',
-    ...(ref.source.format ? { format: ref.source.format } : {}),
   };
 }
 
@@ -493,7 +448,10 @@ function readDocumentArchiveRef(source: ContentSourceRef): DocumentArchiveResour
   return undefined;
 }
 
-function createStableDocumentSource(source: ContentSourceRef, resolvedFilePath: string): DocumentSourceRef {
+function createStableDocumentSource(
+  source: ContentSourceRef,
+  resolvedFilePath: string,
+): DocumentSourceRef {
   const archiveRef = readDocumentArchiveRef(source);
   if (archiveRef) {
     return {
@@ -582,13 +540,14 @@ function withStableDocumentImageSource(
 
 function readDocumentImageArchiveRef(
   image: DocumentImageInfo,
+  source: DocumentSourceRef,
 ): DocumentArchiveResourceRef | undefined {
-  if (!image.resourceRef) return undefined;
+  const refSource = image.resourceRef?.source ?? source;
   return createDocumentEntryResourceRef({
-    source: image.resourceRef.source,
-    entryPath: image.entryPath ?? image.resourceRef.entryPath,
-    locator: image.locator ?? image.resourceRef.locator,
-    versionPolicy: image.resourceRef.versionPolicy,
+    source: refSource,
+    entryPath: image.entryPath ?? image.resourceRef?.entryPath,
+    locator: image.locator ?? image.resourceRef?.locator,
+    versionPolicy: image.resourceRef?.versionPolicy,
   });
 }
 

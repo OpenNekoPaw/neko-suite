@@ -37,9 +37,6 @@ export {
   type DocumentContentAccessMode,
   type DocumentContentAccessResult,
   type DocumentContentAccessRuntimeDeps,
-  type DocumentImageAccessResource,
-  type DocumentImagesAccessInput,
-  type DocumentImagesAccessResult,
 } from './content-access-document-runtime';
 
 export {

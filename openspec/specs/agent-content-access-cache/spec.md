@@ -45,11 +45,12 @@ Agent document tools SHALL treat binary/container documents as source-first docu
 - **THEN** the tool result SHALL return `imageInfo` entries with stable metadata and document resource refs
 - **AND** it SHALL NOT return `imagePaths`, `path`, `runtimePath`, `runtimeKind`, `cachePath`, or `cacheResourceRef` as public successful output
 
-#### Scenario: ReadDocumentImage materializes internally
+#### Scenario: ReadImage materializes document images from ReadDocument refs
 
-- **WHEN** `ReadDocumentImage` resolves document locators or page indexes to images
+- **WHEN** `ReadImage` receives `ReadDocument.imageInfo[]` entries with `DocumentArchiveResourceRef` values
 - **THEN** document image materialization SHALL occur behind the Agent content-access runtime and resource cache provider
 - **AND** the tool SHALL return stable refs and provider-ready attachments without exposing the materialized cache path as durable identity
+- **AND** the tool SHALL reject EPUB entry paths, cache paths, Webview URIs, and whole document sources as image inputs
 
 ### Requirement: Resource cache owns cache path and lifecycle
 
@@ -89,7 +90,7 @@ Legacy Agent fields that expose cache or runtime implementation details SHALL be
 
 #### Scenario: Legacy field appears in a new tool input
 
-- **WHEN** a new `ReadImage`, `ReadDocument`, `ReadDocumentImage`, Canvas transfer, Storyboard transfer, or composite artifact request includes `cachePath`, `runtimePath`, `runtimeKind`, `cacheResourceRef`, `imagePaths`, or `imageInfo.path` as a durable source
+- **WHEN** a new `ReadImage`, `ReadDocument`, Canvas transfer, Storyboard transfer, or composite artifact request includes `cachePath`, `runtimePath`, `runtimeKind`, `cacheResourceRef`, `imagePaths`, or `imageInfo.path` as a durable source
 - **THEN** the request SHALL be rejected or sanitized with a diagnostic before downstream handoff
 - **AND** tests SHALL prove the legacy field cannot produce a successful new-path result
 

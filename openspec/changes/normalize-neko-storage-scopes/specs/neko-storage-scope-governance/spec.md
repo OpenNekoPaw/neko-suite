@@ -235,8 +235,10 @@ access is explicitly mediated by Host services and structured refs.
 
 - **WHEN** Agent file tools list, grep, or read ordinary workspace files
 - **THEN** managed directories such as `.neko/.cache`, `.neko/logs`,
-  `.neko/state`, `.neko/drafts`, `.neko/plans`, `.neko/tasks`, and temp/cache
-  roots MUST be hidden by default
+  `.neko/state`, and temp/cache roots MUST be hidden by default
+- **AND** Agent Draft/Plan/Task creation documents MUST use visible
+  `neko/creations/<creation-id>/brief.md`, `plan.md`, and `checklist.md`
+  paths rather than hidden managed runtime directories
 - **AND** access to cache-backed media MUST go through structured refs and Host
   content access instead of path scanning
 

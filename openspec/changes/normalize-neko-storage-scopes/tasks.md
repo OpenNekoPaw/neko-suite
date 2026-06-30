@@ -16,7 +16,7 @@
 
 - [ ] 3.1 Route personal Skills, commands, prompts, and AGENTS instructions to `~/.neko` by default while keeping workspace `.neko/skills`, `.neko/commands`, and `.neko/prompts` as explicit project-local targets.
 - [ ] 3.2 Add diagnostics for project-independent personal content found under workspace `.neko` and suggested migration targets under `~/.neko`.
-- [ ] 3.3 Keep Agent IDC artifacts, logs, and runtime snapshots under workspace `.neko/drafts`, `.neko/plans`, `.neko/tasks`, `.neko/logs`, and `.neko/state` through the shared classifier.
+- [ ] 3.3 Keep Agent logs and runtime snapshots under workspace `.neko/logs` and `.neko/state`, while Draft/Plan/Task creation documents use visible `neko/creations/<creation-id>/brief.md`, `plan.md`, and `checklist.md` instead of hidden `.neko` directories.
 - [ ] 3.4 Reject or diagnose deprecated `.neko/hooks` catalogs and ensure settings-based hooks remain the only default hook loading path.
 - [ ] 3.5 Add focused Agent tests for personal/project content roots, IDC artifact roots, hook diagnostics, workspace ignore visibility, and legacy path poisoning.
 

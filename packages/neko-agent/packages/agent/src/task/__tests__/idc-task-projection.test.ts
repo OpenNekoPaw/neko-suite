@@ -33,7 +33,7 @@ describe('TaskManagerIdcTaskProjection', () => {
       artifact: {
         kind: 'task',
         artifactId: 'task-1',
-        path: '/tmp/proj/.neko/tasks/task-run-1.md',
+        path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/checklist.md',
         updatedAt: 20,
       },
     });
@@ -58,7 +58,7 @@ describe('TaskManagerIdcTaskProjection', () => {
           artifact: {
             kind: 'task',
             artifactId: 'task-1',
-            path: '/tmp/proj/.neko/tasks/task-run-1.md',
+            path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/checklist.md',
             updatedAt: 20,
           },
         }),

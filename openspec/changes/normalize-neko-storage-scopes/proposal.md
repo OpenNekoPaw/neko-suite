@@ -23,8 +23,9 @@ and external-processor flows depend on path conventions that are hard to migrate
   - durable user media/assets under workspace paths or media-library roots, then
     recorded through project facts.
 - Add a canonical classification table for existing and planned directories,
-  including `.neko/.cache`, `.neko/logs`, `.neko/state`, `.neko/drafts`,
-  `.neko/plans`, `.neko/tasks`, `.neko/memory.md`, `.neko/skills`,
+  including `.neko/.cache`, `.neko/logs`, `.neko/state`,
+  visible Agent creation documents under `neko/creations/<creation-id>/`,
+  `.neko/memory.md`, `.neko/skills`,
   `.neko/commands`, `.neko/prompts`, `.neko/hooks`, `.neko/processors`,
   `.neko/recordings`, `.neko/temp`, `.neko/imports`, `.neko/dashboard-activity.json`,
   `~/.neko/config.toml`, `~/.neko/skills`, `~/.neko/processors`, Market install

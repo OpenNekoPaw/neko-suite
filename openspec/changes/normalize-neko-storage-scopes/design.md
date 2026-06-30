@@ -140,7 +140,7 @@ Use this matrix as the authoritative target:
 | --- | --- | --- | --- | --- |
 | Project facts and shared media-library variables | `neko/` | project-fact | Git-trackable | owning domain service |
 | Machine-specific project overrides | `.neko/settings.local.json` | project-local | gitignored | Assets/path resolver |
-| Agent IDC artifacts | `.neko/drafts`, `.neko/plans`, `.neko/tasks` | project-local | gitignored | Agent runtime |
+| Agent creation documents | `neko/creations/<creation-id>/brief.md`, `plan.md`, `checklist.md` | project-review | Git-trackable after user approval | Agent creation-document service |
 | Agent runtime locks/snapshots | `.neko/state` | project-local | gitignored | Agent runtime |
 | Project logs and Dashboard activity | `.neko/logs`, `.neko/dashboard-activity.json` | project-local | gitignored | Agent/Dashboard |
 | Project resource cache | `.neko/.cache` | project-cache | gitignored | ResourceCache/Search |
