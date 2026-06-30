@@ -47,6 +47,10 @@ describe('handleSlashCommand', () => {
 
     expect(result.handled).toBe(true);
     expect(result.agentPrompt).toBe('fix bug');
+    expect(result.lifecycleActivation).toEqual({
+      skillName: '剪辑: 快速 workflow',
+      args: 'fix bug',
+    });
     expect(result.executionOverrides?.metadata).toEqual({
       idc: {
         entrySignal: 'prompt-chain-skill',
@@ -136,11 +140,15 @@ describe('handleSkillInvocation', () => {
     expect(skillService.registry.getSkill).toHaveBeenCalledWith('quality-review');
     expect(skillService.registry.getSkillByCommand).not.toHaveBeenCalled();
     expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('quality-review');
-    expect(skillService.apply).toHaveBeenCalledWith(skill, 'changed files');
+    expect(skillService.apply).not.toHaveBeenCalled();
     expect(result).toEqual(
       expect.objectContaining({
         handled: true,
         output: 'Skill activated: quality-review',
+        lifecycleActivation: {
+          skillName: 'quality-review',
+          args: 'changed files',
+        },
         agentPrompt: 'changed files',
         executionOverrides: {
           metadata: {

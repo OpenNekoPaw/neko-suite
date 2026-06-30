@@ -28,6 +28,8 @@ import {
   createFileConversationStorage,
   createConversationId,
   type FileConversationStorage,
+  type SkillLifecycleRuntime,
+  resolveSlashCommandCatalogEntry,
 } from '@neko/agent';
 import { createAgentSessionWithRuntime } from '@neko/agent/runtime';
 import { toSharedService, type Platform } from '@neko/platform';
@@ -43,12 +45,24 @@ import {
   handleSlashCommand,
   isSkillInvocation,
   isSlashCommand,
+  parseSlashCommand,
   type SlashCommandContext,
 } from './slash-commands';
 import { getProviderModels } from './config';
 import { createCLIPlatform, createCLITaskManager } from './platform-bootstrap';
 import { createCliAgentRuntime } from './runtime-bootstrap';
 import { loadSkillArtifactsAsSkills } from './skill-artifacts';
+import {
+  activateCliDomainSkill,
+  type CliSkillLifecycleSessionBridge,
+  createCliSkillLifecycleRuntime,
+  wireCliSkillLifecycleSession,
+} from './skill-lifecycle-session';
+
+interface CliLifecycleActivationHint {
+  readonly skillName: string;
+  readonly args?: string;
+}
 
 /**
  * Agent runner options
@@ -128,6 +142,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
 
     // Initialize Skill Service
     let skillService: ReturnType<typeof createSkillService> | undefined;
+    let skillLifecycleRuntime: SkillLifecycleRuntime | undefined;
     if (config.skillsDir) {
       const skillLoader = createNodeSkillLoader(fs, path);
       skillService = createSkillService();
@@ -135,6 +150,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       for (const skill of loadedSkills) {
         skillService.registry.registerSkill(skill);
       }
+      skillLifecycleRuntime = createCliSkillLifecycleRuntime(skillService);
     }
 
     // Create LLM service via Platform
@@ -178,6 +194,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
         workspaceRoot: config.workDir,
         taskManager,
         ...(skillService ? { skillService } : {}),
+        ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
         projectMemoryManager,
       }),
       conversationId,
@@ -193,32 +210,13 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     });
 
     // Wire skill provider to meta tools
-    if (skillService) {
-      session.setSkillProvider({
-        listSkills: () =>
-          skillService!.registry
-            .listSkills()
-            .filter((s) => s.enabled !== false)
-            .map((s) => ({ name: s.name, description: s.description || '' })),
-        getActiveSkill: () => {
-          const skill = session.getActiveSkill();
-          return skill ? { name: skill.name, description: skill.description || '' } : null;
-        },
-        activateSkill: (name: string) => {
-          const skill = skillService!.registry.getSkill(name);
-          if (!skill) return { success: false, message: `Skill "${name}" not found` };
-          void skillService!.apply(skill).then((injection) => {
-            session.applySkillInjection(injection, skill);
-          });
-          return {
-            success: true,
-            message: `Activated skill "${name}"`,
-          };
-        },
-        deactivateSkill: () => {
-          session.clearActiveSkill();
-          return { success: true, message: 'Skill deactivated' };
-        },
+    let skillLifecycleBridge: CliSkillLifecycleSessionBridge | undefined;
+    if (skillService && skillLifecycleRuntime) {
+      skillLifecycleBridge = wireCliSkillLifecycleSession({
+        session,
+        skillService,
+        conversationId,
+        lifecycleRuntime: skillLifecycleRuntime,
       });
     }
 
@@ -231,8 +229,37 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       includeLanguageHints: true,
     });
 
+    const preparedInput = await prepareSingleRunPrompt({
+      prompt: runOptions.prompt,
+      slashContext: {
+        config,
+        skillService,
+        toolRegistry,
+        currentConversationId: conversationId,
+      },
+      skillLifecycleBridge,
+    });
+    if (!preparedInput.ok) {
+      session.dispose();
+      await mcpManager.disconnectAll();
+      return {
+        success: false,
+        error: preparedInput.error,
+        duration: Date.now() - startTime,
+      };
+    }
+    if (!preparedInput.prompt) {
+      session.dispose();
+      await mcpManager.disconnectAll();
+      return {
+        success: true,
+        output: '',
+        duration: Date.now() - startTime,
+      };
+    }
+
     // Process input for file references
-    const processedInput = await inputProcessor.process(runOptions.prompt);
+    const processedInput = await inputProcessor.process(preparedInput.prompt);
 
     // Build final prompt with file contents
     let finalPrompt = processedInput.message;
@@ -260,8 +287,10 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     }
 
     try {
-      const executionMetadata =
-        session.getExecutionMode() === 'plan' ? createPlanModeIdcMetadata() : undefined;
+      const executionMetadata = mergeIdcExecutionMetadata(
+        session.getExecutionMode() === 'plan' ? createPlanModeIdcMetadata() : undefined,
+        preparedInput.executionMetadata,
+      );
       for await (const event of session.execute(finalPrompt, {
         workspaceRoot: config.workDir,
         ...(executionMetadata ? { metadata: executionMetadata } : {}),
@@ -338,6 +367,103 @@ function createEventCollector(): EventCollector {
 
 export function formatCliMediaSaveSummary(taskId: string, fileCount: number): string {
   return `[media] Generated ${fileCount} file(s) for task ${taskId}; managed output is tracked by Neko.`;
+}
+
+async function prepareSingleRunPrompt(input: {
+  readonly prompt: string;
+  readonly slashContext: SlashCommandContext;
+  readonly skillLifecycleBridge?: CliSkillLifecycleSessionBridge;
+}): Promise<
+  | {
+      readonly ok: true;
+      readonly prompt: string;
+      readonly executionMetadata?: Record<string, unknown>;
+    }
+  | { readonly ok: false; readonly error: string }
+> {
+  const trimmed = input.prompt.trim();
+  if (!trimmed) {
+    return { ok: true, prompt: '' };
+  }
+
+  if (isSkillInvocation(trimmed)) {
+    const result = await handleSkillInvocation(trimmed, input.slashContext);
+    if (result.error) {
+      return { ok: false, error: result.error };
+    }
+    if (result.lifecycleActivation) {
+      const activation = await activateCliLifecycleHint({
+        bridge: input.skillLifecycleBridge,
+        conversationId: input.slashContext.currentConversationId,
+        hint: result.lifecycleActivation,
+      });
+      if (!activation.ok) {
+        return { ok: false, error: activation.message };
+      }
+    } else {
+      return { ok: false, error: 'Skill invocation did not return lifecycle activation' };
+    }
+    return {
+      ok: true,
+      prompt: result.agentPrompt ?? '',
+      executionMetadata: result.executionOverrides?.metadata,
+    };
+  }
+
+  if (isSlashCommand(trimmed)) {
+    const { command } = parseSlashCommand(trimmed);
+    const commandEntry = resolveSlashCommandCatalogEntry(command, {
+      surface: 'cli',
+      skills: input.slashContext.skillService?.registry.listAllSkills(),
+    });
+    if (commandEntry?.source !== 'command-artifact') {
+      return { ok: true, prompt: input.prompt };
+    }
+
+    const result = await handleSlashCommand(trimmed, input.slashContext);
+    if (result.error) {
+      return { ok: false, error: result.error };
+    }
+    if (result.lifecycleActivation) {
+      const activation = await activateCliLifecycleHint({
+        bridge: input.skillLifecycleBridge,
+        conversationId: input.slashContext.currentConversationId,
+        hint: result.lifecycleActivation,
+      });
+      if (!activation.ok) {
+        return { ok: false, error: activation.message };
+      }
+    }
+    return {
+      ok: true,
+      prompt: result.agentPrompt ?? (trimmed.startsWith('/run ') ? trimmed.slice(5).trim() : ''),
+      executionMetadata: result.executionOverrides?.metadata,
+    };
+  }
+
+  return { ok: true, prompt: input.prompt };
+}
+
+async function activateCliLifecycleHint(input: {
+  readonly bridge?: CliSkillLifecycleSessionBridge;
+  readonly conversationId?: string;
+  readonly hint: CliLifecycleActivationHint;
+}): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }> {
+  if (!input.bridge || !input.conversationId) {
+    return { ok: false, message: 'Skill lifecycle runtime is not initialized' };
+  }
+  const result = await activateCliDomainSkill({
+    lifecycleRuntime: input.bridge.runtime,
+    conversationId: input.conversationId,
+    skillName: input.hint.skillName,
+    ...(input.hint.args !== undefined ? { args: input.hint.args } : {}),
+    actor: 'user',
+    syncProjection: () => input.bridge!.syncProjection(),
+  });
+  if (!result.ok) {
+    return { ok: false, message: result.message ?? 'Skill activation failed' };
+  }
+  return { ok: true };
 }
 
 /**
@@ -588,6 +714,7 @@ interface InteractiveSessionState {
   mcpManager: MCPManager;
   toolRegistry: ToolRegistry;
   skillService?: SkillService;
+  skillLifecycleBridge?: CliSkillLifecycleSessionBridge;
   session: AgentSession;
   promptBuilder: SystemPromptBuilder;
   inputProcessor: InputProcessor;
@@ -629,6 +756,7 @@ async function initializeInteractiveSession(
   const mcpManager = new MCPManager();
   const toolRegistry = new ToolRegistry();
   let skillService: SkillService | undefined;
+  let skillLifecycleRuntime: SkillLifecycleRuntime | undefined;
 
   // Register and connect MCP servers
   for (const serverConfig of config.mcpServers) {
@@ -654,6 +782,7 @@ async function initializeInteractiveSession(
     for (const skill of loadedSkills) {
       skillService.registry.registerSkill(skill);
     }
+    skillLifecycleRuntime = createCliSkillLifecycleRuntime(skillService);
   }
 
   // Create LLM service via Platform
@@ -723,6 +852,7 @@ async function initializeInteractiveSession(
       workspaceRoot: config.workDir,
       taskManager,
       ...(skillService ? { skillService } : {}),
+      ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
     }),
     conversationId,
     onConfirmTool: async (request) => {
@@ -748,32 +878,13 @@ async function initializeInteractiveSession(
   });
 
   // Wire skill provider to meta tools
-  if (skillService) {
-    session.setSkillProvider({
-      listSkills: () =>
-        skillService!.registry
-          .listSkills()
-          .filter((s) => s.enabled !== false)
-          .map((s) => ({ name: s.name, description: s.description || '' })),
-      getActiveSkill: () => {
-        const skill = session.getActiveSkill();
-        return skill ? { name: skill.name, description: skill.description || '' } : null;
-      },
-      activateSkill: (name: string) => {
-        const skill = skillService!.registry.getSkill(name);
-        if (!skill) return { success: false, message: `Skill "${name}" not found` };
-        void skillService!.apply(skill).then((injection) => {
-          session.applySkillInjection(injection, skill);
-        });
-        return {
-          success: true,
-          message: `Activated skill "${name}"`,
-        };
-      },
-      deactivateSkill: () => {
-        session.clearActiveSkill();
-        return { success: true, message: 'Skill deactivated' };
-      },
+  let skillLifecycleBridge: CliSkillLifecycleSessionBridge | undefined;
+  if (skillService && skillLifecycleRuntime) {
+    skillLifecycleBridge = wireCliSkillLifecycleSession({
+      session,
+      skillService,
+      conversationId,
+      lifecycleRuntime: skillLifecycleRuntime,
     });
   }
 
@@ -813,6 +924,7 @@ async function initializeInteractiveSession(
     mcpManager,
     toolRegistry,
     skillService,
+    skillLifecycleBridge,
     session,
     promptBuilder,
     inputProcessor,
@@ -916,6 +1028,25 @@ export async function runInteractive(
             prompt();
             return;
           }
+          if (result.lifecycleActivation) {
+            const activation = await activateCliLifecycleHint({
+              bridge: state!.skillLifecycleBridge,
+              conversationId: state!.conversationId,
+              hint: result.lifecycleActivation,
+            });
+            if (!activation.ok) {
+              console.error(theme.error(`Error: ${activation.message}`));
+              prompt();
+              return;
+            }
+          } else {
+            console.error(
+              theme.error('Error: Skill invocation did not return lifecycle activation'),
+            );
+            prompt();
+            return;
+          }
+
           if (result.agentPrompt) {
             executionPrompt = result.agentPrompt;
             executionMetadata = mergeIdcExecutionMetadata(
@@ -1008,6 +1139,19 @@ export async function runInteractive(
           }
           if (result.error) {
             console.error(theme.error(`Error: ${result.error}`));
+          }
+
+          if (result.lifecycleActivation) {
+            const activation = await activateCliLifecycleHint({
+              bridge: state!.skillLifecycleBridge,
+              conversationId: state!.conversationId,
+              hint: result.lifecycleActivation,
+            });
+            if (!activation.ok) {
+              console.error(theme.error(`Error: ${activation.message}`));
+              prompt();
+              return;
+            }
           }
 
           if (!result.continueExecution) {

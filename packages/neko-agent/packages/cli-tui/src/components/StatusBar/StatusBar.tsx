@@ -17,6 +17,7 @@ import { TokenUsage } from './TokenUsage';
 export function StatusBar(): React.JSX.Element {
   const mode = useAgentStore((s) => s.executionMode);
   const activeSkill = useAgentStore((s) => s.activeSkill);
+  const lifecycleRecords = useAgentStore((s) => s.activeSkillLifecycleRecords);
   const usage = useAgentStore((s) => s.usage);
   const config = useConfigStore((s) => s.config);
 
@@ -30,7 +31,13 @@ export function StatusBar(): React.JSX.Element {
       <Text dimColor> | </Text>
 
       {/* Active skill badge */}
-      {activeSkill ? (
+      {lifecycleRecords.length > 0 ? (
+        <>
+          <Text color={tokens.info}>skills:</Text>
+          <Text color={tokens.info}>{formatLifecycleRecords(lifecycleRecords)}</Text>
+          <Text dimColor> | </Text>
+        </>
+      ) : activeSkill ? (
         <>
           <Text color={tokens.info}>skill:</Text>
           <Text color={tokens.info}>{activeSkill}</Text>
@@ -78,4 +85,14 @@ function modeColor(mode: string): string {
 function truncateModel(model: string): string {
   // Remove date suffix like -20250514
   return model.replace(/-\d{8}$/, '');
+}
+
+function formatLifecycleRecords(
+  records: readonly import('@neko/shared').ActiveSkillLifecycleRecordProjection[],
+): string {
+  const first = records[0];
+  if (!first) return '0';
+  const suffix = records.length > 1 ? `+${records.length - 1}` : '';
+  const lock = first.clearable ? '' : ' locked';
+  return `${first.skillName}[${first.slot}]${suffix}${lock}`;
 }

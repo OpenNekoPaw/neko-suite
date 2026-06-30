@@ -11,9 +11,11 @@ export function persistCurrentVisibleConversation(context: MessageHandlerContext
 
   context.conversationMessagesRef.current.set(conversationId, context.messages);
   context.conversationStreamingRef.current.set(conversationId, {
+    ...(context.conversationStreamingRef.current.get(conversationId) ?? {}),
     streamingMessageId: context.streamingMessageIdRef.current,
     isThinking: context.isThinking,
     queuedMessageCount: context.queuedMessageCount ?? 0,
+    queuedMessages: context.queuedMessages ?? [],
   });
 }
 
@@ -41,6 +43,7 @@ export function activateCharacterRoleSessionView(
   context.streamingMessageIdRef.current = projection.streaming.streamingMessageId;
   context.setIsThinking(projection.streaming.isThinking);
   context.setQueuedMessageCount?.(projection.streaming.queuedMessageCount ?? 0);
+  context.setQueuedMessages?.(projection.streaming.queuedMessages ?? []);
   context.activeConversationIdRef.current = projection.activeConversationId;
   context.setActiveConversationId(projection.activeConversationId);
 }

@@ -268,6 +268,33 @@ describe('messages', () => {
         });
       });
 
+      it('should post message queue commands with explicit queue item scope', () => {
+        VSCodeMessages.getMessageQueue('conv-1');
+        VSCodeMessages.promoteQueuedMessage('conv-1', 'queue-1');
+        VSCodeMessages.cancelQueuedMessage('conv-1', 'queue-1');
+        VSCodeMessages.editQueuedMessage('conv-1', 'queue-1');
+
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'getMessageQueue',
+          conversationId: 'conv-1',
+        });
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'promoteQueuedMessage',
+          conversationId: 'conv-1',
+          queueItemId: 'queue-1',
+        });
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'cancelQueuedMessage',
+          conversationId: 'conv-1',
+          queueItemId: 'queue-1',
+        });
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'editQueuedMessage',
+          conversationId: 'conv-1',
+          queueItemId: 'queue-1',
+        });
+      });
+
       it('should post exitCharacterDialogueSession with session scope', () => {
         VSCodeMessages.exitCharacterDialogueSession('npc-session-1');
         expect(mockPostMessage).toHaveBeenCalledWith({

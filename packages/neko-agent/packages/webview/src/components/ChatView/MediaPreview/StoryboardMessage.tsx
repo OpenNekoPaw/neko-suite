@@ -16,7 +16,6 @@ import { SendToMenu, type PluginsAvailable } from '@/components/ChatView/SendToM
 import {
   projectStoryboardScenesAssetBatch,
   projectStoryboardScenesCutTimelinePayload,
-  projectStoryboardScenesTransferPayload,
 } from '@/presenters/storyboard-transfer-presenter';
 
 /** A single shot within a scene */
@@ -55,7 +54,6 @@ function StoryboardMessageComponent({
   onRegenerateScene,
   className,
 }: StoryboardMessageProps) {
-  const canvasPayload = projectStoryboardScenesTransferPayload(scenes);
   const cutPayload = projectStoryboardScenesCutTimelinePayload(scenes);
   const assetBatchPayload = projectStoryboardScenesAssetBatch(scenes);
 
@@ -66,7 +64,6 @@ function StoryboardMessageComponent({
           key={`scene-${scene.sceneIndex}`}
           scene={scene}
           plugins={plugins}
-          canvasPayload={canvasPayload}
           cutPayload={cutPayload}
           assetBatchPayload={assetBatchPayload}
           onRegenerate={onRegenerateScene}
@@ -83,14 +80,12 @@ function StoryboardMessageComponent({
 function SceneGroup({
   scene,
   plugins,
-  canvasPayload,
   cutPayload,
   assetBatchPayload,
   onRegenerate,
 }: {
   scene: StoryboardScene;
   plugins?: PluginsAvailable;
-  canvasPayload?: ReturnType<typeof projectStoryboardScenesTransferPayload>;
   cutPayload?: ReturnType<typeof projectStoryboardScenesCutTimelinePayload>;
   assetBatchPayload?: ReturnType<typeof projectStoryboardScenesAssetBatch>;
   onRegenerate?: (sceneIndex: number) => void;
@@ -173,16 +168,8 @@ function SceneGroup({
               </button>
             )}
             <span className="flex-1" />
-            {(canvasPayload || cutPayload || assetBatchPayload) && plugins && (
+            {(cutPayload || assetBatchPayload) && plugins && (
               <>
-                {canvasPayload && (
-                  <SendToMenu
-                    payload={canvasPayload}
-                    mediaType="image"
-                    plugins={plugins}
-                    allowedTargets={['canvas']}
-                  />
-                )}
                 {cutPayload && (
                   <SendToMenu
                     payload={cutPayload}

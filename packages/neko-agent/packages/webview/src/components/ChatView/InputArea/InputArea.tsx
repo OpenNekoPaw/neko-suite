@@ -4,7 +4,7 @@
  */
 
 import { useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
-import { SendIcon, StopIcon, PlusIcon, InfoIcon, EditIcon, CloseIcon } from '@neko/shared/icons';
+import { SendIcon, StopIcon, PlusIcon, EditIcon, CloseIcon } from '@neko/shared/icons';
 import { ModeConfigBar } from './ModeConfigBar';
 import { ModeSelector } from './ModeSelector';
 import { EntryPromptMenu as ComposerEntryPromptMenu } from './EntryPromptMenu';
@@ -783,6 +783,19 @@ export function InputArea({
       )}
 
       <div className="agent-composer-rail">
+        {inputAreaProjection.showQueuedMessages && (
+          <MessageQueueControls
+            items={queuedMessages}
+            pendingCount={queuePanelCount}
+            expanded={isQueueExpanded}
+            onExpandedChange={setIsQueueExpanded}
+            onPromote={onPromoteQueuedMessage}
+            onCancel={onCancelQueuedMessage}
+            onEdit={onEditQueuedMessage}
+            t={t}
+          />
+        )}
+
         {/* ── Top bar: mode + model | generation params (with integrated media model) ── */}
         {showControlRow && (
           <ModeConfigBar
@@ -858,19 +871,6 @@ export function InputArea({
             onSelectRoleplayEntity={handleEntryRoleplaySelect}
             onClose={closeEntryPromptMenu}
           />
-
-          {inputAreaProjection.showQueuedMessages && (
-            <MessageQueueControls
-              items={queuedMessages}
-              pendingCount={queuePanelCount}
-              expanded={isQueueExpanded}
-              onExpandedChange={setIsQueueExpanded}
-              onPromote={onPromoteQueuedMessage}
-              onCancel={onCancelQueuedMessage}
-              onEdit={onEditQueuedMessage}
-              t={t}
-            />
-          )}
 
           {/* Agent context chips — shown above textarea when context is attached */}
           {inputAreaProjection.showContextChips && (
@@ -1149,7 +1149,7 @@ function MessageQueueControls({
 
   return (
     <div
-      className="agent-composer-queue-panel"
+      className="agent-composer-queue-panel agent-composer-pending-panel"
       role="status"
       aria-live="polite"
       title={t('chat.input.queuedMessages', {
@@ -1157,7 +1157,7 @@ function MessageQueueControls({
       })}
     >
       <div className="agent-composer-queue-header">
-        <InfoIcon className="agent-composer-queue-icon" size={14} strokeWidth={2.1} />
+        <span className="agent-composer-queue-status-dot" aria-hidden="true" />
         <span className="agent-composer-queue-title">
           {t('chat.input.queuedMessages', {
             count: pendingCount,
@@ -1221,7 +1221,7 @@ function QueuedMessageRow({
   const isOptimistic = isOptimisticQueuedMessageItem(item);
 
   return (
-    <div className="agent-composer-queue-row">
+    <div className="agent-composer-queue-row agent-composer-popover-row">
       <span className="agent-composer-queue-index" aria-hidden="true">
         {position}
       </span>

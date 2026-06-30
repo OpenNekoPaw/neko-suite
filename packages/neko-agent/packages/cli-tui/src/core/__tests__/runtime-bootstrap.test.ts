@@ -24,12 +24,14 @@ describe('createCliAgentRuntime', () => {
     const { createCliAgentRuntime } = await import('../runtime-bootstrap');
     const taskManager = { id: 'task-manager' };
     const skillService = { registry: { id: 'skill-registry' } };
+    const skillLifecycleRuntime = { id: 'skill-lifecycle-runtime' };
     const projectMemoryManager = { load: vi.fn() };
 
     const runtime = createCliAgentRuntime({
       workspaceRoot: '/workspace',
       taskManager: taskManager as never,
       skillService: skillService as never,
+      skillLifecycleRuntime: skillLifecycleRuntime as never,
       projectMemoryManager: projectMemoryManager as never,
     });
 
@@ -39,6 +41,7 @@ describe('createCliAgentRuntime', () => {
     expect(runtime.workflowRuntime?.stageTracking).toEqual({
       skillService,
       skillRegistry: skillService.registry,
+      skillLifecycleRuntime,
     });
     expect(runtime.workflowRuntime?.idcTaskProjection).toEqual({
       kind: 'idc-projection',
@@ -46,6 +49,7 @@ describe('createCliAgentRuntime', () => {
     });
     expect(runtime.capabilityRuntime?.skillService).toBe(skillService);
     expect(runtime.capabilityRuntime?.skillRegistry).toBe(skillService.registry);
+    expect(runtime.capabilityRuntime?.skillLifecycleRuntime).toBe(skillLifecycleRuntime);
     expect(runtime.capabilityRuntime?.toolGroupRegistry).toBeDefined();
     expect(runtime.artifactStore).toEqual({
       kind: 'artifact-store',

@@ -6,11 +6,24 @@
  *
  * Output: packages/neko-agent/neko
  */
-import { readFileSync, renameSync } from 'fs';
+import { existsSync, readFileSync, renameSync, readdirSync, statSync } from 'fs';
 import { isAbsolute, join, resolve } from 'path';
 
 const outdir = resolve(import.meta.dir, '../../');
 const stubPath = resolve(import.meta.dir, 'src/stubs/react-devtools-core.ts');
+const repoRoot = resolve(import.meta.dir, '../../../..');
+
+const workspacePackages = new Map<string, string>([
+  ['@neko-agent/types', resolve(repoRoot, 'packages/neko-agent/packages/agent-types')],
+  ['@neko/agent', resolve(repoRoot, 'packages/neko-agent/packages/agent')],
+  ['@neko/ai-sdk', resolve(repoRoot, 'packages/neko-agent/packages/ai-sdk')],
+  ['@neko/content', resolve(repoRoot, 'packages/neko-content')],
+  ['@neko/market-core', resolve(repoRoot, 'packages/neko-market/packages/core')],
+  ['@neko/platform', resolve(repoRoot, 'packages/neko-agent/packages/platform')],
+  ['@neko/shared', resolve(repoRoot, 'packages/neko-types')],
+]);
+
+const rootPnpmStore = resolve(repoRoot, 'node_modules/.pnpm');
 
 const result = await Bun.build({
   entrypoints: ['./src/cli.tsx'],
@@ -27,6 +40,24 @@ const result = await Bun.build({
           path: stubPath,
           namespace: 'file',
         }));
+      },
+    },
+    {
+      name: 'workspace-and-pnpm-resolution',
+      setup(build) {
+        build.onResolve({ filter: /.*/ }, (args) => {
+          const workspacePath = resolveWorkspacePackage(args.path);
+          if (workspacePath) {
+            return { path: workspacePath, namespace: 'file' };
+          }
+
+          const packagePath = resolveRootPnpmPackage(args.path);
+          if (packagePath) {
+            return { path: packagePath, namespace: 'file' };
+          }
+
+          return undefined;
+        });
       },
     },
     {
@@ -64,4 +95,173 @@ if (outputPath) {
   const finalPath = join(outdir, 'neko');
   renameSync(outputPath, finalPath);
   console.log(`Built: ${finalPath}`);
+}
+
+function resolveWorkspacePackage(specifier: string): string | undefined {
+  const packageName = readPackageName(specifier);
+  if (!packageName) return undefined;
+  const packageRoot = workspacePackages.get(packageName);
+  if (!packageRoot) return undefined;
+  const subpath = specifier.slice(packageName.length).replace(/^\//, '');
+  return resolvePackageExport(packageRoot, subpath);
+}
+
+function resolveRootPnpmPackage(specifier: string): string | undefined {
+  if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('node:')) {
+    return undefined;
+  }
+  const packageName = readPackageName(specifier);
+  if (!packageName) return undefined;
+  const packageRoot = findRootPnpmPackageRoot(packageName);
+  if (!packageRoot) return undefined;
+  const subpath = specifier.slice(packageName.length).replace(/^\//, '');
+  return resolvePackageExport(packageRoot, subpath);
+}
+
+function resolvePackageExport(packageRoot: string, subpath: string): string | undefined {
+  const packageJsonPath = resolve(packageRoot, 'package.json');
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
+    readonly exports?: unknown;
+    readonly module?: string;
+    readonly main?: string;
+  };
+  const exportPath = readPackageExport(packageJson, subpath);
+  if (exportPath) {
+    const resolvedExport = resolvePackageTarget(packageRoot, exportPath, subpath);
+    if (resolvedExport) return resolvedExport;
+  }
+  if (subpath) {
+    const resolvedSubpath = resolveFileCandidate(resolve(packageRoot, subpath));
+    if (resolvedSubpath) return resolvedSubpath;
+  }
+  const entry = readPackageEntry(packageJson) ?? 'index.js';
+  return resolveFileCandidate(resolve(packageRoot, entry));
+}
+
+function findRootPnpmPackageRoot(packageName: string): string | undefined {
+  if (!existsSync(rootPnpmStore)) return undefined;
+  const escapedName = packageName.replace('/', '+');
+  const matches = readdirSync(rootPnpmStore)
+    .filter((entry) => entry === packageName || entry.startsWith(`${escapedName}@`))
+    .sort()
+    .reverse();
+  for (const match of matches) {
+    const root = resolve(rootPnpmStore, match, 'node_modules', packageName);
+    if (existsSync(resolve(root, 'package.json'))) return root;
+  }
+  return undefined;
+}
+
+function readPackageName(specifier: string): string | undefined {
+  const parts = specifier.split('/');
+  if (specifier.startsWith('@')) {
+    const [scope, name] = parts;
+    return scope && name ? `${scope}/${name}` : undefined;
+  }
+  return parts[0];
+}
+
+function readPackageExport(
+  packageJson: {
+    readonly exports?: unknown;
+  },
+  subpath: string,
+): string | undefined {
+  const exports = packageJson.exports;
+  if (!subpath) {
+    if (typeof exports === 'string') return exports;
+    if (isRecord(exports)) return readConditionalExport(exports['.']) ?? readConditionalExport(exports);
+    return undefined;
+  }
+  if (!isRecord(exports)) return undefined;
+  const key = `./${subpath.replace(/\.ts$/, '')}`;
+  const direct = readConditionalExport(exports[key]);
+  if (direct) return direct;
+  for (const [exportKey, exportValue] of Object.entries(exports)) {
+    if (!exportKey.includes('*')) continue;
+    const prefix = exportKey.slice(0, exportKey.indexOf('*'));
+    const suffix = exportKey.slice(exportKey.indexOf('*') + 1);
+    const lookup = `./${subpath}`;
+    if (!lookup.startsWith(prefix) || !lookup.endsWith(suffix)) continue;
+    const wildcard = lookup.slice(prefix.length, lookup.length - suffix.length);
+    const conditional = readConditionalExport(exportValue);
+    if (conditional) return conditional.replace('*', wildcard);
+  }
+  return undefined;
+}
+
+function readPackageEntry(packageJson: {
+  readonly exports?: unknown;
+  readonly module?: string;
+  readonly main?: string;
+}): string | undefined {
+  if (typeof packageJson.exports === 'string') return packageJson.exports;
+  if (isRecord(packageJson.exports)) {
+    const rootExport = packageJson.exports['.'];
+    if (typeof rootExport === 'string') return rootExport;
+    if (isRecord(rootExport)) {
+      for (const key of ['bun', 'require', 'default', 'import', 'module']) {
+        const value = rootExport[key];
+        if (typeof value === 'string') return value;
+      }
+    }
+    const topLevelExport = readConditionalExport(packageJson.exports);
+    if (topLevelExport) return topLevelExport;
+  }
+  return packageJson.module ?? packageJson.main;
+}
+
+function readConditionalExport(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (!isRecord(value)) return undefined;
+  for (const key of ['bun', 'require', 'default', 'import', 'module']) {
+    const candidate = value[key];
+    if (typeof candidate === 'string') return candidate;
+    const nested = readConditionalExport(candidate);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+function resolvePackageTarget(
+  packageRoot: string,
+  exportPath: string,
+  subpath: string,
+): string | undefined {
+  const candidates = [exportPath];
+  if (subpath.endsWith('.ts') && !exportPath.endsWith('.ts')) {
+    candidates.push(exportPath.replace(/\.js$/, '.ts'));
+  }
+  for (const candidate of candidates) {
+    const resolved = resolveFileCandidate(resolve(packageRoot, candidate));
+    if (resolved) return resolved;
+  }
+  return undefined;
+}
+
+function resolveFileCandidate(basePath: string): string | undefined {
+  for (const candidate of candidateSourceFiles(basePath)) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  }
+  return undefined;
+}
+
+function candidateSourceFiles(basePath: string): readonly string[] {
+  return [
+    basePath,
+    `${basePath}.ts`,
+    `${basePath}.tsx`,
+    `${basePath}.js`,
+    `${basePath}.jsx`,
+    `${basePath}.mjs`,
+    resolve(basePath, 'index.ts'),
+    resolve(basePath, 'index.tsx'),
+    resolve(basePath, 'index.js'),
+    resolve(basePath, 'index.jsx'),
+    resolve(basePath, 'index.mjs'),
+  ];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

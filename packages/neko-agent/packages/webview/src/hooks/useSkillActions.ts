@@ -15,7 +15,7 @@ export interface UseSkillActionsProps {
 }
 
 export interface UseSkillActionsReturn {
-  handleClearActiveSkill: () => void;
+  handleClearActiveSkill: (recordId?: string) => void;
 }
 
 export function useSkillActions({
@@ -23,12 +23,26 @@ export function useSkillActions({
   activeSkill,
   setActiveSkill,
 }: UseSkillActionsProps): UseSkillActionsReturn {
-  const handleClearActiveSkill = useCallback(() => {
-    if (activeSkill && activeSkill.conversationId === activeConversationId) {
-      setActiveSkill(null);
-      VSCodeMessages.clearActiveSkill(activeConversationId);
-    }
-  }, [activeSkill, activeConversationId, setActiveSkill]);
+  const handleClearActiveSkill = useCallback(
+    (recordId?: string) => {
+      if (activeSkill && activeSkill.conversationId === activeConversationId) {
+        const remainingRecords = recordId
+          ? activeSkill.records?.filter((record) => record.id !== recordId)
+          : [];
+        setActiveSkill(
+          remainingRecords && remainingRecords.length > 0
+            ? {
+                ...activeSkill,
+                skillName: remainingRecords[0]?.skillName ?? activeSkill.skillName,
+                records: remainingRecords,
+              }
+            : null,
+        );
+        VSCodeMessages.clearActiveSkill(activeConversationId, recordId ? { recordId } : undefined);
+      }
+    },
+    [activeSkill, activeConversationId, setActiveSkill],
+  );
 
   return { handleClearActiveSkill };
 }

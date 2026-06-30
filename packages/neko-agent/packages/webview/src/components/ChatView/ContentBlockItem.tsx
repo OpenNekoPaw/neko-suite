@@ -15,13 +15,10 @@ import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageCo
 import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
+import { VSCodeMessages } from '@/messages';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
-import { projectMarkdownStoryboardDraft } from '@/presenters/markdown-storyboard-draft-presenter';
-import {
-  projectAssistantMarkdownCanvasDraftPayload,
-  projectAssistantMarkdownCanvasTransferPayload,
-  projectMarkdownStoryboardResourceProjection,
-} from '@/presenters/storyboard-transfer-presenter';
+import { projectCanvasMarkdownCapabilityInput } from '@/presenters/canvas-markdown-capability-presenter';
+import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
 import {
   CodeIcon,
   EditIcon,
@@ -36,6 +33,15 @@ import {
   type ContentBlockHeaderTone,
   type ContentBlockUiProjection,
 } from '@/presenters/content-block-presenter';
+import {
+  isCanvasMarkdownCapabilityInput,
+  isCanvasMarkdownCapabilityResult,
+  type AgentCapabilityAction,
+  type AgentCapabilityArtifactRef,
+  type AgentCapabilityInvocationResult,
+  type CanvasMarkdownCapabilityResult,
+  type CanvasMarkdownCapabilityInput,
+} from '@neko/shared';
 import type { MessageSpeakerIdentity } from '@/components/ChatView/message-identity';
 
 interface ContentBlockItemProps {
@@ -198,41 +204,24 @@ function renderBlockContent(
       );
 
     case 'markdown': {
-      const storyboardResources = !projection.renderStreaming
-        ? projectMarkdownStoryboardResourceProjection({
+      const markdownResources = !projection.renderStreaming
+        ? projectMarkdownResourceRendering({
+            markdown: projection.content,
             siblingBlocks: projection.siblingBlocks,
             toolCalls: projection.toolCalls,
           })
         : undefined;
-      const storyboardDraft = !projection.renderStreaming
-        ? projectMarkdownStoryboardDraft(projection.content, storyboardResources)
-        : undefined;
-      const canvasPayload =
+      const canvasMarkdownCapability =
         !projection.renderStreaming && callbacks.pluginsAvailable?.canvas
-          ? projectAssistantMarkdownCanvasTransferPayload({
-              content: projection.content,
-              storyboardDraft,
-              siblingBlocks: projection.siblingBlocks,
-              toolCalls: projection.toolCalls,
+          ? projectCanvasMarkdownCapabilityInput({
+              markdown: projection.content,
+              markdownResources,
               target: projectCanvasContentTransferTarget({
                 ambientNodes: callbacks.ambientNodes,
                 contextChips: callbacks.contextChips,
               }),
-              provenance: { source: 'webview', label: 'assistant-storyboard-block' },
-            })
-          : null;
-      const canvasDraftPayload =
-        !projection.renderStreaming &&
-        callbacks.pluginsAvailable?.canvas &&
-        storyboardDraft?.status !== 'none'
-          ? projectAssistantMarkdownCanvasDraftPayload({
-              content: projection.content,
-              storyboardDraft,
-              target: projectCanvasContentTransferTarget({
-                ambientNodes: callbacks.ambientNodes,
-                contextChips: callbacks.contextChips,
-              }),
-              provenance: { source: 'webview', label: 'assistant-storyboard-draft-block' },
+              provenance: { source: 'webview', label: 'assistant-markdown-block' },
+              title: 'Assistant Markdown',
             })
           : null;
 
@@ -241,28 +230,17 @@ function renderBlockContent(
           <MarkdownRenderer
             content={projection.content}
             isStreaming={projection.renderStreaming}
-            storyboardDraft={storyboardDraft}
+            markdownResources={markdownResources}
           />
-          {(canvasPayload || canvasDraftPayload) && callbacks.pluginsAvailable && (
+          {canvasMarkdownCapability && callbacks.pluginsAvailable && (
             <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-[var(--agent-divider)] pt-1">
-              {canvasPayload ? (
-                <SendToMenu
-                  payload={canvasPayload}
-                  mediaType="image"
-                  plugins={callbacks.pluginsAvailable}
-                  allowedTargets={['canvas']}
-                />
-              ) : null}
-              {canvasDraftPayload ? (
-                <SendToMenu
-                  payload={canvasDraftPayload}
-                  mediaType="image"
-                  plugins={callbacks.pluginsAvailable}
-                  allowedTargets={['canvas']}
-                  hidePrefixLabel={Boolean(canvasPayload)}
-                  labelOverride="Add draft to"
-                />
-              ) : null}
+              <SendToMenu
+                canvasMarkdownCapability={canvasMarkdownCapability}
+                conversationId={conversationId}
+                mediaType="image"
+                plugins={callbacks.pluginsAvailable}
+                allowedTargets={['canvas']}
+              />
             </div>
           )}
         </div>
@@ -350,7 +328,196 @@ function renderBlockContent(
         </div>
       );
 
+    case 'canvasLifecycle':
+      return (
+        <CanvasLifecycleResultCard
+          lifecycle={projection.canvasLifecycle.result}
+          success={projection.canvasLifecycle.success}
+          requestId={projection.canvasLifecycle.requestId}
+          error={projection.canvasLifecycle.error}
+          conversationId={conversationId}
+        />
+      );
+
     case 'empty':
       return null;
   }
+}
+
+function CanvasLifecycleResultCard({
+  lifecycle,
+  success,
+  requestId,
+  error,
+  conversationId,
+}: {
+  lifecycle: AgentCapabilityInvocationResult;
+  success: boolean;
+  requestId: string;
+  error?: string;
+  conversationId: string | null;
+}) {
+  return (
+    <div className="agent-bubble agent-bubble-assistant w-fit max-w-full rounded-2xl rounded-tl-md px-2.5 py-2 text-[12px] leading-relaxed">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="font-medium text-[var(--agent-fg)]">Canvas {lifecycle.status}</span>
+        <span className="font-mono text-[10px] text-[var(--vscode-descriptionForeground)]">
+          {lifecycle.capabilityId}
+        </span>
+        <CanvasLifecycleDataBadge result={readCanvasMarkdownLifecycleData(lifecycle)} />
+        {!success && (
+          <span className="rounded border border-[var(--vscode-errorForeground)] px-1.5 py-0.5 text-[10px] text-[var(--vscode-errorForeground)]">
+            blocked
+          </span>
+        )}
+      </div>
+      {lifecycle.reviewArtifact && (
+        <div className="mt-1 text-[11px] text-[var(--agent-fg-secondary)]">
+          Review artifact: {formatArtifactRef(lifecycle.reviewArtifact)}
+        </div>
+      )}
+      {lifecycle.changedRefs?.length ? (
+        <div className="mt-1 text-[11px] text-[var(--agent-fg-secondary)]">
+          Changed refs: {lifecycle.changedRefs.map(formatArtifactRef).join(', ')}
+        </div>
+      ) : null}
+      {lifecycle.diagnostics.length > 0 && (
+        <div className="mt-1.5 space-y-1">
+          {lifecycle.diagnostics.map((diagnostic, index) => (
+            <div
+              key={`${diagnostic.code}:${index}`}
+              className="rounded border border-[var(--agent-divider)] bg-[var(--agent-elevated)] px-1.5 py-1 text-[11px]"
+            >
+              <span className="font-medium">{diagnostic.severity}</span>{' '}
+              <span className="font-mono">{diagnostic.code}</span>: {diagnostic.message}
+            </div>
+          ))}
+        </div>
+      )}
+      {error && (
+        <div className="mt-1.5 rounded border border-[var(--vscode-errorForeground)] px-1.5 py-1 text-[11px] text-[var(--vscode-errorForeground)]">
+          {error}
+        </div>
+      )}
+      <CanvasLifecycleActionList
+        actions={lifecycle.actions}
+        conversationId={conversationId}
+        parentRequestId={requestId}
+      />
+    </div>
+  );
+}
+
+function CanvasLifecycleDataBadge({ result }: { result: CanvasMarkdownCapabilityResult | null }) {
+  if (!result) return null;
+  if (result.displayFallback) {
+    return (
+      <span className="rounded border border-[var(--vscode-editorWarning-foreground)] px-1.5 py-0.5 text-[10px] text-[var(--vscode-editorWarning-foreground)]">
+        display-only fallback
+      </span>
+    );
+  }
+  if (result.resolvedKind === 'generic-table') {
+    return (
+      <span className="rounded border border-[var(--agent-divider)] px-1.5 py-0.5 text-[10px] text-[var(--vscode-descriptionForeground)]">
+        generic table
+      </span>
+    );
+  }
+  if (result.resolvedKind === 'creative-table') {
+    return (
+      <span className="rounded border border-[var(--agent-divider)] px-1.5 py-0.5 text-[10px] text-[var(--vscode-descriptionForeground)]">
+        creative table
+      </span>
+    );
+  }
+  return null;
+}
+
+function readCanvasMarkdownLifecycleData(
+  lifecycle: AgentCapabilityInvocationResult,
+): CanvasMarkdownCapabilityResult | null {
+  return isCanvasMarkdownCapabilityResult(lifecycle.data) ? lifecycle.data : null;
+}
+
+function CanvasLifecycleActionList({
+  actions,
+  conversationId,
+  parentRequestId,
+}: {
+  actions: AgentCapabilityInvocationResult['actions'];
+  conversationId: string | null;
+  parentRequestId: string;
+}) {
+  if (!actions?.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {actions.map((action) => (
+        <CanvasLifecycleActionButton
+          key={action.actionId}
+          action={action}
+          conversationId={conversationId}
+          parentRequestId={parentRequestId}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CanvasLifecycleActionButton({
+  action,
+  conversationId,
+  parentRequestId,
+}: {
+  action: AgentCapabilityAction;
+  conversationId: string | null;
+  parentRequestId: string;
+}) {
+  const input = projectCanvasLifecycleActionInput(action);
+  const disabledReason = !conversationId
+    ? 'Conversation unavailable'
+    : !input
+      ? 'Unsupported action payload'
+      : undefined;
+  const disabled = disabledReason !== undefined;
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      title={disabledReason ?? `${action.capabilityId} ${action.phase}`}
+      onClick={() => {
+        if (!conversationId || !input) return;
+        VSCodeMessages.invokeCanvasMarkdownCapability(
+          conversationId,
+          `${action.capabilityId}:${action.actionId}:${parentRequestId}`,
+          input,
+        );
+      }}
+      className="inline-flex min-h-6 max-w-full items-center gap-1 rounded border border-[var(--agent-input-border)] bg-[var(--agent-surface)] px-2 py-1 text-[11px] font-medium text-[var(--agent-fg)] transition-colors hover:border-[var(--agent-accent)] hover:bg-[var(--agent-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <span className="truncate">{action.label ?? action.actionId}</span>
+      {action.requiresApproval && <span className="text-[10px] opacity-70">approve</span>}
+    </button>
+  );
+}
+
+function projectCanvasLifecycleActionInput(
+  action: AgentCapabilityAction,
+): CanvasMarkdownCapabilityInput | null {
+  if (!isCanvasMarkdownCapabilityInput(action.payload)) return null;
+  if (action.capabilityId !== action.payload.capabilityId) return null;
+  if (!action.requiresApproval) return action.payload;
+  if (action.phase !== 'apply' && action.phase !== 'execute') return action.payload;
+  return {
+    ...action.payload,
+    approval: {
+      source: 'user-confirmation',
+      approvedAt: Date.now(),
+    },
+  } as CanvasMarkdownCapabilityInput;
+}
+
+function formatArtifactRef(ref: AgentCapabilityArtifactRef): string {
+  return [ref.packageId, ref.kind, ref.id].filter(Boolean).join(':');
 }

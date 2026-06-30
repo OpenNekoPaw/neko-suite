@@ -243,6 +243,8 @@ function estimateContentBlockHeight(block: ContentBlock): number {
       return 150;
     case 'composite':
       return 220;
+    case 'canvas_lifecycle':
+      return 140;
     case 'text': {
       const contentLines = Math.ceil((block.content?.length ?? 0) / 60);
       return Math.max(MESSAGE_LIST_ESTIMATED_CONTENT_BLOCK_HEIGHT, contentLines * 20 + 40);

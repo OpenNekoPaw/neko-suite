@@ -14,7 +14,11 @@ import type {
   SendMessageWebviewMessage,
   WebviewToExtensionMessage,
 } from '@neko-agent/types';
-import type { DocumentLocator, DocumentSourceRef } from '@neko/shared';
+import type {
+  CanvasMarkdownCapabilityInput,
+  DocumentLocator,
+  DocumentSourceRef,
+} from '@neko/shared';
 import type { AgentContextType } from '@neko/shared';
 
 export { postRawMessage as postMessage, type VSCodeAPI };
@@ -452,6 +456,20 @@ export const VSCodeMessages = {
       return;
     }
     postWebviewMessage({ type: 'sendToPlugin', target, payload: assetPathOrPayload });
+  },
+
+  /** Invoke Canvas-owned Markdown capability with original Markdown and stable resource refs. */
+  invokeCanvasMarkdownCapability: (
+    conversationId: string,
+    requestId: string,
+    input: CanvasMarkdownCapabilityInput,
+  ) => {
+    postWebviewMessage({
+      type: 'invokeCanvasMarkdownCapability',
+      conversationId,
+      requestId,
+      input,
+    });
   },
 
   /** Retry a failed background task */

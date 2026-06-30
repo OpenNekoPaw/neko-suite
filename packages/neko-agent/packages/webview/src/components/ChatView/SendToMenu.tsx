@@ -11,6 +11,7 @@
 import { memo, useCallback } from 'react';
 import { VSCodeMessages } from '@/messages';
 import { ArrowRightIcon, FileIcon, LayersIcon, ScissorsIcon, UploadIcon } from '@neko/shared/icons';
+import type { CanvasMarkdownCapabilityInput } from '@neko/shared';
 import type {
   PluginTransferAssetRef,
   PluginTransferMediaType,
@@ -34,6 +35,10 @@ interface SendToMenuProps {
   assets?: readonly PluginTransferAssetRef[];
   /** Structured transfer payload. Overrides assetPath / assetPaths / assets when provided. */
   payload?: PluginTransferPayload;
+  /** Canvas Markdown capability input. Used for Markdown authoring handoff. */
+  canvasMarkdownCapability?: CanvasMarkdownCapabilityInput;
+  /** Conversation scope for Canvas Markdown capability results. */
+  conversationId?: string | null;
   /** Optional target allow-list for composite UIs that split structured and flat transfers. */
   allowedTargets?: readonly PluginTransferTarget[];
   /** Media type hint for determining valid targets */
@@ -42,6 +47,8 @@ interface SendToMenuProps {
   plugins: PluginsAvailable;
   /** Hide the leading "Send to" text for compact contexts such as thumbnails. */
   hidePrefixLabel?: boolean;
+  /** Override the leading action phrase for explicit draft-only flows. */
+  labelOverride?: string;
   /** Hide Explorer from contexts that already have a primary view/reveal affordance. */
   hideExplorerTarget?: boolean;
   className?: string;
@@ -52,15 +59,27 @@ function SendToMenuComponent({
   assetPaths,
   assets,
   payload,
+  canvasMarkdownCapability,
+  conversationId,
   allowedTargets,
   mediaType,
   plugins,
   hidePrefixLabel = false,
+  labelOverride = 'Send to',
   hideExplorerTarget = false,
   className,
 }: SendToMenuProps) {
   const handleSendTo = useCallback(
     (target: SendToTarget) => {
+      if (canvasMarkdownCapability) {
+        if (target !== 'canvas' || !conversationId) return;
+        VSCodeMessages.invokeCanvasMarkdownCapability(
+          conversationId,
+          createCanvasMarkdownCapabilityRequestId(canvasMarkdownCapability.capabilityId),
+          canvasMarkdownCapability,
+        );
+        return;
+      }
       const transferPayload = buildPluginTransferPayload({
         assetPath,
         assetPaths,
@@ -71,26 +90,23 @@ function SendToMenuComponent({
       if (!transferPayload) return;
       VSCodeMessages.sendToPlugin(target, transferPayload);
     },
-    [assetPath, assetPaths, assets, mediaType, payload],
+    [assetPath, assetPaths, assets, canvasMarkdownCapability, conversationId, mediaType, payload],
   );
 
   const projection = projectPluginTransferMenu({
     mediaType,
     plugins,
-    ...(payload?.kind === 'canvasStoryboard' ? { structuredKind: 'canvasStoryboard' } : {}),
     ...(payload?.kind === 'cutStoryboard' ? { structuredKind: 'cutStoryboard' } : {}),
-    ...(payload?.kind === 'canvasText' ||
-    payload?.kind === 'canvasPrompt' ||
-    payload?.kind === 'canvasStructuredContent'
-      ? { structuredKind: 'canvasContent' }
-      : {}),
   });
   const targets = allowedTargets
     ? projection.targets.filter((target) => allowedTargets.includes(target.id))
     : projection.targets;
-  const visibleTargets = hideExplorerTarget
-    ? targets.filter((target) => target.id !== 'explorer')
+  const capabilityTargets = canvasMarkdownCapability
+    ? targets.filter((target) => target.id === 'canvas' && Boolean(conversationId))
     : targets;
+  const visibleTargets = hideExplorerTarget
+    ? capabilityTargets.filter((target) => target.id !== 'explorer')
+    : capabilityTargets;
 
   if (visibleTargets.length === 0) return null;
 
@@ -98,7 +114,7 @@ function SendToMenuComponent({
     <div className={`flex min-w-0 flex-wrap items-center gap-1.5 ${className ?? ''}`}>
       {!hidePrefixLabel && (
         <span className="shrink-0 text-[10px] text-[var(--vscode-descriptionForeground)]">
-          Send to
+          {labelOverride}
         </span>
       )}
       {visibleTargets.map((target) => (
@@ -118,6 +134,14 @@ function SendToMenuComponent({
       ))}
     </div>
   );
+}
+
+function createCanvasMarkdownCapabilityRequestId(capabilityId: string): string {
+  const random =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `${capabilityId}:${random}`;
 }
 
 function buildPluginTransferPayload(input: {

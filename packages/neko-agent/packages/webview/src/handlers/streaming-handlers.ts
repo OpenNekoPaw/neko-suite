@@ -33,6 +33,7 @@ import {
 } from '../presenters/message-presenter';
 import {
   hasQueuedUserMessages,
+  projectReleasedQueuedMessageIntoTranscript,
   projectQueuedMessagesCleared,
   projectQueuedMessagesForPendingCount,
 } from '../presenters/message-queue-presenter';
@@ -184,7 +185,9 @@ const handleMessageQueued: MessageHandler<'messageQueued'> = (
   context,
 ) => {
   if (message.snapshot) {
-    applyMessageQueueSnapshot(message.snapshot, context);
+    applyMessageQueueSnapshot(message.snapshot, context, {
+      releasedItem: message.releasedItem,
+    });
     return;
   }
 
@@ -297,16 +300,24 @@ function getPreviousQueuedMessageCount(
 function applyMessageQueueSnapshot(
   snapshot: MessageQueueSnapshotMessage['snapshot'],
   context: MessageHandlerContext,
+  options: {
+    readonly releasedItem?: MessageQueuedMessage['releasedItem'];
+  } = {},
 ): void {
   if (isStaleMessageQueueSnapshot(snapshot, context)) {
     return;
   }
 
   updateConversation(context, snapshot.conversationId, (msgs, streamingId) => ({
-    messages: projectQueuedMessagesCleared(msgs),
+    messages: options.releasedItem
+      ? projectReleasedQueuedMessageIntoTranscript({
+          messages: msgs,
+          item: options.releasedItem,
+        })
+      : projectQueuedMessagesCleared(msgs),
     streamingMessageId: streamingId,
     isThinking:
-      snapshot.items.length > 0
+      snapshot.items.length > 0 || options.releasedItem
         ? true
         : (context.conversationStreamingRef.current.get(snapshot.conversationId)?.isThinking ??
           context.isThinking),

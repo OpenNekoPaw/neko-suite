@@ -895,6 +895,7 @@ describe('useChatActions', () => {
     const setStreamingMessageId = vi.fn();
     const clearInput = vi.fn();
     const setAttachedFiles = vi.fn();
+    const onUserMessageSent = vi.fn();
     const streamingMessageIdRef = { current: 'assistant-streaming' };
 
     const { result } = renderHook(() => {
@@ -913,6 +914,7 @@ describe('useChatActions', () => {
         setActiveTab: vi.fn(),
         clearInput,
         setAttachedFiles,
+        onUserMessageSent,
       });
     });
 
@@ -920,15 +922,15 @@ describe('useChatActions', () => {
       result.current.handleSend();
     });
 
-    expect(setMessages).toHaveBeenCalledTimes(1);
-    const updater = setMessages.mock.calls[0]?.[0] as (messages: unknown[]) => unknown[];
-    expect(updater([])).toEqual([
-      expect.objectContaining({
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(onUserMessageSent).toHaveBeenCalledWith({
+      conversationId: 'conv-queue',
+      message: expect.objectContaining({
         role: 'user',
         content: '继续这个方向',
         isQueued: true,
       }),
-    ]);
+    });
     expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         conversationId: 'conv-queue',
@@ -981,6 +983,7 @@ describe('useChatActions', () => {
     const setIsThinking = vi.fn();
     const setStreamingMessageId = vi.fn();
     const setActiveTab = vi.fn();
+    const onUserMessageSent = vi.fn();
     const streamingMessageIdRef = { current: 'assistant-streaming' };
 
     const { result } = renderHook(() => {
@@ -999,6 +1002,7 @@ describe('useChatActions', () => {
         setActiveTab,
         clearInput: vi.fn(),
         setAttachedFiles: vi.fn(),
+        onUserMessageSent,
       });
     });
 
@@ -1012,14 +1016,15 @@ describe('useChatActions', () => {
         message: 'Continue from selection',
       }),
     );
-    const updater = setMessages.mock.calls[0]?.[0] as (messages: unknown[]) => unknown[];
-    expect(updater([])).toEqual([
-      expect.objectContaining({
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(onUserMessageSent).toHaveBeenCalledWith({
+      conversationId: 'conv-trigger-queue',
+      message: expect.objectContaining({
         role: 'user',
         content: 'Continue from selection',
         isQueued: true,
       }),
-    ]);
+    });
     expect(setStreamingMessageId).not.toHaveBeenCalled();
     expect(streamingMessageIdRef.current).toBe('assistant-streaming');
     expect(setIsThinking).not.toHaveBeenCalled();

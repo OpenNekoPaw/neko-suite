@@ -40,6 +40,10 @@ export async function handleTUISlashCommand(
   executionOverrides?: {
     metadata?: Record<string, unknown>;
   };
+  lifecycleActivation?: {
+    readonly skillName: string;
+    readonly args?: string;
+  };
 }> {
   const cliContext: SlashCommandContext = {
     config: context.config,
@@ -60,6 +64,7 @@ export async function handleTUISlashCommand(
     error: result.error,
     agentPrompt: result.agentPrompt,
     executionOverrides: result.executionOverrides,
+    lifecycleActivation: result.lifecycleActivation,
   };
 }
 
@@ -73,6 +78,10 @@ export async function handleTUISkillInvocation(
   agentPrompt?: string;
   executionOverrides?: {
     metadata?: Record<string, unknown>;
+  };
+  lifecycleActivation?: {
+    readonly skillName: string;
+    readonly args?: string;
   };
 }> {
   const cliContext: SlashCommandContext = {
@@ -94,5 +103,6 @@ export async function handleTUISkillInvocation(
     error: result.error,
     agentPrompt: result.agentPrompt,
     executionOverrides: result.executionOverrides,
+    lifecycleActivation: result.lifecycleActivation,
   };
 }

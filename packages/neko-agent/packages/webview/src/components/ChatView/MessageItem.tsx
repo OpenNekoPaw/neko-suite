@@ -6,6 +6,7 @@ import { PlanReview } from '@/components/ChatView/PlanReview';
 import { TaskCard, BatchTaskCard } from '@/components/ChatView/TaskCard';
 import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
 import { ProcessRecordsGroup } from '@/components/ChatView/ProcessRecordsGroup';
+import { ContentBlockItem } from '@/components/ChatView/ContentBlockItem';
 import { MessageActions } from '@/components/ChatView/MessageActions';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageContent';
@@ -34,12 +35,8 @@ import {
 import { VSCodeMessages } from '@/messages';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
-import { projectMarkdownStoryboardDraft } from '@/presenters/markdown-storyboard-draft-presenter';
-import {
-  projectAssistantMarkdownCanvasDraftPayload,
-  projectAssistantMarkdownCanvasTransferPayload,
-  projectMarkdownStoryboardResourceProjection,
-} from '@/presenters/storyboard-transfer-presenter';
+import { projectCanvasMarkdownCapabilityInput } from '@/presenters/canvas-markdown-capability-presenter';
+import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
 import {
   DEFAULT_MESSAGE_IDENTITIES,
   selectMessageIdentity,
@@ -165,35 +162,21 @@ function ContentBlockRenderer({
       );
 
     case 'markdown': {
-      const storyboardResources = !projection.renderStreaming
-        ? projectMarkdownStoryboardResourceProjection({
+      const markdownResources = !projection.renderStreaming
+        ? projectMarkdownResourceRendering({
+            markdown: projection.content,
             siblingBlocks: projection.siblingBlocks,
             toolCalls: projection.toolCalls,
           })
         : undefined;
-      const storyboardDraft = !projection.renderStreaming
-        ? projectMarkdownStoryboardDraft(projection.content, storyboardResources)
-        : undefined;
-      const canvasPayload =
+      const canvasMarkdownCapability =
         !projection.renderStreaming && pluginsAvailable?.canvas
-          ? projectAssistantMarkdownCanvasTransferPayload({
-              content: projection.content,
-              storyboardDraft,
-              siblingBlocks: projection.siblingBlocks,
-              toolCalls: projection.toolCalls,
+          ? projectCanvasMarkdownCapabilityInput({
+              markdown: projection.content,
+              markdownResources,
               target: projectCanvasContentTransferTarget({ ambientNodes, contextChips }),
-              provenance: { source: 'webview', label: 'assistant-storyboard-block' },
-            })
-          : null;
-      const canvasDraftPayload =
-        !projection.renderStreaming &&
-        pluginsAvailable?.canvas &&
-        storyboardDraft?.status !== 'none'
-          ? projectAssistantMarkdownCanvasDraftPayload({
-              content: projection.content,
-              storyboardDraft,
-              target: projectCanvasContentTransferTarget({ ambientNodes, contextChips }),
-              provenance: { source: 'webview', label: 'assistant-storyboard-draft-block' },
+              provenance: { source: 'webview', label: 'assistant-markdown-block' },
+              title: 'Assistant Markdown',
             })
           : null;
 
@@ -202,28 +185,17 @@ function ContentBlockRenderer({
           <MarkdownRenderer
             content={projection.content}
             isStreaming={projection.renderStreaming}
-            storyboardDraft={storyboardDraft}
+            markdownResources={markdownResources}
           />
-          {(canvasPayload || canvasDraftPayload) && pluginsAvailable && (
+          {canvasMarkdownCapability && pluginsAvailable && (
             <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-[var(--agent-divider)] pt-1">
-              {canvasPayload ? (
-                <SendToMenu
-                  payload={canvasPayload}
-                  mediaType="image"
-                  plugins={pluginsAvailable}
-                  allowedTargets={['canvas']}
-                />
-              ) : null}
-              {canvasDraftPayload ? (
-                <SendToMenu
-                  payload={canvasDraftPayload}
-                  mediaType="image"
-                  plugins={pluginsAvailable}
-                  allowedTargets={['canvas']}
-                  hidePrefixLabel={Boolean(canvasPayload)}
-                  labelOverride="Add draft to"
-                />
-              ) : null}
+              <SendToMenu
+                canvasMarkdownCapability={canvasMarkdownCapability}
+                conversationId={conversationId}
+                mediaType="image"
+                plugins={pluginsAvailable}
+                allowedTargets={['canvas']}
+              />
             </div>
           )}
         </div>
@@ -297,6 +269,18 @@ function ContentBlockRenderer({
             data={projection.richContent.data}
           />
         </div>
+      );
+
+    case 'canvasLifecycle':
+      return (
+        <ContentBlockItem
+          projection={projection}
+          isFirst={false}
+          isLast={false}
+          isStreaming={false}
+          conversationId={conversationId}
+          workItemIds={workItemIds}
+        />
       );
 
     case 'empty':

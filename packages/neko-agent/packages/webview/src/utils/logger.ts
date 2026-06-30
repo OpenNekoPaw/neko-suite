@@ -2,10 +2,15 @@
  * Webview Logger Registry
  *
  * Browser-side logger for neko-agent webview.
- * Uses ConsoleLogger from @neko/shared with Warn level.
+ * Uses the shared webview logger registry.
  */
-import { createLoggerRegistry, LogLevel } from '@neko/shared';
+import { createWebviewLoggerRegistry, LogLevel } from '@neko/shared';
 
-const registry = createLoggerRegistry('NekoAgent', LogLevel.Warn);
+const registry = createWebviewLoggerRegistry({
+  packageName: 'NekoAgent',
+  defaultLevel: LogLevel.Debug,
+});
 
-export const { getLogger } = registry;
+export const setRootLogger = registry.setRootLogger;
+export const getRootLogger = registry.getRootLogger;
+export const getLogger = registry.getLogger;

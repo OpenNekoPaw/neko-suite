@@ -109,7 +109,10 @@ describe('message presenter', () => {
   it('preserves composite artifact transfers in tool result and backfill projection', () => {
     const artifact = makeArtifactSnapshot('artifact-1', 'Draft plan');
     const blockPage = makeArtifactBlockPage('artifact-1', 'page-2');
-    const summary = makeArtifactExecutionSummary('artifact-1', 'canvas.importStoryboard');
+    const summary = makeArtifactExecutionSummary(
+      'artifact-1',
+      'canvas.createStoryboardDraftFromMarkdown',
+    );
     const result = projectToolResultIntoMessages({
       messages: createToolMessages(),
       streamingMessageId: null,

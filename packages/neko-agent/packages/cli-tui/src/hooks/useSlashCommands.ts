@@ -36,8 +36,12 @@ export function useSlashCommands(sessionActions: {
   ) => Promise<void>;
   updateModel?: (model: string) => void;
   updateMode?: (mode: 'plan' | 'ask' | 'auto') => void;
-  activateSkill?: (name: string) => boolean;
-  deactivateSkill?: () => void;
+  activateSkill?: (name: string, args?: string) => boolean | Promise<boolean>;
+  deactivateSkill?: (input?: {
+    readonly recordId?: string;
+    readonly slot?: import('@neko/shared').SkillLifecycleSlot;
+    readonly skillName?: string;
+  }) => boolean | Promise<boolean>;
   getSkillService?: () => SkillService | undefined;
   getToolRegistry?: () => ToolRegistry | undefined;
 }): SlashCommandHandlers {
@@ -61,7 +65,19 @@ export function useSlashCommands(sessionActions: {
 
           if (result.error) {
             useConversationStore.getState().addError(new Error(result.error));
-          } else if (result.agentPrompt && sessionActions.submit) {
+          } else {
+            const activation = result.lifecycleActivation;
+            if (activation) {
+              const ok =
+                (await sessionActions.activateSkill?.(activation.skillName, activation.args)) ??
+                false;
+              if (!ok) {
+                return;
+              }
+            }
+          }
+
+          if (result.agentPrompt && sessionActions.submit) {
             await sessionActions.submit(result.agentPrompt, result.executionOverrides);
           }
         } catch (error) {
@@ -161,21 +177,34 @@ export function useSlashCommands(sessionActions: {
             return;
           }
 
+          // Deactivate: /skill off
+          if (skillArg === 'off' || skillArg.startsWith('off ')) {
+            const clearTarget = skillArg.slice(3).trim();
+            const records = useAgentStore.getState().activeSkillLifecycleRecords;
+            if (!clearTarget && records.length > 1) {
+              addSystemMessage(
+                `Multiple active Skill lifecycle records. Use /skill off <recordId|slot|skillName>. Active: ${records
+                  .map((record) => `${record.id} ${record.skillName}[${record.slot}]`)
+                  .join(', ')}`,
+              );
+              return;
+            }
+            const scopedTarget = parseSkillClearTarget(clearTarget, records);
+            const ok = (await sessionActions.deactivateSkill?.(scopedTarget)) ?? false;
+            if (ok) {
+              addSystemMessage('Skill lifecycle record deactivated.');
+            }
+            return;
+          }
+
           // Direct activate: /skill <name>
-          if (skillArg && skillArg !== 'off') {
-            const ok = sessionActions.activateSkill?.(skillArg) ?? false;
+          if (skillArg) {
+            const ok = (await sessionActions.activateSkill?.(skillArg)) ?? false;
             if (ok) {
               addSystemMessage(`Skill activated: ${skillArg}`);
             } else {
               addSystemMessage(`Skill not found: "${skillArg}". Use /skill to browse.`);
             }
-            return;
-          }
-
-          // Deactivate: /skill off
-          if (skillArg === 'off') {
-            sessionActions.deactivateSkill?.();
-            addSystemMessage('Skill deactivated.');
             return;
           }
 
@@ -195,10 +224,12 @@ export function useSlashCommands(sessionActions: {
           if (!selectedId) return;
 
           if (selectedId === '__off__') {
-            sessionActions.deactivateSkill?.();
-            addSystemMessage('Skill deactivated.');
+            const ok = (await sessionActions.deactivateSkill?.()) ?? false;
+            if (ok) {
+              addSystemMessage('Skill lifecycle record deactivated.');
+            }
           } else {
-            const ok = sessionActions.activateSkill?.(selectedId) ?? false;
+            const ok = (await sessionActions.activateSkill?.(selectedId)) ?? false;
             if (ok) {
               addSystemMessage(`Skill activated: ${selectedId}`);
             }
@@ -255,7 +286,19 @@ export function useSlashCommands(sessionActions: {
           addSystemMessage(`Unknown command: ${input}. Type /help for available commands.`);
         } else if (result.error) {
           useConversationStore.getState().addError(new Error(result.error));
-        } else if (result.agentPrompt && sessionActions.submit) {
+        } else {
+          const activation = result.lifecycleActivation;
+          if (activation) {
+            const ok =
+              (await sessionActions.activateSkill?.(activation.skillName, activation.args)) ??
+              false;
+            if (!ok) {
+              return;
+            }
+          }
+        }
+
+        if (result.agentPrompt && sessionActions.submit) {
           await sessionActions.submit(result.agentPrompt, result.executionOverrides);
         }
       } catch (error) {
@@ -277,6 +320,42 @@ export function useSlashCommands(sessionActions: {
 /** Add a system-level informational message to the conversation */
 function addSystemMessage(text: string): void {
   useConversationStore.getState().addSystemMessage(text);
+}
+
+function parseSkillClearTarget(
+  target: string,
+  records: readonly import('@neko/shared').ActiveSkillLifecycleRecordProjection[],
+):
+  | {
+      readonly recordId?: string;
+      readonly slot?: import('@neko/shared').SkillLifecycleSlot;
+      readonly skillName?: string;
+    }
+  | undefined {
+  if (!target) {
+    return undefined;
+  }
+  const slot = parseLifecycleSlot(target);
+  if (slot) {
+    return { slot };
+  }
+  if (records.some((record) => record.id === target)) {
+    return { recordId: target };
+  }
+  return { skillName: target };
+}
+
+function parseLifecycleSlot(value: string): import('@neko/shared').SkillLifecycleSlot | null {
+  switch (value) {
+    case 'stagePersona':
+    case 'domainSkill':
+    case 'referenceSkill':
+    case 'ephemeralSkill':
+    case 'workflowSkill':
+      return value;
+    default:
+      return null;
+  }
 }
 
 /** Show a selection menu and return the selected ID (or null if cancelled) */

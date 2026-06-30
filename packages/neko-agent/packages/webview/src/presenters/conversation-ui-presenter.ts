@@ -115,7 +115,12 @@ function projectConversationTab(input: {
 }
 
 function idleStreamingState(): ConversationStreamingState {
-  return { streamingMessageId: null, isThinking: false, queuedMessageCount: 0 };
+  return {
+    streamingMessageId: null,
+    isThinking: false,
+    queuedMessageCount: 0,
+    queuedMessages: [],
+  };
 }
 
 function projectPersistedStreamingState(
@@ -131,6 +136,7 @@ function projectPersistedStreamingState(
     streamingMessageId: streamingMessage.id,
     isThinking: true,
     queuedMessageCount: 0,
+    queuedMessages: [],
   };
 }
 

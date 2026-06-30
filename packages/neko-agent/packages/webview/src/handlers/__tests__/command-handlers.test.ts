@@ -95,6 +95,82 @@ describe('command handlers conversation isolation', () => {
     expect(harness.context.activeConversationId).toBe('conv-a');
     expect(harness.context.activeConversationIdRef.current).toBe('conv-a');
   });
+
+  it('appends Canvas lifecycle capability diagnostics to the result conversation', () => {
+    const visibleMessage = message('visible-message', 'assistant', '当前会话内容');
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      currentMessages: [visibleMessage],
+    });
+
+    dispatch(
+      commandHandlers,
+      {
+        type: 'canvasMarkdownCapabilityResult',
+        requestId: 'req-1',
+        conversationId: 'conv-a',
+        success: false,
+        lifecycleResult: {
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          status: 'blocked',
+          diagnostics: [
+            {
+              severity: 'error',
+              code: 'missing-resource-token',
+              message: 'Creative draft resource token "P1" does not match a known resource.',
+              token: 'P1',
+            },
+          ],
+          actions: [
+            {
+              actionId: 'repair-resource',
+              label: 'Repair resource references',
+              capabilityId: 'canvas.ingestMarkdown',
+              phase: 'review',
+              requiresApproval: false,
+            },
+          ],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.messages()).toEqual([visibleMessage]);
+    expect(harness.conversationMessages().get('conv-a')).toEqual([
+      expect.objectContaining({
+        role: 'assistant',
+        content: expect.stringContaining('missing-resource-token'),
+        contentBlocks: [
+          expect.objectContaining({
+            type: 'canvas_lifecycle',
+            canvasLifecycle: expect.objectContaining({
+              requestId: 'req-1',
+              success: false,
+              result: expect.objectContaining({
+                capabilityId: 'canvas.ingestMarkdown',
+                actions: [
+                  expect.objectContaining({
+                    actionId: 'repair-resource',
+                    capabilityId: 'canvas.ingestMarkdown',
+                  }),
+                ],
+              }),
+            }),
+          }),
+        ],
+      }),
+    ]);
+    expect(harness.conversationMessages().get('conv-a')?.[0]?.content).toContain(
+      'Repair resource references',
+    );
+    expect(harness.conversationMessages().get('conv-a')?.[0]?.content).toContain(
+      'Available Canvas lifecycle actions',
+    );
+    expect(harness.conversationMessages().get('conv-a')?.[0]?.content).not.toContain(
+      'Next actions',
+    );
+  });
 });
 
 function dispatch(

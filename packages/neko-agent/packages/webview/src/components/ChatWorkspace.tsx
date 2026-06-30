@@ -22,6 +22,7 @@ import {
   type ConversationKind,
   type CharacterDialogueSessionProjection,
   type EmbodyCharacterSessionProjection,
+  type AgentQueuedMessageItem,
 } from '@neko-agent/types';
 import type { SettingsState, Message, TabType } from '@neko-agent/types';
 import { VSCodeMessages } from '@/messages';
@@ -65,6 +66,7 @@ export interface ChatWorkspaceProps {
   setIsThinking: React.Dispatch<React.SetStateAction<boolean>>;
   streamingMessageId: string | null;
   queuedMessageCount: number;
+  queuedMessages: readonly AgentQueuedMessageItem[];
   setStreamingMessageId: React.Dispatch<React.SetStateAction<string | null>>;
   streamingMessageIdRef: MutableRefObject<string | null>;
   activeConversationId: string | null;
@@ -129,6 +131,13 @@ export interface ChatWorkspaceProps {
   onInitialInputRequestConsumed?: (id: number) => void;
   initialEntryPromptMenuRequest?: { id: number; menu: EntryPromptMenu } | null;
   onInitialEntryPromptMenuRequestConsumed?: (id: number) => void;
+  queuedEditRequest?: {
+    id: number;
+    conversationId: string;
+    item: AgentQueuedMessageItem;
+  } | null;
+  onQueuedEditRequestConsumed?: (id: number) => void;
+  onQueuedEditConflict?: (event: { conversationId: string; item: AgentQueuedMessageItem }) => void;
   // Session cleanup: ConversationController registers a ref so it can call our cleanup
   sessionCleanupRef: MutableRefObject<{
     cleanupConversation: (id: string) => void;
@@ -147,6 +156,7 @@ export function ChatWorkspace({
   setIsThinking,
   streamingMessageId,
   queuedMessageCount,
+  queuedMessages,
   setStreamingMessageId,
   streamingMessageIdRef,
   activeConversationId,
@@ -197,6 +207,9 @@ export function ChatWorkspace({
   onInitialInputRequestConsumed,
   initialEntryPromptMenuRequest,
   onInitialEntryPromptMenuRequestConsumed,
+  queuedEditRequest,
+  onQueuedEditRequestConsumed,
+  onQueuedEditConflict,
   sessionCleanupRef,
 }: ChatWorkspaceProps) {
   // ---- UI state (model selection comes from props, not useUIState) ----
@@ -238,12 +251,17 @@ export function ChatWorkspace({
   const [entryPromptMenu, setEntryPromptMenu] = useState<EntryPromptMenu | null>(null);
   const consumedEntryPromptRequestIdRef = useRef<number | null>(null);
   const consumedInitialInputRequestIdRef = useRef<number | null>(null);
+  const inputValueRef = useRef(inputValue);
   const isCharacterRoleSession = isCharacterRoleConversationKind(conversationKind);
   const isConversationSwitching = Boolean(
     isForegroundConversationActivationPending ||
     (activeTabConversationId && activeTabConversationId !== activeConversationId),
   );
   const consumedPendingSendRequestIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    inputValueRef.current = inputValue;
+  }, [inputValue]);
 
   // ---- Model lists ----
   const {
@@ -326,6 +344,7 @@ export function ChatWorkspace({
 
     consumedInitialInputRequestIdRef.current = initialInputRequest.id;
     setInputValue(initialInputRequest.messageText);
+    inputValueRef.current = initialInputRequest.messageText;
     const trailingMention = projectTrailingMention(initialInputRequest.messageText);
     if (trailingMention && !isCharacterRoleSession) {
       onMentionSearchFilterChange(trailingMention.requestFilter);
@@ -361,6 +380,30 @@ export function ChatWorkspace({
     onMentionSearchFilterChange,
   ]);
 
+  useEffect(() => {
+    if (!queuedEditRequest || !activeConversationId || isConversationSwitching) return;
+    if (queuedEditRequest.conversationId !== activeConversationId) return;
+
+    const currentInputValue = inputValueRef.current;
+    if (currentInputValue.trim().length === 0) {
+      setInputValue(queuedEditRequest.item.content);
+      inputValueRef.current = queuedEditRequest.item.content;
+    } else {
+      onQueuedEditConflict?.({
+        conversationId: queuedEditRequest.conversationId,
+        item: queuedEditRequest.item,
+      });
+    }
+    onQueuedEditRequestConsumed?.(queuedEditRequest.id);
+  }, [
+    activeConversationId,
+    isConversationSwitching,
+    onQueuedEditConflict,
+    onQueuedEditRequestConsumed,
+    queuedEditRequest,
+    setInputValue,
+  ]);
+
   // Pre-intercept handler: catches messages not in the registry
   const handleMessageWithExtras = useCallback(
     (event: MessageEvent) => {
@@ -389,6 +432,7 @@ export function ChatWorkspace({
           if (typeof msg.message === 'string') {
             setActiveTab('chat');
             setInputValue(msg.message);
+            inputValueRef.current = msg.message;
           }
           break;
         case 'injectContext':
@@ -403,6 +447,7 @@ export function ChatWorkspace({
               !injectConversationId || injectConversationId === activeConversationIdRef.current;
             if (shouldPrefillActiveInput && msg.payload.intent) {
               setInputValue(msg.payload.intent);
+              inputValueRef.current = msg.payload.intent;
             }
           }
           break;
@@ -527,6 +572,30 @@ export function ChatWorkspace({
   );
   const isModelConfigurationBusy = isThinking || workItems.some(isActiveWorkItem);
 
+  const handlePromoteQueuedMessage = useCallback(
+    (queueItemId: string) => {
+      if (!activeConversationId || isCharacterRoleSession) return;
+      VSCodeMessages.promoteQueuedMessage(activeConversationId, queueItemId);
+    },
+    [activeConversationId, isCharacterRoleSession],
+  );
+
+  const handleCancelQueuedMessage = useCallback(
+    (queueItemId: string) => {
+      if (!activeConversationId || isCharacterRoleSession) return;
+      VSCodeMessages.cancelQueuedMessage(activeConversationId, queueItemId);
+    },
+    [activeConversationId, isCharacterRoleSession],
+  );
+
+  const handleEditQueuedMessage = useCallback(
+    (queueItemId: string) => {
+      if (!activeConversationId || isCharacterRoleSession) return;
+      VSCodeMessages.editQueuedMessage(activeConversationId, queueItemId);
+    },
+    [activeConversationId, isCharacterRoleSession],
+  );
+
   return (
     <InputAreaProvider
       isBusy={isModelConfigurationBusy}
@@ -573,6 +642,7 @@ export function ChatWorkspace({
         inputValue={inputValue}
         isThinking={isThinking}
         queuedMessageCount={queuedMessageCount}
+        queuedMessages={queuedMessages}
         streamingMessageId={streamingMessageId}
         activeConversationId={activeConversationId}
         conversationKind={conversationKind}
@@ -607,6 +677,9 @@ export function ChatWorkspace({
         onInputChange={setInputValue}
         onSend={handleSend}
         onCancel={handleCancelMessage}
+        onPromoteQueuedMessage={handlePromoteQueuedMessage}
+        onCancelQueuedMessage={handleCancelQueuedMessage}
+        onEditQueuedMessage={handleEditQueuedMessage}
         entryPromptMenu={entryPromptMenu}
         onEntryPromptMenuChange={setEntryPromptMenu}
         attachedFiles={attachedFiles}

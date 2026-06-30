@@ -28,10 +28,7 @@ export type CompositeRichContentKind = 'storyboard-table' | 'comparison-grid' | 
 export type CompositeMediaType = 'image' | 'video' | 'audio' | 'model' | 'unknown';
 
 export type CompositeMediaDiagnosticCode =
-  | 'missing-tool-result'
-  | 'missing-asset'
-  | 'missing-uri'
-  | 'ambiguous-media-alias';
+  'missing-tool-result' | 'missing-asset' | 'missing-uri' | 'ambiguous-media-alias';
 
 export interface CompositeMediaDiagnostic {
   readonly code: CompositeMediaDiagnosticCode;
@@ -172,6 +169,7 @@ export function projectCompositeBlockRichContent(
   const sectionInputs = maybeAlignStoryboardSectionMediaRefs(
     input.composite.sections,
     storyboardTable,
+    toolCalls,
   );
   const projectedSections = sectionInputs.map((section, sectionIndex) =>
     projectCompositeSection({
@@ -392,6 +390,7 @@ function hasResolvedStoryboardShotImageReference(
   toolCalls: ReadonlyMap<string, ToolCall>,
 ): boolean {
   if (shot.referenceImagePath) return true;
+  if (collectExplicitStoryboardDocumentMediaRefs(shot).length > 0) return true;
   return collectExplicitStoryboardMediaRefs(shot).some((mediaRef) => {
     const resolved = resolveCompositeMediaRef(mediaRef, toolCalls);
     return 'media' in resolved;
@@ -409,9 +408,11 @@ function selectExplicitStoryboardImageRef(
         (ref) => ref.toolCallId === locator.toolCallId && ref.assetIndex === locator.assetIndex,
       );
       if (exact) return exact;
-      const batchRefs = selectSingleEligibleImageBatch(imageIndex);
-      const batchRef = batchRefs?.[locator.assetIndex];
-      if (batchRef) return batchRef;
+      if (isRepairableStoryboardToolResultAlias(locator.toolCallId)) {
+        const batchRefs = selectSingleEligibleImageBatch(imageIndex);
+        const batchRef = batchRefs?.[locator.assetIndex];
+        if (batchRef) return batchRef;
+      }
       continue;
     }
 
@@ -596,9 +597,7 @@ function readStoryboardSourceImageNumber(
 }
 
 function isStoryboardImageSourceTool(toolName: string): boolean {
-  return (
-    toolName === 'ReadImage' || toolName === 'ReadDocument'
-  );
+  return toolName === 'ReadImage' || toolName === 'ReadDocument';
 }
 
 function isImageCandidateResolvable(candidate: MediaCandidate): boolean {
@@ -608,6 +607,7 @@ function isImageCandidateResolvable(candidate: MediaCandidate): boolean {
 function maybeAlignStoryboardSectionMediaRefs(
   sections: readonly CompositeSection[],
   storyboardTable: StoryboardTable | undefined,
+  toolCalls: ReadonlyMap<string, ToolCall>,
 ): readonly CompositeSection[] {
   if (!storyboardTable) return sections;
 
@@ -616,7 +616,7 @@ function maybeAlignStoryboardSectionMediaRefs(
   const alignedSections = sections.map((section, sectionIndex) => {
     const shot = shotRows[sectionIndex];
     if (!shot) return section;
-    const mediaRefs = collectExplicitStoryboardMediaRefs(shot);
+    const mediaRefs = collectExplicitStoryboardMediaRefsForSection(shot, toolCalls);
     if (mediaRefs.length === 0) return section;
     changed = true;
     return { ...section, mediaRefs };
@@ -631,35 +631,88 @@ function maybeBackfillStoryboardSectionMedia(
   toolCalls: ReadonlyMap<string, ToolCall>,
   diagnostics: CompositeMediaDiagnostic[],
 ): readonly ResolvedCompositeSection[] {
-  if (!storyboardTable || sections.every((section) => section.media.length > 0)) {
+  if (!storyboardTable) {
     return sections;
   }
 
   const shotRows = storyboardTable.scenes.flatMap((scene) => scene.shots);
   return sections.map((section) => {
-    if (section.media.length > 0) return section;
     const shot = shotRows[section.index];
     if (!shot) return section;
 
-    const media: ResolvedCompositeMedia[] = [];
+    const media: ResolvedCompositeMedia[] = [...section.media];
     const sectionDiagnostics: CompositeMediaDiagnostic[] = [];
-    for (const mediaRef of collectExplicitStoryboardMediaRefs(shot)) {
-      const resolved = resolveCompositeMediaRef(mediaRef, toolCalls);
-      if ('media' in resolved) {
-        media.push(resolved.media);
-        continue;
+    for (const mediaRef of collectExplicitStoryboardDocumentMediaRefs(shot)) {
+      const resolved = projectStoryboardDocumentResourceMediaRef(mediaRef, media.length);
+      if (resolved && !hasResolvedCompositeMediaResource(media, resolved.resourceRef)) {
+        media.push(resolved);
       }
-      pushDiagnostic(diagnostics, resolved.diagnostic);
-      pushDiagnostic(sectionDiagnostics, resolved.diagnostic);
     }
 
-    if (media.length === 0 && sectionDiagnostics.length === 0) return section;
+    if (section.media.length === 0) {
+      for (const mediaRef of collectExplicitStoryboardMediaRefsForSection(shot, toolCalls)) {
+        const resolved = resolveCompositeMediaRef(mediaRef, toolCalls);
+        if ('media' in resolved) {
+          media.push(resolved.media);
+          continue;
+        }
+        pushDiagnostic(diagnostics, resolved.diagnostic);
+        pushDiagnostic(sectionDiagnostics, resolved.diagnostic);
+      }
+    }
+
+    if (media.length === section.media.length && sectionDiagnostics.length === 0) return section;
     return {
       ...section,
       media,
       diagnostics: [...section.diagnostics, ...sectionDiagnostics],
     };
   });
+}
+
+function collectExplicitStoryboardMediaRefsForSection(
+  shot: StoryboardTable['scenes'][number]['shots'][number],
+  toolCalls: ReadonlyMap<string, ToolCall>,
+): readonly MediaRef[] {
+  const layeredRefs = [...(shot.sourceMediaRefs ?? []), ...(shot.generatedMediaRefs ?? [])].flatMap(
+    (mediaRef) => projectStoryboardMediaRefToCompositeMediaRefForSection(mediaRef, toolCalls),
+  );
+  return layeredRefs.length > 0
+    ? layeredRefs
+    : (shot.mediaRefs ?? []).flatMap((mediaRef) =>
+        projectStoryboardMediaRefToCompositeMediaRefForSection(mediaRef, toolCalls),
+      );
+}
+
+function projectStoryboardMediaRefToCompositeMediaRefForSection(
+  mediaRef: StoryboardMediaRef,
+  toolCalls: ReadonlyMap<string, ToolCall>,
+): readonly MediaRef[] {
+  if (
+    mediaRef.documentResourceRef &&
+    mediaRef.locator.type === 'tool-result' &&
+    !hasSuccessfulToolResult(mediaRef.locator.toolCallId, toolCalls)
+  ) {
+    return [];
+  }
+  return projectStoryboardMediaRefToCompositeMediaRef(mediaRef);
+}
+
+function hasSuccessfulToolResult(
+  toolCallId: string,
+  toolCalls: ReadonlyMap<string, ToolCall>,
+): boolean {
+  const toolCall = toolCalls.get(toolCallId);
+  return toolCall?.result?.success === true;
+}
+
+function hasResolvedCompositeMediaResource(
+  media: readonly ResolvedCompositeMedia[],
+  resourceRef: DocumentArchiveResourceRef | undefined,
+): boolean {
+  const key = createDocumentResourceCandidateKey(resourceRef);
+  if (!key) return false;
+  return media.some((item) => createDocumentResourceCandidateKey(item.resourceRef) === key);
 }
 
 function collectExplicitStoryboardMediaRefs(
@@ -685,6 +738,44 @@ function projectStoryboardMediaRefToCompositeMediaRef(
       role: mediaRef.role,
     },
   ];
+}
+
+function collectExplicitStoryboardDocumentMediaRefs(
+  shot: StoryboardTable['scenes'][number]['shots'][number],
+): readonly StoryboardMediaRef[] {
+  const layeredRefs = [...(shot.sourceMediaRefs ?? []), ...(shot.generatedMediaRefs ?? [])].filter(
+    hasStableDocumentResourceRef,
+  );
+  return layeredRefs.length > 0
+    ? layeredRefs
+    : (shot.mediaRefs ?? []).filter(hasStableDocumentResourceRef);
+}
+
+function hasStableDocumentResourceRef(mediaRef: StoryboardMediaRef): boolean {
+  return parseStableDocumentArchiveResourceRef(mediaRef.documentResourceRef) !== undefined;
+}
+
+function projectStoryboardDocumentResourceMediaRef(
+  mediaRef: StoryboardMediaRef,
+  assetIndex: number,
+): ResolvedCompositeMedia | undefined {
+  const resourceRef = parseStableDocumentArchiveResourceRef(mediaRef.documentResourceRef);
+  if (!resourceRef) return undefined;
+  return {
+    id: [
+      'storyboard-document-resource',
+      mediaRef.refId,
+      createDocumentResourceCandidateKey(resourceRef) ?? resourceRef.entryPath,
+    ].join(':'),
+    toolCallId: mediaRef.refId,
+    assetIndex,
+    type: inferMediaType(mediaRef.mimeType, resourceRef.entryPath, 'image'),
+    src: '',
+    resourceRef,
+    ...(mediaRef.mimeType ? { mimeType: mediaRef.mimeType } : {}),
+    ...(mediaRef.label ? { caption: mediaRef.label, label: mediaRef.label } : {}),
+    role: mediaRef.role,
+  };
 }
 
 function projectCompositeSection(input: {
@@ -725,6 +816,8 @@ function resolveCompositeMediaRef(
   const assetIndex = mediaRef.assetIndex ?? 0;
   const toolCall = toolCalls.get(mediaRef.toolCallId);
   if (!toolCall?.result || toolCall.result.success !== true) {
+    const resolvedAlias = resolveMissingReadImageAlias(mediaRef, toolCalls, assetIndex);
+    if (resolvedAlias) return { media: resolvedAlias };
     return {
       diagnostic: {
         code: 'missing-tool-result',
@@ -815,6 +908,37 @@ function resolveMediaCandidateByAssetIndex(
   if (exact) return exact;
   const positional = candidates[assetIndex];
   return positional?.assetIndex === assetIndex ? positional : undefined;
+}
+
+function resolveMissingReadImageAlias(
+  mediaRef: MediaRef,
+  toolCalls: ReadonlyMap<string, ToolCall>,
+  assetIndex: number,
+): ResolvedCompositeMedia | undefined {
+  if (!isReadImageCurrentResultAlias(mediaRef.toolCallId)) return undefined;
+  const imageIndex = createStoryboardImageAliasIndex(toolCalls);
+  const batch = selectSingleEligibleImageBatch(imageIndex);
+  const imageRef = batch?.[assetIndex];
+  if (!imageRef) return undefined;
+  const resolved = resolveCompositeMediaRef(
+    {
+      ...mediaRef,
+      toolCallId: imageRef.toolCallId,
+      assetIndex: imageRef.assetIndex,
+      caption: mediaRef.caption ?? imageRef.label ?? imageRef.alias,
+    },
+    toolCalls,
+  );
+  return 'media' in resolved ? resolved.media : undefined;
+}
+
+function isReadImageCurrentResultAlias(toolCallId: string): boolean {
+  const normalized = toolCallId.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return normalized === 'readimagecurrentresult';
+}
+
+function isRepairableStoryboardToolResultAlias(toolCallId: string): boolean {
+  return isReadImageCurrentResultAlias(toolCallId) || /^readimage[.-]/i.test(toolCallId);
 }
 
 function collectToolCalls(

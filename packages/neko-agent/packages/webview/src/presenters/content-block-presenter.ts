@@ -1,4 +1,4 @@
-import type { CodeDiff, ContentBlock, ToolCall } from '@neko-agent/types';
+import type { CanvasLifecycleBlockData, CodeDiff, ContentBlock, ToolCall } from '@neko-agent/types';
 import type { Plan } from '@neko-agent/types';
 import {
   projectCompositeBlockRichContent,
@@ -14,15 +14,11 @@ export type ContentBlockRenderKind =
   | 'diff'
   | 'plan'
   | 'composite'
+  | 'canvasLifecycle'
   | 'empty';
 
 export type ContentBlockHeaderIconKind =
-  | 'thinking'
-  | 'response'
-  | 'tool'
-  | 'edit'
-  | 'plan'
-  | 'composite';
+  'thinking' | 'response' | 'tool' | 'edit' | 'plan' | 'composite';
 
 export type ContentBlockHeaderTone = 'purple' | 'green' | 'blue' | 'orange' | 'yellow';
 
@@ -89,6 +85,11 @@ export interface CompositeContentBlockProjection extends ContentBlockProjectionB
   richContent: CompositeRichContentProjection;
 }
 
+export interface CanvasLifecycleContentBlockProjection extends ContentBlockProjectionBase {
+  renderKind: 'canvasLifecycle';
+  canvasLifecycle: CanvasLifecycleBlockData;
+}
+
 export interface EmptyContentBlockProjection extends ContentBlockProjectionBase {
   renderKind: 'empty';
 }
@@ -101,6 +102,7 @@ export type ContentBlockUiProjection =
   | DiffContentBlockProjection
   | PlanContentBlockProjection
   | CompositeContentBlockProjection
+  | CanvasLifecycleContentBlockProjection
   | EmptyContentBlockProjection;
 
 export interface ContentBlockProcessGroupProjection {
@@ -174,6 +176,11 @@ const CONTENT_BLOCK_HEADER_METADATA: Record<ContentBlock['type'], ContentBlockHe
     label: 'Composite',
     tone: 'blue',
   },
+  canvas_lifecycle: {
+    iconKind: 'tool',
+    label: 'Canvas',
+    tone: 'blue',
+  },
 };
 
 export function projectContentBlockUi(input: ProjectContentBlockUiInput): ContentBlockUiProjection {
@@ -240,6 +247,15 @@ export function projectContentBlockUi(input: ProjectContentBlockUiInput): Conten
           toolCalls: input.toolCalls,
           plugins: input.plugins,
         }),
+      };
+    case 'canvas_lifecycle':
+      if (!input.block.canvasLifecycle) {
+        return { ...base, renderKind: 'empty' };
+      }
+      return {
+        ...base,
+        renderKind: 'canvasLifecycle',
+        canvasLifecycle: input.block.canvasLifecycle,
       };
   }
 }
@@ -395,6 +411,7 @@ function isPrimaryResultProjection(projection: ContentBlockUiProjection): boolea
     case 'markdown':
       return projection.content.trim().length > 0;
     case 'composite':
+    case 'canvasLifecycle':
     case 'diff':
     case 'plan':
       return true;
@@ -418,6 +435,7 @@ function isCollapsibleProcessProjection(projection: ContentBlockUiProjection): b
     case 'diff':
     case 'plan':
     case 'composite':
+    case 'canvasLifecycle':
     case 'empty':
       return false;
   }

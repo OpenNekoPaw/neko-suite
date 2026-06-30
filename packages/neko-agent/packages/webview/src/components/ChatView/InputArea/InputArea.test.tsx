@@ -1156,8 +1156,12 @@ describe('InputArea composer controls', () => {
     expect(screen.getByTitle('取消 (Esc)').className).toContain('agent-composer-stop');
     expect(document.querySelector('.agent-composer-queue-count')).toBeNull();
     const queuePanel = document.querySelector('.agent-composer-queue-panel');
+    expect(queuePanel?.className).toContain('agent-composer-pending-panel');
     expect(queuePanel?.textContent).toContain('消息队列（2 条待处理）');
     expect(queuePanel?.textContent).toContain('消息队列功能是否完善');
+    expect(queuePanel?.querySelector('.agent-composer-queue-row')?.className).toContain(
+      'agent-composer-popover-row',
+    );
     expect(screen.getByTitle('加入队列').className).toContain('agent-composer-queue');
 
     fireEvent.click(screen.getByTitle('设为下一条发送'));
@@ -1204,7 +1208,37 @@ describe('InputArea composer controls', () => {
     expect(screen.getByText('要求后续变更')).toBeTruthy();
   });
 
-  it('keeps queued items collapsed above the composer and can expand multiple items', () => {
+  it('keeps mention suggestions as a composer overlay instead of a persistent rail block', () => {
+    render(
+      <Harness
+        mentionItems={[
+          {
+            id: 'file:assets/storyboard.nkc',
+            kind: 'file',
+            label: 'storyboard.nkc',
+            description: 'assets/storyboard.nkc',
+            filePath: 'assets/storyboard.nkc',
+          },
+        ]}
+      >
+        <InputArea inputValue="" isThinking={false} onInputChange={vi.fn()} onSend={vi.fn()} />
+      </Harness>,
+    );
+
+    const textarea = screen.getByPlaceholderText('输入任何问题...') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: '@story' } });
+
+    const mentionMenu = screen.getByRole('menu');
+    const composerShell = document.querySelector('.agent-composer-shell');
+    const controlRow = document.querySelector('.agent-composer-control-row');
+    expect(mentionMenu.className).toContain('agent-composer-popover');
+    expect(mentionMenu.className).toContain('agent-composer-mention-menu');
+    expect(composerShell?.contains(mentionMenu)).toBe(true);
+    expect(controlRow?.contains(mentionMenu)).toBe(false);
+    expect(document.querySelector('.agent-composer-queue-panel')).toBeNull();
+  });
+
+  it('keeps queued items above mode controls and the composer shell, then can expand multiple items', () => {
     render(
       <Harness>
         <InputArea
@@ -1234,8 +1268,21 @@ describe('InputArea composer controls', () => {
     );
 
     const queuePanel = document.querySelector('.agent-composer-queue-panel');
+    const controlRow = document.querySelector('.agent-composer-control-row');
+    const composerShell = document.querySelector('.agent-composer-shell');
     const textarea = screen.getByRole('textbox');
     expect(queuePanel).toBeTruthy();
+    expect(controlRow).toBeTruthy();
+    expect(composerShell).toBeTruthy();
+    expect(composerShell?.contains(queuePanel)).toBe(false);
+    expect(
+      (queuePanel as Node).compareDocumentPosition(controlRow as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      (queuePanel as Node).compareDocumentPosition(composerShell as Node) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       textarea.compareDocumentPosition(queuePanel as Node) & Node.DOCUMENT_POSITION_PRECEDING,
     ).toBeTruthy();

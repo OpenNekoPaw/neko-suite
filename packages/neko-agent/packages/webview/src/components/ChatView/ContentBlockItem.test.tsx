@@ -1,17 +1,21 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ContentBlock } from '@neko-agent/types';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { registerDefaultRenderers } from '@/components/ChatView/RichContent';
 import { ContentBlockItem } from './ContentBlockItem';
 
+const { mockPostMessage } = vi.hoisted(() => ({
+  mockPostMessage: vi.fn(),
+}));
+
 vi.mock('@neko/shared/vscode', () => ({
   getVSCodeAPI: () => ({
-    postMessage: vi.fn(),
+    postMessage: mockPostMessage,
     getState: vi.fn(),
     setState: vi.fn(),
   }),
-  postMessage: vi.fn(),
+  postMessage: (message: unknown) => mockPostMessage(message),
 }));
 
 vi.mock('@/i18n/I18nContext', () => ({
@@ -22,6 +26,10 @@ vi.mock('@/i18n/I18nContext', () => ({
 }));
 
 describe('ContentBlockItem Canvas transfer actions', () => {
+  beforeEach(() => {
+    mockPostMessage.mockClear();
+  });
+
   it('renders assistant identity on the first content block avatar', () => {
     renderContentBlock(
       {
@@ -39,7 +47,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     expect(screen.getByLabelText('小橘 (Character Dialogue)')).toBeTruthy();
   });
 
-  it('does not render Canvas transfer for plain assistant prose', () => {
+  it('renders Canvas Markdown lifecycle transfer for plain assistant prose', () => {
     renderContentBlock({
       id: 'plain',
       type: 'text',
@@ -47,7 +55,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       content: 'Hi! How can I help?',
     });
 
-    expect(screen.queryByRole('button', { name: 'Canvas' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
   });
 
   it('renders Canvas transfer for storyboard-ready markdown', () => {
@@ -90,8 +98,8 @@ describe('ContentBlockItem Canvas transfer actions', () => {
                 blocks: [{ blockId: 'summary', kind: 'text', text: 'Review shots.' }],
                 suggestedActions: [
                   {
-                    actionId: 'canvas.importStoryboard',
-                    kind: 'execute',
+                    actionId: 'canvas.ingestMarkdown',
+                    kind: 'review',
                     disabled: true,
                     disabledReason: 'Provider unavailable',
                   },
@@ -107,7 +115,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     expect(screen.getByText('Review shots.')).toBeTruthy();
     expect(screen.getByText('text')).toBeTruthy();
     expect(screen.getByText('comic-shot-asset-prep')).toBeTruthy();
-    expect(screen.getByText('canvas.importStoryboard')).toBeTruthy();
+    expect(screen.getByText('canvas.ingestMarkdown')).toBeTruthy();
     expect(screen.getByText(/disabled: Provider unavailable/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /import/i })).toBeNull();
   });
@@ -166,6 +174,127 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     expect(screen.getByText('shot-1')).toBeTruthy();
     expect(screen.getByText('1 rows / 1 columns')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /execute|import/i })).toBeNull();
+  });
+
+  it('renders Canvas lifecycle follow-up actions as approval-gated controls', () => {
+    renderContentBlock({
+      id: 'canvas-result',
+      type: 'canvas_lifecycle',
+      timestamp: 1,
+      canvasLifecycle: {
+        requestId: 'req-1',
+        success: true,
+        result: {
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          status: 'needs-review',
+          diagnostics: [],
+          reviewArtifact: {
+            kind: 'node',
+            id: 'table-1',
+            packageId: 'neko-canvas',
+            profile: 'storyboard',
+          },
+          actions: [
+            {
+              actionId: 'create-storyboard-nodes',
+              label: 'Create storyboard nodes',
+              capabilityId: 'canvas.createStoryboardFromMarkdown',
+              phase: 'apply',
+              requiresApproval: true,
+              sourceRef: { kind: 'node', id: 'table-1', packageId: 'neko-canvas' },
+              payload: {
+                capabilityId: 'canvas.createStoryboardFromMarkdown',
+                markdown: '| Scene | Shot | Visual |\\n| --- | --- | --- |\\n| S1 | 1 | open |',
+                sourceFormat: 'gfm-table',
+                mode: 'create-nodes',
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    expect(screen.getByText('Canvas needs-review')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Create storyboard nodes/ }));
+
+    expect(mockPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'invokeCanvasMarkdownCapability',
+        conversationId: 'conv-1',
+        input: expect.objectContaining({
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+          mode: 'create-nodes',
+          approval: expect.objectContaining({ source: 'user-confirmation' }),
+        }),
+      }),
+    );
+  });
+
+  it('marks generic fallback lifecycle results as display-only', () => {
+    renderContentBlock({
+      id: 'canvas-result',
+      type: 'canvas_lifecycle',
+      timestamp: 1,
+      canvasLifecycle: {
+        requestId: 'req-1',
+        success: true,
+        result: {
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          status: 'needs-review',
+          diagnostics: [
+            {
+              severity: 'warning',
+              code: 'canvas-creative-profile-unsupported',
+              message: 'Unsupported creative profile "interactive-video".',
+            },
+          ],
+          data: {
+            capabilityId: 'canvas.ingestMarkdown',
+            status: 'created',
+            resolvedKind: 'generic-table',
+            displayFallback: true,
+            diagnostics: [],
+          },
+        },
+      },
+    });
+
+    expect(screen.getByText('display-only fallback')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Create storyboard nodes/ })).toBeNull();
+  });
+
+  it('renders unsupported Canvas lifecycle actions disabled', () => {
+    renderContentBlock({
+      id: 'canvas-result',
+      type: 'canvas_lifecycle',
+      timestamp: 1,
+      canvasLifecycle: {
+        requestId: 'req-1',
+        success: true,
+        result: {
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          status: 'needs-review',
+          diagnostics: [],
+          actions: [
+            {
+              actionId: 'run-external',
+              label: 'Run external action',
+              capabilityId: 'canvas.createStoryboardFromMarkdown',
+              phase: 'apply',
+              requiresApproval: true,
+              payload: { capabilityId: 'unknown.tool', markdown: 'nope' },
+            },
+          ],
+        },
+      },
+    });
+
+    const action = screen.getByRole('button', { name: /Run external action/ });
+    expect(action.hasAttribute('disabled')).toBe(true);
+    expect(action.getAttribute('title')).toBe('Unsupported action payload');
   });
 });
 

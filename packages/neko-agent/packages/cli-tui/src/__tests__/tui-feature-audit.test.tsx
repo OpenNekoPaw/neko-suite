@@ -335,6 +335,36 @@ describe('5. Model Configuration Display', () => {
     expect(f3()).toContain('auto');
     console.log('[Config] Auto mode:\n', f3());
   });
+
+  it('status bar shows active Skill lifecycle records compactly', () => {
+    useAgentStore.getState().setActiveSkillLifecycleRecords([
+      {
+        id: 'domain-1',
+        skillName: 'review',
+        slot: 'domainSkill',
+        owner: 'user',
+        clearable: true,
+        status: 'active',
+      },
+      {
+        id: 'stage-1',
+        skillName: 'creation-persona',
+        slot: 'stagePersona',
+        owner: 'idc',
+        clearable: false,
+        lockedReason: 'IDC stage persona is cleared when its owning stage exits',
+        status: 'active',
+      },
+    ]);
+
+    const { lastFrame } = render(<StatusBar />);
+    const frame = lastFrame()!;
+
+    expect(frame).toContain('skills:');
+    expect(frame).toContain('review[domainSkill]+1');
+    expect(frame).not.toContain('skill:review');
+    console.log('[Config] Skill lifecycle status:\n', frame);
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════

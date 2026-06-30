@@ -4,7 +4,7 @@
  * 支持 Mermaid 图表渲染
  */
 
-import { memo, useMemo } from 'react';
+import { isValidElement, memo, useMemo, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -15,6 +15,10 @@ import {
 } from '@neko-agent/types';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { projectCompositeBlockRichContent } from '@/presenters/composite-content-presenter';
+import {
+  normalizeMarkdownResourceLookupToken,
+  type MarkdownResourceRenderingProjection,
+} from '@/presenters/markdown-resource-rendering-presenter';
 import { t } from '@/i18n';
 import { validateCompositeArtifact, type CompositeArtifact } from '@neko/shared';
 import { CodeBlock } from './CodeBlock';
@@ -24,9 +28,13 @@ interface MarkdownRendererProps {
   content: string;
   isStreaming?: boolean;
   className?: string;
+  markdownResources?: MarkdownResourceRenderingProjection;
 }
 
-function createMarkdownComponents(isStreaming?: boolean): Components {
+function createMarkdownComponents(
+  isStreaming?: boolean,
+  markdownResources?: MarkdownResourceRenderingProjection,
+): Components {
   return {
     // Code blocks
     code({ node, className, children, ...props }) {
@@ -157,9 +165,10 @@ function createMarkdownComponents(isStreaming?: boolean): Components {
       );
     },
     td({ children }) {
+      const tokenProjection = projectMarkdownResourceTokenCell(children, markdownResources);
       return (
         <td className="px-3 py-1.5 text-[12px] text-[var(--vscode-foreground)] border border-[var(--vscode-panel-border)]">
-          {children}
+          {tokenProjection ?? children}
         </td>
       );
     },
@@ -185,12 +194,131 @@ function createMarkdownComponents(isStreaming?: boolean): Components {
     },
 
     // Images
-    img({ src, alt }) {
+    img({ src }) {
+      const imageProjection = projectMarkdownImageResource(src, markdownResources);
+      if (imageProjection) {
+        return imageProjection;
+      }
       return (
-        <img src={src} alt={alt || ''} className="max-w-full h-auto rounded my-2" loading="lazy" />
+        <span
+          className="my-2 inline-flex rounded border border-[var(--vscode-inputValidation-warningBorder)] bg-[var(--vscode-inputValidation-warningBackground)] px-2 py-1 text-[11px] text-[var(--vscode-inputValidation-warningForeground)]"
+          data-markdown-image-status="unprojected"
+        >
+          {src
+            ? `Image reference "${src}" is not projected by the host.`
+            : 'Image reference is missing a source.'}
+        </span>
       );
     },
   };
+}
+
+function projectMarkdownResourceTokenCell(
+  children: ReactNode,
+  markdownResources: MarkdownResourceRenderingProjection | undefined,
+): ReactNode | null {
+  const token = readPlainText(children);
+  if (!token) return null;
+  const normalizedToken = normalizeMarkdownResourceLookupToken(token);
+  const projection = markdownResources?.tokens.find(
+    (candidate) => normalizeMarkdownResourceLookupToken(candidate.token) === normalizedToken,
+  );
+  if (!projection) return null;
+  return (
+    <span className="inline-flex min-w-[8rem] max-w-full flex-col gap-1 align-top">
+      <span className="inline-flex flex-wrap items-center gap-1.5">
+        <span className="font-mono text-[11px] text-[var(--vscode-foreground)]">{token}</span>
+        <span
+          className="rounded border border-[var(--vscode-panel-border)] px-1 py-0.5 text-[10px] text-[var(--vscode-descriptionForeground)]"
+          data-markdown-resource-status={projection.status}
+        >
+          {markdownResourceStatusLabel(projection)}
+        </span>
+      </span>
+      {projection.renderUris.length > 0 ? (
+        <span className="flex max-w-[12rem] flex-wrap gap-1">
+          {projection.renderUris.slice(0, 4).map((uri, index) => (
+            <img
+              key={`${uri}-${index}`}
+              src={uri}
+              alt={projection.refs[index]?.label ?? token}
+              className="h-12 w-12 rounded border border-[var(--vscode-panel-border)] object-cover"
+              loading="lazy"
+            />
+          ))}
+        </span>
+      ) : null}
+      {projection.diagnostics.length > 0 ? (
+        <span className="text-[10px] text-[var(--vscode-errorForeground)]">
+          {projection.diagnostics[0]?.message}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function projectMarkdownImageResource(
+  src: string | undefined,
+  markdownResources: MarkdownResourceRenderingProjection | undefined,
+): ReactNode | null {
+  if (!src) return null;
+  const normalizedToken = normalizeMarkdownResourceLookupToken(src);
+  const projection = markdownResources?.tokens.find(
+    (candidate) => normalizeMarkdownResourceLookupToken(candidate.token) === normalizedToken,
+  );
+  if (!projection) return null;
+  if (projection.renderUris.length === 0) {
+    return projectMarkdownResourceTokenCell(src, markdownResources);
+  }
+  const renderUri = projection.renderUris[0];
+  return (
+    <span className="my-2 inline-flex max-w-full flex-col gap-1">
+      <img
+        src={renderUri}
+        alt={projection.refs[0]?.label ?? src}
+        className="max-w-full rounded border border-[var(--vscode-panel-border)]"
+        loading="lazy"
+      />
+      <span
+        className="text-[10px] text-[var(--vscode-descriptionForeground)]"
+        data-markdown-image-status={projection.status}
+      >
+        {src}
+      </span>
+    </span>
+  );
+}
+
+function markdownResourceStatusLabel(
+  projection: MarkdownResourceRenderingProjection['tokens'][number],
+): string {
+  if (projection.status === 'bound') {
+    return projection.refs.length > 1 ? `${projection.refs.length} images` : 'image';
+  }
+  if (projection.status === 'ambiguous') {
+    const candidateCount = projection.diagnostics[0]?.candidates?.length;
+    return candidateCount ? `${candidateCount} candidates` : 'ambiguous';
+  }
+  if (projection.status === 'missing') return 'missing';
+  if (projection.status === 'unsupported') return 'unsupported';
+  return 'unbound';
+}
+
+function readPlainText(node: ReactNode): string | undefined {
+  if (typeof node === 'string' || typeof node === 'number') {
+    const value = String(node).trim();
+    return value.length > 0 ? value : undefined;
+  }
+  if (Array.isArray(node)) {
+    const parts = node.map(readPlainText);
+    if (parts.some((part) => part === undefined)) return undefined;
+    const value = parts.join('').trim();
+    return value.length > 0 ? value : undefined;
+  }
+  if (isValidElement<{ children?: ReactNode }>(node) && node.props.children !== undefined) {
+    return readPlainText(node.props.children);
+  }
+  return undefined;
 }
 
 function projectStructuredCodeBlock(
@@ -248,10 +376,45 @@ function StructuredArtifactPending() {
   );
 }
 
-function MarkdownRendererComponent({ content, isStreaming, className }: MarkdownRendererProps) {
+function CreativeDraftDiagnostics({
+  markdownResources,
+}: {
+  readonly markdownResources?: MarkdownResourceRenderingProjection;
+}) {
+  const diagnostics =
+    markdownResources?.status === 'diagnostic'
+      ? markdownResources.diagnostics
+          .filter((diagnostic) => diagnostic.severity === 'error')
+          .slice(0, 3)
+      : [];
+  if (diagnostics.length === 0) return null;
+
+  return (
+    <div
+      role="alert"
+      className="mt-2 rounded border border-[var(--vscode-inputValidation-errorBorder)] bg-[var(--vscode-inputValidation-errorBackground)] px-2 py-1.5 text-[11px] text-[var(--vscode-inputValidation-errorForeground)]"
+    >
+      {diagnostics.map((diagnostic, index) => (
+        <div key={`${diagnostic.code}-${diagnostic.token ?? 'markdown'}-${index}`}>
+          {diagnostic.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MarkdownRendererComponent({
+  content,
+  isStreaming,
+  className,
+  markdownResources,
+}: MarkdownRendererProps) {
   // Memoize remark plugins
   const remarkPlugins = useMemo(() => [remarkGfm], []);
-  const markdownComponents = useMemo(() => createMarkdownComponents(isStreaming), [isStreaming]);
+  const markdownComponents = useMemo(
+    () => createMarkdownComponents(isStreaming, markdownResources),
+    [isStreaming, markdownResources],
+  );
 
   return (
     <div
@@ -260,6 +423,8 @@ function MarkdownRendererComponent({ content, isStreaming, className }: Markdown
       <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
         {content}
       </ReactMarkdown>
+      <MarkdownExtensionDiagnostics markdownResources={markdownResources} />
+      <CreativeDraftDiagnostics markdownResources={markdownResources} />
       {isStreaming && (
         <span className="inline-block w-1.5 h-4 ml-1 bg-[var(--vscode-foreground)] animate-pulse" />
       )}
@@ -269,3 +434,30 @@ function MarkdownRendererComponent({ content, isStreaming, className }: Markdown
 
 // Memoize to prevent unnecessary re-renders during streaming
 export const MarkdownRenderer = memo(MarkdownRendererComponent);
+
+function MarkdownExtensionDiagnostics({
+  markdownResources,
+}: {
+  readonly markdownResources?: MarkdownResourceRenderingProjection;
+}) {
+  const diagnostics =
+    markdownResources?.diagnostics
+      .filter(
+        (diagnostic) => diagnostic.code === 'unsupported-resource-reference-markdown-extension',
+      )
+      .slice(0, 3) ?? [];
+  if (diagnostics.length === 0) return null;
+
+  return (
+    <div
+      role="note"
+      className="mt-2 rounded border border-[var(--vscode-inputValidation-warningBorder)] bg-[var(--vscode-inputValidation-warningBackground)] px-2 py-1.5 text-[11px] text-[var(--vscode-inputValidation-warningForeground)]"
+    >
+      {diagnostics.map((diagnostic, index) => (
+        <div key={`${diagnostic.code}-${diagnostic.token ?? 'embed'}-${index}`}>
+          {diagnostic.message}
+        </div>
+      ))}
+    </div>
+  );
+}

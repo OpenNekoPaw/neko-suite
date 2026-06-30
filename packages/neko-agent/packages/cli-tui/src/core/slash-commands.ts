@@ -7,7 +7,6 @@
 
 import {
   type Skill,
-  type SkillApplicationResult,
   type SkillService,
   type ToolRegistry,
   type CommandContext,
@@ -51,6 +50,11 @@ export interface SlashCommandResult {
   executionOverrides?: {
     metadata?: Record<string, unknown>;
   };
+  /** Lifecycle activation requested by an explicit Skill-backed slash command. */
+  lifecycleActivation?: {
+    readonly skillName: string;
+    readonly args?: string;
+  };
 }
 
 export interface SkillInvocationResult {
@@ -60,6 +64,11 @@ export interface SkillInvocationResult {
   agentPrompt?: string;
   executionOverrides?: {
     metadata?: Record<string, unknown>;
+  };
+  /** Lifecycle activation requested by an explicit `$skill` invocation. */
+  lifecycleActivation?: {
+    readonly skillName: string;
+    readonly args?: string;
   };
 }
 
@@ -220,34 +229,38 @@ export async function handleSlashCommand(
   });
   const skill =
     commandEntry?.source === 'command-artifact' ? (commandEntry.skill as Skill) : undefined;
-  const isBuiltin = commandEntry?.source === 'builtin';
-  const commandContext = toCommandContext(context);
-  const result = await executeSlashCommand(
-    input,
-    commandContext,
-    context.skillService
-      ? {
-          getSkillByCommand: (name: string) =>
-            context.skillService!.registry.getSkillByCommand(name),
-          apply: (skill: unknown, args?: string) => {
-            return context.skillService!.apply(
-              skill as Parameters<typeof context.skillService.apply>[0],
-              args,
-            );
-          },
-        }
-      : undefined,
-  );
-
-  const slashResult = toSlashCommandResult(result);
-  if (result.handled && !result.error && !isBuiltin && skill && argsText.length > 0) {
-    slashResult.agentPrompt = argsText;
-    slashResult.executionOverrides = {
-      metadata: createSkillExecutionIdcMetadata(skill as Skill),
-    };
+  if (skill) {
+    return createCommandArtifactSlashResult(command, argsText, skill);
   }
 
-  return slashResult;
+  const commandContext = toCommandContext(context);
+  const result = await executeSlashCommand(input, commandContext);
+
+  return toSlashCommandResult(result);
+}
+
+function createCommandArtifactSlashResult(
+  command: string,
+  argsText: string,
+  skill: Skill,
+): SlashCommandResult {
+  return {
+    handled: true,
+    continueExecution: true,
+    output: `Skill /${command} activated`,
+    ...(argsText
+      ? {
+          agentPrompt: argsText,
+          executionOverrides: {
+            metadata: createSkillExecutionIdcMetadata(skill),
+          },
+        }
+      : {}),
+    lifecycleActivation: {
+      skillName: skill.name,
+      ...(argsText ? { args: argsText } : {}),
+    },
+  };
 }
 
 export async function handleSkillInvocation(
@@ -290,17 +303,13 @@ export async function handleSkillInvocation(
     return { handled: true, error: `Skill has no content: $${parsed.skillName}` };
   }
 
-  const application = await applyCliSkill(skillService, loadedSkill, parsed.args);
-  if (!application.applied) {
-    return {
-      handled: true,
-      error: application.error ?? `Failed to apply skill: $${parsed.skillName}`,
-    };
-  }
-
   return {
     handled: true,
     output: `Skill activated: ${loadedSkill.name}`,
+    lifecycleActivation: {
+      skillName: loadedSkill.name,
+      ...(parsed.args ? { args: parsed.args } : {}),
+    },
     ...(parsed.args
       ? {
           agentPrompt: parsed.args,
@@ -323,23 +332,6 @@ function parseDirectSkillInvocation(
     skillName: parsed.name,
     ...(parsed.args ? { args: parsed.args } : {}),
   };
-}
-
-async function applyCliSkill(
-  skillService: SkillService,
-  skill: Skill,
-  args?: string,
-): Promise<SkillApplicationResult> {
-  try {
-    const injection =
-      args === undefined ? await skillService.apply(skill) : await skillService.apply(skill, args);
-    return { applied: true, injection, skill };
-  } catch (error) {
-    return {
-      applied: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
 }
 
 /**

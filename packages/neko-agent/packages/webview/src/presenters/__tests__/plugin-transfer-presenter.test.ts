@@ -67,15 +67,7 @@ describe('plugin transfer presenter', () => {
     ).toEqual(['model', 'explorer']);
   });
 
-  it('limits structured storyboard payloads to compatible plugin targets', () => {
-    expect(
-      projectPluginTransferMenu({
-        mediaType: 'image',
-        plugins: { canvas: true, cut: true },
-        structuredKind: 'canvasStoryboard',
-      }).targets.map((target) => target.id),
-    ).toEqual(['canvas']);
-
+  it('limits structured cut storyboard payloads to the timeline target', () => {
     expect(
       projectPluginTransferMenu({
         mediaType: 'image',
@@ -83,24 +75,6 @@ describe('plugin transfer presenter', () => {
         structuredKind: 'cutStoryboard',
       }).targets.map((target) => target.id),
     ).toEqual(['cut']);
-  });
-
-  it('limits Canvas content payloads to Canvas without relying on media type routing', () => {
-    expect(
-      projectPluginTransferMenu({
-        mediaType: 'model',
-        plugins: { canvas: true, cut: true, model: true },
-        structuredKind: 'canvasContent',
-      }).targets.map((target) => target.id),
-    ).toEqual(['canvas']);
-
-    expect(
-      projectPluginTransferMenu({
-        mediaType: 'image',
-        plugins: { canvas: false, cut: true },
-        structuredKind: 'canvasContent',
-      }).targets,
-    ).toEqual([]);
   });
 
   it('projects Canvas content transfer targets from selected node context', () => {

@@ -11,6 +11,7 @@ export type {
   AgentStateSnapshotMessage,
   AgentTurnTimelineMessage,
   AmbientCanvasUpdateMessage,
+  CanvasMarkdownCapabilityResultMessage,
   CompressionErrorMessage,
   CompressionResultMessage,
   ConfigChangedMessage,

@@ -3,6 +3,7 @@ import {
   createTaskManagerIdcTaskProjection,
   registerBuiltinToolGroups,
   type IRuntimeTaskManager,
+  type SkillLifecycleRuntime,
   type SkillService,
 } from '@neko/agent';
 import { createNodeArtifactStore, type AgentRuntimeConfig } from '@neko/agent/runtime';
@@ -12,6 +13,7 @@ export interface CliAgentRuntimeConfig {
   readonly workspaceRoot: string;
   readonly taskManager: IRuntimeTaskManager;
   readonly skillService?: SkillService;
+  readonly skillLifecycleRuntime?: SkillLifecycleRuntime;
   readonly projectMemoryManager?: IProjectMemoryManager;
 }
 
@@ -24,14 +26,15 @@ export function createCliToolGroupRegistry(): ToolGroupRegistry {
 export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRuntimeConfig {
   const toolGroupRegistry = createCliToolGroupRegistry();
   const skillService = config.skillService;
+  const skillLifecycleRuntime = config.skillLifecycleRuntime;
 
   return {
     workflowRuntime: {
-      ...(skillService
+      ...(skillService || skillLifecycleRuntime
         ? {
             stageTracking: {
-              skillService,
-              skillRegistry: skillService.registry,
+              ...(skillService ? { skillService, skillRegistry: skillService.registry } : {}),
+              ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
             },
           }
         : {}),
@@ -44,6 +47,7 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
             skillRegistry: skillService.registry,
           }
         : {}),
+      ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
       toolGroupRegistry,
     },
     artifactStore: createNodeArtifactStore({ workspaceRoot: config.workspaceRoot }),

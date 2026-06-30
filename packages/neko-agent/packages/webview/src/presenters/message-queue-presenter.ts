@@ -8,6 +8,11 @@ export interface QueuedMessageReleaseInput {
   nextQueuedMessageCount: number;
 }
 
+export interface ReleasedQueuedMessageProjectionInput {
+  messages: readonly Message[];
+  item: AgentQueuedMessageItem;
+}
+
 export function projectQueuedMessagesForPendingCount(input: QueuedMessageReleaseInput): Message[] {
   const releaseCount = Math.max(0, input.previousQueuedMessageCount - input.nextQueuedMessageCount);
 
@@ -38,6 +43,34 @@ export function projectQueuedMessagesCleared(messages: readonly Message[]): Mess
   return messages.filter((message) => !isQueuedUserMessage(message));
 }
 
+export function projectReleasedQueuedMessageIntoTranscript(
+  input: ReleasedQueuedMessageProjectionInput,
+): Message[] {
+  const releasedMessageId = buildReleasedQueuedMessageId(input.item.id);
+  const withoutPendingItems = projectQueuedMessagesCleared(input.messages);
+  if (
+    withoutPendingItems.some(
+      (message) =>
+        message.id === releasedMessageId ||
+        (message.role === 'user' &&
+          message.content === input.item.content &&
+          message.timestamp === input.item.createdAt),
+    )
+  ) {
+    return withoutPendingItems;
+  }
+
+  return [
+    ...withoutPendingItems,
+    {
+      id: releasedMessageId,
+      role: 'user',
+      content: input.item.content,
+      timestamp: input.item.createdAt,
+    },
+  ];
+}
+
 export function hasQueuedUserMessages(messages: readonly Message[]): boolean {
   return messages.some(isQueuedUserMessage);
 }
@@ -64,4 +97,8 @@ export function isOptimisticQueuedMessageItem(item: Pick<AgentQueuedMessageItem,
 
 function isQueuedUserMessage(message: Message): boolean {
   return message.role === 'user' && message.isQueued === true;
+}
+
+function buildReleasedQueuedMessageId(queueItemId: string): string {
+  return `released:${queueItemId}`;
 }

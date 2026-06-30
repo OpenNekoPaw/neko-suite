@@ -62,12 +62,10 @@ const PLUGIN_TRANSFER_TARGETS: readonly PluginTransferTargetProjection[] = [
 export function projectPluginTransferMenu(input: {
   mediaType: PluginTransferMediaType;
   plugins: PluginsAvailable;
-  structuredKind?: 'canvasStoryboard' | 'cutStoryboard' | 'canvasContent';
+  structuredKind?: 'cutStoryboard';
 }): PluginTransferMenuProjection {
   const targets = PLUGIN_TRANSFER_TARGETS.filter((target) => {
-    if (input.structuredKind === 'canvasStoryboard' || input.structuredKind === 'canvasContent') {
-      if (target.id !== 'canvas') return false;
-    } else if (input.structuredKind === 'cutStoryboard') {
+    if (input.structuredKind === 'cutStoryboard') {
       if (target.id !== 'cut') return false;
     } else if (!target.accepts.includes(input.mediaType)) {
       return false;

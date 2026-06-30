@@ -17,7 +17,6 @@ import { useTranslation } from '@/i18n/I18nContext';
 import {
   projectStoryboardTableAssetBatch,
   projectStoryboardTableCutTimelinePayload,
-  projectStoryboardTableTransferPayload,
 } from '@/presenters/storyboard-transfer-presenter';
 
 function isStoryboardTableRichData(data: unknown): data is StoryboardTableRichData {
@@ -36,7 +35,6 @@ function StoryboardTableRendererComponent({
   data,
   className,
 }: RichContentProps<StoryboardTableRichData>) {
-  const canvasPayload = projectStoryboardTableTransferPayload(data);
   const cutPayload = projectStoryboardTableCutTimelinePayload(data);
   const assetBatchPayload = projectStoryboardTableAssetBatch(data);
   const plugins = data.plugins;
@@ -54,17 +52,8 @@ function StoryboardTableRendererComponent({
             : t('chat.storyboardTable.count.rows', { count: rowCount })
         }
         actions={
-          plugins && (canvasPayload || cutPayload || assetBatchPayload) ? (
+          plugins && (cutPayload || assetBatchPayload) ? (
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
-              {canvasPayload && (
-                <SendToMenu
-                  payload={canvasPayload}
-                  mediaType="image"
-                  plugins={plugins}
-                  allowedTargets={['canvas']}
-                  hidePrefixLabel
-                />
-              )}
               {cutPayload && (
                 <SendToMenu
                   payload={cutPayload}

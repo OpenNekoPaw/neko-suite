@@ -4,6 +4,7 @@ import {
   hasQueuedUserMessages,
   isOptimisticQueuedMessageItem,
   projectOptimisticQueuedMessageItem,
+  projectReleasedQueuedMessageIntoTranscript,
   projectQueuedMessagesCleared,
   projectQueuedMessagesForPendingCount,
 } from '../message-queue-presenter';
@@ -71,6 +72,51 @@ describe('message queue presenter', () => {
       message({ id: 'user-1', role: 'user', content: '原始请求' }),
       message({ id: 'assistant-1', role: 'assistant', content: '处理中' }),
     ]);
+  });
+
+  it('projects a released runtime queue item as a normal transcript user message', () => {
+    expect(
+      projectReleasedQueuedMessageIntoTranscript({
+        messages: [
+          message({ id: 'user-1', role: 'user', content: '原始请求' }),
+          message({ id: 'queued-1', role: 'user', content: '继续', isQueued: true }),
+          message({ id: 'assistant-1', role: 'assistant', content: '处理中' }),
+        ],
+        item: {
+          id: 'runtime-1',
+          conversationId: 'conv-1',
+          content: '继续',
+          createdAt: 123,
+          source: 'composer',
+        },
+      }),
+    ).toEqual([
+      message({ id: 'user-1', role: 'user', content: '原始请求' }),
+      message({ id: 'assistant-1', role: 'assistant', content: '处理中' }),
+      message({ id: 'released:runtime-1', role: 'user', content: '继续', timestamp: 123 }),
+    ]);
+  });
+
+  it('does not duplicate an already released runtime queue item', () => {
+    const releasedMessage = message({
+      id: 'released:runtime-1',
+      role: 'user',
+      content: '继续',
+      timestamp: 123,
+    });
+
+    expect(
+      projectReleasedQueuedMessageIntoTranscript({
+        messages: [releasedMessage],
+        item: {
+          id: 'runtime-1',
+          conversationId: 'conv-1',
+          content: '继续',
+          createdAt: 123,
+          source: 'composer',
+        },
+      }),
+    ).toEqual([releasedMessage]);
   });
 
   it('projects optimistic queued messages as non-authoritative composer items', () => {

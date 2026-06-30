@@ -478,16 +478,18 @@ export function ConversationController({
 
   const handleUserMessageSent = useCallback(
     (event: { conversationId: string; message: Message }) => {
+      const optimisticQueuedItem = projectOptimisticQueuedMessageItem(event);
       const cachedMessages =
         conversationMessagesRef.current.get(event.conversationId) ??
         (event.conversationId === activeConversationIdRef.current ? messages : []);
       const nextMessages = cachedMessages.some((message) => message.id === event.message.id)
         ? cachedMessages
-        : [...cachedMessages, event.message];
+        : optimisticQueuedItem
+          ? cachedMessages
+          : [...cachedMessages, event.message];
 
       conversationMessagesRef.current.set(event.conversationId, nextMessages);
       const currentStreaming = conversationStreamingRef.current.get(event.conversationId);
-      const optimisticQueuedItem = projectOptimisticQueuedMessageItem(event);
       const nextQueuedMessages =
         currentStreaming?.queuedMessages && currentStreaming.queuedMessages.length > 0
           ? currentStreaming.queuedMessages
@@ -509,21 +511,23 @@ export function ConversationController({
         setQueuedMessages(nextQueuedMessages);
       }
 
-      setOpenTabs((prev) =>
-        applyUserMessageToOpenTabs({
-          openTabs: prev,
-          conversationId: event.conversationId,
-          messageContent: event.message.content,
-        }),
-      );
-      setConversations((prev) =>
-        applyUserMessageToConversationSummaries({
-          conversations: prev,
-          conversationId: event.conversationId,
-          messageContent: event.message.content,
-          timestamp: event.message.timestamp,
-        }),
-      );
+      if (!optimisticQueuedItem) {
+        setOpenTabs((prev) =>
+          applyUserMessageToOpenTabs({
+            openTabs: prev,
+            conversationId: event.conversationId,
+            messageContent: event.message.content,
+          }),
+        );
+        setConversations((prev) =>
+          applyUserMessageToConversationSummaries({
+            conversations: prev,
+            conversationId: event.conversationId,
+            messageContent: event.message.content,
+            timestamp: event.message.timestamp,
+          }),
+        );
+      }
       triggerForceUpdate();
     },
     [

@@ -1034,6 +1034,70 @@ describe('work item message handlers', () => {
     });
   });
 
+  it('projects a released queued item into the transcript when execution starts', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '原始请求',
+          timestamp: 1,
+        },
+      ],
+      currentStreaming: {
+        isThinking: true,
+        streamingMessageId: 'assistant-1',
+        queuedMessageCount: 1,
+        queuedMessages: [
+          {
+            id: 'runtime-1',
+            conversationId: 'conv-a',
+            content: '继续补充分镜',
+            createdAt: 10,
+            source: 'composer',
+          },
+        ],
+        messageQueueVersion: 1,
+      },
+    });
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'messageQueued',
+        conversationId: 'conv-a',
+        pendingCount: 0,
+        releasedItem: {
+          id: 'runtime-1',
+          conversationId: 'conv-a',
+          content: '继续补充分镜',
+          createdAt: 10,
+          source: 'composer',
+        },
+        snapshot: {
+          conversationId: 'conv-a',
+          pendingCount: 0,
+          version: 2,
+          items: [],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming().queuedMessageCount).toBe(0);
+    expect(harness.streaming().queuedMessages).toEqual([]);
+    expect(harness.messages()).toEqual([
+      expect.objectContaining({ id: 'user-1', role: 'user', content: '原始请求' }),
+      {
+        id: 'released:runtime-1',
+        role: 'user',
+        content: '继续补充分镜',
+        timestamp: 10,
+      },
+    ]);
+  });
+
   it('does not release local queue items on queue acknowledgement events', () => {
     const harness = createContextHarness({
       activeConversationId: 'conv-a',

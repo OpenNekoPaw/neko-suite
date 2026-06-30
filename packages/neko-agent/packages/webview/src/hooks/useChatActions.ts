@@ -217,7 +217,9 @@ export function useChatActions({
         ...(contextReferences ? { contextReferences } : {}),
       };
 
-      setMessages((prev) => [...prev, userMessage]);
+      if (!isQueueingSend) {
+        setMessages((prev) => [...prev, userMessage]);
+      }
       onUserMessageSent?.({ conversationId, message: userMessage });
       clearInput();
       setAttachedFiles([]);
@@ -323,7 +325,9 @@ export function useChatActions({
         ...(isQueueingSend ? { isQueued: true } : {}),
       };
 
-      setMessages((prev) => [...prev, userMessage]);
+      if (!isQueueingSend) {
+        setMessages((prev) => [...prev, userMessage]);
+      }
       onUserMessageSent?.({ conversationId, message: userMessage });
       if (!isQueueingSend) {
         setIsThinking(true);

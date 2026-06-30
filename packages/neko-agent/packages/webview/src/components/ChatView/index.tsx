@@ -7,6 +7,7 @@ import {
   type EmbodyCharacterSessionProjection,
   type AgentLlmConfig,
   type AgentModelSlots,
+  type AgentQueuedMessageItem,
 } from '@neko-agent/types';
 import { MessageList } from '@/components/ChatView/MessageList';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
@@ -26,6 +27,7 @@ interface ChatViewProps {
   inputValue: string;
   isThinking: boolean;
   queuedMessageCount?: number;
+  queuedMessages?: readonly AgentQueuedMessageItem[];
   streamingMessageId: string | null;
   activeConversationId: string | null;
   conversationKind?: ConversationKind;
@@ -34,7 +36,7 @@ interface ChatViewProps {
   isConversationSwitching?: boolean;
   /** Active skill indicator */
   activeSkill?: ActiveSkillIndicator | null;
-  onClearActiveSkill?: () => void;
+  onClearActiveSkill?: (recordId?: string) => void;
   // Unified work items
   workItems?: AgentWorkItem[];
   pluginsAvailable?: PluginsAvailable;
@@ -54,6 +56,9 @@ interface ChatViewProps {
   onRejectAllPlanSteps?: (planId: string) => void;
   // Input callbacks
   onInputChange: (value: string) => void;
+  onPromoteQueuedMessage?: (queueItemId: string) => void;
+  onCancelQueuedMessage?: (queueItemId: string) => void;
+  onEditQueuedMessage?: (queueItemId: string) => void;
   onSend: (input?: {
     messageText?: string;
     displayMessageText?: string;
@@ -82,6 +87,7 @@ export function ChatView({
   inputValue,
   isThinking,
   queuedMessageCount = 0,
+  queuedMessages = [],
   streamingMessageId,
   activeConversationId,
   conversationKind = 'chat',
@@ -105,6 +111,9 @@ export function ChatView({
   onApproveAllPlanSteps,
   onRejectAllPlanSteps,
   onInputChange,
+  onPromoteQueuedMessage,
+  onCancelQueuedMessage,
+  onEditQueuedMessage,
   onSend,
   onCancel,
   entryPromptMenu,
@@ -125,7 +134,6 @@ export function ChatView({
       }),
     [characterDialogueSession, conversationKind, embodyCharacterSession],
   );
-
   // P2: Dropped files state for DropZone integration
   const [droppedFiles, setDroppedFiles] = useState<MessageAttachment[]>([]);
 
@@ -186,9 +194,13 @@ export function ChatView({
           inputValue={inputValue}
           isThinking={isThinking}
           queuedMessageCount={queuedMessageCount}
+          queuedMessages={queuedMessages}
           droppedFiles={droppedFiles}
           onDroppedFilesProcessed={handleDroppedFilesProcessed}
           onInputChange={onInputChange}
+          onPromoteQueuedMessage={onPromoteQueuedMessage}
+          onCancelQueuedMessage={onCancelQueuedMessage}
+          onEditQueuedMessage={onEditQueuedMessage}
           onSend={onSend}
           onCancel={onCancel}
           entryPromptMenu={entryPromptMenu}

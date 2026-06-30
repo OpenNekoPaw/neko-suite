@@ -39,6 +39,7 @@ const handleSkillInjection: MessageHandler<'skillInjection'> = (
     conversationId,
     skillName: message.skillName,
     allowedTools: message.allowedTools,
+    lifecycle: message.lifecycle,
   });
   context.setActiveSkill(activeSkillProjection.activeSkill);
 };
