@@ -5,10 +5,15 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "outDir": "../../dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "paths": {
+      "@neko-story/headless": ["../headless/src/index.ts"],
+      "@neko-story/headless/*": ["../headless/src/*"]
+    }
   },
   "include": ["src/**/*"],
   "references": [
+    { "path": "../headless" },
     { "path": "../types" },
     { "path": "../parser" }
   ]

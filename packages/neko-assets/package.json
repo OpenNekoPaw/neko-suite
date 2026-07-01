@@ -33,6 +33,8 @@
     "neko.neko-preview"
   ],
   "activationEvents": [
+    "onCommand:neko.assets.contractPath",
+    "onCommand:neko.assets.queryMediaLibrary",
     "onInstallKind:media.voice-pack"
   ],
   "main": "./dist/extension.js",

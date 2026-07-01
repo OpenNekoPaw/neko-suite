@@ -1,0 +1,20 @@
+{
+  "name": "@neko-story/headless",
+  "version": "0.0.1",
+  "private": true,
+  "description": "VSCode-free Agent capabilities for Neko Story",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@neko/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.2",
+    "vitest": "^4.1.2"
+  },
+  "license": "AGPL-3.0-or-later"
+}

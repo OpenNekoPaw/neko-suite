@@ -22,6 +22,7 @@ const declaredCommands: string[] =
   (pkgJson.contributes?.commands as Array<{ command: string }> | undefined)?.map(
     (c) => c.command,
   ) ?? [];
+const activationEvents: string[] = (pkgJson.activationEvents as string[] | undefined) ?? [];
 
 const extensionSource = readFileSync(resolve(__dirname, '..', 'extension.ts'), 'utf-8');
 
@@ -91,6 +92,11 @@ describe('extension.ts -- baseline commands keep only valid commands', () => {
 
   it('DOES contain internal media-library roots command registration', () => {
     expect(extensionSource).toContain("'neko.assets.getMediaLibraryRoots'");
+  });
+
+  it('DOES contain internal media-library query command registration', () => {
+    expect(extensionSource).toContain("'neko.assets.queryMediaLibrary'");
+    expect(activationEvents).toContain('onCommand:neko.assets.queryMediaLibrary');
   });
 
   it('DOES contain Agent-facing asset reveal and reference copy registrations', () => {

@@ -75,6 +75,13 @@ export interface AgentContext {
 export interface AgentStep {
   /** Step type ('content_delta' for streaming text chunks) */
   type: 'think' | 'act' | 'observe' | 'respond' | 'content_delta';
+  /** Stream delta semantic used by host projections. */
+  deltaKind?: 'assistant_text_replacement';
+  /** Replacement reason when deltaKind is assistant_text_replacement. */
+  replacement?: {
+    reason: 'output-validation-retry';
+    attempt: number;
+  };
   /** Step content */
   content: string;
   /** Extended thinking content for UI presentation */

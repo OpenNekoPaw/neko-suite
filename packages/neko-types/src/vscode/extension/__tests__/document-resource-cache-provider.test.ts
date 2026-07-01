@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { PathResolver } from '../../../path';
 import type { DocumentSourceRef } from '../../../types';
 import {
   createDocumentResourceRef,
@@ -27,10 +28,12 @@ describe('DocumentResourceCacheProvider', () => {
     expect(ref.provider).toBe('document-archive');
     expect(ref.scope).toBe('project');
     expect(ref.source.kind).toBe('document');
-    expect(ref.source.metadata).toMatchObject({
+    expect(ref.source.document).toMatchObject({
+      filePath: source.filePath,
       format: 'epub',
     });
-    expect(ref.source.metadata).not.toHaveProperty('legacyCachePath');
+    expect(ref.source).not.toHaveProperty('filePath');
+    expect(ref.source).not.toHaveProperty('metadata');
     expect(ref.id).toBe(
       createDocumentResourceRefFromArchiveRef({
         kind: 'document-entry',
@@ -154,6 +157,40 @@ describe('DocumentResourceCacheProvider', () => {
     expect(fsOps.writeFile).toHaveBeenCalledWith(
       expect.stringContaining('/workspace/.neko/.cache/resources/documents/'),
       new Uint8Array([1, 2, 3]),
+    );
+  });
+
+  it('resolves path variables before reading document entries from portable refs', async () => {
+    const fsOps = createFsOps();
+    const entryReader = {
+      readEntry: vi.fn(async () => new Uint8Array([1, 2, 3])),
+    };
+    const provider = new DocumentResourceCacheProvider({
+      entryReader,
+      fsOps,
+      pathResolver: new PathResolver(new Map([['BOOKS', '/library/books']])),
+      projectRoot: '/workspace/demo',
+    });
+    const ref = createDocumentResourceRef({
+      source,
+      entryPath: 'OPS/page-1.jpg',
+    });
+
+    const result = await provider.ensure({
+      ref,
+      variant: { role: 'document-entry' },
+      cacheRoot: '/workspace/.neko/.cache/resources',
+    });
+
+    expect(result.status).toBe('ready');
+    expect(ref.source.document).toMatchObject({
+      filePath: '${BOOKS}/comic.epub',
+    });
+    expect(entryReader.readEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filePath: '/library/books/comic.epub',
+      }),
+      'OPS/page-1.jpg',
     );
   });
 

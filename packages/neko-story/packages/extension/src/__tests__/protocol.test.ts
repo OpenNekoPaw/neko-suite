@@ -190,11 +190,19 @@ describe('neko-story protocol', () => {
       expect(extensionSource).toContain('Agent 自主分析内容');
     });
 
-    it('registers ScenePlan and ShotPlan agent tools in story capability provider', () => {
-      expect(capabilityProviderSource).toContain('TOOL_NAMES_STORY.GENERATE_SCENE_PLAN');
-      expect(capabilityProviderSource).toContain('TOOL_NAMES_STORY.GENERATE_SHOT_PLAN');
-      expect(capabilityProviderSource).toContain('buildStoryScenePlans(index');
-      expect(capabilityProviderSource).toContain('buildShotPlansForScene(scene');
+    it('adapts the headless story capability provider and keeps VSCode-only edit tooling local', () => {
+      expect(capabilityProviderSource).toContain('createNekoStoryHeadlessCapabilityProvider');
+      expect(capabilityProviderSource).toContain('this.headless.getTools(context)');
+      expect(capabilityProviderSource).toContain('TOOL_NAMES_STORY.STORY_APPLY_SUGGESTION');
+      expect(capabilityProviderSource).toContain(
+        'requirements: { vscode: true, activeEditor: true }',
+      );
+    });
+
+    it('exposes indexed screenplay collection for terminal-safe scene references', () => {
+      expect(extensionSource).toContain('getAllScriptIndices()');
+      expect(extensionSource).toContain('return indexService.getAllScriptIndices();');
+      expect(capabilityProviderSource).toContain('getReferenceContributors');
     });
   });
 

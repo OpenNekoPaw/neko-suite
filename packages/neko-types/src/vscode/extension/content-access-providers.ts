@@ -9,6 +9,7 @@ import {
   isOfflineContentAccessIntent,
   isPreviewLikeContentAccessIntent,
   isResourceRef,
+  readResourceSourceLocalPath,
   type ContentAccessProvider,
   type ContentAccessProviderRequest,
   type ContentAccessDiagnostic,
@@ -26,6 +27,7 @@ import {
   type ContentSourceRef,
   type ContentStableSourceRef,
   type ResourceCacheStatus,
+  type ResourceRef,
   type ResourceVariantRequest,
 } from '../../types';
 import { resolveWorkspaceGeneratedAssetRelativeDirectory } from '../../types/generated-asset';
@@ -487,6 +489,13 @@ export class DocumentEntryContentAccessProvider implements ContentAccessProvider
     }
     if (
       request.intent === 'agent-context' &&
+      request.target === 'bytes' &&
+      documentRef.entryPath !== undefined
+    ) {
+      return true;
+    }
+    if (
+      request.intent === 'agent-context' &&
       request.target === 'local-path' &&
       documentRef.entryPath === undefined
     ) {
@@ -519,8 +528,19 @@ export class DocumentEntryContentAccessProvider implements ContentAccessProvider
       return this.sourceProvider.resolve(input);
     }
 
-    if (request.intent === 'package' && request.target === 'bytes') {
+    if (
+      request.target === 'bytes' &&
+      (request.intent === 'package' || request.intent === 'agent-context')
+    ) {
       if (!documentRef.entryPath) {
+        if (request.intent === 'agent-context') {
+          return unsupportedDestination(
+            request,
+            this.id,
+            'Document archive sources cannot be resolved as whole-file provider assets. Use a ResourceRef with a stable document entry path.',
+            'content-document-whole-archive-read-rejected',
+          );
+        }
         return unsupportedDestination(
           request,
           this.id,
@@ -931,29 +951,28 @@ function mapCacheStatus(status: ResourceCacheStatus): ContentAccessStatus {
 function extractSourcePath(ref: ContentSourceRef): string | undefined {
   if (isResourceRef(ref)) {
     const fileLocatorPath = ref.locator?.kind === 'file' ? ref.locator.path : undefined;
-    return (
-      ref.source.filePath ??
-      ref.source.projectRelativePath ??
-      ref.source.document?.filePath ??
-      fileLocatorPath
-    );
+    return readResourceSourceLocalPath(ref.source) ?? fileLocatorPath;
   }
   switch (ref.kind) {
     case 'document':
-      return ref.source.filePath ?? ref.source.document?.filePath;
+      return readResourceSourceLocalPath(ref.source);
     case 'asset':
-      return ref.sourcePath ?? ref.resource?.source.filePath;
+      return ref.sourcePath ?? readOptionalResourceSourcePath(ref.resource);
     case 'file':
       return ref.path;
     case 'media-library':
       return ref.path;
     case 'generated-asset':
-      return ref.path ?? ref.resource?.source.filePath;
+      return ref.path ?? readOptionalResourceSourcePath(ref.resource);
     case 'runtime':
       return ref.source ? extractSourcePath(ref.source) : undefined;
     default:
       return assertNever(ref);
   }
+}
+
+function readOptionalResourceSourcePath(resource: ResourceRef | undefined): string | undefined {
+  return resource ? readResourceSourceLocalPath(resource.source) : undefined;
 }
 
 function getDocumentRef(ref: ContentSourceRef): ContentDocumentSourceRef | undefined {

@@ -91,8 +91,7 @@ let library: AssetLibrary | null = null;
 let diffService: AssetDiffService | null = null;
 let thumbnailService: ThumbnailService | null = null;
 let mediaSettingsService:
-  | import('./services/MediaLibrarySettingsService').MediaLibrarySettingsService
-  | null = null;
+  import('./services/MediaLibrarySettingsService').MediaLibrarySettingsService | null = null;
 let healthMonitor: AssetHealthMonitor | null = null;
 /** Entity change event emitter — module-level so command handlers + API can both fire */
 let entityChangeEmitter: import('vscode').EventEmitter<void> | null = null;
@@ -1990,6 +1989,23 @@ interface MediaSearchQuickPickItem extends vscode.QuickPickItem {
   mediaType: string;
 }
 
+interface QueryMediaLibraryCommandInput {
+  readonly keyword?: unknown;
+  readonly limit?: unknown;
+  readonly types?: unknown;
+}
+
+function isAssetMediaType(value: unknown): value is import('@neko/shared').AssetMediaType {
+  return (
+    value === 'video' ||
+    value === 'audio' ||
+    value === 'image' ||
+    value === 'sequence' ||
+    value === 'text' ||
+    value === 'document'
+  );
+}
+
 function registerSearchCommand(
   context: vscode.ExtensionContext,
   searchService: MediaLibrarySearchService,
@@ -2006,6 +2022,25 @@ function registerSearchCommand(
   ];
 
   context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.assets.queryMediaLibrary',
+      async (input?: QueryMediaLibraryCommandInput) => {
+        const keyword = typeof input?.keyword === 'string' ? input.keyword : '';
+        const limit =
+          typeof input?.limit === 'number' && Number.isFinite(input.limit)
+            ? Math.max(1, Math.floor(input.limit))
+            : undefined;
+        const types = Array.isArray(input?.types)
+          ? input.types.filter((type): type is import('@neko/shared').AssetMediaType =>
+              isAssetMediaType(type),
+            )
+          : undefined;
+        return searchService.search(keyword, {
+          ...(limit !== undefined ? { limit } : {}),
+          ...(types && types.length > 0 ? { types } : {}),
+        });
+      },
+    ),
     vscode.commands.registerCommand('neko.assets.searchMediaLibrary', () => {
       const quickPick = vscode.window.createQuickPick<MediaSearchQuickPickItem>();
       quickPick.placeholder = t('mediaLibrary.search.placeholder');

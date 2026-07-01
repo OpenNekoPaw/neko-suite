@@ -19,6 +19,7 @@ import type { ProviderCard } from './provider-card';
 import type { PerceptionCapabilityFacet } from './comic-animation-indexing';
 import type { ReferenceContributorManifest } from './reference-resolution';
 import type { AgentCapabilityLifecycleDescriptor } from './agent-capability-lifecycle';
+import type { AgentReferenceContributor } from './reference-contributor';
 
 // =============================================================================
 // Protocol v1 metadata
@@ -38,13 +39,31 @@ export interface AgentCapabilityHostRequirement {
   readonly reason?: string;
 }
 
+export interface AgentCapabilityRuntimeRequirements {
+  readonly vscode?: boolean;
+  readonly activeEditor?: boolean;
+  readonly mediaService?: boolean;
+  readonly engineBridge?: boolean;
+  readonly contentAccess?: boolean;
+  readonly writableProject?: boolean;
+}
+
+export interface AgentCapabilityRuntimeRequirementDescriptor {
+  readonly requirements?: AgentCapabilityRuntimeRequirements;
+}
+
 export interface AgentCapabilityProtocolMetadata {
   /** Capability protocol version. Omitted legacy providers are treated as 1.0-compatible. */
   readonly protocolVersion?: AgentCapabilityProtocolVersion;
   /** Trust tier used by future policy enforcement; omitted providers default to core. */
   readonly trustLevel?: AgentCapabilityTrustLevel;
-  /** Hosts supported by this provider. Omitted means vscode-only for legacy compatibility. */
+  /**
+   * Hosts supported by this provider. Omitted means vscode-only for legacy compatibility;
+   * TUI/CLI loaders should require an explicit `tui` or `cli` host requirement.
+   */
   readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
+  /** Runtime ports or host affordances required before this provider can be loaded. */
+  readonly requirements?: AgentCapabilityRuntimeRequirements;
   /** Lifecycle hooks implemented by the provider. Informational in Stage 1. */
   readonly lifecycleHooks?: readonly AgentCapabilityLifecycleHook[];
 }
@@ -82,7 +101,7 @@ export interface AgentCapabilityManifest extends AgentCapabilityProtocolMetadata
  * Static declaration of a single capability.
  * Only metadata — the actual Tool/Skill implementation is provided at runtime.
  */
-export interface CapabilityDeclaration {
+export interface CapabilityDeclaration extends AgentCapabilityRuntimeRequirementDescriptor {
   /** Capability type */
   type: 'tool' | 'skill' | 'toolGroup';
 
@@ -297,6 +316,12 @@ export interface AgentCapabilityProvider extends AgentCapabilityProtocolMetadata
    * package-owned and are resolved lazily by the relevant provider.
    */
   getArtifactFacets?(context: AgentCapabilityContext): AgentArtifactFacetsContribution;
+
+  /**
+   * Optional terminal-safe reference contributors. TUI consumes these for `@`
+   * suggestions; Webview may adapt them into richer chips/previews elsewhere.
+   */
+  getReferenceContributors?(context: AgentCapabilityContext): readonly AgentReferenceContributor[];
 
   /**
    * Optional: Cleanup when the provider is unregistered (extension deactivated).

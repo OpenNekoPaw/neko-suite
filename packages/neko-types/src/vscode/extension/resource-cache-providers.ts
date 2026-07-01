@@ -6,6 +6,7 @@ import {
   createResourceRef,
   createResourceVariantKey,
   hashStableValue,
+  readResourceSourceLocalPath,
   type PreviewAssetKind,
   type PreviewManifest,
   type PreviewVariant,
@@ -430,7 +431,7 @@ function readLocalSourcePath(ref: ResourceRef): string | undefined {
   const locatorPath = ref.locator?.kind === 'file' ? ref.locator.path : undefined;
   const metadataPath =
     readString(ref.source.metadata?.['path']) ?? readString(ref.source.metadata?.['sourcePath']);
-  return readLocalPath(locatorPath ?? ref.source.filePath ?? ref.source.uri ?? metadataPath);
+  return readLocalPath(locatorPath ?? readResourceSourceLocalPath(ref.source) ?? metadataPath);
 }
 
 function readGeneratedAssetFromRef(

@@ -163,7 +163,7 @@ export interface IWorkspaceIndex extends vscode.Disposable {
   /**
    * Returns structured ScriptIndex for every indexed Fountain file in the workspace.
    */
-  getAllScriptIndices(): readonly ScriptIndex[];
+  getAllScriptIndices?(): readonly ScriptIndex[];
 
   /**
    * Fires when the index has been updated with the affected URIs.

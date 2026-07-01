@@ -7,6 +7,7 @@
  * same lifecycle vocabulary without importing runtime internals.
  */
 
+import type { AgentCapabilityActivationProvenance } from './agent-capability-activation';
 import type { RelatedSkill, SkillInjection, SkillMediaWorkflowHint } from './skill';
 
 export type SkillLifecycleSlot =
@@ -121,6 +122,7 @@ export interface SkillLifecycleRecord {
   readonly createdAt: number;
   readonly lastUsedTurn: number;
   readonly source: SkillLifecycleActivationSource;
+  readonly provenance?: AgentCapabilityActivationProvenance;
 }
 
 export interface SkillLifecycleActivationRequest {
@@ -131,6 +133,7 @@ export interface SkillLifecycleActivationRequest {
   readonly lifetime: SkillLifecycleLifetime;
   readonly source: SkillLifecycleActivationSource;
   readonly args?: string;
+  readonly provenance?: AgentCapabilityActivationProvenance;
   readonly now?: number;
   readonly turnCount?: number;
 }
@@ -197,6 +200,7 @@ export interface ActiveSkillLifecycleRecordProjection {
   readonly slot: SkillLifecycleSlot;
   readonly owner: SkillLifecycleOwner;
   readonly clearable: boolean;
+  readonly provenance?: AgentCapabilityActivationProvenance;
   readonly lockedReason?: string;
   readonly expires?: string;
   readonly status: SkillLifecycleRecordStatus;

@@ -662,6 +662,13 @@ export interface NekoStoryAPI {
   getScriptIndex(uriOrPath: string): NekoStoryScriptIndex | undefined;
 
   /**
+   * Returns every currently indexed Fountain screenplay.
+   * Hosts that expose workspace indexing should implement this so terminal
+   * reference search can discover scenes without requiring an active editor path.
+   */
+  getAllScriptIndices?(): readonly NekoStoryScriptIndex[];
+
+  /**
    * Returns the project-level characters.json snapshot for the given file path or URI.
    * When omitted, uses the active workspace folder or the first workspace folder.
    */

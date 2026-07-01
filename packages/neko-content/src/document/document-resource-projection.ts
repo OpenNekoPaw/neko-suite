@@ -14,7 +14,10 @@ export interface DocumentResourceProjection {
 }
 
 export interface DocumentResourceProjectionProjector {
-  project(ref: DocumentArchiveResourceRef, variant: ResourceVariantRequest): Promise<string | undefined>;
+  project(
+    ref: DocumentArchiveResourceRef,
+    variant: ResourceVariantRequest,
+  ): Promise<string | undefined>;
   onMissingProjection?(record: Record<string, unknown>, field: string): void;
 }
 
@@ -28,10 +31,7 @@ export function createManagedDocumentResourceRef(
     kind: 'document',
     source: {
       kind: 'document',
-      filePath: ref.source.filePath,
       document: ref.source,
-      identity: ref.source.identity,
-      metadata: { format: ref.source.format },
     },
     ...(ref.entryPath || ref.locator
       ? {

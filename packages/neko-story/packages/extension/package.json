@@ -13,6 +13,7 @@
   "dependencies": {
     "@neko/entity": "workspace:*",
     "@neko/shared": "workspace:*",
+    "@neko-story/headless": "workspace:*",
     "@neko-story/parser": "workspace:*",
     "@neko-story/types": "workspace:*"
   },

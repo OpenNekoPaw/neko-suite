@@ -3,6 +3,7 @@ import {
   createResourceFingerprint,
   createResourceRef,
   isResourceRef,
+  readResourceSourceLocalPath,
   type ContentAccessRequest,
   type ContentAccessResult,
   type ContentDocumentSourceRef,
@@ -315,10 +316,7 @@ export class DocumentContentAccessRuntime {
       kind: 'document',
       source: {
         kind: 'document',
-        filePath: ref.source.filePath,
         document: ref.source,
-        identity: ref.source.identity,
-        metadata: { format: ref.source.format },
       },
       ...(ref.entryPath || ref.locator
         ? {
@@ -385,29 +383,28 @@ function stableSource(
 function readSourcePath(ref: ContentSourceRef): string | undefined {
   if (isResourceRef(ref)) {
     const locatorPath = ref.locator?.kind === 'file' ? ref.locator.path : undefined;
-    return (
-      ref.source.filePath ??
-      ref.source.projectRelativePath ??
-      ref.source.document?.filePath ??
-      locatorPath
-    );
+    return readResourceSourceLocalPath(ref.source) ?? locatorPath;
   }
   switch (ref.kind) {
     case 'document':
-      return ref.source.filePath ?? ref.source.document?.filePath;
+      return readResourceSourceLocalPath(ref.source);
     case 'asset':
-      return ref.sourcePath ?? ref.resource?.source.filePath;
+      return ref.sourcePath ?? readOptionalResourceSourcePath(ref.resource);
     case 'file':
       return ref.path;
     case 'media-library':
       return ref.path;
     case 'generated-asset':
-      return ref.path ?? ref.resource?.source.filePath;
+      return ref.path ?? readOptionalResourceSourcePath(ref.resource);
     case 'runtime':
       return ref.source ? readSourcePath(ref.source) : undefined;
     default:
       return assertNever(ref);
   }
+}
+
+function readOptionalResourceSourcePath(resource: ResourceRef | undefined): string | undefined {
+  return resource ? readResourceSourceLocalPath(resource.source) : undefined;
 }
 
 function createDocumentEntryVariant(): ResourceVariantRequest {

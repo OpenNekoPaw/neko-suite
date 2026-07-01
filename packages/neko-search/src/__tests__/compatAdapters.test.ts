@@ -67,6 +67,8 @@ describe('compatibility project search adapters', () => {
   it('projects asset aliases, media files, documents, confirmed entities, and entity requirements', async () => {
     const adapters = createCompatibilityProjectSearchAdapters({
       workspaceFileFinder: { findFiles: async () => [] },
+      contractPath: async (filePath) =>
+        filePath.startsWith('/media/') ? filePath.replace('/media', '${MEDIA}') : filePath,
       jsonReader: makeJsonReader({
         '/workspace/neko/assets/library.json': {
           entities: [
@@ -164,7 +166,17 @@ describe('compatibility project search adapters', () => {
 
     expect(assetItems[0]).toEqual(expect.objectContaining({ kind: 'asset', label: '橘猫参考图' }));
     expect(mediaItems[0]).toEqual(
-      expect.objectContaining({ kind: 'media', label: 'cat-school.mp4' }),
+      expect.objectContaining({
+        kind: 'media',
+        label: 'cat-school.mp4',
+        filePath: '${MEDIA}/cat-school.mp4',
+        source: expect.objectContaining({ sourceId: '${MEDIA}/cat-school.mp4' }),
+        navigationData: expect.objectContaining({
+          filePath: '${MEDIA}/cat-school.mp4',
+          portablePath: '${MEDIA}/cat-school.mp4',
+          resolvedPath: '/media/cat-school.mp4',
+        }),
+      }),
     );
     expect(documentItems[0]).toEqual(
       expect.objectContaining({ kind: 'document', label: '世界观设定集' }),
@@ -178,6 +190,87 @@ describe('compatibility project search adapters', () => {
     expect(generatedItems[0]).toEqual(
       expect.objectContaining({ kind: 'generated-asset', label: 'xiaoju.png · 小橘角色参考' }),
     );
+  });
+
+  it('falls back to the Assets media library runtime query when media cache files are absent', async () => {
+    const queryMediaLibrary = vi.fn(async () => [
+      {
+        filePath: '/library/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+        fileName: '[Kmoe][浪客行]卷01.epub',
+        libraryName: '素材',
+        mediaType: 'document' as const,
+      },
+    ]);
+    const adapters = createCompatibilityProjectSearchAdapters({
+      workspaceFileFinder: { findFiles: async () => [] },
+      jsonReader: makeJsonReader({}),
+      contractPath: async (filePath) =>
+        filePath.startsWith('/library/') ? filePath.replace('/library', '${A}') : filePath,
+      queryMediaLibrary,
+    });
+
+    const mediaItems = await adapters
+      .find((item) => item.partition === 'media-library')!
+      .query({ text: '浪客', projectRoot: '/workspace', limit: 30 }, { projectRoot: '/workspace' });
+
+    expect(queryMediaLibrary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        keyword: '浪客',
+        limit: 30,
+        projectRoot: '/workspace',
+      }),
+    );
+    expect(mediaItems).toEqual([
+      expect.objectContaining({
+        kind: 'document',
+        label: '[Kmoe][浪客行]卷01.epub',
+        filePath: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+        source: expect.objectContaining({
+          partition: 'media-library',
+          sourceId: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+        }),
+        navigationData: expect.objectContaining({
+          filePath: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+          portablePath: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+          resolvedPath: '/library/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+          libraryName: '素材',
+        }),
+      }),
+    ]);
+  });
+
+  it('does not query the Assets media runtime when a loaded cache has no matches', async () => {
+    const queryMediaLibrary = vi.fn(async () => [
+      {
+        filePath: '/library/浪客行.epub',
+        fileName: '浪客行.epub',
+        libraryName: '素材',
+        mediaType: 'document' as const,
+      },
+    ]);
+    const adapters = createCompatibilityProjectSearchAdapters({
+      workspaceFileFinder: { findFiles: async () => [] },
+      jsonReader: makeJsonReader({
+        '/workspace/.neko/.cache/search-index.json': {
+          entries: [
+            {
+              filePath: '/library/other.epub',
+              fileName: 'other.epub',
+              libraryName: '素材',
+              mediaType: 'document',
+            },
+          ],
+        },
+      }),
+      queryMediaLibrary,
+    });
+
+    const mediaItems = await adapters
+      .find((item) => item.partition === 'media-library')!
+      .query({ text: '浪客', projectRoot: '/workspace', limit: 30 }, { projectRoot: '/workspace' });
+
+    expect(mediaItems).toEqual([]);
+    expect(queryMediaLibrary).not.toHaveBeenCalled();
   });
 
   it('logs malformed compatibility JSON without failing provider queries', async () => {

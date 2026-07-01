@@ -1287,7 +1287,7 @@ function bindResources(
       diagnostics.push({
         severity: 'error',
         code: 'canvas-markdown-missing-resource-token',
-        message: `Creative draft resource token "${token}" does not match a known resource.`,
+        message: `Markdown resource token "${token}" does not match a known resource.`,
         token,
       });
       return { token, status: 'missing' };
@@ -1296,7 +1296,7 @@ function bindResources(
       diagnostics.push({
         severity: 'error',
         code: 'canvas-markdown-ambiguous-resource-token',
-        message: `Creative draft resource token "${token}" matches multiple resources.`,
+        message: `Markdown resource token "${token}" matches multiple resources.`,
         token,
         candidates: candidates.map(createSafeResourceCandidateSummary),
       });

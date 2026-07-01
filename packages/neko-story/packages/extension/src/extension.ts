@@ -538,6 +538,13 @@ export function activate(context: vscode.ExtensionContext) {
     },
 
     /**
+     * Returns structured ScriptIndex values for every indexed Fountain file.
+     */
+    getAllScriptIndices() {
+      return indexService.getAllScriptIndices();
+    },
+
+    /**
      * Returns the current workspace folder's character registry snapshot.
      */
     getCharacterRegistry(uriOrPath?: string) {

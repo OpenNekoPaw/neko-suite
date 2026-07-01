@@ -329,6 +329,10 @@ export function createResourceFingerprint(input: {
   };
 }
 
+export function readResourceSourceLocalPath(source: ResourceSourceRef): string | undefined {
+  return source.filePath ?? source.projectRelativePath ?? source.document?.filePath ?? source.uri;
+}
+
 export function isResourceScope(value: unknown): value is ResourceScope {
   return includesString(RESOURCE_SCOPES, value);
 }

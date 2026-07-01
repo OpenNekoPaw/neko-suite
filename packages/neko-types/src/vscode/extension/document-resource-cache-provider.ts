@@ -1,10 +1,12 @@
 import * as fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
+import type { PathResolver } from '../../path';
 import {
   createResourceFingerprint,
   createResourceRef,
   hashStableValue,
+  readResourceSourceLocalPath,
   type DocumentArchiveResourceRef,
   type DocumentLocator,
   type DocumentSourceRef,
@@ -27,6 +29,8 @@ export interface DocumentEntryReader {
 export interface DocumentResourceCacheProviderOptions {
   readonly entryReader?: DocumentEntryReader;
   readonly fsOps?: DocumentResourceCacheFsOps;
+  readonly pathResolver?: PathResolver;
+  readonly projectRoot?: string;
 }
 
 export interface DocumentResourceCacheFsOps {
@@ -47,10 +51,14 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
 
   private readonly entryReader?: DocumentEntryReader;
   private readonly fsOps: DocumentResourceCacheFsOps;
+  private readonly pathResolver?: PathResolver;
+  private readonly projectRoot?: string;
 
   constructor(options: DocumentResourceCacheProviderOptions) {
     this.entryReader = options.entryReader;
     this.fsOps = options.fsOps ?? nodeFsOps;
+    this.pathResolver = options.pathResolver;
+    this.projectRoot = options.projectRoot;
   }
 
   supports(ref: ResourceRef, variant: ResourceVariantRequest): boolean {
@@ -115,7 +123,10 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
     if (!this.entryReader) {
       return undefined;
     }
-    const bytes = await this.entryReader.readEntry(source, entryPath);
+    const bytes = await this.entryReader.readEntry(
+      this.resolveDocumentSourceForRead(source),
+      entryPath,
+    );
     if (!bytes) {
       return undefined;
     }
@@ -137,6 +148,18 @@ export class DocumentResourceCacheProvider implements ResourceCacheProvider {
       height: input.variant.height,
       sizeBytes: stat.size || bytes.byteLength,
       rebuildable: true,
+    };
+  }
+
+  private resolveDocumentSourceForRead(source: DocumentSourceRef): DocumentSourceRef {
+    if (!this.pathResolver || !this.projectRoot) return source;
+    const resolved = this.pathResolver.resolveSource(source.filePath, this.projectRoot);
+    if (resolved.type !== 'local' || this.pathResolver.hasVariable(resolved.path)) {
+      return source;
+    }
+    return {
+      ...source,
+      filePath: resolved.path,
     };
   }
 }
@@ -176,30 +199,18 @@ export function createDocumentResourceRef(input: CreateDocumentResourceRefInput)
 }
 
 function createDocumentResourceSource(input: CreateDocumentResourceRefInput): ResourceSourceRef {
+  const extensionPrivateMetadata =
+    input.scope === 'extension-private'
+      ? {
+          cacheScope: 'extension-private',
+          nonPortable: true,
+          nonPortableReason: 'no-workspace-or-extension-private-scratch',
+        }
+      : undefined;
   return {
     kind: 'document',
     document: createStableDocumentSource(input.source),
-    filePath: input.source.filePath,
-    identity: input.source.identity
-      ? {
-          fileId: input.source.identity.fileId,
-          sizeBytes: input.source.identity.sizeBytes,
-          mtimeMs: input.source.identity.mtimeMs,
-          hash: input.source.identity.hash,
-        }
-      : input.source.fileId
-        ? { fileId: input.source.fileId }
-        : undefined,
-    metadata: {
-      format: input.source.format,
-      ...(input.scope === 'extension-private'
-        ? {
-            cacheScope: 'extension-private',
-            nonPortable: true,
-            nonPortableReason: 'no-workspace-or-extension-private-scratch',
-          }
-        : {}),
-    },
+    ...(extensionPrivateMetadata ? { metadata: extensionPrivateMetadata } : {}),
   };
 }
 
@@ -320,7 +331,7 @@ function createResourceSourceDirectoryKey(source: ResourceSourceRef): unknown {
   }
   return {
     kind: source.kind,
-    filePath: source.filePath,
+    filePath: readResourceSourceLocalPath(source),
     uri: source.uri,
     projectRelativePath: source.projectRelativePath,
     mediaLibraryId: source.mediaLibraryId,

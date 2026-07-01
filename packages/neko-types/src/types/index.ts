@@ -110,7 +110,10 @@ export * from './platform';
 
 // Agent interface types
 export * from './agent';
+export * from './agent-capability-activation';
+export * from './agent-capability-diagnostics';
 export * from './agent-capability-lifecycle';
+export * from './reference-contributor';
 
 // Agent execution trace contracts
 export * from './agent-trace';

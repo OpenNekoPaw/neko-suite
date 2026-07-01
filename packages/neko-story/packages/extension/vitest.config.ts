@@ -12,6 +12,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      '@neko-story/headless': path.resolve(__dirname, '../headless/src'),
       '@neko-story/parser': path.resolve(__dirname, '../parser/src'),
       '@neko-story/types': path.resolve(__dirname, '../types/src'),
     },

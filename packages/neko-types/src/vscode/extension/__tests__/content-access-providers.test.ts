@@ -48,6 +48,17 @@ describe('content access providers', () => {
     },
     fingerprint: createResourceFingerprint({ strategy: 'provider', value: 'comic-v1' }),
   });
+  const resourceWithoutEntryPath = createResourceRef({
+    scope: resource.scope,
+    provider: resource.provider,
+    kind: resource.kind,
+    source: resource.source,
+    locator: {
+      kind: 'document',
+      locator: { kind: 'chapter', chapterHref: 'OPS/page-1.xhtml' },
+    },
+    fingerprint: resource.fingerprint,
+  });
   const variant: ResourceVariantRequest = {
     role: 'thumbnail',
     width: 256,
@@ -326,6 +337,24 @@ describe('content access providers', () => {
     expect(text(result.bytes)).toBe('/media/books/comic.epub:OPS/page-1.jpg');
   });
 
+  it('reads document entry bytes for agent image context without registering the whole archive', async () => {
+    const provider = new DocumentEntryContentAccessProvider({
+      projectRoot: '/workspace/demo',
+      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      entryReader: async ({ sourcePath, entryPath }) => bytes(`${sourcePath}:${entryPath}`),
+    });
+
+    const result = await provider.resolve({
+      request: { ref: resource, intent: 'agent-context', target: 'bytes' },
+    });
+
+    expect(result).toMatchObject({
+      status: 'ready',
+      providerId: 'document-entry-content-access',
+    });
+    expect(text(result.bytes)).toBe('/media/books/comic.epub:OPS/page-1.jpg');
+  });
+
   it('rejects whole document archive bytes instead of falling back to source-file reads', async () => {
     const fileOps = createFileOps({ '/media/books/comic.epub': bytes('whole-archive') });
     const readFile = vi.fn(fileOps.readFile);
@@ -337,7 +366,7 @@ describe('content access providers', () => {
     });
 
     const result = await provider.resolve({
-      request: { ref: resource, intent: 'agent-context', target: 'bytes' },
+      request: { ref: resourceWithoutEntryPath, intent: 'agent-context', target: 'bytes' },
     });
 
     expect(result).toMatchObject({

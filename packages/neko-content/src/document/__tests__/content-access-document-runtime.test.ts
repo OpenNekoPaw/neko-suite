@@ -82,6 +82,13 @@ describe('DocumentContentAccessRuntime', () => {
         variant: { role: 'document-entry' },
         source: expect.objectContaining({
           provider: 'document-archive',
+          source: {
+            kind: 'document',
+            document: {
+              filePath: resolvedSource.filePath,
+              format: source.format,
+            },
+          },
           locator: expect.objectContaining({
             kind: 'document',
             entryPath: 'image/moe-010564.jpg',

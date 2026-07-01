@@ -137,7 +137,12 @@ export class SceneWorkspaceIndexService implements ISceneWorkspaceIndex {
     this.locationMap.clear();
     this.headingMap.clear();
 
-    for (const scriptIndex of this.workspaceIndex.getAllScriptIndices()) {
+    const scriptIndices = this.workspaceIndex.getAllScriptIndices?.();
+    if (!scriptIndices) {
+      throw new Error('SceneWorkspaceIndexService requires workspaceIndex.getAllScriptIndices');
+    }
+
+    for (const scriptIndex of scriptIndices) {
       const scriptUri = vscode.Uri.parse(scriptIndex.uri);
       for (const scene of scriptIndex.scenes) {
         const indexEntry: SceneIndexEntry = { entry: scene, scriptUri };

@@ -166,10 +166,11 @@
   },
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
-    "compile": "pnpm run build:types && pnpm run build:parser && pnpm run build:webview && pnpm run build:extension",
+    "compile": "pnpm run build:types && pnpm run build:parser && pnpm run build:headless && pnpm run build:webview && pnpm run build:extension",
     "build": "pnpm run compile",
     "build:types": "pnpm --filter @neko-story/types run build",
     "build:parser": "pnpm --filter @neko-story/parser run build",
+    "build:headless": "pnpm --filter @neko-story/headless run build",
     "build:extension": "pnpm --filter @neko-story/extension run build",
     "build:webview": "pnpm --filter @neko-story/webview run build",
     "watch": "pnpm --filter @neko-story/extension run watch",
