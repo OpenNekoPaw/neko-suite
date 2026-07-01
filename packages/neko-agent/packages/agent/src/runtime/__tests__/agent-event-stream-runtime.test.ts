@@ -826,6 +826,69 @@ describe('agent event stream runtime processor', () => {
     expect(streamCompleteCallIndex).toBeGreaterThan(completedTaskCallIndex);
   });
 
+  it('uses the background task wait port to complete turns when progress events are absent', async () => {
+    const processor = new AgentEventStreamRuntimeProcessor<SourceTask>();
+    const postMessage = vi.fn();
+    let resolveWait!: (task: SourceTask) => void;
+
+    const processing = processor.process({
+      conversationId: 'conv-1',
+      messageId: 'msg-stream',
+      events: toAsyncIterable([createBackgroundToolResultEvent()]),
+      postMessage,
+      backgroundTasks: {
+        observeProgress: () => vi.fn(),
+        waitForCompletion: vi.fn(
+          () =>
+            new Promise<SourceTask>((resolve) => {
+              resolveWait = resolve;
+            }),
+        ),
+        createRecoveryProgress: (task) => ({
+          id: task.id,
+          status: 'failed',
+          progress: 100,
+          error: 'Progress delivery failed',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        }),
+        createProgressDelivery: (task) => ({
+          progress: {
+            id: task.id,
+            status: 'completed',
+            progress: 100,
+            updatedAt: '2026-01-01T00:00:02.000Z',
+          },
+        }),
+      },
+    });
+
+    const stateBeforeCompletion = await Promise.race([
+      processing.then(() => 'resolved' as const),
+      new Promise<'pending'>((resolve) => {
+        setTimeout(() => resolve('pending'), 0);
+      }),
+    ]);
+
+    expect(stateBeforeCompletion).toBe('pending');
+
+    resolveWait({ id: 'task-1' });
+    await processing;
+
+    const streamCompleteCallIndex = postMessage.mock.calls.findIndex(
+      ([message]) => message.type === 'streamComplete',
+    );
+    const completedTaskCallIndex = postMessage.mock.calls.findIndex(
+      ([message]) =>
+        isAgentTurnTimelineMessage(message) &&
+        message.events.some(
+          (item) => item.itemId === 'tool-background-task-task-1' && item.status === 'succeeded',
+        ),
+    );
+
+    expect(completedTaskCallIndex).toBeGreaterThanOrEqual(0);
+    expect(streamCompleteCallIndex).toBeGreaterThan(completedTaskCallIndex);
+  });
+
   it('disposes all tracked background task subscriptions', async () => {
     const processor = new AgentEventStreamRuntimeProcessor<SourceTask>();
     const unsubscribeA = vi.fn();
