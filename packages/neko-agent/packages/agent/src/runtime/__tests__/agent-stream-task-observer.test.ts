@@ -62,8 +62,12 @@ describe('agent stream task observer runtime', () => {
     expect(result).toMatchObject({
       started: true,
       taskId: 'task-1',
-      unsubscribe,
     });
+    expect(result.started ? result.unsubscribe : undefined).toEqual(expect.any(Function));
+    if (result.started) {
+      result.unsubscribe?.();
+    }
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
     expect(postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'taskCreated',
@@ -78,14 +82,14 @@ describe('agent stream task observer runtime', () => {
     });
   });
 
-  it('projects progress updates and persists result urls through injected effects', () => {
+  it('projects progress updates and persists result urls through injected effects', async () => {
     let observerInput:
       | ObserveAgentStreamBackgroundTaskProgressInput<SourceTask, { readonly kind: 'plan' }>
       | undefined;
     const postMessage = vi.fn();
     const persistResultUrls = vi.fn();
 
-    startAgentStreamBackgroundTaskObserver<SourceTask, { readonly kind: 'plan' }>({
+    const result = startAgentStreamBackgroundTaskObserver<SourceTask, { readonly kind: 'plan' }>({
       conversationId: 'conv-1',
       messageId: 'msg-stream',
       event: createBackgroundToolResultEvent(),
@@ -114,7 +118,7 @@ describe('agent stream task observer runtime', () => {
     });
 
     expect(observerInput).toBeDefined();
-    observerInput!.onTaskProgress({
+    await observerInput!.onTaskProgress({
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -148,6 +152,9 @@ describe('agent stream task observer runtime', () => {
       toolCallId: 'tool-1',
       urls: ['/tmp/cat.png'],
       deliveryPlan: { kind: 'plan' },
+    });
+    await expect(result.started ? result.completion : Promise.resolve(null)).resolves.toEqual({
+      status: 'completed',
     });
   });
 

@@ -23,6 +23,7 @@ import {
 import {
   startAgentStreamBackgroundTaskObserver,
   type AgentStreamBackgroundTaskObservedProgress,
+  type AgentStreamBackgroundTaskCompletion,
   type AgentStreamBackgroundTaskProgressErrorEvent,
   type ObserveAgentStreamBackgroundTaskProgressInput,
   type StartAgentStreamBackgroundTaskObserverInput,
@@ -103,6 +104,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
       messageId: streamingMessageId,
       now: input.now,
     });
+    const backgroundTaskCompletions: Promise<AgentStreamBackgroundTaskCompletion>[] = [];
     let lastPartialSnapshotAt = 0;
 
     for await (const event of input.events) {
@@ -136,7 +138,15 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
       }
 
       if (event.type === 'tool_result') {
-        this.subscribeToBackgroundTaskProgress(input, streamingMessageId, event, timeline);
+        const completion = this.subscribeToBackgroundTaskProgress(
+          input,
+          streamingMessageId,
+          event,
+          timeline,
+        );
+        if (completion) {
+          backgroundTaskCompletions.push(completion);
+        }
       }
 
       if (
@@ -171,6 +181,9 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     }
 
     finalizeAgentStreamProjectionState(streamState);
+    if (backgroundTaskCompletions.length > 0) {
+      await Promise.all(backgroundTaskCompletions);
+    }
     const finalTimelineMessage = timeline.complete(streamState.contentBlocks);
     if (finalTimelineMessage) {
       await input.postMessage(finalTimelineMessage);
@@ -216,10 +229,10 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     streamingMessageId: string,
     event: AgentEvent,
     timeline: AgentTurnTimelineProjection,
-  ): void {
+  ): Promise<AgentStreamBackgroundTaskCompletion> | undefined {
     const backgroundTasks = input.backgroundTasks;
     if (!backgroundTasks) {
-      return;
+      return undefined;
     }
 
     let trackedUnsubscribe: (() => void) | undefined;
@@ -268,6 +281,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
       trackedUnsubscribe = observer.unsubscribe;
       this.trackProgressSubscription(input.conversationId, trackedUnsubscribe);
     }
+    return observer.started ? observer.completion : undefined;
   }
 
   private trackProgressSubscription(conversationId: string, unsubscribe: () => void): void {

@@ -633,7 +633,7 @@ describe('agent event stream runtime processor', () => {
       | ObserveAgentStreamBackgroundTaskProgressInput<SourceTask, { readonly done: boolean }>
       | undefined;
 
-    await processor.process({
+    const processing = processor.process({
       conversationId: 'conv-1',
       messageId: 'msg-stream',
       events: toAsyncIterable([createBackgroundToolResultEvent()]),
@@ -662,6 +662,9 @@ describe('agent event stream runtime processor', () => {
         persistResultUrls: vi.fn(),
       },
     });
+
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(observerInput).toMatchObject({
       taskId: 'task-1',
@@ -731,8 +734,96 @@ describe('agent event stream runtime processor', () => {
       expect.objectContaining({ type: 'taskUpdated', conversationId: 'conv-1' }),
     );
 
+    await observerInput!.onTaskProgress({
+      conversationId: 'conv-1',
+      sourceTask: { id: 'task-1' },
+      task: {
+        progress: {
+          id: 'task-1',
+          status: 'completed',
+          progress: 100,
+          updatedAt: '2026-01-01T00:00:03.000Z',
+        },
+      },
+    });
+
+    await processing;
+
     processor.clearConversation('conv-1');
     expect(unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for submitted background tasks before completing the agent turn', async () => {
+    const processor = new AgentEventStreamRuntimeProcessor<SourceTask>();
+    const postMessage = vi.fn();
+    let observerInput: ObserveAgentStreamBackgroundTaskProgressInput<SourceTask> | undefined;
+
+    const processing = processor.process({
+      conversationId: 'conv-1',
+      messageId: 'msg-stream',
+      events: toAsyncIterable([createBackgroundToolResultEvent()]),
+      postMessage,
+      backgroundTasks: {
+        observeProgress: (input) => {
+          observerInput = input;
+          return vi.fn();
+        },
+        createRecoveryProgress: (task) => ({
+          id: task.id,
+          status: 'failed',
+          progress: 100,
+          error: 'Progress delivery failed',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        }),
+        createProgressDelivery: (task) => ({
+          progress: {
+            id: task.id,
+            status: 'completed',
+            progress: 100,
+            updatedAt: '2026-01-01T00:00:02.000Z',
+          },
+        }),
+      },
+    });
+
+    const stateBeforeTerminalProgress = await Promise.race([
+      processing.then(() => 'resolved' as const),
+      new Promise<'pending'>((resolve) => {
+        setTimeout(() => resolve('pending'), 0);
+      }),
+    ]);
+
+    expect(observerInput).toBeDefined();
+    expect(stateBeforeTerminalProgress).toBe('pending');
+
+    await observerInput!.onTaskProgress({
+      conversationId: 'conv-1',
+      sourceTask: { id: 'task-1' },
+      task: {
+        progress: {
+          id: 'task-1',
+          status: 'completed',
+          progress: 100,
+          updatedAt: '2026-01-01T00:00:02.000Z',
+        },
+      },
+    });
+
+    await processing;
+
+    const streamCompleteCallIndex = postMessage.mock.calls.findIndex(
+      ([message]) => message.type === 'streamComplete',
+    );
+    const completedTaskCallIndex = postMessage.mock.calls.findIndex(
+      ([message]) =>
+        isAgentTurnTimelineMessage(message) &&
+        message.events.some(
+          (item) => item.itemId === 'tool-background-task-task-1' && item.status === 'succeeded',
+        ),
+    );
+
+    expect(completedTaskCallIndex).toBeGreaterThanOrEqual(0);
+    expect(streamCompleteCallIndex).toBeGreaterThan(completedTaskCallIndex);
   });
 
   it('disposes all tracked background task subscriptions', async () => {
@@ -740,7 +831,9 @@ describe('agent event stream runtime processor', () => {
     const unsubscribeA = vi.fn();
     const unsubscribeB = vi.fn();
     let observeCallCount = 0;
-    const observeProgress = () => {
+    const observerInputs: ObserveAgentStreamBackgroundTaskProgressInput<SourceTask>[] = [];
+    const observeProgress = (input: ObserveAgentStreamBackgroundTaskProgressInput<SourceTask>) => {
+      observerInputs.push(input);
       observeCallCount += 1;
       return observeCallCount === 1 ? unsubscribeA : unsubscribeB;
     };
@@ -771,13 +864,19 @@ describe('agent event stream runtime processor', () => {
       },
     });
 
-    await processor.process(createInput('conv-a'));
-    await processor.process(createInput('conv-b'));
+    const first = processor.process(createInput('conv-a'));
+    await Promise.resolve();
+    await Promise.resolve();
+    const second = processor.process(createInput('conv-b'));
+    await Promise.resolve();
+    await Promise.resolve();
 
     processor.dispose();
+    await Promise.all([first, second]);
 
     expect(unsubscribeA).toHaveBeenCalledTimes(1);
     expect(unsubscribeB).toHaveBeenCalledTimes(1);
+    expect(observerInputs).toHaveLength(2);
   });
 });
 

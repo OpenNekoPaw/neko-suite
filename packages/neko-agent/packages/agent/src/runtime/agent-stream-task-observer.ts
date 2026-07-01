@@ -111,7 +111,23 @@ export type StartAgentStreamBackgroundTaskObserverResult =
       readonly started: true;
       readonly taskId: string;
       readonly task: BackgroundTaskView;
+      readonly completion: Promise<AgentStreamBackgroundTaskCompletion>;
       readonly unsubscribe?: () => void;
+    };
+
+export type AgentStreamBackgroundTaskCompletion =
+  | {
+      readonly status: 'completed' | 'failed' | 'cancelled';
+    }
+  | {
+      readonly status: 'ignored';
+    }
+  | {
+      readonly status: 'observer-unavailable';
+    }
+  | {
+      readonly status: 'delivery-error';
+      readonly error: unknown;
     };
 
 export function startAgentStreamBackgroundTaskObserver<
@@ -136,8 +152,20 @@ export function startAgentStreamBackgroundTaskObserver<
       started: true,
       taskId: start.taskId,
       task: start.task,
+      completion: Promise.resolve({ status: 'observer-unavailable' }),
     };
   }
+
+  let settled = false;
+  let resolveCompletion: (completion: AgentStreamBackgroundTaskCompletion) => void;
+  const completion = new Promise<AgentStreamBackgroundTaskCompletion>((resolve) => {
+    resolveCompletion = resolve;
+  });
+  const complete = (next: AgentStreamBackgroundTaskCompletion) => {
+    if (settled) return;
+    settled = true;
+    resolveCompletion(next);
+  };
 
   const context: AgentStreamBackgroundTaskDeliveryContext = {
     conversationId: input.conversationId,
@@ -154,8 +182,16 @@ export function startAgentStreamBackgroundTaskObserver<
       progress: input.createRecoveryProgress(task),
     }),
     createTaskView: (task) => input.createProgressDelivery(task, context),
-    onIgnoredConversationTask: input.onIgnoredConversationTask,
-    onProgressDeliveryError: input.onProgressDeliveryError,
+    onIgnoredConversationTask: (event) => {
+      input.onIgnoredConversationTask?.(event);
+      complete({ status: 'ignored' });
+    },
+    onProgressDeliveryError: (event) => {
+      input.onProgressDeliveryError?.(event);
+      if (!event.recoveryTask) {
+        complete({ status: 'delivery-error', error: event.error });
+      }
+    },
     onTaskProgress: async ({ conversationId, task, sourceTask }) => {
       if (conversationId !== input.conversationId) {
         input.onIgnoredConversationTask?.({
@@ -163,6 +199,7 @@ export function startAgentStreamBackgroundTaskObserver<
           conversationId: input.conversationId,
           sourceTask,
         });
+        complete({ status: 'ignored' });
         return;
       }
 
@@ -188,13 +225,25 @@ export function startAgentStreamBackgroundTaskObserver<
             : {}),
         });
       }
+      const status = projection.task.status;
+      if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+        complete({ status });
+      }
     },
   });
+  const trackedUnsubscribe =
+    typeof unsubscribe === 'function'
+      ? () => {
+          unsubscribe();
+          complete({ status: 'cancelled' });
+        }
+      : undefined;
 
   return {
     started: true,
     taskId: start.taskId,
     task: start.task,
-    ...(typeof unsubscribe === 'function' ? { unsubscribe } : {}),
+    completion,
+    ...(trackedUnsubscribe ? { unsubscribe: trackedUnsubscribe } : {}),
   };
 }
