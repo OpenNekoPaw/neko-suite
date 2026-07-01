@@ -4,7 +4,13 @@ import type {
   IToolGroupRegistry,
   SkillMediaWorkflowHint,
 } from '@neko/shared';
-import { ActivateSkillTool, DeactivateSkillTool, GetContextTool } from '../meta-tools';
+import {
+  ActivateSkillTool,
+  DeactivateSkillTool,
+  GetContextTool,
+  SetExecutionModeTool,
+  StartIDCWorkflowTool,
+} from '../meta-tools';
 import type { SkillContextSummary } from '../meta-tools';
 
 describe('core meta tools', () => {
@@ -170,6 +176,88 @@ describe('core meta tools', () => {
       error: 'IDC stage persona is cleared when its owning stage exits',
     });
     expect(deactivateSkill).toHaveBeenCalledWith({ recordId: 'record-stage' });
+  });
+
+  it('starts IDC workflow through the typed Agent meta tool provider path', async () => {
+    const startIdcWorkflow = vi.fn(async () => ({
+      success: true,
+      message: 'IDC workflow started: run-1',
+      runId: 'run-1',
+      events: [],
+    }));
+    const tool = new StartIDCWorkflowTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill: vi.fn(),
+      deactivateSkill: vi.fn(),
+      startIdcWorkflow,
+    });
+
+    await expect(
+      tool.execute({ runKind: 'plan-review', runId: 'run-1', reason: 'Need IDC stages' }),
+    ).resolves.toEqual({
+      success: true,
+      data: {
+        started: true,
+        runKind: 'plan-review',
+        runId: 'run-1',
+        message: 'IDC workflow started: run-1',
+        diagnostics: undefined,
+      },
+    });
+    expect(startIdcWorkflow).toHaveBeenCalledWith({
+      runKind: 'plan-review',
+      runId: 'run-1',
+      reason: 'Need IDC stages',
+    });
+  });
+
+  it('sets execution mode through the typed Agent meta tool provider path', async () => {
+    const setExecutionMode = vi.fn(async () => ({
+      success: true,
+      message: 'Execution mode set to plan',
+      mode: 'plan' as const,
+    }));
+    const tool = new SetExecutionModeTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill: vi.fn(),
+      deactivateSkill: vi.fn(),
+      setExecutionMode,
+    });
+
+    await expect(tool.execute({ mode: 'plan', reason: 'Dry run first' })).resolves.toEqual({
+      success: true,
+      data: {
+        changed: true,
+        mode: 'plan',
+        message: 'Execution mode set to plan',
+      },
+    });
+    expect(setExecutionMode).toHaveBeenCalledWith({
+      mode: 'plan',
+      reason: 'Dry run first',
+    });
+  });
+
+  it('rejects invalid execution mode meta tool input before provider invocation', async () => {
+    const setExecutionMode = vi.fn();
+    const tool = new SetExecutionModeTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill: vi.fn(),
+      deactivateSkill: vi.fn(),
+      setExecutionMode,
+    });
+
+    await expect(tool.execute({ mode: 'hidden-idc' })).resolves.toEqual({
+      success: false,
+      error: 'Invalid execution mode',
+    });
+    expect(setExecutionMode).not.toHaveBeenCalled();
   });
 });
 

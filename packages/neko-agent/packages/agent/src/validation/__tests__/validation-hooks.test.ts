@@ -9,6 +9,7 @@ import { ValidationHooks, createValidationHooks } from '../validation-hooks';
 import { AgentError } from '../../errors';
 import type { AgentContext, AgentStep, ChatMessage, ContentPart } from '@neko/shared';
 import type { ValidationHooksOptions, ValidationError, ValidationWarning } from '../types';
+import { consumeOutputValidationRepairRequest } from '../output-validation-repair-request';
 
 const mermaidRuntimeMocks = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -27,6 +28,13 @@ function createTestContext(messages: ChatMessage[] = []): AgentContext {
     iteration: 0,
     toolResults: [],
     metadata: {},
+  };
+}
+
+function createTestContextWithMetadata(metadata: Record<string, unknown>): AgentContext {
+  return {
+    ...createTestContext(),
+    metadata,
   };
 }
 
@@ -375,6 +383,131 @@ describe('ValidationHooks', () => {
       await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
       // Callbacks should still be called for errors, but no throw
       expect(onValidationError).toHaveBeenCalled();
+    });
+  });
+
+  describe('afterThink - skill artifact validators', () => {
+    it('uses skillValidationRequirements metadata to validate storyboard creative tables', async () => {
+      const hooks = new ValidationHooks({
+        outputConstraints: {
+          mermaidPreValidate: false,
+          onValidationFail: 'error',
+        },
+      });
+      const step = createTestStep(
+        [
+          '| 镜头 | 源页 | 景别/构图 | 画面内容 | 动作与节奏 | 镜头运动 | 声音/氛围 | 时长 | 备注 |',
+          '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+          '| 1 | P1 | 全景 | 主角站立 | 慢 | 推近 | 风声 | 3s | 待确认 |',
+        ].join('\n'),
+      );
+      const context = createTestContextWithMetadata({
+        skillValidationRequirements: ['creative-table.storyboard'],
+      });
+
+      await expect(hooks.afterThink(step, context)).rejects.toThrow(AgentError);
+    });
+
+    it('queues storyboard creative table repair when generic output mode is retry', async () => {
+      const hooks = new ValidationHooks({
+        outputConstraints: {
+          mermaidPreValidate: false,
+          onValidationFail: 'retry',
+        },
+      });
+      const step = createTestStep(
+        [
+          '---',
+          'id: storyboard-draft',
+          'kind: draft',
+          'status: draft',
+          'domain: storyboard',
+          '---',
+          '',
+          '| scene | shot | source |',
+          '| --- | --- | --- |',
+          '| 正文 | 1 | P1 |',
+        ].join('\n'),
+      );
+      const context = createTestContextWithMetadata({
+        skillValidationRequirements: ['creative-table.storyboard'],
+      });
+
+      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
+      const repairRequest = consumeOutputValidationRepairRequest(context);
+      expect(repairRequest).toEqual(
+        expect.objectContaining({
+          kind: 'output-validation-repair',
+          attempt: 1,
+          validators: ['creative-table.storyboard'],
+          errors: expect.arrayContaining([
+            expect.objectContaining({ code: 'storyboard-frontmatter-not-allowed' }),
+          ]),
+        }),
+      );
+      expect(repairRequest?.instruction).toContain('final target artifact directly');
+      expect(repairRequest?.instruction).toContain('scene | shot | source');
+      expect(repairRequest?.instruction).toContain('Localized headers are allowed');
+      expect(repairRequest?.instruction).toContain('场景 | 镜头 | 来源 | 来源分格');
+      expect(repairRequest?.instruction).toContain('页码, 景别/构图, 节奏/情绪');
+      expect(repairRequest?.instruction).not.toContain(
+        'Do not use display-only headers such as 镜号, 镜头',
+      );
+      expect(context.messages.at(-1)).toEqual({
+        role: 'user',
+        content: repairRequest?.instruction,
+      });
+    });
+
+    it('localizes storyboard creative table repair requests when runtime locale is Chinese', async () => {
+      const hooks = new ValidationHooks({
+        outputConstraints: {
+          mermaidPreValidate: false,
+          onValidationFail: 'retry',
+        },
+      });
+      const step = createTestStep(
+        [
+          '| 镜号 | 来源页 | 画面内容 |',
+          '| --- | --- | --- |',
+          '| S01 | P1 | 主角站在巨构前 |',
+        ].join('\n'),
+      );
+      const context = createTestContextWithMetadata({
+        locale: 'zh',
+        skillValidationRequirements: ['creative-table.storyboard'],
+      });
+
+      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
+      const repairRequest = consumeOutputValidationRepairRequest(context);
+
+      expect(repairRequest?.instruction).toContain('上一条可见 assistant 输出没有通过');
+      expect(repairRequest?.instruction).toContain('修复要求：');
+      expect(repairRequest?.instruction).toContain('场景 | 镜头 | 来源 | 来源分格');
+      expect(repairRequest?.instruction).toContain('校验错误：');
+      expect(repairRequest?.instruction).not.toContain('The previous visible assistant output');
+      expect(context.messages.at(-1)).toEqual({
+        role: 'user',
+        content: repairRequest?.instruction,
+      });
+    });
+
+    it('does not apply storyboard creative table validation without skill metadata', async () => {
+      const hooks = new ValidationHooks({
+        outputConstraints: {
+          mermaidPreValidate: false,
+          onValidationFail: 'error',
+        },
+      });
+      const step = createTestStep(
+        [
+          '| 镜头 | 源页 | 景别/构图 | 画面内容 |',
+          '| --- | --- | --- | --- |',
+          '| 1 | P1 | 全景 | 主角站立 |',
+        ].join('\n'),
+      );
+
+      await expect(hooks.afterThink(step, createTestContext())).resolves.toBeUndefined();
     });
   });
 

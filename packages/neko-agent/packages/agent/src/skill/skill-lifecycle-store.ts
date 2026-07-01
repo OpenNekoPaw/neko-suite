@@ -69,6 +69,7 @@ export class SkillLifecycleStore {
       createdAt: input.createdAt,
       lastUsedTurn: input.lastUsedTurn,
       source: input.source,
+      ...(input.provenance ? { provenance: input.provenance } : {}),
     };
     this._records.set(id, record);
     return record;

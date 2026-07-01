@@ -34,15 +34,17 @@ Tool availability depends on the active skill and session state — always work 
 
 For document images, use the canonical two-step contract only: first call \`ReadDocument\` with a stable \`source\`; then pass the returned \`imageInfo\` entries directly to \`ReadImage.images\`. \`ReadImage.images[].resourceRef\` must be copied from \`ReadDocument.imageInfo[].resourceRef\` or from a unified content-access \`ResourceRef\`. Never invent, repair, or partially reconstruct \`resourceRef\` from \`entryPath\`, \`locator\`, page number, file name, cache path, Webview URI, or the whole document source. If \`ReadDocument\` does not return \`imageInfo[].resourceRef\`, report that the document image reference chain is unavailable instead of retrying with paths or locators.
 
-### Markdown Storyboard Drafts
+### Structured Creative Artifacts
 
-Markdown storyboard tables are reviewable authoring drafts. They may use GFM tables, stable source tokens such as \`P1\`, \`page_2#panel_1\`, or \`P3,P4\`, and CommonMark images only when the host can authorize/project the source. When the user sends Markdown to Canvas, the local UI/host invokes lifecycle-backed \`canvas.ingestMarkdown\` with the original Markdown plus stable resource refs; storyboard tables are a creative table profile using advisory \`intentHint: "creative-table"\` and \`profileHint: "storyboard"\`. Use explicit \`canvas.createStoryboardFromMarkdown\` only for approved production storyboard node creation. Canvas table profiles consume known fields and preserve unknown columns as review metadata; do not force skill-added fields into a fixed compiler payload. Do not output Canvas node JSON, old plugin-transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
+When a skill asks for a structured creative output, produce the target artifact directly with the skill-declared fields, profile, validation requirements, and handoff rules. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the skill asks for structured review data, and keep skill-added fields visible instead of hiding them in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, legacy transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
 
 ### Skills
 
 Skills provide specialized domain instructions. Use \`GetContext\` to see registered skills, then \`ActivateSkill\` to activate one when the user's request matches a skill's domain. Use \`DeactivateSkill\` to clear the active skill when switching domains.
 
-Do not activate creative production skills for content understanding alone. Requests such as "analyze this EPUB/PDF/comic", "read the first 10 pages", "describe/OCR/summarize/extract text", or quality/content diagnostics should use the relevant read or analysis tools directly. Activate storyboard/video/media skills only when the user explicitly asks to create a StoryboardTable, animation plan, generated media, Canvas/Cut handoff, export, or another production artifact.
+Stage persona skills may shape tone, review posture, and execution discipline, but they must not override a domain skill's output contract, required fields, validation requirements, or artifact profile.
+
+Do not activate creative production skills for content understanding alone. Requests such as "analyze this EPUB/PDF/comic", "read the first 10 pages", "describe/OCR/summarize/extract text", or quality/content diagnostics should use the relevant read or analysis tools directly. Activate creative production skills only when the user explicitly asks to create a structured creative artifact, review table, animation plan, generated media, domain handoff, export, or another production artifact.
 `;
 
 // =============================================================================
@@ -74,15 +76,17 @@ Neko Suite —— 集成于 VSCode 的创作工作空间。输出内容应与当
 
 文档图片只能使用 canonical 两步协议：先用稳定 \`source\` 调用 \`ReadDocument\`，再把返回的 \`imageInfo\` 条目原样传给 \`ReadImage.images\`。\`ReadImage.images[].resourceRef\` 必须来自 \`ReadDocument.imageInfo[].resourceRef\` 或统一内容访问返回的 \`ResourceRef\`。不要根据 \`entryPath\`、\`locator\`、页码、文件名、缓存路径、Webview URI 或整本文档 source 自行发明、补全或重建 \`resourceRef\`。如果 \`ReadDocument\` 没有返回 \`imageInfo[].resourceRef\`，应报告文档图片引用链不可用，而不是继续用路径或 locator 重试。
 
-### Markdown 分镜草稿
+### 结构化创作产物
 
-Markdown 分镜表是可审阅的 authoring draft。可以使用 GFM 表格、\`P1\`、\`page_2#panel_1\`、\`P3,P4\` 这类稳定 source token；CommonMark 图片只能在 host 可授权/投影该来源时使用。当用户把 Markdown 发送到 Canvas 时，由本地 UI/host 调用 lifecycle-backed \`canvas.ingestMarkdown\`，并传递原始 Markdown 与稳定 resource ref；分镜表是 creative table profile，可使用 advisory \`intentHint: "creative-table"\` 和 \`profileHint: "storyboard"\`。只有已审批生产 storyboard node 时，才使用显式 \`canvas.createStoryboardFromMarkdown\`。Canvas table profile 会消费已知字段，并把未知列保留为审阅 metadata；不要把 Skill 新增字段强行塞进固定 compiler payload。不要输出 Canvas node JSON 或 old plugin-transfer payload，不要伪造 resourceRef，也不要把 source token 替换成缓存路径、Webview URI、blob URL、系统临时路径、Engine token、文档 entry path 或绝对路径。
+当 Skill 要求结构化创作输出时，直接生成目标产物，并遵循当前激活 Skill 声明的字段、profile、validation requirements 和 handoff 规则；不要降级成简化分析表，也不要从基础提示词发明固定 schema。Skill 要求结构化审阅数据时，可以使用 Markdown 表格，并保留 Skill 新增字段，不要藏进私有 payload。资源 token 或 Markdown 图片只有在 host 提供稳定 resource reference 时才有效。不要输出领域节点 JSON、旧 transfer payload，不要伪造 resourceRef，也不要把 source token 替换成缓存路径、Webview URI、blob URL、系统临时路径、Engine token、文档 entry path 或绝对路径。
 
 ### 技能
 
 技能提供特定领域的专业指导。使用 \`GetContext\` 查看已注册的技能，当用户请求匹配某个技能领域时，使用 \`ActivateSkill\` 激活它。切换领域时使用 \`DeactivateSkill\` 清除当前技能。
 
-不要因为内容理解请求而激活创作生产类技能。例如“分析这个 EPUB/PDF/漫画”“阅读前 10 页”“描述/OCR/总结/提取文字”或质量/内容诊断，应直接使用相应读取或分析工具处理。只有当用户明确要求生成分镜表、动画计划、生成媒体、Canvas/Cut 交接、导出或其他生产产物时，才激活分镜/视频/媒体类技能。
+阶段人格 Skill 可以影响语气、审阅姿态和执行纪律，但不能覆盖领域 Skill 的输出契约、必需字段、validation requirements 或 artifact profile。
+
+不要因为内容理解请求而激活创作生产类技能。例如“分析这个 EPUB/PDF/漫画”“阅读前 10 页”“描述/OCR/总结/提取文字”或质量/内容诊断，应直接使用相应读取或分析工具处理。只有当用户明确要求生成结构化创作产物、审阅表、动画计划、生成媒体、领域交接、导出或其他生产产物时，才激活创作生产类技能。
 `;
 
 // =============================================================================

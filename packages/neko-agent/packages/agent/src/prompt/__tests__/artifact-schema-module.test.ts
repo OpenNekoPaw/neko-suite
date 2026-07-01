@@ -57,6 +57,16 @@ describe('ArtifactSchemaModule', () => {
     expect(content).toContain('Do not create, read, or repair creation document files yourself');
   });
 
+  it('keeps creation-document frontmatter out of normal chat replies', () => {
+    const mod = new ArtifactSchemaModule();
+    const content = mod.renderSync(makeCtx({ runId: 'r1' }))![0]!.content;
+    expect(content).toContain('write only the human-readable artifact');
+    expect(content).toContain('body in chat');
+    expect(content).toContain('Do not include YAML frontmatter');
+    expect(content).toContain('normal assistant replies');
+    expect(content).toContain('runtime-persisted creation documents only');
+  });
+
   it('different runIds produce different content', () => {
     const mod = new ArtifactSchemaModule();
     const s1 = mod.renderSync(makeCtx({ runId: 'foo' }))![0]!.content;

@@ -226,7 +226,7 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
       // bindings subscribe to `stage.entered` to swap Skills. We pick the
       // terminal activated stage (already DAG-sorted by the planner).
       const terminal = terminalStage(decision.activated);
-      if (deps.stageTracker) {
+      if (deps.stageTracker && activeRunId) {
         if (terminal) deps.stageTracker.enter(terminal);
       }
       logger.debug(

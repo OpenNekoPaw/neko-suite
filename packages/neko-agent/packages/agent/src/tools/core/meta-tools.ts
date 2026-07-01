@@ -5,6 +5,7 @@
  * - GetContext: Current state overview (active skill, registered skills, tool categories)
  * - ActivateSkill: AI-driven skill activation (injects domain-specific instructions)
  * - DeactivateSkill: Clear the active skill
+ * - StartIDCWorkflow / SetExecutionMode: AI-driven capability activation through typed intents
  */
 
 import type {
@@ -21,6 +22,7 @@ import type {
   SkillLifecycleDiagnostic,
 } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
+import type { ExecutionMode, IdcWorkflowActivationResult } from '../../session/types';
 
 // =============================================================================
 // Skill Provider Interface
@@ -66,6 +68,21 @@ export interface ISkillProvider {
     message: string;
     removedRecordIds?: readonly string[];
     diagnostics?: readonly SkillLifecycleDiagnostic[];
+  }>;
+  /** Start or resume the IDC workflow through an Agent-tool activation intent. */
+  startIdcWorkflow?(input: {
+    readonly runKind: string;
+    readonly runId?: string;
+    readonly reason?: string;
+  }): SkillProviderMaybePromise<IdcWorkflowActivationResult>;
+  /** Request an execution-mode change through an Agent-tool activation intent. */
+  setExecutionMode?(input: {
+    readonly mode: ExecutionMode;
+    readonly reason?: string;
+  }): SkillProviderMaybePromise<{
+    readonly success: boolean;
+    readonly message: string;
+    readonly mode?: ExecutionMode;
   }>;
 }
 
@@ -268,6 +285,138 @@ export class DeactivateSkillTool extends BuiltinTool {
 }
 
 // =============================================================================
+// StartIDCWorkflow Tool
+// =============================================================================
+
+/**
+ * StartIDCWorkflow - AI-driven IDC workflow activation.
+ */
+export class StartIDCWorkflowTool extends BuiltinTool {
+  readonly name = 'StartIDCWorkflow';
+  readonly description =
+    'Start or resume the IDC workflow when the task needs Draft/Plan/Apply lifecycle tracking. Use this only when the workflow should become visibly active.';
+  readonly parameters: ToolParameters = {
+    type: 'object',
+    properties: {
+      runKind: {
+        type: 'string',
+        description: 'Workflow kind or origin label for the IDC run',
+      },
+      runId: {
+        type: 'string',
+        description: 'Optional stable run id to resume or reuse',
+      },
+      reason: {
+        type: 'string',
+        description: 'Short reason shown in activation provenance',
+      },
+    },
+    required: ['runKind'],
+  };
+  readonly category: ToolCategory = 'system';
+
+  private _skillProvider?: ISkillProvider;
+
+  setSkillProvider(provider: ISkillProvider): void {
+    this._skillProvider = provider;
+  }
+
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const validation = this.validateArgs(args);
+    if (!validation.valid) {
+      return this.error(validation.error ?? 'Invalid arguments');
+    }
+
+    if (!this._skillProvider?.startIdcWorkflow) {
+      return this.error('IDC workflow activation is not initialized');
+    }
+
+    const result = await this._skillProvider.startIdcWorkflow({
+      runKind: String(args.runKind),
+      ...(typeof args.runId === 'string' ? { runId: args.runId } : {}),
+      ...(typeof args.reason === 'string' ? { reason: args.reason } : {}),
+    });
+
+    if (!result.success) {
+      return this.error(result.message);
+    }
+
+    return this.success({
+      started: true,
+      runKind: String(args.runKind),
+      runId: result.runId,
+      message: result.message,
+      diagnostics: result.diagnostics,
+    });
+  }
+}
+
+// =============================================================================
+// SetExecutionMode Tool
+// =============================================================================
+
+/**
+ * SetExecutionMode - AI-driven visible execution-mode request.
+ */
+export class SetExecutionModeTool extends BuiltinTool {
+  readonly name = 'SetExecutionMode';
+  readonly description =
+    'Request a visible execution mode change. Use plan to dry-run, ask to require approval, and auto to run approved safe actions automatically.';
+  readonly parameters: ToolParameters = {
+    type: 'object',
+    properties: {
+      mode: {
+        type: 'string',
+        enum: ['plan', 'ask', 'auto'],
+        description: 'Execution mode to set',
+      },
+      reason: {
+        type: 'string',
+        description: 'Short reason shown in activation provenance',
+      },
+    },
+    required: ['mode'],
+  };
+  readonly category: ToolCategory = 'system';
+
+  private _skillProvider?: ISkillProvider;
+
+  setSkillProvider(provider: ISkillProvider): void {
+    this._skillProvider = provider;
+  }
+
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const validation = this.validateArgs(args);
+    if (!validation.valid) {
+      return this.error(validation.error ?? 'Invalid arguments');
+    }
+
+    const mode = readExecutionMode(args.mode);
+    if (!mode) {
+      return this.error('Invalid execution mode');
+    }
+    if (!this._skillProvider?.setExecutionMode) {
+      return this.error('Execution mode activation is not initialized');
+    }
+
+    const result = await this._skillProvider.setExecutionMode({
+      mode,
+      ...(typeof args.reason === 'string' ? { reason: args.reason } : {}),
+    });
+
+    if (!result.success) {
+      return this.error(result.message);
+    }
+
+    return this.success({
+      changed: true,
+      mode: result.mode ?? mode,
+      message: result.message,
+    });
+  }
+}
+
+// =============================================================================
 // Factory
 // =============================================================================
 
@@ -283,5 +432,11 @@ export function createCoreMetaTools(
     new GetContextTool(categoryRegistry, skillRegistry),
     new ActivateSkillTool(),
     new DeactivateSkillTool(),
+    new StartIDCWorkflowTool(),
+    new SetExecutionModeTool(),
   ];
+}
+
+function readExecutionMode(value: unknown): ExecutionMode | null {
+  return value === 'plan' || value === 'ask' || value === 'auto' ? value : null;
 }

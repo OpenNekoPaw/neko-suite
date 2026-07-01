@@ -230,10 +230,12 @@ function projectLocalMediaStringField(input: {
   readonly options: MessageResourceProjectionOptions;
 }): boolean {
   if (!isProjectableLocalMediaStringField(input.key, input.item)) return false;
-  if (hasStableDocumentResourceRef(input.owner)) return true;
   const resolved = resolveLocalMediaPath(input.item, input.options);
   if (resolved) {
-    input.projected[input.key] = resolved;
+    input.projected[input.key] = hasStableResourceRef(input.owner) ? input.item : resolved;
+    if (hasStableResourceRef(input.owner) && input.projected['renderUri'] === undefined) {
+      input.projected['renderUri'] = resolved;
+    }
   } else {
     appendProjectionDiagnostic(input.projected, input.item, input.key);
   }
@@ -248,7 +250,7 @@ function isProjectableLocalMediaStringField(key: string, item: unknown): item is
   );
 }
 
-function hasStableDocumentResourceRef(value: object): boolean {
+function hasStableResourceRef(value: object): boolean {
   return (
     Object.prototype.hasOwnProperty.call(value, 'resourceRef') ||
     Object.prototype.hasOwnProperty.call(value, 'documentResourceRef')

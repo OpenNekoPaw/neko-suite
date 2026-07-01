@@ -22,6 +22,12 @@ export interface ImageConstraints {
 export interface OutputConstraints {
   /** Enable Mermaid syntax pre-validation */
   mermaidPreValidate: boolean;
+  /**
+   * Artifact/table validators to apply to final assistant output.
+   * Dynamic Skill-specific requirements may also be supplied through
+   * AgentContext.metadata.skillValidationRequirements.
+   */
+  artifactValidators?: readonly string[];
   /** JSON Schema for validation */
   jsonSchema?: object;
   /** Maximum output length in characters */

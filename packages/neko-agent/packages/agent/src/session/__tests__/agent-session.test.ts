@@ -8,7 +8,12 @@ import { AgentSession } from '../agent-session';
 import { PLAN_MODE_SYSTEM_REMINDER } from '../../permission/types';
 import { ToolRegistry } from '../../tools';
 import type { AgentSessionConfig, AgentEvent } from '../types';
-import { TOOL_NAMES_PERCEPTION, createSubagentReviewEvidence } from '@neko/shared';
+import {
+  TOOL_NAMES_MEDIA,
+  TOOL_NAMES_PERCEPTION,
+  createAgentCapabilityActivationIntent,
+  createSubagentReviewEvidence,
+} from '@neko/shared';
 import type {
   IService,
   IToolRegistry,
@@ -44,6 +49,25 @@ function getCompletedRuns(session: AgentSession) {
   return ((
     session as unknown as { _runStore?: { listCompleted(): readonly unknown[] } }
   )._runStore?.listCompleted() ?? []) as readonly unknown[];
+}
+
+function startIdcRunForTest(session: AgentSession, runKind: string, runId?: string): string | null {
+  return (
+    session.startIdcRunWithIntent({
+      runKind,
+      ...(runId ? { runId } : {}),
+      intent: createAgentCapabilityActivationIntent({
+        conversationId: 'test-conversation',
+        source: 'user-explicit',
+        target: 'idc-workflow',
+        action: runId ? 'resume' : 'activate',
+        name: runKind,
+        requestedBy: 'user',
+        reason: `Test starts IDC workflow ${runKind}`,
+        createdAt: Date.now(),
+      }),
+    }).runId ?? null
+  );
 }
 
 function getInternalRunStore(session: AgentSession) {
@@ -510,7 +534,7 @@ describe('AgentSession', () => {
   });
 
   describe('execute() failure lifecycle', () => {
-    it('ends the IDC run as failed with a serializable error cause', async () => {
+    it('does not create an IDC run when execute() fails without explicit workflow activation', async () => {
       const session = new AgentSession(
         createConfig({
           executionMode: 'plan',
@@ -538,20 +562,7 @@ describe('AgentSession', () => {
         content: 'executor blew up',
       });
       expect(session.getActiveIdcRun()).toBeNull();
-      expect(getCompletedRuns(session)).toEqual([
-        expect.objectContaining({
-          runKind: 'plan-mode',
-          status: 'failed',
-          error: expect.objectContaining({
-            code: 'execute_failed',
-            message: 'executor blew up',
-            cause: expect.objectContaining({
-              name: 'Error',
-              message: 'executor blew up',
-            }),
-          }),
-        }),
-      ]);
+      expect(getCompletedRuns(session)).toEqual([]);
     });
   });
 
@@ -1066,6 +1077,65 @@ describe('AgentSession', () => {
       const historyAfter = session.getHistory();
       expect(historyAfter[0]!.content).not.toContain('Skill-specific instructions');
     });
+
+    it('should activate lazy ToolSets for allowed tools on applySkillInjection', () => {
+      const session = new AgentSession(config);
+      const toolInjectionManager = (session as unknown as Record<string, unknown>)[
+        '_toolInjectionManager'
+      ] as { getState(): { activeToolSets: string[] }; getToolsForTurn(input: string): string[] };
+
+      expect(toolInjectionManager.getState().activeToolSets).not.toContain('ai-generation');
+
+      session.applySkillInjection({
+        name: 'ai-generate',
+        systemPrompt: 'Generate media assets.',
+        allowedTools: [TOOL_NAMES_MEDIA.GENERATE_IMAGE],
+        type: 'skill',
+      });
+
+      expect(toolInjectionManager.getState().activeToolSets).toContain('ai-generation');
+      expect(toolInjectionManager.getToolsForTurn('generate an image')).toContain(
+        TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+      );
+
+      session.removeSkillInjection('ai-generate');
+
+      expect(toolInjectionManager.getState().activeToolSets).not.toContain('ai-generation');
+    });
+
+    it('should expose image generation tools for media model metadata during execute', async () => {
+      const session = new AgentSession(config);
+      const toolInjectionManager = (session as unknown as Record<string, unknown>)[
+        '_toolInjectionManager'
+      ] as { getState(): { activeToolSets: string[] }; getToolsForTurn(input: string): string[] };
+      const mockExec = injectMockExecutor(session, []);
+      mockExec.executeStream.mockImplementationOnce(async function* () {
+        expect(toolInjectionManager.getState().activeToolSets).toContain('ai-generation');
+        expect(toolInjectionManager.getToolsForTurn('生成猫猫图片')).toContain(
+          TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+        );
+        yield {
+          type: 'think',
+          content: 'done',
+          timestamp: 1,
+        };
+      });
+
+      expect(toolInjectionManager.getState().activeToolSets).not.toContain('ai-generation');
+
+      await collectEvents(
+        session.execute('生成猫猫图片', {
+          metadata: {
+            mediaModels: {
+              image: { providerId: 'openai', modelId: 'gpt-image-1' },
+            },
+          },
+        }),
+      );
+
+      expect(mockExec.executeStream).toHaveBeenCalled();
+      expect(toolInjectionManager.getState().activeToolSets).not.toContain('ai-generation');
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -1092,7 +1162,7 @@ describe('AgentSession', () => {
       );
       const runStore = getInternalRunStore(session);
 
-      session.startIdcRun('wf', 'run-active');
+      startIdcRunForTest(session, 'wf', 'run-active');
       session.dispose();
 
       expect(runStore?.getActive()).toBeNull();
@@ -1108,10 +1178,14 @@ describe('AgentSession', () => {
     it('disposes a runtime-provided artifact watcher', () => {
       const start = vi.fn().mockResolvedValue(undefined);
       const disposeWatcher = vi.fn().mockResolvedValue(undefined);
-      const artifactWatcherFactory = vi.fn(() => ({
-        start,
-        dispose: disposeWatcher,
-      }));
+      let getWatcherCreationId: (() => string | null) | undefined;
+      const artifactWatcherFactory = vi.fn((input: { getCreationId(): string | null }) => {
+        getWatcherCreationId = input.getCreationId;
+        return {
+          start,
+          dispose: disposeWatcher,
+        };
+      });
       const session = new AgentSession(
         createConfig({
           stageTracking: {},
@@ -1133,8 +1207,8 @@ describe('AgentSession', () => {
           getCreationId: expect.any(Function),
         }),
       );
-      const watcherConfig = artifactWatcherFactory.mock.calls[0]?.[0];
-      expect(watcherConfig?.getCreationId()).toBeNull();
+      expect(getWatcherCreationId).toBeDefined();
+      expect(getWatcherCreationId?.()).toBeNull();
       expect(start).toHaveBeenCalledTimes(1);
 
       session.dispose();
@@ -1195,8 +1269,9 @@ describe('AgentSession', () => {
           },
         }),
       );
+      startIdcRunForTest(session, 'stage-persona', 'run-stage-persona');
 
-      // Initial sync is fire-and-forget; wait for it.
+      // Stage persona activation requires an explicitly active IDC workflow.
       await session.syncStagePersona();
 
       expect(session.getCurrentStage()).toBe('draft');
@@ -1251,7 +1326,7 @@ describe('AgentSession', () => {
       expect(session.enterStage('apply')).toBe(false);
     });
 
-    it('starts an IDC run automatically when execute() begins', async () => {
+    it('does not start an IDC run automatically when execute() begins', async () => {
       const session = new AgentSession(
         createConfig({
           executionMode: 'plan',
@@ -1265,12 +1340,7 @@ describe('AgentSession', () => {
       await collectEvents(session.execute('Outline the implementation'));
 
       expect(session.getActiveIdcRun()).toBeNull();
-      expect(getCompletedRuns(session)).toEqual([
-        expect.objectContaining({
-          runKind: 'plan-mode',
-          status: 'completed',
-        }),
-      ]);
+      expect(getCompletedRuns(session)).toEqual([]);
     });
 
     it('startIdcRun writes runKind', () => {
@@ -1280,7 +1350,7 @@ describe('AgentSession', () => {
         }),
       );
 
-      session.startIdcRun('artifact-resume', 'run-kind');
+      startIdcRunForTest(session, 'artifact-resume', 'run-kind');
 
       expect(session.getActiveIdcRun()).toEqual(
         expect.objectContaining({
@@ -1288,6 +1358,73 @@ describe('AgentSession', () => {
           runKind: 'artifact-resume',
           status: 'running',
         }),
+      );
+    });
+
+    it('stops an IDC run only through an explicit user intent', () => {
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {},
+        }),
+      );
+      startIdcRunForTest(session, 'artifact-resume', 'run-stop');
+
+      const result = session.stopIdcRunWithIntent({
+        intent: createAgentCapabilityActivationIntent({
+          conversationId: 'test-conversation',
+          source: 'user-explicit',
+          target: 'idc-workflow',
+          action: 'deactivate',
+          name: 'artifact-resume',
+          requestedBy: 'user',
+          reason: 'Test stops IDC workflow',
+          createdAt: Date.now(),
+        }),
+      });
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          success: true,
+          runId: 'run-stop',
+        }),
+      );
+      expect(session.getActiveIdcRun()).toBeNull();
+      expect(getCompletedRuns(session)).toEqual([
+        expect.objectContaining({ id: 'run-stop', status: 'aborted' }),
+      ]);
+      expect(result.events.map((event) => event.step)).toEqual([
+        'requested',
+        'validated',
+        'prepared',
+        'projected',
+        'active',
+      ]);
+    });
+
+    it('rejects IDC stop without an idc-workflow deactivate intent', () => {
+      const session = new AgentSession(
+        createConfig({
+          stageTracking: {},
+        }),
+      );
+      startIdcRunForTest(session, 'artifact-resume', 'run-invalid-stop');
+
+      const result = session.stopIdcRunWithIntent({
+        intent: createAgentCapabilityActivationIntent({
+          conversationId: 'test-conversation',
+          source: 'user-explicit',
+          target: 'execution-mode',
+          action: 'set',
+          name: 'plan',
+          requestedBy: 'user',
+          createdAt: Date.now(),
+        }),
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.diagnostics?.[0]?.code).toBe('invalid-idc-workflow-deactivation-intent');
+      expect(session.getActiveIdcRun()).toEqual(
+        expect.objectContaining({ id: 'run-invalid-stop', status: 'running' }),
       );
     });
   });
@@ -2341,7 +2478,7 @@ describe('AgentSession', () => {
           }),
         );
 
-        session.startIdcRun('wf-debounce', 'run-1');
+        startIdcRunForTest(session, 'wf-debounce', 'run-1');
         await Promise.resolve();
 
         expect(
@@ -2396,7 +2533,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startIdcRun('wf-artifacts', 'run-1');
+      startIdcRunForTest(session, 'wf-artifacts', 'run-1');
 
       const draft: Draft = {
         id: 'draft-1',
@@ -2429,23 +2566,14 @@ describe('AgentSession', () => {
       await session.writePlanArtifact(plan);
       await session.writeTaskArtifact(task);
       await session.flushWorkspaceSink();
+      const artifactBase = '/tmp/proj/neko/creations/cut-trailer-draft-draft-1';
+      const draftPath = `${artifactBase}/brief.md`;
+      const planPath = `${artifactBase}/plan.md`;
+      const taskPath = `${artifactBase}/checklist.md`;
 
-      expect(
-        writes.filter(
-          (entry) => entry.path === '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/brief.md',
-        ),
-      ).toHaveLength(1);
-      expect(
-        writes.filter(
-          (entry) => entry.path === '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/plan.md',
-        ),
-      ).toHaveLength(1);
-      expect(
-        writes.filter(
-          (entry) =>
-            entry.path === '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/checklist.md',
-        ),
-      ).toHaveLength(1);
+      expect(writes.filter((entry) => entry.path === draftPath)).toHaveLength(1);
+      expect(writes.filter((entry) => entry.path === planPath)).toHaveLength(1);
+      expect(writes.filter((entry) => entry.path === taskPath)).toHaveLength(1);
       expect(session.getArtifactsForRun('run-1').map((record) => record.kind)).toEqual([
         'draft',
         'plan',
@@ -2461,19 +2589,19 @@ describe('AgentSession', () => {
             {
               kind: 'draft',
               artifactId: 'draft-1',
-              path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/brief.md',
+              path: draftPath,
               updatedAt: 2,
             },
             {
               kind: 'plan',
               artifactId: 'plan-1',
-              path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/plan.md',
+              path: planPath,
               updatedAt: 4,
             },
             {
               kind: 'task',
               artifactId: 'task-1',
-              path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/checklist.md',
+              path: taskPath,
               updatedAt: 6,
             },
           ],
@@ -2494,19 +2622,19 @@ describe('AgentSession', () => {
         {
           kind: 'draft',
           artifactId: 'draft-1',
-          path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/brief.md',
+          path: draftPath,
           updatedAt: 2,
         },
         {
           kind: 'plan',
           artifactId: 'plan-1',
-          path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/plan.md',
+          path: planPath,
           updatedAt: 4,
         },
         {
           kind: 'task',
           artifactId: 'task-1',
-          path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/checklist.md',
+          path: taskPath,
           updatedAt: 6,
         },
       ]);
@@ -2583,9 +2711,10 @@ describe('AgentSession', () => {
       session.dispose();
     });
 
-    it('marks missing restored artifact bindings as stale when ArtifactService is authoritative', async () => {
+    it('does not silently restore persisted active IDC state from startup snapshots', async () => {
       const { registry, service } = minimalStageTrackingConfig();
       const writes: Array<{ path: string; data: string }> = [];
+      const activationEvents: import('@neko/shared').AgentCapabilityActivationProgressEvent[] = [];
       const restoredDraft: Draft = {
         id: 'draft-active',
         title: 'Recovered draft',
@@ -2697,34 +2826,31 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
           artifactService: artifactService as never,
           idcTaskProjection: projection as never,
+          onActivationProgress: (_conversationId, events) => {
+            activationEvents.push(...events);
+          },
         }),
       );
 
       await session.flushWorkspaceSink();
 
       expect(projection.syncTask).not.toHaveBeenCalled();
-      expect(session.getActiveIdcRun()).toEqual(
+      expect(session.getActiveIdcRun()).toBeNull();
+      expect(session.getIdcRun('run-active')).toBeNull();
+      expect(activationEvents).toEqual([
         expect.objectContaining({
-          id: 'run-active',
-          runKind: 'wf-active',
-          draft: restoredDraft,
-          artifactBindings: [
-            {
-              kind: 'draft',
-              artifactId: 'draft-active',
-              path: '/tmp/proj/neko/creations/active-creation/brief.md',
-              updatedAt: 11,
-            },
-            {
-              kind: 'task',
-              artifactId: 'task-missing',
-              path: '/tmp/proj/neko/creations/active-creation/checklist.md',
-              updatedAt: 31,
-              stale: true,
-            },
+          target: 'idc-workflow',
+          action: 'resume',
+          name: 'wf-active',
+          step: 'failed',
+          status: 'failed',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'persisted-idc-requires-explicit-resume',
+            }),
           ],
         }),
-      );
+      ]);
 
       const snapshot = parseLatestWrite<{
         run: {
@@ -2739,21 +2865,7 @@ describe('AgentSession', () => {
           };
         };
       }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
-      expect(snapshot.run.active?.artifacts).toEqual([
-        {
-          kind: 'draft',
-          artifactId: 'draft-active',
-          path: '/tmp/proj/neko/creations/active-creation/brief.md',
-          updatedAt: 11,
-        },
-        {
-          kind: 'task',
-          artifactId: 'task-missing',
-          path: '/tmp/proj/neko/creations/active-creation/checklist.md',
-          updatedAt: 31,
-          stale: true,
-        },
-      ]);
+      expect(snapshot.run.active).toBeUndefined();
 
       session.dispose();
     });
@@ -2761,6 +2873,7 @@ describe('AgentSession', () => {
     it('restores stage/run runtime state and hydrates run artifacts on startup', async () => {
       const { registry, service } = minimalStageTrackingConfig();
       const writes: Array<{ path: string; data: string }> = [];
+      const activationEvents: import('@neko/shared').AgentCapabilityActivationProgressEvent[] = [];
       const restoredDraft: Draft = {
         id: 'draft-active',
         title: 'Recovered draft',
@@ -2931,6 +3044,9 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
           artifactService: artifactService as never,
           idcTaskProjection: projection as never,
+          onActivationProgress: (_conversationId, events) => {
+            activationEvents.push(...events);
+          },
         }),
       );
 
@@ -2939,7 +3055,6 @@ describe('AgentSession', () => {
       expect(artifactService.restore).toHaveBeenCalledTimes(1);
       expect(projection.syncTask).toHaveBeenCalledWith({
         runId: 'run-active',
-        runStartedAt: 2,
         task: restoredTask,
         artifact: {
           kind: 'task',
@@ -2948,71 +3063,26 @@ describe('AgentSession', () => {
           updatedAt: 31,
         },
       });
+      expect(projection.clearRun).not.toHaveBeenCalled();
       expect(session.listArtifactRunIds()).toEqual(['run-active', 'run-done']);
-      expect(session.getIdcRun('run-active')).toEqual(
+      expect(session.getArtifactsForRun('run-active')).toEqual([draftRecord, taskRecord]);
+      expect(session.getArtifactsForRun('run-done')).toEqual([planRecord]);
+      expect(session.getIdcRun('run-active')).toBeNull();
+      expect(session.getIdcRun('run-done')).toBeNull();
+      expect(session.listIdcRuns()).toEqual([]);
+      expect(session.getActiveIdcRun()).toBeNull();
+      expect(getCompletedRuns(session)).toEqual([]);
+      expect(activationEvents).toEqual([
         expect.objectContaining({
-          id: 'run-active',
-          runKind: 'wf-active',
-        }),
-      );
-      expect(session.getIdcRun('run-done')).toEqual(
-        expect.objectContaining({
-          id: 'run-done',
-          runKind: 'wf-done',
-        }),
-      );
-      expect(session.listIdcRuns()).toEqual([
-        expect.objectContaining({ id: 'run-active', status: 'running' }),
-        expect.objectContaining({ id: 'run-done', status: 'completed' }),
-      ]);
-      expect(session.getActiveIdcRun()).toEqual(
-        expect.objectContaining({
-          id: 'run-active',
-          runKind: 'wf-active',
-          status: 'running',
-          draft: restoredDraft,
-          task: restoredTask,
-          rounds: [
+          target: 'idc-workflow',
+          action: 'resume',
+          name: 'wf-active',
+          step: 'failed',
+          status: 'failed',
+          diagnostics: [
             expect.objectContaining({
-              round: 0,
-              activatedStages: ['draft', 'plan'],
+              code: 'persisted-idc-requires-explicit-resume',
             }),
-          ],
-          artifactBindings: [
-            {
-              kind: 'draft',
-              artifactId: 'draft-active',
-              path: '/tmp/proj/neko/creations/active-creation/brief.md',
-              updatedAt: 11,
-            },
-            {
-              kind: 'task',
-              artifactId: 'task-active',
-              path: '/tmp/proj/neko/creations/active-creation/checklist.md',
-              updatedAt: 31,
-            },
-          ],
-        }),
-      );
-      expect(getCompletedRuns(session)).toEqual([
-        expect.objectContaining({
-          id: 'run-done',
-          runKind: 'wf-done',
-          status: 'completed',
-          plan: restoredPlan,
-          rounds: [
-            expect.objectContaining({
-              round: 0,
-              activatedStages: ['apply'],
-            }),
-          ],
-          artifactBindings: [
-            {
-              kind: 'plan',
-              artifactId: 'plan-done',
-              path: '/tmp/proj/neko/creations/done-creation/plan.md',
-              updatedAt: 21,
-            },
           ],
         }),
       ]);
@@ -3037,34 +3107,17 @@ describe('AgentSession', () => {
       }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
 
       expect(snapshot.stage).toEqual({
-        current: 'plan',
-        enteredAt: 40,
-        transitions: [
-          { from: null, to: 'draft', at: 10 },
-          { from: 'draft', to: 'plan', at: 20 },
-        ],
+        current: null,
+        transitions: [],
       });
-      expect(snapshot.run.active).toEqual(
-        expect.objectContaining({
-          id: 'run-active',
-          roundCount: 1,
-          rounds: [
-            { round: 0, activatedStages: ['draft', 'plan'], skippedStages: [], decidedAt: 3 },
-          ],
-        }),
-      );
-      expect(snapshot.run.lastCompleted).toEqual(
-        expect.objectContaining({
-          id: 'run-done',
-          status: 'completed',
-          rounds: [{ round: 0, activatedStages: ['apply'], skippedStages: [], decidedAt: 6 }],
-        }),
-      );
+      expect(snapshot.run.active).toBeUndefined();
+      expect(snapshot.run.lastCompleted).toBeUndefined();
       session.dispose();
     });
 
-    it('clears restored IDC task projection for completed runs during startup restore', async () => {
+    it('restores completed task artifacts without resuming completed IDC runs', async () => {
       const { registry, service } = minimalStageTrackingConfig();
+      const activationEvents: import('@neko/shared').AgentCapabilityActivationProgressEvent[] = [];
       const completedTask: Task = {
         id: 'task-done',
         createdAt: 60,
@@ -3149,6 +3202,9 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
           artifactService: artifactService as never,
           idcTaskProjection: projection as never,
+          onActivationProgress: (_conversationId, events) => {
+            activationEvents.push(...events);
+          },
         }),
       );
 
@@ -3156,7 +3212,6 @@ describe('AgentSession', () => {
 
       expect(projection.syncTask).toHaveBeenCalledWith({
         runId: 'run-done',
-        runStartedAt: 11,
         task: completedTask,
         artifact: {
           kind: 'task',
@@ -3165,14 +3220,23 @@ describe('AgentSession', () => {
           updatedAt: 61,
         },
       });
-      expect(projection.clearRun).toHaveBeenCalledWith('run-done', 11);
+      expect(projection.clearRun).not.toHaveBeenCalled();
       expect(session.getActiveIdcRun()).toBeNull();
-      expect(session.getIdcRun('run-done')).toEqual(
+      expect(session.getIdcRun('run-done')).toBeNull();
+      expect(session.getArtifactsForRun('run-done')).toEqual([completedTaskRecord]);
+      expect(activationEvents).toEqual([
         expect.objectContaining({
-          id: 'run-done',
-          status: 'completed',
+          target: 'idc-workflow',
+          action: 'resume',
+          step: 'failed',
+          status: 'failed',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'persisted-idc-requires-explicit-resume',
+            }),
+          ],
         }),
-      );
+      ]);
       session.dispose();
     });
 
@@ -3207,7 +3271,7 @@ describe('AgentSession', () => {
       };
 
       await session.writeDraftArtifact(draft, { runId: 'run-reuse' });
-      session.startIdcRun('wf-reuse', 'run-reuse');
+      startIdcRunForTest(session, 'wf-reuse', 'run-reuse');
 
       expect(session.getActiveIdcRun()).toEqual(
         expect.objectContaining({
@@ -3217,7 +3281,7 @@ describe('AgentSession', () => {
             {
               kind: 'draft',
               artifactId: 'draft-reuse',
-              path: '/tmp/proj/neko/creations/reuse-creation/brief.md',
+              path: '/tmp/proj/neko/creations/cut-reuse-me-draft-reuse/brief.md',
               updatedAt: 11,
             },
           ],
@@ -3264,7 +3328,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startIdcRun('wf-observed', 'run-observed');
+      startIdcRunForTest(session, 'wf-observed', 'run-observed');
 
       const observedPath = '/tmp/proj/neko/creations/observed-creation/plan.md';
       files.set(
@@ -3393,7 +3457,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startIdcRun('wf-task-echo', 'run-task-echo');
+      startIdcRunForTest(session, 'wf-task-echo', 'run-task-echo');
 
       const task: Task = {
         id: 'task-echo',
@@ -3453,7 +3517,7 @@ describe('AgentSession', () => {
           idcTaskProjection: idcTaskProjection as never,
         }),
       );
-      session.startIdcRun('wf-task-projection', 'run-1');
+      startIdcRunForTest(session, 'wf-task-projection', 'run-1');
       const activeRun = session.getActiveIdcRun();
       expect(activeRun).toEqual(
         expect.objectContaining({
@@ -3479,7 +3543,7 @@ describe('AgentSession', () => {
         artifact: {
           kind: 'task',
           artifactId: 'task-1',
-          path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/checklist.md',
+          path: '/tmp/proj/neko/creations/task-1/checklist.md',
           updatedAt: 6,
         },
       });
@@ -3502,7 +3566,7 @@ describe('AgentSession', () => {
         }),
       );
       injectMockExecutor(session, []);
-      session.startIdcRun('wf-task-cleanup', 'run-complete');
+      startIdcRunForTest(session, 'wf-task-cleanup', 'run-complete');
       const startedAt = session.getIdcRun('run-complete')?.startedAt;
       expect(startedAt).toEqual(expect.any(Number));
 
@@ -3529,7 +3593,7 @@ describe('AgentSession', () => {
           idcTaskProjection: idcTaskProjection as never,
         }),
       );
-      session.startIdcRun('wf-task-dispose', 'run-dispose');
+      startIdcRunForTest(session, 'wf-task-dispose', 'run-dispose');
       const startedAt = session.getIdcRun('run-dispose')?.startedAt;
       expect(startedAt).toEqual(expect.any(Number));
 
@@ -3559,7 +3623,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startIdcRun('test-wf', 'run-1');
+      startIdcRunForTest(session, 'test-wf', 'run-1');
 
       const engine = session.getApprovalEngine()!;
       await engine.evaluate({
@@ -3603,7 +3667,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startIdcRun('test-wf', 'run-1');
+      startIdcRunForTest(session, 'test-wf', 'run-1');
 
       await session.getApprovalEngine()!.evaluate({
         channel: 'permission',
@@ -3645,7 +3709,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startIdcRun('wf', 'run-1');
+      startIdcRunForTest(session, 'wf', 'run-1');
 
       const bus = session.getEventBus()!;
       bus.emit({
@@ -3735,7 +3799,7 @@ describe('AgentSession', () => {
         }),
       );
 
-      session.startIdcRun('wf-demo', 'run-1');
+      startIdcRunForTest(session, 'wf-demo', 'run-1');
       session.enterStage('draft');
       session.enterStage('plan');
       (
@@ -4235,7 +4299,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startIdcRun('wf', 'run-1');
+      startIdcRunForTest(session, 'wf', 'run-1');
 
       await session.whenPreferencesReady();
 
@@ -4325,7 +4389,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      session.startIdcRun('wf', 'run-1');
+      startIdcRunForTest(session, 'wf', 'run-1');
       await session.whenPreferencesReady();
 
       // User said "auto approve tool:DeleteAll" but the subject is

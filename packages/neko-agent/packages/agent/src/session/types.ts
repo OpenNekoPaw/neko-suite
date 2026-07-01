@@ -6,6 +6,8 @@
  */
 
 import type {
+  AgentCapabilityActivationIntent,
+  AgentCapabilityActivationProgressEvent,
   ChatMessage,
   ExecutorHooks,
   IService,
@@ -63,6 +65,27 @@ export interface IJournalWriter {
  * - auto: Auto execute all tools
  */
 export type ExecutionMode = 'plan' | 'ask' | 'auto';
+
+export interface IdcWorkflowActivationInput {
+  readonly runKind: string;
+  readonly runId?: string;
+  readonly intent: AgentCapabilityActivationIntent;
+}
+
+export interface IdcWorkflowActivationResult {
+  readonly success: boolean;
+  readonly message: string;
+  readonly runId?: string;
+  readonly diagnostics?: readonly import('@neko/shared').AgentCapabilityActivationDiagnostic[];
+  readonly events: readonly AgentCapabilityActivationProgressEvent[];
+}
+
+export interface IdcWorkflowStopInput {
+  readonly intent: AgentCapabilityActivationIntent;
+  readonly status?: 'completed' | 'failed' | 'aborted';
+}
+
+export type IdcWorkflowControlResult = IdcWorkflowActivationResult;
 
 export interface AgentEventErrorRecord {
   message: string;
@@ -164,6 +187,12 @@ export interface AgentSessionConfig {
 
   /** Validation error callback */
   onValidationError?: (error: import('../validation/types').ValidationError) => void;
+
+  /** Host-visible activation progress for Skill/IDC/mode lifecycle changes. */
+  onActivationProgress?: (
+    conversationId: string,
+    events: readonly AgentCapabilityActivationProgressEvent[],
+  ) => void;
 
   /** External registries (optional, will create if not provided) */
   toolGroupRegistry?: IToolGroupRegistry;
@@ -435,6 +464,7 @@ export type AgentEventType =
   | 'thinking_content' // Extended thinking content (Claude)
   | 'text' // Text output (complete)
   | 'text_delta' // Streaming text chunk (incremental)
+  | 'assistant_text_replacement' // Current assistant text is being internally repaired/replaced
   | 'tool_call' // Tool invocation
   | 'tool_result' // Tool execution result
   | 'tool_result_backfill' // Delayed tool result patch from background work
@@ -456,6 +486,12 @@ export interface AgentEvent {
 
   /** Text content */
   content?: string;
+
+  /** Replacement reason for assistant_text_replacement events. */
+  replacement?: {
+    reason: 'output-validation-retry';
+    attempt: number;
+  };
 
   /** Number of user messages waiting behind the active run. */
   pendingCount?: number;
@@ -652,6 +688,21 @@ export interface IAgentSession {
   setExecutionMode(mode: ExecutionMode): void;
 
   /**
+   * Set execution mode through an explicit activation intent.
+   */
+  setExecutionModeWithIntent(mode: ExecutionMode, intent: AgentCapabilityActivationIntent): void;
+
+  /**
+   * Start or resume an IDC workflow through an explicit activation intent.
+   */
+  startIdcRunWithIntent(input: IdcWorkflowActivationInput): IdcWorkflowActivationResult;
+
+  /**
+   * Stop the active IDC workflow through an explicit activation intent.
+   */
+  stopIdcRunWithIntent(input: IdcWorkflowStopInput): IdcWorkflowControlResult;
+
+  /**
    * Wire an ISkillProvider into the meta tools.
    * Called by the extension layer after the skill system is initialized.
    */
@@ -792,6 +843,17 @@ export interface IAgentSession {
     injection: import('../skill').SkillInjection,
     skill?: import('@neko/shared').Skill,
   ): void;
+
+  /**
+   * Activate ToolSets that contain the given tools. Returns only ToolSets that
+   * were newly activated by this call so callers can reverse turn-scoped state.
+   */
+  activateToolSetsForTools(toolNames: readonly string[]): readonly string[];
+
+  /**
+   * Deactivate a previously activated ToolSet.
+   */
+  deactivateToolSet(toolSetName: string): void;
 
   /**
    * Remove a previously injected skill prompt

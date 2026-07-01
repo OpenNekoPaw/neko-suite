@@ -1,7 +1,7 @@
 /**
- * Comic to Storyboard Skill - Convert manga/comic pages to reviewable storyboard drafts
+ * Comic to Storyboard Skill - Convert manga/comic pages to reviewable creative tables
  *
- * Provides comic panel analysis, OCR, shot-local character cues, and Markdown storyboard draft output.
+ * Provides comic panel analysis, OCR, shot-local character cues, and Markdown creative table output.
  * Triggered when user explicitly asks for a comic storyboard or shot breakdown.
  */
 
@@ -19,14 +19,14 @@ const localizedComicToStoryboardContent = {
 };
 
 /**
- * Comic to Storyboard skill - Convert manga/comic pages to reviewable storyboard drafts
+ * Comic to Storyboard skill - Convert manga/comic pages to reviewable creative tables
  *
  * Triggered when user explicitly asks for a comic storyboard or shot breakdown.
  */
 export const comicToStoryboardSkill: Skill = {
   name: 'comic-to-storyboard',
   description:
-    'Convert manga/comic pages into reviewable Markdown storyboard drafts with prompts, resource tokens, and next actions. ' +
+    'Convert manga/comic pages into reviewable Markdown creative tables with prompts, resource tokens, and next actions. ' +
     'Use only when the user asks to create or update a comic storyboard table, shot breakdown, ' +
     'comic adaptation storyboard, or webtoon storyboard; not for content-only EPUB/comic analysis. ' +
     'Keywords: comic storyboard, storyboard table, shot breakdown, 漫画分镜, 分镜表, 生成分镜表.',
@@ -52,7 +52,7 @@ export const comicToStoryboardSkill: Skill = {
   ],
   mediaWorkflow: {
     useCases: [
-      'Create a reviewable Markdown storyboard draft from comic, manga, webtoon, PDF, or image pages',
+      'Create a reviewable Markdown creative table from comic, manga, webtoon, PDF, or image pages',
       'Convert panel analysis and OCR evidence into a Markdown storyboard table with prompts, resource tokens, and next actions',
       'Build a shot breakdown for comic adaptation before animation or Cut handoff',
     ],
@@ -71,7 +71,7 @@ export const comicToStoryboardSkill: Skill = {
     operations: ['create-storyboard', 'shot-breakdown', 'panel-analysis', 'ocr-to-storyboard'],
     costLevel: 'low',
     riskLevel: 'low',
-    validationRequirements: ['CreativeTable', 'CanvasMarkdownCapabilityInput'],
+    validationRequirements: ['creative-table.storyboard', 'CanvasMarkdownCapabilityInput'],
     optionalTools: [TOOL_NAMES_SYSTEM.READ_IMAGE, TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE],
   },
 };

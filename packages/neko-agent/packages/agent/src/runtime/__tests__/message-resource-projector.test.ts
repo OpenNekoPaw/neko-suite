@@ -57,6 +57,56 @@ describe('message resource projector', () => {
     });
   });
 
+  it('adds renderUri for stable resource-backed media without replacing durable path fields', () => {
+    expect(
+      projectResourceValue(
+        {
+          images: [
+            {
+              label: 'Page 1',
+              path: '/tmp/page-1.jpg',
+              resourceRef: {
+                id: 'page-1',
+                scope: 'project',
+                provider: 'read-image',
+                kind: 'media',
+                source: { kind: 'file', projectRelativePath: 'images/page-1.jpg' },
+                locator: { kind: 'file', path: 'images/page-1.jpg' },
+                fingerprint: {
+                  strategy: 'provider',
+                  providerId: 'read-image',
+                  value: 'page-1',
+                },
+              },
+            },
+          ],
+        },
+        { resolveLocalMediaPath: (path) => `webview://${path}` },
+      ),
+    ).toEqual({
+      images: [
+        {
+          label: 'Page 1',
+          path: '/tmp/page-1.jpg',
+          renderUri: 'webview:///tmp/page-1.jpg',
+          resourceRef: {
+            id: 'page-1',
+            scope: 'project',
+            provider: 'read-image',
+            kind: 'media',
+            source: { kind: 'file', projectRelativePath: 'images/page-1.jpg' },
+            locator: { kind: 'file', path: 'images/page-1.jpg' },
+            fingerprint: {
+              strategy: 'provider',
+              providerId: 'read-image',
+              value: 'page-1',
+            },
+          },
+        },
+      ],
+    });
+  });
+
   it('projects tool result payloads in content blocks', () => {
     const messages: Message[] = [
       {

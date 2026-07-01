@@ -98,6 +98,11 @@ describe('media turn runtime', () => {
         task: { ...task, status: 'completed', progress: 100 },
       }),
     });
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'streamComplete',
+      conversationId: 'conv-1',
+      messageId: 'media-turn:task-1',
+    });
   });
 
   it('ignores task callbacks for a different conversation', async () => {

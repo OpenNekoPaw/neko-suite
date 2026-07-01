@@ -43,6 +43,14 @@ export function* stepToEvents(
 
   switch (step.type) {
     case 'content_delta':
+      if (step.deltaKind === 'assistant_text_replacement') {
+        yield {
+          type: 'assistant_text_replacement',
+          replacement: step.replacement ?? { reason: 'output-validation-retry', attempt: 1 },
+        };
+        streamState.hasStreamedDeltas = false;
+        break;
+      }
       if (step.content) {
         yield { type: 'text_delta', content: step.content };
         streamState.hasStreamedDeltas = true;

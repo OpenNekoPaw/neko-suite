@@ -54,6 +54,7 @@ import {
 import { getLogger } from '../utils/logger';
 import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 import { hasBlockingLifecycleProjectionDiagnostic } from '../skill/skill-lifecycle-projection';
+import { projectMediaModelTools } from '../tools/media-generation-tool-selection';
 
 function getAgentTurnRuntimeLogger() {
   return getLogger('AgentTurnRuntime');
@@ -108,6 +109,8 @@ export interface AgentTurnRunner<TPlatform, TContext extends object> {
   getPendingMessagesCount(): number;
   dequeuePendingMessage(): AgentPendingMessageItem | null;
   drainPendingMessageQueue(): readonly AgentPendingMessageItem[];
+  activateToolSetsForTools?(toolNames: readonly string[]): readonly string[];
+  deactivateToolSet?(toolSetName: string): void;
   applySkillInjection?(injection: SkillInjection, skill?: Skill): void;
   getActiveSkill?(): Skill | undefined;
   clearActiveSkill?(): void;
@@ -620,6 +623,11 @@ export async function executeAgentTurn<
     input.activeSkill ?? null,
     input.skillLifecycle ?? null,
   );
+  const turnActivatedToolSets = activateTurnMediaToolSets(agentRunner, {
+    mediaModel: input.mediaModel,
+    mediaModels: input.mediaModels,
+    skillLifecycle: input.skillLifecycle ?? null,
+  });
 
   let confirmationDisposable: AgentTurnDisposable | undefined;
   try {
@@ -711,6 +719,9 @@ export async function executeAgentTurn<
     return { status: 'completed' };
   } finally {
     confirmationDisposable?.dispose();
+    for (const toolSetName of turnActivatedToolSets) {
+      agentRunner.deactivateToolSet?.(toolSetName);
+    }
   }
 }
 
@@ -931,9 +942,14 @@ function assertQueueableRunningTurn<
     throw new Error(AGENT_SESSION_BUSY_MESSAGE);
   }
   const metadata = params.input.executionOverrides?.metadata;
-  if (metadata && Object.keys(metadata).length > 0) {
+  if (metadataHasQueueBlockingKeys(metadata)) {
     throw new Error(AGENT_SESSION_BUSY_MESSAGE);
   }
+}
+
+function metadataHasQueueBlockingKeys(metadata: Record<string, unknown> | undefined): boolean {
+  if (!metadata) return false;
+  return Object.keys(metadata).some((key) => key !== 'locale');
 }
 
 function buildQueuedAgentMessageNotice(pendingCount: number): string {
@@ -1060,6 +1076,40 @@ function clearPreviousTurnManagedSkill<TPlatform, TContext extends object>(
   if (!currentSkillName || currentSkillName === previousTurnSkillName) {
     agentRunner.clearActiveSkill?.();
   }
+}
+
+function activateTurnMediaToolSets<TPlatform, TContext extends object>(
+  agentRunner: AgentTurnRunner<TPlatform, TContext>,
+  input: {
+    readonly mediaModel?: ModelRef<MediaModelCategory>;
+    readonly mediaModels?: AgentMediaModelSelections;
+    readonly skillLifecycle: AgentTurnSkillLifecycleState | null;
+  },
+): readonly string[] {
+  const mediaTools = projectMediaModelTools({
+    mediaModel: input.mediaModel,
+    mediaModels: input.mediaModels,
+  });
+  if (mediaTools.length === 0 || !agentRunner.activateToolSetsForTools) {
+    return [];
+  }
+  if (!shouldActivateMediaToolsForTurn(input, mediaTools)) {
+    return [];
+  }
+  return agentRunner.activateToolSetsForTools(mediaTools);
+}
+
+function shouldActivateMediaToolsForTurn(
+  input: {
+    readonly skillLifecycle: AgentTurnSkillLifecycleState | null;
+  },
+  mediaTools: readonly string[],
+): boolean {
+  const lifecyclePolicy = input.skillLifecycle?.projection.toolPolicy;
+  if (lifecyclePolicy?.allowedTools) {
+    return mediaTools.some((toolName) => lifecyclePolicy.allowedTools?.includes(toolName));
+  }
+  return true;
 }
 
 function projectLifecycleAsTurnSkill(

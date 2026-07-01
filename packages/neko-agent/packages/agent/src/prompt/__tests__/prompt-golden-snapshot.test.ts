@@ -53,26 +53,31 @@ describe('prompt golden snapshots', () => {
     expect(composeBaseOnly(BUILTIN_DEFAULT_PROMPT_ZH)).toMatchSnapshot();
   });
 
-  it('base prompts route Markdown storyboard drafts through Canvas Markdown capabilities', () => {
+  it('base prompts keep domain-specific creative artifact contracts out of the default layer', () => {
     for (const prompt of [BUILTIN_DEFAULT_PROMPT_EN, BUILTIN_DEFAULT_PROMPT_ZH]) {
-      expect(prompt).toContain('canvas.ingestMarkdown');
-      expect(prompt).toContain('intentHint: "creative-table"');
-      expect(prompt).toContain('profileHint: "storyboard"');
-      expect(prompt).toContain('canvas.createStoryboardFromMarkdown');
-      expect(prompt).toContain('lifecycle-backed');
-      expect(prompt).toContain('old plugin-transfer payload');
+      expect(prompt).toMatch(/Structured Creative Artifacts|结构化创作产物/);
+      expect(prompt).toMatch(/active skill|当前激活 Skill/);
+      expect(prompt).toMatch(/validation requirements/);
+      expect(prompt).toMatch(/domain node JSON|领域节点 JSON/);
+      expect(prompt).toMatch(
+        /must not override a domain skill's output contract|不能覆盖领域 Skill 的输出契约/,
+      );
       expect(prompt).toContain('Webview URI');
       expect(prompt).toContain('blob URL');
       expect(prompt).toContain('Engine token');
-      expect(prompt).toContain('Canvas node JSON');
-      expect(prompt).toMatch(/unknown columns|未知列/);
-      expect(prompt).toMatch(/review metadata|审阅 metadata/);
+      expect(prompt).not.toContain('Markdown Storyboard Drafts');
+      expect(prompt).not.toContain('Markdown 分镜草稿');
+      expect(prompt).not.toContain('canvas.ingestMarkdown');
+      expect(prompt).not.toContain('intentHint: "creative-table"');
+      expect(prompt).not.toContain('profileHint: "storyboard"');
+      expect(prompt).not.toContain('canvas.createStoryboardFromMarkdown');
+      expect(prompt).not.toContain('old plugin-transfer payload');
+      expect(prompt).not.toContain('Canvas node JSON');
+      expect(prompt).not.toContain('StoryboardTable');
       expect(prompt).not.toContain('storyboard draft runtime');
       expect(prompt).not.toContain('compile through the local storyboard draft runtime');
       expect(prompt).not.toContain('本地 storyboard draft runtime');
     }
-    expect(BUILTIN_DEFAULT_PROMPT_EN).toContain('stable resource refs');
-    expect(BUILTIN_DEFAULT_PROMPT_ZH).toContain('稳定 resource ref');
   });
 
   it('plan mode EN base', () => {

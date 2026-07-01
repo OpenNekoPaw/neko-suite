@@ -3,10 +3,13 @@ import {
   type BuildAgentErrorAssistantMessageInput,
 } from './message-runtime';
 import {
+  buildAgentPhaseMessage,
   buildErrorMessage,
   buildMediaTaskCreatedMessage,
   buildMediaTaskProgressMessage,
+  buildStreamCompleteMessage,
   projectMediaTaskToWorkItem,
+  type AgentPhaseMessage,
   type AgentMediaTaskView,
   type ErrorMessage,
   type MediaModelCategory,
@@ -15,10 +18,15 @@ import {
   type Message,
   type ModelRef,
   type AgentWorkflowIdentity,
+  type StreamCompleteMessage,
 } from '@neko-agent/types';
 
 export type AgentMediaTurnRuntimeMessage =
-  ErrorMessage | MediaTaskCreatedMessage | MediaTaskProgressMessage;
+  | AgentPhaseMessage
+  | ErrorMessage
+  | MediaTaskCreatedMessage
+  | MediaTaskProgressMessage
+  | StreamCompleteMessage;
 
 export interface AgentMediaTurnTaskEvent<
   TTaskView extends AgentMediaTaskView = AgentMediaTaskView,
@@ -78,6 +86,7 @@ export interface RunAgentMediaTurnInput<
     input: AgentMediaTurnExecutionInput<TTaskView, TSourceTask>,
   ) => Promise<unknown>;
   readonly postMessage: (message: AgentMediaTurnRuntimeMessage) => void;
+  readonly now?: () => number;
   readonly persistErrorMessage?: (message: Message) => void;
   readonly buildErrorMessageInput?: (message: string) => BuildAgentErrorAssistantMessageInput;
   readonly unavailableMessage?: string;
@@ -165,6 +174,21 @@ export async function runAgentMediaTurn<
             }),
           }),
         );
+        if (isTerminalMediaTurnStatus(event.task.status)) {
+          input.postMessage(
+            buildStreamCompleteMessage({
+              conversationId: input.conversationId,
+              messageId: `media-turn:${event.task.id}`,
+            }),
+          );
+          input.postMessage(
+            buildAgentPhaseMessage({
+              conversationId: input.conversationId,
+              phase: 'idle',
+              timestamp: input.now?.() ?? Date.now(),
+            }),
+          );
+        }
       },
       onIgnoredConversationTask: input.onIgnoredConversationTask,
       onAlreadyTerminalTask: input.onAlreadyTerminalTask,
@@ -185,4 +209,8 @@ function isMediaTurnEventForConversation(
   conversationId: string,
 ): boolean {
   return event.conversationId === conversationId;
+}
+
+function isTerminalMediaTurnStatus(status: AgentMediaTaskView['status']): boolean {
+  return status === 'completed' || status === 'failed' || status === 'cancelled';
 }

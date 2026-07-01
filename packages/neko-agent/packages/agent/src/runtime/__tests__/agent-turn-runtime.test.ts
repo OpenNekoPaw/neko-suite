@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { TOOL_NAMES_MEDIA } from '@neko/shared';
 import { buildAgentTurnRuntimeInput } from '../agent-turn-assembly';
 import {
   AGENT_TURN_PRECONDITION_MESSAGE,
@@ -8,6 +9,7 @@ import {
   type AgentTurnRunner,
   type ExecuteAgentTurnInput,
 } from '../agent-turn-runtime';
+import { AGENT_SESSION_BUSY_MESSAGE } from '../agent-session-runner';
 import type { AgentPendingMessageItem } from '../agent-runner-port';
 import type { TimelineContextRuntime } from '../timeline-context-runtime';
 import { createTimelineSelectionContextPacket } from '../multimodal-context-packet';
@@ -94,6 +96,8 @@ function createAgentRunner(
       return item ? { ...item } : null;
     }),
     drainPendingMessageQueue: vi.fn(() => pendingMessages.splice(0).map((item) => ({ ...item }))),
+    activateToolSetsForTools: vi.fn(() => ['ai-generation']),
+    deactivateToolSet: vi.fn(),
     applySkillInjection: vi.fn((_injection, skill) => {
       activeSkillName = skill?.name;
     }),
@@ -530,6 +534,76 @@ describe('executeAgentTurn', () => {
     });
   });
 
+  it('queues running text input when execution metadata only carries locale', async () => {
+    const platform = { name: 'platform' };
+    const agentRunner = createAgentRunner({
+      isRunning: true,
+      config: {
+        platform,
+        systemPrompt: 'base system prompt',
+        maxIterations: 200,
+        autoExecuteTools: true,
+        temperature: 0.7,
+        providerId: 'openai',
+        modelId: 'gpt-4.1',
+        executionMode: 'ask',
+        workspaceRoot: '/repo',
+        workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
+        conversationId: 'conv-1',
+      },
+    });
+    const { input } = createBaseInput({
+      platform,
+      executionOverrides: { metadata: { locale: 'zh' } },
+      agentManager: {
+        getOrCreate: vi.fn(() => agentRunner),
+        loadHistoryWithContext: vi.fn(),
+      },
+    });
+
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'queued',
+      pendingCount: 1,
+    });
+    expect(agentRunner.enqueuePendingMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        content: 'current request',
+      }),
+    );
+  });
+
+  it('rejects running text input when execution metadata carries IDC activation context', async () => {
+    const platform = { name: 'platform' };
+    const agentRunner = createAgentRunner({
+      isRunning: true,
+      config: {
+        platform,
+        systemPrompt: 'base system prompt',
+        maxIterations: 200,
+        autoExecuteTools: true,
+        temperature: 0.7,
+        providerId: 'openai',
+        modelId: 'gpt-4.1',
+        executionMode: 'ask',
+        workspaceRoot: '/repo',
+        workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
+        conversationId: 'conv-1',
+      },
+    });
+    const { input } = createBaseInput({
+      platform,
+      executionOverrides: { metadata: { locale: 'zh', idc: { runKind: 'plan-mode' } } },
+      agentManager: {
+        getOrCreate: vi.fn(() => agentRunner),
+        loadHistoryWithContext: vi.fn(),
+      },
+    });
+
+    await expect(executeAgentTurn(input)).rejects.toThrow(AGENT_SESSION_BUSY_MESSAGE);
+    expect(agentRunner.enqueuePendingMessage).not.toHaveBeenCalled();
+  });
+
   it('publishes the released queue item when a pending message starts executing', async () => {
     const agentRunner = createAgentRunner();
     const queuedMessage = {
@@ -692,6 +766,162 @@ describe('executeAgentTurn', () => {
     expect(vi.mocked(applySkillInjection!).mock.invocationCallOrder[0] ?? 0).toBeGreaterThan(
       vi.mocked(agentRunner.configure).mock.invocationCallOrder[0] ?? 0,
     );
+  });
+
+  it('activates selected image model ToolSets alongside the active skill for the turn', async () => {
+    const activeSkill = {
+      skill: {
+        name: 'ai-generate',
+        description: 'Generate media',
+        content: 'Generate media instructions',
+        source: 'builtin' as const,
+        enabled: true,
+      },
+      injection: {
+        name: 'ai-generate',
+        systemPrompt: 'Generate media instructions',
+        type: 'skill' as const,
+      },
+    };
+    const { input, agentRunner } = createBaseInput({
+      activeSkill,
+      mediaModels: {
+        image: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.applySkillInjection).toHaveBeenCalledWith(
+      activeSkill.injection,
+      activeSkill.skill,
+    );
+    expect(agentRunner.activateToolSetsForTools).toHaveBeenCalledWith([
+      TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+    ]);
+    expect(agentRunner.deactivateToolSet).toHaveBeenCalledWith('ai-generation');
+    expect(agentRunner.applySkillInjection).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowedTools: [TOOL_NAMES_MEDIA.GENERATE_IMAGE],
+      }),
+      activeSkill.skill,
+    );
+  });
+
+  it('activates turn-scoped media model ToolSets when no skill is active', async () => {
+    const { input, agentRunner } = createBaseInput({
+      mediaModels: {
+        image: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.activateToolSetsForTools).toHaveBeenCalledWith([
+      TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+    ]);
+    expect(agentRunner.deactivateToolSet).toHaveBeenCalledWith('ai-generation');
+    expect(agentRunner.applySkillInjection).not.toHaveBeenCalled();
+  });
+
+  it('activates ToolSets for legacy single media model selection', async () => {
+    const { input, agentRunner } = createBaseInput({
+      mediaModel: { providerId: 'runway', modelId: 'gen-3', category: 'video' },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.activateToolSetsForTools).toHaveBeenCalledWith([
+      TOOL_NAMES_MEDIA.GENERATE_VIDEO,
+    ]);
+    expect(agentRunner.deactivateToolSet).toHaveBeenCalledWith('ai-generation');
+  });
+
+  it('keeps lifecycle tool policy above selected media model ToolSets', async () => {
+    const { input, agentRunner } = createBaseInput({
+      mediaModels: {
+        image: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
+      },
+      skillLifecycle: {
+        projection: {
+          promptSections: [
+            {
+              id: 'skill:domainSkill:review:record-1',
+              layer: 'skill',
+              content: 'Review prompt',
+              priority: 20,
+              recordId: 'record-1',
+              slot: 'domainSkill',
+              skillName: 'review',
+            },
+          ],
+          toolPolicy: {
+            mode: 'allowlist',
+            allowedTools: ['WriteDocument'],
+            contributingRecordIds: ['record-1'],
+            diagnostics: [],
+          },
+          diagnostics: [],
+          visibleIndicators: [],
+        },
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.applySkillInjection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'lifecycle-projection',
+        allowedTools: ['WriteDocument'],
+      }),
+      expect.any(Object),
+    );
+    expect(agentRunner.activateToolSetsForTools).not.toHaveBeenCalled();
+  });
+
+  it('activates selected media ToolSets when lifecycle tool policy allows them', async () => {
+    const { input, agentRunner } = createBaseInput({
+      mediaModels: {
+        image: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
+      },
+      skillLifecycle: {
+        projection: {
+          promptSections: [
+            {
+              id: 'skill:domainSkill:review:record-1',
+              layer: 'skill',
+              content: 'Review prompt',
+              priority: 20,
+              recordId: 'record-1',
+              slot: 'domainSkill',
+              skillName: 'review',
+            },
+          ],
+          toolPolicy: {
+            mode: 'allowlist',
+            allowedTools: [TOOL_NAMES_MEDIA.GENERATE_IMAGE],
+            contributingRecordIds: ['record-1'],
+            diagnostics: [],
+          },
+          diagnostics: [],
+          visibleIndicators: [],
+        },
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.applySkillInjection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'lifecycle-projection',
+        allowedTools: [TOOL_NAMES_MEDIA.GENERATE_IMAGE],
+      }),
+      expect.any(Object),
+    );
+    expect(agentRunner.activateToolSetsForTools).toHaveBeenCalledWith([
+      TOOL_NAMES_MEDIA.GENERATE_IMAGE,
+    ]);
+    expect(agentRunner.deactivateToolSet).toHaveBeenCalledWith('ai-generation');
   });
 
   it('replays lifecycle projection before retired active skill state can apply', async () => {

@@ -366,6 +366,40 @@ function createAgentTurnTimelineProjection(input: {
   return {
     project(event, eventTime) {
       switch (event.type) {
+        case 'assistant_text_replacement': {
+          const closedThinking = closeThinking(activeThinkingItem, eventTime);
+          if (closedThinking) activeThinkingItem = null;
+          const events: AgentTurnTimelineItem[] = closedThinking ? [closedThinking] : [];
+          if (activeTextItem?.kind === 'assistant_text') {
+            activeTextItem = {
+              ...activeTextItem,
+              payload: {
+                ...activeTextItem.payload,
+                content: '',
+                replaceContent: true,
+              },
+              status: 'streaming',
+              updatedAt: eventTime,
+            };
+            events.push(activeTextItem);
+            return buildMessage(events);
+          }
+
+          activeTextItem = {
+            conversationId: input.conversationId,
+            turnId,
+            messageId: input.messageId,
+            itemId: `text-${nextSequence()}`,
+            sequence,
+            kind: 'assistant_text',
+            status: 'streaming',
+            payload: { content: '', format: 'markdown', replaceContent: true },
+            createdAt: eventTime,
+            updatedAt: eventTime,
+          };
+          events.push(activeTextItem);
+          return buildMessage(events);
+        }
         case 'thinking_content': {
           if (activeThinkingItem?.kind === 'thinking') {
             activeThinkingItem = {
@@ -541,6 +575,8 @@ function createAgentTurnTimelineProjection(input: {
         }
         case 'error': {
           const events = closeText(eventTime);
+          const errorCode = readErrorCode(event.error);
+          const errorDetails = readErrorDetails(event.error);
           const item: AgentTurnTimelineItem = {
             conversationId: input.conversationId,
             turnId,
@@ -549,7 +585,11 @@ function createAgentTurnTimelineProjection(input: {
             sequence,
             kind: 'error',
             status: 'failed',
-            payload: { message: event.error?.message ?? 'An error occurred' },
+            payload: {
+              message: event.error?.message ?? 'An error occurred',
+              ...(errorCode ? { code: errorCode } : {}),
+              ...(errorDetails ? { details: errorDetails } : {}),
+            },
             createdAt: eventTime,
             updatedAt: eventTime,
           };
@@ -637,6 +677,7 @@ function isPersistablePartialEvent(event: AgentEvent): boolean {
     event.type === 'thinking_content' ||
     event.type === 'text' ||
     event.type === 'text_delta' ||
+    event.type === 'assistant_text_replacement' ||
     event.type === 'tool_call' ||
     event.type === 'tool_result' ||
     event.type === 'tool_result_backfill' ||
@@ -651,4 +692,20 @@ function isStructuralPartialEvent(event: AgentEvent): boolean {
     event.type === 'tool_result_backfill' ||
     event.type === 'error'
   );
+}
+
+function readErrorCode(error: AgentEvent['error']): string | undefined {
+  if (!isRecord(error)) return undefined;
+  const code = error['code'];
+  return typeof code === 'string' && code.length > 0 ? code : undefined;
+}
+
+function readErrorDetails(error: AgentEvent['error']): Record<string, unknown> | undefined {
+  if (!isRecord(error)) return undefined;
+  const context = error['context'];
+  return isRecord(context) ? context : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

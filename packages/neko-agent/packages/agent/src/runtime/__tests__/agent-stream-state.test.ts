@@ -297,6 +297,66 @@ describe('agent stream state reducer', () => {
     expect(state.errorMessage).toBe('bad');
   });
 
+  it('preserves streamed storyboard text when post-stream validation fails', () => {
+    const state = createAgentStreamProjectionState();
+    const streamedTable = '| 镜号 | 画面内容 |\n| --- | --- |\n| 1 | bad |';
+    applyAgentStreamEventToState(state, {
+      type: 'text_delta',
+      content: streamedTable,
+    });
+
+    applyAgentStreamEventToState(state, {
+      type: 'error',
+      error: Object.assign(new Error('bad storyboard'), {
+        name: 'AgentError',
+        code: 'storyboard-table-forbidden-header',
+      }),
+    });
+
+    expect(state.accumulatedResponse).toBe(streamedTable);
+    expect(state.contentBlocks).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        content: streamedTable,
+      }),
+    ]);
+    expect(state.errorMessage).toBe('bad storyboard');
+  });
+
+  it('replaces streamed assistant text when output validation retries internally', () => {
+    const state = createAgentStreamProjectionState();
+
+    applyAgentStreamEventToState(
+      state,
+      { type: 'text_delta', content: 'invalid table' },
+      {
+        now: () => 10,
+      },
+    );
+    applyAgentStreamEventToState(state, {
+      type: 'assistant_text_replacement',
+      replacement: { reason: 'output-validation-retry', attempt: 1 },
+    });
+    applyAgentStreamEventToState(
+      state,
+      { type: 'text_delta', content: 'fixed table' },
+      {
+        now: () => 12,
+      },
+    );
+    finalizeAgentStreamProjectionState(state);
+
+    expect(state.accumulatedResponse).toBe('fixed table');
+    expect(state.contentBlocks).toEqual([
+      expect.objectContaining({
+        id: 'block-text-10',
+        type: 'text',
+        content: 'fixed table',
+        isStreaming: false,
+      }),
+    ]);
+  });
+
   it('projects agent events to webview protocol messages', () => {
     expect(
       projectAgentStreamEventToWebviewMessages({

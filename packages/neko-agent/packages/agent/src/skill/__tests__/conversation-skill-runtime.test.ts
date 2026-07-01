@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Skill, SkillDiscoveryResult, SkillInjection } from '@neko/shared';
+import type {
+  AgentCapabilityActivationProgressEvent,
+  Skill,
+  SkillDiscoveryResult,
+  SkillInjection,
+} from '@neko/shared';
 import { ConversationSkillRuntime } from '../conversation-skill-runtime';
 
 function createSkill(
   name: string,
   command?: string,
   entryPointKind?: Skill['entryPointKind'],
+  mediaWorkflow?: Skill['mediaWorkflow'],
 ): Skill {
   return {
     name,
@@ -15,6 +21,7 @@ function createSkill(
     enabled: true,
     ...(command ? { command } : {}),
     ...(entryPointKind ? { entryPointKind } : {}),
+    ...(mediaWorkflow ? { mediaWorkflow } : {}),
   };
 }
 
@@ -86,7 +93,11 @@ describe('ConversationSkillRuntime', () => {
         content: 'commit instructions: fix bug',
       }),
     ]);
-    expect(bridge.applySkillInjection).not.toHaveBeenCalled();
+    expect(bridge.applySkillInjection).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({ name: 'commit' }),
+      commit,
+    );
   });
 
   it('reports legacy slash skill aliases as migration-only diagnostics', async () => {
@@ -225,8 +236,11 @@ describe('ConversationSkillRuntime', () => {
     });
   });
 
-  it('does not auto-activate high-confidence matches before the turn executes', async () => {
-    const storyboard = createSkill('comic-to-storyboard');
+  it('rejects natural-language auto activation without discovery, apply, or active state', async () => {
+    const storyboard = createSkill('comic-to-storyboard', undefined, undefined, {
+      producedArtifacts: ['CreativeTable'],
+      validationRequirements: ['creative-table.storyboard'],
+    });
     const skillService = createSkillService([storyboard], {
       found: true,
       matches: [{ skill: storyboard, relevance: 0.95, reason: 'artifact match' }],
@@ -248,14 +262,19 @@ describe('ConversationSkillRuntime', () => {
       userInput: '生成分镜表',
     });
 
-    expect(result).toBeNull();
+    expect(result).toEqual({
+      applied: false,
+      error: 'Natural-language Skill auto-activation is disabled; use $skill or ActivateSkill.',
+    });
     expect(skillService.discover).not.toHaveBeenCalled();
-    expect(skillService.registry.ensureLoaded).not.toHaveBeenCalled();
+    expect(skillService.apply).not.toHaveBeenCalled();
     expect(runtime.getActiveSkill('conv-1')).toBeUndefined();
+    expect(runtime.projectSkillLifecycle('conv-1').promptSections).toEqual([]);
+    expect(runtime.getActiveLifecycleRecords('conv-1')).toEqual([]);
     expect(bridge.applySkillInjection).not.toHaveBeenCalled();
   });
 
-  it('does not auto-activate matches that require confirmation', async () => {
+  it('rejects natural-language auto activation even when matches would require confirmation', async () => {
     const storyboard = createSkill('comic-to-storyboard');
     const skillService = createSkillService([storyboard], {
       found: true,
@@ -270,8 +289,140 @@ describe('ConversationSkillRuntime', () => {
       userInput: 'maybe storyboard',
     });
 
-    expect(result).toBeNull();
+    expect(result).toEqual({
+      applied: false,
+      error: 'Natural-language Skill auto-activation is disabled; use $skill or ActivateSkill.',
+    });
+    expect(skillService.discover).not.toHaveBeenCalled();
     expect(skillService.registry.ensureLoaded).not.toHaveBeenCalled();
     expect(runtime.getActiveSkill('conv-1')).toBeUndefined();
+    expect(runtime.getActiveLifecycleRecords('conv-1')).toEqual([]);
+  });
+
+  it('rejects natural-language auto activation even for high-confidence matches without validators', async () => {
+    const notes = createSkill('notes');
+    const skillService = createSkillService([notes], {
+      found: true,
+      matches: [{ skill: notes, relevance: 0.95, reason: 'keyword match' }],
+      topMatch: { skill: notes, relevance: 0.95, reason: 'keyword match' },
+      requiresConfirmation: false,
+    });
+    const runtime = new ConversationSkillRuntime({ skillService: skillService as any });
+
+    const result = await runtime.autoActivateSkill({
+      conversationId: 'conv-1',
+      userInput: '整理 notes',
+    });
+
+    expect(result).toEqual({
+      applied: false,
+      error: 'Natural-language Skill auto-activation is disabled; use $skill or ActivateSkill.',
+    });
+    expect(skillService.discover).not.toHaveBeenCalled();
+    expect(skillService.apply).not.toHaveBeenCalled();
+    expect(runtime.getActiveSkill('conv-1')).toBeUndefined();
+    expect(runtime.getActiveLifecycleRecords('conv-1')).toEqual([]);
+  });
+
+  it('emits host-visible activation progress without adding progress labels to Skill prompt', async () => {
+    const progressEvents: AgentCapabilityActivationProgressEvent[] = [];
+    const skill = createSkill('quality-review');
+    const skillService = createSkillService([skill]);
+    const runtime = new ConversationSkillRuntime({
+      skillService: skillService as any,
+      now: () => 100,
+      onActivationProgress: (_conversationId, events) => {
+        progressEvents.push(...events);
+      },
+    });
+
+    const result = await runtime.applySkillInvocation({
+      skillName: 'quality-review',
+      conversationId: 'conv-1',
+      args: 'changed files',
+    });
+
+    expect(result).toEqual(expect.objectContaining({ applied: true, skill }));
+    expect(progressEvents.map((event) => event.step)).toEqual([
+      'requested',
+      'validated',
+      'loaded',
+      'prepared',
+      'record-created',
+      'projected',
+      'active',
+    ]);
+    expect(new Set(progressEvents.map((event) => event.source))).toEqual(
+      new Set(['user-explicit']),
+    );
+    expect(runtime.projectSkillLifecycle('conv-1').visibleIndicators[0]?.provenance).toEqual(
+      expect.objectContaining({
+        source: 'user-explicit',
+        target: 'skill',
+        action: 'activate',
+        requestedBy: 'user',
+      }),
+    );
+    const promptContent = runtime
+      .projectSkillLifecycle('conv-1')
+      .promptSections.map((section) => section.content)
+      .join('\n');
+    expect(promptContent).toBe('quality-review instructions: changed files');
+    for (const label of ['requested', 'validated', 'loaded', 'projected', 'active']) {
+      expect(promptContent).not.toContain(label);
+    }
+  });
+
+  it('records agent-tool provenance when ActivateSkill uses the domain activation path', async () => {
+    const progressEvents: AgentCapabilityActivationProgressEvent[] = [];
+    const skill = createSkill('quality-review');
+    const skillService = createSkillService([skill]);
+    const bridge = {
+      applySkillInjection: vi.fn(),
+      clearActiveSkill: vi.fn(),
+    };
+    const runtime = new ConversationSkillRuntime({
+      skillService: skillService as any,
+      agentBridge: bridge,
+      now: () => 200,
+      onActivationProgress: (_conversationId, events) => {
+        progressEvents.push(...events);
+      },
+    });
+
+    const result = await runtime.activateDomainSkill({
+      skillName: 'quality-review',
+      conversationId: 'conv-1',
+      reason: 'Agent selected the review workflow',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        lifecycleRecordId: expect.any(String),
+      }),
+    );
+    expect(progressEvents.at(-1)).toEqual(
+      expect.objectContaining({
+        step: 'active',
+        source: 'agent-tool',
+        requestedBy: 'agent',
+        reason: 'Agent selected the review workflow',
+      }),
+    );
+    expect(runtime.projectSkillLifecycle('conv-1').visibleIndicators[0]?.provenance).toEqual(
+      expect.objectContaining({
+        source: 'agent-tool',
+        target: 'skill',
+        action: 'activate',
+        requestedBy: 'agent',
+        reason: 'Agent selected the review workflow',
+      }),
+    );
+    expect(bridge.applySkillInjection).toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({ name: 'quality-review' }),
+      skill,
+    );
   });
 });

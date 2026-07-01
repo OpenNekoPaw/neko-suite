@@ -23,6 +23,33 @@ import { MermaidBlockChecker } from './mermaid-validator';
 import { JsonExtractor } from './json-validator';
 import { JsonSchemaValidator } from './json-validator';
 import { LengthValidator } from './length-validator';
+import {
+  STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
+  validateStoryboardCreativeTableOutput,
+} from './creative-table-validator';
+
+interface ArtifactValidatorResult {
+  readonly errors: readonly ValidationError[];
+  readonly warnings: readonly ValidationWarning[];
+}
+
+type ArtifactValidator = (content: string) => ArtifactValidatorResult;
+
+interface ArtifactValidatorDefinition {
+  readonly id: string;
+  readonly aliases?: readonly string[];
+  readonly validate: ArtifactValidator;
+}
+
+const ARTIFACT_VALIDATOR_DEFINITIONS: readonly ArtifactValidatorDefinition[] = [
+  {
+    id: STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
+    aliases: ['StoryboardCreativeTable'],
+    validate: validateStoryboardCreativeTableOutput,
+  },
+] as const;
+
+const ARTIFACT_VALIDATOR_REGISTRY = createArtifactValidatorRegistry(ARTIFACT_VALIDATOR_DEFINITIONS);
 
 /**
  * OutputValidator - Orchestrates LLM output validation
@@ -50,7 +77,10 @@ export class OutputValidator {
   /**
    * Validate output content
    */
-  async validate(content: string): Promise<ValidationResult> {
+  async validate(
+    content: string,
+    runtimeArtifactValidators?: readonly string[],
+  ): Promise<ValidationResult> {
     const errors: ValidationError[] = [];
     const warnings: ValidationWarning[] = [];
 
@@ -74,6 +104,33 @@ export class OutputValidator {
       const schemaResult = await this.validateJsonSchema(content);
       errors.push(...schemaResult.errors);
       warnings.push(...schemaResult.warnings);
+    }
+
+    // 4. Artifact/table validation
+    const artifactResult = this.validateArtifactValidators(
+      content,
+      mergeArtifactValidators(this.constraints.artifactValidators, runtimeArtifactValidators),
+    );
+    errors.push(...artifactResult.errors);
+    warnings.push(...artifactResult.warnings);
+
+    return { errors, warnings };
+  }
+
+  validateArtifactValidators(
+    content: string,
+    validators: readonly string[] | undefined,
+  ): ValidationResult {
+    const errors: ValidationError[] = [];
+    const warnings: ValidationWarning[] = [];
+
+    const normalizedValidators = new Set((validators ?? []).map(normalizeValidatorId));
+    for (const [validatorId, validator] of ARTIFACT_VALIDATOR_REGISTRY) {
+      if (!normalizedValidators.has(validatorId)) continue;
+
+      const result = validator(content);
+      errors.push(...result.errors);
+      warnings.push(...result.warnings);
     }
 
     return { errors, warnings };
@@ -179,8 +236,11 @@ export class OutputValidator {
   /**
    * Validate with detailed block position info
    */
-  async validateWithBlockInfo(content: string): Promise<ValidationResultWithBlocks> {
-    const baseResult = await this.validate(content);
+  async validateWithBlockInfo(
+    content: string,
+    runtimeArtifactValidators?: readonly string[],
+  ): Promise<ValidationResultWithBlocks> {
+    const baseResult = await this.validate(content, runtimeArtifactValidators);
     const result: ValidationResultWithBlocks = { ...baseResult };
 
     // Mermaid validation with block info
@@ -278,4 +338,34 @@ export class OutputValidator {
  */
 export function createOutputValidator(constraints?: Partial<OutputConstraints>): OutputValidator {
   return new OutputValidator(constraints);
+}
+
+function normalizeValidatorId(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_.:-]+/g, '');
+}
+
+function createArtifactValidatorRegistry(
+  definitions: readonly ArtifactValidatorDefinition[],
+): ReadonlyMap<string, ArtifactValidator> {
+  const registry = new Map<string, ArtifactValidator>();
+  for (const definition of definitions) {
+    registry.set(normalizeValidatorId(definition.id), definition.validate);
+    for (const alias of definition.aliases ?? []) {
+      registry.set(normalizeValidatorId(alias), definition.validate);
+    }
+  }
+  return registry;
+}
+
+function mergeArtifactValidators(
+  configured: readonly string[] | undefined,
+  runtime: readonly string[] | undefined,
+): readonly string[] | undefined {
+  if ((!configured || configured.length === 0) && (!runtime || runtime.length === 0)) {
+    return undefined;
+  }
+  return [...new Set([...(configured ?? []), ...(runtime ?? [])])];
 }

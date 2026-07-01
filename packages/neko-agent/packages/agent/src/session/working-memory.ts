@@ -173,6 +173,11 @@ export function projectPersistedEventsToWorkingMemory(
         }
         break;
 
+      case 'assistant_text_replacement':
+        pendingAssistant = null;
+        pendingReasoningContent = null;
+        break;
+
       case 'error': {
         pendingAssistant = flushPendingAssistant(history, pendingAssistant);
         pendingReasoningContent = null;

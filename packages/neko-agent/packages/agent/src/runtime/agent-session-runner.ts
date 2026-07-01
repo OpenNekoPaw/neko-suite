@@ -1,15 +1,25 @@
-import type { ChatMessage, PromptFragment, Skill, SkillInjection } from '@neko/shared';
+import type {
+  AgentCapabilityActivationDiagnostic,
+  AgentCapabilityActivationProgressEvent,
+  ChatMessage,
+  PromptFragment,
+  Skill,
+  SkillInjection,
+} from '@neko/shared';
+import { createAgentCapabilityActivationProgressEvent } from '@neko/shared';
 import type { ToolConfirmationRequest } from '../permission/types';
 import type {
   AgentEvent,
   AgentSessionConfig,
   CompressionResult,
+  IdcWorkflowControlResult,
   ExecutionContext,
   IAgentSession,
 } from '../session/types';
 import type { ISkillProvider } from '../tools/core/meta-tools';
 import {
   AgentPendingMessageQueueError,
+  type AgentRunnerIdcWorkflowControlInput,
   type AgentPendingMessageItem,
   type EnqueuePendingMessageInput,
 } from './agent-runner-port';
@@ -32,6 +42,10 @@ export interface AgentSessionRunnerOptions<TContext> {
   readonly onDidStart?: () => void;
   readonly onDidStop?: () => void;
   readonly onDidRequestConfirmation?: (request: AgentSessionRunnerConfirmation) => void;
+  readonly onDidActivationProgress?: (event: {
+    readonly conversationId: string;
+    readonly events: readonly AgentCapabilityActivationProgressEvent[];
+  }) => void;
   readonly onMissingConfirmation?: (toolCallId: string) => void;
   readonly onConfirmationTimeout?: (request: AgentSessionRunnerConfirmation) => void;
   readonly confirmationTimeoutMs?: number;
@@ -134,6 +148,13 @@ export class AgentSessionRunner<TContext> {
       this._isRunning = false;
       this._options.onDidStop?.();
     }
+  }
+
+  buildActivationProgressCallback(): NonNullable<AgentSessionConfig['onActivationProgress']> {
+    return (conversationId, events) => {
+      if (events.length === 0) return;
+      this._options.onDidActivationProgress?.({ conversationId, events });
+    };
   }
 
   cancel(): void {
@@ -303,8 +324,37 @@ export class AgentSessionRunner<TContext> {
     this._session?.setPromptFragments(fragments);
   }
 
+  controlIdcWorkflow(input: AgentRunnerIdcWorkflowControlInput): IdcWorkflowControlResult {
+    if (!this._session) {
+      return this._rejectIdcWorkflowControl(input, {
+        severity: 'error',
+        code: 'agent-session-not-configured',
+        message: 'Agent session is not configured for this conversation.',
+      });
+    }
+
+    if (input.action === 'stop') {
+      return this._session.stopIdcRunWithIntent({ intent: input.intent });
+    }
+
+    const runKind = normalizeIdcWorkflowRunKind(input.runKind);
+    return this._session.startIdcRunWithIntent({
+      runKind,
+      ...(input.runId ? { runId: input.runId } : {}),
+      intent: input.intent,
+    });
+  }
+
   applySkillInjection(injection: SkillInjection, skill?: Skill): void {
     this._session?.applySkillInjection(injection, skill);
+  }
+
+  activateToolSetsForTools(toolNames: readonly string[]): readonly string[] {
+    return this._session?.activateToolSetsForTools(toolNames) ?? [];
+  }
+
+  deactivateToolSet(toolSetName: string): void {
+    this._session?.deactivateToolSet(toolSetName);
   }
 
   getActiveSkill(): Skill | undefined {
@@ -324,6 +374,29 @@ export class AgentSessionRunner<TContext> {
     this._session?.dispose();
     this._session = undefined;
     this._isRunning = false;
+  }
+
+  private _rejectIdcWorkflowControl(
+    input: AgentRunnerIdcWorkflowControlInput,
+    diagnostic: AgentCapabilityActivationDiagnostic,
+  ): IdcWorkflowControlResult {
+    const event = createAgentCapabilityActivationProgressEvent({
+      intent: input.intent,
+      step: 'failed',
+      status: 'failed',
+      diagnostics: [diagnostic],
+      at: Date.now(),
+    });
+    this._options.onDidActivationProgress?.({
+      conversationId: input.intent.conversationId,
+      events: [event],
+    });
+    return {
+      success: false,
+      message: diagnostic.message,
+      diagnostics: [diagnostic],
+      events: [event],
+    };
   }
 
   private _findPendingMessageIndex(queueItemId: string): number {
@@ -392,4 +465,9 @@ function normalizePendingMessageContent(content: string): string {
 
 function clonePendingMessageItem(item: AgentPendingMessageItem): AgentPendingMessageItem {
   return { ...item };
+}
+
+function normalizeIdcWorkflowRunKind(runKind: string | undefined): string {
+  const trimmed = runKind?.trim();
+  return trimmed ? trimmed : 'idc';
 }

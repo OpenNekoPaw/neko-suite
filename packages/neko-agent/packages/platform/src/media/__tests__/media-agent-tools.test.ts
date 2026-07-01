@@ -79,6 +79,37 @@ describe('registerMediaAgentTools', () => {
     );
   });
 
+  it('preserves the runtime conversation id in GenerateImage request metadata', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute(
+      'GenerateImage',
+      {
+        prompt: 'A playful cat',
+        providerId: 'openai-provider',
+        modelId: 'dalle-model',
+      },
+      {
+        trace: {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          turnId: 'turn-1',
+        },
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(media.generateImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          conversationId: 'conv-1',
+        }),
+      }),
+    );
+  });
+
   it('extracts generation intent from task markdown and records providerAdaptation metadata', async () => {
     const registry = new ToolRegistry();
     const media = createMediaMock();

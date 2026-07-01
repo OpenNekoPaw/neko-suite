@@ -55,6 +55,17 @@ export { ImageValidator, ImageValidationError, createImageValidator } from './im
 // Output Validator
 export { OutputValidator, createOutputValidator } from './output-validator';
 
+// Creative table validators
+export {
+  STORYBOARD_CREATIVE_TABLE_HEADERS,
+  STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
+  validateStoryboardCreativeTableOutput,
+} from './creative-table-validator';
+export type {
+  MarkdownTableSummary,
+  StoryboardCreativeTableValidationResult,
+} from './creative-table-validator';
+
 // Validation Hooks
 export { ValidationHooks, createValidationHooks } from './validation-hooks';
 

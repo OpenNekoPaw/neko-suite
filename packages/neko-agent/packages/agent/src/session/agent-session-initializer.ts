@@ -110,6 +110,7 @@ export interface SessionComponents {
  */
 export interface SessionCallbacks {
   onToolConfirmation: (request: ToolConfirmationRequest) => void;
+  getActiveSkillValidationRequirements?: () => readonly string[] | undefined;
 }
 
 // =============================================================================
@@ -274,6 +275,9 @@ export function initializeSession(
     toolGroupRegistry,
     toolInjectionManager,
     onToolConfirmation: (request) => callbacks.onToolConfirmation(request),
+    ...(callbacks.getActiveSkillValidationRequirements
+      ? { getActiveSkillValidationRequirements: callbacks.getActiveSkillValidationRequirements }
+      : {}),
   });
 
   // Step 7: System prompt composer + initial history
@@ -395,6 +399,7 @@ export interface CreateExecutorDeps {
   toolGroupRegistry: ToolGroupRegistry;
   toolInjectionManager: ToolInjectionManager;
   onToolConfirmation: (request: ToolConfirmationRequest) => void;
+  getActiveSkillValidationRequirements?: () => readonly string[] | undefined;
 }
 
 /**
@@ -462,6 +467,9 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
       },
     },
     hooks,
+    ...(deps.getActiveSkillValidationRequirements
+      ? { getActiveSkillValidationRequirements: deps.getActiveSkillValidationRequirements }
+      : {}),
     toolSkillRegistry: toolGroupRegistry,
     toolInjectionManager,
   });

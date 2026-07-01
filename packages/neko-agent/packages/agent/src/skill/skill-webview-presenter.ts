@@ -2,6 +2,7 @@ import type {
   Skill,
   SkillInjection,
   SkillLifecycleProjection,
+  AgentCapabilityActivationProvenance,
   SkillSummary,
   SkillToolDefinition,
 } from '@neko/shared';
@@ -31,6 +32,7 @@ export interface SkillInjectionMessage {
       expires?: string;
       status?: string;
       allowedTools?: string[];
+      provenance?: AgentCapabilityActivationProvenance;
     }>;
   };
 }
@@ -75,6 +77,7 @@ export function buildSkillInjectionMessage(input: {
               ...(record.lockedReason ? { lockedReason: record.lockedReason } : {}),
               ...(record.expires ? { expires: record.expires } : {}),
               ...(record.status ? { status: record.status } : {}),
+              ...(record.provenance ? { provenance: record.provenance } : {}),
               ...(record.id === input.lifecycle?.toolPolicy.contributingRecordIds[0] &&
               input.lifecycle.toolPolicy.allowedTools
                 ? { allowedTools: [...input.lifecycle.toolPolicy.allowedTools] }

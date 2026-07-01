@@ -31,6 +31,7 @@ import { runHooksWithTrace } from './hook-runner';
 import { think, thinkStream, type ThinkDeps } from './think-phase';
 import { act, observe, buildToolResultMessages, type ActDeps } from './act-phase';
 import { getLogger } from '../utils/logger';
+import { consumeOutputValidationRepairRequest } from '../validation/output-validation-repair-request';
 
 const logger = getLogger('Executor');
 
@@ -45,6 +46,8 @@ export interface AgentExecutorOptions {
   config: AgentConfig;
   /** Extensible hooks for additional capabilities */
   hooks?: ExecutorHooks[];
+  /** Reads active Skill artifact validators after meta-tools mutate Skill state. */
+  getActiveSkillValidationRequirements?: () => readonly string[] | undefined;
   /** ToolSkill registry for dynamic tool injection */
   toolSkillRegistry?: IToolGroupRegistry;
   /** Tool injection manager for three-layer injection */
@@ -72,6 +75,7 @@ export class AgentExecutor implements IAgentExecutor {
   private toolRegistry: IToolRegistry;
   private config: AgentConfig;
   private hooks: ExecutorHooks[];
+  private getActiveSkillValidationRequirements?: () => readonly string[] | undefined;
   private onStep?: (step: AgentStep) => void;
   private onStateChange?: (state: AgentState) => void;
   private state: AgentState = 'init';
@@ -87,6 +91,7 @@ export class AgentExecutor implements IAgentExecutor {
     this.toolRegistry = options.toolRegistry;
     this.config = options.config;
     this.hooks = options.hooks || [];
+    this.getActiveSkillValidationRequirements = options.getActiveSkillValidationRequirements;
     this.onStep = options.onStep;
     this.onStateChange = options.onStateChange;
     this.toolSkillRegistry = options.toolSkillRegistry;
@@ -248,8 +253,6 @@ export class AgentExecutor implements IAgentExecutor {
             yield step; // Stream delta to consumer
           } else {
             thinkStep = step;
-            steps.push(step);
-            yield step;
           }
         }
 
@@ -274,6 +277,43 @@ export class AgentExecutor implements IAgentExecutor {
             usage: thinkStep.usage,
           }),
         );
+
+        const repairRequest =
+          thinkStep.toolCalls && thinkStep.toolCalls.length > 0
+            ? null
+            : consumeOutputValidationRepairRequest(agentContext);
+        if (repairRequest) {
+          logger.debug(
+            'neko.agent.validation.repair.queued',
+            withAgentTrace(iterationTrace, {
+              iteration: agentContext.iteration,
+              attempt: repairRequest.attempt,
+              validators: repairRequest.validators,
+              errorCodes: repairRequest.errors.map((error) => error.code),
+            }),
+          );
+          yield {
+            type: 'content_delta',
+            content: '',
+            deltaKind: 'assistant_text_replacement',
+            replacement: {
+              reason: 'output-validation-retry',
+              attempt: repairRequest.attempt,
+            },
+            timestamp: Date.now(),
+          };
+          await runHooksWithTrace(
+            this.hooks,
+            'onIterationComplete',
+            iterationTrace,
+            agentContext.iteration,
+            agentContext,
+          );
+          continue;
+        }
+
+        steps.push(thinkStep);
+        yield thinkStep;
 
         if (thinkStep.toolCalls && thinkStep.toolCalls.length > 0) {
           // ACT
@@ -307,6 +347,7 @@ export class AgentExecutor implements IAgentExecutor {
 
           // Add tool results to context
           agentContext.messages.push(...buildToolResultMessages(toolResults));
+          this.syncActiveSkillValidationRequirements(agentContext);
 
           // Hook: onIterationComplete
           await runHooksWithTrace(
@@ -486,6 +527,25 @@ export class AgentExecutor implements IAgentExecutor {
     };
   }
 
+  private syncActiveSkillValidationRequirements(context: AgentContext): void {
+    const requirements = this.getActiveSkillValidationRequirements?.();
+    if (requirements && requirements.length > 0) {
+      context.metadata = {
+        ...context.metadata,
+        skillValidationRequirements: [...requirements],
+      };
+      return;
+    }
+
+    if (context.metadata['skillValidationRequirements'] === undefined) {
+      return;
+    }
+
+    const { skillValidationRequirements: _removed, ...metadata } = context.metadata;
+    void _removed;
+    context.metadata = metadata;
+  }
+
   /**
    * Initialize agent context from input and optional partial context
    */
@@ -550,8 +610,6 @@ export class AgentExecutor implements IAgentExecutor {
       this.setState('think');
       const thinkStartedAt = Date.now();
       const thinkStep = await think(this.thinkDeps, context, thinkTrace);
-      steps.push(thinkStep);
-      this.onStep?.(thinkStep);
       logger.debug(
         'neko.agent.think.end',
         withAgentTrace(thinkTrace, {
@@ -561,6 +619,33 @@ export class AgentExecutor implements IAgentExecutor {
           usage: thinkStep.usage,
         }),
       );
+
+      const repairRequest =
+        thinkStep.toolCalls && thinkStep.toolCalls.length > 0
+          ? null
+          : consumeOutputValidationRepairRequest(context);
+      if (repairRequest) {
+        logger.debug(
+          'neko.agent.validation.repair.queued',
+          withAgentTrace(iterationTrace, {
+            iteration: context.iteration,
+            attempt: repairRequest.attempt,
+            validators: repairRequest.validators,
+            errorCodes: repairRequest.errors.map((error) => error.code),
+          }),
+        );
+        await runHooksWithTrace(
+          this.hooks,
+          'onIterationComplete',
+          iterationTrace,
+          context.iteration,
+          context,
+        );
+        continue;
+      }
+
+      steps.push(thinkStep);
+      this.onStep?.(thinkStep);
 
       // Check if we have tool calls
       if (thinkStep.toolCalls && thinkStep.toolCalls.length > 0) {
@@ -595,6 +680,7 @@ export class AgentExecutor implements IAgentExecutor {
 
         // Add tool results to context
         context.messages.push(...buildToolResultMessages(toolResults));
+        this.syncActiveSkillValidationRequirements(context);
 
         // Hook: onIterationComplete
         await runHooksWithTrace(

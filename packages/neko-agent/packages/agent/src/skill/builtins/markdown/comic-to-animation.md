@@ -26,8 +26,8 @@ This is not a hardcoded pipeline. Choose the smallest next skill or lifecycle ca
 ## Lifecycle Artifact Rules
 
 - Markdown creative tables are reviewable authoring artifacts. Canvas ingest, generation, Cut, export, and execution handoff should go through lifecycle capabilities or focused domain tools.
-- For Canvas review of Markdown tables, prefer `canvas.ingestMarkdown` with the original Markdown, stable resources, and advisory `intentHint: "creative-table"` / `profileHint: "storyboard"` when appropriate.
-- Do not output Canvas node JSON, transfer payload JSON, project-internal handoff objects, Webview URIs, blob URLs, localhost URLs, provider-temporary handles, cache paths, temp paths, or absolute private paths.
+- For Canvas review of Markdown tables, use the Canvas lifecycle tool/capability exposed in the runtime tool list with the original Markdown and stable resources when appropriate.
+- Do not output domain node JSON, project-internal handoff objects, Webview URIs, blob URLs, localhost URLs, provider-temporary handles, cache paths, temp paths, or absolute private paths.
 - Use actual tool-result, generated-asset, Canvas node, or workspace-safe refs for media. Do not invent ids.
 - Keep storyboard, animation plan, image-prep plan, entity evidence, generated media refs, and execution summaries separate but cross-referenceable through stable shot/source ids.
 - Entity memory and character evidence are owned by the appropriate entity/contribution flow. If this skill surfaces character observations, label them as review evidence unless a trusted contribution capability is invoked.

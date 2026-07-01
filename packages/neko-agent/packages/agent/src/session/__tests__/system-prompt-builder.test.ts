@@ -269,6 +269,18 @@ describe('Builtin Prompts', () => {
     expect(BUILTIN_DEFAULT_PROMPT_ZH).toContain('GetContext');
   });
 
+  it('keeps storyboard and Canvas profile contracts out of default prompts', () => {
+    for (const prompt of [BUILTIN_DEFAULT_PROMPT_EN, BUILTIN_DEFAULT_PROMPT_ZH]) {
+      expect(prompt).not.toContain('Markdown Storyboard Drafts');
+      expect(prompt).not.toContain('Markdown 分镜草稿');
+      expect(prompt).not.toContain('canvas.ingestMarkdown');
+      expect(prompt).not.toContain('profileHint: "storyboard"');
+      expect(prompt).not.toContain('intentHint: "creative-table"');
+      expect(prompt).not.toContain('StoryboardTable');
+      expect(prompt).not.toContain('old plugin-transfer');
+    }
+  });
+
   it('should contain planning instructions in plan prompts', () => {
     // English
     expect(BUILTIN_PLAN_PROMPT_EN).toContain('PLANNING MODE');

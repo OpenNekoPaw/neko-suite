@@ -19,6 +19,7 @@ import type { ImageGenerationRequest } from './types';
 
 interface ImageToolRequestInput {
   readonly args: Record<string, unknown>;
+  readonly options?: ToolExecuteOptions;
   readonly target: GenerationTargetMetadata;
   readonly resolved: ResolvedGenerationPrompt;
   readonly transformMetadata?: Record<string, unknown>;
@@ -271,6 +272,7 @@ function buildImageGenerationRequest(input: ImageToolRequestInput): ImageGenerat
   const sizeStr = readOptionalString(input.args.size);
   const [width, height] = sizeStr?.split('x').map(Number) ?? [];
   const metadata = buildImageToolMetadata({
+    options: input.options,
     resolved: input.resolved,
     target: input.target,
     transformMetadata: input.transformMetadata,
@@ -300,6 +302,7 @@ function buildImageGenerationRequest(input: ImageToolRequestInput): ImageGenerat
 }
 
 function buildImageToolMetadata(input: {
+  readonly options?: ToolExecuteOptions;
   readonly resolved: ResolvedGenerationPrompt;
   readonly target: GenerationTargetMetadata;
   readonly transformMetadata?: Record<string, unknown>;
@@ -307,10 +310,23 @@ function buildImageToolMetadata(input: {
   const metadata = input.resolved.metadata
     ? withGenerationTargetMetadata(input.resolved.metadata, input.target)
     : undefined;
-  if (!input.transformMetadata) return metadata;
+  const withConversation = mergeRuntimeConversationMetadata(metadata, input.options);
+  if (!input.transformMetadata) return withConversation;
+  return {
+    ...(withConversation ?? {}),
+    transformImage: input.transformMetadata,
+  };
+}
+
+function mergeRuntimeConversationMetadata(
+  metadata: Record<string, unknown> | undefined,
+  options: ToolExecuteOptions | undefined,
+): Record<string, unknown> | undefined {
+  const conversationId = options?.trace?.conversationId;
+  if (!conversationId) return metadata;
   return {
     ...(metadata ?? {}),
-    transformImage: input.transformMetadata,
+    conversationId,
   };
 }
 
@@ -431,9 +447,8 @@ function readTransformImageReferenceArgs(args: Record<string, unknown>): Record<
 
 function readIpAdapterRefs(value: unknown): ImageGenerationRequest['ipAdapterRefs'] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const refs = value.flatMap(
-    (item): NonNullable<ImageGenerationRequest['ipAdapterRefs']> =>
-      isIpAdapterRef(item) ? [item] : [],
+  const refs = value.flatMap((item): NonNullable<ImageGenerationRequest['ipAdapterRefs']> =>
+    isIpAdapterRef(item) ? [item] : [],
   );
   return refs.length > 0 ? refs : undefined;
 }
@@ -785,6 +800,7 @@ export function registerMediaAgentTools(
           const task = await media.generateImage({
             ...buildImageGenerationRequest({
               args: { size: '1024x1024', ...args },
+              options,
               target: requestTarget,
               resolved,
             }),

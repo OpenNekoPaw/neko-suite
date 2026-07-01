@@ -22,7 +22,10 @@ describe('attachment projection helpers', () => {
   it('formats file and media attachment text consistently', () => {
     expect(formatFileAttachmentContent('code.ts', 'const x = 1;')).toContain('### File: code.ts');
     expect(formatUnreadableFileAttachment('secret.txt')).toContain('Failed to read file');
-    const documentReference = formatDocumentAttachmentReference('book.epub', '${A}/books/book.epub');
+    const documentReference = formatDocumentAttachmentReference(
+      'book.epub',
+      '${A}/books/book.epub',
+    );
     expect(documentReference).toContain('Use ReadDocument');
     expect(documentReference).toContain('source={"kind":"file","path":"${A}/books/book.epub"}');
     expect(
@@ -32,6 +35,19 @@ describe('attachment projection helpers', () => {
         path: '/tmp/clip.mp4',
       }),
     ).toBe('\n\n[Attached video: clip.mp4] (path: /tmp/clip.mp4)');
+  });
+
+  it('localizes document attachment references while preserving ReadDocument contracts', () => {
+    const documentReference = formatDocumentAttachmentReference(
+      'book.epub',
+      '${A}/books/book.epub',
+      'zh-CN',
+    );
+
+    expect(documentReference).toContain('[已附加 文档: book.epub]');
+    expect(documentReference).toContain('分析该文档前，先调用 ReadDocument');
+    expect(documentReference).toContain('source={"kind":"file","path":"${A}/books/book.epub"}');
+    expect(documentReference).not.toContain('Use ReadDocument with source=');
   });
 
   it('extracts file reference chip paths from a message', () => {
@@ -95,15 +111,14 @@ describe('attachment projection helpers', () => {
       {
         readTextFile,
         readImageFileAsBase64: async () => null,
+        locale: 'zh',
       },
     );
 
     expect(readTextFile).not.toHaveBeenCalled();
-    expect(result.textContent).toContain('[Attached document: book.epub]');
-    expect(result.textContent).toContain('Use ReadDocument');
-    expect(result.textContent).toContain(
-      'source={"kind":"file","path":"${A}/books/book.epub"}',
-    );
+    expect(result.textContent).toContain('[已附加 文档: book.epub]');
+    expect(result.textContent).toContain('分析该文档前，先调用 ReadDocument');
+    expect(result.textContent).toContain('source={"kind":"file","path":"${A}/books/book.epub"}');
     expect(result.textContent).not.toContain('document should not be read');
   });
 

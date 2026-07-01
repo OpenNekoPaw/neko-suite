@@ -44,6 +44,9 @@ import {
 import type { ResolvedProviderSource } from '@neko/ai-sdk';
 
 const logger = getLogger('MediaTaskExecutor');
+const DEFAULT_IMAGE_TASK_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_VIDEO_TASK_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_AUDIO_TASK_TIMEOUT_MS = 5 * 60 * 1000;
 
 function createUnsupportedProviderDiagnostic(providerType: string): string {
   return (
@@ -74,6 +77,12 @@ export interface MediaTaskExecutorOptions {
   pollingIntervalMs?: number;
   /** Max polling attempts (default: 360 = 30 min at 5s interval) */
   maxPollingAttempts?: number;
+  /** Max wall-clock time for one image provider call before the task fails visibly. */
+  imageTaskTimeoutMs?: number;
+  /** Max wall-clock time for one video provider call before the task fails visibly. */
+  videoTaskTimeoutMs?: number;
+  /** Max wall-clock time for one audio provider call before the task fails visibly. */
+  audioTaskTimeoutMs?: number;
   /**
    * Provider types that may temporarily use the legacy MediaAdapter bridge.
    * Keep scoped to migration rows; unsupported providers fail visibly.
@@ -95,6 +104,9 @@ export class MediaTaskExecutor {
   private taskManager?: MediaTaskManagerDeps;
   private readonly allowLegacyBridgeProviderTypes: ReadonlySet<string>;
   private readonly requestAssetMaterializer?: MediaRequestAssetMaterializer;
+  private readonly imageTaskTimeoutMs: number;
+  private readonly videoTaskTimeoutMs: number;
+  private readonly audioTaskTimeoutMs: number;
 
   constructor(
     providerRegistry: ProviderRegistry,
@@ -107,6 +119,9 @@ export class MediaTaskExecutor {
       options.allowLegacyBridgeProviderTypes ?? AI_SDK_LEGACY_BRIDGE_MIGRATION_PROVIDER_TYPES,
     );
     this.requestAssetMaterializer = options.requestAssetMaterializer;
+    this.imageTaskTimeoutMs = options.imageTaskTimeoutMs ?? DEFAULT_IMAGE_TASK_TIMEOUT_MS;
+    this.videoTaskTimeoutMs = options.videoTaskTimeoutMs ?? DEFAULT_VIDEO_TASK_TIMEOUT_MS;
+    this.audioTaskTimeoutMs = options.audioTaskTimeoutMs ?? DEFAULT_AUDIO_TASK_TIMEOUT_MS;
   }
 
   /**
@@ -381,18 +396,24 @@ export class MediaTaskExecutor {
           nekoProviderOptions['aspectRatio'] = imgReq.aspectRatio;
         if (imgReq.quality !== undefined) nekoProviderOptions['quality'] = imgReq.quality;
 
-        const result = await generateImage({
-          model: imageModel,
-          prompt: imgReq.prompt,
-          n: imgReq.count ?? 1,
-          size: size as `${number}x${number}` | undefined,
-          abortSignal: context?.signal,
-          maxRetries: 0,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ...(Object.keys(nekoProviderOptions).length > 0
-            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              ({ providerOptions: { neko: nekoProviderOptions } } as any)
-            : {}),
+        const result = await runProviderCallWithTimeout({
+          timeoutMs: this.imageTaskTimeoutMs,
+          signal: context?.signal,
+          timeoutMessage: `Image generation timed out after ${this.imageTaskTimeoutMs}ms`,
+          run: (abortSignal) =>
+            generateImage({
+              model: imageModel,
+              prompt: imgReq.prompt,
+              n: imgReq.count ?? 1,
+              size: size as `${number}x${number}` | undefined,
+              abortSignal,
+              maxRetries: 0,
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              ...(Object.keys(nekoProviderOptions).length > 0
+                ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  ({ providerOptions: { neko: nekoProviderOptions } } as any)
+                : {}),
+            }),
         });
 
         throwIfAborted(context?.signal);
@@ -429,18 +450,24 @@ export class MediaTaskExecutor {
         const prompt = this.buildVideoPrompt(vidReq);
         const videoProviderOptions = this.buildVideoProviderOptions(vidReq);
 
-        const result = await experimental_generateVideo({
-          model: videoModel,
-          prompt,
-          aspectRatio: this.parseAspectRatio(vidReq.aspectRatio),
-          resolution,
-          duration: vidReq.duration,
-          fps: vidReq.fps,
-          ...(Object.keys(videoProviderOptions).length > 0
-            ? { providerOptions: { neko: videoProviderOptions } }
-            : {}),
-          abortSignal: context?.signal,
-          maxRetries: 0,
+        const result = await runProviderCallWithTimeout({
+          timeoutMs: this.videoTaskTimeoutMs,
+          signal: context?.signal,
+          timeoutMessage: `Video generation timed out after ${this.videoTaskTimeoutMs}ms`,
+          run: (abortSignal) =>
+            experimental_generateVideo({
+              model: videoModel,
+              prompt,
+              aspectRatio: this.parseAspectRatio(vidReq.aspectRatio),
+              resolution,
+              duration: vidReq.duration,
+              fps: vidReq.fps,
+              ...(Object.keys(videoProviderOptions).length > 0
+                ? { providerOptions: { neko: videoProviderOptions } }
+                : {}),
+              abortSignal,
+              maxRetries: 0,
+            }),
         });
 
         throwIfAborted(context?.signal);
@@ -471,14 +498,20 @@ export class MediaTaskExecutor {
         const speechModel = resolved.speech(model.name);
         if (!speechModel) return null;
 
-        const result = await experimental_generateSpeech({
-          model: speechModel,
-          text: audioReq.prompt,
-          voice: audioReq.metadata?.voice as string | undefined,
-          speed: audioReq.metadata?.speed as number | undefined,
-          outputFormat: audioReq.format,
-          abortSignal: context?.signal,
-          maxRetries: 0,
+        const result = await runProviderCallWithTimeout({
+          timeoutMs: this.audioTaskTimeoutMs,
+          signal: context?.signal,
+          timeoutMessage: `Audio generation timed out after ${this.audioTaskTimeoutMs}ms`,
+          run: (abortSignal) =>
+            experimental_generateSpeech({
+              model: speechModel,
+              text: audioReq.prompt,
+              voice: audioReq.metadata?.voice as string | undefined,
+              speed: audioReq.metadata?.speed as number | undefined,
+              outputFormat: audioReq.format,
+              abortSignal,
+              maxRetries: 0,
+            }),
         });
 
         throwIfAborted(context?.signal);
@@ -764,6 +797,54 @@ export class MediaTaskExecutor {
 function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new Error('Task aborted');
+  }
+}
+
+async function runProviderCallWithTimeout<T>(input: {
+  readonly timeoutMs: number;
+  readonly signal?: AbortSignal;
+  readonly timeoutMessage: string;
+  readonly run: (signal: AbortSignal) => Promise<T>;
+}): Promise<T> {
+  throwIfAborted(input.signal);
+
+  const controller = new AbortController();
+  let timedOut = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let onParentAbort: (() => void) | undefined;
+  const providerCall = input.run(controller.signal);
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      reject(new Error(input.timeoutMessage));
+    }, input.timeoutMs);
+  });
+  const parentSignal = input.signal;
+  const parentAbortPromise = parentSignal
+    ? new Promise<never>((_, reject) => {
+        onParentAbort = () => {
+          controller.abort();
+          reject(new Error('Task aborted'));
+        };
+        parentSignal.addEventListener('abort', onParentAbort, { once: true });
+      })
+    : undefined;
+
+  try {
+    return await Promise.race(
+      parentAbortPromise
+        ? [providerCall, timeoutPromise, parentAbortPromise]
+        : [providerCall, timeoutPromise],
+    );
+  } catch (error) {
+    if (controller.signal.aborted && !input.signal?.aborted) {
+      throw new Error(timedOut ? input.timeoutMessage : 'Task aborted');
+    }
+    throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    if (onParentAbort) input.signal?.removeEventListener('abort', onParentAbort);
   }
 }
 

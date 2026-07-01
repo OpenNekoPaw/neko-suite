@@ -131,6 +131,7 @@ export class JournalReader {
           case 'tool_call':
           case 'tool_result':
           case 'text_delta':
+          case 'assistant_text_replacement':
           case 'thinking':
           case 'tool_progress':
           case 'tool_confirmation':

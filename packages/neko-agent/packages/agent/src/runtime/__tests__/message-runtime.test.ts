@@ -223,6 +223,48 @@ describe('message runtime helpers', () => {
     expect(enhanced).toContain('source={"kind":"file","path":"${A}/books/book.epub"}');
   });
 
+  it('localizes runtime document reference instructions while preserving tool contracts', () => {
+    const enhanced = buildEnhancedAgentMessage({
+      message: '分析前10页，生成分镜表',
+      documentReferences: [{ path: '${A}/books/book.epub' }],
+      locale: 'zh-CN',
+    });
+
+    expect(enhanced).toContain('--- 引用文档 ---');
+    expect(enhanced).toContain('[文档: ${A}/books/book.epub]');
+    expect(enhanced).toContain('分析该文档前，先调用 ReadDocument');
+    expect(enhanced).toContain('source={"kind":"file","path":"${A}/books/book.epub"}');
+    expect(enhanced).not.toContain('--- Referenced Documents ---');
+    expect(enhanced).not.toContain('Do not inline the whole document as chat context.');
+  });
+
+  it('localizes structured document context labels for zh runtime prompts', () => {
+    const projected = formatAgentContextPayload(
+      {
+        type: 'document-selection',
+        id: 'selection-1',
+        label: 'book.epub · Chapter 1',
+        summary: 'Selected text',
+        data: {
+          filePath: '/books/book.epub',
+          text: 'selected paragraph',
+          contentKind: 'text',
+          source: { filePath: '/books/book.epub', format: 'epub', fileId: 'book-1' },
+          locator: { kind: 'chapter', chapterHref: 'chapter-1.xhtml', spineIndex: 0 },
+          excerpt: { contentKind: 'text', text: 'selected paragraph', truncated: false },
+        },
+      },
+      'zh',
+    );
+
+    expect(projected).toContain('[文档: book.epub · Chapter 1]');
+    expect(projected).toContain('来源: /books/book.epub');
+    expect(projected).toContain('格式: epub');
+    expect(projected).toContain('摘录:\nselected paragraph');
+    expect(projected).toContain('调用 ReadDocument');
+    expect(projected).not.toContain('Follow-up: use ReadDocument');
+  });
+
   it('prepares referenced file contents with injected input processor', async () => {
     const onReferenceError = vi.fn();
 
@@ -597,6 +639,42 @@ describe('message runtime helpers', () => {
         generateMessageId: () => 'user-1',
       }),
     ).resolves.toEqual({ status: 'agent-failed', error });
+  });
+
+  it('adds runtime locale metadata before dispatching to the agent executor', async () => {
+    const executeAgentTurn = vi.fn(async () => undefined);
+
+    await expect(
+      runAgentMessageTurnRuntime({
+        request: {
+          conversationId: 'conv-1',
+          messageText: '分析前10页，生成分镜表',
+          sessionMode: 'agent',
+          locale: 'zh-CN',
+          executionOverrides: { metadata: { traceId: 'trace-1' } },
+        },
+        processAttachments: async () => ({
+          textContent: '',
+          imageAttachments: [],
+        }),
+        persistUserMessage: vi.fn(),
+        postMessage: vi.fn(),
+        executeAgentTurn,
+        generateMessageId: () => 'user-1',
+      }),
+    ).resolves.toEqual({ status: 'agent-dispatched' });
+
+    expect(executeAgentTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        executionOverrides: {
+          metadata: {
+            traceId: 'trace-1',
+            locale: 'zh',
+          },
+        },
+        locale: 'zh-CN',
+      }),
+    );
   });
 
   it('runs turn preflight before preparing and dispatching the agent message', async () => {

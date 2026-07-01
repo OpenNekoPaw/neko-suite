@@ -232,6 +232,7 @@ function projectVisibleIndicator(
     slot: record.slot,
     owner: record.owner,
     clearable: record.deactivation.clearableByUser,
+    ...(record.provenance ? { provenance: record.provenance } : {}),
     ...(record.deactivation.lockedReason ? { lockedReason: record.deactivation.lockedReason } : {}),
     ...(projectExpiry(record) ? { expires: projectExpiry(record) } : {}),
     status: record.status,

@@ -6,11 +6,11 @@
  *   - `/v1/images/edits`       (multipart)  — image editing / inpainting with
  *                                             `image` and optional `mask`
  *
- * Non-standard fields like `control_image`, `ip_adapter_refs`, `edit_instruction`,
- * `style` are accepted only by NewAPI deployments that internally proxy to
- * providers with these capabilities (e.g. Flux on fal.ai). They are forwarded
- * as body fields on `/v1/images/generations`; standard-compliant proxies may
- * ignore them.
+ * Non-standard fields like `control_image`, `ip_adapter_refs`, and
+ * `edit_instruction` are accepted only by NewAPI deployments that internally
+ * proxy to providers with these capabilities (e.g. Flux on fal.ai). Prompt-only
+ * style hints should stay in the prompt for the standard generations endpoint;
+ * standard-compliant proxies can reject unknown body keys.
  */
 
 import { lookup as dnsLookup } from 'node:dns/promises';
@@ -132,8 +132,8 @@ export class NewAPIImageModel implements ImageModelV3 {
       body.inpaint_strength = nekoExtras['inpaintStrength'];
     if (nekoExtras['editInstruction'] !== undefined)
       body.edit_instruction = nekoExtras['editInstruction'];
-    if (nekoExtras['style'] !== undefined) body.style = nekoExtras['style'];
-    if (nekoExtras['quality'] !== undefined) body.quality = nekoExtras['quality'];
+    const quality = normalizeNewAPIImageQuality(nekoExtras['quality'], this.modelId);
+    if (quality !== undefined) body.quality = quality;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -202,7 +202,8 @@ export class NewAPIImageModel implements ImageModelV3 {
     form.append('prompt', options.prompt ?? '');
     if (options.n) form.append('n', String(options.n));
     if (options.size) form.append('size', options.size);
-    if (nekoExtras['quality'] !== undefined) form.append('quality', String(nekoExtras['quality']));
+    const quality = normalizeNewAPIImageQuality(nekoExtras['quality'], this.modelId);
+    if (quality !== undefined) form.append('quality', String(quality));
 
     // Attach source image. Accepts base64, data URL, or remote URL (downloaded).
     const referenceImageBase64 = nekoExtras['referenceImageBase64'] as string | undefined;
@@ -341,6 +342,19 @@ function decodeBase64OrDataUrl(input: string): { bytes: Uint8Array; mimeType: st
     return { bytes: Buffer.from(match[2] ?? '', 'base64'), mimeType: match[1] ?? 'image/png' };
   }
   return { bytes: Buffer.from(input, 'base64'), mimeType: 'image/png' };
+}
+
+function normalizeNewAPIImageQuality(value: unknown, modelId: string): string | undefined {
+  if (typeof value !== 'string' || value.length === 0) return undefined;
+  if (!modelId.startsWith('gpt-image-')) return value;
+  switch (value) {
+    case 'hd':
+      return 'high';
+    case 'standard':
+      return 'auto';
+    default:
+      return value;
+  }
 }
 
 /** Maximum bytes accepted from a remote image download (20 MB). */

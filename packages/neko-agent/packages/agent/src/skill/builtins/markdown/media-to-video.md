@@ -7,7 +7,7 @@ Coordinate media-to-video work through focused skills and existing tools. This i
 1. Inspect the user's input and determine the source modality: comic, document, image, image sequence, storyboard, animation plan, or generated media.
 2. Route intent before activating production skills:
    - Content understanding only (describe, OCR, summarize, extract text, panel order, character/scene analysis, quality diagnostics, "read/analyze the first N pages") should stay in normal read/analysis tool use and should not activate media-to-video, comic-to-animation, comic-to-storyboard, or storyboard-to-animation-plan.
-   - Storyboard-only requests activate comic-to-storyboard and stop after the reviewable Markdown storyboard draft unless the user also asks for animation, video, generated media, Canvas/Cut handoff, or export.
+   - Storyboard-only requests activate comic-to-storyboard and stop after the reviewable Markdown creative table unless the user also asks for animation, video, generated media, Canvas/Cut handoff, or export.
    - Explicit video/animation/generation/export requests activate this coordinator or a focused production skill.
 3. Use GetContext to inspect available related skills. Activate a focused skill when its detailed guidance is needed.
 4. For comic EPUB/PDF/CBZ/CBR pages, prefer comic-to-storyboard first only when a storyboard artifact is requested; prefer comic-to-animation when the user explicitly requests animation/video production.
@@ -20,8 +20,8 @@ Coordinate media-to-video work through focused skills and existing tools. This i
 
 ## Structured Artifact Rules
 
-- Markdown storyboard drafts are reviewable authoring artifacts. For production animation, Cut, generated media, export, or execution summaries, invoke validated lifecycle capabilities before claiming handoff success.
-- For Canvas review of Markdown tables, prefer lifecycle-backed `canvas.ingestMarkdown` and pass original Markdown plus stable resource refs through local UI/tool adapters; use advisory `intentHint: "creative-table"` and `profileHint: "storyboard"` for storyboard creative tables. Do not output Canvas node JSON, transfer payload JSON, or project-internal handoff objects. Canvas table profiles preserve unknown columns as review metadata.
+- Markdown creative tables are reviewable authoring artifacts. For production animation, Cut, generated media, export, or execution summaries, invoke validated lifecycle capabilities before claiming handoff success.
+- For Canvas review of Markdown tables, use the Canvas lifecycle tool/capability exposed in the runtime tool list and pass original Markdown plus stable resource refs through local UI/tool adapters. Do not output domain node JSON or project-internal handoff objects. Keep useful unknown columns visible as review metadata.
 - The reviewed storyboard creative table remains the creative shot source. AnimationPlan carries only provider-neutral execution intent in `shotOverlays[]`; runtime status belongs to Agent async tasks or execution summaries.
 - Use actual tool-result or generated-asset references for media. Do not invent ids.
 - Do not embed base64, blob URLs, localhost URLs, or absolute local cache paths.

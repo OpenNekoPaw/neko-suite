@@ -64,6 +64,13 @@ export type AgentStreamProjectionMessage =
       content?: string;
     }
   | {
+      type: 'assistantTextReplacement';
+      conversationId: string;
+      messageId: string;
+      reason: 'output-validation-retry';
+      attempt: number;
+    }
+  | {
       type: 'toolCall';
       conversationId: string;
       messageId: string;
@@ -189,6 +196,16 @@ export function projectAgentStreamEventToHostMessages(
           content: event.content,
         },
       ];
+    case 'assistant_text_replacement':
+      return [
+        {
+          type: 'assistantTextReplacement',
+          conversationId,
+          messageId,
+          reason: event.replacement?.reason ?? 'output-validation-retry',
+          attempt: event.replacement?.attempt ?? 1,
+        },
+      ];
     case 'tool_call':
       return [
         {
@@ -296,6 +313,8 @@ export function applyAgentStreamEventToState(
     case 'text':
     case 'text_delta':
       return applyTextContent(state, event.content ?? '', options);
+    case 'assistant_text_replacement':
+      return applyAssistantTextReplacement(state);
     case 'tool_call':
       return applyToolCall(state, event, options);
     case 'tool_result':
@@ -413,6 +432,29 @@ function applyTextContent(
   }
 
   return phaseChange ? { phaseChange } : {};
+}
+
+function applyAssistantTextReplacement(state: AgentStreamProjectionState): AgentStreamStateUpdate {
+  const currentTextBlock = state.currentTextBlockId
+    ? findContentBlock(state, state.currentTextBlockId)
+    : undefined;
+  const targetTextBlock =
+    currentTextBlock?.type === 'text'
+      ? currentTextBlock
+      : [...state.contentBlocks].reverse().find((block) => block.type === 'text');
+
+  if (targetTextBlock?.type === 'text') {
+    targetTextBlock.content = '';
+    targetTextBlock.isStreaming = true;
+    state.currentTextBlockId = targetTextBlock.id;
+  }
+
+  state.accumulatedResponse = state.contentBlocks
+    .filter((block) => block.type === 'text')
+    .map((block) => block.content ?? '')
+    .join('');
+
+  return {};
 }
 
 function applyToolCall(

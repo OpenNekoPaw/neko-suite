@@ -47,18 +47,31 @@
 
 ## 输出契约
 
-普通审阅输出时，先给简洁说明，再输出一张 Canvas-ingestable Markdown creative table。这张表就是分镜表；不要引入第二个产物名，也不要说之后再转换。
+普通审阅输出时，先给简洁说明，再输出一张 Markdown creative table。这张表就是分镜表；不要引入第二个产物名，也不要说之后再转换。
 
-主表必须按以下顺序使用这些精确核心表头：
+普通聊天回复不要输出 YAML frontmatter 或创作文档元数据。禁止输出 `---`、`id:`、`kind: draft`、`status: draft`、`domain: storyboard` 或 `referenceChain:` 这类块/键。它们只属于 host/runtime 持久化的创作文档，不属于分镜 creative table。
+
+主表必须按以下顺序覆盖这些稳定字段，并在核心字段之后追加下面的必需决策扩展字段。表头可以使用当前语言的本地化显示名，但必须能明确映射到这些稳定字段：
 
 `scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `prompt`, `reviewStatus`, `nextAction`
 
+核心字段之后必须追加这些决策扩展字段：
+
+`contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`
+
 规则：
 
-- 即使单元格内容是中文或日文，表头也必须使用上面的英文字段 id。不要把 `镜号`、`对应页`、`景别`、`画面内容`、`镜头/构图`、`文字/对白`、`时长建议` 或 `备注` 作为主表头。
+- 中文表头可以使用 `场景`、`镜头`、`来源`、`来源分格`、`决策`、`时长`、`画面`、`运镜`、`音频`、`人物`、`对白`、`提示词`、`审阅状态`、`建议操作`、`内容类型`、`决策理由`、`需要拆分`、`重复来源`，但不能漏掉任何稳定字段。
+- 绝不能把简化的页级分析表当作分镜表输出。禁止作为主表头的字段包括 `页码`、`景别/构图`、`节奏/情绪`、`page`、`image reference`、`analysis` 或 `suggestion`。`画面内容`、`生成提示词`、`建议操作` 等可以作为本地化字段，但只有在整张表同时包含全部必需字段时才合格。
+- 不要说必需的分镜字段之后再补。`characters`、`shot`、`duration`、`motion`、`prompt` 和 `nextAction` 必须现在就出现在唯一主表中。
+- 如果证据仍然停留在页级，也必须用必需核心列创建一个或多个 shot 行，并在不确定的单元格写 `needs-panel-analysis`、`needs-review` 或 `needs-prompt`；不要降级成页面列表。
+- 不要再输出第二张“分镜结构建议”表。keep/skip/split/merge 和下一步规划写入 `decision`、`decisionReason`、`reviewStatus` 和 `nextAction`。
 - `prompt` 和 `nextAction` 必填。没有现成提示词或动作时，写 `needs-prompt` 或 `needs-review`。
 - 每行代表叙事 shot 或视频节拍，不是页面清单。同一个 `source` 可以在多行重复，用于表达一页/一图拆出多个 shot。
-- `decision` 表达 keep/skip/merge/split/reference-only 等选择。
+- `decision` 表达 keep/skip/merge/split/duplicate/reference-only 等选择。封面、重复页、广告页、空白页和元数据页也必须显式写出 `decision`，不要静默消失。
+- `decisionReason` 说明为什么保留、跳过、合并、拆分成多个 shot，或判定为重复。
+- 一页/一格需要拆成多个 shot 或需要裁切分格时，`requiresSplit` 写 `true`；否则写 `false`。
+- 只有重复或需要合并到另一来源/shot 时才填写 `duplicateOf`；否则留空。
 - `source` 使用当前图片索引中的稳定可读 token，例如 `P1`、`P1#panel_2`、`page_2#panel_1` 或 `P3,P4`。
 - `sourcePanel` 表达分格位置、裁切意图或页面/分格映射，例如 `右上分格`、`panel 2` 或 `整页宽幅裁切`。
 - 单元格保持短小、可审阅。不确定性放进扩展列，不要全部塞进 `visual`。
@@ -71,28 +84,30 @@
 
 `prompt` 是后续生成或修复动作的重要输入。`source`、`visual`、`duration`、`reviewStatus` 和 `nextAction` 帮助 Canvas 展示 diagnostics 和审阅动作。
 
-需要时，在核心表头之后追加扩展列，例如 `contentType`、`decisionReason`、`requiresSplit`、`requiresTextRemoval`、`requiresInpaint`、`referenceImage`、`styleRef`、`textCueType`、`speaker`、`ocrNotes`、`risk`、`actionId`、`resultRef` 或 `executionStatus`。Canvas creative table profile 会消费已知字段，并把未知列保留为审阅 metadata。
+需要时，在必需决策扩展表头之后继续追加扩展列，例如 `requiresTextRemoval`、`requiresInpaint`、`referenceImage`、`styleRef`、`textCueType`、`speaker`、`ocrNotes`、`risk`、`actionId`、`resultRef` 或 `executionStatus`。已知字段应保持稳定；有用的扩展列应作为审阅 metadata 可见保留。
 
 ## 资源引用
 
 - 推荐普通 token：`P1`、`P1#panel_2`、`page_2#panel_1`、`P3,P4`。
-- 可以在目标是同一个稳定 token/path 时使用 CommonMark 图片，例如 `![cover](P1)` 或 `![panel](page_2#panel_1)`。alt text 只是展示文字，target 才是资源身份。
+- 只有当前工具/host 资源索引中存在完全相同 target 时，才在 `source` 单元格使用标准 CommonMark 图片，例如 `![P1](P1)` 或 `![panel](page_2#panel_1)`。alt text 只是展示文字，target 才是资源身份。
+- 如果看不到稳定资源绑定，使用普通 token，并在 `reviewStatus` 或 `nextAction` 写 `needs-resource-binding`，不要编造 Markdown 图片。
+- CommonMark 图片 target 可以是稳定 token，也可以是工具返回的稳定文档图片路径，例如 `![page](image/moe-010564.jpg)`。不要使用相对项目路径，除非工具/资源索引返回了完全相同的 token。
 - `#panel_1`、`#crop_top` 等后缀表示 base image token 上的分格/裁切意图，不是另一张资源。
-- 不要写 render URI、Webview URI、blob URL、`.neko/.cache` 路径、provider cache path、系统临时路径、Engine token、base64 图片数据、绝对私有路径、provider-private handle 或 Canvas node JSON。
-- `![[cover.png]]` 或 `[[Chapter 1#Section]]` 这类 Neko resource-reference 语法只有在 renderer/session 明确声明支持时才能使用。默认使用普通 token 或 CommonMark 图片。
+- 不要写 render URI、Webview URI、blob URL、`.neko/.cache` 路径、provider cache path、系统临时路径、Engine token、base64 图片数据、绝对私有路径、provider-private handle 或领域节点 JSON。
+- 分镜表中不要使用 `![[cover.png]]` 或 `[[Chapter 1#Section]]` 这类 Neko/Obsidian-style resource-reference 语法。本 Skill 遵循 Codex-style 标准 Markdown：`![alt](resource-token)`。
 
 ## Canvas 交接
 
-如果用户要求发送到 Canvas，优先使用 lifecycle-backed `canvas.ingestMarkdown` capability。分镜 creative table 使用 advisory `intentHint: "creative-table"` 和 `profileHint: "storyboard"`。本地 UI/tool adapter 会携带真实稳定 resource refs。除非 Canvas capability/tool 返回成功，不要声称 Canvas 成功。
+如果用户要求发送到 Canvas，使用运行时工具列表中可用的 Canvas lifecycle tool/capability。本地 UI/tool adapter 会携带真实稳定 resource refs。除非 Canvas capability/tool 返回成功，不要声称 Canvas 成功。
 
-变更生产节点前，先走 validation 或 review action。不要输出 Canvas node JSON、transfer payload JSON 或其他项目内部数据结构。
+变更生产节点前，先走 validation 或 review action。不要输出领域节点 JSON 或其他项目内部交接对象。
 
 ## 示例
 
-| scene   | shot | source     | sourcePanel | decision | duration | visual                     | motion                 | audio        | characters                 | dialogue | prompt                                                                       | reviewStatus | nextAction       |
-| ------- | ---- | ---------- | ----------- | -------- | -------- | -------------------------- | ---------------------- | ------------ | -------------------------- | -------- | ---------------------------------------------------------------------------- | ------------ | ---------------- |
-| 第 1 页 | 1    | P1#panel_1 | 上方分格    | keep     | 3s       | 小小的人影在黄昏靠近发光物 | 缓慢推近               | 低风声       | 牧羊少年：短披风、谨慎姿态 |          | 暗黑童话风格，黄昏牧场，谨慎少年靠近发光古灯，镜头缓慢推近，保持角色设计一致 | needs-review | use-as-reference |
-| 第 1 页 | 2    | P1#panel_2 | 下方特写    | split    | 2s       | 手伸向光源，强化悬念       | 静态特写，光线轻微闪动 | 柔和魔法嗡鸣 | 牧羊少年：手和袖口可见     |          | 手伸向紫金色光源的特写，紧张氛围，保留原漫画构图                             | needs-review | split-panel      |
+| scene   | shot | source     | sourcePanel | decision | duration | visual                     | motion                 | audio        | characters                 | dialogue | prompt                                                                       | reviewStatus | nextAction       | contentType | decisionReason         | requiresSplit | duplicateOf |
+| ------- | ---- | ---------- | ----------- | -------- | -------- | -------------------------- | ---------------------- | ------------ | -------------------------- | -------- | ---------------------------------------------------------------------------- | ------------ | ---------------- | ----------- | ---------------------- | ------------- | ----------- |
+| 第 1 页 | 1    | P1#panel_1 | 上方分格    | keep     | 3s       | 小小的人影在黄昏靠近发光物 | 缓慢推近               | 低风声       | 牧羊少年：短披风、谨慎姿态 |          | 暗黑童话风格，黄昏牧场，谨慎少年靠近发光古灯，镜头缓慢推近，保持角色设计一致 | needs-review | use-as-reference | story       | 建立镜头，有叙事价值   | false         |             |
+| 第 1 页 | 2    | P1#panel_2 | 下方特写    | split    | 2s       | 手伸向光源，强化悬念       | 静态特写，光线轻微闪动 | 柔和魔法嗡鸣 | 牧羊少年：手和袖口可见     |          | 手伸向紫金色光源的特写，紧张氛围，保留原漫画构图                             | needs-review | split-panel      | story       | 同一页包含独立特写节拍 | true          |             |
 
 推荐扩展示例：
 

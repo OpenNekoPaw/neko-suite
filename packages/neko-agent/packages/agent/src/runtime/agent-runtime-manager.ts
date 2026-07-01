@@ -12,10 +12,12 @@ import {
 import { SubAgentRuntimeCoordinator } from './subagent-runtime';
 import type {
   AgentRunnerEventSource,
+  AgentRunnerIdcWorkflowControlInput,
   AgentPendingMessageItem,
   AgentRunnerPortEvent,
   DisposableLike,
 } from './agent-runner-port';
+import type { IdcWorkflowControlResult } from '../session/types';
 
 export type AgentRuntimeManagerDisposable = DisposableLike;
 export type AgentRuntimeManagerEvent = AgentRunnerEventSource<void>;
@@ -44,6 +46,7 @@ export interface AgentRuntimeManagerAgent extends ManagedAgentRuntime {
   isToolAllowed(toolName: string): boolean;
   setSkillProvider(provider: ISkillProvider): void;
   refreshCapabilityRuntime(): void;
+  controlIdcWorkflow(input: AgentRunnerIdcWorkflowControlInput): IdcWorkflowControlResult;
   readonly onDidRunnerEvent?: AgentRunnerEventSource<AgentRunnerPortEvent>;
   readonly onDidStart?: AgentRuntimeManagerEvent;
   readonly onDidStop?: AgentRuntimeManagerEvent;
@@ -109,6 +112,10 @@ export interface AgentRuntimeManager<TAgent extends AgentRuntimeManagerAgent> {
   getActiveSkill(conversationId: string): Skill | undefined;
   clearActiveSkill(conversationId: string): void;
   isToolAllowed(conversationId: string, toolName: string): boolean;
+  controlIdcWorkflow(
+    conversationId: string,
+    input: AgentRunnerIdcWorkflowControlInput,
+  ): IdcWorkflowControlResult;
   setSkillProviderFactory(factory: SkillProviderFactory): void;
   refreshCapabilityRuntime(): void;
   dispose(): void;
@@ -266,6 +273,13 @@ class DefaultAgentRuntimeManager<
 
   isToolAllowed(conversationId: string, toolName: string): boolean {
     return this.pool.get(conversationId)?.isToolAllowed(toolName) ?? true;
+  }
+
+  controlIdcWorkflow(
+    conversationId: string,
+    input: AgentRunnerIdcWorkflowControlInput,
+  ): IdcWorkflowControlResult {
+    return this.requireAgent(conversationId).controlIdcWorkflow(input);
   }
 
   setSkillProviderFactory(factory: SkillProviderFactory): void {

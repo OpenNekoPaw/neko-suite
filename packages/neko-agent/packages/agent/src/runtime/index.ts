@@ -813,13 +813,16 @@ export {
   formatDocumentAttachmentReference,
   formatFileAttachmentContent,
   formatMediaAttachmentReference,
+  formatReadDocumentInstruction,
   formatUnreadableFileAttachment,
+  normalizeAgentRuntimePromptLocale,
   parseBase64DataUrl,
   projectAgentMessageAttachments,
   type AgentAttachmentProjectionDeps,
   type AgentAttachmentProjectionError,
   type AgentBase64ImageAttachment,
   type AgentProcessedAttachments,
+  type AgentRuntimePromptLocale,
 } from './attachment-projection';
 
 export {

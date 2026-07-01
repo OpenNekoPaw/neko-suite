@@ -1,6 +1,6 @@
 # Image to Shot
 
-Convert one or more still images into reviewable shot planning tables. Inspect images with ReadImage, describe visible evidence, and produce a Canvas-ingestable Markdown creative table when the user wants storyboard or shot planning.
+Convert one or more still images into reviewable shot planning tables. Inspect images with ReadImage, describe visible evidence, and produce a Markdown creative table when the user wants storyboard or shot planning.
 
 ## Lifecycle Handoff Rules
 

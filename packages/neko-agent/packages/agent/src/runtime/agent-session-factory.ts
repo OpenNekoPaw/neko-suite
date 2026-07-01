@@ -1,5 +1,6 @@
 import * as nodePath from 'node:path';
 import type {
+  AgentCapabilityActivationProgressEvent,
   ExecutorHooks,
   IOperationToolAdapterRegistry,
   IProjectMemoryManager,
@@ -85,6 +86,10 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly onConfirmTool?: (request: ToolConfirmationRequest) => Promise<boolean>;
   readonly onValidationWarning?: (warning: ValidationWarning) => void;
   readonly onValidationError?: (error: ValidationError) => void;
+  readonly onActivationProgress?: (
+    conversationId: string,
+    events: readonly AgentCapabilityActivationProgressEvent[],
+  ) => void;
   readonly logger?: AgentRuntimeSessionFactoryLogger;
 }
 
@@ -173,6 +178,7 @@ export async function createAgentRuntimeSession(
     ...(config.onConfirmTool ? { onConfirmTool: config.onConfirmTool } : {}),
     ...(config.onValidationWarning ? { onValidationWarning: config.onValidationWarning } : {}),
     ...(config.onValidationError ? { onValidationError: config.onValidationError } : {}),
+    ...(config.onActivationProgress ? { onActivationProgress: config.onActivationProgress } : {}),
   });
 
   return {
@@ -234,6 +240,7 @@ export function updateAgentRuntimeSession(
       providerOptions: config.providerOptions,
       maxIterations: config.maxIterations,
       executionMode: config.executionMode ?? 'auto',
+      onActivationProgress: config.onActivationProgress,
     },
     ...(promptFragments ? { promptFragments } : {}),
   };

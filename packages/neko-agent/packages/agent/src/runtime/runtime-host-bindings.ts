@@ -1,4 +1,5 @@
 import type {
+  AgentCapabilityActivationProgressEvent,
   ExecutorHooks,
   IOperationToolAdapterRegistry,
   IService,
@@ -67,6 +68,10 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly onConfirmTool?: (request: ToolConfirmationRequest) => Promise<boolean>;
   readonly onValidationWarning?: (warning: ValidationWarning) => void;
   readonly onValidationError?: (error: ValidationError) => void;
+  readonly onActivationProgress?: (
+    conversationId: string,
+    events: readonly AgentCapabilityActivationProgressEvent[],
+  ) => void;
   readonly logger?: AgentRuntimeSessionFactoryLogger;
 }
 
@@ -123,6 +128,7 @@ export function buildAgentRuntimeSessionFactoryConfig(
     onConfirmTool: input.onConfirmTool,
     onValidationWarning: input.onValidationWarning,
     onValidationError: input.onValidationError,
+    onActivationProgress: input.onActivationProgress,
     logger: input.logger,
   };
 }

@@ -1,6 +1,6 @@
 # 图片转镜头
 
-将一张或多张静态图片转换为可审阅的镜头计划表。先用 ReadImage 检查图片，描述可见证据；当用户需要分镜或镜头规划时，输出可被 Canvas 摄入的 Markdown creative table。
+将一张或多张静态图片转换为可审阅的镜头计划表。先用 ReadImage 检查图片，描述可见证据；当用户需要分镜或镜头规划时，输出 Markdown creative table。
 
 ## Lifecycle 交接规则
 

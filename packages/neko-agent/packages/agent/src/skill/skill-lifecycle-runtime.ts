@@ -140,6 +140,7 @@ export class SkillLifecycleRuntime {
       createdAt: now,
       lastUsedTurn: turnCount,
       source: input.source,
+      ...(input.provenance ? { provenance: input.provenance } : {}),
     });
 
     return {

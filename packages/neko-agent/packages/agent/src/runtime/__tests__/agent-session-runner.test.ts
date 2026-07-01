@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createAgentCapabilityActivationIntent,
+  createAgentCapabilityActivationProgressEvent,
+} from '@neko/shared';
+import {
   AGENT_SESSION_BUSY_MESSAGE,
   AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
   AgentSessionRunner,
@@ -14,6 +18,19 @@ function createSession(events: AgentEvent[] = [{ type: 'text', content: 'respons
     configure: vi.fn(),
     getExecutionMode: vi.fn(),
     setExecutionMode: vi.fn(),
+    setExecutionModeWithIntent: vi.fn(),
+    startIdcRunWithIntent: vi.fn(() => ({
+      success: true,
+      message: 'started',
+      runId: 'run-1',
+      events: [],
+    })),
+    stopIdcRunWithIntent: vi.fn(() => ({
+      success: true,
+      message: 'stopped',
+      runId: 'run-1',
+      events: [],
+    })),
     setSkillProvider: vi.fn(),
     setPromptFragments: vi.fn(),
     getArtifactsForRun: vi.fn(() => []),
@@ -38,6 +55,8 @@ function createSession(events: AgentEvent[] = [{ type: 'text', content: 'respons
     getHistory: vi.fn(() => [...history]),
     addMessage: vi.fn((message) => history.push(message)),
     applySkillInjection: vi.fn(),
+    activateToolSetsForTools: vi.fn(() => []),
+    deactivateToolSet: vi.fn(),
     removeSkillInjection: vi.fn(),
     getActiveSkill: vi.fn(),
     clearActiveSkill: vi.fn(),
@@ -99,6 +118,94 @@ describe('AgentSessionRunner', () => {
     ]);
     expect(onDidStart).toHaveBeenCalledTimes(1);
     expect(onDidStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards session activation progress through the runner callback', () => {
+    const onDidActivationProgress = vi.fn();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+      onDidActivationProgress,
+    });
+    const intent = createAgentCapabilityActivationIntent({
+      conversationId: 'conv-1',
+      source: 'agent-tool',
+      target: 'idc-workflow',
+      action: 'activate',
+      name: 'workflow',
+      requestedBy: 'agent',
+      createdAt: 100,
+    });
+    const event = createAgentCapabilityActivationProgressEvent({
+      intent,
+      step: 'requested',
+      status: 'succeeded',
+      at: 101,
+    });
+
+    runner.buildActivationProgressCallback()('conv-1', [event]);
+
+    expect(onDidActivationProgress).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      events: [event],
+    });
+  });
+
+  it('controls IDC workflow through the configured session', () => {
+    const session = createSession();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+    });
+    runner.setSession(session);
+    const intent = createAgentCapabilityActivationIntent({
+      conversationId: 'conv-1',
+      source: 'user-explicit',
+      target: 'idc-workflow',
+      action: 'activate',
+      name: 'idc',
+      requestedBy: 'user',
+      createdAt: 100,
+    });
+
+    const result = runner.controlIdcWorkflow({
+      action: 'start',
+      runKind: 'idc',
+      intent,
+    });
+
+    expect(result.success).toBe(true);
+    expect(session.startIdcRunWithIntent).toHaveBeenCalledWith({
+      runKind: 'idc',
+      intent,
+    });
+  });
+
+  it('emits failed activation progress when IDC workflow control has no session', () => {
+    const onDidActivationProgress = vi.fn();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+      onDidActivationProgress,
+    });
+    const intent = createAgentCapabilityActivationIntent({
+      conversationId: 'conv-1',
+      source: 'user-explicit',
+      target: 'idc-workflow',
+      action: 'deactivate',
+      name: 'idc',
+      requestedBy: 'user',
+      createdAt: 100,
+    });
+
+    const result = runner.controlIdcWorkflow({
+      action: 'stop',
+      intent,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.diagnostics?.[0]?.code).toBe('agent-session-not-configured');
+    expect(onDidActivationProgress).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      events: [expect.objectContaining({ step: 'failed', status: 'failed' })],
+    });
   });
 
   it('rejects a second direct execute while execution is running', async () => {
@@ -261,7 +368,7 @@ describe('AgentSessionRunner', () => {
     });
 
     const approval = runner.handleToolConfirmation({
-      toolCall: { id: 'call-1', name: 'write_file', arguments: {} },
+      toolCall: { id: 'call-1', name: 'write_file', arguments: {}, index: 0 },
       action: 'write',
       description: 'Write file',
       details: { path: 'README.md' },
@@ -293,7 +400,7 @@ describe('AgentSessionRunner', () => {
     });
 
     const approval = runner.handleToolConfirmation({
-      toolCall: { id: 'call-1', name: 'write_file', arguments: {} },
+      toolCall: { id: 'call-1', name: 'write_file', arguments: {}, index: 0 },
       action: 'write',
       description: 'Write file',
       details: {},
@@ -322,10 +429,11 @@ describe('AgentSessionRunner', () => {
     });
 
     const approval = runner.handleToolConfirmation({
-      toolCall: { id: 'call-1', name: 'write_file', arguments: {} },
+      toolCall: { id: 'call-1', name: 'write_file', arguments: {}, index: 0 },
       action: 'write',
       description: 'Write file',
       details: {},
+      confirmationToken: 'token-1',
     });
     timeout?.();
 

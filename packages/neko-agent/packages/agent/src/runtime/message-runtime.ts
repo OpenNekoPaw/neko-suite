@@ -41,8 +41,11 @@ import {
 import { DEFAULT_MENTION_EXCLUDE_GLOB } from '../input/mention-excludes';
 import {
   extractFileReferencePaths,
+  formatReadDocumentInstruction,
+  normalizeAgentRuntimePromptLocale,
   type AgentBase64ImageAttachment,
   type AgentProcessedAttachments,
+  type AgentRuntimePromptLocale,
 } from './attachment-projection';
 import { getLogger } from '../utils/logger';
 
@@ -89,6 +92,7 @@ export interface AgentMessageRuntimeRequest {
   readonly fileReferences?: readonly AgentFileReference[];
   readonly promptId?: string;
   readonly executionOverrides?: AgentMessageExecutionOverrides;
+  readonly locale?: AgentRuntimePromptLocale | string;
 }
 
 export interface ProviderExpressionTargetConfig {
@@ -102,6 +106,7 @@ export interface AgentExecutionMetadataInput {
   readonly multimodalContextPacket?: unknown;
   readonly conversationId?: string;
   readonly parentAgentId?: string;
+  readonly locale?: AgentRuntimePromptLocale | string;
 }
 
 export interface AgentReferencedFileContent {
@@ -153,6 +158,7 @@ export interface BuildEnhancedAgentMessageInput {
   readonly documentReferences?: readonly AgentReferencedDocument[];
   readonly attachmentText?: string;
   readonly contextPayloads?: readonly AgentContextPayload[];
+  readonly locale?: AgentRuntimePromptLocale | string;
 }
 
 export interface AgentReferencedMediaProcessor {
@@ -196,6 +202,7 @@ export interface PrepareAgentMessageDispatchInput {
   readonly inputProcessor?: AgentMessageFileReferenceProcessor | null;
   readonly processAttachments: (
     attachments: readonly MessageAttachment[] | undefined,
+    options?: { readonly locale?: AgentRuntimePromptLocale | string },
   ) => Promise<AgentProcessedAttachments>;
   readonly createReferencedMediaProcessor?:
     | (() => AgentReferencedMediaProcessor | null | Promise<AgentReferencedMediaProcessor | null>)
@@ -239,6 +246,7 @@ export interface AgentMessageTurnAgentExecutionInput {
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
   readonly executionOverrides?: AgentMessageExecutionOverrides;
+  readonly locale?: AgentRuntimePromptLocale | string;
 }
 
 export type AgentMessageTurnAgentExecutionResult =
@@ -852,6 +860,7 @@ export async function prepareAgentMessageDispatch(
 
   const { textContent: attachmentText, imageAttachments } = await input.processAttachments(
     request.attachments,
+    { locale: request.locale },
   );
   const mediaImages = await mergeReferencedMediaImageAttachments({
     message: parsedMessage,
@@ -867,6 +876,7 @@ export async function prepareAgentMessageDispatch(
     fileContents,
     documentReferences,
     attachmentText,
+    locale: request.locale,
   });
   const route: AgentMessageDispatchRoute =
     request.sessionMode !== 'agent' && request.mediaModel
@@ -982,7 +992,11 @@ export async function runAgentMessageTurnRuntime(
       imageAttachments: prepared.mediaImages,
       mediaModel: input.request.mediaModel,
       mediaModels: input.request.mediaModels,
-      executionOverrides: input.request.executionOverrides,
+      executionOverrides: withAgentRuntimeLocaleMetadata(
+        input.request.executionOverrides,
+        input.request.locale,
+      ),
+      locale: input.request.locale,
     });
     if (result?.status === 'queued') {
       input.removeUserMessage?.(conversationId, prepared.userMessage.id);
@@ -1022,37 +1036,42 @@ export function buildEnhancedAgentMessage(input: BuildEnhancedAgentMessageInput)
   const fileContents = input.fileContents ?? [];
   const documentReferences = input.documentReferences ?? [];
   const contextPayloads = input.contextPayloads ?? [];
+  const labels = getEnhancedMessageLabels(input.locale);
   let enhancedMessage = input.message;
 
   if (contextPayloads.length > 0) {
-    enhancedMessage += '\n\n--- Attached Context ---';
+    enhancedMessage += `\n\n--- ${labels.attachedContext} ---`;
     for (const payload of contextPayloads) {
-      enhancedMessage += `\n\n${formatAgentContextPayload(payload)}`;
+      enhancedMessage += `\n\n${formatAgentContextPayload(payload, input.locale)}`;
     }
   }
 
   if (fileContents.length > 0) {
-    enhancedMessage += '\n\n--- Referenced Files ---';
+    enhancedMessage += `\n\n--- ${labels.referencedFiles} ---`;
     for (const file of fileContents) {
-      enhancedMessage += `\n\n### File: ${file.path}\n\`\`\`\n${file.content}\n\`\`\``;
+      enhancedMessage += `\n\n### ${labels.file}: ${file.path}\n\`\`\`\n${file.content}\n\`\`\``;
     }
   }
 
   if (documentReferences.length > 0) {
-    enhancedMessage += '\n\n--- Referenced Documents ---';
+    enhancedMessage += `\n\n--- ${labels.referencedDocuments} ---`;
     for (const document of documentReferences) {
-      enhancedMessage += `\n\n[Document: ${document.path}]\nUse ReadDocument with source={"kind":"file","path":"${document.path}"} before analyzing this document. Do not inline the whole document as chat context.`;
+      enhancedMessage += `\n\n[${labels.document}: ${document.path}]\n${formatReadDocumentInstruction(document.path, input.locale)}`;
     }
   }
 
   if (input.attachmentText) {
-    enhancedMessage += `\n\n--- Attached Files ---${input.attachmentText}`;
+    enhancedMessage += `\n\n--- ${labels.attachedFiles} ---${input.attachmentText}`;
   }
 
   return enhancedMessage;
 }
 
-export function formatAgentContextPayload(payload: AgentContextPayload): string {
+export function formatAgentContextPayload(
+  payload: AgentContextPayload,
+  locale?: AgentRuntimePromptLocale | string,
+): string {
+  const labels = getEnhancedMessageLabels(locale);
   const documentContext =
     payload.type === 'document-selection' ? extractDocumentContextData(payload.data) : undefined;
   const text = extractAgentContextText(payload.data);
@@ -1060,46 +1079,104 @@ export function formatAgentContextPayload(payload: AgentContextPayload): string 
   const filePath = extractAgentContextFilePath(payload.data);
 
   if (documentContext) {
-    const lines = [`[Document: ${payload.label}]`];
+    const lines = [`[${labels.document}: ${payload.label}]`];
     const source = documentContext.source;
-    lines.push(`Source: ${source?.filePath ?? filePath ?? 'unknown'}`);
+    lines.push(`${labels.source}: ${source?.filePath ?? filePath ?? labels.unknown}`);
     if (source?.format) {
-      lines.push(`Format: ${source.format}`);
+      lines.push(`${labels.format}: ${source.format}`);
     }
     const locatorText = formatDocumentLocator(documentContext.locator);
     if (locatorText) {
-      lines.push(`Locator: ${locatorText}`);
+      lines.push(`${labels.locator}: ${locatorText}`);
     }
     const excerptText = documentContext.excerpt?.text ?? text;
     if (excerptText) {
-      lines.push(`Excerpt:\n${excerptText}`);
+      lines.push(`${labels.excerpt}:\n${excerptText}`);
     }
     if (imageData || documentContext.excerpt?.imageData) {
-      lines.push('[Image attached]');
+      lines.push(`[${labels.imageAttached}]`);
     }
-    lines.push(
-      'Follow-up: use ReadDocument with the structured source ref shown above when more document context is needed.',
-    );
+    lines.push(labels.followUpReadDocument);
     return lines.join('\n');
   }
 
   if (text && imageData) {
-    return `[Content: ${payload.label}]\n${text}\n[Image attached]`;
+    return `[${labels.content}: ${payload.label}]\n${text}\n[${labels.imageAttached}]`;
   }
 
   if (text) {
-    return `[Content: ${payload.label}]\n${text}`;
+    return `[${labels.content}: ${payload.label}]\n${text}`;
   }
 
   if (imageData) {
-    return `[Image: ${payload.label}]\n[Image attached]`;
+    return `[${labels.image}: ${payload.label}]\n[${labels.imageAttached}]`;
   }
 
   if (filePath) {
-    return `[File: ${payload.label}]\n${filePath}`;
+    return `[${labels.file}: ${payload.label}]\n${filePath}`;
   }
 
-  return `[Context: ${payload.label}]\n${payload.summary}`;
+  return `[${labels.context}: ${payload.label}]\n${payload.summary}`;
+}
+
+function getEnhancedMessageLabels(locale?: AgentRuntimePromptLocale | string): {
+  readonly attachedContext: string;
+  readonly referencedFiles: string;
+  readonly referencedDocuments: string;
+  readonly attachedFiles: string;
+  readonly file: string;
+  readonly document: string;
+  readonly source: string;
+  readonly format: string;
+  readonly locator: string;
+  readonly excerpt: string;
+  readonly imageAttached: string;
+  readonly followUpReadDocument: string;
+  readonly content: string;
+  readonly image: string;
+  readonly context: string;
+  readonly unknown: string;
+} {
+  if (normalizeAgentRuntimePromptLocale(locale) === 'zh') {
+    return {
+      attachedContext: '附加上下文',
+      referencedFiles: '引用文件',
+      referencedDocuments: '引用文档',
+      attachedFiles: '附件',
+      file: '文件',
+      document: '文档',
+      source: '来源',
+      format: '格式',
+      locator: '定位',
+      excerpt: '摘录',
+      imageAttached: '已附加图片',
+      followUpReadDocument:
+        '后续需要更多文档上下文时，使用上方结构化 source ref 调用 ReadDocument。',
+      content: '内容',
+      image: '图片',
+      context: '上下文',
+      unknown: '未知',
+    };
+  }
+  return {
+    attachedContext: 'Attached Context',
+    referencedFiles: 'Referenced Files',
+    referencedDocuments: 'Referenced Documents',
+    attachedFiles: 'Attached Files',
+    file: 'File',
+    document: 'Document',
+    source: 'Source',
+    format: 'Format',
+    locator: 'Locator',
+    excerpt: 'Excerpt',
+    imageAttached: 'Image attached',
+    followUpReadDocument:
+      'Follow-up: use ReadDocument with the structured source ref shown above when more document context is needed.',
+    content: 'Content',
+    image: 'Image',
+    context: 'Context',
+    unknown: 'unknown',
+  };
 }
 
 export function buildAgentProjectFileSearchPlan(
@@ -1650,8 +1727,25 @@ export function buildAgentExecutionMetadata(
   if (input.parentAgentId) {
     metadata['parentAgentId'] = input.parentAgentId;
   }
+  if (input.locale) {
+    metadata['locale'] = normalizeAgentRuntimePromptLocale(input.locale);
+  }
 
   return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
+export function withAgentRuntimeLocaleMetadata(
+  overrides: AgentMessageExecutionOverrides | undefined,
+  locale: AgentRuntimePromptLocale | string | undefined,
+): AgentMessageExecutionOverrides | undefined {
+  if (!locale) return overrides;
+  return {
+    ...(overrides ?? {}),
+    metadata: {
+      ...(overrides?.metadata ?? {}),
+      locale: normalizeAgentRuntimePromptLocale(locale),
+    },
+  };
 }
 
 export function summarizeAgentEventProgress(event: AgentEvent): string | undefined {

@@ -39,6 +39,27 @@ describe('stepToEvents', () => {
     expect(ss.hasStreamedDeltas).toBe(true);
   });
 
+  it('should emit assistant_text_replacement for validation retry deltas', () => {
+    const step: AgentStep = {
+      type: 'content_delta',
+      content: '',
+      deltaKind: 'assistant_text_replacement',
+      replacement: { reason: 'output-validation-retry', attempt: 1 },
+      timestamp: Date.now(),
+    };
+    const ss: StreamState = { hasStreamedDeltas: true };
+
+    const events = collect(stepToEvents(step, 1, 10, ss));
+
+    expect(events).toEqual([
+      {
+        type: 'assistant_text_replacement',
+        replacement: { reason: 'output-validation-retry', attempt: 1 },
+      },
+    ]);
+    expect(ss.hasStreamedDeltas).toBe(false);
+  });
+
   it('should emit iteration + text for think step (no prior deltas)', () => {
     const step: AgentStep = { type: 'think', content: 'Thinking...', timestamp: Date.now() };
     const ss = freshStreamState();

@@ -22,9 +22,14 @@ The host creation-document service owns storage, approval gates, and path
 selection.
 
 When a user asks for a proposal, requirement, plan, task list, storyboard
-draft, or other creator-facing artifact, write the content in the chat
-using the structure below. The runtime may persist approved creation documents
-in a project-owned visible directory such as
+draft, or other creator-facing artifact, write only the human-readable artifact
+body in chat. Do not include YAML frontmatter, \`id:\`, \`kind:\`,
+\`status:\`, \`domain:\`, or \`referenceChain:\` in normal assistant replies
+unless a host/runtime tool explicitly asks for persisted creation-document
+Markdown.
+
+The runtime may persist approved creation documents in a project-owned visible
+directory such as
 \`neko/creations/<creation-id>/brief.md\`,
 \`neko/creations/<creation-id>/plan.md\`, and
 \`neko/creations/<creation-id>/checklist.md\`.
@@ -32,7 +37,7 @@ in a project-owned visible directory such as
 Do not write or read hidden managed runtime directories for creation documents.
 Managed runtime/cache paths are not a valid creation-document surface.
 
-### Required frontmatter when the runtime persists creation documents
+### Required frontmatter for runtime-persisted creation documents only
 
 \`\`\`yaml
 ---
@@ -75,7 +80,8 @@ Task only requires the shared fields (id / kind / createdAt / updatedAt).
 3. Do not invent hidden paths, cache paths, Webview URIs, or provider-private
    paths for creation documents.
 4. If the host reports a creation-document diagnostic, explain the diagnostic and
-   provide a corrected artifact body in chat.`;
+   provide a corrected artifact body in chat without YAML frontmatter unless the
+   diagnostic explicitly requests a persisted creation-document Markdown block.`;
 
 export class ArtifactSchemaModule implements PromptModule {
   readonly manifest: PromptModuleManifest = {

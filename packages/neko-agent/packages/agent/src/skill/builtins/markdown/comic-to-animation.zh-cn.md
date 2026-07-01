@@ -26,8 +26,8 @@
 ## Lifecycle Artifact 规则
 
 - Markdown creative table 是可审阅的 authoring artifact。Canvas ingest、生成、Cut、导出和执行交接应走 lifecycle capability 或聚焦领域工具。
-- 对 Markdown 表格做 Canvas 审阅时，优先使用 `canvas.ingestMarkdown`，传递原始 Markdown、稳定 resources，并按需附带 advisory `intentHint: "creative-table"` / `profileHint: "storyboard"`。
-- 不要输出 Canvas node JSON、transfer payload JSON、项目内部交接对象、Webview URI、blob URL、localhost URL、provider 临时句柄、缓存路径、临时路径或绝对私有路径。
+- 对 Markdown 表格做 Canvas 审阅时，使用运行时工具列表暴露的 Canvas lifecycle tool/capability，并按需传递原始 Markdown 和稳定 resources。
+- 不要输出领域节点 JSON、项目内部交接对象、Webview URI、blob URL、localhost URL、provider 临时句柄、缓存路径、临时路径或绝对私有路径。
 - 媒体引用必须来自真实 tool-result、generated-asset、Canvas node 或 workspace-safe ref，不要编造 id。
 - 分镜、动画计划、图像准备计划、实体证据、生成媒体引用和执行总结应保持独立，但通过稳定 shot/source id 交叉引用。
 - 实体记忆和人物证据由对应的实体/contribution 流程拥有。本 Skill 展示人物观察时，除非调用了可信 contribution capability，否则只标注为审阅证据。

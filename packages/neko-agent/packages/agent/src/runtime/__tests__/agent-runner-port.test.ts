@@ -63,6 +63,8 @@ describe('AgentRunnerPort', () => {
       setSkillProvider: vi.fn(),
       refreshCapabilityRuntime: vi.fn(),
       applySkillInjection: vi.fn(),
+      activateToolSetsForTools: vi.fn(() => []),
+      deactivateToolSet: vi.fn(),
       getActiveSkill: vi.fn(() => undefined),
       clearActiveSkill: vi.fn(),
       isToolAllowed: vi.fn(() => true),

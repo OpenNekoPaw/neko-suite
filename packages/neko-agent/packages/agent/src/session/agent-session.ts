@@ -16,6 +16,11 @@
  */
 
 import type {
+  AgentCapabilityActivationDiagnostic,
+  AgentCapabilityActivationAction,
+  AgentCapabilityActivationIntent,
+  AgentCapabilityActivationProgressEvent,
+  AgentCapabilityActivationTarget,
   AgentStep,
   AgentTraceContext,
   ChatMessage,
@@ -28,6 +33,8 @@ import type {
   Tool,
 } from '@neko/shared';
 import {
+  createAgentCapabilityActivationIntent,
+  createAgentCapabilityActivationProgressEvent,
   createAgentTraceContext,
   createAgentTurnId,
   deriveAgentTraceContext,
@@ -73,7 +80,14 @@ import {
 } from '../approval';
 import { loadPreferences } from '../workspace';
 import type { ISkillProvider } from '../tools/core/meta-tools';
-import { ActivateSkillTool, DeactivateSkillTool, GetContextTool } from '../tools/core/meta-tools';
+import {
+  ActivateSkillTool,
+  DeactivateSkillTool,
+  GetContextTool,
+  SetExecutionModeTool,
+  StartIDCWorkflowTool,
+} from '../tools/core/meta-tools';
+import { projectMediaModelToolsFromMetadata } from '../tools/media-generation-tool-selection';
 import { stepToEvents, type StreamState } from './step-event-converter';
 
 import type {
@@ -83,6 +97,8 @@ import type {
   ExecutionMode,
   ExecutionContext,
   CompressionResult,
+  IdcWorkflowActivationResult,
+  IdcWorkflowControlResult,
   ToolResultPatchResult,
 } from './types';
 
@@ -158,7 +174,6 @@ import { createAgentObservationRecorder } from '../runtime/agent-observation-rec
 import {
   classifyIdcEntrySignal,
   classifyIdcTaskShape,
-  resolveIdcRunKind,
   type IdcTurnPlanningContext,
 } from './idc-turn-planning';
 
@@ -402,6 +417,8 @@ export class AgentSession implements IAgentSession {
     // Delegate component creation to initializer (SRP: init logic separate from runtime)
     const components = initializeSession(config, {
       onToolConfirmation: (request) => this._handleToolConfirmation(request),
+      getActiveSkillValidationRequirements: () =>
+        this.getActiveSkill()?.mediaWorkflow?.validationRequirements,
     });
 
     // Assign initialized components
@@ -483,6 +500,7 @@ export class AgentSession implements IAgentSession {
       promptComposer: this._promptComposer,
       getPermissionHooks: () => this._permissionHooks,
       syncSystemPrompt: () => this._syncSystemPrompt(),
+      toolSetActivator: this._toolInjectionManager,
       skillInjectionModule: this._skillInjectionModule,
       ...(this._ablationMarker && {
         enableInjection: !this._ablationMarker.disableSkillInjection,
@@ -742,6 +760,9 @@ export class AgentSession implements IAgentSession {
     if (!config.stageTracking) {
       this._rebuildFeedbackCoordinator();
     }
+    this._wireMetaToolCapabilityProvider(
+      this._createCapabilityProvider(createEmptySkillProvider()),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -795,6 +816,10 @@ export class AgentSession implements IAgentSession {
    * Called by the extension layer after the skill system is initialized.
    */
   setSkillProvider(provider: ISkillProvider): void {
+    this._wireMetaToolCapabilityProvider(this._createCapabilityProvider(provider));
+  }
+
+  private _wireMetaToolCapabilityProvider(provider: ISkillProvider): void {
     for (const tool of this._metaTools) {
       if (tool instanceof GetContextTool) {
         tool.setSkillProvider(provider);
@@ -802,8 +827,58 @@ export class AgentSession implements IAgentSession {
         tool.setSkillProvider(provider);
       } else if (tool instanceof DeactivateSkillTool) {
         tool.setSkillProvider(provider);
+      } else if (tool instanceof StartIDCWorkflowTool) {
+        tool.setSkillProvider(provider);
+      } else if (tool instanceof SetExecutionModeTool) {
+        tool.setSkillProvider(provider);
       }
     }
+  }
+
+  private _createCapabilityProvider(provider: ISkillProvider): ISkillProvider {
+    return {
+      ...provider,
+      startIdcWorkflow: (input) => {
+        const now = Date.now();
+        const runKind = normalizeActivationName(input.runKind, 'idc');
+        const intent = createAgentCapabilityActivationIntent({
+          conversationId: this._config.conversationId ?? 'unknown',
+          source: 'agent-tool',
+          target: 'idc-workflow',
+          action: input.runId ? 'resume' : 'activate',
+          name: runKind,
+          requestedBy: 'agent',
+          reason: input.reason ?? `StartIDCWorkflow requested ${runKind}`,
+          createdAt: now,
+          metadata: {
+            ...(input.runId ? { runId: input.runId } : {}),
+          },
+        });
+        return this.startIdcRunWithIntent({
+          runKind,
+          ...(input.runId ? { runId: input.runId } : {}),
+          intent,
+        });
+      },
+      setExecutionMode: (input) => {
+        const intent = createAgentCapabilityActivationIntent({
+          conversationId: this._config.conversationId ?? 'unknown',
+          source: 'agent-tool',
+          target: 'execution-mode',
+          action: 'set',
+          name: input.mode,
+          requestedBy: 'agent',
+          reason: input.reason ?? `SetExecutionMode requested ${input.mode}`,
+          createdAt: Date.now(),
+        });
+        this.setExecutionModeWithIntent(input.mode, intent);
+        return {
+          success: true,
+          message: `Execution mode set to ${input.mode}`,
+          mode: input.mode,
+        };
+      },
+    };
   }
 
   setPromptFragments(fragments: readonly PromptFragment[] | undefined): void {
@@ -901,6 +976,29 @@ export class AgentSession implements IAgentSession {
     }
   }
 
+  setExecutionModeWithIntent(mode: ExecutionMode, intent: AgentCapabilityActivationIntent): void {
+    const events: AgentCapabilityActivationProgressEvent[] = [];
+    const emit = this._createActivationEmitter(intent, events);
+    if (!this._isExpectedActivationIntent(intent, 'execution-mode', 'set')) {
+      emit('failed', 'failed', {
+        diagnostics: [
+          {
+            severity: 'error',
+            code: 'invalid-execution-mode-activation-intent',
+            message: 'Execution mode changes require an execution-mode set activation intent.',
+          },
+        ],
+      });
+      return;
+    }
+
+    emit('requested', 'succeeded');
+    emit('validated', 'succeeded');
+    this.setExecutionMode(mode);
+    emit('projected', 'succeeded', { metadata: { mode } });
+    emit('active', 'succeeded', { metadata: { mode } });
+  }
+
   // ---------------------------------------------------------------------------
   // Execution
   // ---------------------------------------------------------------------------
@@ -920,6 +1018,7 @@ export class AgentSession implements IAgentSession {
     const turnStartedAt = Date.now();
     let runCompletionStatus: 'completed' | 'failed' = 'completed';
     let runCompletionError: IdcRun['error'] | undefined;
+    let turnActivatedToolSets: readonly string[] = [];
     let trace = createAgentTraceContext({
       conversationId: this._config.conversationId,
       turnId: createAgentTurnId(this._config.conversationId ?? 'unknown', turnStartedAt),
@@ -936,6 +1035,7 @@ export class AgentSession implements IAgentSession {
         activeSkill: this.getActiveSkill(),
         metadata: context?.metadata,
       };
+      turnActivatedToolSets = this._activateTurnMediaToolSets(context?.metadata);
 
       // Execute UserPromptSubmit hooks (if configured)
       let processedInput = input;
@@ -978,9 +1078,6 @@ export class AgentSession implements IAgentSession {
         },
       ];
 
-      if (this._runStore && !this._runStore.getActive()) {
-        this.startIdcRun(resolveIdcRunKind(this._currentTurnPlanningContext));
-      }
       trace = deriveAgentTraceContext(trace, {
         runId: this._runStore?.getActive()?.id ?? null,
         phase: 'session',
@@ -1015,6 +1112,7 @@ export class AgentSession implements IAgentSession {
       await this._updateMemoryRecall(memoryQueryInput);
       this._syncSystemPrompt(); // Ensure system prompt is fresh before snapshot
       const messagesSnapshot = [...this._history];
+      const activeSkill = this.getActiveSkill();
 
       for await (const step of this._executor.executeStream(processedInput, {
         messages: messagesSnapshot,
@@ -1027,6 +1125,13 @@ export class AgentSession implements IAgentSession {
           conversationId: trace.conversationId,
           runId: trace.runId,
           turnId: trace.turnId,
+          ...(activeSkill
+            ? {
+                activeSkillName: activeSkill.name,
+                skillValidationRequirements:
+                  activeSkill.mediaWorkflow?.validationRequirements ?? [],
+              }
+            : {}),
         },
         trace,
       })) {
@@ -1209,6 +1314,9 @@ export class AgentSession implements IAgentSession {
       }
       yield errorEvent;
     } finally {
+      for (const toolSetName of turnActivatedToolSets) {
+        this.deactivateToolSet(toolSetName);
+      }
       this._closeActiveRun(runCompletionStatus, runCompletionError);
       this._currentTurnPlanningContext = null;
       this._promptRuntime.setMemoryRecallContent(null);
@@ -1303,6 +1411,25 @@ export class AgentSession implements IAgentSession {
     this._skillCoordinator.apply(injection, skill);
   }
 
+  activateToolSetsForTools(toolNames: readonly string[]): readonly string[] {
+    return this._toolInjectionManager.activateToolSetsForTools([...toolNames]);
+  }
+
+  deactivateToolSet(toolSetName: string): void {
+    this._toolInjectionManager.deactivateToolSet(toolSetName);
+  }
+
+  private _activateTurnMediaToolSets(
+    metadata: Record<string, unknown> | undefined,
+  ): readonly string[] {
+    const mediaTools = projectMediaModelToolsFromMetadata(metadata);
+    if (mediaTools.length === 0) {
+      return [];
+    }
+
+    return this.activateToolSetsForTools(mediaTools);
+  }
+
   /**
    * Remove a previously injected skill prompt (reversible injection).
    * Request-time projection adapter cleanup for callers that provide a single
@@ -1377,7 +1504,196 @@ export class AgentSession implements IAgentSession {
    * run is already active (the runner closes it on onExecuteEnd).
    */
   startIdcRun(runKind: string, runId?: string): string | null {
-    return this._idcRunLifecycle.startRun(runKind, runId);
+    const conversationId = this._config.conversationId ?? 'unknown';
+    const now = Date.now();
+    const intent = createAgentCapabilityActivationIntent({
+      conversationId,
+      source: 'agent-tool',
+      target: 'idc-workflow',
+      action: 'activate',
+      name: normalizeActivationName(runKind, 'idc'),
+      requestedBy: 'agent',
+      reason:
+        'Implicit IDC start path rejected because no explicit activation intent was supplied.',
+      createdAt: now,
+      metadata: {
+        oldPath: 'AgentSession.startIdcRun',
+        ...(runId ? { runId } : {}),
+      },
+    });
+    this._emitActivationProgress(conversationId, [
+      createAgentCapabilityActivationProgressEvent({
+        intent,
+        step: 'failed',
+        status: 'failed',
+        at: now,
+        diagnostics: [
+          {
+            severity: 'error',
+            code: 'implicit-idc-start-rejected',
+            message:
+              'AgentSession.startIdcRun requires an explicit activation intent; use startIdcRunWithIntent.',
+          },
+        ],
+      }),
+    ]);
+    return null;
+  }
+
+  startIdcRunWithIntent(input: {
+    readonly runKind: string;
+    readonly runId?: string;
+    readonly intent: AgentCapabilityActivationIntent;
+  }): IdcWorkflowActivationResult {
+    const events: AgentCapabilityActivationProgressEvent[] = [];
+    const emit = this._createActivationEmitter(input.intent, events);
+    if (
+      !this._isExpectedActivationIntent(input.intent, 'idc-workflow') ||
+      (input.intent.action !== 'activate' && input.intent.action !== 'resume')
+    ) {
+      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
+        {
+          severity: 'error',
+          code: 'invalid-idc-workflow-activation-intent',
+          message:
+            'IDC workflow activation requires an idc-workflow activate or resume activation intent.',
+        },
+      ];
+      emit('failed', 'failed', { diagnostics });
+      return {
+        success: false,
+        message: diagnostics[0]!.message,
+        diagnostics,
+        events,
+      };
+    }
+
+    emit('requested', 'succeeded');
+    if (!this._runStore) {
+      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
+        {
+          severity: 'error',
+          code: 'idc-workflow-runtime-missing',
+          message: 'IDC workflow runtime is not configured for this session.',
+        },
+      ];
+      emit('failed', 'failed', { diagnostics });
+      return {
+        success: false,
+        message: diagnostics[0]!.message,
+        diagnostics,
+        events,
+      };
+    }
+
+    emit('validated', 'succeeded');
+    emit('prepared', 'succeeded', {
+      metadata: {
+        runKind: input.runKind,
+        ...(input.runId ? { runId: input.runId } : {}),
+      },
+    });
+    const runId = this._idcRunLifecycle.startRun(input.runKind, input.runId);
+    if (!runId) {
+      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
+        {
+          severity: 'error',
+          code: 'idc-workflow-start-failed',
+          message: 'IDC workflow did not start.',
+        },
+      ];
+      emit('failed', 'failed', { diagnostics });
+      return {
+        success: false,
+        message: diagnostics[0]!.message,
+        diagnostics,
+        events,
+      };
+    }
+
+    emit('record-created', 'succeeded', { recordId: runId });
+    emit('projected', 'succeeded', { recordId: runId });
+    emit('active', 'succeeded', { recordId: runId });
+    return {
+      success: true,
+      message: `IDC workflow started: ${runId}`,
+      runId,
+      events,
+    };
+  }
+
+  stopIdcRunWithIntent(input: {
+    readonly intent: AgentCapabilityActivationIntent;
+    readonly status?: 'completed' | 'failed' | 'aborted';
+  }): IdcWorkflowControlResult {
+    const events: AgentCapabilityActivationProgressEvent[] = [];
+    const emit = this._createActivationEmitter(input.intent, events);
+    if (!this._isExpectedActivationIntent(input.intent, 'idc-workflow', 'deactivate')) {
+      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
+        {
+          severity: 'error',
+          code: 'invalid-idc-workflow-deactivation-intent',
+          message: 'IDC workflow stop requires an idc-workflow deactivate activation intent.',
+        },
+      ];
+      emit('failed', 'failed', { diagnostics });
+      return {
+        success: false,
+        message: diagnostics[0]!.message,
+        diagnostics,
+        events,
+      };
+    }
+
+    emit('requested', 'succeeded');
+    if (!this._runStore) {
+      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
+        {
+          severity: 'error',
+          code: 'idc-workflow-runtime-missing',
+          message: 'IDC workflow runtime is not configured for this session.',
+        },
+      ];
+      emit('failed', 'failed', { diagnostics });
+      return {
+        success: false,
+        message: diagnostics[0]!.message,
+        diagnostics,
+        events,
+      };
+    }
+
+    emit('validated', 'succeeded');
+    const activeRun = this._runStore.getActive();
+    if (!activeRun) {
+      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
+        {
+          severity: 'error',
+          code: 'idc-workflow-not-active',
+          message: 'No active IDC workflow is available to stop.',
+        },
+      ];
+      emit('failed', 'failed', { diagnostics });
+      return {
+        success: false,
+        message: diagnostics[0]!.message,
+        diagnostics,
+        events,
+      };
+    }
+
+    emit('prepared', 'succeeded', { recordId: activeRun.id });
+    const status = input.status ?? 'aborted';
+    this._closeActiveRun(status);
+    this._persistIdcRuntimeState();
+    emit('projected', 'succeeded', { recordId: activeRun.id, metadata: { status } });
+    emit('active', 'succeeded', { recordId: activeRun.id, metadata: { status } });
+    return {
+      success: true,
+      message: `IDC workflow stopped: ${activeRun.id}`,
+      runId: activeRun.id,
+      events,
+    };
   }
 
   /**
@@ -1733,12 +2049,51 @@ export class AgentSession implements IAgentSession {
   }
 
   private _restoreIdcRuntimeState(state: import('../workspace').IdcRuntimeRestoreState): void {
-    this._idcRunLifecycle.restore(state);
     this._restorePendingApprovals(state.approval);
     this._feedbackRuntime.restore(state.feedback);
-    if (this._stagePersonaBinding) {
-      void this._stagePersonaBinding.syncCurrent();
+    if (hasPersistedIdcActivationState(state)) {
+      this._emitPersistedIdcResumeDiagnostic(state);
     }
+  }
+
+  private _emitPersistedIdcResumeDiagnostic(
+    state: import('../workspace').IdcRuntimeRestoreState,
+  ): void {
+    const conversationId = this._config.conversationId ?? 'unknown';
+    const runName =
+      state.run.active?.runKind ?? state.run.active?.id ?? state.stage.current ?? 'idc';
+    const now = Date.now();
+    const intent = createAgentCapabilityActivationIntent({
+      conversationId,
+      source: 'user-explicit',
+      target: 'idc-workflow',
+      action: 'resume',
+      name: runName,
+      requestedBy: 'user',
+      reason: 'Persisted IDC runtime state requires explicit resume.',
+      createdAt: now,
+      metadata: {
+        restored: true,
+        ...(state.run.active?.id ? { runId: state.run.active.id } : {}),
+        ...(state.stage.current ? { stage: state.stage.current } : {}),
+      },
+    });
+    this._emitActivationProgress(conversationId, [
+      createAgentCapabilityActivationProgressEvent({
+        intent,
+        step: 'failed',
+        status: 'failed',
+        at: now,
+        diagnostics: [
+          {
+            severity: 'warning',
+            code: 'persisted-idc-requires-explicit-resume',
+            message:
+              'Persisted IDC workflow state is available but was not resumed automatically. Use an explicit resume action to reactivate it.',
+          },
+        ],
+      }),
+    ]);
   }
 
   private _restorePendingApprovals(
@@ -1771,6 +2126,47 @@ export class AgentSession implements IAgentSession {
         },
       });
     }
+  }
+
+  private _createActivationEmitter(
+    intent: AgentCapabilityActivationIntent,
+    sink: AgentCapabilityActivationProgressEvent[],
+  ): (
+    step: Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]['step'],
+    status: Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]['status'],
+    extra?: Partial<Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]>,
+  ) => void {
+    return (step, status, extra = {}) => {
+      const event = createAgentCapabilityActivationProgressEvent({
+        intent,
+        step,
+        status,
+        at: Date.now(),
+        ...(extra.recordId !== undefined ? { recordId: extra.recordId } : {}),
+        ...(extra.diagnostics !== undefined ? { diagnostics: extra.diagnostics } : {}),
+        ...(extra.metadata !== undefined ? { metadata: extra.metadata } : {}),
+      });
+      sink.push(event);
+      this._emitActivationProgress(intent.conversationId, [event]);
+    };
+  }
+
+  private _emitActivationProgress(
+    conversationId: string,
+    events: readonly AgentCapabilityActivationProgressEvent[],
+  ): void {
+    if (events.length === 0) return;
+    this._config.onActivationProgress?.(conversationId, events);
+  }
+
+  private _isExpectedActivationIntent(
+    intent: AgentCapabilityActivationIntent,
+    target: AgentCapabilityActivationTarget,
+    action?: AgentCapabilityActivationAction,
+  ): boolean {
+    if (intent.target !== target) return false;
+    if (action && intent.action !== action) return false;
+    return intent.source === 'user-explicit' || intent.source === 'agent-tool';
   }
 
   private _rebuildFeedbackCoordinator(): void {
@@ -2089,6 +2485,8 @@ export class AgentSession implements IAgentSession {
       toolGroupRegistry: this._toolGroupRegistry,
       toolInjectionManager: this._toolInjectionManager,
       onToolConfirmation: (request) => this._handleToolConfirmation(request),
+      getActiveSkillValidationRequirements: () =>
+        this.getActiveSkill()?.mediaWorkflow?.validationRequirements,
     });
 
     this._permissionHooks = permissionHooks;
@@ -2341,6 +2739,37 @@ function _approvalResolutionToDecision(
     case 'user-reject':
       return 'reject';
   }
+}
+
+function normalizeActivationName(value: string, fallback: string): string {
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function hasPersistedIdcActivationState(
+  state: import('../workspace').IdcRuntimeRestoreState,
+): boolean {
+  return Boolean(
+    state.run.active ||
+    state.run.lastCompleted ||
+    state.stage.current ||
+    state.stage.transitions.length > 0,
+  );
+}
+
+function createEmptySkillProvider(): ISkillProvider {
+  return {
+    listSkills: () => [],
+    getActiveSkill: () => null,
+    activateSkill: (name) => ({
+      success: false,
+      message: `Skill system is not initialized: ${name}`,
+    }),
+    deactivateSkill: () => ({
+      success: false,
+      message: 'Skill system is not initialized',
+    }),
+  };
 }
 
 // =============================================================================

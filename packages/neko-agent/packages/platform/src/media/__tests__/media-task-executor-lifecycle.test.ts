@@ -83,7 +83,7 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
 
   it('fails visibly for adapter-only providers that are not listed as migration bridges', async () => {
     const adapter = createAdapter({
-      generateImage: vi.fn(async () => ({
+      generateImage: vi.fn(async (): Promise<MediaAdapterResult> => ({
         status: 'completed',
         outputs: [{ type: 'image', url: PNG_BASE64 }],
       })),
@@ -102,6 +102,33 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
     expect(task.status).toBe('failed');
     expect(task.output?.error).toContain('AI SDK media provider is not configured');
     expect(adapter.generateImage).not.toHaveBeenCalled();
+  });
+
+  it('fails stuck image provider calls after the executor timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const harness = createHarness({
+        adapter: createAdapter({
+          generateImage: vi.fn(() => new Promise<MediaAdapterResult>(() => {})),
+          statuses: [],
+        }),
+        imageTaskTimeoutMs: 10,
+      });
+
+      const taskId = await harness.manager.submit(
+        createMediaTaskInput('text-to-image', 'provider-1', 'model-1', { prompt: 'cat' }),
+      );
+      await waitForTaskRunning(harness.manager, taskId);
+
+      const waiter = harness.manager.waitForCompletion(taskId, 1000);
+      await vi.advanceTimersByTimeAsync(10);
+      const task = await waiter;
+
+      expect(task.status).toBe('failed');
+      expect(task.error).toContain('Image generation timed out after 10ms');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('propagates cancellation during external wait', async () => {
@@ -134,12 +161,10 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
     vi.useFakeTimers();
     try {
       const adapter = createAdapter({
-        generateVideo: vi.fn(
-          async (): Promise<MediaAdapterResult> => ({
-            externalTaskId: 'external-resume',
-            status: 'processing',
-          }),
-        ),
+        generateVideo: vi.fn(async (): Promise<MediaAdapterResult> => ({
+          externalTaskId: 'external-resume',
+          status: 'processing',
+        })),
         statuses: [
           {
             status: 'completed',
@@ -194,6 +219,7 @@ describe('MediaTaskExecutor lifecycle reporting', () => {
 function createHarness(options: {
   adapter: MediaAdapter;
   allowLegacyBridgeProviderTypes?: readonly string[];
+  imageTaskTimeoutMs?: number;
   storage?: MemoryTaskStorage;
   recoveryStorage?: MemoryTaskRecoveryStorage;
 }) {
@@ -203,6 +229,9 @@ function createHarness(options: {
   const manager = new TaskManager({ storage, recoveryStorage, cleanupIntervalMs: 0 });
   const executor = new MediaTaskExecutor({} as ProviderRegistry, createConfigManager(), {
     allowLegacyBridgeProviderTypes: options.allowLegacyBridgeProviderTypes ?? ['test-provider'],
+    ...(options.imageTaskTimeoutMs !== undefined
+      ? { imageTaskTimeoutMs: options.imageTaskTimeoutMs }
+      : {}),
   });
   executor.registerWith(manager);
 

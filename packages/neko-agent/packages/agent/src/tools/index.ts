@@ -28,6 +28,8 @@ export { ToolInjectionManager, createToolInjectionManager } from './tool-injecti
 export {
   ActivateSkillTool,
   DeactivateSkillTool,
+  StartIDCWorkflowTool,
+  SetExecutionModeTool,
   GetContextTool,
   createCoreMetaTools,
   type ISkillProvider,

@@ -199,11 +199,18 @@ function createCoordinatorDeps() {
     setBase: vi.fn(),
     setSection: vi.fn(),
     removeSection: vi.fn().mockReturnValue(true),
+    removeSectionsByPrefix: vi.fn().mockReturnValue(0),
     hasSection: vi.fn().mockReturnValue(false),
     getSection: vi.fn(),
     compose: vi.fn().mockReturnValue('prompt'),
+    composeStructured: vi.fn().mockReturnValue({
+      text: 'prompt',
+      sections: [],
+      cacheBoundaries: [],
+    }),
     getTotalTokens: vi.fn().mockReturnValue(0),
     getLayerUsage: vi.fn(),
+    dumpSections: vi.fn().mockReturnValue([]),
     reset: vi.fn(),
   };
   const permissionHooks = {

@@ -1,10 +1,15 @@
 import type {
+  AgentCapabilityActivationProgressEvent,
   Skill,
   SkillApplicationResult,
   SkillDiscoveryResult,
   SkillInjection,
   SkillLifecycleProjection,
   SkillLifecycleRecord,
+} from '@neko/shared';
+import {
+  createAgentCapabilityActivationIntent,
+  createAgentCapabilityActivationProgressEvent,
 } from '@neko/shared';
 import { normalizeAgentInputTriggerName } from '@neko-agent/types';
 import type { SkillService } from './skill-service';
@@ -35,6 +40,10 @@ export interface ConversationSkillRuntimeLogger {
 export interface ConversationSkillRuntimeDeps {
   readonly skillService?: SkillService;
   readonly agentBridge?: ConversationSkillAgentBridge;
+  readonly onActivationProgress?: (
+    conversationId: string,
+    events: readonly AgentCapabilityActivationProgressEvent[],
+  ) => void;
   readonly now?: () => number;
   readonly logger?: ConversationSkillRuntimeLogger;
 }
@@ -43,12 +52,18 @@ export interface ApplySlashSkillCommandInput {
   readonly command: string;
   readonly conversationId: string;
   readonly args?: string;
+  readonly source?: 'user-explicit' | 'agent-tool';
+  readonly requestedBy?: 'user' | 'agent';
+  readonly reason?: string;
 }
 
 export interface ApplySkillInvocationInput {
   readonly skillName: string;
   readonly conversationId: string;
   readonly args?: string;
+  readonly source?: 'user-explicit' | 'agent-tool';
+  readonly requestedBy?: 'user' | 'agent';
+  readonly reason?: string;
 }
 
 export interface ExecuteSkillInput {
@@ -122,7 +137,11 @@ export class ConversationSkillRuntime {
       };
     }
 
-    return this._applySkill(input.conversationId, skill, input.args);
+    return this._applySkill(input.conversationId, skill, input.args, {
+      source: input.source ?? 'user-explicit',
+      requestedBy: input.requestedBy ?? 'user',
+      reason: input.reason ?? `Slash command /${input.command}`,
+    });
   }
 
   async applySkillInvocation(
@@ -177,7 +196,11 @@ export class ConversationSkillRuntime {
       };
     }
 
-    return this._applySkill(input.conversationId, loadedSkill, input.args);
+    return this._applySkill(input.conversationId, loadedSkill, input.args, {
+      source: input.source ?? 'user-explicit',
+      requestedBy: input.requestedBy ?? 'user',
+      reason: input.reason ?? `Skill invocation ${formatSkillInvocationName(skillName)}`,
+    });
   }
 
   async executeSkill(input: ExecuteSkillInput): Promise<SkillApplicationResult | null> {
@@ -194,7 +217,11 @@ export class ConversationSkillRuntime {
       return { applied: false, error: `Unknown skill: ${input.skillId}` };
     }
 
-    return this._applySkill(input.conversationId, skill);
+    return this._applySkill(input.conversationId, skill, undefined, {
+      source: 'user-explicit',
+      requestedBy: 'user',
+      reason: `Execute skill ${skill.name}`,
+    });
   }
 
   async activateDomainSkill(input: ApplySkillInvocationInput): Promise<{
@@ -204,7 +231,12 @@ export class ConversationSkillRuntime {
     lifecycleRecordId?: string;
     diagnostics?: readonly import('@neko/shared').SkillLifecycleDiagnostic[];
   }> {
-    const result = await this.applySkillInvocation(input);
+    const result = await this.applySkillInvocation({
+      ...input,
+      source: input.source ?? 'agent-tool',
+      requestedBy: input.requestedBy ?? 'agent',
+      reason: input.reason ?? `ActivateSkill requested ${input.skillName}`,
+    });
     if (!result?.applied) {
       return {
         success: false,
@@ -271,8 +303,13 @@ export class ConversationSkillRuntime {
   }
 
   async autoActivateSkill(input: AutoActivateSkillInput): Promise<SkillApplicationResult | null> {
-    void input;
-    return null;
+    if (!input.conversationId) {
+      return { applied: false, error: 'No active conversation' };
+    }
+    return {
+      applied: false,
+      error: 'Natural-language Skill auto-activation is disabled; use $skill or ActivateSkill.',
+    };
   }
 
   isToolAllowed(toolName: string, conversationId: string): boolean {
@@ -318,6 +355,7 @@ export class ConversationSkillRuntime {
       injection,
       appliedAt: this._deps.now?.() ?? Date.now(),
     });
+    this._deps.agentBridge?.applySkillInjection(conversationId, injection, skill);
   }
 
   clearActiveSkill(conversationId: string): void {
@@ -353,32 +391,101 @@ export class ConversationSkillRuntime {
     conversationId: string,
     skill: Skill,
     args?: string,
+    activation: {
+      readonly source: 'user-explicit' | 'agent-tool';
+      readonly requestedBy: 'user' | 'agent';
+      readonly reason?: string;
+    } = { source: 'user-explicit', requestedBy: 'user' },
   ): Promise<SkillApplicationResult> {
+    const now = this._deps.now?.() ?? Date.now();
+    const intent = createAgentCapabilityActivationIntent({
+      conversationId,
+      source: activation.source,
+      target: 'skill',
+      action: 'activate',
+      name: skill.name,
+      requestedBy: activation.requestedBy,
+      ...(activation.reason ? { reason: activation.reason } : {}),
+      createdAt: now,
+    });
+    const events: AgentCapabilityActivationProgressEvent[] = [];
+    const emit = (
+      step: Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]['step'],
+      status: Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]['status'],
+      extra: Partial<Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]> = {},
+    ) => {
+      const event = createAgentCapabilityActivationProgressEvent({
+        intent,
+        step,
+        status,
+        at: this._deps.now?.() ?? Date.now(),
+        ...(extra.recordId !== undefined ? { recordId: extra.recordId } : {}),
+        ...(extra.diagnostics !== undefined ? { diagnostics: extra.diagnostics } : {}),
+        ...(extra.metadata !== undefined ? { metadata: extra.metadata } : {}),
+      });
+      events.push(event);
+      this._deps.onActivationProgress?.(conversationId, [event]);
+    };
     try {
       const skillService = this._deps.skillService;
       if (!skillService) {
+        emit('failed', 'failed', {
+          diagnostics: [
+            {
+              severity: 'error',
+              code: 'skill-service-missing',
+              message: 'SkillService not initialized',
+            },
+          ],
+        });
         return { applied: false, error: 'SkillService not initialized' };
       }
 
+      emit('requested', 'succeeded');
+      emit('validated', 'succeeded');
       const injection =
         args === undefined
           ? await skillService.apply(skill)
           : await skillService.apply(skill, args);
+      emit('loaded', 'succeeded');
+      emit('prepared', 'succeeded', {
+        metadata: {
+          hasAllowedTools: Boolean(injection.allowedTools?.length),
+          hasModelOverride: Boolean(injection.model),
+        },
+      });
       const lifecycle = this._getLifecycleRuntime();
+      let lifecycleRecordId: string | undefined;
       if (lifecycle) {
         const result = lifecycle.activatePrepared({
           ...defaultSkillLifecycleRequest({
             conversationId,
             skillName: skill.name,
-            owner: 'user',
-            source: 'explicit-user',
+            owner: activation.requestedBy,
+            source: activation.source === 'agent-tool' ? 'explicit-agent' : 'explicit-user',
             ...(args !== undefined ? { args } : {}),
-            now: this._deps.now?.() ?? Date.now(),
+            now,
           }),
+          provenance: {
+            intentId: intent.id,
+            source: activation.source,
+            target: 'skill',
+            action: 'activate',
+            requestedBy: activation.requestedBy,
+            ...(activation.reason ? { reason: activation.reason } : {}),
+          },
           skill,
           injection,
         });
         if (!result.ok) {
+          emit('failed', 'failed', {
+            diagnostics: result.diagnostics.map((diagnostic) => ({
+              severity: 'error',
+              code: diagnostic.code,
+              message: diagnostic.message,
+              ...(diagnostic.details ? { details: diagnostic.details } : {}),
+            })),
+          });
           return {
             applied: false,
             error:
@@ -386,10 +493,32 @@ export class ConversationSkillRuntime {
               `Failed to activate skill: ${formatSkillInvocationName(skill.name)}`,
           };
         }
+        lifecycleRecordId = result.record?.id;
+        emit('record-created', 'succeeded', {
+          ...(lifecycleRecordId ? { recordId: lifecycleRecordId } : {}),
+          metadata: {
+            replacedRecordIds: result.replacedRecordIds ?? [],
+          },
+        });
       }
       this.applySkillInjection(conversationId, injection, skill);
+      emit('projected', 'succeeded', {
+        ...(lifecycleRecordId ? { recordId: lifecycleRecordId } : {}),
+      });
+      emit('active', 'succeeded', {
+        ...(lifecycleRecordId ? { recordId: lifecycleRecordId } : {}),
+      });
       return { applied: true, injection, skill };
     } catch (error) {
+      emit('failed', 'failed', {
+        diagnostics: [
+          {
+            severity: 'error',
+            code: 'skill-activation-failed',
+            message: error instanceof Error ? error.message : String(error),
+          },
+        ],
+      });
       return {
         applied: false,
         error: error instanceof Error ? error.message : String(error),

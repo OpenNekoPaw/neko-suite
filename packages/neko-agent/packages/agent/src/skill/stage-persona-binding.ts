@@ -123,7 +123,7 @@ class StagePersonaBinding implements IStagePersonaBinding {
 
   async syncCurrent(): Promise<void> {
     const stage = this._deps.stageTracker.current;
-    if (stage) await this._applyPersonaFor(stage);
+    if (stage && this._getRunId?.()) await this._applyPersonaFor(stage);
   }
 
   getActiveStage(): IdcStage | null {
@@ -146,6 +146,10 @@ class StagePersonaBinding implements IStagePersonaBinding {
   // ---------------------------------------------------------------------------
 
   private async _onEntered(stage: IdcStage): Promise<void> {
+    if (!this._getRunId?.()) {
+      logger.warn(`Skipping persona swap for stage "${stage}" without an active IDC run`);
+      return;
+    }
     try {
       await this._applyPersonaFor(stage);
     } catch (err) {

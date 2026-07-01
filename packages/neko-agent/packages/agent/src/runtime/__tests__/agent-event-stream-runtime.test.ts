@@ -372,6 +372,216 @@ describe('agent event stream runtime processor', () => {
     );
   });
 
+  it('keeps invalid streamed storyboard tables visible after validation errors', async () => {
+    const processor = new AgentEventStreamRuntimeProcessor();
+    const postMessage = vi.fn();
+    const streamedTable = '| 镜号 | 画面内容 |\n| --- | --- |\n| 1 | bad |';
+
+    const result = await processor.process({
+      conversationId: 'conv-1',
+      messageId: 'assistant-stream',
+      events: toAsyncIterable<AgentEvent>([
+        {
+          type: 'text_delta',
+          content: streamedTable,
+        },
+        {
+          type: 'error',
+          error: Object.assign(new Error('Storyboard creative table uses forbidden header.'), {
+            name: 'AgentError',
+            code: 'storyboard-table-forbidden-header',
+          }),
+        },
+      ]),
+      postMessage,
+      now: () => 100,
+    });
+
+    const completeMessage = postMessage.mock.calls
+      .map(([message]) => message)
+      .find((message) => message.type === 'streamComplete');
+
+    expect(result.accumulatedResponse).toBe(streamedTable);
+    expect(result.contentBlocks).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        content: streamedTable,
+        isStreaming: false,
+      }),
+    ]);
+    expect(completeMessage).toEqual(
+      expect.objectContaining({
+        type: 'streamComplete',
+      }),
+    );
+    expect(completeMessage?.contentBlocks ?? []).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        content: streamedTable,
+      }),
+    ]);
+    expect(
+      postMessage.mock.calls
+        .map(([message]) => message)
+        .filter(isAgentTurnTimelineMessage)
+        .flatMap((message) => message.events),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'error',
+          payload: expect.objectContaining({
+            code: 'storyboard-table-forbidden-header',
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('replaces streamed assistant text when validation retry repairs internally', async () => {
+    const processor = new AgentEventStreamRuntimeProcessor();
+    const postMessage = vi.fn();
+
+    const result = await processor.process({
+      conversationId: 'conv-1',
+      messageId: 'assistant-stream',
+      events: toAsyncIterable<AgentEvent>([
+        { type: 'text_delta', content: 'invalid table' },
+        {
+          type: 'assistant_text_replacement',
+          replacement: { reason: 'output-validation-retry', attempt: 1 },
+        },
+        { type: 'text_delta', content: 'fixed table' },
+      ]),
+      postMessage,
+      now: () => 100,
+    });
+
+    const completeMessage = postMessage.mock.calls
+      .map(([message]) => message)
+      .find((message) => message.type === 'streamComplete');
+    const timelineMessages = postMessage.mock.calls
+      .map(([message]) => message)
+      .filter(isAgentTurnTimelineMessage);
+
+    expect(result.accumulatedResponse).toBe('fixed table');
+    expect(result.contentBlocks).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        content: 'fixed table',
+        isStreaming: false,
+      }),
+    ]);
+    expect(completeMessage?.contentBlocks).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        content: 'fixed table',
+      }),
+    ]);
+    expect(timelineMessages.flatMap((message) => message.events)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'assistant_text',
+          payload: expect.objectContaining({ content: '', replaceContent: true }),
+        }),
+        expect.objectContaining({
+          kind: 'assistant_text',
+          payload: expect.objectContaining({ content: 'fixed table' }),
+        }),
+      ]),
+    );
+  });
+
+  it('preserves ReadImage resource context when validation retry repairs storyboard markdown', async () => {
+    const processor = new AgentEventStreamRuntimeProcessor();
+    const postMessage = vi.fn();
+    const repairedMarkdown = [
+      '| scene | shot | source | sourcePanel | decision | duration | visual | motion | audio | characters | dialogue | prompt | reviewStatus | nextAction | contentType | decisionReason | requiresSplit | duplicateOf |',
+      '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+      '| 开场 | S01 | P1 | 整页 | keep | 3s | 主角出现 | 缓慢推近 | 低风声 | 主角 |  | 黑白工业巨构前的孤独主角 | needs-review | use-as-reference | story | 建立空间与人物 | false |  |',
+    ].join('\n');
+
+    const result = await processor.process({
+      conversationId: 'conv-1',
+      messageId: 'assistant-stream',
+      events: toAsyncIterable<AgentEvent>([
+        {
+          type: 'tool_call',
+          toolCall: { id: 'read-image', name: 'ReadImage', arguments: {} },
+        },
+        {
+          type: 'tool_result',
+          toolResult: {
+            toolCallId: 'read-image',
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  alias: 'P1',
+                  label: 'Page 1',
+                  entryPath: 'OPS/page-1.jpg',
+                  mimeType: 'image/jpeg',
+                  renderUri: 'vscode-webview://page-1',
+                  resourceRef: {
+                    kind: 'document-entry',
+                    source: { filePath: '${BOOKS}/story.epub', format: 'epub' },
+                    entryPath: 'OPS/page-1.jpg',
+                    versionPolicy: 'versioned-export',
+                  },
+                },
+              ],
+            },
+            attachments: [
+              { type: 'image', path: 'vscode-webview://page-1', mimeType: 'image/jpeg' },
+            ],
+          },
+        },
+        { type: 'text_delta', content: '| 镜号 | 画面内容 |\n| --- | --- |\n| 1 | bad |' },
+        {
+          type: 'assistant_text_replacement',
+          replacement: { reason: 'output-validation-retry', attempt: 1 },
+        },
+        { type: 'text_delta', content: repairedMarkdown },
+      ]),
+      postMessage,
+      now: () => 100,
+    });
+
+    const completeMessage = postMessage.mock.calls
+      .map(([message]) => message)
+      .find((message) => message.type === 'streamComplete');
+
+    expect(result.accumulatedResponse).toBe(repairedMarkdown);
+    expect(result.contentBlocks.map((block) => block.type)).toEqual(['tool_call', 'text']);
+    expect(result.contentBlocks[0]).toMatchObject({
+      type: 'tool_call',
+      toolCall: {
+        id: 'read-image',
+        name: 'ReadImage',
+        result: {
+          success: true,
+          data: {
+            imageInfo: [
+              expect.objectContaining({
+                alias: 'P1',
+                renderUri: 'vscode-webview://page-1',
+              }),
+            ],
+          },
+        },
+      },
+    });
+    expect(result.contentBlocks[1]).toMatchObject({
+      type: 'text',
+      content: repairedMarkdown,
+      isStreaming: false,
+    });
+    expect(JSON.stringify(result.contentBlocks)).not.toContain('镜号');
+    expect(completeMessage?.contentBlocks?.map((block) => block.type)).toEqual([
+      'tool_call',
+      'text',
+    ]);
+  });
+
   it('throttles text partial snapshots while always persisting structural events', async () => {
     const processor = new AgentEventStreamRuntimeProcessor();
     const onPartialAssistantMessage = vi.fn();

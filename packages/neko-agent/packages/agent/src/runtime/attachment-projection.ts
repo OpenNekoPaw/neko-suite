@@ -1,5 +1,7 @@
 import { isDocumentFile, type MessageAttachment } from '@neko/shared';
 
+export type AgentRuntimePromptLocale = 'en' | 'zh';
+
 export interface AgentBase64ImageAttachment {
   readonly type: 'base64';
   readonly media_type: string;
@@ -20,6 +22,7 @@ export interface AgentAttachmentProjectionError {
 export interface AgentAttachmentProjectionDeps {
   readonly readTextFile: (path: string) => Promise<string>;
   readonly readImageFileAsBase64: (path: string) => Promise<AgentBase64ImageAttachment | null>;
+  readonly locale?: AgentRuntimePromptLocale | string;
   readonly onError?: (error: AgentAttachmentProjectionError) => void;
 }
 
@@ -40,26 +43,48 @@ export function parseBase64DataUrl(dataUrl: string): AgentBase64ImageAttachment 
   };
 }
 
-export function formatFileAttachmentContent(name: string, content: string): string {
-  return `\n\n### File: ${name}\n\`\`\`\n${content}\n\`\`\``;
+export function normalizeAgentRuntimePromptLocale(
+  locale?: AgentRuntimePromptLocale | string,
+): AgentRuntimePromptLocale {
+  return locale?.trim().toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
-export function formatUnreadableFileAttachment(name: string): string {
-  return `\n\n### File: ${name}\n(Failed to read file)`;
+export function formatFileAttachmentContent(
+  name: string,
+  content: string,
+  locale?: AgentRuntimePromptLocale | string,
+): string {
+  const labels = getAttachmentLabels(locale);
+  return `\n\n### ${labels.file}: ${name}\n\`\`\`\n${content}\n\`\`\``;
+}
+
+export function formatUnreadableFileAttachment(
+  name: string,
+  locale?: AgentRuntimePromptLocale | string,
+): string {
+  const labels = getAttachmentLabels(locale);
+  return `\n\n### ${labels.file}: ${name}\n(${labels.failedToReadFile})`;
 }
 
 export function formatMediaAttachmentReference(
   attachment: Pick<MessageAttachment, 'type' | 'name' | 'path'>,
+  locale?: AgentRuntimePromptLocale | string,
 ): string {
-  let text = `\n\n[Attached ${attachment.type}: ${attachment.name}]`;
+  const labels = getAttachmentLabels(locale);
+  let text = `\n\n[${labels.attached} ${formatAttachmentType(attachment.type, locale)}: ${attachment.name}]`;
   if (attachment.path) {
-    text += ` (path: ${attachment.path})`;
+    text += ` (${labels.path}: ${attachment.path})`;
   }
   return text;
 }
 
-export function formatDocumentAttachmentReference(name: string, path: string): string {
-  return `\n\n[Attached document: ${name}] (path: ${path})\nUse ReadDocument with source={"kind":"file","path":"${path}"} before analyzing this document. Do not inline the whole document as chat context.`;
+export function formatDocumentAttachmentReference(
+  name: string,
+  path: string,
+  locale?: AgentRuntimePromptLocale | string,
+): string {
+  const labels = getAttachmentLabels(locale);
+  return `\n\n[${labels.attached} ${labels.document}: ${name}] (${labels.path}: ${path})\n${formatReadDocumentInstruction(path, locale)}`;
 }
 
 export function extractFileReferencePaths(message: string): string[] {
@@ -118,26 +143,82 @@ export async function projectAgentMessageAttachments(
         }
 
         if (isDocumentFile(attachment.path)) {
-          textContent += formatDocumentAttachmentReference(attachment.name, attachment.path);
+          textContent += formatDocumentAttachmentReference(
+            attachment.name,
+            attachment.path,
+            deps.locale,
+          );
           break;
         }
 
         try {
           const content = await deps.readTextFile(attachment.path);
-          textContent += formatFileAttachmentContent(attachment.name, content);
+          textContent += formatFileAttachmentContent(attachment.name, content, deps.locale);
         } catch (error) {
           deps.onError?.({ attachment, operation: 'read-file', error });
-          textContent += formatUnreadableFileAttachment(attachment.name);
+          textContent += formatUnreadableFileAttachment(attachment.name, deps.locale);
         }
         break;
       }
 
       case 'video':
       case 'audio':
-        textContent += formatMediaAttachmentReference(attachment);
+        textContent += formatMediaAttachmentReference(attachment, deps.locale);
         break;
     }
   }
 
   return { textContent, imageAttachments };
+}
+
+export function formatReadDocumentInstruction(
+  path: string,
+  locale?: AgentRuntimePromptLocale | string,
+): string {
+  if (normalizeAgentRuntimePromptLocale(locale) === 'zh') {
+    return `分析该文档前，先调用 ReadDocument，参数使用 source={"kind":"file","path":"${path}"}。不要把整本文档直接内联到聊天上下文。`;
+  }
+  return `Use ReadDocument with source={"kind":"file","path":"${path}"} before analyzing this document. Do not inline the whole document as chat context.`;
+}
+
+function getAttachmentLabels(locale?: AgentRuntimePromptLocale | string): {
+  readonly attached: string;
+  readonly document: string;
+  readonly file: string;
+  readonly path: string;
+  readonly failedToReadFile: string;
+} {
+  if (normalizeAgentRuntimePromptLocale(locale) === 'zh') {
+    return {
+      attached: '已附加',
+      document: '文档',
+      file: '文件',
+      path: '路径',
+      failedToReadFile: '读取文件失败',
+    };
+  }
+  return {
+    attached: 'Attached',
+    document: 'document',
+    file: 'File',
+    path: 'path',
+    failedToReadFile: 'Failed to read file',
+  };
+}
+
+function formatAttachmentType(
+  type: MessageAttachment['type'],
+  locale?: AgentRuntimePromptLocale | string,
+): string {
+  if (normalizeAgentRuntimePromptLocale(locale) !== 'zh') return type;
+  switch (type) {
+    case 'image':
+      return '图片';
+    case 'video':
+      return '视频';
+    case 'audio':
+      return '音频';
+    case 'file':
+      return '文件';
+  }
 }
