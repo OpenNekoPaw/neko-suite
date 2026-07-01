@@ -5,8 +5,8 @@ Date: 2026-06-30
 ### Reuse
 
 - `CanvasMarkdownCapabilityInput` / `CanvasMarkdownCapabilityResult` in `@neko/shared` are already the cross-package Agent Webview -> Agent Extension -> Canvas contract. Extend this boundary instead of adding a new package or reintroducing `@neko/draft-runtime`.
-- `invokeCanvasMarkdownCapability` / `canvasMarkdownCapabilityResult` Webview messages already provide a typed request/response route. Keep the message kind and allow it to carry the new ingest capability input.
-- Canvas `invokeCanvasMarkdownCapability` already owns validation, resource binding, node creation, and diagnostics. Keep implementation in `neko-canvas`.
+- The old Webview `invokeCanvasMarkdownCapability` request route has been removed for new Markdown handoffs. Primary Markdown sends now use `requestCanvasMarkdownHandoff`, and follow-up controls use `invokeAgentCapabilityLifecycle`.
+- Canvas Markdown capability implementation still owns validation, resource binding, node creation, and diagnostics behind the Agent/capability lifecycle backend. Keep implementation in `neko-canvas`.
 - Existing `AgentCapabilityInvocationResult` and lifecycle approval handling already represent follow-up actions and `waiting-approval`. Reuse that result envelope for Canvas ingest follow-up actions.
 - Plugin transfer remains valid for ordinary asset transfer (`singleAsset`, `assetBatch`) and Cut storyboard handoff, but not for Markdown-to-Canvas authoring.
 
@@ -30,7 +30,8 @@ Date: 2026-06-30
 
 ### Current Gaps
 
-- Webview presenter currently infers any GFM table as `canvas.createTableFromMarkdown`.
+- Webview presenter currently builds Canvas Markdown capability input for assistant Markdown blocks, which makes `Send to Canvas` a direct Canvas command instead of an Agent-led tool decision.
+- `Send to Canvas` must be a fast trigger for Agent operation; Agent must decide whether to call Canvas, which capability to call, and which intent/profile hints to provide.
 - Canvas has hardcoded generic/storyboard profile constants but no validated Creative Table profile descriptor with `approval` / `plan` / `execution` field roles.
 - Canvas lifecycle result actions are appended as text in Webview instead of rendered as actionable controls.
 - Skill guidance still names `canvas.createStoryboardDraftFromMarkdown` as the preferred Canvas review action rather than a unified ingest/creative table handoff.

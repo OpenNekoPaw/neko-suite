@@ -30,19 +30,19 @@
 
 ## 5. Agent Webview Handoff
 
-- [x] 5.1 Update `projectCanvasMarkdownCapabilityInput` or successor presenter to build one Canvas ingest request by default for assistant Markdown blocks.
-- [x] 5.2 Pass stable resource refs from Markdown resource rendering projections into the ingest request while excluding render URIs and runtime-only handles.
-- [x] 5.3 Add intent/profile hint projection from Skill metadata, message context, or assistant-declared preferred Canvas action without making Webview the final profile authority.
-- [x] 5.4 Keep the visible UI as one primary `Send to Canvas` action; move any validation/debug modes into optional secondary controls only if needed.
-- [x] 5.5 Add Webview presenter/component tests proving Markdown tables route through ingest, not direct generic/storyboard menu branching or old plugin-transfer payloads.
+- [x] 5.1 Replace Webview-default Canvas ingest projection with an Agent handoff request projection for assistant Markdown blocks.
+- [x] 5.2 Pass stable resource refs from Markdown resource rendering projections into the Agent handoff context while excluding render URIs and runtime-only handles.
+- [x] 5.3 Move intent/profile hint interpretation to Agent tool selection; Webview may preserve declared hints as context but MUST NOT choose the final Canvas capability/profile.
+- [x] 5.4 Keep the visible UI as one primary `Send to Canvas` action; the button is a fast trigger for Agent operation, not a Canvas command shortcut.
+- [x] 5.5 Add Webview presenter/component tests proving Markdown handoffs route through Agent tool selection, not direct Canvas ingest, direct generic/storyboard menu branching, or old plugin-transfer payloads.
 
 ## 6. Lifecycle Action UI
 
 - [x] 6.1 Replace inert `Next actions` text-only rendering for Canvas lifecycle results with a structured result projection that includes status, diagnostics, refs, and action controls.
-- [x] 6.2 Add Webview controls for supported lifecycle follow-up actions that invoke the same backend with required approval context.
+- [x] 6.2 Add Webview controls for supported lifecycle follow-up actions that invoke the Agent/capability lifecycle backend with required approval context rather than calling Canvas directly.
 - [x] 6.3 Add disabled/diagnostic rendering for unsupported follow-up actions instead of inventing fallback commands.
 - [x] 6.4 Add Extension route tests proving mutating follow-up actions without approval return `waiting-approval` and approved actions re-enter the lifecycle backend.
-- [x] 6.5 Add Webview tests proving follow-up actions are actionable and generic fallback does not present creative execution controls.
+- [x] 6.5 Add Webview tests proving follow-up actions are actionable through Agent/capability lifecycle and generic fallback does not present creative execution controls.
 
 ## 7. Skill And Prompt Alignment
 

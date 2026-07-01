@@ -1,34 +1,35 @@
 ## ADDED Requirements
 
-### Requirement: Agent Webview uses one primary Send to Canvas action
-Agent Webview SHALL expose a single primary `Send to Canvas` action for Markdown content and route it through Canvas Markdown ingest instead of requiring users to choose generic, creative, storyboard, or production table modes up front.
+### Requirement: Agent Webview Send to Canvas triggers Agent-led handoff
+Agent Webview SHALL expose a single primary `Send to Canvas` action for Markdown content, but the action SHALL trigger an Agent-led Canvas handoff operation instead of directly invoking a Canvas Markdown capability from Webview.
 
 #### Scenario: User sends Markdown to Canvas
 - **WHEN** a user activates the primary `Send to Canvas` action on an Agent Markdown block
-- **THEN** Agent Webview MUST send the Markdown, stable resource refs, target context, provenance, and any available intent/profile hints to the Canvas ingest route
-- **AND** Agent Webview MUST NOT send old plugin-transfer storyboard payloads or Canvas node JSON
+- **THEN** Agent Webview MUST send the Markdown, stable resource refs, target context, provenance, and user intent to the Agent handoff route
+- **AND** Agent MUST decide whether to call Canvas, which Canvas capability to call, and which intent/profile hints to provide
+- **AND** Agent Webview MUST NOT directly invoke Canvas Markdown capabilities, send old plugin-transfer storyboard payloads, or send Canvas node JSON
 
 #### Scenario: Advanced send choices exist
 - **WHEN** Agent Webview exposes secondary validation or debug choices for Markdown handoff
 - **THEN** those choices MUST remain optional secondary actions
-- **AND** the primary user path MUST still use Canvas ingest as the default
+- **AND** the primary user path MUST still use Agent-led tool selection rather than a Webview default Canvas command
 
-### Requirement: Agent intent and Skill hints are advisory
-Agent and Skill output SHALL be allowed to provide Markdown intent, preferred Canvas action, and profile hints, but Canvas SHALL remain the authority for resolving table kind, profile, validation, resource binding, and follow-up actions.
+### Requirement: Agent owns Canvas tool selection while Canvas validates execution
+Agent and Skill output SHALL be allowed to provide Markdown intent, preferred Canvas action, and profile hints. Agent SHALL own Canvas tool selection for Markdown handoffs, while Canvas SHALL remain the authority for resolving table kind, profile, validation, resource binding, and follow-up actions after a Canvas capability is invoked.
 
 #### Scenario: Skill suggests a creative profile
 - **WHEN** a Skill-generated Markdown block includes or implies a supported creative profile such as storyboard
-- **THEN** Agent Webview MAY pass that profile hint to Canvas ingest
+- **THEN** Agent MAY pass that profile hint when it chooses a Canvas Markdown capability
 - **AND** Canvas MUST validate the hint before returning a creative table result
 
 #### Scenario: Skill adds fields not known to Canvas
 - **WHEN** a Skill-generated Markdown table contains extra columns not declared by the resolved Canvas profile
-- **THEN** Agent Webview MUST preserve the Markdown and send it unchanged
+- **THEN** Agent Webview MUST preserve the Markdown for the Agent handoff request
 - **AND** Canvas MUST preserve those fields as table metadata or return profile diagnostics without requiring Agent Webview to normalize them
 
 #### Scenario: Agent suggests an execution action
 - **WHEN** Agent text or table content suggests an execution action such as split image, redraw image, generate video, or create storyboard nodes
-- **THEN** Agent Webview MAY include the suggestion as intent metadata when supported by the local contract
+- **THEN** Agent MAY include the suggestion as intent metadata when it selects a trusted local capability
 - **AND** Canvas or the lifecycle backend MUST resolve the action to a trusted registered capability before it can be presented as executable
 
 ### Requirement: Webview resource projection remains display-only
@@ -37,15 +38,15 @@ Agent Webview SHALL use resource projections for thumbnails and status display, 
 #### Scenario: Markdown references a bound image token
 - **WHEN** Agent Webview renders a Markdown table containing a token that matches a tool-result resource projection
 - **THEN** Webview MAY display a thumbnail or status badge for that token
-- **AND** the Canvas ingest request MUST carry the corresponding `ResourceRef`, document resource ref, or authorized stable source path rather than the Webview render URI
+- **AND** the Agent handoff context MUST carry the corresponding `ResourceRef`, document resource ref, or authorized stable source path rather than the Webview render URI
 
 #### Scenario: Markdown references an unresolved image token
 - **WHEN** Agent Webview cannot map a table token or image target to a stable resource identity
 - **THEN** Webview MUST preserve the Markdown text and may show a diagnostic
-- **AND** Canvas ingest MUST return missing-resource diagnostics instead of binding by chat attachment order or filename guessing
+- **AND** any Agent-selected Canvas ingest request MUST return missing-resource diagnostics instead of binding by chat attachment order or filename guessing
 
 ### Requirement: Canvas ingest results are shown as structured results
-Agent Webview SHALL render Canvas ingest results with status, diagnostics, created/review artifact refs, resource summaries, and follow-up actions without requiring users to inspect raw JSON.
+Agent Webview SHALL render Agent-selected Canvas capability results with status, diagnostics, created/review artifact refs, resource summaries, and follow-up actions without requiring users to inspect raw JSON.
 
 #### Scenario: Canvas creates a review table
 - **WHEN** Canvas ingest returns a review artifact or created table node
@@ -67,7 +68,7 @@ Agent Webview SHALL render trusted Canvas lifecycle follow-up actions as actiona
 
 #### Scenario: Follow-up action requires approval
 - **WHEN** a follow-up action has a mutating lifecycle phase or requires approval
-- **THEN** Agent Webview MUST collect explicit user confirmation or route through an existing approval mechanism before invoking it
+- **THEN** Agent Webview MUST collect explicit user confirmation or route through an existing Agent/capability approval mechanism before invoking it
 - **AND** the lifecycle backend MUST block the invocation if approval context is missing
 
 #### Scenario: Follow-up action is unsupported
@@ -81,7 +82,7 @@ Agent Skills that generate creative Markdown tables SHALL describe approval, pla
 #### Scenario: Comic storyboard Skill creates a table
 - **WHEN** the comic/storyboard Skill asks the model to produce a Markdown storyboard table
 - **THEN** the guidance MUST describe review facts, planning fields, prompts, and execution suggestions as creative table fields
-- **AND** it MUST prefer Canvas ingest or a Canvas creative table profile for Canvas delivery rather than a fixed `StoryboardDraftNormalized` or old compiler payload
+- **AND** it MUST instruct Agent to choose an appropriate Canvas capability/profile for Canvas delivery rather than relying on a Webview default command, fixed `StoryboardDraftNormalized`, or old compiler payload
 
 #### Scenario: Skill output references media
 - **WHEN** a Skill instructs the model to reference images or media in Markdown tables

@@ -4,7 +4,7 @@ The current Markdown-to-Canvas path already moved away from old plugin-transfer 
 
 - `canvas.createTableFromMarkdown` creates a generic table from a GFM table.
 - `canvas.createStoryboardDraftFromMarkdown` creates a review-first storyboard table with hardcoded storyboard aliases and follow-up actions.
-- Agent Webview's default `Send to Canvas` path can still treat any GFM table as generic unless a caller explicitly supplies a more specific capability.
+- Agent Webview's direct `Send to Canvas` path can still treat any GFM table as generic because it bypasses Agent tool-selection and invokes a default Canvas capability before Agent can infer creative intent.
 - Canvas preserves unknown table columns, but it does not know whether those fields are user review facts, suggested plan inputs, or executable actions.
 
 The product direction is not a fixed StoryboardDraft protocol. The table is the user-reviewable creative artifact; storyboard is one profile among future profiles such as image preparation, prompt batches, approval matrices, generated-asset review, and interactive video branch maps. Ordinary tables should also render media references where stable resource refs are available.
@@ -13,11 +13,11 @@ The product direction is not a fixed StoryboardDraft protocol. The table is the 
 
 | Layer | Analysis |
 | --- | --- |
-| Responsibility | Agent skills own output guidance and may express intent/profile hints. Agent Webview owns presentation, resource render projections, and one primary `Send to Canvas` affordance. Agent Extension owns typed Webview-to-Canvas request routing and lifecycle approval mediation. Canvas owns Markdown ingest, table parsing, profile resolution, resource binding, node creation, persisted table metadata, diagnostics, and follow-up action definitions. Trusted domain capability providers own actual image/video/Cut/Canvas execution. |
+| Responsibility | Agent skills own output guidance and may express intent/profile hints. Agent runtime owns Canvas handoff decisions and selects which Canvas capability/tool to invoke. Agent Webview owns presentation, resource render projections, and one primary `Send to Canvas` affordance that only triggers the Agent-led operation. Agent Extension owns typed handoff routing, Agent tool invocation plumbing, and lifecycle approval mediation. Canvas owns Markdown ingest, table parsing, profile resolution, resource binding, node creation, persisted table metadata, diagnostics, and follow-up action definitions after Agent invokes a Canvas capability. Trusted domain capability providers own actual image/video/Cut/Canvas execution. |
 | Dependency | Shared DTOs live in `@neko/shared` only when Agent Webview, Agent Extension, and Canvas all need static types. Canvas profile implementation stays in `neko-canvas` and must not import Agent/Webview internals. Webview must not import Canvas handlers or VSCode APIs. Table Core pure helpers can remain Canvas-private until another owning package needs them. |
 | Interface | The cross-package interface is an ingest request/result: Markdown, source format, stable resources, target, provenance, optional intent/profile hints, resolved kind/profile, diagnostics, preview, node refs, and lifecycle actions. It is not `CanvasNode[]`, `StoryboardDraftNormalized`, `CreativeDraftDocument`, or a fixed storyboard row DTO. |
 | Extension | New table behavior is added by registering a Canvas-owned `CreativeTableProfile` descriptor and optional trusted action adapters. Skill-added fields can be displayed and grouped by roles when the active profile declares them; otherwise they remain preserved unknown columns. New execution actions must resolve to a registered capability, not arbitrary Markdown text. |
-| Testing | Unit tests cover DTO validation, table parsing, media-token extraction, resource binding, profile resolution, generic fallback, and action readiness. Webview presenter tests prove a single `Send to Canvas` invokes ingest and does not expose generic/creative/storyboard as the primary choice. Extension route tests prove lifecycle actions can be approved and re-invoked. Path-level tests poison plugin-transfer/storyboard compiler routes. VSCode Webview runtime smoke remains the final interaction check. |
+| Testing | Unit tests cover DTO validation, table parsing, media-token extraction, resource binding, profile resolution, generic fallback, and action readiness. Webview presenter tests prove a single `Send to Canvas` triggers an Agent handoff request and does not invoke Canvas ingest directly or expose generic/creative/storyboard as the primary choice. Agent/Extension route tests prove Agent-selected Canvas capability calls and lifecycle actions can be approved and re-invoked. Path-level tests poison direct Webview-to-Canvas ingest, plugin-transfer, and storyboard compiler routes for new Markdown handoffs. VSCode Webview runtime smoke remains the final interaction check. |
 | Proportionality | This is a local VSCode client capability facade, not a remote tool platform. A small Canvas-owned registry is justified because at least storyboard, image-prep, prompt batch, and review tables need the same field-role/resource/action semantics. There is no dynamic package scanning, remote schema registry, multi-tenant policy layer, or generic workflow scheduler. |
 | Fail-visible behavior | Unknown profiles, invalid profile descriptors, duplicate field aliases, unsafe resource identities, unsupported execution actions, missing required execution fields, unresolved resource tokens, and attempts to hit old compiler paths return diagnostics or fail tests. Generic fallback is display-only and must not be reported as creative/action success. |
 
@@ -25,8 +25,8 @@ The product direction is not a fixed StoryboardDraft protocol. The table is the 
 
 **Goals:**
 
-- Give Agent Webview one primary Markdown `Send to Canvas` entry point.
-- Let Canvas resolve Markdown into a note, generic table, or creative table using explicit hints and safe detection.
+- Give Agent Webview one primary Markdown `Send to Canvas` shortcut that triggers an Agent-led Canvas handoff operation.
+- Let Agent decide whether and how to call Canvas, then let Canvas resolve Markdown into a note, generic table, or creative table using explicit hints and safe detection.
 - Extract a media-aware Table Core so ordinary tables and creative tables both preserve columns/rows/cells and render stable media/resource references.
 - Define Creative Table profiles with field roles: `approval`, `plan`, and `execution`.
 - Keep generic tables as safe display fallback for unsupported creative profiles or uncertain table semantics.
@@ -45,12 +45,13 @@ The product direction is not a fixed StoryboardDraft protocol. The table is the 
 
 ## Decisions
 
-1. **Use a Canvas ingest facade as the default Webview handoff.**
-   - The primary Webview action sends `canvas.ingestMarkdown` or equivalent typed input with Markdown, resources, target, provenance, and optional hints.
-   - Canvas resolves `resolvedKind: markdown-note | generic-table | creative-table` and returns diagnostics/actions.
-   - Existing specific capabilities may remain as wrappers or lower-level handlers, but default `Send to Canvas` uses ingest.
+1. **Use Agent-led handoff; Canvas ingest is an Agent-selected tool, not a Webview default command.**
+   - The primary Webview action sends the Markdown block, stable resource refs, target context, provenance, and user intent to the Agent handoff route.
+   - Agent decides whether to call Canvas, which Canvas capability to call, and which intent/profile hints to provide.
+   - If Agent selects `canvas.ingestMarkdown` or an equivalent Canvas Markdown capability, Canvas resolves `resolvedKind: markdown-note | generic-table | creative-table` and returns diagnostics/actions.
+   - Existing specific capabilities may remain as wrappers or lower-level handlers, but `Send to Canvas` does not bypass Agent by invoking any Canvas capability directly from Webview.
    - Alternative rejected: expose menu-first choices such as "Send as Generic Table", "Send as Storyboard Draft", and "Send as Creative Table". This leaks internal taxonomy to users and will not scale to future profiles.
-   - Alternative rejected: let Agent alone choose the path. User button clicks must work without another model turn, and Canvas must be the authority for validation and resource binding.
+   - Alternative rejected: let Webview default to `canvas.ingestMarkdown`. This turns a convenience button into a hidden compiler path, prevents Agent from choosing the right tool/profile, and causes creative tables to fall back to generic display when Agent intent is required.
 
 2. **Make Table Core media-aware and semantics-light.**
    - Table Core parses one GFM table, stores original Markdown, columns, rows, cells, source ranges when available, unknown columns, and diagnostics.
@@ -92,7 +93,7 @@ The product direction is not a fixed StoryboardDraft protocol. The table is the 
 - [Risk] The ingest facade becomes a hidden compiler. -> Mitigation: keep the facade limited to Markdown/table classification, Table Core, profile resolution, Canvas node creation, and action descriptors; actual media generation/video/Cut execution remains in trusted domain capabilities.
 - [Risk] Profile descriptors grow too dynamic. -> Mitigation: profiles are registered code/config owned by Canvas or trusted extensions, validated at startup, and fail on duplicate aliases, unknown actions, or unsupported field types.
 - [Risk] Generic fallback hides mistakes. -> Mitigation: fallback status and diagnostics must say the table is display-only; creative/action results remain blocked.
-- [Risk] Webview action UI duplicates plan-mode approval. -> Mitigation: Webview action buttons invoke the same Agent capability lifecycle route and approval context instead of inventing a second approval system.
+- [Risk] Webview action UI duplicates plan-mode approval or bypasses Agent tool choice. -> Mitigation: Webview action buttons trigger Agent/capability lifecycle routes with approval context instead of invoking Canvas capabilities directly.
 - [Risk] Resource matching remains ambiguous for user-readable tokens. -> Mitigation: show token status, candidate summaries, and never bind by row order or attachment order.
 - [Risk] Renaming storyboard profile breaks existing tests/prompts. -> Mitigation: keep alias compatibility for `storyboard-draft` while updating new documentation and tests to assert creative profile behavior.
 
@@ -101,8 +102,8 @@ The product direction is not a fixed StoryboardDraft protocol. The table is the 
 1. Define shared ingest/profile/result DTOs and validators needed across Agent Webview, Agent Extension, and Canvas.
 2. Refactor Canvas `markdownCapabilities.ts` toward Table Core helpers and a validated profile registry while preserving existing behavior through tests.
 3. Add built-in `generic` and `storyboard` profiles; map old `storyboard-draft` aliases to `storyboard`.
-4. Implement Canvas ingest facade with display fallback and diagnostics before changing Webview default routing.
-5. Change Agent Webview `Send to Canvas` to call ingest by default and pass resource refs plus optional intent/profile hints.
+4. Implement Canvas ingest facade with display fallback and diagnostics before replacing Webview direct routing with Agent-led handoff.
+5. Change Agent Webview `Send to Canvas` to trigger an Agent-led Canvas handoff request with resource refs plus context; Agent then selects Canvas ingest or a more specific Canvas capability.
 6. Add lifecycle action projection UI and route follow-up approval/execution through the existing lifecycle backend.
 7. Update Skill prompts/tests to describe Creative Table field roles and Canvas ingest intent.
 8. Remove or poison obsolete new-request paths that use storyboard draft runtime/compiler or plugin-transfer storyboard payloads.

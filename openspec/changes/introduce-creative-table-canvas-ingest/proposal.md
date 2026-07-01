@@ -6,12 +6,12 @@ Neko needs one media-aware table ingest path where ordinary tables can still sho
 
 ## What Changes
 
-- Add a Canvas-owned Markdown ingest facade for Agent/Webview `Send to Canvas` that accepts Markdown, stable resource refs, target, provenance, and optional intent/profile hints, then resolves to a Markdown note, generic table, or creative table.
+- Add a Canvas-owned Markdown ingest facade for Agent-selected tool calls that accepts Markdown, stable resource refs, target, provenance, and optional intent/profile hints, then resolves to a Markdown note, generic table, or creative table.
 - Introduce a shared Table Core contract for GFM table parse results, columns, rows, cells, unknown-column preservation, resource/media bindings, render diagnostics, and display fallback.
 - Introduce Creative Table profiles as Canvas-owned descriptors layered on Table Core. Profiles define fields, aliases, value types, media/resource behavior, prompt fields, action fields, and field roles: `approval`, `plan`, and `execution`.
 - Recast storyboard as a built-in Creative Table profile/preset rather than an independent runtime or protocol. Keep `storyboard-draft` only as a compatibility alias where needed.
 - Make generic tables a safe display fallback for creative-table recognition failures: content and media previews may be preserved, but creative semantics and execution actions must remain blocked until a supported profile validates.
-- Keep Webview UI simple with one primary `Send to Canvas` action. Webview may pass intent/profile hints from Agent output or user context, but Canvas remains the authority for parsing, profile resolution, validation, resource binding, node creation, and follow-up actions.
+- Keep Webview UI simple with one primary `Send to Canvas` action, but treat that button as a fast trigger for an Agent-led operation. Agent remains responsible for deciding whether to call Canvas, which Canvas capability to call, and which intent/profile hints to provide. Canvas remains the authority for parsing, profile resolution, validation, resource binding, node creation, and follow-up actions once Agent invokes a Canvas capability.
 - Add lifecycle action projection so Canvas-returned follow-up actions can become explicit approval-gated UI/actions instead of plain `Next actions` text.
 - Update Skill guidance to describe creative table field roles and stable media references without requiring the model to output Canvas node JSON, fixed StoryboardDraft DTOs, or old plugin-transfer payloads.
 - **BREAKING**: New Markdown-to-Canvas requests must not target `@neko/storyboard-draft`, `@neko/draft-runtime`, `StoryboardDraftNormalized`, `canvasStructuredContent`, or direct storyboard compiler payloads as canonical success paths.
@@ -29,7 +29,7 @@ Neko needs one media-aware table ingest path where ordinary tables can still sho
 ### New Capabilities
 
 - `creative-table-canvas-ingest`: Canvas-owned Markdown ingest, media-aware Table Core, Creative Table profiles, generic display fallback, and approval/plan/execution field roles for Canvas table creation.
-- `agent-canvas-markdown-handoff`: Agent Webview single-button Send to Canvas behavior, intent/profile hint projection, lifecycle action result UI, and fail-visible routing to Canvas ingest.
+- `agent-canvas-markdown-handoff`: Agent Webview single-button Send to Canvas behavior as an Agent-operation shortcut, Agent-owned tool selection, lifecycle action result UI, and fail-visible routing from Agent-selected Canvas capabilities.
 
 ### Modified Capabilities
 
@@ -45,12 +45,12 @@ Neko needs one media-aware table ingest path where ordinary tables can still sho
   - Add `canvas.ingestMarkdown` or equivalent capability/facade that dispatches note/generic/creative/storyboard behavior and returns typed diagnostics/actions.
   - Convert the current storyboard draft handler into a built-in creative profile and compatibility capability wrapper.
 - Agent Webview and Extension:
-  - Change Markdown `Send to Canvas` to invoke the unified ingest/facade by default.
-  - Preserve a simple primary action; optional secondary validation/debug choices may exist but should not expose generic/creative/storyboard as the main user decision.
+  - Change Markdown `Send to Canvas` to enqueue/trigger an Agent-owned Canvas handoff operation instead of invoking Canvas ingest directly from Webview.
+  - Preserve a simple primary action; optional secondary validation/debug choices may exist but should not expose generic/creative/storyboard as the main user decision or bypass Agent tool selection.
   - Render returned lifecycle actions as actionable approval/execute controls instead of only appending text.
 - Skills and prompts:
   - Update comic/storyboard and media-to-video guidance to describe creative table roles, media references, action suggestions, and Canvas ingest intent.
   - Stop presenting `StoryboardDraft` as a standalone protocol.
 - Cleanup and validation:
   - Remove or poison old storyboard draft/compiler success paths for new Markdown handoff requests.
-  - Add path-level tests proving the default path hits Canvas ingest, not plugin-transfer fallback or old compiler routes.
+  - Add path-level tests proving the primary button hits the Agent-led handoff path, and that any Canvas ingest call is produced by Agent/tool selection rather than a Webview default command or old plugin-transfer/compiler route.
