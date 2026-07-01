@@ -8,15 +8,17 @@
  * - StatusBar (fixed at bottom)
  */
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Box } from 'ink';
 import type { CLIConfig } from '../core/types';
-import type { IService } from '@neko/shared';
+import type { AgentCapabilityProvider, IService } from '@neko/shared';
 import { ChatView } from './ChatView/ChatView';
 import { InputEditor } from './Input/InputEditor';
 import { StatusBar } from './StatusBar/StatusBar';
 import { ToolApprovalPanel } from './ToolApproval/ToolApprovalPanel';
 import { SelectionMenu } from './Selection/SelectionMenu';
+import type { InputSuggestionOption } from './Input/input-suggestions';
+import { createTuiReferenceSuggestions } from './Input/reference-suggestions';
 import { ErrorBoundary } from './shared/ErrorBoundary';
 import { useAgentSession } from '../hooks/useAgentSession';
 import { useKeyboard } from '../hooks/useKeyboard';
@@ -26,19 +28,25 @@ import { useAgentStore } from '../stores/agent-store';
 import { useConversationStore } from '../stores/conversation-store';
 import { useConfigStore } from '../stores/config-store';
 import { useUIStore } from '../stores/ui-store';
+import { createTuiSkillInvocationCatalog } from '../core/slash-command-catalog';
 
 interface AppProps {
   /** CLI configuration (loaded before render) */
   readonly config: CLIConfig;
   /** Optional Platform Service from extension */
   readonly service?: IService;
+  /** Host-agnostic capability providers injected by embedding hosts. */
+  readonly capabilityProviders?: readonly AgentCapabilityProvider[];
 }
 
-export function App({ config, service }: AppProps): React.JSX.Element {
+export function App({ config, service, capabilityProviders }: AppProps): React.JSX.Element {
   const status = useAgentStore((s) => s.status);
   const pendingApproval = useUIStore((s) => s.pendingApproval);
   const pendingSelection = useUIStore((s) => s.pendingSelection);
   const pendingPlanReview = useUIStore((s) => s.pendingPlanReview);
+  const [referenceSuggestions, setReferenceSuggestions] = useState<
+    readonly InputSuggestionOption[]
+  >([]);
 
   // Track terminal size changes
   useTerminalSize();
@@ -56,15 +64,59 @@ export function App({ config, service }: AppProps): React.JSX.Element {
     confirmTool,
     updateModel,
     updateMode,
+    validateLlmConfig,
+    applyLlmConfig,
+    getContextTokenCount,
+    compactContext,
+    getMessageQueueSnapshot,
+    promoteQueuedMessage,
+    cancelQueuedMessage,
+    editQueuedMessage,
     activateSkill,
     deactivateSkill,
     getSkillService,
     getToolRegistry,
+    listMcpServers,
+    listMcpTools,
+    connectMcpServer,
+    disconnectMcpServer,
+    reconnectMcpServer,
+    getCapabilityProviderSummaries,
+    getCapabilityDiagnostics,
+    listCapabilityTools,
+    getReferenceContributors,
+    controlIdcWorkflow,
     slashCommands,
   } = useAgentSession({
     config,
     service,
+    capabilityProviders,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    void createTuiReferenceSuggestions({
+      workspaceRoot: config.workDir,
+      referenceContributors: getReferenceContributors(),
+    }).then(
+      (suggestions) => {
+        if (!cancelled) {
+          setReferenceSuggestions(suggestions);
+        }
+      },
+      (error) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : String(error);
+          useConversationStore
+            .getState()
+            .addError(new Error(`Reference suggestion error: ${message}`));
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [config.workDir, getReferenceContributors, slashCommands]);
 
   // Slash command handling
   const { handleCommand, onClear } = useSlashCommands({
@@ -72,10 +124,27 @@ export function App({ config, service }: AppProps): React.JSX.Element {
     submit,
     updateModel,
     updateMode,
+    validateLlmConfig,
+    applyLlmConfig,
+    getContextTokenCount,
+    compactContext,
+    getMessageQueueSnapshot,
+    promoteQueuedMessage,
+    cancelQueuedMessage,
+    editQueuedMessage,
     activateSkill,
     deactivateSkill,
     getSkillService,
     getToolRegistry,
+    listMcpServers,
+    listMcpTools,
+    connectMcpServer,
+    disconnectMcpServer,
+    reconnectMcpServer,
+    getCapabilityProviderSummaries,
+    getCapabilityDiagnostics,
+    listCapabilityTools,
+    controlIdcWorkflow,
   });
 
   // Global keyboard shortcuts
@@ -149,7 +218,21 @@ export function App({ config, service }: AppProps): React.JSX.Element {
     : null;
 
   const isRunning = status === 'running' || status === 'waiting_confirmation';
-  const inputDisabled = isRunning || !!pendingSelection || pendingPlanReview;
+  const inputDisabled = !!pendingSelection || pendingPlanReview;
+  const skillSuggestions = createTuiSkillInvocationCatalog(
+    getSkillService()
+      ?.registry.listSkills()
+      .map((skill) => ({
+        name: skill.name,
+        description: skill.description ?? undefined,
+        enabled: skill.enabled,
+      })),
+  ).map((skill) => ({
+    trigger: '$' as const,
+    name: skill.name.startsWith('$') ? skill.name.slice(1) : skill.name,
+    description: skill.description,
+    kind: 'skill',
+  }));
 
   return (
     <ErrorBoundary label="Neko TUI">
@@ -178,8 +261,11 @@ export function App({ config, service }: AppProps): React.JSX.Element {
         <InputEditor
           onSubmit={handleSubmit}
           onSlashCommand={handleCommand}
+          onSkillInvocation={handleCommand}
           disabled={inputDisabled}
           commands={slashCommands}
+          skills={skillSuggestions}
+          references={referenceSuggestions}
         />
 
         {/* Status bar — fixed at very bottom */}

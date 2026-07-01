@@ -15,6 +15,14 @@ export interface AgentStreamBackgroundTaskDeliveryContext {
   readonly baseTask: BackgroundTaskView;
 }
 
+export interface AgentStreamBackgroundTaskWaitInput {
+  readonly conversationId: string;
+  readonly taskId: string;
+  readonly toolCallId?: string;
+  readonly taskType: BackgroundTaskView['type'];
+  readonly signal: AbortSignal;
+}
+
 export interface AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan = unknown> {
   readonly progress: BackgroundTaskProgressPatch;
   readonly deliveryPlan?: TDeliveryPlan;
@@ -84,6 +92,7 @@ export interface StartAgentStreamBackgroundTaskObserverInput<
   readonly observeProgress?: (
     input: ObserveAgentStreamBackgroundTaskProgressInput<TSourceTask, TDeliveryPlan>,
   ) => void | (() => void);
+  readonly waitForCompletion?: (input: AgentStreamBackgroundTaskWaitInput) => Promise<TSourceTask>;
   readonly createRecoveryProgress: (task: TSourceTask) => BackgroundTaskProgressPatch;
   readonly createProgressDelivery: (
     task: TSourceTask,
@@ -161,9 +170,11 @@ export function startAgentStreamBackgroundTaskObserver<
   const completion = new Promise<AgentStreamBackgroundTaskCompletion>((resolve) => {
     resolveCompletion = resolve;
   });
+  const waitController = new AbortController();
   const complete = (next: AgentStreamBackgroundTaskCompletion) => {
     if (settled) return;
     settled = true;
+    waitController.abort();
     resolveCompletion(next);
   };
 
@@ -174,6 +185,48 @@ export function startAgentStreamBackgroundTaskObserver<
     taskType: start.taskType,
     baseTask: start.task,
   };
+
+  const deliverObservedProgress = async (params: {
+    readonly conversationId: string;
+    readonly task: AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>;
+    readonly sourceTask: TSourceTask;
+  }): Promise<void> => {
+    if (params.conversationId !== input.conversationId) {
+      input.onIgnoredConversationTask?.({
+        taskId: start.taskId,
+        conversationId: input.conversationId,
+        sourceTask: params.sourceTask,
+      });
+      complete({ status: 'ignored' });
+      return;
+    }
+
+    const projection = projectAgentStreamBackgroundTaskProgress({
+      conversationId: input.conversationId,
+      baseTask: start.task,
+      progress: params.task.progress,
+      parentMessageId: input.messageId,
+      parentToolCallId: start.toolCallId,
+      deliveryPlan: params.task.deliveryPlan,
+      persistResultUrls: params.task.persistResultUrls,
+    });
+    await input.postMessage(projection.message);
+
+    if (projection.persistResultUrls) {
+      input.persistResultUrls?.({
+        conversationId: input.conversationId,
+        taskId: start.taskId,
+        ...(start.toolCallId ? { toolCallId: start.toolCallId } : {}),
+        urls: projection.persistResultUrls,
+        ...(projection.deliveryPlan !== undefined ? { deliveryPlan: projection.deliveryPlan } : {}),
+      });
+    }
+    const status = projection.task.status;
+    if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+      complete({ status });
+    }
+  };
+
   const unsubscribe = observeProgress({
     taskId: start.taskId,
     conversationId: input.conversationId,
@@ -192,45 +245,45 @@ export function startAgentStreamBackgroundTaskObserver<
         complete({ status: 'delivery-error', error: event.error });
       }
     },
-    onTaskProgress: async ({ conversationId, task, sourceTask }) => {
-      if (conversationId !== input.conversationId) {
-        input.onIgnoredConversationTask?.({
-          taskId: start.taskId,
-          conversationId: input.conversationId,
-          sourceTask,
-        });
-        complete({ status: 'ignored' });
-        return;
-      }
-
-      const projection = projectAgentStreamBackgroundTaskProgress({
-        conversationId: input.conversationId,
-        baseTask: start.task,
-        progress: task.progress,
-        parentMessageId: input.messageId,
-        parentToolCallId: start.toolCallId,
-        deliveryPlan: task.deliveryPlan,
-        persistResultUrls: task.persistResultUrls,
-      });
-      await input.postMessage(projection.message);
-
-      if (projection.persistResultUrls) {
-        input.persistResultUrls?.({
-          conversationId: input.conversationId,
-          taskId: start.taskId,
-          ...(start.toolCallId ? { toolCallId: start.toolCallId } : {}),
-          urls: projection.persistResultUrls,
-          ...(projection.deliveryPlan !== undefined
-            ? { deliveryPlan: projection.deliveryPlan }
-            : {}),
-        });
-      }
-      const status = projection.task.status;
-      if (status === 'completed' || status === 'failed' || status === 'cancelled') {
-        complete({ status });
-      }
-    },
+    onTaskProgress: (event) => deliverObservedProgress(event),
   });
+
+  if (input.waitForCompletion) {
+    void input
+      .waitForCompletion({
+        conversationId: input.conversationId,
+        taskId: start.taskId,
+        ...(start.toolCallId ? { toolCallId: start.toolCallId } : {}),
+        taskType: start.taskType,
+        signal: waitController.signal,
+      })
+      .then(async (task) => {
+        if (settled) return;
+        await deliverObservedProgress({
+          conversationId: input.conversationId,
+          sourceTask: task,
+          task: await input.createProgressDelivery(task, context),
+        });
+      })
+      .catch(async (error: unknown) => {
+        if (settled) return;
+        const projection = projectAgentStreamBackgroundTaskProgress({
+          conversationId: input.conversationId,
+          baseTask: start.task,
+          progress: {
+            id: start.taskId,
+            status: 'failed',
+            progress: start.task.progress,
+            error: formatBackgroundTaskWaitError(error),
+            updatedAt: new Date(input.now?.() ?? Date.now()).toISOString(),
+          },
+          parentMessageId: input.messageId,
+          parentToolCallId: start.toolCallId,
+        });
+        await input.postMessage(projection.message);
+        complete({ status: 'delivery-error', error });
+      });
+  }
   const trackedUnsubscribe =
     typeof unsubscribe === 'function'
       ? () => {
@@ -246,4 +299,8 @@ export function startAgentStreamBackgroundTaskObserver<
     completion,
     ...(trackedUnsubscribe ? { unsubscribe: trackedUnsubscribe } : {}),
   };
+}
+
+function formatBackgroundTaskWaitError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

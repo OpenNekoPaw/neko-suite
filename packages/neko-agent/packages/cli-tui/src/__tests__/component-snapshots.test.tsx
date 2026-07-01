@@ -290,11 +290,11 @@ describe('Component Snapshots (ink-testing-library)', () => {
   // ═══════════════════════════════════════════════════════════════════
 
   describe('InputEditor', () => {
-    it('renders empty input with placeholder', () => {
+    it('renders empty input with prompt and cursor', () => {
       const { lastFrame } = render(<InputEditor onSubmit={() => {}} />);
       const frame = lastFrame();
       expect(frame).toContain('>');
-      expect(frame).toContain('Type a message or /help');
+      expect(frame).not.toContain('/ commands  $ Skills  @ refs');
       expect(frame).toContain('▋');
       console.log('InputEditor (empty, idle):\n', frame);
     });

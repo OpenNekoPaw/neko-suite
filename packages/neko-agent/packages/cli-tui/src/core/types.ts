@@ -3,6 +3,7 @@
  */
 
 import type { AgentResult, MCPServerConfig } from '@neko/agent';
+import type { AgentLlmConfig } from '@neko-agent/types';
 
 /**
  * CLI configuration
@@ -16,6 +17,11 @@ export interface CLIConfig {
   providerRequiresApiKey: boolean;
   /** Chat model ID */
   model: string;
+  /** Explicit provider/model identity for the selected chat model. */
+  chatModel?: {
+    providerId: string;
+    modelId: string;
+  };
   /** Media model IDs (for image/video/audio generation, empty if none) */
   mediaModels: string[];
   /** Default media models by type */
@@ -44,6 +50,8 @@ export interface CLIConfig {
   outputFormat: 'text' | 'json' | 'markdown';
   /** Extended thinking budget in tokens (0 = disabled, Anthropic/DeepSeek only) */
   thinkingBudget: number;
+  /** Runtime LLM parameter presets and advanced values for Agent turns. */
+  llmConfig?: AgentLlmConfig;
   /** Original defaultModel value that was not found in models list (triggers model switch UI) */
   modelNotFound?: string;
 }

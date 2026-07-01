@@ -6,17 +6,26 @@
  */
 
 import { create } from 'zustand';
-import type { AgentStatus, ExecutionMode, TokenUsage, IterationProgress } from '../types/state';
+import type {
+  AgentStatus,
+  ExecutionMode,
+  MessageQueueState,
+  SessionMode,
+  TokenUsage,
+  IterationProgress,
+} from '../types/state';
 import type { ActiveSkillLifecycleRecordProjection } from '@neko/shared';
 
 export interface AgentSlice {
   // State
   readonly status: AgentStatus;
+  readonly sessionMode: SessionMode;
   readonly executionMode: ExecutionMode;
   readonly iteration: IterationProgress;
   readonly usage: TokenUsage;
   readonly startTime: number | null;
   readonly error: Error | null;
+  readonly messageQueue: MessageQueueState;
   /** Currently active skill name (null if none) */
   readonly activeSkill: string | null;
   /** Active Skill lifecycle records projected for CLI/TUI surfaces. */
@@ -29,6 +38,9 @@ export interface AgentSlice {
   setError: (error: Error) => void;
   setIteration: (current: number, max: number) => void;
   updateUsage: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
+  setMessageQueueSnapshot: (snapshot: MessageQueueState['snapshot']) => void;
+  setMessageQueueDiagnostic: (diagnostic: string | null) => void;
+  setSessionMode: (mode: SessionMode) => void;
   setExecutionMode: (mode: ExecutionMode) => void;
   setActiveSkill: (name: string | null) => void;
   setActiveSkillLifecycleRecords: (
@@ -39,11 +51,16 @@ export interface AgentSlice {
 
 const initialState = {
   status: 'idle' as AgentStatus,
+  sessionMode: 'agent' as SessionMode,
   executionMode: 'auto' as ExecutionMode,
   iteration: { current: 0, max: 0 },
   usage: { input: 0, output: 0, total: 0 },
   startTime: null as number | null,
   error: null as Error | null,
+  messageQueue: {
+    snapshot: null,
+    diagnostic: null,
+  } as MessageQueueState,
   activeSkill: null as string | null,
   activeSkillLifecycleRecords: [] as readonly ActiveSkillLifecycleRecordProjection[],
 };
@@ -79,6 +96,28 @@ export const useAgentStore = create<AgentSlice>((set) => ({
         total: usage.totalTokens,
       },
     });
+  },
+
+  setMessageQueueSnapshot: (snapshot) => {
+    set({
+      messageQueue: {
+        snapshot,
+        diagnostic: null,
+      },
+    });
+  },
+
+  setMessageQueueDiagnostic: (diagnostic) => {
+    set((state) => ({
+      messageQueue: {
+        ...state.messageQueue,
+        diagnostic,
+      },
+    }));
+  },
+
+  setSessionMode: (mode) => {
+    set({ sessionMode: mode });
   },
 
   setExecutionMode: (mode) => {

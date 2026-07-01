@@ -193,6 +193,25 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     expect(createJournalWriter).not.toHaveBeenCalled();
   });
 
+  it('keeps provider-owned capability category registry over stale explicit session registry', () => {
+    const staleToolCategoryRegistry = { kind: 'stale-tool-category-registry' } as never;
+    const capabilityToolCategoryRegistry = { kind: 'capability-tool-category-registry' } as never;
+
+    const config = buildAgentSessionConfigWithRuntime({
+      service: {} as never,
+      toolRegistry: {} as never,
+      systemPrompt: 'system',
+      toolCategoryRegistry: staleToolCategoryRegistry,
+      runtime: {
+        capabilityRuntime: {
+          toolCategoryRegistry: capabilityToolCategoryRegistry,
+        },
+      },
+    });
+
+    expect(config.toolCategoryRegistry).toBe(capabilityToolCategoryRegistry);
+  });
+
   it('does not create a journal writer when conversationId is absent', () => {
     const createJournalWriter = vi.fn();
 

@@ -32,11 +32,24 @@ import {
   resolveSlashCommandCatalogEntry,
 } from '@neko/agent';
 import { createAgentSessionWithRuntime } from '@neko/agent/runtime';
-import { toSharedService, type Platform } from '@neko/platform';
+import {
+  ConfigManager,
+  FileUserConfigManager,
+  projectLlmParameters,
+  toSharedService,
+  type Platform,
+} from '@neko/platform';
+import type { AgentLlmConfig, ModelRef } from '@neko-agent/types';
 
 type ExecutionMode = 'plan' | 'ask' | 'auto';
-import { resolveStorageLayout, type IService } from '@neko/shared';
+import {
+  createAgentCapabilityActivationIntent,
+  resolveStorageLayout,
+  type AgentCapabilityProvider,
+  type IService,
+} from '@neko/shared';
 import type { SkillService, IRuntimeTaskManager } from '@neko/agent';
+import { ProviderCardRegistry } from '@neko/agent';
 import type { CLIConfig, RunOptions, CLIResult } from './types';
 import { theme } from './theme';
 import { formatToolCall } from './formatter';
@@ -48,9 +61,19 @@ import {
   parseSlashCommand,
   type SlashCommandContext,
 } from './slash-commands';
-import { getProviderModels } from './config';
+import {
+  handleTuiControlCommand,
+  type TuiCommandRouterContext,
+  type TuiCommandRouterResult,
+  type TuiModelIdentity,
+  type TuiParameterValidationResult,
+} from './tui-command-router';
+import { getProviderModels, listChatModelOptions } from './config';
 import { createCLIPlatform, createCLITaskManager } from './platform-bootstrap';
-import { createCliAgentRuntime } from './runtime-bootstrap';
+import { formatTuiReferenceDiagnostics } from './reference-diagnostics';
+import { createTuiMessageQueue, type TuiMessageQueue } from './message-queue';
+import { createCliAgentRuntime, createCliToolGroupRegistry } from './runtime-bootstrap';
+import { createTuiCapabilityLoader, type TuiCapabilityLoaderResult } from './tui-capability-loader';
 import { loadSkillArtifactsAsSkills } from './skill-artifacts';
 import {
   activateCliDomainSkill,
@@ -58,6 +81,13 @@ import {
   createCliSkillLifecycleRuntime,
   wireCliSkillLifecycleSession,
 } from './skill-lifecycle-session';
+import {
+  connectTuiMcpServer,
+  createTuiMcpServerSnapshots,
+  disconnectTuiMcpServer,
+  listRegisteredTuiMcpTools,
+  reconnectTuiMcpServer,
+} from './tui-mcp-ports';
 
 interface CliLifecycleActivationHint {
   readonly skillName: string;
@@ -74,6 +104,8 @@ export interface AgentRunnerOptions {
   service?: IService;
   /** Optional shared task plane provided by the host bootstrap */
   taskManager?: IRuntimeTaskManager;
+  /** Host-agnostic package capability providers injected by the CLI host. */
+  capabilityProviders?: readonly AgentCapabilityProvider[];
   hooks?: Partial<ExecutorHooks>;
   onOutput?: (text: string) => void;
   onToolCall?: (name: string, args: unknown) => void;
@@ -91,6 +123,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     runOptions,
     service,
     taskManager: providedTaskManager,
+    capabilityProviders = [],
     hooks,
     onOutput,
     onToolCall,
@@ -152,6 +185,15 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       }
       skillLifecycleRuntime = createCliSkillLifecycleRuntime(skillService);
     }
+    const toolGroupRegistry = createCliToolGroupRegistry();
+    const providerCardRegistry = new ProviderCardRegistry();
+    const capabilityLoader = createTuiCapabilityLoader({
+      toolRegistry,
+      ...(skillService ? { skillRegistry: skillService.registry } : {}),
+      toolGroupRegistry,
+      providerCardRegistry,
+    });
+    const capabilityLoadResult = capabilityLoader.registerProviders(capabilityProviders);
 
     // Create LLM service via Platform
     let llmService: IService;
@@ -188,6 +230,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       maxIterations: runOptions.maxIterations,
       temperature: config.temperature,
       maxTokens: config.maxTokens,
+      providerId: config.chatModel?.providerId ?? config.provider,
       modelId: config.model,
       hooks: hooks ? [hooks as ExecutorHooks] : undefined,
       runtime: createCliAgentRuntime({
@@ -195,6 +238,9 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
         taskManager,
         ...(skillService ? { skillService } : {}),
         ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
+        toolGroupRegistry,
+        providerCardRegistry,
+        promptFragments: capabilityLoadResult.promptFragments,
         projectMemoryManager,
       }),
       conversationId,
@@ -260,19 +306,21 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
 
     // Process input for file references
     const processedInput = await inputProcessor.process(preparedInput.prompt);
+    const referenceDiagnostic = formatTuiReferenceDiagnostics(processedInput.errors);
+    if (referenceDiagnostic) {
+      session.dispose();
+      await mcpManager.disconnectAll();
+      return {
+        success: false,
+        error: referenceDiagnostic,
+        duration: Date.now() - startTime,
+      };
+    }
 
     // Build final prompt with file contents
     let finalPrompt = processedInput.message;
     if (processedInput.hasFiles) {
       finalPrompt = `${processedInput.message}\n\n## Referenced Files\n\n${processedInput.fileContents}`;
-    }
-
-    // Report any file loading errors
-    if (processedInput.errors.length > 0) {
-      const errorMessages = processedInput.errors
-        .map((e) => `- ${e.reference}: ${e.error}`)
-        .join('\n');
-      finalPrompt += `\n\n## File Loading Errors\n\n${errorMessages}`;
     }
 
     // Execute and collect events
@@ -282,6 +330,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     // Wire timeout via AbortController
     const controller = new AbortController();
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
     if (runOptions.timeout) {
       timeoutId = setTimeout(() => controller.abort(), runOptions.timeout);
     }
@@ -296,6 +345,8 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
         ...(executionMetadata ? { metadata: executionMetadata } : {}),
       })) {
         if (controller.signal.aborted) {
+          timedOut = true;
+          session.cancel();
           onOutput?.('\n[Timeout] Execution aborted');
           break;
         }
@@ -325,6 +376,16 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     session.dispose();
     await mcpManager.disconnectAll();
 
+    if (timedOut) {
+      const error = new Error(`Agent execution timed out after ${runOptions.timeout}ms`);
+      return createCliFailureResult({
+        error,
+        output,
+        collector,
+        startTime,
+      });
+    }
+
     const result: AgentResult = {
       success: true,
       response: output,
@@ -350,6 +411,33 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       duration: Date.now() - startTime,
     };
   }
+}
+
+function createCliFailureResult(input: {
+  readonly error: Error;
+  readonly output: string;
+  readonly collector: EventCollector;
+  readonly startTime: number;
+}): CLIResult {
+  const endTime = Date.now();
+  return {
+    success: false,
+    output: input.output,
+    error: input.error.message,
+    agentResult: {
+      success: false,
+      response: input.output,
+      steps: input.collector.steps,
+      iterations: input.collector.iterations,
+      error: input.error,
+      timing: {
+        startTime: input.startTime,
+        endTime,
+        duration: endTime - input.startTime,
+      },
+    },
+    duration: endTime - input.startTime,
+  };
 }
 
 /**
@@ -529,6 +617,9 @@ function handleAgentEvent(
       if (event.content) {
         onOutput?.(event.content);
       }
+      break;
+
+    case 'assistant_text_replacement':
       break;
 
     case 'thinking_content':
@@ -734,6 +825,378 @@ interface InteractiveSessionState {
     video?: string;
     audio?: string;
   };
+  mediaModelRefs: {
+    image?: ModelRef<'image'>;
+    video?: ModelRef<'video'>;
+    audio?: ModelRef<'audio'>;
+  };
+  /** Terminal session mode for subsequent sends. */
+  sessionMode: 'agent' | 'image' | 'video' | 'audio';
+  /** Readline mode is prompt-serial, but exposes the same queue command surface. */
+  messageQueue: TuiMessageQueue;
+  /** TUI-safe capability provider registration snapshot. */
+  capabilityLoadResult: TuiCapabilityLoaderResult;
+}
+
+interface InteractiveRouterContextInput {
+  readonly slashContext: SlashCommandContext;
+  readonly getState: () => InteractiveSessionState;
+  readonly getSessionConfig: () => CLIConfig;
+  readonly setSessionConfig: (config: CLIConfig) => void;
+  readonly service?: IService;
+}
+
+function createInteractiveRouterContext(
+  input: InteractiveRouterContextInput,
+): TuiCommandRouterContext {
+  return {
+    slash: input.slashContext,
+    ports: {
+      output: {
+        info: (message: string) => console.log(message),
+        error: (message: string) => console.error(theme.error(`Error: ${message}`)),
+      },
+      lifecycle: {
+        exit: () => {},
+      },
+      history: {
+        clear: () => {
+          input.getState().session.clearHistory();
+          return 'Conversation history cleared';
+        },
+      },
+      mode: {
+        getSessionMode: () => input.getState().sessionMode,
+        setSessionMode: (mode) => {
+          input.getState().sessionMode = mode;
+          return `Session mode set to: ${mode}`;
+        },
+        setExecutionMode: (mode: ExecutionMode) => {
+          const state = input.getState();
+          state.promptBuilder.setMode(mode === 'plan' ? 'plan' : 'default');
+          state.session.setExecutionMode(mode);
+          switch (mode) {
+            case 'plan':
+              return 'Switched to plan mode';
+            case 'auto':
+              return 'Switched to auto mode';
+            case 'ask':
+              return 'Switched to ask mode';
+          }
+        },
+      },
+      model: {
+        listChatModelOptions: () => listChatModelOptions(input.getSessionConfig().workDir),
+        listChatModels: () => {
+          const config = input.getSessionConfig();
+          return getProviderModels(config.provider, config.workDir);
+        },
+        selectChatModel: (model) => {
+          const currentConfig = input.getSessionConfig();
+          const identity =
+            typeof model === 'string'
+              ? { providerId: currentConfig.provider, modelId: model }
+              : model;
+          const nextConfig = {
+            ...currentConfig,
+            provider: identity.providerId,
+            model: identity.modelId,
+            chatModel: {
+              providerId: identity.providerId,
+              modelId: identity.modelId,
+            },
+          };
+          input.setSessionConfig(nextConfig);
+          input.getState().rebuildService(nextConfig, input.service);
+        },
+      },
+      media: {
+        listMediaModelOptions: () =>
+          listChatModelOptions(input.getSessionConfig().workDir).filter(
+            (option) =>
+              option.category === 'image' ||
+              option.category === 'video' ||
+              option.category === 'audio',
+          ),
+        getCurrentMediaModels: () => ({
+          ...(input.getSessionConfig().defaultMediaModels ?? {}),
+          ...input.getState().mediaModelOverrides,
+        }),
+        setMediaModel: (category, model) => {
+          const state = input.getState();
+          const nextValue =
+            model === 'none' ? 'none' : (model.optionId ?? `${model.providerId}:${model.modelId}`);
+          state.mediaModelOverrides = {
+            ...state.mediaModelOverrides,
+            [category]: nextValue,
+          };
+          if (model !== 'none') {
+            state.mediaModelRefs = {
+              ...state.mediaModelRefs,
+              [category]: {
+                providerId: model.providerId,
+                modelId: model.modelId,
+                category,
+              },
+            };
+          } else {
+            const nextRefs = { ...state.mediaModelRefs };
+            delete nextRefs[category];
+            state.mediaModelRefs = nextRefs;
+          }
+          input.slashContext.currentMediaOverrides = state.mediaModelOverrides;
+          state.platform?.config.setRuntimeMediaDefaults(state.mediaModelOverrides);
+        },
+        resetMediaModels: () => {
+          const state = input.getState();
+          state.mediaModelOverrides = {};
+          state.mediaModelRefs = {};
+          input.slashContext.currentMediaOverrides = {};
+          state.platform?.config.setRuntimeMediaDefaults({});
+        },
+      },
+      parameters: {
+        getConfig: () => input.getSessionConfig().llmConfig,
+        validate: (llmConfig) => validateInteractiveLlmConfig(input.getSessionConfig(), llmConfig),
+        apply: (result) => {
+          const currentConfig = input.getSessionConfig();
+          const nextConfig = {
+            ...currentConfig,
+            llmConfig: result.config,
+            temperature: result.chatOptions?.temperature ?? currentConfig.temperature,
+            maxTokens: result.chatOptions?.maxTokens ?? currentConfig.maxTokens,
+            thinkingBudget: result.chatOptions?.thinkingBudget ?? currentConfig.thinkingBudget,
+          };
+          input.setSessionConfig(nextConfig);
+          input.getState().session.configure({
+            temperature: nextConfig.temperature,
+            topP: result.chatOptions?.topP,
+            maxTokens: nextConfig.maxTokens,
+            thinkingBudget: nextConfig.thinkingBudget,
+            providerOptions: result.providerOptions,
+          });
+        },
+      },
+      context: {
+        getTokenCount: () => input.getState().session.getTokenCount(),
+        compact: () => input.getState().session.compressContext(),
+      },
+      queue: {
+        getSnapshot: () => input.getState().messageQueue.snapshot(),
+        promote: (queueItemId) => input.getState().messageQueue.promote(queueItemId),
+        cancel: (queueItemId) => input.getState().messageQueue.cancel(queueItemId),
+        edit: (queueItemId, content) => input.getState().messageQueue.edit(queueItemId, content),
+      },
+      workflow: {
+        controlIdcWorkflow: (control) => {
+          const state = input.getState();
+          const action =
+            control.action === 'stop'
+              ? 'deactivate'
+              : control.action === 'resume'
+                ? 'resume'
+                : 'activate';
+          const intent = createAgentCapabilityActivationIntent({
+            conversationId: state.conversationId,
+            source: 'user-explicit',
+            target: 'idc-workflow',
+            action,
+            name: control.runKind ?? control.runId ?? 'idc',
+            requestedBy: 'user',
+            reason: control.reason ?? `TUI /idc ${control.action}`,
+            metadata: {
+              surface: 'cli-tui',
+              command: '/idc',
+              ...(control.runKind ? { runKind: control.runKind } : {}),
+              ...(control.runId ? { runId: control.runId } : {}),
+            },
+            createdAt: Date.now(),
+          });
+          const result =
+            control.action === 'stop'
+              ? state.session.stopIdcRunWithIntent({ intent })
+              : state.session.startIdcRunWithIntent({
+                  runKind: control.runKind ?? 'idc',
+                  ...(control.runId ? { runId: control.runId } : {}),
+                  intent,
+                });
+          if (!result.success) {
+            throw new Error(result.message);
+          }
+          return result.message;
+        },
+      },
+      mcp: {
+        listServers: () =>
+          createTuiMcpServerSnapshots(input.getState().mcpManager, input.getState().toolRegistry),
+        listTools: (serverId) => listRegisteredTuiMcpTools(input.getState().toolRegistry, serverId),
+        connect: (serverId) =>
+          connectTuiMcpServer(input.getState().mcpManager, input.getState().toolRegistry, serverId),
+        disconnect: (serverId) =>
+          disconnectTuiMcpServer(
+            input.getState().mcpManager,
+            input.getState().toolRegistry,
+            serverId,
+          ),
+        reconnect: (serverId) =>
+          reconnectTuiMcpServer(
+            input.getState().mcpManager,
+            input.getState().toolRegistry,
+            serverId,
+          ),
+      },
+      capability: {
+        getProviderSummaries: () => input.getState().capabilityLoadResult.providers,
+        getDiagnostics: () => input.getState().capabilityLoadResult.diagnostics,
+        listTools: (providerId) => {
+          const tools = input.getState().toolRegistry.list();
+          if (!providerId) {
+            return tools.map((tool) => tool.name);
+          }
+          const summary = input
+            .getState()
+            .capabilityLoadResult.providers.find((provider) => provider.providerId === providerId);
+          if (!summary) {
+            return [];
+          }
+          const providerToolNames = new Set(
+            summary.loaded
+              .filter((contribution) => contribution.kind === 'tool')
+              .map((contribution) => contribution.name),
+          );
+          return tools
+            .map((tool) => tool.name)
+            .filter((toolName) => providerToolNames.has(toolName));
+        },
+      },
+      status: {
+        getSnapshot: () => ({
+          sessionMode: input.getState().sessionMode,
+          executionMode: input.getState().session.getExecutionMode(),
+          agentStatus: 'interactive',
+          chatModelIdentity: formatInteractiveChatModel(input.getSessionConfig()),
+          mediaModelSummary: formatInteractiveMediaSummary(
+            input.getSessionConfig(),
+            input.getState(),
+          ),
+          llmParameterSummary: formatInteractiveLlmParameterSummary(
+            input.getSessionConfig().llmConfig,
+          ),
+          queueCount: input.getState().messageQueue.snapshot().pendingCount,
+        }),
+      },
+    },
+  };
+}
+
+function projectInteractiveCommandResult(result: TuiCommandRouterResult): void {
+  if (result.output) {
+    console.log(result.output);
+  }
+  if (result.error) {
+    console.error(theme.error(`Error: ${result.error}`));
+  }
+}
+
+function validateInteractiveLlmConfig(
+  config: CLIConfig,
+  llmConfig: AgentLlmConfig,
+): TuiParameterValidationResult {
+  const manager = new ConfigManager({
+    userConfigManager: new FileUserConfigManager(),
+    workspacePath: config.workDir,
+  });
+  try {
+    const providerId = config.chatModel?.providerId ?? config.provider;
+    const modelId = config.chatModel?.modelId ?? config.model;
+    const provider = manager.getProvider(providerId);
+    const model = manager.getModel(modelId);
+    if (!provider) {
+      throw new Error(`Provider "${providerId}" is not configured.`);
+    }
+    if (!model) {
+      throw new Error(`Model "${modelId}" is not configured.`);
+    }
+    const projection = projectLlmParameters({ provider, model, llmConfig });
+    return {
+      config: llmConfig,
+      chatOptions: projection.chatOptions,
+      providerOptions: projection.providerOptions,
+      diagnostics: projection.diagnostics.map((diagnostic) => diagnostic.message),
+      summary: formatInteractiveLlmProjectionSummary(projection),
+    };
+  } finally {
+    manager.dispose();
+  }
+}
+
+function formatInteractiveChatModel(config: CLIConfig): string {
+  return `${config.chatModel?.providerId ?? config.provider}:${config.chatModel?.modelId ?? config.model}`;
+}
+
+function formatInteractiveMediaSummary(
+  config: CLIConfig,
+  state: InteractiveSessionState,
+): string | undefined {
+  const merged = {
+    ...(config.defaultMediaModels ?? {}),
+    ...state.mediaModelOverrides,
+  };
+  const entries = (['image', 'video', 'audio'] as const)
+    .map((category) => (merged[category] ? `${category}=${merged[category]}` : undefined))
+    .filter((entry): entry is string => Boolean(entry));
+  return entries.length > 0 ? entries.join(', ') : undefined;
+}
+
+function formatInteractiveLlmParameterSummary(
+  llmConfig: AgentLlmConfig | undefined,
+): string | undefined {
+  if (!llmConfig) return undefined;
+  const entries = [
+    llmConfig.reasoningPreset ? `reasoning=${llmConfig.reasoningPreset}` : undefined,
+    llmConfig.verbosityPreset ? `verbosity=${llmConfig.verbosityPreset}` : undefined,
+    llmConfig.creativityPreset ? `creativity=${llmConfig.creativityPreset}` : undefined,
+    ...(llmConfig.advanced
+      ? Object.entries(llmConfig.advanced).map(([key, value]) =>
+          value !== undefined ? `${key}=${value}` : undefined,
+        )
+      : []),
+  ].filter((entry): entry is string => Boolean(entry));
+  return entries.length > 0 ? entries.join(', ') : undefined;
+}
+
+function formatInteractiveLlmProjectionSummary(
+  result: ReturnType<typeof projectLlmParameters>,
+): string {
+  const applied = [
+    result.chatOptions.temperature !== undefined
+      ? `temperature=${result.chatOptions.temperature}`
+      : undefined,
+    result.chatOptions.topP !== undefined ? `topP=${result.chatOptions.topP}` : undefined,
+    result.chatOptions.maxTokens !== undefined
+      ? `maxTokens=${result.chatOptions.maxTokens}`
+      : undefined,
+    result.chatOptions.thinkingBudget !== undefined
+      ? `thinkingBudget=${result.chatOptions.thinkingBudget}`
+      : undefined,
+    Object.keys(result.providerOptions).length > 0
+      ? `providerOptions=${Object.keys(result.providerOptions).join(',')}`
+      : undefined,
+  ].filter((entry): entry is string => Boolean(entry));
+  return applied.length > 0 ? `Applied: ${applied.join(', ')}` : 'Applied: provider defaults';
+}
+
+function mergeInteractiveMediaModelMetadata(
+  metadata: Record<string, unknown> | undefined,
+  refs: InteractiveSessionState['mediaModelRefs'],
+): Record<string, unknown> | undefined {
+  if (Object.keys(refs).length === 0) {
+    return metadata;
+  }
+  return {
+    ...(metadata ?? {}),
+    mediaModels: refs,
+  };
 }
 
 /**
@@ -748,6 +1211,7 @@ async function initializeInteractiveSession(
   service?: IService,
   resumeId?: string,
   providedTaskManager?: IRuntimeTaskManager,
+  capabilityProviders: readonly AgentCapabilityProvider[] = [],
 ): Promise<InteractiveSessionState> {
   // Track tools the user has approved with "always"
   const alwaysAllowedTools = new Set<string>();
@@ -784,6 +1248,15 @@ async function initializeInteractiveSession(
     }
     skillLifecycleRuntime = createCliSkillLifecycleRuntime(skillService);
   }
+  const toolGroupRegistry = createCliToolGroupRegistry();
+  const providerCardRegistry = new ProviderCardRegistry();
+  const capabilityLoader = createTuiCapabilityLoader({
+    toolRegistry,
+    ...(skillService ? { skillRegistry: skillService.registry } : {}),
+    toolGroupRegistry,
+    providerCardRegistry,
+  });
+  const capabilityLoadResult = capabilityLoader.registerProviders(capabilityProviders);
 
   // Create LLM service via Platform
   let platform: Platform | undefined;
@@ -847,12 +1320,16 @@ async function initializeInteractiveSession(
     maxIterations: 50,
     temperature: config.temperature,
     maxTokens: config.maxTokens,
+    providerId: config.chatModel?.providerId ?? config.provider,
     modelId: config.model,
     runtime: createCliAgentRuntime({
       workspaceRoot: config.workDir,
       taskManager,
       ...(skillService ? { skillService } : {}),
       ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
+      toolGroupRegistry,
+      providerCardRegistry,
+      promptFragments: capabilityLoadResult.promptFragments,
     }),
     conversationId,
     onConfirmTool: async (request) => {
@@ -906,9 +1383,11 @@ async function initializeInteractiveSession(
     }
     session.configure({
       service: llmService,
+      providerId: newConfig.chatModel?.providerId ?? newConfig.provider,
       modelId: newConfig.model,
       temperature: newConfig.temperature,
       maxTokens: newConfig.maxTokens,
+      thinkingBudget: newConfig.thinkingBudget,
     });
   };
 
@@ -936,6 +1415,10 @@ async function initializeInteractiveSession(
     conversationTitle,
     conversationCreatedAt,
     mediaModelOverrides: {},
+    mediaModelRefs: {},
+    sessionMode: 'agent',
+    messageQueue: createTuiMessageQueue({ conversationId }),
+    capabilityLoadResult,
   };
 }
 
@@ -946,7 +1429,11 @@ export async function runInteractive(
   config: CLIConfig,
   service?: IService,
   _hooks?: Partial<ExecutorHooks>,
-  options?: { resumeId?: string; taskManager?: IRuntimeTaskManager },
+  options?: {
+    resumeId?: string;
+    taskManager?: IRuntimeTaskManager;
+    capabilityProviders?: readonly AgentCapabilityProvider[];
+  },
 ): Promise<void> {
   const readline = await import('node:readline');
 
@@ -967,6 +1454,7 @@ export async function runInteractive(
       service,
       options?.resumeId,
       options?.taskManager,
+      options?.capabilityProviders ?? [],
     );
 
     // Create slash command context
@@ -1064,82 +1552,21 @@ export async function runInteractive(
 
         // Handle slash commands
         if (isSlashCommand(trimmed)) {
-          // Handle special commands
-          if (trimmed === '/plan') {
-            state!.promptBuilder.setMode('plan');
-            state!.session.setExecutionMode('plan');
-            console.log(theme.info('Switched to plan mode'));
-            prompt();
-            return;
-          }
+          const result = await handleTuiControlCommand(
+            trimmed,
+            createInteractiveRouterContext({
+              slashContext,
+              getState: () => state!,
+              getSessionConfig: () => sessionConfig,
+              setSessionConfig: (nextConfig) => {
+                sessionConfig = nextConfig;
+                slashContext.config = sessionConfig;
+              },
+              service,
+            }),
+          );
 
-          if (trimmed === '/auto') {
-            state!.promptBuilder.setMode('default');
-            state!.session.setExecutionMode('auto');
-            console.log(theme.info('Switched to auto mode'));
-            prompt();
-            return;
-          }
-
-          if (trimmed === '/ask') {
-            state!.promptBuilder.setMode('default');
-            state!.session.setExecutionMode('ask');
-            console.log(theme.info('Switched to ask mode'));
-            prompt();
-            return;
-          }
-
-          // Handle /model command
-          if (trimmed.startsWith('/model')) {
-            const newModel = trimmed.slice(6).trim();
-            if (!newModel) {
-              // List available models from Platform ConfigManager
-              const models = getProviderModels(sessionConfig.provider, sessionConfig.workDir);
-              console.log(`\n${theme.muted('Current:')} ${sessionConfig.model}`);
-              if (models.length > 0) {
-                console.log(theme.muted(`Available (${sessionConfig.provider}):`));
-                for (const m of models) {
-                  const marker = m === sessionConfig.model ? theme.success('* ') : '  ';
-                  console.log(`  ${marker}${m}`);
-                }
-              }
-            } else {
-              sessionConfig = { ...sessionConfig, model: newModel };
-              slashContext.config = sessionConfig;
-              // Rebuild LLM service so the model change takes effect
-              state!.rebuildService(sessionConfig, service);
-              console.log(theme.info(`Model switched to: ${newModel}`));
-            }
-            prompt();
-            return;
-          }
-
-          if (trimmed === '/clear') {
-            state!.session.clearHistory();
-            console.log(theme.info('Conversation history cleared'));
-            prompt();
-            return;
-          }
-
-          if (trimmed === '/compact') {
-            const result = await state!.session.compressContext();
-            console.log(
-              theme.info(
-                `Context compressed: ${result.originalTokens} -> ${result.compressedTokens} tokens (${(result.ratio * 100).toFixed(1)}%)`,
-              ),
-            );
-            prompt();
-            return;
-          }
-
-          const result = await handleSlashCommand(trimmed, slashContext);
-
-          if (result.output) {
-            console.log(result.output);
-          }
-          if (result.error) {
-            console.error(theme.error(`Error: ${result.error}`));
-          }
+          projectInteractiveCommandResult(result);
 
           if (result.lifecycleActivation) {
             const activation = await activateCliLifecycleHint({
@@ -1214,6 +1641,10 @@ export async function runInteractive(
                 ? createPlanModeIdcMetadata()
                 : undefined;
           }
+          executionMetadata = mergeInteractiveMediaModelMetadata(
+            executionMetadata,
+            state!.mediaModelRefs,
+          );
 
           for await (const event of state!.session.execute(finalPrompt, {
             workspaceRoot: sessionConfig.workDir,

@@ -5,7 +5,7 @@
  * - Enter: submit input (or select menu item when menu is open)
  * - Shift+Enter / Ctrl+J: add newline (multi-line mode)
  * - Up/Down: navigate command history (or menu items)
- * - /: prefix triggers inline slash command menu
+ * - /, $, @: prefix triggers inline command, Skill, or reference menu
  * - Esc: dismiss menu
  * - Tab: select menu item
  */
@@ -14,6 +14,11 @@ import React, { useState, useCallback, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { tokens } from '../../theme/tokens';
 import { TUI_COMMANDS, type SlashCommandOption } from './SlashCommandMenu';
+import {
+  deriveInputSuggestionMenu,
+  selectInputSuggestion,
+  type InputSuggestionOption,
+} from './input-suggestions';
 
 interface InputEditorProps {
   /** Called when user submits a prompt */
@@ -24,8 +29,14 @@ interface InputEditorProps {
   readonly prompt?: string;
   /** Called when slash command detected (starts with /) */
   readonly onSlashCommand?: (input: string) => void;
+  /** Called when direct Skill invocation detected (starts with $) */
+  readonly onSkillInvocation?: (input: string) => void;
   /** Available slash commands for menu/autocomplete */
   readonly commands?: readonly SlashCommandOption[];
+  /** Enabled Skill invocation suggestions for `$` namespace */
+  readonly skills?: readonly InputSuggestionOption[];
+  /** Terminal-safe file/context/reference suggestions for `@` namespace */
+  readonly references?: readonly InputSuggestionOption[];
 }
 
 const MAX_HISTORY = 50;
@@ -35,7 +46,10 @@ export function InputEditor({
   disabled = false,
   prompt = '>',
   onSlashCommand,
+  onSkillInvocation,
   commands = TUI_COMMANDS,
+  skills = [],
+  references = [],
 }: InputEditorProps): React.JSX.Element {
   const [value, setValue] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -43,11 +57,10 @@ export function InputEditor({
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
 
-  // Filter commands based on current input
-  const filterText = value.startsWith('/') ? value.slice(1).toLowerCase() : '';
-  const filtered: SlashCommandOption[] = menuOpen
-    ? commands.filter((cmd) => cmd.name.toLowerCase().startsWith(filterText))
-    : [];
+  const activeMenu = menuOpen
+    ? deriveInputSuggestionMenu(value, { commands, skills, references })
+    : null;
+  const filtered = activeMenu?.options ?? [];
 
   const addToHistory = useCallback((entry: string) => {
     const history = historyRef.current;
@@ -82,8 +95,7 @@ export function InputEditor({
       if (key.tab || (key.return && !key.shift)) {
         const selected = filtered[menuIndex];
         if (selected) {
-          const cmd = `/${selected.name} `;
-          setValue(cmd);
+          setValue(selectInputSuggestion(selected));
           setMenuOpen(false);
           setMenuIndex(0);
         }
@@ -93,7 +105,7 @@ export function InputEditor({
       // Backspace in menu
       if (key.backspace || key.delete) {
         const next = value.slice(0, -1);
-        if (!next.startsWith('/')) {
+        if (!deriveInputSuggestionMenu(next, { commands, skills, references })) {
           setMenuOpen(false);
         }
         setValue(next);
@@ -104,8 +116,7 @@ export function InputEditor({
       // Regular typing while menu open — update filter
       if (input && !key.ctrl && !key.meta) {
         const next = value + input;
-        // If it has a space, it's a full command — close menu and keep typing
-        if (next.includes(' ')) {
+        if (!deriveInputSuggestionMenu(next, { commands, skills, references })) {
           setMenuOpen(false);
           setValue(next);
         } else {
@@ -127,6 +138,12 @@ export function InputEditor({
 
       if (trimmed.startsWith('/') && onSlashCommand) {
         onSlashCommand(trimmed);
+        setValue('');
+        return;
+      }
+
+      if (trimmed.startsWith('$') && onSkillInvocation) {
+        onSkillInvocation(trimmed);
         setValue('');
         return;
       }
@@ -183,7 +200,7 @@ export function InputEditor({
       historyIndexRef.current = -1;
 
       // Open menu when typing `/` at the start
-      if (next === '/' || (next.startsWith('/') && !next.includes(' '))) {
+      if (deriveInputSuggestionMenu(next, { commands, skills, references })) {
         setMenuOpen(true);
         setMenuIndex(0);
       }
@@ -197,8 +214,13 @@ export function InputEditor({
   return (
     <Box flexDirection="column">
       {/* Slash command menu — above the input box */}
-      {menuOpen && filtered.length > 0 ? (
-        <SlashMenu items={filtered} selectedIndex={menuIndex} maxVisible={8} />
+      {activeMenu && filtered.length > 0 ? (
+        <SuggestionMenu
+          trigger={activeMenu.trigger}
+          items={filtered}
+          selectedIndex={menuIndex}
+          maxVisible={8}
+        />
       ) : null}
 
       {/* Input box */}
@@ -238,14 +260,20 @@ export function InputEditor({
 // SlashMenu — bordered, scrollable command menu
 // =============================================================================
 
-interface SlashMenuProps {
-  readonly items: SlashCommandOption[];
+interface SuggestionMenuProps {
+  readonly trigger: '/' | '$' | '@';
+  readonly items: readonly InputSuggestionOption[];
   readonly selectedIndex: number;
   /** Max visible rows before scrolling */
   readonly maxVisible?: number;
 }
 
-function SlashMenu({ items, selectedIndex, maxVisible = 8 }: SlashMenuProps): React.JSX.Element {
+function SuggestionMenu({
+  trigger,
+  items,
+  selectedIndex,
+  maxVisible = 8,
+}: SuggestionMenuProps): React.JSX.Element {
   const total = items.length;
   const visibleCount = Math.min(total, maxVisible);
 
@@ -275,15 +303,18 @@ function SlashMenu({ items, selectedIndex, maxVisible = 8 }: SlashMenuProps): Re
       {/* Scroll-up indicator */}
       {hasScrollUp ? <Text dimColor> ↑ {scrollTop} more</Text> : null}
 
-      {visible.map((cmd, visIdx) => {
+      {visible.map((item, visIdx) => {
         const realIdx = scrollTop + visIdx;
         const isSelected = realIdx === selectedIndex;
         return (
-          <Box key={cmd.name}>
+          <Box key={`${item.trigger}:${item.name}`}>
             <Text color={isSelected ? tokens.info : undefined} bold={isSelected}>
-              {isSelected ? '▸ ' : '  '}/{cmd.name}
+              {isSelected ? '▸ ' : '  '}
+              {trigger}
+              {item.name}
             </Text>
-            <Text dimColor> {cmd.description}</Text>
+            {item.kind ? <Text dimColor> [{item.kind}]</Text> : null}
+            {item.description ? <Text dimColor> {item.description}</Text> : null}
           </Box>
         );
       })}

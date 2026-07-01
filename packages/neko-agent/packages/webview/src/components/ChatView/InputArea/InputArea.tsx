@@ -88,6 +88,7 @@ interface InputAreaProps {
   }) => void;
   onCancel?: () => void;
   onControlIdcWorkflow?: (action: 'start' | 'resume' | 'stop') => void;
+  showIdcWorkflowControls?: boolean;
   entryPromptMenu?: EntryPromptMenu | null;
   onEntryPromptMenuChange?: (menu: EntryPromptMenu | null) => void;
   disabled?: boolean;
@@ -116,6 +117,7 @@ export function InputArea({
   onSend,
   onCancel,
   onControlIdcWorkflow,
+  showIdcWorkflowControls = false,
   entryPromptMenu,
   onEntryPromptMenuChange,
   disabled = false,
@@ -979,7 +981,7 @@ export function InputArea({
               </div>
             )}
 
-            {onControlIdcWorkflow && (
+            {showIdcWorkflowControls && onControlIdcWorkflow && (
               <div className="agent-composer-idc-controls" aria-label={t('chat.idc.controls')}>
                 <button
                   type="button"

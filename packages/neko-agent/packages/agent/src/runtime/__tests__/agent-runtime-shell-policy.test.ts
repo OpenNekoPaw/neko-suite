@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IService, IToolRegistry, Tool, ToolCategory, ToolResult } from '@neko/shared';
 import { createAgentRuntimeSession, updateAgentRuntimeSession } from '../agent-session-factory';
+import { ToolCategoryRegistry } from '../../tools/tool-category-registry';
 
 class MemoryToolRegistry implements IToolRegistry {
   private readonly tools = new Map<string, Tool>();
@@ -115,6 +116,51 @@ describe('Agent runtime shell policy', () => {
       success: false,
       error: expect.stringContaining('outside authorized write roots'),
     });
+  });
+
+  it('uses the provider-owned capability category registry over a stale session registry', async () => {
+    const toolRegistry = new MemoryToolRegistry();
+    const staleRegistry = new ToolCategoryRegistry();
+    const capabilityRegistry = new ToolCategoryRegistry();
+    const syncToolCategories = vi.fn((registry: ToolCategoryRegistry) => {
+      registry.categorizeTool('ReadDocument', 'file', 'always');
+      registry.categorizeTool('ReadImage', 'analysis', 'always');
+    });
+
+    const handle = await createAgentRuntimeSession({
+      service: createService(),
+      createService,
+      toolRegistry,
+      systemPrompt: 'system',
+      toolCategoryRegistry: staleRegistry,
+      capabilityRuntime: {
+        toolCategoryRegistry: capabilityRegistry,
+      },
+      syncToolCategories,
+    });
+
+    expect(syncToolCategories).toHaveBeenCalledWith(capabilityRegistry);
+    expect(handle.toolCategoryRegistry).toBe(capabilityRegistry);
+    expect(capabilityRegistry.getToolInfo('ReadDocument')).toBeDefined();
+    expect(capabilityRegistry.getToolInfo('ReadImage')).toBeDefined();
+    expect(staleRegistry.getToolInfo('ReadDocument')).toBeUndefined();
+    expect(staleRegistry.getToolInfo('ReadImage')).toBeUndefined();
+
+    await expect(toolRegistry.execute('GetContext', { includeTools: true })).resolves.toMatchObject(
+      {
+        success: true,
+        data: expect.objectContaining({
+          tools: expect.arrayContaining([
+            expect.objectContaining({
+              tools: expect.arrayContaining(['ReadDocument']),
+            }),
+            expect.objectContaining({
+              tools: expect.arrayContaining(['ReadImage']),
+            }),
+          ]),
+        }),
+      },
+    );
   });
 });
 

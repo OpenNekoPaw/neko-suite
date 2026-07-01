@@ -1,23 +1,35 @@
 /**
  * useSlashCommands Hook
  *
- * Handles slash command execution in TUI context.
- * Reuses @neko/cli handleSlashCommand and adapts result to stores.
+ * Adapts Ink/Zustand state to the package-local TUI command router.
  */
 
 import { useCallback } from 'react';
+import type { CompressionResult, SkillService, ToolRegistry } from '@neko/agent';
+import type { ActiveSkillLifecycleRecordProjection } from '@neko/shared';
+import type { AgentLlmConfig } from '@neko-agent/types';
 import {
   handleTUISkillInvocation,
-  handleTUISlashCommand,
   isSkillInvocation,
   isSlashCommand,
 } from '../adapters/slash-adapter';
-import type { SkillService, ToolRegistry } from '@neko/agent';
+import { getProviderModels, listChatModelOptions } from '../core/config';
+import {
+  handleTuiControlCommand,
+  type TuiCommandRouterContext,
+  type TuiCommandRouterResult,
+  type TuiSkillOption,
+  type TuiSkillClearTarget,
+  type TuiModelIdentity,
+  type TuiMcpPorts,
+  type TuiCapabilityPorts,
+  type TuiWorkflowPorts,
+} from '../core/tui-command-router';
+import { TuiMessageQueueError, formatTuiQueueError } from '../core/message-queue';
+import { useAgentStore } from '../stores/agent-store';
 import { useConfigStore } from '../stores/config-store';
 import { useConversationStore } from '../stores/conversation-store';
-import { useAgentStore } from '../stores/agent-store';
 import { useUIStore, type SelectionMenuItem } from '../stores/ui-store';
-import { getProviderModels } from '../core/config';
 
 export { isSlashCommand, isSkillInvocation };
 
@@ -28,279 +40,85 @@ interface SlashCommandHandlers {
   onClear: () => void;
 }
 
-export function useSlashCommands(sessionActions: {
+interface SlashCommandSessionActions {
   clearHistory: () => void;
   submit?: (
     prompt: string,
     executionOverrides?: { metadata?: Record<string, unknown> },
   ) => Promise<void>;
-  updateModel?: (model: string) => void;
+  updateModel?: (model: string | TuiModelIdentity) => void;
   updateMode?: (mode: 'plan' | 'ask' | 'auto') => void;
+  validateLlmConfig?: AgentSessionHandleParameterValidator;
+  applyLlmConfig?: AgentSessionHandleParameterApplier;
+  getContextTokenCount?: () => number | null;
+  compactContext?: () => Promise<CompressionResult>;
+  getMessageQueueSnapshot?: NonNullable<
+    import('./useAgentSession').AgentSessionHandle['getMessageQueueSnapshot']
+  >;
+  promoteQueuedMessage?: NonNullable<
+    import('./useAgentSession').AgentSessionHandle['promoteQueuedMessage']
+  >;
+  cancelQueuedMessage?: NonNullable<
+    import('./useAgentSession').AgentSessionHandle['cancelQueuedMessage']
+  >;
+  editQueuedMessage?: NonNullable<
+    import('./useAgentSession').AgentSessionHandle['editQueuedMessage']
+  >;
   activateSkill?: (name: string, args?: string) => boolean | Promise<boolean>;
-  deactivateSkill?: (input?: {
-    readonly recordId?: string;
-    readonly slot?: import('@neko/shared').SkillLifecycleSlot;
-    readonly skillName?: string;
-  }) => boolean | Promise<boolean>;
+  deactivateSkill?: (input?: TuiSkillClearTarget) => boolean | Promise<boolean>;
   getSkillService?: () => SkillService | undefined;
   getToolRegistry?: () => ToolRegistry | undefined;
-}): SlashCommandHandlers {
+  listMcpServers?: TuiMcpPorts['listServers'];
+  listMcpTools?: NonNullable<TuiMcpPorts['listTools']>;
+  connectMcpServer?: NonNullable<TuiMcpPorts['connect']>;
+  disconnectMcpServer?: NonNullable<TuiMcpPorts['disconnect']>;
+  reconnectMcpServer?: NonNullable<TuiMcpPorts['reconnect']>;
+  getCapabilityProviderSummaries?: TuiCapabilityPorts['getProviderSummaries'];
+  getCapabilityDiagnostics?: TuiCapabilityPorts['getDiagnostics'];
+  listCapabilityTools?: TuiCapabilityPorts['listTools'];
+  controlIdcWorkflow?: NonNullable<TuiWorkflowPorts['controlIdcWorkflow']>;
+}
+
+type AgentSessionHandleParameterValidator = NonNullable<
+  import('./useAgentSession').AgentSessionHandle['validateLlmConfig']
+>;
+type AgentSessionHandleParameterApplier = NonNullable<
+  import('./useAgentSession').AgentSessionHandle['applyLlmConfig']
+>;
+
+export function useSlashCommands(sessionActions: SlashCommandSessionActions): SlashCommandHandlers {
   const handleCommand = useCallback(
     async (input: string) => {
-      const config = useConfigStore.getState().config;
-
-      if (isSkillInvocation(input)) {
-        try {
-          const result = await handleTUISkillInvocation(input, {
-            config,
-            skillService: sessionActions.getSkillService?.(),
-            toolRegistry: sessionActions.getToolRegistry?.(),
-            onConfigUpdate: (updates) => {
-              useConfigStore.getState().setConfig(updates);
-            },
-            onOutput: (text) => {
-              addSystemMessage(text);
-            },
-          });
-
-          if (result.error) {
-            useConversationStore.getState().addError(new Error(result.error));
-          } else {
-            const activation = result.lifecycleActivation;
-            if (activation) {
-              const ok =
-                (await sessionActions.activateSkill?.(activation.skillName, activation.args)) ??
-                false;
-              if (!ok) {
-                return;
-              }
-            }
-          }
-
-          if (result.agentPrompt && sessionActions.submit) {
-            await sessionActions.submit(result.agentPrompt, result.executionOverrides);
-          }
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error);
-          useConversationStore.getState().addError(new Error(`Skill invocation error: ${msg}`));
-        }
+      if (isAgentRunning() && !isAllowedRunningCommand(input)) {
+        const error = isSkillInvocation(input)
+          ? new TuiMessageQueueError(
+              'not-queueable',
+              'Skill invocations cannot be queued while an Agent turn is running.',
+            )
+          : new TuiMessageQueueError(
+              'not-queueable',
+              'Commands cannot be queued while an Agent turn is running.',
+            );
+        const message = formatTuiQueueError(error);
+        useAgentStore.getState().setMessageQueueDiagnostic(message);
+        useConversationStore.getState().addError(new Error(message));
         return;
       }
 
-      // Built-in TUI commands that don't delegate to CLI
-      const cmd = input.split(' ')[0]?.toLowerCase();
-
-      switch (cmd) {
-        case '/exit':
-        case '/quit':
-          process.exit(0);
-          return;
-
-        case '/clear':
-          sessionActions.clearHistory();
-          useConversationStore.getState().clearMessages();
-          useConversationStore.getState().addUserMessage('[History cleared]');
-          return;
-
-        case '/model': {
-          const modelArg = input.slice(6).trim();
-          if (modelArg) {
-            // Direct switch: /model <name>
-            if (sessionActions.updateModel) {
-              sessionActions.updateModel(modelArg);
-            }
-            addSystemMessage(`Model switched to: ${modelArg}`);
-            return;
-          }
-
-          // Build category menu — skip empty categories
-          const chatModels = getProviderModels(config.provider, config.workDir);
-          if (!chatModels.includes(config.model)) {
-            chatModels.unshift(config.model);
-          }
-          const mediaModels = config.mediaModels;
-
-          const hasChatModels = chatModels.length > 0;
-          const hasMediaModels = mediaModels.length > 0;
-
-          // If only chat models, go directly to chat model selection
-          if (hasChatModels && !hasMediaModels) {
-            await showModelPicker(
-              'Chat Model',
-              chatModels,
-              config.model,
-              sessionActions.updateModel,
-            );
-            return;
-          }
-
-          // If both, show category picker first
-          if (hasChatModels && hasMediaModels) {
-            const categories: SelectionMenuItem[] = [
-              { id: 'chat', label: 'Chat', description: config.model },
-              { id: 'media', label: 'Media', description: mediaModels.join(', ') },
-            ];
-            const categoryId = await showSelection('Select Model Category', categories);
-            if (!categoryId) return;
-
-            if (categoryId === 'chat') {
-              await showModelPicker(
-                'Chat Model',
-                chatModels,
-                config.model,
-                sessionActions.updateModel,
-              );
-            } else {
-              await showModelPicker('Media Model', mediaModels, mediaModels[0] ?? '', undefined);
-            }
-            return;
-          }
-
-          // No models at all
-          addSystemMessage('No models configured.');
-          return;
-        }
-
-        case '/skill': {
-          const skillArg = input.slice(6).trim();
-          const skillService = sessionActions.getSkillService?.();
-
-          if (!skillService) {
-            addSystemMessage('No skills loaded. Configure skillsDir in your config.');
-            return;
-          }
-
-          const skills = skillService.registry.listSkills().filter((s) => s.enabled !== false);
-
-          if (skills.length === 0) {
-            addSystemMessage('No skills available in skillsDir.');
-            return;
-          }
-
-          // Deactivate: /skill off
-          if (skillArg === 'off' || skillArg.startsWith('off ')) {
-            const clearTarget = skillArg.slice(3).trim();
-            const records = useAgentStore.getState().activeSkillLifecycleRecords;
-            if (!clearTarget && records.length > 1) {
-              addSystemMessage(
-                `Multiple active Skill lifecycle records. Use /skill off <recordId|slot|skillName>. Active: ${records
-                  .map((record) => `${record.id} ${record.skillName}[${record.slot}]`)
-                  .join(', ')}`,
-              );
-              return;
-            }
-            const scopedTarget = parseSkillClearTarget(clearTarget, records);
-            const ok = (await sessionActions.deactivateSkill?.(scopedTarget)) ?? false;
-            if (ok) {
-              addSystemMessage('Skill lifecycle record deactivated.');
-            }
-            return;
-          }
-
-          // Direct activate: /skill <name>
-          if (skillArg) {
-            const ok = (await sessionActions.activateSkill?.(skillArg)) ?? false;
-            if (ok) {
-              addSystemMessage(`Skill activated: ${skillArg}`);
-            } else {
-              addSystemMessage(`Skill not found: "${skillArg}". Use /skill to browse.`);
-            }
-            return;
-          }
-
-          // Interactive picker
-          const activeSkillName = useAgentStore.getState().activeSkill;
-          const items: SelectionMenuItem[] = [
-            ...skills.map((s) => ({
-              id: s.name,
-              label: s.name,
-              description: s.description ?? undefined,
-              active: s.name === activeSkillName,
-            })),
-            { id: '__off__', label: '✕ Deactivate', description: 'Clear active skill' },
-          ];
-
-          const selectedId = await showSelection('Select Skill', items);
-          if (!selectedId) return;
-
-          if (selectedId === '__off__') {
-            const ok = (await sessionActions.deactivateSkill?.()) ?? false;
-            if (ok) {
-              addSystemMessage('Skill lifecycle record deactivated.');
-            }
-          } else {
-            const ok = (await sessionActions.activateSkill?.(selectedId)) ?? false;
-            if (ok) {
-              addSystemMessage(`Skill activated: ${selectedId}`);
-            }
-          }
-          return;
-        }
-
-        case '/status': {
-          const status = useAgentStore.getState();
-          const msg = [
-            `Model: ${config.model}`,
-            `Mode: ${status.executionMode}`,
-            `Status: ${status.status}`,
-            `Tokens: ${status.usage.total}`,
-          ].join('\n');
-          addSystemMessage(msg);
-          return;
-        }
-
-        case '/plan':
-          sessionActions.updateMode?.('plan');
-          addSystemMessage('Plan mode enabled');
-          return;
-
-        case '/auto':
-          sessionActions.updateMode?.('auto');
-          addSystemMessage('Auto mode enabled');
-          return;
-
-        case '/ask':
-          sessionActions.updateMode?.('ask');
-          addSystemMessage('Ask mode enabled');
-          return;
-
-        default:
-          break;
+      if (isSkillInvocation(input)) {
+        await handleSkillInvocationCommand(input, sessionActions);
+        return;
       }
 
-      // Delegate to CLI slash command handler
       try {
-        const result = await handleTUISlashCommand(input, {
-          config,
-          skillService: sessionActions.getSkillService?.(),
-          toolRegistry: sessionActions.getToolRegistry?.(),
-          onConfigUpdate: (updates) => {
-            useConfigStore.getState().setConfig(updates);
-          },
-          onOutput: (text) => {
-            addSystemMessage(text);
-          },
-        });
+        const result = await handleTuiControlCommand(input, createInkRouterContext(sessionActions));
 
         if (!result.handled) {
           addSystemMessage(`Unknown command: ${input}. Type /help for available commands.`);
-        } else if (result.error) {
-          useConversationStore.getState().addError(new Error(result.error));
-        } else {
-          const activation = result.lifecycleActivation;
-          if (activation) {
-            const ok =
-              (await sessionActions.activateSkill?.(activation.skillName, activation.args)) ??
-              false;
-            if (!ok) {
-              return;
-            }
-          }
+          return;
         }
 
-        if (result.agentPrompt && sessionActions.submit) {
-          await sessionActions.submit(result.agentPrompt, result.executionOverrides);
-        }
+        await projectCommandResult(result, sessionActions);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         useConversationStore.getState().addError(new Error(`Command error: ${msg}`));
@@ -317,53 +135,286 @@ export function useSlashCommands(sessionActions: {
   return { handleCommand, onClear };
 }
 
+function isAgentRunning(): boolean {
+  const status = useAgentStore.getState().status;
+  return status === 'running' || status === 'waiting_confirmation';
+}
+
+function isAllowedRunningCommand(input: string): boolean {
+  if (!isSlashCommand(input)) {
+    return false;
+  }
+  const commandName = input.trim().split(/\s+/)[0]?.slice(1).toLowerCase();
+  if (commandName === 'queue' || commandName === 'status' || commandName === 's') {
+    return true;
+  }
+  if (commandName === 'idc') {
+    const action = input.trim().split(/\s+/)[1]?.toLowerCase();
+    return action === 'stop';
+  }
+  return false;
+}
+
+async function handleSkillInvocationCommand(
+  input: string,
+  sessionActions: SlashCommandSessionActions,
+): Promise<void> {
+  const config = useConfigStore.getState().config;
+  try {
+    const result = await handleTUISkillInvocation(input, {
+      config,
+      skillService: sessionActions.getSkillService?.(),
+      toolRegistry: sessionActions.getToolRegistry?.(),
+      onConfigUpdate: (updates) => {
+        useConfigStore.getState().setConfig(updates);
+      },
+      onOutput: addSystemMessage,
+    });
+
+    if (result.error) {
+      useConversationStore.getState().addError(new Error(result.error));
+      return;
+    }
+
+    const activation = result.lifecycleActivation;
+    if (activation) {
+      const ok =
+        (await sessionActions.activateSkill?.(activation.skillName, activation.args)) ?? false;
+      if (!ok) {
+        return;
+      }
+    }
+
+    if (result.agentPrompt && sessionActions.submit) {
+      await sessionActions.submit(result.agentPrompt, result.executionOverrides);
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    useConversationStore.getState().addError(new Error(`Skill invocation error: ${msg}`));
+  }
+}
+
+function createInkRouterContext(
+  sessionActions: SlashCommandSessionActions,
+): TuiCommandRouterContext {
+  const config = useConfigStore.getState().config;
+  return {
+    slash: {
+      config,
+      skillService: sessionActions.getSkillService?.(),
+      toolRegistry: sessionActions.getToolRegistry?.(),
+      onConfigUpdate: (updates) => {
+        useConfigStore.getState().setConfig(updates);
+      },
+    },
+    ports: {
+      output: {
+        info: addSystemMessage,
+        error: (message) => useConversationStore.getState().addError(new Error(message)),
+      },
+      lifecycle: {
+        exit: () => process.exit(0),
+      },
+      history: {
+        clear: () => {
+          sessionActions.clearHistory();
+          useConversationStore.getState().clearMessages();
+          useConversationStore.getState().addUserMessage('[History cleared]');
+        },
+      },
+      mode: {
+        getSessionMode: () => useAgentStore.getState().sessionMode,
+        setSessionMode: (mode) => {
+          useAgentStore.getState().setSessionMode(mode);
+          return `Session mode set to: ${mode}`;
+        },
+        setExecutionMode: (mode) => {
+          sessionActions.updateMode?.(mode);
+          return `${mode[0]?.toUpperCase()}${mode.slice(1)} mode enabled`;
+        },
+      },
+      model: {
+        listChatModelOptions: () => listChatModelOptions(useConfigStore.getState().config.workDir),
+        listChatModels: () => {
+          const currentConfig = useConfigStore.getState().config;
+          return getProviderModels(currentConfig.provider, currentConfig.workDir);
+        },
+        selectChatModel: (model) => sessionActions.updateModel?.(model),
+        selectMenuItem: (input) => showSelection(input.title, [...input.items]),
+        selectModelFromMenu: (input) =>
+          showModelPicker(input.title, [...input.models], input.currentModel),
+      },
+      media: {
+        listMediaModelOptions: () =>
+          listChatModelOptions(useConfigStore.getState().config.workDir).filter(
+            (option) =>
+              option.category === 'image' ||
+              option.category === 'video' ||
+              option.category === 'audio',
+          ),
+        getCurrentMediaModels: () => useConfigStore.getState().config.defaultMediaModels ?? {},
+        setMediaModel: (category, model) => {
+          const config = useConfigStore.getState().config;
+          const current = config.defaultMediaModels ?? {};
+          const nextValue =
+            model === 'none' ? 'none' : (model.optionId ?? `${model.providerId}:${model.modelId}`);
+          useConfigStore.getState().setConfig({
+            defaultMediaModels: {
+              ...current,
+              [category]: nextValue,
+            },
+          });
+        },
+        resetMediaModels: () => {
+          useConfigStore.getState().setConfig({ defaultMediaModels: {} });
+        },
+      },
+      parameters: {
+        getConfig: () => useConfigStore.getState().config.llmConfig,
+        validate: (llmConfig) =>
+          sessionActions.validateLlmConfig?.(llmConfig) ?? { config: llmConfig },
+        apply: (result) => sessionActions.applyLlmConfig?.(result),
+      },
+      skill: {
+        listEnabled: () => listEnabledSkills(sessionActions.getSkillService?.()),
+        getActiveSkillName: () => useAgentStore.getState().activeSkill,
+        getActiveRecords: () => useAgentStore.getState().activeSkillLifecycleRecords,
+        activate: sessionActions.activateSkill,
+        deactivate: sessionActions.deactivateSkill,
+        selectSkillFromMenu: (input) => showSelection(input.title, [...input.items]),
+      },
+      context: {
+        getTokenCount: () => {
+          const count = sessionActions.getContextTokenCount?.();
+          if (count === null || count === undefined) {
+            throw new Error('Context token estimate unavailable');
+          }
+          return count;
+        },
+        compact: sessionActions.compactContext,
+      },
+      queue: sessionActions.getMessageQueueSnapshot
+        ? {
+            getSnapshot: () => {
+              const snapshot = sessionActions.getMessageQueueSnapshot?.();
+              if (!snapshot) {
+                throw new Error('Message queue snapshot unavailable');
+              }
+              return snapshot;
+            },
+            promote: (queueItemId) => {
+              if (!sessionActions.promoteQueuedMessage) {
+                throw new Error('Queue promote is not available for this session.');
+              }
+              return sessionActions.promoteQueuedMessage(queueItemId);
+            },
+            cancel: (queueItemId) => {
+              if (!sessionActions.cancelQueuedMessage) {
+                throw new Error('Queue cancel is not available for this session.');
+              }
+              return sessionActions.cancelQueuedMessage(queueItemId);
+            },
+            edit: (queueItemId, content) => {
+              if (!sessionActions.editQueuedMessage) {
+                throw new Error('Queue edit is not available for this session.');
+              }
+              return sessionActions.editQueuedMessage(queueItemId, content);
+            },
+          }
+        : undefined,
+      mcp: sessionActions.listMcpServers
+        ? {
+            listServers: sessionActions.listMcpServers,
+            listTools: sessionActions.listMcpTools,
+            connect: sessionActions.connectMcpServer,
+            disconnect: sessionActions.disconnectMcpServer,
+            reconnect: sessionActions.reconnectMcpServer,
+          }
+        : undefined,
+      capability:
+        sessionActions.getCapabilityProviderSummaries &&
+        sessionActions.getCapabilityDiagnostics &&
+        sessionActions.listCapabilityTools
+          ? {
+              getProviderSummaries: sessionActions.getCapabilityProviderSummaries,
+              getDiagnostics: sessionActions.getCapabilityDiagnostics,
+              listTools: sessionActions.listCapabilityTools,
+            }
+          : undefined,
+      workflow: sessionActions.controlIdcWorkflow
+        ? {
+            controlIdcWorkflow: sessionActions.controlIdcWorkflow,
+          }
+        : undefined,
+      status: {
+        getSnapshot: () => {
+          const status = useAgentStore.getState();
+          return {
+            sessionMode: status.sessionMode,
+            executionMode: status.executionMode,
+            agentStatus: status.status,
+            tokensTotal: status.usage.total,
+            chatModelIdentity: formatConfigChatModel(useConfigStore.getState().config),
+            mediaModelSummary: formatMediaModelSummary(useConfigStore.getState().config),
+            llmParameterSummary: formatLlmParameterSummary(useConfigStore.getState().config),
+            activeSkillSummary: formatActiveSkillSummary(status.activeSkillLifecycleRecords),
+            queueCount: status.messageQueue.snapshot?.pendingCount ?? 0,
+          };
+        },
+      },
+    },
+  };
+}
+
+async function projectCommandResult(
+  result: TuiCommandRouterResult,
+  sessionActions: SlashCommandSessionActions,
+): Promise<void> {
+  if (result.output) {
+    addSystemMessage(result.output);
+  }
+  if (result.error) {
+    useConversationStore.getState().addError(new Error(result.error));
+    return;
+  }
+
+  const activation = result.lifecycleActivation;
+  if (activation) {
+    const ok =
+      (await sessionActions.activateSkill?.(activation.skillName, activation.args)) ?? false;
+    if (!ok) {
+      return;
+    }
+  }
+
+  if (result.agentPrompt && sessionActions.submit) {
+    await sessionActions.submit(result.agentPrompt, result.executionOverrides);
+  }
+}
+
 /** Add a system-level informational message to the conversation */
 function addSystemMessage(text: string): void {
   useConversationStore.getState().addSystemMessage(text);
 }
 
-function parseSkillClearTarget(
-  target: string,
-  records: readonly import('@neko/shared').ActiveSkillLifecycleRecordProjection[],
-):
-  | {
-      readonly recordId?: string;
-      readonly slot?: import('@neko/shared').SkillLifecycleSlot;
-      readonly skillName?: string;
-    }
-  | undefined {
-  if (!target) {
-    return undefined;
-  }
-  const slot = parseLifecycleSlot(target);
-  if (slot) {
-    return { slot };
-  }
-  if (records.some((record) => record.id === target)) {
-    return { recordId: target };
-  }
-  return { skillName: target };
-}
-
-function parseLifecycleSlot(value: string): import('@neko/shared').SkillLifecycleSlot | null {
-  switch (value) {
-    case 'stagePersona':
-    case 'domainSkill':
-    case 'referenceSkill':
-    case 'ephemeralSkill':
-    case 'workflowSkill':
-      return value;
-    default:
-      return null;
-  }
+function listEnabledSkills(skillService: SkillService | undefined): TuiSkillOption[] {
+  return (
+    skillService?.registry
+      .listSkills()
+      .filter((skill) => skill.enabled !== false)
+      .map((skill) => ({
+        name: skill.name,
+        description: skill.description ?? undefined,
+      })) ?? []
+  );
 }
 
 /** Show a selection menu and return the selected ID (or null if cancelled) */
-function showSelection(title: string, items: SelectionMenuItem[]): Promise<string | null> {
+function showSelection(title: string, items: readonly SelectionMenuItem[]): Promise<string | null> {
   return new Promise((resolve) => {
     useUIStore.getState().showSelection({
       title,
-      items,
+      items: [...items],
       resolve: (selectedId) => {
         useUIStore.getState().dismissSelection();
         resolve(selectedId);
@@ -372,24 +423,64 @@ function showSelection(title: string, items: SelectionMenuItem[]): Promise<strin
   });
 }
 
-/** Show a model picker, apply selection via updateModel callback */
+/** Show a model picker and return the selected model. */
 async function showModelPicker(
   title: string,
-  models: string[],
+  models: readonly string[],
   currentModel: string,
-  onSelect?: (model: string) => void,
-): Promise<void> {
-  const items: SelectionMenuItem[] = models.map((m) => ({
-    id: m,
-    label: m,
-    active: m === currentModel,
+): Promise<string | null> {
+  const items: SelectionMenuItem[] = models.map((model) => ({
+    id: model,
+    label: model,
+    active: model === currentModel,
   }));
 
-  const selectedId = await showSelection(title, items);
-  if (!selectedId) return;
+  return showSelection(title, items);
+}
 
-  if (onSelect) {
-    onSelect(selectedId);
+function formatActiveSkillSummary(
+  records: readonly ActiveSkillLifecycleRecordProjection[],
+): string | undefined {
+  const first = records[0];
+  if (!first) {
+    return undefined;
   }
-  addSystemMessage(`Model switched to: ${selectedId}`);
+  const suffix = records.length > 1 ? `+${records.length - 1}` : '';
+  return `${first.skillName}[${first.slot}]${suffix}`;
+}
+
+function formatConfigChatModel(config: {
+  provider: string;
+  model: string;
+  chatModel?: { providerId: string; modelId: string };
+}): string {
+  const providerId = config.chatModel?.providerId ?? config.provider;
+  const modelId = config.chatModel?.modelId ?? config.model;
+  return `${providerId}:${modelId}`;
+}
+
+function formatMediaModelSummary(config: {
+  defaultMediaModels?: { image?: string; video?: string; audio?: string };
+}): string | undefined {
+  const media = config.defaultMediaModels ?? {};
+  const entries = (['image', 'video', 'audio'] as const)
+    .map((category) => (media[category] ? `${category}=${media[category]}` : undefined))
+    .filter((entry): entry is string => Boolean(entry));
+  return entries.length > 0 ? entries.join(', ') : undefined;
+}
+
+function formatLlmParameterSummary(config: { llmConfig?: AgentLlmConfig }): string | undefined {
+  const llmConfig = config.llmConfig;
+  if (!llmConfig) return undefined;
+  const entries = [
+    llmConfig.reasoningPreset ? `reasoning=${llmConfig.reasoningPreset}` : undefined,
+    llmConfig.verbosityPreset ? `verbosity=${llmConfig.verbosityPreset}` : undefined,
+    llmConfig.creativityPreset ? `creativity=${llmConfig.creativityPreset}` : undefined,
+    ...(llmConfig.advanced
+      ? Object.entries(llmConfig.advanced).map(([key, value]) =>
+          value !== undefined ? `${key}=${value}` : undefined,
+        )
+      : []),
+  ].filter((entry): entry is string => Boolean(entry));
+  return entries.length > 0 ? entries.join(', ') : undefined;
 }

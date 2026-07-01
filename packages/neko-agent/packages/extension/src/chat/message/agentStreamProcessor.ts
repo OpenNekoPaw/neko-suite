@@ -198,6 +198,7 @@ export class AgentStreamProcessor {
                       sourceTask: mediaTask,
                     }),
                 }),
+              waitForCompletion: (input) => waitForMediaTask(media, input.taskId, input.signal),
             }
           : {}),
         createRecoveryProgress: (task) => createMediaTaskProgressView({ task }),
@@ -531,6 +532,34 @@ function appendResourceProjectionDiagnostic(
 
 function resolveDocumentResourceScope(): 'project' | 'extension-private' {
   return vscode.workspace.workspaceFolders?.[0] ? 'project' : 'extension-private';
+}
+
+function waitForMediaTask(
+  media: Platform['media'],
+  taskId: string,
+  signal: AbortSignal,
+): Promise<MediaTask> {
+  if (!media) {
+    return Promise.reject(new Error('Media service is unavailable.'));
+  }
+  if (signal.aborted) {
+    return Promise.reject(new DOMException('Media task wait was cancelled.', 'AbortError'));
+  }
+
+  return new Promise<MediaTask>((resolve, reject) => {
+    const abort = () => reject(new DOMException('Media task wait was cancelled.', 'AbortError'));
+    signal.addEventListener('abort', abort, { once: true });
+    media.waitForTask(taskId).then(
+      (task) => {
+        signal.removeEventListener('abort', abort);
+        resolve(task);
+      },
+      (error) => {
+        signal.removeEventListener('abort', abort);
+        reject(error);
+      },
+    );
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

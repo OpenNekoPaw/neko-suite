@@ -17,27 +17,70 @@ import {
   ToolRegistry,
   createSystemPromptBuilder,
   getDefaultPersonalPath,
+  getBuiltinSkills,
   createInputProcessor,
   createCoreTools,
   mergeIdcExecutionMetadata,
+  ProviderCardRegistry,
   type IAgentSession,
   type InputProcessor,
   type SystemPromptBuilder,
+  type Skill,
   type SkillService,
   type SkillLifecycleRuntime,
   type IRuntimeTaskManager,
+  type AgentEvent,
 } from '@neko/agent';
 import { createAgentSessionWithRuntime } from '@neko/agent/runtime';
-import { type Platform } from '@neko/platform';
+import {
+  projectLlmParameters,
+  ConfigManager,
+  FileUserConfigManager,
+  type Platform,
+} from '@neko/platform';
+import type { AgentLlmConfig } from '@neko-agent/types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CLIConfig } from '../core/types';
 import type { ExecutionMode } from '../types/state';
-import type { IService } from '@neko/shared';
+import {
+  createAgentCapabilityActivationIntent,
+  type AgentCapabilityProvider,
+  type IService,
+} from '@neko/shared';
 import { getProviderModels, updateDefaultModel } from '../core/config';
+import type {
+  TuiCapabilityPorts,
+  TuiMcpServerSnapshot,
+  TuiModelIdentity,
+  TuiParameterValidationResult,
+  TuiWorkflowPorts,
+} from '../core/tui-command-router';
 import { createCLIPlatform, createCLITaskManager } from '../core/platform-bootstrap';
-import { createCliAgentRuntime } from '../core/runtime-bootstrap';
-import { loadSkillArtifactsAsSkills } from '../core/skill-artifacts';
+import { createCliAgentRuntime, createCliToolGroupRegistry } from '../core/runtime-bootstrap';
+import {
+  createTuiCapabilityLoader,
+  type TuiCapabilityLoaderResult,
+} from '../core/tui-capability-loader';
+import { formatTuiReferenceDiagnostics } from '../core/reference-diagnostics';
+import {
+  TuiMessageQueueError,
+  createTuiMessageQueue,
+  formatTuiQueueError,
+  type TuiMessageQueue,
+} from '../core/message-queue';
+import {
+  connectTuiMcpServer,
+  createTuiMcpServerSnapshots,
+  disconnectTuiMcpServer,
+  listRegisteredTuiMcpTools,
+  reconnectTuiMcpServer,
+} from '../core/tui-mcp-ports';
+import {
+  loadCodexSkillArtifactsAsSkills,
+  loadSkillArtifactsAsSkills,
+} from '../core/skill-artifacts';
+import { mergeTuiMediaModelMetadata } from '../core/media-model-metadata';
 import { useConfigStore } from '../stores/config-store';
 import { useAgentStore } from '../stores/agent-store';
 import { useConversationStore } from '../stores/conversation-store';
@@ -61,6 +104,8 @@ export interface UseAgentSessionOptions {
   readonly service?: IService;
   /** Optional shared task plane provided by the host bootstrap */
   readonly taskManager?: IRuntimeTaskManager;
+  /** Host-agnostic package capability providers injected by the CLI host. */
+  readonly capabilityProviders?: readonly AgentCapabilityProvider[];
 }
 
 export interface AgentSessionHandle {
@@ -76,9 +121,28 @@ export interface AgentSessionHandle {
   /** Confirm or reject a tool call */
   confirmTool: (toolCallId: string, approved: boolean) => void;
   /** Switch model and rebuild LLM service */
-  updateModel: (model: string) => void;
+  updateModel: (model: string | TuiModelIdentity) => void;
   /** Switch execution mode and rebuild system prompt */
   updateMode: (mode: ExecutionMode) => void;
+  /** Get the current Agent context token estimate. */
+  getContextTokenCount: () => number | null;
+  /** Compress the current Agent context through the runtime session path. */
+  compactContext: () => Promise<import('@neko/agent').CompressionResult>;
+  /** Message queue snapshot for running-turn prompt queueing. */
+  getMessageQueueSnapshot: () => import('@neko-agent/types').AgentMessageQueueSnapshot | null;
+  /** Promote a queued message to run next. */
+  promoteQueuedMessage: (queueItemId: string) => import('@neko-agent/types').AgentQueuedMessageItem;
+  /** Cancel a queued message without cancelling the active turn. */
+  cancelQueuedMessage: (queueItemId: string) => import('@neko-agent/types').AgentQueuedMessageItem;
+  /** Edit a queued message item. */
+  editQueuedMessage: (
+    queueItemId: string,
+    content: string,
+  ) => import('@neko-agent/types').AgentQueuedMessageItem;
+  /** Validate and apply LLM parameter config. */
+  validateLlmConfig: (config: AgentLlmConfig) => TuiParameterValidationResult;
+  /** Apply a previously validated LLM parameter config. */
+  applyLlmConfig: (result: TuiParameterValidationResult) => void;
   /** Activate a skill by name; returns false if skill not found */
   activateSkill: (name: string, args?: string) => Promise<boolean>;
   /** Deactivate the currently active skill or a scoped lifecycle record. */
@@ -91,6 +155,26 @@ export interface AgentSessionHandle {
   readonly getSkillService: () => SkillService | undefined;
   /** Tool registry (for slash commands) */
   readonly getToolRegistry: () => ToolRegistry | undefined;
+  /** Snapshot MCP server connection state for /mcp. */
+  readonly listMcpServers: () => readonly TuiMcpServerSnapshot[];
+  /** List registered MCP tool names, optionally for one server. */
+  readonly listMcpTools: (serverId?: string) => readonly string[];
+  /** Connect an MCP server and register its tools. */
+  readonly connectMcpServer: (serverId: string) => Promise<void>;
+  /** Disconnect an MCP server. */
+  readonly disconnectMcpServer: (serverId: string) => Promise<void>;
+  /** Reconnect an MCP server and refresh its tools. */
+  readonly reconnectMcpServer: (serverId: string) => Promise<void>;
+  /** Read TUI capability provider diagnostics. */
+  readonly getCapabilityProviderSummaries: TuiCapabilityPorts['getProviderSummaries'];
+  /** Read TUI capability availability diagnostics. */
+  readonly getCapabilityDiagnostics: TuiCapabilityPorts['getDiagnostics'];
+  /** List TUI capability tools, optionally scoped by provider id. */
+  readonly listCapabilityTools: TuiCapabilityPorts['listTools'];
+  /** Terminal-safe `@` reference contributors loaded from capability providers. */
+  readonly getReferenceContributors: () => TuiCapabilityLoaderResult['referenceContributors'];
+  /** Explicit IDC workflow controls for /idc start|resume|stop. */
+  readonly controlIdcWorkflow: NonNullable<TuiWorkflowPorts['controlIdcWorkflow']>;
   /** Slash command catalog for TUI autocomplete */
   readonly slashCommands: readonly TuiSlashCommandOption[];
   /** Whether session is initialized */
@@ -113,7 +197,7 @@ export interface AgentSessionHandle {
  * 3. Route events through EventAdapter → stores
  */
 export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHandle {
-  const { config, service, taskManager: providedTaskManager } = options;
+  const { config, service, taskManager: providedTaskManager, capabilityProviders = [] } = options;
   const sessionRef = useRef<IAgentSession | null>(null);
   const adapterRef = useRef<IEventAdapter | null>(null);
   const inputProcessorRef = useRef<InputProcessor | null>(null);
@@ -124,12 +208,16 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const skillLifecycleRuntimeRef = useRef<SkillLifecycleRuntime | null>(null);
   const skillLifecycleBridgeRef = useRef<CliSkillLifecycleSessionBridge | null>(null);
   const toolRegistryRef = useRef<ToolRegistry | null>(null);
+  const capabilityLoadResultRef = useRef<TuiCapabilityLoaderResult | null>(null);
   const conversationIdRef = useRef(createCliConversationId());
+  const messageQueueRef = useRef<TuiMessageQueue | null>(null);
+  const drainingQueueRef = useRef(false);
   const isReadyRef = useRef(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const [slashCommands, setSlashCommands] = useState<readonly TuiSlashCommandOption[]>(
     createTuiSlashCommandCatalog(),
   );
+  const [, setSkillCatalogVersion] = useState(0);
 
   // Initialize session on mount
   useEffect(() => {
@@ -166,8 +254,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
               useConfigStore.getState().setConfig({ model: selectedId });
               useConversationStore.getState().addSystemMessage(`Model set to: ${selectedId}`);
             } else {
-              // User dismissed without selecting — use first available
-              effectiveModel = chatModels[0]!;
+              const fallbackModel = chatModels[0];
+              if (!fallbackModel) {
+                throw new Error('No models available after model picker dismissal.');
+              }
+              effectiveModel = fallbackModel;
               useConversationStore
                 .getState()
                 .addSystemMessage(`No model selected, using: ${effectiveModel}`);
@@ -209,25 +300,33 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           projectMemoryManager,
         });
         toolRegistry.registerMany(coreTools);
+        const toolGroupRegistry = createCliToolGroupRegistry();
+        const providerCardRegistry = new ProviderCardRegistry();
 
         // 3. Skills
-        let skillService: ReturnType<typeof createSkillService> | undefined;
-        if (config.skillsDir) {
-          const skillLoader = createNodeSkillLoader(fs, path);
-          skillService = createSkillService();
-          skillServiceRef.current = skillService;
-          const loadedSkills = await loadSkillArtifactsAsSkills(skillLoader, config.skillsDir);
-          for (const skill of loadedSkills) {
-            skillService.registry.registerSkill(skill);
-          }
-          setSlashCommands(createTuiSlashCommandCatalog(loadedSkills));
-        } else {
-          setSlashCommands(createTuiSlashCommandCatalog());
+        const detectedLocale = detectLocale();
+        const skillLoader = createNodeSkillLoader(fs, path);
+        const skillService = createSkillService();
+        skillServiceRef.current = skillService;
+        const loadedSkills = await loadTuiSessionSkills(skillLoader, config, detectedLocale);
+        for (const skill of loadedSkills) {
+          skillService.registry.registerSkill(skill);
         }
+        setSlashCommands(createTuiSlashCommandCatalog(loadedSkills));
+        setSkillCatalogVersion((version) => version + 1);
 
-        const skillLifecycleRuntime = skillService
-          ? ensureHookSkillLifecycleRuntime(skillService, skillLifecycleRuntimeRef)
-          : undefined;
+        const skillLifecycleRuntime = ensureHookSkillLifecycleRuntime(
+          skillService,
+          skillLifecycleRuntimeRef,
+        );
+        const capabilityLoader = createTuiCapabilityLoader({
+          toolRegistry,
+          skillRegistry: skillService.registry,
+          toolGroupRegistry,
+          providerCardRegistry,
+        });
+        const capabilityLoadResult = capabilityLoader.registerProviders(capabilityProviders);
+        capabilityLoadResultRef.current = capabilityLoadResult;
 
         // 4. LLM Service — use Platform for multi-provider routing
         let llmService: IService;
@@ -248,7 +347,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
         // 5. System Prompt
         const executionMode = useAgentStore.getState().executionMode;
-        const detectedLocale = detectLocale();
         const promptBuilder = createSystemPromptBuilder({
           locale: detectedLocale,
           mode: executionMode === 'plan' ? 'plan' : 'default',
@@ -268,12 +366,16 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           maxIterations: 50,
           temperature: config.temperature,
           maxTokens: config.maxTokens,
+          providerId: config.chatModel?.providerId ?? config.provider,
           modelId: effectiveModel,
           runtime: createCliAgentRuntime({
             workspaceRoot: config.workDir,
             taskManager,
             ...(skillService ? { skillService } : {}),
             ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
+            toolGroupRegistry,
+            providerCardRegistry,
+            promptFragments: capabilityLoadResult.promptFragments,
             projectMemoryManager,
           }),
           conversationId: conversationIdRef.current,
@@ -291,6 +393,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         });
 
         sessionRef.current = session;
+        messageQueueRef.current = createTuiMessageQueue({
+          conversationId: conversationIdRef.current,
+        });
+        useAgentStore.getState().setMessageQueueSnapshot(messageQueueRef.current.snapshot());
 
         // Wire skill provider to meta tools
         if (skillService && skillLifecycleRuntime) {
@@ -316,9 +422,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
         // 8. Event Adapter
         adapterRef.current = createEventAdapter({
-          conversationStore: useConversationStore.getState(),
-          agentStore: useAgentStore.getState(),
-          uiStore: useUIStore.getState(),
+          conversationStore: () => useConversationStore.getState(),
+          agentStore: () => useAgentStore.getState(),
+          uiStore: () => useUIStore.getState(),
         });
 
         isReadyRef.current = true;
@@ -337,54 +443,135 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const executePrompt = useCallback(
+    async (prompt: string, metadataOverrides?: Record<string, unknown>): Promise<void> => {
+      const session = sessionRef.current;
+      const adapter = adapterRef.current;
+      const inputProcessor = inputProcessorRef.current;
+      if (!session || !adapter) {
+        throw new Error('Session not initialized');
+      }
+
+      let finalPrompt = prompt;
+      if (inputProcessor) {
+        const processed = await inputProcessor.process(prompt);
+        const referenceDiagnostic = formatTuiReferenceDiagnostics(processed.errors);
+        if (referenceDiagnostic) {
+          throw new Error(referenceDiagnostic);
+        }
+        finalPrompt = processed.message;
+        if (processed.hasFiles) {
+          finalPrompt = `${processed.message}\n\n## Referenced Files\n\n${processed.fileContents}`;
+        }
+      }
+
+      adapter.reset();
+      useConversationStore.getState().addUserMessage(prompt);
+      useAgentStore.getState().setRunning();
+
+      const idcMetadata = mergeIdcExecutionMetadata(
+        session.getExecutionMode() === 'plan' ? createPlanModeIdcMetadata() : undefined,
+        metadataOverrides,
+      );
+      const currentConfig = useConfigStore.getState().config;
+      const metadata = mergeTuiMediaModelMetadata(
+        idcMetadata,
+        currentConfig.defaultMediaModels,
+        currentConfig.chatModel?.providerId ?? currentConfig.provider,
+      );
+
+      for await (const event of session.execute(finalPrompt, {
+        workspaceRoot: readConfigWorkDir(),
+        ...(metadata ? { metadata } : {}),
+      })) {
+        adapter.handleEvent(event);
+      }
+    },
+    [],
+  );
+
+  const drainQueuedPrompts = useCallback(async (): Promise<void> => {
+    if (drainingQueueRef.current) {
+      return;
+    }
+    drainingQueueRef.current = true;
+    try {
+      const queue = messageQueueRef.current;
+      const adapter = adapterRef.current;
+      if (!queue || !adapter) {
+        return;
+      }
+
+      for (;;) {
+        const released = queue.dequeue();
+        if (!released) {
+          useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+          return;
+        }
+        const snapshot = queue.snapshot();
+        useAgentStore.getState().setMessageQueueSnapshot(snapshot);
+        adapter.handleEvent({
+          type: 'messageQueued',
+          pendingCount: snapshot.pendingCount,
+          releasedQueuedMessageItem: released,
+          messageQueueSnapshot: snapshot,
+        } satisfies AgentEvent);
+        await executePrompt(released.content);
+      }
+    } finally {
+      drainingQueueRef.current = false;
+    }
+  }, [executePrompt]);
+
   const submit = useCallback(
     async (prompt: string, executionOverrides?: { metadata?: Record<string, unknown> }) => {
-      // Wait for initialization if needed
       if (initPromiseRef.current) {
         await initPromiseRef.current;
       }
 
       const session = sessionRef.current;
       const adapter = adapterRef.current;
-      const inputProcessor = inputProcessorRef.current;
 
       if (!session || !adapter) {
         useAgentStore.getState().setError(new Error('Session not initialized'));
         return;
       }
 
-      // Reset adapter state
-      adapter.reset();
-
-      // Add user message to store
-      useConversationStore.getState().addUserMessage(prompt);
-      useAgentStore.getState().setRunning();
+      if (session.isRunning() || useAgentStore.getState().status === 'running') {
+        const queue = messageQueueRef.current;
+        if (!queue) {
+          useConversationStore.getState().addError(new Error('Message queue is not initialized'));
+          return;
+        }
+        try {
+          if (executionOverrides?.metadata && Object.keys(executionOverrides.metadata).length > 0) {
+            throw new TuiMessageQueueError(
+              'not-queueable',
+              'Prompts with execution metadata cannot be queued while an Agent turn is running.',
+            );
+          }
+          const item = queue.enqueue(prompt);
+          const snapshot = queue.snapshot();
+          useAgentStore.getState().setMessageQueueSnapshot(snapshot);
+          adapter.handleEvent({
+            type: 'messageQueued',
+            content: `Message queued (${snapshot.pendingCount} pending)`,
+            pendingCount: snapshot.pendingCount,
+            queuedMessageItem: item,
+            messageQueueSnapshot: snapshot,
+          });
+        } catch (error) {
+          const message = formatTuiQueueError(error);
+          useAgentStore.getState().setMessageQueueDiagnostic(message);
+          useConversationStore.getState().addError(new Error(message));
+        }
+        return;
+      }
 
       try {
-        // Process file references
-        let finalPrompt = prompt;
-        if (inputProcessor) {
-          const processed = await inputProcessor.process(prompt);
-          finalPrompt = processed.message;
-          if (processed.hasFiles) {
-            finalPrompt = `${processed.message}\n\n## Referenced Files\n\n${processed.fileContents}`;
-          }
-        }
+        await executePrompt(prompt, executionOverrides?.metadata);
+        await drainQueuedPrompts();
 
-        const metadata = mergeIdcExecutionMetadata(
-          session.getExecutionMode() === 'plan' ? createPlanModeIdcMetadata() : undefined,
-          executionOverrides?.metadata,
-        );
-
-        // Execute and stream events
-        for await (const event of session.execute(finalPrompt, {
-          workspaceRoot: useConfigStore_getWorkDir(),
-          ...(metadata ? { metadata } : {}),
-        })) {
-          adapter.handleEvent(event);
-        }
-
-        // Trigger plan review after plan-mode execution completes
         if (useAgentStore.getState().executionMode === 'plan') {
           useUIStore.getState().showPlanReview();
         }
@@ -394,12 +581,46 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         useConversationStore.getState().addError(err);
       }
     },
-    [],
+    [drainQueuedPrompts, executePrompt],
   );
 
   const cancel = useCallback(() => {
     sessionRef.current?.cancel();
     useAgentStore.getState().setIdle();
+  }, []);
+
+  const getMessageQueueSnapshot = useCallback(() => {
+    return messageQueueRef.current?.snapshot() ?? null;
+  }, []);
+
+  const promoteQueuedMessage = useCallback((queueItemId: string) => {
+    const queue = messageQueueRef.current;
+    if (!queue) {
+      throw new Error('Message queue is not initialized');
+    }
+    const item = queue.promote(queueItemId);
+    useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+    return item;
+  }, []);
+
+  const cancelQueuedMessage = useCallback((queueItemId: string) => {
+    const queue = messageQueueRef.current;
+    if (!queue) {
+      throw new Error('Message queue is not initialized');
+    }
+    const item = queue.cancel(queueItemId);
+    useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+    return item;
+  }, []);
+
+  const editQueuedMessage = useCallback((queueItemId: string, content: string) => {
+    const queue = messageQueueRef.current;
+    if (!queue) {
+      throw new Error('Message queue is not initialized');
+    }
+    const item = queue.edit(queueItemId, content);
+    useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+    return item;
   }, []);
 
   const clearHistory = useCallback(() => {
@@ -415,14 +636,64 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     }
   }, []);
 
-  const updateModel = useCallback((model: string) => {
-    useConfigStore.getState().setConfig({ model });
+  const updateModel = useCallback((model: string | TuiModelIdentity) => {
+    const identity =
+      typeof model === 'string'
+        ? { providerId: useConfigStore.getState().config.provider, modelId: model }
+        : model;
+    useConfigStore.getState().setConfig({
+      provider: identity.providerId,
+      model: identity.modelId,
+      chatModel: {
+        providerId: identity.providerId,
+        modelId: identity.modelId,
+      },
+    });
     // Platform's Service uses ModelSelector which reads from ConfigManager,
     // so we just need to pass the new modelId to the session
     const session = sessionRef.current;
     if (session) {
-      session.configure({ modelId: model });
+      session.configure({ providerId: identity.providerId, modelId: identity.modelId });
     }
+  }, []);
+
+  const validateLlmConfig = useCallback(
+    (llmConfig: AgentLlmConfig): TuiParameterValidationResult => {
+      const config = useConfigStore.getState().config;
+      const result = projectCliLlmParameters(config, llmConfig);
+      if (result.diagnostics.length > 0) {
+        return {
+          config: llmConfig,
+          diagnostics: result.diagnostics.map((diagnostic) => diagnostic.message),
+        };
+      }
+
+      return {
+        config: llmConfig,
+        chatOptions: result.chatOptions,
+        providerOptions: result.providerOptions,
+        summary: formatLlmProjectionSummary(result),
+      };
+    },
+    [],
+  );
+
+  const applyLlmConfig = useCallback((result: TuiParameterValidationResult): void => {
+    const config = useConfigStore.getState().config;
+    useConfigStore.getState().setConfig({
+      llmConfig: result.config,
+      temperature: result.chatOptions?.temperature ?? config.temperature,
+      maxTokens: result.chatOptions?.maxTokens ?? config.maxTokens,
+      thinkingBudget: result.chatOptions?.thinkingBudget ?? config.thinkingBudget,
+    });
+
+    sessionRef.current?.configure({
+      temperature: result.chatOptions?.temperature ?? config.temperature,
+      topP: result.chatOptions?.topP,
+      maxTokens: result.chatOptions?.maxTokens ?? config.maxTokens,
+      thinkingBudget: result.chatOptions?.thinkingBudget ?? config.thinkingBudget,
+      providerOptions: result.providerOptions,
+    });
   }, []);
 
   const activateSkill = useCallback(async (name: string, args?: string): Promise<boolean> => {
@@ -507,6 +778,127 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     session.setExecutionMode(mode);
   }, []);
 
+  const getContextTokenCount = useCallback((): number | null => {
+    const session = sessionRef.current;
+    return session ? session.getTokenCount() : null;
+  }, []);
+
+  const compactContext = useCallback(async () => {
+    const session = sessionRef.current;
+    if (!session) {
+      throw new Error('Session not initialized');
+    }
+    return session.compressContext();
+  }, []);
+
+  const listMcpServers = useCallback((): readonly TuiMcpServerSnapshot[] => {
+    return createTuiMcpServerSnapshots(mcpManagerRef.current, toolRegistryRef.current);
+  }, []);
+
+  const listMcpTools = useCallback((serverId?: string): readonly string[] => {
+    return listRegisteredTuiMcpTools(toolRegistryRef.current, serverId);
+  }, []);
+
+  const connectMcpServer = useCallback(async (serverId: string): Promise<void> => {
+    const manager = mcpManagerRef.current;
+    const registry = toolRegistryRef.current;
+    if (!manager || !registry) {
+      throw new Error('MCP runtime is not initialized');
+    }
+    await connectTuiMcpServer(manager, registry, serverId);
+  }, []);
+
+  const disconnectMcpServer = useCallback(async (serverId: string): Promise<void> => {
+    const manager = mcpManagerRef.current;
+    const registry = toolRegistryRef.current;
+    if (!manager || !registry) {
+      throw new Error('MCP runtime is not initialized');
+    }
+    await disconnectTuiMcpServer(manager, registry, serverId);
+  }, []);
+
+  const reconnectMcpServer = useCallback(async (serverId: string): Promise<void> => {
+    const manager = mcpManagerRef.current;
+    const registry = toolRegistryRef.current;
+    if (!manager || !registry) {
+      throw new Error('MCP runtime is not initialized');
+    }
+    await reconnectTuiMcpServer(manager, registry, serverId);
+  }, []);
+
+  const getCapabilityProviderSummaries = useCallback(() => {
+    return capabilityLoadResultRef.current?.providers ?? [];
+  }, []);
+
+  const getCapabilityDiagnostics = useCallback(() => {
+    return capabilityLoadResultRef.current?.diagnostics ?? [];
+  }, []);
+
+  const listCapabilityTools = useCallback((providerId?: string): readonly string[] => {
+    const tools = toolRegistryRef.current?.list() ?? [];
+    if (!providerId) {
+      return tools.map((tool) => tool.name);
+    }
+    const summary = capabilityLoadResultRef.current?.providers.find(
+      (provider) => provider.providerId === providerId,
+    );
+    if (!summary) {
+      return [];
+    }
+    const providerToolNames = new Set(
+      summary.loaded
+        .filter((contribution) => contribution.kind === 'tool')
+        .map((contribution) => contribution.name),
+    );
+    return tools.map((tool) => tool.name).filter((toolName) => providerToolNames.has(toolName));
+  }, []);
+
+  const getReferenceContributors = useCallback(() => {
+    return capabilityLoadResultRef.current?.referenceContributors ?? [];
+  }, []);
+
+  const controlIdcWorkflow = useCallback<NonNullable<TuiWorkflowPorts['controlIdcWorkflow']>>(
+    async (input) => {
+      const session = sessionRef.current;
+      if (!session) {
+        throw new Error('Session not initialized');
+      }
+      const createdAt = Date.now();
+      const action =
+        input.action === 'stop' ? 'deactivate' : input.action === 'resume' ? 'resume' : 'activate';
+      const name = input.runKind ?? input.runId ?? 'idc';
+      const intent = createAgentCapabilityActivationIntent({
+        conversationId: conversationIdRef.current,
+        source: 'user-explicit',
+        target: 'idc-workflow',
+        action,
+        name,
+        requestedBy: 'user',
+        reason: input.reason ?? `TUI /idc ${input.action}`,
+        metadata: {
+          surface: 'cli-tui',
+          command: '/idc',
+          ...(input.runKind ? { runKind: input.runKind } : {}),
+          ...(input.runId ? { runId: input.runId } : {}),
+        },
+        createdAt,
+      });
+      const result =
+        input.action === 'stop'
+          ? session.stopIdcRunWithIntent({ intent })
+          : session.startIdcRunWithIntent({
+              runKind: input.runKind ?? 'idc',
+              ...(input.runId ? { runId: input.runId } : {}),
+              intent,
+            });
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+      return result.message;
+    },
+    [],
+  );
+
   return {
     submit,
     cancel,
@@ -514,17 +906,75 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     confirmTool,
     updateModel,
     updateMode,
+    getContextTokenCount,
+    compactContext,
+    getMessageQueueSnapshot,
+    promoteQueuedMessage,
+    cancelQueuedMessage,
+    editQueuedMessage,
+    validateLlmConfig,
+    applyLlmConfig,
     activateSkill,
     deactivateSkill,
     getSkillService: () => skillServiceRef.current ?? undefined,
     getToolRegistry: () => toolRegistryRef.current ?? undefined,
+    listMcpServers,
+    listMcpTools,
+    connectMcpServer,
+    disconnectMcpServer,
+    reconnectMcpServer,
+    getCapabilityProviderSummaries,
+    getCapabilityDiagnostics,
+    listCapabilityTools,
+    getReferenceContributors,
+    controlIdcWorkflow,
     slashCommands,
     isReady: isReadyRef.current,
   };
 }
 
+async function loadTuiSessionSkills(
+  skillLoader: Parameters<typeof loadSkillArtifactsAsSkills>[0],
+  config: CLIConfig,
+  locale: 'en' | 'zh',
+): Promise<Skill[]> {
+  const merged = new Map<string, Skill>();
+
+  for (const skill of getBuiltinSkills({ locale: locale === 'zh' ? 'zh-CN' : 'en' })) {
+    merged.set(skill.name, skill);
+  }
+
+  for (const skillsDir of resolveNekoTuiSkillDirectories(config)) {
+    const loadedSkills = await loadSkillArtifactsAsSkills(skillLoader, skillsDir);
+    for (const skill of loadedSkills) {
+      merged.set(skill.name, skill);
+    }
+  }
+
+  const codexSkillsDir = path.join(config.workDir, '.codex', 'skills');
+  const codexSkills = await loadCodexSkillArtifactsAsSkills(fs, path, codexSkillsDir);
+  for (const skill of codexSkills) {
+    merged.set(skill.name, skill);
+  }
+
+  return Array.from(merged.values());
+}
+
+function resolveNekoTuiSkillDirectories(config: CLIConfig): string[] {
+  const dirs: string[] = [];
+
+  if (config.skillsDir) {
+    const configuredDir = path.resolve(config.workDir, config.skillsDir);
+    if (!dirs.some((dir) => path.resolve(dir) === configuredDir)) {
+      dirs.push(configuredDir);
+    }
+  }
+
+  return dirs;
+}
+
 /** Helper to get workDir from config store */
-function useConfigStore_getWorkDir(): string {
+function readConfigWorkDir(): string {
   return useConfigStore.getState().config.workDir;
 }
 
@@ -559,4 +1009,45 @@ function ensureHookSkillLifecycleRuntime(
     ref.current = createCliSkillLifecycleRuntime(skillService);
   }
   return ref.current;
+}
+
+function projectCliLlmParameters(config: CLIConfig, llmConfig: AgentLlmConfig) {
+  const manager = new ConfigManager({
+    userConfigManager: new FileUserConfigManager(),
+    workspacePath: config.workDir,
+  });
+  try {
+    const providerId = config.chatModel?.providerId ?? config.provider;
+    const modelId = config.chatModel?.modelId ?? config.model;
+    const provider = manager.getProvider(providerId);
+    const model = manager.getModel(modelId);
+    if (!provider) {
+      throw new Error(`Provider "${providerId}" is not configured.`);
+    }
+    if (!model) {
+      throw new Error(`Model "${modelId}" is not configured.`);
+    }
+    return projectLlmParameters({ provider, model, llmConfig });
+  } finally {
+    manager.dispose();
+  }
+}
+
+function formatLlmProjectionSummary(result: ReturnType<typeof projectLlmParameters>): string {
+  const applied = [
+    result.chatOptions.temperature !== undefined
+      ? `temperature=${result.chatOptions.temperature}`
+      : undefined,
+    result.chatOptions.topP !== undefined ? `topP=${result.chatOptions.topP}` : undefined,
+    result.chatOptions.maxTokens !== undefined
+      ? `maxTokens=${result.chatOptions.maxTokens}`
+      : undefined,
+    result.chatOptions.thinkingBudget !== undefined
+      ? `thinkingBudget=${result.chatOptions.thinkingBudget}`
+      : undefined,
+    Object.keys(result.providerOptions).length > 0
+      ? `providerOptions=${Object.keys(result.providerOptions).join(',')}`
+      : undefined,
+  ].filter(Boolean);
+  return applied.length > 0 ? `Applied: ${applied.join(', ')}` : 'Applied: provider defaults';
 }

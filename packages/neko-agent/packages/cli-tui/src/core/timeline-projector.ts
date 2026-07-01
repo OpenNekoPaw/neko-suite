@@ -1,0 +1,694 @@
+import type { AgentEvent } from '@neko/agent';
+import type {
+  AgentTurnTimelineItem,
+  AgentTurnTimelineMessage,
+  AgentWorkItem,
+  MediaTaskCreatedMessage,
+  MediaTaskProgressMessage,
+  TaskCreatedMessage,
+  TaskUpdatedMessage,
+  ToolCall,
+} from '@neko-agent/types';
+import { getToolSummary } from '@neko-agent/types';
+import {
+  collectTuiArtifactReferences,
+  formatTuiArtifactReference,
+} from './artifact-reference-formatter';
+import type {
+  TerminalTimelineParentAnchor,
+  TerminalTimelineRow,
+  TerminalTimelineRowStatus,
+} from '../types/state';
+
+export type TerminalTimelineMessage =
+  | AgentTurnTimelineMessage
+  | MediaTaskCreatedMessage
+  | MediaTaskProgressMessage
+  | TaskCreatedMessage
+  | TaskUpdatedMessage;
+
+export interface TerminalTimelineProjector {
+  readonly projectEvent: (event: AgentEvent) => TerminalTimelineRow[];
+  readonly projectMessage: (message: TerminalTimelineMessage) => TerminalTimelineRow[];
+  readonly reset: () => void;
+}
+
+export interface TerminalTimelineProjectorOptions {
+  readonly now?: () => number;
+}
+
+interface ToolProjectionState {
+  readonly id: string;
+  readonly name: string;
+  readonly arguments: Record<string, unknown>;
+  readonly rowId: string;
+}
+
+interface ActiveTextProjectionState {
+  readonly id: string;
+  readonly sequence: number;
+  readonly kind: 'assistant_text' | 'thinking';
+  readonly content: string;
+}
+
+export function createTerminalTimelineProjector(
+  options: TerminalTimelineProjectorOptions = {},
+): TerminalTimelineProjector {
+  let sequence = 0;
+  let activeText: ActiveTextProjectionState | null = null;
+  let activeThinking: ActiveTextProjectionState | null = null;
+  const toolsById = new Map<string, ToolProjectionState>();
+  const rowsByItemId = new Set<string>();
+
+  const nextSequence = (): number => {
+    sequence += 1;
+    return sequence;
+  };
+
+  const now = (): number => options.now?.() ?? Date.now();
+
+  const buildRow = (
+    row: Omit<TerminalTimelineRow, 'sequence' | 'timestamp'> & {
+      readonly sequence?: number;
+      readonly timestamp?: number;
+    },
+  ): TerminalTimelineRow => ({
+    ...row,
+    sequence: row.sequence ?? nextSequence(),
+    timestamp: row.timestamp ?? now(),
+  });
+
+  const diagnostic = (
+    code: string,
+    content: string,
+    parent?: TerminalTimelineParentAnchor,
+  ): TerminalTimelineRow => {
+    const rowSequence = nextSequence();
+    return {
+      id: `diagnostic-${rowSequence}`,
+      sequence: rowSequence,
+      kind: 'diagnostic',
+      status: 'error',
+      content,
+      diagnosticCode: code,
+      ...(parent ? { parent } : {}),
+      timestamp: now(),
+    };
+  };
+
+  const closeActiveText = (): TerminalTimelineRow[] => {
+    const rows: TerminalTimelineRow[] = [];
+    if (activeThinking) {
+      rows.push(
+        buildRow({
+          id: activeThinking.id,
+          sequence: activeThinking.sequence,
+          kind: 'thinking',
+          status: 'complete',
+          content: activeThinking.content,
+        }),
+      );
+      activeThinking = null;
+    }
+    if (activeText) {
+      rows.push(
+        buildRow({
+          id: activeText.id,
+          sequence: activeText.sequence,
+          kind: 'assistant_text',
+          status: 'complete',
+          content: activeText.content,
+        }),
+      );
+      activeText = null;
+    }
+    return rows;
+  };
+
+  const closeActiveThinking = (): TerminalTimelineRow[] => {
+    if (!activeThinking) return [];
+    const row = buildRow({
+      id: activeThinking.id,
+      sequence: activeThinking.sequence,
+      kind: 'thinking',
+      status: 'complete',
+      content: activeThinking.content,
+    });
+    activeThinking = null;
+    return [row];
+  };
+
+  return {
+    projectEvent(event) {
+      switch (event.type) {
+        case 'assistant_text_replacement': {
+          const rows = closeActiveThinking();
+          if (!activeText) {
+            const rowSequence = nextSequence();
+            activeText = {
+              id: `text-${rowSequence}`,
+              sequence: rowSequence,
+              kind: 'assistant_text',
+              content: '',
+            };
+          } else {
+            activeText = {
+              ...activeText,
+              content: '',
+            };
+          }
+          rows.push(
+            buildRow({
+              id: activeText.id,
+              sequence: activeText.sequence,
+              kind: 'assistant_text',
+              status: 'streaming',
+              content: '',
+            }),
+          );
+          return rows;
+        }
+
+        case 'thinking':
+        case 'thinking_content': {
+          const content = event.thinking ?? event.reasoningContent ?? '';
+          if (!activeThinking) {
+            const rowSequence = nextSequence();
+            activeThinking = {
+              id: `thinking-${rowSequence}`,
+              sequence: rowSequence,
+              kind: 'thinking',
+              content: '',
+            };
+          }
+          activeThinking = {
+            ...activeThinking,
+            content: activeThinking.content + content,
+          };
+          return [
+            buildRow({
+              id: activeThinking.id,
+              sequence: activeThinking.sequence,
+              kind: 'thinking',
+              status: 'streaming',
+              content: activeThinking.content,
+            }),
+          ];
+        }
+
+        case 'text':
+        case 'text_delta': {
+          const rows = closeActiveThinking();
+          if (!activeText) {
+            const rowSequence = nextSequence();
+            activeText = {
+              id: `text-${rowSequence}`,
+              sequence: rowSequence,
+              kind: 'assistant_text',
+              content: '',
+            };
+          }
+          activeText = {
+            ...activeText,
+            content: activeText.content + (event.content ?? ''),
+          };
+          rows.push(
+            buildRow({
+              id: activeText.id,
+              sequence: activeText.sequence,
+              kind: 'assistant_text',
+              status: event.type === 'text' ? 'complete' : 'streaming',
+              content: activeText.content,
+            }),
+          );
+          if (event.type === 'text') {
+            activeText = null;
+          }
+          return rows;
+        }
+
+        case 'tool_call': {
+          const rows = closeActiveText();
+          const toolCall = event.toolCall;
+          if (!toolCall) {
+            return [
+              ...rows,
+              diagnostic(
+                'missing-tool-call',
+                'Timeline diagnostic: tool_call event did not include toolCall payload.',
+              ),
+            ];
+          }
+          const rowId = `tool-${toolCall.id}`;
+          toolsById.set(toolCall.id, {
+            id: toolCall.id,
+            name: toolCall.name,
+            arguments: toolCall.arguments,
+            rowId,
+          });
+          rows.push(
+            buildRow({
+              id: rowId,
+              kind: 'tool',
+              status: 'running',
+              toolCallId: toolCall.id,
+              toolName: toolCall.name,
+              argsSummary: summarizeArgs(toolCall.name, toolCall.arguments),
+            }),
+          );
+          return rows;
+        }
+
+        case 'tool_progress': {
+          const progress = event.toolProgress;
+          if (!progress?.toolCallId) {
+            return [
+              diagnostic(
+                'missing-tool-progress-anchor',
+                'Timeline diagnostic: tool_progress event is missing toolCallId.',
+              ),
+            ];
+          }
+          const tool = toolsById.get(progress.toolCallId);
+          if (!tool) {
+            return [
+              diagnostic(
+                'unknown-tool-progress-anchor',
+                `Timeline diagnostic: tool_progress references unknown tool id ${progress.toolCallId}.`,
+                { kind: 'tool', id: progress.toolCallId },
+              ),
+            ];
+          }
+          return [
+            buildRow({
+              id: tool.rowId,
+              kind: 'tool',
+              status: 'running',
+              parent: { kind: 'tool', id: progress.toolCallId },
+              toolCallId: progress.toolCallId,
+              toolName: progress.toolName || tool.name,
+              progress: progress.percent,
+              details: joinDetails(progress.stage, progress.preview),
+            }),
+          ];
+        }
+
+        case 'tool_confirmation': {
+          const confirmation = event.toolConfirmation;
+          const toolCallId = confirmation?.toolCall.id;
+          if (!toolCallId) {
+            return [
+              diagnostic(
+                'missing-tool-confirmation-anchor',
+                'Timeline diagnostic: tool_confirmation event is missing toolCall.id.',
+              ),
+            ];
+          }
+          const tool = toolsById.get(toolCallId);
+          if (!tool) {
+            return [
+              diagnostic(
+                'unknown-tool-confirmation-anchor',
+                `Timeline diagnostic: tool_confirmation references unknown tool id ${toolCallId}.`,
+                { kind: 'tool', id: toolCallId },
+              ),
+            ];
+          }
+          return [
+            buildRow({
+              id: tool.rowId,
+              kind: 'tool',
+              status: 'waiting',
+              parent: { kind: 'tool', id: toolCallId },
+              toolCallId,
+              toolName: confirmation?.toolCall.name ?? tool.name,
+              confirmationSummary: joinDetails(confirmation?.action, confirmation?.description),
+            }),
+          ];
+        }
+
+        case 'tool_result': {
+          const rows = closeActiveText();
+          const result = event.toolResult;
+          if (!result?.toolCallId) {
+            return [
+              ...rows,
+              diagnostic(
+                'missing-tool-result-anchor',
+                'Timeline diagnostic: tool_result event is missing toolCallId.',
+              ),
+            ];
+          }
+          const tool = toolsById.get(result.toolCallId);
+          if (!tool) {
+            return [
+              ...rows,
+              diagnostic(
+                'unknown-tool-result-anchor',
+                `Timeline diagnostic: tool_result references unknown tool id ${result.toolCallId}.`,
+                { kind: 'tool', id: result.toolCallId },
+              ),
+            ];
+          }
+          rows.push(
+            buildRow({
+              id: tool.rowId,
+              kind: 'tool',
+              status: result.success ? 'success' : 'error',
+              parent: { kind: 'tool', id: result.toolCallId },
+              toolCallId: result.toolCallId,
+              toolName: tool.name,
+              resultSummary: summarizeToolResult(result),
+            }),
+          );
+          return rows;
+        }
+
+        case 'tool_result_backfill': {
+          const backfill = event.toolResultBackfill;
+          if (!backfill?.toolCallId) {
+            return [
+              diagnostic(
+                'missing-tool-backfill-anchor',
+                'Timeline diagnostic: tool_result_backfill event is missing toolCallId.',
+              ),
+            ];
+          }
+          const tool = toolsById.get(backfill.toolCallId);
+          if (!tool) {
+            return [
+              diagnostic(
+                'unknown-tool-backfill-anchor',
+                `Timeline diagnostic: tool_result_backfill references unknown tool id ${backfill.toolCallId}.`,
+                { kind: 'tool', id: backfill.toolCallId },
+              ),
+            ];
+          }
+          return [
+            buildRow({
+              id: tool.rowId,
+              kind: 'tool',
+              status: 'success',
+              parent: { kind: 'tool', id: backfill.toolCallId },
+              toolCallId: backfill.toolCallId,
+              toolName: tool.name,
+              backfillSummary: summarizeBackfill(backfill.dataPatch),
+            }),
+          ];
+        }
+
+        case 'error': {
+          const rows = closeActiveText();
+          const rowSequence = nextSequence();
+          return [
+            ...rows,
+            {
+              id: `error-${rowSequence}`,
+              sequence: rowSequence,
+              kind: 'error',
+              status: 'error',
+              content: event.error?.message ?? 'An error occurred',
+              timestamp: now(),
+            },
+          ];
+        }
+
+        case 'done':
+          return closeActiveText();
+
+        default:
+          return [];
+      }
+    },
+
+    projectMessage(message) {
+      switch (message.type) {
+        case 'agentTurnTimeline':
+          return message.events.flatMap((item) =>
+            projectTimelineItem(item, rowsByItemId, buildRow, now),
+          );
+        case 'mediaTaskCreated':
+        case 'mediaTaskProgress':
+        case 'taskCreated':
+        case 'taskUpdated':
+          return projectWorkItem(message.workItem, buildRow);
+      }
+    },
+
+    reset() {
+      sequence = 0;
+      activeText = null;
+      activeThinking = null;
+      toolsById.clear();
+      rowsByItemId.clear();
+    },
+  };
+}
+
+function projectTimelineItem(
+  item: AgentTurnTimelineItem,
+  rowsByItemId: Set<string>,
+  buildRow: (
+    row: Omit<TerminalTimelineRow, 'sequence' | 'timestamp'> & {
+      readonly sequence?: number;
+      readonly timestamp?: number;
+    },
+  ) => TerminalTimelineRow,
+  now: () => number,
+): TerminalTimelineRow[] {
+  const parent = toParentAnchor(item);
+  if (parent?.kind === 'item' && parent.id && !rowsByItemId.has(parent.id)) {
+    return [
+      {
+        id: `diagnostic-${item.itemId}`,
+        sequence: item.sequence,
+        kind: 'diagnostic',
+        status: 'error',
+        parent,
+        content: `Timeline diagnostic: ${item.kind} references unknown parent item ${parent.id}.`,
+        diagnosticCode: 'unknown-parent-item-anchor',
+        timestamp: now(),
+      },
+    ];
+  }
+  rowsByItemId.add(item.itemId);
+
+  switch (item.kind) {
+    case 'assistant_text':
+      return [
+        buildRow({
+          id: item.itemId,
+          kind: 'assistant_text',
+          status: item.status === 'streaming' ? 'streaming' : 'complete',
+          content: item.payload.content,
+          ...(parent ? { parent } : {}),
+          timestamp: item.updatedAt,
+        }),
+      ];
+    case 'thinking':
+      return [
+        buildRow({
+          id: item.itemId,
+          kind: 'thinking',
+          status: item.status === 'streaming' ? 'streaming' : 'complete',
+          content: item.payload.content,
+          ...(parent ? { parent } : {}),
+          timestamp: item.updatedAt,
+        }),
+      ];
+    case 'tool_call': {
+      const toolCall = item.payload.toolCall;
+      return [
+        buildRow({
+          id: item.itemId,
+          kind: 'tool',
+          status: toTerminalStatus(item.status),
+          ...(parent ? { parent } : {}),
+          toolCallId: toolCall.id,
+          toolName: toolCall.name,
+          argsSummary: summarizeArgs(toolCall.name, toolCall.arguments),
+          resultSummary: toolCall.result ? summarizeTimelineToolResult(toolCall) : undefined,
+          timestamp: item.updatedAt,
+        }),
+      ];
+    }
+    case 'task':
+    case 'media':
+      return [
+        buildRow({
+          id: item.itemId,
+          kind: item.kind,
+          status: toTerminalStatus(item.status),
+          ...(parent ? { parent } : {}),
+          ...summarizeWorkItem(item.payload.workItem),
+          timestamp: item.updatedAt,
+        }),
+      ];
+    case 'error':
+      return [
+        buildRow({
+          id: item.itemId,
+          kind: 'error',
+          status: 'error',
+          ...(parent ? { parent } : {}),
+          content: item.payload.message,
+          diagnosticCode: item.payload.code,
+          details: item.payload.details ? summarizeUnknown(item.payload.details) : undefined,
+          timestamp: item.updatedAt,
+        }),
+      ];
+    case 'composite':
+      return [
+        buildRow({
+          id: item.itemId,
+          kind: 'diagnostic',
+          status: 'complete',
+          ...(parent ? { parent } : {}),
+          content: 'Composite content available as terminal reference.',
+          timestamp: item.updatedAt,
+        }),
+      ];
+  }
+}
+
+function projectWorkItem(
+  workItem: AgentWorkItem,
+  buildRow: (
+    row: Omit<TerminalTimelineRow, 'sequence' | 'timestamp'> & {
+      readonly sequence?: number;
+      readonly timestamp?: number;
+    },
+  ) => TerminalTimelineRow,
+): TerminalTimelineRow[] {
+  const kind = workItem.kind === 'media-task' ? 'media' : 'task';
+  return [
+    buildRow({
+      id: `${kind}-${workItem.id}`,
+      kind,
+      status: toWorkItemStatus(workItem.status),
+      parent: workItem.parentToolCallId
+        ? { kind: 'tool', id: workItem.parentToolCallId }
+        : { kind: 'turn' },
+      ...summarizeWorkItem(workItem),
+      timestamp: Date.parse(workItem.updatedAt) || Date.now(),
+    }),
+  ];
+}
+
+function summarizeWorkItem(
+  workItem: AgentWorkItem,
+): Pick<TerminalTimelineRow, 'taskId' | 'taskTitle' | 'taskKind' | 'progress' | 'details'> {
+  const currentStep = workItem.steps?.find((step) => step.id === workItem.currentStepId);
+  return {
+    taskId: workItem.id,
+    taskTitle: workItem.title,
+    taskKind: workItem.kind,
+    progress: workItem.progress,
+    details: joinDetails(currentStep?.name, currentStep?.message, workItem.error),
+  };
+}
+
+function toParentAnchor(item: AgentTurnTimelineItem): TerminalTimelineParentAnchor | undefined {
+  if (item.parentAnchor === 'tool_call') {
+    return { kind: 'tool', id: item.parentToolCallId };
+  }
+  if (item.parentAnchor === 'item') {
+    return { kind: 'item', id: item.parentItemId };
+  }
+  if (item.parentAnchor === 'turn') {
+    return { kind: 'turn' };
+  }
+  return undefined;
+}
+
+function toTerminalStatus(status: AgentTurnTimelineItem['status']): TerminalTimelineRowStatus {
+  switch (status) {
+    case 'streaming':
+      return 'streaming';
+    case 'pending':
+      return 'running';
+    case 'succeeded':
+      return 'success';
+    case 'failed':
+      return 'error';
+    case 'complete':
+      return 'complete';
+  }
+}
+
+function toWorkItemStatus(status: AgentWorkItem['status']): TerminalTimelineRowStatus {
+  switch (status) {
+    case 'queued':
+      return 'queued';
+    case 'processing':
+      return 'processing';
+    case 'completed':
+      return 'success';
+    case 'failed':
+      return 'error';
+    case 'cancelled':
+      return 'cancelled';
+  }
+}
+
+function summarizeArgs(name: string, args: Record<string, unknown>): string {
+  const summary = getToolSummary(name, args);
+  return summary || summarizeUnknown(args);
+}
+
+function summarizeToolResult(result: NonNullable<AgentEvent['toolResult']>): string | undefined {
+  if (!result.success) {
+    return result.error ?? 'failed';
+  }
+  const references = collectTuiArtifactReferences({
+    attachments: result.attachments,
+    perceptionCards: result.perceptionCards,
+    artifacts: result.artifacts,
+    toolCallId: result.toolCallId,
+  });
+  if (references.length > 0) {
+    return references.map(formatTuiArtifactReference).join('\n');
+  }
+  const counts = [
+    result.attachments?.length ? `attachments=${result.attachments.length}` : '',
+    result.perceptionCards?.length ? `perception=${result.perceptionCards.length}` : '',
+    result.artifacts?.length ? `artifacts=${result.artifacts.length}` : '',
+  ].filter(Boolean);
+  if (counts.length > 0) {
+    return counts.join(' ');
+  }
+  return summarizeUnknown(result.data);
+}
+
+function summarizeTimelineToolResult(toolCall: ToolCall): string | undefined {
+  const result = toolCall.result;
+  if (!result) return undefined;
+  if (!result.success) return result.error ?? 'failed';
+  return summarizeUnknown(result.data);
+}
+
+function summarizeBackfill(dataPatch: Record<string, unknown>): string {
+  const keys = Object.keys(dataPatch);
+  return keys.length > 0 ? `patched ${keys.join(', ')}` : 'patched result';
+}
+
+function summarizeUnknown(value: unknown): string {
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') return truncate(value, 96);
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return `items=${value.length}`;
+  if (typeof value === 'object') {
+    const keys = Object.keys(value);
+    return keys.length > 0 ? keys.slice(0, 4).join(', ') : '{}';
+  }
+  return String(value);
+}
+
+function joinDetails(...parts: readonly (string | undefined)[]): string | undefined {
+  const joined = parts.filter((part): part is string => Boolean(part && part.trim())).join(' - ');
+  return joined.length > 0 ? truncate(joined, 120) : undefined;
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}

@@ -6,14 +6,17 @@
   "exports": {
     ".": "./src/index.ts",
     "./mocks": "./src/mocks/index.ts",
-    "./fixtures": "./src/fixtures/index.ts"
+    "./fixtures": "./src/fixtures/index.ts",
+    "./real-api": "./src/real-api/index.ts"
   },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@neko/agent": "workspace:*"
+    "@neko/agent": "workspace:*",
+    "@neko/platform": "workspace:*",
+    "@neko/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

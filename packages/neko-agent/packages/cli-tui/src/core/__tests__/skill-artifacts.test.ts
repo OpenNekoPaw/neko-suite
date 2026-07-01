@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadSkillArtifactsAsSkills } from '../skill-artifacts';
+import { loadCodexSkillArtifactsAsSkills, loadSkillArtifactsAsSkills } from '../skill-artifacts';
 
 describe('loadSkillArtifactsAsSkills', () => {
   it('loads sibling .neko/commands artifacts and adapts them into Skills', async () => {
@@ -53,6 +53,55 @@ describe('loadSkillArtifactsAsSkills', () => {
         name: 'commit',
         command: 'commit',
         supportsArguments: true,
+      }),
+    ]);
+  });
+});
+
+describe('loadCodexSkillArtifactsAsSkills', () => {
+  it('loads Codex-style SKILL.md directories as lightweight project Skills', async () => {
+    const files = new Map([
+      [
+        '/workspace/demo/.codex/skills/openspec-apply-change/SKILL.md',
+        [
+          '---',
+          'name: openspec-apply-change',
+          'description: Implement tasks from an OpenSpec change.',
+          'license: MIT',
+          '---',
+          '',
+          'Use OpenSpec apply instructions.',
+        ].join('\n'),
+      ],
+    ]);
+    const fs = {
+      readdir: vi.fn(async () => [
+        { name: 'openspec-apply-change', isDirectory: () => true },
+        { name: 'README.md', isDirectory: () => false },
+      ]),
+      readFile: vi.fn(async (filePath: string) => {
+        const content = files.get(filePath);
+        if (content === undefined) {
+          throw new Error(`ENOENT ${filePath}`);
+        }
+        return content;
+      }),
+    };
+
+    const skills = await loadCodexSkillArtifactsAsSkills(
+      fs,
+      { join: (...parts: string[]) => parts.join('/') },
+      '/workspace/demo/.codex/skills',
+    );
+
+    expect(skills).toEqual([
+      expect.objectContaining({
+        name: 'openspec-apply-change',
+        description: 'Implement tasks from an OpenSpec change.',
+        content: 'Use OpenSpec apply instructions.',
+        source: 'project',
+        enabled: true,
+        entryPointKind: 'skill',
       }),
     ]);
   });

@@ -67,6 +67,33 @@ function getPostedTimelineToolResult(
     .at(-1)?.payload.toolCall.result;
 }
 
+function waitForMicrotasks(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+async function waitForCondition(
+  predicate: () => boolean,
+  message = 'Timed out waiting for test condition',
+): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return;
+    await waitForMicrotasks();
+  }
+  throw new Error(message);
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((outerResolve, outerReject) => {
+    resolve = outerResolve;
+    reject = outerReject;
+  });
+  return { promise, resolve, reject };
+}
+
 /**
  * Helper to create an async iterable from an array of events
  */
@@ -1306,25 +1333,23 @@ describe('AgentStreamProcessor', () => {
     it('should send full background task views for task progress updates', async () => {
       let progressCallback: ((task: any) => Promise<void>) | undefined;
       const unsubscribe = vi.fn();
+      const waitForTask = createDeferred<any>();
       const platform = {
         media: {
           onProgress: vi.fn((_taskId: string, callback: (task: any) => Promise<void>) => {
             progressCallback = callback;
             return unsubscribe;
           }),
+          waitForTask: vi.fn(() => waitForTask.promise),
           saveOutputs: vi.fn(),
         },
       };
       processor = new AgentStreamProcessor({ platform: platform as any });
 
-      await processor.processStream(
+      const processing = processor.processStream(
         webview as any,
         'conv-1',
         toAsyncIterable([
-          {
-            type: 'tool_call',
-            toolCall: { id: 'tc-media', name: 'GenerateVideo', arguments: {} },
-          },
           {
             type: 'tool_result',
             toolResult: {
@@ -1342,6 +1367,7 @@ describe('AgentStreamProcessor', () => {
         ]),
         callbacks,
       );
+      await waitForCondition(() => progressCallback !== undefined);
 
       await progressCallback?.({
         id: 'task-media',
@@ -1354,6 +1380,19 @@ describe('AgentStreamProcessor', () => {
         updatedAt: new Date('2026-01-01T00:00:01.000Z'),
         request: { prompt: 'Generate a city flythrough', metadata: { conversationId: 'conv-1' } },
       });
+      waitForTask.resolve({
+        id: 'task-media',
+        type: 'text-to-video',
+        status: 'completed',
+        progress: 100,
+        providerId: 'runway',
+        modelId: 'gen-3',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:02.000Z'),
+        outputs: [{ type: 'video', url: 'https://example.com/video.mp4', mimeType: 'video/mp4' }],
+        request: { prompt: 'Generate a city flythrough', metadata: { conversationId: 'conv-1' } },
+      });
+      await processing;
 
       expect(getPostedTimelineMessages(webview).flatMap((message) => message.events)).toEqual(
         expect.arrayContaining([
@@ -1379,12 +1418,14 @@ describe('AgentStreamProcessor', () => {
       let progressCallback: ((task: any) => Promise<void>) | undefined;
       const backfillSink = { applyBackfill: vi.fn().mockResolvedValue(undefined) };
       const perceptionPipeline = { perceive: vi.fn().mockResolvedValue({ card: {} }) };
+      const waitForTask = createDeferred<any>();
       const platform = {
         media: {
           onProgress: vi.fn((_taskId: string, callback: (task: any) => Promise<void>) => {
             progressCallback = callback;
             return vi.fn();
           }),
+          waitForTask: vi.fn(() => waitForTask.promise),
         },
       };
       const mediaDeliveryHost = {
@@ -1432,7 +1473,7 @@ describe('AgentStreamProcessor', () => {
         },
       });
 
-      await processor.processStream(
+      const processing = processor.processStream(
         webview as any,
         'conv-1',
         toAsyncIterable([
@@ -1453,8 +1494,9 @@ describe('AgentStreamProcessor', () => {
         ]),
         callbacks,
       );
+      await waitForCondition(() => progressCallback !== undefined);
 
-      await progressCallback?.({
+      const completedTask = {
         id: 'task-media',
         type: 'text-to-image',
         status: 'completed',
@@ -1465,7 +1507,10 @@ describe('AgentStreamProcessor', () => {
         updatedAt: new Date('2026-01-01T00:00:01.000Z'),
         outputs: [{ type: 'image', url: 'https://example.com/image.png', mimeType: 'image/png' }],
         request: { prompt: 'Generate a cat', metadata: { conversationId: 'conv-1' } },
-      });
+      };
+      waitForTask.resolve(completedTask);
+      await progressCallback?.(completedTask);
+      await processing;
 
       expect(backfillSink.applyBackfill).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1505,12 +1550,14 @@ describe('AgentStreamProcessor', () => {
       let progressCallback: ((task: any) => Promise<void>) | undefined;
       const backfillSink = { applyBackfill: vi.fn().mockResolvedValue(undefined) };
       const perceptionPipeline = { perceive: vi.fn().mockResolvedValue({ card: {} }) };
+      const waitForTask = createDeferred<any>();
       const platform = {
         media: {
           onProgress: vi.fn((_taskId: string, callback: (task: any) => Promise<void>) => {
             progressCallback = callback;
             return vi.fn();
           }),
+          waitForTask: vi.fn(() => waitForTask.promise),
         },
       };
       const mediaDeliveryHost = {
@@ -1553,7 +1600,7 @@ describe('AgentStreamProcessor', () => {
         },
       });
 
-      await processor.processStream(
+      const processing = processor.processStream(
         webview as any,
         'conv-1',
         toAsyncIterable([
@@ -1574,8 +1621,9 @@ describe('AgentStreamProcessor', () => {
         ]),
         callbacks,
       );
+      await waitForCondition(() => progressCallback !== undefined);
 
-      await progressCallback?.({
+      const completedTask = {
         id: 'task-media',
         type: 'text-to-image',
         status: 'completed',
@@ -1586,7 +1634,10 @@ describe('AgentStreamProcessor', () => {
         updatedAt: new Date('2026-01-01T00:00:01.000Z'),
         outputs: [{ type: 'image', url: 'https://example.com/image.png', mimeType: 'image/png' }],
         request: { prompt: 'Generate a cat', metadata: { conversationId: 'conv-1' } },
-      });
+      };
+      waitForTask.resolve(completedTask);
+      await progressCallback?.(completedTask);
+      await processing;
 
       expect(backfillSink.applyBackfill).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1602,18 +1653,20 @@ describe('AgentStreamProcessor', () => {
     it('should ignore background task progress from another conversation', async () => {
       let progressCallback: ((task: any) => Promise<void>) | undefined;
       const unsubscribe = vi.fn();
+      const waitForTask = createDeferred<any>();
       const platform = {
         media: {
           onProgress: vi.fn((_taskId: string, callback: (task: any) => Promise<void>) => {
             progressCallback = callback;
             return unsubscribe;
           }),
+          waitForTask: vi.fn(() => waitForTask.promise),
           saveOutputs: vi.fn(),
         },
       };
       processor = new AgentStreamProcessor({ platform: platform as any });
 
-      await processor.processStream(
+      const processing = processor.processStream(
         webview as any,
         'conv-1',
         toAsyncIterable([
@@ -1634,6 +1687,7 @@ describe('AgentStreamProcessor', () => {
         ]),
         callbacks,
       );
+      await waitForCondition(() => progressCallback !== undefined);
 
       await progressCallback?.({
         id: 'task-media',
@@ -1646,6 +1700,7 @@ describe('AgentStreamProcessor', () => {
         updatedAt: new Date('2026-01-01T00:00:01.000Z'),
         request: { prompt: 'Generate a cat', metadata: { conversationId: 'conv-other' } },
       });
+      await processing;
 
       expect(webview.postMessage).not.toHaveBeenCalledWith(
         expect.objectContaining({ type: 'taskUpdated' }),
@@ -1655,17 +1710,19 @@ describe('AgentStreamProcessor', () => {
 
     it('should dispose background task progress subscriptions', async () => {
       const unsubscribe = vi.fn();
+      const waitForTask = createDeferred<any>();
       const platform = {
         media: {
           onProgress: vi.fn((_taskId: string, _callback: (task: any) => Promise<void>) => {
             return unsubscribe;
           }),
+          waitForTask: vi.fn(() => waitForTask.promise),
           saveOutputs: vi.fn(),
         },
       };
       processor = new AgentStreamProcessor({ platform: platform as any });
 
-      await processor.processStream(
+      const processing = processor.processStream(
         webview as any,
         'conv-1',
         toAsyncIterable([
@@ -1686,8 +1743,10 @@ describe('AgentStreamProcessor', () => {
         ]),
         callbacks,
       );
+      await waitForCondition(() => platform.media.onProgress.mock.calls.length === 1);
 
       processor.dispose();
+      await processing;
 
       expect(unsubscribe).toHaveBeenCalledTimes(1);
     });
@@ -1695,6 +1754,8 @@ describe('AgentStreamProcessor', () => {
     it('should clear background task progress subscriptions by conversation', async () => {
       const unsubscribeA = vi.fn();
       const unsubscribeB = vi.fn();
+      const waitForTaskA = createDeferred<any>();
+      const waitForTaskB = createDeferred<any>();
       const platform = {
         media: {
           onProgress: vi
@@ -1705,6 +1766,10 @@ describe('AgentStreamProcessor', () => {
             .mockImplementationOnce(
               (_taskId: string, _callback: (task: any) => Promise<void>) => unsubscribeB,
             ),
+          waitForTask: vi
+            .fn()
+            .mockImplementationOnce(() => waitForTaskA.promise)
+            .mockImplementationOnce(() => waitForTaskB.promise),
           saveOutputs: vi.fn(),
         },
       };
@@ -1728,10 +1793,25 @@ describe('AgentStreamProcessor', () => {
           },
         ]);
 
-      await processor.processStream(webview as any, 'conv-a', events('task-a'), callbacks);
-      await processor.processStream(webview as any, 'conv-b', events('task-b'), callbacks);
+      const first = processor.processStream(webview as any, 'conv-a', events('task-a'), callbacks);
+      await waitForCondition(() => platform.media.onProgress.mock.calls.length === 1);
+      const second = processor.processStream(webview as any, 'conv-b', events('task-b'), callbacks);
+      await waitForCondition(() => platform.media.onProgress.mock.calls.length === 2);
 
       processor.clearConversation('conv-a');
+      waitForTaskB.resolve({
+        id: 'task-b',
+        type: 'text-to-image',
+        status: 'completed',
+        progress: 100,
+        providerId: 'openai',
+        modelId: 'gpt-image-1',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:01.000Z'),
+        outputs: [{ type: 'image', url: 'https://example.com/image.png', mimeType: 'image/png' }],
+        request: { prompt: 'Generate a cat', metadata: { conversationId: 'conv-b' } },
+      });
+      await Promise.all([first, second]);
 
       expect(unsubscribeA).toHaveBeenCalledTimes(1);
       expect(unsubscribeB).not.toHaveBeenCalled();

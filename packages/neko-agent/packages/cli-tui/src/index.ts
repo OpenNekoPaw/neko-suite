@@ -42,9 +42,17 @@ export {
 export {
   runAgent,
   runAgentWithContext,
+  runInteractive,
   type AgentRunnerOptions,
   type AgentRunnerWithContextOptions,
 } from './core/runner';
+
+export {
+  createTuiCapabilityLoader,
+  type TuiCapabilityLoader,
+  type TuiCapabilityLoaderOptions,
+  type TuiCapabilityLoaderResult,
+} from './core/tui-capability-loader';
 
 // Slash Commands
 export {

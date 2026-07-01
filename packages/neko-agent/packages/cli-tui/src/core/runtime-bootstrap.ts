@@ -7,13 +7,16 @@ import {
   type SkillService,
 } from '@neko/agent';
 import { createNodeArtifactStore, type AgentRuntimeConfig } from '@neko/agent/runtime';
-import type { IProjectMemoryManager } from '@neko/shared';
+import type { IProjectMemoryManager, IProviderCardRegistry, PromptFragment } from '@neko/shared';
 
 export interface CliAgentRuntimeConfig {
   readonly workspaceRoot: string;
   readonly taskManager: IRuntimeTaskManager;
   readonly skillService?: SkillService;
   readonly skillLifecycleRuntime?: SkillLifecycleRuntime;
+  readonly toolGroupRegistry?: ToolGroupRegistry;
+  readonly providerCardRegistry?: IProviderCardRegistry;
+  readonly promptFragments?: readonly PromptFragment[];
   readonly projectMemoryManager?: IProjectMemoryManager;
 }
 
@@ -24,7 +27,7 @@ export function createCliToolGroupRegistry(): ToolGroupRegistry {
 }
 
 export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRuntimeConfig {
-  const toolGroupRegistry = createCliToolGroupRegistry();
+  const toolGroupRegistry = config.toolGroupRegistry ?? createCliToolGroupRegistry();
   const skillService = config.skillService;
   const skillLifecycleRuntime = config.skillLifecycleRuntime;
 
@@ -49,6 +52,8 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
         : {}),
       ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
       toolGroupRegistry,
+      ...(config.providerCardRegistry ? { providerCardRegistry: config.providerCardRegistry } : {}),
+      ...(config.promptFragments !== undefined ? { promptFragments: config.promptFragments } : {}),
     },
     artifactStore: createNodeArtifactStore({ workspaceRoot: config.workspaceRoot }),
     ...(config.projectMemoryManager

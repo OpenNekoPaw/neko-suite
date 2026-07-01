@@ -6,6 +6,49 @@
  */
 
 import type { AgentResult } from '@neko/agent';
+import type { AgentMessageQueueSnapshot } from '@neko-agent/types';
+
+export type TerminalTimelineRowKind =
+  'assistant_text' | 'thinking' | 'tool' | 'task' | 'media' | 'error' | 'diagnostic';
+
+export type TerminalTimelineRowStatus =
+  | 'streaming'
+  | 'pending'
+  | 'running'
+  | 'waiting'
+  | 'success'
+  | 'error'
+  | 'complete'
+  | 'queued'
+  | 'processing'
+  | 'cancelled';
+
+export interface TerminalTimelineParentAnchor {
+  readonly kind: 'turn' | 'tool' | 'item';
+  readonly id?: string;
+}
+
+export interface TerminalTimelineRow {
+  readonly id: string;
+  readonly sequence: number;
+  readonly kind: TerminalTimelineRowKind;
+  readonly status: TerminalTimelineRowStatus;
+  readonly parent?: TerminalTimelineParentAnchor;
+  readonly content?: string;
+  readonly toolCallId?: string;
+  readonly toolName?: string;
+  readonly argsSummary?: string;
+  readonly resultSummary?: string;
+  readonly backfillSummary?: string;
+  readonly confirmationSummary?: string;
+  readonly taskId?: string;
+  readonly taskTitle?: string;
+  readonly taskKind?: string;
+  readonly progress?: number;
+  readonly details?: string;
+  readonly diagnosticCode?: string;
+  readonly timestamp: number;
+}
 
 /**
  * Message in conversation history
@@ -17,6 +60,7 @@ export interface Message {
   thinking?: string;
   toolCalls: ToolCallState[];
   todos: TodoItem[];
+  timelineRows?: TerminalTimelineRow[];
   readonly timestamp: number;
   /** True for error messages, false for informational system messages */
   readonly isError?: boolean;
@@ -53,6 +97,11 @@ export type AgentStatus = 'idle' | 'running' | 'waiting_confirmation' | 'error';
 export type ExecutionMode = 'plan' | 'ask' | 'auto';
 
 /**
+ * Session mode (aligned with @neko-agent/types SessionMode)
+ */
+export type SessionMode = 'agent' | 'image' | 'video' | 'audio';
+
+/**
  * Token usage stats
  */
 export interface TokenUsage {
@@ -67,6 +116,11 @@ export interface TokenUsage {
 export interface IterationProgress {
   readonly current: number;
   readonly max: number;
+}
+
+export interface MessageQueueState {
+  readonly snapshot: AgentMessageQueueSnapshot | null;
+  readonly diagnostic: string | null;
 }
 
 /**

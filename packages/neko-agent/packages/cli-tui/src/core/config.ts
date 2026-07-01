@@ -16,6 +16,7 @@ import path from 'path';
 import { ConfigManager, FileUserConfigManager, type ConfigManagerOptions } from '@neko/platform';
 import type { CLIConfig } from './types';
 import { DEFAULT_CLI_CONFIG } from './types';
+import type { ChatModelOption } from '@neko/shared';
 // Config path utilities (Node.js only - re-exported for backward compat)
 import {
   getUserConfigDir,
@@ -180,13 +181,13 @@ export function loadConfig(
       })
       .map((m) => m.id);
 
-    // Default media models by type. The TOML source is [default_models.<type>]
-    // with explicit provider/model identity; CLI session state still stores the
-    // selected model id string used by slash commands.
+    // Default media models by type. Platform normalizes these to ChatModelOption
+    // ids (`provider:model`) when possible so CLI/TUI commands keep explicit
+    // provider/model identity instead of ambiguous model labels.
     const defaultMediaModels = {
-      image: rawWorkspace.defaultModels?.image?.modelId ?? rawUser.defaultModels?.image?.modelId,
-      video: rawWorkspace.defaultModels?.video?.modelId ?? rawUser.defaultModels?.video?.modelId,
-      audio: rawWorkspace.defaultModels?.audio?.modelId ?? rawUser.defaultModels?.audio?.modelId,
+      image: modelRefToOptionId(rawWorkspace.defaultModels?.image ?? rawUser.defaultModels?.image),
+      video: modelRefToOptionId(rawWorkspace.defaultModels?.video ?? rawUser.defaultModels?.video),
+      audio: modelRefToOptionId(rawWorkspace.defaultModels?.audio ?? rawUser.defaultModels?.audio),
     };
 
     // Workspace overrides user for scalars
@@ -213,6 +214,10 @@ export function loadConfig(
       providerType,
       providerRequiresApiKey,
       model,
+      chatModel: {
+        providerId,
+        modelId: model,
+      },
       mediaModels,
       defaultMediaModels,
       apiKey,
@@ -241,6 +246,12 @@ function findDefaultModel(cm: ConfigManager, providerId: string): string | undef
   const models = cm.getModelsByProvider(providerId);
   const enabled = models.find((m) => m.enabled !== false);
   return enabled?.name ?? enabled?.id ?? models[0]?.name ?? models[0]?.id;
+}
+
+function modelRefToOptionId(
+  ref: { providerId: string; modelId: string } | undefined,
+): string | undefined {
+  return ref ? `${ref.providerId}:${ref.modelId}` : undefined;
 }
 
 // =============================================================================
@@ -292,6 +303,15 @@ export function getProviderModels(providerId: string, workDir?: string): string[
   const cm = createConfigManager(workDir);
   try {
     return cm.getModelsByProvider(providerId).map((m) => m.name ?? m.id);
+  } finally {
+    cm.dispose();
+  }
+}
+
+export function listChatModelOptions(workDir?: string): ChatModelOption[] {
+  const cm = createConfigManager(workDir);
+  try {
+    return cm.getChatModelOptions();
   } finally {
     cm.dispose();
   }

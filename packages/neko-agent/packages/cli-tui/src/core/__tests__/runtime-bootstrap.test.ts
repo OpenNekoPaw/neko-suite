@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createNodeArtifactStore = vi.fn((config: unknown) => ({ kind: 'artifact-store', config }));
 const createTaskManagerIdcTaskProjection = vi.fn((config: unknown) => ({
@@ -20,6 +20,10 @@ vi.mock('@neko/agent/runtime', () => ({
 }));
 
 describe('createCliAgentRuntime', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('builds the shared CLI runtime planes from host-owned services', async () => {
     const { createCliAgentRuntime } = await import('../runtime-bootstrap');
     const taskManager = { id: 'task-manager' };
@@ -71,5 +75,25 @@ describe('createCliAgentRuntime', () => {
     expect(runtime.capabilityRuntime?.skillRegistry).toBeUndefined();
     expect(runtime.capabilityRuntime?.toolGroupRegistry).toBeDefined();
     expect(runtime.feedbackLoop).toBeUndefined();
+  });
+
+  it('uses injected capability registries and prompt fragments', async () => {
+    const { createCliAgentRuntime } = await import('../runtime-bootstrap');
+    const toolGroupRegistry = { id: 'injected-tool-groups' };
+    const providerCardRegistry = { id: 'provider-cards' };
+    const promptFragments = [{ id: 'neko-assets:references', content: 'Use asset IDs.' }];
+
+    const runtime = createCliAgentRuntime({
+      workspaceRoot: '/workspace',
+      taskManager: { id: 'task-manager' } as never,
+      toolGroupRegistry: toolGroupRegistry as never,
+      providerCardRegistry: providerCardRegistry as never,
+      promptFragments,
+    });
+
+    expect(runtime.capabilityRuntime?.toolGroupRegistry).toBe(toolGroupRegistry);
+    expect(runtime.capabilityRuntime?.providerCardRegistry).toBe(providerCardRegistry);
+    expect(runtime.capabilityRuntime?.promptFragments).toBe(promptFragments);
+    expect(registerBuiltinToolGroups).not.toHaveBeenCalled();
   });
 });

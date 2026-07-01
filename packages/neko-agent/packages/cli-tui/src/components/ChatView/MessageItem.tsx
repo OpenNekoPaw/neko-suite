@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { Message } from '../../types/state';
+import type { Message, TerminalTimelineRow } from '../../types/state';
 import { INK_TOOL_ICONS, tokens } from '../../theme/tokens';
 import { StreamingText } from './StreamingText';
 import { ThinkingBlock } from './ThinkingBlock';
@@ -59,6 +59,18 @@ export function MessageItem({
   // Assistant message — full rendering pipeline
   const hasThinking = currentThinking || message.thinking;
   const thinkingContent = currentThinking || message.thinking || '';
+  const timelineRows = message.timelineRows ?? [];
+
+  if (timelineRows.length > 0) {
+    return (
+      <Box flexDirection="column" marginBottom={1}>
+        {timelineRows.map((row) => (
+          <TimelineRowLine key={row.id} row={row} />
+        ))}
+        {message.todos.length > 0 ? <TodoList todos={message.todos} /> : null}
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -86,6 +98,140 @@ export function MessageItem({
       {message.todos.length > 0 ? <TodoList todos={message.todos} /> : null}
     </Box>
   );
+}
+
+function TimelineRowLine({ row }: { readonly row: TerminalTimelineRow }): React.JSX.Element {
+  switch (row.kind) {
+    case 'assistant_text':
+      return row.status === 'streaming' ? (
+        <StreamingText content={row.content ?? ''} isStreaming={true} />
+      ) : row.content ? (
+        <MarkdownRenderer content={row.content} />
+      ) : (
+        <Box />
+      );
+    case 'thinking':
+      return (
+        <ThinkingBlock
+          content={row.content ?? ''}
+          isThinking={row.status === 'streaming'}
+          maxLines={3}
+        />
+      );
+    case 'tool':
+      return <TimelineProcessLine row={row} label={row.toolName ?? 'tool'} />;
+    case 'task':
+      return <TimelineProcessLine row={row} label={row.taskTitle ?? row.taskId ?? 'task'} />;
+    case 'media':
+      return <TimelineProcessLine row={row} label={row.taskTitle ?? row.taskId ?? 'media'} />;
+    case 'error':
+    case 'diagnostic':
+      return (
+        <Box>
+          <Text color={tokens.error}>✗</Text>
+          <Text color={tokens.error}> {row.content ?? row.details ?? 'Timeline error'}</Text>
+          <TimelineAnchor row={row} />
+        </Box>
+      );
+  }
+}
+
+function TimelineProcessLine({
+  row,
+  label,
+}: {
+  readonly row: TerminalTimelineRow;
+  readonly label: string;
+}): React.JSX.Element {
+  const icon = timelineStatusIcon(row);
+  const color = timelineStatusColor(row);
+  const detail = [
+    row.argsSummary,
+    row.confirmationSummary,
+    row.resultSummary && !row.resultSummary.includes('\n') ? row.resultSummary : undefined,
+    row.backfillSummary,
+    row.progress !== undefined ? `${row.progress}%` : undefined,
+    row.details,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const multilineResult = row.resultSummary?.includes('\n') ? row.resultSummary : undefined;
+
+  return (
+    <Box flexDirection="column">
+      <Box>
+        <Text color={color}>{icon}</Text>
+        <Text> </Text>
+        <Text bold>{label}</Text>
+        <TimelineIdentity row={row} />
+        {detail ? <Text dimColor> {truncate(detail, 96)}</Text> : null}
+        <TimelineAnchor row={row} />
+      </Box>
+      {multilineResult ? (
+        <Box flexDirection="column" marginLeft={2}>
+          {multilineResult.split('\n').map((line, index) => (
+            <Text key={`${row.id}-result-${index}`} dimColor={index > 0}>
+              {line}
+            </Text>
+          ))}
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
+function TimelineIdentity({
+  row,
+}: {
+  readonly row: TerminalTimelineRow;
+}): React.JSX.Element | null {
+  const id = row.toolCallId ?? row.taskId;
+  if (!id) return null;
+  return <Text dimColor> id={id}</Text>;
+}
+
+function TimelineAnchor({ row }: { readonly row: TerminalTimelineRow }): React.JSX.Element | null {
+  if (!row.parent) return null;
+  const suffix = row.parent.id ? `${row.parent.kind}:${row.parent.id}` : row.parent.kind;
+  return <Text dimColor> parent={suffix}</Text>;
+}
+
+function timelineStatusIcon(row: TerminalTimelineRow): string {
+  switch (row.status) {
+    case 'success':
+    case 'complete':
+      return INK_TOOL_ICONS.success;
+    case 'error':
+    case 'cancelled':
+      return INK_TOOL_ICONS.error;
+    case 'waiting':
+    case 'queued':
+    case 'processing':
+    case 'running':
+    case 'pending':
+    case 'streaming':
+      return INK_TOOL_ICONS.running;
+  }
+}
+
+function timelineStatusColor(row: TerminalTimelineRow): string {
+  switch (row.status) {
+    case 'success':
+    case 'complete':
+      return tokens.toolSuccess;
+    case 'error':
+    case 'cancelled':
+      return tokens.toolError;
+    case 'waiting':
+      return tokens.warning;
+    case 'queued':
+    case 'processing':
+    case 'running':
+    case 'pending':
+    case 'streaming':
+      return tokens.toolPending;
+  }
 }
 
 /** Compact tool call display line */

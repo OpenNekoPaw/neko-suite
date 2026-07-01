@@ -96,14 +96,13 @@ describe('1. Claude Code Visual Style', () => {
     console.log('[Style] StatusBar:\n', frame);
   });
 
-  it('input has bordered box with placeholder (Claude Code style)', () => {
+  it('input has bordered box with prompt cursor', () => {
     const { lastFrame } = render(<InputEditor onSubmit={() => {}} />);
     const frame = lastFrame()!;
     // Bordered round box
     expect(frame).toContain('╭');
     expect(frame).toContain('╰');
-    // Placeholder
-    expect(frame).toContain('Type a message or /help');
+    expect(frame).not.toContain('/ commands  $ Skills  @ refs');
     // Cursor
     expect(frame).toContain('▋');
     console.log('[Style] Input:\n', frame);

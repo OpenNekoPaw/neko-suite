@@ -145,8 +145,7 @@ export async function createAgentRuntimeSession(
     projectMemoryManager,
   );
 
-  const toolCategoryRegistry =
-    config.toolCategoryRegistry ?? config.capabilityRuntime?.toolCategoryRegistry;
+  const toolCategoryRegistry = resolveRuntimeToolCategoryRegistry(config);
   syncToolCategories(config, toolCategoryRegistry);
 
   const promptFragments = resolveAgentRuntimePromptFragments(config);
@@ -204,8 +203,7 @@ export function updateAgentRuntimeSession(
   handle: AgentRuntimeSessionHandle,
   config: AgentRuntimeSessionUpdateConfig,
 ): AgentRuntimeSessionUpdate {
-  const toolCategoryRegistry =
-    config.toolCategoryRegistry ?? config.capabilityRuntime?.toolCategoryRegistry;
+  const toolCategoryRegistry = resolveRuntimeToolCategoryRegistry(config);
   registerCoreRuntimeTools(
     config.toolRegistry,
     config.workspaceRoot,
@@ -309,6 +307,12 @@ function syncToolCategories(
   } catch (err) {
     config.logger?.warn('Failed to sync capability tool categories:', err);
   }
+}
+
+function resolveRuntimeToolCategoryRegistry(
+  config: Pick<AgentRuntimeSessionFactoryConfig, 'capabilityRuntime' | 'toolCategoryRegistry'>,
+): IToolCategoryRegistry | undefined {
+  return config.capabilityRuntime?.toolCategoryRegistry ?? config.toolCategoryRegistry;
 }
 
 export function resolveAgentRuntimePromptFragments(

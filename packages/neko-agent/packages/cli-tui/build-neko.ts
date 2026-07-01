@@ -11,6 +11,7 @@ import { isAbsolute, join, resolve } from 'path';
 
 const outdir = resolve(import.meta.dir, '../../');
 const stubPath = resolve(import.meta.dir, 'src/stubs/react-devtools-core.ts');
+const signalExitStubPath = resolve(import.meta.dir, 'src/stubs/signal-exit.ts');
 const repoRoot = resolve(import.meta.dir, '../../../..');
 
 const workspacePackages = new Map<string, string>([
@@ -38,6 +39,18 @@ const result = await Bun.build({
         // Stub ink's optional devtools integration (only used in React DevTools workflow)
         build.onResolve({ filter: /^react-devtools-core$/ }, () => ({
           path: stubPath,
+          namespace: 'file',
+        }));
+      },
+    },
+    {
+      name: 'stub-signal-exit',
+      setup(build) {
+        // Bun compile currently wraps signal-exit@3's CommonJS export as an object,
+        // while Ink imports it as a default callable. Keep this shim scoped to the
+        // standalone binary build so the normal Node package keeps the real module.
+        build.onResolve({ filter: /^signal-exit$/ }, () => ({
+          path: signalExitStubPath,
           namespace: 'file',
         }));
       },

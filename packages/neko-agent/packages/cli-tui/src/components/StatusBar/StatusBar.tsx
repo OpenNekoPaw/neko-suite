@@ -15,18 +15,24 @@ import { tokens } from '../../theme/tokens';
 import { TokenUsage } from './TokenUsage';
 
 export function StatusBar(): React.JSX.Element {
+  const sessionMode = useAgentStore((s) => s.sessionMode);
   const mode = useAgentStore((s) => s.executionMode);
   const activeSkill = useAgentStore((s) => s.activeSkill);
   const lifecycleRecords = useAgentStore((s) => s.activeSkillLifecycleRecords);
+  const queueSnapshot = useAgentStore((s) => s.messageQueue.snapshot);
   const usage = useAgentStore((s) => s.usage);
   const config = useConfigStore((s) => s.config);
 
-  const chatModel = truncateModel(config.model);
-  const mediaModels = config.mediaModels;
+  const chatModel = truncateModel(
+    `${config.chatModel?.providerId ?? config.provider}:${config.chatModel?.modelId ?? config.model}`,
+  );
+  const mediaModels = formatMediaModels(config.defaultMediaModels);
 
   return (
     <Box paddingLeft={1} paddingRight={1}>
       {/* Mode badge — leftmost */}
+      <Text color={sessionModeColor(sessionMode)}>{sessionMode}</Text>
+      <Text dimColor>:</Text>
       <Text color={modeColor(mode)}>{mode}</Text>
       <Text dimColor> | </Text>
 
@@ -52,11 +58,15 @@ export function StatusBar(): React.JSX.Element {
 
       {/* Media models */}
       <Text dimColor>media:</Text>
-      {mediaModels.length > 0 ? (
-        <Text>{mediaModels.map(truncateModel).join(',')}</Text>
-      ) : (
-        <Text color={tokens.muted}>none</Text>
-      )}
+      {mediaModels ? <Text>{mediaModels}</Text> : <Text color={tokens.muted}>none</Text>}
+
+      {queueSnapshot && queueSnapshot.pendingCount > 0 ? (
+        <>
+          <Text dimColor> | </Text>
+          <Text color={tokens.warning}>queue:</Text>
+          <Text color={tokens.warning}>{queueSnapshot.pendingCount}</Text>
+        </>
+      ) : null}
 
       {/* Spacer */}
       <Box flexGrow={1} />
@@ -65,6 +75,21 @@ export function StatusBar(): React.JSX.Element {
       {usage.total > 0 ? <TokenUsage usage={usage} /> : null}
     </Box>
   );
+}
+
+function sessionModeColor(mode: string): string {
+  switch (mode) {
+    case 'agent':
+      return tokens.info;
+    case 'image':
+      return tokens.success;
+    case 'video':
+      return tokens.warning;
+    case 'audio':
+      return tokens.code.keyword;
+    default:
+      return tokens.muted;
+  }
 }
 
 /** Get theme color for execution mode */
@@ -85,6 +110,18 @@ function modeColor(mode: string): string {
 function truncateModel(model: string): string {
   // Remove date suffix like -20250514
   return model.replace(/-\d{8}$/, '');
+}
+
+function formatMediaModels(
+  mediaModels: { image?: string; video?: string; audio?: string } | undefined,
+): string | null {
+  if (!mediaModels) return null;
+  const values = (['image', 'video', 'audio'] as const)
+    .map((category) =>
+      mediaModels[category] ? `${category}:${truncateModel(mediaModels[category])}` : undefined,
+    )
+    .filter((value): value is string => Boolean(value));
+  return values.length > 0 ? values.join(',') : null;
 }
 
 function formatLifecycleRecords(

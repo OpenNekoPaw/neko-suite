@@ -10,7 +10,9 @@ import type { MCPServerPreset } from '../types/config';
 import type { UnifiedConfig } from '@neko/shared';
 // Node.js config reader - direct import
 import {
+  readConfigFileResult,
   readUserConfigResult,
+  writeConfigFile,
   writeUserConfig as writeUserConfigFile,
   getUserConfigPath,
   type ConfigReadResult,
@@ -70,9 +72,9 @@ function unifiedToUserConfig(unified: UnifiedConfig | null): UserConfig {
  * Convert user config to unified config for saving.
  * Preserves scalar fields (defaultProvider, maxTokens, etc.) from the existing file.
  */
-function userToUnifiedConfig(user: UserConfig): UnifiedConfig {
+function userToUnifiedConfig(user: UserConfig, configPath?: string): UnifiedConfig {
   // Read existing file to preserve scalar fields not managed by UserConfig
-  const existingResult = readUserConfigResult();
+  const existingResult = configPath ? readConfigFileResult(configPath) : readUserConfigResult();
   const existing = existingResult.status === 'ok' ? existingResult.config : {};
   if (existingResult.status !== 'ok' && existingResult.status !== 'missing') {
     throw new Error(existingResult.diagnostic.message);
@@ -134,6 +136,15 @@ export type UserConfigReadResult =
 // File-based User Config Manager
 // =============================================================================
 
+export interface FileUserConfigManagerOptions {
+  /**
+   * Explicit config file path.
+   *
+   * Omit to use the canonical user config at ~/.neko/config.toml.
+   */
+  readonly filePath?: string;
+}
+
 /**
  * User config manager using file storage (~/.neko/config.toml)
  *
@@ -145,8 +156,11 @@ export type UserConfigReadResult =
 export class FileUserConfigManager implements IUserConfigManager {
   private cachedConfig: UserConfig | null = null;
   private cachedReadResult: ConfigReadResult | null = null;
+  private readonly filePath: string;
 
-  constructor() {}
+  constructor(options: FileUserConfigManagerOptions = {}) {
+    this.filePath = options.filePath ?? getUserConfigPath();
+  }
 
   /**
    * Load user configuration from file
@@ -173,12 +187,12 @@ export class FileUserConfigManager implements IUserConfigManager {
    * Save user configuration to file
    */
   async save(config: UserConfig): Promise<void> {
-    const unified = userToUnifiedConfig(config);
-    writeUserConfigFile(unified);
+    const unified = userToUnifiedConfig(config, this.filePath);
+    this.writeRawConfig(unified);
     this.cachedConfig = config;
     this.cachedReadResult = {
       status: 'ok',
-      filePath: getUserConfigPath(),
+      filePath: this.filePath,
       config: unified,
     };
   }
@@ -281,7 +295,10 @@ export class FileUserConfigManager implements IUserConfigManager {
 
   loadRawResult(): ConfigReadResult {
     if (!this.cachedReadResult) {
-      this.cachedReadResult = readUserConfigResult();
+      this.cachedReadResult =
+        this.filePath === getUserConfigPath()
+          ? readUserConfigResult()
+          : readConfigFileResult(this.filePath);
       if (this.cachedReadResult.status === 'ok') {
         this.cachedConfig = unifiedToUserConfig(this.cachedReadResult.config);
       } else {
@@ -297,14 +314,14 @@ export class FileUserConfigManager implements IUserConfigManager {
   ): Promise<void> {
     const raw = this.loadRawForWrite();
     (raw as Record<string, unknown>)[key] = value;
-    writeUserConfigFile(raw);
+    this.writeRawConfig(raw);
     this.reload();
   }
 
   async updateScalars(updates: Partial<UnifiedConfig>): Promise<void> {
     const raw = this.loadRawForWrite();
     Object.assign(raw, updates);
-    writeUserConfigFile(raw);
+    this.writeRawConfig(raw);
     this.reload();
   }
 
@@ -335,6 +352,14 @@ export class FileUserConfigManager implements IUserConfigManager {
       return {};
     }
     throw new Error(result.diagnostic.message);
+  }
+
+  private writeRawConfig(config: UnifiedConfig): void {
+    if (this.filePath === getUserConfigPath()) {
+      writeUserConfigFile(config);
+      return;
+    }
+    writeConfigFile(this.filePath, config);
   }
 }
 

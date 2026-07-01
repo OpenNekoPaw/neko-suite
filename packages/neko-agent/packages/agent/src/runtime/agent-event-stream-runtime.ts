@@ -25,6 +25,7 @@ import {
   type AgentStreamBackgroundTaskObservedProgress,
   type AgentStreamBackgroundTaskCompletion,
   type AgentStreamBackgroundTaskProgressErrorEvent,
+  type AgentStreamBackgroundTaskWaitInput,
   type ObserveAgentStreamBackgroundTaskProgressInput,
   type StartAgentStreamBackgroundTaskObserverInput,
 } from './agent-stream-task-observer';
@@ -43,6 +44,7 @@ export interface AgentEventStreamRuntimeBackgroundTasks<
   readonly observeProgress?: (
     input: ObserveAgentStreamBackgroundTaskProgressInput<TSourceTask, TDeliveryPlan>,
   ) => void | (() => void);
+  readonly waitForCompletion?: (input: AgentStreamBackgroundTaskWaitInput) => Promise<TSourceTask>;
   readonly createRecoveryProgress: StartAgentStreamBackgroundTaskObserverInput<
     TSourceTask,
     TDeliveryPlan
@@ -255,6 +257,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
         }
       },
       observeProgress: backgroundTasks.observeProgress,
+      waitForCompletion: backgroundTasks.waitForCompletion,
       createRecoveryProgress: backgroundTasks.createRecoveryProgress,
       createProgressDelivery: async (task, context) => {
         const progress = await backgroundTasks.createProgressDelivery(task, context);
@@ -327,6 +330,7 @@ function shouldPostProjectionMessageToWebview(message: AgentStreamProjectionMess
     case 'error':
       return false;
   }
+  return false;
 }
 
 function createAgentTurnTimelineProjection(input: {

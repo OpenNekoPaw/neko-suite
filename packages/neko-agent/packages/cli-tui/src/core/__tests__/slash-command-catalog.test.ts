@@ -11,6 +11,19 @@ describe('createTuiSlashCommandCatalog', () => {
 
     expect(names).toContain('help');
     expect(names).toContain('plan');
+    expect(names).toContain('compact');
+    expect(names).toContain('mode');
+    expect(names).toContain('model');
+    expect(names).toContain('media');
+    expect(names).toContain('param');
+    expect(names).toContain('queue');
+    expect(names).toContain('mcp');
+    expect(names).toContain('capability');
+    expect(names).toContain('artifact');
+    expect(names).toContain('auto');
+    expect(names).toContain('ask');
+    expect(names).toContain('skill');
+    expect(names).toContain('idc');
   });
 
   it('adds enabled command artifacts and deduplicates builtin names', () => {
@@ -44,14 +57,7 @@ describe('createTuiSlashCommandCatalog', () => {
   });
 
   it('projects ordinary skills and legacy aliases into the dollar catalog without slash entries', () => {
-    const slashCommands = createTuiSlashCommandCatalog([
-      {
-        name: 'quality-review',
-        command: 'quality-review',
-        description: 'Ordinary skill with legacy slash alias',
-        enabled: true,
-      },
-    ]);
+    const slashCommands = createTuiSlashCommandCatalog([]);
     const skillCommands = createTuiSkillInvocationCatalog([
       {
         name: 'quality-review',

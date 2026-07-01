@@ -37,6 +37,10 @@ const translations: Record<string, string> = {
   'chat.input.queueAwaitingSnapshot': '正在同步队列...',
   'chat.input.cancel': '取消 (Esc)',
   'chat.input.commands': '命令',
+  'chat.idc.controls': 'IDC 工作流控制',
+  'chat.idc.start': '启动 IDC 工作流',
+  'chat.idc.resume': '继续 IDC 工作流',
+  'chat.idc.stop': '停止 IDC 工作流',
   'chat.input.canvasContext.kicker': '画布选中上下文',
   'chat.input.canvasContext.multiTitle': '已选 {count} 个画布节点',
   'chat.input.canvasContext.counts': '画布选中统计',
@@ -264,6 +268,47 @@ vi.mock('@/i18n/I18nContext', () => ({
 describe('InputArea composer controls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('does not show IDC workflow controls just because the control callback exists', () => {
+    render(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={false}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+          onControlIdcWorkflow={vi.fn()}
+        />
+      </Harness>,
+    );
+
+    expect(screen.queryByLabelText('IDC 工作流控制')).toBeNull();
+  });
+
+  it('shows IDC workflow controls only when explicitly enabled', () => {
+    const onControlIdcWorkflow = vi.fn();
+
+    render(
+      <Harness>
+        <InputArea
+          inputValue=""
+          isThinking={false}
+          onInputChange={vi.fn()}
+          onSend={vi.fn()}
+          onControlIdcWorkflow={onControlIdcWorkflow}
+          showIdcWorkflowControls
+        />
+      </Harness>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '启动 IDC 工作流' }));
+    fireEvent.click(screen.getByRole('button', { name: '继续 IDC 工作流' }));
+    fireEvent.click(screen.getByRole('button', { name: '停止 IDC 工作流' }));
+
+    expect(onControlIdcWorkflow).toHaveBeenNthCalledWith(1, 'start');
+    expect(onControlIdcWorkflow).toHaveBeenNthCalledWith(2, 'resume');
+    expect(onControlIdcWorkflow).toHaveBeenNthCalledWith(3, 'stop');
   });
 
   it('keeps unconfigured conversations on Agent with an empty LLM selector only', () => {

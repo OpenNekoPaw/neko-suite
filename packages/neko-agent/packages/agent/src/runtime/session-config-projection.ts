@@ -36,7 +36,7 @@ export function buildAgentSessionConfigWithRuntime(
   const artifactWatcherFactory = base.artifactWatcherFactory ?? artifacts?.createArtifactWatcher;
   const promptFragments = base.promptFragments ?? capability?.promptFragments;
   const toolGroupRegistry = base.toolGroupRegistry ?? capability?.toolGroupRegistry;
-  const toolCategoryRegistry = base.toolCategoryRegistry ?? capability?.toolCategoryRegistry;
+  const toolCategoryRegistry = capability?.toolCategoryRegistry ?? base.toolCategoryRegistry;
   const skillService = base.skillService ?? capability?.skillService;
   const providerCardRegistry = base.providerCardRegistry ?? capability?.providerCardRegistry;
   const projectMemoryManager = base.projectMemoryManager ?? feedback?.projectMemoryManager;

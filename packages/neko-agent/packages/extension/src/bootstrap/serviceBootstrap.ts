@@ -26,6 +26,7 @@ const logger = getLogger('ServiceBootstrap');
 import { IEditorRegistry, EditorRegistry } from '../editor/common/editorRegistry';
 import { AgentManager, IAgentManager as IAgentManagerInterface } from '../ai/agentManager';
 import { TaskLifecycleCoordinator } from '../services/taskLifecycleCoordinator';
+import { resolveAgentRealApiUserConfigManagerOptions } from './realApiConfigInjection';
 
 // =============================================================================
 // Service Identifiers
@@ -104,7 +105,13 @@ export async function bootstrapCoreServices(
   // ==========================================================================
   // 3. Create Platform (with injected toolRegistry and file-based user config)
   // ==========================================================================
-  const userConfigManager = new FileUserConfigManager();
+  const userConfigManager = new FileUserConfigManager(
+    resolveAgentRealApiUserConfigManagerOptions({
+      extensionMode: context.extensionMode,
+      productionExtensionMode: vscode.ExtensionMode.Production,
+      env: process.env,
+    }),
+  );
   context.subscriptions.push({ dispose: () => userConfigManager.dispose() });
 
   const platform = createPlatform({

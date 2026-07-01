@@ -1,0 +1,168 @@
+import { describe, expect, it } from 'vitest';
+import { createEventAdapter } from './event-adapter';
+import { useAgentStore } from '../stores/agent-store';
+import { useConversationStore } from '../stores/conversation-store';
+import { useUIStore } from '../stores/ui-store';
+
+describe('createEventAdapter queue projection', () => {
+  it('projects queue snapshots without duplicating released user messages', () => {
+    resetStores();
+    const adapter = createEventAdapter({
+      agentStore: useAgentStore.getState,
+      conversationStore: useConversationStore.getState,
+      uiStore: useUIStore.getState,
+    });
+
+    adapter.handleEvent({
+      type: 'messageQueued',
+      pendingCount: 1,
+      queuedMessageItem: {
+        id: 'queue-1',
+        conversationId: 'conv-1',
+        content: 'next prompt',
+        createdAt: 1000,
+        source: 'composer',
+      },
+      messageQueueSnapshot: {
+        conversationId: 'conv-1',
+        items: [
+          {
+            id: 'queue-1',
+            conversationId: 'conv-1',
+            content: 'next prompt',
+            createdAt: 1000,
+            source: 'composer',
+          },
+        ],
+        pendingCount: 1,
+        version: 1,
+      },
+    });
+    adapter.handleEvent({
+      type: 'messageQueued',
+      pendingCount: 0,
+      releasedQueuedMessageItem: {
+        id: 'queue-1',
+        conversationId: 'conv-1',
+        content: 'next prompt',
+        createdAt: 1000,
+        source: 'composer',
+      },
+      messageQueueSnapshot: {
+        conversationId: 'conv-1',
+        items: [],
+        pendingCount: 0,
+        version: 2,
+      },
+    });
+
+    expect(useAgentStore.getState().messageQueue.snapshot).toMatchObject({
+      pendingCount: 0,
+      version: 2,
+    });
+    expect(
+      useConversationStore.getState().messages.filter((message) => message.role === 'user'),
+    ).toHaveLength(0);
+    expect(
+      useConversationStore
+        .getState()
+        .messages.some((message) => message.content.includes('Queued message: queue-1')),
+    ).toBe(true);
+  });
+});
+
+describe('createEventAdapter timeline projection', () => {
+  it('projects text, tools, failures, and later text as ordered timeline rows', () => {
+    resetStores();
+    const adapter = createEventAdapter({
+      agentStore: useAgentStore.getState,
+      conversationStore: useConversationStore.getState,
+      uiStore: useUIStore.getState,
+    });
+
+    adapter.handleEvent({ type: 'text_delta', content: 'Before tool. ' });
+    adapter.handleEvent({
+      type: 'tool_call',
+      toolCall: { id: 'call-1', name: 'ReadFile', arguments: { path: 'brief.md' } },
+    });
+    adapter.handleEvent({
+      type: 'tool_result',
+      toolResult: {
+        toolCallId: 'call-1',
+        success: false,
+        data: null,
+        error: 'File missing',
+      },
+    });
+    adapter.handleEvent({ type: 'text_delta', content: 'After tool.' });
+    adapter.handleEvent({ type: 'done' });
+
+    const assistant = useConversationStore
+      .getState()
+      .messages.find((message) => message.role === 'assistant');
+    expect(assistant?.toolCalls).toEqual([]);
+    expect(
+      assistant?.timelineRows?.map((row) => [row.kind, row.status, row.content ?? row.toolCallId]),
+    ).toEqual([
+      ['assistant_text', 'complete', 'Before tool. '],
+      ['tool', 'error', 'call-1'],
+      ['assistant_text', 'complete', 'After tool.'],
+    ]);
+  });
+
+  it('keeps tool confirmation anchored while still showing approval UI', () => {
+    resetStores();
+    const adapter = createEventAdapter({
+      agentStore: useAgentStore.getState,
+      conversationStore: useConversationStore.getState,
+      uiStore: useUIStore.getState,
+    });
+
+    adapter.handleEvent({
+      type: 'tool_call',
+      toolCall: { id: 'call-2', name: 'WriteFile', arguments: { path: 'out.txt' } },
+    });
+    adapter.handleEvent({
+      type: 'tool_confirmation',
+      toolConfirmation: {
+        toolCall: {
+          id: 'call-2',
+          index: 0,
+          name: 'WriteFile',
+          arguments: { path: 'out.txt' },
+        },
+        action: 'write file',
+        description: 'Write out.txt',
+        details: {},
+        confirmationToken: 'confirm-2',
+      },
+    });
+
+    const assistant = useConversationStore
+      .getState()
+      .messages.find((message) => message.role === 'assistant');
+    expect(assistant?.timelineRows?.find((row) => row.toolCallId === 'call-2')).toMatchObject({
+      kind: 'tool',
+      status: 'waiting',
+      confirmationSummary: 'write file - Write out.txt',
+      parent: { kind: 'tool', id: 'call-2' },
+    });
+    expect(useUIStore.getState().pendingApproval).toMatchObject({
+      toolCallId: 'call-2',
+      toolName: 'WriteFile',
+    });
+  });
+});
+
+function resetStores(): void {
+  useAgentStore.getState().reset();
+  useConversationStore.getState().clearMessages();
+  useUIStore.setState({
+    pendingApproval: null,
+    pendingSelection: null,
+    pendingPlanReview: false,
+    scrollOffset: 0,
+    inputFocused: true,
+    slashMenuOpen: false,
+  });
+}

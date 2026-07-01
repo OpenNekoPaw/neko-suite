@@ -6,7 +6,7 @@
  */
 
 import { create } from 'zustand';
-import type { Message, ToolCallState, TodoItem } from '../types/state';
+import type { Message, TerminalTimelineRow, ToolCallState, TodoItem } from '../types/state';
 
 let messageCounter = 0;
 function nextId(): string {
@@ -33,6 +33,7 @@ export interface ConversationSlice {
     data: unknown;
     error?: string;
   }) => void;
+  applyTimelineRows: (rows: readonly TerminalTimelineRow[]) => void;
   updateTodos: (todos: TodoItem[]) => void;
   addError: (error: Error) => void;
   addSystemMessage: (content: string) => void;
@@ -144,6 +145,33 @@ export const useConversationStore = create<ConversationSlice>((set) => ({
     });
   },
 
+  applyTimelineRows: (rows) => {
+    if (rows.length === 0) return;
+    set((state) => {
+      const messages = [...state.messages];
+      const last = messages[messages.length - 1];
+      if (last?.role !== 'assistant') {
+        messages.push({
+          id: nextId(),
+          role: 'assistant' as const,
+          content: '',
+          toolCalls: [],
+          todos: [],
+          timelineRows: normalizeTimelineRows(rows),
+          timestamp: Date.now(),
+        });
+        return { messages, isStreaming: rows.some((row) => row.status === 'streaming') };
+      }
+
+      const timelineRows = mergeTimelineRows(last.timelineRows ?? [], rows);
+      messages[messages.length - 1] = {
+        ...last,
+        timelineRows,
+      };
+      return { messages, isStreaming: timelineRows.some((row) => row.status === 'streaming') };
+    });
+  },
+
   updateTodos: (todos) => {
     set((state) => {
       const messages = [...state.messages];
@@ -194,3 +222,20 @@ export const useConversationStore = create<ConversationSlice>((set) => ({
     set({ messages: [], currentDelta: '', isStreaming: false, currentThinking: '' });
   },
 }));
+
+function mergeTimelineRows(
+  currentRows: readonly TerminalTimelineRow[],
+  incomingRows: readonly TerminalTimelineRow[],
+): TerminalTimelineRow[] {
+  return normalizeTimelineRows([...currentRows, ...incomingRows]);
+}
+
+function normalizeTimelineRows(rows: readonly TerminalTimelineRow[]): TerminalTimelineRow[] {
+  const rowsById = new Map<string, TerminalTimelineRow>();
+  for (const row of rows) {
+    rowsById.set(row.id, row);
+  }
+  return [...rowsById.values()].sort(
+    (a, b) => a.sequence - b.sequence || a.timestamp - b.timestamp,
+  );
+}

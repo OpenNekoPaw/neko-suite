@@ -1,0 +1,27 @@
+# Copy to a user-owned mock.toml path only when a mock harness command needs a file-backed config.
+# Default mock tests do not require this file.
+
+default_provider = "mock-provider"
+default_model = "mock-chat"
+
+[default_models.llm]
+provider_id = "mock-provider"
+model_id = "mock-chat"
+
+[[providers]]
+id = "mock-provider"
+name = "Mock Provider"
+type = "mock"
+api_url = "http://127.0.0.1/mock"
+enabled = true
+connection_kind = "local"
+protocol_profile = "mock"
+requires_api_key = false
+
+[[models]]
+id = "mock-chat"
+name = "mock-chat"
+provider_id = "mock-provider"
+type = "llm"
+capabilities = ["chat", "streaming", "function_calling"]
+enabled = true
