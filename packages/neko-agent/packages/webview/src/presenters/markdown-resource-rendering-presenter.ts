@@ -8,6 +8,7 @@ import {
   type PerceptionCard,
   type PerceptualAssetRef,
   type ResourceRef,
+  type ResourceSourceRef,
   type ToolResultAttachment,
 } from '@neko/shared';
 
@@ -83,6 +84,9 @@ const RESOURCE_COLUMN_HINTS = new Set([
   'image',
   'images',
   'picture',
+  'source_page',
+  'perception',
+  'perception_card',
   'resource',
   'resources',
   'asset',
@@ -93,6 +97,8 @@ const RESOURCE_COLUMN_HINTS = new Set([
   'media',
   'source',
   '来源',
+  '来源页',
+  '感知卡',
   '源图',
   '图片',
   '图像',
@@ -109,7 +115,7 @@ export function projectMarkdownResourceRendering(
   const resourceIndex = createResourceIndex(refs);
   const diagnostics = detectUnsupportedResourceReferenceSyntax(input.markdown);
   const tokens = extractMarkdownResourceTokens(input.markdown).map((token) =>
-    projectMarkdownResourceToken(token, resourceIndex),
+    projectMarkdownResourceToken(token, resourceIndex, refs.length),
   );
   const allDiagnostics = [
     ...diagnostics,
@@ -131,15 +137,20 @@ export function normalizeMarkdownResourceLookupToken(value: string): string {
   return stripResourcePlacementHint(stripMarkdownToken(value))
     .trim()
     .toLowerCase()
-    .replace(/[\s-]+/g, '_');
+    .replace(/[/|、，,]+/g, '_')
+    .replace(/[\s-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 function projectMarkdownResourceToken(
   token: string,
   resourceIndex: ReadonlyMap<string, readonly MarkdownToolResultImageRef[]>,
+  resourceCount: number,
 ): MarkdownRenderedResourceToken {
   const refs = resourceIndex.get(normalizeMarkdownResourceLookupToken(token)) ?? [];
   if (refs.length === 0) {
+    const hasResourceContext = resourceCount > 0;
     return {
       token,
       status: 'missing',
@@ -149,9 +160,11 @@ function projectMarkdownResourceToken(
       diagnostics: [
         {
           severity: 'error',
-          code: 'missing-resource-token',
+          code: hasResourceContext ? 'missing-resource-token' : 'missing-resource-context',
           token,
-          message: `Creative draft resource token "${token}" does not match a known resource.`,
+          message: hasResourceContext
+            ? `Markdown resource token "${token}" does not match a known resource.`
+            : `Markdown resource token "${token}" cannot be resolved because this message has no image resource context.`,
         },
       ],
     };
@@ -169,7 +182,7 @@ function projectMarkdownResourceToken(
           severity: 'error',
           code: 'ambiguous-resource-token',
           token,
-          message: `Creative draft resource token "${token}" matches multiple resources.`,
+          message: `Markdown resource token "${token}" matches multiple resources.`,
           candidates: summaries,
         },
       ],
@@ -245,9 +258,7 @@ function extractTableResourceCellTokens(markdown: string): readonly string[] {
     const separator = parseTableLine(lines[index + 1] ?? '');
     if (!header || !separator || !isSeparatorRow(separator)) continue;
     const resourceColumnIndexes = header
-      .map((label, columnIndex) =>
-        RESOURCE_COLUMN_HINTS.has(normalizeMarkdownResourceLookupToken(label)) ? columnIndex : -1,
-      )
+      .map((label, columnIndex) => (isResourceColumnHeader(label) ? columnIndex : -1))
       .filter((columnIndex) => columnIndex >= 0);
     for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
       if (!TABLE_ROW_RE.test(lines[rowIndex] ?? '')) break;
@@ -268,6 +279,13 @@ function extractCellTokens(value: string): readonly string[] {
     .map((match) => stripMarkdownToken(match[1] ?? match[0]))
     .filter((token) => token.length > 0 && !isIgnoredResourceWord(token));
   return uniqueStrings([...imageTargets, ...plainTokens]);
+}
+
+function isResourceColumnHeader(label: string): boolean {
+  const normalized = normalizeMarkdownResourceLookupToken(label);
+  if (RESOURCE_COLUMN_HINTS.has(normalized)) return true;
+  const parts = normalized.split('_').filter((part) => part.length > 0);
+  return parts.some((part) => RESOURCE_COLUMN_HINTS.has(part));
 }
 
 function detectUnsupportedResourceReferenceSyntax(
@@ -317,7 +335,7 @@ function createResourceIndex(
 function resourceIdentityKey(ref: MarkdownToolResultImageRef): string {
   if (ref.resourceRef) return `resource:${ref.resourceRef.id}`;
   if (ref.documentResourceRef) {
-    return `document:${ref.documentResourceRef.source.filePath}:${ref.documentResourceRef.entryPath ?? ''}`;
+    return `document:${readDocumentResourceSourceId(ref.documentResourceRef) ?? 'unknown'}:${ref.documentResourceRef.entryPath ?? JSON.stringify(ref.documentResourceRef.locator)}`;
   }
   return `tool:${ref.toolCallId}:${ref.assetIndex}`;
 }
@@ -335,6 +353,7 @@ function createMarkdownToolResultTokens(ref: MarkdownToolResultImageRef): readon
       ref.sequenceNumber !== undefined ? `image_${ref.sequenceNumber}` : undefined,
       ref.sequenceNumber !== undefined ? `page_${ref.sequenceNumber}` : undefined,
       ref.sequenceNumber !== undefined ? `P${ref.sequenceNumber}` : undefined,
+      ...sequenceNumberLookupTokens(ref.sequenceNumber),
       ...(ref.entryPath ? pathLookupTokens(ref.entryPath) : []),
       ...(ref.documentResourceRef?.entryPath
         ? pathLookupTokens(ref.documentResourceRef.entryPath)
@@ -374,11 +393,11 @@ function collectMarkdownImageRefsFromToolCall(
   toolCall: ToolCall,
 ): readonly MarkdownToolResultImageRef[] {
   const data = asRecord(toolCall.result?.data);
-  if (!data) return [];
   const renderUrisByIndex = createToolResultRenderUriIndex(toolCall);
   const assetTokensByIndex = createToolResultAssetTokenIndex(toolCall);
   const refs: MarkdownToolResultImageRef[] = [];
-  for (const [index, image] of readRecordArray(data, 'imageInfo').entries()) {
+
+  for (const [index, image] of collectToolResultImageInfoRecords(data).entries()) {
     refs.push(
       projectMarkdownImageRef(
         toolCall.id,
@@ -391,8 +410,10 @@ function collectMarkdownImageRefsFromToolCall(
       ),
     );
   }
-  for (const [index, image] of readRecordArray(data, 'images').entries()) {
+
+  for (const [index, image] of collectToolResultImageRecords(data).entries()) {
     const documentImage = asRecord(image['documentImage']);
+    const resourceRef = documentImage?.['resourceRef'] ?? image['resourceRef'];
     refs.push(
       projectMarkdownImageRef(
         toolCall.id,
@@ -401,9 +422,7 @@ function collectMarkdownImageRefsFromToolCall(
         {
           ...(documentImage ?? {}),
           ...image,
-          ...(documentImage?.['resourceRef'] !== undefined
-            ? { resourceRef: documentImage['resourceRef'] }
-            : {}),
+          ...(resourceRef !== undefined ? { resourceRef } : {}),
         },
         renderUrisByIndex.get(index),
         index + 1,
@@ -411,7 +430,60 @@ function collectMarkdownImageRefsFromToolCall(
       ),
     );
   }
+  if (refs.length === 0) {
+    refs.push(...collectMarkdownImageRefsFromPerceptionCards(toolCall, renderUrisByIndex));
+  }
   return refs;
+}
+
+function collectToolResultImageInfoRecords(
+  data: Record<string, unknown> | undefined,
+): readonly Record<string, unknown>[] {
+  if (!data) return [];
+  return [
+    ...readRecordArray(data, 'imageInfo'),
+    ...readRecordArray(asRecord(data['excerpt']), 'imageInfo'),
+  ];
+}
+
+function collectToolResultImageRecords(
+  data: Record<string, unknown> | undefined,
+): readonly Record<string, unknown>[] {
+  if (!data) return [];
+  return readRecordArray(data, 'images');
+}
+
+function collectMarkdownImageRefsFromPerceptionCards(
+  toolCall: ToolCall,
+  renderUrisByIndex: ReadonlyMap<number, string>,
+): readonly MarkdownToolResultImageRef[] {
+  return (toolCall.result?.perceptionCards ?? []).flatMap((card, index) => {
+    const imageRef =
+      card.perceptual?.thumbnailRef ??
+      card.perceptual?.keyframeRefs?.[0] ??
+      card.perceptual?.multiViewRefs?.[0];
+    if (!imageRef) return [];
+    const record: Record<string, unknown> = {
+      label: imageRef.label ?? card.cacheKey ?? card.assetId,
+      alias: imageRef.assetId,
+      mimeType: imageRef.mimeType ?? card.structural.mimeType,
+      width: card.structural.width,
+      height: card.structural.height,
+      ...(imageRef.documentResourceRef ? { resourceRef: imageRef.documentResourceRef } : {}),
+      entryPath: imageRef.documentResourceRef?.entryPath ?? imageRef.uri,
+    };
+    return [
+      projectMarkdownImageRef(
+        toolCall.id,
+        toolCall.name,
+        index,
+        record,
+        renderUrisByIndex.get(index) ?? readRenderablePerceptionCardUri(card),
+        index + 1,
+        readPerceptionCardLookupTokens(card).filter(isNonEmptyString),
+      ),
+    ];
+  });
 }
 
 function projectMarkdownImageRef(
@@ -580,12 +652,7 @@ function dedupeMarkdownImageRefs(
   const seen = new Set<string>();
   const deduped: MarkdownToolResultImageRef[] = [];
   for (const ref of refs) {
-    const key =
-      (ref.documentResourceRef
-        ? `${ref.documentResourceRef.source.filePath}:${ref.documentResourceRef.entryPath ?? JSON.stringify(ref.documentResourceRef.locator)}`
-        : undefined) ??
-      (ref.resourceRef ? `${ref.resourceRef.provider}:${ref.resourceRef.id}` : undefined) ??
-      `${ref.toolCallId}:${ref.assetIndex}`;
+    const key = markdownImageRefDedupeKey(ref);
     if (seen.has(key)) {
       const existingIndex = deduped.findIndex(
         (candidate) => markdownImageRefDedupeKey(candidate) === key,
@@ -605,7 +672,7 @@ function dedupeMarkdownImageRefs(
 function markdownImageRefDedupeKey(ref: MarkdownToolResultImageRef): string {
   return (
     (ref.documentResourceRef
-      ? `${ref.documentResourceRef.source.filePath}:${ref.documentResourceRef.entryPath ?? JSON.stringify(ref.documentResourceRef.locator)}`
+      ? `${readDocumentResourceSourceId(ref.documentResourceRef) ?? 'unknown'}:${ref.documentResourceRef.entryPath ?? JSON.stringify(ref.documentResourceRef.locator)}`
       : undefined) ??
     (ref.resourceRef ? `${ref.resourceRef.provider}:${ref.resourceRef.id}` : undefined) ??
     `${ref.toolCallId}:${ref.assetIndex}`
@@ -712,6 +779,18 @@ function pathLookupTokens(value: string): readonly string[] {
   return [value, fileName(value), fileStem(value)].filter(isNonEmptyString);
 }
 
+function sequenceNumberLookupTokens(value: number | undefined): readonly string[] {
+  if (value === undefined || !Number.isInteger(value) || value <= 0) return [];
+  const zeroBased = value - 1;
+  const paddedZeroBased = String(zeroBased).padStart(2, '0');
+  return [
+    ...(zeroBased === 0 ? ['P0', 'page_0', 'image_0'] : []),
+    `P${paddedZeroBased}`,
+    `page_${paddedZeroBased}`,
+    `image_${paddedZeroBased}`,
+  ];
+}
+
 function stripMarkdownToken(value: string): string {
   return value.trim().replace(/^`+|`+$/g, '');
 }
@@ -727,9 +806,11 @@ function stripResourcePlacementHint(value: string): string {
 function resourceRefLookupTokens(resourceRef: ResourceRef): readonly string[] {
   return uniqueStrings(
     [
-      resourceRef.source.filePath,
+      readResourceSourceLocalPath(resourceRef.source),
       resourceRef.source.projectRelativePath,
+      resourceRef.source.document?.filePath,
       resourceRef.locator?.kind === 'file' ? resourceRef.locator.path : undefined,
+      resourceRef.locator?.kind === 'document' ? resourceRef.locator.entryPath : undefined,
     ]
       .filter(isNonEmptyString)
       .flatMap(pathLookupTokens),
@@ -743,9 +824,12 @@ function readImageDerivedAssetTokens(ref: MarkdownToolResultImageRef): readonly 
       ref.label,
       ref.entryPath ? fileName(ref.entryPath) : undefined,
       ref.entryPath ? fileStem(ref.entryPath) : undefined,
-      ref.resourceRef?.source.filePath ? fileName(ref.resourceRef.source.filePath) : undefined,
-      ref.resourceRef?.source.projectRelativePath
-        ? fileName(ref.resourceRef.source.projectRelativePath)
+      ref.resourceRef ? resourceSourceFileName(ref.resourceRef.source) : undefined,
+      ref.resourceRef?.source.document?.filePath
+        ? fileName(ref.resourceRef.source.document.filePath)
+        : undefined,
+      ref.resourceRef?.locator?.kind === 'document' && ref.resourceRef.locator.entryPath
+        ? fileName(ref.resourceRef.locator.entryPath)
         : undefined,
       ref.resourceRef?.locator?.kind === 'file' && ref.resourceRef.locator.path
         ? fileName(ref.resourceRef.locator.path)
@@ -812,6 +896,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isAbsolutePath(value: string): boolean {
   return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value);
+}
+
+function readResourceSourceLocalPath(source: ResourceSourceRef): string | undefined {
+  return source.filePath ?? source.projectRelativePath ?? source.document?.filePath ?? source.uri;
+}
+
+function resourceSourceFileName(source: ResourceSourceRef): string | undefined {
+  const localPath = readResourceSourceLocalPath(source);
+  return localPath ? fileName(localPath) : undefined;
 }
 
 function isNonEmptyString(value: unknown): value is string {

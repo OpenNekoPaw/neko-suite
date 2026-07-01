@@ -84,6 +84,7 @@ export interface ExecuteAgentTurnForWebviewInput {
   mediaModel?: ModelRef<MediaModelCategory>;
   mediaModels?: AgentMediaModelSelections;
   executionOverrides?: AgentMessageExecutionOverrides;
+  locale?: string;
 }
 
 export class AgentTurnBridge {

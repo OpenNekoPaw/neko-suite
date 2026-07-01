@@ -820,6 +820,125 @@ describe('AgentStreamProcessor', () => {
       );
     });
 
+    it('keeps projected ReadImage resources on final repaired storyboard streamComplete', async () => {
+      const materializedPath = '/workspace/.neko-runtime/resources/documents/doc_1/page-1.jpg';
+      const archiveRef = {
+        kind: 'document-entry',
+        source: { filePath: '${BOOKS}/story.epub', format: 'epub' },
+        entryPath: 'OPS/page-1.jpg',
+        versionPolicy: 'versioned-export',
+      };
+      const localResourceAccess = {
+        toWebviewUri: vi.fn((_webview, filePath: string) =>
+          filePath === materializedPath ? 'vscode-webview://page-1.jpg' : undefined,
+        ),
+      };
+      const contentAccessRuntime = {
+        loadProviderAsset: vi.fn(async () => ({
+          status: 'ready',
+          source: { kind: 'file', path: materializedPath },
+          diagnostics: [],
+          uri: materializedPath,
+          mimeType: 'image/jpeg',
+          sizeBytes: 2048,
+        })),
+      };
+      processor = new AgentStreamProcessor({
+        localResourceAccess: localResourceAccess as any,
+        contentAccessRuntime: contentAccessRuntime as any,
+      });
+      const repairedMarkdown = [
+        '| scene | shot | source | sourcePanel | decision | duration | visual | motion | audio | characters | dialogue | prompt | reviewStatus | nextAction | contentType | decisionReason | requiresSplit | duplicateOf |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+        '| 开场 | S01 | P1 | 整页 | keep | 3s | 主角出现 | 缓慢推近 | 低风声 | 主角 |  | 黑白工业巨构前的孤独主角 | needs-review | use-as-reference | story | 建立空间与人物 | false |  |',
+      ].join('\n');
+      const events = toAsyncIterable([
+        {
+          type: 'tool_call',
+          toolCall: {
+            id: 'tc-read-image',
+            name: 'ReadImage',
+            arguments: {
+              images: [{ alias: 'P1', label: 'Page 1', resourceRef: archiveRef }],
+            },
+          },
+        },
+        {
+          type: 'tool_result',
+          toolResult: {
+            toolCallId: 'tc-read-image',
+            success: true,
+            data: {
+              images: [
+                {
+                  alias: 'P1',
+                  label: 'Page 1',
+                  width: 1511,
+                  height: 2160,
+                  mimeType: 'image/jpeg',
+                  resourceRef: archiveRef,
+                },
+              ],
+            },
+          },
+        },
+        {
+          type: 'text_delta',
+          content: '| 镜号 | 画面内容 |\n| --- | --- |\n| 1 | bad |',
+        },
+        {
+          type: 'assistant_text_replacement',
+          replacement: { reason: 'output-validation-retry', attempt: 1 },
+        },
+        {
+          type: 'text_delta',
+          content: repairedMarkdown,
+        },
+      ]);
+
+      await processor.processStream(webview as any, 'conv-1', events, callbacks);
+
+      const streamComplete = webview.postMessage.mock.calls
+        .map(([message]) => message)
+        .find((message) => message.type === 'streamComplete');
+      expect(streamComplete?.contentBlocks?.map((block: { type: string }) => block.type)).toEqual([
+        'tool_call',
+        'text',
+      ]);
+      expect(streamComplete?.contentBlocks?.[0]).toMatchObject({
+        type: 'tool_call',
+        toolCall: {
+          id: 'tc-read-image',
+          name: 'ReadImage',
+          result: {
+            success: true,
+            data: {
+              images: [
+                expect.objectContaining({
+                  alias: 'P1',
+                  renderUri: 'vscode-webview://page-1.jpg',
+                  resourceRef: archiveRef,
+                }),
+              ],
+            },
+          },
+        },
+      });
+      expect(streamComplete?.contentBlocks?.[1]).toMatchObject({
+        type: 'text',
+        content: repairedMarkdown,
+        isStreaming: false,
+      });
+      expect(JSON.stringify(streamComplete?.contentBlocks)).not.toContain('镜号');
+      expect(contentAccessRuntime.loadProviderAsset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          caller: 'message-resource-projection',
+          preferredTarget: 'local-path',
+          variant: expect.objectContaining({ role: 'document-entry', mimeType: 'image/jpeg' }),
+        }),
+      );
+    });
+
     it('projects top-level tool result media fields for webview delivery', async () => {
       const localResourceAccess = {
         toWebviewUri: vi.fn((_webview, filePath: string) => `webview-uri:${filePath}`),

@@ -7,7 +7,7 @@
  */
 
 import type { RichContentProps, RichContentRendererEntry } from '../types';
-import { VSCodeMessages } from '@/messages';
+import { openMediaTarget } from '@/components/ChatView/MediaPreview/openMediaTarget';
 
 interface PanoramicRichData {
   src: string;
@@ -35,11 +35,7 @@ function PanoramicRendererComponent({
 
   const openPreview = () => {
     const pathToOpen = data.localPath ?? data.src;
-    if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
-      VSCodeMessages.openFile(pathToOpen);
-    } else {
-      VSCodeMessages.openUrl(pathToOpen);
-    }
+    openMediaTarget(pathToOpen);
   };
 
   return (

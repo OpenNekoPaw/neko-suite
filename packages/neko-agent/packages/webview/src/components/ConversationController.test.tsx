@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { useEffect } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { SettingsState } from '@neko-agent/types';
+import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import { ConversationController } from './ConversationController';
 
 const vscodeMocks = vi.hoisted(() => ({
@@ -86,19 +88,35 @@ vi.mock('@/i18n/I18nContext', () => ({
 
 vi.mock('@/components/ChatWorkspace', () => ({
   ChatWorkspace: (props: {
+    activeConversationId?: string | null;
+    activationProgress?: readonly ActivationProgressTimeline[];
+    handleMessage?: (event: MessageEvent) => void;
     pendingSendRequest?: { id: number; input: { messageText?: string } } | null;
     initialInputRequest?: { id: number; messageText: string } | null;
     initialEntryPromptMenuRequest?: { id: number; menu: 'generate-assets' | 'roleplay' } | null;
     onInitialEntryPromptMenuRequestConsumed?: (id: number) => void;
-  }) => (
-    <div data-testid="chat-workspace">
-      <span data-testid="entry-menu">{props.initialEntryPromptMenuRequest?.menu ?? 'none'}</span>
-      <span data-testid="pending-send">
-        {props.pendingSendRequest?.input.messageText ?? 'none'}
-      </span>
-      <span data-testid="initial-input">{props.initialInputRequest?.messageText ?? 'none'}</span>
-    </div>
-  ),
+  }) => {
+    useEffect(() => {
+      if (!props.handleMessage) return;
+      const listener = (event: MessageEvent) => props.handleMessage?.(event);
+      window.addEventListener('message', listener);
+      return () => window.removeEventListener('message', listener);
+    }, [props.handleMessage]);
+
+    return (
+      <div data-testid="chat-workspace">
+        <span data-testid="workspace-conversation">{props.activeConversationId ?? 'none'}</span>
+        <span data-testid="workspace-activation-progress">
+          {props.activationProgress?.map((timeline) => timeline.name).join(',') ?? 'none'}
+        </span>
+        <span data-testid="entry-menu">{props.initialEntryPromptMenuRequest?.menu ?? 'none'}</span>
+        <span data-testid="pending-send">
+          {props.pendingSendRequest?.input.messageText ?? 'none'}
+        </span>
+        <span data-testid="initial-input">{props.initialInputRequest?.messageText ?? 'none'}</span>
+      </div>
+    );
+  },
 }));
 
 vi.mock('@/components/ChatView/InputArea', async () => {
@@ -343,7 +361,71 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('initial-input').textContent).toBe('make a rain scene');
     expect(screen.getByTestId('pending-send').textContent).toBe('none');
   });
+
+  it('does not project activation progress from a different conversation into the active tab', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Start Chat/ }));
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'activeConversation',
+            conversation: { id: 'conv-a', title: 'Skill chat', messages: [] },
+          },
+        }),
+      );
+    });
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'agentCapabilityActivationProgress',
+            conversationId: 'conv-a',
+            events: [createActivationEvent('conv-a', 'ai-generate')],
+          },
+        }),
+      );
+    });
+    expect(screen.getByTestId('workspace-activation-progress').textContent).toBe('ai-generate');
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Skill chat', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Clean chat', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-b',
+            },
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-activation-progress').textContent).toBe('');
+  });
 });
+
+function createActivationEvent(conversationId: string, name: string) {
+  return {
+    id: `${conversationId}-event-1`,
+    activationId: `${conversationId}-activation-1`,
+    conversationId,
+    target: 'skill',
+    action: 'activate',
+    name,
+    step: 'active',
+    status: 'succeeded',
+    source: 'agent-tool',
+    requestedBy: 'agent',
+    at: 1,
+  };
+}
 
 function createProps(): React.ComponentProps<typeof ConversationController> {
   return {

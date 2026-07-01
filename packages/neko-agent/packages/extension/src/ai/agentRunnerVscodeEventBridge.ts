@@ -59,6 +59,7 @@ export class AgentRunnerVscodeEventBridge implements vscode.Disposable {
       case 'cancel':
       case 'historyLoaded':
       case 'contextCompressed':
+      case 'activationProgress':
         return;
     }
   }

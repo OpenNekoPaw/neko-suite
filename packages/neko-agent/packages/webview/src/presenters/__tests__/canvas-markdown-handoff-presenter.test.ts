@@ -1,0 +1,169 @@
+import { describe, expect, it } from 'vitest';
+import { STORYBOARD_CREATIVE_TABLE_HEADERS } from '@neko-agent/types';
+import { projectCanvasMarkdownHandoffRequest } from '../canvas-markdown-handoff-presenter';
+import type { MarkdownResourceRenderingProjection } from '../markdown-resource-rendering-presenter';
+
+describe('canvas markdown handoff presenter', () => {
+  it('projects storyboard creative tables to an Agent handoff request without choosing a Canvas capability', () => {
+    const projection = projectCanvasMarkdownHandoffRequest({
+      markdown: createStoryboardCreativeTable(),
+      markdownResources: createResourceProjection(),
+      target: { plugin: 'canvas', nodeId: 'board-1', mode: 'append' },
+      provenance: {
+        source: 'webview',
+        label: 'assistant-markdown-block',
+        metadata: { renderUri: 'vscode-webview://must-not-leak' },
+      },
+      title: 'Storyboard Draft',
+      declaredIntentHint: 'creative-table',
+      declaredProfileHint: 'storyboard',
+    });
+
+    expect(projection).toEqual(
+      expect.objectContaining({
+        sourceFormat: 'gfm-table',
+        title: 'Storyboard Draft',
+        target: { nodeId: 'board-1', mode: 'append' },
+        provenance: { source: 'webview', label: 'assistant-markdown-block' },
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+        resources: [
+          {
+            token: 'P1',
+            label: 'Panel 1',
+            role: 'source',
+            sourcePath: '${PROJECT}/assets/panel-1.png',
+          },
+        ],
+      }),
+    );
+    expect(JSON.stringify(projection)).not.toContain('capabilityId');
+    expect(JSON.stringify(projection)).not.toContain('vscode-webview://must-not-leak');
+  });
+
+  it('infers storyboard creative tables without choosing a Canvas capability', () => {
+    const projection = projectCanvasMarkdownHandoffRequest({
+      markdown: createStoryboardCreativeTable(),
+      title: 'Review Table',
+    });
+
+    expect(projection).toEqual(
+      expect.objectContaining({
+        sourceFormat: 'gfm-table',
+        title: 'Review Table',
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+      }),
+    );
+    expect(JSON.stringify(projection)).not.toContain('canvas.ingestMarkdown');
+  });
+
+  it('does not expose Canvas handoff for plain Markdown prose', () => {
+    expect(
+      projectCanvasMarkdownHandoffRequest({
+        markdown: '# Plan\n\n- Review panels\n- Create draft',
+      }),
+    ).toBeNull();
+  });
+
+  it('does not expose Canvas handoff for weak or display-only storyboard tables', () => {
+    expect(
+      projectCanvasMarkdownHandoffRequest({
+        markdown: ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+      }),
+    ).toBeNull();
+  });
+
+  it('allows extension columns after the required storyboard creative fields are present', () => {
+    const projection = projectCanvasMarkdownHandoffRequest({
+      markdown: createStoryboardCreativeTable({ extraHeaders: ['customAction'] }),
+    });
+
+    expect(projection).toEqual(
+      expect.objectContaining({
+        sourceFormat: 'gfm-table',
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+      }),
+    );
+  });
+
+  it('projects localized Chinese storyboard creative tables', () => {
+    const projection = projectCanvasMarkdownHandoffRequest({
+      markdown: [
+        '| 场景 | 镜头 | 来源 | 来源分格 | 决策 | 时长 | 画面 | 运镜 | 音频 | 人物 | 对白 | 提示词 | 审阅状态 | 建议操作 | 内容类型 | 决策理由 | 需要拆分 | 重复来源 |',
+        '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+        '| 正文 | 1 | P1 | 整页 | keep | 3s | 主角出现 | 推近 | 低风声 | 主角 |  | 暗黑童话风格 | needs-review | use-as-reference | story | 有叙事价值 | false |  |',
+      ].join('\n'),
+    });
+
+    expect(projection).toEqual(
+      expect.objectContaining({
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+      }),
+    );
+  });
+});
+
+function createStoryboardCreativeTable(options?: {
+  readonly extraHeaders?: readonly string[];
+}): string {
+  const headers = [...STORYBOARD_CREATIVE_TABLE_HEADERS, ...(options?.extraHeaders ?? [])];
+  return [
+    `| ${headers.join(' | ')} |`,
+    `| ${headers.map(() => '---').join(' | ')} |`,
+    `| ${headers.map((header) => storyboardCreativeTableValue(header)).join(' | ')} |`,
+  ].join('\n');
+}
+
+function storyboardCreativeTableValue(header: string): string {
+  const values: Record<string, string> = {
+    scene: 'Opening',
+    shot: '1',
+    source: 'P1',
+    sourcePanel: 'P1',
+    decision: 'keep',
+    duration: '3s',
+    visual: 'wide shot',
+    motion: 'slow push in',
+    audio: 'low ambience',
+    characters: 'lead',
+    dialogue: '',
+    prompt: 'cinematic light',
+    reviewStatus: 'needs-review',
+    nextAction: 'split-panels',
+    contentType: 'story',
+    decisionReason: 'useful narrative beat',
+    requiresSplit: 'true',
+    duplicateOf: '',
+    customAction: 'prepare-keyframe',
+  };
+  return values[header] ?? '';
+}
+
+function createResourceProjection(): MarkdownResourceRenderingProjection {
+  return {
+    status: 'ready',
+    diagnostics: [],
+    tokens: [
+      {
+        token: 'P1',
+        status: 'bound',
+        refs: [{ token: 'P1', label: 'Panel 1', role: 'source' }],
+        resources: [
+          {
+            token: 'P1',
+            label: 'Panel 1',
+            role: 'source',
+            sourcePath: '${PROJECT}/assets/panel-1.png',
+          },
+        ],
+        renderUris: ['vscode-webview://panel-1'],
+        diagnostics: [],
+      },
+    ],
+  };
+}

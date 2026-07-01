@@ -58,11 +58,22 @@ export function projectDisplayTabs(input: ProjectDisplayTabsInput): DisplayTab[]
       agentState,
     });
 
-    return {
-      ...tab,
-      ...(displayStatus ? { displayStatus } : {}),
-    };
+    const displayTab = cloneDisplayTabWithoutStatus(tab);
+    return displayStatus ? { ...displayTab, displayStatus } : displayTab;
   });
+}
+
+function cloneDisplayTabWithoutStatus(tab: OpenTab): DisplayTab {
+  return {
+    id: tab.id,
+    title: tab.title,
+    conversationId: tab.conversationId,
+    ...(tab.kind ? { kind: tab.kind } : {}),
+    ...(tab.characterDialogueSession
+      ? { characterDialogueSession: tab.characterDialogueSession }
+      : {}),
+    ...(tab.embodyCharacterSession ? { embodyCharacterSession: tab.embodyCharacterSession } : {}),
+  };
 }
 
 export function applyUserMessageToTabState(

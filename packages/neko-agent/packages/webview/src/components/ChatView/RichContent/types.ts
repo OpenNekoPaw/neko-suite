@@ -13,13 +13,7 @@ import type { ComponentType } from 'react';
 
 /** Built-in rich content kinds shipped with neko-agent */
 export type BuiltinContentKind =
-  | 'image'
-  | 'image-grid'
-  | 'video'
-  | 'audio'
-  | 'storyboard'
-  | 'panoramic-image'
-  | 'panoramic-video';
+  'image' | 'image-grid' | 'video' | 'audio' | 'storyboard' | 'panoramic-image' | 'panoramic-video';
 
 /**
  * Union of all content kinds.
@@ -39,6 +33,8 @@ export interface RichContentProps<T = unknown> {
   className?: string;
   /** Compact mode — no header/chrome, used inside TaskCard inline results */
   inline?: boolean;
+  /** Whether clicking the rendered media should request the host to open it. */
+  openOnClick?: boolean;
 }
 
 // ---------------------------------------------------------------------------

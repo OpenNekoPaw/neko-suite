@@ -246,7 +246,7 @@ function ResultPreview({ task }: { task: BackgroundTask }) {
     <div className="mb-2 rounded border border-[var(--agent-divider)] bg-[color-mix(in_srgb,var(--agent-surface)_70%,transparent)] p-2">
       {/* Media result — registry-driven rendering (ADR-6 §6.2) */}
       {contentKind && contentData && (
-        <RichContentRenderer kind={contentKind} data={contentData} inline />
+        <RichContentRenderer kind={contentKind} data={contentData} inline openOnClick={false} />
       )}
 
       {/* Result metadata */}

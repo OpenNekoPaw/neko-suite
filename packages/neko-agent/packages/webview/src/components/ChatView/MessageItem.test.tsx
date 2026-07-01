@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { Message } from '@neko-agent/types';
+import { STORYBOARD_CREATIVE_TABLE_HEADERS, type Message } from '@neko-agent/types';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
+import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import { MessageItem } from './MessageItem';
 import type { MessageIdentityMap } from './message-identity';
 
@@ -61,6 +62,78 @@ describe('MessageItem identity rendering', () => {
 });
 
 describe('MessageItem tool aggregation', () => {
+  it('does not render Canvas handoff on plain assistant messages when Canvas is available', () => {
+    renderMessageItem({
+      message: createMessage({
+        role: 'assistant',
+        content: '',
+        contentBlocks: [
+          {
+            id: 'text-1',
+            type: 'text',
+            timestamp: 1,
+            content: '我会先读取资料，然后分析页面。',
+          },
+        ],
+      }),
+      identities: defaultIdentities(),
+      pluginsAvailable: { canvas: true },
+    });
+
+    expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
+  });
+
+  it('renders Canvas handoff on canonical storyboard creative table messages', () => {
+    renderMessageItem({
+      message: createMessage({
+        role: 'assistant',
+        content: '',
+        contentBlocks: [
+          {
+            id: 'text-1',
+            type: 'text',
+            timestamp: 1,
+            content: createStoryboardCreativeTable(),
+          },
+        ],
+      }),
+      identities: defaultIdentities(),
+      pluginsAvailable: { canvas: true },
+    });
+
+    expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
+  });
+
+  it('renders storyboard source thumbnails from same-message ReadImage tool context', () => {
+    renderMessageItem({
+      message: createMessage({
+        role: 'assistant',
+        content: '',
+        contentBlocks: [
+          readImageToolBlock({
+            alias: 'P1',
+            label: 'Page 1',
+            renderUri: 'vscode-webview://page-1',
+          }),
+          {
+            id: 'text-1',
+            type: 'text',
+            timestamp: 20,
+            content: createStoryboardCreativeTable(),
+          },
+        ],
+      }),
+      identities: defaultIdentities(),
+      pluginsAvailable: { canvas: true },
+    });
+
+    expect(screen.getAllByAltText('Page 1').map((image) => image.getAttribute('src'))).toEqual([
+      'vscode-webview://page-1',
+      'vscode-webview://page-1',
+    ]);
+    expect(screen.queryByText(/no image resource context/)).toBeNull();
+  });
+
   it('renders consecutive repeated tool calls as a collapsed group', () => {
     renderMessageItem({
       message: createMessage({
@@ -239,12 +312,55 @@ describe('MessageItem reference rendering', () => {
   });
 });
 
-function renderMessageItem(input: { message: Message; identities: MessageIdentityMap }) {
+function renderMessageItem(input: {
+  message: Message;
+  identities: MessageIdentityMap;
+  pluginsAvailable?: PluginsAvailable;
+}) {
   render(
-    <MessageActionsProvider>
+    <MessageActionsProvider pluginsAvailable={input.pluginsAvailable}>
       <MessageItem message={input.message} conversationId="conv-1" identities={input.identities} />
     </MessageActionsProvider>,
   );
+}
+
+function defaultIdentities(): MessageIdentityMap {
+  return {
+    user: { displayName: 'You', avatarLabel: 'You', title: 'You' },
+    assistant: { displayName: 'Assistant', avatarLabel: 'AI', title: 'Assistant' },
+  };
+}
+
+function createStoryboardCreativeTable(): string {
+  return [
+    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.join(' | ')} |`,
+    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.map(() => '---').join(' | ')} |`,
+    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.map((header) => storyboardCreativeTableValue(header)).join(' | ')} |`,
+  ].join('\n');
+}
+
+function storyboardCreativeTableValue(header: string): string {
+  const values: Record<string, string> = {
+    scene: '森林',
+    shot: '1',
+    source: 'P1',
+    sourcePanel: 'P1',
+    decision: 'keep',
+    duration: '3s',
+    visual: '角色进入森林',
+    motion: 'slow push in',
+    audio: 'low ambience',
+    characters: 'lead',
+    dialogue: '',
+    prompt: 'cinematic forest storyboard frame',
+    reviewStatus: 'needs-review',
+    nextAction: 'split-panels',
+    contentType: 'story',
+    decisionReason: 'useful narrative beat',
+    requiresSplit: 'true',
+    duplicateOf: '',
+  };
+  return values[header] ?? '';
 }
 
 function createMessage(
@@ -272,6 +388,44 @@ function toolBlock(id: string, name: string, filePath: string, duration: number)
         success: true,
         data: { file_path: filePath },
         duration,
+      },
+    },
+  };
+}
+
+function readImageToolBlock(input: { alias: string; label: string; renderUri: string }) {
+  return {
+    id: 'block-read-image',
+    type: 'tool_call' as const,
+    timestamp: 10,
+    toolCall: {
+      id: 'read-image',
+      name: 'ReadImage',
+      arguments: {},
+      result: {
+        success: true,
+        data: {
+          imageInfo: [
+            {
+              alias: input.alias,
+              label: input.label,
+              renderUri: input.renderUri,
+              resourceRef: {
+                id: 'page-1',
+                scope: 'project',
+                provider: 'read-image',
+                kind: 'media',
+                source: { kind: 'file', projectRelativePath: 'images/page-1.jpg' },
+                locator: { kind: 'file', path: 'images/page-1.jpg' },
+                fingerprint: {
+                  strategy: 'provider',
+                  providerId: 'read-image',
+                  value: 'page-1',
+                },
+              },
+            },
+          ],
+        },
       },
     },
   };

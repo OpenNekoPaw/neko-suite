@@ -142,6 +142,19 @@ describe('SkillHandler', () => {
       expect(skillService.apply).toHaveBeenCalledWith(mockSkill, 'fix bug');
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
+          type: 'agentCapabilityActivationProgress',
+          conversationId: 'conv-1',
+          events: expect.arrayContaining([
+            expect.objectContaining({
+              step: 'requested',
+              source: 'user-explicit',
+              requestedBy: 'user',
+            }),
+          ]),
+        }),
+      );
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
           type: 'skillInjection',
           conversationId: 'conv-1',
           skillName: 'commit',
@@ -263,12 +276,16 @@ describe('SkillHandler', () => {
   });
 
   describe('autoActivateSkill', () => {
-    it('does not activate high-confidence discovered skills from natural language', async () => {
+    it('rejects natural-language auto activation without applying or posting injection', async () => {
       const mockSkill = {
         name: 'comic-to-storyboard',
         description: 'Convert manga pages into StoryboardTable storyboards',
         content: 'Storyboard instructions',
         enabled: true,
+        mediaWorkflow: {
+          producedArtifacts: ['CreativeTable'],
+          validationRequirements: ['creative-table.storyboard'],
+        },
       };
       skillService.discover.mockReturnValue({
         found: true,
@@ -291,11 +308,17 @@ describe('SkillHandler', () => {
         userInput: '生成分镜表',
       });
 
-      expect(result).toBeNull();
+      expect(result).toEqual({
+        applied: false,
+        error: 'Natural-language Skill auto-activation is disabled; use $skill or ActivateSkill.',
+      });
       expect(skillService.discover).not.toHaveBeenCalled();
-      expect((skillService.registry as any).ensureLoaded).not.toHaveBeenCalled();
       expect(skillService.apply).not.toHaveBeenCalled();
-      expect(webview.postMessage).not.toHaveBeenCalled();
+      expect(webview.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'skillInjection',
+        }),
+      );
     });
   });
 

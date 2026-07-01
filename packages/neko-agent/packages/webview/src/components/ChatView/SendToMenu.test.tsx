@@ -16,16 +16,15 @@ vi.mock('@neko/shared/vscode', () => ({
 }));
 
 describe('SendToMenu', () => {
-  it('invokes Canvas Markdown capabilities instead of sendToPlugin for Markdown handoff', () => {
+  it('invokes Canvas Markdown lifecycle directly for Markdown handoff buttons', () => {
     render(
       <SendToMenu
-        canvasMarkdownCapability={{
-          capabilityId: 'canvas.ingestMarkdown',
+        canvasMarkdownHandoff={{
           markdown:
             '| scene | shot id | visual | image |\n| --- | --- | --- | --- |\n| S1 | 1 | open | P1 |',
           sourceFormat: 'gfm-table',
-          intentHint: 'creative-table',
-          profileHint: 'storyboard',
+          declaredIntentHint: 'creative-table',
+          declaredProfileHint: 'storyboard',
           resources: [{ token: 'P1', sourcePath: '${PROJECT}/assets/panel-1.png' }],
           provenance: {
             source: 'webview',
@@ -43,19 +42,33 @@ describe('SendToMenu', () => {
 
     expect(mockPostMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'invokeCanvasMarkdownCapability',
+        type: 'invokeAgentCapabilityLifecycle',
         conversationId: 'conv-1',
-        input: expect.objectContaining({
+        invocation: expect.objectContaining({
           capabilityId: 'canvas.ingestMarkdown',
-          intentHint: 'creative-table',
-          profileHint: 'storyboard',
-          resources: [{ token: 'P1', sourcePath: '${PROJECT}/assets/panel-1.png' }],
-          provenance: {
+          phase: 'review',
+          payload: expect.objectContaining({
+            capabilityId: 'canvas.ingestMarkdown',
+            markdown:
+              '| scene | shot id | visual | image |\n| --- | --- | --- | --- |\n| S1 | 1 | open | P1 |',
+            intentHint: 'creative-table',
+            profileHint: 'storyboard',
+            resources: [{ token: 'P1', sourcePath: '${PROJECT}/assets/panel-1.png' }],
+            provenance: expect.objectContaining({
+              source: 'webview',
+              label: 'assistant-markdown-block',
+              conversationId: 'conv-1',
+            }),
+          }),
+          provenance: expect.objectContaining({
             source: 'webview',
-            label: 'assistant-markdown-block',
-          },
+            conversationId: 'conv-1',
+          }),
         }),
       }),
+    );
+    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain(
+      'requestCanvasMarkdownHandoff',
     );
     expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('vscode-webview://');
     expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('blob:');

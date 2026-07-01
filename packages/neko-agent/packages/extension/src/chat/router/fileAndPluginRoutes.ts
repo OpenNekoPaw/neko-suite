@@ -1,15 +1,16 @@
 import * as vscode from 'vscode';
 import {
   NEKO_PLUGIN_EXTENSION_IDS,
-  buildCanvasMarkdownCapabilityResultMessage,
+  buildAgentCapabilityLifecycleResultMessage,
   type WebviewToExtensionMessage,
 } from '@neko-agent/types';
 import {
   createAgentCapabilityLifecycleDiagnostic,
   isAgentCapabilityInvocationResult,
+  isCanvasMarkdownCapabilityId,
+  isCanvasMarkdownCapabilityInput,
   validateAgentCapabilityInvocationInput,
   validateAgentCapabilityInvocationResult,
-  validateCanvasMarkdownCapabilityInput,
   type CanvasMarkdownCapabilityResult,
   type CanvasMarkdownCapabilityInput,
   type NekoCanvasAPI,
@@ -199,8 +200,8 @@ export function tryHandleFileAndPluginRoute(
       );
       return true;
 
-    case 'invokeCanvasMarkdownCapability':
-      void invokeCanvasMarkdownCapability(message, deps);
+    case 'invokeAgentCapabilityLifecycle':
+      void invokeAgentCapabilityLifecycle(message, deps);
       return true;
 
     case 'dnd:start':
@@ -226,36 +227,17 @@ export function tryHandleFileAndPluginRoute(
   }
 }
 
-async function invokeCanvasMarkdownCapability(
-  message: Extract<WebviewToExtensionMessage, { type: 'invokeCanvasMarkdownCapability' }>,
+async function invokeAgentCapabilityLifecycle(
+  message: Extract<WebviewToExtensionMessage, { type: 'invokeAgentCapabilityLifecycle' }>,
   deps: ChatWebviewMessageRouterDeps,
 ): Promise<void> {
   try {
-    const inputDiagnostics = validateCanvasMarkdownCapabilityInput(message.input);
-    if (inputDiagnostics.length > 0) {
-      const lifecycleResult = createBlockedCanvasMarkdownLifecycleResultFromDiagnostics(
-        message.input.capabilityId,
-        readCanvasMarkdownLifecyclePhase(message.input),
-        inputDiagnostics,
-      );
-      await deps.webview.postMessage(
-        buildCanvasMarkdownCapabilityResultMessage({
-          requestId: message.requestId,
-          conversationId: message.conversationId,
-          success: false,
-          lifecycleResult,
-        }),
-      );
-      return;
-    }
-
-    const canvasApi = await getCanvasApi();
-    const lifecycleResult = await invokeCanvasMarkdownLifecycleCapability(canvasApi, message.input);
+    const lifecycleResult = await invokeAgentCapabilityLifecycleBackend(message.invocation);
     const canvasResult = isCanvasMarkdownCapabilityResultData(lifecycleResult.data)
       ? lifecycleResult.data
       : undefined;
     await deps.webview.postMessage(
-      buildCanvasMarkdownCapabilityResultMessage({
+      buildAgentCapabilityLifecycleResultMessage({
         requestId: message.requestId,
         conversationId: message.conversationId,
         success:
@@ -266,21 +248,39 @@ async function invokeCanvasMarkdownCapability(
     );
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    logger.warn('Canvas Markdown capability invocation failed', { error });
+    logger.warn('Agent capability lifecycle invocation failed', { error });
     await deps.webview.postMessage(
-      buildCanvasMarkdownCapabilityResultMessage({
+      buildAgentCapabilityLifecycleResultMessage({
         requestId: message.requestId,
         conversationId: message.conversationId,
         success: false,
         error: reason,
         lifecycleResult: createBlockedCanvasMarkdownLifecycleResult(
-          message.input.capabilityId,
-          readCanvasMarkdownLifecyclePhase(message.input),
+          message.invocation.capabilityId,
+          message.invocation.phase,
           reason,
         ),
       }),
     );
   }
+}
+
+async function invokeAgentCapabilityLifecycleBackend(
+  invocation: AgentCapabilityInvocationInput,
+): Promise<AgentCapabilityInvocationResult> {
+  if (!isCanvasMarkdownLifecycleInvocation(invocation)) {
+    return createBlockedCanvasMarkdownLifecycleResult(
+      invocation.capabilityId,
+      invocation.phase,
+      'Agent capability lifecycle backend does not support this capability.',
+      'agent-capability-lifecycle-unknown-capability',
+      'capabilityId',
+    );
+  }
+
+  const payload = applyCanvasMarkdownInvocationApproval(invocation.payload, invocation.approval);
+  const canvasApi = await getCanvasApi();
+  return invokeCanvasMarkdownLifecycleCapability(canvasApi, payload);
 }
 
 async function invokeCanvasMarkdownLifecycleCapability(
@@ -445,12 +445,68 @@ function toCanvasMarkdownLifecycleResult(
                 }
               : {}),
             ...(invocation.target ? { target: invocation.target } : {}),
-            payload: invocation.payload,
+            payload: projectCanvasMarkdownActionPayload(invocation.payload, action.capabilityId),
           })),
         }
       : {}),
     data: result,
   };
+}
+
+function projectCanvasMarkdownActionPayload(
+  input: AgentCapabilityInvocationInput['payload'],
+  actionCapabilityId: string | undefined,
+): CanvasMarkdownCapabilityInput | undefined {
+  if (!isCanvasMarkdownCapabilityInput(input)) return undefined;
+  const capabilityId = isCanvasMarkdownCapabilityId(actionCapabilityId)
+    ? actionCapabilityId
+    : input.capabilityId;
+  if (capabilityId === 'canvas.attachResource') return undefined;
+  if (!isCanvasMarkdownTextInput(input)) return undefined;
+  const base = {
+    markdown: input.markdown,
+    ...(input.title ? { title: input.title } : {}),
+    ...(input.sourceFormat ? { sourceFormat: input.sourceFormat } : {}),
+    ...(input.resources ? { resources: input.resources } : {}),
+    ...(input.target ? { target: input.target } : {}),
+    ...(input.provenance ? { provenance: input.provenance } : {}),
+    ...(input.intentHint ? { intentHint: input.intentHint } : {}),
+    ...(input.profileHint ? { profileHint: input.profileHint } : {}),
+  };
+
+  switch (capabilityId) {
+    case 'canvas.ingestMarkdown':
+      return { capabilityId, ...base };
+    case 'canvas.createMarkdownNote':
+      return { capabilityId, ...base };
+    case 'canvas.createTableFromMarkdown':
+      return {
+        capabilityId,
+        ...base,
+        ...('tableTitle' in input && input.tableTitle ? { tableTitle: input.tableTitle } : {}),
+      };
+    case 'canvas.createStoryboardDraftFromMarkdown':
+      return { capabilityId, ...base };
+    case 'canvas.createStoryboardFromMarkdown':
+      return {
+        capabilityId,
+        ...base,
+        mode: 'create-nodes',
+      };
+    case 'canvas.validateMarkdownStoryboard':
+      return { capabilityId, ...base };
+  }
+}
+
+type CanvasMarkdownTextInput = Exclude<
+  CanvasMarkdownCapabilityInput,
+  { capabilityId: 'canvas.attachResource' }
+>;
+
+function isCanvasMarkdownTextInput(
+  input: CanvasMarkdownCapabilityInput,
+): input is CanvasMarkdownTextInput {
+  return input.capabilityId !== 'canvas.attachResource';
 }
 
 function readCanvasMarkdownLifecyclePhase(
@@ -489,6 +545,22 @@ function projectCanvasMarkdownLifecycleTarget(
   };
 }
 
+function isCanvasMarkdownLifecycleInvocation(
+  invocation: AgentCapabilityInvocationInput,
+): invocation is AgentCapabilityInvocationInput & { payload: CanvasMarkdownCapabilityInput } {
+  return isCanvasMarkdownCapabilityInput(invocation.payload);
+}
+
+function applyCanvasMarkdownInvocationApproval(
+  payload: CanvasMarkdownCapabilityInput,
+  approval: AgentCapabilityInvocationInput['approval'],
+): CanvasMarkdownCapabilityInput {
+  if (!approval || payload.capabilityId !== 'canvas.createStoryboardFromMarkdown') {
+    return payload;
+  }
+  return { ...payload, approval };
+}
+
 function getCanvasMarkdownLifecycleDescriptor(
   capabilityId: CanvasMarkdownCapabilityInput['capabilityId'],
 ): AgentCapabilityLifecycleDescriptor | undefined {
@@ -525,27 +597,6 @@ function createBlockedCanvasMarkdownLifecycleResult(
     phase,
     status: 'blocked',
     diagnostics: [createAgentCapabilityLifecycleDiagnostic('error', code, message, fieldKey)],
-  };
-}
-
-function createBlockedCanvasMarkdownLifecycleResultFromDiagnostics(
-  capabilityId: string,
-  phase: AgentCapabilityLifecyclePhase,
-  diagnostics: readonly CanvasMarkdownCapabilityResult['diagnostics'][number][],
-): AgentCapabilityInvocationResult {
-  return {
-    capabilityId,
-    phase,
-    status: 'blocked',
-    diagnostics: diagnostics.map((diagnostic) => ({
-      severity: diagnostic.severity,
-      code: diagnostic.code,
-      message: diagnostic.message,
-      ...(diagnostic.fieldKey ? { fieldKey: diagnostic.fieldKey } : {}),
-      ...(diagnostic.token ? { token: diagnostic.token } : {}),
-      ...(diagnostic.line !== undefined ? { line: diagnostic.line } : {}),
-      ...(diagnostic.column !== undefined ? { column: diagnostic.column } : {}),
-    })),
   };
 }
 

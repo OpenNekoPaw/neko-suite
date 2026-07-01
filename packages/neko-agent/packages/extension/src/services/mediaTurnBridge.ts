@@ -45,6 +45,7 @@ export class MediaTurnBridge {
       conversationId: input.conversationId,
       prompt: input.prompt,
       mediaModel: input.mediaModel,
+      now: this.deps.now,
       postMessage: (message) => {
         this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
         void input.webview.postMessage(message);

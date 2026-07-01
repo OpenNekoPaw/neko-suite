@@ -8,6 +8,7 @@ import {
   createAgentSessionRunner,
   type AgentRunnerConfirmationRequest,
   type AgentRunnerEventEmitter,
+  type AgentRunnerIdcWorkflowControlInput,
   type AgentPendingMessageItem,
   type AgentRunnerPort,
   type AgentRunnerPortEvent,
@@ -24,6 +25,7 @@ import {
 import type { IEngineClientProvider } from '../services/engineClientProvider';
 import type { IAgentContext } from './agentContext';
 import type { IAgentConfig } from './agentRunnerContracts';
+import type { IdcWorkflowControlResult } from '@neko/agent';
 
 export interface AgentRunnerRuntimeAdapterLogger {
   warn(message: string, details?: unknown): void;
@@ -53,6 +55,8 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
     onDidStop: () => this.runnerEvents.fire({ type: 'stop' }),
     onDidRequestConfirmation: (request) =>
       this.runnerEvents.fire({ type: 'confirmation', request: projectConfirmation(request) }),
+    onDidActivationProgress: ({ conversationId, events }) =>
+      this.runnerEvents.fire({ type: 'activationProgress', conversationId, events }),
     onMissingConfirmation: (toolCallId) =>
       this.deps.logger.warn('No pending confirmation found for toolCallId:', toolCallId),
     onConfirmationTimeout: (request) =>
@@ -235,11 +239,23 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
     this.runtimeController.refresh(this.createRuntimeSessionAssemblyInput(this.config));
   }
 
+  controlIdcWorkflow(input: AgentRunnerIdcWorkflowControlInput): IdcWorkflowControlResult {
+    return this.sessionRunner.controlIdcWorkflow(input);
+  }
+
   applySkillInjection(
     injection: import('@neko/agent').SkillInjection,
     skill?: import('@neko/agent').Skill,
   ): void {
     this.sessionRunner.applySkillInjection(injection, skill);
+  }
+
+  activateToolSetsForTools(toolNames: readonly string[]): readonly string[] {
+    return this.sessionRunner.activateToolSetsForTools(toolNames);
+  }
+
+  deactivateToolSet(toolSetName: string): void {
+    this.sessionRunner.deactivateToolSet(toolSetName);
   }
 
   getActiveSkill(): import('@neko/shared').Skill | undefined {
@@ -311,6 +327,7 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
           details: error.details,
         });
       },
+      onActivationProgress: this.sessionRunner.buildActivationProgressCallback(),
       logger: {
         warn: (message, error) => this.deps.logger.warn(message, error),
         error: (message, details) => this.deps.logger.error(message, details),

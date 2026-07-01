@@ -11,12 +11,7 @@ import { getPanoramicPreviewRoute } from '@neko/shared';
 export type AgentWorkItemStatusTone = 'info' | 'success' | 'danger' | 'neutral';
 
 export type AgentTaskRichContentKind =
-  | 'image'
-  | 'image-grid'
-  | 'video'
-  | 'audio'
-  | 'panoramic-image'
-  | 'panoramic-video';
+  'image' | 'image-grid' | 'video' | 'audio' | 'panoramic-image' | 'panoramic-video';
 
 export interface AgentTaskResultContentProjection {
   contentKind: AgentTaskRichContentKind | null;
@@ -48,9 +43,7 @@ export interface BackgroundTaskBatchProjection {
   taskType: AgentWorkItemTaskType;
   tone: AgentWorkItemStatusTone;
   titleKey:
-    | 'tasks.batchVideoGeneration'
-    | 'tasks.batchAudioGeneration'
-    | 'tasks.batchImageGeneration';
+    'tasks.batchVideoGeneration' | 'tasks.batchAudioGeneration' | 'tasks.batchImageGeneration';
   badges: BackgroundTaskBatchBadgeProjection[];
   rows: BackgroundTaskBatchRowProjection[];
   showProgress: boolean;
@@ -298,6 +291,8 @@ function projectTaskRichContent(
   thumbnailUrl: string | undefined,
 ): Pick<AgentTaskResultContentProjection, 'contentKind' | 'contentData'> {
   const firstUrl = displayUrls?.[0];
+  const openTargets = task.result?.assets?.map((asset) => asset.assetRef?.uri ?? asset.renderUri);
+  const firstOpenTarget = openTargets?.[0];
 
   switch (task.type) {
     case 'video':
@@ -309,6 +304,7 @@ function projectTaskRichContent(
             src: thumbnailUrl ?? firstUrl,
             poster: thumbnailUrl,
             name: task.name,
+            localPath: firstOpenTarget,
             kind: 'video',
           },
         };
@@ -319,13 +315,14 @@ function projectTaskRichContent(
           src: firstUrl,
           poster: thumbnailUrl,
           title: task.name,
+          localPath: firstOpenTarget,
         },
       };
     case 'audio':
       if (!firstUrl) return EMPTY_TASK_RESULT_CONTENT;
       return {
         contentKind: 'audio',
-        contentData: { src: firstUrl, title: task.name },
+        contentData: { src: firstUrl, title: task.name, localPath: firstOpenTarget },
       };
     case 'image': {
       if (displayUrls && displayUrls.length > 1) {
@@ -333,6 +330,7 @@ function projectTaskRichContent(
           contentKind: 'image-grid',
           contentData: {
             urls: [...displayUrls],
+            ...(openTargets ? { localPaths: [...openTargets] } : {}),
             name: task.name,
           },
         };
@@ -342,12 +340,12 @@ function projectTaskRichContent(
       if (firstUrl && isPanoramicRenderUri(firstUrl, 'image')) {
         return {
           contentKind: 'panoramic-image',
-          contentData: { src: imgSrc, name: task.name, kind: 'image' },
+          contentData: { src: imgSrc, name: task.name, localPath: firstOpenTarget, kind: 'image' },
         };
       }
       return {
         contentKind: 'image',
-        contentData: { src: imgSrc, name: task.name },
+        contentData: { src: imgSrc, name: task.name, localPath: firstOpenTarget },
       };
     }
   }

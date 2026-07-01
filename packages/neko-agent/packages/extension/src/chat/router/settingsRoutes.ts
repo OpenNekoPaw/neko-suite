@@ -15,7 +15,9 @@ export function tryHandleSettingsRoute(
       return true;
 
     case 'updateSettings':
-      void deps.settingsHandler.handleUpdateSettings(deps.webview, message.settings);
+      void deps.settingsHandler.handleUpdateSettings(deps.webview, message.settings, {
+        ...(message.conversationId ? { conversationId: message.conversationId } : {}),
+      });
       return true;
 
     case 'getTabState':

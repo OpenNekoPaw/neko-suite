@@ -4,6 +4,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaskHandler } from '../taskHandler';
+import * as vscode from 'vscode';
+
+vi.mock('vscode', async () => await import('../../../__mocks__/vscode'));
 
 function createMockWebview() {
   return { postMessage: vi.fn().mockResolvedValue(true) };
@@ -275,6 +278,38 @@ describe('TaskHandler', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('handleViewTaskResult', () => {
+    it('opens generated media task refs through the generated asset index', async () => {
+      taskManager.get.mockResolvedValue(null);
+      platform.media.getTask.mockResolvedValue({
+        id: 'media-1',
+        type: 'text-to-image',
+        status: 'completed',
+        progress: 100,
+        request: { prompt: 'cat', metadata: { conversationId } },
+        outputs: [{ type: 'image', url: 'generated-assets/asset-1.png' }],
+      });
+      handler = new TaskHandler({
+        taskManager: taskManager as any,
+        platform: platform as any,
+        generatedAssetLookup: {
+          get: vi.fn().mockReturnValue({
+            id: 'asset-1',
+            path: '/workspace/demo/neko/generated/image/task_1.png',
+          }),
+        },
+      });
+
+      await handler.handleViewTaskResult('media-1', conversationId);
+
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'vscode.open',
+        expect.objectContaining({ fsPath: '/workspace/demo/neko/generated/image/task_1.png' }),
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
   });
 });

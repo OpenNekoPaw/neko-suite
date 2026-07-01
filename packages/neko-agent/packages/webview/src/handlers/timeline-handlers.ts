@@ -29,6 +29,7 @@ function applyTimelineMessageToConversation(
         state: streaming.activeTurnTimeline ?? null,
         message,
       });
+      const wasCompleted = streaming.activeTurnTimeline?.completed === true;
 
       if (projection.diagnostics.length > 0) {
         context.setGlobalError(formatTimelineDiagnostics(projection.diagnostics));
@@ -46,7 +47,7 @@ function applyTimelineMessageToConversation(
       }
       return {
         messages: projectMessagesWithActiveTurnTimeline(messages, projection.state),
-        streamingMessageId: message.messageId,
+        streamingMessageId: wasCompleted ? streaming.streamingMessageId : message.messageId,
         isThinking: false,
         activeTurnTimeline: projection.state,
       };

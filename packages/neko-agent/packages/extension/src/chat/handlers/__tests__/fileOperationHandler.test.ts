@@ -94,6 +94,25 @@ describe('FileOperationHandler', () => {
       expect(commands.executeCommand).toHaveBeenCalledWith('vscode.open', expect.any(Object));
     });
 
+    it('should resolve generated asset refs before opening files', async () => {
+      const { commands } = await import('vscode');
+      handler = new FileOperationHandler({
+        generatedAssetLookup: {
+          get: vi.fn().mockReturnValue({
+            id: 'asset-1',
+            path: '/workspace/demo/neko/generated/image/task_1.png',
+          }),
+        },
+      } as never);
+
+      await handler.handleOpenFile('generated-assets/asset-1.png');
+
+      expect(commands.executeCommand).toHaveBeenCalledWith(
+        'vscode.open',
+        expect.objectContaining({ fsPath: '/workspace/demo/neko/generated/image/task_1.png' }),
+      );
+    });
+
     it('should route various video extensions correctly', async () => {
       const { commands } = await import('vscode');
       for (const ext of ['mov', 'avi', 'mkv', 'webm']) {

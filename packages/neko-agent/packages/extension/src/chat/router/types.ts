@@ -8,6 +8,7 @@ import type {
   ContextHandler,
   ConversationMessageHandler,
   FileOperationHandler,
+  IdcWorkflowHandler,
   PlanModeHandler,
   SettingsHandler,
   SkillHandler,
@@ -23,6 +24,7 @@ export interface ChatWebviewMessageRouterDeps {
   readonly taskHandler: TaskHandler;
   readonly skillHandler: SkillHandler;
   readonly fileOperationHandler: FileOperationHandler;
+  readonly idcWorkflowHandler: IdcWorkflowHandler;
   readonly planModeHandler: PlanModeHandler;
   readonly settingsHandler: SettingsHandler;
   readonly contextHandler: ContextHandler;

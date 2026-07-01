@@ -42,8 +42,7 @@ export interface CreateExtensionAgentContentAccessRuntimeOptions {
   readonly maxProviderAssetBytes?: number;
 }
 
-export interface CreateExtensionAgentContentAccessRuntimeResult
-  extends AgentContentAccessRuntimeServices {
+export interface CreateExtensionAgentContentAccessRuntimeResult extends AgentContentAccessRuntimeServices {
   readonly runtime: AgentContentAccessRuntime;
 }
 
@@ -69,6 +68,8 @@ export function createExtensionAgentContentAccessRuntime(
       ? {
           providers: [
             new DocumentResourceCacheProvider({
+              pathResolver: options.pathResolver,
+              ...(workspaceRoot ? { projectRoot: workspaceRoot } : {}),
               entryReader: {
                 readEntry: (source, entryPath) =>
                   engineContentAccess.readDocumentEntry({

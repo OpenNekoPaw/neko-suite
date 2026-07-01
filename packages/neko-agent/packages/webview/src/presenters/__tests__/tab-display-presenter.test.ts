@@ -61,4 +61,28 @@ describe('tab display presenter', () => {
     expect(projected.map((tab) => tab.displayStatus)).toEqual(['running', 'completed', 'running']);
     expect(tabs[0]).not.toHaveProperty('displayStatus');
   });
+
+  it('does not carry stale displayStatus from persisted tab records', () => {
+    const tabs = [
+      {
+        id: 'tab-1',
+        title: 'Generated cat image',
+        conversationId: 'conv-1',
+        displayStatus: 'running',
+      },
+    ] as unknown as OpenTab[];
+
+    const projected = projectDisplayTabs({
+      openTabs: tabs,
+      conversations: [],
+      activeConversationId: null,
+      activeMessages: [],
+      activeStreaming: { streamingMessageId: null, isThinking: false },
+      messagesByConversation: new Map(),
+      streamingByConversation: new Map(),
+      agentStateByConversation: new Map(),
+    });
+
+    expect(projected[0]).not.toHaveProperty('displayStatus');
+  });
 });

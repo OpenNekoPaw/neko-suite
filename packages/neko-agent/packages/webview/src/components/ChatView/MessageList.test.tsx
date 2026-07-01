@@ -87,14 +87,14 @@ describe('MessageList auto-scroll lifecycle', () => {
     expect(screen.getByText('/books/a.epub')).toBeTruthy();
   });
 
-  it('passes plugin availability into composite block projections for Canvas transfer actions', () => {
+  it('passes plugin availability into markdown storyboard Canvas transfer actions', () => {
     virtualItems = [{ index: 0, key: 'storyboard', start: 0 }];
     registerDefaultRenderers();
 
     renderWithI18n(
       <MessageActionsProvider pluginsAvailable={{ canvas: true, cut: false, sketch: false }}>
         <MessageList
-          messages={[createCompositeStoryboardMessage()]}
+          messages={[createStoryboardMarkdownMessage()]}
           isThinking={false}
           streamingMessageId={null}
           activeConversationId="conv-1"
@@ -103,6 +103,28 @@ describe('MessageList auto-scroll lifecycle', () => {
     );
 
     expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
+  });
+
+  it('renders storyboard resources from prior assistant ReadImage context', () => {
+    virtualItems = [
+      { index: 0, key: 'read-image', start: 0 },
+      { index: 1, key: 'storyboard', start: 80 },
+    ];
+
+    renderWithI18n(
+      <MessageActionsProvider pluginsAvailable={{ canvas: true }}>
+        <MessageList
+          messages={[createReadImageContextMessage(), createStoryboardMarkdownMessage()]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+        />
+      </MessageActionsProvider>,
+    );
+
+    expect(screen.getByAltText('Page 1').getAttribute('src')).toBe('vscode-webview://page-1.jpg');
+    expect(screen.queryByText(/no image resource context/)).toBeNull();
+    expect(screen.queryByText('P1')).toBeNull();
   });
 
   it('renders collapsed process records before final content when they happened first', () => {
@@ -161,14 +183,91 @@ describe('MessageList auto-scroll lifecycle', () => {
     expect(screen.getByText('Tool limit: 1')).toBeTruthy();
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Clear record: comic-to-storyboard (domainSkill)' }),
+      screen.getByRole('button', { name: 'Clear record: comic-to-storyboard (Domain skill)' }),
     );
     expect(onClearActiveSkill).toHaveBeenCalledOnce();
   });
+
+  it('localizes active skill lifecycle metadata while preserving raw tokens as titles', () => {
+    virtualItems = [{ index: 0, key: 'skill-notice', start: 0 }];
+
+    renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList
+          messages={[]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+          activeSkillNotice={{
+            skillName: 'creation-persona',
+            records: [
+              {
+                id: 'record-1',
+                skillName: 'creation-persona',
+                slot: 'stagePersona',
+                owner: 'idc',
+                clearable: false,
+                lockedReason: 'IDC stage persona is cleared when its owning stage exits',
+              },
+            ],
+          }}
+        />
+      </MessageActionsProvider>,
+      'zh-cn',
+    );
+
+    expect(screen.getByText('阶段人设').getAttribute('title')).toBe('stagePersona');
+    expect(screen.getByText('IDC 阶段').getAttribute('title')).toBe('idc');
+    expect(screen.getByText('随所属 IDC 阶段退出自动清理').getAttribute('title')).toBe(
+      'IDC stage persona is cleared when its owning stage exits',
+    );
+    expect(screen.queryByText('stagePersona')).toBeNull();
+    expect(screen.queryByText('idc')).toBeNull();
+    expect(
+      screen.queryByText('IDC stage persona is cleared when its owning stage exits'),
+    ).toBeNull();
+  });
+
+  it('does not render activation progress as a standalone row above messages', () => {
+    virtualItems = [];
+
+    renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList
+          messages={[]}
+          isThinking={false}
+          streamingMessageId={null}
+          activeConversationId="conv-1"
+          activationProgress={[
+            {
+              conversationId: 'conv-1',
+              activationId: 'activation-1',
+              target: 'skill',
+              action: 'activate',
+              name: 'quality-review',
+              source: 'agent-tool',
+              requestedBy: 'agent',
+              reason: 'Agent selected review',
+              status: 'succeeded',
+              events: [
+                activationEvent('event-1', 'requested', 'succeeded', 1),
+                activationEvent('event-2', 'validated', 'succeeded', 2),
+                activationEvent('event-3', 'active', 'succeeded', 3),
+              ],
+            },
+          ]}
+        />
+      </MessageActionsProvider>,
+    );
+
+    expect(screen.queryByRole('button', { name: /Skill succeeded/ })).toBeNull();
+    expect(screen.queryByText('quality-review')).toBeNull();
+    expect(screen.queryByText('requested')).toBeNull();
+  });
 });
 
-function renderWithI18n(node: React.ReactElement) {
-  const service = new I18nService('en');
+function renderWithI18n(node: React.ReactElement, locale: 'en' | 'zh-cn' = 'en') {
+  const service = new I18nService(locale);
   service.registerBundle('chat', 'en', enChat);
   service.registerBundle('chat', 'zh-cn', zhCnChat);
   return render(<I18nProvider service={service}>{node}</I18nProvider>);
@@ -197,47 +296,74 @@ function createToolMessage(): Message {
   };
 }
 
-function createCompositeStoryboardMessage(): Message {
+function createReadImageContextMessage(): Message {
   return {
-    id: 'message-storyboard',
+    id: 'message-read-image',
     role: 'assistant',
     content: '',
     timestamp: 1_717_200_000_000,
     contentBlocks: [
       {
-        id: 'block-composite',
-        type: 'composite',
-        timestamp: 1_717_200_000_000,
-        composite: {
-          template: 'storyboard-table',
-          title: 'Storyboard',
-          storyboardTable: {
-            schemaVersion: 1,
-            kind: 'storyboard-table',
-            title: 'Storyboard',
-            scenes: [
-              {
-                sceneId: 'scene-1',
-                sceneTitle: 'Scene 1',
-                shots: [
-                  {
-                    shotNumber: 1,
-                    duration: 2,
-                    visualDescription: 'Title page.',
-                    characterAction: 'Static title card.',
-                    imageStrategy: 'generate-new',
+        id: 'read-image-block',
+        type: 'tool_call',
+        timestamp: 10,
+        toolCall: {
+          id: 'read-image-1',
+          name: 'ReadImage',
+          arguments: {},
+          result: {
+            success: true,
+            data: {
+              imageInfo: [
+                {
+                  alias: 'P1',
+                  label: 'Page 1',
+                  resourceRef: {
+                    id: 'page-1',
+                    scope: 'project',
+                    provider: 'read-image',
+                    kind: 'media',
+                    source: { kind: 'file', projectRelativePath: 'images/page-1.jpg' },
+                    locator: { kind: 'file', path: 'images/page-1.jpg' },
+                    fingerprint: {
+                      strategy: 'provider',
+                      providerId: 'read-image',
+                      value: 'page-1',
+                    },
                   },
-                ],
+                },
+              ],
+            },
+            attachments: [
+              {
+                type: 'image',
+                path: 'vscode-webview://page-1.jpg',
+                mimeType: 'image/jpeg',
               },
             ],
           },
-          sections: [
-            {
-              heading: 'Scene 1 / Shot 1',
-              content: 'Title page.',
-            },
-          ],
         },
+      },
+    ],
+  };
+}
+
+function createStoryboardMarkdownMessage(): Message {
+  return {
+    id: 'message-storyboard-markdown',
+    role: 'assistant',
+    content: '',
+    timestamp: 1_717_200_001_000,
+    contentBlocks: [
+      {
+        id: 'storyboard-text',
+        type: 'text',
+        timestamp: 20,
+        content: [
+          '| scene | shot | source | sourcePanel | decision | duration | visual | motion | audio | characters | dialogue | prompt | reviewStatus | nextAction | contentType | decisionReason | requiresSplit | duplicateOf |',
+          '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+          '| Opening | 1 | P1 | full page | keep | 3s | Page opening frame | slow push | low rumble | lead |  | cinematic frame | needs-review | split-panels | story | narrative beat | true |  |',
+        ].join('\n'),
       },
     ],
   };
@@ -283,5 +409,35 @@ function toolBlock(id: string, name: string, filePath: string, duration: number)
         duration,
       },
     },
+  };
+}
+
+function activationEvent(
+  id: string,
+  step:
+    | 'requested'
+    | 'validated'
+    | 'loaded'
+    | 'prepared'
+    | 'record-created'
+    | 'projected'
+    | 'active'
+    | 'failed',
+  status: 'pending' | 'running' | 'succeeded' | 'failed',
+  at: number,
+) {
+  return {
+    id,
+    activationId: 'activation-1',
+    conversationId: 'conv-1',
+    target: 'skill' as const,
+    action: 'activate' as const,
+    name: 'quality-review',
+    step,
+    status,
+    source: 'agent-tool' as const,
+    requestedBy: 'agent' as const,
+    reason: 'Agent selected review',
+    at,
   };
 }

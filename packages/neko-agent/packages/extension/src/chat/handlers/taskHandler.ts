@@ -30,6 +30,10 @@ import type { ITaskManager as TaskManager } from '@neko/shared';
 import { getLogger } from '../../base';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
+import {
+  resolveGeneratedAssetOpenPath,
+  type GeneratedAssetLookup,
+} from '../../services/generatedAssetOpenResolver';
 
 const logger = getLogger('TaskHandler');
 
@@ -41,6 +45,7 @@ export interface TaskHandlerDeps {
   taskManager?: TaskManager;
   dashboardWorkItems?: AgentDashboardWorkItemSource;
   localResourceAccess?: AgentLocalResourceAccess;
+  generatedAssetLookup?: GeneratedAssetLookup;
 }
 
 /**
@@ -188,6 +193,19 @@ export class TaskHandler {
     if (plan.kind === 'open-file') {
       await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(plan.filePath));
       return;
+    }
+
+    const generatedAssetPath = resolveGeneratedAssetOpenPath(
+      plan.url,
+      this.deps.generatedAssetLookup,
+    );
+    if (generatedAssetPath) {
+      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(generatedAssetPath));
+      return;
+    }
+
+    if (plan.url.startsWith('generated-assets/')) {
+      throw new Error(`Generated asset is not available for opening: ${plan.url}`);
     }
 
     await vscode.env.openExternal(vscode.Uri.parse(plan.url));

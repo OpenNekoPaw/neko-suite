@@ -64,6 +64,7 @@ export interface AgentTurnTimelineAssistantTextPayload {
   readonly content: string;
   readonly format?: 'markdown' | 'plain';
   readonly sourceBlockId?: string;
+  readonly replaceContent?: boolean;
 }
 
 export interface AgentTurnTimelineThinkingPayload {

@@ -52,6 +52,7 @@ import {
   type BoundActiveSkillIndicator,
   type PendingForegroundConversationActivation,
 } from '@/handlers';
+import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import { shouldActivateForegroundConversation } from '@/handlers/foreground-activation';
 import { ChatWorkspace } from './ChatWorkspace';
 import {
@@ -171,6 +172,11 @@ export function ConversationController({
 
   // ---- UI state for active tab ----
   const [activeTab, setActiveTab] = useState<TabType>('chat');
+  const activeTabConversationId = activeTabId
+    ? (openTabs.find((tab) => tab.id === activeTabId)?.conversationId ?? null)
+    : null;
+  const activeOpenTab = activeTabId ? openTabs.find((tab) => tab.id === activeTabId) : undefined;
+  const visibleConversationId = activeTabId ? activeTabConversationId : activeConversationId;
 
   // Model selection state — owned here so the settingsData handler can hydrate
   // it on reload. Passed down to ChatWorkspace which reads it for send().
@@ -231,9 +237,15 @@ export function ConversationController({
   const [activeSkillByConversation, setActiveSkillByConversation] = useState<
     Map<string, BoundActiveSkillIndicator>
   >(() => new Map());
-  const activeSkill = activeConversationId
-    ? (activeSkillByConversation.get(activeConversationId) ?? null)
+  const [activationProgressByConversation, setActivationProgressByConversation] = useState<
+    Map<string, readonly ActivationProgressTimeline[]>
+  >(() => new Map());
+  const activeSkill = visibleConversationId
+    ? (activeSkillByConversation.get(visibleConversationId) ?? null)
     : null;
+  const activationProgress = visibleConversationId
+    ? (activationProgressByConversation.get(visibleConversationId) ?? [])
+    : [];
   const setActiveSkill = useCallback<
     React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>
   >(
@@ -378,6 +390,12 @@ export function ConversationController({
         next.delete(conversationId);
         return next;
       });
+      setActivationProgressByConversation((prev) => {
+        if (!prev.has(conversationId)) return prev;
+        const next = new Map(prev);
+        next.delete(conversationId);
+        return next;
+      });
       setPromptModeByConversation((prev) => {
         if (!prev.has(conversationId)) return prev;
         const next = new Map(prev);
@@ -458,10 +476,6 @@ export function ConversationController({
     },
     [activeSettings.chatModelOptions, updateSettings],
   );
-  const activeTabConversationId = activeTabId
-    ? (openTabs.find((tab) => tab.id === activeTabId)?.conversationId ?? null)
-    : null;
-  const activeOpenTab = activeTabId ? openTabs.find((tab) => tab.id === activeTabId) : undefined;
   const conversationKind = activeOpenTab?.kind ?? 'chat';
   const embodyCharacterSession = activeOpenTab?.embodyCharacterSession;
 
@@ -692,6 +706,7 @@ export function ConversationController({
     forceAgentStateUpdate,
     setSkills,
     setActiveSkill,
+    setActivationProgressByConversation,
     updateSettings,
     setPromptModeForConversation,
     setShowOnboarding,
@@ -1254,6 +1269,7 @@ export function ConversationController({
             skills={skills}
             activeSkill={activeSkill}
             setActiveSkill={setActiveSkill}
+            activationProgress={activationProgress}
             // Context chips
             contextChips={contextChips}
             ambientNodes={ambientNodes}

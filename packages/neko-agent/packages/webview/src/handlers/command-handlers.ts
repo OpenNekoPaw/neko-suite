@@ -7,7 +7,7 @@
 import { defineHandler } from './types';
 import type { MessageHandler, HandlerRegistration, MessageHandlerContext } from './types';
 import type {
-  CanvasMarkdownCapabilityResultMessage,
+  AgentCapabilityLifecycleResultMessage,
   PromptModeChangedMessage,
   SlashCommandResultMessage,
 } from './messages';
@@ -39,8 +39,8 @@ const handlePromptModeChanged: MessageHandler<'promptModeChanged'> = (
   context.setPromptModeForConversation(message.conversationId, message.mode);
 };
 
-const handleCanvasMarkdownCapabilityResult: MessageHandler<'canvasMarkdownCapabilityResult'> = (
-  message: CanvasMarkdownCapabilityResultMessage,
+const handleAgentCapabilityLifecycleResult: MessageHandler<'agentCapabilityLifecycleResult'> = (
+  message: AgentCapabilityLifecycleResultMessage,
   context,
 ) => {
   updateConversation(context, message.conversationId, (messages, streamingMessageId) => ({
@@ -102,11 +102,11 @@ function applySlashCommandEffect(
 export const commandHandlers: HandlerRegistration[] = [
   defineHandler('slashCommandResult', handleSlashCommandResult),
   defineHandler('promptModeChanged', handlePromptModeChanged),
-  defineHandler('canvasMarkdownCapabilityResult', handleCanvasMarkdownCapabilityResult),
+  defineHandler('agentCapabilityLifecycleResult', handleAgentCapabilityLifecycleResult),
 ];
 
 function projectCanvasMarkdownLifecycleContentBlock(
-  message: CanvasMarkdownCapabilityResultMessage,
+  message: AgentCapabilityLifecycleResultMessage,
 ): ContentBlock {
   if (!message.lifecycleResult) {
     throw new Error('Canvas Markdown lifecycle content block requires a lifecycle result.');
@@ -125,7 +125,7 @@ function projectCanvasMarkdownLifecycleContentBlock(
 }
 
 function projectCanvasMarkdownCapabilityResultContent(
-  message: CanvasMarkdownCapabilityResultMessage,
+  message: AgentCapabilityLifecycleResultMessage,
 ): string {
   const lifecycle = message.lifecycleResult;
   if (lifecycle) {
@@ -195,7 +195,7 @@ function projectCanvasMarkdownCapabilityResultContent(
 
 function projectLifecycleActions(
   actions:
-    | NonNullable<NonNullable<CanvasMarkdownCapabilityResultMessage['lifecycleResult']>['actions']>
+    | NonNullable<NonNullable<AgentCapabilityLifecycleResultMessage['lifecycleResult']>['actions']>
     | undefined,
 ): string {
   if (!actions?.length) return '';

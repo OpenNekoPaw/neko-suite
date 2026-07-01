@@ -13,6 +13,7 @@ import { ContentBlockItem } from '@/components/ChatView/ContentBlockItem';
 import { ProcessRecordsGroup } from '@/components/ChatView/ProcessRecordsGroup';
 import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
 import { SkillIndicator, type ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
+import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import {
   DEFAULT_MESSAGE_IDENTITIES,
   type MessageIdentityMap,
@@ -30,6 +31,7 @@ interface MessageListProps {
   activeConversationId: string | null;
   identities?: MessageIdentityMap;
   activeSkillNotice?: ActiveSkillIndicator | null;
+  activationProgress?: readonly ActivationProgressTimeline[];
   onClearActiveSkill?: (recordId?: string) => void;
 }
 
@@ -40,6 +42,7 @@ export function MessageList({
   activeConversationId,
   identities = DEFAULT_MESSAGE_IDENTITIES,
   activeSkillNotice,
+  activationProgress = [],
   onClearActiveSkill,
 }: MessageListProps) {
   const { pluginsAvailable } = useMessageActions();
@@ -56,8 +59,16 @@ export function MessageList({
         streamingMessageId,
         plugins: pluginsAvailable,
         activeSkillNotice,
+        activationProgress,
       }),
-    [messages, isThinking, streamingMessageId, pluginsAvailable, activeSkillNotice],
+    [
+      messages,
+      isThinking,
+      streamingMessageId,
+      pluginsAvailable,
+      activeSkillNotice,
+      activationProgress,
+    ],
   );
 
   const flattenedItems = projection.items;
@@ -173,6 +184,7 @@ export function MessageList({
                     conversationId={activeConversationId}
                     workItemIds={item.workItemIds}
                     siblingBlocks={item.siblingBlocks}
+                    ambientToolCalls={item.ambientToolCalls}
                     assistantIdentity={identities.assistant}
                   />
                 ) : item.kind === 'process_group' ? (
@@ -183,6 +195,7 @@ export function MessageList({
                     conversationId={activeConversationId}
                     workItemIds={item.workItemIds}
                     siblingBlocks={item.siblingBlocks}
+                    ambientToolCalls={item.ambientToolCalls}
                     assistantIdentity={identities.assistant}
                   />
                 ) : (

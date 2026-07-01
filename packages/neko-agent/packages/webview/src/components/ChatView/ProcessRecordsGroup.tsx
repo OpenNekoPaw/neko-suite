@@ -1,5 +1,5 @@
 import { memo, useCallback, useState } from 'react';
-import type { ContentBlock } from '@neko-agent/types';
+import type { ContentBlock, ToolCall } from '@neko-agent/types';
 import type { ContentBlockProcessGroupProjection } from '@/presenters/content-block-presenter';
 import { ContentBlockItem } from '@/components/ChatView/ContentBlockItem';
 import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
@@ -12,6 +12,7 @@ interface ProcessRecordsGroupProps {
   conversationId: string | null;
   workItemIds?: string[];
   siblingBlocks: ContentBlock[];
+  ambientToolCalls?: readonly ToolCall[];
   isFirst?: boolean;
   isStreaming: boolean;
   assistantIdentity?: MessageSpeakerIdentity;
@@ -22,6 +23,7 @@ function ProcessRecordsGroupComponent({
   conversationId,
   workItemIds,
   siblingBlocks,
+  ambientToolCalls,
   isFirst = false,
   isStreaming,
   assistantIdentity,
@@ -93,6 +95,7 @@ function ProcessRecordsGroupComponent({
                   conversationId={conversationId}
                   workItemIds={workItemIds}
                   siblingBlocks={siblingBlocks}
+                  ambientToolCalls={ambientToolCalls}
                   assistantIdentity={assistantIdentity}
                 />
               ))}

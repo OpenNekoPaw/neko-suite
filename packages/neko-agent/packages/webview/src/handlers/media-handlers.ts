@@ -3,9 +3,11 @@
  *
  * Handles: mediaTaskCreated, mediaTaskProgress
  *
- * On creation outside an active timeline: merges the projected work item,
- * appends the assistant TaskCard host message, and stops the thinking indicator.
- * On progress: updates task in the per-conversation work item store.
+ * On creation outside an active timeline: merges the projected work item and
+ * appends the assistant TaskCard host message. Direct media turns keep the
+ * thinking indicator active until terminal progress or streamComplete arrives.
+ * On progress: updates task in the per-conversation work item store and clears
+ * direct-turn running state on terminal task status.
  */
 
 import { defineHandler } from './types';
@@ -18,6 +20,7 @@ import {
   hasActiveTimelineWorkItem,
   rejectActiveTimelineNonTimelineMessage,
 } from './timeline-handlers';
+import { updateConversation } from './message-updater';
 
 // ---------------------------------------------------------------------------
 // Handlers
@@ -57,6 +60,14 @@ const handleMediaTaskCreated: MessageHandler<'mediaTaskCreated'> = (
   context.setWorkItemsByConversation((prev) =>
     upsertWorkItemsForConversation(prev, conversationId, [workItem]),
   );
+
+  if (message.parentScope === 'turn') {
+    updateConversation(context, conversationId, (messages) => ({
+      messages: appendMediaTaskMessageToMessages(messages, workItem.id),
+      isThinking: true,
+    }));
+    return;
+  }
 
   // Stop thinking indicator (only for the active conversation)
   if (context.isCurrentConversation(conversationId)) {
@@ -112,6 +123,15 @@ const handleMediaTaskProgress: MessageHandler<'mediaTaskProgress'> = (
   context.setWorkItemsByConversation((prev) =>
     upsertWorkItemsForConversation(prev, conversationId, [workItem]),
   );
+
+  if (message.parentScope === 'turn' && isTerminalMediaTaskStatus(workItem.status)) {
+    updateConversation(context, conversationId, (messages) => ({
+      messages,
+      isThinking: false,
+      streamingMessageId: null,
+      queuedMessageCount: 0,
+    }));
+  }
 };
 
 // ---------------------------------------------------------------------------
@@ -122,3 +142,9 @@ export const mediaHandlers: HandlerRegistration[] = [
   defineHandler('mediaTaskCreated', handleMediaTaskCreated),
   defineHandler('mediaTaskProgress', handleMediaTaskProgress),
 ];
+
+function isTerminalMediaTaskStatus(
+  status: MediaTaskProgressMessage['workItem']['status'],
+): boolean {
+  return status === 'completed' || status === 'failed' || status === 'cancelled';
+}

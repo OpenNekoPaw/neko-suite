@@ -10,6 +10,7 @@ import {
   projectAgentMessageAttachments,
   type AgentBase64ImageAttachment,
   type AgentProcessedAttachments,
+  type AgentRuntimePromptLocale,
 } from '@neko/agent/runtime';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import {
@@ -42,10 +43,14 @@ export class AttachmentProcessor {
   /**
    * Process attachments using agent-owned projection rules.
    */
-  async processAttachments(attachments?: MessageAttachment[]): Promise<ProcessedAttachments> {
+  async processAttachments(
+    attachments?: MessageAttachment[],
+    options: { readonly locale?: AgentRuntimePromptLocale | string } = {},
+  ): Promise<ProcessedAttachments> {
     return projectAgentMessageAttachments(attachments, {
       readTextFile: async (path) => fs.promises.readFile(path, 'utf-8'),
       readImageFileAsBase64: (path) => this.readFileAsBase64(path),
+      locale: options.locale,
       onError: ({ operation, error }) => {
         logger.error(`Failed to ${operation} attachment`, error);
       },

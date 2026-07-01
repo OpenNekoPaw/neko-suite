@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ContentBlock } from '@neko-agent/types';
+import { STORYBOARD_CREATIVE_TABLE_HEADERS, type ContentBlock } from '@neko-agent/types';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { registerDefaultRenderers } from '@/components/ChatView/RichContent';
 import { ContentBlockItem } from './ContentBlockItem';
@@ -47,7 +47,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     expect(screen.getByLabelText('小橘 (Character Dialogue)')).toBeTruthy();
   });
 
-  it('renders Canvas Markdown lifecycle transfer for plain assistant prose', () => {
+  it('does not render Canvas Markdown lifecycle transfer for plain assistant prose', () => {
     renderContentBlock({
       id: 'plain',
       type: 'text',
@@ -55,7 +55,42 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       content: 'Hi! How can I help?',
     });
 
-    expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
+  });
+
+  it('routes assistant Markdown Send to Canvas through the lifecycle backend', () => {
+    renderContentBlock({
+      id: 'storyboard',
+      type: 'text',
+      timestamp: 1,
+      content: createStoryboardCreativeTable(),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Canvas/ }));
+
+    expect(mockPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'invokeAgentCapabilityLifecycle',
+        conversationId: 'conv-1',
+        invocation: expect.objectContaining({
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          payload: expect.objectContaining({
+            capabilityId: 'canvas.ingestMarkdown',
+            markdown: expect.stringContaining('| scene | shot | source |'),
+            sourceFormat: 'gfm-table',
+            intentHint: 'creative-table',
+            profileHint: 'storyboard',
+          }),
+        }),
+      }),
+    );
+    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain(
+      'requestCanvasMarkdownHandoff',
+    );
+    expect(mockPostMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'invokeCanvasMarkdownCapability' }),
+    );
   });
 
   it('renders Canvas transfer for storyboard-ready markdown', () => {
@@ -63,14 +98,21 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       id: 'storyboard',
       type: 'text',
       timestamp: 1,
-      content: `
-| 镜头 | 画面 |
-| --- | --- |
-| 1 | 角色进入森林 |
-`,
+      content: createStoryboardCreativeTable(),
     });
 
     expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
+  });
+
+  it('does not render Canvas transfer for simplified display-only storyboard tables', () => {
+    renderContentBlock({
+      id: 'weak-storyboard',
+      type: 'text',
+      timestamp: 1,
+      content: ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
+    });
+
+    expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
   });
 
   it('renders composite artifact transfers as review-only artifact cards', () => {
@@ -220,12 +262,16 @@ describe('ContentBlockItem Canvas transfer actions', () => {
 
     expect(mockPostMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'invokeCanvasMarkdownCapability',
+        type: 'invokeAgentCapabilityLifecycle',
         conversationId: 'conv-1',
-        input: expect.objectContaining({
+        invocation: expect.objectContaining({
           capabilityId: 'canvas.createStoryboardFromMarkdown',
-          mode: 'create-nodes',
+          phase: 'apply',
           approval: expect.objectContaining({ source: 'user-confirmation' }),
+          payload: expect.objectContaining({
+            capabilityId: 'canvas.createStoryboardFromMarkdown',
+            mode: 'create-nodes',
+          }),
         }),
       }),
     );
@@ -323,4 +369,36 @@ function renderContentBlock(
       />
     </MessageActionsProvider>,
   );
+}
+
+function createStoryboardCreativeTable(): string {
+  return [
+    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.join(' | ')} |`,
+    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.map(() => '---').join(' | ')} |`,
+    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.map((header) => storyboardCreativeTableValue(header)).join(' | ')} |`,
+  ].join('\n');
+}
+
+function storyboardCreativeTableValue(header: string): string {
+  const values: Record<string, string> = {
+    scene: '森林',
+    shot: '1',
+    source: 'P1',
+    sourcePanel: 'P1',
+    decision: 'keep',
+    duration: '3s',
+    visual: '角色进入森林',
+    motion: 'slow push in',
+    audio: 'low ambience',
+    characters: 'lead',
+    dialogue: '',
+    prompt: 'cinematic forest storyboard frame',
+    reviewStatus: 'needs-review',
+    nextAction: 'split-panels',
+    contentType: 'story',
+    decisionReason: 'useful narrative beat',
+    requiresSplit: 'true',
+    duplicateOf: '',
+  };
+  return values[header] ?? '';
 }

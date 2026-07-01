@@ -323,6 +323,23 @@ describe('messages', () => {
           args: 'changed files',
         });
       });
+
+      it('should post explicit IDC workflow control without using settings', () => {
+        VSCodeMessages.controlIdcWorkflow('conv-1', 'start', {
+          runKind: 'idc',
+          reason: 'toolbar',
+        });
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'controlIdcWorkflow',
+          conversationId: 'conv-1',
+          action: 'start',
+          runKind: 'idc',
+          reason: 'toolbar',
+        });
+        expect(mockPostMessage).not.toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'updateSettings' }),
+        );
+      });
     });
   });
 });

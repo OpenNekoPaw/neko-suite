@@ -35,7 +35,7 @@ import {
 import { VSCodeMessages } from '@/messages';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
-import { projectCanvasMarkdownCapabilityInput } from '@/presenters/canvas-markdown-capability-presenter';
+import { projectCanvasMarkdownHandoffRequest } from '@/presenters/canvas-markdown-handoff-presenter';
 import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
 import {
   DEFAULT_MESSAGE_IDENTITIES,
@@ -169,9 +169,9 @@ function ContentBlockRenderer({
             toolCalls: projection.toolCalls,
           })
         : undefined;
-      const canvasMarkdownCapability =
+      const canvasMarkdownHandoff =
         !projection.renderStreaming && pluginsAvailable?.canvas
-          ? projectCanvasMarkdownCapabilityInput({
+          ? projectCanvasMarkdownHandoffRequest({
               markdown: projection.content,
               markdownResources,
               target: projectCanvasContentTransferTarget({ ambientNodes, contextChips }),
@@ -187,10 +187,10 @@ function ContentBlockRenderer({
             isStreaming={projection.renderStreaming}
             markdownResources={markdownResources}
           />
-          {canvasMarkdownCapability && pluginsAvailable && (
+          {canvasMarkdownHandoff && pluginsAvailable && (
             <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-[var(--agent-divider)] pt-1">
               <SendToMenu
-                canvasMarkdownCapability={canvasMarkdownCapability}
+                canvasMarkdownHandoff={canvasMarkdownHandoff}
                 conversationId={conversationId}
                 mediaType="image"
                 plugins={pluginsAvailable}

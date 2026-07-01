@@ -12,6 +12,7 @@ import { createServiceId, getLogger } from '../base';
 import type { ChatMessage, ConfiguredToolGroup } from '@neko/shared';
 import type {
   AgentRunnerConfirmationRequest,
+  AgentRunnerIdcWorkflowControlInput,
   AgentPendingMessageItem,
   AgentRunnerPort,
   AgentRunnerPortEvent,
@@ -19,7 +20,7 @@ import type {
   AgentRuntimeSessionControllerTarget,
   SubAgentRuntimeCoordinator,
 } from '@neko/agent/runtime';
-import type { AgentEvent, SubAgentEvent } from '@neko/agent';
+import type { AgentEvent, IdcWorkflowControlResult, SubAgentEvent } from '@neko/agent';
 import {
   getEngineClientProvider,
   type IEngineClientProvider,
@@ -230,11 +231,23 @@ export class AgentRunner implements IAgentRunner {
     this.port.refreshCapabilityRuntime();
   }
 
+  controlIdcWorkflow(input: AgentRunnerIdcWorkflowControlInput): IdcWorkflowControlResult {
+    return this.port.controlIdcWorkflow(input);
+  }
+
   applySkillInjection(
     injection: import('@neko/agent').SkillInjection,
     skill?: import('@neko/agent').Skill,
   ): void {
     this.port.applySkillInjection(injection, skill);
+  }
+
+  activateToolSetsForTools(toolNames: readonly string[]): readonly string[] {
+    return this.port.activateToolSetsForTools(toolNames);
+  }
+
+  deactivateToolSet(toolSetName: string): void {
+    this.port.deactivateToolSet(toolSetName);
   }
 
   getActiveSkill(): import('@neko/shared').Skill | undefined {

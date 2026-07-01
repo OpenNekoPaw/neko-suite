@@ -44,6 +44,7 @@ describe('Embody Character session handlers', () => {
       isThinking: true,
       streamingMessageId: 'old-stream',
       queuedMessageCount: 0,
+      queuedMessages: [],
     });
     expect(harness.openTabs()).toEqual([tab]);
     expect(harness.activeTabId()).toBe('tab-embody');
@@ -208,6 +209,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     forceAgentStateUpdate: () => undefined,
     setSkills: noopDispatch(),
     setActiveSkill: noopDispatch(),
+    setActivationProgressByConversation: noopDispatch(),
     setGlobalError: noopDispatch(),
     conversationTokenCountRef: ref(new Map()),
     conversationCompressingRef: ref(new Map()),

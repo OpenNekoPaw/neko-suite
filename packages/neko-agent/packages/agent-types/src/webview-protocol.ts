@@ -7,10 +7,14 @@
 
 import type {
   AgentContextPayload,
+  AgentCapabilityActivationProgressEvent,
+  AgentCapabilityActivationProvenance,
+  AgentCapabilityInvocationInput,
   AgentCapabilityInvocationResult,
   AgentContextType,
-  CanvasMarkdownCapabilityInput,
+  CanvasMarkdownCapabilityTarget,
   CanvasMarkdownCapabilityResult,
+  CanvasMarkdownResourceRef,
   ChatModelOption,
   DocumentLocator,
   DocumentSourceRef,
@@ -22,7 +26,9 @@ import type {
 import type { StoryboardTextCue, StoryboardVoiceCue } from '@neko/shared';
 import {
   STORYBOARD_TEXT_CUE_KINDS,
-  isCanvasMarkdownCapabilityInput,
+  isAgentCapabilityInvocationInput,
+  isCanvasMarkdownCapabilityTarget,
+  isCanvasMarkdownResourceRef,
   isResourceRef,
   parseDocumentArchiveResourceRef,
   parseDocumentLocator,
@@ -215,6 +221,7 @@ export interface PlanStepActionWebviewMessage {
 export interface UpdateSettingsWebviewMessage {
   type: 'updateSettings';
   settings: Record<string, unknown>;
+  conversationId?: string;
 }
 
 export interface UpdateTabStateWebviewMessage {
@@ -271,11 +278,26 @@ export interface SendToPluginWebviewMessage {
   payload?: PluginTransferPayload;
 }
 
-export interface InvokeCanvasMarkdownCapabilityWebviewMessage {
-  type: 'invokeCanvasMarkdownCapability';
+export interface InvokeAgentCapabilityLifecycleWebviewMessage {
+  type: 'invokeAgentCapabilityLifecycle';
   requestId: string;
   conversationId: string;
-  input: CanvasMarkdownCapabilityInput;
+  invocation: AgentCapabilityInvocationInput;
+}
+
+export interface RequestCanvasMarkdownHandoffWebviewMessage {
+  type: 'requestCanvasMarkdownHandoff';
+  requestId: string;
+  conversationId: string;
+  markdown: string;
+  title?: string;
+  sourceFormat?: 'markdown' | 'markdown-table' | 'gfm-table' | 'resource-reference-markdown';
+  resources?: readonly CanvasMarkdownResourceRef[];
+  target?: CanvasMarkdownCapabilityTarget;
+  provenance?: PluginTransferProvenance;
+  userIntent?: string;
+  declaredIntentHint?: 'auto' | 'note' | 'table' | 'creative-table';
+  declaredProfileHint?: string;
 }
 
 export interface DragStartWebviewMessage {
@@ -309,6 +331,17 @@ export interface InvokeSkillWebviewMessage {
   skillName: string;
   conversationId: string;
   args?: string;
+}
+
+export type ControlIdcWorkflowAction = 'start' | 'resume' | 'stop';
+
+export interface ControlIdcWorkflowWebviewMessage {
+  type: 'controlIdcWorkflow';
+  conversationId: string;
+  action: ControlIdcWorkflowAction;
+  runKind?: string;
+  runId?: string;
+  reason?: string;
 }
 
 export interface InvokePluginSlashCommandWebviewMessage {
@@ -378,12 +411,14 @@ export type WebviewToExtensionMessage =
   | OpenUrlWebviewMessage
   | SetPromptModeWebviewMessage
   | SendToPluginWebviewMessage
-  | InvokeCanvasMarkdownCapabilityWebviewMessage
+  | InvokeAgentCapabilityLifecycleWebviewMessage
+  | RequestCanvasMarkdownHandoffWebviewMessage
   | DragStartWebviewMessage
   | MermaidErrorWebviewMessage
   | DownloadSvgWebviewMessage
   | InvokeSlashCommandWebviewMessage
   | InvokeSkillWebviewMessage
+  | ControlIdcWorkflowWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
   | StartCharacterDialogueFromSlashWebviewMessage
   | ExitCharacterDialogueSessionWebviewMessage
@@ -452,6 +487,14 @@ export interface StreamTextMessage {
   content?: string;
   conversationId: string;
   messageId?: string;
+}
+
+export interface AssistantTextReplacementMessage {
+  type: 'assistantTextReplacement';
+  conversationId: string;
+  messageId?: string;
+  reason: 'output-validation-retry';
+  attempt: number;
 }
 
 export interface StreamCompleteMessage {
@@ -765,14 +808,20 @@ export interface SlashCommandResultMessage {
   data?: Record<string, unknown>;
 }
 
-export interface CanvasMarkdownCapabilityResultMessage {
-  type: 'canvasMarkdownCapabilityResult';
+export interface AgentCapabilityLifecycleResultMessage {
+  type: 'agentCapabilityLifecycleResult';
   requestId: string;
   conversationId: string;
   success: boolean;
   lifecycleResult?: AgentCapabilityInvocationResult;
   result?: CanvasMarkdownCapabilityResult;
   error?: string;
+}
+
+export interface AgentCapabilityActivationProgressMessage {
+  type: 'agentCapabilityActivationProgress';
+  conversationId: string;
+  events: readonly AgentCapabilityActivationProgressEvent[];
 }
 
 export interface CharacterDialogueSessionStartedMessage {
@@ -822,6 +871,7 @@ export interface SkillInjectionMessage {
       expires?: string;
       status?: string;
       allowedTools?: string[];
+      provenance?: AgentCapabilityActivationProvenance;
     }>;
   };
 }
@@ -901,6 +951,7 @@ export type { AgentTurnTimelineMessage };
 export type ExtensionToWebviewMessage =
   | ThinkingMessage
   | StreamTextMessage
+  | AssistantTextReplacementMessage
   | StreamCompleteMessage
   | StreamThinkingMessage
   | MessageCancelledMessage
@@ -939,7 +990,8 @@ export type ExtensionToWebviewMessage =
   | SubAgentEventMessage
   | TabStateMessage
   | SlashCommandResultMessage
-  | CanvasMarkdownCapabilityResultMessage
+  | AgentCapabilityLifecycleResultMessage
+  | AgentCapabilityActivationProgressMessage
   | CharacterDialogueSessionStartedMessage
   | CharacterDialogueSessionExitedMessage
   | EmbodyCharacterSessionStartedMessage
@@ -1036,6 +1088,11 @@ const QUEUED_MESSAGE_ACTION_TYPES: readonly QueuedMessageActionWebviewMessage['t
   'cancelQueuedMessage',
   'editQueuedMessage',
 ];
+const CONTROL_IDC_WORKFLOW_ACTIONS: readonly ControlIdcWorkflowAction[] = [
+  'start',
+  'resume',
+  'stop',
+];
 export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'sendMessage',
   'searchProjectFiles',
@@ -1057,12 +1114,14 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'openUrl',
   'setPromptMode',
   'sendToPlugin',
-  'invokeCanvasMarkdownCapability',
+  'invokeAgentCapabilityLifecycle',
+  'requestCanvasMarkdownHandoff',
   'dnd:start',
   'mermaidError',
   'downloadSvg',
   'invokeSlashCommand',
   'invokeSkill',
+  'controlIdcWorkflow',
   'invokePluginSlashCommand',
   'startCharacterDialogueFromSlash',
   'exitCharacterDialogueSession',
@@ -1100,6 +1159,21 @@ export function buildStreamTextMessage(input: {
     type: 'streamText',
     conversationId: input.conversationId,
     ...(input.content !== undefined ? { content: input.content } : {}),
+    ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
+  };
+}
+
+export function buildAssistantTextReplacementMessage(input: {
+  readonly conversationId: string;
+  readonly messageId?: string;
+  readonly reason: 'output-validation-retry';
+  readonly attempt: number;
+}): AssistantTextReplacementMessage {
+  return {
+    type: 'assistantTextReplacement',
+    conversationId: input.conversationId,
+    reason: input.reason,
+    attempt: input.attempt,
     ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
   };
 }
@@ -1254,22 +1328,33 @@ export function buildAmbientCanvasUpdateMessage(input: {
   };
 }
 
-export function buildCanvasMarkdownCapabilityResultMessage(input: {
+export function buildAgentCapabilityLifecycleResultMessage(input: {
   readonly requestId: string;
   readonly conversationId: string;
   readonly success: boolean;
   readonly lifecycleResult?: AgentCapabilityInvocationResult;
   readonly result?: CanvasMarkdownCapabilityResult;
   readonly error?: string;
-}): CanvasMarkdownCapabilityResultMessage {
+}): AgentCapabilityLifecycleResultMessage {
   return {
-    type: 'canvasMarkdownCapabilityResult',
+    type: 'agentCapabilityLifecycleResult',
     requestId: input.requestId,
     conversationId: input.conversationId,
     success: input.success,
     ...(input.lifecycleResult !== undefined ? { lifecycleResult: input.lifecycleResult } : {}),
     ...(input.result !== undefined ? { result: input.result } : {}),
     ...(input.error !== undefined ? { error: input.error } : {}),
+  };
+}
+
+export function buildAgentCapabilityActivationProgressMessage(input: {
+  readonly conversationId: string;
+  readonly events: readonly AgentCapabilityActivationProgressEvent[];
+}): AgentCapabilityActivationProgressMessage {
+  return {
+    type: 'agentCapabilityActivationProgress',
+    conversationId: input.conversationId,
+    events: input.events,
   };
 }
 
@@ -1522,8 +1607,10 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseSetPromptModeMessage(raw);
     case 'sendToPlugin':
       return parseSendToPluginMessage(raw);
-    case 'invokeCanvasMarkdownCapability':
-      return parseInvokeCanvasMarkdownCapabilityMessage(raw);
+    case 'invokeAgentCapabilityLifecycle':
+      return parseInvokeAgentCapabilityLifecycleMessage(raw);
+    case 'requestCanvasMarkdownHandoff':
+      return parseRequestCanvasMarkdownHandoffMessage(raw);
     case 'dnd:start':
       return parseDragStartMessage(raw);
     case 'mermaidError':
@@ -1534,6 +1621,8 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseInvokeSlashCommandMessage(raw);
     case 'invokeSkill':
       return parseInvokeSkillMessage(raw);
+    case 'controlIdcWorkflow':
+      return parseControlIdcWorkflowMessage(raw);
     case 'invokePluginSlashCommand':
       return parseInvokePluginSlashCommandMessage(raw);
     case 'startCharacterDialogueFromSlash':
@@ -1816,7 +1905,11 @@ function parseUpdateSettingsMessage(
   raw: Record<string, unknown>,
 ): UpdateSettingsWebviewMessage | null {
   if (!isRecord(raw.settings)) return null;
-  return { type: 'updateSettings', settings: raw.settings };
+  return {
+    type: 'updateSettings',
+    settings: raw.settings,
+    ...(typeof raw.conversationId === 'string' ? { conversationId: raw.conversationId } : {}),
+  };
 }
 
 function parseUpdateTabStateMessage(
@@ -1913,18 +2006,106 @@ function parseSendToPluginMessage(raw: Record<string, unknown>): SendToPluginWeb
   };
 }
 
-function parseInvokeCanvasMarkdownCapabilityMessage(
+function parseInvokeAgentCapabilityLifecycleMessage(
   raw: Record<string, unknown>,
-): InvokeCanvasMarkdownCapabilityWebviewMessage | null {
+): InvokeAgentCapabilityLifecycleWebviewMessage | null {
   const requestId = requiredString(raw.requestId);
   const conversationId = requiredString(raw.conversationId);
-  if (!requestId || !conversationId || !isCanvasMarkdownCapabilityInput(raw.input)) return null;
+  if (!requestId || !conversationId || !isAgentCapabilityInvocationInput(raw.invocation)) {
+    return null;
+  }
   return {
-    type: 'invokeCanvasMarkdownCapability',
+    type: 'invokeAgentCapabilityLifecycle',
     requestId,
     conversationId,
-    input: raw.input,
+    invocation: raw.invocation,
   };
+}
+
+function parseRequestCanvasMarkdownHandoffMessage(
+  raw: Record<string, unknown>,
+): RequestCanvasMarkdownHandoffWebviewMessage | null {
+  if (
+    raw.capabilityId !== undefined ||
+    raw.input !== undefined ||
+    raw.intentHint !== undefined ||
+    raw.profileHint !== undefined
+  ) {
+    return null;
+  }
+
+  const requestId = requiredString(raw.requestId);
+  const conversationId = requiredString(raw.conversationId);
+  const markdown = requiredString(raw.markdown);
+  if (!requestId || !conversationId || !markdown) return null;
+
+  const title = optionalString(raw.title);
+  if (raw.title !== undefined && title === undefined) return null;
+  const sourceFormat =
+    raw.sourceFormat === undefined ? undefined : parseCanvasMarkdownSourceFormat(raw.sourceFormat);
+  if (raw.sourceFormat !== undefined && sourceFormat === undefined) return null;
+  const resources =
+    raw.resources === undefined
+      ? undefined
+      : Array.isArray(raw.resources) && raw.resources.every(isCanvasMarkdownResourceRef)
+        ? raw.resources
+        : null;
+  if (resources === null) return null;
+  const target =
+    raw.target === undefined
+      ? undefined
+      : isCanvasMarkdownCapabilityTarget(raw.target)
+        ? raw.target
+        : null;
+  if (target === null) return null;
+  const provenance =
+    raw.provenance === undefined
+      ? undefined
+      : parseOptionalPluginTransferProvenance(raw.provenance);
+  if (provenance === null) return null;
+  const userIntent = optionalString(raw.userIntent);
+  if (raw.userIntent !== undefined && userIntent === undefined) return null;
+  const declaredIntentHint =
+    raw.declaredIntentHint === undefined
+      ? undefined
+      : parseCanvasMarkdownIntentHint(raw.declaredIntentHint);
+  if (raw.declaredIntentHint !== undefined && declaredIntentHint === undefined) return null;
+  const declaredProfileHint = optionalString(raw.declaredProfileHint);
+  if (raw.declaredProfileHint !== undefined && declaredProfileHint === undefined) return null;
+
+  return {
+    type: 'requestCanvasMarkdownHandoff',
+    requestId,
+    conversationId,
+    markdown,
+    ...(title ? { title } : {}),
+    ...(sourceFormat ? { sourceFormat } : {}),
+    ...(resources ? { resources } : {}),
+    ...(target ? { target } : {}),
+    ...(provenance ? { provenance } : {}),
+    ...(userIntent ? { userIntent } : {}),
+    ...(declaredIntentHint ? { declaredIntentHint } : {}),
+    ...(declaredProfileHint ? { declaredProfileHint } : {}),
+  };
+}
+
+function parseCanvasMarkdownSourceFormat(
+  value: unknown,
+): RequestCanvasMarkdownHandoffWebviewMessage['sourceFormat'] | undefined {
+  return value === 'markdown' ||
+    value === 'markdown-table' ||
+    value === 'gfm-table' ||
+    value === 'resource-reference-markdown'
+    ? value
+    : undefined;
+}
+
+function parseCanvasMarkdownIntentHint(
+  value: unknown,
+): RequestCanvasMarkdownHandoffWebviewMessage['declaredIntentHint'] | undefined {
+  return value === 'auto' || value === 'note' || value === 'table' || value === 'creative-table'
+    ? value
+    : undefined;
 }
 
 function parsePluginTransferPayload(value: unknown): PluginTransferPayload | null {
@@ -2437,6 +2618,27 @@ function parseInvokeSkillMessage(raw: Record<string, unknown>): InvokeSkillWebvi
   };
 }
 
+function parseControlIdcWorkflowMessage(
+  raw: Record<string, unknown>,
+): ControlIdcWorkflowWebviewMessage | null {
+  const conversationId = requiredString(raw.conversationId);
+  const action = parseControlIdcWorkflowAction(raw.action);
+  const runKind = optionalStringStrict(raw.runKind);
+  const runId = optionalStringStrict(raw.runId);
+  const reason = optionalStringStrict(raw.reason);
+  if (!conversationId || !action || runKind === null || runId === null || reason === null) {
+    return null;
+  }
+  return {
+    type: 'controlIdcWorkflow',
+    conversationId,
+    action,
+    ...(runKind !== undefined ? { runKind } : {}),
+    ...(runId !== undefined ? { runId } : {}),
+    ...(reason !== undefined ? { reason } : {}),
+  };
+}
+
 function parseInvokePluginSlashCommandMessage(
   raw: Record<string, unknown>,
 ): InvokePluginSlashCommandWebviewMessage | null {
@@ -2903,6 +3105,13 @@ function optionalSearchProjectFilesPurpose(
 ): 'roleplay' | 'entry' | undefined | null {
   if (value === undefined) return undefined;
   return value === 'roleplay' || value === 'entry' ? value : null;
+}
+
+function parseControlIdcWorkflowAction(value: unknown): ControlIdcWorkflowAction | null {
+  return typeof value === 'string' &&
+    CONTROL_IDC_WORKFLOW_ACTIONS.includes(value as ControlIdcWorkflowAction)
+    ? (value as ControlIdcWorkflowAction)
+    : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

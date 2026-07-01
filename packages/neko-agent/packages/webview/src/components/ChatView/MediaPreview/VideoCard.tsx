@@ -9,7 +9,7 @@
 import { useState, useRef, useCallback, memo } from 'react';
 import { formatTime } from '@neko/neko-client';
 import { ChevronDownIcon as ChevronIcon, ErrorIcon, OpenIcon, PlayIcon } from '@neko/shared/icons';
-import { VSCodeMessages } from '@/messages';
+import { openMediaTarget } from './openMediaTarget';
 
 interface VideoPlayerProps {
   src: string;
@@ -68,12 +68,7 @@ function VideoPlayerComponent({
   // Open file in neko-preview (hardware-accelerated preview)
   const handleOpenPreview = useCallback(() => {
     const pathToOpen = localPath || src;
-    // Check if it's a local file path → open with neko-preview
-    if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
-      VSCodeMessages.openFile(pathToOpen);
-    } else {
-      VSCodeMessages.openUrl(pathToOpen);
-    }
+    openMediaTarget(pathToOpen);
   }, [localPath, src]);
 
   // Inline mode: compact thumbnail card with click-to-open

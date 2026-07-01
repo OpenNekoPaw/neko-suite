@@ -19,9 +19,17 @@ interface RichContentRendererProps {
   className?: string;
   /** Compact mode for inline embedding (e.g. inside TaskCard) */
   inline?: boolean;
+  /** Whether clicking the rendered media should request the host to open it. */
+  openOnClick?: boolean;
 }
 
-function RichContentRendererComponent({ kind, data, className, inline }: RichContentRendererProps) {
+function RichContentRendererComponent({
+  kind,
+  data,
+  className,
+  inline,
+  openOnClick,
+}: RichContentRendererProps) {
   const entry = richContentRegistry.get(kind);
 
   // No renderer registered for this kind
@@ -35,7 +43,7 @@ function RichContentRendererComponent({ kind, data, className, inline }: RichCon
   }
 
   const Renderer = entry.component;
-  return <Renderer data={data} className={className} inline={inline} />;
+  return <Renderer data={data} className={className} inline={inline} openOnClick={openOnClick} />;
 }
 
 export const RichContentRenderer = memo(RichContentRendererComponent);

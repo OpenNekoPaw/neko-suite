@@ -12,6 +12,7 @@ import {
   activateCharacterRoleSessionView,
   persistCurrentVisibleConversation,
 } from './character-role-session-state';
+import type { MessageHandlerContext, StreamingState } from './types';
 
 /**
  * Handle 'tabState' message - Restore tab state from extension
@@ -58,6 +59,11 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
         cachedStreaming: context.conversationStreamingRef.current.get(activeTab.conversationId),
       });
       context.setActiveTab('chat');
+      return;
+    }
+
+    if (activeTab) {
+      activateOrdinaryTabView(context, activeTab.conversationId);
     }
   }
 };
@@ -66,3 +72,31 @@ const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, co
  * All tab handler registrations
  */
 export const tabHandlers: HandlerRegistration[] = [defineHandler('tabState', handleTabState)];
+
+function activateOrdinaryTabView(context: MessageHandlerContext, conversationId: string): void {
+  const cachedMessages = context.conversationMessagesRef.current.get(conversationId);
+  const cachedStreaming = context.conversationStreamingRef.current.get(conversationId);
+
+  context.isTablessConversationViewRef.current = false;
+  if (cachedMessages) {
+    const streaming = cachedStreaming ?? idleStreamingState();
+    context.setMessages(cachedMessages);
+    context.setStreamingMessageId(streaming.streamingMessageId);
+    context.streamingMessageIdRef.current = streaming.streamingMessageId;
+    context.setIsThinking(streaming.isThinking);
+    context.setQueuedMessageCount?.(streaming.queuedMessageCount ?? 0);
+    context.setQueuedMessages?.(streaming.queuedMessages ?? []);
+  }
+  context.setActiveConversationId(conversationId);
+  context.activeConversationIdRef.current = conversationId;
+  context.setActiveTab('chat');
+}
+
+function idleStreamingState(): StreamingState {
+  return {
+    streamingMessageId: null,
+    isThinking: false,
+    queuedMessageCount: 0,
+    queuedMessages: [],
+  };
+}

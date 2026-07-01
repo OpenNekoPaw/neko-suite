@@ -34,6 +34,7 @@ import {
   SettingsHandler,
   ContextHandler,
   SlashCommandHandler,
+  IdcWorkflowHandler,
   ConversationMessageHandler,
 } from './handlers';
 import {
@@ -67,6 +68,8 @@ import {
   createAgentLocalResourceAccess,
   type AgentLocalResourceAccess,
 } from '../services/localResourceAccess';
+import { createWorkspaceGeneratedAssetIndex } from '../services/generatedAssetOpenResolver';
+import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
 import { StateTaskDeliveryCursorStorage, TaskDeliveryBridge } from '../services/taskDeliveryBridge';
 import { handleChatWebviewMessage } from './chatWebviewMessageRouter';
 import {
@@ -142,6 +145,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private readonly _settingsHandler: SettingsHandler;
   private readonly _contextHandler: ContextHandler;
   private readonly _slashCommandHandler: SlashCommandHandler;
+  private readonly _idcWorkflowHandler: IdcWorkflowHandler;
   private readonly _conversationMessageHandler: ConversationMessageHandler;
   private readonly _characterDialogue: CharacterDialogueController;
   private readonly _embodyCharacter: EmbodyCharacterController;
@@ -167,6 +171,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _configBridge?: ConfigBridge;
   private readonly _accountAiCatalog: AccountAiCatalogCache;
   private readonly _localResourceAccess: AgentLocalResourceAccess;
+  private readonly _generatedAssetIndex: GeneratedAssetIndex | undefined;
   private _capabilityRefreshRuntime?: CapabilityRuntimeRefreshRuntime;
   private readonly _dashboardWorkItems = new AgentDashboardWorkItemSource();
   private readonly _taskDeliveryBridge: TaskDeliveryBridge;
@@ -189,12 +194,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     // Initialize managers
     this._settings = new SettingsManager();
     this._systemPrompt = new SystemPromptManager();
+    this._systemPrompt.setLocale(vscode.env.language);
     this._accountAiCatalog = new AccountAiCatalogCache({
       getAuth: () => getNekoAuthAPI(),
       logger,
     });
     this._localResourceAccess =
       options.localResourceAccess ?? createChatLocalResourceAccess(_extensionUri, _context);
+    this._generatedAssetIndex = createWorkspaceGeneratedAssetIndex({ logger });
     this._conversations = new ConversationBridge(
       _context,
       getCurrentWorkspaceRoot,
@@ -221,6 +228,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._contextHandler = new ContextHandler({
       conversations: this._conversations,
     });
+    this._idcWorkflowHandler = new IdcWorkflowHandler({});
     this._conversationMessageHandler = new ConversationMessageHandler({
       conversations: this._conversations,
       promptModeCleanup: this._systemPrompt,
@@ -364,7 +372,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           undefined,
           this._dashboardWorkItems,
           this._localResourceAccess,
-          { accountAiCatalog: this._accountAiCatalog },
+          {
+            accountAiCatalog: this._accountAiCatalog,
+            generatedAssetIndex: this._generatedAssetIndex,
+          },
         );
         this._dashboardWorkItems.updateDeps({
           platform: this._platform,
@@ -428,8 +439,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           taskManager: this._taskManager,
           dashboardWorkItems: this._dashboardWorkItems,
           localResourceAccess: this._localResourceAccess,
+          generatedAssetLookup: this._generatedAssetIndex,
         });
-        this._fileOperationHandler.updateDeps({ platform: this._platform });
+        this._fileOperationHandler.updateDeps({
+          platform: this._platform,
+          generatedAssetLookup: this._generatedAssetIndex,
+        });
         this._planModeHandler.updateDeps({
           messages: this._messages,
         });
@@ -440,6 +455,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           taskState: this._taskManager,
         });
         this._contextHandler.updateDeps({ agentManager: this._agentManager });
+        this._idcWorkflowHandler.updateDeps({ agentManager: this._agentManager });
         this._slashCommandHandler.updateDeps({
           agentManager: this._agentManager,
           messages: this._messages,
@@ -641,6 +657,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           taskHandler: this._taskHandler,
           skillHandler: this._skillHandler,
           fileOperationHandler: this._fileOperationHandler,
+          idcWorkflowHandler: this._idcWorkflowHandler,
           planModeHandler: this._planModeHandler,
           settingsHandler: this._settingsHandler,
           contextHandler: this._contextHandler,
@@ -882,6 +899,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._embodyCharacter.dispose();
     this._conversations.dispose();
     this._localResourceAccess.dispose();
+    this._generatedAssetIndex?.dispose();
     this._configBridge?.dispose();
     this._configBridge = undefined;
 

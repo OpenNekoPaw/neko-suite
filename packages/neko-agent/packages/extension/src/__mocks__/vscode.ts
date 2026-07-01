@@ -43,6 +43,7 @@ export const extensions = {
 
 // env mock
 export const env = {
+  language: 'zh-cn',
   openExternal: vi.fn().mockResolvedValue(true),
 };
 

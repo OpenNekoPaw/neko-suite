@@ -29,12 +29,17 @@ function isImageGridRichData(data: unknown): data is ImageGridRichData {
 // Component
 // ---------------------------------------------------------------------------
 
-function ImageGridRendererComponent({ data, className }: RichContentProps<ImageGridRichData>) {
+function ImageGridRendererComponent({
+  data,
+  className,
+  openOnClick,
+}: RichContentProps<ImageGridRichData>) {
   return (
     <ImageGridCard
       urls={data.urls}
       localPaths={data.localPaths}
       name={data.name}
+      openOnClick={openOnClick}
       className={className}
     />
   );

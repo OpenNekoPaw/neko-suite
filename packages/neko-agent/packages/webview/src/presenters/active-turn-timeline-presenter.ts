@@ -95,8 +95,13 @@ function projectActiveTurnTimelineToMessage(
     return { message: null, workItemIds: [] };
   }
 
-  const contentBlocks = projectTimelineItemsToContentBlocks(state.items);
-  const workItemIds = projectTimelineWorkItemIds(state.items);
+  const visibleItems = state.items;
+  const timelineContentBlocks = projectTimelineItemsToContentBlocks(visibleItems);
+  const finalContentBlocks = state.finalContentBlocks;
+  const contentBlocks = state.completed
+    ? mergeFinalContentBlocksIntoTimelineOrder(timelineContentBlocks, finalContentBlocks)
+    : timelineContentBlocks;
+  const workItemIds = projectTimelineWorkItemIds(visibleItems);
   return {
     workItemIds,
     message: {
@@ -252,15 +257,19 @@ function mergeTimelineItem(
       if (current.kind !== 'assistant_text') return event;
       const currentContent = current.payload.content;
       const nextContent = event.payload.content;
+      const { replaceContent: _replaceContent, ...eventPayload } = event.payload;
+      void _replaceContent;
       return {
         ...event,
         ...base,
         payload: {
           ...current.payload,
-          ...event.payload,
-          content: nextContent.startsWith(currentContent)
+          ...eventPayload,
+          content: event.payload.replaceContent
             ? nextContent
-            : `${currentContent}${nextContent}`,
+            : nextContent.startsWith(currentContent)
+              ? nextContent
+              : `${currentContent}${nextContent}`,
         },
       };
     }
@@ -460,6 +469,75 @@ function mergeTimelineProjectionIntoMessage(message: Message, projection: Messag
     contentBlocks: projection.contentBlocks,
     workItemIds: mergeOptionalIds(message.workItemIds, projection.workItemIds),
   };
+}
+
+function mergeFinalContentBlocksIntoTimelineOrder(
+  timelineBlocks: readonly ContentBlock[],
+  finalBlocks: readonly ContentBlock[] | undefined,
+): ContentBlock[] {
+  if (!finalBlocks || finalBlocks.length === 0) {
+    return [...timelineBlocks];
+  }
+
+  const finalById = new Map(finalBlocks.map((block) => [block.id, block]));
+  const finalByToolCallId = new Map(
+    finalBlocks.flatMap((block) =>
+      block.type === 'tool_call' && block.toolCall?.id ? [[block.toolCall.id, block]] : [],
+    ),
+  );
+  const finalTextBlocks = finalBlocks.filter((block) => block.type === 'text');
+  const finalThinkingBlocks = finalBlocks.filter((block) => block.type === 'thinking');
+  const finalCompositeBlocks = finalBlocks.filter((block) => block.type === 'composite');
+  let textOrdinal = 0;
+  let thinkingOrdinal = 0;
+  let compositeOrdinal = 0;
+  const usedFinalIds = new Set<string>();
+
+  const merged = timelineBlocks.map((block) => {
+    const ordinalReplacement = (() => {
+      switch (block.type) {
+        case 'text': {
+          const replacement = finalTextBlocks[textOrdinal];
+          textOrdinal += 1;
+          return replacement;
+        }
+        case 'thinking': {
+          const replacement = finalThinkingBlocks[thinkingOrdinal];
+          thinkingOrdinal += 1;
+          return replacement;
+        }
+        case 'composite': {
+          const replacement = finalCompositeBlocks[compositeOrdinal];
+          compositeOrdinal += 1;
+          return replacement;
+        }
+        default:
+          return undefined;
+      }
+    })();
+    const replacement =
+      finalById.get(block.id) ??
+      (block.type === 'tool_call' && block.toolCall?.id
+        ? finalByToolCallId.get(block.toolCall.id)
+        : undefined) ??
+      (ordinalReplacement && !usedFinalIds.has(ordinalReplacement.id)
+        ? ordinalReplacement
+        : undefined);
+    if (!replacement) {
+      return block;
+    }
+
+    usedFinalIds.add(replacement.id);
+    return replacement;
+  });
+
+  for (const block of finalBlocks) {
+    if (!usedFinalIds.has(block.id)) {
+      merged.push(block);
+    }
+  }
+
+  return merged;
 }
 
 function mergeOptionalIds(

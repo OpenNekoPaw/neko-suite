@@ -333,6 +333,11 @@ describe('work-item-presenter', () => {
               id: 'asset-1',
               type: 'generated-image',
               renderUri: 'webview://asset.png',
+              assetRef: {
+                assetId: 'asset-1',
+                uri: 'generated-assets/asset-1.png',
+                mimeType: 'image/png',
+              },
               mimeType: 'image/png',
               generatedAt: '2026-01-01T00:00:00.000Z',
               width: 1024,
@@ -346,6 +351,7 @@ describe('work-item-presenter', () => {
       contentKind: 'image',
       contentData: {
         src: 'webview://asset.png',
+        localPath: 'generated-assets/asset-1.png',
         name: 'Render asset',
       },
       displayWidth: 1024,

@@ -34,6 +34,7 @@ import {
   toMediaBackgroundTaskType,
 } from '@neko/platform/media/media-task-view';
 import { GeneratedAssetIndex, generateAssetId } from '@neko/platform/media/generated-asset-index';
+import { createWorkspaceGeneratedAssetIndex } from './generatedAssetOpenResolver';
 import { getLogger } from '../base';
 import type { AgentLocalResourceAccess } from './localResourceAccess';
 
@@ -55,7 +56,7 @@ export class MediaTaskDeliveryHost {
   private readonly ownsAssetIndex: boolean;
 
   constructor(private readonly deps: MediaTaskDeliveryHostDeps) {
-    const createdAssetIndex = deps.assetIndex ?? createWorkspaceGeneratedAssetIndex();
+    const createdAssetIndex = deps.assetIndex ?? createWorkspaceGeneratedAssetIndex({ logger });
     this.assetIndex = createdAssetIndex;
     this.ownsAssetIndex = deps.assetIndex === undefined && createdAssetIndex !== undefined;
   }
@@ -137,7 +138,7 @@ export class MediaTaskDeliveryHost {
     const settingsPlan = buildMediaTaskDeliverySettingsPlan({
       workspaceRoot: workspaceFolder?.uri.fsPath,
       defaultOutputDir: workspaceFolder
-        ? resolveGeneratedOutputDir(workspaceFolder.uri.fsPath)
+        ? resolveGeneratedOutputDir(workspaceFolder.uri.fsPath, taskType)
         : undefined,
       configuredOutputDir: mediaConfig.get<string>(
         MEDIA_TASK_OUTPUT_DIR_SETTING_KEY,
@@ -185,26 +186,12 @@ export class MediaTaskDeliveryHost {
   }
 }
 
-function createWorkspaceGeneratedAssetIndex(): GeneratedAssetIndex | undefined {
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-  if (!workspaceFolder) {
-    return undefined;
-  }
-
-  try {
-    const generatedDir = resolveGeneratedOutputDir(workspaceFolder.uri.fsPath);
-    const assetIndex = new GeneratedAssetIndex(generatedDir);
-    void assetIndex.load();
-    return assetIndex;
-  } catch {
-    logger.warn('Failed to initialize GeneratedAssetIndex — asset tracking disabled');
-    return undefined;
-  }
-}
-
-function resolveGeneratedOutputDir(workspaceRoot: string): string {
+function resolveGeneratedOutputDir(
+  workspaceRoot: string,
+  mediaKind: GeneratedMediaTaskType | 'file',
+): string {
   return vscode.Uri.joinPath(
     vscode.Uri.file(workspaceRoot),
-    resolveWorkspaceGeneratedAssetRelativeDirectory({ mediaKind: 'file' }),
+    resolveWorkspaceGeneratedAssetRelativeDirectory({ mediaKind }),
   ).fsPath;
 }

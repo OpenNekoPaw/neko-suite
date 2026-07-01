@@ -9,11 +9,13 @@ import type {
   AgentTurnTimelineToolCallItem,
   TaskWorkItem,
 } from '@neko-agent/types';
+import { createResourceFingerprint, createResourceRef } from '@neko/shared';
 import {
   applyAgentTurnTimelineMessage,
   completeActiveTurnTimeline,
   projectMessagesWithActiveTurnTimeline,
 } from '../active-turn-timeline-presenter';
+import { projectMarkdownResourceRendering } from '../markdown-resource-rendering-presenter';
 
 describe('active turn timeline presenter', () => {
   it('renders text, tool, and later text in sequence order', () => {
@@ -68,6 +70,60 @@ describe('active turn timeline presenter', () => {
       'tool-item-1',
       'text-2',
     ]);
+  });
+
+  it('uses final projected tool result blocks while preserving timeline order', () => {
+    const active = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([
+        textItem('text-1', 1, '| scene | source |\n| --- | --- |\n| A | P1 |'),
+        toolItem('tool-item-1', 2, 'tool-1'),
+      ]),
+    }).state;
+    const completed = completeActiveTurnTimeline(active, {
+      finalContentBlocks: [
+        {
+          id: 'text-1',
+          type: 'text',
+          timestamp: 1,
+          content: '| scene | source |\n| --- | --- |\n| A | P1 |',
+          isStreaming: false,
+        },
+        {
+          id: 'tool-item-1',
+          type: 'tool_call',
+          timestamp: 2,
+          toolCall: {
+            id: 'tool-1',
+            name: 'ReadImage',
+            arguments: {},
+            result: {
+              success: true,
+              data: {
+                images: [
+                  {
+                    alias: 'P1',
+                    renderUri: 'vscode-webview://page-1',
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    const messages = projectMessagesWithActiveTurnTimeline([], completed);
+
+    expect(messages[0]?.contentBlocks?.map((block) => block.id)).toEqual(['text-1', 'tool-item-1']);
+    expect(messages[0]?.contentBlocks?.[1]?.toolCall?.result?.data).toEqual({
+      images: [
+        {
+          alias: 'P1',
+          renderUri: 'vscode-webview://page-1',
+        },
+      ],
+    });
   });
 
   it('keeps a tool item in its original position when the result update arrives later', () => {
@@ -406,6 +462,179 @@ describe('active turn timeline presenter', () => {
       { id: 'text-1', content: 'Before.' },
       { id: 'error-1', content: 'Error: Read failed' },
       { id: 'text-2', content: ' After.' },
+    ]);
+  });
+
+  it('keeps streamed assistant text visible when storyboard validation fails', () => {
+    const streamedTable = '| 镜号 | 画面内容 |\n| --- | --- |\n| 1 | bad |';
+    const result = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([
+        textItem('text-1', 1, streamedTable),
+        {
+          ...errorItem('error-1', 2, 'Storyboard table invalid'),
+          payload: {
+            message: 'Storyboard table invalid',
+            code: 'storyboard-table-forbidden-header',
+          },
+        },
+      ]),
+    });
+    const completed = completeActiveTurnTimeline(result.state, {
+      finalContentBlocks: [
+        {
+          id: 'text-1',
+          type: 'text',
+          timestamp: 1,
+          content: streamedTable,
+          isStreaming: false,
+        },
+      ],
+    });
+    const messages = projectMessagesWithActiveTurnTimeline([], completed);
+
+    expect(messages[0]?.content).toBe(`${streamedTable}Error: Storyboard table invalid`);
+    expect(messages[0]?.contentBlocks).toEqual([
+      expect.objectContaining({
+        id: 'text-1',
+        type: 'text',
+        content: streamedTable,
+      }),
+      expect.objectContaining({
+        id: 'error-1',
+        type: 'text',
+        content: 'Error: Storyboard table invalid',
+      }),
+    ]);
+  });
+
+  it('replaces an assistant text item during internal validation retry', () => {
+    const active = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([textItem('text-1', 1, 'invalid table')]),
+    }).state;
+    const replaced = applyAgentTurnTimelineMessage({
+      state: active,
+      message: timelineMessage([
+        {
+          ...textItem('text-1', 2, ''),
+          payload: { content: '', format: 'markdown', replaceContent: true },
+        },
+      ]),
+    }).state;
+    const repaired = applyAgentTurnTimelineMessage({
+      state: replaced,
+      message: timelineMessage([textItem('text-1', 3, 'fixed table')]),
+    }).state;
+    const completed = completeActiveTurnTimeline(repaired, {
+      finalContentBlocks: [
+        {
+          id: 'text-1',
+          type: 'text',
+          timestamp: 1,
+          content: 'fixed table',
+          isStreaming: false,
+        },
+      ],
+    });
+    const messages = projectMessagesWithActiveTurnTimeline([], completed);
+
+    expect(messages[0]?.content).toBe('fixed table');
+    expect(messages[0]?.contentBlocks).toEqual([
+      expect.objectContaining({
+        id: 'text-1',
+        type: 'text',
+        content: 'fixed table',
+      }),
+    ]);
+  });
+
+  it('keeps earlier tool resource context available after validation retry replacement', () => {
+    const active = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([
+        toolItem('tool-read-image', 1, 'read-image'),
+        textItem('text-1', 2, '| scene | source |\n| --- | --- |\n| A | P9 |'),
+      ]),
+    }).state;
+    const replaced = applyAgentTurnTimelineMessage({
+      state: active,
+      message: timelineMessage([
+        {
+          ...textItem('text-1', 3, ''),
+          payload: { content: '', format: 'markdown', replaceContent: true },
+        },
+      ]),
+    }).state;
+    const repairedMarkdown = '| scene | source |\n| --- | --- |\n| A | P1 |';
+    const repaired = applyAgentTurnTimelineMessage({
+      state: replaced,
+      message: timelineMessage([textItem('text-1', 4, repairedMarkdown)]),
+    }).state;
+    const completed = completeActiveTurnTimeline(repaired, {
+      finalContentBlocks: [
+        {
+          id: 'tool-read-image',
+          type: 'tool_call',
+          timestamp: 1,
+          toolCall: {
+            id: 'read-image',
+            name: 'ReadImage',
+            arguments: {},
+            result: {
+              success: true,
+              data: {
+                imageInfo: [
+                  {
+                    label: 'Page 1',
+                    alias: 'P1',
+                    renderUri: 'vscode-webview://page-1',
+                    resourceRef: createResourceRef({
+                      id: 'page-1',
+                      scope: 'project',
+                      provider: 'read-image',
+                      kind: 'media',
+                      source: { kind: 'file', projectRelativePath: 'images/page-1.jpg' },
+                      locator: { kind: 'file', path: 'images/page-1.jpg' },
+                      fingerprint: createResourceFingerprint({
+                        strategy: 'provider',
+                        value: 'page-1',
+                      }),
+                    }),
+                  },
+                ],
+              },
+            },
+          },
+        },
+        {
+          id: 'text-1',
+          type: 'text',
+          timestamp: 2,
+          content: repairedMarkdown,
+          isStreaming: false,
+        },
+      ],
+    });
+    const messages = projectMessagesWithActiveTurnTimeline([], completed);
+    const textBlock = messages[0]?.contentBlocks?.find((block) => block.type === 'text');
+
+    const projection = projectMarkdownResourceRendering({
+      markdown: textBlock?.content ?? '',
+      siblingBlocks: messages[0]?.contentBlocks,
+    });
+
+    expect(messages[0]?.contentBlocks?.map((block) => block.id)).toEqual([
+      'tool-read-image',
+      'text-1',
+    ]);
+    expect(projection.status).toBe('ready');
+    expect(projection.tokens).toEqual([
+      expect.objectContaining({
+        token: 'P1',
+        status: 'bound',
+        renderUris: ['vscode-webview://page-1'],
+      }),
     ]);
   });
 

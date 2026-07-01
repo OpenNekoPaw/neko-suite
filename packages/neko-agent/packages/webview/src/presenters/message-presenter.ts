@@ -45,6 +45,9 @@ export interface ToolResultMessageProjectionInput {
   success: boolean;
   data?: unknown;
   error?: string;
+  attachments?: readonly import('@neko/shared').ToolResultAttachment[];
+  perceptionCards?: readonly import('@neko/shared').PerceptionCard[];
+  backfillDiagnostics?: readonly import('@neko/shared').ToolResultBackfillDiagnostic[];
   plan?: Plan;
   artifacts?: readonly AgentArtifactTransferPayload[];
   now?: () => number;
@@ -82,6 +85,12 @@ export interface StreamingTextProjectionInput extends MessageProjectorIdOptions 
   streamingMessageId: string | null;
   messageId?: string;
   content?: string;
+}
+
+export interface AssistantTextReplacementProjectionInput extends MessageProjectorIdOptions {
+  messages: readonly Message[];
+  streamingMessageId: string | null;
+  messageId?: string;
 }
 
 export interface StreamingThinkingProjectionInput extends MessageProjectorIdOptions {
@@ -385,6 +394,56 @@ export function projectStreamingTextIntoMessages(
   };
 }
 
+export function projectAssistantTextReplacementIntoMessages(
+  input: AssistantTextReplacementProjectionInput,
+): StreamingMessageProjectionResult {
+  const targetMessageId = input.messageId ?? input.streamingMessageId ?? undefined;
+  if (!targetMessageId) {
+    return { messages: [...input.messages], updated: false, isThinking: false };
+  }
+
+  let updated = false;
+  const messages = input.messages.map((message) => {
+    if (message.id !== targetMessageId) return message;
+
+    updated = true;
+    const timestamp = input.now?.() ?? Date.now();
+    const contentBlocks = replaceAssistantTextBlocks(message.contentBlocks ?? [], input);
+    const hasStreamingTextBlock = contentBlocks.some(
+      (block) => block.type === 'text' && block.isStreaming === true,
+    );
+    const nextContentBlocks = hasStreamingTextBlock
+      ? contentBlocks
+      : [
+          ...contentBlocks,
+          {
+            id: `block-${timestamp}-${input.randomId?.() ?? 'replacement'}`,
+            type: 'text' as const,
+            timestamp,
+            content: '',
+            isStreaming: true,
+          },
+        ];
+
+    return {
+      ...message,
+      content: nextContentBlocks
+        .filter((block) => block.type === 'text')
+        .map((block) => block.content ?? '')
+        .join(''),
+      isStreaming: true,
+      contentBlocks: nextContentBlocks,
+    };
+  });
+
+  return {
+    messages,
+    updated,
+    targetMessageId,
+    isThinking: false,
+  };
+}
+
 export function projectStreamingThinkingIntoMessages(
   input: StreamingThinkingProjectionInput,
 ): StreamingMessageProjectionResult {
@@ -544,6 +603,29 @@ function addToolCallBlock(
       toolCall,
     },
   ];
+}
+
+function replaceAssistantTextBlocks(
+  contentBlocks: readonly ContentBlock[],
+  options: MessageProjectorIdOptions,
+): ContentBlock[] {
+  let replaced = false;
+  return contentBlocks.map((block) => {
+    if (block.type === 'thinking') {
+      return { ...block, isThinkingComplete: true };
+    }
+    if (block.type !== 'text') return block;
+    if (replaced) {
+      return { ...block, content: '', isStreaming: false };
+    }
+    replaced = true;
+    return {
+      ...block,
+      content: '',
+      isStreaming: true,
+      timestamp: block.timestamp || options.now?.() || Date.now(),
+    };
+  });
 }
 
 function closeStreamingTextBlocks(blocks: readonly ContentBlock[]): ContentBlock[] {
@@ -819,6 +901,9 @@ function updateToolResultContentBlocks(
       success: input.success,
       data: input.data,
       error: input.error,
+      ...(input.attachments ? { attachments: input.attachments } : {}),
+      ...(input.perceptionCards ? { perceptionCards: input.perceptionCards } : {}),
+      ...(input.backfillDiagnostics ? { backfillDiagnostics: input.backfillDiagnostics } : {}),
       ...(input.artifacts ? { artifacts: input.artifacts } : {}),
     },
   });

@@ -42,6 +42,9 @@ vi.mock('vscode', () => {
     extensions: {
       getExtension: vi.fn(),
     },
+    env: {
+      language: 'en',
+    },
     commands: {
       executeCommand: vi.fn(),
     },
@@ -64,8 +67,13 @@ vi.mock('vscode', () => {
 });
 import * as vscode from 'vscode';
 import {
+  createAgentCapabilityActivationIntent,
+  createAgentCapabilityActivationProgressEvent,
+} from '@neko/shared';
+import {
   buildProviderExpressionTargets,
   type AgentMessageRuntimeRequest,
+  type AgentRunnerPortEvent,
 } from '@neko/agent/runtime';
 import {
   DEFAULT_MENTION_EXCLUDE_GLOB,
@@ -354,8 +362,7 @@ function createMockConversations() {
 
 /** Minimal IAgentRunner — returned by agentManager.getOrCreate */
 function createMockAgentRunner() {
-  let runnerEventListener:
-    ((event: { type: 'subagent'; event: SubAgentEvent } | { type: 'stop' }) => void) | undefined;
+  let runnerEventListener: ((event: AgentRunnerPortEvent) => void) | undefined;
   const subAgentEventDisposable = {
     dispose: vi.fn(() => {
       runnerEventListener = undefined;
@@ -403,6 +410,7 @@ function createMockAgentRunner() {
       return subAgentEventDisposable;
     }),
     emitSubAgentEvent: (event: SubAgentEvent) => runnerEventListener?.({ type: 'subagent', event }),
+    emitRunnerEvent: (event: AgentRunnerPortEvent) => runnerEventListener?.(event),
     subAgentEventDisposable,
   };
 }
@@ -593,13 +601,13 @@ describe('AgentMessageTurnHandler', () => {
       expect(agentRunner.execute).toHaveBeenCalledWith(
         'outline the rollout',
         expect.objectContaining({
-          metadata: {
-            idc: {
+          metadata: expect.objectContaining({
+            idc: expect.objectContaining({
               entrySignal: 'vague-creative',
               taskShape: 'multi-step',
               runKind: 'plan-mode',
-            },
-          },
+            }),
+          }),
         }),
       );
     });
@@ -1095,6 +1103,47 @@ describe('AgentMessageTurnHandler', () => {
   });
 
   describe('handleUserMessage() — SubAgent event bridge', () => {
+    it('forwards activation progress events for the subscribed conversation', async () => {
+      const webview = createMockWebview();
+      const agentRunner = createMockAgentRunner();
+      const handler = buildHandler({
+        agentManager: createMockAgentManager(agentRunner),
+        providers: createMockProviders(true),
+      });
+      const intent = createAgentCapabilityActivationIntent({
+        conversationId: 'conv-1',
+        source: 'agent-tool',
+        target: 'skill',
+        action: 'activate',
+        name: 'quality-review',
+        requestedBy: 'agent',
+        createdAt: 100,
+      });
+      const event = createAgentCapabilityActivationProgressEvent({
+        intent,
+        step: 'requested',
+        status: 'succeeded',
+        at: 101,
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createChatModelRequest('start activation', { conversationId: 'conv-1' }),
+      );
+
+      agentRunner.emitRunnerEvent({
+        type: 'activationProgress',
+        conversationId: 'conv-1',
+        events: [event],
+      });
+
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'agentCapabilityActivationProgress',
+        conversationId: 'conv-1',
+        events: [event],
+      });
+    });
+
     it('forwards SubAgent events for the subscribed conversation', async () => {
       const webview = createMockWebview();
       const agentRunner = createMockAgentRunner();

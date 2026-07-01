@@ -32,14 +32,24 @@ describe('conversation UI presenter', () => {
           isError: true,
         },
       ],
-      streaming: { streamingMessageId: null, isThinking: false, queuedMessageCount: 0 },
+      streaming: {
+        streamingMessageId: null,
+        isThinking: false,
+        queuedMessageCount: 0,
+        queuedMessages: [],
+      },
     });
   });
 
   it('projects history cleared into empty messages and idle streaming', () => {
     expect(projectHistoryClearedConversation()).toEqual({
       messages: [],
-      streaming: { streamingMessageId: null, isThinking: false, queuedMessageCount: 0 },
+      streaming: {
+        streamingMessageId: null,
+        isThinking: false,
+        queuedMessageCount: 0,
+        queuedMessages: [],
+      },
     });
   });
 
@@ -101,6 +111,7 @@ describe('conversation UI presenter', () => {
       streamingMessageId: null,
       isThinking: false,
       queuedMessageCount: 0,
+      queuedMessages: [],
     });
     expect(projected.workItems).toMatchObject([
       {
@@ -159,6 +170,7 @@ describe('conversation UI presenter', () => {
       streamingMessageId: 'assistant-stream',
       isThinking: true,
       queuedMessageCount: 0,
+      queuedMessages: [],
     });
   });
 

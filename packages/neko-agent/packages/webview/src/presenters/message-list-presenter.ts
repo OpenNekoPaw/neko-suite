@@ -1,12 +1,15 @@
-import type { ContentBlock, Message } from '@neko-agent/types';
+import type { ContentBlock, Message, ToolCall } from '@neko-agent/types';
 import {
   deriveToolCallsFromContentBlocks,
+  mergeToolCalls,
   projectContentBlocksDisplay,
   projectContentBlocksUi,
   type ContentBlockProcessGroupProjection,
   type ContentBlockUiProjection,
 } from '@/presenters/content-block-presenter';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
+import type { AgentCapabilityActivationProvenance } from '@neko/shared';
 
 export type MessageListItemKind =
   'message' | 'content_block' | 'process_group' | 'skill_notice' | 'thinking_indicator';
@@ -32,6 +35,7 @@ export interface MessageListContentBlockItemProjection {
   workItemIds?: string[];
   projection: ContentBlockUiProjection;
   siblingBlocks: ContentBlock[];
+  ambientToolCalls: readonly ToolCall[];
   isFirst: boolean;
   isLast: boolean;
   isStreaming: boolean;
@@ -45,6 +49,7 @@ export interface MessageListProcessGroupItemProjection {
   workItemIds?: string[];
   processGroup: ContentBlockProcessGroupProjection;
   siblingBlocks: ContentBlock[];
+  ambientToolCalls: readonly ToolCall[];
   isFirst: boolean;
   isStreaming: boolean;
   ownerMessageId: string;
@@ -70,6 +75,7 @@ export interface MessageListSkillNoticeProjection {
     expires?: string;
     status?: string;
     allowedTools?: readonly string[];
+    provenance?: AgentCapabilityActivationProvenance;
   }[];
 }
 
@@ -86,6 +92,7 @@ export interface MessageListProjectionInput {
   streamingMessageId: string | null;
   plugins?: PluginsAvailable;
   activeSkillNotice?: MessageListSkillNoticeProjection | null;
+  activationProgress?: readonly ActivationProgressTimeline[];
 }
 
 export interface MessageListProjection {
@@ -105,6 +112,7 @@ export function projectMessageList(input: MessageListProjectionInput): MessageLi
   const items = projectMessageListItems(input.messages, showThinkingIndicator, {
     plugins: input.plugins,
     activeSkillNotice: input.activeSkillNotice,
+    activationProgress: input.activationProgress,
   });
 
   return {
@@ -118,11 +126,15 @@ export function projectMessageList(input: MessageListProjectionInput): MessageLi
 export function projectMessageListItems(
   messages: readonly Message[],
   showThinkingIndicator: boolean,
-  options: Pick<MessageListProjectionInput, 'plugins' | 'activeSkillNotice'> = {},
+  options: Pick<
+    MessageListProjectionInput,
+    'plugins' | 'activeSkillNotice' | 'activationProgress'
+  > = {},
 ): MessageListProjectionItem[] {
   const items: MessageListProjectionItem[] = [];
   let prevRole: Message['role'] | null = null;
   let prevTimestamp = 0;
+  let ambientToolCalls: readonly ToolCall[] = [];
 
   if (options.activeSkillNotice) {
     items.push({
@@ -142,13 +154,16 @@ export function projectMessageListItems(
     const isGrouped = prevRole === message.role && timeDiff < 2 * 60 * 1000;
 
     if (message.role === 'assistant' && message.contentBlocks && message.contentBlocks.length > 0) {
+      const messageToolCalls = deriveToolCallsFromContentBlocks(message.contentBlocks);
+      const markdownToolCalls = mergeToolCalls(messageToolCalls, ambientToolCalls);
       const contentBlockProjections = projectContentBlocksUi(
         message.contentBlocks,
         message.isStreaming ?? false,
         undefined,
         message.contentBlocks,
-        undefined,
+        messageToolCalls,
         options.plugins,
+        ambientToolCalls,
       );
 
       const displayProjection = projectContentBlocksDisplay(contentBlockProjections);
@@ -162,6 +177,7 @@ export function projectMessageListItems(
             workItemIds: message.workItemIds,
             projection: displayItem.projection,
             siblingBlocks: message.contentBlocks ?? [],
+            ambientToolCalls: markdownToolCalls ?? [],
             isFirst: displayIndex === 0,
             isLast: displayIndex === displayItems.length - 1,
             isStreaming: message.isStreaming ?? false,
@@ -177,6 +193,7 @@ export function projectMessageListItems(
           workItemIds: message.workItemIds,
           processGroup: displayItem.processGroup,
           siblingBlocks: message.contentBlocks ?? [],
+          ambientToolCalls: markdownToolCalls ?? [],
           isFirst: displayIndex === 0,
           isStreaming: message.isStreaming ?? false,
           ownerMessageId: message.id,
@@ -195,6 +212,11 @@ export function projectMessageListItems(
 
     prevRole = message.role;
     prevTimestamp = message.timestamp;
+    if (message.role === 'assistant' && message.contentBlocks && message.contentBlocks.length > 0) {
+      ambientToolCalls =
+        mergeToolCalls(deriveToolCallsFromContentBlocks(message.contentBlocks), ambientToolCalls) ??
+        [];
+    }
   }
 
   if (showThinkingIndicator) {

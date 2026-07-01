@@ -6,7 +6,7 @@
  */
 
 import { memo } from 'react';
-import type { ContentBlock } from '@neko-agent/types';
+import type { ContentBlock, ToolCall } from '@neko-agent/types';
 import { ToolCallDisplay, ToolCallGroupDisplay } from '@/components/ChatView/ToolCallDisplay';
 import { DiffBlock } from '@/components/ChatView/DiffBlock';
 import { PlanReview } from '@/components/ChatView/PlanReview';
@@ -17,7 +17,7 @@ import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { VSCodeMessages } from '@/messages';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
-import { projectCanvasMarkdownCapabilityInput } from '@/presenters/canvas-markdown-capability-presenter';
+import { projectCanvasMarkdownHandoffRequest } from '@/presenters/canvas-markdown-handoff-presenter';
 import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
 import {
   CodeIcon,
@@ -38,9 +38,9 @@ import {
   isCanvasMarkdownCapabilityResult,
   type AgentCapabilityAction,
   type AgentCapabilityArtifactRef,
+  type AgentCapabilityInvocationInput,
   type AgentCapabilityInvocationResult,
   type CanvasMarkdownCapabilityResult,
-  type CanvasMarkdownCapabilityInput,
 } from '@neko/shared';
 import type { MessageSpeakerIdentity } from '@/components/ChatView/message-identity';
 
@@ -61,6 +61,8 @@ interface ContentBlockItemProps {
   workItemIds?: string[];
   /** Sibling blocks from the owner message, used for composite media resolution */
   siblingBlocks?: ContentBlock[];
+  /** Tool calls collected from prior assistant messages in the same conversation. */
+  ambientToolCalls?: readonly ToolCall[];
   /** Speaker identity for assistant-owned content blocks. */
   assistantIdentity?: MessageSpeakerIdentity;
 }
@@ -90,6 +92,7 @@ export const ContentBlockItem = memo(function ContentBlockItem({
   conversationId,
   workItemIds,
   siblingBlocks,
+  ambientToolCalls,
   assistantIdentity,
 }: ContentBlockItemProps) {
   const actions = useMessageActions();
@@ -99,6 +102,7 @@ export const ContentBlockItem = memo(function ContentBlockItem({
       ? projectContentBlockUi({
           block,
           siblingBlocks,
+          ambientToolCalls,
           parentIsStreaming: isStreaming,
         })
       : null);
@@ -211,9 +215,9 @@ function renderBlockContent(
             toolCalls: projection.toolCalls,
           })
         : undefined;
-      const canvasMarkdownCapability =
+      const canvasMarkdownHandoff =
         !projection.renderStreaming && callbacks.pluginsAvailable?.canvas
-          ? projectCanvasMarkdownCapabilityInput({
+          ? projectCanvasMarkdownHandoffRequest({
               markdown: projection.content,
               markdownResources,
               target: projectCanvasContentTransferTarget({
@@ -232,10 +236,10 @@ function renderBlockContent(
             isStreaming={projection.renderStreaming}
             markdownResources={markdownResources}
           />
-          {canvasMarkdownCapability && callbacks.pluginsAvailable && (
+          {canvasMarkdownHandoff && callbacks.pluginsAvailable && (
             <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-[var(--agent-divider)] pt-1">
               <SendToMenu
-                canvasMarkdownCapability={canvasMarkdownCapability}
+                canvasMarkdownHandoff={canvasMarkdownHandoff}
                 conversationId={conversationId}
                 mediaType="image"
                 plugins={callbacks.pluginsAvailable}
@@ -473,10 +477,10 @@ function CanvasLifecycleActionButton({
   conversationId: string | null;
   parentRequestId: string;
 }) {
-  const input = projectCanvasLifecycleActionInput(action);
+  const invocation = projectCanvasLifecycleActionInvocation(action);
   const disabledReason = !conversationId
     ? 'Conversation unavailable'
-    : !input
+    : !invocation
       ? 'Unsupported action payload'
       : undefined;
   const disabled = disabledReason !== undefined;
@@ -487,11 +491,11 @@ function CanvasLifecycleActionButton({
       disabled={disabled}
       title={disabledReason ?? `${action.capabilityId} ${action.phase}`}
       onClick={() => {
-        if (!conversationId || !input) return;
-        VSCodeMessages.invokeCanvasMarkdownCapability(
+        if (!conversationId || !invocation) return;
+        VSCodeMessages.invokeAgentCapabilityLifecycle(
           conversationId,
           `${action.capabilityId}:${action.actionId}:${parentRequestId}`,
-          input,
+          invocation,
         );
       }}
       className="inline-flex min-h-6 max-w-full items-center gap-1 rounded border border-[var(--agent-input-border)] bg-[var(--agent-surface)] px-2 py-1 text-[11px] font-medium text-[var(--agent-fg)] transition-colors hover:border-[var(--agent-accent)] hover:bg-[var(--agent-hover)] disabled:cursor-not-allowed disabled:opacity-50"
@@ -502,20 +506,26 @@ function CanvasLifecycleActionButton({
   );
 }
 
-function projectCanvasLifecycleActionInput(
+function projectCanvasLifecycleActionInvocation(
   action: AgentCapabilityAction,
-): CanvasMarkdownCapabilityInput | null {
+): AgentCapabilityInvocationInput | null {
   if (!isCanvasMarkdownCapabilityInput(action.payload)) return null;
   if (action.capabilityId !== action.payload.capabilityId) return null;
-  if (!action.requiresApproval) return action.payload;
-  if (action.phase !== 'apply' && action.phase !== 'execute') return action.payload;
+  const approval =
+    action.requiresApproval && (action.phase === 'apply' || action.phase === 'execute')
+      ? {
+          source: 'user-confirmation' as const,
+          approvedAt: Date.now(),
+        }
+      : undefined;
   return {
-    ...action.payload,
-    approval: {
-      source: 'user-confirmation',
-      approvedAt: Date.now(),
-    },
-  } as CanvasMarkdownCapabilityInput;
+    capabilityId: action.capabilityId,
+    phase: action.phase,
+    payload: action.payload,
+    ...(action.target ? { target: action.target } : {}),
+    ...(approval ? { approval } : {}),
+    provenance: { source: 'webview' },
+  };
 }
 
 function formatArtifactRef(ref: AgentCapabilityArtifactRef): string {

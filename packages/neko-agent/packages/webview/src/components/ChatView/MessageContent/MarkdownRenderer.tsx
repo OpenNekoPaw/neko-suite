@@ -12,6 +12,7 @@ import {
   isCompositeContentFenceLanguage,
   parseCompositeContentJson,
   parseCompositeContentJsonCandidates,
+  resolveStoryboardCreativeTableHeader,
 } from '@neko-agent/types';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { projectCompositeBlockRichContent } from '@/presenters/composite-content-presenter';
@@ -158,9 +159,13 @@ function createMarkdownComponents(
       return <tr className="border-b border-[var(--vscode-panel-border)]">{children}</tr>;
     },
     th({ children }) {
+      const projectedHeader = projectStoryboardCreativeTableHeader(children);
       return (
-        <th className="px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--vscode-foreground)] border border-[var(--vscode-panel-border)]">
-          {children}
+        <th
+          className="px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--vscode-foreground)] border border-[var(--vscode-panel-border)]"
+          title={projectedHeader?.title}
+        >
+          {projectedHeader?.label ?? children}
         </th>
       );
     },
@@ -213,6 +218,19 @@ function createMarkdownComponents(
   };
 }
 
+function projectStoryboardCreativeTableHeader(
+  children: ReactNode,
+): { readonly label: string; readonly title?: string } | null {
+  const text = readPlainText(children);
+  if (!text) return null;
+  const field = resolveStoryboardCreativeTableHeader(text);
+  if (!field) return null;
+  const label = t(`chat.storyboardTable.fields.${field}`);
+  return label === `chat.storyboardTable.fields.${field}`
+    ? { label: text, title: field === text ? undefined : field }
+    : { label, title: field === text ? undefined : field };
+}
+
 function projectMarkdownResourceTokenCell(
   children: ReactNode,
   markdownResources: MarkdownResourceRenderingProjection | undefined,
@@ -224,6 +242,22 @@ function projectMarkdownResourceTokenCell(
     (candidate) => normalizeMarkdownResourceLookupToken(candidate.token) === normalizedToken,
   );
   if (!projection) return null;
+  if (projection.status === 'bound' && projection.renderUris.length > 0) {
+    return (
+      <span className="flex max-w-[28rem] flex-wrap gap-1.5 align-top">
+        {projection.renderUris.slice(0, 4).map((uri, index) => (
+          <img
+            key={`${uri}-${index}`}
+            src={uri}
+            alt={projection.refs[index]?.label ?? token}
+            title={projection.refs[index]?.label ?? token}
+            className="max-h-40 min-h-24 w-auto max-w-[14rem] rounded border border-[var(--vscode-panel-border)] object-contain"
+            loading="lazy"
+          />
+        ))}
+      </span>
+    );
+  }
   return (
     <span className="inline-flex min-w-[8rem] max-w-full flex-col gap-1 align-top">
       <span className="inline-flex flex-wrap items-center gap-1.5">
@@ -236,13 +270,13 @@ function projectMarkdownResourceTokenCell(
         </span>
       </span>
       {projection.renderUris.length > 0 ? (
-        <span className="flex max-w-[12rem] flex-wrap gap-1">
+        <span className="flex max-w-[28rem] flex-wrap gap-1.5">
           {projection.renderUris.slice(0, 4).map((uri, index) => (
             <img
               key={`${uri}-${index}`}
               src={uri}
               alt={projection.refs[index]?.label ?? token}
-              className="h-12 w-12 rounded border border-[var(--vscode-panel-border)] object-cover"
+              className="max-h-40 min-h-24 w-auto max-w-[14rem] rounded border border-[var(--vscode-panel-border)] object-contain"
               loading="lazy"
             />
           ))}
@@ -262,31 +296,35 @@ function projectMarkdownImageResource(
   markdownResources: MarkdownResourceRenderingProjection | undefined,
 ): ReactNode | null {
   if (!src) return null;
-  const normalizedToken = normalizeMarkdownResourceLookupToken(src);
+  const baseToken = stripResourcePlacementHint(src);
+  const normalizedToken = normalizeMarkdownResourceLookupToken(baseToken);
   const projection = markdownResources?.tokens.find(
     (candidate) => normalizeMarkdownResourceLookupToken(candidate.token) === normalizedToken,
   );
   if (!projection) return null;
   if (projection.renderUris.length === 0) {
-    return projectMarkdownResourceTokenCell(src, markdownResources);
+    return projectMarkdownResourceTokenCell(baseToken, markdownResources);
   }
   const renderUri = projection.renderUris[0];
   return (
     <span className="my-2 inline-flex max-w-full flex-col gap-1">
       <img
         src={renderUri}
-        alt={projection.refs[0]?.label ?? src}
+        alt={projection.refs[0]?.label ?? baseToken}
+        title={projection.refs[0]?.label ?? baseToken}
         className="max-w-full rounded border border-[var(--vscode-panel-border)]"
         loading="lazy"
       />
-      <span
-        className="text-[10px] text-[var(--vscode-descriptionForeground)]"
-        data-markdown-image-status={projection.status}
-      >
-        {src}
-      </span>
     </span>
   );
+}
+
+function stripResourcePlacementHint(value: string): string {
+  const trimmed = value.trim();
+  if (/^[A-Za-z][A-Za-z0-9_.~:@/%+-]*#[A-Za-z][A-Za-z0-9_.:-]*$/.test(trimmed)) {
+    return trimmed.slice(0, trimmed.indexOf('#'));
+  }
+  return trimmed;
 }
 
 function markdownResourceStatusLabel(

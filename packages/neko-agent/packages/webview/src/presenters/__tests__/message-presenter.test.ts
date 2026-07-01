@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Message, ToolCall } from '@neko-agent/types';
 import {
+  projectAssistantTextReplacementIntoMessages,
   projectMessageCancelledIntoMessages,
   projectStreamingCompleteIntoMessages,
   projectStreamingTextIntoMessages,
@@ -13,6 +14,7 @@ import {
   updatePlanStepInMessages,
 } from '../message-presenter';
 import { projectToolResultBackfillIntoMessages } from '../tool-result-backfill-presenter';
+import { projectMarkdownResourceRendering } from '../markdown-resource-rendering-presenter';
 
 describe('message presenter', () => {
   it('creates an assistant message when projecting a tool call without a target', () => {
@@ -103,6 +105,51 @@ describe('message presenter', () => {
         progress: 100,
         subAgent: { response: 'Looks good' },
       },
+    ]);
+  });
+
+  it('preserves tool result media attachments for later Markdown resource rendering', () => {
+    const result = projectToolResultIntoMessages({
+      messages: createToolMessages({}, { name: 'ReadImage' }),
+      streamingMessageId: null,
+      toolCallId: 'tool-1',
+      success: true,
+      data: {
+        images: [
+          {
+            label: 'Page 1',
+            alias: 'P1',
+            mimeType: 'image/jpeg',
+            resourceRef: {
+              id: 'page-1',
+              scope: 'project',
+              provider: 'read-image',
+              kind: 'media',
+              source: { kind: 'file', projectRelativePath: 'images/page-1.jpg' },
+              locator: { kind: 'file', path: 'images/page-1.jpg' },
+              fingerprint: { strategy: 'provider', providerId: 'read-image', value: 'page-1' },
+            },
+          },
+        ],
+      },
+      attachments: [
+        {
+          type: 'image',
+          path: 'vscode-webview://page-1',
+          mimeType: 'image/jpeg',
+          assetRef: {
+            assetId: 'P1',
+            uri: 'vscode-webview://page-1',
+            mimeType: 'image/jpeg',
+            label: 'Page 1',
+          },
+        },
+      ],
+    });
+
+    const toolResult = result.messages[0]?.contentBlocks?.[0]?.toolCall?.result;
+    expect(toolResult?.attachments).toEqual([
+      expect.objectContaining({ path: 'vscode-webview://page-1' }),
     ]);
   });
 
@@ -422,6 +469,97 @@ describe('message presenter', () => {
         },
       ],
     });
+  });
+
+  it('replaces invalid streamed text while preserving tool resource context', () => {
+    const withTool = projectToolCallIntoMessages({
+      messages: [],
+      streamingMessageId: null,
+      messageId: 'assistant-stream',
+      toolCallId: 'tool-read-image',
+      toolName: 'ReadImage',
+      arguments: {},
+      now: () => 1000,
+    });
+    const withToolResult = projectToolResultIntoMessages({
+      messages: withTool.messages,
+      streamingMessageId: 'assistant-stream',
+      messageId: 'assistant-stream',
+      toolCallId: 'tool-read-image',
+      success: true,
+      data: {
+        images: [
+          {
+            label: 'Page 1',
+            alias: 'P1',
+            mimeType: 'image/jpeg',
+            resourceRef: {
+              id: 'page-1',
+              scope: 'project',
+              provider: 'read-image',
+              kind: 'media',
+              source: { kind: 'file', projectRelativePath: 'images/page-1.jpg' },
+              locator: { kind: 'file', path: 'images/page-1.jpg' },
+              fingerprint: { strategy: 'provider', providerId: 'read-image', value: 'page-1' },
+            },
+          },
+        ],
+      },
+      attachments: [
+        {
+          type: 'image',
+          path: 'vscode-webview://page-1',
+          mimeType: 'image/jpeg',
+          assetRef: {
+            assetId: 'P1',
+            uri: 'vscode-webview://page-1',
+            mimeType: 'image/jpeg',
+            label: 'Page 1',
+          },
+        },
+      ],
+      now: () => 1001,
+    });
+    const invalidText = projectStreamingTextIntoMessages({
+      messages: withToolResult.messages,
+      streamingMessageId: 'assistant-stream',
+      messageId: 'assistant-stream',
+      content: '| 页码 | 画面内容 |\n| --- | --- |\n| P1 | frame |',
+      now: () => 1002,
+    });
+    const replaced = projectAssistantTextReplacementIntoMessages({
+      messages: invalidText.messages,
+      streamingMessageId: 'assistant-stream',
+      messageId: 'assistant-stream',
+      now: () => 1003,
+    });
+    const repairedMarkdown =
+      '| scene | shot | source | visual |\n| --- | --- | --- | --- |\n| Opening | 1 | P1 | frame |';
+    const repaired = projectStreamingTextIntoMessages({
+      messages: replaced.messages,
+      streamingMessageId: 'assistant-stream',
+      messageId: 'assistant-stream',
+      content: repairedMarkdown,
+      now: () => 1004,
+    });
+
+    expect(repaired.messages[0]?.content).toBe(repairedMarkdown);
+    expect(repaired.messages[0]?.contentBlocks?.map((block) => block.type)).toEqual([
+      'tool_call',
+      'text',
+    ]);
+    const projection = projectMarkdownResourceRendering({
+      markdown: repairedMarkdown,
+      siblingBlocks: repaired.messages[0]?.contentBlocks,
+    });
+    expect(projection.status).toBe('ready');
+    expect(projection.tokens).toEqual([
+      expect.objectContaining({
+        token: 'P1',
+        status: 'bound',
+        renderUris: ['vscode-webview://page-1'],
+      }),
+    ]);
   });
 
   it('closes the active response block before inserting a tool call', () => {

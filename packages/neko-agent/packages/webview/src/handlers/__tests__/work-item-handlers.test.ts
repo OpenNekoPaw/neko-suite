@@ -2,12 +2,16 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { describe, expect, it } from 'vitest';
 import type {
   AgentBackgroundTask,
+  AgentTurnTimelineAssistantTextItem,
+  AgentTurnTimelineMediaItem,
   AgentTurnTimelineMessage,
   AgentMediaTaskView,
   AgentQueuedMessageItem,
   ExtensionToWebviewMessage,
+  ContentBlock,
   Message,
   SubAgentWorkItemEvent,
+  ToolCall,
 } from '@neko-agent/types';
 import {
   projectBackgroundTaskToWorkItem,
@@ -27,6 +31,7 @@ import { taskHandlers } from '../task-handlers';
 import { timelineHandlers } from '../timeline-handlers';
 import { toolHandlers } from '../tool-handlers';
 import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
+import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
 
 describe('work item message handlers', () => {
   it('stores plugin availability for TaskCard send-to menus', () => {
@@ -376,6 +381,95 @@ describe('work item message handlers', () => {
     expect(harness.workItems().get('conv-a')).toBeUndefined();
   });
 
+  it('keeps direct media turns running until the terminal streamComplete arrives', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null, queuedMessageCount: 0 },
+    });
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'thinking',
+        conversationId: 'conv-a',
+      },
+      harness.context,
+    );
+    dispatch(
+      mediaHandlers,
+      {
+        type: 'mediaTaskCreated',
+        conversationId: 'conv-a',
+        parentScope: 'turn',
+        workItem: createMediaWorkItem('conv-a', 'media-a'),
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming()).toMatchObject({
+      isThinking: true,
+      streamingMessageId: null,
+    });
+    expect(harness.messages()).toEqual([expect.objectContaining({ workItemIds: ['media-a'] })]);
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'streamComplete',
+        conversationId: 'conv-a',
+        messageId: 'media-turn:media-a',
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming()).toMatchObject({
+      isThinking: false,
+      streamingMessageId: null,
+    });
+  });
+
+  it('clears direct media turn running state from terminal progress events', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null, queuedMessageCount: 0 },
+    });
+
+    dispatch(
+      mediaHandlers,
+      {
+        type: 'mediaTaskCreated',
+        conversationId: 'conv-a',
+        parentScope: 'turn',
+        workItem: createMediaWorkItem('conv-a', 'media-a'),
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming()).toMatchObject({
+      isThinking: true,
+      streamingMessageId: null,
+    });
+
+    dispatch(
+      mediaHandlers,
+      {
+        type: 'mediaTaskProgress',
+        conversationId: 'conv-a',
+        parentScope: 'turn',
+        workItem: createMediaWorkItem('conv-a', 'media-a', { status: 'completed' }),
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming()).toMatchObject({
+      isThinking: false,
+      streamingMessageId: null,
+      queuedMessageCount: 0,
+    });
+  });
+
   it('anchors active timeline media tasks from canonical timeline events', () => {
     const harness = createContextHarness({
       activeConversationId: 'conv-a',
@@ -577,6 +671,84 @@ describe('work item message handlers', () => {
     ]);
   });
 
+  it('keeps ReadImage resource context when validation replacement repairs the final table', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+    const repairedMarkdown = [
+      '| scene | shot | source | sourcePanel | decision | duration | visual | motion | audio | characters | dialogue | prompt | reviewStatus | nextAction | contentType | decisionReason | requiresSplit | duplicateOf |',
+      '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+      '| 开场 | S01 | P1 | 整页 | keep | 3s | 主角出现 | 缓慢推近 | 低风声 | 主角 |  | 黑白工业巨构前的孤独主角 | needs-review | use-as-reference | story | 建立空间与人物 | false |  |',
+    ].join('\n');
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([
+        readImageTimelineItem('tool-read-image', 1, 'read-image'),
+        textTimelineItem('text-storyboard', 2, '| 镜号 | 画面内容 |\n| --- | --- |\n| 1 | bad |'),
+      ]),
+      harness.context,
+    );
+    dispatch(
+      timelineHandlers,
+      timelineMessage([
+        {
+          ...textTimelineItem('text-storyboard', 3, ''),
+          payload: { content: '', format: 'markdown', replaceContent: true },
+        },
+      ]),
+      harness.context,
+    );
+    dispatch(
+      timelineHandlers,
+      timelineMessage([textTimelineItem('text-storyboard', 4, repairedMarkdown)]),
+      harness.context,
+    );
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'streamComplete',
+        conversationId: 'conv-a',
+        messageId: 'msg-a',
+        contentBlocks: [
+          readImageContentBlock('tool-read-image', 1, 'read-image'),
+          {
+            id: 'text-storyboard',
+            type: 'text',
+            timestamp: 2,
+            content: repairedMarkdown,
+            isStreaming: false,
+          },
+        ],
+      },
+      harness.context,
+    );
+
+    const message = harness.messages()[0];
+    const textBlock = message?.contentBlocks?.find((block) => block.type === 'text');
+    const projection = projectMarkdownResourceRendering({
+      markdown: textBlock?.content ?? '',
+      siblingBlocks: message?.contentBlocks,
+    });
+
+    expect(message?.contentBlocks?.map((block) => block.id)).toEqual([
+      'tool-read-image',
+      'text-storyboard',
+    ]);
+    expect(message?.content).toBe(repairedMarkdown);
+    expect(projection.status).toBe('ready');
+    expect(projection.tokens).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          token: 'P1',
+          status: 'bound',
+          renderUris: ['vscode-webview://page-1'],
+        }),
+      ]),
+    );
+  });
+
   it('rejects active timeline tool results with unknown parents', () => {
     const harness = createContextHarness({
       activeConversationId: 'conv-a',
@@ -757,6 +929,74 @@ describe('work item message handlers', () => {
         }),
       ]),
     );
+  });
+
+  it('keeps a completed timeline conversation idle when delayed media progress arrives', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([
+        textTimelineItem('text-before', 1, 'Before.'),
+        {
+          ...turnMediaTimelineItem('media-task-media-a', 2, 'media-a'),
+          status: 'pending',
+          payload: {
+            workItem: createMediaWorkItem('conv-a', 'media-a', {
+              parentMessageId: 'msg-a',
+              status: 'processing',
+              progress: 20,
+            }),
+          },
+        },
+      ]),
+      harness.context,
+    );
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'streamComplete',
+        conversationId: 'conv-a',
+        messageId: 'msg-a',
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming()).toMatchObject({
+      isThinking: false,
+      streamingMessageId: null,
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([
+        {
+          ...turnMediaTimelineItem('media-task-media-a', 3, 'media-a'),
+          status: 'succeeded',
+          payload: {
+            workItem: createMediaWorkItem('conv-a', 'media-a', {
+              parentMessageId: 'msg-a',
+              status: 'completed',
+              progress: 100,
+            }),
+          },
+        },
+      ]),
+      harness.context,
+    );
+
+    expect(harness.streaming()).toMatchObject({
+      isThinking: false,
+      streamingMessageId: null,
+    });
+    expect(harness.workItems().get('conv-a')?.get('media-a')).toMatchObject({
+      status: 'completed',
+      progress: 100,
+    });
   });
 
   it('renders active timeline conversation errors immediately from canonical timeline events', () => {
@@ -1360,12 +1600,15 @@ function createTaskWorkItem(
   });
 }
 
-function createMediaTask(id: string): AgentMediaTaskView {
+function createMediaTask(
+  id: string,
+  overrides: Partial<Pick<AgentMediaTaskView, 'status' | 'progress'>> = {},
+): AgentMediaTaskView {
   return {
     id,
     type: 'image',
-    status: 'processing',
-    progress: 25,
+    status: overrides.status ?? 'processing',
+    progress: overrides.progress ?? 25,
     providerId: 'provider-1',
     modelId: 'model-1',
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -1377,13 +1620,18 @@ function createMediaTask(id: string): AgentMediaTaskView {
 function createMediaWorkItem(
   conversationId: string,
   id: string,
-  links: { parentMessageId?: string; parentToolCallId?: string } = {},
+  options: {
+    parentMessageId?: string;
+    parentToolCallId?: string;
+    status?: AgentMediaTaskView['status'];
+    progress?: number;
+  } = {},
 ) {
   return projectMediaTaskToWorkItem({
     conversationId,
-    task: createMediaTask(id),
-    parentMessageId: links.parentMessageId,
-    parentToolCallId: links.parentToolCallId,
+    task: createMediaTask(id, { status: options.status, progress: options.progress }),
+    parentMessageId: options.parentMessageId,
+    parentToolCallId: options.parentToolCallId,
   });
 }
 
@@ -1401,7 +1649,7 @@ function textTimelineItem(
   itemId: string,
   sequence: number,
   content: string,
-): AgentTurnTimelineMessage['events'][number] {
+): AgentTurnTimelineAssistantTextItem {
   return {
     conversationId: 'conv-a',
     turnId: 'turn-msg-a',
@@ -1413,6 +1661,96 @@ function textTimelineItem(
     payload: { content, format: 'markdown' },
     createdAt: sequence,
     updatedAt: sequence,
+  };
+}
+
+function readImageTimelineItem(
+  itemId: string,
+  sequence: number,
+  toolCallId: string,
+): AgentTurnTimelineMessage['events'][number] {
+  return {
+    conversationId: 'conv-a',
+    turnId: 'turn-msg-a',
+    messageId: 'msg-a',
+    itemId,
+    sequence,
+    kind: 'tool_call',
+    status: 'succeeded',
+    payload: {
+      toolCall: createReadImageToolCall(toolCallId),
+    },
+    createdAt: sequence,
+    updatedAt: sequence,
+  };
+}
+
+function readImageContentBlock(id: string, timestamp: number, toolCallId: string): ContentBlock {
+  return {
+    id,
+    type: 'tool_call',
+    timestamp,
+    toolCall: createReadImageToolCall(toolCallId),
+  };
+}
+
+function createReadImageToolCall(toolCallId: string): ToolCall {
+  return {
+    id: toolCallId,
+    name: 'ReadImage',
+    arguments: {},
+    result: {
+      success: true,
+      data: {
+        imageInfo: [
+          {
+            alias: 'P1',
+            label: 'Page 1',
+            entryPath: 'OPS/page-1.jpg',
+            mimeType: 'image/jpeg',
+            width: 1511,
+            height: 2160,
+            renderUri: 'vscode-webview://page-1',
+            resourceRef: {
+              kind: 'document-entry',
+              source: {
+                filePath: '${BOOKS}/story.epub',
+                format: 'epub',
+              },
+              entryPath: 'OPS/page-1.jpg',
+              versionPolicy: 'versioned-export',
+            },
+          },
+        ],
+        images: [
+          {
+            alias: 'P1',
+            label: 'Page 1',
+            entryPath: 'OPS/page-1.jpg',
+            mimeType: 'image/jpeg',
+            width: 1511,
+            height: 2160,
+            renderUri: 'vscode-webview://page-1',
+            resourceRef: {
+              kind: 'document-entry',
+              source: {
+                filePath: '${BOOKS}/story.epub',
+                format: 'epub',
+              },
+              entryPath: 'OPS/page-1.jpg',
+              versionPolicy: 'versioned-export',
+            },
+          },
+        ],
+      },
+      attachments: [
+        {
+          type: 'image',
+          path: 'vscode-webview://page-1',
+          mimeType: 'image/jpeg',
+        },
+      ],
+    },
   };
 }
 
@@ -1447,7 +1785,7 @@ function turnMediaTimelineItem(
   itemId: string,
   sequence: number,
   workItemId: string,
-): AgentTurnTimelineMessage['events'][number] {
+): AgentTurnTimelineMediaItem {
   return {
     conversationId: 'conv-a',
     turnId: 'turn-msg-a',
@@ -1631,6 +1969,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     forceAgentStateUpdate: () => undefined,
     setSkills: noopDispatch(),
     setActiveSkill: noopDispatch(),
+    setActivationProgressByConversation: noopDispatch(),
     setGlobalError: createSetter(
       () => globalError,
       (next) => {

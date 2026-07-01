@@ -37,6 +37,7 @@ import type {
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { AgentWorkItem } from '@/components/AgentWorkItem';
 import type { BoundActiveSkillIndicator } from '@/handlers';
+import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import { projectTrailingMention } from '@/components/ChatView/InputArea/mention-input';
 import {
   useUIState,
@@ -109,6 +110,7 @@ export interface ChatWorkspaceProps {
   skills: SkillSummary[];
   activeSkill: BoundActiveSkillIndicator | null;
   setActiveSkill: React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>;
+  activationProgress?: readonly ActivationProgressTimeline[];
   // Context chips
   contextChips: AgentContextPayload[];
   ambientNodes: Array<{ nodeId: string; type: string; summary: string }>;
@@ -190,6 +192,7 @@ export function ChatWorkspace({
   skills,
   activeSkill,
   setActiveSkill,
+  activationProgress = [],
   contextChips,
   ambientNodes,
   onAddContextChip,
@@ -540,6 +543,9 @@ export function ChatWorkspace({
 
   const handleExecutionModeChange = (mode: ShellExecutionMode) => {
     updateSettings({ executionMode: mode });
+    if (activeConversationId) {
+      VSCodeMessages.updateSettings({ executionMode: mode }, activeConversationId);
+    }
   };
 
   const handlePromptModeChange = (mode: PromptMode) => {
@@ -547,6 +553,17 @@ export function ChatWorkspace({
     updateSettings({ promptMode: mode });
     VSCodeMessages.setPromptMode(mode, activeConversationId);
   };
+
+  const handleControlIdcWorkflow = useCallback(
+    (action: 'start' | 'resume' | 'stop') => {
+      if (!activeConversationId || isCharacterRoleSession) return;
+      VSCodeMessages.controlIdcWorkflow(activeConversationId, action, {
+        runKind: 'idc',
+        reason: `Composer IDC workflow ${action}`,
+      });
+    },
+    [activeConversationId, isCharacterRoleSession],
+  );
 
   const handleMediaModelSelect = useCallback(
     (category: 'image' | 'video' | 'audio', modelId: string) => {
@@ -654,6 +671,7 @@ export function ChatWorkspace({
             ? activeSkill
             : null
         }
+        activationProgress={!isCharacterRoleSession ? activationProgress : []}
         onClearActiveSkill={skillActions.handleClearActiveSkill}
         workItems={workItems}
         pluginsAvailable={pluginsAvailable}
@@ -677,6 +695,7 @@ export function ChatWorkspace({
         onInputChange={setInputValue}
         onSend={handleSend}
         onCancel={handleCancelMessage}
+        onControlIdcWorkflow={!isCharacterRoleSession ? handleControlIdcWorkflow : undefined}
         onPromoteQueuedMessage={handlePromoteQueuedMessage}
         onCancelQueuedMessage={handleCancelQueuedMessage}
         onEditQueuedMessage={handleEditQueuedMessage}

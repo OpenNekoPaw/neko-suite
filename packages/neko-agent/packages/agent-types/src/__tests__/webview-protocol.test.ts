@@ -1166,6 +1166,65 @@ describe('webview protocol projectors', () => {
     ).toBeNull();
   });
 
+  it('parses explicit IDC workflow controls as conversation-scoped messages', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'controlIdcWorkflow',
+        conversationId: 'conv-1',
+        action: 'start',
+        runKind: 'idc',
+        reason: 'User clicked start',
+      }),
+    ).toEqual({
+      type: 'controlIdcWorkflow',
+      conversationId: 'conv-1',
+      action: 'start',
+      runKind: 'idc',
+      reason: 'User clicked start',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'controlIdcWorkflow',
+        conversationId: 'conv-1',
+        action: 'resume',
+        runId: 'run-1',
+      }),
+    ).toEqual({
+      type: 'controlIdcWorkflow',
+      conversationId: 'conv-1',
+      action: 'resume',
+      runId: 'run-1',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'controlIdcWorkflow',
+        conversationId: 'conv-1',
+        action: 'stop',
+      }),
+    ).toEqual({
+      type: 'controlIdcWorkflow',
+      conversationId: 'conv-1',
+      action: 'stop',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'controlIdcWorkflow',
+        action: 'start',
+      }),
+    ).toBeNull();
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'controlIdcWorkflow',
+        conversationId: 'conv-1',
+        action: 'auto',
+      }),
+    ).toBeNull();
+  });
+
   it('validates reveal context source contextType against the agent context union', () => {
     expect(
       parseWebviewToExtensionMessage({
@@ -1598,7 +1657,7 @@ describe('webview protocol projectors', () => {
     ).toBeNull();
   });
 
-  it('parses Canvas Markdown capability invocations through the typed bridge', () => {
+  it('rejects direct Canvas Markdown capability invocations from Webview', () => {
     expect(
       parseWebviewToExtensionMessage({
         type: 'invokeCanvasMarkdownCapability',
@@ -1622,31 +1681,7 @@ describe('webview protocol projectors', () => {
           provenance: { source: 'webview', label: 'assistant-storyboard-block' },
         },
       }),
-    ).toEqual({
-      type: 'invokeCanvasMarkdownCapability',
-      requestId: 'req-1',
-      conversationId: 'conv-1',
-      input: {
-        capabilityId: 'canvas.ingestMarkdown',
-        markdown:
-          '| Scene | Shot | Visual | Image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
-        sourceFormat: 'gfm-table',
-        intentHint: 'creative-table',
-        profileHint: 'storyboard',
-        resources: [
-          {
-            token: 'P1',
-            label: 'Panel 1',
-            sourcePath: '${PROJECT}/assets/panel-1.png',
-          },
-        ],
-        target: { nodeId: 'board-1', mode: 'append' },
-        provenance: { source: 'webview', label: 'assistant-storyboard-block' },
-      },
-    });
-  });
-
-  it('rejects Canvas Markdown capability invocations with runtime-only resource identity', () => {
+    ).toBeNull();
     expect(
       parseWebviewToExtensionMessage({
         type: 'invokeCanvasMarkdownCapability',
@@ -1665,6 +1700,112 @@ describe('webview protocol projectors', () => {
         },
       }),
     ).toBeNull();
+  });
+
+  it('parses Agent-led Canvas Markdown handoff requests without a selected capability', () => {
+    const parsed = parseWebviewToExtensionMessage({
+      type: 'requestCanvasMarkdownHandoff',
+      requestId: 'handoff-1',
+      conversationId: 'conv-1',
+      markdown:
+        '| Scene | Shot | Visual | Image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
+      sourceFormat: 'gfm-table',
+      declaredIntentHint: 'creative-table',
+      declaredProfileHint: 'storyboard',
+      resources: [
+        {
+          token: 'P1',
+          label: 'Panel 1',
+          sourcePath: '${PROJECT}/assets/panel-1.png',
+        },
+      ],
+      target: { nodeId: 'board-1', mode: 'append' },
+      provenance: { source: 'webview', label: 'assistant-storyboard-block' },
+    });
+
+    expect(parsed).toEqual({
+      type: 'requestCanvasMarkdownHandoff',
+      requestId: 'handoff-1',
+      conversationId: 'conv-1',
+      markdown:
+        '| Scene | Shot | Visual | Image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
+      sourceFormat: 'gfm-table',
+      declaredIntentHint: 'creative-table',
+      declaredProfileHint: 'storyboard',
+      resources: [
+        {
+          token: 'P1',
+          label: 'Panel 1',
+          sourcePath: '${PROJECT}/assets/panel-1.png',
+        },
+      ],
+      target: { nodeId: 'board-1', mode: 'append' },
+      provenance: { source: 'webview', label: 'assistant-storyboard-block' },
+    });
+    expect(JSON.stringify(parsed)).not.toContain('capabilityId');
+    expect(JSON.stringify(parsed)).not.toContain('intentHint');
+    expect(JSON.stringify(parsed)).not.toContain('profileHint');
+  });
+
+  it('rejects Canvas Markdown handoff requests that preselect a capability', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'requestCanvasMarkdownHandoff',
+        requestId: 'handoff-1',
+        conversationId: 'conv-1',
+        markdown: '| A |\\n| --- |\\n| B |',
+        sourceFormat: 'gfm-table',
+        capabilityId: 'canvas.ingestMarkdown',
+      }),
+    ).toBeNull();
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'requestCanvasMarkdownHandoff',
+        requestId: 'handoff-2',
+        conversationId: 'conv-1',
+        markdown: '| A |\\n| --- |\\n| B |',
+        sourceFormat: 'gfm-table',
+        intentHint: 'creative-table',
+      }),
+    ).toBeNull();
+  });
+
+  it('parses Agent capability lifecycle invocations for follow-up actions', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'invokeAgentCapabilityLifecycle',
+        requestId: 'follow-up-1',
+        conversationId: 'conv-1',
+        invocation: {
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+          phase: 'apply',
+          payload: {
+            capabilityId: 'canvas.createStoryboardFromMarkdown',
+            markdown: '| Visual |\\n| --- |\\n| open |',
+            sourceFormat: 'gfm-table',
+            mode: 'create-nodes',
+          },
+          approval: { source: 'user-confirmation', approvedAt: 123 },
+          provenance: { source: 'webview' },
+        },
+      }),
+    ).toEqual({
+      type: 'invokeAgentCapabilityLifecycle',
+      requestId: 'follow-up-1',
+      conversationId: 'conv-1',
+      invocation: {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        phase: 'apply',
+        payload: {
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+          markdown: '| Visual |\\n| --- |\\n| open |',
+          sourceFormat: 'gfm-table',
+          mode: 'create-nodes',
+        },
+        approval: { source: 'user-confirmation', approvedAt: 123 },
+        provenance: { source: 'webview' },
+      },
+    });
   });
 
   it('rejects malformed cut storyboard transfer payloads', () => {

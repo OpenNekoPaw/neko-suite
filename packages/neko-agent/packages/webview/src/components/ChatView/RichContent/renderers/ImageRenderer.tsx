@@ -30,7 +30,12 @@ function isImageRichData(data: unknown): data is ImageRichData {
 // Component
 // ---------------------------------------------------------------------------
 
-function ImageRendererComponent({ data, className, inline }: RichContentProps<ImageRichData>) {
+function ImageRendererComponent({
+  data,
+  className,
+  inline,
+  openOnClick,
+}: RichContentProps<ImageRichData>) {
   return (
     <ImagePreview
       src={data.src}
@@ -38,6 +43,7 @@ function ImageRendererComponent({ data, className, inline }: RichContentProps<Im
       name={data.name}
       localPath={data.localPath}
       inline={inline}
+      openOnClick={openOnClick}
       className={className}
     />
   );

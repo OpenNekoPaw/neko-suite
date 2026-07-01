@@ -7,6 +7,7 @@
 
 import { useState, useCallback, memo } from 'react';
 import { VSCodeMessages } from '@/messages';
+import { openMediaTarget } from './openMediaTarget';
 
 interface ImageGridCardProps {
   /** Webview-safe image URIs */
@@ -15,25 +16,30 @@ interface ImageGridCardProps {
   localPaths?: string[];
   /** Task or batch name shown in header */
   name?: string;
+  /** Whether clicking an image should request the host to open it. */
+  openOnClick?: boolean;
   className?: string;
 }
 
-function ImageGridCardComponent({ urls, localPaths, name, className }: ImageGridCardProps) {
+function ImageGridCardComponent({
+  urls,
+  localPaths,
+  name,
+  openOnClick = true,
+  className,
+}: ImageGridCardProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   const handleOpen = useCallback(
     (index: number) => {
+      if (!openOnClick) return;
       const localPath = localPaths?.[index];
       const src = localPath ?? urls[index];
       if (!src) return;
 
-      if (src.startsWith('/') || /^[A-Za-z]:[\\/]/.test(src)) {
-        VSCodeMessages.openFile(src);
-      } else {
-        VSCodeMessages.openUrl(src);
-      }
+      openMediaTarget(src);
     },
-    [localPaths, urls],
+    [localPaths, openOnClick, urls],
   );
 
   /** Notify Extension Host that a drag operation started (ADR-5 P1 DnD). */
@@ -58,10 +64,10 @@ function ImageGridCardComponent({ urls, localPaths, name, className }: ImageGrid
         <img
           src={src}
           alt={name ?? 'Generated image'}
-          className="w-full max-h-[200px] object-contain cursor-pointer hover:opacity-90 transition-opacity"
+          className={`w-full max-h-[200px] object-contain transition-opacity ${openOnClick ? 'cursor-pointer hover:opacity-90' : ''}`}
           draggable={!!localPaths?.[0]}
           onDragStart={() => handleDragStart(0)}
-          onClick={() => handleOpen(0)}
+          onClick={openOnClick ? () => handleOpen(0) : undefined}
           loading="lazy"
         />
       </div>
@@ -84,7 +90,7 @@ function ImageGridCardComponent({ urls, localPaths, name, className }: ImageGrid
           return (
             <div
               key={`img-${index}`}
-              className={`relative cursor-pointer group overflow-hidden rounded
+              className={`relative group overflow-hidden rounded ${openOnClick ? 'cursor-pointer' : ''}
                 ${isSelected ? 'ring-2 ring-[var(--vscode-focusBorder)]' : ''}
               `}
               draggable={!!localPaths?.[index]}
@@ -97,7 +103,7 @@ function ImageGridCardComponent({ urls, localPaths, name, className }: ImageGrid
               <img
                 src={url}
                 alt={`Result ${index + 1}`}
-                className="w-full aspect-square object-cover group-hover:opacity-90 transition-opacity"
+                className={`w-full aspect-square object-cover transition-opacity ${openOnClick ? 'group-hover:opacity-90' : ''}`}
                 loading="lazy"
               />
               {/* Index badge */}
@@ -105,7 +111,9 @@ function ImageGridCardComponent({ urls, localPaths, name, className }: ImageGrid
                 {index + 1}
               </div>
               {/* Hover overlay */}
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+              {openOnClick && (
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+              )}
             </div>
           );
         })}

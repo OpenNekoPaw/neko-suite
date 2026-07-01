@@ -17,6 +17,7 @@ import type {
   AgentQueuedMessageItem,
 } from '@neko-agent/types';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
+import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
@@ -123,6 +124,9 @@ export interface AgentStateContext {
 export interface SkillContext {
   setSkills: React.Dispatch<React.SetStateAction<SkillSummary[]>>;
   setActiveSkill: React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>;
+  setActivationProgressByConversation: React.Dispatch<
+    React.SetStateAction<Map<string, readonly ActivationProgressTimeline[]>>
+  >;
 }
 
 /** Global, non-conversation-scoped UI notifications */

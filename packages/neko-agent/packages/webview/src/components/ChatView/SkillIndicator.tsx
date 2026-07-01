@@ -4,6 +4,7 @@
  * Shows when a skill is actively injected into the conversation.
  */
 import { PackageIcon } from '@neko/shared/icons';
+import type { AgentCapabilityActivationProvenance } from '@neko/shared';
 import { useTranslation } from '@/i18n/I18nContext';
 
 export interface ActiveSkillIndicator {
@@ -22,6 +23,7 @@ export interface ActiveSkillLifecycleIndicator {
   expires?: string;
   status?: string;
   allowedTools?: readonly string[];
+  provenance?: AgentCapabilityActivationProvenance;
 }
 
 interface SkillIndicatorProps {
@@ -44,15 +46,28 @@ export function SkillIndicator({ skill, onClear }: SkillIndicatorProps) {
         {records.map((record) => (
           <span key={record.id} className="agent-skill-notice-record">
             <code className="agent-skill-notice-name">{record.skillName}</code>
-            <span className="agent-skill-notice-meta">{record.slot}</span>
-            {record.owner ? <span className="agent-skill-notice-meta">{record.owner}</span> : null}
+            <span className="agent-skill-notice-meta" title={record.slot}>
+              {projectSkillLifecycleToken(t, 'slot', record.slot)}
+            </span>
+            {record.owner ? (
+              <span className="agent-skill-notice-meta" title={record.owner}>
+                {projectSkillLifecycleToken(t, 'owner', record.owner)}
+              </span>
+            ) : null}
+            {record.provenance ? (
+              <span className="agent-skill-notice-meta" title={record.provenance.reason}>
+                {formatSkillActivationProvenance(t, record.provenance)}
+              </span>
+            ) : null}
             {record.allowedTools && record.allowedTools.length > 0 ? (
               <span className="agent-skill-notice-meta">
                 {t('chat.skill.toolLimit', { count: record.allowedTools.length })}
               </span>
             ) : null}
             {record.lockedReason ? (
-              <span className="agent-skill-notice-meta">{record.lockedReason}</span>
+              <span className="agent-skill-notice-meta" title={record.lockedReason}>
+                {projectSkillLockedReason(t, record.lockedReason)}
+              </span>
             ) : !record.clearable ? (
               <span className="agent-skill-notice-meta">{t('chat.skill.locked')}</span>
             ) : null}
@@ -66,7 +81,7 @@ export function SkillIndicator({ skill, onClear }: SkillIndicatorProps) {
                 type="button"
                 onClick={() => onClear(record.id)}
                 className="agent-skill-notice-clear"
-                aria-label={`${t('chat.skill.clear')}: ${record.skillName} (${record.slot})`}
+                aria-label={`${t('chat.skill.clear')}: ${record.skillName} (${projectSkillLifecycleToken(t, 'slot', record.slot)})`}
               >
                 {t('chat.skill.clear')}
               </button>
@@ -88,3 +103,37 @@ function skillToRecord(skill: ActiveSkillIndicator): ActiveSkillLifecycleIndicat
     ...(skill.allowedTools ? { allowedTools: skill.allowedTools } : {}),
   };
 }
+
+function formatSkillActivationProvenance(
+  t: (key: string) => string,
+  provenance: AgentCapabilityActivationProvenance,
+): string {
+  const key = `chat.skill.provenance.${provenance.source}`;
+  const label = t(key);
+  if (label !== key) return label;
+  return provenance.source === 'agent-tool' ? 'Agent tool' : 'User';
+}
+
+type SkillTranslation = (key: string, params?: Record<string, string | number>) => string;
+
+function projectSkillLifecycleToken(
+  t: SkillTranslation,
+  kind: 'slot' | 'owner',
+  token: string,
+): string {
+  const key = `chat.skill.${kind}.${token}`;
+  const label = t(key);
+  return label === key ? token : label;
+}
+
+function projectSkillLockedReason(t: SkillTranslation, reason: string): string {
+  const key = SKILL_LOCKED_REASON_KEY_BY_MESSAGE[reason];
+  if (!key) return reason;
+  const label = t(key);
+  return label === key ? reason : label;
+}
+
+const SKILL_LOCKED_REASON_KEY_BY_MESSAGE: Record<string, string> = {
+  'IDC stage persona is cleared when its owning stage exits':
+    'chat.skill.lockedReason.idcStagePersonaStageExit',
+};

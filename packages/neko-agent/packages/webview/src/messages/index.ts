@@ -10,15 +10,14 @@
 
 import { getVSCodeAPI, postMessage as postRawMessage, type VSCodeAPI } from '@neko/shared/vscode';
 import type {
+  ControlIdcWorkflowAction,
+  InvokeAgentCapabilityLifecycleWebviewMessage,
+  RequestCanvasMarkdownHandoffWebviewMessage,
   PluginTransferPayload,
   SendMessageWebviewMessage,
   WebviewToExtensionMessage,
 } from '@neko-agent/types';
-import type {
-  CanvasMarkdownCapabilityInput,
-  DocumentLocator,
-  DocumentSourceRef,
-} from '@neko/shared';
+import type { DocumentLocator, DocumentSourceRef } from '@neko/shared';
 import type { AgentContextType } from '@neko/shared';
 
 export { postRawMessage as postMessage, type VSCodeAPI };
@@ -121,8 +120,12 @@ export const VSCodeMessages = {
    * Update settings
    * @param settings - Settings object to update
    */
-  updateSettings: (settings: Record<string, unknown>) => {
-    postWebviewMessage({ type: 'updateSettings', settings });
+  updateSettings: (settings: Record<string, unknown>, conversationId?: string) => {
+    postWebviewMessage({
+      type: 'updateSettings',
+      settings,
+      ...(conversationId ? { conversationId } : {}),
+    });
   },
 
   /**
@@ -409,6 +412,22 @@ export const VSCodeMessages = {
     postWebviewMessage({ type: 'invokeSkill', skillName, args, conversationId });
   },
 
+  /** Explicitly start, resume, or stop the IDC workflow for a conversation. */
+  controlIdcWorkflow: (
+    conversationId: string,
+    action: ControlIdcWorkflowAction,
+    options: { readonly runKind?: string; readonly runId?: string; readonly reason?: string } = {},
+  ) => {
+    postWebviewMessage({
+      type: 'controlIdcWorkflow',
+      conversationId,
+      action,
+      ...(options.runKind ? { runKind: options.runKind } : {}),
+      ...(options.runId ? { runId: options.runId } : {}),
+      ...(options.reason ? { reason: options.reason } : {}),
+    });
+  },
+
   /**
    * Invoke a plugin slash command registered by an external extension.
    * Extension host routes it to the registering extension via VSCode command API.
@@ -458,18 +477,25 @@ export const VSCodeMessages = {
     postWebviewMessage({ type: 'sendToPlugin', target, payload: assetPathOrPayload });
   },
 
-  /** Invoke Canvas-owned Markdown capability with original Markdown and stable resource refs. */
-  invokeCanvasMarkdownCapability: (
+  /** Invoke an Agent/capability lifecycle action with approval context when required. */
+  invokeAgentCapabilityLifecycle: (
     conversationId: string,
     requestId: string,
-    input: CanvasMarkdownCapabilityInput,
+    invocation: InvokeAgentCapabilityLifecycleWebviewMessage['invocation'],
   ) => {
     postWebviewMessage({
-      type: 'invokeCanvasMarkdownCapability',
+      type: 'invokeAgentCapabilityLifecycle',
       conversationId,
       requestId,
-      input,
+      invocation,
     });
+  },
+
+  /** Request an Agent-led Canvas Markdown handoff. Agent chooses the Canvas tool. */
+  requestCanvasMarkdownHandoff: (
+    payload: Omit<RequestCanvasMarkdownHandoffWebviewMessage, 'type'>,
+  ) => {
+    postWebviewMessage({ type: 'requestCanvasMarkdownHandoff', ...payload });
   },
 
   /** Retry a failed background task */

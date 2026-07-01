@@ -169,6 +169,148 @@ describe('markdown resource rendering presenter', () => {
     );
   });
 
+  it('binds screenshot-style source page and perception card columns', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: [
+        '| 镜号 | 来源页 / 感知卡 | 画面内容 | 镜头设计 |',
+        '| --- | --- | --- | --- |',
+        '| S01 | `read-image-p01-cover` | 主角立于黑白工业巨构前 | 中远景 |',
+      ].join('\n'),
+      toolCalls: [
+        createReadImageToolCall({
+          label: 'p01-cover',
+          entryPath: 'images/p01-cover.jpg',
+          assetId: 'read-image-p01-cover',
+          resourceId: 'managed-p01-cover',
+        }),
+      ],
+    });
+
+    expect(projection.status).toBe('ready');
+    expect(projection.tokens).toEqual([
+      expect.objectContaining({
+        token: 'read-image-p01-cover',
+        status: 'bound',
+        renderUris: ['vscode-webview://cover'],
+        resources: [
+          expect.objectContaining({
+            token: 'read-image-p01-cover',
+            resourceRef: expect.objectContaining({ id: 'managed-p01-cover' }),
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('binds CommonMark image targets from ReadImage document resources', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: '![第 1 页](P1)',
+      toolCalls: [
+        createReadImageDocumentResourceToolCall({
+          label: 'Page 1',
+          entryPath: 'image/moe-010564.jpg',
+          renderUri: 'vscode-webview://moe-page-1',
+        }),
+      ],
+    });
+
+    expect(projection.status).toBe('ready');
+    expect(projection.tokens).toEqual([
+      expect.objectContaining({
+        token: 'P1',
+        status: 'bound',
+        renderUris: ['vscode-webview://moe-page-1'],
+        resources: [
+          expect.objectContaining({
+            token: 'P1',
+            documentResourceRef: expect.objectContaining({ entryPath: 'image/moe-010564.jpg' }),
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('binds zero-based scoped page aliases from a ReadImage document resource batch', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: [
+        '| 镜头 | 来源 | 画面内容 |',
+        '| --- | --- | --- |',
+        '| S001 | P00 | 封面页 |',
+        '| S002 | P01 | 第一张正文图 |',
+        '| S003 | P02 | 第二张正文图 |',
+      ].join('\n'),
+      toolCalls: [createReadImageDocumentResourceBatchToolCall()],
+    });
+
+    expect(projection.status).toBe('ready');
+    expect(projection.tokens).toEqual([
+      expect.objectContaining({
+        token: 'P00',
+        status: 'bound',
+        renderUris: ['vscode-webview://cover'],
+        resources: [
+          expect.objectContaining({
+            token: 'P00',
+            documentResourceRef: expect.objectContaining({ entryPath: 'image/cover.jpg' }),
+          }),
+        ],
+      }),
+      expect.objectContaining({
+        token: 'P01',
+        status: 'bound',
+        renderUris: ['vscode-webview://moe-010564'],
+        resources: [
+          expect.objectContaining({
+            token: 'P01',
+            documentResourceRef: expect.objectContaining({ entryPath: 'image/moe-010564.jpg' }),
+          }),
+        ],
+      }),
+      expect.objectContaining({
+        token: 'P02',
+        status: 'bound',
+        renderUris: ['vscode-webview://moe-003015'],
+        resources: [
+          expect.objectContaining({
+            token: 'P02',
+            documentResourceRef: expect.objectContaining({ entryPath: 'image/moe-003015.jpg' }),
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('binds document entry paths and basenames from managed document ResourceRef locators', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: [
+        '| shot | source | visual |',
+        '| --- | --- | --- |',
+        '| 1 | ![page](image/moe-010564.jpg) | Opening frame |',
+        '| 2 | ![page](moe-010564.jpg) | Detail frame |',
+      ].join('\n'),
+      toolCalls: [
+        createReadImageManagedDocumentResourceToolCall({
+          entryPath: 'image/moe-010564.jpg',
+          renderUri: 'vscode-webview://managed-moe-page',
+        }),
+      ],
+    });
+
+    expect(projection.status).toBe('ready');
+    expect(projection.tokens).toEqual([
+      expect.objectContaining({
+        token: 'image/moe-010564.jpg',
+        status: 'bound',
+        renderUris: ['vscode-webview://managed-moe-page'],
+      }),
+      expect.objectContaining({
+        token: 'moe-010564.jpg',
+        status: 'bound',
+        renderUris: ['vscode-webview://managed-moe-page'],
+      }),
+    ]);
+  });
+
   it('binds document image basenames without requiring generated read-image prefixes', () => {
     const projection = projectMarkdownResourceRendering({
       markdown: [
@@ -243,6 +385,76 @@ describe('markdown resource rendering presenter', () => {
         status: 'bound',
       }),
     ]);
+  });
+
+  it('binds scoped page tokens from nested ReadDocument excerpt imageInfo entries', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: [
+        '| scene | shot | source | visual |',
+        '| --- | --- | --- | --- |',
+        '| Opening | 1 | P1 | Wide panel |',
+      ].join('\n'),
+      toolCalls: [createReadDocumentToolCall({ nestedExcerpt: true })],
+    });
+
+    expect(projection.status).toBe('ready');
+    expect(projection.tokens).toEqual([
+      expect.objectContaining({
+        token: 'P1',
+        status: 'bound',
+        renderUris: ['vscode-webview://page-1'],
+        resources: [
+          expect.objectContaining({
+            token: 'P1',
+            documentResourceRef: expect.objectContaining({ entryPath: 'OPS/page-1.jpg' }),
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('builds scoped page tokens from perception cards when result data has only media refs', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: [
+        '| scene | shot | source | visual |',
+        '| --- | --- | --- | --- |',
+        '| Opening | 1 | P1 | Wide panel |',
+      ].join('\n'),
+      toolCalls: [createPerceptionOnlyToolCall()],
+    });
+
+    expect(projection.status).toBe('ready');
+    expect(projection.tokens).toEqual([
+      expect.objectContaining({
+        token: 'P1',
+        status: 'bound',
+        renderUris: ['vscode-webview://page-1'],
+      }),
+    ]);
+  });
+
+  it('distinguishes missing tokens caused by absent resource context', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: [
+        '| scene | shot | source | visual |',
+        '| --- | --- | --- | --- |',
+        '| Opening | 1 | P1 | Wide panel |',
+      ].join('\n'),
+      toolCalls: [],
+    });
+
+    expect(projection.status).toBe('diagnostic');
+    expect(projection.tokens[0]).toEqual(
+      expect.objectContaining({
+        token: 'P1',
+        status: 'missing',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'missing-resource-context',
+          }),
+        ],
+      }),
+    );
   });
 
   it('does not treat CommonMark image alt text as a separate resource token', () => {
@@ -341,37 +553,195 @@ function createReadImageToolCall(
   };
 }
 
-function createReadDocumentToolCall(
+function createReadImageDocumentResourceToolCall(
   overrides: {
-    readonly id?: string;
     readonly label?: string;
     readonly entryPath?: string;
-    readonly sourcePath?: string;
+    readonly renderUri?: string;
   } = {},
 ): ToolCall {
-  const entryPath = overrides.entryPath ?? 'OPS/page-1.jpg';
+  const entryPath = overrides.entryPath ?? 'image/moe-010564.jpg';
+  const resourceRef = {
+    kind: 'document-entry' as const,
+    source: {
+      filePath: '/books/story.epub',
+      format: 'epub' as const,
+    },
+    entryPath,
+    locator: { kind: 'chapter' as const, chapterHref: 'Page_1', spineIndex: 0 },
+    versionPolicy: 'versioned-export' as const,
+  };
   return {
-    id: overrides.id ?? 'read-doc',
-    name: 'ReadDocument',
+    id: 'read-image-document',
+    name: 'ReadImage',
     arguments: {},
     result: {
       success: true,
       data: {
-        imageInfo: [
+        images: [
           {
             label: overrides.label ?? 'Page 1',
             entryPath,
             mimeType: 'image/jpeg',
-            width: 1494,
-            height: 2133,
+            resourceRef,
+          },
+        ],
+      },
+      attachments: [
+        {
+          type: 'image',
+          path: overrides.renderUri ?? 'vscode-webview://document-page',
+          mimeType: 'image/jpeg',
+          assetRef: {
+            assetId: 'read-image-page-1',
+            uri: entryPath,
+            mimeType: 'image/jpeg',
+            label: overrides.label ?? 'Page 1',
+            documentResourceRef: resourceRef,
+          },
+        },
+      ],
+      perceptionCards: [
+        {
+          version: 1,
+          assetId: 'read-image-page-1',
+          modality: 'image',
+          createdAt: 1,
+          layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'complete' },
+          structural: {
+            format: 'jpeg',
+            mimeType: 'image/jpeg',
+            byteSize: 1024,
+          },
+          perceptual: {
+            thumbnailRef: {
+              assetId: 'read-image-page-1',
+              uri: entryPath,
+              mimeType: 'image/jpeg',
+              label: overrides.label ?? 'Page 1',
+              documentResourceRef: resourceRef,
+            },
+          },
+        },
+      ],
+    },
+  };
+}
+
+function createReadImageDocumentResourceBatchToolCall(): ToolCall {
+  const entries = [
+    {
+      label: 'read-image-cover.jpg',
+      entryPath: 'image/cover.jpg',
+      renderUri: 'vscode-webview://cover',
+    },
+    {
+      label: 'read-image-moe-010564.jpg',
+      entryPath: 'image/moe-010564.jpg',
+      renderUri: 'vscode-webview://moe-010564',
+    },
+    {
+      label: 'read-image-moe-003015.jpg',
+      entryPath: 'image/moe-003015.jpg',
+      renderUri: 'vscode-webview://moe-003015',
+    },
+  ];
+  const source = {
+    filePath: '${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub',
+    format: 'epub' as const,
+  };
+  return {
+    id: 'read-image-document-batch',
+    name: 'ReadImage',
+    arguments: {},
+    result: {
+      success: true,
+      data: {
+        mode: 'metadata',
+        images: entries.map((entry, index) => ({
+          label: entry.label,
+          entryPath: entry.entryPath,
+          mimeType: 'image/jpeg',
+          resourceRef: {
+            kind: 'document-entry',
+            source,
+            entryPath: entry.entryPath,
+            locator: {
+              kind: 'chapter',
+              chapterHref: index === 0 ? 'html/cover.html' : `html/page-${index}.html`,
+              spineIndex: index,
+              title: index === 0 ? 'html/cover.html' : `html/page-${index}.html`,
+            },
+            versionPolicy: 'versioned-export',
+          },
+        })),
+      },
+      attachments: entries.map((entry, index) => ({
+        type: 'image',
+        path: entry.renderUri,
+        mimeType: 'image/jpeg',
+        assetRef: {
+          assetId: entry.label,
+          uri: entry.entryPath,
+          mimeType: 'image/jpeg',
+          label: entry.label,
+          documentResourceRef: {
+            kind: 'document-entry',
+            source,
+            entryPath: entry.entryPath,
+            locator: {
+              kind: 'chapter',
+              chapterHref: index === 0 ? 'html/cover.html' : `html/page-${index}.html`,
+              spineIndex: index,
+              title: index === 0 ? 'html/cover.html' : `html/page-${index}.html`,
+            },
+            versionPolicy: 'versioned-export',
+          },
+        },
+      })),
+    },
+  };
+}
+
+function createReadImageManagedDocumentResourceToolCall(
+  overrides: {
+    readonly entryPath?: string;
+    readonly renderUri?: string;
+  } = {},
+): ToolCall {
+  const entryPath = overrides.entryPath ?? 'image/moe-010564.jpg';
+  return {
+    id: 'read-image-managed-document',
+    name: 'ReadImage',
+    arguments: {},
+    result: {
+      success: true,
+      data: {
+        images: [
+          {
+            label: 'Moe page',
+            mimeType: 'image/jpeg',
             resourceRef: {
-              kind: 'document-entry',
+              id: 'managed-document-moe-page',
+              scope: 'project',
+              provider: 'document-archive',
+              kind: 'document',
               source: {
-                filePath: overrides.sourcePath ?? '/books/story.epub',
-                format: 'epub',
+                kind: 'document',
+                document: {
+                  filePath: '/books/story.epub',
+                  format: 'epub',
+                },
               },
-              entryPath,
-              versionPolicy: 'versioned-export',
+              locator: {
+                kind: 'document',
+                entryPath,
+              },
+              fingerprint: {
+                strategy: 'provider',
+                providerId: 'document-archive',
+                value: '/books/story.epub',
+              },
             },
           },
         ],
@@ -379,8 +749,126 @@ function createReadDocumentToolCall(
       attachments: [
         {
           type: 'image',
+          path: overrides.renderUri ?? 'vscode-webview://managed-document-page',
+          mimeType: 'image/jpeg',
+          assetRef: {
+            assetId: 'read-image-managed-moe-page',
+            uri: entryPath,
+            mimeType: 'image/jpeg',
+            label: 'Moe page',
+          },
+        },
+      ],
+    },
+  };
+}
+
+function createReadDocumentToolCall(
+  overrides: {
+    readonly id?: string;
+    readonly label?: string;
+    readonly entryPath?: string;
+    readonly sourcePath?: string;
+    readonly nestedExcerpt?: boolean;
+  } = {},
+): ToolCall {
+  const entryPath = overrides.entryPath ?? 'OPS/page-1.jpg';
+  const imageInfo = [
+    {
+      label: overrides.label ?? 'Page 1',
+      entryPath,
+      mimeType: 'image/jpeg',
+      width: 1494,
+      height: 2133,
+      resourceRef: {
+        kind: 'document-entry',
+        source: {
+          filePath: overrides.sourcePath ?? '/books/story.epub',
+          format: 'epub',
+        },
+        entryPath,
+        versionPolicy: 'versioned-export',
+      },
+    },
+  ];
+  return {
+    id: overrides.id ?? 'read-doc',
+    name: 'ReadDocument',
+    arguments: {},
+    result: {
+      success: true,
+      data: {
+        ...(overrides.nestedExcerpt
+          ? { excerpt: { contentKind: 'image', imageInfo } }
+          : { imageInfo }),
+      },
+      attachments: [
+        {
+          type: 'image',
           path: 'vscode-webview://page-1',
           mimeType: 'image/jpeg',
+        },
+      ],
+    },
+  };
+}
+
+function createPerceptionOnlyToolCall(): ToolCall {
+  const documentResourceRef = {
+    kind: 'document-entry' as const,
+    source: {
+      filePath: '/books/story.epub',
+      format: 'epub' as const,
+    },
+    entryPath: 'OPS/page-1.jpg',
+    versionPolicy: 'versioned-export' as const,
+  };
+  return {
+    id: 'read-image-perception-only',
+    name: 'ReadImage',
+    arguments: {},
+    result: {
+      success: true,
+      data: {
+        mode: 'metadata',
+      },
+      attachments: [
+        {
+          type: 'image',
+          path: 'vscode-webview://page-1',
+          mimeType: 'image/jpeg',
+          assetRef: {
+            assetId: 'read-image-page-1',
+            uri: 'OPS/page-1.jpg',
+            mimeType: 'image/jpeg',
+            label: 'Page 1',
+            documentResourceRef,
+          },
+        },
+      ],
+      perceptionCards: [
+        {
+          version: 1,
+          assetId: 'read-image-page-1',
+          modality: 'image',
+          createdAt: 1,
+          layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'complete' },
+          structural: {
+            format: 'jpeg',
+            mimeType: 'image/jpeg',
+            byteSize: 1024,
+            width: 1494,
+            height: 2133,
+          },
+          perceptual: {
+            thumbnailRef: {
+              assetId: 'read-image-page-1',
+              uri: 'OPS/page-1.jpg',
+              mimeType: 'image/jpeg',
+              label: 'Page 1',
+              documentResourceRef,
+            },
+          },
         },
       ],
     },

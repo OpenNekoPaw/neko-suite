@@ -10,6 +10,7 @@
 import { defineHandler } from './types';
 import type { MessageHandler, HandlerRegistration } from './types';
 import type {
+  AssistantTextReplacementMessage,
   ThinkingMessage,
   StreamTextMessage,
   StreamCompleteMessage,
@@ -26,6 +27,7 @@ import type { AgentStateStoreProjection } from '@neko-agent/types';
 import { updateConversation } from './message-updater';
 import type { MessageHandlerContext } from './types';
 import {
+  projectAssistantTextReplacementIntoMessages,
   projectMessageCancelledIntoMessages,
   projectStreamingCompleteIntoMessages,
   projectStreamingTextIntoMessages,
@@ -81,6 +83,34 @@ const handleStreamText: MessageHandler<'streamText'> = (message: StreamTextMessa
     return {
       messages: projection.messages,
       streamingMessageId: projection.streamingMessageId,
+      isThinking: projection.isThinking,
+    };
+  });
+};
+
+const handleAssistantTextReplacement: MessageHandler<'assistantTextReplacement'> = (
+  message: AssistantTextReplacementMessage,
+  context,
+) => {
+  const activeTimeline = getActiveTimelineForMessage(
+    context,
+    message.conversationId,
+    message.messageId,
+  );
+  if (activeTimeline) {
+    return;
+  }
+
+  updateConversation(context, message.conversationId, (msgs, streamingId) => {
+    const projection = projectAssistantTextReplacementIntoMessages({
+      messages: msgs,
+      streamingMessageId: streamingId,
+      messageId: message.messageId,
+    });
+
+    return {
+      messages: projection.messages,
+      streamingMessageId: projection.targetMessageId ?? streamingId,
       isThinking: projection.isThinking,
     };
   });
@@ -370,6 +400,7 @@ function applyAgentStateProjection(
 export const streamingHandlers: HandlerRegistration[] = [
   defineHandler('thinking', handleThinking),
   defineHandler('streamText', handleStreamText),
+  defineHandler('assistantTextReplacement', handleAssistantTextReplacement),
   defineHandler('streamComplete', handleStreamComplete),
   defineHandler('streamThinking', handleStreamThinking),
   defineHandler('messageCancelled', handleMessageCancelled),

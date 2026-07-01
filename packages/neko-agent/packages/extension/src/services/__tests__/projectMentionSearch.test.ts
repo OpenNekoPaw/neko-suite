@@ -316,6 +316,75 @@ describe('projectMentionSearch', () => {
     ]);
   });
 
+  it('uses media library portable paths emitted by project search without re-contracting', async () => {
+    vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command: string) => {
+      if (command === 'neko.assets.contractPath') {
+        throw new Error('Unexpected contractPath call for portable media-library fixture.');
+      }
+      if (command === PROJECT_SEARCH_QUERY_COMMAND) {
+        return {
+          items: [
+            {
+              id: 'media:${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+              kind: 'document',
+              label: '[Kmoe][浪客行]卷01.epub',
+              description: 'Media: 素材',
+              source: {
+                partition: 'media-library',
+                sourceId: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+                sourceKind: 'document',
+                filePath: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+              },
+              projectRoot: '/workspace',
+              filePath: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+              searchText:
+                '[Kmoe][浪客行]卷01.epub ${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+              freshness: 'fresh',
+              metadata: { mediaType: 'document' },
+              navigationData: {
+                filePath: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+                portablePath: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+                resolvedPath: '/Users/feng/Assets/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+                libraryName: '素材',
+              },
+            },
+          ],
+          partitions: [],
+          freshness: 'fresh',
+          context: { projectRoot: '/workspace' },
+          query: { text: '浪客' },
+        };
+      }
+      return undefined;
+    });
+
+    const candidates = await searchProjectMentionCandidates(
+      {
+        includePattern: '**/*浪客*',
+        excludePattern: '**/node_modules/**',
+        limit: 30,
+      },
+      { projectRoot: '/workspace' },
+    );
+
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        type: 'media',
+        label: '[Kmoe][浪客行]卷01.epub',
+        source: 'media-library',
+        mediaType: 'document',
+        filePath: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+        navigationData: expect.objectContaining({
+          filePath: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+          portablePath: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+          resolvedPath: '/Users/feng/Assets/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+          sourceId: '${A}/epub/animation/浪客行/[Kmoe][浪客行]卷01.epub',
+          variable: 'A',
+        }),
+      }),
+    ]);
+  });
+
   it('does not expose unmanaged absolute paths as successful file mention paths', async () => {
     vi.mocked(vscode.commands.executeCommand).mockImplementation(
       async (command: string, arg: unknown) => {

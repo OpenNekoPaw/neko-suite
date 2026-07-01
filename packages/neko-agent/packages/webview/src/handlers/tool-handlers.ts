@@ -152,6 +152,9 @@ const handleToolResult: MessageHandler<'toolResult'> = (message: ToolResultMessa
       success: message.success,
       data: message.data,
       error: message.error,
+      attachments: message.attachments,
+      perceptionCards: message.perceptionCards,
+      backfillDiagnostics: message.backfillDiagnostics,
       plan: message.plan,
       artifacts: message.artifacts,
     });

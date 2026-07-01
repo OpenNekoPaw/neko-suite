@@ -12,7 +12,7 @@
 import { useState, useRef, useCallback, memo } from 'react';
 import { formatTime } from '@neko/neko-client';
 import { ChevronDownIcon as ChevronIcon, ErrorIcon, OpenIcon, PlayIcon } from '@neko/shared/icons';
-import { VSCodeMessages } from '@/messages';
+import { openMediaTarget } from './openMediaTarget';
 
 interface AudioPlayerProps {
   src: string;
@@ -59,11 +59,7 @@ function InlineAudioCard({
 
   const handleOpenPreview = useCallback(() => {
     const pathToOpen = localPath || src;
-    if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
-      VSCodeMessages.openFile(pathToOpen);
-    } else {
-      VSCodeMessages.openUrl(pathToOpen);
-    }
+    openMediaTarget(pathToOpen);
   }, [localPath, src]);
 
   return (
@@ -141,12 +137,7 @@ function AudioPlayerComponent({
   // Open file in neko-preview (hardware-accelerated preview with waveform)
   const handleOpenPreview = useCallback(() => {
     const pathToOpen = localPath || src;
-    // Check if it's a local file path → open with neko-preview
-    if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
-      VSCodeMessages.openFile(pathToOpen);
-    } else {
-      VSCodeMessages.openUrl(pathToOpen);
-    }
+    openMediaTarget(pathToOpen);
   }, [localPath, src]);
 
   // Inline mode: compact card with waveform placeholder + click-to-open (ADR-6)

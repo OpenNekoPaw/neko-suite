@@ -6,7 +6,7 @@
 
 import { useState, useCallback, memo } from 'react';
 import { ChevronDownIcon as ChevronIcon, ErrorIcon, OpenIcon } from '@neko/shared/icons';
-import { VSCodeMessages } from '@/messages';
+import { openMediaTarget } from './openMediaTarget';
 
 interface ImagePreviewProps {
   src: string;
@@ -17,6 +17,8 @@ interface ImagePreviewProps {
   localPath?: string;
   /** Inline mode: show only image without header (for use inside cards like TaskCard) */
   inline?: boolean;
+  /** Whether clicking the image should request the host to open it. */
+  openOnClick?: boolean;
 }
 
 /**
@@ -39,6 +41,7 @@ function ImagePreviewComponent({
   className,
   localPath,
   inline = false,
+  openOnClick = true,
 }: ImagePreviewProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,14 +64,10 @@ function ImagePreviewComponent({
 
   // Open file in VSCode or system default
   const handleOpenFile = useCallback(() => {
+    if (!openOnClick) return;
     const pathToOpen = localPath || src;
-    // Check if it's a local file path
-    if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
-      VSCodeMessages.openFile(pathToOpen);
-    } else {
-      VSCodeMessages.openUrl(pathToOpen);
-    }
-  }, [localPath, src]);
+    openMediaTarget(pathToOpen);
+  }, [localPath, openOnClick, src]);
 
   // Inline mode: show only the image without header
   if (inline) {
@@ -91,8 +90,8 @@ function ImagePreviewComponent({
               alt={alt}
               onLoad={handleLoad}
               onError={handleError}
-              onClick={handleOpenFile}
-              className={`w-full max-h-[200px] rounded object-contain cursor-pointer hover:opacity-90 transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+              onClick={openOnClick ? handleOpenFile : undefined}
+              className={`w-full max-h-[200px] rounded object-contain transition-opacity ${openOnClick ? 'cursor-pointer hover:opacity-90' : ''} ${isLoading ? 'opacity-0' : 'opacity-100'}`}
             />
           </div>
         )}
@@ -168,8 +167,8 @@ function ImagePreviewComponent({
                 alt={alt}
                 onLoad={handleLoad}
                 onError={handleError}
-                onClick={handleOpenFile}
-                className={`w-full max-h-[200px] rounded object-contain cursor-pointer hover:opacity-90 transition-opacity ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+                onClick={openOnClick ? handleOpenFile : undefined}
+                className={`w-full max-h-[200px] rounded object-contain transition-opacity ${openOnClick ? 'cursor-pointer hover:opacity-90' : ''} ${isLoading ? 'opacity-0' : 'opacity-100'}`}
               />
             </div>
           )}

@@ -66,6 +66,45 @@ describe('message-list-presenter', () => {
     });
   });
 
+  it('does not project activation progress as a standalone conversation-level list item', () => {
+    const projection = projectMessageList({
+      messages: [],
+      isThinking: false,
+      streamingMessageId: null,
+      activationProgress: [
+        {
+          conversationId: 'conv-1',
+          activationId: 'activation-1',
+          target: 'skill',
+          action: 'activate',
+          name: 'quality-review',
+          source: 'agent-tool',
+          requestedBy: 'agent',
+          reason: 'Agent selected review',
+          status: 'succeeded',
+          events: [
+            {
+              id: 'event-1',
+              activationId: 'activation-1',
+              conversationId: 'conv-1',
+              target: 'skill',
+              action: 'activate',
+              name: 'quality-review',
+              step: 'requested',
+              status: 'succeeded',
+              source: 'agent-tool',
+              requestedBy: 'agent',
+              reason: 'Agent selected review',
+              at: 1,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(projection.items).toEqual([]);
+  });
+
   it('projects repeated assistant tool blocks as a single grouped list item', () => {
     const items = projectMessageListItems(
       [
@@ -179,6 +218,68 @@ describe('message-list-presenter', () => {
         renderKind: 'markdown',
         content: 'Final storyboard summary.',
       },
+    });
+  });
+
+  it('carries prior assistant tool results into later markdown projections', () => {
+    const items = projectMessageListItems(
+      [
+        {
+          id: 'msg-read-image',
+          role: 'assistant',
+          content: '',
+          timestamp: 1,
+          contentBlocks: [
+            {
+              id: 'read-image-block',
+              type: 'tool_call',
+              timestamp: 10,
+              toolCall: {
+                id: 'read-image-1',
+                name: 'ReadImage',
+                arguments: {},
+                result: {
+                  success: true,
+                  data: {
+                    imageInfo: [
+                      {
+                        alias: 'P1',
+                        label: 'Page 1',
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        },
+        {
+          id: 'msg-storyboard',
+          role: 'assistant',
+          content: '',
+          timestamp: 2,
+          contentBlocks: [
+            {
+              id: 'storyboard-text',
+              type: 'text',
+              timestamp: 20,
+              content:
+                '| scene | shot | source | visual |\n| --- | --- | --- | --- |\n| Opening | 1 | P1 | Frame |',
+            },
+          ],
+        },
+      ],
+      false,
+    );
+
+    expect(items).toHaveLength(2);
+    expect(items[1]).toMatchObject({
+      kind: 'content_block',
+      projection: {
+        renderKind: 'markdown',
+        toolCalls: [expect.objectContaining({ id: 'read-image-1', name: 'ReadImage' })],
+      },
+      ambientToolCalls: [expect.objectContaining({ id: 'read-image-1', name: 'ReadImage' })],
     });
   });
 

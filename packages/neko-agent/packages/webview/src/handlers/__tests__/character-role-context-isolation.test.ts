@@ -282,7 +282,107 @@ describe('character role context isolation', () => {
       isThinking: true,
       streamingMessageId: 'ordinary-stream',
       queuedMessageCount: 0,
+      queuedMessages: [],
     });
+  });
+
+  it('restores ordinary tab messages when activeConversation arrives before restored tabState', () => {
+    const ordinaryMessage = message('ordinary-message', 'assistant', '普通 Agent 回复');
+    const harness = createContextHarness({
+      activeConversationId: null,
+      activeTabId: null,
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null, queuedMessageCount: 0 },
+      openTabs: [],
+      isTablessConversationView: true,
+    });
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-a',
+          title: 'Ordinary chat',
+          messages: [ordinaryMessage],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.activeConversationId()).toBeNull();
+    expect(harness.messages()).toEqual([]);
+    expect(harness.conversationMessages().get('conv-a')).toEqual([ordinaryMessage]);
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        tabState: {
+          openTabs: [{ id: 'tab-conv-a', title: 'Ordinary chat', conversationId: 'conv-a' }],
+          activeTabId: 'tab-conv-a',
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.context.isTablessConversationViewRef.current).toBe(false);
+    expect(harness.activeConversationId()).toBe('conv-a');
+    expect(harness.context.activeConversationIdRef.current).toBe('conv-a');
+    expect(harness.activeTabId()).toBe('tab-conv-a');
+    expect(harness.messages()).toEqual([ordinaryMessage]);
+    expect(harness.streaming()).toEqual({
+      isThinking: false,
+      streamingMessageId: null,
+      queuedMessageCount: 0,
+    });
+  });
+
+  it('applies ordinary activeConversation after restored tabState leaves tabless mode', () => {
+    const ordinaryMessage = message('ordinary-message', 'assistant', '普通 Agent 回复');
+    const harness = createContextHarness({
+      activeConversationId: null,
+      activeTabId: null,
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null, queuedMessageCount: 0 },
+      openTabs: [],
+      isTablessConversationView: true,
+    });
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        tabState: {
+          openTabs: [{ id: 'tab-conv-a', title: 'Ordinary chat', conversationId: 'conv-a' }],
+          activeTabId: 'tab-conv-a',
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.context.isTablessConversationViewRef.current).toBe(false);
+    expect(harness.activeConversationId()).toBe('conv-a');
+    expect(harness.context.activeConversationIdRef.current).toBe('conv-a');
+    expect(harness.messages()).toEqual([]);
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-a',
+          title: 'Ordinary chat',
+          messages: [ordinaryMessage],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.activeConversationId()).toBe('conv-a');
+    expect(harness.context.activeConversationIdRef.current).toBe('conv-a');
+    expect(harness.activeTabId()).toBe('tab-conv-a');
+    expect(harness.messages()).toEqual([ordinaryMessage]);
   });
 
   it('keeps an explicitly empty tab state from restoring the closed active conversation', () => {
@@ -345,7 +445,7 @@ function dispatch(
 }
 
 interface ContextHarnessOptions {
-  activeConversationId: string;
+  activeConversationId: string | null;
   activeTabId: string | null;
   currentMessages: Message[];
   currentStreaming: StreamingState;
@@ -353,6 +453,7 @@ interface ContextHarnessOptions {
   cachedMessages?: Map<string, Message[]>;
   cachedStreaming?: Map<string, StreamingState>;
   pendingForegroundActivation?: PendingForegroundConversationActivation | null;
+  isTablessConversationView?: boolean;
 }
 
 interface ContextHarness {
@@ -378,7 +479,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   let pluginsAvailable: PluginsAvailable = {};
   const activeConversationIdRef = ref<string | null>(options.activeConversationId);
   const streamingMessageIdRef = ref<string | null>(streaming.streamingMessageId);
-  const isTablessConversationViewRef = ref(false);
+  const isTablessConversationViewRef = ref(options.isTablessConversationView ?? false);
   const conversationMessagesRef = ref(new Map<string, Message[]>(options.cachedMessages ?? []));
   const conversationStreamingRef = ref(
     new Map<string, StreamingState>(options.cachedStreaming ?? []),
@@ -460,6 +561,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     forceAgentStateUpdate: () => undefined,
     setSkills: noopDispatch(),
     setActiveSkill: noopDispatch(),
+    setActivationProgressByConversation: noopDispatch(),
     setGlobalError: noopDispatch(),
     conversationTokenCountRef: ref(new Map()),
     conversationCompressingRef: ref(new Map()),

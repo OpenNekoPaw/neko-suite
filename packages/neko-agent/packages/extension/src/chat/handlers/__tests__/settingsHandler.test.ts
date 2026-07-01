@@ -290,6 +290,49 @@ describe('SettingsHandler', () => {
       expect(platform.config.applyRuntimeAssistantSettingsFromWebview).toHaveBeenCalledWith(update);
     });
 
+    it('emits visible activation progress for explicit execution mode changes', async () => {
+      handler = new SettingsHandler({
+        platform: platform as any,
+      });
+
+      await handler.handleUpdateSettings(
+        webview as any,
+        { executionMode: 'plan' },
+        { conversationId: 'conv-1' },
+      );
+
+      const progressMessages = webview.postMessage.mock.calls
+        .map(([message]) => message)
+        .filter((message) => message.type === 'agentCapabilityActivationProgress');
+      expect(progressMessages.map((message) => message.events[0].step)).toEqual([
+        'requested',
+        'validated',
+        'projected',
+        'active',
+      ]);
+      expect(progressMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            conversationId: 'conv-1',
+            events: [
+              expect.objectContaining({
+                target: 'execution-mode',
+                action: 'set',
+                name: 'plan',
+                source: 'user-explicit',
+                requestedBy: 'user',
+                status: 'succeeded',
+              }),
+            ],
+          }),
+        ]),
+      );
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'settingsUpdated',
+        success: true,
+      });
+    });
+
     it('should report failure when platform is unavailable', async () => {
       handler = new SettingsHandler({});
       await handler.handleUpdateSettings(webview as any, {

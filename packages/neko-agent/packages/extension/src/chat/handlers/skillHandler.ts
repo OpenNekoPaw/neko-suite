@@ -21,6 +21,7 @@ import type {
 } from '@neko/agent';
 import type { SkillLifecycleProjection } from '@neko/shared';
 import { ConversationSkillRuntime } from '@neko/agent';
+import { buildAgentCapabilityActivationProgressMessage } from '@neko-agent/types';
 import { getLogger } from '../../base';
 
 const logger = getLogger('SkillHandler');
@@ -34,6 +35,7 @@ export interface SkillHandlerDeps {
 export class SkillHandler {
   private _deps: SkillHandlerDeps;
   private readonly _runtime: ConversationSkillRuntime;
+  private readonly _webviewsByConversation = new Map<string, vscode.Webview>();
 
   constructor(deps: SkillHandlerDeps = {}) {
     this._deps = deps;
@@ -68,6 +70,11 @@ export class SkillHandler {
     webview.postMessage(this._runtime.buildSkillsListMessage());
   }
 
+  bindConversationWebview(webview: vscode.Webview, conversationId: string): void {
+    if (!conversationId) return;
+    this._webviewsByConversation.set(conversationId, webview);
+  }
+
   // ===========================================================================
   // Slash Command Invocation
   // ===========================================================================
@@ -89,10 +96,14 @@ export class SkillHandler {
     conversationId: string,
     args?: string,
   ): Promise<SkillApplicationResult | null> {
+    this.bindConversationWebview(webview, conversationId);
     const result = await this._runtime.applySlashCommand({
       command,
       conversationId,
       ...(args !== undefined ? { args } : {}),
+      source: 'user-explicit',
+      requestedBy: 'user',
+      reason: `Slash command /${command}`,
     });
 
     if (result?.applied) {
@@ -110,10 +121,14 @@ export class SkillHandler {
     conversationId: string,
     args?: string,
   ): Promise<SkillApplicationResult | null> {
+    this.bindConversationWebview(webview, conversationId);
     const result = await this._runtime.applySkillInvocation({
       skillName,
       conversationId,
       ...(args !== undefined ? { args } : {}),
+      source: 'user-explicit',
+      requestedBy: 'user',
+      reason: `Skill invocation $${skillName}`,
     });
 
     if (result?.applied) {
@@ -123,9 +138,7 @@ export class SkillHandler {
   }
 
   /**
-   * Compatibility shell for removed natural-language Skill routing.
-   * The Agent inspects the Skill catalog through GetContext and activates with
-   * ActivateSkill when appropriate.
+   * Discover matching Skills for UI hints and pre-turn artifact validator routing.
    */
   discoverSkills(userInput: string): SkillDiscoveryResult | null {
     return this._runtime.discoverSkills(userInput);
@@ -138,6 +151,7 @@ export class SkillHandler {
       readonly userInput: string;
     },
   ): Promise<SkillApplicationResult | null> {
+    this.bindConversationWebview(webview, input.conversationId);
     const result = await this._runtime.autoActivateSkill(input);
     if (result?.applied) {
       this._sendSkillInjection(webview, result, input.conversationId);
@@ -222,8 +236,24 @@ export class SkillHandler {
             },
           }
         : {}),
+      onActivationProgress: (conversationId, events) => {
+        if (events.length === 0) return;
+        this._postActivationProgress(conversationId, events);
+      },
       logger,
     } satisfies ConstructorParameters<typeof ConversationSkillRuntime>[0];
+  }
+
+  private _postActivationProgress(
+    conversationId: string,
+    events: Parameters<typeof buildAgentCapabilityActivationProgressMessage>[0]['events'],
+  ): void {
+    const webview = this._webviewsByConversation.get(conversationId);
+    if (!webview) {
+      return;
+    }
+    const message = buildAgentCapabilityActivationProgressMessage({ conversationId, events });
+    void webview.postMessage(message);
   }
 }
 

@@ -18,6 +18,7 @@ import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { AgentWorkItem } from '@/components/AgentWorkItem';
 import type { AgentContextPayload } from '@neko/shared';
 import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
+import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator';
 import { CharacterDialogueHeader } from '@/components/ChatView/CharacterDialogueHeader';
 import { EmbodyCharacterHeader } from '@/components/ChatView/EmbodyCharacterHeader';
@@ -36,6 +37,7 @@ interface ChatViewProps {
   isConversationSwitching?: boolean;
   /** Active skill indicator */
   activeSkill?: ActiveSkillIndicator | null;
+  activationProgress?: readonly ActivationProgressTimeline[];
   onClearActiveSkill?: (recordId?: string) => void;
   // Unified work items
   workItems?: AgentWorkItem[];
@@ -69,6 +71,7 @@ interface ChatViewProps {
     llmConfig?: AgentLlmConfig;
   }) => void;
   onCancel?: () => void;
+  onControlIdcWorkflow?: (action: 'start' | 'resume' | 'stop') => void;
   entryPromptMenu?: EntryPromptMenu | null;
   onEntryPromptMenuChange?: (menu: EntryPromptMenu | null) => void;
   /** Session-bound attached files (managed by parent) */
@@ -95,6 +98,7 @@ export function ChatView({
   embodyCharacterSession,
   isConversationSwitching = false,
   activeSkill,
+  activationProgress = [],
   onClearActiveSkill,
   workItems,
   pluginsAvailable,
@@ -116,6 +120,7 @@ export function ChatView({
   onEditQueuedMessage,
   onSend,
   onCancel,
+  onControlIdcWorkflow,
   entryPromptMenu,
   onEntryPromptMenuChange,
   attachedFiles,
@@ -184,6 +189,7 @@ export function ChatView({
               activeConversationId={activeConversationId}
               identities={messageIdentities}
               activeSkillNotice={activeSkill}
+              activationProgress={activationProgress}
               onClearActiveSkill={onClearActiveSkill}
             />
           </MessageActionsProvider>
@@ -203,6 +209,7 @@ export function ChatView({
           onEditQueuedMessage={onEditQueuedMessage}
           onSend={onSend}
           onCancel={onCancel}
+          onControlIdcWorkflow={onControlIdcWorkflow}
           entryPromptMenu={entryPromptMenu}
           onEntryPromptMenuChange={onEntryPromptMenuChange}
           disabled={isConversationSwitching}

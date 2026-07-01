@@ -17,6 +17,12 @@ import {
   isAuthorizationFailure,
   type AccountAiCatalogCache,
 } from '../../services/accountAiCatalogCache';
+import {
+  createAgentCapabilityActivationIntent,
+  createAgentCapabilityActivationProgressEvent,
+  type AgentCapabilityActivationProgressEvent,
+} from '@neko/shared';
+import { buildAgentCapabilityActivationProgressMessage } from '@neko-agent/types';
 import { getLogger } from '../../base';
 import { AGENT_SESSION_CONFIG_LOCKED_MESSAGE } from '@neko/agent/runtime';
 import type { Task } from '@neko/shared';
@@ -91,6 +97,7 @@ export class SettingsHandler {
   async handleUpdateSettings(
     webview: vscode.Webview,
     settings: Record<string, unknown>,
+    options: { readonly conversationId?: string } = {},
   ): Promise<void> {
     if (!this.deps.platform) {
       webview.postMessage(
@@ -103,6 +110,45 @@ export class SettingsHandler {
     }
 
     const platform = this.deps.platform;
+    const executionMode = readExecutionMode(settings['executionMode']);
+    const activationIntent =
+      executionMode && options.conversationId
+        ? createAgentCapabilityActivationIntent({
+            conversationId: options.conversationId,
+            source: 'user-explicit',
+            target: 'execution-mode',
+            action: 'set',
+            name: executionMode,
+            requestedBy: 'user',
+            reason: `Execution mode selector set ${executionMode}`,
+            createdAt: Date.now(),
+          })
+        : null;
+    const emit = (
+      step: Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]['step'],
+      status: Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]['status'],
+      extra: Partial<Parameters<typeof createAgentCapabilityActivationProgressEvent>[0]> = {},
+    ) => {
+      if (!activationIntent || !options.conversationId) return;
+      const event = createAgentCapabilityActivationProgressEvent({
+        intent: activationIntent,
+        step,
+        status,
+        at: Date.now(),
+        ...(extra.diagnostics !== undefined ? { diagnostics: extra.diagnostics } : {}),
+        ...(extra.metadata !== undefined ? { metadata: extra.metadata } : {}),
+      });
+      void webview.postMessage(
+        buildAgentCapabilityActivationProgressMessage({
+          conversationId: options.conversationId,
+          events: [event],
+        }),
+      );
+    };
+    if (activationIntent) {
+      emit('requested', 'succeeded');
+      emit('validated', 'succeeded');
+    }
     const message = await runAssistantSettingsUpdateRuntime(settings, {
       updateSettingsFromWebview: async (updates) => {
         if (this.isModelConfigurationUpdate(updates)) {
@@ -111,6 +157,22 @@ export class SettingsHandler {
         await platform.config.applyRuntimeAssistantSettingsFromWebview(updates);
       },
     });
+    if (activationIntent) {
+      if (message.success) {
+        emit('projected', 'succeeded', { metadata: { mode: executionMode } });
+        emit('active', 'succeeded', { metadata: { mode: executionMode } });
+      } else {
+        emit('failed', 'failed', {
+          diagnostics: [
+            {
+              severity: 'error',
+              code: 'execution-mode-update-failed',
+              message: message.error ?? 'Execution mode update failed',
+            },
+          ],
+        });
+      }
+    }
     webview.postMessage(message);
   }
 
@@ -168,3 +230,7 @@ const MODEL_CONFIGURATION_UPDATE_KEYS = [
   'agentModels',
   'mediaModelSelection',
 ] as const;
+
+function readExecutionMode(value: unknown): 'plan' | 'ask' | 'auto' | null {
+  return value === 'plan' || value === 'ask' || value === 'auto' ? value : null;
+}

@@ -9,7 +9,10 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import type { Platform } from '@neko/platform';
-import { buildGlobalErrorMessage } from '@neko-agent/types';
+import {
+  buildAgentCapabilityActivationProgressMessage,
+  buildGlobalErrorMessage,
+} from '@neko-agent/types';
 import type { IAgentManager } from '../ai/agentManager';
 import type { IAgentRunner } from '../ai/agentRunner';
 import { getCanvasSelection } from '../services/canvasAmbientContext';
@@ -54,6 +57,7 @@ import { MediaTaskDeliveryHost } from '../services/mediaTaskDeliveryHost';
 import { MediaTurnBridge } from '../services/mediaTurnBridge';
 import type { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../services/localResourceAccess';
+import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
 import { createVSCodeWorkspaceFileReader } from '../services/workspaceFileReader';
 import { searchVSCodeProjectFiles } from '../services/workspaceProjectSearch';
 import { searchProjectMentionCandidates } from '../services/projectMentionSearch';
@@ -70,6 +74,7 @@ const logger = getLogger('AgentMessageTurnHandler');
 
 export interface AgentMessageTurnHandlerOptions {
   readonly accountAiCatalog?: AccountAiCatalogCache;
+  readonly generatedAssetIndex?: GeneratedAssetIndex;
 }
 
 export class AgentMessageTurnHandler {
@@ -117,6 +122,7 @@ export class AgentMessageTurnHandler {
 
     this._mediaDeliveryHost = new MediaTaskDeliveryHost({
       platform: this._platform,
+      assetIndex: this._options.generatedAssetIndex,
       transcodeFile: (inputPath, outputPath, mediaType) =>
         this._engineClientProvider.transcodeFile(inputPath, outputPath, mediaType),
       localResourceAccess: this._localResourceAccess,
@@ -203,18 +209,24 @@ export class AgentMessageTurnHandler {
     webview: vscode.Webview,
     request: AgentMessageRuntimeRequest,
   ): Promise<void> {
-    const resolvedRequest = this._resolveAgentTurnRequest(webview, request);
+    const localizedRequest: AgentMessageRuntimeRequest = {
+      ...request,
+      locale: request.locale ?? vscode.env.language,
+    };
+    const resolvedRequest = this._resolveAgentTurnRequest(webview, localizedRequest);
     if (!resolvedRequest) {
       return;
     }
+    this._skillHandler?.bindConversationWebview(webview, resolvedRequest.conversationId);
 
     await runAgentMessageTurnRuntime({
       request: resolvedRequest,
       inputProcessor: this._getInputProcessor(),
-      processAttachments: (attachments) =>
-        this._attachmentProcessor.processAttachments(attachments ? [...attachments] : undefined),
-      beforePrepareAgentTurn: ({ conversationId, userInput }) =>
-        this._autoActivateSkillForTurn(webview, conversationId, userInput),
+      processAttachments: (attachments, options) =>
+        this._attachmentProcessor.processAttachments(
+          attachments ? [...attachments] : undefined,
+          options,
+        ),
       createReferencedMediaProcessor: async () =>
         new MediaPreprocessor(
           await this._engineClientProvider.getOptionalClient(),
@@ -291,22 +303,6 @@ export class AgentMessageTurnHandler {
     });
   }
 
-  private async _autoActivateSkillForTurn(
-    webview: vscode.Webview,
-    conversationId: string,
-    userInput: string,
-  ): Promise<void> {
-    const skillHandler = this._skillHandler;
-    if (!skillHandler) {
-      return;
-    }
-
-    const result = await skillHandler.autoActivateSkill(webview, { conversationId, userInput });
-    if (!result?.applied) {
-      return;
-    }
-  }
-
   private _resolveAgentTurnRequest(
     webview: vscode.Webview,
     request: AgentMessageRuntimeRequest,
@@ -368,6 +364,19 @@ export class AgentMessageTurnHandler {
     }
 
     const disposable = agentRunner.onDidRunnerEvent((runnerEvent) => {
+      if (
+        runnerEvent.type === 'activationProgress' &&
+        runnerEvent.conversationId === conversationId
+      ) {
+        void webview.postMessage(
+          buildAgentCapabilityActivationProgressMessage({
+            conversationId,
+            events: runnerEvent.events,
+          }),
+        );
+        return;
+      }
+
       if (runnerEvent.type !== 'subagent') {
         return;
       }

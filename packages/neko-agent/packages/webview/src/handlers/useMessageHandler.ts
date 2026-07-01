@@ -33,6 +33,7 @@ import type {
   PluginSlashCommandDef,
 } from '@/components/ChatView/InputArea/types';
 import type { BoundActiveSkillIndicator } from './types';
+import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { ExtensionToWebviewMessage } from './messages';
 
@@ -106,6 +107,9 @@ export interface UseMessageHandlerProps {
   // State setters - Skills
   setSkills: React.Dispatch<React.SetStateAction<SkillSummary[]>>;
   setActiveSkill: React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>;
+  setActivationProgressByConversation: React.Dispatch<
+    React.SetStateAction<Map<string, readonly ActivationProgressTimeline[]>>
+  >;
 
   // State setters - SSO/Onboarding
   updateSettings: (partial: Partial<SettingsState>) => void;
@@ -176,6 +180,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     forceAgentStateUpdate,
     setSkills,
     setActiveSkill,
+    setActivationProgressByConversation,
     updateSettings,
     setPromptModeForConversation,
     setShowOnboarding,
@@ -267,6 +272,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       forceAgentStateUpdate,
       setSkills,
       setActiveSkill,
+      setActivationProgressByConversation,
       updateSettings,
       setPromptModeForConversation,
       setShowOnboarding,
@@ -323,6 +329,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       forceAgentStateUpdate,
       setSkills,
       setActiveSkill,
+      setActivationProgressByConversation,
       updateSettings,
       setPromptModeForConversation,
       setShowOnboarding,

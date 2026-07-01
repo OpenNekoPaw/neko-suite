@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { createResourceFingerprint, createResourceRef } from '@neko/shared';
+import { PathResolver, createResourceFingerprint, createResourceRef } from '@neko/shared';
 import type { IEngineClientProvider } from '../engineClientProvider';
 import { createExtensionAgentContentAccessRuntime } from '../agentContentAccessRuntime';
 
@@ -149,6 +149,46 @@ describe('createExtensionAgentContentAccessRuntime', () => {
     );
   });
 
+  it('loads document entry assets through resolved host paths for ReadImage', async () => {
+    const engine = createEngine(PNG_1X1);
+    const { runtime } = createExtensionAgentContentAccessRuntime({
+      engineClientProvider: createEngineClientProvider(engine),
+      workspaceRoot: '/workspace/demo',
+      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+    });
+    const documentEntryRef = createResourceRef({
+      id: 'res-page-1',
+      scope: 'project',
+      provider: 'document-archive',
+      kind: 'document',
+      source: {
+        kind: 'document',
+        filePath: '${BOOKS}/comic.epub',
+        document: { filePath: '${BOOKS}/comic.epub', format: 'epub' },
+      },
+      locator: { kind: 'document', entryPath: 'OPS/images/page-1.png' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'comic-v1',
+        providerId: 'document-archive',
+      }),
+    });
+
+    const result = await runtime.loadProviderAsset({
+      caller: 'read-image',
+      source: documentEntryRef,
+      preferredTarget: 'bytes',
+    });
+
+    expect(result.status).toBe('ready');
+    expect(Array.from(result.bytes ?? [])).toEqual(Array.from(PNG_1X1));
+    expect(engine.registerFile).toHaveBeenCalledWith({
+      filePath: '/media/books/comic.epub',
+      purpose: 'document',
+    });
+    expect(engine.readFileEntry).toHaveBeenCalledWith('engine-token-1', 'OPS/images/page-1.png');
+  });
+
   it('rejects runtime handles as durable Agent content identity', async () => {
     const { runtime } = createExtensionAgentContentAccessRuntime({
       engineClientProvider: createEngineClientProvider(createEngine(PNG_1X1)),
@@ -182,6 +222,7 @@ function createEngine(bytes: Uint8Array) {
       fileSizeBytes: bytes.byteLength,
     })),
     readFileRange: vi.fn(async () => bytes.buffer.slice(0)),
+    readFileEntry: vi.fn(async () => bytes.buffer.slice(0)),
     unregisterFile: vi.fn(async () => undefined),
     withRegisteredFile: vi.fn(async (request, task) => {
       const registered = await engine.registerFile(request);

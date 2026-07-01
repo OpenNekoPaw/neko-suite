@@ -11,6 +11,20 @@ vi.mock('@/i18n/I18nContext', () => ({
   }),
 }));
 
+vi.mock('@/i18n', () => ({
+  t: (key: string) =>
+    ({
+      'chat.storyboardTable.fields.scene': '场景',
+      'chat.storyboardTable.fields.shot': '镜头',
+      'chat.storyboardTable.fields.source': '来源',
+      'chat.storyboardTable.fields.sourcePanel': '来源分格',
+      'chat.storyboardTable.fields.visual': '画面',
+      'chat.storyboardTable.fields.prompt': '提示词',
+      'chat.storyboardTable.fields.nextAction': '建议操作',
+      'chat.structuredArtifact.generating': 'Generating structured content...',
+    })[key] ?? key,
+}));
+
 describe('MarkdownRenderer structured artifacts', () => {
   it('renders uppercase neko composite artifacts as storyboard tables', () => {
     renderMarkdown(`Summary.
@@ -155,9 +169,77 @@ describe('MarkdownRenderer structured artifacts', () => {
       projection,
     );
 
-    expect(screen.getByText('page_1')).toBeTruthy();
+    expect(screen.queryByText('page_1')).toBeNull();
     expect(screen.getByAltText('Page 1').getAttribute('src')).toBe('vscode-webview://page-1');
     expect(JSON.stringify(projection.tokens[0]?.refs)).not.toContain('vscode-webview://page-1');
+  });
+
+  it('renders table resource images as uncropped media previews', () => {
+    renderMarkdown(
+      [
+        '| shot id | source | visual |',
+        '| --- | --- | --- |',
+        '| 001 | P1 | Establishing page |',
+      ].join('\n'),
+      false,
+      {
+        status: 'ready',
+        diagnostics: [],
+        tokens: [
+          {
+            token: 'P1',
+            status: 'bound',
+            refs: [{ label: 'Page 1', role: 'source' }],
+            resources: [{ token: 'P1', label: 'Page 1', role: 'source', sourcePath: 'P1' }],
+            renderUris: ['vscode-webview://page-1'],
+            diagnostics: [],
+          },
+        ],
+      },
+    );
+
+    const image = screen.getByAltText('Page 1');
+    expect(image.getAttribute('src')).toBe('vscode-webview://page-1');
+    expect(image.className).toContain('object-contain');
+    expect(image.className).toContain('max-h-40');
+    expect(image.className).not.toContain('h-12');
+    expect(image.className).not.toContain('w-12');
+    expect(image.className).not.toContain('object-cover');
+    expect(screen.queryByText('P1')).toBeNull();
+  });
+
+  it('localizes storyboard creative table field headers while preserving cell content', () => {
+    renderMarkdown(
+      [
+        '| scene | shot | source | sourcePanel | nextAction |',
+        '| --- | --- | --- | --- | --- |',
+        '| 正文 | 1 | P1 | 整页 | use-as-reference |',
+      ].join('\n'),
+    );
+
+    expect(screen.getByText('场景')).toBeTruthy();
+    expect(screen.getByText('镜头')).toBeTruthy();
+    expect(screen.getByText('来源')).toBeTruthy();
+    expect(screen.getByText('来源分格')).toBeTruthy();
+    expect(screen.getByText('建议操作')).toBeTruthy();
+    expect(screen.queryByText('sourcePanel')).toBeNull();
+    expect(screen.getByText('use-as-reference')).toBeTruthy();
+  });
+
+  it('localizes supported Chinese storyboard header aliases to stable field labels', () => {
+    renderMarkdown(
+      [
+        '| 画面内容 | 生成提示词 | 建议操作 |',
+        '| --- | --- | --- |',
+        '| 主角出现 | 黑白工业巨构镜头 | split-panel |',
+      ].join('\n'),
+    );
+
+    expect(screen.getByText('画面')).toBeTruthy();
+    expect(screen.getByText('提示词')).toBeTruthy();
+    expect(screen.getByText('建议操作')).toBeTruthy();
+    expect(screen.queryByText('画面内容')).toBeNull();
+    expect(screen.queryByText('生成提示词')).toBeNull();
   });
 
   it('renders inline-code resource labels from normalized token projection', () => {
@@ -193,9 +275,8 @@ describe('MarkdownRenderer structured artifacts', () => {
       projection,
     );
 
-    expect(
-      screen.getByText('image', { selector: '[data-markdown-resource-status="bound"]' }),
-    ).toBeTruthy();
+    expect(screen.queryByText('`read-image-cover.jpg`')).toBeNull();
+    expect(screen.queryByText('image')).toBeNull();
     expect(screen.getByAltText('read-image-cover.jpg').getAttribute('src')).toBe(
       'vscode-webview://cover',
     );
@@ -217,7 +298,7 @@ describe('MarkdownRenderer structured artifacts', () => {
             code: 'missing-resource-token',
             severity: 'error',
             token: 'missing',
-            message: 'Creative draft resource token "missing" does not match a known resource.',
+            message: 'Markdown resource token "missing" does not match a known resource.',
           },
         ],
         tokens: [
@@ -232,7 +313,7 @@ describe('MarkdownRenderer structured artifacts', () => {
                 code: 'missing-resource-token',
                 severity: 'error',
                 token: 'missing',
-                message: 'Creative draft resource token "missing" does not match a known resource.',
+                message: 'Markdown resource token "missing" does not match a known resource.',
               },
             ],
           },
@@ -260,7 +341,7 @@ describe('MarkdownRenderer structured artifacts', () => {
             code: 'missing-resource-token',
             severity: 'error',
             token: 'page_1',
-            message: 'Creative draft resource token "page_1" does not match a known resource.',
+            message: 'Markdown resource token "page_1" does not match a known resource.',
           },
         ],
       },
@@ -293,7 +374,70 @@ describe('MarkdownRenderer structured artifacts', () => {
     });
 
     expect(screen.getByAltText('cover.png').getAttribute('src')).toBe('vscode-webview://cover');
-    expect(screen.getByText('assets/cover.png')).toBeTruthy();
+    expect(screen.queryByText('assets/cover.png')).toBeNull();
+  });
+
+  it('renders CommonMark image panel hints through the base resource token', () => {
+    renderMarkdown('![panel](P1#panel_1)', false, {
+      status: 'ready',
+      diagnostics: [],
+      tokens: [
+        {
+          token: 'P1',
+          status: 'bound',
+          refs: [{ label: 'Page 1', role: 'source' }],
+          resources: [{ token: 'P1', label: 'Page 1', role: 'source', sourcePath: 'P1' }],
+          renderUris: ['vscode-webview://page-1'],
+          diagnostics: [],
+        },
+      ],
+    });
+
+    expect(screen.getByAltText('Page 1').getAttribute('src')).toBe('vscode-webview://page-1');
+    expect(screen.queryByText('P1#panel_1')).toBeNull();
+  });
+
+  it('renders missing resource context diagnostics distinctly', () => {
+    renderMarkdown(
+      [
+        '| scene | shot | source | visual |',
+        '| --- | --- | --- | --- |',
+        '| Opening | 1 | P1 | Frame |',
+      ].join('\n'),
+      false,
+      {
+        status: 'diagnostic',
+        diagnostics: [
+          {
+            code: 'missing-resource-context',
+            severity: 'error',
+            token: 'P1',
+            message:
+              'Markdown resource token "P1" cannot be resolved because this message has no image resource context.',
+          },
+        ],
+        tokens: [
+          {
+            token: 'P1',
+            status: 'missing',
+            refs: [],
+            resources: [],
+            renderUris: [],
+            diagnostics: [
+              {
+                code: 'missing-resource-context',
+                severity: 'error',
+                token: 'P1',
+                message:
+                  'Markdown resource token "P1" cannot be resolved because this message has no image resource context.',
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(screen.getByRole('alert').textContent).toContain('no image resource context');
   });
 
   it('shows unsupported-extension diagnostics for Neko resource-reference embeds', () => {

@@ -132,6 +132,7 @@ export interface ProjectContentBlockUiInput {
   block: ContentBlock;
   siblingBlocks?: readonly ContentBlock[];
   toolCalls?: readonly ToolCall[];
+  ambientToolCalls?: readonly ToolCall[];
   parentIsStreaming?: boolean;
   formatTimestamp?: (timestamp: number) => string;
   plugins?: PluginsAvailable;
@@ -205,7 +206,11 @@ export function projectContentBlockUi(input: ProjectContentBlockUiInput): Conten
         content: input.block.content,
         renderStreaming: input.block.isStreaming === true || parentIsStreaming,
         ...(input.siblingBlocks ? { siblingBlocks: input.siblingBlocks } : {}),
-        ...(input.toolCalls ? { toolCalls: input.toolCalls } : {}),
+        ...(input.toolCalls || input.ambientToolCalls
+          ? {
+              toolCalls: mergeToolCalls(input.toolCalls, input.ambientToolCalls),
+            }
+          : {}),
       };
     case 'tool_call':
       if (!input.block.toolCall) {
@@ -244,7 +249,7 @@ export function projectContentBlockUi(input: ProjectContentBlockUiInput): Conten
         richContent: projectCompositeBlockRichContent({
           composite: input.block.composite,
           siblingBlocks: input.siblingBlocks,
-          toolCalls: input.toolCalls,
+          toolCalls: mergeToolCalls(input.toolCalls, input.ambientToolCalls),
           plugins: input.plugins,
         }),
       };
@@ -267,6 +272,7 @@ export function projectContentBlocksUi(
   siblingBlocks: readonly ContentBlock[] | undefined = blocks,
   toolCalls: readonly ToolCall[] | undefined = deriveToolCallsFromContentBlocks(siblingBlocks),
   plugins?: PluginsAvailable,
+  ambientToolCalls?: readonly ToolCall[],
 ): ContentBlockUiProjection[] {
   if (!blocks || blocks.length === 0) return [];
 
@@ -275,6 +281,7 @@ export function projectContentBlocksUi(
       block,
       siblingBlocks,
       toolCalls,
+      ambientToolCalls,
       parentIsStreaming,
       formatTimestamp,
       plugins,
@@ -292,6 +299,23 @@ export function deriveToolCallsFromContentBlocks(
       ?.map((block) => (block.type === 'tool_call' ? block.toolCall : undefined))
       .filter((toolCall): toolCall is ToolCall => toolCall !== undefined) ?? []
   );
+}
+
+export function mergeToolCalls(
+  primary: readonly ToolCall[] | undefined,
+  ambient: readonly ToolCall[] | undefined,
+): ToolCall[] | undefined {
+  if ((!primary || primary.length === 0) && (!ambient || ambient.length === 0)) {
+    return undefined;
+  }
+  const byId = new Map<string, ToolCall>();
+  for (const toolCall of ambient ?? []) {
+    byId.set(toolCall.id, toolCall);
+  }
+  for (const toolCall of primary ?? []) {
+    byId.set(toolCall.id, toolCall);
+  }
+  return Array.from(byId.values());
 }
 
 export function projectContentBlocksDisplay(

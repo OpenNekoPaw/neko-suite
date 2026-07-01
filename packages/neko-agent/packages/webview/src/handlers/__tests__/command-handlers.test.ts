@@ -106,7 +106,7 @@ describe('command handlers conversation isolation', () => {
     dispatch(
       commandHandlers,
       {
-        type: 'canvasMarkdownCapabilityResult',
+        type: 'agentCapabilityLifecycleResult',
         requestId: 'req-1',
         conversationId: 'conv-a',
         success: false,
@@ -118,7 +118,7 @@ describe('command handlers conversation isolation', () => {
             {
               severity: 'error',
               code: 'missing-resource-token',
-              message: 'Creative draft resource token "P1" does not match a known resource.',
+              message: 'Markdown resource token "P1" does not match a known resource.',
               token: 'P1',
             },
           ],
@@ -264,6 +264,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     forceAgentStateUpdate: () => undefined,
     setSkills: noopDispatch(),
     setActiveSkill: noopDispatch(),
+    setActivationProgressByConversation: noopDispatch(),
     setGlobalError: noopDispatch(),
     conversationTokenCountRef: ref(new Map()),
     conversationCompressingRef: ref(new Map()),

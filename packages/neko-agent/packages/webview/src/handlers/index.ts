@@ -24,6 +24,7 @@ import { subAgentHandlers } from './subagent-handlers';
 import { characterDialogueSessionHandlers } from './character-dialogue-session-handlers';
 import { embodyCharacterSessionHandlers } from './embody-character-session-handlers';
 import { timelineHandlers } from './timeline-handlers';
+import { activationProgressHandlers } from './activation-progress-handlers';
 
 /**
  * Create a fully configured message handler registry
@@ -46,6 +47,7 @@ export function createConfiguredRegistry(): MessageHandlerRegistry {
   registry.registerAll(characterDialogueSessionHandlers);
   registry.registerAll(embodyCharacterSessionHandlers);
   registry.registerAll(timelineHandlers);
+  registry.registerAll(activationProgressHandlers);
 
   return registry;
 }

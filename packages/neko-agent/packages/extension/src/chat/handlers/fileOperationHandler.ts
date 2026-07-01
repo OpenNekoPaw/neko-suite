@@ -21,6 +21,10 @@ import {
 } from '@neko/platform/files';
 import type { DocumentLocator, DocumentSourceRef } from '@neko/shared';
 import { getLogger, handleError } from '../../base';
+import {
+  resolveGeneratedAssetOpenPath,
+  type GeneratedAssetLookup,
+} from '../../services/generatedAssetOpenResolver';
 
 const logger = getLogger('FileOperationHandler');
 
@@ -29,6 +33,7 @@ const logger = getLogger('FileOperationHandler');
  */
 export interface FileOperationHandlerDeps {
   platform?: Platform;
+  generatedAssetLookup?: GeneratedAssetLookup;
 }
 
 /**
@@ -42,10 +47,11 @@ export class FileOperationHandler {
   }
 
   async handleOpenFile(filePath: string): Promise<void> {
-    const plan = createOpenFilePlan(filePath);
-    if (!plan) return;
+    if (!filePath) return;
 
     try {
+      const plan = createOpenFilePlan(this._resolveOpenFilePath(filePath));
+      if (!plan) return;
       const uri = this._uriForOpenFilePath(plan.cleanPath);
 
       if (plan.viewer === 'video') {
@@ -157,6 +163,15 @@ export class FileOperationHandler {
     }
 
     return vscode.Uri.file(cleanPath);
+  }
+
+  private _resolveOpenFilePath(filePath: string): string {
+    const resolved = resolveGeneratedAssetOpenPath(filePath, this.deps.generatedAssetLookup);
+    if (resolved) return resolved;
+    if (filePath.startsWith('generated-assets/')) {
+      throw new Error(`Generated asset is not available for opening: ${filePath}`);
+    }
+    return filePath;
   }
 
   private async _openFilePath(filePath: string): Promise<void> {
