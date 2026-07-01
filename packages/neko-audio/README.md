@@ -15,7 +15,7 @@
 - **激活依赖**：neko-engine、neko-tools
 - **状态**：Alpha
 - **测试**：vitest v4
-- **布局**：Webview 使用 Creative Workbench Shell：左侧工具栏承接响度分析、静音检测、降噪、标准化、频谱开关等常用音频命令，并通过底部显隐组控制右侧 SidePanel；Transport、波形、时间线、频谱画面和 LoudnessPanel 保持在主面板展示区；Effects、Recording、Export、Presets 等局部设置保留在右侧 SidePanel；duration/sample rate/channels/codec 由 Extension 侧 `AudioStatusBar` 投射到 VSCode 原生 StatusBar。
+- **布局**：Webview 使用 Creative Workbench Shell：左侧工具栏承接响度分析、静音检测、降噪、标准化、频谱开关等常用音频命令，并通过底部显隐组控制右侧 SidePanel；Transport、波形、时间线、频谱画面和 LoudnessPanel 保持在主面板展示区；`.nka` 项目模式在时间线上方提供 timeline tool mode 与 selection action bar，时间线下方保留 AddSourceStrip 与紧凑 Mixer/Master strip；右侧 Dock 以 AI、Inspector、Effects、Markers/Regions、Recording、Export、Presets 组成任务栈；duration/sample rate/channels/codec 由 Extension 侧 `AudioStatusBar` 投射到 VSCode 原生 StatusBar。
 
 ## Architecture
 
@@ -41,16 +41,33 @@
                                    │   ├─ TrackLane     (轨道头 + 元素区)
                                    │   ├─ AudioClip     (波形缩略图)
                                    │   └─ Playhead      (播放头)
+                                   ├─ TimelineToolModeBar / SelectionActionBar
+                                   ├─ AddSourceStrip    (导入/录音/加轨/AI 入口)
                                    ├─ MixerPanel        (ChannelStrip: Vol/Pan/S/M/FX count)
+                                   ├─ MasterLoudnessStrip (LUFS/True Peak/导出就绪)
                                    ├─ TransportBar      (播放控制 + 时间显示)
                                    ├─ Toolbar           (工具按钮)
                                    ├─ SpectrumAnalyzer  (AnalyserNode FFT)
+                                   ├─ AudioAiOperationPanel + AiResultCompare
+                                   ├─ AudioInspectorPanel / EffectsMiniRack / MarkersRegionsPanel
                                    ├─ EffectsPanel      (12 种效果 + 参数编辑器)
                                    ├─ RecordingPanel    (录音到指定轨道)
                                    ├─ ExportPanel       (格式/采样率/码率/声道)
                                    ├─ LoudnessPanel     (EBU R128 响度指标)
                                    └─ Toast             (操作结果通知)
 ```
+
+### 轻量 AI DAW 工作台模型
+
+`neko-audio` 的目标是嵌入 VSCode 的轻量 AI DAW，而不是独立 openDAW 克隆。工作台优先把常用创作动作放在选择上下文附近：
+
+- 时间线：`TimelineToolModeBar` 提供选择、分割、裁剪、淡化、增益、标记、自动化模式；`SelectionActionBar` 根据当前 clip/region/track/master 目标暴露 split、trim、fade、gain、denoise、normalize、silence cleanup、send to AI。
+- 右侧 Dock：基础模式显示 AI、Inspector、Recording、Export、Presets；专业模式在同一项目状态上增加 Effects 与 Markers/Regions。
+- AI 审阅：`AudioAiOperationPanel` 记录 quick action、提示词请求、状态、诊断和 affected ids；`AiResultCompare` 明确区分 previewable、apply-only、unsupported、failed、stale，不伪造 A/B 预览。
+- 导出就绪：`MasterLoudnessStrip` 在紧凑 Mixer 主控条和 Export panel 中复用同一 loudness readiness 状态。未分析时只显示需要分析或不可用，不把项目误报为已通过。
+- 文件与项目边界：导入仍走 `project:addSource` 和 Extension 授权路径；音频分析、效果、播放和导出仍走 `audio:*` / Engine 路径；Webview 不读取本地文件，不构建项目 mix config，也不直接 mutate Engine 状态。
+
+明确非目标：不在此包内引入完整插件浏览器、样本库浏览器、设备图、MIDI piano roll、routing matrix、多窗口 mixer、插件宿主或云端服务抽象。专业能力只有在 `.nka` 项目状态、Extension gateway 和 Engine render path 能形成可审计闭环时才进入 UI。
 
 ### .nka 项目文件 (v2.2)
 

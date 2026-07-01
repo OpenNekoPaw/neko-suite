@@ -12,6 +12,13 @@ import {
   type BeatGridSnapMode,
   type BeatGridState,
 } from '../utils/beatGrid';
+import {
+  isAudioTimelineToolMode,
+  type AudioAiOperationItem,
+  type AudioInspectorScope,
+  type AudioSelectionTarget,
+  type AudioTimelineToolMode,
+} from '../utils/audioWorkbench';
 
 // =============================================================================
 // State Types
@@ -31,7 +38,8 @@ export interface Marker {
   color?: string;
 }
 
-export type SidePanelType = 'effects' | 'recording' | 'export' | 'presets';
+export type SidePanelType =
+  'ai' | 'inspector' | 'effects' | 'markers' | 'recording' | 'export' | 'presets';
 
 export interface AudioStoreState {
   // File info
@@ -61,6 +69,18 @@ export interface AudioStoreState {
   zoom: number;
   /** Beat-grid snapping state for project timeline editing */
   beatGrid: BeatGridState;
+  /** Workbench selection target used by timeline actions and Inspector */
+  selectedWorkbenchTarget: AudioSelectionTarget | null;
+  /** Active timeline edit tool */
+  activeTimelineTool: AudioTimelineToolMode;
+  /** Requested Inspector projection scope */
+  inspectorScope: AudioInspectorScope;
+  /** Visible AI operation queue/review items */
+  aiOperations: AudioAiOperationItem[];
+  /** Active AI operation review item */
+  activeAiOperationId: string | null;
+  /** Visible workbench diagnostic key */
+  workbenchDiagnostic: string | null;
 
   // Loop
   isLooping: boolean;
@@ -74,6 +94,8 @@ export interface AudioStoreState {
 
   // Loudness analysis result
   loudness: LoudnessResult | null;
+  loudnessAnalysisStatus: LoudnessAnalysisStatus;
+  loudnessAnalysisRequestId: string | null;
 
   // Toast notifications
   toast: ToastMessage | null;
@@ -84,6 +106,8 @@ export interface LoudnessResult {
   truePeak: number;
   loudnessRange: number;
 }
+
+export type LoudnessAnalysisStatus = 'idle' | 'pending' | 'available' | 'unavailable';
 
 export interface ToastMessage {
   id: number;
@@ -122,6 +146,17 @@ export interface AudioStoreActions {
   setZoom(zoom: number): void;
   setBeatGrid: (updates: Partial<BeatGridState>) => void;
   setBeatGridSnapMode: (mode: BeatGridSnapMode) => void;
+  setSelectedWorkbenchTarget(target: AudioSelectionTarget | null): void;
+  setActiveTimelineTool(mode: AudioTimelineToolMode): void;
+  setInspectorScope(scope: AudioInspectorScope): void;
+  addAiOperation(operation: AudioAiOperationItem): void;
+  updateAiOperation(
+    operationId: string,
+    updates: Partial<Omit<AudioAiOperationItem, 'id' | 'createdAt'>>,
+  ): void;
+  clearAiOperation(operationId: string): void;
+  setActiveAiOperation(operationId: string | null): void;
+  setWorkbenchDiagnostic(diagnosticKey: string | null): void;
   toggleLoop(): void;
 
   // Project
@@ -132,7 +167,9 @@ export interface AudioStoreActions {
 
   // Analysis
   setSilenceRegions(regions: Array<{ start: number; end: number }>): void;
-  setLoudness(loudness: LoudnessResult | null): void;
+  setLoudness(loudness: LoudnessResult | null, requestId?: string | null): void;
+  setLoudnessAnalysisPending(requestId: string): void;
+  setLoudnessAnalysisUnavailable(requestId?: string | null): void;
 
   // Toast
   showToast(text: string, level?: 'info' | 'success' | 'error'): void;
@@ -168,6 +205,12 @@ const initialState: AudioStoreState = {
   error: null,
   zoom: 1.0,
   beatGrid: DEFAULT_BEAT_GRID_STATE,
+  selectedWorkbenchTarget: null,
+  activeTimelineTool: 'select',
+  inspectorScope: 'selection',
+  aiOperations: [],
+  activeAiOperationId: null,
+  workbenchDiagnostic: null,
 
   isLooping: false,
 
@@ -177,6 +220,8 @@ const initialState: AudioStoreState = {
   silenceRegions: [],
 
   loudness: null,
+  loudnessAnalysisStatus: 'idle',
+  loudnessAnalysisRequestId: null,
   toast: null,
 };
 
@@ -212,6 +257,36 @@ export const useAudioStore = create<AudioStoreState & AudioStoreActions>()((set)
   setBeatGrid: (updates) => set((s) => ({ beatGrid: { ...s.beatGrid, ...updates } })),
   setBeatGridSnapMode: (mode) =>
     set((s) => ({ beatGrid: { ...s.beatGrid, enabled: mode !== 'off', mode } })),
+  setSelectedWorkbenchTarget: (selectedWorkbenchTarget) => set({ selectedWorkbenchTarget }),
+  setActiveTimelineTool: (activeTimelineTool) => {
+    if (!isAudioTimelineToolMode(activeTimelineTool)) {
+      throw new Error(`Unknown audio timeline tool mode: ${String(activeTimelineTool)}`);
+    }
+    set({ activeTimelineTool, workbenchDiagnostic: null });
+  },
+  setInspectorScope: (inspectorScope) => set({ inspectorScope }),
+  addAiOperation: (operation) =>
+    set((s) => ({
+      aiOperations: [operation, ...s.aiOperations],
+      activeAiOperationId: operation.id,
+      activeSidePanel: 'ai',
+    })),
+  updateAiOperation: (operationId, updates) =>
+    set((s) => ({
+      aiOperations: s.aiOperations.map((operation) =>
+        operation.id === operationId ? { ...operation, ...updates } : operation,
+      ),
+      workbenchDiagnostic: s.aiOperations.some((operation) => operation.id === operationId)
+        ? s.workbenchDiagnostic
+        : 'audio.aiOperation.stale',
+    })),
+  clearAiOperation: (operationId) =>
+    set((s) => ({
+      aiOperations: s.aiOperations.filter((operation) => operation.id !== operationId),
+      activeAiOperationId: s.activeAiOperationId === operationId ? null : s.activeAiOperationId,
+    })),
+  setActiveAiOperation: (activeAiOperationId) => set({ activeAiOperationId }),
+  setWorkbenchDiagnostic: (workbenchDiagnostic) => set({ workbenchDiagnostic }),
   toggleLoop: () => set((s) => ({ isLooping: !s.isLooping })),
 
   // Project
@@ -222,7 +297,32 @@ export const useAudioStore = create<AudioStoreState & AudioStoreActions>()((set)
 
   // Analysis
   setSilenceRegions: (silenceRegions) => set({ silenceRegions }),
-  setLoudness: (loudness) => set({ loudness }),
+  setLoudness: (loudness, requestId = null) =>
+    set((s) => {
+      if (requestId && s.loudnessAnalysisRequestId && requestId !== s.loudnessAnalysisRequestId) {
+        return { workbenchDiagnostic: 'audio.masterReadiness.staleAnalysis' };
+      }
+      return {
+        loudness,
+        loudnessAnalysisStatus: loudness ? 'available' : 'idle',
+        loudnessAnalysisRequestId: null,
+      };
+    }),
+  setLoudnessAnalysisPending: (loudnessAnalysisRequestId) =>
+    set({ loudnessAnalysisStatus: 'pending', loudnessAnalysisRequestId }),
+  setLoudnessAnalysisUnavailable: (requestId = null) =>
+    set((s) => {
+      if (requestId && requestId !== s.loudnessAnalysisRequestId) {
+        return s.loudnessAnalysisRequestId
+          ? { workbenchDiagnostic: 'audio.masterReadiness.staleAnalysis' }
+          : {};
+      }
+      return {
+        loudness: null,
+        loudnessAnalysisStatus: 'unavailable',
+        loudnessAnalysisRequestId: null,
+      };
+    }),
 
   // Toast
   showToast: (text, level = 'info') => {

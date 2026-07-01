@@ -7,7 +7,8 @@ export interface AudioProtocolViewActions {
   setWaveform(waveform: WaveformDataMessage): void;
   setStreamInfo(streamId: string, streamUrl: string): void;
   setSilenceRegions(regions: Array<{ start: number; end: number }>): void;
-  setLoudness(loudness: LoudnessResult | null): void;
+  setLoudness(loudness: LoudnessResult | null, requestId?: string | null): void;
+  setLoudnessAnalysisUnavailable(requestId?: string | null): void;
   showToast(text: string, level?: 'info' | 'success' | 'error'): void;
 }
 
@@ -83,7 +84,11 @@ export function handleAudioResponseMessage(
         if (regions) actions.setSilenceRegions(regions);
       } else {
         const loudness = parseLoudness(message.result);
-        if (loudness) actions.setLoudness(loudness);
+        if (loudness) {
+          actions.setLoudness(loudness, message.requestId);
+        } else {
+          actions.setLoudnessAnalysisUnavailable(message.requestId);
+        }
       }
       return true;
 
@@ -106,6 +111,7 @@ export function handleAudioResponseMessage(
       return true;
 
     case 'audio:error':
+      actions.setLoudnessAnalysisUnavailable(message.requestId);
       actions.showToast(message.error, 'error');
       return true;
 

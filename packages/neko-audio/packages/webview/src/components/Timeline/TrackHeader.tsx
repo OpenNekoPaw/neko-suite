@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAudioProjectStore, type AudioTrackUIState } from '../../stores/audioProjectStore';
+import { useAudioStore } from '../../stores/audioStore';
 import type { TimelineTrack } from '@neko/shared';
 import { t } from '../../i18n';
 
@@ -31,6 +32,7 @@ export function TrackHeader({
   const setTrackVolume = useAudioProjectStore((s) => s.setTrackVolume);
   const setTrackPan = useAudioProjectStore((s) => s.setTrackPan);
   const removeTrack = useAudioProjectStore((s) => s.removeTrack);
+  const setSelectedWorkbenchTarget = useAudioStore((s) => s.setSelectedWorkbenchTarget);
   const hasAiHighlight = useAudioProjectStore((s) => s.hasAiTrackHighlight(track.id));
   const [draftVolume, setDraftVolume] = useState(uiState.volume);
   const [draftPan, setDraftPan] = useState(uiState.pan);
@@ -91,6 +93,7 @@ export function TrackHeader({
     <div
       className="neko-track-header flex shrink-0 border-r border-[var(--editor-border)] bg-[var(--track-header-bg)] overflow-hidden"
       style={{ width, minWidth: width, height }}
+      onClick={() => setSelectedWorkbenchTarget({ kind: 'track', trackId: track.id })}
       onContextMenu={onContextMenu}
     >
       {/* Color bar */}

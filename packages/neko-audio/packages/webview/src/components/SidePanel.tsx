@@ -12,13 +12,19 @@ import { EffectsPanel } from './EffectsPanel';
 import { RecordingPanel } from './RecordingPanel';
 import { ExportPanel } from './ExportPanel';
 import { PresetBrowser } from './PresetBrowser';
+import { AudioInspectorPanel } from './AudioInspectorPanel';
+import { AudioAiOperationPanel } from './AudioAiOperationPanel';
+import { MarkersRegionsPanel } from './MarkersRegionsPanel';
 import { audioSidePanelItems } from './audioSidePanelItems';
 import { useEffectsChain } from '../hooks/useEffectsChain';
 import { AudioIconButton } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
 
 const PANEL_TITLES: Record<SidePanelType, string> = {
+  ai: 'audio.aiPanel.title',
+  inspector: 'audio.inspector.title',
   effects: 'audio.effects.title',
+  markers: 'audio.markers.title',
   recording: 'audio.recording.title',
   export: 'audio.export.title',
   presets: 'audio.presets.title',
@@ -30,7 +36,13 @@ interface SidePanelProps {
   readonly mode: AudioRightDockMode;
 }
 
-const BASIC_SIDE_PANEL_TYPES = new Set<SidePanelType>(['recording', 'export', 'presets']);
+const BASIC_SIDE_PANEL_TYPES = new Set<SidePanelType>([
+  'ai',
+  'inspector',
+  'recording',
+  'export',
+  'presets',
+]);
 
 export function SidePanel({ mode }: SidePanelProps) {
   const { activeSidePanel, closeSidePanel, openSidePanel } = useAudioStore();
@@ -90,8 +102,11 @@ export function SidePanel({ mode }: SidePanelProps) {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="audio-side-panel-scroll flex-1 overflow-y-auto">
+        {effectiveActiveSidePanel === 'ai' && <AudioAiOperationPanel />}
+        {effectiveActiveSidePanel === 'inspector' && <AudioInspectorPanel />}
         {effectiveActiveSidePanel === 'effects' && <EffectsPanel chain={effectsChain} />}
+        {effectiveActiveSidePanel === 'markers' && <MarkersRegionsPanel />}
         {effectiveActiveSidePanel === 'recording' && <RecordingPanel />}
         {effectiveActiveSidePanel === 'export' && <ExportPanel />}
         {effectiveActiveSidePanel === 'presets' && <PresetBrowser />}

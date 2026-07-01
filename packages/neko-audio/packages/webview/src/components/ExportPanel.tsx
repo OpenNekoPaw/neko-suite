@@ -9,6 +9,7 @@ import { useState, useCallback } from 'react';
 import type { AudioExportFormat } from '@neko/shared';
 import { useAudioStore } from '../stores/audioStore';
 import { postMessage } from '../shared/useVscodeMessage';
+import { MasterLoudnessStrip } from './MasterLoudnessStrip';
 import { AudioButton, AudioSelect } from './shared/AudioUiPrimitives';
 import { t } from '../i18n';
 
@@ -61,6 +62,8 @@ export function ExportPanel() {
 
   return (
     <div className="flex flex-col gap-2 p-2">
+      <MasterLoudnessStrip variant="export" />
+
       {/* Format */}
       <div className="flex flex-col gap-1">
         <label className="text-[10px] opacity-70">{t('audio.export.format')}</label>

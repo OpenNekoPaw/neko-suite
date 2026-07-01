@@ -24,12 +24,30 @@ vi.mock('./PresetBrowser', () => ({
   PresetBrowser: () => <div data-testid="preset-browser" />,
 }));
 
+vi.mock('./AudioAiOperationPanel', () => ({
+  AudioAiOperationPanel: () => <div data-testid="ai-panel" />,
+}));
+
+vi.mock('./AudioInspectorPanel', () => ({
+  AudioInspectorPanel: () => <div data-testid="inspector-panel" />,
+}));
+
+vi.mock('./MarkersRegionsPanel', () => ({
+  MarkersRegionsPanel: () => <div data-testid="markers-panel" />,
+}));
+
 vi.mock('../hooks/useEffectsChain', () => ({
   useEffectsChain: () => ({}),
 }));
 
 vi.mock('../i18n', () => ({
   t: (key: string) => key,
+}));
+
+vi.mock('@neko/ui/icons', () => ({
+  CloseIcon: ({ className = '' }: { readonly className?: string }) => (
+    <span data-icon="close" className={className} />
+  ),
 }));
 
 describe('Audio SidePanel', () => {
@@ -61,11 +79,11 @@ describe('Audio SidePanel', () => {
     expect(host.querySelector('[data-testid="effects-panel"]')).not.toBeNull();
 
     const tabs = host.querySelectorAll<HTMLButtonElement>('.audio-side-panel-tabs button');
-    expect(tabs).toHaveLength(4);
-    expect(tabs[0]?.getAttribute('aria-selected')).toBe('true');
+    expect(tabs).toHaveLength(7);
+    expect(tabs[2]?.getAttribute('aria-selected')).toBe('true');
 
     act(() => {
-      tabs[1]?.click();
+      tabs[4]?.click();
     });
 
     expect(useAudioStore.getState().activeSidePanel).toBe('recording');
@@ -79,10 +97,10 @@ describe('Audio SidePanel', () => {
     });
 
     expect(host.querySelector('[data-testid="effects-panel"]')).toBeNull();
-    expect(host.querySelector('[data-testid="recording-panel"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="ai-panel"]')).not.toBeNull();
 
     const tabs = host.querySelectorAll<HTMLButtonElement>('.audio-side-panel-tabs button');
-    expect(tabs).toHaveLength(3);
-    expect(useAudioStore.getState().activeSidePanel).toBe('recording');
+    expect(tabs).toHaveLength(5);
+    expect(useAudioStore.getState().activeSidePanel).toBe('ai');
   });
 });

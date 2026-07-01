@@ -6,6 +6,7 @@ import {
   type AudioTrackUIState,
 } from '../stores/audioProjectStore';
 import type { TimelineTrack } from '@neko/shared';
+import { MasterLoudnessStrip } from './MasterLoudnessStrip';
 import { t } from '../i18n';
 
 export function MixerPanel() {
@@ -203,6 +204,8 @@ function MasterStrip() {
         <span />
         <span />
       </div>
+
+      <MasterLoudnessStrip />
 
       <label className="neko-channel-control">
         <span>{t('audio.mixer.volumeShort')}</span>

@@ -9,9 +9,24 @@ export interface AudioSidePanelItem {
 
 export const audioSidePanelItems: readonly AudioSidePanelItem[] = [
   {
+    panel: 'ai',
+    icon: <IconAi />,
+    titleKey: 'audio.aiPanel.title',
+  },
+  {
+    panel: 'inspector',
+    icon: <IconInspector />,
+    titleKey: 'audio.inspector.title',
+  },
+  {
     panel: 'effects',
     icon: <IconEffects />,
     titleKey: 'audio.effects.title',
+  },
+  {
+    panel: 'markers',
+    icon: <IconMarkers />,
+    titleKey: 'audio.markers.title',
   },
   {
     panel: 'recording',
@@ -29,6 +44,44 @@ export const audioSidePanelItems: readonly AudioSidePanelItem[] = [
     titleKey: 'audio.presets.title',
   },
 ];
+
+function IconAi(): React.ReactElement {
+  return <span className="text-[10px] font-semibold">AI</span>;
+}
+
+function IconInspector(): React.ReactElement {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-4 h-4"
+    >
+      <rect x="4" y="3" width="12" height="14" rx="1.5" />
+      <path d="M7 7h6M7 10h6M7 13h3" />
+    </svg>
+  );
+}
+
+function IconMarkers(): React.ReactElement {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-4 h-4"
+    >
+      <path d="M5 3v14" />
+      <path d="M6 4h9l-2 3 2 3H6" />
+    </svg>
+  );
+}
 
 function IconEffects(): React.ReactElement {
   return (

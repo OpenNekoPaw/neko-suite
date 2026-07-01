@@ -31,6 +31,9 @@ import { LoudnessPanel } from '../components/LoudnessPanel';
 import { EmptyProject } from '../components/EmptyProject';
 import { AudioTimeline } from '../components/Timeline/AudioTimeline';
 import { MixerPanel } from '../components/MixerPanel';
+import { AddSourceStrip } from '../components/AddSourceStrip';
+import { SelectionActionBar } from '../components/SelectionActionBar';
+import { TimelineToolModeBar } from '../components/TimelineToolModeBar';
 import { Toast } from '../components/Toast';
 import {
   isAudioUserCommand,
@@ -65,6 +68,7 @@ export function AudioEditor() {
     setProjectMode,
     setMarkers,
     setLoudness,
+    setLoudnessAnalysisUnavailable,
     showToast,
   } = useAudioStore();
   const { togglePlay, seek, stop, audioClientRef } = useAudioPlayback();
@@ -78,13 +82,6 @@ export function AudioEditor() {
     }
     openSidePanel('effects');
   }, [activeSidePanel, closeSidePanel, openSidePanel]);
-  const handleOpenExport = useCallback(() => {
-    openSidePanel('export');
-  }, [openSidePanel]);
-  const handleOpenPackage = useCallback(() => {
-    postMessage({ type: 'project:package' });
-  }, []);
-
   // Drag-drop support for importing audio into project
   const editorRef = useRef<HTMLDivElement>(null);
   const { isKeyboardFocused, isKeyboardFocusedRef, setKeyboardFocused } = useFocusedWebviewRoot(
@@ -123,6 +120,7 @@ export function AudioEditor() {
             setStreamInfo,
             setSilenceRegions,
             setLoudness,
+            setLoudnessAnalysisUnavailable,
             showToast,
           },
         );
@@ -187,6 +185,7 @@ export function AudioEditor() {
       setProjectMode,
       setMarkers,
       setLoudness,
+      setLoudnessAnalysisUnavailable,
       setKeyboardFocused,
       isKeyboardFocusedRef,
       showToast,
@@ -236,8 +235,6 @@ export function AudioEditor() {
         leftRail={
           <Toolbar
             sidePanelVisible={isSidePanelVisible}
-            onOpenExport={handleOpenExport}
-            onOpenPackage={handleOpenPackage}
             onToggleSidePanel={handleToggleSidePanel}
           />
         }
@@ -249,7 +246,12 @@ export function AudioEditor() {
               <div className="audio-main-content">
                 {isV2 ? (
                   <div className="neko-project-workstation">
+                    <div className="audio-workbench-action-row">
+                      <TimelineToolModeBar />
+                      <SelectionActionBar />
+                    </div>
                     <AudioTimeline isKeyboardFocusedRef={isKeyboardFocusedRef} />
+                    <AddSourceStrip />
                     <MixerPanel />
                   </div>
                 ) : (

@@ -5,6 +5,11 @@ import { describe, expect, it } from 'vitest';
 describe('AudioEditor workbench layout boundary', () => {
   const source = readFileSync(join(__dirname, 'AudioEditor.tsx'), 'utf-8');
   const toolbarSource = readFileSync(join(__dirname, '../components/Toolbar.tsx'), 'utf-8');
+  const sidePanelSource = readFileSync(join(__dirname, '../components/SidePanel.tsx'), 'utf-8');
+  const sidePanelItemsSource = readFileSync(
+    join(__dirname, '../components/audioSidePanelItems.tsx'),
+    'utf-8',
+  );
 
   it('uses the shared creative workbench shell for audio regions', () => {
     expect(source).toMatch(/import \{ CreativeWorkbenchShell \} from '@neko\/ui\/workbench'/);
@@ -31,22 +36,41 @@ describe('AudioEditor workbench layout boundary', () => {
     expect(source).toMatch(/label: t\('audio\.rightDock\.mode\.professional'\)/);
   });
 
-  it('moves analysis controls into the left rail instead of a horizontal main-panel toolbar', () => {
+  it('keeps the main surface focused on waveform and timeline workbench actions', () => {
     expect(source).toMatch(/className="audio-main-surface"/);
     expect(source).not.toMatch(/<AudioMainPanelTools/);
     expect(source).not.toMatch(/<AudioHudControls/);
-    expect(toolbarSource).toMatch(/data-audio-toolbar-action="analyze-loudness"/);
-    expect(toolbarSource).toMatch(/data-audio-toolbar-action="toggle-spectrum"/);
-    expect(toolbarSource).toMatch(/audio\.analysis\.loudness/);
+    expect(source).toMatch(/<TimelineToolModeBar \/>/);
+    expect(source).toMatch(/<SelectionActionBar \/>/);
+    expect(source).toMatch(/<AddSourceStrip \/>/);
+    expect(source).toMatch(/<MixerPanel \/>/);
   });
 
-  it('keeps the left rail responsible for audio commands and right panel visibility', () => {
+  it('keeps the left rail responsible for right panel visibility only', () => {
     expect(toolbarSource).toMatch(/CreativeLeftRail/);
-    expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-export"/);
-    expect(toolbarSource).toMatch(/data-creative-left-rail-action="open-package"/);
-    expect(toolbarSource).toMatch(/data-creative-left-rail-action="analyze-loudness"/);
-    expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-spectrum"/);
+    expect(toolbarSource).toMatch(/data-creative-left-rail-action="toggle-side-panel"/);
     expect(toolbarSource).toMatch(/data-creative-left-rail-target="right-panel"/);
     expect(toolbarSource).toMatch(/aria-controls="audio-side-panel"/);
+    expect(toolbarSource).not.toMatch(/data-audio-toolbar-action=/);
+    expect(toolbarSource).not.toMatch(/data-creative-left-rail-action="open-/);
+    expect(toolbarSource).not.toMatch(/audio\.analysis\.loudness/);
+    expect(toolbarSource).not.toMatch(/audio\.export\.toggle/);
+  });
+
+  it('routes audio command surfaces through right dock panels', () => {
+    expect(sidePanelItemsSource).toMatch(/panel: 'ai'/);
+    expect(sidePanelItemsSource).toMatch(/panel: 'inspector'/);
+    expect(sidePanelItemsSource).toMatch(/panel: 'effects'/);
+    expect(sidePanelItemsSource).toMatch(/panel: 'markers'/);
+    expect(sidePanelItemsSource).toMatch(/panel: 'recording'/);
+    expect(sidePanelItemsSource).toMatch(/panel: 'export'/);
+    expect(sidePanelItemsSource).toMatch(/panel: 'presets'/);
+    expect(sidePanelSource).toMatch(/<AudioAiOperationPanel \/>/);
+    expect(sidePanelSource).toMatch(/<AudioInspectorPanel \/>/);
+    expect(sidePanelSource).toMatch(/<EffectsPanel chain=\{effectsChain\} \/>/);
+    expect(sidePanelSource).toMatch(/<MarkersRegionsPanel \/>/);
+    expect(sidePanelSource).toMatch(/<RecordingPanel \/>/);
+    expect(sidePanelSource).toMatch(/<ExportPanel \/>/);
+    expect(sidePanelSource).toMatch(/<PresetBrowser \/>/);
   });
 });

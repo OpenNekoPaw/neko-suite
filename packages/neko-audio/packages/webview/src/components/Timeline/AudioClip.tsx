@@ -134,6 +134,7 @@ export function AudioClip({
   const removeElement = useAudioProjectStore((s) => s.removeElement);
   const addElement = useAudioProjectStore((s) => s.addElement);
   const splitElementAt = useAudioProjectStore((s) => s.splitElementAt);
+  const setSelectedWorkbenchTarget = useAudioStore((s) => s.setSelectedWorkbenchTarget);
   const [previewUpdates, setPreviewUpdates] = useState<Partial<TimelineElement> | null>(null);
   const previewElement = previewUpdates
     ? ({ ...element, ...previewUpdates } as TimelineElement)
@@ -203,6 +204,14 @@ export function AudioClip({
     [trackId, element, isMuted, updateElement, removeElement, addElement, splitElementAt],
   );
 
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      setSelectedWorkbenchTarget({ kind: 'clip', trackId, elementId: element.id });
+      interaction.onMouseDown(e);
+    },
+    [element.id, interaction, setSelectedWorkbenchTarget, trackId],
+  );
+
   return (
     <div
       className={`absolute overflow-hidden transition-opacity ${aiHighlighted ? 'neko-ai-clip-highlight' : ''}`}
@@ -223,7 +232,7 @@ export function AudioClip({
         opacity: isMuted ? 0.4 : 1,
       }}
       title={clipName}
-      onMouseDown={locked ? undefined : interaction.onMouseDown}
+      onMouseDown={locked ? undefined : handleMouseDown}
       onMouseMove={locked ? undefined : interaction.onMouseMove}
       onContextMenu={locked ? undefined : handleContextMenu}
     >

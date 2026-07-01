@@ -167,6 +167,61 @@ describe('audioStore', () => {
       expect(getState().error).toBe('Something broke');
       expect(getState().isLoading).toBe(false);
     });
+
+    it('stores workbench selection, tool mode, inspector scope, diagnostics, and AI operations', () => {
+      getState().setSelectedWorkbenchTarget({
+        kind: 'clip',
+        trackId: 'track-1',
+        elementId: 'clip-1',
+      });
+      getState().setActiveTimelineTool('split');
+      getState().setInspectorScope('track');
+      getState().setWorkbenchDiagnostic('audio.workbench.selection.none');
+      getState().addAiOperation({
+        id: 'ai-op-1',
+        actionId: 'denoise',
+        label: 'Denoise',
+        target: { kind: 'clip', trackId: 'track-1', elementId: 'clip-1' },
+        status: 'pending',
+        createdAt: 1,
+        affectedTrackIds: [],
+        affectedElementIds: [],
+        affectedEffectIds: [],
+        affectedMarkerIds: [],
+        reviewState: 'apply-only',
+      });
+
+      expect(getState().selectedWorkbenchTarget).toEqual({
+        kind: 'clip',
+        trackId: 'track-1',
+        elementId: 'clip-1',
+      });
+      expect(getState().activeTimelineTool).toBe('split');
+      expect(getState().inspectorScope).toBe('track');
+      expect(getState().workbenchDiagnostic).toBe('audio.workbench.selection.none');
+      expect(getState().activeSidePanel).toBe('ai');
+      expect(getState().activeAiOperationId).toBe('ai-op-1');
+      expect(getState().aiOperations).toHaveLength(1);
+
+      getState().updateAiOperation('ai-op-1', {
+        status: 'completed',
+        affectedElementIds: ['clip-1'],
+      });
+      expect(getState().aiOperations[0]).toMatchObject({
+        status: 'completed',
+        affectedElementIds: ['clip-1'],
+      });
+
+      getState().clearAiOperation('ai-op-1');
+      expect(getState().aiOperations).toHaveLength(0);
+      expect(getState().activeAiOperationId).toBeNull();
+    });
+
+    it('fails visibly for unknown timeline tool modes', () => {
+      expect(() => getState().setActiveTimelineTool('unknown' as never)).toThrow(
+        'Unknown audio timeline tool mode',
+      );
+    });
   });
 
   // =========================================================================
@@ -215,6 +270,25 @@ describe('audioStore', () => {
       const loudness = { integratedLoudness: -14.2, truePeak: -1.1, loudnessRange: 8.5 };
       getState().setLoudness(loudness);
       expect(getState().loudness).toEqual(loudness);
+      expect(getState().loudnessAnalysisStatus).toBe('available');
+    });
+
+    it('tracks loudness analysis pending, unavailable, and stale request diagnostics', () => {
+      getState().setLoudnessAnalysisPending('request-1');
+      expect(getState().loudnessAnalysisStatus).toBe('pending');
+      expect(getState().loudnessAnalysisRequestId).toBe('request-1');
+
+      getState().setLoudness(
+        { integratedLoudness: -14.2, truePeak: -1.1, loudnessRange: 8.5 },
+        'stale-request',
+      );
+      expect(getState().loudnessAnalysisStatus).toBe('pending');
+      expect(getState().workbenchDiagnostic).toBe('audio.masterReadiness.staleAnalysis');
+
+      getState().setLoudnessAnalysisUnavailable('request-1');
+      expect(getState().loudness).toBeNull();
+      expect(getState().loudnessAnalysisStatus).toBe('unavailable');
+      expect(getState().loudnessAnalysisRequestId).toBeNull();
     });
   });
 
@@ -283,6 +357,11 @@ describe('audioStore', () => {
       expect(s.selection).toBeNull();
       expect(s.showSpectrum).toBe(false);
       expect(s.projectMode).toBe(false);
+      expect(s.selectedWorkbenchTarget).toBeNull();
+      expect(s.activeTimelineTool).toBe('select');
+      expect(s.aiOperations).toEqual([]);
+      expect(s.activeAiOperationId).toBeNull();
+      expect(s.loudnessAnalysisStatus).toBe('idle');
       expect(s.isLoading).toBe(true);
     });
   });

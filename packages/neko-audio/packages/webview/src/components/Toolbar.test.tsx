@@ -12,12 +12,6 @@ vi.mock('../i18n', () => ({
 }));
 
 vi.mock('@neko/ui/icons', () => ({
-  DownloadIcon: ({ size = 16 }: { readonly size?: number }) => (
-    <span data-icon="download">{size}</span>
-  ),
-  PackageIcon: ({ size = 16 }: { readonly size?: number }) => (
-    <span data-icon="package">{size}</span>
-  ),
   RightPanelIcon: ({ size = 16 }: { readonly size?: number }) => (
     <span data-icon="right-panel">{size}</span>
   ),
@@ -43,20 +37,11 @@ describe('Audio toolbar surfaces', () => {
     host.remove();
   });
 
-  it('places audio command buttons and right panel visibility in the left rail', () => {
+  it('keeps the left rail focused on workbench visibility instead of duplicate task actions', () => {
     const onToggleSidePanel = vi.fn();
-    const onOpenExport = vi.fn();
-    const onOpenPackage = vi.fn();
 
     act(() => {
-      root.render(
-        <Toolbar
-          sidePanelVisible={false}
-          onOpenExport={onOpenExport}
-          onOpenPackage={onOpenPackage}
-          onToggleSidePanel={onToggleSidePanel}
-        />,
-      );
+      root.render(<Toolbar sidePanelVisible={false} onToggleSidePanel={onToggleSidePanel} />);
     });
 
     const sidePanelButton = buttonByLabel('audio.sidePanel.show');
@@ -66,37 +51,21 @@ describe('Audio toolbar surfaces', () => {
     expect(host.querySelector('.audio-left-toolbar')?.getAttribute('aria-label')).toBe(
       'audio.toolbar.leftRail',
     );
-    expect(buttonByLabel('audio.spectrum.toggle')).not.toBeNull();
-    expect(buttonByLabel('audio.export.toggle')).not.toBeNull();
-    expect(buttonByLabel('audio.package.project')).not.toBeNull();
-    expect(
-      buttonByLabel('audio.export.toggle')?.getAttribute('data-creative-left-rail-action'),
-    ).toBe('open-export');
-    expect(
-      buttonByLabel('audio.package.project')?.getAttribute('data-creative-left-rail-action'),
-    ).toBe('open-package');
-    expect(buttonByLabel('audio.analysis.loudness')).not.toBeNull();
-    expect(buttonByLabel('audio.analysis.silence')).not.toBeNull();
-    expect(buttonByLabel('audio.analysis.denoise')).not.toBeNull();
-    expect(buttonByLabel('audio.analysis.normalize')).not.toBeNull();
-    expect(
-      buttonByLabel('audio.analysis.loudness')?.getAttribute('data-audio-toolbar-action'),
-    ).toBe('analyze-loudness');
-    expect(
-      buttonByLabel('audio.spectrum.toggle')?.getAttribute('data-creative-left-rail-kind'),
-    ).toBe('common-action');
+    expect(buttonByLabel('audio.spectrum.toggle')).toBeNull();
+    expect(buttonByLabel('audio.export.toggle')).toBeNull();
+    expect(buttonByLabel('audio.package.project')).toBeNull();
+    expect(buttonByLabel('audio.analysis.loudness')).toBeNull();
+    expect(buttonByLabel('audio.analysis.silence')).toBeNull();
+    expect(buttonByLabel('audio.analysis.denoise')).toBeNull();
+    expect(buttonByLabel('audio.analysis.normalize')).toBeNull();
     expect(sidePanelButton?.getAttribute('aria-controls')).toBe('audio-side-panel');
     expect(sidePanelButton?.getAttribute('aria-expanded')).toBe('false');
     expect(sidePanelButton?.getAttribute('data-creative-left-rail-kind')).toBe('visibility-toggle');
     expect(sidePanelButton?.getAttribute('data-creative-left-rail-target')).toBe('right-panel');
     act(() => {
-      buttonByLabel('audio.export.toggle')?.click();
-      buttonByLabel('audio.package.project')?.click();
       sidePanelButton?.click();
     });
 
-    expect(onOpenExport).toHaveBeenCalledTimes(1);
-    expect(onOpenPackage).toHaveBeenCalledTimes(1);
     expect(onToggleSidePanel).toHaveBeenCalledTimes(1);
   });
 

@@ -9,6 +9,7 @@ function createActions() {
     setStreamInfo: vi.fn(),
     setSilenceRegions: vi.fn(),
     setLoudness: vi.fn(),
+    setLoudnessAnalysisUnavailable: vi.fn(),
     showToast: vi.fn(),
   };
 }
@@ -106,23 +107,41 @@ describe('audioProtocolHandler', () => {
     handleAudioResponseMessage(loudness, actions);
     handleAudioResponseMessage(silence, actions);
 
-    expect(actions.setLoudness).toHaveBeenCalledWith({
-      integratedLoudness: -14,
-      truePeak: -1,
-      loudnessRange: 6,
-    });
+    expect(actions.setLoudness).toHaveBeenCalledWith(
+      {
+        integratedLoudness: -14,
+        truePeak: -1,
+        loudnessRange: 6,
+      },
+      undefined,
+    );
     expect(actions.setSilenceRegions).toHaveBeenCalledWith([{ start: 1, end: 2 }]);
+  });
+
+  it('marks loudness analysis unavailable when the result cannot be parsed', () => {
+    const actions = createActions();
+    const message: AudioResponseMessage = {
+      type: 'audio:analysisResult',
+      requestId: 'req-loudness',
+      kind: 'loudness',
+      result: {},
+    };
+
+    expect(handleAudioResponseMessage(message, actions)).toBe(true);
+    expect(actions.setLoudnessAnalysisUnavailable).toHaveBeenCalledWith('req-loudness');
   });
 
   it('shows typed audio errors', () => {
     const actions = createActions();
     const message: AudioResponseMessage = {
       type: 'audio:error',
+      requestId: 'req-loudness',
       success: false,
       error: 'No audio project is open',
     };
 
     expect(handleAudioResponseMessage(message, actions)).toBe(true);
+    expect(actions.setLoudnessAnalysisUnavailable).toHaveBeenCalledWith('req-loudness');
     expect(actions.showToast).toHaveBeenCalledWith('No audio project is open', 'error');
   });
 });
