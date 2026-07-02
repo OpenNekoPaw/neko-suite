@@ -4,12 +4,12 @@
 
 export * from './types';
 export * from './agent-session';
-export { createSkillRunKind, encodeRunKindSegment } from './idc-run-kind';
+export { createSkillCreationKind, encodeCreationKindSegment } from './creation-kind';
 export {
-  createPlanModeIdcMetadata,
-  createSkillExecutionIdcMetadata,
-  mergeIdcExecutionMetadata,
-} from './idc-execution-metadata';
+  createPlanModeCreationMetadata,
+  createSkillExecutionCreationMetadata,
+  mergeCreationExecutionMetadata,
+} from './creation-execution-metadata';
 export {
   initializeSession,
   type SessionComponents,

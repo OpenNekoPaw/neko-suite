@@ -15,15 +15,10 @@ const logger = getLogger('AgentManager');
 import type { ChatMessage } from '@neko/shared';
 import {
   createAgentRuntimeManager,
-  type AgentRunnerIdcWorkflowControlInput,
   type AgentPendingMessageItem,
   type AgentRuntimeManager,
 } from '@neko/agent/runtime';
-import {
-  type AgentHistoryWithToolContextMessage,
-  type IdcWorkflowControlResult,
-  type SkillInjection,
-} from '@neko/agent';
+import { type AgentHistoryWithToolContextMessage, type SkillInjection } from '@neko/agent';
 import { AgentRunner, IAgentRunner } from './agentRunner';
 
 /**
@@ -168,14 +163,6 @@ export interface IAgentManager extends vscode.Disposable {
    * Reverses all injection tracks via SkillInjectionCoordinator.
    */
   clearActiveSkill(conversationId: string): void;
-
-  /**
-   * Explicitly start, resume, or stop an IDC workflow for an already configured Agent session.
-   */
-  controlIdcWorkflow(
-    conversationId: string,
-    input: AgentRunnerIdcWorkflowControlInput,
-  ): IdcWorkflowControlResult;
 
   /**
    * Set the per-conversation skill provider factory for meta tools.
@@ -377,13 +364,6 @@ export class AgentManager implements IAgentManager {
 
   clearActiveSkill(conversationId: string): void {
     this._runtime.clearActiveSkill(conversationId);
-  }
-
-  controlIdcWorkflow(
-    conversationId: string,
-    input: AgentRunnerIdcWorkflowControlInput,
-  ): IdcWorkflowControlResult {
-    return this._runtime.controlIdcWorkflow(conversationId, input);
   }
 
   setSkillProviderFactory(factory: import('@neko/agent').SkillProviderFactory): void {

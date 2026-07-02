@@ -1,5 +1,5 @@
 /**
- * Stage Persona Binding — swaps the persona Skill when the active IDC stage
+ * Stage Persona Binding — swaps the persona Skill when the active built-in creation stage
  * changes.
  *
  * See: docs/architecture/agent-unified-workflow.md §4, §6.5
@@ -55,7 +55,7 @@ export function defaultSkillNameForStage(stage: IdcStage): string {
 // =============================================================================
 
 export interface StagePersonaBindingDeps {
-  /** Source of truth for the current IDC stage. */
+  /** Source of truth for the current built-in creation stage. */
   stageTracker: StageTracker;
   /** Source for the persona Skills. */
   skillRegistry: ISkillRegistry;
@@ -63,7 +63,7 @@ export interface StagePersonaBindingDeps {
   skillService: SkillService;
   /** Applies / removes the injection across the 4 tracks atomically. */
   coordinator?: SkillInjectionCoordinator;
-  /** Canonical lifecycle runtime for IDC-owned stage persona records. */
+  /** Canonical lifecycle runtime for Agent-owned stage persona records. */
   lifecycleRuntime?: SkillLifecycleRuntime;
   /**
    * Override for the stage → skill-name mapping. Defaults to
@@ -72,7 +72,7 @@ export interface StagePersonaBindingDeps {
    */
   skillNameForStage?: (stage: IdcStage) => string;
   /**
-   * Optional provider of the active IdcRun id. When supplied, the binding
+   * Optional provider of the active creation correlation id. When supplied, the binding
    * substitutes `{runId}` occurrences in the persona prompt at activation
    * time so the creation-persona can name the current review context. Null
    * leaves `{runId}` literal in place and the AI must derive the id from the
@@ -208,13 +208,13 @@ class StagePersonaBinding implements IStagePersonaBinding {
         skill,
         injection,
         slot: 'stagePersona',
-        owner: 'idc',
+        owner: 'creation-profile',
         lifetime: {
-          kind: 'idc-stage',
+          kind: 'creation-stage',
           runId: this._runId(),
           stage,
         },
-        source: 'idc-stage',
+        source: 'creation-stage',
       });
       return;
     }
@@ -227,7 +227,7 @@ class StagePersonaBinding implements IStagePersonaBinding {
   }
 
   private _runId(): string {
-    return this._getRunId?.() ?? 'idc-run';
+    return this._getRunId?.() ?? 'agent-creation';
   }
 }
 

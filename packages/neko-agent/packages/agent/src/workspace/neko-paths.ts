@@ -71,7 +71,6 @@ export type NekoCacheFile = keyof typeof NEKO_CACHE_FILES;
  */
 export const NEKO_STATE_FILES = {
   sessionLock: 'session-lock.json',
-  idcRuntime: 'idc-runtime.json',
 } as const;
 
 export type NekoStateFile = keyof typeof NEKO_STATE_FILES;

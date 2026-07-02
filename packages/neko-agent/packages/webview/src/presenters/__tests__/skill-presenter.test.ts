@@ -13,7 +13,7 @@ describe('skill-presenter', () => {
               id: 'record-1',
               skillName: 'creation-persona',
               slot: 'stagePersona',
-              owner: 'idc',
+              owner: 'creation-profile',
               clearable: false,
               lockedReason: 'stage owned',
             },

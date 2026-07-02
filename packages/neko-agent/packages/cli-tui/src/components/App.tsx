@@ -85,7 +85,6 @@ export function App({ config, service, capabilityProviders }: AppProps): React.J
     getCapabilityDiagnostics,
     listCapabilityTools,
     getReferenceContributors,
-    controlIdcWorkflow,
     slashCommands,
   } = useAgentSession({
     config,
@@ -144,7 +143,6 @@ export function App({ config, service, capabilityProviders }: AppProps): React.J
     getCapabilityProviderSummaries,
     getCapabilityDiagnostics,
     listCapabilityTools,
-    controlIdcWorkflow,
   });
 
   // Global keyboard shortcuts

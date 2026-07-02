@@ -593,7 +593,9 @@ describe('executeAgentTurn', () => {
     });
     const { input } = createBaseInput({
       platform,
-      executionOverrides: { metadata: { locale: 'zh', idc: { runKind: 'plan-mode' } } },
+      executionOverrides: {
+        metadata: { locale: 'zh', agentCreation: { creationKind: 'plan-mode' } },
+      },
       agentManager: {
         getOrCreate: vi.fn(() => agentRunner),
         loadHistoryWithContext: vi.fn(),
@@ -1592,8 +1594,8 @@ describe('buildAgentTurnRuntimeInput', () => {
     const onPhaseChange = vi.fn();
     const onErrorMessage = vi.fn();
     const taskManager = {} as never;
-    const workflow = {
-      workflowDefinitionId: 'neko.workflow.idc.v1',
+    const legacyTrace = {
+      workflowDefinitionId: 'neko.legacyTrace.idc.v1',
       workflowRunId: 'run-1',
       workflowNodeId: 'apply',
     };
@@ -1649,7 +1651,7 @@ describe('buildAgentTurnRuntimeInput', () => {
         isPlanMode: vi.fn(() => true),
         getActiveSkillState: vi.fn(() => undefined),
         taskManager,
-        workflow,
+        legacyTrace,
       },
       host: {
         agentManager,
@@ -1703,7 +1705,7 @@ describe('buildAgentTurnRuntimeInput', () => {
     expect(runtimeInput.agentManager).toBe(agentManager);
     expect(runtimeInput.agentManager?.nextMessageQueueSnapshotVersion?.('conv-1')).toBeUndefined();
     expect(runtimeInput.taskManager).toBe(taskManager);
-    expect(runtimeInput.workflow).toBe(workflow);
+    expect(runtimeInput.legacyTrace).toBe(legacyTrace);
     runtimeInput.onErrorMessage?.({
       id: 'error-1',
       role: 'assistant',

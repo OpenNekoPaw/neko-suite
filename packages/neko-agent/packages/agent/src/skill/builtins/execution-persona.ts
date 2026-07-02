@@ -1,7 +1,7 @@
 /**
  * Execution Persona Skill — IDC Apply persona (technical semantics)
  *
- * See: docs/architecture/agent-unified-workflow.md §4 (IDC stages)
+ * See: docs/architecture/agent-unified-workflow.md §4 (built-in creation stages)
  *
  * Activated during the Apply stage (after Draft approval + Plan).
  * Provides the system-operator persona: tool calls, resource management,

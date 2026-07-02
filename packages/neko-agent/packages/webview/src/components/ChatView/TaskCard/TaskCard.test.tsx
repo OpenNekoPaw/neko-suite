@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BackgroundTask } from '@/components/TaskListView';
 import { TaskCard } from './TaskCard';
 
@@ -22,11 +22,45 @@ vi.mock('@neko/shared/vscode', () => ({
 
 vi.mock('@/i18n/I18nContext', () => ({
   useTranslation: () => ({
-    t: (key: string) => (key === 'common.view' ? 'View' : key),
+    t: (key: string) => {
+      const messages: Record<string, string> = {
+        'common.copy': 'Copy',
+        'common.view': 'View',
+        'tasks.viewInVSCode': 'View in VSCode',
+        'tasks.copyResultReference': 'Copy result reference',
+      };
+      return messages[key] ?? key;
+    },
   }),
 }));
 
 describe('TaskCard result actions', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('renders explicit copy and VSCode view actions for completed results', () => {
+    render(<TaskCard task={createCompletedImageTask()} onViewResult={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'View in VSCode' })).toBeTruthy();
+  });
+
+  it('copies the stable result reference from generated asset metadata', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(<TaskCard task={createCompletedImageTask()} onViewResult={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+
+    expect(writeText).toHaveBeenCalledWith('generated-assets/asset-1.png');
+  });
+
   it('renders result previews without path-backed transfer actions', () => {
     render(
       <TaskCard
@@ -59,12 +93,12 @@ describe('TaskCard result actions', () => {
     expect(onViewResult).not.toHaveBeenCalled();
   });
 
-  it('opens the result only from the explicit view button', () => {
+  it('opens the result only from the explicit VSCode view button', () => {
     const onViewResult = vi.fn();
 
     render(<TaskCard task={createCompletedImageTask()} onViewResult={onViewResult} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'View' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View in VSCode' }));
 
     expect(onViewResult).toHaveBeenCalledWith('task-1');
   });
@@ -84,6 +118,23 @@ function createCompletedImageTask(): BackgroundTask {
     updatedAt: '2026-06-20T00:00:01.000Z',
     result: {
       urls: ['webview-uri:/workspace/.neko/generated/image/frame.png'],
+      assets: [
+        {
+          id: 'asset-1',
+          type: 'generated-image',
+          renderUri: 'webview-uri:/workspace/.neko/generated/image/frame.png',
+          assetRef: {
+            assetId: 'asset-1',
+            uri: 'generated-assets/asset-1.png',
+            mimeType: 'image/png',
+          },
+          mimeType: 'image/png',
+          generatedAt: '2026-06-20T00:00:01.000Z',
+          width: 1024,
+          height: 1024,
+          ratio: '1:1',
+        },
+      ],
       width: 1024,
       height: 1024,
     },

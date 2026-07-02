@@ -1,7 +1,5 @@
 /**
- * Execution Events — IDC Apply-stage (execution-persona) event namespace.
- *
- * See: docs/architecture/agent-unified-workflow.md §4, §6.2
+ * Execution Events — apply-stage execution-persona event namespace.
  *
  * Channels follow `execution.<phase>.<verb>` and are **technical-semantic**
  * (system-facing), not user-facing. Emitted while execution-persona is
@@ -13,8 +11,7 @@
  * activated/skipped summary. Per-primitive detail lives on debug channels.
  */
 
-import type { StageSkipReason, StageTaskShape } from './stage';
-import type { IdcRunRoundSummary } from './idc-run';
+import type { StageActivationRoundSummary, StageSkipReason, StageTaskShape } from './stage';
 
 // =============================================================================
 // Channel names
@@ -61,7 +58,7 @@ export interface ExecutionRoundActivationDecidedEvent {
   channel: typeof EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED;
   runId: string;
   taskShape: StageTaskShape;
-  summary: IdcRunRoundSummary;
+  summary: StageActivationRoundSummary;
   at: number;
 }
 

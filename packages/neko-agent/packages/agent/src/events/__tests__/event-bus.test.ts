@@ -22,7 +22,7 @@ function creationStarted(runId = 'r1', at = 1): DualFlowEvent {
   return {
     channel: CREATION_CHANNELS.RUN_STARTED,
     runId,
-    runKind: 'wf',
+    creationKind: 'profile.default',
     at,
   };
 }
@@ -60,7 +60,7 @@ describe('EventBus', () => {
   it('typed payload is narrowed via channel generic', () => {
     const bus = createEventBus();
     bus.on(CREATION_CHANNELS.RUN_STARTED, (event) => {
-      expect(event.runKind).toBe('wf');
+      expect(event.creationKind).toBe('profile.default');
     });
     bus.emit(creationStarted());
   });

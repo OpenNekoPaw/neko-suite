@@ -12,7 +12,6 @@ import { createServiceId, getLogger } from '../base';
 import type { ChatMessage, ConfiguredToolGroup } from '@neko/shared';
 import type {
   AgentRunnerConfirmationRequest,
-  AgentRunnerIdcWorkflowControlInput,
   AgentPendingMessageItem,
   AgentRunnerPort,
   AgentRunnerPortEvent,
@@ -20,7 +19,7 @@ import type {
   AgentRuntimeSessionControllerTarget,
   SubAgentRuntimeCoordinator,
 } from '@neko/agent/runtime';
-import type { AgentEvent, IdcWorkflowControlResult, SubAgentEvent } from '@neko/agent';
+import type { AgentEvent, SubAgentEvent } from '@neko/agent';
 import {
   getEngineClientProvider,
   type IEngineClientProvider,
@@ -229,10 +228,6 @@ export class AgentRunner implements IAgentRunner {
 
   refreshCapabilityRuntime(): void {
     this.port.refreshCapabilityRuntime();
-  }
-
-  controlIdcWorkflow(input: AgentRunnerIdcWorkflowControlInput): IdcWorkflowControlResult {
-    return this.port.controlIdcWorkflow(input);
   }
 
   applySkillInjection(

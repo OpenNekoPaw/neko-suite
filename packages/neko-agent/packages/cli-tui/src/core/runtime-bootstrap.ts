@@ -1,6 +1,6 @@
 import {
   ToolGroupRegistry,
-  createTaskManagerIdcTaskProjection,
+  createTaskManagerCreationTaskProjection,
   registerBuiltinToolGroups,
   type IRuntimeTaskManager,
   type SkillLifecycleRuntime,
@@ -32,7 +32,7 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
   const skillLifecycleRuntime = config.skillLifecycleRuntime;
 
   return {
-    workflowRuntime: {
+    creationGuidance: {
       ...(skillService || skillLifecycleRuntime
         ? {
             stageTracking: {
@@ -41,7 +41,9 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
             },
           }
         : {}),
-      idcTaskProjection: createTaskManagerIdcTaskProjection({ store: config.taskManager }),
+      creationTaskProjection: createTaskManagerCreationTaskProjection({
+        store: config.taskManager,
+      }),
     },
     capabilityRuntime: {
       ...(skillService

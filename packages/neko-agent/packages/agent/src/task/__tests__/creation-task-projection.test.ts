@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Task } from '@neko-agent/types';
-import { createTaskManagerIdcTaskProjection } from '../idc-task-projection';
+import { createTaskManagerCreationTaskProjection } from '../creation-task-projection';
 
-describe('TaskManagerIdcTaskProjection', () => {
-  it('projects IDC task items into IDC projected tasks', async () => {
+describe('TaskManagerCreationTaskProjection', () => {
+  it('projects Agent creation task items into creation projected tasks', async () => {
     const store = {
-      upsertIdcProjectedTask: vi.fn().mockResolvedValue(undefined),
-      clearIdcProjectedTasksForRun: vi.fn().mockResolvedValue([]),
+      upsertCreationProjectedTask: vi.fn().mockResolvedValue(undefined),
+      clearCreationProjectedTasksForRun: vi.fn().mockResolvedValue([]),
       delete: vi.fn().mockResolvedValue(true),
     };
-    const projection = createTaskManagerIdcTaskProjection({ store });
+    const projection = createTaskManagerCreationTaskProjection({ store });
     const task: Task = {
       id: 'task-1',
       createdAt: 10,
@@ -38,19 +38,19 @@ describe('TaskManagerIdcTaskProjection', () => {
       },
     });
 
-    expect(projectedIds).toEqual(['idc:run-1:a', 'idc:run-1:b', 'idc:run-1:c']);
-    expect(store.upsertIdcProjectedTask).toHaveBeenNthCalledWith(
+    expect(projectedIds).toEqual(['creation:run-1:a', 'creation:run-1:b', 'creation:run-1:c']);
+    expect(store.upsertCreationProjectedTask).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        id: 'idc:run-1:a',
+        id: 'creation:run-1:a',
         status: 'pending',
         progress: 0,
       }),
     );
-    expect(store.upsertIdcProjectedTask).toHaveBeenNthCalledWith(
+    expect(store.upsertCreationProjectedTask).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        id: 'idc:run-1:b',
+        id: 'creation:run-1:b',
         status: 'running',
         progress: 50,
         binding: expect.objectContaining({
@@ -66,10 +66,10 @@ describe('TaskManagerIdcTaskProjection', () => {
         content: 'Render preview',
       }),
     );
-    expect(store.upsertIdcProjectedTask).toHaveBeenNthCalledWith(
+    expect(store.upsertCreationProjectedTask).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
-        id: 'idc:run-1:c',
+        id: 'creation:run-1:c',
         status: 'completed',
         progress: 100,
       }),
@@ -79,11 +79,11 @@ describe('TaskManagerIdcTaskProjection', () => {
 
   it('removes stale projected tasks when the checklist shrinks', async () => {
     const store = {
-      upsertIdcProjectedTask: vi.fn().mockResolvedValue(undefined),
-      clearIdcProjectedTasksForRun: vi.fn().mockResolvedValue([]),
+      upsertCreationProjectedTask: vi.fn().mockResolvedValue(undefined),
+      clearCreationProjectedTasksForRun: vi.fn().mockResolvedValue([]),
       delete: vi.fn().mockResolvedValue(true),
     };
-    const projection = createTaskManagerIdcTaskProjection({ store });
+    const projection = createTaskManagerCreationTaskProjection({ store });
 
     await projection.syncTask({
       runId: 'run-2',
@@ -110,26 +110,28 @@ describe('TaskManagerIdcTaskProjection', () => {
       },
     });
 
-    expect(store.delete).toHaveBeenCalledWith('idc:run-2:a');
-    expect(store.upsertIdcProjectedTask).toHaveBeenLastCalledWith(
+    expect(store.delete).toHaveBeenCalledWith('creation:run-2:a');
+    expect(store.upsertCreationProjectedTask).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        id: 'idc:run-2:b',
+        id: 'creation:run-2:b',
         status: 'completed',
       }),
     );
   });
 
-  it('clears persisted IDC projected tasks by run even without in-memory projection state', async () => {
+  it('clears persisted creation projected tasks by legacy trace run even without in-memory projection state', async () => {
     const store = {
-      upsertIdcProjectedTask: vi.fn().mockResolvedValue(undefined),
-      clearIdcProjectedTasksForRun: vi.fn().mockResolvedValue(['idc:run-3:a', 'idc:run-3:b']),
+      upsertCreationProjectedTask: vi.fn().mockResolvedValue(undefined),
+      clearCreationProjectedTasksForRun: vi
+        .fn()
+        .mockResolvedValue(['creation:run-3:a', 'creation:run-3:b']),
       delete: vi.fn().mockResolvedValue(true),
     };
-    const projection = createTaskManagerIdcTaskProjection({ store });
+    const projection = createTaskManagerCreationTaskProjection({ store });
 
     await projection.clearRun('run-3', 301);
 
-    expect(store.clearIdcProjectedTasksForRun).toHaveBeenCalledWith('run-3', 301);
+    expect(store.clearCreationProjectedTasksForRun).toHaveBeenCalledWith('run-3', 301);
     expect(store.delete).not.toHaveBeenCalled();
   });
 });

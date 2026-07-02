@@ -191,7 +191,7 @@ export class TaskHandler {
 
   private async executeOpenPlan(plan: TaskResultOpenPlan): Promise<void> {
     if (plan.kind === 'open-file') {
-      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(plan.filePath));
+      await this.openInVSCode(plan.filePath);
       return;
     }
 
@@ -200,7 +200,7 @@ export class TaskHandler {
       this.deps.generatedAssetLookup,
     );
     if (generatedAssetPath) {
-      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(generatedAssetPath));
+      await this.openInVSCode(generatedAssetPath);
       return;
     }
 
@@ -208,6 +208,36 @@ export class TaskHandler {
       throw new Error(`Generated asset is not available for opening: ${plan.url}`);
     }
 
+    if (isWorkspaceRelativeFilePath(plan.url)) {
+      await this.openInVSCode(plan.url);
+      return;
+    }
+
     await vscode.env.openExternal(vscode.Uri.parse(plan.url));
   }
+
+  private async openInVSCode(filePath: string): Promise<void> {
+    await vscode.commands.executeCommand('vscode.open', this.toVSCodeOpenUri(filePath));
+  }
+
+  private toVSCodeOpenUri(filePath: string): vscode.Uri {
+    if (isAbsoluteFilePath(filePath)) {
+      return vscode.Uri.file(filePath);
+    }
+
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (workspaceFolder) {
+      return vscode.Uri.joinPath(workspaceFolder.uri, filePath);
+    }
+
+    return vscode.Uri.file(filePath);
+  }
+}
+
+function isWorkspaceRelativeFilePath(value: string): boolean {
+  return !/^[a-z][a-z0-9+.-]*:/i.test(value) && value.length > 0;
+}
+
+function isAbsoluteFilePath(value: string): boolean {
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value);
 }

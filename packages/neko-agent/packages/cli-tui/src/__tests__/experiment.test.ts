@@ -45,7 +45,7 @@ vi.mock('@neko/agent', () => ({
     connectAll = vi.fn(async () => undefined);
   },
   createAllMCPTools,
-  createTaskManagerIdcTaskProjection: vi.fn(() => ({ id: 'projection' })),
+  createTaskManagerCreationTaskProjection: vi.fn(() => ({ id: 'projection' })),
   createSkillService: vi.fn(() => ({ registry: { registerSkill: vi.fn() } })),
   createNodeSkillLoader: vi.fn(() => ({ id: 'skill-loader' })),
   ToolRegistry: class ToolRegistry {

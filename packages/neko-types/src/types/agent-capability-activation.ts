@@ -13,8 +13,8 @@ export type AgentCapabilityActivationSource = (typeof AGENT_CAPABILITY_ACTIVATIO
 
 export const AGENT_CAPABILITY_ACTIVATION_TARGETS = [
   'skill',
-  'idc-workflow',
-  'idc-stage',
+  'creation-profile',
+  'creation-stage',
   'execution-mode',
 ] as const;
 

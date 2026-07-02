@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Draft, ExecutionPlan, Task } from '@neko-agent/types';
-import { createWorkspaceArtifactService, toIdcRunArtifactBinding } from '../artifact-service';
+import { createWorkspaceArtifactService, toArtifactScopeBinding } from '../artifact-service';
 
 describe('createWorkspaceArtifactService', () => {
   it('writes draft / plan / task creation documents to creator-facing paths and indexes them by run', async () => {
@@ -89,7 +89,7 @@ describe('createWorkspaceArtifactService', () => {
       expect.objectContaining({ kind: 'plan', artifactId: 'plan-1' }),
       expect.objectContaining({ kind: 'task', artifactId: 'task-1' }),
     ]);
-    expect(toIdcRunArtifactBinding(taskRecord)).toEqual({
+    expect(toArtifactScopeBinding(taskRecord)).toEqual({
       kind: 'task',
       artifactId: 'task-1',
       path: '/workspace/demo/neko/creations/cut-launch-teaser-draft-1/checklist.md',

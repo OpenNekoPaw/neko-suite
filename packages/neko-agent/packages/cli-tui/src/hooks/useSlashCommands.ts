@@ -23,7 +23,6 @@ import {
   type TuiModelIdentity,
   type TuiMcpPorts,
   type TuiCapabilityPorts,
-  type TuiWorkflowPorts,
 } from '../core/tui-command-router';
 import { TuiMessageQueueError, formatTuiQueueError } from '../core/message-queue';
 import { useAgentStore } from '../stores/agent-store';
@@ -76,7 +75,6 @@ interface SlashCommandSessionActions {
   getCapabilityProviderSummaries?: TuiCapabilityPorts['getProviderSummaries'];
   getCapabilityDiagnostics?: TuiCapabilityPorts['getDiagnostics'];
   listCapabilityTools?: TuiCapabilityPorts['listTools'];
-  controlIdcWorkflow?: NonNullable<TuiWorkflowPorts['controlIdcWorkflow']>;
 }
 
 type AgentSessionHandleParameterValidator = NonNullable<
@@ -147,10 +145,6 @@ function isAllowedRunningCommand(input: string): boolean {
   const commandName = input.trim().split(/\s+/)[0]?.slice(1).toLowerCase();
   if (commandName === 'queue' || commandName === 'status' || commandName === 's') {
     return true;
-  }
-  if (commandName === 'idc') {
-    const action = input.trim().split(/\s+/)[1]?.toLowerCase();
-    return action === 'stop';
   }
   return false;
 }
@@ -341,11 +335,6 @@ function createInkRouterContext(
               listTools: sessionActions.listCapabilityTools,
             }
           : undefined,
-      workflow: sessionActions.controlIdcWorkflow
-        ? {
-            controlIdcWorkflow: sessionActions.controlIdcWorkflow,
-          }
-        : undefined,
       status: {
         getSnapshot: () => {
           const status = useAgentStore.getState();

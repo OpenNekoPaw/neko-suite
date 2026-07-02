@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -54,8 +54,6 @@ describe('agent architecture boundary guards', () => {
 
   it('keeps runtime collaborators independent from VSCode, React, Webview, and Extension modules', () => {
     const collaboratorFiles = [
-      join(agentSrc, 'session/session-persistence.ts'),
-      join(agentSrc, 'session/idc-run-lifecycle.ts'),
       join(agentSrc, 'session/session-artifact-facade.ts'),
       join(agentSrc, 'session/feedback-runtime-bridge.ts'),
       join(agentSrc, 'session/prompt-runtime-facade.ts'),
@@ -102,10 +100,10 @@ describe('agent architecture boundary guards', () => {
     const source = readSourceFiles(extensionSrc, (file) => !isTestFile(file));
 
     expect(source).not.toMatch(
-      /class\s+(SessionPersistence|IdcRunLifecycle|SessionArtifactFacade|FeedbackRuntimeBridge|PromptRuntimeFacade)\b/,
+      /class\s+(SessionPersistence|SessionArtifactFacade|FeedbackRuntimeBridge|PromptRuntimeFacade)\b/,
     );
     expect(source).not.toMatch(
-      /from\s+['"][^'"]*session\/(?:session-persistence|idc-run-lifecycle|session-artifact-facade|feedback-runtime-bridge|prompt-runtime-facade)['"]/,
+      /from\s+['"][^'"]*session\/(?:session-persistence|session-artifact-facade|feedback-runtime-bridge|prompt-runtime-facade)['"]/,
     );
   });
 
@@ -266,6 +264,262 @@ describe('agent architecture boundary guards', () => {
 
     expect(violations).toEqual([]);
   });
+
+  it('keeps removed IDC run control APIs out of Agent source and tests', () => {
+    const sourceFiles = listFiles(agentSrc)
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !relativePath.endsWith('architecture-boundary-guards.test.ts'));
+    const forbiddenPatterns = [
+      /\bstartIdcRunWithIntent\b/,
+      /\bstopIdcRunWithIntent\b/,
+      /\bstartIdcRun\s*\(/,
+      /\bgetActiveIdcRun\b/,
+      /\bgetIdcRun\s*\(/,
+      /\blistIdcRuns\b/,
+      /\bcreateIdcRunStore\b/,
+      /\bIIdcRunStore\b/,
+      /\bIdcRunLifecycle\b/,
+      /\b_runStore\b/,
+      /\b_idcRunLifecycle\b/,
+      /\bworkflowRuntime\b/,
+      /\bIWorkflowRuntime\b/,
+    ];
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps legacy IDC workflow control targets out of production activation paths', () => {
+    const sourceFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(extensionSrc),
+      ...listFiles(webviewSrc),
+    ]
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      [/'idc-workflow'/, /"idc-workflow"/, /\bStartIDCWorkflow\b/, /['"`]\/idc(?:\s|['"`])/]
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps legacy idc metadata out of Agent creation guidance parsing', () => {
+    const sourceFiles = [
+      join(agentSrc, 'session/creation-turn-planning.ts'),
+      join(agentSrc, 'session/creation-execution-metadata.ts'),
+    ].map((file) => ({
+      relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+      source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+    }));
+
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      [/metadata\[['"]idc['"]\]/, /\bagentCreation\s*\?\?\s*metadata\[['"]idc['"]\]/]
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps workspace snapshot APIs named as staged creation compatibility, not IDC runtime', () => {
+    const workspaceSrc = join(agentSrc, 'workspace');
+    const sourceFiles = listFiles(workspaceSrc)
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+    const forbiddenPatterns = [
+      /\bidc-runtime-state-(?:store|reader)\b/,
+      /\bcreateIdcRuntimeStateStore\b/,
+      /\breadIdcRuntimeState\b/,
+      /\bparseIdcRuntimeState\b/,
+      /\bIIdcRuntimeStateStore\b/,
+      /\bIdcRuntimeState(?:Input|Snapshot|FsOps|StoreConfig|ReadFsOps)?\b/,
+      /\bReadIdcRuntimeStateConfig\b/,
+      /\bIdcRuntimeRestoreState\b/,
+    ];
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps prompt-chain observation ports from being named as creation runtimes', () => {
+    const sourceFiles = [...listFiles(agentSrc), ...listFiles(join(packageRoot, 'agent-types/src'))]
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !relativePath.endsWith('architecture-boundary-guards.test.ts'));
+
+    const forbiddenPatterns = [
+      /\bConversationSkillCreationRuntimePort\b/,
+      /\bcreationRuntime\??:/,
+      /\b_deps\.creationRuntime\b/,
+      /\bcreation runtime is configured\b/i,
+    ];
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps Agent-native creation as prompt/profile guidance, not a parallel runtime or state store', () => {
+    const forbiddenFiles = [
+      'packages/neko-agent/packages/agent/src/runtime/agent-native-creation-runtime.ts',
+      'packages/neko-agent/packages/agent/src/workspace/staged-creation-snapshot-reader.ts',
+      'packages/neko-agent/packages/agent/src/workspace/staged-creation-snapshot-store.ts',
+      'packages/neko-agent/packages/agent-types/src/creation-activity.ts',
+    ];
+    const existingForbiddenFiles = forbiddenFiles.filter((file) =>
+      existsSync(join(repoRoot, file)),
+    );
+
+    expect(existingForbiddenFiles).toEqual([]);
+
+    const sourceFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(join(packageRoot, 'agent-types/src')),
+      ...listFiles(extensionSrc),
+      ...listFiles(webviewSrc),
+    ]
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !relativePath.endsWith('architecture-boundary-guards.test.ts'));
+
+    const forbiddenPatterns = [
+      /agent-native-creation-runtime/,
+      /staged-creation-snapshot-(?:reader|store)/,
+      /from ['"][^'"]*creation-activity['"]/,
+      /\bAgentNativeCreationRuntime\b/,
+      /\bcreateAgentNativeCreationRuntime\b/,
+      /\bStagedCreationSnapshot\b/,
+      /\bAgentCreationActivity\b/,
+    ];
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps new production code from importing legacy workflow trace DTOs as creation identity', () => {
+    const allowedLegacyFiles = new Set([
+      'packages/neko-agent/packages/agent-types/src/index.ts',
+      'packages/neko-agent/packages/agent-types/src/webview-protocol.ts',
+    ]);
+    const sourceFiles = [
+      ...listFiles(join(packageRoot, 'agent-types/src')),
+      ...listFiles(agentSrc),
+      ...listFiles(extensionSrc),
+      ...listFiles(webviewSrc),
+    ]
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !allowedLegacyFiles.has(relativePath));
+
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      [/from ['"]\.\/workflow['"]/, /from ['"]@neko-agent\/types['"][^;]*AgentWorkflow/]
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+    expect(
+      existsSync(join(repoRoot, 'packages/neko-agent/packages/agent-types/src/workflow.ts')),
+    ).toBe(false);
+  });
+
+  it('keeps production task projection names creation-native outside explicit legacy trace files', () => {
+    const allowedLegacyFiles = new Set(['packages/agent/src/task/creation-projected-task.ts']);
+    const sourceFiles = [...listFiles(join(packageRoot, 'agent-types/src')), ...listFiles(agentSrc)]
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !allowedLegacyFiles.has(relativePath));
+
+    const violations = sourceFiles.flatMap(({ relativePath, source }) => {
+      const patterns = [
+        /\bIIdcTaskProjection\b/,
+        /\bIdcProjectedTask\b/,
+        /\bcreateTaskManagerIdcTaskProjection\b/,
+        /['"`]idc:\$\{/,
+        /source:\s*['"]idc['"]/,
+      ].filter((pattern) => {
+        if (
+          relativePath === 'packages/agent/src/task/task-manager.ts' &&
+          String(pattern) === String(/['"`]idc:\$\{/)
+        ) {
+          return false;
+        }
+        return pattern.test(source);
+      });
+      return patterns.map((pattern) => `${relativePath} matches ${pattern}`);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps the superseded creation-iteration change frozen', () => {
+    const changeDir = join(
+      repoRoot,
+      '../..',
+      'openspec/changes/introduce-agent-creation-iteration-contracts',
+    );
+    const files = [
+      'proposal.md',
+      'design.md',
+      'tasks.md',
+      'specs/agent-creation-iteration-contracts/spec.md',
+    ];
+
+    for (const file of files) {
+      const source = readFileSync(join(changeDir, file), 'utf-8');
+      expect(source).toContain('Superseded by `normalize-agent-native-creation-boundary`');
+    }
+
+    const tasks = readFileSync(join(changeDir, 'tasks.md'), 'utf-8');
+    expect(tasks).not.toMatch(/^- \[ \] \d/m);
+  });
 });
 
 const allowedAgentSessionFieldNames = new Set([
@@ -291,7 +545,7 @@ const allowedAgentSessionFieldNames = new Set([
   '_stageTracker',
   '_stagePersonaBinding',
   '_stageGuardian',
-  '_runStore',
+  '_activeTurnRunId',
   '_reactRunnerState',
   '_reactLoopBaseHooks',
   '_runnerHooks',
@@ -301,11 +555,9 @@ const allowedAgentSessionFieldNames = new Set([
   '_auditsSink',
   '_stepsSink',
   '_artifactWatcher',
-  '_sessionPersistence',
   '_artifactFacade',
   '_feedbackRuntime',
   '_promptRuntime',
-  '_idcRunLifecycle',
   '_feedbackCoordinator',
   '_controlPlane',
   '_operationToolAdapterRegistry',
@@ -331,11 +583,9 @@ const allowedAgentSessionFieldNames = new Set([
 ]);
 
 const approvedAgentSessionCollaboratorFields = new Set([
-  '_sessionPersistence',
   '_artifactFacade',
   '_feedbackRuntime',
   '_promptRuntime',
-  '_idcRunLifecycle',
 ]);
 
 const legacyAgentSessionFieldDebt = new Set([
@@ -355,12 +605,7 @@ const legacyAgentSessionFieldDebt = new Set([
 ]);
 
 type AgentSessionFieldCategory =
-  | 'timer'
-  | 'sink'
-  | 'queue'
-  | 'guidance-state'
-  | 'transition-buffer'
-  | 'prompt-module-instance';
+  'timer' | 'sink' | 'queue' | 'guidance-state' | 'transition-buffer' | 'prompt-module-instance';
 
 function classifyAgentSessionField(
   name: string,

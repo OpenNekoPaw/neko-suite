@@ -215,22 +215,12 @@ export interface SkillCompliance {
 // =============================================================================
 
 export type SkillCatalogRole =
-  | 'orchestrator'
-  | 'focused-skill'
-  | 'standalone'
-  | 'quick-action'
-  | 'persona';
+  'orchestrator' | 'focused-skill' | 'standalone' | 'quick-action' | 'persona';
 
 export type SkillCatalogVisibility = 'primary' | 'advanced' | 'hidden';
 
 export type SkillCatalogActionId =
-  | 'run'
-  | 'edit'
-  | 'reveal'
-  | 'fork'
-  | 'create'
-  | 'duplicate'
-  | 'rescan';
+  'run' | 'edit' | 'reveal' | 'fork' | 'create' | 'duplicate' | 'rescan';
 
 export type SkillCatalogEditableSource = Extract<SkillCatalogSource, 'project' | 'personal'>;
 
@@ -1368,6 +1358,12 @@ const MEDIA_WORKFLOW_DSL_FIELD_NAMES = [
   'workflows',
 ] as const;
 
+const EXECUTABLE_WORKFLOW_LANGUAGE_RE =
+  /\b(?:executable\s+)?(?:workflow|dag|pipeline)\b.{0,80}\b(?:runtime|executor|execut(?:e|able|ion)|node|transition|scheduler|route|branch)\b|\b(?:runtime|executor|scheduler)\b.{0,80}\b(?:workflow|dag|pipeline|node|transition)\b/i;
+const PROMPT_CHAIN_GUIDANCE_RE = /\bprompt-chain\b.{0,80}\bguidance\b/i;
+const NON_EXECUTABLE_WORKFLOW_CLARIFICATION_RE =
+  /\bnot\b.{0,80}\b(?:executable|runtime|dag|workflow\s+runtime|workflow\s+engine)\b|\bno\b.{0,80}\b(?:runtime|dag|workflow\s+engine|executor)\b/i;
+
 const SKILL_CATALOG_ROLES = [
   'orchestrator',
   'focused-skill',
@@ -1428,10 +1424,26 @@ export function validateSkill(skill: Partial<Skill>): SkillValidationResult {
 
   if (typeof skill.content !== 'string' || skill.content.trim().length === 0) {
     errors.push('Missing required field: content');
+  } else {
+    validateSkillPromptChainLanguage(skill.content, warnings);
   }
 
   validateSkillManifest(skill, errors, warnings);
   return { valid: errors.length === 0, errors, warnings };
+}
+
+function validateSkillPromptChainLanguage(content: string, warnings: string[]): void {
+  if (!EXECUTABLE_WORKFLOW_LANGUAGE_RE.test(content)) return;
+  if (
+    PROMPT_CHAIN_GUIDANCE_RE.test(content) &&
+    NON_EXECUTABLE_WORKFLOW_CLARIFICATION_RE.test(content)
+  ) {
+    return;
+  }
+
+  warnings.push(
+    'Skill prompt text appears to describe executable workflow/DAG/runtime behavior. Skills may provide prompt-chain guidance, but execution, lifecycle, approval, and state stay Agent-native.',
+  );
 }
 
 export function validateSkillManifest(

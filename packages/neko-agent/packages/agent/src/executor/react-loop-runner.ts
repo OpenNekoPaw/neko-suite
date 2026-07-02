@@ -5,7 +5,7 @@
  * See: docs/architecture/agent-unified-workflow.md §3 (entry rules), §4 (stages)
  *
  * Design choice: registers as ExecutorHooks instead of patching the
- * executor directly. The executor stays ReAct-pure; the IDC machinery is
+ * executor directly. The executor stays ReAct-pure; the stage guidance is
  * bolted on as a pluggable hook that any session which opts in can wire.
  *
  * Per-iteration behaviour:
@@ -14,7 +14,7 @@
  *     - Derive an entry signal from task shape + round index
  *     - Ask the planner for a StageActivationDecision
  *     - Assert the decision passes dispatcher DAG checks
- *     - Record the round summary on the WorkflowRun store
+ *     - Record the round summary on the Agent-native creation state
  *   afterAct:
  *     - Inspect tool results to decide the NEXT round's lastObserveHint
  *       (retry if any tool errored, normal otherwise)
@@ -42,11 +42,9 @@ import { planStages, type StageEntrySignal } from '../skill/activation/stage-pla
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
 import type { StageTracker } from '../skill/stage-tracker';
 import { assertStageDispatch } from './stage-dispatcher';
-import { roundSummaryFromDecision, type IIdcRunStore } from './idc-run-store';
 import type { IEventBus } from '../events/event-bus';
 import type { IAutohealChain, AutohealOutcome } from '../autoheal';
 import { getLogger } from '../utils/logger';
-import { toSerializableErrorCause } from '../utils/serializable-error';
 
 const logger = getLogger('ReActLoopRunner');
 
@@ -56,15 +54,18 @@ const logger = getLogger('ReActLoopRunner');
 
 export interface ReActLoopRunnerDeps {
   /**
-   * Tracks the current IDC stage. The runner calls `stageTracker.enter()`
+   * Tracks the current built-in creation stage. The runner calls `stageTracker.enter()`
    * with the terminal stage of each round's activation decision, which lets
    * listeners (e.g. StagePersonaBinding) swap the active persona Skill.
    * Optional so lightweight call sites (tests, headless executions) can
    * skip stage tracking entirely.
    */
   stageTracker?: StageTracker;
-  /** Where round summaries get aggregated. */
-  runStore: IIdcRunStore;
+  /**
+   * Existing Agent execution context used for event correlation. This is not a
+   * creation runtime; the runner must not own lifecycle or stage state.
+   */
+  getRunContext: () => ReActLoopRunContext | null;
   /**
    * Resolves the current L2 mode each time a decision is needed. Callers
    * that wire ExecutionMode → StageMode should pass a closure rather than
@@ -102,6 +103,11 @@ export interface ReActLoopRunnerDeps {
   autohealChain?: IAutohealChain;
   /** Clock injection for deterministic tests. Defaults to Date.now. */
   now?: () => number;
+}
+
+export interface ReActLoopRunContext {
+  readonly runId: string;
+  readonly creationKind: string;
 }
 
 export interface TaskShapeSignals {
@@ -175,12 +181,12 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
       subjectAttempts.clear();
 
       if (deps.eventBus) {
-        const activeRun = deps.runStore.getActive();
-        if (activeRun) {
+        const runContext = deps.getRunContext();
+        if (runContext) {
           deps.eventBus.emit({
             channel: CREATION_CHANNELS.RUN_STARTED,
-            runId: activeRun.id,
-            runKind: activeRun.runKind,
+            runId: runContext.runId,
+            creationKind: runContext.creationKind,
             at: clock(),
           });
         }
@@ -214,12 +220,11 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
         logger.error(`Dispatch assertion failed: ${String(err)}`);
       }
 
-      deps.runStore.recordRound(decision, state.nextObserveHint);
       state.lastDecision = decision;
-      const activeRunId = deps.runStore.getActive()?.id;
+      const activeRunId = deps.getRunContext()?.runId;
       const trace = deriveAgentTraceContext(_ctx.trace, {
         ...(activeRunId ? { runId: activeRunId } : {}),
-        phase: 'workflow',
+        phase: 'creation',
       });
 
       // Tell the tracker which stage this round terminated in — persona
@@ -227,7 +232,9 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
       // terminal activated stage (already DAG-sorted by the planner).
       const terminal = terminalStage(decision.activated);
       if (deps.stageTracker && activeRunId) {
-        if (terminal) deps.stageTracker.enter(terminal);
+        if (terminal) {
+          deps.stageTracker.enter(terminal);
+        }
       }
       logger.debug(
         'neko.agent.workflow.stage_activation.decided',
@@ -245,11 +252,11 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
 
       // P5 — compacted round event per plan v2 R9.
       if (deps.eventBus) {
-        const activeRun = deps.runStore.getActive();
-        if (activeRun) {
+        const runContext = deps.getRunContext();
+        if (runContext) {
           deps.eventBus.emit({
             channel: EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED,
-            runId: activeRun.id,
+            runId: runContext.runId,
             taskShape: decision.taskShape,
             summary: roundSummaryFromDecision(decision, state.nextObserveHint),
             at: decision.decidedAt,
@@ -274,7 +281,7 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
       // it matches ApprovalSubject.kind emitted by the ApprovalEngine.
       // StageGuardian pairs approvals and applies by exact subject match.
       if (deps.eventBus && results.length > 0) {
-        const activeRunId = deps.runStore.getActive()?.id;
+        const activeRunId = deps.getRunContext()?.runId;
         if (activeRunId) {
           const at = Date.now();
           for (const result of results) {
@@ -318,7 +325,7 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
 
       const errorCode = getErrorCode(failed);
       const message = getErrorMessage(failed);
-      const runId = deps.runStore.getActive()?.id;
+      const runId = deps.getRunContext()?.runId;
       try {
         const outcome = await deps.autohealChain.run(
           { subject, errorCode, message, attempt, cause: failed },
@@ -349,7 +356,7 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
       // without calling tools) from think+act steps. Consumers of the
       // steps.jsonl audit log use this to bucket rounds.
       if (deps.eventBus) {
-        const activeRunId = deps.runStore.getActive()?.id;
+        const activeRunId = deps.getRunContext()?.runId;
         if (activeRunId) {
           deps.eventBus.emit({
             channel: EXECUTION_CHANNELS.STEP_COMPLETED,
@@ -365,22 +372,12 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
 
     async onExecuteEnd(result: AgentResult) {
       const terminal = result.success ? 'completed' : 'failed';
-      const activeRun = deps.runStore.getActive();
-      deps.runStore.endRun(
-        terminal,
-        result.success
-          ? undefined
-          : {
-              code: 'executor-error',
-              message: result.response ?? 'unknown',
-              cause: toSerializableErrorCause(result.error),
-            },
-      );
+      const runContext = deps.getRunContext();
 
-      if (deps.eventBus && activeRun) {
+      if (deps.eventBus && runContext) {
         deps.eventBus.emit({
           channel: CREATION_CHANNELS.RUN_ENDED,
-          runId: activeRun.id,
+          runId: runContext.runId,
           status: terminal,
           at: clock(),
         });
@@ -389,6 +386,19 @@ export function createReActLoopRunner(deps: ReActLoopRunnerDeps): {
   };
 
   return { hooks, state };
+}
+
+export function roundSummaryFromDecision(
+  decision: StageActivationDecision,
+  lastObserveHint?: string,
+): import('@neko-agent/types').StageActivationRoundSummary {
+  return {
+    round: decision.round,
+    activatedStages: decision.activated,
+    skippedStages: decision.skipped,
+    decidedAt: decision.decidedAt,
+    lastObserveHint,
+  };
 }
 
 // =============================================================================

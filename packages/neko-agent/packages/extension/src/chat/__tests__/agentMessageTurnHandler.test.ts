@@ -602,10 +602,10 @@ describe('AgentMessageTurnHandler', () => {
         'outline the rollout',
         expect.objectContaining({
           metadata: expect.objectContaining({
-            idc: expect.objectContaining({
+            agentCreation: expect.objectContaining({
               entrySignal: 'vague-creative',
               taskShape: 'multi-step',
-              runKind: 'plan-mode',
+              creationKind: 'plan-mode',
             }),
           }),
         }),

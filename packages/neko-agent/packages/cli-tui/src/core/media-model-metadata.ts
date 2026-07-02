@@ -1,4 +1,4 @@
-import { mergeIdcExecutionMetadata } from '@neko/agent';
+import { mergeCreationExecutionMetadata } from '@neko/agent';
 
 type TuiMediaCategory = 'image' | 'video' | 'audio';
 
@@ -20,7 +20,7 @@ export function mergeTuiMediaModelMetadata(
   if (Object.keys(mediaModels).length === 0) {
     return metadata;
   }
-  return mergeIdcExecutionMetadata(metadata, { mediaModels });
+  return mergeCreationExecutionMetadata(metadata, { mediaModels });
 }
 
 export function buildTuiMediaModelMetadata(

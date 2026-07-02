@@ -5,7 +5,7 @@
  * - GetContext: Current state overview (active skill, registered skills, tool categories)
  * - ActivateSkill: AI-driven skill activation (injects domain-specific instructions)
  * - DeactivateSkill: Clear the active skill
- * - StartIDCWorkflow / SetExecutionMode: AI-driven capability activation through typed intents
+ * - SetExecutionMode: AI-driven capability activation through typed intents
  */
 
 import type {
@@ -22,7 +22,7 @@ import type {
   SkillLifecycleDiagnostic,
 } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
-import type { ExecutionMode, IdcWorkflowActivationResult } from '../../session/types';
+import type { ExecutionMode } from '../../session/types';
 
 // =============================================================================
 // Skill Provider Interface
@@ -69,12 +69,6 @@ export interface ISkillProvider {
     removedRecordIds?: readonly string[];
     diagnostics?: readonly SkillLifecycleDiagnostic[];
   }>;
-  /** Start or resume the IDC workflow through an Agent-tool activation intent. */
-  startIdcWorkflow?(input: {
-    readonly runKind: string;
-    readonly runId?: string;
-    readonly reason?: string;
-  }): SkillProviderMaybePromise<IdcWorkflowActivationResult>;
   /** Request an execution-mode change through an Agent-tool activation intent. */
   setExecutionMode?(input: {
     readonly mode: ExecutionMode;
@@ -285,73 +279,6 @@ export class DeactivateSkillTool extends BuiltinTool {
 }
 
 // =============================================================================
-// StartIDCWorkflow Tool
-// =============================================================================
-
-/**
- * StartIDCWorkflow - AI-driven IDC workflow activation.
- */
-export class StartIDCWorkflowTool extends BuiltinTool {
-  readonly name = 'StartIDCWorkflow';
-  readonly description =
-    'Start or resume the IDC workflow when the task needs Draft/Plan/Apply lifecycle tracking. Use this only when the workflow should become visibly active.';
-  readonly parameters: ToolParameters = {
-    type: 'object',
-    properties: {
-      runKind: {
-        type: 'string',
-        description: 'Workflow kind or origin label for the IDC run',
-      },
-      runId: {
-        type: 'string',
-        description: 'Optional stable run id to resume or reuse',
-      },
-      reason: {
-        type: 'string',
-        description: 'Short reason shown in activation provenance',
-      },
-    },
-    required: ['runKind'],
-  };
-  readonly category: ToolCategory = 'system';
-
-  private _skillProvider?: ISkillProvider;
-
-  setSkillProvider(provider: ISkillProvider): void {
-    this._skillProvider = provider;
-  }
-
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
-    const validation = this.validateArgs(args);
-    if (!validation.valid) {
-      return this.error(validation.error ?? 'Invalid arguments');
-    }
-
-    if (!this._skillProvider?.startIdcWorkflow) {
-      return this.error('IDC workflow activation is not initialized');
-    }
-
-    const result = await this._skillProvider.startIdcWorkflow({
-      runKind: String(args.runKind),
-      ...(typeof args.runId === 'string' ? { runId: args.runId } : {}),
-      ...(typeof args.reason === 'string' ? { reason: args.reason } : {}),
-    });
-
-    if (!result.success) {
-      return this.error(result.message);
-    }
-
-    return this.success({
-      started: true,
-      runKind: String(args.runKind),
-      runId: result.runId,
-      message: result.message,
-      diagnostics: result.diagnostics,
-    });
-  }
-}
-
-// =============================================================================
 // SetExecutionMode Tool
 // =============================================================================
 
@@ -432,7 +359,6 @@ export function createCoreMetaTools(
     new GetContextTool(categoryRegistry, skillRegistry),
     new ActivateSkillTool(),
     new DeactivateSkillTool(),
-    new StartIDCWorkflowTool(),
     new SetExecutionModeTool(),
   ];
 }

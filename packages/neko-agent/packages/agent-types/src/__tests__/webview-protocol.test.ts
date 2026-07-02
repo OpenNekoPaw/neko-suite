@@ -1166,65 +1166,6 @@ describe('webview protocol projectors', () => {
     ).toBeNull();
   });
 
-  it('parses explicit IDC workflow controls as conversation-scoped messages', () => {
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'controlIdcWorkflow',
-        conversationId: 'conv-1',
-        action: 'start',
-        runKind: 'idc',
-        reason: 'User clicked start',
-      }),
-    ).toEqual({
-      type: 'controlIdcWorkflow',
-      conversationId: 'conv-1',
-      action: 'start',
-      runKind: 'idc',
-      reason: 'User clicked start',
-    });
-
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'controlIdcWorkflow',
-        conversationId: 'conv-1',
-        action: 'resume',
-        runId: 'run-1',
-      }),
-    ).toEqual({
-      type: 'controlIdcWorkflow',
-      conversationId: 'conv-1',
-      action: 'resume',
-      runId: 'run-1',
-    });
-
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'controlIdcWorkflow',
-        conversationId: 'conv-1',
-        action: 'stop',
-      }),
-    ).toEqual({
-      type: 'controlIdcWorkflow',
-      conversationId: 'conv-1',
-      action: 'stop',
-    });
-
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'controlIdcWorkflow',
-        action: 'start',
-      }),
-    ).toBeNull();
-
-    expect(
-      parseWebviewToExtensionMessage({
-        type: 'controlIdcWorkflow',
-        conversationId: 'conv-1',
-        action: 'auto',
-      }),
-    ).toBeNull();
-  });
-
   it('validates reveal context source contextType against the agent context union', () => {
     expect(
       parseWebviewToExtensionMessage({

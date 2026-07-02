@@ -79,12 +79,12 @@ describe('message runtime helpers', () => {
     });
   });
 
-  it('merges plan-mode IDC metadata with execution overrides and media models', () => {
+  it('merges plan-mode creation metadata with execution overrides and media models', () => {
     expect(
       buildAgentTurnExecutionMetadata(
         'plan',
         {
-          idc: {
+          agentCreation: {
             taskShape: 'single-step',
             custom: true,
           },
@@ -95,10 +95,10 @@ describe('message runtime helpers', () => {
         },
       ),
     ).toEqual({
-      idc: {
+      agentCreation: {
         entrySignal: 'vague-creative',
         taskShape: 'single-step',
-        runKind: 'plan-mode',
+        creationKind: 'plan-mode',
         custom: true,
       },
       traceId: 'trace-1',

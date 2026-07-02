@@ -15,7 +15,7 @@ export type {
   AgentRuntimeConfig,
   ArtifactWatcherFactory,
   ArtifactWatcherRuntimeConfig,
-  IWorkflowRuntime,
+  ICreationGuidanceRuntime,
   IArtifactStore,
   ICapabilityRuntime,
   IFeedbackLoop,
@@ -53,7 +53,7 @@ export {
 
 export {
   createWorkspaceArtifactService,
-  toIdcRunArtifactBinding,
+  toArtifactScopeBinding,
   type AnyArtifactObservedInput,
   type AnyArtifactRecord,
   type ArtifactObservedInput,
@@ -142,17 +142,6 @@ export {
   type AgentRuntimeSessionController,
   type AgentRuntimeSessionControllerTarget,
 } from './agent-runtime-session-controller';
-
-export {
-  IDC_WORKFLOW_DEFINITION_ID,
-  buildWorkflowIdentity,
-  createAgentWorkflowRuntime,
-  createIdcWorkflowDefinition,
-  selectIdcWorkflowEntryNode,
-  type AgentWorkflowRuntime,
-  type AgentWorkflowRuntimeOptions,
-  type CreateAgentWorkflowRunInput,
-} from './agent-workflow-runtime';
 
 export {
   createAgentCapabilityRuntimeRegistries,
@@ -556,10 +545,8 @@ export {
   buildAgentRetryCreationMessage,
   buildAgentScriptCommandMessage,
   createAgentFileContextPayloadId,
-  getAgentCreationQuickStartOptions,
   inferAgentCreationIntentFromFilePath,
   inferAgentFileContextType,
-  type AgentCreationQuickStartOption,
   type AgentPromptCommandKind,
   type AgentScriptCommandKind,
   type BuildAgentCreationMessageInput,

@@ -4,7 +4,7 @@
  * Plan is the parsed output of the agent's `parsePlanMarkdown` function:
  * a structured view of a plan-mode markdown message with numbered steps.
  * It has no relationship to:
- *   - IDC stages (see `./stage` — Specify/Plan/Tasks/Implement are process
+ *   - built-in creation stages (see `./stage` — Specify/Plan/Tasks/Implement are process
  *     stages, not document structures)
  *   - The deleted `WorkflowLitePlan` (a router/pipeline artifact)
  *
@@ -23,13 +23,7 @@
  * "user is reviewing" and "agent is executing".
  */
 export type PlanStatus =
-  | 'pending'
-  | 'in-progress'
-  | 'completed'
-  | 'failed'
-  | 'approved'
-  | 'rejected'
-  | 'modified';
+  'pending' | 'in-progress' | 'completed' | 'failed' | 'approved' | 'rejected' | 'modified';
 
 export interface PlanStep {
   /** Stable step id formed from the plan id + index. */

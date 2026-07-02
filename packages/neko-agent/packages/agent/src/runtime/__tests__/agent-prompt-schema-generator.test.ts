@@ -24,7 +24,7 @@ function injected(overrides: Partial<AgentInjectedCapabilitySet> = {}): AgentInj
     promptFragments: [],
     allowedTools: [],
     slashCommands: [],
-    workflowFragments: [],
+    promptChainFragments: [],
     diagnostics: [],
     ...overrides,
   };
@@ -42,17 +42,18 @@ describe('agent-prompt-schema-generator', () => {
       agentsMdOverlay: 'AGENTS overlay',
       settings: { executionMode: 'plan', temperature: 0.2 },
       activeSkillId: 'skill:storyboard',
-      workflow: {
-        identity: {
+      creation: {
+        creationId: 'creation-1',
+        iterationId: 'iteration-1',
+        profileId: 'idc.default',
+        stage: 'plan',
+        planMode: true,
+        allowedToolNames: ['write_plan'],
+        legacyTrace: {
           workflowDefinitionId: 'idc',
           workflowRunId: 'run-1',
           workflowNodeId: 'plan',
         },
-        stage: 'plan',
-        nodeId: 'plan',
-        nodeKind: 'prompt',
-        planMode: true,
-        allowedToolNames: ['write_plan'],
       },
       injectedCapabilities: injected({
         promptFragments: [{ id: 'skill:storyboard:prompt', content: 'SKILL PROMPT', priority: 75 }],
@@ -89,7 +90,7 @@ describe('agent-prompt-schema-generator', () => {
 
     expect(bundle.sections.map((section) => section.id)).toEqual([
       'base',
-      'workflow:idc-profile',
+      'creation:idc-profile',
       'schema:structured-output',
       'capability:skill:storyboard:prompt',
       'environment:agents-md',
@@ -104,18 +105,20 @@ describe('agent-prompt-schema-generator', () => {
 
       ---
 
-      ## Runtime Workflow Profile
+      ## Creation Profile Guidance
       - Plan mode: enabled
-      - IDC stage: plan
-      - Workflow node: plan
-      - Node kind: prompt
-      - Follow IDC order: Draft clarifies intent, Plan decomposes work, Apply executes verified changes.
+      - Creation profile: idc.default
+      - Creation stage: plan
+      - Creation id: creation-1
+      - Iteration id: iteration-1
+      - Legacy trace node: plan
+      - Follow creation profile guidance: Draft clarifies intent, Plan decomposes work, Apply executes verified changes.
 
       ---
 
       ## Structured Output Contract
       - Expected schema purposes: idc-plan
-      - Return machine-readable JSON when a workflow node explicitly asks for a structured artifact.
+      - Return machine-readable JSON when a creation stage explicitly asks for a structured artifact.
 
       ---
 
@@ -154,7 +157,7 @@ describe('agent-prompt-schema-generator', () => {
     expect(bundle.schemaBundle.structuredOutputSchemas.map((schema) => schema.purpose)).toEqual([
       'idc-plan',
     ]);
-    expect(bundle.snapshot).toEqual({ promptHash: 'af4d7556', schemaHash: '19b94944' });
+    expect(bundle.snapshot).toEqual({ promptHash: 'aa622fed', schemaHash: '022451d8' });
   });
 
   it('projects prompt-only tool instructions for providers without native tool calls', () => {
@@ -163,7 +166,7 @@ describe('agent-prompt-schema-generator', () => {
       injectedCapabilities: injected({ allowedTools: ['write_plan'] }),
       toolSchemas: [toolSchema],
       provider: { toolMode: 'prompt-only', structuredOutputMode: 'prompt-json' },
-      requestedSchemaPurposes: ['workflow-node-output'],
+      requestedSchemaPurposes: ['creation-stage-output'],
     });
 
     expect(bundle.schemaBundle.toolSchemas).toEqual([toolSchema]);

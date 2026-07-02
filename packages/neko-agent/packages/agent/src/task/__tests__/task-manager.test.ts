@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TaskManager } from '../task-manager';
-import { isIdcProjectedTaskPayload } from '../idc-projected-task';
+import { isCreationProjectedTaskPayload } from '../creation-projected-task';
 import type { TaskInput, Task, TaskStatus, TaskExecutor } from '@neko/shared';
 
 describe('TaskManager', () => {
@@ -269,36 +269,36 @@ describe('TaskManager', () => {
       const progressCallback = vi.fn();
 
       await manager.upsertExternalTask({
-        id: 'idc:run-1:item-1',
+        id: 'creation:run-1:item-1',
         type: 'workflow',
         status: 'running',
         input: {
           type: 'workflow',
-          payload: { source: 'idc', runId: 'run-1', itemId: 'item-1' },
+          payload: { source: 'creation', runId: 'run-1', itemId: 'item-1' },
         },
         progress: 50,
         createdAt: 10,
         updatedAt: 20,
       });
-      const unsubscribe = manager.onProgress('idc:run-1:item-1', progressCallback);
+      const unsubscribe = manager.onProgress('creation:run-1:item-1', progressCallback);
 
       await manager.upsertExternalTask({
-        id: 'idc:run-1:item-1',
+        id: 'creation:run-1:item-1',
         type: 'workflow',
         status: 'completed',
         input: {
           type: 'workflow',
-          payload: { source: 'idc', runId: 'run-1', itemId: 'item-1' },
+          payload: { source: 'creation', runId: 'run-1', itemId: 'item-1' },
         },
         progress: 100,
         createdAt: 10,
         updatedAt: 30,
       });
 
-      const task = await manager.get('idc:run-1:item-1');
+      const task = await manager.get('creation:run-1:item-1');
       expect(task).toEqual(
         expect.objectContaining({
-          id: 'idc:run-1:item-1',
+          id: 'creation:run-1:item-1',
           type: 'workflow',
           status: 'completed',
           progress: 100,
@@ -306,7 +306,7 @@ describe('TaskManager', () => {
       );
       expect(progressCallback).toHaveBeenCalledWith(
         expect.objectContaining({
-          id: 'idc:run-1:item-1',
+          id: 'creation:run-1:item-1',
           status: 'completed',
         }),
       );
@@ -314,10 +314,10 @@ describe('TaskManager', () => {
     });
   });
 
-  describe('upsertIdcProjectedTask', () => {
-    it('should persist IDC projected tasks with explicit artifact bindings', async () => {
-      await manager.upsertIdcProjectedTask({
-        id: 'idc:run-1:item-1',
+  describe('upsertCreationProjectedTask', () => {
+    it('should persist staged-creation projected tasks with explicit artifact bindings', async () => {
+      await manager.upsertCreationProjectedTask({
+        id: 'creation:run-1:item-1',
         status: 'running',
         progress: 50,
         createdAt: 10,
@@ -325,7 +325,7 @@ describe('TaskManager', () => {
         content: 'Export teaser',
         activeForm: 'Exporting teaser',
         binding: {
-          source: 'idc',
+          source: 'creation',
           runId: 'run-1',
           checklistId: 'task-1',
           itemId: 'item-1',
@@ -338,16 +338,16 @@ describe('TaskManager', () => {
         },
       });
 
-      const task = await manager.get('idc:run-1:item-1');
+      const task = await manager.get('creation:run-1:item-1');
       expect(task).toEqual(
         expect.objectContaining({
-          id: 'idc:run-1:item-1',
+          id: 'creation:run-1:item-1',
           type: 'workflow',
           status: 'running',
           progress: 50,
         }),
       );
-      expect(isIdcProjectedTaskPayload(task?.input.payload)).toBe(true);
+      expect(isCreationProjectedTaskPayload(task?.input.payload)).toBe(true);
       expect(task?.input.payload).toEqual(
         expect.objectContaining({
           name: 'Export teaser',
@@ -362,79 +362,79 @@ describe('TaskManager', () => {
     });
   });
 
-  describe('clearIdcProjectedTasksForRun', () => {
-    it('should clear only IDC projected tasks bound to the target run provenance', async () => {
-      await manager.upsertIdcProjectedTask({
-        id: 'idc:run-1:item-1',
+  describe('clearCreationProjectedTasksForRun', () => {
+    it('should clear only staged-creation projected tasks bound to the target run provenance', async () => {
+      await manager.upsertCreationProjectedTask({
+        id: 'creation:run-1:item-1',
         status: 'running',
         progress: 50,
         createdAt: 10,
         updatedAt: 20,
         content: 'Export teaser',
         binding: {
-          source: 'idc',
+          source: 'creation',
           runId: 'run-1',
           runStartedAt: 101,
           checklistId: 'task-1',
           itemId: 'item-1',
         },
       });
-      await manager.upsertIdcProjectedTask({
-        id: 'idc:run-1:item-2',
+      await manager.upsertCreationProjectedTask({
+        id: 'creation:run-1:item-2',
         status: 'completed',
         progress: 100,
         createdAt: 11,
         updatedAt: 21,
         content: 'Retry teaser',
         binding: {
-          source: 'idc',
+          source: 'creation',
           runId: 'run-1',
           runStartedAt: 202,
           checklistId: 'task-1b',
           itemId: 'item-2',
         },
       });
-      await manager.upsertIdcProjectedTask({
-        id: 'idc:run-1:item-no-start',
+      await manager.upsertCreationProjectedTask({
+        id: 'creation:run-1:item-no-start',
         status: 'completed',
         progress: 100,
         createdAt: 13,
         updatedAt: 23,
         content: 'Untimed run task',
         binding: {
-          source: 'idc',
+          source: 'creation',
           runId: 'run-1',
           checklistId: 'task-untimed',
           itemId: 'item-no-start',
         },
       });
-      await manager.upsertIdcProjectedTask({
-        id: 'idc:run-2:item-1',
+      await manager.upsertCreationProjectedTask({
+        id: 'creation:run-2:item-1',
         status: 'completed',
         progress: 100,
         createdAt: 12,
         updatedAt: 22,
         content: 'Render preview',
         binding: {
-          source: 'idc',
+          source: 'creation',
           runId: 'run-2',
           checklistId: 'task-2',
           itemId: 'item-1',
         },
       });
 
-      const deletedIds = await manager.clearIdcProjectedTasksForRun('run-1', 101);
+      const deletedIds = await manager.clearCreationProjectedTasksForRun('run-1', 101);
 
-      expect(deletedIds).toEqual(['idc:run-1:item-1']);
-      expect(await manager.get('idc:run-1:item-1')).toBeUndefined();
-      expect(await manager.get('idc:run-1:item-2')).toEqual(
-        expect.objectContaining({ id: 'idc:run-1:item-2' }),
+      expect(deletedIds).toEqual(['creation:run-1:item-1']);
+      expect(await manager.get('creation:run-1:item-1')).toBeUndefined();
+      expect(await manager.get('creation:run-1:item-2')).toEqual(
+        expect.objectContaining({ id: 'creation:run-1:item-2' }),
       );
-      expect(await manager.get('idc:run-1:item-no-start')).toEqual(
-        expect.objectContaining({ id: 'idc:run-1:item-no-start' }),
+      expect(await manager.get('creation:run-1:item-no-start')).toEqual(
+        expect.objectContaining({ id: 'creation:run-1:item-no-start' }),
       );
-      expect(await manager.get('idc:run-2:item-1')).toEqual(
-        expect.objectContaining({ id: 'idc:run-2:item-1' }),
+      expect(await manager.get('creation:run-2:item-1')).toEqual(
+        expect.objectContaining({ id: 'creation:run-2:item-1' }),
       );
     });
   });

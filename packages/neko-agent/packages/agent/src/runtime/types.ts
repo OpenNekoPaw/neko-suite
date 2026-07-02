@@ -7,7 +7,7 @@ import type {
   IOperationToolAdapterRegistry,
   PromptFragment,
 } from '@neko/shared';
-import type { AgentWorkflowIdentity, IdcStage } from '@neko-agent/types';
+import type { AgentLegacyCreationTrace, IdcStage } from '@neko-agent/types';
 import type { IArtifactWatcher } from '../artifact';
 import type { IEventBus } from '../events';
 import type { SkillService } from '../skill/skill-service';
@@ -50,15 +50,17 @@ export interface IRuntimeWorkspaceFsOps {
 }
 
 /**
- * Workflow runtime contract.
+ * Agent creation guidance/bootstrap contract.
  *
- * Owns stage-tracking and IDC entry/runtime coordination, but stays
- * intentionally narrow so different hosts can bootstrap the same
- * session/runtime stack without duplicating configuration glue.
+ * This is not a creation runtime. Existing Agent session/turn/capability
+ * machinery owns lifecycle, validation feedback, approval, state, artifact
+ * provenance, and side-effect decisions. This port only carries declarative
+ * stage/prompt-chain guidance adapters plus quarantined legacy trace plumbing.
  */
-export interface IWorkflowRuntime {
-  readonly workflow?: {
-    readonly active?: AgentWorkflowIdentity;
+export interface ICreationGuidanceRuntime {
+  /** Legacy trace projection only; not canonical creation state. */
+  readonly legacyTrace?: {
+    readonly active?: AgentLegacyCreationTrace;
   };
   readonly stageTracking?: {
     readonly skillRegistry?: ISkillRegistry;
@@ -67,7 +69,7 @@ export interface IWorkflowRuntime {
     readonly initialStage?: IdcStage;
     readonly guardian?: false | Record<string, unknown>;
   };
-  readonly idcTaskProjection?: import('../task').IIdcTaskProjection;
+  readonly creationTaskProjection?: import('../task').ICreationTaskProjection;
   readonly controlPlane?: IControlPlane;
 }
 
@@ -143,7 +145,7 @@ export interface IFeedbackLoop {
  * Hosts may supply any subset; explicit session-config fields still win.
  */
 export interface AgentRuntimeConfig {
-  readonly workflowRuntime?: IWorkflowRuntime;
+  readonly creationGuidance?: ICreationGuidanceRuntime;
   readonly artifactStore?: IArtifactStore;
   readonly capabilityRuntime?: ICapabilityRuntime;
   readonly feedbackLoop?: IFeedbackLoop;

@@ -2,7 +2,7 @@
  * ArtifactValidator — pure, dependency-free frontmatter schema check for the
  * three IDC artifact families (Draft / Plan / Task).
  *
- * See: docs/architecture/agent-unified-workflow.md §4 (IDC stages), §7.5
+ * See: docs/architecture/agent-unified-workflow.md §4 (built-in creation stages), §7.5
  *      (frontmatter minimum)
  *
  * Phase B (2026-04-22): when the dedicated `DraftWriteTool` / `TaskWriteTool` /

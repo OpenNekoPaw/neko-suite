@@ -1,7 +1,7 @@
 /**
- * Stage Tracker — owns the current IDC stage and emits enter/exit events.
+ * Stage Tracker — owns the current built-in creation stage and emits enter/exit events.
  *
- * See: docs/architecture/agent-unified-workflow.md §4 (IDC stages), §6.5
+ * See: docs/architecture/agent-unified-workflow.md §4 (built-in creation stages), §6.5
  *      (L0 StageTracker infrastructure)
  *
  * Replaces FlowSwitcher. Whereas FlowSwitcher modelled a two-ring cycle

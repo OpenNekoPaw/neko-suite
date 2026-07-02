@@ -204,7 +204,7 @@ export function projectContentBlockUi(input: ProjectContentBlockUiInput): Conten
         ...base,
         renderKind: 'markdown',
         content: input.block.content,
-        renderStreaming: input.block.isStreaming === true || parentIsStreaming,
+        renderStreaming: input.block.isStreaming === true,
         ...(input.siblingBlocks ? { siblingBlocks: input.siblingBlocks } : {}),
         ...(input.toolCalls || input.ambientToolCalls
           ? {

@@ -11,8 +11,8 @@
  *   event so the narrator + agent can surface a hint on the next turn.
  * - **Debounced**: 300ms, so rapid rewrites (e.g. editor auto-save during AI
  *   authoring) collapse to one event per file.
- * - **Pure event side** only — the watcher does not read the IdcRunStore or
- *   inject runId into files. Caller supplies `getRunId()` for correlation and
+ * - **Pure event side** only — the watcher does not read staged creation state or
+ *   inject runId into files. Caller supplies `getRunId()` for compatibility correlation and
  *   `getCreationId()` for the visible directory. With no active creation at
  *   startup the watcher does not create or observe a directory.
  * - **Test-friendly**: `fsOps` is injectable so a test runner can spy on
@@ -61,7 +61,7 @@ export interface ArtifactWatcherHandle {
 export interface ArtifactWatcherConfig {
   paths: ICreationArtifactPaths;
   eventBus: IEventBus;
-  /** Returns the active IdcRun id. `null` skips watcher startup. */
+  /** Returns the active artifact correlation id. `null` skips watcher startup. */
   getRunId: () => string | null;
   /** Returns the active creator-facing creation id. `null` skips watcher startup. */
   getCreationId: () => string | null;

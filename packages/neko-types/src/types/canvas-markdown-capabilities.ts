@@ -665,9 +665,10 @@ function isCanvasMarkdownApprovalContext(value: unknown): value is AgentCapabili
     optionalString(value['approvalId']) &&
     optionalNumber(value['approvedAt']) &&
     optionalString(value['approvedBy']) &&
-    optionalString(value['workflowDefinitionId']) &&
-    optionalString(value['workflowRunId']) &&
-    optionalString(value['workflowNodeId']) &&
+    optionalString(value['creationId']) &&
+    optionalString(value['iterationId']) &&
+    optionalString(value['profileId']) &&
+    optionalString(value['stageId']) &&
     optionalString(value['toolCallId'])
   );
 }

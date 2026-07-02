@@ -58,7 +58,7 @@ export type Paradigm =
 // =============================================================================
 
 /**
- * The three IDC stages (agent-unified-workflow.md §4.1).
+ * The three built-in creation stages (agent-unified-workflow.md §4.1).
  *
  * - draft: Business-declarative (What). AI produces a Draft, user approves.
  * - plan:  Technical-imperative (How). AI compiles an ExecutionPlan and its
@@ -112,7 +112,7 @@ export type StageSkipReason =
 
 /**
  * Result of the stage-planner for one ReAct round. Consumed by
- * IdcRunRoundSummary for per-round telemetry compaction.
+ * StageActivationRoundSummary for per-round telemetry compaction.
  */
 export interface StageActivationDecision {
   /** Task shape used to drive the decision. */
@@ -137,3 +137,25 @@ export interface StageActivationDecision {
  * agent package to construct valid sets.
  */
 export type StageSet = readonly IdcStage[];
+
+/**
+ * Compact summary of one Agent ReAct round's stage activation.
+ *
+ * This is event telemetry only. It must not become a run/activity state model
+ * or a workflow execution record.
+ */
+export interface StageActivationRoundSummary {
+  /** 0-based round index within the current Agent turn. */
+  round: number;
+  /** Stages activated this round. Built-in IDC stages remain DAG-ordered. */
+  activatedStages: readonly IdcStage[];
+  /** Stages considered and skipped, with reason codes. */
+  skippedStages: readonly {
+    stage: IdcStage;
+    reason: StageSkipReason;
+  }[];
+  /** Wall-clock when the activation decision was made. */
+  decidedAt: number;
+  /** Optional free-form hint from the prior observe that shaped this round. */
+  lastObserveHint?: string;
+}

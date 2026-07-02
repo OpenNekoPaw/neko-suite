@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
-  getIdcProjectedTaskRunBinding,
-  getIdcProjectedTaskRunId,
-  isIdcProjectedTaskPayload,
-  toSerializableIdcProjectedTask,
-  toIdcProjectedTaskPayload,
-} from '../idc-projected-task';
+  getCreationProjectedTaskRunBinding,
+  getCreationProjectedTaskRunId,
+  isCreationProjectedTaskPayload,
+  toSerializableCreationProjectedTask,
+  toCreationProjectedTaskPayload,
+} from '../creation-projected-task';
 
-describe('idc-projected-task', () => {
-  it('serializes explicit IDC projected task bindings into shared task payloads', () => {
-    const task = toSerializableIdcProjectedTask({
-      id: 'idc:run-1:item-1',
+describe('creation-projected-task', () => {
+  it('serializes Agent creation projected task bindings into shared task payloads', () => {
+    const task = toSerializableCreationProjectedTask({
+      id: 'creation:run-1:item-1',
       status: 'running',
       progress: 50,
       createdAt: 10,
@@ -18,7 +18,7 @@ describe('idc-projected-task', () => {
       content: 'Export teaser',
       activeForm: 'Exporting teaser',
       binding: {
-        source: 'idc',
+        source: 'creation',
         runId: 'run-1',
         runStartedAt: 101,
         checklistId: 'task-1',
@@ -39,10 +39,12 @@ describe('idc-projected-task', () => {
         input: {
           type: 'workflow',
           payload: {
-            source: 'idc',
+            source: 'creation',
             name: 'Export teaser',
-            runId: 'run-1',
-            runStartedAt: 101,
+            legacyTrace: {
+              runId: 'run-1',
+              runStartedAt: 101,
+            },
             checklistId: 'task-1',
             itemId: 'item-1',
             activeForm: 'Exporting teaser',
@@ -58,16 +60,16 @@ describe('idc-projected-task', () => {
     );
   });
 
-  it('guards IDC projected task payload shape', () => {
-    const validPayload = toIdcProjectedTaskPayload({
-      id: 'idc:run-1:item-1',
+  it('guards Agent creation projected task payload shape', () => {
+    const validPayload = toCreationProjectedTaskPayload({
+      id: 'creation:run-1:item-1',
       status: 'completed',
       progress: 100,
       createdAt: 10,
       updatedAt: 30,
       content: 'Export teaser',
       binding: {
-        source: 'idc',
+        source: 'creation',
         runId: 'run-1',
         runStartedAt: 101,
         checklistId: 'task-1',
@@ -75,21 +77,25 @@ describe('idc-projected-task', () => {
       },
     });
 
-    expect(isIdcProjectedTaskPayload(validPayload)).toBe(true);
-    expect(isIdcProjectedTaskPayload({ ...validPayload, content: 'Export teaser' })).toBe(false);
-    expect(isIdcProjectedTaskPayload({ source: 'idc', runId: 'run-1' })).toBe(false);
+    expect(isCreationProjectedTaskPayload(validPayload)).toBe(true);
+    expect(isCreationProjectedTaskPayload({ ...validPayload, content: 'Export teaser' })).toBe(
+      false,
+    );
+    expect(isCreationProjectedTaskPayload({ ...validPayload, runId: 'run-1' })).toBe(false);
+    expect(isCreationProjectedTaskPayload({ ...validPayload, source: 'idc' })).toBe(false);
+    expect(isCreationProjectedTaskPayload({ source: 'creation', runId: 'run-1' })).toBe(false);
   });
 
-  it('extracts run id only from IDC projected tasks with the explicit payload contract', () => {
-    const workflowTask = toSerializableIdcProjectedTask({
-      id: 'idc:run-1:item-1',
+  it('extracts legacy trace run id only from Agent creation projected task payloads', () => {
+    const workflowTask = toSerializableCreationProjectedTask({
+      id: 'creation:run-1:item-1',
       status: 'completed',
       progress: 100,
       createdAt: 10,
       updatedAt: 30,
       content: 'Export teaser',
       binding: {
-        source: 'idc',
+        source: 'creation',
         runId: 'run-1',
         runStartedAt: 101,
         checklistId: 'task-1',
@@ -97,13 +103,13 @@ describe('idc-projected-task', () => {
       },
     });
 
-    expect(getIdcProjectedTaskRunBinding(workflowTask)).toEqual({
+    expect(getCreationProjectedTaskRunBinding(workflowTask)).toEqual({
       runId: 'run-1',
       runStartedAt: 101,
     });
-    expect(getIdcProjectedTaskRunId(workflowTask)).toBe('run-1');
+    expect(getCreationProjectedTaskRunId(workflowTask)).toBe('run-1');
     expect(
-      getIdcProjectedTaskRunId({
+      getCreationProjectedTaskRunId({
         type: 'custom',
         input: { type: 'custom', payload: {} },
       }),

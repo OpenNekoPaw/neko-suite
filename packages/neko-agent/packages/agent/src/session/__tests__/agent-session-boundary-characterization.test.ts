@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  createAgentCapabilityActivationIntent,
-  createTool,
-  type IService,
-  type StreamChunk,
-} from '@neko/shared';
+import { createTool, type IService, type StreamChunk } from '@neko/shared';
 import type { Draft, ExecutionPlan, Task } from '@neko-agent/types';
 import { AgentSession } from '../agent-session';
 import type { AgentEvent, AgentSessionConfig, ExecutionMode, IJournalWriter } from '../types';
@@ -94,25 +89,6 @@ function createConfig(overrides: Partial<AgentSessionConfig> = {}): AgentSession
     maxIterations: 3,
     ...overrides,
   };
-}
-
-function startIdcRunForTest(session: AgentSession, runKind: string, runId: string): string | null {
-  return (
-    session.startIdcRunWithIntent({
-      runKind,
-      runId,
-      intent: createAgentCapabilityActivationIntent({
-        conversationId: 'conv-boundary',
-        source: 'user-explicit',
-        target: 'idc-workflow',
-        action: 'resume',
-        name: runKind,
-        requestedBy: 'user',
-        reason: `Test starts IDC workflow ${runKind}`,
-        createdAt: Date.now(),
-      }),
-    }).runId ?? null
-  );
 }
 
 class CapturingJournalWriter implements IJournalWriter {
@@ -327,7 +303,7 @@ class OneShotFeedbackCoordinator implements IFeedbackCoordinator {
 }
 
 describe('AgentSession boundary characterization', () => {
-  it('dispatches ordinary turns without default IDC run or stage activation', async () => {
+  it('dispatches ordinary turns without legacy IDC run controls', async () => {
     const journalWriter = new CapturingJournalWriter();
     const session = new AgentSession(
       createConfig({
@@ -351,9 +327,7 @@ describe('AgentSession boundary characterization', () => {
     expect(session.getHistory().map((message) => message.role)).toEqual(
       expect.arrayContaining(['system', 'user', 'assistant']),
     );
-    expect(session.getActiveIdcRun()).toBeNull();
-    expect(session.listIdcRuns()).toEqual([]);
-    expect(session.getCurrentStage()).toBeNull();
+    expect(session.getCurrentStage()).toBe('apply');
 
     session.dispose();
     expect(journalWriter.dispose).toHaveBeenCalledTimes(1);
@@ -421,31 +395,23 @@ describe('AgentSession boundary characterization', () => {
         stageTracking: { guardian: false },
       }),
     );
-    const runId = startIdcRunForTest(session, 'test', 'run-artifact');
-    expect(runId).toBe('run-artifact');
-
     const draft = createDraft('draft-1', 100);
     const plan = createPlan('plan-1', 101);
     const task = createTask('task-1', 102);
 
-    await session.writeDraftArtifact(draft);
-    await session.writePlanArtifact(plan);
-    await session.writeTaskArtifact(task);
+    const legacyTrace = { runId: 'legacy-trace-artifact' };
+    await session.writeDraftArtifact(draft, legacyTrace);
+    await session.writePlanArtifact(plan, legacyTrace);
+    await session.writeTaskArtifact(task, legacyTrace);
     await session.flushWorkspaceSink();
 
-    expect(session.getArtifactsForRun('run-artifact').map((record) => record.kind)).toEqual([
+    const artifactRunIds = session.listArtifactRunIds();
+    expect(artifactRunIds).toHaveLength(1);
+    expect(session.getArtifactsForRun(artifactRunIds[0]!).map((record) => record.kind)).toEqual([
       'draft',
       'plan',
       'task',
     ]);
-    expect(session.listArtifactRunIds()).toEqual(['run-artifact']);
-    expect(session.getActiveIdcRun()).toEqual(
-      expect.objectContaining({
-        draft,
-        plan,
-        task,
-      }),
-    );
 
     await collect(session.execute('apply feedback guidance'));
 
@@ -454,76 +420,6 @@ describe('AgentSession boundary characterization', () => {
     session.dispose();
     expect(artifactService.dispose).toHaveBeenCalledTimes(1);
     expect(feedbackCoordinator.dispose).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects the legacy IDC start path without creating an active run', () => {
-    const activationEvents: import('@neko/shared').AgentCapabilityActivationProgressEvent[] = [];
-    const session = new AgentSession(
-      createConfig({
-        stageTracking: { guardian: false },
-        onActivationProgress: (_conversationId, events) => {
-          activationEvents.push(...events);
-        },
-      }),
-    );
-
-    const runId = session.startIdcRun('legacy', 'run-legacy');
-
-    expect(runId).toBeNull();
-    expect(session.getActiveIdcRun()).toBeNull();
-    expect(activationEvents).toEqual([
-      expect.objectContaining({
-        step: 'failed',
-        status: 'failed',
-        diagnostics: [
-          expect.objectContaining({
-            code: 'implicit-idc-start-rejected',
-          }),
-        ],
-      }),
-    ]);
-    session.dispose();
-  });
-
-  it('rejects IDC workflow intents with non-start actions', () => {
-    const activationEvents: import('@neko/shared').AgentCapabilityActivationProgressEvent[] = [];
-    const session = new AgentSession(
-      createConfig({
-        stageTracking: { guardian: false },
-        onActivationProgress: (_conversationId, events) => {
-          activationEvents.push(...events);
-        },
-      }),
-    );
-
-    const result = session.startIdcRunWithIntent({
-      runKind: 'invalid',
-      intent: createAgentCapabilityActivationIntent({
-        conversationId: 'conv-boundary',
-        source: 'agent-tool',
-        target: 'idc-workflow',
-        action: 'deactivate',
-        name: 'invalid',
-        requestedBy: 'agent',
-        reason: 'Invalid test intent',
-        createdAt: Date.now(),
-      }),
-    });
-
-    expect(result.success).toBe(false);
-    expect(session.getActiveIdcRun()).toBeNull();
-    expect(activationEvents).toEqual([
-      expect.objectContaining({
-        step: 'failed',
-        status: 'failed',
-        diagnostics: [
-          expect.objectContaining({
-            code: 'invalid-idc-workflow-activation-intent',
-          }),
-        ],
-      }),
-    ]);
-    session.dispose();
   });
 });
 

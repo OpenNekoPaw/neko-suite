@@ -12,7 +12,7 @@ const SLOT_PRIORITY: Record<SkillLifecycleSlot, number> = {
   stagePersona: 10,
   domainSkill: 20,
   referenceSkill: 30,
-  workflowSkill: 40,
+  promptChainSkill: 40,
   ephemeralSkill: 50,
 };
 
@@ -23,7 +23,7 @@ const SLOT_MODEL_SOURCE: Record<
   stagePersona: 'stagePersona',
   domainSkill: 'domainSkill',
   referenceSkill: 'runtime',
-  workflowSkill: 'workflowSkill',
+  promptChainSkill: 'promptChainSkill',
   ephemeralSkill: 'runtime',
 };
 
@@ -243,10 +243,10 @@ function projectExpiry(record: SkillLifecycleRecord): string | undefined {
   switch (record.lifetime.kind) {
     case 'turn':
       return `turn:${record.lifetime.turnId}`;
-    case 'idc-stage':
-      return `idc-stage:${record.lifetime.runId}:${record.lifetime.stage}`;
-    case 'workflow':
-      return `workflow:${record.lifetime.runId}`;
+    case 'creation-stage':
+      return `creation-stage:${record.lifetime.runId}:${record.lifetime.stage}`;
+    case 'prompt-chain':
+      return `prompt-chain:${record.lifetime.runId}`;
     case 'inactivity':
       return `inactive:${record.lifetime.maxIdleTurns}`;
     case 'conversation':

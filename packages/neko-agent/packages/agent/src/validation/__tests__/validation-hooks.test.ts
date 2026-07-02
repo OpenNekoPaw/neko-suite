@@ -459,6 +459,52 @@ describe('ValidationHooks', () => {
       });
     });
 
+    it('records Agent-native validation feedback without rewriting streamed output', async () => {
+      const recordValidationFeedback = vi.fn();
+      const hooks = new ValidationHooks({
+        outputConstraints: {
+          mermaidPreValidate: false,
+          onValidationFail: 'retry',
+        },
+        creationFeedback: {
+          recordValidationFeedback,
+        },
+      });
+      const originalContent = [
+        '| 镜号 | 来源页 | 画面内容 |',
+        '| --- | --- | --- |',
+        '| S01 | P1 | 主角站在巨构前 |',
+      ].join('\n');
+      const step = createTestStep(originalContent);
+      const context = createTestContextWithMetadata({
+        skillValidationRequirements: ['creative-table.storyboard'],
+        agentCreation: {
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+        },
+      });
+
+      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
+
+      expect(step.content).toBe(originalContent);
+      expect(recordValidationFeedback).toHaveBeenCalledWith({
+        creationId: 'creation-1',
+        iterationId: 'iteration-1',
+        validatorId: 'creative-table.storyboard',
+        status: 'failed',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            severity: 'error',
+            code: expect.stringContaining('storyboard-table-'),
+          }),
+        ]),
+        metadata: expect.objectContaining({
+          feedbackAction: 'revise',
+          preserveStreamedOutput: true,
+        }),
+      });
+    });
+
     it('localizes storyboard creative table repair requests when runtime locale is Chinese', async () => {
       const hooks = new ValidationHooks({
         outputConstraints: {

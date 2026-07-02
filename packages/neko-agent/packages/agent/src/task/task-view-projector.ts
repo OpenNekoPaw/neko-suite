@@ -15,11 +15,7 @@ import type { AgentBackgroundTask } from '@neko-agent/types';
 
 export type BackgroundTaskViewType = 'image' | 'video' | 'audio';
 export type BackgroundTaskViewStatus =
-  | 'queued'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+  'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
 export interface BackgroundTaskView {
   id: string;
@@ -393,7 +389,12 @@ function stripNestedRenderableAssetPaths<
 }
 
 function isStableTaskResultUrl(value: string): boolean {
-  return isPublicGeneratedAssetResultUri(value);
+  return isPublicGeneratedAssetResultUri(value) && !isWebviewRenderUri(value);
+}
+
+function isWebviewRenderUri(value: string): boolean {
+  const scheme = value.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
+  return Boolean(scheme?.includes('webview')) || /^webview-/i.test(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

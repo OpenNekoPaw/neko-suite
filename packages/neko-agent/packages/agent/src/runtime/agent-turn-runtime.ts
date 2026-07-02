@@ -5,6 +5,7 @@ import type {
   MessageQueuedMessage,
   AgentMessageQueueSnapshot,
   AgentQueuedMessageItem,
+  AgentLegacyCreationTrace,
   AgentModelSlots,
   AgentMediaModelSelections,
   AgentPhase,
@@ -12,7 +13,6 @@ import type {
   Message,
   ModelRef,
   ToolConfirmationMessage,
-  AgentWorkflowIdentity,
 } from '@neko-agent/types';
 import {
   buildAgentPhaseMessage,
@@ -271,7 +271,7 @@ export interface ExecuteAgentTurnInput<
   readonly generateMessageId: () => string;
   readonly now?: () => number;
   readonly taskManager?: IRuntimeTaskManager;
-  readonly workflow?: AgentWorkflowIdentity;
+  readonly legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export type AgentTurnHostMessage =
@@ -778,7 +778,7 @@ async function executeAgentTurnMessage<
       ? timelineContextPacket
       : null,
     canvasContextPacket,
-    ...(input.input.workflow ? { workflow: input.input.workflow } : {}),
+    ...(input.input.legacyTrace ? { legacyTrace: input.input.legacyTrace } : {}),
   });
 
   const contextPatch = buildAgentTurnContextPatch({

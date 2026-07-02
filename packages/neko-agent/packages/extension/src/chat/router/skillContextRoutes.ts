@@ -60,23 +60,6 @@ export function tryHandleSkillContextRoute(
       return true;
     }
 
-    case 'controlIdcWorkflow': {
-      const conversationId = resolveRequiredConversationId(
-        webview,
-        message,
-        'control IDC workflow',
-      );
-      if (!conversationId) return true;
-      deps.idcWorkflowHandler.handleControl(webview, {
-        conversationId,
-        action: message.action,
-        ...(message.runKind ? { runKind: message.runKind } : {}),
-        ...(message.runId ? { runId: message.runId } : {}),
-        ...(message.reason ? { reason: message.reason } : {}),
-      });
-      return true;
-    }
-
     case 'getContextTokenCount': {
       const conversationId = resolveRequiredConversationId(
         webview,

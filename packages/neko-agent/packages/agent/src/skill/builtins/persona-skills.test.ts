@@ -1,5 +1,5 @@
 /**
- * IDC stage persona skills tests.
+ * Creation stage persona skills tests.
  *
  * Covers:
  * - All three persona skills (creation-persona / execution-persona /
@@ -19,7 +19,7 @@ import {
 } from './index';
 import { TOOL_NAMES } from '@neko/shared';
 
-describe('IDC stage persona skills', () => {
+describe('Creation stage persona skills', () => {
   it('builtinSkills contains all three personas', () => {
     const names = builtinSkills.map((s) => s.name);
     expect(names).toContain('creation-persona');

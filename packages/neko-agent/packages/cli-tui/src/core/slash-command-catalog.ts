@@ -63,10 +63,6 @@ const TUI_LOCAL_COMMANDS: readonly TuiSlashCommandOption[] = [
     name: 'skill',
     description: 'Activate or deactivate a Skill lifecycle record',
   },
-  {
-    name: 'idc',
-    description: 'Explicitly start, resume, or stop the IDC workflow',
-  },
 ];
 
 export function createTuiSlashCommandCatalog(

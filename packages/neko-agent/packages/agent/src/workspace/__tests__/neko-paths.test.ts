@@ -75,6 +75,5 @@ describe('NekoPaths', () => {
   it('state() returns canonical state file paths', () => {
     const p = createNekoPaths('/r');
     expect(p.state('sessionLock')).toBe(`/r/.neko/state/${NEKO_STATE_FILES.sessionLock}`);
-    expect(p.state('idcRuntime')).toBe(`/r/.neko/state/${NEKO_STATE_FILES.idcRuntime}`);
   });
 });

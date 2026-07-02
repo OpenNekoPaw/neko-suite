@@ -138,6 +138,20 @@ describe('task view projector', () => {
     expect(toBackgroundTaskView(task).result).toBeUndefined();
   });
 
+  it('does not expose webview render URIs as durable task results', () => {
+    const task = createTask({
+      output: {
+        data: {
+          urls: ['webview-uri:/workspace/neko/generated/image/a.png'],
+          thumbnailUrl: 'vscode-webview://rendered-thumbnail.png',
+        },
+      },
+    });
+
+    expect(getTaskResultUrl(task)).toBeUndefined();
+    expect(toBackgroundTaskView(task).result).toBeUndefined();
+  });
+
   it('projects generated drafts without durable urls or host paths', () => {
     const task = createTask({
       output: {
@@ -258,8 +272,8 @@ describe('task view projector', () => {
         status: 'completed',
         progress: 100,
         result: {
-          urls: ['webview://video.mp4'],
-          thumbnailUrl: 'webview://video.mp4',
+          urls: ['generated-assets/video-1.mp4'],
+          thumbnailUrl: 'generated-assets/video-1.mp4',
         },
         updatedAt: '2026-01-01T00:00:02.000Z',
       }),
@@ -268,8 +282,8 @@ describe('task view projector', () => {
       status: 'completed',
       progress: 100,
       result: {
-        urls: ['webview://video.mp4'],
-        thumbnailUrl: 'webview://video.mp4',
+        urls: ['generated-assets/video-1.mp4'],
+        thumbnailUrl: 'generated-assets/video-1.mp4',
       },
       updatedAt: '2026-01-01T00:00:02.000Z',
     });

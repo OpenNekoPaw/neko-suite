@@ -63,30 +63,6 @@ export {
 } from './session-lock';
 
 export {
-  createIdcRuntimeStateStore,
-  type IIdcRuntimeStateStore,
-  type IdcRuntimeStateFsOps,
-  type IdcRuntimeStateInput,
-  type IdcRuntimeStateSnapshot,
-  type IdcRuntimeStageTransition,
-  type PersistedFeedbackGuidanceSnapshot,
-  type PersistedIdcRunSnapshot,
-  type PendingApprovalSnapshot,
-} from './idc-runtime-state-store';
-
-export {
-  readIdcRuntimeState,
-  parseIdcRuntimeState,
-  readPendingApprovalState,
-  parsePendingApprovalState,
-  type IdcRuntimeStateReadFsOps,
-  type ReadIdcRuntimeStateConfig,
-  type ReadPendingApprovalStateConfig,
-  type IdcRuntimeRestoreState,
-  type PendingApprovalRestoreState,
-} from './idc-runtime-state-reader';
-
-export {
   createNdjsonEventSink,
   type INdjsonEventSink,
   type NdjsonEventSinkConfig,

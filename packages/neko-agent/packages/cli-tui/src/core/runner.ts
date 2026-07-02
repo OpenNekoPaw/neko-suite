@@ -11,7 +11,7 @@ import type { AgentResult, AgentStep, ExecutorHooks, AgentEvent } from '@neko/ag
 import {
   MCPManager,
   createAllMCPTools,
-  createPlanModeIdcMetadata,
+  createPlanModeCreationMetadata,
   createSkillService,
   createNodeSkillLoader,
   ToolRegistry,
@@ -22,7 +22,7 @@ import {
   createInputProcessor,
   createCoreTools,
   createFileProjectMemoryManager,
-  mergeIdcExecutionMetadata,
+  mergeCreationExecutionMetadata,
   type InputProcessor,
   type ConversationRecord,
   createFileConversationStorage,
@@ -42,12 +42,7 @@ import {
 import type { AgentLlmConfig, ModelRef } from '@neko-agent/types';
 
 type ExecutionMode = 'plan' | 'ask' | 'auto';
-import {
-  createAgentCapabilityActivationIntent,
-  resolveStorageLayout,
-  type AgentCapabilityProvider,
-  type IService,
-} from '@neko/shared';
+import { resolveStorageLayout, type AgentCapabilityProvider, type IService } from '@neko/shared';
 import type { SkillService, IRuntimeTaskManager } from '@neko/agent';
 import { ProviderCardRegistry } from '@neko/agent';
 import type { CLIConfig, RunOptions, CLIResult } from './types';
@@ -336,8 +331,8 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     }
 
     try {
-      const executionMetadata = mergeIdcExecutionMetadata(
-        session.getExecutionMode() === 'plan' ? createPlanModeIdcMetadata() : undefined,
+      const executionMetadata = mergeCreationExecutionMetadata(
+        session.getExecutionMode() === 'plan' ? createPlanModeCreationMetadata() : undefined,
         preparedInput.executionMetadata,
       );
       for await (const event of session.execute(finalPrompt, {
@@ -742,7 +737,7 @@ export async function runAgentWithContext(
     let output = '';
     const collector = createEventCollector();
     const executionMetadata =
-      session.getExecutionMode() === 'plan' ? createPlanModeIdcMetadata() : undefined;
+      session.getExecutionMode() === 'plan' ? createPlanModeCreationMetadata() : undefined;
 
     for await (const event of session.execute(finalPrompt, {
       workspaceRoot: config.workDir,
@@ -986,45 +981,6 @@ function createInteractiveRouterContext(
         promote: (queueItemId) => input.getState().messageQueue.promote(queueItemId),
         cancel: (queueItemId) => input.getState().messageQueue.cancel(queueItemId),
         edit: (queueItemId, content) => input.getState().messageQueue.edit(queueItemId, content),
-      },
-      workflow: {
-        controlIdcWorkflow: (control) => {
-          const state = input.getState();
-          const action =
-            control.action === 'stop'
-              ? 'deactivate'
-              : control.action === 'resume'
-                ? 'resume'
-                : 'activate';
-          const intent = createAgentCapabilityActivationIntent({
-            conversationId: state.conversationId,
-            source: 'user-explicit',
-            target: 'idc-workflow',
-            action,
-            name: control.runKind ?? control.runId ?? 'idc',
-            requestedBy: 'user',
-            reason: control.reason ?? `TUI /idc ${control.action}`,
-            metadata: {
-              surface: 'cli-tui',
-              command: '/idc',
-              ...(control.runKind ? { runKind: control.runKind } : {}),
-              ...(control.runId ? { runId: control.runId } : {}),
-            },
-            createdAt: Date.now(),
-          });
-          const result =
-            control.action === 'stop'
-              ? state.session.stopIdcRunWithIntent({ intent })
-              : state.session.startIdcRunWithIntent({
-                  runKind: control.runKind ?? 'idc',
-                  ...(control.runId ? { runId: control.runId } : {}),
-                  intent,
-                });
-          if (!result.success) {
-            throw new Error(result.message);
-          }
-          return result.message;
-        },
       },
       mcp: {
         listServers: () =>
@@ -1537,9 +1493,9 @@ export async function runInteractive(
 
           if (result.agentPrompt) {
             executionPrompt = result.agentPrompt;
-            executionMetadata = mergeIdcExecutionMetadata(
+            executionMetadata = mergeCreationExecutionMetadata(
               state!.session.getExecutionMode() === 'plan'
-                ? createPlanModeIdcMetadata()
+                ? createPlanModeCreationMetadata()
                 : undefined,
               result.executionOverrides?.metadata,
             );
@@ -1590,9 +1546,9 @@ export async function runInteractive(
 
           if (result.agentPrompt) {
             executionPrompt = result.agentPrompt;
-            executionMetadata = mergeIdcExecutionMetadata(
+            executionMetadata = mergeCreationExecutionMetadata(
               state!.session.getExecutionMode() === 'plan'
-                ? createPlanModeIdcMetadata()
+                ? createPlanModeCreationMetadata()
                 : undefined,
               result.executionOverrides?.metadata,
             );
@@ -1638,7 +1594,7 @@ export async function runInteractive(
           if (!executionMetadata) {
             executionMetadata =
               state!.session.getExecutionMode() === 'plan'
-                ? createPlanModeIdcMetadata()
+                ? createPlanModeCreationMetadata()
                 : undefined;
           }
           executionMetadata = mergeInteractiveMediaModelMetadata(

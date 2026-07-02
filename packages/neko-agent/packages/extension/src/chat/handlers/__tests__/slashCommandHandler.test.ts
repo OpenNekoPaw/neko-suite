@@ -481,10 +481,10 @@ describe('SlashCommandHandler', () => {
         sessionMode: 'agent',
         executionOverrides: {
           metadata: {
-            idc: {
+            agentCreation: {
               entrySignal: 'prompt-chain-skill',
               taskShape: 'multi-step',
-              runKind: 'skill:commit-workflow',
+              creationKind: 'skill:commit-workflow',
             },
           },
         },
@@ -572,17 +572,17 @@ describe('SlashCommandHandler', () => {
         sessionMode: 'agent',
         executionOverrides: {
           metadata: {
-            idc: {
+            agentCreation: {
               entrySignal: 'prompt-chain-skill',
               taskShape: 'multi-step',
-              runKind: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
+              creationKind: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
             },
           },
         },
       });
     });
 
-    it('should attach IDC metadata for explicit skill slash execution', async () => {
+    it('should attach creation metadata for explicit skill slash execution', async () => {
       const agentManager = { applySkillInjection: vi.fn() };
       handler = new SlashCommandHandler({
         conversations: conversations as any,
@@ -620,10 +620,10 @@ describe('SlashCommandHandler', () => {
         sessionMode: 'agent',
         executionOverrides: {
           metadata: {
-            idc: {
+            agentCreation: {
               entrySignal: 'prompt-chain-skill',
               taskShape: 'multi-step',
-              runKind: 'skill:commit',
+              creationKind: 'skill:commit',
             },
           },
         },

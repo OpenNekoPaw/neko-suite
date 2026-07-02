@@ -4,15 +4,7 @@
  */
 
 import { useRef, useState, useCallback, useEffect, type ReactNode } from 'react';
-import {
-  SendIcon,
-  StopIcon,
-  PlusIcon,
-  EditIcon,
-  CloseIcon,
-  PlayIcon,
-  RefreshIcon,
-} from '@neko/shared/icons';
+import { SendIcon, StopIcon, PlusIcon, EditIcon, CloseIcon } from '@neko/shared/icons';
 import { ModeConfigBar } from './ModeConfigBar';
 import { ModeSelector } from './ModeSelector';
 import { EntryPromptMenu as ComposerEntryPromptMenu } from './EntryPromptMenu';
@@ -87,8 +79,6 @@ interface InputAreaProps {
     llmConfig?: AgentLlmConfig;
   }) => void;
   onCancel?: () => void;
-  onControlIdcWorkflow?: (action: 'start' | 'resume' | 'stop') => void;
-  showIdcWorkflowControls?: boolean;
   entryPromptMenu?: EntryPromptMenu | null;
   onEntryPromptMenuChange?: (menu: EntryPromptMenu | null) => void;
   disabled?: boolean;
@@ -116,8 +106,6 @@ export function InputArea({
   onEditQueuedMessage,
   onSend,
   onCancel,
-  onControlIdcWorkflow,
-  showIdcWorkflowControls = false,
   entryPromptMenu,
   onEntryPromptMenuChange,
   disabled = false,
@@ -978,38 +966,6 @@ export function InputArea({
               >
                 <MediaCallIcon className="w-3 h-3" />
                 <span>{mediaModelCallCount}</span>
-              </div>
-            )}
-
-            {showIdcWorkflowControls && onControlIdcWorkflow && (
-              <div className="agent-composer-idc-controls" aria-label={t('chat.idc.controls')}>
-                <button
-                  type="button"
-                  onClick={() => onControlIdcWorkflow('start')}
-                  className="agent-composer-tool-button"
-                  title={t('chat.idc.start')}
-                  aria-label={t('chat.idc.start')}
-                >
-                  <PlayIcon className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onControlIdcWorkflow('resume')}
-                  className="agent-composer-tool-button"
-                  title={t('chat.idc.resume')}
-                  aria-label={t('chat.idc.resume')}
-                >
-                  <RefreshIcon className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onControlIdcWorkflow('stop')}
-                  className="agent-composer-tool-button"
-                  title={t('chat.idc.stop')}
-                  aria-label={t('chat.idc.stop')}
-                >
-                  <StopIcon className="w-3.5 h-3.5" />
-                </button>
               </div>
             )}
 

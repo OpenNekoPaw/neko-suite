@@ -282,6 +282,80 @@ describe('TaskHandler', () => {
   });
 
   describe('handleViewTaskResult', () => {
+    it('opens generated asset refs from task-manager output in VSCode', async () => {
+      taskManager.get.mockResolvedValue({
+        id: 'task-1',
+        type: 'image_generation',
+        status: 'completed',
+        progress: 100,
+        createdAt: 1000,
+        updatedAt: 2000,
+        input: { payload: { conversationId } },
+        output: { data: { urls: ['generated-assets/asset-1.png'] } },
+      });
+      handler = new TaskHandler({
+        taskManager: taskManager as any,
+        generatedAssetLookup: {
+          get: vi.fn().mockReturnValue({
+            id: 'asset-1',
+            path: '/workspace/demo/neko/generated/image/task_1.png',
+          }),
+        },
+      });
+
+      await handler.handleViewTaskResult('task-1', conversationId);
+
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'vscode.open',
+        expect.objectContaining({ fsPath: '/workspace/demo/neko/generated/image/task_1.png' }),
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('opens workspace-relative generated files in VSCode', async () => {
+      taskManager.get.mockResolvedValue({
+        id: 'task-1',
+        type: 'image_generation',
+        status: 'completed',
+        progress: 100,
+        createdAt: 1000,
+        updatedAt: 2000,
+        input: { payload: { conversationId } },
+        output: { data: { urls: ['neko/generated/image/task_1.png'] } },
+      });
+      handler = new TaskHandler({ taskManager: taskManager as any });
+
+      await handler.handleViewTaskResult('task-1', conversationId);
+
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'vscode.open',
+        expect.objectContaining({ fsPath: '/mock/workspace/neko/generated/image/task_1.png' }),
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('does not open webview render URIs through external applications', async () => {
+      taskManager.get.mockResolvedValue({
+        id: 'task-1',
+        type: 'image_generation',
+        status: 'completed',
+        progress: 100,
+        createdAt: 1000,
+        updatedAt: 2000,
+        input: { payload: { conversationId } },
+        output: { data: { urls: ['webview-uri:/workspace/neko/generated/image/task_1.png'] } },
+      });
+      handler = new TaskHandler({ taskManager: taskManager as any });
+
+      await handler.handleViewTaskResult('task-1', conversationId);
+
+      expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+        'vscode.open',
+        expect.anything(),
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
     it('opens generated media task refs through the generated asset index', async () => {
       taskManager.get.mockResolvedValue(null);
       platform.media.getTask.mockResolvedValue({

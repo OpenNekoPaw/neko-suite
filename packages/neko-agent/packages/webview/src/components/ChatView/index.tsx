@@ -71,7 +71,6 @@ interface ChatViewProps {
     llmConfig?: AgentLlmConfig;
   }) => void;
   onCancel?: () => void;
-  onControlIdcWorkflow?: (action: 'start' | 'resume' | 'stop') => void;
   entryPromptMenu?: EntryPromptMenu | null;
   onEntryPromptMenuChange?: (menu: EntryPromptMenu | null) => void;
   /** Session-bound attached files (managed by parent) */
@@ -120,7 +119,6 @@ export function ChatView({
   onEditQueuedMessage,
   onSend,
   onCancel,
-  onControlIdcWorkflow,
   entryPromptMenu,
   onEntryPromptMenuChange,
   attachedFiles,
@@ -209,7 +207,6 @@ export function ChatView({
           onEditQueuedMessage={onEditQueuedMessage}
           onSend={onSend}
           onCancel={onCancel}
-          onControlIdcWorkflow={onControlIdcWorkflow}
           entryPromptMenu={entryPromptMenu}
           onEntryPromptMenuChange={onEntryPromptMenuChange}
           disabled={isConversationSwitching}

@@ -35,9 +35,9 @@ import type {
 import { isDocumentFile } from '@neko/shared';
 import type { AgentEvent } from '../session/types';
 import {
-  createPlanModeIdcMetadata,
-  mergeIdcExecutionMetadata,
-} from '../session/idc-execution-metadata';
+  createPlanModeCreationMetadata,
+  mergeCreationExecutionMetadata,
+} from '../session/creation-execution-metadata';
 import { DEFAULT_MENTION_EXCLUDE_GLOB } from '../input/mention-excludes';
 import {
   extractFileReferencePaths,
@@ -1704,8 +1704,8 @@ export function buildAgentTurnExecutionMetadata(
   overrides?: Record<string, unknown>,
   mediaModels?: RuntimeMediaModelSelections,
 ): Record<string, unknown> | undefined {
-  const base = executionMode === 'plan' ? createPlanModeIdcMetadata() : undefined;
-  const merged = mergeIdcExecutionMetadata(base, overrides);
+  const base = executionMode === 'plan' ? createPlanModeCreationMetadata() : undefined;
+  const merged = mergeCreationExecutionMetadata(base, overrides);
   if (!mediaModels || Object.keys(mediaModels).length === 0) return merged;
   return {
     ...(merged ?? {}),

@@ -19,6 +19,7 @@
 | [`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md) | Agent Skill catalog、用户新增 Skill metadata 和激活权威边界       |
 | [`adr-agent-skill-creator-and-validation.md`](adr-agent-skill-creator-and-validation.md) | Agent Skill Creator、标准化技能创作、确定性校验和激活边界 |
 | [`adr-agent-prompt-skill-validator-boundary.md`](adr-agent-prompt-skill-validator-boundary.md) | Agent 默认提示词、Skill 提示词、Validator 和 Capability 的职责边界 |
+| [`adr-agent-native-creation-capability-boundary.md`](adr-agent-native-creation-capability-boundary.md) | Agent 原生创作能力、IDC profile、Skill prompt-chain 与 workflow 禁用边界 |
 | [`adr-agent-command-skill-trigger-boundary.md`](adr-agent-command-skill-trigger-boundary.md) | Agent `/` 命令、`$` 技能和 `@` 上下文引用的触发入口边界            |
 | [`adr-agent-sandbox-and-external-processing-boundary.md`](adr-agent-sandbox-and-external-processing-boundary.md) | Agent 资源沙箱、外部处理器、命令执行和审批边界                   |
 | [`adr-code-debt-redundancy-governance.md`](adr-code-debt-redundancy-governance.md) | 重复、冗余、兼容桥和 fallback 代码的分类、清理优先级与验证规则 |

@@ -60,7 +60,7 @@ export interface AblationMarkerHook extends ExecutorHooks {
   /** Agent-first tool-evidence guidance mode override. */
   agentFirstToolEvidenceMode?: AgentFirstToolEvidenceMode;
   narrative: NarrativePreviewFeatureToggles;
-  disableIdcWorkflow: boolean;
+  disableCreationProfileGuidance: boolean;
   disablePlanModeProfile: boolean;
   disableCapabilityProtocol: boolean;
   disablePromptSchemaGenerator: boolean;
@@ -93,7 +93,7 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
       toolInjectionMode: toggles.toolInjection,
     }),
     narrative: normalizeNarrativePreviewFeatureToggles(toggles.narrative),
-    disableIdcWorkflow: toggles.idcWorkflow === false,
+    disableCreationProfileGuidance: toggles.creationProfileGuidance === false,
     disablePlanModeProfile: toggles.planModeProfile === false,
     disableCapabilityProtocol: toggles.capabilityProtocol === false,
     disablePromptSchemaGenerator: toggles.promptSchemaGenerator === false,

@@ -4,6 +4,12 @@
 - 日期：2026-06-29
 - 适用范围：`neko-agent` IDC runtime、Skill lifecycle、SKILL.md prompt-chain、生成媒体、Canvas/Cut 交付、质量审查和创作文档
 
+> 2026-07-02 更新：本文关于 IDC runtime、固定 Draft/Plan/Apply
+> 边界和 workflow trace 的表述已被
+> [`adr-agent-native-creation-capability-boundary.md`](adr-agent-native-creation-capability-boundary.md)
+> 收紧。新的 canonical 设计是 Agent-native creation profile/stage/iteration；
+> IDC 只是默认 profile，workflow 只表示 Skill prompt-chain guidance。
+
 本文记录 Neko Suite 对 Agent 自主影视创作流程的系统级边界决策。它补充 [`agent.md`](agent.md)、[`adr-agent-idc-skill-planmode-trigger-boundary.md`](adr-agent-idc-skill-planmode-trigger-boundary.md)、[`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md) 与 [`adr-agent-sandbox-and-external-processing-boundary.md`](adr-agent-sandbox-and-external-processing-boundary.md)。
 
 ## 背景

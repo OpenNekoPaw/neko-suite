@@ -121,7 +121,7 @@ describe('useSlashCommands Skill lifecycle commands', () => {
       'fix bug',
       expect.objectContaining({
         metadata: expect.objectContaining({
-          idc: expect.objectContaining({ entrySignal: 'prompt-chain-skill' }),
+          agentCreation: expect.objectContaining({ entrySignal: 'prompt-chain-skill' }),
         }),
       }),
     );
@@ -144,7 +144,7 @@ describe('useSlashCommands Skill lifecycle commands', () => {
       'changed files',
       expect.objectContaining({
         metadata: expect.objectContaining({
-          idc: expect.objectContaining({ entrySignal: 'prompt-chain-skill' }),
+          agentCreation: expect.objectContaining({ entrySignal: 'prompt-chain-skill' }),
         }),
       }),
     );
@@ -189,52 +189,6 @@ describe('useSlashCommands Skill lifecycle commands', () => {
     expect(lastSystemMessage()).toBe('Queue: empty (version 0)');
   });
 
-  it('routes IDC workflow commands through the explicit workflow control port', async () => {
-    const controlIdcWorkflow = vi.fn(() => 'IDC workflow started: run-1');
-    const handleCommand = renderHarness({
-      activateSkill: vi.fn(() => true),
-      deactivateSkill: vi.fn(),
-      controlIdcWorkflow,
-    });
-
-    await handleCommand('/idc start storyboard');
-
-    expect(controlIdcWorkflow).toHaveBeenCalledWith({
-      action: 'start',
-      runKind: 'storyboard',
-      reason: 'TUI /idc start',
-    });
-    expect(lastSystemMessage()).toBe('IDC workflow started: run-1');
-  });
-
-  it('allows IDC stop while running but rejects IDC start before side effects', async () => {
-    const controlIdcWorkflow = vi.fn(() => 'IDC workflow stopped');
-    const submit = vi.fn();
-    const handleCommand = renderHarness({
-      activateSkill: vi.fn(() => true),
-      deactivateSkill: vi.fn(),
-      submit,
-      controlIdcWorkflow,
-    });
-    useAgentStore.getState().setRunning();
-
-    await handleCommand('/idc start storyboard');
-
-    expect(controlIdcWorkflow).not.toHaveBeenCalled();
-    expect(submit).not.toHaveBeenCalled();
-    expect(lastSystemMessage()).toContain(
-      'not-queueable: Commands cannot be queued while an Agent turn is running.',
-    );
-
-    await handleCommand('/idc stop');
-
-    expect(controlIdcWorkflow).toHaveBeenCalledWith({
-      action: 'stop',
-      reason: 'TUI /idc stop',
-    });
-    expect(lastSystemMessage()).toBe('IDC workflow stopped');
-  });
-
   it('updates default media models through /model media commands', async () => {
     const handleCommand = renderHarness({
       activateSkill: vi.fn(() => true),
@@ -262,9 +216,6 @@ function renderHarness(actions: {
   readonly getMessageQueueSnapshot?: NonNullable<
     import('../useAgentSession').AgentSessionHandle['getMessageQueueSnapshot']
   >;
-  readonly controlIdcWorkflow?: NonNullable<
-    import('../../core/tui-command-router').TuiWorkflowPorts['controlIdcWorkflow']
-  >;
 }): (input: string) => Promise<void> {
   let handleCommand: ((input: string) => Promise<void>) | undefined;
 
@@ -279,7 +230,6 @@ function renderHarness(actions: {
       activateSkill: actions.activateSkill,
       deactivateSkill: actions.deactivateSkill,
       getMessageQueueSnapshot: actions.getMessageQueueSnapshot,
-      ...(actions.controlIdcWorkflow ? { controlIdcWorkflow: actions.controlIdcWorkflow } : {}),
       getSkillService: () => createSkillServiceMock(),
     }));
     return React.createElement(React.Fragment);

@@ -8,7 +8,6 @@ import {
   createAgentSessionRunner,
   type AgentRunnerConfirmationRequest,
   type AgentRunnerEventEmitter,
-  type AgentRunnerIdcWorkflowControlInput,
   type AgentPendingMessageItem,
   type AgentRunnerPort,
   type AgentRunnerPortEvent,
@@ -25,7 +24,6 @@ import {
 import type { IEngineClientProvider } from '../services/engineClientProvider';
 import type { IAgentContext } from './agentContext';
 import type { IAgentConfig } from './agentRunnerContracts';
-import type { IdcWorkflowControlResult } from '@neko/agent';
 
 export interface AgentRunnerRuntimeAdapterLogger {
   warn(message: string, details?: unknown): void;
@@ -237,10 +235,6 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
     }
 
     this.runtimeController.refresh(this.createRuntimeSessionAssemblyInput(this.config));
-  }
-
-  controlIdcWorkflow(input: AgentRunnerIdcWorkflowControlInput): IdcWorkflowControlResult {
-    return this.sessionRunner.controlIdcWorkflow(input);
   }
 
   applySkillInjection(

@@ -1,5 +1,5 @@
 /**
- * Stage Registry — metadata + dependency DAG for the three IDC stages.
+ * Stage Registry — metadata + dependency DAG for the three built-in creation stages.
  *
  * See: docs/architecture/agent-unified-workflow.md §4
  *

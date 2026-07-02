@@ -1,7 +1,5 @@
 /**
- * Creation Events — pre-Apply (creation-persona) event namespace.
- *
- * See: docs/architecture/agent-unified-workflow.md §4, §6.2
+ * Creation Events — creation-persona event namespace.
  *
  * Channels follow `creation.<stage>.<verb>` and are **business-semantic**
  * (user-facing), not technical-semantic. Emitted during the IDC Draft /
@@ -13,8 +11,7 @@
  * agent-types can remain infrastructure-free.
  */
 
-import type { StageSkipReason } from './stage';
-import type { IdcRunRoundSummary } from './idc-run';
+import type { StageActivationRoundSummary, StageSkipReason } from './stage';
 
 // =============================================================================
 // Channel names (stable strings — used as bus keys)
@@ -44,7 +41,7 @@ export type CreationChannel = (typeof CREATION_CHANNELS)[keyof typeof CREATION_C
 export interface CreationRunStartedEvent {
   channel: typeof CREATION_CHANNELS.RUN_STARTED;
   runId: string;
-  runKind: string;
+  creationKind: string;
   at: number;
 }
 
@@ -89,7 +86,7 @@ export interface CreationStatusUpdatedEvent {
    * consumers to correlate narrative with the activation decision that
    * produced it without replaying the bus (R9 compaction).
    */
-  lastRound?: IdcRunRoundSummary;
+  lastRound?: StageActivationRoundSummary;
   at: number;
 }
 

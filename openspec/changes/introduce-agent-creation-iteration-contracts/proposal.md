@@ -1,37 +1,19 @@
-## Why
+# Superseded: Agent Creation Iteration Contracts
 
-Agent 已经具备 IDC 阶段、创作文档路径、Skill 生命周期和事件频道骨架，但影视创作仍缺少一个明确的长期创作域模型来承接媒体追踪、prompt-chain 执行痕迹和质量审查结果。当前 `AgentWorkflowRun`、`IdcRun`、生成资产 ref 和文本 artifact 并存，容易把固定 workflow run 误当成创作身份锚点，也难以证明 Agent 是自主判断能力而不是执行一条隐藏流水线。
+> Superseded by `normalize-agent-native-creation-boundary` (2026-07-02).
+> This change is intentionally frozen. Do not resume it directly.
 
-## What Changes
+## Why This Is Frozen
 
-- Introduce a new Agent creation contract centered on `Creation`, `CreationIteration`, and `CreationEvent`.
-- Add typed iteration activity tracking that references IDC's existing `draft` / `plan` / `apply` stages without adding new IDC phases.
-- Add minimal prompt-chain execution event contracts for checkpoint, skip, reorder, and completion observations.
-- Define how text artifacts, media resource refs, Skill lifecycle records, IDC context, and quality review diagnostics attach to creation iterations.
-- Retire `agent-workflow-runtime.ts` as a future canonical identity source by documenting and testing that new creation tracking uses `creationId` / `iterationId`, not `workflowRunId`.
-- Add path-level validation for generated media flowing through Storyboard, Canvas, Cut, and Preview using `assetRef` / `ResourceRef` instead of cache paths, Webview URIs, or temporary absolute paths.
+This proposal attempted to introduce broad `AgentCreation`, `CreationIteration`, and `CreationEvent` contracts. That direction is now rejected because it risks recreating a parallel Agent creation runtime under new names.
 
-## Capabilities
+The accepted boundary is:
 
-### New Capabilities
+- Agent existing session/turn/capability runtime owns lifecycle, stage, feedback, validation, approval, state, artifact provenance, and capability invocation.
+- IDC is only a creation profile.
+- Skill provides prompt-chain guidance, output standards, tool boundaries, and validator hints.
+- Workflow only means prompt-chain guidance, not a runtime, DAG, scheduler, node executor, or state machine.
 
-- `agent-creation-iteration-contracts`: Defines the canonical Agent creation and iteration contracts, prompt-chain execution events, and resource/reference attachment behavior for autonomous creative workflows.
+## Replacement
 
-### Modified Capabilities
-
-- None. Existing generated asset, content access, Skill trigger, and Canvas/Cut handoff capabilities remain authoritative for their domains; this change adds a cross-Agent creation tracking contract and path-level tests that compose them.
-
-## Impact
-
-- Affected packages:
-  - `packages/neko-agent/packages/agent-types`: new public DTOs and validators for creation, iteration, event, prompt-chain observation, and projection payloads.
-  - `packages/neko-agent/packages/agent`: creation/iteration event helpers, IDC/Skill lifecycle attachment points, prompt-chain event emission, and tests proving `workflowRunId` is not the canonical identity.
-  - `packages/neko-agent/packages/extension`: host adapter wiring for creation event persistence/projection only where needed; no Webview policy ownership moves into Extension.
-  - `packages/neko-types`: only if shared Layer 0 refs need reusable helper types; otherwise keep the new Agent-specific contract in `agent-types`.
-- Affected architecture:
-  - Implements the P0/P1/P2 priorities from `docs/architecture/adr-agent-autonomous-filmmaking-creation-boundary.md`.
-  - Keeps `runtime.workflowRuntime` as a bootstrap plane while preventing `agent-workflow-runtime.ts` from gaining new canonical creative semantics.
-- Compatibility:
-  - Prelaunch internal DTO changes may be breaking.
-  - Existing creation documents and media resources are not migrated by this change.
-  - Legacy workflow projection may remain temporarily, but new creation tracking must fail tests if it depends on `workflowRunId` as the identity anchor.
+Use `openspec/changes/normalize-agent-native-creation-boundary/` for any further cleanup work.

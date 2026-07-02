@@ -1,13 +1,7 @@
-import type { AgentWorkflowIdentity } from './workflow';
+import type { AgentLegacyCreationTrace } from './legacy-trace';
 
 export type AgentMediaModality =
-  | 'text'
-  | 'image'
-  | 'video'
-  | 'audio'
-  | 'document'
-  | 'data'
-  | 'mixed';
+  'text' | 'image' | 'video' | 'audio' | 'document' | 'data' | 'mixed';
 
 export interface AgentMediaMetadata {
   readonly mimeType?: string;
@@ -29,7 +23,7 @@ export interface AgentMultimodalEvidenceRef {
   readonly artifactId?: string;
   readonly perceptionInputId?: string;
   readonly conversationId?: string;
-  readonly workflow?: AgentWorkflowIdentity;
+  readonly legacyTrace?: AgentLegacyCreationTrace;
   readonly taskId?: string;
   readonly toolCallId?: string;
   readonly sourceArtifactId?: string;
@@ -39,15 +33,11 @@ export interface AgentMultimodalEvidenceRef {
 }
 
 export type AgentMultimodalEvidenceWithheldReason =
-  | 'policy'
-  | 'ablation'
-  | 'payload-too-large'
-  | 'unsupported-modality'
-  | 'missing-payload';
+  'policy' | 'ablation' | 'payload-too-large' | 'unsupported-modality' | 'missing-payload';
 
 export interface AgentMultimodalPacketLinkage {
   readonly conversationId?: string;
-  readonly workflow?: AgentWorkflowIdentity;
+  readonly legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export interface AgentToolModalityDeclaration {
@@ -66,7 +56,7 @@ export interface AgentGeneratedArtifactProjection {
   readonly mimeType?: string;
   readonly metadata?: AgentMediaMetadata & Record<string, unknown>;
   readonly conversationId?: string;
-  readonly workflow?: AgentWorkflowIdentity;
+  readonly legacyTrace?: AgentLegacyCreationTrace;
   readonly taskId?: string;
   readonly toolCallId?: string;
 }

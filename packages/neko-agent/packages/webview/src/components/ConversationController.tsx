@@ -948,18 +948,42 @@ export function ConversationController({
     isTablessConversationViewRef.current = false;
   }, []);
 
-  const handleBeforeConversationActivation = useCallback((conversationId: string) => {
-    setPendingSendRequest(null);
-    setInitialEntryPromptMenuRequest(null);
-    setInitialInputRequest(null);
-    setEntryPromptMenu(null);
-    pendingForegroundConversationActivationRef.current = {
-      reason: 'switch-conversation',
-      conversationId,
-    };
-    setIsForegroundConversationActivationPending(true);
-    isTablessConversationViewRef.current = false;
-  }, []);
+  const handleBeforeConversationActivation = useCallback(
+    (conversationId: string) => {
+      setPendingSendRequest(null);
+      setInitialEntryPromptMenuRequest(null);
+      setInitialInputRequest(null);
+      setEntryPromptMenu(null);
+      pendingForegroundConversationActivationRef.current = {
+        reason: 'switch-conversation',
+        conversationId,
+      };
+      setIsForegroundConversationActivationPending(true);
+      isTablessConversationViewRef.current = false;
+      const cachedMessages = conversationMessagesRef.current.get(conversationId) ?? [];
+      const cachedStreaming = conversationStreamingRef.current.get(conversationId);
+      setMessages(cachedMessages);
+      setStreamingMessageId(cachedStreaming?.streamingMessageId ?? null);
+      streamingMessageIdRef.current = cachedStreaming?.streamingMessageId ?? null;
+      setIsThinking(cachedStreaming?.isThinking ?? false);
+      setQueuedMessageCount(cachedStreaming?.queuedMessageCount ?? 0);
+      setQueuedMessages(cachedStreaming?.queuedMessages ?? []);
+      activeConversationIdRef.current = conversationId;
+      setActiveConversationId(conversationId);
+    },
+    [
+      activeConversationIdRef,
+      conversationMessagesRef,
+      conversationStreamingRef,
+      setActiveConversationId,
+      setIsThinking,
+      setMessages,
+      setQueuedMessageCount,
+      setQueuedMessages,
+      setStreamingMessageId,
+      streamingMessageIdRef,
+    ],
+  );
 
   const handleAllTabsClosed = useCallback(() => {
     setPendingSendRequest(null);

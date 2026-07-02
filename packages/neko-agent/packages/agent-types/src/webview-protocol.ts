@@ -57,7 +57,6 @@ import type {
   TaskWorkItem,
 } from './work-item';
 import type { DashboardTask } from '@neko/shared/types/dashboard-task';
-import type { AgentWorkflowRun } from './workflow';
 import type { AgentArtifactTransferPayload } from './artifact-transfer';
 import type { AgentTurnTimelineItem, AgentTurnTimelineMessage } from './agent-turn-timeline';
 import { assertValidAgentTurnTimelineMessage } from './agent-turn-timeline';
@@ -333,17 +332,6 @@ export interface InvokeSkillWebviewMessage {
   args?: string;
 }
 
-export type ControlIdcWorkflowAction = 'start' | 'resume' | 'stop';
-
-export interface ControlIdcWorkflowWebviewMessage {
-  type: 'controlIdcWorkflow';
-  conversationId: string;
-  action: ControlIdcWorkflowAction;
-  runKind?: string;
-  runId?: string;
-  reason?: string;
-}
-
 export interface InvokePluginSlashCommandWebviewMessage {
   type: 'invokePluginSlashCommand';
   extensionId: string;
@@ -418,7 +406,6 @@ export type WebviewToExtensionMessage =
   | DownloadSvgWebviewMessage
   | InvokeSlashCommandWebviewMessage
   | InvokeSkillWebviewMessage
-  | ControlIdcWorkflowWebviewMessage
   | InvokePluginSlashCommandWebviewMessage
   | StartCharacterDialogueFromSlashWebviewMessage
   | ExitCharacterDialogueSessionWebviewMessage
@@ -918,12 +905,6 @@ export interface TaskDeliveryReplayMessage {
   task: DashboardTask;
 }
 
-export interface WorkflowProjectionMessage {
-  type: 'workflowProjection';
-  conversationId: string;
-  run: AgentWorkflowRun;
-}
-
 export interface ExternalMessage {
   type: 'externalMessage';
   message?: string;
@@ -1004,7 +985,6 @@ export type ExtensionToWebviewMessage =
   | MediaTaskCreatedMessage
   | MediaTaskProgressMessage
   | TaskDeliveryReplayMessage
-  | WorkflowProjectionMessage
   | ExternalMessage
   | PrefillInputMessage
   | InjectContextMessage
@@ -1088,11 +1068,6 @@ const QUEUED_MESSAGE_ACTION_TYPES: readonly QueuedMessageActionWebviewMessage['t
   'cancelQueuedMessage',
   'editQueuedMessage',
 ];
-const CONTROL_IDC_WORKFLOW_ACTIONS: readonly ControlIdcWorkflowAction[] = [
-  'start',
-  'resume',
-  'stop',
-];
 export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'sendMessage',
   'searchProjectFiles',
@@ -1121,7 +1096,6 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'downloadSvg',
   'invokeSlashCommand',
   'invokeSkill',
-  'controlIdcWorkflow',
   'invokePluginSlashCommand',
   'startCharacterDialogueFromSlash',
   'exitCharacterDialogueSession',
@@ -1500,17 +1474,6 @@ export function buildTaskDeliveryReplayMessage(input: {
   };
 }
 
-export function buildWorkflowProjectionMessage(input: {
-  readonly conversationId: string;
-  readonly run: AgentWorkflowRun;
-}): WorkflowProjectionMessage {
-  return {
-    type: 'workflowProjection',
-    conversationId: input.conversationId,
-    run: input.run,
-  };
-}
-
 export function buildSubAgentEventMessage(input: {
   readonly event: SubAgentWorkItemEvent;
   readonly workItem: SubAgentWorkItem;
@@ -1621,8 +1584,6 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseInvokeSlashCommandMessage(raw);
     case 'invokeSkill':
       return parseInvokeSkillMessage(raw);
-    case 'controlIdcWorkflow':
-      return parseControlIdcWorkflowMessage(raw);
     case 'invokePluginSlashCommand':
       return parseInvokePluginSlashCommandMessage(raw);
     case 'startCharacterDialogueFromSlash':
@@ -2618,27 +2579,6 @@ function parseInvokeSkillMessage(raw: Record<string, unknown>): InvokeSkillWebvi
   };
 }
 
-function parseControlIdcWorkflowMessage(
-  raw: Record<string, unknown>,
-): ControlIdcWorkflowWebviewMessage | null {
-  const conversationId = requiredString(raw.conversationId);
-  const action = parseControlIdcWorkflowAction(raw.action);
-  const runKind = optionalStringStrict(raw.runKind);
-  const runId = optionalStringStrict(raw.runId);
-  const reason = optionalStringStrict(raw.reason);
-  if (!conversationId || !action || runKind === null || runId === null || reason === null) {
-    return null;
-  }
-  return {
-    type: 'controlIdcWorkflow',
-    conversationId,
-    action,
-    ...(runKind !== undefined ? { runKind } : {}),
-    ...(runId !== undefined ? { runId } : {}),
-    ...(reason !== undefined ? { reason } : {}),
-  };
-}
-
 function parseInvokePluginSlashCommandMessage(
   raw: Record<string, unknown>,
 ): InvokePluginSlashCommandWebviewMessage | null {
@@ -3105,13 +3045,6 @@ function optionalSearchProjectFilesPurpose(
 ): 'roleplay' | 'entry' | undefined | null {
   if (value === undefined) return undefined;
   return value === 'roleplay' || value === 'entry' ? value : null;
-}
-
-function parseControlIdcWorkflowAction(value: unknown): ControlIdcWorkflowAction | null {
-  return typeof value === 'string' &&
-    CONTROL_IDC_WORKFLOW_ACTIONS.includes(value as ControlIdcWorkflowAction)
-    ? (value as ControlIdcWorkflowAction)
-    : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,6 +1,6 @@
 # Agent 横切架构
 
-更新日期：2026-06-15
+更新日期：2026-07-02
 
 Agent 是 Neko Suite 的横切创作智能层，不是一个创作领域。它为视频、音频、模型、2D 和互动创作提供意图理解、计划、工具调用、上下文压缩、审阅和修复能力。
 
@@ -15,20 +15,21 @@ Agent 是 Neko Suite 的横切创作智能层，不是一个创作领域。它�
 - Agent-first：创作意图先进入 Agent runtime，由 runtime 决定是否需要领域工具、Engine、素材库、实体或市场能力。
 - API-first：跨层交互先定义 shared contract、command、provider、port 或 message schema，再接 UI 和具体实现。
 - Prompt-first：Prompt 只表达上下文、角色、约束和行为策略，不隐藏宿主副作用。
-- Skill-first：Skill 描述领域策略、工具组合、prompt fragments 和适用条件，不成为私有 workflow engine。
+- Creation-first：创作 lifecycle、stage、iteration、validator feedback、review 和 approval 归 Agent 原生创作能力所有；IDC 只是 profile。
+- Skill-first：Skill 描述领域策略、prompt-chain guidance、工具组合、prompt fragments 和适用条件，不成为私有 workflow engine。
 - Tool-as-capability：Tool 是可审计能力入口，必须有来源、权限、schema、trust、输入输出 contract。
 - Provider-neutral：runtime 不依赖具体模型供应商语义，provider adapter 负责 tool calling、structured output、多模态消息投影差异。
 - Grounded-output：Agent 输出要进入持久上下文，必须接地到 `ResourceRef`、asset/entity ID、Search source、Engine output 或领域项目格式。
 - Human-governed：不可逆、高成本、外部副作用、信任边界变化和项目事实改写必须经过 Approval/Policy。
 - Host-agnostic runtime：Agent runtime 不知道 VS Code、React、Webview、Node 文件系统细节；这些都通过 host adapter 注入。
-- Projection-only UI：Webview 展示消息、任务、workflow、artifact 和设置投影，不拥有 Agent 业务策略。
+- Projection-only UI：Webview 展示消息、任务、Agent-native creation 状态、artifact 和设置投影，不拥有 Agent 业务策略。
 
 ## 分层
 
 | 层            | 职责                                                                     |
 | ------------- | ------------------------------------------------------------------------ |
 | `agent-types` | Webview/Extension/runtime 共享协议、消息、投影和状态 contract            |
-| `agent`       | host-agnostic runtime、workflow、prompt、skill、memory、tool、evaluation |
+| `agent`       | host-agnostic runtime、Agent-native creation、prompt、skill、memory、tool、evaluation |
 | `ai-sdk`      | Provider/AI SDK adapter，不承载 UI 或 VS Code 逻辑                       |
 | `platform`    | host-agnostic 平台桥、配置、provider glue 和能力注入                     |
 | `extension`   | VS Code commands、配置桥、host adapters、会话入口、资源授权              |
@@ -39,12 +40,12 @@ Agent 是 Neko Suite 的横切创作智能层，不是一个创作领域。它�
 
 | 包/层         | 可以做                                                                                                      | 不可以做                                             |
 | ------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `agent-types` | 定义 Webview/Extension/runtime 共享消息、workflow、provider、prompt schema、work item、artifact projection  | 导入 runtime、VS Code、React 或 provider SDK         |
-| `agent`       | session、turn assembly、IDC workflow、prompt/schema、memory、tool orchestration、approval、evaluation       | 读写 VS Code API、渲染 UI、直接访问 Webview          |
-| `ai-sdk`      | provider adapter、model invocation、tool/structured-output projection、多模态消息投影                       | 拥有业务 workflow、读取项目文件、决定领域语义        |
+| `agent-types` | 定义 Webview/Extension/runtime 共享消息、Agent-native creation、provider、prompt schema、work item、artifact projection | 导入 runtime、VS Code、React 或 provider SDK         |
+| `agent`       | session、turn assembly、creation profile/stage/iteration、prompt/schema、memory、tool orchestration、approval、evaluation | 读写 VS Code API、渲染 UI、直接访问 Webview          |
+| `ai-sdk`      | provider adapter、model invocation、tool/structured-output projection、多模态消息投影                       | 拥有创作 lifecycle、读取项目文件、决定领域语义       |
 | `platform`    | host-agnostic platform glue、tool provider、market skill adapter、配置解析、能力注入                        | 依赖 React/Webview，实现 VS Code UI                  |
 | `extension`   | VS Code command、Webview bridge、file/resource/auth/engine/entity/search host adapter、lifecycle/disposable | 沉淀 Agent runtime 决策或 prompt 拼装                |
-| `webview`     | Chat、settings、skill catalog、workflow/task/artifact projection、用户确认                                  | 导入 runtime/platform/ai-sdk，执行工具或访问文件系统 |
+| `webview`     | Chat、settings、skill catalog、creation/task/artifact projection、用户确认                                  | 导入 runtime/platform/ai-sdk，执行工具或访问文件系统 |
 | `cli-tui`     | 非 VS Code shell 和 TUI adapter                                                                             | 绕过 runtime 另建 Agent 业务路径                     |
 
 ## 架构视图
@@ -61,11 +62,11 @@ Webview / CLI projection
 
 | 维度   | 约束                                                                                                                                                                                                             |
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 职责   | Webview/CLI 只投影交互；Extension/shell 只注入宿主能力；Agent runtime 拥有 turn、workflow、skill、prompt、tool、memory、approval、evaluation；Platform/AI SDK 只适配 provider；领域服务拥有具体创作事实          |
+| 职责   | Webview/CLI 只投影交互；Extension/shell 只注入宿主能力；Agent runtime 拥有 turn、creation profile/stage/iteration、skill、prompt、tool、memory、approval、evaluation；Platform/AI SDK 只适配 provider；领域服务拥有具体创作事实 |
 | 依赖   | Webview 依赖 `agent-types`，不依赖 runtime；Extension 可依赖 runtime 和 platform，但不沉淀策略；`agent`、`platform`、`ai-sdk` 保持 host-agnostic；领域包通过 capability、command、facade 或 shared contract 接入 |
 | 接口   | Webview protocol、runtime ports、provider adapter、capability contribution、tool schema、artifact projection 和 grounded refs 分层定义，不能用自由 JSON 在层间扩散                                               |
-| 扩展   | 新 provider、新 skill、新 market capability、新领域工具先进入 registration，再按 workflow/context/policy 注入；扩展点不能绕过 approval、grounding 和 diagnostics                                                 |
-| 可测性 | 通过 prompt snapshot/hash、protocol schema、adapter fake、workflow transition、tool allowlist、boundary import guard 和 projection fixture 固化行为，不依赖真实 UI 或真实 provider 才能验证核心策略              |
+| 扩展   | 新 provider、新 skill、新 market capability、新领域工具先进入 registration，再按 creation profile/context/policy 注入；扩展点不能绕过 approval、grounding 和 diagnostics                                      |
+| 可测性 | 通过 prompt snapshot/hash、protocol schema、adapter fake、creation profile/iteration、tool allowlist、boundary import guard 和 projection fixture 固化行为，不依赖真实 UI 或真实 provider 才能验证核心策略       |
 
 ## 运行时入口与平面
 
@@ -74,7 +75,7 @@ Agent runtime 的宿主入口不应直接暴露零散构造参数。宿主应组
 ```text
 host bootstrap
   -> runtime config
-      workflowRuntime
+      creationGuidance
       artifactStore
       capabilityRuntime
       feedbackLoop
@@ -83,10 +84,10 @@ host bootstrap
 
 | 平面                | 职责                                                                          | 约束                                                              |
 | ------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `workflowRuntime`   | IDC stage、workflow run/node/transition、PlanMode/AutoMode 入口               | 不读取 VS Code 或 Webview 状态，只消费宿主投影                    |
+| `creationGuidance`  | Agent-native creation profile guidance、stage projection、validator feedback、review projection | 不拥有 lifecycle/state，不执行领域副作用，不创建 workflow run/node/transition |
 | `artifactStore`     | workspace artifact、journal writer、artifact projection、grounded output refs | 不保存 Webview URI、runtime token、临时绝对路径或 provider secret |
 | `capabilityRuntime` | skill、toolGroup、prompt fragments、provider cards、capability diagnostics    | registration 与 injection 分离，不能注册即注入 LLM                |
-| `feedbackLoop`      | memory recall/extraction、evaluation signal、recovery decision、user feedback | feedback 是控制信号，不是普通 IDC 阶段                            |
+| `feedbackLoop`      | memory recall/extraction、evaluation signal、recovery decision、user feedback | feedback 是控制信号，不是私有阶段 runtime                         |
 
 宿主显式配置优先于 runtime 默认值。Extension、CLI 和 TUI 不应各自维护一套 session bootstrap 映射；差异通过 host adapter 注入。
 
@@ -94,7 +95,7 @@ host bootstrap
 
 ```text
 Intent
-  -> Workflow / IDC
+  -> Agent-native creation profile/stage
   -> Prompt context
   -> Skill strategy
   -> Tool and capability injection
@@ -120,27 +121,28 @@ Intent
 | 平面       | 负责                                                                               | 不负责                                     |
 | ---------- | ---------------------------------------------------------------------------------- | ------------------------------------------ |
 | Prompt     | 角色、语言、上下文摘要、行为偏好、skill fragments                                  | 执行工具、保存事实、注入 secret            |
-| Schema     | tool arguments、structured output、workflow artifact、recovery decision 的结构约束 | 决定是否执行工具                           |
-| Runtime    | turn assembly、IDC transition、tool orchestration、artifact projection             | 读取 VS Code API 或渲染 UI                 |
+| Schema     | tool arguments、structured output、creation artifact、recovery decision 的结构约束 | 决定是否执行工具                           |
+| Runtime    | turn assembly、creation iteration、tool orchestration、artifact projection         | 读取 VS Code API 或渲染 UI                 |
 | Policy     | permission mode、trust level、approval gate、secret boundary、host availability    | 用 prompt 文案替代权限判断                 |
 | Memory     | journal、conversation projection、project memory、semantic recall                  | 替代 Assets、Entity、Engine 或领域项目格式 |
 | Evaluation | deterministic checks、LLM judge adapter、diagnostics、recovery signal              | 直接改 confirmed fact 或绕过 approval      |
 
-控制面是横切约束，不是 IDC 的第四阶段。普通创作主路径仍是 Draft、Plan、Apply；评估、记忆、审批和恢复只在需要时介入。
+控制面是横切约束，不是 IDC 的第四阶段。内置 IDC profile 可以提供 Draft、Plan、Apply 三个默认 stage；其他 profile 可以声明更多或更少 stage。评估、记忆、审批和恢复只在需要时介入。
 
-## IDC 工作流
+## Agent 原生阶段式创作
 
-IDC 是 Intent-Driven Creation，面向创作目标而不是软件开发任务。默认骨架是 Draft、Plan、Apply 三阶段。
+Agent 原生创作能力拥有 lifecycle、stage、iteration、validation feedback、review、approval 和后续 action 判断。IDC 是 Intent-Driven Creation 的默认 creation profile，不是独立 runtime，也不是全局固定三阶段。
 
 ```text
 User intent
-  -> Draft
+  -> creation profile
+  -> stage: Draft
       clarify creative goal, references, constraints, missing context
-  -> Plan
+  -> stage: Plan
       choose capability path, tools, assets, entities, engine/runtime needs
-  -> Apply
+  -> stage: Apply
       execute tools, produce grounded artifacts, update projections
-  -> Observe / Evaluate
+  -> validation / review feedback
       validate result, collect feedback, suggest recovery
 ```
 
@@ -149,27 +151,27 @@ User intent
 | 阶段             | 回答                               | 主要产物                                             | 不应承担               |
 | ---------------- | ---------------------------------- | ---------------------------------------------------- | ---------------------- |
 | Draft            | 用户想创作什么，约束和参考是什么   | intent summary、context refs、draft artifacts        | 直接执行不可逆工具     |
-| Plan             | 用哪些能力、顺序和审批完成目标     | workflow nodes、tool allowlist、artifact expectation | 私自扩大权限或隐藏工具 |
+| Plan             | 用哪些能力、顺序和审批完成目标     | next actions、tool/capability hints、artifact expectation | 私自扩大权限或隐藏工具 |
 | Apply            | 执行工具、生成媒体、写入事实或产物 | tool results、artifacts、entity/asset/resource refs  | 重新解释用户目标       |
 | Observe/Evaluate | 结果是否达标，如何恢复             | diagnostics、feedback、repair suggestions            | 绕过审批自动改事实     |
 
-IDC 不要求每个 turn 都完整走三阶段。简单、低风险、无副作用问题可以直接进入 Apply；多步骤、跨领域、高成本、写项目事实或需要媒体生成的请求应显式进入 Draft/Plan。
+内置 IDC profile 不要求每个 turn 都完整走三阶段。简单、低风险、无副作用问题可以直接回答或进入轻量执行；多步骤、跨领域、高成本、写项目事实或需要媒体生成的请求应让 Agent 显式说明当前 stage、validator 和下一步。
 
 ### 进入策略
 
 | 用户意图                                   | 默认路径                           | 说明                                                                   |
 | ------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------------- |
-| 解释、查询、只读总结                       | 直接回答或轻量 Apply               | 不创建完整 workflow，除非需要持久 artifact                             |
+| 解释、查询、只读总结                       | 直接回答或轻量 Apply               | 不创建 workflow run，除非需要持久 artifact 或 creation iteration         |
 | 单一低风险工具                             | 隐式 Draft -> Apply                | runtime 可内部选择工具，但仍保留 tool trace                            |
 | 多领域创作、媒体生成、批量变更             | Draft -> Plan -> Apply             | 明确目标、参考、能力路径、预期产物和审批点                             |
 | 删除、覆盖、安装、外部副作用、信任边界变化 | Draft -> Plan -> Approval -> Apply | Policy 决定是否需要用户确认和更高信任能力                              |
 | 结果不达标或工具失败                       | Observe/Evaluate -> recovery       | recovery 可以 retry、regress、restart 或 escalate-user，但不能自动越权 |
 
-### Workflow 投影
+### Legacy Trace 投影
 
-`AgentWorkflowDefinition` 描述稳定流程结构，`AgentWorkflowRun` 描述一次运行，`AgentWorkflowNode` 表达 IDC stage、prompt、tool、media-task、approval、evaluator 或 artifact 节点，`AgentWorkflowTransition` 记录切换原因。UI 只展示 projection，不推导流程策略。
+`AgentWorkflowDefinition`、`AgentWorkflowRun`、`AgentWorkflowNode` 和 `AgentWorkflowTransition` 只能作为 legacy trace/projection 或兼容观察存在，不是新的 Agent 创作身份、阶段状态或执行权威。新代码应使用 Agent 现有 session/turn/capability 边界承接创作状态，只在具体投影需要时增加小型 contract，并用 prompt-chain observation 记录 Skill 方法指导的采纳、跳过、重排和完成。
 
-异步 task、media task、subagent event 和 artifact projection 应尽量携带 `conversationId`，在可用时携带 `workflowDefinitionId`、`workflowRunId`、`workflowNodeId`。这样 Webview 可以恢复视图，Agent runtime 也能把结果重新接回当前创作意图。
+异步 task、media task、subagent event 和 artifact projection 应尽量携带 `conversationId`、`creationId` 和 `iterationId`。仍需保留 `workflowDefinitionId`、`workflowRunId`、`workflowNodeId` 时，必须标记为 legacy trace，并且缺失这些字段不得阻断 Agent-native creation 状态、validator feedback 或 review projection。
 
 ## Agent 交互协议
 
@@ -178,7 +180,7 @@ Agent 有三类协议面，不能混用：
 | 协议面            | 参与方                            | 内容                                                                           | 约束                                                 |
 | ----------------- | --------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------- |
 | Webview protocol  | Webview ↔ Extension               | `sendMessage`、confirm tool、plan action、slash command、settings、open/reveal | 只传投影和用户意图，不传 secret 和 runtime internals |
-| Runtime protocol  | Extension adapter ↔ Agent runtime | turn assembly、workflow run、tool call、approval、memory、artifact projection  | host-agnostic，使用 ports/adapters                   |
+| Runtime protocol  | Extension adapter ↔ Agent runtime | turn assembly、creation iteration、tool call、approval、memory、artifact projection | host-agnostic，使用 ports/adapters                   |
 | Provider protocol | Runtime/AI SDK ↔ model provider   | messages、tool schemas、structured output、多模态 payload                      | provider-specific 差异在 adapter 内消化              |
 
 ### 消息与产物
@@ -232,7 +234,7 @@ Registration
         |
         v
 Injection
-  active skill + workflow node + provider capability + policy + context budget
+  active skill + creation stage/profile + provider capability + policy + context budget
   -> prompt fragments + tool schemas + allowlist + structured output schemas
 ```
 
@@ -254,8 +256,8 @@ Injection
 | Discover   | 从 builtin、workspace、market、local、MCP 或 provider contribution 发现，不执行副作用                                          |
 | Validate   | 校验 manifest、schema、trust、host requirements、tool references、prompt fragment 形状                                         |
 | Register   | 进入 registry，产出 diagnostics 和 capability metadata                                                                         |
-| Activate   | 根据用户意图、slash command、active skill、workflow node 或领域上下文选择候选                                                  |
-| Inject     | 在 policy、token budget、provider capability 和 workflow stage 允许时注入 prompt fragments、tool schemas 和 structured schemas |
+| Activate   | 根据用户意图、slash command、active skill、creation stage/profile 或领域上下文选择候选                                        |
+| Inject     | 在 policy、token budget、provider capability 和 creation stage/profile 允许时注入 prompt fragments、tool schemas 和 structured schemas |
 | Observe    | 记录 capability diagnostics、tool result metadata、artifact refs 和 feedback signal                                            |
 | Deactivate | 切换会话、清除 active skill、失去 trust/host requirement 或上下文不再匹配时移出 injection set                                  |
 
@@ -266,10 +268,10 @@ Skill-first 的含义是“领域策略包先行”，不是“Skill 拥有执�
 | 层          | 内容                                                                             |
 | ----------- | -------------------------------------------------------------------------------- |
 | base        | 项目级行为边界、安全规则、Agent 角色                                             |
-| schema      | 工具参数、IDC artifact、structured output、recovery decision                     |
+| schema      | 工具参数、creation artifact、structured output、recovery decision                |
 | skill       | active skill 和 capability prompt fragments                                      |
 | environment | locale、settings、AGENTS.md overlay、provider expression、memory/context summary |
-| ephemeral   | 当前 workflow node、selected context、tool allowlist、多模态 evidence            |
+| ephemeral   | 当前 creation stage/iteration、selected context、tool allowlist、多模态 evidence |
 
 Prompt 生成应输出 prompt snapshot/hash 和 diagnostics，便于追踪 drift。Provider 不支持 native tool calling 或 structured output 时，由 adapter 决定 prompt-only 投影或返回 capability diagnostic。
 
@@ -325,11 +327,11 @@ Agent-first 不表示忽略 UI 或素材文件。UI 提供“用户正在指什�
 | untrusted/local capability 注入                   | 默认不自动执行，不进入高风险 tool allowlist                              |
 | secret/token/provider credential                  | 只通过 Auth/config/provider adapter，不写 prompt、skill 或 Webview state |
 
-Approval 是运行时 gate，不应埋在 prompt 文案里。Policy 可以影响 tool allowlist、workflow stage、provider choice 和 recovery path。
+Approval 是运行时 gate，不应埋在 prompt 文案里。Policy 可以影响 tool allowlist、creation stage、provider choice 和 recovery path。
 
 ## Evaluation 与 Recovery
 
-Evaluation 是横切审阅面，不是默认 IDC 阶段。
+Evaluation 是横切审阅面，不是默认 IDC 阶段，也不是独立 workflow runtime。
 
 - deterministic evaluator 适合格式、尺寸、duration、schema、引用完整性、权限合规检查。
 - LLM-as-judge 只通过 Provider adapter 接入，并保留 provider/model/prompt snapshot。
@@ -340,9 +342,9 @@ Evaluation 是横切审阅面，不是默认 IDC 阶段。
 | Recovery signal | 含义                                 | 约束                            |
 | --------------- | ------------------------------------ | ------------------------------- |
 | retry-tool      | 同一工具参数或小范围修正后重试       | 只适合幂等或可回滚工具          |
-| retry-stage     | 保持用户目标，重新执行当前 IDC stage | 需要保留失败 diagnostics        |
+| retry-stage     | 保持用户目标，重新执行当前 creation stage | 需要保留失败 diagnostics    |
 | regress         | 回到 Draft 或 Plan 修正目标/方案     | 不自动丢弃用户已确认内容        |
-| restart-run     | 重新创建 workflow run                | 需要明确 lineage 和用户可见说明 |
+| restart-creation | 重新创建 creation session 或 iteration | 需要明确 lineage 和用户可见说明 |
 | escalate-user   | 请求用户决策、授权或补充素材         | 不用模型臆造缺失事实            |
 
 ## 跨领域接入规则
@@ -373,7 +375,7 @@ Evaluation 是横切审阅面，不是默认 IDC 阶段。
 | 反模式                                         | 风险                               | 正确边界                                         |
 | ---------------------------------------------- | ---------------------------------- | ------------------------------------------------ |
 | Webview 直接导入 `@neko/agent` 或 provider SDK | UI 与 runtime 互相缠死             | Webview 只消费 `agent-types` 投影                |
-| Extension 拼 prompt 或决定 workflow            | Host adapter 变成业务层            | runtime 负责 prompt/workflow，Extension 注入能力 |
+| Extension 拼 prompt 或决定 creation stage      | Host adapter 变成业务层            | runtime 负责 prompt/creation，Extension 注入能力 |
 | Skill 内藏执行逻辑                             | Skill 变成不可审计 workflow engine | Skill 只声明策略、片段、工具范围                 |
 | 注册能力即注入 LLM                             | token 爆炸和权限泄漏               | Registration 与 Injection 分离                   |
 | Tool 结果直接写项目事实                        | 副作用不可审计                     | 通过领域服务、审批和事实层                       |
@@ -389,7 +391,7 @@ Evaluation 是横切审阅面，不是默认 IDC 阶段。
 | 音频     | 转写、效果链建议、混音/后期建议、音频质量审阅     |
 | 模型     | LookDev、材质/灯光建议、捏脸、场景编辑和验证      |
 | 2D       | 图像准备、PSD 分层建议、Puppet 辅助、角色素材整理 |
-| 互动     | 流程生成、状态解释、自动连接、运行态审阅与修复    |
+| 互动     | 交互结构生成、状态解释、自动连接、运行态审阅与修复 |
 
 领域文档应说明 Agent 如何参与某个创作目标；本文只定义 Agent 自身横切边界。
 
@@ -397,7 +399,7 @@ Evaluation 是横切审阅面，不是默认 IDC 阶段。
 
 本设计吸收以下历史主题的稳定部分：
 
-- Agent unified workflow / IDC
+- Agent-native creation / IDC profile
 - Agent runtime boundary guard
 - Capability Protocol
 - Agent media architecture

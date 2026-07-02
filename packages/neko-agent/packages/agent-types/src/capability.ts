@@ -22,7 +22,7 @@ export type AgentCapabilityContributionKind =
   | 'toolGroup'
   | 'slashCommand'
   | 'promptFragment'
-  | 'workflowFragment'
+  | 'promptChainFragment'
   | 'artifactProtocol'
   | 'artifactProfile'
   | 'artifactRenderer'
@@ -37,10 +37,9 @@ export interface AgentCapabilityPermissionRequirement {
   readonly approvalRequired?: boolean;
 }
 
-export interface AgentCapabilityWorkflowNodeRequirement {
-  readonly nodeIds?: readonly string[];
-  readonly nodeKinds?: readonly string[];
-  readonly stages?: readonly string[];
+export interface AgentCapabilityCreationStageRequirement {
+  readonly profileIds?: readonly string[];
+  readonly stageIds?: readonly string[];
 }
 
 export interface AgentCapabilityContributionIdentity {
@@ -58,10 +57,11 @@ export interface AgentCapabilitySlashCommandContribution {
   readonly skillId?: string;
 }
 
-export interface AgentCapabilityWorkflowFragmentContribution {
+export interface AgentCapabilityPromptChainFragmentContribution {
   readonly id: string;
   readonly title?: string;
-  readonly nodeIds?: readonly string[];
+  readonly promptChainId?: string;
+  readonly checkpointIds?: readonly string[];
 }
 
 export type AgentArtifactCapabilityRisk = 'low' | 'medium' | 'high' | 'destructive';
@@ -216,11 +216,11 @@ export interface AgentCapabilityContribution {
   readonly description?: string;
   readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
   readonly permissionRequirements?: readonly AgentCapabilityPermissionRequirement[];
-  readonly workflowNodeRequirements?: readonly AgentCapabilityWorkflowNodeRequirement[];
+  readonly creationStageRequirements?: readonly AgentCapabilityCreationStageRequirement[];
   readonly promptFragments?: readonly PromptFragment[];
   readonly allowedTools?: readonly string[];
   readonly slashCommands?: readonly AgentCapabilitySlashCommandContribution[];
-  readonly workflowFragments?: readonly AgentCapabilityWorkflowFragmentContribution[];
+  readonly promptChainFragments?: readonly AgentCapabilityPromptChainFragmentContribution[];
   readonly toolNames?: readonly string[];
   readonly toolGroupNames?: readonly string[];
   readonly artifactFacets?: AgentArtifactFacetsContribution;
@@ -241,9 +241,8 @@ export interface AgentCapabilityDiagnostic {
 export interface AgentCapabilityInjectionContext {
   readonly host: AgentCapabilityHost;
   readonly activeSkillId?: string;
-  readonly workflowNodeId?: string;
-  readonly workflowNodeKind?: string;
-  readonly workflowStage?: string;
+  readonly creationProfileId?: string;
+  readonly creationStageId?: string;
   readonly allowedTrustLevels?: readonly AgentCapabilityTrustLevel[];
   readonly toolBudget?: number;
   readonly disabledContributionIds?: readonly string[];
@@ -265,7 +264,7 @@ export interface AgentInjectedCapabilitySet {
   readonly promptFragments: readonly PromptFragment[];
   readonly allowedTools: readonly string[];
   readonly slashCommands: readonly AgentCapabilitySlashCommandContribution[];
-  readonly workflowFragments: readonly AgentCapabilityWorkflowFragmentContribution[];
+  readonly promptChainFragments: readonly AgentCapabilityPromptChainFragmentContribution[];
   readonly diagnostics: readonly AgentCapabilityDiagnostic[];
 }
 
@@ -290,7 +289,7 @@ export type AgentCapabilityTelemetryEventKind =
   | 'skill-remove'
   | 'prompt-fragment-change'
   | 'schema-change'
-  | 'workflow-fragment-change'
+  | 'prompt-chain-fragment-change'
   | 'provider-card-change';
 
 export interface AgentCapabilityTelemetryEvent {

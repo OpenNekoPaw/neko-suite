@@ -13,8 +13,8 @@ import type {
   AgentCapabilityTelemetryEventKind,
   AgentCapabilityTelemetryReason,
   AgentCapabilityTelemetrySnapshot,
-  AgentCapabilityWorkflowNodeRequirement,
-  AgentCapabilityWorkflowFragmentContribution,
+  AgentCapabilityCreationStageRequirement,
+  AgentCapabilityPromptChainFragmentContribution,
   AgentInjectedCapabilitySet,
 } from '@neko-agent/types';
 import type {
@@ -40,7 +40,7 @@ export interface NormalizeSkillCapabilityInput {
   readonly version?: string;
   readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
   readonly permissionRequirements?: readonly AgentCapabilityPermissionRequirement[];
-  readonly workflowNodeRequirements?: readonly AgentCapabilityWorkflowNodeRequirement[];
+  readonly creationStageRequirements?: readonly AgentCapabilityCreationStageRequirement[];
 }
 
 export interface NormalizeSkillScanGroupInput {
@@ -130,8 +130,8 @@ export function normalizeSkillCapability(
     ...(input.permissionRequirements
       ? { permissionRequirements: input.permissionRequirements }
       : {}),
-    ...(input.workflowNodeRequirements
-      ? { workflowNodeRequirements: input.workflowNodeRequirements }
+    ...(input.creationStageRequirements
+      ? { creationStageRequirements: input.creationStageRequirements }
       : {}),
     promptFragments: skill.content ? [promptFragment] : [],
     allowedTools: skill.allowedTools ?? [],
@@ -239,8 +239,13 @@ export function validateCapabilityContribution(
     pushMissingStringDiagnostic(diagnostics, contributionId, command.id, 'slashCommands.id');
     pushMissingStringDiagnostic(diagnostics, contributionId, command.name, 'slashCommands.name');
   }
-  for (const fragment of contribution.workflowFragments ?? []) {
-    pushMissingStringDiagnostic(diagnostics, contributionId, fragment.id, 'workflowFragments.id');
+  for (const fragment of contribution.promptChainFragments ?? []) {
+    pushMissingStringDiagnostic(
+      diagnostics,
+      contributionId,
+      fragment.id,
+      'promptChainFragments.id',
+    );
   }
   for (const requirement of contribution.hostRequirements ?? []) {
     if (!isHost(requirement.host)) {
@@ -257,17 +262,13 @@ export function validateCapabilityContribution(
       'permissionRequirements.scope',
     );
   }
-  for (const requirement of contribution.workflowNodeRequirements ?? []) {
-    if (
-      (requirement.nodeIds?.length ?? 0) === 0 &&
-      (requirement.nodeKinds?.length ?? 0) === 0 &&
-      (requirement.stages?.length ?? 0) === 0
-    ) {
+  for (const requirement of contribution.creationStageRequirements ?? []) {
+    if ((requirement.profileIds?.length ?? 0) === 0 && (requirement.stageIds?.length ?? 0) === 0) {
       diagnostics.push(
         validationDiagnostic(
           contributionId,
-          'empty-workflow-node-requirement',
-          'workflowNodeRequirements',
+          'empty-creation-stage-requirement',
+          'creationStageRequirements',
         ),
       );
     }
@@ -544,10 +545,10 @@ function getInjectionSkipReason(
       message: 'Capability contribution does not support the current host.',
     };
   }
-  if (!isWorkflowNodeSupported(contribution.workflowNodeRequirements, context)) {
+  if (!isCreationStageSupported(contribution.creationStageRequirements, context)) {
     return {
-      reason: 'workflow-node-requirement',
-      message: 'Capability contribution does not support the current workflow node.',
+      reason: 'creation-stage-requirement',
+      message: 'Capability contribution does not support the current creation stage.',
     };
   }
   if (!isPermissionAllowed(contribution, context)) {
@@ -575,7 +576,7 @@ function buildInjectedCapabilitySet(
   const promptFragments: PromptFragment[] = [];
   const allowedTools: string[] = [];
   const slashCommands: AgentCapabilitySlashCommandContribution[] = [];
-  const workflowFragments: AgentCapabilityWorkflowFragmentContribution[] = [];
+  const promptChainFragments: AgentCapabilityPromptChainFragmentContribution[] = [];
   const contributions: AgentCapabilityContribution[] = [];
   const contributionList = Array.from(registeredContributions);
 
@@ -594,7 +595,7 @@ function buildInjectedCapabilitySet(
       promptFragments,
       allowedTools,
       slashCommands,
-      workflowFragments,
+      promptChainFragments,
       diagnostics,
     };
   }
@@ -618,7 +619,7 @@ function buildInjectedCapabilitySet(
     }
     if (!context.ablation?.disableSkillInjection) {
       slashCommands.push(...(contribution.slashCommands ?? []));
-      workflowFragments.push(...(contribution.workflowFragments ?? []));
+      promptChainFragments.push(...(contribution.promptChainFragments ?? []));
     }
     if (!context.ablation?.disableToolInjection && remainingToolBudget > 0) {
       for (const toolName of contribution.allowedTools ?? contribution.toolNames ?? []) {
@@ -645,7 +646,7 @@ function buildInjectedCapabilitySet(
     promptFragments,
     allowedTools,
     slashCommands,
-    workflowFragments,
+    promptChainFragments,
     diagnostics,
   };
 }
@@ -958,8 +959,8 @@ function findRegistrationCollisions(
     pushNameCollisions(diagnostics, contribution, existing, 'prompt-fragment', (item) =>
       (item.promptFragments ?? []).map((fragment) => fragment.id),
     );
-    pushNameCollisions(diagnostics, contribution, existing, 'workflow-fragment', (item) =>
-      (item.workflowFragments ?? []).map((fragment) => fragment.id),
+    pushNameCollisions(diagnostics, contribution, existing, 'prompt-chain-fragment', (item) =>
+      (item.promptChainFragments ?? []).map((fragment) => fragment.id),
     );
   }
   return diagnostics;
@@ -1352,16 +1353,15 @@ function isHostSupported(
   return requirements.some((requirement) => requirement.host === host || requirement.optional);
 }
 
-function isWorkflowNodeSupported(
-  requirements: readonly AgentCapabilityWorkflowNodeRequirement[] | undefined,
+function isCreationStageSupported(
+  requirements: readonly AgentCapabilityCreationStageRequirement[] | undefined,
   context: AgentCapabilityInjectionContext,
 ): boolean {
   if (!requirements || requirements.length === 0) return true;
   return requirements.some(
     (requirement) =>
-      includesWhenPresent(requirement.nodeIds, context.workflowNodeId) &&
-      includesWhenPresent(requirement.nodeKinds, context.workflowNodeKind) &&
-      includesWhenPresent(requirement.stages, context.workflowStage),
+      includesWhenPresent(requirement.profileIds, context.creationProfileId) &&
+      includesWhenPresent(requirement.stageIds, context.creationStageId),
   );
 }
 
@@ -1424,7 +1424,7 @@ function selectSkippedField(contribution: AgentCapabilityContribution, reason: s
   if ((contribution.allowedTools?.length ?? 0) > 0 || (contribution.toolNames?.length ?? 0) > 0) {
     return 'tools';
   }
-  if ((contribution.workflowFragments?.length ?? 0) > 0) return 'workflowFragments';
+  if ((contribution.promptChainFragments?.length ?? 0) > 0) return 'promptChainFragments';
   return 'contribution';
 }
 
@@ -1434,11 +1434,11 @@ function readContributionUsedFields(contribution: AgentCapabilityContribution): 
   if (contribution.description) fields.push('description');
   if (contribution.hostRequirements?.length) fields.push('hostRequirements');
   if (contribution.permissionRequirements?.length) fields.push('permissionRequirements');
-  if (contribution.workflowNodeRequirements?.length) fields.push('workflowNodeRequirements');
+  if (contribution.creationStageRequirements?.length) fields.push('creationStageRequirements');
   if (contribution.promptFragments?.length) fields.push('promptFragments');
   if (contribution.allowedTools?.length) fields.push('allowedTools');
   if (contribution.slashCommands?.length) fields.push('slashCommands');
-  if (contribution.workflowFragments?.length) fields.push('workflowFragments');
+  if (contribution.promptChainFragments?.length) fields.push('promptChainFragments');
   if (contribution.toolNames?.length) fields.push('toolNames');
   if (contribution.toolGroupNames?.length) fields.push('toolGroupNames');
   if (hasArtifactFacets(contribution.artifactFacets)) fields.push('artifactFacets');
@@ -1478,7 +1478,7 @@ function toTelemetryReason(reason: string): AgentCapabilityTelemetryReason {
       return 'ablation-skipped';
     case 'host-requirement':
     case 'trust-policy':
-    case 'workflow-node-requirement':
+    case 'creation-stage-requirement':
     case 'permission-policy':
     case 'active-skill':
     case 'disabled':

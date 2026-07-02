@@ -9,7 +9,6 @@ import {
   DeactivateSkillTool,
   GetContextTool,
   SetExecutionModeTool,
-  StartIDCWorkflowTool,
 } from '../meta-tools';
 import type { SkillContextSummary } from '../meta-tools';
 
@@ -113,14 +112,14 @@ describe('core meta tools', () => {
     expect(deactivateSkill).toHaveBeenCalled();
   });
 
-  it('returns locked IDC stage persona diagnostics through GetContext and DeactivateSkill', async () => {
+  it('returns locked Creation stage persona diagnostics through GetContext and DeactivateSkill', async () => {
     const deactivateSkill = vi.fn(async () => ({
       success: false,
-      message: 'IDC stage persona is cleared when its owning stage exits',
+      message: 'Creation stage persona is cleared when its owning stage exits',
       diagnostics: [
         {
           code: 'locked-deactivation' as const,
-          message: 'IDC stage persona is cleared when its owning stage exits',
+          message: 'Creation stage persona is cleared when its owning stage exits',
           conversationId: 'conv-1',
           recordId: 'record-stage',
           skillName: 'creation-persona',
@@ -137,9 +136,9 @@ describe('core meta tools', () => {
             id: 'record-stage',
             skillName: 'creation-persona',
             slot: 'stagePersona' as const,
-            owner: 'idc' as const,
+            owner: 'creation-profile' as const,
             clearable: false,
-            lockedReason: 'IDC stage persona is cleared when its owning stage exits',
+            lockedReason: 'Creation stage persona is cleared when its owning stage exits',
             status: 'active' as const,
           },
         ],
@@ -163,7 +162,7 @@ describe('core meta tools', () => {
                 id: 'record-stage',
                 slot: 'stagePersona',
                 clearable: false,
-                lockedReason: 'IDC stage persona is cleared when its owning stage exits',
+                lockedReason: 'Creation stage persona is cleared when its owning stage exits',
               }),
             ],
             diagnostics: [],
@@ -173,44 +172,9 @@ describe('core meta tools', () => {
     );
     await expect(deactivateTool.execute({ recordId: 'record-stage' })).resolves.toEqual({
       success: false,
-      error: 'IDC stage persona is cleared when its owning stage exits',
+      error: 'Creation stage persona is cleared when its owning stage exits',
     });
     expect(deactivateSkill).toHaveBeenCalledWith({ recordId: 'record-stage' });
-  });
-
-  it('starts IDC workflow through the typed Agent meta tool provider path', async () => {
-    const startIdcWorkflow = vi.fn(async () => ({
-      success: true,
-      message: 'IDC workflow started: run-1',
-      runId: 'run-1',
-      events: [],
-    }));
-    const tool = new StartIDCWorkflowTool();
-    tool.setSkillProvider({
-      listSkills: vi.fn(),
-      getActiveSkill: vi.fn(),
-      activateSkill: vi.fn(),
-      deactivateSkill: vi.fn(),
-      startIdcWorkflow,
-    });
-
-    await expect(
-      tool.execute({ runKind: 'plan-review', runId: 'run-1', reason: 'Need IDC stages' }),
-    ).resolves.toEqual({
-      success: true,
-      data: {
-        started: true,
-        runKind: 'plan-review',
-        runId: 'run-1',
-        message: 'IDC workflow started: run-1',
-        diagnostics: undefined,
-      },
-    });
-    expect(startIdcWorkflow).toHaveBeenCalledWith({
-      runKind: 'plan-review',
-      runId: 'run-1',
-      reason: 'Need IDC stages',
-    });
   });
 
   it('sets execution mode through the typed Agent meta tool provider path', async () => {

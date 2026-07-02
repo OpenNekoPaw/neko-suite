@@ -19,7 +19,7 @@
  * Deferred to later PRs:
  *   - `approval-skipped`    — needs ApprovalEngine hooks (§6.1, not yet
  *     rewired to the IDC vocabulary).
- *   - `stage-not-entered`   — needs IdcRun ↔ tracker reconciliation.
+ *   - `stage-not-entered`   — needs creation activity ↔ tracker reconciliation.
  */
 
 import type { IdcStage } from '@neko-agent/types';
