@@ -52,7 +52,7 @@ export type AgentCapabilityArtifactRefKind = (typeof AGENT_CAPABILITY_ARTIFACT_R
 
 export const AGENT_CAPABILITY_APPROVAL_SOURCES = [
   'user-confirmation',
-  'workflow-apply',
+  'creation-apply',
   'tool-confirmation',
   'policy',
 ] as const;
@@ -100,9 +100,10 @@ export interface AgentCapabilityApprovalContext {
   readonly approvalId?: string;
   readonly approvedAt?: number;
   readonly approvedBy?: string;
-  readonly workflowDefinitionId?: string;
-  readonly workflowRunId?: string;
-  readonly workflowNodeId?: string;
+  readonly creationId?: string;
+  readonly iterationId?: string;
+  readonly profileId?: string;
+  readonly stageId?: string;
   readonly toolCallId?: string;
 }
 
@@ -537,9 +538,10 @@ function isAgentCapabilityApprovalContext(value: unknown): value is AgentCapabil
     optionalString(value['approvalId']) &&
     optionalNumber(value['approvedAt']) &&
     optionalString(value['approvedBy']) &&
-    optionalString(value['workflowDefinitionId']) &&
-    optionalString(value['workflowRunId']) &&
-    optionalString(value['workflowNodeId']) &&
+    optionalString(value['creationId']) &&
+    optionalString(value['iterationId']) &&
+    optionalString(value['profileId']) &&
+    optionalString(value['stageId']) &&
     optionalString(value['toolCallId'])
   );
 }

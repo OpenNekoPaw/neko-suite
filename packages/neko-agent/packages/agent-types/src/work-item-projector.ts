@@ -12,7 +12,7 @@ import type {
   SubAgentWorkItemEvent,
   TaskWorkItem,
 } from './work-item';
-import type { AgentWorkflowIdentity } from './workflow';
+import type { AgentLegacyCreationTrace } from './legacy-trace';
 
 export interface ProjectBackgroundTaskWorkItemInput {
   conversationId: string;
@@ -20,7 +20,7 @@ export interface ProjectBackgroundTaskWorkItemInput {
   kind?: TaskWorkItem['kind'];
   parentMessageId?: string | null;
   parentToolCallId?: string | null;
-  workflow?: AgentWorkflowIdentity;
+  legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export interface ProjectBackgroundTasksWorkItemsInput {
@@ -34,7 +34,7 @@ export interface ProjectMediaTaskWorkItemInput {
   task: AgentMediaTaskView;
   parentMessageId?: string | null;
   parentToolCallId?: string | null;
-  workflow?: AgentWorkflowIdentity;
+  legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export function backgroundTaskToWorkItem(
@@ -42,14 +42,14 @@ export function backgroundTaskToWorkItem(
   conversationId: string,
   kind: TaskWorkItem['kind'],
   links: Partial<Pick<AgentWorkItemBase, 'parentMessageId' | 'parentToolCallId'>> = {},
-  workflow?: AgentWorkflowIdentity,
+  legacyTrace?: AgentLegacyCreationTrace,
 ): TaskWorkItem {
   const result = sanitizeAgentMediaTaskResult(task.result);
   const { result: _discardedResult, ...taskWithoutResult } = task;
   return {
     id: task.id,
     conversationId,
-    ...(workflow ? { workflow } : {}),
+    ...(legacyTrace ? { legacyTrace } : {}),
     kind,
     parentMessageId: links.parentMessageId ?? null,
     parentToolCallId: links.parentToolCallId ?? null,
@@ -121,7 +121,7 @@ export function projectBackgroundTaskToWorkItem(
       parentMessageId: input.parentMessageId,
       parentToolCallId: input.parentToolCallId,
     },
-    input.workflow,
+    input.legacyTrace,
   );
 }
 
@@ -144,13 +144,13 @@ export function projectMediaTaskToWorkItem(input: ProjectMediaTaskWorkItemInput)
     kind: 'media-task',
     parentMessageId: input.parentMessageId,
     parentToolCallId: input.parentToolCallId,
-    workflow: input.workflow,
+    legacyTrace: input.legacyTrace,
   });
 }
 
 export function projectSubAgentEventToWorkItem(
   event: SubAgentWorkItemEvent,
-  workflow?: AgentWorkflowIdentity,
+  legacyTrace?: AgentLegacyCreationTrace,
 ): SubAgentWorkItem {
   const status = toSubAgentWorkItemStatus(event.data?.status ?? event.type);
   const progress = toSubAgentProgress(event.type, event.data?.progress);
@@ -162,7 +162,7 @@ export function projectSubAgentEventToWorkItem(
   return {
     id: event.subAgentId,
     conversationId: event.conversationId,
-    ...(workflow ? { workflow } : {}),
+    ...(legacyTrace ? { legacyTrace } : {}),
     kind: 'subagent',
     parentMessageId: event.data?.parentMessageId ?? null,
     parentToolCallId: event.data?.parentToolCallId ?? null,

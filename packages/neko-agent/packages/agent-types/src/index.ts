@@ -67,6 +67,26 @@ export {
   type NekoEngineFrameServerResult,
 } from './engine-bridge-contract';
 export type { EnabledStateRecord } from './enabled-state';
+export type { AgentLegacyCreationTrace } from './legacy-trace';
+export type {
+  AgentPromptChainCheckpointObservation,
+  AgentPromptChainCompletedObservation,
+  AgentPromptChainObservation,
+  AgentPromptChainObservationBase,
+  AgentPromptChainObservationKind,
+  AgentPromptChainReorderedObservation,
+  AgentPromptChainSkippedObservation,
+  AgentPromptChainStartedObservation,
+} from './prompt-chain-observation';
+export {
+  buildAgentPromptChainCheckpointObservation,
+  buildAgentPromptChainCompletedObservation,
+  buildAgentPromptChainReorderedObservation,
+  buildAgentPromptChainSkippedObservation,
+  buildAgentPromptChainStartedObservation,
+  isAgentPromptChainObservation,
+} from './prompt-chain-observation';
+
 export type {
   AgentCommandCatalogEntry,
   AgentCommandCatalogSource,
@@ -158,17 +178,6 @@ export type {
   TaskWorkItem,
 } from './work-item';
 export type {
-  AgentWorkflowDefinition,
-  AgentWorkflowIdentity,
-  AgentWorkflowNode,
-  AgentWorkflowNodeKind,
-  AgentWorkflowProjection,
-  AgentWorkflowRun,
-  AgentWorkflowStageProfile,
-  AgentWorkflowStatus,
-  AgentWorkflowTransition,
-} from './workflow';
-export type {
   AgentCapabilityContribution,
   AgentCapabilityContributionIdentity,
   AgentCapabilityContributionKind,
@@ -184,8 +193,8 @@ export type {
   AgentCapabilityTelemetryEventKind,
   AgentCapabilityTelemetryReason,
   AgentCapabilityTelemetrySnapshot,
-  AgentCapabilityWorkflowNodeRequirement,
-  AgentCapabilityWorkflowFragmentContribution,
+  AgentCapabilityCreationStageRequirement,
+  AgentCapabilityPromptChainFragmentContribution,
   AgentArtifactExecutionCapabilityContribution,
   AgentArtifactFacetsContribution,
   AgentLifecycleCapabilityContribution,
@@ -281,8 +290,8 @@ export type {
   GeneratedSchemaPurpose,
   GeneratedStructuredSchema,
   PromptGenerationContext,
+  PromptGenerationCreationContext,
   PromptGenerationProviderCapabilities,
-  PromptGenerationWorkflowContext,
   PromptSchemaProviderToolMode,
   PromptSchemaStructuredOutputMode,
 } from './prompt-schema';
@@ -398,8 +407,6 @@ export type {
   ConfigStateMessage,
   ConfirmToolWebviewMessage,
   ContextTokenCountMessage,
-  ControlIdcWorkflowAction,
-  ControlIdcWorkflowWebviewMessage,
   ConversationListMessage,
   ConversationOnlyWebviewMessage,
   DeleteConversationWebviewMessage,
@@ -487,7 +494,6 @@ export type {
   UpdateSettingsWebviewMessage,
   UpdateTabStateWebviewMessage,
   WebviewToExtensionMessage,
-  WorkflowProjectionMessage,
 } from './webview-protocol';
 export type { AgentConfigDiagnostic, AgentConfigDiagnosticCode } from './config-diagnostic';
 export {
@@ -528,7 +534,6 @@ export {
   buildTasksUpdatedMessage,
   buildThinkingMessage,
   buildToolConfirmationMessage,
-  buildWorkflowProjectionMessage,
   isSessionMode,
   parseSendMessageWebviewMessage,
   parseWebviewToExtensionMessage,
@@ -568,6 +573,7 @@ export type {
   IdcStage,
   StageSet,
   StageActivationDecision,
+  StageActivationRoundSummary,
   StageSkipReason,
   StageTaskShape,
   Paradigm,
@@ -575,15 +581,6 @@ export type {
 
 // Task primitive (Plan-stage user-visible checklist — renamed from TodoList 2026-04-22)
 export type { TaskStatus, TaskStatusCamel, TaskItem, Task } from './task';
-
-// IdcRun — run record carrying IDC stage-activation summaries
-export type {
-  IdcRunStatus,
-  IdcRunRoundSummary,
-  IdcRun,
-  IdcRunArtifactKind,
-  IdcRunArtifactBinding,
-} from './idc-run';
 
 // Draft — Draft-stage artifact (ADR §5.2, §7.5; renamed from Proposal 2026-04-22)
 export type { Draft, DraftStatus } from './draft';

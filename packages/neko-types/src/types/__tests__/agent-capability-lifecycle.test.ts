@@ -86,12 +86,13 @@ describe('agent capability lifecycle contracts', () => {
         insertionPoint: { x: 10, y: 20 },
       },
       approval: {
-        source: 'workflow-apply',
+        source: 'creation-apply',
         approvalId: 'approval-1',
         approvedAt: 123,
-        workflowDefinitionId: 'neko.workflow.idc.v1',
-        workflowRunId: 'run-1',
-        workflowNodeId: 'apply',
+        creationId: 'creation-1',
+        iterationId: 'iteration-1',
+        profileId: 'idc.default',
+        stageId: 'apply',
       },
       provenance: {
         source: 'agent',

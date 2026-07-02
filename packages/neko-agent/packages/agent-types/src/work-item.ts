@@ -6,13 +6,9 @@ import type {
   RenderableGeneratedAsset,
   RenderableGeneratedDraft,
 } from '@neko/shared';
-import type { AgentWorkflowIdentity } from './workflow';
+import type { AgentLegacyCreationTrace } from './legacy-trace';
 export type AgentWorkItemTaskStatus =
-  | 'queued'
-  | 'processing'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+  'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
 export type AgentWorkItemTaskType = 'image' | 'video' | 'audio';
 
@@ -59,7 +55,7 @@ export type AgentWorkItemKind = 'media-task' | 'tool-background-task' | 'subagen
 export interface AgentWorkItemBase {
   id: string;
   conversationId: string;
-  workflow?: AgentWorkflowIdentity;
+  legacyTrace?: AgentLegacyCreationTrace;
   kind: AgentWorkItemKind;
   parentMessageId: string | null;
   parentToolCallId: string | null;
@@ -168,12 +164,7 @@ export interface AgentMediaTaskView {
 }
 
 export type SubAgentWorkItemEventType =
-  | 'spawned'
-  | 'started'
-  | 'progress'
-  | 'completed'
-  | 'failed'
-  | 'cancelled';
+  'spawned' | 'started' | 'progress' | 'completed' | 'failed' | 'cancelled';
 
 export type SubAgentRuntimeStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 

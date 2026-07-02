@@ -431,6 +431,45 @@ describe('validateSkillManifest — standalone manifest pass', () => {
     );
   });
 
+  it('warns when skill prompt text claims executable workflow semantics', () => {
+    const r = validateSkill(
+      baseSkill({
+        content: [
+          '# media-orchestrator',
+          '',
+          'This skill defines a workflow DAG with executable nodes and runtime transitions.',
+        ].join('\n'),
+      }),
+    );
+
+    expect(r.valid).toBe(true);
+    expect(r.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Skill prompt text appears to describe executable workflow'),
+      ]),
+    );
+  });
+
+  it('does not warn when workflow language is clearly prompt-chain guidance', () => {
+    const r = validateSkill(
+      baseSkill({
+        content: [
+          '# media-method',
+          '',
+          'This is prompt-chain guidance, not an executable workflow runtime or DAG.',
+          'The Agent decides whether to skip, reorder, or revise each suggestion.',
+        ].join('\n'),
+      }),
+    );
+
+    expect(r.valid).toBe(true);
+    expect(r.warnings).not.toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Skill prompt text appears to describe executable workflow'),
+      ]),
+    );
+  });
+
   it('rejects malformed media workflow hint fields', () => {
     const r = validateSkillManifest(
       baseManifest({

@@ -1,7 +1,7 @@
 import type { ToolDefinition } from '@neko/shared';
 import type { AgentCapabilityDiagnostic, AgentInjectedCapabilitySet } from './capability';
 import type { AgentMultimodalEvidenceRef } from './multimodal-tooling';
-import type { AgentWorkflowIdentity } from './workflow';
+import type { AgentLegacyCreationTrace } from './legacy-trace';
 
 export type PromptSchemaProviderToolMode = 'native' | 'prompt-only' | 'none';
 export type PromptSchemaStructuredOutputMode = 'native' | 'prompt-json' | 'unsupported';
@@ -9,18 +9,19 @@ export type GeneratedSchemaPurpose =
   | 'idc-draft'
   | 'idc-plan'
   | 'idc-apply'
-  | 'workflow-node-output'
+  | 'creation-stage-output'
   | 'evaluator-output'
   | 'recovery-decision'
   | 'tool-arguments';
 
-export interface PromptGenerationWorkflowContext {
-  readonly identity?: AgentWorkflowIdentity;
+export interface PromptGenerationCreationContext {
+  readonly creationId?: string;
+  readonly iterationId?: string;
+  readonly profileId?: string;
   readonly stage?: string;
-  readonly nodeId?: string;
-  readonly nodeKind?: string;
   readonly planMode?: boolean;
   readonly allowedToolNames?: readonly string[];
+  readonly legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export interface PromptGenerationProviderCapabilities {
@@ -36,7 +37,7 @@ export interface PromptGenerationContext {
   readonly agentsMdOverlay?: string;
   readonly settings?: Readonly<Record<string, unknown>>;
   readonly activeSkillId?: string;
-  readonly workflow?: PromptGenerationWorkflowContext;
+  readonly creation?: PromptGenerationCreationContext;
   readonly injectedCapabilities?: AgentInjectedCapabilitySet;
   readonly provider?: PromptGenerationProviderCapabilities;
   readonly providerPromptFragments?: readonly {
