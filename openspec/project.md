@@ -28,7 +28,7 @@ OpenSpec changes in this repository must preserve the product direction:
 - Extension host: VSCode Extension API, TypeScript, esbuild.
 - Engine: Rust, wgpu, FFmpeg, axum, tokio, bevy_ecs, napi-rs.
 - Streaming: H.264, PCM, fMP4, WebSocket, WebCodecs.
-- AI: Vercel AI SDK, MCP, provider adapters, Neko Agent IDC workflows.
+- AI: Vercel AI SDK, MCP, provider adapters, Neko Agent IDC staged creation.
 - Contracts: Protobuf for engine communication; JSON Schema/typed validators for
   durable `nk*` project files.
 - Build/test: pnpm 10, Turborepo 2, Vitest, cargo test, dependency-cruiser,
