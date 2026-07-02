@@ -6,7 +6,7 @@
  *
  * Responsibility: subscribe to a EventBus and distill the stream into
  * a bounded history of "milestones" — the salient steps a user or
- * status dashboard would care about (run started, round decided,
+ * status dashboard would care about (creation started, round decided,
  * autoheal escalation, run ended).
  *
  * Design rules:
@@ -42,7 +42,7 @@ import type { ISharedMemoryStore } from '../memory/shared-memory-store';
  * string, `at` is ms epoch. Callers render as they see fit.
  */
 export type MilestoneKind =
-  | 'run-started'
+  | 'creation-started'
   | 'run-ended'
   | 'round-decided'
   | 'autoheal'
@@ -102,8 +102,8 @@ export function defaultClassify(event: DualFlowEvent): Milestone | null {
     case CREATION_CHANNELS.RUN_STARTED:
       return {
         ...base,
-        kind: 'run-started',
-        label: `Run started (${event.runKind})`,
+        kind: 'creation-started',
+        label: `Creation started (${event.creationKind})`,
         runId: event.runId,
       };
     case CREATION_CHANNELS.RUN_ENDED:

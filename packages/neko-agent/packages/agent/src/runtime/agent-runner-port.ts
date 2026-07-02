@@ -1,5 +1,4 @@
 import type {
-  AgentCapabilityActivationIntent,
   AgentCapabilityActivationProgressEvent,
   ChatMessage,
   ConfiguredToolGroup,
@@ -7,7 +6,7 @@ import type {
   SkillInjection,
 } from '@neko/shared';
 import type { ISkillProvider } from '../tools/core/meta-tools';
-import type { AgentEvent, CompressionResult, IdcWorkflowControlResult } from '../session/types';
+import type { AgentEvent, CompressionResult } from '../session/types';
 import type { SubAgentEvent } from '../subagent/types';
 
 export interface DisposableLike {
@@ -37,13 +36,6 @@ export interface EnqueuePendingMessageInput {
   readonly conversationId: string;
   readonly content: string;
   readonly now?: number;
-}
-
-export interface AgentRunnerIdcWorkflowControlInput {
-  readonly action: 'start' | 'resume' | 'stop';
-  readonly runKind?: string;
-  readonly runId?: string;
-  readonly intent: AgentCapabilityActivationIntent;
 }
 
 export type AgentPendingMessageQueueErrorCode =
@@ -118,7 +110,6 @@ export interface AgentRunnerPort<TConfig, TContext> extends DisposableLike {
   getToolSkills(): ConfiguredToolGroup[];
   setSkillProvider(provider: ISkillProvider): void;
   refreshCapabilityRuntime(): void;
-  controlIdcWorkflow(input: AgentRunnerIdcWorkflowControlInput): IdcWorkflowControlResult;
   applySkillInjection(injection: SkillInjection, skill?: Skill): void;
   activateToolSetsForTools(toolNames: readonly string[]): readonly string[];
   deactivateToolSet(toolSetName: string): void;

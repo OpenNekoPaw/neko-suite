@@ -32,8 +32,8 @@ describe('StagePersonaBinding lifecycle mode', () => {
       expect.objectContaining({
         skillName: 'creation-persona',
         slot: 'stagePersona',
-        owner: 'idc',
-        lifetime: { kind: 'idc-stage', runId: 'run-1', stage: 'draft' },
+        owner: 'creation-profile',
+        lifetime: { kind: 'creation-stage', runId: 'run-1', stage: 'draft' },
         deactivation: expect.objectContaining({
           clearableByUser: false,
           clearableByRuntime: true,
@@ -48,7 +48,7 @@ describe('StagePersonaBinding lifecycle mode', () => {
     expect(planRecords).toEqual([
       expect.objectContaining({
         skillName: 'creation-persona',
-        lifetime: { kind: 'idc-stage', runId: 'run-1', stage: 'plan' },
+        lifetime: { kind: 'creation-stage', runId: 'run-1', stage: 'plan' },
       }),
     ]);
     expect(planRecords[0]?.id).not.toBe(draftRecords[0]?.id);

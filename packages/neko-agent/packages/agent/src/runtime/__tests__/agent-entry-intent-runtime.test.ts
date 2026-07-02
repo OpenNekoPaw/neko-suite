@@ -8,25 +8,11 @@ import {
   buildAgentRetryCreationMessage,
   buildAgentScriptCommandMessage,
   createAgentFileContextPayloadId,
-  getAgentCreationQuickStartOptions,
   inferAgentCreationIntentFromFilePath,
   inferAgentFileContextType,
 } from '../agent-entry-intent-runtime';
 
 describe('agent entry intent runtime', () => {
-  it('exposes quick-start creation options as immutable copies', () => {
-    const options = getAgentCreationQuickStartOptions();
-    expect(options).toHaveLength(4);
-    expect(options[0]).toEqual({
-      label: '$(file-text) Script → Video',
-      description: 'Convert a screenplay to video',
-      value: 'Convert my script to video',
-    });
-
-    options[0] = { label: 'changed', description: 'changed', value: 'changed' };
-    expect(getAgentCreationQuickStartOptions()[0]?.value).toBe('Convert my script to video');
-  });
-
   it('maps source files to creation intents and messages', () => {
     expect(inferAgentCreationIntentFromFilePath('/tmp/story.fountain')).toBe(
       'Convert this screenplay to video',

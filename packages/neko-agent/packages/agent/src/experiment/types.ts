@@ -7,8 +7,7 @@
 
 import type { AgentResult } from '@neko/shared';
 import type { NarrativePreviewFeatureToggles } from '@neko/shared';
-import type { AgentMultimodalEvidenceRef } from '@neko-agent/types';
-import type { AgentWorkflowIdentity } from '@neko-agent/types';
+import type { AgentLegacyCreationTrace } from '@neko-agent/types';
 import type { PermissionMode } from '../permission/types';
 import type { AgentSessionConfig, ExecutionContext } from '../session/types';
 
@@ -111,11 +110,11 @@ export interface AblationToggles {
   /** Canvas Narrative Preview feature flags. */
   narrative?: NarrativeAblationToggles;
 
-  // --- Unified workflow runtime ---
+  // --- Prompt-chain/profile guidance ---
 
-  /** IDC workflow envelope. false = run without IDC workflow runtime hints. */
-  idcWorkflow?: false;
-  /** PlanMode workflow profile. false = keep chat execution but remove PlanMode profile hints. */
+  /** Built-in creation profile guidance. false = run without IDC staged creation hints. */
+  creationProfileGuidance?: false;
+  /** PlanMode profile guidance. false = keep chat execution but remove PlanMode hints. */
   planModeProfile?: false;
   /** Capability protocol enforcement. false = discover capabilities without strict enforcement. */
   capabilityProtocol?: false;
@@ -214,84 +213,6 @@ export interface EvaluationResult {
   details?: Record<string, unknown>;
 }
 
-export type WorkflowEvaluatorKind = 'deterministic' | 'llm-judge';
-
-export type WorkflowRecoverySignalAction =
-  | 'retry-node'
-  | 'regress-stage'
-  | 'restart-run'
-  | 'escalate-user';
-
-export interface WorkflowEvaluatorCorrectionHint {
-  id: string;
-  message: string;
-  targetNodeId?: string;
-  evidenceRefIds?: readonly string[];
-  severity?: 'info' | 'warning' | 'blocking';
-}
-
-export interface WorkflowRecoverySignal {
-  id: string;
-  action: WorkflowRecoverySignalAction;
-  reason: string;
-  workflow?: AgentWorkflowIdentity;
-  targetNodeId?: string;
-  correctionHintIds?: readonly string[];
-}
-
-export interface WorkflowEvaluatorProviderIdentity {
-  providerId?: string;
-  modelId?: string;
-  variantId?: string;
-}
-
-export interface WorkflowEvaluatorPromptSchemaSnapshot {
-  promptHash?: string;
-  schemaHash?: string;
-  snapshotRef?: string;
-}
-
-export interface WorkflowEvaluatorResult extends EvaluationResult {
-  id: string;
-  evaluatorId: string;
-  kind: WorkflowEvaluatorKind;
-  score: number;
-  passed: boolean;
-  reasons: readonly string[];
-  evidenceRefs: readonly AgentMultimodalEvidenceRef[];
-  metrics: Record<string, number | boolean | string>;
-  correctionHints: readonly WorkflowEvaluatorCorrectionHint[];
-  recoverySignals: readonly WorkflowRecoverySignal[];
-  workflow?: AgentWorkflowIdentity;
-  provider?: WorkflowEvaluatorProviderIdentity;
-  promptSnapshot?: WorkflowEvaluatorPromptSchemaSnapshot;
-}
-
-export interface WorkflowEvaluatorInput {
-  fixture: WorkflowEvaluationFixture;
-  variant: WorkflowEvaluationVariantInput;
-  artifacts?: readonly {
-    id: string;
-    type: string;
-    uri?: string;
-    metadata?: Readonly<Record<string, unknown>>;
-  }[];
-  evidenceRefs?: readonly AgentMultimodalEvidenceRef[];
-  promptSnapshot?: PromptSchemaSnapshotRef;
-}
-
-export interface WorkflowEvaluatorRunner {
-  readonly id: string;
-  evaluate(
-    input: WorkflowEvaluatorInput,
-  ): Promise<WorkflowEvaluatorResult> | WorkflowEvaluatorResult;
-}
-
-export interface WorkflowJudgeAdapter {
-  readonly id: string;
-  judge(input: WorkflowEvaluatorInput): Promise<WorkflowEvaluatorResult> | WorkflowEvaluatorResult;
-}
-
 export interface ExperimentEvaluator {
   evaluate(result: AgentResult, descriptor: ExperimentRunDescriptor): Promise<EvaluationResult>;
 }
@@ -346,94 +267,6 @@ export interface ExperimentMetrics {
     byTool: Record<string, { calls: number; successes: number; failures: number }>;
   };
   custom: Record<string, unknown>;
-}
-
-export interface WorkflowMetricSnapshot {
-  workflowRunId?: string;
-  workflowNodeId?: string;
-  nodeCompletions: number;
-  taskCompletions: number;
-  approvalInterruptions: number;
-  generatedArtifacts: number;
-  retries: number;
-  latencyMs: number;
-  toolCalls: number;
-  evaluatorOutcomes: readonly EvaluationResult[];
-}
-
-export interface PromptSchemaSnapshotRef {
-  workflowRunId?: string;
-  workflowNodeId?: string;
-  providerId?: string;
-  modelId?: string;
-  variantName: string;
-  promptHash?: string;
-  schemaHash?: string;
-  snapshotRef?: string;
-}
-
-export type CapabilityEvolutionEventKind =
-  | 'skill-install'
-  | 'skill-update'
-  | 'skill-remove'
-  | 'prompt-fragment-change'
-  | 'schema-change'
-  | 'workflow-definition-change'
-  | 'provider-card-change';
-
-export interface CapabilityEvolutionEvent {
-  id: string;
-  kind: CapabilityEvolutionEventKind;
-  capabilityId?: string;
-  version?: string;
-  summary: string;
-  createdAt: number;
-}
-
-export interface WorkflowEvaluationFixture {
-  name: string;
-  prompt: string;
-  workflowRunId?: string;
-  workflowNodeId?: string;
-  expectedCapabilities?: readonly string[];
-  expectedModalities?: readonly string[];
-}
-
-export interface WorkflowEvaluationVariantInput {
-  variantName: string;
-  toggles: AblationToggles;
-  metrics: ExperimentMetrics;
-  promptSnapshot?: PromptSchemaSnapshotRef;
-  evolutionEvents?: readonly CapabilityEvolutionEvent[];
-  evaluatorResults?: readonly WorkflowEvaluatorResult[];
-}
-
-export interface WorkflowEvaluationHarnessInput {
-  fixture: WorkflowEvaluationFixture;
-  baseline: WorkflowEvaluationVariantInput;
-  variants: readonly WorkflowEvaluationVariantInput[];
-  evaluators?: readonly WorkflowEvaluatorRunner[];
-}
-
-export interface WorkflowEvaluationComparison {
-  variantName: string;
-  tokenDelta: number;
-  latencyDeltaMs: number;
-  toolCallDelta: number;
-  promptHashChanged: boolean;
-  omittedCapabilities: readonly string[];
-  qualityDelta?: number;
-  correctionHints?: readonly WorkflowEvaluatorCorrectionHint[];
-  recoverySignals?: readonly WorkflowRecoverySignal[];
-}
-
-export interface WorkflowEvaluationHarnessResult {
-  fixture: WorkflowEvaluationFixture;
-  baseline: WorkflowEvaluationVariantInput;
-  variants: readonly WorkflowEvaluationVariantInput[];
-  comparisons: readonly WorkflowEvaluationComparison[];
-  evolutionEvents: readonly CapabilityEvolutionEvent[];
-  evaluatorResults: readonly WorkflowEvaluatorResult[];
 }
 
 // =============================================================================

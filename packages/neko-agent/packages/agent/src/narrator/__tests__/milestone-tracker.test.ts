@@ -39,7 +39,7 @@ function runStarted(at = 1): DualFlowEvent {
   return {
     channel: CREATION_CHANNELS.RUN_STARTED,
     runId: 'r1',
-    runKind: 'flow-a',
+    creationKind: 'flow-a',
     at,
   };
 }
@@ -64,8 +64,8 @@ describe('MilestoneTracker', () => {
 
     const history = tracker.getHistory();
     expect(history).toHaveLength(3);
-    expect(history[0]!.kind).toBe('run-started');
-    expect(history[0]!.label).toBe('Run started (flow-a)');
+    expect(history[0]!.kind).toBe('creation-started');
+    expect(history[0]!.label).toBe('Creation started (flow-a)');
     expect(history[1]!.kind).toBe('round-decided');
     expect(history[2]!.kind).toBe('autoheal');
     expect(tracker.getLatest()?.kind).toBe('autoheal');
@@ -91,7 +91,7 @@ describe('MilestoneTracker', () => {
 
     const entries = store.get<Milestone>('shared', 'milestone');
     expect(entries).toHaveLength(2);
-    expect(entries[0]!.tag).toBe('run-started');
+    expect(entries[0]!.tag).toBe('creation-started');
     expect(entries[1]!.tag).toBe('round-decided');
   });
 

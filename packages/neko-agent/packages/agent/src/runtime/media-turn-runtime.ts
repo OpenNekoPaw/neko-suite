@@ -12,12 +12,12 @@ import {
   type AgentPhaseMessage,
   type AgentMediaTaskView,
   type ErrorMessage,
+  type AgentLegacyCreationTrace,
   type MediaModelCategory,
   type MediaTaskCreatedMessage,
   type MediaTaskProgressMessage,
   type Message,
   type ModelRef,
-  type AgentWorkflowIdentity,
   type StreamCompleteMessage,
 } from '@neko-agent/types';
 
@@ -81,7 +81,7 @@ export interface RunAgentMediaTurnInput<
   readonly conversationId: string;
   readonly prompt: string;
   readonly mediaModel: ModelRef<MediaModelCategory>;
-  readonly workflow?: AgentWorkflowIdentity;
+  readonly legacyTrace?: AgentLegacyCreationTrace;
   readonly executeMediaTurn?: (
     input: AgentMediaTurnExecutionInput<TTaskView, TSourceTask>,
   ) => Promise<unknown>;
@@ -149,7 +149,7 @@ export async function runAgentMediaTurn<
             workItem: projectMediaTaskToWorkItem({
               conversationId: input.conversationId,
               task: event.task,
-              workflow: input.workflow,
+              legacyTrace: input.legacyTrace,
             }),
           }),
         );
@@ -170,7 +170,7 @@ export async function runAgentMediaTurn<
             workItem: projectMediaTaskToWorkItem({
               conversationId: input.conversationId,
               task: event.task,
-              workflow: input.workflow,
+              legacyTrace: input.legacyTrace,
             }),
           }),
         );

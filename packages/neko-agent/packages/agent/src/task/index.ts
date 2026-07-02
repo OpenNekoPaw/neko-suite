@@ -8,25 +8,25 @@ export {
   TaskManager,
   type TaskManagerOptions,
   type ConcurrencyConfig,
-  type IIdcProjectedTaskStore,
+  type ICreationProjectedTaskStore,
   type IRuntimeTaskManager,
 } from './task-manager';
 export {
-  createTaskManagerIdcTaskProjection,
-  type IIdcTaskProjection,
-  type IIdcTaskProjectionStore,
-  type IdcTaskProjectionConfig,
-} from './idc-task-projection';
+  createTaskManagerCreationTaskProjection,
+  type ICreationTaskProjection,
+  type ICreationTaskProjectionStore,
+  type CreationTaskProjectionConfig,
+} from './creation-task-projection';
 export {
-  getIdcProjectedTaskRunId,
-  isIdcProjectedTaskPayload,
-  toSerializableIdcProjectedTask,
-  toIdcProjectedTaskPayload,
-  type IdcProjectedTaskArtifactBinding,
-  type IdcProjectedTaskBinding,
-  type IdcProjectedTaskPayload,
-  type IdcProjectedTaskUpsertInput,
-} from './idc-projected-task';
+  getCreationProjectedTaskRunId,
+  isCreationProjectedTaskPayload,
+  toSerializableCreationProjectedTask,
+  toCreationProjectedTaskPayload,
+  type CreationProjectedTaskArtifactBinding,
+  type CreationProjectedTaskBinding,
+  type CreationProjectedTaskPayload,
+  type CreationProjectedTaskUpsertInput,
+} from './creation-projected-task';
 export {
   buildCancelTaskActionPlan,
   buildClearCompletedTaskPlan,

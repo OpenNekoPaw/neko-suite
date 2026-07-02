@@ -19,7 +19,7 @@ import {
 import { createProviderExpressionPromptFragments } from '../provider';
 import { createFileProjectMemoryManager } from '../memory';
 import { createCoreTools } from '../tools';
-import { createTaskManagerIdcTaskProjection, type IRuntimeTaskManager } from '../task';
+import { createTaskManagerCreationTaskProjection, type IRuntimeTaskManager } from '../task';
 import type {
   AgentSessionConfig,
   ExecutionMode,
@@ -370,7 +370,7 @@ function buildAgentRuntimeConfig(
   feedbackLoop: IFeedbackLoop | undefined,
 ): AgentRuntimeConfig {
   return {
-    workflowRuntime: {
+    creationGuidance: {
       ...(config.capabilityRuntime?.skillRegistry ||
       config.capabilityRuntime?.skillService ||
       config.capabilityRuntime?.skillLifecycleRuntime
@@ -390,7 +390,7 @@ function buildAgentRuntimeConfig(
         : {}),
       ...(config.taskManager
         ? {
-            idcTaskProjection: createTaskManagerIdcTaskProjection({
+            creationTaskProjection: createTaskManagerCreationTaskProjection({
               store: config.taskManager,
             }),
           }

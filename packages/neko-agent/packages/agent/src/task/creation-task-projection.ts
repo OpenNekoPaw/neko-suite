@@ -1,34 +1,34 @@
 import type { Task as IdcTask, TaskStatus as IdcTaskStatus } from '@neko-agent/types';
 import type { SerializableTask } from '@neko/shared';
 import type {
-  IdcProjectedTaskArtifactBinding,
-  IdcProjectedTaskUpsertInput,
-} from './idc-projected-task';
-import type { IIdcProjectedTaskStore } from './task-manager';
+  CreationProjectedTaskArtifactBinding,
+  CreationProjectedTaskUpsertInput,
+} from './creation-projected-task';
+import type { ICreationProjectedTaskStore } from './task-manager';
 
-export interface IIdcTaskProjectionStore extends IIdcProjectedTaskStore {
+export interface ICreationTaskProjectionStore extends ICreationProjectedTaskStore {
   delete(id: string): Promise<boolean>;
 }
 
-export interface IIdcTaskProjection {
+export interface ICreationTaskProjection {
   syncTask(input: {
     runId: string;
     runStartedAt?: number;
     task: IdcTask;
-    artifact?: IdcProjectedTaskArtifactBinding;
+    artifact?: CreationProjectedTaskArtifactBinding;
   }): Promise<readonly string[]>;
   clearRun(runId: string, runStartedAt?: number): Promise<void>;
 }
 
-export interface IdcTaskProjectionConfig {
-  readonly store: IIdcTaskProjectionStore;
+export interface CreationTaskProjectionConfig {
+  readonly store: ICreationTaskProjectionStore;
 }
 
-class TaskManagerIdcTaskProjection implements IIdcTaskProjection {
-  private readonly _store: IIdcTaskProjectionStore;
+class TaskManagerCreationTaskProjection implements ICreationTaskProjection {
+  private readonly _store: ICreationTaskProjectionStore;
   private readonly _projectedIdsByRun = new Map<string, Set<string>>();
 
-  constructor(config: IdcTaskProjectionConfig) {
+  constructor(config: CreationTaskProjectionConfig) {
     this._store = config.store;
   }
 
@@ -36,7 +36,7 @@ class TaskManagerIdcTaskProjection implements IIdcTaskProjection {
     runId: string;
     runStartedAt?: number;
     task: IdcTask;
-    artifact?: IdcProjectedTaskArtifactBinding;
+    artifact?: CreationProjectedTaskArtifactBinding;
   }): Promise<readonly string[]> {
     const runKey = createProjectionRunKey(input.runId, input.runStartedAt);
     const nextIds = new Set<string>();
@@ -50,7 +50,7 @@ class TaskManagerIdcTaskProjection implements IIdcTaskProjection {
         input.artifact,
       );
       nextIds.add(projected.id);
-      await this._store.upsertIdcProjectedTask(projected);
+      await this._store.upsertCreationProjectedTask(projected);
     }
 
     const previousIds = this._projectedIdsByRun.get(runKey) ?? new Set<string>();
@@ -65,15 +65,15 @@ class TaskManagerIdcTaskProjection implements IIdcTaskProjection {
   }
 
   async clearRun(runId: string, runStartedAt?: number): Promise<void> {
-    await this._store.clearIdcProjectedTasksForRun(runId, runStartedAt);
+    await this._store.clearCreationProjectedTasksForRun(runId, runStartedAt);
     this._projectedIdsByRun.delete(createProjectionRunKey(runId, runStartedAt));
   }
 }
 
-export function createTaskManagerIdcTaskProjection(
-  config: IdcTaskProjectionConfig,
-): IIdcTaskProjection {
-  return new TaskManagerIdcTaskProjection(config);
+export function createTaskManagerCreationTaskProjection(
+  config: CreationTaskProjectionConfig,
+): ICreationTaskProjection {
+  return new TaskManagerCreationTaskProjection(config);
 }
 
 function toProjectedTask(
@@ -81,13 +81,13 @@ function toProjectedTask(
   runStartedAt: number | undefined,
   task: IdcTask,
   item: IdcTask['items'][number],
-  artifact?: IdcProjectedTaskArtifactBinding,
-): IdcProjectedTaskUpsertInput {
+  artifact?: CreationProjectedTaskArtifactBinding,
+): CreationProjectedTaskUpsertInput {
   return {
     id: createProjectedTaskId(runId, item.id),
     status: toProjectedTaskStatus(item.status),
     binding: {
-      source: 'idc',
+      source: 'creation',
       runId,
       ...(runStartedAt !== undefined ? { runStartedAt } : {}),
       checklistId: task.id,
@@ -104,7 +104,7 @@ function toProjectedTask(
 }
 
 function createProjectedTaskId(runId: string, itemId: string): string {
-  return `idc:${runId}:${itemId}`;
+  return `creation:${runId}:${itemId}`;
 }
 
 function createProjectionRunKey(runId: string, runStartedAt?: number): string {

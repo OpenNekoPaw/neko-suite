@@ -1,7 +1,7 @@
 /**
  * Stage Planner Tests
  *
- * Covers agent-unified-workflow.md §3 (entry rules) × §4 (three IDC stages).
+ * Covers agent-unified-workflow.md §3 (entry rules) × §4 (three built-in creation stages).
  *
  * Structure:
  *   - Entry-stage resolution per §3.2 rules 1–6

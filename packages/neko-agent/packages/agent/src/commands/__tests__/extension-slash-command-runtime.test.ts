@@ -97,7 +97,7 @@ describe('extension slash command runtime', () => {
     );
   });
 
-  it('executes command artifact slash arguments with IDC metadata', async () => {
+  it('executes command artifact slash arguments with legacy IDC trace metadata', async () => {
     deps.skills!.listAllSkills = vi.fn(() => [
       {
         name: 'commit-workflow',
@@ -135,10 +135,10 @@ describe('extension slash command runtime', () => {
       sessionMode: 'agent',
       executionOverrides: {
         metadata: {
-          idc: {
+          agentCreation: {
             entrySignal: 'prompt-chain-skill',
             taskShape: 'multi-step',
-            runKind: 'skill:commit-workflow',
+            creationKind: 'skill:commit-workflow',
           },
         },
       },

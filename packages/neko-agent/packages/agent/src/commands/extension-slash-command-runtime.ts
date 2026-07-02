@@ -1,5 +1,5 @@
 import type { Skill, SkillApplicationResult } from '@neko/shared';
-import { createSkillExecutionIdcMetadata } from '../session/idc-execution-metadata';
+import { createSkillExecutionCreationMetadata } from '../session/creation-execution-metadata';
 import {
   buildExtensionCommandConversationSummaries,
   buildExtensionCommandHostEffectPlan,
@@ -353,7 +353,7 @@ async function runExtensionSkillSlashCommand(
 function createSkillExecutionOverrides(
   skill: Skill | undefined,
 ): Pick<ExtensionSlashCommandExecutionDispatch, 'executionOverrides'> {
-  const metadata = createSkillExecutionIdcMetadata(skill);
+  const metadata = createSkillExecutionCreationMetadata(skill);
   if (!metadata) return {};
 
   return {

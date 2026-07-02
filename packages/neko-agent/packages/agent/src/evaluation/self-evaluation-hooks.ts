@@ -52,7 +52,7 @@ export interface SelfEvaluationHooksDeps {
   /**
    * Optional StageTracker. When absent the hook is an inert no-op — all
    * lifecycle methods passthrough without flipping any flags. Permits
-   * sessions without IDC stage tracking (CLI smoke tests, simple
+   * sessions without built-in creation stage tracking (CLI smoke tests, simple
    * integrations) to wire the hook uniformly without special-casing.
    */
   readonly stageTracker?: StageTracker | null;

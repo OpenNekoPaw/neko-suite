@@ -19,24 +19,10 @@ function createSession(events: AgentEvent[] = [{ type: 'text', content: 'respons
     getExecutionMode: vi.fn(),
     setExecutionMode: vi.fn(),
     setExecutionModeWithIntent: vi.fn(),
-    startIdcRunWithIntent: vi.fn(() => ({
-      success: true,
-      message: 'started',
-      runId: 'run-1',
-      events: [],
-    })),
-    stopIdcRunWithIntent: vi.fn(() => ({
-      success: true,
-      message: 'stopped',
-      runId: 'run-1',
-      events: [],
-    })),
     setSkillProvider: vi.fn(),
     setPromptFragments: vi.fn(),
     getArtifactsForRun: vi.fn(() => []),
     listArtifactRunIds: vi.fn(() => []),
-    getIdcRun: vi.fn(() => null),
-    listIdcRuns: vi.fn(() => []),
     getFeedbackCycles: vi.fn(() => []),
     getOperationToolAdapterRegistry: vi.fn(() => null),
     writeDraftArtifact: vi.fn(),
@@ -129,9 +115,9 @@ describe('AgentSessionRunner', () => {
     const intent = createAgentCapabilityActivationIntent({
       conversationId: 'conv-1',
       source: 'agent-tool',
-      target: 'idc-workflow',
+      target: 'creation-profile',
       action: 'activate',
-      name: 'workflow',
+      name: 'creation-profile',
       requestedBy: 'agent',
       createdAt: 100,
     });
@@ -147,64 +133,6 @@ describe('AgentSessionRunner', () => {
     expect(onDidActivationProgress).toHaveBeenCalledWith({
       conversationId: 'conv-1',
       events: [event],
-    });
-  });
-
-  it('controls IDC workflow through the configured session', () => {
-    const session = createSession();
-    const runner = new AgentSessionRunner({
-      buildExecutionContext: () => ({}),
-    });
-    runner.setSession(session);
-    const intent = createAgentCapabilityActivationIntent({
-      conversationId: 'conv-1',
-      source: 'user-explicit',
-      target: 'idc-workflow',
-      action: 'activate',
-      name: 'idc',
-      requestedBy: 'user',
-      createdAt: 100,
-    });
-
-    const result = runner.controlIdcWorkflow({
-      action: 'start',
-      runKind: 'idc',
-      intent,
-    });
-
-    expect(result.success).toBe(true);
-    expect(session.startIdcRunWithIntent).toHaveBeenCalledWith({
-      runKind: 'idc',
-      intent,
-    });
-  });
-
-  it('emits failed activation progress when IDC workflow control has no session', () => {
-    const onDidActivationProgress = vi.fn();
-    const runner = new AgentSessionRunner({
-      buildExecutionContext: () => ({}),
-      onDidActivationProgress,
-    });
-    const intent = createAgentCapabilityActivationIntent({
-      conversationId: 'conv-1',
-      source: 'user-explicit',
-      target: 'idc-workflow',
-      action: 'deactivate',
-      name: 'idc',
-      requestedBy: 'user',
-      createdAt: 100,
-    });
-
-    const result = runner.controlIdcWorkflow({
-      action: 'stop',
-      intent,
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.diagnostics?.[0]?.code).toBe('agent-session-not-configured');
-    expect(onDidActivationProgress).toHaveBeenCalledWith({
-      conversationId: 'conv-1',
-      events: [expect.objectContaining({ step: 'failed', status: 'failed' })],
     });
   });
 

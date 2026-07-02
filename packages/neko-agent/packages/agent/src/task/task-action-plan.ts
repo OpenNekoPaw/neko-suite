@@ -6,10 +6,7 @@ import {
 } from './task-view-projector';
 
 export type TaskActionRejectReason =
-  | 'task-unavailable'
-  | 'wrong-conversation'
-  | 'invalid-status'
-  | 'no-result';
+  'task-unavailable' | 'wrong-conversation' | 'invalid-status' | 'no-result';
 
 export interface TaskActionRejectPlan {
   readonly kind: 'reject';
@@ -72,9 +69,7 @@ export interface ViewTaskResultActionPlan {
 }
 
 export type ViewTaskResultPlan =
-  | ViewTaskResultActionPlan
-  | TaskActionRejectPlan
-  | TaskActionNoopPlan;
+  ViewTaskResultActionPlan | TaskActionRejectPlan | TaskActionNoopPlan;
 
 export type TaskResultOpenPlan =
   | {
@@ -297,7 +292,16 @@ function isAbsoluteLocalPath(value: string): boolean {
 }
 
 function isPublicTaskResultUrl(value: string | undefined): value is string {
-  return typeof value === 'string' && isPublicGeneratedAssetResultUri(value);
+  return (
+    typeof value === 'string' &&
+    isPublicGeneratedAssetResultUri(value) &&
+    !isWebviewRenderUri(value)
+  );
+}
+
+function isWebviewRenderUri(value: string): boolean {
+  const scheme = value.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
+  return Boolean(scheme?.includes('webview')) || /^webview-/i.test(value);
 }
 
 function rejectTaskAction(

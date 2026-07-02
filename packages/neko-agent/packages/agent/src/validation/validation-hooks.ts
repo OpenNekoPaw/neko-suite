@@ -129,6 +129,7 @@ export class ValidationHooks implements ExecutorHooks {
       for (const error of result.errors) {
         this.options.onValidationError?.(error);
       }
+      this.recordAgentNativeValidationFeedback(context, result.errors, result.warnings);
       const action = this.outputValidator.getConstraints().onValidationFail;
       if (action === 'retry') {
         queueOutputValidationRepairRequest({
@@ -163,6 +164,7 @@ export class ValidationHooks implements ExecutorHooks {
       for (const error of result.errors) {
         this.options.onValidationError?.(error);
       }
+      this.recordAgentNativeValidationFeedback(context, result.errors, result.warnings);
 
       if (action === 'error') {
         const firstError = result.errors[0];
@@ -191,6 +193,35 @@ export class ValidationHooks implements ExecutorHooks {
         step.content = content;
       }
       // 'warn' and 'silent' modes don't throw or modify content
+    }
+  }
+
+  private recordAgentNativeValidationFeedback(
+    context: AgentContext,
+    errors: readonly ValidationError[],
+    warnings: readonly ValidationWarning[],
+  ): void {
+    const creation = readAgentCreationValidationContext(context.metadata);
+    if (!creation || errors.length === 0) return;
+    const validators = readSkillValidationRequirements(context.metadata) ?? ['output'];
+    for (const validatorId of validators) {
+      this.options.creationFeedback?.recordValidationFeedback({
+        creationId: creation.creationId,
+        iterationId: creation.iterationId,
+        validatorId,
+        status: 'failed',
+        diagnostics: errors.map((error) => ({
+          severity: 'error',
+          code: error.code,
+          message: error.message,
+          ...(error.details ? { metadata: error.details } : {}),
+        })),
+        metadata: {
+          feedbackAction: 'revise',
+          preserveStreamedOutput: true,
+          warningCount: warnings.length,
+        },
+      });
     }
   }
 
@@ -347,6 +378,20 @@ function readRuntimePromptLocale(metadata: Record<string, unknown>): 'en' | 'zh'
   return normalizeAgentRuntimePromptLocale(typeof value === 'string' ? value : undefined);
 }
 
+function readAgentCreationValidationContext(
+  metadata: Record<string, unknown>,
+): { readonly creationId: string; readonly iterationId: string } | null {
+  const value = metadata['agentCreation'];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  return typeof record['creationId'] === 'string' &&
+    record['creationId'].trim().length > 0 &&
+    typeof record['iterationId'] === 'string' &&
+    record['iterationId'].trim().length > 0
+    ? { creationId: record['creationId'], iterationId: record['iterationId'] }
+    : null;
+}
+
 function isArtifactValidationError(error: ValidationError): boolean {
   return (
     error.code.startsWith('storyboard-table-') ||
@@ -373,7 +418,7 @@ function buildArtifactValidationRepairInstruction(
     '  scene | shot | source | sourcePanel | decision | duration | visual | motion | audio | characters | dialogue | prompt | reviewStatus | nextAction | contentType | decisionReason | requiresSplit | duplicateOf',
     '- Localized headers are allowed only when they map unambiguously to those stable fields; for Chinese you may use 场景 | 镜头 | 来源 | 来源分格 | 决策 | 时长 | 画面 | 运镜 | 音频 | 人物 | 对白 | 提示词 | 审阅状态 | 建议操作 | 内容类型 | 决策理由 | 需要拆分 | 重复来源.',
     '- Do not use simplified page-analysis headers such as 页码, 景别/构图, 节奏/情绪, page, image reference, analysis, or suggestion as the storyboard table.',
-    '- Do not output YAML frontmatter, creation-document metadata, domain node JSON, or legacy transfer payloads.',
+    '- Do not output YAML frontmatter, creation-document metadata, domain node JSON, or retired transfer payloads.',
     '- Preserve valid CommonMark image/resource tokens exactly; do not invent filenames, resourceRef values, Webview URIs, blob URLs, cache paths, or absolute paths.',
     '',
     'Validation errors:',

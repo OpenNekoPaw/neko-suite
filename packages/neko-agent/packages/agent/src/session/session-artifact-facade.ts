@@ -1,31 +1,20 @@
-import type {
-  Draft,
-  ExecutionArtifactWrittenEvent,
-  ExecutionPlan,
-  IdcRun,
-  Task,
-} from '@neko-agent/types';
-import type { IdcProjectedTaskArtifactBinding } from '../task/idc-projected-task';
+import type { Draft, ExecutionArtifactWrittenEvent, ExecutionPlan, Task } from '@neko-agent/types';
+import type { CreationProjectedTaskArtifactBinding } from '../task/creation-projected-task';
 import {
-  toIdcRunArtifactBinding,
+  toArtifactScopeBinding,
+  type ArtifactScopeBinding,
   type AnyArtifactRecord,
   type ArtifactRecord,
   type IArtifactService,
 } from '../runtime/artifact-service';
 
-export interface SessionArtifactRunPort {
-  readonly getActiveRun: () => IdcRun | null;
-  readonly getCompletedRuns: () => readonly IdcRun[];
-  readonly setDraft: (
-    draft: Draft,
-    binding: NonNullable<IdcRun['artifactBindings']>[number],
-  ) => void;
-  readonly setPlan: (
-    plan: ExecutionPlan,
-    binding: NonNullable<IdcRun['artifactBindings']>[number],
-  ) => void;
-  readonly setTask: (task: Task, binding: NonNullable<IdcRun['artifactBindings']>[number]) => void;
-  readonly bindArtifact: (binding: NonNullable<IdcRun['artifactBindings']>[number]) => void;
+export interface SessionArtifactActivityPort {
+  readonly getActiveArtifactScope: () => {
+    readonly id: string;
+    readonly startedAt?: number;
+  } | null;
+  readonly getArtifactScopeStartedAt: (scopeId: string) => number | undefined;
+  readonly bindArtifact?: (scopeId: string, binding: ArtifactScopeBinding) => void;
 }
 
 export interface SessionArtifactWorkspacePort {
@@ -39,7 +28,7 @@ export interface SessionArtifactPersistencePort {
 }
 
 export interface SessionArtifactFacadePorts {
-  readonly run: SessionArtifactRunPort;
+  readonly activity: SessionArtifactActivityPort;
   readonly workspace: SessionArtifactWorkspacePort;
   readonly persistence: SessionArtifactPersistencePort;
 }
@@ -53,7 +42,7 @@ export class SessionArtifactFacade {
   private _artifactService: IArtifactService | null = null;
   private _artifactRestoreReady: Promise<void> | null = null;
   private _artifactSyncPending: Promise<void> = Promise.resolve();
-  private _taskProjection: import('../task').IIdcTaskProjection | null = null;
+  private _taskProjection: import('../task').ICreationTaskProjection | null = null;
   private _taskProjectionPending: Promise<void> = Promise.resolve();
 
   constructor(options: SessionArtifactFacadeOptions) {
@@ -72,7 +61,7 @@ export class SessionArtifactFacade {
     }
   }
 
-  setTaskProjection(projection: import('../task').IIdcTaskProjection | null): void {
+  setTaskProjection(projection: import('../task').ICreationTaskProjection | null): void {
     this._taskProjection = projection;
   }
 
@@ -142,7 +131,7 @@ export class SessionArtifactFacade {
   }
 
   attachRecord(record: AnyArtifactRecord): void {
-    const binding = toIdcRunArtifactBinding(record);
+    const binding = toArtifactScopeBinding(record);
 
     if (record.kind === 'task') {
       this.queueTaskProjection(
@@ -158,22 +147,7 @@ export class SessionArtifactFacade {
       );
     }
 
-    const activeRun = this._options.ports.run.getActiveRun();
-    if (!activeRun || activeRun.id !== record.runId) {
-      return;
-    }
-
-    switch (record.kind) {
-      case 'draft':
-        this._options.ports.run.setDraft(record.value, binding);
-        return;
-      case 'plan':
-        this._options.ports.run.setPlan(record.value, binding);
-        return;
-      case 'task':
-        this._options.ports.run.setTask(record.value, binding);
-        return;
-    }
+    this._options.ports.activity.bindArtifact?.(record.runId, binding);
   }
 
   queueObservedArtifactSync(event: ExecutionArtifactWrittenEvent): void {
@@ -189,7 +163,7 @@ export class SessionArtifactFacade {
   queueTaskProjection(
     runId: string,
     task: Task,
-    artifact?: IdcProjectedTaskArtifactBinding,
+    artifact?: CreationProjectedTaskArtifactBinding,
     runStartedAt?: number,
   ): void {
     const projection = this._taskProjection;
@@ -207,7 +181,7 @@ export class SessionArtifactFacade {
         });
       })
       .catch((error) => {
-        this._warn(`IDC task projection failed for ${runId}: ${String(error)}`);
+        this._warn(`Creation task projection failed for ${runId}: ${String(error)}`);
       });
   }
 
@@ -222,29 +196,8 @@ export class SessionArtifactFacade {
         await projection.clearRun(runId, runStartedAt);
       })
       .catch((error) => {
-        this._warn(`IDC task projection cleanup failed for ${runId}: ${String(error)}`);
+        this._warn(`Creation task projection cleanup failed for ${runId}: ${String(error)}`);
       });
-  }
-
-  replayRestoredTaskProjection(run: IdcRun | null): void {
-    if (!run?.task) {
-      return;
-    }
-
-    const artifactBinding = run.artifactBindings?.find((binding) => binding.kind === 'task');
-    this.queueTaskProjection(
-      run.id,
-      run.task,
-      artifactBinding
-        ? {
-            kind: 'task',
-            artifactId: artifactBinding.artifactId,
-            path: artifactBinding.path,
-            updatedAt: artifactBinding.updatedAt,
-          }
-        : undefined,
-      run.startedAt,
-    );
   }
 
   dispose(): void {
@@ -297,22 +250,18 @@ export class SessionArtifactFacade {
       throw new Error('ArtifactService is not configured for this session');
     }
 
-    const targetRunId = runId ?? this._options.ports.run.getActiveRun()?.id ?? null;
+    const targetRunId = runId ?? this._options.ports.activity.getActiveArtifactScope()?.id ?? null;
     if (!targetRunId) {
-      throw new Error('writeArtifact requires an active IDC run or an explicit runId');
+      throw new Error(
+        'writeArtifact requires an active Agent creation session or an explicit artifact scope id',
+      );
     }
 
     return { artifactService, targetRunId };
   }
 
   private getKnownRunStartedAt(runId: string): number | undefined {
-    const activeRun = this._options.ports.run.getActiveRun();
-    if (activeRun?.id === runId) {
-      return activeRun.startedAt;
-    }
-
-    const completedRun = this._options.ports.run.getCompletedRuns().find((run) => run.id === runId);
-    return completedRun?.startedAt;
+    return this._options.ports.activity.getArtifactScopeStartedAt(runId);
   }
 
   private async _syncObservedArtifact(event: ExecutionArtifactWrittenEvent): Promise<void> {
@@ -335,7 +284,7 @@ export class SessionArtifactFacade {
       path: event.path,
       updatedAt: existing && existing.path === event.path ? existing.updatedAt : event.at,
     } as const;
-    this._options.ports.run.bindArtifact(binding);
+    this._options.ports.activity.bindArtifact?.(event.runId, binding);
 
     const readFile = this._options.ports.workspace.getWorkspaceReadFile();
     if (!readFile || !artifactService) {

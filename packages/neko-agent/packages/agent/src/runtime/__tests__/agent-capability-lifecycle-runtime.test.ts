@@ -102,7 +102,13 @@ describe('AgentCapabilityLifecycleRuntime', () => {
       capabilityId: descriptor.capabilityId,
       phase: 'apply',
       target: { containerId: 'scene-1' },
-      approval: { source: 'workflow-apply', workflowNodeId: 'apply' },
+      approval: {
+        source: 'creation-apply',
+        creationId: 'creation-1',
+        iterationId: 'iteration-1',
+        profileId: 'idc.default',
+        stageId: 'apply',
+      },
     };
     const result: AgentCapabilityInvocationResult = {
       capabilityId: descriptor.capabilityId,
@@ -142,7 +148,13 @@ describe('AgentCapabilityLifecycleRuntime', () => {
         capabilityId: descriptor.capabilityId,
         phase: 'apply',
         target: { containerId: 'scene-1' },
-        approval: { source: 'workflow-apply', workflowNodeId: 'apply' },
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
         provenance: {
           source: 'agent',
           creationId: 'creation-1',

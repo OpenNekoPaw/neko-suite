@@ -6,7 +6,7 @@ import type {
   AgentRuntimeConfig,
   IArtifactStore,
   ICapabilityRuntime,
-  IWorkflowRuntime,
+  ICreationGuidanceRuntime,
 } from './types';
 
 const logger = getLogger('AgentSessionRuntimeBootstrap');
@@ -24,13 +24,14 @@ export function buildAgentSessionConfigWithRuntime(
   config: AgentSessionRuntimeBootstrapConfig,
 ): AgentSessionConfig {
   const { runtime, ...base } = config;
-  const workflow = runtime?.workflowRuntime;
+  const creationGuidance = runtime?.creationGuidance;
   const artifacts = runtime?.artifactStore;
   const capability = runtime?.capabilityRuntime;
   const feedback = runtime?.feedbackLoop;
 
-  const stageTracking = mergeStageTracking(base.stageTracking, workflow, capability);
-  const idcTaskProjection = base.idcTaskProjection ?? workflow?.idcTaskProjection;
+  const stageTracking = mergeStageTracking(base.stageTracking, creationGuidance, capability);
+  const creationTaskProjection =
+    base.creationTaskProjection ?? creationGuidance?.creationTaskProjection;
   const workspace = base.workspace ?? toWorkspaceConfig(artifacts);
   const artifactService = base.artifactService ?? artifacts?.artifactService;
   const artifactWatcherFactory = base.artifactWatcherFactory ?? artifacts?.createArtifactWatcher;
@@ -41,7 +42,7 @@ export function buildAgentSessionConfigWithRuntime(
   const providerCardRegistry = base.providerCardRegistry ?? capability?.providerCardRegistry;
   const projectMemoryManager = base.projectMemoryManager ?? feedback?.projectMemoryManager;
   const feedbackCoordinator = base.feedbackCoordinator ?? feedback?.feedbackCoordinator;
-  const controlPlane = base.controlPlane ?? workflow?.controlPlane;
+  const controlPlane = base.controlPlane ?? creationGuidance?.controlPlane;
   const externalProcessorRuntime =
     base.externalProcessorRuntime ?? capability?.externalProcessorRuntime;
   const contentAccessRuntime = base.contentAccessRuntime ?? capability?.contentAccessRuntime;
@@ -52,7 +53,7 @@ export function buildAgentSessionConfigWithRuntime(
   return {
     ...base,
     ...(stageTracking ? { stageTracking } : {}),
-    ...(idcTaskProjection ? { idcTaskProjection } : {}),
+    ...(creationTaskProjection ? { creationTaskProjection } : {}),
     ...(workspace ? { workspace } : {}),
     ...(artifactService ? { artifactService } : {}),
     ...(artifactWatcherFactory ? { artifactWatcherFactory } : {}),
@@ -88,17 +89,17 @@ export function createAgentSessionWithRuntime(
 
 /**
  * Merge stage tracking bindings from three planes with a fixed precedence:
- * explicit session config > workflow runtime > capability runtime.
+ * explicit session config > creation guidance runtime > capability runtime.
  *
  * This keeps host overrides deterministic while still letting runtime
  * bootstrap fill shared skill/service references from lower layers.
  */
 function mergeStageTracking(
   explicit: AgentSessionConfig['stageTracking'],
-  workflow: IWorkflowRuntime | undefined,
+  creationGuidance: ICreationGuidanceRuntime | undefined,
   capability: ICapabilityRuntime | undefined,
 ): AgentSessionConfig['stageTracking'] {
-  const runtimeStageTracking = workflow?.stageTracking;
+  const runtimeStageTracking = creationGuidance?.stageTracking;
   if (!explicit && !runtimeStageTracking) return undefined;
 
   const skillRegistry =

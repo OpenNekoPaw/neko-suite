@@ -180,6 +180,30 @@ describe('task action plan', () => {
     });
   });
 
+  it('does not treat webview render URIs as view-result URLs', () => {
+    expect(
+      buildViewTaskResultActionPlan({
+        taskId: 'task-1',
+        conversationId: 'conv-1',
+        task: createTask({
+          id: 'task-1',
+          payload: { conversationId: 'conv-1' },
+          output: { data: { urls: ['webview-uri:/workspace/neko/generated/image/result.png'] } },
+        }),
+        media: {
+          id: 'task-1',
+          conversationId: 'conv-1',
+          resultUrl: 'webview-uri:/workspace/neko/generated/image/result.png',
+        },
+      }),
+    ).toEqual({
+      kind: 'noop',
+      reason: 'no-result',
+      taskId: 'task-1',
+      conversationId: 'conv-1',
+    });
+  });
+
   it('filters clear-completed candidates by conversation id', () => {
     expect(
       buildClearCompletedTaskPlan({

@@ -19,9 +19,9 @@ describe('SkillLifecycleRuntime', () => {
         allowedTools: ['ReadDocument', 'WriteDraft'],
       }),
       slot: 'stagePersona',
-      owner: 'idc',
-      lifetime: { kind: 'idc-stage', runId: 'run-1', stage: 'plan' },
-      source: 'idc-stage',
+      owner: 'creation-profile',
+      lifetime: { kind: 'creation-stage', runId: 'run-1', stage: 'plan' },
+      source: 'creation-stage',
       now: 1,
       turnCount: 1,
     });
@@ -100,16 +100,16 @@ describe('SkillLifecycleRuntime', () => {
     expect(runtime.project('conv-1').toolPolicy.mode).toBe('unrestricted');
   });
 
-  it('rejects locked IDC stage persona deactivation but expires it on matching stage exit', () => {
+  it('rejects locked Creation stage persona deactivation but expires it on matching stage exit', () => {
     const runtime = createRuntime([]);
     const activation = runtime.activatePrepared({
       conversationId: 'conv-1',
       skill: createSkill('creation-persona'),
       injection: createInjection('creation-persona'),
       slot: 'stagePersona',
-      owner: 'idc',
-      lifetime: { kind: 'idc-stage', runId: 'run-1', stage: 'draft' },
-      source: 'idc-stage',
+      owner: 'creation-profile',
+      lifetime: { kind: 'creation-stage', runId: 'run-1', stage: 'draft' },
+      source: 'creation-stage',
       now: 1,
       turnCount: 1,
     });
@@ -266,20 +266,20 @@ describe('SkillLifecycleRuntime', () => {
     expect(runtime.list('conv-1')[0]?.lastUsedTurn).toBe(2);
   });
 
-  it('fails closed for incompatible tool policies and model override conflicts', () => {
+  it('fails closed before creating records with incompatible model override conflicts', () => {
     const runtime = createRuntime([]);
     runtime.activatePrepared({
       conversationId: 'conv-1',
       skill: createSkill('review'),
       injection: createInjection('review', { allowedTools: ['ReadDocument'], model: 'model-a' }),
       slot: 'stagePersona',
-      owner: 'idc',
-      lifetime: { kind: 'idc-stage', runId: 'run-1', stage: 'apply' },
-      source: 'idc-stage',
+      owner: 'creation-profile',
+      lifetime: { kind: 'creation-stage', runId: 'run-1', stage: 'apply' },
+      source: 'creation-stage',
       now: 1,
       turnCount: 1,
     });
-    runtime.activatePrepared({
+    const activation = runtime.activatePrepared({
       conversationId: 'conv-1',
       skill: createSkill('write'),
       injection: createInjection('write', { allowedTools: ['WriteDocument'], model: 'model-b' }),
@@ -293,15 +293,20 @@ describe('SkillLifecycleRuntime', () => {
 
     const projection = runtime.project('conv-1');
 
-    expect(projection.toolPolicy).toEqual(
+    expect(activation).toEqual(
       expect.objectContaining({
-        mode: 'conflict',
+        ok: false,
+        diagnostics: [
+          expect.objectContaining({
+            code: 'skill-conflict',
+            details: expect.objectContaining({ reason: 'model-override-conflict' }),
+          }),
+        ],
       }),
     );
-    expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      'tool-policy-conflict',
-      'model-override-conflict',
-    ]);
+    expect(runtime.list('conv-1').map((record) => record.skillName)).toEqual(['review']);
+    expect(projection.toolPolicy).toEqual(expect.objectContaining({ mode: 'allowlist' }));
+    expect(projection.diagnostics).toEqual([]);
   });
 
   it('rejects lifecycle activation when an explicit conflict config matches an active record', () => {
@@ -353,9 +358,9 @@ describe('SkillLifecycleRuntime', () => {
       skill: createSkill('stage-persona'),
       injection: createInjection('stage-persona', { model: 'model-a' }),
       slot: 'stagePersona',
-      owner: 'idc',
-      lifetime: { kind: 'idc-stage', runId: 'run-1', stage: 'plan' },
-      source: 'idc-stage',
+      owner: 'creation-profile',
+      lifetime: { kind: 'creation-stage', runId: 'run-1', stage: 'plan' },
+      source: 'creation-stage',
       now: 1,
       turnCount: 1,
     });
@@ -386,7 +391,23 @@ describe('SkillLifecycleRuntime', () => {
     expect(runtime.list('conv-1').map((record) => record.skillName)).toEqual(['stage-persona']);
   });
 
-  it('expires turn, workflow, and inactivity scoped records only when their event matches', () => {
+  it('accepts promptChainSkill as the canonical method-guidance slot', async () => {
+    const runtime = createRuntime([createSkill('storyboard-method')]);
+
+    const result = await runtime.activate({
+      conversationId: 'conv-1',
+      skillName: 'storyboard-method',
+      slot: 'promptChainSkill',
+      owner: 'agent',
+      lifetime: { kind: 'conversation', untilCleared: true },
+      source: 'explicit-agent',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.record?.slot).toBe('promptChainSkill');
+  });
+
+  it('expires turn, prompt-chain, and inactivity scoped records only when their event matches', () => {
     const store = new SkillLifecycleStore();
     const runtime = createRuntime([], store);
     const turn = runtime.activatePrepared({
@@ -400,13 +421,13 @@ describe('SkillLifecycleRuntime', () => {
       now: 1,
       turnCount: 1,
     });
-    const workflow = runtime.activatePrepared({
+    const promptChain = runtime.activatePrepared({
       conversationId: 'conv-1',
-      skill: createSkill('workflow-skill'),
-      injection: createInjection('workflow-skill'),
-      slot: 'workflowSkill',
+      skill: createSkill('prompt-chain-skill'),
+      injection: createInjection('prompt-chain-skill'),
+      slot: 'promptChainSkill',
       owner: 'agent',
-      lifetime: { kind: 'workflow', runId: 'run-1' },
+      lifetime: { kind: 'prompt-chain', runId: 'chain-1' },
       source: 'explicit-agent',
       now: 2,
       turnCount: 2,
@@ -430,8 +451,12 @@ describe('SkillLifecycleRuntime', () => {
       runtime.expire({ conversationId: 'conv-1', reason: 'turn-ended', turnId: 'turn-1' }),
     ).toEqual(expect.objectContaining({ removedRecordIds: [turn.record?.id] }));
     expect(
-      runtime.expire({ conversationId: 'conv-1', reason: 'workflow-ended', runId: 'run-1' }),
-    ).toEqual(expect.objectContaining({ removedRecordIds: [workflow.record?.id] }));
+      runtime.expire({
+        conversationId: 'conv-1',
+        reason: 'prompt-chain-ended',
+        runId: 'chain-1',
+      }),
+    ).toEqual(expect.objectContaining({ removedRecordIds: [promptChain.record?.id] }));
     expect(
       runtime.expire({ conversationId: 'conv-1', reason: 'inactive', currentTurn: 4 }),
     ).toEqual(expect.objectContaining({ removedRecordIds: [] }));

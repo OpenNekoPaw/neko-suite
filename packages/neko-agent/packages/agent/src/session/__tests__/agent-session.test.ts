@@ -11,7 +11,6 @@ import type { AgentSessionConfig, AgentEvent } from '../types';
 import {
   TOOL_NAMES_MEDIA,
   TOOL_NAMES_PERCEPTION,
-  createAgentCapabilityActivationIntent,
   createSubagentReviewEvidence,
 } from '@neko/shared';
 import type {
@@ -43,39 +42,6 @@ async function collectEvents(iterable: AsyncIterable<AgentEvent>): Promise<Agent
     events.push(event);
   }
   return events;
-}
-
-function getCompletedRuns(session: AgentSession) {
-  return ((
-    session as unknown as { _runStore?: { listCompleted(): readonly unknown[] } }
-  )._runStore?.listCompleted() ?? []) as readonly unknown[];
-}
-
-function startIdcRunForTest(session: AgentSession, runKind: string, runId?: string): string | null {
-  return (
-    session.startIdcRunWithIntent({
-      runKind,
-      ...(runId ? { runId } : {}),
-      intent: createAgentCapabilityActivationIntent({
-        conversationId: 'test-conversation',
-        source: 'user-explicit',
-        target: 'idc-workflow',
-        action: runId ? 'resume' : 'activate',
-        name: runKind,
-        requestedBy: 'user',
-        reason: `Test starts IDC workflow ${runKind}`,
-        createdAt: Date.now(),
-      }),
-    }).runId ?? null
-  );
-}
-
-function getInternalRunStore(session: AgentSession) {
-  return (
-    session as unknown as {
-      _runStore?: { getActive(): unknown; listCompleted(): readonly unknown[] };
-    }
-  )._runStore;
 }
 
 function parseLatestWrite<T>(writes: readonly { path: string; data: string }[], path: string): T {
@@ -534,7 +500,7 @@ describe('AgentSession', () => {
   });
 
   describe('execute() failure lifecycle', () => {
-    it('does not create an IDC run when execute() fails without explicit workflow activation', async () => {
+    it('keeps session history consistent when execute() fails with stage tracking', async () => {
       const session = new AgentSession(
         createConfig({
           executionMode: 'plan',
@@ -561,8 +527,6 @@ describe('AgentSession', () => {
         role: 'assistant',
         content: 'executor blew up',
       });
-      expect(session.getActiveIdcRun()).toBeNull();
-      expect(getCompletedRuns(session)).toEqual([]);
     });
   });
 
@@ -1154,27 +1118,6 @@ describe('AgentSession', () => {
       expect(session.getPendingConfirmations()).toEqual([]);
     });
 
-    it('aborts an active IDC run before tearing down stage tracking', () => {
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {},
-        }),
-      );
-      const runStore = getInternalRunStore(session);
-
-      startIdcRunForTest(session, 'wf', 'run-active');
-      session.dispose();
-
-      expect(runStore?.getActive()).toBeNull();
-      expect(runStore?.listCompleted()).toEqual([
-        expect.objectContaining({
-          id: 'run-active',
-          runKind: 'wf',
-          status: 'aborted',
-        }),
-      ]);
-    });
-
     it('disposes a runtime-provided artifact watcher', () => {
       const start = vi.fn().mockResolvedValue(undefined);
       const disposeWatcher = vi.fn().mockResolvedValue(undefined);
@@ -1208,7 +1151,7 @@ describe('AgentSession', () => {
         }),
       );
       expect(getWatcherCreationId).toBeDefined();
-      expect(getWatcherCreationId?.()).toBeNull();
+      expect(getWatcherCreationId?.()).toBe('test-conversation');
       expect(start).toHaveBeenCalledTimes(1);
 
       session.dispose();
@@ -1218,7 +1161,7 @@ describe('AgentSession', () => {
   });
 
   // -------------------------------------------------------------------------
-  // IDC stage tracking
+  // built-in creation stage tracking
   // -------------------------------------------------------------------------
 
   describe('stage tracking', () => {
@@ -1269,9 +1212,6 @@ describe('AgentSession', () => {
           },
         }),
       );
-      startIdcRunForTest(session, 'stage-persona', 'run-stage-persona');
-
-      // Stage persona activation requires an explicitly active IDC workflow.
       await session.syncStagePersona();
 
       expect(session.getCurrentStage()).toBe('draft');
@@ -1326,7 +1266,7 @@ describe('AgentSession', () => {
       expect(session.enterStage('apply')).toBe(false);
     });
 
-    it('does not start an IDC run automatically when execute() begins', async () => {
+    it('does not require a separate creation runtime when execute() begins with stage tracking', async () => {
       const session = new AgentSession(
         createConfig({
           executionMode: 'plan',
@@ -1339,93 +1279,7 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('Outline the implementation'));
 
-      expect(session.getActiveIdcRun()).toBeNull();
-      expect(getCompletedRuns(session)).toEqual([]);
-    });
-
-    it('startIdcRun writes runKind', () => {
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {},
-        }),
-      );
-
-      startIdcRunForTest(session, 'artifact-resume', 'run-kind');
-
-      expect(session.getActiveIdcRun()).toEqual(
-        expect.objectContaining({
-          id: 'run-kind',
-          runKind: 'artifact-resume',
-          status: 'running',
-        }),
-      );
-    });
-
-    it('stops an IDC run only through an explicit user intent', () => {
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {},
-        }),
-      );
-      startIdcRunForTest(session, 'artifact-resume', 'run-stop');
-
-      const result = session.stopIdcRunWithIntent({
-        intent: createAgentCapabilityActivationIntent({
-          conversationId: 'test-conversation',
-          source: 'user-explicit',
-          target: 'idc-workflow',
-          action: 'deactivate',
-          name: 'artifact-resume',
-          requestedBy: 'user',
-          reason: 'Test stops IDC workflow',
-          createdAt: Date.now(),
-        }),
-      });
-
-      expect(result).toEqual(
-        expect.objectContaining({
-          success: true,
-          runId: 'run-stop',
-        }),
-      );
-      expect(session.getActiveIdcRun()).toBeNull();
-      expect(getCompletedRuns(session)).toEqual([
-        expect.objectContaining({ id: 'run-stop', status: 'aborted' }),
-      ]);
-      expect(result.events.map((event) => event.step)).toEqual([
-        'requested',
-        'validated',
-        'prepared',
-        'projected',
-        'active',
-      ]);
-    });
-
-    it('rejects IDC stop without an idc-workflow deactivate intent', () => {
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {},
-        }),
-      );
-      startIdcRunForTest(session, 'artifact-resume', 'run-invalid-stop');
-
-      const result = session.stopIdcRunWithIntent({
-        intent: createAgentCapabilityActivationIntent({
-          conversationId: 'test-conversation',
-          source: 'user-explicit',
-          target: 'execution-mode',
-          action: 'set',
-          name: 'plan',
-          requestedBy: 'user',
-          createdAt: Date.now(),
-        }),
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.diagnostics?.[0]?.code).toBe('invalid-idc-workflow-deactivation-intent');
-      expect(session.getActiveIdcRun()).toEqual(
-        expect.objectContaining({ id: 'run-invalid-stop', status: 'running' }),
-      );
+      expect(session.getCurrentStage()).toBe('apply');
     });
   });
 
@@ -2454,63 +2308,7 @@ describe('AgentSession', () => {
       expect(parsed.event.kind).toBe('tool:GenerateImage');
     });
 
-    it('flushWorkspaceSink forces pending runtime-state debounce writes to land immediately', async () => {
-      vi.useFakeTimers();
-      try {
-        const { registry, service } = minimalStageTrackingConfig();
-        const writes: Array<{ path: string; data: string }> = [];
-        const fsOps = {
-          async mkdir(): Promise<void> {},
-          async appendFile(): Promise<void> {},
-          async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
-            writes.push({ path, data });
-          },
-        };
-
-        const session = new AgentSession(
-          createConfig({
-            stageTracking: {
-              skillRegistry: registry as never,
-              skillService: service as never,
-              initialStage: 'draft',
-            },
-            workspace: { root: '/tmp/proj', fsOps },
-          }),
-        );
-
-        startIdcRunForTest(session, 'wf-debounce', 'run-1');
-        await Promise.resolve();
-
-        expect(
-          writes.filter((entry) => entry.path === '/tmp/proj/.neko/state/idc-runtime.json'),
-        ).toHaveLength(0);
-
-        await session.flushWorkspaceSink();
-
-        const runtimeWrites = writes.filter(
-          (entry) => entry.path === '/tmp/proj/.neko/state/idc-runtime.json',
-        );
-        expect(runtimeWrites).toHaveLength(1);
-
-        const snapshot = JSON.parse(runtimeWrites[0]!.data) as {
-          run: {
-            active?: { id: string; status: string };
-          };
-        };
-        expect(snapshot.run.active).toEqual(
-          expect.objectContaining({
-            id: 'run-1',
-            status: 'running',
-          }),
-        );
-
-        session.dispose();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('writes draft / plan / task artifacts through ArtifactService and binds them to the active run', async () => {
+    it('writes draft / plan / task artifacts through ArtifactService and binds them to active Agent creation', async () => {
       const { registry, service } = minimalStageTrackingConfig();
       const writes: Array<{ path: string; data: string }> = [];
       const fsOps = {
@@ -2533,7 +2331,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      startIdcRunForTest(session, 'wf-artifacts', 'run-1');
+      const runId = 'artifact-run';
 
       const draft: Draft = {
         id: 'draft-1',
@@ -2562,9 +2360,9 @@ describe('AgentSession', () => {
         items: [{ id: 'step-1', content: 'Export teaser', status: 'pending' }],
       };
 
-      await session.writeDraftArtifact(draft);
-      await session.writePlanArtifact(plan);
-      await session.writeTaskArtifact(task);
+      await session.writeDraftArtifact(draft, { runId });
+      await session.writePlanArtifact(plan, { runId });
+      await session.writeTaskArtifact(task, { runId });
       await session.flushWorkspaceSink();
       const artifactBase = '/tmp/proj/neko/creations/cut-trailer-draft-draft-1';
       const draftPath = `${artifactBase}/brief.md`;
@@ -2574,78 +2372,22 @@ describe('AgentSession', () => {
       expect(writes.filter((entry) => entry.path === draftPath)).toHaveLength(1);
       expect(writes.filter((entry) => entry.path === planPath)).toHaveLength(1);
       expect(writes.filter((entry) => entry.path === taskPath)).toHaveLength(1);
-      expect(session.getArtifactsForRun('run-1').map((record) => record.kind)).toEqual([
+      const artifactIndexSnapshot = parseLatestWrite<{
+        entries: Array<{ kind: string; artifactId: string; runId: string }>;
+      }>(writes, '/tmp/proj/.neko/.cache/artifact-index.json');
+      expect(session.getArtifactsForRun(runId).map((record) => record.kind)).toEqual([
         'draft',
         'plan',
         'task',
       ]);
-      expect(session.getActiveIdcRun()).toEqual(
-        expect.objectContaining({
-          id: 'run-1',
-          draft,
-          plan,
-          task,
-          artifactBindings: [
-            {
-              kind: 'draft',
-              artifactId: 'draft-1',
-              path: draftPath,
-              updatedAt: 2,
-            },
-            {
-              kind: 'plan',
-              artifactId: 'plan-1',
-              path: planPath,
-              updatedAt: 4,
-            },
-            {
-              kind: 'task',
-              artifactId: 'task-1',
-              path: taskPath,
-              updatedAt: 6,
-            },
-          ],
-        }),
-      );
-
-      const snapshot = parseLatestWrite<{
-        run: {
-          active?: {
-            artifacts?: readonly { kind: string; artifactId: string; path: string }[];
-          };
-        };
-      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
-      const artifactIndexSnapshot = parseLatestWrite<{
-        entries: Array<{ kind: string; artifactId: string; runId: string }>;
-      }>(writes, '/tmp/proj/.neko/.cache/artifact-index.json');
-      expect(snapshot.run.active?.artifacts).toEqual([
-        {
-          kind: 'draft',
-          artifactId: 'draft-1',
-          path: draftPath,
-          updatedAt: 2,
-        },
-        {
-          kind: 'plan',
-          artifactId: 'plan-1',
-          path: planPath,
-          updatedAt: 4,
-        },
-        {
-          kind: 'task',
-          artifactId: 'task-1',
-          path: taskPath,
-          updatedAt: 6,
-        },
-      ]);
       expect(artifactIndexSnapshot.entries).toEqual([
-        expect.objectContaining({ kind: 'draft', artifactId: 'draft-1', runId: 'run-1' }),
-        expect.objectContaining({ kind: 'plan', artifactId: 'plan-1', runId: 'run-1' }),
-        expect.objectContaining({ kind: 'task', artifactId: 'task-1', runId: 'run-1' }),
+        expect.objectContaining({ kind: 'draft', artifactId: 'draft-1', runId }),
+        expect.objectContaining({ kind: 'plan', artifactId: 'plan-1', runId }),
+        expect.objectContaining({ kind: 'task', artifactId: 'task-1', runId }),
       ]);
     });
 
-    it('restores task artifacts from ArtifactService and replays IDC task projection on startup', async () => {
+    it('restores task artifacts from ArtifactService and replays creation task projection on startup', async () => {
       const restoredTask: Task = {
         id: 'task-restore',
         createdAt: 5,
@@ -2690,7 +2432,7 @@ describe('AgentSession', () => {
         createConfig({
           workspace: { root: '/tmp/proj', fsOps },
           artifactService: artifactService as never,
-          idcTaskProjection: projection as never,
+          creationTaskProjection: projection as never,
         }),
       );
 
@@ -2711,536 +2453,7 @@ describe('AgentSession', () => {
       session.dispose();
     });
 
-    it('does not silently restore persisted active IDC state from startup snapshots', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const writes: Array<{ path: string; data: string }> = [];
-      const activationEvents: import('@neko/shared').AgentCapabilityActivationProgressEvent[] = [];
-      const restoredDraft: Draft = {
-        id: 'draft-active',
-        title: 'Recovered draft',
-        status: 'pending_review',
-        domain: 'cut',
-        createdAt: 10,
-        updatedAt: 11,
-        intent: 'Recover intent',
-        approach: 'Recover approach',
-        artifact: 'Recover artifact',
-      };
-      const draftRecord = {
-        kind: 'draft',
-        runId: 'run-active',
-        artifactId: 'draft-active',
-        path: '/tmp/proj/neko/creations/active-creation/brief.md',
-        updatedAt: 11,
-        content: '# Draft',
-        value: restoredDraft,
-      };
-      const projection = {
-        syncTask: vi.fn(async () => ['idc:run-active:check-1']),
-        clearRun: vi.fn(async () => undefined),
-      };
-      const artifactService = {
-        restore: vi.fn(async () => [draftRecord]),
-        listRunIds: vi.fn(() => ['run-active']),
-        listByRunId: vi.fn((runId: string) => (runId === 'run-active' ? [draftRecord] : [])),
-        getByRunId: vi.fn(() => null),
-        write: vi.fn(),
-        writeDraft: vi.fn(),
-        writePlan: vi.fn(),
-        writeTask: vi.fn(),
-        ingestObservedArtifact: vi.fn(),
-        flush: vi.fn(async () => undefined),
-        dispose: vi.fn(async () => undefined),
-      };
-      const fsOps = {
-        async mkdir(): Promise<void> {},
-        async appendFile(path: string, data: string): Promise<void> {
-          writes.push({ path, data });
-        },
-        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
-          writes.push({ path, data });
-        },
-        async readFile(path: string): Promise<string> {
-          if (path !== '/tmp/proj/.neko/state/idc-runtime.json') {
-            throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
-          }
-
-          return JSON.stringify({
-            updatedAt: 50,
-            stage: {
-              current: 'apply',
-              enteredAt: 40,
-              transitions: [
-                { from: null, to: 'draft', at: 10 },
-                { from: 'draft', to: 'apply', at: 20 },
-              ],
-            },
-            run: {
-              active: {
-                id: 'run-active',
-                runKind: 'wf-active',
-                status: 'running',
-                createdAt: 1,
-                startedAt: 2,
-                roundCount: 1,
-                rounds: [
-                  {
-                    round: 0,
-                    activatedStages: ['draft', 'apply'],
-                    skippedStages: [],
-                    decidedAt: 3,
-                  },
-                ],
-                artifacts: [
-                  {
-                    kind: 'draft',
-                    artifactId: 'draft-active',
-                    path: '/tmp/proj/neko/creations/active-creation/brief.md',
-                    updatedAt: 11,
-                  },
-                  {
-                    kind: 'task',
-                    artifactId: 'task-missing',
-                    path: '/tmp/proj/neko/creations/active-creation/checklist.md',
-                    updatedAt: 31,
-                  },
-                ],
-              },
-            },
-            approval: {
-              pending: [],
-            },
-            feedback: {
-              pendingGuidance: null,
-            },
-          });
-        },
-      };
-
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-          },
-          workspace: { root: '/tmp/proj', fsOps },
-          artifactService: artifactService as never,
-          idcTaskProjection: projection as never,
-          onActivationProgress: (_conversationId, events) => {
-            activationEvents.push(...events);
-          },
-        }),
-      );
-
-      await session.flushWorkspaceSink();
-
-      expect(projection.syncTask).not.toHaveBeenCalled();
-      expect(session.getActiveIdcRun()).toBeNull();
-      expect(session.getIdcRun('run-active')).toBeNull();
-      expect(activationEvents).toEqual([
-        expect.objectContaining({
-          target: 'idc-workflow',
-          action: 'resume',
-          name: 'wf-active',
-          step: 'failed',
-          status: 'failed',
-          diagnostics: [
-            expect.objectContaining({
-              code: 'persisted-idc-requires-explicit-resume',
-            }),
-          ],
-        }),
-      ]);
-
-      const snapshot = parseLatestWrite<{
-        run: {
-          active?: {
-            artifacts?: Array<{
-              kind: string;
-              artifactId: string;
-              path: string;
-              updatedAt: number;
-              stale?: boolean;
-            }>;
-          };
-        };
-      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
-      expect(snapshot.run.active).toBeUndefined();
-
-      session.dispose();
-    });
-
-    it('restores stage/run runtime state and hydrates run artifacts on startup', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const writes: Array<{ path: string; data: string }> = [];
-      const activationEvents: import('@neko/shared').AgentCapabilityActivationProgressEvent[] = [];
-      const restoredDraft: Draft = {
-        id: 'draft-active',
-        title: 'Recovered draft',
-        status: 'pending_review',
-        domain: 'cut',
-        createdAt: 10,
-        updatedAt: 11,
-        intent: 'Recover intent',
-        approach: 'Recover approach',
-        artifact: 'Recover artifact',
-      };
-      const restoredPlan: ExecutionPlan = {
-        id: 'plan-done',
-        draftId: 'draft-active',
-        title: 'Recovered plan',
-        status: 'ready',
-        createdAt: 20,
-        updatedAt: 21,
-        steps: [],
-      };
-      const restoredTask: Task = {
-        id: 'task-active',
-        createdAt: 30,
-        updatedAt: 31,
-        items: [{ id: 'check-1', content: 'Resume apply', status: 'pending' }],
-      };
-      const draftRecord = {
-        kind: 'draft',
-        runId: 'run-active',
-        artifactId: 'draft-active',
-        path: '/tmp/proj/neko/creations/active-creation/brief.md',
-        updatedAt: 11,
-        content: '# Draft',
-        value: restoredDraft,
-      };
-      const planRecord = {
-        kind: 'plan',
-        runId: 'run-done',
-        artifactId: 'plan-done',
-        path: '/tmp/proj/neko/creations/done-creation/plan.md',
-        updatedAt: 21,
-        content: '# Plan',
-        value: restoredPlan,
-      };
-      const taskRecord = {
-        kind: 'task',
-        runId: 'run-active',
-        artifactId: 'task-active',
-        path: '/tmp/proj/neko/creations/active-creation/checklist.md',
-        updatedAt: 31,
-        content: '# Tasks',
-        value: restoredTask,
-      };
-      const projection = {
-        syncTask: vi.fn(async () => ['idc:run-active:check-1']),
-        clearRun: vi.fn(async () => undefined),
-      };
-      const artifactService = {
-        restore: vi.fn(async () => [draftRecord, planRecord, taskRecord]),
-        listRunIds: vi.fn(() => ['run-active', 'run-done']),
-        listByRunId: vi.fn((runId: string) => {
-          if (runId === 'run-active') return [draftRecord, taskRecord];
-          if (runId === 'run-done') return [planRecord];
-          return [];
-        }),
-        getByRunId: vi.fn(() => null),
-        write: vi.fn(),
-        writeDraft: vi.fn(),
-        writePlan: vi.fn(),
-        writeTask: vi.fn(),
-        ingestObservedArtifact: vi.fn(),
-        flush: vi.fn(async () => undefined),
-        dispose: vi.fn(async () => undefined),
-      };
-      const fsOps = {
-        async mkdir(): Promise<void> {},
-        async appendFile(path: string, data: string): Promise<void> {
-          writes.push({ path, data });
-        },
-        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
-          writes.push({ path, data });
-        },
-        async readFile(path: string): Promise<string> {
-          if (path !== '/tmp/proj/.neko/state/idc-runtime.json') {
-            throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
-          }
-
-          return JSON.stringify({
-            updatedAt: 50,
-            stage: {
-              current: 'plan',
-              enteredAt: 40,
-              transitions: [
-                { from: null, to: 'draft', at: 10 },
-                { from: 'draft', to: 'plan', at: 20 },
-              ],
-            },
-            run: {
-              active: {
-                id: 'run-active',
-                runKind: 'wf-active',
-                status: 'running',
-                createdAt: 1,
-                startedAt: 2,
-                roundCount: 1,
-                rounds: [
-                  {
-                    round: 0,
-                    activatedStages: ['draft', 'plan'],
-                    skippedStages: [],
-                    decidedAt: 3,
-                  },
-                ],
-                artifacts: [
-                  {
-                    kind: 'draft',
-                    artifactId: 'draft-active',
-                    path: '/tmp/proj/neko/creations/active-creation/brief.md',
-                    updatedAt: 11,
-                  },
-                  {
-                    kind: 'task',
-                    artifactId: 'task-active',
-                    path: '/tmp/proj/neko/creations/active-creation/checklist.md',
-                    updatedAt: 31,
-                  },
-                ],
-              },
-              lastCompleted: {
-                id: 'run-done',
-                runKind: 'wf-done',
-                status: 'completed',
-                createdAt: 4,
-                startedAt: 5,
-                endedAt: 6,
-                roundCount: 1,
-                rounds: [
-                  {
-                    round: 0,
-                    activatedStages: ['apply'],
-                    skippedStages: [],
-                    decidedAt: 6,
-                  },
-                ],
-                artifacts: [
-                  {
-                    kind: 'plan',
-                    artifactId: 'plan-done',
-                    path: '/tmp/proj/neko/creations/done-creation/plan.md',
-                    updatedAt: 21,
-                  },
-                ],
-              },
-            },
-            approval: {
-              pending: [],
-            },
-          });
-        },
-      };
-
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-          },
-          workspace: { root: '/tmp/proj', fsOps },
-          artifactService: artifactService as never,
-          idcTaskProjection: projection as never,
-          onActivationProgress: (_conversationId, events) => {
-            activationEvents.push(...events);
-          },
-        }),
-      );
-
-      await session.flushWorkspaceSink();
-
-      expect(artifactService.restore).toHaveBeenCalledTimes(1);
-      expect(projection.syncTask).toHaveBeenCalledWith({
-        runId: 'run-active',
-        task: restoredTask,
-        artifact: {
-          kind: 'task',
-          artifactId: 'task-active',
-          path: '/tmp/proj/neko/creations/active-creation/checklist.md',
-          updatedAt: 31,
-        },
-      });
-      expect(projection.clearRun).not.toHaveBeenCalled();
-      expect(session.listArtifactRunIds()).toEqual(['run-active', 'run-done']);
-      expect(session.getArtifactsForRun('run-active')).toEqual([draftRecord, taskRecord]);
-      expect(session.getArtifactsForRun('run-done')).toEqual([planRecord]);
-      expect(session.getIdcRun('run-active')).toBeNull();
-      expect(session.getIdcRun('run-done')).toBeNull();
-      expect(session.listIdcRuns()).toEqual([]);
-      expect(session.getActiveIdcRun()).toBeNull();
-      expect(getCompletedRuns(session)).toEqual([]);
-      expect(activationEvents).toEqual([
-        expect.objectContaining({
-          target: 'idc-workflow',
-          action: 'resume',
-          name: 'wf-active',
-          step: 'failed',
-          status: 'failed',
-          diagnostics: [
-            expect.objectContaining({
-              code: 'persisted-idc-requires-explicit-resume',
-            }),
-          ],
-        }),
-      ]);
-
-      const snapshot = parseLatestWrite<{
-        stage: {
-          current: string | null;
-          transitions: Array<{ from: string | null; to: string; at: number }>;
-        };
-        run: {
-          active?: {
-            id: string;
-            roundCount: number;
-            rounds?: Array<{ round: number }>;
-          };
-          lastCompleted?: {
-            id: string;
-            status: string;
-            rounds?: Array<{ round: number }>;
-          };
-        };
-      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
-
-      expect(snapshot.stage).toEqual({
-        current: null,
-        transitions: [],
-      });
-      expect(snapshot.run.active).toBeUndefined();
-      expect(snapshot.run.lastCompleted).toBeUndefined();
-      session.dispose();
-    });
-
-    it('restores completed task artifacts without resuming completed IDC runs', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const activationEvents: import('@neko/shared').AgentCapabilityActivationProgressEvent[] = [];
-      const completedTask: Task = {
-        id: 'task-done',
-        createdAt: 60,
-        updatedAt: 61,
-        items: [{ id: 'done-step', content: 'Completed checklist', status: 'completed' }],
-      };
-      const completedTaskRecord = {
-        kind: 'task',
-        runId: 'run-done',
-        artifactId: 'task-done',
-        path: '/tmp/proj/neko/creations/done-creation/checklist.md',
-        updatedAt: 61,
-        content: '# Tasks',
-        value: completedTask,
-      };
-      const projection = {
-        syncTask: vi.fn(async () => ['idc:run-done:done-step']),
-        clearRun: vi.fn(async () => undefined),
-      };
-      const artifactService = {
-        restore: vi.fn(async () => [completedTaskRecord]),
-        listRunIds: vi.fn(() => ['run-done']),
-        listByRunId: vi.fn((runId: string) => (runId === 'run-done' ? [completedTaskRecord] : [])),
-        getByRunId: vi.fn(() => null),
-        write: vi.fn(),
-        writeDraft: vi.fn(),
-        writePlan: vi.fn(),
-        writeTask: vi.fn(),
-        ingestObservedArtifact: vi.fn(),
-        flush: vi.fn(async () => undefined),
-        dispose: vi.fn(async () => undefined),
-      };
-      const fsOps = {
-        async mkdir(): Promise<void> {},
-        async appendFile(): Promise<void> {},
-        async writeFile(): Promise<void> {},
-        async readFile(path: string): Promise<string> {
-          if (path !== '/tmp/proj/.neko/state/idc-runtime.json') {
-            throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
-          }
-
-          return JSON.stringify({
-            stage: {
-              current: 'apply',
-              transitions: [],
-            },
-            run: {
-              lastCompleted: {
-                id: 'run-done',
-                runKind: 'wf-done',
-                status: 'completed',
-                createdAt: 10,
-                startedAt: 11,
-                endedAt: 12,
-                roundCount: 1,
-                rounds: [
-                  {
-                    round: 0,
-                    activatedStages: ['apply'],
-                    skippedStages: [],
-                    decidedAt: 12,
-                  },
-                ],
-              },
-            },
-            approval: {
-              pending: [],
-            },
-            feedback: {
-              pendingGuidance: null,
-            },
-          });
-        },
-      };
-
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-          },
-          workspace: { root: '/tmp/proj', fsOps },
-          artifactService: artifactService as never,
-          idcTaskProjection: projection as never,
-          onActivationProgress: (_conversationId, events) => {
-            activationEvents.push(...events);
-          },
-        }),
-      );
-
-      await session.flushWorkspaceSink();
-
-      expect(projection.syncTask).toHaveBeenCalledWith({
-        runId: 'run-done',
-        task: completedTask,
-        artifact: {
-          kind: 'task',
-          artifactId: 'task-done',
-          path: '/tmp/proj/neko/creations/done-creation/checklist.md',
-          updatedAt: 61,
-        },
-      });
-      expect(projection.clearRun).not.toHaveBeenCalled();
-      expect(session.getActiveIdcRun()).toBeNull();
-      expect(session.getIdcRun('run-done')).toBeNull();
-      expect(session.getArtifactsForRun('run-done')).toEqual([completedTaskRecord]);
-      expect(activationEvents).toEqual([
-        expect.objectContaining({
-          target: 'idc-workflow',
-          action: 'resume',
-          step: 'failed',
-          status: 'failed',
-          diagnostics: [
-            expect.objectContaining({
-              code: 'persisted-idc-requires-explicit-resume',
-            }),
-          ],
-        }),
-      ]);
-      session.dispose();
-    });
-
-    it('hydrates previously written artifacts when startIdcRun reuses the same runId', async () => {
+    it('groups artifacts by explicit legacy artifact key without starting an IDC run', async () => {
       const { registry, service } = minimalStageTrackingConfig();
       const fsOps = {
         async mkdir(_path: string): Promise<void> {},
@@ -3271,25 +2484,18 @@ describe('AgentSession', () => {
       };
 
       await session.writeDraftArtifact(draft, { runId: 'run-reuse' });
-      startIdcRunForTest(session, 'wf-reuse', 'run-reuse');
 
-      expect(session.getActiveIdcRun()).toEqual(
+      expect(session.getArtifactsForRun('run-reuse')).toEqual([
         expect.objectContaining({
-          id: 'run-reuse',
-          draft,
-          artifactBindings: [
-            {
-              kind: 'draft',
-              artifactId: 'draft-reuse',
-              path: '/tmp/proj/neko/creations/cut-reuse-me-draft-reuse/brief.md',
-              updatedAt: 11,
-            },
-          ],
+          kind: 'draft',
+          artifactId: 'draft-reuse',
+          path: '/tmp/proj/neko/creations/cut-reuse-me-draft-reuse/brief.md',
+          updatedAt: 11,
         }),
-      );
+      ]);
     });
 
-    it('ingests artifact.written bus events into ArtifactService and the active run', async () => {
+    it('ingests artifact.written bus events into ArtifactService using the emitted legacy artifact key', async () => {
       const { registry, service } = minimalStageTrackingConfig();
       const files = new Map<string, string>();
       const writes: Array<{ path: string; data: string }> = [];
@@ -3301,15 +2507,6 @@ describe('AgentSession', () => {
           writes.push({ path, data });
         },
         async readFile(path: string, _encoding: 'utf-8'): Promise<string> {
-          if (path === '/tmp/proj/.neko/state/idc-runtime.json') {
-            return JSON.stringify({
-              schemaVersion: 1,
-              updatedAt: 0,
-              stage: { current: null, transitions: [] },
-              run: {},
-              approval: { pending: [] },
-            });
-          }
           const value = files.get(path);
           if (!value) {
             throw new Error(`Missing fixture file: ${path}`);
@@ -3328,7 +2525,6 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      startIdcRunForTest(session, 'wf-observed', 'run-observed');
 
       const observedPath = '/tmp/proj/neko/creations/observed-creation/plan.md';
       files.set(
@@ -3376,18 +2572,11 @@ describe('AgentSession', () => {
           kind: 'plan',
           artifactId: 'observed-plan',
           path: observedPath,
-        }),
-      ]);
-      expect(session.getActiveIdcRun()).toEqual(
-        expect.objectContaining({
-          id: 'run-observed',
-          plan: {
+          value: expect.objectContaining({
             id: 'observed-plan',
             draftId: 'observed-draft',
             title: 'Observed plan',
             status: 'ready',
-            createdAt: Date.parse('2026-04-22T10:00:00.000Z'),
-            updatedAt: Date.parse('2026-04-22T10:30:00.000Z'),
             steps: [
               {
                 id: 'observed-plan.step.1',
@@ -3396,17 +2585,9 @@ describe('AgentSession', () => {
                 args: 'path: out.md',
               },
             ],
-          },
-          artifactBindings: [
-            {
-              kind: 'plan',
-              artifactId: 'observed-plan',
-              path: observedPath,
-              updatedAt: Date.parse('2026-04-22T10:30:00.000Z'),
-            },
-          ],
+          }),
         }),
-      );
+      ]);
       expect(
         parseLatestWrite<{
           entries: Array<{ kind: string; artifactId: string; runId: string }>;
@@ -3430,15 +2611,6 @@ describe('AgentSession', () => {
           files.set(path, data);
         },
         async readFile(path: string, _encoding: 'utf-8'): Promise<string> {
-          if (path === '/tmp/proj/.neko/state/idc-runtime.json') {
-            return JSON.stringify({
-              schemaVersion: 1,
-              updatedAt: 0,
-              stage: { current: null, transitions: [] },
-              run: {},
-              approval: { pending: [] },
-            });
-          }
           const value = files.get(path);
           if (!value) {
             throw new Error(`Missing fixture file: ${path}`);
@@ -3457,7 +2629,7 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      startIdcRunForTest(session, 'wf-task-echo', 'run-task-echo');
+      const runId = 'run-echo';
 
       const task: Task = {
         id: 'task-echo',
@@ -3465,11 +2637,11 @@ describe('AgentSession', () => {
         updatedAt: 2,
         items: [{ id: 'custom-item-id', content: 'Export teaser', status: 'pending' }],
       };
-      const record = await session.writeTaskArtifact(task);
+      const record = await session.writeTaskArtifact(task, { runId });
 
       session.getEventBus()!.emit({
         channel: 'execution.artifact.written',
-        runId: 'run-task-echo',
+        runId,
         kind: 'task',
         path: record.path,
         artifactId: 'task-echo',
@@ -3477,25 +2649,20 @@ describe('AgentSession', () => {
       });
       await session.flushWorkspaceSink();
 
-      expect(session.getActiveIdcRun()).toEqual(
+      expect(session.getArtifactsForRun(runId)).toEqual([
         expect.objectContaining({
-          id: 'run-task-echo',
-          task,
-          artifactBindings: [
-            {
-              kind: 'task',
-              artifactId: 'task-echo',
-              path: record.path,
-              updatedAt: 2,
-            },
-          ],
+          kind: 'task',
+          artifactId: 'task-echo',
+          path: record.path,
+          updatedAt: 2,
+          value: task,
         }),
-      );
+      ]);
     });
 
-    it('projects Task artifacts into the shared task plane when an IDC task projection is configured', async () => {
+    it('projects Task artifacts into the shared task plane when a creation task projection is configured', async () => {
       const { registry, service } = minimalStageTrackingConfig();
-      const idcTaskProjection = {
+      const creationTaskProjection = {
         syncTask: vi.fn().mockResolvedValue(['idc:run-1:task-item-1']),
         clearRun: vi.fn().mockResolvedValue(undefined),
       };
@@ -3514,17 +2681,10 @@ describe('AgentSession', () => {
               async writeFile(): Promise<void> {},
             },
           },
-          idcTaskProjection: idcTaskProjection as never,
+          creationTaskProjection: creationTaskProjection as never,
         }),
       );
-      startIdcRunForTest(session, 'wf-task-projection', 'run-1');
-      const activeRun = session.getActiveIdcRun();
-      expect(activeRun).toEqual(
-        expect.objectContaining({
-          id: 'run-1',
-          startedAt: expect.any(Number),
-        }),
-      );
+      const runId = 'run-projected-task';
 
       const task: Task = {
         id: 'task-1',
@@ -3533,12 +2693,11 @@ describe('AgentSession', () => {
         items: [{ id: 'task-item-1', content: 'Export teaser', status: 'pending' }],
       };
 
-      await session.writeTaskArtifact(task);
+      await session.writeTaskArtifact(task, { runId });
       await session.flushWorkspaceSink();
 
-      expect(idcTaskProjection.syncTask).toHaveBeenCalledWith({
-        runId: 'run-1',
-        runStartedAt: activeRun?.startedAt,
+      expect(creationTaskProjection.syncTask).toHaveBeenCalledWith({
+        runId,
         task,
         artifact: {
           kind: 'task',
@@ -3547,60 +2706,6 @@ describe('AgentSession', () => {
           updatedAt: 6,
         },
       });
-    });
-
-    it('clears shared task projection when an active run completes', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const idcTaskProjection = {
-        syncTask: vi.fn().mockResolvedValue(['idc:run-complete:task-item-1']),
-        clearRun: vi.fn().mockResolvedValue(undefined),
-      };
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-            initialStage: 'plan',
-          },
-          idcTaskProjection: idcTaskProjection as never,
-        }),
-      );
-      injectMockExecutor(session, []);
-      startIdcRunForTest(session, 'wf-task-cleanup', 'run-complete');
-      const startedAt = session.getIdcRun('run-complete')?.startedAt;
-      expect(startedAt).toEqual(expect.any(Number));
-
-      await collectEvents(session.execute('finish workflow'));
-      await session.flushWorkspaceSink();
-
-      expect(idcTaskProjection.clearRun).toHaveBeenCalledWith('run-complete', startedAt);
-      expect(session.getActiveIdcRun()).toBeNull();
-    });
-
-    it('clears shared task projection when dispose aborts an active run', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const idcTaskProjection = {
-        syncTask: vi.fn().mockResolvedValue(['idc:run-dispose:task-item-1']),
-        clearRun: vi.fn().mockResolvedValue(undefined),
-      };
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-            initialStage: 'plan',
-          },
-          idcTaskProjection: idcTaskProjection as never,
-        }),
-      );
-      startIdcRunForTest(session, 'wf-task-dispose', 'run-dispose');
-      const startedAt = session.getIdcRun('run-dispose')?.startedAt;
-      expect(startedAt).toEqual(expect.any(Number));
-
-      session.dispose();
-      await Promise.resolve();
-
-      expect(idcTaskProjection.clearRun).toHaveBeenCalledWith('run-dispose', startedAt);
     });
 
     it('ApprovalEngine decisions bridge to execution.approve.decided + land in audits.jsonl (C4)', async () => {
@@ -3623,7 +2728,6 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      startIdcRunForTest(session, 'test-wf', 'run-1');
 
       const engine = session.getApprovalEngine()!;
       await engine.evaluate({
@@ -3667,7 +2771,6 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      startIdcRunForTest(session, 'test-wf', 'run-1');
 
       await session.getApprovalEngine()!.evaluate({
         channel: 'permission',
@@ -3709,7 +2812,6 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      startIdcRunForTest(session, 'wf', 'run-1');
 
       const bus = session.getEventBus()!;
       bus.emit({
@@ -3743,7 +2845,7 @@ describe('AgentSession', () => {
       expect(auditRows).toHaveLength(0);
     });
 
-    it('decisions before a run starts do NOT emit approve.decided (no runId)', async () => {
+    it('approval decisions emit approve.decided through the Agent-native creation scope', async () => {
       const { registry, service } = minimalStageTrackingConfig();
       const writes: Array<{ path: string; data: string }> = [];
       const fsOps = {
@@ -3757,7 +2859,6 @@ describe('AgentSession', () => {
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
-            // No initialStage — no active run yet.
           },
           workspace: { root: '/tmp/proj', fsOps },
         }),
@@ -3772,494 +2873,16 @@ describe('AgentSession', () => {
       });
       await session.flushWorkspaceSink();
 
-      const auditRows = writes.filter((w) => w.path === '/tmp/proj/.neko/logs/audits.jsonl');
-      expect(auditRows).toHaveLength(0);
-    });
-
-    it('persists current stage transitions and last completed run to state/idc-runtime.json', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const writes: Array<{ path: string; data: string }> = [];
-      const fsOps = {
-        async mkdir(): Promise<void> {},
-        async appendFile(path: string, data: string): Promise<void> {
-          writes.push({ path, data });
-        },
-        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
-          writes.push({ path, data });
-        },
-      };
-      const session = new AgentSession(
-        createConfig({
-          conversationId: 'conv-1',
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-          },
-          workspace: { root: '/tmp/proj', fsOps },
-        }),
-      );
-
-      startIdcRunForTest(session, 'wf-demo', 'run-1');
-      session.enterStage('draft');
-      session.enterStage('plan');
-      (
-        session as unknown as {
-          _closeActiveRun(status: 'completed' | 'failed' | 'aborted', error?: unknown): void;
-          _persistIdcRuntimeState(): void;
-        }
-      )._closeActiveRun('completed');
-      (
-        session as unknown as {
-          _persistIdcRuntimeState(): void;
-        }
-      )._persistIdcRuntimeState();
-
-      await session.flushWorkspaceSink();
-
-      const snapshot = parseLatestWrite<{
-        conversationId?: string;
-        stage: {
-          current: string | null;
-          transitions: Array<{ from: string | null; to: string; at: number }>;
-        };
-        run: {
-          active?: unknown;
-          lastCompleted?: { id: string; runKind: string; status: string };
-        };
-        approval: { pending: unknown[] };
-      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
-
-      expect(snapshot.conversationId).toBe('conv-1');
-      expect(snapshot.stage.current).toBe('plan');
-      expect(snapshot.stage.transitions).toEqual([
-        expect.objectContaining({ from: null, to: 'draft' }),
-        expect.objectContaining({ from: 'draft', to: 'plan' }),
-      ]);
-      expect(snapshot.run.active).toBeUndefined();
-      expect(snapshot.run.lastCompleted).toEqual(
+      const auditRows = writes
+        .filter((w) => w.path === '/tmp/proj/.neko/logs/audits.jsonl')
+        .map((w) => JSON.parse(w.data.trim()) as { event: { channel: string; runId?: string } });
+      expect(auditRows).toHaveLength(1);
+      expect(auditRows[0]!.event).toEqual(
         expect.objectContaining({
-          id: 'run-1',
-          runKind: 'wf-demo',
-          status: 'completed',
+          channel: 'execution.approve.decided',
+          runId: 'test-conversation',
         }),
       );
-      expect(snapshot.approval.pending).toEqual([]);
-      session.dispose();
-    });
-
-    it('persists pending tool approvals to state/idc-runtime.json and clears them after confirmation', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const writes: Array<{ path: string; data: string }> = [];
-      const fsOps = {
-        async mkdir(): Promise<void> {},
-        async appendFile(path: string, data: string): Promise<void> {
-          writes.push({ path, data });
-        },
-        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
-          writes.push({ path, data });
-        },
-      };
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-          },
-          workspace: { root: '/tmp/proj', fsOps },
-          onConfirmTool: vi.fn(async () => await new Promise<boolean>(() => {})),
-        }),
-      );
-      (
-        session as unknown as {
-          _approvalEngine: unknown;
-          _permissionHooks: unknown;
-        }
-      )._approvalEngine = null;
-      (
-        session as unknown as {
-          _approvalEngine: unknown;
-          _permissionHooks: unknown;
-        }
-      )._permissionHooks = null;
-
-      (
-        session as unknown as {
-          _handleToolConfirmation(request: {
-            toolCall: { id: string; name: string; arguments: Record<string, unknown> };
-            action: string;
-            description: string;
-            details: Record<string, unknown>;
-            confirmationToken: string;
-          }): void;
-        }
-      )._handleToolConfirmation({
-        toolCall: {
-          id: 'call-1',
-          name: 'Write',
-          arguments: { path: 'src/demo.ts' },
-        },
-        action: 'Write file',
-        description: 'Write src/demo.ts',
-        details: { path: 'src/demo.ts' },
-        confirmationToken: 'confirm-1',
-      });
-
-      await session.flushWorkspaceSink();
-
-      const pendingSnapshot = parseLatestWrite<{
-        approval: {
-          pending: Array<{ confirmationToken: string; toolCallId: string; toolName: string }>;
-        };
-      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
-      expect(pendingSnapshot.approval.pending).toEqual([
-        expect.objectContaining({
-          confirmationToken: 'confirm-1',
-          toolCallId: 'call-1',
-          toolName: 'Write',
-        }),
-      ]);
-
-      session.confirmTool('call-1', true);
-      await session.flushWorkspaceSink();
-
-      const clearedSnapshot = parseLatestWrite<{
-        approval: {
-          pending: unknown[];
-        };
-      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
-      expect(clearedSnapshot.approval.pending).toEqual([]);
-      session.dispose();
-    });
-
-    it('restores, persists, and clears pending feedback guidance via state/idc-runtime.json', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const statePath = '/tmp/proj/.neko/state/idc-runtime.json';
-      const restoredWrites: Array<{ path: string; data: string }> = [];
-      const persistedState = JSON.stringify({
-        stage: {
-          current: 'apply',
-          transitions: [],
-        },
-        run: {},
-        approval: {
-          pending: [],
-        },
-        feedback: {
-          pendingGuidance: {
-            content: '- Repair the failing draft artifact before retrying.',
-          },
-        },
-      });
-      const restoredFsOps = {
-        async mkdir(): Promise<void> {},
-        async appendFile(path: string, data: string): Promise<void> {
-          restoredWrites.push({ path, data });
-        },
-        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
-          restoredWrites.push({ path, data });
-        },
-        async readFile(path: string): Promise<string> {
-          if (path === statePath) {
-            return persistedState;
-          }
-          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
-        },
-      };
-      const restoredSession = new AgentSession(
-        createConfig({
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-          },
-          workspace: { root: '/tmp/proj', fsOps: restoredFsOps },
-        }),
-      );
-
-      await restoredSession.flushWorkspaceSink();
-
-      expect(
-        (
-          restoredSession as unknown as {
-            _feedbackGuidanceModule: { getContent(): string | null };
-          }
-        )._feedbackGuidanceModule.getContent(),
-      ).toBe('- Repair the failing draft artifact before retrying.');
-      expect(restoredSession.getHistory()[0]!.content).toContain('Feedback Guidance');
-
-      (
-        restoredSession as unknown as {
-          _persistIdcRuntimeState(): void;
-        }
-      )._persistIdcRuntimeState();
-      await restoredSession.flushWorkspaceSink();
-
-      const persistedSnapshot = parseLatestWrite<{
-        feedback: {
-          pendingGuidance: {
-            content: string;
-            sourceRunId?: string;
-            sourceRunStartedAt?: number;
-          } | null;
-        };
-      }>(restoredWrites, statePath);
-      expect(persistedSnapshot.feedback.pendingGuidance).toEqual({
-        content: '- Repair the failing draft artifact before retrying.',
-      });
-
-      restoredSession.clearHistory();
-      await restoredSession.flushWorkspaceSink();
-
-      const clearedSnapshot = parseLatestWrite<{
-        feedback: {
-          pendingGuidance: {
-            content: string;
-            sourceRunId?: string;
-            sourceRunStartedAt?: number;
-          } | null;
-        };
-      }>(restoredWrites, statePath);
-      expect(clearedSnapshot.feedback.pendingGuidance).toBeNull();
-      restoredSession.dispose();
-    });
-
-    it('drops stale persisted feedback guidance when the source run is no longer active after restore', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const statePath = '/tmp/proj/.neko/state/idc-runtime.json';
-      const writes: Array<{ path: string; data: string }> = [];
-      const fsOps = {
-        async mkdir(): Promise<void> {},
-        async appendFile(path: string, data: string): Promise<void> {
-          writes.push({ path, data });
-        },
-        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
-          writes.push({ path, data });
-        },
-        async readFile(path: string): Promise<string> {
-          if (path === statePath) {
-            return JSON.stringify({
-              stage: {
-                current: 'apply',
-                transitions: [],
-              },
-              run: {},
-              approval: {
-                pending: [],
-              },
-              feedback: {
-                pendingGuidance: {
-                  content: '- Repair the failing draft artifact before retrying.',
-                  sourceRunId: 'run-stale',
-                  sourceRunStartedAt: 11,
-                },
-              },
-            });
-          }
-          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
-        },
-      };
-
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-          },
-          workspace: { root: '/tmp/proj', fsOps },
-        }),
-      );
-
-      await session.flushWorkspaceSink();
-
-      expect(
-        (
-          session as unknown as {
-            _feedbackGuidanceModule: { getContent(): string | null };
-          }
-        )._feedbackGuidanceModule.getContent(),
-      ).toBeNull();
-
-      const persistedSnapshot = parseLatestWrite<{
-        feedback: {
-          pendingGuidance: {
-            content: string;
-            sourceRunId?: string;
-            sourceRunStartedAt?: number;
-          } | null;
-        };
-      }>(writes, statePath);
-      expect(persistedSnapshot.feedback.pendingGuidance).toBeNull();
-      session.dispose();
-    });
-
-    it('restores pending tool approvals from state/idc-runtime.json and treats them as stale clearable state', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const writes: Array<{ path: string; data: string }> = [];
-      const fsOps = {
-        async mkdir(): Promise<void> {},
-        async appendFile(path: string, data: string): Promise<void> {
-          writes.push({ path, data });
-        },
-        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
-          writes.push({ path, data });
-        },
-        async readFile(path: string): Promise<string> {
-          if (path === '/tmp/proj/.neko/state/idc-runtime.json') {
-            return JSON.stringify({
-              updatedAt: 7,
-              approval: {
-                pending: [
-                  {
-                    channel: 'permission',
-                    confirmationToken: 'confirm-restore',
-                    toolCallId: 'call-restore',
-                    toolName: 'Write',
-                    action: 'Write file',
-                    description: 'Write src/demo.ts',
-                    details: {
-                      path: 'src/demo.ts',
-                      arguments: { path: 'src/demo.ts' },
-                    },
-                  },
-                ],
-              },
-            });
-          }
-          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
-        },
-      };
-
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-          },
-          workspace: { root: '/tmp/proj', fsOps },
-        }),
-      );
-
-      await session.flushWorkspaceSink();
-
-      expect(session.getPendingConfirmations()).toEqual([
-        expect.objectContaining({
-          confirmationToken: 'confirm-restore',
-          toolCall: expect.objectContaining({
-            id: 'call-restore',
-            name: 'Write',
-            arguments: { path: 'src/demo.ts' },
-          }),
-          details: expect.objectContaining({
-            path: 'src/demo.ts',
-            restoredFromRuntimeState: true,
-            restoredSnapshotUpdatedAt: 7,
-          }),
-        }),
-      ]);
-
-      session.confirmTool('call-restore', true);
-      await session.flushWorkspaceSink();
-
-      expect(session.getPendingConfirmations()).toEqual([]);
-
-      const clearedSnapshot = parseLatestWrite<{
-        approval: {
-          pending: unknown[];
-        };
-      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
-      expect(clearedSnapshot.approval.pending).toEqual([]);
-      session.dispose();
-    });
-
-    it('dispose clears restored pending approvals without requiring a live permission token', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const writes: Array<{ path: string; data: string }> = [];
-      const fsOps = {
-        async mkdir(): Promise<void> {},
-        async appendFile(path: string, data: string): Promise<void> {
-          writes.push({ path, data });
-        },
-        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
-          writes.push({ path, data });
-        },
-        async readFile(path: string): Promise<string> {
-          if (path === '/tmp/proj/.neko/state/idc-runtime.json') {
-            return JSON.stringify({
-              approval: {
-                pending: [
-                  {
-                    channel: 'permission',
-                    confirmationToken: 'confirm-restore',
-                    toolCallId: 'call-restore',
-                    toolName: 'Write',
-                    action: 'Write file',
-                    description: 'Write src/demo.ts',
-                    details: {
-                      arguments: { path: 'src/demo.ts' },
-                    },
-                  },
-                ],
-              },
-            });
-          }
-          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
-        },
-      };
-
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-          },
-          workspace: { root: '/tmp/proj', fsOps },
-        }),
-      );
-
-      await session.flushWorkspaceSink();
-      session.dispose();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      const clearedSnapshot = parseLatestWrite<{
-        approval: {
-          pending: unknown[];
-        };
-      }>(writes, '/tmp/proj/.neko/state/idc-runtime.json');
-      expect(clearedSnapshot.approval.pending).toEqual([]);
-    });
-
-    it('ignores malformed runtime-state approval snapshots during restore', async () => {
-      const { registry, service } = minimalStageTrackingConfig();
-      const writes: Array<{ path: string; data: string }> = [];
-      const fsOps = {
-        async mkdir(): Promise<void> {},
-        async appendFile(path: string, data: string): Promise<void> {
-          writes.push({ path, data });
-        },
-        async writeFile(path: string, data: string, _encoding: 'utf-8'): Promise<void> {
-          writes.push({ path, data });
-        },
-        async readFile(path: string): Promise<string> {
-          if (path === '/tmp/proj/.neko/state/idc-runtime.json') {
-            return '{';
-          }
-          throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
-        },
-      };
-
-      const session = new AgentSession(
-        createConfig({
-          stageTracking: {
-            skillRegistry: registry as never,
-            skillService: service as never,
-          },
-          workspace: { root: '/tmp/proj', fsOps },
-        }),
-      );
-
-      await session.flushWorkspaceSink();
-
-      expect(session.getPendingConfirmations()).toEqual([]);
-      session.dispose();
     });
 
     it('session with no workspace config exposes NekoPaths === null', () => {
@@ -4299,7 +2922,6 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      startIdcRunForTest(session, 'wf', 'run-1');
 
       await session.whenPreferencesReady();
 
@@ -4389,7 +3011,6 @@ describe('AgentSession', () => {
           workspace: { root: '/tmp/proj', fsOps },
         }),
       );
-      startIdcRunForTest(session, 'wf', 'run-1');
       await session.whenPreferencesReady();
 
       // User said "auto approve tool:DeleteAll" but the subject is

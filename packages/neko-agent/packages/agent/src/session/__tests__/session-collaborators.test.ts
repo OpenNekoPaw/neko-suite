@@ -10,26 +10,22 @@ import type {
   Draft,
   ExecutionArtifactWrittenEvent,
   ExecutionPlan,
-  IdcRun,
   IdcStage,
   Task,
 } from '@neko-agent/types';
-import { createIdcRunStore, type IIdcRunStore } from '../../executor';
 import type { IControlPlane } from '../../control-plane';
-import { StageTracker, type IStageGuardian } from '../../skill';
-import { SessionPersistence } from '../session-persistence';
-import { IdcRunLifecycle } from '../idc-run-lifecycle';
 import { SessionArtifactFacade } from '../session-artifact-facade';
 import { FeedbackRuntimeBridge } from '../feedback-runtime-bridge';
 import { PromptRuntimeFacade } from '../prompt-runtime-facade';
 import type {
   AnyArtifactRecord,
+  ArtifactScopeBinding,
   ArtifactObservedInput,
   ArtifactRecord,
   ArtifactWriteInput,
   IArtifactService,
 } from '../../runtime/artifact-service';
-import type { IIdcTaskProjection } from '../../task';
+import type { ICreationTaskProjection } from '../../task';
 import type {
   FeedbackCycle,
   FeedbackEvaluationContext,
@@ -47,11 +43,6 @@ import { MemoryRecallModule } from '../../prompt/modules/memory/memory-recall-mo
 import { CreativeVersionLogModule } from '../../prompt/modules/ephemeral/creative-version-log-module';
 import { SubpackageFragmentsModule } from '../../prompt/modules/environment/subpackage-fragments-module';
 import type { AgentExecutor } from '../../executor/agent-executor';
-import type {
-  IdcRuntimeRestoreState,
-  IdcRuntimeStateInput,
-  IIdcRuntimeStateStore,
-} from '../../workspace';
 import { setRootLogger } from '../../utils/logger';
 
 afterEach(() => {
@@ -59,187 +50,21 @@ afterEach(() => {
 });
 
 describe('session runtime collaborators', () => {
-  it('persists runtime snapshots after restore, flushes pending work, and disposes resources', async () => {
-    vi.useFakeTimers();
-    const snapshot = createRuntimeStateInput();
-    const store = createRuntimeStateStore();
-    const unsubscribe = vi.fn();
-    const persistence = new SessionPersistence({
-      debounceMs: 25,
-      buildSnapshot: () => snapshot,
-    });
-
-    persistence.setStore(store);
-    persistence.addUnsubscriber(unsubscribe);
-    persistence.restoreFrom(Promise.resolve({ restored: true }), vi.fn(), () => true);
-    await persistence.whenRestoreReady();
-
-    expect(persistence.isRestorePending).toBe(false);
-    expect(store.update).not.toHaveBeenCalled();
-
-    vi.advanceTimersByTime(24);
-    expect(store.update).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(1);
-    expect(store.update).toHaveBeenCalledWith(snapshot);
-
-    persistence.schedule();
-    persistence.flushPending();
-    expect(store.update).toHaveBeenCalledTimes(2);
-
-    await persistence.flush();
-    expect(store.flush).toHaveBeenCalledTimes(1);
-
-    persistence.dispose();
-    expect(unsubscribe).toHaveBeenCalledTimes(1);
-    expect(store.dispose).toHaveBeenCalledTimes(1);
-    expect(persistence.hasStore).toBe(false);
-  });
-
-  it('warns when replacing or disposing runtime state stores whose dispose rejects', async () => {
-    const onWarn = vi.fn();
-    const firstStore = createRuntimeStateStore();
-    firstStore.dispose.mockRejectedValueOnce(new Error('first dispose failed'));
-    const secondStore = createRuntimeStateStore();
-    secondStore.dispose.mockRejectedValueOnce(new Error('second dispose failed'));
-    const persistence = new SessionPersistence({
-      debounceMs: 25,
-      buildSnapshot: () => createRuntimeStateInput(),
-      onWarn,
-    });
-
-    persistence.setStore(firstStore);
-    persistence.setStore(secondStore);
-    await flushMicrotasks();
-
-    expect(firstStore.dispose).toHaveBeenCalledTimes(1);
-    expect(onWarn).toHaveBeenCalledWith(
-      'Failed to dispose previous IDC runtime state store',
-      expect.objectContaining({ error: expect.any(Error) }),
-    );
-
-    persistence.dispose();
-    await flushMicrotasks();
-
-    expect(secondStore.dispose).toHaveBeenCalledTimes(1);
-    expect(onWarn).toHaveBeenCalledWith(
-      'Failed to dispose IDC runtime state store',
-      expect.objectContaining({ error: expect.any(Error) }),
-    );
-  });
-
-  it('starts, closes, restores, and trims IDC lifecycle state independently', () => {
-    const runStore = createIdcRunStore({ now: () => 100, nextId: () => 'generated-run' });
-    const stageTracker = new StageTracker({ now: () => 200 });
-    const guardian = createStageGuardian();
-    const onPersist = vi.fn();
-    const queueTaskProjectionClear = vi.fn();
-    const replayRestoredTaskProjection = vi.fn();
-    const skillLifecycleRuntime = { expire: vi.fn() };
-    const lifecycle = new IdcRunLifecycle({
-      maxPersistedStageTransitions: 2,
-      ports: {
-        runtime: {
-          getRunStore: () => runStore,
-          getStageTracker: () => stageTracker,
-          getStageGuardian: () => guardian,
-          getSkillLifecycleRuntime: () => skillLifecycleRuntime as never,
-          getConversationId: () => 'conv-1',
-          onPersist,
-        },
-        artifacts: {
-          hasArtifactService: () => false,
-          listArtifactsByRunId: () => [],
-          hydrateRunArtifacts: vi.fn(),
-          queueTaskProjectionClear,
-          replayRestoredTaskProjection,
-        },
-        restore: {
-          restoreRunFromSnapshot: (snapshot) =>
-            snapshot
-              ? ({
-                  id: snapshot.id,
-                  runKind: snapshot.runKind,
-                  status: snapshot.status,
-                  createdAt: snapshot.createdAt,
-                  startedAt: snapshot.startedAt ?? snapshot.createdAt,
-                  endedAt: snapshot.endedAt,
-                  rounds: [],
-                } satisfies IdcRun)
-              : null,
-          isActiveRunStatus: (status) => status === 'running',
-          isTerminalRunStatus: (status) =>
-            status === 'completed' || status === 'failed' || status === 'aborted',
-        },
-      },
-    });
-
-    expect(lifecycle.startRun('creation', 'run-1')).toBe('run-1');
-    expect(runStore.getActive()?.id).toBe('run-1');
-    expect(onPersist).toHaveBeenCalledTimes(1);
-
-    lifecycle.recordStageTransition({ previous: null, stage: 'draft', at: 201 });
-    lifecycle.recordStageTransition({ previous: 'draft', stage: 'plan', at: 202 });
-    lifecycle.recordStageTransition({ previous: 'plan', stage: 'apply', at: 203 });
-    expect(lifecycle.stageTransitions).toEqual([
-      { from: 'draft', to: 'plan', at: 202 },
-      { from: 'plan', to: 'apply', at: 203 },
-    ]);
-
-    lifecycle.closeActiveRun('completed');
-    expect(runStore.getActive()).toBeNull();
-    expect(queueTaskProjectionClear).toHaveBeenCalledWith('run-1', 100);
-    expect(skillLifecycleRuntime.expire).toHaveBeenCalledWith({
-      conversationId: 'conv-1',
-      reason: 'workflow-ended',
-      runId: 'run-1',
-    });
-
-    const restoredStore = createIdcRunStore({ now: () => 300 });
-    const restoredTracker = new StageTracker({ now: () => 300 });
-    const restoredGuardian = createStageGuardian();
-    const restoredLifecycle = createIdcRunLifecycleForRestore({
-      runStore: restoredStore,
-      stageTracker: restoredTracker,
-      guardian: restoredGuardian,
-      queueTaskProjectionClear,
-      replayRestoredTaskProjection,
-    });
-    restoredLifecycle.restore(createRestoreState());
-
-    expect(restoredTracker.current).toBe('plan');
-    expect(restoredGuardian.restore).toHaveBeenCalledWith(
-      expect.objectContaining({
-        current: 'plan',
-        visitedStages: ['draft', 'plan'],
-      }),
-    );
-    expect(restoredStore.getActive()?.id).toBe('run-restored');
-    expect(replayRestoredTaskProjection).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'run-restored' }),
-    );
-  });
-
   it('restores artifacts, writes artifacts, drains sync queues, and disposes services', async () => {
     const draft = createDraft('draft-1', 100);
     const restoredTask = createTask('task-restored', 101);
     const service = new MemoryArtifactService([
-      createArtifactRecord('draft', 'run-1', draft, 100),
-      createArtifactRecord('task', 'run-1', restoredTask, 101),
+      createArtifactRecord('draft', 'activity-1', draft, 100),
+      createArtifactRecord('task', 'activity-1', restoredTask, 101),
     ]);
     const projection = createTaskProjection();
-    const activeRun: IdcRun = createRun('run-1', 90);
-    const setDraft = vi.fn();
-    const setTask = vi.fn();
     const bindArtifact = vi.fn();
     const onPersist = vi.fn();
     const facade = new SessionArtifactFacade({
       ports: {
-        run: {
-          getActiveRun: () => activeRun,
-          getCompletedRuns: () => [],
-          setDraft,
-          setPlan: vi.fn(),
-          setTask,
+        activity: {
+          getActiveArtifactScope: () => ({ id: 'activity-1', startedAt: 90 }),
+          getArtifactScopeStartedAt: (scopeId) => (scopeId === 'activity-1' ? 90 : undefined),
           bindArtifact,
         },
         workspace: {
@@ -258,33 +83,42 @@ describe('session runtime collaborators', () => {
     await facade.whenRestoreReady();
     await facade.flush();
 
-    expect(setDraft).toHaveBeenCalledWith(draft, expect.objectContaining({ kind: 'draft' }));
-    expect(setTask).toHaveBeenCalledWith(restoredTask, expect.objectContaining({ kind: 'task' }));
+    expect(bindArtifact).toHaveBeenCalledWith(
+      'activity-1',
+      expect.objectContaining({ kind: 'draft' }),
+    );
+    expect(bindArtifact).toHaveBeenCalledWith(
+      'activity-1',
+      expect.objectContaining({ kind: 'task' }),
+    );
     expect(projection.syncTask).toHaveBeenCalledWith(
       expect.objectContaining({
-        runId: 'run-1',
+        runId: 'activity-1',
         runStartedAt: 90,
         task: restoredTask,
       }),
     );
 
-    const writtenPlan = await facade.writePlan(createPlan('plan-1', 102), 'run-1');
+    const writtenPlan = await facade.writePlan(createPlan('plan-1', 102), 'activity-1');
     expect(writtenPlan.kind).toBe('plan');
     expect(onPersist).toHaveBeenCalledTimes(1);
 
-    facade.queueObservedArtifactSync(createArtifactWrittenEvent('task', 'run-1'));
-    facade.queueTaskProjectionClear('run-1', 90);
+    facade.queueObservedArtifactSync(createArtifactWrittenEvent('task', 'activity-1'));
+    facade.queueTaskProjectionClear('activity-1', 90);
     await facade.flush();
 
-    expect(bindArtifact).toHaveBeenCalledWith(expect.objectContaining({ kind: 'task' }));
+    expect(bindArtifact).toHaveBeenCalledWith(
+      'activity-1',
+      expect.objectContaining({ kind: 'task' }),
+    );
     expect(service.ingestObservedArtifactMock).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'task',
-        runId: 'run-1',
+        runId: 'activity-1',
         content: 'observed content',
       }),
     );
-    expect(projection.clearRun).toHaveBeenCalledWith('run-1', 90);
+    expect(projection.clearRun).toHaveBeenCalledWith('activity-1', 90);
 
     facade.dispose();
     expect(service.dispose).toHaveBeenCalledTimes(1);
@@ -299,7 +133,7 @@ describe('session runtime collaborators', () => {
     });
     const facade = createArtifactFacade({
       onWarn,
-      activeRun: createRun('run-error', 100),
+      activeRun: { id: 'activity-error', startedAt: 100 },
       readFile: vi.fn(async () => 'content'),
     });
     facade.setArtifactService(service);
@@ -312,11 +146,11 @@ describe('session runtime collaborators', () => {
       expect.objectContaining({ error: expect.any(Error) }),
     );
 
-    await expect(facade.writePlan(createPlan('plan-fail', 101), 'run-error')).rejects.toThrow(
+    await expect(facade.writePlan(createPlan('plan-fail', 101), 'activity-error')).rejects.toThrow(
       'write failed',
     );
 
-    await expect(facade.writePlan(createPlan('plan-ok', 102), 'run-error')).resolves.toEqual(
+    await expect(facade.writePlan(createPlan('plan-ok', 102), 'activity-error')).resolves.toEqual(
       expect.objectContaining({ kind: 'plan', artifactId: 'plan-ok' }),
     );
   });
@@ -331,31 +165,35 @@ describe('session runtime collaborators', () => {
     projection.syncTask.mockRejectedValueOnce(new Error('projection failed'));
     const facade = createArtifactFacade({
       onWarn,
-      activeRun: createRun('run-queue', 100),
+      activeRun: { id: 'activity-queue', startedAt: 100 },
       readFile: (path) => readFile(path),
     });
     facade.setArtifactService(service);
     facade.setTaskProjection(projection);
 
-    facade.queueObservedArtifactSync(createArtifactWrittenEvent('task', 'run-queue'));
-    facade.queueTaskProjection('run-queue', createTask('task-failed-projection', 101));
+    facade.queueObservedArtifactSync(createArtifactWrittenEvent('task', 'activity-queue'));
+    facade.queueTaskProjection('activity-queue', createTask('task-failed-projection', 101));
     await expect(facade.flush()).resolves.toBeUndefined();
 
     expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('artifact sync failed'), undefined);
     expect(onWarn).toHaveBeenCalledWith(
-      expect.stringContaining('IDC task projection failed for run-queue'),
+      expect.stringContaining('Creation task projection failed for activity-queue'),
       undefined,
     );
 
     readFile = vi.fn(async () => 'recovered content');
-    facade.queueObservedArtifactSync(createArtifactWrittenEvent('task', 'run-queue'));
-    facade.queueTaskProjectionClear('run-queue', 100);
+    facade.queueObservedArtifactSync(createArtifactWrittenEvent('task', 'activity-queue'));
+    facade.queueTaskProjectionClear('activity-queue', 100);
     await expect(facade.flush()).resolves.toBeUndefined();
 
     expect(service.ingestObservedArtifactMock).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'task', runId: 'run-queue', content: 'recovered content' }),
+      expect.objectContaining({
+        kind: 'task',
+        runId: 'activity-queue',
+        content: 'recovered content',
+      }),
     );
-    expect(projection.clearRun).toHaveBeenCalledWith('run-queue', 100);
+    expect(projection.clearRun).toHaveBeenCalledWith('activity-queue', 100);
   });
 
   it('captures feedback guidance, applies control-plane guidance, and logs trace summaries', async () => {
@@ -376,7 +214,7 @@ describe('session runtime collaborators', () => {
         control: {
           getControlPlane: () => createControlPlane(),
           getCurrentStage: () => 'apply',
-          getActiveRun: () => createRun('run-feedback', 100),
+          getActiveArtifactScope: () => ({ id: 'activity-feedback', startedAt: 100 }),
           recordStageTransition,
         },
         prompt: {
@@ -405,7 +243,7 @@ describe('session runtime collaborators', () => {
       expect.objectContaining({
         trace: expect.objectContaining({
           conversationId: 'conv-feedback',
-          runId: 'run-feedback',
+          runId: 'activity-feedback',
           phase: 'feedback',
         }),
         actionCount: 1,
@@ -423,18 +261,6 @@ describe('session runtime collaborators', () => {
         reason: 'no-pending-feedback',
       }),
     );
-
-    bridge.restore({
-      pendingGuidance: {
-        content: 'Persisted guidance',
-        sourceRunId: 'run-feedback',
-        sourceRunStartedAt: 100,
-      },
-    });
-    expect(syncSystemPrompt).toHaveBeenCalled();
-    expect(bridge.guidanceSnapshot).toEqual(
-      expect.objectContaining({ content: 'Persisted guidance' }),
-    );
   });
 
   it('surfaces feedback stage transition persistence failures from captureCycle', async () => {
@@ -449,7 +275,7 @@ describe('session runtime collaborators', () => {
         control: {
           getControlPlane: () => createControlPlane(),
           getCurrentStage: () => 'apply',
-          getActiveRun: () => createRun('run-feedback-error', 100),
+          getActiveArtifactScope: () => ({ id: 'activity-feedback-error', startedAt: 100 }),
           recordStageTransition: vi.fn(async () => {
             throw new Error('transition persist failed');
           }),
@@ -547,7 +373,7 @@ describe('session runtime collaborators', () => {
           promptComposer: composer,
           promptModuleOrchestrator: orchestrator,
           promptContextProvider: () => ({
-            runId: 'run-prompt',
+            runId: 'activity-prompt',
             stage: 'draft',
             locale: 'en',
             projectPath: '/workspace',
@@ -599,139 +425,20 @@ describe('session runtime collaborators', () => {
   });
 });
 
-function createRuntimeStateInput(): IdcRuntimeStateInput {
-  return {
-    conversationId: 'conv-1',
-    stage: {
-      current: 'draft',
-      transitions: [],
-    },
-    run: {},
-    approval: {
-      pending: [],
-    },
-    feedback: {
-      pendingGuidance: null,
-    },
-  };
-}
-
-function createRuntimeStateStore(): IIdcRuntimeStateStore & {
-  update: ReturnType<typeof vi.fn>;
-  flush: ReturnType<typeof vi.fn>;
-  dispose: ReturnType<typeof vi.fn>;
-} {
-  return {
-    update: vi.fn(),
-    flush: vi.fn(async () => {}),
-    dispose: vi.fn(async () => {}),
-  };
-}
-
-function createIdcRunLifecycleForRestore(input: {
-  readonly runStore: IIdcRunStore;
-  readonly stageTracker: StageTracker;
-  readonly guardian: IStageGuardian;
-  readonly queueTaskProjectionClear: (runId: string, runStartedAt?: number) => void;
-  readonly replayRestoredTaskProjection: (run: IdcRun | null) => void;
-}): IdcRunLifecycle {
-  return new IdcRunLifecycle({
-    maxPersistedStageTransitions: 8,
-    ports: {
-      runtime: {
-        getRunStore: () => input.runStore,
-        getStageTracker: () => input.stageTracker,
-        getStageGuardian: () => input.guardian,
-        onPersist: vi.fn(),
-      },
-      artifacts: {
-        hasArtifactService: () => false,
-        listArtifactsByRunId: () => [],
-        hydrateRunArtifacts: vi.fn(),
-        queueTaskProjectionClear: input.queueTaskProjectionClear,
-        replayRestoredTaskProjection: input.replayRestoredTaskProjection,
-      },
-      restore: {
-        restoreRunFromSnapshot: (snapshot) =>
-          snapshot
-            ? ({
-                id: snapshot.id,
-                runKind: snapshot.runKind,
-                status: snapshot.status,
-                createdAt: snapshot.createdAt,
-                startedAt: snapshot.startedAt ?? snapshot.createdAt,
-                endedAt: snapshot.endedAt,
-                rounds: [],
-              } satisfies IdcRun)
-            : null,
-        isActiveRunStatus: (status) => status === 'running',
-        isTerminalRunStatus: (status) =>
-          status === 'completed' || status === 'failed' || status === 'aborted',
-      },
-    },
-  });
-}
-
-function createRestoreState(): IdcRuntimeRestoreState {
-  return {
-    stage: {
-      current: 'plan',
-      enteredAt: 42,
-      transitions: [{ from: 'draft', to: 'plan', at: 42 }],
-    },
-    run: {
-      active: {
-        id: 'run-restored',
-        runKind: 'creation',
-        status: 'running',
-        createdAt: 40,
-        startedAt: 40,
-        roundCount: 0,
-      },
-    },
-    approval: {
-      pending: [],
-    },
-    feedback: {
-      pendingGuidance: null,
-    },
-  };
-}
-
-function createStageGuardian(): IStageGuardian {
-  return {
-    onIssue: vi.fn(() => () => {}),
-    tick: vi.fn(),
-    noteApproval: vi.fn(),
-    noteApply: vi.fn(),
-    restore: vi.fn(),
-    getHistory: vi.fn(() => []),
-    dispose: vi.fn(),
-  };
-}
-
-type IdcArtifactBinding = NonNullable<IdcRun['artifactBindings']>[number];
-
 function createArtifactFacade(input: {
-  readonly activeRun?: IdcRun | null;
-  readonly completedRuns?: readonly IdcRun[];
+  readonly activeRun?: { readonly id: string; readonly startedAt?: number } | null;
   readonly readFile?: ((path: string) => Promise<string>) | null;
   readonly onWarn?: (message: string, data?: Record<string, unknown>) => void;
   readonly onPersist?: () => void;
-  readonly setDraft?: (draft: Draft, binding: IdcArtifactBinding) => void;
-  readonly setPlan?: (plan: ExecutionPlan, binding: IdcArtifactBinding) => void;
-  readonly setTask?: (task: Task, binding: IdcArtifactBinding) => void;
-  readonly bindArtifact?: (binding: IdcArtifactBinding) => void;
+  readonly bindArtifact?: (scopeId: string, binding: ArtifactScopeBinding) => void;
 }): SessionArtifactFacade {
   const activeRun = input.activeRun ?? null;
   return new SessionArtifactFacade({
     ports: {
-      run: {
-        getActiveRun: () => activeRun,
-        getCompletedRuns: () => input.completedRuns ?? [],
-        setDraft: input.setDraft ?? vi.fn(),
-        setPlan: input.setPlan ?? vi.fn(),
-        setTask: input.setTask ?? vi.fn(),
+      activity: {
+        getActiveArtifactScope: () => activeRun,
+        getArtifactScopeStartedAt: (scopeId) =>
+          activeRun?.id === scopeId ? activeRun.startedAt : undefined,
         bindArtifact: input.bindArtifact ?? vi.fn(),
       },
       workspace: {
@@ -767,7 +474,7 @@ function createPromptRuntimeFacade(
         promptComposer: composer,
         promptModuleOrchestrator: orchestrator,
         promptContextProvider: () => ({
-          runId: input.runId === undefined ? 'run-prompt' : input.runId,
+          runId: input.runId === undefined ? 'activity-prompt' : input.runId,
           stage: input.stage === undefined ? 'draft' : input.stage,
           locale: 'en',
           projectPath: '/workspace',
@@ -946,7 +653,7 @@ class MemoryArtifactService implements IArtifactService {
   }
 }
 
-function createTaskProjection(): IIdcTaskProjection & {
+function createTaskProjection(): ICreationTaskProjection & {
   syncTask: ReturnType<typeof vi.fn>;
   clearRun: ReturnType<typeof vi.fn>;
 } {
@@ -1062,7 +769,7 @@ function createFeedbackCycle(): FeedbackCycle {
   return {
     timestamp: 100,
     currentStage: 'apply',
-    activeRunId: 'run-feedback',
+    activeRunId: 'activity-feedback',
     signals: [],
     decisions: [
       {
@@ -1071,7 +778,7 @@ function createFeedbackCycle(): FeedbackCycle {
         toolCallId: 'tool-1',
         toolName: 'WriteFile',
         error: 'failed',
-        runId: 'run-feedback',
+        runId: 'activity-feedback',
       },
     ],
     actions: [
@@ -1095,6 +802,7 @@ function createControlPlane(): IControlPlane {
       get: () => undefined,
       list: () => [],
       has: () => false,
+      byStage: () => undefined,
     },
     advise: vi.fn((input) => ({
       input,
@@ -1109,17 +817,6 @@ function createControlPlane(): IControlPlane {
       },
     })),
     getDecisionHistory: vi.fn(() => []),
-  };
-}
-
-function createRun(id: string, startedAt: number): IdcRun {
-  return {
-    id,
-    runKind: 'creation',
-    status: 'running',
-    createdAt: startedAt,
-    startedAt,
-    rounds: [],
   };
 }
 

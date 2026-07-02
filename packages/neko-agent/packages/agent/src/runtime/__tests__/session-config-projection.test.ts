@@ -29,15 +29,15 @@ describe('buildAgentSessionConfigWithRuntime', () => {
       list: vi.fn(() => []),
     } as unknown as IOperationToolAdapterRegistry;
     const contentAccessRuntime = { resolve: vi.fn() } as never;
-    const idcTaskProjection = { kind: 'idc-task-projection' } as never;
+    const creationTaskProjection = { kind: 'creation-task-projection' } as never;
 
     const runtime: AgentRuntimeConfig = {
-      workflowRuntime: {
+      creationGuidance: {
         stageTracking: {
           initialStage: 'draft',
           guardian: false,
         },
-        idcTaskProjection,
+        creationTaskProjection,
         controlPlane,
       },
       artifactStore: {
@@ -91,7 +91,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
         skillLifecycleRuntime,
       }),
     );
-    expect(config.idcTaskProjection).toBe(idcTaskProjection);
+    expect(config.creationTaskProjection).toBe(creationTaskProjection);
     expect(config.workspace).toEqual(
       expect.objectContaining({
         root: '/workspace/demo',
@@ -151,7 +151,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
       },
       promptFragments: [{ id: 'explicit:fragment', content: 'Explicit fragment' }],
       runtime: {
-        workflowRuntime: {
+        creationGuidance: {
           stageTracking: {
             initialStage: 'draft',
             guardian: false,

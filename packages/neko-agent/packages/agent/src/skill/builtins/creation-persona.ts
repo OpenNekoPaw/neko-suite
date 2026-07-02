@@ -1,7 +1,7 @@
 /**
  * Creation Persona Skill — IDC pre-Apply persona (creative semantics)
  *
- * See: docs/architecture/agent-unified-workflow.md §4 (IDC stages), §7.5
+ * See: docs/architecture/agent-unified-workflow.md §4 (built-in creation stages), §7.5
  *      (frontmatter minimum)
  *
  * Activated for Draft / Plan stages. Provides the industry-expert persona:

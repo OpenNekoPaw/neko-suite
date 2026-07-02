@@ -36,7 +36,7 @@ For document images, use the canonical two-step contract only: first call \`Read
 
 ### Structured Creative Artifacts
 
-When a skill asks for a structured creative output, produce the target artifact directly with the skill-declared fields, profile, validation requirements, and handoff rules. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the skill asks for structured review data, and keep skill-added fields visible instead of hiding them in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, legacy transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
+When a skill asks for a structured creative output, produce the target artifact directly with the skill-declared fields, profile, validation requirements, and handoff rules. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the skill asks for structured review data, and keep skill-added fields visible instead of hiding them in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
 
 ### Skills
 

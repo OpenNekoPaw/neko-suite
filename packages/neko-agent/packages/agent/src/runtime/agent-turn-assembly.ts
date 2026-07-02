@@ -1,9 +1,9 @@
 import type {
   AgentLlmConfig,
+  AgentLegacyCreationTrace,
   AgentMediaModelSelections,
   AgentModelSlots,
   AgentPhase,
-  AgentWorkflowIdentity,
   MediaModelCategory,
   Message,
   ModelRef,
@@ -64,7 +64,7 @@ export interface AgentTurnRuntimeServices<THistoryMessage> {
     conversationId: string,
   ) => SkillLifecycleProjection | undefined;
   readonly taskManager?: IRuntimeTaskManager;
-  readonly workflow?: AgentWorkflowIdentity;
+  readonly legacyTrace?: AgentLegacyCreationTrace;
 }
 
 export interface AgentTurnActiveSkillState {
@@ -263,7 +263,7 @@ export function buildAgentTurnRuntimeInput<
     generateMessageId: input.host.generateMessageId,
     now: input.host.now,
     ...(input.runtime.taskManager ? { taskManager: input.runtime.taskManager } : {}),
-    ...(input.runtime.workflow ? { workflow: input.runtime.workflow } : {}),
+    ...(input.runtime.legacyTrace ? { legacyTrace: input.runtime.legacyTrace } : {}),
   };
 }
 

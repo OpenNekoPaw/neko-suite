@@ -89,10 +89,10 @@ export interface SessionComponents {
   // of replacing the base prompt.
   agentsMdModule: AgentsMdModule;
 
-  // PR3c: IDC artifact contract (paths, frontmatter, write rules)
+  // PR3c: creation artifact contract (paths, frontmatter, write rules)
   // extracted out of creation-persona and into the L1 schema layer. The
   // initializer only creates/exposes the module; runtime activation is
-  // driven by session-level IdcRun transitions (PR3d).
+  // driven by Agent-native creation stage transitions (PR3d).
   artifactSchemaModule: ArtifactSchemaModule;
 
   // PR3e: sub-package prompt fragments projected into the L3 environment

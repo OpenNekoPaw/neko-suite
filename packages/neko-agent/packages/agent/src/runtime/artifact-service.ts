@@ -1,10 +1,4 @@
-import type {
-  ArtifactKind,
-  Draft,
-  ExecutionPlan,
-  IdcRunArtifactBinding,
-  Task,
-} from '@neko-agent/types';
+import type { ArtifactKind, Draft, ExecutionPlan, Task } from '@neko-agent/types';
 import {
   createArtifactIndexStore,
   createNekoPaths,
@@ -41,6 +35,11 @@ export interface ArtifactBinding<K extends ArtifactKind = ArtifactKind> {
   readonly path: string;
   readonly updatedAt: number;
 }
+
+export type ArtifactScopeBinding<K extends ArtifactKind = ArtifactKind> = Omit<
+  ArtifactBinding<K>,
+  'runId'
+>;
 
 export interface ArtifactRecord<K extends ArtifactKind = ArtifactKind> extends ArtifactBinding<K> {
   readonly content: ArtifactValueByKind[K];
@@ -380,7 +379,7 @@ export function createWorkspaceArtifactService(config: ArtifactServiceConfig): I
   return new WorkspaceArtifactService(config);
 }
 
-export function toIdcRunArtifactBinding(binding: ArtifactBinding): IdcRunArtifactBinding {
+export function toArtifactScopeBinding(binding: ArtifactBinding): ArtifactScopeBinding {
   return {
     kind: binding.kind,
     artifactId: binding.artifactId,

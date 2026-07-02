@@ -31,21 +31,24 @@ import {
 import { MemoryTaskStorage } from './task-storage';
 import { MemoryTaskRecoveryStorage } from './task-recovery-storage';
 import {
-  getIdcProjectedTaskRunBinding,
-  toSerializableIdcProjectedTask,
-  type IdcProjectedTaskUpsertInput,
-} from './idc-projected-task';
+  getCreationProjectedTaskRunBinding,
+  toSerializableCreationProjectedTask,
+  type CreationProjectedTaskUpsertInput,
+} from './creation-projected-task';
 import { isTaskCleanupCandidate } from './task-storage-policy';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('TaskManager');
 
-export interface IIdcProjectedTaskStore {
-  upsertIdcProjectedTask(task: IdcProjectedTaskUpsertInput): Promise<void>;
-  clearIdcProjectedTasksForRun(runId: string, runStartedAt?: number): Promise<readonly string[]>;
+export interface ICreationProjectedTaskStore {
+  upsertCreationProjectedTask(task: CreationProjectedTaskUpsertInput): Promise<void>;
+  clearCreationProjectedTasksForRun(
+    runId: string,
+    runStartedAt?: number,
+  ): Promise<readonly string[]>;
 }
 
-export interface IRuntimeTaskManager extends ITaskManager, IIdcProjectedTaskStore {
+export interface IRuntimeTaskManager extends ITaskManager, ICreationProjectedTaskStore {
   initialize(): Promise<void>;
   resumePendingTasks(): Promise<string[]>;
   dispose(): Promise<void>;
@@ -555,25 +558,26 @@ export class TaskManager implements IRuntimeTaskManager {
   }
 
   /**
-   * Upsert an IDC projected task that carries an explicit checklist/artifact binding.
+   * Upsert a staged-creation projected task with explicit checklist/artifact binding.
    */
-  async upsertIdcProjectedTask(task: IdcProjectedTaskUpsertInput): Promise<void> {
-    await this.upsertExternalTask(toSerializableIdcProjectedTask(task));
+  async upsertCreationProjectedTask(task: CreationProjectedTaskUpsertInput): Promise<void> {
+    await this.upsertExternalTask(toSerializableCreationProjectedTask(task));
   }
 
   /**
-   * Clear all persisted IDC projected tasks projected from a specific run.
+   * Clear all persisted staged-creation projected tasks from a specific run.
    *
    * This intentionally scans storage instead of only the in-memory task map
-   * so completed-run cleanup still works after restore/restart.
+   * so completed-run cleanup still works after restore/restart. Old `idc:`
+   * ids are still recognized here only to clean pre-migration local state.
    */
-  async clearIdcProjectedTasksForRun(
+  async clearCreationProjectedTasksForRun(
     runId: string,
     runStartedAt?: number,
   ): Promise<readonly string[]> {
     const storedTasks = await this.storage.loadAll();
     const ids = storedTasks
-      .filter((task) => isIdcProjectedTaskBoundToRun(task, runId, runStartedAt))
+      .filter((task) => isCreationProjectedTaskBoundToRun(task, runId, runStartedAt))
       .map((task) => task.id);
 
     for (const id of ids) {
@@ -876,21 +880,24 @@ function getFlushPromises(storage: ITaskRecoveryStorage): Promise<unknown>[] {
   return [];
 }
 
-function isIdcProjectedTaskBoundToRun(
+function isCreationProjectedTaskBoundToRun(
   task: Pick<SerializableTask, 'id' | 'type' | 'input'>,
   runId: string,
   runStartedAt?: number,
 ): boolean {
-  if (task.type === 'workflow' && task.id.startsWith(`idc:${runId}:`)) {
+  if (
+    task.type === 'workflow' &&
+    (task.id.startsWith(`creation:${runId}:`) || task.id.startsWith(`idc:${runId}:`))
+  ) {
     if (runStartedAt === undefined) {
       return true;
     }
 
-    const idBinding = getIdcProjectedTaskRunBinding(task);
+    const idBinding = getCreationProjectedTaskRunBinding(task);
     return idBinding?.runId === runId && idBinding.runStartedAt === runStartedAt;
   }
 
-  const binding = getIdcProjectedTaskRunBinding(task);
+  const binding = getCreationProjectedTaskRunBinding(task);
   if (!binding || binding.runId !== runId) {
     return false;
   }

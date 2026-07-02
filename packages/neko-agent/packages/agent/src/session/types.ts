@@ -66,27 +66,6 @@ export interface IJournalWriter {
  */
 export type ExecutionMode = 'plan' | 'ask' | 'auto';
 
-export interface IdcWorkflowActivationInput {
-  readonly runKind: string;
-  readonly runId?: string;
-  readonly intent: AgentCapabilityActivationIntent;
-}
-
-export interface IdcWorkflowActivationResult {
-  readonly success: boolean;
-  readonly message: string;
-  readonly runId?: string;
-  readonly diagnostics?: readonly import('@neko/shared').AgentCapabilityActivationDiagnostic[];
-  readonly events: readonly AgentCapabilityActivationProgressEvent[];
-}
-
-export interface IdcWorkflowStopInput {
-  readonly intent: AgentCapabilityActivationIntent;
-  readonly status?: 'completed' | 'failed' | 'aborted';
-}
-
-export type IdcWorkflowControlResult = IdcWorkflowActivationResult;
-
 export interface AgentEventErrorRecord {
   message: string;
   name?: string;
@@ -336,13 +315,13 @@ export interface AgentSessionConfig {
   artifactWatcherFactory?: ArtifactWatcherFactory;
 
   /**
-   * Optional IDC task projection runtime.
+   * Optional staged-creation task projection adapter.
    *
    * When provided, Task artifacts are mirrored into the shared task plane
    * (for example TaskManager-backed UI surfaces) so checklist progress no
-   * longer lives only inside markdown artifacts / IdcRun state.
+   * longer lives only inside markdown artifacts or retired artifact indexes.
    */
-  idcTaskProjection?: import('../task').IIdcTaskProjection;
+  creationTaskProjection?: import('../task').ICreationTaskProjection;
 
   /**
    * JSONL journal writer for session event persistence.
@@ -366,38 +345,33 @@ export interface AgentSessionConfig {
   traitsRegistry?: ToolTraitsRegistry;
 
   /**
-   * IDC stage-tracking runtime.
+   * Optional built-in IDC profile guidance.
    *
-   * When provided, AgentSession enables the IDC runner pieces
-   * (StageTracker, IdcRunStore, ApprovalEngine, StageGuardian, optional
-   * workspace sinks). Persona auto-swap is optional: when both
-   * `skillRegistry` and `skillService` are supplied, the session also
-   * applies the matching persona Skill (`creation-persona` for draft/plan,
-   * `execution-persona` for apply) on each stage transition.
-   *
-   * Omitted = IDC runtime stays dormant for callers that want a plain ReAct
-   * session.
+   * When provided, AgentSession enables StageTracker, ApprovalEngine,
+   * StageGuardian, and optional persona Skill projection on top of the normal
+   * Agent ReAct loop. This is prompt/stage guidance only; it does not create a
+   * separate workflow, run store, or creation runtime.
    */
   stageTracking?: {
     /**
      * Optional source for persona Skills. Must be paired with
-     * `skillService`; when omitted, IDC still runs but stage changes do
+     * `skillService`; when omitted, stage projection still runs but stage changes do
      * not swap persona prompts.
      */
     skillRegistry?: import('@neko/shared').ISkillRegistry;
     /**
      * Optional injector for persona Skills. Must be paired with
-     * `skillRegistry`; when omitted, IDC still runs but persona binding is
+     * `skillRegistry`; when omitted, stage projection still runs but persona binding is
      * skipped.
      */
     skillService?: import('../skill/skill-service').SkillService;
     /**
-     * Canonical lifecycle runtime for IDC-owned stage persona records.
+     * Skill lifecycle projection for stage persona records.
      * When supplied, stage persona activation writes lifecycle records instead
      * of mutating the single active injection adapter slot.
      */
     skillLifecycleRuntime?: import('../skill/skill-lifecycle-runtime').SkillLifecycleRuntime;
-    /** Initial IDC stage (default: none — tracker stays uninitialised). */
+    /** Initial built-in IDC profile stage (default: none — tracker stays uninitialised). */
     initialStage?: import('@neko-agent/types').IdcStage;
     /**
      * Optional StageGuardian configuration (ADR §5.4, §6.5). When
@@ -408,33 +382,19 @@ export interface AgentSessionConfig {
   };
 
   /**
-   * Workspace persistence (ADR §7.4). When supplied, AgentSession
-   * creates a NekoPaths resolver rooted at `root` and attaches an
-   * NdjsonEventSink that appends every bus event to
-   * `<root>/.neko/logs/events.jsonl`. When `fsOps.writeFile` is also
-   * available, the session additionally maintains
-   * `<root>/.neko/state/idc-runtime.json` with the latest stage/run/
-   * pending-approval snapshot. Omitted = no disk sink; the session
-   * still runs but without persisted telemetry/state snapshots.
-   *
-   * Separate audit / step sinks are left for follow-up PRs (each
-   * gets its own sink with a channel-filter predicate). This PR
-   * ships the events sink only — the common case.
+   * Workspace persistence (ADR §7.4). When supplied, AgentSession creates a
+   * NekoPaths resolver rooted at `root` and attaches JSONL event sinks under
+   * `<root>/.neko/logs/`. Omitted = no disk sink; the session still runs.
    */
   workspace?: {
     /** Project root (not the `.neko/` subdirectory itself). */
     root: string;
     /**
-     * Platform fsOps. Must implement NdjsonFsOps; when `readFile` is
-     * also provided (widened type, `readFile(path, 'utf-8')`), the
-     * session auto-loads `.neko/preferences.md` and registers a
-     * preferences strategy pack on the ApprovalEngine (ADR §9.3). When
-     * `writeFile(path, data, 'utf-8')` is provided, the latest IDC
-     * runtime snapshot is persisted under `.neko/state/idc-runtime.json`.
+     * Platform fsOps. Must implement NdjsonFsOps; when `readFile` is also
+     * provided, the session auto-loads `.neko/preferences.md` and registers a
+     * preferences strategy pack on the ApprovalEngine (ADR §9.3).
      */
-    fsOps: import('../workspace').NdjsonFsOps &
-      Partial<import('../workspace').PreferencesFsOps> &
-      Partial<import('../workspace').IdcRuntimeStateFsOps>;
+    fsOps: import('../workspace').NdjsonFsOps & Partial<import('../workspace').PreferencesFsOps>;
     /**
      * Absolute path to the global `preferences.md` (typically
      * `~/.neko/preferences.md`). When omitted, only the project layer
@@ -693,16 +653,6 @@ export interface IAgentSession {
   setExecutionModeWithIntent(mode: ExecutionMode, intent: AgentCapabilityActivationIntent): void;
 
   /**
-   * Start or resume an IDC workflow through an explicit activation intent.
-   */
-  startIdcRunWithIntent(input: IdcWorkflowActivationInput): IdcWorkflowActivationResult;
-
-  /**
-   * Stop the active IDC workflow through an explicit activation intent.
-   */
-  stopIdcRunWithIntent(input: IdcWorkflowStopInput): IdcWorkflowControlResult;
-
-  /**
    * Wire an ISkillProvider into the meta tools.
    * Called by the extension layer after the skill system is initialized.
    */
@@ -726,17 +676,6 @@ export interface IAgentSession {
    * List run ids that currently have persisted Draft / Plan / Task artifacts.
    */
   listArtifactRunIds(): readonly string[];
-
-  /**
-   * Look up an IDC run by id across the active + completed run plane.
-   */
-  getIdcRun(runId: string): import('@neko-agent/types').IdcRun | null;
-
-  /**
-   * Enumerate active + completed IDC runs, newest-first with the active run
-   * (when present) ahead of completed history.
-   */
-  listIdcRuns(): readonly import('@neko-agent/types').IdcRun[];
 
   /**
    * Recent feedback coordination cycles assembled from artifact observation,

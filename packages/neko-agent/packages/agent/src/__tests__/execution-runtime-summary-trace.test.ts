@@ -8,7 +8,7 @@ import {
 } from '@neko/shared';
 
 describe('agent runtime summary trace logs', () => {
-  it('logs IDC stage activation, approval decisions, and subagent lifecycle summaries with trace', async () => {
+  it('logs built-in creation stage activation, approval decisions, and subagent lifecycle summaries with trace', async () => {
     const transport = new CapturedLogTransport();
     const { setRootLogger } = await import('../utils/logger');
     setRootLogger(new ConsoleLogger('Agent', LogLevel.Debug, [transport]));
@@ -20,11 +20,17 @@ describe('agent runtime summary trace logs', () => {
       iteration: 1,
     });
 
-    const { createIdcRunStore, createReActLoopRunner } = await import('../executor');
-    const runStore = createIdcRunStore({ now: () => 100, nextId: () => 'run-runtime-summary' });
-    runStore.startRun({ runKind: 'test', runId: 'run-runtime-summary' });
+    const { createReActLoopRunner } = await import('../executor');
     const { hooks } = createReActLoopRunner({
-      runStore,
+      creation: {
+        getActive: () => ({
+          creationId: 'run-runtime-summary',
+          profileId: 'idc.default',
+        }),
+        recordRound: vi.fn(),
+        recordStageTransition: vi.fn(),
+        close: vi.fn(),
+      },
       getMode: () => 'ask',
       now: () => 100,
     });
@@ -100,7 +106,7 @@ describe('agent runtime summary trace logs', () => {
         trace: expect.objectContaining({
           conversationId: 'conv-runtime-summary',
           runId: 'run-runtime-summary',
-          phase: 'workflow',
+          phase: 'creation',
         }),
         activatedStages: expect.any(Array),
         terminalStage: expect.any(String),

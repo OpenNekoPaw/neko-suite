@@ -4,20 +4,20 @@ import type { StageEntrySignal } from '../skill/activation/stage-planner';
 import type { ExecutionMode } from './types';
 import type { TaskShapeSignals } from '../executor/react-loop-runner';
 
-export interface IdcTurnMetadata {
+export interface CreationTurnMetadata {
   entrySignal?: StageEntrySignal;
   taskShape?: StageTaskShape;
-  runKind?: string;
+  creationKind?: string;
 }
 
-export interface IdcTurnPlanningContext {
+export interface CreationTurnPlanningContext {
   input: string;
   executionMode: ExecutionMode;
   activeSkill?: Skill;
   metadata?: Record<string, unknown>;
 }
 
-const IDC_ARTIFACT_REF_RE = /@(?:draft|plan|task)-[a-z0-9._-]+/i;
+const CREATION_ARTIFACT_REF_RE = /@(?:draft|plan|task)-[a-z0-9._-]+/i;
 const MULTI_STEP_HINT_RE =
   /\b(?:and then|then|after that|next|finally|for each|batch|series|multiple|several|all of)\b|(?:然后|接着|再|最后|依次|批量|多个|一系列)/i;
 const READ_ONLY_RE =
@@ -31,31 +31,31 @@ const SPECIFIC_DELIVERY_RE =
 const HIGH_RISK_RE =
   /\b(?:delete|remove|drop|destroy|purge|wipe|reset|overwrite|truncate)\b|(?:删除|移除|清空|销毁|重置|覆盖)/i;
 
-function extractIdcTurnMetadata(
+function extractCreationTurnMetadata(
   metadata: Record<string, unknown> | undefined,
-): IdcTurnMetadata | undefined {
+): CreationTurnMetadata | undefined {
   if (!metadata) return undefined;
-  const raw = metadata['idc'];
+  const raw = metadata['agentCreation'];
   if (!raw || typeof raw !== 'object') return undefined;
-  const idc = raw as Record<string, unknown>;
-  const next: IdcTurnMetadata = {};
+  const creation = raw as Record<string, unknown>;
+  const next: CreationTurnMetadata = {};
 
-  if (isStageEntrySignal(idc['entrySignal'])) {
-    next.entrySignal = idc['entrySignal'];
+  if (isStageEntrySignal(creation['entrySignal'])) {
+    next.entrySignal = creation['entrySignal'];
   }
-  if (isStageTaskShape(idc['taskShape'])) {
-    next.taskShape = idc['taskShape'];
+  if (isStageTaskShape(creation['taskShape'])) {
+    next.taskShape = creation['taskShape'];
   }
-  if (typeof idc['runKind'] === 'string' && idc['runKind'].trim().length > 0) {
-    next.runKind = idc['runKind'].trim();
+  if (typeof creation['creationKind'] === 'string' && creation['creationKind'].trim().length > 0) {
+    next.creationKind = creation['creationKind'].trim();
   }
 
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
-export function classifyIdcTaskShape(
+export function classifyCreationTaskShape(
   signals: TaskShapeSignals,
-  context: IdcTurnPlanningContext | null,
+  context: CreationTurnPlanningContext | null,
 ): StageTaskShape {
   if (signals.lastHadError) return 'retry';
   if (!context) {
@@ -66,7 +66,7 @@ export function classifyIdcTaskShape(
         : 'pure-think';
   }
 
-  const metadata = extractIdcTurnMetadata(context.metadata);
+  const metadata = extractCreationTurnMetadata(context.metadata);
   if (metadata?.taskShape) return metadata.taskShape;
 
   if (signals.round > 0) {
@@ -83,9 +83,9 @@ export function classifyIdcTaskShape(
   return 'single-write';
 }
 
-export function classifyIdcEntrySignal(
+export function classifyCreationEntrySignal(
   signals: TaskShapeSignals & { taskShape: StageTaskShape },
-  context: IdcTurnPlanningContext | null,
+  context: CreationTurnPlanningContext | null,
 ): StageEntrySignal {
   if (!context) {
     return signals.round > 0
@@ -93,25 +93,25 @@ export function classifyIdcEntrySignal(
       : inferDefaultEntrySignal(signals.taskShape, '');
   }
 
-  const metadata = extractIdcTurnMetadata(context.metadata);
+  const metadata = extractCreationTurnMetadata(context.metadata);
   if (metadata?.entrySignal) return metadata.entrySignal;
 
   if (signals.round > 0) return 'atomic-instruction';
 
   const input = context.input.trim();
-  if (IDC_ARTIFACT_REF_RE.test(input)) return 'referenced-artifact';
+  if (CREATION_ARTIFACT_REF_RE.test(input)) return 'referenced-artifact';
   if (HIGH_RISK_RE.test(input)) return 'high-risk-forced';
   if (looksLikeVagueCreative(input)) return 'vague-creative';
   return inferDefaultEntrySignal(signals.taskShape, input);
 }
 
-export function resolveIdcRunKind(context: IdcTurnPlanningContext | null): string {
+export function resolveCreationKind(context: CreationTurnPlanningContext | null): string {
   if (!context) return 'agent-turn';
 
-  const metadata = extractIdcTurnMetadata(context.metadata);
-  if (metadata?.runKind) return metadata.runKind;
+  const metadata = extractCreationTurnMetadata(context.metadata);
+  if (metadata?.creationKind) return metadata.creationKind;
   if (context.executionMode === 'plan') return 'plan-mode';
-  if (IDC_ARTIFACT_REF_RE.test(context.input)) return 'artifact-resume';
+  if (CREATION_ARTIFACT_REF_RE.test(context.input)) return 'artifact-resume';
   return 'agent-turn';
 }
 

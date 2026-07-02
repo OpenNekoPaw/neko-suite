@@ -84,7 +84,7 @@ function buildPromptSections(
   const workflowSection = renderWorkflowSection(context);
   if (workflowSection) {
     sections.push({
-      id: 'workflow:idc-profile',
+      id: 'creation:idc-profile',
       layer: 'schema',
       content: workflowSection,
       priority: 95,
@@ -248,7 +248,7 @@ function resolveToolAllowlist(context: PromptGenerationContext): readonly string
     return [];
   }
   const injected = context.injectedCapabilities?.allowedTools ?? [];
-  const nodeAllowed = context.workflow?.allowedToolNames;
+  const nodeAllowed = context.creation?.allowedToolNames;
   const source =
     nodeAllowed && nodeAllowed.length > 0
       ? injected.filter((toolName) => nodeAllowed.includes(toolName))
@@ -333,7 +333,7 @@ function resolveStructuredOutputSchemas(
 }
 
 function inferSchemaPurposes(context: PromptGenerationContext): readonly GeneratedSchemaPurpose[] {
-  switch (context.workflow?.stage) {
+  switch (context.creation?.stage) {
     case 'draft':
       return ['idc-draft'];
     case 'plan':
@@ -341,7 +341,7 @@ function inferSchemaPurposes(context: PromptGenerationContext): readonly Generat
     case 'apply':
       return ['idc-apply'];
     default:
-      return context.workflow?.nodeId ? ['workflow-node-output'] : [];
+      return context.creation?.stage ? ['creation-stage-output'] : [];
   }
 }
 
@@ -358,8 +358,9 @@ function createStructuredSchema(
       additionalProperties: false,
       properties: {
         kind: { const: purpose },
-        workflowRunId: { type: 'string' },
-        workflowNodeId: { type: 'string' },
+        creationId: { type: 'string' },
+        iterationId: { type: 'string' },
+        stageId: { type: 'string' },
         summary: { type: 'string' },
         artifacts: {
           type: 'array',
@@ -384,28 +385,34 @@ function createStructuredSchema(
       },
       required: ['kind', 'summary'],
       metadata: {
-        workflowRunId: context.workflow?.identity?.workflowRunId,
-        workflowNodeId: context.workflow?.nodeId,
+        creationId: context.creation?.creationId,
+        iterationId: context.creation?.iterationId,
+        stageId: context.creation?.stage,
+        legacyTrace: context.creation?.legacyTrace,
       },
     },
   };
 }
 
 function renderWorkflowSection(context: PromptGenerationContext): string | null {
-  const workflow = context.workflow;
-  if (!workflow) return null;
+  const creation = context.creation;
+  if (!creation) return null;
 
   const lines = [
-    '## Runtime Workflow Profile',
-    `- Plan mode: ${workflow.planMode ? 'enabled' : 'disabled'}`,
-    workflow.stage ? `- IDC stage: ${workflow.stage}` : null,
-    workflow.nodeId ? `- Workflow node: ${workflow.nodeId}` : null,
-    workflow.nodeKind ? `- Node kind: ${workflow.nodeKind}` : null,
+    '## Creation Profile Guidance',
+    `- Plan mode: ${creation.planMode ? 'enabled' : 'disabled'}`,
+    creation.profileId ? `- Creation profile: ${creation.profileId}` : null,
+    creation.stage ? `- Creation stage: ${creation.stage}` : null,
+    creation.creationId ? `- Creation id: ${creation.creationId}` : null,
+    creation.iterationId ? `- Iteration id: ${creation.iterationId}` : null,
+    creation.legacyTrace?.workflowNodeId
+      ? `- Legacy trace node: ${creation.legacyTrace.workflowNodeId}`
+      : null,
   ].filter((line): line is string => Boolean(line));
 
-  if (workflow.planMode) {
+  if (creation.planMode) {
     lines.push(
-      '- Follow IDC order: Draft clarifies intent, Plan decomposes work, Apply executes verified changes.',
+      '- Follow creation profile guidance: Draft clarifies intent, Plan decomposes work, Apply executes verified changes.',
     );
   }
 
@@ -456,7 +463,7 @@ function renderStructuredSchemaHint(context: PromptGenerationContext): string | 
   return [
     '## Structured Output Contract',
     `- Expected schema purposes: ${purposes.join(', ')}`,
-    '- Return machine-readable JSON when a workflow node explicitly asks for a structured artifact.',
+    '- Return machine-readable JSON when a creation stage explicitly asks for a structured artifact.',
   ].join('\n');
 }
 

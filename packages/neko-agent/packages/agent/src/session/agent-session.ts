@@ -47,7 +47,6 @@ import {
   type ExecutionPlan,
   type IdcStage,
   type StageActivationDecision,
-  type IdcRun,
   type Task,
 } from '@neko-agent/types';
 import type { SkillInjection, IStagePersonaBinding, IStageGuardian } from '../skill';
@@ -58,16 +57,11 @@ import {
   createStageGuardian,
 } from '../skill';
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
-import type { IIdcRunStore, ReActLoopRunnerState } from '../executor';
-import { createReActLoopRunner, createIdcRunStore } from '../executor';
+import type { ReActLoopRunnerState } from '../executor';
+import { createReActLoopRunner } from '../executor';
 import type { IEventBus } from '../events';
 import { createEventBus } from '../events';
-import {
-  createIdcRuntimeStateStore,
-  createNekoPaths,
-  createNdjsonEventSink,
-  readIdcRuntimeState,
-} from '../workspace';
+import { createNekoPaths, createNdjsonEventSink } from '../workspace';
 import type { IArtifactWatcher } from '../artifact';
 import type { IAutohealChain } from '../autoheal';
 import { createAutohealChain } from '../autoheal';
@@ -85,7 +79,6 @@ import {
   DeactivateSkillTool,
   GetContextTool,
   SetExecutionModeTool,
-  StartIDCWorkflowTool,
 } from '../tools/core/meta-tools';
 import { projectMediaModelToolsFromMetadata } from '../tools/media-generation-tool-selection';
 import { stepToEvents, type StreamState } from './step-event-converter';
@@ -97,8 +90,6 @@ import type {
   ExecutionMode,
   ExecutionContext,
   CompressionResult,
-  IdcWorkflowActivationResult,
-  IdcWorkflowControlResult,
   ToolResultPatchResult,
 } from './types';
 
@@ -158,24 +149,21 @@ import {
   createConfiguredExecutor,
   DEFAULT_MAX_ITERATIONS,
 } from './agent-session-initializer';
-import { SessionPersistence } from './session-persistence';
-import { IdcRunLifecycle } from './idc-run-lifecycle';
 import { SessionArtifactFacade } from './session-artifact-facade';
 import { FeedbackRuntimeBridge } from './feedback-runtime-bridge';
 import { PromptRuntimeFacade } from './prompt-runtime-facade';
 import {
   createWorkspaceArtifactService,
   type AnyArtifactRecord,
-  toIdcRunArtifactBinding,
   type ArtifactRecord,
   type IArtifactService,
 } from '../runtime/artifact-service';
 import { createAgentObservationRecorder } from '../runtime/agent-observation-recorder';
 import {
-  classifyIdcEntrySignal,
-  classifyIdcTaskShape,
-  type IdcTurnPlanningContext,
-} from './idc-turn-planning';
+  classifyCreationEntrySignal,
+  classifyCreationTaskShape,
+  type CreationTurnPlanningContext,
+} from './creation-turn-planning';
 
 const logger = getLogger('AgentSession');
 
@@ -187,9 +175,7 @@ function getAgentSessionLogger() {
 // Constants
 // =============================================================================
 
-const MAX_PERSISTED_STAGE_TRANSITIONS = 32;
 const MAX_FEEDBACK_CYCLES = 32;
-const IDC_RUNTIME_STATE_DEBOUNCE_MS = 200;
 
 // =============================================================================
 // AgentSession Implementation
@@ -228,8 +214,8 @@ export class AgentSession implements IAgentSession {
   private _skillInjectionModule: SkillInjectionModule;
   // PR3b: AGENTS.md overlay module (environment layer).
   private _agentsMdModule: AgentsMdModule;
-  // PR3c: IDC artifact contract (L1 schema layer). Instance held here so
-  // future session-level IdcRun transition wiring (PR3d) can toggle it.
+  // PR3c: creation artifact contract (L1 schema layer). Instance held here so
+  // Agent-native creation projection can toggle it.
   private _artifactSchemaModule: ArtifactSchemaModule;
   // PR3e: sub-package prompt fragments (environment layer priority 70).
   // Instance held for future re-sync passes when provider set changes.
@@ -238,7 +224,7 @@ export class AgentSession implements IAgentSession {
   // Skill injection (3-track coordinator)
   private _skillCoordinator!: SkillInjectionCoordinator;
 
-  // IDC stage tracking: StageTracker emits stage.entered events;
+  // built-in creation stage tracking: StageTracker emits stage.entered events;
   // StagePersonaBinding subscribes and swaps the persona Skill when a new
   // stage is reached.
   private _stageTracker: StageTracker | null = null;
@@ -246,9 +232,6 @@ export class AgentSession implements IAgentSession {
   /** Non-blocking inspector that rides alongside the tracker (ADR §6.5). */
   private _stageGuardian: IStageGuardian | null = null;
 
-  // ReAct-loop stage-activation orchestrator.
-  private _runStore: IIdcRunStore | null = null;
-  private _idcRunLifecycle: IdcRunLifecycle;
   private _reactRunnerState: Readonly<ReActLoopRunnerState> | null = null;
   private _reactLoopBaseHooks: import('@neko/shared').ExecutorHooks | null = null;
   private _runnerHooks: import('@neko/shared').ExecutorHooks | null = null;
@@ -259,8 +242,6 @@ export class AgentSession implements IAgentSession {
   private _nekoPaths: import('../workspace').INekoPaths | null = null;
   // JSONL event sink persisting bus events to `.neko/logs/events.jsonl`.
   private _eventSink: import('../workspace').INdjsonEventSink | null = null;
-  // Mutable workspace snapshot for active IDC runtime state.
-  private _sessionPersistence: SessionPersistence;
   private _artifactFacade: SessionArtifactFacade;
   private _feedbackRuntime: FeedbackRuntimeBridge;
   private _promptRuntime!: PromptRuntimeFacade;
@@ -312,8 +293,10 @@ export class AgentSession implements IAgentSession {
   private _journalSeq = 0;
   /** Tracks streaming state across step conversions */
   private _streamState: StreamState = { hasStreamedDeltas: false };
-  /** Current turn's IDC planning hints (input, active skill, external metadata). */
-  private _currentTurnPlanningContext: IdcTurnPlanningContext | null = null;
+  /** Current turn's creation planning hints (input, active skill, external metadata). */
+  private _currentTurnPlanningContext: CreationTurnPlanningContext | null = null;
+  /** Current Agent turn id used for event/artifact correlation only. */
+  private _activeTurnRunId: string | null = null;
   private _memoryRecall: MemoryRecall | null = null;
   private _pendingConfirmations = new Map<
     string,
@@ -333,20 +316,11 @@ export class AgentSession implements IAgentSession {
   constructor(config: AgentSessionConfig) {
     this._config = config;
     this._executionMode = config.executionMode ?? 'auto';
-    this._sessionPersistence = new SessionPersistence({
-      debounceMs: IDC_RUNTIME_STATE_DEBOUNCE_MS,
-      buildSnapshot: () => this._buildIdcRuntimeStateSnapshot(),
-      onWarn: (message, data) => logger.warn(message, data),
-    });
     this._artifactFacade = new SessionArtifactFacade({
       ports: {
-        run: {
-          getActiveRun: () => this._runStore?.getActive() ?? null,
-          getCompletedRuns: () => this._runStore?.listCompleted() ?? [],
-          setDraft: (draft, binding) => this._runStore?.setDraft(draft, binding),
-          setPlan: (plan, binding) => this._runStore?.setPlan(plan, binding),
-          setTask: (task, binding) => this._runStore?.setTask(task, binding),
-          bindArtifact: (binding) => this._runStore?.bindArtifact(binding),
+        activity: {
+          getActiveArtifactScope: () => this._getActiveArtifactScope(),
+          getArtifactScopeStartedAt: (scopeId) => this._getArtifactScopeStartedAt(scopeId),
         },
         workspace: {
           getWorkspaceReadFile: () => {
@@ -358,7 +332,7 @@ export class AgentSession implements IAgentSession {
           isDisposed: () => this._disposed,
         },
         persistence: {
-          onPersist: () => this._persistIdcRuntimeState(),
+          onPersist: () => undefined,
           onWarn: (message, data) => logger.warn(message, data),
         },
       },
@@ -374,7 +348,7 @@ export class AgentSession implements IAgentSession {
         control: {
           getControlPlane: () => this._controlPlane,
           getCurrentStage: () => this._stageTracker?.current ?? null,
-          getActiveRun: () => this._runStore?.getActive() ?? null,
+          getActiveArtifactScope: () => this._getActiveArtifactScope(),
           recordStageTransition: (input) => this._recordFeedbackStageTransition(input),
         },
         prompt: {
@@ -386,34 +360,6 @@ export class AgentSession implements IAgentSession {
         },
       },
     });
-    this._idcRunLifecycle = new IdcRunLifecycle({
-      maxPersistedStageTransitions: MAX_PERSISTED_STAGE_TRANSITIONS,
-      ports: {
-        runtime: {
-          getRunStore: () => this._runStore,
-          getStageTracker: () => this._stageTracker,
-          getStageGuardian: () => this._stageGuardian,
-          getSkillLifecycleRuntime: () => this._config.stageTracking?.skillLifecycleRuntime ?? null,
-          getConversationId: () => this._config.conversationId ?? null,
-          onPersist: () => this._persistIdcRuntimeState(),
-        },
-        artifacts: {
-          hasArtifactService: () => this._artifactFacade.hasArtifactService,
-          listArtifactsByRunId: (runId) => this._artifactFacade.getRecordsForRun(runId),
-          hydrateRunArtifacts: (runId) => this._artifactFacade.hydrateRunArtifacts(runId),
-          queueTaskProjectionClear: (runId, runStartedAt) =>
-            this._artifactFacade.queueTaskProjectionClear(runId, runStartedAt),
-          replayRestoredTaskProjection: (run) =>
-            this._artifactFacade.replayRestoredTaskProjection(run),
-        },
-        restore: {
-          restoreRunFromSnapshot: restoreIdcRunFromSnapshot,
-          isActiveRunStatus,
-          isTerminalRunStatus,
-        },
-      },
-    });
-
     // Delegate component creation to initializer (SRP: init logic separate from runtime)
     const components = initializeSession(config, {
       onToolConfirmation: (request) => this._handleToolConfirmation(request),
@@ -445,7 +391,7 @@ export class AgentSession implements IAgentSession {
     this._artifactSchemaModule = components.artifactSchemaModule;
     this._subpackageFragmentsModule = components.subpackageFragmentsModule;
     this._promptContextProvider = createPromptContextProvider({
-      getRunId: () => this._runStore?.getActive()?.id ?? null,
+      getRunId: () => this._getActiveTurnRunId(),
       getStage: () => this._stageTracker?.current ?? null,
       getActiveSkillName: () => this.getActiveSkill()?.name ?? null,
       getActiveTools: () => collectInjectedToolNames(this._toolInjectionManager),
@@ -489,7 +435,7 @@ export class AgentSession implements IAgentSession {
     this._operationToolAdapterRegistry = config.operationToolAdapterRegistry ?? null;
 
     this._artifactFacade.setArtifactService(resolveArtifactService(config));
-    this._artifactFacade.setTaskProjection(config.idcTaskProjection ?? null);
+    this._artifactFacade.setTaskProjection(config.creationTaskProjection ?? null);
     this._artifactFacade.scheduleRestore();
 
     // SkillInjectionCoordinator requires closures over Session fields
@@ -521,9 +467,8 @@ export class AgentSession implements IAgentSession {
           ...(config.stageTracking.skillLifecycleRuntime
             ? { lifecycleRuntime: config.stageTracking.skillLifecycleRuntime }
             : { coordinator: this._skillCoordinator }),
-          // Resolve `{runId}` in creation-persona's artifact-file contract
-          // lazily so re-applies after a new IdcRun pick up the fresh id.
-          getRunId: () => this._runStore?.getActive()?.id ?? null,
+          // Placeholder name from the binding API: value is the Agent-native creation id.
+          getRunId: () => this._getActiveTurnRunId(),
           getConversationId: () => this._config.conversationId ?? null,
         });
         void this._stagePersonaBinding.syncCurrent();
@@ -535,7 +480,6 @@ export class AgentSession implements IAgentSession {
       //     execution.autoheal.* on the same bus.
       //   - Approval engine: pre-filters ask-mode tool calls via the
       //     declarative + imperative strategy packs.
-      this._runStore = createIdcRunStore();
       this._eventBus = createEventBus();
 
       // Workspace persistence (ADR §7.4). When a project root is
@@ -557,46 +501,6 @@ export class AgentSession implements IAgentSession {
       // hidden managed creation-document directories by default.
       this._artifactWatcher = this._createConfiguredArtifactWatcher();
       void this._artifactWatcher?.start();
-
-      if (
-        this._nekoPaths &&
-        config.workspace &&
-        typeof config.workspace.fsOps.writeFile === 'function'
-      ) {
-        this._sessionPersistence.setStore(
-          createIdcRuntimeStateStore({
-            filePath: this._nekoPaths.state('idcRuntime'),
-            fsOps: {
-              mkdir: config.workspace.fsOps.mkdir,
-              writeFile: config.workspace.fsOps.writeFile.bind(config.workspace.fsOps),
-            },
-          }),
-        );
-      }
-
-      if (
-        this._nekoPaths &&
-        config.workspace &&
-        typeof config.workspace.fsOps.readFile === 'function'
-      ) {
-        const runtimeStateRead = readIdcRuntimeState({
-          filePath: this._nekoPaths.state('idcRuntime'),
-          fsOps: {
-            readFile: config.workspace.fsOps.readFile.bind(config.workspace.fsOps),
-          },
-        });
-        this._sessionPersistence.restoreFrom(
-          Promise.all([this._artifactFacade.whenRestoreReady(), runtimeStateRead]).then(
-            ([, restored]) => restored,
-          ),
-          (restored) => {
-            if (!this._disposed) {
-              this._restoreIdcRuntimeState(restored);
-            }
-          },
-          () => !this._disposed,
-        );
-      }
 
       this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
       this._approvalEngine = createApprovalEngine({
@@ -641,7 +545,7 @@ export class AgentSession implements IAgentSession {
       // still get audit coverage.
       {
         const bus = this._eventBus;
-        const getRunId = (): string | undefined => this._runStore?.getActive()?.id;
+        const getRunId = (): string | undefined => this._getActiveTurnRunId() ?? undefined;
         this._approvalEngine.onDecision((request, response) => {
           const runId = getRunId();
           if (!runId) return; // No active run — skip (pre-execute engine use).
@@ -681,17 +585,17 @@ export class AgentSession implements IAgentSession {
 
       const { hooks: runnerHooks, state } = createReActLoopRunner({
         stageTracker: this._stageTracker,
-        runStore: this._runStore,
+        getRunContext: () => this._getActiveRunContext(),
         getMode: () => this._executionMode as StageMode,
         classifyTaskShape: (signals) =>
-          classifyIdcTaskShape(signals, this._currentTurnPlanningContext),
+          classifyCreationTaskShape(signals, this._currentTurnPlanningContext),
         classifyEntrySignal: (signals) =>
-          classifyIdcEntrySignal(signals, this._currentTurnPlanningContext),
+          classifyCreationEntrySignal(signals, this._currentTurnPlanningContext),
         eventBus: this._eventBus,
         autohealChain: this._autohealChain,
       });
       this._reactRunnerState = state;
-      this._installRuntimeStatePersistence();
+      this._installRuntimeEventObservers();
 
       // StageGuardian — non-blocking inspector alongside the tracker.
       // Opted out by setting `stageTracking.guardian = false`; otherwise
@@ -776,8 +680,8 @@ export class AgentSession implements IAgentSession {
       this._artifactFacade.setArtifactService(resolveArtifactService(this._config));
       this._artifactFacade.scheduleRestore();
     }
-    if (config.idcTaskProjection !== undefined) {
-      this._artifactFacade.setTaskProjection(config.idcTaskProjection ?? null);
+    if (config.creationTaskProjection !== undefined) {
+      this._artifactFacade.setTaskProjection(config.creationTaskProjection ?? null);
     }
     if (config.controlPlane !== undefined) {
       this._controlPlane = config.controlPlane ?? null;
@@ -827,8 +731,6 @@ export class AgentSession implements IAgentSession {
         tool.setSkillProvider(provider);
       } else if (tool instanceof DeactivateSkillTool) {
         tool.setSkillProvider(provider);
-      } else if (tool instanceof StartIDCWorkflowTool) {
-        tool.setSkillProvider(provider);
       } else if (tool instanceof SetExecutionModeTool) {
         tool.setSkillProvider(provider);
       }
@@ -838,28 +740,6 @@ export class AgentSession implements IAgentSession {
   private _createCapabilityProvider(provider: ISkillProvider): ISkillProvider {
     return {
       ...provider,
-      startIdcWorkflow: (input) => {
-        const now = Date.now();
-        const runKind = normalizeActivationName(input.runKind, 'idc');
-        const intent = createAgentCapabilityActivationIntent({
-          conversationId: this._config.conversationId ?? 'unknown',
-          source: 'agent-tool',
-          target: 'idc-workflow',
-          action: input.runId ? 'resume' : 'activate',
-          name: runKind,
-          requestedBy: 'agent',
-          reason: input.reason ?? `StartIDCWorkflow requested ${runKind}`,
-          createdAt: now,
-          metadata: {
-            ...(input.runId ? { runId: input.runId } : {}),
-          },
-        });
-        return this.startIdcRunWithIntent({
-          runKind,
-          ...(input.runId ? { runId: input.runId } : {}),
-          intent,
-        });
-      },
       setExecutionMode: (input) => {
         const intent = createAgentCapabilityActivationIntent({
           conversationId: this._config.conversationId ?? 'unknown',
@@ -888,7 +768,7 @@ export class AgentSession implements IAgentSession {
   }
 
   getArtifactsForRun(runId?: string): readonly ArtifactRecord[] {
-    const targetRunId = runId ?? this._runStore?.getActive()?.id ?? null;
+    const targetRunId = runId ?? this._getActiveTurnRunId();
     if (!targetRunId) {
       return [];
     }
@@ -898,29 +778,6 @@ export class AgentSession implements IAgentSession {
 
   listArtifactRunIds(): readonly string[] {
     return this._artifactFacade.listRunIds();
-  }
-
-  getIdcRun(runId: string): IdcRun | null {
-    if (!runId || !this._runStore) {
-      return null;
-    }
-
-    const active = this._runStore.getActive();
-    if (active?.id === runId) {
-      return active;
-    }
-
-    return this._runStore.listCompleted().find((run) => run.id === runId) ?? null;
-  }
-
-  listIdcRuns(): readonly IdcRun[] {
-    if (!this._runStore) {
-      return [];
-    }
-
-    const active = this._runStore.getActive();
-    const completed = [...this._runStore.listCompleted()].reverse();
-    return active ? [active, ...completed] : completed;
   }
 
   getFeedbackCycles(): readonly import('../feedback').FeedbackCycle[] {
@@ -936,12 +793,12 @@ export class AgentSession implements IAgentSession {
       return;
     }
 
-    const activeRun = this._runStore?.getActive() ?? null;
+    const activeRunId = this._getActiveTurnRunId();
     this._feedbackCoordinator.observe({
       kind: 'subagent-review',
       observedAt: result.createdAt,
       review: result,
-      ...(activeRun?.id ? { runId: activeRun.id } : {}),
+      ...(activeRunId ? { runId: activeRunId } : {}),
     });
 
     if (!this._ablationMarker?.disableAgentFirstToolEvidence) {
@@ -1017,13 +874,15 @@ export class AgentSession implements IAgentSession {
     this._isRunning = true;
     const turnStartedAt = Date.now();
     let runCompletionStatus: 'completed' | 'failed' = 'completed';
-    let runCompletionError: IdcRun['error'] | undefined;
+    let runCompletionError:
+      { readonly code: string; readonly message: string; readonly cause?: unknown } | undefined;
     let turnActivatedToolSets: readonly string[] = [];
     let trace = createAgentTraceContext({
       conversationId: this._config.conversationId,
       turnId: createAgentTurnId(this._config.conversationId ?? 'unknown', turnStartedAt),
       phase: 'session',
     });
+    this._activeTurnRunId = trace.turnId;
     let iteration = 0;
     const hadPendingFeedbackGuidance = this._feedbackRuntime.hasGuidance();
     let feedbackGuidanceAdjustedThisTurn = false;
@@ -1079,7 +938,7 @@ export class AgentSession implements IAgentSession {
       ];
 
       trace = deriveAgentTraceContext(trace, {
-        runId: this._runStore?.getActive()?.id ?? null,
+        runId: this._getActiveTurnRunId(),
         phase: 'session',
       });
       logger.debug(
@@ -1317,14 +1176,15 @@ export class AgentSession implements IAgentSession {
       for (const toolSetName of turnActivatedToolSets) {
         this.deactivateToolSet(toolSetName);
       }
-      this._closeActiveRun(runCompletionStatus, runCompletionError);
+      void runCompletionStatus;
+      void runCompletionError;
       this._currentTurnPlanningContext = null;
+      this._activeTurnRunId = null;
       this._promptRuntime.setMemoryRecallContent(null);
       if (!feedbackGuidanceAdjustedThisTurn && hadPendingFeedbackGuidance) {
         this._feedbackRuntime.clearGuidance();
       }
       this._syncSystemPrompt();
-      this._persistIdcRuntimeState();
       this._isRunning = false;
       logger.debug(
         'neko.agent.session.execute.end',
@@ -1355,7 +1215,6 @@ export class AgentSession implements IAgentSession {
         this._permissionHooks.confirmTool(pending.request.confirmationToken, approved);
       }
       this._pendingConfirmations.delete(toolCallId);
-      this._persistIdcRuntimeState();
     }
   }
 
@@ -1465,11 +1324,11 @@ export class AgentSession implements IAgentSession {
   }
 
   // ---------------------------------------------------------------------------
-  // IDC stage tracking
+  // built-in creation stage tracking
   // ---------------------------------------------------------------------------
 
   /**
-   * Current IDC stage the agent is operating in, or null if stage tracking
+   * Current built-in creation stage the agent is operating in, or null if stage tracking
    * is not configured.
    */
   getCurrentStage(): IdcStage | null {
@@ -1499,212 +1358,7 @@ export class AgentSession implements IAgentSession {
   }
 
   /**
-   * Begin an IdcRun — the ReAct-loop runner appends rounds into the
-   * active run. Returns null if dual-flow is not configured. No-op if a
-   * run is already active (the runner closes it on onExecuteEnd).
-   */
-  startIdcRun(runKind: string, runId?: string): string | null {
-    const conversationId = this._config.conversationId ?? 'unknown';
-    const now = Date.now();
-    const intent = createAgentCapabilityActivationIntent({
-      conversationId,
-      source: 'agent-tool',
-      target: 'idc-workflow',
-      action: 'activate',
-      name: normalizeActivationName(runKind, 'idc'),
-      requestedBy: 'agent',
-      reason:
-        'Implicit IDC start path rejected because no explicit activation intent was supplied.',
-      createdAt: now,
-      metadata: {
-        oldPath: 'AgentSession.startIdcRun',
-        ...(runId ? { runId } : {}),
-      },
-    });
-    this._emitActivationProgress(conversationId, [
-      createAgentCapabilityActivationProgressEvent({
-        intent,
-        step: 'failed',
-        status: 'failed',
-        at: now,
-        diagnostics: [
-          {
-            severity: 'error',
-            code: 'implicit-idc-start-rejected',
-            message:
-              'AgentSession.startIdcRun requires an explicit activation intent; use startIdcRunWithIntent.',
-          },
-        ],
-      }),
-    ]);
-    return null;
-  }
-
-  startIdcRunWithIntent(input: {
-    readonly runKind: string;
-    readonly runId?: string;
-    readonly intent: AgentCapabilityActivationIntent;
-  }): IdcWorkflowActivationResult {
-    const events: AgentCapabilityActivationProgressEvent[] = [];
-    const emit = this._createActivationEmitter(input.intent, events);
-    if (
-      !this._isExpectedActivationIntent(input.intent, 'idc-workflow') ||
-      (input.intent.action !== 'activate' && input.intent.action !== 'resume')
-    ) {
-      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
-        {
-          severity: 'error',
-          code: 'invalid-idc-workflow-activation-intent',
-          message:
-            'IDC workflow activation requires an idc-workflow activate or resume activation intent.',
-        },
-      ];
-      emit('failed', 'failed', { diagnostics });
-      return {
-        success: false,
-        message: diagnostics[0]!.message,
-        diagnostics,
-        events,
-      };
-    }
-
-    emit('requested', 'succeeded');
-    if (!this._runStore) {
-      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
-        {
-          severity: 'error',
-          code: 'idc-workflow-runtime-missing',
-          message: 'IDC workflow runtime is not configured for this session.',
-        },
-      ];
-      emit('failed', 'failed', { diagnostics });
-      return {
-        success: false,
-        message: diagnostics[0]!.message,
-        diagnostics,
-        events,
-      };
-    }
-
-    emit('validated', 'succeeded');
-    emit('prepared', 'succeeded', {
-      metadata: {
-        runKind: input.runKind,
-        ...(input.runId ? { runId: input.runId } : {}),
-      },
-    });
-    const runId = this._idcRunLifecycle.startRun(input.runKind, input.runId);
-    if (!runId) {
-      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
-        {
-          severity: 'error',
-          code: 'idc-workflow-start-failed',
-          message: 'IDC workflow did not start.',
-        },
-      ];
-      emit('failed', 'failed', { diagnostics });
-      return {
-        success: false,
-        message: diagnostics[0]!.message,
-        diagnostics,
-        events,
-      };
-    }
-
-    emit('record-created', 'succeeded', { recordId: runId });
-    emit('projected', 'succeeded', { recordId: runId });
-    emit('active', 'succeeded', { recordId: runId });
-    return {
-      success: true,
-      message: `IDC workflow started: ${runId}`,
-      runId,
-      events,
-    };
-  }
-
-  stopIdcRunWithIntent(input: {
-    readonly intent: AgentCapabilityActivationIntent;
-    readonly status?: 'completed' | 'failed' | 'aborted';
-  }): IdcWorkflowControlResult {
-    const events: AgentCapabilityActivationProgressEvent[] = [];
-    const emit = this._createActivationEmitter(input.intent, events);
-    if (!this._isExpectedActivationIntent(input.intent, 'idc-workflow', 'deactivate')) {
-      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
-        {
-          severity: 'error',
-          code: 'invalid-idc-workflow-deactivation-intent',
-          message: 'IDC workflow stop requires an idc-workflow deactivate activation intent.',
-        },
-      ];
-      emit('failed', 'failed', { diagnostics });
-      return {
-        success: false,
-        message: diagnostics[0]!.message,
-        diagnostics,
-        events,
-      };
-    }
-
-    emit('requested', 'succeeded');
-    if (!this._runStore) {
-      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
-        {
-          severity: 'error',
-          code: 'idc-workflow-runtime-missing',
-          message: 'IDC workflow runtime is not configured for this session.',
-        },
-      ];
-      emit('failed', 'failed', { diagnostics });
-      return {
-        success: false,
-        message: diagnostics[0]!.message,
-        diagnostics,
-        events,
-      };
-    }
-
-    emit('validated', 'succeeded');
-    const activeRun = this._runStore.getActive();
-    if (!activeRun) {
-      const diagnostics: AgentCapabilityActivationDiagnostic[] = [
-        {
-          severity: 'error',
-          code: 'idc-workflow-not-active',
-          message: 'No active IDC workflow is available to stop.',
-        },
-      ];
-      emit('failed', 'failed', { diagnostics });
-      return {
-        success: false,
-        message: diagnostics[0]!.message,
-        diagnostics,
-        events,
-      };
-    }
-
-    emit('prepared', 'succeeded', { recordId: activeRun.id });
-    const status = input.status ?? 'aborted';
-    this._closeActiveRun(status);
-    this._persistIdcRuntimeState();
-    emit('projected', 'succeeded', { recordId: activeRun.id, metadata: { status } });
-    emit('active', 'succeeded', { recordId: activeRun.id, metadata: { status } });
-    return {
-      success: true,
-      message: `IDC workflow stopped: ${activeRun.id}`,
-      runId: activeRun.id,
-      events,
-    };
-  }
-
-  /**
-   * Snapshot of the active IdcRun (or null if none).
-   */
-  getActiveIdcRun(): IdcRun | null {
-    return this._runStore?.getActive() ?? null;
-  }
-
-  /**
-   * Last IDC stage-activation decision made by the runner.
+   * Last built-in creation stage-activation decision made by the runner.
    */
   getLastActivationDecision(): StageActivationDecision | null {
     return this._reactRunnerState?.lastDecision ?? null;
@@ -1764,11 +1418,8 @@ export class AgentSession implements IAgentSession {
    */
   async flushWorkspaceSink(): Promise<void> {
     await this._artifactFacade.whenRestoreReady();
-    await this._sessionPersistence.whenRestoreReady();
-    this._sessionPersistence.flushPending();
     await Promise.all([
       this._eventSink ? this._eventSink.flush() : Promise.resolve(),
-      this._sessionPersistence.flush(),
       this._auditsSink ? this._auditsSink.flush() : Promise.resolve(),
       this._stepsSink ? this._stepsSink.flush() : Promise.resolve(),
       this._artifactFacade.flush(),
@@ -1807,7 +1458,6 @@ export class AgentSession implements IAgentSession {
     // Rebuild from composer to preserve current prompt composition
     this._history = [{ role: 'system', content: this._promptRuntime.composeText() }];
     this._historyEventIds = [[]];
-    this._persistIdcRuntimeState();
   }
 
   loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void {
@@ -1823,7 +1473,6 @@ export class AgentSession implements IAgentSession {
     } else {
       this._historyEventIds[0] = [];
     }
-    this._persistIdcRuntimeState();
   }
 
   // ---------------------------------------------------------------------------
@@ -1838,7 +1487,7 @@ export class AgentSession implements IAgentSession {
     const originalTokens = this.getTokenCount();
     const trace = createAgentTraceContext({
       conversationId: this._config.conversationId,
-      runId: this._runStore?.getActive()?.id ?? null,
+      runId: this._getActiveTurnRunId(),
       turnId: createAgentTurnId(this._config.conversationId ?? 'unknown'),
       phase: 'compaction',
     });
@@ -1867,7 +1516,6 @@ export class AgentSession implements IAgentSession {
     if (this._disposed) return;
     this._disposed = true;
     this.cancel();
-    this._closeActiveRun('aborted');
     this._isRunning = false;
     // Ablation: restore SkillService discovery state if this session disabled
     // it. SkillService is externally owned so we must un-flip to avoid leaking
@@ -1889,13 +1537,9 @@ export class AgentSession implements IAgentSession {
       }
     }
     this._pendingConfirmations.clear();
-    this._persistIdcRuntimeState();
-    this._sessionPersistence.flushPending();
-    this._sessionPersistence.dispose();
     this._stagePersonaBinding = null;
     this._stageGuardian = null;
     this._stageTracker = null;
-    this._runStore = null;
     this._reactRunnerState = null;
     this._runnerHooks = null;
     // Flush all JSONL sinks before clearing the bus so in-flight
@@ -1928,11 +1572,29 @@ export class AgentSession implements IAgentSession {
   // Private Methods
   // ---------------------------------------------------------------------------
 
-  private _closeActiveRun(
-    status: 'completed' | 'failed' | 'aborted',
-    error?: IdcRun['error'],
-  ): void {
-    this._idcRunLifecycle.closeActiveRun(status, error);
+  private _getActiveTurnRunId(): string | null {
+    return this._activeTurnRunId ?? this._config.conversationId ?? null;
+  }
+
+  private _getActiveArtifactScope(): { readonly id: string; readonly startedAt?: number } | null {
+    const id = this._getActiveTurnRunId();
+    return id ? { id } : null;
+  }
+
+  private _getArtifactScopeStartedAt(creationId: string): number | undefined {
+    void creationId;
+    return undefined;
+  }
+
+  private _getActiveRunContext(): { readonly runId: string; readonly creationKind: string } | null {
+    const runId = this._getActiveTurnRunId();
+    if (!runId) {
+      return null;
+    }
+    return {
+      runId,
+      creationKind: this._currentTurnPlanningContext?.metadata?.creationKind ?? 'agent-turn',
+    };
   }
 
   private async _persistTerminalJournalEvent(event: AgentEvent): Promise<string | undefined> {
@@ -1980,150 +1642,10 @@ export class AgentSession implements IAgentSession {
     }
   }
 
-  private _installRuntimeStatePersistence(): void {
-    const shouldPersistRuntimeState = this._sessionPersistence.hasStore;
-
-    if (this._stageTracker && shouldPersistRuntimeState) {
-      this._sessionPersistence.addUnsubscriber(
-        this._stageTracker.onEntered((event) => {
-          this._idcRunLifecycle.recordStageTransition(event);
-        }),
-      );
-    }
-
+  private _installRuntimeEventObservers(): void {
     if (this._eventBus) {
-      this._sessionPersistence.addUnsubscriber(
-        this._eventBus.on(EXECUTION_CHANNELS.ARTIFACT_WRITTEN, (event) => {
-          this._artifactFacade.queueObservedArtifactSync(event);
-        }),
-      );
-      if (shouldPersistRuntimeState) {
-        this._sessionPersistence.addUnsubscriber(
-          this._eventBus.on(EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED, () => {
-            this._persistIdcRuntimeState();
-          }),
-        );
-        this._sessionPersistence.addUnsubscriber(
-          this._eventBus.on(CREATION_CHANNELS.RUN_ENDED, () => {
-            this._persistIdcRuntimeState();
-          }),
-        );
-      }
-    }
-
-    if (shouldPersistRuntimeState && !this._sessionPersistence.isRestorePending) {
-      this._persistIdcRuntimeState();
-    }
-  }
-
-  private _persistIdcRuntimeState(): void {
-    this._sessionPersistence.schedule();
-  }
-
-  private _buildIdcRuntimeStateSnapshot(): import('../workspace').IdcRuntimeStateInput | null {
-    const activeRun = this._runStore?.getActive() ?? null;
-    const completedRuns = this._runStore?.listCompleted() ?? [];
-    const lastCompletedRun =
-      completedRuns.length > 0 ? (completedRuns[completedRuns.length - 1] ?? null) : null;
-
-    return {
-      ...(this._config.conversationId ? { conversationId: this._config.conversationId } : {}),
-      stage: {
-        current: this._stageTracker?.current ?? null,
-        ...(this._stageTracker?.current ? { enteredAt: this._stageTracker.enteredAt } : {}),
-        transitions: [...this._idcRunLifecycle.stageTransitions],
-      },
-      run: {
-        ...(activeRun ? { active: snapshotIdcRun(activeRun) } : {}),
-        ...(lastCompletedRun ? { lastCompleted: snapshotIdcRun(lastCompletedRun) } : {}),
-      },
-      approval: {
-        pending: Array.from(this._pendingConfirmations.values()).map(({ request }) =>
-          snapshotPendingApproval(request),
-        ),
-      },
-      feedback: {
-        pendingGuidance: this._feedbackRuntime.guidanceSnapshot,
-      },
-    };
-  }
-
-  private _restoreIdcRuntimeState(state: import('../workspace').IdcRuntimeRestoreState): void {
-    this._restorePendingApprovals(state.approval);
-    this._feedbackRuntime.restore(state.feedback);
-    if (hasPersistedIdcActivationState(state)) {
-      this._emitPersistedIdcResumeDiagnostic(state);
-    }
-  }
-
-  private _emitPersistedIdcResumeDiagnostic(
-    state: import('../workspace').IdcRuntimeRestoreState,
-  ): void {
-    const conversationId = this._config.conversationId ?? 'unknown';
-    const runName =
-      state.run.active?.runKind ?? state.run.active?.id ?? state.stage.current ?? 'idc';
-    const now = Date.now();
-    const intent = createAgentCapabilityActivationIntent({
-      conversationId,
-      source: 'user-explicit',
-      target: 'idc-workflow',
-      action: 'resume',
-      name: runName,
-      requestedBy: 'user',
-      reason: 'Persisted IDC runtime state requires explicit resume.',
-      createdAt: now,
-      metadata: {
-        restored: true,
-        ...(state.run.active?.id ? { runId: state.run.active.id } : {}),
-        ...(state.stage.current ? { stage: state.stage.current } : {}),
-      },
-    });
-    this._emitActivationProgress(conversationId, [
-      createAgentCapabilityActivationProgressEvent({
-        intent,
-        step: 'failed',
-        status: 'failed',
-        at: now,
-        diagnostics: [
-          {
-            severity: 'warning',
-            code: 'persisted-idc-requires-explicit-resume',
-            message:
-              'Persisted IDC workflow state is available but was not resumed automatically. Use an explicit resume action to reactivate it.',
-          },
-        ],
-      }),
-    ]);
-  }
-
-  private _restorePendingApprovals(
-    state: import('../workspace').PendingApprovalRestoreState,
-  ): void {
-    for (const pending of state.pending) {
-      if (this._pendingConfirmations.has(pending.toolCallId)) {
-        continue;
-      }
-
-      const restoredDetails = {
-        ...pending.details,
-        restoredFromRuntimeState: true,
-        ...(state.updatedAt !== undefined ? { restoredSnapshotUpdatedAt: state.updatedAt } : {}),
-      };
-
-      this._pendingConfirmations.set(pending.toolCallId, {
-        source: 'restored',
-        request: {
-          toolCall: {
-            id: pending.toolCallId,
-            name: pending.toolName,
-            arguments: getRestoredToolArguments(pending.details),
-            index: 0,
-          },
-          action: pending.action,
-          description: pending.description,
-          details: restoredDetails,
-          confirmationToken: pending.confirmationToken,
-        },
+      this._eventBus.on(EXECUTION_CHANNELS.ARTIFACT_WRITTEN, (event) => {
+        this._artifactFacade.queueObservedArtifactSync(event);
       });
     }
   }
@@ -2197,11 +1719,8 @@ export class AgentSession implements IAgentSession {
       return null;
     }
 
-    const getRunId = (): string | null => this._runStore?.getActive()?.id ?? null;
-    const getCreationId = (): string | null => {
-      const runId = getRunId();
-      return runId ? this._artifactFacade.getCreationIdForRun(runId) : null;
-    };
+    const getRunId = (): string | null => this._getActiveTurnRunId();
+    const getCreationId = (): string | null => this._getActiveTurnRunId();
     if (this._config.artifactWatcherFactory) {
       return this._config.artifactWatcherFactory({
         eventBus: this._eventBus,
@@ -2298,7 +1817,7 @@ export class AgentSession implements IAgentSession {
       return;
     }
 
-    const activeRunId = this._runStore?.getActive()?.id ?? null;
+    const activeRunId = this._getActiveTurnRunId();
     const feedbackTrace = deriveAgentTraceContext(trace, {
       ...(activeRunId ? { runId: activeRunId } : {}),
       phase: 'feedback',
@@ -2510,7 +2029,6 @@ export class AgentSession implements IAgentSession {
     );
     // Store pending confirmation (resolve is handled by onConfirmTool callback)
     this._pendingConfirmations.set(toolCallId, { source: 'live', request });
-    this._persistIdcRuntimeState();
 
     void this._resolveToolConfirmation(request);
   }
@@ -2741,22 +2259,6 @@ function _approvalResolutionToDecision(
   }
 }
 
-function normalizeActivationName(value: string, fallback: string): string {
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : fallback;
-}
-
-function hasPersistedIdcActivationState(
-  state: import('../workspace').IdcRuntimeRestoreState,
-): boolean {
-  return Boolean(
-    state.run.active ||
-    state.run.lastCompleted ||
-    state.stage.current ||
-    state.stage.transitions.length > 0,
-  );
-}
-
 function createEmptySkillProvider(): ISkillProvider {
   return {
     listSkills: () => [],
@@ -2862,215 +2364,6 @@ function getChatMessageContent(message: ChatMessage): string {
   return message.content
     .flatMap((part) => ('text' in part && typeof part.text === 'string' ? [part.text] : []))
     .join('\n');
-}
-
-function snapshotIdcRun(run: IdcRun): import('../workspace').PersistedIdcRunSnapshot {
-  const lastRound = run.rounds.length > 0 ? run.rounds[run.rounds.length - 1] : undefined;
-
-  return {
-    id: run.id,
-    runKind: run.runKind,
-    status: run.status,
-    createdAt: run.createdAt,
-    ...(run.startedAt !== undefined ? { startedAt: run.startedAt } : {}),
-    ...(run.endedAt !== undefined ? { endedAt: run.endedAt } : {}),
-    roundCount: run.rounds.length,
-    ...(run.rounds.length > 0 ? { rounds: [...run.rounds] } : {}),
-    ...(lastRound ? { lastRound } : {}),
-    ...(run.artifactBindings && run.artifactBindings.length > 0
-      ? {
-          artifacts: run.artifactBindings.map((binding) => ({
-            kind: binding.kind,
-            artifactId: binding.artifactId,
-            path: binding.path,
-            updatedAt: binding.updatedAt,
-            ...(binding.stale === true ? { stale: true } : {}),
-          })),
-        }
-      : {}),
-    ...(run.task
-      ? {
-          task: {
-            id: run.task.id,
-            counts: countTaskStatuses(run.task.items),
-          },
-        }
-      : {}),
-    ...(run.error
-      ? {
-          error: {
-            code: run.error.code,
-            message: run.error.message,
-            ...(run.error.cause !== undefined
-              ? { cause: toSerializableErrorCause(run.error.cause) }
-              : {}),
-          },
-        }
-      : {}),
-  };
-}
-
-function snapshotPendingApproval(
-  request: ToolConfirmationRequest,
-): import('../workspace').PendingApprovalSnapshot {
-  return {
-    channel: 'permission',
-    confirmationToken: request.confirmationToken,
-    toolCallId: request.toolCall.id,
-    toolName: request.toolCall.name,
-    action: request.action,
-    description: request.description,
-    details: stripRestoredPendingApprovalDetails(request.details),
-  };
-}
-
-function getRestoredToolArguments(details: Record<string, unknown>): Record<string, unknown> {
-  const raw = details['arguments'];
-  return typeof raw === 'object' && raw !== null ? { ...(raw as Record<string, unknown>) } : {};
-}
-
-function stripRestoredPendingApprovalDetails(
-  details: Record<string, unknown>,
-): Record<string, unknown> {
-  const next = { ...details };
-  delete next['restoredFromRuntimeState'];
-  delete next['restoredSnapshotUpdatedAt'];
-  return next;
-}
-
-function restoreIdcRunFromSnapshot(
-  snapshot: import('../workspace').PersistedIdcRunSnapshot | undefined,
-  records: readonly AnyArtifactRecord[],
-  options: {
-    markMissingArtifactsStale?: boolean;
-  } = {},
-): IdcRun | null {
-  if (!snapshot) {
-    return null;
-  }
-  const runKind = snapshot.runKind;
-  if (!runKind) {
-    return null;
-  }
-
-  const artifactBindings = mergeRestoredArtifactBindings(snapshot.artifacts, records, options);
-  const draftRecord = records.find((record) => record.kind === 'draft');
-  const planRecord = records.find((record) => record.kind === 'plan');
-  const taskRecord = records.find((record) => record.kind === 'task');
-
-  return {
-    id: snapshot.id,
-    runKind,
-    status: snapshot.status,
-    createdAt: snapshot.createdAt,
-    ...(snapshot.startedAt !== undefined ? { startedAt: snapshot.startedAt } : {}),
-    ...(snapshot.endedAt !== undefined ? { endedAt: snapshot.endedAt } : {}),
-    rounds:
-      snapshot.rounds && snapshot.rounds.length > 0
-        ? [...snapshot.rounds]
-        : snapshot.lastRound
-          ? [snapshot.lastRound]
-          : [],
-    ...(artifactBindings.length > 0 ? { artifactBindings } : {}),
-    ...(draftRecord?.kind === 'draft' ? { draft: draftRecord.value } : {}),
-    ...(planRecord?.kind === 'plan' ? { plan: planRecord.value } : {}),
-    ...(taskRecord?.kind === 'task' ? { task: taskRecord.value } : {}),
-    ...(snapshot.error ? { error: { ...snapshot.error } } : {}),
-  };
-}
-
-function mergeRestoredArtifactBindings(
-  snapshotBindings: import('../workspace').PersistedIdcRunSnapshot['artifacts'] | undefined,
-  records: readonly AnyArtifactRecord[],
-  options: {
-    markMissingArtifactsStale?: boolean;
-  } = {},
-): readonly NonNullable<IdcRun['artifactBindings']>[number][] {
-  const merged: NonNullable<IdcRun['artifactBindings']>[number][] = [];
-  const recordKinds = new Set(records.map((record) => record.kind));
-
-  for (const binding of snapshotBindings ?? []) {
-    upsertRestoredArtifactBinding(
-      merged,
-      options.markMissingArtifactsStale === true && !recordKinds.has(binding.kind)
-        ? { ...binding, stale: true }
-        : binding,
-    );
-  }
-  for (const record of records) {
-    upsertRestoredArtifactBinding(merged, toIdcRunArtifactBinding(record));
-  }
-
-  return merged;
-}
-
-function upsertRestoredArtifactBinding(
-  target: NonNullable<IdcRun['artifactBindings']>[number][],
-  binding: NonNullable<IdcRun['artifactBindings']>[number],
-): void {
-  const existingIndex = target.findIndex((entry) => entry.kind === binding.kind);
-  if (existingIndex >= 0) {
-    target.splice(existingIndex, 1, binding);
-  } else {
-    target.push(binding);
-  }
-
-  target.sort(
-    (left, right) => restoredArtifactKindOrder(left.kind) - restoredArtifactKindOrder(right.kind),
-  );
-}
-
-function restoredArtifactKindOrder(
-  kind: NonNullable<IdcRun['artifactBindings']>[number]['kind'],
-): number {
-  switch (kind) {
-    case 'draft':
-      return 0;
-    case 'plan':
-      return 1;
-    case 'task':
-      return 2;
-  }
-}
-
-function isActiveRunStatus(status: IdcRun['status']): status is 'pending' | 'running' {
-  return status === 'pending' || status === 'running';
-}
-
-function isTerminalRunStatus(
-  status: IdcRun['status'],
-): status is 'completed' | 'aborted' | 'failed' {
-  return status === 'completed' || status === 'aborted' || status === 'failed';
-}
-
-function countTaskStatuses(
-  items: NonNullable<IdcRun['task']>['items'],
-): NonNullable<import('../workspace').PersistedIdcRunSnapshot['task']>['counts'] {
-  const counts = {
-    pending: 0,
-    in_progress: 0,
-    completed: 0,
-    failed: 0,
-  };
-
-  for (const item of items) {
-    switch (item.status) {
-      case 'pending':
-        counts.pending += 1;
-        break;
-      case 'in_progress':
-        counts.in_progress += 1;
-        break;
-      case 'completed':
-        counts.completed += 1;
-        break;
-      case 'failed':
-        counts.failed += 1;
-        break;
-    }
-  }
-
-  return counts;
 }
 
 function createProviderCardProjectConfig(

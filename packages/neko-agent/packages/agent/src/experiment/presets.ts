@@ -113,15 +113,15 @@ export const NO_THINKING: ExperimentVariant = {
   toggles: { thinkingBudget: 0 },
 };
 
-export const NO_IDC_WORKFLOW: ExperimentVariant = {
-  name: 'no-idc-workflow',
-  description: 'Unified IDC workflow envelope disabled',
-  toggles: { idcWorkflow: false },
+export const NO_CREATION_PROFILE_GUIDANCE: ExperimentVariant = {
+  name: 'no-creation-profile-guidance',
+  description: 'Built-in creation profile guidance disabled',
+  toggles: { creationProfileGuidance: false },
 };
 
 export const NO_PLAN_MODE_PROFILE: ExperimentVariant = {
   name: 'no-plan-mode-profile',
-  description: 'PlanMode workflow profile hints disabled',
+  description: 'PlanMode prompt profile hints disabled',
   toggles: { planModeProfile: false },
 };
 
@@ -316,7 +316,7 @@ export function createStandardAblationSuite(): ExperimentVariant[] {
     NO_MEMORY_RECALL,
     NO_TRAITS,
     NO_THINKING,
-    NO_IDC_WORKFLOW,
+    NO_CREATION_PROFILE_GUIDANCE,
     NO_PLAN_MODE_PROFILE,
     NO_CAPABILITY_PROTOCOL,
     NO_PROMPT_SCHEMA_GENERATOR,

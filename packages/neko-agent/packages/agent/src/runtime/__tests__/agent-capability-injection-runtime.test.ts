@@ -87,10 +87,10 @@ describe('agent-capability-injection-runtime', () => {
       },
       promptFragments: [{ id: '', content: '' }],
       slashCommands: [{ id: '', name: '' }],
-      workflowFragments: [{ id: '' }],
+      promptChainFragments: [{ id: '' }],
       hostRequirements: [{ host: 'vscode' }],
       permissionRequirements: [{ scope: '' }],
-      workflowNodeRequirements: [{}],
+      creationStageRequirements: [{}],
     });
 
     expect(runtime.getDiagnostics('registration').map((item) => item.reason)).toEqual([
@@ -102,7 +102,7 @@ describe('agent-capability-injection-runtime', () => {
       'missing-required-field',
       'missing-required-field',
       'missing-required-field',
-      'empty-workflow-node-requirement',
+      'empty-creation-stage-requirement',
     ]);
     expect(
       validateCapabilityContribution({
@@ -655,7 +655,7 @@ describe('agent-capability-injection-runtime', () => {
     );
   });
 
-  it('reports deterministic command, tool, prompt, and workflow collisions at registration', () => {
+  it('reports deterministic command, tool, prompt, and prompt-chain collisions at registration', () => {
     const runtime = createAgentCapabilityInjectionRuntime();
 
     runtime.registerMany([
@@ -669,7 +669,7 @@ describe('agent-capability-injection-runtime', () => {
         slashCommands: [{ id: 'cmd-review', name: 'review' }],
         allowedTools: ['read_file'],
         promptFragments: [{ id: 'fragment:review', content: 'review' }],
-        workflowFragments: [{ id: 'workflow:review' }],
+        promptChainFragments: [{ id: 'prompt-chain:review' }],
       },
       {
         identity: {
@@ -681,7 +681,7 @@ describe('agent-capability-injection-runtime', () => {
         slashCommands: [{ id: 'cmd-review-market', name: 'review' }],
         allowedTools: ['read_file'],
         promptFragments: [{ id: 'fragment:review', content: 'review 2' }],
-        workflowFragments: [{ id: 'workflow:review' }],
+        promptChainFragments: [{ id: 'prompt-chain:review' }],
       },
     ]);
 
@@ -689,7 +689,7 @@ describe('agent-capability-injection-runtime', () => {
       'slash-command-collision',
       'tool-collision',
       'prompt-fragment-collision',
-      'workflow-fragment-collision',
+      'prompt-chain-fragment-collision',
     ]);
     expect(runtime.getDiagnostics('registration')[0]?.metadata).toMatchObject({
       winner: 'builtin:review',
@@ -755,7 +755,7 @@ describe('agent-capability-injection-runtime', () => {
     ).toEqual([]);
   });
 
-  it('skips injection by workflow node and permission policy before prompt/tool injection', () => {
+  it('skips injection by creation stage and permission policy before prompt/tool injection', () => {
     const runtime = createAgentCapabilityInjectionRuntime();
     runtime.registerMany([
       {
@@ -765,7 +765,7 @@ describe('agent-capability-injection-runtime', () => {
           sourceId: '@neko/apply-only',
           trustLevel: 'community',
         },
-        workflowNodeRequirements: [{ stages: ['apply'] }],
+        creationStageRequirements: [{ stageIds: ['apply'] }],
         promptFragments: [{ id: 'apply', content: 'apply prompt' }],
       },
       {
@@ -792,20 +792,20 @@ describe('agent-capability-injection-runtime', () => {
 
     const skipped = runtime.inject({
       host: 'vscode',
-      workflowStage: 'draft',
+      creationStageId: 'draft',
       permissionPolicy: { allowedScopes: ['workspace.write'] },
     });
 
     expect(skipped.contributions.map((item) => item.identity.id)).toEqual(['skill:write']);
     expect(skipped.allowedTools).toEqual(['write_file']);
     expect(skipped.diagnostics.map((item) => item.reason)).toEqual([
-      'workflow-node-requirement',
+      'creation-stage-requirement',
       'permission-policy',
     ]);
 
     const approved = runtime.inject({
       host: 'vscode',
-      workflowStage: 'apply',
+      creationStageId: 'apply',
       permissionPolicy: {
         allowedScopes: ['workspace.write', 'workspace.delete'],
         allowIrreversible: true,
@@ -929,7 +929,7 @@ describe('agent-capability-injection-runtime', () => {
       permissionRequirements: [{ scope: 'workspace.write', mode: 'write', approvalRequired: true }],
       metadata: {
         unknownFields: ['futurePrompt'],
-        unsupportedFields: ['workflowFragments.experimental'],
+        unsupportedFields: ['promptChainFragments.experimental'],
       },
     });
 
@@ -954,7 +954,7 @@ describe('agent-capability-injection-runtime', () => {
       expect.arrayContaining([
         expect.objectContaining({ field: 'futurePrompt', reason: 'unknown-field' }),
         expect.objectContaining({
-          field: 'workflowFragments.experimental',
+          field: 'promptChainFragments.experimental',
           reason: 'unsupported-field',
         }),
         expect.objectContaining({ reason: 'policy-skipped' }),
@@ -1002,7 +1002,7 @@ describe('agent-capability-injection-runtime', () => {
       hash: 'schema-hash',
     });
     runtime.recordTelemetryEvent({
-      kind: 'workflow-fragment-change',
+      kind: 'prompt-chain-fragment-change',
       contributionId: installed.identity.id,
       source: installed.identity.source,
       sourceId: installed.identity.sourceId,
@@ -1033,7 +1033,7 @@ describe('agent-capability-injection-runtime', () => {
         'skill-install',
         'skill-update',
         'schema-change',
-        'workflow-fragment-change',
+        'prompt-chain-fragment-change',
         'provider-card-change',
         'skill-remove',
       ]),

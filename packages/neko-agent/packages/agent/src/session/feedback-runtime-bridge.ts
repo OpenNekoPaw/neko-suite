@@ -1,6 +1,6 @@
 import type { AgentTraceContext } from '@neko/shared';
 import { deriveAgentTraceContext, withAgentTrace } from '@neko/shared';
-import type { IdcRun, IdcStage } from '@neko-agent/types';
+import type { IdcStage } from '@neko-agent/types';
 import type { IControlPlane, StageTransitionGuidance } from '../control-plane';
 import type {
   FeedbackCycle,
@@ -17,7 +17,10 @@ export interface FeedbackRuntimeFeedbackPort {
 export interface FeedbackRuntimeControlPort {
   readonly getControlPlane: () => IControlPlane | null;
   readonly getCurrentStage: () => IdcStage | null;
-  readonly getActiveRun: () => IdcRun | null;
+  readonly getActiveArtifactScope: () => {
+    readonly id: string;
+    readonly startedAt?: number;
+  } | null;
   readonly recordStageTransition: (input: {
     readonly cycle: FeedbackCycle;
     readonly decision: FeedbackDecision;
@@ -47,12 +50,16 @@ export interface FeedbackRuntimeBridgeOptions {
   readonly ports: FeedbackRuntimeBridgePorts;
 }
 
-type PersistedFeedbackGuidanceSnapshot = import('../workspace').PersistedFeedbackGuidanceSnapshot;
+interface FeedbackGuidanceState {
+  readonly content: string;
+  readonly sourceArtifactScopeId?: string;
+  readonly sourceArtifactScopeStartedAt?: number;
+}
 
 export class FeedbackRuntimeBridge {
   private readonly _options: FeedbackRuntimeBridgeOptions;
   private _cycles: FeedbackCycle[] = [];
-  private _guidanceState: PersistedFeedbackGuidanceSnapshot | null = null;
+  private _guidanceState: FeedbackGuidanceState | null = null;
 
   constructor(options: FeedbackRuntimeBridgeOptions) {
     this._options = options;
@@ -60,10 +67,6 @@ export class FeedbackRuntimeBridge {
 
   get cycles(): readonly FeedbackCycle[] {
     return this._cycles;
-  }
-
-  get guidanceSnapshot(): PersistedFeedbackGuidanceSnapshot | null {
-    return this._guidanceState ? { ...this._guidanceState } : null;
   }
 
   hasGuidance(): boolean {
@@ -79,32 +82,14 @@ export class FeedbackRuntimeBridge {
     this.setGuidanceContent(null);
   }
 
-  restore(state: import('../workspace').IdcRuntimeRestoreState['feedback']): void {
-    if (this._options.ports.feedback.isRecoveryGuidanceDisabled()) {
-      this._applyGuidanceSnapshot(null);
-      this._options.ports.prompt.syncSystemPrompt();
-      return;
-    }
-
-    const activeRun = this._options.ports.control.getActiveRun();
-    if (!shouldRestorePersistedFeedbackGuidance(state.pendingGuidance, activeRun)) {
-      this._applyGuidanceSnapshot(null);
-      this._options.ports.prompt.syncSystemPrompt();
-      return;
-    }
-
-    this._applyGuidanceSnapshot(state.pendingGuidance);
-    this._options.ports.prompt.syncSystemPrompt();
-  }
-
   async captureCycle(trace?: AgentTraceContext): Promise<boolean> {
     const coordinator = this._options.ports.feedback.getCoordinator();
     if (!coordinator) {
       return false;
     }
 
-    const activeRun = this._options.ports.control.getActiveRun();
-    const activeRunId = activeRun?.id ?? null;
+    const activeArtifactScope = this._options.ports.control.getActiveArtifactScope();
+    const activeRunId = activeArtifactScope?.id ?? null;
     const feedbackTrace = deriveAgentTraceContext(trace, {
       ...(activeRunId ? { runId: activeRunId } : {}),
       phase: 'feedback',
@@ -151,7 +136,7 @@ export class FeedbackRuntimeBridge {
 
   setGuidanceContent(
     content: string | null,
-    sourceRun?: Pick<IdcRun, 'id' | 'startedAt'> | null,
+    sourceRun?: { readonly id: string; readonly startedAt?: number } | null,
   ): void {
     if (this._options.ports.feedback.isRecoveryGuidanceDisabled() && content !== null) {
       this._applyGuidanceSnapshot(null);
@@ -166,8 +151,10 @@ export class FeedbackRuntimeBridge {
 
     this._applyGuidanceSnapshot({
       content: trimmed,
-      ...(sourceRun?.id ? { sourceRunId: sourceRun.id } : {}),
-      ...(sourceRun?.startedAt !== undefined ? { sourceRunStartedAt: sourceRun.startedAt } : {}),
+      ...(sourceRun?.id ? { sourceArtifactScopeId: sourceRun.id } : {}),
+      ...(sourceRun?.startedAt !== undefined
+        ? { sourceArtifactScopeStartedAt: sourceRun.startedAt }
+        : {}),
     });
   }
 
@@ -206,7 +193,7 @@ export class FeedbackRuntimeBridge {
       return;
     }
 
-    const activeRun = this._options.ports.control.getActiveRun();
+    const activeRun = this._options.ports.control.getActiveArtifactScope();
     const guidanceBlocks: string[] = [];
     let requestedClear = false;
     for (const guidance of stageGuidance) {
@@ -235,7 +222,7 @@ export class FeedbackRuntimeBridge {
     }
   }
 
-  private _applyGuidanceSnapshot(snapshot: PersistedFeedbackGuidanceSnapshot | null): void {
+  private _applyGuidanceSnapshot(snapshot: FeedbackGuidanceState | null): void {
     this._guidanceState = snapshot ? { ...snapshot } : null;
     this._options.ports.prompt.setGuidanceContent(snapshot?.content ?? null);
   }
@@ -250,32 +237,12 @@ function formatStageTransitionGuidance(guidance: StageTransitionGuidance): strin
 
 function formatStageTransitionAction(guidance: StageTransitionGuidance, fromStage: string): string {
   if (guidance.transitionAction === 'restart-run') {
-    return `restart the IDC run from ${fromStage}`;
+    return `restart staged creation from ${fromStage}`;
   }
   if (guidance.transitionAction === 'regress-to') {
     return `regress from ${fromStage} to ${guidance.toStageId ?? 'an earlier stage'}`;
   }
   return `retry ${guidance.toStageId ?? fromStage}`;
-}
-
-function shouldRestorePersistedFeedbackGuidance(
-  guidance: PersistedFeedbackGuidanceSnapshot | null,
-  activeRun: Pick<IdcRun, 'id' | 'startedAt'> | null,
-): boolean {
-  if (!guidance) {
-    return false;
-  }
-  if (!guidance.sourceRunId) {
-    return true;
-  }
-  if (!activeRun || activeRun.id !== guidance.sourceRunId) {
-    return false;
-  }
-  if (guidance.sourceRunStartedAt === undefined) {
-    return true;
-  }
-
-  return activeRun.startedAt === guidance.sourceRunStartedAt;
 }
 
 function uniqueStrings(values: readonly string[]): string[] {

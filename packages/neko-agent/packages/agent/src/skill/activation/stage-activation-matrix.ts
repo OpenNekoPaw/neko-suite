@@ -31,7 +31,7 @@ import type { IdcStage } from '@neko-agent/types';
 // =============================================================================
 
 /**
- * L2 execution modes for IDC stage activation.
+ * L2 execution modes for built-in creation stage activation.
  */
 export type StageMode = 'plan' | 'ask' | 'auto';
 

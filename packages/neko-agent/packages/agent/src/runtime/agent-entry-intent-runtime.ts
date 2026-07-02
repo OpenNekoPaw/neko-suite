@@ -1,11 +1,5 @@
 import type { AgentContextPayload, AgentContextType } from '@neko/shared';
 
-export interface AgentCreationQuickStartOption {
-  readonly label: string;
-  readonly description: string;
-  readonly value: string;
-}
-
 export interface BuildAgentCreationMessageInput {
   readonly intent: string;
   readonly sourceFilePath?: string;
@@ -46,29 +40,6 @@ export const AGENT_DOCUMENT_CONTEXT_INTENTS = {
 
 export const AGENT_RETRY_CREATION_MESSAGE = 'Retry the failed scenes from my last creation run';
 
-const CREATION_QUICK_START_OPTIONS: readonly AgentCreationQuickStartOption[] = [
-  {
-    label: '$(file-text) Script → Video',
-    description: 'Convert a screenplay to video',
-    value: 'Convert my script to video',
-  },
-  {
-    label: '$(file-pdf) Document → Video',
-    description: 'Turn a document into video',
-    value: 'Create a video from my document',
-  },
-  {
-    label: '$(image) Images → Video',
-    description: 'Generate video from visual concepts',
-    value: 'Create a video from these visual concepts',
-  },
-  {
-    label: '$(zap) Quick Generate',
-    description: 'Describe scenes to generate',
-    value: 'Generate videos for these scenes',
-  },
-];
-
 const CREATION_INTENT_BY_EXTENSION: Readonly<Record<string, string>> = {
   fountain: 'Convert this screenplay to video',
   nks: 'Convert this screenplay to video',
@@ -80,10 +51,6 @@ const CREATION_INTENT_BY_EXTENSION: Readonly<Record<string, string>> = {
 };
 
 const IMAGE_FILE_EXTENSION_RE = /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i;
-
-export function getAgentCreationQuickStartOptions(): AgentCreationQuickStartOption[] {
-  return CREATION_QUICK_START_OPTIONS.map((option) => ({ ...option }));
-}
 
 export function buildAgentCreationMessage(input: BuildAgentCreationMessageInput): string {
   if (!input.sourceFilePath) {

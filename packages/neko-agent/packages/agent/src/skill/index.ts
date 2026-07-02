@@ -95,7 +95,7 @@ export {
   type BuiltinSkillLocale,
   type BuiltinSkillOptions,
   type LocalizedBuiltinSkillContent,
-  // IDC stage persona skills
+  // Creation stage persona skills
   creationPersonaSkill,
   executionPersonaSkill,
   iterationPersonaSkill,
@@ -104,7 +104,7 @@ export {
   registerBuiltinToolGroups,
 } from './builtins';
 
-// Stage Tracker (IDC stage transitions — replaces FlowSwitcher)
+// Stage Tracker (creation stage transitions — replaces FlowSwitcher)
 export {
   StageTracker,
   createStageTracker,

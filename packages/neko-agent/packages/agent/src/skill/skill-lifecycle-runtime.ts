@@ -400,12 +400,12 @@ export function defaultDeactivationPolicy(
   slot: SkillLifecycleSlot,
   owner: SkillLifecycleOwner,
 ): SkillLifecycleDeactivationPolicy {
-  if (slot === 'stagePersona' && owner === 'idc') {
+  if (slot === 'stagePersona' && owner === 'creation-profile') {
     return {
       clearableByUser: false,
       clearableByAgent: false,
       clearableByRuntime: true,
-      lockedReason: 'IDC stage persona is cleared when its owning stage exits',
+      lockedReason: 'Creation stage persona is cleared when its owning stage exits',
     };
   }
 

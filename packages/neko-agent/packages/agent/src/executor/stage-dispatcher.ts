@@ -1,5 +1,5 @@
 /**
- * Stage Dispatcher — runtime guard that the IDC stage DAG is respected.
+ * Stage Dispatcher — runtime guard that the built-in creation stage DAG is respected.
  *
  * See: docs/architecture/agent-unified-workflow.md §4
  *
@@ -46,8 +46,7 @@ export interface StageDispatchViolation {
 }
 
 export type StageDispatchValidation =
-  | { ok: true }
-  | { ok: false; violations: readonly StageDispatchViolation[] };
+  { ok: true } | { ok: false; violations: readonly StageDispatchViolation[] };
 
 // =============================================================================
 // Validator
