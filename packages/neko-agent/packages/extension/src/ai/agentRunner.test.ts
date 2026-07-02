@@ -321,7 +321,7 @@ function buildMockSessionConfig(
     ...(config.perceptionClients ? { perceptionClients: config.perceptionClients } : {}),
     ...(config.onConfirmTool ? { onConfirmTool: config.onConfirmTool } : {}),
     runtime: {
-      workflowRuntime: {
+      creationGuidance: {
         ...(capabilityRuntime?.skillRegistry || capabilityRuntime?.skillService
           ? {
               stageTracking: {
@@ -335,7 +335,7 @@ function buildMockSessionConfig(
             }
           : {}),
         ...(config.taskManager
-          ? { idcTaskProjection: { syncTask: vi.fn(), clearRun: vi.fn() } }
+          ? { creationTaskProjection: { syncTask: vi.fn(), clearRun: vi.fn() } }
           : {}),
       },
       capabilityRuntime: {
@@ -489,7 +489,7 @@ describe('AgentRunner', () => {
               skillService,
               skillRegistry,
             }),
-            workflowRuntime: expect.objectContaining({
+            creationGuidance: expect.objectContaining({
               stageTracking: expect.objectContaining({
                 skillRegistry,
                 skillService,
@@ -642,8 +642,8 @@ describe('AgentRunner', () => {
       expect(latestCreateSessionConfig).toEqual(
         expect.objectContaining({
           runtime: expect.objectContaining({
-            workflowRuntime: expect.objectContaining({
-              idcTaskProjection: expect.objectContaining({
+            creationGuidance: expect.objectContaining({
+              creationTaskProjection: expect.objectContaining({
                 syncTask: expect.any(Function),
                 clearRun: expect.any(Function),
               }),

@@ -205,9 +205,9 @@ describe('MessageList auto-scroll lifecycle', () => {
                 id: 'record-1',
                 skillName: 'creation-persona',
                 slot: 'stagePersona',
-                owner: 'idc',
+                owner: 'creation-profile',
                 clearable: false,
-                lockedReason: 'IDC stage persona is cleared when its owning stage exits',
+                lockedReason: 'Creation stage persona is cleared when its owning stage exits',
               },
             ],
           }}
@@ -217,14 +217,14 @@ describe('MessageList auto-scroll lifecycle', () => {
     );
 
     expect(screen.getByText('阶段人设').getAttribute('title')).toBe('stagePersona');
-    expect(screen.getByText('IDC 阶段').getAttribute('title')).toBe('idc');
-    expect(screen.getByText('随所属 IDC 阶段退出自动清理').getAttribute('title')).toBe(
-      'IDC stage persona is cleared when its owning stage exits',
+    expect(screen.getByText('创作 Profile').getAttribute('title')).toBe('creation-profile');
+    expect(screen.getByText('随所属创作阶段退出自动清理').getAttribute('title')).toBe(
+      'Creation stage persona is cleared when its owning stage exits',
     );
     expect(screen.queryByText('stagePersona')).toBeNull();
-    expect(screen.queryByText('idc')).toBeNull();
+    expect(screen.queryByText('creation-profile')).toBeNull();
     expect(
-      screen.queryByText('IDC stage persona is cleared when its owning stage exits'),
+      screen.queryByText('Creation stage persona is cleared when its owning stage exits'),
     ).toBeNull();
   });
 

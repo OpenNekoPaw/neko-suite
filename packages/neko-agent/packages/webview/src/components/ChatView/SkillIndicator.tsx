@@ -134,6 +134,6 @@ function projectSkillLockedReason(t: SkillTranslation, reason: string): string {
 }
 
 const SKILL_LOCKED_REASON_KEY_BY_MESSAGE: Record<string, string> = {
-  'IDC stage persona is cleared when its owning stage exits':
-    'chat.skill.lockedReason.idcStagePersonaStageExit',
+  'Creation stage persona is cleared when its owning stage exits':
+    'chat.skill.lockedReason.creationStagePersonaStageExit',
 };

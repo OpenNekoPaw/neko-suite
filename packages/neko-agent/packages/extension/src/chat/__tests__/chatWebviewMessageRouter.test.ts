@@ -76,9 +76,6 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       handleOpenUrl: vi.fn(),
       handleDownloadSvg: vi.fn(),
     } as any,
-    idcWorkflowHandler: {
-      handleControl: vi.fn(),
-    } as any,
     planModeHandler: {
       handlePlanApprove: vi.fn(),
       handlePlanReject: vi.fn(),
@@ -197,29 +194,6 @@ describe('handleChatWebviewMessage', () => {
     expect(deps.messages?.handleUserMessage).toHaveBeenCalledTimes(1);
     expect(deps.slashCommandHandler.handleCommand).not.toHaveBeenCalled();
     expect(deps.taskHandler.sendTasks).not.toHaveBeenCalled();
-  });
-
-  it('routes explicit IDC workflow controls without touching settings', () => {
-    const deps = createDeps();
-
-    handleChatWebviewMessage(
-      {
-        type: 'controlIdcWorkflow',
-        conversationId: 'conv-1',
-        action: 'start',
-        runKind: 'idc',
-        reason: 'toolbar',
-      },
-      deps,
-    );
-
-    expect(deps.idcWorkflowHandler.handleControl).toHaveBeenCalledWith(deps.webview, {
-      conversationId: 'conv-1',
-      action: 'start',
-      runKind: 'idc',
-      reason: 'toolbar',
-    });
-    expect(deps.settingsHandler.handleUpdateSettings).not.toHaveBeenCalled();
   });
 
   it('routes message queue commands with explicit conversation scope', () => {

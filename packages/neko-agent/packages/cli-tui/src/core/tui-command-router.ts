@@ -147,17 +147,6 @@ export interface TuiQueuePorts {
   readonly edit: (queueItemId: string, content: string) => AgentQueuedMessageItem;
 }
 
-export type TuiIdcWorkflowAction = 'start' | 'resume' | 'stop';
-
-export interface TuiWorkflowPorts {
-  readonly controlIdcWorkflow?: (input: {
-    readonly action: TuiIdcWorkflowAction;
-    readonly runKind?: string;
-    readonly runId?: string;
-    readonly reason?: string;
-  }) => string | void | Promise<string | void>;
-}
-
 export interface TuiMcpServerSnapshot {
   readonly id: string;
   readonly name: string;
@@ -206,7 +195,6 @@ export interface TuiCommandRouterPorts {
   readonly skill?: TuiSkillPorts;
   readonly context?: TuiContextPorts;
   readonly queue?: TuiQueuePorts;
-  readonly workflow?: TuiWorkflowPorts;
   readonly mcp?: TuiMcpPorts;
   readonly capability?: TuiCapabilityPorts;
   readonly artifact?: TuiArtifactPorts;
@@ -266,9 +254,6 @@ export async function handleTuiControlCommand(
 
     case 'skill':
       return handleSkill(commandText, context);
-
-    case 'idc':
-      return handleIdcWorkflow(commandText, context);
 
     case 'status':
     case 's':
@@ -1289,41 +1274,6 @@ async function handleSkill(
   return handled({ ...(ok ? { output: `Skill activated: ${selectedId}` } : {}) });
 }
 
-async function handleIdcWorkflow(
-  input: string,
-  context: TuiCommandRouterContext,
-): Promise<TuiCommandRouterResult> {
-  const workflowPort = context.ports.workflow?.controlIdcWorkflow;
-  if (!workflowPort) {
-    return handled({ error: 'IDC workflow controls are not available for this session.' });
-  }
-
-  const args = input.slice('/idc'.length).trim().split(/\s+/).filter(Boolean);
-  const action = args[0]?.toLowerCase();
-  if (!action) {
-    return handled({ output: 'Usage: /idc start [runKind] | /idc resume [runId] | /idc stop' });
-  }
-
-  if (!isTuiIdcWorkflowAction(action)) {
-    return handled({
-      error: `Unknown IDC workflow action: ${action}. Usage: /idc start [runKind] | /idc resume [runId] | /idc stop`,
-    });
-  }
-
-  const value = args[1];
-  const output = await workflowPort({
-    action,
-    ...(action === 'start' && value ? { runKind: value } : {}),
-    ...(action === 'resume' && value ? { runId: value } : {}),
-    reason: `TUI /idc ${action}`,
-  });
-  return handled({ output: output ?? `IDC workflow ${action} requested.` });
-}
-
-function isTuiIdcWorkflowAction(value: string): value is TuiIdcWorkflowAction {
-  return value === 'start' || value === 'resume' || value === 'stop';
-}
-
 function handleQueue(input: string, context: TuiCommandRouterContext): TuiCommandRouterResult {
   const queuePorts = context.ports.queue;
   if (!queuePorts) {
@@ -1838,7 +1788,7 @@ function parseLifecycleSlot(value: string): SkillLifecycleSlot | null {
     case 'domainSkill':
     case 'referenceSkill':
     case 'ephemeralSkill':
-    case 'workflowSkill':
+    case 'promptChainSkill':
       return value;
     default:
       return null;

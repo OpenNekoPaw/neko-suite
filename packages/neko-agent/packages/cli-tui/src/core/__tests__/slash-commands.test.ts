@@ -52,10 +52,10 @@ describe('handleSlashCommand', () => {
       args: 'fix bug',
     });
     expect(result.executionOverrides?.metadata).toEqual({
-      idc: {
+      agentCreation: {
         entrySignal: 'prompt-chain-skill',
         taskShape: 'multi-step',
-        runKind: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
+        creationKind: 'skill:%E5%89%AA%E8%BE%91%3A%20%E5%BF%AB%E9%80%9F%20workflow',
       },
     });
   });
@@ -152,10 +152,10 @@ describe('handleSkillInvocation', () => {
         agentPrompt: 'changed files',
         executionOverrides: {
           metadata: {
-            idc: {
+            agentCreation: {
               entrySignal: 'prompt-chain-skill',
               taskShape: 'multi-step',
-              runKind: 'skill:quality-review',
+              creationKind: 'skill:quality-review',
             },
           },
         },

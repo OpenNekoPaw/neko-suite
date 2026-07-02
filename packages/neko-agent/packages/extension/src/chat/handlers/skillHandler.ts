@@ -265,6 +265,6 @@ function isSkillLifecycleSlot(
     value === 'domainSkill' ||
     value === 'referenceSkill' ||
     value === 'ephemeralSkill' ||
-    value === 'workflowSkill'
+    value === 'promptChainSkill'
   );
 }

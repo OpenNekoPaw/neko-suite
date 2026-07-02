@@ -10,7 +10,6 @@
 
 import { getVSCodeAPI, postMessage as postRawMessage, type VSCodeAPI } from '@neko/shared/vscode';
 import type {
-  ControlIdcWorkflowAction,
   InvokeAgentCapabilityLifecycleWebviewMessage,
   RequestCanvasMarkdownHandoffWebviewMessage,
   PluginTransferPayload,
@@ -410,22 +409,6 @@ export const VSCodeMessages = {
    */
   invokeSkill: (skillName: string, args: string | undefined, conversationId: string) => {
     postWebviewMessage({ type: 'invokeSkill', skillName, args, conversationId });
-  },
-
-  /** Explicitly start, resume, or stop the IDC workflow for a conversation. */
-  controlIdcWorkflow: (
-    conversationId: string,
-    action: ControlIdcWorkflowAction,
-    options: { readonly runKind?: string; readonly runId?: string; readonly reason?: string } = {},
-  ) => {
-    postWebviewMessage({
-      type: 'controlIdcWorkflow',
-      conversationId,
-      action,
-      ...(options.runKind ? { runKind: options.runKind } : {}),
-      ...(options.runId ? { runId: options.runId } : {}),
-      ...(options.reason ? { reason: options.reason } : {}),
-    });
   },
 
   /**

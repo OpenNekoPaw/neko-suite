@@ -20,50 +20,6 @@ describe('handleTuiControlCommand', () => {
     expect(result.source).toBe('tui-router');
     expect(result.output).toBe('Plan mode enabled');
     expect(context.ports.mode?.setExecutionMode).toHaveBeenCalledWith('plan');
-    expect(context.ports.workflow?.controlIdcWorkflow).not.toHaveBeenCalled();
-  });
-
-  it('routes explicit IDC workflow commands through the workflow port', async () => {
-    const context = createContext();
-
-    const started = await handleTuiControlCommand('/idc start storyboard', context);
-    const resumed = await handleTuiControlCommand('/idc resume run-123', context);
-    const stopped = await handleTuiControlCommand('/idc stop', context);
-
-    expect(started.output).toBe('IDC workflow start accepted');
-    expect(resumed.output).toBe('IDC workflow resume accepted');
-    expect(stopped.output).toBe('IDC workflow stop accepted');
-    expect(context.ports.workflow?.controlIdcWorkflow).toHaveBeenNthCalledWith(1, {
-      action: 'start',
-      runKind: 'storyboard',
-      reason: 'TUI /idc start',
-    });
-    expect(context.ports.workflow?.controlIdcWorkflow).toHaveBeenNthCalledWith(2, {
-      action: 'resume',
-      runId: 'run-123',
-      reason: 'TUI /idc resume',
-    });
-    expect(context.ports.workflow?.controlIdcWorkflow).toHaveBeenNthCalledWith(3, {
-      action: 'stop',
-      reason: 'TUI /idc stop',
-    });
-    expect(context.ports.mode?.setExecutionMode).not.toHaveBeenCalled();
-  });
-
-  it('reports IDC workflow command diagnostics visibly', async () => {
-    const missingPortContext = createContext({ workflow: undefined });
-    const context = createContext();
-
-    const unavailable = await handleTuiControlCommand('/idc start', missingPortContext);
-    const usage = await handleTuiControlCommand('/idc', context);
-    const invalid = await handleTuiControlCommand('/idc pause', context);
-
-    expect(unavailable.error).toBe('IDC workflow controls are not available for this session.');
-    expect(usage.output).toBe('Usage: /idc start [runKind] | /idc resume [runId] | /idc stop');
-    expect(invalid.error).toBe(
-      'Unknown IDC workflow action: pause. Usage: /idc start [runKind] | /idc resume [runId] | /idc stop',
-    );
-    expect(context.ports.workflow?.controlIdcWorkflow).not.toHaveBeenCalled();
   });
 
   it('routes model switching through the model port', async () => {
@@ -564,7 +520,6 @@ function createContext(
     readonly mediaModelOptions?: readonly ChatModelOption[];
     readonly selectedMenuItem?: string | null;
     readonly queue?: ReturnType<typeof createTuiMessageQueue>;
-    readonly workflow?: TuiCommandRouterContext['ports']['workflow'];
     readonly mcp?: TuiCommandRouterContext['ports']['mcp'];
     readonly capability?: TuiCapabilityPorts;
     readonly artifact?: TuiArtifactPorts;
@@ -696,12 +651,6 @@ function createContext(
             edit: (queueItemId, content) => overrides.queue!.edit(queueItemId, content),
           }
         : undefined,
-      workflow:
-        overrides.workflow === undefined && 'workflow' in overrides
-          ? undefined
-          : (overrides.workflow ?? {
-              controlIdcWorkflow: vi.fn((input) => `IDC workflow ${input.action} accepted`),
-            }),
       mcp:
         overrides.mcp === undefined && 'mcp' in overrides
           ? undefined

@@ -10,7 +10,7 @@ import { useRef, useCallback, useEffect, useState } from 'react';
 import {
   MCPManager,
   createAllMCPTools,
-  createPlanModeIdcMetadata,
+  createPlanModeCreationMetadata,
   createFileProjectMemoryManager,
   createSkillService,
   createNodeSkillLoader,
@@ -20,7 +20,7 @@ import {
   getBuiltinSkills,
   createInputProcessor,
   createCoreTools,
-  mergeIdcExecutionMetadata,
+  mergeCreationExecutionMetadata,
   ProviderCardRegistry,
   type IAgentSession,
   type InputProcessor,
@@ -43,18 +43,13 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CLIConfig } from '../core/types';
 import type { ExecutionMode } from '../types/state';
-import {
-  createAgentCapabilityActivationIntent,
-  type AgentCapabilityProvider,
-  type IService,
-} from '@neko/shared';
+import { type AgentCapabilityProvider, type IService } from '@neko/shared';
 import { getProviderModels, updateDefaultModel } from '../core/config';
 import type {
   TuiCapabilityPorts,
   TuiMcpServerSnapshot,
   TuiModelIdentity,
   TuiParameterValidationResult,
-  TuiWorkflowPorts,
 } from '../core/tui-command-router';
 import { createCLIPlatform, createCLITaskManager } from '../core/platform-bootstrap';
 import { createCliAgentRuntime, createCliToolGroupRegistry } from '../core/runtime-bootstrap';
@@ -173,8 +168,6 @@ export interface AgentSessionHandle {
   readonly listCapabilityTools: TuiCapabilityPorts['listTools'];
   /** Terminal-safe `@` reference contributors loaded from capability providers. */
   readonly getReferenceContributors: () => TuiCapabilityLoaderResult['referenceContributors'];
-  /** Explicit IDC workflow controls for /idc start|resume|stop. */
-  readonly controlIdcWorkflow: NonNullable<TuiWorkflowPorts['controlIdcWorkflow']>;
   /** Slash command catalog for TUI autocomplete */
   readonly slashCommands: readonly TuiSlashCommandOption[];
   /** Whether session is initialized */
@@ -469,13 +462,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       useConversationStore.getState().addUserMessage(prompt);
       useAgentStore.getState().setRunning();
 
-      const idcMetadata = mergeIdcExecutionMetadata(
-        session.getExecutionMode() === 'plan' ? createPlanModeIdcMetadata() : undefined,
+      const creationMetadata = mergeCreationExecutionMetadata(
+        session.getExecutionMode() === 'plan' ? createPlanModeCreationMetadata() : undefined,
         metadataOverrides,
       );
       const currentConfig = useConfigStore.getState().config;
       const metadata = mergeTuiMediaModelMetadata(
-        idcMetadata,
+        creationMetadata,
         currentConfig.defaultMediaModels,
         currentConfig.chatModel?.providerId ?? currentConfig.provider,
       );
@@ -857,48 +850,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     return capabilityLoadResultRef.current?.referenceContributors ?? [];
   }, []);
 
-  const controlIdcWorkflow = useCallback<NonNullable<TuiWorkflowPorts['controlIdcWorkflow']>>(
-    async (input) => {
-      const session = sessionRef.current;
-      if (!session) {
-        throw new Error('Session not initialized');
-      }
-      const createdAt = Date.now();
-      const action =
-        input.action === 'stop' ? 'deactivate' : input.action === 'resume' ? 'resume' : 'activate';
-      const name = input.runKind ?? input.runId ?? 'idc';
-      const intent = createAgentCapabilityActivationIntent({
-        conversationId: conversationIdRef.current,
-        source: 'user-explicit',
-        target: 'idc-workflow',
-        action,
-        name,
-        requestedBy: 'user',
-        reason: input.reason ?? `TUI /idc ${input.action}`,
-        metadata: {
-          surface: 'cli-tui',
-          command: '/idc',
-          ...(input.runKind ? { runKind: input.runKind } : {}),
-          ...(input.runId ? { runId: input.runId } : {}),
-        },
-        createdAt,
-      });
-      const result =
-        input.action === 'stop'
-          ? session.stopIdcRunWithIntent({ intent })
-          : session.startIdcRunWithIntent({
-              runKind: input.runKind ?? 'idc',
-              ...(input.runId ? { runId: input.runId } : {}),
-              intent,
-            });
-      if (!result.success) {
-        throw new Error(result.message);
-      }
-      return result.message;
-    },
-    [],
-  );
-
   return {
     submit,
     cancel,
@@ -927,7 +878,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     getCapabilityDiagnostics,
     listCapabilityTools,
     getReferenceContributors,
-    controlIdcWorkflow,
     slashCommands,
     isReady: isReadyRef.current,
   };

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useEffect } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { SettingsState } from '@neko-agent/types';
+import type { ConversationSummary, Message, SettingsState } from '@neko-agent/types';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import { ConversationController } from './ConversationController';
 
@@ -14,6 +14,7 @@ const vscodeMocks = vi.hoisted(() => ({
   getTabState: vi.fn(),
   updateTabState: vi.fn(),
   newConversation: vi.fn(),
+  switchConversation: vi.fn(),
   searchProjectFiles: vi.fn(),
   getContextTokenCount: vi.fn(),
   getTasks: vi.fn(),
@@ -89,6 +90,9 @@ vi.mock('@/i18n/I18nContext', () => ({
 vi.mock('@/components/ChatWorkspace', () => ({
   ChatWorkspace: (props: {
     activeConversationId?: string | null;
+    activeTabConversationId?: string | null;
+    messages?: Message[];
+    isForegroundConversationActivationPending?: boolean;
     activationProgress?: readonly ActivationProgressTimeline[];
     handleMessage?: (event: MessageEvent) => void;
     pendingSendRequest?: { id: number; input: { messageText?: string } } | null;
@@ -96,6 +100,12 @@ vi.mock('@/components/ChatWorkspace', () => ({
     initialEntryPromptMenuRequest?: { id: number; menu: 'generate-assets' | 'roleplay' } | null;
     onInitialEntryPromptMenuRequestConsumed?: (id: number) => void;
   }) => {
+    const isConversationSwitching = Boolean(
+      props.isForegroundConversationActivationPending ||
+      (props.activeTabConversationId &&
+        props.activeTabConversationId !== props.activeConversationId),
+    );
+
     useEffect(() => {
       if (!props.handleMessage) return;
       const listener = (event: MessageEvent) => props.handleMessage?.(event);
@@ -106,6 +116,15 @@ vi.mock('@/components/ChatWorkspace', () => ({
     return (
       <div data-testid="chat-workspace">
         <span data-testid="workspace-conversation">{props.activeConversationId ?? 'none'}</span>
+        <span data-testid="workspace-tab-conversation">
+          {props.activeTabConversationId ?? 'none'}
+        </span>
+        <span data-testid="workspace-messages">
+          {props.messages?.map((message) => message.content).join('|') ?? ''}
+        </span>
+        <span data-testid="workspace-switching">
+          {isConversationSwitching ? 'switching' : 'idle'}
+        </span>
         <span data-testid="workspace-activation-progress">
           {props.activationProgress?.map((timeline) => timeline.name).join(',') ?? 'none'}
         </span>
@@ -409,6 +428,69 @@ describe('ConversationController entry state', () => {
 
     expect(screen.getByTestId('workspace-activation-progress').textContent).toBe('');
   });
+
+  it('does not display the previous conversation transcript after opening a history conversation', () => {
+    vi.clearAllMocks();
+    render(
+      <ConversationController
+        {...createProps({
+          history: [
+            { id: 'conv-a', title: '分析前10页，生成分镜表', messageCount: 1, updatedAt: 2 },
+            { id: 'conv-b', title: '生成猫猫玩耍的图片', messageCount: 1, updatedAt: 1 },
+          ],
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open 分析前10页，生成分镜表' }));
+    expect(vscodeMocks.switchConversation).toHaveBeenCalledWith('conv-a');
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'activeConversation',
+            conversation: {
+              id: 'conv-a',
+              title: '分析前10页，生成分镜表',
+              messages: [message('message-a', '分析前10页，生成分镜表')],
+            },
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-conversation').textContent).toBe('conv-a');
+    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-a');
+    expect(screen.getByTestId('workspace-messages').textContent).toBe('分析前10页，生成分镜表');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open 生成猫猫玩耍的图片' }));
+
+    expect(vscodeMocks.switchConversation).toHaveBeenCalledWith('conv-b');
+    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
+    expect(screen.getByTestId('workspace-switching').textContent).toBe('switching');
+    expect(screen.getByTestId('workspace-messages').textContent).toBe('');
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'activeConversation',
+            conversation: {
+              id: 'conv-b',
+              title: '生成猫猫玩耍的图片',
+              messages: [message('message-b', '生成猫猫玩耍的图片')],
+            },
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-conversation').textContent).toBe('conv-b');
+    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
+    expect(screen.getByTestId('workspace-switching').textContent).toBe('idle');
+    expect(screen.getByTestId('workspace-messages').textContent).toBe('生成猫猫玩耍的图片');
+  });
 });
 
 function createActivationEvent(conversationId: string, name: string) {
@@ -427,7 +509,13 @@ function createActivationEvent(conversationId: string, name: string) {
   };
 }
 
-function createProps(): React.ComponentProps<typeof ConversationController> {
+interface CreatePropsOptions {
+  readonly history?: readonly ConversationSummary[];
+}
+
+function createProps(
+  options: CreatePropsOptions = {},
+): React.ComponentProps<typeof ConversationController> {
   return {
     settings: createSettings(),
     setSettings: vi.fn(),
@@ -455,9 +543,27 @@ function createProps(): React.ComponentProps<typeof ConversationController> {
             Close {tab.title}
           </button>
         ))}
+        {options.history?.map((conversation) => (
+          <button
+            key={conversation.id}
+            type="button"
+            onClick={() => props.onOpenConversation(conversation.id, conversation.title)}
+          >
+            Open {conversation.title}
+          </button>
+        ))}
         <span data-testid="tab-count">{props.tabs.length}</span>
       </div>
     ),
+  };
+}
+
+function message(id: string, content: string): Message {
+  return {
+    id,
+    role: 'user',
+    content,
+    timestamp: 1,
   };
 }
 

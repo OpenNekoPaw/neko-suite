@@ -5,7 +5,6 @@ import {
   buildAgentCreationMessage,
   buildAgentFileContextPayload,
   buildAgentRetryCreationMessage,
-  getAgentCreationQuickStartOptions,
   inferAgentCreationIntentFromFilePath,
 } from '@neko/agent/runtime';
 import { handleError } from '../base';
@@ -23,39 +22,6 @@ export function registerCreationQuickStartCommands(
   context: vscode.ExtensionContext,
   chatViewProvider: ChatViewProvider,
 ): void {
-  context.subscriptions.push(
-    vscode.commands.registerCommand('neko.agent.startCreation', async () => {
-      const intent = await vscode.window.showQuickPick(getAgentCreationQuickStartOptions(), {
-        placeHolder: 'Choose a creation task...',
-      });
-
-      if (!intent) return;
-
-      const fileUris = await vscode.window.showOpenDialog({
-        canSelectMany: false,
-        filters: {
-          Scripts: ['fountain', 'nks'],
-          Documents: ['md', 'txt', 'pdf', 'docx'],
-          'All Files': ['*'],
-        },
-        openLabel: 'Select Source File',
-      });
-
-      if (fileUris && fileUris.length > 0) {
-        const filePath = fileUris[0].fsPath;
-        await chatViewProvider.sendMessageToAssistant(
-          buildAgentCreationMessage({ intent: intent.value, sourceFilePath: filePath }),
-          true,
-        );
-      } else {
-        await chatViewProvider.sendMessageToAssistant(
-          buildAgentCreationMessage({ intent: intent.value }),
-          true,
-        );
-      }
-    }),
-  );
-
   context.subscriptions.push(
     vscode.commands.registerCommand('neko.agent.createFromFile', async (uri?: vscode.Uri) => {
       let filePath: string | undefined;

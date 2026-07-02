@@ -34,7 +34,6 @@ import {
   SettingsHandler,
   ContextHandler,
   SlashCommandHandler,
-  IdcWorkflowHandler,
   ConversationMessageHandler,
 } from './handlers';
 import {
@@ -145,7 +144,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private readonly _settingsHandler: SettingsHandler;
   private readonly _contextHandler: ContextHandler;
   private readonly _slashCommandHandler: SlashCommandHandler;
-  private readonly _idcWorkflowHandler: IdcWorkflowHandler;
   private readonly _conversationMessageHandler: ConversationMessageHandler;
   private readonly _characterDialogue: CharacterDialogueController;
   private readonly _embodyCharacter: EmbodyCharacterController;
@@ -228,7 +226,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._contextHandler = new ContextHandler({
       conversations: this._conversations,
     });
-    this._idcWorkflowHandler = new IdcWorkflowHandler({});
     this._conversationMessageHandler = new ConversationMessageHandler({
       conversations: this._conversations,
       promptModeCleanup: this._systemPrompt,
@@ -455,7 +452,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           taskState: this._taskManager,
         });
         this._contextHandler.updateDeps({ agentManager: this._agentManager });
-        this._idcWorkflowHandler.updateDeps({ agentManager: this._agentManager });
         this._slashCommandHandler.updateDeps({
           agentManager: this._agentManager,
           messages: this._messages,
@@ -657,7 +653,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           taskHandler: this._taskHandler,
           skillHandler: this._skillHandler,
           fileOperationHandler: this._fileOperationHandler,
-          idcWorkflowHandler: this._idcWorkflowHandler,
           planModeHandler: this._planModeHandler,
           settingsHandler: this._settingsHandler,
           contextHandler: this._contextHandler,

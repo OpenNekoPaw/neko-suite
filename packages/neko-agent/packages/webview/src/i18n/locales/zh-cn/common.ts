@@ -17,6 +17,7 @@ export const common = {
   'common.success': '成功',
   'common.close': '关闭',
   'common.view': '查看',
+  'common.copy': '复制',
   'common.test': '测试',
   'common.testing': '测试中...',
   'common.connected': '已连接',

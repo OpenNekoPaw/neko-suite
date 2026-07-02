@@ -15,6 +15,8 @@ export const tasks = {
   'tasks.status.cancelled': 'Cancelled',
 
   'tasks.viewResult': 'View Result',
+  'tasks.viewInVSCode': 'View in VSCode',
+  'tasks.copyResultReference': 'Copy result reference',
   'tasks.cancel': 'Cancel',
   'tasks.retry': 'Retry',
   'tasks.remove': 'Remove',

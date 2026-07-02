@@ -15,6 +15,8 @@ export const tasks = {
   'tasks.status.cancelled': '已取消',
 
   'tasks.viewResult': '查看结果',
+  'tasks.viewInVSCode': '在 VSCode 中查看',
+  'tasks.copyResultReference': '复制结果引用',
   'tasks.cancel': '取消',
   'tasks.retry': '重试',
   'tasks.remove': '移除',

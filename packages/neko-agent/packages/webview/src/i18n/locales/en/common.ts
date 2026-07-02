@@ -17,6 +17,7 @@ export const common = {
   'common.success': 'Success',
   'common.close': 'Close',
   'common.view': 'View',
+  'common.copy': 'Copy',
   'common.test': 'Test',
   'common.testing': 'Testing...',
   'common.connected': 'Connected',

@@ -65,7 +65,6 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'clearActiveSkill',
   'invokeSlashCommand',
   'invokeSkill',
-  'controlIdcWorkflow',
   'getContextTokenCount',
   'compressContext',
   'webviewKeyboardFocus',

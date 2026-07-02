@@ -12,7 +12,7 @@ import {
   type CommandContext,
   type CommandResult,
   type ChatMessage,
-  createSkillExecutionIdcMetadata,
+  createSkillExecutionCreationMetadata,
   executeSlashCommand,
   isSlashCommand as checkIsSlashCommand,
   parseSlashCommand as parseCommand,
@@ -252,7 +252,7 @@ function createCommandArtifactSlashResult(
       ? {
           agentPrompt: argsText,
           executionOverrides: {
-            metadata: createSkillExecutionIdcMetadata(skill),
+            metadata: createSkillExecutionCreationMetadata(skill),
           },
         }
       : {}),
@@ -314,7 +314,7 @@ export async function handleSkillInvocation(
       ? {
           agentPrompt: parsed.args,
           executionOverrides: {
-            metadata: createSkillExecutionIdcMetadata(loadedSkill),
+            metadata: createSkillExecutionCreationMetadata(loadedSkill),
           },
         }
       : {}),

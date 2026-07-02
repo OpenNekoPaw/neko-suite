@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createNodeArtifactStore = vi.fn((config: unknown) => ({ kind: 'artifact-store', config }));
-const createTaskManagerIdcTaskProjection = vi.fn((config: unknown) => ({
+const createTaskManagerCreationTaskProjection = vi.fn((config: unknown) => ({
   kind: 'idc-projection',
   config,
 }));
@@ -11,7 +11,7 @@ vi.mock('@neko/agent', () => ({
   ToolGroupRegistry: class ToolGroupRegistry {
     readonly kind = 'tool-group-registry';
   },
-  createTaskManagerIdcTaskProjection,
+  createTaskManagerCreationTaskProjection,
   registerBuiltinToolGroups,
 }));
 
@@ -39,15 +39,15 @@ describe('createCliAgentRuntime', () => {
       projectMemoryManager: projectMemoryManager as never,
     });
 
-    expect(createTaskManagerIdcTaskProjection).toHaveBeenCalledWith({ store: taskManager });
+    expect(createTaskManagerCreationTaskProjection).toHaveBeenCalledWith({ store: taskManager });
     expect(createNodeArtifactStore).toHaveBeenCalledWith({ workspaceRoot: '/workspace' });
     expect(registerBuiltinToolGroups).toHaveBeenCalledOnce();
-    expect(runtime.workflowRuntime?.stageTracking).toEqual({
+    expect(runtime.creationGuidance?.stageTracking).toEqual({
       skillService,
       skillRegistry: skillService.registry,
       skillLifecycleRuntime,
     });
-    expect(runtime.workflowRuntime?.idcTaskProjection).toEqual({
+    expect(runtime.creationGuidance?.creationTaskProjection).toEqual({
       kind: 'idc-projection',
       config: { store: taskManager },
     });
@@ -70,7 +70,7 @@ describe('createCliAgentRuntime', () => {
       taskManager: { id: 'task-manager' } as never,
     });
 
-    expect(runtime.workflowRuntime?.stageTracking).toBeUndefined();
+    expect(runtime.creationGuidance?.stageTracking).toBeUndefined();
     expect(runtime.capabilityRuntime?.skillService).toBeUndefined();
     expect(runtime.capabilityRuntime?.skillRegistry).toBeUndefined();
     expect(runtime.capabilityRuntime?.toolGroupRegistry).toBeDefined();

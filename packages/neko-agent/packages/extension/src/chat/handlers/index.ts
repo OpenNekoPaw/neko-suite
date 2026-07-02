@@ -12,7 +12,6 @@ export { PlanModeHandler, type PlanModeHandlerDeps } from './planModeHandler';
 export { SettingsHandler, type SettingsHandlerDeps } from './settingsHandler';
 export { ContextHandler, type ContextHandlerDeps } from './contextHandler';
 export { SlashCommandHandler, type SlashCommandHandlerDeps } from './slashCommandHandler';
-export { IdcWorkflowHandler, type IdcWorkflowHandlerDeps } from './idcWorkflowHandler';
 export {
   ConversationMessageHandler,
   type ConversationMessageHandlerDeps,

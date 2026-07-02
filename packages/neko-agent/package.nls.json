@@ -25,7 +25,6 @@
   "neko.script.optimize.title": "Optimize Script",
   "neko.script.generateImage.title": "Generate Image from Script",
   "neko.script.generateVideo.title": "Generate Video from Script",
-  "neko.agent.startCreation.title": "Start Creation...",
   "neko.agent.createFromFile.title": "Create Video from This File",
   "neko.agent.retryCreation.title": "Retry Last Creation",
   "neko.agent.addToContext.title": "Add to Neko Agent"

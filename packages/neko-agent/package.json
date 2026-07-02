@@ -215,11 +215,6 @@
         "category": "NekoAgent: AI"
       },
       {
-        "command": "neko.agent.startCreation",
-        "title": "%neko.agent.startCreation.title%",
-        "category": "NekoAgent: Creation"
-      },
-      {
         "command": "neko.agent.createFromFile",
         "title": "%neko.agent.createFromFile.title%",
         "category": "NekoAgent: Creation"

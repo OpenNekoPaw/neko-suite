@@ -225,6 +225,6 @@ function isSkillLifecycleSlot(value: unknown): value is SkillLifecycleDeactivati
     value === 'domainSkill' ||
     value === 'referenceSkill' ||
     value === 'ephemeralSkill' ||
-    value === 'workflowSkill'
+    value === 'promptChainSkill'
   );
 }

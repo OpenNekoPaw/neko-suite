@@ -67,6 +67,26 @@ describe('content block presenter', () => {
     });
   });
 
+  it('does not mark completed text blocks as streaming while the parent message is still processing', () => {
+    const projections = projectContentBlocksUi(
+      [
+        {
+          id: 'block-text',
+          type: 'text',
+          timestamp: 20,
+          content: '已提交猫猫玩耍图片生成任务，正在后台处理。',
+          isStreaming: false,
+        },
+      ],
+      true,
+    );
+
+    expect(projections[0]).toMatchObject({
+      renderKind: 'markdown',
+      renderStreaming: false,
+    });
+  });
+
   it('keeps collapsible process records in source order when a primary result exists', () => {
     const projections = projectContentBlocksUi([
       {

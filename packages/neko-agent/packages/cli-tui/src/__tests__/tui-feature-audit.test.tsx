@@ -349,9 +349,9 @@ describe('5. Model Configuration Display', () => {
         id: 'stage-1',
         skillName: 'creation-persona',
         slot: 'stagePersona',
-        owner: 'idc',
+        owner: 'creation-profile',
         clearable: false,
-        lockedReason: 'IDC stage persona is cleared when its owning stage exits',
+        lockedReason: 'Creation stage persona is cleared when its owning stage exits',
         status: 'active',
       },
     ]);

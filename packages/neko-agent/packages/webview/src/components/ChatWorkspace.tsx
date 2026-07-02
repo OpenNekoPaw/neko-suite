@@ -554,17 +554,6 @@ export function ChatWorkspace({
     VSCodeMessages.setPromptMode(mode, activeConversationId);
   };
 
-  const handleControlIdcWorkflow = useCallback(
-    (action: 'start' | 'resume' | 'stop') => {
-      if (!activeConversationId || isCharacterRoleSession) return;
-      VSCodeMessages.controlIdcWorkflow(activeConversationId, action, {
-        runKind: 'idc',
-        reason: `Composer IDC workflow ${action}`,
-      });
-    },
-    [activeConversationId, isCharacterRoleSession],
-  );
-
   const handleMediaModelSelect = useCallback(
     (category: 'image' | 'video' | 'audio', modelId: string) => {
       setMediaModelSelection((prev) => ({ ...prev, [category]: modelId }));
@@ -695,7 +684,6 @@ export function ChatWorkspace({
         onInputChange={setInputValue}
         onSend={handleSend}
         onCancel={handleCancelMessage}
-        onControlIdcWorkflow={!isCharacterRoleSession ? handleControlIdcWorkflow : undefined}
         onPromoteQueuedMessage={handlePromoteQueuedMessage}
         onCancelQueuedMessage={handleCancelQueuedMessage}
         onEditQueuedMessage={handleEditQueuedMessage}

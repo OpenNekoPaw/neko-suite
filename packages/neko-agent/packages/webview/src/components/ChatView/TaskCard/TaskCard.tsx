@@ -19,7 +19,8 @@ import {
   ErrorIcon,
   ToolLoadingSpinner as LoadingSpinner,
 } from '@/components/ChatView/ToolCallDisplay';
-import { CloseIcon, RefreshIcon } from '@neko/shared/icons';
+import { CheckIcon, CloseIcon, CopyIcon, OpenIcon, RefreshIcon } from '@neko/shared/icons';
+import { getLogger } from '@/utils/logger';
 import { TaskSteps, ChevronIcon } from './TaskSteps';
 import {
   getTaskTypeLabel,
@@ -41,15 +42,32 @@ interface TaskCardProps {
 const compactActionClass =
   'inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded border border-[var(--agent-input-border)] bg-[var(--agent-surface)] px-2 text-[10px] font-medium text-[var(--agent-fg)] transition-colors hover:border-[var(--agent-accent)] hover:bg-[var(--agent-hover)] focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-[var(--agent-accent)]';
 
+const logger = getLogger('TaskCard');
+
 export function TaskCard({ task, onCancel, onRetry, onViewResult }: TaskCardProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const projection = projectBackgroundTaskCard(task);
+  const resultReference = getTaskResultReference(task);
 
   const toggleExpand = useCallback(() => {
     setIsExpanded((prev) => !prev);
   }, []);
+
+  const copyResultReference = useCallback(async () => {
+    if (!resultReference) return;
+
+    try {
+      await navigator.clipboard.writeText(resultReference);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      logger.error('Failed to copy task result reference:', error);
+    }
+  }, [resultReference]);
+
   const toneClass = toInlineToneClass(projection.tone);
 
   return (
@@ -128,6 +146,21 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult }: TaskCardProp
             </button>
           )}
 
+          {projection.showViewResult && resultReference && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                void copyResultReference();
+              }}
+              className={compactActionClass}
+              title={t('tasks.copyResultReference')}
+              aria-label={t('common.copy')}
+            >
+              {copied ? <CheckIcon className="h-3 w-3" /> : <CopyIcon className="h-3 w-3" />}
+              <span>{t('common.copy')}</span>
+            </button>
+          )}
+
           {projection.showViewResult && onViewResult && (
             <button
               onClick={(e) => {
@@ -135,9 +168,11 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult }: TaskCardProp
                 onViewResult(task.id);
               }}
               className={compactActionClass}
-              title={t('tasks.viewResult')}
+              title={t('tasks.viewInVSCode')}
+              aria-label={t('tasks.viewInVSCode')}
             >
-              {t('common.view')}
+              <OpenIcon className="h-3 w-3" />
+              <span>{t('tasks.viewInVSCode')}</span>
             </button>
           )}
 
@@ -227,6 +262,13 @@ function toInlineToneClass(tone: AgentWorkItemStatusTone): string {
   if (tone === 'danger') return 'is-danger';
   if (tone === 'info') return 'is-info';
   return '';
+}
+
+function getTaskResultReference(task: BackgroundTask): string | null {
+  const assetRef = task.result?.assets?.find((asset) => asset.assetRef?.uri)?.assetRef?.uri;
+  if (assetRef) return assetRef;
+
+  return task.result?.urls.find((url) => url.length > 0) ?? null;
 }
 
 // ---------------------------------------------------------------------------

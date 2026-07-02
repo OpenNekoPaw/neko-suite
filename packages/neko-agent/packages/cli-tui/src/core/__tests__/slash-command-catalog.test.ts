@@ -23,7 +23,7 @@ describe('createTuiSlashCommandCatalog', () => {
     expect(names).toContain('auto');
     expect(names).toContain('ask');
     expect(names).toContain('skill');
-    expect(names).toContain('idc');
+    expect(names).not.toContain('idc');
   });
 
   it('adds enabled command artifacts and deduplicates builtin names', () => {
