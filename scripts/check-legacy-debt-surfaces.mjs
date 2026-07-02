@@ -501,6 +501,7 @@ function isDeleteNowSurface(lowerFile, lowerLine) {
 
 function isCurrentBridgeSurface(lowerFile, lowerLine) {
   return (
+    containsAny(lowerFile, ['legacy-trace.ts']) ||
     containsAny(lowerFile, ['/bridge/', 'bridge.ts', 'adapter.ts', 'capabilityprovider.ts']) ||
     containsAny(lowerFile, [
       'ai-sdk/src/types.ts',
@@ -517,6 +518,10 @@ function isCurrentBridgeSurface(lowerFile, lowerLine) {
       'compatibility adapter',
       'legacy bridge',
       'legacy adapter',
+      'legacy trace',
+      'legacytrace',
+      'agentlegacycreationtrace',
+      'legacy-trace',
       'provider resolver',
       'codec override',
       '@neko/shared/components',

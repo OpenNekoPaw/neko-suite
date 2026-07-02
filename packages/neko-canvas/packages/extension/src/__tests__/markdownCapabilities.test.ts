@@ -220,7 +220,13 @@ describe('Canvas Markdown capabilities', () => {
         markdown: STORYBOARD_MARKDOWN,
         title: 'Opening',
         mode: 'create-nodes',
-        approval: { source: 'workflow-apply', workflowNodeId: 'apply' },
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
       },
       operations,
     );
@@ -680,7 +686,13 @@ describe('Canvas Markdown capabilities', () => {
       {
         capabilityId: 'canvas.createStoryboardFromMarkdown',
         mode: 'create-nodes',
-        approval: { source: 'workflow-apply', workflowNodeId: 'apply' },
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
         markdown: [
           '| 场景 | 镜号 | 画面描述 | 生成提示词 | 镜头运动 | 时长秒 | 角色 | 台词 |',
           '| --- | --- | --- | --- | --- | --- | --- | --- |',
@@ -796,7 +808,13 @@ describe('Canvas Markdown capabilities', () => {
       {
         capabilityId: 'canvas.createStoryboardFromMarkdown',
         mode: 'create-nodes',
-        approval: { source: 'workflow-apply', workflowNodeId: 'apply' },
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
         markdown: [
           '| Scene | Shot | Image | Next Action |',
           '| --- | --- | --- | --- |',

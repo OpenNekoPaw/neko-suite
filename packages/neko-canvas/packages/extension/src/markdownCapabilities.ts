@@ -399,7 +399,7 @@ async function ingestMarkdown(
       });
     }
 
-    const fallback = await createProfiledTableFromParsed({
+    const genericResult = await createProfiledTableFromParsed({
       input,
       operations,
       parsedTable: parsed.table,
@@ -410,7 +410,7 @@ async function ingestMarkdown(
       fallbackLabel: input.title ?? 'Markdown Table',
       includeActions: false,
     });
-    return fallback;
+    return genericResult;
   }
 
   return createProfiledTableFromParsed({
