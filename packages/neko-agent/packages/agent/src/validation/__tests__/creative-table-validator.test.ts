@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  STORYBOARD_CREATIVE_TABLE_FIELDS as AGENT_TYPES_STORYBOARD_CREATIVE_TABLE_FIELDS,
+  STORYBOARD_CREATIVE_TABLE_HEADERS as AGENT_TYPES_STORYBOARD_CREATIVE_TABLE_HEADERS,
+  resolveStoryboardCreativeTableHeader as resolveAgentTypesStoryboardCreativeTableHeader,
+} from '@neko-agent/types';
+import {
   OutputValidator,
   STORYBOARD_CREATIVE_TABLE_HEADERS,
   STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
@@ -7,6 +12,17 @@ import {
 } from '..';
 
 describe('validateStoryboardCreativeTableOutput', () => {
+  it('uses shared storyboard profile aliases through agent-types compatibility exports', () => {
+    expect(AGENT_TYPES_STORYBOARD_CREATIVE_TABLE_HEADERS).toContain('imagePrompt');
+    expect(
+      AGENT_TYPES_STORYBOARD_CREATIVE_TABLE_FIELDS.some((field) => field.id === 'sceneVideoPrompt'),
+    ).toBe(true);
+    expect(resolveAgentTypesStoryboardCreativeTableHeader('场景视频提示词')).toBe(
+      'sceneVideoPrompt',
+    );
+    expect(resolveAgentTypesStoryboardCreativeTableHeader('建议操作')).toBe('nextAction');
+  });
+
   it('accepts the canonical storyboard creative table headers', () => {
     const markdown = [
       '| scene | shot | source | sourcePanel | decision | duration | visual | motion | audio | characters | dialogue | prompt | reviewStatus | nextAction | contentType | decisionReason | requiresSplit | duplicateOf |',
