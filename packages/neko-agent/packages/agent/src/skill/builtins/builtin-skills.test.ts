@@ -133,15 +133,14 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.content).toContain('domain: storyboard');
       expect(comicToStoryboardSkill.content).toContain('referenceChain:');
       expect(comicToStoryboardSkill.content).toContain(
-        '`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `prompt`, `reviewStatus`, `nextAction`',
+        '`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `imagePrompt`, `imageEditPrompt`, `shotVideoPrompt`, `videoEditPrompt`, `sceneStylePrompt`, `sceneVideoPrompt`, `sceneVideoEditPrompt`, `reviewStatus`, `nextAction`, `contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`',
       );
       expect(comicToStoryboardSkill.content).toContain(
-        '`contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`',
+        'The Webview displays raw Markdown headers and does not translate them',
       );
-      expect(comicToStoryboardSkill.content).toContain('Headers may use localized display labels');
-      expect(comicToStoryboardSkill.content).toContain(
-        'must map unambiguously to one stable field',
-      );
+      expect(comicToStoryboardSkill.content).toContain('unambiguously mapped to one stable field');
+      expect(comicToStoryboardSkill.content).toContain('open review metadata');
+      expect(comicToStoryboardSkill.content).toContain('nextAction` is plan text only');
       expect(comicToStoryboardSkill.content).toContain('Chinese headers may use');
       expect(comicToStoryboardSkill.content).toContain('`read-image-*.jpg`');
       expect(comicToStoryboardSkill.content).toContain('![P1](P1)');
@@ -158,12 +157,12 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.content).toContain('`页码`');
       expect(comicToStoryboardSkill.content).toContain('`节奏/情绪`');
       expect(comicToStoryboardSkill.content).toContain('`画面内容`');
-      expect(comicToStoryboardSkill.content).toContain('`生成提示词`');
+      expect(comicToStoryboardSkill.content).toContain('`图像提示词`');
       expect(comicToStoryboardSkill.content).toContain(
-        'Localized labels such as `画面内容`, `生成提示词`, and `建议操作` are acceptable',
+        'Localized labels such as `画面内容`, `图像提示词`, and `建议操作` are acceptable',
       );
       expect(comicToStoryboardSkill.content).toContain(
-        'Do not say the required storyboard fields can be added later',
+        'Do not say the storyboard anchors can be added later',
       );
       expect(comicToStoryboardSkill.content).toContain('needs-panel-analysis');
       expect(comicToStoryboardSkill.content).toContain('Do not output a second');
@@ -181,7 +180,7 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.content).toContain('Do not use Neko/Obsidian-style');
       expect(comicToStoryboardSkill.content).toContain('runtime tool list');
       expect(comicToStoryboardSkill.content).toContain('visible as review metadata');
-      expect(comicToStoryboardSkill.content).toContain('Approval fields');
+      expect(comicToStoryboardSkill.content).toContain('Approval/review fields');
       expect(comicToStoryboardSkill.content).toContain('Plan fields');
       expect(comicToStoryboardSkill.content).toContain('Execution fields');
       expect(comicToStoryboardSkill.content).toContain('reviewStatus');
@@ -503,14 +502,13 @@ describe('Builtin Skills', () => {
       expect(zhComic?.content).toContain('获取视觉证据');
       expect(zhComic?.content).toContain('Markdown creative table');
       expect(zhComic?.content).toContain('这张表就是分镜表');
-      expect(zhComic?.content).toContain('表头可以使用当前语言的本地化显示名');
-      expect(zhComic?.content).toContain('必须能明确映射到这些稳定字段');
+      expect(zhComic?.content).toContain('Webview 会直接显示 Markdown 表头，不会翻译表头');
+      expect(zhComic?.content).toContain('明确映射到一个稳定字段');
+      expect(zhComic?.content).toContain('开放的审阅 metadata');
+      expect(zhComic?.content).toContain('`nextAction` 只是计划文本');
       expect(zhComic?.content).toContain('中文表头可以使用');
       expect(zhComic?.content).toContain(
-        '`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `prompt`, `reviewStatus`, `nextAction`',
-      );
-      expect(zhComic?.content).toContain(
-        '`contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`',
+        '`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `imagePrompt`, `imageEditPrompt`, `shotVideoPrompt`, `videoEditPrompt`, `sceneStylePrompt`, `sceneVideoPrompt`, `sceneVideoEditPrompt`, `reviewStatus`, `nextAction`, `contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`',
       );
       expect(zhComic?.content).toContain('`read-image-*.jpg`');
       expect(zhComic?.content).toContain('![P1](P1)');
@@ -520,8 +518,8 @@ describe('Builtin Skills', () => {
       expect(zhComic?.content).toContain('`页码`');
       expect(zhComic?.content).toContain('`节奏/情绪`');
       expect(zhComic?.content).toContain('`画面内容`');
-      expect(zhComic?.content).toContain('`生成提示词`');
-      expect(zhComic?.content).toContain('不要说必需的分镜字段之后再补');
+      expect(zhComic?.content).toContain('`图像提示词`');
+      expect(zhComic?.content).toContain('不要说分镜锚点之后再补');
       expect(zhComic?.content).toContain('needs-panel-analysis');
       expect(zhComic?.content).toContain('不要再输出第二张');
       expect(zhComic?.content).toContain('keep/skip/merge/split/duplicate');
