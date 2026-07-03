@@ -210,6 +210,7 @@ export * from './narrative-runtime';
 export * from './storyboard-planner';
 export * from './storyboard-readiness';
 export * from './storyboard-table';
+export * from './creative-table-profile';
 export * from './storyboard-plan-overlay';
 export * from './shot-image-prep';
 export * from './composite-artifact';
