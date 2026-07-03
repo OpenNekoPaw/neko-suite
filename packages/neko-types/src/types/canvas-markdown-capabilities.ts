@@ -1,4 +1,9 @@
 import type { CanvasAgentProvenance, CanvasAgentTargetRef } from './canvas-agent-operations';
+import {
+  getCreativeTableOperationRequirement,
+  STORYBOARD_CREATIVE_TABLE_PROFILE,
+  type CreativeTableOperationRequirement,
+} from './creative-table-profile';
 import { isDocumentArchiveResourceRef, type DocumentArchiveResourceRef } from './document-reading';
 import { isResourceRef, type ResourceRef } from './resource-cache';
 import type { AgentCapabilityApprovalContext } from './agent-capability-lifecycle';
@@ -158,6 +163,7 @@ export interface CanvasMarkdownCapabilityBaseInput {
   readonly provenance?: CanvasAgentProvenance;
   readonly intentHint?: CanvasMarkdownIngestIntent;
   readonly profileHint?: string;
+  readonly operationHint?: CreativeTableOperationRequirement['operationId'];
 }
 
 export interface CanvasIngestMarkdownInput extends CanvasMarkdownCapabilityBaseInput {
@@ -471,6 +477,8 @@ export function validateCanvasMarkdownCapabilityInput(
     );
   }
 
+  validateOperationHint(value['operationHint'], diagnostics);
+
   if (value['target'] !== undefined && !isCanvasMarkdownCapabilityTarget(value['target'])) {
     diagnostics.push(
       createCanvasMarkdownDiagnostic(
@@ -565,6 +573,39 @@ function validateAttachResourceInput(
   }
   validateCanvasMarkdownResource(value['resource'], undefined, diagnostics, 'resource');
   validateOptionalStringField(value, 'role', diagnostics);
+}
+
+function validateOperationHint(
+  value: unknown,
+  diagnostics: CanvasMarkdownCapabilityDiagnostic[],
+): void {
+  if (value === undefined) return;
+  if (!resolveStoryboardOperationRequirement(value)) {
+    diagnostics.push(
+      createCanvasMarkdownDiagnostic(
+        'error',
+        'canvas-markdown-unsupported-operation-hint',
+        'Canvas Markdown operation hint is not supported by the storyboard creative table profile.',
+        'operationHint',
+      ),
+    );
+  }
+}
+
+function resolveStoryboardOperationRequirement(
+  value: unknown,
+): CreativeTableOperationRequirement | undefined {
+  if (typeof value !== 'string') return undefined;
+  for (const candidate of STORYBOARD_CREATIVE_TABLE_PROFILE.operationRequirements) {
+    const requirement = getCreativeTableOperationRequirement(
+      STORYBOARD_CREATIVE_TABLE_PROFILE,
+      candidate.operationId,
+    );
+    if (requirement?.operationId === value) {
+      return requirement;
+    }
+  }
+  return undefined;
 }
 
 function validateCanvasMarkdownResource(

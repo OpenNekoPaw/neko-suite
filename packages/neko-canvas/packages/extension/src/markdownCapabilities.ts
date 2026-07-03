@@ -1,5 +1,6 @@
 import {
   createCanvasMarkdownDiagnostic,
+  getCreativeTableOperationRequirement,
   isCanvasCreativeTableFieldRole,
   isCanvasCreativeTableValueType,
   isCanvasMarkdownCapabilityId,
@@ -475,6 +476,13 @@ async function createProfiledTableFromParsed(options: {
     'review',
     profileColumns,
   );
+  const operationDiagnostics = validateOperationRequiredFields(
+    options.input,
+    options.profile,
+    options.parsedTable,
+    profileColumns,
+    'warning',
+  );
   const resourceBindings = bindResources(
     options.parsedTable,
     options.input.resources ?? [],
@@ -483,6 +491,7 @@ async function createProfiledTableFromParsed(options: {
   const diagnostics = [
     ...(options.extraDiagnostics ?? []),
     ...profileDiagnostics,
+    ...operationDiagnostics,
     ...resourceBindings.diagnostics,
   ];
   const nodeId = await options.operations.createNode(
@@ -679,12 +688,7 @@ function validateMarkdownStoryboard(
         ...parsed.diagnostics,
         ...profileResult.diagnostics,
         ...(profileResult.profile
-          ? validateTableProfile(
-              profileResult.profile,
-              parsed.table,
-              'review',
-              resolveProfileColumns(profileResult.profile, parsed.table),
-            )
+          ? validateResolvedStoryboardTable(input, profileResult.profile, parsed.table)
           : []),
       ]
     : [...parsed.diagnostics, ...profileResult.diagnostics];
@@ -696,6 +700,18 @@ function validateMarkdownStoryboard(
     diagnostics,
     preview: createTablePreview(input, parsed.table, []),
   };
+}
+
+function validateResolvedStoryboardTable(
+  input: CanvasMarkdownCapabilityInput & { markdown: string },
+  profile: CanvasMarkdownTableProfileDescriptor,
+  table: MarkdownTable,
+): readonly CanvasMarkdownCapabilityDiagnostic[] {
+  const profileColumns = resolveProfileColumns(profile, table);
+  return [
+    ...validateTableProfile(profile, table, 'review', profileColumns),
+    ...validateOperationRequiredFields(input, profile, table, profileColumns, 'warning'),
+  ];
 }
 
 function parseSingleMarkdownTable(markdown: string): {
@@ -988,6 +1004,46 @@ function validateTableProfile(
   return diagnostics;
 }
 
+function validateOperationRequiredFields(
+  input: CanvasMarkdownCapabilityInput & { markdown: string },
+  profile: CanvasMarkdownTableProfileDescriptor,
+  table: MarkdownTable,
+  profileColumns: CanvasMarkdownResolvedTableProfileColumns,
+  severity: CanvasMarkdownCapabilityDiagnostic['severity'],
+): readonly CanvasMarkdownCapabilityDiagnostic[] {
+  if (!input.operationHint || !profile.creative) {
+    return [];
+  }
+
+  const requirement = getCreativeTableOperationRequirement(
+    STORYBOARD_CREATIVE_TABLE_PROFILE,
+    input.operationHint,
+  );
+  if (!requirement) {
+    throw new Error(`Unsupported Canvas Markdown operation hint "${input.operationHint}".`);
+  }
+
+  return requirement.requiredFieldIds
+    .filter((fieldId) => !hasOperationRequiredFieldValue(table, profileColumns, fieldId))
+    .map((fieldId) =>
+      createCanvasMarkdownDiagnostic(
+        severity,
+        'canvas-markdown-operation-required-field-missing',
+        `Operation "${requirement.operationId}" requires storyboard field "${fieldId}" with at least one non-empty value.`,
+        fieldId,
+      ),
+    );
+}
+
+function hasOperationRequiredFieldValue(
+  table: MarkdownTable,
+  profileColumns: CanvasMarkdownResolvedTableProfileColumns,
+  fieldId: string,
+): boolean {
+  const column = profileColumns.columnsByField.get(fieldId);
+  return Boolean(column && table.rows.some((row) => getCell(row, column).length > 0));
+}
+
 function createTableNodeData(
   input: CanvasMarkdownCapabilityInput & { markdown: string },
   table: MarkdownTable,
@@ -1089,7 +1145,10 @@ function buildStoryboardProductionRequest(
   readonly request?: CanvasCreateCompositeRequest;
   readonly diagnostics: readonly CanvasMarkdownCapabilityDiagnostic[];
 } {
-  const diagnostics = validateTableProfile(profile, table, 'apply', profileColumns);
+  const diagnostics = [
+    ...validateTableProfile(profile, table, 'apply', profileColumns),
+    ...validateOperationRequiredFields(input, profile, table, profileColumns, 'error'),
+  ];
   const visualColumn = getStoryboardProductionContentColumn(profileColumns);
   if (diagnostics.some((diagnostic) => diagnostic.severity === 'error') || !visualColumn) {
     return { diagnostics };

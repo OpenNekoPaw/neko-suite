@@ -3,7 +3,6 @@ import {
   createResourceFingerprint,
   createResourceRef,
   type CanvasCreateCompositeRequest,
-  type CanvasMarkdownCapabilityInput,
   type CanvasMarkdownResourceRef,
   type ResourceRef,
 } from '@neko/shared';
@@ -471,6 +470,70 @@ describe('Canvas Markdown capabilities', () => {
         }),
       }),
       'table.basic',
+    );
+  });
+
+  it('keeps operation-targeted storyboard drafts reviewable when required fields are missing', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        operationHint: 'video.scene.generate',
+        markdown: [
+          '| scene | shot | visual | shotVideoPrompt |',
+          '| --- | --- | --- | --- |',
+          '| Opening | 1 | wide reveal | slow push |',
+        ].join('\n'),
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('needs-review');
+    expect(result.draftNodeId).toBe('table-1');
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        severity: 'warning',
+        code: 'canvas-markdown-operation-required-field-missing',
+        fieldKey: 'sceneVideoPrompt',
+      }),
+    );
+    expect(operations.createNode).toHaveBeenCalledWith(
+      'table',
+      { x: 0, y: 0 },
+      expect.objectContaining({
+        markdown: expect.objectContaining({
+          tableProfile: 'storyboard',
+          rows: [
+            expect.objectContaining({
+              cells: expect.objectContaining({
+                shotvideoprompt: 'slow push',
+              }),
+            }),
+          ],
+        }),
+      }),
+      'table.basic',
+    );
+  });
+
+  it('does not add operation required field diagnostics when the required field has content', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        operationHint: 'video.scene.generate',
+        markdown: [
+          '| scene | shot | visual | sceneVideoPrompt |',
+          '| --- | --- | --- | --- |',
+          '| Opening | 1 | wide reveal | slow scene journey |',
+        ].join('\n'),
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('created');
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+      'canvas-markdown-operation-required-field-missing',
     );
   });
 
@@ -1081,6 +1144,40 @@ describe('Canvas Markdown capabilities', () => {
     expect(production.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'canvas-markdown-storyboard-visual-column-required',
     ]);
+  });
+
+  it('blocks operation-targeted production creation when required fields are missing', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        mode: 'create-nodes',
+        operationHint: 'video.scene.generate',
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
+        markdown: [
+          '| scene | shot | visual | shotVideoPrompt |',
+          '| --- | --- | --- | --- |',
+          '| Opening | 1 | wide reveal | slow push |',
+        ].join('\n'),
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('blocked');
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'canvas-markdown-operation-required-field-missing',
+        fieldKey: 'sceneVideoPrompt',
+      }),
+    ]);
+    expect(operations.createComposite).not.toHaveBeenCalled();
   });
 
   it('reports ambiguous resource tokens with safe candidate summaries', async () => {

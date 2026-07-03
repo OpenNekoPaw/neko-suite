@@ -38,6 +38,21 @@ describe('canvas markdown capability contracts', () => {
     expect(isCanvasCreativeTableFieldRole('plan')).toBe(true);
   });
 
+  it('accepts a supported storyboard operation hint', () => {
+    const input: CanvasMarkdownCapabilityInput = {
+      capabilityId: 'canvas.validateMarkdownStoryboard',
+      markdown: [
+        '| scene | shot | sceneVideoPrompt |',
+        '| --- | --- | --- |',
+        '| Opening | 1 | slow reveal |',
+      ].join('\n'),
+      operationHint: 'video.scene.generate',
+    };
+
+    expect(validateCanvasMarkdownCapabilityInput(input)).toEqual([]);
+    expect(isCanvasMarkdownCapabilityInput(input)).toBe(true);
+  });
+
   it('accepts a valid Markdown note capability input with stable resources', () => {
     const input: CanvasMarkdownCapabilityInput = {
       capabilityId: 'canvas.createMarkdownNote',
@@ -105,6 +120,22 @@ describe('canvas markdown capability contracts', () => {
     ]);
     expect(unsupportedFormat.map((diagnostic) => diagnostic.code)).toEqual([
       'canvas-markdown-unsupported-source-format',
+    ]);
+  });
+
+  it('diagnoses unsupported operation hints', () => {
+    const diagnostics = validateCanvasMarkdownCapabilityInput({
+      capabilityId: 'canvas.validateMarkdownStoryboard',
+      markdown: '| scene | shot |\n| --- | --- |\n| Opening | 1 |',
+      operationHint: 'video.remote.unknown',
+    });
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'canvas-markdown-unsupported-operation-hint',
+        fieldKey: 'operationHint',
+      }),
     ]);
   });
 
