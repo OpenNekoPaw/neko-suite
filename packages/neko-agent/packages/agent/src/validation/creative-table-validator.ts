@@ -38,6 +38,14 @@ const FORBIDDEN_STORYBOARD_HEADERS = [
 
 const YAML_FRONTMATTER_RE = /^---\s*\n[\s\S]*?\n---(?:\s*\n|$)/;
 
+const STORYBOARD_CHAT_OUTPUT_IDENTITY_FIELDS = ['scene', 'shot'] as const;
+const STORYBOARD_CHAT_OUTPUT_PRODUCTION_ANCHOR_FIELDS = [
+  'source',
+  ...STORYBOARD_CREATIVE_TABLE_PROFILE.fields
+    .filter((field) => field.promptSlot)
+    .map((field) => field.id),
+] as const;
+
 export interface StoryboardCreativeTableValidationResult {
   readonly errors: readonly ValidationError[];
   readonly warnings: readonly ValidationWarning[];
@@ -53,6 +61,12 @@ export interface MarkdownTableSummary {
 export interface MarkdownTableRowSummary {
   readonly line: number;
   readonly cells: readonly string[];
+}
+
+interface StoryboardChatOutputAnchorDiagnostic {
+  readonly missingAnchor: 'scene-shot' | 'source-or-prompt-slot';
+  readonly fieldGroup: readonly string[];
+  readonly missingFields?: readonly string[];
 }
 
 export function validateStoryboardCreativeTableOutput(
@@ -110,6 +124,15 @@ export function validateStoryboardCreativeTableOutput(
       ),
     );
   }
+  for (const diagnostic of getStoryboardChatOutputAnchorDiagnostics(classification)) {
+    errors.push(
+      createStoryboardTableError(
+        'storyboard-table-missing-chat-output-anchor',
+        `Storyboard creative table is missing Agent chat output anchor "${diagnostic.missingAnchor}": ${diagnostic.fieldGroup.join(', ')}.`,
+        { headerLine: table.headerLine, ...diagnostic },
+      ),
+    );
+  }
 
   const outOfOrder = firstOutOfOrderHeader(table.headers);
   if (outOfOrder) {
@@ -130,6 +153,7 @@ function findStoryboardCandidateTable(
   tables: readonly MarkdownTableSummary[],
 ): MarkdownTableSummary | undefined {
   return (
+    tables.find((table) => hasStoryboardChatOutputAnchors(table.headers)) ??
     tables.find(
       (table) =>
         classifyCreativeTableHeaders(STORYBOARD_CREATIVE_TABLE_PROFILE, table.headers)
@@ -139,6 +163,41 @@ function findStoryboardCandidateTable(
       table.headers.some((header) => resolveStoryboardCreativeTableHeader(header) !== undefined),
     )
   );
+}
+
+function hasStoryboardChatOutputAnchors(headers: readonly string[]): boolean {
+  const classification = classifyCreativeTableHeaders(STORYBOARD_CREATIVE_TABLE_PROFILE, headers);
+  return getStoryboardChatOutputAnchorDiagnostics(classification).length === 0;
+}
+
+function getStoryboardChatOutputAnchorDiagnostics(
+  classification: ReturnType<typeof classifyCreativeTableHeaders>,
+): StoryboardChatOutputAnchorDiagnostic[] {
+  const knownFieldIds = new Set(classification.knownFields.map((field) => field.id));
+  const diagnostics: StoryboardChatOutputAnchorDiagnostic[] = [];
+  const missingIdentityFields = STORYBOARD_CHAT_OUTPUT_IDENTITY_FIELDS.filter(
+    (field) => !knownFieldIds.has(field),
+  );
+  if (missingIdentityFields.length > 0) {
+    diagnostics.push({
+      missingAnchor: 'scene-shot',
+      fieldGroup: STORYBOARD_CHAT_OUTPUT_IDENTITY_FIELDS,
+      missingFields: missingIdentityFields,
+    });
+  }
+
+  const hasProductionAnchor =
+    knownFieldIds.has('source') ||
+    knownFieldIds.has('prompt') ||
+    classification.knownFields.some((field) => field.promptSlot);
+  if (!hasProductionAnchor) {
+    diagnostics.push({
+      missingAnchor: 'source-or-prompt-slot',
+      fieldGroup: STORYBOARD_CHAT_OUTPUT_PRODUCTION_ANCHOR_FIELDS,
+    });
+  }
+
+  return diagnostics;
 }
 
 function firstOutOfOrderHeader(

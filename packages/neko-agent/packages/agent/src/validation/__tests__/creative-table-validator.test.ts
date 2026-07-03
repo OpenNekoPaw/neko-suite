@@ -66,6 +66,53 @@ describe('validateStoryboardCreativeTableOutput', () => {
     expect(result.errors).toEqual([]);
   });
 
+  it('rejects weak storyboard-like tables without chat output anchors', () => {
+    const markdown = [
+      '| scene | visual | risk |',
+      '| --- | --- | --- |',
+      '| Opening | Wide industrial corridor | too vague |',
+    ].join('\n');
+
+    const result = validateStoryboardCreativeTableOutput(markdown);
+
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'storyboard-table-missing-chat-output-anchor',
+          details: expect.objectContaining({
+            missingAnchor: 'scene-shot',
+            fieldGroup: ['scene', 'shot'],
+            missingFields: ['shot'],
+          }),
+        }),
+        expect.objectContaining({
+          code: 'storyboard-table-missing-chat-output-anchor',
+          details: expect.objectContaining({
+            missingAnchor: 'source-or-prompt-slot',
+            fieldGroup: expect.arrayContaining(['source', 'prompt', 'imagePrompt']),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('prefers a later table that satisfies storyboard chat output anchors', () => {
+    const markdown = [
+      '| scene | visual | risk |',
+      '| --- | --- | --- |',
+      '| Opening | Wide industrial corridor | too vague |',
+      '',
+      '| scene | shot | source | visual |',
+      '| --- | --- | --- | --- |',
+      '| Opening | 1 | P1 | Wide industrial corridor |',
+    ].join('\n');
+
+    const result = validateStoryboardCreativeTableOutput(markdown);
+
+    expect(result.errors).toEqual([]);
+    expect(result.table?.headers).toEqual(['scene', 'shot', 'source', 'visual']);
+  });
+
   it('fails visible when an execution action id appears without a trusted lifecycle context', () => {
     const markdown = [
       '| scene | shot | source | visual | actionId |',
@@ -82,11 +129,40 @@ describe('validateStoryboardCreativeTableOutput', () => {
     ]);
   });
 
+  it('accepts an empty execution action id column', () => {
+    const markdown = [
+      '| scene | shot | source | visual | actionId |',
+      '| --- | --- | --- | --- | --- |',
+      '| Opening | 1 | P1 | Wide industrial corridor |  |',
+    ].join('\n');
+
+    const result = validateStoryboardCreativeTableOutput(markdown);
+
+    expect(result.errors).toEqual([]);
+  });
+
+  it('fails visible when an execution result ref appears without a trusted lifecycle context', () => {
+    const markdown = [
+      '| scene | shot | source | visual | resultRef |',
+      '| --- | --- | --- | --- | --- |',
+      '| Opening | 1 | P1 | Wide industrial corridor | canvas.result.local |',
+    ].join('\n');
+
+    const result = validateStoryboardCreativeTableOutput(markdown);
+
+    expect(result.errors).toEqual([
+      expect.objectContaining({
+        code: 'storyboard-table-execution-field-not-supported',
+        details: expect.objectContaining({ field: 'resultRef' }),
+      }),
+    ]);
+  });
+
   it('warns for non-standard shot and scene duration values when duration fields exist', () => {
     const markdown = [
-      '| scene | shot | visual | duration | sceneDuration |',
-      '| --- | --- | --- | --- | --- |',
-      '| Opening | 1 | Wide industrial corridor | around three seconds | half a minute |',
+      '| scene | shot | source | visual | duration | sceneDuration |',
+      '| --- | --- | --- | --- | --- | --- |',
+      '| Opening | 1 | P1 | Wide industrial corridor | around three seconds | half a minute |',
     ].join('\n');
 
     const result = validateStoryboardCreativeTableOutput(markdown);
