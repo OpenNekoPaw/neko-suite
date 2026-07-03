@@ -472,6 +472,23 @@ async function createProfiledTableFromParsed(options: {
 }): Promise<CanvasMarkdownCapabilityResult> {
   const resolvedKind = toResolvedTableKind(options.profile, options.displayFallback);
   const profileColumns = resolveProfileColumns(options.profile, options.parsedTable);
+  const operationProfileDiagnostics = validateOperationProfileMatch(options.input, options.profile);
+  if (operationProfileDiagnostics.length > 0) {
+    return {
+      capabilityId: options.actionCapabilityId,
+      status: 'blocked',
+      resolvedKind,
+      profileId: options.profile.profileId,
+      displayFallback: Boolean(options.displayFallback),
+      diagnostics: [...(options.extraDiagnostics ?? []), ...operationProfileDiagnostics],
+      preview: createTablePreview(options.input, options.parsedTable, [], {
+        resolvedKind,
+        profile: options.profile,
+        profileColumns,
+        displayFallback: Boolean(options.displayFallback),
+      }),
+    };
+  }
   const profileDiagnostics = validateTableProfile(
     options.profile,
     options.parsedTable,
@@ -1004,6 +1021,24 @@ function validateTableProfile(
   }
 
   return diagnostics;
+}
+
+function validateOperationProfileMatch(
+  input: CanvasMarkdownCapabilityInput & { markdown: string },
+  profile: CanvasMarkdownTableProfileDescriptor,
+): readonly CanvasMarkdownCapabilityDiagnostic[] {
+  if (!input.operationHint || (profile.creative && profile.profileId === 'storyboard')) {
+    return [];
+  }
+
+  return [
+    createCanvasMarkdownDiagnostic(
+      'error',
+      'canvas-markdown-operation-profile-mismatch',
+      `Operation hint "${input.operationHint}" requires the storyboard creative table profile.`,
+      'operationHint',
+    ),
+  ];
 }
 
 function validateOperationRequiredFields(

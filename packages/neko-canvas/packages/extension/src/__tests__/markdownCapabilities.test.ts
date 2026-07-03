@@ -3,6 +3,7 @@ import {
   createResourceFingerprint,
   createResourceRef,
   type CanvasCreateCompositeRequest,
+  type CanvasMarkdownCapabilityInput,
   type CanvasMarkdownResourceRef,
   type ResourceRef,
 } from '@neko/shared';
@@ -466,6 +467,65 @@ describe('Canvas Markdown capabilities', () => {
       }),
       'table.basic',
     );
+  });
+
+  it('blocks ingest when operation hints conflict with a non-creative profile hint', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.ingestMarkdown',
+        operationHint: 'video.scene.generate',
+        profileHint: 'generic',
+        markdown: [
+          '| scene | shot | visual | shotVideoPrompt |',
+          '| --- | --- | --- | --- |',
+          '| Opening | 1 | wide reveal | slow push |',
+        ].join('\n'),
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('blocked');
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'canvas-markdown-operation-profile-mismatch',
+        fieldKey: 'operationHint',
+      }),
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+      'canvas-markdown-operation-required-field-missing',
+    );
+    expect(operations.createNode).not.toHaveBeenCalled();
+  });
+
+  it('blocks invalid operation hints before Canvas operations are called', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.ingestMarkdown',
+        operationHint: 'video.remote.unknown',
+        markdown: [
+          '| scene | shot | visual | sceneVideoPrompt |',
+          '| --- | --- | --- | --- |',
+          '| Opening | 1 | wide reveal | slow scene journey |',
+        ].join('\n'),
+      } as unknown as CanvasMarkdownCapabilityInput,
+      operations,
+    );
+
+    expect(result.status).toBe('blocked');
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'canvas-markdown-unsupported-operation-hint',
+        fieldKey: 'operationHint',
+      }),
+    ]);
+    expect(operations.applyAgentContent).not.toHaveBeenCalled();
+    expect(operations.createNode).not.toHaveBeenCalled();
+    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.updateNode).not.toHaveBeenCalled();
   });
 
   it('consumes shared storyboard fields including localized prompt slots and review metadata', async () => {
