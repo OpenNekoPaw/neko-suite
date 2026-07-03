@@ -66,6 +66,18 @@ describe('validateStoryboardCreativeTableOutput', () => {
     expect(result.errors).toEqual([]);
   });
 
+  it('accepts localized prompt-slot storyboard output with plan-only next actions', () => {
+    const markdown = [
+      '| 场景 | 镜头 | 来源 | 来源分格 | 决策 | 时长 | 画面 | 运镜 | 音频 | 人物 | 对白 | 图像提示词 | 图像编辑提示词 | 镜头视频提示词 | 视频编辑提示词 | 场景风格提示词 | 场景视频提示词 | 场景视频编辑提示词 | 审阅状态 | 建议操作 | 内容类型 | 决策理由 | 需要拆分 | 重复来源 |',
+      '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+      '| 正文 | 1 | P1#panel_1 | 上方分格 | keep | 3s | 主角靠近发光物 | 缓慢推近 | 低风声 | 主角 |  | 暗黑童话关键帧，主角靠近发光古灯 | 重绘光晕并移除气泡文字 | 主角从阴影中缓慢走向光源，短镜头运动 | 调整单镜头运动结尾的光晕闪烁 | 黄昏牧场、紫金魔法光、墨线质感 | 用 20 秒连接镜头 1-3，保持黄昏牧场风格连续 | 将整场视频调成更冷的月光色调 | needs-review | 拆分分格后再送 Canvas 审阅 | story | 建立叙事节拍 | false |  |',
+    ].join('\n');
+
+    const result = validateStoryboardCreativeTableOutput(markdown);
+
+    expect(result.errors).toEqual([]);
+  });
+
   it('accepts an edit prompt slot as the production anchor', () => {
     const markdown = [
       '| scene | shot | imageEditPrompt |',

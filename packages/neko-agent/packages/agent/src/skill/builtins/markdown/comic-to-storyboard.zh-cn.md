@@ -51,22 +51,26 @@
 
 普通聊天回复不要输出 YAML frontmatter 或创作文档元数据。禁止输出 `---`、`id:`、`kind: draft`、`status: draft`、`domain: storyboard` 或 `referenceChain:` 这类块/键。它们只属于 host/runtime 持久化的创作文档，不属于分镜 creative table。
 
-主表必须按以下顺序覆盖这些稳定字段，并在核心字段之后追加下面的必需决策扩展字段。表头可以使用当前语言的本地化显示名，但必须能明确映射到这些稳定字段：
+生产可用的分镜输出优先使用以下 canonical 稳定表头顺序。Webview 会直接显示 Markdown 表头，不会翻译表头；因此请使用用户/输出语言的字段标签，同时保证每个标签都能明确映射到一个稳定字段：
 
-`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `prompt`, `reviewStatus`, `nextAction`
+`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `imagePrompt`, `imageEditPrompt`, `shotVideoPrompt`, `videoEditPrompt`, `sceneStylePrompt`, `sceneVideoPrompt`, `sceneVideoEditPrompt`, `reviewStatus`, `nextAction`, `contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`
 
-核心字段之后必须追加这些决策扩展字段：
-
-`contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`
+validator 支持开放的审阅 metadata，不要求证据不足或任务不需要时填齐所有推荐字段。聊天分镜输出仍必须包含 `scene` + `shot`，并且包含 `source`，或至少一个提示词槽（prompt slot）/ 兼容字段 `prompt`。
 
 规则：
 
-- 中文表头可以使用 `场景`、`镜头`、`来源`、`来源分格`、`决策`、`时长`、`画面`、`运镜`、`音频`、`人物`、`对白`、`提示词`、`审阅状态`、`建议操作`、`内容类型`、`决策理由`、`需要拆分`、`重复来源`，但不能漏掉任何稳定字段。
-- 绝不能把简化的页级分析表当作分镜表输出。禁止作为主表头的字段包括 `页码`、`景别/构图`、`节奏/情绪`、`page`、`image reference`、`analysis` 或 `suggestion`。`画面内容`、`生成提示词`、`建议操作` 等可以作为本地化字段，但只有在整张表同时包含全部必需字段时才合格。
-- 不要说必需的分镜字段之后再补。`characters`、`shot`、`duration`、`motion`、`prompt` 和 `nextAction` 必须现在就出现在唯一主表中。
-- 如果证据仍然停留在页级，也必须用必需核心列创建一个或多个 shot 行，并在不确定的单元格写 `needs-panel-analysis`、`needs-review` 或 `needs-prompt`；不要降级成页面列表。
+- 中文表头可以使用 `场景`、`镜头`、`来源`、`来源分格`、`决策`、`时长`、`画面`、`运镜`、`音频`、`人物`、`对白`、`图像提示词`、`图像编辑提示词`、`镜头视频提示词`、`视频编辑提示词`、`场景风格提示词`、`场景视频提示词`、`场景视频编辑提示词`、`审阅状态`、`建议操作`、`内容类型`、`决策理由`、`需要拆分`、`重复来源`。
+- 绝不能把简化的页级分析表当作分镜表输出。禁止作为主表头的字段包括 `页码`、`景别/构图`、`节奏/情绪`、`page`、`image reference`、`analysis` 或 `suggestion`。`画面内容`、`图像提示词`、`建议操作` 等可以作为本地化字段，但单张表必须包含聊天输出锚点。
+- 不要说分镜锚点之后再补。`scene`、`shot` 和 `source`/prompt-slot 锚点必须现在就出现在唯一主表中。
+- 如果证据仍然停留在页级，也必须用已有分镜列创建一个或多个 shot 行，并在不确定的单元格写 `needs-panel-analysis`、`needs-review` 或 `needs-prompt`；不要降级成页面列表。
 - 不要再输出第二张“分镜结构建议”表。keep/skip/split/merge 和下一步规划写入 `decision`、`decisionReason`、`reviewStatus` 和 `nextAction`。
-- `prompt` 和 `nextAction` 必填。没有现成提示词或动作时，写 `needs-prompt` 或 `needs-review`。
+- 当用户要求特定生成或编辑目标时，必须包含对应提示词槽；不确定的提示词单元格写 `needs-prompt`。
+- 提示词槽必须显式、模型感知：`imagePrompt` = 单镜头图像生成提示词；`imageEditPrompt` = 单镜头图像编辑/重绘/inpaint 提示词；`shotVideoPrompt` = 单镜头视频生成提示词；`videoEditPrompt` = 单镜头视频编辑提示词；`sceneStylePrompt` = 场景级图像/风格提示词；`sceneVideoPrompt` = 场景视频生成提示词；`sceneVideoEditPrompt` = 场景视频编辑提示词。
+- 兼容字段 `prompt` 仍可用于旧输出和通用图像生成，但新的输出应优先使用模型专用提示词槽。
+- 每行代表一个 shot 或视频节拍；scene 列负责把多行归组到同一场景。
+- Shot 提示词槽描述单镜头关键帧、编辑或短镜头运动。Scene 提示词槽描述跨多个 shot 的场景级连续性、风格，或更长的场景视频生成/编辑。
+- `sceneVideoPrompt` 可以概括多个 shot 节拍如何连接；shot prompt 应保持基于来源分格/镜头证据。
+- 分镜提示词可以面向图像生成/编辑和视频生成/编辑。视频模型支持只用通用语义表达，不要硬编码 provider payload、外部 API JSON 或内部 job contract。若提到 Seedance/Volcengine 类场景，也只描述为场景/镜头视频生成用途。
 - 每行代表叙事 shot 或视频节拍，不是页面清单。同一个 `source` 可以在多行重复，用于表达一页/一图拆出多个 shot。
 - `decision` 表达 keep/skip/merge/split/duplicate/reference-only 等选择。封面、重复页、广告页、空白页和元数据页也必须显式写出 `decision`，不要静默消失。
 - `decisionReason` 说明为什么保留、跳过、合并、拆分成多个 shot，或判定为重复。
@@ -78,13 +82,15 @@
 
 ### 字段角色
 
-- 审阅字段：`scene`、`shot`、`source`、`sourcePanel`、`decision`、`visual`、`audio`、`characters`、`dialogue`、`reviewStatus`。
-- 计划字段：`prompt`、`motion`、`duration`、`decisionReason`、`requiresSplit`、`requiresTextRemoval`、`requiresInpaint`、`referenceImage`、`styleRef`。
-- 执行字段：`nextAction`、可信 action id、结果 ref、执行状态和生成结果 ref；只有本地 capability 或真实工具结果支持时才写。
+- 审阅字段：`scene`、`shot`、`source`、`sourcePanel`、`decision`、`visual`、`audio`、`characters`、`dialogue`、`reviewStatus`，以及有用的开放审阅 metadata 列。
+- 计划字段：共享 profile descriptor 中声明的字段，例如 `motion`、`duration`、提示词槽、兼容字段 `prompt`、`decisionReason`、`requiresSplit`、`requiresTextRemoval`、`requiresInpaint`、`referenceImage`、`styleRef` 和 `nextAction`。
+- 计划字段只有在共享 profile descriptor 声明后才具有生产语义。
+- `nextAction` 只是计划文本，不是可信执行 action。
+- `actionId`、`resultRef`、`executionStatus` 和生成结果 ref 等执行字段属于可信 lifecycle 字段。除非有本地 capability/tool 结果明确支撑，本 Skill 的普通输出应省略它们。
 
-`prompt` 是后续生成或修复动作的重要输入。`source`、`visual`、`duration`、`reviewStatus` 和 `nextAction` 帮助 Canvas 展示 diagnostics 和审阅动作。
+提示词槽是后续生成或修复动作的重要输入。`source`、`visual`、`duration`、`reviewStatus` 和 `nextAction` 帮助 Canvas 展示 diagnostics 和审阅规划。
 
-需要时，在必需决策扩展表头之后继续追加扩展列，例如 `requiresTextRemoval`、`requiresInpaint`、`referenceImage`、`styleRef`、`textCueType`、`speaker`、`ocrNotes`、`risk`、`actionId`、`resultRef` 或 `executionStatus`。已知字段应保持稳定；有用的扩展列应作为审阅 metadata 可见保留。
+需要时，在推荐稳定表头之后继续追加扩展列，例如 `requiresTextRemoval`、`requiresInpaint`、`referenceImage`、`styleRef`、`textCueType`、`speaker`、`ocrNotes` 或 `risk`。已知字段应保持稳定；有用的扩展列应作为审阅 metadata 可见保留。没有可信 lifecycle 结果支撑时，不要输出执行字段。
 
 ## 资源引用
 
@@ -104,16 +110,16 @@
 
 ## 示例
 
-| scene   | shot | source     | sourcePanel | decision | duration | visual                     | motion                 | audio        | characters                 | dialogue | prompt                                                                       | reviewStatus | nextAction       | contentType | decisionReason         | requiresSplit | duplicateOf |
-| ------- | ---- | ---------- | ----------- | -------- | -------- | -------------------------- | ---------------------- | ------------ | -------------------------- | -------- | ---------------------------------------------------------------------------- | ------------ | ---------------- | ----------- | ---------------------- | ------------- | ----------- |
-| 第 1 页 | 1    | P1#panel_1 | 上方分格    | keep     | 3s       | 小小的人影在黄昏靠近发光物 | 缓慢推近               | 低风声       | 牧羊少年：短披风、谨慎姿态 |          | 暗黑童话风格，黄昏牧场，谨慎少年靠近发光古灯，镜头缓慢推近，保持角色设计一致 | needs-review | use-as-reference | story       | 建立镜头，有叙事价值   | false         |             |
-| 第 1 页 | 2    | P1#panel_2 | 下方特写    | split    | 2s       | 手伸向光源，强化悬念       | 静态特写，光线轻微闪动 | 柔和魔法嗡鸣 | 牧羊少年：手和袖口可见     |          | 手伸向紫金色光源的特写，紧张氛围，保留原漫画构图                             | needs-review | split-panel      | story       | 同一页包含独立特写节拍 | true          |             |
+| 场景    | 镜头 | 来源       | 来源分格 | 决策  | 时长 | 画面                       | 运镜                   | 音频         | 人物                       | 对白 | 图像提示词                                                       | 图像编辑提示词 | 镜头视频提示词                                         | 视频编辑提示词 | 场景风格提示词                   | 场景视频提示词                                                 | 场景视频编辑提示词 | 审阅状态     | 建议操作         | 内容类型 | 决策理由               | 需要拆分 | 重复来源 |
+| ------- | ---- | ---------- | -------- | ----- | ---- | -------------------------- | ---------------------- | ------------ | -------------------------- | ---- | ---------------------------------------------------------------- | -------------- | ------------------------------------------------------ | -------------- | -------------------------------- | -------------------------------------------------------------- | ------------------ | ------------ | ---------------- | -------- | ---------------------- | -------- | -------- |
+| 第 1 页 | 1    | P1#panel_1 | 上方分格 | keep  | 3s   | 小小的人影在黄昏靠近发光物 | 缓慢推近               | 低风声       | 牧羊少年：短披风、谨慎姿态 |      | 暗黑童话关键帧，黄昏牧场，谨慎少年靠近发光古灯，保持角色设计一致 | needs-prompt   | 缓慢推近发光古灯，短镜头，悬疑节奏                     | needs-prompt   | 黄昏牧场、紫金色魔法光、墨线质感 | 连接镜头 1-2 成 8 秒场景：靠近、手部特写、光芒增强，保持连续性 | needs-prompt       | needs-review | use-as-reference | story    | 建立镜头，有叙事价值   | false    |          |
+| 第 1 页 | 2    | P1#panel_2 | 下方特写 | split | 2s   | 手伸向光源，强化悬念       | 静态特写，光线轻微闪动 | 柔和魔法嗡鸣 | 牧羊少年：手和袖口可见     |      | 手伸向紫金色光源的特写关键帧，紧张氛围，保留原漫画构图           | needs-prompt   | 静态特写，只有光线轻微闪动，不添加来源分格之外的新动作 | needs-prompt   | 黄昏牧场、紫金色魔法光、墨线质感 | 连接镜头 1-2 成 8 秒场景：靠近、手部特写、光芒增强，保持连续性 | needs-prompt       | needs-review | split-panel      | story    | 同一页包含独立特写节拍 | true     |          |
 
 推荐扩展示例：
 
-| scene    | shot | source     | sourcePanel | decision | duration | visual           | motion   | audio      | characters       | dialogue | prompt                       | reviewStatus | nextAction                    | decisionReason       | requiresSplit |
-| -------- | ---- | ---------- | ----------- | -------- | -------- | ---------------- | -------- | ---------- | ---------------- | -------- | ---------------------------- | ------------ | ----------------------------- | -------------------- | ------------- |
-| 正文开场 | 1    | P5#panel_1 | 右上分格    | keep     | 4s       | 主角进入巨构空间 | 缓慢推近 | 低频环境声 | 主角：小比例剪影 |          | 基于来源分格的视频生成提示词 | needs-review | split-panel, use-as-reference | 一页包含多个可用分格 | true          |
+| 场景     | 镜头 | 来源       | 来源分格 | 决策 | 时长 | 画面             | 运镜     | 音频       | 人物             | 对白 | 图像提示词                 | 图像编辑提示词               | 场景视频提示词                         | 场景视频编辑提示词           | 审阅状态     | 建议操作                      | 决策理由             | 需要拆分 |
+| -------- | ---- | ---------- | -------- | ---- | ---- | ---------------- | -------- | ---------- | ---------------- | ---- | -------------------------- | ---------------------------- | -------------------------------------- | ---------------------------- | ------------ | ----------------------------- | -------------------- | -------- |
+| 正文开场 | 1    | P5#panel_1 | 右上分格 | keep | 4s   | 主角进入巨构空间 | 缓慢推近 | 低频环境声 | 主角：小比例剪影 |      | 巨构室内关键帧，小比例剪影 | 重绘天顶光，移除对白气泡图形 | 延展镜头 1-3 的进入巨构空间节拍，12 秒 | 整场调成更冷色月光并平滑运镜 | needs-review | split-panel, use-as-reference | 一页包含多个可用分格 | true     |
 
 ## 人物和文字说明
 
@@ -162,6 +168,6 @@
 3. keep/skip/merge/split 说明。
 4. 预计总视频时长。
 5. 必要时列出角色和参考分格。
-6. 使用精确核心表头、包含提示词、资源/source token、review status 和 next actions 的单张 Markdown creative table。
+6. 使用支持提示词槽的表头、资源/source token、review status 和仅计划用途的 next actions 的单张 Markdown creative table。
 7. 只有用户需要 Canvas 交付时，才说明推荐 Canvas action。
 8. 只有当用户需要动画、生成、Canvas、Cut 或导出时，才建议下一步 Skill。

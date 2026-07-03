@@ -51,22 +51,26 @@ For normal review output, provide concise notes first, then output exactly one M
 
 Do not output YAML frontmatter or creation-document metadata in normal chat replies. Forbidden blocks/keys include `---`, `id:`, `kind: draft`, `status: draft`, `domain: storyboard`, and `referenceChain:`. Those keys are only for host/runtime-persisted creation documents, not storyboard creative tables.
 
-The primary table MUST cover these stable fields in this order, followed by the required decision extension fields below. Headers may use localized display labels when appropriate, but each header must map unambiguously to one stable field:
+For production-ready storyboard output, prefer this canonical stable header order. The Webview displays raw Markdown headers and does not translate them, so use field labels in the user's/output language while keeping each label unambiguously mapped to one stable field:
 
-`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `prompt`, `reviewStatus`, `nextAction`
+`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `imagePrompt`, `imageEditPrompt`, `shotVideoPrompt`, `videoEditPrompt`, `sceneStylePrompt`, `sceneVideoPrompt`, `sceneVideoEditPrompt`, `reviewStatus`, `nextAction`, `contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`
 
-Required decision extension fields after the core fields:
-
-`contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`
+The validator supports open review metadata and does not require every recommended field when evidence or the requested task does not need it. For chat storyboard output, the table must still include `scene` + `shot`, and either `source` or at least one prompt slot / legacy `prompt`.
 
 Rules:
 
-- Chinese headers may use `场景`, `镜头`, `来源`, `来源分格`, `决策`, `时长`, `画面`, `运镜`, `音频`, `人物`, `对白`, `提示词`, `审阅状态`, `建议操作`, `内容类型`, `决策理由`, `需要拆分`, and `重复来源`, but none of the stable fields may be omitted.
-- Never output a simplified page-analysis table as the storyboard table. Forbidden primary headers include `页码`, `景别/构图`, `节奏/情绪`, `page`, `image reference`, `analysis`, or `suggestion`. Localized labels such as `画面内容`, `生成提示词`, and `建议操作` are acceptable only when the single table also contains every required storyboard field.
-- Do not say the required storyboard fields can be added later. `characters`, `shot`, `duration`, `motion`, `prompt`, and `nextAction` must appear now in the single primary table.
-- If the evidence is still page-level, still create one or more shot rows with the required core columns and mark uncertain cells as `needs-panel-analysis`, `needs-review`, or `needs-prompt`; do not downgrade to a page list.
+- Chinese headers may use `场景`, `镜头`, `来源`, `来源分格`, `决策`, `时长`, `画面`, `运镜`, `音频`, `人物`, `对白`, `图像提示词`, `图像编辑提示词`, `镜头视频提示词`, `视频编辑提示词`, `场景风格提示词`, `场景视频提示词`, `场景视频编辑提示词`, `审阅状态`, `建议操作`, `内容类型`, `决策理由`, `需要拆分`, and `重复来源`.
+- Never output a simplified page-analysis table as the storyboard table. Forbidden primary headers include `页码`, `景别/构图`, `节奏/情绪`, `page`, `image reference`, `analysis`, or `suggestion`. Localized labels such as `画面内容`, `图像提示词`, and `建议操作` are acceptable when the single table also contains the chat output anchors.
+- Do not say the storyboard anchors can be added later. `scene`, `shot`, and the `source`/prompt-slot anchor must appear now in the single primary table.
+- If the evidence is still page-level, still create one or more shot rows with the available storyboard columns and mark uncertain cells as `needs-panel-analysis`, `needs-review`, or `needs-prompt`; do not downgrade to a page list.
 - Do not output a second "storyboard structure suggestion" table. Put keep/skip/split/merge and next-step planning in `decision`, `decisionReason`, `reviewStatus`, and `nextAction`.
-- `prompt` and `nextAction` are required. If no prompt or action is ready, write `needs-prompt` or `needs-review`.
+- When a specific generation or editing target is requested, include the corresponding prompt slot and write `needs-prompt` in uncertain prompt cells.
+- Prompt slots are explicit and model-aware: `imagePrompt` = shot image generation prompt; `imageEditPrompt` = shot image edit/redraw/inpaint prompt; `shotVideoPrompt` = shot video generation prompt; `videoEditPrompt` = shot video edit prompt; `sceneStylePrompt` = scene-level image/style prompt; `sceneVideoPrompt` = scene video generation prompt; `sceneVideoEditPrompt` = scene video edit prompt.
+- Legacy `prompt` is accepted for compatibility and general image generation, but new output should prefer the model-specific prompt slots.
+- Each row represents a shot or video beat; scene columns group rows into a scene.
+- Shot prompt slots describe per-shot keyframes, edits, or short shot motion. Scene prompt slots describe scene-level continuity/style or longer scene video generation/editing across multiple shots.
+- `sceneVideoPrompt` may summarize how multiple shot beats connect; shot prompts should stay grounded in source panel/shot evidence.
+- Storyboard prompts may target image generation/editing and video generation/editing. Keep video model support generic and do not output provider payloads, external API JSON, or internal job contracts. If a Seedance/Volcengine-style use case is relevant, describe it only as scene/shot video generation intent.
 - Every row represents a narrative shot or video beat, not a page list. The same `source` may appear in multiple rows when one page/image yields multiple shots.
 - Use `decision` for keep/skip/merge/split/duplicate/reference-only choices. Covers, repeated pages, ads, blanks, and metadata pages must still get an explicit `decision`, not disappear silently.
 - Use `decisionReason` to explain why a source is kept, skipped, merged, split into multiple shots, or treated as a duplicate.
@@ -78,13 +82,15 @@ Rules:
 
 ### Field Roles
 
-- Approval fields: `scene`, `shot`, `source`, `sourcePanel`, `decision`, `visual`, `audio`, `characters`, `dialogue`, `reviewStatus`.
-- Plan fields: `prompt`, `motion`, `duration`, `decisionReason`, `requiresSplit`, `requiresTextRemoval`, `requiresInpaint`, `referenceImage`, `styleRef`.
-- Execution fields: `nextAction`, trusted action ids, result refs, execution status, and generated result refs only when backed by local capabilities or real tool results.
+- Approval/review fields: `scene`, `shot`, `source`, `sourcePanel`, `decision`, `visual`, `audio`, `characters`, `dialogue`, `reviewStatus`, plus useful open review metadata columns.
+- Plan fields: declared profile fields such as `motion`, `duration`, prompt slots, legacy `prompt`, `decisionReason`, `requiresSplit`, `requiresTextRemoval`, `requiresInpaint`, `referenceImage`, `styleRef`, and `nextAction`.
+- Plan fields have production semantics only when declared in the shared profile descriptor.
+- `nextAction` is plan text only. It is not a trusted execution action.
+- Execution fields such as `actionId`, `resultRef`, `executionStatus`, and generated result refs are trusted lifecycle fields. Normal output from this skill should omit them unless a local capability/tool result explicitly backs them.
 
-`prompt` is important input for later generation or repair actions. `source`, `visual`, `duration`, `reviewStatus`, and `nextAction` help Canvas show diagnostics and review actions.
+Prompt slots are important input for later generation or repair actions. `source`, `visual`, `duration`, `reviewStatus`, and `nextAction` help Canvas show diagnostics and review planning.
 
-Add more extension columns after the required decision extension headers when useful, for example `requiresTextRemoval`, `requiresInpaint`, `referenceImage`, `styleRef`, `textCueType`, `speaker`, `ocrNotes`, `risk`, `actionId`, `resultRef`, or `executionStatus`. Known fields should remain stable; useful extra columns should stay visible as review metadata.
+Add more extension columns after the recommended stable headers when useful, for example `requiresTextRemoval`, `requiresInpaint`, `referenceImage`, `styleRef`, `textCueType`, `speaker`, `ocrNotes`, or `risk`. Known fields should remain stable; useful extra columns should stay visible as review metadata. Omit execution fields unless backed by trusted lifecycle results.
 
 ## Resource References
 
@@ -104,16 +110,16 @@ Use validation or review actions before mutating production nodes. Do not output
 
 ## Example
 
-| scene  | shot | source     | sourcePanel    | decision | duration | visual                                                  | motion                                    | audio            | characters                                  | dialogue | prompt                                                                                                                         | reviewStatus | nextAction       | contentType | decisionReason                         | requiresSplit | duplicateOf |
-| ------ | ---- | ---------- | -------------- | -------- | -------- | ------------------------------------------------------- | ----------------------------------------- | ---------------- | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------ | ---------------- | ----------- | -------------------------------------- | ------------- | ----------- |
-| Page 1 | 1    | P1#panel_1 | top panel      | keep     | 3s       | A small figure approaches a glowing object at dusk      | Slow push-in                              | Low wind         | Shepherd boy: short cloak, cautious posture |          | Dark fairy-tale style, dusk pasture, cautious boy approaches a glowing ancient lamp, slow push-in, consistent character design | needs-review | use-as-reference | story       | Establishing beat with narrative value | false         |             |
-| Page 1 | 2    | P1#panel_2 | lower close-up | split    | 2s       | The hand reaches toward the light, emphasizing suspense | Static close-up with slight light flicker | Soft magical hum | Shepherd boy: hand and sleeve visible       |          | Close-up of a hand reaching toward purple-gold light, tense atmosphere, preserve original manga composition                    | needs-review | split-panel      | story       | Same page contains a separate close-up | true          |             |
+| scene  | shot | source     | sourcePanel    | decision | duration | visual                                                  | motion                                    | audio            | characters                                  | dialogue | imagePrompt                                                                                                          | imageEditPrompt | shotVideoPrompt                                                       | videoEditPrompt | sceneStylePrompt                                     | sceneVideoPrompt                                                                             | sceneVideoEditPrompt | reviewStatus | nextAction       | contentType | decisionReason                         | requiresSplit | duplicateOf |
+| ------ | ---- | ---------- | -------------- | -------- | -------- | ------------------------------------------------------- | ----------------------------------------- | ---------------- | ------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- | --------------- | --------------------------------------------------------------------- | --------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------- | ------------ | ---------------- | ----------- | -------------------------------------- | ------------- | ----------- |
+| Page 1 | 1    | P1#panel_1 | top panel      | keep     | 3s       | A small figure approaches a glowing object at dusk      | Slow push-in                              | Low wind         | Shepherd boy: short cloak, cautious posture |          | Dark fairy-tale keyframe, dusk pasture, cautious boy approaches a glowing ancient lamp, consistent character design  | needs-prompt    | Slow push-in toward the ancient lamp, short suspenseful shot          | needs-prompt    | Dusk pasture, purple-gold magical light, ink texture | Connect shots 1-2 as one 8s scene: approach, hand close-up, light flare, preserve continuity | needs-prompt         | needs-review | use-as-reference | story       | Establishing beat with narrative value | false         |             |
+| Page 1 | 2    | P1#panel_2 | lower close-up | split    | 2s       | The hand reaches toward the light, emphasizing suspense | Static close-up with slight light flicker | Soft magical hum | Shepherd boy: hand and sleeve visible       |          | Close-up keyframe of a hand reaching toward purple-gold light, tense atmosphere, preserve original manga composition | needs-prompt    | Static close-up with subtle light flicker, no new action beyond panel | needs-prompt    | Dusk pasture, purple-gold magical light, ink texture | Connect shots 1-2 as one 8s scene: approach, hand close-up, light flare, preserve continuity | needs-prompt         | needs-review | split-panel      | story       | Same page contains a separate close-up | true          |             |
 
 Recommended extension example:
 
-| scene   | shot | source     | sourcePanel     | decision | duration | visual                                    | motion       | audio              | characters                    | dialogue | prompt                                          | reviewStatus | nextAction                    | decisionReason                           | requiresSplit |
-| ------- | ---- | ---------- | --------------- | -------- | -------- | ----------------------------------------- | ------------ | ------------------ | ----------------------------- | -------- | ----------------------------------------------- | ------------ | ----------------------------- | ---------------------------------------- | ------------- |
-| Opening | 1    | P5#panel_1 | top-right panel | keep     | 4s       | The protagonist enters a monumental space | Slow push-in | Low ambient rumble | Protagonist: small silhouette |          | Video-ready prompt grounded in the source panel | needs-review | split-panel, use-as-reference | One page contains multiple usable panels | true          |
+| scene   | shot | source     | sourcePanel     | decision | duration | visual                                    | motion       | audio              | characters                    | dialogue | imagePrompt                                   | imageEditPrompt                                       | sceneVideoPrompt                                       | sceneVideoEditPrompt                             | reviewStatus | nextAction                    | decisionReason                           | requiresSplit |
+| ------- | ---- | ---------- | --------------- | -------- | -------- | ----------------------------------------- | ------------ | ------------------ | ----------------------------- | -------- | --------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------ | ------------ | ----------------------------- | ---------------------------------------- | ------------- |
+| Opening | 1    | P5#panel_1 | top-right panel | keep     | 4s       | The protagonist enters a monumental space | Slow push-in | Low ambient rumble | Protagonist: small silhouette |          | Monumental interior keyframe, tiny silhouette | Redraw the ceiling light and remove speech bubble art | Extend the monumental-entry beat across shots 1-3, 12s | Cool the whole scene and smooth the camera drift | needs-review | split-panel, use-as-reference | One page contains multiple usable panels | true          |
 
 ## Character And Text Notes
 
@@ -162,6 +168,6 @@ After analysis, present:
 3. Keep/skip/merge/split notes.
 4. Estimated total video duration.
 5. Character list with reference panels when useful.
-6. The single Markdown creative table with the exact core headers, prompts, resource/source tokens, review status, and next actions.
+6. The single Markdown creative table with prompt-slot-aware headers, resource/source tokens, review status, and plan-only next actions.
 7. The preferred Canvas action only when the user wants Canvas delivery.
 8. Suggested next skill only if the user wants animation, generation, Canvas, Cut, or export.
