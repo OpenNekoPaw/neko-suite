@@ -123,6 +123,7 @@ export const STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS = [
   'imageEditPrompt',
   'shotVideoPrompt',
   'sceneVideoPrompt',
+  'sceneVideoEditPrompt',
   'reviewStatus',
   'nextAction',
   'contentType',
@@ -182,8 +183,8 @@ export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor =
     {
       operationId: 'video.scene.edit',
       label: 'Edit scene video',
-      requiredFieldIds: ['videoEditPrompt'],
-      acceptedPromptFieldIds: ['videoEditPrompt', 'sceneVideoPrompt'],
+      requiredFieldIds: ['sceneVideoEditPrompt'],
+      acceptedPromptFieldIds: ['sceneVideoEditPrompt', 'sceneVideoPrompt'],
     },
   ],
   fields: [
@@ -293,7 +294,6 @@ export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor =
         '提示词',
         '生成提示词',
         '视觉提示词',
-        '图像提示词',
         '动画化提示',
       ],
       {
@@ -404,6 +404,24 @@ export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor =
       {
         valueType: 'prompt',
         promptSlot: { scope: 'scene', mediaType: 'video', operation: 'generate' },
+        productionMapping: { target: 'scene.promptSlots' },
+      },
+    ),
+    planField(
+      'sceneVideoEditPrompt',
+      'Scene Video Edit Prompt',
+      '场景视频编辑提示词',
+      [
+        'scene video edit prompt',
+        'scenevideoeditprompt',
+        'scene edit prompt',
+        '场景视频编辑提示词',
+        '整场视频编辑提示词',
+        '长视频编辑提示词',
+      ],
+      {
+        valueType: 'prompt',
+        promptSlot: { scope: 'scene', mediaType: 'video', operation: 'edit' },
         productionMapping: { target: 'scene.promptSlots' },
       },
     ),

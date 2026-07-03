@@ -100,4 +100,65 @@ describe('creative table profile descriptor', () => {
     expect(normalizeCreativeTableHeader('source_panel')).toBe('sourcepanel');
     expect(STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS).toContain('imagePrompt');
   });
+
+  it('keeps storyboard descriptor references internally consistent', () => {
+    const fieldIds = new Set(STORYBOARD_CREATIVE_TABLE_PROFILE.fields.map((field) => field.id));
+
+    expect(
+      STORYBOARD_CREATIVE_TABLE_PROFILE.recommendedHeaders.filter(
+        (fieldId) => !fieldIds.has(fieldId),
+      ),
+    ).toEqual([]);
+    expect(
+      STORYBOARD_CREATIVE_TABLE_PROFILE.minimumFieldGroups
+        .flat()
+        .filter((fieldId) => !fieldIds.has(fieldId)),
+    ).toEqual([]);
+
+    for (const requirement of STORYBOARD_CREATIVE_TABLE_PROFILE.operationRequirements) {
+      expect(requirement.requiredFieldIds.filter((fieldId) => !fieldIds.has(fieldId))).toEqual([]);
+      expect(
+        requirement.acceptedPromptFieldIds.filter((fieldId) => !fieldIds.has(fieldId)),
+      ).toEqual([]);
+    }
+  });
+
+  it('keeps operation required prompt slots aligned with operation ids', () => {
+    for (const requirement of STORYBOARD_CREATIVE_TABLE_PROFILE.operationRequirements) {
+      const [mediaType, scope, operation] = requirement.operationId.split('.');
+
+      for (const fieldId of requirement.requiredFieldIds) {
+        const field = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find(
+          (candidate) => candidate.id === fieldId,
+        );
+
+        expect(field?.promptSlot).toEqual({ scope, mediaType, operation });
+      }
+    }
+
+    const sceneVideoEditRequirement = getCreativeTableOperationRequirement(
+      STORYBOARD_CREATIVE_TABLE_PROFILE,
+      'video.scene.edit',
+    );
+    const sceneVideoEditField = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find(
+      (field) => field.id === sceneVideoEditRequirement?.requiredFieldIds[0],
+    );
+
+    expect(sceneVideoEditField?.promptSlot).toEqual({
+      scope: 'scene',
+      mediaType: 'video',
+      operation: 'edit',
+    });
+  });
+
+  it('keeps imagePrompt localized label out of legacy prompt aliases', () => {
+    const promptField = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find(
+      (field) => field.id === 'prompt',
+    );
+
+    expect(resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, '图像提示词')?.id).toBe(
+      'imagePrompt',
+    );
+    expect(promptField?.aliases).not.toContain('图像提示词');
+  });
 });
