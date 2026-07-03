@@ -76,6 +76,14 @@ describe('validateStoryboardCreativeTableOutput', () => {
     const result = validateStoryboardCreativeTableOutput(markdown);
 
     expect(result.errors).toEqual([]);
+    expect(resolveAgentTypesStoryboardCreativeTableHeader('图像提示词')).toBe('imagePrompt');
+    expect(resolveAgentTypesStoryboardCreativeTableHeader('场景视频提示词')).toBe(
+      'sceneVideoPrompt',
+    );
+    expect(resolveAgentTypesStoryboardCreativeTableHeader('建议操作')).toBe('nextAction');
+    expect(result.table?.headers).toEqual(
+      expect.arrayContaining(['图像提示词', '场景视频提示词', '建议操作']),
+    );
   });
 
   it('accepts an edit prompt slot as the production anchor', () => {
