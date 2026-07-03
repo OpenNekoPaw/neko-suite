@@ -76,6 +76,9 @@ describe('validateStoryboardCreativeTableOutput', () => {
     const result = validateStoryboardCreativeTableOutput(markdown);
 
     expect(result.errors).toEqual([]);
+    expect(result.warnings.map((warning) => warning.code)).not.toContain(
+      'storyboard-table-unknown-next-action',
+    );
     expect(resolveAgentTypesStoryboardCreativeTableHeader('图像提示词')).toBe('imagePrompt');
     expect(resolveAgentTypesStoryboardCreativeTableHeader('场景视频提示词')).toBe(
       'sceneVideoPrompt',

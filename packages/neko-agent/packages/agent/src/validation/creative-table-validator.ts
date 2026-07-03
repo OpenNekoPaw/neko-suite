@@ -290,7 +290,6 @@ function validateStoryboardTableRows(
   for (const row of table.rows) {
     validateKnownValueCell(row, positions, 'decision', STORYBOARD_DECISION_VALUES, errors);
     validateKnownValueCell(row, positions, 'reviewStatus', STORYBOARD_REVIEW_STATUS_VALUES, errors);
-    validateKnownListCell(row, positions, 'nextAction', STORYBOARD_NEXT_ACTION_VALUES, warnings);
     validateKnownValueCell(row, positions, 'contentType', STORYBOARD_CONTENT_TYPE_VALUES, warnings);
     validateBooleanCell(row, positions, 'requiresSplit', errors);
     validateHumanDescriptionCell(row, positions, 'characters', errors);
@@ -317,29 +316,6 @@ function validateKnownValueCell(
       { field, value, line: row.line },
     ),
   );
-}
-
-function validateKnownListCell(
-  row: MarkdownTableRowSummary,
-  positions: ReadonlyMap<StoryboardCreativeTableHeader, number>,
-  field: StoryboardCreativeTableHeader,
-  allowedValues: ReadonlySet<string>,
-  warnings: ValidationWarning[],
-): void {
-  const value = getRowFieldValue(row, positions, field);
-  if (value === undefined || value.length === 0) return;
-  const values = value
-    .split(/[,，、/]+/)
-    .map(normalizeCellValue)
-    .filter((item) => item.length > 0);
-  const unsupported = values.filter((item) => !allowedValues.has(item));
-  if (unsupported.length === 0) return;
-  warnings.push({
-    type: 'output',
-    code: 'storyboard-table-unknown-next-action',
-    message: `Storyboard creative table row ${row.line} has non-standard "${field}" value "${unsupported.join(', ')}".`,
-    suggestion: `Use known nextAction tokens such as ${Array.from(allowedValues).slice(0, 8).join(', ')}, or keep the custom action only when it is intentional.`,
-  });
 }
 
 function validateDurationCell(
@@ -479,7 +455,7 @@ const STORYBOARD_REVIEW_STATUS_VALUES = new Set([
   'needs-ocr',
 ]);
 
-const STORYBOARD_NEXT_ACTION_VALUES = new Set([
+const STORYBOARD_LEGACY_PLAN_TOKEN_PLACEHOLDER_VALUES = new Set([
   'needs-review',
   'needs-panel-analysis',
   'needs-resource-binding',
@@ -511,7 +487,7 @@ const STORYBOARD_CONTENT_TYPE_VALUES = new Set([
 
 const STORYBOARD_MACHINE_PLACEHOLDER_VALUES = new Set([
   ...STORYBOARD_REVIEW_STATUS_VALUES,
-  ...STORYBOARD_NEXT_ACTION_VALUES,
+  ...STORYBOARD_LEGACY_PLAN_TOKEN_PLACEHOLDER_VALUES,
   ...STORYBOARD_DECISION_VALUES,
   'true',
   'false',
