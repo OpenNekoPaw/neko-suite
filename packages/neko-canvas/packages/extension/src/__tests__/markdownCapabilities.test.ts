@@ -423,6 +423,51 @@ describe('Canvas Markdown capabilities', () => {
     });
   });
 
+  it('treats operation hints as storyboard ingest signals for operation diagnostics', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.ingestMarkdown',
+        operationHint: 'video.scene.generate',
+        markdown: [
+          '| scene | shot | visual | shotVideoPrompt |',
+          '| --- | --- | --- | --- |',
+          '| Opening | 1 | wide reveal | slow push |',
+        ].join('\n'),
+      },
+      operations,
+    );
+
+    expect(result).toMatchObject({
+      capabilityId: 'canvas.ingestMarkdown',
+      status: 'needs-review',
+      resolvedKind: 'creative-table',
+      profileId: 'storyboard',
+      draftNodeId: 'table-1',
+      tableNodeId: 'table-1',
+    });
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        severity: 'warning',
+        code: 'canvas-markdown-operation-required-field-missing',
+        fieldKey: 'sceneVideoPrompt',
+      }),
+    );
+    expect(operations.createNode).toHaveBeenCalledWith(
+      'table',
+      { x: 0, y: 0 },
+      expect.objectContaining({
+        markdown: expect.objectContaining({
+          resolvedKind: 'creative-table',
+          tableProfile: 'storyboard',
+          reviewKind: 'storyboard',
+          creative: true,
+        }),
+      }),
+      'table.basic',
+    );
+  });
+
   it('consumes shared storyboard fields including localized prompt slots and review metadata', async () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(

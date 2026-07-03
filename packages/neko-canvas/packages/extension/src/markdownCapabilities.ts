@@ -287,7 +287,9 @@ async function ingestMarkdown(
   }
 
   const parsed = parseSingleMarkdownTable(input.markdown);
-  if (!parsed.table && input.intentHint !== 'table' && input.intentHint !== 'creative-table') {
+  const shouldReviewAsCreativeTable =
+    input.intentHint === 'creative-table' || input.operationHint !== undefined;
+  if (!parsed.table && input.intentHint !== 'table' && !shouldReviewAsCreativeTable) {
     return projectIngestFacadeResult(
       await createMarkdownNote({ ...input, capabilityId: 'canvas.createMarkdownNote' }, operations),
     );
@@ -296,15 +298,15 @@ async function ingestMarkdown(
     return {
       capabilityId: input.capabilityId,
       status: 'blocked',
-      resolvedKind: input.intentHint === 'creative-table' ? 'creative-table' : 'generic-table',
+      resolvedKind: shouldReviewAsCreativeTable ? 'creative-table' : 'generic-table',
       diagnostics: parsed.diagnostics,
       preview: createTablePreview(input, parsed.table, [], {
-        resolvedKind: input.intentHint === 'creative-table' ? 'creative-table' : 'generic-table',
+        resolvedKind: shouldReviewAsCreativeTable ? 'creative-table' : 'generic-table',
       }),
     };
   }
 
-  if (input.intentHint === 'creative-table' || input.profileHint) {
+  if (shouldReviewAsCreativeTable || input.profileHint) {
     const profileResult = resolveTableProfile(input.profileHint, 'storyboard');
     if (profileResult.profile) {
       return createProfiledTableFromParsed({
