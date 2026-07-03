@@ -123,6 +123,20 @@ describe('creative table profile descriptor', () => {
     }
   });
 
+  it('keeps storyboard prompt slots in the minimum production anchor group', () => {
+    const productionAnchorGroup = STORYBOARD_CREATIVE_TABLE_PROFILE.minimumFieldGroups.find(
+      (group) => group.includes('visual') && group.includes('source') && group.includes('prompt'),
+    );
+    const promptSlotFieldIds = STORYBOARD_CREATIVE_TABLE_PROFILE.fields
+      .filter((field) => field.promptSlot)
+      .map((field) => field.id);
+
+    expect(productionAnchorGroup).toBeDefined();
+    expect(
+      promptSlotFieldIds.filter((fieldId) => !productionAnchorGroup?.includes(fieldId)),
+    ).toEqual([]);
+  });
+
   it('keeps operation required prompt slots aligned with operation ids', () => {
     for (const requirement of STORYBOARD_CREATIVE_TABLE_PROFILE.operationRequirements) {
       const [mediaType, scope, operation] = requirement.operationId.split('.');

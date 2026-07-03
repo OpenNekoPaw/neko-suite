@@ -66,6 +66,35 @@ describe('validateStoryboardCreativeTableOutput', () => {
     expect(result.errors).toEqual([]);
   });
 
+  it('accepts an edit prompt slot as the production anchor', () => {
+    const markdown = [
+      '| scene | shot | imageEditPrompt |',
+      '| --- | --- | --- |',
+      '| Opening | 1 | repaint the corridor keyframe with warmer rim light |',
+    ].join('\n');
+
+    const result = validateStoryboardCreativeTableOutput(markdown);
+
+    expect(result.errors).toEqual([]);
+  });
+
+  it('keeps a prompt-slot anchored table preferred over a later source table', () => {
+    const markdown = [
+      '| scene | shot | imageEditPrompt |',
+      '| --- | --- | --- |',
+      '| Opening | 1 | repaint the corridor keyframe with warmer rim light |',
+      '',
+      '| scene | shot | source | visual |',
+      '| --- | --- | --- | --- |',
+      '| Opening | 1 | P1 | Wide industrial corridor |',
+    ].join('\n');
+
+    const result = validateStoryboardCreativeTableOutput(markdown);
+
+    expect(result.errors).toEqual([]);
+    expect(result.table?.headers).toEqual(['scene', 'shot', 'imageEditPrompt']);
+  });
+
   it('rejects weak storyboard-like tables without chat output anchors', () => {
     const markdown = [
       '| scene | visual | risk |',

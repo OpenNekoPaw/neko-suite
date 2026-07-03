@@ -147,7 +147,18 @@ export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor =
   recommendedHeaders: STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS,
   minimumFieldGroups: [
     ['scene', 'shot'],
-    ['visual', 'source', 'imagePrompt', 'prompt', 'shotVideoPrompt', 'sceneVideoPrompt'],
+    [
+      'visual',
+      'source',
+      'imagePrompt',
+      'prompt',
+      'imageEditPrompt',
+      'shotVideoPrompt',
+      'videoEditPrompt',
+      'sceneStylePrompt',
+      'sceneVideoPrompt',
+      'sceneVideoEditPrompt',
+    ],
   ],
   operationRequirements: [
     {
