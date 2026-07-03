@@ -1,10 +1,10 @@
-import type { CanvasMarkdownCapabilityTarget, CanvasMarkdownResourceRef } from '@neko/shared';
 import {
-  STORYBOARD_CREATIVE_TABLE_HEADERS,
-  resolveStoryboardCreativeTableHeader,
-  type PluginTransferProvenance,
-  type PluginTransferTargetRef,
-} from '@neko-agent/types';
+  STORYBOARD_CREATIVE_TABLE_PROFILE,
+  classifyCreativeTableHeaders,
+  type CanvasMarkdownCapabilityTarget,
+  type CanvasMarkdownResourceRef,
+} from '@neko/shared';
+import type { PluginTransferProvenance, PluginTransferTargetRef } from '@neko-agent/types';
 import type { MarkdownResourceRenderingProjection } from './markdown-resource-rendering-presenter';
 
 export interface CanvasMarkdownHandoffRequest {
@@ -80,8 +80,8 @@ function inferCanvasMarkdownHandoffKind(markdown: string): CanvasMarkdownHandoff
   const tables = extractGfmTables(markdown);
   if (tables.length === 0) return null;
 
-  const hasCanonicalStoryboardTable = tables.some(isCanonicalStoryboardCreativeTable);
-  if (!hasCanonicalStoryboardTable) return null;
+  const hasStoryboardTable = tables.some(isStoryboardCreativeTable);
+  if (!hasStoryboardTable) return null;
 
   return { declaredIntentHint: 'creative-table', declaredProfileHint: 'storyboard' };
 }
@@ -108,9 +108,8 @@ function extractGfmTables(markdown: string): readonly (readonly string[])[] {
   return tables;
 }
 
-function isCanonicalStoryboardCreativeTable(headers: readonly string[]): boolean {
-  const normalizedHeaders = new Set(headers.map(resolveStoryboardCreativeTableHeader));
-  return STORYBOARD_CREATIVE_TABLE_HEADERS.every((header) => normalizedHeaders.has(header));
+function isStoryboardCreativeTable(headers: readonly string[]): boolean {
+  return classifyCreativeTableHeaders(STORYBOARD_CREATIVE_TABLE_PROFILE, headers).matchedProfile;
 }
 
 function looksLikeTableRow(line: string): boolean {

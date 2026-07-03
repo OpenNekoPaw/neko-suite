@@ -12,7 +12,6 @@ import {
   isCompositeContentFenceLanguage,
   parseCompositeContentJson,
   parseCompositeContentJsonCandidates,
-  resolveStoryboardCreativeTableHeader,
 } from '@neko-agent/types';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { projectCompositeBlockRichContent } from '@/presenters/composite-content-presenter';
@@ -159,13 +158,9 @@ function createMarkdownComponents(
       return <tr className="border-b border-[var(--vscode-panel-border)]">{children}</tr>;
     },
     th({ children }) {
-      const projectedHeader = projectStoryboardCreativeTableHeader(children);
       return (
-        <th
-          className="px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--vscode-foreground)] border border-[var(--vscode-panel-border)]"
-          title={projectedHeader?.title}
-        >
-          {projectedHeader?.label ?? children}
+        <th className="px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--vscode-foreground)] border border-[var(--vscode-panel-border)]">
+          {children}
         </th>
       );
     },
@@ -216,19 +211,6 @@ function createMarkdownComponents(
       );
     },
   };
-}
-
-function projectStoryboardCreativeTableHeader(
-  children: ReactNode,
-): { readonly label: string; readonly title?: string } | null {
-  const text = readPlainText(children);
-  if (!text) return null;
-  const field = resolveStoryboardCreativeTableHeader(text);
-  if (!field) return null;
-  const label = t(`chat.storyboardTable.fields.${field}`);
-  return label === `chat.storyboardTable.fields.${field}`
-    ? { label: text, title: field === text ? undefined : field }
-    : { label, title: field === text ? undefined : field };
 }
 
 function projectMarkdownResourceTokenCell(

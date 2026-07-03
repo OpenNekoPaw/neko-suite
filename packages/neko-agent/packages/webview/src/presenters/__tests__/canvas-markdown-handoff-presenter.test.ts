@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { STORYBOARD_CREATIVE_TABLE_HEADERS } from '@neko-agent/types';
 import { projectCanvasMarkdownHandoffRequest } from '../canvas-markdown-handoff-presenter';
 import type { MarkdownResourceRenderingProjection } from '../markdown-resource-rendering-presenter';
 
@@ -66,10 +65,10 @@ describe('canvas markdown handoff presenter', () => {
     ).toBeNull();
   });
 
-  it('does not expose Canvas handoff for weak or display-only storyboard tables', () => {
+  it('does not expose Canvas handoff for storyboard tables that miss profile minimum groups', () => {
     expect(
       projectCanvasMarkdownHandoffRequest({
-        markdown: ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
+        markdown: ['| 场景 | 镜头 |', '| --- | --- |', '| 正文 | 1 |'].join('\n'),
         declaredIntentHint: 'creative-table',
         declaredProfileHint: 'storyboard',
       }),
@@ -106,12 +105,40 @@ describe('canvas markdown handoff presenter', () => {
       }),
     );
   });
+
+  it('infers storyboard handoff from minimum profile fields and dynamic review columns', () => {
+    const result = projectCanvasMarkdownHandoffRequest({
+      markdown: [
+        '| 场景 | 镜头 | 来源 | 画面 | 图像提示词 | 自定义审阅 |',
+        '| --- | --- | --- | --- | --- | --- |',
+        '| 开场 | 1 | P1 | 巨构空间 | 黑白关键帧 | OCR uncertain |',
+      ].join('\n'),
+    });
+
+    expect(result).toMatchObject({
+      sourceFormat: 'gfm-table',
+      declaredIntentHint: 'creative-table',
+      declaredProfileHint: 'storyboard',
+    });
+  });
+
+  it('infers storyboard handoff from scene-level video prompt fields', () => {
+    const result = projectCanvasMarkdownHandoffRequest({
+      markdown: [
+        '| scene | shot | visual | sceneVideoPrompt |',
+        '| --- | --- | --- | --- |',
+        '| Opening | 1 | Character crosses a huge corridor | 30s continuous lonely exploration |',
+      ].join('\n'),
+    });
+
+    expect(result?.declaredProfileHint).toBe('storyboard');
+  });
 });
 
 function createStoryboardCreativeTable(options?: {
   readonly extraHeaders?: readonly string[];
 }): string {
-  const headers = [...STORYBOARD_CREATIVE_TABLE_HEADERS, ...(options?.extraHeaders ?? [])];
+  const headers = ['scene', 'shot', 'source', 'visual', ...(options?.extraHeaders ?? [])];
   return [
     `| ${headers.join(' | ')} |`,
     `| ${headers.map(() => '---').join(' | ')} |`,
@@ -124,21 +151,7 @@ function storyboardCreativeTableValue(header: string): string {
     scene: 'Opening',
     shot: '1',
     source: 'P1',
-    sourcePanel: 'P1',
-    decision: 'keep',
-    duration: '3s',
     visual: 'wide shot',
-    motion: 'slow push in',
-    audio: 'low ambience',
-    characters: 'lead',
-    dialogue: '',
-    prompt: 'cinematic light',
-    reviewStatus: 'needs-review',
-    nextAction: 'split-panels',
-    contentType: 'story',
-    decisionReason: 'useful narrative beat',
-    requiresSplit: 'true',
-    duplicateOf: '',
     customAction: 'prepare-keyframe',
   };
   return values[header] ?? '';
