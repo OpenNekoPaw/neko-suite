@@ -457,6 +457,14 @@ export interface ShotCharacterCandidate {
   readonly diagnostics?: readonly ComicAnimationDiagnostic[];
 }
 
+export interface CanvasCreativePromptSlot {
+  readonly fieldId: string;
+  readonly scope: 'shot' | 'scene';
+  readonly mediaType: 'image' | 'video' | 'audio';
+  readonly operation: 'generate' | 'edit';
+  readonly prompt: string;
+}
+
 /**
  * Shot node - a single storyboard panel with full production metadata
  */
@@ -500,6 +508,8 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     voiceCues?: readonly StoryboardVoiceCue[];
     /** AI generation prompt — overrides visualDescription for image generation */
     generationPrompt?: string;
+    /** Provider-neutral prompt slots imported from Creative Tables. */
+    promptSlots?: readonly CanvasCreativePromptSlot[];
     /** Visual style directive (e.g. "noir", "cyberpunk") */
     visualStyle?: string;
     /** Reference image asset path from [[REF: path]] */
@@ -557,6 +567,8 @@ export interface SceneGroupCanvasNode extends CanvasNodeBase {
     sceneNumber: number;
     location?: string;
     timeOfDay?: string;
+    /** Provider-neutral scene prompt slots imported from Creative Tables. */
+    promptSlots?: readonly CanvasCreativePromptSlot[];
   };
 }
 

@@ -805,6 +805,96 @@ describe('Canvas Markdown capabilities', () => {
     } satisfies Partial<CanvasCreateCompositeRequest>);
   });
 
+  it('does not create production shot nodes for skip or reference-only rows', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        mode: 'create-nodes',
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
+        markdown: [
+          '| scene | shot | source | decision | visual | imagePrompt |',
+          '| --- | --- | --- | --- | --- | --- |',
+          '| Opening | 1 | P1 | reference-only | cover style reference | cover keyframe |',
+          '| Opening | 2 | P2 | skip | metadata page | metadata keyframe |',
+          '| Opening | 3 | P3 | keep | corridor shot | corridor keyframe |',
+        ].join('\n'),
+        resources: [createResource('P1'), createResource('P2'), createResource('P3')],
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('created');
+    const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
+    expect(request?.children).toHaveLength(1);
+    expect(request?.children[0]?.data).toMatchObject({
+      shotNumber: 3,
+      visualDescription: 'corridor shot',
+      generationPrompt: 'corridor keyframe',
+    });
+  });
+
+  it('preserves shot and scene prompt slots during production node creation', async () => {
+    const operations = createOperations();
+    await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        mode: 'create-nodes',
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
+        markdown: [
+          '| scene | shot | visual | imagePrompt | imageEditPrompt | shotVideoPrompt | sceneVideoPrompt |',
+          '| --- | --- | --- | --- | --- | --- | --- |',
+          '| Opening | 1 | corridor | keyframe prompt | remove text | slow dolly | 30s scene journey |',
+        ].join('\n'),
+      },
+      operations,
+    );
+
+    const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
+    expect(request?.data).toMatchObject({
+      promptSlots: [
+        expect.objectContaining({
+          fieldId: 'sceneVideoPrompt',
+          scope: 'scene',
+          mediaType: 'video',
+          operation: 'generate',
+          prompt: '30s scene journey',
+        }),
+      ],
+    });
+    expect(request?.children[0]?.data).toMatchObject({
+      generationPrompt: 'keyframe prompt',
+      promptSlots: expect.arrayContaining([
+        expect.objectContaining({
+          fieldId: 'imageEditPrompt',
+          scope: 'shot',
+          mediaType: 'image',
+          operation: 'edit',
+          prompt: 'remove text',
+        }),
+        expect.objectContaining({
+          fieldId: 'shotVideoPrompt',
+          scope: 'shot',
+          mediaType: 'video',
+          operation: 'generate',
+          prompt: 'slow dolly',
+        }),
+      ]),
+    });
+  });
+
   it('rejects unsupported storyboard table profile hints visibly', async () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(

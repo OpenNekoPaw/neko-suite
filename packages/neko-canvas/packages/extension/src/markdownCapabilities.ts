@@ -11,6 +11,7 @@ import {
   type CanvasAgentContentPayload,
   type CanvasCreateCompositeRequest,
   type CanvasCreateCompositeResult,
+  type CanvasCreativePromptSlot,
   type CreativeTableFieldDescriptor,
   type CanvasMarkdownCapabilityDiagnostic,
   type CanvasMarkdownCapabilityInput,
@@ -1096,7 +1097,7 @@ function buildStoryboardProductionRequest(
 
   const sceneColumn = profileColumns.columnsByField.get('scene');
   const shotColumn = profileColumns.columnsByField.get('shot');
-  const promptColumn =
+  const imagePromptColumn =
     profileColumns.columnsByField.get('imagePrompt') ?? profileColumns.columnsByField.get('prompt');
   const motionColumn = profileColumns.columnsByField.get('motion');
   const durationColumn = profileColumns.columnsByField.get('duration');
@@ -1104,6 +1105,12 @@ function buildStoryboardProductionRequest(
   const dialogueColumn = profileColumns.columnsByField.get('dialogue');
   const firstSceneTitle = sceneColumn ? getCell(table.rows[0], sceneColumn) : undefined;
   const sceneTitle = firstSceneTitle || input.title || 'Storyboard';
+  const productionRows = table.rows.filter((row) =>
+    shouldCreateStoryboardShot(row, profileColumns),
+  );
+  const scenePromptSlots = uniquePromptSlots(
+    productionRows.flatMap((row) => extractPromptSlots(row, profileColumns, 'scene')),
+  );
 
   return {
     request: {
@@ -1114,11 +1121,17 @@ function buildStoryboardProductionRequest(
         sceneTitle,
         sceneNumber: 1,
         markdownSource: input.markdown,
+        ...(scenePromptSlots.length > 0 ? { promptSlots: scenePromptSlots } : {}),
       },
       autoLayout: true,
-      children: table.rows.map((row, index) => {
+      children: productionRows.map((row, index) => {
         const visual = getCell(row, visualColumn);
-        const prompt = promptColumn ? getCell(row, promptColumn) : undefined;
+        const prompt = imagePromptColumn ? getCell(row, imagePromptColumn) : undefined;
+        const promptSlots = uniquePromptSlots(
+          extractPromptSlots(row, profileColumns, 'shot').filter(
+            (slot) => slot.fieldId !== 'imagePrompt' && slot.fieldId !== 'prompt',
+          ),
+        );
         const characters = characterColumn
           ? parseCharacters(getCell(row, characterColumn))
           : undefined;
@@ -1133,6 +1146,7 @@ function buildStoryboardProductionRequest(
             visualDescription: visual,
             characterAction: motionColumn ? (getCell(row, motionColumn) ?? visual) : visual,
             ...(prompt ? { generationPrompt: prompt } : {}),
+            ...(promptSlots.length > 0 ? { promptSlots } : {}),
             ...(motionColumn
               ? { cameraMovement: normalizeCameraMovement(getCell(row, motionColumn)) }
               : {}),
@@ -1145,6 +1159,60 @@ function buildStoryboardProductionRequest(
     },
     diagnostics,
   };
+}
+
+function shouldCreateStoryboardShot(
+  row: MarkdownTableRow,
+  profileColumns: CanvasMarkdownResolvedTableProfileColumns,
+): boolean {
+  const decisionColumn = profileColumns.columnsByField.get('decision');
+  const decision = decisionColumn ? getCell(row, decisionColumn).trim().toLowerCase() : '';
+  return decision !== 'skip' && decision !== 'reference-only' && decision !== 'duplicate';
+}
+
+function extractPromptSlots(
+  row: MarkdownTableRow,
+  profileColumns: CanvasMarkdownResolvedTableProfileColumns,
+  scope: 'shot' | 'scene',
+): readonly CanvasCreativePromptSlot[] {
+  const slots: CanvasCreativePromptSlot[] = [];
+  for (const consumed of profileColumns.consumedColumns) {
+    const descriptor = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find(
+      (field) => field.id === consumed.fieldId,
+    );
+    if (!descriptor?.promptSlot || descriptor.promptSlot.scope !== scope) continue;
+    const column = profileColumns.columnsByField.get(consumed.fieldId);
+    const prompt = column ? getCell(row, column) : '';
+    if (!prompt) continue;
+    slots.push({
+      fieldId: consumed.fieldId,
+      scope: descriptor.promptSlot.scope,
+      mediaType: descriptor.promptSlot.mediaType,
+      operation: descriptor.promptSlot.operation,
+      prompt,
+    });
+  }
+  return slots;
+}
+
+function uniquePromptSlots(
+  promptSlots: readonly CanvasCreativePromptSlot[],
+): readonly CanvasCreativePromptSlot[] {
+  const seen = new Set<string>();
+  const unique: CanvasCreativePromptSlot[] = [];
+  for (const promptSlot of promptSlots) {
+    const key = [
+      promptSlot.fieldId,
+      promptSlot.scope,
+      promptSlot.mediaType,
+      promptSlot.operation,
+      promptSlot.prompt,
+    ].join('\u0000');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(promptSlot);
+  }
+  return unique;
 }
 
 function getCell(
