@@ -109,7 +109,16 @@ function extractGfmTables(markdown: string): readonly (readonly string[])[] {
 }
 
 function isStoryboardCreativeTable(headers: readonly string[]): boolean {
-  return classifyCreativeTableHeaders(STORYBOARD_CREATIVE_TABLE_PROFILE, headers).matchedProfile;
+  const classification = classifyCreativeTableHeaders(STORYBOARD_CREATIVE_TABLE_PROFILE, headers);
+  if (!classification.matchedProfile) return false;
+
+  const fieldIds = new Set(classification.knownFields.map((field) => field.id));
+  const hasStoryboardRowIdentity = fieldIds.has('scene') && fieldIds.has('shot');
+  const hasTransferAnchor =
+    fieldIds.has('source') ||
+    fieldIds.has('prompt') ||
+    classification.knownFields.some((field) => field.promptSlot !== undefined);
+  return hasStoryboardRowIdentity && hasTransferAnchor;
 }
 
 function looksLikeTableRow(line: string): boolean {

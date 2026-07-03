@@ -75,6 +75,30 @@ describe('canvas markdown handoff presenter', () => {
     ).toBeNull();
   });
 
+  it('does not expose Canvas handoff for simplified display-only storyboard tables', () => {
+    expect(
+      projectCanvasMarkdownHandoffRequest({
+        markdown: ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+      }),
+    ).toBeNull();
+  });
+
+  it('does not expose Canvas handoff for tables inside fenced code blocks', () => {
+    expect(
+      projectCanvasMarkdownHandoffRequest({
+        markdown: [
+          '```markdown',
+          '| scene | shot | source | visual |',
+          '| --- | --- | --- | --- |',
+          '| Opening | 1 | P1 | Wide shot |',
+          '```',
+        ].join('\n'),
+      }),
+    ).toBeNull();
+  });
+
   it('allows extension columns after the required storyboard creative fields are present', () => {
     const projection = projectCanvasMarkdownHandoffRequest({
       markdown: createStoryboardCreativeTable({ extraHeaders: ['customAction'] }),
