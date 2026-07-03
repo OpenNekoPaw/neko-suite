@@ -21,6 +21,8 @@ describe('validateStoryboardCreativeTableOutput', () => {
       'sceneVideoPrompt',
     );
     expect(resolveAgentTypesStoryboardCreativeTableHeader('建议操作')).toBe('nextAction');
+    expect(resolveAgentTypesStoryboardCreativeTableHeader('prompt')).toBe('prompt');
+    expect(resolveAgentTypesStoryboardCreativeTableHeader('actionId')).toBe('actionId');
   });
 
   it('accepts the canonical storyboard creative table headers', () => {

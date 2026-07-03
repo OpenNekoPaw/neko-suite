@@ -10,9 +10,15 @@ export const STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID = 'creative-table.storyboard
 
 export const STORYBOARD_CREATIVE_TABLE_HEADERS = STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS;
 
-export type StoryboardCreativeTableHeader = (typeof STORYBOARD_CREATIVE_TABLE_HEADERS)[number];
+export type StoryboardCreativeTableRecommendedHeader =
+  (typeof STORYBOARD_CREATIVE_TABLE_HEADERS)[number];
 
 export type StoryboardCreativeTableFieldDescriptor = CreativeTableFieldDescriptor;
+
+export type StoryboardCreativeTableFieldId = CreativeTableFieldDescriptor['id'];
+
+// Legacy name: resolves any known storyboard profile field id, not only recommended display headers.
+export type StoryboardCreativeTableHeader = StoryboardCreativeTableFieldId;
 
 export const STORYBOARD_CREATIVE_TABLE_FIELDS = STORYBOARD_CREATIVE_TABLE_PROFILE.fields;
 
@@ -24,5 +30,5 @@ export function resolveStoryboardCreativeTableHeader(
   value: string,
 ): StoryboardCreativeTableHeader | undefined {
   const field = resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, value);
-  return field?.id as StoryboardCreativeTableHeader | undefined;
+  return field?.id;
 }
