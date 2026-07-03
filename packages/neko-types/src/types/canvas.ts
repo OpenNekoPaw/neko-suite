@@ -25,6 +25,11 @@ import type {
   ComicAnimationDiagnostic,
   VisualOccurrence,
 } from './comic-animation-indexing';
+import type {
+  CreativeTablePromptMediaType,
+  CreativeTablePromptOperation,
+  CreativeTablePromptScope,
+} from './creative-table-profile';
 
 // =============================================================================
 // Canvas Types - Infinite Canvas Editor Data Model
@@ -459,9 +464,9 @@ export interface ShotCharacterCandidate {
 
 export interface CanvasCreativePromptSlot {
   readonly fieldId: string;
-  readonly scope: 'shot' | 'scene';
-  readonly mediaType: 'image' | 'video' | 'audio';
-  readonly operation: 'generate' | 'edit';
+  readonly scope: CreativeTablePromptScope;
+  readonly mediaType: CreativeTablePromptMediaType;
+  readonly operation: CreativeTablePromptOperation;
   readonly prompt: string;
 }
 

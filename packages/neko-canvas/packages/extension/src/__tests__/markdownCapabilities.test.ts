@@ -805,7 +805,7 @@ describe('Canvas Markdown capabilities', () => {
     } satisfies Partial<CanvasCreateCompositeRequest>);
   });
 
-  it('does not create production shot nodes for skip or reference-only rows', async () => {
+  it('does not create production shot nodes for skip, reference-only, or duplicate rows', async () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(
       {
@@ -823,9 +823,15 @@ describe('Canvas Markdown capabilities', () => {
           '| --- | --- | --- | --- | --- | --- |',
           '| Opening | 1 | P1 | reference-only | cover style reference | cover keyframe |',
           '| Opening | 2 | P2 | skip | metadata page | metadata keyframe |',
-          '| Opening | 3 | P3 | keep | corridor shot | corridor keyframe |',
+          '| Opening | 3 | P3 | duplicate | repeated panel | repeated keyframe |',
+          '| Opening | 4 | P4 | keep | corridor shot | corridor keyframe |',
         ].join('\n'),
-        resources: [createResource('P1'), createResource('P2'), createResource('P3')],
+        resources: [
+          createResource('P1'),
+          createResource('P2'),
+          createResource('P3'),
+          createResource('P4'),
+        ],
       },
       operations,
     );
@@ -834,10 +840,44 @@ describe('Canvas Markdown capabilities', () => {
     const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
     expect(request?.children).toHaveLength(1);
     expect(request?.children[0]?.data).toMatchObject({
-      shotNumber: 3,
+      shotNumber: 4,
       visualDescription: 'corridor shot',
       generationPrompt: 'corridor keyframe',
     });
+  });
+
+  it('blocks production creation when every storyboard row is non-production', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        mode: 'create-nodes',
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
+        markdown: [
+          '| scene | shot | decision | visual | imagePrompt |',
+          '| --- | --- | --- | --- | --- |',
+          '| Opening | 1 | reference-only | cover style reference | cover keyframe |',
+          '| Opening | 2 | skip | metadata page | metadata keyframe |',
+          '| Opening | 3 | duplicate | repeated panel | repeated keyframe |',
+        ].join('\n'),
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('blocked');
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'canvas-markdown-storyboard-no-production-rows',
+      }),
+    ]);
+    expect(operations.createComposite).not.toHaveBeenCalled();
   });
 
   it('preserves shot and scene prompt slots during production node creation', async () => {
@@ -854,9 +894,9 @@ describe('Canvas Markdown capabilities', () => {
           stageId: 'apply',
         },
         markdown: [
-          '| scene | shot | visual | imagePrompt | imageEditPrompt | shotVideoPrompt | sceneVideoPrompt |',
-          '| --- | --- | --- | --- | --- | --- | --- |',
-          '| Opening | 1 | corridor | keyframe prompt | remove text | slow dolly | 30s scene journey |',
+          '| scene | shot | visual | imagePrompt | prompt | imageEditPrompt | shotVideoPrompt | sceneVideoPrompt |',
+          '| --- | --- | --- | --- | --- | --- | --- | --- |',
+          '| Opening | 1 | corridor | keyframe prompt | legacy prompt | remove text | slow dolly | 30s scene journey |',
         ].join('\n'),
       },
       operations,
@@ -892,6 +932,49 @@ describe('Canvas Markdown capabilities', () => {
           prompt: 'slow dolly',
         }),
       ]),
+    });
+    const shotPromptSlots = request?.children[0]?.data?.['promptSlots'];
+    expect(shotPromptSlots).toEqual([
+      expect.objectContaining({ fieldId: 'imageEditPrompt' }),
+      expect.objectContaining({ fieldId: 'shotVideoPrompt' }),
+    ]);
+  });
+
+  it('derives production prompt fallback from storyboard prompt slot descriptors', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        mode: 'create-nodes',
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
+        markdown: [
+          '| scene | shot | imageEditPrompt |',
+          '| --- | --- | --- |',
+          '| Opening | 1 | remove lettering from source panel |',
+        ].join('\n'),
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('created');
+    const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
+    expect(request?.children[0]?.data).toMatchObject({
+      visualDescription: 'remove lettering from source panel',
+      promptSlots: [
+        expect.objectContaining({
+          fieldId: 'imageEditPrompt',
+          scope: 'shot',
+          mediaType: 'image',
+          operation: 'edit',
+          prompt: 'remove lettering from source panel',
+        }),
+      ],
     });
   });
 

@@ -166,6 +166,11 @@ const CANVAS_GENERIC_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
   reviewActions: [],
 };
 
+const STORYBOARD_PROMPT_SLOT_FIELD_IDS = STORYBOARD_CREATIVE_TABLE_PROFILE.fields
+  .filter((field) => field.promptSlot)
+  .map((field) => field.id);
+const STORYBOARD_PRODUCTION_CONTENT_FIELD_IDS = ['visual', ...STORYBOARD_PROMPT_SLOT_FIELD_IDS];
+
 function createCanvasProfileFieldsFromCreativeProfile(
   fields: readonly CreativeTableFieldDescriptor[],
 ): readonly CanvasMarkdownTableFieldDescriptor[] {
@@ -194,7 +199,7 @@ const CANVAS_STORYBOARD_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
   validationRules: [
     {
       phases: ['review'],
-      fieldIds: ['visual', 'imagePrompt', 'prompt', 'shotVideoPrompt', 'sceneVideoPrompt'],
+      fieldIds: STORYBOARD_PRODUCTION_CONTENT_FIELD_IDS,
       severity: 'warning',
       code: 'canvas-markdown-storyboard-visual-or-prompt-missing',
       message:
@@ -210,7 +215,7 @@ const CANVAS_STORYBOARD_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
     },
     {
       phases: ['apply'],
-      fieldIds: ['visual', 'imagePrompt', 'prompt', 'shotVideoPrompt', 'sceneVideoPrompt'],
+      fieldIds: STORYBOARD_PRODUCTION_CONTENT_FIELD_IDS,
       severity: 'error',
       code: 'canvas-markdown-storyboard-visual-column-required',
       message: 'Production storyboard creation requires a visual/画面内容 or prompt column.',
@@ -1085,12 +1090,7 @@ function buildStoryboardProductionRequest(
   readonly diagnostics: readonly CanvasMarkdownCapabilityDiagnostic[];
 } {
   const diagnostics = validateTableProfile(profile, table, 'apply', profileColumns);
-  const visualColumn =
-    profileColumns.columnsByField.get('visual') ??
-    profileColumns.columnsByField.get('imagePrompt') ??
-    profileColumns.columnsByField.get('prompt') ??
-    profileColumns.columnsByField.get('shotVideoPrompt') ??
-    profileColumns.columnsByField.get('sceneVideoPrompt');
+  const visualColumn = getStoryboardProductionContentColumn(profileColumns);
   if (diagnostics.some((diagnostic) => diagnostic.severity === 'error') || !visualColumn) {
     return { diagnostics };
   }
@@ -1108,6 +1108,19 @@ function buildStoryboardProductionRequest(
   const productionRows = table.rows.filter((row) =>
     shouldCreateStoryboardShot(row, profileColumns),
   );
+  if (productionRows.length === 0) {
+    return {
+      diagnostics: [
+        ...diagnostics,
+        createCanvasMarkdownDiagnostic(
+          'error',
+          'canvas-markdown-storyboard-no-production-rows',
+          'Production storyboard creation requires at least one row whose decision is not skip, reference-only, or duplicate.',
+          'decision',
+        ),
+      ],
+    };
+  }
   const scenePromptSlots = uniquePromptSlots(
     productionRows.flatMap((row) => extractPromptSlots(row, profileColumns, 'scene')),
   );
@@ -1159,6 +1172,22 @@ function buildStoryboardProductionRequest(
     },
     diagnostics,
   };
+}
+
+function getStoryboardProductionContentColumn(
+  profileColumns: CanvasMarkdownResolvedTableProfileColumns,
+): MarkdownTableColumn | undefined {
+  const visualColumn = profileColumns.columnsByField.get('visual');
+  if (visualColumn) {
+    return visualColumn;
+  }
+  for (const fieldId of STORYBOARD_PROMPT_SLOT_FIELD_IDS) {
+    const column = profileColumns.columnsByField.get(fieldId);
+    if (column) {
+      return column;
+    }
+  }
+  return undefined;
 }
 
 function shouldCreateStoryboardShot(
