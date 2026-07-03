@@ -1,4 +1,5 @@
 import type { ValidationError, ValidationWarning } from './types';
+import { STORYBOARD_CREATIVE_TABLE_PROFILE, classifyCreativeTableHeaders } from '@neko/shared';
 import {
   STORYBOARD_CREATIVE_TABLE_HEADERS,
   STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
@@ -96,15 +97,16 @@ export function validateStoryboardCreativeTableOutput(
     }
   }
 
-  const missingHeaders = STORYBOARD_CREATIVE_TABLE_HEADERS.filter(
-    (header) => !fieldHeaders.includes(header),
+  const classification = classifyCreativeTableHeaders(
+    STORYBOARD_CREATIVE_TABLE_PROFILE,
+    table.headers,
   );
-  for (const header of missingHeaders) {
+  for (const group of classification.missingMinimumGroups) {
     errors.push(
       createStoryboardTableError(
-        'storyboard-table-missing-column',
-        `Storyboard creative table is missing required column "${header}".`,
-        { header, headerLine: table.headerLine },
+        'storyboard-table-missing-minimum-field-group',
+        `Storyboard creative table is missing one of the required field groups: ${group.join(', ')}.`,
+        { headerLine: table.headerLine, fieldGroup: group },
       ),
     );
   }
@@ -127,12 +129,15 @@ export function validateStoryboardCreativeTableOutput(
 function findStoryboardCandidateTable(
   tables: readonly MarkdownTableSummary[],
 ): MarkdownTableSummary | undefined {
-  return tables.find(
-    (table) =>
-      table.headers.some((header) => resolveStoryboardCreativeTableHeader(header) === 'scene') ||
-      table.headers.some((header) => resolveStoryboardCreativeTableHeader(header) === 'shot') ||
-      table.headers.some((header) => resolveStoryboardCreativeTableHeader(header) === 'visual') ||
-      table.headers.some((header) => resolveStoryboardCreativeTableHeader(header) === 'prompt'),
+  return (
+    tables.find(
+      (table) =>
+        classifyCreativeTableHeaders(STORYBOARD_CREATIVE_TABLE_PROFILE, table.headers)
+          .matchedProfile,
+    ) ??
+    tables.find((table) =>
+      table.headers.some((header) => resolveStoryboardCreativeTableHeader(header) !== undefined),
+    )
   );
 }
 
@@ -207,35 +212,32 @@ function validateStoryboardTableRows(
     if (field && !positions.has(field)) positions.set(field, index);
   });
 
+  for (const [field, index] of positions) {
+    const descriptor = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find((item) => item.id === field);
+    if (descriptor?.role !== 'execution') continue;
+    for (const row of table.rows) {
+      const value = row.cells[index]?.trim();
+      if (!value) continue;
+      errors.push(
+        createStoryboardTableError(
+          'storyboard-table-execution-field-not-supported',
+          `Storyboard creative table row ${row.line} includes execution field "${field}", but executable actions must come from trusted Canvas lifecycle results.`,
+          { field, value, line: row.line },
+        ),
+      );
+    }
+  }
+
   for (const row of table.rows) {
-    validateRequiredCell(row, positions, 'characters', errors);
-    validateRequiredCell(row, positions, 'prompt', errors);
-    validateRequiredCell(row, positions, 'nextAction', errors);
     validateKnownValueCell(row, positions, 'decision', STORYBOARD_DECISION_VALUES, errors);
     validateKnownValueCell(row, positions, 'reviewStatus', STORYBOARD_REVIEW_STATUS_VALUES, errors);
     validateKnownListCell(row, positions, 'nextAction', STORYBOARD_NEXT_ACTION_VALUES, warnings);
     validateKnownValueCell(row, positions, 'contentType', STORYBOARD_CONTENT_TYPE_VALUES, warnings);
     validateBooleanCell(row, positions, 'requiresSplit', errors);
     validateHumanDescriptionCell(row, positions, 'characters', errors);
+    validateDurationCell(row, positions, 'duration', warnings);
+    validateDurationCell(row, positions, 'sceneDuration', warnings);
   }
-}
-
-function validateRequiredCell(
-  row: MarkdownTableRowSummary,
-  positions: ReadonlyMap<StoryboardCreativeTableHeader, number>,
-  field: StoryboardCreativeTableHeader,
-  errors: ValidationError[],
-): void {
-  const value = getRowFieldValue(row, positions, field);
-  if (value === undefined) return;
-  if (value.length > 0) return;
-  errors.push(
-    createStoryboardTableError(
-      'storyboard-table-empty-required-cell',
-      `Storyboard creative table row ${row.line} is missing required "${field}" content.`,
-      { field, line: row.line },
-    ),
-  );
 }
 
 function validateKnownValueCell(
@@ -278,6 +280,23 @@ function validateKnownListCell(
     code: 'storyboard-table-unknown-next-action',
     message: `Storyboard creative table row ${row.line} has non-standard "${field}" value "${unsupported.join(', ')}".`,
     suggestion: `Use known nextAction tokens such as ${Array.from(allowedValues).slice(0, 8).join(', ')}, or keep the custom action only when it is intentional.`,
+  });
+}
+
+function validateDurationCell(
+  row: MarkdownTableRowSummary,
+  positions: ReadonlyMap<StoryboardCreativeTableHeader, number>,
+  field: StoryboardCreativeTableHeader,
+  warnings: ValidationWarning[],
+): void {
+  const value = getRowFieldValue(row, positions, field);
+  if (value === undefined || value.length === 0) return;
+  if (/^\d+(?:\.\d+)?\s*(?:s|秒|sec|seconds)?$/i.test(value.trim())) return;
+  warnings.push({
+    type: 'output',
+    code: 'storyboard-table-duration-format',
+    message: `Storyboard creative table row ${row.line} has a non-standard "${field}" duration "${value}".`,
+    suggestion: 'Use a short duration such as 3s, 4.5s, or 30s.',
   });
 }
 

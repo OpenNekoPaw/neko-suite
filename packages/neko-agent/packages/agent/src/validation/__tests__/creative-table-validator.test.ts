@@ -6,7 +6,6 @@ import {
 } from '@neko-agent/types';
 import {
   OutputValidator,
-  STORYBOARD_CREATIVE_TABLE_HEADERS,
   STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
   validateStoryboardCreativeTableOutput,
 } from '..';
@@ -35,7 +34,76 @@ describe('validateStoryboardCreativeTableOutput', () => {
     const result = validateStoryboardCreativeTableOutput(markdown);
 
     expect(result.errors).toEqual([]);
-    expect(result.table?.headers).toEqual([...STORYBOARD_CREATIVE_TABLE_HEADERS]);
+    expect(result.table?.headers).toEqual(
+      expect.arrayContaining(['scene', 'shot', 'source', 'visual', 'prompt']),
+    );
+  });
+
+  it('accepts open review metadata columns without requiring every recommended storyboard field', () => {
+    const markdown = [
+      '| 场景 | 镜头 | 来源 | 画面 | 自定义审阅 |',
+      '| --- | --- | --- | --- | --- |',
+      '| 开场 | 1 | P1 | 角色进入巨构空间 | OCR uncertain |',
+    ].join('\n');
+
+    const result = validateStoryboardCreativeTableOutput(markdown);
+
+    expect(result.errors).toEqual([]);
+    expect(result.warnings.map((warning) => warning.code)).not.toContain(
+      'storyboard-table-missing-column',
+    );
+  });
+
+  it('accepts model-aware prompt slots without the legacy prompt column', () => {
+    const markdown = [
+      '| scene | shot | source | visual | imagePrompt | shotVideoPrompt | sceneVideoPrompt | reviewStatus |',
+      '| --- | --- | --- | --- | --- | --- | --- | --- |',
+      '| Opening | 1 | P1 | Wide industrial corridor | monochrome keyframe | slow dolly through corridor | 30s lonely exploration | needs-review |',
+    ].join('\n');
+
+    const result = validateStoryboardCreativeTableOutput(markdown);
+
+    expect(result.errors).toEqual([]);
+  });
+
+  it('fails visible when an execution action id appears without a trusted lifecycle context', () => {
+    const markdown = [
+      '| scene | shot | source | visual | actionId |',
+      '| --- | --- | --- | --- | --- |',
+      '| Opening | 1 | P1 | Wide industrial corridor | unregistered.local.action |',
+    ].join('\n');
+
+    const result = validateStoryboardCreativeTableOutput(markdown);
+
+    expect(result.errors).toEqual([
+      expect.objectContaining({
+        code: 'storyboard-table-execution-field-not-supported',
+      }),
+    ]);
+  });
+
+  it('warns for non-standard shot and scene duration values when duration fields exist', () => {
+    const markdown = [
+      '| scene | shot | visual | duration | sceneDuration |',
+      '| --- | --- | --- | --- | --- |',
+      '| Opening | 1 | Wide industrial corridor | around three seconds | half a minute |',
+    ].join('\n');
+
+    const result = validateStoryboardCreativeTableOutput(markdown);
+
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'storyboard-table-duration-format',
+          message: expect.stringContaining('"duration"'),
+        }),
+        expect.objectContaining({
+          code: 'storyboard-table-duration-format',
+          message: expect.stringContaining('"sceneDuration"'),
+        }),
+      ]),
+    );
   });
 
   it('rejects creation-document frontmatter in chat storyboard output', () => {
@@ -71,10 +139,12 @@ describe('validateStoryboardCreativeTableOutput', () => {
     const result = validateStoryboardCreativeTableOutput(markdown);
 
     expect(result.errors.map((error) => error.code)).toContain('storyboard-table-forbidden-header');
-    expect(result.errors.map((error) => error.code)).toContain('storyboard-table-missing-column');
-    expect(result.errors.some((error) => error.message.includes('characters'))).toBe(true);
-    expect(result.errors.some((error) => error.message.includes('prompt'))).toBe(true);
-    expect(result.errors.some((error) => error.message.includes('nextAction'))).toBe(true);
+    expect(result.errors.map((error) => error.code)).not.toContain(
+      'storyboard-table-missing-column',
+    );
+    expect(result.errors.map((error) => error.code)).not.toContain(
+      'storyboard-table-missing-minimum-field-group',
+    );
   });
 
   it('rejects journal-style seven-column storyboard summaries as simplified tables', () => {
@@ -92,19 +162,13 @@ describe('validateStoryboardCreativeTableOutput', () => {
     expect(result.errors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: 'storyboard-table-forbidden-header' }),
-        expect.objectContaining({
-          code: 'storyboard-table-missing-column',
-          details: expect.objectContaining({ header: 'characters' }),
-        }),
-        expect.objectContaining({
-          code: 'storyboard-table-missing-column',
-          details: expect.objectContaining({ header: 'prompt' }),
-        }),
-        expect.objectContaining({
-          code: 'storyboard-table-missing-column',
-          details: expect.objectContaining({ header: 'nextAction' }),
-        }),
       ]),
+    );
+    expect(result.errors.map((error) => error.code)).not.toContain(
+      'storyboard-table-missing-column',
+    );
+    expect(result.errors.map((error) => error.code)).not.toContain(
+      'storyboard-table-missing-minimum-field-group',
     );
   });
 
@@ -122,11 +186,10 @@ describe('validateStoryboardCreativeTableOutput', () => {
     expect(result.errors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: 'storyboard-table-forbidden-header' }),
-        expect.objectContaining({ code: 'storyboard-table-missing-column' }),
+        expect.objectContaining({ code: 'storyboard-table-missing-minimum-field-group' }),
       ]),
     );
-    expect(result.errors.some((error) => error.message.includes('prompt'))).toBe(true);
-    expect(result.errors.some((error) => error.message.includes('characters'))).toBe(true);
+    expect(result.errors.some((error) => error.message.includes('scene, shot'))).toBe(true);
   });
 
   it('accepts localized Chinese storyboard creative table headers', () => {
