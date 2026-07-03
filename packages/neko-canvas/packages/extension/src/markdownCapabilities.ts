@@ -619,6 +619,15 @@ async function createStoryboardFromMarkdown(
   }
 
   const profileColumns = resolveProfileColumns(profileResult.profile, parsed.table);
+  const operationProfileDiagnostics = validateOperationProfileMatch(input, profileResult.profile);
+  if (operationProfileDiagnostics.length > 0) {
+    return {
+      capabilityId: input.capabilityId,
+      status: 'blocked',
+      diagnostics: operationProfileDiagnostics,
+      preview: createTablePreview(input, parsed.table, []),
+    };
+  }
   const production = buildStoryboardProductionRequest(
     input,
     parsed.table,
@@ -729,6 +738,7 @@ function validateResolvedStoryboardTable(
   const profileColumns = resolveProfileColumns(profile, table);
   return [
     ...validateTableProfile(profile, table, 'review', profileColumns),
+    ...validateOperationProfileMatch(input, profile),
     ...validateOperationRequiredFields(input, profile, table, profileColumns, 'warning'),
   ];
 }

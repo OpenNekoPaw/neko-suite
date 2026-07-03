@@ -305,6 +305,35 @@ describe('Canvas Markdown capabilities', () => {
     expect(operations.updateNode).not.toHaveBeenCalled();
   });
 
+  it('blocks validation when operation hints conflict with a non-creative profile hint', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.validateMarkdownStoryboard',
+        operationHint: 'video.scene.generate',
+        profileHint: 'generic',
+        markdown: [
+          '| scene | shot | visual | sceneVideoPrompt |',
+          '| --- | --- | --- | --- |',
+          '| Opening | 1 | wide reveal | slow scene journey |',
+        ].join('\n'),
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('blocked');
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'canvas-markdown-operation-profile-mismatch',
+        fieldKey: 'operationHint',
+      }),
+    ]);
+    expect(operations.createNode).not.toHaveBeenCalled();
+    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.updateNode).not.toHaveBeenCalled();
+  });
+
   it('ingests Markdown notes through the unified Canvas facade', async () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(
@@ -1166,6 +1195,41 @@ describe('Canvas Markdown capabilities', () => {
       }),
     ]);
     expect(operations.createNode).not.toHaveBeenCalled();
+  });
+
+  it('blocks production creation when operation hints conflict with a non-creative profile hint', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        mode: 'create-nodes',
+        operationHint: 'video.scene.generate',
+        profileHint: 'generic',
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
+        markdown: [
+          '| scene | shot | visual | sceneVideoPrompt |',
+          '| --- | --- | --- | --- |',
+          '| Opening | 1 | wide reveal | slow scene journey |',
+        ].join('\n'),
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('blocked');
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        code: 'canvas-markdown-operation-profile-mismatch',
+        fieldKey: 'operationHint',
+      }),
+    ]);
+    expect(operations.createComposite).not.toHaveBeenCalled();
   });
 
   it('keeps generic tables generic even when they contain storyboard-like columns', async () => {
