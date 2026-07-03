@@ -154,7 +154,7 @@ describe('Canvas Markdown capabilities', () => {
             expect.objectContaining({ fieldId: 'scene', columnId: 'scene', role: 'approval' }),
             expect.objectContaining({ fieldId: 'shot', columnId: 'shot', role: 'approval' }),
             expect.objectContaining({
-              fieldId: 'image',
+              fieldId: 'source',
               columnId: 'image',
               role: 'approval',
               valueType: 'resource-token',
@@ -166,10 +166,9 @@ describe('Canvas Markdown capabilities', () => {
               valueType: 'prompt',
             }),
             expect.objectContaining({
-              fieldId: 'action',
+              fieldId: 'nextAction',
               columnId: 'next-action',
-              role: 'execution',
-              valueType: 'action',
+              role: 'plan',
             }),
           ]),
           resources: expect.arrayContaining([
@@ -418,11 +417,93 @@ describe('Canvas Markdown capabilities', () => {
           consumedColumns: expect.arrayContaining([
             expect.objectContaining({ fieldId: 'visual', role: 'approval' }),
             expect.objectContaining({ fieldId: 'prompt', role: 'plan' }),
-            expect.objectContaining({ fieldId: 'action', role: 'execution' }),
+            expect.objectContaining({ fieldId: 'nextAction', role: 'plan' }),
           ]),
         }),
       }),
     });
+  });
+
+  it('consumes shared storyboard fields including localized prompt slots and review metadata', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.ingestMarkdown',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
+        markdown: [
+          '| 场景 | 镜头 | 来源 | 来源分格 | 决策 | 画面 | 图像提示词 | 镜头视频提示词 | 场景视频提示词 | 审阅状态 | 建议操作 | 决策理由 | 需要拆分 |',
+          '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+          '| 开场 | 1 | P1#panel_1 | 右上 | keep | 巨构空间 | 黑白关键帧 | 缓慢推进 | 30s 连续探索 | needs-review | use-as-reference | 建立空间 | true |',
+        ].join('\n'),
+        resources: [createResource('P1')],
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('created');
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+      'canvas-markdown-storyboard-next-action-missing',
+    );
+    expect(operations.createNode).toHaveBeenCalledWith(
+      'table',
+      { x: 0, y: 0 },
+      expect.objectContaining({
+        markdown: expect.objectContaining({
+          consumedColumns: expect.arrayContaining([
+            expect.objectContaining({ fieldId: 'source', columnId: '来源' }),
+            expect.objectContaining({ fieldId: 'sourcePanel', role: 'approval' }),
+            expect.objectContaining({ fieldId: 'decision', role: 'approval' }),
+            expect.objectContaining({ fieldId: 'imagePrompt', role: 'plan', valueType: 'prompt' }),
+            expect.objectContaining({
+              fieldId: 'shotVideoPrompt',
+              role: 'plan',
+              valueType: 'prompt',
+            }),
+            expect.objectContaining({
+              fieldId: 'sceneVideoPrompt',
+              role: 'plan',
+              valueType: 'prompt',
+            }),
+            expect.objectContaining({ fieldId: 'nextAction', role: 'plan' }),
+          ]),
+          unknownColumns: [],
+        }),
+      }),
+      'table.basic',
+    );
+  });
+
+  it('preserves custom review metadata while consuming all shared storyboard aliases', async () => {
+    const operations = createOperations();
+    await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.ingestMarkdown',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
+        markdown: [
+          '| scene | shot | source | visual | imagePrompt | customRisk |',
+          '| --- | --- | --- | --- | --- | --- |',
+          '| Opening | 1 | P1 | wide shot | keyframe | high OCR uncertainty |',
+        ].join('\n'),
+        resources: [createResource('P1')],
+      },
+      operations,
+    );
+
+    expect(operations.createNode).toHaveBeenCalledWith(
+      'table',
+      { x: 0, y: 0 },
+      expect.objectContaining({
+        markdown: expect.objectContaining({
+          consumedColumns: expect.arrayContaining([
+            expect.objectContaining({ fieldId: 'imagePrompt' }),
+          ]),
+          unknownColumns: [expect.objectContaining({ label: 'customRisk' })],
+        }),
+      }),
+      'table.basic',
+    );
   });
 
   it('consumes normalized creative table headers and preserves extension columns', async () => {
@@ -456,16 +537,15 @@ describe('Canvas Markdown capabilities', () => {
         markdown: expect.objectContaining({
           tableProfile: 'storyboard',
           consumedColumns: expect.arrayContaining([
-            expect.objectContaining({ fieldId: 'image', columnId: 'source' }),
+            expect.objectContaining({ fieldId: 'source', columnId: 'source' }),
+            expect.objectContaining({ fieldId: 'sourcePanel', columnId: 'sourcepanel' }),
+            expect.objectContaining({ fieldId: 'decision', columnId: 'decision' }),
             expect.objectContaining({ fieldId: 'visual', columnId: 'visual' }),
             expect.objectContaining({ fieldId: 'prompt', columnId: 'prompt' }),
-            expect.objectContaining({ fieldId: 'action', columnId: 'nextaction' }),
+            expect.objectContaining({ fieldId: 'reviewStatus', columnId: 'reviewstatus' }),
+            expect.objectContaining({ fieldId: 'nextAction', columnId: 'nextaction' }),
           ]),
-          unknownColumns: expect.arrayContaining([
-            expect.objectContaining({ id: 'sourcepanel', label: 'sourcePanel' }),
-            expect.objectContaining({ id: 'decision', label: 'decision' }),
-            expect.objectContaining({ id: 'reviewstatus', label: 'reviewStatus' }),
-          ]),
+          unknownColumns: [],
           rows: [
             expect.objectContaining({
               cells: expect.objectContaining({

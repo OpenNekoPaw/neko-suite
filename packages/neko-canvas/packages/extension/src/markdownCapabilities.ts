@@ -5,11 +5,13 @@ import {
   isCanvasMarkdownCapabilityId,
   isResourceRef,
   isRuntimeOnlyCanvasMarkdownResourceValue,
+  STORYBOARD_CREATIVE_TABLE_PROFILE,
   validateCanvasMarkdownCapabilityInput,
   type CanvasAgentApplyContentResult,
   type CanvasAgentContentPayload,
   type CanvasCreateCompositeRequest,
   type CanvasCreateCompositeResult,
+  type CreativeTableFieldDescriptor,
   type CanvasMarkdownCapabilityDiagnostic,
   type CanvasMarkdownCapabilityInput,
   type CanvasMarkdownCapabilityPreviewSummary,
@@ -163,6 +165,18 @@ const CANVAS_GENERIC_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
   reviewActions: [],
 };
 
+function createCanvasProfileFieldsFromCreativeProfile(
+  fields: readonly CreativeTableFieldDescriptor[],
+): readonly CanvasMarkdownTableFieldDescriptor[] {
+  return fields.map((field) => ({
+    fieldId: field.id,
+    aliases: field.aliases,
+    role: field.role,
+    valueType: field.valueType,
+    ...(field.resourceColumn ? { resourceColumn: true } : {}),
+  }));
+}
+
 const CANVAS_STORYBOARD_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
   profileId: 'storyboard',
   aliases: [
@@ -175,132 +189,30 @@ const CANVAS_STORYBOARD_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
   reviewKind: 'storyboard',
   creative: true,
   unknownColumnPolicy: 'preserve',
-  fields: [
-    { fieldId: 'scene', role: 'approval', valueType: 'text', aliases: ['scene', '场景', '场次'] },
-    {
-      fieldId: 'shot',
-      role: 'approval',
-      valueType: 'text',
-      aliases: ['shot', 'shot id', 'shotid', '镜头', '镜头编号', '镜号'],
-    },
-    {
-      fieldId: 'image',
-      role: 'approval',
-      valueType: 'resource-token',
-      resourceColumn: true,
-      aliases: [
-        'image',
-        'images',
-        'picture',
-        'pictures',
-        'resource',
-        'resources',
-        'asset',
-        'assets',
-        'file',
-        'files',
-        'filename',
-        'filenames',
-        'reference',
-        'references',
-        'ref',
-        'media',
-        'source',
-        'source image',
-        'sourceimage',
-        '图片',
-        '图像',
-        '资源',
-        '素材',
-        '参考图',
-        '参考',
-      ],
-    },
-    {
-      fieldId: 'visual',
-      role: 'approval',
-      valueType: 'text',
-      aliases: [
-        'visual',
-        'visual description',
-        'visualdescription',
-        'description',
-        'content',
-        '画面',
-        '画面内容',
-        '画面描述',
-        '内容',
-        '描述',
-      ],
-    },
-    {
-      fieldId: 'prompt',
-      role: 'plan',
-      valueType: 'prompt',
-      aliases: [
-        'prompt',
-        'generation prompt',
-        'generationprompt',
-        '提示词',
-        '生成提示词',
-        '图像提示词',
-      ],
-    },
-    {
-      fieldId: 'motion',
-      role: 'plan',
-      valueType: 'text',
-      aliases: ['motion', 'camera', 'camera movement', 'cameramovement', '运镜', '镜头运动'],
-    },
-    {
-      fieldId: 'duration',
-      role: 'plan',
-      valueType: 'duration',
-      aliases: ['duration', 'time', 'seconds', '时长', '时长秒'],
-    },
-    {
-      fieldId: 'character',
-      role: 'approval',
-      valueType: 'text',
-      aliases: ['character', 'characters', '人物', '角色'],
-    },
-    {
-      fieldId: 'dialogue',
-      role: 'approval',
-      valueType: 'text',
-      aliases: ['dialogue', 'voiceover', 'voice over', '台词', '旁白', '对白'],
-    },
-    {
-      fieldId: 'action',
-      role: 'execution',
-      valueType: 'action',
-      aliases: ['action', 'next action', 'nextaction', '执行', '下一步', '操作', '下一步操作'],
-    },
-  ],
+  fields: createCanvasProfileFieldsFromCreativeProfile(STORYBOARD_CREATIVE_TABLE_PROFILE.fields),
   validationRules: [
     {
       phases: ['review'],
-      fieldIds: ['visual', 'prompt'],
+      fieldIds: ['visual', 'imagePrompt', 'prompt', 'shotVideoPrompt', 'sceneVideoPrompt'],
       severity: 'warning',
       code: 'canvas-markdown-storyboard-visual-or-prompt-missing',
       message:
-        'Storyboard draft table has no visual/画面内容 or prompt/生成提示词 column; Canvas will keep it as review metadata.',
+        'Storyboard draft table has no visual/画面内容 or prompt column; Canvas will keep it as review metadata.',
     },
     {
       phases: ['review'],
-      fieldIds: ['action'],
+      fieldIds: ['nextAction', 'actionId'],
       severity: 'info',
       code: 'canvas-markdown-storyboard-next-action-missing',
       message:
-        'Storyboard draft table has no next-action/下一步 column; Canvas can still keep it for review.',
+        'Storyboard draft table has no nextAction/建议操作 or trusted actionId column; Canvas can still keep it for review.',
     },
     {
       phases: ['apply'],
-      fieldIds: ['visual', 'prompt'],
+      fieldIds: ['visual', 'imagePrompt', 'prompt', 'shotVideoPrompt', 'sceneVideoPrompt'],
       severity: 'error',
       code: 'canvas-markdown-storyboard-visual-column-required',
-      message:
-        'Production storyboard creation requires a visual/画面内容 or prompt/生成提示词 column.',
+      message: 'Production storyboard creation requires a visual/画面内容 or prompt column.',
     },
   ],
   reviewActions: [
@@ -1173,17 +1085,22 @@ function buildStoryboardProductionRequest(
 } {
   const diagnostics = validateTableProfile(profile, table, 'apply', profileColumns);
   const visualColumn =
-    profileColumns.columnsByField.get('visual') ?? profileColumns.columnsByField.get('prompt');
+    profileColumns.columnsByField.get('visual') ??
+    profileColumns.columnsByField.get('imagePrompt') ??
+    profileColumns.columnsByField.get('prompt') ??
+    profileColumns.columnsByField.get('shotVideoPrompt') ??
+    profileColumns.columnsByField.get('sceneVideoPrompt');
   if (diagnostics.some((diagnostic) => diagnostic.severity === 'error') || !visualColumn) {
     return { diagnostics };
   }
 
   const sceneColumn = profileColumns.columnsByField.get('scene');
   const shotColumn = profileColumns.columnsByField.get('shot');
-  const promptColumn = profileColumns.columnsByField.get('prompt');
+  const promptColumn =
+    profileColumns.columnsByField.get('imagePrompt') ?? profileColumns.columnsByField.get('prompt');
   const motionColumn = profileColumns.columnsByField.get('motion');
   const durationColumn = profileColumns.columnsByField.get('duration');
-  const characterColumn = profileColumns.columnsByField.get('character');
+  const characterColumn = profileColumns.columnsByField.get('characters');
   const dialogueColumn = profileColumns.columnsByField.get('dialogue');
   const firstSceneTitle = sceneColumn ? getCell(table.rows[0], sceneColumn) : undefined;
   const sceneTitle = firstSceneTitle || input.title || 'Storyboard';
