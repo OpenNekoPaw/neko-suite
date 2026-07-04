@@ -20,8 +20,7 @@ import {
   BUILTIN_DEFAULT_PROMPT_ZH,
   BUILTIN_PLAN_PROMPT_EN,
 } from '../builtin-prompts';
-import { creationPersonaSkill } from '../../skill/builtins/creation-persona';
-import { executionPersonaSkill } from '../../skill/builtins/execution-persona';
+import { creationPersonaSkill, executionPersonaSkill } from '@neko-agent/skills';
 import { ArtifactSchemaModule } from '../modules/schema/artifact-schema-module';
 import { SubpackageFragmentsModule } from '../modules/environment/subpackage-fragments-module';
 import { freezePromptContext } from '../context';

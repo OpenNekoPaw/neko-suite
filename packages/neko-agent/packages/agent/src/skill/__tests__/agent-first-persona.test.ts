@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { creationPersonaSkill } from '../builtins/creation-persona';
-import { executionPersonaSkill } from '../builtins/execution-persona';
+import { creationPersonaSkill, executionPersonaSkill } from '@neko-agent/skills';
 
 describe('Agent-first persona guidance', () => {
   it('adds Observation and Rationale sections to creation persona', () => {

@@ -10,7 +10,7 @@
  * - lazy:     Schema injected only on explicit activation (effects, audio, AI gen)
  */
 
-import type { ToolGroup, IToolGroupRegistry } from '@neko/shared';
+import type { ToolGroup } from '@neko/shared';
 import {
   TOOL_NAMES_MEDIA,
   TOOL_NAMES_PERCEPTION,
@@ -384,12 +384,3 @@ export const builtinToolGroups: ToolGroup[] = [
   mediaQAToolSet,
   perceptionEvidenceToolSet,
 ];
-
-/**
- * Register all builtin ToolSets to a registry
- */
-export function registerBuiltinToolGroups(registry: IToolGroupRegistry): void {
-  for (const group of builtinToolGroups) {
-    registry.register(group);
-  }
-}

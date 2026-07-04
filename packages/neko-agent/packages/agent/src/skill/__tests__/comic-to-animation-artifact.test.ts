@@ -8,8 +8,8 @@ import {
   type CompositeArtifactBlock,
   type CompositeArtifactDomainBlock,
 } from '@neko/shared';
-import { createAgentCapabilityInjectionRuntime } from '../../../runtime/agent-capability-injection-runtime';
-import sampleArtifact from '../samples/comic-to-animation-composite-artifact.json';
+import { createAgentCapabilityInjectionRuntime } from '../../runtime/agent-capability-injection-runtime';
+import sampleArtifact from '../__fixtures__/comic-to-animation-composite-artifact.json';
 
 const profileDescriptors: readonly ArtifactProfileDescriptor[] = [
   {

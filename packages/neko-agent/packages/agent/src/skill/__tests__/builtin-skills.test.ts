@@ -22,7 +22,7 @@ import {
   videoEditingSkill,
   qualityAssessmentSkill,
   normalizeBuiltinSkillLocale,
-} from '../index';
+} from '../builtins';
 import {
   animationPlanToCutSkill,
   comicToAnimationSkill,
