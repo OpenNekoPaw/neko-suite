@@ -138,7 +138,7 @@ export class SkillHandler {
   }
 
   /**
-   * Discover matching Skills for UI hints and pre-turn artifact validator routing.
+   * Discover matching Skills for explicit UI/search surfaces only.
    */
   discoverSkills(userInput: string): SkillDiscoveryResult | null {
     return this._runtime.discoverSkills(userInput);
