@@ -8,7 +8,7 @@ export default defineConfig({
   target: 'node18',
   outDir: 'dist',
   // Bundle workspace packages since they export raw .ts files
-  noExternal: ['@neko/shared', '@neko/agent'],
+  noExternal: ['@neko/shared', '@neko/agent', '@neko-agent/skills'],
   // Keep heavy/optional deps external
   external: ['ink', 'react', 'yoga-wasm-web', 'mermaid', 'ajv'],
   esbuildOptions(options) {

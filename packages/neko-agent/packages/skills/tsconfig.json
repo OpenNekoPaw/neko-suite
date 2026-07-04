@@ -14,16 +14,15 @@
     "outDir": "./dist",
     "resolveJsonModule": true,
     "noEmit": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "@neko-agent/skills": ["../skills/src/index.ts"],
-      "@neko-agent/skills/*": ["../skills/src/*"]
+      "@neko/shared": ["../../../neko-types/src/index.ts"],
+      "@neko/shared/*": ["../../../neko-types/src/*"]
     }
   },
-  "include": ["src/**/*", "src/**/*.d.ts"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "src/__tests__/real-api-agent-workflow.test.ts"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

@@ -7,13 +7,14 @@
 import type { Skill, ISkillRegistry } from '@neko/shared';
 import { TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA, TOOL_NAMES_SYSTEM } from '@neko/shared';
 import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
-import { comicToStoryboardSkill, getComicToStoryboardSkill } from './comic-to-storyboard';
 import {
   animationPlanToCutSkill,
   comicToAnimationSkill,
+  comicToStoryboardSkill,
   exportVideoPackageSkill,
   getAnimationPlanToCutSkill,
   getComicToAnimationSkill,
+  getComicToStoryboardSkill,
   getExportVideoPackageSkill,
   getGeneratedShotAssemblySkill,
   getImageToShotSkill,
@@ -22,26 +23,29 @@ import {
   generatedShotAssemblySkill,
   imageToShotSkill,
   mediaToVideoSkill,
+  normalizeBuiltinSkillLocale,
+  selectBuiltinSkillContent,
   storyboardToAnimationPlanSkill,
-} from './media-to-video';
+  type BuiltinSkillOptions,
+} from '@neko-agent/skills';
 import { scriptGenerationSkill } from './script-generation';
 import { qualityAssessmentSkill } from './quality-assessment';
 import { creationPersonaSkill } from './creation-persona';
 import { executionPersonaSkill } from './execution-persona';
 import { iterationPersonaSkill } from './iteration-persona';
-import type { BuiltinSkillOptions } from './builtin-skill-content';
 
 // Re-export ai-generate for external use
 export { aiGenerateSkill, aiGenerateToolDefinitions };
 
-// Re-export new skills
-export { comicToStoryboardSkill, getComicToStoryboardSkill } from './comic-to-storyboard';
+// Re-export package-owned creative workflow skills
 export {
   animationPlanToCutSkill,
   comicToAnimationSkill,
+  comicToStoryboardSkill,
   exportVideoPackageSkill,
   getAnimationPlanToCutSkill,
   getComicToAnimationSkill,
+  getComicToStoryboardSkill,
   getExportVideoPackageSkill,
   getGeneratedShotAssemblySkill,
   getImageToShotSkill,
@@ -52,14 +56,14 @@ export {
   imageToShotSkill,
   mediaToVideoSkill,
   storyboardToAnimationPlanSkill,
-} from './media-to-video';
+} from '@neko-agent/skills';
 export {
   normalizeBuiltinSkillLocale,
   selectBuiltinSkillContent,
   type BuiltinSkillLocale,
   type BuiltinSkillOptions,
   type LocalizedBuiltinSkillContent,
-} from './builtin-skill-content';
+} from '@neko-agent/skills';
 export { scriptGenerationSkill } from './script-generation';
 export { qualityAssessmentSkill } from './quality-assessment';
 

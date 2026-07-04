@@ -32,7 +32,7 @@ import {
   imageToShotSkill,
   mediaToVideoSkill,
   storyboardToAnimationPlanSkill,
-} from './media-to-video';
+} from '@neko-agent/skills';
 
 describe('Builtin Skills', () => {
   describe('builtinSkills array', () => {
