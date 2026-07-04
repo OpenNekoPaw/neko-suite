@@ -7,7 +7,7 @@
 
 import type { Skill } from '@neko/shared';
 import { TOOL_NAMES_CANVAS, TOOL_NAMES_SYSTEM } from '@neko/shared';
-import { localizeBuiltinSkill } from './builtin-skill-content';
+import { localizeBuiltinSkill, normalizeBuiltinSkillLocale } from './builtin-skill-content';
 import comicToStoryboardContent from './markdown/comic-to-storyboard.md?raw';
 import comicToStoryboardZhCnContent from './markdown/comic-to-storyboard.zh-cn.md?raw';
 
