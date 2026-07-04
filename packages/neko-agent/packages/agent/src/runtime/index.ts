@@ -716,7 +716,6 @@ export {
 
 export {
   buildRuntimePluginSlashCommandDispatch,
-  buildRuntimePluginTransferPlan,
   buildRuntimePluginsAvailableMessage,
   createRuntimePluginSlashCommandRegistry,
   expandRuntimePluginTransferInputs,
@@ -769,17 +768,6 @@ export {
   type TimelineSelectionContextOptions,
   type ToolProducedMultimodalEvidenceInput,
 } from './multimodal-context-packet';
-
-export {
-  createCanvasNodeUpdateAdapter,
-  createDefaultOperationToolAdapterRegistry,
-  createModelElementUpdateAdapter,
-  createTimelineElementUpdateAdapter,
-  type CanvasNodeUpdateAdapterOptions,
-  type DefaultOperationToolAdapterRegistryOptions,
-  type ModelElementUpdateAdapterOptions,
-  type TimelineElementUpdateAdapterOptions,
-} from './operation-adapters';
 
 export {
   CapabilityRegistryRuntime,

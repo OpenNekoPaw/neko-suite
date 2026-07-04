@@ -242,23 +242,23 @@ function readRgba(
   key: string,
 ): [number, number, number, number] | undefined {
   const candidate = value?.[key];
-  if (!Array.isArray(candidate) || candidate.length !== 4) {
-    return undefined;
-  }
-  const channels = candidate.filter(
-    (item): item is number => typeof item === 'number' && Number.isFinite(item),
-  );
-  return channels.length === 4 ? [channels[0], channels[1], channels[2], channels[3]] : undefined;
+  return isNumberTuple4(candidate) ? candidate : undefined;
 }
 
 function readNumberTuple3(value: unknown): [number, number, number] | undefined {
-  if (!Array.isArray(value) || value.length !== 3) {
-    return undefined;
-  }
-  const items = value.filter(
-    (item): item is number => typeof item === 'number' && Number.isFinite(item),
-  );
-  return items.length === 3 ? [items[0], items[1], items[2]] : undefined;
+  return isNumberTuple3(value) ? value : undefined;
+}
+
+function isNumberTuple4(value: unknown): value is [number, number, number, number] {
+  return Array.isArray(value) && value.length === 4 && value.every(isFiniteNumber);
+}
+
+function isNumberTuple3(value: unknown): value is [number, number, number] {
+  return Array.isArray(value) && value.length === 3 && value.every(isFiniteNumber);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function readCameraOverride(

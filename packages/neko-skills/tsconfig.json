@@ -19,6 +19,8 @@
     "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
+      "@neko-agent/types": ["../neko-agent/packages/agent-types/src/index.ts"],
+      "@neko-agent/types/*": ["../neko-agent/packages/agent-types/src/*"],
       "@neko/shared": ["../../../neko-types/src/index.ts"],
       "@neko/shared/*": ["../../../neko-types/src/*"]
     }

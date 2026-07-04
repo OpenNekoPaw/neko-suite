@@ -157,6 +157,71 @@ describe('agent architecture boundary guards', () => {
     expect(existingFiles).toEqual([]);
   });
 
+  it('keeps concrete operation tool adapters out of Agent runtime ownership', () => {
+    const forbiddenRuntimeFiles = [
+      join(agentSrc, 'runtime/operation-adapters/canvas-node-update-adapter.ts'),
+      join(agentSrc, 'runtime/operation-adapters/model-element-update-adapter.ts'),
+      join(agentSrc, 'runtime/operation-adapters/timeline-element-update-adapter.ts'),
+    ];
+    const existingFiles = forbiddenRuntimeFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+
+    expect(existingFiles).toEqual([]);
+
+    const runtimeSourceFiles = listFiles(join(agentSrc, 'runtime'))
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !relativePath.endsWith('architecture-boundary-guards.test.ts'));
+
+    const forbiddenAdapterTerms = [
+      /\bcreateDefaultOperationToolAdapterRegistry\b/,
+      /\bcreateCanvasNodeUpdateAdapter\b/,
+      /\bcreateModelElementUpdateAdapter\b/,
+      /\bcreateTimelineElementUpdateAdapter\b/,
+      /canvas-node-update/,
+      /model-element-update/,
+      /timeline-element-update/,
+    ];
+    const violations = runtimeSourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenAdapterTerms
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps domain plugin transfer command plans out of Agent runtime ownership', () => {
+    const runtimeSourceFiles = listFiles(join(agentSrc, 'runtime'))
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !relativePath.endsWith('architecture-boundary-guards.test.ts'));
+
+    const forbiddenCommandTerms = [
+      /['"`]neko\.canvas\.importAsset['"`]/,
+      /['"`]neko\.cut\.importStoryboard['"`]/,
+      /['"`]neko\.cut\.importGeneratedClip['"`]/,
+      /['"`]neko\.sketch\.importAsset['"`]/,
+      /['"`]neko\.model\.importAsset['"`]/,
+    ];
+    const violations = runtimeSourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenCommandTerms
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps media quality domain validation out of Agent core', () => {
     const forbiddenValidationFiles = [
       join(agentSrc, 'validation/qa-types.ts'),

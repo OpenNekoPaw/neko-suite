@@ -28,7 +28,6 @@ import type {
   IValidationLoop,
 } from './types';
 import type { ModelTierResolver, SpecializedAgentPreset } from '../subagent';
-import { createDefaultOperationToolAdapterRegistry } from './operation-adapters';
 import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 
 export interface AgentRuntimeHostBindings {
@@ -63,7 +62,6 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly conversationId?: string;
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
   readonly previousOperationToolAdapterRegistry?: IOperationToolAdapterRegistry;
-  readonly createDefaultOperationToolAdapterRegistry?: () => IOperationToolAdapterRegistry;
   readonly locale?: 'en' | 'zh';
   readonly providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
@@ -151,10 +149,7 @@ function resolveOperationToolAdapterRegistry(
   if (input.previousOperationToolAdapterRegistry) {
     return input.previousOperationToolAdapterRegistry;
   }
-  return (
-    input.createDefaultOperationToolAdapterRegistry?.() ??
-    createDefaultOperationToolAdapterRegistry()
-  );
+  return undefined;
 }
 
 function resolveCapabilityPromptFragments(

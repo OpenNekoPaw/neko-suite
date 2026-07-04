@@ -7,7 +7,6 @@ import {
   type NekoPluginKey,
   type PluginSlashCommandDef,
   type PluginSlashCommandInvocation,
-  type PluginTransferCommandPlan,
   type PluginTransferPayload,
   type PluginTransferAssetRef,
   type PluginsAvailableMessage,
@@ -15,7 +14,6 @@ import {
   type ProjectPluginsAvailableInput,
   type RegisteredPluginSlashCommand,
 } from '@neko-agent/types';
-import { isDocumentArchiveResourceRef, type DocumentArchiveResourceRef } from '@neko/shared';
 
 type RuntimePluginTransferBuildPayload = Exclude<PluginTransferPayload, { kind: 'assetBatch' }>;
 
@@ -54,111 +52,6 @@ export function createRuntimePluginSlashCommandRegistry(): RuntimePluginSlashCom
   return new DefaultRuntimePluginSlashCommandRegistry();
 }
 
-export function buildRuntimePluginTransferPlan(
-  input: BuildPluginTransferPlanInput,
-): PluginTransferCommandPlan {
-  const payload =
-    input.payload ??
-    (input.assetPath
-      ? {
-          kind: 'singleAsset' as const,
-          asset: {
-            path: input.assetPath,
-            ...(isPluginTransferMediaType(input.mediaType) ? { mediaType: input.mediaType } : {}),
-          },
-        }
-      : undefined);
-
-  if (!payload) {
-    return { status: 'unsupported', target: input.target };
-  }
-
-  if (payload.kind === 'cutStoryboard') {
-    if (input.target === 'cut') {
-      return {
-        status: 'execute-command',
-        command: 'neko.cut.importStoryboard',
-        payload: payload.storyboard,
-      };
-    }
-    return { status: 'unsupported', target: input.target, reason: 'unsupported-structured-target' };
-  }
-
-  assertSingleTransferPayload(payload);
-
-  if (input.target === 'canvas') {
-    const documentResourceRef = readDocumentResourceRef(payload.asset, payload.provenance);
-    return {
-      status: 'execute-command',
-      command: 'neko.canvas.importAsset',
-      payload: {
-        ...(payload.asset.path ? { path: payload.asset.path } : {}),
-        ...(payload.asset.mediaType ? { type: payload.asset.mediaType } : {}),
-        ...(payload.asset.name ? { name: payload.asset.name } : {}),
-        ...(documentResourceRef ? { documentResourceRef } : {}),
-        ...(payload.asset.resourceRef ? { resourceRef: payload.asset.resourceRef } : {}),
-        ...((payload.target ?? payload.asset.target)
-          ? { target: payload.target ?? payload.asset.target }
-          : {}),
-        ...((payload.provenance ?? payload.asset.provenance)
-          ? { provenance: payload.provenance ?? payload.asset.provenance }
-          : {}),
-      },
-    };
-  }
-
-  if (!payload.asset.path) {
-    return {
-      status: 'unsupported',
-      target: input.target,
-      reason: 'asset-path-required',
-    };
-  }
-
-  if (input.target === 'cut') {
-    return {
-      status: 'execute-command',
-      command: 'neko.cut.importGeneratedClip',
-      payload: {
-        assetPath: payload.asset.path,
-        ...(payload.asset.mediaType ? { mediaType: payload.asset.mediaType } : {}),
-        ...(payload.asset.name ? { name: payload.asset.name } : {}),
-      },
-    };
-  }
-
-  if (input.target === 'sketch' && payload.asset.mediaType === 'image') {
-    return {
-      status: 'execute-command',
-      command: 'neko.sketch.importAsset',
-      payload: {
-        path: payload.asset.path,
-        ...(payload.asset.name ? { name: payload.asset.name } : {}),
-      },
-    };
-  }
-
-  if (input.target === 'model' && payload.asset.mediaType === 'model') {
-    return {
-      status: 'execute-command',
-      command: 'neko.model.importAsset',
-      payload: {
-        path: payload.asset.path,
-        ...(payload.asset.name ? { name: payload.asset.name } : {}),
-      },
-    };
-  }
-
-  if (input.target === 'explorer') {
-    return {
-      status: 'reveal-file',
-      filePath: payload.asset.path,
-    };
-  }
-
-  return { status: 'unsupported', target: input.target };
-}
-
 export function expandRuntimePluginTransferInputs(
   input: ExpandPluginTransferInputsInput,
 ): readonly BuildPluginTransferPlanInput[] {
@@ -176,20 +69,6 @@ export function expandRuntimePluginTransferInputs(
   }));
 }
 
-function assertSingleTransferPayload(
-  payload: RuntimePluginTransferBuildPayload,
-): asserts payload is Extract<PluginTransferPayload, { kind: 'singleAsset' }> {
-  if (payload.kind !== 'singleAsset') {
-    throw new Error(`Unsupported plugin transfer payload kind: ${payload.kind}`);
-  }
-}
-
-function isPluginTransferMediaType(
-  value: string | undefined,
-): value is 'image' | 'video' | 'audio' | 'model' {
-  return value === 'image' || value === 'video' || value === 'audio' || value === 'model';
-}
-
 function resolveBatchTransferDefaults(
   asset: PluginTransferAssetRef,
   batch: Extract<PluginTransferPayload, { kind: 'assetBatch' }>,
@@ -198,18 +77,6 @@ function resolveBatchTransferDefaults(
     ...(!asset.target && batch.target ? { target: batch.target } : {}),
     ...(!asset.provenance && batch.provenance ? { provenance: batch.provenance } : {}),
   };
-}
-
-function readDocumentResourceRef(
-  asset: PluginTransferAssetRef,
-  payloadProvenance: PluginTransferAssetRef['provenance'] | undefined,
-): DocumentArchiveResourceRef | undefined {
-  const candidates = [
-    asset.documentResourceRef,
-    asset.provenance?.metadata?.['documentResourceRef'],
-    payloadProvenance?.metadata?.['documentResourceRef'],
-  ];
-  return candidates.find(isDocumentArchiveResourceRef);
 }
 
 export function buildRuntimePluginSlashCommandDispatch(

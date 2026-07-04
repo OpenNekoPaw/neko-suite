@@ -1504,6 +1504,9 @@ importers:
 
   packages/neko-skills:
     dependencies:
+      '@neko-agent/types':
+        specifier: workspace:*
+        version: link:../neko-agent/packages/agent-types
       '@neko/shared':
         specifier: workspace:*
         version: link:../neko-types

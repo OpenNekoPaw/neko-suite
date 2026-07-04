@@ -14,6 +14,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@neko-agent/types": "workspace:*",
     "@neko/shared": "workspace:*"
   },
   "devDependencies": {

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ExecutorHooks, IService, IToolRegistry } from '@neko/shared';
+import type {
+  ExecutorHooks,
+  IOperationToolAdapterRegistry,
+  IService,
+  IToolRegistry,
+} from '@neko/shared';
 import { buildAgentRuntimeSessionFactoryConfig } from '../runtime-host-bindings';
 
 function createService(): IService {
@@ -17,11 +22,21 @@ function createToolRegistry(): IToolRegistry {
   } as unknown as IToolRegistry;
 }
 
+function createOperationRegistry(): IOperationToolAdapterRegistry {
+  return {
+    register: vi.fn(),
+    unregister: vi.fn(),
+    get: vi.fn(),
+    list: vi.fn(),
+    findPlanner: vi.fn(),
+  };
+}
+
 describe('buildAgentRuntimeSessionFactoryConfig', () => {
   it('assembles host bindings into runtime session factory config', () => {
     const service = createService();
     const toolRegistry = createToolRegistry();
-    const operationRegistry = { list: vi.fn(), findPlanner: vi.fn() };
+    const operationRegistry = createOperationRegistry();
     const fragments = [{ id: 'capability:test', content: 'capability prompt' }];
     const perceptionClients = { transcribe: { perception: { transcribe: vi.fn() } } };
 
@@ -33,7 +48,7 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
       authorizedReadRoots: ['/media/library'],
       workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
       conversationId: 'conv-1',
-      createDefaultOperationToolAdapterRegistry: () => operationRegistry,
+      operationToolAdapterRegistry: operationRegistry,
       getCapabilityPromptFragments: () => fragments,
       getPerceptionClients: () => perceptionClients,
     });
@@ -55,46 +70,39 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
     );
   });
 
-  it('prefers explicit operation registry over previous/default registry', () => {
-    const explicit = { list: vi.fn() };
-    const previous = { list: vi.fn() };
-    const createDefault = vi.fn(() => ({ list: vi.fn() }));
+  it('prefers explicit operation registry over previous registry', () => {
+    const explicit = createOperationRegistry();
+    const previous = createOperationRegistry();
 
     const config = buildAgentRuntimeSessionFactoryConfig({
       createService,
       toolRegistry: createToolRegistry(),
       operationToolAdapterRegistry: explicit,
       previousOperationToolAdapterRegistry: previous,
-      createDefaultOperationToolAdapterRegistry: createDefault,
     });
 
     expect(config.operationToolAdapterRegistry).toBe(explicit);
-    expect(createDefault).not.toHaveBeenCalled();
   });
 
-  it('falls back to previous operation registry before creating a default registry', () => {
-    const previous = { list: vi.fn() };
-    const createDefault = vi.fn(() => ({ list: vi.fn() }));
+  it('falls back to previous operation registry when no explicit registry is injected', () => {
+    const previous = createOperationRegistry();
 
     const config = buildAgentRuntimeSessionFactoryConfig({
       createService,
       toolRegistry: createToolRegistry(),
       previousOperationToolAdapterRegistry: previous,
-      createDefaultOperationToolAdapterRegistry: createDefault,
     });
 
     expect(config.operationToolAdapterRegistry).toBe(previous);
-    expect(createDefault).not.toHaveBeenCalled();
   });
 
-  it('creates the default operation registry inside runtime when none is injected', () => {
+  it('does not create a domain operation registry when none is injected', () => {
     const config = buildAgentRuntimeSessionFactoryConfig({
       createService,
       toolRegistry: createToolRegistry(),
     });
 
-    expect(config.operationToolAdapterRegistry).toBeDefined();
-    expect(config.operationToolAdapterRegistry?.list()).toEqual(expect.any(Array));
+    expect(config.operationToolAdapterRegistry).toBeUndefined();
   });
 
   it('passes explicit executor hooks through to the session factory config', () => {

@@ -21,6 +21,7 @@ import {
   CREATIVE_PRESETS as CREATIVE_SUBAGENT_PRESETS,
   createAutohealChain,
   createDefaultCreativeProcessRecoveryPolicy,
+  createDefaultOperationToolAdapterRegistry,
   createValidationCoordinatorFactory,
   createQualityReviewValidationAdapter,
 } from '@neko/skills';
@@ -282,10 +283,11 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
   private createRuntimeSessionAssemblyInput(
     config: IAgentConfig,
   ): AgentRuntimeSessionAssemblyInput {
+    const capabilityRuntime = getCapabilityRuntimeBindings();
     return {
       createService: () =>
         toSharedService(config.platform.createService(), {
-          providerCardRegistry: getCapabilityRuntimeBindings().providerCardRegistry,
+          providerCardRegistry: capabilityRuntime.providerCardRegistry,
           ...(this.deps.perceptionAssetLoader
             ? { assetLoader: this.deps.perceptionAssetLoader }
             : {}),
@@ -306,14 +308,17 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
       workspaceIgnoreRules: config.workspaceIgnoreRules,
       taskManager: config.taskManager,
       conversationId: config.conversationId,
-      operationToolAdapterRegistry: config.operationToolAdapterRegistry,
+      operationToolAdapterRegistry:
+        config.operationToolAdapterRegistry ??
+        capabilityRuntime.operationToolAdapterRegistry ??
+        createDefaultOperationToolAdapterRegistry(),
       locale: config.locale,
       providerExpressionTargets: config.providerExpressionTargets,
       creationGuidance: {
         autohealChainFactory: createAutohealChain,
         creativeProcessRecoveryPolicy: createDefaultCreativeProcessRecoveryPolicy(),
       },
-      capabilityRuntime: getCapabilityRuntimeBindings(),
+      capabilityRuntime,
       validationLoop: {
         validationCoordinatorFactory: createValidationCoordinatorFactory(),
         toolResultValidationAdapters: [createQualityReviewValidationAdapter()],

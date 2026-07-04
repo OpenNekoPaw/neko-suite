@@ -36,6 +36,15 @@ const { loadWorkspaceFileIgnoreRulesMock } = vi.hoisted(() => ({
   loadWorkspaceFileIgnoreRulesMock: vi.fn(async () => ({ gitignoreRules: [] })),
 }));
 
+const { createDefaultOperationToolAdapterRegistryMock, defaultOperationToolAdapterRegistryMock } =
+  vi.hoisted(() => ({
+    createDefaultOperationToolAdapterRegistryMock: vi.fn(),
+    defaultOperationToolAdapterRegistryMock: {
+      list: vi.fn(),
+      findPlanner: vi.fn(),
+    },
+  }));
+
 // Mock vscode (already handled by __mocks__/vscode.ts, but ensure EventEmitter works)
 vi.mock('vscode', () => {
   class EventEmitter<T> {
@@ -143,6 +152,14 @@ vi.mock('@neko/agent', async (importOriginal) => {
       buildAgentsOverlay: vi.fn().mockReturnValue(undefined),
     })),
     getDefaultPersonalPath: vi.fn().mockReturnValue('~/.neko'),
+  };
+});
+
+vi.mock('@neko/skills', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    createDefaultOperationToolAdapterRegistry: createDefaultOperationToolAdapterRegistryMock,
   };
 });
 
@@ -410,6 +427,9 @@ describe('AgentRunner', () => {
     syncToolCategoriesMock.mockReset();
     executeCommandMock.mockReset();
     activateEngineExtensionMock.mockReset();
+    createDefaultOperationToolAdapterRegistryMock.mockReturnValue(
+      defaultOperationToolAdapterRegistryMock,
+    );
     loadWorkspaceFileIgnoreRulesMock.mockResolvedValue({ gitignoreRules: [] });
     vi.restoreAllMocks();
     latestCreateSessionConfig = undefined;
@@ -597,7 +617,7 @@ describe('AgentRunner', () => {
         durationSecs: 1,
       });
       expect(activateEngineExtensionMock).toHaveBeenCalled();
-      expect(executeCommandMock).toHaveBeenCalledWith(NEKO_ENGINE_ENSURE_FRAME_SERVER_COMMAND);
+      expect(executeCommandMock).toHaveBeenCalledWith(NEKO_ENGINE_ENSURE_FRAME_SERVER_COMMAND, []);
 
       const fetchCall = vi.mocked(globalThis.fetch).mock.calls.at(-1);
       expect(fetchCall?.[0]).toBe('http://127.0.0.1:7788/v1/dispatch');
@@ -610,20 +630,65 @@ describe('AgentRunner', () => {
       );
     });
 
-    it('应该默认装配 OperationToolAdapterRegistry 到 session runtime', async () => {
+    it('应该从 @neko/skills 默认装配 OperationToolAdapterRegistry 到 session runtime', async () => {
       await runner.configure({
         platform: mockPlatform,
         systemPrompt: 'Test prompt',
       });
 
+      expect(createDefaultOperationToolAdapterRegistryMock).toHaveBeenCalledTimes(1);
+      expect(latestRuntimeAssemblyInput?.operationToolAdapterRegistry).toBe(
+        defaultOperationToolAdapterRegistryMock,
+      );
       expect(latestCreateSessionConfig).toEqual(
         expect.objectContaining({
           runtime: expect.objectContaining({
             capabilityRuntime: expect.objectContaining({
-              operationToolAdapterRegistry: expect.objectContaining({
-                list: expect.any(Function),
-                findPlanner: expect.any(Function),
-              }),
+              operationToolAdapterRegistry: defaultOperationToolAdapterRegistryMock,
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('应该优先使用配置显式传入的 OperationToolAdapterRegistry', async () => {
+      const explicitRegistry = { list: vi.fn(), findPlanner: vi.fn() };
+
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+        operationToolAdapterRegistry: explicitRegistry,
+      });
+
+      expect(createDefaultOperationToolAdapterRegistryMock).not.toHaveBeenCalled();
+      expect(latestRuntimeAssemblyInput?.operationToolAdapterRegistry).toBe(explicitRegistry);
+      expect(latestCreateSessionConfig).toEqual(
+        expect.objectContaining({
+          runtime: expect.objectContaining({
+            capabilityRuntime: expect.objectContaining({
+              operationToolAdapterRegistry: explicitRegistry,
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('应该优先使用 capability runtime 已贡献的 OperationToolAdapterRegistry', async () => {
+      const contributedRegistry = { list: vi.fn(), findPlanner: vi.fn() };
+      capabilityRuntimeMock.operationToolAdapterRegistry = contributedRegistry;
+
+      await runner.configure({
+        platform: mockPlatform,
+        systemPrompt: 'Test prompt',
+      });
+
+      expect(createDefaultOperationToolAdapterRegistryMock).not.toHaveBeenCalled();
+      expect(latestRuntimeAssemblyInput?.operationToolAdapterRegistry).toBe(contributedRegistry);
+      expect(latestCreateSessionConfig).toEqual(
+        expect.objectContaining({
+          runtime: expect.objectContaining({
+            capabilityRuntime: expect.objectContaining({
+              operationToolAdapterRegistry: contributedRegistry,
             }),
           }),
         }),

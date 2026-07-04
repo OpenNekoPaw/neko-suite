@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import {
-  buildRuntimePluginTransferPlan,
   buildRuntimePluginsAvailableMessage,
   expandRuntimePluginTransferInputs,
 } from '@neko/agent/runtime';
+import { buildNekoSuitePluginTransferPlan } from '@neko/skills';
 import type { PluginTransferAssetRef, PluginTransferPayload } from '@neko-agent/types';
 import {
   PathResolver,
@@ -77,7 +77,7 @@ export async function sendGeneratedAssetToPlugin(
     const executeCommand = deps.executeCommand ?? vscode.commands.executeCommand;
 
     for (const input of inputs) {
-      const plan = buildRuntimePluginTransferPlan(input);
+      const plan = buildNekoSuitePluginTransferPlan(input);
 
       if (plan.status === 'execute-command') {
         results.push(await executeCommand(plan.command, plan.payload));
