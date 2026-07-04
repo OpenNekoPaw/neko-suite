@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { STORYBOARD_CREATIVE_TABLE_HEADERS, type Message } from '@neko-agent/types';
+import type { Message } from '@neko-agent/types';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import { MessageItem } from './MessageItem';
@@ -20,6 +20,24 @@ vi.mock('@/i18n/I18nContext', () => ({
     t: (key: string) => key,
   }),
 }));
+
+const STORYBOARD_TEST_HEADERS = [
+  'scene',
+  'shot',
+  'source',
+  'sourcePanel',
+  'decision',
+  'duration',
+  'visual',
+  'motion',
+  'audio',
+  'characters',
+  'dialogue',
+  'prompt',
+  'reviewStatus',
+  'nextAction',
+  'contentType',
+] as const;
 
 describe('MessageItem identity rendering', () => {
   it('renders the character name for character dialogue assistant messages', () => {
@@ -333,9 +351,9 @@ function defaultIdentities(): MessageIdentityMap {
 
 function createStoryboardCreativeTable(): string {
   return [
-    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.join(' | ')} |`,
-    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.map(() => '---').join(' | ')} |`,
-    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.map((header) => storyboardCreativeTableValue(header)).join(' | ')} |`,
+    `| ${STORYBOARD_TEST_HEADERS.join(' | ')} |`,
+    `| ${STORYBOARD_TEST_HEADERS.map(() => '---').join(' | ')} |`,
+    `| ${STORYBOARD_TEST_HEADERS.map((header) => storyboardCreativeTableValue(header)).join(' | ')} |`,
   ].join('\n');
 }
 

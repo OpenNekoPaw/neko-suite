@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { STORYBOARD_CREATIVE_TABLE_HEADERS, type ContentBlock } from '@neko-agent/types';
+import type { ContentBlock } from '@neko-agent/types';
 import { MessageActionsProvider } from '@/components/ChatView/MessageActionsContext';
 import { registerDefaultRenderers } from '@/components/ChatView/RichContent';
 import { ContentBlockItem } from './ContentBlockItem';
@@ -8,6 +8,24 @@ import { ContentBlockItem } from './ContentBlockItem';
 const { mockPostMessage } = vi.hoisted(() => ({
   mockPostMessage: vi.fn(),
 }));
+
+const STORYBOARD_TEST_HEADERS = [
+  'scene',
+  'shot',
+  'source',
+  'sourcePanel',
+  'decision',
+  'duration',
+  'visual',
+  'motion',
+  'audio',
+  'characters',
+  'dialogue',
+  'prompt',
+  'reviewStatus',
+  'nextAction',
+  'contentType',
+] as const;
 
 vi.mock('@neko/shared/vscode', () => ({
   getVSCodeAPI: () => ({
@@ -75,10 +93,10 @@ describe('ContentBlockItem Canvas transfer actions', () => {
         requestId: expect.stringMatching(/^canvas-markdown-handoff:/),
         markdown: expect.stringContaining('| scene | shot | source |'),
         sourceFormat: 'gfm-table',
-        declaredIntentHint: 'creative-table',
-        declaredProfileHint: 'storyboard',
       }),
     );
+    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('declaredIntentHint');
+    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('declaredProfileHint');
     expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('capabilityId');
     expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('intentHint');
     expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('profileHint');
@@ -101,7 +119,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
   });
 
-  it('does not render Canvas transfer for simplified display-only storyboard tables', () => {
+  it('renders Agent-led Canvas transfer for simplified storyboard display tables', () => {
     renderContentBlock({
       id: 'weak-storyboard',
       type: 'text',
@@ -109,7 +127,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       content: ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
     });
 
-    expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
   });
 
   it('renders composite artifact transfers as review-only artifact cards', () => {
@@ -370,9 +388,9 @@ function renderContentBlock(
 
 function createStoryboardCreativeTable(): string {
   return [
-    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.join(' | ')} |`,
-    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.map(() => '---').join(' | ')} |`,
-    `| ${STORYBOARD_CREATIVE_TABLE_HEADERS.map((header) => storyboardCreativeTableValue(header)).join(' | ')} |`,
+    `| ${STORYBOARD_TEST_HEADERS.join(' | ')} |`,
+    `| ${STORYBOARD_TEST_HEADERS.map(() => '---').join(' | ')} |`,
+    `| ${STORYBOARD_TEST_HEADERS.map((header) => storyboardCreativeTableValue(header)).join(' | ')} |`,
   ].join('\n');
 }
 

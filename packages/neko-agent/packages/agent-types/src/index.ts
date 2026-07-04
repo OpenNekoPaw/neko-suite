@@ -31,14 +31,6 @@ export {
   type CompositeContentExtraction,
   type CompositeContentFenceCandidate,
 } from './composite-content-contract';
-export {
-  STORYBOARD_CREATIVE_TABLE_FIELDS,
-  STORYBOARD_CREATIVE_TABLE_HEADERS,
-  normalizeStoryboardCreativeTableHeader,
-  resolveStoryboardCreativeTableHeader,
-  type StoryboardCreativeTableFieldDescriptor,
-  type StoryboardCreativeTableHeader,
-} from './creative-table-contract';
 export type {
   CloseCurrentConversationTabInput,
   CloseCurrentConversationTabProjection,

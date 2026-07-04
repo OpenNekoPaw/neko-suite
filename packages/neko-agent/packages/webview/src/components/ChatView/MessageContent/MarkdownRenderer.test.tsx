@@ -14,15 +14,6 @@ vi.mock('@/i18n/I18nContext', () => ({
 vi.mock('@/i18n', () => ({
   t: (key: string) =>
     ({
-      'chat.storyboardTable.fields.scene': '场景',
-      'chat.storyboardTable.fields.shot': '镜头',
-      'chat.storyboardTable.fields.source': '来源',
-      'chat.storyboardTable.fields.sourcePanel': '来源分格',
-      'chat.storyboardTable.fields.visual': '画面',
-      'chat.storyboardTable.fields.imagePrompt': '图像提示词',
-      'chat.storyboardTable.fields.sceneVideoPrompt': '场景视频提示词',
-      'chat.storyboardTable.fields.prompt': '提示词',
-      'chat.storyboardTable.fields.nextAction': '建议操作',
       'chat.structuredArtifact.generating': 'Generating structured content...',
     })[key] ?? key,
   getLocale: () => 'zh-cn',
@@ -211,7 +202,7 @@ describe('MarkdownRenderer structured artifacts', () => {
     expect(screen.queryByText('P1')).toBeNull();
   });
 
-  it('localizes known creative table headers while preserving extension headers', () => {
+  it('preserves emitted creative table headers including extension headers', () => {
     render(
       <MarkdownRenderer
         content={[
@@ -222,14 +213,14 @@ describe('MarkdownRenderer structured artifacts', () => {
       />,
     );
 
-    expect(screen.getByRole('columnheader', { name: '场景' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: '图像提示词' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: '场景视频提示词' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'scene' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'imagePrompt' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'sceneVideoPrompt' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: '自定义审阅' })).toBeTruthy();
-    expect(screen.queryByRole('columnheader', { name: 'imagePrompt' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: '图像提示词' })).toBeNull();
   });
 
-  it('localizes storyboard creative table field headers while preserving cell content', () => {
+  it('preserves storyboard creative table field headers while preserving cell content', () => {
     renderMarkdown(
       [
         '| scene | shot | source | sourcePanel | nextAction |',
@@ -238,16 +229,16 @@ describe('MarkdownRenderer structured artifacts', () => {
       ].join('\n'),
     );
 
-    expect(screen.getByRole('columnheader', { name: '场景' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: '镜头' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: '来源' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: '来源分格' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: '建议操作' })).toBeTruthy();
-    expect(screen.queryByRole('columnheader', { name: 'sourcePanel' })).toBeNull();
+    expect(screen.getByRole('columnheader', { name: 'scene' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'shot' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'source' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'sourcePanel' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'nextAction' })).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: '来源分格' })).toBeNull();
     expect(screen.getByText('use-as-reference')).toBeTruthy();
   });
 
-  it('localizes supported Chinese storyboard header aliases to stable field labels', () => {
+  it('preserves Chinese storyboard header aliases emitted by the agent', () => {
     renderMarkdown(
       [
         '| 画面内容 | 生成提示词 | 建议操作 |',
@@ -256,11 +247,11 @@ describe('MarkdownRenderer structured artifacts', () => {
       ].join('\n'),
     );
 
-    expect(screen.getByRole('columnheader', { name: '画面' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: '提示词' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '画面内容' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '生成提示词' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: '建议操作' })).toBeTruthy();
-    expect(screen.queryByRole('columnheader', { name: '画面内容' })).toBeNull();
-    expect(screen.queryByRole('columnheader', { name: '生成提示词' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: '画面' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: '提示词' })).toBeNull();
   });
 
   it('renders inline-code resource labels from normalized token projection', () => {

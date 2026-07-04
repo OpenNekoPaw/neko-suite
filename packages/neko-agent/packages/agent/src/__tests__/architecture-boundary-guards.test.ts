@@ -307,6 +307,33 @@ describe('agent architecture boundary guards', () => {
     expect(violations).toEqual([]);
   });
 
+  it('keeps storyboard CreativeTable field contracts out of Agent types and Webview rendering', () => {
+    const sourceFiles = [
+      ...listFiles(join(packageRoot, 'agent-types/src')),
+      ...listFiles(webviewSrc),
+    ]
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+    const forbiddenPatterns = [
+      /creative-table-contract/,
+      /\bSTORYBOARD_CREATIVE_TABLE_(?:FIELDS|HEADERS)\b/,
+      /\bresolveStoryboardCreativeTableHeader\b/,
+      /\bnormalizeStoryboardCreativeTableHeader\b/,
+      /chat\.storyboardTable\.fields/,
+    ];
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps media quality domain validation out of Agent core', () => {
     const forbiddenValidationFiles = [
       join(agentSrc, 'validation/qa-types.ts'),
