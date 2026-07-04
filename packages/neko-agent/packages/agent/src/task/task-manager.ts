@@ -885,16 +885,22 @@ function isCreationProjectedTaskBoundToRun(
   runId: string,
   runStartedAt?: number,
 ): boolean {
-  if (
-    task.type === 'workflow' &&
-    (task.id.startsWith(`creation:${runId}:`) || task.id.startsWith(`idc:${runId}:`))
-  ) {
+  if (task.type === 'workflow' && task.id.startsWith(`creation:${runId}:`)) {
     if (runStartedAt === undefined) {
       return true;
     }
 
     const idBinding = getCreationProjectedTaskRunBinding(task);
     return idBinding?.runId === runId && idBinding.runStartedAt === runStartedAt;
+  }
+
+  if (task.type === 'workflow' && task.id.startsWith(`idc:${runId}:`)) {
+    if (runStartedAt === undefined) {
+      return true;
+    }
+
+    const migrationBinding = getIdcMigrationProjectedTaskRunBinding(task);
+    return migrationBinding?.runId === runId && migrationBinding.runStartedAt === runStartedAt;
   }
 
   const binding = getCreationProjectedTaskRunBinding(task);
@@ -906,4 +912,28 @@ function isCreationProjectedTaskBoundToRun(
   }
 
   return binding.runStartedAt === runStartedAt;
+}
+
+function getIdcMigrationProjectedTaskRunBinding(
+  task: Pick<SerializableTask, 'type' | 'input'>,
+): { readonly runId: string; readonly runStartedAt: number } | null {
+  if (task.type !== 'workflow') {
+    return null;
+  }
+
+  const payload = task.input.payload;
+  if (typeof payload !== 'object' || payload === null) {
+    return null;
+  }
+
+  const candidate = payload as Record<string, unknown>;
+  const legacyTrace = candidate['legacyTrace'];
+  if (candidate['source'] !== 'idc' || typeof legacyTrace !== 'object' || legacyTrace === null) {
+    return null;
+  }
+
+  const trace = legacyTrace as Record<string, unknown>;
+  return typeof trace['runId'] === 'string' && typeof trace['runStartedAt'] === 'number'
+    ? { runId: trace['runId'], runStartedAt: trace['runStartedAt'] }
+    : null;
 }

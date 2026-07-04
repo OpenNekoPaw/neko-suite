@@ -340,7 +340,7 @@ export interface IAgentExecutor {
 
 // Note: Skill types (Skill, SlashCommand, SkillMatch, etc.) are now in ./skill.ts
 // They follow Claude-compatible skill definitions with support for both:
-// - Skills: Semantic discovery with description matching
+// - Skills: candidate discovery with explicit user or Agent-tool activation
 // - Slash Commands: Explicit /command triggers with argument interpolation
 
 /**

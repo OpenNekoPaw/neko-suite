@@ -159,7 +159,10 @@ describe('skill runtime bootstrap', () => {
 
     const provider = bootstrap.createSkillProviderFactory(state)('conversation-1');
     const activeSkill = await provider.getActiveSkill();
-    const activation = await provider.activateSkill('storyboard');
+    const activation = await provider.activateSkill({
+      name: 'storyboard',
+      reason: 'Agent selected storyboard workflow',
+    });
     const deactivation = await provider.deactivateSkill();
 
     expect(activeSkill).toEqual({ name: 'storyboard', description: 'storyboard description' });

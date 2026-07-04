@@ -88,7 +88,9 @@ describe('current single-Skill lifecycle characterization', () => {
       effects,
     });
 
-    await expect(provider.activateSkill('review')).resolves.toEqual({
+    await expect(
+      provider.activateSkill({ name: 'review', reason: 'Agent selected review workflow' }),
+    ).resolves.toEqual({
       success: true,
       message: 'Activated skill "review"',
       allowedTools: ['ReadDocument'],

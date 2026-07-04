@@ -308,11 +308,11 @@ function isRenderableGeneratedAsset(
 function isRenderableGeneratedDraft(
   value: unknown,
 ): value is NonNullable<NonNullable<AgentBackgroundTask['result']>['drafts']>[number] {
-  return (
-    isRenderableGeneratedAsset(value) &&
-    isRecord(value.draftRef) &&
-    isGeneratedDraftRef(value.draftRef)
-  );
+  if (!isRecord(value)) {
+    return false;
+  }
+  const draftRef = value['draftRef'];
+  return isRenderableGeneratedAsset(value) && isGeneratedDraftRef(draftRef);
 }
 
 function sanitizeBackgroundTaskResult(

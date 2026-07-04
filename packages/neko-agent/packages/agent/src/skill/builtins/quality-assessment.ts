@@ -1,8 +1,8 @@
 /**
  * Quality Assessment Skill — Evaluate AI-generated media and propose fixes
  *
- * Triggered by semantic matching (quality check, evaluate media, 质量检查, etc.)
- * or slash command: /quality-check
+ * Invoked explicitly or by Agent `ActivateSkill` after the Agent decides a
+ * quality-assessment workflow is needed.
  *
  * Uses QualityCheck tool (VisionEvaluator for images, AudioEvaluator for audio)
  * and RemediationPlanner for deterministic fix suggestions.

@@ -1,10 +1,14 @@
 /**
- * Skill Matcher - Semantic matching for skill discovery
+ * Skill Matcher - candidate discovery only
  *
- * Matches user requests to skills based on:
+ * Matches user requests to Skill candidates based on:
  * - Keywords in skill description
  * - Skill name matching
  * - Semantic similarity (future: embeddings)
+ *
+ * This matcher must never apply a Skill, inject prompt text, or create Skill
+ * lifecycle state. Activation is limited to explicit user invocation or the
+ * Agent's `ActivateSkill` tool call after it has decided and explained why.
  */
 
 import type { Skill, SkillMatch, ISkillMatcher } from '@neko/shared';
@@ -27,17 +31,17 @@ interface RequestIntent {
 }
 
 /**
- * Keyword-based skill matcher
+ * Term-based candidate matcher
  *
  * Matches based on:
  * 1. Exact skill name match
- * 2. Slash command match
+ * 2. Catalog description terms
  * 3. Keywords in description
  */
 export class KeywordSkillMatcher extends SkillMatcher {
   /**
-   * Keywords that indicate skill intent
-   * Maps common phrases to skill-related concepts
+   * Terms that indicate skill intent.
+   * Maps common phrases to skill-related concepts.
    */
   private intentKeywords: Record<string, string[]> = {
     commit: ['commit', 'save changes', 'git commit', 'commit message', 'commit this'],
@@ -151,7 +155,7 @@ export class KeywordSkillMatcher extends SkillMatcher {
 
     const skillText = this.buildSkillSearchText(skill);
 
-    // 2. Description keyword matching (Skills no longer have slash commands)
+    // 2. Description term matching (Skills no longer have slash commands)
     const descriptionLower = skillText.toLowerCase();
     const descriptionWords = this.tokenize(descriptionLower);
 
@@ -164,10 +168,10 @@ export class KeywordSkillMatcher extends SkillMatcher {
       // Calculate relevance based on matching word ratio
       const wordMatchRatio = matchingWords.length / Math.max(requestWords.length, 1);
       relevance += wordMatchRatio * 0.6;
-      reasons.push(`Matched keywords: ${matchingWords.join(', ')}`);
+      reasons.push(`Matched catalog terms: ${matchingWords.join(', ')}`);
     }
 
-    // 4. Intent keyword matching
+    // 4. Intent term matching
     for (const [intent, keywords] of Object.entries(this.intentKeywords)) {
       const hasIntent = keywords.some((kw) => requestLower.includes(kw));
       const skillHasIntent = keywords.some((kw) => descriptionLower.includes(kw));

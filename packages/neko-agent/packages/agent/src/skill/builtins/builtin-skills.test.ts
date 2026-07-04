@@ -110,10 +110,12 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.name).toBe('comic-to-storyboard');
     });
 
-    it('should have description with trigger keywords', () => {
+    it('should describe the domain without keyword-trigger routing hints', () => {
       expect(comicToStoryboardSkill.description).toContain('comic');
       expect(comicToStoryboardSkill.description).toContain('manga');
-      expect(comicToStoryboardSkill.description).toContain('漫画');
+      expect(comicToStoryboardSkill.description).toContain('storyboard');
+      expect(comicToStoryboardSkill.description).not.toContain('Keywords:');
+      expect(comicToStoryboardSkill.description).not.toContain('生成分镜表');
     });
 
     it('should have content with workflow instructions', () => {
@@ -121,6 +123,18 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.content).toContain('Panel');
       expect(comicToStoryboardSkill.content).toContain('OCR');
       expect(comicToStoryboardSkill.content).toContain('Markdown creative table');
+      expect(comicToStoryboardSkill.content).toContain(
+        'A manifest-only ReadDocument result is not visual evidence',
+      );
+      expect(comicToStoryboardSkill.content).toContain(
+        'If ReadDocument does not return `imageInfo[]`',
+      );
+      expect(comicToStoryboardSkill.content).toContain(
+        'If manifest returns no `imageInfo[]`, continue with ReadDocument mode="content" or mode="next"',
+      );
+      expect(comicToStoryboardSkill.content).toContain(
+        'Do not output storyboard rows until ReadImage has returned visual evidence',
+      );
       expect(comicToStoryboardSkill.content).toContain('Canvas Handoff');
       expect(comicToStoryboardSkill.content).toContain('Field Roles');
     });
@@ -136,12 +150,23 @@ describe('Builtin Skills', () => {
         '`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `imagePrompt`, `imageEditPrompt`, `shotVideoPrompt`, `videoEditPrompt`, `sceneStylePrompt`, `sceneVideoPrompt`, `sceneVideoEditPrompt`, `reviewStatus`, `nextAction`, `contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`',
       );
       expect(comicToStoryboardSkill.content).toContain(
-        'The Webview displays raw Markdown headers and does not translate them',
+        'use these canonical stable field ids exactly for known columns',
       );
-      expect(comicToStoryboardSkill.content).toContain('unambiguously mapped to one stable field');
+      expect(comicToStoryboardSkill.content).toContain(
+        'Do not localize known field headers in new Markdown output',
+      );
+      expect(comicToStoryboardSkill.content).toContain(
+        'Known fields are resolved through the shared storyboard profile',
+      );
+      expect(comicToStoryboardSkill.content).toContain(
+        'the Webview displays those fields in the current UI locale',
+      );
+      expect(comicToStoryboardSkill.content).toContain(
+        'Unknown extension columns keep their raw Markdown headers',
+      );
       expect(comicToStoryboardSkill.content).toContain('open review metadata');
       expect(comicToStoryboardSkill.content).toContain('nextAction` is plan text only');
-      expect(comicToStoryboardSkill.content).toContain('Chinese headers may use');
+      expect(comicToStoryboardSkill.content).toContain('Chinese/localized headers');
       expect(comicToStoryboardSkill.content).toContain('`read-image-*.jpg`');
       expect(comicToStoryboardSkill.content).toContain('![P1](P1)');
       expect(comicToStoryboardSkill.content).toContain('Codex-style standard Markdown');
@@ -279,6 +304,17 @@ describe('Builtin Skills', () => {
       expect(comicToStoryboardSkill.allowedTools).toContain(TOOL_NAMES_SYSTEM.READ_IMAGE);
       expect(comicToStoryboardSkill.allowedTools).toContain(
         TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
+      );
+    });
+
+    it('should allow Agent-led Canvas Markdown lifecycle handoff tools', () => {
+      expect(comicToStoryboardSkill.allowedTools).toEqual(
+        expect.arrayContaining([
+          TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN,
+          TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_DRAFT_FROM_MARKDOWN,
+          TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN,
+          TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD,
+        ]),
       );
     });
 
@@ -502,11 +538,21 @@ describe('Builtin Skills', () => {
       expect(zhComic?.content).toContain('获取视觉证据');
       expect(zhComic?.content).toContain('Markdown creative table');
       expect(zhComic?.content).toContain('这张表就是分镜表');
-      expect(zhComic?.content).toContain('Webview 会直接显示 Markdown 表头，不会翻译表头');
-      expect(zhComic?.content).toContain('明确映射到一个稳定字段');
+      expect(zhComic?.content).toContain('只有 manifest 的 ReadDocument 结果不是视觉证据');
+      expect(zhComic?.content).toContain('如果 ReadDocument 没有返回 `imageInfo[]`');
+      expect(zhComic?.content).toContain(
+        '如果 manifest 没有返回 `imageInfo[]`，继续用 ReadDocument mode="content" 或 mode="next"',
+      );
+      expect(zhComic?.content).toContain('ReadImage 返回视觉证据前，不要输出分镜行');
+      expect(zhComic?.content).toContain('必须对已知列精确使用以下 canonical 稳定字段 id');
+      expect(zhComic?.content).toContain('新 Markdown 输出不要本地化已知字段表头');
+      expect(zhComic?.content).toContain('已知字段由 shared storyboard profile 解析');
+      expect(zhComic?.content).toContain('Webview 会按当前 UI 语言展示字段标签');
+      expect(zhComic?.content).toContain('未知扩展列会保留 Markdown 原表头');
       expect(zhComic?.content).toContain('开放的审阅 metadata');
       expect(zhComic?.content).toContain('`nextAction` 只是计划文本');
-      expect(zhComic?.content).toContain('中文表头可以使用');
+      expect(zhComic?.content).toContain('中文/本地化表头');
+      expect(zhComic?.content).toContain('本 Skill 新生成的已知字段表头应使用 canonical field id');
       expect(zhComic?.content).toContain(
         '`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `imagePrompt`, `imageEditPrompt`, `shotVideoPrompt`, `videoEditPrompt`, `sceneStylePrompt`, `sceneVideoPrompt`, `sceneVideoEditPrompt`, `reviewStatus`, `nextAction`, `contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`',
       );
@@ -623,7 +669,7 @@ describe('Builtin Skills', () => {
       expect(scriptGenerationSkill.name).toBe('script-generation');
     });
 
-    it('should have description with trigger keywords', () => {
+    it('should have description with discoverable domain terms', () => {
       expect(scriptGenerationSkill.description).toContain('script');
       expect(scriptGenerationSkill.description).toContain('screenplay');
       expect(scriptGenerationSkill.description).toContain('写剧本');
@@ -670,7 +716,7 @@ describe('Builtin Skills', () => {
       expect(qualityAssessmentSkill.name).toBe('quality-assessment');
     });
 
-    it('should have description with trigger keywords (en + zh)', () => {
+    it('should have description with discoverable domain terms (en + zh)', () => {
       expect(qualityAssessmentSkill.description).toContain('quality');
       expect(qualityAssessmentSkill.description).toContain('artifacts');
       expect(qualityAssessmentSkill.description).toContain('loudness');

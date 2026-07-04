@@ -5,6 +5,12 @@
 
 ## Removed Requirements
 
-The broad `AgentCreation`, `CreationIteration`, and `CreationEvent` requirements are withdrawn. They are replaced by the Agent-native creation boundary requirements in:
+### Requirement: Broad Agent creation iteration contracts
 
-`openspec/changes/normalize-agent-native-creation-boundary/specs/agent-native-creation-boundary/spec.md`
+The system SHALL withdraw the broad `AgentCreation`, `CreationIteration`, and `CreationEvent` contract direction from this change. Future work MUST use the Agent-native creation boundary requirements in `openspec/changes/normalize-agent-native-creation-boundary/specs/agent-native-creation-boundary/spec.md`.
+
+#### Scenario: Superseded change stays frozen
+
+- **WHEN** a developer validates active OpenSpec changes
+- **THEN** this change SHALL parse as a removed requirement only
+- **AND** implementation work SHALL continue under `normalize-agent-native-creation-boundary` or a new aligned proposal.

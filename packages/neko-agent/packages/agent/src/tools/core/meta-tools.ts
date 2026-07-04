@@ -36,6 +36,11 @@ export interface SkillContextSummary {
   readonly mediaWorkflow?: SkillMediaWorkflowHint;
 }
 
+export interface SkillActivationRequest {
+  readonly name: string;
+  readonly reason: string;
+}
+
 /**
  * Interface for providing skill information to meta tools.
  * Set by the extension layer after initialization.
@@ -50,8 +55,8 @@ export interface ISkillProvider {
     records: readonly ActiveSkillLifecycleRecordProjection[];
     diagnostics: readonly SkillLifecycleDiagnostic[];
   }>;
-  /** Activate a skill by name. Returns injection result or error. */
-  activateSkill(name: string): SkillProviderMaybePromise<{
+  /** Activate a skill by name after the Agent has decided and explained why. */
+  activateSkill(input: SkillActivationRequest): SkillProviderMaybePromise<{
     success: boolean;
     message: string;
     allowedTools?: string[];
@@ -171,7 +176,7 @@ export class GetContextTool extends BuiltinTool {
 export class ActivateSkillTool extends BuiltinTool {
   readonly name = 'ActivateSkill';
   readonly description =
-    'Activate a skill to receive specialized domain instructions. Use GetContext to see available skills. Only one skill can be active at a time.';
+    'Activate a skill after ordinary Agent understanding confirms a domain skill is needed. Do not use keyword matching alone. Briefly state the activation reason before calling this tool. Only one skill can be active at a time.';
   readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
@@ -179,8 +184,13 @@ export class ActivateSkillTool extends BuiltinTool {
         type: 'string',
         description: 'Name of the skill to activate',
       },
+      reason: {
+        type: 'string',
+        description:
+          'Concise reason based on the current conversation and gathered context, explaining why this skill is needed now.',
+      },
     },
-    required: ['skillName'],
+    required: ['skillName', 'reason'],
   };
   readonly category: ToolCategory = 'system';
 
@@ -201,7 +211,12 @@ export class ActivateSkillTool extends BuiltinTool {
     }
 
     const skillName = args.skillName as string;
-    const result = await this._skillProvider.activateSkill(skillName);
+    const reason = typeof args.reason === 'string' ? args.reason.trim() : '';
+    if (reason.length === 0) {
+      return this.error('Activation reason is required');
+    }
+
+    const result = await this._skillProvider.activateSkill({ name: skillName, reason });
 
     if (!result.success) {
       return this.error(result.message);
@@ -210,10 +225,11 @@ export class ActivateSkillTool extends BuiltinTool {
     return this.success({
       activated: true,
       skillName,
+      reason,
       message: result.message,
-      allowedTools: result.allowedTools,
-      lifecycleRecordId: result.lifecycleRecordId,
-      diagnostics: result.diagnostics,
+      ...(result.allowedTools ? { allowedTools: result.allowedTools } : {}),
+      ...(result.lifecycleRecordId ? { lifecycleRecordId: result.lifecycleRecordId } : {}),
+      ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
     });
   }
 }

@@ -12,6 +12,8 @@ import {
   isCompositeContentFenceLanguage,
   parseCompositeContentJson,
   parseCompositeContentJsonCandidates,
+  resolveStoryboardCreativeTableHeader,
+  STORYBOARD_CREATIVE_TABLE_FIELDS,
 } from '@neko-agent/types';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { projectCompositeBlockRichContent } from '@/presenters/composite-content-presenter';
@@ -19,7 +21,7 @@ import {
   normalizeMarkdownResourceLookupToken,
   type MarkdownResourceRenderingProjection,
 } from '@/presenters/markdown-resource-rendering-presenter';
-import { t } from '@/i18n';
+import { getLocale, t } from '@/i18n';
 import { validateCompositeArtifact, type CompositeArtifact } from '@neko/shared';
 import { CodeBlock } from './CodeBlock';
 import { MermaidBlock } from './MermaidBlock';
@@ -158,9 +160,13 @@ function createMarkdownComponents(
       return <tr className="border-b border-[var(--vscode-panel-border)]">{children}</tr>;
     },
     th({ children }) {
+      const projectedHeader = projectStoryboardCreativeTableHeader(children);
       return (
-        <th className="px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--vscode-foreground)] border border-[var(--vscode-panel-border)]">
-          {children}
+        <th
+          className="px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--vscode-foreground)] border border-[var(--vscode-panel-border)]"
+          title={projectedHeader?.title}
+        >
+          {projectedHeader?.label ?? children}
         </th>
       );
     },
@@ -211,6 +217,24 @@ function createMarkdownComponents(
       );
     },
   };
+}
+
+function projectStoryboardCreativeTableHeader(
+  children: ReactNode,
+): { readonly label: string; readonly title?: string } | null {
+  const text = readPlainText(children);
+  if (!text) return null;
+  const fieldId = resolveStoryboardCreativeTableHeader(text);
+  if (!fieldId) return null;
+  const key = `chat.storyboardTable.fields.${fieldId}`;
+  const localized = t(key);
+  if (localized !== key) {
+    return { label: localized, title: fieldId === text ? undefined : fieldId };
+  }
+  const descriptor = STORYBOARD_CREATIVE_TABLE_FIELDS.find((field) => field.id === fieldId);
+  const locale = getLocale();
+  const label = descriptor?.labels[locale] ?? descriptor?.labels.en ?? text;
+  return { label, title: fieldId === text ? undefined : fieldId };
 }
 
 function projectMarkdownResourceTokenCell(

@@ -433,13 +433,22 @@ describe('markdown resource rendering presenter', () => {
     ]);
   });
 
-  it('distinguishes missing tokens caused by absent resource context', () => {
+  it('does not turn plain table source tokens into diagnostics without image resource context', () => {
     const projection = projectMarkdownResourceRendering({
       markdown: [
         '| scene | shot | source | visual |',
         '| --- | --- | --- | --- |',
         '| Opening | 1 | P1 | Wide panel |',
       ].join('\n'),
+      toolCalls: [],
+    });
+
+    expect(projection).toEqual({ status: 'none', tokens: [], diagnostics: [] });
+  });
+
+  it('distinguishes explicit image targets caused by absent resource context', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: '![Page 1](P1)',
       toolCalls: [],
     });
 

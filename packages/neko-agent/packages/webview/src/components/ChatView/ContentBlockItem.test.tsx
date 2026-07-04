@@ -47,7 +47,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     expect(screen.getByLabelText('小橘 (Character Dialogue)')).toBeTruthy();
   });
 
-  it('does not render Canvas Markdown lifecycle transfer for plain assistant prose', () => {
+  it('does not render Canvas Markdown handoff for plain assistant prose', () => {
     renderContentBlock({
       id: 'plain',
       type: 'text',
@@ -58,7 +58,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
   });
 
-  it('routes assistant Markdown Send to Canvas through the lifecycle backend', () => {
+  it('routes assistant Markdown Send to Canvas through Agent-led handoff', () => {
     renderContentBlock({
       id: 'storyboard',
       type: 'text',
@@ -70,26 +70,23 @@ describe('ContentBlockItem Canvas transfer actions', () => {
 
     expect(mockPostMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'invokeAgentCapabilityLifecycle',
+        type: 'requestCanvasMarkdownHandoff',
         conversationId: 'conv-1',
-        invocation: expect.objectContaining({
-          capabilityId: 'canvas.ingestMarkdown',
-          phase: 'review',
-          payload: expect.objectContaining({
-            capabilityId: 'canvas.ingestMarkdown',
-            markdown: expect.stringContaining('| scene | shot | source |'),
-            sourceFormat: 'gfm-table',
-            intentHint: 'creative-table',
-            profileHint: 'storyboard',
-          }),
-        }),
+        requestId: expect.stringMatching(/^canvas-markdown-handoff:/),
+        markdown: expect.stringContaining('| scene | shot | source |'),
+        sourceFormat: 'gfm-table',
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
       }),
     );
-    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain(
-      'requestCanvasMarkdownHandoff',
-    );
+    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('capabilityId');
+    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('intentHint');
+    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('profileHint');
     expect(mockPostMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: 'invokeCanvasMarkdownCapability' }),
+    );
+    expect(mockPostMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'invokeAgentCapabilityLifecycle' }),
     );
   });
 

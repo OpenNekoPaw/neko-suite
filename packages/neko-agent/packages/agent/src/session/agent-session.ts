@@ -877,12 +877,13 @@ export class AgentSession implements IAgentSession {
     let runCompletionError:
       { readonly code: string; readonly message: string; readonly cause?: unknown } | undefined;
     let turnActivatedToolSets: readonly string[] = [];
+    const turnId = createAgentTurnId(this._config.conversationId ?? 'unknown', turnStartedAt);
     let trace = createAgentTraceContext({
       conversationId: this._config.conversationId,
-      turnId: createAgentTurnId(this._config.conversationId ?? 'unknown', turnStartedAt),
+      turnId,
       phase: 'session',
     });
-    this._activeTurnRunId = trace.turnId;
+    this._activeTurnRunId = turnId;
     let iteration = 0;
     const hadPendingFeedbackGuidance = this._feedbackRuntime.hasGuidance();
     let feedbackGuidanceAdjustedThisTurn = false;
@@ -1591,9 +1592,10 @@ export class AgentSession implements IAgentSession {
     if (!runId) {
       return null;
     }
+    const creationKind = this._currentTurnPlanningContext?.metadata?.['creationKind'];
     return {
       runId,
-      creationKind: this._currentTurnPlanningContext?.metadata?.creationKind ?? 'agent-turn',
+      creationKind: typeof creationKind === 'string' ? creationKind : 'agent-turn',
     };
   }
 
@@ -2263,9 +2265,9 @@ function createEmptySkillProvider(): ISkillProvider {
   return {
     listSkills: () => [],
     getActiveSkill: () => null,
-    activateSkill: (name) => ({
+    activateSkill: (input) => ({
       success: false,
-      message: `Skill system is not initialized: ${name}`,
+      message: `Skill system is not initialized: ${input.name}`,
     }),
     deactivateSkill: () => ({
       success: false,
@@ -2369,18 +2371,17 @@ function getChatMessageContent(message: ChatMessage): string {
 function createProviderCardProjectConfig(
   workspace: AgentSessionConfig['workspace'] | undefined,
 ): import('../feedback').FeedbackCoordinatorConfig['providerCardProject'] | undefined {
-  if (!workspace || typeof workspace.fsOps.writeFile !== 'function') {
+  if (!workspace || !hasWorkspaceWriteFileFsOps(workspace.fsOps)) {
     return undefined;
   }
 
+  const fsOps = workspace.fsOps;
   return {
     workspaceRoot: workspace.root,
     fsOps: {
-      mkdir: workspace.fsOps.mkdir.bind(workspace.fsOps),
-      writeFile: workspace.fsOps.writeFile.bind(workspace.fsOps),
-      ...(typeof workspace.fsOps.readFile === 'function'
-        ? { readFile: workspace.fsOps.readFile.bind(workspace.fsOps) }
-        : {}),
+      mkdir: fsOps.mkdir.bind(fsOps),
+      writeFile: fsOps.writeFile.bind(fsOps),
+      ...(typeof fsOps.readFile === 'function' ? { readFile: fsOps.readFile.bind(fsOps) } : {}),
     },
   };
 }
@@ -2391,17 +2392,28 @@ function resolveArtifactService(config: AgentSessionConfig): IArtifactService | 
   }
 
   const workspace = config.workspace;
-  if (!workspace || typeof workspace.fsOps.writeFile !== 'function') {
+  if (!workspace || !hasWorkspaceWriteFileFsOps(workspace.fsOps)) {
     return null;
   }
 
+  const fsOps = workspace.fsOps;
   return createWorkspaceArtifactService({
     workspaceRoot: workspace.root,
     fsOps: {
-      mkdir: workspace.fsOps.mkdir.bind(workspace.fsOps),
-      writeFile: workspace.fsOps.writeFile.bind(workspace.fsOps),
+      mkdir: fsOps.mkdir.bind(fsOps),
+      writeFile: fsOps.writeFile.bind(fsOps),
     },
   });
+}
+
+type WorkspaceFsOps = NonNullable<AgentSessionConfig['workspace']>['fsOps'];
+
+interface WorkspaceWriteFileFsOps extends WorkspaceFsOps {
+  writeFile(path: string, data: string, encoding: 'utf-8'): Promise<void>;
+}
+
+function hasWorkspaceWriteFileFsOps(fsOps: WorkspaceFsOps): fsOps is WorkspaceWriteFileFsOps {
+  return 'writeFile' in fsOps && typeof fsOps.writeFile === 'function';
 }
 
 interface ObservedToolResult {

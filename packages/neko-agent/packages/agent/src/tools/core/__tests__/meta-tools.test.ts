@@ -77,16 +77,46 @@ describe('core meta tools', () => {
       deactivateSkill: vi.fn(),
     });
 
-    await expect(tool.execute({ skillName: 'commit' })).resolves.toEqual({
+    await expect(
+      tool.execute({
+        skillName: 'commit',
+        reason: 'User asked for a commit message after I inspected the request.',
+      }),
+    ).resolves.toEqual({
       success: true,
       data: {
         activated: true,
         skillName: 'commit',
+        reason: 'User asked for a commit message after I inspected the request.',
         message: 'Activated skill "commit"',
         allowedTools: ['bash'],
       },
     });
-    expect(activateSkill).toHaveBeenCalledWith('commit');
+    expect(activateSkill).toHaveBeenCalledWith({
+      name: 'commit',
+      reason: 'User asked for a commit message after I inspected the request.',
+    });
+  });
+
+  it('rejects agent-driven skill activation without a non-empty reason', async () => {
+    const activateSkill = vi.fn();
+    const tool = new ActivateSkillTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill,
+      deactivateSkill: vi.fn(),
+    });
+
+    await expect(tool.execute({ skillName: 'commit' })).resolves.toEqual({
+      success: false,
+      error: 'Missing required field: reason',
+    });
+    await expect(tool.execute({ skillName: 'commit', reason: '   ' })).resolves.toEqual({
+      success: false,
+      error: 'Activation reason is required',
+    });
+    expect(activateSkill).not.toHaveBeenCalled();
   });
 
   it('awaits asynchronous skill deactivation before returning success', async () => {

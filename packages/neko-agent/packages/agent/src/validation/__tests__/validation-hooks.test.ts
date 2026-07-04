@@ -446,9 +446,14 @@ describe('ValidationHooks', () => {
         }),
       );
       expect(repairRequest?.instruction).toContain('final target artifact directly');
-      expect(repairRequest?.instruction).toContain('scene | shot | source');
+      expect(repairRequest?.instruction).toContain('imagePrompt | imageEditPrompt');
+      expect(repairRequest?.instruction).toContain('shotVideoPrompt | videoEditPrompt');
+      expect(repairRequest?.instruction).toContain('sceneStylePrompt | sceneVideoPrompt');
       expect(repairRequest?.instruction).toContain('Localized headers are allowed');
-      expect(repairRequest?.instruction).toContain('场景 | 镜头 | 来源 | 来源分格');
+      expect(repairRequest?.instruction).toContain('图像提示词');
+      expect(repairRequest?.instruction).toContain('场景视频提示词');
+      expect(repairRequest?.instruction).not.toContain('dialogue | prompt | reviewStatus');
+      expect(repairRequest?.instruction).not.toContain('对白 | 提示词 | 审阅状态');
       expect(repairRequest?.instruction).toContain('页码, 景别/构图, 节奏/情绪');
       expect(repairRequest?.instruction).not.toContain(
         'Do not use display-only headers such as 镜号, 镜头',
@@ -529,13 +534,170 @@ describe('ValidationHooks', () => {
 
       expect(repairRequest?.instruction).toContain('上一条可见 assistant 输出没有通过');
       expect(repairRequest?.instruction).toContain('修复要求：');
-      expect(repairRequest?.instruction).toContain('场景 | 镜头 | 来源 | 来源分格');
+      expect(repairRequest?.instruction).toContain('图像提示词');
+      expect(repairRequest?.instruction).toContain('镜头视频提示词');
+      expect(repairRequest?.instruction).toContain('场景视频提示词');
+      expect(repairRequest?.instruction).not.toContain('对白 | 提示词 | 审阅状态');
       expect(repairRequest?.instruction).toContain('校验错误：');
       expect(repairRequest?.instruction).not.toContain('The previous visible assistant output');
       expect(context.messages.at(-1)).toEqual({
         role: 'user',
         content: repairRequest?.instruction,
       });
+    });
+
+    it('queues repair when storyboard source tokens lack image resource context', async () => {
+      const hooks = new ValidationHooks({
+        outputConstraints: {
+          mermaidPreValidate: false,
+          onValidationFail: 'retry',
+        },
+      });
+      const step = createTestStep(
+        [
+          '| scene | shot | source | visual | imagePrompt | reviewStatus | nextAction |',
+          '| --- | --- | --- | --- | --- | --- | --- |',
+          '| Opening | 1 | P1 | 主角站在巨构前 | 黑白工业巨构前的孤独主角 | needs-review | bind page image |',
+        ].join('\n'),
+      );
+      const context = createTestContextWithMetadata({
+        locale: 'zh',
+        skillValidationRequirements: ['creative-table.storyboard'],
+      });
+      context.messages.push({
+        role: 'tool',
+        toolCallId: 'read-doc-manifest',
+        content: JSON.stringify({
+          source: { kind: 'file', path: '${A}/books/story.epub' },
+          mode: 'manifest',
+          manifest: {
+            format: 'epub',
+            units: [{ kind: 'chapter', href: 'html/page-1.html' }],
+          },
+        }),
+      });
+
+      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
+      const repairRequest = consumeOutputValidationRepairRequest(context);
+
+      expect(repairRequest).toEqual(
+        expect.objectContaining({
+          kind: 'output-validation-repair',
+          errors: expect.arrayContaining([
+            expect.objectContaining({
+              code: 'storyboard-table-source-resource-context-missing',
+            }),
+          ]),
+        }),
+      );
+      expect(repairRequest?.instruction).toContain('ReadDocument');
+      expect(repairRequest?.instruction).toContain('ReadImage');
+      expect(repairRequest?.instruction).toContain('needs-resource-binding');
+      expect(repairRequest?.instruction).toContain('不要继续输出替换表格');
+      expect(repairRequest?.instruction).toContain(
+        '先调用 ReadDocument mode="content"、mode="next" 或 mode="range"',
+      );
+    });
+
+    it('queues repair when storyboard has resource bindings but no ReadImage visual evidence', async () => {
+      const hooks = new ValidationHooks({
+        outputConstraints: {
+          mermaidPreValidate: false,
+          onValidationFail: 'retry',
+        },
+      });
+      const step = createTestStep(
+        [
+          '| scene | shot | source | visual | imagePrompt | reviewStatus | nextAction |',
+          '| --- | --- | --- | --- | --- | --- | --- |',
+          '| Opening | 1 | P1 | 主角站在巨构前 | 黑白工业巨构前的孤独主角 | needs-review | inspect panels |',
+        ].join('\n'),
+      );
+      const context = createTestContextWithMetadata({
+        locale: 'zh',
+        skillValidationRequirements: ['creative-table.storyboard'],
+      });
+      context.messages.push({
+        role: 'tool',
+        toolCallId: 'read-doc-range',
+        content: JSON.stringify({
+          source: { kind: 'file', path: '${A}/books/story.epub' },
+          mode: 'range',
+          imageInfo: [
+            {
+              alias: 'P1',
+              label: 'Page 1',
+              resourceRef: {
+                provider: 'document-archive',
+                id: 'story.epub#images/page-1.jpg',
+              },
+            },
+          ],
+        }),
+      });
+
+      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
+      const repairRequest = consumeOutputValidationRepairRequest(context);
+
+      expect(repairRequest?.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'storyboard-table-visual-evidence-missing',
+          }),
+        ]),
+      );
+      expect(repairRequest?.errors).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'storyboard-table-source-resource-context-missing',
+          }),
+        ]),
+      );
+      expect(repairRequest?.instruction).toContain('ReadDocument.imageInfo 只负责绑定');
+      expect(repairRequest?.instruction).toContain('ReadImage');
+      expect(repairRequest?.instruction).toContain('不要继续输出替换表格');
+      expect(repairRequest?.instruction).toContain('先调用 ReadImage');
+    });
+
+    it('accepts storyboard source tokens when ReadImage visual evidence exists', async () => {
+      const hooks = new ValidationHooks({
+        outputConstraints: {
+          mermaidPreValidate: false,
+          onValidationFail: 'retry',
+        },
+      });
+      const step = createTestStep(
+        [
+          '| scene | shot | source | visual | imagePrompt | reviewStatus | nextAction |',
+          '| --- | --- | --- | --- | --- | --- | --- |',
+          '| Opening | 1 | P1 | 主角站在巨构前 | 黑白工业巨构前的孤独主角 | needs-review | inspect panels |',
+        ].join('\n'),
+      );
+      const context = createTestContextWithMetadata({
+        locale: 'zh',
+        skillValidationRequirements: ['creative-table.storyboard'],
+      });
+      context.messages.push({
+        role: 'tool',
+        toolCallId: 'read-image-pages',
+        content: JSON.stringify({
+          mode: 'metadata',
+          images: [
+            {
+              alias: 'P1',
+              label: 'Page 1',
+              resourceRef: {
+                provider: 'document-archive',
+                id: 'story.epub#images/page-1.jpg',
+              },
+            },
+          ],
+        }),
+      });
+
+      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
+
+      expect(consumeOutputValidationRepairRequest(context)).toBeNull();
     });
 
     it('does not apply storyboard creative table validation without skill metadata', async () => {

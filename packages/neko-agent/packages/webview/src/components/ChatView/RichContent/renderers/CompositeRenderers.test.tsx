@@ -430,7 +430,7 @@ describe('composite rich content renderers', () => {
     expect(markup).not.toContain('max-h-[720px]');
   });
 
-  it('renders storyboard table transfer actions for available targets', () => {
+  it('keeps semantic storyboard tables free of fixed transfer actions', () => {
     registerDefaultRenderers();
 
     renderWithI18n(
@@ -498,9 +498,10 @@ describe('composite rich content renderers', () => {
       />,
     );
 
-    expect(screen.getByTitle('Send to Canvas')).toBeTruthy();
-    expect(screen.getByTitle('Send to Timeline')).toBeTruthy();
-    expect(screen.getByTitle('Send to Explorer')).toBeTruthy();
+    expect(screen.getByText('Transferable Storyboard')).toBeTruthy();
+    expect(screen.queryByTitle('Send to Canvas')).toBeNull();
+    expect(screen.queryByTitle('Send to Timeline')).toBeNull();
+    expect(screen.queryByTitle('Send to Explorer')).toBeNull();
   });
 
   it('localizes semantic storyboard table field labels', () => {

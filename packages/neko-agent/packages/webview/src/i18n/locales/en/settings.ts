@@ -131,7 +131,7 @@ export const settings = {
     'Priority: Project (.neko/AGENTS.md) > User (~/.neko/AGENTS.md)',
   'settings.prompts.skillsHintTitle': 'Use Skills to Customize AI Behavior',
   'settings.prompts.skillsHintDescription':
-    'Skills are a more powerful way to customize AI behavior. Create SKILL.md files in .neko/skills/ directory, and AI will automatically apply relevant skills based on context.',
+    'Skills are a more powerful way to customize AI behavior. Create SKILL.md files in .neko/skills/ directory, then invoke them explicitly or let the Agent activate one after it explains why the Skill is needed.',
 
   'settings.hooks.title': 'Hooks Configuration',
   'settings.hooks.description':

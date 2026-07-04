@@ -320,18 +320,20 @@ export interface SkillCatalogProjectionOptions {
 }
 
 // =============================================================================
-// Skill Types (Semantic Discovery)
+// Skill Types (Agent-Visible Capabilities)
 // =============================================================================
 
 /**
- * Skill - Claude-compatible semantic discovery skill
+ * Skill - Claude-compatible capability instructions
  *
  * A Skill is a Markdown document (SKILL.md) that teaches Claude how to
- * perform a specific task. Skills are automatically discovered based on
- * semantic matching of their descriptions.
+ * perform a specific task. Registry search may expose Skills as candidates,
+ * but candidate discovery must not create active Skill state. Activation is
+ * limited to explicit user invocation or an Agent `ActivateSkill` tool call
+ * after the Agent has decided and explained why the Skill is needed.
  *
  * Key characteristics:
- * - Invoked explicitly with `$skill-name` or implicitly by semantic matching
+ * - Invoked explicitly with `$skill-name` or by Agent `ActivateSkill`
  * - Slash command artifacts reuse this runtime shape but set
  *   `entryPointKind: "command-artifact"`
  * - Supports multi-file structure with support files
@@ -345,17 +347,19 @@ export interface Skill {
   name: string;
 
   /**
-   * Semantic description - Claude uses this to decide when to apply the skill
+   * Catalog description shown to users and to the Agent as candidate context.
    *
    * Should answer:
    * 1. What does this skill do?
    * 2. When should it be used?
    *
-   * Include trigger keywords users would naturally say.
+   * Do not describe this as a keyword trigger. The Agent may use the description
+   * as context when deciding whether to call `ActivateSkill`, but registry/UI
+   * search matches are candidates only and must not activate the Skill.
    * Max 1024 characters.
    *
    * @example "Extract text and tables from PDF files, fill forms, merge documents.
-   *          Use when working with PDF files or when the user mentions PDFs."
+   *          Use after the Agent confirms the user needs PDF document operations."
    */
   description: string;
 
@@ -602,11 +606,11 @@ export interface SlashCommand {
 }
 
 // =============================================================================
-// Skill Matching (Semantic Discovery)
+// Skill Matching (Candidate Discovery)
 // =============================================================================
 
 /**
- * Skill match result from semantic matching
+ * Skill match result from candidate discovery.
  */
 export interface SkillMatch {
   /** Matched skill */
@@ -619,18 +623,24 @@ export interface SkillMatch {
   relevance: number;
 
   /**
-   * Reason for the match
-   * @example "Matched keyword 'PDF' in description"
+   * Candidate discovery reason. This is diagnostic/search metadata only; it is
+   * not an activation reason and must not create active Skill lifecycle state.
+   * @example "Matched catalog candidate 'PDF document operations'"
    */
   reason: string;
 }
 
 /**
- * Skill matcher interface - For semantic skill discovery
+ * Skill matcher interface - For candidate discovery only.
  */
 export interface ISkillMatcher {
   /**
-   * Find skills that match the user's request
+   * Find Skill candidates that match the user's request.
+   *
+   * Implementations must not apply Skills, create lifecycle records, inject
+   * prompts, or change tool policy. Activation remains a separate explicit
+   * user action or Agent `ActivateSkill` tool call.
+   *
    * @param request User's input text
    * @param skills Available skills to search
    * @returns Matched skills sorted by relevance (highest first)

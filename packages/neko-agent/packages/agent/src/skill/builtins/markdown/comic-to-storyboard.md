@@ -13,13 +13,14 @@ Use this skill only when the user asks to create or update a storyboard, shot br
 1. Request comic images from the user when none are available.
 2. For EPUB/CBZ/CBR/PDF comic files, use ReadDocument first.
    - Prefer mode="manifest" to inspect page/chapter count, then mode="range" with max_images for the pages being analyzed.
+   - A manifest-only ReadDocument result is not visual evidence and is not enough to write storyboard rows. If manifest returns no `imageInfo[]`, continue with ReadDocument mode="content" or mode="next" using the returned cursor, or mode="range" for the requested pages, before producing the table.
    - QuerySemanticCoverage only checks reusable semantic evidence. It does not read image pixels and must not replace ReadImage.
    - Call QuerySemanticCoverage first only when the user asks to reuse prior analysis or when a large repeated range is being analyzed. If coverage is missing, stale, partial, or failed, continue with ReadDocument and ReadImage.
    - Do not inspect `.neko/.cache`, `.neko/semantic-index`, SQLite, FTS, vector stores, scratch paths, Webview URIs, or provider-private payloads.
    - Use ReadDocument.imageInfo for width, height, mimeType, byteSize, and aspect ratio. Do not run Python/PIL, file, sips, identify, unzip, unrar, 7z, or other external commands just to probe image metadata.
-   - Use ReadImage with mode="metadata" for page images only after ReadDocument returns `imageInfo[]` entries that contain stable resource data; pass those entries unchanged as structured `images[]` so aliases, locators, page labels, and resource identity are preserved.
+   - Use ReadImage with mode="metadata" for page images only after ReadDocument returns `imageInfo[]` entries that contain stable resource data; pass those entries unchanged as structured `images[]` so aliases, locators, page labels, and resource identity are preserved. If ReadDocument does not return `imageInfo[]`, keep reading the requested page window with mode="content", mode="next", or mode="range" before diagnosing the image reference chain as unavailable; never invent `P1`, `page_1`, or document-entry paths.
    - Do not invent another image access path for the same document image.
-3. Analyze returned images with the current native multimodal model before making claims about characters, dialogue/OCR, panel count, actions, or camera. A QuerySemanticCoverage result or an imageInfo filename/dimensions list alone is not visual analysis.
+3. Analyze returned images with the current native multimodal model before making claims about characters, dialogue/OCR, panel count, actions, or camera. A QuerySemanticCoverage result or an imageInfo filename/dimensions list alone is not visual analysis. Do not output storyboard rows until ReadImage has returned visual evidence.
 4. When the requested page set is larger than one read call can expose, process pages in explicit batches and keep producing the storyboard from inspected evidence. Do not loop over the same pages or switch tools trying to force a perfect batch.
 
 ### 2. Read Panels Before Writing Rows
@@ -51,7 +52,7 @@ For normal review output, provide concise notes first, then output exactly one M
 
 Do not output YAML frontmatter or creation-document metadata in normal chat replies. Forbidden blocks/keys include `---`, `id:`, `kind: draft`, `status: draft`, `domain: storyboard`, and `referenceChain:`. Those keys are only for host/runtime-persisted creation documents, not storyboard creative tables.
 
-For production-ready storyboard output, prefer this canonical stable header order. The Webview displays raw Markdown headers and does not translate them, so use field labels in the user's/output language while keeping each label unambiguously mapped to one stable field:
+For production-ready storyboard output, use these canonical stable field ids exactly for known columns, in this order when present. Do not localize known field headers in new Markdown output. Known fields are resolved through the shared storyboard profile, and the Webview displays those fields in the current UI locale. Unknown extension columns keep their raw Markdown headers, so write extension headers in the user's/output language and keep their meaning clear.
 
 `scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `imagePrompt`, `imageEditPrompt`, `shotVideoPrompt`, `videoEditPrompt`, `sceneStylePrompt`, `sceneVideoPrompt`, `sceneVideoEditPrompt`, `reviewStatus`, `nextAction`, `contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`
 
@@ -59,10 +60,10 @@ The validator supports open review metadata and does not require every recommend
 
 Rules:
 
-- Chinese headers may use `场景`, `镜头`, `来源`, `来源分格`, `决策`, `时长`, `画面`, `运镜`, `音频`, `人物`, `对白`, `图像提示词`, `图像编辑提示词`, `镜头视频提示词`, `视频编辑提示词`, `场景风格提示词`, `场景视频提示词`, `场景视频编辑提示词`, `审阅状态`, `建议操作`, `内容类型`, `决策理由`, `需要拆分`, and `重复来源`.
-- Never output a simplified page-analysis table as the storyboard table. Forbidden primary headers include `页码`, `景别/构图`, `节奏/情绪`, `page`, `image reference`, `analysis`, or `suggestion`. Localized labels such as `画面内容`, `图像提示词`, and `建议操作` are acceptable when the single table also contains the chat output anchors.
+- Chinese/localized headers such as `场景`, `镜头`, `来源`, `图像提示词`, and `建议操作` are accepted for user-supplied or legacy tables, but new output from this skill should use canonical field ids for known fields.
+- Never output a simplified page-analysis table as the storyboard table. Forbidden primary headers include `页码`, `景别/构图`, `节奏/情绪`, `page`, `image reference`, `analysis`, or `suggestion`. Localized labels such as `画面内容`, `图像提示词`, and `建议操作` are acceptable only for repair/validation of existing tables, not as the preferred new output headers.
 - Do not say the storyboard anchors can be added later. `scene`, `shot`, and the `source`/prompt-slot anchor must appear now in the single primary table.
-- If the evidence is still page-level, still create one or more shot rows with the available storyboard columns and mark uncertain cells as `needs-panel-analysis`, `needs-review`, or `needs-prompt`; do not downgrade to a page list.
+- If the ReadImage visual evidence is still page-level, still create one or more shot rows with the available storyboard columns and mark uncertain cells as `needs-panel-analysis`, `needs-review`, or `needs-prompt`; do not downgrade to a page list.
 - Do not output a second "storyboard structure suggestion" table. Put keep/skip/split/merge and next-step planning in `decision`, `decisionReason`, `reviewStatus`, and `nextAction`.
 - When a specific generation or editing target is requested, include the corresponding prompt slot and write `needs-prompt` in uncertain prompt cells.
 - Prompt slots are explicit and model-aware: `imagePrompt` = shot image generation prompt; `imageEditPrompt` = shot image edit/redraw/inpaint prompt; `shotVideoPrompt` = shot video generation prompt; `videoEditPrompt` = shot video edit prompt; `sceneStylePrompt` = scene-level image/style prompt; `sceneVideoPrompt` = scene video generation prompt; `sceneVideoEditPrompt` = scene video edit prompt.

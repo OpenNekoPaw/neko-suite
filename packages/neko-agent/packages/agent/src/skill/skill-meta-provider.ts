@@ -4,13 +4,17 @@ import type {
   SkillInjection,
   SkillLifecycleDeactivationRequest,
 } from '@neko/shared';
-import type { ISkillProvider, SkillContextSummary } from '../tools/core/meta-tools';
+import type {
+  ISkillProvider,
+  SkillActivationRequest,
+  SkillContextSummary,
+} from '../tools/core/meta-tools';
 import type { SkillService } from './skill-service';
 
 export interface ConversationSkillProviderEffects {
   getActiveSkill(): Skill | undefined;
   getActiveSkillLifecycle?(): ActiveSkillLifecycleProjection;
-  activateLifecycleSkill?(name: string): Promise<{
+  activateLifecycleSkill?(input: SkillActivationRequest): Promise<{
     success: boolean;
     message: string;
     allowedTools?: string[];
@@ -67,27 +71,27 @@ export function createConversationSkillProvider(
         }
       : undefined,
 
-    activateSkill: async (name) => {
+    activateSkill: async (input) => {
       if (effects.activateLifecycleSkill) {
-        return effects.activateLifecycleSkill(name);
+        return effects.activateLifecycleSkill(input);
       }
 
       try {
-        const skill = await skillService.registry.ensureLoaded(name);
+        const skill = await skillService.registry.ensureLoaded(input.name);
         if (!skill) {
-          logger?.warn?.(`Skill "${name}" not found during activation`);
-          return { success: false, message: `Skill "${name}" not found` };
+          logger?.warn?.(`Skill "${input.name}" not found during activation`);
+          return { success: false, message: `Skill "${input.name}" not found` };
         }
 
         const injection = await skillService.apply(skill);
         await effects.applySkillInjection(injection, skill);
         return {
           success: true,
-          message: `Activated skill "${name}"`,
+          message: `Activated skill "${input.name}"`,
           allowedTools: injection.allowedTools ?? skill.allowedTools,
         };
       } catch (error) {
-        logger?.error?.('Failed to activate skill', { name, error });
+        logger?.error?.('Failed to activate skill', { name: input.name, error });
         return {
           success: false,
           message: error instanceof Error ? error.message : String(error),

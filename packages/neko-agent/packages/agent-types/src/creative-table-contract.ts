@@ -17,7 +17,7 @@ export type StoryboardCreativeTableFieldDescriptor = CreativeTableFieldDescripto
 
 export type StoryboardCreativeTableFieldId = CreativeTableFieldDescriptor['id'];
 
-// Legacy name: resolves any known storyboard profile field id, not only recommended display headers.
+// Broad contract name: resolves any storyboard profile field id, not only recommended display headers.
 export type StoryboardCreativeTableHeader = StoryboardCreativeTableFieldId;
 
 export const STORYBOARD_CREATIVE_TABLE_FIELDS = STORYBOARD_CREATIVE_TABLE_PROFILE.fields;

@@ -15,6 +15,7 @@ export type AgentTracePhase =
   | 'tool'
   | 'compaction'
   | 'workflow'
+  | 'creation'
   | 'approval'
   | 'feedback'
   | 'subagent';

@@ -2,11 +2,12 @@
  * Skill Service — Stateless orchestration of skill discovery and injection
  *
  * This service integrates:
- * - SkillMatcher: Semantic skill discovery
+ * - SkillMatcher: candidate discovery for UI/context hints
  * - SkillInjector: Prompt injection preparation
  *
  * IMPORTANT: This service is fully stateless — it only builds injection payloads
- * and performs discovery/matching. Active skill state is owned exclusively by
+ * and performs discovery/matching. Discovery returns candidates only; it must
+ * not inject prompts or create active state. Active skill state is owned exclusively by
  * SkillInjectionCoordinator (accessed via AgentSession).
  */
 
@@ -72,9 +73,9 @@ export class SkillService {
   }
 
   /**
-   * Toggle automatic skill discovery (ablation-controlled).
+   * Toggle candidate discovery (ablation-controlled).
    * When disabled, `discover()` returns an empty result immediately, so
-   * chat-side auto-suggestion paths see no matches and skip activation.
+   * chat-side suggestion paths see no matches.
    * Manual `apply()` / `discoverAndApply` unaffected for explicit invocations,
    * but `discoverAndApply` reads through `discover()` so it will also return
    * null when disabled.

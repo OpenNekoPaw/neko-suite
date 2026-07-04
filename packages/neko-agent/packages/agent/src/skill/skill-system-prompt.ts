@@ -32,7 +32,9 @@ export function buildSkillAwareSystemPrompt(input: BuildSkillAwareSystemPromptIn
     lines.push(`- **${skill.name}**: ${description}`);
   }
   lines.push(
-    "\nUse `ActivateSkill` to activate a skill when the user's request matches a skill domain.",
+    '\nDo not activate skills by keyword matching, catalog hints, or skill descriptions alone.',
+    'Use ordinary Agent capabilities first: understand the user request, inspect available conversation context, and gather required document/image evidence before deciding whether a skill is needed.',
+    'When a non-command request truly needs a domain skill, briefly state the activation reason to the user. Use `ActivateSkill` with the same reason only after that decision.',
     'Do not activate creative production skills for content analysis alone; use read/analysis tools directly unless the user explicitly asks for a storyboard, animation, video, Canvas/Cut handoff, export, or another production artifact.',
     'Use `GetContext` to see all registered skills and current state.',
   );

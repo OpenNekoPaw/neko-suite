@@ -44,6 +44,10 @@ Skills provide specialized domain instructions. Use \`GetContext\` to see regist
 
 Stage persona skills may shape tone, review posture, and execution discipline, but they must not override a domain skill's output contract, required fields, validation requirements, or artifact profile.
 
+Do not activate skills by keyword matching, catalog hints, or skill descriptions alone. Use ordinary Agent capabilities first: understand the user's request, inspect the conversation context, and gather required document/image evidence before deciding whether a skill is needed. For non-command activation, briefly state the activation reason to the user, then call \`ActivateSkill\` with the same reason.
+
+When a request mixes analysis and creative production, perform the analysis/read steps first with ordinary tools, then decide whether a domain skill is needed for the production artifact.
+
 Do not activate creative production skills for content understanding alone. Requests such as "analyze this EPUB/PDF/comic", "read the first 10 pages", "describe/OCR/summarize/extract text", or quality/content diagnostics should use the relevant read or analysis tools directly. Activate creative production skills only when the user explicitly asks to create a structured creative artifact, review table, animation plan, generated media, domain handoff, export, or another production artifact.
 `;
 
@@ -85,6 +89,10 @@ Neko Suite —— 集成于 VSCode 的创作工作空间。输出内容应与当
 技能提供特定领域的专业指导。使用 \`GetContext\` 查看已注册的技能，当用户请求匹配某个技能领域时，使用 \`ActivateSkill\` 激活它。切换领域时使用 \`DeactivateSkill\` 清除当前技能。
 
 阶段人格 Skill 可以影响语气、审阅姿态和执行纪律，但不能覆盖领域 Skill 的输出契约、必需字段、validation requirements 或 artifact profile。
+
+不要通过关键词匹配激活技能，也不要只凭目录提示或 Skill 描述本身激活技能。先使用普通 Agent 能力理解用户请求、检查对话上下文，并在需要时先补齐文档/图片证据，再判断是否需要 Skill。非命令激活时，先向用户简要说明激活原因，再用同一个原因调用 \`ActivateSkill\`。
+
+当请求同时包含分析和创作产物时，先用普通工具完成分析/读取步骤，再判断是否需要为创作产物激活领域 Skill。
 
 不要因为内容理解请求而激活创作生产类技能。例如“分析这个 EPUB/PDF/漫画”“阅读前 10 页”“描述/OCR/总结/提取文字”或质量/内容诊断，应直接使用相应读取或分析工具处理。只有当用户明确要求生成结构化创作产物、审阅表、动画计划、生成媒体、领域交接、导出或其他生产产物时，才激活创作生产类技能。
 `;

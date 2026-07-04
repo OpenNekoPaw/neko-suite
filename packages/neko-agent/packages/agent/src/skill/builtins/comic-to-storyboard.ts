@@ -6,7 +6,7 @@
  */
 
 import type { Skill } from '@neko/shared';
-import { TOOL_NAMES_SYSTEM } from '@neko/shared';
+import { TOOL_NAMES_CANVAS, TOOL_NAMES_SYSTEM } from '@neko/shared';
 import { localizeBuiltinSkill } from './builtin-skill-content';
 import comicToStoryboardContent from './markdown/comic-to-storyboard.md?raw';
 import comicToStoryboardZhCnContent from './markdown/comic-to-storyboard.zh-cn.md?raw';
@@ -27,9 +27,8 @@ export const comicToStoryboardSkill: Skill = {
   name: 'comic-to-storyboard',
   description:
     'Convert manga/comic pages into reviewable Markdown creative tables with prompts, resource tokens, and next actions. ' +
-    'Use only when the user asks to create or update a comic storyboard table, shot breakdown, ' +
-    'comic adaptation storyboard, or webtoon storyboard; not for content-only EPUB/comic analysis. ' +
-    'Keywords: comic storyboard, storyboard table, shot breakdown, 漫画分镜, 分镜表, 生成分镜表.',
+    'Use after the Agent has understood the request and confirmed a comic storyboard artifact, shot breakdown, ' +
+    'comic adaptation storyboard, or webtoon storyboard is needed; not for content-only EPUB/comic analysis.',
   content: comicToStoryboardContent,
   allowedTools: [
     // Vision analysis (LLM with image input)
@@ -39,6 +38,11 @@ export const comicToStoryboardSkill: Skill = {
     TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
+    // Agent-led Canvas handoff. These remain confirmation/lifecycle gated by Canvas.
+    TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN,
+    TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_DRAFT_FROM_MARKDOWN,
+    TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN,
+    TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD,
   ],
   icon: '📚',
   source: 'builtin',

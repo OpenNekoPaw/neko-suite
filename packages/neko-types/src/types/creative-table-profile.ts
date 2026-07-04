@@ -122,6 +122,8 @@ export const STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS = [
   'imagePrompt',
   'imageEditPrompt',
   'shotVideoPrompt',
+  'videoEditPrompt',
+  'sceneStylePrompt',
   'sceneVideoPrompt',
   'sceneVideoEditPrompt',
   'reviewStatus',

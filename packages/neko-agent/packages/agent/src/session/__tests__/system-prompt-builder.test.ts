@@ -106,6 +106,19 @@ describe('SystemPromptBuilder', () => {
       expect(prompt).toBe(BUILTIN_DEFAULT_PROMPT_ZH);
     });
 
+    it('should require agent-driven skill activation to follow content understanding', () => {
+      expect(BUILTIN_DEFAULT_PROMPT_EN).toContain('Do not activate skills by keyword matching');
+      expect(BUILTIN_DEFAULT_PROMPT_EN).toContain('Use ordinary Agent capabilities first');
+      expect(BUILTIN_DEFAULT_PROMPT_EN).toContain('state the activation reason');
+      expect(BUILTIN_DEFAULT_PROMPT_EN).toContain(
+        'When a request mixes analysis and creative production',
+      );
+      expect(BUILTIN_DEFAULT_PROMPT_ZH).toContain('不要通过关键词匹配激活技能');
+      expect(BUILTIN_DEFAULT_PROMPT_ZH).toContain('先使用普通 Agent 能力');
+      expect(BUILTIN_DEFAULT_PROMPT_ZH).toContain('说明激活原因');
+      expect(BUILTIN_DEFAULT_PROMPT_ZH).toContain('当请求同时包含分析和创作产物');
+    });
+
     it('should build plan mode English prompt', () => {
       const builder = new SystemPromptBuilder({ locale: 'en', mode: 'plan' });
       const prompt = builder.build();

@@ -16,7 +16,7 @@ vi.mock('@neko/shared/vscode', () => ({
 }));
 
 describe('SendToMenu', () => {
-  it('invokes Canvas Markdown lifecycle directly for Markdown handoff buttons', () => {
+  it('requests Agent-led Canvas Markdown handoff for Markdown handoff buttons', () => {
     render(
       <SendToMenu
         canvasMarkdownHandoff={{
@@ -42,34 +42,28 @@ describe('SendToMenu', () => {
 
     expect(mockPostMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'invokeAgentCapabilityLifecycle',
+        type: 'requestCanvasMarkdownHandoff',
         conversationId: 'conv-1',
-        invocation: expect.objectContaining({
-          capabilityId: 'canvas.ingestMarkdown',
-          phase: 'review',
-          payload: expect.objectContaining({
-            capabilityId: 'canvas.ingestMarkdown',
-            markdown:
-              '| scene | shot id | visual | image |\n| --- | --- | --- | --- |\n| S1 | 1 | open | P1 |',
-            intentHint: 'creative-table',
-            profileHint: 'storyboard',
-            resources: [{ token: 'P1', sourcePath: '${PROJECT}/assets/panel-1.png' }],
-            provenance: expect.objectContaining({
-              source: 'webview',
-              label: 'assistant-markdown-block',
-              conversationId: 'conv-1',
-            }),
-          }),
-          provenance: expect.objectContaining({
-            source: 'webview',
-            conversationId: 'conv-1',
-          }),
+        requestId: expect.stringMatching(/^canvas-markdown-handoff:/),
+        markdown:
+          '| scene | shot id | visual | image |\n| --- | --- | --- | --- |\n| S1 | 1 | open | P1 |',
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+        resources: [{ token: 'P1', sourcePath: '${PROJECT}/assets/panel-1.png' }],
+        provenance: expect.objectContaining({
+          source: 'webview',
+          label: 'assistant-markdown-block',
         }),
       }),
     );
-    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain(
-      'requestCanvasMarkdownHandoff',
+    expect(mockPostMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'invokeAgentCapabilityLifecycle',
+      }),
     );
+    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('capabilityId');
+    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('intentHint');
+    expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('profileHint');
     expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('vscode-webview://');
     expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('blob:');
     expect(mockPostMessage).not.toHaveBeenCalledWith(

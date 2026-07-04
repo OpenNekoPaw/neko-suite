@@ -328,7 +328,10 @@ describe('AgentExecutor', () => {
       const chatStreamMock = service.chatStream as ReturnType<typeof vi.fn>;
       const activationResp = toolCallResponse(
         'ActivateSkill',
-        { skillName: 'comic-to-storyboard' },
+        {
+          skillName: 'comic-to-storyboard',
+          reason: 'The user requested a storyboard table after the task was understood.',
+        },
         'activate-skill-call',
       );
       const invalidStoryboardResp = textResponse(
@@ -343,7 +346,11 @@ describe('AgentExecutor', () => {
       chatStreamMock.mockReturnValueOnce(responseToStream(invalidStoryboardResp));
       (toolRegistry.execute as ReturnType<typeof vi.fn>).mockResolvedValue({
         success: true,
-        data: { activated: true, skillName: 'comic-to-storyboard' },
+        data: {
+          activated: true,
+          skillName: 'comic-to-storyboard',
+          reason: 'The user requested a storyboard table after the task was understood.',
+        },
       });
 
       let activated = false;
@@ -371,14 +378,17 @@ describe('AgentExecutor', () => {
       );
 
       await expect(collectSteps(executor.executeStream('生成分镜表'))).rejects.toMatchObject({
-        code: 'storyboard-table-missing-column',
+        code: 'storyboard-table-missing-chat-output-anchor',
       });
     });
 
     it('streams the invalid storyboard table, then replaces it with a validator repair result', async () => {
       const activationResp = toolCallResponse(
         'ActivateSkill',
-        { skillName: 'comic-to-storyboard' },
+        {
+          skillName: 'comic-to-storyboard',
+          reason: 'The user requested a storyboard table after the task was understood.',
+        },
         'activate-skill-call',
       );
       const invalidStoryboardResp = textResponse(
@@ -392,7 +402,7 @@ describe('AgentExecutor', () => {
         [
           '| scene | shot | source | sourcePanel | decision | duration | visual | motion | audio | characters | dialogue | prompt | reviewStatus | nextAction | contentType | decisionReason | requiresSplit | duplicateOf |',
           '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-          '| 开场 | S01 | P1 | 整页 | keep | 3s | 主角站在巨构前 | 缓慢推近 | 低频环境声 | 主角 |  | 黑白工业巨构前的孤独主角，缓慢推近 | needs-review | use-as-reference | story | 建立空间与人物 | false |  |',
+          '| 开场 | S01 |  | 整页 | keep | 3s | 主角站在巨构前 | 缓慢推近 | 低频环境声 | 主角 |  | 黑白工业巨构前的孤独主角，缓慢推近 | needs-review | needs-resource-binding | story | 建立空间与人物 | false |  |',
         ].join('\n'),
       );
 
@@ -402,7 +412,11 @@ describe('AgentExecutor', () => {
       chatStreamMock.mockReturnValueOnce(responseToStream(repairedStoryboardResp));
       (toolRegistry.execute as ReturnType<typeof vi.fn>).mockResolvedValue({
         success: true,
-        data: { activated: true, skillName: 'comic-to-storyboard' },
+        data: {
+          activated: true,
+          skillName: 'comic-to-storyboard',
+          reason: 'The user requested a storyboard table after the task was understood.',
+        },
       });
 
       let activated = false;

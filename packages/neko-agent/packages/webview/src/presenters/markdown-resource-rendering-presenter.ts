@@ -114,7 +114,7 @@ export function projectMarkdownResourceRendering(
   const refs = collectMarkdownToolResultImageRefs(input);
   const resourceIndex = createResourceIndex(refs);
   const diagnostics = detectUnsupportedResourceReferenceSyntax(input.markdown);
-  const tokens = extractMarkdownResourceTokens(input.markdown).map((token) =>
+  const tokens = extractMarkdownResourceTokens(input.markdown, refs.length > 0).map((token) =>
     projectMarkdownResourceToken(token, resourceIndex, refs.length),
   );
   const allDiagnostics = [
@@ -236,10 +236,13 @@ function createSafeCandidateSummary(
   };
 }
 
-function extractMarkdownResourceTokens(markdown: string): readonly string[] {
+function extractMarkdownResourceTokens(
+  markdown: string,
+  includePlainTableCellTokens: boolean,
+): readonly string[] {
   return uniqueStrings([
     ...extractCommonMarkImageTargets(markdown),
-    ...extractTableResourceCellTokens(markdown),
+    ...(includePlainTableCellTokens ? extractTableResourceCellTokens(markdown) : []),
   ]);
 }
 

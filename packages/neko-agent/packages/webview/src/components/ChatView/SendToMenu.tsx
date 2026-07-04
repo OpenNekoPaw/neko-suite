@@ -11,7 +11,6 @@
 import { memo, useCallback } from 'react';
 import { VSCodeMessages } from '@/messages';
 import { ArrowRightIcon, FileIcon, LayersIcon, ScissorsIcon, UploadIcon } from '@neko/shared/icons';
-import type { AgentCapabilityInvocationInput, CanvasMarkdownCapabilityInput } from '@neko/shared';
 import type {
   PluginTransferAssetRef,
   PluginTransferMediaType,
@@ -36,9 +35,9 @@ interface SendToMenuProps {
   assets?: readonly PluginTransferAssetRef[];
   /** Structured transfer payload. Overrides assetPath / assetPaths / assets when provided. */
   payload?: PluginTransferPayload;
-  /** Canvas Markdown handoff context. Sent through the capability lifecycle backend. */
+  /** Canvas Markdown handoff context. Sent as an Agent turn so the Agent can choose Canvas tools. */
   canvasMarkdownHandoff?: CanvasMarkdownHandoffRequest;
-  /** Conversation scope for Canvas Markdown lifecycle results. */
+  /** Conversation scope for Agent-led Canvas Markdown handoff. */
   conversationId?: string | null;
   /** Optional target allow-list for composite UIs that split structured and flat transfers. */
   allowedTargets?: readonly PluginTransferTarget[];
@@ -74,11 +73,31 @@ function SendToMenuComponent({
     (target: SendToTarget) => {
       if (canvasMarkdownHandoff) {
         if (target !== 'canvas' || !conversationId) return;
-        VSCodeMessages.invokeAgentCapabilityLifecycle(
+        VSCodeMessages.requestCanvasMarkdownHandoff({
           conversationId,
-          createCanvasMarkdownLifecycleRequestId(),
-          createCanvasMarkdownLifecycleInvocation(canvasMarkdownHandoff, conversationId),
-        );
+          requestId: createCanvasMarkdownHandoffRequestId(),
+          markdown: canvasMarkdownHandoff.markdown,
+          ...(canvasMarkdownHandoff.title ? { title: canvasMarkdownHandoff.title } : {}),
+          ...(canvasMarkdownHandoff.sourceFormat
+            ? { sourceFormat: canvasMarkdownHandoff.sourceFormat }
+            : {}),
+          ...(canvasMarkdownHandoff.resources
+            ? { resources: canvasMarkdownHandoff.resources }
+            : {}),
+          ...(canvasMarkdownHandoff.target ? { target: canvasMarkdownHandoff.target } : {}),
+          ...(canvasMarkdownHandoff.provenance
+            ? { provenance: canvasMarkdownHandoff.provenance }
+            : {}),
+          ...(canvasMarkdownHandoff.userIntent
+            ? { userIntent: canvasMarkdownHandoff.userIntent }
+            : {}),
+          ...(canvasMarkdownHandoff.declaredIntentHint
+            ? { declaredIntentHint: canvasMarkdownHandoff.declaredIntentHint }
+            : {}),
+          ...(canvasMarkdownHandoff.declaredProfileHint
+            ? { declaredProfileHint: canvasMarkdownHandoff.declaredProfileHint }
+            : {}),
+        });
         return;
       }
       const transferPayload = buildPluginTransferPayload({
@@ -137,63 +156,12 @@ function SendToMenuComponent({
   );
 }
 
-function createCanvasMarkdownLifecycleRequestId(): string {
+function createCanvasMarkdownHandoffRequestId(): string {
   const random =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `canvas-markdown-lifecycle:${random}`;
-}
-
-function createCanvasMarkdownLifecycleInvocation(
-  handoff: CanvasMarkdownHandoffRequest,
-  conversationId: string,
-): AgentCapabilityInvocationInput {
-  const payload: CanvasMarkdownCapabilityInput = {
-    capabilityId: 'canvas.ingestMarkdown',
-    markdown: handoff.markdown,
-    ...(handoff.title ? { title: handoff.title } : {}),
-    ...(handoff.sourceFormat ? { sourceFormat: handoff.sourceFormat } : {}),
-    ...(handoff.resources ? { resources: handoff.resources } : {}),
-    ...(handoff.target ? { target: handoff.target } : {}),
-    provenance: {
-      source: handoff.provenance?.source ?? 'webview',
-      conversationId: handoff.provenance?.conversationId ?? conversationId,
-      ...(handoff.provenance?.messageId ? { messageId: handoff.provenance.messageId } : {}),
-      ...(handoff.provenance?.toolCallId ? { toolCallId: handoff.provenance.toolCallId } : {}),
-      ...(handoff.provenance?.label ? { label: handoff.provenance.label } : {}),
-    },
-    ...(handoff.declaredIntentHint ? { intentHint: handoff.declaredIntentHint } : {}),
-    ...(handoff.declaredProfileHint ? { profileHint: handoff.declaredProfileHint } : {}),
-  };
-
-  return {
-    capabilityId: 'canvas.ingestMarkdown',
-    phase: 'review',
-    payload,
-    ...(handoff.target
-      ? {
-          target: {
-            packageId: 'neko-canvas',
-            ...(handoff.target.canvasId ? { canvasId: handoff.target.canvasId } : {}),
-            ...(handoff.target.nodeId ? { nodeId: handoff.target.nodeId } : {}),
-            ...(handoff.target.containerId ? { containerId: handoff.target.containerId } : {}),
-            ...(handoff.target.slotId ? { slotId: handoff.target.slotId } : {}),
-            ...(handoff.target.fieldPath ? { fieldPath: handoff.target.fieldPath } : {}),
-            ...(handoff.target.insertionPoint
-              ? { insertionPoint: handoff.target.insertionPoint }
-              : {}),
-          },
-        }
-      : {}),
-    provenance: {
-      source: 'webview',
-      conversationId,
-      ...(handoff.provenance?.messageId ? { messageId: handoff.provenance.messageId } : {}),
-      ...(handoff.provenance?.toolCallId ? { toolCallId: handoff.provenance.toolCallId } : {}),
-      ...(handoff.provenance?.label ? { label: handoff.provenance.label } : {}),
-    },
-  };
+  return `canvas-markdown-handoff:${random}`;
 }
 
 function buildPluginTransferPayload(input: {

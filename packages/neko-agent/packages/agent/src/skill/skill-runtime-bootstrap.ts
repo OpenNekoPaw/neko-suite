@@ -17,7 +17,7 @@ import {
 } from './skill-registry-populator';
 import { createConversationSkillProvider } from './skill-meta-provider';
 import type { ISubpackageResolver } from './subpackage-guard';
-import type { SkillProviderFactory } from '../tools/core/meta-tools';
+import type { SkillActivationRequest, SkillProviderFactory } from '../tools/core/meta-tools';
 
 export interface RuntimeSkillAwareSystemPromptResult {
   readonly prompt: string;
@@ -77,7 +77,7 @@ export interface RuntimeSkillProviderState {
   getActiveSkillLifecycle?(conversationId: string): ActiveSkillLifecycleProjection;
   activateLifecycleSkill?(
     conversationId: string,
-    skillName: string,
+    input: SkillActivationRequest,
   ): Promise<{
     success: boolean;
     message: string;
@@ -252,8 +252,7 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
             : {}),
           ...(activateLifecycleSkill
             ? {
-                activateLifecycleSkill: (skillName) =>
-                  activateLifecycleSkill(conversationId, skillName),
+                activateLifecycleSkill: (input) => activateLifecycleSkill(conversationId, input),
               }
             : {}),
           ...(deactivateLifecycleSkill

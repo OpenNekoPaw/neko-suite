@@ -1,19 +1,10 @@
 {
   "schemaVersion": 1,
   "owner": "neko-agent-architecture",
-  "updatedAt": "2026-06-19",
+  "updatedAt": "2026-07-04",
   "qualityGate": {
-    "failingProductionSemanticClasses": [
-      "delete-now",
-      "migrate-now",
-      "needs-review"
-    ],
-    "retainedEntryRequirements": [
-      "owner",
-      "replacement",
-      "removeAfter",
-      "tests"
-    ],
+    "failingProductionSemanticClasses": ["delete-now", "migrate-now", "needs-review"],
+    "retainedEntryRequirements": ["owner", "replacement", "removeAfter", "tests"],
     "legacyBridgeSunsetProviderTypes": [
       "fal",
       "dashscope",
@@ -81,9 +72,7 @@
       "stalePatterns": [
         {
           "pattern": "LEGACY_CENTRALIZED_TOOL_REGISTRATION_METADATA|LegacyCentralizedToolRegistrationMetadata|createReadDocumentTool\\(|createReadImageTool\\(|createReadDocumentImageTool\\(|createSemanticCoverageTool\\(",
-          "paths": [
-            "packages/neko-agent/packages/extension/src/bootstrap/toolBootstrap.ts"
-          ]
+          "paths": ["packages/neko-agent/packages/extension/src/bootstrap/toolBootstrap.ts"]
         }
       ],
       "notes": "toolBootstrap may keep Agent-owned plugin skill catalogue discovery; domain document/media/search tools must use capability providers."
@@ -106,9 +95,7 @@
         {
           "provider": "fal.ai",
           "providerType": "fal",
-          "taskFamilies": [
-            "image"
-          ],
+          "taskFamilies": ["image"],
           "resolverPath": "resolveProvider('fal', config, FalMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
           "nativeSupportStatus": "Temporary migration bridge only. No native fal.ai AI SDK path yet; provider can alternatively be configured as newapi/generic when using an OpenAI-compatible proxy.",
           "migrationConditions": [
@@ -125,10 +112,7 @@
         {
           "provider": "DashScope",
           "providerType": "dashscope",
-          "taskFamilies": [
-            "image",
-            "video"
-          ],
+          "taskFamilies": ["image", "video"],
           "resolverPath": "resolveProvider('dashscope', config, DashScopeMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
           "nativeSupportStatus": "Temporary migration bridge only. No native DashScope AI SDK path yet.",
           "migrationConditions": [
@@ -145,9 +129,7 @@
         {
           "provider": "Runway",
           "providerType": "runway",
-          "taskFamilies": [
-            "video"
-          ],
+          "taskFamilies": ["video"],
           "resolverPath": "resolveProvider('runway', config, RunwayMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
           "nativeSupportStatus": "Temporary migration bridge only. Runway async video API needs provider-specific native support.",
           "migrationConditions": [
@@ -163,9 +145,7 @@
         {
           "provider": "Luma",
           "providerType": "luma",
-          "taskFamilies": [
-            "video"
-          ],
+          "taskFamilies": ["video"],
           "resolverPath": "resolveProvider('luma', config, LumaMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
           "nativeSupportStatus": "Temporary migration bridge only. Luma video API needs provider-specific native support.",
           "migrationConditions": [
@@ -181,10 +161,7 @@
         {
           "provider": "Suno",
           "providerType": "suno",
-          "taskFamilies": [
-            "audio",
-            "music"
-          ],
+          "taskFamilies": ["audio", "music"],
           "resolverPath": "resolveProvider('suno', config, SunoMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
           "nativeSupportStatus": "Temporary migration bridge only. Suno music/audio generation needs provider-specific native support.",
           "migrationConditions": [
@@ -200,9 +177,7 @@
         {
           "provider": "Vidu",
           "providerType": "vidu",
-          "taskFamilies": [
-            "video"
-          ],
+          "taskFamilies": ["video"],
           "resolverPath": "resolveProvider('vidu', config, ViduMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
           "nativeSupportStatus": "Temporary migration bridge only. Vidu video API needs provider-specific native support.",
           "migrationConditions": [
@@ -218,9 +193,7 @@
         {
           "provider": "Midjourney proxy",
           "providerType": "midjourney",
-          "taskFamilies": [
-            "image"
-          ],
+          "taskFamilies": ["image"],
           "resolverPath": "resolveProvider('midjourney', config, MidjourneyMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
           "nativeSupportStatus": "Temporary migration bridge only. Midjourney proxy APIs are not OpenAI-compatible enough for the generic path.",
           "migrationConditions": [
@@ -236,9 +209,7 @@
         {
           "provider": "MiniMax",
           "providerType": "minimax",
-          "taskFamilies": [
-            "video"
-          ],
+          "taskFamilies": ["video"],
           "resolverPath": "resolveProvider('minimax', config, MiniMaxMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
           "nativeSupportStatus": "Temporary migration bridge only. MiniMax video API needs provider-specific native support.",
           "migrationConditions": [
@@ -254,9 +225,7 @@
         {
           "provider": "Liblib",
           "providerType": "liblib",
-          "taskFamilies": [
-            "image"
-          ],
+          "taskFamilies": ["image"],
           "resolverPath": "resolveProvider('liblib', config, LiblibMediaAdapter, { allowLegacyBridge: true }) -> createLegacyBridgeProvider()",
           "nativeSupportStatus": "Temporary migration bridge only. Liblib image/workflow API needs provider-specific native support.",
           "migrationConditions": [
@@ -272,10 +241,7 @@
         {
           "provider": "Kling",
           "providerType": "kling",
-          "taskFamilies": [
-            "image",
-            "video"
-          ],
+          "taskFamilies": ["image", "video"],
           "resolverPath": "resolveProvider('kling', config, poisonedAdapter, { allowLegacyBridge: true }) -> createNewAPIProvider() compatible native path",
           "nativeSupportStatus": "Migrated to native-compatible AI SDK resolution through createNewAPIProvider() while preserving provider type metadata as kling.",
           "migrationConditions": [
@@ -338,13 +304,7 @@
         "pnpm check:unused",
         "pnpm --filter @neko/content exec vitest --run src/document/__tests__/document-reader.test.ts"
       ],
-      "dependencies": [
-        "epub2",
-        "fast-xml-parser",
-        "node-fetch",
-        "node-unrar-js",
-        "xlsx"
-      ],
+      "dependencies": ["epub2", "fast-xml-parser", "node-fetch", "node-unrar-js", "xlsx"],
       "notes": "Knip cannot reliably trace these dynamic parser backends from the content domain service runtime module loader."
     },
     {
@@ -374,7 +334,7 @@
       "replacement": "Canonical AgentWorkflowRuntime, .neko/.cache/artifact-index.json, explicit document read modes, AgentCapabilityProvider registry identity, and object-shaped feedback.pendingGuidance snapshots.",
       "removeAfter": "Removed by cleanup-remaining-legacy-debt-surfaces Agent 7.x after repo scans found no current production caller for the compatibility paths.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/agent-workflow-runtime.test.ts packages/agent/src/runtime/__tests__/artifact-service.test.ts packages/agent/src/runtime/__tests__/capability-registry-runtime.test.ts packages/agent/src/workspace/__tests__/idc-runtime-state-reader.test.ts packages/extension/src/tools/__tests__/contentAccessTools.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/runtime/__tests__/agent-turn-runtime.test.ts packages/agent/src/runtime/__tests__/artifact-service.test.ts packages/agent/src/runtime/__tests__/capability-registry-runtime.test.ts packages/agent/src/__tests__/architecture-boundary-guards.test.ts packages/extension/src/tools/__tests__/contentAccessTools.test.ts",
         "rg -n \"createLegacyWorkflowUsageRecorder|AgentLegacyWorkflow|readArtifactRestoreEntriesWithLegacyFallback|toLegacyArtifactIndexPath|legacyToolNames|normalizeLegacyResourceRef|legacyContent|content preserves legacy full read\" packages/neko-agent/packages/agent packages/neko-agent/packages/agent-types packages/neko-agent/packages/extension",
         "pnpm check:agent-boundaries"
       ],
@@ -447,18 +407,18 @@
     {
       "id": "LCD-019",
       "package": "neko-agent",
-      "surface": "packages/neko-agent/packages/agent/src/task/idc-projected-task.ts IdcProjectedTaskPayload.content legacy display-field mirror",
+      "surface": "Superseded IDC projected task payload content display-field mirror",
       "kind": "canonical-compatibility",
       "semanticClass": "migrate-now",
       "status": "removed",
       "owner": "neko-agent-task-runtime",
-      "replacement": "Canonical IdcProjectedTaskPayload.name display field emitted by toIdcProjectedTaskPayload().",
-      "removeAfter": "Removed after the current serializer already emitted name only and prelaunch policy confirmed no persisted IDC task payload compatibility window is required.",
+      "replacement": "Canonical CreationProjectedTaskPayload.name display field emitted by toCreationProjectedTaskPayload().",
+      "removeAfter": "Removed when Agent-native creation task projection replaced the old idc-projected-task module and rejected persisted payload.content mirrors.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/task/__tests__/idc-projected-task.test.ts packages/agent/src/task/__tests__/task-manager.test.ts packages/agent/src/task/__tests__/task-manager-persistence.test.ts packages/agent/src/task/__tests__/idc-task-projection.test.ts",
-        "rg -n \"Legacy mirror kept only|already-persisted tasks|content\\\\?: string|candidate\\\\['content'\\\\] === undefined|typeof candidate\\\\['content'\\\\]\" packages/neko-agent/packages/agent/src/task/idc-projected-task.ts packages/neko-agent/packages/agent/src/task/__tests__/idc-projected-task.test.ts"
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/task/__tests__/creation-projected-task.test.ts packages/agent/src/task/__tests__/task-manager.test.ts packages/agent/src/task/__tests__/task-manager-persistence.test.ts packages/agent/src/task/__tests__/creation-task-projection.test.ts",
+        "rg -n \"IdcProjectedTaskPayload|toIdcProjectedTaskPayload|idc-projected-task|idc-task-projection|content\\\\?: string|candidate\\\\['content'\\\\] === undefined|typeof candidate\\\\['content'\\\\]\" packages/neko-agent/packages/agent/src/task packages/neko-agent/packages/agent/src/__tests__/architecture-boundary-guards.test.ts"
       ],
-      "notes": "IdcProjectedTaskUpsertInput.content remains the current in-memory source text that serializes to payload.name; this entry only removes the persisted payload.content mirror."
+      "notes": "CreationProjectedTaskUpsertInput.content remains the current in-memory source text that serializes to payload.name; this entry only removes the persisted payload.content mirror and old IDC projection module."
     },
     {
       "id": "LCD-020",
@@ -511,18 +471,18 @@
     {
       "id": "LCD-023",
       "package": "neko-agent",
-      "surface": "packages/neko-agent/packages/agent/src/task/task-manager.ts IDC projected task run cleanup fallback for corrupted payload bindings or payloads without runStartedAt",
-      "kind": "canonical-compatibility",
-      "semanticClass": "migrate-now",
-      "status": "removed",
+      "surface": "packages/neko-agent/packages/agent/src/task/task-manager.ts migration-only cleanup bridge for pre-migration idc-prefixed projected tasks",
+      "kind": "migration-adapter",
+      "semanticClass": "current-bridge",
+      "status": "active",
       "owner": "neko-agent-task-runtime",
-      "replacement": "Canonical IdcProjectedTaskPayload with matching runId and runStartedAt provenance.",
-      "removeAfter": "Removed after prelaunch policy confirmed there is no persisted old IDC task payload compatibility window; cleanup now ignores corrupted or untimed payloads when a runStartedAt-specific cleanup is requested.",
+      "replacement": "Canonical CreationProjectedTaskPayload with matching legacyTrace.runId and legacyTrace.runStartedAt provenance.",
+      "removeAfter": "Remove the idc-prefixed task id matcher after pre-migration local task storage is either migrated or intentionally discarded; runStartedAt-specific cleanup must continue to ignore corrupted or untimed payloads.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/task/__tests__/task-manager.test.ts packages/agent/src/task/__tests__/task-manager-persistence.test.ts packages/agent/src/task/__tests__/idc-projected-task.test.ts packages/agent/src/task/__tests__/idc-task-projection.test.ts",
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/task/__tests__/task-manager.test.ts packages/agent/src/task/__tests__/task-manager-persistence.test.ts packages/agent/src/task/__tests__/creation-projected-task.test.ts packages/agent/src/task/__tests__/creation-task-projection.test.ts",
         "rg -n 'Legacy payloads written|provenance tagging|falls back to IDC task id provenance|payload binding is corrupted|idBinding\\\\?\\\\.runStartedAt === undefined|binding\\\\.runStartedAt === undefined \\\\|\\\\|' packages/neko-agent/packages/agent/src/task -g'*.ts'"
       ],
-      "notes": "Run cleanup without runStartedAt still clears all canonical projected tasks for that run; the removed path was only the old-format/corrupt-payload fallback."
+      "notes": "Run cleanup without runStartedAt still clears canonical creation projected tasks for that run. The retained idc: prefix branch is a visible migration bridge for pre-migration local storage, while corrupted or untimed payload fallback remains removed."
     },
     {
       "id": "LCD-024",

@@ -33,7 +33,7 @@ const logger = getLogger('LazyLoader');
 export interface LazySkill {
   /** Skill name */
   name: string;
-  /** Skill description (for semantic matching) */
+  /** Skill description (for candidate discovery and catalog display) */
   description: string;
   /** Icon */
   icon?: string;

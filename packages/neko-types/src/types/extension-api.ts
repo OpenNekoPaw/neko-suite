@@ -985,8 +985,9 @@ export interface SkillLocalizedText {
  * A single capability advertised by a plugin for discovery in the agent UI.
  *
  * Skills appear in the agent's skill browser and can be invoked directly by
- * the user or matched automatically by the LLM when the user's intent aligns
- * with the skill description.
+ * the user. The Agent may inspect Skill metadata and call `ActivateSkill`
+ * with a visible reason when a Skill is needed; catalog matches are candidates
+ * only and must not activate Skills by themselves.
  */
 export interface SkillDef {
   /** Unique within the owning extension, e.g. "batch-generate" */

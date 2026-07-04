@@ -46,7 +46,9 @@ describe('createConversationSkillProvider', () => {
     const skillService = createSkillServiceMock({ skills: [skill], injection });
     const provider = createConversationSkillProvider({ skillService, effects });
 
-    await expect(provider.activateSkill('commit')).resolves.toEqual({
+    await expect(
+      provider.activateSkill({ name: 'commit', reason: 'Agent selected commit workflow' }),
+    ).resolves.toEqual({
       success: true,
       message: 'Activated skill "commit"',
       allowedTools: ['bash'],
@@ -76,7 +78,12 @@ describe('createConversationSkillProvider', () => {
     const skillService = createSkillServiceMock({ skills: [parent, child], injection });
     const provider = createConversationSkillProvider({ skillService, effects });
 
-    await expect(provider.activateSkill('comic-to-storyboard')).resolves.toEqual({
+    await expect(
+      provider.activateSkill({
+        name: 'comic-to-storyboard',
+        reason: 'Agent selected storyboard workflow',
+      }),
+    ).resolves.toEqual({
       success: true,
       message: 'Activated skill "comic-to-storyboard"',
       allowedTools: ['ReadDocument', 'ReadImage'],
@@ -95,7 +102,9 @@ describe('createConversationSkillProvider', () => {
       logger: { warn },
     });
 
-    await expect(provider.activateSkill('missing')).resolves.toEqual({
+    await expect(
+      provider.activateSkill({ name: 'missing', reason: 'Agent selected missing workflow' }),
+    ).resolves.toEqual({
       success: false,
       message: 'Skill "missing" not found',
     });
@@ -115,7 +124,9 @@ describe('createConversationSkillProvider', () => {
       logger,
     });
 
-    await expect(provider.activateSkill('video')).resolves.toEqual({
+    await expect(
+      provider.activateSkill({ name: 'video', reason: 'Agent selected video workflow' }),
+    ).resolves.toEqual({
       success: false,
       message: 'subpackage missing',
     });

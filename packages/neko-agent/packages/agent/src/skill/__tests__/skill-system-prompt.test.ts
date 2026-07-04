@@ -20,6 +20,9 @@ describe('skill system prompt', () => {
     expect(prompt).toContain('- **storyboard**: Storyboard expert');
     expect(prompt).not.toContain('disabled');
     expect(prompt).toContain('Use `ActivateSkill`');
+    expect(prompt).toContain('Do not activate skills by keyword matching');
+    expect(prompt).toContain('Use ordinary Agent capabilities first');
+    expect(prompt).toContain('briefly state the activation reason');
   });
 
   it('keeps the base prompt unchanged when no enabled skills exist', () => {
