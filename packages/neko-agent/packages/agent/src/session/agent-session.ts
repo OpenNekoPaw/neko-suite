@@ -21,6 +21,14 @@ import type {
   AgentCapabilityActivationIntent,
   AgentCapabilityActivationProgressEvent,
   AgentCapabilityActivationTarget,
+  AutohealEventEmitterPort,
+  AgentEventSubscriptionPort,
+  AgentFeedbackCoordinator as IFeedbackCoordinator,
+  AgentFeedbackCycle,
+  AgentFeedbackSignal,
+  IAutohealChain,
+  AgentProviderExpressionConceptDecision,
+  AgentStageTransitionGuidance as StageTransitionGuidance,
   AgentObservedToolResult,
   AgentStep,
   AgentTraceContext,
@@ -64,8 +72,6 @@ import type { IEventBus } from '../events';
 import { createEventBus } from '../events';
 import { createNekoPaths, createNdjsonEventSink } from '../workspace';
 import type { IArtifactWatcher } from '../artifact';
-import type { IAutohealChain } from '../autoheal';
-import { createAutohealChain } from '../autoheal';
 import type { IApprovalEngine } from '../approval';
 import {
   createApprovalEngine,
@@ -125,12 +131,6 @@ import type { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-sch
 import type { SubpackageFragmentsModule } from '../prompt/modules/environment/subpackage-fragments-module';
 import { createPromptContextProvider } from '../prompt/context';
 import { MemoryRecall } from '../memory/memory-recall';
-import {
-  composeBeforeThinkHooks,
-  createFeedbackCoordinator,
-  type IFeedbackCoordinator,
-} from '../feedback';
-import { createDefaultControlPlane, type StageTransitionGuidance } from '../control-plane';
 import {
   applyToolResultBackfillToChatHistory,
   projectPersistedEventsToWorkingMemory,
@@ -249,11 +249,10 @@ export class AgentSession implements IAgentSession {
   // ADR §6.5). Replaces the dedicated Write tools with a non-blocking
   // validator that emits artifact.* events onto the EventBus.
   private _artifactWatcher: IArtifactWatcher | null = null;
-  // Unified feedback runtime: owns artifact observation, self-evaluation
-  // guidance, and project-memory extraction as a single session-level
-  // dependency rather than three ad hoc code paths.
+  // Skill/host-injected feedback coordinator. Agent core owns the generic
+  // runtime ports and delegates concrete observation/evaluation policies.
   private _feedbackCoordinator: IFeedbackCoordinator | null = null;
-  private _controlPlane: import('../control-plane').IControlPlane | null = null;
+  private _controlPlane: import('@neko/shared').AgentControlPlane | null = null;
   private _operationToolAdapterRegistry:
     import('@neko/shared').IOperationToolAdapterRegistry | null = null;
   // Loaded user preferences (ADR §9.3). null when workspace.fsOps
@@ -425,7 +424,7 @@ export class AgentSession implements IAgentSession {
     if (config.journalWriter) {
       this._journalWriter = config.journalWriter;
     }
-    this._controlPlane = config.controlPlane ?? createDefaultControlPlane();
+    this._controlPlane = config.controlPlane ?? null;
     this._operationToolAdapterRegistry = config.operationToolAdapterRegistry ?? null;
 
     this._artifactFacade.setArtifactService(resolveArtifactService(config));
@@ -470,8 +469,8 @@ export class AgentSession implements IAgentSession {
 
       // Install the ReAct-loop stage-activation runner and its companions:
       //   - EventBus: typed channel for compacted round / milestone events.
-      //   - Autoheal chain: routes tool errors through L1-L5; emits
-      //     execution.autoheal.* on the same bus.
+      //   - Optional skill-owned Autoheal chain: routes tool errors through
+      //     L1-L5 and emits execution.autoheal.* through a shared event port.
       //   - Approval engine: pre-filters ask-mode tool calls via the
       //     declarative + imperative strategy packs.
       this._eventBus = createEventBus();
@@ -496,7 +495,14 @@ export class AgentSession implements IAgentSession {
       this._artifactWatcher = this._createConfiguredArtifactWatcher();
       void this._artifactWatcher?.start();
 
-      this._autohealChain = createAutohealChain({ eventBus: this._eventBus });
+      this._autohealChain =
+        config.autohealChainFactory?.({
+          eventBus: createAutohealEventEmitterPort(this._eventBus),
+          diagnostics: {
+            warn: (message, details) => logger.warn(message, details),
+            info: (message, details) => logger.info(message, details),
+          },
+        }) ?? null;
       this._approvalEngine = createApprovalEngine({
         strategyPacks: [creationStrategyPack, executionStrategyPack],
       });
@@ -586,7 +592,7 @@ export class AgentSession implements IAgentSession {
         classifyEntrySignal: (signals) =>
           classifyCreationEntrySignal(signals, this._currentTurnPlanningContext),
         eventBus: this._eventBus,
-        autohealChain: this._autohealChain,
+        ...(this._autohealChain ? { autohealChain: this._autohealChain } : {}),
       });
       this._reactRunnerState = state;
       this._installRuntimeEventObservers();
@@ -774,7 +780,7 @@ export class AgentSession implements IAgentSession {
     return this._artifactFacade.listRunIds();
   }
 
-  getFeedbackCycles(): readonly import('../feedback').FeedbackCycle[] {
+  getFeedbackCycles(): readonly AgentFeedbackCycle[] {
     return this._feedbackRuntime.cycles;
   }
 
@@ -1689,21 +1695,19 @@ export class AgentSession implements IAgentSession {
 
   private _rebuildFeedbackCoordinator(): void {
     const previous = this._feedbackCoordinator;
-    const providerCardProject = this._ablationMarker?.disableProviderCardAutoEvolve
-      ? undefined
-      : createProviderCardProjectConfig(this._config.workspace);
     this._feedbackCoordinator =
       this._config.feedbackCoordinator ??
-      createFeedbackCoordinator({
-        eventBus: this._eventBus,
+      this._config.feedbackCoordinatorFactory?.({
+        eventBus: createFeedbackEventSubscriptionPort(this._eventBus),
         stageTracker: this._stageTracker,
+        workspace: this._ablationMarker?.disableProviderCardAutoEvolve
+          ? undefined
+          : createFeedbackWorkspacePort(this._config.workspace),
         projectMemoryManager: this._config.projectMemoryManager,
         autoMemoryExtraction: this._config.autoMemoryExtraction,
-        ...(this._config.feedbackControlPolicy
-          ? { controlPolicy: this._config.feedbackControlPolicy }
-          : {}),
-        ...(providerCardProject ? { providerCardProject } : {}),
-      });
+        controlPolicy: this._config.feedbackControlPolicy,
+      }) ??
+      null;
 
     if (previous && previous !== this._feedbackCoordinator) {
       previous.dispose();
@@ -1926,8 +1930,8 @@ export class AgentSession implements IAgentSession {
   }
 
   private async _recordFeedbackStageTransition(input: {
-    readonly cycle: import('../feedback').FeedbackCycle;
-    readonly decision: import('../feedback').FeedbackDecision;
+    readonly cycle: AgentFeedbackCycle;
+    readonly decision: import('@neko/shared').AgentFeedbackDecision;
     readonly guidance: StageTransitionGuidance;
     readonly timestamp: number;
   }): Promise<void> {
@@ -2271,6 +2275,68 @@ function createEmptySkillProvider(): ISkillProvider {
   };
 }
 
+function createFeedbackEventSubscriptionPort(
+  eventBus: IEventBus | null,
+): AgentEventSubscriptionPort | null {
+  if (!eventBus) {
+    return null;
+  }
+
+  return {
+    on(channel, listener) {
+      if (channel !== EXECUTION_CHANNELS.ARTIFACT_INVALID) {
+        throw new Error(`Unsupported feedback event channel: ${channel}`);
+      }
+      return eventBus.on(EXECUTION_CHANNELS.ARTIFACT_INVALID, (event) => listener(event));
+    },
+  };
+}
+
+function createAutohealEventEmitterPort(
+  eventBus: IEventBus | null,
+): AutohealEventEmitterPort | undefined {
+  if (!eventBus) {
+    return undefined;
+  }
+
+  return {
+    emit(event) {
+      if (!isAutohealExecutionChannel(event.channel)) {
+        throw new Error(`Unsupported autoheal event channel: ${event.channel}`);
+      }
+      eventBus.emit(event as Parameters<IEventBus['emit']>[0]);
+    },
+  };
+}
+
+function isAutohealExecutionChannel(channel: string): boolean {
+  return (
+    channel === EXECUTION_CHANNELS.AUTOHEAL_L1_RETRY ||
+    channel === EXECUTION_CHANNELS.AUTOHEAL_L2_DEGRADE ||
+    channel === EXECUTION_CHANNELS.AUTOHEAL_L3_SUBSTITUTE ||
+    channel === EXECUTION_CHANNELS.AUTOHEAL_L4_TRIGGERED ||
+    channel === EXECUTION_CHANNELS.AUTOHEAL_L5_ESCALATED
+  );
+}
+
+function createFeedbackWorkspacePort(
+  workspace: AgentSessionConfig['workspace'] | undefined,
+): import('@neko/shared').AgentFeedbackWorkspacePort | undefined {
+  if (!workspace || !hasWorkspaceWriteFileFsOps(workspace.fsOps)) {
+    return undefined;
+  }
+
+  const fsOps = workspace.fsOps;
+  return {
+    root: workspace.root,
+    fsOps: {
+      mkdir: fsOps.mkdir.bind(fsOps),
+      writeFile: fsOps.writeFile.bind(fsOps),
+      ...(typeof fsOps.readFile === 'function' ? { readFile: fsOps.readFile.bind(fsOps) } : {}),
+    },
+  };
+}
+
 // =============================================================================
 // Factory Function
 // =============================================================================
@@ -2331,6 +2397,44 @@ function collectPersistedEventIds(entries: readonly PersistedAgentEvent[]): stri
   return eventIds;
 }
 
+function composeBeforeThinkHooks(
+  base: import('@neko/shared').ExecutorHooks,
+  hooks: readonly import('@neko/shared').ExecutorHooks[],
+): import('@neko/shared').ExecutorHooks {
+  const beforeThinkChain: Array<
+    (context: import('@neko/shared').AgentContext) => Promise<import('@neko/shared').AgentContext | void>
+  > = [];
+  if (base.beforeThink) {
+    beforeThinkChain.push((context) => base.beforeThink!(context));
+  }
+  for (const hook of hooks) {
+    if (hook.beforeThink) {
+      beforeThinkChain.push((context) => hook.beforeThink!(context));
+    }
+  }
+
+  if (beforeThinkChain.length <= 1) {
+    return base;
+  }
+
+  const nameSuffix = hooks
+    .map((hook) => hook.name ?? null)
+    .filter((name): name is string => Boolean(name))
+    .join('+');
+
+  return {
+    ...base,
+    name: nameSuffix ? `${base.name ?? 'react-loop'}+${nameSuffix}` : (base.name ?? 'react-loop'),
+    beforeThink: async (context) => {
+      let next = context;
+      for (const step of beforeThinkChain) {
+        next = (await step(next)) || next;
+      }
+      return next;
+    },
+  };
+}
+
 function collectCompressedMessageSourceEventIds(
   message: CompressedMessage,
   historyEventIds: readonly string[][],
@@ -2361,24 +2465,6 @@ function getChatMessageContent(message: ChatMessage): string {
   return message.content
     .flatMap((part) => ('text' in part && typeof part.text === 'string' ? [part.text] : []))
     .join('\n');
-}
-
-function createProviderCardProjectConfig(
-  workspace: AgentSessionConfig['workspace'] | undefined,
-): import('../feedback').FeedbackCoordinatorConfig['providerCardProject'] | undefined {
-  if (!workspace || !hasWorkspaceWriteFileFsOps(workspace.fsOps)) {
-    return undefined;
-  }
-
-  const fsOps = workspace.fsOps;
-  return {
-    workspaceRoot: workspace.root,
-    fsOps: {
-      mkdir: fsOps.mkdir.bind(fsOps),
-      writeFile: fsOps.writeFile.bind(fsOps),
-      ...(typeof fsOps.readFile === 'function' ? { readFile: fsOps.readFile.bind(fsOps) } : {}),
-    },
-  };
 }
 
 function resolveArtifactService(config: AgentSessionConfig): IArtifactService | null {
@@ -2442,7 +2528,7 @@ function toProviderExpressionFeedbackSignal(input: {
   readonly observedAt: number;
   readonly runId?: string;
   readonly attachEvidence?: boolean;
-}): import('../feedback').FeedbackSignal | null {
+}): AgentFeedbackSignal | null {
   const metadata = extractProviderExpressionMetadata(input.result);
   if (!metadata) {
     return null;
@@ -2472,7 +2558,7 @@ function extractProviderExpressionMetadata(result: ObservedToolResult): {
   reason?: string;
   styleFamily?: string;
   concepts: readonly string[];
-  conceptDecisions: readonly import('../feedback').ProviderExpressionConceptDecision[];
+  conceptDecisions: readonly AgentProviderExpressionConceptDecision[];
   raw: Record<string, unknown>;
 } | null {
   const adaptation = getProviderAdaptationCandidate(result);
@@ -2489,7 +2575,7 @@ function extractProviderAdaptationMetadata(metadata: Record<string, unknown>): {
   reason?: string;
   styleFamily?: string;
   concepts: readonly string[];
-  conceptDecisions: readonly import('../feedback').ProviderExpressionConceptDecision[];
+  conceptDecisions: readonly AgentProviderExpressionConceptDecision[];
   raw: Record<string, unknown>;
 } | null {
   const mode =

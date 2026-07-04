@@ -1,22 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { AgentContext, AgentResult, ToolResultWithMeta } from '@neko/shared';
+import type {
+  AgentContext,
+  AgentResult,
+  AutohealHandler,
+  IAutohealChain,
+  ToolResultWithMeta,
+} from '@neko/shared';
 import { createAgentTraceContext } from '@neko/shared';
-import type { IdcStage, StageActivationDecision } from '@neko-agent/types';
 import { createStageTracker } from '../../skill';
-import { createReActLoopRunner, type ReActLoopCreationPort } from '../react-loop-runner';
+import { createReActLoopRunner, type ReActLoopRunContext } from '../react-loop-runner';
 import { createEventBus, CREATION_CHANNELS, EXECUTION_CHANNELS } from '../../events';
-import { createAutohealChain, type AutohealHandler } from '../../autoheal';
 
-interface FakeCreationPort extends ReActLoopCreationPort {
-  active: { creationId: string; profileId: string; currentStageId?: string } | null;
-  rounds: StageActivationDecision[];
-  transitions: Array<{ stage: IdcStage; at: number }>;
-  closed: {
-    status: 'completed' | 'failed' | 'cancelled';
-    error?: { readonly code: string; readonly message: string; readonly cause?: unknown };
-  } | null;
-  creationId: string;
-}
+const runContext: ReActLoopRunContext = {
+  runId: 'creation-test',
+  creationKind: 'idc.default',
+};
 
 function ctx(iteration: number): AgentContext {
   return {
@@ -29,43 +27,16 @@ function ctx(iteration: number): AgentContext {
   };
 }
 
-function createFakeCreationPort(): FakeCreationPort {
-  const port: FakeCreationPort = {
-    active: { creationId: 'creation-test', profileId: 'idc.default' },
-    creationId: 'creation-test',
-    rounds: [],
-    transitions: [],
-    closed: null,
-    getActive: () => port.active,
-    recordRound: (decision) => {
-      port.rounds.push(decision);
-    },
-    recordStageTransition: (stage, at) => {
-      port.transitions.push({ stage, at });
-      if (port.active) {
-        port.active = { ...port.active, currentStageId: stage };
-      }
-    },
-    close: (status, error) => {
-      port.closed = error ? { status, error } : { status };
-      port.active = null;
-    },
-  };
-  return port;
-}
-
 describe('ReActLoopRunner hooks', () => {
   let stageTracker: ReturnType<typeof createStageTracker>;
-  let creation: FakeCreationPort;
 
   beforeEach(() => {
     stageTracker = createStageTracker({ now: () => 0 });
-    creation = createFakeCreationPort();
   });
 
-  it('beforeThink records a decision on Agent-native creation state', async () => {
+  it('beforeThink records a decision on runner state', async () => {
     const { hooks, state } = createReActLoopRunner({
-      creation,
+      getRunContext: () => runContext,
       getMode: () => 'auto',
       now: () => 42,
     });
@@ -76,12 +47,11 @@ describe('ReActLoopRunner hooks', () => {
     expect(state.lastDecision).not.toBeNull();
     expect(state.lastDecision!.round).toBe(0);
     expect(state.lastDecision!.decidedAt).toBe(42);
-    expect(creation.rounds).toHaveLength(1);
   });
 
   it('afterAct with errored results flips the next observe hint to retry', async () => {
     const { hooks, state } = createReActLoopRunner({
-      creation,
+      getRunContext: () => runContext,
       getMode: () => 'auto',
     });
 
@@ -93,7 +63,7 @@ describe('ReActLoopRunner hooks', () => {
 
   it('afterAct with successful results keeps hint normal', async () => {
     const { hooks, state } = createReActLoopRunner({
-      creation,
+      getRunContext: () => runContext,
       getMode: () => 'auto',
     });
 
@@ -105,7 +75,7 @@ describe('ReActLoopRunner hooks', () => {
 
   it('onIterationComplete bumps the round counter', async () => {
     const { hooks, state } = createReActLoopRunner({
-      creation,
+      getRunContext: () => runContext,
       getMode: () => 'auto',
     });
 
@@ -116,39 +86,17 @@ describe('ReActLoopRunner hooks', () => {
     expect(state.round).toBe(2);
   });
 
-  it('onExecuteEnd closes active Agent-native creation as completed on success', async () => {
+  it('onExecuteEnd without a bus does not throw', async () => {
     const { hooks } = createReActLoopRunner({
-      creation,
+      getRunContext: () => runContext,
       getMode: () => 'auto',
     });
-    await hooks.onExecuteEnd?.(agentResult({ success: true }));
-
-    expect(creation.active).toBeNull();
-    expect(creation.closed?.status).toBe('completed');
-  });
-
-  it('onExecuteEnd records failure and error code on failure', async () => {
-    const { hooks } = createReActLoopRunner({
-      creation,
-      getMode: () => 'auto',
-    });
-    await hooks.onExecuteEnd?.(
-      agentResult({ success: false, response: 'oops', error: new Error('tool timeout') }),
-    );
-
-    expect(creation.closed?.status).toBe('failed');
-    expect(creation.closed?.error?.code).toBe('executor-error');
-    expect(creation.closed?.error?.cause).toEqual(
-      expect.objectContaining({
-        name: 'Error',
-        message: 'tool timeout',
-      }),
-    );
+    await expect(hooks.onExecuteEnd?.(agentResult({ success: true }))).resolves.not.toThrow();
   });
 
   it('multi-iteration sequence keeps round counter and decision.round aligned', async () => {
     const { hooks, state } = createReActLoopRunner({
-      creation,
+      getRunContext: () => runContext,
       getMode: () => 'auto',
     });
     await hooks.onExecuteStart?.('input', ctx(0));
@@ -160,13 +108,12 @@ describe('ReActLoopRunner hooks', () => {
       await hooks.onIterationComplete?.(i + 1, ctx(i + 1));
     }
     expect(state.round).toBe(3);
-    expect(creation.rounds).toHaveLength(3);
   });
 
   it('terminal stage of each decision is entered into the StageTracker', async () => {
     const { hooks } = createReActLoopRunner({
       stageTracker,
-      creation,
+      getRunContext: () => runContext,
       getMode: () => 'auto',
     });
 
@@ -174,7 +121,6 @@ describe('ReActLoopRunner hooks', () => {
     await hooks.beforeThink?.(ctx(1));
 
     expect(stageTracker.current).not.toBeNull();
-    expect(creation.transitions).toHaveLength(1);
   });
 
   describe('EventBus integration', () => {
@@ -184,7 +130,7 @@ describe('ReActLoopRunner hooks', () => {
       bus.on(CREATION_CHANNELS.RUN_STARTED, onStart);
 
       const { hooks } = createReActLoopRunner({
-        creation,
+        getRunContext: () => runContext,
         getMode: () => 'auto',
         eventBus: bus,
         now: () => 555,
@@ -194,8 +140,8 @@ describe('ReActLoopRunner hooks', () => {
       expect(onStart).toHaveBeenCalledWith(
         expect.objectContaining({
           channel: CREATION_CHANNELS.RUN_STARTED,
-          runId: creation.creationId,
-          creationKind: 'idc.default',
+          runId: runContext.runId,
+          creationKind: runContext.creationKind,
           at: 555,
         }),
       );
@@ -207,7 +153,7 @@ describe('ReActLoopRunner hooks', () => {
       bus.on(EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED, onRound);
 
       const { hooks } = createReActLoopRunner({
-        creation,
+        getRunContext: () => runContext,
         getMode: () => 'auto',
         eventBus: bus,
         now: () => 777,
@@ -219,7 +165,7 @@ describe('ReActLoopRunner hooks', () => {
       expect(onRound.mock.calls[0]![0]).toEqual(
         expect.objectContaining({
           channel: EXECUTION_CHANNELS.ROUND_ACTIVATION_DECIDED,
-          runId: creation.creationId,
+          runId: runContext.runId,
           summary: expect.objectContaining({ round: 0 }),
         }),
       );
@@ -231,7 +177,7 @@ describe('ReActLoopRunner hooks', () => {
       bus.on(CREATION_CHANNELS.RUN_ENDED, onEnd);
 
       const { hooks } = createReActLoopRunner({
-        creation,
+        getRunContext: () => runContext,
         getMode: () => 'auto',
         eventBus: bus,
       });
@@ -242,7 +188,7 @@ describe('ReActLoopRunner hooks', () => {
       expect(onEnd).toHaveBeenCalledWith(
         expect.objectContaining({
           channel: CREATION_CHANNELS.RUN_ENDED,
-          runId: creation.creationId,
+          runId: runContext.runId,
           status: 'failed',
         }),
       );
@@ -250,7 +196,7 @@ describe('ReActLoopRunner hooks', () => {
 
     it('no bus means no emission and no errors', async () => {
       const { hooks } = createReActLoopRunner({
-        creation,
+        getRunContext: () => runContext,
         getMode: () => 'auto',
       });
 
@@ -266,9 +212,9 @@ describe('ReActLoopRunner hooks', () => {
         level: 1,
         note: 'retry #1',
       });
-      const chain = createAutohealChain({ handlers: { l1Retry: heal } });
+      const chain = createFakeAutohealChain(heal);
       const { hooks, state } = createReActLoopRunner({
-        creation,
+        getRunContext: () => runContext,
         getMode: () => 'auto',
         autohealChain: chain,
       });
@@ -281,18 +227,13 @@ describe('ReActLoopRunner hooks', () => {
     });
 
     it('aborted outcome produces user-cancel hint', async () => {
-      const chain = createAutohealChain({
-        handlers: {
-          l1Retry: async () => ({ resolution: 'pass', level: 1 }),
-          l5Escalate: async () => ({
-            resolution: 'aborted',
-            level: 5,
-            reason: 'user-decline',
-          }),
-        },
-      });
+      const chain = createFakeAutohealChain(async () => ({
+        resolution: 'aborted',
+        level: 5,
+        reason: 'user-decline',
+      }));
       const { hooks, state } = createReActLoopRunner({
-        creation,
+        getRunContext: () => runContext,
         getMode: () => 'auto',
         autohealChain: chain,
       });
@@ -305,9 +246,13 @@ describe('ReActLoopRunner hooks', () => {
     });
 
     it('successful results after an errored round clear the autoheal outcome', async () => {
-      const chain = createAutohealChain();
+      const chain = createFakeAutohealChain(async () => ({
+        resolution: 'aborted',
+        level: 5,
+        reason: 'retry-exhausted',
+      }));
       const { hooks, state } = createReActLoopRunner({
-        creation,
+        getRunContext: () => runContext,
         getMode: () => 'auto',
         autohealChain: chain,
       });
@@ -321,12 +266,15 @@ describe('ReActLoopRunner hooks', () => {
     });
 
     it('chain throw gracefully falls back to retry hint', async () => {
-      const chain = createAutohealChain();
+      const chain = createFakeAutohealChain(async () => ({
+        resolution: 'pass',
+        level: 1,
+      }));
       (chain as unknown as { run: () => Promise<never> }).run = async () => {
         throw new Error('chain explosion');
       };
       const { hooks, state } = createReActLoopRunner({
-        creation,
+        getRunContext: () => runContext,
         getMode: () => 'auto',
         autohealChain: chain,
       });
@@ -341,7 +289,7 @@ describe('ReActLoopRunner hooks', () => {
     it('emits one event per successful write tool result in the batch', async () => {
       const bus = createEventBus();
       const { hooks } = createReActLoopRunner({
-        creation,
+        getRunContext: () => runContext,
         getMode: () => 'auto',
         eventBus: bus,
       });
@@ -358,15 +306,15 @@ describe('ReActLoopRunner hooks', () => {
       ] as unknown as ToolResultWithMeta[]);
 
       expect(events).toEqual([
-        { kind: 'tool:GenerateImage', runId: creation.creationId },
-        { kind: 'tool:AddTimelineElement', runId: creation.creationId },
+        { kind: 'tool:GenerateImage', runId: runContext.runId },
+        { kind: 'tool:AddTimelineElement', runId: runContext.runId },
       ]);
     });
 
     it('skips failed tools and read-only tools', async () => {
       const bus = createEventBus();
       const { hooks } = createReActLoopRunner({
-        creation,
+        getRunContext: () => runContext,
         getMode: () => 'auto',
         eventBus: bus,
       });
@@ -389,7 +337,7 @@ describe('ReActLoopRunner hooks', () => {
     it('emits one event per onIterationComplete with current round and thinkOnly flag', async () => {
       const bus = createEventBus();
       const { hooks } = createReActLoopRunner({
-        creation,
+        getRunContext: () => runContext,
         getMode: () => 'auto',
         eventBus: bus,
       });
@@ -430,6 +378,12 @@ function successfulResult(subject: string): ToolResultWithMeta[] {
   return [
     { success: true, data: 'ok', callId: 'c1', name: subject },
   ] as unknown as ToolResultWithMeta[];
+}
+
+function createFakeAutohealChain(handler: AutohealHandler): IAutohealChain {
+  return {
+    run: handler,
+  };
 }
 
 function agentResult(input: { success: boolean; response?: string; error?: Error }): AgentResult {

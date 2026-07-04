@@ -26,10 +26,16 @@
  *     (Issues are buffered until drained, not persisted across runs.)
  */
 
-import type { ArtifactKind, ExecutionArtifactInvalidEvent } from '@neko-agent/types';
-import { EXECUTION_CHANNELS } from '@neko-agent/types';
-import type { AgentContext, ExecutorHooks, ChatMessage } from '@neko/shared';
-import type { IEventBus } from '../events/event-bus';
+import type {
+  AgentArtifactInvalidEvent as ExecutionArtifactInvalidEvent,
+  AgentArtifactKind as ArtifactKind,
+  AgentContext,
+  AgentEventSubscriptionPort as IEventBus,
+  ExecutorHooks,
+  ChatMessage,
+} from '@neko/shared';
+
+const ARTIFACT_INVALID_CHANNEL = 'execution.artifact.invalid';
 
 // =============================================================================
 // Types
@@ -72,7 +78,7 @@ export class ArtifactObservationHooks implements ExecutorHooks {
     this._maxBuffered = config.maxBuffered ?? DEFAULT_MAX_BUFFERED;
     const bus = config.eventBus;
     if (!bus) return;
-    this._unsubscribe = bus.on(EXECUTION_CHANNELS.ARTIFACT_INVALID, (event) => {
+    this._unsubscribe = bus.on(ARTIFACT_INVALID_CHANNEL, (event) => {
       this._ingest(event);
     });
   }

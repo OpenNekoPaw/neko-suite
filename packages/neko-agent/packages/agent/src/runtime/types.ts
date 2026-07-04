@@ -1,5 +1,7 @@
 import type {
   AgentToolResultFeedbackAdapter,
+  AgentControlPlane as IControlPlane,
+  AgentFeedbackCoordinator as IFeedbackCoordinator,
   IProjectMemoryManager,
   ISkillRegistry,
   IToolCategoryRegistry,
@@ -14,8 +16,6 @@ import type { IEventBus } from '../events';
 import type { SkillService } from '../skill/skill-service';
 import type { SkillLifecycleRuntime } from '../skill/skill-lifecycle-runtime';
 import type { IArtifactService } from './artifact-service';
-import type { IFeedbackCoordinator } from '../feedback';
-import type { IControlPlane } from '../control-plane';
 import type { AgentExternalProcessorRuntime } from './external-processor-runtime';
 import type { AgentContentAccessRuntime } from './agent-content-access-runtime';
 
@@ -72,6 +72,7 @@ export interface ICreationGuidanceRuntime {
   };
   readonly creationTaskProjection?: import('../task').ICreationTaskProjection;
   readonly controlPlane?: IControlPlane;
+  readonly autohealChainFactory?: import('@neko/shared').AgentAutohealChainFactory;
 }
 
 /**
@@ -138,6 +139,7 @@ export interface IFeedbackLoop {
   readonly autoMemoryExtraction?: boolean;
   readonly memoryRecall?: boolean;
   readonly feedbackCoordinator?: IFeedbackCoordinator;
+  readonly feedbackCoordinatorFactory?: import('@neko/shared').AgentFeedbackCoordinatorFactory;
   readonly toolResultFeedbackAdapters?: readonly AgentToolResultFeedbackAdapter[];
 }
 

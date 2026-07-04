@@ -1,25 +1,57 @@
 import { describe, it, expect } from 'vitest';
-import type { AgentContext, ChatMessage } from '@neko/shared';
-import { EXECUTION_CHANNELS } from '@neko-agent/types';
-import type { ExecutionArtifactInvalidEvent } from '@neko-agent/types';
-import { createEventBus } from '../../events/event-bus';
-import { createArtifactObservationHooks } from '../artifact-observation-hooks';
+import type {
+  AgentArtifactInvalidEvent,
+  AgentContext,
+  AgentEventSubscriptionPort,
+  ChatMessage,
+} from '@neko/shared';
+import { createArtifactObservationHooks } from './artifact-observation-hooks';
+
+const ARTIFACT_INVALID_CHANNEL = 'execution.artifact.invalid';
+
+class TestEventBus implements AgentEventSubscriptionPort {
+  private readonly listeners = new Map<string, Set<(event: AgentArtifactInvalidEvent) => void>>();
+
+  on(channel: string, listener: (event: AgentArtifactInvalidEvent) => void): () => void {
+    const listeners = this.listeners.get(channel) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(channel, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) {
+        this.listeners.delete(channel);
+      }
+    };
+  }
+
+  emit(event: AgentArtifactInvalidEvent): void {
+    const listeners = this.listeners.get(event.channel ?? '');
+    if (!listeners) {
+      return;
+    }
+    for (const listener of listeners) {
+      listener(event);
+    }
+  }
+}
 
 function makeContext(): AgentContext {
   return {
     messages: [{ role: 'user', content: 'hello' } as ChatMessage],
-    state: { status: 'thinking' } as AgentContext['state'],
+    state: 'think',
     iteration: 0,
     toolResults: [],
     metadata: {},
   };
 }
 
-function invalid(
-  event: Partial<ExecutionArtifactInvalidEvent> = {},
-): ExecutionArtifactInvalidEvent {
+function createEventBus(): TestEventBus {
+  return new TestEventBus();
+}
+
+function invalid(event: Partial<AgentArtifactInvalidEvent> = {}): AgentArtifactInvalidEvent {
   return {
-    channel: EXECUTION_CHANNELS.ARTIFACT_INVALID,
+    channel: ARTIFACT_INVALID_CHANNEL,
     runId: 'run-1',
     kind: 'draft',
     path: '/tmp/neko/creations/xyz/brief.md',
@@ -55,7 +87,7 @@ describe('ArtifactObservationHooks', () => {
     const injected = result.messages[1];
     expect(injected?.role).toBe('system');
     expect(String(injected?.content)).toContain('ArtifactWatcher reported validation issues');
-    expect(String(injected?.content)).toContain('draft-xyz.md');
+    expect(String(injected?.content)).toContain('brief.md');
     expect(String(injected?.content)).toContain('invalid-status');
     expect(String(injected?.content)).toContain('status');
   });

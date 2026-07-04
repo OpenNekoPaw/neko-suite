@@ -7,6 +7,9 @@ const createTaskManagerCreationTaskProjection = vi.fn((config: unknown) => ({
 }));
 const registerBuiltinToolGroups = vi.fn();
 const createQualityReviewFeedbackAdapter = vi.fn(() => ({ id: 'quality-review-feedback' }));
+const createFeedbackCoordinatorFactory = vi.fn(() => ({ id: 'feedback-coordinator-factory' }));
+const createDefaultControlPlane = vi.fn(() => ({ id: 'control-plane' }));
+const createAutohealChain = vi.fn(() => ({ id: 'autoheal-chain' }));
 
 vi.mock('@neko/agent', () => ({
   ToolGroupRegistry: class ToolGroupRegistry {
@@ -20,6 +23,9 @@ vi.mock('@neko/agent/runtime', () => ({
 }));
 
 vi.mock('@neko/skills', () => ({
+  createAutohealChain,
+  createDefaultControlPlane,
+  createFeedbackCoordinatorFactory,
   createQualityReviewFeedbackAdapter,
   registerBuiltinToolGroups,
 }));
@@ -52,6 +58,8 @@ describe('createCliAgentRuntime', () => {
       skillRegistry: skillService.registry,
       skillLifecycleRuntime,
     });
+    expect(runtime.creationGuidance?.controlPlane).toEqual({ id: 'control-plane' });
+    expect(runtime.creationGuidance?.autohealChainFactory).toBe(createAutohealChain);
     expect(runtime.creationGuidance?.creationTaskProjection).toEqual({
       kind: 'idc-projection',
       config: { store: taskManager },
@@ -65,6 +73,9 @@ describe('createCliAgentRuntime', () => {
       config: { workspaceRoot: '/workspace' },
     });
     expect(runtime.feedbackLoop?.projectMemoryManager).toBe(projectMemoryManager);
+    expect(runtime.feedbackLoop?.feedbackCoordinatorFactory).toEqual({
+      id: 'feedback-coordinator-factory',
+    });
     expect(runtime.feedbackLoop?.toolResultFeedbackAdapters).toEqual([
       { id: 'quality-review-feedback' },
     ]);
@@ -79,10 +90,12 @@ describe('createCliAgentRuntime', () => {
     });
 
     expect(runtime.creationGuidance?.stageTracking).toBeUndefined();
+    expect(runtime.creationGuidance?.autohealChainFactory).toBe(createAutohealChain);
     expect(runtime.capabilityRuntime?.skillService).toBeUndefined();
     expect(runtime.capabilityRuntime?.skillRegistry).toBeUndefined();
     expect(runtime.capabilityRuntime?.toolGroupRegistry).toBeDefined();
     expect(runtime.feedbackLoop).toEqual({
+      feedbackCoordinatorFactory: { id: 'feedback-coordinator-factory' },
       toolResultFeedbackAdapters: [{ id: 'quality-review-feedback' }],
     });
   });

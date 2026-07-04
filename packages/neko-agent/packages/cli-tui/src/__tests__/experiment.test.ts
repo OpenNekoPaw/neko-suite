@@ -63,6 +63,9 @@ vi.mock('@neko/agent', () => ({
 }));
 
 vi.mock('@neko/skills', () => ({
+  createAutohealChain: vi.fn(() => ({ id: 'autoheal-chain' })),
+  createDefaultControlPlane: vi.fn(() => ({ id: 'control-plane' })),
+  createFeedbackCoordinatorFactory: vi.fn(() => ({ id: 'feedback-coordinator-factory' })),
   createQualityReviewFeedbackAdapter: vi.fn(() => ({ id: 'quality-review-feedback' })),
   registerBuiltinToolGroups,
 }));

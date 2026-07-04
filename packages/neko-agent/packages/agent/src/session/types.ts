@@ -226,10 +226,24 @@ export interface AgentSessionConfig {
    * are delegated to this coordinator instead of being assembled ad hoc
    * inside AgentSession.
    */
-  feedbackCoordinator?: import('../feedback').IFeedbackCoordinator;
+  feedbackCoordinator?: import('@neko/shared').AgentFeedbackCoordinator;
 
-  /** Feedback control policy used by the default FeedbackCoordinator. */
-  feedbackControlPolicy?: import('../feedback').FeedbackControlPolicy;
+  /**
+   * Optional host/skill-owned feedback coordinator factory.
+   *
+   * AgentSession calls this only after its generic runtime ports
+   * (EventBus/StageTracker/project memory) are available. This keeps concrete
+   * feedback policies outside Agent core while allowing skills to subscribe to
+   * agent-owned runtime events through stable shared ports.
+   */
+  feedbackCoordinatorFactory?: import('@neko/shared').AgentFeedbackCoordinatorFactory;
+
+  /**
+   * Legacy host policy field. Agent core no longer creates a default
+   * FeedbackCoordinator; skills/extensions that own feedback policy should
+   * configure their injected coordinator directly.
+   */
+  feedbackControlPolicy?: import('@neko/shared').AgentFeedbackControlPolicy;
 
   /**
    * Host-contributed adapters that can turn successful tool outputs into
@@ -242,7 +256,16 @@ export interface AgentSessionConfig {
    * decisions and may return stage guidance; it must not execute tools or
    * mutate project state.
    */
-  controlPlane?: import('../control-plane').IControlPlane;
+  controlPlane?: import('@neko/shared').AgentControlPlane;
+
+  /**
+   * Optional skill/host-owned technical recovery chain factory.
+   *
+   * Agent core owns the ReAct hook point only. Concrete autoheal policies
+   * and strategy packs are contributed by skill/domain packages through this
+   * factory.
+   */
+  autohealChainFactory?: import('@neko/shared').AgentAutohealChainFactory;
 
   /**
    * Optional OperationTool adapter registry. Adapters only map approved
@@ -558,8 +581,8 @@ export interface AgentEvent {
     timestamp: number;
     activeRunId?: string;
     currentStageId?: string;
-    decision: import('../feedback').FeedbackDecision;
-    guidance: import('../control-plane').StageTransitionGuidance;
+    decision: import('@neko/shared').AgentFeedbackDecision;
+    guidance: import('@neko/shared').AgentStageTransitionGuidance;
   };
 
   /** Agent-first multimodal observation event */
@@ -687,7 +710,7 @@ export interface IAgentSession {
    * Recent feedback coordination cycles assembled from artifact observation,
    * self-evaluation scheduling, and memory extraction.
    */
-  getFeedbackCycles(): readonly import('../feedback').FeedbackCycle[];
+  getFeedbackCycles(): readonly import('@neko/shared').AgentFeedbackCycle[];
 
   /**
    * Get the injected OperationTool adapter registry, if this host provides one.

@@ -1,4 +1,4 @@
-import type { FeedbackDecision } from '../feedback';
+import type { AgentFeedbackDecision as FeedbackDecision } from '@neko/shared';
 import {
   createDefaultArtifactRegistry,
   type IArtifactRegistry,

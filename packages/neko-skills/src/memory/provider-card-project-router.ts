@@ -1,6 +1,9 @@
 import { dirname, join } from 'node:path';
 import { isValidProviderId } from '@neko/shared';
-import type { FeedbackSignal, ProviderExpressionConceptDecision } from '../feedback';
+import type {
+  AgentFeedbackSignal as FeedbackSignal,
+  AgentProviderExpressionConceptDecision as ProviderExpressionConceptDecision,
+} from '@neko/shared';
 
 export interface ProviderCardProjectFsOps {
   mkdir(path: string, opts?: { recursive: boolean }): Promise<void>;

@@ -42,9 +42,12 @@ export function buildAgentSessionConfigWithRuntime(
   const providerCardRegistry = base.providerCardRegistry ?? capability?.providerCardRegistry;
   const projectMemoryManager = base.projectMemoryManager ?? feedback?.projectMemoryManager;
   const feedbackCoordinator = base.feedbackCoordinator ?? feedback?.feedbackCoordinator;
+  const feedbackCoordinatorFactory =
+    base.feedbackCoordinatorFactory ?? feedback?.feedbackCoordinatorFactory;
   const toolResultFeedbackAdapters =
     base.toolResultFeedbackAdapters ?? feedback?.toolResultFeedbackAdapters;
   const controlPlane = base.controlPlane ?? creationGuidance?.controlPlane;
+  const autohealChainFactory = base.autohealChainFactory ?? creationGuidance?.autohealChainFactory;
   const externalProcessorRuntime =
     base.externalProcessorRuntime ?? capability?.externalProcessorRuntime;
   const contentAccessRuntime = base.contentAccessRuntime ?? capability?.contentAccessRuntime;
@@ -66,8 +69,10 @@ export function buildAgentSessionConfigWithRuntime(
     ...(providerCardRegistry ? { providerCardRegistry } : {}),
     ...(projectMemoryManager ? { projectMemoryManager } : {}),
     ...(feedbackCoordinator ? { feedbackCoordinator } : {}),
+    ...(feedbackCoordinatorFactory ? { feedbackCoordinatorFactory } : {}),
     ...(toolResultFeedbackAdapters ? { toolResultFeedbackAdapters } : {}),
     ...(controlPlane ? { controlPlane } : {}),
+    ...(autohealChainFactory ? { autohealChainFactory } : {}),
     ...(externalProcessorRuntime ? { externalProcessorRuntime } : {}),
     ...(contentAccessRuntime ? { contentAccessRuntime } : {}),
     ...(operationToolAdapterRegistry ? { operationToolAdapterRegistry } : {}),

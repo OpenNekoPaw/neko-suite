@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createTool, type IService, type StreamChunk } from '@neko/shared';
+import {
+  createTool,
+  type AgentFeedbackCoordinator,
+  type AgentFeedbackCycle,
+  type AgentFeedbackEvaluationContext,
+  type AgentFeedbackMemoryExtractionInput,
+  type AgentFeedbackMemoryExtractionOutcome,
+  type IService,
+  type StreamChunk,
+} from '@neko/shared';
 import type { Draft, ExecutionPlan, Task } from '@neko-agent/types';
 import { AgentSession } from '../agent-session';
 import type { AgentEvent, AgentSessionConfig, ExecutionMode, IJournalWriter } from '../types';
@@ -11,13 +20,6 @@ import type {
   ArtifactWriteInput,
   IArtifactService,
 } from '../../runtime/artifact-service';
-import type {
-  FeedbackCycle,
-  FeedbackEvaluationContext,
-  FeedbackMemoryExtractionInput,
-  FeedbackMemoryExtractionOutcome,
-  IFeedbackCoordinator,
-} from '../../feedback';
 
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const values: T[] = [];
@@ -285,7 +287,7 @@ function extractCreationId(path: string): string | null {
   return match?.[1] ?? null;
 }
 
-class OneShotFeedbackCoordinator implements IFeedbackCoordinator {
+class OneShotFeedbackCoordinator implements AgentFeedbackCoordinator {
   private used = false;
   readonly observe = vi.fn();
   readonly dispose = vi.fn();
@@ -294,15 +296,15 @@ class OneShotFeedbackCoordinator implements IFeedbackCoordinator {
   readonly getDecisionHistory = () => [];
   readonly getActionHistory = () => [];
   readonly extractMemory = async (
-    _input: FeedbackMemoryExtractionInput,
-  ): Promise<FeedbackMemoryExtractionOutcome> => ({
+    _input: AgentFeedbackMemoryExtractionInput,
+  ): Promise<AgentFeedbackMemoryExtractionOutcome> => ({
     kind: 'skipped',
     timestamp: 100,
     sourceEventIds: [],
     reason: 'disabled',
   });
 
-  evaluatePending(context: FeedbackEvaluationContext = {}): FeedbackCycle | null {
+  evaluatePending(context: AgentFeedbackEvaluationContext = {}): AgentFeedbackCycle | null {
     if (this.used) {
       return null;
     }

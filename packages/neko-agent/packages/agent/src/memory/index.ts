@@ -8,10 +8,6 @@
 // Project memory (cross-session file-backed memory)
 export { FileProjectMemoryManager, createFileProjectMemoryManager } from './project-memory-manager';
 
-// KeyFact extraction (heuristic, no LLM)
-export { KeyFactExtractor } from './keyfact-extractor';
-export type { KeyFactExtractorOptions } from './keyfact-extractor';
-
 // Memory recall (project memory only)
 export { MemoryRecall } from './memory-recall';
 export type { MemoryRecallOptions, RecalledMemory } from './memory-recall';

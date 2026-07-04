@@ -6,7 +6,13 @@ import {
   type SkillService,
 } from '@neko/agent';
 import { createNodeArtifactStore, type AgentRuntimeConfig } from '@neko/agent/runtime';
-import { createQualityReviewFeedbackAdapter, registerBuiltinToolGroups } from '@neko/skills';
+import {
+  createAutohealChain,
+  createDefaultControlPlane,
+  createFeedbackCoordinatorFactory,
+  createQualityReviewFeedbackAdapter,
+  registerBuiltinToolGroups,
+} from '@neko/skills';
 import type { IProjectMemoryManager, IProviderCardRegistry, PromptFragment } from '@neko/shared';
 
 export interface CliAgentRuntimeConfig {
@@ -33,6 +39,8 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
 
   return {
     creationGuidance: {
+      autohealChainFactory: createAutohealChain,
+      controlPlane: createDefaultControlPlane(),
       ...(skillService || skillLifecycleRuntime
         ? {
             stageTracking: {
@@ -60,6 +68,7 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
     artifactStore: createNodeArtifactStore({ workspaceRoot: config.workspaceRoot }),
     feedbackLoop: {
       ...(config.projectMemoryManager ? { projectMemoryManager: config.projectMemoryManager } : {}),
+      feedbackCoordinatorFactory: createFeedbackCoordinatorFactory(),
       toolResultFeedbackAdapters: [createQualityReviewFeedbackAdapter()],
     },
   };

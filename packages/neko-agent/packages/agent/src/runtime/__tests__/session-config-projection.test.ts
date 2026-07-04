@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { IOperationToolAdapterRegistry, PromptFragment } from '@neko/shared';
+import type {
+  AgentAutohealChainFactory,
+  AutohealOutcome,
+  IOperationToolAdapterRegistry,
+  PromptFragment,
+} from '@neko/shared';
 import { buildAgentSessionConfigWithRuntime, type AgentRuntimeConfig } from '../index';
 
 describe('buildAgentSessionConfigWithRuntime', () => {
@@ -24,7 +29,11 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     const providerCardRegistry = { kind: 'provider-card-registry' } as never;
     const projectMemoryManager = { kind: 'project-memory' } as never;
     const feedbackCoordinator = { kind: 'feedback-coordinator' } as never;
+    const feedbackCoordinatorFactory = vi.fn(() => feedbackCoordinator);
     const controlPlane = { kind: 'control-plane' } as never;
+    const autohealChainFactory: AgentAutohealChainFactory = vi.fn(() => ({
+      run: vi.fn(async (): Promise<AutohealOutcome> => ({ resolution: 'pass', level: 1 })),
+    }));
     const operationToolAdapterRegistry = {
       list: vi.fn(() => []),
     } as unknown as IOperationToolAdapterRegistry;
@@ -39,6 +48,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
         },
         creationTaskProjection,
         controlPlane,
+        autohealChainFactory,
       },
       artifactStore: {
         workspace: {
@@ -71,6 +81,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
         autoMemoryExtraction: false,
         memoryRecall: false,
         feedbackCoordinator,
+        feedbackCoordinatorFactory,
       },
     };
 
@@ -108,7 +119,9 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     expect(config.stageTracking?.skillLifecycleRuntime).toBe(skillLifecycleRuntime);
     expect(config.projectMemoryManager).toBe(projectMemoryManager);
     expect(config.feedbackCoordinator).toBe(feedbackCoordinator);
+    expect(config.feedbackCoordinatorFactory).toBe(feedbackCoordinatorFactory);
     expect(config.controlPlane).toBe(controlPlane);
+    expect(config.autohealChainFactory).toBe(autohealChainFactory);
     expect(config.operationToolAdapterRegistry).toBe(operationToolAdapterRegistry);
     expect(config.contentAccessRuntime).toBe(contentAccessRuntime);
     expect(config.compactLogging).toBe(false);

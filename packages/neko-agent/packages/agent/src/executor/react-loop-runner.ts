@@ -31,7 +31,9 @@ import {
   withAgentTrace,
   type AgentContext,
   type AgentResult,
+  type AutohealOutcome,
   type ExecutorHooks,
+  type IAutohealChain,
   type ToolResultWithMeta,
 } from '@neko/shared';
 import type { IdcStage, StageActivationDecision, StageTaskShape } from '@neko-agent/types';
@@ -43,7 +45,6 @@ import type { StageMode } from '../skill/activation/stage-activation-matrix';
 import type { StageTracker } from '../skill/stage-tracker';
 import { assertStageDispatch } from './stage-dispatcher';
 import type { IEventBus } from '../events/event-bus';
-import type { IAutohealChain, AutohealOutcome } from '../autoheal';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ReActLoopRunner');

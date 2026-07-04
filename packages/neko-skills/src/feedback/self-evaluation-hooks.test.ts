@@ -3,16 +3,47 @@
  * piece operationalised as a hook that reacts to Apply-stage exits.
  */
 import { describe, it, expect } from 'vitest';
-import type { AgentContext, ChatMessage } from '@neko/shared';
-import { SelfEvaluationHooks, SELF_EVAL_GUIDANCE } from '../self-evaluation-hooks';
-import { StageTracker } from '../../skill/stage-tracker';
+import type { AgentContext, AgentStageTrackerPort, ChatMessage } from '@neko/shared';
+import { SelfEvaluationHooks, SELF_EVAL_GUIDANCE } from './self-evaluation-hooks';
+
+class TestStageTracker implements AgentStageTrackerPort {
+  private current: string | null;
+  private readonly listeners = new Set<(event: { stage: string }) => void>();
+
+  constructor(config: { initialStage?: string } = {}) {
+    this.current = config.initialStage ?? null;
+  }
+
+  enter(stage: string): boolean {
+    if (this.current === stage) {
+      return false;
+    }
+    const previous = this.current;
+    this.current = stage;
+    if (previous) {
+      for (const listener of this.listeners) {
+        listener({ stage: previous });
+      }
+    }
+    return true;
+  }
+
+  onExited(listener: (event: { stage: string }) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+}
 
 function makeContext(messages: ChatMessage[] = []): AgentContext {
   return {
     messages,
+    state: 'think',
     iteration: 0,
-    maxIterations: 10,
-  } as AgentContext;
+    toolResults: [],
+    metadata: {},
+  };
 }
 
 describe('SelfEvaluationHooks', () => {
@@ -25,7 +56,7 @@ describe('SelfEvaluationHooks', () => {
   });
 
   it('buffers a flag when the Apply stage exits', () => {
-    const tracker = new StageTracker({ initialStage: 'apply' });
+    const tracker = new TestStageTracker({ initialStage: 'apply' });
     const hook = new SelfEvaluationHooks({ stageTracker: tracker });
     expect(hook.isPending()).toBe(false);
     tracker.enter('draft'); // triggers onExited(stage='apply')
@@ -33,7 +64,7 @@ describe('SelfEvaluationHooks', () => {
   });
 
   it('does not buffer on non-Apply stage exits', () => {
-    const tracker = new StageTracker({ initialStage: 'draft' });
+    const tracker = new TestStageTracker({ initialStage: 'draft' });
     const hook = new SelfEvaluationHooks({ stageTracker: tracker });
     tracker.enter('plan'); // exits 'draft'
     expect(hook.isPending()).toBe(false);
@@ -44,7 +75,7 @@ describe('SelfEvaluationHooks', () => {
   });
 
   it('beforeThink injects a guidance system message and clears the flag', async () => {
-    const tracker = new StageTracker({ initialStage: 'apply' });
+    const tracker = new TestStageTracker({ initialStage: 'apply' });
     const hook = new SelfEvaluationHooks({ stageTracker: tracker });
     tracker.enter('draft');
 
@@ -58,7 +89,7 @@ describe('SelfEvaluationHooks', () => {
   });
 
   it('only injects once per Apply-exit signal', async () => {
-    const tracker = new StageTracker({ initialStage: 'apply' });
+    const tracker = new TestStageTracker({ initialStage: 'apply' });
     const hook = new SelfEvaluationHooks({ stageTracker: tracker });
     tracker.enter('draft');
 
@@ -69,7 +100,7 @@ describe('SelfEvaluationHooks', () => {
   });
 
   it('fires again after a subsequent Apply exit', async () => {
-    const tracker = new StageTracker({ initialStage: 'apply' });
+    const tracker = new TestStageTracker({ initialStage: 'apply' });
     const hook = new SelfEvaluationHooks({ stageTracker: tracker });
 
     // First Apply → Draft cycle
@@ -84,7 +115,7 @@ describe('SelfEvaluationHooks', () => {
   });
 
   it('dispose unsubscribes from the tracker', () => {
-    const tracker = new StageTracker({ initialStage: 'apply' });
+    const tracker = new TestStageTracker({ initialStage: 'apply' });
     const hook = new SelfEvaluationHooks({ stageTracker: tracker });
 
     hook.dispose();
@@ -93,7 +124,7 @@ describe('SelfEvaluationHooks', () => {
   });
 
   it('dispose is idempotent', () => {
-    const tracker = new StageTracker({ initialStage: 'apply' });
+    const tracker = new TestStageTracker({ initialStage: 'apply' });
     const hook = new SelfEvaluationHooks({ stageTracker: tracker });
     expect(() => {
       hook.dispose();

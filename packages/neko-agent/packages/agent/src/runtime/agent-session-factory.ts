@@ -33,6 +33,7 @@ import type {
   AgentRuntimeConfig,
   IArtifactStore,
   ICapabilityRuntime,
+  ICreationGuidanceRuntime,
   IFeedbackLoop,
 } from './types';
 import type { ProviderExpressionTargetConfig } from './message-runtime';
@@ -75,6 +76,7 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly capabilityRuntime?: ICapabilityRuntime;
   readonly capabilityPromptFragments?: readonly PromptFragment[];
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
+  readonly creationGuidance?: ICreationGuidanceRuntime;
   readonly artifactStore?: IArtifactStore;
   readonly feedbackLoop?: IFeedbackLoop;
   readonly projectMemoryFilePath?: string;
@@ -370,25 +372,28 @@ function buildAgentRuntimeConfig(
   toolCategoryRegistry: IToolCategoryRegistry | undefined,
   feedbackLoop: IFeedbackLoop | undefined,
 ): AgentRuntimeConfig {
+  const runtimeStageTracking =
+    config.capabilityRuntime?.skillRegistry ||
+    config.capabilityRuntime?.skillService ||
+    config.capabilityRuntime?.skillLifecycleRuntime
+      ? {
+          ...(config.creationGuidance?.stageTracking ?? {}),
+          ...(config.capabilityRuntime.skillRegistry
+            ? { skillRegistry: config.capabilityRuntime.skillRegistry }
+            : {}),
+          ...(config.capabilityRuntime.skillService
+            ? { skillService: config.capabilityRuntime.skillService }
+            : {}),
+          ...(config.capabilityRuntime.skillLifecycleRuntime
+            ? { skillLifecycleRuntime: config.capabilityRuntime.skillLifecycleRuntime }
+            : {}),
+        }
+      : config.creationGuidance?.stageTracking;
+
   return {
     creationGuidance: {
-      ...(config.capabilityRuntime?.skillRegistry ||
-      config.capabilityRuntime?.skillService ||
-      config.capabilityRuntime?.skillLifecycleRuntime
-        ? {
-            stageTracking: {
-              ...(config.capabilityRuntime.skillRegistry
-                ? { skillRegistry: config.capabilityRuntime.skillRegistry }
-                : {}),
-              ...(config.capabilityRuntime.skillService
-                ? { skillService: config.capabilityRuntime.skillService }
-                : {}),
-              ...(config.capabilityRuntime.skillLifecycleRuntime
-                ? { skillLifecycleRuntime: config.capabilityRuntime.skillLifecycleRuntime }
-                : {}),
-            },
-          }
-        : {}),
+      ...(config.creationGuidance ?? {}),
+      ...(runtimeStageTracking ? { stageTracking: runtimeStageTracking } : {}),
       ...(config.taskManager
         ? {
             creationTaskProjection: createTaskManagerCreationTaskProjection({

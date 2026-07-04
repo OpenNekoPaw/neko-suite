@@ -1,13 +1,14 @@
-import type { AgentTraceContext } from '@neko/shared';
+import type {
+  AgentControlPlane as IControlPlane,
+  AgentFeedbackCoordinator as IFeedbackCoordinator,
+  AgentFeedbackCycle as FeedbackCycle,
+  AgentFeedbackDecision as FeedbackDecision,
+  AgentFeedbackFlowAction as FeedbackFlowAction,
+  AgentStageTransitionGuidance as StageTransitionGuidance,
+  AgentTraceContext,
+} from '@neko/shared';
 import { deriveAgentTraceContext, withAgentTrace } from '@neko/shared';
 import type { IdcStage } from '@neko-agent/types';
-import type { IControlPlane, StageTransitionGuidance } from '../control-plane';
-import type {
-  FeedbackCycle,
-  FeedbackDecision,
-  FeedbackFlowAction,
-  IFeedbackCoordinator,
-} from '../feedback';
 
 export interface FeedbackRuntimeFeedbackPort {
   readonly getCoordinator: () => IFeedbackCoordinator | null;

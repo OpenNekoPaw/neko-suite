@@ -25,8 +25,12 @@
  *   - No PromptModule projection — message is per-turn ephemeral, matches
  *     the one-shot timing better than a layer section
  */
-import type { AgentContext, ChatMessage, ExecutorHooks } from '@neko/shared';
-import type { StageTracker } from '../skill/stage-tracker';
+import type {
+  AgentContext,
+  AgentStageTrackerPort as StageTracker,
+  ChatMessage,
+  ExecutorHooks,
+} from '@neko/shared';
 
 /**
  * Guidance text appended as a system message on the turn following an

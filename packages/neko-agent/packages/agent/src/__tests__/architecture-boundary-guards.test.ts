@@ -202,8 +202,18 @@ describe('agent architecture boundary guards', () => {
     expect([...existingFiles, ...sourceViolations]).toEqual([]);
   });
 
-  it('keeps optional Autoheal strategy packs out of Agent core', () => {
-    const forbiddenFiles = [join(agentSrc, 'autoheal/example-handlers.ts')];
+  it('keeps concrete feedback, control-plane, and feedback memory policies out of Agent core', () => {
+    const forbiddenFiles = [
+      join(agentSrc, 'artifact/artifact-observation-hooks.ts'),
+      join(agentSrc, 'control-plane/artifact-registry.ts'),
+      join(agentSrc, 'control-plane/control-plane.ts'),
+      join(agentSrc, 'control-plane/stage-registry.ts'),
+      join(agentSrc, 'evaluation/self-evaluation-hooks.ts'),
+      join(agentSrc, 'feedback/feedback-coordinator.ts'),
+      join(agentSrc, 'memory/keyfact-extractor.ts'),
+      join(agentSrc, 'memory/project-memory-router.ts'),
+      join(agentSrc, 'memory/provider-card-project-router.ts'),
+    ];
     const existingFiles = forbiddenFiles
       .filter((file) => existsSync(file))
       .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
@@ -215,6 +225,44 @@ describe('agent architecture boundary guards', () => {
         source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
       }));
     const forbiddenTerms = [
+      /\bcreateFeedbackCoordinator\b/,
+      /\bcreateDefaultControlPlane\b/,
+      /\bFeedbackStageController\b/,
+      /\bSelfEvaluationHooks\b/,
+      /\bcreateArtifactObservationHooks\b/,
+      /\bKeyFactExtractor\b/,
+      /\bProjectMemoryRouter\b/,
+      /\bProviderCardProjectRouter\b/,
+    ];
+    const sourceViolations = productionSource.flatMap(({ relativePath, source }) =>
+      forbiddenTerms
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect([...existingFiles, ...sourceViolations]).toEqual([]);
+  });
+
+  it('keeps optional Autoheal strategy packs and chain implementation out of Agent core', () => {
+    const forbiddenFiles = [
+      join(agentSrc, 'autoheal/autoheal-chain.ts'),
+      join(agentSrc, 'autoheal/autoheal-types.ts'),
+      join(agentSrc, 'autoheal/example-handlers.ts'),
+    ];
+    const existingFiles = forbiddenFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+    const productionSource = listFiles(agentSrc)
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+    const forbiddenTerms = [
+      /\bclass\s+AutohealChain\b/,
+      /\bcreateAutohealChain\b/,
+      /\bDEFAULT_AUTOHEAL_POLICY\b/,
       /\bcreateResolutionDegradeHandler\b/,
       /\bcreateSubstituteHandler\b/,
       /\bcreateUserEscalationHandler\b/,

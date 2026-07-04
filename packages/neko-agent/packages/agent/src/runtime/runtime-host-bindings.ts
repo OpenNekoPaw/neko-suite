@@ -21,7 +21,12 @@ import type {
 } from './agent-session-factory';
 import type { ProviderExpressionTargetConfig } from './message-runtime';
 import type { SubAgentRuntimeCoordinator } from './subagent-runtime';
-import type { IArtifactStore, ICapabilityRuntime, IFeedbackLoop } from './types';
+import type {
+  IArtifactStore,
+  ICapabilityRuntime,
+  ICreationGuidanceRuntime,
+  IFeedbackLoop,
+} from './types';
 import type { ModelTierResolver, SpecializedAgentPreset } from '../subagent';
 import { createDefaultOperationToolAdapterRegistry } from './operation-adapters';
 import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
@@ -62,6 +67,7 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly locale?: 'en' | 'zh';
   readonly providerExpressionTargets?: readonly ProviderExpressionTargetConfig[];
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
+  readonly creationGuidance?: ICreationGuidanceRuntime;
   readonly artifactStore?: IArtifactStore;
   readonly feedbackLoop?: IFeedbackLoop;
   readonly projectMemoryFilePath?: string;
@@ -118,6 +124,7 @@ export function buildAgentRuntimeSessionFactoryConfig(
     capabilityRuntime: input.capabilityRuntime,
     capabilityPromptFragments,
     toolCategoryRegistry: input.toolCategoryRegistry,
+    creationGuidance: input.creationGuidance,
     artifactStore: input.artifactStore,
     feedbackLoop: input.feedbackLoop,
     projectMemoryFilePath: input.projectMemoryFilePath,

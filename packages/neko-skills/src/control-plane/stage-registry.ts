@@ -1,5 +1,7 @@
-import type { FeedbackDecision } from '../feedback';
-import type { IdcStage } from '@neko-agent/types';
+import type {
+  AgentFeedbackDecision as FeedbackDecision,
+  AgentStageId as IdcStage,
+} from '@neko/shared';
 
 export type StageRiskLevel = 'low' | 'medium' | 'high' | 'unknown';
 export type StageTransitionAction = 'retry-stage' | 'regress-to' | 'restart-run';

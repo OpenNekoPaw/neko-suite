@@ -4,6 +4,12 @@ import {
   ConsoleLogger,
   LogLevel,
   createAgentTraceContext,
+  type AgentControlPlane,
+  type AgentFeedbackCoordinator,
+  type AgentFeedbackCycle,
+  type AgentFeedbackEvaluationContext,
+  type AgentFeedbackMemoryExtractionInput,
+  type AgentFeedbackMemoryExtractionOutcome,
   type ChatMessage,
 } from '@neko/shared';
 import type {
@@ -13,7 +19,6 @@ import type {
   IdcStage,
   Task,
 } from '@neko-agent/types';
-import type { IControlPlane } from '../../control-plane';
 import { SessionArtifactFacade } from '../session-artifact-facade';
 import { FeedbackRuntimeBridge } from '../feedback-runtime-bridge';
 import { PromptRuntimeFacade } from '../prompt-runtime-facade';
@@ -26,13 +31,6 @@ import type {
   IArtifactService,
 } from '../../runtime/artifact-service';
 import type { ICreationTaskProjection } from '../../task';
-import type {
-  FeedbackCycle,
-  FeedbackEvaluationContext,
-  FeedbackMemoryExtractionInput,
-  FeedbackMemoryExtractionOutcome,
-  IFeedbackCoordinator,
-} from '../../feedback';
 import { SystemPromptComposer } from '../../prompt/system-prompt-composer';
 import { ModuleOrchestrator } from '../../prompt/composer/module-orchestrator';
 import { PromptModuleRegistry } from '../../prompt/registry/module-registry';
@@ -200,7 +198,7 @@ describe('session runtime collaborators', () => {
     const transport = new CapturedLogTransport();
     setRootLogger(new ConsoleLogger('Agent', LogLevel.Debug, [transport]));
     const cycle = createFeedbackCycle();
-    const coordinator = createFeedbackCoordinator(cycle);
+    const coordinator = createTestFeedbackCoordinator(cycle);
     const setPromptGuidanceContent = vi.fn();
     const syncSystemPrompt = vi.fn();
     const recordStageTransition = vi.fn(async () => {});
@@ -264,7 +262,7 @@ describe('session runtime collaborators', () => {
   });
 
   it('surfaces feedback stage transition persistence failures from captureCycle', async () => {
-    const coordinator = createFeedbackCoordinator(createFeedbackCycle());
+    const coordinator = createTestFeedbackCoordinator(createFeedbackCycle());
     const bridge = new FeedbackRuntimeBridge({
       maxCycles: 4,
       ports: {
@@ -733,39 +731,43 @@ function createArtifactWrittenEvent(
   };
 }
 
-class TestFeedbackCoordinator implements IFeedbackCoordinator {
-  private _nextCycle: FeedbackCycle | null;
+class TestFeedbackCoordinator implements AgentFeedbackCoordinator {
+  private _nextCycle: AgentFeedbackCycle | null;
   readonly getBeforeThinkHooks = vi.fn(() => []);
   readonly observe = vi.fn();
   readonly getSignalHistory = vi.fn(() => []);
   readonly getDecisionHistory = vi.fn(() => []);
   readonly getActionHistory = vi.fn(() => []);
   readonly extractMemory = vi.fn(
-    async (_input: FeedbackMemoryExtractionInput): Promise<FeedbackMemoryExtractionOutcome> => ({
+    async (
+      _input: AgentFeedbackMemoryExtractionInput,
+    ): Promise<AgentFeedbackMemoryExtractionOutcome> => ({
       kind: 'skipped',
+      timestamp: 100,
+      sourceEventIds: [],
       reason: 'disabled',
     }),
   );
   readonly dispose = vi.fn();
 
-  constructor(cycle: FeedbackCycle | null) {
+  constructor(cycle: AgentFeedbackCycle | null) {
     this._nextCycle = cycle;
   }
 
-  setNextCycle(cycle: FeedbackCycle | null): void {
+  setNextCycle(cycle: AgentFeedbackCycle | null): void {
     this._nextCycle = cycle;
   }
 
-  evaluatePending(_context?: FeedbackEvaluationContext): FeedbackCycle | null {
+  evaluatePending(_context?: AgentFeedbackEvaluationContext): AgentFeedbackCycle | null {
     return this._nextCycle;
   }
 }
 
-function createFeedbackCoordinator(cycle: FeedbackCycle | null): TestFeedbackCoordinator {
+function createTestFeedbackCoordinator(cycle: AgentFeedbackCycle | null): TestFeedbackCoordinator {
   return new TestFeedbackCoordinator(cycle);
 }
 
-function createFeedbackCycle(): FeedbackCycle {
+function createFeedbackCycle(): AgentFeedbackCycle {
   return {
     timestamp: 100,
     currentStage: 'apply',
@@ -791,8 +793,8 @@ function createFeedbackCycle(): FeedbackCycle {
   };
 }
 
-function createControlPlane(): IControlPlane {
-  return {
+function createControlPlane(): AgentControlPlane {
+  const controlPlane = {
     stageRegistry: {
       get: () => undefined,
       list: () => [],
@@ -818,6 +820,7 @@ function createControlPlane(): IControlPlane {
     })),
     getDecisionHistory: vi.fn(() => []),
   };
+  return controlPlane;
 }
 
 function createDraft(id: string, now: number): Draft {

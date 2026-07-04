@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { IProjectMemoryManager, KeyFact } from '@neko/shared';
 
 export interface RoutedProjectMemoryFact {
@@ -261,9 +262,7 @@ function stripBulletPrefix(input: string): string {
 }
 
 function createProjectMemoryFactId(fact: KeyFact, index: number): string {
-  const crypto = require('node:crypto') as typeof import('node:crypto');
-  const digest = crypto
-    .createHash('sha1')
+  const digest = createHash('sha1')
     .update(`${fact.category}\u0000${fact.content}\u0000${index}`)
     .digest('hex')
     .slice(0, 12);

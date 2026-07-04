@@ -110,6 +110,7 @@ export * from './platform';
 
 // Agent interface types
 export * from './agent';
+export * from './agent-autoheal';
 export * from './agent-capability-activation';
 export * from './agent-capability-diagnostics';
 export * from './agent-capability-lifecycle';

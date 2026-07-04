@@ -134,22 +134,6 @@ export type {
 } from './experiment';
 
 export {
-  composeBeforeThinkHooks,
-  createFeedbackCoordinator,
-  type FeedbackCoordinatorConfig,
-  type FeedbackCycle,
-  type FeedbackDecision,
-  type FeedbackEvaluationContext,
-  type FeedbackSignal,
-  type IFeedbackEvaluator,
-  type FeedbackMemoryExtractionInput,
-  type FeedbackMemoryExtractionOutcome,
-  type FeedbackMemoryExtractionResult,
-  type FeedbackMemoryExtractionSkipped,
-  type IFeedbackCoordinator,
-} from './feedback';
-
-export {
   parseProviderCardMarkdown,
   ProviderCardRegistry,
   createProviderCardRegistry,
@@ -226,32 +210,6 @@ export {
   CORE_TOOLS,
 } from './tools';
 
-export {
-  ControlPlane,
-  FeedbackStageController,
-  ArtifactRegistry,
-  StageRegistry,
-  createArtifactRegistry,
-  createControlPlane,
-  createDefaultArtifactRegistry,
-  createDefaultControlPlane,
-  createDefaultStageRegistry,
-  createStageRegistry,
-  type ArtifactDescriptor,
-  type ControlPlaneConfig,
-  type ControlPlaneDecision,
-  type ControlPlaneDecisionInput,
-  type IArtifactRegistry,
-  type IControlPlane,
-  type IReadonlyArtifactRegistry,
-  type IStageController,
-  type IStageRegistry,
-  type StageControllerContext,
-  type StageDescriptor,
-  type StageRiskLevel,
-  type StageTransitionGuidance,
-} from './control-plane';
-
 // Export plan parsing and message projection helpers
 export {
   buildPlanApprovalDispatchPlan,
@@ -322,10 +280,9 @@ export {
 export {
   FileProjectMemoryManager,
   createFileProjectMemoryManager,
-  KeyFactExtractor,
   MemoryRecall,
 } from './memory';
-export type { KeyFactExtractorOptions, MemoryRecallOptions, RecalledMemory } from './memory';
+export type { MemoryRecallOptions, RecalledMemory } from './memory';
 
 // Export MCP
 export {

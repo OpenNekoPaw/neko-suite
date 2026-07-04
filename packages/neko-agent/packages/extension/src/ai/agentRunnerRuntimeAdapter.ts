@@ -19,6 +19,9 @@ import {
 import type { AgentEvent } from '@neko/agent';
 import {
   CREATIVE_PRESETS as CREATIVE_SUBAGENT_PRESETS,
+  createAutohealChain,
+  createDefaultControlPlane,
+  createFeedbackCoordinatorFactory,
   createQualityReviewFeedbackAdapter,
 } from '@neko/skills';
 import {
@@ -306,8 +309,13 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
       operationToolAdapterRegistry: config.operationToolAdapterRegistry,
       locale: config.locale,
       providerExpressionTargets: config.providerExpressionTargets,
+      creationGuidance: {
+        autohealChainFactory: createAutohealChain,
+        controlPlane: createDefaultControlPlane(),
+      },
       capabilityRuntime: getCapabilityRuntimeBindings(),
       feedbackLoop: {
+        feedbackCoordinatorFactory: createFeedbackCoordinatorFactory(),
         toolResultFeedbackAdapters: [createQualityReviewFeedbackAdapter()],
       },
       getCapabilityPromptFragments: () => getCapabilityDiscoveryService().getAllPromptFragments(),

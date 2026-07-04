@@ -1,4 +1,7 @@
-import type { ArtifactKind, IdcStage } from '@neko-agent/types';
+import type {
+  AgentArtifactKind as ArtifactKind,
+  AgentStageId as IdcStage,
+} from '@neko/shared';
 
 export interface ArtifactDescriptor {
   readonly id: string;

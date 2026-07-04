@@ -1,20 +1,30 @@
 import type {
   AgentContext,
+  AgentArtifactInvalidEvent as ExecutionArtifactInvalidEvent,
+  AgentEventSubscriptionPort as IEventBus,
+  AgentFeedbackArbiter as IFeedbackArbiter,
+  AgentFeedbackControlPolicy as FeedbackControlPolicy,
+  AgentFeedbackCoordinator as IFeedbackCoordinator,
+  AgentFeedbackCoordinatorFactory,
+  AgentFeedbackCycle as FeedbackCycle,
+  AgentFeedbackDecision as FeedbackDecision,
+  AgentFeedbackEvaluationContext as FeedbackEvaluationContext,
+  AgentFeedbackEvaluator as IFeedbackEvaluator,
+  AgentFeedbackFlowAction as FeedbackFlowAction,
+  AgentFeedbackMemoryExtractionInput as FeedbackMemoryExtractionInput,
+  AgentFeedbackMemoryExtractionOutcome as FeedbackMemoryExtractionOutcome,
+  AgentFeedbackMemoryExtractionResult as FeedbackMemoryExtractionResult,
+  AgentFeedbackMemoryExtractionSkipped as FeedbackMemoryExtractionSkipped,
+  AgentFeedbackSignal as FeedbackSignal,
   AgentObservation,
-  AgentToolReviewFeedbackSignal,
-  ChatMessage,
+  AgentProviderExpressionConceptDecision as ProviderExpressionConceptDecision,
+  AgentStageTrackerPort as StageTracker,
   DecisionRationale,
   ExecutorHooks,
   IProjectMemoryManager,
-  PerceptionEvidence,
-  SubagentReviewResult,
 } from '@neko/shared';
-import type { ArtifactKind, ExecutionArtifactInvalidEvent, IdcStage } from '@neko-agent/types';
-import { EXECUTION_CHANNELS } from '@neko-agent/types';
-import type { IEventBus } from '../events';
-import type { StageTracker } from '../skill/stage-tracker';
-import { createArtifactObservationHooks } from '../artifact/artifact-observation-hooks';
-import { SelfEvaluationHooks } from '../evaluation/self-evaluation-hooks';
+import { createArtifactObservationHooks } from './artifact-observation-hooks';
+import { SelfEvaluationHooks } from './self-evaluation-hooks';
 import { KeyFactExtractor } from '../memory/keyfact-extractor';
 import { ProjectMemoryRouter } from '../memory/project-memory-router';
 import {
@@ -22,6 +32,8 @@ import {
   type ProviderCardProjectFsOps,
   type ProviderCardProjectReviewMode,
 } from '../memory/provider-card-project-router';
+
+const ARTIFACT_INVALID_CHANNEL = 'execution.artifact.invalid';
 
 // =============================================================================
 // Types
@@ -60,274 +72,28 @@ export interface FeedbackCoordinatorConfig {
   readonly now?: () => number;
 }
 
-export interface FeedbackMemoryExtractionInput {
-  readonly messages: readonly ChatMessage[];
-  readonly sourceEventIds?: readonly string[];
-}
+export interface FeedbackCoordinatorFactoryConfig
+  extends Omit<
+    FeedbackCoordinatorConfig,
+    'eventBus' | 'stageTracker' | 'projectMemoryManager' | 'autoMemoryExtraction'
+  > {}
 
-export interface FeedbackMemoryExtractionSkipped {
-  readonly kind: 'skipped';
-  readonly timestamp: number;
-  readonly sourceEventIds: string[];
-  readonly reason: 'disabled' | 'no-facts';
-}
-
-export interface FeedbackMemoryExtractionResult {
-  readonly kind: 'extracted';
-  readonly timestamp: number;
-  readonly sourceEventIds: string[];
-  readonly facts: Array<{
-    id: string;
-    content: string;
-    category: 'preference' | 'decision' | 'context' | 'action';
-    confidence: number;
-    destination: 'project';
-  }>;
-  /**
-   * Mirrors the journal/session event contract even though the current
-   * coordinator implementation only emits `written` or `dedup`.
-   */
-  readonly writeStatus: 'pending' | 'written' | 'rejected-by-user' | 'dedup';
-}
-
-export type FeedbackMemoryExtractionOutcome =
-  FeedbackMemoryExtractionSkipped | FeedbackMemoryExtractionResult;
-
-export interface ProviderExpressionConceptDecision {
-  readonly concept: string;
-  readonly status: string;
-  readonly output?: string;
-  readonly reason?: string;
-}
-
-export type FeedbackSignal =
-  | {
-      readonly kind: 'artifact-invalid';
-      readonly observedAt: number;
-      readonly runId: string;
-      readonly artifactKind: ArtifactKind;
-      readonly path: string;
-      readonly issues: ExecutionArtifactInvalidEvent['issues'];
-    }
-  | {
-      readonly kind: 'self-evaluation-requested';
-      readonly observedAt: number;
-      readonly stage: 'apply';
-    }
-  | {
-      readonly kind: 'tool-failure';
-      readonly observedAt: number;
-      readonly toolCallId: string;
-      readonly toolName: string;
-      readonly error: string;
-      readonly runId?: string;
-    }
-  | AgentToolReviewFeedbackSignal
-  | {
-      readonly kind: 'memory-extraction';
-      readonly observedAt: number;
-      readonly extraction: FeedbackMemoryExtractionResult;
-    }
-  | {
-      readonly kind: 'provider-card-observation';
-      readonly observedAt: number;
-      readonly toolCallId: string;
-      readonly toolName: string;
-      readonly mode: 'agentic' | 'fallback' | 'native';
-      readonly providerId?: string;
-      readonly reason?: string;
-      readonly styleFamily?: string;
-      readonly concepts?: readonly string[];
-      readonly conceptDecisions?: readonly ProviderExpressionConceptDecision[];
-      readonly runId?: string;
-      readonly metadata: Record<string, unknown>;
-    }
-  | {
-      readonly kind: 'agent-observation';
-      readonly observedAt: number;
-      readonly observation: AgentObservation;
-      readonly runId?: string;
-    }
-  | {
-      readonly kind: 'decision-rationale';
-      readonly observedAt: number;
-      readonly rationale: DecisionRationale;
-      readonly runId?: string;
-    }
-  | {
-      readonly kind: 'subagent-review';
-      readonly observedAt: number;
-      readonly review: SubagentReviewResult;
-      readonly runId?: string;
-    };
-
-export type FeedbackDecision =
-  | {
-      readonly action: 'repair';
-      readonly signalKind: 'artifact-invalid';
-      readonly runId: string;
-      readonly artifactKind: ArtifactKind;
-      readonly path: string;
-      readonly issueCount: number;
-    }
-  | {
-      readonly action: 'self-evaluate';
-      readonly signalKind: 'self-evaluation-requested';
-      readonly stage: 'apply';
-    }
-  | {
-      readonly action: 'repair';
-      readonly signalKind: 'tool-failure';
-      readonly toolCallId: string;
-      readonly toolName: string;
-      readonly error: string;
-      readonly runId?: string;
-    }
-  | {
-      readonly action: 'repair';
-      readonly signalKind: 'tool-review';
-      readonly toolCallId: string;
-      readonly toolName: string;
-      readonly summary: string;
-      readonly repairGuidance?: string;
-      readonly escalationMessage?: string;
-      readonly repeatKey?: string;
-      readonly runId?: string;
-      readonly evidenceId?: string;
-    }
-  | {
-      readonly action: 'continue';
-      readonly signalKind: 'tool-review';
-      readonly toolCallId: string;
-      readonly toolName: string;
-      readonly summary: string;
-    }
-  | {
-      readonly action: 'memorize';
-      readonly signalKind: 'memory-extraction';
-      readonly factCount: number;
-      readonly writeStatus: FeedbackMemoryExtractionResult['writeStatus'];
-    }
-  | {
-      readonly action: 'continue';
-      readonly signalKind: 'provider-card-observation';
-      readonly toolCallId: string;
-      readonly toolName: string;
-      readonly mode: 'agentic' | 'fallback' | 'native';
-      readonly providerId?: string;
-      readonly reason?: string;
-      readonly styleFamily?: string;
-    }
-  | {
-      readonly action: 'continue';
-      readonly signalKind: 'agent-observation';
-      readonly observationId: string;
-      readonly confidence: AgentObservation['confidence'];
-      readonly evidenceIds: readonly string[];
-    }
-  | {
-      readonly action: 'continue';
-      readonly signalKind: 'decision-rationale';
-      readonly rationaleId: string;
-      readonly confidence: DecisionRationale['confidence'];
-      readonly observationIds: readonly string[];
-      readonly evidenceIds: readonly string[];
-      readonly riskLevel?: NonNullable<DecisionRationale['risk']>['level'];
-    }
-  | {
-      readonly action: 'continue';
-      readonly signalKind: 'subagent-review';
-      readonly requestId: string;
-      readonly reviewerId: string;
-      readonly evidenceIds: readonly string[];
-      readonly recommendationIds: readonly string[];
-      readonly runId?: string;
-    }
-  | {
-      readonly action: 'continue';
-      readonly reason: 'no-actionable-signal';
-    };
-
-export interface FeedbackControlPolicy {
-  /**
-   * Number of repeated repair-class feedback observations before the control
-   * layer stops silently suggesting self-repair and instead tells the agent to
-   * escalate the issue back to the user.
-   */
-  readonly escalationThreshold?: number;
-  /**
-   * When true, low-confidence rationale without an AgentObservation receives
-   * guidance instead of silently clearing feedback state.
-   */
-  readonly agentObservationRequired?: boolean;
-  /**
-   * Controls only guidance wording. The arbiter never invokes tools directly;
-   * the Agent remains responsible for choosing whether to attach evidence.
-   */
-  readonly toolEvidenceMode?: 'off' | 'optional' | 'required-for-low-confidence';
-}
-
-export type FeedbackFlowAction =
-  | {
-      readonly kind: 'set-guidance';
-      readonly guidance: string;
-      readonly signalKinds: ReadonlyArray<FeedbackSignal['kind']>;
-    }
-  | {
-      readonly kind: 'clear-guidance';
-      readonly reason: 'no-actionable-signal' | 'continue' | 'memorize';
-    }
-  | {
-      readonly kind: 'escalate-user';
-      readonly message: string;
-      readonly signalKind: 'artifact-invalid' | 'tool-failure' | 'tool-review';
-      readonly repeatCount: number;
-      readonly runId?: string;
-    };
-
-export interface FeedbackEvaluationContext {
-  readonly currentStage?: IdcStage | null;
-  readonly activeRunId?: string | null;
-}
-
-export interface FeedbackCycle {
-  readonly timestamp: number;
-  readonly signals: readonly FeedbackSignal[];
-  readonly decisions: readonly FeedbackDecision[];
-  readonly actions: readonly FeedbackFlowAction[];
-  readonly currentStage?: IdcStage | null;
-  readonly activeRunId?: string | null;
-}
-
-export interface IFeedbackEvaluator {
-  readonly id: string;
-  evaluate(input: {
-    readonly signals: readonly FeedbackSignal[];
-    readonly context: FeedbackEvaluationContext;
-  }): readonly FeedbackDecision[];
-}
-
-export interface IFeedbackArbiter {
-  readonly id: string;
-  decide(input: {
-    readonly signals: readonly FeedbackSignal[];
-    readonly decisions: readonly FeedbackDecision[];
-    readonly context: FeedbackEvaluationContext;
-    readonly signalHistory: readonly FeedbackSignal[];
-    readonly countSignals?: (signal: FeedbackSignal) => number;
-  }): readonly FeedbackFlowAction[];
-}
-
-export interface IFeedbackCoordinator {
-  getBeforeThinkHooks(): readonly ExecutorHooks[];
-  observe(signal: FeedbackSignal): void;
-  evaluatePending(context?: FeedbackEvaluationContext): FeedbackCycle | null;
-  getSignalHistory(): readonly FeedbackSignal[];
-  getDecisionHistory(): readonly FeedbackDecision[];
-  getActionHistory(): readonly FeedbackFlowAction[];
-  extractMemory(input: FeedbackMemoryExtractionInput): Promise<FeedbackMemoryExtractionOutcome>;
-  dispose(): void;
-}
+export type {
+  FeedbackControlPolicy,
+  FeedbackCycle,
+  FeedbackDecision,
+  FeedbackEvaluationContext,
+  FeedbackFlowAction,
+  FeedbackMemoryExtractionInput,
+  FeedbackMemoryExtractionOutcome,
+  FeedbackMemoryExtractionResult,
+  FeedbackMemoryExtractionSkipped,
+  FeedbackSignal,
+  IFeedbackArbiter,
+  IFeedbackCoordinator,
+  IFeedbackEvaluator,
+  ProviderExpressionConceptDecision,
+};
 
 // =============================================================================
 // Implementation
@@ -393,7 +159,7 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
         : [createDefaultFeedbackEvaluator()];
     this._arbiter = config.arbiter ?? createDefaultFeedbackArbiter(config.controlPolicy);
     this._artifactInvalidUnsubscribe =
-      config.eventBus?.on(EXECUTION_CHANNELS.ARTIFACT_INVALID, (event) => {
+      config.eventBus?.on(ARTIFACT_INVALID_CHANNEL, (event) => {
         this.observe(feedbackSignalFromArtifactInvalidEvent(event));
       }) ?? null;
     this._providerCardProjectRouter = config.providerCardProject
@@ -551,6 +317,29 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
 
 export function createFeedbackCoordinator(config: FeedbackCoordinatorConfig): IFeedbackCoordinator {
   return new FeedbackCoordinator(config);
+}
+
+export function createFeedbackCoordinatorFactory(
+  config: FeedbackCoordinatorFactoryConfig = {},
+): AgentFeedbackCoordinatorFactory {
+  const configuredProviderCardProject = config.providerCardProject;
+  return (runtime) =>
+    createFeedbackCoordinator({
+      ...config,
+      eventBus: runtime.eventBus,
+      stageTracker: runtime.stageTracker,
+      providerCardProject:
+        configuredProviderCardProject ??
+        (runtime.workspace
+          ? {
+              workspaceRoot: runtime.workspace.root,
+              fsOps: runtime.workspace.fsOps,
+            }
+          : undefined),
+      projectMemoryManager: runtime.projectMemoryManager,
+      autoMemoryExtraction: runtime.autoMemoryExtraction,
+      controlPolicy: runtime.controlPolicy ?? config.controlPolicy,
+    });
 }
 
 // =============================================================================

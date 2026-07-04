@@ -1109,7 +1109,7 @@ packages/neko-skills/src/character/entity-memory-contribution-inference.ts
 Agent core now keeps only:
 
 - generic `autoheal-chain` / `autoheal-types`
-- generic artifact watcher / artifact validator / observation hooks
+- generic artifact watcher / artifact validator
 - generic stream projection with an injected `projectCompositeBlock` extension point
 - generic validation hooks, with image URL MIME inference now fail-visible for malformed URLs and unknown extensions
 
@@ -1128,6 +1128,79 @@ node scripts/check-neko-agent-boundaries.mjs
 ```
 
 Expected: PASS. `pnpm --filter` / `pnpm exec` remain blocked locally by pnpm ignored-builds approval in this workspace, so direct package-local binaries are the executable validation path for this step.
+
+- [x] **Step 16: Move feedback, control-plane, and feedback-memory policies out of Agent core**
+
+Moved concrete feedback/control-plane policy implementations from Agent core into `@neko/skills`:
+
+```text
+packages/neko-skills/src/feedback/feedback-coordinator.ts
+packages/neko-skills/src/feedback/artifact-observation-hooks.ts
+packages/neko-skills/src/feedback/self-evaluation-hooks.ts
+packages/neko-skills/src/control-plane/control-plane.ts
+packages/neko-skills/src/control-plane/stage-registry.ts
+packages/neko-skills/src/control-plane/artifact-registry.ts
+packages/neko-skills/src/memory/keyfact-extractor.ts
+packages/neko-skills/src/memory/project-memory-router.ts
+packages/neko-skills/src/memory/provider-card-project-router.ts
+```
+
+Agent core now keeps only:
+
+- shared feedback/control-plane contracts in `@neko/shared`
+- generic `FeedbackRuntimeBridge`
+- generic `FeedbackGuidanceModule`
+- session/runtime config projection for injected `feedbackCoordinator`, `feedbackCoordinatorFactory`, and `controlPlane`
+- a narrow `AgentEventSubscriptionPort` adapter for `execution.artifact.invalid`
+
+The CLI and VSCode Extension composition roots now inject `createFeedbackCoordinatorFactory()` and `createDefaultControlPlane()` from `@neko/skills`. Agent no longer creates default feedback/control-plane implementations internally and no longer exports `feedback`, `control-plane`, `evaluation`, or feedback-memory policy modules. Architecture guards now fail if Agent core reintroduces concrete feedback coordinator, default control-plane, self-evaluation hooks, artifact observation hooks, key-fact extraction, project-memory routing, or provider-card project routing.
+
+Validation:
+
+```bash
+./node_modules/.bin/tsc --noEmit -p packages/neko-skills/tsconfig.json
+./node_modules/.bin/tsc --noEmit -p packages/neko-agent/packages/extension/tsconfig.json
+./node_modules/.bin/vitest run src/feedback/*.test.ts src/control-plane/control-plane.test.ts src/memory/__tests__/*.test.ts --reporter=verbose
+./node_modules/.bin/vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts packages/agent/src/runtime/__tests__/session-config-projection.test.ts packages/agent/src/session/__tests__/session-collaborators.test.ts --reporter=verbose
+./node_modules/.bin/vitest run packages/agent/src/session/__tests__/agent-session-boundary-characterization.test.ts --reporter=verbose
+./node_modules/.bin/vitest run packages/cli-tui/src/core/__tests__/runtime-bootstrap.test.ts --reporter=verbose
+node scripts/check-neko-agent-boundaries.mjs
+./node_modules/.bin/esbuild ./packages/extension/src/index.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --loader:.md=text --alias:@neko/skills=../neko-skills/src/index.ts
+```
+
+Expected: PASS. `pnpm --filter` / `pnpm exec` remain blocked locally by pnpm ignored-builds approval in this workspace, so direct package-local binaries are the executable validation path for this step.
+
+- [x] **Step 17: Move Autoheal chain implementation out of Agent core**
+
+Moved the concrete 5-level autoheal chain out of Agent core and into `@neko/skills`:
+
+```text
+packages/neko-skills/src/autoheal/autoheal-chain.ts
+packages/neko-skills/src/autoheal/__tests__/autoheal-chain.test.ts
+```
+
+Agent core now keeps only:
+
+- shared autoheal contracts in `@neko/shared` (`agent-autoheal.ts`)
+- the ReAct runner hook point that accepts an optional `IAutohealChain`
+- session/runtime config projection for an injected `autohealChainFactory`
+- a narrow EventBus adapter from shared autoheal runtime events to execution channels
+
+The CLI and VSCode Extension composition roots now inject `createAutohealChain` from `@neko/skills`. Agent no longer creates a default autoheal chain internally and no longer owns `autoheal-chain.ts` or `autoheal-types.ts`. Architecture guards now fail if Agent core reintroduces `createAutohealChain`, `DEFAULT_AUTOHEAL_POLICY`, `AutohealChain`, or optional autoheal strategy packs.
+
+Validation:
+
+```bash
+./node_modules/.bin/tsc --noEmit -p packages/neko-skills/tsconfig.json
+./node_modules/.bin/tsc --noEmit -p packages/neko-agent/packages/extension/tsconfig.json
+./node_modules/.bin/vitest run src/autoheal/__tests__/autoheal-chain.test.ts src/autoheal/__tests__/example-handlers.test.ts src/feedback/*.test.ts src/control-plane/control-plane.test.ts src/memory/__tests__/*.test.ts --reporter=verbose
+./node_modules/.bin/vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts packages/agent/src/runtime/__tests__/session-config-projection.test.ts packages/agent/src/executor/__tests__/react-loop-runner.test.ts packages/agent/src/session/__tests__/session-collaborators.test.ts packages/agent/src/session/__tests__/agent-session-boundary-characterization.test.ts --reporter=verbose
+./node_modules/.bin/vitest run packages/cli-tui/src/core/__tests__/runtime-bootstrap.test.ts packages/cli-tui/src/__tests__/experiment.test.ts --reporter=verbose
+node scripts/check-neko-agent-boundaries.mjs
+./node_modules/.bin/esbuild ./packages/extension/src/index.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --loader:.md=text --alias:@neko/skills=../neko-skills/src/index.ts
+```
+
+Expected: PASS. `./node_modules/.bin/tsc --noEmit -p packages/neko-agent/packages/agent/tsconfig.json` still reports unrelated pre-existing test fixture type errors in broader agent tests; the current autoheal change is covered by the focused extension compile, package-local skills compile, focused runtime tests, boundary script, and extension bundle.
 
 ### Task 7: Final Boundary Verification
 

@@ -1,16 +1,85 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  type AgentArtifactInvalidEvent,
+  type AgentEventSubscriptionPort,
   createSubagentReviewEvidence,
   type AgentObservation,
   type ChatMessage,
   type DecisionRationale,
+  type AgentStageTrackerPort,
   type IProjectMemoryManager,
   type PerceptionEvidence,
 } from '@neko/shared';
-import { EXECUTION_CHANNELS } from '@neko-agent/types';
-import { createEventBus } from '../../events';
-import { createStageTracker } from '../../skill';
-import { createFeedbackCoordinator } from '../feedback-coordinator';
+import { createFeedbackCoordinator, createFeedbackCoordinatorFactory } from './feedback-coordinator';
+
+const ARTIFACT_INVALID_CHANNEL = 'execution.artifact.invalid';
+
+class TestEventBus implements AgentEventSubscriptionPort {
+  private readonly listeners = new Map<string, Set<(event: AgentArtifactInvalidEvent) => void>>();
+
+  on(channel: string, listener: (event: AgentArtifactInvalidEvent) => void): () => void {
+    const listeners = this.listeners.get(channel) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(channel, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0) {
+        this.listeners.delete(channel);
+      }
+    };
+  }
+
+  emit(event: AgentArtifactInvalidEvent): void {
+    const listeners = this.listeners.get(event.channel ?? '');
+    if (!listeners) {
+      return;
+    }
+    for (const listener of listeners) {
+      listener(event);
+    }
+  }
+}
+
+class TestStageTracker implements AgentStageTrackerPort {
+  private current: string | null;
+  private readonly listeners = new Set<(event: { stage: string }) => void>();
+  private readonly now: () => number;
+
+  constructor(config: { initialStage?: string; now?: () => number } = {}) {
+    this.current = config.initialStage ?? null;
+    this.now = config.now ?? Date.now;
+  }
+
+  enter(stage: string): boolean {
+    if (this.current === stage) {
+      return false;
+    }
+    const previous = this.current;
+    this.current = stage;
+    void this.now();
+    if (previous) {
+      for (const listener of this.listeners) {
+        listener({ stage: previous });
+      }
+    }
+    return true;
+  }
+
+  onExited(listener: (event: { stage: string }) => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+}
+
+function createEventBus(): TestEventBus {
+  return new TestEventBus();
+}
+
+function createStageTracker(config: { initialStage?: string; now?: () => number } = {}): TestStageTracker {
+  return new TestStageTracker(config);
+}
 
 function createMockProjectMemory(initialContent: string | null = null): IProjectMemoryManager {
   let content = initialContent;
@@ -87,7 +156,7 @@ describe('FeedbackCoordinator', () => {
     });
 
     eventBus.emit({
-      channel: EXECUTION_CHANNELS.ARTIFACT_INVALID,
+      channel: ARTIFACT_INVALID_CHANNEL,
       runId: 'run-1',
       kind: 'plan',
       path: '/tmp/proj/neko/creations/cut-launch-teaser-draft-1/plan.md',
@@ -510,6 +579,39 @@ describe('FeedbackCoordinator', () => {
     expect(writes[0]?.path).toBe('/workspace/demo/.neko/providers/sdxl.card.md');
     expect(writes[0]?.data).toContain('"type":"provider-card-observation"');
     expect(writes[0]?.data).toContain('"mode":"fallback"');
+  });
+
+  it('uses runtime workspace ports for provider-card project observations from the factory', async () => {
+    const writes: Array<{ path: string; data: string }> = [];
+    const factory = createFeedbackCoordinatorFactory({ now: () => 0 });
+    const coordinator = factory({
+      workspace: {
+        root: '/workspace/demo',
+        fsOps: {
+          mkdir: vi.fn(async () => undefined),
+          writeFile: vi.fn(async (path: string, data: string) => {
+            writes.push({ path, data });
+          }),
+        },
+      },
+    });
+
+    coordinator.observe({
+      kind: 'provider-card-observation',
+      observedAt: 0,
+      toolCallId: 'call-img',
+      toolName: 'GenerateImage',
+      mode: 'agentic',
+      providerId: 'sdxl',
+      metadata: { mode: 'agentic' },
+    });
+
+    coordinator.evaluatePending();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.path).toBe('/workspace/demo/.neko/providers/sdxl.card.md');
+    expect(writes[0]?.data).toContain('"mode":"agentic"');
   });
 
   it('logs provider-card project write failures from fire-and-forget writes', async () => {
