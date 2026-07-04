@@ -107,6 +107,27 @@ describe('agent architecture boundary guards', () => {
     );
   });
 
+  it('keeps builtin Skill catalog localization out of the Extension host adapter', () => {
+    const source = stripTypeScriptComments(readFileSync(join(extensionSrc, 'index.ts'), 'utf-8'));
+
+    expect(source).not.toMatch(/\bBUILTIN_SKILL_LOCALES\b/);
+    expect(source).not.toMatch(/\bconst\s+\w*SkillLocales\b/i);
+  });
+
+  it('keeps creative execution runtimes out of Agent runtime ownership', () => {
+    const forbiddenRuntimeFiles = [
+      join(agentSrc, 'runtime/storyboard-image-runtime.ts'),
+      join(agentSrc, 'runtime/shot-image-prep-runtime.ts'),
+      join(agentSrc, 'runtime/comic-animation-indexing-runtime.ts'),
+    ];
+
+    const existingFiles = forbiddenRuntimeFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file));
+
+    expect(existingFiles).toEqual([]);
+  });
+
   it('keeps host-specific projection names quarantined away from runtime production callers', () => {
     const sourceFiles = listFiles(packageRoot)
       .filter(

@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./builtins": "./src/builtins/index.ts",
+    "./creative": "./src/creative/index.ts",
     "./*": "./src/*"
   },
   "scripts": {

@@ -629,7 +629,7 @@ export {
   type StoryboardImageRuntimePlan,
   type StoryboardImageRuntimePlanInput,
   type StoryboardImageRuntimeToolPort,
-} from './storyboard-image-runtime';
+} from '@neko-agent/skills';
 
 export {
   backfillShotImagePrepOutputRefs,
@@ -654,7 +654,7 @@ export {
   type ShotImagePrepRuntimeToolPort,
   type ShotImagePrepToolCapability,
   type ShotImagePrepToolRequest,
-} from './shot-image-prep-runtime';
+} from '@neko-agent/skills';
 
 export {
   backfillBatchExecutionPlanFromSummary,
@@ -681,7 +681,7 @@ export {
   type ShotImagePrepBatchPlanInput,
   type StoryContinuityRuntimeOptions,
   type StoryContinuityStoreSnapshot,
-} from './comic-animation-indexing-runtime';
+} from '@neko-agent/skills';
 
 export {
   AgentEventStreamRuntimeProcessor,
