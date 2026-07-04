@@ -561,6 +561,9 @@ interface CanvasMarkdownToolDefinition {
   readonly isReadOnly?: boolean;
 }
 
+type CanvasToolName = (typeof TOOL_NAMES_CANVAS)[keyof typeof TOOL_NAMES_CANVAS];
+type CanvasToolLocalization = NonNullable<Tool['localization']>[string];
+
 const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] = [
   {
     name: TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN,
@@ -664,6 +667,373 @@ function createCanvasMarkdownLifecycleDescriptor(
 const CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS: readonly AgentCapabilityLifecycleDescriptor[] =
   CANVAS_MARKDOWN_TOOL_DEFINITIONS.map(createCanvasMarkdownLifecycleDescriptor);
 
+const CANVAS_TOOL_ZH_LOCALIZATIONS = {
+  [TOOL_NAMES_CANVAS.CREATE_CANVAS]: {
+    description: '创建新的画布。',
+    parameters: {
+      name: '画布名称。',
+      width: '画布宽度，单位像素。',
+      height: '画布高度，单位像素。',
+      backgroundColor: '背景颜色，使用十六进制颜色值。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.ADD_CANVAS_SHAPE]: {
+    description: '向画布添加一个基础形状。',
+    parameters: {
+      canvasId: 'Canvas ID。',
+      type: '形状类型。',
+      x: 'X 坐标。',
+      y: 'Y 坐标。',
+      width: '宽度。',
+      height: '高度。',
+      fill: '填充颜色。',
+      stroke: '描边颜色。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_PLAN]: {
+    description:
+      '读取当前 CanvasPlaybackPlan 投影；仅展示画布顺序，不持久化路由顺序、播放头或播放状态。',
+    parameters: {
+      sourceCanvasUri: '可选 Canvas 文档 URI；省略时使用当前活动 Canvas。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_ROUTES]: {
+    description: '读取由 CanvasPlaybackPlan 派生的有效播放路由候选；不创建 Agent 自有时间线。',
+    parameters: {
+      sourceCanvasUri: '可选 Canvas 文档 URI；省略时使用当前活动 Canvas。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_REVEAL_PLAYBACK_WORKSPACE]: {
+    description:
+      '打开同一 Webview 内的 Canvas PlaybackWorkspace，用于路由播放；Canvas 负责播放 UI 和播放头。',
+    parameters: {
+      sourceCanvasUri: '可选 Canvas 文档 URI。',
+      routeId: '可选播放路由 ID，用于聚焦。',
+      unitId: '可选播放单元 ID，用于跳转。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_CREATE_CUT_DRAFT_FROM_ROUTE]: {
+    description:
+      '将 Canvas 播放路由投影为 CanvasCutDraftPayload，并可在确认后发送到 Cut。',
+    parameters: {
+      sourceCanvasUri: '可选 Canvas 文档 URI。',
+      routeId: '要投影的播放路由 ID。',
+      projectName: '可选目标 Cut 项目名称。',
+      sendToCut: '为 true 时，在确认后把创建的草稿发送到当前 Cut 时间线。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_REORDER_PLAYBACK_UNITS]: {
+    description:
+      '通过 Canvas 图命令重排播放单元，并重新投影 CanvasPlaybackPlan；Agent 推断的重排需要确认。',
+    parameters: {
+      sourceCanvasUri: '可选 Canvas 文档 URI。',
+      routeId: '要重排的播放路由 ID。',
+      orderedUnitIds: '所选路由的完整播放单元 ID 顺序。',
+      approvalContext: '审批上下文；agent-inferred 仍需要确认。',
+      instructionText: '同一轮用户给出的具体重排指令。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN]: {
+    description: '将 Markdown 内容作为可审阅草稿导入 Canvas。',
+    parameters: {
+      markdown: '原始 Markdown 内容；不要传入渲染后的 HTML。',
+      title: '可选标题。',
+      sourceFormat: '来源格式提示。',
+      resources: 'Markdown 中引用的稳定资源列表。',
+      target: '可选 Canvas 插入目标。',
+      provenance: '可选 Agent 来源信息。',
+      intentHint: '可选内容意图提示。',
+      profileHint: '可选 Canvas profile 提示。',
+      tableTitle: '可选表格标题。',
+      mode: '可选分镜创建模式。',
+      approval: '生产级 apply 变更所需的审批上下文。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_CREATE_MARKDOWN_NOTE]: {
+    description: '从已审阅 Markdown 创建 Canvas Markdown Note；Canvas 会在变更前校验目标和资源。',
+    parameters: {
+      markdown: '原始 Markdown 内容；不要传入渲染后的 HTML。',
+      title: '可选标题。',
+      sourceFormat: '来源格式提示。',
+      resources: 'Markdown 中引用的稳定资源列表。',
+      target: '可选 Canvas 插入目标。',
+      provenance: '可选 Agent 来源信息。',
+      intentHint: '可选内容意图提示。',
+      profileHint: '可选 Canvas profile 提示。',
+      tableTitle: '可选表格标题。',
+      mode: '可选分镜创建模式。',
+      approval: '生产级 apply 变更所需的审批上下文。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_CREATE_TABLE_FROM_MARKDOWN]: {
+    description: '从 Markdown 或 GFM 表格创建 Canvas 表格/草稿节点；Canvas 负责解析和诊断。',
+    parameters: {
+      markdown: '原始 Markdown 内容；不要传入渲染后的 HTML。',
+      title: '可选标题。',
+      sourceFormat: '来源格式提示。',
+      resources: 'Markdown 中引用的稳定资源列表。',
+      target: '可选 Canvas 插入目标。',
+      provenance: '可选 Agent 来源信息。',
+      intentHint: '可选内容意图提示。',
+      profileHint: '可选 Canvas profile 提示。',
+      tableTitle: '可选表格标题。',
+      mode: '可选分镜创建模式。',
+      approval: '生产级 apply 变更所需的审批上下文。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_DRAFT_FROM_MARKDOWN]: {
+    description: '从 Markdown 创建 review-first Canvas 分镜草稿，默认不创建生产分镜节点。',
+    parameters: {
+      markdown: '原始 Markdown 分镜内容。',
+      title: '可选标题。',
+      sourceFormat: '来源格式提示。',
+      resources: 'Markdown 中引用的稳定资源列表。',
+      target: '可选 Canvas 插入目标。',
+      provenance: '可选 Agent 来源信息。',
+      intentHint: '可选内容意图提示。',
+      profileHint: '可选 Canvas profile 提示。',
+      tableTitle: '可选表格标题。',
+      mode: '可选分镜创建模式。',
+      approval: '生产级 apply 变更所需的审批上下文。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN]: {
+    description: '在显式确认后，从已校验 Markdown 创建生产 Canvas 分镜节点。',
+    parameters: {
+      markdown: '原始 Markdown 分镜内容。',
+      title: '可选标题。',
+      sourceFormat: '来源格式提示。',
+      resources: 'Markdown 中引用的稳定资源列表。',
+      target: '可选 Canvas 插入目标。',
+      provenance: '可选 Agent 来源信息。',
+      intentHint: '可选内容意图提示。',
+      profileHint: '可选 Canvas profile 提示。',
+      tableTitle: '可选表格标题。',
+      mode: '可选分镜创建模式。',
+      approval: '生产级 apply 变更所需的审批上下文。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_ATTACH_RESOURCE]: {
+    description: '把稳定 ResourceRef 或 DocumentArchiveResourceRef 绑定到已有 Canvas 目标。',
+    parameters: {
+      target: '资源绑定的 Canvas 目标。',
+      resource: '稳定 ResourceRef 或 DocumentArchiveResourceRef 包装对象。',
+      role: '可选资源角色。',
+      provenance: '可选 Agent 来源信息。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD]: {
+    description: '只读校验 Markdown 分镜内容是否可被 Canvas 接收。',
+    parameters: {
+      markdown: '要校验的 Markdown 分镜内容。',
+      title: '可选标题。',
+      sourceFormat: '来源格式提示。',
+      resources: 'Markdown 中引用的稳定资源列表。',
+      target: '可选 Canvas 插入目标。',
+      provenance: '可选 Agent 来源信息。',
+      intentHint: '内容意图提示。',
+      profileHint: 'Canvas profile 提示。',
+      tableTitle: '可选表格标题。',
+      mode: '可选分镜创建模式。',
+      approval: '生产级 apply 变更所需的审批上下文。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_LIST_NODES]: {
+    description: '列出当前画布上的节点，可按类型过滤。',
+    parameters: {
+      type: '可选节点类型过滤条件。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_GET_NODE]: {
+    description: '按节点 ID 读取单个 Canvas 节点的完整信息。',
+    parameters: {
+      nodeId: 'Canvas 节点 ID。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_UPDATE_NODE]: {
+    description:
+      '更新 Canvas 节点的数据字段。生成图片前先把提示词/参数写回节点，保证会话压缩后仍可恢复。',
+    parameters: {
+      nodeId: 'Canvas 节点 ID。',
+      data: '要合并到 node.data 的部分字段。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE]: {
+    description: '在当前画布创建一个新节点，并返回新节点 ID。',
+    parameters: {
+      type: '节点类型。',
+      preset: '可选的 Canvas 预设；优先使用可组合预设以获得稳定渲染和预览 metadata。',
+      x: '画布 X 坐标。',
+      y: '画布 Y 坐标。',
+      data: '节点初始数据。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_DERIVE_NODE]: {
+    description: '基于已有节点和注册预设派生后继节点，并创建普通 Canvas 连接。',
+    parameters: {
+      sourceNodeId: '来源 Canvas 节点 ID。',
+      targetPreset: '可选目标预设。',
+      targetType: '未提供目标预设时使用的目标节点类型。',
+      data: '覆盖默认值的可选数据。',
+      connect: '是否连接来源和派生节点，默认 true。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE]: {
+    description: '按容器策略一次性创建容器和子节点，并执行共享自动布局。',
+    parameters: {
+      containerPreset: '注册的容器预设。',
+      x: '容器 X 坐标。',
+      y: '容器 Y 坐标。',
+      data: '容器默认数据或覆盖值。',
+      children: '子节点规格列表。',
+      autoLayout: '是否在容器内自动排列子节点，默认 true。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK]: {
+    description: '通过 block 绑定或 node.data JSON Pointer 路径更新可组合 Canvas block。',
+    parameters: {
+      nodeId: 'Canvas 节点 ID。',
+      blockId: '带绑定的可组合 block ID。',
+      path: 'node.data 内的 JSON Pointer 路径，例如 /content。',
+      value: '新值；对象应传入 JSON 文本。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_EXTRACT_STRUCTURED_CONTENT]: {
+    description:
+      '从 Canvas 节点提取 JSON、Markdown 或 prompt 文本，保留层级边界并忽略运行时预览状态。',
+    parameters: {
+      nodeIds: '可选显式节点 ID；省略时使用选择或全部节点。',
+      format: '提取格式。',
+      includeChildren: '是否递归包含容器子节点。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT]: {
+    description:
+      '读取紧凑的当前 Canvas 上下文，包括选区、子系统摘要、插入点、视口、焦点容器和可编辑字段。',
+    parameters: {
+      includeSelection: '是否包含选中节点 ID 和紧凑摘要。',
+      includeFocusedContainer: '是否包含焦点容器摘要和子节点约束。',
+      includeNodeDetails: '是否包含更丰富的节点摘要；大型媒体数据仍会省略。',
+      includeSubsystemMetadata:
+        '是否包含 narrative、behavior、entity、memory 子系统的有界 metadata 摘要。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_NARRATIVE_TRAVERSE]: {
+    description:
+      '遍历混合 Canvas 中的 narrative flow 节点；不会遍历 storyboard、behavior、entity 或 memory 节点。',
+    parameters: {
+      startNodeId: '可选 narrative 起始节点 ID。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT]: {
+    description:
+      '把 Agent 生成的文本、优化提示词或结构化内容应用到 Canvas 节点、容器、字段路径或视口插入点。',
+    parameters: {
+      kind: '要应用的内容类型。',
+      text: 'kind=text 时的文本内容。',
+      prompt: 'kind=prompt 时的提示词内容。',
+      contentJson: 'kind=structured 时的 JSON 字符串。',
+      title: '可选内容标题。',
+      format: '内容格式提示。',
+      nodeId: '显式 Canvas 节点目标。',
+      containerId: '显式 Canvas 容器目标。',
+      slotId: '显式 Canvas 槽位目标。',
+      fieldPath: 'node.data 内的 JSON Pointer 路径，例如 /generationPrompt。',
+      mode: '变更模式；replace/apply 需要显式目标数据。',
+      x: '画布插入 X 坐标。',
+      y: '画布插入 Y 坐标。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_GET_STORYBOARD_EXECUTION_SUMMARY]: {
+    description:
+      '读取 Story/Agent 工作流可用的只读场景/镜头执行摘要，包含稳定场景 ID、镜头数、生成状态和时间线导入 metadata。',
+    parameters: {
+      sourceScriptUri: '可选源剧本 URI，用于关联导入的 Story 场景。',
+      sceneId: '可选 Story 场景 ID。',
+      sceneNodeId: '可选 Canvas SceneGroup 节点 ID。',
+      canvasFileUri: '可选 Canvas 文件 URI，用于跟踪绑定。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_GENERATE_IMAGE]: {
+    description:
+      '触发 ShotNode 或 Gallery 子媒体节点的图片生成。调用前先用 canvas_update_node 写入提示词/参数。',
+    parameters: {
+      nodeId: 'ShotNode 或 GalleryNode ID。',
+      childNodeId: 'GalleryNode 的子媒体节点 ID。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_GENERATE_BATCH]: {
+    description: '批量触发多个镜头节点的图片生成，适合一次生成一个场景内所有镜头。',
+    parameters: {
+      nodeIds: '要生成图片的 ShotNode ID 列表。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.SET_PROJECT_GENERATION_CONFIG]: {
+    description:
+      '保存项目级生成参数和模型配置；它们会作为节点默认值。批量生成前应先调用，避免上下文压缩后丢失参数。',
+    parameters: {
+      imageRatio: '图片画幅比例。',
+      imageResolution: '图片分辨率。',
+      videoRatio: '视频画幅比例。',
+      videoResolution: '视频分辨率。',
+      videoDuration: '视频时长，单位秒。',
+      videoFps: '视频帧率。',
+      imageModel: '图片生成模型 ID。',
+      videoModel: '视频生成模型 ID。',
+      audioModel: '音频生成模型 ID。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.EXPORT_STORYBOARD]: {
+    description: '将分镜导出为 ZIP 图片包，或导入到 neko-cut 时间线。',
+    parameters: {
+      format: '导出格式：zip 或 neko-cut。',
+      projectName: '用于文件名和 manifest 的项目名称。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_APPLY_STYLE_TRANSFER]: {
+    description: '使用 GalleryNode 作为风格参考，对目标 ShotNode 应用风格迁移并触发批量图片生成。',
+    parameters: {
+      targetNodeIds: '要应用风格迁移的 ShotNode 列表。',
+      referenceNodeId: '作为 IP-Adapter 风格参考的 GalleryNode ID。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.IMPORT_SCRIPT_TO_CANVAS]: {
+    description: '把 Fountain 剧本导入当前 Canvas，生成分镜骨架或语义分镜计划。',
+    parameters: {
+      path: 'Fountain 剧本文件的绝对路径。',
+      mode: '导入模式：mechanical 为启发式骨架，semantic 使用 ScenePlan/ShotPlan。',
+      startX: '第一个 SceneGroupNode 的画布 X 坐标。',
+      startY: '第一个 SceneGroupNode 的画布 Y 坐标。',
+      scenesLimit: '最多导入的场景数量。',
+      scenePlans: 'semantic 模式下可选的 ScenePlan/ShotPlan 数组。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_GENERATE_VIDEO_WITH_KEYFRAMES]: {
+    description: '使用首帧和尾帧图片作为关键帧，为 ShotNode 生成视频片段。',
+    parameters: {
+      nodeId: '保存生成视频的目标 ShotNode ID。',
+      firstFrameNodeId: '提供首帧图片的 ShotNode ID。',
+      lastFrameNodeId: '提供尾帧图片的 ShotNode ID。',
+      duration: '视频时长，单位秒。',
+      aspectRatio: '画幅比例，例如 16:9 或 9:16。',
+    },
+  },
+} satisfies Readonly<Record<CanvasToolName, CanvasToolLocalization>>;
+
+function withCanvasToolLocalization<T extends Tool>(tool: T): T {
+  const localization = CANVAS_TOOL_ZH_LOCALIZATIONS[tool.name as CanvasToolName];
+  if (!localization) {
+    throw new Error(`Missing zh localization for Canvas tool "${tool.name}".`);
+  }
+  return {
+    ...tool,
+    localization: {
+      ...tool.localization,
+      zh: localization,
+    },
+  };
+}
+
 const CANVAS_MARKDOWN_STORYBOARD_SKILL: Skill = {
   name: 'canvas-markdown-storyboard',
   description:
@@ -690,7 +1060,16 @@ const CANVAS_MARKDOWN_STORYBOARD_SKILL: Skill = {
   source: 'builtin',
   enabled: true,
   icon: 'canvas',
-  validationRequirements: ['CanvasMarkdownCapabilityInput'],
+  mediaWorkflow: {
+    referencedCapabilities: [
+      'canvas.validateMarkdownStoryboard',
+      'canvas.createStoryboardDraftFromMarkdown',
+      'canvas.createStoryboardFromMarkdown',
+      'canvas.attachResource',
+    ],
+    validationRequirements: ['CanvasMarkdownCapabilityInput'],
+    tags: ['canvas', 'markdown', 'storyboard'],
+  },
 };
 
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
@@ -2216,15 +2595,18 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         },
       },
     ];
+    const localizedTools = tools.map((tool) => withCanvasToolLocalization(tool));
 
     // -----------------------------------------------------------------------
     // Keyframe Video Generation (requires mediaService)
     // -----------------------------------------------------------------------
     if (mediaService) {
-      tools.push(createVideoKeyframeTool(api, mediaService, logger));
+      localizedTools.push(
+        withCanvasToolLocalization(createVideoKeyframeTool(api, mediaService, logger)),
+      );
     }
 
-    return tools;
+    return localizedTools;
   }
 
   getToolGroups(): ToolGroup[] {

@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import type { CanvasPlaybackPlan, CutCanvasDraftImportResult, NekoCanvasAPI } from '@neko/shared';
+import type {
+  CanvasPlaybackPlan,
+  CutCanvasDraftImportResult,
+  ICapabilityMediaService,
+  NekoCanvasAPI,
+} from '@neko/shared';
 import { TOOL_NAMES_CANVAS } from '@neko/shared';
 import { createNekoCanvasCapabilityProvider } from '../agentCapabilityProvider';
 
@@ -146,6 +151,17 @@ function createApi(): NekoCanvasAPI {
       onDidChangeCanvas: vi.fn(() => ({ dispose: vi.fn() })),
     },
   } as unknown as NekoCanvasAPI;
+}
+
+function createMediaService(): ICapabilityMediaService {
+  return {
+    generateImage: vi.fn(async () => ({ id: 'image-task-1' })),
+    generateVideo: vi.fn(async () => ({ id: 'video-task-1' })),
+    waitForTask: vi.fn(async () => ({
+      status: 'completed',
+      outputs: [{ url: 'file:///generated/video.mp4', mimeType: 'video/mp4' }],
+    })),
+  };
 }
 
 describe('agentCapabilityProvider storyboard export contracts', () => {
@@ -347,12 +363,19 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
           source: 'builtin',
           enabled: true,
           allowedTools: expect.arrayContaining(['canvas.createStoryboardFromMarkdown']),
+          mediaWorkflow: expect.objectContaining({
+            validationRequirements: ['CanvasMarkdownCapabilityInput'],
+          }),
         }),
       ]),
     );
     expect(skills.find((skill) => skill.name === 'canvas-markdown-storyboard')?.content).toContain(
       'canvas.createStoryboardFromMarkdown',
     );
+    expect(
+      'validationRequirements' in
+        (skills.find((skill) => skill.name === 'canvas-markdown-storyboard') ?? {}),
+    ).toBe(false);
   });
 
   it('executes Markdown capability tools through the Canvas Markdown API', async () => {
@@ -419,6 +442,51 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
           capabilityId: 'canvas.ingestMarkdown',
           status: 'blocked',
         },
+      },
+    });
+  });
+
+  it('localizes Canvas-owned tool definitions in the Canvas provider', () => {
+    const provider = createNekoCanvasCapabilityProvider(createApi());
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: createMediaService(),
+      configManager: undefined,
+      embedFn: undefined,
+    });
+
+    const toolsMissingZhLocalization = tools
+      .filter((tool) => !tool.localization?.zh?.description)
+      .map((tool) => tool.name);
+
+    expect(toolsMissingZhLocalization).toEqual([]);
+    expect(
+      tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_LIST_NODES)?.localization?.zh,
+    ).toMatchObject({
+      description: '列出当前画布上的节点，可按类型过滤。',
+      parameters: {
+        type: '可选节点类型过滤条件。',
+      },
+    });
+    expect(
+      tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD)
+        ?.localization?.zh,
+    ).toMatchObject({
+      description: '只读校验 Markdown 分镜内容是否可被 Canvas 接收。',
+      parameters: {
+        markdown: '要校验的 Markdown 分镜内容。',
+        sourceFormat: '来源格式提示。',
+      },
+    });
+    expect(
+      tools.find(
+        (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_GENERATE_VIDEO_WITH_KEYFRAMES,
+      )?.localization?.zh,
+    ).toMatchObject({
+      description: '使用首帧和尾帧图片作为关键帧，为 ShotNode 生成视频片段。',
+      parameters: {
+        firstFrameNodeId: '提供首帧图片的 ShotNode ID。',
+        lastFrameNodeId: '提供尾帧图片的 ShotNode ID。',
       },
     });
   });

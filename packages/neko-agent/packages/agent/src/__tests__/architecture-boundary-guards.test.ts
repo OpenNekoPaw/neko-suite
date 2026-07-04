@@ -222,6 +222,42 @@ describe('agent architecture boundary guards', () => {
     expect(violations).toEqual([]);
   });
 
+  it('keeps Canvas and Cut tool localization metadata out of Agent core', () => {
+    const toolRegistrySource = stripTypeScriptComments(
+      readFileSync(join(agentSrc, 'tools/tool-registry.ts'), 'utf-8'),
+    );
+    const forbiddenToolMetadataKeys = [
+      'CreateCanvas',
+      'AddCanvasShape',
+      'canvas_list_nodes',
+      'canvas_get_node',
+      'canvas_update_node',
+      'canvas_create_node',
+      'canvas_derive_node',
+      'canvas_create_composite',
+      'canvas_update_block',
+      'canvas_extract_structured_content',
+      'canvas_get_active_context',
+      'canvas_narrative_traverse',
+      'canvas_apply_agent_content',
+      'canvas_get_storyboard_execution_summary',
+      'canvas_generate_image',
+      'canvas_generate_batch',
+      'set_project_generation_config',
+      'export_storyboard',
+      'canvas_apply_style_transfer',
+      'import_script_to_canvas',
+      'canvas_generate_video_with_keyframes',
+      'canvas.ingestMarkdown',
+      'canvas.validateMarkdownStoryboard',
+    ];
+    const violations = forbiddenToolMetadataKeys
+      .filter((toolName) => createObjectKeyPattern(toolName).test(toolRegistrySource))
+      .map((toolName) => `tools/tool-registry.ts contains localization key ${toolName}`);
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps media quality domain validation out of Agent core', () => {
     const forbiddenValidationFiles = [
       join(agentSrc, 'validation/qa-types.ts'),
@@ -1042,6 +1078,16 @@ function readSourceFiles(dir: string, include: (file: string) => boolean): strin
 
 function stripTypeScriptComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+}
+
+function createObjectKeyPattern(key: string): RegExp {
+  const escaped = escapeRegExp(key);
+  const bareKey = /^[A-Za-z_$][\w$]*$/.test(key) ? escaped : '(?!)';
+  return new RegExp(`(?:^|[,{]\\s*)(?:['"\`]${escaped}['"\`]|${bareKey})\\s*:`, 'm');
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function listFiles(dir: string): string[] {
