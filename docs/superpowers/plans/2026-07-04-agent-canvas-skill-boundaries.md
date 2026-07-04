@@ -1009,6 +1009,28 @@ pnpm run compile:extension
 
 Expected: PASS.
 
+- [x] **Step 12: Move Story scene search runtime out of Agent core**
+
+Moved screenplay/scene search indexing from Agent tools into `@neko/skills`:
+
+```text
+packages/neko-skills/src/story/script-scene-search-runtime.ts
+packages/neko-skills/src/story/__tests__/script-scene-search-runtime.test.ts
+```
+
+Agent core no longer exports Story scene search runtime APIs from `@neko/agent` or `@neko/agent/tools`.
+
+Verification:
+
+```bash
+./node_modules/.bin/vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts --reporter=verbose
+./node_modules/.bin/vitest run ../neko-skills/src/story/__tests__/script-scene-search-runtime.test.ts --reporter=verbose
+./node_modules/.bin/tsc --noEmit -p ../neko-skills/tsconfig.json
+pnpm run compile:extension
+```
+
+Expected: PASS.
+
 ### Task 7: Final Boundary Verification
 
 **Files:**

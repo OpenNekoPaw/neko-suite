@@ -126,21 +126,5 @@ export {
 // Tier resolver (tiered lazy loading)
 export { resolveToolGroupTier, resolveSkillTier } from './tier-resolver';
 
-export {
-  ScriptEmbeddingIndex,
-  buildScriptSceneTextInputs,
-  keywordSearchScriptScenes,
-  normalizeScriptSceneTopK,
-  searchScriptScenes,
-  tokenizeScriptSceneQuery,
-  type EmbedFn,
-  type SceneEmbedding,
-  type SceneTextInput,
-  type ScriptSceneSearchInput,
-  type ScriptSceneSearchResult,
-  type ScriptSceneSpan,
-  type SearchResult,
-} from './script-scene-search-runtime';
-
 // Re-export injection constants
 export { DEFAULT_INJECTION_CONFIG, CORE_TOOLS } from '@neko/shared';

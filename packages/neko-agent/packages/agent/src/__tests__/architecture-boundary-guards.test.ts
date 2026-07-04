@@ -149,6 +149,15 @@ describe('agent architecture boundary guards', () => {
     expect(existingFiles).toEqual([]);
   });
 
+  it('keeps Story scene search runtime out of Agent core', () => {
+    const forbiddenToolFiles = [join(agentSrc, 'tools/script-scene-search-runtime.ts')];
+    const existingFiles = forbiddenToolFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+
+    expect(existingFiles).toEqual([]);
+  });
+
   it('keeps Agent package independent from concrete skill packages', () => {
     const packageManifest = stripTypeScriptComments(
       readFileSync(join(repoRoot, 'packages/agent/package.json'), 'utf-8'),
