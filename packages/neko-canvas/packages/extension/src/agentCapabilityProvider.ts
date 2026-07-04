@@ -627,6 +627,42 @@ const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] 
   },
 ] as const;
 
+function createCanvasMarkdownLifecycleDescriptor(
+  definition: CanvasMarkdownToolDefinition,
+): AgentCapabilityLifecycleDescriptor {
+  return {
+    capabilityId: definition.capabilityId,
+    providerId: 'neko-canvas',
+    displayName: definition.displayName,
+    description: definition.description,
+    phases:
+      definition.capabilityId === 'canvas.createStoryboardFromMarkdown'
+        ? ['validate', 'review', 'apply']
+        : definition.capabilityId === 'canvas.validateMarkdownStoryboard'
+          ? ['validate']
+          : [definition.phase],
+    inputSchema: { id: 'canvas.markdown.input', version: 1 },
+    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+    accepts:
+      definition.capabilityId === 'canvas.attachResource'
+        ? ['ResourceRef', 'DocumentArchiveResourceRef']
+        : ['Markdown', 'GfmTable'],
+    produces:
+      definition.capabilityId === 'canvas.validateMarkdownStoryboard'
+        ? ['CanvasMarkdownCapabilityDiagnostics']
+        : ['canvas-node-ref'],
+    risk: definition.isReadOnly ? 'low' : 'medium',
+    requiresApproval: definition.requiresConfirmation,
+    safetyKind: definition.requiresConfirmation ? 'confirmation-gated' : 'read-only-query',
+    targetRequirements: definition.requiresConfirmation
+      ? { allowedFallbacks: ['viewport-insertion', 'explicit-user-input'] }
+      : undefined,
+  };
+}
+
+const CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS: readonly AgentCapabilityLifecycleDescriptor[] =
+  CANVAS_MARKDOWN_TOOL_DEFINITIONS.map(createCanvasMarkdownLifecycleDescriptor);
+
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
   readonly id = 'neko-canvas';
   readonly version = '1.0.0';
@@ -752,34 +788,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
           requiresApproval: false,
         },
       ],
-      lifecycleCapabilities: CANVAS_MARKDOWN_TOOL_DEFINITIONS.map((definition) => ({
-        capabilityId: definition.capabilityId,
-        providerId: 'neko-canvas',
-        displayName: definition.displayName,
-        description: definition.description,
-        phases:
-          definition.capabilityId === 'canvas.createStoryboardFromMarkdown'
-            ? ['validate', 'review', 'apply']
-            : definition.capabilityId === 'canvas.validateMarkdownStoryboard'
-              ? ['validate']
-              : [definition.phase],
-        inputSchema: { id: 'canvas.markdown.input', version: 1 },
-        resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
-        accepts:
-          definition.capabilityId === 'canvas.attachResource'
-            ? ['ResourceRef', 'DocumentArchiveResourceRef']
-            : ['Markdown', 'GfmTable'],
-        produces:
-          definition.capabilityId === 'canvas.validateMarkdownStoryboard'
-            ? ['CanvasMarkdownCapabilityDiagnostics']
-            : ['canvas-node-ref'],
-        risk: definition.isReadOnly ? 'low' : 'medium',
-        requiresApproval: definition.requiresConfirmation,
-        safetyKind: definition.requiresConfirmation ? 'confirmation-gated' : 'read-only-query',
-        targetRequirements: definition.requiresConfirmation
-          ? { allowedFallbacks: ['viewport-insertion', 'explicit-user-input'] }
-          : undefined,
-      })),
+      lifecycleCapabilities: CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS,
     };
   }
 

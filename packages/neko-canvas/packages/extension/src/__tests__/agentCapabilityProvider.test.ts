@@ -296,6 +296,15 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
 
     const provider = createNekoCanvasCapabilityProvider(createApi());
     const facets = provider.getArtifactFacets({ extensionContext: {} });
+    expect(facets.lifecycleCapabilities?.map((descriptor) => descriptor.capabilityId)).toEqual([
+      'canvas.ingestMarkdown',
+      'canvas.createMarkdownNote',
+      'canvas.createTableFromMarkdown',
+      'canvas.createStoryboardDraftFromMarkdown',
+      'canvas.createStoryboardFromMarkdown',
+      'canvas.attachResource',
+      'canvas.validateMarkdownStoryboard',
+    ]);
     expect(facets.lifecycleCapabilities).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -309,7 +318,15 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
           safetyKind: 'confirmation-gated',
         }),
         expect.objectContaining({
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+          providerId: 'neko-canvas',
+          phases: ['validate', 'review', 'apply'],
+          requiresApproval: true,
+          safetyKind: 'confirmation-gated',
+        }),
+        expect.objectContaining({
           capabilityId: 'canvas.validateMarkdownStoryboard',
+          providerId: 'neko-canvas',
           displayName: 'Validate Markdown Storyboard',
           phases: ['validate'],
           requiresApproval: false,
