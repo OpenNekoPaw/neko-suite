@@ -1096,6 +1096,39 @@ node scripts/check-neko-agent-boundaries.mjs
 
 Expected: PASS. `pnpm run compile:extension` remains blocked locally by pnpm ignored-builds approval, so the direct esbuild command is the executable extension bundle verification for this step.
 
+- [x] **Step 15: Move remaining domain strategy packs out of Agent core and harden validation**
+
+Moved optional Autoheal strategy packs and character/entity memory artifact helpers from Agent runtime ownership into `@neko/skills`:
+
+```text
+packages/neko-skills/src/autoheal/example-handlers.ts
+packages/neko-skills/src/character/character-memory-artifact.ts
+packages/neko-skills/src/character/entity-memory-contribution-inference.ts
+```
+
+Agent core now keeps only:
+
+- generic `autoheal-chain` / `autoheal-types`
+- generic artifact watcher / artifact validator / observation hooks
+- generic stream projection with an injected `projectCompositeBlock` extension point
+- generic validation hooks, with image URL MIME inference now fail-visible for malformed URLs and unknown extensions
+
+The VSCode Extension composition root injects `maybeAttachInferredEntityMemoryContribution()` from `@neko/skills`; Agent no longer owns the character/entity memory inference implementation. Architecture guards now fail if Agent core reintroduces optional Autoheal strategy factories or character/entity memory artifact projection.
+
+Validation:
+
+```bash
+./node_modules/.bin/vitest run packages/agent/src/runtime/__tests__/agent-stream-state.test.ts packages/agent/src/validation/__tests__/validation-hooks.test.ts packages/agent/src/__tests__/architecture-boundary-guards.test.ts
+./node_modules/.bin/vitest run packages/agent/src/runtime/__tests__/agent-event-stream-runtime.test.ts packages/agent/src/autoheal/__tests__/autoheal-chain.test.ts
+./node_modules/.bin/vitest run src/autoheal/__tests__/example-handlers.test.ts src/character/__tests__/character-memory-artifact.test.ts src/character/__tests__/entity-memory-contribution-inference.test.ts
+./node_modules/.bin/tsc --noEmit -p packages/neko-skills/tsconfig.json
+./node_modules/.bin/tsc --noEmit -p packages/neko-agent/packages/extension/tsconfig.json
+./node_modules/.bin/esbuild ./packages/extension/src/index.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --loader:.md=text --alias:@neko/skills=../neko-skills/src/index.ts
+node scripts/check-neko-agent-boundaries.mjs
+```
+
+Expected: PASS. `pnpm --filter` / `pnpm exec` remain blocked locally by pnpm ignored-builds approval in this workspace, so direct package-local binaries are the executable validation path for this step.
+
 ### Task 7: Final Boundary Verification
 
 **Files:**
