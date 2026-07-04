@@ -783,11 +783,14 @@ describe('message runtime helpers', () => {
   });
 
   it('appends ambient canvas context to the system prompt', () => {
-    expect(
-      appendAmbientCanvasSystemPrompt('base prompt', [
-        { nodeId: 'node-1', type: 'image', summary: 'Hero frame' },
-      ]),
-    ).toContain('[image] Hero frame (id: node-1)');
+    const prompt = appendAmbientCanvasSystemPrompt('base prompt', [
+      { nodeId: 'node-1', type: 'image', summary: 'Hero frame' },
+    ]);
+
+    expect(prompt).toContain('[image] Hero frame (id: node-1)');
+    expect(prompt).not.toContain('canvas_get_node');
+    expect(prompt).not.toContain('canvas_update_node');
+    expect(prompt).not.toContain('canvas_generate_image');
   });
 
   it('builds a project file search plan for the host adapter', () => {

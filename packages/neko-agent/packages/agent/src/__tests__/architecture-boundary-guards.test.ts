@@ -291,6 +291,22 @@ describe('agent architecture boundary guards', () => {
     expect(violations).toEqual([]);
   });
 
+  it('keeps provider-specific Canvas tool instructions out of Agent runtime prompts', () => {
+    const messageRuntimeSource = stripTypeScriptComments(
+      readFileSync(join(agentSrc, 'runtime/message-runtime.ts'), 'utf-8'),
+    );
+    const forbiddenPromptToolNames = [
+      'canvas_get_node',
+      'canvas_update_node',
+      'canvas_generate_image',
+    ];
+    const violations = forbiddenPromptToolNames
+      .filter((toolName) => messageRuntimeSource.includes(toolName))
+      .map((toolName) => `runtime/message-runtime.ts contains provider tool ${toolName}`);
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps media quality domain validation out of Agent core', () => {
     const forbiddenValidationFiles = [
       join(agentSrc, 'validation/qa-types.ts'),

@@ -1433,7 +1433,7 @@ export function appendAmbientCanvasSystemPrompt(
   return (
     systemPrompt +
     `\n\n## Current Canvas Selection\nThe user has selected the following canvas node(s):\n${nodeLines}\n` +
-    'Use canvas_get_node / canvas_update_node / canvas_generate_image tools to operate on them.'
+    'Use the registered Canvas provider capabilities when the task requires reading or changing these nodes.'
   );
 }
 
