@@ -21,7 +21,7 @@ export const handleConfig: CommandHandler = (args, context) => {
       '',
       `  provider:     ${config?.provider ?? '(not set)'}`,
       `  model:        ${config?.model ?? '(not set)'}`,
-      `  maxTokens:    ${config?.maxTokens ?? '(default)'}`,
+      `  maxOutputTokens: ${config?.maxTokens ?? '(default)'}`,
       `  temperature:  ${config?.temperature ?? '(default)'}`,
       `  verbose:      ${config?.verbose ?? false}`,
       `  outputFormat: ${config?.outputFormat ?? 'text'}`,

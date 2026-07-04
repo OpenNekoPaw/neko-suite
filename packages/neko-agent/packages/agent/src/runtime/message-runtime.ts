@@ -72,6 +72,11 @@ export interface AgentLlmRuntimeOptions {
   readonly providerOptions?: Record<string, unknown>;
 }
 
+export interface AgentModelTokenMetadata {
+  readonly contextWindow?: number;
+  readonly maxOutputTokens?: number;
+}
+
 export interface AgentMessageIdOptions {
   readonly now?: () => number;
   readonly randomSuffix?: () => string;
@@ -85,6 +90,7 @@ export interface AgentMessageRuntimeRequest {
   readonly agentModels?: AgentModelSlots;
   readonly llmConfig?: AgentLlmConfig;
   readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
+  readonly modelTokenMetadata?: AgentModelTokenMetadata;
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
   readonly attachments?: MessageAttachment[];
@@ -242,6 +248,7 @@ export interface AgentMessageTurnAgentExecutionInput {
   readonly agentModels?: AgentModelSlots;
   readonly llmConfig?: AgentLlmConfig;
   readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
+  readonly modelTokenMetadata?: AgentModelTokenMetadata;
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;

@@ -26,6 +26,7 @@ import type {
 import {
   calculateBackoff,
   deriveAgentTraceContext,
+  resolveAgentTokenBudget,
   sleepWithAbort,
   withAgentTrace,
 } from '@neko/shared';
@@ -182,7 +183,7 @@ export class Service implements IService {
     const routing = this.resolveRouting(options.providerId, options.modelId, [], 'chat');
     const { model, provider, adapter } = this.resolveResources(routing);
 
-    const chatOptions: ChatOptions = { ...options, model: model.name };
+    const chatOptions = resolveProviderChatOptions(options, model);
     try {
       const projectedMessages = await projectMessagesForProvider(messages, chatOptions, {
         providerId: routing.providerId,
@@ -281,7 +282,7 @@ export class Service implements IService {
     const routing = this.resolveRouting(options.providerId, options.modelId, [], 'chat');
     const { model, provider, adapter } = this.resolveResources(routing);
 
-    const chatOptions: ChatOptions = { ...options, model: model.name, stream: true };
+    const chatOptions = resolveProviderChatOptions({ ...options, stream: true }, model);
     // Apply stream timeout if configured
     const timeoutMs = this.getStreamTimeout();
     const createStream = () => {
@@ -729,6 +730,43 @@ function createProjectedChatStream(input: {
 
 function shouldUseServiceManagedStreamRetry(adapter: import('../types/adapter').Adapter): boolean {
   return adapter.type === 'generic' || adapter.type === 'azure' || adapter.type === 'ollama';
+}
+
+function resolveProviderChatOptions(
+  options: ServiceOptions,
+  model: import('../types/provider').Model,
+): ChatOptions {
+  const chatOptions: ChatOptions = { ...options, model: model.name };
+  if (options.maxTokens === undefined) {
+    return chatOptions;
+  }
+
+  const budget = resolveAgentTokenBudget({
+    modelId: model.id,
+    contextWindow: model.contextWindow,
+    modelMaxOutputTokens: model.maxOutputTokens,
+    defaultMaxOutputTokens: options.maxTokens,
+    requestedMaxOutputTokens: options.maxTokens,
+    reasoningReserveTokens: options.thinkingBudget,
+  });
+  const error = budget.diagnostics.find((diagnostic) => diagnostic.severity === 'error');
+  if (error) {
+    throw new PlatformError({
+      category: 'validation',
+      code: 'TOKEN_BUDGET_INVALID',
+      message: `${error.message} Configure [defaults].max_tokens as an output cap, models[].context_window as the input context window, and models[].max_output_tokens as the model output cap.`,
+      retryable: false,
+      context: {
+        modelId: model.id,
+        diagnostics: budget.diagnostics,
+      },
+    });
+  }
+
+  return {
+    ...chatOptions,
+    maxTokens: budget.effectiveMaxOutputTokens,
+  };
 }
 
 interface ChatMessageSummary {

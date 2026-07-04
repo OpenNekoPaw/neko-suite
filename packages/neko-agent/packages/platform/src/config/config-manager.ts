@@ -736,6 +736,8 @@ export class ConfigManager {
       diagnostic?.code === 'unsupportedVersion' ||
       diagnostic?.code === 'duplicateProviderId' ||
       diagnostic?.code === 'duplicateModelId' ||
+      diagnostic?.code === 'invalidDefaultMaxTokens' ||
+      diagnostic?.code === 'invalidModelTokenMetadata' ||
       diagnostic?.code === 'unsupportedModelType' ||
       diagnostic?.code === 'unsupportedDefaultMediaModelType' ||
       diagnostic?.code === 'unsupportedDefaultModelType' ||

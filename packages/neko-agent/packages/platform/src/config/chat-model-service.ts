@@ -70,7 +70,10 @@ export class ChatModelService implements IChatModelService {
         ...(provider.supportLevel ? { supportLevel: provider.supportLevel } : {}),
         capabilities: capabilities as ModelCapability[],
         category,
-        ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+        ...(isPositiveInteger(model.contextWindow) ? { contextWindow: model.contextWindow } : {}),
+        ...(isPositiveInteger(model.maxOutputTokens)
+          ? { maxOutputTokens: model.maxOutputTokens }
+          : {}),
         ...(category === 'llm'
           ? { llmParameterControls: this.getLlmParameterControls(model, provider) }
           : {}),
@@ -103,4 +106,8 @@ export class ChatModelService implements IChatModelService {
  */
 export function createChatModelService(): IChatModelService {
   return new ChatModelService();
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }

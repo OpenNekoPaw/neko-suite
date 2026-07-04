@@ -67,6 +67,7 @@ const mockModels: Model[] = [
     providerId: 'openai',
     capabilities: ['chat', 'vision', 'function_calling'],
     contextWindow: 128000,
+    maxOutputTokens: 128000,
     enabled: true,
   },
   {
@@ -215,6 +216,48 @@ describe('Service', () => {
       expect(response.routing.modelId).toBe('gpt-4');
       expect(response.routing.providerId).toBe('openai');
       expect(response.timing.duration).toBeDefined();
+    });
+
+    it('rejects oversized output caps before provider dispatch', async () => {
+      const adapter = createMockAdapter();
+      const config = createMockConfig(adapter);
+      const service = new Service(config);
+
+      await expect(
+        service.chat([{ role: 'user', content: 'Hello' }], {
+          providerId: 'openai',
+          modelId: 'gpt-4',
+          maxTokens: 256000,
+        }),
+      ).rejects.toMatchObject({
+        code: 'TOKEN_BUDGET_INVALID',
+      });
+
+      expect(adapter.chat).not.toHaveBeenCalled();
+    });
+
+    it('passes only the validated output cap to provider adapters', async () => {
+      const adapter = createMockAdapter();
+      const config = createMockConfig(adapter);
+      const service = new Service(config);
+
+      await service.chat([{ role: 'user', content: 'Hello' }], {
+        providerId: 'openai',
+        modelId: 'gpt-4',
+        maxTokens: 8192,
+      });
+
+      expect(adapter.chat).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          maxTokens: 8192,
+        }),
+        expect.objectContaining({
+          contextWindow: 128000,
+          maxOutputTokens: 128000,
+        }),
+        expect.any(Object),
+      );
     });
 
     it('records raw chat request and response payloads when a recorder is configured', async () => {

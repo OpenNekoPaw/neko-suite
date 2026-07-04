@@ -154,7 +154,7 @@ export function generateCliStatusText(context: CommandContext): string {
     `  Model:        ${config?.model ?? '(not set)'}`,
     `  API Key:      ${apiKeyStatus}`,
     `  Base URL:     ${config?.baseUrl ?? '(default)'}`,
-    `  Max Tokens:   ${config?.maxTokens ?? '(default)'}`,
+    `  Max Output Tokens: ${config?.maxTokens ?? '(default)'}`,
     `  Temperature:  ${config?.temperature ?? '(default)'}`,
     '',
     'Environment:',

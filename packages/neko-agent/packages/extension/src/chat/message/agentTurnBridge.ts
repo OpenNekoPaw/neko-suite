@@ -126,6 +126,7 @@ export class AgentTurnBridge {
         agentModels: input.agentModels,
         llmConfig: input.llmConfig,
         llmRuntimeOptions: input.llmRuntimeOptions,
+        modelTokenMetadata: resolveSelectedModelTokenMetadata(this.deps.providers, input.chatModel),
         modelCapabilities: resolveSelectedModelCapabilities(this.deps.providers, input.chatModel),
         mediaModel: input.mediaModel,
         mediaModels: input.mediaModels,
@@ -217,4 +218,27 @@ function resolveSelectedModelCapabilities(
     return undefined;
   }
   return [...model.capabilities];
+}
+
+function resolveSelectedModelTokenMetadata(
+  providers: ProviderManager,
+  chatModel: ModelRef<'llm'> | undefined,
+): { contextWindow?: number; maxOutputTokens?: number } | undefined {
+  if (!chatModel?.providerId || !chatModel.modelId) {
+    return undefined;
+  }
+
+  const model = providers.getModel(chatModel.modelId);
+  if (!model || model.providerId !== chatModel.providerId) {
+    return undefined;
+  }
+
+  return {
+    ...(isPositiveInteger(model.contextWindow) ? { contextWindow: model.contextWindow } : {}),
+    ...(isPositiveInteger(model.maxOutputTokens) ? { maxOutputTokens: model.maxOutputTokens } : {}),
+  };
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }

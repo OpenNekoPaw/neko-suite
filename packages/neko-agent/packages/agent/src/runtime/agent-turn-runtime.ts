@@ -20,6 +20,7 @@ import {
   buildToolConfirmationMessage,
 } from '@neko-agent/types';
 import type { Skill, SkillInjection } from '@neko/shared';
+import { resolveAgentAutoCompactTokenThreshold, resolveAgentTokenBudget } from '@neko/shared';
 import type { SkillLifecycleProjection } from '@neko/shared';
 import type { AgentEvent } from '../session/types';
 import {
@@ -40,6 +41,7 @@ import {
   type AgentAmbientCanvasNode,
   type AgentTurnConfigurationPlan,
   type AgentLlmRuntimeOptions,
+  type AgentModelTokenMetadata,
   type AgentMessageExecutionOverrides,
   type AgentMessageTurnPreconditionReason,
   type AgentProviderCandidate,
@@ -80,6 +82,7 @@ export interface AgentTurnRunnerConfigureInput<TPlatform> {
   readonly temperature?: number;
   readonly topP?: number;
   readonly maxTokens?: number;
+  readonly contextSettings?: { readonly maxTokens?: number };
   readonly providerId?: string;
   readonly modelId?: string;
   readonly modelCapabilities?: readonly string[];
@@ -214,6 +217,7 @@ export interface ExecuteAgentTurnInput<
   readonly agentModels?: AgentModelSlots;
   readonly llmConfig?: AgentLlmConfig;
   readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
+  readonly modelTokenMetadata?: AgentModelTokenMetadata;
   readonly modelCapabilities?: readonly string[];
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
@@ -525,6 +529,43 @@ export async function executeAgentTurn<
       items: agentRunner.getPendingMessageQueue(),
       version: nextQueueSnapshotVersion(),
     });
+  const rawMaxTokens = usesProjectedLlmOptions
+    ? llmRuntimeOptions.maxTokens
+    : (llmRuntimeOptions?.maxTokens ?? input.settings.maxTokens);
+  const rawThinkingBudget = usesProjectedLlmOptions
+    ? llmRuntimeOptions.thinkingBudget
+    : (llmRuntimeOptions?.thinkingBudget ?? input.settings.thinkingBudget);
+  const tokenBudget =
+    rawMaxTokens !== undefined
+      ? resolveAgentTokenBudget({
+          modelId: providerSelection.effectiveModelId,
+          contextWindow: input.modelTokenMetadata?.contextWindow,
+          modelMaxOutputTokens: input.modelTokenMetadata?.maxOutputTokens,
+          defaultMaxOutputTokens: rawMaxTokens,
+          requestedMaxOutputTokens: rawMaxTokens,
+          reasoningReserveTokens: rawThinkingBudget,
+        })
+      : undefined;
+  const tokenBudgetError = tokenBudget?.diagnostics.find(
+    (diagnostic) => diagnostic.severity === 'error',
+  );
+  if (tokenBudgetError) {
+    const errorMessage = buildAgentErrorAssistantMessage({
+      id: input.generateMessageId(),
+      timestamp: now(),
+      message: `${tokenBudgetError.message} Configure [defaults].max_tokens as max output tokens, models[].context_window as the model context window, and models[].max_output_tokens as the model output cap.`,
+    });
+    input.conversations.addAssistantMessage(input.conversationId, errorMessage);
+    return { status: 'completed', assistantMessage: errorMessage };
+  }
+  const resolvedMaxTokens = tokenBudget?.effectiveMaxOutputTokens ?? rawMaxTokens;
+  const compactThreshold =
+    tokenBudget?.effectiveInputBudget !== undefined
+      ? resolveAgentAutoCompactTokenThreshold({
+          effectiveInputBudget: tokenBudget.effectiveInputBudget,
+          defaultTokenThreshold: 100000,
+        })
+      : undefined;
 
   const turnConfig = buildAgentTurnConfigurationPlan({
     conversationId: input.conversationId,
@@ -549,12 +590,8 @@ export async function executeAgentTurn<
     topP: usesProjectedLlmOptions
       ? llmRuntimeOptions.topP
       : (llmRuntimeOptions?.topP ?? input.settings.topP),
-    maxTokens: usesProjectedLlmOptions
-      ? llmRuntimeOptions.maxTokens
-      : (llmRuntimeOptions?.maxTokens ?? input.settings.maxTokens),
-    thinkingBudget: usesProjectedLlmOptions
-      ? llmRuntimeOptions.thinkingBudget
-      : (llmRuntimeOptions?.thinkingBudget ?? input.settings.thinkingBudget),
+    maxTokens: resolvedMaxTokens,
+    thinkingBudget: rawThinkingBudget,
     providerOptions: llmRuntimeOptions?.providerOptions,
     workspaceRoot,
   });
@@ -567,6 +604,7 @@ export async function executeAgentTurn<
     temperature: turnConfig.temperature,
     topP: turnConfig.topP,
     maxTokens: turnConfig.maxTokens,
+    ...(compactThreshold !== undefined ? { contextSettings: { maxTokens: compactThreshold } } : {}),
     providerId: turnConfig.providerId,
     modelId: turnConfig.modelId,
     modelCapabilities: input.modelCapabilities,

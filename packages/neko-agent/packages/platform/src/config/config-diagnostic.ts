@@ -62,6 +62,8 @@ export function projectAssistantConfigReadResultDiagnostic(
     result.status === 'unsupportedModelProtocol' ||
     result.status === 'duplicateProviderId' ||
     result.status === 'duplicateModelId' ||
+    result.status === 'invalidDefaultMaxTokens' ||
+    result.status === 'invalidModelTokenMetadata' ||
     result.status === 'unsupportedModelType' ||
     result.status === 'unsupportedDefaultMediaModelType' ||
     result.status === 'unsupportedDefaultModelType' ||
@@ -103,6 +105,10 @@ export function buildSafeConfigDiagnosticMessage(
       return `Configuration file contains duplicate provider IDs: ${filePath}. Remove duplicate provider entries, then open a new Agent session or tab.`;
     case 'duplicateModelId':
       return `Configuration file contains duplicate model IDs: ${filePath}. Remove duplicate model entries, then open a new Agent session or tab.`;
+    case 'invalidDefaultMaxTokens':
+      return `Configuration file contains an invalid [defaults].max_tokens output-token cap: ${filePath}. Use a positive integer for max output tokens, then open a new Agent session or tab.`;
+    case 'invalidModelTokenMetadata':
+      return `Configuration file contains invalid model token metadata: ${filePath}. Use positive integers for models[].context_window and models[].max_output_tokens, then open a new Agent session or tab.`;
     case 'unsupportedModelType':
       return `Configuration file contains an unsupported model type: ${filePath}. Use llm, image, video, or audio, then open a new Agent session or tab.`;
     case 'unsupportedDefaultMediaModelType':

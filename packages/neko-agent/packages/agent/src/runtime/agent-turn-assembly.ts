@@ -20,6 +20,7 @@ import type { AgentBase64ImageAttachment } from './attachment-projection';
 import type {
   AgentAmbientCanvasNode,
   AgentLlmRuntimeOptions,
+  AgentModelTokenMetadata,
   AgentMessageExecutionOverrides,
   AgentProviderCandidate,
   AgentStreamPersistenceSnapshot,
@@ -141,6 +142,7 @@ export interface AgentTurnAssemblyInput<
   readonly agentModels?: AgentModelSlots;
   readonly llmConfig?: AgentLlmConfig;
   readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
+  readonly modelTokenMetadata?: AgentModelTokenMetadata;
   readonly modelCapabilities?: readonly string[];
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
   readonly mediaModel?: ModelRef<MediaModelCategory>;
@@ -212,6 +214,7 @@ export function buildAgentTurnRuntimeInput<
     agentModels: input.agentModels,
     llmConfig: input.llmConfig,
     llmRuntimeOptions: input.llmRuntimeOptions,
+    modelTokenMetadata: input.modelTokenMetadata,
     modelCapabilities: input.modelCapabilities,
     mediaModel: input.mediaModel,
     mediaModels: input.mediaModels,

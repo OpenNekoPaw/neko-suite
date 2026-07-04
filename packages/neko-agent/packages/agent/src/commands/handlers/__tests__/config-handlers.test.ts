@@ -45,6 +45,8 @@ describe('handleConfig', () => {
       expect(result.output).toContain('Current Configuration');
       expect(result.output).toContain('provider:     anthropic');
       expect(result.output).toContain('model:        claude-sonnet-4-6');
+      expect(result.output).toContain('maxOutputTokens: 4096');
+      expect(result.output).not.toContain('maxTokens:');
     });
 
     it('should show usage hints', () => {

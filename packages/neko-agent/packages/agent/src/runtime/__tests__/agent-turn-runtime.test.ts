@@ -704,6 +704,56 @@ describe('executeAgentTurn', () => {
     );
   });
 
+  it('derives runner output cap and compact threshold from selected model token metadata', async () => {
+    const { input, agentRunner } = createBaseInput({
+      settings: {
+        executionMode: 'ask',
+        autoExecuteTools: true,
+        temperature: 0.2,
+        maxTokens: 8192,
+      },
+      modelTokenMetadata: {
+        contextWindow: 256000,
+        maxOutputTokens: 128000,
+      },
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.configure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxTokens: 8192,
+        contextSettings: {
+          maxTokens: 217600,
+        },
+      }),
+    );
+  });
+
+  it('returns a visible error before runner configuration for oversized output caps', async () => {
+    const { input, agentRunner } = createBaseInput({
+      settings: {
+        executionMode: 'ask',
+        autoExecuteTools: true,
+        temperature: 0.2,
+        maxTokens: 256000,
+      },
+      modelTokenMetadata: {
+        contextWindow: 256000,
+        maxOutputTokens: 128000,
+      },
+    });
+
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'completed',
+      assistantMessage: expect.objectContaining({
+        role: 'assistant',
+        content: expect.stringContaining('max_output_tokens'),
+      }),
+    });
+    expect(agentRunner.configure).not.toHaveBeenCalled();
+  });
+
   it('keeps omitted projected LLM options from falling back to global settings', async () => {
     const { input, agentRunner } = createBaseInput({
       chatModel: { providerId: 'openai', modelId: 'gpt-4.1', category: 'llm' },

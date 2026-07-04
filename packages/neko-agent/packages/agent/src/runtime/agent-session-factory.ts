@@ -58,6 +58,7 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly temperature?: number;
   readonly topP?: number;
   readonly maxTokens?: number;
+  readonly contextSettings?: AgentSessionConfig['contextSettings'];
   readonly providerId?: string;
   readonly modelId?: string;
   readonly modelCapabilities?: readonly string[];
@@ -168,6 +169,7 @@ export async function createAgentRuntimeSession(
     temperature: config.temperature,
     topP: config.topP,
     maxTokens: config.maxTokens,
+    contextSettings: config.contextSettings,
     thinkingBudget: config.thinkingBudget,
     providerOptions: config.providerOptions,
     providerId: config.providerId,
@@ -237,6 +239,7 @@ export function updateAgentRuntimeSession(
       temperature: config.temperature,
       topP: config.topP,
       maxTokens: config.maxTokens,
+      contextSettings: config.contextSettings,
       thinkingBudget: config.thinkingBudget,
       providerOptions: config.providerOptions,
       maxIterations: config.maxIterations,

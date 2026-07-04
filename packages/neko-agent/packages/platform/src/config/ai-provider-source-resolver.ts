@@ -142,7 +142,10 @@ function buildAccountModelOptions(
         ...(catalog.provider.supportLevel ? { supportLevel: catalog.provider.supportLevel } : {}),
         capabilities: [...model.capabilities],
         category,
-        ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+        ...(isPositiveInteger(model.contextWindow) ? { contextWindow: model.contextWindow } : {}),
+        ...(isPositiveInteger(model.maxOutputTokens)
+          ? { maxOutputTokens: model.maxOutputTokens }
+          : {}),
         ...(category === 'llm'
           ? {
               llmParameterControls: projectLlmParameterControls({
@@ -289,7 +292,10 @@ function toSecretSafeAccountModel(model: Model): SecretSafeModelProjection {
     ...(model.type ? { type: model.type } : {}),
     ...(model.protocolProfile ? { protocolProfile: model.protocolProfile } : {}),
     capabilities: [...model.capabilities],
-    ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+    ...(isPositiveInteger(model.contextWindow) ? { contextWindow: model.contextWindow } : {}),
+    ...(isPositiveInteger(model.maxOutputTokens)
+      ? { maxOutputTokens: model.maxOutputTokens }
+      : {}),
     enabled: model.enabled !== false,
     source: 'account-gateway',
   };
@@ -325,4 +331,8 @@ function hasNonEmptyRecord(value: unknown): boolean {
 
 function isNonEmptyString(value: unknown): boolean {
   return typeof value === 'string' && value.length > 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }

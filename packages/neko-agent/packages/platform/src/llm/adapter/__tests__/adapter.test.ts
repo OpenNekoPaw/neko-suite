@@ -10,6 +10,7 @@ import { AnthropicAdapter } from '../anthropic-adapter';
 import { GoogleAdapter } from '../google-adapter';
 import { OllamaAdapter } from '../ollama-adapter';
 import { GenericAdapter } from '../generic-adapter';
+import { AzureAdapter } from '../azure-adapter';
 import type { ChatChunk, Adapter, ChatMessage, ChatOptions } from '../../../types/adapter';
 import type { Model, Provider } from '../../../types/provider';
 
@@ -508,5 +509,43 @@ describe('MockAdapter', () => {
 
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks[chunks.length - 1].finishReason).toBe('stop');
+  });
+});
+
+describe('Provider output token wire mapping', () => {
+  const tokenModel: Model = {
+    id: 'token-model',
+    name: 'token-model',
+    providerId: 'provider',
+    capabilities: ['chat'],
+    contextWindow: 256000,
+    maxOutputTokens: 128000,
+    enabled: true,
+  };
+
+  it('Azure adapter maps only the resolved output cap to max_tokens', () => {
+    const adapter = new AzureAdapter();
+    const body = (
+      adapter as unknown as {
+        buildRequestBody: (
+          messages: ChatMessage[],
+          options: ChatOptions,
+          model: Model,
+        ) => Record<string, unknown>;
+      }
+    ).buildRequestBody([{ role: 'user', content: 'hi' }], { maxTokens: 8192 }, tokenModel);
+
+    expect(body.max_tokens).toBe(8192);
+  });
+
+  it('Ollama adapter maps only the resolved output cap to num_predict', () => {
+    const adapter = new OllamaAdapter();
+    const options = (
+      adapter as unknown as {
+        buildOptions: (options: ChatOptions) => Record<string, unknown>;
+      }
+    ).buildOptions({ maxTokens: 8192 });
+
+    expect(options.num_predict).toBe(8192);
   });
 });

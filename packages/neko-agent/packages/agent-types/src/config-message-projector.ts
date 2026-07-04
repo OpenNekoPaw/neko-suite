@@ -45,7 +45,7 @@ export interface MessageModelProjection {
 export interface ChatWorkspaceModelStateInput {
   chatModelOptions: readonly ChatModelOption[];
   selectedModel: string;
-  defaultContextWindow: number;
+  defaultMaxOutputTokens: number;
   sessionMode: AgentSessionMode;
   mediaModelSelection: Readonly<MediaModelSelectionState>;
 }
@@ -56,7 +56,10 @@ export interface ChatWorkspaceModelStateProjection {
   availableMediaModels: ChatModelOption[];
   activeMediaModel?: ChatModelOption;
   agentMediaModels?: AgentMediaModelSelections;
-  selectedContextWindow: number;
+  selectedContextWindow?: number;
+  selectedEffectiveInputBudget?: number;
+  selectedOutputTokenCap?: number;
+  selectedMaxOutputTokens?: number;
 }
 
 export interface SessionModeMediaSelectionProjection {

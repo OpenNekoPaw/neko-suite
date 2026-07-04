@@ -115,6 +115,14 @@ function createConfig(overrides: Partial<AgentSessionConfig> = {}): AgentSession
   };
 }
 
+function readCompressorTokenThreshold(session: AgentSession): number {
+  return (
+    (session as unknown as Record<string, { getConfig: () => { triggers: { tokenThreshold: number } } }>)[
+      '_compressor'
+    ]
+  ).getConfig().triggers.tokenThreshold;
+}
+
 class CapturingJournalWriter implements IJournalWriter {
   readonly events: AgentEvent[] = [];
   readonly snapshots: Array<{
@@ -430,6 +438,36 @@ describe('AgentSession boundary characterization', () => {
     expect(result.compressedTokens).toBeGreaterThan(0);
     expect(session.getHistory().length).toBeLessThan(beforeLength);
     expect(session.getHistory()[0]?.role).toBe('system');
+    session.dispose();
+  });
+
+  it('updates auto-compact threshold from context settings without reading output max tokens', () => {
+    const session = new AgentSession(
+      createConfig({
+        maxTokens: 8192,
+        contextSettings: { maxTokens: 120000 },
+      }),
+    );
+
+    expect(readCompressorTokenThreshold(session)).toBe(120000);
+
+    session.configure({ maxTokens: 256000, contextSettings: { maxTokens: 50000 } });
+
+    expect(readCompressorTokenThreshold(session)).toBe(50000);
+    expect((session as unknown as { _config: AgentSessionConfig })._config.maxTokens).toBe(256000);
+    session.dispose();
+  });
+
+  it('manual context compression preserves the configured output cap', async () => {
+    const session = new AgentSession(createConfig({ maxTokens: 8192 }));
+    for (let i = 0; i < 12; i++) {
+      session.addMessage({ role: 'user', content: `user message ${i}` });
+      session.addMessage({ role: 'assistant', content: `assistant response ${i}` });
+    }
+
+    await session.compressContext();
+
+    expect((session as unknown as { _config: AgentSessionConfig })._config.maxTokens).toBe(8192);
     session.dispose();
   });
 

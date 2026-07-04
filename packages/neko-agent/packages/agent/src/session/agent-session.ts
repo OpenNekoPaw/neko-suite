@@ -141,6 +141,7 @@ import { toSerializableErrorCause } from '../utils/serializable-error';
 import {
   initializeSession,
   createConfiguredExecutor,
+  DEFAULT_MAX_CONTEXT_TOKENS,
   DEFAULT_MAX_ITERATIONS,
 } from './agent-session-initializer';
 import { SessionArtifactFacade } from './session-artifact-facade';
@@ -693,6 +694,15 @@ export class AgentSession implements IAgentSession {
     // Update execution mode if changed
     if (config.executionMode !== undefined) {
       this._executionMode = config.executionMode;
+    }
+
+    if ('contextSettings' in config) {
+      this._compressor.configure({
+        triggers: {
+          tokenThreshold: config.contextSettings?.maxTokens ?? DEFAULT_MAX_CONTEXT_TOKENS,
+          turnThreshold: 20,
+        },
+      });
     }
 
     // Update system prompt in history if changed

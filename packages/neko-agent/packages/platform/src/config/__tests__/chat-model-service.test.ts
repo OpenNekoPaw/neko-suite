@@ -21,6 +21,7 @@ const model: Model = {
   enabled: true,
   capabilities: ['chat'],
   contextWindow: 200000,
+  maxOutputTokens: 64000,
 };
 
 describe('ChatModelService', () => {
@@ -37,6 +38,7 @@ describe('ChatModelService', () => {
       capabilities: ['chat'],
       category: 'llm',
       contextWindow: 200000,
+      maxOutputTokens: 64000,
       llmParameterControls: {
         reasoning: false,
         verbosity: false,
@@ -87,6 +89,40 @@ describe('ChatModelService', () => {
         maxOutputTokens: true,
       },
     });
+  });
+
+  it('keeps missing token metadata unknown in selector options', () => {
+    const service = new ChatModelService();
+    const [option] = service.getChatModelOptions(
+      [provider],
+      [
+        {
+          ...model,
+          contextWindow: undefined,
+          maxOutputTokens: undefined,
+        },
+      ],
+    );
+
+    expect(option?.contextWindow).toBeUndefined();
+    expect(option?.maxOutputTokens).toBeUndefined();
+  });
+
+  it('does not project invalid token metadata into selector options', () => {
+    const service = new ChatModelService();
+    const [option] = service.getChatModelOptions(
+      [provider],
+      [
+        {
+          ...model,
+          contextWindow: -1,
+          maxOutputTokens: 0,
+        },
+      ],
+    );
+
+    expect(option?.contextWindow).toBeUndefined();
+    expect(option?.maxOutputTokens).toBeUndefined();
   });
 
   it('projects effective model protocol profiles into selector options', () => {

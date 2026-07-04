@@ -172,15 +172,19 @@ describe('AISdkAdapter reasoning model handling', () => {
     const { generateText } = await import('ai');
 
     // Non-reasoning
-    const normalModel = makeModel();
-    await adapter.chat(messages, { maxTokens: 1024 }, normalModel, makeProvider());
+    const normalModel = makeModel({ contextWindow: 256000, maxOutputTokens: 128000 });
+    await adapter.chat(messages, { maxTokens: 8192 }, normalModel, makeProvider());
     const normalArgs = vi.mocked(generateText).mock.calls[0]![0];
-    expect(normalArgs.maxOutputTokens).toBe(1024);
+    expect(normalArgs.maxOutputTokens).toBe(8192);
 
     vi.mocked(generateText).mockClear();
 
     // Reasoning
-    const reasoningModel = makeModel({ capabilities: ['chat', 'reasoning'] });
+    const reasoningModel = makeModel({
+      capabilities: ['chat', 'reasoning'],
+      contextWindow: 256000,
+      maxOutputTokens: 128000,
+    });
     await adapter.chat(messages, { maxTokens: 2048 }, reasoningModel, makeProvider());
     const reasoningArgs = vi.mocked(generateText).mock.calls[0]![0];
     expect(reasoningArgs.maxOutputTokens).toBe(2048);

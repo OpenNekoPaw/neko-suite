@@ -37,8 +37,13 @@ export interface IAgentConfig {
   /** Top P sampling */
   topP?: number;
 
-  /** Max tokens */
+  /** Max output tokens */
   maxTokens?: number;
+
+  /** Context compression threshold derived from effective input budget. */
+  contextSettings?: {
+    maxTokens?: number;
+  };
 
   /** Model ID */
   modelId?: string;

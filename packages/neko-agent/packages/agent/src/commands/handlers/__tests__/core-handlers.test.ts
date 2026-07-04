@@ -151,7 +151,7 @@ describe('generateExtensionHelpText', () => {
   it('should include tips section', () => {
     const helpText = generateExtensionHelpText();
     expect(helpText).toContain('**Tips:**');
-    expect(helpText).toContain('Use `$skill-name` to activate a Skill explicitly');
+    expect(helpText).toContain('Use `$skill-name` to activate a clearable domain Skill');
     expect(helpText).toContain('Use `@` to reference files');
   });
 
@@ -188,6 +188,8 @@ describe('generateCliStatusText', () => {
     expect(statusText).toContain('anthropic');
     expect(statusText).toContain('Model:');
     expect(statusText).toContain('claude-sonnet-4-6');
+    expect(statusText).toContain('Max Output Tokens:');
+    expect(statusText).not.toContain('Max Tokens:');
   });
 
   it('should mask API key', () => {

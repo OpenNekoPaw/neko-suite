@@ -86,6 +86,36 @@ describe('GenericAdapter DeepSeek reasoning compatibility', () => {
     expect(response.thinking).toBe('Answer from context.');
   });
 
+  it('maps max_tokens from resolved output cap instead of model context metadata', async () => {
+    const adapter = new GenericAdapter();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        id: 'resp-1',
+        model: 'deepseek-v4-pro',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: 'ok' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+      }),
+    );
+
+    await adapter.chat(
+      [{ role: 'user', content: 'hi' }],
+      { maxTokens: 8192 },
+      { ...model, contextWindow: 256000, maxOutputTokens: 128000 },
+      provider,
+    );
+
+    const body = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string) as {
+      max_tokens?: number;
+    };
+    expect(body.max_tokens).toBe(8192);
+  });
+
   it('streams reasoning_content and fragmented tool-call deltas without creating text-token tools', async () => {
     const adapter = new GenericAdapter();
     const stream = [
