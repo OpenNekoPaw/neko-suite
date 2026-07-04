@@ -985,6 +985,30 @@ pnpm run compile:extension
 
 Expected: PASS.
 
+- [x] **Step 11: Move Puppet face domain tools out of Agent core**
+
+Moved Puppet face parameter runtime and tool factory from Agent core into `@neko/skills`:
+
+```text
+packages/neko-skills/src/puppet/puppet-face-runtime.ts
+packages/neko-skills/src/puppet/puppet-face-tools.ts
+packages/neko-skills/src/puppet/__tests__/puppet-face-runtime.test.ts
+packages/neko-skills/src/puppet/__tests__/puppet-face-tools.test.ts
+```
+
+Agent core no longer exports Puppet face domain APIs from `@neko/agent` or `@neko/agent/tools`. The VSCode Extension bridge still wires VSCode command invocation, image file access, and `NekoPuppetAPI`, but imports the domain tool factory from `@neko/skills`.
+
+Verification:
+
+```bash
+./node_modules/.bin/vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts --reporter=verbose
+./node_modules/.bin/vitest run ../neko-skills/src/puppet/__tests__/puppet-face-runtime.test.ts ../neko-skills/src/puppet/__tests__/puppet-face-tools.test.ts --reporter=verbose
+./node_modules/.bin/tsc --noEmit -p ../neko-skills/tsconfig.json
+pnpm run compile:extension
+```
+
+Expected: PASS.
+
 ### Task 7: Final Boundary Verification
 
 **Files:**

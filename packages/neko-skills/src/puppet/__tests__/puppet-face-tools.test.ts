@@ -12,7 +12,7 @@ function createDeps(overrides: Partial<PuppetFaceToolsDeps> = {}): PuppetFaceToo
 }
 
 describe('puppet face tool factory', () => {
-  it('creates agent-owned puppet face tools with shared tool metadata', () => {
+  it('creates skill-contributed puppet face tools with shared tool metadata', () => {
     const tools = createPuppetFaceTools(createDeps());
 
     expect(tools.map((tool) => tool.name)).toEqual([

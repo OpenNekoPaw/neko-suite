@@ -3,4 +3,5 @@
 export * from './builtins';
 export * from './canvas';
 export * from './creative';
+export * from './puppet';
 export * from './subagent';

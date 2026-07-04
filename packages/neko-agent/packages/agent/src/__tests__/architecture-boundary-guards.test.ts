@@ -137,6 +137,18 @@ describe('agent architecture boundary guards', () => {
     expect(existingFiles).toEqual([]);
   });
 
+  it('keeps Puppet face domain tools out of Agent core', () => {
+    const forbiddenToolFiles = [
+      join(agentSrc, 'tools/puppet-face-runtime.ts'),
+      join(agentSrc, 'tools/puppet-face-tools.ts'),
+    ];
+    const existingFiles = forbiddenToolFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+
+    expect(existingFiles).toEqual([]);
+  });
+
   it('keeps Agent package independent from concrete skill packages', () => {
     const packageManifest = stripTypeScriptComments(
       readFileSync(join(repoRoot, 'packages/agent/package.json'), 'utf-8'),

@@ -1,7 +1,7 @@
 /**
  * Puppet Face Tools - VSCode bridge for AI-assisted puppet face parameters.
  *
- * Business rules live in @neko/agent's PuppetFaceRuntime. This file only wires
+ * Business rules are contributed by @neko/skills. This file only wires
  * VSCode command invocation, image file access, and NekoPuppetAPI application.
  */
 
@@ -9,10 +9,10 @@ import * as vscode from 'vscode';
 import { promises as fsp } from 'node:fs';
 import type { NekoPuppetAPI } from '@neko/shared';
 import {
-  createPuppetFaceTools as createAgentPuppetFaceTools,
+  createPuppetFaceTools as createSkillPuppetFaceTools,
   detectPuppetFaceImageMimeType,
   type PuppetFaceImageInput,
-} from '@neko/agent/tools';
+} from '@neko/skills';
 import { NEKO_AGENT_LLM_GENERATE_COMMAND, NEKO_PUPPET_EXTENSION_ID } from '@neko-agent/types';
 import { getLogger } from '../base';
 import type { Tool } from './types';
@@ -34,7 +34,7 @@ export function createPuppetFaceTools(): Tool[] {
     return ext.activate() as Promise<NekoPuppetAPI>;
   };
 
-  return createAgentPuppetFaceTools({
+  return createSkillPuppetFaceTools({
     generateWithLLM: async (systemPrompt, userPrompt) => {
       const result = await vscode.commands.executeCommand<string>(
         NEKO_AGENT_LLM_GENERATE_COMMAND,
