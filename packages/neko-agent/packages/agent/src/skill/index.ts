@@ -64,6 +64,7 @@ export {
   registerBuiltins,
   builtinSkills,
   getBuiltinSkills,
+  builtinSkillLocales,
   normalizeBuiltinSkillLocale,
   selectBuiltinSkillContent,
   // Individual skills
@@ -93,6 +94,7 @@ export {
   getMediaWorkflowBuiltinSkills,
   qualityAssessmentSkill,
   type BuiltinSkillLocale,
+  type BuiltinSkillLocaleMap,
   type BuiltinSkillOptions,
   type LocalizedBuiltinSkillContent,
   // Creation stage persona skills

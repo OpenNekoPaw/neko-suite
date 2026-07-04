@@ -4,6 +4,7 @@ import {
   aiGenerateSkill,
   aiGenerateToolDefinitions,
   builtinSkills,
+  builtinSkillLocales,
   builtinToolGroups,
   comicToStoryboardSkill,
   creationPersonaSkill,
@@ -58,5 +59,16 @@ describe('@neko-agent/skills builtins', () => {
       getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'comic-to-storyboard')
         ?.content,
     ).toContain('分镜');
+  });
+
+  it('owns builtin skill catalog display localization metadata', () => {
+    expect(builtinSkillLocales['comic-to-storyboard']?.['zh-cn']).toEqual(
+      expect.objectContaining({
+        name: '漫画转分镜表',
+        description: expect.stringContaining('结构化分镜表'),
+        tags: expect.arrayContaining(['AI', '漫画', '分镜']),
+      }),
+    );
+    expect(builtinSkillLocales['media-to-video']?.['zh-cn']?.name).toBe('媒体转视频');
   });
 });
