@@ -41,7 +41,7 @@ export interface UnifiedConfig {
   /** Default models by broad model type */
   defaultModels?: TypeDefaultModels;
 
-  /** Global default maxTokens */
+  /** Global default max output tokens */
   maxTokens?: number;
 
   /** Global default temperature */
@@ -149,7 +149,7 @@ export interface NormalizedConfig {
   /** Default model ID */
   defaultModel: string;
 
-  /** Global default maxTokens */
+  /** Global default max output tokens */
   maxTokens: number;
 
   /** Global default temperature */

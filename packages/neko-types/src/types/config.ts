@@ -376,9 +376,9 @@ export interface ModelConfig {
   type?: ModelType;
   /** Model capabilities */
   capabilities: ModelCapability[] | string[];
-  /** Context window size in tokens */
+  /** Total context window size in tokens */
   contextWindow?: number;
-  /** Maximum output tokens */
+  /** Maximum output generation tokens supported by the model */
   maxOutputTokens?: number;
   /** Cost per 1K input tokens (USD) */
   inputCostPer1k?: number;
@@ -575,8 +575,10 @@ export interface ChatModelOption {
   capabilities?: readonly string[];
   /** Model type for UI grouping */
   category?: ModelType;
-  /** Context window size in tokens, when known */
+  /** Total context window size in tokens, when known */
   contextWindow?: number;
+  /** Maximum output generation tokens supported by the model, when known */
+  maxOutputTokens?: number;
   /** LLM parameter controls that are meaningful for this model/provider pair */
   llmParameterControls?: LlmParameterControlAvailability;
 }

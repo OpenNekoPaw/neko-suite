@@ -144,6 +144,8 @@ export interface TomlConfigValidationIssue {
     | 'unsupportedModelProtocol'
     | 'duplicateProviderId'
     | 'duplicateModelId'
+    | 'invalidDefaultMaxTokens'
+    | 'invalidModelTokenMetadata'
     | 'unsupportedModelType'
     | 'unsupportedDefaultMediaModelType'
     | 'unsupportedDefaultModelType';
@@ -298,6 +300,9 @@ export function validateTomlConfig(config: NekoTomlConfig): void {
   collectUnsupportedModelOverrideProtocolProfileIssues(config.model_overrides, issues);
   collectUnsupportedModelOverrideProtocolIssues(config.model_overrides, issues);
   collectDefaultModelIssues(config.default_models, issues);
+  collectDefaultTokenIssues(config.defaults, issues);
+  collectModelTokenIssues(config.models, 'models', issues);
+  collectModelOverrideTokenIssues(config.model_overrides, issues);
   if (issues.length > 0) {
     throw new TomlConfigValidationError(issues);
   }
@@ -742,6 +747,62 @@ function collectUnsupportedModelProtocolIssues(
   }
 }
 
+function collectDefaultTokenIssues(
+  defaults: TomlDefaultsConfig | undefined,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (defaults?.max_tokens !== undefined && !isPositiveInteger(defaults.max_tokens)) {
+    issues.push({
+      code: 'invalidDefaultMaxTokens',
+      path: 'defaults.max_tokens',
+      message:
+        `[defaults].max_tokens must be a positive integer output-token cap, got ${String(defaults.max_tokens)}.`,
+    });
+  }
+}
+
+function collectModelTokenIssues(
+  models: readonly TomlModelConfig[] | undefined,
+  section: string,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!models) return;
+  for (const model of models) {
+    collectModelTokenValueIssues(model, `${section}.${model.id}`, issues);
+  }
+}
+
+function collectModelOverrideTokenIssues(
+  overrides: Record<string, Partial<TomlModelConfig>> | undefined,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!overrides) return;
+  for (const [modelId, override] of Object.entries(overrides)) {
+    collectModelTokenValueIssues(override, `model_overrides.${modelId}`, issues);
+  }
+}
+
+function collectModelTokenValueIssues(
+  model: Pick<Partial<TomlModelConfig>, 'context_window' | 'max_output_tokens'>,
+  path: string,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (model.context_window !== undefined && !isPositiveInteger(model.context_window)) {
+    issues.push({
+      code: 'invalidModelTokenMetadata',
+      path: `${path}.context_window`,
+      message: `${path}.context_window must be a positive integer input context window, got ${String(model.context_window)}.`,
+    });
+  }
+  if (model.max_output_tokens !== undefined && !isPositiveInteger(model.max_output_tokens)) {
+    issues.push({
+      code: 'invalidModelTokenMetadata',
+      path: `${path}.max_output_tokens`,
+      message: `${path}.max_output_tokens must be a positive integer model output cap, got ${String(model.max_output_tokens)}.`,
+    });
+  }
+}
+
 function collectUnsupportedModelOverrideProtocolProfileIssues(
   overrides: Record<string, Partial<TomlModelConfig>> | undefined,
   issues: TomlConfigValidationIssue[],
@@ -831,6 +892,10 @@ function isStreamFormat(value: unknown): value is ProtocolVariant['streamFormat'
 
 function isAllowedString<T extends string>(value: unknown, allowed: readonly T[]): value is T {
   return typeof value === 'string' && allowed.some((entry) => entry === value);
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 function formatAllowedValues(values: readonly string[]): string {

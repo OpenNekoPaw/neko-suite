@@ -30,6 +30,8 @@ export type ConfigReadErrorCode =
   | 'unsupportedModelProtocol'
   | 'duplicateProviderId'
   | 'duplicateModelId'
+  | 'invalidDefaultMaxTokens'
+  | 'invalidModelTokenMetadata'
   | 'unsupportedModelType'
   | 'unsupportedDefaultMediaModelType'
   | 'unsupportedDefaultModelType'
@@ -212,6 +214,12 @@ function getConfigReadErrorCode(error: unknown): ConfigReadErrorCode {
   }
   if (isTomlValidationError(error, 'duplicateProviderId')) return 'duplicateProviderId';
   if (isTomlValidationError(error, 'duplicateModelId')) return 'duplicateModelId';
+  if (isTomlValidationError(error, 'invalidDefaultMaxTokens')) {
+    return 'invalidDefaultMaxTokens';
+  }
+  if (isTomlValidationError(error, 'invalidModelTokenMetadata')) {
+    return 'invalidModelTokenMetadata';
+  }
   if (isTomlValidationError(error, 'unsupportedModelType')) return 'unsupportedModelType';
   if (isTomlValidationError(error, 'unsupportedDefaultMediaModelType')) {
     return 'unsupportedDefaultMediaModelType';
@@ -329,6 +337,20 @@ function buildConfigReadDiagnostic(
         code,
         filePath,
         message: `Configuration file contains duplicate model IDs: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'invalidDefaultMaxTokens':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an invalid default max output token cap: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'invalidModelTokenMetadata':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains invalid model token metadata: ${filePath}`,
         ...(detail !== undefined ? { detail } : {}),
       };
     case 'unsupportedModelType':

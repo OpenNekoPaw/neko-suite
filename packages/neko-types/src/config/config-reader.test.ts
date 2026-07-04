@@ -231,6 +231,83 @@ describe('config-reader typed results', () => {
     );
   });
 
+  it('keeps default output tokens separate from model context and output metadata', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[defaults]',
+        'max_tokens = 256000',
+        '',
+        '[[models]]',
+        'id = "gpt-5-codex"',
+        'name = "gpt-5-codex"',
+        'provider_id = "openai"',
+        'type = "llm"',
+        'capabilities = ["chat"]',
+        'context_window = 256000',
+        'max_output_tokens = 128000',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') throw new Error('Expected ok result');
+    expect(result.config.maxTokens).toBe(256000);
+    expect(result.config.models?.[0]).toEqual(
+      expect.objectContaining({
+        contextWindow: 256000,
+        maxOutputTokens: 128000,
+      }),
+    );
+  });
+
+  it('diagnoses invalid token metadata instead of replacing it with output defaults', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[defaults]',
+        'max_tokens = 8192',
+        '',
+        '[[models]]',
+        'id = "broken-model"',
+        'name = "broken-model"',
+        'provider_id = "openai"',
+        'type = "llm"',
+        'capabilities = ["chat"]',
+        'context_window = -1',
+        'max_output_tokens = 0',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('invalidModelTokenMetadata');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain('context_window');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain('max_output_tokens');
+  });
+
+  it('diagnoses non-positive default max_tokens as an output-token config error', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[defaults]',
+        'max_tokens = 0',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('invalidDefaultMaxTokens');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain('[defaults].max_tokens');
+  });
+
   it('accepts existing capability metadata fields for type defaults', () => {
     const filePath = path.join(createTempRoot(), 'config.toml');
     fs.writeFileSync(
