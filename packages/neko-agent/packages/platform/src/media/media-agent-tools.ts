@@ -1157,7 +1157,7 @@ export function registerMediaAgentTools(
           },
           fps: {
             type: 'number',
-            enum: ['24', '30', '60'],
+            enum: [24, 30, 60],
             description: 'Frames per second (default: 24)',
           },
           aspectRatio: {

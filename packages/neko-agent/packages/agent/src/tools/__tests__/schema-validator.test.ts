@@ -104,6 +104,17 @@ describe('validateSchema', () => {
     expect(errors).toHaveLength(0);
   });
 
+  it('should pass valid numeric enum value', () => {
+    const schema: ToolParameters = {
+      type: 'object',
+      properties: {
+        fps: { type: 'number', enum: [24, 30, 60] },
+      },
+    };
+    const errors = validateSchema({ fps: 24 }, schema);
+    expect(errors).toHaveLength(0);
+  });
+
   // --- Numeric range ---
 
   it('should fail below minimum', () => {

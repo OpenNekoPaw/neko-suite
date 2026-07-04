@@ -482,7 +482,7 @@ function countProjectionToolCalls(projection: ContentBlockUiProjection): number 
 }
 
 function isStreamingProjection(projection: ContentBlockUiProjection): boolean {
-  if (projection.header.showStreamingBadge || projection.parentIsStreaming) return true;
+  if (projection.header.showStreamingBadge) return true;
   return projection.renderKind === 'thinking' && projection.isThinkingComplete === false;
 }
 

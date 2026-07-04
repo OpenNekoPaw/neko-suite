@@ -676,9 +676,9 @@ export function ChatWorkspace({
             VSCodeMessages.retryTask(taskId, activeConversationId);
           }
         }}
-        onViewTaskResult={(taskId) => {
+        onViewTaskResult={(taskId, resultRef) => {
           if (!isCharacterRoleSession && activeConversationId) {
-            VSCodeMessages.viewTaskResult(taskId, activeConversationId);
+            VSCodeMessages.viewTaskResult(taskId, activeConversationId, resultRef);
           }
         }}
         onInputChange={setInputValue}

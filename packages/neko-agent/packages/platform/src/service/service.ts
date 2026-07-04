@@ -18,6 +18,8 @@ import type {
   ServiceCallContext,
   ServiceResponse,
   ServiceStreamResponse,
+  ModelCallRecord,
+  ModelCallRecorder,
   EmbeddingOptions,
   EmbeddingResponse,
 } from '../types/service';
@@ -43,6 +45,7 @@ import type { PlatformErrorCategory, RetryPolicy, RetryTimeoutPreset } from '../
 export interface ServiceConfig {
   configManager: ConfigManager;
   providerRegistry: ProviderRegistry;
+  modelCallRecorder?: ModelCallRecorder;
 }
 
 /**
@@ -185,77 +188,76 @@ export class Service implements IService {
         providerId: routing.providerId,
         modelId: routing.modelId,
       });
-      logger.debug(
-        'neko.agent.llm.request',
-        withAgentTrace(
-          trace,
-          createModelCallRequestLog({
-            requestId,
-            stream: false,
-            routing,
-            options: chatOptions,
-            originalMessages: messages,
-            projectedMessages,
-          }),
-        ),
-      );
-      logger.debug(
-        'neko.agent.llm.request.raw',
-        withAgentTrace(
-          trace,
-          createModelCallRequestDebugLog({
-            requestId,
-            stream: false,
-            routing,
-            options: chatOptions,
-            originalMessages: messages,
-            projectedMessages,
-          }),
-        ),
-      );
+      const requestLog = createModelCallRequestLog({
+        requestId,
+        stream: false,
+        routing,
+        options: chatOptions,
+        originalMessages: messages,
+        projectedMessages,
+      });
+      const requestDebugLog = createModelCallRequestDebugLog({
+        requestId,
+        stream: false,
+        routing,
+        options: chatOptions,
+        originalMessages: messages,
+        projectedMessages,
+      });
+      logger.debug('neko.agent.llm.request', withAgentTrace(trace, requestLog));
+      logger.debug('neko.agent.llm.request.raw', withAgentTrace(trace, requestDebugLog));
+      recordModelCall(logger, this.config.modelCallRecorder, {
+        kind: 'request',
+        requestId,
+        stream: false,
+        routing,
+        trace,
+        payload: requestDebugLog,
+      });
 
       const response = await adapter.chat(projectedMessages, chatOptions, model, provider);
       const responseMeta = this.buildResponseMeta(routing, startTime);
-      logger.debug(
-        'neko.agent.llm.response',
-        withAgentTrace(
-          trace,
-          createModelCallResponseLog({
-            requestId,
-            stream: false,
-            routing,
-            durationMs: responseMeta.timing.duration,
-            response,
-          }),
-        ),
-      );
-      logger.debug(
-        'neko.agent.llm.response.raw',
-        withAgentTrace(
-          trace,
-          createModelCallResponseDebugLog({
-            requestId,
-            stream: false,
-            routing,
-            response,
-          }),
-        ),
-      );
+      const responseLog = createModelCallResponseLog({
+        requestId,
+        stream: false,
+        routing,
+        durationMs: responseMeta.timing.duration,
+        response,
+      });
+      const responseDebugLog = createModelCallResponseDebugLog({
+        requestId,
+        stream: false,
+        routing,
+        response,
+      });
+      logger.debug('neko.agent.llm.response', withAgentTrace(trace, responseLog));
+      logger.debug('neko.agent.llm.response.raw', withAgentTrace(trace, responseDebugLog));
+      recordModelCall(logger, this.config.modelCallRecorder, {
+        kind: 'response',
+        requestId,
+        stream: false,
+        routing,
+        trace,
+        payload: responseDebugLog,
+      });
       return { ...response, ...responseMeta };
     } catch (error) {
-      logger.warn(
-        'neko.agent.llm.failed',
-        withAgentTrace(
-          trace,
-          createModelCallFailureLog({
-            requestId,
-            stream: false,
-            routing,
-            durationMs: Date.now() - startTime,
-            error,
-          }),
-        ),
-      );
+      const failureLog = createModelCallFailureLog({
+        requestId,
+        stream: false,
+        routing,
+        durationMs: Date.now() - startTime,
+        error,
+      });
+      logger.warn('neko.agent.llm.failed', withAgentTrace(trace, failureLog));
+      recordModelCall(logger, this.config.modelCallRecorder, {
+        kind: 'failure',
+        requestId,
+        stream: false,
+        routing,
+        trace,
+        payload: failureLog,
+      });
       throw error;
     }
   }
@@ -289,34 +291,32 @@ export class Service implements IService {
         providerId: routing.providerId,
         modelId: routing.modelId,
         onProjected: (projectedMessages) => {
-          logger.debug(
-            'neko.agent.llm.request',
-            withAgentTrace(
-              trace,
-              createModelCallRequestLog({
-                requestId,
-                stream: true,
-                routing,
-                options: chatOptions,
-                originalMessages: messages,
-                projectedMessages,
-              }),
-            ),
-          );
-          logger.debug(
-            'neko.agent.llm.request.raw',
-            withAgentTrace(
-              trace,
-              createModelCallRequestDebugLog({
-                requestId,
-                stream: true,
-                routing,
-                options: chatOptions,
-                originalMessages: messages,
-                projectedMessages,
-              }),
-            ),
-          );
+          const requestLog = createModelCallRequestLog({
+            requestId,
+            stream: true,
+            routing,
+            options: chatOptions,
+            originalMessages: messages,
+            projectedMessages,
+          });
+          const requestDebugLog = createModelCallRequestDebugLog({
+            requestId,
+            stream: true,
+            routing,
+            options: chatOptions,
+            originalMessages: messages,
+            projectedMessages,
+          });
+          logger.debug('neko.agent.llm.request', withAgentTrace(trace, requestLog));
+          logger.debug('neko.agent.llm.request.raw', withAgentTrace(trace, requestDebugLog));
+          recordModelCall(logger, this.config.modelCallRecorder, {
+            kind: 'request',
+            requestId,
+            stream: true,
+            routing,
+            trace,
+            payload: requestDebugLog,
+          });
         },
         start: (projectedMessages) =>
           adapter.chatStream(projectedMessages, chatOptions, model, provider),
@@ -347,50 +347,51 @@ export class Service implements IService {
       response: responsePromise
         .then((response) => {
           const responseMeta = this.buildResponseMeta(routing, startTime);
-          logger.debug(
-            'neko.agent.llm.response',
-            withAgentTrace(
-              trace,
-              createModelCallResponseLog({
-                requestId,
-                stream: true,
-                routing,
-                durationMs: responseMeta.timing.duration,
-                response,
-              }),
-            ),
-          );
-          logger.debug(
-            'neko.agent.llm.response.raw',
-            withAgentTrace(
-              trace,
-              createModelCallResponseDebugLog({
-                requestId,
-                stream: true,
-                routing,
-                response,
-              }),
-            ),
-          );
+          const responseLog = createModelCallResponseLog({
+            requestId,
+            stream: true,
+            routing,
+            durationMs: responseMeta.timing.duration,
+            response,
+          });
+          const responseDebugLog = createModelCallResponseDebugLog({
+            requestId,
+            stream: true,
+            routing,
+            response,
+          });
+          logger.debug('neko.agent.llm.response', withAgentTrace(trace, responseLog));
+          logger.debug('neko.agent.llm.response.raw', withAgentTrace(trace, responseDebugLog));
+          recordModelCall(logger, this.config.modelCallRecorder, {
+            kind: 'response',
+            requestId,
+            stream: true,
+            routing,
+            trace,
+            payload: responseDebugLog,
+          });
           return {
             ...response,
             ...responseMeta,
           };
         })
         .catch((error: unknown) => {
-          logger.warn(
-            'neko.agent.llm.failed',
-            withAgentTrace(
-              trace,
-              createModelCallFailureLog({
-                requestId,
-                stream: true,
-                routing,
-                durationMs: Date.now() - startTime,
-                error,
-              }),
-            ),
-          );
+          const failureLog = createModelCallFailureLog({
+            requestId,
+            stream: true,
+            routing,
+            durationMs: Date.now() - startTime,
+            error,
+          });
+          logger.warn('neko.agent.llm.failed', withAgentTrace(trace, failureLog));
+          recordModelCall(logger, this.config.modelCallRecorder, {
+            kind: 'failure',
+            requestId,
+            stream: true,
+            routing,
+            trace,
+            payload: failureLog,
+          });
           throw error;
         }),
     };
@@ -817,6 +818,64 @@ function getServiceLogger() {
 function createModelCallRequestId(now = Date.now()): string {
   modelCallSequence = modelCallSequence >= Number.MAX_SAFE_INTEGER ? 1 : modelCallSequence + 1;
   return `llm-${now.toString(36)}-${modelCallSequence.toString(36)}`;
+}
+
+function recordModelCall(
+  logger: ReturnType<typeof getServiceLogger>,
+  recorder: ModelCallRecorder | undefined,
+  input: {
+    readonly kind: ModelCallRecord['kind'];
+    readonly requestId: string;
+    readonly stream: boolean;
+    readonly routing: RoutingResult;
+    readonly trace: ReturnType<typeof deriveAgentTraceContext>;
+    readonly payload: Record<string, unknown>;
+  },
+): void {
+  if (!recorder) {
+    return;
+  }
+
+  const record: ModelCallRecord = {
+    schema: 'neko.model-call.v1',
+    kind: input.kind,
+    requestId: input.requestId,
+    timestamp: Date.now(),
+    providerId: input.routing.providerId,
+    modelId: input.routing.modelId,
+    stream: input.stream,
+    attempt: input.routing.attempt,
+    trace: input.trace,
+    payload: input.payload,
+  };
+
+  try {
+    const result = recorder.record(record);
+    if (isPromiseLike(result)) {
+      result.catch((error: unknown) => {
+        logger.warn('neko.agent.llm.record.failed', {
+          requestId: input.requestId,
+          kind: input.kind,
+          error: summarizeError(error),
+        });
+      });
+    }
+  } catch (error) {
+    logger.warn('neko.agent.llm.record.failed', {
+      requestId: input.requestId,
+      kind: input.kind,
+      error: summarizeError(error),
+    });
+  }
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'then' in value &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
 }
 
 function createModelCallRequestLog(input: {

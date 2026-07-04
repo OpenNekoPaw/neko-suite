@@ -25,6 +25,23 @@ describe('skill system prompt', () => {
     expect(prompt).toContain('briefly state the activation reason');
   });
 
+  it('keeps Chinese skill catalogs in Chinese when a skill lacks localized description', () => {
+    const prompt = buildSkillAwareSystemPrompt({
+      basePrompt: '基础提示',
+      skills: [
+        { name: 'video-editing', description: 'Video editing assistant for timeline operations.' },
+        { name: 'comic-to-storyboard', description: '将漫画页面转换成可审阅分镜表。' },
+      ],
+    });
+
+    expect(prompt).toContain('# 可用技能');
+    expect(prompt).toContain(
+      '- **video-editing**: 领域能力说明以技能正文为准；仅在 Agent 判断需要后激活。',
+    );
+    expect(prompt).toContain('- **comic-to-storyboard**: 将漫画页面转换成可审阅分镜表。');
+    expect(prompt).not.toContain('Video editing assistant');
+  });
+
   it('keeps the base prompt unchanged when no enabled skills exist', () => {
     expect(
       buildSkillAwareSystemPrompt({

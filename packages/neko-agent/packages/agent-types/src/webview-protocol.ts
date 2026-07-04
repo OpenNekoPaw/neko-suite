@@ -233,6 +233,7 @@ export interface TaskActionWebviewMessage {
   type: 'cancelTask' | 'retryTask' | 'viewTaskResult';
   taskId: string;
   conversationId: string;
+  resultRef?: string;
 }
 
 export interface OpenFileWebviewMessage {
@@ -1891,7 +1892,10 @@ function parseTaskActionMessage(
 ): TaskActionWebviewMessage | null {
   const taskId = requiredString(raw.taskId);
   const conversationId = requiredString(raw.conversationId);
-  return taskId && conversationId ? { type, taskId, conversationId } : null;
+  const resultRef = typeof raw.resultRef === 'string' && raw.resultRef ? raw.resultRef : undefined;
+  return taskId && conversationId
+    ? { type, taskId, conversationId, ...(resultRef ? { resultRef } : {}) }
+    : null;
 }
 
 function parseQueuedMessageActionMessage(

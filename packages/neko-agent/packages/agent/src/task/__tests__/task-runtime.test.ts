@@ -149,7 +149,7 @@ describe('task runtime', () => {
     });
   });
 
-  it('opens task result URLs via host effects', async () => {
+  it('does not open provider result URLs through the VSCode view action', async () => {
     taskManager.get.mockResolvedValue(
       createTask({
         id: 'task-1',
@@ -164,10 +164,29 @@ describe('task runtime', () => {
       effects,
     );
 
+    expect(result.kind).toBe('noop');
+    expect(openTaskResult).not.toHaveBeenCalled();
+  });
+
+  it('opens displayed result refs when persisted storage has only provider URLs', async () => {
+    taskManager.get.mockResolvedValue(
+      createTask({
+        id: 'task-1',
+        payload: { conversationId: 'conv-1' },
+        output: { data: { url: 'https://example.test/output.png' } },
+      }),
+    );
+
+    const result = await runViewTaskResultRuntime(
+      { taskId: 'task-1', conversationId: 'conv-1', resultRef: 'generated-assets/asset-1.png' },
+      { taskManager },
+      effects,
+    );
+
     expect(result.kind).toBe('opened-result');
     expect(openTaskResult).toHaveBeenCalledWith({
       kind: 'open-external',
-      url: 'https://example.test/output.png',
+      url: 'generated-assets/asset-1.png',
     });
   });
 

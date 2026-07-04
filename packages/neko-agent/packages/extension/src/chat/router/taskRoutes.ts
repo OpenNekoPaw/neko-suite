@@ -33,7 +33,7 @@ export function tryHandleTaskRoute(
     case 'viewTaskResult': {
       const conversationId = resolveRequiredConversationId(webview, message, 'viewTaskResult');
       if (!conversationId) return true;
-      deps.taskHandler.handleViewTaskResult(message.taskId, conversationId);
+      deps.taskHandler.handleViewTaskResult(message.taskId, conversationId, message.resultRef);
       return true;
     }
 

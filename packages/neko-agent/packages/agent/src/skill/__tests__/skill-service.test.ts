@@ -389,7 +389,7 @@ describe('KeywordSkillMatcher', () => {
       expect.objectContaining({
         skill: storyboardSkill,
         relevance: 0.95,
-        reason: expect.stringContaining("Matched artifact 'CreativeTable'"),
+        reason: expect.stringContaining("Candidate artifact 'CreativeTable'"),
       }),
     );
   });
@@ -463,7 +463,7 @@ describe('KeywordSkillMatcher', () => {
     const matches = matcher.match('把这个 EPUB 前10页生成分镜表', makeMediaWorkflowSkills());
 
     expect(matches[0]?.skill.name).toBe('comic-to-storyboard');
-    expect(matches[0]?.reason).toContain("Matched artifact 'CreativeTable'");
+    expect(matches[0]?.reason).toContain("Candidate artifact 'CreativeTable'");
   });
 
   it('routes explicit EPUB animation requests to comic-to-animation before broad media skills', () => {

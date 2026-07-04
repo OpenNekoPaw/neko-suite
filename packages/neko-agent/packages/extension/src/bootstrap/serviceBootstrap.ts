@@ -6,6 +6,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as nodePath from 'node:path';
 import { Platform, createPlatform, FileUserConfigManager } from '@neko/platform';
 import {
   MCPManager,
@@ -26,6 +27,7 @@ const logger = getLogger('ServiceBootstrap');
 import { IEditorRegistry, EditorRegistry } from '../editor/common/editorRegistry';
 import { AgentManager, IAgentManager as IAgentManagerInterface } from '../ai/agentManager';
 import { TaskLifecycleCoordinator } from '../services/taskLifecycleCoordinator';
+import { createModelCallJsonlRecorder } from '../services/modelCallJsonlRecorder';
 import { resolveAgentRealApiUserConfigManagerOptions } from './realApiConfigInjection';
 
 // =============================================================================
@@ -42,6 +44,7 @@ export const ITaskLifecycleCoordinator = createServiceId<TaskLifecycleCoordinato
 );
 
 const DEFAULT_TASK_RECOVERY_STORAGE_KEY = 'neko.agent.taskRecovery';
+const MODEL_CALL_LOG_FILE = 'model-calls.jsonl';
 
 // Re-export IEditorRegistry
 export { IEditorRegistry };
@@ -114,11 +117,22 @@ export async function bootstrapCoreServices(
   );
   context.subscriptions.push({ dispose: () => userConfigManager.dispose() });
 
+  const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const modelCallRecorder = workspacePath
+    ? createModelCallJsonlRecorder({
+        filePath: nodePath.join(workspacePath, '.neko', 'logs', MODEL_CALL_LOG_FILE),
+      })
+    : undefined;
+  if (modelCallRecorder?.dispose) {
+    context.subscriptions.push({ dispose: () => void modelCallRecorder.dispose?.() });
+  }
+
   const platform = createPlatform({
-    workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    workspacePath,
     taskManager,
     toolRegistry,
     userConfigManager,
+    ...(modelCallRecorder ? { modelCallRecorder } : {}),
   });
   services.set(IPlatform, platform);
 

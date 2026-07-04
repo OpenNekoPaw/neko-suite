@@ -23,6 +23,27 @@ export interface ServiceCallContext {
   readonly trace?: AgentTraceContext;
 }
 
+export type ModelCallRecordKind = 'request' | 'response' | 'failure';
+
+export interface ModelCallRecord {
+  readonly schema: 'neko.model-call.v1';
+  readonly kind: ModelCallRecordKind;
+  readonly requestId: string;
+  readonly timestamp: number;
+  readonly providerId: string;
+  readonly modelId: string;
+  readonly stream: boolean;
+  readonly attempt: number;
+  readonly trace: AgentTraceContext;
+  readonly payload: Record<string, unknown>;
+}
+
+export interface ModelCallRecorder {
+  record(record: ModelCallRecord): void | Promise<void>;
+  flush?(): Promise<void>;
+  dispose?(): void | Promise<void>;
+}
+
 /**
  * Service response with additional metadata
  */

@@ -34,7 +34,7 @@ interface TaskCardProps {
   task: BackgroundTask;
   onCancel?: (taskId: string) => void;
   onRetry?: (taskId: string) => void;
-  onViewResult?: (taskId: string) => void;
+  onViewResult?: (taskId: string, resultRef?: string) => void;
   /** Available neko-suite plugins for "Send to" buttons (ADR-5) */
   plugins?: PluginsAvailable;
 }
@@ -165,7 +165,7 @@ export function TaskCard({ task, onCancel, onRetry, onViewResult }: TaskCardProp
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onViewResult(task.id);
+                onViewResult(task.id, resultReference ?? undefined);
               }}
               className={compactActionClass}
               title={t('tasks.viewInVSCode')}

@@ -193,8 +193,13 @@ export const VSCodeMessages = {
    * View a task's result
    * @param taskId - The task ID
    */
-  viewTaskResult: (taskId: string, conversationId: string) => {
-    postWebviewMessage({ type: 'viewTaskResult', taskId, conversationId });
+  viewTaskResult: (taskId: string, conversationId: string, resultRef?: string) => {
+    postWebviewMessage({
+      type: 'viewTaskResult',
+      taskId,
+      conversationId,
+      ...(resultRef ? { resultRef } : {}),
+    });
   },
 
   /** Request full configuration from extension */

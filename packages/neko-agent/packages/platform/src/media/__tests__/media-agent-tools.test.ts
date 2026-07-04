@@ -36,6 +36,25 @@ function createTask(
 }
 
 describe('registerMediaAgentTools', () => {
+  it('exposes numeric fps enum values in the GenerateVideo tool schema', () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const generateVideo = registry
+      .toToolDefinitions()
+      .find((tool) => tool.function.name === 'GenerateVideo');
+    const parameters = generateVideo?.function.parameters as
+      { properties?: Record<string, unknown> } | undefined;
+
+    expect(parameters?.properties?.fps).toEqual(
+      expect.objectContaining({
+        type: 'number',
+        enum: [24, 30, 60],
+      }),
+    );
+  });
+
   it('keeps GenerateImage prompt mode compatible and passes explicit provider/model routing', async () => {
     const registry = new ToolRegistry();
     const media = createMediaMock();

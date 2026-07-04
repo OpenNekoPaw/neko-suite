@@ -2,7 +2,7 @@
  * Script Generation Skill - Professional screenplay writing assistant
  *
  * Provides structured script generation with genre templates, character arcs, and iterative refinement.
- * Triggered when user mentions: write script, generate screenplay, create story
+ * Intended for explicit screenplay, script, or story creation requests.
  */
 
 import type { Skill } from '@neko/shared';
@@ -302,14 +302,13 @@ Suggest to user:
 /**
  * Script Generation skill - Professional screenplay writing with genre templates
  *
- * Triggered when user mentions: write script, generate screenplay, create story
+ * Intended for explicit screenplay, script, or story creation requests.
  */
 export const scriptGenerationSkill: Skill = {
   name: 'script-generation',
   description:
     'Professional screenplay and script writing assistant with genre templates and iterative refinement. ' +
-    'Use when user mentions: write script, generate screenplay, create story, write fountain, ' +
-    'screenplay template, story structure, character arc, 写剧本, 生成剧本, 创作故事.',
+    'Use after the Agent has confirmed the user intends to create or revise a screenplay, Fountain script, story structure, character arc, or script template.',
   content: scriptGenerationContent,
   allowedTools: [
     // File operations for script I/O

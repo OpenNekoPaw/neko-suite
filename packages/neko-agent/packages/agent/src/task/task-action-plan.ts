@@ -191,6 +191,7 @@ export function buildViewTaskResultActionPlan(input: {
   readonly conversationId: string;
   readonly task?: Task | null;
   readonly media?: TaskMediaCandidate | null;
+  readonly resultRef?: string;
 }): ViewTaskResultPlan {
   const taskOwnership = getTaskOwnership(input.task, input.conversationId);
   if (taskOwnership === 'wrong-conversation') {
@@ -206,7 +207,19 @@ export function buildViewTaskResultActionPlan(input: {
     return rejectTaskAction(input, 'wrong-conversation', input.media?.conversationId);
   }
 
-  if (mediaOwnership === 'match' && isPublicTaskResultUrl(input.media?.resultUrl)) {
+  if (taskOwnership === 'match') {
+    const url = getTaskResultUrl(input.task ?? undefined);
+    if (url && isVSCodeTaskResultUrl(url)) {
+      return {
+        kind: 'open-url',
+        taskId: input.taskId,
+        conversationId: input.conversationId,
+        url,
+      };
+    }
+  }
+
+  if (mediaOwnership === 'match' && isVSCodeTaskResultUrl(input.media?.resultUrl)) {
     return {
       kind: 'open-url',
       taskId: input.taskId,
@@ -215,16 +228,13 @@ export function buildViewTaskResultActionPlan(input: {
     };
   }
 
-  if (taskOwnership === 'match') {
-    const url = getTaskResultUrl(input.task ?? undefined);
-    if (url) {
-      return {
-        kind: 'open-url',
-        taskId: input.taskId,
-        conversationId: input.conversationId,
-        url,
-      };
-    }
+  if (isDisplayedGeneratedTaskResultRef(input.resultRef)) {
+    return {
+      kind: 'open-url',
+      taskId: input.taskId,
+      conversationId: input.conversationId,
+      url: input.resultRef,
+    };
   }
 
   return {
@@ -299,9 +309,28 @@ function isPublicTaskResultUrl(value: string | undefined): value is string {
   );
 }
 
+function isVSCodeTaskResultUrl(value: string | undefined): value is string {
+  if (!isPublicTaskResultUrl(value)) return false;
+  return (
+    value.startsWith('generated-assets/') ||
+    value.startsWith('file://') ||
+    isAbsoluteLocalPath(value) ||
+    isWorkspaceRelativePath(value)
+  );
+}
+
 function isWebviewRenderUri(value: string): boolean {
   const scheme = value.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
   return Boolean(scheme?.includes('webview')) || /^webview-/i.test(value);
+}
+
+function isWorkspaceRelativePath(value: string): boolean {
+  return !/^[a-z][a-z0-9+.-]*:/i.test(value) && value.length > 0;
+}
+
+function isDisplayedGeneratedTaskResultRef(value: string | undefined): value is string {
+  if (!isPublicTaskResultUrl(value)) return false;
+  return value.startsWith('generated-assets/') || value.startsWith('neko/generated/');
 }
 
 function rejectTaskAction(

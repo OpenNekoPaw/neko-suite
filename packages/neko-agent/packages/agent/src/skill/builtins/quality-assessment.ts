@@ -16,9 +16,7 @@ export const qualityAssessmentSkill: Skill = {
   description:
     'Evaluate quality of AI-generated images, videos, and audio. ' +
     'Detect issues (artifacts, blur, noise, style drift, clipping, loudness) and suggest auto-fixes. ' +
-    'Use when user mentions: check quality, evaluate media, assess image, review generated, ' +
-    'quality issues, is this good enough, rate this, 质量检查, 评估质量, 画面质量, 音频质量, ' +
-    '检查画面, 有没有问题.',
+    'Use after the Agent has confirmed the user intends to assess generated media quality, diagnose visual/audio defects, rate output, or plan approved repairs.',
   content: `# Media Quality Assessment Assistant
 
 You help users evaluate the quality of AI-generated media and fix detected issues after approval.

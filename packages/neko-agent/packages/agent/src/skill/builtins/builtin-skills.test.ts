@@ -647,7 +647,7 @@ describe('Builtin Skills', () => {
       expect(zhComicAnimation?.content).not.toContain('imageStrategy');
     });
 
-    it('keeps machine-facing skill contracts stable across locales', () => {
+    it('keeps machine-facing skill contracts stable across locales while localizing descriptions', () => {
       const enSkills = getBuiltinSkills({ locale: 'en' });
       const zhSkills = getBuiltinSkills({ locale: 'zh-CN' });
 
@@ -656,11 +656,15 @@ describe('Builtin Skills', () => {
       for (const enSkill of enSkills) {
         const zhSkill = zhSkills.find((skill) => skill.name === enSkill.name);
         expect(zhSkill).toBeDefined();
-        expect(zhSkill?.description).toBe(enSkill.description);
         expect(zhSkill?.allowedTools).toEqual(enSkill.allowedTools);
         expect(zhSkill?.referencedSkills).toEqual(enSkill.referencedSkills);
         expect(zhSkill?.mediaWorkflow).toEqual(enSkill.mediaWorkflow);
       }
+
+      const enComic = enSkills.find((skill) => skill.name === 'comic-to-storyboard');
+      const zhComic = zhSkills.find((skill) => skill.name === 'comic-to-storyboard');
+      expect(zhComic?.description).not.toBe(enComic?.description);
+      expect(zhComic?.description).toContain('分镜');
     });
   });
 
@@ -672,7 +676,8 @@ describe('Builtin Skills', () => {
     it('should have description with discoverable domain terms', () => {
       expect(scriptGenerationSkill.description).toContain('script');
       expect(scriptGenerationSkill.description).toContain('screenplay');
-      expect(scriptGenerationSkill.description).toContain('写剧本');
+      expect(scriptGenerationSkill.description).toContain('Agent has confirmed');
+      expect(scriptGenerationSkill.description).not.toContain('Use when user mentions');
     });
 
     it('should have content with genre templates', () => {
@@ -720,8 +725,8 @@ describe('Builtin Skills', () => {
       expect(qualityAssessmentSkill.description).toContain('quality');
       expect(qualityAssessmentSkill.description).toContain('artifacts');
       expect(qualityAssessmentSkill.description).toContain('loudness');
-      expect(qualityAssessmentSkill.description).toContain('质量检查');
-      expect(qualityAssessmentSkill.description).toContain('音频质量');
+      expect(qualityAssessmentSkill.description).toContain('Agent has confirmed');
+      expect(qualityAssessmentSkill.description).not.toContain('Use when user mentions');
     });
 
     it('should have content with workflow instructions', () => {

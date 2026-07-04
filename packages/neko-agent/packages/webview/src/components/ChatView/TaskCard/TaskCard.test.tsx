@@ -100,7 +100,7 @@ describe('TaskCard result actions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'View in VSCode' }));
 
-    expect(onViewResult).toHaveBeenCalledWith('task-1');
+    expect(onViewResult).toHaveBeenCalledWith('task-1', 'generated-assets/asset-1.png');
   });
 });
 

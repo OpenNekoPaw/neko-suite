@@ -387,6 +387,26 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     });
   });
 
+  it('declares numeric videoFps enum values for project generation config', () => {
+    const provider = createNekoCanvasCapabilityProvider(createApi());
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const configTool = tools.find(
+      (tool) => tool.name === TOOL_NAMES_CANVAS.SET_PROJECT_GENERATION_CONFIG,
+    );
+
+    expect(configTool?.parameters.properties['videoFps']).toEqual(
+      expect.objectContaining({
+        type: 'number',
+        enum: [24, 30],
+      }),
+    );
+  });
+
   it('projects Canvas Markdown lifecycle actions through capability definitions', async () => {
     const api = createApi();
     api.markdown.invoke = vi.fn(async (input) => ({

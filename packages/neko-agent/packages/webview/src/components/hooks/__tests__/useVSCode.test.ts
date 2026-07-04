@@ -186,11 +186,12 @@ describe('messages', () => {
       });
 
       it('should post viewTaskResult', () => {
-        VSCodeMessages.viewTaskResult('task-123', 'conv-1');
+        VSCodeMessages.viewTaskResult('task-123', 'conv-1', 'generated-assets/asset-1.png');
         expect(mockPostMessage).toHaveBeenCalledWith({
           type: 'viewTaskResult',
           taskId: 'task-123',
           conversationId: 'conv-1',
+          resultRef: 'generated-assets/asset-1.png',
         });
       });
 

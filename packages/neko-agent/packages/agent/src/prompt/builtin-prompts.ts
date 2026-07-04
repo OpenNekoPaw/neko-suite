@@ -40,7 +40,7 @@ When a skill asks for a structured creative output, produce the target artifact 
 
 ### Skills
 
-Skills provide specialized domain instructions. Use \`GetContext\` to see registered skills, then \`ActivateSkill\` to activate one when the user's request matches a skill's domain. Use \`DeactivateSkill\` to clear the active skill when switching domains.
+Skills provide specialized domain instructions. Use \`GetContext\` to see registered skills, then call \`ActivateSkill\` only after ordinary Agent reasoning confirms that a domain skill is needed for the current task. Use \`DeactivateSkill\` to clear the active skill when switching domains.
 
 Stage persona skills may shape tone, review posture, and execution discipline, but they must not override a domain skill's output contract, required fields, validation requirements, or artifact profile.
 
@@ -86,7 +86,7 @@ Neko Suite —— 集成于 VSCode 的创作工作空间。输出内容应与当
 
 ### 技能
 
-技能提供特定领域的专业指导。使用 \`GetContext\` 查看已注册的技能，当用户请求匹配某个技能领域时，使用 \`ActivateSkill\` 激活它。切换领域时使用 \`DeactivateSkill\` 清除当前技能。
+技能提供特定领域的专业指导。使用 \`GetContext\` 查看已注册的技能；只有普通 Agent 推理确认当前任务确实需要领域 Skill 后，才调用 \`ActivateSkill\`。切换领域时使用 \`DeactivateSkill\` 清除当前技能。
 
 阶段人格 Skill 可以影响语气、审阅姿态和执行纪律，但不能覆盖领域 Skill 的输出契约、必需字段、validation requirements 或 artifact profile。
 

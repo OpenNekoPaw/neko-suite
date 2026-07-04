@@ -1792,7 +1792,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               description: 'Video resolution',
             },
             videoDuration: { type: 'number', description: 'Video duration in seconds' },
-            videoFps: { type: 'number', enum: ['24', '30'], description: 'Video frame rate' },
+            videoFps: { type: 'number', enum: [24, 30], description: 'Video frame rate' },
             imageModel: { type: 'string', description: 'Image generation model id' },
             videoModel: { type: 'string', description: 'Video generation model id' },
             audioModel: { type: 'string', description: 'Audio generation model id' },

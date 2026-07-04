@@ -54,6 +54,14 @@ export interface ToolFilterOptions {
 }
 
 /**
+ * Options for projecting runtime tool definitions into model-visible schemas.
+ */
+export interface ToolDefinitionProjectionOptions {
+  /** Runtime prompt locale used for model-facing descriptions. */
+  locale?: string;
+}
+
+/**
  * Validation error detail for schema validation failures.
  * Structured so LLM can self-correct on retry.
  */
@@ -159,7 +167,7 @@ export interface ToolResult {
 export interface ToolParameterProperty {
   type: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object';
   description?: string;
-  enum?: string[];
+  enum?: (string | number)[];
   items?: Record<string, unknown>;
   properties?: Record<string, ToolParameterProperty>;
   required?: string[];
@@ -224,6 +232,13 @@ export interface ToolExecuteOptions {
  */
 export type ToolKind = 'standard' | 'perception' | 'operation';
 
+export interface ToolLocalization {
+  /** Localized tool description for model-facing tool definitions. */
+  readonly description?: string;
+  /** Localized model-facing parameter descriptions, keyed by property name or dotted path. */
+  readonly parameters?: Readonly<Record<string, string>>;
+}
+
 export interface Tool {
   /** Discriminant for capability-specific tool metadata. */
   kind?: ToolKind;
@@ -231,6 +246,8 @@ export interface Tool {
   name: string;
   /** Tool description for LLM */
   description: string;
+  /** Optional localized model-facing descriptions, keyed by locale such as en, zh, or zh-cn. */
+  localization?: Readonly<Record<string, ToolLocalization>>;
   /** Parameter schema (JSON Schema object) */
   parameters: ToolParameters;
   /** Tool category */
@@ -333,8 +350,12 @@ export interface IToolRegistry {
   /**
    * Convert tools to LLM tool definitions
    * @param filter Optional filter to limit which tools are included
+   * @param options Optional projection options for model-facing metadata
    */
-  toToolDefinitions(filter?: ToolFilterOptions): ToolDefinition[];
+  toToolDefinitions(
+    filter?: ToolFilterOptions,
+    options?: ToolDefinitionProjectionOptions,
+  ): ToolDefinition[];
 
   /** Get tool count (optional) */
   readonly size?: number;

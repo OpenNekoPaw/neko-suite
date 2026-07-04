@@ -158,6 +158,28 @@ describe('MessageList auto-scroll lifecycle', () => {
     expect(screen.getByText('ReadDocument')).toBeTruthy();
   });
 
+  it('does not show completed process records as running while the parent message is still streaming', () => {
+    virtualItems = [
+      { index: 0, key: 'process-records', start: 0 },
+      { index: 1, key: 'streaming-content', start: 80 },
+    ];
+
+    renderWithI18n(
+      <MessageActionsProvider>
+        <MessageList
+          messages={[createStreamingMessageWithCompletedProcessRecords()]}
+          isThinking={false}
+          streamingMessageId="message-with-completed-process"
+          activeConversationId="conv-1"
+        />
+      </MessageActionsProvider>,
+    );
+
+    const processRecordsButton = screen.getByRole('button', { name: /Process records/ });
+
+    expect(processRecordsButton.querySelector('.animate-spin')).toBeNull();
+  });
+
   it('renders the active skill notice inside the virtualized conversation list', () => {
     const onClearActiveSkill = vi.fn();
     virtualItems = [{ index: 0, key: 'skill-notice', start: 0 }];
@@ -389,6 +411,27 @@ function createMessageWithFinalContentAndProcessRecords(): Message {
         type: 'text',
         timestamp: 20,
         content: 'Final storyboard summary.',
+      },
+    ],
+  };
+}
+
+function createStreamingMessageWithCompletedProcessRecords(): Message {
+  return {
+    id: 'message-with-completed-process',
+    role: 'assistant',
+    content: '',
+    timestamp: 1_717_200_000_000,
+    isStreaming: true,
+    contentBlocks: [
+      toolBlock('tool-1', 'ReadDocument', 'manifest', 10),
+      {
+        id: 'text-1',
+        type: 'text',
+        timestamp: 20,
+        content:
+          '清单显示这本 EPUB 是按单页章节组织的，接下来我用 manifest cursor 顺序读取前 10 个页面批次。',
+        isStreaming: false,
       },
     ],
   };

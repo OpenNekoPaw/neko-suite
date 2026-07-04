@@ -25,6 +25,7 @@ import { JsonSchemaValidator } from './json-validator';
 import { LengthValidator } from './length-validator';
 import {
   STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
+  hasStoryboardCreativeTableArtifactShape,
   validateStoryboardCreativeTableOutput,
 } from './creative-table-validator';
 
@@ -34,10 +35,12 @@ interface ArtifactValidatorResult {
 }
 
 type ArtifactValidator = (content: string) => ArtifactValidatorResult;
+type ArtifactValidatorApplicability = (content: string) => boolean;
 
 interface ArtifactValidatorDefinition {
   readonly id: string;
   readonly aliases?: readonly string[];
+  readonly shouldValidate?: ArtifactValidatorApplicability;
   readonly validate: ArtifactValidator;
 }
 
@@ -45,6 +48,7 @@ const ARTIFACT_VALIDATOR_DEFINITIONS: readonly ArtifactValidatorDefinition[] = [
   {
     id: STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
     aliases: ['StoryboardCreativeTable'],
+    shouldValidate: hasStoryboardCreativeTableArtifactShape,
     validate: validateStoryboardCreativeTableOutput,
   },
 ] as const;
@@ -128,7 +132,11 @@ export class OutputValidator {
     for (const [validatorId, validator] of ARTIFACT_VALIDATOR_REGISTRY) {
       if (!normalizedValidators.has(validatorId)) continue;
 
-      const result = validator(content);
+      if (validator.shouldValidate && !validator.shouldValidate(content)) {
+        continue;
+      }
+
+      const result = validator.validate(content);
       errors.push(...result.errors);
       warnings.push(...result.warnings);
     }
@@ -349,12 +357,12 @@ function normalizeValidatorId(value: string): string {
 
 function createArtifactValidatorRegistry(
   definitions: readonly ArtifactValidatorDefinition[],
-): ReadonlyMap<string, ArtifactValidator> {
-  const registry = new Map<string, ArtifactValidator>();
+): ReadonlyMap<string, ArtifactValidatorDefinition> {
+  const registry = new Map<string, ArtifactValidatorDefinition>();
   for (const definition of definitions) {
-    registry.set(normalizeValidatorId(definition.id), definition.validate);
+    registry.set(normalizeValidatorId(definition.id), definition);
     for (const alias of definition.aliases ?? []) {
-      registry.set(normalizeValidatorId(alias), definition.validate);
+      registry.set(normalizeValidatorId(alias), definition);
     }
   }
   return registry;

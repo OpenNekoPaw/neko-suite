@@ -32,10 +32,7 @@ import {
 } from './task-view-projector';
 
 export type TaskRuntimeMessage =
-  | TasksUpdatedMessage
-  | TaskUpdatedMessage
-  | TaskRemovedMessage
-  | MediaTaskProgressMessage;
+  TasksUpdatedMessage | TaskUpdatedMessage | TaskRemovedMessage | MediaTaskProgressMessage;
 
 export type TaskRuntimeAction = 'cancel' | 'retry' | 'remove' | 'view-result';
 
@@ -72,6 +69,7 @@ export interface TaskRuntimeEffects {
 export interface TaskRuntimeInput {
   taskId: string;
   conversationId: string;
+  resultRef?: string;
 }
 
 export interface ConversationTasksRuntimeInput {

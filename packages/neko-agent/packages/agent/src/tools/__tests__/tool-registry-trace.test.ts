@@ -234,6 +234,87 @@ describe('ToolRegistry provider schema projection', () => {
     expect(parameters).not.toHaveProperty('not');
   });
 
+  it('projects localized tool descriptions and parameter descriptions for Chinese runtime prompts', async () => {
+    const { ToolRegistry } = await import('../tool-registry');
+    const registry = new ToolRegistry();
+    registry.register(
+      createTool({
+        name: 'ReadDocument',
+        description: 'Read a document file and return text plus image metadata.',
+        category: 'document',
+        isConcurrencySafe: true,
+        isReadOnly: true,
+        parameters: {
+          type: 'object',
+          required: ['source'],
+          properties: {
+            source: {
+              type: 'object',
+              description: 'Document source. Use a file source with a stable path.',
+            },
+            mode: {
+              type: 'string',
+              enum: ['manifest', 'next'],
+              description: 'Read mode.',
+            },
+          },
+        },
+        execute: async () => ({ success: true, data: 'ok' }),
+      }),
+    );
+
+    const [definition] = registry.toToolDefinitions(undefined, { locale: 'zh' });
+    const properties = definition?.function.parameters['properties'] as Record<
+      string,
+      { description?: string }
+    >;
+
+    expect(definition?.function.description).toBe(
+      '读取文档文件，返回文本、结构信息和可供 ReadImage 使用的 imageInfo/resourceRef。',
+    );
+    expect(properties['source']?.description).toBe(
+      '文档来源。读取本地文件时使用 { kind: "file", path }，path 可为 ${VAR}/path。',
+    );
+    expect(properties['mode']?.description).toBe('读取模式，例如 manifest、next 或 text。');
+  });
+
+  it('prefers tool-provided localization metadata for dynamically registered tools', async () => {
+    const { ToolRegistry } = await import('../tool-registry');
+    const registry = new ToolRegistry();
+    registry.register(
+      createTool({
+        name: 'custom_story_tool',
+        description: 'Create story data.',
+        category: 'workflow',
+        localization: {
+          zh: {
+            description: '创建剧情数据。',
+            parameters: {
+              title: '剧情标题。',
+            },
+          },
+        },
+        parameters: {
+          type: 'object',
+          required: ['title'],
+          properties: {
+            title: { type: 'string', description: 'Story title.' },
+          },
+        },
+        execute: async () => ({ success: true, data: 'ok' }),
+      }),
+    );
+
+    const [definition] = registry.toToolDefinitions(undefined, { locale: 'zh-CN' });
+    const properties = definition?.function.parameters['properties'] as Record<
+      string,
+      { description?: string }
+    >;
+
+    expect(definition?.function.description).toBe('创建剧情数据。');
+    expect(properties['title']?.description).toBe('剧情标题。');
+  });
+
   it('projects optional domain metadata outside provider parameters', async () => {
     const { ToolRegistry } = await import('../tool-registry');
     const registry = new ToolRegistry();

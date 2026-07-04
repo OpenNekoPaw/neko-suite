@@ -78,12 +78,12 @@ export { builtinToolGroups, registerBuiltinToolGroups } from './tool-skills';
 /**
  * Video Editing Assistant - Help with timeline operations
  *
- * Triggered when user mentions: edit video, cut clip, trim, transition, timeline
+ * Intended for explicit timeline editing requests.
  */
 export const videoEditingSkill: Skill = {
   name: 'video-editing',
   description:
-    'Video editing assistant for timeline operations. Use when user mentions: edit video, cut clip, trim video, add transition, timeline editing, split clip, merge clips, adjust timing.',
+    'Video editing assistant for timeline operations. Use after the Agent has confirmed the user intends to edit a timeline, trim or split clips, merge clips, add transitions, or adjust timing.',
   content: `# Video Editing Assistant
 
 You are an expert video editor. Help users with timeline-based editing tasks.
@@ -174,12 +174,12 @@ You are an expert video editor. Help users with timeline-based editing tasks.
 /**
  * Color Grading Assistant - Help with color correction and grading
  *
- * Triggered when user mentions: color grade, color correct, LUT, white balance
+ * Intended for explicit color correction or grading requests.
  */
 export const colorGradingSkill: Skill = {
   name: 'color-grading',
   description:
-    'Color grading and correction assistant. Use when user mentions: color grade, color correct, apply LUT, white balance, exposure, contrast, saturation, cinematic look, film look.',
+    'Color grading and correction assistant. Use after the Agent has confirmed the user intends to adjust color, exposure, contrast, white balance, LUTs, saturation, or a cinematic/film look.',
   content: `# Color Grading Assistant
 
 You are a professional colorist. Help users achieve their desired visual style.
@@ -261,12 +261,12 @@ You are a professional colorist. Help users achieve their desired visual style.
 /**
  * Audio Mixing Assistant - Help with audio levels and effects
  *
- * Triggered when user mentions: audio mix, volume, music, voiceover, sound
+ * Intended for explicit audio mixing and sound design requests.
  */
 export const audioMixingSkill: Skill = {
   name: 'audio-mixing',
   description:
-    'Audio mixing and sound design assistant. Use when user mentions: audio mix, adjust volume, add music, voiceover levels, sound effects, normalize audio, fade in/out, ducking.',
+    'Audio mixing and sound design assistant. Use after the Agent has confirmed the user intends to mix audio, adjust levels, add or balance music, normalize sound, fade audio, or apply ducking.',
   content: `# Audio Mixing Assistant
 
 You are a professional audio mixer. Help users achieve balanced, clear audio.
@@ -349,12 +349,12 @@ Automatically lower music when dialogue plays:
 /**
  * Subtitle Assistant - Help with captioning and subtitles
  *
- * Triggered when user mentions: subtitle, caption, transcribe, translate text
+ * Intended for explicit subtitle, caption, transcription, or translation requests.
  */
 export const subtitleSkill: Skill = {
   name: 'subtitle-assistant',
   description:
-    'Subtitle and captioning assistant. Use when user mentions: add subtitles, create captions, transcribe video, translate subtitles, subtitle timing, SRT, VTT.',
+    'Subtitle and captioning assistant. Use after the Agent has confirmed the user intends to create, edit, time, translate, import, or export subtitles/captions such as SRT or VTT.',
   content: `# Subtitle Assistant
 
 You are a professional subtitler. Help users create accessible, well-timed captions.
@@ -437,7 +437,7 @@ You are a professional subtitler. Help users create accessible, well-timed capti
 /**
  * Script to Timeline Assistant - Convert Fountain scripts to neko-cut projects
  *
- * Triggered when user mentions: convert script, fountain to timeline, screenplay to project
+ * Intended for explicit script-to-timeline conversion requests.
  *
  * Leverages neko-story's TimelineConverter format:
  *   Track 0 (text):     one TextElement per scene heading
@@ -446,7 +446,7 @@ You are a professional subtitler. Help users create accessible, well-timed capti
 export const scriptToTimelineSkill: Skill = {
   name: 'script-to-timeline',
   description:
-    'Script to timeline conversion assistant. Use when user mentions: convert script to timeline, fountain to video project, screenplay to neko-cut, script to editing project, import fountain.',
+    'Script to timeline conversion assistant. Use after the Agent has confirmed the user intends to convert a Fountain script or screenplay into a timeline/video project.',
   content: `# Script to Timeline Converter
 
 You help users convert Fountain format screenplays into neko-cut timeline projects.
@@ -569,13 +569,13 @@ Fountain is a plain-text screenplay format:
  * Scene-to-Music Skill
  *
  * Analyzes timeline content and generates matching background music.
- * Triggered by: 配乐, background music, auto score, 自动配乐, 场景配乐, add music to timeline
+ * Intended for explicit scene scoring or background music requests.
  */
 export const sceneToMusicSkill: Skill = {
   name: 'scene-to-music',
   description:
     'Analyze timeline scenes and generate matching background music with GenerateMusic, then insert it as an audio track. ' +
-    'Use when user mentions: 配乐, background music, auto score, 自动配乐, 场景配乐, add music, music for scene.',
+    'Use after the Agent has confirmed the user intends to score a scene, add background music, or generate music for a timeline.',
   content: `# Scene-to-Music Assistant
 
 Analyze the timeline and generate background music that matches the scene content and mood.

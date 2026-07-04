@@ -33,7 +33,7 @@ interface RequestIntent {
 /**
  * Term-based candidate matcher
  *
- * Matches based on:
+ * Candidate scoring is based on:
  * 1. Exact skill name match
  * 2. Catalog description terms
  * 3. Keywords in description
@@ -178,7 +178,7 @@ export class KeywordSkillMatcher extends SkillMatcher {
 
       if (hasIntent && skillHasIntent) {
         relevance += 0.3;
-        reasons.push(`Matched intent '${intent}'`);
+        reasons.push(`Candidate intent '${intent}'`);
         break; // Only count one intent match
       }
     }
@@ -196,7 +196,7 @@ export class KeywordSkillMatcher extends SkillMatcher {
       const artifactRelevance = this.getArtifactMatchRelevance(skill, artifact);
       relevance += artifactRelevance;
       reasons.push(
-        `Matched artifact '${artifact}' via '${matchedKeyword}' (${artifactRelevance.toFixed(2)})`,
+        `Candidate artifact '${artifact}' via '${matchedKeyword}' (${artifactRelevance.toFixed(2)})`,
       );
       break;
     }

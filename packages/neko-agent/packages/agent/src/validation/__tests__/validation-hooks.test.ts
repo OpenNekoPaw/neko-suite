@@ -464,6 +464,36 @@ describe('ValidationHooks', () => {
       });
     });
 
+    it('does not run storyboard table validation for missing-visual-evidence diagnostics', async () => {
+      const onValidationError = vi.fn();
+      const hooks = new ValidationHooks({
+        outputConstraints: {
+          mermaidPreValidate: false,
+          onValidationFail: 'retry',
+        },
+        onValidationError,
+      });
+      const step = createTestStep(
+        [
+          '无法生成可靠分镜表：当前缺少可见像素证据。',
+          '',
+          '我已经读取到文档 manifest 和 imageInfo，但还没有通过 ReadImage 取得前 10 页的可见画面。',
+          '请先允许我读取这些图片后再生成分镜表。',
+        ].join('\n'),
+      );
+      const context = createTestContextWithMetadata({
+        locale: 'zh',
+        skillValidationRequirements: ['creative-table.storyboard'],
+      });
+      const messageCountBefore = context.messages.length;
+
+      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
+
+      expect(onValidationError).not.toHaveBeenCalled();
+      expect(consumeOutputValidationRepairRequest(context)).toBeNull();
+      expect(context.messages).toHaveLength(messageCountBefore);
+    });
+
     it('records Agent-native validation feedback without rewriting streamed output', async () => {
       const recordValidationFeedback = vi.fn();
       const hooks = new ValidationHooks({

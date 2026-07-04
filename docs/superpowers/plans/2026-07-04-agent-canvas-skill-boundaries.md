@@ -1,0 +1,962 @@
+# Agent Canvas Skill Boundaries Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Move Canvas Markdown ingest, CreativeTable validation, storyboard profile actions, resource binding, and Send to Canvas lifecycle execution to their owning layers while keeping Agent as the generic capability lifecycle/router.
+
+**Architecture:** `@neko/shared` keeps only cross-package capability DTOs. `neko-canvas` owns Markdown ingest, CreativeTable profiles, deterministic validation, resource binding, and Canvas action descriptors. `neko-agent` owns intent routing, lifecycle approval, provider discovery, and Webview handoff presentation, without hardcoded storyboard field protocols.
+
+**Tech Stack:** TypeScript, Vitest, VSCode Extension API, React Webview presenter tests, existing `AgentCapabilityProvider` and Canvas Markdown capability contracts.
+
+---
+
+## Scope
+
+This plan implements the boundary cleanup for Canvas/Agent/CreativeTable behavior. A full migration of all built-in skill content into a new package is isolated in Task 6 because it is mechanically larger and should not block the runtime boundary fix.
+
+## Architecture Checks
+
+1. 是否符合现有架构：Yes. It uses existing `AgentCapabilityProvider.getArtifactFacets().lifecycleCapabilities`, `CanvasMarkdownCapabilityInput/Result`, and Canvas-owned `markdown.invoke`.
+2. 如何进一步降低耦合：Remove Agent-owned Canvas lifecycle descriptors, Webview storyboard header gating, and Agent storyboard deterministic validator.
+3. 是否易于扩展与测试：Yes. New profiles/actions are added by Canvas provider metadata and Canvas profile registry; Agent tests assert provider-discovered descriptors and old-path absence.
+
+## Five-Layer Analysis
+
+| Layer | Decision |
+| --- | --- |
+| Responsibilities | Canvas owns Canvas semantics; Agent owns generic lifecycle; Webview owns projection only; Skills own prompt guidance only. |
+| Dependencies | Agent may depend on `@neko/shared` DTOs and provider metadata, not Canvas internals. Canvas depends on shared DTOs, not Agent Webview or Agent validators. |
+| Interfaces | Cross-package interface remains `CanvasMarkdownCapabilityInput`, `CanvasMarkdownCapabilityResult`, `AgentCapabilityLifecycleDescriptor`, and stable resource refs. |
+| Extension | Dynamic table/profile expansion happens through Canvas profile descriptors and provider lifecycle descriptors, not Agent fixed field arrays. |
+| Tests | Path-level tests prove provider-discovered lifecycle, dynamic Webview handoff, Canvas-owned validation, and removal of Agent storyboard fixed validator. |
+
+## File Structure
+
+- Modify `packages/neko-canvas/packages/extension/src/agentCapabilityProvider.ts`
+  - Export or localize one Canvas-owned builder for Markdown lifecycle descriptors.
+  - Keep action capability mapping in Canvas provider metadata.
+- Modify `packages/neko-canvas/packages/extension/src/__tests__/agentCapabilityProvider.test.ts`
+  - Assert Canvas provider advertises Markdown lifecycle capabilities through `getArtifactFacets`.
+- Modify `packages/neko-agent/packages/extension/src/services/capabilityDiscoveryService.ts`
+  - Add a thin lifecycle descriptor lookup over registered providers.
+- Modify `packages/neko-agent/packages/extension/src/services/__tests__/capabilityDiscoveryService.test.ts`
+  - Assert descriptor lookup returns provider-owned descriptors and updates after unregister.
+- Modify `packages/neko-agent/packages/extension/src/chat/router/types.ts`
+  - Add `resolveLifecycleCapabilityDescriptor` dependency.
+- Modify `packages/neko-agent/packages/extension/src/chat/chatProvider.ts`
+  - Inject descriptor lookup from `getCapabilityDiscoveryService()`.
+- Modify `packages/neko-agent/packages/extension/src/chat/router/fileAndPluginRoutes.ts`
+  - Remove hardcoded `CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS`.
+  - Route Canvas Markdown lifecycle using injected provider descriptor.
+- Modify `packages/neko-agent/packages/extension/src/chat/__tests__/chatWebviewMessageRouter.test.ts`
+  - Assert lifecycle fails visibly when provider descriptor is absent.
+  - Assert approved apply succeeds through injected descriptor.
+- Modify `packages/neko-agent/packages/webview/src/presenters/canvas-markdown-handoff-presenter.ts`
+  - Remove import of storyboard fixed headers.
+  - Detect table handoff generically and preserve caller-declared hints.
+- Modify `packages/neko-agent/packages/webview/src/presenters/__tests__/canvas-markdown-handoff-presenter.test.ts`
+  - Update tests so weak/dynamic/localized tables can be handed to Agent.
+- Modify `packages/neko-agent/packages/agent/src/validation/output-validator.ts`
+  - Remove storyboard CreativeTable artifact validator registry from Agent output validation.
+- Delete `packages/neko-agent/packages/agent/src/validation/creative-table-validator.ts`
+- Delete `packages/neko-agent/packages/agent/src/validation/__tests__/creative-table-validator.test.ts`
+- Modify `packages/neko-agent/packages/agent-types/src/creative-table-contract.ts`
+  - Delete the file if no imports remain after Webview and validator cleanup.
+- Modify `packages/neko-agent/packages/agent-types/src/index.ts`
+  - Remove exports from `creative-table-contract.ts`.
+- Modify built-in skill metadata under `packages/neko-agent/packages/agent/src/skill/builtins/`
+  - Replace `creative-table.storyboard` validation requirements with Canvas lifecycle validation guidance.
+- Optional create `packages/neko-agent/packages/skills/`
+  - Move domain skill definitions only after runtime cleanup is green.
+
+---
+
+### Task 1: Make Canvas Provider The Lifecycle Descriptor Source
+
+**Files:**
+- Modify: `packages/neko-canvas/packages/extension/src/agentCapabilityProvider.ts`
+- Test: `packages/neko-canvas/packages/extension/src/__tests__/agentCapabilityProvider.test.ts`
+
+- [ ] **Step 1: Write the failing Canvas provider test**
+
+Add this test near the existing Canvas Markdown capability tests:
+
+```ts
+it('advertises Canvas Markdown lifecycle descriptors from the Canvas provider', () => {
+  const provider = createNekoCanvasCapabilityProvider(createApi());
+  const facets = provider.getArtifactFacets({
+    extensionContext: {},
+    mediaService: undefined,
+    configManager: undefined,
+    embedFn: undefined,
+  });
+
+  expect(facets.lifecycleCapabilities?.map((descriptor) => descriptor.capabilityId)).toEqual([
+    'canvas.ingestMarkdown',
+    'canvas.createMarkdownNote',
+    'canvas.createTableFromMarkdown',
+    'canvas.createStoryboardDraftFromMarkdown',
+    'canvas.createStoryboardFromMarkdown',
+    'canvas.attachResource',
+    'canvas.validateMarkdownStoryboard',
+  ]);
+  expect(
+    facets.lifecycleCapabilities?.find(
+      (descriptor) => descriptor.capabilityId === 'canvas.createStoryboardFromMarkdown',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      providerId: 'neko-canvas',
+      phases: ['validate', 'review', 'apply'],
+      requiresApproval: true,
+      safetyKind: 'confirmation-gated',
+    }),
+  );
+  expect(
+    facets.lifecycleCapabilities?.find(
+      (descriptor) => descriptor.capabilityId === 'canvas.validateMarkdownStoryboard',
+    ),
+  ).toEqual(
+    expect.objectContaining({
+      providerId: 'neko-canvas',
+      phases: ['validate'],
+      requiresApproval: false,
+      safetyKind: 'read-only-query',
+    }),
+  );
+});
+```
+
+- [ ] **Step 2: Run the focused test and confirm it fails if metadata is missing**
+
+Run:
+
+```bash
+pnpm exec vitest run packages/neko-canvas/packages/extension/src/__tests__/agentCapabilityProvider.test.ts
+```
+
+Expected before implementation: failure if Canvas provider lifecycle metadata does not contain every Markdown capability descriptor.
+
+- [ ] **Step 3: Extract Canvas Markdown lifecycle descriptor construction**
+
+In `packages/neko-canvas/packages/extension/src/agentCapabilityProvider.ts`, add this helper below `CANVAS_MARKDOWN_TOOL_DEFINITIONS`:
+
+```ts
+function createCanvasMarkdownLifecycleDescriptor(
+  definition: CanvasMarkdownToolDefinition,
+): AgentCapabilityLifecycleDescriptor {
+  return {
+    capabilityId: definition.capabilityId,
+    providerId: 'neko-canvas',
+    displayName: definition.displayName,
+    description: definition.description,
+    phases:
+      definition.capabilityId === 'canvas.createStoryboardFromMarkdown'
+        ? ['validate', 'review', 'apply']
+        : definition.capabilityId === 'canvas.validateMarkdownStoryboard'
+          ? ['validate']
+          : [definition.phase],
+    inputSchema: { id: 'canvas.markdown.input', version: 1 },
+    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+    accepts:
+      definition.capabilityId === 'canvas.attachResource'
+        ? ['ResourceRef', 'DocumentArchiveResourceRef']
+        : ['Markdown', 'GfmTable'],
+    produces:
+      definition.capabilityId === 'canvas.validateMarkdownStoryboard'
+        ? ['CanvasMarkdownCapabilityDiagnostics']
+        : ['canvas-node-ref'],
+    risk: definition.isReadOnly ? 'low' : 'medium',
+    requiresApproval: definition.requiresConfirmation,
+    safetyKind: definition.requiresConfirmation ? 'confirmation-gated' : 'read-only-query',
+    targetRequirements: definition.requiresConfirmation
+      ? { allowedFallbacks: ['viewport-insertion', 'explicit-user-input'] }
+      : undefined,
+  };
+}
+
+const CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS: readonly AgentCapabilityLifecycleDescriptor[] =
+  CANVAS_MARKDOWN_TOOL_DEFINITIONS.map(createCanvasMarkdownLifecycleDescriptor);
+```
+
+Then replace the inline `lifecycleCapabilities: CANVAS_MARKDOWN_TOOL_DEFINITIONS.map(...)` in `getArtifactFacets` with:
+
+```ts
+lifecycleCapabilities: CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS,
+```
+
+- [ ] **Step 4: Re-run the Canvas provider test**
+
+Run:
+
+```bash
+pnpm exec vitest run packages/neko-canvas/packages/extension/src/__tests__/agentCapabilityProvider.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit Task 1**
+
+```bash
+git add packages/neko-canvas/packages/extension/src/agentCapabilityProvider.ts packages/neko-canvas/packages/extension/src/__tests__/agentCapabilityProvider.test.ts
+git commit -m "refactor(canvas): advertise markdown lifecycle descriptors"
+```
+
+---
+
+### Task 2: Add Provider-Discovered Lifecycle Lookup To Agent Extension
+
+**Files:**
+- Modify: `packages/neko-agent/packages/extension/src/services/capabilityDiscoveryService.ts`
+- Test: `packages/neko-agent/packages/extension/src/services/__tests__/capabilityDiscoveryService.test.ts`
+
+- [ ] **Step 1: Write the failing discovery service test**
+
+Add this test inside `describe('CapabilityDiscoveryService', () => { ... })`:
+
+```ts
+it('resolves lifecycle descriptors from registered provider artifact facets', () => {
+  const provider = createProvider({
+    id: 'neko-canvas',
+    tools: [createTool({ name: 'CanvasIngestMarkdown', category: 'canvas' })],
+    providerCards: [],
+  });
+  provider.getArtifactFacets = () => ({
+    lifecycleCapabilities: [
+      {
+        capabilityId: 'canvas.ingestMarkdown',
+        providerId: 'neko-canvas',
+        displayName: 'Ingest Markdown to Canvas',
+        description: 'Ingest reviewed Markdown into Canvas.',
+        phases: ['review'],
+        inputSchema: { id: 'canvas.markdown.input', version: 1 },
+        resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+        accepts: ['Markdown', 'GfmTable'],
+        produces: ['canvas-node-ref'],
+        risk: 'medium',
+        requiresApproval: true,
+        safetyKind: 'confirmation-gated',
+      },
+    ],
+  });
+
+  service.registerProvider(provider, { extensionContext: {} });
+
+  expect(service.getLifecycleCapabilityDescriptor('canvas.ingestMarkdown')).toEqual(
+    expect.objectContaining({
+      capabilityId: 'canvas.ingestMarkdown',
+      providerId: 'neko-canvas',
+      phases: ['review'],
+    }),
+  );
+
+  service.unregisterProvider('neko-canvas');
+
+  expect(service.getLifecycleCapabilityDescriptor('canvas.ingestMarkdown')).toBeUndefined();
+});
+```
+
+- [ ] **Step 2: Run the focused test and confirm the method is missing**
+
+Run:
+
+```bash
+pnpm --filter @neko-agent/extension test:run -- src/services/__tests__/capabilityDiscoveryService.test.ts
+```
+
+Expected before implementation: TypeScript or test failure because `getLifecycleCapabilityDescriptor` is not defined.
+
+- [ ] **Step 3: Implement lifecycle descriptor lookup**
+
+Update imports in `capabilityDiscoveryService.ts`:
+
+```ts
+import type {
+  AgentCapabilityContext,
+  AgentCapabilityLifecycleDescriptor,
+  AgentCapabilityManifest,
+  AgentCapabilityProvider,
+  PromptFragment,
+} from '@neko/shared';
+```
+
+Add this method to `CapabilityDiscoveryService` after `getAllPromptFragments()`:
+
+```ts
+getLifecycleCapabilityDescriptor(
+  capabilityId: string,
+): AgentCapabilityLifecycleDescriptor | undefined {
+  if (!this._capabilityContext) return undefined;
+
+  for (const provider of this._runtime.getAllProviders()) {
+    const facets = provider.getArtifactFacets?.(this._capabilityContext);
+    const descriptor = facets?.lifecycleCapabilities?.find(
+      (candidate) => candidate.capabilityId === capabilityId,
+    );
+    if (descriptor) return descriptor;
+  }
+
+  return undefined;
+}
+```
+
+- [ ] **Step 4: Re-run the discovery service test**
+
+Run:
+
+```bash
+pnpm --filter @neko-agent/extension test:run -- src/services/__tests__/capabilityDiscoveryService.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit Task 2**
+
+```bash
+git add packages/neko-agent/packages/extension/src/services/capabilityDiscoveryService.ts packages/neko-agent/packages/extension/src/services/__tests__/capabilityDiscoveryService.test.ts
+git commit -m "feat(agent): discover lifecycle descriptors from providers"
+```
+
+---
+
+### Task 3: Remove Agent Hardcoded Canvas Lifecycle Descriptors
+
+**Files:**
+- Modify: `packages/neko-agent/packages/extension/src/chat/router/types.ts`
+- Modify: `packages/neko-agent/packages/extension/src/chat/chatProvider.ts`
+- Modify: `packages/neko-agent/packages/extension/src/chat/router/fileAndPluginRoutes.ts`
+- Test: `packages/neko-agent/packages/extension/src/chat/__tests__/chatWebviewMessageRouter.test.ts`
+
+- [ ] **Step 1: Write the failing router tests**
+
+Add a descriptor helper near test helpers in `chatWebviewMessageRouter.test.ts`:
+
+```ts
+function createCanvasLifecycleDescriptor(capabilityId: string) {
+  return {
+    capabilityId,
+    providerId: 'neko-canvas',
+    displayName: capabilityId,
+    description: `${capabilityId} descriptor`,
+    phases:
+      capabilityId === 'canvas.createStoryboardFromMarkdown'
+        ? (['validate', 'review', 'apply'] as const)
+        : (['review'] as const),
+    inputSchema: { id: 'canvas.markdown.input', version: 1 },
+    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+    accepts: ['Markdown', 'GfmTable'],
+    produces: ['canvas-node-ref'],
+    risk: 'medium' as const,
+    requiresApproval: capabilityId === 'canvas.createStoryboardFromMarkdown',
+    safetyKind:
+      capabilityId === 'canvas.createStoryboardFromMarkdown'
+        ? ('confirmation-gated' as const)
+        : ('read-only-query' as const),
+  };
+}
+```
+
+Update `createDeps()` to include:
+
+```ts
+resolveLifecycleCapabilityDescriptor: vi.fn((capabilityId: string) =>
+  capabilityId.startsWith('canvas.')
+    ? createCanvasLifecycleDescriptor(capabilityId)
+    : undefined,
+),
+```
+
+Add this test near the Canvas lifecycle tests:
+
+```ts
+it('fails visibly when no provider lifecycle descriptor is registered', async () => {
+  const deps = createDeps();
+  deps.resolveLifecycleCapabilityDescriptor = vi.fn(() => undefined);
+  const invoke = vi.fn();
+  vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+    id: 'neko.neko-canvas',
+    isActive: true,
+    exports: { markdown: { invoke } },
+    activate: vi.fn(),
+  } as any);
+
+  handleChatWebviewMessage(
+    {
+      type: 'invokeAgentCapabilityLifecycle',
+      requestId: 'req-no-descriptor',
+      conversationId: 'conv-1',
+      invocation: {
+        capabilityId: 'canvas.ingestMarkdown',
+        phase: 'review',
+        payload: {
+          capabilityId: 'canvas.ingestMarkdown',
+          markdown: '| visual |\n| --- |\n| open |',
+          sourceFormat: 'gfm-table',
+        },
+      },
+    },
+    deps,
+  );
+
+  await flushAsyncWork();
+
+  expect(invoke).not.toHaveBeenCalled();
+  expect(deps.webview.postMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      type: 'agentCapabilityLifecycleResult',
+      requestId: 'req-no-descriptor',
+      success: false,
+      lifecycleResult: expect.objectContaining({
+        capabilityId: 'canvas.ingestMarkdown',
+        phase: 'review',
+        status: 'blocked',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'agent-capability-lifecycle-unknown-capability',
+            fieldKey: 'capabilityId',
+          }),
+        ],
+      }),
+    }),
+  );
+});
+```
+
+- [ ] **Step 2: Run the router test and confirm current hardcoded descriptors make it fail**
+
+Run:
+
+```bash
+pnpm --filter @neko-agent/extension test:run -- src/chat/__tests__/chatWebviewMessageRouter.test.ts
+```
+
+Expected before implementation: the new missing-descriptor test fails because the hardcoded descriptor still allows routing.
+
+- [ ] **Step 3: Add descriptor resolver to router deps**
+
+In `router/types.ts`, import the descriptor type and add the dependency:
+
+```ts
+import type { AgentCapabilityLifecycleDescriptor } from '@neko/shared';
+```
+
+```ts
+readonly resolveLifecycleCapabilityDescriptor?: (
+  capabilityId: string,
+) => AgentCapabilityLifecycleDescriptor | undefined;
+```
+
+- [ ] **Step 4: Inject discovery lookup from ChatProvider**
+
+In `chatProvider.ts`, add this property to the `handleChatWebviewMessage` deps object:
+
+```ts
+resolveLifecycleCapabilityDescriptor: (capabilityId) =>
+  getCapabilityDiscoveryService().getLifecycleCapabilityDescriptor(capabilityId),
+```
+
+- [ ] **Step 5: Remove hardcoded Canvas descriptors from fileAndPluginRoutes**
+
+Delete the `CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS` constant from `fileAndPluginRoutes.ts`.
+
+Change lifecycle invocation signatures:
+
+```ts
+async function invokeAgentCapabilityLifecycle(
+  message: Extract<WebviewToExtensionMessage, { type: 'invokeAgentCapabilityLifecycle' }>,
+  deps: ChatWebviewMessageRouterDeps,
+): Promise<void> {
+  try {
+    const lifecycleResult = await invokeAgentCapabilityLifecycleBackend(message.invocation, deps);
+```
+
+```ts
+async function invokeAgentCapabilityLifecycleBackend(
+  invocation: AgentCapabilityInvocationInput,
+  deps: ChatWebviewMessageRouterDeps,
+): Promise<AgentCapabilityInvocationResult> {
+```
+
+```ts
+return invokeCanvasMarkdownLifecycleCapability(canvasApi, payload, deps);
+```
+
+```ts
+async function invokeCanvasMarkdownLifecycleCapability(
+  canvasApi: NekoCanvasAPI,
+  input: CanvasMarkdownCapabilityInput,
+  deps: ChatWebviewMessageRouterDeps,
+): Promise<AgentCapabilityInvocationResult> {
+  const descriptor = deps.resolveLifecycleCapabilityDescriptor?.(input.capabilityId);
+```
+
+Replace `getCanvasMarkdownLifecycleDescriptor` with a fail-visible helper:
+
+```ts
+function requireCanvasMarkdownLifecycleDescriptor(
+  deps: ChatWebviewMessageRouterDeps,
+  capabilityId: CanvasMarkdownCapabilityInput['capabilityId'],
+): AgentCapabilityLifecycleDescriptor | undefined {
+  return deps.resolveLifecycleCapabilityDescriptor?.(capabilityId);
+}
+```
+
+Use the helper from `invokeCanvasMarkdownLifecycleCapability` or remove it if the direct resolver call is clearer. Do not keep any local array of Canvas descriptors in Agent.
+
+- [ ] **Step 6: Re-run the router test**
+
+Run:
+
+```bash
+pnpm --filter @neko-agent/extension test:run -- src/chat/__tests__/chatWebviewMessageRouter.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 7: Commit Task 3**
+
+```bash
+git add packages/neko-agent/packages/extension/src/chat/router/types.ts packages/neko-agent/packages/extension/src/chat/chatProvider.ts packages/neko-agent/packages/extension/src/chat/router/fileAndPluginRoutes.ts packages/neko-agent/packages/extension/src/chat/__tests__/chatWebviewMessageRouter.test.ts
+git commit -m "refactor(agent): route canvas lifecycle from provider descriptors"
+```
+
+---
+
+### Task 4: Make Webview Send To Canvas Field-Agnostic
+
+**Files:**
+- Modify: `packages/neko-agent/packages/webview/src/presenters/canvas-markdown-handoff-presenter.ts`
+- Test: `packages/neko-agent/packages/webview/src/presenters/__tests__/canvas-markdown-handoff-presenter.test.ts`
+
+- [ ] **Step 1: Update Webview presenter tests for dynamic fields**
+
+Replace the test named `does not expose Canvas handoff for weak or display-only storyboard tables` with:
+
+```ts
+it('hands any GFM table to Agent without requiring storyboard canonical headers', () => {
+  const projection = projectCanvasMarkdownHandoffRequest({
+    markdown: ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
+    declaredIntentHint: 'creative-table',
+    declaredProfileHint: 'storyboard',
+  });
+
+  expect(projection).toEqual(
+    expect.objectContaining({
+      sourceFormat: 'gfm-table',
+      declaredIntentHint: 'creative-table',
+      declaredProfileHint: 'storyboard',
+    }),
+  );
+  expect(JSON.stringify(projection)).not.toContain('capabilityId');
+});
+```
+
+Add this test:
+
+```ts
+it('preserves skill-added columns without importing storyboard field contracts', () => {
+  const projection = projectCanvasMarkdownHandoffRequest({
+    markdown: [
+      '| scene | shot | imagePrompt.generate | imagePrompt.edit | videoPrompt.generate | model |',
+      '| --- | --- | --- | --- | --- | --- |',
+      '| S1 | 1 | neon door | extend shadows | slow push in | seedance-2-5 |',
+    ].join('\n'),
+    declaredIntentHint: 'creative-table',
+    declaredProfileHint: 'storyboard',
+  });
+
+  expect(projection).toEqual(
+    expect.objectContaining({
+      sourceFormat: 'gfm-table',
+      declaredIntentHint: 'creative-table',
+      declaredProfileHint: 'storyboard',
+    }),
+  );
+});
+```
+
+- [ ] **Step 2: Run the Webview presenter test and confirm fixed header gating fails**
+
+Run:
+
+```bash
+pnpm --filter @neko-agent/webview test -- src/presenters/__tests__/canvas-markdown-handoff-presenter.test.ts
+```
+
+Expected before implementation: the updated weak-table test fails because `isCanonicalStoryboardCreativeTable` still rejects the table.
+
+- [ ] **Step 3: Remove storyboard fixed-field imports and genericize table detection**
+
+In `canvas-markdown-handoff-presenter.ts`, replace the top imports with:
+
+```ts
+import type { CanvasMarkdownCapabilityTarget, CanvasMarkdownResourceRef } from '@neko/shared';
+import type { PluginTransferProvenance, PluginTransferTargetRef } from '@neko-agent/types';
+import type { MarkdownResourceRenderingProjection } from './markdown-resource-rendering-presenter';
+```
+
+Replace `CanvasMarkdownHandoffKind` and `inferCanvasMarkdownHandoffKind` with:
+
+```ts
+interface CanvasMarkdownHandoffKind {
+  readonly declaredIntentHint?: CanvasMarkdownHandoffRequest['declaredIntentHint'];
+  readonly declaredProfileHint?: string;
+}
+
+function inferCanvasMarkdownHandoffKind(markdown: string): CanvasMarkdownHandoffKind | null {
+  const tables = extractGfmTables(markdown);
+  if (tables.length === 0) return null;
+  return {};
+}
+```
+
+In the returned object, prefer caller-declared hints:
+
+```ts
+...(options.declaredIntentHint ?? handoffKind.declaredIntentHint
+  ? { declaredIntentHint: options.declaredIntentHint ?? handoffKind.declaredIntentHint }
+  : {}),
+...(options.declaredProfileHint ?? handoffKind.declaredProfileHint
+  ? { declaredProfileHint: options.declaredProfileHint ?? handoffKind.declaredProfileHint }
+  : {}),
+```
+
+Delete `isCanonicalStoryboardCreativeTable` and all references to `STORYBOARD_CREATIVE_TABLE_HEADERS`.
+
+- [ ] **Step 4: Re-run the Webview presenter test**
+
+Run:
+
+```bash
+pnpm --filter @neko-agent/webview test -- src/presenters/__tests__/canvas-markdown-handoff-presenter.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit Task 4**
+
+```bash
+git add packages/neko-agent/packages/webview/src/presenters/canvas-markdown-handoff-presenter.ts packages/neko-agent/packages/webview/src/presenters/__tests__/canvas-markdown-handoff-presenter.test.ts
+git commit -m "refactor(agent-webview): make canvas markdown handoff field agnostic"
+```
+
+---
+
+### Task 5: Remove Agent-Owned Storyboard CreativeTable Validator
+
+**Files:**
+- Modify: `packages/neko-agent/packages/agent/src/validation/output-validator.ts`
+- Modify: `packages/neko-agent/packages/agent/src/validation/index.ts`
+- Modify: `packages/neko-agent/packages/agent/src/index.ts`
+- Delete: `packages/neko-agent/packages/agent/src/validation/creative-table-validator.ts`
+- Delete: `packages/neko-agent/packages/agent/src/validation/__tests__/creative-table-validator.test.ts`
+- Modify: `packages/neko-agent/packages/agent-types/src/index.ts`
+- Delete: `packages/neko-agent/packages/agent-types/src/creative-table-contract.ts`
+- Modify tests that mention `creative-table.storyboard` under `packages/neko-agent/packages/agent/src/validation/__tests__/`, `packages/neko-agent/packages/agent/src/executor/__tests__/`, `packages/neko-agent/packages/extension/src/chat/handlers/__tests__/`, and `packages/neko-agent/packages/agent/src/skill/builtins/`.
+
+- [ ] **Step 1: Write the output validator behavior test**
+
+In `packages/neko-agent/packages/agent/src/validation/__tests__/validation-hooks.test.ts`, add:
+
+```ts
+it('does not run Canvas CreativeTable validators inside Agent output validation', async () => {
+  const validator = new OutputValidator();
+  const result = await validator.validate(
+    ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
+    ['creative-table.storyboard'],
+  );
+
+  expect(result.errors).toEqual([]);
+  expect(result.warnings).toEqual([]);
+});
+```
+
+If `OutputValidator` is not imported in that file, add:
+
+```ts
+import { OutputValidator } from '../output-validator';
+```
+
+- [ ] **Step 2: Run Agent validation tests and confirm the old validator still fires**
+
+Run:
+
+```bash
+pnpm --filter @neko/agent test:run -- src/validation/__tests__/validation-hooks.test.ts src/validation/__tests__/creative-table-validator.test.ts
+```
+
+Expected before implementation: the new test fails or old CreativeTable validator tests still assert Agent-owned fixed fields.
+
+- [ ] **Step 3: Remove storyboard validator registration from OutputValidator**
+
+In `output-validator.ts`, remove this import:
+
+```ts
+import {
+  STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
+  hasStoryboardCreativeTableArtifactShape,
+  validateStoryboardCreativeTableOutput,
+} from './creative-table-validator';
+```
+
+Replace the artifact validator registry with an empty registry:
+
+```ts
+const ARTIFACT_VALIDATOR_DEFINITIONS: readonly ArtifactValidatorDefinition[] = [] as const;
+```
+
+Keep `validateArtifactValidators` intact so future non-Canvas artifact validators can still be registered intentionally.
+
+- [ ] **Step 4: Remove exports and deleted files**
+
+Delete:
+
+```bash
+rm packages/neko-agent/packages/agent/src/validation/creative-table-validator.ts
+rm packages/neko-agent/packages/agent/src/validation/__tests__/creative-table-validator.test.ts
+rm packages/neko-agent/packages/agent-types/src/creative-table-contract.ts
+```
+
+Remove `creative-table-contract` exports from:
+
+```ts
+packages/neko-agent/packages/agent-types/src/index.ts
+packages/neko-agent/packages/agent/src/validation/index.ts
+packages/neko-agent/packages/agent/src/index.ts
+```
+
+- [ ] **Step 5: Update skill metadata from validator ids to Canvas lifecycle guidance**
+
+In `packages/neko-agent/packages/agent/src/skill/builtins/comic-to-storyboard.ts`, replace:
+
+```ts
+validationRequirements: ['creative-table.storyboard', 'CanvasMarkdownCapabilityInput'],
+```
+
+with:
+
+```ts
+validationRequirements: ['CanvasMarkdownCapabilityInput'],
+```
+
+In `packages/neko-agent/packages/agent/src/skill/builtins/media-to-video.ts`, remove `creative-table.storyboard` from `artifactProfiles` and `validationRequirements` arrays while keeping `storyboard`, `comic-shot-asset-prep`, and `CanvasMarkdownCapabilityInput`.
+
+Update tests that expect `creative-table.storyboard` so they expect Canvas Markdown validation requirements only:
+
+```ts
+expect(skill.validationRequirements).toContain('CanvasMarkdownCapabilityInput');
+expect(skill.validationRequirements).not.toContain('creative-table.storyboard');
+```
+
+- [ ] **Step 6: Run all affected Agent tests**
+
+Run:
+
+```bash
+pnpm --filter @neko/agent test:run -- src/validation/__tests__/validation-hooks.test.ts src/executor/__tests__/agent-executor.test.ts src/skill/builtins/builtin-skills.test.ts src/skill/__tests__/conversation-skill-runtime.test.ts
+pnpm --filter @neko-agent/extension test:run -- src/chat/handlers/__tests__/skillHandler.test.ts
+pnpm --filter @neko-agent/webview test -- src/presenters/__tests__/canvas-markdown-handoff-presenter.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 7: Confirm no Agent fixed storyboard contract imports remain**
+
+Run:
+
+```bash
+rg -n "STORYBOARD_CREATIVE_TABLE|creative-table.storyboard|validateStoryboardCreativeTableOutput|resolveStoryboardCreativeTableHeader" packages/neko-agent packages/neko-canvas packages/neko-types
+```
+
+Expected output may include Canvas profile tests or OpenSpec documents, but must not include Agent production code importing fixed storyboard table headers or Agent output validator registration.
+
+- [ ] **Step 8: Commit Task 5**
+
+```bash
+git add packages/neko-agent/packages/agent packages/neko-agent/packages/agent-types packages/neko-agent/packages/extension packages/neko-agent/packages/webview
+git commit -m "refactor(agent): remove storyboard creative table validator ownership"
+```
+
+---
+
+### Task 6: Optional Extract Built-In Skill Content Into A Skills Subpackage
+
+**Files:**
+- Create: `packages/neko-agent/packages/skills/package.json`
+- Create: `packages/neko-agent/packages/skills/src/index.ts`
+- Create: `packages/neko-agent/packages/skills/src/builtins/comic-to-storyboard.ts`
+- Create: `packages/neko-agent/packages/skills/src/builtins/media-to-video.ts`
+- Create: `packages/neko-agent/packages/skills/src/builtins/index.ts`
+- Modify: `packages/neko-agent/packages/agent/package.json`
+- Modify: `packages/neko-agent/packages/agent/src/skill/builtins/index.ts`
+- Move tests from `packages/neko-agent/packages/agent/src/skill/builtins/` to `packages/neko-agent/packages/skills/src/builtins/` after the package compiles.
+
+- [ ] **Step 1: Create the package manifest**
+
+Add `packages/neko-agent/packages/skills/package.json`:
+
+```json
+{
+  "name": "@neko-agent/skills",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./builtins": "./src/builtins/index.ts",
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "test": "vitest --run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@neko/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.2",
+    "typescript": "^5.0.0"
+  },
+  "license": "AGPL-3.0-or-later"
+}
+```
+
+- [ ] **Step 2: Move skill definitions without moving runtime**
+
+Move only pure skill definition files from:
+
+```text
+packages/neko-agent/packages/agent/src/skill/builtins/comic-to-storyboard.ts
+packages/neko-agent/packages/agent/src/skill/builtins/media-to-video.ts
+```
+
+to:
+
+```text
+packages/neko-agent/packages/skills/src/builtins/comic-to-storyboard.ts
+packages/neko-agent/packages/skills/src/builtins/media-to-video.ts
+```
+
+Create `packages/neko-agent/packages/skills/src/builtins/index.ts`:
+
+```ts
+export { comicToStoryboardSkill } from './comic-to-storyboard';
+export { mediaToVideoSkills } from './media-to-video';
+```
+
+Create `packages/neko-agent/packages/skills/src/index.ts`:
+
+```ts
+export * from './builtins';
+```
+
+- [ ] **Step 3: Keep Agent runtime as consumer**
+
+Add dependency to `packages/neko-agent/packages/agent/package.json`:
+
+```json
+"@neko-agent/skills": "workspace:*"
+```
+
+Update `packages/neko-agent/packages/agent/src/skill/builtins/index.ts` to re-export from the new package:
+
+```ts
+export { comicToStoryboardSkill, mediaToVideoSkills } from '@neko-agent/skills';
+```
+
+- [ ] **Step 4: Run skill tests**
+
+Run:
+
+```bash
+pnpm --filter @neko-agent/skills test
+pnpm --filter @neko/agent test:run -- src/skill/builtins/builtin-skills.test.ts src/skill/__tests__/conversation-skill-runtime.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit Task 6**
+
+```bash
+git add packages/neko-agent/packages/skills packages/neko-agent/packages/agent/package.json packages/neko-agent/packages/agent/src/skill/builtins
+git commit -m "refactor(agent): move builtin skill content to skills package"
+```
+
+---
+
+### Task 7: Final Boundary Verification
+
+**Files:**
+- No planned production edits.
+- Test command output is the deliverable.
+
+- [ ] **Step 1: Run focused tests**
+
+Run:
+
+```bash
+pnpm exec vitest run packages/neko-canvas/packages/extension/src/__tests__/agentCapabilityProvider.test.ts packages/neko-canvas/packages/extension/src/__tests__/markdownCapabilities.test.ts
+pnpm --filter @neko-agent/extension test:run -- src/services/__tests__/capabilityDiscoveryService.test.ts src/chat/__tests__/chatWebviewMessageRouter.test.ts
+pnpm --filter @neko-agent/webview test -- src/presenters/__tests__/canvas-markdown-handoff-presenter.test.ts
+pnpm --filter @neko/agent test:run -- src/validation/__tests__/validation-hooks.test.ts src/skill/builtins/builtin-skills.test.ts
+```
+
+Expected: all focused tests PASS.
+
+- [ ] **Step 2: Run boundary checks**
+
+Run:
+
+```bash
+pnpm check:agent-boundaries
+pnpm check:webview-boundaries
+pnpm check:legacy-debt
+```
+
+Expected: all checks PASS.
+
+- [ ] **Step 3: Run TypeScript compile for affected packages**
+
+Run:
+
+```bash
+pnpm exec tsc --noEmit -p packages/neko-agent/packages/extension/tsconfig.json
+pnpm exec tsc --noEmit -p packages/neko-agent/packages/agent/tsconfig.json
+pnpm exec tsc --noEmit -p packages/neko-agent/packages/webview/tsconfig.json
+```
+
+Expected: all compile commands PASS.
+
+- [ ] **Step 4: Run residual search**
+
+Run:
+
+```bash
+rg -n "CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS|STORYBOARD_CREATIVE_TABLE|creative-table.storyboard|resolveStoryboardCreativeTableHeader|validateStoryboardCreativeTableOutput" packages/neko-agent packages/neko-canvas packages/neko-types
+```
+
+Expected:
+- No `CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS` in `packages/neko-agent`.
+- No `STORYBOARD_CREATIVE_TABLE` imports in Agent Webview or Agent validator code.
+- No `creative-table.storyboard` in runtime validation requirements.
+- Canvas profile code may still contain storyboard field aliases because Canvas owns that profile.
+
+- [ ] **Step 5: Run full quality gate if focused checks are green**
+
+Run:
+
+```bash
+pnpm check:quality
+```
+
+Expected: PASS.
+
+---
+
+## Self-Review
+
+**Spec coverage:** The plan covers Canvas ingest protocol ownership, CreativeTable deterministic validator ownership, storyboard profile execution actions, resource binding, Send to Canvas lifecycle/capability execution, Webview field-agnostic handoff, and optional skills package extraction.
+
+**Placeholder scan:** The plan contains concrete paths, test snippets, commands, and expected outcomes. It does not rely on unspecified implementation steps.
+
+**Type consistency:** The plan uses existing `AgentCapabilityLifecycleDescriptor`, `CanvasMarkdownCapabilityInput`, `CanvasMarkdownCapabilityResult`, `AgentCapabilityProvider`, and `ChatWebviewMessageRouterDeps` types. New dependency names are consistent across router deps, tests, and ChatProvider injection.

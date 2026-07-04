@@ -12,6 +12,7 @@ import type {
   Tool,
   ToolCategory,
   ToolExecuteOptions,
+  ToolLocalization,
   ToolParameters,
   ToolQueryBeforeMutateGuidance,
   ToolResult,
@@ -141,6 +142,7 @@ export function createTool(config: {
   description: string;
   parameters: ToolParameters;
   category: ToolCategory;
+  localization?: Readonly<Record<string, ToolLocalization>>;
   requiresConfirmation?: boolean;
   safetyKind?: ToolSafetyKind;
   targetRequirements?: ToolTargetRequirements;
@@ -155,6 +157,7 @@ export function createTool(config: {
   return {
     name: config.name,
     description: config.description,
+    ...(config.localization ? { localization: config.localization } : {}),
     parameters: config.parameters,
     category: config.category,
     requiresConfirmation: config.requiresConfirmation ?? false,
@@ -185,6 +188,8 @@ export interface BuildToolConfig {
   description: string;
   parameters: ToolParameters;
   category: ToolCategory;
+  /** Optional localized model-facing descriptions keyed by locale. */
+  localization?: Readonly<Record<string, ToolLocalization>>;
   /** Safety preset — applies predefined flag combination. Default: 'custom' (Fail-Closed). */
   safety?: ToolSafetyPreset;
   /** Override preset's requiresConfirmation */
@@ -241,6 +246,7 @@ export function buildTool(config: BuildToolConfig): Tool {
     description: config.description,
     parameters: config.parameters,
     category: config.category,
+    localization: config.localization,
     traits: config.traits,
     domain: config.domain,
     safetyKind: config.safetyKind,

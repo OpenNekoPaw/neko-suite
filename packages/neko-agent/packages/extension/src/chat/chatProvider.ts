@@ -488,7 +488,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     await this._localResourceAccess.configureChatWebview(webviewView.webview);
     webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
     this._setupMessageHandlers(webviewView.webview);
-    this._startWithEmptyTabs();
 
     // Notify webview which neko-suite plugins are installed (ADR-5)
     postPluginsAvailable(webviewView.webview);
@@ -750,16 +749,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     // Startup no longer restores previously open tabs. Conversation history
     // remains available from the menu; tab restoration is user-driven.
     this._tabState = { openTabs: [], activeTabId: null };
+    this._conversations.clearActive();
 
     if (restored.openTabs.length > 0 || restored.activeTabId !== null) {
       this._saveTabState();
     }
-  }
-
-  private _startWithEmptyTabs(): void {
-    this._tabState = { openTabs: [], activeTabId: null };
-    this._conversations.clearActive();
-    this._saveTabState();
   }
 
   private _syncActiveConversationFromTabState(): void {
@@ -811,6 +805,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     );
     this._tabState = result.tabState;
     this._saveTabState();
+
+    if (result.sync.kind === 'switched') {
+      this._conversationMessageHandler.sendActiveConversation();
+    }
   }
 
   public async startCharacterDialogue(

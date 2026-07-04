@@ -149,6 +149,26 @@ export function validateStoryboardCreativeTableOutput(
   return { errors, warnings, table };
 }
 
+export function hasStoryboardCreativeTableArtifactShape(content: string): boolean {
+  if (YAML_FRONTMATTER_RE.test(content.trimStart())) {
+    return true;
+  }
+
+  return extractMarkdownTables(content).some((table) => {
+    const resolvedHeaderCount = table.headers.filter(
+      (header) => resolveStoryboardCreativeTableHeader(header) !== undefined,
+    ).length;
+    if (resolvedHeaderCount >= 2) {
+      return true;
+    }
+
+    const normalizedHeaders = table.headers.map(normalizeHeader);
+    return FORBIDDEN_STORYBOARD_HEADERS.some((header) =>
+      normalizedHeaders.includes(normalizeHeader(header)),
+    );
+  });
+}
+
 function findStoryboardCandidateTable(
   tables: readonly MarkdownTableSummary[],
 ): MarkdownTableSummary | undefined {

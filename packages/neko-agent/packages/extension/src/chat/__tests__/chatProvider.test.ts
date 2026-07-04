@@ -116,8 +116,7 @@ describe('chatProvider', () => {
     await Promise.resolve();
 
     const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
-      | ((message: unknown) => void | Promise<void>)
-      | undefined;
+      ((message: unknown) => void | Promise<void>) | undefined;
     await receiveMessage?.({ type: 'getActiveConversation' });
     await receiveMessage?.({ type: 'getTabState' });
 
@@ -176,8 +175,7 @@ describe('chatProvider', () => {
     await Promise.resolve();
 
     const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
-      | ((message: unknown) => void | Promise<void>)
-      | undefined;
+      ((message: unknown) => void | Promise<void>) | undefined;
     await receiveMessage?.({ type: 'getActiveConversation' });
     await receiveMessage?.({ type: 'getTabState' });
 
@@ -230,8 +228,7 @@ describe('chatProvider', () => {
     await Promise.resolve();
 
     const receiveFirstMessage = vi.mocked(firstWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
-      | ((message: unknown) => void | Promise<void>)
-      | undefined;
+      ((message: unknown) => void | Promise<void>) | undefined;
     await receiveFirstMessage?.({ type: 'updateTabState', openTabs: [], activeTabId: null });
 
     const secondWebview = vscode.createMockWebview();
@@ -247,8 +244,7 @@ describe('chatProvider', () => {
     await Promise.resolve();
 
     const receiveSecondMessage = vi.mocked(secondWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
-      | ((message: unknown) => void | Promise<void>)
-      | undefined;
+      ((message: unknown) => void | Promise<void>) | undefined;
     await receiveSecondMessage?.({ type: 'getActiveConversation' });
     await receiveSecondMessage?.({ type: 'getTabState' });
 
@@ -259,6 +255,157 @@ describe('chatProvider', () => {
     expect(secondWebview.postMessage).toHaveBeenCalledWith({
       type: 'tabState',
       tabState: { openTabs: [], activeTabId: null },
+    });
+
+    provider.dispose();
+  });
+
+  it('preserves same-session open tabs when the webview is recreated', async () => {
+    const now = Date.now();
+    const historicalConversation = {
+      id: 'conv-history',
+      title: 'History',
+      messages: [{ id: 'msg-1', role: 'user', content: 'persisted transcript', timestamp: now }],
+      createdAt: now,
+      updatedAt: now,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [['conv-history', historicalConversation]],
+        activeId: null,
+      },
+    });
+    const firstWebview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview: firstWebview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveFirstMessage = vi.mocked(firstWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    await receiveFirstMessage?.({
+      type: 'updateTabState',
+      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+      activeTabId: 'tab-history',
+    });
+
+    const secondWebview = vscode.createMockWebview();
+    provider.resolveWebviewView(
+      {
+        webview: secondWebview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveSecondMessage = vi.mocked(secondWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    await receiveSecondMessage?.({ type: 'getActiveConversation' });
+    await receiveSecondMessage?.({ type: 'getTabState' });
+
+    expect(secondWebview.postMessage).toHaveBeenCalledWith({
+      type: 'activeConversation',
+      conversation: expect.objectContaining({
+        id: 'conv-history',
+        title: 'History',
+        messages: [
+          expect.objectContaining({
+            id: 'msg-1',
+            content: 'persisted transcript',
+          }),
+        ],
+      }),
+    });
+    expect(secondWebview.postMessage).toHaveBeenCalledWith({
+      type: 'tabState',
+      tabState: {
+        openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+        activeTabId: 'tab-history',
+      },
+    });
+
+    provider.dispose();
+  });
+
+  it('sends the active conversation when tab state synchronization switches to a history conversation', async () => {
+    const now = Date.now();
+    const historicalConversation = {
+      id: 'conv-history',
+      title: 'History',
+      messages: [{ id: 'msg-1', role: 'user', content: 'persisted transcript', timestamp: now }],
+      createdAt: now,
+      updatedAt: now,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [['conv-history', historicalConversation]],
+        activeId: null,
+      },
+      'neko.tabState': {
+        openTabs: [],
+        activeTabId: null,
+      },
+    });
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    expect(receiveMessage).toBeDefined();
+    vi.mocked(webview.postMessage).mockClear();
+
+    await receiveMessage?.({
+      type: 'updateTabState',
+      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+      activeTabId: 'tab-history',
+    });
+
+    expect(context.workspaceState.update).toHaveBeenCalledWith('neko.tabState', {
+      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+      activeTabId: 'tab-history',
+    });
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'activeConversation',
+      conversation: expect.objectContaining({
+        id: 'conv-history',
+        title: 'History',
+        messages: [
+          expect.objectContaining({
+            id: 'msg-1',
+            content: 'persisted transcript',
+          }),
+        ],
+      }),
     });
 
     provider.dispose();
@@ -479,8 +626,7 @@ describe('chatProvider', () => {
     await Promise.resolve();
 
     const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
-      | ((message: unknown) => void | Promise<void>)
-      | undefined;
+      ((message: unknown) => void | Promise<void>) | undefined;
     expect(receiveMessage).toBeDefined();
 
     vi.mocked(webview.postMessage).mockClear();
@@ -514,8 +660,7 @@ describe('chatProvider', () => {
     await Promise.resolve();
 
     const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
-      | ((message: unknown) => void | Promise<void>)
-      | undefined;
+      ((message: unknown) => void | Promise<void>) | undefined;
     expect(receiveMessage).toBeDefined();
 
     await receiveMessage?.({ type: 'webviewKeyboardEditable', editable: true });
@@ -578,8 +723,7 @@ describe('chatProvider', () => {
     await Promise.resolve();
 
     const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
-      | ((message: unknown) => void | Promise<void>)
-      | undefined;
+      ((message: unknown) => void | Promise<void>) | undefined;
     vi.mocked(webview.postMessage).mockClear();
 
     await receiveMessage?.({ type: 'webviewKeyboardFocus', focused: true });
@@ -614,8 +758,7 @@ describe('chatProvider', () => {
     await Promise.resolve();
 
     const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
-      | ((message: unknown) => void | Promise<void>)
-      | undefined;
+      ((message: unknown) => void | Promise<void>) | undefined;
     await receiveMessage?.({ type: 'webviewKeyboardFocus', focused: true });
     await receiveMessage?.({ type: 'webviewKeyboardEditable', editable: true });
     vi.mocked(vscode.commands.executeCommand).mockClear();

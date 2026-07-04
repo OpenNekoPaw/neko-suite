@@ -46,7 +46,7 @@ interface ChatViewProps {
   ambientNodes?: readonly AmbientCanvasNodeProjection[];
   onCancelTask?: (taskId: string) => void;
   onRetryTask?: (taskId: string) => void;
-  onViewTaskResult?: (taskId: string) => void;
+  onViewTaskResult?: (taskId: string, resultRef?: string) => void;
   // Code diff actions
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;

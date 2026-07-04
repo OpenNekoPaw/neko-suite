@@ -301,6 +301,22 @@ describe('webview protocol parser', () => {
     });
   });
 
+  it('preserves optional displayed result refs on task view actions', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'viewTaskResult',
+        conversationId: 'conv-1',
+        taskId: 'task-1',
+        resultRef: 'generated-assets/asset-1.png',
+      }),
+    ).toEqual({
+      type: 'viewTaskResult',
+      conversationId: 'conv-1',
+      taskId: 'task-1',
+      resultRef: 'generated-assets/asset-1.png',
+    });
+  });
+
   it('rejects message queue commands without required explicit scope', () => {
     expect(parseWebviewToExtensionMessage({ type: 'getMessageQueue' })).toBeNull();
     expect(

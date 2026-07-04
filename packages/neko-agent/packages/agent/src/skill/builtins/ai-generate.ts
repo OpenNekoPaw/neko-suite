@@ -2,7 +2,7 @@
  * AI Generate Skill - Builtin skill for AI media generation
  *
  * Provides image, video, audio, and music generation capabilities.
- * Triggered when user mentions: generate image, create video, TTS, background music, etc.
+ * Intended for explicit AI media generation requests.
  */
 
 import type { Skill, SkillToolDefinition } from '@neko/shared';
@@ -435,12 +435,12 @@ Default strategy:
 /**
  * AI Generate skill - Generate images, videos, audio, and music using AI
  *
- * Triggered when user mentions: generate image, create video, TTS, background music, AI drawing
+ * Intended for explicit AI media generation requests.
  */
 export const aiGenerateSkill: Skill = {
   name: 'ai-generate',
   description:
-    'AI media generation capabilities including image, video, audio, and music generation. Use when user mentions: generate image, create video, text-to-speech, TTS, background music, BGM, AI drawing, create picture, make video, voiceover, dubbing.',
+    'AI media generation capabilities including image, video, audio, and music generation. Use after the Agent has confirmed the user intends to create or transform media such as images, videos, speech, music, voiceover, or dubbing.',
   content: aiGenerateContent,
   allowedTools: [
     TOOL_NAMES_MEDIA.GENERATE_IMAGE,

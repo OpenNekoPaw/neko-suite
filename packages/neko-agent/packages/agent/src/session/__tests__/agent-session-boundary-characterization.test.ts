@@ -64,6 +64,20 @@ function createToolCallService(): IService {
   };
 }
 
+function createEmptyStreamService(): IService {
+  return {
+    chat: async () => ({
+      id: 'empty-response',
+      model: 'test-model',
+      message: { role: 'assistant', content: '' },
+      finishReason: 'stop',
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    }),
+    chatStream: () => streamEmptyResponse(),
+    embed: async () => ({ embeddings: [] }),
+  };
+}
+
 async function* streamToolCall(): AsyncIterable<StreamChunk> {
   yield {
     type: 'tool_call',
@@ -77,6 +91,14 @@ async function* streamToolCall(): AsyncIterable<StreamChunk> {
     type: 'done',
     finishReason: 'tool_calls',
     usage: { promptTokens: 2, completionTokens: 1, totalTokens: 3 },
+  };
+}
+
+async function* streamEmptyResponse(): AsyncIterable<StreamChunk> {
+  yield {
+    type: 'done',
+    finishReason: 'stop',
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
   };
 }
 
@@ -303,6 +325,30 @@ class OneShotFeedbackCoordinator implements IFeedbackCoordinator {
 }
 
 describe('AgentSession boundary characterization', () => {
+  it('surfaces an error instead of completing when the model returns no content or tool calls', async () => {
+    const session = new AgentSession(
+      createConfig({
+        service: createEmptyStreamService(),
+      }),
+    );
+
+    const events = await collect(session.execute('empty response'));
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'error',
+          error: expect.objectContaining({
+            message:
+              'The selected chat model completed without returning text, tool calls, thinking, or an error. Please retry or choose another model.',
+          }),
+        }),
+      ]),
+    );
+    expect(events).not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'done' })]));
+    session.dispose();
+  });
+
   it('dispatches ordinary turns without legacy IDC run controls', async () => {
     const journalWriter = new CapturingJournalWriter();
     const session = new AgentSession(

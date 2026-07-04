@@ -217,6 +217,68 @@ describe('Service', () => {
       expect(response.timing.duration).toBeDefined();
     });
 
+    it('records raw chat request and response payloads when a recorder is configured', async () => {
+      const record = vi.fn();
+      const config = {
+        ...createMockConfig(),
+        modelCallRecorder: { record },
+      };
+      const service = new Service(config);
+
+      await service.chat(
+        [
+          { role: 'system', content: 'System prompt' },
+          { role: 'user', content: 'Hello' },
+        ],
+        {
+          providerId: 'openai',
+          modelId: 'gpt-4',
+          systemPromptSections: [{ content: 'Section prompt', cacheControl: 'ephemeral' }],
+        },
+        { trace: createAgentTraceContext({ conversationId: 'conv-1' }) },
+      );
+
+      expect(record).toHaveBeenCalledTimes(2);
+      expect(record).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          schema: 'neko.model-call.v1',
+          kind: 'request',
+          providerId: 'openai',
+          modelId: 'gpt-4',
+          stream: false,
+          payload: expect.objectContaining({
+            debugPayloadIncludesRawText: true,
+            systemPromptSections: [
+              { index: 0, cacheControl: 'ephemeral', content: 'Section prompt' },
+            ],
+            originalMessages: expect.arrayContaining([
+              expect.objectContaining({
+                role: 'system',
+                content: 'System prompt',
+              }),
+            ]),
+          }),
+        }),
+      );
+      expect(record).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          schema: 'neko.model-call.v1',
+          kind: 'response',
+          providerId: 'openai',
+          modelId: 'gpt-4',
+          stream: false,
+          payload: expect.objectContaining({
+            message: expect.objectContaining({
+              role: 'assistant',
+              content: 'Test response',
+            }),
+          }),
+        }),
+      );
+    });
+
     it('rejects model-only chat routing instead of inferring a provider', async () => {
       const config = createMockConfig();
       const service = new Service(config);
@@ -546,6 +608,63 @@ describe('Service', () => {
       const finalResponse = await response;
       expect(finalResponse.message.content).toBe('Hello World');
       expect(finalResponse.routing.modelId).toBe('gpt-4');
+    });
+
+    it('records raw streaming request and response payloads when a recorder is configured', async () => {
+      const record = vi.fn();
+      const config = {
+        ...createMockConfig(),
+        modelCallRecorder: { record },
+      };
+      const service = new Service(config);
+
+      const { stream, response } = service.chatStream(
+        [{ role: 'user', content: 'Hello' }],
+        {
+          providerId: 'openai',
+          modelId: 'gpt-4',
+        },
+        { trace: createAgentTraceContext({ conversationId: 'conv-stream' }) },
+      );
+
+      for await (const _chunk of stream) {
+        // Drain stream.
+      }
+      await response;
+
+      expect(record).toHaveBeenCalledTimes(2);
+      expect(record).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          schema: 'neko.model-call.v1',
+          kind: 'request',
+          providerId: 'openai',
+          modelId: 'gpt-4',
+          stream: true,
+          payload: expect.objectContaining({
+            debugPayloadIncludesRawText: true,
+            originalMessages: expect.arrayContaining([
+              expect.objectContaining({ role: 'user', content: 'Hello' }),
+            ]),
+          }),
+        }),
+      );
+      expect(record).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          schema: 'neko.model-call.v1',
+          kind: 'response',
+          providerId: 'openai',
+          modelId: 'gpt-4',
+          stream: true,
+          payload: expect.objectContaining({
+            message: expect.objectContaining({
+              role: 'assistant',
+              content: 'Hello World',
+            }),
+          }),
+        }),
+      );
     });
 
     it('projects messages before opening a chat stream', async () => {

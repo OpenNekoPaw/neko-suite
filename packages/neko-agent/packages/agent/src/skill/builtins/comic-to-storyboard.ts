@@ -81,5 +81,19 @@ export const comicToStoryboardSkill: Skill = {
 };
 
 export function getComicToStoryboardSkill(locale?: string): Skill {
-  return localizeBuiltinSkill(comicToStoryboardSkill, localizedComicToStoryboardContent, locale);
+  const skill = localizeBuiltinSkill(
+    comicToStoryboardSkill,
+    localizedComicToStoryboardContent,
+    locale,
+  );
+  if (normalizeBuiltinSkillLocale(locale) !== 'zh-cn') {
+    return skill;
+  }
+
+  return {
+    ...skill,
+    description:
+      '将漫画、日漫、webtoon、PDF、EPUB、CBZ/CBR 页面或图片序列转换成可审阅的 Markdown 分镜 creative table。' +
+      '仅在 Agent 已理解请求并确认需要分镜表、镜头拆解、漫画改编表或 webtoon 分镜产物后使用；不用于纯内容分析。',
+  };
 }

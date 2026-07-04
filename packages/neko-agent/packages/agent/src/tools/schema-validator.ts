@@ -72,7 +72,7 @@ function validateProperty(
   }
 
   // Enum check
-  if (prop.enum && !prop.enum.includes(String(value))) {
+  if (prop.enum && !prop.enum.some((candidate) => candidate === value)) {
     errors.push({
       field,
       expected: `one of [${prop.enum.join(', ')}]`,

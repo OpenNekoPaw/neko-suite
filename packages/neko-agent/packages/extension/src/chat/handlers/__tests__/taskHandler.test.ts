@@ -334,6 +334,45 @@ describe('TaskHandler', () => {
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
 
+    it('opens persisted task-manager results in VSCode instead of media provider urls', async () => {
+      taskManager.get.mockResolvedValue({
+        id: 'task-1',
+        type: 'image_generation',
+        status: 'completed',
+        progress: 100,
+        createdAt: 1000,
+        updatedAt: 2000,
+        input: { payload: { conversationId } },
+        output: { data: { urls: ['generated-assets/asset-1.png'] } },
+      });
+      platform.media.getTask.mockResolvedValue({
+        id: 'task-1',
+        type: 'text-to-image',
+        status: 'completed',
+        progress: 100,
+        request: { prompt: 'cat', metadata: { conversationId } },
+        outputs: [{ type: 'image', url: 'https://provider.example/result.png' }],
+      });
+      handler = new TaskHandler({
+        taskManager: taskManager as any,
+        platform: platform as any,
+        generatedAssetLookup: {
+          get: vi.fn().mockReturnValue({
+            id: 'asset-1',
+            path: '/workspace/demo/neko/generated/image/task_1.png',
+          }),
+        },
+      });
+
+      await handler.handleViewTaskResult('task-1', conversationId);
+
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'vscode.open',
+        expect.objectContaining({ fsPath: '/workspace/demo/neko/generated/image/task_1.png' }),
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
     it('does not open webview render URIs through external applications', async () => {
       taskManager.get.mockResolvedValue({
         id: 'task-1',
@@ -352,6 +391,45 @@ describe('TaskHandler', () => {
       expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
         'vscode.open',
         expect.anything(),
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('opens the displayed result ref when stored task data is not directly openable', async () => {
+      taskManager.get.mockResolvedValue({
+        id: 'task-1',
+        type: 'image_generation',
+        status: 'completed',
+        progress: 100,
+        createdAt: 1000,
+        updatedAt: 2000,
+        input: { payload: { conversationId } },
+        output: { data: { url: 'https://provider.example/result.png' } },
+      });
+      platform.media.getTask.mockResolvedValue({
+        id: 'task-1',
+        type: 'text-to-image',
+        status: 'completed',
+        progress: 100,
+        request: { prompt: 'cat', metadata: { conversationId } },
+        outputs: [{ type: 'image', url: 'https://provider.example/result.png' }],
+      });
+      handler = new TaskHandler({
+        taskManager: taskManager as any,
+        platform: platform as any,
+        generatedAssetLookup: {
+          get: vi.fn().mockReturnValue({
+            id: 'asset-1',
+            path: '/workspace/demo/neko/generated/image/task_1.png',
+          }),
+        },
+      });
+
+      await handler.handleViewTaskResult('task-1', conversationId, 'generated-assets/asset-1.png');
+
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'vscode.open',
+        expect.objectContaining({ fsPath: '/workspace/demo/neko/generated/image/task_1.png' }),
       );
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });

@@ -23,8 +23,11 @@ import type {
 import { deriveAgentTraceContext, withAgentTrace } from '@neko/shared';
 import { runHooksWithTrace } from './hook-runner';
 import { getLogger } from '../utils/logger';
+import { AgentError } from '../errors';
 
 const logger = getLogger('ThinkPhase');
+const EMPTY_MODEL_RESPONSE_MESSAGE =
+  'The selected chat model completed without returning text, tool calls, thinking, or an error. Please retry or choose another model.';
 
 // =============================================================================
 // Types
@@ -83,15 +86,21 @@ export async function think(
     name: tc.function.name,
     arguments: parseToolCallArgs(tc.function.arguments),
   }));
+  const reasoningContent = response.reasoningContent ?? response.message.reasoningContent;
+  assertModelReturnedWork({
+    content,
+    toolCallCount: toolCalls?.length ?? 0,
+    thinking: response.thinking || extractedThinking || undefined,
+    reasoningContent,
+  });
 
   // Add assistant message to context (with stripped content)
   context.messages.push({
     ...response.message,
     content,
-    reasoningContent: response.reasoningContent ?? response.message.reasoningContent,
+    reasoningContent,
   });
 
-  const reasoningContent = response.reasoningContent ?? response.message.reasoningContent;
   const step: AgentStep = {
     type: 'think',
     content,
@@ -225,6 +234,12 @@ export async function* thinkStream(
 
   // Extract and strip <think> tags from accumulated content
   const { content: strippedContent, thinking: extractedThinking } = extractThinkTags(content);
+  assertModelReturnedWork({
+    content: strippedContent,
+    toolCallCount: toolCalls.length,
+    thinking: accumulatedThinking || extractedThinking || undefined,
+    reasoningContent: accumulatedReasoningContent || undefined,
+  });
 
   // Build assistant message and add to context (with stripped content)
   const assistantMessage: ChatMessage = {
@@ -257,6 +272,24 @@ export async function* thinkStream(
   await runHooksWithTrace(deps.hooks, 'afterThink', trace, step, context);
 
   yield step;
+}
+
+function assertModelReturnedWork(input: {
+  readonly content: string;
+  readonly toolCallCount: number;
+  readonly thinking?: string;
+  readonly reasoningContent?: string;
+}): void {
+  if (
+    input.content.trim().length > 0 ||
+    input.toolCallCount > 0 ||
+    (input.thinking?.trim().length ?? 0) > 0 ||
+    (input.reasoningContent?.trim().length ?? 0) > 0
+  ) {
+    return;
+  }
+
+  throw AgentError.execution(EMPTY_MODEL_RESPONSE_MESSAGE);
 }
 
 // =============================================================================
@@ -501,7 +534,9 @@ async function prepareThinkContext(
   const lastUserMessage = modifiedContext.messages.filter((m) => m.role === 'user').pop();
   const userInput = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
   const toolFilter = getToolFilter(deps, userInput);
-  const tools = deps.toolRegistry.toToolDefinitions(toolFilter);
+  const tools = deps.toolRegistry.toToolDefinitions(toolFilter, {
+    locale: readRuntimeToolDefinitionLocale(modifiedContext.metadata),
+  });
   logger.debug(
     'neko.agent.think.prepare.end',
     withAgentTrace(phaseTrace, {
@@ -524,6 +559,11 @@ async function prepareThinkContext(
   };
 
   return { modifiedContext, tools, options };
+}
+
+function readRuntimeToolDefinitionLocale(metadata: Record<string, unknown>): string | undefined {
+  const value = metadata['locale'];
+  return typeof value === 'string' ? value : undefined;
 }
 
 type ServiceMessageProjector = NonNullable<AgentConfig['serviceOptions']>['messageProjector'];

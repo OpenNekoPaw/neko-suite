@@ -108,10 +108,14 @@ export class TaskHandler {
   /**
    * Handle viewing task result
    */
-  async handleViewTaskResult(taskId: string, conversationId: string): Promise<void> {
+  async handleViewTaskResult(
+    taskId: string,
+    conversationId: string,
+    resultRef?: string,
+  ): Promise<void> {
     await this._runTaskRuntime(() =>
       runViewTaskResultRuntime(
-        { taskId, conversationId },
+        { taskId, conversationId, ...(resultRef ? { resultRef } : {}) },
         this._createTaskRuntimeDeps(),
         this._createTaskRuntimeEffects(),
       ),

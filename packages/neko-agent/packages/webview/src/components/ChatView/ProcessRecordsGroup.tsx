@@ -34,7 +34,7 @@ function ProcessRecordsGroupComponent({
     setIsExpanded((prev) => !prev);
   }, []);
 
-  const isRunning = isStreaming || processGroup.isStreaming;
+  const isRunning = processGroup.isStreaming;
   const summaryParts = [
     t('chat.processRecords.steps', { count: processGroup.blockCount }),
     processGroup.toolCallCount > 0

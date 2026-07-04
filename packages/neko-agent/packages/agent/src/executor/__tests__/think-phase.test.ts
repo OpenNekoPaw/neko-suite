@@ -190,6 +190,19 @@ describe('think', () => {
     expect(beforeThink).toHaveBeenCalledTimes(1);
   });
 
+  it('passes runtime locale to tool definition projection', async () => {
+    const deps = createDeps();
+    (deps.service.chat as ReturnType<typeof vi.fn>).mockResolvedValue(textResponse('Hi'));
+    const context = createContext();
+    context.metadata['locale'] = 'zh-CN';
+
+    await think(deps, context);
+
+    expect(deps.toolRegistry.toToolDefinitions).toHaveBeenCalledWith(undefined, {
+      locale: 'zh-CN',
+    });
+  });
+
   it('injects current turn multimodal packet into service message projector', async () => {
     const deps = createDeps({
       config: {

@@ -115,7 +115,48 @@ describe('task action plan', () => {
     });
   });
 
-  it('prefers media result url and falls back to task result url', () => {
+  it('prefers task-manager result url over media provider urls', () => {
+    expect(
+      buildViewTaskResultActionPlan({
+        taskId: 'task-1',
+        conversationId: 'conv-1',
+        task: createTask({
+          id: 'task-1',
+          payload: { conversationId: 'conv-1' },
+          output: { data: { urls: ['generated-assets/asset-1.png'] } },
+        }),
+        media: {
+          id: 'task-1',
+          conversationId: 'conv-1',
+          resultUrl: 'https://media.example/result.png',
+        },
+      }),
+    ).toEqual({
+      kind: 'open-url',
+      taskId: 'task-1',
+      conversationId: 'conv-1',
+      url: 'generated-assets/asset-1.png',
+    });
+
+    expect(
+      buildViewTaskResultActionPlan({
+        taskId: 'task-2',
+        conversationId: 'conv-1',
+        task: createTask({
+          id: 'task-2',
+          payload: { conversationId: 'conv-1' },
+          output: { data: { urls: ['neko/generated/image/result.png'] } },
+        }),
+      }),
+    ).toEqual({
+      kind: 'open-url',
+      taskId: 'task-2',
+      conversationId: 'conv-1',
+      url: 'neko/generated/image/result.png',
+    });
+  });
+
+  it('does not open provider URLs as VSCode task results', () => {
     expect(
       buildViewTaskResultActionPlan({
         taskId: 'task-1',
@@ -132,27 +173,69 @@ describe('task action plan', () => {
         },
       }),
     ).toEqual({
-      kind: 'open-url',
+      kind: 'noop',
+      reason: 'no-result',
       taskId: 'task-1',
       conversationId: 'conv-1',
-      url: 'https://media.example/result.png',
     });
+  });
 
+  it('falls back to generated media refs when task-manager storage has no result', () => {
     expect(
       buildViewTaskResultActionPlan({
-        taskId: 'task-2',
+        taskId: 'media-1',
         conversationId: 'conv-1',
-        task: createTask({
-          id: 'task-2',
-          payload: { conversationId: 'conv-1' },
-          output: { data: { url: 'https://task.example/result.png' } },
-        }),
+        media: {
+          id: 'media-1',
+          conversationId: 'conv-1',
+          resultUrl: 'generated-assets/asset-1.png',
+        },
       }),
     ).toEqual({
       kind: 'open-url',
-      taskId: 'task-2',
+      taskId: 'media-1',
       conversationId: 'conv-1',
-      url: 'https://task.example/result.png',
+      url: 'generated-assets/asset-1.png',
+    });
+  });
+
+  it('falls back to the displayed result ref when storage has only provider urls', () => {
+    expect(
+      buildViewTaskResultActionPlan({
+        taskId: 'task-1',
+        conversationId: 'conv-1',
+        task: createTask({
+          id: 'task-1',
+          payload: { conversationId: 'conv-1' },
+          output: { data: { url: 'https://task.example/result.png' } },
+        }),
+        media: {
+          id: 'task-1',
+          conversationId: 'conv-1',
+          resultUrl: 'https://media.example/result.png',
+        },
+        resultRef: 'generated-assets/asset-1.png',
+      }),
+    ).toEqual({
+      kind: 'open-url',
+      taskId: 'task-1',
+      conversationId: 'conv-1',
+      url: 'generated-assets/asset-1.png',
+    });
+  });
+
+  it('rejects displayed result refs outside generated asset roots', () => {
+    expect(
+      buildViewTaskResultActionPlan({
+        taskId: 'task-1',
+        conversationId: 'conv-1',
+        resultRef: 'README.md',
+      }),
+    ).toEqual({
+      kind: 'noop',
+      reason: 'no-result',
+      taskId: 'task-1',
+      conversationId: 'conv-1',
     });
   });
 

@@ -353,6 +353,7 @@ import { MediaGenerationService } from './media/media-generation-service';
 import { createMediaPlatform } from './media';
 import { registerMediaAgentTools } from './media/media-agent-tools';
 import type { MediaRequestAssetMaterializer } from './media/media-request-assets';
+import type { ModelCallRecorder } from './types';
 import { SkillMarketService, type SkillMarketServiceOptions } from './market';
 import { getLogger } from './utils/logger';
 
@@ -398,6 +399,11 @@ export interface PlatformOptions {
    * Platform must not read local binary files directly.
    */
   requestAssetMaterializer?: MediaRequestAssetMaterializer;
+  /**
+   * Host-owned recorder for raw model-call diagnostics. Platform emits records
+   * at the model-call boundary; the host decides if and where they are saved.
+   */
+  modelCallRecorder?: ModelCallRecorder;
 }
 
 /**
@@ -479,6 +485,7 @@ export function createPlatform(options: PlatformOptions): Platform {
     return new Service({
       configManager,
       providerRegistry,
+      modelCallRecorder: options.modelCallRecorder,
     });
   };
 

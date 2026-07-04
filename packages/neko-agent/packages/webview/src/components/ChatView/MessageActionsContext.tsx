@@ -21,7 +21,7 @@ export interface MessageActionsContextValue {
   // Task actions
   onCancelTask?: (taskId: string) => void;
   onRetryTask?: (taskId: string) => void;
-  onViewTaskResult?: (taskId: string) => void;
+  onViewTaskResult?: (taskId: string, resultRef?: string) => void;
   // Diff actions
   onAcceptDiff?: (filePath: string) => void;
   onRejectDiff?: (filePath: string) => void;
