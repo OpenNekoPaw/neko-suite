@@ -1,6 +1,4 @@
 import {
-  STORYBOARD_CREATIVE_TABLE_PROFILE,
-  classifyCreativeTableHeaders,
   type CanvasMarkdownCapabilityTarget,
   type CanvasMarkdownResourceRef,
 } from '@neko/shared';
@@ -43,14 +41,16 @@ export function projectCanvasMarkdownHandoffRequest(
   const resources = projectCanvasMarkdownResources(options.markdownResources);
   const target = projectCanvasMarkdownTarget(options.target);
   const provenance = projectCanvasMarkdownProvenance(options.provenance);
+  const declaredIntentHint = options.declaredIntentHint ?? handoffKind.declaredIntentHint;
+  const declaredProfileHint = options.declaredProfileHint ?? handoffKind.declaredProfileHint;
 
   return {
     markdown,
     sourceFormat: 'gfm-table',
     ...(options.title ? { title: options.title } : {}),
     ...(options.userIntent ? { userIntent: options.userIntent } : {}),
-    declaredIntentHint: handoffKind.declaredIntentHint,
-    declaredProfileHint: handoffKind.declaredProfileHint,
+    ...(declaredIntentHint ? { declaredIntentHint } : {}),
+    ...(declaredProfileHint ? { declaredProfileHint } : {}),
     ...(resources.length > 0 ? { resources } : {}),
     ...(target ? { target } : {}),
     ...(provenance ? { provenance } : {}),
@@ -72,18 +72,14 @@ function projectCanvasMarkdownResources(
 }
 
 interface CanvasMarkdownHandoffKind {
-  readonly declaredIntentHint: 'creative-table';
-  readonly declaredProfileHint: string;
+  readonly declaredIntentHint?: CanvasMarkdownHandoffRequest['declaredIntentHint'];
+  readonly declaredProfileHint?: string;
 }
 
 function inferCanvasMarkdownHandoffKind(markdown: string): CanvasMarkdownHandoffKind | null {
   const tables = extractGfmTables(markdown);
   if (tables.length === 0) return null;
-
-  const hasStoryboardTable = tables.some(isStoryboardCreativeTable);
-  if (!hasStoryboardTable) return null;
-
-  return { declaredIntentHint: 'creative-table', declaredProfileHint: 'storyboard' };
+  return {};
 }
 
 function extractGfmTables(markdown: string): readonly (readonly string[])[] {
@@ -106,19 +102,6 @@ function extractGfmTables(markdown: string): readonly (readonly string[])[] {
   }
 
   return tables;
-}
-
-function isStoryboardCreativeTable(headers: readonly string[]): boolean {
-  const classification = classifyCreativeTableHeaders(STORYBOARD_CREATIVE_TABLE_PROFILE, headers);
-  if (!classification.matchedProfile) return false;
-
-  const fieldIds = new Set(classification.knownFields.map((field) => field.id));
-  const hasStoryboardRowIdentity = fieldIds.has('scene') && fieldIds.has('shot');
-  const hasTransferAnchor =
-    fieldIds.has('source') ||
-    fieldIds.has('prompt') ||
-    classification.knownFields.some((field) => field.promptSlot !== undefined);
-  return hasStoryboardRowIdentity && hasTransferAnchor;
 }
 
 function looksLikeTableRow(line: string): boolean {

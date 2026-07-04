@@ -40,7 +40,7 @@ describe('canvas markdown handoff presenter', () => {
     expect(JSON.stringify(projection)).not.toContain('vscode-webview://must-not-leak');
   });
 
-  it('infers storyboard creative tables without choosing a Canvas capability', () => {
+  it('projects GFM tables without choosing a Canvas capability or profile', () => {
     const projection = projectCanvasMarkdownHandoffRequest({
       markdown: createStoryboardCreativeTable(),
       title: 'Review Table',
@@ -50,11 +50,11 @@ describe('canvas markdown handoff presenter', () => {
       expect.objectContaining({
         sourceFormat: 'gfm-table',
         title: 'Review Table',
-        declaredIntentHint: 'creative-table',
-        declaredProfileHint: 'storyboard',
       }),
     );
     expect(JSON.stringify(projection)).not.toContain('canvas.ingestMarkdown');
+    expect(projection?.declaredIntentHint).toBeUndefined();
+    expect(projection?.declaredProfileHint).toBeUndefined();
   });
 
   it('does not expose Canvas handoff for plain Markdown prose', () => {
@@ -65,24 +65,37 @@ describe('canvas markdown handoff presenter', () => {
     ).toBeNull();
   });
 
-  it('does not expose Canvas handoff for storyboard tables that miss profile minimum groups', () => {
-    expect(
-      projectCanvasMarkdownHandoffRequest({
-        markdown: ['| 场景 | 镜头 |', '| --- | --- |', '| 正文 | 1 |'].join('\n'),
+  it('hands any GFM table to Agent without requiring storyboard canonical headers', () => {
+    const projection = projectCanvasMarkdownHandoffRequest({
+      markdown: ['| 场景 | 镜头 |', '| --- | --- |', '| 正文 | 1 |'].join('\n'),
+      declaredIntentHint: 'creative-table',
+      declaredProfileHint: 'storyboard',
+    });
+
+    expect(projection).toEqual(
+      expect.objectContaining({
+        sourceFormat: 'gfm-table',
         declaredIntentHint: 'creative-table',
         declaredProfileHint: 'storyboard',
       }),
-    ).toBeNull();
+    );
+    expect(JSON.stringify(projection)).not.toContain('capabilityId');
   });
 
-  it('does not expose Canvas handoff for simplified display-only storyboard tables', () => {
-    expect(
-      projectCanvasMarkdownHandoffRequest({
-        markdown: ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
+  it('hands simplified display tables to Agent instead of applying Webview storyboard gates', () => {
+    const projection = projectCanvasMarkdownHandoffRequest({
+      markdown: ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
+      declaredIntentHint: 'creative-table',
+      declaredProfileHint: 'storyboard',
+    });
+
+    expect(projection).toEqual(
+      expect.objectContaining({
+        sourceFormat: 'gfm-table',
         declaredIntentHint: 'creative-table',
         declaredProfileHint: 'storyboard',
       }),
-    ).toBeNull();
+    );
   });
 
   it('does not expose Canvas handoff for tables inside fenced code blocks', () => {
@@ -107,6 +120,26 @@ describe('canvas markdown handoff presenter', () => {
     expect(projection).toEqual(
       expect.objectContaining({
         sourceFormat: 'gfm-table',
+      }),
+    );
+    expect(projection?.declaredIntentHint).toBeUndefined();
+    expect(projection?.declaredProfileHint).toBeUndefined();
+  });
+
+  it('preserves skill-added columns without importing storyboard field contracts', () => {
+    const projection = projectCanvasMarkdownHandoffRequest({
+      markdown: [
+        '| scene | shot | imagePrompt.generate | imagePrompt.edit | videoPrompt.generate | model |',
+        '| --- | --- | --- | --- | --- | --- |',
+        '| S1 | 1 | neon door | extend shadows | slow push in | seedance-2-5 |',
+      ].join('\n'),
+      declaredIntentHint: 'creative-table',
+      declaredProfileHint: 'storyboard',
+    });
+
+    expect(projection).toEqual(
+      expect.objectContaining({
+        sourceFormat: 'gfm-table',
         declaredIntentHint: 'creative-table',
         declaredProfileHint: 'storyboard',
       }),
@@ -124,10 +157,11 @@ describe('canvas markdown handoff presenter', () => {
 
     expect(projection).toEqual(
       expect.objectContaining({
-        declaredIntentHint: 'creative-table',
-        declaredProfileHint: 'storyboard',
+        sourceFormat: 'gfm-table',
       }),
     );
+    expect(projection?.declaredIntentHint).toBeUndefined();
+    expect(projection?.declaredProfileHint).toBeUndefined();
   });
 
   it('infers storyboard handoff from minimum profile fields and dynamic review columns', () => {
@@ -141,12 +175,12 @@ describe('canvas markdown handoff presenter', () => {
 
     expect(result).toMatchObject({
       sourceFormat: 'gfm-table',
-      declaredIntentHint: 'creative-table',
-      declaredProfileHint: 'storyboard',
     });
+    expect(result?.declaredIntentHint).toBeUndefined();
+    expect(result?.declaredProfileHint).toBeUndefined();
   });
 
-  it('infers storyboard handoff from scene-level video prompt fields', () => {
+  it('hands scene-level video prompt fields to Agent without inferring storyboard profile', () => {
     const result = projectCanvasMarkdownHandoffRequest({
       markdown: [
         '| scene | shot | visual | sceneVideoPrompt |',
@@ -155,7 +189,10 @@ describe('canvas markdown handoff presenter', () => {
       ].join('\n'),
     });
 
-    expect(result?.declaredProfileHint).toBe('storyboard');
+    expect(result).toMatchObject({
+      sourceFormat: 'gfm-table',
+    });
+    expect(result?.declaredProfileHint).toBeUndefined();
   });
 });
 
