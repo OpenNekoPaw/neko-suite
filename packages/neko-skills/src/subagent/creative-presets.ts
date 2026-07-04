@@ -9,7 +9,20 @@
  * - vfx-artist: Visual effects, compositing, color grading
  */
 
-import type { SpecializedAgentPreset } from './types';
+export type SubAgentModelTier = 'fast' | 'balanced' | 'powerful';
+
+export type SubAgentPresetToolPolicy =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'all' }
+  | { readonly kind: 'allow-list'; readonly tools: readonly string[] };
+
+export interface SubAgentPresetContribution {
+  readonly description: string;
+  readonly systemPrompt: string;
+  readonly toolPolicy: SubAgentPresetToolPolicy;
+  readonly defaultModelTier: SubAgentModelTier;
+  readonly defaultMaxIterations: number;
+}
 
 // =============================================================================
 // Creative Agent Type
@@ -37,7 +50,7 @@ export type QualityTier = 'draft' | 'standard' | 'premium';
 // Creative Presets
 // =============================================================================
 
-export const CREATIVE_PRESETS: Record<CreativeAgentType, SpecializedAgentPreset> = {
+export const CREATIVE_PRESETS: Record<CreativeAgentType, SubAgentPresetContribution> = {
   'creative-director': {
     description: 'Creative director for scene planning and visual storytelling',
     systemPrompt: `You are a creative director specializing in visual storytelling and media production.

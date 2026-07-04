@@ -55,7 +55,7 @@ export interface TaskItem {
   result?: SubAgentResult;
   /** Task IDs that must complete before this task can start */
   dependencies?: string[];
-  /** Arbitrary metadata (creative: style, quality_tier, asset refs) */
+  /** Arbitrary host-defined metadata. */
   metadata?: Record<string, unknown>;
   /** Priority (higher = dispatched sooner, default: 0) */
   priority?: number;

@@ -16,6 +16,7 @@ export type {
   // Core types
   SubAgentRunMode,
   SubAgentStatus,
+  BuiltinSpecializedAgentType,
   SpecializedAgentType,
   ModelTier,
   AgentToolPolicy,
@@ -66,13 +67,6 @@ export {
 // =============================================================================
 
 export { createTaskTool, createTaskOutputTool, registerSubAgentTools } from './task-tool';
-
-// =============================================================================
-// Creative Presets
-// =============================================================================
-
-export { CREATIVE_PRESETS, isCreativeAgentType, getCreativeAgentTypes } from './creative-presets';
-export type { CreativeAgentType, QualityTier } from './creative-presets';
 
 // =============================================================================
 // Coordinator

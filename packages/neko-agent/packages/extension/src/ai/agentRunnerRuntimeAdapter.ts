@@ -17,6 +17,7 @@ import {
   type SubAgentRuntimeCoordinator,
 } from '@neko/agent/runtime';
 import type { AgentEvent } from '@neko/agent';
+import { CREATIVE_PRESETS as CREATIVE_SUBAGENT_PRESETS } from '@neko/skills';
 import {
   getCapabilityDiscoveryService,
   getCapabilityRuntimeBindings,
@@ -308,6 +309,7 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
       getPerceptionClients: () =>
         this.deps.engineClientProvider.createPerceptionClients(config.engineClient),
       subAgentRuntime: this.deps.subAgentRuntime,
+      specializedSubAgentPresets: CREATIVE_SUBAGENT_PRESETS,
       syncToolCategories: (registry) => {
         getCapabilityDiscoveryService().syncToolCategories(registry);
       },

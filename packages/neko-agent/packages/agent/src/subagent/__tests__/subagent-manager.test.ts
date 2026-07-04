@@ -289,6 +289,46 @@ describe('SubAgentManager', () => {
 
       expect(getCreatedAgentToolNames(deps)).toEqual(['read_file', 'write_file', 'grep']);
     });
+
+    it('should use specialized presets contributed by the host runtime', async () => {
+      deps.specializedPresets = {
+        'external-domain-planner': {
+          description: 'External domain planner',
+          systemPrompt: 'You are an externally contributed planner.',
+          toolPolicy: { kind: 'allow-list', tools: ['read_file'] },
+          defaultModelTier: 'powerful',
+          defaultMaxIterations: 7,
+        },
+      };
+      const managerWithExternalPreset = new SubAgentManager(deps);
+      const config = createTestConfig({
+        id: 'external-preset-agent',
+        type: 'external-domain-planner',
+      });
+
+      await managerWithExternalPreset.spawn('parent-1', 'conv-1', config);
+      await managerWithExternalPreset.getResult('external-preset-agent', 5000);
+
+      const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      expect(agentConfig.systemPrompt).toContain('externally contributed planner');
+      expect(agentConfig.maxIterations).toBe(7);
+      expect(agentConfig.primaryModel).toBe('test-powerful-model');
+      expect(getCreatedAgentToolNames(deps)).toEqual(['read_file']);
+    });
+
+    it('should fail clearly for unknown specialized preset types', async () => {
+      const config = createTestConfig({
+        id: 'unknown-preset-agent',
+        type: 'missing-domain-planner',
+      });
+
+      await manager.spawn('parent-1', 'conv-1', config);
+      const result = await manager.getResult('unknown-preset-agent', 5000);
+
+      expect(result.status).toBe('failed');
+      expect(result.error).toContain('Unknown SubAgent preset type "missing-domain-planner"');
+      expect(deps.createAgent).not.toHaveBeenCalled();
+    });
   });
 
   describe('spawnBatch', () => {

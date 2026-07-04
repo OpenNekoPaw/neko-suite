@@ -22,7 +22,7 @@ import type {
 import type { ProviderExpressionTargetConfig } from './message-runtime';
 import type { SubAgentRuntimeCoordinator } from './subagent-runtime';
 import type { IArtifactStore, ICapabilityRuntime, IFeedbackLoop } from './types';
-import type { ModelTierResolver } from '../subagent';
+import type { ModelTierResolver, SpecializedAgentPreset } from '../subagent';
 import { createDefaultOperationToolAdapterRegistry } from './operation-adapters';
 import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 
@@ -35,6 +35,7 @@ export interface AgentRuntimeHostBindings {
   readonly getPerceptionClients?: () => AgentSessionConfig['perceptionClients'];
   readonly subAgentRuntime?: SubAgentRuntimeCoordinator;
   readonly modelTierResolver?: ModelTierResolver;
+  readonly specializedSubAgentPresets?: Readonly<Record<string, SpecializedAgentPreset>>;
 }
 
 export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindings {
@@ -124,6 +125,7 @@ export function buildAgentRuntimeSessionFactoryConfig(
     perceptionClients,
     subAgentRuntime: input.subAgentRuntime,
     modelTierResolver: input.modelTierResolver,
+    specializedSubAgentPresets: input.specializedSubAgentPresets,
     syncToolCategories: input.syncToolCategories,
     onConfirmTool: input.onConfirmTool,
     onValidationWarning: input.onValidationWarning,

@@ -16,6 +16,7 @@ import {
   type ModelTier,
   type ModelTierResolver,
   type SubAgentSystem,
+  type SpecializedAgentPreset,
 } from '../subagent';
 import type { AgentSessionConfig } from '../session/types';
 import { createAgentSessionWithRuntime } from './session-config-projection';
@@ -29,6 +30,7 @@ export interface AgentSubAgentSystemConfig {
   readonly toolRegistry: IToolRegistry;
   readonly capabilityRuntime?: ICapabilityRuntime;
   readonly registerTools?: boolean;
+  readonly specializedPresets?: Readonly<Record<string, SpecializedAgentPreset>>;
 }
 
 export interface AgentSubAgentRuntimeRegistration {
@@ -88,6 +90,7 @@ export class SubAgentRuntimeCoordinator {
       ...(config.capabilityRuntime?.toolGroupRegistry
         ? { toolSkillRegistry: config.capabilityRuntime.toolGroupRegistry }
         : {}),
+      ...(config.specializedPresets ? { specializedPresets: config.specializedPresets } : {}),
       ...(config.registerTools !== undefined ? { registerTools: config.registerTools } : {}),
     });
 

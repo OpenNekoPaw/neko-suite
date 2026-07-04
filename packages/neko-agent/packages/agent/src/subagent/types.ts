@@ -36,22 +36,18 @@ export type SubAgentStatus =
   | 'cancelled'; // Cancelled by parent or timeout
 
 /**
- * Specialized agent types with predefined configurations
+ * Agent-owned SubAgent preset types. Domain-specific presets are contributed by
+ * hosts through `SubAgentManagerDeps.specializedPresets`.
  */
-export type SpecializedAgentType =
+export type BuiltinSpecializedAgentType =
   | 'code-search' // Search and analyze code
   | 'file-explorer' // Navigate file system
   | 'test-runner' // Run and analyze tests
   | 'document-writer' // Write documentation
   | 'general' // General purpose agent
-  | 'npc-character' // Isolated NPC character validation
-  // Creative domain experts (C.5)
-  | 'creative-director' // Scene planning, visual storytelling, direction
-  | 'cinematographer' // Composition, lighting, camera work
-  | 'composer' // Music creation, sound design
-  | 'editor' // Timeline editing, transitions, pacing
-  | 'vfx-artist' // Visual effects, compositing, color grading
-  | 'quality-checker'; // Media quality evaluation, consistency analysis
+  | 'npc-character'; // Isolated NPC character validation
+
+export type SpecializedAgentType = BuiltinSpecializedAgentType | (string & {});
 
 /**
  * Model tier for SubAgent
@@ -160,15 +156,11 @@ export interface SubAgentConfig {
    */
   inheritParentToolSkills?: boolean;
 
-  // ==========================================================================
-  // Creative (C.5)
-  // ==========================================================================
-
   /**
-   * Quality tier for creative generation tasks.
-   * Affects model selection and generation parameters.
+   * Host-defined preset options. Agent runtime preserves these for contributed
+   * presets but does not interpret domain-specific keys.
    */
-  qualityTier?: 'draft' | 'standard' | 'premium';
+  presetOptions?: Record<string, unknown>;
 }
 
 /**
@@ -309,6 +301,8 @@ export interface SubAgentManagerDeps {
   toolSkillRegistry?: IToolGroupRegistry;
   /** Custom model tier resolver supplied by runtime/platform configuration. */
   modelTierResolver?: ModelTierResolver;
+  /** Host-contributed specialized presets. */
+  specializedPresets?: Readonly<Record<string, SpecializedAgentPreset>>;
 }
 
 /**
@@ -406,9 +400,8 @@ export interface TaskToolArgs {
   /** Whether to inherit parent agent's active ToolSkills */
   inherit_parent_tool_skills?: boolean;
 
-  // Creative (C.5)
-  /** Quality tier for creative generation tasks */
-  quality_tier?: 'draft' | 'standard' | 'premium';
+  /** Host-defined options passed through to contributed presets. */
+  preset_options?: Record<string, unknown>;
 }
 
 /**

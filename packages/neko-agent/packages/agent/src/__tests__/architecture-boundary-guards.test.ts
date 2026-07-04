@@ -204,6 +204,42 @@ describe('agent architecture boundary guards', () => {
     expect(violations).toEqual([]);
   });
 
+  it('keeps domain SubAgent presets out of Agent core', () => {
+    const forbiddenFiles = [join(agentSrc, 'subagent/creative-presets.ts')];
+    const existingForbiddenFiles = forbiddenFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+
+    expect(existingForbiddenFiles).toEqual([]);
+
+    const subagentRuntimeSourceFiles = listFiles(join(agentSrc, 'subagent'))
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !relativePath.endsWith('architecture-boundary-guards.test.ts'));
+
+    const forbiddenDomainPresetTerms = [
+      /['"`]creative-director['"`]/,
+      /['"`]cinematographer['"`]/,
+      /['"`]composer['"`]/,
+      /['"`]vfx-artist['"`]/,
+      /['"`]quality-checker['"`]/,
+      /\bquality_tier\b/,
+      /\bQualityTier\b/,
+      /\bCreativeAgentType\b/,
+    ];
+    const violations = subagentRuntimeSourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenDomainPresetTerms
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps host-specific projection names quarantined away from runtime production callers', () => {
     const sourceFiles = listFiles(packageRoot)
       .filter(

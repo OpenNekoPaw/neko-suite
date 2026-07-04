@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { CREATIVE_PRESETS, isCreativeAgentType, getCreativeAgentTypes } from '../creative-presets';
-import type { AgentToolPolicy } from '../types';
+import type { SubAgentPresetToolPolicy } from '../creative-presets';
 
 // =============================================================================
 // Tests
@@ -65,7 +65,7 @@ describe('CREATIVE_PRESETS', () => {
   });
 });
 
-function getAllowListTools(policy: AgentToolPolicy): readonly string[] {
+function getAllowListTools(policy: SubAgentPresetToolPolicy): readonly string[] {
   if (policy.kind !== 'allow-list') {
     throw new Error(`Expected allow-list policy, got ${policy.kind}`);
   }

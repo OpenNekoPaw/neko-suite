@@ -27,7 +27,6 @@ import type {
   SubAgentExecutor,
   SubAgentModelTierResolverContext,
 } from './types';
-import { CREATIVE_PRESETS } from './creative-presets';
 
 const logger = getLogger('SubAgentManager');
 
@@ -119,13 +118,7 @@ Guidelines:
   },
 };
 
-/**
- * All specialized presets (base + creative)
- */
-export const SPECIALIZED_PRESETS: Record<string, SpecializedAgentPreset> = {
-  ...BASE_PRESETS,
-  ...CREATIVE_PRESETS,
-};
+export const SPECIALIZED_PRESETS: Readonly<Record<string, SpecializedAgentPreset>> = BASE_PRESETS;
 
 // =============================================================================
 // SubAgent Instance
@@ -381,8 +374,10 @@ export class SubAgentManager implements ISubAgentManager {
     });
 
     try {
-      // Get specialized preset
-      const preset = SPECIALIZED_PRESETS[config.type];
+      const preset = this.getSpecializedPreset(config.type);
+      if (!preset) {
+        throw new Error(`Unknown SubAgent preset type "${config.type}"`);
+      }
 
       // =======================================================================
       // Step 1: Collect tools from ToolSkills
@@ -521,6 +516,13 @@ export class SubAgentManager implements ISubAgentManager {
 ${config.description}
 
 Focus on completing this specific task efficiently and report your findings clearly.`;
+  }
+
+  private getSpecializedPreset(type: string): SpecializedAgentPreset | undefined {
+    return {
+      ...SPECIALIZED_PRESETS,
+      ...(this.deps.specializedPresets ?? {}),
+    }[type];
   }
 
   /**

@@ -40,7 +40,7 @@ import {
   SubAgentRuntimeCoordinator,
   type AgentSubAgentRuntimeRegistration,
 } from './subagent-runtime';
-import type { ModelTierResolver } from '../subagent';
+import type { ModelTierResolver, SpecializedAgentPreset } from '../subagent';
 import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 
 export interface AgentRuntimeSessionFactoryLogger {
@@ -82,6 +82,7 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly perceptionClients?: AgentSessionConfig['perceptionClients'];
   readonly subAgentRuntime?: SubAgentRuntimeCoordinator;
   readonly modelTierResolver?: ModelTierResolver;
+  readonly specializedSubAgentPresets?: Readonly<Record<string, SpecializedAgentPreset>>;
   readonly syncToolCategories?: (registry: IToolCategoryRegistry) => void;
   readonly onConfirmTool?: (request: ToolConfirmationRequest) => Promise<boolean>;
   readonly onValidationWarning?: (warning: ValidationWarning) => void;
@@ -448,6 +449,9 @@ function registerSubAgentRuntime(
     createService: config.createService,
     toolRegistry: config.toolRegistry,
     ...(config.capabilityRuntime ? { capabilityRuntime: config.capabilityRuntime } : {}),
+    ...(config.specializedSubAgentPresets
+      ? { specializedPresets: config.specializedSubAgentPresets }
+      : {}),
   });
 
   const registration: AgentSubAgentRuntimeRegistration = {

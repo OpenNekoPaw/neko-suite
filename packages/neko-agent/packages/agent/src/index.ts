@@ -809,6 +809,7 @@ export {
   // Types
   type SubAgentRunMode,
   type SubAgentStatus,
+  type BuiltinSpecializedAgentType,
   type SpecializedAgentType,
   type ModelTier,
   type AgentToolPolicy,

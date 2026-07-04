@@ -86,6 +86,21 @@ describe('createTaskTool', () => {
       expect(params.required).toContain('description');
       expect(params.required).toContain('prompt');
     });
+
+    it('should allow host-contributed SubAgent types without a fixed domain enum', () => {
+      const tool = createTaskTool(manager);
+      const params = tool.parameters as {
+        readonly properties: Record<string, { readonly enum?: readonly string[]; readonly type: string }>;
+      };
+
+      expect(params.properties.subagent_type).toEqual(
+        expect.objectContaining({
+          type: 'string',
+        }),
+      );
+      expect(params.properties.subagent_type.enum).toBeUndefined();
+      expect(params.properties.quality_tier).toBeUndefined();
+    });
   });
 
   describe('execute', () => {

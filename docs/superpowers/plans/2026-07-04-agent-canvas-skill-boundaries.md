@@ -931,6 +931,38 @@ Verification:
 
 Expected: PASS.
 
+- [x] **Step 9: Move domain SubAgent presets out of Agent core**
+
+Moved creative-domain SubAgent presets from Agent core into `@neko/skills`:
+
+```text
+packages/neko-skills/src/subagent/creative-presets.ts
+packages/neko-skills/src/subagent/__tests__/creative-presets.test.ts
+```
+
+Agent core now owns only built-in host-neutral SubAgent presets and accepts host-contributed presets through runtime bindings:
+
+```text
+packages/neko-agent/packages/agent/src/runtime/runtime-host-bindings.ts
+packages/neko-agent/packages/agent/src/runtime/agent-session-factory.ts
+packages/neko-agent/packages/agent/src/runtime/subagent-runtime.ts
+packages/neko-agent/packages/agent/src/subagent/types.ts
+packages/neko-agent/packages/agent/src/subagent/subagent-manager.ts
+```
+
+The VSCode Extension composition root injects `@neko/skills` creative presets without making `@neko/agent` depend on the concrete skills package.
+
+Verification:
+
+```bash
+./node_modules/.bin/vitest run packages/agent/src/subagent/__tests__/subagent-manager.test.ts packages/agent/src/subagent/__tests__/task-tool.test.ts packages/agent/src/__tests__/architecture-boundary-guards.test.ts --reporter=verbose
+./node_modules/.bin/vitest run ../neko-skills/src/subagent/__tests__/creative-presets.test.ts --reporter=verbose
+./node_modules/.bin/tsc --noEmit -p ../neko-skills/tsconfig.json
+pnpm run compile:extension
+```
+
+Expected: PASS.
+
 ### Task 7: Final Boundary Verification
 
 **Files:**
