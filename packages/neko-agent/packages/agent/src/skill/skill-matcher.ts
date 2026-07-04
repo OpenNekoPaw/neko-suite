@@ -39,6 +39,74 @@ interface RequestIntent {
  * 3. Keywords in description
  */
 export class KeywordSkillMatcher extends SkillMatcher {
+  private readonly creativeMediaWorkflowTermFragments = [
+    'animation',
+    'audio',
+    'canvas',
+    'comic',
+    'creative',
+    'cut',
+    'export',
+    'grading',
+    'image',
+    'manga',
+    'media',
+    'motion',
+    'shot',
+    'storyboard',
+    'subtitle',
+    'timeline',
+    'video',
+    'webtoon',
+  ];
+
+  private readonly comicDocumentSourceTermFragments = [
+    'cbz',
+    'cbr',
+    'comic',
+    'document',
+    'epub',
+    'image-sequence',
+    'manga',
+    'pdf',
+    'source',
+    'webtoon',
+  ];
+
+  private readonly productionTermFragments = [
+    'animation',
+    'assembly',
+    'audio',
+    'cut',
+    'export',
+    'generate',
+    'generation',
+    'image',
+    'media',
+    'motion',
+    'timeline',
+    'video',
+  ];
+
+  private readonly focusedProductionTermFragments = [
+    'asset',
+    'motion',
+    'plan',
+    'prep',
+    'reference',
+    'shot',
+    'storyboard',
+  ];
+
+  private readonly broadOrchestrationTermFragments = [
+    'coordinate',
+    'coordinator',
+    'handoff',
+    'orchestration',
+    'select-focused',
+    'workflow',
+  ];
+
   /**
    * Terms that indicate skill intent.
    * Maps common phrases to skill-related concepts.
@@ -399,15 +467,34 @@ export class KeywordSkillMatcher extends SkillMatcher {
       return 0;
     }
 
-    if (skill.name === 'comic-to-animation' && intent.hasComicDocumentSource) {
-      return 0.97;
+    if (!this.isCreativeMediaWorkflowSkill(skill)) {
+      return 0;
     }
 
-    if (skill.name === 'media-to-video') {
-      return 0.65;
+    if (!this.hasWorkflowTermFragment(skill, this.productionTermFragments)) {
+      return 0;
     }
 
-    return 0;
+    let relevance = 0;
+
+    if (
+      intent.hasComicDocumentSource &&
+      this.hasWorkflowTermFragment(skill, this.comicDocumentSourceTermFragments)
+    ) {
+      relevance += 0.45;
+    }
+
+    relevance += 0.35;
+
+    if (this.hasWorkflowTermFragment(skill, this.focusedProductionTermFragments)) {
+      relevance += 0.15;
+    }
+
+    if (this.hasWorkflowTermFragment(skill, this.broadOrchestrationTermFragments)) {
+      relevance -= 0.15;
+    }
+
+    return Math.max(0, Math.min(relevance, 0.97));
   }
 
   private getSkillSpecificityScore(skill: Skill): number {
@@ -422,38 +509,34 @@ export class KeywordSkillMatcher extends SkillMatcher {
   }
 
   private isCreativeMediaWorkflowSkill(skill: Skill): boolean {
-    if (
-      [
-        'comic-to-storyboard',
-        'comic-to-animation',
-        'media-to-video',
-        'storyboard-to-animation-plan',
-        'animation-plan-to-cut',
-        'generated-shot-assembly',
-        'export-video-package',
-      ].includes(skill.name)
-    ) {
-      return true;
+    return this.hasWorkflowTermFragment(skill, this.creativeMediaWorkflowTermFragments);
+  }
+
+  private hasWorkflowTermFragment(skill: Skill, fragments: readonly string[]): boolean {
+    const workflowTerms = this.getWorkflowTerms(skill);
+    return workflowTerms.some((term) => fragments.some((fragment) => term.includes(fragment)));
+  }
+
+  private getWorkflowTerms(skill: Skill): readonly string[] {
+    const mediaWorkflow = skill.mediaWorkflow;
+    if (!mediaWorkflow) {
+      return [];
     }
 
-    const workflowTerms = [
-      ...(skill.mediaWorkflow?.tags ?? []),
-      ...(skill.mediaWorkflow?.producedArtifacts ?? []),
-      ...(skill.mediaWorkflow?.inputArtifacts ?? []),
-    ];
-    return workflowTerms.some((term) =>
-      [
-        'storyboard',
-        'storyboard-table',
-        'StoryboardTable',
-        'storyboard-plan-overlay',
-        'comic-to-animation',
-        'media-to-video',
-        'animation',
-        'cut-storyboard-payload',
-        'generated-media-ref',
-      ].includes(term),
-    );
+    return [
+      skill.domain,
+      ...(mediaWorkflow.useCases ?? []),
+      ...(mediaWorkflow.acceptedModalities ?? []),
+      ...(mediaWorkflow.producedArtifacts ?? []),
+      ...(mediaWorkflow.artifactProfiles ?? []),
+      ...(mediaWorkflow.inputArtifacts ?? []),
+      ...(mediaWorkflow.referencedCapabilities ?? []),
+      ...(mediaWorkflow.suggestedProjectors ?? []),
+      ...(mediaWorkflow.tags ?? []),
+      ...(mediaWorkflow.operations ?? []),
+    ]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      .map((value) => value.toLowerCase());
   }
 
   private containsAny(text: string, keywords: readonly string[]): boolean {

@@ -21,7 +21,7 @@ import type { Tool } from '@neko/shared';
 import { ConversationCompressor, MessageClassifier, CreativeSummarizer } from '../context';
 import { createExecutorHooks } from '../hooks';
 import { extractAblationMarker, type AblationMarkerHook } from '../experiment/apply-toggles';
-import { ToolGroupRegistry, registerBuiltinToolGroups } from '../skill';
+import { ToolGroupRegistry } from '../skill';
 import {
   ToolCategoryRegistry,
   ToolInjectionManager,
@@ -165,9 +165,6 @@ export function initializeSession(
   // Step 2: Tool group registry
   const toolGroupRegistry =
     (config.toolGroupRegistry as ToolGroupRegistry) ?? new ToolGroupRegistry();
-  if (!config.toolGroupRegistry) {
-    registerBuiltinToolGroups(toolGroupRegistry);
-  }
 
   // Step 3: Tool category registry — categorize tools by loading tier
   const toolCategoryRegistry =

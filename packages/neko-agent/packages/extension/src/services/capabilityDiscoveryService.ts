@@ -22,6 +22,7 @@ import type {
   AgentCapabilityManifest,
   AgentCapabilityProvider,
   PromptFragment,
+  Skill,
 } from '@neko/shared';
 import { NEKO_AGENT_REGISTER_CAPABILITIES_COMMAND } from '@neko-agent/types';
 import { getRootLogger } from '../base';
@@ -107,6 +108,10 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
 
   getAllPromptFragments(): PromptFragment[] {
     return this._runtime.getAllPromptFragments();
+  }
+
+  getAllSkills(): Skill[] {
+    return this._runtime.getAllSkills();
   }
 
   getLifecycleCapabilityDescriptor(

@@ -20,10 +20,35 @@ import {
   BUILTIN_DEFAULT_PROMPT_ZH,
   BUILTIN_PLAN_PROMPT_EN,
 } from '../builtin-prompts';
-import { creationPersonaSkill, executionPersonaSkill } from '@neko-agent/skills';
 import { ArtifactSchemaModule } from '../modules/schema/artifact-schema-module';
 import { SubpackageFragmentsModule } from '../modules/environment/subpackage-fragments-module';
 import { freezePromptContext } from '../context';
+
+const creationPersonaSkill = {
+  name: 'creation-persona',
+  content: [
+    '# Creation Persona',
+    '',
+    '## Observation',
+    'Inspect user intent and available evidence before selecting a creative workflow.',
+    '',
+    '## Rationale',
+    'Explain why the selected workflow fits the current task.',
+  ].join('\n'),
+};
+
+const executionPersonaSkill = {
+  name: 'execution-persona',
+  content: [
+    '# Execution Persona',
+    '',
+    '## Observation',
+    'Track concrete operation evidence while executing the approved plan.',
+    '',
+    '## Recovery Guidance',
+    'When execution fails, summarize the failing operation and next recovery step.',
+  ].join('\n'),
+};
 
 function composeBaseOnly(base: string): string {
   const composer = new SystemPromptComposer();

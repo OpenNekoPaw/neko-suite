@@ -59,8 +59,11 @@ vi.mock('@neko/agent', () => ({
   createCoreTools,
   createFileProjectMemoryManager: vi.fn(() => ({ load: loadProjectMemory })),
   ToolGroupRegistry: class ToolGroupRegistry {},
-  registerBuiltinToolGroups,
   createConversationId,
+}));
+
+vi.mock('@neko/skills', () => ({
+  registerBuiltinToolGroups,
 }));
 
 vi.mock('../core/platform-bootstrap', () => ({

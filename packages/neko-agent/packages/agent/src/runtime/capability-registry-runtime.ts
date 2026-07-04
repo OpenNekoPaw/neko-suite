@@ -372,6 +372,20 @@ export class CapabilityRegistryRuntime {
     return Array.from(this.providers.values()).map((entry) => entry.provider);
   }
 
+  getAllSkills(): Skill[] {
+    const aggregated: Skill[] = [];
+    for (const { provider } of this.providers.values()) {
+      if (!provider.getSkills) continue;
+      try {
+        const skills = provider.getSkills();
+        if (skills && skills.length > 0) aggregated.push(...skills);
+      } catch (err) {
+        this.logger.warn(`Provider "${provider.id}" getSkills threw; skipping`, err);
+      }
+    }
+    return aggregated;
+  }
+
   getAllPromptFragments(): PromptFragment[] {
     if (!this.capabilityContext) {
       if (!this.warnedMissingCapabilityContextForFragments) {

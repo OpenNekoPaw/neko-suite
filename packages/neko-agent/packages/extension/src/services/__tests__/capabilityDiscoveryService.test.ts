@@ -42,6 +42,16 @@ function createTool(overrides: Partial<Tool> & Pick<Tool, 'name' | 'category'>):
   };
 }
 
+function createSkill(name: string): Skill {
+  return {
+    name,
+    description: `${name} skill`,
+    content: `Use ${name}.`,
+    source: 'builtin',
+    enabled: true,
+  };
+}
+
 function createProvider(config: {
   id?: string;
   version?: string;
@@ -389,5 +399,17 @@ describe('CapabilityDiscoveryService', () => {
     capabilityLogger.warn.mockClear();
     expect(service.getAllPromptFragments()).toEqual([]);
     expect(capabilityLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it('resolves skills contributed by registered providers', () => {
+    const provider = createProvider({
+      id: 'neko-canvas',
+      tools: [createTool({ name: 'CanvasIngestMarkdown', category: 'canvas' })],
+      skills: [createSkill('canvas-storyboard')],
+    });
+
+    service.registerProvider(provider, { extensionContext: {} });
+
+    expect(service.getAllSkills().map((skill) => skill.name)).toEqual(['canvas-storyboard']);
   });
 });

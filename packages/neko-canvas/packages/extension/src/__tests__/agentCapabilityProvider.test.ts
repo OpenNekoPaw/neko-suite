@@ -336,6 +336,25 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     );
   });
 
+  it('provides Canvas-owned domain skills for Canvas Markdown workflows', () => {
+    const provider = createNekoCanvasCapabilityProvider(createApi());
+    const skills = provider.getSkills?.() ?? [];
+
+    expect(skills).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'canvas-markdown-storyboard',
+          source: 'builtin',
+          enabled: true,
+          allowedTools: expect.arrayContaining(['canvas.createStoryboardFromMarkdown']),
+        }),
+      ]),
+    );
+    expect(skills.find((skill) => skill.name === 'canvas-markdown-storyboard')?.content).toContain(
+      'canvas.createStoryboardFromMarkdown',
+    );
+  });
+
   it('executes Markdown capability tools through the Canvas Markdown API', async () => {
     const api = createApi();
     const provider = createNekoCanvasCapabilityProvider(api);

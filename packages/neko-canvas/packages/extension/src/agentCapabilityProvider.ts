@@ -39,6 +39,7 @@ import type {
   AgentCapabilityInvocationInput,
   AgentCapabilityInvocationResult,
   AgentCapabilityLifecycleDescriptor,
+  Skill,
 } from '@neko/shared';
 import {
   TOOL_NAMES_CANVAS,
@@ -663,11 +664,44 @@ function createCanvasMarkdownLifecycleDescriptor(
 const CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS: readonly AgentCapabilityLifecycleDescriptor[] =
   CANVAS_MARKDOWN_TOOL_DEFINITIONS.map(createCanvasMarkdownLifecycleDescriptor);
 
+const CANVAS_MARKDOWN_STORYBOARD_SKILL: Skill = {
+  name: 'canvas-markdown-storyboard',
+  description:
+    'Prepare reviewed Markdown storyboard or table content for Canvas ingestion. Use after the Agent has inspected the source material and decided Canvas should create or validate storyboard nodes.',
+  content: [
+    '# Canvas Markdown Storyboard',
+    '',
+    'Use this skill only after you have understood the user request and inspected required source material.',
+    '',
+    '## Canvas Lifecycle',
+    '- Use canvas.validateMarkdownStoryboard to validate Markdown storyboard content without mutating Canvas.',
+    '- Use canvas.createStoryboardDraftFromMarkdown when the user needs a draft Canvas representation for review.',
+    '- Use canvas.createStoryboardFromMarkdown only after review/approval for Canvas mutation.',
+    '- Use canvas.attachResource when reviewed rows need explicit resource refs bound to Canvas targets.',
+    '',
+    'Do not invent fixed storyboard table headers in the Agent runtime. Preserve user/source language and field names in Markdown, and let Canvas profile validation decide whether a field is supported.',
+  ].join('\n'),
+  allowedTools: [
+    'canvas.validateMarkdownStoryboard',
+    'canvas.createStoryboardDraftFromMarkdown',
+    'canvas.createStoryboardFromMarkdown',
+    'canvas.attachResource',
+  ],
+  source: 'builtin',
+  enabled: true,
+  icon: 'canvas',
+  validationRequirements: ['CanvasMarkdownCapabilityInput'],
+};
+
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
   readonly id = 'neko-canvas';
   readonly version = '1.0.0';
 
   constructor(private readonly _api: NekoCanvasAPI) {}
+
+  getSkills(): Skill[] {
+    return [CANVAS_MARKDOWN_STORYBOARD_SKILL];
+  }
 
   getArtifactFacets(_context: AgentCapabilityContext): AgentArtifactFacetsContribution {
     return {

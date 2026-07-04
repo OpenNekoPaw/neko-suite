@@ -19,7 +19,7 @@ import {
   scriptGenerationSkill,
 } from './index';
 
-describe('@neko-agent/skills builtins', () => {
+describe('@neko/skills builtins', () => {
   it('exports comic storyboard and media workflow skill definitions', () => {
     expect(comicToStoryboardSkill.name).toBe('comic-to-storyboard');
     expect(mediaToVideoSkill.name).toBe('media-to-video');

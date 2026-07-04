@@ -52,11 +52,11 @@ import {
 import {
   createRuntimeSkillBootstrap,
   createRuntimeSkillLazySync,
-  getBuiltinSkills,
   SkillRegistry,
   type IRuntimeTaskManager,
   type ISubpackageResolver,
 } from '@neko/agent';
+import { getBuiltinSkills } from '@neko/skills';
 import { getSkillFileService } from '../services/SkillFileService';
 import { setActiveCanvasAmbientScope } from '../services/canvasAmbientContext';
 import { postPluginsAvailable } from '../services/pluginTransferBridge';
@@ -84,7 +84,7 @@ import {
   type OpenTab,
   type TabState,
 } from '@neko-agent/types';
-import type { NpcAgentWorkflowRequest } from '@neko/shared';
+import type { NpcAgentWorkflowRequest, Skill } from '@neko/shared';
 import { updateWebviewKeyboardEditableOwner } from '@neko/shared/vscode/extension';
 import { AccountAiCatalogCache } from '../services/accountAiCatalogCache';
 
@@ -321,20 +321,26 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         // CapabilityDiscoveryService is bootstrapped earlier in activation; fall
         // back silently if something flipped the order so the chat view still opens.
         let subpackageResolver: ISubpackageResolver | undefined;
+        let providerSkills: Skill[] = [];
         try {
           const capabilityDiscovery = getCapabilityDiscoveryService();
           subpackageResolver = {
             get: (id: string) => capabilityDiscovery.getSubpackage(id),
           };
+          providerSkills = capabilityDiscovery.getAllSkills();
         } catch {
           subpackageResolver = undefined;
+          providerSkills = [];
         }
         const capabilityRuntime = getCapabilityRuntimeBindings();
         const skillRuntimeBootstrap = createRuntimeSkillBootstrap({
           registry: capabilityRuntime.skillRegistry ?? new SkillRegistry(),
           toolRegistry: toolRegistry ?? undefined,
           subpackageResolver,
-          builtinSkills: getBuiltinSkills({ locale: vscode.env.language }),
+          builtinSkills: [
+            ...providerSkills,
+            ...getBuiltinSkills({ locale: vscode.env.language }),
+          ],
           logger,
         });
         const { skillService } = skillRuntimeBootstrap;

@@ -28,6 +28,7 @@
     "@neko/agent": "workspace:*",
     "@neko/market-core": "workspace:*",
     "@neko/platform": "workspace:*",
+    "@neko/skills": "workspace:*",
     "@neko/shared": "workspace:*",
     "ink": "^5.0.1",
     "react": "^18.3.1",

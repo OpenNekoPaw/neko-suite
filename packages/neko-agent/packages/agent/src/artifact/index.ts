@@ -45,11 +45,3 @@ export {
   inferEntityMemoryContributionFromCharacterAnalysis,
   maybeAttachInferredEntityMemoryContribution,
 } from './entity-memory-contribution-inference';
-
-export {
-  buildShotImagePrepReviewArtifact,
-  buildStoryboardShotImagePrepReviewArtifact,
-  type ShotImagePrepArtifactInput,
-  type StoryboardShotImagePrepArtifactInput,
-  type StoryboardShotImagePrepArtifactResult,
-} from './shot-image-prep-artifact';

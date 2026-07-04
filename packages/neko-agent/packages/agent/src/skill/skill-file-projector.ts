@@ -13,7 +13,6 @@ import type {
   SlashCommand,
 } from '@neko/shared';
 import * as path from 'node:path';
-import { builtinSkills } from './builtins';
 import type { LazyCommand, LazySkill } from './lazy-loader';
 import { matchSkillPaths } from './path-matcher';
 import { resolveNekoContentDir, type NekoContentSource } from '../workspace/neko-content-layout';
@@ -61,6 +60,10 @@ export interface SkillFileLoadResultOf<TSkill, TCommand> {
 export interface ConfiguredSkillFileCatalog {
   skills: ConfiguredSkill[];
   commands: ConfiguredSlashCommand[];
+}
+
+export interface ToConfiguredSkillFileCatalogOptions {
+  builtinSkills?: readonly Skill[];
 }
 
 export interface BuildSkillFileContentOptions {
@@ -427,8 +430,9 @@ export function shouldCopySkillDirectoryEntry(entryName: string): boolean {
 
 export function toConfiguredSkillFileCatalog(
   result: SkillFileScanResult,
+  options: ToConfiguredSkillFileCatalogOptions = {},
 ): ConfiguredSkillFileCatalog {
-  const builtinSkillConfigs: ConfiguredSkill[] = builtinSkills.map((skill) => ({
+  const builtinSkillConfigs: ConfiguredSkill[] = (options.builtinSkills ?? []).map((skill) => ({
     ...skill,
     source: 'builtin' as SkillSource,
     enabled: true,

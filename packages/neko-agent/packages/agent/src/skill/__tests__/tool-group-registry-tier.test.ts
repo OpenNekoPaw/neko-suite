@@ -3,8 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { TOOL_NAMES_PERCEPTION, type ToolGroup } from '@neko/shared';
-import { builtinToolGroups, registerBuiltinToolGroups } from '../builtins';
+import type { ToolGroup } from '@neko/shared';
 import { ToolGroupRegistry } from '../tool-group-registry';
 
 // ---------------------------------------------------------------------------
@@ -27,43 +26,6 @@ describe('ToolGroupRegistry — tiered loading', () => {
 
   beforeEach(() => {
     registry = new ToolGroupRegistry();
-  });
-
-  // -------------------------------------------------------------------------
-  // getDefaultTools — only resident
-  // -------------------------------------------------------------------------
-  it('registers perception evidence as an optional lazy ToolSet', () => {
-    registerBuiltinToolGroups(registry);
-
-    const group = registry.get('perception-evidence');
-    expect(group).toEqual(
-      expect.objectContaining({
-        loadingTier: 'lazy',
-        alwaysActive: false,
-        tools: [
-          TOOL_NAMES_PERCEPTION.DESCRIBE_INPUT,
-          TOOL_NAMES_PERCEPTION.AUDIO_TRANSCRIBE,
-          TOOL_NAMES_PERCEPTION.IMAGE_SIMILARITY,
-          TOOL_NAMES_PERCEPTION.IMAGE_CLASSIFY,
-          TOOL_NAMES_PERCEPTION.VIDEO_DETECT_SHOTS,
-        ],
-      }),
-    );
-    expect(registry.getDefaultTools()).not.toContain(TOOL_NAMES_PERCEPTION.DESCRIBE_INPUT);
-    expect(registry.getDefaultTools()).not.toContain(TOOL_NAMES_PERCEPTION.AUDIO_TRANSCRIBE);
-    expect(registry.getDefaultTools()).not.toContain(TOOL_NAMES_PERCEPTION.IMAGE_SIMILARITY);
-    expect(registry.getDefaultTools()).not.toContain(TOOL_NAMES_PERCEPTION.IMAGE_CLASSIFY);
-    expect(registry.getDefaultTools()).not.toContain(TOOL_NAMES_PERCEPTION.VIDEO_DETECT_SHOTS);
-    expect(registry.getActiveTools(['perception-evidence'])).toEqual(
-      expect.arrayContaining([
-        TOOL_NAMES_PERCEPTION.DESCRIBE_INPUT,
-        TOOL_NAMES_PERCEPTION.AUDIO_TRANSCRIBE,
-        TOOL_NAMES_PERCEPTION.IMAGE_SIMILARITY,
-        TOOL_NAMES_PERCEPTION.IMAGE_CLASSIFY,
-        TOOL_NAMES_PERCEPTION.VIDEO_DETECT_SHOTS,
-      ]),
-    );
-    expect(builtinToolGroups.map((entry) => entry.name)).toContain('perception-evidence');
   });
 
   describe('getDefaultTools()', () => {

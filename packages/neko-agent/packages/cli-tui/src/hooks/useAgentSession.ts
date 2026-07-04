@@ -17,7 +17,6 @@ import {
   ToolRegistry,
   createSystemPromptBuilder,
   getDefaultPersonalPath,
-  getBuiltinSkills,
   createInputProcessor,
   createCoreTools,
   mergeCreationExecutionMetadata,
@@ -32,6 +31,7 @@ import {
   type AgentEvent,
 } from '@neko/agent';
 import { createAgentSessionWithRuntime } from '@neko/agent/runtime';
+import { getBuiltinSkills } from '@neko/skills';
 import {
   projectLlmParameters,
   ConfigManager,

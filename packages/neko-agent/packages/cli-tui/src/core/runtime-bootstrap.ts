@@ -1,12 +1,12 @@
 import {
   ToolGroupRegistry,
   createTaskManagerCreationTaskProjection,
-  registerBuiltinToolGroups,
   type IRuntimeTaskManager,
   type SkillLifecycleRuntime,
   type SkillService,
 } from '@neko/agent';
 import { createNodeArtifactStore, type AgentRuntimeConfig } from '@neko/agent/runtime';
+import { registerBuiltinToolGroups } from '@neko/skills';
 import type { IProjectMemoryManager, IProviderCardRegistry, PromptFragment } from '@neko/shared';
 
 export interface CliAgentRuntimeConfig {

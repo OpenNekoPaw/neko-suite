@@ -15,7 +15,7 @@ const signalExitStubPath = resolve(import.meta.dir, 'src/stubs/signal-exit.ts');
 const repoRoot = resolve(import.meta.dir, '../../../..');
 
 const workspacePackages = new Map<string, string>([
-  ['@neko-agent/skills', resolve(repoRoot, 'packages/neko-agent/packages/skills')],
+  ['@neko/skills', resolve(repoRoot, 'packages/neko-skills')],
   ['@neko-agent/types', resolve(repoRoot, 'packages/neko-agent/packages/agent-types')],
   ['@neko/agent', resolve(repoRoot, 'packages/neko-agent/packages/agent')],
   ['@neko/ai-sdk', resolve(repoRoot, 'packages/neko-agent/packages/ai-sdk')],

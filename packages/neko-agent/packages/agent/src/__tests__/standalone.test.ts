@@ -23,7 +23,6 @@ import {
   createToolGuard,
   SkillService,
   createSkillService,
-  builtinSkills,
   MarkdownParser,
 
   // Tools
@@ -95,7 +94,6 @@ describe('Standalone Mode', () => {
       expect(createToolGuard).toBeDefined();
       expect(SkillService).toBeDefined();
       expect(createSkillService).toBeDefined();
-      expect(builtinSkills).toBeDefined();
       expect(MarkdownParser).toBeDefined();
     });
 

@@ -1,5 +1,4 @@
 import type { Skill, SlashCommand } from '@neko/shared';
-import { builtinSkills } from './builtins';
 import { createCommandBackedSkill, createLazyCommandBackedSkill } from './command-backed-skill';
 import type { LazyCommand, LazySkill } from './lazy-loader';
 import { SkillRegistry } from './skill-registry';
@@ -50,7 +49,7 @@ export class SkillRegistryPopulator {
   private readonly managedDiskSkillRestores = new Map<string, Skill>();
 
   populate(input: SkillRegistryPopulateInput): SkillRegistryPopulationSummary {
-    const builtins = input.builtinSkills ?? builtinSkills;
+    const builtins = input.builtinSkills ?? [];
     this.ensureBuiltinSkills(input.registry, builtins);
     this.clearManagedDiskSkills(input.registry);
 
@@ -76,7 +75,7 @@ export class SkillRegistryPopulator {
   }
 
   populateLazy(input: LazySkillRegistryPopulateInput): SkillRegistryPopulationSummary {
-    const builtins = input.builtinSkills ?? builtinSkills;
+    const builtins = input.builtinSkills ?? [];
     this.ensureBuiltinSkills(input.registry, builtins);
     this.clearManagedDiskSkills(input.registry);
 

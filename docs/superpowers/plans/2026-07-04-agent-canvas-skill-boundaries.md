@@ -66,8 +66,9 @@ This plan implements the boundary cleanup for Canvas/Agent/CreativeTable behavio
   - Remove exports from `creative-table-contract.ts`.
 - Modify built-in skill metadata under `packages/neko-agent/packages/agent/src/skill/builtins/`
   - Replace `creative-table.storyboard` validation requirements with Canvas lifecycle validation guidance.
-- Optional create `packages/neko-agent/packages/skills/`
-  - Move domain skill definitions only after runtime cleanup is green.
+- Optional create `packages/neko-skills/`
+  - Move cross-domain extension skills out of `@neko/agent`; host layers inject them into the agent skill runtime.
+  - Domain packages such as `neko-canvas` should expose domain-owned skills/capabilities from their own package boundaries.
 
 ---
 
@@ -779,110 +780,156 @@ git commit -m "refactor(agent): remove storyboard creative table validator owner
 
 ---
 
-### Task 6: Optional Extract Built-In Skill Content Into A Skills Subpackage
+### Task 6: Extract Built-In Skill Content Into Top-Level `neko-skills`
+
+**Decision:** `@neko/agent` must not depend on concrete skills. Agent owns the skill runtime, prompt composition, loader/registry/lifecycle ports, and host-neutral registries. `@neko/skills` owns cross-domain extension skill definitions and creative helper runtimes until those helpers move to their owning domain packages. VSCode Extension and CLI are the composition roots that inject `@neko/skills` into agent runtime.
 
 **Files:**
-- Create: `packages/neko-agent/packages/skills/package.json`
-- Create: `packages/neko-agent/packages/skills/src/index.ts`
-- Create: `packages/neko-agent/packages/skills/src/builtins/comic-to-storyboard.ts`
-- Create: `packages/neko-agent/packages/skills/src/builtins/media-to-video.ts`
-- Create: `packages/neko-agent/packages/skills/src/builtins/index.ts`
+- Create/move: `packages/neko-skills/package.json`
+- Create/move: `packages/neko-skills/src/index.ts`
+- Create/move: `packages/neko-skills/src/builtins/**`
+- Create/move: `packages/neko-skills/src/creative/**`
 - Modify: `packages/neko-agent/packages/agent/package.json`
-- Modify: `packages/neko-agent/packages/agent/src/skill/builtins/index.ts`
-- Move tests from `packages/neko-agent/packages/agent/src/skill/builtins/` to `packages/neko-agent/packages/skills/src/builtins/` after the package compiles.
+- Modify: `packages/neko-agent/packages/agent/tsconfig.json`
+- Modify: `packages/neko-agent/packages/agent/src/skill/index.ts`
+- Modify: `packages/neko-agent/packages/agent/src/runtime/index.ts`
+- Modify: `packages/neko-agent/packages/agent/src/runtime/capability-runtime-registries.ts`
+- Modify: `packages/neko-agent/packages/agent/src/session/agent-session-initializer.ts`
+- Modify: `packages/neko-agent/packages/extension/src/index.ts`
+- Modify: `packages/neko-agent/packages/extension/src/chat/chatProvider.ts`
+- Modify: `packages/neko-agent/packages/cli-tui/src/**`
 
-- [ ] **Step 1: Create the package manifest**
+- [x] **Step 1: Add a failing architecture guard**
 
-Add `packages/neko-agent/packages/skills/package.json`:
+Add an agent architecture test proving `packages/neko-agent/packages/agent` does not import or declare dependencies on `@neko-agent/skills` or `@neko/skills`.
 
-```json
-{
-  "name": "@neko-agent/skills",
-  "private": true,
-  "version": "0.0.1",
-  "type": "module",
-  "exports": {
-    ".": "./src/index.ts",
-    "./builtins": "./src/builtins/index.ts",
-    "./*": "./src/*"
-  },
-  "scripts": {
-    "test": "vitest --run",
-    "test:watch": "vitest"
-  },
-  "dependencies": {
-    "@neko/shared": "workspace:*"
-  },
-  "devDependencies": {
-    "vitest": "^4.1.2",
-    "typescript": "^5.0.0"
-  },
-  "license": "AGPL-3.0-or-later"
-}
+Verification before implementation:
+
+```bash
+./node_modules/.bin/vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts
 ```
 
-- [ ] **Step 2: Move skill definitions without moving runtime**
+Expected before implementation: FAIL on agent package config, runtime re-export, and `skill/builtins` shim.
 
-Move only pure skill definition files from:
+- [x] **Step 2: Move the skills package to top-level `packages/neko-skills`**
+
+Move existing cross-domain skill definitions and creative helper runtimes from:
 
 ```text
-packages/neko-agent/packages/agent/src/skill/builtins/comic-to-storyboard.ts
-packages/neko-agent/packages/agent/src/skill/builtins/media-to-video.ts
+packages/neko-agent/packages/skills
 ```
 
 to:
 
 ```text
-packages/neko-agent/packages/skills/src/builtins/comic-to-storyboard.ts
-packages/neko-agent/packages/skills/src/builtins/media-to-video.ts
+packages/neko-skills
 ```
 
-Create `packages/neko-agent/packages/skills/src/builtins/index.ts`:
-
-```ts
-export { comicToStoryboardSkill } from './comic-to-storyboard';
-export { mediaToVideoSkills } from './media-to-video';
-```
-
-Create `packages/neko-agent/packages/skills/src/index.ts`:
-
-```ts
-export * from './builtins';
-```
-
-- [ ] **Step 3: Keep Agent runtime as consumer**
-
-Add dependency to `packages/neko-agent/packages/agent/package.json`:
+Set package name:
 
 ```json
-"@neko-agent/skills": "workspace:*"
+"name": "@neko/skills"
 ```
 
-Update `packages/neko-agent/packages/agent/src/skill/builtins/index.ts` to re-export from the new package:
+- [x] **Step 3: Remove Agent package dependency on concrete skills**
 
-```ts
-export { comicToStoryboardSkill, mediaToVideoSkills } from '@neko-agent/skills';
+Remove `@neko-agent/skills` / `@neko/skills` from:
+
+```text
+packages/neko-agent/packages/agent/package.json
+packages/neko-agent/packages/agent/tsconfig.json
+packages/neko-agent/packages/agent/src/runtime/index.ts
+packages/neko-agent/packages/agent/src/skill/index.ts
+packages/neko-agent/packages/agent/src/skill/builtins/index.ts
 ```
 
-- [ ] **Step 4: Run skill tests**
+Delete the agent-side builtin shim instead of replacing it with a new re-export.
+
+- [x] **Step 4: Make builtins explicit host injection**
+
+Change agent runtime defaults so empty registries are created by default:
+
+```text
+packages/neko-agent/packages/agent/src/runtime/capability-runtime-registries.ts
+packages/neko-agent/packages/agent/src/session/agent-session-initializer.ts
+packages/neko-agent/packages/agent/src/skill/skill-registry-populator.ts
+packages/neko-agent/packages/agent/src/skill/skill-file-projector.ts
+```
+
+Then inject builtins from host/composition layers:
+
+```text
+packages/neko-agent/packages/extension/src/index.ts
+packages/neko-agent/packages/extension/src/chat/chatProvider.ts
+packages/neko-agent/packages/cli-tui/src/core/runtime-bootstrap.ts
+packages/neko-agent/packages/cli-tui/src/hooks/useAgentSession.ts
+```
+
+- [x] **Step 5: Update workspace aliases and lockfile**
+
+Update:
+
+```text
+packages/neko-agent/package.json
+packages/neko-agent/vitest.config.ts
+packages/neko-agent/vitest.real-api.config.ts
+packages/neko-agent/packages/extension/package.json
+packages/neko-agent/packages/cli-tui/package.json
+packages/neko-agent/packages/cli-tui/build-neko.ts
+packages/neko-agent/packages/cli-tui/tsup.config.ts
+pnpm-lock.yaml
+```
+
+- [x] **Step 6: Run focused verification**
 
 Run:
 
 ```bash
-pnpm --filter @neko-agent/skills test
-pnpm --filter @neko/agent test:run -- src/skill/builtins/builtin-skills.test.ts src/skill/__tests__/conversation-skill-runtime.test.ts
+./node_modules/.bin/vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts
+./node_modules/.bin/vitest run packages/agent/src/runtime/__tests__/capability-runtime-registries.test.ts packages/agent/src/skill/__tests__/skill-registry-populator.test.ts packages/agent/src/skill/__tests__/skill-file-projector.test.ts packages/agent/src/skill/__tests__/tool-group-registry-tier.test.ts packages/agent/src/__tests__/standalone.test.ts
+./node_modules/.bin/vitest run packages/cli-tui/src/core/__tests__/runtime-bootstrap.test.ts packages/cli-tui/src/__tests__/experiment.test.ts
+./node_modules/.bin/vitest run ../neko-skills/src/builtins/builtin-skills.test.ts ../neko-skills/src/builtins/persona-skills.test.ts ../neko-skills/src/creative/__tests__/storyboard-image-runtime.test.ts ../neko-skills/src/creative/__tests__/shot-image-prep-runtime.test.ts ../neko-skills/src/creative/__tests__/comic-animation-indexing-runtime.test.ts
+./node_modules/.bin/tsc --noEmit -p ../neko-skills/tsconfig.json
+./node_modules/.bin/esbuild ./packages/extension/src/index.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --loader:.md=text --alias:@neko/skills=../neko-skills/src/index.ts
+```
+
+Expected: PASS. Full agent `tsc --noEmit -p packages/agent/tsconfig.json` still has pre-existing test fixture type debt and is not the acceptance gate for this task.
+
+- [x] **Step 7: Remove concrete media workflow strategy from Agent matcher**
+
+Agent `KeywordSkillMatcher` now treats natural-language discovery as generic candidate discovery only:
+
+- It no longer hardcodes concrete creative media skill names such as comic/storyboard/video package builtins.
+- It ranks explicit production requests from `Skill.mediaWorkflow` metadata (`acceptedModalities`, `producedArtifacts`, `artifactProfiles`, `tags`, and `operations`).
+- It still filters content-only document/comic analysis away from creative production skills and does not activate skills; activation remains explicit user invocation or Agent-led `ActivateSkill`.
+
+Verification:
+
+```bash
+./node_modules/.bin/vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts packages/agent/src/skill/__tests__/skill-service.test.ts
+```
+
+Expected: PASS, including the guard that scans Agent core for concrete media workflow skill names.
+
+- [x] **Step 8: Move concrete creative artifact samples out of Agent tests**
+
+Moved the `comic-to-animation` composite artifact sample and its profile/projector tests to:
+
+```text
+packages/neko-skills/src/creative/__fixtures__/comic-to-animation-composite-artifact.json
+packages/neko-skills/src/creative/__tests__/comic-to-animation-artifact.test.ts
+```
+
+The migrated tests depend only on `@neko/shared` and the local `@neko/skills` fixture. Agent runtime/provider registration behavior remains covered by generic Agent capability runtime tests, without concrete creative skill fixtures.
+
+Verification:
+
+```bash
+./node_modules/.bin/vitest run ../neko-skills/src/creative/__tests__/comic-to-animation-artifact.test.ts ../neko-skills/src/creative/__tests__/shot-image-prep-artifact.test.ts
+./node_modules/.bin/tsc --noEmit -p ../neko-skills/tsconfig.json
 ```
 
 Expected: PASS.
-
-- [ ] **Step 5: Commit Task 6**
-
-```bash
-git add packages/neko-agent/packages/skills packages/neko-agent/packages/agent/package.json packages/neko-agent/packages/agent/src/skill/builtins
-git commit -m "refactor(agent): move builtin skill content to skills package"
-```
-
----
 
 ### Task 7: Final Boundary Verification
 

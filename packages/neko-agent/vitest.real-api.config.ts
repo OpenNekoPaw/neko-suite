@@ -18,7 +18,7 @@ export default defineConfig({
       '@neko/agent': path.resolve(__dirname, 'packages/agent/src'),
       '@neko/platform': path.resolve(__dirname, 'packages/platform/src'),
       '@neko/content': path.resolve(__dirname, '../neko-content/src'),
-      '@neko-agent/skills': path.resolve(__dirname, 'packages/skills/src'),
+      '@neko/skills': path.resolve(__dirname, '../neko-skills/src'),
       '@neko-agent/types': path.resolve(__dirname, 'packages/agent-types/src'),
       '@neko-agent/test-utils': path.resolve(__dirname, 'test-utils/src'),
       '@neko-agent/test-utils/real-api': path.resolve(

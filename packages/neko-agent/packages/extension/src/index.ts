@@ -21,7 +21,7 @@ import {
   watchLogLevel,
 } from '@neko/shared/vscode/extension';
 import { LogLevel, withTimeout, type ISkillProvider } from '@neko/shared';
-import { builtinSkillLocales, getBuiltinSkills } from '@neko/agent/skill';
+import { builtinSkillLocales, getBuiltinSkills, registerBuiltinToolGroups } from '@neko/skills';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { ITaskManager } from './bootstrap';
 import { setPlatformRootLogger } from '@neko/platform';
@@ -138,6 +138,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   // Platform services are injected into context so providers can use media/config/embed
   // without depending on @neko/platform directly.
   const capabilityRegistries = createAgentCapabilityRuntimeRegistries();
+  registerBuiltinToolGroups(capabilityRegistries.toolGroupRegistry);
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const engineClientProvider = getEngineClientProvider();
   await engineClientProvider.setAuthorizedReadRoots?.(

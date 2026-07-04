@@ -18,7 +18,6 @@
     "test:run": "vitest --run --passWithNoTests"
   },
   "dependencies": {
-    "@neko-agent/skills": "workspace:*",
     "@neko-agent/types": "workspace:*",
     "@neko/content": "workspace:*",
     "@neko/shared": "workspace:*",

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentCapabilityProvider, Tool } from '@neko/shared';
+import type { AgentCapabilityProvider, Skill, Tool } from '@neko/shared';
 import { ToolRegistry } from '../../tools';
 import { CapabilityRegistryRuntime } from '../capability-registry-runtime';
 
@@ -21,7 +21,32 @@ function createProvider(id: string, tools: Tool[]): AgentCapabilityProvider {
   };
 }
 
+function createSkill(name: string): Skill {
+  return {
+    name,
+    description: `${name} skill`,
+    content: `Use ${name}.`,
+    source: 'builtin',
+    enabled: true,
+  };
+}
+
 describe('CapabilityRegistryRuntime', () => {
+  it('aggregates skills contributed by registered providers', () => {
+    const toolRegistry = new ToolRegistry();
+    const runtime = new CapabilityRegistryRuntime({ toolRegistry });
+
+    runtime.registerProvider(
+      {
+        ...createProvider('neko.canvas', []),
+        getSkills: () => [createSkill('canvas-storyboard')],
+      },
+      { extensionContext: {} },
+    );
+
+    expect(runtime.getAllSkills().map((skill) => skill.name)).toEqual(['canvas-storyboard']);
+  });
+
   it('cleans registered providers that no longer have installed manifests', () => {
     const toolRegistry = new ToolRegistry();
     const disposed = vi.fn();

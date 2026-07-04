@@ -8,7 +8,6 @@ import {
   type CompositeArtifactBlock,
   type CompositeArtifactDomainBlock,
 } from '@neko/shared';
-import { createAgentCapabilityInjectionRuntime } from '../../runtime/agent-capability-injection-runtime';
 import sampleArtifact from '../__fixtures__/comic-to-animation-composite-artifact.json';
 
 const profileDescriptors: readonly ArtifactProfileDescriptor[] = [
@@ -133,32 +132,7 @@ describe('comic-to-animation composite artifact sample', () => {
     });
   });
 
-  it('keeps suggested execution actions unavailable without provider registration', () => {
-    const runtime = createAgentCapabilityInjectionRuntime();
-
-    runtime.register({
-      identity: {
-        id: 'skill:comic-to-animation',
-        source: 'builtin',
-        sourceId: 'comic-to-animation',
-        trustLevel: 'core',
-      },
-      metadata: {
-        mediaWorkflow: {
-          producedArtifacts: ['CompositeArtifact', 'GenericTable'],
-          artifactProfiles: ['comic-shot-asset-prep', 'comic-to-animation-plan'],
-          referencedCapabilities: ['canvas.ingestMarkdown', 'cut.importStoryboard'],
-        },
-      },
-    });
-
-    expect(
-      runtime
-        .getArtifactFacets()
-        .lifecycleCapabilities?.find(
-          (capability) => capability.capabilityId === 'canvas.ingestMarkdown',
-        ),
-    ).toBeUndefined();
+  it('keeps provider-dependent suggested execution actions disabled in the review sample', () => {
     expect(sampleArtifact.suggestedActions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -170,76 +144,7 @@ describe('comic-to-animation composite artifact sample', () => {
     );
   });
 
-  it('projects the reviewed storyboard domain block for Cut while Canvas uses lifecycle review', () => {
-    const runtime = createAgentCapabilityInjectionRuntime();
-    runtime.registerMany([
-      {
-        identity: {
-          id: 'provider:canvas',
-          source: 'provider',
-          sourceId: 'neko-canvas',
-          trustLevel: 'core',
-        },
-        artifactFacets: {
-          lifecycleCapabilities: [
-            {
-              capabilityId: 'canvas.ingestMarkdown',
-              providerId: 'neko-canvas',
-              displayName: 'Ingest Markdown into Canvas',
-              description: 'Create a Canvas Markdown note, generic table, or creative table.',
-              phases: ['review'],
-              inputSchema: { id: 'canvas.markdown.input', version: 1 },
-              resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
-              accepts: ['markdown', 'gfm-table'],
-              produces: ['canvas.table', 'canvas.storyboard'],
-              risk: 'medium',
-              requiresApproval: true,
-              safetyKind: 'confirmation-gated',
-            },
-          ],
-        },
-      },
-      {
-        identity: {
-          id: 'provider:cut',
-          source: 'provider',
-          sourceId: 'neko-cut',
-          trustLevel: 'core',
-        },
-        artifactFacets: {
-          projectors: [
-            {
-              id: 'projector:storyboard-to-cut',
-              accepts: ['StoryboardTable'],
-              produces: ['CutStoryboardImportPayload'],
-              profiles: ['manga-to-video'],
-              lazy: true,
-            },
-          ],
-          capabilities: [
-            {
-              capabilityId: 'cut.importStoryboard',
-              packageId: 'neko-cut',
-              accepts: ['CutStoryboardImportPayload'],
-              produces: ['timeline-element-ref'],
-              actions: ['cut.importStoryboard'],
-              risk: 'medium',
-              requiresApproval: true,
-            },
-          ],
-        },
-      },
-    ]);
-
-    expect(
-      runtime
-        .getArtifactFacets()
-        .lifecycleCapabilities?.find(
-          (capability) => capability.capabilityId === 'canvas.ingestMarkdown',
-        ),
-    ).toBeDefined();
-    expect(runtime.findArtifactCapabilities('cut.importStoryboard')).toHaveLength(1);
-
+  it('projects the reviewed storyboard domain block for Cut payload import', () => {
     const artifact = sampleArtifact as CompositeArtifact;
     const cutProjection = projectCompositeArtifactToCutStoryboardPayload({
       artifact,

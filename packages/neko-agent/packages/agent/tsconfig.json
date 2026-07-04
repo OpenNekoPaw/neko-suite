@@ -14,11 +14,7 @@
     "outDir": "./dist",
     "resolveJsonModule": true,
     "noEmit": true,
-    "baseUrl": ".",
-    "paths": {
-      "@neko-agent/skills": ["../skills/src/index.ts"],
-      "@neko-agent/skills/*": ["../skills/src/*"]
-    }
+    "baseUrl": "."
   },
   "include": ["src/**/*", "src/**/*.d.ts"],
   "exclude": [

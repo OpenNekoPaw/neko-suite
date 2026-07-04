@@ -476,4 +476,39 @@ describe('KeywordSkillMatcher', () => {
       'media-to-video',
     ]);
   });
+
+  it('routes explicit EPUB animation requests from workflow metadata without concrete skill names', () => {
+    const matcher = new KeywordSkillMatcher();
+    const broadCoordinator = makeSkill({
+      name: 'broad-production-coordinator',
+      description: 'Coordinate explicit media production across several artifact handoff steps.',
+      mediaWorkflow: {
+        acceptedModalities: ['document'],
+        producedArtifacts: ['CreativeTable', 'AnimationPlan', 'workflow-execution-summary'],
+        tags: ['orchestration', 'animation'],
+        operations: ['coordinate-media-production', 'select-focused-skill'],
+      },
+    });
+    const focusedComicProducer = makeSkill({
+      name: 'focused-source-animation',
+      description: 'Create animation planning artifacts from comic or manga document input.',
+      mediaWorkflow: {
+        acceptedModalities: ['comic', 'manga', 'document'],
+        producedArtifacts: ['AnimationPlan', 'generated-media-ref'],
+        artifactProfiles: ['storyboard', 'shot-asset-prep'],
+        tags: ['comic', 'manga', 'animation'],
+        operations: ['create-animation-plan', 'prepare-shot-images'],
+      },
+    });
+
+    const matches = matcher.match('把这个 EPUB 前10页转动画并生成视频', [
+      broadCoordinator,
+      focusedComicProducer,
+    ]);
+
+    expect(matches.map((match) => match.skill.name).slice(0, 2)).toEqual([
+      'focused-source-animation',
+      'broad-production-coordinator',
+    ]);
+  });
 });

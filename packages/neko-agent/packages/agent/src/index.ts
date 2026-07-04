@@ -610,15 +610,6 @@ export {
   type SubpackageInfo,
   type SkillActivationIssue,
   type SkillActivationIssueCode,
-  // Builtins
-  registerBuiltins,
-  builtinSkills,
-  getBuiltinSkills,
-  builtinSkillLocales,
-  normalizeBuiltinSkillLocale,
-  selectBuiltinSkillContent,
-  builtinToolGroups,
-  registerBuiltinToolGroups,
   // ToolGroup Registry
   ToolGroupRegistry,
   createToolGroupRegistry,

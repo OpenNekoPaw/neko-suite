@@ -340,18 +340,23 @@ Body`,
   });
 
   describe('toConfiguredSkillFileCatalog', () => {
-    it('merges builtin, personal, and project skills with enabled true', () => {
-      const catalog = toConfiguredSkillFileCatalog({
-        personal: {
-          skills: [makeSkill('personal', 'personal')],
-          commands: [makeCommand('cmd', 'personal')],
+    it('merges explicitly provided builtin, personal, and project skills with enabled true', () => {
+      const catalog = toConfiguredSkillFileCatalog(
+        {
+          personal: {
+            skills: [makeSkill('personal', 'personal')],
+            commands: [makeCommand('cmd', 'personal')],
+          },
+          project: {
+            skills: [makeSkill('project', 'project')],
+            commands: [],
+          },
+          errors: [],
         },
-        project: {
-          skills: [makeSkill('project', 'project')],
-          commands: [],
+        {
+          builtinSkills: [makeSkill('builtin', 'builtin')],
         },
-        errors: [],
-      });
+      );
 
       expect(catalog.skills.some((skill) => skill.source === 'builtin')).toBe(true);
       expect(catalog.skills.find((skill) => skill.name === 'personal')?.enabled).toBe(true);

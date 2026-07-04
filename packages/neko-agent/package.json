@@ -409,7 +409,7 @@
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
     "compile": "pnpm run compile:extension && pnpm run compile:webview",
-    "compile:extension": "esbuild ./packages/extension/src/index.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --loader:.md=text --alias:@neko-agent/skills=./packages/skills/src/index.ts",
+    "compile:extension": "esbuild ./packages/extension/src/index.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --loader:.md=text --alias:@neko/skills=../neko-skills/src/index.ts",
     "compile:webview": "cd packages/webview && pnpm run build && cd ../.. && pnpm run copy:webview",
     "copy:webview": "rm -rf dist/webview && mkdir -p dist/webview && cp -r packages/webview/dist/* dist/webview/",
     "watch": "pnpm run compile:extension -- --watch",

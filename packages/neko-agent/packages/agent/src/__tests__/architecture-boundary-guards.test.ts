@@ -128,6 +128,82 @@ describe('agent architecture boundary guards', () => {
     expect(existingFiles).toEqual([]);
   });
 
+  it('keeps Agent package independent from concrete skill packages', () => {
+    const packageManifest = stripTypeScriptComments(
+      readFileSync(join(repoRoot, 'packages/agent/package.json'), 'utf-8'),
+    );
+    const tsconfig = stripTypeScriptComments(
+      readFileSync(join(repoRoot, 'packages/agent/tsconfig.json'), 'utf-8'),
+    );
+    const sourceFiles = listFiles(agentSrc)
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !relativePath.endsWith('architecture-boundary-guards.test.ts'));
+
+    const forbiddenPackageSpecifiers = [
+      /"@neko-agent\/skills"/,
+      /"@neko-agent\/skills\//,
+      /"@neko\/skills"/,
+      /"@neko\/skills\//,
+    ];
+    const manifestViolations = forbiddenPackageSpecifiers
+      .filter((pattern) => pattern.test(packageManifest) || pattern.test(tsconfig))
+      .map((pattern) => `packages/agent package config matches ${pattern}`);
+    const sourceViolations = sourceFiles.flatMap(({ relativePath, source }) =>
+      [
+        /from\s+['"]@neko-agent\/skills(?:\/[^'"]*)?['"]/,
+        /from\s+['"]@neko\/skills(?:\/[^'"]*)?['"]/,
+        /import\(['"]@neko-agent\/skills(?:\/[^'"]*)?['"]\)/,
+        /import\(['"]@neko\/skills(?:\/[^'"]*)?['"]\)/,
+      ]
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect([...manifestViolations, ...sourceViolations]).toEqual([]);
+  });
+
+  it('keeps concrete media workflow skill strategy out of Agent core', () => {
+    const forbiddenFiles = [
+      join(agentSrc, 'artifact/shot-image-prep-artifact.ts'),
+    ];
+    const existingForbiddenFiles = forbiddenFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+
+    expect(existingForbiddenFiles).toEqual([]);
+
+    const skillRuntimeSourceFiles = listFiles(join(agentSrc, 'skill'))
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !relativePath.endsWith('architecture-boundary-guards.test.ts'));
+
+    const forbiddenSkillNames = [
+      /['"`]comic-to-storyboard['"`]/,
+      /['"`]comic-to-animation['"`]/,
+      /['"`]media-to-video['"`]/,
+      /['"`]storyboard-to-animation-plan['"`]/,
+      /['"`]animation-plan-to-cut['"`]/,
+      /['"`]generated-shot-assembly['"`]/,
+      /['"`]export-video-package['"`]/,
+    ];
+    const violations = skillRuntimeSourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenSkillNames
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps host-specific projection names quarantined away from runtime production callers', () => {
     const sourceFiles = listFiles(packageRoot)
       .filter(

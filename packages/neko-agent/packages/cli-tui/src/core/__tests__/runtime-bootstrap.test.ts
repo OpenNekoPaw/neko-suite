@@ -12,11 +12,14 @@ vi.mock('@neko/agent', () => ({
     readonly kind = 'tool-group-registry';
   },
   createTaskManagerCreationTaskProjection,
-  registerBuiltinToolGroups,
 }));
 
 vi.mock('@neko/agent/runtime', () => ({
   createNodeArtifactStore,
+}));
+
+vi.mock('@neko/skills', () => ({
+  registerBuiltinToolGroups,
 }));
 
 describe('createCliAgentRuntime', () => {

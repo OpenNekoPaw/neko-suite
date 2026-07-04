@@ -59,53 +59,6 @@ export {
   type SkillActivationIssueCode,
 } from './subpackage-guard';
 
-// Builtin skills
-export {
-  registerBuiltins,
-  builtinSkills,
-  getBuiltinSkills,
-  builtinSkillLocales,
-  normalizeBuiltinSkillLocale,
-  selectBuiltinSkillContent,
-  // Individual skills
-  aiGenerateSkill,
-  videoEditingSkill,
-  colorGradingSkill,
-  audioMixingSkill,
-  subtitleSkill,
-  scriptGenerationSkill,
-  scriptToTimelineSkill,
-  comicToStoryboardSkill,
-  getComicToStoryboardSkill,
-  mediaToVideoSkill,
-  getMediaToVideoSkill,
-  comicToAnimationSkill,
-  getComicToAnimationSkill,
-  imageToShotSkill,
-  getImageToShotSkill,
-  storyboardToAnimationPlanSkill,
-  getStoryboardToAnimationPlanSkill,
-  animationPlanToCutSkill,
-  getAnimationPlanToCutSkill,
-  generatedShotAssemblySkill,
-  getGeneratedShotAssemblySkill,
-  exportVideoPackageSkill,
-  getExportVideoPackageSkill,
-  getMediaWorkflowBuiltinSkills,
-  qualityAssessmentSkill,
-  type BuiltinSkillLocale,
-  type BuiltinSkillLocaleMap,
-  type BuiltinSkillOptions,
-  type LocalizedBuiltinSkillContent,
-  // Creation stage persona skills
-  creationPersonaSkill,
-  executionPersonaSkill,
-  iterationPersonaSkill,
-  // ToolGroups
-  builtinToolGroups,
-  registerBuiltinToolGroups,
-} from './builtins';
-
 // Stage Tracker (creation stage transitions — replaces FlowSwitcher)
 export {
   StageTracker,
