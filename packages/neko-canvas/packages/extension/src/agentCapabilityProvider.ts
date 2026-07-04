@@ -563,6 +563,7 @@ interface CanvasMarkdownToolDefinition {
 
 type CanvasToolName = (typeof TOOL_NAMES_CANVAS)[keyof typeof TOOL_NAMES_CANVAS];
 type CanvasToolLocalization = NonNullable<Tool['localization']>[string];
+type CanvasToolTraits = NonNullable<Tool['traits']>;
 
 const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] = [
   {
@@ -666,6 +667,25 @@ function createCanvasMarkdownLifecycleDescriptor(
 
 const CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS: readonly AgentCapabilityLifecycleDescriptor[] =
   CANVAS_MARKDOWN_TOOL_DEFINITIONS.map(createCanvasMarkdownLifecycleDescriptor);
+
+const CANVAS_READ_ONLY_TOOL_NAMES: ReadonlySet<CanvasToolName> = new Set([
+  TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_PLAN,
+  TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_ROUTES,
+  TOOL_NAMES_CANVAS.CANVAS_REVEAL_PLAYBACK_WORKSPACE,
+  TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD,
+  TOOL_NAMES_CANVAS.CANVAS_LIST_NODES,
+  TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+  TOOL_NAMES_CANVAS.CANVAS_EXTRACT_STRUCTURED_CONTENT,
+  TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+  TOOL_NAMES_CANVAS.CANVAS_NARRATIVE_TRAVERSE,
+  TOOL_NAMES_CANVAS.CANVAS_GET_STORYBOARD_EXECUTION_SUMMARY,
+]);
+
+const CANVAS_NETWORK_GENERATION_TOOL_NAMES: ReadonlySet<CanvasToolName> = new Set([
+  TOOL_NAMES_CANVAS.CANVAS_GENERATE_IMAGE,
+  TOOL_NAMES_CANVAS.CANVAS_GENERATE_BATCH,
+  TOOL_NAMES_CANVAS.CANVAS_APPLY_STYLE_TRANSFER,
+]);
 
 const CANVAS_TOOL_ZH_LOCALIZATIONS = {
   [TOOL_NAMES_CANVAS.CREATE_CANVAS]: {
@@ -1020,7 +1040,7 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
   },
 } satisfies Readonly<Record<CanvasToolName, CanvasToolLocalization>>;
 
-function withCanvasToolLocalization<T extends Tool>(tool: T): T {
+function withCanvasToolMetadata<T extends Tool>(tool: T): T {
   const localization = CANVAS_TOOL_ZH_LOCALIZATIONS[tool.name as CanvasToolName];
   if (!localization) {
     throw new Error(`Missing zh localization for Canvas tool "${tool.name}".`);
@@ -1031,7 +1051,21 @@ function withCanvasToolLocalization<T extends Tool>(tool: T): T {
       ...tool.localization,
       zh: localization,
     },
+    traits: tool.traits ?? readCanvasToolTraits(tool.name as CanvasToolName),
   };
+}
+
+function readCanvasToolTraits(toolName: CanvasToolName): CanvasToolTraits {
+  if (toolName === TOOL_NAMES_CANVAS.CANVAS_GENERATE_VIDEO_WITH_KEYFRAMES) {
+    return { cost: 'expensive', reversible: false, locality: 'network', impactLevel: 'high' };
+  }
+  if (CANVAS_NETWORK_GENERATION_TOOL_NAMES.has(toolName)) {
+    return { cost: 'moderate', reversible: false, locality: 'network', impactLevel: 'high' };
+  }
+  if (CANVAS_READ_ONLY_TOOL_NAMES.has(toolName)) {
+    return { cost: 'free', reversible: true, locality: 'local', impactLevel: 'none' };
+  }
+  return { cost: 'free', reversible: true, locality: 'local', impactLevel: 'low' };
 }
 
 const CANVAS_MARKDOWN_STORYBOARD_SKILL: Skill = {
@@ -2595,14 +2629,14 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         },
       },
     ];
-    const localizedTools = tools.map((tool) => withCanvasToolLocalization(tool));
+    const localizedTools = tools.map((tool) => withCanvasToolMetadata(tool));
 
     // -----------------------------------------------------------------------
     // Keyframe Video Generation (requires mediaService)
     // -----------------------------------------------------------------------
     if (mediaService) {
       localizedTools.push(
-        withCanvasToolLocalization(createVideoKeyframeTool(api, mediaService, logger)),
+        withCanvasToolMetadata(createVideoKeyframeTool(api, mediaService, logger)),
       );
     }
 

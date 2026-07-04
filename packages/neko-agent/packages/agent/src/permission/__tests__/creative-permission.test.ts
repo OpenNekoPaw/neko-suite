@@ -16,7 +16,7 @@ import { DEFAULT_TOOL_TRAITS } from '@neko/shared';
 import { ToolTraitsRegistry, DEFAULT_CREATIVE_TOOL_TRAITS } from '../tool-traits-registry';
 import { PermissionRuleMatcher } from '../rule-matcher';
 import type { PermissionConfig } from '../types';
-import { DEFAULT_READ_ONLY_TOOLS, CREATIVE_PLAN_TOOLS } from '../types';
+import { DEFAULT_READ_ONLY_TOOLS } from '../types';
 
 // =============================================================================
 // Helpers
@@ -38,7 +38,7 @@ function makePlanConfig(overrides?: Partial<PermissionConfig>): PermissionConfig
   return {
     mode: 'plan',
     rules: {},
-    readOnlyTools: [...DEFAULT_READ_ONLY_TOOLS, ...CREATIVE_PLAN_TOOLS],
+    readOnlyTools: DEFAULT_READ_ONLY_TOOLS,
     ...overrides,
   };
 }
@@ -93,9 +93,9 @@ describe('ToolTraitsRegistry', () => {
     it('bulk registers multiple entries', () => {
       registry.registerMany(DEFAULT_CREATIVE_TOOL_TRAITS);
       expect(registry.has('GenerateVideo')).toBe(true);
-      expect(registry.has('GetTimelineInfo')).toBe(true);
+      expect(registry.has('Read')).toBe(true);
       expect(registry.get('GenerateVideo').cost).toBe('expensive');
-      expect(registry.get('GetTimelineInfo').cost).toBe('free');
+      expect(registry.get('Read').cost).toBe('free');
     });
   });
 
@@ -142,7 +142,7 @@ describe('PermissionRuleMatcher - auto mode with traits', () => {
   describe('reversible OR local → auto-allow', () => {
     it('allows local reversible tools', () => {
       const matcher = new PermissionRuleMatcher(makeAutoConfig(), registry);
-      const result = matcher.check(makeToolCall('GetTimelineInfo'));
+      const result = matcher.check(makeToolCall('Read'));
       expect(result.decision).toBe('allow');
       expect(result.reason).toContain('auto-allowed');
     });
@@ -208,12 +208,6 @@ describe('PermissionRuleMatcher - auto mode with traits', () => {
       expect(result.decision).toBe('ask');
     });
 
-    it('asks for canvas_generate_image (network, irreversible)', () => {
-      const matcher = new PermissionRuleMatcher(makeAutoConfig(), registry);
-      const result = matcher.check(makeToolCall('canvas_generate_image'));
-      expect(result.decision).toBe('ask');
-    });
-
     it('asks for Bash (hybrid, irreversible)', () => {
       const matcher = new PermissionRuleMatcher(makeAutoConfig(), registry);
       const result = matcher.check(makeToolCall('Bash', { command: 'rm -rf /' }));
@@ -238,9 +232,9 @@ describe('PermissionRuleMatcher - auto mode with traits', () => {
 
   describe('deny/allow rules take precedence over traits', () => {
     it('deny rules still block even if traits would allow', () => {
-      const config = makeAutoConfig({ rules: { deny: ['GetTimelineInfo'] } });
+      const config = makeAutoConfig({ rules: { deny: ['Read'] } });
       const matcher = new PermissionRuleMatcher(config, registry);
-      const result = matcher.check(makeToolCall('GetTimelineInfo'));
+      const result = matcher.check(makeToolCall('Read'));
       expect(result.decision).toBe('deny');
     });
 
@@ -257,25 +251,23 @@ describe('PermissionRuleMatcher - auto mode with traits', () => {
 // Plan Mode with Creative Tools
 // =============================================================================
 
-describe('PermissionRuleMatcher - plan mode with creative tools', () => {
-  it('allows creative plan tools in plan mode', () => {
+describe('PermissionRuleMatcher - plan mode with injected domain tools', () => {
+  it('allows caller-provided domain read-only tools in plan mode', () => {
+    const matcher = new PermissionRuleMatcher(
+      makePlanConfig({
+        readOnlyTools: [...DEFAULT_READ_ONLY_TOOLS, 'canvas_get_node', 'ListAssets'],
+      }),
+    );
+
+    expect(matcher.check(makeToolCall('canvas_get_node')).decision).toBe('allow');
+    expect(matcher.check(makeToolCall('ListAssets')).decision).toBe('allow');
+  });
+
+  it('does not ship domain read-only tools in Agent defaults', () => {
     const matcher = new PermissionRuleMatcher(makePlanConfig());
 
-    // Timeline read-only
-    expect(matcher.check(makeToolCall('GetTimelineInfo')).decision).toBe('allow');
-    expect(matcher.check(makeToolCall('ListTimelineElements')).decision).toBe('allow');
-
-    // Canvas read-only
-    expect(matcher.check(makeToolCall('canvas_list_nodes')).decision).toBe('allow');
-    expect(matcher.check(makeToolCall('canvas_get_node')).decision).toBe('allow');
-
-    // Effects discovery
-    expect(matcher.check(makeToolCall('ListVideoEffects')).decision).toBe('allow');
-    expect(matcher.check(makeToolCall('GetVideoEffectInfo')).decision).toBe('allow');
-
-    // Asset browsing
-    expect(matcher.check(makeToolCall('ListAssets')).decision).toBe('allow');
-    expect(matcher.check(makeToolCall('GetAsset')).decision).toBe('allow');
+    expect(matcher.check(makeToolCall('canvas_get_node')).decision).toBe('deny');
+    expect(matcher.check(makeToolCall('ListAssets')).decision).toBe('deny');
   });
 
   it('still allows default read-only tools in plan mode', () => {
@@ -321,7 +313,7 @@ describe('DEFAULT_CREATIVE_TOOL_TRAITS', () => {
 
   it('marks generation tools as network + irreversible', () => {
     const generationTools = DEFAULT_CREATIVE_TOOL_TRAITS.filter(
-      (e) => e.name.startsWith('Generate') || e.name.startsWith('canvas_generate'),
+      (e) => e.name.startsWith('Generate'),
     );
     for (const entry of generationTools) {
       expect(entry.traits.locality).toBe('network');
@@ -329,17 +321,15 @@ describe('DEFAULT_CREATIVE_TOOL_TRAITS', () => {
     }
   });
 
-  it('marks timeline/canvas tools as local + reversible', () => {
-    const localTools = DEFAULT_CREATIVE_TOOL_TRAITS.filter(
-      (e) =>
-        e.name.startsWith('GetTimeline') ||
-        e.name.startsWith('ListTimeline') ||
-        e.name.startsWith('canvas_list') ||
-        e.name.startsWith('canvas_get'),
+  it('does not contain domain-owned tool names', () => {
+    expect(DEFAULT_CREATIVE_TOOL_TRAITS.map((entry) => entry.name)).not.toEqual(
+      expect.arrayContaining([
+        'GetTimelineInfo',
+        'canvas_get_node',
+        'canvas_generate_image',
+        'ListVideoEffects',
+        'ListAssets',
+      ]),
     );
-    for (const entry of localTools) {
-      expect(entry.traits.locality).toBe('local');
-      expect(entry.traits.reversible).toBe(true);
-    }
   });
 });

@@ -10,7 +10,7 @@
  * Session creates the coordinator itself after initialization.
  */
 
-import type { ChatMessage, ToolName } from '@neko/shared';
+import type { ChatMessage, IToolRegistry, ToolName } from '@neko/shared';
 import type { AgentSessionConfig } from './types';
 import type { IPermissionManager } from '../permission/permission-manager-types';
 import type { PermissionMode } from '../permission/types';
@@ -437,6 +437,7 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
     onValidationWarning: config.onValidationWarning,
     onValidationError: config.onValidationError,
     traitsRegistry: config.traitsRegistry,
+    readOnlyTools: collectRegisteredReadOnlyToolNames(config.toolRegistry),
     ...(ablationMarker && {
       disableHooks: ablationMarker.disableHooks,
       disableCompression: ablationMarker.disableCompression,
@@ -472,4 +473,8 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
   });
 
   return { executor, permissionHooks };
+}
+
+function collectRegisteredReadOnlyToolNames(toolRegistry: IToolRegistry): string[] {
+  return toolRegistry.list().filter((tool) => tool.isReadOnly).map((tool) => tool.name);
 }

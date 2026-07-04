@@ -258,6 +258,39 @@ describe('agent architecture boundary guards', () => {
     expect(violations).toEqual([]);
   });
 
+  it('keeps domain tool permission defaults out of Agent core', () => {
+    const permissionSource = [
+      'permission/tool-traits-registry.ts',
+      'permission/types.ts',
+      'hooks/executor-hooks-factory.ts',
+    ]
+      .map((relativePath) => stripTypeScriptComments(readFileSync(join(agentSrc, relativePath), 'utf-8')))
+      .join('\n');
+    const forbiddenPermissionToolNames = [
+      'GetTimelineInfo',
+      'ListTimelineElements',
+      'AddTimelineElement',
+      'UpdateTimelineElement',
+      'DeleteTimelineElement',
+      'canvas_list_nodes',
+      'canvas_get_node',
+      'canvas_update_node',
+      'canvas_create_node',
+      'canvas_generate_image',
+      'canvas_generate_video_with_keyframes',
+      'GenerateVideoForClip',
+      'ListVideoEffects',
+      'GetVideoEffectInfo',
+      'ListAssets',
+      'GetAsset',
+    ];
+    const violations = forbiddenPermissionToolNames
+      .filter((toolName) => new RegExp(`['"\`]${escapeRegExp(toolName)}['"\`]`).test(permissionSource))
+      .map((toolName) => `Agent permission defaults contain domain tool ${toolName}`);
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps media quality domain validation out of Agent core', () => {
     const forbiddenValidationFiles = [
       join(agentSrc, 'validation/qa-types.ts'),

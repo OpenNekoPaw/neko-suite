@@ -65,63 +65,12 @@ export class ToolTraitsRegistry {
 }
 
 /**
- * Default creative tool traits for known neko-suite tools.
+ * Default tool traits for Agent-owned generic tools.
  *
- * Categorization:
- * - Timeline/Canvas/Effects tools: free, local, reversible
- * - AI generation tools: moderate-expensive, network, irreversible
+ * Domain packages attach their own Tool.traits metadata when contributing
+ * tools. Agent core keeps only platform media and core utility defaults.
  */
 export const DEFAULT_CREATIVE_TOOL_TRAITS: ReadonlyArray<{ name: string; traits: ToolTraits }> = [
-  // ── Timeline tools (NekoCut) — free, local, reversible ──
-  {
-    name: 'GetTimelineInfo',
-    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'none' },
-  },
-  {
-    name: 'ListTimelineElements',
-    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'none' },
-  },
-  {
-    name: 'AddTimelineElement',
-    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'low' },
-  },
-  {
-    name: 'UpdateTimelineElement',
-    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'low' },
-  },
-  {
-    name: 'DeleteTimelineElement',
-    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'low' },
-  },
-
-  // ── Canvas tools (NekoCanvas) — free, local, reversible ──
-  {
-    name: 'canvas_list_nodes',
-    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'none' },
-  },
-  {
-    name: 'canvas_get_node',
-    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'none' },
-  },
-  {
-    name: 'canvas_update_node',
-    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'low' },
-  },
-  {
-    name: 'canvas_create_node',
-    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'low' },
-  },
-
-  // ── Effects discovery — free, local, read-only ──
-  {
-    name: 'ListVideoEffects',
-    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'none' },
-  },
-  {
-    name: 'GetVideoEffectInfo',
-    traits: { cost: 'free', reversible: true, locality: 'local', impactLevel: 'none' },
-  },
-
   // ── AI generation — network, irreversible, costs API credits ──
   {
     name: 'GenerateImage',
@@ -142,20 +91,6 @@ export const DEFAULT_CREATIVE_TOOL_TRAITS: ReadonlyArray<{ name: string; traits:
   {
     name: 'GenerateTTS',
     traits: { cost: 'cheap', reversible: false, locality: 'network', impactLevel: 'low' },
-  },
-
-  // ── Canvas AI generation — network, irreversible ──
-  {
-    name: 'canvas_generate_image',
-    traits: { cost: 'moderate', reversible: false, locality: 'network', impactLevel: 'high' },
-  },
-  {
-    name: 'canvas_generate_video_with_keyframes',
-    traits: { cost: 'expensive', reversible: false, locality: 'network', impactLevel: 'high' },
-  },
-  {
-    name: 'GenerateVideoForClip',
-    traits: { cost: 'expensive', reversible: false, locality: 'network', impactLevel: 'high' },
   },
 
   // ── Core tools — free, local ──

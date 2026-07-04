@@ -385,8 +385,6 @@ export {
   // Permission Hooks
   PermissionHooks,
   createPermissionHooks,
-  // Creative Permission
-  CREATIVE_PLAN_TOOLS,
   ToolTraitsRegistry,
   DEFAULT_CREATIVE_TOOL_TRAITS,
 } from './permission';

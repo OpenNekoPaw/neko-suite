@@ -13,7 +13,7 @@ import type { ConversationCompressor } from '../context';
 import type { IPermissionManager } from '../permission/permission-manager-types';
 import type { PermissionMode, PermissionRules } from '../permission/types';
 import type { ToolConfirmationRequest } from '../permission/types';
-import { CREATIVE_PLAN_TOOLS, DEFAULT_READ_ONLY_TOOLS } from '../permission/types';
+import { DEFAULT_READ_ONLY_TOOLS } from '../permission/types';
 import type { ToolTraitsRegistry } from '../permission/tool-traits-registry';
 import type { ValidationWarning, ValidationError } from '../validation/types';
 import type { SettingsHookLoader } from '../hook-loader/settings-hook-loader';
@@ -38,6 +38,9 @@ export interface ExecutorHooksFactoryConfig {
 
   /** Initial permission rules */
   permissionRules?: PermissionRules;
+
+  /** Additional read-only tools supplied by registered capability providers. */
+  readOnlyTools?: readonly string[];
 
   /** Callback when a tool requires user confirmation */
   onToolAskStarted?: (request: ToolConfirmationRequest) => void;
@@ -140,7 +143,7 @@ export function createExecutorHooks(
     config: {
       mode: config.permissionMode,
       rules: config.permissionRules ?? {},
-      readOnlyTools: [...DEFAULT_READ_ONLY_TOOLS, ...CREATIVE_PLAN_TOOLS],
+      readOnlyTools: mergeReadOnlyTools(config.readOnlyTools),
     },
     onToolAskStarted: config.onToolAskStarted,
     settingsHookLoader: config.settingsHookLoader,
@@ -173,4 +176,8 @@ export function createExecutorHooks(
   ];
 
   return { hooks, permissionHooks };
+}
+
+function mergeReadOnlyTools(extraTools: readonly string[] | undefined): string[] {
+  return Array.from(new Set([...DEFAULT_READ_ONLY_TOOLS, ...(extraTools ?? [])]));
 }

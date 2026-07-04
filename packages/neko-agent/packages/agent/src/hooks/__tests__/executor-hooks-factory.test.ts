@@ -81,6 +81,31 @@ describe('createExecutorHooks', () => {
     expect(result.permissionHooks.getMode()).toBe('ask');
   });
 
+  it('should use caller-provided read-only tools for plan mode permissions', async () => {
+    const result = createExecutorHooks({
+      compressor: createMockCompressor(),
+      permissionMode: 'plan',
+      readOnlyTools: ['domain_read_context'],
+    });
+    const permissionHook = result.hooks.find((hook) => hook.name === 'permission');
+
+    await expect(
+      permissionHook?.onToolCall?.(
+        { name: 'domain_read_context', arguments: {}, id: 'call-read', index: 0 },
+        async () => ({ success: true }),
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      permissionHook?.onToolCall?.(
+        { name: 'domain_write_context', arguments: {}, id: 'call-write', index: 1 },
+        async () => ({ success: true }),
+      ),
+    ).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('plan mode'),
+    });
+  });
+
   it('should handle empty custom hooks', () => {
     const result = createExecutorHooks({
       compressor: createMockCompressor(),

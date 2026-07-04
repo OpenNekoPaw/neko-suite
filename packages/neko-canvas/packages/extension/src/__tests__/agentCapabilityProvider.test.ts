@@ -491,6 +491,34 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     });
   });
 
+  it('declares Canvas-owned tool traits in the Canvas provider', () => {
+    const provider = createNekoCanvasCapabilityProvider(createApi());
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: createMediaService(),
+      configManager: undefined,
+      embedFn: undefined,
+    });
+
+    const toolsMissingTraits = tools.filter((tool) => !tool.traits).map((tool) => tool.name);
+
+    expect(toolsMissingTraits).toEqual([]);
+    expect(tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_GET_NODE)?.traits).toEqual({
+      cost: 'free',
+      reversible: true,
+      locality: 'local',
+      impactLevel: 'none',
+    });
+    expect(
+      tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_GENERATE_IMAGE)?.traits,
+    ).toEqual({
+      cost: 'moderate',
+      reversible: false,
+      locality: 'network',
+      impactLevel: 'high',
+    });
+  });
+
   it('declares numeric videoFps enum values for project generation config', () => {
     const provider = createNekoCanvasCapabilityProvider(createApi());
     const tools = provider.getTools({
