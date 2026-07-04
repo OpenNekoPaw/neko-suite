@@ -7,7 +7,7 @@ import {
   planCanvasImageSource,
   type CanvasMediaOutput,
   type CanvasPromptMessage,
-} from '@neko/agent/runtime';
+} from '@neko/skills';
 import { NEKO_PLUGIN_EXTENSION_IDS } from '@neko-agent/types';
 import { getRootLogger, ServiceCollection } from '../base';
 import { IPlatform } from '../bootstrap';
@@ -61,8 +61,8 @@ async function fetchOutputAsDataUrl(output: CanvasMediaOutput): Promise<string |
  * Build the canvas generation runtime with VSCode/platform bridge adapters.
  *
  * Extension owns only host access here: VSCode command APIs, cross-extension
- * Canvas lookup and network/file bytes. Prompt construction,
- * reference selection and media request assembly stay inside @neko/agent.
+ * Canvas lookup and network/file bytes. Prompt construction, reference
+ * selection and media request assembly are contributed by @neko/skills.
  */
 export function createCanvasGenerationRuntime(
   services: ServiceCollection,

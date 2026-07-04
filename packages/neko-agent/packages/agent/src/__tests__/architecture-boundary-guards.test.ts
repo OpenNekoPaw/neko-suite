@@ -128,6 +128,15 @@ describe('agent architecture boundary guards', () => {
     expect(existingFiles).toEqual([]);
   });
 
+  it('keeps Canvas generation runtime out of Agent runtime ownership', () => {
+    const forbiddenRuntimeFiles = [join(agentSrc, 'runtime/canvas-generation-runtime.ts')];
+    const existingFiles = forbiddenRuntimeFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+
+    expect(existingFiles).toEqual([]);
+  });
+
   it('keeps Agent package independent from concrete skill packages', () => {
     const packageManifest = stripTypeScriptComments(
       readFileSync(join(repoRoot, 'packages/agent/package.json'), 'utf-8'),

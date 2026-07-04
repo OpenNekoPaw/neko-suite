@@ -963,6 +963,28 @@ pnpm run compile:extension
 
 Expected: PASS.
 
+- [x] **Step 10: Move Canvas generation helper runtime out of Agent core**
+
+Moved Canvas image-generation prompt/request assembly from Agent runtime into `@neko/skills`:
+
+```text
+packages/neko-skills/src/canvas/canvas-generation-runtime.ts
+packages/neko-skills/src/canvas/__tests__/canvas-generation-runtime.test.ts
+```
+
+Agent core no longer exports or owns `runtime/canvas-generation-runtime.ts`. The VSCode Extension command bridge still owns the current compatibility command names (`neko.agent.buildPrompt`, `neko.agent.generateForNode`) but imports the implementation from `@neko/skills`. A later Canvas capability migration should move command/capability ownership to the Canvas provider.
+
+Verification:
+
+```bash
+./node_modules/.bin/vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts --reporter=verbose
+./node_modules/.bin/vitest run ../neko-skills/src/canvas/__tests__/canvas-generation-runtime.test.ts --reporter=verbose
+./node_modules/.bin/tsc --noEmit -p ../neko-skills/tsconfig.json
+pnpm run compile:extension
+```
+
+Expected: PASS.
+
 ### Task 7: Final Boundary Verification
 
 **Files:**

@@ -16,9 +16,8 @@ import {
 import {
   buildAgentPromptCommandMessage,
   buildAgentScriptCommandMessage,
-  type CanvasGenerationInput,
-  type CanvasShotPromptData,
 } from '@neko/agent/runtime';
+import type { CanvasGenerationInput, CanvasShotPromptData } from '@neko/skills';
 import { getRootLogger, handleError, ServiceCollection } from '../base';
 import { IPlatform } from '../bootstrap';
 import type { ChatViewProvider } from '../chat';
