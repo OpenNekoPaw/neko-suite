@@ -37,7 +37,7 @@ export interface ApprovalSubject {
   label: string;
   /**
    * Stable kind string that strategy packs route on — e.g.
-   * 'tool:canvas_generate_image', 'plan:Plan-123', 'quality:consistency'.
+   * 'tool:GenerateImage', 'plan:Plan-123', 'policy:consistency'.
    */
   kind: string;
   /** Is the action destructive? Strategy packs inspect this. */
