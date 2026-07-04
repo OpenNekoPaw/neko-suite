@@ -412,8 +412,6 @@ export {
   type JsonBlockInfo,
   type JsonBlockValidationResult,
   type ValidationResultWithBlocks,
-  type MarkdownTableSummary,
-  type StoryboardCreativeTableValidationResult,
   type ConsistencyCheckToolsDeps,
   type QualityCheckToolsDeps,
   type BasicQualityIssue,
@@ -432,8 +430,6 @@ export {
   // Constants
   DEFAULT_IMAGE_CONSTRAINTS,
   DEFAULT_OUTPUT_CONSTRAINTS,
-  STORYBOARD_CREATIVE_TABLE_HEADERS,
-  STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
   VIDEO_CONTENT_ANALYZER_PLACEHOLDERS,
   // Image Validator
   ImageValidator,
@@ -442,7 +438,6 @@ export {
   // Output Validator
   OutputValidator,
   createOutputValidator,
-  validateStoryboardCreativeTableOutput,
   // Validation Hooks
   ValidationHooks,
   createValidationHooks,

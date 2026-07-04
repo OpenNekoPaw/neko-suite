@@ -324,7 +324,7 @@ describe('AgentExecutor', () => {
       expect(types).toEqual(['think', 'act', 'observe', 'content_delta', 'think']);
     });
 
-    it('refreshes active skill validators after ActivateSkill in the same turn', async () => {
+    it('does not run Canvas CreativeTable validation after ActivateSkill in the same turn', async () => {
       const chatStreamMock = service.chatStream as ReturnType<typeof vi.fn>;
       const activationResp = toolCallResponse(
         'ActivateSkill',
@@ -359,7 +359,7 @@ describe('AgentExecutor', () => {
           service,
           toolRegistry,
           getActiveSkillValidationRequirements: () =>
-            activated ? ['creative-table.storyboard'] : undefined,
+            activated ? ['CanvasMarkdownCapabilityInput'] : undefined,
           hooks: [
             new ValidationHooks({
               outputConstraints: {
@@ -377,12 +377,17 @@ describe('AgentExecutor', () => {
         }),
       );
 
-      await expect(collectSteps(executor.executeStream('生成分镜表'))).rejects.toMatchObject({
-        code: 'storyboard-table-missing-chat-output-anchor',
-      });
+      await expect(collectSteps(executor.executeStream('生成分镜表'))).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'think',
+            content: invalidStoryboardResp.message.content,
+          }),
+        ]),
+      );
     });
 
-    it('streams the invalid storyboard table, then replaces it with a validator repair result', async () => {
+    it('streams storyboard tables without Agent-owned validator repair replacement', async () => {
       const activationResp = toolCallResponse(
         'ActivateSkill',
         {
@@ -398,18 +403,9 @@ describe('AgentExecutor', () => {
           '| S01 | P1 | 主角站在巨构前 |',
         ].join('\n'),
       );
-      const repairedStoryboardResp = textResponse(
-        [
-          '| scene | shot | source | sourcePanel | decision | duration | visual | motion | audio | characters | dialogue | prompt | reviewStatus | nextAction | contentType | decisionReason | requiresSplit | duplicateOf |',
-          '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-          '| 开场 | S01 |  | 整页 | keep | 3s | 主角站在巨构前 | 缓慢推近 | 低频环境声 | 主角 |  | 黑白工业巨构前的孤独主角，缓慢推近 | needs-review | needs-resource-binding | story | 建立空间与人物 | false |  |',
-        ].join('\n'),
-      );
-
       const chatStreamMock = service.chatStream as ReturnType<typeof vi.fn>;
       chatStreamMock.mockReturnValueOnce(responseToStream(activationResp));
       chatStreamMock.mockReturnValueOnce(responseToStream(invalidStoryboardResp));
-      chatStreamMock.mockReturnValueOnce(responseToStream(repairedStoryboardResp));
       (toolRegistry.execute as ReturnType<typeof vi.fn>).mockResolvedValue({
         success: true,
         data: {
@@ -425,7 +421,7 @@ describe('AgentExecutor', () => {
           service,
           toolRegistry,
           getActiveSkillValidationRequirements: () =>
-            activated ? ['creative-table.storyboard'] : undefined,
+            activated ? ['CanvasMarkdownCapabilityInput'] : undefined,
           hooks: [
             new ValidationHooks({
               outputConstraints: {
@@ -448,30 +444,21 @@ describe('AgentExecutor', () => {
       );
       const deltas = steps.filter((step) => step.type === 'content_delta');
 
-      expect(deltas.map((step) => step.content)).toEqual([
-        invalidStoryboardResp.message.content,
-        '',
-        repairedStoryboardResp.message.content,
-      ]);
-      expect(deltas[1]).toMatchObject({
-        deltaKind: 'assistant_text_replacement',
-        replacement: { reason: 'output-validation-retry', attempt: 1 },
-      });
+      expect(deltas.map((step) => step.content)).toEqual([invalidStoryboardResp.message.content]);
+      expect(deltas).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ deltaKind: 'assistant_text_replacement' }),
+        ]),
+      );
       expect(steps.filter((step) => step.type === 'think').map((step) => step.content)).toEqual([
         '',
-        repairedStoryboardResp.message.content,
+        invalidStoryboardResp.message.content,
       ]);
       expect(steps.at(-1)).toMatchObject({
         type: 'think',
-        content: repairedStoryboardResp.message.content,
+        content: invalidStoryboardResp.message.content,
       });
-      expect(chatStreamMock).toHaveBeenCalledTimes(3);
-      const repairMessages = chatStreamMock.mock.calls[2]?.[0] as ChatMessage[] | undefined;
-      expect(repairMessages?.at(-1)?.content).toContain('上一条可见 assistant 输出没有通过');
-      expect(repairMessages?.at(-1)?.content).toContain('scene | shot | source');
-      expect(repairMessages?.at(-1)?.content).not.toContain(
-        'previous visible assistant output failed',
-      );
+      expect(chatStreamMock).toHaveBeenCalledTimes(2);
     });
   });
 

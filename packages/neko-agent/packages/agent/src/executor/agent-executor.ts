@@ -31,7 +31,6 @@ import { runHooksWithTrace } from './hook-runner';
 import { think, thinkStream, type ThinkDeps } from './think-phase';
 import { act, observe, buildToolResultMessages, type ActDeps } from './act-phase';
 import { getLogger } from '../utils/logger';
-import { consumeOutputValidationRepairRequest } from '../validation/output-validation-repair-request';
 
 const logger = getLogger('Executor');
 
@@ -277,40 +276,6 @@ export class AgentExecutor implements IAgentExecutor {
             usage: thinkStep.usage,
           }),
         );
-
-        const repairRequest =
-          thinkStep.toolCalls && thinkStep.toolCalls.length > 0
-            ? null
-            : consumeOutputValidationRepairRequest(agentContext);
-        if (repairRequest) {
-          logger.debug(
-            'neko.agent.validation.repair.queued',
-            withAgentTrace(iterationTrace, {
-              iteration: agentContext.iteration,
-              attempt: repairRequest.attempt,
-              validators: repairRequest.validators,
-              errorCodes: repairRequest.errors.map((error) => error.code),
-            }),
-          );
-          yield {
-            type: 'content_delta',
-            content: '',
-            deltaKind: 'assistant_text_replacement',
-            replacement: {
-              reason: 'output-validation-retry',
-              attempt: repairRequest.attempt,
-            },
-            timestamp: Date.now(),
-          };
-          await runHooksWithTrace(
-            this.hooks,
-            'onIterationComplete',
-            iterationTrace,
-            agentContext.iteration,
-            agentContext,
-          );
-          continue;
-        }
 
         steps.push(thinkStep);
         yield thinkStep;
@@ -619,30 +584,6 @@ export class AgentExecutor implements IAgentExecutor {
           usage: thinkStep.usage,
         }),
       );
-
-      const repairRequest =
-        thinkStep.toolCalls && thinkStep.toolCalls.length > 0
-          ? null
-          : consumeOutputValidationRepairRequest(context);
-      if (repairRequest) {
-        logger.debug(
-          'neko.agent.validation.repair.queued',
-          withAgentTrace(iterationTrace, {
-            iteration: context.iteration,
-            attempt: repairRequest.attempt,
-            validators: repairRequest.validators,
-            errorCodes: repairRequest.errors.map((error) => error.code),
-          }),
-        );
-        await runHooksWithTrace(
-          this.hooks,
-          'onIterationComplete',
-          iterationTrace,
-          context.iteration,
-          context,
-        );
-        continue;
-      }
 
       steps.push(thinkStep);
       this.onStep?.(thinkStep);

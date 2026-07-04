@@ -6,8 +6,6 @@ import {
   type CreativeTableFieldDescriptor,
 } from '@neko/shared';
 
-export const STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID = 'creative-table.storyboard';
-
 export const STORYBOARD_CREATIVE_TABLE_HEADERS = STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS;
 
 export type StoryboardCreativeTableRecommendedHeader =

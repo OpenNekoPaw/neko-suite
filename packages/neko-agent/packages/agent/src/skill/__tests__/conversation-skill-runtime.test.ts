@@ -240,7 +240,7 @@ describe('ConversationSkillRuntime', () => {
   it('rejects natural-language auto activation without discovery, apply, or active state', async () => {
     const storyboard = createSkill('comic-to-storyboard', undefined, undefined, {
       producedArtifacts: ['CreativeTable'],
-      validationRequirements: ['creative-table.storyboard'],
+      validationRequirements: ['CanvasMarkdownCapabilityInput'],
     });
     const skillService = createSkillService([storyboard], {
       found: true,

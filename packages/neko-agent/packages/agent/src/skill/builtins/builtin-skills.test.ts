@@ -341,10 +341,10 @@ describe('Builtin Skills', () => {
         inputArtifacts: expect.arrayContaining(['MediaTextSegment', 'comic']),
         producedArtifacts: expect.arrayContaining(['CreativeTable']),
         operations: expect.arrayContaining(['create-storyboard']),
-        artifactProfiles: ['storyboard', 'creative-table.storyboard'],
+        artifactProfiles: ['storyboard'],
         referencedCapabilities: ['canvas.ingestMarkdown', 'canvas.validateMarkdownStoryboard'],
         suggestedProjectors: ['capability:canvas.ingestMarkdown'],
-        validationRequirements: ['creative-table.storyboard', 'CanvasMarkdownCapabilityInput'],
+        validationRequirements: ['CanvasMarkdownCapabilityInput'],
       });
       expect(comicToStoryboardSkill.referencedSkills).toEqual(
         expect.arrayContaining([
@@ -364,6 +364,12 @@ describe('Builtin Skills', () => {
       );
       expect(comicToStoryboardSkill.mediaWorkflow?.artifactProfiles).not.toContain(
         'comic-shot-asset-prep',
+      );
+      expect(comicToStoryboardSkill.mediaWorkflow?.artifactProfiles).not.toContain(
+        'creative-table.storyboard',
+      );
+      expect(comicToStoryboardSkill.mediaWorkflow?.validationRequirements).not.toContain(
+        'creative-table.storyboard',
       );
       expect(comicToStoryboardSkill.mediaWorkflow?.referencedCapabilities).not.toContain(
         'comic-image-prep-pipeline',
@@ -440,7 +446,7 @@ describe('Builtin Skills', () => {
           'GenericTable',
           'EntityMemoryContribution',
         ]),
-        artifactProfiles: ['storyboard', 'creative-table.storyboard', 'comic-shot-asset-prep'],
+        artifactProfiles: ['storyboard', 'comic-shot-asset-prep'],
         referencedCapabilities: ['canvas.ingestMarkdown', 'canvas.validateMarkdownStoryboard'],
         operations: expect.arrayContaining(['coordinate-media-production']),
       });
@@ -475,7 +481,7 @@ describe('Builtin Skills', () => {
         ]),
       );
       expect(comicToAnimationSkill.mediaWorkflow).toMatchObject({
-        artifactProfiles: ['storyboard', 'creative-table.storyboard', 'comic-shot-asset-prep'],
+        artifactProfiles: ['storyboard', 'comic-shot-asset-prep'],
         validationRequirements: expect.arrayContaining([
           'CreativeTable',
           'CanvasMarkdownCapabilityInput',

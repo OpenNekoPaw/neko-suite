@@ -284,7 +284,7 @@ describe('SkillHandler', () => {
         enabled: true,
         mediaWorkflow: {
           producedArtifacts: ['CreativeTable'],
-          validationRequirements: ['creative-table.storyboard'],
+          validationRequirements: ['CanvasMarkdownCapabilityInput'],
         },
       };
       skillService.discover.mockReturnValue({

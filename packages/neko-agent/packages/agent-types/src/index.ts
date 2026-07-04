@@ -34,7 +34,6 @@ export {
 export {
   STORYBOARD_CREATIVE_TABLE_FIELDS,
   STORYBOARD_CREATIVE_TABLE_HEADERS,
-  STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
   normalizeStoryboardCreativeTableHeader,
   resolveStoryboardCreativeTableHeader,
   type StoryboardCreativeTableFieldDescriptor,

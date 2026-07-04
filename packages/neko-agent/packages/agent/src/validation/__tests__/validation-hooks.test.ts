@@ -9,7 +9,6 @@ import { ValidationHooks, createValidationHooks } from '../validation-hooks';
 import { AgentError } from '../../errors';
 import type { AgentContext, AgentStep, ChatMessage, ContentPart } from '@neko/shared';
 import type { ValidationHooksOptions, ValidationError, ValidationWarning } from '../types';
-import { consumeOutputValidationRepairRequest } from '../output-validation-repair-request';
 
 const mermaidRuntimeMocks = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -387,7 +386,7 @@ describe('ValidationHooks', () => {
   });
 
   describe('afterThink - skill artifact validators', () => {
-    it('uses skillValidationRequirements metadata to validate storyboard creative tables', async () => {
+    it('does not run Canvas CreativeTable validators inside Agent output validation', async () => {
       const hooks = new ValidationHooks({
         outputConstraints: {
           mermaidPreValidate: false,
@@ -395,20 +394,16 @@ describe('ValidationHooks', () => {
         },
       });
       const step = createTestStep(
-        [
-          '| 镜头 | 源页 | 景别/构图 | 画面内容 | 动作与节奏 | 镜头运动 | 声音/氛围 | 时长 | 备注 |',
-          '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-          '| 1 | P1 | 全景 | 主角站立 | 慢 | 推近 | 风声 | 3s | 待确认 |',
-        ].join('\n'),
+        ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
       );
       const context = createTestContextWithMetadata({
         skillValidationRequirements: ['creative-table.storyboard'],
       });
 
-      await expect(hooks.afterThink(step, context)).rejects.toThrow(AgentError);
+      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
     });
 
-    it('queues storyboard creative table repair when generic output mode is retry', async () => {
+    it('does not queue storyboard repair requests from Agent retry mode', async () => {
       const hooks = new ValidationHooks({
         outputConstraints: {
           mermaidPreValidate: false,
@@ -420,65 +415,11 @@ describe('ValidationHooks', () => {
           '---',
           'id: storyboard-draft',
           'kind: draft',
-          'status: draft',
-          'domain: storyboard',
           '---',
           '',
           '| scene | shot | source |',
           '| --- | --- | --- |',
           '| 正文 | 1 | P1 |',
-        ].join('\n'),
-      );
-      const context = createTestContextWithMetadata({
-        skillValidationRequirements: ['creative-table.storyboard'],
-      });
-
-      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
-      const repairRequest = consumeOutputValidationRepairRequest(context);
-      expect(repairRequest).toEqual(
-        expect.objectContaining({
-          kind: 'output-validation-repair',
-          attempt: 1,
-          validators: ['creative-table.storyboard'],
-          errors: expect.arrayContaining([
-            expect.objectContaining({ code: 'storyboard-frontmatter-not-allowed' }),
-          ]),
-        }),
-      );
-      expect(repairRequest?.instruction).toContain('final target artifact directly');
-      expect(repairRequest?.instruction).toContain('imagePrompt | imageEditPrompt');
-      expect(repairRequest?.instruction).toContain('shotVideoPrompt | videoEditPrompt');
-      expect(repairRequest?.instruction).toContain('sceneStylePrompt | sceneVideoPrompt');
-      expect(repairRequest?.instruction).toContain('Localized headers are allowed');
-      expect(repairRequest?.instruction).toContain('图像提示词');
-      expect(repairRequest?.instruction).toContain('场景视频提示词');
-      expect(repairRequest?.instruction).not.toContain('dialogue | prompt | reviewStatus');
-      expect(repairRequest?.instruction).not.toContain('对白 | 提示词 | 审阅状态');
-      expect(repairRequest?.instruction).toContain('页码, 景别/构图, 节奏/情绪');
-      expect(repairRequest?.instruction).not.toContain(
-        'Do not use display-only headers such as 镜号, 镜头',
-      );
-      expect(context.messages.at(-1)).toEqual({
-        role: 'user',
-        content: repairRequest?.instruction,
-      });
-    });
-
-    it('does not run storyboard table validation for missing-visual-evidence diagnostics', async () => {
-      const onValidationError = vi.fn();
-      const hooks = new ValidationHooks({
-        outputConstraints: {
-          mermaidPreValidate: false,
-          onValidationFail: 'retry',
-        },
-        onValidationError,
-      });
-      const step = createTestStep(
-        [
-          '无法生成可靠分镜表：当前缺少可见像素证据。',
-          '',
-          '我已经读取到文档 manifest 和 imageInfo，但还没有通过 ReadImage 取得前 10 页的可见画面。',
-          '请先允许我读取这些图片后再生成分镜表。',
         ].join('\n'),
       );
       const context = createTestContextWithMetadata({
@@ -489,12 +430,10 @@ describe('ValidationHooks', () => {
 
       await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
 
-      expect(onValidationError).not.toHaveBeenCalled();
-      expect(consumeOutputValidationRepairRequest(context)).toBeNull();
       expect(context.messages).toHaveLength(messageCountBefore);
     });
 
-    it('records Agent-native validation feedback without rewriting streamed output', async () => {
+    it('does not record Agent-native feedback for Canvas CreativeTable validators', async () => {
       const recordValidationFeedback = vi.fn();
       const hooks = new ValidationHooks({
         outputConstraints: {
@@ -505,12 +444,11 @@ describe('ValidationHooks', () => {
           recordValidationFeedback,
         },
       });
-      const originalContent = [
-        '| 镜号 | 来源页 | 画面内容 |',
-        '| --- | --- | --- |',
-        '| S01 | P1 | 主角站在巨构前 |',
-      ].join('\n');
-      const step = createTestStep(originalContent);
+      const step = createTestStep(
+        ['| 镜号 | 来源页 | 画面内容 |', '| --- | --- | --- |', '| S01 | P1 | 主角站在巨构前 |'].join(
+          '\n',
+        ),
+      );
       const context = createTestContextWithMetadata({
         skillValidationRequirements: ['creative-table.storyboard'],
         agentCreation: {
@@ -521,115 +459,10 @@ describe('ValidationHooks', () => {
 
       await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
 
-      expect(step.content).toBe(originalContent);
-      expect(recordValidationFeedback).toHaveBeenCalledWith({
-        creationId: 'creation-1',
-        iterationId: 'iteration-1',
-        validatorId: 'creative-table.storyboard',
-        status: 'failed',
-        diagnostics: expect.arrayContaining([
-          expect.objectContaining({
-            severity: 'error',
-            code: expect.stringContaining('storyboard-table-'),
-          }),
-        ]),
-        metadata: expect.objectContaining({
-          feedbackAction: 'revise',
-          preserveStreamedOutput: true,
-        }),
-      });
+      expect(recordValidationFeedback).not.toHaveBeenCalled();
     });
 
-    it('localizes storyboard creative table repair requests when runtime locale is Chinese', async () => {
-      const hooks = new ValidationHooks({
-        outputConstraints: {
-          mermaidPreValidate: false,
-          onValidationFail: 'retry',
-        },
-      });
-      const step = createTestStep(
-        [
-          '| 镜号 | 来源页 | 画面内容 |',
-          '| --- | --- | --- |',
-          '| S01 | P1 | 主角站在巨构前 |',
-        ].join('\n'),
-      );
-      const context = createTestContextWithMetadata({
-        locale: 'zh',
-        skillValidationRequirements: ['creative-table.storyboard'],
-      });
-
-      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
-      const repairRequest = consumeOutputValidationRepairRequest(context);
-
-      expect(repairRequest?.instruction).toContain('上一条可见 assistant 输出没有通过');
-      expect(repairRequest?.instruction).toContain('修复要求：');
-      expect(repairRequest?.instruction).toContain('图像提示词');
-      expect(repairRequest?.instruction).toContain('镜头视频提示词');
-      expect(repairRequest?.instruction).toContain('场景视频提示词');
-      expect(repairRequest?.instruction).not.toContain('对白 | 提示词 | 审阅状态');
-      expect(repairRequest?.instruction).toContain('校验错误：');
-      expect(repairRequest?.instruction).not.toContain('The previous visible assistant output');
-      expect(context.messages.at(-1)).toEqual({
-        role: 'user',
-        content: repairRequest?.instruction,
-      });
-    });
-
-    it('queues repair when storyboard source tokens lack image resource context', async () => {
-      const hooks = new ValidationHooks({
-        outputConstraints: {
-          mermaidPreValidate: false,
-          onValidationFail: 'retry',
-        },
-      });
-      const step = createTestStep(
-        [
-          '| scene | shot | source | visual | imagePrompt | reviewStatus | nextAction |',
-          '| --- | --- | --- | --- | --- | --- | --- |',
-          '| Opening | 1 | P1 | 主角站在巨构前 | 黑白工业巨构前的孤独主角 | needs-review | bind page image |',
-        ].join('\n'),
-      );
-      const context = createTestContextWithMetadata({
-        locale: 'zh',
-        skillValidationRequirements: ['creative-table.storyboard'],
-      });
-      context.messages.push({
-        role: 'tool',
-        toolCallId: 'read-doc-manifest',
-        content: JSON.stringify({
-          source: { kind: 'file', path: '${A}/books/story.epub' },
-          mode: 'manifest',
-          manifest: {
-            format: 'epub',
-            units: [{ kind: 'chapter', href: 'html/page-1.html' }],
-          },
-        }),
-      });
-
-      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
-      const repairRequest = consumeOutputValidationRepairRequest(context);
-
-      expect(repairRequest).toEqual(
-        expect.objectContaining({
-          kind: 'output-validation-repair',
-          errors: expect.arrayContaining([
-            expect.objectContaining({
-              code: 'storyboard-table-source-resource-context-missing',
-            }),
-          ]),
-        }),
-      );
-      expect(repairRequest?.instruction).toContain('ReadDocument');
-      expect(repairRequest?.instruction).toContain('ReadImage');
-      expect(repairRequest?.instruction).toContain('needs-resource-binding');
-      expect(repairRequest?.instruction).toContain('不要继续输出替换表格');
-      expect(repairRequest?.instruction).toContain(
-        '先调用 ReadDocument mode="content"、mode="next" 或 mode="range"',
-      );
-    });
-
-    it('queues repair when storyboard has resource bindings but no ReadImage visual evidence', async () => {
+    it('does not require ReadImage evidence from Agent validation hooks', async () => {
       const hooks = new ValidationHooks({
         outputConstraints: {
           mermaidPreValidate: false,
@@ -653,99 +486,11 @@ describe('ValidationHooks', () => {
         content: JSON.stringify({
           source: { kind: 'file', path: '${A}/books/story.epub' },
           mode: 'range',
-          imageInfo: [
-            {
-              alias: 'P1',
-              label: 'Page 1',
-              resourceRef: {
-                provider: 'document-archive',
-                id: 'story.epub#images/page-1.jpg',
-              },
-            },
-          ],
+          imageInfo: [{ alias: 'P1', label: 'Page 1' }],
         }),
       });
 
       await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
-      const repairRequest = consumeOutputValidationRepairRequest(context);
-
-      expect(repairRequest?.errors).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            code: 'storyboard-table-visual-evidence-missing',
-          }),
-        ]),
-      );
-      expect(repairRequest?.errors).not.toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            code: 'storyboard-table-source-resource-context-missing',
-          }),
-        ]),
-      );
-      expect(repairRequest?.instruction).toContain('ReadDocument.imageInfo 只负责绑定');
-      expect(repairRequest?.instruction).toContain('ReadImage');
-      expect(repairRequest?.instruction).toContain('不要继续输出替换表格');
-      expect(repairRequest?.instruction).toContain('先调用 ReadImage');
-    });
-
-    it('accepts storyboard source tokens when ReadImage visual evidence exists', async () => {
-      const hooks = new ValidationHooks({
-        outputConstraints: {
-          mermaidPreValidate: false,
-          onValidationFail: 'retry',
-        },
-      });
-      const step = createTestStep(
-        [
-          '| scene | shot | source | visual | imagePrompt | reviewStatus | nextAction |',
-          '| --- | --- | --- | --- | --- | --- | --- |',
-          '| Opening | 1 | P1 | 主角站在巨构前 | 黑白工业巨构前的孤独主角 | needs-review | inspect panels |',
-        ].join('\n'),
-      );
-      const context = createTestContextWithMetadata({
-        locale: 'zh',
-        skillValidationRequirements: ['creative-table.storyboard'],
-      });
-      context.messages.push({
-        role: 'tool',
-        toolCallId: 'read-image-pages',
-        content: JSON.stringify({
-          mode: 'metadata',
-          images: [
-            {
-              alias: 'P1',
-              label: 'Page 1',
-              resourceRef: {
-                provider: 'document-archive',
-                id: 'story.epub#images/page-1.jpg',
-              },
-            },
-          ],
-        }),
-      });
-
-      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
-
-      expect(consumeOutputValidationRepairRequest(context)).toBeNull();
-    });
-
-    it('does not apply storyboard creative table validation without skill metadata', async () => {
-      const hooks = new ValidationHooks({
-        outputConstraints: {
-          mermaidPreValidate: false,
-          onValidationFail: 'error',
-        },
-      });
-      const step = createTestStep(
-        [
-          '| 镜头 | 源页 | 景别/构图 | 画面内容 |',
-          '| --- | --- | --- | --- |',
-          '| 1 | P1 | 全景 | 主角站立 |',
-        ].join('\n'),
-      );
-
-      await expect(hooks.afterThink(step, createTestContext())).resolves.toBeUndefined();
     });
   });
 

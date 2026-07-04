@@ -23,11 +23,6 @@ import { MermaidBlockChecker } from './mermaid-validator';
 import { JsonExtractor } from './json-validator';
 import { JsonSchemaValidator } from './json-validator';
 import { LengthValidator } from './length-validator';
-import {
-  STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
-  hasStoryboardCreativeTableArtifactShape,
-  validateStoryboardCreativeTableOutput,
-} from './creative-table-validator';
 
 interface ArtifactValidatorResult {
   readonly errors: readonly ValidationError[];
@@ -44,14 +39,7 @@ interface ArtifactValidatorDefinition {
   readonly validate: ArtifactValidator;
 }
 
-const ARTIFACT_VALIDATOR_DEFINITIONS: readonly ArtifactValidatorDefinition[] = [
-  {
-    id: STORYBOARD_CREATIVE_TABLE_VALIDATOR_ID,
-    aliases: ['StoryboardCreativeTable'],
-    shouldValidate: hasStoryboardCreativeTableArtifactShape,
-    validate: validateStoryboardCreativeTableOutput,
-  },
-] as const;
+const ARTIFACT_VALIDATOR_DEFINITIONS: readonly ArtifactValidatorDefinition[] = [] as const;
 
 const ARTIFACT_VALIDATOR_REGISTRY = createArtifactValidatorRegistry(ARTIFACT_VALIDATOR_DEFINITIONS);
 
