@@ -1031,6 +1031,34 @@ pnpm run compile:extension
 
 Expected: PASS.
 
+- [x] **Step 13: Move media quality validation tools out of Agent core**
+
+Moved media quality and consistency tool implementations from Agent validation into `@neko/skills`, while promoting shared QA evidence contracts into `@neko/shared`:
+
+```text
+packages/neko-skills/src/quality/remediation-planner.ts
+packages/neko-skills/src/quality/consistency-evaluator.ts
+packages/neko-skills/src/quality/media-quality-runtime.ts
+packages/neko-skills/src/quality/quality-check-tools.ts
+packages/neko-types/src/types/quality/qa-types.ts
+packages/neko-types/src/types/quality/quality-evidence-normalizer.ts
+packages/neko-types/src/types/quality/video-content-index.ts
+```
+
+Agent core no longer exports or owns `QualityCheck`, `QualityRepairCheck`, `QualityCheckConsistency`, deterministic remediation planning, consistency evaluation, media quality runtime, or video content index construction. Agent feedback/session code imports shared QA evidence contracts from `@neko/shared` only so it can record tool results as generic feedback evidence. The VSCode Extension bridge still supplies VSCode file access, logger adapters, media generator, and analyzer dependencies, but imports the quality tool factories from `@neko/skills`.
+
+Verification:
+
+```bash
+./node_modules/.bin/vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts packages/extension/src/tools/__tests__/qualityCheckTools.test.ts packages/extension/src/tools/__tests__/consistencyCheckTools.test.ts ../neko-skills/src/quality/__tests__/quality-check-tools.test.ts ../neko-skills/src/quality/__tests__/consistency-evaluator.test.ts ../neko-skills/src/quality/__tests__/remediation-planner.test.ts --reporter=verbose
+../../node_modules/.bin/vitest run src/types/quality/__tests__/quality-evidence-normalizer.test.ts src/types/quality/__tests__/video-content-index.test.ts --reporter=verbose
+./node_modules/.bin/tsc --noEmit -p ../neko-skills/tsconfig.json
+pnpm run compile:extension
+node scripts/check-neko-agent-boundaries.mjs
+```
+
+Expected: PASS.
+
 ### Task 7: Final Boundary Verification
 
 **Files:**
