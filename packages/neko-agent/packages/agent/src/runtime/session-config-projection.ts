@@ -42,6 +42,8 @@ export function buildAgentSessionConfigWithRuntime(
   const providerCardRegistry = base.providerCardRegistry ?? capability?.providerCardRegistry;
   const projectMemoryManager = base.projectMemoryManager ?? feedback?.projectMemoryManager;
   const feedbackCoordinator = base.feedbackCoordinator ?? feedback?.feedbackCoordinator;
+  const toolResultFeedbackAdapters =
+    base.toolResultFeedbackAdapters ?? feedback?.toolResultFeedbackAdapters;
   const controlPlane = base.controlPlane ?? creationGuidance?.controlPlane;
   const externalProcessorRuntime =
     base.externalProcessorRuntime ?? capability?.externalProcessorRuntime;
@@ -64,6 +66,7 @@ export function buildAgentSessionConfigWithRuntime(
     ...(providerCardRegistry ? { providerCardRegistry } : {}),
     ...(projectMemoryManager ? { projectMemoryManager } : {}),
     ...(feedbackCoordinator ? { feedbackCoordinator } : {}),
+    ...(toolResultFeedbackAdapters ? { toolResultFeedbackAdapters } : {}),
     ...(controlPlane ? { controlPlane } : {}),
     ...(externalProcessorRuntime ? { externalProcessorRuntime } : {}),
     ...(contentAccessRuntime ? { contentAccessRuntime } : {}),

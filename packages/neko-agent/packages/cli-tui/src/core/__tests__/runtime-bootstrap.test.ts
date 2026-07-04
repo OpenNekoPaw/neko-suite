@@ -6,6 +6,7 @@ const createTaskManagerCreationTaskProjection = vi.fn((config: unknown) => ({
   config,
 }));
 const registerBuiltinToolGroups = vi.fn();
+const createQualityReviewFeedbackAdapter = vi.fn(() => ({ id: 'quality-review-feedback' }));
 
 vi.mock('@neko/agent', () => ({
   ToolGroupRegistry: class ToolGroupRegistry {
@@ -19,6 +20,7 @@ vi.mock('@neko/agent/runtime', () => ({
 }));
 
 vi.mock('@neko/skills', () => ({
+  createQualityReviewFeedbackAdapter,
   registerBuiltinToolGroups,
 }));
 
@@ -63,9 +65,12 @@ describe('createCliAgentRuntime', () => {
       config: { workspaceRoot: '/workspace' },
     });
     expect(runtime.feedbackLoop?.projectMemoryManager).toBe(projectMemoryManager);
+    expect(runtime.feedbackLoop?.toolResultFeedbackAdapters).toEqual([
+      { id: 'quality-review-feedback' },
+    ]);
   });
 
-  it('keeps optional skill and feedback planes minimal when absent', async () => {
+  it('keeps optional skill planes minimal when absent', async () => {
     const { createCliAgentRuntime } = await import('../runtime-bootstrap');
 
     const runtime = createCliAgentRuntime({
@@ -77,7 +82,9 @@ describe('createCliAgentRuntime', () => {
     expect(runtime.capabilityRuntime?.skillService).toBeUndefined();
     expect(runtime.capabilityRuntime?.skillRegistry).toBeUndefined();
     expect(runtime.capabilityRuntime?.toolGroupRegistry).toBeDefined();
-    expect(runtime.feedbackLoop).toBeUndefined();
+    expect(runtime.feedbackLoop).toEqual({
+      toolResultFeedbackAdapters: [{ id: 'quality-review-feedback' }],
+    });
   });
 
   it('uses injected capability registries and prompt fragments', async () => {

@@ -710,117 +710,106 @@ describe('FeedbackCoordinator', () => {
     });
   });
 
-  it('turns failing quality-check signals into repair decisions', () => {
+  it('turns failing tool-review signals into repair decisions', () => {
     const coordinator = createFeedbackCoordinator({
       now: () => 25,
     });
     const evidence: PerceptionEvidence = {
-      id: 'quality-review:run-quality:call-qc',
+      id: 'review-evidence:run-review:call-review',
       source: 'tool',
-      summary: 'QualityReview failed 1/2 scene(s): scene(s) 2; 3 remediation hint(s) available.',
+      summary: 'ReviewTool reported one blocking issue.',
       confidence: 0.5,
-      toolName: 'QualityCheck',
+      toolName: 'ReviewTool',
       createdAt: 20,
       status: 'active',
     };
 
     coordinator.observe({
-      kind: 'quality-check',
+      kind: 'tool-review',
       observedAt: 20,
-      toolCallId: 'call-qc',
-      toolName: 'QualityCheck',
-      totalScenes: 2,
-      passed: 1,
-      failed: 1,
-      failingSceneIndexes: [2],
-      remediationCount: 3,
-      runId: 'run-quality',
+      toolCallId: 'call-review',
+      toolName: 'ReviewTool',
+      status: 'failed',
+      summary: 'ReviewTool reported one blocking issue.',
+      repairGuidance: 'Repair the reviewed output before continuing.',
+      repeatKey: 'review-tool:run-review',
+      runId: 'run-review',
       evidence,
     });
 
-    expect(coordinator.evaluatePending({ activeRunId: 'run-quality' })).toEqual({
+    expect(coordinator.evaluatePending({ activeRunId: 'run-review' })).toEqual({
       timestamp: 25,
-      activeRunId: 'run-quality',
+      activeRunId: 'run-review',
       signals: [
         {
-          kind: 'quality-check',
+          kind: 'tool-review',
           observedAt: 20,
-          toolCallId: 'call-qc',
-          toolName: 'QualityCheck',
-          totalScenes: 2,
-          passed: 1,
-          failed: 1,
-          failingSceneIndexes: [2],
-          remediationCount: 3,
-          runId: 'run-quality',
+          toolCallId: 'call-review',
+          toolName: 'ReviewTool',
+          status: 'failed',
+          summary: 'ReviewTool reported one blocking issue.',
+          repairGuidance: 'Repair the reviewed output before continuing.',
+          repeatKey: 'review-tool:run-review',
+          runId: 'run-review',
           evidence,
         },
       ],
       decisions: [
         {
           action: 'repair',
-          signalKind: 'quality-check',
-          toolCallId: 'call-qc',
-          toolName: 'QualityCheck',
-          totalScenes: 2,
-          failed: 1,
-          failingSceneIndexes: [2],
-          remediationCount: 3,
-          runId: 'run-quality',
-          evidenceId: 'quality-review:run-quality:call-qc',
+          signalKind: 'tool-review',
+          toolCallId: 'call-review',
+          toolName: 'ReviewTool',
+          summary: 'ReviewTool reported one blocking issue.',
+          repairGuidance: 'Repair the reviewed output before continuing.',
+          repeatKey: 'review-tool:run-review',
+          runId: 'run-review',
+          evidenceId: 'review-evidence:run-review:call-review',
         },
       ],
       actions: [
         {
           kind: 'set-guidance',
-          guidance:
-            '- Repair the failing quality-check result. Focus on scene(s) 2 and apply 3 suggested remediation step(s) as needed.',
-          signalKinds: ['quality-check'],
+          guidance: '- Repair the reviewed output before continuing.',
+          signalKinds: ['tool-review'],
         },
       ],
     });
   });
 
-  it('turns passing quality-check signals into continue decisions', () => {
+  it('turns passing tool-review signals into continue decisions', () => {
     const coordinator = createFeedbackCoordinator({
       now: () => 31,
     });
 
     coordinator.observe({
-      kind: 'quality-check',
+      kind: 'tool-review',
       observedAt: 30,
-      toolCallId: 'call-qc-pass',
-      toolName: 'QualityCheck',
-      totalScenes: 1,
-      passed: 1,
-      failed: 0,
-      failingSceneIndexes: [],
-      remediationCount: 0,
+      toolCallId: 'call-review-pass',
+      toolName: 'ReviewTool',
+      status: 'passed',
+      summary: 'ReviewTool passed.',
     });
 
     expect(coordinator.evaluatePending()).toEqual({
       timestamp: 31,
       signals: [
         {
-          kind: 'quality-check',
+          kind: 'tool-review',
           observedAt: 30,
-          toolCallId: 'call-qc-pass',
-          toolName: 'QualityCheck',
-          totalScenes: 1,
-          passed: 1,
-          failed: 0,
-          failingSceneIndexes: [],
-          remediationCount: 0,
+          toolCallId: 'call-review-pass',
+          toolName: 'ReviewTool',
+          status: 'passed',
+          summary: 'ReviewTool passed.',
         },
       ],
       decisions: [
         {
           action: 'continue',
-          signalKind: 'quality-check',
-          toolCallId: 'call-qc-pass',
-          toolName: 'QualityCheck',
-          totalScenes: 1,
-          passed: 1,
+          signalKind: 'tool-review',
+          toolCallId: 'call-review-pass',
+          toolName: 'ReviewTool',
+          summary: 'ReviewTool passed.',
         },
       ],
       actions: [

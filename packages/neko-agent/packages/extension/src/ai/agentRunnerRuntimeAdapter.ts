@@ -17,7 +17,10 @@ import {
   type SubAgentRuntimeCoordinator,
 } from '@neko/agent/runtime';
 import type { AgentEvent } from '@neko/agent';
-import { CREATIVE_PRESETS as CREATIVE_SUBAGENT_PRESETS } from '@neko/skills';
+import {
+  CREATIVE_PRESETS as CREATIVE_SUBAGENT_PRESETS,
+  createQualityReviewFeedbackAdapter,
+} from '@neko/skills';
 import {
   getCapabilityDiscoveryService,
   getCapabilityRuntimeBindings,
@@ -304,6 +307,9 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
       locale: config.locale,
       providerExpressionTargets: config.providerExpressionTargets,
       capabilityRuntime: getCapabilityRuntimeBindings(),
+      feedbackLoop: {
+        toolResultFeedbackAdapters: [createQualityReviewFeedbackAdapter()],
+      },
       getCapabilityPromptFragments: () => getCapabilityDiscoveryService().getAllPromptFragments(),
       toolCategoryRegistry: config.toolCategoryRegistry,
       getPerceptionClients: () =>

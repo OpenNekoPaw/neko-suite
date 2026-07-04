@@ -22,13 +22,13 @@ This plan implements the boundary cleanup for Canvas/Agent/CreativeTable behavio
 
 ## Five-Layer Analysis
 
-| Layer | Decision |
-| --- | --- |
-| Responsibilities | Canvas owns Canvas semantics; Agent owns generic lifecycle; Webview owns projection only; Skills own prompt guidance only. |
-| Dependencies | Agent may depend on `@neko/shared` DTOs and provider metadata, not Canvas internals. Canvas depends on shared DTOs, not Agent Webview or Agent validators. |
-| Interfaces | Cross-package interface remains `CanvasMarkdownCapabilityInput`, `CanvasMarkdownCapabilityResult`, `AgentCapabilityLifecycleDescriptor`, and stable resource refs. |
-| Extension | Dynamic table/profile expansion happens through Canvas profile descriptors and provider lifecycle descriptors, not Agent fixed field arrays. |
-| Tests | Path-level tests prove provider-discovered lifecycle, dynamic Webview handoff, Canvas-owned validation, and removal of Agent storyboard fixed validator. |
+| Layer            | Decision                                                                                                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Responsibilities | Canvas owns Canvas semantics; Agent owns generic lifecycle; Webview owns projection only; Skills own prompt guidance only.                                         |
+| Dependencies     | Agent may depend on `@neko/shared` DTOs and provider metadata, not Canvas internals. Canvas depends on shared DTOs, not Agent Webview or Agent validators.         |
+| Interfaces       | Cross-package interface remains `CanvasMarkdownCapabilityInput`, `CanvasMarkdownCapabilityResult`, `AgentCapabilityLifecycleDescriptor`, and stable resource refs. |
+| Extension        | Dynamic table/profile expansion happens through Canvas profile descriptors and provider lifecycle descriptors, not Agent fixed field arrays.                       |
+| Tests            | Path-level tests prove provider-discovered lifecycle, dynamic Webview handoff, Canvas-owned validation, and removal of Agent storyboard fixed validator.           |
 
 ## File Structure
 
@@ -75,6 +75,7 @@ This plan implements the boundary cleanup for Canvas/Agent/CreativeTable behavio
 ### Task 1: Make Canvas Provider The Lifecycle Descriptor Source
 
 **Files:**
+
 - Modify: `packages/neko-canvas/packages/extension/src/agentCapabilityProvider.ts`
 - Test: `packages/neko-canvas/packages/extension/src/__tests__/agentCapabilityProvider.test.ts`
 
@@ -208,6 +209,7 @@ git commit -m "refactor(canvas): advertise markdown lifecycle descriptors"
 ### Task 2: Add Provider-Discovered Lifecycle Lookup To Agent Extension
 
 **Files:**
+
 - Modify: `packages/neko-agent/packages/extension/src/services/capabilityDiscoveryService.ts`
 - Test: `packages/neko-agent/packages/extension/src/services/__tests__/capabilityDiscoveryService.test.ts`
 
@@ -323,6 +325,7 @@ git commit -m "feat(agent): discover lifecycle descriptors from providers"
 ### Task 3: Remove Agent Hardcoded Canvas Lifecycle Descriptors
 
 **Files:**
+
 - Modify: `packages/neko-agent/packages/extension/src/chat/router/types.ts`
 - Modify: `packages/neko-agent/packages/extension/src/chat/chatProvider.ts`
 - Modify: `packages/neko-agent/packages/extension/src/chat/router/fileAndPluginRoutes.ts`
@@ -526,6 +529,7 @@ git commit -m "refactor(agent): route canvas lifecycle from provider descriptors
 ### Task 4: Make Webview Send To Canvas Field-Agnostic
 
 **Files:**
+
 - Modify: `packages/neko-agent/packages/webview/src/presenters/canvas-markdown-handoff-presenter.ts`
 - Test: `packages/neko-agent/packages/webview/src/presenters/__tests__/canvas-markdown-handoff-presenter.test.ts`
 
@@ -646,6 +650,7 @@ git commit -m "refactor(agent-webview): make canvas markdown handoff field agnos
 ### Task 5: Remove Agent-Owned Storyboard CreativeTable Validator
 
 **Files:**
+
 - Modify: `packages/neko-agent/packages/agent/src/validation/output-validator.ts`
 - Modify: `packages/neko-agent/packages/agent/src/validation/index.ts`
 - Modify: `packages/neko-agent/packages/agent/src/index.ts`
@@ -721,9 +726,9 @@ rm packages/neko-agent/packages/agent-types/src/creative-table-contract.ts
 Remove `creative-table-contract` exports from:
 
 ```ts
-packages/neko-agent/packages/agent-types/src/index.ts
-packages/neko-agent/packages/agent/src/validation/index.ts
-packages/neko-agent/packages/agent/src/index.ts
+packages / neko - agent / packages / agent - types / src / index.ts;
+packages / neko - agent / packages / agent / src / validation / index.ts;
+packages / neko - agent / packages / agent / src / index.ts;
 ```
 
 - [ ] **Step 5: Update skill metadata from validator ids to Canvas lifecycle guidance**
@@ -785,6 +790,7 @@ git commit -m "refactor(agent): remove storyboard creative table validator owner
 **Decision:** `@neko/agent` must not depend on concrete skills. Agent owns the skill runtime, prompt composition, loader/registry/lifecycle ports, and host-neutral registries. `@neko/skills` owns cross-domain extension skill definitions and creative helper runtimes until those helpers move to their owning domain packages. VSCode Extension and CLI are the composition roots that inject `@neko/skills` into agent runtime.
 
 **Files:**
+
 - Create/move: `packages/neko-skills/package.json`
 - Create/move: `packages/neko-skills/src/index.ts`
 - Create/move: `packages/neko-skills/src/builtins/**`
@@ -1059,9 +1065,41 @@ node scripts/check-neko-agent-boundaries.mjs
 
 Expected: PASS.
 
+- [x] **Step 14: Move media quality feedback adapters out of Agent core**
+
+Moved `QualityCheck` / `QualityRepairCheck` / `QualityCheckConsistency` feedback parsing and evidence construction from Agent feedback/session code into `@neko/skills`:
+
+```text
+packages/neko-skills/src/quality/quality-review-feedback.ts
+packages/neko-skills/src/quality/__tests__/quality-review-feedback.test.ts
+packages/neko-types/src/types/agent-feedback.ts
+```
+
+Agent core now owns only the generic feedback loop contract:
+
+- `AgentToolResultFeedbackAdapter`
+- `AgentToolReviewFeedbackSignal`
+- runtime/session projection of `toolResultFeedbackAdapters`
+- generic `tool-review` evaluation and arbitration
+
+The VSCode Extension and CLI composition roots inject `createQualityReviewFeedbackAdapter()` from `@neko/skills`; Agent no longer exports `createQualityReviewEvidence` or contains quality-specific feedback parsing. The architecture guard now fails if Agent production code reintroduces `QualityCheck`, `QualityRepairCheck`, `QualityCheckConsistency`, `quality-review`, or `quality-check` feedback ownership.
+
+Verification:
+
+```bash
+./node_modules/.bin/vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts packages/agent/src/feedback/__tests__/feedback-coordinator.test.ts packages/agent/src/session/__tests__/agent-session.test.ts ../neko-skills/src/quality/__tests__/quality-review-feedback.test.ts -t "agent architecture boundary guards|FeedbackCoordinator|feedback observation|createQualityReview" --reporter=verbose
+./node_modules/.bin/vitest run packages/agent/src/runtime/__tests__/session-config-projection.test.ts packages/cli-tui/src/core/__tests__/runtime-bootstrap.test.ts packages/cli-tui/src/__tests__/experiment.test.ts --reporter=verbose
+./node_modules/.bin/tsc --noEmit -p ../neko-skills/tsconfig.json
+./node_modules/.bin/esbuild ./packages/extension/src/index.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --loader:.md=text --alias:@neko/skills=../neko-skills/src/index.ts
+node scripts/check-neko-agent-boundaries.mjs
+```
+
+Expected: PASS. `pnpm run compile:extension` remains blocked locally by pnpm ignored-builds approval, so the direct esbuild command is the executable extension bundle verification for this step.
+
 ### Task 7: Final Boundary Verification
 
 **Files:**
+
 - No planned production edits.
 - Test command output is the deliverable.
 
@@ -1111,6 +1149,7 @@ rg -n "CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS|STORYBOARD_CREATIVE_TABLE|creative-
 ```
 
 Expected:
+
 - No `CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS` in `packages/neko-agent`.
 - No `STORYBOARD_CREATIVE_TABLE` imports in Agent Webview or Agent validator code.
 - No `creative-table.storyboard` in runtime validation requirements.

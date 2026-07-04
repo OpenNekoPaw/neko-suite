@@ -232,6 +232,12 @@ export interface AgentSessionConfig {
   feedbackControlPolicy?: import('../feedback').FeedbackControlPolicy;
 
   /**
+   * Host-contributed adapters that can turn successful tool outputs into
+   * generic feedback signals. Domain packages own concrete adapter rules.
+   */
+  toolResultFeedbackAdapters?: readonly import('@neko/shared').AgentToolResultFeedbackAdapter[];
+
+  /**
    * Optional ControlPlane guidance provider. It only receives feedback
    * decisions and may return stage guidance; it must not execute tools or
    * mutate project state.

@@ -1,6 +1,7 @@
 import type {
   AgentContext,
   AgentObservation,
+  AgentToolReviewFeedbackSignal,
   ChatMessage,
   DecisionRationale,
   ExecutorHooks,
@@ -90,8 +91,7 @@ export interface FeedbackMemoryExtractionResult {
 }
 
 export type FeedbackMemoryExtractionOutcome =
-  | FeedbackMemoryExtractionSkipped
-  | FeedbackMemoryExtractionResult;
+  FeedbackMemoryExtractionSkipped | FeedbackMemoryExtractionResult;
 
 export interface ProviderExpressionConceptDecision {
   readonly concept: string;
@@ -122,20 +122,7 @@ export type FeedbackSignal =
       readonly error: string;
       readonly runId?: string;
     }
-  | {
-      readonly kind: 'quality-check';
-      readonly observedAt: number;
-      readonly toolCallId: string;
-      readonly toolName: 'QualityCheck' | 'QualityRepairCheck' | 'QualityCheckConsistency';
-      readonly mode?: 'analysis' | 'repair' | 'consistency';
-      readonly totalScenes: number;
-      readonly passed: number;
-      readonly failed: number;
-      readonly failingSceneIndexes: readonly number[];
-      readonly remediationCount: number;
-      readonly runId?: string;
-      readonly evidence?: PerceptionEvidence;
-    }
+  | AgentToolReviewFeedbackSignal
   | {
       readonly kind: 'memory-extraction';
       readonly observedAt: number;
@@ -198,25 +185,22 @@ export type FeedbackDecision =
     }
   | {
       readonly action: 'repair';
-      readonly signalKind: 'quality-check';
+      readonly signalKind: 'tool-review';
       readonly toolCallId: string;
-      readonly toolName: 'QualityCheck' | 'QualityRepairCheck' | 'QualityCheckConsistency';
-      readonly mode?: 'analysis' | 'repair' | 'consistency';
-      readonly totalScenes: number;
-      readonly failed: number;
-      readonly failingSceneIndexes: readonly number[];
-      readonly remediationCount: number;
+      readonly toolName: string;
+      readonly summary: string;
+      readonly repairGuidance?: string;
+      readonly escalationMessage?: string;
+      readonly repeatKey?: string;
       readonly runId?: string;
       readonly evidenceId?: string;
     }
   | {
       readonly action: 'continue';
-      readonly signalKind: 'quality-check';
+      readonly signalKind: 'tool-review';
       readonly toolCallId: string;
-      readonly toolName: 'QualityCheck' | 'QualityRepairCheck' | 'QualityCheckConsistency';
-      readonly mode?: 'analysis' | 'repair' | 'consistency';
-      readonly totalScenes: number;
-      readonly passed: number;
+      readonly toolName: string;
+      readonly summary: string;
     }
   | {
       readonly action: 'memorize';
@@ -296,7 +280,7 @@ export type FeedbackFlowAction =
   | {
       readonly kind: 'escalate-user';
       readonly message: string;
-      readonly signalKind: 'artifact-invalid' | 'tool-failure' | 'quality-check';
+      readonly signalKind: 'artifact-invalid' | 'tool-failure' | 'tool-review';
       readonly repeatCount: number;
       readonly runId?: string;
     };
@@ -673,18 +657,19 @@ function createDefaultFeedbackEvaluator(): IFeedbackEvaluator {
               ...(signal.runId ? { runId: signal.runId } : {}),
             });
             break;
-          case 'quality-check':
-            if (signal.failed > 0) {
+          case 'tool-review':
+            if (signal.status === 'failed') {
               decisions.push({
                 action: 'repair',
                 signalKind: signal.kind,
                 toolCallId: signal.toolCallId,
                 toolName: signal.toolName,
-                ...(signal.mode ? { mode: signal.mode } : {}),
-                totalScenes: signal.totalScenes,
-                failed: signal.failed,
-                failingSceneIndexes: [...signal.failingSceneIndexes],
-                remediationCount: signal.remediationCount,
+                summary: signal.summary,
+                ...(signal.repairGuidance ? { repairGuidance: signal.repairGuidance } : {}),
+                ...(signal.escalationMessage
+                  ? { escalationMessage: signal.escalationMessage }
+                  : {}),
+                ...(signal.repeatKey ? { repeatKey: signal.repeatKey } : {}),
                 ...(signal.runId ? { runId: signal.runId } : {}),
                 ...(signal.evidence ? { evidenceId: signal.evidence.id } : {}),
               });
@@ -695,9 +680,7 @@ function createDefaultFeedbackEvaluator(): IFeedbackEvaluator {
               signalKind: signal.kind,
               toolCallId: signal.toolCallId,
               toolName: signal.toolName,
-              ...(signal.mode ? { mode: signal.mode } : {}),
-              totalScenes: signal.totalScenes,
-              passed: signal.passed,
+              summary: signal.summary,
             });
             break;
           case 'memory-extraction':
@@ -839,25 +822,26 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
             }
 
             const repeatCount = getRepeatCount(signalHistory, countSignals, {
-              kind: 'quality-check',
+              kind: 'tool-review',
               observedAt: 0,
               toolCallId: decision.toolCallId,
               toolName: decision.toolName,
-              ...(decision.mode ? { mode: decision.mode } : {}),
-              totalScenes: decision.totalScenes,
-              passed: Math.max(decision.totalScenes - decision.failed, 0),
-              failed: decision.failed,
-              failingSceneIndexes: decision.failingSceneIndexes,
-              remediationCount: decision.remediationCount,
+              status: 'failed',
+              summary: decision.summary,
+              ...(decision.repairGuidance ? { repairGuidance: decision.repairGuidance } : {}),
+              ...(decision.escalationMessage
+                ? { escalationMessage: decision.escalationMessage }
+                : {}),
+              ...(decision.repeatKey ? { repeatKey: decision.repeatKey } : {}),
               ...(decision.runId ? { runId: decision.runId } : {}),
             });
             if (repeatCount >= effectivePolicy.escalationThreshold) {
               actions.push({
                 kind: 'escalate-user',
                 message:
-                  `Quality check keeps failing for run ${decision.runId ?? 'unknown-run'} ` +
-                  `(${repeatCount} time(s)). Ask the user whether to accept the current output ` +
-                  'or revise the target quality bar.',
+                  decision.escalationMessage ??
+                  `Tool review for ${decision.toolName} failed ${repeatCount} time(s). ` +
+                    'Ask the user whether to accept the current output or change strategy.',
                 signalKind: decision.signalKind,
                 repeatCount,
                 ...(decision.runId ? { runId: decision.runId } : {}),
@@ -866,19 +850,10 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
             }
 
             guidanceKinds.add(decision.signalKind);
-            if (decision.mode === 'repair') {
-              guidanceBlocks.push(
-                `Review the quality repair attempt from ${decision.toolName}. ` +
-                  `Focus on scene(s) ${decision.failingSceneIndexes.join(', ')} and verify ` +
-                  `${decision.remediationCount} suggested remediation step(s) before any further repair.`,
-              );
-            } else {
-              guidanceBlocks.push(
-                `Repair the failing quality-check result. ` +
-                  `Focus on scene(s) ${decision.failingSceneIndexes.join(', ')} and apply ` +
-                  `${decision.remediationCount} suggested remediation step(s) as needed.`,
-              );
-            }
+            guidanceBlocks.push(
+              decision.repairGuidance ??
+                `Review the failed result from ${decision.toolName}: ${decision.summary}`,
+            );
             break;
           }
           case 'self-evaluate':
@@ -1069,8 +1044,8 @@ function signalSignature(signal: FeedbackSignal): string {
       return `self-evaluation-requested|${signal.stage}`;
     case 'tool-failure':
       return `tool-failure|${signal.runId ?? ''}|${signal.toolName}`;
-    case 'quality-check':
-      return `quality-check|${signal.runId ?? ''}|${signal.toolCallId}`;
+    case 'tool-review':
+      return `tool-review|${signal.runId ?? ''}|${signal.repeatKey ?? signal.toolName}`;
     case 'memory-extraction':
       return `memory-extraction|${signal.extraction.sourceEventIds.join(',')}|${signal.observedAt}`;
     case 'provider-card-observation':

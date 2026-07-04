@@ -63,6 +63,7 @@ vi.mock('@neko/agent', () => ({
 }));
 
 vi.mock('@neko/skills', () => ({
+  createQualityReviewFeedbackAdapter: vi.fn(() => ({ id: 'quality-review-feedback' })),
   registerBuiltinToolGroups,
 }));
 

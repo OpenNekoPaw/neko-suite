@@ -21,6 +21,7 @@ import type {
   AgentCapabilityActivationIntent,
   AgentCapabilityActivationProgressEvent,
   AgentCapabilityActivationTarget,
+  AgentObservedToolResult,
   AgentStep,
   AgentTraceContext,
   ChatMessage,
@@ -127,16 +128,8 @@ import { MemoryRecall } from '../memory/memory-recall';
 import {
   composeBeforeThinkHooks,
   createFeedbackCoordinator,
-  createQualityReviewEvidence,
   type IFeedbackCoordinator,
 } from '../feedback';
-import {
-  CHARACTER_INCONSISTENCY_FAIL_SCORE,
-  STYLE_DRIFT_COLOR_POP_THRESHOLD,
-  type ConsistencyReport,
-  type QualityEvidenceSceneTimeRange,
-  type QualityEvidenceTimeRange,
-} from '@neko/shared';
 import { createDefaultControlPlane, type StageTransitionGuidance } from '../control-plane';
 import {
   applyToolResultBackfillToChatHistory,
@@ -1826,7 +1819,7 @@ export class AgentSession implements IAgentSession {
       phase: 'feedback',
     });
     let failureSignals = 0;
-    let qualitySignals = 0;
+    let toolReviewSignals = 0;
     let providerExpressionSignals = 0;
     for (let i = 0; i < step.toolResults.length; i++) {
       const result = step.toolResults[i] as ObservedToolResult;
@@ -1846,7 +1839,8 @@ export class AgentSession implements IAgentSession {
         continue;
       }
 
-      const qualityCheckSignal = toQualityCheckFeedbackSignal({
+      const toolReviewSignal = toToolReviewFeedbackSignal({
+        adapters: this._config.toolResultFeedbackAdapters,
         result,
         toolArguments: toolCall?.arguments,
         toolCallId,
@@ -1854,15 +1848,15 @@ export class AgentSession implements IAgentSession {
         observedAt: step.timestamp,
         ...(activeRunId ? { runId: activeRunId } : {}),
       });
-      if (qualityCheckSignal) {
-        this._feedbackCoordinator.observe(qualityCheckSignal);
-        qualitySignals += 1;
+      if (toolReviewSignal) {
+        this._feedbackCoordinator.observe(toolReviewSignal);
+        toolReviewSignals += 1;
         if (
-          'evidence' in qualityCheckSignal &&
-          qualityCheckSignal.evidence &&
+          'evidence' in toolReviewSignal &&
+          toolReviewSignal.evidence &&
           !this._ablationMarker?.disableAgentFirstToolEvidence
         ) {
-          void this._recordAgentEvidence(qualityCheckSignal.evidence);
+          void this._recordAgentEvidence(toolReviewSignal.evidence);
         }
       }
 
@@ -1884,7 +1878,7 @@ export class AgentSession implements IAgentSession {
       withAgentTrace(feedbackTrace, {
         toolResultCount: step.toolResults.length,
         failureSignals,
-        qualitySignals,
+        toolReviewSignals,
         providerExpressionSignals,
       }),
     );
@@ -2417,103 +2411,28 @@ function hasWorkspaceWriteFileFsOps(fsOps: WorkspaceFsOps): fsOps is WorkspaceWr
   return 'writeFile' in fsOps && typeof fsOps.writeFile === 'function';
 }
 
-interface ObservedToolResult {
-  readonly callId?: string;
-  readonly name?: string;
-  readonly success: boolean;
-  readonly data?: unknown;
-  readonly error?: string;
-  readonly metadata?: Record<string, unknown>;
-}
-
-type QualityCheckEvaluationSummary = import('../feedback').QualityReviewEvaluationSummary;
-
-type QualityCheckFeedbackPayload = import('../feedback').QualityReviewFeedbackPayload;
-
-type QualityConsistencyReport = ConsistencyReport;
+type ObservedToolResult = AgentObservedToolResult;
 
 function resolveObservedToolName(result: ObservedToolResult, toolNameHint?: string): string {
   return result.name ?? toolNameHint ?? 'unknown-tool';
 }
 
-function toQualityCheckFeedbackSignal(input: {
+function toToolReviewFeedbackSignal(input: {
+  readonly adapters: AgentSessionConfig['toolResultFeedbackAdapters'];
   readonly result: ObservedToolResult;
   readonly toolArguments?: Record<string, unknown>;
   readonly toolCallId: string;
   readonly toolName: string;
   readonly observedAt: number;
   readonly runId?: string;
-}): import('../feedback').FeedbackSignal | null {
-  const sceneTimeRanges = readSceneTimeRangesFromToolArguments(input.toolArguments);
-
-  if (input.toolName === 'QualityCheck' || input.toolName === 'QualityRepairCheck') {
-    if (!isQualityCheckFeedbackPayload(input.result.data)) {
-      return null;
+}): import('@neko/shared').AgentToolReviewFeedbackSignal | null {
+  for (const adapter of input.adapters ?? []) {
+    const signal = adapter.createSignal(input);
+    if (signal) {
+      return signal;
     }
-
-    const mode = input.toolName === 'QualityRepairCheck' ? 'repair' : 'analysis';
-    const qualityReview = createQualityReviewEvidence({
-      payload: input.result.data,
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      mode,
-      observedAt: input.observedAt,
-      ...(input.runId ? { runId: input.runId } : {}),
-      ...(sceneTimeRanges.length > 0 ? { sceneTimeRanges } : {}),
-    });
-
-    return {
-      kind: 'quality-check',
-      observedAt: input.observedAt,
-      toolCallId: input.toolCallId,
-      toolName: input.toolName,
-      mode,
-      totalScenes: qualityReview.summary.totalScenes,
-      passed: qualityReview.summary.passed,
-      failed: qualityReview.summary.failed,
-      failingSceneIndexes: qualityReview.summary.failingSceneIndexes,
-      remediationCount: qualityReview.summary.remediationCount,
-      ...(input.runId ? { runId: input.runId } : {}),
-      evidence: qualityReview.evidence,
-    };
   }
-
-  if (input.toolName !== 'QualityCheckConsistency' || !isConsistencyReportLike(input.result.data)) {
-    return null;
-  }
-
-  const { report: consistencyReport, diagnostics: adapterDiagnostics } =
-    normalizeConsistencyReportForFeedback(input.result.data);
-  const payload = createQualityReviewPayloadFromConsistencyReport(
-    consistencyReport,
-    input.toolArguments,
-  );
-  const qualityReview = createQualityReviewEvidence({
-    payload,
-    consistencyReport,
-    toolCallId: input.toolCallId,
-    toolName: 'QualityCheckConsistency',
-    mode: 'consistency',
-    observedAt: input.observedAt,
-    ...(input.runId ? { runId: input.runId } : {}),
-    ...(sceneTimeRanges.length > 0 ? { sceneTimeRanges } : {}),
-    ...(adapterDiagnostics.length > 0 ? { adapterDiagnostics } : {}),
-  });
-
-  return {
-    kind: 'quality-check',
-    observedAt: input.observedAt,
-    toolCallId: input.toolCallId,
-    toolName: 'QualityCheckConsistency',
-    mode: 'consistency',
-    totalScenes: qualityReview.summary.totalScenes,
-    passed: qualityReview.summary.passed,
-    failed: qualityReview.summary.failed,
-    failingSceneIndexes: qualityReview.summary.failingSceneIndexes,
-    remediationCount: qualityReview.summary.remediationCount,
-    ...(input.runId ? { runId: input.runId } : {}),
-    evidence: qualityReview.evidence,
-  };
+  return null;
 }
 
 function toProviderExpressionFeedbackSignal(input: {
@@ -2639,203 +2558,6 @@ function readProviderId(metadata: Record<string, unknown>): string | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isQualityCheckFeedbackPayload(value: unknown): value is QualityCheckFeedbackPayload {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  return (
-    isFiniteNumber(candidate['totalScenes']) &&
-    isFiniteNumber(candidate['passed']) &&
-    isFiniteNumber(candidate['failed']) &&
-    Array.isArray(candidate['evaluations']) &&
-    candidate['evaluations'].every(isQualityCheckEvaluationSummary)
-  );
-}
-
-function isQualityCheckEvaluationSummary(value: unknown): value is QualityCheckEvaluationSummary {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-
-  const candidate = value as Record<string, unknown>;
-  return (
-    isFiniteNumber(candidate['index']) &&
-    typeof candidate['passed'] === 'boolean' &&
-    isFiniteNumber(candidate['finalScore']) &&
-    (candidate['remediations'] === undefined || Array.isArray(candidate['remediations']))
-  );
-}
-
-function isConsistencyReportLike(value: unknown): value is Record<string, unknown> {
-  if (!isRecord(value)) return false;
-  return isFiniteNumber(value['overallConsistency']) && Array.isArray(value['styleDrift']);
-}
-
-function normalizeConsistencyReportForFeedback(value: Record<string, unknown>): {
-  readonly report: QualityConsistencyReport;
-  readonly diagnostics: readonly string[];
-} {
-  const diagnostics: string[] = [];
-  const overallConsistency =
-    typeof value['overallConsistency'] === 'number' ? value['overallConsistency'] : 0;
-  const characterConsistency = Array.isArray(value['characterConsistency'])
-    ? value['characterConsistency']
-    : [];
-  if (!Array.isArray(value['characterConsistency'])) {
-    diagnostics.push('missing-characterConsistency');
-  }
-
-  const aestheticScore = isFiniteNumber(value['aestheticScore']) ? value['aestheticScore'] : 0;
-  if (!isFiniteNumber(value['aestheticScore'])) {
-    diagnostics.push('missing-aestheticScore');
-  }
-
-  const recommendations = Array.isArray(value['recommendations'])
-    ? value['recommendations'].filter((entry): entry is string => typeof entry === 'string')
-    : [];
-  if (!Array.isArray(value['recommendations'])) {
-    diagnostics.push('missing-recommendations');
-  }
-
-  return {
-    report: {
-      overallConsistency,
-      styleDrift: value['styleDrift'] as QualityConsistencyReport['styleDrift'],
-      characterConsistency:
-        characterConsistency as QualityConsistencyReport['characterConsistency'],
-      aestheticScore,
-      recommendations,
-    },
-    diagnostics,
-  };
-}
-
-function createQualityReviewPayloadFromConsistencyReport(
-  report: QualityConsistencyReport,
-  toolArguments: Record<string, unknown> | undefined,
-): QualityCheckFeedbackPayload {
-  const sceneIndexes = readSceneIndexesFromToolArguments(toolArguments);
-  const failedSceneIndexes = new Set<number>();
-  for (const drift of report.styleDrift) {
-    if (drift.driftScore > STYLE_DRIFT_COLOR_POP_THRESHOLD) {
-      failedSceneIndexes.add(drift.fromScene);
-      failedSceneIndexes.add(drift.toScene);
-    }
-  }
-  for (const character of report.characterConsistency ?? []) {
-    for (const appearance of character.appearances) {
-      if (appearance.score < CHARACTER_INCONSISTENCY_FAIL_SCORE) {
-        failedSceneIndexes.add(appearance.sceneIndex);
-      }
-    }
-  }
-
-  const indexes =
-    sceneIndexes.length > 0
-      ? sceneIndexes
-      : [...failedSceneIndexes].sort((left, right) => left - right);
-  const evaluations = indexes.map((index) => ({
-    index,
-    passed: !failedSceneIndexes.has(index),
-    finalScore: report.overallConsistency,
-    remediations:
-      failedSceneIndexes.has(index) && report.recommendations.length > 0
-        ? report.recommendations
-        : undefined,
-  }));
-
-  const failed = evaluations.filter((evaluation) => !evaluation.passed).length;
-  return {
-    totalScenes: evaluations.length,
-    passed: evaluations.length - failed,
-    failed,
-    evaluations,
-  };
-}
-
-function readSceneTimeRangesFromToolArguments(
-  toolArguments: Record<string, unknown> | undefined,
-): QualityEvidenceSceneTimeRange[] {
-  if (!toolArguments) return [];
-  const scenes = toolArguments['scenes'];
-  if (!Array.isArray(scenes)) return [];
-
-  const ranges: QualityEvidenceSceneTimeRange[] = [];
-  for (let index = 0; index < scenes.length; index++) {
-    const scene = scenes[index];
-    if (!isRecord(scene)) continue;
-    const sceneIndex = readSceneIndex(scene, index);
-    const timeRange = readToolArgumentTimeRange(scene);
-    if (sceneIndex !== null && timeRange) {
-      ranges.push({ sceneIndex, timeRange });
-    }
-  }
-  return ranges;
-}
-
-function readSceneIndexesFromToolArguments(
-  toolArguments: Record<string, unknown> | undefined,
-): number[] {
-  if (!toolArguments) return [];
-  const scenes = toolArguments['scenes'];
-  if (!Array.isArray(scenes)) return [];
-  return scenes
-    .map((scene, index) => (isRecord(scene) ? readSceneIndex(scene, index) : null))
-    .filter((sceneIndex): sceneIndex is number => sceneIndex !== null);
-}
-
-function readSceneIndex(scene: Record<string, unknown>, defaultIndex: number): number | null {
-  const explicit = scene['index'] ?? scene['sceneIndex'];
-  if (typeof explicit === 'number' && Number.isFinite(explicit)) return Math.floor(explicit);
-  return defaultIndex;
-}
-
-function readToolArgumentTimeRange(
-  scene: Record<string, unknown>,
-): QualityEvidenceTimeRange | null {
-  const direct = readTimeRangeLike(scene['timeRange']);
-  if (direct) return direct;
-  const start = scene['start'] ?? scene['startTime'];
-  const end = scene['end'] ?? scene['endTime'];
-  const fromScalar = readTimeRangeScalars(start, end);
-  if (fromScalar) return fromScalar;
-  const duration = scene['duration'];
-  if (typeof duration === 'number' && Number.isFinite(duration) && duration >= 0) {
-    return { start: 0, end: duration };
-  }
-  return null;
-}
-
-function readTimeRangeLike(
-  value: unknown,
-): QualityEvidenceTimeRange | null {
-  if (!isRecord(value)) return null;
-  return readTimeRangeScalars(value['start'], value['end']);
-}
-
-function readTimeRangeScalars(
-  start: unknown,
-  end: unknown,
-): QualityEvidenceTimeRange | null {
-  if (
-    typeof start !== 'number' ||
-    typeof end !== 'number' ||
-    !Number.isFinite(start) ||
-    !Number.isFinite(end) ||
-    start < 0 ||
-    end < start
-  ) {
-    return null;
-  }
-  return { start, end };
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function collectInjectedToolNames(toolInjectionManager: ToolInjectionManager): readonly ToolName[] {

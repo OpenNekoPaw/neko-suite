@@ -1,4 +1,5 @@
 import type {
+  AgentToolResultFeedbackAdapter,
   IProjectMemoryManager,
   ISkillRegistry,
   IToolCategoryRegistry,
@@ -137,6 +138,7 @@ export interface IFeedbackLoop {
   readonly autoMemoryExtraction?: boolean;
   readonly memoryRecall?: boolean;
   readonly feedbackCoordinator?: IFeedbackCoordinator;
+  readonly toolResultFeedbackAdapters?: readonly AgentToolResultFeedbackAdapter[];
 }
 
 /**

@@ -175,6 +175,34 @@ describe('agent architecture boundary guards', () => {
     expect(existingFiles).toEqual([]);
   });
 
+  it('keeps media quality feedback adapters out of Agent core', () => {
+    const forbiddenFeedbackFiles = [join(agentSrc, 'feedback/quality-review-evidence.ts')];
+    const existingFiles = forbiddenFeedbackFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+    const productionSource = listFiles(agentSrc)
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+    const qualityFeedbackTerms = [
+      /\bQualityCheck\b/,
+      /\bQualityRepairCheck\b/,
+      /\bQualityCheckConsistency\b/,
+      /quality-review/,
+      /quality-check/,
+    ];
+    const sourceViolations = productionSource.flatMap(({ relativePath, source }) =>
+      qualityFeedbackTerms
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect([...existingFiles, ...sourceViolations]).toEqual([]);
+  });
+
   it('keeps Agent package independent from concrete skill packages', () => {
     const packageManifest = stripTypeScriptComments(
       readFileSync(join(repoRoot, 'packages/agent/package.json'), 'utf-8'),
@@ -215,9 +243,7 @@ describe('agent architecture boundary guards', () => {
   });
 
   it('keeps concrete media workflow skill strategy out of Agent core', () => {
-    const forbiddenFiles = [
-      join(agentSrc, 'artifact/shot-image-prep-artifact.ts'),
-    ];
+    const forbiddenFiles = [join(agentSrc, 'artifact/shot-image-prep-artifact.ts')];
     const existingForbiddenFiles = forbiddenFiles
       .filter((file) => existsSync(file))
       .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));

@@ -14,11 +14,15 @@ import {
   createSubagentReviewEvidence,
 } from '@neko/shared';
 import type {
+  AgentToolResultFeedbackAdapter,
+  AgentToolResultFeedbackAdapterInput,
+  AgentToolReviewFeedbackSignal,
   IService,
   IToolRegistry,
   AgentStep,
   ChatMessage,
   IProjectMemoryManager,
+  PerceptionEvidence,
   ToolResultWithMeta,
 } from '@neko/shared';
 import type { IJournalWriter } from '../types';
@@ -103,6 +107,228 @@ function createConfig(overrides?: Partial<AgentSessionConfig>): AgentSessionConf
     maxIterations: 10,
     ...overrides,
   };
+}
+
+function createQualityReviewTestFeedbackAdapter(): AgentToolResultFeedbackAdapter {
+  return {
+    id: 'test-quality-review-feedback',
+    createSignal(input) {
+      if (input.toolName === 'QualityCheck' || input.toolName === 'QualityRepairCheck') {
+        return createQualityPayloadReviewSignal(input);
+      }
+      if (input.toolName === 'QualityCheckConsistency') {
+        return createConsistencyReviewSignal(input);
+      }
+      return null;
+    },
+  };
+}
+
+function createQualityPayloadReviewSignal(
+  input: AgentToolResultFeedbackAdapterInput,
+): AgentToolReviewFeedbackSignal | null {
+  if (!isRecord(input.result.data) || !Array.isArray(input.result.data['evaluations'])) {
+    return null;
+  }
+  const evaluations = input.result.data['evaluations'].filter(isRecord);
+  const failedIndexes = evaluations
+    .filter((evaluation) => evaluation['passed'] === false)
+    .map((evaluation) => evaluation['index'])
+    .filter((index): index is number => typeof index === 'number');
+  const remediationCount = evaluations.reduce(
+    (count, evaluation) =>
+      count + (Array.isArray(evaluation['remediations']) ? evaluation['remediations'].length : 0),
+    0,
+  );
+  const totalScenes = readNumber(input.result.data['totalScenes'], evaluations.length);
+  const passed = readNumber(input.result.data['passed'], totalScenes - failedIndexes.length);
+  const failed = readNumber(input.result.data['failed'], failedIndexes.length);
+  const mode = input.toolName === 'QualityRepairCheck' ? 'repair' : 'analysis';
+  const label = mode === 'repair' ? 'QualityRepairReview repair attempt' : 'QualityReview';
+  const summary =
+    failed === 0
+      ? `${label} passed ${passed}/${totalScenes} scene(s).`
+      : `${label} failed ${failed}/${totalScenes} scene(s): scene(s) ${failedIndexes.join(', ')}; ${remediationCount} remediation hint(s) available.`;
+
+  return createReviewSignal({
+    input,
+    mode,
+    summary,
+    totalScenes,
+    passed,
+    failed,
+    failedIndexes,
+    remediationCount,
+    data: {
+      kind: 'quality-review',
+      mode,
+      toolCallId: input.toolCallId,
+      totalScenes,
+      passed,
+      failed,
+      failingSceneIndexes: failedIndexes,
+      remediationCount,
+    },
+  });
+}
+
+function createConsistencyReviewSignal(
+  input: AgentToolResultFeedbackAdapterInput,
+): AgentToolReviewFeedbackSignal | null {
+  if (!isRecord(input.result.data) || !Array.isArray(input.result.data['styleDrift'])) {
+    return null;
+  }
+  const report = input.result.data;
+  const sceneTimeRanges = readSceneTimeRanges(input.toolArguments);
+  const styleDrift = report['styleDrift'].filter(isRecord);
+  const failedIndexes = [
+    ...new Set(
+      styleDrift
+        .filter((drift) => readNumber(drift['driftScore'], 0) > 40)
+        .flatMap((drift) => [drift['fromScene'], drift['toScene']])
+        .filter((index): index is number => typeof index === 'number'),
+    ),
+  ].sort((left, right) => left - right);
+  const sceneIndexes = readSceneIndexes(input.toolArguments);
+  const indexes = sceneIndexes.length > 0 ? sceneIndexes : failedIndexes;
+  const recommendations = Array.isArray(report['recommendations']) ? report['recommendations'] : [];
+  const remediationCount = failedIndexes.length * recommendations.length;
+  const passed = indexes.length - failedIndexes.length;
+  const failed = failedIndexes.length;
+  const summary =
+    failed === 0
+      ? `QualityConsistencyReview passed ${passed}/${indexes.length} scene(s).`
+      : `QualityConsistencyReview failed ${failed}/${indexes.length} scene(s): scene(s) ${failedIndexes.join(', ')}; ${remediationCount} remediation hint(s) available.`;
+  const continuityEdgeCandidates = styleDrift.map((drift) => {
+    const fromSceneIndex = readNumber(drift['fromScene'], 0);
+    const toSceneIndex = readNumber(drift['toScene'], 0);
+    const fromRange = sceneTimeRanges.get(fromSceneIndex);
+    const toRange = sceneTimeRanges.get(toSceneIndex);
+    return {
+      fromSceneIndex,
+      toSceneIndex,
+      fromTime: fromRange?.end,
+      toTime: toRange?.start,
+      ...(readNumber(drift['driftScore'], 0) > 40 ? { issue: 'color-pop' } : {}),
+    };
+  });
+
+  return createReviewSignal({
+    input,
+    mode: 'consistency',
+    summary,
+    totalScenes: indexes.length,
+    passed,
+    failed,
+    failedIndexes,
+    remediationCount,
+    data: {
+      kind: 'quality-review',
+      mode: 'consistency',
+      toolCallId: input.toolCallId,
+      totalScenes: indexes.length,
+      passed,
+      failed,
+      failingSceneIndexes: failedIndexes,
+      remediationCount,
+      adapterDiagnostics: [
+        'missing-characterConsistency',
+        'missing-aestheticScore',
+        'missing-recommendations',
+      ].filter((diagnostic) =>
+        diagnostic === 'missing-characterConsistency'
+          ? !Array.isArray(report['characterConsistency'])
+          : diagnostic === 'missing-aestheticScore'
+            ? typeof report['aestheticScore'] !== 'number'
+            : !Array.isArray(report['recommendations']),
+      ),
+      continuityEdgeCandidates,
+    },
+  });
+}
+
+function createReviewSignal(input: {
+  readonly input: AgentToolResultFeedbackAdapterInput;
+  readonly mode: 'analysis' | 'repair' | 'consistency';
+  readonly summary: string;
+  readonly totalScenes: number;
+  readonly passed: number;
+  readonly failed: number;
+  readonly failedIndexes: readonly number[];
+  readonly remediationCount: number;
+  readonly data: Record<string, unknown>;
+}): AgentToolReviewFeedbackSignal {
+  const evidence: PerceptionEvidence = {
+    id: `quality-review:runless:${input.input.toolCallId}`,
+    source: 'tool',
+    summary: input.summary,
+    confidence: input.totalScenes > 0 ? input.passed / input.totalScenes : 0,
+    toolName: input.input.toolName,
+    data: input.data,
+    createdAt: input.input.observedAt,
+    status: 'active',
+  };
+  const status = input.failed > 0 ? 'failed' : 'passed';
+  return {
+    kind: 'tool-review',
+    observedAt: input.input.observedAt,
+    toolCallId: input.input.toolCallId,
+    toolName: input.input.toolName,
+    status,
+    summary: input.summary,
+    ...(status === 'failed'
+      ? {
+          repairGuidance:
+            input.mode === 'repair'
+              ? `Review the quality repair attempt from ${input.input.toolName}. Focus on scene(s) ${input.failedIndexes.join(', ')} and verify ${input.remediationCount} suggested remediation step(s) before any further repair.`
+              : `Repair the failing quality-check result. Focus on scene(s) ${input.failedIndexes.join(', ')} and apply ${input.remediationCount} suggested remediation step(s) as needed.`,
+          repeatKey: `quality-review:runless:${input.input.toolName}`,
+        }
+      : {}),
+    evidence,
+    metadata: {
+      mode: input.mode,
+      totalScenes: input.totalScenes,
+      passed: input.passed,
+      failed: input.failed,
+      failingSceneIndexes: [...input.failedIndexes],
+      remediationCount: input.remediationCount,
+    },
+  };
+}
+
+function readSceneIndexes(toolArguments: Record<string, unknown> | undefined): number[] {
+  const scenes = toolArguments?.['scenes'];
+  if (!Array.isArray(scenes)) return [];
+  return scenes
+    .map((scene, index) =>
+      isRecord(scene) ? readNumber(scene['sceneIndex'] ?? scene['index'], index) : null,
+    )
+    .filter((index): index is number => typeof index === 'number');
+}
+
+function readSceneTimeRanges(
+  toolArguments: Record<string, unknown> | undefined,
+): Map<number, { start: number; end: number }> {
+  const ranges = new Map<number, { start: number; end: number }>();
+  const scenes = toolArguments?.['scenes'];
+  if (!Array.isArray(scenes)) return ranges;
+  scenes.forEach((scene, index) => {
+    if (!isRecord(scene) || !isRecord(scene['timeRange'])) return;
+    const start = scene['timeRange']['start'];
+    const end = scene['timeRange']['end'];
+    if (typeof start !== 'number' || typeof end !== 'number') return;
+    ranges.set(readNumber(scene['sceneIndex'] ?? scene['index'], index), { start, end });
+  });
+  return ranges;
+}
+
+function readNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function createMockProjectMemory(initialContent: string | null = null): IProjectMemoryManager {
@@ -1284,6 +1510,12 @@ describe('AgentSession', () => {
   });
 
   describe('feedback observation', () => {
+    beforeEach(() => {
+      config = createConfig({
+        toolResultFeedbackAdapters: [createQualityReviewTestFeedbackAdapter()],
+      });
+    });
+
     it('captures tool failures as repair feedback cycles', async () => {
       const session = new AgentSession(config);
       injectMockExecutor(session, [
@@ -1307,24 +1539,24 @@ describe('AgentSession', () => {
       expect(session.getFeedbackCycles()).toEqual([
         expect.objectContaining({
           currentStage: null,
-          activeRunId: null,
+          activeRunId: expect.any(String),
           signals: [
-            {
+            expect.objectContaining({
               kind: 'tool-failure',
               observedAt: 100,
               toolCallId: 'call-write',
               toolName: 'Write',
               error: 'permission denied',
-            },
+            }),
           ],
           decisions: [
-            {
+            expect.objectContaining({
               action: 'repair',
               signalKind: 'tool-failure',
               toolCallId: 'call-write',
               toolName: 'Write',
               error: 'permission denied',
-            },
+            }),
           ],
           actions: [
             {
@@ -1397,9 +1629,14 @@ describe('AgentSession', () => {
 
     it('does not inject feedback recovery guidance when recovery guidance is disabled', async () => {
       const session = new AgentSession(
-        applyAblationToggles(createConfig(), {
-          agentFirst: { recoveryGuidance: false },
-        }),
+        applyAblationToggles(
+          createConfig({
+            toolResultFeedbackAdapters: [createQualityReviewTestFeedbackAdapter()],
+          }),
+          {
+            agentFirst: { recoveryGuidance: false },
+          },
+        ),
       );
       injectMockExecutor(session, [
         {
@@ -1529,19 +1766,24 @@ describe('AgentSession', () => {
       expect(session.getFeedbackCycles()).toEqual([
         expect.objectContaining({
           currentStage: null,
-          activeRunId: null,
+          activeRunId: expect.any(String),
           signals: [
-            {
-              kind: 'quality-check',
+            expect.objectContaining({
+              kind: 'tool-review',
               observedAt: 200,
               toolCallId: 'call-qc',
               toolName: 'QualityCheck',
-              mode: 'analysis',
-              totalScenes: 2,
-              passed: 1,
-              failed: 1,
-              failingSceneIndexes: [2],
-              remediationCount: 1,
+              status: 'failed',
+              summary:
+                'QualityReview failed 1/2 scene(s): scene(s) 2; 1 remediation hint(s) available.',
+              metadata: {
+                mode: 'analysis',
+                totalScenes: 2,
+                passed: 1,
+                failed: 1,
+                failingSceneIndexes: [2],
+                remediationCount: 1,
+              },
               evidence: expect.objectContaining({
                 id: 'quality-review:runless:call-qc',
                 source: 'tool',
@@ -1549,40 +1791,32 @@ describe('AgentSession', () => {
                 summary:
                   'QualityReview failed 1/2 scene(s): scene(s) 2; 1 remediation hint(s) available.',
                 data: expect.objectContaining({
-                  normalizedIssues: [
-                    expect.objectContaining({
-                      category: 'stutter',
-                      start: 4,
-                      end: 9,
-                      source: expect.objectContaining({
-                        sourceTimeRange: { start: 4, end: 9 },
-                      }),
-                    }),
-                  ],
+                  mode: 'analysis',
+                  failingSceneIndexes: [2],
                 }),
               }),
-            },
+            }),
           ],
           decisions: [
-            {
+            expect.objectContaining({
               action: 'repair',
-              signalKind: 'quality-check',
+              signalKind: 'tool-review',
               toolCallId: 'call-qc',
               toolName: 'QualityCheck',
-              mode: 'analysis',
-              totalScenes: 2,
-              failed: 1,
-              failingSceneIndexes: [2],
-              remediationCount: 1,
+              summary:
+                'QualityReview failed 1/2 scene(s): scene(s) 2; 1 remediation hint(s) available.',
+              repairGuidance:
+                'Repair the failing quality-check result. Focus on scene(s) 2 and apply 1 suggested remediation step(s) as needed.',
+              repeatKey: 'quality-review:runless:QualityCheck',
               evidenceId: 'quality-review:runless:call-qc',
-            },
+            }),
           ],
           actions: [
             {
               kind: 'set-guidance',
               guidance:
                 '- Repair the failing quality-check result. Focus on scene(s) 2 and apply 1 suggested remediation step(s) as needed.',
-              signalKinds: ['quality-check'],
+              signalKinds: ['tool-review'],
             },
           ],
         }),
@@ -1591,7 +1825,12 @@ describe('AgentSession', () => {
 
     it('captures QualityRepairCheck attempts as auditable repair evidence', async () => {
       const journalWriter = createMockJournalWriter();
-      const session = new AgentSession(createConfig({ journalWriter }));
+      const session = new AgentSession(
+        createConfig({
+          journalWriter,
+          toolResultFeedbackAdapters: [createQualityReviewTestFeedbackAdapter()],
+        }),
+      );
       injectMockExecutor(session, [
         {
           type: 'act',
@@ -1664,23 +1903,18 @@ describe('AgentSession', () => {
 
       expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
         expect.objectContaining({
-          kind: 'quality-check',
+          kind: 'tool-review',
           toolName: 'QualityRepairCheck',
-          mode: 'repair',
+          status: 'failed',
+          metadata: expect.objectContaining({
+            mode: 'repair',
+          }),
           evidence: expect.objectContaining({
             summary:
               'QualityRepairReview repair attempt failed 1/1 scene(s): scene(s) 2; 1 remediation hint(s) available.',
             data: expect.objectContaining({
               mode: 'repair',
-              normalizedIssues: [
-                expect.objectContaining({
-                  category: 'tearing',
-                  source: expect.objectContaining({
-                    mediaPath: '/tmp/scene-2-repair.mp4',
-                    attempts: 2,
-                  }),
-                }),
-              ],
+              failingSceneIndexes: [2],
             }),
           }),
         }),
@@ -1749,9 +1983,12 @@ describe('AgentSession', () => {
 
       expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
         expect.objectContaining({
-          kind: 'quality-check',
+          kind: 'tool-review',
           toolName: 'QualityCheckConsistency',
-          mode: 'consistency',
+          status: 'failed',
+          metadata: expect.objectContaining({
+            mode: 'consistency',
+          }),
           evidence: expect.objectContaining({
             summary:
               'QualityConsistencyReview failed 2/2 scene(s): scene(s) 1, 2; 2 remediation hint(s) available.',
@@ -1830,8 +2067,10 @@ describe('AgentSession', () => {
 
       expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
         expect.objectContaining({
-          failed: 2,
-          failingSceneIndexes: [2, 3],
+          metadata: expect.objectContaining({
+            failed: 2,
+            failingSceneIndexes: [2, 3],
+          }),
           evidence: expect.objectContaining({
             data: expect.objectContaining({
               continuityEdgeCandidates: [
@@ -1926,7 +2165,12 @@ describe('AgentSession', () => {
 
     it('records QualityReview evidence into the Agent-first journal graph', async () => {
       const journalWriter = createMockJournalWriter();
-      const session = new AgentSession(createConfig({ journalWriter }));
+      const session = new AgentSession(
+        createConfig({
+          journalWriter,
+          toolResultFeedbackAdapters: [createQualityReviewTestFeedbackAdapter()],
+        }),
+      );
       injectMockExecutor(session, [
         {
           type: 'act',

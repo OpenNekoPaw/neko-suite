@@ -146,13 +146,7 @@ export {
   type FeedbackMemoryExtractionOutcome,
   type FeedbackMemoryExtractionResult,
   type FeedbackMemoryExtractionSkipped,
-  createQualityReviewEvidence,
   type IFeedbackCoordinator,
-  type QualityReviewEvidenceInput,
-  type QualityReviewEvidenceResult,
-  type QualityReviewEvidenceSummary,
-  type QualityReviewEvaluationSummary,
-  type QualityReviewFeedbackPayload,
 } from './feedback';
 
 export {

@@ -113,6 +113,7 @@ export * from './agent';
 export * from './agent-capability-activation';
 export * from './agent-capability-diagnostics';
 export * from './agent-capability-lifecycle';
+export * from './agent-feedback';
 export * from './reference-contributor';
 
 // Agent execution trace contracts

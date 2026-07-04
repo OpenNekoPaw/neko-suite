@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { createQualityReviewEvidence } from '../quality-review-evidence';
+import {
+  createQualityReviewEvidence,
+  createQualityReviewFeedbackAdapter,
+} from '../quality-review-feedback';
 
 describe('createQualityReviewEvidence', () => {
   it('wraps failing QualityReview output as perception evidence', () => {
@@ -317,6 +320,122 @@ describe('createQualityReviewEvidence', () => {
         toolName: 'QualityCheckConsistency',
         observationId: 'obs-1',
         createdAt: 30,
+      }),
+    );
+  });
+});
+
+describe('createQualityReviewFeedbackAdapter', () => {
+  it('turns failing QualityCheck output into a generic tool-review signal', () => {
+    const adapter = createQualityReviewFeedbackAdapter();
+
+    const signal = adapter.createSignal({
+      result: {
+        callId: 'call-qc',
+        name: 'QualityCheck',
+        success: true,
+        data: {
+          totalScenes: 2,
+          passed: 1,
+          failed: 1,
+          evaluations: [
+            { index: 1, passed: true, finalScore: 0.9 },
+            {
+              index: 2,
+              passed: false,
+              finalScore: 0.4,
+              remediations: [{ action: 'Regenerate the shot' }],
+            },
+          ],
+        },
+      },
+      toolArguments: {
+        scenes: [{ index: 2, timeRange: { start: 4, end: 9 } }],
+      },
+      toolCallId: 'call-qc',
+      toolName: 'QualityCheck',
+      observedAt: 10,
+      runId: 'run-quality',
+    });
+
+    expect(signal).toEqual(
+      expect.objectContaining({
+        kind: 'tool-review',
+        observedAt: 10,
+        toolCallId: 'call-qc',
+        toolName: 'QualityCheck',
+        status: 'failed',
+        summary: 'QualityReview failed 1/2 scene(s): scene(s) 2; 1 remediation hint(s) available.',
+        repairGuidance:
+          'Repair the failing quality-check result. Focus on scene(s) 2 and apply 1 suggested remediation step(s) as needed.',
+        repeatKey: 'quality-review:run-quality:QualityCheck',
+        runId: 'run-quality',
+        metadata: {
+          mode: 'analysis',
+          totalScenes: 2,
+          passed: 1,
+          failed: 1,
+          failingSceneIndexes: [2],
+          remediationCount: 1,
+        },
+        evidence: expect.objectContaining({
+          id: 'quality-review:run-quality:call-qc',
+          toolName: 'QualityCheck',
+        }),
+      }),
+    );
+  });
+
+  it('normalizes partial QualityCheckConsistency reports before creating feedback', () => {
+    const adapter = createQualityReviewFeedbackAdapter();
+
+    const signal = adapter.createSignal({
+      result: {
+        callId: 'call-consistency',
+        name: 'QualityCheckConsistency',
+        success: true,
+        data: {
+          overallConsistency: 58,
+          styleDrift: [
+            { fromScene: 1, toScene: 2, driftScore: 60, description: 'strong style drift' },
+          ],
+        },
+      },
+      toolArguments: {
+        scenes: [
+          { sceneIndex: 1, timeRange: { start: 0, end: 4 } },
+          { sceneIndex: 2, timeRange: { start: 4, end: 8 } },
+        ],
+      },
+      toolCallId: 'call-consistency',
+      toolName: 'QualityCheckConsistency',
+      observedAt: 20,
+    });
+
+    expect(signal).toEqual(
+      expect.objectContaining({
+        kind: 'tool-review',
+        toolName: 'QualityCheckConsistency',
+        status: 'failed',
+        metadata: expect.objectContaining({
+          mode: 'consistency',
+          failed: 2,
+          failingSceneIndexes: [1, 2],
+        }),
+        evidence: expect.objectContaining({
+          data: expect.objectContaining({
+            adapterDiagnostics: [
+              'missing-characterConsistency',
+              'missing-aestheticScore',
+              'missing-recommendations',
+            ],
+            continuityEdgeCandidates: [
+              expect.objectContaining({
+                issue: 'color-pop',
+              }),
+            ],
+          }),
+        }),
       }),
     );
   });

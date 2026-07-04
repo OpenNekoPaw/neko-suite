@@ -6,7 +6,7 @@ import {
   type SkillService,
 } from '@neko/agent';
 import { createNodeArtifactStore, type AgentRuntimeConfig } from '@neko/agent/runtime';
-import { registerBuiltinToolGroups } from '@neko/skills';
+import { createQualityReviewFeedbackAdapter, registerBuiltinToolGroups } from '@neko/skills';
 import type { IProjectMemoryManager, IProviderCardRegistry, PromptFragment } from '@neko/shared';
 
 export interface CliAgentRuntimeConfig {
@@ -58,12 +58,9 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
       ...(config.promptFragments !== undefined ? { promptFragments: config.promptFragments } : {}),
     },
     artifactStore: createNodeArtifactStore({ workspaceRoot: config.workspaceRoot }),
-    ...(config.projectMemoryManager
-      ? {
-          feedbackLoop: {
-            projectMemoryManager: config.projectMemoryManager,
-          },
-        }
-      : {}),
+    feedbackLoop: {
+      ...(config.projectMemoryManager ? { projectMemoryManager: config.projectMemoryManager } : {}),
+      toolResultFeedbackAdapters: [createQualityReviewFeedbackAdapter()],
+    },
   };
 }
