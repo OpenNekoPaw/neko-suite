@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
+import { resolveAgentTokenBudget } from '@neko/shared';
 import { useAgentStore } from '../../stores/agent-store';
 import { useConfigStore } from '../../stores/config-store';
 import { tokens } from '../../theme/tokens';
@@ -27,6 +28,13 @@ export function StatusBar(): React.JSX.Element {
     `${config.chatModel?.providerId ?? config.provider}:${config.chatModel?.modelId ?? config.model}`,
   );
   const mediaModels = formatMediaModels(config.defaultMediaModels);
+  const tokenBudget = resolveAgentTokenBudget({
+    modelId: config.chatModel?.modelId ?? config.model,
+    contextWindow: config.chatModel?.contextWindow,
+    modelMaxOutputTokens: config.chatModel?.maxOutputTokens,
+    defaultMaxOutputTokens: config.maxTokens,
+    requestedMaxOutputTokens: config.maxTokens,
+  });
 
   return (
     <Box paddingLeft={1} paddingRight={1}>
@@ -72,7 +80,14 @@ export function StatusBar(): React.JSX.Element {
       <Box flexGrow={1} />
 
       {/* Token usage bar */}
-      {usage.total > 0 ? <TokenUsage usage={usage} /> : null}
+      {usage.total > 0 ? (
+        <TokenUsage
+          usage={usage}
+          maxContextTokens={tokenBudget.effectiveInputBudget}
+          maxOutputTokens={tokenBudget.effectiveMaxOutputTokens}
+          modelMaxOutputTokens={tokenBudget.modelMaxOutputTokens}
+        />
+      ) : null}
     </Box>
   );
 }

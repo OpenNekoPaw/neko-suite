@@ -93,7 +93,7 @@ export const settings = {
   'settings.prompts.showToolCalls': '显示工具调用',
   'settings.prompts.modelParameters': '模型参数',
   'settings.prompts.temperature': '温度: {value}',
-  'settings.prompts.maxTokens': '最大 Token: {value}',
+  'settings.prompts.maxTokens': '最大输出 Token: {value}',
   'settings.prompts.create': '创建',
   'settings.prompts.default.name': '默认助手',
   'settings.prompts.default.description': '用于日常任务的通用 AI 助手',
@@ -163,7 +163,7 @@ export const settings = {
 
   'settings.advanced.title': '高级设置',
   'settings.advanced.temperature': '温度',
-  'settings.advanced.maxTokens': '最大 Token 数',
+  'settings.advanced.maxTokens': '最大输出 Token 数',
   'settings.advanced.autoExecuteTools': '自动执行工具',
   'settings.advanced.streamResponses': '流式响应',
   'settings.advanced.showToolCalls': '显示工具调用',

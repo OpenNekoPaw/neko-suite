@@ -179,12 +179,31 @@ Agent presets 是创作意图，不是 provider 原始参数：
 
 自定义 provider 如果缺少能力元数据，默认只开放保守通用能力，不假设支持 reasoning、verbosity、fast service tier 或 provider-specific thinking。要开启高级 LLM 控件，在 provider 或 model 的 `options.llmCapabilities` 中声明能力；这些能力只决定 UI 展示和参数投影，不改变 provider 的连接模式。
 
+Token 配置有三个独立含义，不要混用：
+
+- `[defaults].max_tokens`：默认最大输出 token 数，用于回复生成上限。
+- `[[models]].context_window`：模型输入上下文窗口 metadata。
+- `[[models]].max_output_tokens`：模型支持的最大输出 token 数 metadata。
+
+如果把 `max_tokens = 256000` 当上下文窗口，而模型 `max_output_tokens = 128000`，Agent 会在 provider 调用前给出可见诊断，不会把 256000 发送为 `max_tokens`。
+
+```toml
+[defaults]
+max_tokens = 8192
+
+# In each chat-capable [[models]] entry:
+context_window = 256000
+max_output_tokens = 128000
+```
+
 ```toml
 [[models]]
 id = "custom-gpt-reasoning"
 name = "gpt-reasoning"
 provider_id = "neko-gateway"
 type = "llm"
+context_window = 256000
+max_output_tokens = 128000
 capabilities = ["chat", "streaming", "reasoning", "verbosity"]
 enabled = true
 

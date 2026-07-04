@@ -151,7 +151,8 @@ export function loadConfig(
     // If not, mark it as modelNotFound but do NOT fallback —
     // callers must block and let the user choose before proceeding.
     let modelNotFound: string | undefined;
-    if (!cm.getModel(model)) {
+    const selectedModelConfig = cm.getModel(model);
+    if (!selectedModelConfig) {
       modelNotFound = model;
     }
 
@@ -217,6 +218,12 @@ export function loadConfig(
       chatModel: {
         providerId,
         modelId: model,
+        ...(isPositiveInteger(selectedModelConfig?.contextWindow)
+          ? { contextWindow: selectedModelConfig.contextWindow }
+          : {}),
+        ...(isPositiveInteger(selectedModelConfig?.maxOutputTokens)
+          ? { maxOutputTokens: selectedModelConfig.maxOutputTokens }
+          : {}),
       },
       mediaModels,
       defaultMediaModels,
@@ -252,6 +259,10 @@ function modelRefToOptionId(
   ref: { providerId: string; modelId: string } | undefined,
 ): string | undefined {
   return ref ? `${ref.providerId}:${ref.modelId}` : undefined;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 // =============================================================================

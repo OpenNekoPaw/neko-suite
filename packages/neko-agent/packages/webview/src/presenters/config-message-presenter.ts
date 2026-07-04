@@ -1,8 +1,9 @@
-import type {
-  AgentContextPayload,
-  ChatModelOption,
-  ModelSourceGroup,
-  ModelType,
+import {
+  resolveAgentTokenBudget,
+  type AgentContextPayload,
+  type ChatModelOption,
+  type ModelSourceGroup,
+  type ModelType,
 } from '@neko/shared';
 import type {
   AgentMediaModelCategory,
@@ -115,10 +116,12 @@ export function projectChatWorkspaceModelState(
   const allModels = normalizeChatModelOptions(input.chatModelOptions);
   const availableModels = allModels.filter(isChatSelectableModel);
   const availableMediaModels = allModels.filter(isAgentMediaChatModelOption);
-  const selectedContextWindow = resolveSelectedContextWindow({
-    selectedModel: input.selectedModel,
-    availableModels,
-    defaultContextWindow: input.defaultContextWindow,
+  const selectedModelOption = availableModels.find((model) => model.id === input.selectedModel);
+  const selectedTokenBudget = resolveAgentTokenBudget({
+    modelId: selectedModelOption?.modelId ?? input.selectedModel,
+    contextWindow: selectedModelOption?.contextWindow,
+    modelMaxOutputTokens: selectedModelOption?.maxOutputTokens,
+    defaultMaxOutputTokens: input.defaultMaxOutputTokens,
   });
   let activeMediaModel: ChatModelOption | undefined;
   let agentMediaModels: AgentMediaModelSelections | undefined;
@@ -139,7 +142,18 @@ export function projectChatWorkspaceModelState(
     allModels,
     availableModels,
     availableMediaModels,
-    selectedContextWindow,
+    ...(selectedTokenBudget.contextWindow !== undefined
+      ? { selectedContextWindow: selectedTokenBudget.contextWindow }
+      : {}),
+    ...(selectedTokenBudget.effectiveInputBudget !== undefined
+      ? { selectedEffectiveInputBudget: selectedTokenBudget.effectiveInputBudget }
+      : {}),
+    ...(selectedTokenBudget.effectiveMaxOutputTokens !== undefined
+      ? { selectedOutputTokenCap: selectedTokenBudget.effectiveMaxOutputTokens }
+      : {}),
+    ...(selectedTokenBudget.modelMaxOutputTokens !== undefined
+      ? { selectedMaxOutputTokens: selectedTokenBudget.modelMaxOutputTokens }
+      : {}),
     ...(activeMediaModel ? { activeMediaModel } : {}),
     ...(agentMediaModels ? { agentMediaModels } : {}),
   };
@@ -321,6 +335,8 @@ function readConfigDiagnostic(value: unknown): SettingsState['configDiagnostic']
     code !== 'unsupportedModelProtocol' &&
     code !== 'duplicateProviderId' &&
     code !== 'duplicateModelId' &&
+    code !== 'invalidDefaultMaxTokens' &&
+    code !== 'invalidModelTokenMetadata' &&
     code !== 'unsupportedModelType' &&
     code !== 'unsupportedDefaultMediaModelType' &&
     code !== 'unsupportedDefaultModelType' &&
@@ -376,22 +392,6 @@ function normalizeChatModelOptions(
   chatModelOptions: readonly ChatModelOption[],
 ): ChatModelOption[] {
   return [...chatModelOptions];
-}
-
-function resolveSelectedContextWindow(input: {
-  selectedModel: string;
-  availableModels: readonly ChatModelOption[];
-  defaultContextWindow: number;
-}): number {
-  const defaultContextWindow =
-    Number.isFinite(input.defaultContextWindow) && input.defaultContextWindow > 0
-      ? input.defaultContextWindow
-      : 8192;
-
-  const selected = input.availableModels.find((model) => model.id === input.selectedModel);
-  return selected?.contextWindow && selected.contextWindow > 0
-    ? selected.contextWindow
-    : defaultContextWindow;
 }
 
 function isAgentMediaCategory(category: unknown): category is AgentMediaModelCategory {
@@ -550,6 +550,15 @@ function isChatModelOption(value: unknown): value is ChatModelOption {
   if (
     contextWindow !== undefined &&
     (typeof contextWindow !== 'number' || !Number.isFinite(contextWindow) || contextWindow <= 0)
+  ) {
+    return false;
+  }
+  const maxOutputTokens = record.maxOutputTokens;
+  if (
+    maxOutputTokens !== undefined &&
+    (typeof maxOutputTokens !== 'number' ||
+      !Number.isFinite(maxOutputTokens) ||
+      maxOutputTokens <= 0)
   ) {
     return false;
   }

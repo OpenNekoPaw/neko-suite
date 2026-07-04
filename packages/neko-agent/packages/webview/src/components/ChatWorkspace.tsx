@@ -272,11 +272,13 @@ export function ChatWorkspace({
     availableMediaModels,
     activeMediaModel,
     agentMediaModels,
-    selectedContextWindow,
+    selectedEffectiveInputBudget,
+    selectedOutputTokenCap,
+    selectedMaxOutputTokens,
   } = projectChatWorkspaceModelState({
     chatModelOptions: settings.chatModelOptions,
     selectedModel,
-    defaultContextWindow: settings.maxTokens,
+    defaultMaxOutputTokens: settings.maxTokens,
     sessionMode,
     mediaModelSelection,
   });
@@ -619,7 +621,9 @@ export function ChatWorkspace({
       promptMode={settings.promptMode}
       onPromptModeChange={handlePromptModeChange}
       contextTokenCount={contextTokenCount}
-      maxContextTokens={selectedContextWindow}
+      maxContextTokens={selectedEffectiveInputBudget}
+      outputTokenCap={selectedOutputTokenCap}
+      modelMaxOutputTokens={selectedMaxOutputTokens}
       isCompressing={isCompressing}
       onCompressContext={handleCompressContext}
       mediaModelCallCount={mediaModelCallCount}

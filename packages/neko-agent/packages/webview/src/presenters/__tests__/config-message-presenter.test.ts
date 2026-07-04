@@ -300,6 +300,7 @@ describe('config message presenter', () => {
           modelId: 'gpt-4.1',
           category: 'llm',
           contextWindow: 200000,
+          maxOutputTokens: 128000,
         },
         {
           id: 'flux:pro',
@@ -325,7 +326,7 @@ describe('config message presenter', () => {
         },
       ],
       selectedModel: 'openai:gpt-4.1',
-      defaultContextWindow: 8192,
+      defaultMaxOutputTokens: 8192,
       sessionMode: 'agent',
       mediaModelSelection: {
         image: 'flux:pro',
@@ -347,6 +348,9 @@ describe('config message presenter', () => {
       audio: { providerId: 'suno', modelId: 'chirp', category: 'audio' },
     });
     expect(projection.selectedContextWindow).toBe(200000);
+    expect(projection.selectedEffectiveInputBudget).toBe(200000);
+    expect(projection.selectedOutputTokenCap).toBe(8192);
+    expect(projection.selectedMaxOutputTokens).toBe(128000);
   });
 
   it('projects direct media mode active model and default model list', () => {
@@ -354,7 +358,7 @@ describe('config message presenter', () => {
       projectChatWorkspaceModelState({
         chatModelOptions: [],
         selectedModel: '',
-        defaultContextWindow: 4096,
+        defaultMaxOutputTokens: 4096,
         sessionMode: 'agent',
         mediaModelSelection: { image: 'none', video: 'none', audio: 'none' },
       }),
@@ -362,7 +366,7 @@ describe('config message presenter', () => {
       allModels: [],
       availableModels: [],
       availableMediaModels: [],
-      selectedContextWindow: 4096,
+      selectedOutputTokenCap: 4096,
     });
 
     const directProjection = projectChatWorkspaceModelState({
@@ -376,7 +380,7 @@ describe('config message presenter', () => {
         },
       ],
       selectedModel: 'missing:model',
-      defaultContextWindow: 16384,
+      defaultMaxOutputTokens: 4096,
       sessionMode: 'video',
       mediaModelSelection: {
         image: 'none',
@@ -387,7 +391,36 @@ describe('config message presenter', () => {
 
     expect(directProjection.activeMediaModel?.id).toBe('runway:gen-4');
     expect(directProjection.agentMediaModels).toBeUndefined();
-    expect(directProjection.selectedContextWindow).toBe(16384);
+    expect(directProjection.selectedContextWindow).toBeUndefined();
+    expect(directProjection.selectedEffectiveInputBudget).toBeUndefined();
+    expect(directProjection.selectedMaxOutputTokens).toBeUndefined();
+  });
+
+  it('does not use the default output-token cap as a context-window fallback', () => {
+    const projection = projectChatWorkspaceModelState({
+      chatModelOptions: [
+        {
+          id: 'openai:custom',
+          label: 'OpenAI / Custom',
+          providerId: 'openai',
+          modelId: 'custom',
+          category: 'llm',
+          maxOutputTokens: 128000,
+        },
+      ],
+      selectedModel: 'openai:custom',
+      defaultMaxOutputTokens: 256000,
+      sessionMode: 'agent',
+      mediaModelSelection: {
+        image: 'none',
+        video: 'none',
+        audio: 'none',
+      },
+    });
+
+    expect(projection.selectedContextWindow).toBeUndefined();
+    expect(projection.selectedEffectiveInputBudget).toBeUndefined();
+    expect(projection.selectedOutputTokenCap).toBe(128000);
   });
 
   it('projects media model selection changes from session mode transitions', () => {

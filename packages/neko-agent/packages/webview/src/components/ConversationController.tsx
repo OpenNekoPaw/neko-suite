@@ -429,7 +429,7 @@ export function ConversationController({
       projectChatWorkspaceModelState({
         chatModelOptions: activeSettings.chatModelOptions,
         selectedModel,
-        defaultContextWindow: activeSettings.maxTokens,
+        defaultMaxOutputTokens: activeSettings.maxTokens,
         sessionMode: entrySessionMode,
         mediaModelSelection,
       }),
@@ -1213,7 +1213,9 @@ export function ConversationController({
               onExecutionModeChange={(mode) => updateActiveSettings({ executionMode: mode })}
               promptMode={activeSettings.promptMode}
               onPromptModeChange={(mode) => updateActiveSettings({ promptMode: mode })}
-              maxContextTokens={entryModelState.selectedContextWindow}
+              maxContextTokens={entryModelState.selectedEffectiveInputBudget}
+              outputTokenCap={entryModelState.selectedOutputTokenCap}
+              modelMaxOutputTokens={entryModelState.selectedMaxOutputTokens}
               mediaModelCallCount={0}
               skills={skills}
               pluginCommands={pluginCommands}

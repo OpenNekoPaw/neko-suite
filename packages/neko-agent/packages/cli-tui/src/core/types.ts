@@ -21,6 +21,8 @@ export interface CLIConfig {
   chatModel?: {
     providerId: string;
     modelId: string;
+    contextWindow?: number;
+    maxOutputTokens?: number;
   };
   /** Media model IDs (for image/video/audio generation, empty if none) */
   mediaModels: string[];
@@ -34,7 +36,7 @@ export interface CLIConfig {
   apiKey?: string;
   /** API base URL (optional) */
   baseUrl?: string;
-  /** Max tokens for response */
+  /** Max output tokens for response generation */
   maxTokens: number;
   /** Temperature for generation */
   temperature: number;

@@ -94,7 +94,7 @@ export const settings = {
   'settings.prompts.showToolCalls': 'Show tool calls',
   'settings.prompts.modelParameters': 'Model Parameters',
   'settings.prompts.temperature': 'Temperature: {value}',
-  'settings.prompts.maxTokens': 'Max Tokens: {value}',
+  'settings.prompts.maxTokens': 'Max Output Tokens: {value}',
   'settings.prompts.create': 'Create',
   'settings.prompts.default.name': 'Default Assistant',
   'settings.prompts.default.description': 'General-purpose AI assistant for everyday tasks',
@@ -168,7 +168,7 @@ export const settings = {
 
   'settings.advanced.title': 'Advanced',
   'settings.advanced.temperature': 'Temperature',
-  'settings.advanced.maxTokens': 'Max Tokens',
+  'settings.advanced.maxTokens': 'Max Output Tokens',
   'settings.advanced.autoExecuteTools': 'Auto Execute Tools',
   'settings.advanced.streamResponses': 'Stream Responses',
   'settings.advanced.showToolCalls': 'Show Tool Calls',

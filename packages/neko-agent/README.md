@@ -211,7 +211,7 @@ const result = await vscode.commands.executeCommand<string | null>(
 // neko-agent 未激活时返回 null，调用方自行降级处理
 ```
 
-**合约**：`messages` 参数为 `ChatMessage[]`，`options.maxTokens` 可选（默认 1000）。命令端会使用当前 Agent 已选中的完整 `providerId + modelId`，调用方不能通过该命令覆盖到其他 provider/model。返回模型第一条文本回复；neko-agent 未配置完整 LLM、非文本内容或任何错误均返回 `null`，由调用方自行降级处理。
+**合约**：`messages` 参数为 `ChatMessage[]`，`options.maxTokens` 可选（默认 1000），语义是回复生成的最大输出 token 数，不是模型上下文窗口。模型输入上下文窗口应来自配置中的 `[[models]].context_window`，模型输出硬上限应来自 `[[models]].max_output_tokens`。命令端会使用当前 Agent 已选中的完整 `providerId + modelId`，调用方不能通过该命令覆盖到其他 provider/model。返回模型第一条文本回复；neko-agent 未配置完整 LLM、非文本内容或任何错误均返回 `null`，由调用方自行降级处理。
 
 ## 文档格式支持
 

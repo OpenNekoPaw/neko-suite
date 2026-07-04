@@ -474,6 +474,7 @@ export const chat = {
   'chat.attachFile': 'Attach file',
   'chat.referenceFile': 'Reference file with @',
   'chat.usage.tokens': 'Context estimate',
+  'chat.usage.unknownLimit': 'unknown',
   'chat.usage.used': 'occupied',
   'chat.usage.compressing': 'Compressing...',
   'chat.usage.clickToCompress': 'Click to compress context',

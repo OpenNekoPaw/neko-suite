@@ -17,6 +17,8 @@ interface MockModel {
   providerId: string;
   type?: string;
   capabilities?: readonly string[];
+  contextWindow?: number;
+  maxOutputTokens?: number;
   enabled?: boolean;
 }
 
@@ -182,5 +184,30 @@ describe('loadConfig', () => {
 
     expect(config.provider).toBe('gateway');
     expect(config.model).toBe('gpt-4.1');
+  });
+
+  it('projects selected chat model token metadata into CLI config', () => {
+    state.userConfig = {
+      defaultModels: {
+        llm: {
+          providerId: 'gateway',
+          modelId: 'gateway-chat',
+        },
+      },
+    };
+    state.models = state.models.map((model) =>
+      model.id === 'gateway-chat'
+        ? { ...model, contextWindow: 256000, maxOutputTokens: 128000 }
+        : model,
+    );
+
+    const config = loadConfig('/tmp/project');
+
+    expect(config.chatModel).toEqual({
+      providerId: 'gateway',
+      modelId: 'gateway-chat',
+      contextWindow: 256000,
+      maxOutputTokens: 128000,
+    });
   });
 });

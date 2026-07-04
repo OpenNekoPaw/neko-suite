@@ -353,7 +353,7 @@ function handleConfig(args: string[], context: SlashCommandContext): SlashComman
       `  model:        ${config.model}`,
       `  apiKey:       ${apiKeyStatus}`,
       `  baseUrl:      ${config.baseUrl ?? '(default)'}`,
-      `  maxTokens:    ${config.maxTokens}`,
+      `  maxOutputTokens: ${config.maxTokens}`,
       `  temperature:  ${config.temperature}`,
       `  verbose:      ${config.verbose}`,
       `  outputFormat: ${config.outputFormat}`,

@@ -9,7 +9,6 @@ import { useTranslation } from '@/i18n/I18nContext';
 import { getLogger } from '../../../utils/logger';
 
 const logger = getLogger('UsageIndicator');
-const DEFAULT_MAX_CONTEXT_TOKENS = 8192;
 
 // Pie chart geometry
 const RADIUS = 5;
@@ -18,6 +17,8 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 interface UsageIndicatorProps {
   tokenCount: number;
   maxTokens?: number;
+  maxOutputTokens?: number;
+  modelMaxOutputTokens?: number;
   isCompressing?: boolean;
   onCompress?: () => Promise<void>;
 }
@@ -36,16 +37,21 @@ function getUsageColor(percentage: number): string {
 
 export function UsageIndicator({
   tokenCount,
-  maxTokens = DEFAULT_MAX_CONTEXT_TOKENS,
+  maxTokens,
+  maxOutputTokens,
+  modelMaxOutputTokens,
   isCompressing = false,
   onCompress,
 }: UsageIndicatorProps) {
   const { t } = useTranslation();
   const [showTooltip, setShowTooltip] = useState(false);
 
-  const effectiveMaxTokens =
-    Number.isFinite(maxTokens) && maxTokens > 0 ? maxTokens : DEFAULT_MAX_CONTEXT_TOKENS;
-  const percentage = Math.min((tokenCount / effectiveMaxTokens) * 100, 100);
+  const outputWindow = getDisplayOutputWindow(maxOutputTokens, modelMaxOutputTokens);
+  const displayTokenWindow = isPositiveInteger(maxTokens)
+    ? maxTokens + (outputWindow ?? 0)
+    : undefined;
+  const hasKnownLimit = isPositiveInteger(displayTokenWindow);
+  const percentage = hasKnownLimit ? Math.min((tokenCount / displayTokenWindow) * 100, 100) : 0;
   const color = getUsageColor(percentage);
   // stroke-dashoffset controls how much of the arc is "filled"
   const dashOffset = CIRCUMFERENCE * (1 - percentage / 100);
@@ -127,11 +133,15 @@ export function UsageIndicator({
         <div className="agent-composer-tooltip">
           <div>
             {t('chat.usage.tokens')}: {tokenCount.toLocaleString()} /{' '}
-            {effectiveMaxTokens.toLocaleString()}
+            {hasKnownLimit ? displayTokenWindow.toLocaleString() : t('chat.usage.unknownLimit')}
           </div>
-          <div className="agent-composer-tooltip-muted">
-            {percentage.toFixed(1)}% {t('chat.usage.used')} — {formatTokenCount(tokenCount)}
-          </div>
+          {hasKnownLimit ? (
+            <div className="agent-composer-tooltip-muted">
+              {percentage.toFixed(1)}% {t('chat.usage.used')} — {formatTokenCount(tokenCount)}
+            </div>
+          ) : (
+            <div className="agent-composer-tooltip-muted">{formatTokenCount(tokenCount)}</div>
+          )}
           {onCompress && !isCompressing && (
             <div className="agent-composer-tooltip-link">{t('chat.usage.clickToCompress')}</div>
           )}
@@ -139,4 +149,17 @@ export function UsageIndicator({
       )}
     </div>
   );
+}
+
+function isPositiveInteger(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function getDisplayOutputWindow(
+  maxOutputTokens: number | undefined,
+  modelMaxOutputTokens: number | undefined,
+): number | undefined {
+  if (isPositiveInteger(modelMaxOutputTokens)) return modelMaxOutputTokens;
+  if (isPositiveInteger(maxOutputTokens)) return maxOutputTokens;
+  return undefined;
 }

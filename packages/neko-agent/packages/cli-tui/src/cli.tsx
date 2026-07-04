@@ -112,7 +112,7 @@ configCmd
         `  API Key:     ${config.apiKey ? '***' + config.apiKey.slice(-4) : chalk.red('Not set')}`,
       );
       console.log(`  Base URL:    ${config.baseUrl ?? 'Default'}`);
-      console.log(`  Max Tokens:  ${config.maxTokens}`);
+      console.log(`  Max Output Tokens: ${config.maxTokens}`);
       console.log(`  Temperature: ${config.temperature}`);
       console.log(`  Work Dir:    ${config.workDir}`);
       console.log(`  Skills Dir:  ${config.skillsDir ?? 'Not set'}`);

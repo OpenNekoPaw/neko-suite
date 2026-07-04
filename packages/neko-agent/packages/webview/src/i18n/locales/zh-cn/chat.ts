@@ -458,6 +458,7 @@ export const chat = {
   'chat.attachFile': '添加附件',
   'chat.referenceFile': '使用 @ 引用文件',
   'chat.usage.tokens': '上下文估算',
+  'chat.usage.unknownLimit': '未知',
   'chat.usage.used': '已占用',
   'chat.usage.compressing': '压缩中...',
   'chat.usage.clickToCompress': '点击压缩上下文',

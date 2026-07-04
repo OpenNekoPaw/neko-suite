@@ -1,8 +1,7 @@
 /**
  * TokenUsage Component
  *
- * Visual progress bar showing context window usage.
- * Displays input/output token counts with a filled bar.
+ * Visual progress bar showing input context usage against the combined input+output window.
  */
 
 import React from 'react';
@@ -12,20 +11,31 @@ import { tokens } from '../../theme/tokens';
 
 interface TokenUsageProps {
   readonly usage: TokenUsageType;
-  /** Context window limit (default: 200K for Claude) */
-  readonly maxTokens?: number;
+  /** Effective input-context budget, when known. */
+  readonly maxContextTokens?: number;
+  /** Resolved output generation cap, when known. */
+  readonly maxOutputTokens?: number;
+  /** Model hard output cap, when known. */
+  readonly modelMaxOutputTokens?: number;
   /** Bar width in characters (default: 15) */
   readonly width?: number;
 }
 
 export function TokenUsage({
   usage,
-  maxTokens = 200_000,
+  maxContextTokens,
+  maxOutputTokens,
+  modelMaxOutputTokens,
   width = 15,
 }: TokenUsageProps): React.JSX.Element {
   if (usage.total === 0) return <Text />;
 
-  const ratio = Math.min(usage.total / maxTokens, 1);
+  const outputWindow = getDisplayOutputWindow(maxOutputTokens, modelMaxOutputTokens);
+  const displayTokenWindow = isPositiveInteger(maxContextTokens)
+    ? maxContextTokens + (outputWindow ?? 0)
+    : undefined;
+  const hasKnownContextBudget = isPositiveInteger(displayTokenWindow);
+  const ratio = hasKnownContextBudget ? Math.min(usage.input / displayTokenWindow, 1) : 0;
   const filled = Math.round(ratio * width);
   const empty = width - filled;
 
@@ -36,14 +46,30 @@ export function TokenUsage({
 
   return (
     <Text>
-      <Text color={barColor}>{bar}</Text>
-      <Text dimColor> {formatCompact(usage.total)}</Text>
+      {hasKnownContextBudget ? <Text color={barColor}>{bar}</Text> : null}
+      <Text dimColor>
+        {hasKnownContextBudget ? ' ' : ''}ctx:{formatCompact(usage.input)}/
+        {hasKnownContextBudget ? formatCompact(displayTokenWindow) : '?'}
+      </Text>
     </Text>
   );
+}
+
+function isPositiveInteger(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
 }
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
+}
+
+function getDisplayOutputWindow(
+  maxOutputTokens: number | undefined,
+  modelMaxOutputTokens: number | undefined,
+): number | undefined {
+  if (isPositiveInteger(modelMaxOutputTokens)) return modelMaxOutputTokens;
+  if (isPositiveInteger(maxOutputTokens)) return maxOutputTokens;
+  return undefined;
 }

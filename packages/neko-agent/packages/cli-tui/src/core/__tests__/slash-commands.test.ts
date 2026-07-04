@@ -111,6 +111,16 @@ describe('handleSlashCommand', () => {
     expect(result.error).toContain('Unknown config subcommand: migrate');
   });
 
+  it('labels maxTokens as max output tokens in config output', async () => {
+    const result = await handleSlashCommand('/config', {
+      config: createConfig(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(result.output).toContain('maxOutputTokens: 4096');
+    expect(result.output).not.toContain('maxTokens:');
+  });
+
   it('rejects music as a top-level media category', async () => {
     const result = await handleSlashCommand('/media music', {
       config: createConfig(),
