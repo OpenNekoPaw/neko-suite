@@ -282,10 +282,10 @@
       "semanticClass": "delete-now",
       "status": "removed",
       "owner": "neko-agent-runtime",
-      "replacement": "packages/neko-agent/packages/agent/src/artifact/entity-memory-contribution-inference.ts",
-      "removeAfter": "Removed from Webview by implement-agent-boundary-cleanup Phase 3; Webview renders runtime-provided projections and sends user intent.",
+      "replacement": "packages/neko-skills/src/character/entity-memory-contribution-inference.ts",
+      "removeAfter": "Removed from Webview by implement-agent-boundary-cleanup Phase 3, then moved from Agent runtime to skills ownership by agent-canvas-skill-boundaries follow-up; Webview renders runtime-provided projections and sends user intent.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/artifact/__tests__/entity-memory-contribution-inference.test.ts",
+        "pnpm --dir packages/neko-skills exec vitest run src/character/__tests__/entity-memory-contribution-inference.test.ts",
         "pnpm --dir packages/neko-agent exec vitest run packages/webview/src/presenters/__tests__/composite-content-presenter.test.ts",
         "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/__tests__/architecture-boundary-guards.test.ts"
       ]

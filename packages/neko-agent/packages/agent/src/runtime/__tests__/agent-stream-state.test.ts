@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { isEntityMemoryContribution } from '@neko/shared';
 import {
   applyAgentStreamEventToState,
   createAgentStreamMessageId,
@@ -154,7 +153,7 @@ describe('agent stream state reducer', () => {
     ]);
   });
 
-  it('projects character analysis table contribution payloads before Webview rendering', () => {
+  it('keeps composite blocks domain-neutral by default', () => {
     const state = createAgentStreamProjectionState();
 
     applyAgentStreamEventToState(
@@ -170,14 +169,34 @@ describe('agent stream state reducer', () => {
     finalizeAgentStreamProjectionState(state);
 
     const composite = state.contentBlocks.find((block) => block.type === 'composite')?.composite;
-    const contribution = composite?.extensions?.['neko.entityMemoryContributionPayload'];
-    expect(isEntityMemoryContribution(contribution)).toBe(true);
-    expect(contribution).toMatchObject({
-      contributionId: 'character-analysis-opening',
-      sourcePackage: 'neko-agent',
-      reviewPolicy: 'requires-user-review',
-      entityCandidates: [expect.objectContaining({ name: '瑞德' })],
+    expect(composite?.extensions?.['neko.entityMemoryContributionPayload']).toBeUndefined();
+  });
+
+  it('applies injected composite projectors during finalization', () => {
+    const state = createAgentStreamProjectionState();
+
+    applyAgentStreamEventToState(
+      state,
+      {
+        type: 'text',
+        content:
+          'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","title":"Opening","sections":[{"heading":"Shot 1","content":"Opening shot"}]}\n```',
+      },
+      { now: () => 10 },
+    );
+
+    finalizeAgentStreamProjectionState(state, {
+      projectCompositeBlock: (composite) => ({
+        ...composite,
+        extensions: {
+          ...(composite.extensions ?? {}),
+          'neko.testProjection': true,
+        },
+      }),
     });
+
+    const composite = state.contentBlocks.find((block) => block.type === 'composite')?.composite;
+    expect(composite?.extensions?.['neko.testProjection']).toBe(true);
   });
 
   it('applies delayed tool result backfill to collected calls and blocks', () => {

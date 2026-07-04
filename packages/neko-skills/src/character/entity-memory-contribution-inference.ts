@@ -9,7 +9,19 @@ import type {
   EntityMemoryContribution,
 } from '@neko/shared';
 import { isEntityMemoryContribution } from '@neko/shared';
-import type { CompositeBlockData, CompositeSection } from '@neko-agent/types';
+
+export interface CompositeSectionLike {
+  readonly heading?: string;
+  readonly content?: string;
+  readonly extensions?: Record<string, unknown>;
+}
+
+export interface CompositeBlockLike {
+  readonly template?: string;
+  readonly title?: string;
+  readonly sections: readonly CompositeSectionLike[];
+  readonly extensions?: Record<string, unknown>;
+}
 
 interface CharacterAnalysisRow {
   readonly sectionIndex: number;
@@ -46,7 +58,7 @@ const GENERIC_ROLE_NAME_PATTERN =
 const DEFAULT_CONFIDENCE = 0.62;
 
 export function inferEntityMemoryContributionFromCharacterAnalysis(
-  composite: CompositeBlockData,
+  composite: CompositeBlockLike,
 ): EntityMemoryContribution | undefined {
   if (findProjectedEntityMemoryContribution(composite)) return undefined;
 
@@ -189,9 +201,12 @@ export function inferEntityMemoryContributionFromCharacterAnalysis(
   return isEntityMemoryContribution(contribution) ? contribution : undefined;
 }
 
+export function maybeAttachInferredEntityMemoryContribution<TComposite extends CompositeBlockLike>(
+  composite: TComposite,
+): TComposite;
 export function maybeAttachInferredEntityMemoryContribution(
-  composite: CompositeBlockData,
-): CompositeBlockData {
+  composite: CompositeBlockLike,
+): CompositeBlockLike {
   if (findProjectedEntityMemoryContribution(composite)) return composite;
 
   const contribution = inferEntityMemoryContributionFromCharacterAnalysis(composite);
@@ -207,7 +222,7 @@ export function maybeAttachInferredEntityMemoryContribution(
 }
 
 export function findProjectedEntityMemoryContribution(
-  composite: CompositeBlockData,
+  composite: CompositeBlockLike,
 ): EntityMemoryContribution | undefined {
   const candidates: readonly unknown[] = [
     composite.extensions?.['neko.entityMemoryContribution'],
@@ -223,7 +238,7 @@ export function findProjectedEntityMemoryContribution(
 }
 
 function collectCharacterAnalysisRows(
-  sections: readonly CompositeSection[],
+  sections: readonly CompositeSectionLike[],
 ): readonly CharacterAnalysisRow[] {
   const rows: CharacterAnalysisRow[] = [];
   sections.forEach((section, sectionIndex) => {
@@ -361,7 +376,7 @@ function inferObservationDimension(
   return 'continuity';
 }
 
-function createInferenceSourceRef(composite: CompositeBlockData): CharacterMemorySourceRef {
+function createInferenceSourceRef(composite: CompositeBlockLike): CharacterMemorySourceRef {
   return {
     kind: 'manual',
     label: composite.title

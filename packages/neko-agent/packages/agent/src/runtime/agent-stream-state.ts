@@ -10,8 +10,13 @@ import {
 } from '@neko-agent/types';
 import type { AgentEvent } from '../session';
 import { createPlanContentBlockFromToolResultData } from '../plan';
-import { maybeAttachInferredEntityMemoryContribution } from '../artifact/entity-memory-contribution-inference';
 import { applyToolResultBackfillToResult } from './tool-result-backfill';
+
+type CompositeBlockData = NonNullable<ContentBlock['composite']>;
+
+export type AgentStreamCompositeProjector = (
+  composite: CompositeBlockData,
+) => CompositeBlockData;
 
 export interface CollectedToolCall {
   id: string;
@@ -42,6 +47,10 @@ export interface AgentStreamStateUpdate {
 
 export interface AgentStreamStateOptions {
   now?: () => number;
+}
+
+export interface AgentStreamFinalizeOptions {
+  readonly projectCompositeBlock?: AgentStreamCompositeProjector;
 }
 
 export interface AgentStreamMessageIdOptions {
@@ -334,11 +343,12 @@ export function applyAgentStreamEventToState(
 
 export function finalizeAgentStreamProjectionState(
   state: AgentStreamProjectionState,
+  options: AgentStreamFinalizeOptions = {},
 ): AgentStreamProjectionState {
   const finalizedBlocks: ContentBlock[] = [];
   for (const block of state.contentBlocks) {
     if (block.type === 'text' && block.isStreaming) {
-      finalizedBlocks.push(...finalizeTextContentBlock(block));
+      finalizedBlocks.push(...finalizeTextContentBlock(block, options));
       continue;
     }
     if (block.type === 'thinking' && !block.isThinkingComplete) {
@@ -584,7 +594,10 @@ function findContentBlock(
   return state.contentBlocks.find((block) => block.id === blockId);
 }
 
-function finalizeTextContentBlock(block: ContentBlock): ContentBlock[] {
+function finalizeTextContentBlock(
+  block: ContentBlock,
+  options: AgentStreamFinalizeOptions,
+): ContentBlock[] {
   const content = block.content ?? '';
   const extracted = extractCompositeContentBlocks(content);
   const text = extracted.composites.length > 0 ? extracted.text : content;
@@ -601,7 +614,7 @@ function finalizeTextContentBlock(block: ContentBlock): ContentBlock[] {
       id: `${block.id}-composite-${index + 1}`,
       type: 'composite' as const,
       timestamp: block.timestamp,
-      composite: maybeAttachInferredEntityMemoryContribution(composite),
+      composite: options.projectCompositeBlock?.(composite) ?? composite,
     })),
   );
   return nextBlocks;

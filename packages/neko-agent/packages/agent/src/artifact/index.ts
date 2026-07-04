@@ -28,20 +28,3 @@ export {
   createArtifactObservationHooks,
   type ArtifactObservationHooksConfig,
 } from './artifact-observation-hooks';
-
-export {
-  buildEntityMemoryContribution,
-  buildEntityMemoryContributionReviewArtifact,
-  buildCharacterMemoryReviewArtifact,
-  buildCharacterObservationTable,
-  buildMediaTextSegmentTable,
-  type CharacterMemoryArtifactInput,
-  type EntityMemoryContributionBuildInput,
-  type EntityMemoryContributionArtifactInput,
-} from './character-memory-artifact';
-
-export {
-  findProjectedEntityMemoryContribution,
-  inferEntityMemoryContributionFromCharacterAnalysis,
-  maybeAttachInferredEntityMemoryContribution,
-} from './entity-memory-contribution-inference';

@@ -24,8 +24,40 @@
  * their own AutohealHandler; this module is about low-friction defaults.
  */
 
-import type { AutohealHandler } from './autoheal-chain';
-import type { AutohealFailure } from './autoheal-types';
+export interface AutohealFailureLike {
+  readonly subject: string;
+  readonly errorCode: string;
+  readonly message?: string;
+  readonly attempt: number;
+}
+
+export interface AutohealContextLike {
+  readonly round: number;
+  readonly runId?: string;
+  readonly metadata?: Record<string, unknown>;
+}
+
+export type AutohealOutcomeLike =
+  | {
+      readonly resolution: 'healed';
+      readonly level: 1 | 2 | 3 | 4 | 5;
+      readonly note?: string;
+    }
+  | {
+      readonly resolution: 'pass';
+      readonly level: 1 | 2 | 3 | 4 | 5;
+      readonly note?: string;
+    }
+  | {
+      readonly resolution: 'aborted';
+      readonly level: 1 | 2 | 3 | 4 | 5;
+      readonly reason: string;
+    };
+
+export type AutohealHandlerLike = (
+  failure: AutohealFailureLike,
+  context: AutohealContextLike,
+) => Promise<AutohealOutcomeLike>;
 
 // =============================================================================
 // L2 — Degrade on cost / OOM / quality-fail
@@ -67,12 +99,12 @@ const DEFAULT_RESOLUTION_LADDER = ['1080p', '720p', '480p'] as const;
  */
 export function createResolutionDegradeHandler(
   config: ResolutionDegradeConfig = {},
-): AutohealHandler {
+): AutohealHandlerLike {
   const triggers = new Set(config.triggers ?? DEFAULT_DEGRADE_TRIGGERS);
   const ladder = config.ladder ?? DEFAULT_RESOLUTION_LADDER;
   const key = config.argKey ?? 'resolution';
 
-  return async (failure: AutohealFailure) => {
+  return async (failure: AutohealFailureLike) => {
     if (!triggers.has(failure.errorCode)) {
       return { resolution: 'pass', level: 2, note: `not-a-degrade-trigger:${failure.errorCode}` };
     }
@@ -121,14 +153,14 @@ const DEFAULT_SUBSTITUTE_TRIGGERS = ['tool_unavailable', 'deprecated', 'unsuppor
  *     map: { 'image.dalle': 'image.sdxl', 'video.sora': 'video.kling' },
  *   });
  */
-export function createSubstituteHandler(config: SubstituteConfig): AutohealHandler {
+export function createSubstituteHandler(config: SubstituteConfig): AutohealHandlerLike {
   const triggers = new Set(config.triggers ?? DEFAULT_SUBSTITUTE_TRIGGERS);
   const mapGet: (key: string) => string | undefined =
     config.map instanceof Map
       ? (k) => (config.map as ReadonlyMap<string, string>).get(k)
       : (k) => (config.map as Readonly<Record<string, string>>)[k];
 
-  return async (failure: AutohealFailure) => {
+  return async (failure: AutohealFailureLike) => {
     if (!triggers.has(failure.errorCode)) {
       return {
         resolution: 'pass',
@@ -172,8 +204,8 @@ function _bareToolName(subject: string): string {
  *   });
  */
 export function createUserEscalationHandler(
-  prompt: (failure: AutohealFailure) => Promise<boolean>,
-): AutohealHandler {
+  prompt: (failure: AutohealFailureLike) => Promise<boolean>,
+): AutohealHandlerLike {
   return async (failure) => {
     const declineAbort = await prompt(failure).catch(() => false);
     return {

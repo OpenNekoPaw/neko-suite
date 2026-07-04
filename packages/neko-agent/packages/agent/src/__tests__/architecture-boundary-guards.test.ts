@@ -57,7 +57,6 @@ describe('agent architecture boundary guards', () => {
       join(agentSrc, 'session/session-artifact-facade.ts'),
       join(agentSrc, 'session/feedback-runtime-bridge.ts'),
       join(agentSrc, 'session/prompt-runtime-facade.ts'),
-      join(agentSrc, 'artifact/entity-memory-contribution-inference.ts'),
       join(agentSrc, 'runtime/character-dialogue-runtime.ts'),
     ];
     const source = collaboratorFiles.map((file) => readFileSync(file, 'utf-8')).join('\n');
@@ -196,6 +195,68 @@ describe('agent architecture boundary guards', () => {
     ];
     const sourceViolations = productionSource.flatMap(({ relativePath, source }) =>
       qualityFeedbackTerms
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect([...existingFiles, ...sourceViolations]).toEqual([]);
+  });
+
+  it('keeps optional Autoheal strategy packs out of Agent core', () => {
+    const forbiddenFiles = [join(agentSrc, 'autoheal/example-handlers.ts')];
+    const existingFiles = forbiddenFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+    const productionSource = listFiles(agentSrc)
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+    const forbiddenTerms = [
+      /\bcreateResolutionDegradeHandler\b/,
+      /\bcreateSubstituteHandler\b/,
+      /\bcreateUserEscalationHandler\b/,
+      /image\.dalle/,
+      /image\.sdxl/,
+      /video\.sora/,
+      /video\.kling/,
+    ];
+    const sourceViolations = productionSource.flatMap(({ relativePath, source }) =>
+      forbiddenTerms
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect([...existingFiles, ...sourceViolations]).toEqual([]);
+  });
+
+  it('keeps character memory artifact projection out of Agent core', () => {
+    const forbiddenFiles = [
+      join(agentSrc, 'artifact/character-memory-artifact.ts'),
+      join(agentSrc, 'artifact/entity-memory-contribution-inference.ts'),
+    ];
+    const existingFiles = forbiddenFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+    const productionSource = listFiles(agentSrc)
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+    const forbiddenTerms = [
+      /\bbuildCharacterMemoryReviewArtifact\b/,
+      /\bbuildEntityMemoryContributionReviewArtifact\b/,
+      /\binferEntityMemoryContributionFromCharacterAnalysis\b/,
+      /\bmaybeAttachInferredEntityMemoryContribution\b/,
+      /character-memory-artifact-review/,
+      /entity-memory-contribution-review/,
+    ];
+    const sourceViolations = productionSource.flatMap(({ relativePath, source }) =>
+      forbiddenTerms
         .filter((pattern) => pattern.test(source))
         .map((pattern) => `${relativePath} matches ${pattern}`),
     );

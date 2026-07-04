@@ -35,6 +35,7 @@ import {
 import { type AgentPhase, type ContentBlock, type Message } from '@neko-agent/types';
 import type { ConversationBridge } from '../conversationBridge';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
+import { maybeAttachInferredEntityMemoryContribution } from '@neko/skills';
 import { MediaTaskDeliveryHost } from '../../services/mediaTaskDeliveryHost';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
@@ -156,6 +157,7 @@ export class AgentStreamProcessor {
       onPartialAssistantMessage: (message) => {
         this.upsertPartialAssistantMessage(conversationId, message);
       },
+      projectCompositeBlock: maybeAttachInferredEntityMemoryContribution,
       backgroundTasks: {
         ...(media
           ? {

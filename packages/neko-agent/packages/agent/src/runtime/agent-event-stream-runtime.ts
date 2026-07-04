@@ -19,6 +19,7 @@ import {
   finalizeAgentStreamProjectionState,
   projectAgentStreamEventToHostMessages,
   type AgentStreamProjectionMessage,
+  type AgentStreamCompositeProjector,
 } from './agent-stream-state';
 import {
   startAgentStreamBackgroundTaskObserver,
@@ -85,6 +86,7 @@ export interface ProcessAgentEventStreamRuntimeInput<
   readonly onPartialAssistantMessage?: (message: Message) => void;
   readonly partialAssistantSnapshotIntervalMs?: number;
   readonly backgroundTasks?: AgentEventStreamRuntimeBackgroundTasks<TSourceTask, TDeliveryPlan>;
+  readonly projectCompositeBlock?: AgentStreamCompositeProjector;
   readonly now?: () => number;
 }
 
@@ -182,7 +184,9 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
       }
     }
 
-    finalizeAgentStreamProjectionState(streamState);
+    finalizeAgentStreamProjectionState(streamState, {
+      projectCompositeBlock: input.projectCompositeBlock,
+    });
     if (backgroundTaskCompletions.length > 0) {
       await Promise.all(backgroundTaskCompletions);
     }

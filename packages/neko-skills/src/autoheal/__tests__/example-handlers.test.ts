@@ -12,9 +12,9 @@ import {
   createSubstituteHandler,
   createUserEscalationHandler,
 } from '../example-handlers';
-import type { AutohealFailure, AutohealContext } from '../autoheal-types';
+import type { AutohealContextLike, AutohealFailureLike } from '../example-handlers';
 
-function failure(overrides: Partial<AutohealFailure> = {}): AutohealFailure {
+function failure(overrides: Partial<AutohealFailureLike> = {}): AutohealFailureLike {
   return {
     subject: 'tool:video.generate',
     errorCode: 'OOM',
@@ -24,7 +24,7 @@ function failure(overrides: Partial<AutohealFailure> = {}): AutohealFailure {
   };
 }
 
-const ctx: AutohealContext = { round: 0 };
+const ctx: AutohealContextLike = { round: 0 };
 
 describe('createResolutionDegradeHandler', () => {
   it('emits degrade note on trigger + ladder rung', async () => {

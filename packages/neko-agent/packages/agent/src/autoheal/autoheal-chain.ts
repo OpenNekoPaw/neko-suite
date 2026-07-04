@@ -2,8 +2,8 @@
  * Autoheal Chain — 5-level recovery orchestrator (ADR §6.4 RetryEngine).
  *
  * See: docs/architecture/agent-unified-workflow.md §6.4
- *      packages/neko-agent/packages/agent/src/autoheal/example-handlers.ts
- *        (drop-in factories for the common L2/L3 strategies)
+ *      packages/neko-skills/src/autoheal/example-handlers.ts
+ *        (optional drop-in factories for common L2/L3 strategies)
  *
  * Levels execute in order; each handler returns an outcome:
  *   - `healed`   chain stops; caller should retry the tool with the

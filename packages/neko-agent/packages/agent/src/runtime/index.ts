@@ -574,6 +574,8 @@ export {
   projectAgentStreamEventToWebviewMessages,
   type AgentStreamProjectionMessage,
   type AgentStreamProjectionState,
+  type AgentStreamCompositeProjector,
+  type AgentStreamFinalizeOptions,
   type AgentStreamMessageIdOptions,
   type AgentStreamStateOptions,
   type AgentStreamStateUpdate,

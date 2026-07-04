@@ -22,13 +22,3 @@ export {
   type AutohealOutcome,
   type AutohealPolicy,
 } from './autoheal-types';
-
-// Drop-in handler factories for the common L2 / L3 / L5 strategies.
-// Core chain stays conservative; these are opt-in composable defaults.
-export {
-  createResolutionDegradeHandler,
-  createSubstituteHandler,
-  createUserEscalationHandler,
-  type ResolutionDegradeConfig,
-  type SubstituteConfig,
-} from './example-handlers';
