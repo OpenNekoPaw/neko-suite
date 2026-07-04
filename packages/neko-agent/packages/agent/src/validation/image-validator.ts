@@ -136,24 +136,42 @@ export class ImageValidator {
    * Infer MIME type from URL extension
    */
   private inferMimeTypeFromUrl(url: string): string {
+    let parsedUrl: URL;
     try {
-      const pathname = new URL(url).pathname.toLowerCase();
-      const extension = pathname.split('.').pop();
-
-      const mimeTypes: Record<string, string> = {
-        jpg: 'image/jpeg',
-        jpeg: 'image/jpeg',
-        png: 'image/png',
-        gif: 'image/gif',
-        webp: 'image/webp',
-        bmp: 'image/bmp',
-        svg: 'image/svg+xml',
-      };
-
-      return mimeTypes[extension || ''] || 'image/jpeg'; // Default to JPEG
+      parsedUrl = new URL(url);
     } catch {
-      return 'image/jpeg'; // Default for invalid URLs
+      throw new ImageValidationError('INVALID_IMAGE_URL', 'Image URL is not a valid URL', {
+        url,
+      });
     }
+
+    const pathname = parsedUrl.pathname.toLowerCase();
+    const extension = pathname.includes('.') ? pathname.split('.').pop() : undefined;
+
+    const mimeTypes: Record<string, string> = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      bmp: 'image/bmp',
+      svg: 'image/svg+xml',
+    };
+
+    const mimeType = extension ? mimeTypes[extension] : undefined;
+    if (!mimeType) {
+      throw new ImageValidationError(
+        'UNKNOWN_IMAGE_MIME_TYPE',
+        'Image URL must include a supported image file extension',
+        {
+          url,
+          path: parsedUrl.pathname,
+          allowedExtensions: Object.keys(mimeTypes),
+        },
+      );
+    }
+
+    return mimeType;
   }
 
   /**

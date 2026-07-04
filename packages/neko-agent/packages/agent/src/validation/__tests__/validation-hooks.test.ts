@@ -539,6 +539,24 @@ describe('ValidationHooks', () => {
       expect(result.error?.type).toBe('image');
       expect(result.error?.code).toBe('UNSUPPORTED_FORMAT');
     });
+
+    it('returns invalid for image URLs without a supported extension', async () => {
+      const hooks = new ValidationHooks();
+
+      const result = await hooks.validateImage('https://example.test/assets/image');
+
+      expect(result.valid).toBe(false);
+      expect(result.error?.code).toBe('UNKNOWN_IMAGE_MIME_TYPE');
+    });
+
+    it('returns invalid for malformed image URLs', async () => {
+      const hooks = new ValidationHooks();
+
+      const result = await hooks.validateImage('not a valid url');
+
+      expect(result.valid).toBe(false);
+      expect(result.error?.code).toBe('INVALID_IMAGE_URL');
+    });
   });
 
   describe('validateOutput utility', () => {
