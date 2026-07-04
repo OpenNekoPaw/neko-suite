@@ -119,7 +119,7 @@ const compatibilityExceptions = [
     id: 'puppet-face-tool-bridge',
     file: 'packages/neko-agent/packages/extension/src/tools/puppetFaceTools.ts',
     reason:
-      'Tool bridge: Extension supplies VSCode command and cross-extension API access; @neko/agent tools own puppet-face rules.',
+      'Tool bridge: Extension supplies VSCode command and cross-extension API access; @neko/skills contributes puppet-face rules.',
     owner: 'neko-agent-tools',
     tracking: 'openspec:harden-neko-agent-runtime-workflow-closure:3',
     introducedAt: '2026-05-04',

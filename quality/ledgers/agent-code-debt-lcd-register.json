@@ -431,8 +431,8 @@
       "replacement": "Explicit AgentToolPolicy on SubAgentConfig and SpecializedAgentPreset.",
       "removeAfter": "Removed after all SubAgent presets and tests migrated to explicit toolPolicy none/all/allow-list semantics; Skill.allowedTools remains a separate current skill-injection contract.",
       "tests": [
-        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/subagent/__tests__/subagent-manager.test.ts packages/agent/src/subagent/__tests__/creative-presets.test.ts",
-        "rg -n 'allowedTools\\\\??:|allowedTools:|preset\\\\.allowedTools|config\\\\.allowedTools|legacy allowedTools|legacy empty allowedTools|Empty means all tools|Has preset allowedTools' packages/neko-agent/packages/agent/src/subagent -g'*.ts'"
+        "pnpm --dir packages/neko-agent exec vitest run packages/agent/src/subagent/__tests__/subagent-manager.test.ts ../neko-skills/src/subagent/__tests__/creative-presets.test.ts",
+        "rg -n 'allowedTools\\\\??:|allowedTools:|preset\\\\.allowedTools|config\\\\.allowedTools|legacy allowedTools|legacy empty allowedTools|Empty means all tools|Has preset allowedTools' packages/neko-agent/packages/agent/src/subagent packages/neko-skills/src/subagent -g'*.ts'"
       ],
       "notes": "This does not remove Skill.allowedTools, injected capability allowedTools, or tool-guard allow-lists, which are current skill/capability contracts outside the SubAgent configuration surface."
     },
