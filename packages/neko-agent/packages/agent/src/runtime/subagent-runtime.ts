@@ -22,7 +22,7 @@ import type { AgentSessionConfig } from '../session/types';
 import { createAgentSessionWithRuntime } from './session-config-projection';
 import { summarizeAgentEventProgress } from './message-runtime';
 import { createNodeArtifactStore } from './node-artifact-store';
-import type { IArtifactStore, ICapabilityRuntime, IFeedbackLoop } from './types';
+import type { IArtifactStore, ICapabilityRuntime, IValidationLoop } from './types';
 import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 
 export interface AgentSubAgentSystemConfig {
@@ -48,7 +48,7 @@ export interface AgentSubAgentRuntimeRegistration {
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
   readonly artifactStore?: IArtifactStore;
-  readonly feedbackLoop?: IFeedbackLoop;
+  readonly validationLoop?: IValidationLoop;
   readonly perceptionClients?: AgentSessionConfig['perceptionClients'];
 }
 
@@ -214,7 +214,7 @@ export class SubAgentRuntimeCoordinator {
               createNodeArtifactStore({
                 ...(runtime.workspaceRoot ? { workspaceRoot: runtime.workspaceRoot } : {}),
               }),
-            ...(runtime.feedbackLoop ? { feedbackLoop: runtime.feedbackLoop } : {}),
+            ...(runtime.validationLoop ? { validationLoop: runtime.validationLoop } : {}),
           },
           conversationId,
           ...(runtime.perceptionClients ? { perceptionClients: runtime.perceptionClients } : {}),

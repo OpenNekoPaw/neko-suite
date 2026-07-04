@@ -8,9 +8,9 @@ import {
 import { createNodeArtifactStore, type AgentRuntimeConfig } from '@neko/agent/runtime';
 import {
   createAutohealChain,
-  createDefaultControlPlane,
-  createFeedbackCoordinatorFactory,
-  createQualityReviewFeedbackAdapter,
+  createDefaultCreativeProcessRecoveryPolicy,
+  createValidationCoordinatorFactory,
+  createQualityReviewValidationAdapter,
   registerBuiltinToolGroups,
 } from '@neko/skills';
 import type { IProjectMemoryManager, IProviderCardRegistry, PromptFragment } from '@neko/shared';
@@ -40,7 +40,7 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
   return {
     creationGuidance: {
       autohealChainFactory: createAutohealChain,
-      controlPlane: createDefaultControlPlane(),
+      creativeProcessRecoveryPolicy: createDefaultCreativeProcessRecoveryPolicy(),
       ...(skillService || skillLifecycleRuntime
         ? {
             stageTracking: {
@@ -66,10 +66,10 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
       ...(config.promptFragments !== undefined ? { promptFragments: config.promptFragments } : {}),
     },
     artifactStore: createNodeArtifactStore({ workspaceRoot: config.workspaceRoot }),
-    feedbackLoop: {
+    validationLoop: {
       ...(config.projectMemoryManager ? { projectMemoryManager: config.projectMemoryManager } : {}),
-      feedbackCoordinatorFactory: createFeedbackCoordinatorFactory(),
-      toolResultFeedbackAdapters: [createQualityReviewFeedbackAdapter()],
+      validationCoordinatorFactory: createValidationCoordinatorFactory(),
+      toolResultValidationAdapters: [createQualityReviewValidationAdapter()],
     },
   };
 }

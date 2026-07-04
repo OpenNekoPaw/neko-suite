@@ -18,7 +18,7 @@ export type {
   ICreationGuidanceRuntime,
   IArtifactStore,
   ICapabilityRuntime,
-  IFeedbackLoop,
+  IValidationLoop,
   IRuntimeJournalWriter,
   IRuntimeWorkspaceFsOps,
 } from './types';

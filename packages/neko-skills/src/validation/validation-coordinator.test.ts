@@ -10,7 +10,7 @@ import {
   type IProjectMemoryManager,
   type PerceptionEvidence,
 } from '@neko/shared';
-import { createFeedbackCoordinator, createFeedbackCoordinatorFactory } from './feedback-coordinator';
+import { createValidationCoordinator, createValidationCoordinatorFactory } from './validation-coordinator';
 
 const ARTIFACT_INVALID_CHANNEL = 'execution.artifact.invalid';
 
@@ -135,9 +135,9 @@ function parseSections(content: string | null): Array<{ key: string; body: strin
   return sections;
 }
 
-describe('FeedbackCoordinator', () => {
+describe('ValidationCoordinator', () => {
   it('assembles artifact observation and self-evaluation hooks from runtime deps', () => {
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       eventBus: createEventBus(),
       stageTracker: createStageTracker({ initialStage: 'apply' }),
     });
@@ -150,7 +150,7 @@ describe('FeedbackCoordinator', () => {
 
   it('observes artifact invalidation events and evaluates them into repair decisions', () => {
     const eventBus = createEventBus();
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       eventBus,
       now: () => 9,
     });
@@ -220,7 +220,7 @@ describe('FeedbackCoordinator', () => {
   });
 
   it('records provider expression observations as continue decisions for evaluator consumers', () => {
-    const coordinator = createFeedbackCoordinator({ now: () => 12 });
+    const coordinator = createValidationCoordinator({ now: () => 12 });
 
     coordinator.observe({
       kind: 'provider-card-observation',
@@ -274,7 +274,7 @@ describe('FeedbackCoordinator', () => {
       evidenceIds: [],
       createdAt: 11,
     };
-    const coordinator = createFeedbackCoordinator({ now: () => 13 });
+    const coordinator = createValidationCoordinator({ now: () => 13 });
 
     coordinator.observe({
       kind: 'agent-observation',
@@ -321,8 +321,8 @@ describe('FeedbackCoordinator', () => {
       evidenceIds: [],
       createdAt: 14,
     };
-    const coordinator = createFeedbackCoordinator({
-      controlPolicy: { toolEvidenceMode: 'optional' },
+    const coordinator = createValidationCoordinator({
+      validationPolicy: { toolEvidenceMode: 'optional' },
       now: () => 16,
     });
 
@@ -370,7 +370,7 @@ describe('FeedbackCoordinator', () => {
       observationId: 'obs-shot-3-style-drift',
       createdAt: 18,
     });
-    const coordinator = createFeedbackCoordinator({ now: () => 20 });
+    const coordinator = createValidationCoordinator({ now: () => 20 });
 
     coordinator.observe({
       kind: 'subagent-review',
@@ -463,8 +463,8 @@ describe('FeedbackCoordinator', () => {
       },
       createdAt: 17,
     };
-    const coordinator = createFeedbackCoordinator({
-      controlPolicy: {
+    const coordinator = createValidationCoordinator({
+      validationPolicy: {
         agentObservationRequired: true,
         toolEvidenceMode: 'required-for-low-confidence',
       },
@@ -520,8 +520,8 @@ describe('FeedbackCoordinator', () => {
       evidenceIds: [],
       createdAt: 21,
     };
-    const coordinator = createFeedbackCoordinator({
-      controlPolicy: { toolEvidenceMode: 'off' },
+    const coordinator = createValidationCoordinator({
+      validationPolicy: { toolEvidenceMode: 'off' },
       now: () => 22,
     });
 
@@ -547,7 +547,7 @@ describe('FeedbackCoordinator', () => {
 
   it('routes provider expression observations into project provider-card overrides when configured', async () => {
     const writes: Array<{ path: string; data: string }> = [];
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       providerCardProject: {
         workspaceRoot: '/workspace/demo',
         fsOps: {
@@ -583,7 +583,7 @@ describe('FeedbackCoordinator', () => {
 
   it('uses runtime workspace ports for provider-card project observations from the factory', async () => {
     const writes: Array<{ path: string; data: string }> = [];
-    const factory = createFeedbackCoordinatorFactory({ now: () => 0 });
+    const factory = createValidationCoordinatorFactory({ now: () => 0 });
     const coordinator = factory({
       workspace: {
         root: '/workspace/demo',
@@ -616,7 +616,7 @@ describe('FeedbackCoordinator', () => {
 
   it('logs provider-card project write failures from fire-and-forget writes', async () => {
     const logger = { warn: vi.fn() };
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       providerCardProject: {
         workspaceRoot: '/workspace/demo',
         fsOps: {
@@ -652,9 +652,9 @@ describe('FeedbackCoordinator', () => {
     );
   });
 
-  it('records apply-exit self-evaluation requests as feedback signals', () => {
+  it('records apply-exit self-evaluation requests as validation signals', () => {
     const tracker = createStageTracker({ now: () => 0 });
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       stageTracker: tracker,
       now: () => 11,
     });
@@ -696,7 +696,7 @@ describe('FeedbackCoordinator', () => {
 
   it('writes extracted facts into project memory and returns a journal-ready payload', async () => {
     const projectMemory = createMockProjectMemory();
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       projectMemoryManager: projectMemory,
       now: () => 42,
     });
@@ -758,7 +758,7 @@ describe('FeedbackCoordinator', () => {
   });
 
   it('evaluates tool failure signals into repair decisions', () => {
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       now: () => 18,
     });
 
@@ -813,7 +813,7 @@ describe('FeedbackCoordinator', () => {
   });
 
   it('turns failing tool-review signals into repair decisions', () => {
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       now: () => 25,
     });
     const evidence: PerceptionEvidence = {
@@ -880,7 +880,7 @@ describe('FeedbackCoordinator', () => {
   });
 
   it('turns passing tool-review signals into continue decisions', () => {
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       now: () => 31,
     });
 
@@ -924,7 +924,7 @@ describe('FeedbackCoordinator', () => {
   });
 
   it('escalates repeated tool failures into explicit user-escalation flow actions', () => {
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       now: (() => {
         let tick = 40;
         return () => ++tick;
@@ -988,8 +988,8 @@ describe('FeedbackCoordinator', () => {
 
   it('keeps repeated-signal counts aligned with the capped history window', () => {
     let tick = 0;
-    const coordinator = createFeedbackCoordinator({
-      controlPolicy: { escalationThreshold: 65 },
+    const coordinator = createValidationCoordinator({
+      validationPolicy: { escalationThreshold: 65 },
       now: () => ++tick,
     });
 
@@ -1021,7 +1021,7 @@ describe('FeedbackCoordinator', () => {
     const projectMemory = createMockProjectMemory(
       '## User Preferences\n- 我喜欢中文说明，避免英文模板。\n',
     );
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       projectMemoryManager: projectMemory,
       now: () => 7,
     });
@@ -1043,7 +1043,7 @@ describe('FeedbackCoordinator', () => {
   });
 
   it('returns an explicit skipped result when no fact matches the extraction heuristic', async () => {
-    const coordinator = createFeedbackCoordinator({
+    const coordinator = createValidationCoordinator({
       projectMemoryManager: createMockProjectMemory(),
     });
 
@@ -1060,7 +1060,7 @@ describe('FeedbackCoordinator', () => {
   });
 
   it('returns an explicit skipped result when project memory extraction is disabled', async () => {
-    const coordinator = createFeedbackCoordinator({});
+    const coordinator = createValidationCoordinator({});
 
     const result = await coordinator.extractMemory({
       messages: [{ role: 'user', content: '记住我喜欢中文说明。' }],

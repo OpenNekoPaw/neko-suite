@@ -40,13 +40,13 @@ export type { ConsistencyCheckToolsDeps, QualityCheckToolsDeps } from './quality
 
 export {
   createQualityReviewEvidence,
-  createQualityReviewFeedbackAdapter,
-  createQualityReviewFeedbackSignal,
-} from './quality-review-feedback';
+  createQualityReviewValidationAdapter,
+  createQualityReviewValidationSignal,
+} from './quality-review-validation';
 export type {
   QualityReviewEvidenceInput,
   QualityReviewEvidenceResult,
   QualityReviewEvidenceSummary,
   QualityReviewEvaluationSummary,
-  QualityReviewFeedbackPayload,
-} from './quality-review-feedback';
+  QualityReviewValidationPayload,
+} from './quality-review-validation';

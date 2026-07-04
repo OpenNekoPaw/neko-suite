@@ -1,7 +1,7 @@
 import type {
-  AgentToolResultFeedbackAdapter,
-  AgentControlPlane as IControlPlane,
-  AgentFeedbackCoordinator as IFeedbackCoordinator,
+  AgentToolResultFeedbackAdapter as AgentToolResultValidationAdapter,
+  AgentControlPlane as ICreativeProcessRecoveryPolicy,
+  AgentFeedbackCoordinator as IValidationCoordinator,
   IProjectMemoryManager,
   ISkillRegistry,
   IToolCategoryRegistry,
@@ -54,7 +54,7 @@ export interface IRuntimeWorkspaceFsOps {
  * Agent creation guidance/bootstrap contract.
  *
  * This is not a creation runtime. Existing Agent session/turn/capability
- * machinery owns lifecycle, validation feedback, approval, state, artifact
+ * machinery owns lifecycle, validation, approval, state, artifact
  * provenance, and side-effect decisions. This port only carries declarative
  * stage/prompt-chain guidance adapters plus quarantined legacy trace plumbing.
  */
@@ -71,7 +71,7 @@ export interface ICreationGuidanceRuntime {
     readonly guardian?: false | Record<string, unknown>;
   };
   readonly creationTaskProjection?: import('../task').ICreationTaskProjection;
-  readonly controlPlane?: IControlPlane;
+  readonly creativeProcessRecoveryPolicy?: ICreativeProcessRecoveryPolicy;
   readonly autohealChainFactory?: import('@neko/shared').AgentAutohealChainFactory;
 }
 
@@ -127,20 +127,20 @@ export interface ICapabilityRuntime {
 }
 
 /**
- * Feedback/runtime contract.
+ * Validation/runtime contract.
  *
  * Freezes the memory/journal toggles that influence observe/evaluate/
  * memorize behaviour without forcing hosts to thread these settings
  * through raw AgentSessionConfig fields.
  */
-export interface IFeedbackLoop {
+export interface IValidationLoop {
   readonly projectMemoryManager?: IProjectMemoryManager;
   readonly compactLogging?: boolean;
   readonly autoMemoryExtraction?: boolean;
   readonly memoryRecall?: boolean;
-  readonly feedbackCoordinator?: IFeedbackCoordinator;
-  readonly feedbackCoordinatorFactory?: import('@neko/shared').AgentFeedbackCoordinatorFactory;
-  readonly toolResultFeedbackAdapters?: readonly AgentToolResultFeedbackAdapter[];
+  readonly validationCoordinator?: IValidationCoordinator;
+  readonly validationCoordinatorFactory?: import('@neko/shared').AgentFeedbackCoordinatorFactory;
+  readonly toolResultValidationAdapters?: readonly AgentToolResultValidationAdapter[];
 }
 
 /**
@@ -152,5 +152,5 @@ export interface AgentRuntimeConfig {
   readonly creationGuidance?: ICreationGuidanceRuntime;
   readonly artifactStore?: IArtifactStore;
   readonly capabilityRuntime?: ICapabilityRuntime;
-  readonly feedbackLoop?: IFeedbackLoop;
+  readonly validationLoop?: IValidationLoop;
 }

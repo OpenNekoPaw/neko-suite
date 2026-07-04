@@ -1,57 +1,57 @@
-import type { AgentFeedbackDecision as FeedbackDecision } from '@neko/shared';
+import type { AgentFeedbackDecision as ValidationDecision } from '@neko/shared';
 import {
   createDefaultArtifactRegistry,
   type IArtifactRegistry,
   type IReadonlyArtifactRegistry,
-} from './artifact-registry';
+} from './creative-process-artifacts';
 import type {
   IStageController,
   IReadonlyStageRegistry,
   IStageRegistry,
   StageTransitionGuidance,
-} from './stage-registry';
-import { createDefaultStageRegistry } from './stage-registry';
+} from './creative-process-stages';
+import { createDefaultStageRegistry } from './creative-process-stages';
 
-export interface ControlPlaneDecisionInput {
+export interface CreativeProcessRecoveryDecisionInput {
   readonly currentStageId?: string;
-  readonly decision: FeedbackDecision;
+  readonly decision: ValidationDecision;
 }
 
-export interface ControlPlaneDecision {
-  readonly input: ControlPlaneDecisionInput;
+export interface CreativeProcessRecoveryDecision {
+  readonly input: CreativeProcessRecoveryDecisionInput;
   readonly guidance: StageTransitionGuidance | null;
   readonly createdAt: number;
 }
 
-export interface IControlPlane {
+export interface ICreativeProcessRecoveryPolicy {
   readonly stageRegistry: IReadonlyStageRegistry;
   readonly artifactRegistry: IReadonlyArtifactRegistry;
-  advise(input: ControlPlaneDecisionInput): ControlPlaneDecision;
-  getDecisionHistory(): readonly ControlPlaneDecision[];
+  advise(input: CreativeProcessRecoveryDecisionInput): CreativeProcessRecoveryDecision;
+  getDecisionHistory(): readonly CreativeProcessRecoveryDecision[];
 }
 
-export interface ControlPlaneConfig {
+export interface CreativeProcessRecoveryPolicyConfig {
   readonly stageRegistry: IStageRegistry;
   readonly artifactRegistry?: IArtifactRegistry;
   readonly stageController?: IStageController;
   readonly now?: () => number;
 }
 
-export class ControlPlane implements IControlPlane {
+export class CreativeProcessRecoveryPolicy implements ICreativeProcessRecoveryPolicy {
   readonly stageRegistry: IReadonlyStageRegistry;
   readonly artifactRegistry: IReadonlyArtifactRegistry;
   private readonly stageController?: IStageController;
   private readonly now: () => number;
-  private readonly decisionHistory: ControlPlaneDecision[] = [];
+  private readonly decisionHistory: CreativeProcessRecoveryDecision[] = [];
 
-  constructor(config: ControlPlaneConfig) {
+  constructor(config: CreativeProcessRecoveryPolicyConfig) {
     this.stageRegistry = config.stageRegistry;
     this.artifactRegistry = config.artifactRegistry ?? createDefaultArtifactRegistry();
     this.stageController = config.stageController;
     this.now = config.now ?? Date.now;
   }
 
-  advise(input: ControlPlaneDecisionInput): ControlPlaneDecision {
+  advise(input: CreativeProcessRecoveryDecisionInput): CreativeProcessRecoveryDecision {
     const guidance =
       this.stageController?.evaluate({
         currentStageId: input.currentStageId,
@@ -59,7 +59,7 @@ export class ControlPlane implements IControlPlane {
         history: this.decisionHistory.flatMap((item) => (item.guidance ? [item.guidance] : [])),
         stageRegistry: this.stageRegistry,
       }) ?? null;
-    const decision: ControlPlaneDecision = {
+    const decision: CreativeProcessRecoveryDecision = {
       input,
       guidance,
       createdAt: this.now(),
@@ -68,25 +68,29 @@ export class ControlPlane implements IControlPlane {
     return decision;
   }
 
-  getDecisionHistory(): readonly ControlPlaneDecision[] {
+  getDecisionHistory(): readonly CreativeProcessRecoveryDecision[] {
     return [...this.decisionHistory];
   }
 }
 
-export function createControlPlane(config: ControlPlaneConfig): IControlPlane {
-  return new ControlPlane(config);
+export function createCreativeProcessRecoveryPolicy(
+  config: CreativeProcessRecoveryPolicyConfig,
+): ICreativeProcessRecoveryPolicy {
+  return new CreativeProcessRecoveryPolicy(config);
 }
 
-export function createDefaultControlPlane(config: { now?: () => number } = {}): IControlPlane {
-  return createControlPlane({
+export function createDefaultCreativeProcessRecoveryPolicy(
+  config: { now?: () => number } = {},
+): ICreativeProcessRecoveryPolicy {
+  return createCreativeProcessRecoveryPolicy({
     stageRegistry: createDefaultStageRegistry(),
     artifactRegistry: createDefaultArtifactRegistry(),
-    stageController: new FeedbackStageController(),
+    stageController: new CreativeProcessValidationStageController(),
     ...(config.now ? { now: config.now } : {}),
   });
 }
 
-export class FeedbackStageController implements IStageController {
+export class CreativeProcessValidationStageController implements IStageController {
   evaluate(input: Parameters<IStageController['evaluate']>[0]): StageTransitionGuidance | null {
     const { decision, currentStageId } = input;
     if (decision.action === 'repair') {
@@ -129,7 +133,7 @@ export class FeedbackStageController implements IStageController {
         decisionAction: decision.action,
         fromStageId: currentStageId,
         toStageId: decision.stage,
-        reason: 'Self-evaluation requested by feedback policy.',
+        reason: 'Self-evaluation requested by validation policy.',
         requiresUserApproval: false,
       };
     }

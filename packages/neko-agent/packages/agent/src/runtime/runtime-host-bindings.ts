@@ -25,7 +25,7 @@ import type {
   IArtifactStore,
   ICapabilityRuntime,
   ICreationGuidanceRuntime,
-  IFeedbackLoop,
+  IValidationLoop,
 } from './types';
 import type { ModelTierResolver, SpecializedAgentPreset } from '../subagent';
 import { createDefaultOperationToolAdapterRegistry } from './operation-adapters';
@@ -69,7 +69,7 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
   readonly creationGuidance?: ICreationGuidanceRuntime;
   readonly artifactStore?: IArtifactStore;
-  readonly feedbackLoop?: IFeedbackLoop;
+  readonly validationLoop?: IValidationLoop;
   readonly projectMemoryFilePath?: string;
   readonly personalPath?: string;
   readonly onConfirmTool?: (request: ToolConfirmationRequest) => Promise<boolean>;
@@ -126,7 +126,7 @@ export function buildAgentRuntimeSessionFactoryConfig(
     toolCategoryRegistry: input.toolCategoryRegistry,
     creationGuidance: input.creationGuidance,
     artifactStore: input.artifactStore,
-    feedbackLoop: input.feedbackLoop,
+    validationLoop: input.validationLoop,
     projectMemoryFilePath: input.projectMemoryFilePath,
     personalPath: input.personalPath,
     perceptionClients,

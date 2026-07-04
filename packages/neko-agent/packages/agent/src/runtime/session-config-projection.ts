@@ -27,7 +27,7 @@ export function buildAgentSessionConfigWithRuntime(
   const creationGuidance = runtime?.creationGuidance;
   const artifacts = runtime?.artifactStore;
   const capability = runtime?.capabilityRuntime;
-  const feedback = runtime?.feedbackLoop;
+  const validation = runtime?.validationLoop;
 
   const stageTracking = mergeStageTracking(base.stageTracking, creationGuidance, capability);
   const creationTaskProjection =
@@ -40,13 +40,13 @@ export function buildAgentSessionConfigWithRuntime(
   const toolCategoryRegistry = capability?.toolCategoryRegistry ?? base.toolCategoryRegistry;
   const skillService = base.skillService ?? capability?.skillService;
   const providerCardRegistry = base.providerCardRegistry ?? capability?.providerCardRegistry;
-  const projectMemoryManager = base.projectMemoryManager ?? feedback?.projectMemoryManager;
-  const feedbackCoordinator = base.feedbackCoordinator ?? feedback?.feedbackCoordinator;
+  const projectMemoryManager = base.projectMemoryManager ?? validation?.projectMemoryManager;
+  const feedbackCoordinator = base.feedbackCoordinator ?? validation?.validationCoordinator;
   const feedbackCoordinatorFactory =
-    base.feedbackCoordinatorFactory ?? feedback?.feedbackCoordinatorFactory;
+    base.feedbackCoordinatorFactory ?? validation?.validationCoordinatorFactory;
   const toolResultFeedbackAdapters =
-    base.toolResultFeedbackAdapters ?? feedback?.toolResultFeedbackAdapters;
-  const controlPlane = base.controlPlane ?? creationGuidance?.controlPlane;
+    base.toolResultFeedbackAdapters ?? validation?.toolResultValidationAdapters;
+  const controlPlane = base.controlPlane ?? creationGuidance?.creativeProcessRecoveryPolicy;
   const autohealChainFactory = base.autohealChainFactory ?? creationGuidance?.autohealChainFactory;
   const externalProcessorRuntime =
     base.externalProcessorRuntime ?? capability?.externalProcessorRuntime;
@@ -76,14 +76,14 @@ export function buildAgentSessionConfigWithRuntime(
     ...(externalProcessorRuntime ? { externalProcessorRuntime } : {}),
     ...(contentAccessRuntime ? { contentAccessRuntime } : {}),
     ...(operationToolAdapterRegistry ? { operationToolAdapterRegistry } : {}),
-    ...(feedback?.compactLogging !== undefined && base.compactLogging === undefined
-      ? { compactLogging: feedback.compactLogging }
+    ...(validation?.compactLogging !== undefined && base.compactLogging === undefined
+      ? { compactLogging: validation.compactLogging }
       : {}),
-    ...(feedback?.autoMemoryExtraction !== undefined && base.autoMemoryExtraction === undefined
-      ? { autoMemoryExtraction: feedback.autoMemoryExtraction }
+    ...(validation?.autoMemoryExtraction !== undefined && base.autoMemoryExtraction === undefined
+      ? { autoMemoryExtraction: validation.autoMemoryExtraction }
       : {}),
-    ...(feedback?.memoryRecall !== undefined && base.memoryRecall === undefined
-      ? { memoryRecall: feedback.memoryRecall }
+    ...(validation?.memoryRecall !== undefined && base.memoryRecall === undefined
+      ? { memoryRecall: validation.memoryRecall }
       : {}),
     ...(journalWriter ? { journalWriter } : {}),
   };

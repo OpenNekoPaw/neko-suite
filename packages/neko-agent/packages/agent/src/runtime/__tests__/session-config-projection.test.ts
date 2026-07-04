@@ -28,9 +28,9 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     const toolCategoryRegistry = { kind: 'tool-category-registry' } as never;
     const providerCardRegistry = { kind: 'provider-card-registry' } as never;
     const projectMemoryManager = { kind: 'project-memory' } as never;
-    const feedbackCoordinator = { kind: 'feedback-coordinator' } as never;
-    const feedbackCoordinatorFactory = vi.fn(() => feedbackCoordinator);
-    const controlPlane = { kind: 'control-plane' } as never;
+    const validationCoordinator = { kind: 'validation-coordinator' } as never;
+    const validationCoordinatorFactory = vi.fn(() => validationCoordinator);
+    const creativeProcessRecoveryPolicy = { kind: 'creative-process-recovery-policy' } as never;
     const autohealChainFactory: AgentAutohealChainFactory = vi.fn(() => ({
       run: vi.fn(async (): Promise<AutohealOutcome> => ({ resolution: 'pass', level: 1 })),
     }));
@@ -47,7 +47,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
           guardian: false,
         },
         creationTaskProjection,
-        controlPlane,
+        creativeProcessRecoveryPolicy,
         autohealChainFactory,
       },
       artifactStore: {
@@ -75,13 +75,13 @@ describe('buildAgentSessionConfigWithRuntime', () => {
         operationToolAdapterRegistry,
         contentAccessRuntime,
       },
-      feedbackLoop: {
+      validationLoop: {
         projectMemoryManager,
         compactLogging: false,
         autoMemoryExtraction: false,
         memoryRecall: false,
-        feedbackCoordinator,
-        feedbackCoordinatorFactory,
+        validationCoordinator,
+        validationCoordinatorFactory,
       },
     };
 
@@ -118,9 +118,9 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     expect(config.skillService).toBe(skillService);
     expect(config.stageTracking?.skillLifecycleRuntime).toBe(skillLifecycleRuntime);
     expect(config.projectMemoryManager).toBe(projectMemoryManager);
-    expect(config.feedbackCoordinator).toBe(feedbackCoordinator);
-    expect(config.feedbackCoordinatorFactory).toBe(feedbackCoordinatorFactory);
-    expect(config.controlPlane).toBe(controlPlane);
+    expect(config.feedbackCoordinator).toBe(validationCoordinator);
+    expect(config.feedbackCoordinatorFactory).toBe(validationCoordinatorFactory);
+    expect(config.controlPlane).toBe(creativeProcessRecoveryPolicy);
     expect(config.autohealChainFactory).toBe(autohealChainFactory);
     expect(config.operationToolAdapterRegistry).toBe(operationToolAdapterRegistry);
     expect(config.contentAccessRuntime).toBe(contentAccessRuntime);
@@ -182,7 +182,7 @@ describe('buildAgentSessionConfigWithRuntime', () => {
           createArtifactWatcher: runtimeArtifactWatcherFactory,
           createJournalWriter,
         },
-        feedbackLoop: {
+        validationLoop: {
           compactLogging: false,
         },
       },

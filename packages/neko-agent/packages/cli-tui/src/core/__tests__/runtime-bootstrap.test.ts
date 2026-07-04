@@ -6,9 +6,9 @@ const createTaskManagerCreationTaskProjection = vi.fn((config: unknown) => ({
   config,
 }));
 const registerBuiltinToolGroups = vi.fn();
-const createQualityReviewFeedbackAdapter = vi.fn(() => ({ id: 'quality-review-feedback' }));
-const createFeedbackCoordinatorFactory = vi.fn(() => ({ id: 'feedback-coordinator-factory' }));
-const createDefaultControlPlane = vi.fn(() => ({ id: 'control-plane' }));
+const createQualityReviewValidationAdapter = vi.fn(() => ({ id: 'quality-review-validation' }));
+const createValidationCoordinatorFactory = vi.fn(() => ({ id: 'validation-coordinator-factory' }));
+const createDefaultCreativeProcessRecoveryPolicy = vi.fn(() => ({ id: 'creative-process-recovery-policy' }));
 const createAutohealChain = vi.fn(() => ({ id: 'autoheal-chain' }));
 
 vi.mock('@neko/agent', () => ({
@@ -24,9 +24,9 @@ vi.mock('@neko/agent/runtime', () => ({
 
 vi.mock('@neko/skills', () => ({
   createAutohealChain,
-  createDefaultControlPlane,
-  createFeedbackCoordinatorFactory,
-  createQualityReviewFeedbackAdapter,
+  createDefaultCreativeProcessRecoveryPolicy,
+  createValidationCoordinatorFactory,
+  createQualityReviewValidationAdapter,
   registerBuiltinToolGroups,
 }));
 
@@ -58,7 +58,7 @@ describe('createCliAgentRuntime', () => {
       skillRegistry: skillService.registry,
       skillLifecycleRuntime,
     });
-    expect(runtime.creationGuidance?.controlPlane).toEqual({ id: 'control-plane' });
+    expect(runtime.creationGuidance?.creativeProcessRecoveryPolicy).toEqual({ id: 'creative-process-recovery-policy' });
     expect(runtime.creationGuidance?.autohealChainFactory).toBe(createAutohealChain);
     expect(runtime.creationGuidance?.creationTaskProjection).toEqual({
       kind: 'idc-projection',
@@ -72,12 +72,12 @@ describe('createCliAgentRuntime', () => {
       kind: 'artifact-store',
       config: { workspaceRoot: '/workspace' },
     });
-    expect(runtime.feedbackLoop?.projectMemoryManager).toBe(projectMemoryManager);
-    expect(runtime.feedbackLoop?.feedbackCoordinatorFactory).toEqual({
-      id: 'feedback-coordinator-factory',
+    expect(runtime.validationLoop?.projectMemoryManager).toBe(projectMemoryManager);
+    expect(runtime.validationLoop?.validationCoordinatorFactory).toEqual({
+      id: 'validation-coordinator-factory',
     });
-    expect(runtime.feedbackLoop?.toolResultFeedbackAdapters).toEqual([
-      { id: 'quality-review-feedback' },
+    expect(runtime.validationLoop?.toolResultValidationAdapters).toEqual([
+      { id: 'quality-review-validation' },
     ]);
   });
 
@@ -94,9 +94,9 @@ describe('createCliAgentRuntime', () => {
     expect(runtime.capabilityRuntime?.skillService).toBeUndefined();
     expect(runtime.capabilityRuntime?.skillRegistry).toBeUndefined();
     expect(runtime.capabilityRuntime?.toolGroupRegistry).toBeDefined();
-    expect(runtime.feedbackLoop).toEqual({
-      feedbackCoordinatorFactory: { id: 'feedback-coordinator-factory' },
-      toolResultFeedbackAdapters: [{ id: 'quality-review-feedback' }],
+    expect(runtime.validationLoop).toEqual({
+      validationCoordinatorFactory: { id: 'validation-coordinator-factory' },
+      toolResultValidationAdapters: [{ id: 'quality-review-validation' }],
     });
   });
 

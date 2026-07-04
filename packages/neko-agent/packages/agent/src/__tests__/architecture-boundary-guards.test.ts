@@ -202,14 +202,19 @@ describe('agent architecture boundary guards', () => {
     expect([...existingFiles, ...sourceViolations]).toEqual([]);
   });
 
-  it('keeps concrete feedback, control-plane, and feedback memory policies out of Agent core', () => {
+  it('keeps concrete validation, creative-process recovery, and memory policies out of Agent core', () => {
     const forbiddenFiles = [
       join(agentSrc, 'artifact/artifact-observation-hooks.ts'),
       join(agentSrc, 'control-plane/artifact-registry.ts'),
       join(agentSrc, 'control-plane/control-plane.ts'),
       join(agentSrc, 'control-plane/stage-registry.ts'),
+      join(agentSrc, 'creative-process/creative-process-artifacts.ts'),
+      join(agentSrc, 'creative-process/creative-process-recovery-policy.ts'),
+      join(agentSrc, 'creative-process/creative-process-stages.ts'),
       join(agentSrc, 'evaluation/self-evaluation-hooks.ts'),
       join(agentSrc, 'feedback/feedback-coordinator.ts'),
+      join(agentSrc, 'validation/artifact-validation-observation-hooks.ts'),
+      join(agentSrc, 'validation/validation-coordinator.ts'),
       join(agentSrc, 'memory/keyfact-extractor.ts'),
       join(agentSrc, 'memory/project-memory-router.ts'),
       join(agentSrc, 'memory/provider-card-project-router.ts'),
@@ -226,8 +231,11 @@ describe('agent architecture boundary guards', () => {
       }));
     const forbiddenTerms = [
       /\bcreateFeedbackCoordinator\b/,
+      /\bcreateValidationCoordinator\b/,
       /\bcreateDefaultControlPlane\b/,
+      /\bcreateDefaultCreativeProcessRecoveryPolicy\b/,
       /\bFeedbackStageController\b/,
+      /\bCreativeProcessValidationStageController\b/,
       /\bSelfEvaluationHooks\b/,
       /\bcreateArtifactObservationHooks\b/,
       /\bKeyFactExtractor\b/,

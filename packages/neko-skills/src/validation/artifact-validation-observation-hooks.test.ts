@@ -5,7 +5,7 @@ import type {
   AgentEventSubscriptionPort,
   ChatMessage,
 } from '@neko/shared';
-import { createArtifactObservationHooks } from './artifact-observation-hooks';
+import { createArtifactObservationHooks } from './artifact-validation-observation-hooks';
 
 const ARTIFACT_INVALID_CHANNEL = 'execution.artifact.invalid';
 

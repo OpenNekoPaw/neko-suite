@@ -2,20 +2,20 @@ import type {
   AgentContext,
   AgentArtifactInvalidEvent as ExecutionArtifactInvalidEvent,
   AgentEventSubscriptionPort as IEventBus,
-  AgentFeedbackArbiter as IFeedbackArbiter,
-  AgentFeedbackControlPolicy as FeedbackControlPolicy,
-  AgentFeedbackCoordinator as IFeedbackCoordinator,
-  AgentFeedbackCoordinatorFactory,
-  AgentFeedbackCycle as FeedbackCycle,
-  AgentFeedbackDecision as FeedbackDecision,
-  AgentFeedbackEvaluationContext as FeedbackEvaluationContext,
-  AgentFeedbackEvaluator as IFeedbackEvaluator,
-  AgentFeedbackFlowAction as FeedbackFlowAction,
-  AgentFeedbackMemoryExtractionInput as FeedbackMemoryExtractionInput,
-  AgentFeedbackMemoryExtractionOutcome as FeedbackMemoryExtractionOutcome,
-  AgentFeedbackMemoryExtractionResult as FeedbackMemoryExtractionResult,
-  AgentFeedbackMemoryExtractionSkipped as FeedbackMemoryExtractionSkipped,
-  AgentFeedbackSignal as FeedbackSignal,
+  AgentFeedbackArbiter as IValidationArbiter,
+  AgentFeedbackControlPolicy as ValidationPolicy,
+  AgentFeedbackCoordinator as IValidationCoordinator,
+  AgentFeedbackCoordinatorFactory as AgentValidationCoordinatorFactory,
+  AgentFeedbackCycle as ValidationCycle,
+  AgentFeedbackDecision as ValidationDecision,
+  AgentFeedbackEvaluationContext as ValidationEvaluationContext,
+  AgentFeedbackEvaluator as IValidationEvaluator,
+  AgentFeedbackFlowAction as ValidationFlowAction,
+  AgentFeedbackMemoryExtractionInput as ValidationMemoryExtractionInput,
+  AgentFeedbackMemoryExtractionOutcome as ValidationMemoryExtractionOutcome,
+  AgentFeedbackMemoryExtractionResult as ValidationMemoryExtractionResult,
+  AgentFeedbackMemoryExtractionSkipped as ValidationMemoryExtractionSkipped,
+  AgentFeedbackSignal as ValidationSignal,
   AgentObservation,
   AgentProviderExpressionConceptDecision as ProviderExpressionConceptDecision,
   AgentStageTrackerPort as StageTracker,
@@ -23,8 +23,8 @@ import type {
   ExecutorHooks,
   IProjectMemoryManager,
 } from '@neko/shared';
-import { createArtifactObservationHooks } from './artifact-observation-hooks';
-import { SelfEvaluationHooks } from './self-evaluation-hooks';
+import { createArtifactObservationHooks } from './artifact-validation-observation-hooks';
+import { SelfEvaluationHooks } from '../creative-process/self-evaluation-hooks';
 import { KeyFactExtractor } from '../memory/keyfact-extractor';
 import { ProjectMemoryRouter } from '../memory/project-memory-router';
 import {
@@ -41,22 +41,22 @@ const ARTIFACT_INVALID_CHANNEL = 'execution.artifact.invalid';
 
 export interface IProviderCardProjectRouter {
   writeObservation(
-    signal: Extract<FeedbackSignal, { kind: 'provider-card-observation' }>,
+    signal: Extract<ValidationSignal, { kind: 'provider-card-observation' }>,
   ): Promise<unknown>;
 }
 
-export interface FeedbackLogger {
+export interface ValidationLogger {
   warn(message: string, metadata?: Record<string, unknown>): void;
 }
 
-export interface FeedbackCoordinatorConfig {
+export interface ValidationCoordinatorConfig {
   readonly eventBus?: IEventBus | null;
   readonly stageTracker?: StageTracker | null;
   readonly projectMemoryManager?: IProjectMemoryManager;
   readonly autoMemoryExtraction?: boolean;
-  readonly evaluators?: readonly IFeedbackEvaluator[];
-  readonly arbiter?: IFeedbackArbiter;
-  readonly controlPolicy?: FeedbackControlPolicy;
+  readonly evaluators?: readonly IValidationEvaluator[];
+  readonly arbiter?: IValidationArbiter;
+  readonly validationPolicy?: ValidationPolicy;
   readonly providerCardProject?: {
     readonly workspaceRoot: string;
     readonly fsOps: ProviderCardProjectFsOps;
@@ -68,30 +68,30 @@ export interface FeedbackCoordinatorConfig {
     readonly reviewMode?: ProviderCardProjectReviewMode;
     readonly now: () => number;
   }) => IProviderCardProjectRouter;
-  readonly logger?: FeedbackLogger;
+  readonly logger?: ValidationLogger;
   readonly now?: () => number;
 }
 
-export interface FeedbackCoordinatorFactoryConfig
+export interface ValidationCoordinatorFactoryConfig
   extends Omit<
-    FeedbackCoordinatorConfig,
+    ValidationCoordinatorConfig,
     'eventBus' | 'stageTracker' | 'projectMemoryManager' | 'autoMemoryExtraction'
   > {}
 
 export type {
-  FeedbackControlPolicy,
-  FeedbackCycle,
-  FeedbackDecision,
-  FeedbackEvaluationContext,
-  FeedbackFlowAction,
-  FeedbackMemoryExtractionInput,
-  FeedbackMemoryExtractionOutcome,
-  FeedbackMemoryExtractionResult,
-  FeedbackMemoryExtractionSkipped,
-  FeedbackSignal,
-  IFeedbackArbiter,
-  IFeedbackCoordinator,
-  IFeedbackEvaluator,
+  ValidationPolicy,
+  ValidationCycle,
+  ValidationDecision,
+  ValidationEvaluationContext,
+  ValidationFlowAction,
+  ValidationMemoryExtractionInput,
+  ValidationMemoryExtractionOutcome,
+  ValidationMemoryExtractionResult,
+  ValidationMemoryExtractionSkipped,
+  ValidationSignal,
+  IValidationArbiter,
+  IValidationCoordinator,
+  IValidationEvaluator,
   ProviderExpressionConceptDecision,
 };
 
@@ -108,23 +108,23 @@ function createDefaultProviderCardProjectRouter(config: {
   return new ProviderCardProjectRouter(config);
 }
 
-class FeedbackCoordinator implements IFeedbackCoordinator {
+class ValidationCoordinator implements IValidationCoordinator {
   private readonly _beforeThinkHooks: readonly ExecutorHooks[];
   private readonly _keyFactExtractor: KeyFactExtractor | null;
   private readonly _projectMemoryRouter: ProjectMemoryRouter | null;
   private readonly _providerCardProjectRouter: IProviderCardProjectRouter | null;
-  private readonly _logger: FeedbackLogger | null;
-  private readonly _evaluators: readonly IFeedbackEvaluator[];
-  private readonly _arbiter: IFeedbackArbiter;
+  private readonly _logger: ValidationLogger | null;
+  private readonly _evaluators: readonly IValidationEvaluator[];
+  private readonly _arbiter: IValidationArbiter;
   private readonly _now: () => number;
-  private readonly _pendingSignals: FeedbackSignal[] = [];
-  private readonly _signalHistory: FeedbackSignal[] = [];
+  private readonly _pendingSignals: ValidationSignal[] = [];
+  private readonly _signalHistory: ValidationSignal[] = [];
   private readonly _signalCounts = new Map<string, number>();
-  private readonly _decisionHistory: FeedbackDecision[] = [];
-  private readonly _actionHistory: FeedbackFlowAction[] = [];
+  private readonly _decisionHistory: ValidationDecision[] = [];
+  private readonly _actionHistory: ValidationFlowAction[] = [];
   private readonly _artifactInvalidUnsubscribe: (() => void) | null;
 
-  constructor(config: FeedbackCoordinatorConfig) {
+  constructor(config: ValidationCoordinatorConfig) {
     const observationHook = config.eventBus
       ? createArtifactObservationHooks({
           eventBus: config.eventBus,
@@ -156,11 +156,11 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
     this._evaluators =
       config.evaluators && config.evaluators.length > 0
         ? [...config.evaluators]
-        : [createDefaultFeedbackEvaluator()];
-    this._arbiter = config.arbiter ?? createDefaultFeedbackArbiter(config.controlPolicy);
+        : [createDefaultValidationEvaluator()];
+    this._arbiter = config.arbiter ?? createDefaultValidationArbiter(config.validationPolicy);
     this._artifactInvalidUnsubscribe =
       config.eventBus?.on(ARTIFACT_INVALID_CHANNEL, (event) => {
-        this.observe(feedbackSignalFromArtifactInvalidEvent(event));
+        this.observe(validationSignalFromArtifactInvalidEvent(event));
       }) ?? null;
     this._providerCardProjectRouter = config.providerCardProject
       ? (config.providerCardProjectRouterFactory ?? createDefaultProviderCardProjectRouter)({
@@ -183,7 +183,7 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
     return this._beforeThinkHooks;
   }
 
-  observe(signal: FeedbackSignal): void {
+  observe(signal: ValidationSignal): void {
     this._pendingSignals.push(signal);
     this._signalHistory.push(signal);
     incrementSignalCount(this._signalCounts, signalSignature(signal));
@@ -192,7 +192,7 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
     }
   }
 
-  evaluatePending(context: FeedbackEvaluationContext = {}): FeedbackCycle | null {
+  evaluatePending(context: ValidationEvaluationContext = {}): ValidationCycle | null {
     if (this._pendingSignals.length === 0) {
       return null;
     }
@@ -232,7 +232,7 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
     };
   }
 
-  private async _writeProviderCardObservations(signals: readonly FeedbackSignal[]): Promise<void> {
+  private async _writeProviderCardObservations(signals: readonly ValidationSignal[]): Promise<void> {
     if (!this._providerCardProjectRouter) {
       return;
     }
@@ -244,21 +244,21 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
     }
   }
 
-  getSignalHistory(): readonly FeedbackSignal[] {
+  getSignalHistory(): readonly ValidationSignal[] {
     return this._signalHistory;
   }
 
-  getDecisionHistory(): readonly FeedbackDecision[] {
+  getDecisionHistory(): readonly ValidationDecision[] {
     return this._decisionHistory;
   }
 
-  getActionHistory(): readonly FeedbackFlowAction[] {
+  getActionHistory(): readonly ValidationFlowAction[] {
     return this._actionHistory;
   }
 
   async extractMemory(
-    input: FeedbackMemoryExtractionInput,
-  ): Promise<FeedbackMemoryExtractionOutcome> {
+    input: ValidationMemoryExtractionInput,
+  ): Promise<ValidationMemoryExtractionOutcome> {
     const sourceEventIds = [...(input.sourceEventIds ?? [])];
     if (!this._keyFactExtractor || !this._projectMemoryRouter) {
       return {
@@ -280,7 +280,7 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
     }
 
     const routing = await this._projectMemoryRouter.writeFacts(facts);
-    const extraction: FeedbackMemoryExtractionResult = {
+    const extraction: ValidationMemoryExtractionResult = {
       kind: 'extracted',
       timestamp: this._now(),
       sourceEventIds,
@@ -315,16 +315,18 @@ class FeedbackCoordinator implements IFeedbackCoordinator {
 // Factory
 // =============================================================================
 
-export function createFeedbackCoordinator(config: FeedbackCoordinatorConfig): IFeedbackCoordinator {
-  return new FeedbackCoordinator(config);
+export function createValidationCoordinator(
+  config: ValidationCoordinatorConfig,
+): IValidationCoordinator {
+  return new ValidationCoordinator(config);
 }
 
-export function createFeedbackCoordinatorFactory(
-  config: FeedbackCoordinatorFactoryConfig = {},
-): AgentFeedbackCoordinatorFactory {
+export function createValidationCoordinatorFactory(
+  config: ValidationCoordinatorFactoryConfig = {},
+): AgentValidationCoordinatorFactory {
   const configuredProviderCardProject = config.providerCardProject;
   return (runtime) =>
-    createFeedbackCoordinator({
+    createValidationCoordinator({
       ...config,
       eventBus: runtime.eventBus,
       stageTracker: runtime.stageTracker,
@@ -338,7 +340,7 @@ export function createFeedbackCoordinatorFactory(
           : undefined),
       projectMemoryManager: runtime.projectMemoryManager,
       autoMemoryExtraction: runtime.autoMemoryExtraction,
-      controlPolicy: runtime.controlPolicy ?? config.controlPolicy,
+      validationPolicy: runtime.controlPolicy ?? config.validationPolicy,
     });
 }
 
@@ -348,13 +350,13 @@ export function createFeedbackCoordinatorFactory(
 
 export function composeBeforeThinkHooks(
   base: ExecutorHooks,
-  feedbackHooks: readonly ExecutorHooks[],
+  validationHooks: readonly ExecutorHooks[],
 ): ExecutorHooks {
   const beforeThinkChain: Array<(ctx: AgentContext) => Promise<AgentContext | void>> = [];
   if (base.beforeThink) {
     beforeThinkChain.push((ctx) => base.beforeThink!(ctx));
   }
-  for (const hook of feedbackHooks) {
+  for (const hook of validationHooks) {
     if (hook.beforeThink) {
       beforeThinkChain.push((ctx) => hook.beforeThink!(ctx));
     }
@@ -364,7 +366,7 @@ export function composeBeforeThinkHooks(
     return base;
   }
 
-  const nameSuffix = feedbackHooks
+  const nameSuffix = validationHooks
     .map((hook) => hook.name ?? null)
     .filter((name): name is string => Boolean(name))
     .join('+');
@@ -382,25 +384,25 @@ export function composeBeforeThinkHooks(
   };
 }
 
-const FEEDBACK_HISTORY_CAP = 64;
+const VALIDATION_HISTORY_CAP = 64;
 
 function trimHistory<T>(history: T[]): readonly T[] {
-  if (history.length > FEEDBACK_HISTORY_CAP) {
-    return history.splice(0, history.length - FEEDBACK_HISTORY_CAP);
+  if (history.length > VALIDATION_HISTORY_CAP) {
+    return history.splice(0, history.length - VALIDATION_HISTORY_CAP);
   }
 
   return [];
 }
 
-const DEFAULT_CONTROL_POLICY: Required<FeedbackControlPolicy> = {
+const DEFAULT_VALIDATION_POLICY: Required<ValidationPolicy> = {
   escalationThreshold: 2,
   agentObservationRequired: false,
   toolEvidenceMode: 'optional',
 };
 
-function feedbackSignalFromArtifactInvalidEvent(
+function validationSignalFromArtifactInvalidEvent(
   event: ExecutionArtifactInvalidEvent,
-): FeedbackSignal {
+): ValidationSignal {
   return {
     kind: 'artifact-invalid',
     observedAt: event.at,
@@ -411,11 +413,11 @@ function feedbackSignalFromArtifactInvalidEvent(
   };
 }
 
-function createDefaultFeedbackEvaluator(): IFeedbackEvaluator {
+function createDefaultValidationEvaluator(): IValidationEvaluator {
   return {
-    id: 'default-feedback-evaluator',
+    id: 'default-validation-evaluator',
     evaluate: ({ signals }) => {
-      const decisions: FeedbackDecision[] = [];
+      const decisions: ValidationDecision[] = [];
 
       for (const signal of signals) {
         switch (signal.kind) {
@@ -533,18 +535,18 @@ function createDefaultFeedbackEvaluator(): IFeedbackEvaluator {
   };
 }
 
-function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined): IFeedbackArbiter {
+function createDefaultValidationArbiter(policy: ValidationPolicy | undefined): IValidationArbiter {
   const effectivePolicy = {
-    ...DEFAULT_CONTROL_POLICY,
+    ...DEFAULT_VALIDATION_POLICY,
     ...(policy ?? {}),
   };
 
   return {
-    id: 'default-feedback-arbiter',
+    id: 'default-validation-arbiter',
     decide: ({ signals, decisions, signalHistory, countSignals }) => {
       const guidanceBlocks: string[] = [];
-      const guidanceKinds = new Set<FeedbackSignal['kind']>();
-      const actions: FeedbackFlowAction[] = [];
+      const guidanceKinds = new Set<ValidationSignal['kind']>();
+      const actions: ValidationFlowAction[] = [];
 
       for (const decision of decisions) {
         switch (decision.action) {
@@ -689,10 +691,10 @@ function createDefaultFeedbackArbiter(policy: FeedbackControlPolicy | undefined)
 }
 
 function appendAgentFirstContinueGuidance(
-  decision: Extract<FeedbackDecision, { action: 'continue' }>,
-  policy: Required<FeedbackControlPolicy>,
+  decision: Extract<ValidationDecision, { action: 'continue' }>,
+  policy: Required<ValidationPolicy>,
   guidanceBlocks: string[],
-  guidanceKinds: Set<FeedbackSignal['kind']>,
+  guidanceKinds: Set<ValidationSignal['kind']>,
 ): void {
   if (!('signalKind' in decision)) {
     return;
@@ -745,7 +747,7 @@ function buildLowConfidenceEvidenceGuidance(input: {
   readonly subject: string;
   readonly confidence: AgentObservation['confidence'];
   readonly evidenceCount: number;
-  readonly policy: Required<FeedbackControlPolicy>;
+  readonly policy: Required<ValidationPolicy>;
   readonly requiresObservation: boolean;
   readonly riskLevel?: NonNullable<DecisionRationale['risk']>['level'];
 }): string | null {
@@ -784,9 +786,9 @@ function buildLowConfidenceEvidenceGuidance(input: {
 }
 
 function getRepeatCount(
-  history: readonly FeedbackSignal[],
-  countSignals: ((signal: FeedbackSignal) => number) | undefined,
-  signal: FeedbackSignal,
+  history: readonly ValidationSignal[],
+  countSignals: ((signal: ValidationSignal) => number) | undefined,
+  signal: ValidationSignal,
 ): number {
   if (countSignals) {
     return countSignals(signal);
@@ -797,8 +799,8 @@ function getRepeatCount(
 }
 
 function countMatchingSignals(
-  history: readonly FeedbackSignal[],
-  predicate: (signal: FeedbackSignal) => boolean,
+  history: readonly ValidationSignal[],
+  predicate: (signal: ValidationSignal) => boolean,
 ): number {
   let count = 0;
   for (const signal of history) {
@@ -825,7 +827,7 @@ function decrementSignalCount(counts: Map<string, number>, signature: string): v
   counts.set(signature, current - 1);
 }
 
-function signalSignature(signal: FeedbackSignal): string {
+function signalSignature(signal: ValidationSignal): string {
   switch (signal.kind) {
     case 'artifact-invalid':
       return `artifact-invalid|${signal.runId}|${signal.path}`;
@@ -849,7 +851,7 @@ function signalSignature(signal: FeedbackSignal): string {
 }
 
 function classifyClearReason(
-  decisions: readonly FeedbackDecision[],
+  decisions: readonly ValidationDecision[],
 ): 'no-actionable-signal' | 'continue' | 'memorize' {
   if (decisions.every((decision) => decision.action === 'memorize')) {
     return 'memorize';

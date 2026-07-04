@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   createQualityReviewEvidence,
-  createQualityReviewFeedbackAdapter,
-} from '../quality-review-feedback';
+  createQualityReviewValidationAdapter,
+} from '../quality-review-validation';
 
 describe('createQualityReviewEvidence', () => {
   it('wraps failing QualityReview output as perception evidence', () => {
@@ -325,9 +325,9 @@ describe('createQualityReviewEvidence', () => {
   });
 });
 
-describe('createQualityReviewFeedbackAdapter', () => {
+describe('createQualityReviewValidationAdapter', () => {
   it('turns failing QualityCheck output into a generic tool-review signal', () => {
-    const adapter = createQualityReviewFeedbackAdapter();
+    const adapter = createQualityReviewValidationAdapter();
 
     const signal = adapter.createSignal({
       result: {
@@ -386,8 +386,8 @@ describe('createQualityReviewFeedbackAdapter', () => {
     );
   });
 
-  it('normalizes partial QualityCheckConsistency reports before creating feedback', () => {
-    const adapter = createQualityReviewFeedbackAdapter();
+  it('normalizes partial QualityCheckConsistency reports before creating validation', () => {
+    const adapter = createQualityReviewValidationAdapter();
 
     const signal = adapter.createSignal({
       result: {

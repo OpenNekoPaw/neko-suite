@@ -1,5 +1,5 @@
 import type {
-  AgentFeedbackDecision as FeedbackDecision,
+  AgentFeedbackDecision as ValidationDecision,
   AgentStageId as IdcStage,
 } from '@neko/shared';
 
@@ -20,7 +20,7 @@ export interface StageDescriptor {
 
 export interface StageTransitionGuidance {
   readonly transitionAction: StageTransitionAction;
-  readonly decisionAction: FeedbackDecision['action'];
+  readonly decisionAction: ValidationDecision['action'];
   readonly fromStageId?: string;
   readonly toStageId?: string;
   readonly reason: string;
@@ -29,7 +29,7 @@ export interface StageTransitionGuidance {
 
 export interface StageControllerContext {
   readonly currentStageId?: string;
-  readonly decision: FeedbackDecision;
+  readonly decision: ValidationDecision;
   readonly history?: readonly StageTransitionGuidance[];
   readonly stageRegistry?: IReadonlyStageRegistry;
 }

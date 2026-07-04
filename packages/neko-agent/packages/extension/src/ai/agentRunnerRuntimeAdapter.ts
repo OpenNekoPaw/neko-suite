@@ -20,9 +20,9 @@ import type { AgentEvent } from '@neko/agent';
 import {
   CREATIVE_PRESETS as CREATIVE_SUBAGENT_PRESETS,
   createAutohealChain,
-  createDefaultControlPlane,
-  createFeedbackCoordinatorFactory,
-  createQualityReviewFeedbackAdapter,
+  createDefaultCreativeProcessRecoveryPolicy,
+  createValidationCoordinatorFactory,
+  createQualityReviewValidationAdapter,
 } from '@neko/skills';
 import {
   getCapabilityDiscoveryService,
@@ -311,12 +311,12 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
       providerExpressionTargets: config.providerExpressionTargets,
       creationGuidance: {
         autohealChainFactory: createAutohealChain,
-        controlPlane: createDefaultControlPlane(),
+        creativeProcessRecoveryPolicy: createDefaultCreativeProcessRecoveryPolicy(),
       },
       capabilityRuntime: getCapabilityRuntimeBindings(),
-      feedbackLoop: {
-        feedbackCoordinatorFactory: createFeedbackCoordinatorFactory(),
-        toolResultFeedbackAdapters: [createQualityReviewFeedbackAdapter()],
+      validationLoop: {
+        validationCoordinatorFactory: createValidationCoordinatorFactory(),
+        toolResultValidationAdapters: [createQualityReviewValidationAdapter()],
       },
       getCapabilityPromptFragments: () => getCapabilityDiscoveryService().getAllPromptFragments(),
       toolCategoryRegistry: config.toolCategoryRegistry,

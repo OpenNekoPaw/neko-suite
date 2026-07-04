@@ -1,7 +1,7 @@
 import type {
-  AgentToolResultFeedbackAdapter,
-  AgentToolResultFeedbackAdapterInput,
-  AgentToolReviewFeedbackSignal,
+  AgentToolResultFeedbackAdapter as AgentToolResultValidationAdapter,
+  AgentToolResultFeedbackAdapterInput as AgentToolResultValidationAdapterInput,
+  AgentToolReviewFeedbackSignal as AgentToolReviewValidationSignal,
   AudioTechnicalMetrics,
   ConsistencyReport,
   PerceptionEvidence,
@@ -37,7 +37,7 @@ export interface QualityReviewRecommendation {
   readonly source: 'remediation' | 'suggested-action';
 }
 
-export interface QualityReviewFeedbackPayload {
+export interface QualityReviewValidationPayload {
   readonly totalScenes: number;
   readonly passed: number;
   readonly failed: number;
@@ -45,7 +45,7 @@ export interface QualityReviewFeedbackPayload {
 }
 
 export interface QualityReviewEvidenceInput {
-  readonly payload: QualityReviewFeedbackPayload;
+  readonly payload: QualityReviewValidationPayload;
   readonly toolCallId: string;
   readonly toolName: 'QualityCheck' | 'QualityRepairCheck' | 'QualityCheckConsistency';
   readonly mode?: 'analysis' | 'repair' | 'consistency';
@@ -71,20 +71,20 @@ export interface QualityReviewEvidenceResult {
   readonly summary: QualityReviewEvidenceSummary;
 }
 
-export function createQualityReviewFeedbackAdapter(): AgentToolResultFeedbackAdapter {
+export function createQualityReviewValidationAdapter(): AgentToolResultValidationAdapter {
   return {
-    id: 'quality-review-feedback',
-    createSignal: createQualityReviewFeedbackSignal,
+    id: 'quality-review-validation',
+    createSignal: createQualityReviewValidationSignal,
   };
 }
 
-export function createQualityReviewFeedbackSignal(
-  input: AgentToolResultFeedbackAdapterInput,
-): AgentToolReviewFeedbackSignal | null {
+export function createQualityReviewValidationSignal(
+  input: AgentToolResultValidationAdapterInput,
+): AgentToolReviewValidationSignal | null {
   const sceneTimeRanges = readSceneTimeRangesFromToolArguments(input.toolArguments);
 
   if (input.toolName === 'QualityCheck' || input.toolName === 'QualityRepairCheck') {
-    if (!isQualityCheckFeedbackPayload(input.result.data)) {
+    if (!isQualityCheckValidationPayload(input.result.data)) {
       return null;
     }
 
@@ -107,7 +107,7 @@ export function createQualityReviewFeedbackSignal(
   }
 
   const { report: consistencyReport, diagnostics: adapterDiagnostics } =
-    normalizeConsistencyReportForFeedback(input.result.data);
+    normalizeConsistencyReportForValidation(input.result.data);
   const payload = createQualityReviewPayloadFromConsistencyReport(
     consistencyReport,
     input.toolArguments,
@@ -258,10 +258,10 @@ function formatQualityReviewRecommendation(value: unknown): string | null {
 }
 
 function createToolReviewSignal(
-  input: AgentToolResultFeedbackAdapterInput,
+  input: AgentToolResultValidationAdapterInput,
   review: QualityReviewEvidenceResult,
   mode: NonNullable<QualityReviewEvidenceInput['mode']>,
-): AgentToolReviewFeedbackSignal {
+): AgentToolReviewValidationSignal {
   const status = review.summary.failed > 0 ? 'failed' : 'passed';
   const failingSceneIndexes = [...review.summary.failingSceneIndexes];
   const metadata: Record<string, unknown> = {
@@ -354,7 +354,7 @@ function calculateQualityReviewConfidence(summary: QualityReviewEvidenceSummary)
   return summary.passed / summary.totalScenes;
 }
 
-function isQualityCheckFeedbackPayload(value: unknown): value is QualityReviewFeedbackPayload {
+function isQualityCheckValidationPayload(value: unknown): value is QualityReviewValidationPayload {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
@@ -391,7 +391,7 @@ function isConsistencyReportLike(value: unknown): value is Record<string, unknow
   );
 }
 
-function normalizeConsistencyReportForFeedback(value: Record<string, unknown>): {
+function normalizeConsistencyReportForValidation(value: Record<string, unknown>): {
   readonly report: ConsistencyReport;
   readonly diagnostics: readonly string[];
 } {
@@ -432,7 +432,7 @@ function normalizeConsistencyReportForFeedback(value: Record<string, unknown>): 
 function createQualityReviewPayloadFromConsistencyReport(
   report: ConsistencyReport,
   toolArguments: Record<string, unknown> | undefined,
-): QualityReviewFeedbackPayload {
+): QualityReviewValidationPayload {
   const sceneIndexes = readSceneIndexesFromToolArguments(toolArguments);
   const failedSceneIndexes = new Set<number>();
   for (const drift of report.styleDrift) {

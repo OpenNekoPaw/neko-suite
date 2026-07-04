@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FeedbackStageController,
+  CreativeProcessValidationStageController,
   createArtifactRegistry,
-  createControlPlane,
+  createCreativeProcessRecoveryPolicy,
   createDefaultArtifactRegistry,
-  createDefaultControlPlane,
+  createDefaultCreativeProcessRecoveryPolicy,
   createDefaultStageRegistry,
   createStageRegistry,
 } from './index';
@@ -76,16 +76,16 @@ describe('ArtifactRegistry', () => {
   });
 });
 
-describe('ControlPlane', () => {
-  it('turns repair feedback decisions into non-executing stage guidance', () => {
+describe('CreativeProcessRecoveryPolicy', () => {
+  it('turns repair validation decisions into non-executing stage guidance', () => {
     const registry = createStageRegistry([{ id: 'apply', label: 'Apply', enabled: true }]);
-    const controlPlane = createControlPlane({
+    const recoveryPolicy = createCreativeProcessRecoveryPolicy({
       stageRegistry: registry,
-      stageController: new FeedbackStageController(),
+      stageController: new CreativeProcessValidationStageController(),
       now: () => 1_771_718_420_000,
     });
 
-    const decision = controlPlane.advise({
+    const decision = recoveryPolicy.advise({
       currentStageId: 'apply',
       decision: {
         action: 'repair',
@@ -108,13 +108,13 @@ describe('ControlPlane', () => {
       },
       createdAt: 1_771_718_420_000,
     });
-    expect(controlPlane.getDecisionHistory()).toHaveLength(1);
+    expect(recoveryPolicy.getDecisionHistory()).toHaveLength(1);
   });
 
   it('regresses to the previous registered stage after repeated repair guidance', () => {
-    const controlPlane = createDefaultControlPlane({ now: () => 1 });
+    const recoveryPolicy = createDefaultCreativeProcessRecoveryPolicy({ now: () => 1 });
 
-    controlPlane.advise({
+    recoveryPolicy.advise({
       currentStageId: 'apply',
       decision: {
         action: 'repair',
@@ -124,7 +124,7 @@ describe('ControlPlane', () => {
         error: 'failed',
       },
     });
-    const decision = controlPlane.advise({
+    const decision = recoveryPolicy.advise({
       currentStageId: 'apply',
       decision: {
         action: 'repair',
@@ -146,9 +146,9 @@ describe('ControlPlane', () => {
   });
 
   it('requests a run restart when repeated repair happens at the first stage', () => {
-    const controlPlane = createDefaultControlPlane({ now: () => 1 });
+    const recoveryPolicy = createDefaultCreativeProcessRecoveryPolicy({ now: () => 1 });
 
-    controlPlane.advise({
+    recoveryPolicy.advise({
       currentStageId: 'draft',
       decision: {
         action: 'repair',
@@ -159,7 +159,7 @@ describe('ControlPlane', () => {
         issueCount: 1,
       },
     });
-    const decision = controlPlane.advise({
+    const decision = recoveryPolicy.advise({
       currentStageId: 'draft',
       decision: {
         action: 'repair',
@@ -181,28 +181,28 @@ describe('ControlPlane', () => {
     });
   });
 
-  it('creates a default ControlPlane with IDC stage and artifact registries', () => {
-    const controlPlane = createDefaultControlPlane({ now: () => 1 });
+  it('creates a default CreativeProcessRecoveryPolicy with IDC stage and artifact registries', () => {
+    const recoveryPolicy = createDefaultCreativeProcessRecoveryPolicy({ now: () => 1 });
 
-    expect(controlPlane.stageRegistry.list().map((stage) => stage.id)).toEqual([
+    expect(recoveryPolicy.stageRegistry.list().map((stage) => stage.id)).toEqual([
       'draft',
       'plan',
       'apply',
     ]);
-    expect(controlPlane.artifactRegistry.byStage('apply')?.storageKind).toBe('task');
+    expect(recoveryPolicy.artifactRegistry.byStage('apply')?.storageKind).toBe('task');
   });
 
   it('accumulates every advise call in decision history', () => {
-    const controlPlane = createControlPlane({
+    const recoveryPolicy = createCreativeProcessRecoveryPolicy({
       stageRegistry: createStageRegistry([{ id: 'apply', label: 'Apply', enabled: true }]),
-      stageController: new FeedbackStageController(),
+      stageController: new CreativeProcessValidationStageController(),
       now: (() => {
         let tick = 10;
         return () => tick++;
       })(),
     });
 
-    controlPlane.advise({
+    recoveryPolicy.advise({
       currentStageId: 'apply',
       decision: {
         action: 'repair',
@@ -212,10 +212,10 @@ describe('ControlPlane', () => {
         error: 'failed',
       },
     });
-    controlPlane.advise({
+    recoveryPolicy.advise({
       decision: { action: 'continue', reason: 'no-actionable-signal' },
     });
-    controlPlane.advise({
+    recoveryPolicy.advise({
       currentStageId: 'apply',
       decision: {
         action: 'self-evaluate',
@@ -224,7 +224,7 @@ describe('ControlPlane', () => {
       },
     });
 
-    expect(controlPlane.getDecisionHistory()).toEqual([
+    expect(recoveryPolicy.getDecisionHistory()).toEqual([
       expect.objectContaining({
         createdAt: 10,
         guidance: expect.objectContaining({
@@ -241,14 +241,14 @@ describe('ControlPlane', () => {
   });
 
   it('does not produce guidance for continue decisions', () => {
-    const controlPlane = createControlPlane({
+    const recoveryPolicy = createCreativeProcessRecoveryPolicy({
       stageRegistry: createStageRegistry(),
-      stageController: new FeedbackStageController(),
+      stageController: new CreativeProcessValidationStageController(),
       now: () => 1,
     });
 
     expect(
-      controlPlane.advise({
+      recoveryPolicy.advise({
         decision: { action: 'continue', reason: 'no-actionable-signal' },
       }).guidance,
     ).toBeNull();

@@ -34,7 +34,7 @@ import type {
   IArtifactStore,
   ICapabilityRuntime,
   ICreationGuidanceRuntime,
-  IFeedbackLoop,
+  IValidationLoop,
 } from './types';
 import type { ProviderExpressionTargetConfig } from './message-runtime';
 import {
@@ -78,7 +78,7 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
   readonly creationGuidance?: ICreationGuidanceRuntime;
   readonly artifactStore?: IArtifactStore;
-  readonly feedbackLoop?: IFeedbackLoop;
+  readonly validationLoop?: IValidationLoop;
   readonly projectMemoryFilePath?: string;
   readonly personalPath?: string;
   readonly perceptionClients?: AgentSessionConfig['perceptionClients'];
@@ -154,9 +154,9 @@ export async function createAgentRuntimeSession(
   const promptFragments = resolveAgentRuntimePromptFragments(config);
   const effectiveSystemPrompt = resolveSystemPrompt(promptBuilder, config.systemPrompt);
   const agentsOverride = promptBuilder.buildAgentsOverlay() ?? undefined;
-  const feedbackLoop = buildFeedbackLoop(config.feedbackLoop, projectMemoryManager);
+  const validationLoop = buildValidationLoop(config.validationLoop, projectMemoryManager);
 
-  registerSubAgentRuntime(config, promptFragments, toolCategoryRegistry, feedbackLoop);
+  registerSubAgentRuntime(config, promptFragments, toolCategoryRegistry, validationLoop);
 
   const session = createAgentSessionWithRuntime({
     service: config.service,
@@ -174,7 +174,7 @@ export async function createAgentRuntimeSession(
     modelId: config.modelId,
     modelCapabilities: config.modelCapabilities,
     hooks: config.hooks && config.hooks.length > 0 ? [...config.hooks] : undefined,
-    runtime: buildAgentRuntimeConfig(config, promptFragments, toolCategoryRegistry, feedbackLoop),
+    runtime: buildAgentRuntimeConfig(config, promptFragments, toolCategoryRegistry, validationLoop),
     ...(config.conversationId ? { conversationId: config.conversationId } : {}),
     ...(config.perceptionClients ? { perceptionClients: config.perceptionClients } : {}),
     ...(config.onConfirmTool ? { onConfirmTool: config.onConfirmTool } : {}),
@@ -217,8 +217,8 @@ export function updateAgentRuntimeSession(
   syncToolCategories(config, toolCategoryRegistry);
 
   const promptFragments = resolveAgentRuntimePromptFragments(config);
-  const feedbackLoop = buildFeedbackLoop(config.feedbackLoop, handle.projectMemoryManager);
-  registerSubAgentRuntime(config, promptFragments, toolCategoryRegistry, feedbackLoop);
+  const validationLoop = buildValidationLoop(config.validationLoop, handle.projectMemoryManager);
+  registerSubAgentRuntime(config, promptFragments, toolCategoryRegistry, validationLoop);
 
   handle.promptFragments = promptFragments;
   handle.toolCategoryRegistry = toolCategoryRegistry;
@@ -355,12 +355,12 @@ function resolveProviderExpressionFragments(
   );
 }
 
-function buildFeedbackLoop(
-  feedbackLoop: IFeedbackLoop | undefined,
+function buildValidationLoop(
+  validationLoop: IValidationLoop | undefined,
   projectMemoryManager: IProjectMemoryManager | undefined,
-): IFeedbackLoop | undefined {
+): IValidationLoop | undefined {
   const loop = {
-    ...(feedbackLoop ?? {}),
+    ...(validationLoop ?? {}),
     ...(projectMemoryManager ? { projectMemoryManager } : {}),
   };
   return Object.keys(loop).length > 0 ? loop : undefined;
@@ -370,7 +370,7 @@ function buildAgentRuntimeConfig(
   config: AgentRuntimeSessionFactoryConfig,
   promptFragments: readonly PromptFragment[] | undefined,
   toolCategoryRegistry: IToolCategoryRegistry | undefined,
-  feedbackLoop: IFeedbackLoop | undefined,
+  validationLoop: IValidationLoop | undefined,
 ): AgentRuntimeConfig {
   const runtimeStageTracking =
     config.capabilityRuntime?.skillRegistry ||
@@ -435,7 +435,7 @@ function buildAgentRuntimeConfig(
       createNodeArtifactStore({
         ...(config.workspaceRoot ? { workspaceRoot: config.workspaceRoot } : {}),
       }),
-    ...(feedbackLoop ? { feedbackLoop } : {}),
+    ...(validationLoop ? { validationLoop } : {}),
   };
 }
 
@@ -443,7 +443,7 @@ function registerSubAgentRuntime(
   config: AgentRuntimeSessionUpdateConfig,
   promptFragments: readonly PromptFragment[] | undefined,
   toolCategoryRegistry: IToolCategoryRegistry | undefined,
-  feedbackLoop: IFeedbackLoop | undefined,
+  validationLoop: IValidationLoop | undefined,
 ): void {
   const coordinator = config.subAgentRuntime;
   if (!coordinator) {
@@ -476,7 +476,7 @@ function registerSubAgentRuntime(
       ? { operationToolAdapterRegistry: config.operationToolAdapterRegistry }
       : {}),
     ...(config.artifactStore ? { artifactStore: config.artifactStore } : {}),
-    ...(feedbackLoop ? { feedbackLoop } : {}),
+    ...(validationLoop ? { validationLoop } : {}),
     ...(config.perceptionClients ? { perceptionClients: config.perceptionClients } : {}),
   };
   coordinator.registerRuntime(registration);
