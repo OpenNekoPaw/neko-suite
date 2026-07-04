@@ -179,6 +179,46 @@ describe('CapabilityDiscoveryService', () => {
     );
   });
 
+  it('resolves lifecycle descriptors from registered provider artifact facets', () => {
+    const provider = createProvider({
+      id: 'neko-canvas',
+      tools: [createTool({ name: 'CanvasIngestMarkdown', category: 'canvas' })],
+      providerCards: [],
+    });
+    provider.getArtifactFacets = () => ({
+      lifecycleCapabilities: [
+        {
+          capabilityId: 'canvas.ingestMarkdown',
+          providerId: 'neko-canvas',
+          displayName: 'Ingest Markdown to Canvas',
+          description: 'Ingest reviewed Markdown into Canvas.',
+          phases: ['review'],
+          inputSchema: { id: 'canvas.markdown.input', version: 1 },
+          resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+          accepts: ['Markdown', 'GfmTable'],
+          produces: ['canvas-node-ref'],
+          risk: 'medium',
+          requiresApproval: true,
+          safetyKind: 'confirmation-gated',
+        },
+      ],
+    });
+
+    service.registerProvider(provider, { extensionContext: {} });
+
+    expect(service.getLifecycleCapabilityDescriptor('canvas.ingestMarkdown')).toEqual(
+      expect.objectContaining({
+        capabilityId: 'canvas.ingestMarkdown',
+        providerId: 'neko-canvas',
+        phases: ['review'],
+      }),
+    );
+
+    service.unregisterProvider('neko-canvas');
+
+    expect(service.getLifecycleCapabilityDescriptor('canvas.ingestMarkdown')).toBeUndefined();
+  });
+
   it('在 provider 之间出现同名 tool/skill/toolGroup 时输出结构化告警', () => {
     service = new CapabilityDiscoveryService({
       toolRegistry,

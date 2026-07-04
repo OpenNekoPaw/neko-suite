@@ -18,6 +18,7 @@ import {
 } from '@neko/agent/runtime';
 import type {
   AgentCapabilityContext,
+  AgentCapabilityLifecycleDescriptor,
   AgentCapabilityManifest,
   AgentCapabilityProvider,
   PromptFragment,
@@ -85,6 +86,7 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
   }
 
   registerProvider(provider: AgentCapabilityProvider, context: AgentCapabilityContext): void {
+    this._capabilityContext = context;
     this._runtime.registerProvider(provider, context);
     this._onDidRegister.fire(provider);
   }
@@ -105,6 +107,22 @@ export class CapabilityDiscoveryService implements vscode.Disposable {
 
   getAllPromptFragments(): PromptFragment[] {
     return this._runtime.getAllPromptFragments();
+  }
+
+  getLifecycleCapabilityDescriptor(
+    capabilityId: string,
+  ): AgentCapabilityLifecycleDescriptor | undefined {
+    if (!this._capabilityContext) return undefined;
+
+    for (const provider of this._runtime.getAllProviders()) {
+      const facets = provider.getArtifactFacets?.(this._capabilityContext);
+      const descriptor = facets?.lifecycleCapabilities?.find(
+        (candidate) => candidate.capabilityId === capabilityId,
+      );
+      if (descriptor) return descriptor;
+    }
+
+    return undefined;
   }
 
   getAllManifests(): AgentCapabilityManifest[] {
