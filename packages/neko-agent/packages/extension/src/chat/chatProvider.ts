@@ -667,6 +667,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           updateTabState: (openTabs, activeTabId) => this._updateTabState(openTabs, activeTabId),
           syncCanvasAmbientScopeFromActiveConversation: () =>
             this._syncCanvasAmbientScopeFromActiveConversation(),
+          resolveLifecycleCapabilityDescriptor: (capabilityId) =>
+            getCapabilityDiscoveryService().getLifecycleCapabilityDescriptor(capabilityId),
         });
       }),
     );

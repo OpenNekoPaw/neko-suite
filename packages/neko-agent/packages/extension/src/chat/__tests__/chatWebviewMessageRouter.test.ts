@@ -9,6 +9,7 @@ import {
   WEBVIEW_TO_EXTENSION_MESSAGE_TYPES,
   type WebviewToExtensionMessage,
 } from '@neko-agent/types';
+import type { AgentCapabilityLifecycleDescriptor } from '@neko/shared';
 import { CONFIG_BRIDGE_MESSAGE_TYPES } from '../../services/configBridge';
 import { sendGeneratedAssetToPlugin } from '../../services/pluginTransferBridge';
 
@@ -35,6 +36,29 @@ type DuplicateBridgeMessageType = Extract<
 type AssertNever<T extends never> = T;
 type _AllWebviewMessagesRouted = AssertNever<UnroutedWebviewMessageType>;
 type _NoBridgeMessageOverlap = AssertNever<DuplicateBridgeMessageType>;
+
+function createCanvasLifecycleDescriptor(capabilityId: string): AgentCapabilityLifecycleDescriptor {
+  return {
+    capabilityId,
+    providerId: 'neko-canvas',
+    displayName: capabilityId,
+    description: `${capabilityId} descriptor`,
+    phases:
+      capabilityId === 'canvas.createStoryboardFromMarkdown'
+        ? ['validate', 'review', 'apply']
+        : ['review'],
+    inputSchema: { id: 'canvas.markdown.input', version: 1 },
+    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
+    accepts: ['Markdown', 'GfmTable'],
+    produces: ['canvas-node-ref'],
+    risk: 'medium',
+    requiresApproval: capabilityId === 'canvas.createStoryboardFromMarkdown',
+    safetyKind:
+      capabilityId === 'canvas.createStoryboardFromMarkdown'
+        ? 'confirmation-gated'
+        : 'read-only-query',
+  };
+}
 
 function createDeps(): ChatWebviewMessageRouterDeps {
   return {
@@ -119,6 +143,9 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     sendTabState: vi.fn(),
     updateTabState: vi.fn(),
     syncCanvasAmbientScopeFromActiveConversation: vi.fn(),
+    resolveLifecycleCapabilityDescriptor: vi.fn((capabilityId: string) =>
+      capabilityId.startsWith('canvas.') ? createCanvasLifecycleDescriptor(capabilityId) : undefined,
+    ),
   };
 }
 
@@ -663,6 +690,62 @@ describe('handleChatWebviewMessage', () => {
             expect.objectContaining({
               code: 'agent-capability-lifecycle-approval-required',
               fieldKey: 'approval',
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it('fails visibly when no provider lifecycle descriptor is registered', async () => {
+    const deps = {
+      ...createDeps(),
+      resolveLifecycleCapabilityDescriptor: vi.fn(() => undefined),
+    };
+    const invoke = vi.fn();
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      id: 'neko.neko-canvas',
+      isActive: true,
+      exports: {
+        markdown: { invoke },
+      },
+      activate: vi.fn(),
+    } as any);
+
+    handleChatWebviewMessage(
+      {
+        type: 'invokeAgentCapabilityLifecycle',
+        requestId: 'req-no-descriptor',
+        conversationId: 'conv-1',
+        invocation: {
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          payload: {
+            capabilityId: 'canvas.ingestMarkdown',
+            markdown: '| visual |\\n| --- |\\n| open |',
+            sourceFormat: 'gfm-table',
+          },
+        },
+      },
+      deps,
+    );
+
+    await flushAsyncWork();
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(deps.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'agentCapabilityLifecycleResult',
+        requestId: 'req-no-descriptor',
+        success: false,
+        lifecycleResult: expect.objectContaining({
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          status: 'blocked',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'agent-capability-lifecycle-unknown-capability',
+              fieldKey: 'capabilityId',
             }),
           ],
         }),

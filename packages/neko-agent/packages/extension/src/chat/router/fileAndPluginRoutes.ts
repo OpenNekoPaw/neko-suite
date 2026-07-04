@@ -28,103 +28,6 @@ import { resolveRequiredConversationId } from './conversationId';
 
 const logger = getLogger('ChatWebviewMessageRouter');
 
-const CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS: readonly AgentCapabilityLifecycleDescriptor[] = [
-  {
-    capabilityId: 'canvas.ingestMarkdown',
-    providerId: 'neko-canvas',
-    displayName: 'canvas.ingestMarkdown',
-    description: 'Ingest Agent Markdown into Canvas as a note, generic table, or creative table.',
-    phases: ['review'],
-    inputSchema: { id: 'canvas.markdown.input', version: 1 },
-    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
-    accepts: ['Markdown', 'GfmTable'],
-    produces: ['canvas-node-ref'],
-    risk: 'medium',
-    requiresApproval: false,
-  },
-  {
-    capabilityId: 'canvas.createMarkdownNote',
-    providerId: 'neko-canvas',
-    displayName: 'canvas.createMarkdownNote',
-    description: 'Create a Canvas Markdown note from reviewed Markdown.',
-    phases: ['review'],
-    inputSchema: { id: 'canvas.markdown.input', version: 1 },
-    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
-    accepts: ['Markdown'],
-    produces: ['canvas-node-ref'],
-    risk: 'medium',
-    requiresApproval: false,
-  },
-  {
-    capabilityId: 'canvas.createTableFromMarkdown',
-    providerId: 'neko-canvas',
-    displayName: 'canvas.createTableFromMarkdown',
-    description: 'Create a Canvas generic table node from Markdown.',
-    phases: ['review'],
-    inputSchema: { id: 'canvas.markdown.input', version: 1 },
-    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
-    accepts: ['Markdown', 'GfmTable'],
-    produces: ['canvas-node-ref'],
-    risk: 'medium',
-    requiresApproval: false,
-  },
-  {
-    capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
-    providerId: 'neko-canvas',
-    displayName: 'canvas.createStoryboardDraftFromMarkdown',
-    description: 'Create a review-first Canvas storyboard draft from Markdown.',
-    phases: ['review'],
-    inputSchema: { id: 'canvas.markdown.input', version: 1 },
-    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
-    accepts: ['MarkdownStoryboardDraft', 'GfmTable'],
-    produces: ['canvas-node-ref'],
-    risk: 'medium',
-    requiresApproval: false,
-  },
-  {
-    capabilityId: 'canvas.createStoryboardFromMarkdown',
-    providerId: 'neko-canvas',
-    displayName: 'canvas.createStoryboardFromMarkdown',
-    description: 'Create production Canvas storyboard nodes from approved Markdown.',
-    phases: ['validate', 'review', 'apply'],
-    inputSchema: { id: 'canvas.markdown.input', version: 1 },
-    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
-    accepts: ['MarkdownStoryboardDraft'],
-    produces: ['canvas-node-ref'],
-    risk: 'medium',
-    requiresApproval: true,
-    safetyKind: 'confirmation-gated',
-  },
-  {
-    capabilityId: 'canvas.attachResource',
-    providerId: 'neko-canvas',
-    displayName: 'canvas.attachResource',
-    description: 'Attach a stable resource reference to an existing Canvas target.',
-    phases: ['apply'],
-    inputSchema: { id: 'canvas.markdown.input', version: 1 },
-    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
-    accepts: ['ResourceRef', 'DocumentArchiveResourceRef'],
-    produces: ['canvas-node-ref'],
-    risk: 'medium',
-    requiresApproval: true,
-    safetyKind: 'confirmation-gated',
-  },
-  {
-    capabilityId: 'canvas.validateMarkdownStoryboard',
-    providerId: 'neko-canvas',
-    displayName: 'canvas.validateMarkdownStoryboard',
-    description: 'Validate a Markdown storyboard draft without mutating Canvas state.',
-    phases: ['validate'],
-    inputSchema: { id: 'canvas.markdown.input', version: 1 },
-    resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
-    accepts: ['MarkdownStoryboardDraft', 'GfmTable'],
-    produces: ['CanvasMarkdownCapabilityDiagnostics'],
-    risk: 'low',
-    requiresApproval: false,
-    safetyKind: 'read-only-query',
-  },
-];
-
 export function tryHandleFileAndPluginRoute(
   message: WebviewToExtensionMessage,
   deps: ChatWebviewMessageRouterDeps,
@@ -232,7 +135,7 @@ async function invokeAgentCapabilityLifecycle(
   deps: ChatWebviewMessageRouterDeps,
 ): Promise<void> {
   try {
-    const lifecycleResult = await invokeAgentCapabilityLifecycleBackend(message.invocation);
+    const lifecycleResult = await invokeAgentCapabilityLifecycleBackend(message.invocation, deps);
     const canvasResult = isCanvasMarkdownCapabilityResultData(lifecycleResult.data)
       ? lifecycleResult.data
       : undefined;
@@ -267,6 +170,7 @@ async function invokeAgentCapabilityLifecycle(
 
 async function invokeAgentCapabilityLifecycleBackend(
   invocation: AgentCapabilityInvocationInput,
+  deps: ChatWebviewMessageRouterDeps,
 ): Promise<AgentCapabilityInvocationResult> {
   if (!isCanvasMarkdownLifecycleInvocation(invocation)) {
     return createBlockedCanvasMarkdownLifecycleResult(
@@ -280,14 +184,15 @@ async function invokeAgentCapabilityLifecycleBackend(
 
   const payload = applyCanvasMarkdownInvocationApproval(invocation.payload, invocation.approval);
   const canvasApi = await getCanvasApi();
-  return invokeCanvasMarkdownLifecycleCapability(canvasApi, payload);
+  return invokeCanvasMarkdownLifecycleCapability(canvasApi, payload, deps);
 }
 
 async function invokeCanvasMarkdownLifecycleCapability(
   canvasApi: NekoCanvasAPI,
   input: CanvasMarkdownCapabilityInput,
+  deps: ChatWebviewMessageRouterDeps,
 ): Promise<AgentCapabilityInvocationResult> {
-  const descriptor = getCanvasMarkdownLifecycleDescriptor(input.capabilityId);
+  const descriptor = deps.resolveLifecycleCapabilityDescriptor?.(input.capabilityId);
   if (!descriptor) {
     return createBlockedCanvasMarkdownLifecycleResult(
       input.capabilityId,
@@ -559,14 +464,6 @@ function applyCanvasMarkdownInvocationApproval(
     return payload;
   }
   return { ...payload, approval };
-}
-
-function getCanvasMarkdownLifecycleDescriptor(
-  capabilityId: CanvasMarkdownCapabilityInput['capabilityId'],
-): AgentCapabilityLifecycleDescriptor | undefined {
-  return CANVAS_MARKDOWN_LIFECYCLE_DESCRIPTORS.find(
-    (descriptor) => descriptor.capabilityId === capabilityId,
-  );
 }
 
 function isMutatingLifecyclePhase(phase: AgentCapabilityLifecyclePhase): boolean {
