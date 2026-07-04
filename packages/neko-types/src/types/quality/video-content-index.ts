@@ -5,9 +5,7 @@ import {
   stableStringify,
 } from './quality-evidence-normalizer';
 
-// P0 ownership: VideoContentIndex is currently Agent-local because no Cut or
-// shared package consumer exists yet. Keep this as a composition/validation
-// contract until an implementation needs cross-package sharing.
+// Shared composition contract for quality evidence and future timeline/video analyzers.
 
 export type VideoContentSourceKind = 'asset' | 'timeline-render' | 'clip-range';
 

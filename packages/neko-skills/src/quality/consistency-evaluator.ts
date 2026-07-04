@@ -9,7 +9,7 @@
  * model-agnostic and free of vscode/extension imports.
  */
 
-import type { ConsistencyReport, StyleDriftPair, CharacterAppearance } from './qa-types';
+import type { ConsistencyReport, StyleDriftPair, CharacterAppearance } from '@neko/shared';
 import { isExplicitChatRoutingError } from './chat-routing-error';
 
 // =============================================================================

@@ -7,9 +7,7 @@ import type {
   VideoTechnicalMetrics,
 } from './qa-types';
 
-// P0 ownership: these contracts remain in @neko/agent validation because the
-// current consumers are Agent feedback and validation paths. Promote to
-// @neko/shared only when neko-cut or another package consumes them directly.
+// Shared evidence contracts consumed by Agent feedback and quality skills.
 
 export const STYLE_DRIFT_COLOR_POP_THRESHOLD = 40;
 export const CHARACTER_INCONSISTENCY_FAIL_SCORE = 70;

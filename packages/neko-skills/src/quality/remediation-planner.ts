@@ -13,7 +13,7 @@ import type {
   QualityIssueCategory,
   EvalMediaType,
   RemediationAction,
-} from './qa-types';
+} from '@neko/shared';
 
 // =============================================================================
 // Interface

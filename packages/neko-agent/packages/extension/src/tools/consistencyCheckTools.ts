@@ -1,11 +1,11 @@
 import {
-  createConsistencyCheckTools as createAgentConsistencyCheckTools,
-  type ConsistencyCheckToolsDeps as AgentConsistencyCheckToolsDeps,
+  createConsistencyCheckTools as createSkillsConsistencyCheckTools,
+  type ConsistencyCheckToolsDeps as SkillsConsistencyCheckToolsDeps,
   type ConsistencyChatModelRef,
   type ConsistencyFrameExtractor,
   type ConsistencyLLMService,
   type IClipScorer,
-} from '@neko/agent/validation';
+} from '@neko/skills';
 import type { Tool } from './types';
 import { getLogger } from '../base';
 
@@ -21,7 +21,7 @@ export interface ConsistencyCheckToolsDeps {
 }
 
 export function createConsistencyCheckTools(deps: ConsistencyCheckToolsDeps): Tool[] {
-  const agentDeps: AgentConsistencyCheckToolsDeps = {
+  const skillsDeps: SkillsConsistencyCheckToolsDeps = {
     createService: deps.createService,
     logger,
     ...(deps.chatModel ? { chatModel: deps.chatModel } : {}),
@@ -29,5 +29,5 @@ export function createConsistencyCheckTools(deps: ConsistencyCheckToolsDeps): To
     ...(deps.frameExtractor ? { frameExtractor: deps.frameExtractor } : {}),
   };
 
-  return createAgentConsistencyCheckTools(agentDeps);
+  return createSkillsConsistencyCheckTools(skillsDeps);
 }

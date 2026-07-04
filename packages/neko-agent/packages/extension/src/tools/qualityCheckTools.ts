@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
 import {
-  createQualityCheckTools as createAgentQualityCheckTools,
+  createQualityCheckTools as createSkillsQualityCheckTools,
   type IAudioAnalyzer,
   type IFrameExtractor,
   type MediaQualityChatModelRef,
   type MediaQualityGenerator,
   type MediaQualityLLMService,
-  type QualityCheckToolsDeps as AgentQualityCheckToolsDeps,
-} from '@neko/agent/validation';
+  type QualityCheckToolsDeps as SkillsQualityCheckToolsDeps,
+} from '@neko/skills';
 import type { Tool } from './types';
 import { getLogger } from '../base';
 
@@ -24,7 +24,7 @@ export interface QualityCheckToolsDeps {
 }
 
 export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
-  const agentDeps: AgentQualityCheckToolsDeps = {
+  const skillsDeps: SkillsQualityCheckToolsDeps = {
     createService: deps.createService,
     mediaGenerator: deps.mediaGenerator,
     readFileAsBase64,
@@ -34,7 +34,7 @@ export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
     ...(deps.frameExtractor ? { frameExtractor: deps.frameExtractor } : {}),
   };
 
-  return createAgentQualityCheckTools(agentDeps);
+  return createSkillsQualityCheckTools(skillsDeps);
 }
 
 async function readFileAsBase64(filePath: string): Promise<string> {

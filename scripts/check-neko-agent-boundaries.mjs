@@ -85,7 +85,7 @@ const compatibilityExceptions = [
     id: 'quality-check-tool-bridge',
     file: 'packages/neko-agent/packages/extension/src/tools/qualityCheckTools.ts',
     reason:
-      'Tool bridge: Extension hosts legacy quality-check command wiring while Agent validation owns quality business rules.',
+      'Tool bridge: Extension supplies VSCode file access and logger adapters while @neko/skills owns quality business rules.',
     owner: 'neko-agent-tools',
     tracking: 'openspec:unify-agent-content-access-cache:8.2',
     introducedAt: '2026-05-04',
@@ -102,7 +102,7 @@ const compatibilityExceptions = [
     id: 'consistency-check-tool-bridge',
     file: 'packages/neko-agent/packages/extension/src/tools/consistencyCheckTools.ts',
     reason:
-      'Tool bridge: Extension supplies logger/dependency adapters while Agent validation owns consistency business rules.',
+      'Tool bridge: Extension supplies logger/dependency adapters while @neko/skills owns consistency business rules.',
     owner: 'neko-agent-tools',
     tracking: 'openspec:unify-agent-content-access-cache:8.2',
     introducedAt: '2026-05-04',

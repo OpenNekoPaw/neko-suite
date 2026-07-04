@@ -7,9 +7,9 @@ import type {
   QualityIssueCategory,
   RemediationAction,
   VideoTechnicalMetrics,
-} from './qa-types';
+} from '@neko/shared';
 import { isExplicitChatRoutingError } from './chat-routing-error';
-import { QUALITY_ISSUE_CATEGORIES } from './qa-types';
+import { QUALITY_ISSUE_CATEGORIES } from '@neko/shared';
 import { createRemediationPlanner } from './remediation-planner';
 
 export interface MediaQualityLLMService {

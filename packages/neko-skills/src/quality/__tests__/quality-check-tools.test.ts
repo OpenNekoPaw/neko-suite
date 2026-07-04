@@ -18,7 +18,7 @@ function createGenerator() {
 const CHAT_MODEL = { providerId: 'deepseek-direct', modelId: 'deepseek-chat' } as const;
 
 describe('quality check tool factories', () => {
-  it('creates QualityCheck as an agent-owned read-only analysis tool', () => {
+  it('creates QualityCheck as a skills-owned read-only analysis tool', () => {
     const tools = createQualityCheckTools({
       createService: () => createService({ overallScore: 100, dimensions: {}, issues: [] }),
       mediaGenerator: createGenerator(),
@@ -258,7 +258,7 @@ describe('quality check tool factories', () => {
     expect(readFileAsBase64).not.toHaveBeenCalled();
   });
 
-  it('creates QualityCheckConsistency as an agent-owned read-only analysis tool', () => {
+  it('creates QualityCheckConsistency as a skills-owned read-only analysis tool', () => {
     const tool = createConsistencyCheckTools({
       createService: () =>
         createService({ driftScore: 10, description: 'consistent', characterIssues: [] }),

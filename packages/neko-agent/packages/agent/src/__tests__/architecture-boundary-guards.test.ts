@@ -158,6 +158,23 @@ describe('agent architecture boundary guards', () => {
     expect(existingFiles).toEqual([]);
   });
 
+  it('keeps media quality domain validation out of Agent core', () => {
+    const forbiddenValidationFiles = [
+      join(agentSrc, 'validation/qa-types.ts'),
+      join(agentSrc, 'validation/quality-evidence-normalizer.ts'),
+      join(agentSrc, 'validation/video-content-index.ts'),
+      join(agentSrc, 'validation/remediation-planner.ts'),
+      join(agentSrc, 'validation/consistency-evaluator.ts'),
+      join(agentSrc, 'validation/media-quality-runtime.ts'),
+      join(agentSrc, 'validation/quality-check-tools.ts'),
+    ];
+    const existingFiles = forbiddenValidationFiles
+      .filter((file) => existsSync(file))
+      .map((file) => relative(repoRoot, file).replace(/\\/g, '/'));
+
+    expect(existingFiles).toEqual([]);
+  });
+
   it('keeps Agent package independent from concrete skill packages', () => {
     const packageManifest = stripTypeScriptComments(
       readFileSync(join(repoRoot, 'packages/agent/package.json'), 'utf-8'),

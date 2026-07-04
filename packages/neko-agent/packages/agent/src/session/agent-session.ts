@@ -133,9 +133,10 @@ import {
 import {
   CHARACTER_INCONSISTENCY_FAIL_SCORE,
   STYLE_DRIFT_COLOR_POP_THRESHOLD,
+  type ConsistencyReport,
   type QualityEvidenceSceneTimeRange,
   type QualityEvidenceTimeRange,
-} from '../validation/quality-evidence-normalizer';
+} from '@neko/shared';
 import { createDefaultControlPlane, type StageTransitionGuidance } from '../control-plane';
 import {
   applyToolResultBackfillToChatHistory,
@@ -2429,7 +2430,7 @@ type QualityCheckEvaluationSummary = import('../feedback').QualityReviewEvaluati
 
 type QualityCheckFeedbackPayload = import('../feedback').QualityReviewFeedbackPayload;
 
-type QualityConsistencyReport = import('../validation/qa-types').ConsistencyReport;
+type QualityConsistencyReport = ConsistencyReport;
 
 function resolveObservedToolName(result: ObservedToolResult, toolNameHint?: string): string {
   return result.name ?? toolNameHint ?? 'unknown-tool';
@@ -2758,13 +2759,12 @@ function createQualityReviewPayloadFromConsistencyReport(
 
 function readSceneTimeRangesFromToolArguments(
   toolArguments: Record<string, unknown> | undefined,
-): import('../validation/quality-evidence-normalizer').QualityEvidenceSceneTimeRange[] {
+): QualityEvidenceSceneTimeRange[] {
   if (!toolArguments) return [];
   const scenes = toolArguments['scenes'];
   if (!Array.isArray(scenes)) return [];
 
-  const ranges: import('../validation/quality-evidence-normalizer').QualityEvidenceSceneTimeRange[] =
-    [];
+  const ranges: QualityEvidenceSceneTimeRange[] = [];
   for (let index = 0; index < scenes.length; index++) {
     const scene = scenes[index];
     if (!isRecord(scene)) continue;
@@ -2796,7 +2796,7 @@ function readSceneIndex(scene: Record<string, unknown>, defaultIndex: number): n
 
 function readToolArgumentTimeRange(
   scene: Record<string, unknown>,
-): import('../validation/quality-evidence-normalizer').QualityEvidenceTimeRange | null {
+): QualityEvidenceTimeRange | null {
   const direct = readTimeRangeLike(scene['timeRange']);
   if (direct) return direct;
   const start = scene['start'] ?? scene['startTime'];
@@ -2812,7 +2812,7 @@ function readToolArgumentTimeRange(
 
 function readTimeRangeLike(
   value: unknown,
-): import('../validation/quality-evidence-normalizer').QualityEvidenceTimeRange | null {
+): QualityEvidenceTimeRange | null {
   if (!isRecord(value)) return null;
   return readTimeRangeScalars(value['start'], value['end']);
 }
@@ -2820,7 +2820,7 @@ function readTimeRangeLike(
 function readTimeRangeScalars(
   start: unknown,
   end: unknown,
-): import('../validation/quality-evidence-normalizer').QualityEvidenceTimeRange | null {
+): QualityEvidenceTimeRange | null {
   if (
     typeof start !== 'number' ||
     typeof end !== 'number' ||

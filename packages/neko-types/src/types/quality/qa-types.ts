@@ -1,10 +1,10 @@
 /**
  * QA Types — Data types for creative output quality analysis
  *
- * Agent layer, zero vscode dependency.
+ * Shared contract layer, zero vscode dependency.
  *
  * These types are used by:
- *   - Pipeline diagnostics Skill (Agent-guided analysis on user request)
+ *   - Pipeline diagnostics Skill (agent-guided analysis on user request)
  *   - Gate preview enrichment (scene summary + media path for user review)
  *   - Run report scene summary
  *

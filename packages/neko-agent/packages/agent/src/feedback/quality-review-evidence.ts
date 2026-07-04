@@ -3,14 +3,14 @@ import type {
   AudioTechnicalMetrics,
   QualityIssue,
   VideoTechnicalMetrics,
-} from '../validation/qa-types';
+} from '@neko/shared';
 import {
   normalizeQualityConsistencyPayload,
   normalizeQualityReviewPayload,
   type QualityConsistencyReportForNormalization,
   type QualityEvidenceSceneTimeRange,
   type QualityEvidenceTimeRange,
-} from '../validation/quality-evidence-normalizer';
+} from '@neko/shared';
 
 export interface QualityReviewEvaluationSummary {
   readonly index: number;

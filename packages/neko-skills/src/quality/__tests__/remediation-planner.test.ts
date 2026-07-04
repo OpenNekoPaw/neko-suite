@@ -6,8 +6,11 @@
 
 import { describe, it, expect } from 'vitest';
 import { createRemediationPlanner } from '../remediation-planner';
-import type { QualityIssue, QualityIssueCategory } from '.././qa-types';
-import { QUALITY_ISSUE_CATEGORIES } from '.././qa-types';
+import {
+  QUALITY_ISSUE_CATEGORIES,
+  type QualityIssue,
+  type QualityIssueCategory,
+} from '@neko/shared';
 
 // =============================================================================
 // Helpers

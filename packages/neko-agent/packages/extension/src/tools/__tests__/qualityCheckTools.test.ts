@@ -193,7 +193,7 @@ describe('QualityCheck Tool', () => {
   });
 
   describe('all scenes pass', () => {
-    it('keeps file bytes behind the VSCode host adapter while quality policy runs in agent validation', async () => {
+    it('keeps file bytes behind the VSCode host adapter while quality policy runs in skills', async () => {
       const mockService = createMockService(createPassingEvaluation());
       const tools = createQualityCheckTools({
         createService: () => mockService,
