@@ -13,10 +13,11 @@ import {
   TOOL_NAMES_PERCEPTION,
   createSubagentReviewEvidence,
 } from '@neko/shared';
+import { createValidationCoordinatorFactory } from '@neko/skills';
 import type {
-  AgentToolResultFeedbackAdapter,
-  AgentToolResultFeedbackAdapterInput,
-  AgentToolReviewFeedbackSignal,
+  AgentToolResultValidationAdapter,
+  AgentToolResultValidationAdapterInput,
+  AgentToolReviewValidationSignal,
   IService,
   IToolRegistry,
   AgentStep,
@@ -105,11 +106,12 @@ function createConfig(overrides?: Partial<AgentSessionConfig>): AgentSessionConf
     toolRegistry: createMockToolRegistry(),
     systemPrompt: 'You are a helpful assistant.',
     maxIterations: 10,
+    validationCoordinatorFactory: createValidationCoordinatorFactory(),
     ...overrides,
   };
 }
 
-function createQualityReviewTestFeedbackAdapter(): AgentToolResultFeedbackAdapter {
+function createQualityReviewTestFeedbackAdapter(): AgentToolResultValidationAdapter {
   return {
     id: 'test-quality-review-feedback',
     createSignal(input) {
@@ -125,8 +127,8 @@ function createQualityReviewTestFeedbackAdapter(): AgentToolResultFeedbackAdapte
 }
 
 function createQualityPayloadReviewSignal(
-  input: AgentToolResultFeedbackAdapterInput,
-): AgentToolReviewFeedbackSignal | null {
+  input: AgentToolResultValidationAdapterInput,
+): AgentToolReviewValidationSignal | null {
   if (!isRecord(input.result.data) || !Array.isArray(input.result.data['evaluations'])) {
     return null;
   }
@@ -173,8 +175,8 @@ function createQualityPayloadReviewSignal(
 }
 
 function createConsistencyReviewSignal(
-  input: AgentToolResultFeedbackAdapterInput,
-): AgentToolReviewFeedbackSignal | null {
+  input: AgentToolResultValidationAdapterInput,
+): AgentToolReviewValidationSignal | null {
   if (!isRecord(input.result.data) || !Array.isArray(input.result.data['styleDrift'])) {
     return null;
   }
@@ -248,7 +250,7 @@ function createConsistencyReviewSignal(
 }
 
 function createReviewSignal(input: {
-  readonly input: AgentToolResultFeedbackAdapterInput;
+  readonly input: AgentToolResultValidationAdapterInput;
   readonly mode: 'analysis' | 'repair' | 'consistency';
   readonly summary: string;
   readonly totalScenes: number;
@@ -257,7 +259,7 @@ function createReviewSignal(input: {
   readonly failedIndexes: readonly number[];
   readonly remediationCount: number;
   readonly data: Record<string, unknown>;
-}): AgentToolReviewFeedbackSignal {
+}): AgentToolReviewValidationSignal {
   const evidence: PerceptionEvidence = {
     id: `quality-review:runless:${input.input.toolCallId}`,
     source: 'tool',
@@ -866,10 +868,10 @@ describe('AgentSession', () => {
           }),
         }),
       );
-      expect(session.getFeedbackCycles()).toEqual([
+      expect(session.getValidationCycles()).toEqual([
         expect.objectContaining({
           currentStage: null,
-          activeRunId: null,
+          activeRunId: expect.any(String),
           signals: [
             expect.objectContaining({
               kind: 'memory-extraction',
@@ -895,7 +897,7 @@ describe('AgentSession', () => {
 
     it('routes feedback decisions through ControlPlane guidance only', async () => {
       const projectMemory = createMockProjectMemory();
-      const controlPlane = {
+      const creativeProcessRecoveryPolicy = {
         stageRegistry: {
           register: vi.fn(),
           unregister: vi.fn(),
@@ -917,7 +919,7 @@ describe('AgentSession', () => {
       const session = new AgentSession(
         createConfig({
           projectMemoryManager: projectMemory,
-          controlPlane,
+          creativeProcessRecoveryPolicy,
         }),
       );
       injectMockExecutor(session, [
@@ -926,7 +928,7 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('我喜欢中文说明'));
 
-      expect(controlPlane.advise).toHaveBeenCalledWith({
+      expect(creativeProcessRecoveryPolicy.advise).toHaveBeenCalledWith({
         currentStageId: undefined,
         decision: expect.objectContaining({
           action: 'memorize',
@@ -937,7 +939,7 @@ describe('AgentSession', () => {
 
     it('injects ControlPlane stage guidance into the next feedback prompt', async () => {
       const journalWriter = createMockJournalWriter();
-      const controlPlane = {
+      const creativeProcessRecoveryPolicy = {
         stageRegistry: {
           register: vi.fn(),
           unregister: vi.fn(),
@@ -966,7 +968,7 @@ describe('AgentSession', () => {
         })),
         getDecisionHistory: vi.fn(() => []),
       };
-      const session = new AgentSession(createConfig({ controlPlane, journalWriter }));
+      const session = new AgentSession(createConfig({ creativeProcessRecoveryPolicy, journalWriter }));
       injectMockExecutor(session, [
         {
           type: 'act',
@@ -986,16 +988,16 @@ describe('AgentSession', () => {
       await collectEvents(session.execute('write the draft'));
 
       const content = (
-        session as unknown as { _feedbackGuidanceModule: { getContent(): string | null } }
-      )._feedbackGuidanceModule.getContent();
-      expect(content).toContain('ControlPlane');
+        session as unknown as { _validationGuidanceModule: { getContent(): string | null } }
+      )._validationGuidanceModule.getContent();
+      expect(content).toContain('Creative process recovery');
       expect(content).toContain('Retry the Apply stage with a safer fallback.');
       expect(content).toContain('permission denied');
       expect(journalWriter.appendEvent).toHaveBeenCalledWith(
         expect.any(Number),
         expect.objectContaining({
-          type: 'feedback.stage_transition_requested',
-          feedbackStageTransition: expect.objectContaining({
+          type: 'validation.stage_transition_requested',
+          validationStageTransition: expect.objectContaining({
             timestamp: 1,
             decision: expect.objectContaining({
               action: 'repair',
@@ -1512,7 +1514,7 @@ describe('AgentSession', () => {
   describe('feedback observation', () => {
     beforeEach(() => {
       config = createConfig({
-        toolResultFeedbackAdapters: [createQualityReviewTestFeedbackAdapter()],
+        toolResultValidationAdapters: [createQualityReviewTestFeedbackAdapter()],
       });
     });
 
@@ -1536,7 +1538,7 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('write the draft'));
 
-      expect(session.getFeedbackCycles()).toEqual([
+      expect(session.getValidationCycles()).toEqual([
         expect.objectContaining({
           currentStage: null,
           activeRunId: expect.any(String),
@@ -1611,7 +1613,7 @@ describe('AgentSession', () => {
         type: 'agent.evidence.attached',
         agentEvidence: { ...evidence, contextPacketId: 'ctx-subagent-review' },
       });
-      expect(session.getFeedbackCycles()[0]).toEqual(
+      expect(session.getValidationCycles()[0]).toEqual(
         expect.objectContaining({
           signals: [expect.objectContaining({ kind: 'subagent-review' })],
           decisions: [
@@ -1631,7 +1633,7 @@ describe('AgentSession', () => {
       const session = new AgentSession(
         applyAblationToggles(
           createConfig({
-            toolResultFeedbackAdapters: [createQualityReviewTestFeedbackAdapter()],
+            toolResultValidationAdapters: [createQualityReviewTestFeedbackAdapter()],
           }),
           {
             agentFirst: { recoveryGuidance: false },
@@ -1661,15 +1663,15 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('check scene quality'));
 
-      expect(session.getFeedbackCycles()[0]?.actions).toEqual([
+      expect(session.getValidationCycles()[0]?.actions).toEqual([
         expect.objectContaining({ kind: 'set-guidance' }),
       ]);
       expect(
         (
           session as unknown as {
-            _feedbackGuidanceModule: { getContent(): string | null };
+            _validationGuidanceModule: { getContent(): string | null };
           }
-        )._feedbackGuidanceModule.getContent(),
+        )._validationGuidanceModule.getContent(),
       ).toBeNull();
     });
 
@@ -1697,7 +1699,7 @@ describe('AgentSession', () => {
         expect.any(Number),
         expect.objectContaining({ type: 'agent.evidence.attached' }),
       );
-      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
+      expect(session.getValidationCycles()[0]?.signals[0]).toEqual(
         expect.objectContaining({ kind: 'subagent-review' }),
       );
     });
@@ -1763,7 +1765,7 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('check scene quality'));
 
-      expect(session.getFeedbackCycles()).toEqual([
+      expect(session.getValidationCycles()).toEqual([
         expect.objectContaining({
           currentStage: null,
           activeRunId: expect.any(String),
@@ -1828,7 +1830,7 @@ describe('AgentSession', () => {
       const session = new AgentSession(
         createConfig({
           journalWriter,
-          toolResultFeedbackAdapters: [createQualityReviewTestFeedbackAdapter()],
+          toolResultValidationAdapters: [createQualityReviewTestFeedbackAdapter()],
         }),
       );
       injectMockExecutor(session, [
@@ -1901,7 +1903,7 @@ describe('AgentSession', () => {
       );
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
+      expect(session.getValidationCycles()[0]?.signals[0]).toEqual(
         expect.objectContaining({
           kind: 'tool-review',
           toolName: 'QualityRepairCheck',
@@ -1981,7 +1983,7 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('check consistency'));
 
-      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
+      expect(session.getValidationCycles()[0]?.signals[0]).toEqual(
         expect.objectContaining({
           kind: 'tool-review',
           toolName: 'QualityCheckConsistency',
@@ -2065,7 +2067,7 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('check consistency threshold'));
 
-      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
+      expect(session.getValidationCycles()[0]?.signals[0]).toEqual(
         expect.objectContaining({
           metadata: expect.objectContaining({
             failed: 2,
@@ -2089,7 +2091,7 @@ describe('AgentSession', () => {
         }),
       );
       const edgeCandidates = (
-        session.getFeedbackCycles()[0]?.signals[0] as {
+        session.getValidationCycles()[0]?.signals[0] as {
           evidence?: { data?: { continuityEdgeCandidates?: Array<{ issue?: string }> } };
         }
       ).evidence?.data?.continuityEdgeCandidates;
@@ -2142,7 +2144,7 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('check partial consistency'));
 
-      expect(session.getFeedbackCycles()[0]?.signals[0]).toEqual(
+      expect(session.getValidationCycles()[0]?.signals[0]).toEqual(
         expect.objectContaining({
           toolName: 'QualityCheckConsistency',
           evidence: expect.objectContaining({
@@ -2168,7 +2170,7 @@ describe('AgentSession', () => {
       const session = new AgentSession(
         createConfig({
           journalWriter,
-          toolResultFeedbackAdapters: [createQualityReviewTestFeedbackAdapter()],
+          toolResultValidationAdapters: [createQualityReviewTestFeedbackAdapter()],
         }),
       );
       injectMockExecutor(session, [
@@ -2259,7 +2261,7 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('generate anime image'));
 
-      expect(session.getFeedbackCycles()).toEqual([
+      expect(session.getValidationCycles()).toEqual([
         expect.objectContaining({
           signals: [
             expect.objectContaining({
@@ -2332,7 +2334,7 @@ describe('AgentSession', () => {
       await collectEvents(session.execute('generate anime image'));
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(session.getFeedbackCycles()).toHaveLength(1);
+      expect(session.getValidationCycles()).toHaveLength(1);
       expect(writes).toEqual([]);
     });
 
@@ -2368,7 +2370,7 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('try again'));
 
-      expect(secondTurnPrompt).toContain('## Feedback Guidance');
+      expect(secondTurnPrompt).toContain('## Validation Guidance');
       expect(secondTurnPrompt).toContain('permission denied');
 
       let thirdTurnPrompt = '';
@@ -2383,7 +2385,7 @@ describe('AgentSession', () => {
 
       await collectEvents(session.execute('one more turn'));
 
-      expect(thirdTurnPrompt).not.toContain('## Feedback Guidance');
+      expect(thirdTurnPrompt).not.toContain('## Validation Guidance');
     });
   });
 

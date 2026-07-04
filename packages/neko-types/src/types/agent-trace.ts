@@ -17,7 +17,7 @@ export type AgentTracePhase =
   | 'workflow'
   | 'creation'
   | 'approval'
-  | 'feedback'
+  | 'validation'
   | 'subagent';
 
 export interface AgentTraceContext {

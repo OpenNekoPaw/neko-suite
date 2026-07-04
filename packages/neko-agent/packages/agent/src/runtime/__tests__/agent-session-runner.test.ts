@@ -23,7 +23,7 @@ function createSession(events: AgentEvent[] = [{ type: 'text', content: 'respons
     setPromptFragments: vi.fn(),
     getArtifactsForRun: vi.fn(() => []),
     listArtifactRunIds: vi.fn(() => []),
-    getFeedbackCycles: vi.fn(() => []),
+    getValidationCycles: vi.fn(() => []),
     getOperationToolAdapterRegistry: vi.fn(() => null),
     writeDraftArtifact: vi.fn(),
     writePlanArtifact: vi.fn(),

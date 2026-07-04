@@ -55,7 +55,7 @@ describe('agent architecture boundary guards', () => {
   it('keeps runtime collaborators independent from VSCode, React, Webview, and Extension modules', () => {
     const collaboratorFiles = [
       join(agentSrc, 'session/session-artifact-facade.ts'),
-      join(agentSrc, 'session/feedback-runtime-bridge.ts'),
+      join(agentSrc, 'session/validation-runtime-bridge.ts'),
       join(agentSrc, 'session/prompt-runtime-facade.ts'),
       join(agentSrc, 'runtime/character-dialogue-runtime.ts'),
     ];
@@ -99,10 +99,10 @@ describe('agent architecture boundary guards', () => {
     const source = readSourceFiles(extensionSrc, (file) => !isTestFile(file));
 
     expect(source).not.toMatch(
-      /class\s+(SessionPersistence|SessionArtifactFacade|FeedbackRuntimeBridge|PromptRuntimeFacade)\b/,
+      /class\s+(SessionPersistence|SessionArtifactFacade|ValidationRuntimeBridge|PromptRuntimeFacade)\b/,
     );
     expect(source).not.toMatch(
-      /from\s+['"][^'"]*session\/(?:session-persistence|session-artifact-facade|feedback-runtime-bridge|prompt-runtime-facade)['"]/,
+      /from\s+['"][^'"]*session\/(?:session-persistence|session-artifact-facade|validation-runtime-bridge|prompt-runtime-facade)['"]/,
     );
   });
 
@@ -399,6 +399,43 @@ describe('agent architecture boundary guards', () => {
     );
 
     expect([...existingFiles, ...sourceViolations]).toEqual([]);
+  });
+
+  it('keeps legacy feedback/control-plane runtime entrypoints out of Agent core', () => {
+    const productionSource = listFiles(agentSrc)
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
+    const legacyRuntimePatterns = [
+      /\bFeedbackRuntimeBridge\b/,
+      /feedback-runtime-bridge/,
+      /\bFeedbackGuidanceModule\b/,
+      /feedback-guidance-module/,
+      /feedback\.guidance/,
+      /feedback\.stage_transition_requested/,
+      /\bfeedbackCoordinator(?:Factory)?\b/,
+      /\bfeedbackControlPolicy\b/,
+      /\btoolResultFeedbackAdapters\b/,
+      /\bcontrolPlane\b/,
+      /\bAgentControlPlane\b/,
+      /\bAgentFeedbackCoordinator\b/,
+      /\bAgentFeedbackCycle\b/,
+      /\bAgentFeedbackSignal\b/,
+      /\bAgentFeedbackDecision\b/,
+      /\bAgentFeedbackFlowAction\b/,
+      /\bAgentFeedbackEvaluationContext\b/,
+      /\bAgentFeedbackMemoryExtraction(?:Input|Outcome|Result|Skipped)\b/,
+    ];
+    const violations = productionSource.flatMap(({ relativePath, source }) =>
+      legacyRuntimePatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
   });
 
   it('keeps optional Autoheal strategy packs and chain implementation out of Agent core', () => {
@@ -1007,7 +1044,7 @@ const allowedAgentSessionFieldNames = new Set([
   '_memoryProjectModule',
   '_memoryRecallModule',
   '_creativeVersionLogModule',
-  '_feedbackGuidanceModule',
+  '_validationGuidanceModule',
   '_promptModuleOrchestrator',
   '_promptContextProvider',
   '_skillInjectionModule',
@@ -1029,10 +1066,10 @@ const allowedAgentSessionFieldNames = new Set([
   '_stepsSink',
   '_artifactWatcher',
   '_artifactFacade',
-  '_feedbackRuntime',
+  '_validationRuntime',
   '_promptRuntime',
-  '_feedbackCoordinator',
-  '_controlPlane',
+  '_validationCoordinator',
+  '_creativeProcessRecoveryPolicy',
   '_operationToolAdapterRegistry',
   '_preferencesReady',
   '_preferencesWarnings',
@@ -1057,7 +1094,7 @@ const allowedAgentSessionFieldNames = new Set([
 
 const approvedAgentSessionCollaboratorFields = new Set([
   '_artifactFacade',
-  '_feedbackRuntime',
+  '_validationRuntime',
   '_promptRuntime',
 ]);
 
@@ -1065,7 +1102,7 @@ const legacyAgentSessionFieldDebt = new Set([
   '_memoryProjectModule',
   '_memoryRecallModule',
   '_creativeVersionLogModule',
-  '_feedbackGuidanceModule',
+  '_validationGuidanceModule',
   '_skillInjectionModule',
   '_agentsMdModule',
   '_artifactSchemaModule',
@@ -1093,14 +1130,14 @@ function classifyAgentSessionField(
   if (/(Queue|Pending)/i.test(name + declaration)) {
     return 'queue';
   }
-  if (/(GuidanceState|FeedbackGuidance)/i.test(name + declaration)) {
+  if (/(GuidanceState|ValidationGuidance)/i.test(name + declaration)) {
     return 'guidance-state';
   }
   if (/(TransitionBuffer|StageTransition|stageTransitions)/i.test(name + declaration)) {
     return 'transition-buffer';
   }
   if (
-    /(?:MemoryProjectModule|MemoryRecallModule|CreativeVersionLogModule|FeedbackGuidanceModule|SkillInjectionModule|AgentsMdModule|ArtifactSchemaModule|SubpackageFragmentsModule|PromptModule\b)/.test(
+    /(?:MemoryProjectModule|MemoryRecallModule|CreativeVersionLogModule|ValidationGuidanceModule|SkillInjectionModule|AgentsMdModule|ArtifactSchemaModule|SubpackageFragmentsModule|PromptModule\b)/.test(
       declaration,
     )
   ) {

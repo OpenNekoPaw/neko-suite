@@ -35,7 +35,7 @@ import { SystemPromptComposer } from '../prompt/system-prompt-composer';
 import { MemoryProjectModule } from '../prompt/modules/memory/memory-project-module';
 import { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
 import { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
-import { FeedbackGuidanceModule } from '../prompt/modules/ephemeral/feedback-guidance-module';
+import { ValidationGuidanceModule } from '../prompt/modules/ephemeral/validation-guidance-module';
 import { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
 import { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
@@ -79,7 +79,7 @@ export interface SessionComponents {
   memoryProjectModule: MemoryProjectModule;
   memoryRecallModule: MemoryRecallModule;
   creativeVersionLogModule: CreativeVersionLogModule;
-  feedbackGuidanceModule: FeedbackGuidanceModule;
+  validationGuidanceModule: ValidationGuidanceModule;
   promptModuleOrchestrator: ModuleOrchestrator;
   // PR3a: SkillInjectionCoordinator consumes this to route Track A writes
   // through the module.
@@ -288,7 +288,7 @@ export function initializeSession(
   const memoryProjectModule = new MemoryProjectModule();
   const memoryRecallModule = new MemoryRecallModule();
   const creativeVersionLogModule = new CreativeVersionLogModule();
-  const feedbackGuidanceModule = new FeedbackGuidanceModule();
+  const validationGuidanceModule = new ValidationGuidanceModule();
   const skillInjectionModule = new SkillInjectionModule();
   const agentsMdModule = new AgentsMdModule();
   const artifactSchemaModule = new ArtifactSchemaModule();
@@ -300,7 +300,7 @@ export function initializeSession(
     creativeVersionLogModule,
     artifactSchemaModule,
     subpackageFragmentsModule,
-    feedbackGuidanceModule,
+    validationGuidanceModule,
     memoryProjectModule,
   ]) {
     promptModuleRegistry.register(module);
@@ -354,7 +354,7 @@ export function initializeSession(
     memoryProjectModule,
     memoryRecallModule,
     creativeVersionLogModule,
-    feedbackGuidanceModule,
+    validationGuidanceModule,
     promptModuleOrchestrator,
     skillInjectionModule,
     agentsMdModule,

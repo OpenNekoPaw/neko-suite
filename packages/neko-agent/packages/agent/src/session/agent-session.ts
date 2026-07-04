@@ -23,9 +23,9 @@ import type {
   AgentCapabilityActivationTarget,
   AutohealEventEmitterPort,
   AgentEventSubscriptionPort,
-  AgentFeedbackCoordinator as IFeedbackCoordinator,
-  AgentFeedbackCycle,
-  AgentFeedbackSignal,
+  AgentValidationCoordinator as IValidationCoordinator,
+  AgentValidationCycle,
+  AgentValidationSignal,
   IAutohealChain,
   AgentProviderExpressionConceptDecision,
   AgentStageTransitionGuidance as StageTransitionGuidance,
@@ -124,7 +124,7 @@ import { ModuleOrchestrator } from '../prompt/composer/module-orchestrator';
 import type { MemoryProjectModule } from '../prompt/modules/memory/memory-project-module';
 import type { MemoryRecallModule } from '../prompt/modules/memory/memory-recall-module';
 import type { CreativeVersionLogModule } from '../prompt/modules/ephemeral/creative-version-log-module';
-import type { FeedbackGuidanceModule } from '../prompt/modules/ephemeral/feedback-guidance-module';
+import type { ValidationGuidanceModule } from '../prompt/modules/ephemeral/validation-guidance-module';
 import type { SkillInjectionModule } from '../prompt/modules/skill/skill-injection-module';
 import type { AgentsMdModule } from '../prompt/modules/environment/agents-md-module';
 import type { ArtifactSchemaModule } from '../prompt/modules/schema/artifact-schema-module';
@@ -144,7 +144,7 @@ import {
   DEFAULT_MAX_ITERATIONS,
 } from './agent-session-initializer';
 import { SessionArtifactFacade } from './session-artifact-facade';
-import { FeedbackRuntimeBridge } from './feedback-runtime-bridge';
+import { ValidationRuntimeBridge } from './validation-runtime-bridge';
 import { PromptRuntimeFacade } from './prompt-runtime-facade';
 import {
   createWorkspaceArtifactService,
@@ -169,7 +169,7 @@ function getAgentSessionLogger() {
 // Constants
 // =============================================================================
 
-const MAX_FEEDBACK_CYCLES = 32;
+const MAX_VALIDATION_CYCLES = 32;
 
 // =============================================================================
 // AgentSession Implementation
@@ -200,7 +200,7 @@ export class AgentSession implements IAgentSession {
   private _memoryProjectModule: MemoryProjectModule;
   private _memoryRecallModule: MemoryRecallModule;
   private _creativeVersionLogModule: CreativeVersionLogModule;
-  private _feedbackGuidanceModule: FeedbackGuidanceModule;
+  private _validationGuidanceModule: ValidationGuidanceModule;
   private _promptModuleOrchestrator: ModuleOrchestrator;
   private readonly _promptContextProvider: ReturnType<typeof createPromptContextProvider>;
   // PR3a: owns the format contract for skill-layer sections; consumed by
@@ -237,7 +237,7 @@ export class AgentSession implements IAgentSession {
   // JSONL event sink persisting bus events to `.neko/logs/events.jsonl`.
   private _eventSink: import('../workspace').INdjsonEventSink | null = null;
   private _artifactFacade: SessionArtifactFacade;
-  private _feedbackRuntime: FeedbackRuntimeBridge;
+  private _validationRuntime: ValidationRuntimeBridge;
   private _promptRuntime!: PromptRuntimeFacade;
   // JSONL audits sink persisting approve.decided events to
   // `.neko/logs/audits.jsonl`. Filter-predicated sibling of _eventSink.
@@ -249,10 +249,10 @@ export class AgentSession implements IAgentSession {
   // ADR §6.5). Replaces the dedicated Write tools with a non-blocking
   // validator that emits artifact.* events onto the EventBus.
   private _artifactWatcher: IArtifactWatcher | null = null;
-  // Skill/host-injected feedback coordinator. Agent core owns the generic
+  // Skill/host-injected validation coordinator. Agent core owns the generic
   // runtime ports and delegates concrete observation/evaluation policies.
-  private _feedbackCoordinator: IFeedbackCoordinator | null = null;
-  private _controlPlane: import('@neko/shared').AgentControlPlane | null = null;
+  private _validationCoordinator: IValidationCoordinator | null = null;
+  private _creativeProcessRecoveryPolicy: import('@neko/shared').AgentCreativeProcessRecoveryPolicy | null = null;
   private _operationToolAdapterRegistry:
     import('@neko/shared').IOperationToolAdapterRegistry | null = null;
   // Loaded user preferences (ADR §9.3). null when workspace.fsOps
@@ -330,22 +330,22 @@ export class AgentSession implements IAgentSession {
         },
       },
     });
-    this._feedbackRuntime = new FeedbackRuntimeBridge({
-      maxCycles: MAX_FEEDBACK_CYCLES,
+    this._validationRuntime = new ValidationRuntimeBridge({
+      maxCycles: MAX_VALIDATION_CYCLES,
       ports: {
-        feedback: {
-          getCoordinator: () => this._feedbackCoordinator,
+        validation: {
+          getCoordinator: () => this._validationCoordinator,
           isRecoveryGuidanceDisabled: () =>
             this._ablationMarker?.disableAgentFirstRecoveryGuidance === true,
         },
-        control: {
-          getControlPlane: () => this._controlPlane,
+        recovery: {
+          getRecoveryPolicy: () => this._creativeProcessRecoveryPolicy,
           getCurrentStage: () => this._stageTracker?.current ?? null,
           getActiveArtifactScope: () => this._getActiveArtifactScope(),
-          recordStageTransition: (input) => this._recordFeedbackStageTransition(input),
+          recordStageTransition: (input) => this._recordValidationStageTransition(input),
         },
         prompt: {
-          setGuidanceContent: (content) => this._promptRuntime.setFeedbackGuidanceContent(content),
+          setGuidanceContent: (content) => this._promptRuntime.setValidationGuidanceContent(content),
           syncSystemPrompt: () => this._syncSystemPrompt(),
         },
         diagnostics: {
@@ -377,7 +377,7 @@ export class AgentSession implements IAgentSession {
     this._memoryProjectModule = components.memoryProjectModule;
     this._memoryRecallModule = components.memoryRecallModule;
     this._creativeVersionLogModule = components.creativeVersionLogModule;
-    this._feedbackGuidanceModule = components.feedbackGuidanceModule;
+    this._validationGuidanceModule = components.validationGuidanceModule;
     this._promptModuleOrchestrator = components.promptModuleOrchestrator;
     this._skillInjectionModule = components.skillInjectionModule;
     this._agentsMdModule = components.agentsMdModule;
@@ -400,7 +400,7 @@ export class AgentSession implements IAgentSession {
         },
         modules: {
           artifactSchemaModule: this._artifactSchemaModule,
-          feedbackGuidanceModule: this._feedbackGuidanceModule,
+          validationGuidanceModule: this._validationGuidanceModule,
           memoryRecallModule: this._memoryRecallModule,
           creativeVersionLogModule: this._creativeVersionLogModule,
           subpackageFragmentsModule: this._subpackageFragmentsModule,
@@ -424,7 +424,7 @@ export class AgentSession implements IAgentSession {
     if (config.journalWriter) {
       this._journalWriter = config.journalWriter;
     }
-    this._controlPlane = config.controlPlane ?? null;
+    this._creativeProcessRecoveryPolicy = config.creativeProcessRecoveryPolicy ?? null;
     this._operationToolAdapterRegistry = config.operationToolAdapterRegistry ?? null;
 
     this._artifactFacade.setArtifactService(resolveArtifactService(config));
@@ -632,7 +632,7 @@ export class AgentSession implements IAgentSession {
         }
       }
 
-      this._rebuildFeedbackCoordinator();
+      this._rebuildValidationCoordinator();
 
       // Compose runner hooks with the guardian's tick. Keep runner hooks
       // in a single ExecutorHooks object so the executor's addHook call
@@ -662,7 +662,7 @@ export class AgentSession implements IAgentSession {
     }
 
     if (!config.stageTracking) {
-      this._rebuildFeedbackCoordinator();
+      this._rebuildValidationCoordinator();
     }
     this._wireMetaToolCapabilityProvider(
       this._createCapabilityProvider(createEmptySkillProvider()),
@@ -683,8 +683,8 @@ export class AgentSession implements IAgentSession {
     if (config.creationTaskProjection !== undefined) {
       this._artifactFacade.setTaskProjection(config.creationTaskProjection ?? null);
     }
-    if (config.controlPlane !== undefined) {
-      this._controlPlane = config.controlPlane ?? null;
+    if (config.creativeProcessRecoveryPolicy !== undefined) {
+      this._creativeProcessRecoveryPolicy = config.creativeProcessRecoveryPolicy ?? null;
     }
     if (config.operationToolAdapterRegistry !== undefined) {
       this._operationToolAdapterRegistry = config.operationToolAdapterRegistry ?? null;
@@ -700,7 +700,7 @@ export class AgentSession implements IAgentSession {
       this._promptRuntime.setBasePrompt(config.systemPrompt);
     }
 
-    this._rebuildFeedbackCoordinator();
+    this._rebuildValidationCoordinator();
     this._refreshMemoryRuntime();
     if (this._reactLoopBaseHooks) {
       this._runnerHooks = this._composeRunnerHooks(this._reactLoopBaseHooks);
@@ -780,8 +780,8 @@ export class AgentSession implements IAgentSession {
     return this._artifactFacade.listRunIds();
   }
 
-  getFeedbackCycles(): readonly AgentFeedbackCycle[] {
-    return this._feedbackRuntime.cycles;
+  getValidationCycles(): readonly AgentValidationCycle[] {
+    return this._validationRuntime.cycles;
   }
 
   getOperationToolAdapterRegistry(): import('@neko/shared').IOperationToolAdapterRegistry | null {
@@ -789,12 +789,12 @@ export class AgentSession implements IAgentSession {
   }
 
   async recordSubagentReviewResult(result: SubagentReviewResult): Promise<void> {
-    if (!this._feedbackCoordinator) {
+    if (!this._validationCoordinator) {
       return;
     }
 
     const activeRunId = this._getActiveTurnRunId();
-    this._feedbackCoordinator.observe({
+    this._validationCoordinator.observe({
       kind: 'subagent-review',
       observedAt: result.createdAt,
       review: result,
@@ -805,7 +805,7 @@ export class AgentSession implements IAgentSession {
       await Promise.all(result.evidence.map((evidence) => this._recordAgentEvidence(evidence)));
     }
 
-    await this._captureFeedbackCycle();
+    await this._captureValidationCycle();
   }
 
   writeDraftArtifact(draft: Draft, options?: { runId?: string }): Promise<ArtifactRecord<'draft'>> {
@@ -885,8 +885,8 @@ export class AgentSession implements IAgentSession {
     });
     this._activeTurnRunId = turnId;
     let iteration = 0;
-    const hadPendingFeedbackGuidance = this._feedbackRuntime.hasGuidance();
-    let feedbackGuidanceAdjustedThisTurn = false;
+    const hadPendingValidationGuidance = this._validationRuntime.hasGuidance();
+    let validationGuidanceAdjustedThisTurn = false;
 
     try {
       this._currentTurnPlanningContext = {
@@ -967,8 +967,8 @@ export class AgentSession implements IAgentSession {
         }
       }
 
-      feedbackGuidanceAdjustedThisTurn =
-        (await this._captureFeedbackCycle(trace)) || feedbackGuidanceAdjustedThisTurn;
+      validationGuidanceAdjustedThisTurn =
+        (await this._captureValidationCycle(trace)) || validationGuidanceAdjustedThisTurn;
       await this._updateMemoryRecall(memoryQueryInput);
       this._syncSystemPrompt(); // Ensure system prompt is fresh before snapshot
       const messagesSnapshot = [...this._history];
@@ -1023,9 +1023,9 @@ export class AgentSession implements IAgentSession {
             }
           }
 
-          this._observeToolFeedback(step, trace);
-          feedbackGuidanceAdjustedThisTurn =
-            (await this._captureFeedbackCycle(trace)) || feedbackGuidanceAdjustedThisTurn;
+          this._observeToolValidation(step, trace);
+          validationGuidanceAdjustedThisTurn =
+            (await this._captureValidationCycle(trace)) || validationGuidanceAdjustedThisTurn;
         }
 
         const yieldedEvents = Array.from(
@@ -1118,8 +1118,8 @@ export class AgentSession implements IAgentSession {
       }
 
       await this._extractProjectMemory(turnPersistedEvents);
-      feedbackGuidanceAdjustedThisTurn =
-        (await this._captureFeedbackCycle(trace)) || feedbackGuidanceAdjustedThisTurn;
+      validationGuidanceAdjustedThisTurn =
+        (await this._captureValidationCycle(trace)) || validationGuidanceAdjustedThisTurn;
 
       // Emit done event with real accumulated usage
       const doneEvent = {
@@ -1182,8 +1182,8 @@ export class AgentSession implements IAgentSession {
       this._currentTurnPlanningContext = null;
       this._activeTurnRunId = null;
       this._promptRuntime.setMemoryRecallContent(null);
-      if (!feedbackGuidanceAdjustedThisTurn && hadPendingFeedbackGuidance) {
-        this._feedbackRuntime.clearGuidance();
+      if (!validationGuidanceAdjustedThisTurn && hadPendingValidationGuidance) {
+        this._validationRuntime.clearGuidance();
       }
       this._syncSystemPrompt();
       this._isRunning = false;
@@ -1453,7 +1453,7 @@ export class AgentSession implements IAgentSession {
 
   clearHistory(): void {
     this._processedMemoryEventIds.clear();
-    this._feedbackRuntime.reset();
+    this._validationRuntime.reset();
     this._promptRuntime.setMemoryRecallContent(null);
     this._syncSystemPrompt();
     // Rebuild from composer to preserve current prompt composition
@@ -1465,7 +1465,7 @@ export class AgentSession implements IAgentSession {
     this._history = [...messages];
     this._historyEventIds = normalizeMessageEventIds(this._history, messageEventIds);
     this._processedMemoryEventIds = new Set();
-    this._feedbackRuntime.reset();
+    this._validationRuntime.reset();
     this._markMessageEventIdsAsProcessed(this._historyEventIds);
     // Ensure system prompt is present
     if (this._history.length === 0 || this._history[0].role !== 'system') {
@@ -1552,13 +1552,13 @@ export class AgentSession implements IAgentSession {
     // Close fs.watch handles + drop pending debounces before the bus goes away
     // so any last emit on settle has somewhere to land. Fire-and-forget.
     void this._artifactWatcher?.dispose();
-    this._feedbackCoordinator?.dispose();
+    this._validationCoordinator?.dispose();
     this._eventSink = null;
     this._auditsSink = null;
     this._stepsSink = null;
     this._artifactWatcher = null;
-    this._feedbackCoordinator = null;
-    this._controlPlane = null;
+    this._validationCoordinator = null;
+    this._creativeProcessRecoveryPolicy = null;
     this._operationToolAdapterRegistry = null;
     this._nekoPaths = null;
     this._eventBus?.clear();
@@ -1693,23 +1693,23 @@ export class AgentSession implements IAgentSession {
     return intent.source === 'user-explicit' || intent.source === 'agent-tool';
   }
 
-  private _rebuildFeedbackCoordinator(): void {
-    const previous = this._feedbackCoordinator;
-    this._feedbackCoordinator =
-      this._config.feedbackCoordinator ??
-      this._config.feedbackCoordinatorFactory?.({
-        eventBus: createFeedbackEventSubscriptionPort(this._eventBus),
+  private _rebuildValidationCoordinator(): void {
+    const previous = this._validationCoordinator;
+    this._validationCoordinator =
+      this._config.validationCoordinator ??
+      this._config.validationCoordinatorFactory?.({
+        eventBus: createValidationEventSubscriptionPort(this._eventBus),
         stageTracker: this._stageTracker,
         workspace: this._ablationMarker?.disableProviderCardAutoEvolve
           ? undefined
-          : createFeedbackWorkspacePort(this._config.workspace),
+          : createValidationWorkspacePort(this._config.workspace),
         projectMemoryManager: this._config.projectMemoryManager,
         autoMemoryExtraction: this._config.autoMemoryExtraction,
-        controlPolicy: this._config.feedbackControlPolicy,
+        controlPolicy: this._config.validationControlPolicy,
       }) ??
       null;
 
-    if (previous && previous !== this._feedbackCoordinator) {
+    if (previous && previous !== this._validationCoordinator) {
       previous.dispose();
     }
   }
@@ -1735,8 +1735,8 @@ export class AgentSession implements IAgentSession {
   private _composeRunnerHooks(
     baseHooks: import('@neko/shared').ExecutorHooks,
   ): import('@neko/shared').ExecutorHooks {
-    const feedbackHooks = this._feedbackCoordinator?.getBeforeThinkHooks() ?? [];
-    return composeBeforeThinkHooks(baseHooks, feedbackHooks);
+    const validationHooks = this._validationCoordinator?.getBeforeThinkHooks() ?? [];
+    return composeBeforeThinkHooks(baseHooks, validationHooks);
   }
 
   private _refreshMemoryRuntime(): void {
@@ -1773,7 +1773,7 @@ export class AgentSession implements IAgentSession {
   }
 
   private async _extractProjectMemory(entries: readonly PersistedAgentEvent[]): Promise<void> {
-    if (!this._feedbackCoordinator) {
+    if (!this._validationCoordinator) {
       return;
     }
 
@@ -1790,7 +1790,7 @@ export class AgentSession implements IAgentSession {
       const turnMessages = projectPersistedEventsToWorkingMemory(unprocessedEntries).map(
         (entry) => entry.message,
       );
-      const extraction = await this._feedbackCoordinator.extractMemory({
+      const extraction = await this._validationCoordinator.extractMemory({
         messages: turnMessages,
         sourceEventIds,
       });
@@ -1812,15 +1812,15 @@ export class AgentSession implements IAgentSession {
     }
   }
 
-  private _observeToolFeedback(step: AgentStep, trace?: AgentTraceContext): void {
-    if (!this._feedbackCoordinator || step.type !== 'act' || !step.toolResults) {
+  private _observeToolValidation(step: AgentStep, trace?: AgentTraceContext): void {
+    if (!this._validationCoordinator || step.type !== 'act' || !step.toolResults) {
       return;
     }
 
     const activeRunId = this._getActiveTurnRunId();
-    const feedbackTrace = deriveAgentTraceContext(trace, {
+    const validationTrace = deriveAgentTraceContext(trace, {
       ...(activeRunId ? { runId: activeRunId } : {}),
-      phase: 'feedback',
+      phase: 'validation',
     });
     let failureSignals = 0;
     let toolReviewSignals = 0;
@@ -1831,7 +1831,7 @@ export class AgentSession implements IAgentSession {
       const toolCallId = result.callId ?? toolCall?.id ?? `tool-call-${i}`;
       const toolName = resolveObservedToolName(result, toolCall?.name);
       if (!result.success) {
-        this._feedbackCoordinator.observe({
+        this._validationCoordinator.observe({
           kind: 'tool-failure',
           observedAt: step.timestamp,
           toolCallId,
@@ -1843,8 +1843,8 @@ export class AgentSession implements IAgentSession {
         continue;
       }
 
-      const toolReviewSignal = toToolReviewFeedbackSignal({
-        adapters: this._config.toolResultFeedbackAdapters,
+      const toolReviewSignal = toToolReviewValidationSignal({
+        adapters: this._config.toolResultValidationAdapters,
         result,
         toolArguments: toolCall?.arguments,
         toolCallId,
@@ -1853,7 +1853,7 @@ export class AgentSession implements IAgentSession {
         ...(activeRunId ? { runId: activeRunId } : {}),
       });
       if (toolReviewSignal) {
-        this._feedbackCoordinator.observe(toolReviewSignal);
+        this._validationCoordinator.observe(toolReviewSignal);
         toolReviewSignals += 1;
         if (
           'evidence' in toolReviewSignal &&
@@ -1864,7 +1864,7 @@ export class AgentSession implements IAgentSession {
         }
       }
 
-      const providerExpressionSignal = toProviderExpressionFeedbackSignal({
+      const providerExpressionSignal = toProviderExpressionValidationSignal({
         result,
         toolCallId,
         toolName,
@@ -1872,14 +1872,14 @@ export class AgentSession implements IAgentSession {
         ...(activeRunId ? { runId: activeRunId } : {}),
       });
       if (providerExpressionSignal) {
-        this._feedbackCoordinator.observe(providerExpressionSignal);
+        this._validationCoordinator.observe(providerExpressionSignal);
         providerExpressionSignals += 1;
       }
     }
 
     logger.debug(
-      'neko.agent.feedback.observe.summary',
-      withAgentTrace(feedbackTrace, {
+      'neko.agent.validation.observe.summary',
+      withAgentTrace(validationTrace, {
         toolResultCount: step.toolResults.length,
         failureSignals,
         toolReviewSignals,
@@ -1925,13 +1925,13 @@ export class AgentSession implements IAgentSession {
     return typeof id === 'string' ? id : undefined;
   }
 
-  private async _captureFeedbackCycle(trace?: AgentTraceContext): Promise<boolean> {
-    return this._feedbackRuntime.captureCycle(trace);
+  private async _captureValidationCycle(trace?: AgentTraceContext): Promise<boolean> {
+    return this._validationRuntime.captureCycle(trace);
   }
 
-  private async _recordFeedbackStageTransition(input: {
-    readonly cycle: AgentFeedbackCycle;
-    readonly decision: import('@neko/shared').AgentFeedbackDecision;
+  private async _recordValidationStageTransition(input: {
+    readonly cycle: AgentValidationCycle;
+    readonly decision: import('@neko/shared').AgentValidationDecision;
     readonly guidance: StageTransitionGuidance;
     readonly timestamp: number;
   }): Promise<void> {
@@ -1941,8 +1941,8 @@ export class AgentSession implements IAgentSession {
 
     try {
       await this._journalWriter.appendEvent(++this._journalSeq, {
-        type: 'feedback.stage_transition_requested',
-        feedbackStageTransition: {
+        type: 'validation.stage_transition_requested',
+        validationStageTransition: {
           timestamp: input.timestamp,
           ...(input.cycle.activeRunId ? { activeRunId: input.cycle.activeRunId } : {}),
           ...(input.cycle.currentStage ? { currentStageId: input.cycle.currentStage } : {}),
@@ -1951,7 +1951,7 @@ export class AgentSession implements IAgentSession {
         },
       });
     } catch (error) {
-      logger.warn('Failed to record ControlPlane feedback transition', { error });
+      logger.warn('Failed to record creative process recovery transition', { error });
     }
   }
 
@@ -2275,7 +2275,7 @@ function createEmptySkillProvider(): ISkillProvider {
   };
 }
 
-function createFeedbackEventSubscriptionPort(
+function createValidationEventSubscriptionPort(
   eventBus: IEventBus | null,
 ): AgentEventSubscriptionPort | null {
   if (!eventBus) {
@@ -2285,7 +2285,7 @@ function createFeedbackEventSubscriptionPort(
   return {
     on(channel, listener) {
       if (channel !== EXECUTION_CHANNELS.ARTIFACT_INVALID) {
-        throw new Error(`Unsupported feedback event channel: ${channel}`);
+        throw new Error(`Unsupported validation event channel: ${channel}`);
       }
       return eventBus.on(EXECUTION_CHANNELS.ARTIFACT_INVALID, (event) => listener(event));
     },
@@ -2319,9 +2319,9 @@ function isAutohealExecutionChannel(channel: string): boolean {
   );
 }
 
-function createFeedbackWorkspacePort(
+function createValidationWorkspacePort(
   workspace: AgentSessionConfig['workspace'] | undefined,
-): import('@neko/shared').AgentFeedbackWorkspacePort | undefined {
+): import('@neko/shared').AgentValidationWorkspacePort | undefined {
   if (!workspace || !hasWorkspaceWriteFileFsOps(workspace.fsOps)) {
     return undefined;
   }
@@ -2503,15 +2503,15 @@ function resolveObservedToolName(result: ObservedToolResult, toolNameHint?: stri
   return result.name ?? toolNameHint ?? 'unknown-tool';
 }
 
-function toToolReviewFeedbackSignal(input: {
-  readonly adapters: AgentSessionConfig['toolResultFeedbackAdapters'];
+function toToolReviewValidationSignal(input: {
+  readonly adapters: AgentSessionConfig['toolResultValidationAdapters'];
   readonly result: ObservedToolResult;
   readonly toolArguments?: Record<string, unknown>;
   readonly toolCallId: string;
   readonly toolName: string;
   readonly observedAt: number;
   readonly runId?: string;
-}): import('@neko/shared').AgentToolReviewFeedbackSignal | null {
+}): import('@neko/shared').AgentToolReviewValidationSignal | null {
   for (const adapter of input.adapters ?? []) {
     const signal = adapter.createSignal(input);
     if (signal) {
@@ -2521,14 +2521,14 @@ function toToolReviewFeedbackSignal(input: {
   return null;
 }
 
-function toProviderExpressionFeedbackSignal(input: {
+function toProviderExpressionValidationSignal(input: {
   readonly result: ObservedToolResult;
   readonly toolCallId: string;
   readonly toolName: string;
   readonly observedAt: number;
   readonly runId?: string;
   readonly attachEvidence?: boolean;
-}): AgentFeedbackSignal | null {
+}): AgentValidationSignal | null {
   const metadata = extractProviderExpressionMetadata(input.result);
   if (!metadata) {
     return null;

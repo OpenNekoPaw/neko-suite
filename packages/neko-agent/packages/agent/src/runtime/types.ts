@@ -1,7 +1,7 @@
 import type {
-  AgentToolResultFeedbackAdapter as AgentToolResultValidationAdapter,
-  AgentControlPlane as ICreativeProcessRecoveryPolicy,
-  AgentFeedbackCoordinator as IValidationCoordinator,
+  AgentToolResultValidationAdapter,
+  AgentCreativeProcessRecoveryPolicy as ICreativeProcessRecoveryPolicy,
+  AgentValidationCoordinator as IValidationCoordinator,
   IProjectMemoryManager,
   ISkillRegistry,
   IToolCategoryRegistry,
@@ -139,7 +139,7 @@ export interface IValidationLoop {
   readonly autoMemoryExtraction?: boolean;
   readonly memoryRecall?: boolean;
   readonly validationCoordinator?: IValidationCoordinator;
-  readonly validationCoordinatorFactory?: import('@neko/shared').AgentFeedbackCoordinatorFactory;
+  readonly validationCoordinatorFactory?: import('@neko/shared').AgentValidationCoordinatorFactory;
   readonly toolResultValidationAdapters?: readonly AgentToolResultValidationAdapter[];
 }
 

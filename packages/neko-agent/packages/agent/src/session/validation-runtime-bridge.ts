@@ -1,72 +1,72 @@
 import type {
-  AgentControlPlane as IControlPlane,
-  AgentFeedbackCoordinator as IFeedbackCoordinator,
-  AgentFeedbackCycle as FeedbackCycle,
-  AgentFeedbackDecision as FeedbackDecision,
-  AgentFeedbackFlowAction as FeedbackFlowAction,
+  AgentCreativeProcessRecoveryPolicy as ICreativeProcessRecoveryPolicy,
+  AgentValidationCoordinator as IValidationCoordinator,
+  AgentValidationCycle as ValidationCycle,
+  AgentValidationDecision as ValidationDecision,
+  AgentValidationFlowAction as ValidationFlowAction,
   AgentStageTransitionGuidance as StageTransitionGuidance,
   AgentTraceContext,
 } from '@neko/shared';
 import { deriveAgentTraceContext, withAgentTrace } from '@neko/shared';
 import type { IdcStage } from '@neko-agent/types';
 
-export interface FeedbackRuntimeFeedbackPort {
-  readonly getCoordinator: () => IFeedbackCoordinator | null;
+export interface ValidationRuntimeCoordinatorPort {
+  readonly getCoordinator: () => IValidationCoordinator | null;
   readonly isRecoveryGuidanceDisabled: () => boolean;
 }
 
-export interface FeedbackRuntimeControlPort {
-  readonly getControlPlane: () => IControlPlane | null;
+export interface ValidationRuntimeRecoveryPort {
+  readonly getRecoveryPolicy: () => ICreativeProcessRecoveryPolicy | null;
   readonly getCurrentStage: () => IdcStage | null;
   readonly getActiveArtifactScope: () => {
     readonly id: string;
     readonly startedAt?: number;
   } | null;
   readonly recordStageTransition: (input: {
-    readonly cycle: FeedbackCycle;
-    readonly decision: FeedbackDecision;
+    readonly cycle: ValidationCycle;
+    readonly decision: ValidationDecision;
     readonly guidance: StageTransitionGuidance;
     readonly timestamp: number;
   }) => Promise<void>;
 }
 
-export interface FeedbackRuntimePromptPort {
+export interface ValidationRuntimePromptPort {
   readonly setGuidanceContent: (content: string | null) => void;
   readonly syncSystemPrompt: () => void;
 }
 
-export interface FeedbackRuntimeDiagnosticsPort {
+export interface ValidationRuntimeDiagnosticsPort {
   readonly debug: (message: string, data?: Record<string, unknown>) => void;
 }
 
-export interface FeedbackRuntimeBridgePorts {
-  readonly feedback: FeedbackRuntimeFeedbackPort;
-  readonly control: FeedbackRuntimeControlPort;
-  readonly prompt: FeedbackRuntimePromptPort;
-  readonly diagnostics: FeedbackRuntimeDiagnosticsPort;
+export interface ValidationRuntimeBridgePorts {
+  readonly validation: ValidationRuntimeCoordinatorPort;
+  readonly recovery: ValidationRuntimeRecoveryPort;
+  readonly prompt: ValidationRuntimePromptPort;
+  readonly diagnostics: ValidationRuntimeDiagnosticsPort;
 }
 
-export interface FeedbackRuntimeBridgeOptions {
+export interface ValidationRuntimeBridgeOptions {
   readonly maxCycles: number;
-  readonly ports: FeedbackRuntimeBridgePorts;
+  readonly ports: ValidationRuntimeBridgePorts;
 }
 
-interface FeedbackGuidanceState {
+interface ValidationGuidanceState {
   readonly content: string;
   readonly sourceArtifactScopeId?: string;
   readonly sourceArtifactScopeStartedAt?: number;
 }
 
-export class FeedbackRuntimeBridge {
-  private readonly _options: FeedbackRuntimeBridgeOptions;
-  private _cycles: FeedbackCycle[] = [];
-  private _guidanceState: FeedbackGuidanceState | null = null;
+export class ValidationRuntimeBridge {
+  private readonly _options: ValidationRuntimeBridgeOptions;
+  private _cycles: ValidationCycle[] = [];
+  private _guidanceState: ValidationGuidanceState | null = null;
 
-  constructor(options: FeedbackRuntimeBridgeOptions) {
+  constructor(options: ValidationRuntimeBridgeOptions) {
     this._options = options;
   }
 
-  get cycles(): readonly FeedbackCycle[] {
+  get cycles(): readonly ValidationCycle[] {
     return this._cycles;
   }
 
@@ -84,27 +84,27 @@ export class FeedbackRuntimeBridge {
   }
 
   async captureCycle(trace?: AgentTraceContext): Promise<boolean> {
-    const coordinator = this._options.ports.feedback.getCoordinator();
+    const coordinator = this._options.ports.validation.getCoordinator();
     if (!coordinator) {
       return false;
     }
 
-    const activeArtifactScope = this._options.ports.control.getActiveArtifactScope();
+    const activeArtifactScope = this._options.ports.recovery.getActiveArtifactScope();
     const activeRunId = activeArtifactScope?.id ?? null;
-    const feedbackTrace = deriveAgentTraceContext(trace, {
+    const validationTrace = deriveAgentTraceContext(trace, {
       ...(activeRunId ? { runId: activeRunId } : {}),
-      phase: 'feedback',
+      phase: 'validation',
     });
-    const currentStage = this._options.ports.control.getCurrentStage();
+    const currentStage = this._options.ports.recovery.getCurrentStage();
     const cycle = coordinator.evaluatePending({
       currentStage,
       activeRunId,
     });
     if (!cycle) {
       this._options.ports.diagnostics.debug(
-        'neko.agent.feedback.cycle.skipped',
-        withAgentTrace(feedbackTrace, {
-          reason: 'no-pending-feedback',
+        'neko.agent.validation.cycle.skipped',
+        withAgentTrace(validationTrace, {
+          reason: 'no-pending-validation',
           currentStage,
           activeRunId,
         }),
@@ -116,11 +116,11 @@ export class FeedbackRuntimeBridge {
     if (this._cycles.length > this._options.maxCycles) {
       this._cycles.splice(0, this._cycles.length - this._options.maxCycles);
     }
-    const stageGuidance = await this._adviseControlPlane(cycle);
-    this._applyFeedbackFlowActions(cycle.actions, stageGuidance);
+    const stageGuidance = await this._adviseRecoveryPolicy(cycle);
+    this._applyValidationFlowActions(cycle.actions, stageGuidance);
     this._options.ports.diagnostics.debug(
-      'neko.agent.feedback.cycle.captured',
-      withAgentTrace(feedbackTrace, {
+      'neko.agent.validation.cycle.captured',
+      withAgentTrace(validationTrace, {
         signalCount: cycle.signals.length,
         signalKinds: uniqueStrings(cycle.signals.map((signal) => signal.kind)),
         decisionCount: cycle.decisions.length,
@@ -139,7 +139,7 @@ export class FeedbackRuntimeBridge {
     content: string | null,
     sourceRun?: { readonly id: string; readonly startedAt?: number } | null,
   ): void {
-    if (this._options.ports.feedback.isRecoveryGuidanceDisabled() && content !== null) {
+    if (this._options.ports.validation.isRecoveryGuidanceDisabled() && content !== null) {
       this._applyGuidanceSnapshot(null);
       return;
     }
@@ -159,23 +159,23 @@ export class FeedbackRuntimeBridge {
     });
   }
 
-  private async _adviseControlPlane(
-    cycle: FeedbackCycle,
+  private async _adviseRecoveryPolicy(
+    cycle: ValidationCycle,
   ): Promise<readonly StageTransitionGuidance[]> {
-    const controlPlane = this._options.ports.control.getControlPlane();
-    if (!controlPlane) {
+    const creativeProcessRecoveryPolicy = this._options.ports.recovery.getRecoveryPolicy();
+    if (!creativeProcessRecoveryPolicy) {
       return [];
     }
 
     const guidance: StageTransitionGuidance[] = [];
     for (const decision of cycle.decisions) {
-      const controlDecision = controlPlane.advise({
+      const controlDecision = creativeProcessRecoveryPolicy.advise({
         ...(cycle.currentStage ? { currentStageId: cycle.currentStage } : {}),
         decision,
       });
       if (controlDecision.guidance) {
         guidance.push(controlDecision.guidance);
-        await this._options.ports.control.recordStageTransition({
+        await this._options.ports.recovery.recordStageTransition({
           cycle,
           decision,
           guidance: controlDecision.guidance,
@@ -186,15 +186,15 @@ export class FeedbackRuntimeBridge {
     return guidance;
   }
 
-  private _applyFeedbackFlowActions(
-    actions: readonly FeedbackFlowAction[],
+  private _applyValidationFlowActions(
+    actions: readonly ValidationFlowAction[],
     stageGuidance: readonly StageTransitionGuidance[] = [],
   ): void {
     if (actions.length === 0 && stageGuidance.length === 0) {
       return;
     }
 
-    const activeRun = this._options.ports.control.getActiveArtifactScope();
+    const activeRun = this._options.ports.recovery.getActiveArtifactScope();
     const guidanceBlocks: string[] = [];
     let requestedClear = false;
     for (const guidance of stageGuidance) {
@@ -223,7 +223,7 @@ export class FeedbackRuntimeBridge {
     }
   }
 
-  private _applyGuidanceSnapshot(snapshot: FeedbackGuidanceState | null): void {
+  private _applyGuidanceSnapshot(snapshot: ValidationGuidanceState | null): void {
     this._guidanceState = snapshot ? { ...snapshot } : null;
     this._options.ports.prompt.setGuidanceContent(snapshot?.content ?? null);
   }
@@ -233,7 +233,7 @@ function formatStageTransitionGuidance(guidance: StageTransitionGuidance): strin
   const fromStage = guidance.fromStageId ?? 'current stage';
   const transition = formatStageTransitionAction(guidance, fromStage);
   const approval = guidance.requiresUserApproval ? ' User approval is required.' : '';
-  return `- ControlPlane: ${transition}. ${guidance.reason}${approval}`;
+  return `- Creative process recovery: ${transition}. ${guidance.reason}${approval}`;
 }
 
 function formatStageTransitionAction(guidance: StageTransitionGuidance, fromStage: string): string {

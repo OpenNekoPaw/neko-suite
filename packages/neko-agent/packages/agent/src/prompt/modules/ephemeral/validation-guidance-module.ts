@@ -5,17 +5,17 @@ import type {
 } from '../../registry/module-manifest';
 
 /**
- * FeedbackGuidanceModule — projects control-plane guidance emitted by the
- * feedback arbiter into the next turn's ephemeral prompt layer.
+ * ValidationGuidanceModule — projects validation/recovery guidance emitted by
+ * skill-owned validation policy into the next turn's ephemeral prompt layer.
  *
  * The content is intentionally short-lived: AgentSession keeps it around for
- * one turn after a feedback cycle, then clears it unless a newer cycle
+ * one turn after a validation cycle, then clears it unless a newer cycle
  * replaces it. That gives us a concrete intent -> generate -> evaluate ->
  * decide -> next-turn-control loop without permanently polluting memory.
  */
-export class FeedbackGuidanceModule implements PromptModule {
+export class ValidationGuidanceModule implements PromptModule {
   readonly manifest: PromptModuleManifest = {
-    id: 'feedback.guidance',
+    id: 'validation.guidance',
     layers: ['ephemeral'],
     requires: [],
     priority: 45,
@@ -45,9 +45,9 @@ export class FeedbackGuidanceModule implements PromptModule {
 
     return [
       {
-        sectionId: 'feedback-guidance',
+        sectionId: 'validation-guidance',
         layer: 'ephemeral',
-        content: `## Feedback Guidance\n\n${this._content}`,
+        content: `## Validation Guidance\n\n${this._content}`,
         priority: 45,
       },
     ];

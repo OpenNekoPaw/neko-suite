@@ -261,10 +261,10 @@ describe('applyAblationToggles — Agent-first marker fields', () => {
     expect(marker.disableAgentFirstObservation).toBe(true);
     expect(marker.disableAgentFirstToolEvidence).toBe(true);
     expect(marker.disableAgentFirstRecoveryGuidance).toBe(true);
-    expect(config.feedbackControlPolicy).toEqual({ toolEvidenceMode: 'off' });
+    expect(config.validationControlPolicy).toEqual({ toolEvidenceMode: 'off' });
   });
 
-  it('agentFirst.toolEvidenceMode threads through feedback control policy and marker', () => {
+  it('agentFirst.toolEvidenceMode threads through validation control policy and marker', () => {
     const config = applyAblationToggles(makeBaseConfig(), {
       agentFirst: { toolEvidenceMode: 'required-for-low-confidence' },
     });
@@ -272,7 +272,7 @@ describe('applyAblationToggles — Agent-first marker fields', () => {
 
     expect(marker.agentFirstToolEvidenceMode).toBe('required-for-low-confidence');
     expect(marker.disableAgentFirst).toBe(false);
-    expect(config.feedbackControlPolicy).toEqual({
+    expect(config.validationControlPolicy).toEqual({
       toolEvidenceMode: 'required-for-low-confidence',
     });
   });
@@ -286,6 +286,6 @@ describe('applyAblationToggles — Agent-first marker fields', () => {
     expect(marker.disableAgentFirst).toBe(false);
     expect(marker.disableAgentFirstObservation).toBe(false);
     expect(marker.disableAgentFirstToolEvidence).toBe(true);
-    expect(config.feedbackControlPolicy).toEqual({ toolEvidenceMode: 'off' });
+    expect(config.validationControlPolicy).toEqual({ toolEvidenceMode: 'off' });
   });
 });

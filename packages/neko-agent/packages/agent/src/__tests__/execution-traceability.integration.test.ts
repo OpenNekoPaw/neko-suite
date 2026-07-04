@@ -14,6 +14,7 @@ import {
   type ServiceOptions,
   type StreamChunk,
 } from '@neko/shared';
+import { createValidationCoordinatorFactory } from '@neko/skills';
 
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const values: T[] = [];
@@ -95,6 +96,7 @@ describe('agent execution traceability', () => {
       maxIterations: 3,
       conversationId: 'conv-trace-1',
       stageTracking: { guardian: false },
+      validationCoordinatorFactory: createValidationCoordinatorFactory(),
     });
 
     const events = await collect(session.execute('Read package.json'));
@@ -111,7 +113,7 @@ describe('agent execution traceability', () => {
     const toolRequest = findLog('neko.agent.tool.execute.request');
     const iterationEnd = findLog('neko.agent.iteration.end');
     const compactionCheck = findLog('neko.agent.context_compaction.check');
-    const feedbackCycle = findLog('neko.agent.feedback.cycle.skipped');
+    const feedbackCycle = findLog('neko.agent.validation.cycle.skipped');
 
     for (const entry of [
       sessionStart,
@@ -159,7 +161,7 @@ describe('agent execution traceability', () => {
     );
     expect(dataOf(feedbackCycle).trace).toEqual(
       expect.objectContaining({
-        phase: 'feedback',
+        phase: 'validation',
       }),
     );
   }, 15_000);

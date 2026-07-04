@@ -125,7 +125,7 @@ export class JournalReader {
           case 'compaction':
           case 'compaction_failed':
           case 'memory_extraction':
-          case 'feedback.stage_transition_requested':
+          case 'validation.stage_transition_requested':
           case 'text':
           case 'thinking_content':
           case 'tool_call':

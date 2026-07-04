@@ -41,12 +41,13 @@ export function buildAgentSessionConfigWithRuntime(
   const skillService = base.skillService ?? capability?.skillService;
   const providerCardRegistry = base.providerCardRegistry ?? capability?.providerCardRegistry;
   const projectMemoryManager = base.projectMemoryManager ?? validation?.projectMemoryManager;
-  const feedbackCoordinator = base.feedbackCoordinator ?? validation?.validationCoordinator;
-  const feedbackCoordinatorFactory =
-    base.feedbackCoordinatorFactory ?? validation?.validationCoordinatorFactory;
-  const toolResultFeedbackAdapters =
-    base.toolResultFeedbackAdapters ?? validation?.toolResultValidationAdapters;
-  const controlPlane = base.controlPlane ?? creationGuidance?.creativeProcessRecoveryPolicy;
+  const validationCoordinator = base.validationCoordinator ?? validation?.validationCoordinator;
+  const validationCoordinatorFactory =
+    base.validationCoordinatorFactory ?? validation?.validationCoordinatorFactory;
+  const toolResultValidationAdapters =
+    base.toolResultValidationAdapters ?? validation?.toolResultValidationAdapters;
+  const creativeProcessRecoveryPolicy =
+    base.creativeProcessRecoveryPolicy ?? creationGuidance?.creativeProcessRecoveryPolicy;
   const autohealChainFactory = base.autohealChainFactory ?? creationGuidance?.autohealChainFactory;
   const externalProcessorRuntime =
     base.externalProcessorRuntime ?? capability?.externalProcessorRuntime;
@@ -68,10 +69,10 @@ export function buildAgentSessionConfigWithRuntime(
     ...(skillService ? { skillService } : {}),
     ...(providerCardRegistry ? { providerCardRegistry } : {}),
     ...(projectMemoryManager ? { projectMemoryManager } : {}),
-    ...(feedbackCoordinator ? { feedbackCoordinator } : {}),
-    ...(feedbackCoordinatorFactory ? { feedbackCoordinatorFactory } : {}),
-    ...(toolResultFeedbackAdapters ? { toolResultFeedbackAdapters } : {}),
-    ...(controlPlane ? { controlPlane } : {}),
+    ...(validationCoordinator ? { validationCoordinator } : {}),
+    ...(validationCoordinatorFactory ? { validationCoordinatorFactory } : {}),
+    ...(toolResultValidationAdapters ? { toolResultValidationAdapters } : {}),
+    ...(creativeProcessRecoveryPolicy ? { creativeProcessRecoveryPolicy } : {}),
     ...(autohealChainFactory ? { autohealChainFactory } : {}),
     ...(externalProcessorRuntime ? { externalProcessorRuntime } : {}),
     ...(contentAccessRuntime ? { contentAccessRuntime } : {}),

@@ -13,7 +13,7 @@ export interface PromptRuntimeComposerPort {
 
 export interface PromptRuntimeModulePort {
   readonly artifactSchemaModule: PromptModule;
-  readonly feedbackGuidanceModule: PromptRuntimeContentModule;
+  readonly validationGuidanceModule: PromptRuntimeContentModule;
   readonly memoryRecallModule: PromptRuntimeContentModule;
   readonly creativeVersionLogModule: PromptRuntimeVersionLogModule;
   readonly subpackageFragmentsModule: PromptRuntimeFragmentsModule;
@@ -71,8 +71,8 @@ export class PromptRuntimeFacade {
     this._options.ports.modules.memoryRecallModule.setContent(content);
   }
 
-  setFeedbackGuidanceContent(content: string | null): void {
-    this._options.ports.modules.feedbackGuidanceModule.setContent(content);
+  setValidationGuidanceContent(content: string | null): void {
+    this._options.ports.modules.validationGuidanceModule.setContent(content);
   }
 
   composeText(): string {
@@ -84,7 +84,7 @@ export class PromptRuntimeFacade {
     readonly historyEventIds: string[][];
   }): string[][] {
     this.applyModuleSync(this._options.ports.modules.artifactSchemaModule);
-    this.applyModuleSync(this._options.ports.modules.feedbackGuidanceModule);
+    this.applyModuleSync(this._options.ports.modules.validationGuidanceModule);
     this.applyModuleSync(this._options.ports.modules.memoryRecallModule);
 
     this._options.ports.modules.creativeVersionLogModule.setSummary(

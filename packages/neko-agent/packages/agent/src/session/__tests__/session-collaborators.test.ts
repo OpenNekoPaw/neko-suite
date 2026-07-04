@@ -4,12 +4,12 @@ import {
   ConsoleLogger,
   LogLevel,
   createAgentTraceContext,
-  type AgentControlPlane,
-  type AgentFeedbackCoordinator,
-  type AgentFeedbackCycle,
-  type AgentFeedbackEvaluationContext,
-  type AgentFeedbackMemoryExtractionInput,
-  type AgentFeedbackMemoryExtractionOutcome,
+  type AgentCreativeProcessRecoveryPolicy,
+  type AgentValidationCoordinator,
+  type AgentValidationCycle,
+  type AgentValidationEvaluationContext,
+  type AgentValidationMemoryExtractionInput,
+  type AgentValidationMemoryExtractionOutcome,
   type ChatMessage,
 } from '@neko/shared';
 import type {
@@ -20,7 +20,7 @@ import type {
   Task,
 } from '@neko-agent/types';
 import { SessionArtifactFacade } from '../session-artifact-facade';
-import { FeedbackRuntimeBridge } from '../feedback-runtime-bridge';
+import { ValidationRuntimeBridge } from '../validation-runtime-bridge';
 import { PromptRuntimeFacade } from '../prompt-runtime-facade';
 import type {
   AnyArtifactRecord,
@@ -36,7 +36,7 @@ import { ModuleOrchestrator } from '../../prompt/composer/module-orchestrator';
 import { PromptModuleRegistry } from '../../prompt/registry/module-registry';
 import { PromptSectionCache } from '../../prompt/registry/section-cache';
 import { ArtifactSchemaModule } from '../../prompt/modules/schema/artifact-schema-module';
-import { FeedbackGuidanceModule } from '../../prompt/modules/ephemeral/feedback-guidance-module';
+import { ValidationGuidanceModule } from '../../prompt/modules/ephemeral/validation-guidance-module';
 import { MemoryRecallModule } from '../../prompt/modules/memory/memory-recall-module';
 import { CreativeVersionLogModule } from '../../prompt/modules/ephemeral/creative-version-log-module';
 import { SubpackageFragmentsModule } from '../../prompt/modules/environment/subpackage-fragments-module';
@@ -194,7 +194,7 @@ describe('session runtime collaborators', () => {
     expect(projection.clearRun).toHaveBeenCalledWith('activity-queue', 100);
   });
 
-  it('captures feedback guidance, applies control-plane guidance, and logs trace summaries', async () => {
+  it('captures validation guidance, applies recovery guidance, and logs trace summaries', async () => {
     const transport = new CapturedLogTransport();
     setRootLogger(new ConsoleLogger('Agent', LogLevel.Debug, [transport]));
     const cycle = createFeedbackCycle();
@@ -202,15 +202,15 @@ describe('session runtime collaborators', () => {
     const setPromptGuidanceContent = vi.fn();
     const syncSystemPrompt = vi.fn();
     const recordStageTransition = vi.fn(async () => {});
-    const bridge = new FeedbackRuntimeBridge({
+    const bridge = new ValidationRuntimeBridge({
       maxCycles: 1,
       ports: {
-        feedback: {
+        validation: {
           getCoordinator: () => coordinator,
           isRecoveryGuidanceDisabled: () => false,
         },
-        control: {
-          getControlPlane: () => createControlPlane(),
+        recovery: {
+          getRecoveryPolicy: () => createControlPlane(),
           getCurrentStage: () => 'apply',
           getActiveArtifactScope: () => ({ id: 'activity-feedback', startedAt: 100 }),
           recordStageTransition,
@@ -221,7 +221,7 @@ describe('session runtime collaborators', () => {
         },
         diagnostics: {
           debug: (message, data) => {
-            const logger = new ConsoleLogger('Agent:FeedbackTest', LogLevel.Debug, [transport]);
+            const logger = new ConsoleLogger('Agent:ValidationTest', LogLevel.Debug, [transport]);
             logger.debug(message, data);
           },
         },
@@ -237,12 +237,12 @@ describe('session runtime collaborators', () => {
       expect.stringContaining('Retry with a smaller edit'),
     );
     expect(recordStageTransition).toHaveBeenCalledTimes(1);
-    expect(transport.findByMessage('neko.agent.feedback.cycle.captured')?.data).toEqual(
+    expect(transport.findByMessage('neko.agent.validation.cycle.captured')?.data).toEqual(
       expect.objectContaining({
         trace: expect.objectContaining({
           conversationId: 'conv-feedback',
           runId: 'activity-feedback',
-          phase: 'feedback',
+          phase: 'validation',
         }),
         actionCount: 1,
         stageGuidanceCount: 1,
@@ -254,24 +254,24 @@ describe('session runtime collaborators', () => {
       createAgentTraceContext({ conversationId: 'conv-feedback' }),
     );
     expect(skipped).toBe(false);
-    expect(transport.findByMessage('neko.agent.feedback.cycle.skipped')?.data).toEqual(
+    expect(transport.findByMessage('neko.agent.validation.cycle.skipped')?.data).toEqual(
       expect.objectContaining({
-        reason: 'no-pending-feedback',
+        reason: 'no-pending-validation',
       }),
     );
   });
 
-  it('surfaces feedback stage transition persistence failures from captureCycle', async () => {
+  it('surfaces validation stage transition persistence failures from captureCycle', async () => {
     const coordinator = createTestFeedbackCoordinator(createFeedbackCycle());
-    const bridge = new FeedbackRuntimeBridge({
+    const bridge = new ValidationRuntimeBridge({
       maxCycles: 4,
       ports: {
-        feedback: {
+        validation: {
           getCoordinator: () => coordinator,
           isRecoveryGuidanceDisabled: () => false,
         },
-        control: {
-          getControlPlane: () => createControlPlane(),
+        recovery: {
+          getRecoveryPolicy: () => createControlPlane(),
           getCurrentStage: () => 'apply',
           getActiveArtifactScope: () => ({ id: 'activity-feedback-error', startedAt: 100 }),
           recordStageTransition: vi.fn(async () => {
@@ -357,7 +357,7 @@ describe('session runtime collaborators', () => {
     const registry = new PromptModuleRegistry();
     const orchestrator = new ModuleOrchestrator(registry, composer, new PromptSectionCache());
     const artifactSchemaModule = new ArtifactSchemaModule();
-    const feedbackGuidanceModule = new FeedbackGuidanceModule();
+    const validationGuidanceModule = new ValidationGuidanceModule();
     const memoryRecallModule = new MemoryRecallModule();
     const creativeVersionLogModule = new CreativeVersionLogModule();
     const subpackageFragmentsModule = new SubpackageFragmentsModule();
@@ -381,7 +381,7 @@ describe('session runtime collaborators', () => {
         },
         modules: {
           artifactSchemaModule,
-          feedbackGuidanceModule,
+          validationGuidanceModule,
           memoryRecallModule,
           creativeVersionLogModule,
           subpackageFragmentsModule,
@@ -400,7 +400,7 @@ describe('session runtime collaborators', () => {
     facade.setBasePrompt('Base prompt');
     facade.setPromptFragments([{ id: 'fragment-1', content: 'Fragment prompt' }]);
     facade.setMemoryRecallContent('Memory prompt');
-    facade.setFeedbackGuidanceContent('Guidance prompt');
+    facade.setValidationGuidanceContent('Guidance prompt');
     const nextEventIds = facade.syncSystemPrompt({ history, historyEventIds: [] });
 
     expect(history[0]?.content).toContain('Base prompt');
@@ -482,7 +482,7 @@ function createPromptRuntimeFacade(
       },
       modules: {
         artifactSchemaModule: new ArtifactSchemaModule(),
-        feedbackGuidanceModule: new FeedbackGuidanceModule(),
+        validationGuidanceModule: new ValidationGuidanceModule(),
         memoryRecallModule: new MemoryRecallModule(),
         creativeVersionLogModule: new CreativeVersionLogModule(),
         subpackageFragmentsModule: new SubpackageFragmentsModule(),
@@ -731,8 +731,8 @@ function createArtifactWrittenEvent(
   };
 }
 
-class TestFeedbackCoordinator implements AgentFeedbackCoordinator {
-  private _nextCycle: AgentFeedbackCycle | null;
+class TestFeedbackCoordinator implements AgentValidationCoordinator {
+  private _nextCycle: AgentValidationCycle | null;
   readonly getBeforeThinkHooks = vi.fn(() => []);
   readonly observe = vi.fn();
   readonly getSignalHistory = vi.fn(() => []);
@@ -740,8 +740,8 @@ class TestFeedbackCoordinator implements AgentFeedbackCoordinator {
   readonly getActionHistory = vi.fn(() => []);
   readonly extractMemory = vi.fn(
     async (
-      _input: AgentFeedbackMemoryExtractionInput,
-    ): Promise<AgentFeedbackMemoryExtractionOutcome> => ({
+      _input: AgentValidationMemoryExtractionInput,
+    ): Promise<AgentValidationMemoryExtractionOutcome> => ({
       kind: 'skipped',
       timestamp: 100,
       sourceEventIds: [],
@@ -750,24 +750,24 @@ class TestFeedbackCoordinator implements AgentFeedbackCoordinator {
   );
   readonly dispose = vi.fn();
 
-  constructor(cycle: AgentFeedbackCycle | null) {
+  constructor(cycle: AgentValidationCycle | null) {
     this._nextCycle = cycle;
   }
 
-  setNextCycle(cycle: AgentFeedbackCycle | null): void {
+  setNextCycle(cycle: AgentValidationCycle | null): void {
     this._nextCycle = cycle;
   }
 
-  evaluatePending(_context?: AgentFeedbackEvaluationContext): AgentFeedbackCycle | null {
+  evaluatePending(_context?: AgentValidationEvaluationContext): AgentValidationCycle | null {
     return this._nextCycle;
   }
 }
 
-function createTestFeedbackCoordinator(cycle: AgentFeedbackCycle | null): TestFeedbackCoordinator {
+function createTestFeedbackCoordinator(cycle: AgentValidationCycle | null): TestFeedbackCoordinator {
   return new TestFeedbackCoordinator(cycle);
 }
 
-function createFeedbackCycle(): AgentFeedbackCycle {
+function createFeedbackCycle(): AgentValidationCycle {
   return {
     timestamp: 100,
     currentStage: 'apply',
@@ -793,8 +793,8 @@ function createFeedbackCycle(): AgentFeedbackCycle {
   };
 }
 
-function createControlPlane(): AgentControlPlane {
-  const controlPlane = {
+function createControlPlane(): AgentCreativeProcessRecoveryPolicy {
+  const creativeProcessRecoveryPolicy = {
     stageRegistry: {
       get: () => undefined,
       list: () => [],
@@ -820,7 +820,7 @@ function createControlPlane(): AgentControlPlane {
     })),
     getDecisionHistory: vi.fn(() => []),
   };
-  return controlPlane;
+  return creativeProcessRecoveryPolicy;
 }
 
 function createDraft(id: string, now: number): Draft {

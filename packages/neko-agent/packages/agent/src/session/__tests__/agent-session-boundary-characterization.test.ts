@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createTool,
-  type AgentFeedbackCoordinator,
-  type AgentFeedbackCycle,
-  type AgentFeedbackEvaluationContext,
-  type AgentFeedbackMemoryExtractionInput,
-  type AgentFeedbackMemoryExtractionOutcome,
+  type AgentValidationCoordinator,
+  type AgentValidationCycle,
+  type AgentValidationEvaluationContext,
+  type AgentValidationMemoryExtractionInput,
+  type AgentValidationMemoryExtractionOutcome,
   type IService,
   type StreamChunk,
 } from '@neko/shared';
@@ -287,7 +287,7 @@ function extractCreationId(path: string): string | null {
   return match?.[1] ?? null;
 }
 
-class OneShotFeedbackCoordinator implements AgentFeedbackCoordinator {
+class OneShotFeedbackCoordinator implements AgentValidationCoordinator {
   private used = false;
   readonly observe = vi.fn();
   readonly dispose = vi.fn();
@@ -296,15 +296,15 @@ class OneShotFeedbackCoordinator implements AgentFeedbackCoordinator {
   readonly getDecisionHistory = () => [];
   readonly getActionHistory = () => [];
   readonly extractMemory = async (
-    _input: AgentFeedbackMemoryExtractionInput,
-  ): Promise<AgentFeedbackMemoryExtractionOutcome> => ({
+    _input: AgentValidationMemoryExtractionInput,
+  ): Promise<AgentValidationMemoryExtractionOutcome> => ({
     kind: 'skipped',
     timestamp: 100,
     sourceEventIds: [],
     reason: 'disabled',
   });
 
-  evaluatePending(context: AgentFeedbackEvaluationContext = {}): AgentFeedbackCycle | null {
+  evaluatePending(context: AgentValidationEvaluationContext = {}): AgentValidationCycle | null {
     if (this.used) {
       return null;
     }
@@ -435,11 +435,11 @@ describe('AgentSession boundary characterization', () => {
 
   it('preserves artifact write, restore visibility, feedback guidance, and flush behavior', async () => {
     const artifactService = new MemoryArtifactService();
-    const feedbackCoordinator = new OneShotFeedbackCoordinator();
+    const validationCoordinator = new OneShotFeedbackCoordinator();
     const session = new AgentSession(
       createConfig({
         artifactService,
-        feedbackCoordinator,
+        validationCoordinator,
         stageTracking: { guardian: false },
       }),
     );
@@ -463,11 +463,11 @@ describe('AgentSession boundary characterization', () => {
 
     await collect(session.execute('apply feedback guidance'));
 
-    expect(session.getFeedbackCycles()).toHaveLength(1);
+    expect(session.getValidationCycles()).toHaveLength(1);
     expect(String(session.getHistory()[0]?.content)).toContain('Retry with a smaller edit');
     session.dispose();
     expect(artifactService.dispose).toHaveBeenCalledTimes(1);
-    expect(feedbackCoordinator.dispose).toHaveBeenCalledTimes(1);
+    expect(validationCoordinator.dispose).toHaveBeenCalledTimes(1);
   });
 });
 

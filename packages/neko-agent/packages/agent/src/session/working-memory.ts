@@ -151,7 +151,7 @@ export function projectPersistedEventsToWorkingMemory(
       case 'compaction':
       case 'compaction_failed':
       case 'memory_extraction':
-      case 'feedback.stage_transition_requested':
+      case 'validation.stage_transition_requested':
       case 'thinking':
       case 'text_delta':
       case 'tool_progress':

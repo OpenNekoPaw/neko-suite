@@ -354,16 +354,6 @@ export type AgentFeedbackCoordinatorFactory = (
   input: AgentFeedbackCoordinatorFactoryInput,
 ) => AgentFeedbackCoordinator;
 
-export interface AgentFeedbackLoopConfig {
-  readonly projectMemoryManager?: IProjectMemoryManager;
-  readonly compactLogging?: boolean;
-  readonly autoMemoryExtraction?: boolean;
-  readonly memoryRecall?: boolean;
-  readonly feedbackCoordinator?: AgentFeedbackCoordinator;
-  readonly feedbackCoordinatorFactory?: AgentFeedbackCoordinatorFactory;
-  readonly toolResultFeedbackAdapters?: readonly AgentToolResultFeedbackAdapter[];
-}
-
 export type AgentStageTransitionAction = 'retry-stage' | 'regress-to' | 'restart-run';
 
 export interface AgentStageTransitionGuidance {
@@ -390,3 +380,36 @@ export interface AgentControlPlane {
   advise(input: AgentControlPlaneDecisionInput): AgentControlPlaneDecision;
   getDecisionHistory(): readonly AgentControlPlaneDecision[];
 }
+
+export type AgentToolReviewValidationSignal = AgentToolReviewFeedbackSignal;
+export type AgentToolResultValidationAdapterInput = AgentToolResultFeedbackAdapterInput;
+export type AgentToolResultValidationAdapter = AgentToolResultFeedbackAdapter;
+export type AgentValidationMemoryExtractionInput = AgentFeedbackMemoryExtractionInput;
+export type AgentValidationMemoryExtractionSkipped = AgentFeedbackMemoryExtractionSkipped;
+export type AgentValidationMemoryExtractionResult = AgentFeedbackMemoryExtractionResult;
+export type AgentValidationMemoryExtractionOutcome = AgentFeedbackMemoryExtractionOutcome;
+export type AgentValidationSignal = AgentFeedbackSignal;
+export type AgentValidationDecision = AgentFeedbackDecision;
+export type AgentValidationControlPolicy = AgentFeedbackControlPolicy;
+export type AgentValidationFlowAction = AgentFeedbackFlowAction;
+export type AgentValidationEvaluationContext = AgentFeedbackEvaluationContext;
+export type AgentValidationCycle = AgentFeedbackCycle;
+export type AgentValidationEvaluator = AgentFeedbackEvaluator;
+export type AgentValidationArbiter = AgentFeedbackArbiter;
+export type AgentValidationCoordinator = AgentFeedbackCoordinator;
+export type AgentValidationCoordinatorFactoryInput = AgentFeedbackCoordinatorFactoryInput;
+export type AgentValidationWorkspaceFsOps = AgentFeedbackWorkspaceFsOps;
+export type AgentValidationWorkspacePort = AgentFeedbackWorkspacePort;
+export type AgentValidationCoordinatorFactory = AgentFeedbackCoordinatorFactory;
+export interface AgentValidationLoopConfig {
+  readonly projectMemoryManager?: IProjectMemoryManager;
+  readonly compactLogging?: boolean;
+  readonly autoMemoryExtraction?: boolean;
+  readonly memoryRecall?: boolean;
+  readonly validationCoordinator?: AgentValidationCoordinator;
+  readonly validationCoordinatorFactory?: AgentValidationCoordinatorFactory;
+  readonly toolResultValidationAdapters?: readonly AgentToolResultValidationAdapter[];
+}
+export type AgentCreativeProcessRecoveryDecisionInput = AgentControlPlaneDecisionInput;
+export type AgentCreativeProcessRecoveryDecision = AgentControlPlaneDecision;
+export type AgentCreativeProcessRecoveryPolicy = AgentControlPlane;

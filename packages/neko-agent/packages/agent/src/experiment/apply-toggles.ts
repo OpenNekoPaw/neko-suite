@@ -131,7 +131,7 @@ function createAblationMarkerHook(toggles: AblationToggles): AblationMarkerHook 
  * | autoMemoryExtraction  | autoMemoryExtraction = false                        |
  * | memoryRecall          | memoryRecall = false                               |
  * | providerCardAutoEvolve | marker flag for ProviderCard auto-evolution writes |
- * | agentFirst           | marker flags + feedback control policy           |
+ * | agentFirst           | marker flags + validation control policy         |
  * | narrative            | marker feature flags for Canvas Narrative Preview |
  * | thinkingBudget        | thinkingBudget                                     |
  * | maxIterations         | maxIterations                                      |
@@ -191,15 +191,15 @@ export function applyAblationToggles(
   // --- Agent-first multimodal ---
 
   if (toggles.agentFirst?.toolEvidenceMode !== undefined) {
-    config.feedbackControlPolicy = {
-      ...config.feedbackControlPolicy,
+    config.validationControlPolicy = {
+      ...config.validationControlPolicy,
       toolEvidenceMode: toggles.agentFirst.toolEvidenceMode,
     };
   }
 
   if (toggles.agentFirst?.toolEvidence === false || toggles.agentFirst?.enabled === false) {
-    config.feedbackControlPolicy = {
-      ...config.feedbackControlPolicy,
+    config.validationControlPolicy = {
+      ...config.validationControlPolicy,
       toolEvidenceMode: 'off',
     };
   }

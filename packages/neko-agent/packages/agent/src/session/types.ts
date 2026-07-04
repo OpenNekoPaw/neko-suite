@@ -219,44 +219,44 @@ export interface AgentSessionConfig {
   memoryRecall?: boolean;
 
   /**
-   * Optional feedback runtime coordinator.
+   * Optional validation runtime coordinator.
    *
-   * When provided, session-level feedback sources such as artifact
+   * When provided, session-level validation sources such as artifact
    * observation, self-evaluation guidance, and project-memory extraction
    * are delegated to this coordinator instead of being assembled ad hoc
    * inside AgentSession.
    */
-  feedbackCoordinator?: import('@neko/shared').AgentFeedbackCoordinator;
+  validationCoordinator?: import('@neko/shared').AgentValidationCoordinator;
 
   /**
-   * Optional host/skill-owned feedback coordinator factory.
+   * Optional host/skill-owned validation coordinator factory.
    *
    * AgentSession calls this only after its generic runtime ports
    * (EventBus/StageTracker/project memory) are available. This keeps concrete
-   * feedback policies outside Agent core while allowing skills to subscribe to
+   * validation policies outside Agent core while allowing skills to subscribe to
    * agent-owned runtime events through stable shared ports.
    */
-  feedbackCoordinatorFactory?: import('@neko/shared').AgentFeedbackCoordinatorFactory;
+  validationCoordinatorFactory?: import('@neko/shared').AgentValidationCoordinatorFactory;
 
   /**
-   * Legacy host policy field. Agent core no longer creates a default
-   * FeedbackCoordinator; skills/extensions that own feedback policy should
-   * configure their injected coordinator directly.
+   * Optional host/skill-owned validation policy. Agent core no longer creates
+   * default policy implementations; skills/extensions that own validation
+   * should configure their injected coordinator directly.
    */
-  feedbackControlPolicy?: import('@neko/shared').AgentFeedbackControlPolicy;
+  validationControlPolicy?: import('@neko/shared').AgentValidationControlPolicy;
 
   /**
    * Host-contributed adapters that can turn successful tool outputs into
-   * generic feedback signals. Domain packages own concrete adapter rules.
+   * generic validation signals. Domain packages own concrete adapter rules.
    */
-  toolResultFeedbackAdapters?: readonly import('@neko/shared').AgentToolResultFeedbackAdapter[];
+  toolResultValidationAdapters?: readonly import('@neko/shared').AgentToolResultValidationAdapter[];
 
   /**
-   * Optional ControlPlane guidance provider. It only receives feedback
+   * Optional creative-process recovery provider. It only receives validation
    * decisions and may return stage guidance; it must not execute tools or
    * mutate project state.
    */
-  controlPlane?: import('@neko/shared').AgentControlPlane;
+  creativeProcessRecoveryPolicy?: import('@neko/shared').AgentCreativeProcessRecoveryPolicy;
 
   /**
    * Optional skill/host-owned technical recovery chain factory.
@@ -445,7 +445,7 @@ export type AgentEventType =
   | 'compaction' // Working-memory compaction summary written to journal
   | 'compaction_failed' // Compaction attempt failed and tripped/advanced circuit state
   | 'memory_extraction' // Semantic memory extraction/write pipeline event
-  | 'feedback.stage_transition_requested' // ControlPlane requested retry/regress/restart flow guidance
+  | 'validation.stage_transition_requested' // Creative-process recovery requested retry/regress/restart guidance
   | 'agent.observation.created' // Agent-first multimodal observation recorded
   | 'agent.evidence.attached' // Optional evidence attached to an observation/rationale
   | 'agent.rationale.created' // Agent decision rationale recorded
@@ -576,12 +576,12 @@ export interface AgentEvent {
     writeStatus: 'pending' | 'written' | 'rejected-by-user' | 'dedup';
   };
 
-  /** ControlPlane feedback transition request event */
-  feedbackStageTransition?: {
+  /** Creative-process recovery transition request event */
+  validationStageTransition?: {
     timestamp: number;
     activeRunId?: string;
     currentStageId?: string;
-    decision: import('@neko/shared').AgentFeedbackDecision;
+    decision: import('@neko/shared').AgentValidationDecision;
     guidance: import('@neko/shared').AgentStageTransitionGuidance;
   };
 
@@ -707,10 +707,10 @@ export interface IAgentSession {
   listArtifactRunIds(): readonly string[];
 
   /**
-   * Recent feedback coordination cycles assembled from artifact observation,
+   * Recent validation coordination cycles assembled from artifact observation,
    * self-evaluation scheduling, and memory extraction.
    */
-  getFeedbackCycles(): readonly import('@neko/shared').AgentFeedbackCycle[];
+  getValidationCycles(): readonly import('@neko/shared').AgentValidationCycle[];
 
   /**
    * Get the injected OperationTool adapter registry, if this host provides one.

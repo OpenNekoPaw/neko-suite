@@ -118,9 +118,9 @@ describe('buildAgentSessionConfigWithRuntime', () => {
     expect(config.skillService).toBe(skillService);
     expect(config.stageTracking?.skillLifecycleRuntime).toBe(skillLifecycleRuntime);
     expect(config.projectMemoryManager).toBe(projectMemoryManager);
-    expect(config.feedbackCoordinator).toBe(validationCoordinator);
-    expect(config.feedbackCoordinatorFactory).toBe(validationCoordinatorFactory);
-    expect(config.controlPlane).toBe(creativeProcessRecoveryPolicy);
+    expect(config.validationCoordinator).toBe(validationCoordinator);
+    expect(config.validationCoordinatorFactory).toBe(validationCoordinatorFactory);
+    expect(config.creativeProcessRecoveryPolicy).toBe(creativeProcessRecoveryPolicy);
     expect(config.autohealChainFactory).toBe(autohealChainFactory);
     expect(config.operationToolAdapterRegistry).toBe(operationToolAdapterRegistry);
     expect(config.contentAccessRuntime).toBe(contentAccessRuntime);
