@@ -5,6 +5,7 @@
  */
 
 import type {
+  AgentTaskResultDeliveryPolicy,
   TaskInput,
   TaskOutput,
   TaskRecoveryInfo,
@@ -874,14 +875,22 @@ export function createMediaTaskInput(
     'text-to-audio': 'audio_generation',
     'text-to-music': 'audio_generation',
   };
+  const ownerConversationId = readMediaRequestOwnerConversationId(request.metadata);
+  const ownerRunId = readMediaRequestOwnerRunId(request.metadata);
+  const ownerRunStartedAt = readMediaRequestOwnerRunStartedAt(request.metadata);
+  const resultDeliveryPolicy = readMediaRequestResultDeliveryPolicy(request.metadata);
 
   return {
     type: typeMap[generationType] || 'image_generation',
     lifecycle: {
+      ...(ownerConversationId ? { ownerConversationId } : {}),
+      ...(ownerRunId ? { ownerRunId } : {}),
+      ...(ownerRunStartedAt !== undefined ? { ownerRunStartedAt } : {}),
       runMode: 'background',
       costPhase: 'idle',
       interruptPolicy: 'detach-and-continue',
       recoverPolicy: 'resume-polling',
+      ...(resultDeliveryPolicy ? { resultDeliveryPolicy } : {}),
     },
     payload: {
       generationType,
@@ -896,4 +905,56 @@ export function createMediaTaskInput(
       },
     },
   };
+}
+
+function readMediaRequestOwnerConversationId(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  const value = metadata?.['conversationId'];
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function readMediaRequestOwnerRunId(
+  metadata: Record<string, unknown> | undefined,
+): string | undefined {
+  const value = metadata?.['runId'];
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function readMediaRequestOwnerRunStartedAt(
+  metadata: Record<string, unknown> | undefined,
+): number | undefined {
+  const value = metadata?.['runStartedAt'];
+  return typeof value === 'number' ? value : undefined;
+}
+
+function readMediaRequestResultDeliveryPolicy(
+  metadata: Record<string, unknown> | undefined,
+): AgentTaskResultDeliveryPolicy | undefined {
+  if (!metadata) return undefined;
+  const value = metadata['resultDeliveryPolicy'] ?? metadata['agentTaskResultDeliveryPolicy'];
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error('Media task result delivery policy must be an object.');
+  }
+
+  const kind = value['kind'];
+  switch (kind) {
+    case 'notify-only':
+      return { kind };
+    case 'append-observation':
+      return { kind };
+    case 'ask-user-to-continue':
+    case 'auto-resume-agent':
+      return {
+        kind,
+        ...(typeof value['prompt'] === 'string' ? { prompt: value['prompt'] } : {}),
+      };
+    default:
+      throw new Error('Unknown media task result delivery policy.');
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

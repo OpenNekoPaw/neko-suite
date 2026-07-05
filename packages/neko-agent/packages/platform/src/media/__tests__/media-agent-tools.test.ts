@@ -55,6 +55,42 @@ describe('registerMediaAgentTools', () => {
     );
   });
 
+  it('projects Chinese media tool schema text for model-facing definitions', () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const definitions = registry.toToolDefinitions(undefined, { locale: 'zh-CN' });
+    const byName = new Map(definitions.map((tool) => [tool.function.name, tool.function]));
+    const image = byName.get('GenerateImage');
+    const transform = byName.get('TransformImage');
+    const video = byName.get('GenerateVideo');
+    const music = byName.get('GenerateMusic');
+    const tts = byName.get('GenerateTTS');
+
+    expect(image?.description).toContain('异步图像生成任务');
+    expect(getPropertyDescription(image, 'prompt')).toBe('图像生成或编辑提示词。');
+    expect(getPropertyDescription(image, 'referenceImageUri')).toContain('宿主已解析');
+    expect(getPropertyDescription(image, 'editInstruction')).toContain('编辑指令');
+    expect(getPropertyDescription(image, 'prompt')).not.toContain('Text description');
+
+    expect(transform?.description).toContain('异步图像编辑任务');
+    expect(getPropertyDescription(transform, 'sourceImageUri')).toContain('源图像');
+    expect(getPropertyDescription(transform, 'operationPlan')).toContain('可审阅');
+
+    expect(video?.description).toContain('异步视频生成任务');
+    expect(getPropertyDescription(video, 'prompt')).toBe('视频生成或编辑提示词。');
+    expect(getPropertyDescription(video, 'referenceImageUri')).toContain('图生视频');
+    expect(getPropertyDescription(video, 'editInstruction')).toContain('视频编辑');
+
+    expect(music?.description).toContain('异步音乐生成任务');
+    expect(getPropertyDescription(music, 'mood')).toContain('音乐情绪');
+
+    expect(tts?.description).toContain('异步文本转语音任务');
+    expect(getPropertyDescription(tts, 'text')).toBe('要朗读的文本。');
+    expect(getPropertyDescription(tts, 'sourceCueId')).toContain('对白 cue ID');
+  });
+
   it('keeps GenerateImage prompt mode compatible and passes explicit provider/model routing', async () => {
     const registry = new ToolRegistry();
     const media = createMediaMock();
@@ -124,6 +160,125 @@ describe('registerMediaAgentTools', () => {
       expect.objectContaining({
         metadata: expect.objectContaining({
           conversationId: 'conv-1',
+          runId: 'run-1',
+          resultDeliveryPolicy: { kind: 'auto-resume-agent' },
+        }),
+      }),
+    );
+  });
+
+  it('creates a distinct run lease for Agent background media tasks when the turn trace has no run id', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute(
+      'GenerateImage',
+      {
+        prompt: 'A moonlit studio',
+        providerId: 'openai-provider',
+        modelId: 'dalle-model',
+      },
+      {
+        trace: {
+          conversationId: 'conv-turn-only',
+          turnId: 'turn-conv-turn-only-1',
+        },
+      },
+    );
+
+    const request = media.generateImage.mock.calls[0]?.[0] as
+      { metadata?: Record<string, unknown> } | undefined;
+    const data = result.data as Record<string, unknown>;
+
+    expect(result.success).toBe(true);
+    expect(request?.metadata).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv-turn-only',
+        runId: expect.stringMatching(/^run-conv-turn-only-/),
+        resultDeliveryPolicy: { kind: 'auto-resume-agent' },
+      }),
+    );
+    expect(request?.metadata?.runId).not.toBe('turn-conv-turn-only-1');
+    expect(data).toEqual(
+      expect.objectContaining({
+        backgroundMode: true,
+        conversationId: 'conv-turn-only',
+        runId: request?.metadata?.runId,
+      }),
+    );
+  });
+
+  it('creates unique run leases for concurrent Agent background media tasks in the same millisecond', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+    try {
+      const registry = new ToolRegistry();
+      const media = createMediaMock();
+      registerMediaAgentTools(registry, media as never);
+
+      const [first, second] = await Promise.all([
+        registry.execute(
+          'GenerateImage',
+          {
+            prompt: 'First frame',
+            providerId: 'openai-provider',
+            modelId: 'dalle-model',
+          },
+          { trace: { conversationId: 'conv-concurrent', turnId: 'turn-concurrent' } },
+        ),
+        registry.execute(
+          'GenerateImage',
+          {
+            prompt: 'Second frame',
+            providerId: 'openai-provider',
+            modelId: 'dalle-model',
+          },
+          { trace: { conversationId: 'conv-concurrent', turnId: 'turn-concurrent' } },
+        ),
+      ]);
+
+      const firstRunId = (first.data as Record<string, unknown>).runId;
+      const secondRunId = (second.data as Record<string, unknown>).runId;
+
+      expect(first.success).toBe(true);
+      expect(second.success).toBe(true);
+      expect(firstRunId).toEqual(expect.stringMatching(/^run-conv-concurrent-/));
+      expect(secondRunId).toEqual(expect.stringMatching(/^run-conv-concurrent-/));
+      expect(firstRunId).not.toBe(secondRunId);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('marks Agent-submitted audio media tasks for auto-resume when the runtime trace has a conversation id', async () => {
+    const registry = new ToolRegistry();
+    const media = createMediaMock();
+    registerMediaAgentTools(registry, media as never);
+
+    const result = await registry.execute(
+      'GenerateMusic',
+      {
+        prompt: 'Gentle piano theme',
+        providerId: 'music-provider',
+        modelId: 'music-model',
+      },
+      {
+        trace: {
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          turnId: 'turn-1',
+        },
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(media.generateAudio).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          conversationId: 'conv-1',
+          runId: 'run-1',
+          resultDeliveryPolicy: { kind: 'auto-resume-agent' },
         }),
       }),
     );
@@ -500,3 +655,12 @@ describe('registerMediaAgentTools', () => {
     );
   });
 });
+
+function getPropertyDescription(
+  tool: { parameters: Record<string, unknown> } | undefined,
+  name: string,
+): string | undefined {
+  const properties = tool?.parameters['properties'] as
+    Record<string, { description?: string }> | undefined;
+  return properties?.[name]?.description;
+}

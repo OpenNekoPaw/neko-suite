@@ -9,6 +9,36 @@ import { getMediaAdapterRegistry } from '../adapters/media-adapter-registry';
 import { createMediaTaskInput, MediaTaskExecutor } from '../media-task-executor';
 
 describe('MediaTaskExecutor lifecycle reporting', () => {
+  it('projects Agent task ownership and result delivery policy from media request metadata', () => {
+    const input = createMediaTaskInput('text-to-image', 'provider-1', 'model-1', {
+      prompt: 'cat',
+      metadata: {
+        conversationId: 'conv-1',
+        runId: 'run-1',
+        runStartedAt: 101,
+        resultDeliveryPolicy: { kind: 'auto-resume-agent' },
+      },
+    });
+
+    expect(input.lifecycle).toMatchObject({
+      ownerConversationId: 'conv-1',
+      ownerRunId: 'run-1',
+      ownerRunStartedAt: 101,
+      resultDeliveryPolicy: { kind: 'auto-resume-agent' },
+    });
+  });
+
+  it('fails visibly for unknown media task result delivery policies', () => {
+    expect(() =>
+      createMediaTaskInput('text-to-image', 'provider-1', 'model-1', {
+        prompt: 'cat',
+        metadata: {
+          resultDeliveryPolicy: { kind: 'unknown-policy' },
+        },
+      }),
+    ).toThrow('Unknown media task result delivery policy');
+  });
+
   it('writes recovery info before reporting external wait', async () => {
     vi.useFakeTimers();
     try {

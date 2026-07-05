@@ -6,12 +6,14 @@
  * can subscribe to progress and notify the webview.
  */
 
-import { createTool } from '@neko/shared';
+import { createAgentRunId, createTool } from '@neko/shared';
 import type {
+  AgentTaskResultDeliveryPolicy,
   GenerationIntent,
   IToolRegistry,
   ProviderAdaptationMode,
   ProviderGenerationCapability,
+  TaskRunLease,
   ToolExecuteOptions,
 } from '@neko/shared';
 import type { MediaGenerationService } from './media-generation-service';
@@ -19,7 +21,7 @@ import type { ImageGenerationRequest } from './types';
 
 interface ImageToolRequestInput {
   readonly args: Record<string, unknown>;
-  readonly options?: ToolExecuteOptions;
+  readonly lease?: TaskRunLease;
   readonly target: GenerationTargetMetadata;
   readonly resolved: ResolvedGenerationPrompt;
   readonly transformMetadata?: Record<string, unknown>;
@@ -272,7 +274,7 @@ function buildImageGenerationRequest(input: ImageToolRequestInput): ImageGenerat
   const sizeStr = readOptionalString(input.args.size);
   const [width, height] = sizeStr?.split('x').map(Number) ?? [];
   const metadata = buildImageToolMetadata({
-    options: input.options,
+    lease: input.lease,
     resolved: input.resolved,
     target: input.target,
     transformMetadata: input.transformMetadata,
@@ -302,7 +304,7 @@ function buildImageGenerationRequest(input: ImageToolRequestInput): ImageGenerat
 }
 
 function buildImageToolMetadata(input: {
-  readonly options?: ToolExecuteOptions;
+  readonly lease?: TaskRunLease;
   readonly resolved: ResolvedGenerationPrompt;
   readonly target: GenerationTargetMetadata;
   readonly transformMetadata?: Record<string, unknown>;
@@ -310,7 +312,7 @@ function buildImageToolMetadata(input: {
   const metadata = input.resolved.metadata
     ? withGenerationTargetMetadata(input.resolved.metadata, input.target)
     : undefined;
-  const withConversation = mergeRuntimeConversationMetadata(metadata, input.options);
+  const withConversation = mergeAgentMediaTaskMetadata(metadata, input.lease);
   if (!input.transformMetadata) return withConversation;
   return {
     ...(withConversation ?? {}),
@@ -318,16 +320,64 @@ function buildImageToolMetadata(input: {
   };
 }
 
-function mergeRuntimeConversationMetadata(
+function mergeAgentMediaTaskMetadata(
   metadata: Record<string, unknown> | undefined,
-  options: ToolExecuteOptions | undefined,
+  lease: TaskRunLease | undefined,
 ): Record<string, unknown> | undefined {
-  const conversationId = options?.trace?.conversationId;
-  if (!conversationId) return metadata;
+  if (!lease) return metadata;
   return {
     ...(metadata ?? {}),
-    conversationId,
+    conversationId: lease.conversationId,
+    runId: lease.runId,
+    ...(lease.runStartedAt !== undefined ? { runStartedAt: lease.runStartedAt } : {}),
+    resultDeliveryPolicy: createAgentMediaTaskResultDeliveryPolicy(),
   };
+}
+
+function buildAgentBackgroundTaskLeaseData(
+  lease: TaskRunLease | undefined,
+): Record<string, unknown> {
+  if (!lease) {
+    return {};
+  }
+
+  return {
+    conversationId: lease.conversationId,
+    runId: lease.runId,
+    ...(lease.runStartedAt !== undefined ? { runStartedAt: lease.runStartedAt } : {}),
+  };
+}
+
+function createAgentMediaTaskResultDeliveryPolicy(): AgentTaskResultDeliveryPolicy {
+  return { kind: 'auto-resume-agent' };
+}
+
+let agentBackgroundRunSequence = 0;
+
+function createAgentBackgroundTaskLease(
+  options: ToolExecuteOptions | undefined,
+): TaskRunLease | undefined {
+  const conversationId = options?.trace?.conversationId;
+  if (!conversationId) {
+    return undefined;
+  }
+  const traceRunId = options.trace?.runId;
+  if (traceRunId) {
+    return { conversationId, runId: traceRunId };
+  }
+
+  const runStartedAt = Date.now();
+  return {
+    conversationId,
+    runId: createAgentBackgroundRunId(conversationId, runStartedAt),
+    runStartedAt,
+  };
+}
+
+function createAgentBackgroundRunId(conversationId: string, startedAt: number): string {
+  agentBackgroundRunSequence =
+    agentBackgroundRunSequence >= Number.MAX_SAFE_INTEGER ? 1 : agentBackgroundRunSequence + 1;
+  return `${createAgentRunId(conversationId, startedAt)}-${agentBackgroundRunSequence.toString(36)}`;
 }
 
 function readImageReferenceInputs(args: Record<string, unknown>): Record<string, unknown> {
@@ -616,6 +666,153 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const MEDIA_TOOL_LOCALIZATION = {
+  GenerateImage: {
+    zh: {
+      description:
+        '提交异步图像生成任务（照片、插画、艺术图）。只用于静态图像；视频或动态内容使用 GenerateVideo。此工具只提交任务并立即返回 taskId，图像尚未完成；回复用户时应说明任务已提交并在后台处理。',
+      parameters: {
+        prompt: '图像生成或编辑提示词。',
+        negativePrompt: '可选反向提示词，描述要避免的内容。',
+        taskRef: '可选 Task markdown URI/path，作为生成意图来源。',
+        planRef: '可选 Plan markdown URI/path，作为生成意图来源。',
+        taskMarkdown: '可选内联 Task markdown 内容，用于提取生成意图。',
+        planMarkdown: '可选内联 Plan markdown 内容，用于提取生成意图。',
+        providerAdaptationMode:
+          'Provider 表达适配模式。auto/agentic 使用 Agent prompt 上下文；native 直接发送提示词。',
+        providerId: '可选显式 provider id，用于媒体路由。',
+        modelId: '可选显式 model id，用于媒体路由。',
+        size: '图像尺寸，默认 1024x1024。',
+        quality: '图像质量，默认 standard。',
+        style: '图像风格，默认 vivid。',
+        aspectRatio: '可选目标画幅比例，例如 16:9、9:16 或 1:1。',
+        referenceImageUrl: '可选远程参考图 URL，用于 image-to-image 生成。',
+        referenceImageUri: '可选宿主已解析的本地参考图 URI/path。',
+        referenceImageBase64: '可选参考图 base64 字节，不包含 data: 前缀。',
+        maskUri: '可选宿主已解析的 inpaint mask URI/path。',
+        maskBase64: '可选 inpaint mask base64 字节，不包含 data: 前缀。',
+        inpaintStrength: '可选 inpaint 强度，范围 0.0 到 1.0。',
+        ipAdapterRefs: '可选宿主已解析的 IP-Adapter 参考图，用于主体或风格一致性。',
+        imageBase64: '参考图 base64 字节，不包含 data: 前缀。',
+        mimeType: '参考图 MIME type。',
+        strength: '参考影响强度，范围 0.0 到 1.0。',
+        mode: '参考图引导 style、subject 或 both。',
+        controlImageUri: '可选宿主已解析的 ControlNet 图像 URI/path。',
+        controlImageBase64: '可选 ControlNet 图像 base64 字节，不包含 data: 前缀。',
+        controlMode: '可选 ControlNet conditioning mode。',
+        controlStrength: '可选 ControlNet conditioning 强度，范围 0.0 到 1.0。',
+        editInstruction: '可选自然语言编辑指令，供支持编辑的图像 provider 使用。',
+        n: '要生成的图像数量，1 到 4，默认 1。',
+      },
+    },
+  },
+  TransformImage: {
+    zh: {
+      description:
+        '提交异步图像编辑任务，用源图像、可选 mask、编辑指令、参考图和目标画幅/风格执行 source-bound transform。此 facade 保留 transform lineage；宿主/provider adapter 必须在执行前解析稳定引用。',
+      parameters: {
+        prompt: '可选提示词；未提供时使用 editInstruction。',
+        editInstruction: '针对源图像的自然语言编辑指令。',
+        negativePrompt: '可选反向提示词，描述要避免的内容。',
+        sourceImageRef: '用于 lineage/review 的稳定源图像引用；宿主必须先解析为 URI/base64。',
+        sourceImageUri: '宿主已解析的源图像 URI/path，用作 provider 参考输入。',
+        referenceImageUri: '宿主已解析的参考图 URI/path，用作 provider 参考输入。',
+        referenceImageUrl: '可选远程参考图 URL。',
+        referenceImageBase64: '可选源图像/参考图 base64 字节，不包含 data: 前缀。',
+        maskRefs: '用于 lineage/review 的稳定 mask 引用；宿主必须先解析再执行。',
+        maskUri: '宿主已解析的 inpaint mask URI/path。',
+        maskBase64: '可选 inpaint mask base64 字节，不包含 data: 前缀。',
+        inpaintStrength: '可选 inpaint 强度，范围 0.0 到 1.0。',
+        ipAdapterRefs: '可选宿主已解析的 IP-Adapter 参考图，用于主体或风格一致性。',
+        imageBase64: '参考图 base64 字节，不包含 data: 前缀。',
+        mimeType: '参考图 MIME type。',
+        strength: '参考影响强度，范围 0.0 到 1.0。',
+        mode: '参考图引导 style、subject 或 both。',
+        referenceBundle: '用于 lineage/review 的稳定角色、场景或风格参考 bundle。',
+        controlImageUri: '可选宿主已解析的 ControlNet 图像 URI/path。',
+        controlImageBase64: '可选 ControlNet 图像 base64 字节，不包含 data: 前缀。',
+        controlMode: '可选 ControlNet conditioning mode。',
+        controlStrength: '可选 ControlNet conditioning 强度，范围 0.0 到 1.0。',
+        targetAspectRatio: '可选目标画幅比例，例如 16:9、9:16 或 1:1。',
+        targetStyle: '可选目标风格，用于风格规范化。',
+        operationPlan: '可审阅的 transform 操作，例如 crop-panel、remove-text、inpaint、outpaint。',
+        planId: '可选 shot image prep plan id，用于 lineage metadata。',
+        sceneId: '可选 scene id，用于 lineage metadata。',
+        shotId: '可选 shot id，用于 lineage metadata。',
+        providerId: '可选显式 provider id，用于媒体路由。',
+        modelId: '可选显式 model id，用于媒体路由。',
+        size: '图像尺寸，默认 1024x1024。',
+        quality: '图像质量，默认 standard。',
+        style: '图像风格，默认 vivid。',
+        n: '要生成的图像数量，1 到 4，默认 1。',
+      },
+    },
+  },
+  GenerateVideo: {
+    zh: {
+      description:
+        '提交异步视频生成任务（短片、动画、动态内容）。用户要求视频、动画或动态内容时使用；静态图像使用 GenerateImage。此工具只提交任务并立即返回 taskId，视频尚未完成；回复用户时应说明任务已提交并在后台处理。',
+      parameters: {
+        prompt: '视频生成或编辑提示词。',
+        taskRef: '可选 Task markdown URI/path，作为生成意图来源。',
+        planRef: '可选 Plan markdown URI/path，作为生成意图来源。',
+        taskMarkdown: '可选内联 Task markdown 内容，用于提取生成意图。',
+        planMarkdown: '可选内联 Plan markdown 内容，用于提取生成意图。',
+        providerAdaptationMode:
+          'Provider 表达适配模式。auto/agentic 使用 Agent prompt 上下文；native 直接发送提示词。',
+        providerId: '可选显式 provider id，用于媒体路由。',
+        modelId: '可选显式 model id，用于媒体路由。',
+        duration: '视频时长，单位秒，范围 1 到 30，默认 4。',
+        resolution: '视频分辨率，默认 720p。',
+        fps: '帧率，默认 24。',
+        aspectRatio: '可选目标画幅比例，例如 16:9、9:16 或 1:1。',
+        referenceImageUrl: '可选远程参考图 URL，用于图生视频。',
+        referenceImageUri: '可选宿主已解析的本地参考图 URI/path，用于图生视频。',
+        referenceImageBase64: '可选参考图 base64 字节，不包含 data: 前缀。',
+        referenceVideoUrl: '可选远程参考视频 URL，用于 video-to-video 生成。',
+        startFrameImageBase64: '可选首帧图像 base64 字节，不包含 data: 前缀。',
+        endFrameImageBase64: '可选尾帧图像 base64 字节，不包含 data: 前缀。',
+        motionStrength: '可选运动强度，范围 0.0 到 1.0。',
+        cameraMovement: '可选镜头运动指令，例如 static、pan 或 zoom-in。',
+        cameraAngle: '可选机位角度指令，例如 eye-level 或 low-angle。',
+        shotScale: '可选景别指令，例如 CU、MS、LS 或 VLS。',
+        editInstruction: '可选自然语言指令，用于视频编辑或运动设计。',
+      },
+    },
+  },
+  GenerateMusic: {
+    zh: {
+      description:
+        '提交异步音乐生成任务。此工具只提交任务并立即返回 taskId，音乐尚未完成；回复用户时应说明任务已提交并在后台处理。',
+      parameters: {
+        prompt: '音乐生成提示词。',
+        duration: '音乐时长，单位秒，范围 5 到 300，默认 30。',
+        genre: '音乐类型，例如 corporate、ambient、electronic。',
+        mood: '音乐情绪，例如 upbeat、calm、dramatic。',
+        providerId: '可选显式 provider id，用于媒体路由。',
+        modelId: '可选显式 model id，用于媒体路由。',
+      },
+    },
+  },
+  GenerateTTS: {
+    zh: {
+      description:
+        '提交异步文本转语音任务。此工具只提交任务并立即返回 taskId，音频尚未完成；回复用户时应说明任务已提交并在后台处理。',
+      parameters: {
+        text: '要朗读的文本。',
+        voice: '声音 ID 或名称，例如 alloy、echo、onyx、nova。',
+        language: '语言代码，例如 en、zh、ja。',
+        speed: '语速倍率，范围 0.5 到 2，默认 1。',
+        providerId: '可选显式 provider id，用于媒体路由。',
+        modelId: '可选显式 model id，用于媒体路由。',
+        sourceCueId: '可选结构化分镜对白 cue ID，用于 lineage。',
+        speakerEntityId: '可选说话人的 creative entity ID。',
+        voiceAssetId: '可选声音表示或 voice asset ID，用于该 cue。',
+      },
+    },
+  },
+} as const;
+
 /**
  * Register media generation tools into the tool registry.
  * Tool names must match ai-generate skill's allowedTools exactly.
@@ -630,6 +827,7 @@ export function registerMediaAgentTools(
       name: 'GenerateImage',
       description:
         'Submit an async IMAGE generation task (photos, illustrations, artwork). Only use this for still images — for videos use GenerateVideo instead. This tool only SUBMITS the task and returns immediately with a taskId — the image is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the image is ready or finished.',
+      localization: MEDIA_TOOL_LOCALIZATION.GenerateImage,
       category: 'generation',
       isConcurrencySafe: true,
       parameters: {
@@ -791,6 +989,7 @@ export function registerMediaAgentTools(
         const resolvedTarget = toResolvedToolMediaTarget(target);
 
         try {
+          const lease = createAgentBackgroundTaskLease(options);
           const resolved = await resolveGenerationPrompt(
             args,
             'image.generate',
@@ -800,7 +999,7 @@ export function registerMediaAgentTools(
           const task = await media.generateImage({
             ...buildImageGenerationRequest({
               args: { size: '1024x1024', ...args },
-              options,
+              lease,
               target: requestTarget,
               resolved,
             }),
@@ -809,6 +1008,7 @@ export function registerMediaAgentTools(
             success: true,
             data: {
               backgroundMode: true,
+              ...buildAgentBackgroundTaskLeaseData(lease),
               taskId: task.id,
               type: 'image',
               status: 'queued',
@@ -846,6 +1046,7 @@ export function registerMediaAgentTools(
       name: 'TransformImage',
       description:
         'Submit an async source-bound IMAGE transform task. Use this for editing an existing image with source image, optional mask, edit instruction, references, and target aspect ratio/style. This facade preserves transform lineage; host/provider adapters must resolve stable refs before provider execution.',
+      localization: MEDIA_TOOL_LOCALIZATION.TransformImage,
       category: 'generation',
       isConcurrencySafe: true,
       parameters: {
@@ -1039,6 +1240,7 @@ export function registerMediaAgentTools(
         }
 
         try {
+          const lease = createAgentBackgroundTaskLease(options);
           const resolved = await resolveGenerationPrompt(
             { ...args, prompt },
             'image.generate',
@@ -1060,6 +1262,7 @@ export function registerMediaAgentTools(
                 style: readOptionalString(args.style) ?? readOptionalString(args.targetStyle),
                 editInstruction,
               },
+              lease,
               target: requestTarget,
               resolved,
               transformMetadata,
@@ -1069,6 +1272,7 @@ export function registerMediaAgentTools(
             success: true,
             data: {
               backgroundMode: true,
+              ...buildAgentBackgroundTaskLeaseData(lease),
               taskId: task.id,
               type: 'image-transform',
               status: 'queued',
@@ -1106,6 +1310,7 @@ export function registerMediaAgentTools(
       name: 'GenerateVideo',
       description:
         'Submit an async VIDEO generation task (clips, animations, motion content). Use this when the user asks for a video, animation, or moving content — for still images use GenerateImage instead. This tool only SUBMITS the task and returns immediately with a taskId — the video is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the video is ready or finished.',
+      localization: MEDIA_TOOL_LOCALIZATION.GenerateVideo,
       category: 'generation',
       isConcurrencySafe: true,
       parameters: {
@@ -1220,10 +1425,19 @@ export function registerMediaAgentTools(
         const resolvedTarget = toResolvedToolMediaTarget(target);
 
         try {
+          const lease = createAgentBackgroundTaskLease(options);
           const resolved = await resolveGenerationPrompt(
             args,
             'video.generate',
             resolvedTarget.providerId,
+          );
+          const metadata = mergeAgentMediaTaskMetadata(
+            resolved.metadata
+              ? withGenerationTargetMetadata(resolved.metadata, {
+                  ...toGenerationTargetMetadata(resolvedTarget),
+                })
+              : undefined,
+            lease,
           );
           const task = await media.generateVideo({
             prompt: resolved.prompt,
@@ -1233,18 +1447,13 @@ export function registerMediaAgentTools(
             resolution: args.resolution as string | undefined,
             fps: args.fps as number | undefined,
             ...readVideoReferenceInputs(args),
-            ...(resolved.metadata
-              ? {
-                  metadata: withGenerationTargetMetadata(resolved.metadata, {
-                    ...toGenerationTargetMetadata(resolvedTarget),
-                  }),
-                }
-              : {}),
+            ...(metadata ? { metadata } : {}),
           });
           return {
             success: true,
             data: {
               backgroundMode: true,
+              ...buildAgentBackgroundTaskLeaseData(lease),
               taskId: task.id,
               type: 'video',
               status: 'queued',
@@ -1281,6 +1490,7 @@ export function registerMediaAgentTools(
       name: 'GenerateMusic',
       description:
         'Submit an async music generation task. This tool only SUBMITS the task and returns immediately with a taskId — the music is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the music is ready or finished.',
+      localization: MEDIA_TOOL_LOCALIZATION.GenerateMusic,
       category: 'generation',
       isConcurrencySafe: true,
       parameters: {
@@ -1325,6 +1535,8 @@ export function registerMediaAgentTools(
         const resolvedTarget = toResolvedToolMediaTarget(target);
 
         try {
+          const lease = createAgentBackgroundTaskLease(options);
+          const metadata = mergeAgentMediaTaskMetadata(undefined, lease);
           const task = await media.generateAudio({
             prompt: `${prompt}${genreStr}${moodStr}`,
             providerId: resolvedTarget.providerId,
@@ -1332,11 +1544,13 @@ export function registerMediaAgentTools(
             duration: args.duration as number | undefined,
             isMusic: true,
             genre: args.genre as string | undefined,
+            ...(metadata ? { metadata } : {}),
           });
           return {
             success: true,
             data: {
               backgroundMode: true,
+              ...buildAgentBackgroundTaskLeaseData(lease),
               taskId: task.id,
               type: 'audio',
               status: 'queued',
@@ -1360,6 +1574,7 @@ export function registerMediaAgentTools(
       name: 'GenerateTTS',
       description:
         'Submit an async text-to-speech task. This tool only SUBMITS the task and returns immediately with a taskId — the audio is NOT ready yet. Always tell the user the task has been submitted and is being processed in the background; do NOT say the audio is ready or finished.',
+      localization: MEDIA_TOOL_LOCALIZATION.GenerateTTS,
       category: 'generation',
       isConcurrencySafe: true,
       parameters: {
@@ -1414,12 +1629,9 @@ export function registerMediaAgentTools(
         const resolvedTarget = toResolvedToolMediaTarget(target);
 
         try {
-          const task = await media.generateAudio({
-            prompt: text,
-            providerId: resolvedTarget.providerId,
-            modelId: resolvedTarget.modelId,
-            isMusic: false,
-            metadata: {
+          const lease = createAgentBackgroundTaskLease(options);
+          const metadata = mergeAgentMediaTaskMetadata(
+            {
               voice: args.voice,
               language: args.language,
               speed: args.speed,
@@ -1432,11 +1644,20 @@ export function registerMediaAgentTools(
                 ? { characterIds: [args.speakerEntityId] }
                 : {}),
             },
+            lease,
+          );
+          const task = await media.generateAudio({
+            prompt: text,
+            providerId: resolvedTarget.providerId,
+            modelId: resolvedTarget.modelId,
+            isMusic: false,
+            ...(metadata ? { metadata } : {}),
           });
           return {
             success: true,
             data: {
               backgroundMode: true,
+              ...buildAgentBackgroundTaskLeaseData(lease),
               taskId: task.id,
               type: 'audio',
               status: 'queued',

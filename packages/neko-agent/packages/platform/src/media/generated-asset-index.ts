@@ -120,9 +120,12 @@ export class GeneratedAssetIndex {
     try {
       await fsp.mkdir(this.generatedDir, { recursive: true });
 
+      const assets = mergeGeneratedAssets(await this.readExistingAssetsAsync(), [
+        ...this.assets.values(),
+      ]);
       const data: IndexFile = {
         version: 1,
-        assets: Array.from(this.assets.values()),
+        assets,
       };
       const json = JSON.stringify(data, null, 2);
       const tmpPath = `${this.indexPath}.tmp`;
@@ -140,9 +143,10 @@ export class GeneratedAssetIndex {
     try {
       fs.mkdirSync(this.generatedDir, { recursive: true });
 
+      const assets = mergeGeneratedAssets(this.readExistingAssetsSync(), [...this.assets.values()]);
       const data: IndexFile = {
         version: 1,
-        assets: Array.from(this.assets.values()),
+        assets,
       };
       const json = JSON.stringify(data, null, 2);
       const tmpPath = `${this.indexPath}.tmp`;
@@ -154,8 +158,50 @@ export class GeneratedAssetIndex {
       // The index is reconstructible from generated files.
     }
   }
+
+  private async readExistingAssetsAsync(): Promise<GeneratedAsset[]> {
+    try {
+      return parseIndexAssets(await fsp.readFile(this.indexPath, 'utf-8'));
+    } catch {
+      return [];
+    }
+  }
+
+  private readExistingAssetsSync(): GeneratedAsset[] {
+    try {
+      return parseIndexAssets(fs.readFileSync(this.indexPath, 'utf-8'));
+    } catch {
+      return [];
+    }
+  }
 }
 
 export function generateAssetId(): string {
   return randomUUID();
+}
+
+function mergeGeneratedAssets(
+  existingAssets: readonly GeneratedAsset[],
+  pendingAssets: readonly GeneratedAsset[],
+): GeneratedAsset[] {
+  const merged = new Map<string, GeneratedAsset>();
+  for (const asset of existingAssets) {
+    if (asset.id && asset.type) {
+      merged.set(asset.id, asset);
+    }
+  }
+  for (const asset of pendingAssets) {
+    if (asset.id && asset.type) {
+      merged.set(asset.id, asset);
+    }
+  }
+  return [...merged.values()];
+}
+
+function parseIndexAssets(raw: string): GeneratedAsset[] {
+  const data = JSON.parse(raw) as IndexFile;
+  if (data.version !== 1 || !Array.isArray(data.assets)) {
+    return [];
+  }
+  return data.assets.filter((asset) => Boolean(asset.id && asset.type));
 }

@@ -81,6 +81,23 @@ describe('GeneratedAssetIndex', () => {
     expect(restored.get('asset-1')).toEqual(imageAsset());
   });
 
+  it('merges existing on-disk entries before flushing a stale in-memory cache', async () => {
+    const dir = await createTempDir();
+    const firstWriter = new GeneratedAssetIndex(dir);
+    const secondWriter = new GeneratedAssetIndex(dir);
+    await firstWriter.load();
+    await secondWriter.load();
+
+    firstWriter.add(imageAsset({ id: 'asset-a', path: '/tmp/a.png' }));
+    secondWriter.add(imageAsset({ id: 'asset-b', path: '/tmp/b.png' }));
+    firstWriter.dispose();
+    secondWriter.dispose();
+
+    const raw = await readFile(path.join(dir, 'index.json'), 'utf-8');
+    const parsed = JSON.parse(raw) as { assets?: GeneratedAsset[] };
+    expect(parsed.assets?.map((asset) => asset.id).sort()).toEqual(['asset-a', 'asset-b']);
+  });
+
   it('ignores missing or malformed index files during load', async () => {
     const dir = await createTempDir();
     const index = new GeneratedAssetIndex(dir);
