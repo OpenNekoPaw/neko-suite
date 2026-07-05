@@ -52,25 +52,25 @@
 
 普通聊天回复不要输出 YAML frontmatter 或创作文档元数据。禁止输出 `---`、`id:`、`kind: draft`、`status: draft`、`domain: storyboard` 或 `referenceChain:` 这类块/键。它们只属于 host/runtime 持久化的创作文档，不属于分镜 creative table。
 
-生产可用的分镜输出必须对已知列精确使用以下 canonical 稳定字段 id，并尽量按此顺序出现。新 Markdown 输出不要本地化已知字段表头。已知字段由 shared storyboard profile 解析，Webview 会按当前 UI 语言展示字段标签；未知扩展列会保留 Markdown 原表头，因此扩展列请使用用户/输出语言，并保持含义清晰。
+生产可用的分镜输出必须对已知列精确使用以下规范稳定字段 id，并尽量按此顺序出现。新 Markdown 输出不要本地化已知字段表头。已知字段由 shared storyboard profile 解析，Webview 会按当前 UI 语言展示字段标签；未知扩展列会保留 Markdown 原表头，因此扩展列请使用用户/输出语言，并保持含义清晰。
 
-`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `imagePrompt`, `imageEditPrompt`, `shotVideoPrompt`, `videoEditPrompt`, `sceneStylePrompt`, `sceneVideoPrompt`, `sceneVideoEditPrompt`, `reviewStatus`, `nextAction`, `contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`
+`scene`, `shot`, `source`, `sourcePanel`, `decision`, `duration`, `visual`, `motion`, `audio`, `characters`, `dialogue`, `imagePrompt`, `videoPrompt`, `reviewStatus`, `nextAction`, `contentType`, `decisionReason`, `requiresSplit`, `duplicateOf`
 
 validator 支持开放的审阅 metadata，不要求证据不足或任务不需要时填齐所有推荐字段。聊天分镜输出仍必须包含 `scene` + `shot`，并且包含 `source`，或至少一个提示词槽（prompt slot）/ 兼容字段 `prompt`。
 
 规则：
 
-- 中文/本地化表头如 `场景`、`镜头`、`来源`、`图像提示词`、`建议操作` 可用于解析用户已有表格或旧输出，但本 Skill 新生成的已知字段表头应使用 canonical field id。
+- 中文/本地化表头如 `场景`、`镜头`、`来源`、`图像提示词`、`建议操作` 可用于解析用户已有表格或旧输出，但本 Skill 新生成的已知字段表头应使用规范字段 id。
 - 绝不能把简化的页级分析表当作分镜表输出。禁止作为主表头的字段包括 `页码`、`景别/构图`、`节奏/情绪`、`page`、`image reference`、`analysis` 或 `suggestion`。`画面内容`、`图像提示词`、`建议操作` 等本地化表头只适用于已有表格的修复/校验，不作为新输出的首选表头。
 - 不要说分镜锚点之后再补。`scene`、`shot` 和 `source`/prompt-slot 锚点必须现在就出现在唯一主表中。
 - 如果 ReadImage 返回的视觉证据仍然停留在页级，也必须用已有分镜列创建一个或多个 shot 行，并在不确定的单元格写 `needs-panel-analysis`、`needs-review` 或 `needs-prompt`；不要降级成页面列表。
 - 不要再输出第二张“分镜结构建议”表。keep/skip/split/merge 和下一步规划写入 `decision`、`decisionReason`、`reviewStatus` 和 `nextAction`。
-- 当用户要求特定生成或编辑目标时，必须包含对应提示词槽；不确定的提示词单元格写 `needs-prompt`。
-- 提示词槽必须显式、模型感知：`imagePrompt` = 单镜头图像生成提示词；`imageEditPrompt` = 单镜头图像编辑/重绘/inpaint 提示词；`shotVideoPrompt` = 单镜头视频生成提示词；`videoEditPrompt` = 单镜头视频编辑提示词；`sceneStylePrompt` = 场景级图像/风格提示词；`sceneVideoPrompt` = 场景视频生成提示词；`sceneVideoEditPrompt` = 场景视频编辑提示词。
-- 兼容字段 `prompt` 仍可用于旧输出和通用图像生成，但新的输出应优先使用模型专用提示词槽。
+- 当用户要求特定生成或编辑目标时，必须包含对应媒介提示词槽；不确定的提示词单元格写 `needs-prompt`。
+- 提示词槽只有两种规范字段：`imagePrompt` 用于所有图像生成、图像编辑、重绘、局部重绘/扩图（inpaint/outpaint）、风格延续等图像意图；`videoPrompt` 用于所有单镜视频、场景视频、视频编辑或视频风格调整意图。
+- 生成、编辑、重绘、局部重绘、`shot` 级、`scene` 级、时长和模型倾向都写在提示词文本里，不要新增 `imageEditPrompt`、`shotVideoPrompt`、`videoEditPrompt`、`sceneStylePrompt`、`sceneVideoPrompt` 或 `sceneVideoEditPrompt` 这类拆分列。
+- 兼容字段 `prompt` 仍可用于旧输出和通用图像生成，但新的输出应优先使用 `imagePrompt` 或 `videoPrompt`。
 - 每行代表一个 shot 或视频节拍；scene 列负责把多行归组到同一场景。
-- Shot 提示词槽描述单镜头关键帧、编辑或短镜头运动。Scene 提示词槽描述跨多个 shot 的场景级连续性、风格，或更长的场景视频生成/编辑。
-- `sceneVideoPrompt` 可以概括多个 shot 节拍如何连接；shot prompt 应保持基于来源分格/镜头证据。
+- `videoPrompt` 可以概括多个镜头节拍如何连接，也可以描述单个镜头的短镜头运动；用文本明确“单镜视频生成”“场景视频生成”或“视频编辑”。
 - 分镜提示词可以面向图像生成/编辑和视频生成/编辑。视频模型支持只用通用语义表达，不要硬编码 provider payload、外部 API JSON 或内部 job contract。若提到 Seedance/Volcengine 类场景，也只描述为场景/镜头视频生成用途。
 - 每行代表叙事 shot 或视频节拍，不是页面清单。同一个 `source` 可以在多行重复，用于表达一页/一图拆出多个 shot。
 - `decision` 表达 keep/skip/merge/split/duplicate/reference-only 等选择。封面、重复页、广告页、空白页和元数据页也必须显式写出 `decision`，不要静默消失。
@@ -111,16 +111,16 @@ validator 支持开放的审阅 metadata，不要求证据不足或任务不需�
 
 ## 示例
 
-| scene   | shot | source     | sourcePanel | decision | duration | visual                     | motion                 | audio        | characters                 | dialogue | imagePrompt                                                      | imageEditPrompt | shotVideoPrompt                                        | videoEditPrompt | sceneStylePrompt                 | sceneVideoPrompt                                               | sceneVideoEditPrompt | reviewStatus | nextAction                 | contentType | decisionReason         | requiresSplit | duplicateOf |
-| ------- | ---- | ---------- | ----------- | -------- | -------- | -------------------------- | ---------------------- | ------------ | -------------------------- | -------- | ---------------------------------------------------------------- | --------------- | ------------------------------------------------------ | --------------- | -------------------------------- | -------------------------------------------------------------- | -------------------- | ------------ | -------------------------- | ----------- | ---------------------- | ------------- | ----------- |
-| 第 1 页 | 1    | P1#panel_1 | 上方分格    | keep     | 3s       | 小小的人影在黄昏靠近发光物 | 缓慢推近               | 低风声       | 牧羊少年：短披风、谨慎姿态 |          | 暗黑童话关键帧，黄昏牧场，谨慎少年靠近发光古灯，保持角色设计一致 | needs-prompt    | 缓慢推近发光古灯，短镜头，悬疑节奏                     | needs-prompt    | 黄昏牧场、紫金色魔法光、墨线质感 | 连接镜头 1-2 成 8 秒场景：靠近、手部特写、光芒增强，保持连续性 | needs-prompt         | needs-review | 标记为 Canvas 审阅参考     | story       | 建立镜头，有叙事价值   | false         |             |
-| 第 1 页 | 2    | P1#panel_2 | 下方特写    | split    | 2s       | 手伸向光源，强化悬念       | 静态特写，光线轻微闪动 | 柔和魔法嗡鸣 | 牧羊少年：手和袖口可见     |          | 手伸向紫金色光源的特写关键帧，紧张氛围，保留原漫画构图           | needs-prompt    | 静态特写，只有光线轻微闪动，不添加来源分格之外的新动作 | needs-prompt    | 黄昏牧场、紫金色魔法光、墨线质感 | 连接镜头 1-2 成 8 秒场景：靠近、手部特写、光芒增强，保持连续性 | needs-prompt         | needs-review | 先拆分分格再送 Canvas 审阅 | story       | 同一页包含独立特写节拍 | true          |             |
+| scene   | shot | source     | sourcePanel | decision | duration | visual                     | motion                 | audio        | characters                 | dialogue | imagePrompt                                                                | videoPrompt                                                          | reviewStatus | nextAction                 | contentType | decisionReason         | requiresSplit | duplicateOf |
+| ------- | ---- | ---------- | ----------- | -------- | -------- | -------------------------- | ---------------------- | ------------ | -------------------------- | -------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------ | -------------------------- | ----------- | ---------------------- | ------------- | ----------- |
+| 第 1 页 | 1    | P1#panel_1 | 上方分格    | keep     | 3s       | 小小的人影在黄昏靠近发光物 | 缓慢推近               | 低风声       | 牧羊少年：短披风、谨慎姿态 |          | 图像生成：暗黑童话关键帧，黄昏牧场，谨慎少年靠近发光古灯，保持角色设计一致 | 单镜视频生成：缓慢推近发光古灯，短镜头，悬疑节奏                     | needs-review | 标记为 Canvas 审阅参考     | story       | 建立镜头，有叙事价值   | false         |             |
+| 第 1 页 | 2    | P1#panel_2 | 下方特写    | split    | 2s       | 手伸向光源，强化悬念       | 静态特写，光线轻微闪动 | 柔和魔法嗡鸣 | 牧羊少年：手和袖口可见     |          | 图像生成：手伸向紫金色光源的特写关键帧，紧张氛围，保留原漫画构图           | 单镜视频生成：静态特写，只有光线轻微闪动，不添加来源分格之外的新动作 | needs-review | 先拆分分格再送 Canvas 审阅 | story       | 同一页包含独立特写节拍 | true          |             |
 
 推荐扩展示例：
 
-| scene    | shot | source     | sourcePanel | decision | duration | visual           | motion   | audio      | characters       | dialogue | imagePrompt                | imageEditPrompt              | sceneVideoPrompt                       | sceneVideoEditPrompt         | reviewStatus | nextAction             | decisionReason       | requiresSplit |
-| -------- | ---- | ---------- | ----------- | -------- | -------- | ---------------- | -------- | ---------- | ---------------- | -------- | -------------------------- | ---------------------------- | -------------------------------------- | ---------------------------- | ------------ | ---------------------- | -------------------- | ------------- |
-| 正文开场 | 1    | P5#panel_1 | 右上分格    | keep     | 4s       | 主角进入巨构空间 | 缓慢推近 | 低频环境声 | 主角：小比例剪影 |          | 巨构室内关键帧，小比例剪影 | 重绘天顶光，移除对白气泡图形 | 延展镜头 1-3 的进入巨构空间节拍，12 秒 | 整场调成更冷色月光并平滑运镜 | needs-review | 拆分分格并作为参考审阅 | 一页包含多个可用分格 | true          |
+| scene    | shot | source     | sourcePanel | decision | duration | visual           | motion   | audio      | characters       | dialogue | imagePrompt                            | videoPrompt                                                              | reviewStatus | nextAction             | decisionReason       | requiresSplit | requiresInpaint | styleRef           |
+| -------- | ---- | ---------- | ----------- | -------- | -------- | ---------------- | -------- | ---------- | ---------------- | -------- | -------------------------------------- | ------------------------------------------------------------------------ | ------------ | ---------------------- | -------------------- | ------------- | --------------- | ------------------ |
+| 正文开场 | 1    | P5#panel_1 | 右上分格    | keep     | 4s       | 主角进入巨构空间 | 缓慢推近 | 低频环境声 | 主角：小比例剪影 |          | 图像编辑：重绘天顶光，移除对白气泡图形 | 场景视频生成：延展镜头 1-3 的进入巨构空间节拍，12 秒；冷色月光和平滑运镜 | needs-review | 拆分分格并作为参考审阅 | 一页包含多个可用分格 | true          | true            | 冷色月光、巨构室内 |
 
 ## 人物和文字说明
 

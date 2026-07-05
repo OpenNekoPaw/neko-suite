@@ -49,6 +49,7 @@ export interface QualityReviewEvidenceInput {
   readonly toolCallId: string;
   readonly toolName: 'QualityCheck' | 'QualityRepairCheck' | 'QualityCheckConsistency';
   readonly mode?: 'analysis' | 'repair' | 'consistency';
+  readonly locale?: string;
   readonly observedAt: number;
   readonly runId?: string;
   readonly observationId?: string;
@@ -95,6 +96,7 @@ export function createQualityReviewValidationSignal(
       toolName: input.toolName,
       mode,
       observedAt: input.observedAt,
+      ...(input.locale ? { locale: input.locale } : {}),
       ...(input.runId ? { runId: input.runId } : {}),
       ...(sceneTimeRanges.length > 0 ? { sceneTimeRanges } : {}),
     });
@@ -119,6 +121,7 @@ export function createQualityReviewValidationSignal(
     toolName: 'QualityCheckConsistency',
     mode: 'consistency',
     observedAt: input.observedAt,
+    ...(input.locale ? { locale: input.locale } : {}),
     ...(input.runId ? { runId: input.runId } : {}),
     ...(sceneTimeRanges.length > 0 ? { sceneTimeRanges } : {}),
     ...(adapterDiagnostics.length > 0 ? { adapterDiagnostics } : {}),
@@ -169,7 +172,11 @@ export function createQualityReviewEvidence(
     evidence: {
       id: evidenceId,
       source: 'tool',
-      summary: formatQualityReviewEvidenceSummary(summary, input.mode ?? 'analysis'),
+      summary: formatQualityReviewEvidenceSummary(
+        summary,
+        input.mode ?? 'analysis',
+        input.locale,
+      ),
       confidence: calculateQualityReviewConfidence(summary),
       toolName: input.toolName,
       ...(input.observationId ? { observationId: input.observationId } : {}),
@@ -262,6 +269,7 @@ function createToolReviewSignal(
   review: QualityReviewEvidenceResult,
   mode: NonNullable<QualityReviewEvidenceInput['mode']>,
 ): AgentToolReviewValidationSignal {
+  const locale = normalizeQualityReviewLocale(input.locale);
   const status = review.summary.failed > 0 ? 'failed' : 'passed';
   const failingSceneIndexes = [...review.summary.failingSceneIndexes];
   const metadata: Record<string, unknown> = {
@@ -282,8 +290,13 @@ function createToolReviewSignal(
     summary: review.evidence.summary,
     ...(status === 'failed'
       ? {
-          repairGuidance: createQualityRepairGuidance(input.toolName, review.summary, mode),
-          escalationMessage: createQualityEscalationMessage(input.runId),
+          repairGuidance: createQualityRepairGuidance(
+            input.toolName,
+            review.summary,
+            mode,
+            locale,
+          ),
+          escalationMessage: createQualityEscalationMessage(input.runId, locale),
           repeatKey: `quality-review:${input.runId ?? 'runless'}:${input.toolName}`,
         }
       : {}),
@@ -297,9 +310,24 @@ function createQualityRepairGuidance(
   toolName: string,
   summary: QualityReviewEvidenceSummary,
   mode: NonNullable<QualityReviewEvidenceInput['mode']>,
+  locale: QualityReviewLocale,
 ): string {
   const scenes =
     summary.failingSceneIndexes.length > 0 ? summary.failingSceneIndexes.join(', ') : 'unknown';
+  if (locale === 'zh') {
+    if (mode === 'repair') {
+      return (
+        `复查来自 ${toolName} 的质量修复尝试。` +
+        `聚焦场景 ${scenes}，并在继续修复前验证 ${summary.remediationCount} 条建议修复步骤。`
+      );
+    }
+
+    return (
+      '修复未通过的质量检查结果。' +
+      `聚焦场景 ${scenes}，并按需应用 ${summary.remediationCount} 条建议修复步骤。`
+    );
+  }
+
   if (mode === 'repair') {
     return (
       `Review the quality repair attempt from ${toolName}. ` +
@@ -315,7 +343,17 @@ function createQualityRepairGuidance(
   );
 }
 
-function createQualityEscalationMessage(runId: string | undefined): string {
+function createQualityEscalationMessage(
+  runId: string | undefined,
+  locale: QualityReviewLocale,
+): string {
+  if (locale === 'zh') {
+    return (
+      `运行 ${runId ?? 'unknown-run'} 的质量检查持续失败。` +
+      '请询问用户是接受当前输出，还是调整目标质量标准。'
+    );
+  }
+
   return (
     `Quality check keeps failing for run ${runId ?? 'unknown-run'}. ` +
     'Ask the user whether to accept the current output or revise the target quality bar.'
@@ -329,13 +367,27 @@ function createQualityReviewEvidenceId(input: QualityReviewEvidenceInput): strin
 function formatQualityReviewEvidenceSummary(
   summary: QualityReviewEvidenceSummary,
   mode: 'analysis' | 'repair' | 'consistency',
+  locale?: string,
 ): string {
+  const normalizedLocale = normalizeQualityReviewLocale(locale);
   const label =
     mode === 'repair'
       ? 'QualityRepairReview repair attempt'
       : mode === 'consistency'
         ? 'QualityConsistencyReview'
         : 'QualityReview';
+  if (normalizedLocale === 'zh') {
+    if (summary.failed === 0) {
+      return `${label} 通过 ${summary.passed}/${summary.totalScenes} 个场景。`;
+    }
+
+    return (
+      `${label} 未通过 ${summary.failed}/${summary.totalScenes} 个场景：` +
+      `场景 ${summary.failingSceneIndexes.join(', ')}；` +
+      `有 ${summary.remediationCount} 条修复提示。`
+    );
+  }
+
   if (summary.failed === 0) {
     return `${label} passed ${summary.passed}/${summary.totalScenes} scene(s).`;
   }
@@ -345,6 +397,12 @@ function formatQualityReviewEvidenceSummary(
     `scene(s) ${summary.failingSceneIndexes.join(', ')}; ` +
     `${summary.remediationCount} remediation hint(s) available.`
   );
+}
+
+type QualityReviewLocale = 'en' | 'zh';
+
+function normalizeQualityReviewLocale(locale: string | undefined): QualityReviewLocale {
+  return locale?.trim().toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
 function calculateQualityReviewConfidence(summary: QualityReviewEvidenceSummary): number {

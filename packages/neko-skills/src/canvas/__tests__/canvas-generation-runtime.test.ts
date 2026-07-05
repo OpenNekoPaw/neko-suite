@@ -56,6 +56,25 @@ describe('canvas generation runtime', () => {
     expect(userContent).toContain('VFX: rain, neon glow');
   });
 
+  it('localizes AutoPrompt wrapper text while preserving English prompt output policy', () => {
+    const messages = buildCanvasShotPromptMessages(
+      {
+        visualDescription: '雨夜街道里的侦探',
+        characters: [{ characterName: 'Mika' }],
+        shotScale: 'wide',
+        characterAction: 'walking through neon rain',
+      },
+      { locale: 'zh-CN' },
+    );
+
+    expect(messages[0]?.content).toContain('输出一条简洁的英文图像生成提示词');
+    expect(messages[0]?.content).not.toContain('You are an expert cinematographer');
+    expect(messages[1]?.content).toContain('场景: 雨夜街道里的侦探');
+    expect(messages[1]?.content).toContain('角色: Mika');
+    expect(messages[1]?.content).not.toContain('Scene:');
+    expect(messages[1]?.content).not.toContain('Characters:');
+  });
+
   it('delegates prompt generation to the injected LLM service', async () => {
     const chat = vi.fn().mockResolvedValue({
       message: { content: 'A concise cinematic English prompt.' },

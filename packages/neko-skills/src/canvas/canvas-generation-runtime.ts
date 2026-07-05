@@ -158,6 +158,7 @@ export interface CanvasGenerationRuntimeLogger {
 export interface CanvasGenerationRuntimeDeps {
   readonly chat?: CanvasPromptLLM;
   readonly media?: CanvasMediaService;
+  readonly locale?: string;
   readonly resolveCanvasNode?: (nodeId: string) => Promise<CanvasReferenceNode | null | undefined>;
   readonly resolveImageSource?: (source: string) => Promise<CanvasImageResolveResult | undefined>;
   readonly fetchOutputAsDataUrl?: (output: CanvasMediaOutput) => Promise<string | undefined>;
@@ -197,6 +198,13 @@ const CANVAS_PROMPT_SYSTEM_MESSAGE =
   'Include shot scale, camera angle, and character emotions naturally. ' +
   'Output ONLY the prompt text, no explanations or markdown.';
 
+const CANVAS_PROMPT_SYSTEM_MESSAGE_ZH =
+  '你是专业摄影指导和图像生成提示词工程师。' +
+  '给定镜头元数据（可能是中文或英文），输出一条简洁的英文图像生成提示词（不超过 120 个词）。' +
+  '遵循这个结构：主体 + 环境 + 灯光 + 构图 + 风格。' +
+  '自然包含景别、机位角度和角色情绪。' +
+  '只输出提示词文本，不要解释或 Markdown。';
+
 export class CanvasGenerationRuntime {
   constructor(private readonly deps: CanvasGenerationRuntimeDeps) {}
 
@@ -206,9 +214,15 @@ export class CanvasGenerationRuntime {
       return '';
     }
 
-    const response = await this.deps.chat.chat(buildCanvasShotPromptMessages(shotData), {
-      maxTokens: CANVAS_PROMPT_MAX_TOKENS,
-    });
+    const response = await this.deps.chat.chat(
+      buildCanvasShotPromptMessages(
+        shotData,
+        this.deps.locale ? { locale: this.deps.locale } : {},
+      ),
+      {
+        maxTokens: CANVAS_PROMPT_MAX_TOKENS,
+      },
+    );
 
     return extractCanvasPromptText(response.message.content).trim();
   }
@@ -262,44 +276,83 @@ export class CanvasGenerationRuntime {
 
 export function buildCanvasShotPromptMessages(
   shotData: CanvasShotPromptData,
+  options: { readonly locale?: string } = {},
 ): CanvasPromptMessage[] {
   return [
     {
       role: 'system',
-      content: CANVAS_PROMPT_SYSTEM_MESSAGE,
+      content: isChineseCanvasLocale(options.locale)
+        ? CANVAS_PROMPT_SYSTEM_MESSAGE_ZH
+        : CANVAS_PROMPT_SYSTEM_MESSAGE,
     },
     {
       role: 'user',
-      content: buildCanvasShotPromptUserContent(shotData),
+      content: buildCanvasShotPromptUserContent(shotData, options),
     },
   ];
 }
 
-export function buildCanvasShotPromptUserContent(shotData: CanvasShotPromptData): string {
+export function buildCanvasShotPromptUserContent(
+  shotData: CanvasShotPromptData,
+  options: { readonly locale?: string } = {},
+): string {
+  const labels = isChineseCanvasLocale(options.locale)
+    ? {
+        scene: '场景',
+        style: '风格',
+        characters: '角色',
+        shotScale: '景别',
+        camera: '摄影机',
+        angle: '机位角度',
+        action: '动作',
+        emotion: '情绪',
+        tags: '标签',
+        dialogue: '对白',
+        fallback: '为这个镜头生成图像提示词。',
+      }
+    : {
+        scene: 'Scene',
+        style: 'Style',
+        characters: 'Characters',
+        shotScale: 'Shot scale',
+        camera: 'Camera',
+        angle: 'Angle',
+        action: 'Action',
+        emotion: 'Emotion',
+        tags: 'Tags',
+        dialogue: 'Dialogue',
+        fallback: 'Generate an image prompt for this shot.',
+      };
   const parts: string[] = [];
   if (shotData.generationPrompt) {
-    parts.push(`Scene: ${shotData.generationPrompt}`);
+    parts.push(`${labels.scene}: ${shotData.generationPrompt}`);
   } else if (shotData.visualDescription) {
-    parts.push(`Scene: ${shotData.visualDescription}`);
+    parts.push(`${labels.scene}: ${shotData.visualDescription}`);
   }
-  if (shotData.visualStyle) parts.push(`Style: ${shotData.visualStyle}`);
+  if (shotData.visualStyle) parts.push(`${labels.style}: ${shotData.visualStyle}`);
   if (shotData.characters?.length) {
-    parts.push(`Characters: ${shotData.characters.map((c) => c.characterName).join(', ')}`);
+    parts.push(
+      `${labels.characters}: ${shotData.characters.map((c) => c.characterName).join(', ')}`,
+    );
   }
-  if (shotData.shotScale) parts.push(`Shot scale: ${shotData.shotScale}`);
+  if (shotData.shotScale) parts.push(`${labels.shotScale}: ${shotData.shotScale}`);
   if (shotData.cameraMovement && shotData.cameraMovement !== 'static') {
-    parts.push(`Camera: ${shotData.cameraMovement}`);
+    parts.push(`${labels.camera}: ${shotData.cameraMovement}`);
   }
   if (shotData.cameraAngle && shotData.cameraAngle !== 'eye-level') {
-    parts.push(`Angle: ${shotData.cameraAngle}`);
+    parts.push(`${labels.angle}: ${shotData.cameraAngle}`);
   }
-  if (shotData.characterAction) parts.push(`Action: ${shotData.characterAction}`);
-  if (shotData.emotion?.length) parts.push(`Emotion: ${shotData.emotion.join(', ')}`);
-  if (shotData.sceneTags?.length) parts.push(`Tags: ${shotData.sceneTags.join(', ')}`);
-  if (shotData.dialogue) parts.push(`Dialogue: "${shotData.dialogue}"`);
+  if (shotData.characterAction) parts.push(`${labels.action}: ${shotData.characterAction}`);
+  if (shotData.emotion?.length) parts.push(`${labels.emotion}: ${shotData.emotion.join(', ')}`);
+  if (shotData.sceneTags?.length) parts.push(`${labels.tags}: ${shotData.sceneTags.join(', ')}`);
+  if (shotData.dialogue) parts.push(`${labels.dialogue}: "${shotData.dialogue}"`);
   if (shotData.vfx?.length) parts.push(`VFX: ${shotData.vfx.join(', ')}`);
 
-  return parts.join('\n') || 'Generate an image prompt for this shot.';
+  return parts.join('\n') || labels.fallback;
+}
+
+function isChineseCanvasLocale(locale: string | undefined): boolean {
+  return locale?.trim().toLowerCase().startsWith('zh') === true;
 }
 
 export function extractCanvasPromptText(content: string | readonly unknown[]): string {

@@ -14,12 +14,7 @@ export interface BuiltinSkillOptions {
 export function normalizeBuiltinSkillLocale(locale?: string): BuiltinSkillLocale {
   const normalized = locale?.trim().toLowerCase().replace('_', '-');
 
-  if (
-    normalized === 'zh' ||
-    normalized === 'zh-cn' ||
-    normalized === 'zh-hans' ||
-    normalized === 'zh-sg'
-  ) {
+  if (normalized?.startsWith('zh')) {
     return 'zh-cn';
   }
 

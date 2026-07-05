@@ -1228,7 +1228,9 @@ function buildStoryboardProductionRequest(
     };
   }
   const scenePromptSlots = uniquePromptSlots(
-    productionRows.flatMap((row) => extractPromptSlots(row, profileColumns, 'scene')),
+    productionRows.flatMap((row) =>
+      extractPromptSlots(row, profileColumns, 'scene', input.operationHint),
+    ),
   );
 
   return {
@@ -1247,8 +1249,8 @@ function buildStoryboardProductionRequest(
         const visual = getCell(row, visualColumn);
         const prompt = imagePromptColumn ? getCell(row, imagePromptColumn) : undefined;
         const promptSlots = uniquePromptSlots(
-          extractPromptSlots(row, profileColumns, 'shot').filter(
-            (slot) => slot.fieldId !== 'imagePrompt' && slot.fieldId !== 'prompt',
+          extractPromptSlots(row, profileColumns, 'shot', input.operationHint).filter((slot) =>
+            shouldKeepShotPromptSlot(slot),
           ),
         );
         const characters = characterColumn
@@ -1309,25 +1311,75 @@ function extractPromptSlots(
   row: MarkdownTableRow,
   profileColumns: CanvasMarkdownResolvedTableProfileColumns,
   scope: 'shot' | 'scene',
+  operationHint: CanvasMarkdownCapabilityInput['operationHint'] | undefined,
 ): readonly CanvasCreativePromptSlot[] {
   const slots: CanvasCreativePromptSlot[] = [];
   for (const consumed of profileColumns.consumedColumns) {
     const descriptor = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find(
       (field) => field.id === consumed.fieldId,
     );
-    if (!descriptor?.promptSlot || descriptor.promptSlot.scope !== scope) continue;
-    const column = profileColumns.columnsByField.get(consumed.fieldId);
-    const prompt = column ? getCell(row, column) : '';
+    if (!descriptor?.promptSlot) continue;
+    const promptSlotContext = resolvePromptSlotContext(descriptor.promptSlot, operationHint);
+    if (promptSlotContext.scope !== scope) continue;
+    const prompt = row.cells[consumed.columnId]?.trim() ?? '';
     if (!prompt) continue;
     slots.push({
       fieldId: consumed.fieldId,
-      scope: descriptor.promptSlot.scope,
-      mediaType: descriptor.promptSlot.mediaType,
-      operation: descriptor.promptSlot.operation,
+      scope: promptSlotContext.scope,
+      mediaType: promptSlotContext.mediaType,
+      operation: promptSlotContext.operation,
       prompt,
     });
   }
   return slots;
+}
+
+function shouldKeepShotPromptSlot(promptSlot: CanvasCreativePromptSlot): boolean {
+  if (promptSlot.fieldId !== 'imagePrompt' && promptSlot.fieldId !== 'prompt') {
+    return true;
+  }
+  return promptSlot.operation !== 'generate';
+}
+
+function resolvePromptSlotContext(
+  descriptor: CreativeTableFieldDescriptor['promptSlot'],
+  operationHint: CanvasMarkdownCapabilityInput['operationHint'] | undefined,
+): Pick<CanvasCreativePromptSlot, 'scope' | 'mediaType' | 'operation'> {
+  if (!descriptor) {
+    throw new Error('Prompt slot context requires a descriptor.');
+  }
+  const operationContext = parseOperationHint(operationHint);
+  if (operationContext && operationContext.mediaType === descriptor.mediaType) {
+    return operationContext;
+  }
+  return descriptor;
+}
+
+function parseOperationHint(
+  operationHint: CanvasMarkdownCapabilityInput['operationHint'] | undefined,
+): Pick<CanvasCreativePromptSlot, 'scope' | 'mediaType' | 'operation'> | undefined {
+  if (!operationHint) return undefined;
+  const [mediaType, scope, operation] = operationHint.split('.');
+  if (isPromptMediaType(mediaType) && isPromptScope(scope) && isPromptOperation(operation)) {
+    return { mediaType, scope, operation };
+  }
+  throw new Error(`Unsupported Canvas Markdown operation hint "${operationHint}".`);
+}
+
+function isPromptMediaType(
+  value: string | undefined,
+): value is CanvasCreativePromptSlot['mediaType'] {
+  return value === 'image' || value === 'video' || value === 'audio';
+}
+
+function isPromptScope(value: string | undefined): value is CanvasCreativePromptSlot['scope'] {
+  return value === 'shot' || value === 'scene';
+}
+
+function isPromptOperation(
+  value: string | undefined,
+): value is CanvasCreativePromptSlot['operation'] {
+  return value === 'generate' || value === 'edit';
 }
 
 function uniquePromptSlots(

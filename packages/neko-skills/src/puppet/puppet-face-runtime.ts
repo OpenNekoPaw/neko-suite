@@ -10,6 +10,7 @@ export type PuppetFaceParamChanges = Record<string, { from: number; to: number }
 
 export interface PuppetFaceRuntimeDeps {
   generateWithLLM(systemPrompt: string, userPrompt: string): Promise<string>;
+  readonly locale?: string;
 }
 
 export interface PuppetFaceGenerateInput {
@@ -57,21 +58,28 @@ export type PuppetFaceGenerateResult = PuppetFaceGenerateSuccess | PuppetFaceErr
 export type PuppetFaceImageResult = PuppetFaceImageSuccess | PuppetFaceErrorResult;
 export type PuppetFaceAdjustResult = PuppetFaceAdjustSuccess | PuppetFaceErrorResult;
 
-const PARAM_SCHEMA_PROMPT = buildPuppetFaceParameterSchemaPrompt();
 const DEFAULT_IMAGE_MIME_TYPE = 'image/png';
 
-export function buildPuppetFaceParameterSchemaPrompt(): string {
-  const lines: string[] = ['Available face parameters (id | label | range | default):'];
+export function buildPuppetFaceParameterSchemaPrompt(
+  options: { readonly locale?: string } = {},
+): string {
+  const zh = isChinesePuppetLocale(options.locale);
+  const lines: string[] = [
+    zh
+      ? '可用面部参数（id | 标签 | 范围 | 默认值）：'
+      : 'Available face parameters (id | label | range | default):',
+  ];
   let currentCategory = '';
 
   for (const parameter of PUPPET_FACE_PARAMETERS) {
     if (parameter.category !== currentCategory) {
       currentCategory = parameter.category;
       const meta = PUPPET_FACE_CATEGORIES[parameter.category];
-      lines.push(`\n## ${meta.en} (${meta.zh})`);
+      lines.push(zh ? `\n## ${meta.zh} (${meta.en})` : `\n## ${meta.en} (${meta.zh})`);
     }
+    const label = zh ? parameter.label_zh : parameter.label_en;
     lines.push(
-      `- ${parameter.id}: "${parameter.label_en}" [${parameter.min}, ${parameter.max}] default=${parameter.default}`,
+      `- ${parameter.id}: "${label}" [${parameter.min}, ${parameter.max}] default=${parameter.default}`,
     );
   }
 
@@ -145,15 +153,24 @@ export class PuppetFaceRuntime {
   constructor(private readonly deps: PuppetFaceRuntimeDeps) {}
 
   async generateParams(input: PuppetFaceGenerateInput): Promise<PuppetFaceGenerateResult> {
+    const zh = isChinesePuppetLocale(this.deps.locale);
     const systemPrompt =
-      'You are a 2D character face parameter expert. Given a text description of a character face, ' +
-      'produce a JSON object mapping parameter IDs to numeric values.\n\n' +
-      'Rules:\n' +
-      '- Only include parameters whose values differ from defaults.\n' +
-      "- Values must be within each parameter's [min, max] range.\n" +
-      '- Respond ONLY with a JSON object, no explanation.\n\n' +
-      PARAM_SCHEMA_PROMPT;
-    const userPrompt = `Generate face parameters for: "${input.description}"`;
+      (zh
+        ? '你是 2D 角色面部参数专家。根据角色面部的文本描述，生成一个 JSON 对象，将参数 ID 映射到数值。\n\n' +
+          '规则：\n' +
+          '- 只包含与默认值不同的参数。\n' +
+          '- 数值必须位于每个参数的 [min, max] 范围内。\n' +
+          '- 只返回 JSON 对象，不要解释。\n\n'
+        : 'You are a 2D character face parameter expert. Given a text description of a character face, ' +
+          'produce a JSON object mapping parameter IDs to numeric values.\n\n' +
+          'Rules:\n' +
+          '- Only include parameters whose values differ from defaults.\n' +
+          "- Values must be within each parameter's [min, max] range.\n" +
+          '- Respond ONLY with a JSON object, no explanation.\n\n') +
+      buildPuppetFaceParameterSchemaPrompt(this.deps.locale ? { locale: this.deps.locale } : {});
+    const userPrompt = zh
+      ? `为以下描述生成面部参数："${input.description}"`
+      : `Generate face parameters for: "${input.description}"`;
 
     const parsed = await this.generateAndParse(systemPrompt, userPrompt, 'LLM generation failed');
     if (parsed.success === false) return parsed;
@@ -173,19 +190,29 @@ export class PuppetFaceRuntime {
 
   async inferParamsFromImage(input: PuppetFaceImageInput): Promise<PuppetFaceImageResult> {
     const mimeType = input.mimeType ?? DEFAULT_IMAGE_MIME_TYPE;
+    const zh = isChinesePuppetLocale(this.deps.locale);
     const systemPrompt =
-      'You are a 2D character face parameter expert with vision capabilities. ' +
-      'Given a reference image of a face or character, analyze the facial features ' +
-      'and produce a JSON object mapping parameter IDs to numeric values that best ' +
-      'reproduce the appearance.\n\n' +
-      'Rules:\n' +
-      '- Only include parameters whose values differ from defaults.\n' +
-      "- Values must be within each parameter's [min, max] range.\n" +
-      '- Focus on the most distinctive features of the reference face.\n' +
-      '- Respond ONLY with a JSON object, no explanation.\n\n' +
-      PARAM_SCHEMA_PROMPT;
+      (zh
+        ? '你是具备视觉能力的 2D 角色面部参数专家。给定一张面部或角色参考图，分析面部特征，并生成最能复现外观的参数 ID 到数值的 JSON 对象。\n\n' +
+          '规则：\n' +
+          '- 只包含与默认值不同的参数。\n' +
+          '- 数值必须位于每个参数的 [min, max] 范围内。\n' +
+          '- 关注参考面部最有辨识度的特征。\n' +
+          '- 只返回 JSON 对象，不要解释。\n\n'
+        : 'You are a 2D character face parameter expert with vision capabilities. ' +
+          'Given a reference image of a face or character, analyze the facial features ' +
+          'and produce a JSON object mapping parameter IDs to numeric values that best ' +
+          'reproduce the appearance.\n\n' +
+          'Rules:\n' +
+          '- Only include parameters whose values differ from defaults.\n' +
+          "- Values must be within each parameter's [min, max] range.\n" +
+          '- Focus on the most distinctive features of the reference face.\n' +
+          '- Respond ONLY with a JSON object, no explanation.\n\n') +
+      buildPuppetFaceParameterSchemaPrompt(this.deps.locale ? { locale: this.deps.locale } : {});
     const userPrompt =
-      'Analyze the attached face image and generate matching face parameters.\n' +
+      (zh
+        ? '分析附带的面部图像并生成匹配的面部参数。\n'
+        : 'Analyze the attached face image and generate matching face parameters.\n') +
       `[Image: data:${mimeType};base64,${input.imageBase64}]`;
 
     const parsed = await this.generateAndParse(
@@ -216,18 +243,27 @@ export class PuppetFaceRuntime {
       };
     }
 
+    const zh = isChinesePuppetLocale(this.deps.locale);
     const systemPrompt =
-      'You are a 2D character face parameter expert. Given the current parameter values and ' +
-      'an adjustment instruction, produce a JSON object with the UPDATED parameter values.\n\n' +
-      'Rules:\n' +
-      '- Include ALL parameters (not just changed ones) so the result is a complete state.\n' +
-      "- Values must be within each parameter's [min, max] range.\n" +
-      '- Make proportional, natural-looking adjustments.\n' +
-      '- Respond ONLY with a JSON object, no explanation.\n\n' +
-      PARAM_SCHEMA_PROMPT;
+      (zh
+        ? '你是 2D 角色面部参数专家。给定当前参数值和调整指令，生成包含更新后参数值的 JSON 对象。\n\n' +
+          '规则：\n' +
+          '- 包含所有参数（不只包含变化项），确保结果是完整状态。\n' +
+          '- 数值必须位于每个参数的 [min, max] 范围内。\n' +
+          '- 做出成比例、自然的调整。\n' +
+          '- 只返回 JSON 对象，不要解释。\n\n'
+        : 'You are a 2D character face parameter expert. Given the current parameter values and ' +
+          'an adjustment instruction, produce a JSON object with the UPDATED parameter values.\n\n' +
+          'Rules:\n' +
+          '- Include ALL parameters (not just changed ones) so the result is a complete state.\n' +
+          "- Values must be within each parameter's [min, max] range.\n" +
+          '- Make proportional, natural-looking adjustments.\n' +
+          '- Respond ONLY with a JSON object, no explanation.\n\n') +
+      buildPuppetFaceParameterSchemaPrompt(this.deps.locale ? { locale: this.deps.locale } : {});
     const userPrompt =
-      `Current parameters:\n${JSON.stringify(input.currentParams, null, 2)}\n\n` +
-      `Adjustment instruction: "${input.instruction}"`;
+      (zh ? '当前参数：' : 'Current parameters:') +
+      `\n${JSON.stringify(input.currentParams, null, 2)}\n\n` +
+      (zh ? `调整指令："${input.instruction}"` : `Adjustment instruction: "${input.instruction}"`);
 
     const parsed = await this.generateAndParse(systemPrompt, userPrompt, 'LLM adjustment failed');
     if (parsed.success === false) return parsed;
@@ -302,4 +338,8 @@ function asJsonRecord(value: unknown): Record<string, unknown> {
 
 export function createPuppetFaceRuntime(deps: PuppetFaceRuntimeDeps): PuppetFaceRuntime {
   return new PuppetFaceRuntime(deps);
+}
+
+function isChinesePuppetLocale(locale: string | undefined): boolean {
+  return locale?.trim().toLowerCase().startsWith('zh') === true;
 }

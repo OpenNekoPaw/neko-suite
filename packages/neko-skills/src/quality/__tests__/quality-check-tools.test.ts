@@ -39,6 +39,32 @@ describe('quality check tool factories', () => {
     expect(sceneProperties).toHaveProperty('duration');
   });
 
+  it('owns Chinese localization metadata for quality tool schemas', () => {
+    const qualityTools = createQualityCheckTools({
+      createService: () => createService({ overallScore: 100, dimensions: {}, issues: [] }),
+      mediaGenerator: createGenerator(),
+      readFileAsBase64: vi.fn(),
+      chatModel: CHAT_MODEL,
+    });
+    const consistencyTool = createConsistencyCheckTools({
+      createService: () =>
+        createService({ driftScore: 10, description: 'consistent', characterIssues: [] }),
+      chatModel: CHAT_MODEL,
+    })[0]!;
+    const qualityTool = qualityTools.find((candidate) => candidate.name === 'QualityCheck')!;
+    const repairTool = qualityTools.find((candidate) => candidate.name === 'QualityRepairCheck')!;
+
+    expect(qualityTool.localization?.zh?.description).toContain('评估 AI 生成媒体质量');
+    expect(qualityTool.localization?.zh?.parameters?.scenes).toContain('要评估的场景数组');
+    expect(qualityTool.localization?.zh?.parameters?.['scenes.[].mediaPath']).toContain(
+      '生成媒体文件路径',
+    );
+    expect(repairTool.localization?.zh?.description).toContain('评估 AI 生成媒体质量并显式尝试修复');
+    expect(repairTool.localization?.zh?.parameters?.maxRetries).toContain('修复重试次数');
+    expect(consistencyTool.localization?.zh?.description).toContain('跨场景视觉一致性');
+    expect(consistencyTool.localization?.zh?.parameters?.characters).toContain('要跟踪外观一致性的角色');
+  });
+
   it('creates QualityRepairCheck as an explicit non-read-only repair tool', () => {
     const tools = createQualityCheckTools({
       createService: () => createService({ overallScore: 100, dimensions: {}, issues: [] }),
@@ -107,6 +133,154 @@ describe('quality check tool factories', () => {
       }),
     );
     expect(generator.generate).not.toHaveBeenCalled();
+  });
+
+  it('uses Chinese prompt wrappers for localized QualityCheck model calls', async () => {
+    const service = createService({
+      overallScore: 88,
+      dimensions: {
+        technicalQuality: 90,
+        promptAdherence: 86,
+        scriptAdherence: null,
+        aesthetics: 88,
+      },
+      issues: [],
+    });
+    const tool = createQualityCheckTools({
+      createService: () => service,
+      mediaGenerator: createGenerator(),
+      readFileAsBase64: vi.fn().mockResolvedValue('image-base64'),
+      chatModel: CHAT_MODEL,
+      locale: 'zh-CN',
+    }).find((candidate) => candidate.name === 'QualityCheck')!;
+
+    await tool.execute({
+      scenes: [
+        {
+          index: 0,
+          mediaPath: '/tmp/scene.png',
+          prompt: 'cinematic scene',
+          description: 'hero enters the city',
+        },
+      ],
+      style: 'cinematic',
+      sceneDialogue: ['hello'],
+    });
+
+    const messages = service.chat.mock.calls[0]![0] as Array<{
+      role: string;
+      content: string | Array<{ type: string; text?: string }>;
+    }>;
+    expect(messages[0]!.content).toContain('视觉质量评估器');
+    expect(messages[0]!.content).not.toContain('You are a visual quality evaluator');
+    const userText = (messages[1]!.content as Array<{ type: string; text?: string }>)[0]!.text!;
+    expect(userText).toContain('原始提示词');
+    expect(userText).toContain('场景描述');
+    expect(userText).toContain('全局风格');
+    expect(userText).toContain('对白');
+    expect(userText).not.toContain('Original prompt');
+  });
+
+  it('uses Chinese prompt wrappers for localized QualityRepairCheck prompt optimization', async () => {
+    let callCount = 0;
+    const service = {
+      chat: vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            message: {
+              content: JSON.stringify({
+                overallScore: 20,
+                dimensions: { technicalQuality: 20, promptAdherence: 30, aesthetics: 20 },
+                issues: [{ category: 'artifact', severity: 'major', description: 'blurry image' }],
+              }),
+            },
+          });
+        }
+        if (callCount === 2) {
+          return Promise.resolve({ message: { content: 'Sharper prompt' } });
+        }
+        return Promise.resolve({
+          message: {
+            content: JSON.stringify({
+              overallScore: 90,
+              dimensions: { technicalQuality: 90, promptAdherence: 90, aesthetics: 90 },
+              issues: [],
+            }),
+          },
+        });
+      }),
+    };
+    const tool = createQualityCheckTools({
+      createService: () => service,
+      mediaGenerator: createGenerator(),
+      readFileAsBase64: vi.fn().mockResolvedValue('image-base64'),
+      chatModel: CHAT_MODEL,
+      locale: 'zh-CN',
+    }).find((candidate) => candidate.name === 'QualityRepairCheck')!;
+
+    await tool.execute({
+      scenes: [{ index: 0, mediaPath: '/tmp/scene.png', prompt: 'cinematic scene' }],
+      maxRetries: 1,
+      minScore: 60,
+    });
+
+    const messages = service.chat.mock.calls[1]![0] as Array<{ role: string; content: string }>;
+    expect(messages[0]!.content).toContain('提示词工程师');
+    expect(messages[0]!.content).not.toContain('You are an AI image/video generation prompt engineer');
+    expect(messages[1]!.content).toContain('原始提示词');
+    expect(messages[1]!.content).toContain('发现的问题');
+    expect(messages[1]!.content).not.toContain('Original prompt');
+  });
+
+  it('uses Chinese prompt wrappers for localized video quality model calls', async () => {
+    const service = createService({
+      overallScore: 90,
+      dimensions: {
+        technicalQuality: 90,
+        promptAdherence: 90,
+        scriptAdherence: null,
+        aesthetics: 90,
+        videoQuality: 90,
+      },
+      issues: [],
+    });
+    const frameExtractor = {
+      probe: vi.fn().mockResolvedValue({ duration: 4, fps: 24, width: 1280, height: 720 }),
+      extractFrame: vi.fn().mockResolvedValue('frame-base64'),
+    };
+    const tool = createQualityCheckTools({
+      createService: () => service,
+      mediaGenerator: createGenerator(),
+      readFileAsBase64: vi.fn().mockResolvedValue('unused'),
+      frameExtractor,
+      chatModel: CHAT_MODEL,
+      locale: 'zh-CN',
+    }).find((candidate) => candidate.name === 'QualityCheck')!;
+
+    await tool.execute({
+      scenes: [
+        {
+          index: 0,
+          mediaPath: '/tmp/scene.mp4',
+          prompt: 'cinematic video',
+          description: 'camera moves forward',
+        },
+      ],
+      style: 'cinematic',
+    });
+
+    const messages = service.chat.mock.calls[0]![0] as Array<{
+      role: string;
+      content: string | Array<{ type: string; text?: string }>;
+    }>;
+    expect(messages[0]!.content).toContain('生成视频的质量评估器');
+    expect(messages[0]!.content).not.toContain('You are a video quality evaluator');
+    const userText = (messages[1]!.content as Array<{ type: string; text?: string }>)[0]!.text!;
+    expect(userText).toContain('原始提示词');
+    expect(userText).toContain('视频元数据');
+    expect(userText).toContain('采样帧');
+    expect(userText).not.toContain('Original prompt');
   });
 
   it('does not generate media from read-only QualityCheck even when maxRetries is provided', async () => {

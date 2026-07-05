@@ -733,8 +733,7 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
     },
   },
   [TOOL_NAMES_CANVAS.CANVAS_CREATE_CUT_DRAFT_FROM_ROUTE]: {
-    description:
-      '将 Canvas 播放路由投影为 CanvasCutDraftPayload，并可在确认后发送到 Cut。',
+    description: '将 Canvas 播放路由投影为 CanvasCutDraftPayload，并可在确认后发送到 Cut。',
     parameters: {
       sourceCanvasUri: '可选 Canvas 文档 URI。',
       routeId: '要投影的播放路由 ID。',
@@ -1068,43 +1067,63 @@ function readCanvasToolTraits(toolName: CanvasToolName): CanvasToolTraits {
   return { cost: 'free', reversible: true, locality: 'local', impactLevel: 'low' };
 }
 
-const CANVAS_MARKDOWN_STORYBOARD_SKILL: Skill = {
-  name: 'canvas-markdown-storyboard',
-  description:
-    'Prepare reviewed Markdown storyboard or table content for Canvas ingestion. Use after the Agent has inspected the source material and decided Canvas should create or validate storyboard nodes.',
-  content: [
-    '# Canvas Markdown Storyboard',
-    '',
-    'Use this skill only after you have understood the user request and inspected required source material.',
-    '',
-    '## Canvas Lifecycle',
-    '- Use canvas.validateMarkdownStoryboard to validate Markdown storyboard content without mutating Canvas.',
-    '- Use canvas.createStoryboardDraftFromMarkdown when the user needs a draft Canvas representation for review.',
-    '- Use canvas.createStoryboardFromMarkdown only after review/approval for Canvas mutation.',
-    '- Use canvas.attachResource when reviewed rows need explicit resource refs bound to Canvas targets.',
-    '',
-    'Do not invent fixed storyboard table headers in the Agent runtime. Preserve user/source language and field names in Markdown, and let Canvas profile validation decide whether a field is supported.',
-  ].join('\n'),
-  allowedTools: [
-    'canvas.validateMarkdownStoryboard',
-    'canvas.createStoryboardDraftFromMarkdown',
-    'canvas.createStoryboardFromMarkdown',
-    'canvas.attachResource',
-  ],
-  source: 'builtin',
-  enabled: true,
-  icon: 'canvas',
-  mediaWorkflow: {
-    referencedCapabilities: [
-      'canvas.validateMarkdownStoryboard',
-      'canvas.createStoryboardDraftFromMarkdown',
-      'canvas.createStoryboardFromMarkdown',
-      'canvas.attachResource',
-    ],
-    validationRequirements: ['CanvasMarkdownCapabilityInput'],
-    tags: ['canvas', 'markdown', 'storyboard'],
-  },
-};
+function createCanvasMarkdownStoryboardSkill(locale?: AgentCapabilityContext['locale']): Skill {
+  return {
+    name: 'canvas-markdown-storyboard',
+    description:
+      locale === 'zh'
+        ? '准备已审阅的 Markdown 分镜表或表格内容供 Canvas 摄入。仅在 Agent 已检查素材并确认 Canvas 需要创建或校验分镜节点后使用。'
+        : 'Prepare reviewed Markdown storyboard or table content for Canvas ingestion. Use after the Agent has inspected the source material and decided Canvas should create or validate storyboard nodes.',
+    content: (locale === 'zh'
+      ? CANVAS_MARKDOWN_STORYBOARD_SKILL_ZH
+      : CANVAS_MARKDOWN_STORYBOARD_SKILL_EN
+    ).join('\n'),
+    allowedTools: CANVAS_MARKDOWN_STORYBOARD_TOOLS,
+    source: 'builtin',
+    enabled: true,
+    icon: 'canvas',
+    mediaWorkflow: {
+      referencedCapabilities: CANVAS_MARKDOWN_STORYBOARD_TOOLS,
+      validationRequirements: ['CanvasMarkdownCapabilityInput'],
+      tags: ['canvas', 'markdown', 'storyboard'],
+    },
+  };
+}
+
+const CANVAS_MARKDOWN_STORYBOARD_TOOLS = [
+  'canvas.validateMarkdownStoryboard',
+  'canvas.createStoryboardDraftFromMarkdown',
+  'canvas.createStoryboardFromMarkdown',
+  'canvas.attachResource',
+];
+
+const CANVAS_MARKDOWN_STORYBOARD_SKILL_EN = [
+  '# Canvas Markdown Storyboard',
+  '',
+  'Use this skill only after you have understood the user request and inspected required source material.',
+  '',
+  '## Canvas Lifecycle',
+  '- Use canvas.validateMarkdownStoryboard to validate Markdown storyboard content without mutating Canvas.',
+  '- Use canvas.createStoryboardDraftFromMarkdown when the user needs a draft Canvas representation for review.',
+  '- Use canvas.createStoryboardFromMarkdown only after review/approval for Canvas mutation.',
+  '- Use canvas.attachResource when reviewed rows need explicit resource refs bound to Canvas targets.',
+  '',
+  'Do not invent fixed storyboard table headers in the Agent runtime. Preserve user/source language and field names in Markdown, and let Canvas profile validation decide whether a field is supported.',
+];
+
+const CANVAS_MARKDOWN_STORYBOARD_SKILL_ZH = [
+  '# Canvas Markdown 分镜',
+  '',
+  '仅在已经理解用户请求并检查必要素材后使用本 Skill。',
+  '',
+  '## Canvas 生命周期',
+  '- 使用 canvas.validateMarkdownStoryboard 校验 Markdown 分镜内容，不修改 Canvas。',
+  '- 用户需要可审阅的 Canvas 草稿时，使用 canvas.createStoryboardDraftFromMarkdown。',
+  '- 只有在审阅/确认后，才使用 canvas.createStoryboardFromMarkdown 修改 Canvas。',
+  '- 已审阅行需要绑定明确资源引用到 Canvas 目标时，使用 canvas.attachResource。',
+  '',
+  '不要在 Agent runtime 中发明固定分镜表头。保留用户/来源语言和字段名，由 Canvas profile validation 判断字段是否支持。',
+];
 
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
   readonly id = 'neko-canvas';
@@ -1112,8 +1131,8 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
 
   constructor(private readonly _api: NekoCanvasAPI) {}
 
-  getSkills(): Skill[] {
-    return [CANVAS_MARKDOWN_STORYBOARD_SKILL];
+  getSkills(context?: AgentCapabilityContext): Skill[] {
+    return [createCanvasMarkdownStoryboardSkill(context?.locale)];
   }
 
   getArtifactFacets(_context: AgentCapabilityContext): AgentArtifactFacetsContribution {

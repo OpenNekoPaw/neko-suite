@@ -148,6 +148,28 @@ describe('ConsistencyEvaluator', () => {
     );
   });
 
+  it('uses Chinese prompt wrappers for localized pairwise LLM evaluation', async () => {
+    const evaluator = new ConsistencyEvaluator({
+      ...deps,
+      locale: 'zh-CN',
+    });
+    const inputs = createInputs(2);
+
+    await evaluator.evaluate(inputs, { globalStyle: 'cinematic' });
+
+    const messages = mockService.chat.mock.calls[0]![0] as Array<{
+      role: string;
+      content: string | Array<{ type: string; text?: string }>;
+    }>;
+    expect(messages[0]!.content).toContain('视觉一致性评估器');
+    expect(messages[0]!.content).not.toContain('You are a visual consistency evaluator');
+    const userText = (messages[1]!.content as Array<{ type: string; text?: string }>)[0]!.text!;
+    expect(userText).toContain('全局风格');
+    expect(userText).toContain('场景 A');
+    expect(userText).toContain('比较这两张相邻场景图像');
+    expect(userText).not.toContain('Global style');
+  });
+
   it('should call LLM for pairs with high CLIP drift', async () => {
     // Significantly different CLIP scores → drift > threshold
     const clipScores = new Map([
@@ -251,6 +273,50 @@ describe('ConsistencyEvaluator', () => {
     expect(report.characterConsistency).toHaveLength(1);
     expect(report.characterConsistency[0]!.name).toBe('Alice');
     expect(report.characterConsistency[0]!.appearances.length).toBeGreaterThan(0);
+  });
+
+  it('uses Chinese prompt wrappers for localized character LLM evaluation', async () => {
+    const service = {
+      chat: vi
+        .fn()
+        .mockResolvedValueOnce({
+          message: {
+            content: JSON.stringify({
+              driftScore: 10,
+              description: 'Minimal drift',
+              characterIssues: [],
+            }),
+          },
+        })
+        .mockResolvedValueOnce({
+          message: {
+            content: JSON.stringify({
+              score: 75,
+              issues: ['Hair color changed from red to brown'],
+            }),
+          },
+        }),
+    };
+    const evaluator = new ConsistencyEvaluator({
+      createService: () => service,
+      chatModel: CHAT_MODEL,
+      locale: 'zh-CN',
+    });
+
+    await evaluator.evaluate(createInputs(2), {
+      characters: [{ name: 'Alice', description: 'Red-haired girl in blue dress' }],
+    });
+
+    const messages = service.chat.mock.calls[1]![0] as Array<{
+      role: string;
+      content: string | Array<{ type: string; text?: string }>;
+    }>;
+    expect(messages[0]!.content).toContain('角色外观一致性');
+    expect(messages[0]!.content).not.toContain('You are evaluating character appearance');
+    const userText = (messages[1]!.content as Array<{ type: string; text?: string }>)[0]!.text!;
+    expect(userText).toContain('角色：');
+    expect(userText).toContain('参考图像');
+    expect(userText).not.toContain('Reference image');
   });
 
   it('should extract video frames for video scenes', async () => {

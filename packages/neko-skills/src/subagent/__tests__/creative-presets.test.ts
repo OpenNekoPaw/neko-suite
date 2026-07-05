@@ -3,7 +3,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CREATIVE_PRESETS, isCreativeAgentType, getCreativeAgentTypes } from '../creative-presets';
+import {
+  CREATIVE_PRESETS,
+  getCreativeAgentTypes,
+  getCreativePresets,
+  isCreativeAgentType,
+} from '../creative-presets';
 import type { SubAgentPresetToolPolicy } from '../creative-presets';
 
 // =============================================================================
@@ -62,6 +67,17 @@ describe('CREATIVE_PRESETS', () => {
         'GetContext',
       );
     }
+  });
+
+  it('projects Chinese creative SubAgent presets without changing routing contracts', () => {
+    const presets = getCreativePresets({ locale: 'zh-CN' });
+
+    expect(presets['creative-director'].systemPrompt).toContain('你是专注视觉叙事');
+    expect(presets.editor.systemPrompt).toContain('专业视频剪辑师');
+    expect(presets['quality-checker'].systemPrompt).toContain('媒体质量评估专家');
+    expect(presets['creative-director'].systemPrompt).not.toContain('You are a creative director');
+    expect(presets.editor.toolPolicy).toEqual(CREATIVE_PRESETS.editor.toolPolicy);
+    expect(presets.editor.defaultModelTier).toBe(CREATIVE_PRESETS.editor.defaultModelTier);
   });
 });
 

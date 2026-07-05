@@ -34,6 +34,7 @@ export interface QualityCheckToolsDeps {
   mediaGenerator: MediaQualityGenerator;
   readFileAsBase64(filePath: string): Promise<string>;
   chatModel?: MediaQualityChatModelRef;
+  locale?: string;
   audioAnalyzer?: IAudioAnalyzer;
   frameExtractor?: IFrameExtractor;
   logger?: MediaQualityLogger;
@@ -42,6 +43,74 @@ export interface QualityCheckToolsDeps {
 export interface ConsistencyCheckToolsDeps extends ConsistencyEvaluatorDeps {
   logger?: MediaQualityLogger;
 }
+
+const QUALITY_TOOL_LOCALIZATION: Record<
+  'QualityCheck' | 'QualityRepairCheck' | 'QualityCheckConsistency',
+  NonNullable<Tool['localization']>
+> = {
+  QualityCheck: {
+    zh: {
+      description:
+        '使用多模态视觉 LLM 评估 AI 生成媒体质量，返回结构化问题、问题类别和可执行修复建议。该只读工具不会重新生成媒体；重试和修复由 QualityRepairCheck 处理。仅在用户明确要求质量检查时使用。',
+      parameters: {
+        scenes: '要评估的场景数组。每个场景包含 index、mediaPath、prompt 和可选 description。',
+        'scenes.[].index': '场景索引。',
+        'scenes.[].mediaPath': '生成媒体文件路径。',
+        'scenes.[].prompt': '生成该媒体时使用的提示词。',
+        'scenes.[].description': '可选场景描述，用于评估上下文。',
+        'scenes.[].timeRange': '可选时间线范围，单位秒，用于定位质量证据。',
+        'scenes.[].timeRange.start': '范围开始时间，单位秒。',
+        'scenes.[].timeRange.end': '范围结束时间，单位秒。',
+        'scenes.[].start': '未提供 timeRange 时使用的可选开始时间，单位秒。',
+        'scenes.[].end': '未提供 timeRange 时使用的可选结束时间，单位秒。',
+        'scenes.[].duration': '可选资源本地时长，单位秒。',
+        minScore: '最低通过分数，范围 0-100，默认 60。',
+        style: '全局视觉风格，用作评估上下文。',
+        sceneDialogue: '场景对白，用于剧本一致性评估。',
+      },
+    },
+  },
+  QualityRepairCheck: {
+    zh: {
+      description:
+        '评估 AI 生成媒体质量并显式尝试修复失败的图像或视频场景。仅在用户或 Agent 策略批准修复后使用；生成结果会作为修复尝试报告。',
+      parameters: {
+        scenes: '要评估并可能修复的场景数组。',
+        'scenes.[].index': '场景索引。',
+        'scenes.[].mediaPath': '生成媒体文件路径。',
+        'scenes.[].prompt': '生成该媒体时使用的提示词。',
+        'scenes.[].description': '可选场景描述，用于评估上下文。',
+        'scenes.[].timeRange': '可选时间线范围，单位秒，用于定位质量证据。',
+        'scenes.[].timeRange.start': '范围开始时间，单位秒。',
+        'scenes.[].timeRange.end': '范围结束时间，单位秒。',
+        'scenes.[].start': '未提供 timeRange 时使用的可选开始时间，单位秒。',
+        'scenes.[].end': '未提供 timeRange 时使用的可选结束时间，单位秒。',
+        'scenes.[].duration': '可选资源本地时长，单位秒。',
+        minScore: '最低通过分数，范围 0-100，默认 60。',
+        style: '全局视觉风格，用作评估上下文。',
+        sceneDialogue: '场景对白，用于剧本一致性评估。',
+        maxRetries: '失败图像或视频场景的显式修复重试次数，默认 1。音频不会重新生成。',
+      },
+    },
+  },
+  QualityCheckConsistency: {
+    zh: {
+      description:
+        '评估 AI 生成媒体的跨场景视觉一致性，检测相邻场景的风格漂移，并跟踪角色外观一致性。可使用 CLIP 快速筛查和视觉 LLM 成对比较。',
+      parameters: {
+        scenes: '要评估一致性的场景列表，至少 2 个。',
+        'scenes.[].sceneIndex': '场景在序列中的索引。',
+        'scenes.[].mediaPath': '媒体文件路径，可以是图像或视频。',
+        'scenes.[].prompt': '该场景使用的生成提示词。',
+        globalStyle: '作品的全局风格描述，用于 CLIP 对齐。',
+        characters: '要跟踪外观一致性的角色。',
+        'characters.[].name': '角色名称或标识。',
+        'characters.[].description': '角色外观描述。',
+        'characters.[].referenceImagePath': '可选角色参考图路径。',
+      },
+    },
+  },
+};
 
 export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
   const runtime = createMediaQualityRuntime(deps);
@@ -57,6 +126,7 @@ export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
         'This read-only tool never regenerates media; retry and repair are handled by QualityRepairCheck. ' +
         'IMPORTANT: Only use when the user explicitly requests quality checking - ' +
         'each evaluation costs a vision LLM call. Do NOT call automatically after generation.',
+      localization: QUALITY_TOOL_LOCALIZATION.QualityCheck,
       category: 'analysis',
       isReadOnly: true,
       isConcurrencySafe: false,
@@ -80,6 +150,7 @@ export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
       description:
         'Evaluate AI-generated media quality and explicitly attempt repair by regenerating failed image/video scenes. ' +
         'Use only after the user or Agent policy approves repair; generated media is reported as a repair attempt, not read-only analysis.',
+      localization: QUALITY_TOOL_LOCALIZATION.QualityRepairCheck,
       category: 'generation',
       requiresConfirmation: true,
       isReadOnly: false,
@@ -193,6 +264,7 @@ export function createConsistencyCheckTools(deps: ConsistencyCheckToolsDeps): To
         'Evaluate cross-scene visual consistency for AI-generated media. ' +
         'Detects style drift between adjacent scenes and tracks character appearance consistency. ' +
         'Uses two-layer evaluation: CLIP fast-screening (when available) + Vision LLM pairwise comparison.',
+      localization: QUALITY_TOOL_LOCALIZATION.QualityCheckConsistency,
       category: 'analysis',
       isReadOnly: true,
       isConcurrencySafe: false,
@@ -273,6 +345,7 @@ async function executeConsistencyCheck(
   const evaluator = createConsistencyEvaluator({
     createService: deps.createService,
     ...(deps.chatModel ? { chatModel: deps.chatModel } : {}),
+    ...(deps.locale ? { locale: deps.locale } : {}),
     ...(deps.clipScorer ? { clipScorer: deps.clipScorer } : {}),
     ...(deps.frameExtractor ? { frameExtractor: deps.frameExtractor } : {}),
   });

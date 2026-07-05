@@ -43,6 +43,7 @@ export interface ConsistencyFrameExtractor {
 export interface ConsistencyEvaluatorDeps {
   createService: () => ConsistencyLLMService;
   chatModel?: ConsistencyChatModelRef;
+  locale?: string;
   /** Optional CLIP scorer — when absent, all pairs go to LLM layer 2 */
   clipScorer?: IClipScorer;
   /** Optional frame extractor — when absent, video scenes are skipped */
@@ -96,6 +97,27 @@ Return ONLY valid JSON:
 
 Only report actual inconsistencies. Empty characterIssues array is valid if characters are consistent.`;
 
+const PAIRWISE_SYSTEM_PROMPT_ZH = `你是 AI 生成媒体序列的视觉一致性评估器。
+请比较同一作品中相邻场景的两张图像。
+
+从以下维度评估视觉一致性：
+1. 色彩 palette 和调色一致性
+2. 光线方向和质量
+3. 美术风格 / 渲染技法一致性
+4. 角色外观（如果有角色）
+5. 环境连续性（共享元素）
+
+只返回有效 JSON：
+{
+  "driftScore": <0-100, 0=identical style, 100=completely different>,
+  "description": "<concise description of style differences>",
+  "characterIssues": [
+    { "name": "<character>", "issue": "<description>" }
+  ]
+}
+
+只报告真实不一致。若角色一致，characterIssues 可以为空数组。`;
+
 const CHARACTER_SYSTEM_PROMPT = `You are evaluating character appearance consistency across scenes.
 Compare the character in the current scene image against the reference image.
 
@@ -107,6 +129,66 @@ Return ONLY valid JSON:
 
 Focus on: face/body shape, clothing, hair color/style, distinctive features.
 Empty issues array means the character is consistent.`;
+
+const CHARACTER_SYSTEM_PROMPT_ZH = `你正在评估跨场景的角色外观一致性。
+请将当前场景图像中的角色与参考图像进行比较。
+
+只返回有效 JSON：
+{
+  "score": <0-100, 100=perfectly consistent, 0=completely different character>,
+  "issues": ["<specific inconsistency descriptions>"]
+}
+
+重点关注：脸型/体型、服装、发色/发型、辨识特征。
+空 issues 数组表示角色一致。`;
+
+function getPairwiseConsistencySystemPrompt(locale: string | undefined): string {
+  return isChineseConsistencyLocale(locale) ? PAIRWISE_SYSTEM_PROMPT_ZH : PAIRWISE_SYSTEM_PROMPT;
+}
+
+function getCharacterConsistencySystemPrompt(locale: string | undefined): string {
+  return isChineseConsistencyLocale(locale)
+    ? CHARACTER_SYSTEM_PROMPT_ZH
+    : CHARACTER_SYSTEM_PROMPT;
+}
+
+function isChineseConsistencyLocale(locale: string | undefined): boolean {
+  return locale?.trim().toLowerCase().startsWith('zh') === true;
+}
+
+function formatPairwiseConsistencyUserText(
+  fromInput: ConsistencyInput,
+  toInput: ConsistencyInput,
+  globalStyle: string | undefined,
+  locale: string | undefined,
+): string {
+  if (isChineseConsistencyLocale(locale)) {
+    return (
+      (globalStyle ? `全局风格：“${globalStyle}”\n` : '') +
+      `场景 A（index ${fromInput.sceneIndex}）：“${fromInput.prompt}”\n` +
+      `场景 B（index ${toInput.sceneIndex}）：“${toInput.prompt}”\n\n` +
+      '比较这两张相邻场景图像的视觉一致性。'
+    );
+  }
+
+  return (
+    (globalStyle ? `Global style: "${globalStyle}"\n` : '') +
+    `Scene A (index ${fromInput.sceneIndex}): "${fromInput.prompt}"\n` +
+    `Scene B (index ${toInput.sceneIndex}): "${toInput.prompt}"\n\n` +
+    'Compare these two adjacent scene images for visual consistency.'
+  );
+}
+
+function formatCharacterConsistencyUserText(
+  charRef: CharacterRef,
+  locale: string | undefined,
+): string {
+  if (isChineseConsistencyLocale(locale)) {
+    return `角色：“${charRef.name}” — ${charRef.description}\n\n参考图像在前，当前场景图像在后。请评估一致性。`;
+  }
+
+  return `Character: "${charRef.name}" — ${charRef.description}\n\nReference image (first), current scene image (second). Evaluate consistency.`;
+}
 
 // =============================================================================
 // Implementation
@@ -325,11 +407,12 @@ export class ConsistencyEvaluator {
     const userContent = [
       {
         type: 'text',
-        text:
-          (globalStyle ? `Global style: "${globalStyle}"\n` : '') +
-          `Scene A (index ${fromInput.sceneIndex}): "${fromInput.prompt}"\n` +
-          `Scene B (index ${toInput.sceneIndex}): "${toInput.prompt}"\n\n` +
-          'Compare these two adjacent scene images for visual consistency.',
+        text: formatPairwiseConsistencyUserText(
+          fromInput,
+          toInput,
+          globalStyle,
+          this.deps.locale,
+        ),
       },
       { type: 'image', imageUrl: fromImage },
       { type: 'image', imageUrl: toImage },
@@ -338,7 +421,7 @@ export class ConsistencyEvaluator {
     try {
       const response = await service.chat(
         [
-          { role: 'system', content: PAIRWISE_SYSTEM_PROMPT },
+          { role: 'system', content: getPairwiseConsistencySystemPrompt(this.deps.locale) },
           { role: 'user', content: userContent },
         ],
         withConsistencyChatModelRouting({ maxTokens: 512 }, this.deps.chatModel),
@@ -418,13 +501,13 @@ export class ConsistencyEvaluator {
     try {
       const response = await service.chat(
         [
-          { role: 'system', content: CHARACTER_SYSTEM_PROMPT },
+          { role: 'system', content: getCharacterConsistencySystemPrompt(this.deps.locale) },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: `Character: "${charRef.name}" — ${charRef.description}\n\nReference image (first), current scene image (second). Evaluate consistency.`,
+                text: formatCharacterConsistencyUserText(charRef, this.deps.locale),
               },
               { type: 'image', imageUrl: referenceImage },
               { type: 'image', imageUrl: sceneImage },

@@ -1,6 +1,7 @@
 export {
   CREATIVE_PRESETS,
   getCreativeAgentTypes,
+  getCreativePresets,
   isCreativeAgentType,
   type CreativeAgentType,
   type QualityTier,

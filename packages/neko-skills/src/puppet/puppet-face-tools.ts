@@ -71,6 +71,7 @@ const adjustParameters = {
 export function createPuppetFaceTools(deps: PuppetFaceToolsDeps): Tool[] {
   const runtime = createPuppetFaceRuntime({
     generateWithLLM: deps.generateWithLLM,
+    ...(deps.locale ? { locale: deps.locale } : {}),
   });
 
   return [
@@ -82,6 +83,16 @@ export function createPuppetFaceTools(deps: PuppetFaceToolsDeps): Tool[] {
         'appropriate values for the standard 32 face parameters. The generated parameters are ' +
         'automatically applied to the active puppet model.',
       category: 'generation',
+      localization: {
+        zh: {
+          description:
+            '根据文本描述为 2D puppet 模型生成面部参数值，并可自动应用到当前 puppet。',
+          parameters: {
+            description: '期望面部外观的文本描述，可使用中文或英文。',
+            apply: '是否将生成参数应用到当前 puppet，默认 true。',
+          },
+        },
+      },
       isConcurrencySafe: false,
       isReadOnly: false,
       parameters: generateParamsParameters,
@@ -95,6 +106,16 @@ export function createPuppetFaceTools(deps: PuppetFaceToolsDeps): Tool[] {
         'values. Supports PNG, JPEG, and WebP. The generated parameters are automatically applied ' +
         'to the active puppet model.',
       category: 'generation',
+      localization: {
+        zh: {
+          description:
+            '分析面部或角色参考图，生成匹配的 puppet 面部参数，并可自动应用到当前 puppet。',
+          parameters: {
+            imagePath: '参考面部图像的绝对路径，支持 PNG、JPEG 和 WebP。',
+            apply: '是否将推断参数应用到当前 puppet，默认 true。',
+          },
+        },
+      },
       isConcurrencySafe: false,
       isReadOnly: false,
       parameters: fromImageParameters,
@@ -108,6 +129,15 @@ export function createPuppetFaceTools(deps: PuppetFaceToolsDeps): Tool[] {
         'the instruction to the LLM, and applies the adjusted values. ' +
         'Example: "make the eyes bigger and raise the eyebrows", "嘴角上扬，增加腮红".',
       category: 'generation',
+      localization: {
+        zh: {
+          description: '根据自然语言指令调整当前 puppet 面部参数，并可自动应用调整结果。',
+          parameters: {
+            instruction: '描述如何调整面部的自然语言指令，可使用中文或英文。',
+            apply: '是否将调整参数应用到当前 puppet，默认 true。',
+          },
+        },
+      },
       isConcurrencySafe: false,
       isReadOnly: false,
       parameters: adjustParameters,

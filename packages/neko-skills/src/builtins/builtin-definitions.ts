@@ -24,17 +24,22 @@ import {
   storyboardToAnimationPlanSkill,
 } from './media-to-video';
 import { comicToStoryboardSkill, getComicToStoryboardSkill } from './comic-to-storyboard';
-import { scriptGenerationSkill } from './script-generation';
+import { getScriptGenerationSkill, scriptGenerationSkill } from './script-generation';
 import { qualityAssessmentSkill } from './quality-assessment';
-import { creationPersonaSkill } from './creation-persona';
-import { executionPersonaSkill } from './execution-persona';
-import { iterationPersonaSkill } from './iteration-persona';
+import { creationPersonaSkill, getCreationPersonaSkill } from './creation-persona';
+import { executionPersonaSkill, getExecutionPersonaSkill } from './execution-persona';
+import { getIterationPersonaSkill, iterationPersonaSkill } from './iteration-persona';
 import type {
   BuiltinSkillLocale,
   BuiltinSkillOptions,
   LocalizedBuiltinSkillContent,
 } from './builtin-skill-content';
-import { normalizeBuiltinSkillLocale, selectBuiltinSkillContent } from './builtin-skill-content';
+import {
+  localizeBuiltinSkill,
+  normalizeBuiltinSkillLocale,
+  selectBuiltinSkillContent,
+} from './builtin-skill-content';
+import { localizeBuiltinSkillCatalogText } from './builtin-skill-locales';
 
 // Re-export ai-generate for external use
 export { aiGenerateSkill, aiGenerateToolDefinitions };
@@ -65,13 +70,13 @@ export {
   type BuiltinSkillOptions,
   type LocalizedBuiltinSkillContent,
 } from './builtin-skill-content';
-export { scriptGenerationSkill } from './script-generation';
+export { getScriptGenerationSkill, scriptGenerationSkill } from './script-generation';
 export { qualityAssessmentSkill } from './quality-assessment';
 
 // Creation stage persona skills (docs/architecture/agent-unified-workflow.md §4)
-export { creationPersonaSkill } from './creation-persona';
-export { executionPersonaSkill } from './execution-persona';
-export { iterationPersonaSkill } from './iteration-persona';
+export { creationPersonaSkill, getCreationPersonaSkill } from './creation-persona';
+export { executionPersonaSkill, getExecutionPersonaSkill } from './execution-persona';
+export { getIterationPersonaSkill, iterationPersonaSkill } from './iteration-persona';
 
 // =============================================================================
 // Creative Skills (Semantic Discovery)
@@ -660,6 +665,550 @@ Report to the user what music was generated (prompt used, duration) and where it
   },
 };
 
+const localizedAiGenerateContent: LocalizedBuiltinSkillContent = {
+  default: aiGenerateSkill.content,
+  localized: {
+    'zh-cn': `# AI 媒体生成
+
+你现在可以使用 AI 媒体生成工具。
+
+## 核心原则
+
+1. **立即生成** - 使用默认参数并直接调用工具
+2. **使用工具调用** - 不要在回复中直接嵌入 URL
+3. **不要先追问** - 除非用户明确说想先讨论细节，否则用合理默认值生成
+
+## 快速参考
+
+| 请求类型 | 工具 | 关键参数 |
+|----------|------|----------|
+| 绘制/生成图片 | \`generate_image\` | prompt 或 taskRef、size、style |
+| 生成视频 | \`generate_video\` | prompt 或 taskRef、duration、resolution |
+| 旁白/TTS | \`generate_tts\` | text、voice、language |
+| 背景音乐 | \`generate_music\` | prompt、duration、genre |
+| 角色一致性 | \`generate_character\` | prompt、referenceImageUrl |
+| 音频/视频转写 | \`transcribe_audio\` | audioSource、model |
+| 风格迁移 | \`transfer_style\` | sourceImageUrl、stylePrompt |
+| 视频超分/增强 | \`enhance_video\` | videoUrl、targetResolution |
+| 音频清理 | \`optimize_audio\` | audioUrl、denoise |
+
+## 决策流程
+
+~~~
+User Request → Identify Type → Select Tool → Confirm Params → Generate
+~~~
+
+## 默认参数
+
+| 工具 | 默认值 |
+|------|--------|
+| generate_image | size: 1024x1024, style: vivid, n: 1 |
+| generate_video | duration: 4s, resolution: 720p, fps: 24 |
+| generate_tts | speed: 1.0 |
+| generate_music | duration: 30s |
+
+
+## 生成意图来源
+
+默认使用自然语言 \`prompt\` 作为输入。当已有 Plan/Task markdown 文档时，传入
+\`taskRef\` 或 \`planRef\`，让运行时把该 markdown 作为结构化意图锚点。
+structured intent 来自 markdown 或 prompt metadata。
+
+默认策略：
+- prompt only → native provider prompt
+- taskRef / planRef → 从 markdown 提取 generation intent，同时保留文档作为 structured anchor
+- providerAdaptationMode: auto/agentic → 可用时依赖 AGENT provider expression context
+- providerAdaptationMode: native → 绕过 provider expression guidance，直接传递 prompt
+
+## 图像生成技巧
+
+### 提示词结构
+[Subject] + [Style] + [Details] + [Atmosphere] + [Technical]
+
+### 尺寸选择
+- Social media cover: 1792x1024 (16:9)
+- Square avatar: 1024x1024 (1:1)
+- Phone wallpaper: 1024x1792 (9:16)
+
+### 风格关键词
+- Art styles: oil painting, watercolor, digital art, anime style, pixel art
+- Lighting: golden hour, soft lighting, dramatic lighting, neon lights
+- Technical: 4k, highly detailed, sharp focus, bokeh
+
+## 视频生成技巧
+
+### 包含镜头指令
+- \`static shot\` - 固定机位
+- \`slow pan\` - 缓慢横移
+- \`zoom in/out\` - 推近/拉远
+- \`tracking shot\` - 跟随主体
+
+### 时长建议
+- Logo animation: 2-4s
+- Product showcase: 5-8s
+- Background loop: 8-15s
+
+## 音频生成技巧
+
+### TTS 声音选项
+- \`alloy\` - 中性、专业（旁白、教程）
+- \`echo\` - 温暖、友好（故事、对白）
+- \`onyx\` - 深沉、权威（纪录片）
+- \`nova\` - 年轻、有活力（社交媒体）
+
+### 音乐类型与情绪
+- Corporate: upbeat, inspiring
+- Ambient: calm, peaceful
+- Cinematic: dramatic, epic
+- Lofi: calm, relaxing
+`,
+  },
+};
+
+const localizedSceneToMusicContent: LocalizedBuiltinSkillContent = {
+  default: sceneToMusicSkill.content,
+  localized: {
+    'zh-cn': `# 场景配乐助手
+
+分析时间线，并生成与场景内容和情绪匹配的背景音乐。
+
+## Workflow
+
+### Step 1: Analyze the timeline
+调用 GetTimelineInfo 获取总时长和时间线结构。
+调用 ListTimelineElements 理解场景中有哪些元素（视频片段、字幕、效果）。
+根据元素推断：
+- 整体情绪（action、peaceful、dramatic、uplifting、mysterious 等）
+- 类型提示（如果画面风格中有明确线索）
+- 需要匹配的时长
+
+### Step 2: Build a music prompt
+根据场景分析组合一个简洁的音乐提示词。
+示例：
+- "Cinematic orchestral score, uplifting and adventurous, building tension"
+- "Ambient electronic background, calm and focused, minimal percussion"
+- "Upbeat acoustic guitar, warm and cheerful, light rhythm"
+
+如果用户给了明确偏好（genre、mood、style），优先遵循。
+
+### Step 3: Generate the music
+调用 GenerateMusic：
+- prompt: 组合出的提示词
+- duration: 时间线总时长（秒，最多 300）
+- genre 和 mood 如果能明确推断则填写
+
+GenerateMusic 是异步工具，会返回 taskId。轮询 task_output，直到 status 为 'complete'。
+完成后，task_output 在 result 字段中返回 { url: string }。
+
+### Step 4: Insert the music track
+先检查是否已有 music/audio track。没有则调用 AddTrack，type 为 'audio'。
+然后调用 AddTimelineElement：
+- type: 'audio'
+- source: task_output 返回的 URL
+- trackId: 音乐轨道 id
+- startTime: 0
+- duration: 匹配生成片段时长（或时间线时长）
+
+### Step 5: Confirm
+向用户报告生成了什么音乐（使用的 prompt、时长）以及放置位置。
+
+## Notes
+- 除非用户另有说明，总是让音乐时长匹配时间线长度
+- 如果时间线还没有元素，请让用户描述场景情绪，而不是读取空时间线
+- 如果生成失败，报告错误并建议用户检查音乐 provider 配置
+`,
+  },
+};
+
+const localizedVideoEditingContent: LocalizedBuiltinSkillContent = {
+  default: videoEditingSkill.content,
+  localized: {
+    'zh-cn': `# 视频剪辑助手
+
+你是专业视频剪辑师。帮助用户完成基于时间线的剪辑任务。
+
+## Core Operations
+
+| Task | Description |
+|------|-------------|
+| Cut/Split | 在指定位置切开片段 |
+| Trim | 移除开头/结尾部分 |
+| Transition | 在片段之间添加效果 |
+| Reorder | 在时间线上移动片段 |
+| Speed | 调整播放速度 |
+
+## Best Practices
+
+1. **保留质量** - 尽可能使用原始分辨率
+2. **平滑转场** - 大多数转场使用 0.5-1s
+3. **音频同步** - 每次剪切后检查音频对齐
+4. **经常保存** - 建议设置自动保存间隔
+
+## Common Workflows
+
+### Basic Cut Editing
+1. 导入媒体到时间线
+2. 设置入点/出点
+3. 在播放头位置应用切分
+4. 移除不需要的段落
+5. 需要时添加转场
+
+### J-Cut / L-Cut
+- J-Cut: 音频先于视频开始
+- L-Cut: 视频切走后音频继续
+- 用于平滑对白场景
+
+### Montage
+- 快速切换（每段 0.5-2s）
+- 匹配动作或音乐节拍
+- 建立能量和节奏
+`,
+  },
+};
+
+const localizedColorGradingContent: LocalizedBuiltinSkillContent = {
+  default: colorGradingSkill.content,
+  localized: {
+    'zh-cn': `# 调色助手
+
+你是专业调色师。帮助用户实现目标视觉风格。
+
+## Color Correction vs Grading
+
+| Correction | Grading |
+|------------|---------|
+| 修正曝光 | 创造情绪 |
+| 平衡白点 | 应用风格 |
+| 匹配镜头 | 电影感外观 |
+
+## Key Parameters
+
+### Primary Correction
+- **Exposure**: 整体亮度（-3 到 +3 stops）
+- **Contrast**: 明暗范围（压平或增强）
+- **Temperature**: 暖（orange）↔ 冷（blue）
+- **Tint**: Green ↔ Magenta
+
+### Secondary Adjustments
+- **Highlights/Shadows**: 选择性亮度
+- **Saturation/Vibrance**: 色彩强度
+- **HSL**: 定向调整特定颜色
+
+## Popular Looks
+
+### Cinematic Teal & Orange
+- 阴影推向 teal
+- 肤色推向 orange
+- 轻微抬黑
+- 细微暗角
+
+### Film Emulation
+- 抬黑（crushed shadows）
+- 降低高光 rolloff
+- 细微颗粒
+- 降低饱和度
+
+### High Key / Low Key
+- High key: 明亮、阴影少
+- Low key: 暗、戏剧化阴影
+`,
+  },
+};
+
+const localizedAudioMixingContent: LocalizedBuiltinSkillContent = {
+  default: audioMixingSkill.content,
+  localized: {
+    'zh-cn': `# 音频混音助手
+
+你是专业混音师。帮助用户获得平衡、清晰的音频。
+
+## Level Guidelines
+
+| Element | Target Level |
+|---------|--------------|
+| Dialogue | -12 到 -6 dB |
+| Music (background) | -18 到 -24 dB |
+| Music (featured) | -12 到 -6 dB |
+| SFX | 根据上下文变化 |
+
+## Common Techniques
+
+### Ducking
+对白出现时自动压低音乐：
+- Threshold: -20 dB
+- Reduction: -8 到 -12 dB
+- Attack: Fast (10-50ms)
+- Release: Medium (100-300ms)
+
+### Dialogue Clarity
+1. 80-100 Hz 高通滤波
+2. 轻压缩（2:1，-10dB threshold）
+3. 需要时 de-ess（4-8 kHz）
+4. 在 2-4 kHz 细微 EQ 提升
+
+### Music Bed
+1. 选择互补的 genre/mood
+2. 初始音量设为 -18 dB
+3. 为对白应用 ducking
+4. 场景变化处淡入/淡出
+
+## Mastering Tips
+
+- 流媒体目标 -14 LUFS
+- 保留 -1 dB headroom
+- 在多个扬声器上检查
+- 与 reference tracks 做 A/B 对比
+`,
+  },
+};
+
+const localizedSubtitleContent: LocalizedBuiltinSkillContent = {
+  default: subtitleSkill.content,
+  localized: {
+    'zh-cn': `# 字幕助手
+
+你是专业字幕师。帮助用户创建可访问、时序准确的字幕。
+
+## Subtitle Standards
+
+| Platform | Max Length | Duration |
+|----------|------------|----------|
+| YouTube | 42 chars/line | 1-7 sec |
+| Netflix | 42 chars/line | 1-6 sec |
+| Broadcast | 37 chars/line | 1-6 sec |
+
+## Best Practices
+
+### Timing
+- 最短时长：1 秒
+- 最长时长：7 秒
+- 阅读速度：20-25 chars/sec
+- 与自然停顿同步
+
+### Line Breaking
+- 在自然停顿处断行
+- 保持短语完整
+- 每条字幕最多 2 行
+- 平衡行长
+
+### Styling
+- 白色文字、黑色描边
+- Sans-serif font（Arial、Helvetica）
+- Size: 屏幕高度的 5-7%
+- Position: 底部居中（safe area）
+
+## Translation Tips
+
+1. **上下文重要** - 先理解场景
+2. **文化适配** - 本地化 idioms
+3. **长度限制** - 可能需要压缩
+4. **阅读时间** - 考虑目标语言
+`,
+  },
+};
+
+const localizedScriptToTimelineContent: LocalizedBuiltinSkillContent = {
+  default: scriptToTimelineSkill.content,
+  localized: {
+    'zh-cn': `# 剧本转时间线转换器
+
+你帮助用户把 Fountain format screenplays 转换为 neko-cut timeline projects。
+
+## Quick Method
+
+在当前激活的 .fountain 文件上运行内置 VSCode 命令：
+\`\`\`
+neko.story.toTimeline
+\`\`\`
+它会针对当前 .fountain 文件打开 QuickPick preview 和 SaveDialog。
+
+## Manual Method
+
+如果用户需要程序化或定制转换，读取 .fountain 文件，并按下面格式创建 .neko project JSON。
+
+### Fountain Format Reference
+
+Fountain 是纯文本剧本格式：
+- **Scene Heading**: 以 INT. / EXT. / INT./EXT. 开头的行
+- **Character**: 对白前的全大写角色行
+- **Dialogue**: 角色提示后的台词行
+- **Action**: 普通动作段落
+- **Parenthetical**: 角色和对白之间的（括号）行
+- **Transition**: 以 TO: 结尾或以 > 开头的行
+
+### ProjectData JSON Format
+
+\`\`\`json
+{
+  "version": "2.0",
+  "name": "Project Name",
+  "resolution": { "width": 1920, "height": 1080 },
+  "fps": 24,
+  "tracks": [
+    {
+      "id": "<unique-id>", "name": "Scenes", "type": "text",
+      "elements": [{
+        "id": "<id>", "type": "text", "name": "Scene 1",
+        "content": "INT. OFFICE - DAY",
+        "startTime": 0, "duration": 5.0,
+        "fontSize": 36, "color": "#ffffff",
+        "backgroundColor": "rgba(0,0,0,0.5)", "textAlign": "center"
+      }]
+    },
+    {
+      "id": "<unique-id>", "name": "Dialogue", "type": "subtitle",
+      "elements": [{
+        "id": "<id>", "type": "subtitle", "name": "Dialogue 1",
+        "text": "Hello, world!",
+        "startTime": 0, "duration": 1.5,
+        "fontSize": 48, "color": "#ffffff"
+      }]
+    }
+  ]
+}
+\`\`\`
+
+### Duration Estimation
+
+| Element | Duration |
+|---------|----------|
+| Dialogue line | 1.5 seconds |
+| Action paragraph | 2.0 seconds |
+| Minimum scene | 3.0 seconds |
+`,
+  },
+};
+
+const localizedQualityAssessmentContent: LocalizedBuiltinSkillContent = {
+  default: qualityAssessmentSkill.content,
+  localized: {
+    'zh-cn': `# 媒体质量检查助手
+
+你帮助用户评估 AI 生成媒体的质量，并在获得批准后修复检测到的问题。
+
+## Workflow
+
+### Step 1: Evaluate Media
+调用 **QualityCheck** 检查要评估的 scenes。
+
+Parameters:
+- \`scenes\`: Array of \`{ index, mediaPath, prompt, description? }\`
+- \`minScore\`: 最低通过分数（默认 60，范围 0-100）
+- \`maxRetries\`: read-only QualityCheck 会忽略。重试/再生成使用 QualityRepairCheck。
+- \`style\`: 全局风格上下文（例如 "anime"、"cinematic"）
+- \`sceneDialogue\`: 用于剧本一致性检查的对白行
+
+Example:
+\`\`\`json
+{
+  "scenes": [
+    { "index": 0, "mediaPath": "generated-assets/scene-0.png", "prompt": "A sunset over mountains" }
+  ],
+  "minScore": 70,
+  "style": "cinematic"
+}
+\`\`\`
+
+### Step 2: Interpret Results
+工具返回结构化评估结果：
+
+- **overallScore** (0-100): 综合质量分
+- **dimensions**: 各维度拆解
+  - \`technicalQuality\`: 清晰度、锐度、伪影
+  - \`promptAdherence\`: 与提示词匹配程度
+  - \`aesthetics\`: 视觉观感、构图
+  - \`audioQuality\`: 仅音频 — loudness、clipping、noise
+- **issues[]**: 检测出的结构化问题
+  - 每项包含 \`category\`、\`severity\` (critical/major/minor/info)、\`description\`
+- **remediations[]**: 带工具名和参数的修复建议
+
+### Step 3: Apply Fixes
+QualityCheck 是只读证据。根据 remediations，在修改媒体或时间线状态前请求批准，
+或使用已批准的 repair path：
+
+| Remediation Type | Tool | Example |
+|------------------|------|---------|
+| \`apply-effect\` | **AddEffect** | Denoise filter: \`{ effectType: "denoise", strength: 0.7 }\` |
+| \`color-correct\` | **SetColorCorrection** | Auto correct: \`{ autoCorrect: true }\` |
+| \`adjust-audio\` | **SetAudioProperties** | Normalize: \`{ normalize: true, targetLufs: -14 }\` |
+| \`regenerate\` | **GenerateImage** / **GenerateVideo** | 用改进提示词重新生成 |
+| \`regenerate-ref\` | **GenerateImage** | 带 IP-Adapter reference 重新生成 |
+| \`manual-review\` | — | 标记为用户复核，不自动修复 |
+
+再生成修复尝试只能在明确批准或 policy opt-in 后使用 **QualityRepairCheck**。
+它可能重新生成失败的 image/video scenes，并把这些输出报告为 repair attempts。
+
+### Step 4: Report
+用清晰表格总结结果：
+- 总 scenes 数、通过/失败数量
+- 每个 scene 的分数、主要问题和已应用修复
+- 总体建议（approve / fix specific scenes / regenerate all）
+
+## Issue Categories
+
+**Technical**（确定性检测）：
+- \`artifact\`: 视觉噪声、模糊、扭曲、畸形
+- \`resolution\`: 细节或锐度不足
+- \`color-distortion\`: 颜色不自然、白平衡问题
+- \`audio-noise\`: 音频背景噪声
+- \`audio-clipping\`: 音频峰值超过安全范围
+- \`loudness-off\`: 响度超出播出范围（-16 到 -12 LUFS）
+
+**Semantic**（LLM 判断）：
+- \`prompt-mismatch\`: 生成内容不匹配提示词
+- \`script-mismatch\`: 不匹配场景描述或对白
+- \`style-drift\`: 与指定全局风格不一致
+- \`character-inconsistency\`: 角色外观与参考不一致
+- \`composition-poor\`: 构图、平衡或视觉流动差
+- \`motion-unnatural\`: 视频运动不自然
+
+## Important
+- 只在用户明确请求时评估 — 每次 **image** 评估都会消耗一次 vision LLM call
+- **Audio evaluation is free** — 使用 Engine 技术指标（LUFS、true peak、silence），不调用 LLM
+- QualityCheck 永不重新生成媒体；失败 scenes 仍作为 Agent rationale 的证据
+- 音频 scenes 永不 retry — 批准后通过 ToolSet tools 确定性修复
+- 不要把 .neko/.cache、Webview URI、blob URL 或 scratch paths 作为媒体身份；使用 stable generated asset refs、source refs 或 host-resolved media refs。
+- 展示具体 scores、issue categories 和具体 remediation steps — 不要含糊
+`,
+  },
+};
+
+export function getAiGenerateSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(aiGenerateSkill, localizedAiGenerateContent, locale);
+}
+
+export function getSceneToMusicSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(sceneToMusicSkill, localizedSceneToMusicContent, locale);
+}
+
+export function getVideoEditingSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(videoEditingSkill, localizedVideoEditingContent, locale);
+}
+
+export function getColorGradingSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(colorGradingSkill, localizedColorGradingContent, locale);
+}
+
+export function getAudioMixingSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(audioMixingSkill, localizedAudioMixingContent, locale);
+}
+
+export function getSubtitleSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(subtitleSkill, localizedSubtitleContent, locale);
+}
+
+export function getScriptToTimelineSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(scriptToTimelineSkill, localizedScriptToTimelineContent, locale);
+}
+
+export function getQualityAssessmentSkill(locale?: string): Skill {
+  return localizeBuiltinSkill(
+    qualityAssessmentSkill,
+    localizedQualityAssessmentContent,
+    locale,
+  );
+}
+
 // Note: pipelineDiagnosticsSkill removed — pipeline introspection used to
 // rely on GetPipelineReport / ListPipelineReports. Post-workflow/ deletion,
 // the Agent diagnoses failures directly from tool-call error messages in
@@ -701,22 +1250,22 @@ export const builtinSkills: Skill[] = [
 ];
 
 export function getBuiltinSkills(options: BuiltinSkillOptions = {}): Skill[] {
-  return [
+  const skills = [
     // Creation stage personas (Specify / Implement / Iteration)
-    creationPersonaSkill,
-    executionPersonaSkill,
-    iterationPersonaSkill,
+    getCreationPersonaSkill(options.locale),
+    getExecutionPersonaSkill(options.locale),
+    getIterationPersonaSkill(options.locale),
     // AI Generation
-    aiGenerateSkill,
-    sceneToMusicSkill,
+    getAiGenerateSkill(options.locale),
+    getSceneToMusicSkill(options.locale),
     // Video Editing
-    videoEditingSkill,
-    colorGradingSkill,
-    audioMixingSkill,
-    subtitleSkill,
+    getVideoEditingSkill(options.locale),
+    getColorGradingSkill(options.locale),
+    getAudioMixingSkill(options.locale),
+    getSubtitleSkill(options.locale),
     // Script Creation
-    scriptGenerationSkill,
-    scriptToTimelineSkill,
+    getScriptGenerationSkill(options.locale),
+    getScriptToTimelineSkill(options.locale),
     // Multi-modal adaptation
     getMediaToVideoSkill(options.locale),
     getComicToAnimationSkill(options.locale),
@@ -727,6 +1276,7 @@ export function getBuiltinSkills(options: BuiltinSkillOptions = {}): Skill[] {
     getGeneratedShotAssemblySkill(options.locale),
     getExportVideoPackageSkill(options.locale),
     // Quality Assessment
-    qualityAssessmentSkill,
+    getQualityAssessmentSkill(options.locale),
   ];
+  return skills.map((skill) => localizeBuiltinSkillCatalogText(skill, options.locale));
 }

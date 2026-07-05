@@ -378,6 +378,17 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     ).toBe(false);
   });
 
+  it('localizes Canvas-owned domain skills from the capability context locale', () => {
+    const provider = createNekoCanvasCapabilityProvider(createApi());
+    const skills = provider.getSkills?.({ extensionContext: {}, locale: 'zh' }) ?? [];
+    const skill = skills.find((candidate) => candidate.name === 'canvas-markdown-storyboard');
+
+    expect(skill?.description).toContain('Canvas 摄入');
+    expect(skill?.content).toContain('# Canvas Markdown 分镜');
+    expect(skill?.content).toContain('使用 canvas.validateMarkdownStoryboard');
+    expect(skill?.content).not.toContain('Use this skill only after');
+  });
+
   it('executes Markdown capability tools through the Canvas Markdown API', async () => {
     const api = createApi();
     const provider = createNekoCanvasCapabilityProvider(api);
@@ -479,9 +490,8 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
       },
     });
     expect(
-      tools.find(
-        (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_GENERATE_VIDEO_WITH_KEYFRAMES,
-      )?.localization?.zh,
+      tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_GENERATE_VIDEO_WITH_KEYFRAMES)
+        ?.localization?.zh,
     ).toMatchObject({
       description: '使用首帧和尾帧图片作为关键帧，为 ShotNode 生成视频片段。',
       parameters: {

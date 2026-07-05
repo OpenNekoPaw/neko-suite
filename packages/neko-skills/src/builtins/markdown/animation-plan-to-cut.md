@@ -11,6 +11,6 @@ Convert animation plans into Cut-ready timeline payloads. Query timeline context
 
 ## Guidance
 
-- Use existing generated media refs when available.
+- Use existing generated media refs or `resultRef` values when available.
 - If media is missing, produce a Cut payload draft and mark missing assets clearly.
 - Ask before replacing an existing timeline or adding many elements.

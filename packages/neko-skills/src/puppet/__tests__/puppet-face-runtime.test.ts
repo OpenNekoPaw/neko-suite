@@ -54,6 +54,21 @@ describe('puppet face runtime', () => {
     expect(generateWithLLM.mock.calls[0]?.[1]).toContain('round face and big eyes');
   });
 
+  it('localizes LLM prompts while preserving puppet parameter ids', async () => {
+    const generateWithLLM = vi.fn().mockResolvedValue('{"faceWidth": 0.7}');
+    const runtime = createPuppetFaceRuntime({ generateWithLLM, locale: 'zh-CN' });
+
+    await runtime.generateParams({ description: '圆脸和大眼睛' });
+
+    expect(generateWithLLM.mock.calls[0]?.[0]).toContain('你是 2D 角色面部参数专家');
+    expect(generateWithLLM.mock.calls[0]?.[0]).toContain('可用面部参数');
+    expect(generateWithLLM.mock.calls[0]?.[0]).toContain('faceWidth');
+    expect(generateWithLLM.mock.calls[0]?.[0]).not.toContain(
+      'You are a 2D character face parameter expert',
+    );
+    expect(generateWithLLM.mock.calls[0]?.[1]).toContain('为以下描述生成面部参数');
+  });
+
   it('infers full puppet params from an image payload', async () => {
     const generateWithLLM = vi.fn().mockResolvedValue('{"chinSharpness": -0.2}');
     const runtime = createPuppetFaceRuntime({ generateWithLLM });

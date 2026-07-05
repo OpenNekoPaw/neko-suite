@@ -120,6 +120,7 @@ export interface MediaQualityRuntimeDeps {
   mediaGenerator: MediaQualityGenerator;
   readFileAsBase64(filePath: string): Promise<string>;
   chatModel?: MediaQualityChatModelRef;
+  locale?: string;
   audioAnalyzer?: IAudioAnalyzer;
   frameExtractor?: IFrameExtractor;
   logger?: MediaQualityLogger;
@@ -165,10 +166,52 @@ Issue categories:
 Only report actual issues. Empty issues array is valid for a good image.
 For images, omit location unless there is an explicit temporal range in context.`;
 
+const EVALUATION_SYSTEM_PROMPT_ZH = `你是 AI 生成媒体的视觉质量评估器。
+请根据生成上下文评估提供的图像。
+
+只返回符合此 schema 的有效 JSON：
+{
+  "overallScore": <0-100>,
+  "dimensions": {
+    "technicalQuality": <0-100>,
+    "promptAdherence": <0-100>,
+    "scriptAdherence": <0-100 or null if no script context>,
+    "aesthetics": <0-100>
+  },
+  "issues": [
+    {
+      "category": "<category>",
+      "severity": "<critical|major|minor|info>",
+      "description": "<concise description>",
+      "location": {
+        "timeRange": { "start": <seconds>, "end": <seconds> }
+      }
+    }
+  ]
+}
+
+问题类别：
+- artifact: 视觉噪声、模糊、扭曲、形变
+- resolution: 对目标用途而言细节或清晰度不足
+- color-distortion: 颜色不自然、白平衡问题
+- prompt-mismatch: 生成内容与提示词不匹配
+- script-mismatch: 与场景描述或对白不匹配
+- style-drift: 与指定全局风格不一致
+- character-inconsistency: 角色外观与参考不一致
+- composition-poor: 构图、平衡或视觉流较差
+
+只报告真实存在的问题。好图像可以返回空 issues 数组。
+图像评估中，除非上下文有明确时间范围，否则省略 location。`;
+
 const PROMPT_OPTIMIZATION_SYSTEM_PROMPT = `You are an AI image/video generation prompt engineer.
 Given the original prompt and quality issues found, produce an improved prompt.
 Focus on fixing the specific issues while preserving the original intent.
 Return ONLY the improved prompt text, nothing else. Max 200 words.`;
+
+const PROMPT_OPTIMIZATION_SYSTEM_PROMPT_ZH = `你是 AI 图像/视频生成提示词工程师。
+给定原始提示词和已发现的质量问题，生成改进后的提示词。
+重点修复具体问题，同时保留原始意图。
+只返回改进后的提示词文本，不要其他内容。最多 200 个词。`;
 
 const VIDEO_EVALUATION_SYSTEM_PROMPT = `You are a video quality evaluator for AI-generated video.
 You will be shown multiple frames sampled from a video. Evaluate both per-frame quality
@@ -215,9 +258,138 @@ make the affected range identifiable. If the issue spans the full clip, use the 
 Pay special attention to temporal issues: consistency of lighting, color, character appearance,
 and object positions across frames. Only report actual issues found.`;
 
+const VIDEO_EVALUATION_SYSTEM_PROMPT_ZH = `你是 AI 生成视频的质量评估器。
+你会看到从视频中采样的多帧图像。请同时评估单帧质量和帧间一致性（时间连续性）。
+
+只返回符合此 schema 的有效 JSON：
+{
+  "overallScore": <0-100>,
+  "dimensions": {
+    "technicalQuality": <0-100>,
+    "promptAdherence": <0-100>,
+    "scriptAdherence": <0-100 or null if no script context>,
+    "aesthetics": <0-100>,
+    "videoQuality": <0-100>
+  },
+  "issues": [
+    {
+      "category": "<category>",
+      "severity": "<critical|major|minor|info>",
+      "description": "<concise description>",
+      "location": {
+        "timeRange": { "start": <seconds>, "end": <seconds> }
+      }
+    }
+  ]
+}
+
+视频额外问题类别：
+- jitter: 帧间闪烁、亮度或颜色突变
+- tearing: 画面撕裂、帧错位、拼接瑕疵
+- stuttering: 掉帧感、运动不均匀、画面冻结
+- motion-unnatural: 物理上不可能或不自然的运动
+
+如果可以定位问题影响范围，请包含 location.timeRange 秒数。
+特别关注灯光、颜色、角色外观和物体位置的时间连续性。只报告真实发现的问题。`;
+
 const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'opus', 'm4a', 'flac', 'ogg', 'aac']);
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'mov', 'avi']);
 const DEFAULT_VIDEO_SAMPLE_FRAMES = 4;
+
+function getMediaQualityEvaluationSystemPrompt(locale: string | undefined): string {
+  return isChineseQualityLocale(locale) ? EVALUATION_SYSTEM_PROMPT_ZH : EVALUATION_SYSTEM_PROMPT;
+}
+
+function getPromptOptimizationSystemPrompt(locale: string | undefined): string {
+  return isChineseQualityLocale(locale)
+    ? PROMPT_OPTIMIZATION_SYSTEM_PROMPT_ZH
+    : PROMPT_OPTIMIZATION_SYSTEM_PROMPT;
+}
+
+function getVideoEvaluationSystemPrompt(locale: string | undefined): string {
+  return isChineseQualityLocale(locale)
+    ? VIDEO_EVALUATION_SYSTEM_PROMPT_ZH
+    : VIDEO_EVALUATION_SYSTEM_PROMPT;
+}
+
+function isChineseQualityLocale(locale: string | undefined): boolean {
+  return locale?.trim().toLowerCase().startsWith('zh') === true;
+}
+
+function formatVisionEvaluationUserText(
+  originalPrompt: string,
+  description: string | undefined,
+  options: MediaQualityEvalOptions | undefined,
+  locale: string | undefined,
+): string {
+  const textParts = isChineseQualityLocale(locale)
+    ? [`原始提示词：“${originalPrompt}”`]
+    : [`Original prompt: "${originalPrompt}"`];
+  if (isChineseQualityLocale(locale)) {
+    if (description) textParts.push(`场景描述：“${description}”`);
+    if (options?.globalStyle) textParts.push(`全局风格：“${options.globalStyle}”`);
+    if (options?.dialogue?.length) {
+      textParts.push(`对白：${JSON.stringify(options.dialogue)}`);
+    }
+    return textParts.join('\n');
+  }
+
+  if (description) textParts.push(`Scene description: "${description}"`);
+  if (options?.globalStyle) textParts.push(`Global style: "${options.globalStyle}"`);
+  if (options?.dialogue?.length) {
+    textParts.push(`Dialogue: ${JSON.stringify(options.dialogue)}`);
+  }
+  return textParts.join('\n');
+}
+
+function formatPromptOptimizationUserText(
+  originalPrompt: string,
+  issues: QualityIssue[],
+  locale: string | undefined,
+): string {
+  const issueDescriptions = issues.map((issue) => `- [${issue.category}] ${issue.description}`);
+  if (isChineseQualityLocale(locale)) {
+    return `原始提示词：“${originalPrompt}”\n\n发现的问题：\n${issueDescriptions.join('\n')}\n\n请提供改进后的提示词：`;
+  }
+
+  return `Original prompt: "${originalPrompt}"\n\nIssues found:\n${issueDescriptions.join('\n')}\n\nProvide an improved prompt:`;
+}
+
+function formatVideoEvaluationUserText(
+  originalPrompt: string,
+  meta: { duration: number; fps: number; width: number; height: number },
+  frames: Array<{ base64: string; time: number }>,
+  description: string | undefined,
+  options: MediaQualityEvalOptions | undefined,
+  locale: string | undefined,
+): string {
+  const sampledTimes = frames.map((frame) => `${frame.time.toFixed(1)}s`).join(', ');
+  if (isChineseQualityLocale(locale)) {
+    const textParts = [
+      `原始提示词：“${originalPrompt}”`,
+      `视频元数据：${meta.width}x${meta.height}, ${meta.fps}fps, ${meta.duration.toFixed(1)}s`,
+      `采样帧：${frames.length}（${sampledTimes}）`,
+    ];
+    if (description) textParts.push(`场景描述：“${description}”`);
+    if (options?.globalStyle) textParts.push(`全局风格：“${options.globalStyle}”`);
+    if (options?.dialogue?.length) {
+      textParts.push(`对白：${JSON.stringify(options.dialogue)}`);
+    }
+    return textParts.join('\n');
+  }
+
+  const textParts = [
+    `Original prompt: "${originalPrompt}"`,
+    `Video metadata: ${meta.width}x${meta.height}, ${meta.fps}fps, ${meta.duration.toFixed(1)}s`,
+    `Frames sampled: ${frames.length} (at ${sampledTimes})`,
+  ];
+  if (description) textParts.push(`Scene description: "${description}"`);
+  if (options?.globalStyle) textParts.push(`Global style: "${options.globalStyle}"`);
+  if (options?.dialogue?.length) {
+    textParts.push(`Dialogue: ${JSON.stringify(options.dialogue)}`);
+  }
+  return textParts.join('\n');
+}
 
 const CLIPPING_THRESHOLD_DBFS = -1;
 const LOUDNESS_MIN_LUFS = -24;
@@ -412,7 +584,7 @@ class VisionEvaluator {
   constructor(
     private readonly deps: Pick<
       MediaQualityRuntimeDeps,
-      'createService' | 'readFileAsBase64' | 'chatModel' | 'logger'
+      'createService' | 'readFileAsBase64' | 'chatModel' | 'locale' | 'logger'
     >,
   ) {}
 
@@ -425,22 +597,22 @@ class VisionEvaluator {
     try {
       const base64 = await this.deps.readFileAsBase64(mediaPath);
       const mimeType = this.detectMimeType(mediaPath);
-      const textParts = [`Original prompt: "${originalPrompt}"`];
-      if (description) textParts.push(`Scene description: "${description}"`);
-      if (options?.globalStyle) textParts.push(`Global style: "${options.globalStyle}"`);
-      if (options?.dialogue?.length) {
-        textParts.push(`Dialogue: ${JSON.stringify(options.dialogue)}`);
-      }
+      const userText = formatVisionEvaluationUserText(
+        originalPrompt,
+        description,
+        options,
+        this.deps.locale,
+      );
 
       const response = await this.deps.createService().chat(
         [
-          { role: 'system', content: EVALUATION_SYSTEM_PROMPT },
+          { role: 'system', content: getMediaQualityEvaluationSystemPrompt(this.deps.locale) },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: textParts.join('\n'),
+                text: userText,
               },
               {
                 type: 'image',
@@ -470,13 +642,16 @@ class VisionEvaluator {
 
   async optimizePrompt(originalPrompt: string, issues: QualityIssue[]): Promise<string> {
     try {
-      const issueDescriptions = issues.map((issue) => `- [${issue.category}] ${issue.description}`);
       const response = await this.deps.createService().chat(
         [
-          { role: 'system', content: PROMPT_OPTIMIZATION_SYSTEM_PROMPT },
+          { role: 'system', content: getPromptOptimizationSystemPrompt(this.deps.locale) },
           {
             role: 'user',
-            content: `Original prompt: "${originalPrompt}"\n\nIssues found:\n${issueDescriptions.join('\n')}\n\nProvide an improved prompt:`,
+            content: formatPromptOptimizationUserText(
+              originalPrompt,
+              issues,
+              this.deps.locale,
+            ),
           },
         ],
         withMediaQualityChatModelRouting({ maxTokens: 500 }, this.deps.chatModel),
@@ -638,6 +813,7 @@ class VideoFrameEvaluator {
     private readonly createService: () => MediaQualityLLMService,
     private readonly frameExtractor: IFrameExtractor,
     private readonly chatModel?: MediaQualityChatModelRef,
+    private readonly locale?: string,
     private readonly logger?: MediaQualityLogger,
     private readonly maxFrames: number = DEFAULT_VIDEO_SAMPLE_FRAMES,
   ) {}
@@ -672,18 +848,16 @@ class VideoFrameEvaluator {
         return this.errorResult('Failed to extract any frames from video');
       }
 
-      const textParts = [
-        `Original prompt: "${originalPrompt}"`,
-        `Video metadata: ${meta.width}x${meta.height}, ${meta.fps}fps, ${meta.duration.toFixed(1)}s`,
-        `Frames sampled: ${frames.length} (at ${frames.map((frame) => `${frame.time.toFixed(1)}s`).join(', ')})`,
-      ];
-      if (description) textParts.push(`Scene description: "${description}"`);
-      if (options?.globalStyle) textParts.push(`Global style: "${options.globalStyle}"`);
-      if (options?.dialogue?.length) {
-        textParts.push(`Dialogue: ${JSON.stringify(options.dialogue)}`);
-      }
+      const userText = formatVideoEvaluationUserText(
+        originalPrompt,
+        meta,
+        frames,
+        description,
+        options,
+        this.locale,
+      );
 
-      const contentParts: unknown[] = [{ type: 'text', text: textParts.join('\n') }];
+      const contentParts: unknown[] = [{ type: 'text', text: userText }];
       for (const frame of frames) {
         contentParts.push({
           type: 'image',
@@ -694,7 +868,7 @@ class VideoFrameEvaluator {
 
       const response = await this.createService().chat(
         [
-          { role: 'system', content: VIDEO_EVALUATION_SYSTEM_PROMPT },
+          { role: 'system', content: getVideoEvaluationSystemPrompt(this.locale) },
           { role: 'user', content: contentParts },
         ],
         withMediaQualityChatModelRouting({ maxTokens: 1000 }, this.chatModel),
@@ -766,6 +940,7 @@ export class MediaQualityRuntime {
           deps.createService,
           deps.frameExtractor,
           deps.chatModel,
+          deps.locale,
           deps.logger,
         )
       : undefined;

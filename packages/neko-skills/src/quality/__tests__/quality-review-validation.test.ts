@@ -386,6 +386,47 @@ describe('createQualityReviewValidationAdapter', () => {
     );
   });
 
+  it('localizes failing QualityCheck feedback for Chinese prompt context', () => {
+    const adapter = createQualityReviewValidationAdapter();
+
+    const signal = adapter.createSignal({
+      result: {
+        callId: 'call-qc',
+        name: 'QualityCheck',
+        success: true,
+        data: {
+          totalScenes: 2,
+          passed: 1,
+          failed: 1,
+          evaluations: [
+            { index: 1, passed: true, finalScore: 0.9 },
+            {
+              index: 2,
+              passed: false,
+              finalScore: 0.4,
+              remediations: [{ action: 'Regenerate the shot' }],
+            },
+          ],
+        },
+      },
+      toolCallId: 'call-qc',
+      toolName: 'QualityCheck',
+      observedAt: 10,
+      runId: 'run-quality',
+      locale: 'zh-CN',
+    });
+
+    expect(signal).toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        summary: 'QualityReview 未通过 1/2 个场景：场景 2；有 1 条修复提示。',
+        repairGuidance: '修复未通过的质量检查结果。聚焦场景 2，并按需应用 1 条建议修复步骤。',
+      }),
+    );
+    expect(signal?.summary).not.toContain('failed');
+    expect(signal?.repairGuidance).not.toContain('Repair the failing quality-check result');
+  });
+
   it('normalizes partial QualityCheckConsistency reports before creating validation', () => {
     const adapter = createQualityReviewValidationAdapter();
 
