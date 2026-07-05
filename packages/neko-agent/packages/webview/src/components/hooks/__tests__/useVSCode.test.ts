@@ -160,6 +160,13 @@ describe('messages', () => {
           conversationId: 'conv-1',
         });
       });
+
+      it('rejects session-scoped builders with empty conversationId', () => {
+        expect(() => VSCodeMessages.clearHistory('')).toThrow(
+          'clearHistory requires non-empty conversationId',
+        );
+        expect(mockPostMessage).not.toHaveBeenCalled();
+      });
     });
 
     describe('task management', () => {

@@ -189,6 +189,71 @@ describe('parseWebviewToExtensionMessage', () => {
     ).toBeNull();
   });
 
+  it.each([
+    ['confirm tool approvals', { type: 'confirmTool', toolCallId: 'tool-1', approved: true }],
+    ['history clearing', { type: 'clearHistory' }],
+    ['message cancellation', { type: 'cancelMessage' }],
+    ['task refresh', { type: 'getTasks' }],
+    ['context token refresh', { type: 'getContextTokenCount' }],
+    ['context compression', { type: 'compressContext' }],
+    ['prompt mode refresh', { type: 'getPromptMode' }],
+    ['active Skill clearing', { type: 'clearActiveSkill', recordId: 'record-1' }],
+    ['conversation deletion', { type: 'deleteConversation' }],
+    ['queued message promotion', { type: 'promoteQueuedMessage', queueItemId: 'queue-1' }],
+    ['queued message cancellation', { type: 'cancelQueuedMessage', queueItemId: 'queue-1' }],
+    ['queued message editing', { type: 'editQueuedMessage', queueItemId: 'queue-1' }],
+    ['plan approval', { type: 'planApprove', planId: 'plan-1' }],
+    ['plan rejection', { type: 'planReject', planId: 'plan-1' }],
+    ['plan step approval', { type: 'planStepApprove', planId: 'plan-1', stepId: 'step-1' }],
+    ['plan step rejection', { type: 'planStepReject', planId: 'plan-1', stepId: 'step-1' }],
+    [
+      'plan step modification',
+      {
+        type: 'planStepModify',
+        planId: 'plan-1',
+        stepId: 'step-1',
+        newDescription: 'Update step',
+      },
+    ],
+    ['task cancellation', { type: 'cancelTask', taskId: 'task-1' }],
+    ['task retry', { type: 'retryTask', taskId: 'task-1' }],
+    ['task result viewing', { type: 'viewTaskResult', taskId: 'task-1' }],
+    ['prompt mode setting', { type: 'setPromptMode', mode: 'plan' }],
+    [
+      'capability lifecycle invocation',
+      {
+        type: 'invokeAgentCapabilityLifecycle',
+        requestId: 'request-1',
+        invocation: { capabilityId: 'canvas.createStoryboardFromMarkdown', phase: 'apply' },
+      },
+    ],
+    [
+      'canvas markdown handoff',
+      {
+        type: 'requestCanvasMarkdownHandoff',
+        requestId: 'request-1',
+        markdown: '| Shot |\\n| --- |\\n| opening |',
+      },
+    ],
+    [
+      'Mermaid error feedback',
+      {
+        type: 'mermaidError',
+        error: 'Syntax error',
+        code: 'ParseError',
+        feedbackMessage: 'Fix the Mermaid diagram.',
+      },
+    ],
+    ['builtin slash command', { type: 'invokeSlashCommand', command: 'clear' }],
+    ['Skill invocation', { type: 'invokeSkill', skillName: 'storyboard' }],
+    [
+      'plugin slash command',
+      { type: 'invokePluginSlashCommand', extensionId: 'neko.canvas', commandId: 'batch' },
+    ],
+  ])('rejects %s without explicit conversation scope', (_name, payload) => {
+    expect(parseWebviewToExtensionMessage(payload)).toBeNull();
+  });
+
   it('rejects plugin slash commands without conversationId', () => {
     expect(
       parseWebviewToExtensionMessage({

@@ -152,6 +152,11 @@ export interface IAgentManager extends vscode.Disposable {
     skill?: import('@neko/shared').Skill,
   ): void;
 
+  applySkillLifecycleProjection(
+    conversationId: string,
+    projection: import('@neko/shared').SkillLifecycleProjection,
+  ): void;
+
   /**
    * Get the currently active skill for the specified conversation.
    * Delegates to AgentRunner → AgentSession → SkillInjectionCoordinator.
@@ -356,6 +361,13 @@ export class AgentManager implements IAgentManager {
     skill?: import('@neko/shared').Skill,
   ): void {
     this._runtime.applySkillInjection(conversationId, injection, skill);
+  }
+
+  applySkillLifecycleProjection(
+    conversationId: string,
+    projection: import('@neko/shared').SkillLifecycleProjection,
+  ): void {
+    this._runtime.applySkillLifecycleProjection(conversationId, projection);
   }
 
   getActiveSkill(conversationId: string): import('@neko/shared').Skill | undefined {

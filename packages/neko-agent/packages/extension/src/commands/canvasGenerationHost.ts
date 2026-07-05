@@ -115,6 +115,7 @@ export function createCanvasGenerationRuntime(
     },
     resolveImageSource: resolveImageToBase64,
     fetchOutputAsDataUrl,
+    locale: vscode.env.language,
     logger: getRootLogger(),
   });
 }

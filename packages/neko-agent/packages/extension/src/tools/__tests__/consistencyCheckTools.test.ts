@@ -9,6 +9,9 @@ import { createConsistencyCheckTools } from '../consistencyCheckTools';
 
 // Mock vscode
 vi.mock('vscode', () => ({
+  env: {
+    language: 'zh-CN',
+  },
   Uri: {
     file: (path: string) => ({ fsPath: path, scheme: 'file' }),
   },
@@ -109,6 +112,28 @@ describe('createConsistencyCheckTools', () => {
         modelId: 'deepseek-chat',
       }),
     );
+  });
+
+  it('passes the VSCode locale into the final consistency model prompt', async () => {
+    const tools = createConsistencyCheckTools({
+      createService: () => mockService,
+      chatModel: CHAT_MODEL,
+    });
+    const tool = tools[0]!;
+
+    await tool.execute({
+      scenes: [
+        { sceneIndex: 0, mediaPath: '/media/scene0.png', prompt: 'Scene A' },
+        { sceneIndex: 1, mediaPath: '/media/scene1.png', prompt: 'Scene B' },
+      ],
+    });
+
+    const messages = mockService.chat.mock.calls[0]![0] as Array<{
+      role: string;
+      content: string | Array<{ type: string; text?: string }>;
+    }>;
+    expect(messages[0]!.content).toContain('视觉一致性评估器');
+    expect(messages[0]!.content).not.toContain('You are a visual consistency evaluator');
   });
 
   it('should return default report for empty scenes', async () => {

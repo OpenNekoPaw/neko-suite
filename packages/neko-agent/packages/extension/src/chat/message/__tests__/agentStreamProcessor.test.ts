@@ -1344,7 +1344,11 @@ describe('AgentStreamProcessor', () => {
           saveOutputs: vi.fn(),
         },
       };
-      processor = new AgentStreamProcessor({ platform: platform as any });
+      const handleTerminalTask = vi.fn(async () => undefined);
+      processor = new AgentStreamProcessor({
+        platform: platform as any,
+        taskResultObservations: { handleTerminalTask },
+      });
 
       const processing = processor.processStream(
         webview as any,
@@ -1357,6 +1361,8 @@ describe('AgentStreamProcessor', () => {
               success: true,
               data: {
                 backgroundMode: true,
+                conversationId: 'conv-1',
+                runId: 'run-media',
                 taskId: 'task-media',
                 type: 'video',
                 message: 'Generate a city flythrough',
@@ -1378,9 +1384,12 @@ describe('AgentStreamProcessor', () => {
         modelId: 'gen-3',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:01.000Z'),
-        request: { prompt: 'Generate a city flythrough', metadata: { conversationId: 'conv-1' } },
+        request: {
+          prompt: 'Generate a city flythrough',
+          metadata: { conversationId: 'conv-1', runId: 'run-media' },
+        },
       });
-      waitForTask.resolve({
+      await progressCallback?.({
         id: 'task-media',
         type: 'text-to-video',
         status: 'completed',
@@ -1390,7 +1399,10 @@ describe('AgentStreamProcessor', () => {
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:02.000Z'),
         outputs: [{ type: 'video', url: 'https://example.com/video.mp4', mimeType: 'video/mp4' }],
-        request: { prompt: 'Generate a city flythrough', metadata: { conversationId: 'conv-1' } },
+        request: {
+          prompt: 'Generate a city flythrough',
+          metadata: { conversationId: 'conv-1', runId: 'run-media' },
+        },
       });
       await processing;
 
@@ -1411,6 +1423,18 @@ describe('AgentStreamProcessor', () => {
       );
       expect(webview.postMessage).not.toHaveBeenCalledWith(
         expect.objectContaining({ type: 'taskUpdated' }),
+      );
+      expect(handleTerminalTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'task-media',
+          status: 'completed',
+          lifecycle: expect.objectContaining({ ownerConversationId: 'conv-1' }),
+        }),
+        expect.objectContaining({
+          source: 'media-task',
+          parentMessageId: 'assistant-stream',
+          parentToolCallId: 'tc-media',
+        }),
       );
     });
 
@@ -1484,6 +1508,8 @@ describe('AgentStreamProcessor', () => {
               success: true,
               data: {
                 backgroundMode: true,
+                conversationId: 'conv-1',
+                runId: 'run-media',
                 taskId: 'task-media',
                 type: 'image',
                 message: 'Generate a cat',
@@ -1506,7 +1532,10 @@ describe('AgentStreamProcessor', () => {
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:01.000Z'),
         outputs: [{ type: 'image', url: 'https://example.com/image.png', mimeType: 'image/png' }],
-        request: { prompt: 'Generate a cat', metadata: { conversationId: 'conv-1' } },
+        request: {
+          prompt: 'Generate a cat',
+          metadata: { conversationId: 'conv-1', runId: 'run-media' },
+        },
       };
       waitForTask.resolve(completedTask);
       await progressCallback?.(completedTask);
@@ -1611,6 +1640,8 @@ describe('AgentStreamProcessor', () => {
               success: true,
               data: {
                 backgroundMode: true,
+                conversationId: 'conv-1',
+                runId: 'run-media',
                 taskId: 'task-media',
                 type: 'image',
                 message: 'Generate a cat',
@@ -1633,7 +1664,10 @@ describe('AgentStreamProcessor', () => {
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:01.000Z'),
         outputs: [{ type: 'image', url: 'https://example.com/image.png', mimeType: 'image/png' }],
-        request: { prompt: 'Generate a cat', metadata: { conversationId: 'conv-1' } },
+        request: {
+          prompt: 'Generate a cat',
+          metadata: { conversationId: 'conv-1', runId: 'run-media' },
+        },
       };
       waitForTask.resolve(completedTask);
       await progressCallback?.(completedTask);
@@ -1677,6 +1711,8 @@ describe('AgentStreamProcessor', () => {
               success: true,
               data: {
                 backgroundMode: true,
+                conversationId: 'conv-1',
+                runId: 'run-media',
                 taskId: 'task-media',
                 type: 'image',
                 message: 'Generate a cat',
@@ -1698,7 +1734,10 @@ describe('AgentStreamProcessor', () => {
         modelId: 'gpt-image-1',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:01.000Z'),
-        request: { prompt: 'Generate a cat', metadata: { conversationId: 'conv-other' } },
+        request: {
+          prompt: 'Generate a cat',
+          metadata: { conversationId: 'conv-other', runId: 'run-other' },
+        },
       });
       await processing;
 
@@ -1733,6 +1772,8 @@ describe('AgentStreamProcessor', () => {
               success: true,
               data: {
                 backgroundMode: true,
+                conversationId: 'conv-1',
+                runId: 'run-media',
                 taskId: 'task-media',
                 type: 'image',
                 message: 'Generate a cat',
@@ -1775,7 +1816,7 @@ describe('AgentStreamProcessor', () => {
       };
       processor = new AgentStreamProcessor({ platform: platform as any });
 
-      const events = (taskId: string) =>
+      const events = (conversationId: string, taskId: string) =>
         toAsyncIterable([
           {
             type: 'tool_result',
@@ -1784,6 +1825,8 @@ describe('AgentStreamProcessor', () => {
               success: true,
               data: {
                 backgroundMode: true,
+                conversationId,
+                runId: `run-${taskId}`,
                 taskId,
                 type: 'image',
                 message: 'Generate a cat',
@@ -1793,9 +1836,19 @@ describe('AgentStreamProcessor', () => {
           },
         ]);
 
-      const first = processor.processStream(webview as any, 'conv-a', events('task-a'), callbacks);
+      const first = processor.processStream(
+        webview as any,
+        'conv-a',
+        events('conv-a', 'task-a'),
+        callbacks,
+      );
       await waitForCondition(() => platform.media.onProgress.mock.calls.length === 1);
-      const second = processor.processStream(webview as any, 'conv-b', events('task-b'), callbacks);
+      const second = processor.processStream(
+        webview as any,
+        'conv-b',
+        events('conv-b', 'task-b'),
+        callbacks,
+      );
       await waitForCondition(() => platform.media.onProgress.mock.calls.length === 2);
 
       processor.clearConversation('conv-a');
@@ -1809,7 +1862,10 @@ describe('AgentStreamProcessor', () => {
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         updatedAt: new Date('2026-01-01T00:00:01.000Z'),
         outputs: [{ type: 'image', url: 'https://example.com/image.png', mimeType: 'image/png' }],
-        request: { prompt: 'Generate a cat', metadata: { conversationId: 'conv-b' } },
+        request: {
+          prompt: 'Generate a cat',
+          metadata: { conversationId: 'conv-b', runId: 'run-task-b' },
+        },
       });
       await Promise.all([first, second]);
 

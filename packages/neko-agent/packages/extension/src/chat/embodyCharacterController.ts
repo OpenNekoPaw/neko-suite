@@ -121,6 +121,7 @@ export class EmbodyCharacterController implements vscode.Disposable {
       evidenceSnapshot: evidence,
       responder: this.createResponder(),
       ...(prompt ? { prompt } : {}),
+      locale: vscode.env.language,
       now: this.now,
     });
     this.sessions.set(sessionId, session);

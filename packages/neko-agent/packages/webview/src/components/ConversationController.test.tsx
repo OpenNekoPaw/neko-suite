@@ -1,7 +1,14 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useEffect } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ConversationSummary, Message, SettingsState } from '@neko-agent/types';
+import type { AgentContextPayload } from '@neko/shared';
+import type {
+  AgentQueuedMessageItem,
+  AgentWorkItem,
+  ConversationSummary,
+  Message,
+  SettingsState,
+} from '@neko-agent/types';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import { ConversationController } from './ConversationController';
 
@@ -93,7 +100,13 @@ vi.mock('@/components/ChatWorkspace', () => ({
     activeTabConversationId?: string | null;
     messages?: Message[];
     isForegroundConversationActivationPending?: boolean;
+    queuedMessages?: readonly AgentQueuedMessageItem[];
     activationProgress?: readonly ActivationProgressTimeline[];
+    activeSkill?: { skillName: string } | null;
+    contextChips?: readonly AgentContextPayload[];
+    contextTokenCount?: number;
+    workItems?: readonly AgentWorkItem[];
+    onAddContextChip?: (payload: AgentContextPayload) => void;
     handleMessage?: (event: MessageEvent) => void;
     pendingSendRequest?: { id: number; input: { messageText?: string } } | null;
     initialInputRequest?: { id: number; messageText: string } | null;
@@ -128,6 +141,22 @@ vi.mock('@/components/ChatWorkspace', () => ({
         <span data-testid="workspace-activation-progress">
           {props.activationProgress?.map((timeline) => timeline.name).join(',') ?? 'none'}
         </span>
+        <span data-testid="workspace-queued-messages">
+          {props.queuedMessages?.map((item) => item.content).join('|') ?? ''}
+        </span>
+        <span data-testid="workspace-active-skill">{props.activeSkill?.skillName ?? 'none'}</span>
+        <span data-testid="workspace-context-chips">
+          {props.contextChips?.map((chip) => chip.label).join('|') ?? ''}
+        </span>
+        <span data-testid="workspace-token-count">{props.contextTokenCount ?? 0}</span>
+        <span data-testid="workspace-work-items">
+          {props.workItems?.map((item) => item.title).join('|') ?? ''}
+        </span>
+        <button
+          type="button"
+          data-testid="add-context-chip"
+          onClick={() => props.onAddContextChip?.(contextPayload('ctx-a', 'A context'))}
+        />
         <span data-testid="entry-menu">{props.initialEntryPromptMenuRequest?.menu ?? 'none'}</span>
         <span data-testid="pending-send">
           {props.pendingSendRequest?.input.messageText ?? 'none'}
@@ -429,6 +458,137 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-activation-progress').textContent).toBe('');
   });
 
+  it('projects session UI state from the visible conversation instead of stale conversation events', () => {
+    vi.clearAllMocks();
+    render(
+      <ConversationController
+        {...createProps({
+          history: [
+            { id: 'conv-a', title: 'Storyboard A', messageCount: 1, updatedAt: 2 },
+            { id: 'conv-b', title: 'Storyboard B', messageCount: 1, updatedAt: 1 },
+          ],
+          workItemsByConversation: new Map([
+            ['conv-a', new Map([['work-a', createWorkItem('conv-a', 'A render task')]])],
+          ]),
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Storyboard A' }));
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'messageQueueSnapshot',
+            snapshot: {
+              conversationId: 'conv-a',
+              items: [queuedMessage('conv-a', 'queued for A')],
+              pendingCount: 1,
+              version: 1,
+            },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'skillInjection',
+            conversationId: 'conv-a',
+            skillName: 'storyboard',
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'agentCapabilityActivationProgress',
+            conversationId: 'conv-a',
+            events: [createActivationEvent('conv-a', 'storyboard')],
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'contextTokenCount',
+            conversationId: 'conv-a',
+            tokenCount: 42,
+          },
+        }),
+      );
+    });
+    fireEvent.click(screen.getByTestId('add-context-chip'));
+
+    expect(screen.getByTestId('workspace-queued-messages').textContent).toBe('queued for A');
+    expect(screen.getByTestId('workspace-active-skill').textContent).toBe('storyboard');
+    expect(screen.getByTestId('workspace-activation-progress').textContent).toBe('storyboard');
+    expect(screen.getByTestId('workspace-context-chips').textContent).toBe('A context');
+    expect(screen.getByTestId('workspace-token-count').textContent).toBe('42');
+    expect(screen.getByTestId('workspace-work-items').textContent).toBe('A render task');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Storyboard B' }));
+
+    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
+    expect(screen.getByTestId('workspace-queued-messages').textContent).toBe('');
+    expect(screen.getByTestId('workspace-active-skill').textContent).toBe('none');
+    expect(screen.getByTestId('workspace-activation-progress').textContent).toBe('');
+    expect(screen.getByTestId('workspace-context-chips').textContent).toBe('');
+    expect(screen.getByTestId('workspace-token-count').textContent).toBe('0');
+    expect(screen.getByTestId('workspace-work-items').textContent).toBe('');
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'messageQueueSnapshot',
+            snapshot: {
+              conversationId: 'conv-a',
+              items: [queuedMessage('conv-a', 'late queued for A')],
+              pendingCount: 1,
+              version: 2,
+            },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'skillInjection',
+            conversationId: 'conv-a',
+            skillName: 'late-storyboard',
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'agentCapabilityActivationProgress',
+            conversationId: 'conv-a',
+            events: [createActivationEvent('conv-a', 'late-storyboard')],
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'contextTokenCount',
+            conversationId: 'conv-a',
+            tokenCount: 99,
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
+    expect(screen.getByTestId('workspace-queued-messages').textContent).toBe('');
+    expect(screen.getByTestId('workspace-active-skill').textContent).toBe('none');
+    expect(screen.getByTestId('workspace-activation-progress').textContent).toBe('');
+    expect(screen.getByTestId('workspace-context-chips').textContent).toBe('');
+    expect(screen.getByTestId('workspace-token-count').textContent).toBe('0');
+    expect(screen.getByTestId('workspace-work-items').textContent).toBe('');
+  });
+
   it('does not display the previous conversation transcript after opening a history conversation', () => {
     vi.clearAllMocks();
     render(
@@ -511,6 +671,7 @@ function createActivationEvent(conversationId: string, name: string) {
 
 interface CreatePropsOptions {
   readonly history?: readonly ConversationSummary[];
+  readonly workItemsByConversation?: Map<string, Map<string, AgentWorkItem>>;
 }
 
 function createProps(
@@ -528,7 +689,7 @@ function createProps(
     pluginCommands: [],
     setPluginCommands: vi.fn(),
     updateSettings: vi.fn(),
-    workItemsByConversation: new Map(),
+    workItemsByConversation: options.workItemsByConversation ?? new Map(),
     setWorkItemsByConversation: vi.fn(),
     pluginsAvailable: {},
     setPluginsAvailable: vi.fn(),
@@ -564,6 +725,45 @@ function message(id: string, content: string): Message {
     role: 'user',
     content,
     timestamp: 1,
+  };
+}
+
+function queuedMessage(conversationId: string, content: string): AgentQueuedMessageItem {
+  return {
+    id: `${conversationId}-queued`,
+    conversationId,
+    content,
+    createdAt: 1,
+    source: 'composer',
+  };
+}
+
+function contextPayload(id: string, label: string): AgentContextPayload {
+  return {
+    type: 'file',
+    id,
+    label,
+    summary: label,
+    data: { path: `${id}.md` },
+  };
+}
+
+function createWorkItem(conversationId: string, title: string): AgentWorkItem {
+  return {
+    id: `${conversationId}-work`,
+    conversationId,
+    kind: 'subagent',
+    parentMessageId: null,
+    parentToolCallId: null,
+    title,
+    status: 'processing',
+    progress: 0.5,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    subAgent: {
+      parentAgentId: 'agent-main',
+      runMode: 'background',
+    },
   };
 }
 

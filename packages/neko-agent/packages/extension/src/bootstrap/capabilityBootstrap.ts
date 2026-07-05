@@ -100,9 +100,15 @@ export function bootstrapCapabilities(
     mediaService: options.mediaService,
     configManager: options.configManager,
     embedFn: options.embedFn,
+    locale: normalizeCapabilityLocale(vscode.env.language),
   });
   context.subscriptions.push(_instance);
   return _instance;
+}
+
+function normalizeCapabilityLocale(locale?: string): 'en' | 'zh' {
+  const normalized = locale?.trim().toLowerCase().replace('_', '-');
+  return normalized?.startsWith('zh') ? 'zh' : 'en';
 }
 
 /**

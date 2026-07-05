@@ -51,6 +51,7 @@ export function createPuppetFaceTools(): Tool[] {
     applyFaceParams: async (params) => {
       await (await getAPI()).setFaceParams(params);
     },
+    locale: vscode.env.language,
     logger,
   });
 }

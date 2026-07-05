@@ -19,7 +19,9 @@ import {
   PromptMode,
   SessionMode,
   AgentState,
+  buildAgentSessionDiagnosticMessage,
   type ConversationKind,
+  type AgentSessionDiagnosticMessage,
   type CharacterDialogueSessionProjection,
   type EmbodyCharacterSessionProjection,
   type AgentQueuedMessageItem,
@@ -140,6 +142,7 @@ export interface ChatWorkspaceProps {
   } | null;
   onQueuedEditRequestConsumed?: (id: number) => void;
   onQueuedEditConflict?: (event: { conversationId: string; item: AgentQueuedMessageItem }) => void;
+  onSessionDiagnostic?: (diagnostic: AgentSessionDiagnosticMessage) => void;
   // Session cleanup: ConversationController registers a ref so it can call our cleanup
   sessionCleanupRef: MutableRefObject<{
     cleanupConversation: (id: string) => void;
@@ -162,7 +165,6 @@ export function ChatWorkspace({
   setStreamingMessageId,
   streamingMessageIdRef,
   activeConversationId,
-  activeConversationIdRef,
   activeTabConversationId,
   isForegroundConversationActivationPending = false,
   conversationKind,
@@ -213,6 +215,7 @@ export function ChatWorkspace({
   queuedEditRequest,
   onQueuedEditRequestConsumed,
   onQueuedEditConflict,
+  onSessionDiagnostic,
   sessionCleanupRef,
 }: ChatWorkspaceProps) {
   // ---- UI state (model selection comes from props, not useUIState) ----
@@ -227,6 +230,50 @@ export function ChatWorkspace({
     updateGenParams,
   } = ui;
 
+  const visibleSessionConversationId = activeTabConversationId ?? activeConversationId;
+  const isCharacterRoleSession = isCharacterRoleConversationKind(conversationKind);
+  const hasActiveTabConversationMismatch = Boolean(
+    activeTabConversationId && activeTabConversationId !== activeConversationId,
+  );
+  const isConversationSwitching = Boolean(
+    hasActiveTabConversationMismatch ||
+      (isForegroundConversationActivationPending && !activeTabConversationId),
+  );
+  const sessionMutationConversationId = isConversationSwitching
+    ? null
+    : visibleSessionConversationId;
+  const sessionMutationConversationIdRef = useRef<string | null>(sessionMutationConversationId);
+
+  useEffect(() => {
+    sessionMutationConversationIdRef.current = sessionMutationConversationId;
+  }, [sessionMutationConversationId]);
+
+  useEffect(() => {
+    if (
+      !isConversationSwitching ||
+      !hasActiveTabConversationMismatch ||
+      !activeTabConversationId
+    ) {
+      return;
+    }
+    onSessionDiagnostic?.(
+      buildAgentSessionDiagnosticMessage({
+        code: 'active-tab-mismatch',
+        action: 'session-mutation',
+        conversationId: activeTabConversationId,
+        activeConversationId,
+        activeTabConversationId,
+        message: `Active tab conversation "${activeTabConversationId}" does not match host active conversation "${activeConversationId ?? 'none'}".`,
+      }),
+    );
+  }, [
+    activeConversationId,
+    activeTabConversationId,
+    hasActiveTabConversationMismatch,
+    isConversationSwitching,
+    onSessionDiagnostic,
+  ]);
+
   // ---- Session-bound state: input/attachment isolation per conversation ----
   const {
     attachedFiles,
@@ -236,7 +283,7 @@ export function ChatWorkspace({
     cleanupConversation,
     cleanupAllConversations,
   } = useConversationSession({
-    activeConversationId,
+    activeConversationId: visibleSessionConversationId,
     inputValue,
     setInputValue,
     conversationMessagesRef,
@@ -250,16 +297,31 @@ export function ChatWorkspace({
   sessionCleanupRef.current = { cleanupConversation, cleanupAllConversations };
 
   // ---- Session mode ----
-  const [sessionMode, setSessionMode] = useState<SessionMode>('agent');
+  const [sessionModeByConversation, setSessionModeByConversation] = useState<
+    Map<string, SessionMode>
+  >(() => new Map());
+  const sessionMode = visibleSessionConversationId
+    ? (sessionModeByConversation.get(visibleSessionConversationId) ?? 'agent')
+    : 'agent';
+  const setVisibleSessionMode = useCallback(
+    (mode: SessionMode) => {
+      if (!visibleSessionConversationId) return;
+      setSessionModeByConversation((prev) => {
+        const next = new Map(prev);
+        if (mode === 'agent') {
+          next.delete(visibleSessionConversationId);
+        } else {
+          next.set(visibleSessionConversationId, mode);
+        }
+        return next;
+      });
+    },
+    [visibleSessionConversationId],
+  );
   const [entryPromptMenu, setEntryPromptMenu] = useState<EntryPromptMenu | null>(null);
   const consumedEntryPromptRequestIdRef = useRef<number | null>(null);
   const consumedInitialInputRequestIdRef = useRef<number | null>(null);
   const inputValueRef = useRef(inputValue);
-  const isCharacterRoleSession = isCharacterRoleConversationKind(conversationKind);
-  const isConversationSwitching = Boolean(
-    isForegroundConversationActivationPending ||
-    (activeTabConversationId && activeTabConversationId !== activeConversationId),
-  );
   const consumedPendingSendRequestIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -289,17 +351,17 @@ export function ChatWorkspace({
       (model) => model.category === sessionMode,
     );
     if (!hasCurrentSessionModel) {
-      setSessionMode('agent');
+      setVisibleSessionMode('agent');
     }
-  }, [availableMediaModels, sessionMode]);
+  }, [availableMediaModels, sessionMode, setVisibleSessionMode]);
 
   // ---- Behavior hooks ----
   const handleSendWithoutConversation = useCallback(
     (input: PendingSendInput) => {
-      setSessionMode('agent');
+      setVisibleSessionMode('agent');
       onSendWithoutConversation?.(input);
     },
-    [onSendWithoutConversation],
+    [onSendWithoutConversation, setVisibleSessionMode],
   );
 
   const { handleSend, triggerSend, handleCancelMessage, copyLastResponse } = useChatActions({
@@ -312,8 +374,8 @@ export function ChatWorkspace({
     mediaProviderId: activeMediaModel?.providerId,
     mediaModelId: activeMediaModel?.modelId,
     agentMediaModels,
-    activeConversationId,
-    activeConversationIdRef,
+    activeConversationId: sessionMutationConversationId,
+    activeConversationIdRef: sessionMutationConversationIdRef,
     isConversationSwitching,
     streamingMessageIdRef,
     messages,
@@ -329,22 +391,21 @@ export function ChatWorkspace({
   });
 
   useEffect(() => {
-    if (!pendingSendRequest || !activeConversationId || isConversationSwitching) return;
+    if (!pendingSendRequest || !sessionMutationConversationId) return;
     if (consumedPendingSendRequestIdRef.current === pendingSendRequest.id) return;
 
     consumedPendingSendRequestIdRef.current = pendingSendRequest.id;
     handleSend(pendingSendRequest.input);
     onPendingSendRequestConsumed?.(pendingSendRequest.id);
   }, [
-    activeConversationId,
     handleSend,
-    isConversationSwitching,
     onPendingSendRequestConsumed,
     pendingSendRequest,
+    sessionMutationConversationId,
   ]);
 
   useEffect(() => {
-    if (!initialInputRequest || !activeConversationId || isConversationSwitching) return;
+    if (!initialInputRequest || !sessionMutationConversationId) return;
     if (consumedInitialInputRequestIdRef.current === initialInputRequest.id) return;
 
     consumedInitialInputRequestIdRef.current = initialInputRequest.id;
@@ -353,41 +414,44 @@ export function ChatWorkspace({
     const trailingMention = projectTrailingMention(initialInputRequest.messageText);
     if (trailingMention && !isCharacterRoleSession) {
       onMentionSearchFilterChange(trailingMention.requestFilter);
-      VSCodeMessages.searchProjectFiles(trailingMention.requestFilter, activeConversationId);
+      VSCodeMessages.searchProjectFiles(
+        trailingMention.requestFilter,
+        sessionMutationConversationId,
+      );
     }
     onInitialInputRequestConsumed?.(initialInputRequest.id);
   }, [
-    activeConversationId,
     initialInputRequest,
     isCharacterRoleSession,
-    isConversationSwitching,
     onMentionSearchFilterChange,
     onInitialInputRequestConsumed,
+    sessionMutationConversationId,
     setInputValue,
   ]);
 
   useEffect(() => {
-    if (!initialEntryPromptMenuRequest || !activeConversationId || isConversationSwitching) return;
+    if (!initialEntryPromptMenuRequest || !sessionMutationConversationId) return;
     if (consumedEntryPromptRequestIdRef.current === initialEntryPromptMenuRequest.id) return;
 
     consumedEntryPromptRequestIdRef.current = initialEntryPromptMenuRequest.id;
     setEntryPromptMenu(initialEntryPromptMenuRequest.menu);
     if (initialEntryPromptMenuRequest.menu === 'roleplay') {
       onMentionSearchFilterChange('');
-      VSCodeMessages.searchProjectFiles('', activeConversationId, { purpose: 'roleplay' });
+      VSCodeMessages.searchProjectFiles('', sessionMutationConversationId, {
+        purpose: 'roleplay',
+      });
     }
     onInitialEntryPromptMenuRequestConsumed?.(initialEntryPromptMenuRequest.id);
   }, [
-    activeConversationId,
     initialEntryPromptMenuRequest,
-    isConversationSwitching,
     onInitialEntryPromptMenuRequestConsumed,
     onMentionSearchFilterChange,
+    sessionMutationConversationId,
   ]);
 
   useEffect(() => {
-    if (!queuedEditRequest || !activeConversationId || isConversationSwitching) return;
-    if (queuedEditRequest.conversationId !== activeConversationId) return;
+    if (!queuedEditRequest || !sessionMutationConversationId) return;
+    if (queuedEditRequest.conversationId !== sessionMutationConversationId) return;
 
     const currentInputValue = inputValueRef.current;
     if (currentInputValue.trim().length === 0) {
@@ -401,11 +465,10 @@ export function ChatWorkspace({
     }
     onQueuedEditRequestConsumed?.(queuedEditRequest.id);
   }, [
-    activeConversationId,
-    isConversationSwitching,
     onQueuedEditConflict,
     onQueuedEditRequestConsumed,
     queuedEditRequest,
+    sessionMutationConversationId,
     setInputValue,
   ]);
 
@@ -446,10 +509,13 @@ export function ChatWorkspace({
           }
           if (msg.payload) {
             setActiveTab('chat');
-            const injectConversationId = msg.conversationId ?? activeConversationIdRef.current;
+            const injectConversationId = msg.conversationId ?? sessionMutationConversationId;
+            if (!injectConversationId) {
+              break;
+            }
             onInjectContextChip(msg.payload, injectConversationId);
             const shouldPrefillActiveInput =
-              !injectConversationId || injectConversationId === activeConversationIdRef.current;
+              injectConversationId === sessionMutationConversationId;
             if (shouldPrefillActiveInput && msg.payload.intent) {
               setInputValue(msg.payload.intent);
               inputValueRef.current = msg.payload.intent;
@@ -460,7 +526,8 @@ export function ChatWorkspace({
           if (isCharacterRoleSession) {
             break;
           }
-          if (msg.conversationId && msg.conversationId !== activeConversationIdRef.current) {
+          const ambientConversationId = msg.conversationId ?? sessionMutationConversationId;
+          if (!ambientConversationId || ambientConversationId !== sessionMutationConversationId) {
             break;
           }
           setAmbientNodes(msg.nodes ?? []);
@@ -476,7 +543,7 @@ export function ChatWorkspace({
       setActiveTab,
       onInjectContextChip,
       setAmbientNodes,
-      activeConversationIdRef,
+      sessionMutationConversationId,
       isCharacterRoleSession,
     ],
   );
@@ -487,10 +554,10 @@ export function ChatWorkspace({
     return () => window.removeEventListener('message', handleMessageWithExtras);
   }, [handleMessageWithExtras]);
 
-  const planActions = usePlanActions({ activeConversationId });
+  const planActions = usePlanActions({ activeConversationId: sessionMutationConversationId });
 
   const skillActions = useSkillActions({
-    activeConversationId,
+    activeConversationId: sessionMutationConversationId,
     activeSkill,
     setActiveSkill,
   });
@@ -503,13 +570,13 @@ export function ChatWorkspace({
         textarea?.focus();
       }),
       COMMON_SHORTCUTS.clearConversation(() => {
-        if (!activeConversationId) return;
+        if (!sessionMutationConversationId) return;
         if (isCharacterRoleSession) {
           clearMessages();
           clearInput();
           return;
         }
-        VSCodeMessages.clearHistory(activeConversationId);
+        VSCodeMessages.clearHistory(sessionMutationConversationId);
         clearMessages();
         clearInput();
       }),
@@ -527,7 +594,7 @@ export function ChatWorkspace({
     skills,
     pluginCommands,
     inputValue,
-    activeConversationId,
+    activeConversationId: sessionMutationConversationId,
     setMessages,
     clearInput,
   });
@@ -537,23 +604,28 @@ export function ChatWorkspace({
   const [, forceRender] = useState(0);
 
   const handleCompressContext = useCallback(async () => {
-    if (isCharacterRoleSession || isCompressing || !activeConversationId) return;
-    conversationCompressingRef.current.set(activeConversationId, true);
+    if (isCharacterRoleSession || isCompressing || !sessionMutationConversationId) return;
+    conversationCompressingRef.current.set(sessionMutationConversationId, true);
     forceRender((n) => n + 1);
-    VSCodeMessages.compressContext(activeConversationId);
-  }, [isCharacterRoleSession, isCompressing, activeConversationId, conversationCompressingRef]);
+    VSCodeMessages.compressContext(sessionMutationConversationId);
+  }, [
+    isCharacterRoleSession,
+    isCompressing,
+    sessionMutationConversationId,
+    conversationCompressingRef,
+  ]);
 
   const handleExecutionModeChange = (mode: ShellExecutionMode) => {
     updateSettings({ executionMode: mode });
-    if (activeConversationId) {
-      VSCodeMessages.updateSettings({ executionMode: mode }, activeConversationId);
+    if (sessionMutationConversationId) {
+      VSCodeMessages.updateSettings({ executionMode: mode }, sessionMutationConversationId);
     }
   };
 
   const handlePromptModeChange = (mode: PromptMode) => {
-    if (!activeConversationId) return;
+    if (!sessionMutationConversationId) return;
     updateSettings({ promptMode: mode });
-    VSCodeMessages.setPromptMode(mode, activeConversationId);
+    VSCodeMessages.setPromptMode(mode, sessionMutationConversationId);
   };
 
   const handleMediaModelSelect = useCallback(
@@ -566,7 +638,7 @@ export function ChatWorkspace({
   const handleSessionModeChange = useCallback(
     (mode: SessionMode) => {
       setEntryPromptMenu(null);
-      setSessionMode(mode);
+      setVisibleSessionMode(mode);
       setMediaModelSelection((prev) => {
         const projection = projectMediaModelSelectionForSessionModeChange({
           sessionMode: mode,
@@ -576,32 +648,32 @@ export function ChatWorkspace({
         return projection.updated ? projection.mediaModelSelection : prev;
       });
     },
-    [settings.chatModelOptions, setMediaModelSelection],
+    [settings.chatModelOptions, setMediaModelSelection, setVisibleSessionMode],
   );
   const isModelConfigurationBusy = isThinking || workItems.some(isActiveWorkItem);
 
   const handlePromoteQueuedMessage = useCallback(
     (queueItemId: string) => {
-      if (!activeConversationId || isCharacterRoleSession) return;
-      VSCodeMessages.promoteQueuedMessage(activeConversationId, queueItemId);
+      if (!sessionMutationConversationId || isCharacterRoleSession) return;
+      VSCodeMessages.promoteQueuedMessage(sessionMutationConversationId, queueItemId);
     },
-    [activeConversationId, isCharacterRoleSession],
+    [sessionMutationConversationId, isCharacterRoleSession],
   );
 
   const handleCancelQueuedMessage = useCallback(
     (queueItemId: string) => {
-      if (!activeConversationId || isCharacterRoleSession) return;
-      VSCodeMessages.cancelQueuedMessage(activeConversationId, queueItemId);
+      if (!sessionMutationConversationId || isCharacterRoleSession) return;
+      VSCodeMessages.cancelQueuedMessage(sessionMutationConversationId, queueItemId);
     },
-    [activeConversationId, isCharacterRoleSession],
+    [sessionMutationConversationId, isCharacterRoleSession],
   );
 
   const handleEditQueuedMessage = useCallback(
     (queueItemId: string) => {
-      if (!activeConversationId || isCharacterRoleSession) return;
-      VSCodeMessages.editQueuedMessage(activeConversationId, queueItemId);
+      if (!sessionMutationConversationId || isCharacterRoleSession) return;
+      VSCodeMessages.editQueuedMessage(sessionMutationConversationId, queueItemId);
     },
-    [activeConversationId, isCharacterRoleSession],
+    [sessionMutationConversationId, isCharacterRoleSession],
   );
 
   return (
@@ -633,8 +705,8 @@ export function ChatWorkspace({
       onSkillInvocation={handleSkillInvocation}
       onRequestFiles={(filter) => {
         onMentionSearchFilterChange(filter);
-        if (!isCharacterRoleSession && activeConversationId) {
-          VSCodeMessages.searchProjectFiles(filter, activeConversationId);
+        if (!isCharacterRoleSession && sessionMutationConversationId) {
+          VSCodeMessages.searchProjectFiles(filter, sessionMutationConversationId);
         }
       }}
       mentionItems={mentionItems}
@@ -654,13 +726,13 @@ export function ChatWorkspace({
         queuedMessageCount={queuedMessageCount}
         queuedMessages={queuedMessages}
         streamingMessageId={streamingMessageId}
-        activeConversationId={activeConversationId}
+        activeConversationId={visibleSessionConversationId}
         conversationKind={conversationKind}
         characterDialogueSession={characterDialogueSession}
         embodyCharacterSession={embodyCharacterSession}
         isConversationSwitching={isConversationSwitching}
         activeSkill={
-          !isCharacterRoleSession && activeSkill?.conversationId === activeConversationId
+          !isCharacterRoleSession && activeSkill?.conversationId === sessionMutationConversationId
             ? activeSkill
             : null
         }
@@ -671,18 +743,18 @@ export function ChatWorkspace({
         contextChips={contextChips}
         ambientNodes={ambientNodes}
         onCancelTask={(taskId) => {
-          if (!isCharacterRoleSession && activeConversationId) {
-            VSCodeMessages.cancelTask(taskId, activeConversationId);
+          if (!isCharacterRoleSession && sessionMutationConversationId) {
+            VSCodeMessages.cancelTask(taskId, sessionMutationConversationId);
           }
         }}
         onRetryTask={(taskId) => {
-          if (!isCharacterRoleSession && activeConversationId) {
-            VSCodeMessages.retryTask(taskId, activeConversationId);
+          if (!isCharacterRoleSession && sessionMutationConversationId) {
+            VSCodeMessages.retryTask(taskId, sessionMutationConversationId);
           }
         }}
         onViewTaskResult={(taskId, resultRef) => {
-          if (!isCharacterRoleSession && activeConversationId) {
-            VSCodeMessages.viewTaskResult(taskId, activeConversationId, resultRef);
+          if (!isCharacterRoleSession && sessionMutationConversationId) {
+            VSCodeMessages.viewTaskResult(taskId, sessionMutationConversationId, resultRef);
           }
         }}
         onInputChange={setInputValue}

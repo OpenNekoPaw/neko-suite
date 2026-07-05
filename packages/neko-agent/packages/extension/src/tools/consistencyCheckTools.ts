@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import {
   createConsistencyCheckTools as createSkillsConsistencyCheckTools,
   type ConsistencyCheckToolsDeps as SkillsConsistencyCheckToolsDeps,
@@ -23,6 +24,7 @@ export interface ConsistencyCheckToolsDeps {
 export function createConsistencyCheckTools(deps: ConsistencyCheckToolsDeps): Tool[] {
   const skillsDeps: SkillsConsistencyCheckToolsDeps = {
     createService: deps.createService,
+    locale: vscode.env.language,
     logger,
     ...(deps.chatModel ? { chatModel: deps.chatModel } : {}),
     ...(deps.clipScorer ? { clipScorer: deps.clipScorer } : {}),

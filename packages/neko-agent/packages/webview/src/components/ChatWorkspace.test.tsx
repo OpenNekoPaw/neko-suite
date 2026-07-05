@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { createRef } from 'react';
+import { createRef, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AgentContextPayload } from '@neko/shared';
 import type { AgentState, Message, SettingsState } from '@neko-agent/types';
 import type { ChatWorkspaceProps } from './ChatWorkspace';
 import { ChatWorkspace } from './ChatWorkspace';
@@ -23,10 +24,46 @@ const vscodeMocks = vi.hoisted(() => ({
   promoteQueuedMessage: vi.fn(),
   cancelQueuedMessage: vi.fn(),
   editQueuedMessage: vi.fn(),
+  clearActiveSkill: vi.fn(),
+  approvePlanStep: vi.fn(),
+  rejectPlanStep: vi.fn(),
+  modifyPlanStep: vi.fn(),
+  approveAllPlanSteps: vi.fn(),
+  rejectAllPlanSteps: vi.fn(),
 }));
 
 vi.mock('@/messages', () => ({
   VSCodeMessages: vscodeMocks,
+}));
+
+vi.mock('@/components/ChatView/InputAreaContext', () => ({
+  InputAreaProvider: (props: {
+    children: ReactNode;
+    sessionMode?: 'agent' | 'image' | 'video' | 'audio';
+    onSessionModeChange?: (mode: 'agent' | 'image' | 'video' | 'audio') => void;
+    onCompressContext?: () => Promise<void>;
+    onPromptModeChange?: (mode: 'default' | 'plan') => void;
+  }) => (
+    <div>
+      <span data-testid="session-mode">{props.sessionMode ?? 'agent'}</span>
+      <button
+        type="button"
+        data-testid="set-image-session"
+        onClick={() => props.onSessionModeChange?.('image')}
+      />
+      <button
+        type="button"
+        data-testid="compress-context"
+        onClick={() => void props.onCompressContext?.()}
+      />
+      <button
+        type="button"
+        data-testid="set-plan-mode"
+        onClick={() => props.onPromptModeChange?.('plan')}
+      />
+      {props.children}
+    </div>
+  ),
 }));
 
 vi.mock('@/components/ChatView', () => ({
@@ -34,9 +71,18 @@ vi.mock('@/components/ChatView', () => ({
     activeConversationId: string | null;
     inputValue: string;
     onSend: (input?: { messageText?: string; displayMessageText?: string }) => void;
+    onClearActiveSkill?: (recordId?: string) => void;
+    onCancelTask?: (taskId: string) => void;
+    onRetryTask?: (taskId: string) => void;
+    onViewTaskResult?: (taskId: string, resultRef?: string) => void;
     onPromoteQueuedMessage?: (queueItemId: string) => void;
     onCancelQueuedMessage?: (queueItemId: string) => void;
     onEditQueuedMessage?: (queueItemId: string) => void;
+    onApprovePlanStep?: (planId: string, stepId: string) => void;
+    onRejectPlanStep?: (planId: string, stepId: string) => void;
+    onModifyPlanStep?: (planId: string, stepId: string, newDescription: string) => void;
+    onApproveAllPlanSteps?: (planId: string) => void;
+    onRejectAllPlanSteps?: (planId: string) => void;
     entryPromptMenu?: 'generate-assets' | 'roleplay' | null;
     onEntryPromptMenuChange?: (menu: 'generate-assets' | 'roleplay' | null) => void;
   }) => (
@@ -60,6 +106,31 @@ vi.mock('@/components/ChatView', () => ({
       />
       <button
         type="button"
+        data-testid="clear-active-skill"
+        onClick={() => props.onClearActiveSkill?.('record-1')}
+      />
+      <button
+        type="button"
+        data-testid="approve-plan-step"
+        onClick={() => props.onApprovePlanStep?.('plan-1', 'step-1')}
+      />
+      <button
+        type="button"
+        data-testid="cancel-task"
+        onClick={() => props.onCancelTask?.('task-1')}
+      />
+      <button
+        type="button"
+        data-testid="retry-task"
+        onClick={() => props.onRetryTask?.('task-1')}
+      />
+      <button
+        type="button"
+        data-testid="view-task-result"
+        onClick={() => props.onViewTaskResult?.('task-1', 'result-1')}
+      />
+      <button
+        type="button"
         data-testid="promote-queued"
         onClick={() => props.onPromoteQueuedMessage?.('queued-1')}
       />
@@ -79,6 +150,10 @@ vi.mock('@/components/ChatView', () => ({
   ),
 }));
 
+const keyboardMocks = vi.hoisted(() => ({
+  useKeyboardShortcuts: vi.fn(),
+}));
+
 vi.mock('@/hooks/useKeyboardShortcuts', () => ({
   COMMON_SHORTCUTS: {
     focusInput: (handler: () => void) => ({ id: 'focusInput', handler }),
@@ -87,7 +162,7 @@ vi.mock('@/hooks/useKeyboardShortcuts', () => ({
     copyLastResponse: (handler: () => void) => ({ id: 'copyLastResponse', handler }),
     cancel: (handler: () => void) => ({ id: 'cancel', handler }),
   },
-  useKeyboardShortcuts: vi.fn(),
+  useKeyboardShortcuts: keyboardMocks.useKeyboardShortcuts,
 }));
 
 vi.mock('@/hooks/useSlashCommands', () => ({
@@ -337,7 +412,185 @@ describe('ChatWorkspace pending send', () => {
     fireEvent.click(getByTestId('edit-queued'));
     expect(vscodeMocks.editQueuedMessage).toHaveBeenCalledWith('conv-1', 'queued-1');
   });
+
+  it('keeps session mode isolated per visible conversation', () => {
+    const { getByTestId, rerender } = render(
+      <ChatWorkspace
+        {...createProps({
+          activeConversationId: 'conv-a',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
+          activeTabConversationId: 'conv-a',
+          settings: createSettingsWithImageModel(),
+        })}
+      />,
+    );
+
+    expect(getByTestId('session-mode').textContent).toBe('agent');
+    fireEvent.click(getByTestId('set-image-session'));
+    expect(getByTestId('session-mode').textContent).toBe('image');
+
+    rerender(
+      <ChatWorkspace
+        {...createProps({
+          activeConversationId: 'conv-b',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-b'),
+          activeTabConversationId: 'conv-b',
+          settings: createSettingsWithImageModel(),
+        })}
+      />,
+    );
+
+    expect(getByTestId('session-mode').textContent).toBe('agent');
+
+    rerender(
+      <ChatWorkspace
+        {...createProps({
+          activeConversationId: 'conv-a',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
+          activeTabConversationId: 'conv-a',
+          settings: createSettingsWithImageModel(),
+        })}
+      />,
+    );
+
+    expect(getByTestId('session-mode').textContent).toBe('image');
+  });
+
+  it('does not route visible tab mutations to the stale active conversation during a switch', () => {
+    const clearMessages = vi.fn();
+    const updateSettings = vi.fn();
+    const onInjectContextChip = vi.fn();
+    const setAmbientNodes = vi.fn();
+    const onSessionDiagnostic = vi.fn();
+    const clearInputTarget = render(
+      <ChatWorkspace
+        {...createProps({
+          activeConversationId: 'conv-a',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-a'),
+          activeTabConversationId: 'conv-b',
+          clearMessages,
+          updateSettings,
+          setActiveSkill: vi.fn(),
+          activeSkill: {
+            conversationId: 'conv-a',
+            skillName: 'storyboard',
+            records: [
+              {
+                id: 'record-1',
+                skillName: 'storyboard',
+                slot: 'manual',
+                owner: 'user',
+                clearable: true,
+              },
+            ],
+          },
+          onInjectContextChip,
+          setAmbientNodes,
+          onSessionDiagnostic,
+        })}
+      />,
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'injectContext',
+            payload: contextPayload('ctx-switch', 'Switching context'),
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'ambientCanvasUpdate',
+            nodes: [{ nodeId: 'node-a', type: 'scene', summary: 'stale active scene' }],
+          },
+        }),
+      );
+    });
+    fireEvent.click(clearInputTarget.getByTestId('send'));
+    fireEvent.click(clearInputTarget.getByTestId('compress-context'));
+    fireEvent.click(clearInputTarget.getByTestId('set-plan-mode'));
+    fireEvent.click(clearInputTarget.getByTestId('clear-active-skill'));
+    fireEvent.click(clearInputTarget.getByTestId('approve-plan-step'));
+    fireEvent.click(clearInputTarget.getByTestId('promote-queued'));
+    fireEvent.click(clearInputTarget.getByTestId('cancel-queued'));
+    fireEvent.click(clearInputTarget.getByTestId('edit-queued'));
+    fireEvent.click(clearInputTarget.getByTestId('cancel-task'));
+    fireEvent.click(clearInputTarget.getByTestId('retry-task'));
+    fireEvent.click(clearInputTarget.getByTestId('view-task-result'));
+
+    runRegisteredShortcut('clearConversation');
+
+    expect(vscodeMocks.sendMessage).not.toHaveBeenCalled();
+    expect(vscodeMocks.clearHistory).not.toHaveBeenCalled();
+    expect(vscodeMocks.compressContext).not.toHaveBeenCalled();
+    expect(vscodeMocks.setPromptMode).not.toHaveBeenCalled();
+    expect(vscodeMocks.clearActiveSkill).not.toHaveBeenCalled();
+    expect(vscodeMocks.approvePlanStep).not.toHaveBeenCalled();
+    expect(vscodeMocks.promoteQueuedMessage).not.toHaveBeenCalled();
+    expect(vscodeMocks.cancelQueuedMessage).not.toHaveBeenCalled();
+    expect(vscodeMocks.editQueuedMessage).not.toHaveBeenCalled();
+    expect(vscodeMocks.cancelTask).not.toHaveBeenCalled();
+    expect(vscodeMocks.retryTask).not.toHaveBeenCalled();
+    expect(vscodeMocks.viewTaskResult).not.toHaveBeenCalled();
+    expect(clearMessages).not.toHaveBeenCalled();
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(onInjectContextChip).not.toHaveBeenCalled();
+    expect(setAmbientNodes).not.toHaveBeenCalled();
+    expect(onSessionDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'sessionDiagnostic',
+        code: 'active-tab-mismatch',
+        conversationId: 'conv-b',
+        activeConversationId: 'conv-a',
+        activeTabConversationId: 'conv-b',
+      }),
+    );
+  });
+
+  it('does not report active-tab-mismatch while activation is pending for the same conversation', () => {
+    const onSessionDiagnostic = vi.fn();
+
+    const { getByTestId } = render(
+      <ChatWorkspace
+        {...createProps({
+          activeConversationId: 'conv-b',
+          activeConversationIdRef: createRefWithCurrent<string | null>('conv-b'),
+          activeTabConversationId: 'conv-b',
+          isForegroundConversationActivationPending: true,
+          onSessionDiagnostic,
+        })}
+      />,
+    );
+
+    expect(onSessionDiagnostic).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'sessionDiagnostic',
+        code: 'active-tab-mismatch',
+      }),
+    );
+    fireEvent.click(getByTestId('send'));
+    expect(vscodeMocks.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-b',
+        message: 'hello from tabless state',
+      }),
+    );
+  });
 });
+
+function runRegisteredShortcut(id: string): void {
+  const options = keyboardMocks.useKeyboardShortcuts.mock.calls.at(-1)?.[0] as
+    | { shortcuts?: Array<{ id: string; handler: () => void }> }
+    | undefined;
+  const shortcut = options?.shortcuts?.find((candidate) => candidate.id === id);
+  expect(shortcut).toBeDefined();
+  act(() => {
+    shortcut?.handler();
+  });
+}
 
 function createProps(overrides: Partial<ChatWorkspaceProps> = {}): ChatWorkspaceProps {
   const noop = vi.fn();
@@ -422,6 +675,33 @@ function createSettings(): SettingsState {
     ],
     modelGroups: [],
     ssoSession: null,
+  };
+}
+
+function createSettingsWithImageModel(): SettingsState {
+  const settings = createSettings();
+  return {
+    ...settings,
+    chatModelOptions: [
+      ...settings.chatModelOptions,
+      {
+        id: 'image-model',
+        providerId: 'test-image',
+        modelId: 'image-model',
+        label: 'Image Model',
+        category: 'image',
+      },
+    ],
+  };
+}
+
+function contextPayload(id: string, label: string): AgentContextPayload {
+  return {
+    id,
+    label,
+    type: 'canvas-node',
+    summary: label,
+    data: {},
   };
 }
 

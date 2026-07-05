@@ -51,6 +51,25 @@ function createLoader(toolRegistry = new ToolRegistry()) {
   };
 }
 
+function createLocalizedLoader(toolRegistry = new ToolRegistry()) {
+  const skillRegistry = new SkillRegistry();
+  const toolGroupRegistry = new ToolGroupRegistry();
+  const providerCardRegistry = new ProviderCardRegistry();
+  return {
+    toolRegistry,
+    skillRegistry,
+    toolGroupRegistry,
+    providerCardRegistry,
+    loader: createTuiCapabilityLoader({
+      toolRegistry,
+      skillRegistry,
+      toolGroupRegistry,
+      providerCardRegistry,
+      locale: 'zh',
+    }),
+  };
+}
+
 describe('createTuiCapabilityLoader', () => {
   it('registers providers that explicitly support TUI', () => {
     const { loader, toolRegistry } = createLoader();
@@ -68,6 +87,54 @@ describe('createTuiCapabilityLoader', () => {
       skipped: [],
     });
     expect(result.diagnostics).toEqual([]);
+  });
+
+  it('passes locale to provider skills before registration', () => {
+    const { loader, skillRegistry } = createLocalizedLoader();
+    const provider = createProvider({
+      id: 'localized-skills',
+      getSkills: (context) => [
+        {
+          name: 'localized-skill',
+          description: context?.locale === 'zh' ? '中文技能' : 'English skill',
+          content: 'body',
+          source: 'builtin',
+          enabled: true,
+        },
+      ],
+    });
+
+    const result = loader.registerProviders([provider]);
+
+    expect(result.providers[0]?.loaded).toEqual([{ kind: 'skill', name: 'localized-skill' }]);
+    expect(skillRegistry.getSkill('localized-skill')?.description).toBe('中文技能');
+  });
+
+  it('projects localized provider prompt fragments from the TUI locale', () => {
+    const { loader } = createLocalizedLoader();
+    const provider = createProvider({
+      id: 'localized-fragments',
+      getPromptFragments: () => [
+        {
+          id: 'provider:guide',
+          content: 'English provider guide.',
+          locales: {
+            zh: {
+              content: '中文 Provider 指导。',
+            },
+          },
+        },
+      ],
+    });
+
+    const result = loader.registerProviders([provider]);
+
+    expect(result.promptFragments).toEqual([
+      expect.objectContaining({
+        id: 'provider:guide',
+        content: '中文 Provider 指导。',
+      }),
+    ]);
   });
 
   it('skips legacy providers that do not opt into TUI', () => {

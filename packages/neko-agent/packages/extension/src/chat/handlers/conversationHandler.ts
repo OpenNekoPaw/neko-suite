@@ -139,6 +139,14 @@ export class ConversationMessageHandler {
     }
   }
 
+  sendConversationSnapshot(conversationId: string): boolean {
+    const webview = this.deps.getWebview();
+    if (!webview) {
+      return false;
+    }
+    return this.deps.conversations.sendConversationSnapshot(webview, conversationId);
+  }
+
   sendAgentStateSnapshot(webview: vscode.Webview): void {
     if (!this.deps.messages) return;
     webview.postMessage(

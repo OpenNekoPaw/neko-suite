@@ -455,6 +455,9 @@ function buildHandler(
       toWebviewUri: ReturnType<typeof vi.fn>;
       toWebviewAsset?: ReturnType<typeof vi.fn>;
     };
+    taskResultObservationCoordinator?: {
+      handleTerminalTask: ReturnType<typeof vi.fn>;
+    };
   } = {},
 ) {
   const settings = overrides.settings ?? createMockSettings();
@@ -480,6 +483,9 @@ function buildHandler(
     undefined,
     undefined,
     overrides.localResourceAccess as any,
+    overrides.taskResultObservationCoordinator
+      ? { taskResultObservationCoordinator: overrides.taskResultObservationCoordinator as any }
+      : {},
   );
 }
 
@@ -491,6 +497,7 @@ describe('AgentMessageTurnHandler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     agentStreamProcessorInstances.length = 0;
+    (vscode.env as any).language = 'en';
     (vscode.workspace as any).workspaceFolders = undefined;
     vi.mocked(vscode.workspace.fs.readFile).mockRejectedValue(new Error('missing fixture'));
     vi.mocked(vscode.workspace.findFiles).mockResolvedValue([]);
@@ -559,6 +566,32 @@ describe('AgentMessageTurnHandler', () => {
         expect.objectContaining({ type: 'skillInjection' }),
       );
       expect(agentManager.getOrCreate().execute).toHaveBeenCalled();
+    });
+
+    it('propagates the host locale from the sent user message into runner configuration', async () => {
+      (vscode.env as any).language = 'zh-CN';
+      const webview = createMockWebview();
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      const handler = buildHandler({
+        agentManager,
+        providers: createMockProviders(true),
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createChatModelRequest('继续生成中文分镜表', { conversationId: 'conv-1' }),
+      );
+
+      expect(agentRunner.configure).toHaveBeenCalledWith(
+        expect.objectContaining({
+          locale: 'zh',
+        }),
+      );
+      expect(agentRunner.execute).toHaveBeenCalledWith(
+        '继续生成中文分镜表',
+        expect.anything(),
+      );
     });
   });
 
@@ -1185,6 +1218,56 @@ describe('AgentMessageTurnHandler', () => {
       });
     });
 
+    it('projects terminal SubAgent events to task-result observation coordinator', async () => {
+      const webview = createMockWebview();
+      const agentRunner = createMockAgentRunner();
+      const taskResultObservationCoordinator = {
+        handleTerminalTask: vi.fn(async () => undefined),
+      };
+      const handler = buildHandler({
+        agentManager: createMockAgentManager(agentRunner),
+        providers: createMockProviders(true),
+        taskResultObservationCoordinator,
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createChatModelRequest('start subagent task', { conversationId: 'conv-1' }),
+      );
+
+      agentRunner.emitSubAgentEvent({
+        type: 'completed',
+        subAgentId: 'sub-1',
+        parentAgentId: 'agent-1',
+        conversationId: 'conv-1',
+        data: {
+          runId: 'run-subagent',
+          runStartedAt: 101,
+          parentMessageId: 'msg-1',
+          parentToolCallId: 'tool-1',
+          result: { response: 'done' },
+        },
+        timestamp: 100,
+      });
+
+      expect(taskResultObservationCoordinator.handleTerminalTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'sub-1',
+          status: 'completed',
+          lifecycle: expect.objectContaining({
+            ownerConversationId: 'conv-1',
+            ownerRunId: 'run-subagent',
+            ownerRunStartedAt: 101,
+          }),
+        }),
+        {
+          source: 'subagent',
+          parentMessageId: 'msg-1',
+          parentToolCallId: 'tool-1',
+        },
+      );
+    });
+
     it('does not forward SubAgent events from another conversation', async () => {
       const webview = createMockWebview();
       const agentRunner = createMockAgentRunner();
@@ -1215,8 +1298,40 @@ describe('AgentMessageTurnHandler', () => {
             'type' in message &&
             (message as { type?: unknown }).type === 'subagentEvent'
           );
-        });
+      });
       expect(subAgentMessages).toEqual([]);
+    });
+
+    it('does not record terminal SubAgent observations from another conversation', async () => {
+      const webview = createMockWebview();
+      const agentRunner = createMockAgentRunner();
+      const taskResultObservationCoordinator = {
+        handleTerminalTask: vi.fn(async () => undefined),
+      };
+      const handler = buildHandler({
+        agentManager: createMockAgentManager(agentRunner),
+        providers: createMockProviders(true),
+        taskResultObservationCoordinator,
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createChatModelRequest('start subagent task', { conversationId: 'conv-1' }),
+      );
+
+      agentRunner.emitSubAgentEvent({
+        type: 'completed',
+        subAgentId: 'sub-2',
+        parentAgentId: 'agent-2',
+        conversationId: 'conv-2',
+        data: {
+          runId: 'run-subagent-2',
+          result: { response: 'done' },
+        },
+        timestamp: 200,
+      });
+
+      expect(taskResultObservationCoordinator.handleTerminalTask).not.toHaveBeenCalled();
     });
 
     it('disposes the SubAgent event subscription when clearing agent state', async () => {

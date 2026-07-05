@@ -8,6 +8,7 @@
 export type {
   ActiveConversationMessage,
   AgentPhaseMessage,
+  AgentSessionDiagnosticMessage,
   AgentCapabilityLifecycleResultMessage,
   AgentCapabilityActivationProgressMessage,
   AgentStateSnapshotMessage,

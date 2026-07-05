@@ -9,6 +9,7 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import type { Platform } from '@neko/platform';
+import type { Task, TaskLifecycleMetadata, TaskStatus } from '@neko/shared';
 import {
   buildAgentCapabilityActivationProgressMessage,
   buildGlobalErrorMessage,
@@ -47,6 +48,7 @@ import {
   type ActiveSkillState,
   type InputProcessor,
   type IRuntimeTaskManager,
+  type SubAgentEvent,
 } from '@neko/agent';
 import { getLogger } from '../base';
 import {
@@ -55,6 +57,7 @@ import {
 } from '../services/engineClientProvider';
 import { MediaTaskDeliveryHost } from '../services/mediaTaskDeliveryHost';
 import { MediaTurnBridge } from '../services/mediaTurnBridge';
+import type { TaskResultObservationCoordinator } from '../services/taskResultObservationCoordinator';
 import type { AgentDashboardWorkItemSource } from '../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../services/localResourceAccess';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
@@ -75,6 +78,7 @@ const logger = getLogger('AgentMessageTurnHandler');
 export interface AgentMessageTurnHandlerOptions {
   readonly accountAiCatalog?: AccountAiCatalogCache;
   readonly generatedAssetIndex?: GeneratedAssetIndex;
+  readonly taskResultObservationCoordinator?: TaskResultObservationCoordinator;
 }
 
 export class AgentMessageTurnHandler {
@@ -133,6 +137,9 @@ export class AgentMessageTurnHandler {
       dashboardWorkItems: this._dashboardWorkItems,
       localResourceAccess: this._localResourceAccess,
       conversations: this._conversations,
+      ...(this._options.taskResultObservationCoordinator
+        ? { taskResultObservations: this._options.taskResultObservationCoordinator }
+        : {}),
       generateMessageId: () => createAgentMessageId(),
       now: () => Date.now(),
     });
@@ -147,6 +154,9 @@ export class AgentMessageTurnHandler {
       dashboardWorkItems: this._dashboardWorkItems,
       localResourceAccess: this._localResourceAccess,
       contentAccessRuntime: getCapabilityRuntimeBindings().contentAccessRuntime,
+      ...(this._options.taskResultObservationCoordinator
+        ? { taskResultObservations: this._options.taskResultObservationCoordinator }
+        : {}),
       ...(agentManager
         ? {
             getContextTokenCount: (conversationId) =>
@@ -280,6 +290,7 @@ export class AgentMessageTurnHandler {
               mediaModel,
               mediaModels,
               executionOverrides,
+              locale,
             }) =>
               this._agentTurnBridge.execute({
                 webview,
@@ -293,6 +304,7 @@ export class AgentMessageTurnHandler {
                 mediaModel,
                 mediaModels,
                 executionOverrides,
+                locale,
               })
           : undefined,
       onMissingConversationId: () => {
@@ -380,6 +392,15 @@ export class AgentMessageTurnHandler {
       if (runnerEvent.type !== 'subagent') {
         return;
       }
+      if (runnerEvent.event.conversationId !== conversationId) {
+        logger.warn('Ignored SubAgent event for another conversation', {
+          subscribedConversationId: conversationId,
+          eventConversationId: runnerEvent.event.conversationId,
+          subAgentId: runnerEvent.event.subAgentId,
+        });
+        return;
+      }
+      this._recordTerminalSubAgentObservation(runnerEvent.event);
       const message = this._subAgentEventRuntime.projectForConversation({
         conversationId,
         event: runnerEvent.event,
@@ -392,6 +413,29 @@ export class AgentMessageTurnHandler {
     });
 
     this._subAgentEventSubscriptions.set(conversationId, disposable);
+  }
+
+  private _recordTerminalSubAgentObservation(event: SubAgentEvent): void {
+    const coordinator = this._options.taskResultObservationCoordinator;
+    if (!coordinator || !isTerminalSubAgentEvent(event)) {
+      return;
+    }
+
+    void coordinator
+      .handleTerminalTask(toSubAgentTaskResultObservationTask(event), {
+        source: 'subagent',
+        ...(event.data?.parentMessageId ? { parentMessageId: event.data.parentMessageId } : {}),
+        ...(event.data?.parentToolCallId
+          ? { parentToolCallId: event.data.parentToolCallId }
+          : {}),
+      })
+      .catch((error) => {
+        logger.warn('Failed to record SubAgent task-result observation', {
+          subAgentId: event.subAgentId,
+          conversationId: event.conversationId,
+          error,
+        });
+      });
   }
 
   private _clearSubAgentEventSubscription(conversationId: string): void {
@@ -551,6 +595,72 @@ export class AgentMessageTurnHandler {
       disposable.dispose();
     }
     this._disposables.length = 0;
+  }
+}
+
+function isTerminalSubAgentEvent(event: SubAgentEvent): boolean {
+  return event.type === 'completed' || event.type === 'failed' || event.type === 'cancelled';
+}
+
+function toSubAgentTaskResultObservationTask(event: SubAgentEvent): Task {
+  const status = toTaskStatusFromSubAgentEvent(event);
+  const lifecycle: TaskLifecycleMetadata = {
+    ownerConversationId: event.conversationId,
+    ...(event.data?.runId ? { ownerRunId: event.data.runId } : {}),
+    ...(event.data?.runStartedAt !== undefined ? { ownerRunStartedAt: event.data.runStartedAt } : {}),
+    runMode: event.data?.runMode ?? 'background',
+    costPhase: 'idle',
+    interruptPolicy: 'detach-and-continue',
+    recoverPolicy: 'snapshot-only',
+  };
+  const result = event.data?.result;
+  const error = event.data?.error ?? result?.error;
+
+  return {
+    id: event.subAgentId,
+    type: 'custom',
+    status,
+    input: {
+      type: 'custom',
+      payload: {
+        subAgentId: event.subAgentId,
+        parentAgentId: event.parentAgentId,
+        ...(event.data?.description ? { description: event.data.description } : {}),
+        ...(event.data?.subagentType ? { subagentType: event.data.subagentType } : {}),
+        ...(event.data?.modelTier ? { modelTier: event.data.modelTier } : {}),
+      },
+      lifecycle,
+    },
+    output: {
+      data: {
+        subAgentId: event.subAgentId,
+        ...(result?.response ? { response: result.response } : {}),
+        ...(result?.iterations !== undefined ? { iterations: result.iterations } : {}),
+        ...(result?.usage ? { usage: result.usage } : {}),
+      },
+      ...(error ? { error } : {}),
+    },
+    progress: status === 'completed' ? 100 : 0,
+    createdAt: event.timestamp,
+    updatedAt: event.timestamp,
+    ...(error ? { error } : {}),
+    lifecycle,
+  };
+}
+
+function toTaskStatusFromSubAgentEvent(event: SubAgentEvent): TaskStatus {
+  switch (event.type) {
+    case 'completed':
+      return 'completed';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+      return 'cancelled';
+    case 'spawned':
+      return 'pending';
+    case 'started':
+    case 'progress':
+      return 'running';
   }
 }
 

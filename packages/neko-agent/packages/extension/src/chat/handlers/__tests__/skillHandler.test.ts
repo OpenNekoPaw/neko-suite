@@ -162,7 +162,14 @@ describe('SkillHandler', () => {
         }),
       );
       expect(result).toEqual(expect.objectContaining({ applied: true, skill: mockSkill }));
-      expect(handler.getActiveSkill('conv-1')?.skill).toBe(mockSkill);
+      expect(handler.getActiveSkill('conv-1')?.skill).toEqual(
+        expect.objectContaining({
+          name: 'commit',
+          description: 'Create a commit',
+          content: 'You are a commit assistant',
+          enabled: true,
+        }),
+      );
     });
 
     it('should isolate active command artifact skills by conversation', async () => {
@@ -194,8 +201,22 @@ describe('SkillHandler', () => {
       await handler.handleSlashCommand(webview as any, 'commit', 'conv-1');
       await handler.handleSlashCommand(webview as any, 'review', 'conv-2');
 
-      expect(handler.getActiveSkill('conv-1')?.skill).toBe(commitSkill);
-      expect(handler.getActiveSkill('conv-2')?.skill).toBe(reviewSkill);
+      expect(handler.getActiveSkill('conv-1')?.skill).toEqual(
+        expect.objectContaining({
+          name: 'commit',
+          description: 'Create a commit',
+          content: 'Prompt for commit',
+          enabled: true,
+        }),
+      );
+      expect(handler.getActiveSkill('conv-2')?.skill).toEqual(
+        expect.objectContaining({
+          name: 'review',
+          description: 'Review code',
+          content: 'Prompt for review',
+          enabled: true,
+        }),
+      );
       expect(webview.postMessage).toHaveBeenLastCalledWith(
         expect.objectContaining({
           type: 'skillInjection',

@@ -19,6 +19,7 @@ function createMockConversations() {
     list: vi.fn().mockReturnValue([{ id: 'conv-a' }, { id: 'conv-b' }]),
     sendConversationList: vi.fn(),
     sendActiveConversation: vi.fn(),
+    sendConversationSnapshot: vi.fn().mockReturnValue(true),
     updateMessagesForConversation: vi.fn(),
     clearAll: vi.fn(),
     manager: {
@@ -203,6 +204,17 @@ describe('ConversationMessageHandler', () => {
     expect(agentManager.get).not.toHaveBeenCalled();
     expect(agentManager.cancel).not.toHaveBeenCalled();
     expect(webview.postMessage).not.toHaveBeenCalled();
+    expect(conversations.getActiveId).not.toHaveBeenCalled();
+  });
+
+  it('separates host active snapshots from explicit conversation snapshots', () => {
+    handler.sendActiveConversation();
+
+    expect(conversations.sendActiveConversation).toHaveBeenCalledWith(webview);
+    expect(conversations.sendConversationSnapshot).not.toHaveBeenCalled();
+
+    expect(handler.sendConversationSnapshot('conv-b')).toBe(true);
+    expect(conversations.sendConversationSnapshot).toHaveBeenCalledWith(webview, 'conv-b');
     expect(conversations.getActiveId).not.toHaveBeenCalled();
   });
 

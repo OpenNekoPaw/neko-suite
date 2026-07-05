@@ -1,4 +1,5 @@
 import { CapabilityRegistryRuntime } from '@neko/agent/runtime';
+import { localizePromptFragment } from '@neko/shared';
 import type {
   AgentCapabilityAvailabilityDiagnostic,
   AgentCapabilityHostRequirement,
@@ -39,6 +40,7 @@ export interface TuiCapabilityLoaderOptions {
   readonly toolGroupRegistry?: ToolGroupRegistryLike;
   readonly providerCardRegistry?: Pick<IProviderCardRegistry, 'register' | 'unregister'>;
   readonly referenceContributors?: readonly AgentReferenceContributor[];
+  readonly locale?: 'en' | 'zh';
 }
 
 export interface TuiCapabilityLoaderResult {
@@ -112,13 +114,16 @@ class DefaultTuiCapabilityLoader implements TuiCapabilityLoader {
       return;
     }
 
-    const context = { extensionContext: null };
+    const context = {
+      extensionContext: null,
+      locale: this.options.locale ?? 'en',
+    };
     const safeTools: Tool[] = [];
     const skipped: AgentCapabilityAvailabilityDiagnostic[] = [];
     const safeSkills = filterContributions({
       providerId: provider.id,
       kind: 'skill',
-      contributions: provider.getSkills?.() ?? [],
+      contributions: provider.getSkills?.(context) ?? [],
       getName: (skill) => skill.name,
       skipped,
       diagnostics: this.diagnostics,
@@ -150,7 +155,9 @@ class DefaultTuiCapabilityLoader implements TuiCapabilityLoader {
       }
     }
 
-    const promptFragments = provider.getPromptFragments?.(context) ?? [];
+    const promptFragments = (provider.getPromptFragments?.(context) ?? []).map((fragment) =>
+      localizePromptFragment(fragment, context.locale),
+    );
     const referenceContributors = provider.getReferenceContributors?.(context) ?? [];
     const filteredProvider: AgentCapabilityProvider = {
       ...provider,

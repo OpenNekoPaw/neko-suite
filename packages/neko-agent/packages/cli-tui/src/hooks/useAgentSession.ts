@@ -317,6 +317,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           skillRegistry: skillService.registry,
           toolGroupRegistry,
           providerCardRegistry,
+          locale: detectedLocale,
         });
         const capabilityLoadResult = capabilityLoader.registerProviders(capabilityProviders);
         capabilityLoadResultRef.current = capabilityLoadResult;

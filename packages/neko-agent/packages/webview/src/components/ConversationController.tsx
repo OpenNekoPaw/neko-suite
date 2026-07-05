@@ -39,10 +39,7 @@ import { InputArea } from '@/components/ChatView/InputArea';
 import { InputAreaProvider, type MediaCategory } from '@/components/ChatView/InputAreaContext';
 import { useTranslation } from '@/i18n/I18nContext';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
-import {
-  getWorkItemsForConversation,
-  removeConversationWorkItems,
-} from '@/components/AgentWorkItem';
+import { removeConversationWorkItems } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ProjectFileInfo } from '@/hooks/useConfigState';
 import type { MediaModelSelection } from '@/hooks/useUIState';
@@ -75,6 +72,11 @@ import {
   projectChatWorkspaceModelState,
   projectMediaModelSelectionForSessionModeChange,
 } from '@/presenters/config-message-presenter';
+import {
+  type ConversationAmbientNode,
+  projectConversationSessionActiveSkillMap,
+  projectConversationSessionState,
+} from '@/presenters/conversation-session-state-presenter';
 import { DEFAULT_GENERATION_PARAMS } from '@/components/ChatView/InputArea/types';
 
 // =============================================================================
@@ -240,32 +242,19 @@ export function ConversationController({
   const [activationProgressByConversation, setActivationProgressByConversation] = useState<
     Map<string, readonly ActivationProgressTimeline[]>
   >(() => new Map());
-  const activeSkill = visibleConversationId
-    ? (activeSkillByConversation.get(visibleConversationId) ?? null)
-    : null;
-  const activationProgress = visibleConversationId
-    ? (activationProgressByConversation.get(visibleConversationId) ?? [])
-    : [];
   const setActiveSkill = useCallback<
     React.Dispatch<React.SetStateAction<BoundActiveSkillIndicator | null>>
   >(
     (value) => {
       setActiveSkillByConversation((prev) => {
-        const currentValue = activeConversationId ? (prev.get(activeConversationId) ?? null) : null;
-        const nextValue = typeof value === 'function' ? value(currentValue) : value;
-        const targetConversationId = nextValue?.conversationId ?? activeConversationId;
-        if (!targetConversationId) return prev;
-
-        const next = new Map(prev);
-        if (nextValue) {
-          next.set(targetConversationId, nextValue);
-        } else {
-          next.delete(targetConversationId);
-        }
-        return next;
+        return projectConversationSessionActiveSkillMap({
+          activeSkillByConversation: prev,
+          visibleConversationId,
+          value,
+        });
       });
     },
-    [activeConversationId],
+    [visibleConversationId],
   );
 
   // ---- Agent state ----
@@ -304,9 +293,9 @@ export function ConversationController({
   const [contextChipsByConversation, setContextChipsByConversation] = useState<
     Map<string, AgentContextPayload[]>
   >(() => new Map());
-  const [ambientNodes, setAmbientNodes] = useState<
-    Array<{ nodeId: string; type: string; summary: string }>
-  >([]);
+  const [ambientNodesByConversation, setAmbientNodesByConversation] = useState<
+    Map<string, ConversationAmbientNode[]>
+  >(() => new Map());
 
   const setContextChipsForConversation = useCallback(
     (
@@ -329,38 +318,53 @@ export function ConversationController({
   );
   const handleRemoveContextChip = useCallback(
     (id: string) => {
-      if (!activeConversationId) return;
-      setContextChipsForConversation(activeConversationId, (prev) =>
+      if (!visibleConversationId) return;
+      setContextChipsForConversation(visibleConversationId, (prev) =>
         prev.filter((c) => c.id !== id),
       );
     },
-    [activeConversationId, setContextChipsForConversation],
+    [setContextChipsForConversation, visibleConversationId],
   );
   const handleAddContextChip = useCallback(
     (payload: AgentContextPayload) => {
-      if (!activeConversationId) return;
-      setContextChipsForConversation(activeConversationId, (prev) => {
+      if (!visibleConversationId) return;
+      setContextChipsForConversation(visibleConversationId, (prev) => {
         if (prev.some((c) => c.id === payload.id)) return prev;
         return [...prev, payload];
       });
     },
-    [activeConversationId, setContextChipsForConversation],
+    [setContextChipsForConversation, visibleConversationId],
   );
   const handleInjectContextChip = useCallback(
     (payload: AgentContextPayload, conversationId?: string | null) => {
-      const targetConversationId = conversationId ?? activeConversationId;
+      const targetConversationId = conversationId ?? visibleConversationId;
       if (!targetConversationId) return;
       setContextChipsForConversation(targetConversationId, (prev) => {
         if (prev.some((c) => c.id === payload.id)) return prev;
         return [...prev, payload];
       });
     },
-    [activeConversationId, setContextChipsForConversation],
+    [setContextChipsForConversation, visibleConversationId],
   );
-
-  const contextChips = activeConversationId
-    ? (contextChipsByConversation.get(activeConversationId) ?? [])
-    : [];
+  const setAmbientNodesForVisibleConversation = useCallback<
+    React.Dispatch<React.SetStateAction<ConversationAmbientNode[]>>
+  >(
+    (value) => {
+      if (!visibleConversationId) return;
+      setAmbientNodesByConversation((prev) => {
+        const current = prev.get(visibleConversationId) ?? [];
+        const nextValue = typeof value === 'function' ? value(current) : value;
+        const next = new Map(prev);
+        if (nextValue.length === 0) {
+          next.delete(visibleConversationId);
+        } else {
+          next.set(visibleConversationId, [...nextValue]);
+        }
+        return next;
+      });
+    },
+    [visibleConversationId],
+  );
 
   // Session-bound cleanup ref — ChatWorkspace registers its useConversationSession cleanup
   // callbacks here so ConversationController can invoke them when deleting conversations.
@@ -396,6 +400,12 @@ export function ConversationController({
         next.delete(conversationId);
         return next;
       });
+      setAmbientNodesByConversation((prev) => {
+        if (!prev.has(conversationId)) return prev;
+        const next = new Map(prev);
+        next.delete(conversationId);
+        return next;
+      });
       setPromptModeByConversation((prev) => {
         if (!prev.has(conversationId)) return prev;
         const next = new Map(prev);
@@ -406,20 +416,71 @@ export function ConversationController({
     [setWorkItemsByConversation],
   );
 
-  // ---- Derived state for current conversation ----
-  const contextTokenCount = activeConversationId
-    ? (conversationTokenCountRef.current.get(activeConversationId) ?? 0)
+  // ---- Derived state for visible conversation ----
+  const visibleSessionState = useMemo(() => {
+    const conversationId = visibleConversationId ?? '';
+    const messagesByConversation = new Map(conversationMessagesRef.current);
+    const streamingByConversation = new Map(conversationStreamingRef.current);
+
+    if (activeConversationId) {
+      messagesByConversation.set(activeConversationId, messages);
+      streamingByConversation.set(activeConversationId, {
+        ...(streamingByConversation.get(activeConversationId) ?? {}),
+        streamingMessageId,
+        isThinking,
+        queuedMessageCount,
+        queuedMessages,
+      });
+    }
+
+    return projectConversationSessionState({
+      conversationId,
+      messagesByConversation,
+      streamingByConversation,
+      promptModeByConversation,
+      activeSkillByConversation,
+      activationProgressByConversation,
+      contextChipsByConversation,
+      ambientNodesByConversation,
+      tokenCountByConversation: conversationTokenCountRef.current,
+      compressingByConversation: conversationCompressingRef.current,
+      agentStateByConversation: conversationAgentStateRef.current,
+      workItemsByConversation,
+      defaultPromptMode: settings.promptMode,
+    });
+  }, [
+    activeConversationId,
+    activeSkillByConversation,
+    activationProgressByConversation,
+    ambientNodesByConversation,
+    contextChipsByConversation,
+    conversationMessagesRef,
+    conversationStreamingRef,
+    isThinking,
+    messages,
+    promptModeByConversation,
+    projectionVersion,
+    queuedMessageCount,
+    queuedMessages,
+    settings.promptMode,
+    streamingMessageId,
+    visibleConversationId,
+    workItemsByConversation,
+  ]);
+  const contextTokenCount = visibleSessionState.context.tokenCount;
+  const isCompressing = visibleSessionState.context.isCompressing;
+  const mediaModelCallCount = visibleConversationId
+    ? (conversationMediaCallCountRef.current.get(visibleConversationId) ?? 0)
     : 0;
-  const isCompressing = activeConversationId
-    ? (conversationCompressingRef.current.get(activeConversationId) ?? false)
-    : false;
-  const mediaModelCallCount = activeConversationId
-    ? (conversationMediaCallCountRef.current.get(activeConversationId) ?? 0)
-    : 0;
-  const workItems = getWorkItemsForConversation(workItemsByConversation, activeConversationId);
-  const activePromptMode = activeConversationId
-    ? (promptModeByConversation.get(activeConversationId) ?? 'default')
-    : settings.promptMode;
+  const workItems = [...visibleSessionState.workItems];
+  const activeSkill = visibleSessionState.skill.activeSkill;
+  const activationProgress = visibleSessionState.skill.activationProgress;
+  const contextChips = [...visibleSessionState.context.chips];
+  const ambientNodes = [...visibleSessionState.context.ambientNodes];
+  const visibleAgentState =
+    visibleSessionState.agentState ??
+    (visibleConversationId === activeConversationId ? agentState : null);
+  const activePromptMode = visibleSessionState.promptMode;
   const activeSettings = useMemo<SettingsState>(
     () => ({ ...settings, promptMode: activePromptMode }),
     [settings, activePromptMode],
@@ -444,14 +505,14 @@ export function ConversationController({
   const updateActiveSettings = useCallback(
     (partial: Partial<SettingsState>) => {
       const { promptMode, ...globalSettings } = partial;
-      if (promptMode && activeConversationId) {
-        setPromptModeForConversation(activeConversationId, promptMode);
+      if (promptMode && visibleConversationId) {
+        setPromptModeForConversation(visibleConversationId, promptMode);
       }
       if (Object.keys(globalSettings).length > 0) {
         updateSettings(globalSettings);
       }
     },
-    [activeConversationId, setPromptModeForConversation, updateSettings],
+    [setPromptModeForConversation, updateSettings, visibleConversationId],
   );
   const handleModelSelect = useCallback(
     (modelId: string) => {
@@ -559,7 +620,7 @@ export function ConversationController({
   );
 
   const persistCurrentVisibleConversation = useCallback(() => {
-    const conversationId = activeConversationIdRef.current;
+    const conversationId = visibleConversationId;
     if (!conversationId) return;
     conversationMessagesRef.current.set(conversationId, messages);
     const currentStreaming = conversationStreamingRef.current.get(conversationId);
@@ -571,7 +632,6 @@ export function ConversationController({
       queuedMessages,
     });
   }, [
-    activeConversationIdRef,
     conversationMessagesRef,
     conversationStreamingRef,
     isThinking,
@@ -579,6 +639,38 @@ export function ConversationController({
     queuedMessages,
     messages,
     streamingMessageIdRef,
+    visibleConversationId,
+  ]);
+
+  const clearVisibleConversationMessages = useCallback(() => {
+    const conversationId = visibleConversationId;
+    if (!conversationId) {
+      clearMessages();
+      return;
+    }
+
+    conversationMessagesRef.current.delete(conversationId);
+    conversationStreamingRef.current.delete(conversationId);
+    if (conversationId === activeConversationIdRef.current) {
+      setMessages([]);
+      setStreamingMessageId(null);
+      streamingMessageIdRef.current = null;
+      setIsThinking(false);
+      setQueuedMessageCount(0);
+      setQueuedMessages([]);
+    }
+  }, [
+    activeConversationIdRef,
+    clearMessages,
+    conversationMessagesRef,
+    conversationStreamingRef,
+    setIsThinking,
+    setMessages,
+    setQueuedMessageCount,
+    setQueuedMessages,
+    setStreamingMessageId,
+    streamingMessageIdRef,
+    visibleConversationId,
   ]);
 
   const beginForegroundConversationActivation = useCallback(() => {
@@ -754,20 +846,20 @@ export function ConversationController({
 
   // ---- Context token count on conversation change ----
   useEffect(() => {
-    if (activeConversationId && !isCharacterRoleConversationKind(conversationKind)) {
-      requestConversationResourceSnapshot(activeConversationId);
+    if (visibleConversationId && !isCharacterRoleConversationKind(conversationKind)) {
+      requestConversationResourceSnapshot(visibleConversationId);
     }
-  }, [activeConversationId, conversationKind, requestConversationResourceSnapshot]);
+  }, [conversationKind, requestConversationResourceSnapshot, visibleConversationId]);
 
   // ---- Sync agent state on conversation change ----
   useEffect(() => {
-    if (activeConversationId) {
-      const savedState = conversationAgentStateRef.current.get(activeConversationId);
+    if (visibleConversationId) {
+      const savedState = conversationAgentStateRef.current.get(visibleConversationId);
       setAgentState(savedState || null);
     } else {
       setAgentState(null);
     }
-  }, [activeConversationId]);
+  }, [visibleConversationId]);
 
   // ---- Conversation CRUD callbacks ----
   const startNewForegroundConversation = useCallback(() => {
@@ -1118,14 +1210,9 @@ export function ConversationController({
       projectDisplayTabs({
         openTabs,
         conversations,
-        activeConversationId,
-        activeMessages: messages,
-        activeStreaming: {
-          streamingMessageId,
-          isThinking,
-          queuedMessageCount,
-          queuedMessages,
-        },
+        activeConversationId: visibleConversationId,
+        activeMessages: [...visibleSessionState.messages],
+        activeStreaming: visibleSessionState.streaming,
         messagesByConversation: conversationMessagesRef.current,
         streamingByConversation: conversationStreamingRef.current,
         agentStateByConversation: conversationAgentStateRef.current,
@@ -1133,12 +1220,8 @@ export function ConversationController({
     [
       openTabs,
       conversations,
-      activeConversationId,
-      messages,
-      streamingMessageId,
-      isThinking,
-      queuedMessageCount,
-      queuedMessages,
+      visibleConversationId,
+      visibleSessionState,
       projectionVersion,
     ],
   );
@@ -1147,24 +1230,16 @@ export function ConversationController({
       projectHistoryConversationItems({
         conversations,
         openTabs,
-        activeConversationId,
-        activeStreaming: {
-          streamingMessageId,
-          isThinking,
-          queuedMessageCount,
-          queuedMessages,
-        },
+        activeConversationId: visibleConversationId,
+        activeStreaming: visibleSessionState.streaming,
         streamingByConversation: conversationStreamingRef.current,
         agentStateByConversation: conversationAgentStateRef.current,
       }),
     [
       conversations,
       openTabs,
-      activeConversationId,
-      streamingMessageId,
-      isThinking,
-      queuedMessageCount,
-      queuedMessages,
+      visibleConversationId,
+      visibleSessionState,
       projectionVersion,
     ],
   );
@@ -1180,7 +1255,7 @@ export function ConversationController({
         activeTabId,
         activeView: activeTab,
         historyConversations,
-        activeConversationId,
+        activeConversationId: visibleConversationId,
         onSwitchTab: handleSwitchTab,
         onCloseTab: handleCloseTab,
         onNewChat: handleNewChat,
@@ -1249,13 +1324,13 @@ export function ConversationController({
         ) : (
           <ChatWorkspace
             // Conversation state
-            messages={messages}
+            messages={[...visibleSessionState.messages]}
             setMessages={setMessages}
-            isThinking={isThinking}
+            isThinking={visibleSessionState.streaming.isThinking}
             setIsThinking={setIsThinking}
-            streamingMessageId={streamingMessageId}
-            queuedMessageCount={queuedMessageCount}
-            queuedMessages={queuedMessages}
+            streamingMessageId={visibleSessionState.streaming.streamingMessageId}
+            queuedMessageCount={visibleSessionState.streaming.queuedMessageCount ?? 0}
+            queuedMessages={visibleSessionState.streaming.queuedMessages ?? []}
             setStreamingMessageId={setStreamingMessageId}
             streamingMessageIdRef={streamingMessageIdRef}
             activeConversationId={activeConversationId}
@@ -1265,7 +1340,7 @@ export function ConversationController({
             conversationKind={conversationKind}
             characterDialogueSession={activeOpenTab?.characterDialogueSession}
             embodyCharacterSession={embodyCharacterSession}
-            clearMessages={clearMessages}
+            clearMessages={clearVisibleConversationMessages}
             // Config
             settings={activeSettings}
             updateSettings={updateActiveSettings}
@@ -1303,10 +1378,10 @@ export function ConversationController({
             onRemoveContextChip={handleRemoveContextChip}
             onInjectContextChip={handleInjectContextChip}
             // Agent state
-            agentState={agentState}
+            agentState={visibleAgentState}
             // Message handler (for pre-intercept)
             handleMessage={handleMessage}
-            setAmbientNodes={setAmbientNodes}
+            setAmbientNodes={setAmbientNodesForVisibleConversation}
             onNewChat={handleNewChat}
             onUserMessageSent={handleUserMessageSent}
             onSendWithoutConversation={handleSendWithoutConversation}
@@ -1322,6 +1397,9 @@ export function ConversationController({
             }}
             onQueuedEditConflict={() => {
               setGlobalError(t('chat.input.queueEditDraftConflict'));
+            }}
+            onSessionDiagnostic={(diagnostic) => {
+              setGlobalError(`${diagnostic.code}: ${diagnostic.message}`);
             }}
             // Session cleanup registration
             sessionCleanupRef={sessionCleanupRef}

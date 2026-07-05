@@ -122,6 +122,7 @@ export class AgentTurnBridge {
         conversationId: input.conversationId,
         message: input.message,
         platform: this.deps.platform,
+        locale: input.locale,
         chatModel: input.chatModel,
         agentModels: input.agentModels,
         llmConfig: input.llmConfig,

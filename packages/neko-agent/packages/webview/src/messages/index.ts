@@ -30,6 +30,20 @@ function postWebviewMessage(message: WebviewToExtensionMessage): void {
   postRawMessage(message);
 }
 
+function requireConversationId(messageType: string, conversationId: string): string {
+  if (conversationId.trim().length === 0) {
+    throw new Error(`${messageType} requires non-empty conversationId`);
+  }
+  return conversationId;
+}
+
+function postConversationMessage<TMessage extends WebviewToExtensionMessage & {
+  readonly conversationId: string;
+}>(message: TMessage): void {
+  requireConversationId(message.type, message.conversationId);
+  postWebviewMessage(message);
+}
+
 /**
  * Type-safe message builders for Extension ↔ Webview communication.
  * Each method constructs and sends a properly typed message.
@@ -40,7 +54,7 @@ export const VSCodeMessages = {
    * conversationId and model refs are explicit to avoid multi-tab leakage.
    */
   sendMessage: (payload: Omit<SendMessageWebviewMessage, 'type'>) => {
-    postWebviewMessage({ type: 'sendMessage', ...payload });
+    postConversationMessage({ type: 'sendMessage', ...payload });
   },
 
   /** Create a new conversation */
@@ -53,7 +67,7 @@ export const VSCodeMessages = {
    * @param conversationId - The conversation ID to switch to
    */
   switchConversation: (conversationId: string) => {
-    postWebviewMessage({ type: 'switchConversation', conversationId });
+    postConversationMessage({ type: 'switchConversation', conversationId });
   },
 
   /**
@@ -61,7 +75,7 @@ export const VSCodeMessages = {
    * @param conversationId - The conversation ID to delete
    */
   deleteConversation: (conversationId: string, options?: { activateNext?: boolean }) => {
-    postWebviewMessage({
+    postConversationMessage({
       type: 'deleteConversation',
       conversationId,
       ...(options?.activateNext !== undefined ? { activateNext: options.activateNext } : {}),
@@ -95,7 +109,7 @@ export const VSCodeMessages = {
 
   /** Clear all conversation history */
   clearHistory: (conversationId: string) => {
-    postWebviewMessage({ type: 'clearHistory', conversationId });
+    postConversationMessage({ type: 'clearHistory', conversationId });
   },
 
   /**
@@ -107,10 +121,14 @@ export const VSCodeMessages = {
     conversationId: string | undefined,
     options: { readonly purpose?: 'roleplay' | 'entry' } = {},
   ) => {
+    const scopedConversationId =
+      conversationId === undefined
+        ? undefined
+        : requireConversationId('searchProjectFiles', conversationId);
     postWebviewMessage({
       type: 'searchProjectFiles',
       filter,
-      ...(conversationId ? { conversationId } : {}),
+      ...(scopedConversationId ? { conversationId: scopedConversationId } : {}),
       ...(options.purpose ? { purpose: options.purpose } : {}),
     });
   },
@@ -120,10 +138,14 @@ export const VSCodeMessages = {
    * @param settings - Settings object to update
    */
   updateSettings: (settings: Record<string, unknown>, conversationId?: string) => {
+    const scopedConversationId =
+      conversationId === undefined
+        ? undefined
+        : requireConversationId('updateSettings', conversationId);
     postWebviewMessage({
       type: 'updateSettings',
       settings,
-      ...(conversationId ? { conversationId } : {}),
+      ...(scopedConversationId ? { conversationId: scopedConversationId } : {}),
     });
   },
 
@@ -134,7 +156,7 @@ export const VSCodeMessages = {
    * @param conversationId - Conversation ID for multi-tab safety
    */
   confirmTool: (toolCallId: string, approved: boolean, conversationId: string) => {
-    postWebviewMessage({ type: 'confirmTool', toolCallId, approved, conversationId });
+    postConversationMessage({ type: 'confirmTool', toolCallId, approved, conversationId });
   },
 
   /**
@@ -143,27 +165,27 @@ export const VSCodeMessages = {
    * @param conversationId - Conversation ID for multi-tab safety
    */
   cancelMessage: (conversationId: string) => {
-    postWebviewMessage({ type: 'cancelMessage', conversationId });
+    postConversationMessage({ type: 'cancelMessage', conversationId });
   },
 
   /** Request the authoritative pending message queue for a conversation. */
   getMessageQueue: (conversationId: string) => {
-    postWebviewMessage({ type: 'getMessageQueue', conversationId });
+    postConversationMessage({ type: 'getMessageQueue', conversationId });
   },
 
   /** Promote a queued message so it runs next after the active turn. */
   promoteQueuedMessage: (conversationId: string, queueItemId: string) => {
-    postWebviewMessage({ type: 'promoteQueuedMessage', conversationId, queueItemId });
+    postConversationMessage({ type: 'promoteQueuedMessage', conversationId, queueItemId });
   },
 
   /** Cancel a queued message without cancelling the active response. */
   cancelQueuedMessage: (conversationId: string, queueItemId: string) => {
-    postWebviewMessage({ type: 'cancelQueuedMessage', conversationId, queueItemId });
+    postConversationMessage({ type: 'cancelQueuedMessage', conversationId, queueItemId });
   },
 
   /** Remove a queued message and ask Webview to restore it into the composer. */
   editQueuedMessage: (conversationId: string, queueItemId: string) => {
-    postWebviewMessage({ type: 'editQueuedMessage', conversationId, queueItemId });
+    postConversationMessage({ type: 'editQueuedMessage', conversationId, queueItemId });
   },
 
   /** Exit an active Embody Character feedback session */
@@ -173,7 +195,7 @@ export const VSCodeMessages = {
 
   /** Request the list of background tasks */
   getTasks: (conversationId: string) => {
-    postWebviewMessage({ type: 'getTasks', conversationId });
+    postConversationMessage({ type: 'getTasks', conversationId });
   },
 
   /** Request current agent states snapshot */
@@ -186,7 +208,7 @@ export const VSCodeMessages = {
    * @param taskId - The task ID to cancel
    */
   cancelTask: (taskId: string, conversationId: string) => {
-    postWebviewMessage({ type: 'cancelTask', taskId, conversationId });
+    postConversationMessage({ type: 'cancelTask', taskId, conversationId });
   },
 
   /**
@@ -194,7 +216,7 @@ export const VSCodeMessages = {
    * @param taskId - The task ID
    */
   viewTaskResult: (taskId: string, conversationId: string, resultRef?: string) => {
-    postWebviewMessage({
+    postConversationMessage({
       type: 'viewTaskResult',
       taskId,
       conversationId,
@@ -231,7 +253,7 @@ export const VSCodeMessages = {
     conversationId: string,
     options?: { recordId?: string; slot?: string; skillName?: string },
   ) => {
-    postWebviewMessage({
+    postConversationMessage({
       type: 'clearActiveSkill',
       conversationId,
       ...(options?.recordId ? { recordId: options.recordId } : {}),
@@ -249,7 +271,7 @@ export const VSCodeMessages = {
    * @param conversationId - The conversation ID
    */
   getContextTokenCount: (conversationId: string) => {
-    postWebviewMessage({ type: 'getContextTokenCount', conversationId });
+    postConversationMessage({ type: 'getContextTokenCount', conversationId });
   },
 
   /**
@@ -257,7 +279,7 @@ export const VSCodeMessages = {
    * @param conversationId - The conversation ID
    */
   compressContext: (conversationId: string) => {
-    postWebviewMessage({ type: 'compressContext', conversationId });
+    postConversationMessage({ type: 'compressContext', conversationId });
   },
 
   // ==========================================================================
@@ -271,7 +293,7 @@ export const VSCodeMessages = {
    * @param conversationId - The conversation ID
    */
   approvePlanStep: (planId: string, stepId: string, conversationId: string) => {
-    postWebviewMessage({ type: 'planStepApprove', planId, stepId, conversationId });
+    postConversationMessage({ type: 'planStepApprove', planId, stepId, conversationId });
   },
 
   /**
@@ -281,7 +303,7 @@ export const VSCodeMessages = {
    * @param conversationId - The conversation ID
    */
   rejectPlanStep: (planId: string, stepId: string, conversationId: string) => {
-    postWebviewMessage({ type: 'planStepReject', planId, stepId, conversationId });
+    postConversationMessage({ type: 'planStepReject', planId, stepId, conversationId });
   },
 
   /**
@@ -297,7 +319,13 @@ export const VSCodeMessages = {
     newDescription: string,
     conversationId: string,
   ) => {
-    postWebviewMessage({ type: 'planStepModify', planId, stepId, newDescription, conversationId });
+    postConversationMessage({
+      type: 'planStepModify',
+      planId,
+      stepId,
+      newDescription,
+      conversationId,
+    });
   },
 
   /**
@@ -306,7 +334,7 @@ export const VSCodeMessages = {
    * @param conversationId - The conversation ID
    */
   approveAllPlanSteps: (planId: string, conversationId: string) => {
-    postWebviewMessage({ type: 'planApprove', planId, conversationId });
+    postConversationMessage({ type: 'planApprove', planId, conversationId });
   },
 
   /**
@@ -315,7 +343,7 @@ export const VSCodeMessages = {
    * @param conversationId - The conversation ID
    */
   rejectAllPlanSteps: (planId: string, conversationId: string) => {
-    postWebviewMessage({ type: 'planReject', planId, conversationId });
+    postConversationMessage({ type: 'planReject', planId, conversationId });
   },
 
   // ==========================================================================
@@ -391,11 +419,11 @@ export const VSCodeMessages = {
    * @param mode - The mode to set
    */
   setPromptMode: (mode: 'default' | 'plan', conversationId: string) => {
-    postWebviewMessage({ type: 'setPromptMode', mode, conversationId });
+    postConversationMessage({ type: 'setPromptMode', mode, conversationId });
   },
 
   getPromptMode: (conversationId: string) => {
-    postWebviewMessage({ type: 'getPromptMode', conversationId });
+    postConversationMessage({ type: 'getPromptMode', conversationId });
   },
 
   /**
@@ -404,7 +432,7 @@ export const VSCodeMessages = {
    * @param args - Optional arguments
    */
   invokeSlashCommand: (command: string, args: string | undefined, conversationId: string) => {
-    postWebviewMessage({ type: 'invokeSlashCommand', command, args, conversationId });
+    postConversationMessage({ type: 'invokeSlashCommand', command, args, conversationId });
   },
 
   /**
@@ -413,7 +441,7 @@ export const VSCodeMessages = {
    * @param args - Optional invocation arguments
    */
   invokeSkill: (skillName: string, args: string | undefined, conversationId: string) => {
-    postWebviewMessage({ type: 'invokeSkill', skillName, args, conversationId });
+    postConversationMessage({ type: 'invokeSkill', skillName, args, conversationId });
   },
 
   /**
@@ -429,7 +457,7 @@ export const VSCodeMessages = {
     conversationId: string,
     args?: string,
   ) => {
-    postWebviewMessage({
+    postConversationMessage({
       type: 'invokePluginSlashCommand',
       extensionId,
       commandId,
@@ -471,7 +499,7 @@ export const VSCodeMessages = {
     requestId: string,
     invocation: InvokeAgentCapabilityLifecycleWebviewMessage['invocation'],
   ) => {
-    postWebviewMessage({
+    postConversationMessage({
       type: 'invokeAgentCapabilityLifecycle',
       conversationId,
       requestId,
@@ -483,12 +511,12 @@ export const VSCodeMessages = {
   requestCanvasMarkdownHandoff: (
     payload: Omit<RequestCanvasMarkdownHandoffWebviewMessage, 'type'>,
   ) => {
-    postWebviewMessage({ type: 'requestCanvasMarkdownHandoff', ...payload });
+    postConversationMessage({ type: 'requestCanvasMarkdownHandoff', ...payload });
   },
 
   /** Retry a failed background task */
   retryTask: (taskId: string, conversationId: string) => {
-    postWebviewMessage({ type: 'retryTask', taskId, conversationId });
+    postConversationMessage({ type: 'retryTask', taskId, conversationId });
   },
 
   /** Download a Mermaid diagram as SVG file */
@@ -498,7 +526,13 @@ export const VSCodeMessages = {
 
   /** Report a Mermaid rendering error — sends feedback as user message to AI */
   mermaidError: (error: string, code: string, feedbackMessage: string, conversationId: string) => {
-    postWebviewMessage({ type: 'mermaidError', error, code, feedbackMessage, conversationId });
+    postConversationMessage({
+      type: 'mermaidError',
+      error,
+      code,
+      feedbackMessage,
+      conversationId,
+    });
   },
 
   /** Reveal a file in the OS file manager */

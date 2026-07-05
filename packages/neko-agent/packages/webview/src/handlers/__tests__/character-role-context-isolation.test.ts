@@ -1,9 +1,10 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { describe, expect, it } from 'vitest';
-import type { ExtensionToWebviewMessage, OpenTab } from '@neko-agent/types';
+import type { AgentQueuedMessageItem, ExtensionToWebviewMessage, OpenTab } from '@neko-agent/types';
 import type { Message } from '@neko-agent/types';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import { conversationHandlers } from '../conversation-handlers';
 import { tabHandlers } from '../tab-handlers';
 import type {
@@ -42,6 +43,109 @@ describe('character role context isolation', () => {
     expect(harness.context.streamingMessageIdRef.current).toBeNull();
     expect(harness.messages()).toEqual([ordinaryMessage]);
     expect(harness.streaming()).toEqual({ isThinking: false, streamingMessageId: null });
+  });
+
+  it('synchronizes foreground activeConversation messages and queue state into the session cache', () => {
+    const staleMessage = message('stale-message', 'assistant', '旧缓存');
+    const ordinaryMessage = message('ordinary-message', 'assistant', '普通 Agent 回复');
+    const queuedMessage = queuedMessageItem('queued-stale', 'conv-a');
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      activeTabId: 'tab-a',
+      currentMessages: [staleMessage],
+      currentStreaming: {
+        isThinking: true,
+        streamingMessageId: 'stale-stream',
+        queuedMessageCount: 1,
+        queuedMessages: [queuedMessage],
+      },
+      openTabs: [{ id: 'tab-a', title: 'Ordinary chat', conversationId: 'conv-a' }],
+      cachedMessages: new Map([['conv-a', [staleMessage]]]),
+      includeQueueSetters: true,
+    });
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-a',
+          title: 'Ordinary chat',
+          messages: [ordinaryMessage],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.messages()).toEqual([ordinaryMessage]);
+    expect(harness.streaming()).toEqual({
+      isThinking: false,
+      streamingMessageId: null,
+      queuedMessageCount: 0,
+      queuedMessages: [],
+    });
+    expect(harness.conversationMessages().get('conv-a')).toEqual([ordinaryMessage]);
+    expect(harness.conversationStreaming().get('conv-a')).toEqual({
+      isThinking: false,
+      streamingMessageId: null,
+      queuedMessageCount: 0,
+      queuedMessages: [],
+    });
+  });
+
+  it('keeps foreground activeConversation active timeline in the session cache', () => {
+    const activeTimeline: ActiveTurnTimelineState = {
+      conversationId: 'conv-a',
+      turnId: 'turn-a',
+      messageId: 'assistant-stream',
+      items: [],
+      completed: false,
+    };
+    const cachedMessage = message('assistant-stream', 'assistant', 'partial');
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      activeTabId: 'tab-a',
+      currentMessages: [cachedMessage],
+      currentStreaming: {
+        isThinking: true,
+        streamingMessageId: 'assistant-stream',
+        queuedMessageCount: 0,
+        queuedMessages: [],
+        activeTurnTimeline: activeTimeline,
+      },
+      openTabs: [{ id: 'tab-a', title: 'Ordinary chat', conversationId: 'conv-a' }],
+      cachedMessages: new Map([['conv-a', [cachedMessage]]]),
+      cachedStreaming: new Map([
+        [
+          'conv-a',
+          {
+            isThinking: true,
+            streamingMessageId: 'assistant-stream',
+            queuedMessageCount: 0,
+            queuedMessages: [],
+            activeTurnTimeline: activeTimeline,
+          },
+        ],
+      ]),
+      includeQueueSetters: true,
+    });
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-a',
+          title: 'Ordinary chat',
+          messages: [message('persisted-message', 'assistant', 'persisted')],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toBe(
+      activeTimeline,
+    );
   });
 
   it('caches ordinary activeConversation updates without replacing an active role session view', () => {
@@ -286,6 +390,78 @@ describe('character role context isolation', () => {
     });
   });
 
+  it('clears visible streaming and queue state when switching to an uncached ordinary tab', () => {
+    const activeTimeline: ActiveTurnTimelineState = {
+      conversationId: 'conv-a',
+      turnId: 'turn-a',
+      messageId: 'stream-a',
+      items: [],
+      completed: false,
+    };
+    const messageA = message('message-a', 'assistant', 'A 回复');
+    const queuedA = queuedMessageItem('queued-a', 'conv-a');
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      activeTabId: 'tab-a',
+      currentMessages: [messageA],
+      currentStreaming: {
+        isThinking: true,
+        streamingMessageId: 'stream-a',
+        queuedMessageCount: 1,
+        queuedMessages: [queuedA],
+        activeTurnTimeline: activeTimeline,
+      },
+      cachedMessages: new Map([['conv-a', [messageA]]]),
+      cachedStreaming: new Map([
+        [
+          'conv-a',
+          {
+            isThinking: true,
+            streamingMessageId: 'stream-a',
+            queuedMessageCount: 1,
+            queuedMessages: [queuedA],
+            activeTurnTimeline: activeTimeline,
+          },
+        ],
+      ]),
+      openTabs: [
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+      ],
+      includeQueueSetters: true,
+    });
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        tabState: {
+          openTabs: [
+            { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+            { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+          ],
+          activeTabId: 'tab-b',
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.activeConversationId()).toBe('conv-b');
+    expect(harness.messages()).toEqual([]);
+    expect(harness.streaming()).toMatchObject({
+      isThinking: false,
+      streamingMessageId: null,
+      queuedMessageCount: 0,
+      queuedMessages: [],
+    });
+    expect(harness.conversationStreaming().get('conv-b')).toEqual({
+      isThinking: false,
+      streamingMessageId: null,
+      queuedMessageCount: 0,
+      queuedMessages: [],
+    });
+  });
+
   it('restores ordinary tab messages when activeConversation arrives before restored tabState', () => {
     const ordinaryMessage = message('ordinary-message', 'assistant', '普通 Agent 回复');
     const harness = createContextHarness({
@@ -454,6 +630,7 @@ interface ContextHarnessOptions {
   cachedStreaming?: Map<string, StreamingState>;
   pendingForegroundActivation?: PendingForegroundConversationActivation | null;
   isTablessConversationView?: boolean;
+  includeQueueSetters?: boolean;
 }
 
 interface ContextHarness {
@@ -514,6 +691,26 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
       },
     ),
     streamingMessageId: streaming.streamingMessageId,
+    queuedMessageCount: streaming.queuedMessageCount,
+    queuedMessages: streaming.queuedMessages,
+    setQueuedMessageCount: options.includeQueueSetters
+      ? createSetter(
+          () => streaming.queuedMessageCount ?? 0,
+          (next) => {
+            streaming = { ...streaming, queuedMessageCount: next };
+            context.queuedMessageCount = next;
+          },
+        )
+      : undefined,
+    setQueuedMessages: options.includeQueueSetters
+      ? createSetter(
+          () => streaming.queuedMessages ?? [],
+          (next) => {
+            streaming = { ...streaming, queuedMessages: next };
+            context.queuedMessages = next;
+          },
+        )
+      : undefined,
     streamingMessageIdRef,
     activeConversationId,
     activeConversationIdRef,
@@ -622,6 +819,16 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
 
 function message(id: string, role: Message['role'], content: string): Message {
   return { id, role, content, timestamp: 1 };
+}
+
+function queuedMessageItem(id: string, conversationId: string): AgentQueuedMessageItem {
+  return {
+    id,
+    conversationId,
+    content: 'queued',
+    createdAt: 1,
+    source: 'composer',
+  };
 }
 
 function createSetter<T>(read: () => T, write: (next: T) => void): Dispatch<SetStateAction<T>> {

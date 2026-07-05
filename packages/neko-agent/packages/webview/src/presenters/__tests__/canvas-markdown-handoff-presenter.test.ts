@@ -126,12 +126,12 @@ describe('canvas markdown handoff presenter', () => {
     expect(projection?.declaredProfileHint).toBeUndefined();
   });
 
-  it('preserves skill-added columns without importing storyboard field contracts', () => {
+  it('preserves provider extension columns without splitting prompt field contracts', () => {
     const projection = projectCanvasMarkdownHandoffRequest({
       markdown: [
-        '| scene | shot | imagePrompt.generate | imagePrompt.edit | videoPrompt.generate | model |',
-        '| --- | --- | --- | --- | --- | --- |',
-        '| S1 | 1 | neon door | extend shadows | slow push in | seedance-2-5 |',
+        '| scene | shot | imagePrompt | videoPrompt | model |',
+        '| --- | --- | --- | --- | --- |',
+        '| S1 | 1 | generate keyframe; edit shadows if source is provided | generate slow push in | seedance-2-5 |',
       ].join('\n'),
       declaredIntentHint: 'creative-table',
       declaredProfileHint: 'storyboard',
@@ -180,10 +180,10 @@ describe('canvas markdown handoff presenter', () => {
     expect(result?.declaredProfileHint).toBeUndefined();
   });
 
-  it('hands scene-level video prompt fields to Agent without inferring storyboard profile', () => {
+  it('hands video prompt fields to Agent without inferring storyboard profile', () => {
     const result = projectCanvasMarkdownHandoffRequest({
       markdown: [
-        '| scene | shot | visual | sceneVideoPrompt |',
+        '| scene | shot | visual | videoPrompt |',
         '| --- | --- | --- | --- |',
         '| Opening | 1 | Character crosses a huge corridor | 30s continuous lonely exploration |',
       ].join('\n'),

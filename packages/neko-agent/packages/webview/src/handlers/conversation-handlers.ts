@@ -5,10 +5,11 @@
  */
 
 import { defineHandler } from './types';
-import type { MessageHandler, HandlerRegistration } from './types';
+import type { MessageHandler, HandlerRegistration, StreamingState } from './types';
 import type {
   ErrorMessage,
   GlobalErrorMessage,
+  AgentSessionDiagnosticMessage,
   HistoryClearedMessage,
   ConversationListMessage,
   ActiveConversationMessage,
@@ -24,7 +25,6 @@ import { shouldActivateForegroundConversation } from './foreground-activation';
 import { projectQueuedMessagesCleared } from '@/presenters/message-queue-presenter';
 import {
   getActiveTimelineForMessage,
-  rejectActiveTimelineNonTimelineMessage,
 } from './timeline-handlers';
 
 /**
@@ -40,11 +40,7 @@ const handleError: MessageHandler<'error'> = (message: ErrorMessage, context) =>
     if (hasMatchingError) {
       return;
     }
-    rejectActiveTimelineNonTimelineMessage({
-      context,
-      messageType: message.type,
-      reason: 'active timeline errors must arrive as agentTurnTimeline',
-    });
+    context.setGlobalError(message.message || 'An error occurred');
     return;
   }
 
@@ -74,6 +70,13 @@ const handleError: MessageHandler<'error'> = (message: ErrorMessage, context) =>
  */
 const handleGlobalError: MessageHandler<'globalError'> = (message: GlobalErrorMessage, context) => {
   context.setGlobalError(message.message || 'An error occurred');
+};
+
+const handleSessionDiagnostic: MessageHandler<'sessionDiagnostic'> = (
+  message: AgentSessionDiagnosticMessage,
+  context,
+) => {
+  context.setGlobalError(`${message.code}: ${message.message}`);
 };
 
 /**
@@ -186,8 +189,24 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
   context.streamingMessageIdRef.current = projection.streaming.streamingMessageId;
   context.setIsThinking(projection.streaming.isThinking);
   context.setQueuedMessageCount?.(projection.streaming.queuedMessageCount ?? 0);
+  context.setQueuedMessages?.(projection.streaming.queuedMessages ?? []);
   context.setActiveConversationId(projection.activeConversationId);
   context.activeConversationIdRef.current = projection.activeConversationId;
+  if (conversationId) {
+    const activeTurnTimeline = getProjectedActiveTurnTimeline(projection.streaming);
+    const nextStreaming = {
+      streamingMessageId: projection.streaming.streamingMessageId,
+      isThinking: projection.streaming.isThinking,
+      queuedMessageCount: projection.streaming.queuedMessageCount ?? 0,
+      queuedMessages: projection.streaming.queuedMessages ?? [],
+      ...(projection.streaming.messageQueueVersion !== undefined
+        ? { messageQueueVersion: projection.streaming.messageQueueVersion }
+        : {}),
+      ...(activeTurnTimeline !== undefined ? { activeTurnTimeline } : {}),
+    };
+    context.conversationMessagesRef.current.set(conversationId, projection.messages);
+    context.conversationStreamingRef.current.set(conversationId, nextStreaming);
+  }
   context.isTablessConversationViewRef.current = false;
   context.setOpenTabs(projection.openTabs);
   context.setActiveTabId(projection.activeTabId);
@@ -204,12 +223,36 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
   }
 };
 
+function getProjectedActiveTurnTimeline(streaming: object): StreamingState['activeTurnTimeline'] {
+  const value: unknown = Reflect.get(streaming, 'activeTurnTimeline');
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return isActiveTurnTimelineState(value) ? value : undefined;
+}
+
+function isActiveTurnTimelineState(
+  value: unknown,
+): value is NonNullable<StreamingState['activeTurnTimeline']> {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  return (
+    typeof Reflect.get(value, 'conversationId') === 'string' &&
+    typeof Reflect.get(value, 'turnId') === 'string' &&
+    typeof Reflect.get(value, 'messageId') === 'string' &&
+    Array.isArray(Reflect.get(value, 'items')) &&
+    typeof Reflect.get(value, 'completed') === 'boolean'
+  );
+}
+
 /**
  * All conversation handler registrations
  */
 export const conversationHandlers: HandlerRegistration[] = [
   defineHandler('error', handleError),
   defineHandler('globalError', handleGlobalError),
+  defineHandler('sessionDiagnostic', handleSessionDiagnostic),
   defineHandler('historyCleared', handleHistoryCleared),
   defineHandler('conversationList', handleConversationList),
   defineHandler('activeConversation', handleActiveConversation),

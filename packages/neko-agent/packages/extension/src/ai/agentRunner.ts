@@ -142,6 +142,7 @@ export class AgentRunner implements IAgentRunner {
     readonly conversationId: string;
     readonly content: string;
     readonly now?: number;
+    readonly source?: AgentPendingMessageItem['source'];
   }): AgentPendingMessageItem | null {
     return this.port.enqueuePendingMessage(input);
   }
@@ -214,6 +215,12 @@ export class AgentRunner implements IAgentRunner {
     this.port.addMessage(message, sourceEventIds);
   }
 
+  recordTaskResultObservation(
+    input: import('@neko/agent').RecordSessionTaskResultObservationInput,
+  ): Promise<import('@neko/agent').RecordAgentTaskResultObservationResult> {
+    return this.port.recordTaskResultObservation(input);
+  }
+
   loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void {
     this.port.loadHistory(messages, messageEventIds);
   }
@@ -235,6 +242,10 @@ export class AgentRunner implements IAgentRunner {
     skill?: import('@neko/agent').Skill,
   ): void {
     this.port.applySkillInjection(injection, skill);
+  }
+
+  applySkillLifecycleProjection(projection: import('@neko/shared').SkillLifecycleProjection): void {
+    this.port.applySkillLifecycleProjection(projection);
   }
 
   activateToolSetsForTools(toolNames: readonly string[]): readonly string[] {

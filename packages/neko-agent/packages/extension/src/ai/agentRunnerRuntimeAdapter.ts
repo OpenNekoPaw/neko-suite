@@ -18,12 +18,12 @@ import {
 } from '@neko/agent/runtime';
 import type { AgentEvent } from '@neko/agent';
 import {
-  CREATIVE_PRESETS as CREATIVE_SUBAGENT_PRESETS,
   createAutohealChain,
   createDefaultCreativeProcessRecoveryPolicy,
   createDefaultOperationToolAdapterRegistry,
   createValidationCoordinatorFactory,
   createQualityReviewValidationAdapter,
+  getCreativePresets,
 } from '@neko/skills';
 import {
   getCapabilityDiscoveryService,
@@ -149,6 +149,7 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
     readonly conversationId: string;
     readonly content: string;
     readonly now?: number;
+    readonly source?: AgentPendingMessageItem['source'];
   }): AgentPendingMessageItem | null {
     return this.sessionRunner.enqueuePendingMessage(input);
   }
@@ -223,6 +224,12 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
     this.sessionRunner.addMessage(message, sourceEventIds);
   }
 
+  recordTaskResultObservation(
+    input: import('@neko/agent').RecordSessionTaskResultObservationInput,
+  ): Promise<import('@neko/agent').RecordAgentTaskResultObservationResult> {
+    return this.sessionRunner.recordTaskResultObservation(input);
+  }
+
   loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void {
     this.sessionRunner.loadHistory(messages, messageEventIds);
     this.runnerEvents.fire({ type: 'historyLoaded', messageCount: messages.length });
@@ -250,6 +257,10 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
     skill?: import('@neko/agent').Skill,
   ): void {
     this.sessionRunner.applySkillInjection(injection, skill);
+  }
+
+  applySkillLifecycleProjection(projection: import('@neko/shared').SkillLifecycleProjection): void {
+    this.sessionRunner.applySkillLifecycleProjection(projection);
   }
 
   activateToolSetsForTools(toolNames: readonly string[]): readonly string[] {
@@ -329,7 +340,7 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
       getPerceptionClients: () =>
         this.deps.engineClientProvider.createPerceptionClients(config.engineClient),
       subAgentRuntime: this.deps.subAgentRuntime,
-      specializedSubAgentPresets: CREATIVE_SUBAGENT_PRESETS,
+      specializedSubAgentPresets: getCreativePresets({ locale: config.locale }),
       syncToolCategories: (registry) => {
         getCapabilityDiscoveryService().syncToolCategories(registry);
       },

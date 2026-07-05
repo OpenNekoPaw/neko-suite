@@ -1,4 +1,5 @@
 import type { DashboardTask } from '@neko/shared/types/dashboard-task';
+import { buildTaskDeliveryReplayMessage } from '@neko-agent/types';
 
 export interface TaskDeliveryCursor {
   readonly updatedAt: number;
@@ -38,11 +39,7 @@ export class TaskDeliveryBridge {
       .sort(compareByCursor);
 
     for (const task of pending) {
-      await target.postMessage({
-        type: 'taskDeliveryReplay',
-        conversationId,
-        task,
-      });
+      await target.postMessage(buildTaskDeliveryReplayMessage({ conversationId, task }));
       await this.options.cursorStorage.save(conversationId, toCursor(task));
     }
 

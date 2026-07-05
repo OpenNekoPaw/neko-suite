@@ -12,6 +12,9 @@ import {
 
 // Mock vscode
 vi.mock('vscode', () => ({
+  env: {
+    language: 'zh-CN',
+  },
   Uri: {
     file: (path: string) => ({ fsPath: path, scheme: 'file' }),
   },
@@ -216,6 +219,26 @@ describe('QualityCheck Tool', () => {
           modelId: 'deepseek-chat',
         }),
       );
+    });
+
+    it('passes the VSCode locale into the final QualityCheck model prompt', async () => {
+      const mockService = createMockService(createPassingEvaluation());
+      const tools = createQualityCheckTools({
+        createService: () => mockService,
+        mediaGenerator: createMockGenerator(),
+      });
+
+      const tool = tools.find((t) => t.name === 'QualityCheck')!;
+      await tool.execute({
+        scenes: [{ index: 0, mediaPath: '/tmp/scene.png', prompt: 'Scene' }],
+      });
+
+      const messages = mockService.chat.mock.calls[0]![0] as Array<{
+        role: string;
+        content: string | Array<{ type: string; text?: string }>;
+      }>;
+      expect(messages[0]!.content).toContain('视觉质量评估器');
+      expect(messages[0]!.content).not.toContain('You are a visual quality evaluator');
     });
 
     it('fails visibly when executed without an explicit chat model', async () => {
@@ -601,8 +624,8 @@ describe('QualityCheck Tool', () => {
       // Content should be an array with text part containing style/dialogue
       const content = userMsg!.content as Array<{ type: string; text?: string }>;
       const textPart = content.find((p) => p.type === 'text');
-      expect(textPart?.text).toContain('Global style: "anime"');
-      expect(textPart?.text).toContain('Dialogue:');
+      expect(textPart?.text).toContain('全局风格：“anime”');
+      expect(textPart?.text).toContain('对白：');
       expect(textPart?.text).toContain('Hello world');
     });
   });

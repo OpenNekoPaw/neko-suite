@@ -28,6 +28,7 @@ export function createQualityCheckTools(deps: QualityCheckToolsDeps): Tool[] {
     createService: deps.createService,
     mediaGenerator: deps.mediaGenerator,
     readFileAsBase64,
+    locale: vscode.env.language,
     logger,
     ...(deps.chatModel ? { chatModel: deps.chatModel } : {}),
     ...(deps.audioAnalyzer ? { audioAnalyzer: deps.audioAnalyzer } : {}),

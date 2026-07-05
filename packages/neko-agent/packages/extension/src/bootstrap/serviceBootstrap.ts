@@ -6,6 +6,8 @@
  */
 
 import * as vscode from 'vscode';
+import * as nodeFs from 'node:fs/promises';
+import * as nodeOs from 'node:os';
 import * as nodePath from 'node:path';
 import { Platform, createPlatform, FileUserConfigManager } from '@neko/platform';
 import {
@@ -18,8 +20,12 @@ import {
   connectMCPServersRuntime,
   createStateTaskRecoveryStorage,
   createStateTaskStorage,
+  JournalProjection,
   type IRuntimeTaskManager,
+  type AgentEventType,
+  type TaskResultObservationJournalEntry,
 } from '@neko/agent';
+import { createNekoPaths } from '@neko/agent/workspace';
 import type { SerializableTask, TaskRecoveryInfo } from '@neko/shared';
 import { ServiceCollection, createServiceId, getLogger } from '../base';
 
@@ -27,6 +33,7 @@ const logger = getLogger('ServiceBootstrap');
 import { IEditorRegistry, EditorRegistry } from '../editor/common/editorRegistry';
 import { AgentManager, IAgentManager as IAgentManagerInterface } from '../ai/agentManager';
 import { TaskLifecycleCoordinator } from '../services/taskLifecycleCoordinator';
+import { TaskResultObservationCoordinator } from '../services/taskResultObservationCoordinator';
 import { createModelCallJsonlRecorder } from '../services/modelCallJsonlRecorder';
 import { resolveAgentRealApiUserConfigManagerOptions } from './realApiConfigInjection';
 
@@ -42,9 +49,22 @@ export const IAgentManager = createServiceId<IAgentManagerInterface>('agentManag
 export const ITaskLifecycleCoordinator = createServiceId<TaskLifecycleCoordinator>(
   'taskLifecycleCoordinator',
 );
+export const ITaskResultObservationCoordinator =
+  createServiceId<TaskResultObservationCoordinator>('taskResultObservationCoordinator');
 
 const DEFAULT_TASK_RECOVERY_STORAGE_KEY = 'neko.agent.taskRecovery';
-const MODEL_CALL_LOG_FILE = 'model-calls.jsonl';
+const TASK_RESULT_OBSERVATION_JOURNAL_EVENT_TYPES = [
+  'agent.observation.created',
+  'agent.evidence.attached',
+  'agent.task_result.followup_requested',
+] as const satisfies readonly AgentEventType[];
+let mementoArrayWriterOrdinal = 0;
+
+interface MementoArrayWriteMetadata {
+  readonly ownerId: string;
+  readonly revision: number;
+  readonly updatedAt: number;
+}
 
 // Re-export IEditorRegistry
 export { IEditorRegistry };
@@ -60,6 +80,7 @@ export interface IServiceBootstrapResult {
   taskManager: IRuntimeTaskManager;
   agentManager: AgentManager;
   taskLifecycleCoordinator: TaskLifecycleCoordinator;
+  taskResultObservationCoordinator: TaskResultObservationCoordinator;
   editorRegistry: EditorRegistry;
 }
 
@@ -79,17 +100,11 @@ export async function bootstrapCoreServices(
   // ==========================================================================
   const taskStorage = createStateTaskStorage({
     storageKey: DEFAULT_TASK_STORAGE_KEY,
-    adapter: {
-      load: (key) => context.globalState.get<SerializableTask[]>(key, []),
-      save: (key, tasks) => context.globalState.update(key, [...tasks]),
-    },
+    adapter: createMementoArrayAdapter<SerializableTask>(context, 'task-storage'),
   });
   const recoveryStorage = createStateTaskRecoveryStorage({
     storageKey: DEFAULT_TASK_RECOVERY_STORAGE_KEY,
-    adapter: {
-      load: (key) => context.globalState.get<TaskRecoveryInfo[]>(key, []),
-      save: (key, infos) => context.globalState.update(key, [...infos]),
-    },
+    adapter: createMementoArrayAdapter<TaskRecoveryInfo>(context, 'task-recovery'),
   });
   const taskManager = new TaskManager({
     storage: taskStorage,
@@ -118,9 +133,10 @@ export async function bootstrapCoreServices(
   context.subscriptions.push({ dispose: () => userConfigManager.dispose() });
 
   const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-  const modelCallRecorder = workspacePath
+  const nekoPaths = workspacePath ? createNekoPaths(workspacePath) : undefined;
+  const modelCallRecorder = nekoPaths
     ? createModelCallJsonlRecorder({
-        filePath: nodePath.join(workspacePath, '.neko', 'logs', MODEL_CALL_LOG_FILE),
+        resolveFilePath: ({ trace }) => nekoPaths.conversationLog('modelCalls', trace.conversationId),
       })
     : undefined;
   if (modelCallRecorder?.dispose) {
@@ -175,6 +191,16 @@ export async function bootstrapCoreServices(
   });
   services.set(ITaskLifecycleCoordinator, taskLifecycleCoordinator);
 
+  const taskResultObservationCoordinator = new TaskResultObservationCoordinator({
+    tasks: taskManager,
+    agents: agentManager,
+    journal: createTaskResultObservationJournalPort(),
+  });
+  services.set(ITaskResultObservationCoordinator, taskResultObservationCoordinator);
+  void taskResultObservationCoordinator.reconcileTerminalTasks().catch((error) => {
+    logger.warn('Failed to reconcile Agent task-result observations:', error);
+  });
+
   // ==========================================================================
   // 6. Editor Registry
   // ==========================================================================
@@ -188,7 +214,106 @@ export async function bootstrapCoreServices(
     taskManager,
     agentManager,
     taskLifecycleCoordinator,
+    taskResultObservationCoordinator,
     editorRegistry,
+  };
+}
+
+function createMementoArrayAdapter<T>(
+  context: vscode.ExtensionContext,
+  ownerPrefix: string,
+): {
+  load(key: string): readonly T[];
+  save(key: string, values: readonly T[]): Thenable<void>;
+} {
+  mementoArrayWriterOrdinal += 1;
+  const ownerId = `${ownerPrefix}-${Date.now().toString(36)}-${mementoArrayWriterOrdinal}`;
+  let loadedRevision = 0;
+
+  return {
+    load: (key) => {
+      loadedRevision = readMementoArrayWriteMetadata(context, key)?.revision ?? 0;
+      return context.globalState.get<T[]>(key, []);
+    },
+    save: async (key, values) => {
+      const currentMetadata = readMementoArrayWriteMetadata(context, key);
+      if (
+        currentMetadata &&
+        currentMetadata.revision !== loadedRevision &&
+        currentMetadata.ownerId !== ownerId
+      ) {
+        logger.warn('neko.agent.state_storage.stale_write_possible', {
+          storageKey: key,
+          ownerId,
+          loadedRevision,
+          currentOwnerId: currentMetadata.ownerId,
+          currentRevision: currentMetadata.revision,
+        });
+        loadedRevision = currentMetadata.revision;
+      }
+      const nextMetadata: MementoArrayWriteMetadata = {
+        ownerId,
+        revision: loadedRevision + 1,
+        updatedAt: Date.now(),
+      };
+      await context.globalState.update(key, [...values]);
+      await context.globalState.update(mementoArrayWriteMetadataKey(key), nextMetadata);
+      loadedRevision = nextMetadata.revision;
+    },
+  };
+}
+
+function readMementoArrayWriteMetadata(
+  context: vscode.ExtensionContext,
+  key: string,
+): MementoArrayWriteMetadata | null {
+  const value = context.globalState.get<unknown>(mementoArrayWriteMetadataKey(key));
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    typeof (value as { ownerId?: unknown }).ownerId !== 'string' ||
+    (value as { ownerId: string }).ownerId.trim().length === 0 ||
+    typeof (value as { revision?: unknown }).revision !== 'number' ||
+    !Number.isInteger((value as { revision: number }).revision) ||
+    (value as { revision: number }).revision < 0 ||
+    typeof (value as { updatedAt?: unknown }).updatedAt !== 'number' ||
+    !Number.isFinite((value as { updatedAt: number }).updatedAt)
+  ) {
+    return null;
+  }
+  return value as MementoArrayWriteMetadata;
+}
+
+function mementoArrayWriteMetadataKey(key: string): string {
+  return `${key}.writeMetadata`;
+}
+
+function createTaskResultObservationJournalPort(): {
+  readExistingEntries(conversationId: string): Promise<readonly TaskResultObservationJournalEntry[]>;
+} {
+  const projection = new JournalProjection(nodePath.join(nodeOs.homedir(), '.neko', 'journals'), {
+    readFile: (filePath) => nodeFs.readFile(filePath, 'utf-8'),
+    exists: async (filePath) => {
+      try {
+        await nodeFs.access(filePath);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  });
+
+  return {
+    async readExistingEntries(conversationId) {
+      const entries: TaskResultObservationJournalEntry[] = [];
+      for (const type of TASK_RESULT_OBSERVATION_JOURNAL_EVENT_TYPES) {
+        for await (const entry of projection.filterEvents(conversationId, type)) {
+          entries.push({ event: entry.event });
+        }
+      }
+      return entries;
+    },
   };
 }
 

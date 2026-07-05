@@ -53,6 +53,51 @@ describe('MediaTurnBridge', () => {
       ]),
     );
   });
+
+  it('projects direct terminal media tasks to task-result observation coordinator', async () => {
+    const created = createMediaTask({ status: 'pending', progress: 0 });
+    const completed = createMediaTask({ status: 'completed', progress: 100 });
+    const handleTerminalTask = vi.fn(async () => undefined);
+    const media = {
+      generateImage: vi.fn().mockResolvedValue(created),
+      getTask: vi.fn().mockResolvedValue(completed),
+      onProgress: vi.fn().mockReturnValue(vi.fn()),
+    };
+    const webview = createWebview();
+    const bridge = new MediaTurnBridge({
+      platform: { media } as never,
+      mediaDeliveryHost: {
+        createTaskView: vi.fn(async (_webview: vscode.Webview, task: MediaTask) => ({
+          id: task.id,
+          type: 'image',
+          status: task.status,
+          progress: task.progress,
+          providerId: task.providerId,
+          modelId: task.modelId,
+          createdAt: task.createdAt.toISOString(),
+          updatedAt: task.updatedAt.toISOString(),
+          request: { prompt: task.request.prompt },
+        })),
+      } as never,
+      taskResultObservations: { handleTerminalTask },
+    });
+
+    await bridge.execute({
+      webview,
+      conversationId: 'conv-1',
+      prompt: 'cat',
+      mediaModel: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
+    });
+
+    expect(handleTerminalTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'task-1',
+        status: 'completed',
+        lifecycle: expect.objectContaining({ ownerConversationId: 'conv-1' }),
+      }),
+      { source: 'media-task' },
+    );
+  });
 });
 
 function createWebview(): vscode.Webview & {
@@ -80,7 +125,7 @@ function createMediaTask(input: {
     updatedAt: now,
     request: {
       prompt: 'cat',
-      metadata: { conversationId: 'conv-1' },
+      metadata: { conversationId: 'conv-1', runId: 'run-1', runStartedAt: 101 },
     },
     outputs:
       input.status === 'completed'

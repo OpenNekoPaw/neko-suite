@@ -12,6 +12,7 @@ export {
   ITaskManager,
   IAgentManager,
   ITaskLifecycleCoordinator,
+  ITaskResultObservationCoordinator,
   IEditorRegistry,
   type IServiceBootstrapResult,
 } from './serviceBootstrap';

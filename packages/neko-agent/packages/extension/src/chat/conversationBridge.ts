@@ -15,7 +15,7 @@ import {
   type ConversationStorage,
   type DeleteConversationOptions,
 } from '@neko/agent';
-import type { Message } from '@neko-agent/types';
+import { buildAgentSessionDiagnosticMessage, type Message } from '@neko-agent/types';
 import type { AgentLocalResourceAccess } from '../services/localResourceAccess';
 
 const logger = getLogger('ConversationBridge');
@@ -61,6 +61,7 @@ export class ConversationBridge {
   private _conversationManager: ConversationManager;
   private _persistenceRuntime: ConversationPersistenceRuntime | null = null;
   private readonly getWorkspaceRoot: (() => string | undefined) | undefined;
+  private readonly deletedConversationIds = new Set<string>();
 
   constructor(
     context: vscode.ExtensionContext,
@@ -168,6 +169,7 @@ export class ConversationBridge {
    */
   delete(conversationId: string, options?: DeleteConversationOptions): void {
     this._conversationManager.delete(conversationId, options);
+    this.deletedConversationIds.add(conversationId);
     this._queueConversationDelete(conversationId);
   }
 
@@ -178,6 +180,7 @@ export class ConversationBridge {
     const conversationIds = this._conversationManager.list().map((conversation) => conversation.id);
     this._conversationManager.clear();
     for (const conversationId of conversationIds) {
+      this.deletedConversationIds.add(conversationId);
       this._queueConversationDelete(conversationId);
     }
   }
@@ -299,6 +302,35 @@ export class ConversationBridge {
           toWebviewUri(webview, filePath, this.localResourceAccess),
       }),
     );
+  }
+
+  /**
+   * Send a specific conversation snapshot to webview without changing host active state.
+   */
+  sendConversationSnapshot(webview: vscode.Webview, conversationId: string): boolean {
+    const conversation = this._conversationManager.get(conversationId);
+    if (!conversation) {
+      const deleted = this.deletedConversationIds.has(conversationId);
+      webview.postMessage(
+        buildAgentSessionDiagnosticMessage({
+          code: deleted ? 'deleted-conversation' : 'unknown-conversation',
+          action: 'sendConversationSnapshot',
+          conversationId,
+          message: deleted
+            ? `Conversation "${conversationId}" has already been deleted.`
+            : `Conversation "${conversationId}" does not exist.`,
+        }),
+      );
+      return false;
+    }
+
+    webview.postMessage(
+      buildActiveConversationMessage(conversation, {
+        resolveLocalMediaPath: (filePath) =>
+          toWebviewUri(webview, filePath, this.localResourceAccess),
+      }),
+    );
+    return true;
   }
 
   dispose(): void {

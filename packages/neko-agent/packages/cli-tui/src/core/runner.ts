@@ -187,6 +187,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       ...(skillService ? { skillRegistry: skillService.registry } : {}),
       toolGroupRegistry,
       providerCardRegistry,
+      locale: 'en',
     });
     const capabilityLoadResult = capabilityLoader.registerProviders(capabilityProviders);
 
@@ -1211,6 +1212,7 @@ async function initializeInteractiveSession(
     ...(skillService ? { skillRegistry: skillService.registry } : {}),
     toolGroupRegistry,
     providerCardRegistry,
+    locale: 'en',
   });
   const capabilityLoadResult = capabilityLoader.registerProviders(capabilityProviders);
 

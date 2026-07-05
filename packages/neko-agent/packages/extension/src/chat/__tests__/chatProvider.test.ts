@@ -7,11 +7,14 @@ import {
   NEKO_WEBVIEW_KEYBOARD_EDITABLE_UPDATE_COMMAND,
   type WebviewKeyboardEditableOwnerUpdate,
 } from '@neko/shared/vscode/extension';
+import type { ILogger } from '@neko/shared';
 import { ChatViewProvider, createChatLocalResourceAccess } from '../chatProvider';
+import { setRootLogger } from '../../base';
 
 describe('chatProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setRootLogger(createNoopLogger());
   });
 
   it('restores persisted character role tabs only after role controllers are initialized', () => {
@@ -411,6 +414,194 @@ describe('chatProvider', () => {
     provider.dispose();
   });
 
+  it('logs tab state updates with tab and conversation identity', async () => {
+    const logger = createSpyLogger();
+    setRootLogger(logger);
+    const now = Date.now();
+    const historicalConversation = {
+      id: 'conv-history',
+      title: 'History',
+      messages: [{ id: 'msg-1', role: 'user', content: 'persisted transcript', timestamp: now }],
+      createdAt: now,
+      updatedAt: now,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [['conv-history', historicalConversation]],
+        activeId: null,
+      },
+    });
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    await receiveMessage?.({
+      type: 'updateTabState',
+      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+      activeTabId: 'tab-history',
+    });
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      'neko.agent.tab_state.update',
+      expect.objectContaining({
+        tabId: 'tab-history',
+        conversationId: 'conv-history',
+        sync: expect.objectContaining({
+          kind: 'switched',
+          conversationId: 'conv-history',
+        }),
+      }),
+    );
+
+    provider.dispose();
+    setRootLogger(createNoopLogger());
+  });
+
+  it('records tab state write metadata and warns when another local writer advanced it', async () => {
+    const logger = createSpyLogger();
+    setRootLogger(logger);
+    const now = Date.now();
+    const historicalConversation = {
+      id: 'conv-history',
+      title: 'History',
+      messages: [{ id: 'msg-1', role: 'user', content: 'persisted transcript', timestamp: now }],
+      createdAt: now,
+      updatedAt: now,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [['conv-history', historicalConversation]],
+        activeId: null,
+      },
+      'neko.tabState.writeMetadata': {
+        ownerId: 'other-window',
+        revision: 5,
+        updatedAt: 1000,
+      },
+    });
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    await context.workspaceState.update('neko.tabState.writeMetadata', {
+      ownerId: 'other-window',
+      revision: 6,
+      updatedAt: 2000,
+    });
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    await receiveMessage?.({
+      type: 'updateTabState',
+      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+      activeTabId: 'tab-history',
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'neko.agent.tab_state.stale_write_possible',
+      expect.objectContaining({
+        tabId: 'tab-history',
+        conversationId: 'conv-history',
+        loadedRevision: 5,
+        currentOwnerId: 'other-window',
+        currentRevision: 6,
+      }),
+    );
+    expect(context.workspaceState.update).toHaveBeenCalledWith(
+      'neko.tabState.writeMetadata',
+      expect.objectContaining({
+        ownerId: expect.stringMatching(/^chat-tab-state-/),
+        revision: 7,
+      }),
+    );
+
+    provider.dispose();
+  });
+
+  it('does not replay active conversation snapshots during webview visibility restore', async () => {
+    const now = Date.now();
+    const historicalConversation = {
+      id: 'conv-history',
+      title: 'History',
+      messages: [{ id: 'msg-1', role: 'user', content: 'persisted transcript', timestamp: now }],
+      createdAt: now,
+      updatedAt: now,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [['conv-history', historicalConversation]],
+        activeId: null,
+      },
+    });
+    const webview = vscode.createMockWebview();
+    let visibilityListener: (() => void) | undefined;
+    const view = {
+      webview,
+      visible: true,
+      onDidChangeVisibility: vi.fn((listener: () => void) => {
+        visibilityListener = listener;
+        return { dispose: vi.fn() };
+      }),
+    };
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(view as never, {} as never, {} as never);
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    await receiveMessage?.({
+      type: 'updateTabState',
+      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+      activeTabId: 'tab-history',
+    });
+
+    vi.mocked(webview.postMessage).mockClear();
+    visibilityListener?.();
+    await Promise.resolve();
+
+    const postedTypes = vi
+      .mocked(webview.postMessage)
+      .mock.calls.map(([message]) => (message as { type?: string }).type);
+    expect(postedTypes).not.toContain('activeConversation');
+    expect(postedTypes).toContain('tabState');
+
+    provider.dispose();
+  });
+
   it('configures chat roots for extension assets, workspace, workspace cache, and media libraries', async () => {
     vi.mocked(vscode.extensions.getExtension).mockReturnValue({
       id: 'neko.neko-assets',
@@ -645,6 +836,40 @@ describe('chatProvider', () => {
     provider.dispose();
   });
 
+  it('reports missing session identity for invalid session-scoped webview messages', async () => {
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), createMockContext(), {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    vi.mocked(webview.postMessage).mockClear();
+
+    await receiveMessage?.({ type: 'clearHistory' });
+
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'sessionDiagnostic',
+      code: 'missing-session-identity',
+      severity: 'error',
+      action: 'clearHistory',
+      message: 'Session-scoped webview message "clearHistory" requires conversationId.',
+    });
+
+    provider.dispose();
+  });
+
   it('sets the agent editable keyboard context while the assistant input owns focus', async () => {
     const webview = vscode.createMockWebview();
     const view = {
@@ -813,5 +1038,37 @@ function createImmediateLocalResourceAccess() {
     toWebviewUri: vi.fn(),
     toWebviewAsset: vi.fn(),
     dispose: vi.fn(),
+  };
+}
+
+function createSpyLogger(): ILogger & {
+  readonly debug: ReturnType<typeof vi.fn>;
+  readonly info: ReturnType<typeof vi.fn>;
+  readonly warn: ReturnType<typeof vi.fn>;
+  readonly error: ReturnType<typeof vi.fn>;
+} {
+  const logger = createNoopLogger() as ILogger & {
+    debug: ReturnType<typeof vi.fn>;
+    info: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+    child: ReturnType<typeof vi.fn>;
+  };
+  logger.debug = vi.fn();
+  logger.info = vi.fn();
+  logger.warn = vi.fn();
+  logger.error = vi.fn();
+  logger.child = vi.fn(() => logger);
+  return logger;
+}
+
+function createNoopLogger(): ILogger {
+  return {
+    source: 'noop',
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    child: () => createNoopLogger(),
   };
 }

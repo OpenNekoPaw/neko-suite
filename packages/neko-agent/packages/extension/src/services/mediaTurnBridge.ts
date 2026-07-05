@@ -7,11 +7,16 @@
 
 import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
-import { createMediaTaskView, runMediaTurn } from '@neko/platform';
+import { createMediaTaskView, isTerminalMediaTaskStatus, runMediaTurn } from '@neko/platform';
 import type { MediaModelCategory, ModelRef } from '@neko-agent/types';
 import { runAgentMediaTurn } from '@neko/agent/runtime';
+import type { AgentTaskResultDeliveryPolicy, Task } from '@neko/shared';
 import { getLogger } from '../base';
 import { MediaTaskDeliveryHost } from './mediaTaskDeliveryHost';
+import {
+  readMediaTaskResultDeliveryPolicy,
+  toMediaTaskResultObservationTask,
+} from './mediaTaskResultObservation';
 import type { AgentDashboardWorkItemSource } from './dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from './localResourceAccess';
 import type { ConversationBridge } from '../chat/conversationBridge';
@@ -24,6 +29,15 @@ export interface MediaTurnBridgeDeps {
   dashboardWorkItems?: AgentDashboardWorkItemSource;
   localResourceAccess?: AgentLocalResourceAccess;
   conversations?: ConversationBridge;
+  taskResultObservations?: {
+    handleTerminalTask(
+      task: Task,
+      options: {
+        readonly source: 'media-task';
+        readonly deliveryPolicy?: AgentTaskResultDeliveryPolicy;
+      },
+    ): Promise<void>;
+  };
   generateMessageId?: () => string;
   now?: () => number;
 }
@@ -75,12 +89,20 @@ export class MediaTurnBridge {
                     task,
                     sourceTask: mediaTask,
                   }),
-                onTaskProgress: ({ conversationId, task, mediaTask }) =>
+                onTaskProgress: async ({ conversationId, task, mediaTask }) => {
                   runtimeInput.onTaskProgress({
                     conversationId,
                     task,
                     sourceTask: mediaTask,
-                  }),
+                  });
+                  if (isTerminalMediaTaskStatus(mediaTask.status)) {
+                    await this.recordTerminalMediaTaskObservation({
+                      conversationId,
+                      task,
+                      mediaTask,
+                    });
+                  }
+                },
                 onIgnoredConversationTask: ({ taskId, conversationId, mediaTask }) => {
                   runtimeInput.onIgnoredConversationTask?.({
                     taskId,
@@ -131,5 +153,31 @@ export class MediaTurnBridge {
         logger.error('Media generation error:', error);
       },
     });
+  }
+
+  private async recordTerminalMediaTaskObservation(input: {
+    readonly conversationId: string;
+    readonly task: Awaited<ReturnType<MediaTaskDeliveryHost['createTaskView']>>;
+    readonly mediaTask: Parameters<MediaTaskDeliveryHost['createTaskView']>[1];
+  }): Promise<void> {
+    if (!this.deps.taskResultObservations) {
+      return;
+    }
+    const deliveryPolicy = readMediaTaskResultDeliveryPolicy(input.mediaTask.request.metadata);
+    await this.deps.taskResultObservations.handleTerminalTask(
+      toMediaTaskResultObservationTask({
+        conversationId: input.conversationId,
+        taskId: input.task.id,
+        progress: input.task.progress,
+        mediaTask: input.mediaTask,
+        ...(input.task.result?.assets ? { assets: input.task.result.assets } : {}),
+        ...(input.task.result?.urls ? { resultUrls: input.task.result.urls } : {}),
+        ...(input.task.error?.message ? { error: input.task.error.message } : {}),
+      }),
+      {
+        source: 'media-task',
+        ...(deliveryPolicy ? { deliveryPolicy } : {}),
+      },
+    );
   }
 }

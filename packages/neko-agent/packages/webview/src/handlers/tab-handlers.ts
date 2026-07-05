@@ -76,17 +76,18 @@ export const tabHandlers: HandlerRegistration[] = [defineHandler('tabState', han
 function activateOrdinaryTabView(context: MessageHandlerContext, conversationId: string): void {
   const cachedMessages = context.conversationMessagesRef.current.get(conversationId);
   const cachedStreaming = context.conversationStreamingRef.current.get(conversationId);
+  const messages = cachedMessages ?? [];
+  const streaming = normalizeStreamingState(cachedStreaming);
 
   context.isTablessConversationViewRef.current = false;
-  if (cachedMessages) {
-    const streaming = cachedStreaming ?? idleStreamingState();
-    context.setMessages(cachedMessages);
-    context.setStreamingMessageId(streaming.streamingMessageId);
-    context.streamingMessageIdRef.current = streaming.streamingMessageId;
-    context.setIsThinking(streaming.isThinking);
-    context.setQueuedMessageCount?.(streaming.queuedMessageCount ?? 0);
-    context.setQueuedMessages?.(streaming.queuedMessages ?? []);
-  }
+  context.setMessages(messages);
+  context.setStreamingMessageId(streaming.streamingMessageId);
+  context.streamingMessageIdRef.current = streaming.streamingMessageId;
+  context.setIsThinking(streaming.isThinking);
+  context.setQueuedMessageCount?.(streaming.queuedMessageCount ?? 0);
+  context.setQueuedMessages?.(streaming.queuedMessages ?? []);
+  context.conversationMessagesRef.current.set(conversationId, messages);
+  context.conversationStreamingRef.current.set(conversationId, streaming);
   context.setActiveConversationId(conversationId);
   context.activeConversationIdRef.current = conversationId;
   context.setActiveTab('chat');
@@ -98,5 +99,21 @@ function idleStreamingState(): StreamingState {
     isThinking: false,
     queuedMessageCount: 0,
     queuedMessages: [],
+  };
+}
+
+function normalizeStreamingState(streaming: StreamingState | undefined): StreamingState {
+  if (!streaming) return idleStreamingState();
+  return {
+    streamingMessageId: streaming.streamingMessageId,
+    isThinking: streaming.isThinking,
+    queuedMessageCount: streaming.queuedMessageCount ?? 0,
+    queuedMessages: streaming.queuedMessages ?? [],
+    ...(streaming.messageQueueVersion !== undefined
+      ? { messageQueueVersion: streaming.messageQueueVersion }
+      : {}),
+    ...(streaming.activeTurnTimeline !== undefined
+      ? { activeTurnTimeline: streaming.activeTurnTimeline }
+      : {}),
   };
 }

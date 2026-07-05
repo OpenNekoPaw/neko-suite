@@ -18,6 +18,7 @@ import {
   ITaskManager,
   IToolRegistry,
   IAgentManager as IAgentManagerId,
+  ITaskResultObservationCoordinator,
 } from '../bootstrap';
 import { SettingsManager } from './settingsManager';
 import { ProviderManager } from './providerManager';
@@ -70,6 +71,7 @@ import {
 import { createWorkspaceGeneratedAssetIndex } from '../services/generatedAssetOpenResolver';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
 import { StateTaskDeliveryCursorStorage, TaskDeliveryBridge } from '../services/taskDeliveryBridge';
+import type { TaskResultObservationCoordinator } from '../services/taskResultObservationCoordinator';
 import { handleChatWebviewMessage } from './chatWebviewMessageRouter';
 import {
   getCapabilityDiscoveryService,
@@ -79,18 +81,104 @@ import {
 } from '../bootstrap/capabilityBootstrap';
 import {
   NEKO_AI_ASSISTANT_FOCUS_COMMAND,
+  buildAgentSessionDiagnosticMessage,
   normalizeTabState,
   parseWebviewToExtensionMessage,
   type OpenTab,
   type TabState,
 } from '@neko-agent/types';
-import type { NpcAgentWorkflowRequest, Skill } from '@neko/shared';
+import type { AgentTaskResultFollowUpRequest, NpcAgentWorkflowRequest, Skill } from '@neko/shared';
 import { updateWebviewKeyboardEditableOwner } from '@neko/shared/vscode/extension';
 import { AccountAiCatalogCache } from '../services/accountAiCatalogCache';
 
 const logger = getLogger('ChatProvider');
 const AGENT_KEYBOARD_EDITABLE_CONTEXT = 'neko.agent.keyboardEditable';
 const AGENT_KEYBOARD_EDITABLE_OWNER_ID = 'neko.agent:assistant';
+let tabStateWriterOrdinal = 0;
+const SESSION_SCOPED_WEBVIEW_MESSAGE_TYPES = new Set([
+  'sendMessage',
+  'switchConversation',
+  'deleteConversation',
+  'clearHistory',
+  'confirmTool',
+  'cancelMessage',
+  'getMessageQueue',
+  'promoteQueuedMessage',
+  'cancelQueuedMessage',
+  'editQueuedMessage',
+  'getTasks',
+  'cancelTask',
+  'retryTask',
+  'viewTaskResult',
+  'getContextTokenCount',
+  'compressContext',
+  'planApprove',
+  'planReject',
+  'planStepApprove',
+  'planStepReject',
+  'planStepModify',
+  'setPromptMode',
+  'getPromptMode',
+  'invokeSlashCommand',
+  'invokeSkill',
+  'invokePluginSlashCommand',
+  'invokeAgentCapabilityLifecycle',
+  'requestCanvasMarkdownHandoff',
+  'mermaidError',
+  'clearActiveSkill',
+]);
+
+function buildMissingSessionIdentityDiagnostic(raw: unknown) {
+  if (!isRecord(raw) || typeof raw.type !== 'string') {
+    return null;
+  }
+  if (!SESSION_SCOPED_WEBVIEW_MESSAGE_TYPES.has(raw.type)) {
+    return null;
+  }
+  if (typeof raw.conversationId === 'string' && raw.conversationId.trim().length > 0) {
+    return null;
+  }
+  return buildAgentSessionDiagnosticMessage({
+    code: 'missing-session-identity',
+    action: raw.type,
+    message: `Session-scoped webview message "${raw.type}" requires conversationId.`,
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+interface TabStateWriteMetadata {
+  readonly ownerId: string;
+  readonly revision: number;
+  readonly updatedAt: number;
+}
+
+function createTabStateWriterId(): string {
+  tabStateWriterOrdinal += 1;
+  return `chat-tab-state-${Date.now().toString(36)}-${tabStateWriterOrdinal}`;
+}
+
+function parseTabStateWriteMetadata(value: unknown): TabStateWriteMetadata | null {
+  if (!isRecord(value)) return null;
+  if (
+    typeof value.ownerId !== 'string' ||
+    value.ownerId.trim().length === 0 ||
+    typeof value.revision !== 'number' ||
+    !Number.isInteger(value.revision) ||
+    value.revision < 0 ||
+    typeof value.updatedAt !== 'number' ||
+    !Number.isFinite(value.updatedAt)
+  ) {
+    return null;
+  }
+  return {
+    ownerId: value.ownerId,
+    revision: value.revision,
+    updatedAt: value.updatedAt,
+  };
+}
 
 function getCurrentWorkspaceRoot(): string | undefined {
   const activeEditorPath = vscode.window.activeTextEditor?.document.uri.fsPath;
@@ -123,6 +211,7 @@ export interface ChatViewProviderOptions {
 export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
   public static readonly viewType = 'neko.aiAssistant';
   private static readonly TAB_STATE_KEY = 'neko.tabState';
+  private static readonly TAB_STATE_WRITE_METADATA_KEY = 'neko.tabState.writeMetadata';
 
   private _view?: vscode.WebviewView;
 
@@ -135,6 +224,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   // Tab state for persistence
   private _tabState: TabState = { openTabs: [], activeTabId: null };
+  private readonly _tabStateWriterId = createTabStateWriterId();
+  private _tabStateRevision = 0;
 
   // Handlers
   private readonly _taskHandler: TaskHandler;
@@ -166,6 +257,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _editorRegistry?: IEditorRegistry;
   private _platform?: Platform;
   private _taskManager?: IRuntimeTaskManager;
+  private _taskResultObservationCoordinator?: TaskResultObservationCoordinator;
   private _configBridge?: ConfigBridge;
   private readonly _accountAiCatalog: AccountAiCatalogCache;
   private readonly _localResourceAccess: AgentLocalResourceAccess;
@@ -285,6 +377,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       this._editorRegistry = getService(IEditorRegistry);
       this._platform = getService(IPlatform);
       this._taskManager = getService(ITaskManager);
+      this._taskResultObservationCoordinator = getService(ITaskResultObservationCoordinator);
 
       if (this._platform) {
         // Inject ConfigManager into SettingsManager (late binding)
@@ -337,10 +430,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           registry: capabilityRuntime.skillRegistry ?? new SkillRegistry(),
           toolRegistry: toolRegistry ?? undefined,
           subpackageResolver,
-          builtinSkills: [
-            ...providerSkills,
-            ...getBuiltinSkills({ locale: vscode.env.language }),
-          ],
+          builtinSkills: [...providerSkills, ...getBuiltinSkills({ locale: vscode.env.language })],
+          locale: vscode.env.language,
           logger,
         });
         const { skillService } = skillRuntimeBootstrap;
@@ -378,8 +469,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           {
             accountAiCatalog: this._accountAiCatalog,
             generatedAssetIndex: this._generatedAssetIndex,
+            ...(this._taskResultObservationCoordinator
+              ? { taskResultObservationCoordinator: this._taskResultObservationCoordinator }
+              : {}),
           },
         );
+        this._taskResultObservationCoordinator?.setContinuationPort({
+          requestUserContinuation: (request) => this._requestTaskResultContinuation(request),
+          dispatchIdleAgentTurn: (request) => this._dispatchTaskResultContinuation(request),
+        });
         this._dashboardWorkItems.updateDeps({
           platform: this._platform,
           taskManager: this._taskManager,
@@ -576,6 +674,49 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     }
   }
 
+  private async _requestTaskResultContinuation(
+    request: AgentTaskResultFollowUpRequest,
+  ): Promise<void> {
+    const continueLabel = vscode.l10n.t('Continue');
+    const selected = await vscode.window.showInformationMessage(
+      vscode.l10n.t('Agent task {0} finished and is ready to continue.', request.taskId),
+      continueLabel,
+    );
+    if (selected !== continueLabel) {
+      return;
+    }
+    await this._dispatchTaskResultContinuation(request);
+  }
+
+  private async _dispatchTaskResultContinuation(
+    request: AgentTaskResultFollowUpRequest,
+  ): Promise<void> {
+    if (!this._messages) {
+      throw new Error('Cannot dispatch task-result continuation before message handler is ready');
+    }
+    if (!this._conversations.get(request.conversationId)) {
+      throw new Error(
+        `Cannot dispatch task-result continuation for unknown conversation: ${request.conversationId}`,
+      );
+    }
+
+    await vscode.commands.executeCommand(NEKO_AI_ASSISTANT_FOCUS_COMMAND);
+    const webview = this._view?.webview;
+    if (!webview) {
+      throw new Error('Cannot dispatch task-result continuation without an assistant webview');
+    }
+
+    this._conversations.switchTo(request.conversationId);
+    this._syncCanvasAmbientScopeFromActiveConversation();
+    this._conversationMessageHandler.sendActiveConversation();
+    await this._messages.handleUserMessage(webview, {
+      conversationId: request.conversationId,
+      messageText: request.prompt,
+      sessionMode: 'agent',
+      locale: vscode.env.language,
+    });
+  }
+
   /**
    * Push the current plugin slash command list to the webview.
    * Called on initial load and whenever the SlashCommandRegistry changes.
@@ -624,7 +765,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         const message = parseWebviewToExtensionMessage(raw);
         if (!message) {
           logger.warn('Rejected invalid webview message payload');
-          webview.postMessage(buildInvalidWebviewPayloadMessage());
+          webview.postMessage(
+            buildMissingSessionIdentityDiagnostic(raw) ?? buildInvalidWebviewPayloadMessage(),
+          );
           return;
         }
 
@@ -752,6 +895,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     const persistedTabState = this._context.workspaceState.get<unknown>(
       ChatViewProvider.TAB_STATE_KEY,
     );
+    const persistedWriteMetadata = parseTabStateWriteMetadata(
+      this._context.workspaceState.get<unknown>(ChatViewProvider.TAB_STATE_WRITE_METADATA_KEY),
+    );
+    this._tabStateRevision = persistedWriteMetadata?.revision ?? 0;
     const restored = normalizeTabState(persistedTabState);
 
     // Startup no longer restores previously open tabs. Conversation history
@@ -767,7 +914,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   private _syncActiveConversationFromTabState(): void {
     // Defensive sync for panel restore: normal tab switches send switchConversation
     // before updateTabState, but restored tab state can replay without that message.
-    syncActiveConversationFromTabState(
+    const sync = syncActiveConversationFromTabState(
       { tabState: this._tabState },
       {
         hasConversation: (conversationId) => Boolean(this._conversations.get(conversationId)),
@@ -778,6 +925,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         clearActiveConversation: () => this._conversations.clearActive(),
       },
     );
+    logger.debug('neko.agent.tab_state.sync.restore', {
+      ...this._getActiveTabLogIdentity(),
+      sync,
+    });
   }
 
   private _syncCanvasAmbientScopeFromActiveConversation(): void {
@@ -790,7 +941,39 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   private _saveTabState(): void {
+    const currentWriteMetadata = parseTabStateWriteMetadata(
+      this._context.workspaceState.get<unknown>(ChatViewProvider.TAB_STATE_WRITE_METADATA_KEY),
+    );
+    if (
+      currentWriteMetadata &&
+      currentWriteMetadata.revision !== this._tabStateRevision &&
+      currentWriteMetadata.ownerId !== this._tabStateWriterId
+    ) {
+      logger.warn('neko.agent.tab_state.stale_write_possible', {
+        ...this._getActiveTabLogIdentity(),
+        ownerId: this._tabStateWriterId,
+        loadedRevision: this._tabStateRevision,
+        currentOwnerId: currentWriteMetadata.ownerId,
+        currentRevision: currentWriteMetadata.revision,
+      });
+      this._tabStateRevision = currentWriteMetadata.revision;
+    }
+    const writeMetadata: TabStateWriteMetadata = {
+      ownerId: this._tabStateWriterId,
+      revision: this._tabStateRevision + 1,
+      updatedAt: Date.now(),
+    };
     this._context.workspaceState.update(ChatViewProvider.TAB_STATE_KEY, this._tabState);
+    this._context.workspaceState.update(
+      ChatViewProvider.TAB_STATE_WRITE_METADATA_KEY,
+      writeMetadata,
+    );
+    this._tabStateRevision = writeMetadata.revision;
+    logger.debug('neko.agent.tab_state.persist', {
+      ...this._getActiveTabLogIdentity(),
+      ownerId: writeMetadata.ownerId,
+      revision: writeMetadata.revision,
+    });
   }
 
   private _sendTabState(): void {
@@ -814,9 +997,37 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._tabState = result.tabState;
     this._saveTabState();
 
+    const logIdentity = this._getActiveTabLogIdentity();
+    logger.debug('neko.agent.tab_state.update', {
+      ...logIdentity,
+      openTabCount: this._tabState.openTabs.length,
+      sync: result.sync,
+    });
+    if (result.sync.kind === 'skipped' && result.sync.reason === 'switch-rejected') {
+      logger.warn('neko.agent.tab_state.switch_rejected', {
+        ...logIdentity,
+        conversationId: result.sync.conversationId ?? logIdentity.conversationId,
+        sync: result.sync,
+      });
+    }
+
     if (result.sync.kind === 'switched') {
       this._conversationMessageHandler.sendActiveConversation();
     }
+  }
+
+  private _getActiveTabLogIdentity(): {
+    readonly tabId?: string;
+    readonly conversationId?: string;
+  } {
+    const activeTabId = this._tabState.activeTabId;
+    const activeTab = activeTabId
+      ? this._tabState.openTabs.find((tab) => tab.id === activeTabId)
+      : undefined;
+    return {
+      ...(activeTabId ? { tabId: activeTabId } : {}),
+      ...(activeTab?.conversationId ? { conversationId: activeTab.conversationId } : {}),
+    };
   }
 
   public async startCharacterDialogue(
@@ -898,6 +1109,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
   }
 
   dispose(): void {
+    this._taskResultObservationCoordinator?.setContinuationPort(undefined);
     this._disposeWebviewBindings();
     this._messages?.dispose();
     this._characterDialogue.dispose();

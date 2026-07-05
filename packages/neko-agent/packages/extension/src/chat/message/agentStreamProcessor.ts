@@ -16,6 +16,7 @@ import {
   persistAgentStreamBackgroundTaskResultUrls,
   type BackfillSink,
   type AgentEventStreamRuntimeMessage,
+  type AgentStreamBackgroundTaskTerminalEvent,
   type AgentStreamBackgroundTaskObservedProgress,
   type CollectedToolCall,
   type IPerceptionPipeline,
@@ -28,8 +29,10 @@ import {
 } from '@neko/content/document';
 import {
   type DocumentArchiveResourceRef,
+  type AgentTaskResultDeliveryPolicy,
   type GeneratedAsset,
   type ResourceVariantRequest,
+  type Task,
   type ToolResultBackfillPayload,
 } from '@neko/shared';
 import { type AgentPhase, type ContentBlock, type Message } from '@neko-agent/types';
@@ -39,6 +42,10 @@ import { maybeAttachInferredEntityMemoryContribution } from '@neko/skills';
 import { MediaTaskDeliveryHost } from '../../services/mediaTaskDeliveryHost';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
+import {
+  readMediaTaskResultDeliveryPolicy,
+  toMediaTaskResultObservationTask,
+} from '../../services/mediaTaskResultObservation';
 import {
   observeEntityMemoryContributionAutomation,
   type EntityMemoryContributionAutomationPort,
@@ -103,6 +110,18 @@ export interface AgentStreamProcessorDeps {
   getContextTokenCount?: (conversationId: string) => number;
   /** Optional host-side automation for reviewable entity memory contribution envelopes. */
   entityMemoryContributionAutomation?: EntityMemoryContributionAutomationPort;
+  /** Optional adapter for durable Agent task-result observations. */
+  taskResultObservations?: {
+    handleTerminalTask(
+      task: Task,
+      options: {
+        readonly source: 'media-task';
+        readonly parentMessageId?: string;
+        readonly parentToolCallId?: string;
+        readonly deliveryPolicy?: AgentTaskResultDeliveryPolicy;
+      },
+    ): Promise<void>;
+  };
 }
 
 /**
@@ -173,6 +192,7 @@ export class AgentStreamProcessor {
                   createTaskView: (task) => input.createTaskView(task),
                   onIgnoredConversationTask: ({ taskId, conversationId, mediaTask }) => {
                     input.onIgnoredConversationTask?.({
+                      lease: input.lease,
                       taskId,
                       conversationId,
                       sourceTask: mediaTask,
@@ -186,6 +206,7 @@ export class AgentStreamProcessor {
                     recoveryTask,
                   }) => {
                     input.onProgressDeliveryError?.({
+                      lease: input.lease,
                       taskId,
                       conversationId,
                       sourceTask: mediaTask,
@@ -195,6 +216,7 @@ export class AgentStreamProcessor {
                   },
                   onTaskProgress: ({ conversationId, task, mediaTask }) =>
                     input.onTaskProgress({
+                      lease: input.lease,
                       conversationId,
                       task,
                       sourceTask: mediaTask,
@@ -250,6 +272,7 @@ export class AgentStreamProcessor {
         persistResultUrls: ({ conversationId, taskId, urls }) => {
           this.updateToolResultWithUrls(conversationId, taskId, [...urls]);
         },
+        onTerminalTask: (event) => this.recordTerminalMediaTaskObservation(event),
       },
     });
 
@@ -290,6 +313,33 @@ export class AgentStreamProcessor {
         this.deps.conversations?.updateMessagesForConversation(id, messages),
       onError: (error) => logger.error('Failed to update tool result with URLs:', error),
     });
+  }
+
+  private async recordTerminalMediaTaskObservation(
+    event: AgentStreamBackgroundTaskTerminalEvent<MediaTask, MediaTaskProgressDeliveryPlan>,
+  ): Promise<void> {
+    if (!this.deps.taskResultObservations) {
+      return;
+    }
+
+    const deliveryPolicy = readMediaTaskResultDeliveryPolicy(event.sourceTask.request.metadata);
+    const error = readBackgroundTaskError(event.task.error);
+    await this.deps.taskResultObservations.handleTerminalTask(
+      toMediaTaskResultObservationTask({
+        conversationId: event.conversationId,
+        taskId: event.taskId,
+        progress: event.task.progress,
+        mediaTask: event.sourceTask,
+        ...(event.deliveryPlan ? { deliveryPlan: event.deliveryPlan } : {}),
+        ...(error ? { error } : {}),
+      }),
+      {
+        source: 'media-task',
+        parentMessageId: event.parentMessageId,
+        ...(event.parentToolCallId ? { parentToolCallId: event.parentToolCallId } : {}),
+        ...(deliveryPolicy ? { deliveryPolicy } : {}),
+      },
+    );
   }
 
   private async applyCompletedMediaTaskBackfill(input: {
@@ -360,6 +410,10 @@ export class AgentStreamProcessor {
   dispose(): void {
     this.streamRuntime.dispose();
   }
+}
+
+function readBackgroundTaskError(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }
 
 function projectStreamMessageResourcesForWebview(

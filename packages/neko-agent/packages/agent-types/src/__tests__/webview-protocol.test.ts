@@ -3,6 +3,8 @@ import { createResourceFingerprint, createResourceRef } from '@neko/shared';
 import {
   buildAmbientCanvasUpdateMessage,
   buildAgentPhaseMessage,
+  buildAgentCapabilityActivationProgressMessage,
+  buildAgentSessionDiagnosticMessage,
   buildAgentStateSnapshotMessage,
   buildAgentTurnTimelineMessage,
   buildErrorMessage,
@@ -18,6 +20,7 @@ import {
   buildPluginCommandsMessage,
   buildPluginSlashCommandInvocation,
   buildPluginsAvailableMessage,
+  buildStreamTextMessage,
   buildSubAgentEventMessage,
   buildTaskCreatedMessage,
   buildTaskRemovedMessage,
@@ -992,6 +995,63 @@ describe('webview protocol projectors', () => {
         },
       ],
     });
+    expect(() =>
+      buildAgentStateSnapshotMessage([
+        {
+          phase: 'acting',
+          toolName: 'Read',
+          startedAt: 1777392000000,
+        },
+      ]),
+    ).toThrow('agentStateSnapshot requires non-empty conversationId');
+    expect(() => buildThinkingMessage('')).toThrow('thinking requires non-empty conversationId');
+    expect(() =>
+      buildStreamTextMessage({ conversationId: ' ', content: 'stream' }),
+    ).toThrow('streamText requires non-empty conversationId');
+    expect(() =>
+      buildMessageQueueSnapshotMessage({
+        conversationId: '',
+        pendingCount: 0,
+        version: 1,
+        items: [],
+      }),
+    ).toThrow('messageQueueSnapshot requires non-empty conversationId');
+    expect(() =>
+      buildQueuedMessageEditRequestedMessage({
+        conversationId: 'conv-1',
+        item: { ...queueItem, conversationId: 'conv-2' },
+        snapshot: queueSnapshot,
+      }),
+    ).toThrow('queuedMessageEditRequested item conversationId must match conversationId');
+    expect(() => buildTasksUpdatedMessage({ conversationId: '', workItems: [] })).toThrow(
+      'tasksUpdated requires non-empty conversationId',
+    );
+    expect(() =>
+      buildAgentCapabilityActivationProgressMessage({ conversationId: ' ', events: [] }),
+    ).toThrow('agentCapabilityActivationProgress requires non-empty conversationId');
+    expect(
+      buildAgentSessionDiagnosticMessage({
+        code: 'active-tab-mismatch',
+        message: 'Active tab is switching.',
+        conversationId: 'conv-b',
+        activeConversationId: 'conv-a',
+        activeTabConversationId: 'conv-b',
+      }),
+    ).toEqual({
+      type: 'sessionDiagnostic',
+      code: 'active-tab-mismatch',
+      severity: 'error',
+      message: 'Active tab is switching.',
+      conversationId: 'conv-b',
+      activeConversationId: 'conv-a',
+      activeTabConversationId: 'conv-b',
+    });
+    expect(() =>
+      buildAgentSessionDiagnosticMessage({
+        code: 'missing-session-identity',
+        message: '',
+      }),
+    ).toThrow('sessionDiagnostic requires non-empty message');
     expect(
       buildToolConfirmationMessage({
         conversationId: 'conv-1',

@@ -1020,7 +1020,7 @@ describe('work item message handlers', () => {
     ]);
   });
 
-  it('rejects active non-timeline conversation errors when canonical timeline error is missing', () => {
+  it('shows the original active conversation error instead of an internal timeline rejection', () => {
     const harness = createContextHarness({
       activeConversationId: 'conv-a',
       currentMessages: [],
@@ -1041,9 +1041,7 @@ describe('work item message handlers', () => {
       harness.context,
     );
 
-    expect(harness.globalError()).toContain(
-      'active timeline errors must arrive as agentTurnTimeline',
-    );
+    expect(harness.globalError()).toBe('Provider failed');
     expect(harness.messages()[0]?.contentBlocks).toMatchObject([
       { id: 'text-before', content: 'Before.' },
     ]);

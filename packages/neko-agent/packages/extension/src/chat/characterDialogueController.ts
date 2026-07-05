@@ -302,6 +302,7 @@ export class CharacterDialogueController implements vscode.Disposable {
       entityRef,
       profile,
       mode,
+      locale: vscode.env.language,
     });
     const sessionId = session.id;
     this.sessions.set(sessionId, session);
@@ -508,6 +509,7 @@ export class CharacterDialogueController implements vscode.Disposable {
         applySuggestion: (suggestionInput) =>
           (this.deps.applySuggestion ?? defaultApplyCharacterSuggestion)(suggestionInput),
       },
+      locale: vscode.env.language,
       now: this.now,
       ...(this.deps.createSessionId ? { createSessionId: this.deps.createSessionId } : {}),
       ...(this.deps.createMessageId ? { createMessageId: this.deps.createMessageId } : {}),
@@ -636,6 +638,7 @@ export class CharacterDialogueController implements vscode.Disposable {
       ...(platform ? { service: toSharedService(platform.createService()) } : {}),
       chatModel: this.deps.getSelectedChatModel?.(),
       now: this.now,
+      locale: vscode.env.language,
       logger: this.deps.logger ?? logger,
     });
   }

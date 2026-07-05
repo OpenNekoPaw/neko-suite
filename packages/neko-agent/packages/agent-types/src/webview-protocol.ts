@@ -504,13 +504,15 @@ export interface MessageCancelledMessage {
   conversationId: string;
 }
 
+export type AgentQueuedMessageSource = 'composer' | 'task-result-observation';
+
 export interface AgentQueuedMessageItem {
   id: string;
   conversationId: string;
   content: string;
   createdAt: number;
   updatedAt?: number;
-  source: 'composer';
+  source: AgentQueuedMessageSource;
 }
 
 export interface AgentMessageQueueSnapshot {
@@ -582,6 +584,24 @@ export interface ErrorMessage {
 export interface GlobalErrorMessage {
   type: 'globalError';
   message: string;
+}
+
+export type AgentSessionDiagnosticCode =
+  | 'unknown-conversation'
+  | 'deleted-conversation'
+  | 'missing-session-identity'
+  | 'active-tab-mismatch';
+
+export interface AgentSessionDiagnosticMessage {
+  type: 'sessionDiagnostic';
+  code: AgentSessionDiagnosticCode;
+  severity: 'warning' | 'error';
+  message: string;
+  action?: string;
+  conversationId?: string;
+  tabId?: string;
+  activeConversationId?: string | null;
+  activeTabConversationId?: string | null;
 }
 
 export interface HistoryClearedMessage {
@@ -945,6 +965,7 @@ export type ExtensionToWebviewMessage =
   | AgentStateSnapshotMessage
   | ErrorMessage
   | GlobalErrorMessage
+  | AgentSessionDiagnosticMessage
   | HistoryClearedMessage
   | ConversationListMessage
   | ActiveConversationMessage
@@ -1121,8 +1142,41 @@ export function buildGlobalErrorMessage(message: string): GlobalErrorMessage {
   return { type: 'globalError', message };
 }
 
+export function buildAgentSessionDiagnosticMessage(input: {
+  readonly code: AgentSessionDiagnosticCode;
+  readonly severity?: 'warning' | 'error';
+  readonly message: string;
+  readonly action?: string;
+  readonly conversationId?: string;
+  readonly tabId?: string;
+  readonly activeConversationId?: string | null;
+  readonly activeTabConversationId?: string | null;
+}): AgentSessionDiagnosticMessage {
+  if (!isNonEmptyString(input.message)) {
+    throw new Error('sessionDiagnostic requires non-empty message');
+  }
+  return {
+    type: 'sessionDiagnostic',
+    code: input.code,
+    severity: input.severity ?? 'error',
+    message: input.message,
+    ...(input.action !== undefined ? { action: input.action } : {}),
+    ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+    ...(input.tabId !== undefined ? { tabId: input.tabId } : {}),
+    ...(input.activeConversationId !== undefined
+      ? { activeConversationId: input.activeConversationId }
+      : {}),
+    ...(input.activeTabConversationId !== undefined
+      ? { activeTabConversationId: input.activeTabConversationId }
+      : {}),
+  };
+}
+
 export function buildThinkingMessage(conversationId: string): ThinkingMessage {
-  return { type: 'thinking', conversationId };
+  return {
+    type: 'thinking',
+    conversationId: requireBuilderConversationId(conversationId, 'thinking'),
+  };
 }
 
 export function buildStreamTextMessage(input: {
@@ -1130,9 +1184,10 @@ export function buildStreamTextMessage(input: {
   readonly content?: string;
   readonly messageId?: string;
 }): StreamTextMessage {
+  const conversationId = requireBuilderConversationId(input.conversationId, 'streamText');
   return {
     type: 'streamText',
-    conversationId: input.conversationId,
+    conversationId,
     ...(input.content !== undefined ? { content: input.content } : {}),
     ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
   };
@@ -1144,9 +1199,13 @@ export function buildAssistantTextReplacementMessage(input: {
   readonly reason: 'output-validation-retry';
   readonly attempt: number;
 }): AssistantTextReplacementMessage {
+  const conversationId = requireBuilderConversationId(
+    input.conversationId,
+    'assistantTextReplacement',
+  );
   return {
     type: 'assistantTextReplacement',
-    conversationId: input.conversationId,
+    conversationId,
     reason: input.reason,
     attempt: input.attempt,
     ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
@@ -1158,9 +1217,10 @@ export function buildStreamCompleteMessage(input: {
   readonly messageId?: string;
   readonly contentBlocks?: readonly ContentBlock[];
 }): StreamCompleteMessage {
+  const conversationId = requireBuilderConversationId(input.conversationId, 'streamComplete');
   return {
     type: 'streamComplete',
-    conversationId: input.conversationId,
+    conversationId,
     ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
     ...(input.contentBlocks && input.contentBlocks.length > 0
       ? { contentBlocks: input.contentBlocks }
@@ -1175,9 +1235,10 @@ export function buildAgentTurnTimelineMessage(input: {
   readonly events: readonly AgentTurnTimelineItem[];
   readonly finalContentBlocks?: readonly ContentBlock[];
 }): AgentTurnTimelineMessage {
+  const conversationId = requireBuilderConversationId(input.conversationId, 'agentTurnTimeline');
   const message: AgentTurnTimelineMessage = {
     type: 'agentTurnTimeline',
-    conversationId: input.conversationId,
+    conversationId,
     turnId: input.turnId,
     messageId: input.messageId,
     events: input.events,
@@ -1195,17 +1256,23 @@ export function buildErrorMessage(input: {
 }): ErrorMessage {
   return {
     type: 'error',
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(input.conversationId, 'error'),
     ...(input.message !== undefined ? { message: input.message } : {}),
   };
 }
 
 export function buildHistoryClearedMessage(conversationId: string): HistoryClearedMessage {
-  return { type: 'historyCleared', conversationId };
+  return {
+    type: 'historyCleared',
+    conversationId: requireBuilderConversationId(conversationId, 'historyCleared'),
+  };
 }
 
 export function buildMessageCancelledMessage(conversationId: string): MessageCancelledMessage {
-  return { type: 'messageCancelled', conversationId };
+  return {
+    type: 'messageCancelled',
+    conversationId: requireBuilderConversationId(conversationId, 'messageCancelled'),
+  };
 }
 
 export function buildMessageQueueSnapshotMessage(
@@ -1213,7 +1280,7 @@ export function buildMessageQueueSnapshotMessage(
 ): MessageQueueSnapshotMessage {
   return {
     type: 'messageQueueSnapshot',
-    snapshot: cloneAgentMessageQueueSnapshot(snapshot),
+    snapshot: cloneAgentMessageQueueSnapshot(snapshot, 'messageQueueSnapshot'),
   };
 }
 
@@ -1222,11 +1289,19 @@ export function buildQueuedMessageEditRequestedMessage(input: {
   readonly item: AgentQueuedMessageItem;
   readonly snapshot: AgentMessageQueueSnapshot;
 }): QueuedMessageEditRequestedMessage {
+  const conversationId = requireBuilderConversationId(
+    input.conversationId,
+    'queuedMessageEditRequested',
+  );
+  const snapshot = cloneAgentMessageQueueSnapshot(input.snapshot, 'queuedMessageEditRequested');
+  if (snapshot.conversationId !== conversationId) {
+    throw new Error('queuedMessageEditRequested snapshot conversationId must match conversationId');
+  }
   return {
     type: 'queuedMessageEditRequested',
-    conversationId: input.conversationId,
-    item: { ...input.item },
-    snapshot: cloneAgentMessageQueueSnapshot(input.snapshot),
+    conversationId,
+    item: cloneAgentQueuedMessageItem(input.item, conversationId, 'queuedMessageEditRequested'),
+    snapshot,
   };
 }
 
@@ -1237,15 +1312,21 @@ export function buildMessageQueueErrorMessage(input: {
   readonly queueItemId?: string;
   readonly snapshot?: AgentMessageQueueSnapshot;
 }): MessageQueueErrorMessage {
+  const conversationId = requireBuilderConversationId(input.conversationId, 'messageQueueError');
+  const snapshot =
+    input.snapshot !== undefined
+      ? cloneAgentMessageQueueSnapshot(input.snapshot, 'messageQueueError')
+      : undefined;
+  if (snapshot !== undefined && snapshot.conversationId !== conversationId) {
+    throw new Error('messageQueueError snapshot conversationId must match conversationId');
+  }
   return {
     type: 'messageQueueError',
-    conversationId: input.conversationId,
+    conversationId,
     code: input.code,
     message: input.message,
     ...(input.queueItemId !== undefined ? { queueItemId: input.queueItemId } : {}),
-    ...(input.snapshot !== undefined
-      ? { snapshot: cloneAgentMessageQueueSnapshot(input.snapshot) }
-      : {}),
+    ...(snapshot !== undefined ? { snapshot } : {}),
   };
 }
 
@@ -1257,7 +1338,7 @@ export function buildAgentPhaseMessage(input: {
 }): AgentPhaseMessage {
   return {
     type: 'agentPhase',
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(input.conversationId, 'agentPhase'),
     phase: input.phase,
     ...(input.toolName !== undefined ? { toolName: input.toolName } : {}),
     ...(input.timestamp !== undefined ? { timestamp: input.timestamp } : {}),
@@ -1269,7 +1350,13 @@ export function buildAgentStateSnapshotMessage(
 ): AgentStateSnapshotMessage {
   return {
     type: 'agentStateSnapshot',
-    agentStates: agentStates.map((state) => ({ ...state })),
+    agentStates: agentStates.map((state) => ({
+      ...state,
+      conversationId: requireBuilderConversationId(
+        state.conversationId,
+        'agentStateSnapshot',
+      ),
+    })),
   };
 }
 
@@ -1283,7 +1370,7 @@ export function buildToolConfirmationMessage(input: {
 }): ToolConfirmationMessage {
   return {
     type: 'toolConfirmation',
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(input.conversationId, 'toolConfirmation'),
     toolCallId: input.toolCallId,
     ...(input.toolName !== undefined ? { toolName: input.toolName } : {}),
     ...(input.action !== undefined ? { action: input.action } : {}),
@@ -1314,7 +1401,10 @@ export function buildAgentCapabilityLifecycleResultMessage(input: {
   return {
     type: 'agentCapabilityLifecycleResult',
     requestId: input.requestId,
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(
+      input.conversationId,
+      'agentCapabilityLifecycleResult',
+    ),
     success: input.success,
     ...(input.lifecycleResult !== undefined ? { lifecycleResult: input.lifecycleResult } : {}),
     ...(input.result !== undefined ? { result: input.result } : {}),
@@ -1328,7 +1418,10 @@ export function buildAgentCapabilityActivationProgressMessage(input: {
 }): AgentCapabilityActivationProgressMessage {
   return {
     type: 'agentCapabilityActivationProgress',
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(
+      input.conversationId,
+      'agentCapabilityActivationProgress',
+    ),
     events: input.events,
   };
 }
@@ -1388,7 +1481,7 @@ export function buildTasksUpdatedMessage(input: {
 }): TasksUpdatedMessage {
   return {
     type: 'tasksUpdated',
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(input.conversationId, 'tasksUpdated'),
     workItems: [...input.workItems],
   };
 }
@@ -1401,7 +1494,7 @@ export function buildTaskCreatedMessage(input: {
 }): TaskCreatedMessage {
   return {
     type: 'taskCreated',
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(input.conversationId, 'taskCreated'),
     ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
     ...(input.toolCallId !== undefined ? { toolCallId: input.toolCallId } : {}),
     workItem: input.workItem,
@@ -1414,7 +1507,7 @@ export function buildTaskUpdatedMessage(input: {
 }): TaskUpdatedMessage {
   return {
     type: 'taskUpdated',
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(input.conversationId, 'taskUpdated'),
     workItem: input.workItem,
   };
 }
@@ -1425,7 +1518,7 @@ export function buildTaskRemovedMessage(input: {
 }): TaskRemovedMessage {
   return {
     type: 'taskRemoved',
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(input.conversationId, 'taskRemoved'),
     taskId: input.taskId,
   };
 }
@@ -1439,7 +1532,7 @@ export function buildMediaTaskCreatedMessage(input: {
 }): MediaTaskCreatedMessage {
   return {
     type: 'mediaTaskCreated',
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(input.conversationId, 'mediaTaskCreated'),
     ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
     ...(input.toolCallId !== undefined ? { toolCallId: input.toolCallId } : {}),
     ...(input.parentScope !== undefined ? { parentScope: input.parentScope } : {}),
@@ -1456,7 +1549,7 @@ export function buildMediaTaskProgressMessage(input: {
 }): MediaTaskProgressMessage {
   return {
     type: 'mediaTaskProgress',
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(input.conversationId, 'mediaTaskProgress'),
     ...(input.messageId !== undefined ? { messageId: input.messageId } : {}),
     ...(input.toolCallId !== undefined ? { toolCallId: input.toolCallId } : {}),
     ...(input.parentScope !== undefined ? { parentScope: input.parentScope } : {}),
@@ -1470,7 +1563,7 @@ export function buildTaskDeliveryReplayMessage(input: {
 }): TaskDeliveryReplayMessage {
   return {
     type: 'taskDeliveryReplay',
-    conversationId: input.conversationId,
+    conversationId: requireBuilderConversationId(input.conversationId, 'taskDeliveryReplay'),
     task: input.task,
   };
 }
@@ -1479,9 +1572,10 @@ export function buildSubAgentEventMessage(input: {
   readonly event: SubAgentWorkItemEvent;
   readonly workItem: SubAgentWorkItem;
 }): SubAgentEventMessage {
+  const conversationId = requireBuilderConversationId(input.event.conversationId, 'subagentEvent');
   return {
     type: 'subagentEvent',
-    conversationId: input.event.conversationId,
+    conversationId,
     event: input.event,
     workItem: input.workItem,
   };
@@ -1489,13 +1583,30 @@ export function buildSubAgentEventMessage(input: {
 
 function cloneAgentMessageQueueSnapshot(
   snapshot: AgentMessageQueueSnapshot,
+  messageType: string,
 ): AgentMessageQueueSnapshot {
+  const conversationId = requireBuilderConversationId(snapshot.conversationId, messageType);
   return {
-    conversationId: snapshot.conversationId,
+    conversationId,
     pendingCount: snapshot.pendingCount,
     version: snapshot.version,
-    items: snapshot.items.map((item) => ({ ...item })),
+    items: snapshot.items.map((item) => cloneAgentQueuedMessageItem(item, conversationId, messageType)),
   };
+}
+
+function cloneAgentQueuedMessageItem(
+  item: AgentQueuedMessageItem,
+  conversationId: string,
+  messageType: string,
+): AgentQueuedMessageItem {
+  const itemConversationId = requireBuilderConversationId(
+    item.conversationId,
+    `${messageType} item`,
+  );
+  if (itemConversationId !== conversationId) {
+    throw new Error(`${messageType} item conversationId must match conversationId`);
+  }
+  return { ...item, conversationId: itemConversationId };
 }
 
 function parseClearActiveSkillMessage(
@@ -3033,6 +3144,13 @@ function isNonEmptyString(value: unknown): value is string {
 
 function requiredString(value: unknown): string | null {
   return isNonEmptyString(value) ? value : null;
+}
+
+function requireBuilderConversationId(value: unknown, messageType: string): string {
+  if (!isNonEmptyString(value)) {
+    throw new Error(`${messageType} requires non-empty conversationId`);
+  }
+  return value;
 }
 
 function optionalStringStrict(value: unknown): string | undefined | null {

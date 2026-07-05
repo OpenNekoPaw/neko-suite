@@ -206,7 +206,7 @@ describe('MarkdownRenderer structured artifacts', () => {
     render(
       <MarkdownRenderer
         content={[
-          '| scene | shot | imagePrompt | sceneVideoPrompt | 自定义审阅 |',
+          '| scene | shot | imagePrompt | videoPrompt | 自定义审阅 |',
           '| --- | --- | --- | --- | --- |',
           '| Opening | 1 | keyframe | scene video | note |',
         ].join('\n')}
@@ -215,7 +215,7 @@ describe('MarkdownRenderer structured artifacts', () => {
 
     expect(screen.getByRole('columnheader', { name: 'scene' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: 'imagePrompt' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'sceneVideoPrompt' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'videoPrompt' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: '自定义审阅' })).toBeTruthy();
     expect(screen.queryByRole('columnheader', { name: '图像提示词' })).toBeNull();
   });

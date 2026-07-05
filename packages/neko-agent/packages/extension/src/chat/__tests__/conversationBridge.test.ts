@@ -262,7 +262,59 @@ describe('ConversationBridge', () => {
         }),
       );
     });
+  });
 
+  describe('sendConversationSnapshot', () => {
+    it('posts a specific conversation without changing host active state', () => {
+      const webview = createMockWebview();
+      const activeId = handler.create();
+      const backgroundId = handler.create();
+      handler.switchTo(activeId);
+      handler.updateMessagesForConversation(backgroundId, [
+        { id: 'm-bg', role: 'user', content: 'background', timestamp: 1 },
+      ]);
+
+      expect(handler.sendConversationSnapshot(webview as any, backgroundId)).toBe(true);
+
+      expect(handler.getActiveId()).toBe(activeId);
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'activeConversation',
+        conversation: expect.objectContaining({
+          id: backgroundId,
+          messages: [expect.objectContaining({ id: 'm-bg', content: 'background' })],
+        }),
+      });
+    });
+
+    it('does not post a snapshot for an unknown conversation', () => {
+      const webview = createMockWebview();
+
+      expect(handler.sendConversationSnapshot(webview as any, 'missing-conv')).toBe(false);
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'sessionDiagnostic',
+        code: 'unknown-conversation',
+        severity: 'error',
+        action: 'sendConversationSnapshot',
+        conversationId: 'missing-conv',
+        message: 'Conversation "missing-conv" does not exist.',
+      });
+    });
+
+    it('reports deleted conversation snapshots with a typed diagnostic', () => {
+      const webview = createMockWebview();
+      const conversationId = handler.create();
+      handler.delete(conversationId);
+
+      expect(handler.sendConversationSnapshot(webview as any, conversationId)).toBe(false);
+      expect(webview.postMessage).toHaveBeenCalledWith({
+        type: 'sessionDiagnostic',
+        code: 'deleted-conversation',
+        severity: 'error',
+        action: 'sendConversationSnapshot',
+        conversationId,
+        message: `Conversation "${conversationId}" has already been deleted.`,
+      });
+    });
   });
 
   describe('cleanup on init', () => {
