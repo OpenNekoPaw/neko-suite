@@ -55,16 +55,16 @@
 - [x] 7.3 Add poisoned legacy-path tests proving lifecycle records are the canonical state source.
 - [x] 7.4 Remove stale tests, fixtures, and projections that assume a single active Skill string.
 - [x] 7.5 Document any temporary compatibility shim with owner, replacement path, validation command, and removal condition.
-- [ ] 7.6 Replace the Agent turn projection-to-legacy `applySkillInjection` bridge with direct lifecycle prompt-section and tool-policy consumption in `AgentSession`.
-- [ ] 7.7 Collapse `ConversationSkillRuntime._activeSkills` into a derived lifecycle projection or remove it after all consumers read lifecycle records.
-- [ ] 7.8 Resolve `referenceSkill` tool-policy participation semantics and add slot-level tests for the chosen combination rule.
-- [ ] 7.9 Retire or explicitly deprecate the legacy `ISkillConflictResolver` string-list API after lifecycle conflict consumers are migrated.
+- [x] 7.6 Replace the Agent turn projection-to-legacy `applySkillInjection` bridge with direct lifecycle prompt-section and tool-policy consumption in `AgentSession`.
+- [x] 7.7 Collapse `ConversationSkillRuntime._activeSkills` into a derived lifecycle projection or remove it after all consumers read lifecycle records.
+- [x] 7.8 Resolve `referenceSkill` tool-policy participation semantics and add slot-level tests for the chosen combination rule.
+- [x] 7.9 Retire or explicitly deprecate the legacy `ISkillConflictResolver` string-list API after lifecycle conflict consumers are migrated.
 
 ## 8. Validation
 
-- [ ] 8.1 Run targeted Vitest suites for Skill lifecycle, Skill service, Agent turn runtime, meta tools, Webview message routing, and CLI/TUI Skill commands.
+- [x] 8.1 Run targeted Vitest suites for Skill lifecycle, Skill service, Agent turn runtime, meta tools, Webview message routing, and CLI/TUI Skill commands.
 - [ ] 8.2 Run `pnpm check` and record any residual type/lint risks.
 - [ ] 8.3 Run `pnpm test -- --run` or the repository-equivalent affected test command and record residual risk if full test is too large.
 - [ ] 8.4 Run `pnpm smoke:webview:runtime` or equivalent `vscode-extension-debugger` validation for Webview active Skill indicators and clear actions.
-- [ ] 8.5 Run `pnpm check:legacy-debt` or confirm equivalent coverage from `pnpm check:quality`.
+- [x] 8.5 Run `pnpm check:legacy-debt` or confirm equivalent coverage from `pnpm check:quality`.
 - [x] 8.6 Update `packages/neko-agent/docs/skill-authoring.md` or architecture docs if lifecycle slots, clearability, or Skill manifest guidance becomes user-facing.

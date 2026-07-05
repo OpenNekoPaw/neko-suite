@@ -1,30 +1,28 @@
 ## Validation Notes
 
-Date: 2026-06-28
+Date: 2026-07-05
 
 Completed:
 
-- `openspec validate complete-agent-skill-lifecycle --strict`
-- `git diff --check` for the touched lifecycle files.
+- `./node_modules/.bin/vitest run packages/neko-agent/packages/agent/src/skill/__tests__/skill-lifecycle-runtime.test.ts packages/neko-agent/packages/agent/src/skill/__tests__/conversation-skill-runtime.test.ts packages/neko-agent/packages/agent/src/skill/__tests__/skill-service.test.ts packages/neko-agent/packages/agent/src/skill/__tests__/skill-meta-provider.test.ts packages/neko-agent/packages/agent/src/skill/__tests__/skill-conflict-resolver.test.ts packages/neko-agent/packages/agent/src/runtime/__tests__/agent-turn-runtime.test.ts packages/neko-agent/packages/agent/src/runtime/__tests__/agent-runner-port.test.ts packages/neko-agent/packages/agent/src/runtime/__tests__/agent-runtime-manager.test.ts packages/neko-agent/packages/agent/src/runtime/__tests__/agent-session-runner.test.ts` — 9 files / 148 tests passed.
+- `./node_modules/.bin/vitest run packages/neko-agent/packages/agent/src/session/__tests__/agent-session.test.ts -t "keeps lifecycle ToolGuard restricted"` — 1 regression test passed after proving the red failure first.
+- `../../node_modules/.bin/vitest run --config vitest.config.ts packages/extension/src/chat/__tests__/chatWebviewMessageRouter.test.ts packages/extension/src/chat/handlers/__tests__/skillHandler.test.ts packages/extension/src/chat/handlers/__tests__/slashCommandHandler.test.ts packages/cli-tui/src/hooks/__tests__/useSlashCommands.test.ts packages/cli-tui/src/core/__tests__/slash-commands.test.ts packages/cli-tui/src/core/__tests__/runtime-bootstrap.test.ts` from `packages/neko-agent` — 6 files / 100 tests passed.
+- `../../../../node_modules/.bin/vitest run --config vitest.config.ts src/ai/agentRunner.test.ts` from `packages/neko-agent/packages/extension` — 1 file / 44 tests passed.
+- `../../../../node_modules/.bin/vitest run --config vitest.config.ts src/hooks/__tests__/useSlashCommands.test.ts src/hooks/__tests__/useChatActions.test.ts src/components/hooks/__tests__/useVSCode.test.ts src/presenters/__tests__/skill-presenter.test.ts` from `packages/neko-agent/packages/webview` — 4 files / 55 tests passed.
+- `./node_modules/.bin/tsc --noEmit -p packages/neko-agent/packages/extension/tsconfig.json` passed.
+- `./node_modules/.bin/tsc --noEmit -p packages/neko-agent/packages/webview/tsconfig.json` passed.
+- `node scripts/check-legacy-debt-surfaces.mjs` passed after the deprecated resolver bridge comments were classified as current bridge surfaces.
 
 Implementation review notes:
 
-- Agent turn assembly does pass lifecycle projection into the turn runtime, and `agent-turn-runtime.ts` blocks on lifecycle projection diagnostics before provider execution.
-- The current provider path still folds `projection.promptSections` and `projection.toolPolicy` into a synthetic single `lifecycle-projection` payload and writes it through `agentRunner.applySkillInjection` / `SkillInjectionCoordinator`. This is a migration bridge, not the final direct prompt-section/tool-policy writer.
-- `ConversationSkillRuntime._activeSkills` remains a compatibility projection alongside lifecycle records. It must not become a lifecycle authority; follow-up cleanup is tracked in `tasks.md`.
-- `referenceSkill` currently participates in the same conservative restricted-tool intersection as other slots. The desired slot-specific policy is unresolved and tracked as follow-up work.
-- The legacy string-list `ISkillConflictResolver` API still exists beside the lifecycle conflict resolver. New lifecycle code uses `resolveSkillLifecycleActivationConflict`; old APIs are documented as a temporary shim.
+- Agent provider turns now call `applySkillLifecycleProjection` directly. `AgentSession.applySkillLifecycleProjection` writes lifecycle prompt sections, permission allow rules, ToolGuard state, and ToolSet activation from the projection snapshot without constructing a synthetic `lifecycle-projection` `SkillInjection`.
+- `ConversationSkillRuntime` no longer stores `_activeSkills`; `getActiveSkill` is only a compatibility projection derived from lifecycle records.
+- `referenceSkill` is read-only guidance for prompt/indicator projection and is excluded from effective executable tool-policy restrictions.
+- `ISkillConflictResolver`, `SkillConflict`, `SkillConflictResolver`, and `createSkillConflictResolver` remain as deprecated string-list compatibility bridges. Lifecycle activation uses `resolveSkillLifecycleActivationConflict`.
 
-Blocked:
+Blocked or residual:
 
-- Targeted Vitest suites were attempted with:
-  - `pnpm --config.minimumReleaseAge=0 exec vitest run packages/neko-agent/packages/cli-tui/src/hooks/__tests__/useSlashCommands.test.tsx packages/neko-agent/packages/cli-tui/src/__tests__/tui-feature-audit.test.tsx packages/neko-agent/packages/cli-tui/src/core/__tests__/runtime-bootstrap.test.ts --runInBand`
-  - `pnpm --config.minimum-release-age=0 exec vitest --version`
-  - `node node_modules/.pnpm/vitest@4.1.2_.../node_modules/vitest/vitest.mjs run packages/neko-agent/packages/cli-tui/src/hooks/__tests__/useSlashCommands.test.tsx packages/neko-agent/packages/cli-tui/src/__tests__/tui-feature-audit.test.tsx packages/neko-agent/packages/cli-tui/src/core/__tests__/runtime-bootstrap.test.ts packages/neko-agent/packages/cli-tui/src/core/__tests__/slash-commands.test.ts`
-  - `node node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/bin/tsc --noEmit -p packages/neko-agent/packages/cli-tui/tsconfig.json`
-- The command failed before Vitest started because pnpm's supply-chain lockfile policy rejected `prettier@3.9.1`, published within the active minimum release age window.
-- Direct Vitest startup from `.pnpm` reached Vite transform, but failed before loading tests because the incomplete install is missing esbuild's optional platform package `@esbuild/darwin-arm64`.
-- Direct TypeScript startup from `.pnpm` could not resolve workspace package aliases, React/Ink/Vitest/Node types, or other dependencies because the failed install did not create the normal workspace `node_modules` layout.
-- The repository root still has no installed `node_modules/.bin/vitest` or `tsc` after the failed dependency check, so targeted tests and package type checks could not be completed without first resolving the pnpm policy/install issue.
-
-Remaining validation tasks in `tasks.md` stay unchecked until the dependency policy allows the test runner and quality scripts to execute.
+- `pnpm check`, `pnpm test -- --run`, `pnpm check:legacy-debt`, and `pnpm smoke:webview:runtime` all failed before running their underlying scripts because pnpm rejected ignored build scripts for `@fission-ai/openspec`, `@vscode/vsce-sign`, `core-js`, `es5-ext`, multiple `esbuild` versions, `keytar`, `sharp`, and `tesseract.js`. The command asks for `pnpm approve-builds`.
+- Direct `node scripts/smoke-vscode-debugger-skill.mjs --skill vscode-extension-debugger --require-webview` failed because no VS Code debugger target was listening on `127.0.0.1:9222`.
+- Full `./node_modules/.bin/tsc --noEmit -p packages/neko-agent/packages/agent/tsconfig.json` still fails on existing test fixture type errors outside this lifecycle slice. Filtering the output for touched lifecycle/turn/session/conflict files shows no remaining errors after the fixes in this change.
+- Full `packages/neko-agent/packages/agent/src/session/__tests__/agent-session.test.ts` still has existing failures outside the new lifecycle regression, including the pre-existing lazy ToolSet activation assertion and several stage tracking / audit expectations. The new lifecycle ToolGuard regression passes in isolation.
