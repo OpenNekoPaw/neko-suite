@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createAgentRunId,
   createAgentTraceContext,
   createAgentTurnId,
   deriveAgentTraceContext,
@@ -64,6 +65,11 @@ describe('agent trace contracts', () => {
       parentRequestId: 'llm-1',
       toolRequestId: 'tool-1',
     });
+  });
+
+  it('creates distinct prefixes for turn and durable run identities', () => {
+    expect(createAgentTurnId(' conv-1 ', 42)).toBe('turn-conv-1-16');
+    expect(createAgentRunId(' conv-1 ', 42)).toBe('run-conv-1-16');
   });
 
   it('places trace under data.trace and prevents payload trace override', () => {

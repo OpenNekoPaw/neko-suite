@@ -118,6 +118,7 @@ export interface CharacterDialogueTranscriptEvaluatorOptions {
   readonly service?: Pick<IService, 'chat'>;
   readonly chatModel?: CharacterDialogueChatModelRef;
   readonly now?: () => string;
+  readonly locale?: string;
   readonly logger?: CharacterDialogueRuntimeLogger;
 }
 
@@ -155,6 +156,7 @@ export interface CharacterDialogueRuntimePorts {
 
 export interface CharacterDialogueRuntimeServiceOptions {
   readonly ports: CharacterDialogueRuntimePorts;
+  readonly locale?: string;
   readonly now?: () => string;
   readonly createSessionId?: (entityRef: CreativeEntityRef) => string;
   readonly createMessageId?: (role: NpcTranscriptMessage['role'], turnIndex: number) => string;
@@ -165,6 +167,7 @@ export interface CreateCharacterDialogueSessionInput {
   readonly entityRef: CreativeEntityRef;
   readonly profile: NpcProfileSource;
   readonly mode: NpcTestMode;
+  readonly locale?: string;
 }
 
 export interface LoadCharacterDialogueTurnEvidenceInput {
@@ -177,6 +180,7 @@ export interface LoadCharacterDialogueTurnEvidenceInput {
 export class CharacterDialogueRuntimeService {
   private readonly ports: CharacterDialogueRuntimePorts;
   private readonly now: () => string;
+  private readonly locale: string | undefined;
   private readonly createSessionId: (entityRef: CreativeEntityRef) => string;
   private readonly createMessageId:
     | ((role: NpcTranscriptMessage['role'], turnIndex: number) => string)
@@ -186,6 +190,7 @@ export class CharacterDialogueRuntimeService {
   constructor(options: CharacterDialogueRuntimeServiceOptions) {
     this.ports = options.ports;
     this.now = options.now ?? (() => new Date().toISOString());
+    this.locale = options.locale;
     this.createSessionId = options.createSessionId ?? createDefaultCharacterDialogueSessionId;
     this.createMessageId = options.createMessageId;
     this.logger = options.logger;
@@ -225,12 +230,14 @@ export class CharacterDialogueRuntimeService {
   }
 
   createSession(input: CreateCharacterDialogueSessionInput): CharacterDialogueSession {
+    const locale = input.locale ?? this.locale;
     return new CharacterDialogueSession({
       id: this.createSessionId(input.entityRef),
       entityRef: input.entityRef,
       profileSnapshot: input.profile,
       mode: input.mode,
       responder: this.ports.createResponder(),
+      ...(locale ? { locale } : {}),
       now: this.now,
       ...(this.createMessageId ? { createMessageId: this.createMessageId } : {}),
     });
@@ -260,6 +267,7 @@ export class CharacterDialogueRuntimeService {
       entityRef,
       profile: input.profile,
       mode: input.mode ?? 'roleplay',
+      ...(this.locale ? { locale: this.locale } : {}),
     });
 
     try {
@@ -387,7 +395,7 @@ export async function evaluateCharacterDialogueTranscript(
   const service = options.service;
   if (service) {
     try {
-      const prompts = projectCharacterRoleEvaluationPrompt(artifact);
+      const prompts = projectCharacterRoleEvaluationPrompt(artifact, { locale: options.locale });
       const response = await service.chat(
         [
           { role: 'system', content: prompts.systemPrompt },

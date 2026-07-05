@@ -8,9 +8,9 @@ import {
   type Plan,
   type ToolCall,
 } from '@neko-agent/types';
-import type { AgentEvent } from '../session';
-import { createPlanContentBlockFromToolResultData } from '../plan';
-import { applyToolResultBackfillToResult } from './tool-result-backfill';
+import type { AgentEvent } from '../../session';
+import { createPlanContentBlockFromToolResultData } from '../../plan';
+import { applyToolResultBackfillToResult } from '../tool-result-backfill';
 
 type CompositeBlockData = NonNullable<ContentBlock['composite']>;
 

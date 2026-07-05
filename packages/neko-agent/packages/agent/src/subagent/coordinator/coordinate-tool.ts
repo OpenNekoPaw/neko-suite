@@ -69,6 +69,39 @@ The coordinator manages the full workflow: plan → optional user confirmation �
 ## Task Dependencies
 Use the 'dependencies' field to specify task IDs that must complete first.
 Dependency results are automatically passed to dependent tasks as context.`,
+    localization: {
+      zh: {
+        description: `编排多个 SubAgent 并行处理相关任务，并管理任务依赖。
+
+当多个任务适合并行执行且需要协调时使用。
+任务可以声明依赖；依赖完成前，对应任务不会启动。
+协调器负责完整流程：计划、可选用户确认、执行、完成。
+
+## 何时使用
+- 多个互相依赖的创意任务
+- 并行生成并带质量验证
+- 带依赖链的多步骤流程
+
+## 何时不要使用
+- 单个任务，请改用 task 工具
+- 无依赖的独立并行任务，请使用多个 task 调用`,
+        parameters: {
+          description: '工作流描述。',
+          tasks: '要协调的任务列表。',
+          'tasks.[].id': '唯一任务 ID，用于依赖引用。',
+          'tasks.[].description': '简短任务描述。',
+          'tasks.[].prompt': '给 SubAgent 的详细任务提示。',
+          'tasks.[].agent_type':
+            'SubAgent 预设类型。内建类型包括 code-search、file-explorer、test-runner、document-writer、general 和 npc-character；宿主可以贡献更多预设类型。',
+          'tasks.[].dependencies': '必须先完成的任务 ID 列表。',
+          'tasks.[].priority': '优先级，数值越高越早调度，默认 0。',
+          'tasks.[].metadata': '任务的宿主自定义元数据。',
+          max_concurrency: '最大并发 SubAgent 数，默认 3。',
+          require_confirmation: '执行前是否需要用户确认，默认 true。',
+          worker_model: 'Worker SubAgent 使用的模型档位，默认 balanced。',
+        },
+      },
+    },
 
     parameters: {
       type: 'object',
@@ -168,6 +201,7 @@ Dependency results are automatically passed to dependent tasks as context.`,
         typeof metadata.parentAgentId === 'string' && metadata.parentAgentId.length > 0
           ? metadata.parentAgentId
           : `agent-${conversationId}`;
+      const locale = typeof metadata.locale === 'string' ? metadata.locale : undefined;
 
       // Convert tool args to TaskItems
       const taskItems: Omit<TaskItem, 'status'>[] = tasks.map((t) => ({
@@ -188,6 +222,7 @@ Dependency results are automatically passed to dependent tasks as context.`,
           maxConcurrency: max_concurrency,
           requireConfirmation: require_confirmation,
           workerModelTier: worker_model as 'fast' | 'balanced' | 'powerful' | undefined,
+          ...(locale ? { locale } : {}),
         },
         {
           subAgentManager: deps.subAgentManager,

@@ -78,6 +78,23 @@ describe('character role prompt projectors', () => {
     );
   });
 
+  it('renders Chinese character dialogue prompts without English wrapper drift', () => {
+    const prompt = projectCharacterDialogueSystemPrompt(richProfile, {
+      mode: 'roleplay',
+      locale: 'zh-CN',
+    });
+
+    expect(prompt).toContain('你是 小橘。');
+    expect(prompt).toContain('## 会话模式');
+    expect(prompt).toContain('## 已确认事实');
+    expect(prompt).toContain('## 建议 / 不确定事实');
+    expect(prompt).toContain('- speech.catchphrase: 我先看看 (置信度 72%) [agent-inferred]');
+    expect(prompt).toContain('- portrait: project://assets/xiaoju-portrait (默认)');
+    expect(prompt).not.toContain('## Session Mode');
+    expect(prompt).not.toContain('## Confirmed Facts');
+    expect(prompt).not.toContain('Suggested facts are uncertain');
+  });
+
   it('renders thin profiles with explicit missing context boundaries', () => {
     const prompt = projectCharacterDialogueSystemPrompt(
       {
@@ -127,6 +144,33 @@ describe('character role prompt projectors', () => {
     expect(prompt.userPrompt).toContain('"dimension": "persona-consistency"');
     expect(prompt.userPrompt).toContain('"authority": "suggested"');
     expect(prompt.userPrompt).toContain('"requiresUserConfirmation": true');
+  });
+
+  it('renders Chinese evaluator prompt instructions while preserving JSON keys', () => {
+    const artifact: NpcTranscriptArtifact = {
+      version: NPC_TRANSCRIPT_ARTIFACT_VERSION,
+      createdAt: '2026-06-01T00:00:00.000Z',
+      entityRef,
+      mode: 'roleplay',
+      profileSnapshot: richProfile,
+      transcript: [
+        {
+          id: 'm1',
+          role: 'user',
+          content: '你好',
+          createdAt: '2026-06-01T00:00:01.000Z',
+        },
+      ],
+    };
+
+    const prompt = projectCharacterRoleEvaluationPrompt(artifact, { locale: 'zh' });
+
+    expect(prompt.systemPrompt).toContain('只返回 JSON');
+    expect(prompt.userPrompt).toContain('## 角色档案快照');
+    expect(prompt.userPrompt).toContain('## 对话转录');
+    expect(prompt.userPrompt).toContain('"dimension": "persona-consistency"');
+    expect(prompt.systemPrompt).not.toContain('Return JSON only');
+    expect(prompt.userPrompt).not.toContain('## Profile Snapshot');
   });
 
   it('parses evaluator JSON only when it matches the report contract', () => {

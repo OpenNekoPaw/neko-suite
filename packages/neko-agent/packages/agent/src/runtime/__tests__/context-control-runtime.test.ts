@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { compressAgentContext, sendAgentContextTokenCount } from '../context-control-runtime';
+import { compressAgentContext, sendAgentContextTokenCount } from '../turn/context-control-runtime';
 
 describe('context control runtime', () => {
   it('sends token count from injected context manager', () => {

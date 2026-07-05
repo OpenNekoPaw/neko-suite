@@ -3,6 +3,7 @@ import {
   DEFAULT_TASK_LIFECYCLE_METADATA,
   TASK_TYPES,
   createTaskLifecycleMetadata,
+  extractTaskRunLease,
   isTaskType,
   type SerializableTask,
   type TaskExecutionContext,
@@ -21,6 +22,8 @@ describe('task lifecycle contracts', () => {
     expect(
       createTaskLifecycleMetadata({
         ownerConversationId: 'conversation-1',
+        ownerRunId: 'run-1',
+        ownerRunStartedAt: 101,
         runMode: 'background',
         costPhase: 'external-wait',
         interruptPolicy: 'detach-and-continue',
@@ -28,6 +31,8 @@ describe('task lifecycle contracts', () => {
       }),
     ).toEqual({
       ownerConversationId: 'conversation-1',
+      ownerRunId: 'run-1',
+      ownerRunStartedAt: 101,
       runMode: 'background',
       costPhase: 'external-wait',
       interruptPolicy: 'detach-and-continue',
@@ -73,5 +78,21 @@ describe('task lifecycle contracts', () => {
     expect(JSON.stringify(lifecycle)).not.toContain('signal');
     expect(Object.keys(lifecycle)).not.toContain('signal');
     expect(context.signal).toBe(controller.signal);
+  });
+
+  it('extracts a serializable conversation/run lease for long-running tasks', () => {
+    const lifecycle = createTaskLifecycleMetadata({
+      ownerConversationId: 'conversation-1',
+      ownerRunId: 'run-1',
+      ownerRunStartedAt: 123,
+      runMode: 'background',
+    });
+
+    expect(extractTaskRunLease({ lifecycle })).toEqual({
+      conversationId: 'conversation-1',
+      runId: 'run-1',
+      runStartedAt: 123,
+    });
+    expect(extractTaskRunLease({ lifecycle: { ...lifecycle, ownerRunId: undefined } })).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
-import { TOOL_NAMES_MEDIA } from '@neko/shared';
-import { buildAgentTurnRuntimeInput } from '../agent-turn-assembly';
+import { describe, expect, it, vi, type Mock } from 'vitest';
+import { TOOL_NAMES_MEDIA, type SkillLifecycleProjection } from '@neko/shared';
+import { buildAgentTurnRuntimeInput } from '../turn/agent-turn-assembly';
 import {
   AGENT_TURN_PRECONDITION_MESSAGE,
   executeAgentTurn,
@@ -8,11 +8,11 @@ import {
   runAgentTurnRuntime,
   type AgentTurnRunner,
   type ExecuteAgentTurnInput,
-} from '../agent-turn-runtime';
-import { AGENT_SESSION_BUSY_MESSAGE } from '../agent-session-runner';
-import type { AgentPendingMessageItem } from '../agent-runner-port';
-import type { TimelineContextRuntime } from '../timeline-context-runtime';
-import { createTimelineSelectionContextPacket } from '../multimodal-context-packet';
+} from '../turn/agent-turn-runtime';
+import { AGENT_SESSION_BUSY_MESSAGE } from '../runner/agent-session-runner';
+import type { AgentPendingMessageItem } from '../runner/agent-runner-port';
+import type { TimelineContextRuntime } from '../turn/timeline-context-runtime';
+import { createTimelineSelectionContextPacket } from '../turn/multimodal-context-packet';
 import type { AgentEvent } from '../../session/types';
 
 type TestPlatform = { readonly name: string };
@@ -32,6 +32,10 @@ type TestProvider = {
   readonly modelCapabilities?: Readonly<Record<string, readonly string[]>>;
 };
 
+type TestAgentRunner = AgentTurnRunner<TestPlatform, TestContext> & {
+  readonly applySkillLifecycleProjection: Mock<(projection: SkillLifecycleProjection) => void>;
+};
+
 function createAgentRunner(
   overrides: {
     readonly history?: readonly unknown[];
@@ -40,7 +44,7 @@ function createAgentRunner(
     readonly isRunning?: boolean;
     readonly config?: unknown;
   } = {},
-): AgentTurnRunner<TestPlatform, TestContext> {
+): TestAgentRunner {
   let activeSkillName = overrides.activeSkillName;
   const pendingMessages: AgentPendingMessageItem[] = [];
   let pendingSequence = 0;
@@ -98,6 +102,7 @@ function createAgentRunner(
     drainPendingMessageQueue: vi.fn(() => pendingMessages.splice(0).map((item) => ({ ...item }))),
     activateToolSetsForTools: vi.fn(() => ['ai-generation']),
     deactivateToolSet: vi.fn(),
+    applySkillLifecycleProjection: vi.fn<(projection: SkillLifecycleProjection) => void>(),
     applySkillInjection: vi.fn((_injection, skill) => {
       activeSkillName = skill?.name;
     }),
@@ -383,6 +388,20 @@ describe('executeAgentTurn', () => {
     );
   });
 
+  it('normalizes the runtime locale into runner configuration', async () => {
+    const { input, agentRunner } = createBaseInput({
+      locale: 'zh-CN',
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.configure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locale: 'zh',
+      }),
+    );
+  });
+
   it('keeps Plan Mode above lifecycle Skill tool policy', async () => {
     const { input, agentRunner } = createBaseInput({
       isPlanMode: vi.fn(() => true),
@@ -419,12 +438,10 @@ describe('executeAgentTurn', () => {
         autoExecuteTools: true,
       }),
     );
-    expect(agentRunner.applySkillInjection).toHaveBeenCalledWith(
-      expect.objectContaining({
-        allowedTools: ['WriteDocument'],
-      }),
-      expect.any(Object),
+    expect(agentRunner.applySkillLifecycleProjection).toHaveBeenCalledWith(
+      input.skillLifecycle?.projection,
     );
+    expect(agentRunner.applySkillInjection).not.toHaveBeenCalled();
   });
 
   it('keeps approval gating above lifecycle Skill allowlists', async () => {
@@ -466,12 +483,10 @@ describe('executeAgentTurn', () => {
         autoExecuteTools: false,
       }),
     );
-    expect(agentRunner.applySkillInjection).toHaveBeenCalledWith(
-      expect.objectContaining({
-        allowedTools: ['WriteDocument'],
-      }),
-      expect.any(Object),
+    expect(agentRunner.applySkillLifecycleProjection).toHaveBeenCalledWith(
+      input.skillLifecycle?.projection,
     );
+    expect(agentRunner.applySkillInjection).not.toHaveBeenCalled();
   });
 
   it('queues same-config text input while the runner is already processing', async () => {
@@ -921,13 +936,10 @@ describe('executeAgentTurn', () => {
 
     await executeAgentTurn(input);
 
-    expect(agentRunner.applySkillInjection).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'lifecycle-projection',
-        allowedTools: ['WriteDocument'],
-      }),
-      expect.any(Object),
+    expect(agentRunner.applySkillLifecycleProjection).toHaveBeenCalledWith(
+      input.skillLifecycle?.projection,
     );
+    expect(agentRunner.applySkillInjection).not.toHaveBeenCalled();
     expect(agentRunner.activateToolSetsForTools).not.toHaveBeenCalled();
   });
 
@@ -963,13 +975,10 @@ describe('executeAgentTurn', () => {
 
     await executeAgentTurn(input);
 
-    expect(agentRunner.applySkillInjection).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'lifecycle-projection',
-        allowedTools: [TOOL_NAMES_MEDIA.GENERATE_IMAGE],
-      }),
-      expect.any(Object),
+    expect(agentRunner.applySkillLifecycleProjection).toHaveBeenCalledWith(
+      input.skillLifecycle?.projection,
     );
+    expect(agentRunner.applySkillInjection).not.toHaveBeenCalled();
     expect(agentRunner.activateToolSetsForTools).toHaveBeenCalledWith([
       TOOL_NAMES_MEDIA.GENERATE_IMAGE,
     ]);
@@ -1030,18 +1039,10 @@ describe('executeAgentTurn', () => {
 
     await executeAgentTurn(input);
 
-    expect(agentRunner.applySkillInjection).toHaveBeenCalledWith(
-      {
-        name: 'lifecycle-projection',
-        type: 'skill',
-        systemPrompt: 'Stage persona prompt\n\nReview prompt',
-        allowedTools: ['ReadDocument'],
-      },
-      expect.objectContaining({
-        name: 'lifecycle-projection',
-        content: 'Stage persona prompt\n\nReview prompt',
-      }),
+    expect(agentRunner.applySkillLifecycleProjection).toHaveBeenCalledWith(
+      input.skillLifecycle?.projection,
     );
+    expect(agentRunner.applySkillInjection).not.toHaveBeenCalled();
   });
 
   it('does not apply retired active skill state when lifecycle projection is empty', async () => {
@@ -1078,6 +1079,9 @@ describe('executeAgentTurn', () => {
 
     await executeAgentTurn(input);
 
+    expect(agentRunner.applySkillLifecycleProjection).toHaveBeenCalledWith(
+      input.skillLifecycle?.projection,
+    );
     expect(agentRunner.applySkillInjection).not.toHaveBeenCalled();
   });
 

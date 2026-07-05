@@ -26,7 +26,7 @@ describe('skill webview presenter', () => {
     });
   });
 
-  it('builds skill injection messages with optional conversation and tools', () => {
+  it('builds skill injection messages with explicit conversation and tools', () => {
     const injection: SkillInjection = {
       name: 'review',
       systemPrompt: 'Review code',
@@ -58,5 +58,13 @@ describe('skill webview presenter', () => {
       model: 'claude',
       toolDefinitions: [{ name: 'custom_tool', description: 'Custom tool', parameters: {} }],
     });
+
+    expect(() =>
+      buildSkillInjectionMessage({
+        injection,
+        skill,
+        conversationId: '',
+      }),
+    ).toThrow('skillInjection requires non-empty conversationId');
   });
 });

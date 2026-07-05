@@ -232,6 +232,21 @@ describe('Coordinator', () => {
       expect(subConfig?.prompt).toContain('Context from Coordinator');
       expect(subConfig?.prompt).toContain('sci-fi video');
     });
+
+    it('should localize worker prompt wrappers and pass locale to SubAgents', async () => {
+      const config = createConfig({
+        parentContext: '我们正在编辑中文分镜',
+        locale: 'zh-CN',
+      });
+      await collectEvents(createCoordinator(config, deps));
+
+      const spawnCall = (deps.subAgentManager.spawn as ReturnType<typeof vi.fn>).mock.calls[0];
+      const subConfig = spawnCall?.[2];
+      expect(subConfig?.prompt).toContain('## 协调器上下文');
+      expect(subConfig?.prompt).toContain('## 任务');
+      expect(subConfig?.prompt).not.toContain('## Context from Coordinator');
+      expect(subConfig?.locale).toBe('zh-CN');
+    });
   });
 
   describe('cancel', () => {

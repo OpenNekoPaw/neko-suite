@@ -8,6 +8,12 @@
 import type { ITaskRecoveryStorage, TaskRecoveryInfo } from '@neko/shared';
 import { isTaskType } from '@neko/shared';
 import { getLogger } from '../utils/logger';
+import {
+  assertJsonFileRevisionCurrent,
+  createJsonFileWriteMetadata,
+  createJsonFileWriterId,
+  parseJsonFileWriteMetadata,
+} from '../workspace/json-file-write-guard';
 
 const logger = getLogger('TaskRecoveryStorage');
 
@@ -122,6 +128,10 @@ export interface FileTaskRecoveryStorageOptions {
   deleteFile: (path: string) => Promise<void>;
   /** Storage file path */
   filePath: string;
+  /** Writer identity used for local stale-write diagnostics. */
+  writerId?: string;
+  /** Clock injection for write metadata. */
+  now?: () => number;
 }
 
 /**
@@ -131,12 +141,17 @@ export interface FileTaskRecoveryStorageOptions {
 export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
   private cache: Map<string, TaskRecoveryInfo> = new Map();
   private options: FileTaskRecoveryStorageOptions;
+  private readonly writerId: string;
+  private readonly now: () => number;
   private initialized = false;
   private dirty = false;
+  private loadedRevision = 0;
   private saveTimer?: ReturnType<typeof setTimeout>;
 
   constructor(options: FileTaskRecoveryStorageOptions) {
     this.options = options;
+    this.writerId = options.writerId ?? createJsonFileWriterId('task-recovery');
+    this.now = options.now ?? (() => Date.now());
   }
 
   async save(info: TaskRecoveryInfo): Promise<void> {
@@ -181,9 +196,25 @@ export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
       return;
     }
 
-    const data = Array.from(this.cache.values());
+    await assertJsonFileRevisionCurrent({
+      filePath: this.options.filePath,
+      ownerId: this.writerId,
+      loadedRevision: this.loadedRevision,
+      fsOps: this.options,
+    });
+    const writeMetadata = createJsonFileWriteMetadata(
+      this.writerId,
+      this.loadedRevision,
+      this.now,
+    );
+    const data = {
+      version: 1,
+      writeMetadata,
+      recovery: Array.from(this.cache.values()),
+    };
     const content = JSON.stringify(data, null, 2);
     await this.options.writeFile(this.options.filePath, content);
+    this.loadedRevision = writeMetadata.revision;
     this.dirty = false;
   }
 
@@ -203,7 +234,9 @@ export class FileTaskRecoveryStorage implements ITaskRecoveryStorage {
       const exists = await this.options.exists(this.options.filePath);
       if (exists) {
         const content = await this.options.readFile(this.options.filePath);
-        const data = parseTaskRecoveryInfoArray(JSON.parse(content));
+        const parsed = parseTaskRecoveryStorageContent(content);
+        this.loadedRevision = parsed.revision;
+        const data = parseTaskRecoveryInfoArray(parsed.recovery);
         if (!data) {
           throw new Error('Recovery file does not contain valid task recovery records');
         }
@@ -267,6 +300,23 @@ function parseTaskRecoveryInfoArray(value: unknown): TaskRecoveryInfo[] | null {
     infos.push(info);
   }
   return infos;
+}
+
+function parseTaskRecoveryStorageContent(content: string): {
+  readonly recovery: unknown;
+  readonly revision: number;
+} {
+  const parsed = JSON.parse(content) as unknown;
+  if (Array.isArray(parsed)) {
+    return { recovery: parsed, revision: 0 };
+  }
+  if (isRecord(parsed) && Array.isArray(parsed['recovery'])) {
+    return {
+      recovery: parsed['recovery'],
+      revision: parseJsonFileWriteMetadata(parsed)?.revision ?? 0,
+    };
+  }
+  throw new Error('Recovery file does not contain a recovery array');
 }
 
 function parseTaskRecoveryInfo(value: unknown): TaskRecoveryInfo | null {

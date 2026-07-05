@@ -17,6 +17,9 @@ import type {
   IProviderCardRegistry,
   IOperationToolAdapterRegistry,
   PromptFragment,
+  AgentTaskResultFollowUpRequest,
+  AgentTaskResultObservation,
+  AgentTaskResultDeliveryPolicy,
 } from '@neko/shared';
 import type { ArtifactWatcherFactory } from '../runtime/types';
 import type { ToolTraitsRegistry } from '../permission/tool-traits-registry';
@@ -26,9 +29,10 @@ import type {
   PerceptionSimilarityClient,
   PerceptionTranscribeClient,
 } from '../tools/perception';
-import type { AgentExternalProcessorRuntime } from '../runtime/external-processor-runtime';
-import type { AgentContentAccessRuntime } from '../runtime/agent-content-access-runtime';
+import type { AgentExternalProcessorRuntime } from '../runtime/capability/external-processor-runtime';
+import type { AgentContentAccessRuntime } from '../runtime/capability/agent-content-access-runtime';
 import type { AgentMessageQueueSnapshot, AgentQueuedMessageItem } from '@neko-agent/types';
+import type { TaskResultObservationJournalEntry } from './task-result-observation-recorder';
 
 // Re-export validation types
 export type { ValidationError, ValidationWarning } from '../validation/types';
@@ -71,6 +75,14 @@ export interface AgentEventErrorRecord {
   name?: string;
 }
 
+export interface RecordSessionTaskResultObservationInput {
+  readonly observation: AgentTaskResultObservation;
+  readonly outputData?: unknown;
+  readonly deliveryPolicy?: AgentTaskResultDeliveryPolicy;
+  readonly existingEntries?: readonly TaskResultObservationJournalEntry[];
+  readonly now?: number;
+}
+
 // =============================================================================
 // Session Configuration
 // =============================================================================
@@ -87,6 +99,13 @@ export interface AgentSessionConfig {
 
   /** System prompt (use SystemPromptBuilder to construct) */
   systemPrompt: string;
+
+  /**
+   * Locale for runtime prompt modules. The base system prompt may already be
+   * localized by SystemPromptBuilder; this keeps schema, memory, fragments, and
+   * other module-rendered sections aligned with the same language.
+   */
+  locale?: 'en' | 'zh';
 
   /**
    * Optional AGENTS.md overlay content to layer on top of the base prompt.
@@ -331,7 +350,7 @@ export interface AgentSessionConfig {
    * `workspace.fsOps.writeFile` exists, AgentSession may bootstrap a default
    * workspace-backed service.
    */
-  artifactService?: import('../runtime/artifact-service').IArtifactService;
+  artifactService?: import('../artifact/artifact-service').IArtifactService;
 
   /**
    * Optional runtime artifact watcher factory.
@@ -449,6 +468,7 @@ export type AgentEventType =
   | 'agent.observation.created' // Agent-first multimodal observation recorded
   | 'agent.evidence.attached' // Optional evidence attached to an observation/rationale
   | 'agent.rationale.created' // Agent decision rationale recorded
+  | 'agent.task_result.followup_requested' // Async task result requested follow-up
   | 'thinking' // Agent is in thinking phase
   | 'thinking_content' // Extended thinking content (Claude)
   | 'text' // Text output (complete)
@@ -594,6 +614,9 @@ export interface AgentEvent {
   /** Agent decision rationale event */
   agentRationale?: import('@neko/shared').DecisionRationale;
 
+  /** Async task-result follow-up request event */
+  taskResultFollowUp?: AgentTaskResultFollowUpRequest;
+
   /** Creative version entry (on version_recorded) */
   versionEntry?: import('@neko/shared').CreativeVersionEntry;
 
@@ -699,7 +722,7 @@ export interface IAgentSession {
    */
   getArtifactsForRun(
     runId?: string,
-  ): readonly import('../runtime/artifact-service').ArtifactRecord[];
+  ): readonly import('../artifact/artifact-service').ArtifactRecord[];
 
   /**
    * List run ids that currently have persisted Draft / Plan / Task artifacts.
@@ -723,7 +746,7 @@ export interface IAgentSession {
   writeDraftArtifact(
     draft: import('@neko-agent/types').Draft,
     options?: { runId?: string },
-  ): Promise<import('../runtime/artifact-service').ArtifactRecord<'draft'>>;
+  ): Promise<import('../artifact/artifact-service').ArtifactRecord<'draft'>>;
 
   /**
    * Persist an ExecutionPlan artifact through the unified runtime artifact service.
@@ -731,7 +754,7 @@ export interface IAgentSession {
   writePlanArtifact(
     plan: import('@neko-agent/types').ExecutionPlan,
     options?: { runId?: string },
-  ): Promise<import('../runtime/artifact-service').ArtifactRecord<'plan'>>;
+  ): Promise<import('../artifact/artifact-service').ArtifactRecord<'plan'>>;
 
   /**
    * Persist a Task artifact through the unified runtime artifact service.
@@ -739,7 +762,7 @@ export interface IAgentSession {
   writeTaskArtifact(
     task: import('@neko-agent/types').Task,
     options?: { runId?: string },
-  ): Promise<import('../runtime/artifact-service').ArtifactRecord<'task'>>;
+  ): Promise<import('../artifact/artifact-service').ArtifactRecord<'task'>>;
 
   // ---------------------------------------------------------------------------
   // Execution
@@ -794,11 +817,26 @@ export interface IAgentSession {
   addMessage(message: ChatMessage, sourceEventIds?: readonly string[]): void;
 
   /**
+   * Record an Agent-owned async task terminal result as durable observation
+   * events in the session journal.
+   */
+  recordTaskResultObservation(
+    input: RecordSessionTaskResultObservationInput,
+  ): Promise<import('./task-result-observation-recorder').RecordAgentTaskResultObservationResult>;
+
+  /**
    * Patch an existing tool result after background work completes.
    */
   patchToolResult(
     payload: import('@neko/shared').ToolResultBackfillPayload,
   ): Promise<ToolResultPatchResult>;
+
+  /**
+   * Apply a request-time Skill lifecycle projection directly to prompt and
+   * tool-policy state. This is the canonical turn path for lifecycle records;
+   * it must not route through the legacy single Skill injection bridge.
+   */
+  applySkillLifecycleProjection(projection: import('@neko/shared').SkillLifecycleProjection): void;
 
   /**
    * Apply skill injection (reversible via removeSkillInjection)

@@ -61,9 +61,33 @@ describe('NekoPaths', () => {
 
   it('log() returns canonical JSONL paths', () => {
     const p = createNekoPaths('/r');
+    expect(p.log('modelCalls')).toBe(`/r/.neko/logs/${NEKO_LOG_FILES.modelCalls}`);
     expect(p.log('events')).toBe(`/r/.neko/logs/${NEKO_LOG_FILES.events}`);
     expect(p.log('audits')).toBe(`/r/.neko/logs/${NEKO_LOG_FILES.audits}`);
     expect(p.log('steps')).toBe(`/r/.neko/logs/${NEKO_LOG_FILES.steps}`);
+  });
+
+  it('conversationLog() returns conversation-owned JSONL paths', () => {
+    const p = createNekoPaths('/r');
+    expect(p.conversationLog('modelCalls', 'conv-a')).toBe(
+      `/r/.neko/logs/conversations/conv-a/${NEKO_LOG_FILES.modelCalls}`,
+    );
+    expect(p.conversationLog('events', 'conv-a')).toBe(
+      `/r/.neko/logs/conversations/conv-a/${NEKO_LOG_FILES.events}`,
+    );
+    expect(p.conversationLog('audits', 'conv-b')).toBe(
+      `/r/.neko/logs/conversations/conv-b/${NEKO_LOG_FILES.audits}`,
+    );
+    expect(p.conversationLog('steps', 'conv-b')).toBe(
+      `/r/.neko/logs/conversations/conv-b/${NEKO_LOG_FILES.steps}`,
+    );
+  });
+
+  it('conversationLog() rejects unsafe conversation ids', () => {
+    const p = createNekoPaths('/r');
+    expect(() => p.conversationLog('events', '../conv-a')).toThrow(/invalid conversationId/);
+    expect(() => p.conversationLog('events', 'conv/a')).toThrow(/invalid conversationId/);
+    expect(() => p.conversationLog('events', '')).toThrow(/invalid conversationId/);
   });
 
   it('cache() returns canonical cache snapshot paths', () => {

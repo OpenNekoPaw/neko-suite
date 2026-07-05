@@ -1,13 +1,13 @@
 import { emitDiagnostic } from '@neko/shared';
-import { createAgentSession, type AgentSession } from '../session/agent-session';
-import type { AgentSessionConfig } from '../session/types';
-import { getLogger } from '../utils/logger';
+import { createAgentSession, type AgentSession } from '../../session/agent-session';
+import type { AgentSessionConfig } from '../../session/types';
+import { getLogger } from '../../utils/logger';
 import type {
   AgentRuntimeConfig,
   IArtifactStore,
   ICapabilityRuntime,
   ICreationGuidanceRuntime,
-} from './types';
+} from '../types';
 
 const logger = getLogger('AgentSessionRuntimeBootstrap');
 

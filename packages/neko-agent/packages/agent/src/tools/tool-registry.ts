@@ -20,6 +20,7 @@ import type {
   ToolFilterOptions,
   ToolDefinitionProjectionOptions,
   IToolRegistry,
+  AgentTraceContext,
 } from '@neko/shared';
 import { deriveAgentTraceContext, withAgentTrace } from '@neko/shared';
 import { AgentError } from '../errors';
@@ -126,10 +127,12 @@ export class ToolRegistry implements IToolRegistry {
     const requestId = createToolExecutionRequestId();
     const startedAt = Date.now();
     const logger = getToolRegistryLogger();
-    const trace = deriveAgentTraceContext(options?.trace, {
-      phase: 'tool',
-      toolRequestId: requestId,
-    });
+    const trace = normalizeOrdinaryToolLogTrace(
+      deriveAgentTraceContext(options?.trace, {
+        phase: 'tool',
+        toolRequestId: requestId,
+      }),
+    );
     logger.debug('neko.agent.tool.execute.request', {
       ...withAgentTrace(trace, {
         requestId,
@@ -344,6 +347,21 @@ let toolExecutionSequence = 0;
 
 function getToolRegistryLogger() {
   return getLogger('ToolRegistry');
+}
+
+function normalizeOrdinaryToolLogTrace(trace: AgentTraceContext): AgentTraceContext {
+  if (trace.runId === undefined || trace.runId !== trace.turnId) {
+    return trace;
+  }
+  return {
+    conversationId: trace.conversationId,
+    ...(trace.turnId !== undefined ? { turnId: trace.turnId } : {}),
+    ...(trace.iteration !== undefined ? { iteration: trace.iteration } : {}),
+    ...(trace.phase !== undefined ? { phase: trace.phase } : {}),
+    ...(trace.parentRequestId !== undefined ? { parentRequestId: trace.parentRequestId } : {}),
+    ...(trace.llmRequestId !== undefined ? { llmRequestId: trace.llmRequestId } : {}),
+    ...(trace.toolRequestId !== undefined ? { toolRequestId: trace.toolRequestId } : {}),
+  };
 }
 
 function createToolExecutionRequestId(now = Date.now()): string {

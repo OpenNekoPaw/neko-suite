@@ -83,6 +83,82 @@ describe('FileConversationStorage', () => {
     });
   });
 
+  it('loads the requested conversation journal partition without inferring current active ownership', async () => {
+    const workDir = '/workspace/demo';
+    const indexPath = '/tmp/conversations-index.json';
+    const { readFile, writeFile, exists } = createMemoryFs({
+      [indexPath]: JSON.stringify({
+        version: 1,
+        workspaces: { [workDir]: ['conv-active', 'conv-requested'] },
+        conversations: {
+          'conv-active': {
+            conversationId: 'conv-active',
+            title: 'Active elsewhere',
+            workDir,
+            createdAt: 1000,
+            updatedAt: 3000,
+            messageCount: 1,
+            source: 'extension',
+          },
+          'conv-requested': {
+            conversationId: 'conv-requested',
+            title: 'Requested',
+            workDir,
+            createdAt: 2000,
+            updatedAt: 2500,
+            messageCount: 1,
+            source: 'tui',
+          },
+        },
+      }),
+    });
+    const projectToSummary = vi.fn(async (conversationId: string) => {
+      if (conversationId !== 'conv-requested') {
+        throw new Error(`unexpected journal partition ${conversationId}`);
+      }
+      return {
+        conversationId,
+        title: 'Requested journal',
+        createdAt: 2000,
+        updatedAt: 2600,
+        messageCount: 1,
+        source: 'journal-projection' as const,
+      };
+    });
+    const projectToHistoryWithEventIds = vi.fn(async (conversationId: string) => {
+      if (conversationId !== 'conv-requested') {
+        throw new Error(`unexpected history partition ${conversationId}`);
+      }
+      return {
+        messages: [{ role: 'user' as const, content: 'requested history' }],
+        messageEventIds: [['evt-requested']],
+      };
+    });
+
+    const storage = new FileConversationStorage({
+      workDir,
+      indexFilePath: indexPath,
+      readFile,
+      writeFile,
+      exists,
+      journalProjection: {
+        projectToHistory: vi.fn(),
+        projectToHistoryWithEventIds,
+        projectToSummary,
+        projectAgentFirstGraph: vi.fn().mockResolvedValue(emptyAgentFirstGraph('conv-requested')),
+        scanAgentFirstIntegrity: vi.fn().mockResolvedValue(emptyIntegrityScan('conv-requested')),
+        filterEvents: vi.fn(),
+      },
+    });
+
+    const loaded = await storage.load('conv-requested');
+
+    expect(loaded?.id).toBe('conv-requested');
+    expect(loaded?.messages).toEqual([{ role: 'user', content: 'requested history' }]);
+    expect(projectToSummary).toHaveBeenCalledWith('conv-requested');
+    expect(projectToHistoryWithEventIds).toHaveBeenCalledWith('conv-requested');
+  });
+
   it('initializes an empty index when no index metadata exists', async () => {
     const workDir = '/workspace/demo';
     const indexPath = '/tmp/conversations-index.json';

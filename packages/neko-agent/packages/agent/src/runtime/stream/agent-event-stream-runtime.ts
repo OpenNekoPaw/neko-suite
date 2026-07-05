@@ -10,7 +10,8 @@ import type {
   TaskUpdatedMessage,
 } from '@neko-agent/types';
 import { buildAgentTurnTimelineMessage } from '@neko-agent/types';
-import type { AgentEvent } from '../session/types';
+import type { TaskRunLease } from '@neko/shared';
+import type { AgentEvent } from '../../session/types';
 import {
   applyAgentStreamEventToState,
   buildStreamCompleteProjectionMessage,
@@ -26,14 +27,15 @@ import {
   type AgentStreamBackgroundTaskObservedProgress,
   type AgentStreamBackgroundTaskCompletion,
   type AgentStreamBackgroundTaskProgressErrorEvent,
+  type AgentStreamBackgroundTaskTerminalEvent,
   type AgentStreamBackgroundTaskWaitInput,
   type ObserveAgentStreamBackgroundTaskProgressInput,
   type StartAgentStreamBackgroundTaskObserverInput,
 } from './agent-stream-task-observer';
-import type { AgentStreamPersistenceSnapshot } from './message-runtime';
+import type { AgentStreamPersistenceSnapshot } from '../turn/message-runtime';
 import type { AgentStreamBackgroundTaskPersistInput } from './agent-stream-background-task';
-import { applyToolResultBackfillToResult } from './tool-result-backfill';
-import { buildAgentAssistantMessageFromStream } from './message-runtime';
+import { applyToolResultBackfillToResult } from '../tool-result-backfill';
+import { buildAgentAssistantMessageFromStream } from '../turn/message-runtime';
 
 export type AgentEventStreamRuntimeMessage =
   AgentStreamProjectionMessage | AgentTurnTimelineMessage | TaskCreatedMessage | TaskUpdatedMessage;
@@ -57,6 +59,9 @@ export interface AgentEventStreamRuntimeBackgroundTasks<
   readonly persistResultUrls?: (
     input: AgentStreamBackgroundTaskPersistInput<TDeliveryPlan>,
   ) => void;
+  readonly onTerminalTask?: (
+    event: AgentStreamBackgroundTaskTerminalEvent<TSourceTask, TDeliveryPlan>,
+  ) => void | Promise<void>;
   readonly onIgnoredConversationTask?: StartAgentStreamBackgroundTaskObserverInput<
     TSourceTask,
     TDeliveryPlan
@@ -65,6 +70,10 @@ export interface AgentEventStreamRuntimeBackgroundTasks<
     TSourceTask,
     TDeliveryPlan
   >['onProgressDeliveryError'];
+  readonly onStaleTaskProgress?: StartAgentStreamBackgroundTaskObserverInput<
+    TSourceTask,
+    TDeliveryPlan
+  >['onStaleTaskProgress'];
   readonly shouldForgetSubscriptionAfterProgressDelivery?: (
     progress: AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>,
   ) => boolean;
@@ -251,6 +260,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     };
 
     const observer = startAgentStreamBackgroundTaskObserver<TSourceTask, TDeliveryPlan>({
+      lease: readBackgroundTaskRunLease(input.conversationId, event),
       conversationId: input.conversationId,
       messageId: streamingMessageId,
       event,
@@ -271,6 +281,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
         return progress;
       },
       persistResultUrls: backgroundTasks.persistResultUrls,
+      onTerminalTask: backgroundTasks.onTerminalTask,
       onIgnoredConversationTask: (ignoredEvent) => {
         backgroundTasks.onIgnoredConversationTask?.(ignoredEvent);
         forgetSubscription();
@@ -281,6 +292,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
           forgetSubscription();
         }
       },
+      onStaleTaskProgress: backgroundTasks.onStaleTaskProgress,
       now: input.now,
     });
 
@@ -726,6 +738,53 @@ function readErrorDetails(error: AgentEvent['error']): Record<string, unknown> |
   if (!isRecord(error)) return undefined;
   const context = error['context'];
   return isRecord(context) ? context : undefined;
+}
+
+function readBackgroundTaskRunLease(
+  conversationId: string,
+  event: AgentEvent,
+): TaskRunLease | undefined {
+  if (event.type !== 'tool_result') {
+    return undefined;
+  }
+
+  const data = event.toolResult?.data;
+  const dataRecord = isRecord(data) ? data : undefined;
+  const candidateRecords = [
+    event.toolResult?.metadata,
+    dataRecord,
+    isRecord(dataRecord?.['trace']) ? dataRecord['trace'] : undefined,
+    isRecord(dataRecord?.['legacyTrace']) ? dataRecord['legacyTrace'] : undefined,
+  ];
+
+  for (const candidate of candidateRecords) {
+    if (!candidate) {
+      continue;
+    }
+    const runId = readString(candidate, 'runId');
+    if (!runId) {
+      continue;
+    }
+    const candidateConversationId = readString(candidate, 'conversationId') ?? conversationId;
+    const runStartedAt = readNumber(candidate, 'runStartedAt');
+    return {
+      conversationId: candidateConversationId,
+      runId,
+      ...(runStartedAt !== undefined ? { runStartedAt } : {}),
+    };
+  }
+
+  return undefined;
+}
+
+function readString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+function readNumber(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

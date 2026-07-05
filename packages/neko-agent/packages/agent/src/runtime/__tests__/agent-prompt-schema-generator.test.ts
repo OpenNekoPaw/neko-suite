@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentInjectedCapabilitySet, PromptGenerationContext } from '@neko-agent/types';
 import type { ToolDefinition } from '@neko/shared';
-import { createAgentPromptSchemaGenerator } from '../agent-prompt-schema-generator';
+import { createAgentPromptSchemaGenerator } from '../capability/agent-prompt-schema-generator';
 
 const toolSchema: ToolDefinition = {
   type: 'function',

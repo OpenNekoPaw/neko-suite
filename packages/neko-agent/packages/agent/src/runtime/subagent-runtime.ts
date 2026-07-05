@@ -19,9 +19,9 @@ import {
   type SpecializedAgentPreset,
 } from '../subagent';
 import type { AgentSessionConfig } from '../session/types';
-import { createAgentSessionWithRuntime } from './session-config-projection';
-import { summarizeAgentEventProgress } from './message-runtime';
-import { createNodeArtifactStore } from './node-artifact-store';
+import { createAgentSessionWithRuntime } from './session/session-config-projection';
+import { summarizeAgentEventProgress } from './turn/message-runtime';
+import { createNodeArtifactStore } from '../artifact/node-artifact-store';
 import type { IArtifactStore, ICapabilityRuntime, IValidationLoop } from './types';
 import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
 

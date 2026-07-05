@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MultimodalContextPacket } from '@neko/shared';
-import type { TimelineContextEditorLike } from '../timeline-context-runtime';
-import { createTimelineContextRuntime } from '../timeline-context-runtime';
+import type { TimelineContextEditorLike } from '../turn/timeline-context-runtime';
+import { createTimelineContextRuntime } from '../turn/timeline-context-runtime';
 
 function createTimelineEditor(
   overrides: Partial<{

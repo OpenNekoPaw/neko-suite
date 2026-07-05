@@ -28,7 +28,7 @@ function milestone(overrides: Partial<Milestone> = {}): Milestone {
 
 describe('narrateOne', () => {
   it('prefixes the default icon for each kind', () => {
-    expect(narrateOne(milestone({ kind: 'run-started', label: 'Run started (wf-1)' }))).toBe(
+    expect(narrateOne(milestone({ kind: 'creation-started', label: 'Run started (wf-1)' }))).toBe(
       '▶ Run started (wf-1)',
     );
     expect(narrateOne(milestone({ kind: 'autoheal', label: 'Retry #1 (tool.x)' }))).toBe(
@@ -61,7 +61,7 @@ describe('narrateOne', () => {
 describe('narrate', () => {
   it('preserves insertion order and joins with newlines', () => {
     const events: Milestone[] = [
-      milestone({ kind: 'run-started', label: 'Run started' }),
+      milestone({ kind: 'creation-started', label: 'Run started' }),
       milestone({ kind: 'round-decided', label: 'Round 0' }),
       milestone({ kind: 'run-ended', label: 'Run completed' }),
     ];
@@ -94,7 +94,7 @@ describe('narrateHeadline', () => {
 
   it('appends round counter when rounds exist', () => {
     const events: Milestone[] = [
-      milestone({ kind: 'run-started', label: 'Started' }),
+      milestone({ kind: 'creation-started', label: 'Started' }),
       milestone({ kind: 'round-decided', label: 'Round 0' }),
       milestone({ kind: 'round-decided', label: 'Round 1' }),
       milestone({ kind: 'round-decided', label: 'Round 2' }),
@@ -109,7 +109,7 @@ describe('narrateHeadline', () => {
   });
 
   it('no rounds → no counter', () => {
-    const events: Milestone[] = [milestone({ kind: 'run-started', label: 'Started' })];
+    const events: Milestone[] = [milestone({ kind: 'creation-started', label: 'Started' })];
     expect(narrateHeadline(events)).toBe('▶ Started');
   });
 });

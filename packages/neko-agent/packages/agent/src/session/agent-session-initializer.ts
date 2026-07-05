@@ -142,9 +142,10 @@ export function initializeSession(
     : undefined;
   const creativeSummarizer = classifier
     ? new CreativeSummarizer(classifier, {
-        service: config.service,
-        creativeConfig: typeof creativeOpt === 'object' ? creativeOpt : undefined,
-        summarizerConfig: {
+      service: config.service,
+      creativeConfig: typeof creativeOpt === 'object' ? creativeOpt : undefined,
+      locale: config.locale,
+      summarizerConfig: {
           provider: config.providerId,
           model: config.modelId,
         },
@@ -153,6 +154,7 @@ export function initializeSession(
 
   const compressor = new ConversationCompressor(
     {
+      locale: config.locale ?? 'en',
       triggers: {
         tokenThreshold: config.contextSettings?.maxTokens ?? DEFAULT_MAX_CONTEXT_TOKENS,
         turnThreshold: 20,
@@ -372,7 +374,7 @@ function buildInitializerPromptContext(
   return freezePromptContext({
     runId: null,
     stage: config.stageTracking?.initialStage ?? null,
-    locale: 'en',
+    locale: config.locale ?? 'en',
     projectPath: config.workspace?.root ?? '',
     activeSkillName: null,
     activeTools: [

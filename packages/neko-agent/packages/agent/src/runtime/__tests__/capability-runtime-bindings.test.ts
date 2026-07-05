@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createCapabilityRuntimeBindingStore,
   mergeCapabilityRuntimeBindings,
-} from '../capability-runtime-bindings';
+} from '../capability/capability-runtime-bindings';
 
 describe('capability-runtime-bindings', () => {
   it('keeps existing bindings when a later update passes undefined', () => {

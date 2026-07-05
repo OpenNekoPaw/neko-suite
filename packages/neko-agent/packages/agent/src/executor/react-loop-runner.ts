@@ -31,11 +31,10 @@ import {
   withAgentTrace,
   type AgentContext,
   type AgentResult,
-  type AutohealOutcome,
   type ExecutorHooks,
-  type IAutohealChain,
   type ToolResultWithMeta,
 } from '@neko/shared';
+import type { AutohealOutcome, IAutohealChain } from '@neko/shared/types/agent-autoheal';
 import type { IdcStage, StageActivationDecision, StageTaskShape } from '@neko-agent/types';
 import { CREATION_CHANNELS, EXECUTION_CHANNELS } from '@neko-agent/types';
 import { DEFAULT_READ_ONLY_TOOLS } from '../permission/types';
@@ -512,7 +511,13 @@ function autohealOutcomeToHint(outcome: AutohealOutcome): 'retry' | 'user-cancel
       return 'retry';
     case 'aborted':
       return 'user-cancel';
+    default:
+      return assertNeverAutohealOutcome(outcome);
   }
+}
+
+function assertNeverAutohealOutcome(outcome: never): never {
+  throw new Error(`Unhandled autoheal outcome: ${JSON.stringify(outcome)}`);
 }
 
 /**

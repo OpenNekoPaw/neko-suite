@@ -73,6 +73,78 @@ describe('ToolRegistry trace isolation', () => {
       }),
     );
   });
+
+  it('logs ordinary tool calls by conversation, turn, and tool request without duplicate run id', async () => {
+    const transport = new CapturedLogTransport();
+    const { setRootLogger } = await import('../../utils/logger');
+    setRootLogger(new ConsoleLogger('Agent', LogLevel.Debug, [transport]));
+    const { ToolRegistry } = await import('../tool-registry');
+    const registry = new ToolRegistry();
+    registry.register(
+      createTool({
+        name: 'ReadFile',
+        description: 'Read a file',
+        category: 'file',
+        isConcurrencySafe: true,
+        isReadOnly: true,
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+          },
+          required: ['path'],
+        },
+        execute: vi.fn(async () => ({ success: true, data: 'ok' })),
+      }),
+    );
+
+    await registry.execute(
+      'ReadFile',
+      { path: 'package.json' },
+      {
+        trace: createAgentTraceContext({
+          conversationId: 'conv-tool-log',
+          runId: 'turn-conv-tool-log-a',
+          turnId: 'turn-conv-tool-log-a',
+          phase: 'tool',
+        }),
+      },
+    );
+
+    const requestLog = transport
+      .list()
+      .find((entry) => entry.message === 'neko.agent.tool.execute.request');
+    const resultLog = transport
+      .list()
+      .find((entry) => entry.message === 'neko.agent.tool.execute.result');
+    const requestData = requestLog?.data as
+      | { requestId?: string; trace?: Record<string, unknown> }
+      | undefined;
+    const resultData = resultLog?.data as
+      | { requestId?: string; trace?: Record<string, unknown> }
+      | undefined;
+
+    expect(requestData).toBeDefined();
+    expect(resultData).toBeDefined();
+    expect(requestData!.trace).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv-tool-log',
+        turnId: 'turn-conv-tool-log-a',
+        phase: 'tool',
+        toolRequestId: requestData!.requestId,
+      }),
+    );
+    expect(requestData!.trace).not.toHaveProperty('runId');
+    expect(resultData!.trace).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv-tool-log',
+        turnId: 'turn-conv-tool-log-a',
+        phase: 'tool',
+        toolRequestId: requestData!.requestId,
+      }),
+    );
+    expect(resultData!.trace).not.toHaveProperty('runId');
+  });
 });
 
 describe('ToolRegistry argument normalization', () => {

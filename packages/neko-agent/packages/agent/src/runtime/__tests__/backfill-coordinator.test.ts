@@ -3,7 +3,7 @@ import type { ChatMessage, ToolResultBackfillPayload } from '@neko/shared';
 import {
   applyAgentStreamEventToState,
   createAgentStreamProjectionState,
-} from '../agent-stream-state';
+} from '../stream/agent-stream-state';
 import { BackfillCoordinator } from '../backfill-coordinator';
 import { applyToolResultBackfillToChatHistory } from '../../session/working-memory';
 

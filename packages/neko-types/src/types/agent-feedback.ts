@@ -36,6 +36,7 @@ export interface AgentToolResultFeedbackAdapterInput {
   readonly toolName: string;
   readonly observedAt: number;
   readonly runId?: string;
+  readonly locale?: string;
 }
 
 export interface AgentToolResultFeedbackAdapter {

@@ -33,14 +33,13 @@ export interface LLMSummarizerConfig {
   extractEntities: boolean;
   /** Maximum retries on failure */
   maxRetries: number;
+  /** Prompt language for model-facing summarization wrappers */
+  locale?: string;
 }
 
-/**
- * Default summarizer configuration
- */
-export const DEFAULT_SUMMARIZER_CONFIG: LLMSummarizerConfig = {
-  temperature: 0.3,
-  systemPrompt: `You are a conversation summarizer. Your task is to create concise summaries of conversation segments.
+type LLMSummarizerPromptLocale = 'en' | 'zh';
+
+const DEFAULT_SUMMARIZER_SYSTEM_PROMPT_EN = `You are a conversation summarizer. Your task is to create concise summaries of conversation segments.
 
 Guidelines:
 1. Focus on key decisions, actions taken, and important information exchanged
@@ -53,10 +52,33 @@ Output format:
 - Start with a brief overview (1-2 sentences)
 - List key points
 - Note any important entities (files, functions, concepts) mentioned
-- End with any pending items or unresolved questions`,
+- End with any pending items or unresolved questions`;
+
+const DEFAULT_SUMMARIZER_SYSTEM_PROMPT_ZH = `你是一个对话摘要器，任务是为对话片段生成简洁摘要。
+
+指南：
+1. 聚焦关键决策、已执行操作和重要信息交换
+2. 保留后续可能需要的技术细节
+3. 记录未解决的问题或待办事项
+4. 保持事实性和客观性
+5. 适合时使用项目符号提升清晰度
+
+输出格式：
+- 先用 1-2 句话简要概述
+- 列出关键点
+- 记录提到的重要实体（文件、函数、概念）
+- 最后列出待办事项或未解决问题`;
+
+/**
+ * Default summarizer configuration
+ */
+export const DEFAULT_SUMMARIZER_CONFIG: LLMSummarizerConfig = {
+  temperature: 0.3,
+  systemPrompt: DEFAULT_SUMMARIZER_SYSTEM_PROMPT_EN,
   extractKeyPoints: true,
   extractEntities: true,
   maxRetries: 2,
+  locale: 'en',
 };
 
 /**
@@ -93,10 +115,17 @@ export class LLMSummarizer implements ISummarizer {
    */
   async summarize(request: SummarizationRequest): Promise<SummarizationResult> {
     const { messages, maxTokens, contextHint } = request;
+    const locale = normalizeLLMSummarizerPromptLocale(request.locale ?? this.config.locale);
 
     // Build the prompt
-    const conversationText = this.formatMessagesForSummary(messages);
-    const userPrompt = this.buildSummarizationPrompt(conversationText, maxTokens, contextHint);
+    const conversationText = this.formatMessagesForSummary(messages, locale);
+    const userPrompt = this.buildSummarizationPrompt(
+      conversationText,
+      maxTokens,
+      locale,
+      contextHint,
+    );
+    const systemPrompt = this.getSystemPrompt(locale);
 
     // Call LLM
     let lastError: Error | null = null;
@@ -104,7 +133,7 @@ export class LLMSummarizer implements ISummarizer {
       try {
         const response = await this.service.chat(
           [
-            { role: 'system', content: this.config.systemPrompt },
+            { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
           ],
           {
@@ -130,13 +159,16 @@ export class LLMSummarizer implements ISummarizer {
 
     // All retries failed - return a fallback summary
     logger.error('All attempts failed, using fallback');
-    return this.createFallbackSummary(messages, maxTokens);
+    return this.createFallbackSummary(messages, maxTokens, locale);
   }
 
   /**
    * Format messages for summarization
    */
-  private formatMessagesForSummary(messages: ChatMessage[]): string {
+  private formatMessagesForSummary(
+    messages: ChatMessage[],
+    locale: LLMSummarizerPromptLocale,
+  ): string {
     const parts: string[] = [];
 
     for (const msg of messages) {
@@ -144,10 +176,19 @@ export class LLMSummarizer implements ISummarizer {
         typeof msg.content === 'string'
           ? msg.content
           : msg.content
-              .map((part) => ('text' in part ? part.text : '[non-text content]'))
+              .map((part) =>
+                'text' in part
+                  ? part.text
+                  : locale === 'zh'
+                    ? '[非文本内容]'
+                    : '[non-text content]',
+              )
               .join('\n');
 
-      const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
+      const role =
+        locale === 'zh'
+          ? getLLMSummarizerRoleLabel(msg.role)
+          : msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
       parts.push(`[${role}]: ${content}`);
     }
 
@@ -160,8 +201,30 @@ export class LLMSummarizer implements ISummarizer {
   private buildSummarizationPrompt(
     conversationText: string,
     maxTokens: number,
+    locale: LLMSummarizerPromptLocale,
     contextHint?: string,
   ): string {
+    if (locale === 'zh') {
+      let prompt = `请总结以下对话片段。\n\n`;
+
+      if (contextHint) {
+        prompt += `上下文：${contextHint}\n\n`;
+      }
+
+      prompt += `目标摘要长度：约 ${maxTokens} tokens（${maxTokens * 4} 字符）\n\n`;
+      prompt += `对话：\n---\n${conversationText}\n---\n\n`;
+
+      if (this.config.extractKeyPoints) {
+        prompt += `请包含“关键点：”小节，并使用项目符号。\n`;
+      }
+
+      if (this.config.extractEntities) {
+        prompt += `请包含“实体：”小节，列出提到的重要文件、函数或概念。\n`;
+      }
+
+      return prompt;
+    }
+
     let prompt = `Please summarize the following conversation segment.\n\n`;
 
     if (contextHint) {
@@ -188,7 +251,9 @@ export class LLMSummarizer implements ISummarizer {
   private parseResponse(content: string, maxTokens: number): SummarizationResult {
     // Extract key points if present
     const keyPoints: string[] = [];
-    const keyPointsMatch = content.match(/Key Points?:?\s*([\s\S]*?)(?=Entities?:|$)/i);
+    const keyPointsMatch = content.match(
+      /(?:Key Points?|关键点)[:：]?\s*([\s\S]*?)(?=Entities?:|实体[:：]?|$)/i,
+    );
     if (keyPointsMatch) {
       const pointsText = keyPointsMatch[1];
       const points = pointsText.match(/[-•*]\s*(.+)/g);
@@ -199,7 +264,7 @@ export class LLMSummarizer implements ISummarizer {
 
     // Extract entities if present
     const entities: string[] = [];
-    const entitiesMatch = content.match(/Entities?:?\s*([\s\S]*?)$/i);
+    const entitiesMatch = content.match(/(?:Entities?|实体)[:：]?\s*([\s\S]*?)$/i);
     if (entitiesMatch) {
       const entitiesText = entitiesMatch[1];
       const entityList = entitiesText.match(/[-•*]\s*(.+)/g);
@@ -210,7 +275,7 @@ export class LLMSummarizer implements ISummarizer {
 
     // Get the main summary (everything before Key Points or the whole thing)
     let summary = content;
-    const keyPointsIndex = content.search(/Key Points?:/i);
+    const keyPointsIndex = content.search(/(?:Key Points?|关键点)[:：]/i);
     if (keyPointsIndex > 0) {
       summary = content.substring(0, keyPointsIndex).trim();
     }
@@ -235,15 +300,25 @@ export class LLMSummarizer implements ISummarizer {
   /**
    * Create a fallback summary without LLM
    */
-  private createFallbackSummary(messages: ChatMessage[], maxTokens: number): SummarizationResult {
+  private createFallbackSummary(
+    messages: ChatMessage[],
+    maxTokens: number,
+    locale: LLMSummarizerPromptLocale,
+  ): SummarizationResult {
     const parts: string[] = [];
     let tokenCount = 0;
     const targetTokens = maxTokens * 0.8; // Leave some margin
 
     for (const msg of messages) {
-      const content = typeof msg.content === 'string' ? msg.content : '[complex content]';
+      const content =
+        typeof msg.content === 'string'
+          ? msg.content
+          : locale === 'zh'
+            ? '[复杂内容]'
+            : '[complex content]';
       const preview = content.length > 100 ? content.substring(0, 100) + '...' : content;
-      const line = `[${msg.role}]: ${preview}`;
+      const role = locale === 'zh' ? getLLMSummarizerRoleLabel(msg.role) : msg.role;
+      const line = `[${role}]: ${preview}`;
       const lineTokens = estimateTokens(line);
 
       if (tokenCount + lineTokens > targetTokens) {
@@ -254,7 +329,10 @@ export class LLMSummarizer implements ISummarizer {
       tokenCount += lineTokens;
     }
 
-    const summary = `[Fallback Summary - ${messages.length} messages]\n` + parts.join('\n');
+    const summary =
+      (locale === 'zh'
+        ? `[降级摘要 - ${messages.length} 条消息]\n`
+        : `[Fallback Summary - ${messages.length} messages]\n`) + parts.join('\n');
 
     return {
       summary,
@@ -264,6 +342,42 @@ export class LLMSummarizer implements ISummarizer {
       keyPoints: [],
       entities: [],
     };
+  }
+
+  private getSystemPrompt(locale: LLMSummarizerPromptLocale): string {
+    const prompt = this.config.systemPrompt;
+    if (
+      prompt === DEFAULT_SUMMARIZER_SYSTEM_PROMPT_EN ||
+      prompt === DEFAULT_SUMMARIZER_SYSTEM_PROMPT_ZH
+    ) {
+      return getDefaultLLMSummarizerSystemPrompt(locale);
+    }
+    return prompt;
+  }
+}
+
+function normalizeLLMSummarizerPromptLocale(
+  locale: string | undefined,
+): LLMSummarizerPromptLocale {
+  return locale?.trim().toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
+function getDefaultLLMSummarizerSystemPrompt(locale: LLMSummarizerPromptLocale): string {
+  return locale === 'zh'
+    ? DEFAULT_SUMMARIZER_SYSTEM_PROMPT_ZH
+    : DEFAULT_SUMMARIZER_SYSTEM_PROMPT_EN;
+}
+
+function getLLMSummarizerRoleLabel(role: ChatMessage['role']): string {
+  switch (role) {
+    case 'system':
+      return '系统';
+    case 'user':
+      return '用户';
+    case 'assistant':
+      return '助手';
+    case 'tool':
+      return '工具';
   }
 }
 

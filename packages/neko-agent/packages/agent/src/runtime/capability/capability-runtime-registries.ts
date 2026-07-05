@@ -1,4 +1,4 @@
-import { SkillRegistry, ToolGroupRegistry } from '../skill';
+import { SkillRegistry, ToolGroupRegistry } from '../../skill';
 
 export interface AgentCapabilityRuntimeRegistries {
   readonly skillRegistry: SkillRegistry;

@@ -6,7 +6,7 @@ import {
   type AnyArtifactRecord,
   type ArtifactRecord,
   type IArtifactService,
-} from '../runtime/artifact-service';
+} from '../artifact/artifact-service';
 
 export interface SessionArtifactActivityPort {
   readonly getActiveArtifactScope: () => {
@@ -22,12 +22,17 @@ export interface SessionArtifactWorkspacePort {
   readonly isDisposed: () => boolean;
 }
 
+export interface SessionArtifactSessionPort {
+  readonly getConversationId: () => string | null;
+}
+
 export interface SessionArtifactPersistencePort {
   readonly onPersist: () => void;
   readonly onWarn?: (message: string, data?: Record<string, unknown>) => void;
 }
 
 export interface SessionArtifactFacadePorts {
+  readonly session: SessionArtifactSessionPort;
   readonly activity: SessionArtifactActivityPort;
   readonly workspace: SessionArtifactWorkspacePort;
   readonly persistence: SessionArtifactPersistencePort;
@@ -173,7 +178,12 @@ export class SessionArtifactFacade {
 
     this._taskProjectionPending = this._taskProjectionPending
       .then(async () => {
+        const conversationId = this._options.ports.session.getConversationId()?.trim();
+        if (!conversationId) {
+          throw new Error('Creation task projection requires a non-empty conversationId');
+        }
         await projection.syncTask({
+          conversationId,
           runId,
           ...(runStartedAt !== undefined ? { runStartedAt } : {}),
           task,

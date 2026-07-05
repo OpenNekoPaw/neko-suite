@@ -57,7 +57,7 @@ describe('SkillConflictResolver', () => {
       const skill = createMockSkill({ name: 'skill1' });
       const config: SkillConflictConfig = {
         conflicts: ['skill2'],
-        priority: 'high',
+        priority: 10,
       };
 
       resolver.registerSkill(skill, config);
@@ -154,8 +154,8 @@ describe('SkillConflictResolver', () => {
       const skill1 = createMockSkill({ name: 'skill1' });
       const skill2 = createMockSkill({ name: 'skill2' });
 
-      resolver.registerSkill(skill1, { priority: 'high' });
-      resolver.registerSkill(skill2, { priority: 'low' });
+      resolver.registerSkill(skill1, { priority: 10 });
+      resolver.registerSkill(skill2, { priority: 1 });
     });
 
     it('should have resolveConflict method', () => {

@@ -13,6 +13,7 @@
  *   <root>/.neko/
  *     sessions/        AI-produced session-<runId>.md
  *     logs/            Program-produced .jsonl (events / audits / steps)
+ *       conversations/<conversationId>/  Active per-conversation JSONL logs
  *     .cache/          Program-produced .json (indices, derivable)
  *     state/           Program-produced concurrency + lock files
  *     preferences.md   Project-level user preferences
@@ -47,12 +48,17 @@ export type NekoSubdir = keyof typeof NEKO_SUBDIRS;
  *   steps.jsonl  — per-ReAct-step records (tool / params / outcome)
  */
 export const NEKO_LOG_FILES = {
+  modelCalls: 'model-calls.jsonl',
   events: 'events.jsonl',
   audits: 'audits.jsonl',
   steps: 'steps.jsonl',
 } as const;
 
 export type NekoLogFile = keyof typeof NEKO_LOG_FILES;
+
+export const NEKO_LOG_SUBDIRS = {
+  conversations: 'conversations',
+} as const;
 
 /**
  * Canonical cache-file names (under `cache/`). Program-produced JSON
@@ -96,6 +102,8 @@ export interface INekoPaths {
   file(subdir: Extract<NekoSubdir, 'archives'>, basename: string): string;
   /** Absolute path to a canonical JSONL log. */
   log(kind: NekoLogFile): string;
+  /** Absolute path to a conversation-owned JSONL log. */
+  conversationLog(kind: NekoLogFile, conversationId: string): string;
   /** Absolute path to a canonical cache snapshot. */
   cache(kind: NekoCacheFile): string;
   /** Absolute path to a canonical program-produced state file. */
@@ -114,6 +122,14 @@ function join(a: string, ...rest: string[]): string {
     if (trimmed) out = `${out}/${trimmed}`;
   }
   return out;
+}
+
+function assertSafePathSegment(value: string, label: string): string {
+  const segment = value.trim();
+  if (!/^[A-Za-z0-9._-]+$/.test(segment)) {
+    throw new Error(`NekoPaths: invalid ${label} path segment`);
+  }
+  return segment;
 }
 
 /**
@@ -160,6 +176,11 @@ export function createNekoPaths(projectRoot: string): INekoPaths {
     dir,
     file: file as INekoPaths['file'],
     log: (kind) => `${dir('logs')}/${NEKO_LOG_FILES[kind]}`,
+    conversationLog: (kind, conversationId) =>
+      `${dir('logs')}/${NEKO_LOG_SUBDIRS.conversations}/${assertSafePathSegment(
+        conversationId,
+        'conversationId',
+      )}/${NEKO_LOG_FILES[kind]}`,
     cache: (kind) => `${dir('cache')}/${NEKO_CACHE_FILES[kind]}`,
     state: (kind) => `${dir('state')}/${NEKO_STATE_FILES[kind]}`,
   };

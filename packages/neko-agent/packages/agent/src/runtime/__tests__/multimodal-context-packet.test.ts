@@ -10,7 +10,7 @@ import {
   loadPacketMediaPayloads,
   projectGeneratedArtifactReference,
   summarizeEvidenceFeedback,
-} from '../multimodal-context-packet';
+} from '../turn/multimodal-context-packet';
 
 describe('multimodal-context-packet runtime', () => {
   it('builds one packet from image attachments, timeline, canvas, audio/video metadata, and legacy trace links', () => {

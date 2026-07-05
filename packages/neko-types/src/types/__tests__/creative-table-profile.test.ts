@@ -17,11 +17,14 @@ describe('creative table profile descriptor', () => {
       'sourcePanel',
     );
     expect(resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, '视频提示词')?.id).toBe(
-      'shotVideoPrompt',
+      'videoPrompt',
     );
     expect(resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, '场景视频提示词')?.id).toBe(
-      'sceneVideoPrompt',
+      'videoPrompt',
     );
+    expect(
+      resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, 'imageEditPrompt')?.id,
+    ).toBe('imagePrompt');
     expect(resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, 'custom review')?.id).toBe(
       undefined,
     );
@@ -48,24 +51,66 @@ describe('creative table profile descriptor', () => {
     expect(result.unknownHeaders).toEqual(['自定义审阅列']);
   });
 
-  it('declares prompt slots by scope, media type, and operation', () => {
+  it('keeps canonical prompt fields limited to image and video prompts', () => {
     const imagePrompt = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find(
       (field) => field.id === 'imagePrompt',
     );
-    const sceneVideoPrompt = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find(
-      (field) => field.id === 'sceneVideoPrompt',
+    const videoPrompt = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find(
+      (field) => field.id === 'videoPrompt',
     );
+    const splitPromptFieldIds = [
+      'imageEditPrompt',
+      'shotVideoPrompt',
+      'videoEditPrompt',
+      'sceneStylePrompt',
+      'sceneVideoPrompt',
+      'sceneVideoEditPrompt',
+    ];
+
+    expect(
+      splitPromptFieldIds.filter((fieldId) =>
+        STORYBOARD_CREATIVE_TABLE_PROFILE.fields.some((field) => field.id === fieldId),
+      ),
+    ).toEqual([]);
+    expect(
+      STORYBOARD_CREATIVE_TABLE_PROFILE.recommendedHeaders.filter((fieldId) =>
+        splitPromptFieldIds.includes(fieldId),
+      ),
+    ).toEqual([]);
+    expect(
+      STORYBOARD_CREATIVE_TABLE_PROFILE.fields
+        .filter((field) => field.promptSlot && field.id !== 'prompt')
+        .map((field) => field.id),
+    ).toEqual(['imagePrompt', 'videoPrompt']);
 
     expect(imagePrompt?.promptSlot).toEqual({
       scope: 'shot',
       mediaType: 'image',
       operation: 'generate',
     });
-    expect(sceneVideoPrompt?.promptSlot).toEqual({
-      scope: 'scene',
+    expect(videoPrompt?.promptSlot).toEqual({
+      scope: 'shot',
       mediaType: 'video',
       operation: 'generate',
     });
+  });
+
+  it('maps legacy split prompt headers to canonical prompt fields', () => {
+    expect(resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, '图像编辑提示词')?.id).toBe(
+      'imagePrompt',
+    );
+    expect(
+      resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, 'sceneStylePrompt')?.id,
+    ).toBe('imagePrompt');
+    expect(
+      resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, 'shotVideoPrompt')?.id,
+    ).toBe('videoPrompt');
+    expect(
+      resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, 'videoEditPrompt')?.id,
+    ).toBe('videoPrompt');
+    expect(
+      resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, 'sceneVideoEditPrompt')?.id,
+    ).toBe('videoPrompt');
   });
 
   it('keeps nextAction as plan text and actionId as execution', () => {
@@ -86,19 +131,21 @@ describe('creative table profile descriptor', () => {
     ).toEqual({
       operationId: 'video.scene.generate',
       label: 'Generate scene video',
-      requiredFieldIds: ['sceneVideoPrompt'],
-      acceptedPromptFieldIds: ['sceneVideoPrompt', 'shotVideoPrompt'],
+      requiredFieldIds: ['videoPrompt'],
+      acceptedPromptFieldIds: ['videoPrompt'],
     });
     expect(
       getCreativeTableOperationRequirement(STORYBOARD_CREATIVE_TABLE_PROFILE, 'image.shot.edit')
         ?.requiredFieldIds,
-    ).toEqual(['imageEditPrompt']);
+    ).toEqual(['imagePrompt']);
   });
 
   it('normalizes headers consistently with existing storyboard behavior', () => {
     expect(normalizeCreativeTableHeader('Source Panel')).toBe('sourcepanel');
     expect(normalizeCreativeTableHeader('source_panel')).toBe('sourcepanel');
-    expect(STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS).toContain('imagePrompt');
+    expect(STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS).toEqual(
+      expect.arrayContaining(['imagePrompt', 'videoPrompt']),
+    );
   });
 
   it('keeps storyboard descriptor references internally consistent', () => {
@@ -137,32 +184,18 @@ describe('creative table profile descriptor', () => {
     ).toEqual([]);
   });
 
-  it('keeps operation required prompt slots aligned with operation ids', () => {
+  it('keeps operation requirements aligned with prompt media type', () => {
     for (const requirement of STORYBOARD_CREATIVE_TABLE_PROFILE.operationRequirements) {
-      const [mediaType, scope, operation] = requirement.operationId.split('.');
+      const [mediaType] = requirement.operationId.split('.');
 
       for (const fieldId of requirement.requiredFieldIds) {
         const field = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find(
           (candidate) => candidate.id === fieldId,
         );
 
-        expect(field?.promptSlot).toEqual({ scope, mediaType, operation });
+        expect(field?.promptSlot?.mediaType).toBe(mediaType);
       }
     }
-
-    const sceneVideoEditRequirement = getCreativeTableOperationRequirement(
-      STORYBOARD_CREATIVE_TABLE_PROFILE,
-      'video.scene.edit',
-    );
-    const sceneVideoEditField = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find(
-      (field) => field.id === sceneVideoEditRequirement?.requiredFieldIds[0],
-    );
-
-    expect(sceneVideoEditField?.promptSlot).toEqual({
-      scope: 'scene',
-      mediaType: 'video',
-      operation: 'edit',
-    });
   });
 
   it('keeps imagePrompt localized label out of legacy prompt aliases', () => {

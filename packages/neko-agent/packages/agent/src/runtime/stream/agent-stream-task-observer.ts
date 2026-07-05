@@ -1,6 +1,7 @@
 import type { TaskCreatedMessage, TaskUpdatedMessage } from '@neko-agent/types';
-import type { BackgroundTaskProgressPatch, BackgroundTaskView } from '../task/task-view-projector';
-import type { AgentEvent } from '../session/types';
+import type { TaskRunLease } from '@neko/shared';
+import type { BackgroundTaskProgressPatch, BackgroundTaskView } from '../../task/task-view-projector';
+import type { AgentEvent } from '../../session/types';
 import {
   type AgentStreamBackgroundTaskPersistInput,
   projectAgentStreamBackgroundTaskProgress,
@@ -8,6 +9,7 @@ import {
 } from './agent-stream-background-task';
 
 export interface AgentStreamBackgroundTaskDeliveryContext {
+  readonly lease: TaskRunLease;
   readonly conversationId: string;
   readonly taskId: string;
   readonly toolCallId?: string;
@@ -16,6 +18,7 @@ export interface AgentStreamBackgroundTaskDeliveryContext {
 }
 
 export interface AgentStreamBackgroundTaskWaitInput {
+  readonly lease: TaskRunLease;
   readonly conversationId: string;
   readonly taskId: string;
   readonly toolCallId?: string;
@@ -33,12 +36,14 @@ export interface AgentStreamBackgroundTaskProgressEvent<
   TSourceTask = unknown,
   TDeliveryPlan = unknown,
 > {
+  readonly lease: TaskRunLease;
   readonly conversationId: string;
   readonly task: AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>;
   readonly sourceTask: TSourceTask;
 }
 
 export interface AgentStreamBackgroundTaskIgnoredEvent<TSourceTask = unknown> {
+  readonly lease: TaskRunLease;
   readonly taskId: string;
   readonly conversationId: string;
   readonly sourceTask: TSourceTask;
@@ -48,6 +53,7 @@ export interface AgentStreamBackgroundTaskProgressErrorEvent<
   TSourceTask = unknown,
   TDeliveryPlan = unknown,
 > {
+  readonly lease: TaskRunLease;
   readonly taskId: string;
   readonly conversationId: string;
   readonly sourceTask: TSourceTask;
@@ -55,10 +61,36 @@ export interface AgentStreamBackgroundTaskProgressErrorEvent<
   readonly recoveryTask?: AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>;
 }
 
+export type AgentStreamBackgroundTaskStaleReason = 'lease-mismatch' | 'settled';
+
+export interface AgentStreamBackgroundTaskStaleEvent<TSourceTask = unknown> {
+  readonly reason: AgentStreamBackgroundTaskStaleReason;
+  readonly expectedLease: TaskRunLease;
+  readonly lease: TaskRunLease;
+  readonly taskId: string;
+  readonly conversationId: string;
+  readonly sourceTask: TSourceTask;
+}
+
+export interface AgentStreamBackgroundTaskTerminalEvent<
+  TSourceTask = unknown,
+  TDeliveryPlan = unknown,
+> {
+  readonly lease: TaskRunLease;
+  readonly conversationId: string;
+  readonly taskId: string;
+  readonly parentMessageId: string;
+  readonly parentToolCallId?: string;
+  readonly task: BackgroundTaskView;
+  readonly sourceTask: TSourceTask;
+  readonly deliveryPlan?: TDeliveryPlan;
+}
+
 export interface ObserveAgentStreamBackgroundTaskProgressInput<
   TSourceTask = unknown,
   TDeliveryPlan = unknown,
 > {
+  readonly lease: TaskRunLease;
   readonly taskId: string;
   readonly conversationId: string;
   readonly unsubscribeOnIgnoredConversation: boolean;
@@ -85,6 +117,7 @@ export interface StartAgentStreamBackgroundTaskObserverInput<
   TSourceTask = unknown,
   TDeliveryPlan = unknown,
 > {
+  readonly lease?: TaskRunLease;
   readonly conversationId: string;
   readonly messageId: string;
   readonly event: AgentEvent;
@@ -103,11 +136,17 @@ export interface StartAgentStreamBackgroundTaskObserverInput<
   readonly persistResultUrls?: (
     input: AgentStreamBackgroundTaskPersistInput<TDeliveryPlan>,
   ) => void;
+  readonly onTerminalTask?: (
+    event: AgentStreamBackgroundTaskTerminalEvent<TSourceTask, TDeliveryPlan>,
+  ) => void | Promise<void>;
   readonly onIgnoredConversationTask?: (
     event: AgentStreamBackgroundTaskIgnoredEvent<TSourceTask>,
   ) => void;
   readonly onProgressDeliveryError?: (
     event: AgentStreamBackgroundTaskProgressErrorEvent<TSourceTask, TDeliveryPlan>,
+  ) => void;
+  readonly onStaleTaskProgress?: (
+    event: AgentStreamBackgroundTaskStaleEvent<TSourceTask>,
   ) => void;
   readonly now?: () => number;
 }
@@ -152,6 +191,15 @@ export function startAgentStreamBackgroundTaskObserver<
     now: input.now,
   });
   if (!start) return { started: false };
+  const lease = input.lease;
+  if (!lease) {
+    throw new Error('Background task observer requires a conversation/run lease');
+  }
+  if (lease.conversationId !== input.conversationId) {
+    throw new Error(
+      'Background task observer lease conversationId does not match input conversationId',
+    );
+  }
 
   void input.postMessage(start.message);
 
@@ -179,6 +227,7 @@ export function startAgentStreamBackgroundTaskObserver<
   };
 
   const context: AgentStreamBackgroundTaskDeliveryContext = {
+    lease,
     conversationId: input.conversationId,
     taskId: start.taskId,
     ...(start.toolCallId ? { toolCallId: start.toolCallId } : {}),
@@ -187,17 +236,41 @@ export function startAgentStreamBackgroundTaskObserver<
   };
 
   const deliverObservedProgress = async (params: {
+    readonly lease: TaskRunLease;
     readonly conversationId: string;
     readonly task: AgentStreamBackgroundTaskObservedProgress<TDeliveryPlan>;
     readonly sourceTask: TSourceTask;
   }): Promise<void> => {
     if (params.conversationId !== input.conversationId) {
       input.onIgnoredConversationTask?.({
+        lease,
         taskId: start.taskId,
         conversationId: input.conversationId,
         sourceTask: params.sourceTask,
       });
       complete({ status: 'ignored' });
+      return;
+    }
+    if (!isSameRunLease(params.lease, lease)) {
+      input.onStaleTaskProgress?.({
+        reason: 'lease-mismatch',
+        expectedLease: lease,
+        lease: params.lease,
+        taskId: start.taskId,
+        conversationId: input.conversationId,
+        sourceTask: params.sourceTask,
+      });
+      return;
+    }
+    if (settled) {
+      input.onStaleTaskProgress?.({
+        reason: 'settled',
+        expectedLease: lease,
+        lease: params.lease,
+        taskId: start.taskId,
+        conversationId: input.conversationId,
+        sourceTask: params.sourceTask,
+      });
       return;
     }
 
@@ -214,6 +287,7 @@ export function startAgentStreamBackgroundTaskObserver<
 
     if (projection.persistResultUrls) {
       input.persistResultUrls?.({
+        lease,
         conversationId: input.conversationId,
         taskId: start.taskId,
         ...(start.toolCallId ? { toolCallId: start.toolCallId } : {}),
@@ -223,12 +297,23 @@ export function startAgentStreamBackgroundTaskObserver<
     }
     const status = projection.task.status;
     if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+      await input.onTerminalTask?.({
+        lease,
+        conversationId: input.conversationId,
+        taskId: start.taskId,
+        parentMessageId: input.messageId,
+        ...(start.toolCallId ? { parentToolCallId: start.toolCallId } : {}),
+        task: projection.task,
+        sourceTask: params.sourceTask,
+        ...(projection.deliveryPlan !== undefined ? { deliveryPlan: projection.deliveryPlan } : {}),
+      });
       complete({ status });
     }
   };
 
   const unsubscribe = observeProgress({
     taskId: start.taskId,
+    lease,
     conversationId: input.conversationId,
     unsubscribeOnIgnoredConversation: true,
     createRecoveryTaskView: (task) => ({
@@ -252,6 +337,7 @@ export function startAgentStreamBackgroundTaskObserver<
     void input
       .waitForCompletion({
         conversationId: input.conversationId,
+        lease,
         taskId: start.taskId,
         ...(start.toolCallId ? { toolCallId: start.toolCallId } : {}),
         taskType: start.taskType,
@@ -260,6 +346,7 @@ export function startAgentStreamBackgroundTaskObserver<
       .then(async (task) => {
         if (settled) return;
         await deliverObservedProgress({
+          lease,
           conversationId: input.conversationId,
           sourceTask: task,
           task: await input.createProgressDelivery(task, context),
@@ -303,4 +390,8 @@ export function startAgentStreamBackgroundTaskObserver<
 
 function formatBackgroundTaskWaitError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isSameRunLease(left: TaskRunLease, right: TaskRunLease): boolean {
+  return left.conversationId === right.conversationId && left.runId === right.runId;
 }

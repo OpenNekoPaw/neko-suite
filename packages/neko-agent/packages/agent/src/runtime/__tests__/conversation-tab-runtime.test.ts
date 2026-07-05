@@ -179,10 +179,7 @@ describe('conversation-tab-runtime', () => {
       }),
     ).toEqual({
       actions: [
-        { type: 'syncActiveConversation' },
-        { type: 'syncCanvasAmbientScope' },
         { type: 'sendConversationList' },
-        { type: 'sendActiveConversation' },
         { type: 'sendSettings' },
         {
           type: 'postTabState',
@@ -218,12 +215,7 @@ describe('conversation-tab-runtime', () => {
         hasWebview: false,
       }),
     ).toEqual({
-      actions: [
-        { type: 'syncActiveConversation' },
-        { type: 'syncCanvasAmbientScope' },
-        { type: 'sendConversationList' },
-        { type: 'sendActiveConversation' },
-      ],
+      actions: [{ type: 'sendConversationList' }],
     });
   });
 

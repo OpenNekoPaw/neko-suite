@@ -1,3 +1,4 @@
+import { localizePromptFragment } from '@neko/shared';
 import type {
   AgentCapabilityContext,
   AgentCapabilityHostRequirement,
@@ -219,7 +220,7 @@ export class CapabilityRegistryRuntime {
 
     if (provider.getSkills && this.deps.skillRegistry) {
       try {
-        const skills: Skill[] = provider.getSkills();
+        const skills: Skill[] = provider.getSkills(context);
         for (const skill of skills) {
           this.recordCapabilityNameCollision({
             kind: 'skill',
@@ -377,7 +378,7 @@ export class CapabilityRegistryRuntime {
     for (const { provider } of this.providers.values()) {
       if (!provider.getSkills) continue;
       try {
-        const skills = provider.getSkills();
+        const skills = provider.getSkills(this.capabilityContext ?? undefined);
         if (skills && skills.length > 0) aggregated.push(...skills);
       } catch (err) {
         this.logger.warn(`Provider "${provider.id}" getSkills threw; skipping`, err);
@@ -408,7 +409,13 @@ export class CapabilityRegistryRuntime {
       if (!provider.getPromptFragments) continue;
       try {
         const fragments = provider.getPromptFragments(this.capabilityContext);
-        if (fragments && fragments.length > 0) aggregated.push(...fragments);
+        if (fragments && fragments.length > 0) {
+          aggregated.push(
+            ...fragments.map((fragment) =>
+              localizePromptFragment(fragment, this.capabilityContext?.locale),
+            ),
+          );
+        }
       } catch (err) {
         this.logger.warn(`Provider "${provider.id}" getPromptFragments threw; skipping`, err);
       }

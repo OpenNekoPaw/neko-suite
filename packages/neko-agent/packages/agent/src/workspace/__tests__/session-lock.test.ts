@@ -94,6 +94,34 @@ describe('SessionLock', () => {
     }
   });
 
+  it('conflict diagnostics preserve the holder and do not overwrite the lock file', async () => {
+    const a = createSessionLock({
+      filePath: LOCK_PATH,
+      fsOps: fs,
+      sessionId: 'sess-a',
+      pid: 101,
+      now: () => now,
+    });
+    const b = createSessionLock({
+      filePath: LOCK_PATH,
+      fsOps: fs,
+      sessionId: 'sess-b',
+      pid: 202,
+      now: () => now + 1000,
+    });
+    await a.acquire();
+    const before = fs.files.get(LOCK_PATH);
+
+    const res = await b.acquire();
+
+    expect(res).toEqual({
+      acquired: false,
+      heldBy: { sessionId: 'sess-a', pid: 101, lockedAt: 1_000_000 },
+      stale: false,
+    });
+    expect(fs.files.get(LOCK_PATH)).toBe(before);
+  });
+
   it('same session re-acquire refreshes the timestamp', async () => {
     const lock = createSessionLock({
       filePath: LOCK_PATH,

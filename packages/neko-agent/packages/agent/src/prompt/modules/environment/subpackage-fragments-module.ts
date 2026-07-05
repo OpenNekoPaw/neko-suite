@@ -12,15 +12,18 @@
  * confusion we add a logger warn in a follow-up PR.
  *
  * Activation (PR3e scope): unconditional — every provided fragment gets
- * injected. Conditional activation (by skill / stage / tool / locale) is
- * deferred until a concrete use case justifies the runtime complexity.
+ * injected. Conditional activation (by skill / stage / tool) is deferred until
+ * a concrete use case justifies the runtime complexity. Locale selection is
+ * applied during render so both initializer and live-update paths share the
+ * same final model-facing projection.
  */
 import type {
   PromptModule,
   PromptModuleManifest,
   PromptModuleSection,
 } from '../../registry/module-manifest';
-import type { PromptFragment } from '@neko/shared';
+import { localizePromptFragment, type PromptFragment } from '@neko/shared';
+import type { PromptContext } from '../../context';
 
 const DEFAULT_FRAGMENT_PRIORITY = 70;
 
@@ -51,20 +54,21 @@ export class SubpackageFragmentsModule implements PromptModule {
     return this._fragments;
   }
 
-  async render(): Promise<readonly PromptModuleSection[] | null> {
-    return this.renderSync();
+  async render(ctx?: PromptContext): Promise<readonly PromptModuleSection[] | null> {
+    return this.renderSync(ctx);
   }
 
   /**
    * Sync variant — used by the initializer during session bring-up so the
    * composer is populated before the first composeStructured call.
    */
-  renderSync(): readonly PromptModuleSection[] | null {
+  renderSync(ctx?: PromptContext): readonly PromptModuleSection[] | null {
     if (this._fragments.length === 0) return null;
 
     const seen = new Set<string>();
     const sections: PromptModuleSection[] = [];
-    for (const fragment of this._fragments) {
+    for (const rawFragment of this._fragments) {
+      const fragment = localizePromptFragment(rawFragment, ctx?.locale);
       if (seen.has(fragment.id)) continue; // first-writer-wins
       seen.add(fragment.id);
       sections.push({

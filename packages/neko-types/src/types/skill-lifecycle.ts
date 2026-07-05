@@ -8,7 +8,7 @@
  */
 
 import type { AgentCapabilityActivationProvenance } from './agent-capability-activation';
-import type { RelatedSkill, SkillInjection, SkillMediaWorkflowHint } from './skill';
+import type { RelatedSkill, SkillInjection, SkillMediaWorkflowHint, SkillSource } from './skill';
 
 export type SkillLifecycleSlot =
   'stagePersona' | 'domainSkill' | 'referenceSkill' | 'ephemeralSkill' | 'promptChainSkill';
@@ -103,6 +103,7 @@ export interface SkillLifecycleDeactivationPolicy {
 export interface SkillLifecycleSkillSummary {
   readonly name: string;
   readonly description: string;
+  readonly source: SkillSource;
   readonly domain?: string;
   readonly relatedSkills?: readonly RelatedSkill[];
   readonly mediaWorkflow?: SkillMediaWorkflowHint;

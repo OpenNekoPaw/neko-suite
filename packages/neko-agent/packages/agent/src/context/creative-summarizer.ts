@@ -47,6 +47,8 @@ export interface CreativeSummarizerConfig {
   maxRetries: number;
 }
 
+type CreativeSummarizerLocale = 'en' | 'zh';
+
 const DEFAULT_SUMMARIZER_CFG: CreativeSummarizerConfig = {
   temperature: 0.3,
   maxRetries: 2,
@@ -55,7 +57,8 @@ const DEFAULT_SUMMARIZER_CFG: CreativeSummarizerConfig = {
 /**
  * Category-specific system prompts for layered summarisation
  */
-const CATEGORY_PROMPTS: Record<string, string> = {
+const CATEGORY_PROMPTS: Record<CreativeInfoType, string> = {
+  user_message: '',
   creative_decision: `You are summarising creative direction decisions from a design conversation.
 Extract and preserve:
 - Confirmed style, tone, color palette, composition choices
@@ -90,6 +93,61 @@ Extract and preserve:
 - Specific adjustments requested (brighter, warmer, more contrast, etc.)
 - Implicit style preferences derived from accept/reject patterns
 Output as a preference profile with accept/reject categories.`,
+  other: '',
+};
+
+const CATEGORY_PROMPTS_ZH: Record<CreativeInfoType, string> = {
+  user_message: '',
+  creative_decision: `你正在总结设计对话中的创作方向决策。
+请提取并保留：
+- 已确认的风格、基调、色彩 palette、构图选择
+- 角色设计、叙事结构、音乐风格决策
+- 用户建立的任何约束或规则
+输出紧凑的项目符号列表。保留用户的精确引用词。`,
+
+  version_anchor: `你正在总结创作迭代中的版本检查点。
+请提取并保留：
+- 用户批准了哪些版本（例如“不错”“保留这个”）
+- 已批准版本的关键参数（model、seed、prompt、settings）
+- 用户满意信号及其上下文
+输出带批准状态的编号版本列表。`,
+
+  iteration_chain: `你正在总结创作迭代链路。
+请提取并保留：
+- 进展过程：初始提示词 → 调整 → 结果
+- 迭代之间的参数变化（model、seed、CFG、sampler 等）
+- 每一步的用户反馈和对应修改
+按时间顺序输出演化链。`,
+
+  asset_state: `你正在总结 asset/canvas/timeline 的状态变化。
+请提取并保留：
+- 图层新增、删除、重排
+- 时间线编辑（clip 移动、转场、剪切）
+- 画布变换（resize、crop、composition changes）
+输出结构化 diff，说明当前状态。`,
+
+  aesthetic_pref: `你正在总结创作会话中累积的审美偏好。
+请提取并保留：
+- 用户喜欢（接受）和不喜欢（拒绝）的内容
+- 用户要求的具体调整（更亮、更暖、更多对比等）
+- 从接受/拒绝模式推导出的隐含风格偏好
+输出带接受/拒绝分类的偏好档案。`,
+  other: '',
+};
+
+const CATEGORY_LABELS_ZH: Partial<Record<CreativeInfoType, string>> = {
+  creative_decision: '创作方向决策',
+  version_anchor: '版本检查点',
+  iteration_chain: '迭代链路',
+  asset_state: '资源状态',
+  aesthetic_pref: '审美偏好',
+};
+
+const ROLE_LABELS_ZH: Partial<Record<ChatMessage['role'], string>> = {
+  system: '系统',
+  user: '用户',
+  assistant: '助手',
+  tool: '工具',
 };
 
 /**
@@ -149,6 +207,7 @@ export class CreativeSummarizer implements ISummarizer {
   private classifier: IMessageClassifier;
   private creativeConfig: CreativeCompressionConfig;
   private summarizerConfig: CreativeSummarizerConfig;
+  private locale: CreativeSummarizerLocale;
 
   constructor(
     classifier: IMessageClassifier,
@@ -156,6 +215,7 @@ export class CreativeSummarizer implements ISummarizer {
       service?: IService;
       creativeConfig?: Partial<CreativeCompressionConfig>;
       summarizerConfig?: Partial<CreativeSummarizerConfig>;
+      locale?: string;
     },
   ) {
     this.classifier = classifier;
@@ -168,6 +228,7 @@ export class CreativeSummarizer implements ISummarizer {
       ...DEFAULT_SUMMARIZER_CFG,
       ...options?.summarizerConfig,
     };
+    this.locale = normalizeCreativeSummarizerLocale(options?.locale);
   }
 
   /**
@@ -182,6 +243,8 @@ export class CreativeSummarizer implements ISummarizer {
    */
   async summarize(request: SummarizationRequest): Promise<SummarizationResult> {
     const { messages, maxTokens } = request;
+    const locale = normalizeCreativeSummarizerLocale(request.locale ?? this.locale);
+    const roleLabels = getRoleLabels(locale);
 
     // Step 1: classify
     const classified = this.classifier.classify(messages);
@@ -189,7 +252,7 @@ export class CreativeSummarizer implements ISummarizer {
 
     // Step 2: collect user messages verbatim (P1)
     const userMessages = groups.get('user_message') ?? [];
-    const userTexts = userMessages.map((m) => `[User]: ${extractText(m)}`);
+    const userTexts = userMessages.map((m) => `[${roleLabels.user}]: ${extractText(m)}`);
     const userSection = userTexts.join('\n');
     const userTokens = estimateTokens(userSection);
 
@@ -226,7 +289,12 @@ export class CreativeSummarizer implements ISummarizer {
       const categoryBudget = Math.floor(this.creativeConfig.summaryBudget[budgetKey] * budgetScale);
       if (categoryBudget <= 0) continue;
 
-      const summary = await this.summarizeCategory(category, categoryMessages, categoryBudget);
+      const summary = await this.summarizeCategory(
+        category,
+        categoryMessages,
+        categoryBudget,
+        locale,
+      );
       if (summary) {
         categorySummaries.push(summary);
         allKeyPoints.push(...summary.keyPoints);
@@ -238,7 +306,11 @@ export class CreativeSummarizer implements ISummarizer {
     const parts: string[] = [];
 
     if (userSection.length > 0) {
-      parts.push('## User Messages (verbatim)\n' + userSection);
+      parts.push(
+        (locale === 'zh' ? '## 用户消息（原文保留）' : '## User Messages (verbatim)') +
+          '\n' +
+          userSection,
+      );
     }
 
     for (const summary of categorySummaries) {
@@ -275,28 +347,29 @@ export class CreativeSummarizer implements ISummarizer {
     category: CreativeInfoType,
     messages: ChatMessage[],
     maxTokens: number,
+    locale: CreativeSummarizerLocale,
   ): Promise<CreativeCategorySummary | null> {
-    const categoryLabel = category.replace(/_/g, ' ');
-    const header = `## ${categoryLabel.charAt(0).toUpperCase() + categoryLabel.slice(1)}`;
+    const header = formatCreativeSummaryHeader(category, locale);
+    const roleLabels = getRoleLabels(locale);
 
     // Format messages for the LLM
-    const conversationText = messages.map((m) => `[${m.role}]: ${extractText(m)}`).join('\n\n');
+    const conversationText = messages
+      .map((m) => `[${roleLabels[m.role] ?? m.role}]: ${extractText(m)}`)
+      .join('\n\n');
 
     // Try LLM summarisation
     if (this.service) {
       const systemPrompt =
-        CATEGORY_PROMPTS[category] ?? `Summarise the following conversation messages concisely.`;
+        getCreativeCategoryPrompt(category, locale) ??
+        (locale === 'zh'
+          ? '请简洁总结以下对话消息。'
+          : 'Summarise the following conversation messages concisely.');
 
-      const userPrompt = [
-        `Target length: ~${maxTokens} tokens (${maxTokens * 4} characters).`,
-        '',
-        'Conversation:',
-        '---',
+      const userPrompt = formatCreativeSummarizerUserPrompt(
         conversationText,
-        '---',
-        '',
-        'Include a "Key Points:" section at the end.',
-      ].join('\n');
+        maxTokens,
+        locale,
+      );
 
       for (let attempt = 0; attempt <= this.summarizerConfig.maxRetries; attempt++) {
         try {
@@ -341,7 +414,7 @@ export class CreativeSummarizer implements ISummarizer {
     }
 
     // Fallback: truncated raw messages
-    return this.createFallbackCategorySummary(header, messages, maxTokens);
+    return this.createFallbackCategorySummary(header, messages, maxTokens, locale);
   }
 
   /**
@@ -351,7 +424,9 @@ export class CreativeSummarizer implements ISummarizer {
     const keyPoints: string[] = [];
     const entities: string[] = [];
 
-    const kpMatch = content.match(/Key Points?:?\s*([\s\S]*?)(?=Entities?:|$)/i);
+    const kpMatch = content.match(
+      /(?:Key Points?|关键点)[:：]?\s*([\s\S]*?)(?=Entities?:|实体[:：]?|$)/i,
+    );
     if (kpMatch) {
       const points = kpMatch[1].match(/[-•*]\s*(.+)/g);
       if (points) {
@@ -359,7 +434,7 @@ export class CreativeSummarizer implements ISummarizer {
       }
     }
 
-    const entMatch = content.match(/Entities?:?\s*([\s\S]*?)$/i);
+    const entMatch = content.match(/(?:Entities?|实体)[:：]?\s*([\s\S]*?)$/i);
     if (entMatch) {
       const items = entMatch[1].match(/[-•*]\s*(.+)/g);
       if (items) {
@@ -377,14 +452,16 @@ export class CreativeSummarizer implements ISummarizer {
     header: string,
     messages: ChatMessage[],
     maxTokens: number,
+    locale: CreativeSummarizerLocale,
   ): CreativeCategorySummary {
     const parts: string[] = [];
     let tokens = 0;
+    const roleLabels = getRoleLabels(locale);
 
     for (const msg of messages) {
       const text = extractText(msg);
       const preview = text.length > 120 ? text.substring(0, 120) + '...' : text;
-      const line = `- [${msg.role}]: ${preview}`;
+      const line = `- [${roleLabels[msg.role] ?? msg.role}]: ${preview}`;
       const lineTokens = estimateTokens(line);
 
       if (tokens + lineTokens > maxTokens) break;
@@ -403,6 +480,76 @@ export class CreativeSummarizer implements ISummarizer {
   }
 }
 
+function normalizeCreativeSummarizerLocale(locale: string | undefined): CreativeSummarizerLocale {
+  return locale?.trim().toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
+function getCreativeCategoryPrompt(
+  category: CreativeInfoType,
+  locale: CreativeSummarizerLocale,
+): string | undefined {
+  const prompt = locale === 'zh' ? CATEGORY_PROMPTS_ZH[category] : CATEGORY_PROMPTS[category];
+  return prompt.trim().length > 0 ? prompt : undefined;
+}
+
+function formatCreativeSummaryHeader(
+  category: CreativeInfoType,
+  locale: CreativeSummarizerLocale,
+): string {
+  if (locale === 'zh') {
+    return `## ${CATEGORY_LABELS_ZH[category] ?? category}`;
+  }
+  const categoryLabel = category.replace(/_/g, ' ');
+  return `## ${categoryLabel.charAt(0).toUpperCase() + categoryLabel.slice(1)}`;
+}
+
+function getRoleLabels(locale: CreativeSummarizerLocale): Record<ChatMessage['role'], string> {
+  if (locale === 'zh') {
+    return {
+      system: ROLE_LABELS_ZH.system ?? 'system',
+      user: ROLE_LABELS_ZH.user ?? 'user',
+      assistant: ROLE_LABELS_ZH.assistant ?? 'assistant',
+      tool: ROLE_LABELS_ZH.tool ?? 'tool',
+    };
+  }
+  return {
+    system: 'system',
+    user: 'user',
+    assistant: 'assistant',
+    tool: 'tool',
+  };
+}
+
+function formatCreativeSummarizerUserPrompt(
+  conversationText: string,
+  maxTokens: number,
+  locale: CreativeSummarizerLocale,
+): string {
+  if (locale === 'zh') {
+    return [
+      `目标长度：约 ${maxTokens} tokens（${maxTokens * 4} 字符）。`,
+      '',
+      '对话：',
+      '---',
+      conversationText,
+      '---',
+      '',
+      '在末尾包含“关键点：”小节。',
+    ].join('\n');
+  }
+
+  return [
+    `Target length: ~${maxTokens} tokens (${maxTokens * 4} characters).`,
+    '',
+    'Conversation:',
+    '---',
+    conversationText,
+    '---',
+    '',
+    'Include a "Key Points:" section at the end.',
+  ].join('\n');
+}
+
 /**
  * Factory function
  */
@@ -412,6 +559,7 @@ export function createCreativeSummarizer(
     service?: IService;
     creativeConfig?: Partial<CreativeCompressionConfig>;
     summarizerConfig?: Partial<CreativeSummarizerConfig>;
+    locale?: string;
   },
 ): ISummarizer {
   return new CreativeSummarizer(classifier, options);

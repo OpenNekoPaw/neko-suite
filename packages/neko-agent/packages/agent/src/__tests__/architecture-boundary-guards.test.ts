@@ -53,19 +53,100 @@ describe('agent architecture boundary guards', () => {
   });
 
   it('keeps runtime collaborators independent from VSCode, React, Webview, and Extension modules', () => {
-    const collaboratorFiles = [
+    const sourceFiles = [
+      ...listFiles(join(agentSrc, 'runtime')),
       join(agentSrc, 'session/session-artifact-facade.ts'),
       join(agentSrc, 'session/validation-runtime-bridge.ts'),
       join(agentSrc, 'session/prompt-runtime-facade.ts'),
-      join(agentSrc, 'runtime/character-dialogue-runtime.ts'),
-    ];
-    const source = collaboratorFiles.map((file) => readFileSync(file, 'utf-8')).join('\n');
+    ]
+      .filter((file) => (file.endsWith('.ts') || file.endsWith('.tsx')) && !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }));
 
-    expect(source).not.toMatch(/from\s+['"]vscode['"]/);
-    expect(source).not.toMatch(/require\(['"]vscode['"]\)/);
-    expect(source).not.toMatch(/from\s+['"]react['"]/);
-    expect(source).not.toMatch(/from\s+['"][^'"]*webview[^'"]*['"]/i);
-    expect(source).not.toMatch(/from\s+['"][^'"]*extension[^'"]*['"]/i);
+    const forbiddenImportPatterns = [
+      /from\s+['"]vscode['"]/,
+      /require\(['"]vscode['"]\)/,
+      /from\s+['"]react['"]/,
+      /from\s+['"][^'"]*webview[^'"]*['"]/i,
+      /from\s+['"][^'"]*extension[^'"]*['"]/i,
+    ];
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenImportPatterns
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps runtime root limited to documented runtime owners', () => {
+    const allowedRuntimeRootFiles = new Set([
+      'agent-entry-intent-runtime.ts',
+      'agent-execution-context.ts',
+      'agent-observation-recorder.ts',
+      'agent-state-runtime.ts',
+      'backfill-coordinator.ts',
+      'character-dialogue-runtime.ts',
+      'character-dialogue-session.ts',
+      'character-evidence.ts',
+      'config-bridge-runtime.ts',
+      'conversation-route-runtime.ts',
+      'conversation-tab-runtime.ts',
+      'embody-character-session.ts',
+      'index.ts',
+      'plugin-transfer-runtime.ts',
+      'subagent-event-runtime.ts',
+      'subagent-runtime.ts',
+      'tool-result-backfill.ts',
+      'types.ts',
+    ]);
+    const runtimeRootFiles = readdirSync(join(agentSrc, 'runtime'), { withFileTypes: true })
+      .filter((entry) => entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')))
+      .map((entry) => entry.name)
+      .filter((name) => !allowedRuntimeRootFiles.has(name));
+
+    expect(runtimeRootFiles).toEqual([]);
+  });
+
+  it('keeps runtime subdirectories narrow and documented', () => {
+    const allowedRuntimeSubdirectories = new Set([
+      '__tests__',
+      'capability',
+      'operation-adapters',
+      'runner',
+      'session',
+      'stream',
+      'turn',
+    ]);
+    const runtimeSubdirectories = readdirSync(join(agentSrc, 'runtime'), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .filter((name) => !allowedRuntimeSubdirectories.has(name));
+
+    expect(runtimeSubdirectories).toEqual([]);
+
+    const readme = readFileSync(join(agentSrc, 'runtime/README.md'), 'utf-8');
+    for (const name of ['session/', 'runner/', 'turn/', 'capability/', 'stream/']) {
+      expect(readme).toContain(name);
+    }
+  });
+
+  it('keeps presenters, projectors, services, and stores out of runtime root', () => {
+    const forbiddenRootFilePatterns = [
+      /(?:^|-)presenter\.tsx?$/,
+      /(?:^|-)projector\.tsx?$/,
+      /(?:^|-)projection\.tsx?$/,
+      /(?:^|-)service\.tsx?$/,
+      /(?:^|-)store\.tsx?$/,
+    ];
+    const violations = readdirSync(join(agentSrc, 'runtime'), { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((name) => forbiddenRootFilePatterns.some((pattern) => pattern.test(name)));
+
+    expect(violations).toEqual([]);
   });
 
   it('keeps NPC runtime modules host-agnostic and projection-only', () => {
@@ -293,7 +374,7 @@ describe('agent architecture boundary guards', () => {
 
   it('keeps provider-specific Canvas tool instructions out of Agent runtime prompts', () => {
     const messageRuntimeSource = stripTypeScriptComments(
-      readFileSync(join(agentSrc, 'runtime/message-runtime.ts'), 'utf-8'),
+      readFileSync(join(agentSrc, 'runtime/turn/message-runtime.ts'), 'utf-8'),
     );
     const forbiddenPromptToolNames = [
       'canvas_get_node',
@@ -302,7 +383,7 @@ describe('agent architecture boundary guards', () => {
     ];
     const violations = forbiddenPromptToolNames
       .filter((toolName) => messageRuntimeSource.includes(toolName))
-      .map((toolName) => `runtime/message-runtime.ts contains provider tool ${toolName}`);
+      .map((toolName) => `runtime/turn/message-runtime.ts contains provider tool ${toolName}`);
 
     expect(violations).toEqual([]);
   });
@@ -659,13 +740,13 @@ describe('agent architecture boundary guards', () => {
       }));
 
     const allowedShimFiles = new Set([
-      'packages/agent/src/runtime/agent-stream-state.ts',
+      'packages/agent/src/runtime/stream/agent-stream-state.ts',
       'packages/agent/src/runtime/backfill-coordinator.ts',
-      'packages/agent/src/runtime/context-webview-presenter.ts',
+      'packages/agent/src/session/context-host-message.ts',
       'packages/agent/src/runtime/index.ts',
-      'packages/neko-agent/packages/agent/src/runtime/agent-stream-state.ts',
+      'packages/neko-agent/packages/agent/src/runtime/stream/agent-stream-state.ts',
       'packages/neko-agent/packages/agent/src/runtime/backfill-coordinator.ts',
-      'packages/neko-agent/packages/agent/src/runtime/context-webview-presenter.ts',
+      'packages/neko-agent/packages/agent/src/session/context-host-message.ts',
       'packages/neko-agent/packages/agent/src/runtime/index.ts',
     ]);
     const allowedAdapterFiles = new Set([
@@ -706,9 +787,9 @@ describe('agent architecture boundary guards', () => {
       join(packageRoot, 'platform/src'),
     ];
     const allowedSanitizers = new Set([
-      'packages/agent/src/runtime/message-resource-projector.ts',
+      'packages/agent/src/input/message-resource-projector.ts',
       'packages/agent/src/session/working-memory.ts',
-      'packages/neko-agent/packages/agent/src/runtime/message-resource-projector.ts',
+      'packages/neko-agent/packages/agent/src/input/message-resource-projector.ts',
       'packages/neko-agent/packages/agent/src/session/working-memory.ts',
     ]);
     const violations = hostNeutralRoots.flatMap((root) =>
@@ -1079,10 +1160,16 @@ const allowedAgentSessionFieldNames = new Set([
   '_artifactSchemaModule',
   '_subpackageFragmentsModule',
   '_skillCoordinator',
+  '_lifecycleProjectionSectionIds',
+  '_lifecycleProjectionAllowRules',
+  '_lifecycleProjectionToolGuard',
+  '_lifecycleProjectionActivatedToolSets',
   '_stageTracker',
   '_stagePersonaBinding',
   '_stageGuardian',
-  '_activeTurnRunId',
+  '_activeTurnId',
+  '_activeRunId',
+  '_activeRunStartedAt',
   '_reactRunnerState',
   '_reactLoopBaseHooks',
   '_runnerHooks',
@@ -1112,6 +1199,7 @@ const allowedAgentSessionFieldNames = new Set([
   '_versionLog',
   '_journalWriter',
   '_journalSeq',
+  '_taskResultObservationEntries',
   '_streamState',
   '_currentTurnPlanningContext',
   '_memoryRecall',

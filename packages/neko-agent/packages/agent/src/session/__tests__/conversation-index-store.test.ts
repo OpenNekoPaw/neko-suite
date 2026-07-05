@@ -115,6 +115,72 @@ describe('ConversationIndexStore', () => {
     expect(listed.map((meta) => meta.conversationId)).toEqual(['conv-3', 'conv-2']);
     expect(await store.getMeta('conv-1')).toBeUndefined();
   });
+
+  it('rejects stale whole-file writers before overwriting another conversation partition', async () => {
+    const indexPath = '/tmp/conversations-index.json';
+    const { files, readFile, writeFile, exists } = createMemoryFs();
+    const firstWriter = new ConversationIndexStore({
+      filePath: indexPath,
+      readFile,
+      writeFile,
+      exists,
+      writerId: 'writer-a',
+      now: () => 3000,
+    });
+    const secondWriter = new ConversationIndexStore({
+      filePath: indexPath,
+      readFile,
+      writeFile,
+      exists,
+      writerId: 'writer-b',
+      now: () => 4000,
+    });
+
+    await firstWriter.upsert({
+      conversationId: 'conv-a',
+      title: 'First writer',
+      workDir: '/workspace/demo',
+      createdAt: 1000,
+      updatedAt: 1000,
+      messageCount: 1,
+      source: 'extension',
+    });
+    await secondWriter.upsert({
+      conversationId: 'conv-b',
+      title: 'Second writer',
+      workDir: '/workspace/demo',
+      createdAt: 2000,
+      updatedAt: 2000,
+      messageCount: 1,
+      source: 'tui',
+    });
+
+    await firstWriter.flush();
+    await expect(secondWriter.flush()).rejects.toMatchObject({
+      code: 'stale-json-file-write',
+      details: {
+        filePath: indexPath,
+        ownerId: 'writer-b',
+        loadedRevision: 0,
+        currentRevision: 1,
+        currentOwnerId: 'writer-a',
+      },
+    });
+
+    const persisted = JSON.parse(files.get(indexPath) ?? '{}') as {
+      writeMetadata?: { ownerId: string; revision: number };
+      workspaces?: Record<string, string[]>;
+      conversations?: Record<string, unknown>;
+    };
+    expect(persisted.writeMetadata).toEqual(
+      expect.objectContaining({ ownerId: 'writer-a', revision: 1 }),
+    );
+    expect(persisted.workspaces?.['/workspace/demo']).toEqual(['conv-a']);
+    expect(Object.keys(persisted.conversations ?? {})).toEqual(['conv-a']);
+    expect(await firstWriter.getMeta('conv-a')).toEqual(
+      expect.objectContaining({ conversationId: 'conv-a' }),
+    );
+  });
 });
 
 function createMemoryFs(initialFiles?: Record<string, string>): {

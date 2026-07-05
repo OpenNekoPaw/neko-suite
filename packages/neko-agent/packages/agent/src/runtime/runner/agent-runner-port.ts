@@ -4,10 +4,16 @@ import type {
   ConfiguredToolGroup,
   Skill,
   SkillInjection,
+  SkillLifecycleProjection,
 } from '@neko/shared';
-import type { ISkillProvider } from '../tools/core/meta-tools';
-import type { AgentEvent, CompressionResult } from '../session/types';
-import type { SubAgentEvent } from '../subagent/types';
+import type { ISkillProvider } from '../../tools/core/meta-tools';
+import type {
+  AgentEvent,
+  CompressionResult,
+  RecordSessionTaskResultObservationInput,
+} from '../../session/types';
+import type { RecordAgentTaskResultObservationResult } from '../../session/task-result-observation-recorder';
+import type { SubAgentEvent } from '../../subagent/types';
 
 export interface DisposableLike {
   dispose(): void;
@@ -29,13 +35,16 @@ export interface AgentPendingMessageItem {
   readonly content: string;
   readonly createdAt: number;
   readonly updatedAt?: number;
-  readonly source: 'composer';
+  readonly source: AgentPendingMessageSource;
 }
+
+export type AgentPendingMessageSource = 'composer' | 'task-result-observation';
 
 export interface EnqueuePendingMessageInput {
   readonly conversationId: string;
   readonly content: string;
   readonly now?: number;
+  readonly source?: AgentPendingMessageSource;
 }
 
 export type AgentPendingMessageQueueErrorCode =
@@ -106,10 +115,14 @@ export interface AgentRunnerPort<TConfig, TContext> extends DisposableLike {
   getHistory(): ChatMessage[];
   clearHistory(): void;
   addMessage(message: ChatMessage, sourceEventIds?: readonly string[]): void;
+  recordTaskResultObservation(
+    input: RecordSessionTaskResultObservationInput,
+  ): Promise<RecordAgentTaskResultObservationResult>;
   loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void;
   getToolSkills(): ConfiguredToolGroup[];
   setSkillProvider(provider: ISkillProvider): void;
   refreshCapabilityRuntime(): void;
+  applySkillLifecycleProjection(projection: SkillLifecycleProjection): void;
   applySkillInjection(injection: SkillInjection, skill?: Skill): void;
   activateToolSetsForTools(toolNames: readonly string[]): readonly string[];
   deactivateToolSet(toolSetName: string): void;

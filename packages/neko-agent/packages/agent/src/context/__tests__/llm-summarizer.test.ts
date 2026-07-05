@@ -44,4 +44,25 @@ describe('LLMSummarizer provenance', () => {
     expect(result.source).toBe('fallback');
     expect(result.degraded).toBe(true);
   });
+
+  it('uses Chinese prompt wrappers for localized summarization requests', async () => {
+    const service = createService('摘要\n\n关键点：\n- 一项');
+    const summarizer = new LLMSummarizer(service);
+
+    await summarizer.summarize({
+      messages: [userMessage('请总结这段对话')],
+      maxTokens: 200,
+      locale: 'zh-CN',
+    });
+
+    const messages = vi.mocked(service.chat).mock.calls[0]![0] as Array<{
+      role: string;
+      content: string;
+    }>;
+    expect(messages[0]!.content).toContain('对话摘要器');
+    expect(messages[0]!.content).not.toContain('conversation summarizer');
+    expect(messages[1]!.content).toContain('请总结以下对话片段');
+    expect(messages[1]!.content).toContain('目标摘要长度');
+    expect(messages[1]!.content).not.toContain('Please summarize the following conversation segment');
+  });
 });

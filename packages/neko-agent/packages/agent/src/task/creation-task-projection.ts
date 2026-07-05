@@ -12,6 +12,7 @@ export interface ICreationTaskProjectionStore extends ICreationProjectedTaskStor
 
 export interface ICreationTaskProjection {
   syncTask(input: {
+    conversationId: string;
     runId: string;
     runStartedAt?: number;
     task: IdcTask;
@@ -33,6 +34,7 @@ class TaskManagerCreationTaskProjection implements ICreationTaskProjection {
   }
 
   async syncTask(input: {
+    conversationId: string;
     runId: string;
     runStartedAt?: number;
     task: IdcTask;
@@ -43,6 +45,7 @@ class TaskManagerCreationTaskProjection implements ICreationTaskProjection {
 
     for (const item of input.task.items) {
       const projected = toProjectedTask(
+        input.conversationId,
         input.runId,
         input.runStartedAt,
         input.task,
@@ -77,6 +80,7 @@ export function createTaskManagerCreationTaskProjection(
 }
 
 function toProjectedTask(
+  conversationId: string,
   runId: string,
   runStartedAt: number | undefined,
   task: IdcTask,
@@ -88,6 +92,7 @@ function toProjectedTask(
     status: toProjectedTaskStatus(item.status),
     binding: {
       source: 'creation',
+      conversationId,
       runId,
       ...(runStartedAt !== undefined ? { runStartedAt } : {}),
       checklistId: task.id,

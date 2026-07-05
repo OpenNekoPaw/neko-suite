@@ -29,7 +29,7 @@ import type {
   ArtifactRecord,
   ArtifactWriteInput,
   IArtifactService,
-} from '../../runtime/artifact-service';
+} from '../../artifact/artifact-service';
 import type { ICreationTaskProjection } from '../../task';
 import { SystemPromptComposer } from '../../prompt/system-prompt-composer';
 import { ModuleOrchestrator } from '../../prompt/composer/module-orchestrator';
@@ -60,6 +60,9 @@ describe('session runtime collaborators', () => {
     const onPersist = vi.fn();
     const facade = new SessionArtifactFacade({
       ports: {
+        session: {
+          getConversationId: () => 'conv-1',
+        },
         activity: {
           getActiveArtifactScope: () => ({ id: 'activity-1', startedAt: 90 }),
           getArtifactScopeStartedAt: (scopeId) => (scopeId === 'activity-1' ? 90 : undefined),
@@ -91,6 +94,7 @@ describe('session runtime collaborators', () => {
     );
     expect(projection.syncTask).toHaveBeenCalledWith(
       expect.objectContaining({
+        conversationId: 'conv-1',
         runId: 'activity-1',
         runStartedAt: 90,
         task: restoredTask,
@@ -433,6 +437,9 @@ function createArtifactFacade(input: {
   const activeRun = input.activeRun ?? null;
   return new SessionArtifactFacade({
     ports: {
+      session: {
+        getConversationId: () => 'conv-1',
+      },
       activity: {
         getActiveArtifactScope: () => activeRun,
         getArtifactScopeStartedAt: (scopeId) =>

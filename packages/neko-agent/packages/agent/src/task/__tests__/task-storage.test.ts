@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { MemoryTaskStorage, StateTaskStorage } from '../task-storage';
+import { FileTaskStorage, MemoryTaskStorage, StateTaskStorage } from '../task-storage';
 import type { SerializableTask } from '@neko/shared';
 
 const createTask = (overrides: Partial<SerializableTask> = {}): SerializableTask => ({
@@ -260,5 +260,61 @@ describe('StateTaskStorage', () => {
 
     await expect(storage.cleanup(7 * 24 * 60 * 60 * 1000)).resolves.toBe(1);
     expect((await storage.loadAll()).map((task) => task.id)).toEqual(['running']);
+  });
+});
+
+describe('FileTaskStorage', () => {
+  it('rejects stale whole-file writers before overwriting another task partition', async () => {
+    const filePath = '/tmp/tasks.json';
+    const files = new Map<string, string>();
+    const fsOps = {
+      readFile: async (path: string) => {
+        const content = files.get(path);
+        if (content === undefined) {
+          throw new Error(`File not found: ${path}`);
+        }
+        return content;
+      },
+      writeFile: async (path: string, content: string) => {
+        files.set(path, content);
+      },
+      exists: async (path: string) => files.has(path),
+    };
+    const firstWriter = new FileTaskStorage({
+      filePath,
+      ...fsOps,
+      writerId: 'task-writer-a',
+      now: () => 1000,
+    });
+    const secondWriter = new FileTaskStorage({
+      filePath,
+      ...fsOps,
+      writerId: 'task-writer-b',
+      now: () => 2000,
+    });
+
+    await firstWriter.save(createTask({ id: 'task-a' }));
+    await secondWriter.save(createTask({ id: 'task-b' }));
+    await firstWriter.flush();
+
+    await expect(secondWriter.flush()).rejects.toMatchObject({
+      code: 'stale-json-file-write',
+      details: {
+        filePath,
+        ownerId: 'task-writer-b',
+        loadedRevision: 0,
+        currentRevision: 1,
+        currentOwnerId: 'task-writer-a',
+      },
+    });
+
+    const persisted = JSON.parse(files.get(filePath) ?? '{}') as {
+      writeMetadata?: { ownerId: string; revision: number };
+      tasks?: SerializableTask[];
+    };
+    expect(persisted.writeMetadata).toEqual(
+      expect.objectContaining({ ownerId: 'task-writer-a', revision: 1 }),
+    );
+    expect(persisted.tasks?.map((task) => task.id)).toEqual(['task-a']);
   });
 });

@@ -4,19 +4,20 @@ import type {
   TaskCreatedMessage,
   TaskUpdatedMessage,
 } from '@neko-agent/types';
+import type { TaskRunLease } from '@neko/shared';
 import {
   buildTaskCreatedMessage,
   buildTaskUpdatedMessage,
   projectBackgroundTaskToWorkItem,
 } from '@neko-agent/types';
-import type { AgentEvent } from '../session/types';
+import type { AgentEvent } from '../../session/types';
 import {
   createBackgroundTaskViewFromToolResultData,
   mergeBackgroundTaskProgressView,
   type BackgroundTaskProgressPatch,
   type BackgroundTaskView,
-} from '../task/task-view-projector';
-import { updateBackgroundTaskToolResultUrls } from './message-resource-projector';
+} from '../../task/task-view-projector';
+import { updateBackgroundTaskToolResultUrls } from '../../input/message-resource-projector';
 
 export interface AgentStreamBackgroundTaskStartInput {
   readonly conversationId: string;
@@ -60,6 +61,7 @@ export interface PersistAgentStreamBackgroundTaskResultUrlsInput {
 }
 
 export interface AgentStreamBackgroundTaskPersistInput<TDeliveryPlan = unknown> {
+  readonly lease: TaskRunLease;
   readonly conversationId: string;
   readonly taskId: string;
   readonly toolCallId?: string;

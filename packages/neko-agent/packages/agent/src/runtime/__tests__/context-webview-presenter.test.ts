@@ -3,20 +3,19 @@ import {
   buildCompressionErrorMessage,
   buildCompressionResultMessage,
   buildContextTokenCountMessage,
-} from '../context-webview-presenter';
+} from '../../session/context-host-message';
 
 describe('context webview presenter', () => {
-  it('builds token count messages with optional conversation id', () => {
+  it('builds token count messages with explicit conversation id', () => {
     expect(buildContextTokenCountMessage({ conversationId: 'conv-1', tokenCount: 42 })).toEqual({
       type: 'contextTokenCount',
       conversationId: 'conv-1',
       tokenCount: 42,
     });
 
-    expect(buildContextTokenCountMessage({ tokenCount: 0 })).toEqual({
-      type: 'contextTokenCount',
-      tokenCount: 0,
-    });
+    expect(() => buildContextTokenCountMessage({ conversationId: '', tokenCount: 0 })).toThrow(
+      'contextTokenCount requires non-empty conversationId',
+    );
   });
 
   it('builds compression result and error messages', () => {
@@ -47,5 +46,9 @@ describe('context webview presenter', () => {
       conversationId: 'conv-1',
       error: 'Compression failed',
     });
+
+    expect(() =>
+      buildCompressionErrorMessage({ conversationId: ' ', error: 'Compression failed' }),
+    ).toThrow('compressionError requires non-empty conversationId');
   });
 });

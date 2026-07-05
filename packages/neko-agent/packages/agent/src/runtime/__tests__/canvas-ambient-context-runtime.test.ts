@@ -7,7 +7,7 @@ import {
   readCanvasNodeAssetKind,
   readCanvasNodeAssetUri,
   summarizeCanvasNode,
-} from '../canvas-ambient-context-runtime';
+} from '../turn/canvas-ambient-context-runtime';
 
 describe('canvas ambient context runtime', () => {
   it('summarizes selected shot nodes and caps ambient selection count', () => {

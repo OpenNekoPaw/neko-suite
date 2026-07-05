@@ -294,4 +294,24 @@ describe('CreativeVersionLog', () => {
 
     expect(log.toSummary()).toContain('[approved]');
   });
+
+  it('should localize summary chrome for Chinese prompts', () => {
+    const log = createLog();
+    const entry = log.record({
+      toolName: 'GenerateImage',
+      toolCallId: 'call_1',
+      parameters: { prompt: 'sunset' },
+      resultPath: '/tmp/sunset.png',
+      resultSuccess: true,
+      timestamp: 1000,
+    });
+    log.evaluate(entry.id, 'approved');
+
+    const summary = log.toSummary(5, 'zh');
+
+    expect(summary).toContain('创作版本日志');
+    expect(summary).toContain('[已批准]');
+    expect(summary).not.toContain('Creative Version Log');
+    expect(summary).not.toContain('[approved]');
+  });
 });

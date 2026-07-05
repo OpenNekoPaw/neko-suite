@@ -1,15 +1,24 @@
 /**
- * Runtime layering guide:
+ * Runtime public barrel.
  *
- * - Host bindings: translate VSCode/CLI/platform adapters into runtime session
- *   factory config (`runtime-host-bindings`).
- * - Session projection: merge unified runtime planes into AgentSessionConfig
- *   (`session-config-projection`).
- * - Session factory: create/update one AgentSession and its owned registries.
- * - Runner: execute one configured session with confirmation/subagent events.
- * - Controller: refresh a host-owned session target without leaking factory
- *   details to the extension.
- * - Pool/Manager: own multi-conversation lifecycle, eviction, and compression.
+ * Canonical implementation owners live in the narrow runtime subdirectories
+ * documented in README.md:
+ * - session/: host-neutral session bootstrap, manager, pool, controller, and
+ *   runtime-plane projection into AgentSessionConfig.
+ * - runner/: one configured session execution port, confirmation flow, cancel,
+ *   history, and queue contracts.
+ * - turn/: one user-message dispatch, provider/model selection, context and
+ *   attachment assembly, runner configuration, stream processing, and
+ *   assistant-message persistence.
+ * - capability/: Agent-side consumption of AgentCapabilityProvider
+ *   contributions into Agent registries and bindings.
+ * - stream/: event stream projection, background task observation, and stream
+ *   state.
+ *
+ * Existing owner directories remain canonical for artifacts, input/message
+ * projection, context, memory, prompt, Skill lifecycle, permission, approval,
+ * plan/task projection, and commands. This barrel preserves package imports; it
+ * must not become a governance or compatibility layer.
  */
 export type {
   AgentRuntimeConfig,
@@ -43,13 +52,13 @@ export {
   type AgentProviderAssetResult,
   type AgentResourceProjectionInput,
   type AgentResourceProjectionResult,
-} from './agent-content-access-runtime';
+} from './capability/agent-content-access-runtime';
 
 export {
   buildAgentSessionConfigWithRuntime,
   createAgentSessionWithRuntime,
   type AgentSessionRuntimeBootstrapConfig,
-} from './session-config-projection';
+} from './session/session-config-projection';
 
 export {
   createWorkspaceArtifactService,
@@ -63,13 +72,13 @@ export {
   type ArtifactServiceFsOps,
   type ArtifactWriteInput,
   type IArtifactService,
-} from './artifact-service';
+} from '../artifact/artifact-service';
 
 export {
   createNodeArtifactStore,
   createNodeRuntimeWorkspaceFsOps,
   type NodeArtifactStoreConfig,
-} from './node-artifact-store';
+} from '../artifact/node-artifact-store';
 
 export {
   AgentObservationRecorder,
@@ -91,7 +100,7 @@ export {
   type AgentRuntimePoolOptions,
   type AgentRuntimePoolPressureEvent,
   type ManagedAgentRuntime,
-} from './agent-runtime-pool';
+} from './session/agent-runtime-pool';
 
 export {
   createAgentRuntimeManager,
@@ -103,13 +112,14 @@ export {
   type AgentRuntimeManagerEvent,
   type AgentRuntimeManagerLogger,
   type AgentRuntimeManagerOptions,
-} from './agent-runtime-manager';
+} from './session/agent-runtime-manager';
 
 export {
   AgentPendingMessageQueueError,
   createAgentRunnerEventEmitter,
   type AgentPendingMessageItem,
   type AgentPendingMessageQueueErrorCode,
+  type AgentPendingMessageSource,
   type AgentRunnerEventEmitter,
   type AgentRunnerConfirmationRequest,
   type AgentRunnerEventSource,
@@ -117,7 +127,7 @@ export {
   type AgentRunnerPortEvent,
   type EnqueuePendingMessageInput,
   type DisposableLike,
-} from './agent-runner-port';
+} from './runner/agent-runner-port';
 
 export {
   AgentSessionRunner,
@@ -129,24 +139,24 @@ export {
   type AgentSessionRunnerConfirmation,
   type AgentSessionRunnerOptions,
   type AgentSessionRunnerTimer,
-} from './agent-session-runner';
+} from './runner/agent-session-runner';
 
 export {
   buildAgentRuntimeSessionFactoryConfig,
   type AgentRuntimeHostBindings,
   type AgentRuntimeSessionAssemblyInput,
-} from './runtime-host-bindings';
+} from './session/runtime-host-bindings';
 
 export {
   createAgentRuntimeSessionController,
   type AgentRuntimeSessionController,
   type AgentRuntimeSessionControllerTarget,
-} from './agent-runtime-session-controller';
+} from './session/agent-runtime-session-controller';
 
 export {
   createAgentCapabilityRuntimeRegistries,
   type AgentCapabilityRuntimeRegistries,
-} from './capability-runtime-registries';
+} from './capability/capability-runtime-registries';
 
 export {
   createAgentCapabilityInjectionRuntime,
@@ -160,7 +170,7 @@ export {
   type NormalizeSkillScanGroupInput,
   type NormalizeSkillScanInput,
   type NormalizeSkillCapabilityInput,
-} from './agent-capability-injection-runtime';
+} from './capability/agent-capability-injection-runtime';
 
 export {
   AgentCapabilityLifecycleRuntimeError,
@@ -169,12 +179,12 @@ export {
   type AgentCapabilityLifecycleHandler,
   type AgentCapabilityLifecycleHandlerContext,
   type AgentCapabilityLifecycleRuntime,
-} from './agent-capability-lifecycle-runtime';
+} from './capability/agent-capability-lifecycle-runtime';
 
 export {
   createAgentPromptSchemaGenerator,
   type AgentPromptSchemaGenerator,
-} from './agent-prompt-schema-generator';
+} from './capability/agent-prompt-schema-generator';
 
 export {
   createCapabilityRuntimeBindingStore,
@@ -182,7 +192,7 @@ export {
   type CapabilityRuntimeBindingLogger,
   type CapabilityRuntimeBindingStore,
   type CapabilityRuntimeBindings,
-} from './capability-runtime-bindings';
+} from './capability/capability-runtime-bindings';
 
 export {
   createCapabilityRuntimeRefreshRuntime,
@@ -190,7 +200,7 @@ export {
   type CapabilityRuntimeRefreshOptions,
   type CapabilityRuntimeRefreshResult,
   type CapabilityRuntimeRefreshRuntime,
-} from './capability-runtime-refresh';
+} from './capability/capability-runtime-refresh';
 
 export {
   NEKO_AUTH_EXTENSION_ID,
@@ -231,7 +241,7 @@ export {
   type AgentRuntimeSessionHandle,
   type AgentRuntimeSessionUpdate,
   type AgentRuntimeSessionUpdateConfig,
-} from './agent-session-factory';
+} from './session/agent-session-factory';
 
 export {
   SubAgentRuntimeCoordinator,
@@ -249,7 +259,7 @@ export {
   createWorkspaceInputProcessorRuntime,
   type WorkspaceInputProcessorRuntime,
   type WorkspaceInputProcessorRuntimeOptions,
-} from './workspace-input-processor-runtime';
+} from './turn/workspace-input-processor-runtime';
 
 export {
   createDeveloperModeTemporaryProcessorRequest,
@@ -271,7 +281,7 @@ export {
   type AgentExternalProcessorChainTargetChangeInput,
   type DeveloperModeTemporaryProcessorRequest,
   type DeveloperModeTemporaryProcessorRequestInput,
-} from './external-processor-runtime';
+} from './capability/external-processor-runtime';
 
 export {
   createTimelineContextRuntime,
@@ -279,7 +289,7 @@ export {
   type TimelineContextEditorLike,
   type TimelineContextRuntime,
   type TimelineContextRuntimeOptions,
-} from './timeline-context-runtime';
+} from './turn/timeline-context-runtime';
 
 export {
   buildAgentTurnRuntimeInput,
@@ -293,7 +303,7 @@ export {
   type AgentTurnProviderHost,
   type AgentTurnRuntimeServices,
   type AgentTurnSettingsSource,
-} from './agent-turn-assembly';
+} from './turn/agent-turn-assembly';
 
 export {
   AGENT_TURN_PRECONDITION_MESSAGE,
@@ -317,7 +327,7 @@ export {
   type ExecuteAgentTurnInput,
   type RunAgentTurnRuntimeInput,
   type RunAgentTurnRuntimeResult,
-} from './agent-turn-runtime';
+} from './turn/agent-turn-runtime';
 
 export {
   createAgentTurnContext,
@@ -326,7 +336,7 @@ export {
   type AgentTurnContext,
   type AgentTurnContextInput,
   type AgentTurnProjectType,
-} from './agent-turn-context';
+} from './turn/agent-turn-context';
 
 export {
   buildAgentSessionExecutionContext,
@@ -534,7 +544,7 @@ export {
   type ProviderExpressionTargetConfig,
   type RunAgentMessageTurnRuntimeInput,
   type RunAgentMessageTurnRuntimeResult,
-} from './message-runtime';
+} from './turn/message-runtime';
 
 export {
   AGENT_DOCUMENT_CONTEXT_INTENTS,
@@ -563,7 +573,7 @@ export {
   updateBackgroundTaskToolResultUrls,
   type MessageResourceUpdateResult,
   type MessageResourceProjectionOptions,
-} from './message-resource-projector';
+} from '../input/message-resource-projector';
 
 export {
   applyAgentStreamEventToState,
@@ -583,7 +593,7 @@ export {
   type CollectedToolCall,
   type ProjectAgentStreamEventToHostMessagesInput,
   type ProjectAgentStreamEventToWebviewMessagesInput,
-} from './agent-stream-state';
+} from './stream/agent-stream-state';
 
 export {
   BackfillCoordinator,
@@ -620,7 +630,7 @@ export {
   type AgentEventStreamRuntimeBackgroundTasks,
   type AgentEventStreamRuntimeMessage,
   type ProcessAgentEventStreamRuntimeInput,
-} from './agent-event-stream-runtime';
+} from './stream/agent-event-stream-runtime';
 
 export {
   persistAgentStreamBackgroundTaskResultUrls,
@@ -631,7 +641,7 @@ export {
   type AgentStreamBackgroundTaskStartInput,
   type AgentStreamBackgroundTaskStartProjection,
   type PersistAgentStreamBackgroundTaskResultUrlsInput,
-} from './agent-stream-background-task';
+} from './stream/agent-stream-background-task';
 
 export {
   startAgentStreamBackgroundTaskObserver,
@@ -640,10 +650,11 @@ export {
   type AgentStreamBackgroundTaskObservedProgress,
   type AgentStreamBackgroundTaskProgressErrorEvent,
   type AgentStreamBackgroundTaskProgressEvent,
+  type AgentStreamBackgroundTaskTerminalEvent,
   type ObserveAgentStreamBackgroundTaskProgressInput,
   type StartAgentStreamBackgroundTaskObserverInput,
   type StartAgentStreamBackgroundTaskObserverResult,
-} from './agent-stream-task-observer';
+} from './stream/agent-stream-task-observer';
 
 export {
   runAgentMediaTurn,
@@ -654,7 +665,7 @@ export {
   type AgentMediaTurnTaskEvent,
   type RunAgentMediaTurnInput,
   type RunAgentMediaTurnResult,
-} from './media-turn-runtime';
+} from './turn/media-turn-runtime';
 
 export {
   buildActiveConversationMessage,
@@ -664,7 +675,7 @@ export {
   type ConversationListItemView,
   type ConversationListMessage,
   type ConversationViewSource,
-} from './conversation-webview-presenter';
+} from '../session/conversation-host-message';
 
 export {
   buildChatAmbientCanvasUpdateMessage,
@@ -702,7 +713,7 @@ export {
   type CompressionResultMessage,
   type ContextTokenCountMessage,
   type ContextWebviewMessage,
-} from './context-webview-presenter';
+} from '../session/context-host-message';
 
 export {
   compressAgentContext,
@@ -712,7 +723,7 @@ export {
   type AgentContextControlResult,
   type CompressAgentContextInput,
   type SendAgentContextTokenCountInput,
-} from './context-control-runtime';
+} from './turn/context-control-runtime';
 
 export {
   buildRuntimePluginSlashCommandDispatch,
@@ -741,7 +752,7 @@ export {
   type AgentBase64ImageAttachment,
   type AgentProcessedAttachments,
   type AgentRuntimePromptLocale,
-} from './attachment-projection';
+} from '../input/attachment-projection';
 
 export {
   buildTurnMultimodalContextPacket,
@@ -767,7 +778,7 @@ export {
   type TimelineSelectionContextElement,
   type TimelineSelectionContextOptions,
   type ToolProducedMultimodalEvidenceInput,
-} from './multimodal-context-packet';
+} from './turn/multimodal-context-packet';
 
 export {
   CapabilityRegistryRuntime,
@@ -775,7 +786,7 @@ export {
   type CapabilityProtocolInfo,
   type CapabilityRegistryRuntimeDeps,
   type CapabilityRegistryRuntimeLogger,
-} from './capability-registry-runtime';
+} from './capability/capability-registry-runtime';
 
 export {
   CanvasAmbientContextRuntime,
@@ -791,4 +802,4 @@ export {
   type CanvasChangeInput,
   type CanvasChangeSummary,
   type SelectedNodeSummary,
-} from './canvas-ambient-context-runtime';
+} from './turn/canvas-ambient-context-runtime';

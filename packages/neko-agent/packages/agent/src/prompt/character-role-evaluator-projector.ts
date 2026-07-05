@@ -8,33 +8,42 @@ export interface CharacterRoleEvaluationPromptProjection {
 
 export function projectCharacterRoleEvaluationPrompt(
   artifact: NpcTranscriptArtifact,
+  options: { readonly locale?: string } = {},
 ): CharacterRoleEvaluationPromptProjection {
+  const zh = options.locale?.trim().toLowerCase().startsWith('zh') === true;
   return {
-    systemPrompt: [
-      'You evaluate character role transcripts against the supplied profile snapshot.',
-      'Return JSON only, shaped as NpcEvaluationReport.',
-      'Flag persona consistency issues, dialogue voice fit, knowledge leakage, relationship gaps, and profile improvement suggestions.',
-      'Suggestions must remain suggested and require explicit user confirmation before any entity mutation.',
-    ].join('\n'),
+    systemPrompt: zh
+      ? [
+          '你需要根据提供的角色档案快照评估角色对话转录。',
+          '只返回 JSON，结构必须符合 NpcEvaluationReport。',
+          '标记人设一致性、对白声线匹配、知识边界泄露、关系缺口和角色档案改进建议。',
+          '所有建议必须保持 suggested 状态，并且在任何实体变更前都需要用户明确确认。',
+        ].join('\n')
+      : [
+          'You evaluate character role transcripts against the supplied profile snapshot.',
+          'Return JSON only, shaped as NpcEvaluationReport.',
+          'Flag persona consistency issues, dialogue voice fit, knowledge leakage, relationship gaps, and profile improvement suggestions.',
+          'Suggestions must remain suggested and require explicit user confirmation before any entity mutation.',
+        ].join('\n'),
     userPrompt: [
-      '## Profile Snapshot',
+      zh ? '## 角色档案快照' : '## Profile Snapshot',
       JSON.stringify(artifact.profileSnapshot, null, 2),
       '',
-      '## Transcript',
+      zh ? '## 对话转录' : '## Transcript',
       JSON.stringify(artifact.transcript, null, 2),
       '',
-      '## Expected JSON Shape',
+      zh ? '## 期望 JSON 结构' : '## Expected JSON Shape',
       JSON.stringify(
         {
           version: 1,
           createdAt: 'ISO timestamp',
           entityRef: artifact.entityRef,
-          summary: 'short evaluation summary',
+          summary: zh ? '简短评估摘要' : 'short evaluation summary',
           scores: [
             {
               dimension: 'persona-consistency',
               score: 0.8,
-              summary: 'reason',
+              summary: zh ? '原因' : 'reason',
             },
           ],
           findings: [
@@ -42,7 +51,7 @@ export function projectCharacterRoleEvaluationPrompt(
               id: 'finding-1',
               dimension: 'knowledge-boundary',
               severity: 'warning',
-              message: 'what happened',
+              message: zh ? '发生了什么' : 'what happened',
               transcriptMessageIds: ['message-id'],
               factKeys: ['profile.fact.key'],
             },
@@ -52,9 +61,9 @@ export function projectCharacterRoleEvaluationPrompt(
               id: 'suggestion-1',
               kind: 'entity-metadata',
               status: 'suggested',
-              title: 'suggestion title',
-              rationale: 'why this should be considered',
-              proposedValue: 'new value',
+              title: zh ? '建议标题' : 'suggestion title',
+              rationale: zh ? '为什么需要考虑这个建议' : 'why this should be considered',
+              proposedValue: zh ? '新值' : 'new value',
               applyTarget: {
                 kind: 'entity-metadata',
                 entityRef: artifact.entityRef,

@@ -125,6 +125,12 @@ export interface SubAgentConfig {
   parentMessageId?: string;
   /** Parent tool call ID that spawned this SubAgent, when available */
   parentToolCallId?: string;
+  /** Owning durable run id, when spawned by long-running Agent work */
+  runId?: string;
+  /** Optional durable run start timestamp for restored run disambiguation */
+  runStartedAt?: number;
+  /** Runtime prompt locale inherited from the parent turn. */
+  locale?: string;
 
   // ==========================================================================
   // Skill & ToolSkill Injection (New)
@@ -245,6 +251,8 @@ export interface SubAgentEvent {
     modelTier?: ModelTier;
     parentMessageId?: string;
     parentToolCallId?: string;
+    runId?: string;
+    runStartedAt?: number;
   };
   /** Event timestamp */
   timestamp: number;
@@ -430,6 +438,8 @@ export interface ContextExtractionOptions {
   includeSystemPrompt?: boolean;
   /** Number of recent messages to include */
   includeRecentMessages?: number;
+  /** Runtime prompt locale used for wrapper labels. */
+  locale?: string;
 }
 
 /**
@@ -450,5 +460,6 @@ export interface IContextBridge {
   mergeResults(
     parentMessages: Array<{ role: string; content: string }>,
     subAgentResults: Array<{ id: string; response: string; name?: string }>,
+    locale?: string,
   ): Array<{ role: string; content: string }>;
 }

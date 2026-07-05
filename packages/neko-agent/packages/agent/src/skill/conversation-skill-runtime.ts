@@ -107,7 +107,6 @@ export interface AutoActivateSkillInput {
  */
 export class ConversationSkillRuntime {
   private _deps: ConversationSkillRuntimeDeps;
-  private readonly _activeSkills = new Map<string, ActiveSkillState>();
   private _lifecycleRuntime: SkillLifecycleRuntime | null = null;
 
   constructor(deps: ConversationSkillRuntimeDeps = {}) {
@@ -328,7 +327,6 @@ export class ConversationSkillRuntime {
       };
     }
 
-    this._activeSkills.delete(input.conversationId);
     this._deps.agentBridge?.clearActiveSkill(input.conversationId);
     return {
       success: true,
@@ -359,7 +357,11 @@ export class ConversationSkillRuntime {
 
   getActiveSkill(conversationId: string): ActiveSkillState | undefined {
     if (!conversationId) return undefined;
-    return this._activeSkills.get(conversationId);
+    const records = this.getActiveLifecycleRecords(conversationId);
+    const record =
+      records.find((candidate) => candidate.slot === 'domainSkill') ??
+      records.find((candidate) => candidate.status === 'active');
+    return record ? projectLifecycleRecordAsActiveSkill(record) : undefined;
   }
 
   getActiveLifecycleRecords(conversationId: string): readonly SkillLifecycleRecord[] {
@@ -390,11 +392,6 @@ export class ConversationSkillRuntime {
 
   applySkillInjection(conversationId: string, injection: SkillInjection, skill: Skill): void {
     if (!conversationId) return;
-    this._activeSkills.set(conversationId, {
-      skill,
-      injection,
-      appliedAt: this._deps.now?.() ?? Date.now(),
-    });
     this._deps.agentBridge?.applySkillInjection(conversationId, injection, skill);
   }
 
@@ -407,7 +404,6 @@ export class ConversationSkillRuntime {
       actor: 'user',
       reason: 'explicit-clear',
     });
-    this._activeSkills.delete(conversationId);
     this._deps.agentBridge?.clearActiveSkill(conversationId);
   }
 
@@ -630,4 +626,25 @@ export class ConversationSkillRuntime {
 
 function formatSkillInvocationName(skillName: string): string {
   return `$${skillName}`;
+}
+
+function projectLifecycleRecordAsActiveSkill(record: SkillLifecycleRecord): ActiveSkillState {
+  return {
+    skill: {
+      name: record.skillName,
+      description: record.skillSummary.description,
+      content: record.injection.systemPrompt,
+      source: record.skillSummary.source,
+      enabled: record.status === 'active',
+      ...(record.skillSummary.domain ? { domain: record.skillSummary.domain } : {}),
+      ...(record.skillSummary.relatedSkills
+        ? { referencedSkills: [...record.skillSummary.relatedSkills] }
+        : {}),
+      ...(record.skillSummary.mediaWorkflow
+        ? { mediaWorkflow: record.skillSummary.mediaWorkflow }
+        : {}),
+    },
+    injection: record.injection,
+    appliedAt: record.createdAt,
+  };
 }

@@ -9,7 +9,7 @@ import {
   AgentSessionRunner,
   DEFAULT_AGENT_SESSION_CONFIRMATION_TIMEOUT_MS,
   createAgentSessionRunner,
-} from '../agent-session-runner';
+} from '../runner/agent-session-runner';
 import type { AgentEvent, IAgentSession } from '../../session/types';
 
 function createSession(events: AgentEvent[] = [{ type: 'text', content: 'response' }]) {
@@ -40,6 +40,7 @@ function createSession(events: AgentEvent[] = [{ type: 'text', content: 'respons
     getPendingConfirmations: vi.fn(() => []),
     getHistory: vi.fn(() => [...history]),
     addMessage: vi.fn((message) => history.push(message)),
+    applySkillLifecycleProjection: vi.fn(),
     applySkillInjection: vi.fn(),
     activateToolSetsForTools: vi.fn(() => []),
     deactivateToolSet: vi.fn(),
@@ -202,6 +203,34 @@ describe('AgentSessionRunner', () => {
       expect.objectContaining({ content: 'third' }),
     ]);
     expect(runner.getPendingMessagesCount()).toBe(0);
+
+    await collect(first);
+  });
+
+  it('keeps task-result observation pending messages distinguishable from composer input', async () => {
+    const session = createSession();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+    });
+    runner.setSession(session);
+
+    const first = runner.execute('first', {});
+    await iterator(first).next();
+
+    const queued = runner.enqueuePendingMessage({
+      conversationId: 'conv-1',
+      content: 'continue from task',
+      source: 'task-result-observation',
+      now: 1000,
+    });
+
+    expect(queued).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        content: 'continue from task',
+        source: 'task-result-observation',
+      }),
+    );
 
     await collect(first);
   });

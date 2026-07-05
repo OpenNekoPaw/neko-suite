@@ -158,6 +158,29 @@ describe('CreativeSummarizer', () => {
       expect(result.degraded).toBe(false);
     });
 
+    it('uses Chinese prompt wrappers for localized LLM summarization requests', async () => {
+      const mockService = createMockService('创作决策摘要。\n\n关键点：\n- 选择水墨风格');
+      const summarizer = new CreativeSummarizer(classifier, {
+        service: mockService,
+      });
+
+      await summarizer.summarize({
+        messages: [userMsg('水墨风格'), assistantMsg('确定使用水墨风格')],
+        maxTokens: 2000,
+        locale: 'zh-CN',
+      });
+
+      const messages = vi.mocked(mockService.chat).mock.calls[0]![0] as Array<{
+        role: string;
+        content: string;
+      }>;
+      expect(messages[0]!.content).toContain('创作方向决策');
+      expect(messages[0]!.content).not.toContain('You are summarising');
+      expect(messages[1]!.content).toContain('目标长度');
+      expect(messages[1]!.content).toContain('对话');
+      expect(messages[1]!.content).not.toContain('Target length');
+    });
+
     it('falls back to simple summary on service error', async () => {
       const failingService = {
         chat: vi.fn().mockRejectedValue(new Error('LLM unavailable')),

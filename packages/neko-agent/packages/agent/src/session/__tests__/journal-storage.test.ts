@@ -110,6 +110,44 @@ describe('JournalStorage', () => {
       const reader = storage.createReader('conv-1');
       expect(reader).toBeDefined();
     });
+
+    it('recovers each conversation from its own journal partition', async () => {
+      const fsOps = createMemoryJournalFsOps();
+      const storage = new JournalStorage('/tmp/journals', fsOps);
+
+      await storage.createWriter('conv-a').append({
+        eventId: 'evt-a-user',
+        seq: 1,
+        ts: 1000,
+        type: 'event',
+        event: { type: 'user_message', content: 'hello from A' },
+      });
+      await storage.createWriter('conv-a').append({
+        eventId: 'evt-a-text',
+        seq: 2,
+        ts: 1001,
+        type: 'event',
+        event: { type: 'text', content: 'reply to A' },
+      });
+      await storage.createWriter('conv-b').append({
+        eventId: 'evt-b-user',
+        seq: 1,
+        ts: 2000,
+        type: 'event',
+        event: { type: 'user_message', content: 'hello from B' },
+      });
+
+      const stateA = await storage.createReader('conv-a').readSessionState();
+      const stateB = await storage.createReader('conv-b').readSessionState();
+
+      expect(stateA?.history).toEqual([
+        { role: 'user', content: 'hello from A' },
+        { role: 'assistant', content: 'reply to A' },
+      ]);
+      expect(stateB?.history).toEqual([{ role: 'user', content: 'hello from B' }]);
+      expect(fsOps.files.has('/tmp/journals/conv-a.jsonl')).toBe(true);
+      expect(fsOps.files.has('/tmp/journals/conv-b.jsonl')).toBe(true);
+    });
   });
 
   describe('createJournalStorage factory', () => {
@@ -119,3 +157,31 @@ describe('JournalStorage', () => {
     });
   });
 });
+
+function createMemoryJournalFsOps(): JournalStorageFsOps & { files: Map<string, string> } {
+  const files = new Map<string, string>();
+  return {
+    files,
+    appendFile: vi.fn(async (path: string, data: string) => {
+      files.set(path, (files.get(path) ?? '') + data);
+    }),
+    mkdir: vi.fn().mockResolvedValue(undefined),
+    readFile: vi.fn(async (path: string) => {
+      const content = files.get(path);
+      if (content === undefined) {
+        throw new Error(`File not found: ${path}`);
+      }
+      return content;
+    }),
+    exists: vi.fn(async (path: string) => files.has(path)),
+    readdir: vi.fn(async (dir: string) =>
+      [...files.keys()]
+        .filter((filePath) => filePath.startsWith(`${dir}/`))
+        .map((filePath) => filePath.slice(dir.length + 1)),
+    ),
+    stat: vi.fn().mockResolvedValue({ mtimeMs: Date.now() }),
+    unlink: vi.fn(async (path: string) => {
+      files.delete(path);
+    }),
+  };
+}

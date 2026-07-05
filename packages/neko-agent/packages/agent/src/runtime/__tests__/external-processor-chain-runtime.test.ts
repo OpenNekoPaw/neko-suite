@@ -6,7 +6,7 @@ import {
   type ExternalProcessorManifest,
 } from '@neko-agent/types';
 import { createResourceFingerprint, createResourceRef, type ResourceRef } from '@neko/shared';
-import { createAgentExternalProcessorRuntime } from '../external-processor-runtime';
+import { createAgentExternalProcessorRuntime } from '../capability/external-processor-runtime';
 
 const removeBackgroundManifest = manifest('remove-background', {
   outputSlot: 'mask',

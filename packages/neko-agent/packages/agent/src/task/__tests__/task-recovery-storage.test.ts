@@ -258,6 +258,63 @@ describe('FileTaskRecoveryStorage', () => {
     });
   });
 
+  it('rejects stale whole-file writers before overwriting another recovery partition', async () => {
+    const filePath = '/test/recovery.json';
+    const files = new Map<string, string>();
+    const fsOps = {
+      readFile: async (path: string) => {
+        const content = files.get(path);
+        if (content === undefined) {
+          throw new Error(`File not found: ${path}`);
+        }
+        return content;
+      },
+      writeFile: async (path: string, content: string) => {
+        files.set(path, content);
+      },
+      exists: async (path: string) => files.has(path),
+      deleteFile: async (path: string) => {
+        files.delete(path);
+      },
+    };
+    const firstWriter = new FileTaskRecoveryStorage({
+      filePath,
+      ...fsOps,
+      writerId: 'recovery-writer-a',
+      now: () => 1000,
+    });
+    const secondWriter = new FileTaskRecoveryStorage({
+      filePath,
+      ...fsOps,
+      writerId: 'recovery-writer-b',
+      now: () => 2000,
+    });
+
+    await firstWriter.save(createInfo({ taskId: 'task-a' }));
+    await secondWriter.save(createInfo({ taskId: 'task-b' }));
+    await firstWriter.flush();
+
+    await expect(secondWriter.flush()).rejects.toMatchObject({
+      code: 'stale-json-file-write',
+      details: {
+        filePath,
+        ownerId: 'recovery-writer-b',
+        loadedRevision: 0,
+        currentRevision: 1,
+        currentOwnerId: 'recovery-writer-a',
+      },
+    });
+
+    const persisted = JSON.parse(files.get(filePath) ?? '{}') as {
+      writeMetadata?: { ownerId: string; revision: number };
+      recovery?: TaskRecoveryInfo[];
+    };
+    expect(persisted.writeMetadata).toEqual(
+      expect.objectContaining({ ownerId: 'recovery-writer-a', revision: 1 }),
+    );
+    expect(persisted.recovery?.map((info) => info.taskId)).toEqual(['task-a']);
+  });
+
   describe('delete', () => {
     it('should delete recovery info and schedule save', async () => {
       await storage.save(createInfo({ taskId: 'task_1' }));

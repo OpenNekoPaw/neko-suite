@@ -19,6 +19,12 @@ import { getLogger } from '../utils/logger';
 
 const logger = getLogger('ConversationCompressor');
 
+type CompressorPromptLocale = 'en' | 'zh';
+
+interface ConversationCompressorRuntimeConfig extends Partial<ConversationCompressorConfig> {
+  readonly locale?: string;
+}
+
 /**
  * Simple token estimator (approximation: 1 token ≈ 4 characters)
  */
@@ -49,6 +55,7 @@ function estimateMessageTokens(message: ChatMessage): number {
 export class ConversationCompressor implements IConversationCompressor {
   /** Configuration */
   private config: ConversationCompressorConfig;
+  private locale: CompressorPromptLocale = 'en';
 
   /** Optional summarizer for generating summaries */
   private summarizer?: ISummarizer;
@@ -57,11 +64,13 @@ export class ConversationCompressor implements IConversationCompressor {
   private classifier?: IMessageClassifier;
 
   constructor(
-    config?: Partial<ConversationCompressorConfig>,
+    config?: ConversationCompressorRuntimeConfig,
     summarizer?: ISummarizer,
     classifier?: IMessageClassifier,
   ) {
-    this.config = { ...DEFAULT_COMPRESSOR_CONFIG, ...config };
+    const { locale, ...compressorConfig } = config ?? {};
+    this.config = { ...DEFAULT_COMPRESSOR_CONFIG, ...compressorConfig };
+    this.locale = normalizeCompressorPromptLocale(locale);
     this.summarizer = summarizer;
     this.classifier = classifier;
   }
@@ -69,8 +78,12 @@ export class ConversationCompressor implements IConversationCompressor {
   /**
    * Configure the compressor
    */
-  configure(config: Partial<ConversationCompressorConfig>): void {
-    this.config = { ...this.config, ...config };
+  configure(config: ConversationCompressorRuntimeConfig): void {
+    const { locale, ...compressorConfig } = config;
+    this.config = { ...this.config, ...compressorConfig };
+    if (locale !== undefined) {
+      this.locale = normalizeCompressorPromptLocale(locale);
+    }
   }
 
   /**
@@ -207,7 +220,7 @@ export class ConversationCompressor implements IConversationCompressor {
             compressedMessages.push({
               message: {
                 role: 'system',
-                content: `[Creative summary of turns 1-${olderTurns.length}]\n${summary}`,
+                content: `${formatSummaryWrapper('creative', olderTurns.length, this.locale)}\n${summary}`,
               },
               sourceIndexes: getMessageSourceIndexes(nonUserMessages, messageIndexMap),
               isSummary: true,
@@ -231,7 +244,7 @@ export class ConversationCompressor implements IConversationCompressor {
           compressedMessages.push({
             message: {
               role: 'system',
-              content: `[Summary of turns 1-${olderTurns.length}]\n${summary}`,
+              content: `${formatSummaryWrapper('bulk', olderTurns.length, this.locale)}\n${summary}`,
             },
             sourceIndexes: getMessageSourceIndexes(olderMessages, messageIndexMap),
             isSummary: true,
@@ -352,7 +365,11 @@ export class ConversationCompressor implements IConversationCompressor {
       const result = await this.summarizer.summarize({
         messages,
         maxTokens,
-        contextHint: 'Summarize the key points of this conversation segment.',
+        locale: this.locale,
+        contextHint:
+          this.locale === 'zh'
+            ? '总结这一段对话的关键点。'
+            : 'Summarize the key points of this conversation segment.',
       });
       return result.summary;
     } catch (error) {
@@ -367,11 +384,12 @@ export class ConversationCompressor implements IConversationCompressor {
   private createSimpleSummary(messages: ChatMessage[], maxTokens: number): string {
     const parts: string[] = [];
     let tokenCount = 0;
+    const labels = getCompressorPromptLabels(this.locale);
 
     for (const msg of messages) {
-      const content = typeof msg.content === 'string' ? msg.content : '[complex content]';
+      const content = typeof msg.content === 'string' ? msg.content : labels.complexContent;
       const preview = content.slice(0, 100) + (content.length > 100 ? '...' : '');
-      const line = `[${msg.role}]: ${preview}`;
+      const line = `[${labels.roles[msg.role] ?? msg.role}]: ${preview}`;
       const lineTokens = estimateTokens(line);
 
       if (tokenCount + lineTokens > maxTokens) {
@@ -468,11 +486,51 @@ function getMessageSourceIndexes(
   return indexes;
 }
 
+function normalizeCompressorPromptLocale(locale?: string): CompressorPromptLocale {
+  return locale?.trim().toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
+function formatSummaryWrapper(
+  kind: 'bulk' | 'creative',
+  endTurn: number,
+  locale: CompressorPromptLocale,
+): string {
+  if (locale === 'zh') {
+    return kind === 'creative' ? `[第 1-${endTurn} 轮创作摘要]` : `[第 1-${endTurn} 轮摘要]`;
+  }
+
+  return kind === 'creative'
+    ? `[Creative summary of turns 1-${endTurn}]`
+    : `[Summary of turns 1-${endTurn}]`;
+}
+
+function getCompressorPromptLabels(locale: CompressorPromptLocale): {
+  readonly complexContent: string;
+  readonly roles: Partial<Record<ChatMessage['role'], string>>;
+} {
+  if (locale === 'zh') {
+    return {
+      complexContent: '[复杂内容]',
+      roles: {
+        system: '系统',
+        user: '用户',
+        assistant: '助手',
+        tool: '工具',
+      },
+    };
+  }
+
+  return {
+    complexContent: '[complex content]',
+    roles: {},
+  };
+}
+
 /**
  * Factory function to create a conversation compressor
  */
 export function createConversationCompressor(
-  config?: Partial<ConversationCompressorConfig>,
+  config?: ConversationCompressorRuntimeConfig,
   summarizer?: ISummarizer,
   classifier?: IMessageClassifier,
 ): IConversationCompressor {

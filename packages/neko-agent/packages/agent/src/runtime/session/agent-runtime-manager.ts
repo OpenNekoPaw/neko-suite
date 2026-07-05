@@ -1,21 +1,21 @@
-import type { ChatMessage, Skill, SkillInjection } from '@neko/shared';
-import type { ISkillProvider, SkillProviderFactory } from '../tools/core/meta-tools';
+import type { ChatMessage, Skill, SkillInjection, SkillLifecycleProjection } from '@neko/shared';
+import type { ISkillProvider, SkillProviderFactory } from '../../tools/core/meta-tools';
 import {
   hydrateAgentHistoryWithToolResults,
   type AgentHistoryWithToolContextMessage,
-} from '../session/history-hydration';
+} from '../../session/history-hydration';
 import {
   AgentRuntimePool,
   type AgentRuntimePoolPressureEvent,
   type ManagedAgentRuntime,
 } from './agent-runtime-pool';
-import { SubAgentRuntimeCoordinator } from './subagent-runtime';
+import { SubAgentRuntimeCoordinator } from '../subagent-runtime';
 import type {
   AgentRunnerEventSource,
   AgentPendingMessageItem,
   AgentRunnerPortEvent,
   DisposableLike,
-} from './agent-runner-port';
+} from '../runner/agent-runner-port';
 
 export type AgentRuntimeManagerDisposable = DisposableLike;
 export type AgentRuntimeManagerEvent = AgentRunnerEventSource<void>;
@@ -38,6 +38,7 @@ export interface AgentRuntimeManagerAgent extends ManagedAgentRuntime {
   clearPendingMessages(): void;
   getContextTokenCount(): number;
   compressContext(): Promise<AgentRuntimeCompressionResult>;
+  applySkillLifecycleProjection(projection: SkillLifecycleProjection): void;
   applySkillInjection(injection: SkillInjection, skill?: Skill): void;
   getActiveSkill(): Skill | undefined;
   clearActiveSkill(): void;
@@ -105,6 +106,10 @@ export interface AgentRuntimeManager<TAgent extends AgentRuntimeManagerAgent> {
   nextMessageQueueSnapshotVersion(conversationId: string): number;
   getContextTokenCount(conversationId: string): number;
   compressContext(conversationId: string): Promise<AgentRuntimeCompressionResult>;
+  applySkillLifecycleProjection(
+    conversationId: string,
+    projection: SkillLifecycleProjection,
+  ): void;
   applySkillInjection(conversationId: string, injection: SkillInjection, skill?: Skill): void;
   getActiveSkill(conversationId: string): Skill | undefined;
   clearActiveSkill(conversationId: string): void;
@@ -254,6 +259,13 @@ class DefaultAgentRuntimeManager<
 
   applySkillInjection(conversationId: string, injection: SkillInjection, skill?: Skill): void {
     this.pool.get(conversationId)?.applySkillInjection(injection, skill);
+  }
+
+  applySkillLifecycleProjection(
+    conversationId: string,
+    projection: SkillLifecycleProjection,
+  ): void {
+    this.pool.get(conversationId)?.applySkillLifecycleProjection(projection);
   }
 
   getActiveSkill(conversationId: string): Skill | undefined {

@@ -9,14 +9,14 @@ import type {
   ModelRef,
 } from '@neko-agent/types';
 import type { Skill, SkillInjection, SkillLifecycleProjection } from '@neko/shared';
-import type { AgentEvent } from '../session/types';
-import type { IRuntimeTaskManager } from '../task';
+import type { AgentEvent } from '../../session/types';
+import type { IRuntimeTaskManager } from '../../task';
 import {
   createAgentTurnContext,
   type AgentTurnActiveEditorLike,
   type AgentTurnContext,
 } from './agent-turn-context';
-import type { AgentBase64ImageAttachment } from './attachment-projection';
+import type { AgentBase64ImageAttachment } from '../../input/attachment-projection';
 import type {
   AgentAmbientCanvasNode,
   AgentLlmRuntimeOptions,
@@ -33,7 +33,11 @@ import type {
   RunAgentTurnRuntimeInput,
 } from './agent-turn-runtime';
 import type { TimelineContextEditorLike, TimelineContextRuntime } from './timeline-context-runtime';
-import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
+import type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
+import {
+  normalizeAgentRuntimePromptLocale,
+  type AgentRuntimePromptLocale,
+} from '../../input/attachment-projection';
 
 export interface AgentTurnSettingsSource {
   readonly customSystemPrompt?: string | null;
@@ -144,6 +148,7 @@ export interface AgentTurnAssemblyInput<
   readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
   readonly modelTokenMetadata?: AgentModelTokenMetadata;
   readonly modelCapabilities?: readonly string[];
+  readonly locale?: AgentRuntimePromptLocale | string;
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
@@ -216,6 +221,7 @@ export function buildAgentTurnRuntimeInput<
     llmRuntimeOptions: input.llmRuntimeOptions,
     modelTokenMetadata: input.modelTokenMetadata,
     modelCapabilities: input.modelCapabilities,
+    locale: normalizeAgentRuntimePromptLocale(input.locale),
     mediaModel: input.mediaModel,
     mediaModels: input.mediaModels,
     imageAttachments: input.imageAttachments,

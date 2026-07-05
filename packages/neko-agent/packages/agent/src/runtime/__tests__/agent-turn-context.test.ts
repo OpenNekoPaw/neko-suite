@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAgentTurnContext, inferAgentTurnProjectType } from '../agent-turn-context';
+import { createAgentTurnContext, inferAgentTurnProjectType } from '../turn/agent-turn-context';
 
 describe('agent turn context', () => {
   it('infers supported project types from active editor snapshots', () => {

@@ -9,6 +9,7 @@ import type {
 
 export type ProviderExpressionContextMode = 'selected' | 'candidates';
 export type ProviderExpressionTaskStage = 'planning' | 'routing' | 'generation';
+export type ProviderExpressionLocale = 'en' | 'zh';
 
 export interface ProviderExpressionTarget {
   readonly providerId?: ProviderId;
@@ -29,6 +30,7 @@ export interface ProviderExpressionContextOptions {
   readonly preferredStyleFamily?: StyleFamily;
   readonly taskStage?: ProviderExpressionTaskStage;
   readonly mode?: ProviderExpressionContextMode;
+  readonly locale?: string;
 }
 
 const DEFAULT_SELECTED_PROVIDER_CONTEXT_CARDS = 1;
@@ -151,18 +153,17 @@ function renderProviderExpressionContext(
   mode: ProviderExpressionContextMode,
   options: ProviderExpressionContextOptions,
 ): string {
+  const labels = getProviderExpressionLabels(options.locale);
   const lines = [
-    '## Provider Expression Context',
+    labels.title,
     '',
-    mode === 'selected'
-      ? 'Use this selected provider card as soft guidance for the current media generation target.'
-      : 'Use these candidate provider cards only to choose a generation target or compare provider tendencies.',
-    'They are expression tendencies, failure modes, and examples — not deterministic replacement rules.',
-    'Do not silently replace user intent with card entries. Preserve the Plan/Task Markdown and user prompt as the source of truth.',
-    'If no provider-specific guidance is relevant, write a native provider prompt directly.',
+    mode === 'selected' ? labels.selectedIntro : labels.candidatesIntro,
+    labels.tendencyBoundary,
+    labels.preserveIntent,
+    labels.nativePromptFallback,
     '',
     ...cards.flatMap((card) =>
-      renderProviderCardSummary(card, options.taskStage ?? defaultTaskStage(mode)),
+      renderProviderCardSummary(card, options.taskStage ?? defaultTaskStage(mode), labels),
     ),
   ];
   return applyTokenBudget(lines, options);
@@ -171,18 +172,19 @@ function renderProviderExpressionContext(
 function renderProviderCardSummary(
   card: ProviderCard,
   taskStage: ProviderExpressionTaskStage,
+  labels: ProviderExpressionLabels,
 ): readonly string[] {
   const commonLines = [
     `### ${card.displayName} (${formatProviderTarget(card)})`,
-    `- Capabilities: ${card.capabilities.join(', ')}`,
+    `- ${labels.capabilities}: ${card.capabilities.join(', ')}`,
   ];
 
   if (taskStage === 'routing') {
     return [
       ...commonLines,
-      ...renderStyleAffinities(card),
+      ...renderStyleAffinities(card, labels),
       ...(card.trainingProfile.stylePrior
-        ? [`- Style prior: ${card.trainingProfile.stylePrior}`]
+        ? [`- ${labels.stylePrior}: ${card.trainingProfile.stylePrior}`]
         : []),
       '',
     ];
@@ -192,22 +194,26 @@ function renderProviderCardSummary(
     return [
       ...commonLines,
       ...(card.trainingProfile.descriptionDensity
-        ? [`- Description density: ${card.trainingProfile.descriptionDensity}`]
+        ? [`- ${labels.descriptionDensity}: ${card.trainingProfile.descriptionDensity}`]
         : []),
       ...(card.syntaxProfile.bestPhrasingPattern
-        ? [`- Preferred phrasing: ${card.syntaxProfile.bestPhrasingPattern}`]
+        ? [`- ${labels.preferredPhrasing}: ${card.syntaxProfile.bestPhrasingPattern}`]
         : []),
       ...(card.syntaxProfile.supportsNegativePrompt !== undefined
         ? [
-            `- Negative prompt support: ${card.syntaxProfile.supportsNegativePrompt ? 'supported' : 'weak/unsupported'}`,
+            `- ${labels.negativePromptSupport}: ${
+              card.syntaxProfile.supportsNegativePrompt
+                ? labels.negativePromptSupported
+                : labels.negativePromptWeak
+            }`,
           ]
         : []),
       ...(card.trainingProfile.spatialGrounding
-        ? [`- Spatial grounding: ${card.trainingProfile.spatialGrounding}`]
+        ? [`- ${labels.spatialGrounding}: ${card.trainingProfile.spatialGrounding}`]
         : []),
-      ...renderSoftExpressionHints(card),
+      ...renderSoftExpressionHints(card, labels),
       ...card.trainingProfile.antiBiasStrategies.map(
-        (strategy) => `- Failure/bias note: ${strategy}`,
+        (strategy) => `- ${labels.failureBiasNote}: ${strategy}`,
       ),
       '',
     ];
@@ -216,17 +222,17 @@ function renderProviderCardSummary(
   return [
     ...commonLines,
     ...(card.trainingProfile.stylePrior
-      ? [`- Style prior: ${card.trainingProfile.stylePrior}`]
+      ? [`- ${labels.stylePrior}: ${card.trainingProfile.stylePrior}`]
       : []),
-    ...renderStyleAffinities(card),
+    ...renderStyleAffinities(card, labels),
     ...(card.trainingProfile.descriptionDensity
-      ? [`- Description density: ${card.trainingProfile.descriptionDensity}`]
+      ? [`- ${labels.descriptionDensity}: ${card.trainingProfile.descriptionDensity}`]
       : []),
     ...(card.syntaxProfile.bestPhrasingPattern
-      ? [`- Preferred phrasing: ${card.syntaxProfile.bestPhrasingPattern}`]
+      ? [`- ${labels.preferredPhrasing}: ${card.syntaxProfile.bestPhrasingPattern}`]
       : []),
     ...card.trainingProfile.antiBiasStrategies.map(
-      (strategy) => `- Failure/bias note: ${strategy}`,
+      (strategy) => `- ${labels.failureBiasNote}: ${strategy}`,
     ),
     '',
   ];
@@ -236,29 +242,128 @@ function defaultTaskStage(mode: ProviderExpressionContextMode): ProviderExpressi
   return mode === 'candidates' ? 'routing' : 'generation';
 }
 
+interface ProviderExpressionLabels {
+  readonly title: string;
+  readonly selectedIntro: string;
+  readonly candidatesIntro: string;
+  readonly tendencyBoundary: string;
+  readonly preserveIntent: string;
+  readonly nativePromptFallback: string;
+  readonly capabilities: string;
+  readonly styleTendencies: string;
+  readonly stylePrior: string;
+  readonly descriptionDensity: string;
+  readonly preferredPhrasing: string;
+  readonly negativePromptSupport: string;
+  readonly negativePromptSupported: string;
+  readonly negativePromptWeak: string;
+  readonly spatialGrounding: string;
+  readonly softExpressionHint: string;
+  readonly statusVerb: string;
+  readonly possiblePhrasing: string;
+  readonly hintSeparator: string;
+  readonly failureBiasNote: string;
+  readonly omissionLine: string;
+}
+
+function getProviderExpressionLabels(locale?: string): ProviderExpressionLabels {
+  return normalizeProviderExpressionLocale(locale) === 'zh'
+    ? ZH_PROVIDER_EXPRESSION_LABELS
+    : EN_PROVIDER_EXPRESSION_LABELS;
+}
+
+function normalizeProviderExpressionLocale(locale?: string): ProviderExpressionLocale {
+  return locale?.trim().toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
+const EN_PROVIDER_EXPRESSION_LABELS: ProviderExpressionLabels = {
+  title: '## Provider Expression Context',
+  selectedIntro:
+    'Use this selected provider card as soft guidance for the current media generation target.',
+  candidatesIntro:
+    'Use these candidate provider cards only to choose a generation target or compare provider tendencies.',
+  tendencyBoundary:
+    'They are expression tendencies, failure modes, and examples — not deterministic replacement rules.',
+  preserveIntent:
+    'Do not silently replace user intent with card entries. Preserve the Plan/Task Markdown and user prompt as the source of truth.',
+  nativePromptFallback:
+    'If no provider-specific guidance is relevant, write a native provider prompt directly.',
+  capabilities: 'Capabilities',
+  styleTendencies: 'Style tendencies',
+  stylePrior: 'Style prior',
+  descriptionDensity: 'Description density',
+  preferredPhrasing: 'Preferred phrasing',
+  negativePromptSupport: 'Negative prompt support',
+  negativePromptSupported: 'supported',
+  negativePromptWeak: 'weak/unsupported',
+  spatialGrounding: 'Spatial grounding',
+  softExpressionHint: 'Soft expression hint',
+  statusVerb: 'is',
+  possiblePhrasing: 'possible phrasing',
+  hintSeparator: '; ',
+  failureBiasNote: 'Failure/bias note',
+  omissionLine: '- Additional provider expression details omitted to stay within token budget.',
+};
+
+const ZH_PROVIDER_EXPRESSION_LABELS: ProviderExpressionLabels = {
+  title: '## 供应方表达上下文',
+  selectedIntro: '将这个已选供应方卡片作为当前媒体生成目标的软性指导。',
+  candidatesIntro: '这些候选供应方卡片仅用于选择生成目标或比较供应方倾向。',
+  tendencyBoundary: '它们描述表达倾向、失败模式和示例，不是确定性的替换规则。',
+  preserveIntent: '不要静默用卡片条目替换用户意图。Plan/Task Markdown 和用户提示词是真实来源。',
+  nativePromptFallback: '如果没有相关供应方指导，直接编写原生供应方提示词。',
+  capabilities: '能力',
+  styleTendencies: '风格倾向',
+  stylePrior: '风格先验',
+  descriptionDensity: '描述密度',
+  preferredPhrasing: '推荐措辞',
+  negativePromptSupport: '负向提示词支持',
+  negativePromptSupported: '支持',
+  negativePromptWeak: '较弱或不支持',
+  spatialGrounding: '空间定位',
+  softExpressionHint: '软性表达提示',
+  statusVerb: '是',
+  possiblePhrasing: '可选措辞',
+  hintSeparator: '；',
+  failureBiasNote: '失败/偏差提示',
+  omissionLine: '- 更多供应方表达细节已省略以保持 token 预算。',
+};
+
 function formatProviderTarget(card: ProviderCard): string {
   return card.modelId ? `${card.providerId}/${card.modelId}` : card.providerId;
 }
 
-function renderStyleAffinities(card: ProviderCard): readonly string[] {
+function renderStyleAffinities(
+  card: ProviderCard,
+  labels: ProviderExpressionLabels,
+): readonly string[] {
   const entries = Object.entries(card.trainingProfile.styleAffinities)
     .filter(([, score]) => typeof score === 'number' && score > 0)
     .sort(([left], [right]) => left.localeCompare(right));
   return entries.length > 0
-    ? [`- Style tendencies: ${entries.map(([style, score]) => `${style}(${score})`).join(', ')}`]
+    ? [
+        `- ${labels.styleTendencies}: ${entries
+          .map(([style, score]) => `${style}(${score})`)
+          .join(', ')}`,
+      ]
     : [];
 }
 
-function renderSoftExpressionHints(card: ProviderCard): readonly string[] {
+function renderSoftExpressionHints(
+  card: ProviderCard,
+  labels: ProviderExpressionLabels,
+): readonly string[] {
   return card.conceptCoverage.entries.slice(0, 8).map((entry) => {
-    const hint = entry.expansion ? `; possible phrasing: ${entry.expansion}` : '';
-    return `- Soft expression hint: ${entry.concept} is ${entry.status}${hint}`;
+    const hint = entry.expansion ? `${labels.possiblePhrasing}: ${entry.expansion}` : '';
+    return `- ${labels.softExpressionHint}: ${entry.concept} ${labels.statusVerb} ${
+      entry.status
+    }${hint ? `${labels.hintSeparator}${hint}` : ''}`;
   });
 }
 
 function applyTokenBudget(
   lines: readonly string[],
-  options: Pick<ProviderExpressionContextOptions, 'maxContextTokens' | 'estimateTokens'>,
+  options: Pick<ProviderExpressionContextOptions, 'maxContextTokens' | 'estimateTokens' | 'locale'>,
 ): string {
   const maxTokens = options.maxContextTokens;
   if (!maxTokens || maxTokens <= 0) {
@@ -288,8 +393,7 @@ function applyTokenBudget(
     return selected.join('\n');
   }
 
-  const omissionLine =
-    '- Additional provider expression details omitted to stay within token budget.';
+  const omissionLine = getProviderExpressionLabels(options.locale).omissionLine;
   const fallbackOmissionLine = fitLineToTokenBudget(omissionLine, maxTokens, estimateTokens);
   while (selected.length > 0) {
     const candidate = [...selected, omissionLine].join('\n');

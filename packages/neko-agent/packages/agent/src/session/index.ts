@@ -122,3 +122,16 @@ export type {
   JournalProjectionOptions,
   ConversationSummary,
 } from './journal-projection';
+export {
+  SessionTaskResultObservationRecorder,
+  createAgentTaskResultObservationLedger,
+  createSessionTaskResultObservationRecorder,
+  createTaskResultObservationJournalEntries,
+} from './task-result-observation-recorder';
+export type {
+  AgentTaskResultObservationLedger,
+  RecordAgentTaskResultObservationInput,
+  RecordAgentTaskResultObservationResult,
+  SessionTaskResultObservationRecorderConfig,
+  TaskResultObservationJournalEntry,
+} from './task-result-observation-recorder';

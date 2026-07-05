@@ -42,7 +42,7 @@ describe('canvas markdown capability contracts', () => {
     const input: CanvasMarkdownCapabilityInput = {
       capabilityId: 'canvas.validateMarkdownStoryboard',
       markdown: [
-        '| scene | shot | sceneVideoPrompt |',
+        '| scene | shot | videoPrompt |',
         '| --- | --- | --- |',
         '| Opening | 1 | slow reveal |',
       ].join('\n'),

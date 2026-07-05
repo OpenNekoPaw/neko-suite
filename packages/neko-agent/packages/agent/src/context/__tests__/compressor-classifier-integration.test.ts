@@ -5,10 +5,10 @@
  * older turns are preserved verbatim instead of being summarised away.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ConversationCompressor } from '../conversation-compressor';
 import { MessageClassifier } from '../message-classifier';
-import type { ChatMessage } from '@neko/shared';
+import type { ChatMessage, ISummarizer } from '@neko/shared';
 
 // =============================================================================
 // Helpers
@@ -113,6 +113,36 @@ describe('ConversationCompressor with MessageClassifier', () => {
       expect(summaries.length).toBe(1);
       expect(summaries[0]!.message.content).toContain('Creative summary');
     });
+
+    it('localizes creative summary wrappers for Chinese prompt context', async () => {
+      const classifier = new MessageClassifier();
+      const compressor = new ConversationCompressor(
+        {
+          locale: 'zh',
+          conversationWindow: {
+            recentTurns: 2,
+            olderTurnsStrategy: 'summary',
+            olderTurnsSummaryMaxTokens: 2000,
+          },
+          triggers: { tokenThreshold: 80000, turnThreshold: 20 },
+          toolResultCompression: {
+            maxLength: 500,
+            keepFields: ['status', 'summary', 'error', 'result'],
+            discardFields: ['rawData', 'debug', 'trace', 'stackTrace'],
+          },
+          skillCompression: { inactiveSkillsStrategy: 'index-only', activeSkillAge: 5 },
+        },
+        undefined,
+        classifier,
+      );
+
+      const messages = buildConversation(5);
+      const result = await compressor.compress(messages, { force: true });
+
+      const summaries = result.messages.filter((m) => m.isSummary);
+      expect(summaries[0]!.message.content).toContain('第 1-3 轮创作摘要');
+      expect(summaries[0]!.message.content).not.toContain('Creative summary');
+    });
   });
 
   describe('without classifier (backward compatible)', () => {
@@ -148,6 +178,66 @@ describe('ConversationCompressor with MessageClassifier', () => {
           (m.message.content as string).includes('User turn 1'),
       );
       expect(olderUserMsgs).toHaveLength(0);
+    });
+
+    it('localizes summary wrappers for Chinese prompt context', async () => {
+      const compressor = new ConversationCompressor({
+        conversationWindow: {
+          recentTurns: 2,
+          olderTurnsStrategy: 'summary',
+          olderTurnsSummaryMaxTokens: 2000,
+        },
+        triggers: { tokenThreshold: 80000, turnThreshold: 20 },
+        toolResultCompression: {
+          maxLength: 500,
+          keepFields: ['status', 'summary', 'error', 'result'],
+          discardFields: ['rawData', 'debug', 'trace', 'stackTrace'],
+        },
+        skillCompression: { inactiveSkillsStrategy: 'index-only', activeSkillAge: 5 },
+      });
+      compressor.configure({ locale: 'zh' });
+
+      const messages = buildConversation(5);
+      const result = await compressor.compress(messages, { force: true });
+
+      const summaries = result.messages.filter((m) => m.isSummary);
+      expect(summaries[0]!.message.content).toContain('第 1-3 轮摘要');
+      expect(summaries[0]!.message.content).not.toContain('Summary of turns');
+    });
+
+    it('passes compressor locale into injected summarization requests', async () => {
+      const summarizer: ISummarizer = {
+        summarize: vi.fn().mockResolvedValue({
+          summary: '摘要',
+          tokenCount: 1,
+          keyPoints: [],
+          entities: [],
+        }),
+      };
+      const compressor = new ConversationCompressor(
+        {
+          locale: 'zh-CN',
+          conversationWindow: {
+            recentTurns: 2,
+            olderTurnsStrategy: 'summary',
+            olderTurnsSummaryMaxTokens: 2000,
+          },
+          triggers: { tokenThreshold: 80000, turnThreshold: 20 },
+          toolResultCompression: {
+            maxLength: 500,
+            keepFields: ['status', 'summary', 'error', 'result'],
+            discardFields: ['rawData', 'debug', 'trace', 'stackTrace'],
+          },
+          skillCompression: { inactiveSkillsStrategy: 'index-only', activeSkillAge: 5 },
+        },
+        summarizer,
+      );
+
+      await compressor.compress(buildConversation(5), { force: true });
+
+      expect(vi.mocked(summarizer.summarize).mock.calls[0]![0]).toMatchObject({
+        locale: 'zh',
+      });
     });
   });
 

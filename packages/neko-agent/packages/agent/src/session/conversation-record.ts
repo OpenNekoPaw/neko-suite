@@ -58,6 +58,11 @@ export interface ConversationIndexMeta {
  */
 export interface ConversationsIndexFile {
   version: 1;
+  writeMetadata?: {
+    ownerId: string;
+    revision: number;
+    updatedAt: number;
+  };
   workspaces: Record<string, string[]>;
   conversations: Record<string, ConversationIndexMeta>;
 }

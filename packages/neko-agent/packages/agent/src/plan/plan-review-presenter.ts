@@ -46,7 +46,7 @@ export function buildPromptModeChangedMessage(input: {
 }): PromptModeChangedMessage {
   return {
     type: 'promptModeChanged',
-    conversationId: input.conversationId,
+    conversationId: requireConversationId(input.conversationId, 'promptModeChanged'),
     mode: input.mode,
     isPlanMode: input.isPlanMode,
   };
@@ -60,7 +60,7 @@ export function buildPlanStatusUpdateMessage(input: {
   return {
     type: 'planStatusUpdate',
     planId: input.planId,
-    conversationId: input.conversationId,
+    conversationId: requireConversationId(input.conversationId, 'planStatusUpdate'),
     status: input.status,
   };
 }
@@ -70,7 +70,7 @@ export function buildPlanRejectionFeedbackStreamMessage(
 ): PlanRejectionFeedbackStreamMessage {
   return {
     type: 'streamText',
-    conversationId,
+    conversationId: requireConversationId(conversationId, 'streamText'),
     content: buildPlanRejectionFeedbackMessage(),
   };
 }
@@ -89,7 +89,7 @@ export function projectPlanStepActionReview(input: {
       type: 'planStepStatusUpdate',
       planId: input.planId,
       stepId: input.stepId,
-      conversationId: input.conversationId,
+      conversationId: requireConversationId(input.conversationId, 'planStepStatusUpdate'),
       status,
     },
   };
@@ -110,9 +110,16 @@ export function projectPlanStepModificationReview(input: {
       type: 'planStepStatusUpdate',
       planId: input.planId,
       stepId: input.stepId,
-      conversationId: input.conversationId,
+      conversationId: requireConversationId(input.conversationId, 'planStepStatusUpdate'),
       status: 'modified',
       newDescription: input.newDescription,
     },
   };
+}
+
+function requireConversationId(conversationId: string, messageType: string): string {
+  if (conversationId.trim().length === 0) {
+    throw new Error(`${messageType} requires non-empty conversationId`);
+  }
+  return conversationId;
 }

@@ -91,4 +91,25 @@ describe('plan review presenter', () => {
       content: expect.stringContaining('Plan rejected'),
     });
   });
+
+  it('rejects plan messages without explicit conversation id', () => {
+    expect(() =>
+      buildPromptModeChangedMessage({
+        conversationId: '',
+        mode: 'plan',
+        isPlanMode: true,
+      }),
+    ).toThrow('promptModeChanged requires non-empty conversationId');
+    expect(() =>
+      projectPlanStepActionReview({
+        planId: 'plan-1',
+        stepId: 'step-1',
+        conversationId: ' ',
+        action: 'approve',
+      }),
+    ).toThrow('planStepStatusUpdate requires non-empty conversationId');
+    expect(() => buildPlanRejectionFeedbackStreamMessage('')).toThrow(
+      'streamText requires non-empty conversationId',
+    );
+  });
 });

@@ -5,7 +5,7 @@ import {
   createAgentStreamProjectionState,
   finalizeAgentStreamProjectionState,
   projectAgentStreamEventToWebviewMessages,
-} from '../agent-stream-state';
+} from '../stream/agent-stream-state';
 
 describe('agent stream state reducer', () => {
   it('creates deterministic stream message ids when adapters are provided', () => {

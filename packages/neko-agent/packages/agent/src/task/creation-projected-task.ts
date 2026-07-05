@@ -1,4 +1,4 @@
-import type { SerializableTask } from '@neko/shared';
+import type { SerializableTask, TaskLifecycleMetadata } from '@neko/shared';
 
 export interface CreationProjectedTaskArtifactBinding {
   readonly kind: 'task';
@@ -9,6 +9,7 @@ export interface CreationProjectedTaskArtifactBinding {
 
 export interface CreationProjectedTaskBinding {
   readonly source: 'creation';
+  readonly conversationId: string;
   readonly runId: string;
   readonly runStartedAt?: number;
   readonly checklistId: string;
@@ -51,6 +52,7 @@ export interface CreationProjectedTaskRunBinding {
 export function toSerializableCreationProjectedTask(
   input: CreationProjectedTaskUpsertInput,
 ): SerializableTask {
+  const lifecycle = toCreationProjectedTaskLifecycle(input.binding);
   return {
     id: input.id,
     type: 'workflow',
@@ -58,11 +60,27 @@ export function toSerializableCreationProjectedTask(
     input: {
       type: 'workflow',
       payload: toCreationProjectedTaskPayload(input),
+      lifecycle,
     },
+    lifecycle,
     ...(input.error ? { error: input.error } : {}),
     progress: input.progress,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
+  };
+}
+
+function toCreationProjectedTaskLifecycle(
+  binding: CreationProjectedTaskBinding,
+): TaskLifecycleMetadata {
+  return {
+    ownerConversationId: binding.conversationId,
+    ownerRunId: binding.runId,
+    ...(binding.runStartedAt !== undefined ? { ownerRunStartedAt: binding.runStartedAt } : {}),
+    runMode: 'background',
+    costPhase: 'idle',
+    interruptPolicy: 'detach-and-continue',
+    recoverPolicy: 'snapshot-only',
   };
 }
 

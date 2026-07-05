@@ -47,11 +47,14 @@ function createMockComposer() {
     setBase: vi.fn(),
     setSection: vi.fn(),
     removeSection: vi.fn().mockReturnValue(true),
+    removeSectionsByPrefix: vi.fn(),
     hasSection: vi.fn().mockReturnValue(false),
     getSection: vi.fn(),
     compose: vi.fn().mockReturnValue('composed prompt'),
+    composeStructured: vi.fn().mockReturnValue({ text: 'composed prompt', sections: [] }),
     getTotalTokens: vi.fn().mockReturnValue(0),
     getLayerUsage: vi.fn(),
+    dumpSections: vi.fn().mockReturnValue([]),
     reset: vi.fn(),
   };
 }
@@ -330,6 +333,22 @@ describe('SkillInjectionCoordinator', () => {
       expect(realComposer.hasSection('skill:helper')).toBe(true);
       expect(realComposer.getSection('skill:helper')?.content).toBe('HELPER_PROMPT');
       expect(moduleInstance.getInjection()?.name).toBe('helper');
+    });
+
+    it('passes the configured locale into Track A module rendering', () => {
+      const renderSpy = vi.spyOn(moduleInstance, 'renderSync');
+      coord = new SkillInjectionCoordinator({
+        promptComposer: realComposer,
+        getPermissionHooks: () =>
+          realPermissionHooks as unknown as import('../../permission/permission-manager-types').IPermissionManager,
+        syncSystemPrompt: () => {},
+        skillInjectionModule: moduleInstance,
+        getLocale: () => 'zh',
+      });
+
+      coord.apply(createInjection({ name: 'helper', systemPrompt: 'HELPER_PROMPT' }));
+
+      expect(renderSpy).toHaveBeenCalledWith(expect.objectContaining({ locale: 'zh' }));
     });
 
     it('remove clears both the composer section and the module state', () => {

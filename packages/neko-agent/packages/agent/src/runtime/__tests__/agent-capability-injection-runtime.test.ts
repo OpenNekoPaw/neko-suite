@@ -5,7 +5,7 @@ import {
   normalizeSkillScanCapabilities,
   normalizeSkillCapability,
   validateCapabilityContribution,
-} from '../agent-capability-injection-runtime';
+} from '../capability/agent-capability-injection-runtime';
 import type { Skill } from '@neko/shared';
 
 function skill(name: string, overrides: Partial<Skill> = {}): Skill {

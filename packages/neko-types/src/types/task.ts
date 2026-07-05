@@ -1,3 +1,5 @@
+import type { AgentTaskResultDeliveryPolicy } from './agent-task-result-observation';
+
 /**
  * Task Types - Async task management (core types)
  *
@@ -67,6 +69,15 @@ export type TaskInterruptPolicy =
 export type TaskRecoverPolicy = 'resume-polling' | 'retry-executor' | 'snapshot-only' | 'none';
 
 /**
+ * Serializable ownership lease for long-running task/process work.
+ */
+export interface TaskRunLease {
+  readonly conversationId: string;
+  readonly runId: string;
+  readonly runStartedAt?: number;
+}
+
+/**
  * Serializable task lifecycle metadata.
  *
  * This is a Layer 0 DTO. It must not reference VSCode, React, AbortSignal, or
@@ -75,6 +86,10 @@ export type TaskRecoverPolicy = 'resume-polling' | 'retry-executor' | 'snapshot-
 export interface TaskLifecycleMetadata {
   /** Owning conversation for UI replay, Dashboard grouping, and auditing */
   readonly ownerConversationId?: string;
+  /** Owning durable run for terminal/process-backed observers and cancellation */
+  readonly ownerRunId?: string;
+  /** Optional monotonic creation timestamp for disambiguating restored run ids */
+  readonly ownerRunStartedAt?: number;
   /** Whether the task is foreground turn work or detached background work */
   readonly runMode: TaskRunMode;
   /** Current cost phase */
@@ -83,6 +98,8 @@ export interface TaskLifecycleMetadata {
   readonly interruptPolicy: TaskInterruptPolicy;
   /** How this task recovers after restart */
   readonly recoverPolicy: TaskRecoverPolicy;
+  /** How an Agent-owned terminal task result is delivered back to the Agent */
+  readonly resultDeliveryPolicy?: AgentTaskResultDeliveryPolicy;
 }
 
 /**
@@ -101,6 +118,23 @@ export function createTaskLifecycleMetadata(
   return {
     ...DEFAULT_TASK_LIFECYCLE_METADATA,
     ...overrides,
+  };
+}
+
+export function extractTaskRunLease(
+  input: { readonly lifecycle?: Partial<TaskLifecycleMetadata> | null },
+): TaskRunLease | null {
+  const conversationId = input.lifecycle?.ownerConversationId?.trim();
+  const runId = input.lifecycle?.ownerRunId?.trim();
+  if (!conversationId || !runId) {
+    return null;
+  }
+
+  const runStartedAt = input.lifecycle?.ownerRunStartedAt;
+  return {
+    conversationId,
+    runId,
+    ...(typeof runStartedAt === 'number' ? { runStartedAt } : {}),
   };
 }
 

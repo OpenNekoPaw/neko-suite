@@ -27,6 +27,7 @@ export interface RuntimeSkillAwareSystemPromptResult {
 export interface BuildRuntimeSkillAwareSystemPromptInput {
   readonly basePrompt: string;
   readonly skillService: Pick<SkillService, 'registry'>;
+  readonly locale?: string;
 }
 
 export interface PopulateLazyRuntimeSkillRegistryInput {
@@ -69,6 +70,7 @@ export interface RuntimeSkillBootstrapOptions {
   readonly builtinSkills?: readonly Skill[];
   readonly skillService?: SkillService;
   readonly populator?: SkillRegistryPopulator;
+  readonly locale?: string;
   readonly logger?: RuntimeSkillBootstrapLogger;
 }
 
@@ -129,6 +131,7 @@ export function buildRuntimeSkillAwareSystemPrompt(
     prompt: buildSkillAwareSystemPrompt({
       basePrompt: input.basePrompt,
       skills: enabledSkills,
+      locale: input.locale,
     }),
     enabledSkillCount: enabledSkills.length,
   };
@@ -192,6 +195,7 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
   readonly skillService: SkillService;
   private readonly populator: SkillRegistryPopulator;
   private readonly builtinSkills: readonly Skill[] | undefined;
+  private readonly locale: string | undefined;
   private readonly logger: RuntimeSkillBootstrapLogger | undefined;
 
   constructor(options: RuntimeSkillBootstrapOptions) {
@@ -204,6 +208,7 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
       });
     this.populator = options.populator ?? new SkillRegistryPopulator();
     this.builtinSkills = options.builtinSkills;
+    this.locale = options.locale;
     this.logger = options.logger;
   }
 
@@ -211,6 +216,7 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
     const result = buildRuntimeSkillAwareSystemPrompt({
       basePrompt,
       skillService: this.skillService,
+      locale: this.locale,
     });
 
     this.logger?.debug?.(`Building system prompt with ${result.enabledSkillCount} skills`);

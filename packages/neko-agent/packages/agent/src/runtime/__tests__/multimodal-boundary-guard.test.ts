@@ -25,7 +25,7 @@ describe('multimodal perception architecture boundary guard', () => {
       ...listSourceFiles(join(REPO_ROOT, 'packages/neko-agent/packages/agent/src/perception')),
       join(REPO_ROOT, 'packages/neko-agent/packages/agent/src/runtime/backfill-coordinator.ts'),
       join(REPO_ROOT, 'packages/neko-agent/packages/agent/src/runtime/tool-result-backfill.ts'),
-      join(REPO_ROOT, 'packages/neko-agent/packages/agent/src/runtime/agent-stream-state.ts'),
+      join(REPO_ROOT, 'packages/neko-agent/packages/agent/src/runtime/stream/agent-stream-state.ts'),
     ];
 
     for (const file of files) {

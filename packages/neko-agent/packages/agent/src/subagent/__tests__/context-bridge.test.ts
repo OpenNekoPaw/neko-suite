@@ -40,6 +40,29 @@ describe('ContextBridge', () => {
       expect(summary).toContain('helpful assistant');
     });
 
+    it('should localize wrapper labels for Chinese summaries', () => {
+      const bridge = new ContextBridge();
+      const messages = [
+        { role: 'system', content: '中文系统提示' },
+        { role: 'user', content: '请搜索分镜工具' },
+        { role: 'assistant', content: '我会处理' },
+      ];
+
+      const summary = bridge.extractSummary(messages, {
+        includeSystemPrompt: true,
+        locale: 'zh-CN',
+      });
+
+      expect(summary).toContain('## 系统上下文');
+      expect(summary).toContain('## 最近对话');
+      expect(summary).toContain('[用户]');
+      expect(summary).toContain('[助手]');
+      expect(summary).not.toContain('System Context');
+      expect(summary).not.toContain('Recent Conversation');
+      expect(summary).not.toContain('[User]');
+      expect(summary).not.toContain('[Assistant]');
+    });
+
     it('should exclude system prompt by default', () => {
       const bridge = new ContextBridge();
       const messages = [
@@ -142,6 +165,19 @@ describe('ContextBridge', () => {
       const merged = bridge.mergeResults(parentMessages, []);
 
       expect(merged).toEqual(parentMessages);
+    });
+
+    it('should localize merged result prelude for Chinese parent context', () => {
+      const bridge = new ContextBridge();
+      const parentMessages = [{ role: 'user', content: '检查所有分镜' }];
+      const merged = bridge.mergeResults(
+        parentMessages,
+        [{ id: 'agent-1', response: '已找到三处问题' }],
+        'zh',
+      );
+
+      expect(merged[1]!.content).toContain('我已完成子任务');
+      expect(merged[1]!.content).not.toContain("I've completed the subtasks");
     });
   });
 });

@@ -15,34 +15,34 @@ import {
   createSystemPromptBuilder,
   getDefaultPersonalPath,
   type SystemPromptBuilder,
-} from '../prompt';
-import { createProviderExpressionPromptFragments } from '../provider';
-import { createFileProjectMemoryManager } from '../memory';
-import { createCoreTools } from '../tools';
-import { createTaskManagerCreationTaskProjection, type IRuntimeTaskManager } from '../task';
+} from '../../prompt';
+import { createProviderExpressionPromptFragments } from '../../provider';
+import { createFileProjectMemoryManager } from '../../memory';
+import { createCoreTools } from '../../tools';
+import { createTaskManagerCreationTaskProjection, type IRuntimeTaskManager } from '../../task';
 import type {
   AgentSessionConfig,
   ExecutionMode,
   ValidationError,
   ValidationWarning,
   ToolConfirmationRequest,
-} from '../session';
+} from '../../session';
 import { createAgentSessionWithRuntime } from './session-config-projection';
-import { createNodeArtifactStore } from './node-artifact-store';
+import { createNodeArtifactStore } from '../../artifact/node-artifact-store';
 import type {
   AgentRuntimeConfig,
   IArtifactStore,
   ICapabilityRuntime,
   ICreationGuidanceRuntime,
   IValidationLoop,
-} from './types';
-import type { ProviderExpressionTargetConfig } from './message-runtime';
+} from '../types';
+import type { ProviderExpressionTargetConfig } from '../turn/message-runtime';
 import {
   SubAgentRuntimeCoordinator,
   type AgentSubAgentRuntimeRegistration,
-} from './subagent-runtime';
-import type { ModelTierResolver, SpecializedAgentPreset } from '../subagent';
-import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
+} from '../subagent-runtime';
+import type { ModelTierResolver, SpecializedAgentPreset } from '../../subagent';
+import type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
 
 export interface AgentRuntimeSessionFactoryLogger {
   warn(message: string, error?: unknown): void;
@@ -163,6 +163,7 @@ export async function createAgentRuntimeSession(
     service: config.service,
     toolRegistry: config.toolRegistry,
     systemPrompt: effectiveSystemPrompt,
+    locale: config.locale ?? 'en',
     ...(agentsOverride !== undefined ? { agentsOverride } : {}),
     executionMode: config.executionMode ?? 'auto',
     maxIterations: config.maxIterations,
@@ -242,6 +243,7 @@ export function updateAgentRuntimeSession(
       contextSettings: config.contextSettings,
       thinkingBudget: config.thinkingBudget,
       providerOptions: config.providerOptions,
+      locale: config.locale,
       maxIterations: config.maxIterations,
       executionMode: config.executionMode ?? 'auto',
       onActivationProgress: config.onActivationProgress,
@@ -324,7 +326,7 @@ function resolveRuntimeToolCategoryRegistry(
 export function resolveAgentRuntimePromptFragments(
   config: Pick<
     AgentRuntimeSessionFactoryConfig,
-    'capabilityPromptFragments' | 'capabilityRuntime' | 'providerExpressionTargets'
+    'capabilityPromptFragments' | 'capabilityRuntime' | 'providerExpressionTargets' | 'locale'
   >,
 ): readonly PromptFragment[] | undefined {
   const capabilityFragments = config.capabilityPromptFragments ?? [];
@@ -332,6 +334,7 @@ export function resolveAgentRuntimePromptFragments(
   const providerFragments = resolveProviderExpressionFragments(
     providerCards,
     config.providerExpressionTargets,
+    config.locale,
   );
   const fragments = [...capabilityFragments, ...providerFragments];
   return fragments.length > 0 ? fragments : undefined;
@@ -340,10 +343,15 @@ export function resolveAgentRuntimePromptFragments(
 function resolveProviderExpressionFragments(
   providerCards: readonly ProviderCard[],
   targets: readonly ProviderExpressionTargetConfig[] | undefined,
+  locale: AgentRuntimeSessionFactoryConfig['locale'],
 ): readonly PromptFragment[] {
   const selectedTargets = targets?.filter((target) => target.providerId || target.modelId) ?? [];
   if (selectedTargets.length === 0) {
-    return createProviderExpressionPromptFragments({ cards: providerCards, mode: 'candidates' });
+    return createProviderExpressionPromptFragments({
+      cards: providerCards,
+      mode: 'candidates',
+      locale,
+    });
   }
 
   return selectedTargets.flatMap((target) =>
@@ -354,6 +362,7 @@ function resolveProviderExpressionFragments(
       ...(target.providerId ? { providerId: target.providerId } : {}),
       ...(target.modelId ? { modelId: target.modelId } : {}),
       fragmentId: `provider:expression-context:${target.capability}`,
+      locale,
     }),
   );
 }

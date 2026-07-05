@@ -155,18 +155,19 @@ export class CreativeVersionLog {
    * Generate a human-readable summary of recent versions
    * for context injection into the system prompt.
    */
-  toSummary(maxEntries = 5): string {
+  toSummary(maxEntries = 5, locale?: string): string {
     if (this._entries.length === 0) return '';
 
+    const labels = getVersionLogSummaryLabels(locale);
     const recent = this._entries.slice(-maxEntries);
     const lines = recent.map((e) => {
-      const status = e.userEvaluation ? ` [${e.userEvaluation}]` : '';
+      const status = e.userEvaluation ? ` [${labels.evaluation[e.userEvaluation]}]` : '';
       const path = e.resultPath ? ` → ${e.resultPath}` : '';
       const success = e.resultSuccess ? '✓' : '✗';
       return `#${e.iterationIndex} ${e.toolName}(${summarizeParams(e.parameters)}) ${success}${path}${status}`;
     });
 
-    return `Creative Version Log (${this._entries.length} total, showing last ${recent.length}):\n${lines.join('\n')}`;
+    return `${labels.heading} (${this._entries.length} ${labels.total}, ${labels.showingLast} ${recent.length}):\n${lines.join('\n')}`;
   }
 }
 
@@ -224,6 +225,37 @@ function summarizeParams(params: Record<string, unknown>): string {
 function truncateValue(value: unknown): string {
   const str = String(value);
   return str.length > 30 ? str.slice(0, 27) + '...' : str;
+}
+
+function getVersionLogSummaryLabels(locale?: string): {
+  readonly heading: string;
+  readonly total: string;
+  readonly showingLast: string;
+  readonly evaluation: Record<'approved' | 'rejected' | 'revised', string>;
+} {
+  if (locale?.trim().toLowerCase().startsWith('zh')) {
+    return {
+      heading: '创作版本日志',
+      total: '条',
+      showingLast: '显示最近',
+      evaluation: {
+        approved: '已批准',
+        rejected: '已拒绝',
+        revised: '已修订',
+      },
+    };
+  }
+
+  return {
+    heading: 'Creative Version Log',
+    total: 'total',
+    showingLast: 'showing last',
+    evaluation: {
+      approved: 'approved',
+      rejected: 'rejected',
+      revised: 'revised',
+    },
+  };
 }
 
 // =============================================================================

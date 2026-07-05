@@ -388,6 +388,7 @@ export function projectSkillSummary(skill: Skill): SkillLifecycleSkillSummary {
   return {
     name: skill.name,
     description: skill.description,
+    source: skill.source,
     ...(skill.domain ? { domain: skill.domain } : {}),
     ...(skill.referencedSkills && skill.referencedSkills.length > 0
       ? { relatedSkills: skill.referencedSkills }

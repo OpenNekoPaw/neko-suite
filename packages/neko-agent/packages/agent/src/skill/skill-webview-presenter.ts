@@ -15,7 +15,7 @@ export interface SkillsListMessage {
 
 export interface SkillInjectionMessage {
   type: 'skillInjection';
-  conversationId?: string;
+  conversationId: string;
   skillName: string;
   systemPrompt: string;
   allowedTools?: string[];
@@ -54,12 +54,12 @@ export function buildSkillsListMessage(skills: readonly Skill[] = []): SkillsLis
 export function buildSkillInjectionMessage(input: {
   injection: SkillInjection;
   skill?: Skill;
-  conversationId?: string;
+  conversationId: string;
   lifecycle?: SkillLifecycleProjection;
 }): SkillInjectionMessage {
   return {
     type: 'skillInjection',
-    ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+    conversationId: requireConversationId(input.conversationId, 'skillInjection'),
     skillName: input.injection.name,
     systemPrompt: input.injection.systemPrompt,
     ...(input.injection.allowedTools ? { allowedTools: input.injection.allowedTools } : {}),
@@ -87,4 +87,11 @@ export function buildSkillInjectionMessage(input: {
         }
       : {}),
   };
+}
+
+function requireConversationId(conversationId: string, messageType: string): string {
+  if (conversationId.trim().length === 0) {
+    throw new Error(`${messageType} requires non-empty conversationId`);
+  }
+  return conversationId;
 }

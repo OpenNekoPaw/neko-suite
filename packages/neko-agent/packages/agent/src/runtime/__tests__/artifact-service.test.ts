@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Draft, ExecutionPlan, Task } from '@neko-agent/types';
-import { createWorkspaceArtifactService, toArtifactScopeBinding } from '../artifact-service';
+import { createWorkspaceArtifactService, toArtifactScopeBinding } from '../../artifact/artifact-service';
 
 describe('createWorkspaceArtifactService', () => {
   it('writes draft / plan / task creation documents to creator-facing paths and indexes them by run', async () => {

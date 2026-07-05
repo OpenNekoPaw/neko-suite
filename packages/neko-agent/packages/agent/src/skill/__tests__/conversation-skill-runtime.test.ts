@@ -83,7 +83,13 @@ describe('ConversationSkillRuntime', () => {
     );
 
     expect(runtime.getActiveSkill('conv-1')).toEqual({
-      skill: commit,
+      skill: expect.objectContaining({
+        name: 'commit',
+        description: 'commit skill',
+        content: 'commit instructions: fix bug',
+        source: 'project',
+        enabled: true,
+      }),
       injection: expect.objectContaining({ name: 'commit' }),
       appliedAt: 42,
     });
@@ -210,6 +216,27 @@ describe('ConversationSkillRuntime', () => {
 
     expect(runtime.getActiveSkill('conv-1')).toBeUndefined();
     expect(bridge.clearActiveSkill).toHaveBeenCalledWith('conv-1');
+  });
+
+  it('derives legacy active Skill state from lifecycle records', async () => {
+    const skill = createSkill('review');
+    const skillService = createSkillService([skill]);
+    const runtime = new ConversationSkillRuntime({
+      skillService: skillService as any,
+      now: () => 100,
+    });
+
+    await runtime.executeSkill({ skillId: 'review', conversationId: 'conv-1' });
+    const record = runtime.getActiveLifecycleRecords('conv-1')[0];
+    expect(record).toBeDefined();
+    runtime.getSkillLifecycleRuntime()?.deactivate({
+      conversationId: 'conv-1',
+      recordId: record!.id,
+      actor: 'runtime',
+      reason: 'conflict-resolution',
+    });
+
+    expect(runtime.getActiveSkill('conv-1')).toBeUndefined();
   });
 
   it('builds skill injection messages from active application results', async () => {

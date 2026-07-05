@@ -17,7 +17,7 @@ async function* toAsyncIterable<T>(items: readonly T[]): AsyncIterable<T> {
   }
 }
 
-function createBackgroundToolResultEvent(): AgentEvent {
+function createBackgroundToolResultEvent(conversationId = 'conv-1', runId = 'run-1'): AgentEvent {
   return {
     type: 'tool_result',
     toolResult: {
@@ -25,6 +25,8 @@ function createBackgroundToolResultEvent(): AgentEvent {
       success: true,
       data: {
         backgroundMode: true,
+        conversationId,
+        runId,
         taskId: 'task-1',
         type: 'image',
         message: 'Generate a cat',
@@ -667,6 +669,10 @@ describe('agent event stream runtime processor', () => {
     await Promise.resolve();
 
     expect(observerInput).toMatchObject({
+      lease: {
+        conversationId: 'conv-1',
+        runId: 'run-1',
+      },
       taskId: 'task-1',
       conversationId: 'conv-1',
     });
@@ -697,6 +703,10 @@ describe('agent event stream runtime processor', () => {
     );
 
     await observerInput!.onTaskProgress({
+      lease: {
+        conversationId: 'conv-1',
+        runId: 'run-1',
+      },
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -735,6 +745,10 @@ describe('agent event stream runtime processor', () => {
     );
 
     await observerInput!.onTaskProgress({
+      lease: {
+        conversationId: 'conv-1',
+        runId: 'run-1',
+      },
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -797,6 +811,10 @@ describe('agent event stream runtime processor', () => {
     expect(stateBeforeTerminalProgress).toBe('pending');
 
     await observerInput!.onTaskProgress({
+      lease: {
+        conversationId: 'conv-1',
+        runId: 'run-1',
+      },
       conversationId: 'conv-1',
       sourceTask: { id: 'task-1' },
       task: {
@@ -906,7 +924,7 @@ describe('agent event stream runtime processor', () => {
     ): ProcessAgentEventStreamRuntimeInput<SourceTask> => ({
       conversationId,
       messageId: 'msg-stream',
-      events: toAsyncIterable([createBackgroundToolResultEvent()]),
+      events: toAsyncIterable([createBackgroundToolResultEvent(conversationId, `run-${conversationId}`)]),
       postMessage: () => undefined,
       backgroundTasks: {
         observeProgress,

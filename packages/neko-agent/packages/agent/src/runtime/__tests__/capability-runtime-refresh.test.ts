@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ToolGroup } from '@neko/shared';
-import { createCapabilityRuntimeRefreshRuntime } from '../capability-runtime-refresh';
+import { createCapabilityRuntimeRefreshRuntime } from '../capability/capability-runtime-refresh';
+import { ToolGroupRegistry } from '../../skill';
 
 const mediaToolGroup: ToolGroup = {
   name: 'media',
@@ -12,13 +13,17 @@ const mediaToolGroup: ToolGroup = {
 };
 
 describe('capability-runtime-refresh', () => {
+  function createRegistryWithMediaGroup(): ToolGroupRegistry {
+    const registry = new ToolGroupRegistry();
+    registry.register(mediaToolGroup);
+    return registry;
+  }
+
   it('projects runtime tool groups into the injected tool skill sink', () => {
     const setToolSkills = vi.fn();
     const runtime = createCapabilityRuntimeRefreshRuntime({
       getBindings: () => ({
-        toolGroupRegistry: {
-          list: () => [mediaToolGroup],
-        },
+        toolGroupRegistry: createRegistryWithMediaGroup(),
       }),
       setToolSkills,
       logger: { warn: vi.fn(), error: vi.fn() },
@@ -42,9 +47,7 @@ describe('capability-runtime-refresh', () => {
     const setToolSkills = vi.fn();
     const runtime = createCapabilityRuntimeRefreshRuntime({
       getBindings: () => ({
-        toolGroupRegistry: {
-          list: () => [mediaToolGroup],
-        },
+        toolGroupRegistry: createRegistryWithMediaGroup(),
       }),
       refreshAgentRuntime,
       setToolSkills,
@@ -64,9 +67,7 @@ describe('capability-runtime-refresh', () => {
     const setToolSkills = vi.fn();
     const runtime = createCapabilityRuntimeRefreshRuntime({
       getBindings: () => ({
-        toolGroupRegistry: {
-          list: () => [mediaToolGroup],
-        },
+        toolGroupRegistry: createRegistryWithMediaGroup(),
       }),
       refreshAgentRuntime: () => {
         throw new Error('refresh failed');

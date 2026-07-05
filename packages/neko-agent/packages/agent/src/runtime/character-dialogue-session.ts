@@ -27,6 +27,7 @@ export interface CharacterDialogueResponderInput {
   readonly transcript: readonly NpcTranscriptMessage[];
   readonly userMessage: NpcTranscriptMessage;
   readonly config: CharacterDialogueSessionConfig;
+  readonly locale?: string;
   readonly signal: AbortSignal;
 }
 
@@ -47,6 +48,7 @@ export interface CharacterDialogueSessionOptions {
   readonly responder: CharacterDialogueResponder;
   readonly systemPrompt?: string;
   readonly config?: Partial<CharacterDialogueSessionConfig>;
+  readonly locale?: string;
   readonly now?: () => string;
   readonly createMessageId?: (role: NpcTranscriptMessage['role'], turnIndex: number) => string;
   readonly seedTranscript?: readonly NpcTranscriptMessage[];
@@ -69,6 +71,7 @@ export interface CharacterDialogueSessionSnapshot {
   readonly profileSnapshot: NpcProfileSource;
   readonly mode: NpcTestMode;
   readonly systemPrompt: string;
+  readonly locale: string | undefined;
   readonly config: CharacterDialogueSessionConfig;
   readonly transcript: readonly NpcTranscriptMessage[];
   readonly status: 'active' | 'disposed';
@@ -86,6 +89,7 @@ export class CharacterDialogueSession {
   readonly profileSnapshot: NpcProfileSource;
   readonly mode: NpcTestMode;
   readonly systemPrompt: string;
+  readonly locale: string | undefined;
   readonly config: CharacterDialogueSessionConfig;
 
   private readonly responder: CharacterDialogueResponder;
@@ -104,9 +108,13 @@ export class CharacterDialogueSession {
     this.entityRef = options.entityRef;
     this.profileSnapshot = options.profileSnapshot;
     this.mode = options.mode;
+    this.locale = options.locale;
     this.systemPrompt =
       options.systemPrompt ??
-      projectCharacterDialogueSystemPrompt(options.profileSnapshot, { mode: options.mode });
+      projectCharacterDialogueSystemPrompt(options.profileSnapshot, {
+        mode: options.mode,
+        locale: options.locale,
+      });
     this.config = {
       ...CHARACTER_DIALOGUE_DEFAULT_CONFIG,
       ...(options.config ?? {}),
@@ -166,11 +174,13 @@ export class CharacterDialogueSession {
         systemPrompt: buildCharacterDialogueTurnSystemPrompt({
           baseSystemPrompt: this.systemPrompt,
           turnEvidence: options.turnEvidence,
+          locale: this.locale,
         }),
         ...(options.turnEvidence ? { turnEvidence: options.turnEvidence } : {}),
         transcript: this.getTranscript(),
         userMessage,
         config: this.config,
+        ...(this.locale ? { locale: this.locale } : {}),
         signal: abortController.signal,
       });
       const npcMessage: NpcTranscriptMessage = {
@@ -229,6 +239,7 @@ export class CharacterDialogueSession {
       profileSnapshot: this.profileSnapshot,
       mode: this.mode,
       systemPrompt: this.systemPrompt,
+      locale: this.locale,
       config: this.config,
       transcript: this.getTranscript(),
       status: this.status,
@@ -273,13 +284,18 @@ export function projectCharacterDialogueTranscriptToChatMessages(input: {
 export function buildCharacterDialogueTurnSystemPrompt(input: {
   readonly baseSystemPrompt: string;
   readonly turnEvidence?: CharacterEvidenceBundle;
+  readonly locale?: string;
 }): string {
   if (!input.turnEvidence) return input.baseSystemPrompt;
+  const guidance =
+    input.locale?.trim().toLowerCase().startsWith('zh') === true
+      ? '仅将这些证据用于当前角色会话回合。不要声称可以访问项目文件、工具、全局记忆或未提供的证据。'
+      : 'Use this evidence only for the current role-session turn. Do not claim access to project files, tools, global memory, or omitted evidence.';
   return [
     input.baseSystemPrompt,
     '',
     renderCharacterEvidenceBundle(input.turnEvidence),
     '',
-    'Use this evidence only for the current role-session turn. Do not claim access to project files, tools, global memory, or omitted evidence.',
+    guidance,
   ].join('\n');
 }

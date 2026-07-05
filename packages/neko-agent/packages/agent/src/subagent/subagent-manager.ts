@@ -27,6 +27,7 @@ import type {
   SubAgentExecutor,
   SubAgentModelTierResolverContext,
 } from './types';
+import { getSubAgentPromptLabels, localizeBuiltinSubAgentPreset } from './subagent-localization';
 
 const logger = getLogger('SubAgentManager');
 
@@ -374,7 +375,9 @@ export class SubAgentManager implements ISubAgentManager {
     });
 
     try {
-      const preset = this.getSpecializedPreset(config.type);
+      const locale = config.locale;
+      const labels = getSubAgentPromptLabels(locale);
+      const preset = this.getSpecializedPreset(config.type, locale);
       if (!preset) {
         throw new Error(`Unknown SubAgent preset type "${config.type}"`);
       }
@@ -387,7 +390,10 @@ export class SubAgentManager implements ISubAgentManager {
       // =======================================================================
       // Step 2: Determine runtime tool access
       // =======================================================================
-      const allTools = this.deps.toolRegistry.toToolDefinitions();
+      const allTools = this.deps.toolRegistry.toToolDefinitions(
+        undefined,
+        locale ? { locale } : undefined,
+      );
       const toolPolicy = this.resolveToolPolicy(config, preset, toolSkillTools);
       const filteredTools = this.filterToolsByPolicy(allTools, toolPolicy);
 
@@ -432,7 +438,7 @@ export class SubAgentManager implements ISubAgentManager {
       // Build input prompt
       let inputPrompt = config.prompt;
       if (config.inheritContext && config.contextSummary) {
-        inputPrompt = `## Context from Parent Agent\n${config.contextSummary}\n\n## Task\n${config.prompt}`;
+        inputPrompt = `## ${labels.contextFromParentAgent}\n${config.contextSummary}\n\n## ${labels.task}\n${config.prompt}`;
       }
 
       // Setup timeout
@@ -510,19 +516,24 @@ export class SubAgentManager implements ISubAgentManager {
    * Build system prompt for SubAgent
    */
   private buildSystemPrompt(config: SubAgentConfig, preset: SpecializedAgentPreset): string {
+    const labels = getSubAgentPromptLabels(config.locale);
     return `${preset.systemPrompt}
 
-## Your Task
+## ${labels.yourTask}
 ${config.description}
 
-Focus on completing this specific task efficiently and report your findings clearly.`;
+${labels.taskFocusInstruction}`;
   }
 
-  private getSpecializedPreset(type: string): SpecializedAgentPreset | undefined {
-    return {
-      ...SPECIALIZED_PRESETS,
-      ...(this.deps.specializedPresets ?? {}),
-    }[type];
+  private getSpecializedPreset(
+    type: string,
+    locale: string | undefined,
+  ): SpecializedAgentPreset | undefined {
+    const builtinPreset = SPECIALIZED_PRESETS[type];
+    if (builtinPreset) {
+      return localizeBuiltinSubAgentPreset(type, builtinPreset, locale);
+    }
+    return this.deps.specializedPresets?.[type];
   }
 
   /**
@@ -666,9 +677,10 @@ Focus on completing this specific task efficiently and report your findings clea
     }
 
     // Build final prompt with skill injections
+    const labels = getSubAgentPromptLabels(config.locale);
     return `${basePrompt}
 
-# Injected Skills
+# ${labels.injectedSkills}
 
 ${skillContents.join('\n\n')}`;
   }
@@ -694,6 +706,8 @@ ${content}`;
       modelTier: config.modelTier,
       parentMessageId: config.parentMessageId,
       parentToolCallId: config.parentToolCallId,
+      runId: config.runId,
+      runStartedAt: config.runStartedAt,
     };
   }
 

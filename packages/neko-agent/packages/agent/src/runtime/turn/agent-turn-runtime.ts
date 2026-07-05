@@ -22,13 +22,13 @@ import {
 import type { Skill, SkillInjection } from '@neko/shared';
 import { resolveAgentAutoCompactTokenThreshold, resolveAgentTokenBudget } from '@neko/shared';
 import type { SkillLifecycleProjection } from '@neko/shared';
-import type { AgentEvent } from '../session/types';
+import type { AgentEvent } from '../../session/types';
 import {
   AGENT_SESSION_BUSY_MESSAGE,
   AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
-} from './agent-session-runner';
-import type { AgentPendingMessageItem, EnqueuePendingMessageInput } from './agent-runner-port';
-import type { IRuntimeTaskManager } from '../task';
+} from '../runner/agent-session-runner';
+import type { AgentPendingMessageItem, EnqueuePendingMessageInput } from '../runner/agent-runner-port';
+import type { IRuntimeTaskManager } from '../../task';
 import type { IOperationToolAdapterRegistry } from '@neko/shared';
 import {
   buildAgentAssistantMessageFromStream,
@@ -48,15 +48,19 @@ import {
   type AgentStreamPersistenceSnapshot,
   type ProviderExpressionTargetConfig,
 } from './message-runtime';
-import type { AgentBase64ImageAttachment } from './attachment-projection';
+import {
+  normalizeAgentRuntimePromptLocale,
+  type AgentBase64ImageAttachment,
+  type AgentRuntimePromptLocale,
+} from '../../input/attachment-projection';
 import {
   buildTurnMultimodalContextPacket,
   createCanvasSelectionContextPacket,
 } from './multimodal-context-packet';
-import { getLogger } from '../utils/logger';
-import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
-import { hasBlockingLifecycleProjectionDiagnostic } from '../skill/skill-lifecycle-projection';
-import { projectMediaModelTools } from '../tools/media-generation-tool-selection';
+import { getLogger } from '../../utils/logger';
+import type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
+import { hasBlockingLifecycleProjectionDiagnostic } from '../../skill/skill-lifecycle-projection';
+import { projectMediaModelTools } from '../../tools/media-generation-tool-selection';
 
 function getAgentTurnRuntimeLogger() {
   return getLogger('AgentTurnRuntime');
@@ -93,6 +97,7 @@ export interface AgentTurnRunnerConfigureInput<TPlatform> {
   readonly workspaceRoot?: string;
   readonly authorizedReadRoots?: readonly string[];
   readonly workspaceIgnoreRules?: WorkspaceFileIgnoreRules;
+  readonly locale?: AgentRuntimePromptLocale;
   readonly conversationId: string;
   readonly taskManager?: IRuntimeTaskManager;
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
@@ -114,6 +119,7 @@ export interface AgentTurnRunner<TPlatform, TContext extends object> {
   drainPendingMessageQueue(): readonly AgentPendingMessageItem[];
   activateToolSetsForTools?(toolNames: readonly string[]): readonly string[];
   deactivateToolSet?(toolSetName: string): void;
+  applySkillLifecycleProjection(projection: SkillLifecycleProjection): void;
   applySkillInjection?(injection: SkillInjection, skill?: Skill): void;
   getActiveSkill?(): Skill | undefined;
   clearActiveSkill?(): void;
@@ -219,6 +225,7 @@ export interface ExecuteAgentTurnInput<
   readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
   readonly modelTokenMetadata?: AgentModelTokenMetadata;
   readonly modelCapabilities?: readonly string[];
+  readonly locale?: AgentRuntimePromptLocale | string;
   readonly mediaModel?: ModelRef<MediaModelCategory>;
   readonly mediaModels?: AgentMediaModelSelections;
   readonly imageAttachments?: readonly AgentBase64ImageAttachment[];
@@ -332,6 +339,7 @@ const RUNNING_TURN_CONFIG_KEYS = [
   'workspaceRoot',
   'authorizedReadRoots',
   'workspaceIgnoreRules',
+  'locale',
   'conversationId',
   'taskManager',
   'operationToolAdapterRegistry',
@@ -615,6 +623,7 @@ export async function executeAgentTurn<
     workspaceRoot: turnConfig.workspaceRoot,
     ...(authorizedReadRoots && authorizedReadRoots.length > 0 ? { authorizedReadRoots } : {}),
     ...(workspaceIgnoreRules ? { workspaceIgnoreRules } : {}),
+    locale: normalizeAgentRuntimePromptLocale(input.locale),
     conversationId: turnConfig.conversationId,
     ...(input.taskManager ? { taskManager: input.taskManager } : {}),
   };
@@ -1082,13 +1091,7 @@ function synchronizeAgentTurnSkillState<TPlatform, TContext extends object>(
   const previousTurnSkillName = turnManagedSkillNames.get(runnerKey);
 
   if (skillLifecycle) {
-    const lifecycleSkill = projectLifecycleAsTurnSkill(skillLifecycle.projection);
-    if (lifecycleSkill) {
-      agentRunner.applySkillInjection?.(lifecycleSkill.injection, lifecycleSkill.skill);
-      turnManagedSkillNames.set(runnerKey, lifecycleSkill.skill.name);
-      return;
-    }
-    clearPreviousTurnManagedSkill(agentRunner, previousTurnSkillName);
+    agentRunner.applySkillLifecycleProjection(skillLifecycle.projection);
     turnManagedSkillNames.delete(runnerKey);
     return;
   }
@@ -1148,34 +1151,6 @@ function shouldActivateMediaToolsForTurn(
     return mediaTools.some((toolName) => lifecyclePolicy.allowedTools?.includes(toolName));
   }
   return true;
-}
-
-function projectLifecycleAsTurnSkill(
-  projection: SkillLifecycleProjection,
-): AgentTurnActiveSkillState | null {
-  if (projection.promptSections.length === 0 && projection.toolPolicy.mode === 'unrestricted') {
-    return null;
-  }
-
-  const skillName = 'lifecycle-projection';
-  return {
-    skill: {
-      name: skillName,
-      description: 'Projected active Skill lifecycle records',
-      content: projection.promptSections.map((section) => section.content).join('\n\n'),
-      source: 'builtin',
-      enabled: true,
-    },
-    injection: {
-      name: skillName,
-      type: 'skill',
-      systemPrompt: projection.promptSections.map((section) => section.content).join('\n\n'),
-      ...(projection.toolPolicy.allowedTools
-        ? { allowedTools: [...projection.toolPolicy.allowedTools] }
-        : {}),
-      ...(projection.modelOverride ? { model: projection.modelOverride.model } : {}),
-    },
-  };
 }
 
 function buildBlockingLifecycleProjectionMessage(

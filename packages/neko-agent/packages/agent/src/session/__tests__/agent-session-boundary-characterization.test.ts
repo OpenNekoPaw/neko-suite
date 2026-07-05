@@ -19,7 +19,7 @@ import type {
   ArtifactRecord,
   ArtifactWriteInput,
   IArtifactService,
-} from '../../runtime/artifact-service';
+} from '../../artifact/artifact-service';
 
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const values: T[] = [];

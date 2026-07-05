@@ -15,9 +15,9 @@ import type { IArtifactWatcher } from '../artifact';
 import type { IEventBus } from '../events';
 import type { SkillService } from '../skill/skill-service';
 import type { SkillLifecycleRuntime } from '../skill/skill-lifecycle-runtime';
-import type { IArtifactService } from './artifact-service';
-import type { AgentExternalProcessorRuntime } from './external-processor-runtime';
-import type { AgentContentAccessRuntime } from './agent-content-access-runtime';
+import type { IArtifactService } from '../artifact/artifact-service';
+import type { AgentExternalProcessorRuntime } from './capability/external-processor-runtime';
+import type { AgentContentAccessRuntime } from './capability/agent-content-access-runtime';
 
 /**
  * Minimal journal-writer contract exposed at the runtime bootstrap layer.

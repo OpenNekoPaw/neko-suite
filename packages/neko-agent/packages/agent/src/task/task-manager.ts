@@ -19,12 +19,14 @@ import type {
   SerializableTask,
   TaskExecutor,
   TaskLifecycleMetadata,
+  TaskRunLease,
 } from '@neko/shared';
 import {
   BaseError,
   ConcurrencyPool,
   KeyedConcurrencyPool,
   createTaskLifecycleMetadata,
+  extractTaskRunLease,
   sleepWithAbort,
   withTimeout,
 } from '@neko/shared';
@@ -53,12 +55,24 @@ export interface IRuntimeTaskManager extends ITaskManager, ICreationProjectedTas
   resumePendingTasks(): Promise<string[]>;
   dispose(): Promise<void>;
   registerExecutor(type: TaskType, executor: TaskExecutor): void;
+  onTerminalTask(callback: TaskTerminalCallback, options?: TaskTerminalSubscriptionOptions): () => void;
   saveRecoveryInfo(taskId: string, externalTaskId: string, providerId: string): Promise<void>;
   deleteRecoveryInfo(taskId: string): Promise<void>;
   getRecoveryStorage(): ITaskRecoveryStorage;
   updateLifecycle(id: string, lifecycle: Partial<TaskLifecycleMetadata>): Promise<boolean>;
   updateOutputData(id: string, outputData: Record<string, unknown>): Promise<boolean>;
   upsertExternalTask(task: SerializableTask): Promise<void>;
+}
+
+export interface TaskTerminalEvent {
+  readonly task: Task;
+  readonly lease: TaskRunLease;
+}
+
+export type TaskTerminalCallback = (event: TaskTerminalEvent) => void;
+
+export interface TaskTerminalSubscriptionOptions {
+  readonly replayExisting?: boolean;
 }
 
 /**
@@ -104,6 +118,7 @@ export class TaskManager implements IRuntimeTaskManager {
   private tasks: Map<string, Task> = new Map();
   private executors: Map<TaskType, TaskExecutor> = new Map();
   private progressCallbacks: Map<string, Set<TaskProgressCallback>> = new Map();
+  private terminalCallbacks: Set<TaskTerminalCallback> = new Set();
   private taskCounter = 0;
   private storage: ITaskStorage;
   private recoveryStorage: ITaskRecoveryStorage;
@@ -555,6 +570,9 @@ export class TaskManager implements IRuntimeTaskManager {
     this.tasks.set(task.id, nextTask);
     await this.storage.save(nextTask as SerializableTask);
     this._notifyProgress(nextTask);
+    if (isTerminalStatus(nextTask.status) && (!existing || !isTerminalStatus(existing.status))) {
+      this._notifyTerminal(nextTask);
+    }
   }
 
   /**
@@ -621,6 +639,27 @@ export class TaskManager implements IRuntimeTaskManager {
       if (callbacks?.size === 0) {
         this.progressCallbacks.delete(id);
       }
+    };
+  }
+
+  onTerminalTask(
+    callback: TaskTerminalCallback,
+    options: TaskTerminalSubscriptionOptions = {},
+  ): () => void {
+    this.terminalCallbacks.add(callback);
+    if (options.replayExisting) {
+      for (const task of this.tasks.values()) {
+        if (isTerminalStatus(task.status)) {
+          const event = this._toTerminalEvent(task);
+          if (event) {
+            callback(event);
+          }
+        }
+      }
+    }
+
+    return () => {
+      this.terminalCallbacks.delete(callback);
     };
   }
 
@@ -768,6 +807,7 @@ export class TaskManager implements IRuntimeTaskManager {
   private updateTask(id: string, updates: Partial<Task>): void {
     const task = this.tasks.get(id);
     if (!task) return;
+    const wasTerminal = isTerminalStatus(task.status);
 
     const nextUpdates =
       updates.status !== undefined && isTerminalStatus(updates.status)
@@ -801,6 +841,9 @@ export class TaskManager implements IRuntimeTaskManager {
       this.recoveryStorage.delete(id).catch((err) => {
         logger.error('Failed to delete recovery info for terminal task', { error: err });
       });
+      if (!wasTerminal) {
+        this._notifyTerminal(updatedTask);
+      }
     }
   }
 
@@ -826,6 +869,39 @@ export class TaskManager implements IRuntimeTaskManager {
         // Ignore callback errors
       }
     }
+  }
+
+  private _notifyTerminal(task: Task): void {
+    if (this.isDisposing || !isTerminalStatus(task.status)) {
+      return;
+    }
+
+    const event = this._toTerminalEvent(task);
+    if (!event) {
+      return;
+    }
+
+    for (const callback of this.terminalCallbacks) {
+      try {
+        callback(event);
+      } catch {
+        // Ignore callback errors; observers own diagnostics.
+      }
+    }
+  }
+
+  private _toTerminalEvent(task: Task): TaskTerminalEvent | null {
+    const lease = extractTaskRunLease(task);
+    if (!lease) {
+      logger.warn('Skipping terminal task observer event without run lease', {
+        taskId: task.id,
+        conversationId: task.lifecycle?.ownerConversationId,
+        status: task.status,
+      });
+      return null;
+    }
+
+    return { task, lease };
   }
 
   private removeCompletionWaiter(id: string, waiter: CompletionWaiter): void {

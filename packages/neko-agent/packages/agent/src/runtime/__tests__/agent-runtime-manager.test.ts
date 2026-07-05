@@ -5,10 +5,12 @@ import {
   createAgentRuntimeManager,
   type AgentRuntimeManagerAgent,
   type AgentRuntimeManagerEvent,
-} from '../agent-runtime-manager';
-import type { AgentRunnerEventSource, AgentRunnerPortEvent } from '../agent-runner-port';
+} from '../session/agent-runtime-manager';
+import type { AgentRunnerEventSource, AgentRunnerPortEvent } from '../runner/agent-runner-port';
 
 class MockAgent implements AgentRuntimeManagerAgent {
+  constructor(private readonly conversationId = 'conversation-1') {}
+
   readonly onDidStart: AgentRuntimeManagerEvent = (listener) => {
     this.startListeners.push(listener);
     return { dispose: () => this.removeListener(this.startListeners, listener) };
@@ -26,14 +28,14 @@ class MockAgent implements AgentRuntimeManagerAgent {
   readonly getPendingMessageQueue = vi.fn(() => []);
   readonly removePendingMessage = vi.fn((queueItemId: string) => ({
     id: queueItemId,
-    conversationId: 'conversation-1',
+    conversationId: this.conversationId,
     content: 'queued',
     createdAt: 1000,
     source: 'composer' as const,
   }));
   readonly updatePendingMessage = vi.fn((queueItemId: string, content: string) => ({
     id: queueItemId,
-    conversationId: 'conversation-1',
+    conversationId: this.conversationId,
     content,
     createdAt: 1000,
     updatedAt: 1001,
@@ -41,14 +43,14 @@ class MockAgent implements AgentRuntimeManagerAgent {
   }));
   readonly promotePendingMessage = vi.fn((queueItemId: string) => ({
     id: queueItemId,
-    conversationId: 'conversation-1',
+    conversationId: this.conversationId,
     content: 'queued',
     createdAt: 1000,
     source: 'composer' as const,
   }));
   readonly dequeuePendingMessage = vi.fn(() => ({
     id: 'queue-1',
-    conversationId: 'conversation-1',
+    conversationId: this.conversationId,
     content: 'queued',
     createdAt: 1000,
     source: 'composer' as const,
@@ -60,6 +62,7 @@ class MockAgent implements AgentRuntimeManagerAgent {
     compressedTokens: 64,
     ratio: 0.5,
   }));
+  readonly applySkillLifecycleProjection = vi.fn();
   readonly applySkillInjection = vi.fn();
   readonly getActiveSkill = vi.fn((): Skill | undefined => undefined);
   readonly clearActiveSkill = vi.fn();
@@ -248,5 +251,66 @@ describe('AgentRuntimeManager', () => {
     expect(manager.nextMessageQueueSnapshotVersion('conversation-1')).toBe(2);
     expect(manager.nextMessageQueueSnapshotVersion('conversation-2')).toBe(1);
     expect(manager.nextMessageQueueSnapshotVersion('conversation-1')).toBe(3);
+  });
+
+  it('keeps concurrent conversation runner events, queues, Skills, and cancellation isolated', () => {
+    const starts: string[] = [];
+    const stops: string[] = [];
+    const manager = createAgentRuntimeManager({
+      createAgent: ({ conversationId }) => new MockPortEventAgent(conversationId),
+      onAgentStart: ({ conversationId }) => starts.push(conversationId),
+      onAgentStop: ({ conversationId }) => stops.push(conversationId),
+    });
+    const agentA = manager.getOrCreate('conv-a') as MockPortEventAgent;
+    const agentB = manager.getOrCreate('conv-b') as MockPortEventAgent;
+    const skill: Skill = {
+      name: 'storyboard',
+      description: '',
+      content: '',
+      source: 'project',
+      enabled: true,
+    };
+    const injection: SkillInjection = {
+      systemPrompt: 'prompt',
+      name: 'storyboard',
+      type: 'skill',
+    };
+    const projection: SkillLifecycleProjection = {
+      promptSections: [],
+      toolPolicy: {
+        mode: 'unrestricted',
+        contributingRecordIds: [],
+        diagnostics: [],
+      },
+      diagnostics: [],
+      visibleIndicators: [],
+    };
+
+    agentA.fireRunnerEvent({ type: 'start' });
+    agentB.fireRunnerEvent({ type: 'start' });
+    agentA.fireRunnerEvent({ type: 'stop' });
+    agentB.fireRunnerEvent({ type: 'stop' });
+
+    manager.promotePendingMessage('conv-a', 'queue-a');
+    manager.updatePendingMessage('conv-b', 'queue-b', 'queued B', 2000);
+    manager.applySkillLifecycleProjection('conv-a', projection);
+    manager.applySkillInjection('conv-b', injection, skill);
+    manager.clearActiveSkill('conv-b');
+    manager.cancel('conv-a');
+
+    expect(starts).toEqual(['conv-a', 'conv-b']);
+    expect(stops).toEqual(['conv-a', 'conv-b']);
+    expect(agentA.promotePendingMessage).toHaveBeenCalledWith('queue-a');
+    expect(agentB.promotePendingMessage).not.toHaveBeenCalled();
+    expect(agentB.updatePendingMessage).toHaveBeenCalledWith('queue-b', 'queued B', 2000);
+    expect(agentA.updatePendingMessage).not.toHaveBeenCalled();
+    expect(agentA.applySkillLifecycleProjection).toHaveBeenCalledWith(projection);
+    expect(agentB.applySkillLifecycleProjection).not.toHaveBeenCalled();
+    expect(agentB.applySkillInjection).toHaveBeenCalledWith(injection, skill);
+    expect(agentA.applySkillInjection).not.toHaveBeenCalled();
+    expect(agentB.clearActiveSkill).toHaveBeenCalledOnce();
+    expect(agentA.clearActiveSkill).not.toHaveBeenCalled();
+    expect(agentA.cancel).toHaveBeenCalledOnce();
+    expect(agentB.cancel).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AgentRuntimePool, type ManagedAgentRuntime } from '../agent-runtime-pool';
+import { AgentRuntimePool, type ManagedAgentRuntime } from '../session/agent-runtime-pool';
 
 class TestAgent implements ManagedAgentRuntime {
   readonly cancel = vi.fn();
@@ -64,5 +64,31 @@ describe('AgentRuntimePool', () => {
       maxAgents: 2,
       absoluteMaxAgents: 2,
     });
+  });
+
+  it('cancels one running conversation without touching another running conversation', () => {
+    const agents = new Map<string, TestAgent>();
+    const pool = new AgentRuntimePool({
+      createAgent: (conversationId) => {
+        const agent = new TestAgent(true);
+        agents.set(conversationId, agent);
+        return agent;
+      },
+    });
+
+    const agentA = pool.getOrCreate('conv-a');
+    const agentB = pool.getOrCreate('conv-b');
+
+    expect(pool.getRunningConversations()).toEqual(['conv-a', 'conv-b']);
+
+    pool.cancel('conv-a');
+    agentA.setRunning(false);
+
+    expect(agentA.cancel).toHaveBeenCalledOnce();
+    expect(agentB.cancel).not.toHaveBeenCalled();
+    expect(pool.isRunning('conv-a')).toBe(false);
+    expect(pool.isRunning('conv-b')).toBe(true);
+    expect(pool.getRunningConversations()).toEqual(['conv-b']);
+    expect(agents.get('conv-b')).toBe(agentB);
   });
 });

@@ -2,7 +2,7 @@ import type { Message } from '@neko-agent/types';
 import {
   projectMessagesForResourceDisplay,
   type MessageResourceProjectionOptions,
-} from './message-resource-projector';
+} from '../input/message-resource-projector';
 
 export interface ConversationViewSource {
   id: string;

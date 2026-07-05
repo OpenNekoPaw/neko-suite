@@ -1,10 +1,10 @@
 import type { ConfiguredToolGroup, PromptFragment } from '@neko/shared';
-import type { AgentSessionConfig, IAgentSession } from '../session/types';
+import type { AgentSessionConfig, IAgentSession } from '../../session/types';
 import {
   buildAgentRuntimeSessionFactoryConfig,
   type AgentRuntimeSessionAssemblyInput,
 } from './runtime-host-bindings';
-import { projectRuntimeToolGroups } from '../skill/tool-group-projector';
+import { projectRuntimeToolGroups } from '../../skill/tool-group-projector';
 import {
   createAgentRuntimeSession,
   unregisterAgentRuntimeSession,

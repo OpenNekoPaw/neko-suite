@@ -4,16 +4,17 @@ import type {
   PromptFragment,
   Skill,
   SkillInjection,
+  SkillLifecycleProjection,
 } from '@neko/shared';
-import type { ToolConfirmationRequest } from '../permission/types';
+import type { ToolConfirmationRequest } from '../../permission/types';
 import type {
   AgentEvent,
   AgentSessionConfig,
   CompressionResult,
   ExecutionContext,
   IAgentSession,
-} from '../session/types';
-import type { ISkillProvider } from '../tools/core/meta-tools';
+} from '../../session/types';
+import type { ISkillProvider } from '../../tools/core/meta-tools';
 import {
   AgentPendingMessageQueueError,
   type AgentPendingMessageItem,
@@ -177,7 +178,7 @@ export class AgentSessionRunner<TContext> {
       conversationId: input.conversationId,
       content,
       createdAt: input.now ?? Date.now(),
-      source: 'composer',
+      source: input.source ?? 'composer',
     };
     this._pendingMessages.push(item);
     return item;
@@ -308,6 +309,17 @@ export class AgentSessionRunner<TContext> {
     this._session?.addMessage(message, sourceEventIds);
   }
 
+  recordTaskResultObservation(
+    input: import('../../session/types').RecordSessionTaskResultObservationInput,
+  ): Promise<
+    import('../../session/task-result-observation-recorder').RecordAgentTaskResultObservationResult
+  > {
+    if (!this._session) {
+      throw new Error('Agent not configured');
+    }
+    return this._session.recordTaskResultObservation(input);
+  }
+
   loadHistory(messages: ChatMessage[], messageEventIds?: readonly (readonly string[])[]): void {
     this._session?.loadHistory(messages, messageEventIds);
   }
@@ -322,6 +334,10 @@ export class AgentSessionRunner<TContext> {
 
   applySkillInjection(injection: SkillInjection, skill?: Skill): void {
     this._session?.applySkillInjection(injection, skill);
+  }
+
+  applySkillLifecycleProjection(projection: SkillLifecycleProjection): void {
+    this._session?.applySkillLifecycleProjection(projection);
   }
 
   activateToolSetsForTools(toolNames: readonly string[]): readonly string[] {

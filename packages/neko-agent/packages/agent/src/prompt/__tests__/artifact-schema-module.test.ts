@@ -50,6 +50,17 @@ describe('ArtifactSchemaModule', () => {
     expect(content).not.toContain('generic `Write` tool');
   });
 
+  it('renders the creation-document contract in Chinese for zh locale', () => {
+    const mod = new ArtifactSchemaModule();
+    const content = mod.renderSync(makeCtx({ runId: 'abc-123', locale: 'zh' }))![0]!.content;
+
+    expect(content).toContain('当前 IDC run id 是 `abc-123`');
+    expect(content).toContain('创作文档契约');
+    expect(content).toContain('不要自行创建、读取或修复创作文档文件');
+    expect(content).not.toContain('Creation document contract');
+    expect(content).not.toContain('The active IDC run id is');
+  });
+
   it('tells the agent that persistence is host-owned', () => {
     const mod = new ArtifactSchemaModule();
     const content = mod.renderSync(makeCtx({ runId: 'r1' }))![0]!.content;

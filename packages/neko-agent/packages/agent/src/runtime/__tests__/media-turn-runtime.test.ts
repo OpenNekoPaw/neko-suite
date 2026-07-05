@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runAgentMediaTurn, type AgentMediaTurnExecutionInput } from '../media-turn-runtime';
+import { runAgentMediaTurn, type AgentMediaTurnExecutionInput } from '../turn/media-turn-runtime';
 import { projectMediaTaskToWorkItem } from '@neko-agent/types';
 
 const mediaModel = {

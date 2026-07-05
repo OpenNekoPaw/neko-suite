@@ -4,7 +4,7 @@ import {
   persistAgentStreamBackgroundTaskResultUrls,
   projectAgentStreamBackgroundTaskProgress,
   projectAgentStreamBackgroundTaskStart,
-} from '../agent-stream-background-task';
+} from '../stream/agent-stream-background-task';
 
 describe('agent stream background task runtime', () => {
   it('projects background tool results to taskCreated messages', () => {
@@ -125,7 +125,7 @@ describe('agent stream background task runtime', () => {
         progress: 100,
         updatedAt: '2026-01-01T00:00:02.000Z',
         result: {
-          urls: ['webview://cat.png'],
+          urls: ['neko://generated/cat.png'],
           localPaths: ['/tmp/cat.png'],
         },
       },
@@ -141,7 +141,7 @@ describe('agent stream background task runtime', () => {
         status: 'completed',
         progress: 100,
         result: {
-          urls: ['webview://cat.png'],
+          urls: ['neko://generated/cat.png'],
         },
       },
       message: {
@@ -155,7 +155,7 @@ describe('agent stream background task runtime', () => {
           parentMessageId: 'msg-stream',
           parentToolCallId: 'tool-1',
           result: {
-            urls: ['webview://cat.png'],
+            urls: ['neko://generated/cat.png'],
           },
         },
       },

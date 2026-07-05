@@ -27,6 +27,7 @@ describe('TaskManagerCreationTaskProjection', () => {
     };
 
     const projectedIds = await projection.syncTask({
+      conversationId: 'conv-1',
       runId: 'run-1',
       runStartedAt: 101,
       task,
@@ -54,6 +55,7 @@ describe('TaskManagerCreationTaskProjection', () => {
         status: 'running',
         progress: 50,
         binding: expect.objectContaining({
+          conversationId: 'conv-1',
           runStartedAt: 101,
           artifact: {
             kind: 'task',
@@ -86,6 +88,7 @@ describe('TaskManagerCreationTaskProjection', () => {
     const projection = createTaskManagerCreationTaskProjection({ store });
 
     await projection.syncTask({
+      conversationId: 'conv-1',
       runId: 'run-2',
       runStartedAt: 201,
       task: {
@@ -100,6 +103,7 @@ describe('TaskManagerCreationTaskProjection', () => {
     });
 
     await projection.syncTask({
+      conversationId: 'conv-1',
       runId: 'run-2',
       runStartedAt: 201,
       task: {

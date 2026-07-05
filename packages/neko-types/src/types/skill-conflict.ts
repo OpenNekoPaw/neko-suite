@@ -47,7 +47,11 @@ export interface SkillConflictConfig {
 }
 
 /**
- * Detected skill conflict
+ * Detected skill conflict.
+ *
+ * @deprecated Bridge for the pre-lifecycle string-list conflict DTO. New
+ * Agent Skill activation must use slot-aware lifecycle diagnostics from
+ * `resolveSkillLifecycleActivationConflict`.
  */
 export interface SkillConflict {
   /** Skill attempting to activate */
@@ -95,7 +99,11 @@ export interface MergedSkillConfig {
 }
 
 /**
- * Skill conflict resolver interface
+ * Skill conflict resolver interface.
+ *
+ * @deprecated Bridge for the pre-lifecycle string-list resolver API retained
+ * only for compatibility tests and old callers. Lifecycle activation must use
+ * `SkillLifecycleRecord` based conflict evaluation instead.
  */
 export interface ISkillConflictResolver {
   /**

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import type { Message, ToolCall } from '@neko-agent/types';
 import {
   buildActiveConversationMessage,
   buildConversationListMessage,
-} from '../conversation-webview-presenter';
+} from '../../session/conversation-host-message';
 
-describe('conversation-webview-presenter', () => {
+describe('conversation-host-message', () => {
   it('projects conversation list payloads', () => {
     expect(
       buildConversationListMessage([
@@ -29,27 +30,26 @@ describe('conversation-webview-presenter', () => {
   });
 
   it('projects active conversation resource urls through host resolver', () => {
+    const toolCall: ToolCall = {
+      id: 'tool-1',
+      name: 'GenerateImage',
+      arguments: {},
+      result: { success: true, data: { url: '/tmp/out.png' } },
+    };
+    const messageWithToolCalls = {
+      id: 'msg-1',
+      role: 'assistant',
+      content: '',
+      timestamp: 1,
+      toolCalls: [toolCall],
+    } satisfies Message & { readonly toolCalls: readonly ToolCall[] };
+
     expect(
       buildActiveConversationMessage(
         {
           id: 'conv-1',
           title: 'Assets',
-          messages: [
-            {
-              id: 'msg-1',
-              role: 'assistant',
-              content: '',
-              timestamp: 1,
-              toolCalls: [
-                {
-                  id: 'tool-1',
-                  name: 'GenerateImage',
-                  arguments: {},
-                  result: { success: true, data: { url: '/tmp/out.png' } },
-                },
-              ],
-            },
-          ],
+          messages: [messageWithToolCalls],
           updatedAt: 100,
         },
         { resolveLocalMediaPath: (filePath) => `webview://${filePath}` },

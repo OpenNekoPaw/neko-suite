@@ -8,7 +8,7 @@ import {
   AgentCapabilityLifecycleRuntimeError,
   createAgentCapabilityLifecycleRuntime,
   toAgentCapabilityToolResult,
-} from '../agent-capability-lifecycle-runtime';
+} from '../capability/agent-capability-lifecycle-runtime';
 
 describe('AgentCapabilityLifecycleRuntime', () => {
   it('registers descriptors and lists them by capability id', () => {

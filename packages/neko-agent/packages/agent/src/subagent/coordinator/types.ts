@@ -94,6 +94,8 @@ export interface CoordinatorConfig {
   workerModelTier?: ModelTier;
   /** Parent agent context summary (for SubAgent context injection) */
   parentContext?: string;
+  /** Runtime prompt locale inherited from the parent turn. */
+  locale?: string;
 }
 
 // =============================================================================

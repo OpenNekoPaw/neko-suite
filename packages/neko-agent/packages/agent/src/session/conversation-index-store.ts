@@ -11,6 +11,12 @@ import type {
   ConversationMediaModelSelection,
 } from './conversation-record';
 import { getLogger } from '../utils/logger';
+import {
+  assertJsonFileRevisionCurrent,
+  createJsonFileWriteMetadata,
+  createJsonFileWriterId,
+  parseJsonFileWriteMetadata,
+} from '../workspace/json-file-write-guard';
 
 const logger = getLogger('ConversationIndexStore');
 
@@ -25,6 +31,8 @@ export interface ConversationIndexStoreFsOps {
 
 export interface ConversationIndexStoreOptions extends ConversationIndexStoreFsOps {
   filePath: string;
+  writerId?: string;
+  now?: () => number;
 }
 
 export interface IConversationIndexStore {
@@ -41,14 +49,19 @@ export interface IConversationIndexStore {
 
 export class ConversationIndexStore implements IConversationIndexStore {
   private readonly _options: ConversationIndexStoreOptions;
+  private readonly _writerId: string;
+  private readonly _now: () => number;
   private readonly _workspaces = new Map<string, string[]>();
   private readonly _conversations = new Map<string, ConversationIndexMeta>();
   private _initialized = false;
   private _dirty = false;
+  private _loadedRevision = 0;
   private _saveTimer?: ReturnType<typeof setTimeout>;
 
   constructor(options: ConversationIndexStoreOptions) {
     this._options = options;
+    this._writerId = options.writerId ?? createJsonFileWriterId('conversation-index');
+    this._now = options.now ?? (() => Date.now());
   }
 
   async ensureWorkDir(workDir: string): Promise<void> {
@@ -166,8 +179,20 @@ export class ConversationIndexStore implements IConversationIndexStore {
       return;
     }
 
+    await assertJsonFileRevisionCurrent({
+      filePath: this._options.filePath,
+      ownerId: this._writerId,
+      loadedRevision: this._loadedRevision,
+      fsOps: this._options,
+    });
+    const writeMetadata = createJsonFileWriteMetadata(
+      this._writerId,
+      this._loadedRevision,
+      this._now,
+    );
     const data: ConversationsIndexFile = {
       version: INDEX_VERSION,
+      writeMetadata,
       workspaces: Object.fromEntries(
         Array.from(this._workspaces.entries()).map(([workDir, conversationIds]) => [
           workDir,
@@ -183,6 +208,7 @@ export class ConversationIndexStore implements IConversationIndexStore {
     };
 
     await this._options.writeFile(this._options.filePath, JSON.stringify(data, null, 2));
+    this._loadedRevision = writeMetadata.revision;
     this._dirty = false;
   }
 
@@ -198,6 +224,7 @@ export class ConversationIndexStore implements IConversationIndexStore {
       if (fileExists) {
         const content = await this._options.readFile(this._options.filePath);
         const parsed = JSON.parse(content) as Partial<ConversationsIndexFile>;
+        this._loadedRevision = parseJsonFileWriteMetadata(parsed)?.revision ?? 0;
 
         if (parsed.workspaces && typeof parsed.workspaces === 'object') {
           for (const [workDir, conversationIds] of Object.entries(parsed.workspaces)) {

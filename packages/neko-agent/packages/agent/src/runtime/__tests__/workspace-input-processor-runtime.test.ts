@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { InputProcessor } from '../../input';
-import { createWorkspaceInputProcessorRuntime } from '../workspace-input-processor-runtime';
+import { createWorkspaceInputProcessorRuntime } from '../turn/workspace-input-processor-runtime';
 
 function createProcessor(id: string): InputProcessor {
   return { id } as unknown as InputProcessor;

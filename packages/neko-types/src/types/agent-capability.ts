@@ -249,6 +249,9 @@ export interface AgentCapabilityContext {
 
   /** Embedding function for semantic search. Injected by neko-agent when available. */
   embedFn?: (texts: string[]) => Promise<number[][]>;
+
+  /** Prompt/UI locale normalized by the host for provider-owned prompt text. */
+  locale?: 'en' | 'zh';
 }
 
 /**
@@ -278,7 +281,7 @@ export interface AgentCapabilityProvider extends AgentCapabilityProtocolMetadata
    * Optional: Return skills provided by this sub-package.
    * Skills are workflow templates that reference tools from getTools().
    */
-  getSkills?(): Skill[];
+  getSkills?(context?: AgentCapabilityContext): Skill[];
 
   /**
    * Optional: Return tool groups for tiered lazy loading.

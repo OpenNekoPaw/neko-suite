@@ -3,6 +3,7 @@ import type {
   PromptModuleManifest,
   PromptModuleSection,
 } from '../../registry/module-manifest';
+import type { PromptContext } from '../../context';
 
 /**
  * ValidationGuidanceModule — projects validation/recovery guidance emitted by
@@ -34,20 +35,21 @@ export class ValidationGuidanceModule implements PromptModule {
     return this._content;
   }
 
-  async render(): Promise<readonly PromptModuleSection[] | null> {
-    return this.renderSync();
+  async render(ctx?: PromptContext): Promise<readonly PromptModuleSection[] | null> {
+    return this.renderSync(ctx);
   }
 
-  renderSync(): readonly PromptModuleSection[] | null {
+  renderSync(ctx?: PromptContext): readonly PromptModuleSection[] | null {
     if (!this._content) {
       return null;
     }
 
+    const heading = ctx?.locale === 'zh' ? '## 验证指导' : '## Validation Guidance';
     return [
       {
         sectionId: 'validation-guidance',
         layer: 'ephemeral',
-        content: `## Validation Guidance\n\n${this._content}`,
+        content: `${heading}\n\n${this._content}`,
         priority: 45,
       },
     ];

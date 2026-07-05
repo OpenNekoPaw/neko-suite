@@ -15,6 +15,8 @@ import type {
   PromptModuleManifest,
   PromptModuleSection,
 } from '../../registry/module-manifest';
+import type { PromptContext } from '../../context';
+import { localizeMemoryContentForPrompt } from './memory-locale-projection';
 
 export class MemoryProjectModule implements PromptModule {
   readonly manifest: PromptModuleManifest = {
@@ -41,21 +43,24 @@ export class MemoryProjectModule implements PromptModule {
     return this._content;
   }
 
-  async render(): Promise<readonly PromptModuleSection[] | null> {
-    return this.renderSync();
+  async render(ctx?: PromptContext): Promise<readonly PromptModuleSection[] | null> {
+    return this.renderSync(ctx);
   }
 
   /**
    * Sync variant for sync-only callers (event handlers that must finish before
    * the next composer read). Identical output to render().
    */
-  renderSync(): readonly PromptModuleSection[] | null {
+  renderSync(ctx?: PromptContext): readonly PromptModuleSection[] | null {
     if (!this._content) return null;
+    const locale = ctx?.locale ?? 'en';
+    const heading = locale === 'zh' ? '## 项目记忆' : '## Project Memory';
+    const content = localizeMemoryContentForPrompt(this._content, locale);
     return [
       {
         sectionId: 'memory:project',
         layer: 'environment',
-        content: `## Project Memory\n\n${this._content}`,
+        content: `${heading}\n\n${content}`,
         priority: 60,
       },
     ];

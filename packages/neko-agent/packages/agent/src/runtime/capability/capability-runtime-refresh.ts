@@ -2,7 +2,7 @@ import type { ConfiguredToolGroup } from '@neko/shared';
 import {
   projectRuntimeToolGroups,
   type RuntimeToolGroupRegistryView,
-} from '../skill/tool-group-projector';
+} from '../../skill/tool-group-projector';
 import type { CapabilityRuntimeBindings } from './capability-runtime-bindings';
 
 export interface CapabilityRuntimeRefreshLogger {

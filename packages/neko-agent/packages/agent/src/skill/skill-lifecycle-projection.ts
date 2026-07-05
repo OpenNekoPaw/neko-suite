@@ -132,7 +132,7 @@ function projectToolPolicy(
   records: readonly SkillLifecycleRecord[],
 ): SkillLifecycleToolPolicyProjection {
   const restrictedRecords = records.filter(
-    (record) => (record.injection.allowedTools?.length ?? 0) > 0,
+    (record) => record.slot !== 'referenceSkill' && (record.injection.allowedTools?.length ?? 0) > 0,
   );
   if (restrictedRecords.length === 0) {
     return {

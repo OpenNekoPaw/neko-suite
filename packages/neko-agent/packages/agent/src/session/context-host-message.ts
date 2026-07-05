@@ -1,6 +1,6 @@
 export interface ContextTokenCountMessage {
   type: 'contextTokenCount';
-  conversationId?: string;
+  conversationId: string;
   tokenCount: number;
 }
 
@@ -14,7 +14,7 @@ export interface CompressionResultMessage {
 
 export interface CompressionErrorMessage {
   type: 'compressionError';
-  conversationId?: string;
+  conversationId: string;
   error: string;
 }
 
@@ -33,12 +33,12 @@ export interface CompressionResultData {
 }
 
 export function buildContextTokenCountMessage(input: {
-  conversationId?: string;
+  conversationId: string;
   tokenCount: number;
 }): ContextTokenCountMessage {
   return {
     type: 'contextTokenCount',
-    ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+    conversationId: requireConversationId(input.conversationId, 'contextTokenCount'),
     tokenCount: input.tokenCount,
   };
 }
@@ -49,7 +49,7 @@ export function buildCompressionResultMessage(input: {
 }): CompressionResultMessage {
   return {
     type: 'compressionResult',
-    conversationId: input.conversationId,
+    conversationId: requireConversationId(input.conversationId, 'compressionResult'),
     originalTokens: input.result.originalTokens,
     compressedTokens: input.result.compressedTokens,
     ratio: input.result.ratio,
@@ -57,12 +57,12 @@ export function buildCompressionResultMessage(input: {
 }
 
 export function buildCompressionErrorMessage(input: {
-  conversationId?: string;
+  conversationId: string;
   error: unknown;
 }): CompressionErrorMessage {
   return {
     type: 'compressionError',
-    ...(input.conversationId !== undefined ? { conversationId: input.conversationId } : {}),
+    conversationId: requireConversationId(input.conversationId, 'compressionError'),
     error:
       input.error instanceof Error
         ? input.error.message
@@ -70,4 +70,11 @@ export function buildCompressionErrorMessage(input: {
           ? input.error
           : 'Unknown error',
   };
+}
+
+function requireConversationId(conversationId: string, messageType: string): string {
+  if (conversationId.trim().length === 0) {
+    throw new Error(`${messageType} requires non-empty conversationId`);
+  }
+  return conversationId;
 }

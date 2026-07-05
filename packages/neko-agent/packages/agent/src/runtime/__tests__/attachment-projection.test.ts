@@ -7,7 +7,7 @@ import {
   formatUnreadableFileAttachment,
   parseBase64DataUrl,
   projectAgentMessageAttachments,
-} from '../attachment-projection';
+} from '../../input/attachment-projection';
 
 describe('attachment projection helpers', () => {
   it('parses base64 data URLs into agent image attachments', () => {

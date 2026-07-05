@@ -3,7 +3,7 @@ import * as nodeOs from 'node:os';
 import * as nodePath from 'node:path';
 import { createNodeJournalStorage } from '../session/journal-storage';
 import { createWorkspaceArtifactService, type ArtifactServiceFsOps } from './artifact-service';
-import type { IArtifactStore, IRuntimeWorkspaceFsOps } from './types';
+import type { IArtifactStore, IRuntimeWorkspaceFsOps } from '../runtime/types';
 
 export interface NodeArtifactStoreConfig {
   readonly workspaceRoot?: string;

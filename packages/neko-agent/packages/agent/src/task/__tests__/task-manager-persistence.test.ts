@@ -156,6 +156,7 @@ describe('TaskManager Persistence', () => {
           content: 'Recovered task',
           binding: {
             source: 'creation',
+            conversationId: 'conv-restore',
             runId: 'run-restore',
             runStartedAt: 111,
             checklistId: 'task-restore',
@@ -173,6 +174,7 @@ describe('TaskManager Persistence', () => {
           content: 'Recovered task retry',
           binding: {
             source: 'creation',
+            conversationId: 'conv-restore',
             runId: 'run-restore',
             runStartedAt: 222,
             checklistId: 'task-restore-2',
@@ -213,6 +215,7 @@ describe('TaskManager Persistence', () => {
           content: 'Recovered task',
           binding: {
             source: 'creation',
+            conversationId: 'conv-restore',
             runId: 'run-restore',
             runStartedAt: 111,
             checklistId: 'task-restore',
@@ -246,6 +249,7 @@ describe('TaskManager Persistence', () => {
           content: 'Recovered task retry',
           binding: {
             source: 'creation',
+            conversationId: 'conv-restore',
             runId: 'run-restore',
             runStartedAt: 222,
             checklistId: 'task-restore-2',

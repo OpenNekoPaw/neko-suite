@@ -33,12 +33,12 @@ import type {
   ProviderGenerationCapability,
 } from '@neko/shared';
 import { isDocumentFile } from '@neko/shared';
-import type { AgentEvent } from '../session/types';
+import type { AgentEvent } from '../../session/types';
 import {
   createPlanModeCreationMetadata,
   mergeCreationExecutionMetadata,
-} from '../session/creation-execution-metadata';
-import { DEFAULT_MENTION_EXCLUDE_GLOB } from '../input/mention-excludes';
+} from '../../session/creation-execution-metadata';
+import { DEFAULT_MENTION_EXCLUDE_GLOB } from '../../input/mention-excludes';
 import {
   extractFileReferencePaths,
   formatReadDocumentInstruction,
@@ -46,8 +46,8 @@ import {
   type AgentBase64ImageAttachment,
   type AgentProcessedAttachments,
   type AgentRuntimePromptLocale,
-} from './attachment-projection';
-import { getLogger } from '../utils/logger';
+} from '../../input/attachment-projection';
+import { getLogger } from '../../utils/logger';
 
 function getMessageRuntimeLogger() {
   return getLogger('MessageRuntime');

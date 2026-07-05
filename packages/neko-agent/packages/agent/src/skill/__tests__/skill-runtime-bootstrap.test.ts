@@ -64,6 +64,20 @@ describe('skill runtime bootstrap', () => {
     expect(result.prompt).not.toContain('disabled');
   });
 
+  it('passes the runtime locale into the skill-aware prompt builder', () => {
+    const registry = new SkillRegistry();
+    registry.registerSkill(makeSkill('storyboard'));
+    const bootstrap = createRuntimeSkillBootstrap({ registry, locale: 'zh-TW' });
+
+    const result = bootstrap.buildSystemPrompt('Base prompt');
+
+    expect(result.prompt).toContain('# 可用技能');
+    expect(result.prompt).toContain(
+      '- **storyboard**: 领域能力说明以技能正文为准；仅在 Agent 判断需要后激活。',
+    );
+    expect(result.prompt).not.toContain('storyboard description');
+  });
+
   it('populates lazy skills through the runtime registry mutation boundary', () => {
     const registry = new SkillRegistry();
     const summary = populateLazyRuntimeSkillRegistry({

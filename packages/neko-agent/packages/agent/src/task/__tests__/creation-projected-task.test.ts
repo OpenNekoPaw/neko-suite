@@ -19,6 +19,7 @@ describe('creation-projected-task', () => {
       activeForm: 'Exporting teaser',
       binding: {
         source: 'creation',
+        conversationId: 'conv-1',
         runId: 'run-1',
         runStartedAt: 101,
         checklistId: 'task-1',
@@ -38,6 +39,11 @@ describe('creation-projected-task', () => {
         status: 'running',
         input: {
           type: 'workflow',
+          lifecycle: expect.objectContaining({
+            ownerConversationId: 'conv-1',
+            ownerRunId: 'run-1',
+            ownerRunStartedAt: 101,
+          }),
           payload: {
             source: 'creation',
             name: 'Export teaser',
@@ -56,6 +62,11 @@ describe('creation-projected-task', () => {
             },
           },
         },
+        lifecycle: expect.objectContaining({
+          ownerConversationId: 'conv-1',
+          ownerRunId: 'run-1',
+          ownerRunStartedAt: 101,
+        }),
       }),
     );
   });
@@ -70,6 +81,7 @@ describe('creation-projected-task', () => {
       content: 'Export teaser',
       binding: {
         source: 'creation',
+        conversationId: 'conv-1',
         runId: 'run-1',
         runStartedAt: 101,
         checklistId: 'task-1',
@@ -96,6 +108,7 @@ describe('creation-projected-task', () => {
       content: 'Export teaser',
       binding: {
         source: 'creation',
+        conversationId: 'conv-1',
         runId: 'run-1',
         runStartedAt: 101,
         checklistId: 'task-1',

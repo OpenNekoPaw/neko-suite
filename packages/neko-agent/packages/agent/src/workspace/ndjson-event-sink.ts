@@ -10,9 +10,11 @@
  * sinks with different routing predicates.
  *
  * Serialisation rules:
- *   - Line = `JSON.stringify({ seq, ts, event }) + '\n'`
- *   - `seq` is monotonic per sink instance (1-based).
+ *   - Line = `JSON.stringify({ seq, partitionSeq, partition, ts, event }) + '\n'`
+ *   - `seq` is monotonic per sink instance (1-based) and diagnostic only.
+ *   - `partitionSeq` is monotonic inside the event's conversation/turn/run partition.
  *   - `ts` is ms-epoch from an injected clock.
+ *   - Optional `mapEvent` runs before writing.
  *   - Writes are chained through a Promise so ordering on disk matches
  *     the onAny() delivery order — concurrent event bursts don't
  *     interleave inside a single line.
@@ -31,6 +33,7 @@ import type { DualFlowEvent } from '../events/event-bus';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('NdjsonEventSink');
+let ndjsonEventSinkWriterOrdinal = 0;
 
 // =============================================================================
 // FS dependency
@@ -50,6 +53,10 @@ export interface NdjsonEventSinkConfig {
   filePath: string;
   /** Filesystem operations — injected so the agent package stays fs-free. */
   fsOps: NdjsonFsOps;
+  /** Optional stable writer id for multi-window/process diagnostics. */
+  writerId?: string;
+  /** Optional projection used by owning sessions to attach log-only identity. */
+  mapEvent?: (event: DualFlowEvent) => NdjsonLoggedEvent;
   /**
    * Optional predicate deciding which events end up on disk. When
    * absent, every event on the bus is written. Pass a predicate to
@@ -80,12 +87,26 @@ export interface INdjsonEventSink {
   dispose(): Promise<void>;
 }
 
+export type NdjsonLoggedEvent = DualFlowEvent & {
+  readonly conversationId?: string;
+  readonly turnId?: string;
+};
+
+export interface NdjsonEventLogPartition {
+  readonly conversationId?: string;
+  readonly turnId?: string;
+  readonly runId?: string;
+}
+
 class NdjsonEventSink implements INdjsonEventSink {
   private readonly _filePath: string;
   private readonly _fsOps: NdjsonFsOps;
+  private readonly _writerId: string;
+  private readonly _mapEvent: ((event: DualFlowEvent) => NdjsonLoggedEvent) | undefined;
   private readonly _filter: ((event: DualFlowEvent) => boolean) | undefined;
   private readonly _now: () => number;
   private _seq = 0;
+  private readonly _partitionSeq = new Map<string, number>();
   private _dirEnsured = false;
   private _pending: Promise<void> = Promise.resolve();
   private _unsubscribe: (() => void) | null = null;
@@ -97,6 +118,8 @@ class NdjsonEventSink implements INdjsonEventSink {
     }
     this._filePath = config.filePath;
     this._fsOps = config.fsOps;
+    this._writerId = config.writerId ?? createNdjsonEventSinkWriterId();
+    this._mapEvent = config.mapEvent;
     this._filter = config.filter;
     this._now = config.now ?? (() => Date.now());
   }
@@ -138,7 +161,18 @@ class NdjsonEventSink implements INdjsonEventSink {
   private _enqueue(event: DualFlowEvent): void {
     const seq = ++this._seq;
     const ts = this._now();
-    const line = JSON.stringify({ seq, ts, event }) + '\n';
+    const loggedEvent = this._mapEvent ? this._mapEvent(event) : event;
+    const partition = createNdjsonEventLogPartition(loggedEvent);
+    const partitionSeq = this._nextPartitionSeq(partition);
+    const line =
+      JSON.stringify({
+        writerId: this._writerId,
+        seq,
+        partitionSeq,
+        partition,
+        ts,
+        event: loggedEvent,
+      }) + '\n';
     this._pending = this._pending
       .then(async () => {
         await this._ensureDir();
@@ -159,6 +193,50 @@ class NdjsonEventSink implements INdjsonEventSink {
     }
     this._dirEnsured = true;
   }
+
+  private _nextPartitionSeq(partition: NdjsonEventLogPartition): number {
+    const key = createNdjsonEventLogPartitionKey(partition);
+    const next = (this._partitionSeq.get(key) ?? 0) + 1;
+    this._partitionSeq.set(key, next);
+    return next;
+  }
+}
+
+function createNdjsonEventLogPartition(event: NdjsonLoggedEvent): NdjsonEventLogPartition {
+  const conversationId = readNonEmptyString(event, 'conversationId');
+  const turnId = readNonEmptyString(event, 'turnId');
+  const runId = readNonEmptyString(event, 'runId');
+
+  return {
+    ...(conversationId ? { conversationId } : {}),
+    ...(runId ? { runId } : {}),
+    ...(turnId ? { turnId } : {}),
+  };
+}
+
+function createNdjsonEventSinkWriterId(): string {
+  ndjsonEventSinkWriterOrdinal += 1;
+  return `ndjson-${Date.now().toString(36)}-${ndjsonEventSinkWriterOrdinal}`;
+}
+
+function createNdjsonEventLogPartitionKey(partition: NdjsonEventLogPartition): string {
+  return [
+    partition.conversationId ?? 'global',
+    partition.runId
+      ? `run:${partition.runId}`
+      : partition.turnId
+        ? `turn:${partition.turnId}`
+        : 'none',
+  ].join('\u001f');
+}
+
+function readNonEmptyString(record: object, key: string): string | null {
+  const value = Reflect.get(record, key);
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 // =============================================================================

@@ -8,6 +8,7 @@
  */
 
 import type { ContextExtractionOptions, IContextBridge } from './types';
+import { getSubAgentPromptLabels } from './subagent-localization';
 
 // =============================================================================
 // Constants
@@ -40,7 +41,9 @@ export class ContextBridge implements IContextBridge {
       maxTokens = DEFAULT_MAX_TOKENS,
       includeSystemPrompt = false,
       includeRecentMessages = DEFAULT_INCLUDE_RECENT_MESSAGES,
+      locale,
     } = options;
+    const labels = getSubAgentPromptLabels(locale);
 
     const maxChars = maxTokens * CHARS_PER_TOKEN;
     const parts: string[] = [];
@@ -50,7 +53,7 @@ export class ContextBridge implements IContextBridge {
       const systemMsg = messages.find((m) => m.role === 'system');
       if (systemMsg) {
         const content = this.extractContent(systemMsg.content);
-        parts.push(`## System Context\n${this.truncate(content, 500)}`);
+        parts.push(`## ${labels.systemContext}\n${this.truncate(content, 500)}`);
       }
     }
 
@@ -59,10 +62,10 @@ export class ContextBridge implements IContextBridge {
     const recentMessages = nonSystemMessages.slice(-includeRecentMessages);
 
     if (recentMessages.length > 0) {
-      parts.push('## Recent Conversation');
+      parts.push(`## ${labels.recentConversation}`);
       for (const msg of recentMessages) {
         const content = this.extractContent(msg.content);
-        const roleLabel = this.formatRole(msg.role);
+        const roleLabel = this.formatRole(msg.role, locale);
         parts.push(`[${roleLabel}]: ${this.truncate(content, 300)}`);
       }
     }
@@ -77,6 +80,7 @@ export class ContextBridge implements IContextBridge {
   mergeResults(
     parentMessages: Array<{ role: string; content: string }>,
     subAgentResults: Array<{ id: string; response: string; name?: string }>,
+    locale?: string,
   ): Array<{ role: string; content: string }> {
     if (subAgentResults.length === 0) {
       return parentMessages;
@@ -91,7 +95,7 @@ export class ContextBridge implements IContextBridge {
 
     const assistantMessage = {
       role: 'assistant',
-      content: `I've completed the subtasks. Here are the results:\n\n${resultSummary}`,
+      content: `${getSubAgentPromptLabels(locale).completedSubtasks}\n\n${resultSummary}`,
     };
 
     return [...parentMessages, assistantMessage];
@@ -134,14 +138,8 @@ export class ContextBridge implements IContextBridge {
   /**
    * Format role for display
    */
-  private formatRole(role: string): string {
-    const roleMap: Record<string, string> = {
-      user: 'User',
-      assistant: 'Assistant',
-      system: 'System',
-      tool: 'Tool',
-    };
-    return roleMap[role] || role;
+  private formatRole(role: string, locale: string | undefined): string {
+    return getSubAgentPromptLabels(locale).roleLabels[role] || role;
   }
 
   /**

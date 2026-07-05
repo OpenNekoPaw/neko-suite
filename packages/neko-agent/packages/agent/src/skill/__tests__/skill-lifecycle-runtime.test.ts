@@ -407,6 +407,47 @@ describe('SkillLifecycleRuntime', () => {
     expect(result.record?.slot).toBe('promptChainSkill');
   });
 
+  it('keeps referenceSkill guidance out of effective tool policy restrictions', () => {
+    const runtime = createRuntime([]);
+    const domain = runtime.activatePrepared({
+      conversationId: 'conv-1',
+      skill: createSkill('domain-review'),
+      injection: createInjection('domain-review', { allowedTools: ['WriteDocument'] }),
+      slot: 'domainSkill',
+      owner: 'user',
+      lifetime: { kind: 'conversation', untilCleared: true },
+      source: 'explicit-user',
+      now: 1,
+      turnCount: 1,
+    });
+    const reference = runtime.activatePrepared({
+      conversationId: 'conv-1',
+      skill: createSkill('reference-notes'),
+      injection: createInjection('reference-notes', { allowedTools: ['ReadDocument'] }),
+      slot: 'referenceSkill',
+      owner: 'agent',
+      lifetime: { kind: 'conversation', untilCleared: true },
+      source: 'explicit-agent',
+      now: 2,
+      turnCount: 2,
+    });
+
+    const projection = runtime.project('conv-1');
+
+    expect(domain.ok).toBe(true);
+    expect(reference.ok).toBe(true);
+    expect(projection.promptSections.map((section) => section.skillName)).toEqual([
+      'domain-review',
+      'reference-notes',
+    ]);
+    expect(projection.toolPolicy).toEqual({
+      mode: 'allowlist',
+      allowedTools: ['WriteDocument'],
+      contributingRecordIds: [domain.record?.id],
+      diagnostics: [],
+    });
+  });
+
   it('expires turn, prompt-chain, and inactivity scoped records only when their event matches', () => {
     const store = new SkillLifecycleStore();
     const runtime = createRuntime([], store);

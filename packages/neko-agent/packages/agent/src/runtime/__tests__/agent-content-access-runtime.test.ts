@@ -11,7 +11,7 @@ import {
   toAgentContentAccessDiagnostics,
   type AgentContentAccessRuntime,
   type AgentContentAccessRuntimeRequest,
-} from '../agent-content-access-runtime';
+} from '../capability/agent-content-access-runtime';
 
 const sourceResource = createResourceRef({
   scope: 'project',

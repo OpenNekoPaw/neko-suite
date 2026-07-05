@@ -31,7 +31,7 @@ import {
   shouldHydrateAgentHistory,
   shouldPersistAgentAssistantStream,
   summarizeAgentEventProgress,
-} from '../message-runtime';
+} from '../turn/message-runtime';
 
 describe('message runtime helpers', () => {
   it('creates deterministic agent message ids when adapters are provided', () => {

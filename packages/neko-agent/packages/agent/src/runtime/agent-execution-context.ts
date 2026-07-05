@@ -1,5 +1,5 @@
 import type { ExecutionContext } from '../session/types';
-import { buildAgentExecutionMetadata } from './message-runtime';
+import { buildAgentExecutionMetadata } from './turn/message-runtime';
 
 export interface AgentExecutionContextSource {
   readonly workspaceRoot?: string;

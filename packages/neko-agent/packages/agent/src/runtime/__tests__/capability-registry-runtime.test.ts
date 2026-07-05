@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentCapabilityProvider, Skill, Tool } from '@neko/shared';
+import type { AgentCapabilityProvider, PromptFragment, Skill, Tool } from '@neko/shared';
 import { ToolRegistry } from '../../tools';
-import { CapabilityRegistryRuntime } from '../capability-registry-runtime';
+import { CapabilityRegistryRuntime } from '../capability/capability-registry-runtime';
 
 function createTool(name: string): Tool {
   return {
@@ -45,6 +45,61 @@ describe('CapabilityRegistryRuntime', () => {
     );
 
     expect(runtime.getAllSkills().map((skill) => skill.name)).toEqual(['canvas-storyboard']);
+  });
+
+  it('passes the registered capability context when aggregating provider skills', () => {
+    const toolRegistry = new ToolRegistry();
+    const runtime = new CapabilityRegistryRuntime({ toolRegistry });
+
+    runtime.registerProvider(
+      {
+        ...createProvider('neko.canvas', []),
+        getSkills: (context?: { readonly locale?: string }) => [
+          {
+            ...createSkill('canvas-storyboard'),
+            description: context?.locale === 'zh' ? '画布分镜' : 'Canvas storyboard',
+          },
+        ],
+      },
+      { extensionContext: {}, locale: 'zh' },
+    );
+
+    expect(runtime.getAllSkills()[0]?.description).toBe('画布分镜');
+  });
+
+  it('projects localized provider prompt fragments from the registered capability context', () => {
+    const toolRegistry = new ToolRegistry();
+    const runtime = new CapabilityRegistryRuntime({ toolRegistry });
+    const fragment = {
+      id: 'neko.canvas:markdown',
+      content: 'Canvas Markdown guidance.',
+      locales: {
+        zh: {
+          content: 'Canvas Markdown 中文指导。',
+        },
+      },
+    } satisfies PromptFragment & {
+      readonly locales: {
+        readonly zh: {
+          readonly content: string;
+        };
+      };
+    };
+
+    runtime.registerProvider(
+      {
+        ...createProvider('neko.canvas', []),
+        getPromptFragments: () => [fragment],
+      },
+      { extensionContext: {}, locale: 'zh' },
+    );
+
+    expect(runtime.getAllPromptFragments()).toEqual([
+      expect.objectContaining({
+        id: 'neko.canvas:markdown',
+        content: 'Canvas Markdown 中文指导。',
+      }),
+    ]);
   });
 
   it('cleans registered providers that no longer have installed manifests', () => {

@@ -9,7 +9,7 @@ import { createResourceFingerprint, createResourceRef, type ResourceRef } from '
 import {
   createAgentExternalProcessorRuntime,
   createDeveloperModeTemporaryProcessorRequest,
-} from '../external-processor-runtime';
+} from '../capability/external-processor-runtime';
 
 const manifest = {
   schema: EXTERNAL_PROCESSOR_SCHEMA,

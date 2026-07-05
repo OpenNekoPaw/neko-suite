@@ -52,6 +52,10 @@ export function createAgentTurnId(conversationId: string, startedAt = Date.now()
   return `turn-${normalizeTraceId(conversationId)}-${startedAt.toString(36)}`;
 }
 
+export function createAgentRunId(conversationId: string, startedAt = Date.now()): string {
+  return `run-${normalizeTraceId(conversationId)}-${startedAt.toString(36)}`;
+}
+
 export function createAgentTraceContext(
   input: CreateAgentTraceContextInput = {},
 ): AgentTraceContext {

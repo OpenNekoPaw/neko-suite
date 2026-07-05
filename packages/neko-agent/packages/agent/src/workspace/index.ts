@@ -9,6 +9,7 @@ export {
   createNekoPaths,
   NEKO_DIR,
   NEKO_SUBDIRS,
+  NEKO_LOG_SUBDIRS,
   NEKO_LOG_FILES,
   NEKO_CACHE_FILES,
   NEKO_STATE_FILES,
@@ -67,7 +68,20 @@ export {
   type INdjsonEventSink,
   type NdjsonEventSinkConfig,
   type NdjsonFsOps,
+  type NdjsonLoggedEvent,
 } from './ndjson-event-sink';
+
+export {
+  StaleJsonFileWriteError,
+  assertJsonFileRevisionCurrent,
+  createJsonFileWriteMetadata,
+  createJsonFileWriterId,
+  parseJsonFileWriteMetadata,
+  readJsonFileRevision,
+  type JsonFileRevisionGuardFsOps,
+  type JsonFileWriteMetadata,
+  type StaleJsonFileWriteDetails,
+} from './json-file-write-guard';
 
 export { serializeTask, parseTask } from './task-markdown';
 export { serializeDraft, parseDraft } from './draft-markdown';

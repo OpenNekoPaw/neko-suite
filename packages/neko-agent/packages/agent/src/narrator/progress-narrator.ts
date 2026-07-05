@@ -44,7 +44,7 @@ export interface NarrationFormat {
 }
 
 export const DEFAULT_NARRATION_ICONS: Record<MilestoneKind, string> = {
-  'run-started': '▶',
+  'creation-started': '▶',
   'run-ended': '■',
   'round-decided': '·',
   autoheal: '↻',

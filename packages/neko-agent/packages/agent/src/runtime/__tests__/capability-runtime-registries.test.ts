@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAgentCapabilityRuntimeRegistries } from '../capability-runtime-registries';
+import { createAgentCapabilityRuntimeRegistries } from '../capability/capability-runtime-registries';
 
 describe('createAgentCapabilityRuntimeRegistries', () => {
   it('creates host-neutral capability registries without concrete skill extensions', () => {

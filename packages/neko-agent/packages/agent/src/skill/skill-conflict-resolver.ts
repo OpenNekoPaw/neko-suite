@@ -39,7 +39,10 @@ export interface SkillLifecycleActivationConflictResult {
 const MULTI_RECORD_SLOTS = new Set<SkillLifecycleSlot>(['referenceSkill', 'ephemeralSkill']);
 
 /**
- * Skill conflict resolver implementation
+ * Skill conflict resolver implementation.
+ *
+ * @deprecated Bridge for the pre-lifecycle string-list conflict API. New
+ * lifecycle activation paths must call `resolveSkillLifecycleActivationConflict`.
  */
 export class SkillConflictResolver implements ISkillConflictResolver {
   /** Skill conflict configurations by name */
@@ -413,7 +416,10 @@ export class SkillConflictResolver implements ISkillConflictResolver {
 }
 
 /**
- * Factory function to create a skill conflict resolver
+ * Factory function to create a skill conflict resolver bridge.
+ *
+ * @deprecated Bridge retained for compatibility with old string-list callers.
+ * New code should use `resolveSkillLifecycleActivationConflict`.
  */
 export function createSkillConflictResolver(options?: {
   defaultStrategy?: ConflictResolutionStrategy;

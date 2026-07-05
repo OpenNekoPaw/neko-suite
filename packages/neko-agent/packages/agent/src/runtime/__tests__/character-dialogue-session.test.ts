@@ -82,6 +82,42 @@ describe('CharacterDialogueSession', () => {
     ]);
   });
 
+  it('sends localized Chinese system prompts to the responder', async () => {
+    const responder: CharacterDialogueResponder = vi.fn(async (input) => ({
+      content: input.systemPrompt.includes('## 会话模式') ? '中文提示' : 'english prompt',
+    }));
+    const session = new CharacterDialogueSession({
+      id: 'npc-session-zh',
+      entityRef,
+      profileSnapshot: profile,
+      mode: 'roleplay',
+      locale: 'zh-CN',
+      responder,
+    });
+
+    const turn = await session.sendUserMessage('你好', {
+      turnEvidence: makeEvidenceBundle('Lin only knows this clue.'),
+    });
+
+    expect(turn.npcMessage.content).toBe('中文提示');
+    expect(responder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locale: 'zh-CN',
+        systemPrompt: expect.stringContaining('## 会话模式'),
+      }),
+    );
+    expect(responder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.not.stringContaining('## Session Mode'),
+      }),
+    );
+    expect(responder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('仅将这些证据用于当前角色会话回合'),
+      }),
+    );
+  });
+
   it('passes turn-scoped evidence without persisting it into transcript or snapshot prompt', async () => {
     const responder: CharacterDialogueResponder = vi.fn(async (input) => ({
       content: input.systemPrompt.includes('Lin only knows the public clue.')

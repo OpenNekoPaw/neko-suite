@@ -37,6 +37,7 @@ import type {
   ConversationCompressionResult,
   PromptFragment,
   Skill,
+  SkillLifecycleProjection,
   SubagentReviewResult,
   ToolName,
   Tool,
@@ -44,6 +45,7 @@ import type {
 import {
   createAgentCapabilityActivationIntent,
   createAgentCapabilityActivationProgressEvent,
+  createAgentRunId,
   createAgentTraceContext,
   createAgentTurnId,
   deriveAgentTraceContext,
@@ -58,8 +60,9 @@ import {
   type StageActivationDecision,
   type Task,
 } from '@neko-agent/types';
-import type { SkillInjection, IStagePersonaBinding, IStageGuardian } from '../skill';
+import type { SkillInjection, IStagePersonaBinding, IStageGuardian, IToolGuard } from '../skill';
 import {
+  createToolGuard,
   SkillInjectionCoordinator,
   StageTracker,
   createStagePersonaBinding,
@@ -68,8 +71,9 @@ import {
 import type { StageMode } from '../skill/activation/stage-activation-matrix';
 import type { ReActLoopRunnerState } from '../executor';
 import { createReActLoopRunner } from '../executor';
-import type { IEventBus } from '../events';
+import type { DualFlowEvent, IEventBus } from '../events';
 import { createEventBus } from '../events';
+import type { NdjsonLoggedEvent } from '../workspace';
 import { createNekoPaths, createNdjsonEventSink } from '../workspace';
 import type { IArtifactWatcher } from '../artifact';
 import type { IApprovalEngine } from '../approval';
@@ -102,6 +106,7 @@ import type {
 
 import type { ToolConfirmationRequest } from '../permission/types';
 import { PLAN_MODE_SYSTEM_REMINDER } from '../permission/types';
+import { isPersistentShellAllowRuleForbidden } from '../permission/permission-hooks';
 
 import { AgentExecutor } from '../executor';
 import { type ConversationCompressor } from '../context';
@@ -136,6 +141,11 @@ import {
   projectPersistedEventsToWorkingMemory,
   type PersistedAgentEvent,
 } from './working-memory';
+import {
+  createSessionTaskResultObservationRecorder,
+  createTaskResultObservationJournalEntries,
+  type TaskResultObservationJournalEntry,
+} from './task-result-observation-recorder';
 import { getLogger } from '../utils/logger';
 import { toSerializableErrorCause } from '../utils/serializable-error';
 import {
@@ -152,7 +162,7 @@ import {
   type AnyArtifactRecord,
   type ArtifactRecord,
   type IArtifactService,
-} from '../runtime/artifact-service';
+} from '../artifact/artifact-service';
 import { createAgentObservationRecorder } from '../runtime/agent-observation-recorder';
 import {
   classifyCreationEntrySignal,
@@ -171,6 +181,11 @@ function getAgentSessionLogger() {
 // =============================================================================
 
 const MAX_VALIDATION_CYCLES = 32;
+const WORKFLOW_PERSONA_SKILL_NAMES = new Set([
+  'creation-persona',
+  'execution-persona',
+  'iteration-persona',
+]);
 
 // =============================================================================
 // AgentSession Implementation
@@ -218,6 +233,10 @@ export class AgentSession implements IAgentSession {
 
   // Skill injection (3-track coordinator)
   private _skillCoordinator!: SkillInjectionCoordinator;
+  private readonly _lifecycleProjectionSectionIds = new Set<string>();
+  private _lifecycleProjectionAllowRules: string[] = [];
+  private _lifecycleProjectionToolGuard: IToolGuard | null = null;
+  private _lifecycleProjectionActivatedToolSets: string[] = [];
 
   // built-in creation stage tracking: StageTracker emits stage.entered events;
   // StagePersonaBinding subscribes and swaps the persona Skill when a new
@@ -235,7 +254,7 @@ export class AgentSession implements IAgentSession {
   private _eventBus: IEventBus | null = null;
   // `.neko/` directory resolver (only when workspace config is supplied).
   private _nekoPaths: import('../workspace').INekoPaths | null = null;
-  // JSONL event sink persisting bus events to `.neko/logs/events.jsonl`.
+  // JSONL event sink persisting bus events to a conversation-owned log.
   private _eventSink: import('../workspace').INdjsonEventSink | null = null;
   private _artifactFacade: SessionArtifactFacade;
   private _validationRuntime: ValidationRuntimeBridge;
@@ -285,12 +304,16 @@ export class AgentSession implements IAgentSession {
   private _journalWriter: import('./types').IJournalWriter | null = null;
   /** Journal sequence counter */
   private _journalSeq = 0;
+  private _taskResultObservationEntries: TaskResultObservationJournalEntry[] = [];
   /** Tracks streaming state across step conversions */
   private _streamState: StreamState = { hasStreamedDeltas: false };
   /** Current turn's creation planning hints (input, active skill, external metadata). */
   private _currentTurnPlanningContext: CreationTurnPlanningContext | null = null;
-  /** Current Agent turn id used for event/artifact correlation only. */
-  private _activeTurnRunId: string | null = null;
+  /** Current chat turn identity for model/tool/timeline trace correlation. */
+  private _activeTurnId: string | null = null;
+  /** Durable workflow/activity identity, present only when a distinct lifecycle exists. */
+  private _activeRunId: string | null = null;
+  private _activeRunStartedAt: number | null = null;
   private _memoryRecall: MemoryRecall | null = null;
   private _pendingConfirmations = new Map<
     string,
@@ -310,8 +333,14 @@ export class AgentSession implements IAgentSession {
   constructor(config: AgentSessionConfig) {
     this._config = config;
     this._executionMode = config.executionMode ?? 'auto';
+    if (config.stageTracking) {
+      this._ensureActiveRun();
+    }
     this._artifactFacade = new SessionArtifactFacade({
       ports: {
+        session: {
+          getConversationId: () => this._config.conversationId ?? null,
+        },
         activity: {
           getActiveArtifactScope: () => this._getActiveArtifactScope(),
           getArtifactScopeStartedAt: (scopeId) => this._getArtifactScopeStartedAt(scopeId),
@@ -385,11 +414,11 @@ export class AgentSession implements IAgentSession {
     this._artifactSchemaModule = components.artifactSchemaModule;
     this._subpackageFragmentsModule = components.subpackageFragmentsModule;
     this._promptContextProvider = createPromptContextProvider({
-      getRunId: () => this._getActiveTurnRunId(),
+      getRunId: () => this._getActiveRunId(),
       getStage: () => this._stageTracker?.current ?? null,
       getActiveSkillName: () => this.getActiveSkill()?.name ?? null,
       getActiveTools: () => collectInjectedToolNames(this._toolInjectionManager),
-      getLocale: () => 'en',
+      getLocale: () => this._config.locale ?? 'en',
       getProjectPath: () => this._config.workspace?.root ?? '',
     });
     this._promptRuntime = new PromptRuntimeFacade({
@@ -409,7 +438,9 @@ export class AgentSession implements IAgentSession {
         executor: {
           getExecutor: () => this._executor,
           getCreativeVersionSummary: () =>
-            this._versionLog.size > 0 ? this._versionLog.toSummary() : null,
+            this._versionLog.size > 0
+              ? this._versionLog.toSummary(5, this._config.locale ?? 'en')
+              : null,
         },
         diagnostics: {
           debug: (message, data) => getAgentSessionLogger().debug(message, data),
@@ -442,6 +473,7 @@ export class AgentSession implements IAgentSession {
       syncSystemPrompt: () => this._syncSystemPrompt(),
       toolSetActivator: this._toolInjectionManager,
       skillInjectionModule: this._skillInjectionModule,
+      getLocale: () => this._config.locale ?? 'en',
       ...(this._ablationMarker && {
         enableInjection: !this._ablationMarker.disableSkillInjection,
       }),
@@ -462,7 +494,7 @@ export class AgentSession implements IAgentSession {
             ? { lifecycleRuntime: config.stageTracking.skillLifecycleRuntime }
             : { coordinator: this._skillCoordinator }),
           // Placeholder name from the binding API: value is the Agent-native creation id.
-          getRunId: () => this._getActiveTurnRunId(),
+          getRunId: () => this._getActiveRunId(),
           getConversationId: () => this._config.conversationId ?? null,
         });
         void this._stagePersonaBinding.syncCurrent();
@@ -476,16 +508,21 @@ export class AgentSession implements IAgentSession {
       //     declarative + imperative strategy packs.
       this._eventBus = createEventBus();
 
-      // Workspace persistence (ADR §7.4). When a project root is
-      // supplied, persist every bus event to `<root>/.neko/logs/events.jsonl`.
+      // Workspace persistence (ADR §7.4). When a project root is supplied,
+      // persist every bus event to
+      // `<root>/.neko/logs/conversations/<conversationId>/events.jsonl`.
       // No-op otherwise — the session still runs, just without disk
       // telemetry. Audits / steps sinks can be added later as
       // filter-predicated siblings.
+      const mapWorkspaceLogEvent = (event: DualFlowEvent): NdjsonLoggedEvent =>
+        this._mapWorkspaceLogEvent(event);
       if (config.workspace) {
         this._nekoPaths = createNekoPaths(config.workspace.root);
+        const logConversationId = normalizeWorkspaceLogConversationId(config.conversationId);
         this._eventSink = createNdjsonEventSink({
-          filePath: this._nekoPaths.log('events'),
+          filePath: this._nekoPaths.conversationLog('events', logConversationId),
           fsOps: config.workspace.fsOps,
+          mapEvent: mapWorkspaceLogEvent,
         });
         this._eventSink.attach(this._eventBus);
       }
@@ -546,7 +583,7 @@ export class AgentSession implements IAgentSession {
       // still get audit coverage.
       {
         const bus = this._eventBus;
-        const getRunId = (): string | undefined => this._getActiveTurnRunId() ?? undefined;
+        const getRunId = (): string | undefined => this._getActiveRunId() ?? undefined;
         this._approvalEngine.onDecision((request, response) => {
           const runId = getRunId();
           if (!runId) return; // No active run — skip (pre-execute engine use).
@@ -561,24 +598,27 @@ export class AgentSession implements IAgentSession {
       }
 
       // Workspace audits sink — captures every approve.decided event
-      // to `<root>/.neko/logs/audits.jsonl`. Filter-predicated sibling
+      // to the conversation-owned audits JSONL. Filter-predicated sibling
       // of the events sink so ApprovalEngine decisions are separable
       // from the general event stream for compliance reads.
       if (this._nekoPaths && config.workspace) {
+        const logConversationId = normalizeWorkspaceLogConversationId(config.conversationId);
         this._auditsSink = createNdjsonEventSink({
-          filePath: this._nekoPaths.log('audits'),
+          filePath: this._nekoPaths.conversationLog('audits', logConversationId),
           fsOps: config.workspace.fsOps,
+          mapEvent: mapWorkspaceLogEvent,
           filter: (e: { channel: string }) => e.channel === 'execution.approve.decided',
         });
         this._auditsSink.attach(this._eventBus);
 
-        // Workspace steps sink — per-round step records land in
-        // `<root>/.neko/logs/steps.jsonl`. Third filter view on the
+        // Workspace steps sink — per-round step records land in the
+        // conversation-owned steps JSONL. Third filter view on the
         // same bus; forms the ADR §7.4 logs/ triptych alongside
         // events.jsonl (everything) and audits.jsonl (approvals).
         this._stepsSink = createNdjsonEventSink({
-          filePath: this._nekoPaths.log('steps'),
+          filePath: this._nekoPaths.conversationLog('steps', logConversationId),
           fsOps: config.workspace.fsOps,
+          mapEvent: mapWorkspaceLogEvent,
           filter: (e: { channel: string }) => e.channel === 'execution.step.completed',
         });
         this._stepsSink.attach(this._eventBus);
@@ -704,6 +744,9 @@ export class AgentSession implements IAgentSession {
         },
       });
     }
+    if (config.locale !== undefined) {
+      this._compressor.configure({ locale: config.locale });
+    }
 
     // Update system prompt in history if changed
     if (config.systemPrompt !== undefined) {
@@ -778,7 +821,7 @@ export class AgentSession implements IAgentSession {
   }
 
   getArtifactsForRun(runId?: string): readonly ArtifactRecord[] {
-    const targetRunId = runId ?? this._getActiveTurnRunId();
+    const targetRunId = runId ?? this._getActiveRunId();
     if (!targetRunId) {
       return [];
     }
@@ -803,7 +846,7 @@ export class AgentSession implements IAgentSession {
       return;
     }
 
-    const activeRunId = this._getActiveTurnRunId();
+    const activeRunId = this._getActiveRunId();
     this._validationCoordinator.observe({
       kind: 'subagent-review',
       observedAt: result.createdAt,
@@ -893,7 +936,7 @@ export class AgentSession implements IAgentSession {
       turnId,
       phase: 'session',
     });
-    this._activeTurnRunId = turnId;
+    this._activeTurnId = turnId;
     let iteration = 0;
     const hadPendingValidationGuidance = this._validationRuntime.hasGuidance();
     let validationGuidanceAdjustedThisTurn = false;
@@ -948,10 +991,7 @@ export class AgentSession implements IAgentSession {
         },
       ];
 
-      trace = deriveAgentTraceContext(trace, {
-        runId: this._getActiveTurnRunId(),
-        phase: 'session',
-      });
+      trace = deriveAgentTraceContext(trace, { phase: 'session' });
       logger.debug(
         'neko.agent.session.execute.start',
         withAgentTrace(trace, {
@@ -992,8 +1032,8 @@ export class AgentSession implements IAgentSession {
           projectType: context?.projectType,
           activeFile: context?.activeFile,
           ...context?.metadata,
+          locale: context?.metadata?.['locale'] ?? this._config.locale,
           conversationId: trace.conversationId,
-          runId: trace.runId,
           turnId: trace.turnId,
           ...(activeSkill
             ? {
@@ -1190,7 +1230,7 @@ export class AgentSession implements IAgentSession {
       void runCompletionStatus;
       void runCompletionError;
       this._currentTurnPlanningContext = null;
-      this._activeTurnRunId = null;
+      this._activeTurnId = null;
       this._promptRuntime.setMemoryRecallContent(null);
       if (!validationGuidanceAdjustedThisTurn && hadPendingValidationGuidance) {
         this._validationRuntime.clearGuidance();
@@ -1246,6 +1286,34 @@ export class AgentSession implements IAgentSession {
     this._historyEventIds.push(sourceEventIds ? [...sourceEventIds] : []);
   }
 
+  async recordTaskResultObservation(
+    input: import('./types').RecordSessionTaskResultObservationInput,
+  ): Promise<import('./task-result-observation-recorder').RecordAgentTaskResultObservationResult> {
+    if (!this._journalWriter) {
+      throw new Error('Cannot record task result observation without a session journal writer');
+    }
+
+    const recorder = createSessionTaskResultObservationRecorder({
+      journalWriter: this._journalWriter,
+      nextSeq: () => ++this._journalSeq,
+    });
+    const recordInput = {
+      ...input,
+      existingEntries: [
+        ...this._taskResultObservationEntries,
+        ...(input.existingEntries ?? []),
+      ],
+    };
+    const result = await recorder.record(recordInput);
+    this._taskResultObservationEntries.push(
+      ...createTaskResultObservationJournalEntries({
+        recordInput,
+        recordResult: result,
+      }),
+    );
+    return result;
+  }
+
   async patchToolResult(
     payload: import('@neko/shared').ToolResultBackfillPayload,
   ): Promise<ToolResultPatchResult> {
@@ -1270,6 +1338,88 @@ export class AgentSession implements IAgentSession {
   }
 
   /**
+   * Apply lifecycle projection directly to session prompt and tool-policy state.
+   * Lifecycle records are the canonical source; this path intentionally does
+   * not route through the legacy single Skill injection bridge.
+   */
+  applySkillLifecycleProjection(projection: SkillLifecycleProjection): void {
+    const startTime = Date.now();
+    logger.debug('neko.agent.skill.lifecycle.projection.apply.request', {
+      promptSectionCount: projection.promptSections.length,
+      toolPolicyMode: projection.toolPolicy.mode,
+      allowedToolCount: projection.toolPolicy.allowedTools?.length ?? 0,
+      modelOverride: projection.modelOverride?.model,
+      diagnostics: projection.diagnostics,
+      injectionEnabled: this._ablationMarker?.disableSkillInjection !== true,
+    });
+
+    this._clearSkillLifecycleProjectionState();
+    this._skillCoordinator.clearActive();
+
+    if (this._ablationMarker?.disableSkillInjection === true) {
+      this._syncSystemPrompt();
+      logger.debug('neko.agent.skill.lifecycle.projection.apply.skipped', {
+        reason: 'disabled-by-ablation',
+        durationMs: Date.now() - startTime,
+      });
+      return;
+    }
+
+    const allowRules: string[] = [];
+    const activatedToolSets: string[] = [];
+    try {
+      for (const section of projection.promptSections) {
+        this._promptComposer.setSection({
+          id: section.id,
+          layer: section.layer,
+          content: section.content,
+          priority: section.priority,
+        });
+        this._lifecycleProjectionSectionIds.add(section.id);
+      }
+
+      const lifecycleGuardAllowedTools = projection.toolPolicy.allowedTools
+        ? [...projection.toolPolicy.allowedTools]
+        : undefined;
+      const effectiveAllowRuleTools = filterLifecycleProjectionAllowedTools(
+        projection.toolPolicy.allowedTools,
+      );
+      if (effectiveAllowRuleTools && effectiveAllowRuleTools.length > 0) {
+        for (const tool of effectiveAllowRuleTools) {
+          this._permissionHooks?.addAllowRule(tool);
+          allowRules.push(tool);
+        }
+        activatedToolSets.push(
+          ...this._toolInjectionManager.activateToolSetsForTools(effectiveAllowRuleTools),
+        );
+      }
+
+      this._lifecycleProjectionAllowRules = allowRules;
+      this._lifecycleProjectionActivatedToolSets = activatedToolSets;
+      this._lifecycleProjectionToolGuard = createToolGuard(
+        lifecycleGuardAllowedTools,
+        'skill-lifecycle-projection',
+      );
+      this._syncSystemPrompt();
+
+      logger.debug('neko.agent.skill.lifecycle.projection.applied', {
+        durationMs: Date.now() - startTime,
+        promptSectionCount: projection.promptSections.length,
+        allowRuleCount: allowRules.length,
+        activatedToolSetCount: activatedToolSets.length,
+      });
+    } catch (error) {
+      this._clearSkillLifecycleProjectionState();
+      this._syncSystemPrompt();
+      logger.warn('neko.agent.skill.lifecycle.projection.failed', {
+        durationMs: Date.now() - startTime,
+        error: error instanceof Error ? { name: error.name, message: error.message } : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Apply a skill injection to the active session.
    * Request-time projection adapter for callers that provide a single
    * projected Skill payload.
@@ -1278,6 +1428,9 @@ export class AgentSession implements IAgentSession {
    * @param skill Optional full Skill object for active skill tracking + Track D (ToolSets)
    */
   applySkillInjection(injection: SkillInjection, skill?: Skill): void {
+    if (skillRequiresDurableRun(injection, skill)) {
+      this._ensureActiveRun();
+    }
     this._skillCoordinator.apply(injection, skill);
   }
 
@@ -1331,6 +1484,10 @@ export class AgentSession implements IAgentSession {
    * Returns true if no skill restrictions are active.
    */
   isToolAllowed(toolName: string): boolean {
+    const lifecycleResult = this._lifecycleProjectionToolGuard?.check({ name: toolName });
+    if (lifecycleResult && !lifecycleResult.allowed) {
+      return false;
+    }
     return this._skillCoordinator.isToolAllowed(toolName);
   }
 
@@ -1498,7 +1655,6 @@ export class AgentSession implements IAgentSession {
     const originalTokens = this.getTokenCount();
     const trace = createAgentTraceContext({
       conversationId: this._config.conversationId,
-      runId: this._getActiveTurnRunId(),
       turnId: createAgentTurnId(this._config.conversationId ?? 'unknown'),
       phase: 'compaction',
     });
@@ -1583,13 +1739,66 @@ export class AgentSession implements IAgentSession {
   // Private Methods
   // ---------------------------------------------------------------------------
 
-  private _getActiveTurnRunId(): string | null {
-    return this._activeTurnRunId ?? this._config.conversationId ?? null;
+  private _mapWorkspaceLogEvent(event: DualFlowEvent): NdjsonLoggedEvent {
+    const conversationId = normalizeWorkspaceLogConversationId(this._config.conversationId);
+    const eventConversationId =
+      isRecord(event) && typeof event['conversationId'] === 'string'
+        ? event['conversationId'].trim()
+        : '';
+    const eventTurnId =
+      isRecord(event) && typeof event['turnId'] === 'string' ? event['turnId'].trim() : '';
+
+    if (eventConversationId.length > 0 && eventConversationId !== conversationId) {
+      throw new Error(
+        `AgentSession workspace log conversation mismatch: expected ${conversationId}, received ${eventConversationId}`,
+      );
+    }
+
+    if (
+      eventTurnId.length > 0 &&
+      this._activeTurnId !== null &&
+      eventTurnId !== this._activeTurnId
+    ) {
+      throw new Error(
+        `AgentSession workspace log turn mismatch: expected ${this._activeTurnId}, received ${eventTurnId}`,
+      );
+    }
+
+    return {
+      ...event,
+      conversationId,
+      ...(eventTurnId.length > 0
+        ? { turnId: eventTurnId }
+        : this._activeTurnId !== null
+          ? { turnId: this._activeTurnId }
+          : {}),
+    };
+  }
+
+  private _getActiveRunId(): string | null {
+    return this._activeRunId;
+  }
+
+  private _ensureActiveRun(): string {
+    if (!this._activeRunId) {
+      this._activeRunStartedAt = Date.now();
+      this._activeRunId = createAgentRunId(
+        this._config.conversationId ?? 'unknown',
+        this._activeRunStartedAt,
+      );
+    }
+    return this._activeRunId;
   }
 
   private _getActiveArtifactScope(): { readonly id: string; readonly startedAt?: number } | null {
-    const id = this._getActiveTurnRunId();
-    return id ? { id } : null;
+    const id = this._getActiveRunId();
+    if (!id) {
+      return null;
+    }
+    return {
+      id,
+      ...(this._activeRunStartedAt !== null ? { startedAt: this._activeRunStartedAt } : {}),
+    };
   }
 
   private _getArtifactScopeStartedAt(creationId: string): number | undefined {
@@ -1598,7 +1807,7 @@ export class AgentSession implements IAgentSession {
   }
 
   private _getActiveRunContext(): { readonly runId: string; readonly creationKind: string } | null {
-    const runId = this._getActiveTurnRunId();
+    const runId = this._getActiveRunId();
     if (!runId) {
       return null;
     }
@@ -1729,8 +1938,8 @@ export class AgentSession implements IAgentSession {
       return null;
     }
 
-    const getRunId = (): string | null => this._getActiveTurnRunId();
-    const getCreationId = (): string | null => this._getActiveTurnRunId();
+    const getRunId = (): string | null => this._getActiveRunId();
+    const getCreationId = (): string | null => this._getActiveRunId();
     if (this._config.artifactWatcherFactory) {
       return this._config.artifactWatcherFactory({
         eventBus: this._eventBus,
@@ -1827,7 +2036,7 @@ export class AgentSession implements IAgentSession {
       return;
     }
 
-    const activeRunId = this._getActiveTurnRunId();
+    const activeRunId = this._getActiveRunId();
     const validationTrace = deriveAgentTraceContext(trace, {
       ...(activeRunId ? { runId: activeRunId } : {}),
       phase: 'validation',
@@ -1860,6 +2069,7 @@ export class AgentSession implements IAgentSession {
         toolCallId,
         toolName,
         observedAt: step.timestamp,
+        ...(this._config.locale ? { locale: this._config.locale } : {}),
         ...(activeRunId ? { runId: activeRunId } : {}),
       });
       if (toolReviewSignal) {
@@ -2002,6 +2212,26 @@ export class AgentSession implements IAgentSession {
       history: this._history,
       historyEventIds: this._historyEventIds,
     });
+  }
+
+  private _clearSkillLifecycleProjectionState(): void {
+    for (const sectionId of this._lifecycleProjectionSectionIds) {
+      this._promptComposer.removeSection(sectionId);
+    }
+    this._lifecycleProjectionSectionIds.clear();
+
+    if (this._permissionHooks) {
+      for (const rule of this._lifecycleProjectionAllowRules) {
+        this._permissionHooks.removeAllowRule(rule);
+      }
+    }
+    this._lifecycleProjectionAllowRules = [];
+
+    for (const toolSetName of this._lifecycleProjectionActivatedToolSets) {
+      this._toolInjectionManager.deactivateToolSet(toolSetName);
+    }
+    this._lifecycleProjectionActivatedToolSets = [];
+    this._lifecycleProjectionToolGuard = null;
   }
 
   private _rebuildExecutor(): void {
@@ -2520,6 +2750,7 @@ function toToolReviewValidationSignal(input: {
   readonly toolCallId: string;
   readonly toolName: string;
   readonly observedAt: number;
+  readonly locale?: string;
   readonly runId?: string;
 }): import('@neko/shared').AgentToolReviewValidationSignal | null {
   for (const adapter of input.adapters ?? []) {
@@ -2560,6 +2791,24 @@ function toProviderExpressionValidationSignal(input: {
     ...(input.runId ? { runId: input.runId } : {}),
     metadata: metadata.raw,
   };
+}
+
+function skillRequiresDurableRun(injection: SkillInjection, skill?: Skill): boolean {
+  const name = skill?.name ?? injection.name;
+  if (WORKFLOW_PERSONA_SKILL_NAMES.has(name)) {
+    return true;
+  }
+
+  const workflow = skill?.mediaWorkflow;
+  if (!workflow) {
+    return false;
+  }
+
+  return (
+    (workflow.producedArtifacts?.length ?? 0) > 0 ||
+    (workflow.artifactProfiles?.length ?? 0) > 0 ||
+    (workflow.suggestedProjectors?.length ?? 0) > 0
+  );
 }
 
 function extractProviderExpressionMetadata(result: ObservedToolResult): {
@@ -2652,6 +2901,11 @@ function readProviderId(metadata: Record<string, unknown>): string | undefined {
   return undefined;
 }
 
+function normalizeWorkspaceLogConversationId(value: string | null | undefined): string {
+  const trimmed = value?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : 'unknown';
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -2664,4 +2918,11 @@ function collectInjectedToolNames(toolInjectionManager: ToolInjectionManager): r
       ...(state.injectedTools.get('dynamic') ?? []),
     ]),
   ] as readonly ToolName[];
+}
+
+function filterLifecycleProjectionAllowedTools(
+  allowedTools: readonly string[] | undefined,
+): string[] | undefined {
+  if (!allowedTools) return undefined;
+  return allowedTools.filter((tool) => !isPersistentShellAllowRuleForbidden(tool));
 }

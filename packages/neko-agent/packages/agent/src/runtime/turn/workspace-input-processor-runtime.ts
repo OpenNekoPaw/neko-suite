@@ -1,4 +1,4 @@
-import type { InputProcessor } from '../input';
+import type { InputProcessor } from '../../input';
 
 export interface WorkspaceInputProcessorRuntimeOptions {
   readonly createProcessor: (workspaceRoot: string) => InputProcessor;

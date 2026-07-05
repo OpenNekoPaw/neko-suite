@@ -16,6 +16,8 @@ import type {
   PromptModuleManifest,
   PromptModuleSection,
 } from '../../registry/module-manifest';
+import type { PromptContext } from '../../context';
+import { localizeMemoryContentForPrompt } from './memory-locale-projection';
 
 export class MemoryRecallModule implements PromptModule {
   readonly manifest: PromptModuleManifest = {
@@ -38,18 +40,21 @@ export class MemoryRecallModule implements PromptModule {
     return this._content;
   }
 
-  async render(): Promise<readonly PromptModuleSection[] | null> {
-    return this.renderSync();
+  async render(ctx?: PromptContext): Promise<readonly PromptModuleSection[] | null> {
+    return this.renderSync(ctx);
   }
 
   /** Sync variant — see MemoryProjectModule.renderSync. */
-  renderSync(): readonly PromptModuleSection[] | null {
+  renderSync(ctx?: PromptContext): readonly PromptModuleSection[] | null {
     if (!this._content) return null;
+    const locale = ctx?.locale ?? 'en';
+    const heading = locale === 'zh' ? '## 回忆记忆' : '## Recalled Memories';
+    const content = localizeMemoryContentForPrompt(this._content, locale);
     return [
       {
         sectionId: 'memory:recall',
         layer: 'ephemeral',
-        content: `## Recalled Memories\n\n${this._content}`,
+        content: `${heading}\n\n${content}`,
         priority: 40,
       },
     ];

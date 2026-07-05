@@ -5,6 +5,12 @@
 import type { ITaskStorage, SerializableTask } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 import { buildTaskStorageCleanupPlan, filterRecoverableTasks } from './task-storage-policy';
+import {
+  assertJsonFileRevisionCurrent,
+  createJsonFileWriteMetadata,
+  createJsonFileWriterId,
+  parseJsonFileWriteMetadata,
+} from '../workspace/json-file-write-guard';
 
 const logger = getLogger('TaskStorage');
 
@@ -127,6 +133,10 @@ export interface FileTaskStorageOptions {
   exists: (path: string) => Promise<boolean>;
   /** Storage file path */
   filePath: string;
+  /** Writer identity used for local stale-write diagnostics. */
+  writerId?: string;
+  /** Clock injection for write metadata. */
+  now?: () => number;
 }
 
 /**
@@ -136,12 +146,17 @@ export interface FileTaskStorageOptions {
 export class FileTaskStorage implements ITaskStorage {
   private cache: Map<string, SerializableTask> = new Map();
   private readonly options: FileTaskStorageOptions;
+  private readonly writerId: string;
+  private readonly now: () => number;
   private initialized = false;
   private dirty = false;
+  private loadedRevision = 0;
   private saveTimer?: ReturnType<typeof setTimeout>;
 
   constructor(options: FileTaskStorageOptions) {
     this.options = options;
+    this.writerId = options.writerId ?? createJsonFileWriterId('task-storage');
+    this.now = options.now ?? (() => Date.now());
   }
 
   async save(task: SerializableTask): Promise<void> {
@@ -198,8 +213,24 @@ export class FileTaskStorage implements ITaskStorage {
     if (!this.dirty && this.initialized) {
       return;
     }
-    const data = Array.from(this.cache.values());
+    await assertJsonFileRevisionCurrent({
+      filePath: this.options.filePath,
+      ownerId: this.writerId,
+      loadedRevision: this.loadedRevision,
+      fsOps: this.options,
+    });
+    const writeMetadata = createJsonFileWriteMetadata(
+      this.writerId,
+      this.loadedRevision,
+      this.now,
+    );
+    const data = {
+      version: 1,
+      writeMetadata,
+      tasks: Array.from(this.cache.values()),
+    };
     await this.options.writeFile(this.options.filePath, JSON.stringify(data, null, 2));
+    this.loadedRevision = writeMetadata.revision;
     this.dirty = false;
   }
 
@@ -216,8 +247,9 @@ export class FileTaskStorage implements ITaskStorage {
       const fileExists = await this.options.exists(this.options.filePath);
       if (fileExists) {
         const content = await this.options.readFile(this.options.filePath);
-        const data = JSON.parse(content) as SerializableTask[];
-        for (const task of data) {
+        const { tasks, revision } = parseFileTaskStorageContent(content);
+        this.loadedRevision = revision;
+        for (const task of tasks) {
           this.cache.set(task.id, task);
         }
       }
@@ -239,6 +271,27 @@ export class FileTaskStorage implements ITaskStorage {
       });
     }, 1000);
   }
+}
+
+function parseFileTaskStorageContent(content: string): {
+  readonly tasks: readonly SerializableTask[];
+  readonly revision: number;
+} {
+  const parsed = JSON.parse(content) as unknown;
+  if (Array.isArray(parsed)) {
+    return { tasks: parsed as SerializableTask[], revision: 0 };
+  }
+  if (isRecord(parsed) && Array.isArray(parsed['tasks'])) {
+    return {
+      tasks: parsed['tasks'] as SerializableTask[],
+      revision: parseJsonFileWriteMetadata(parsed)?.revision ?? 0,
+    };
+  }
+  throw new Error('Task storage file does not contain a task array');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**

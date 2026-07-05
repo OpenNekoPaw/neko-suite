@@ -22,6 +22,7 @@ import type {
   TaskPoolProgress,
 } from './types';
 import { TaskPool } from './task-pool';
+import { getSubAgentPromptLabels } from '../subagent-localization';
 
 const logger = getLogger('Coordinator');
 
@@ -252,17 +253,18 @@ export class Coordinator implements ICoordinator {
     activeAgents: Map<string, string>,
   ): Promise<void> {
     const modelTier = this._config.workerModelTier ?? 'balanced';
+    const labels = getSubAgentPromptLabels(this._config.locale);
 
     // Build prompt with parent context
     let prompt = task.prompt;
     if (this._config.parentContext) {
-      prompt = `## Context from Coordinator\n${this._config.parentContext}\n\n## Task\n${prompt}`;
+      prompt = `## ${labels.contextFromCoordinator}\n${this._config.parentContext}\n\n## ${labels.task}\n${prompt}`;
     }
 
     // Include dependency results in prompt
     const depResults = this.getDependencyResults(task);
     if (depResults) {
-      prompt = `${prompt}\n\n## Results from Previous Tasks\n${depResults}`;
+      prompt = `${prompt}\n\n## ${labels.resultsFromPreviousTasks}\n${depResults}`;
     }
 
     try {
@@ -277,6 +279,7 @@ export class Coordinator implements ICoordinator {
           runMode: 'background',
           modelTier,
           timeout,
+          ...(this._config.locale ? { locale: this._config.locale } : {}),
         },
       );
 

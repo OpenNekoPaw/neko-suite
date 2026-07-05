@@ -5,7 +5,7 @@ import {
   projectMessagesForResourceDisplay,
   projectResourceValue,
   updateBackgroundTaskToolResultUrls,
-} from '../message-resource-projector';
+} from '../../input/message-resource-projector';
 
 describe('message resource projector', () => {
   it('detects absolute local media paths only', () => {

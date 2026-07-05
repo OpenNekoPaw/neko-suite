@@ -163,6 +163,8 @@ export interface SummarizationRequest {
   messages: ChatMessage[];
   /** Maximum tokens for summary */
   maxTokens: number;
+  /** Prompt language for model-facing summarization wrappers */
+  locale?: string;
   /** Context hint for summarization */
   contextHint?: string;
 }

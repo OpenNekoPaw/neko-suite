@@ -95,6 +95,45 @@ Launch multiple SubAgents in a single turn for independent tasks:
 ## Skill & ToolSkill Injection
 - skills: Inject domain knowledge into SubAgent's system prompt
 - tool_skills: Activate ToolSkills to give SubAgent additional tools`,
+    localization: {
+      zh: {
+        description: `启动一个 SubAgent，自主处理复杂的多步骤任务。
+
+每个 SubAgent 都会在隔离上下文中运行自己的 ReAct 循环，中间过程不会污染主对话。
+
+## 何时使用 SubAgent
+- 任务需要跨大量文件搜索/阅读
+- 多个独立子任务可以并行执行
+- 任务需要多步推理
+- 主对话上下文很长，需要将工作拆出去
+
+## 何时不要使用 SubAgent
+- 单步操作
+- 与当前对话上下文高度耦合的任务
+- 对成本敏感的简单查询
+
+## 类型选择
+- code-search：查找实现、追踪依赖、分析模式
+- file-explorer：导航目录结构
+- test-runner：执行并分析测试
+- document-writer：创建或更新文档
+- general：需要所有工具的复杂任务`,
+        parameters: {
+          description: '简短任务描述，通常 3 到 5 个词。',
+          prompt: '给 SubAgent 的详细任务说明。',
+          subagent_type:
+            'SubAgent 预设类型。内建类型包括 code-search、file-explorer、test-runner、document-writer、general 和 npc-character；宿主可以贡献更多预设类型。',
+          preset_options: '传递给宿主贡献预设的自定义选项。',
+          run_in_background: '是否在后台运行且不阻塞主 Agent，默认 false。',
+          model: '由运行时或平台配置解析的模型档位：fast、balanced 或 powerful。',
+          resume: '要恢复或查询状态的 SubAgent ID。',
+          skills: '要注入 SubAgent 的技能名称列表。',
+          inherit_parent_skills: '是否继承父 Agent 的当前激活技能，默认 false。',
+          tool_skills: '要为 SubAgent 激活的 ToolSkill 名称列表。',
+          inherit_parent_tool_skills: '是否继承父 Agent 的当前激活 ToolSkills，默认 false。',
+        },
+      },
+    },
 
     parameters: {
       type: 'object',
@@ -224,6 +263,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
       }
 
       const metadata = options?.metadata ?? {};
+      const locale = typeof metadata.locale === 'string' ? metadata.locale : undefined;
       const conversationId =
         typeof metadata.conversationId === 'string' && metadata.conversationId.length > 0
           ? metadata.conversationId
@@ -254,6 +294,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
         timeout: 5 * 60 * 1000, // 5 minutes
         parentMessageId,
         parentToolCallId,
+        ...(locale ? { locale } : {}),
         // Skill & ToolSkill injection
         skills,
         inheritParentSkills: inherit_parent_skills,
@@ -349,6 +390,20 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
 - block=true (default): Wait for the SubAgent to complete, then return its full result
 - block=false: Non-blocking check — returns current status without waiting
 - Use after launching SubAgents with run_in_background: true`,
+    localization: {
+      zh: {
+        description: `获取后台 SubAgent 任务的输出。
+
+- block=true（默认）：等待 SubAgent 完成并返回完整结果
+- block=false：非阻塞查询，只返回当前状态
+- 在使用 run_in_background: true 启动 SubAgent 后调用`,
+        parameters: {
+          task_id: 'SubAgent 任务 ID。',
+          block: '是否等待任务完成，默认 true。',
+          timeout: '最大等待时间，单位毫秒，默认 30000。',
+        },
+      },
+    },
 
     parameters: {
       type: 'object',

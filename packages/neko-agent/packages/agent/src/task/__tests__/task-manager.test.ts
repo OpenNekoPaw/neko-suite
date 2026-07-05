@@ -326,6 +326,7 @@ describe('TaskManager', () => {
         activeForm: 'Exporting teaser',
         binding: {
           source: 'creation',
+          conversationId: 'conv-1',
           runId: 'run-1',
           checklistId: 'task-1',
           itemId: 'item-1',
@@ -359,6 +360,12 @@ describe('TaskManager', () => {
           },
         }),
       );
+      expect(task?.lifecycle).toEqual(
+        expect.objectContaining({
+          ownerConversationId: 'conv-1',
+          ownerRunId: 'run-1',
+        }),
+      );
     });
   });
 
@@ -373,6 +380,7 @@ describe('TaskManager', () => {
         content: 'Export teaser',
         binding: {
           source: 'creation',
+          conversationId: 'conv-1',
           runId: 'run-1',
           runStartedAt: 101,
           checklistId: 'task-1',
@@ -388,6 +396,7 @@ describe('TaskManager', () => {
         content: 'Retry teaser',
         binding: {
           source: 'creation',
+          conversationId: 'conv-1',
           runId: 'run-1',
           runStartedAt: 202,
           checklistId: 'task-1b',
@@ -403,6 +412,7 @@ describe('TaskManager', () => {
         content: 'Untimed run task',
         binding: {
           source: 'creation',
+          conversationId: 'conv-1',
           runId: 'run-1',
           checklistId: 'task-untimed',
           itemId: 'item-no-start',
@@ -417,6 +427,7 @@ describe('TaskManager', () => {
         content: 'Render preview',
         binding: {
           source: 'creation',
+          conversationId: 'conv-2',
           runId: 'run-2',
           checklistId: 'task-2',
           itemId: 'item-1',

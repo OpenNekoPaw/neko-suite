@@ -68,6 +68,9 @@ export interface SkillInjectionCoordinatorDeps {
    */
   skillInjectionModule: SkillInjectionModule;
 
+  /** Locale used when rendering prompt modules for Track A. */
+  getLocale?: () => PromptContext['locale'];
+
   /**
    * When false, `apply()` becomes a no-op — skills can still be matched and
    * activated via ISkillProvider, but nothing is injected into the prompt,
@@ -382,7 +385,7 @@ export class SkillInjectionCoordinator {
     return freezePromptContext({
       runId: null,
       stage: null,
-      locale: 'en',
+      locale: this._deps.getLocale?.() ?? 'en',
       projectPath: '',
       activeSkillName,
       activeTools: [],

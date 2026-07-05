@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createAgentRunnerEventEmitter, type AgentRunnerPort } from '../agent-runner-port';
+import { createAgentRunnerEventEmitter, type AgentRunnerPort } from '../runner/agent-runner-port';
 
 describe('AgentRunnerPort', () => {
   it('provides a host-agnostic event source with disposable subscriptions', () => {
@@ -62,6 +62,7 @@ describe('AgentRunnerPort', () => {
       getToolSkills: vi.fn(() => []),
       setSkillProvider: vi.fn(),
       refreshCapabilityRuntime: vi.fn(),
+      applySkillLifecycleProjection: vi.fn(),
       applySkillInjection: vi.fn(),
       activateToolSetsForTools: vi.fn(() => []),
       deactivateToolSet: vi.fn(),

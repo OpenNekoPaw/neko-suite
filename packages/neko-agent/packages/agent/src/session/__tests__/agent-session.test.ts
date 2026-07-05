@@ -11,9 +11,16 @@ import type { AgentSessionConfig, AgentEvent } from '../types';
 import {
   TOOL_NAMES_MEDIA,
   TOOL_NAMES_PERCEPTION,
+  createTool,
   createSubagentReviewEvidence,
 } from '@neko/shared';
-import { createValidationCoordinatorFactory } from '@neko/skills';
+import {
+  createValidationCoordinatorFactory,
+  getBuiltinSkills,
+  getExecutionPersonaSkill,
+  getIterationPersonaSkill,
+  getScriptGenerationSkill,
+} from '@neko/skills';
 import type {
   AgentToolResultValidationAdapter,
   AgentToolResultValidationAdapterInput,
@@ -24,10 +31,13 @@ import type {
   ChatMessage,
   IProjectMemoryManager,
   PerceptionEvidence,
+  ServiceOptions,
+  SkillLifecycleProjection,
   ToolResultWithMeta,
 } from '@neko/shared';
 import type { IJournalWriter } from '../types';
 import { applyAblationToggles } from '../../experiment/apply-toggles';
+import { ToolGroupRegistry } from '../../skill';
 
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
@@ -53,6 +63,21 @@ function parseLatestWrite<T>(writes: readonly { path: string; data: string }[], 
   const match = [...writes].reverse().find((write) => write.path === path);
   expect(match).toBeDefined();
   return JSON.parse(match!.data) as T;
+}
+
+function parseJsonlWrites<T>(writes: readonly { path: string; data: string }[], path: string): T[] {
+  return writes
+    .filter((write) => write.path === path)
+    .flatMap((write) => write.data.split('\n'))
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as T);
+}
+
+function conversationLogPath(
+  conversationId: string,
+  kind: 'events' | 'audits' | 'steps',
+): string {
+  return `/tmp/proj/.neko/logs/conversations/${conversationId}/${kind}.jsonl`;
 }
 
 // =============================================================================
@@ -633,6 +658,81 @@ describe('AgentSession', () => {
       const doneEvents = events.filter((e) => e.type === 'done');
       expect(doneEvents.length).toBe(1);
     });
+
+    it('passes ordinary chat turns to the executor without a durable run identity', async () => {
+      const session = new AgentSession(createConfig({ conversationId: 'conv-turn-trace' }));
+      const steps: AgentStep[] = [{ type: 'think', content: 'Hello world', timestamp: Date.now() }];
+      const mockExec = injectMockExecutor(session, steps);
+
+      await collectEvents(session.execute('Hi'));
+
+      const callArgs = mockExec.executeStream.mock.calls[0] as
+        | [
+            string,
+            {
+              metadata?: Record<string, unknown>;
+              trace?: { conversationId?: string; turnId?: string; runId?: string };
+            },
+          ]
+        | undefined;
+      const options = callArgs?.[1];
+
+      expect(options?.metadata).toEqual(
+        expect.objectContaining({
+          conversationId: 'conv-turn-trace',
+          turnId: expect.stringMatching(/^turn-conv-turn-trace-/),
+        }),
+      );
+      expect(options?.metadata).not.toHaveProperty('runId');
+      expect(options?.trace).toEqual(
+        expect.objectContaining({
+          conversationId: 'conv-turn-trace',
+          turnId: expect.stringMatching(/^turn-conv-turn-trace-/),
+          phase: 'session',
+        }),
+      );
+      expect(options?.trace).not.toHaveProperty('runId');
+    });
+
+    it('does not leak an active durable workflow run into ordinary executor turn trace', async () => {
+      const session = new AgentSession(
+        createConfig({
+          conversationId: 'conv-workflow-trace',
+          stageTracking: {},
+        }),
+      );
+      const steps: AgentStep[] = [{ type: 'think', content: 'Hello world', timestamp: Date.now() }];
+      const mockExec = injectMockExecutor(session, steps);
+
+      await collectEvents(session.execute('Hi'));
+
+      const callArgs = mockExec.executeStream.mock.calls[0] as
+        | [
+            string,
+            {
+              metadata?: Record<string, unknown>;
+              trace?: { conversationId?: string; turnId?: string; runId?: string };
+            },
+          ]
+        | undefined;
+      const options = callArgs?.[1];
+
+      expect(options?.metadata).toEqual(
+        expect.objectContaining({
+          conversationId: 'conv-workflow-trace',
+          turnId: expect.stringMatching(/^turn-conv-workflow-trace-/),
+        }),
+      );
+      expect(options?.metadata).not.toHaveProperty('runId');
+      expect(options?.trace).toEqual(
+        expect.objectContaining({
+          conversationId: 'conv-workflow-trace',
+          turnId: expect.stringMatching(/^turn-conv-workflow-trace-/),
+          phase: 'session',
+        }),
+      );
+      expect(options?.trace).not.toHaveProperty('runId');
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -871,7 +971,7 @@ describe('AgentSession', () => {
       expect(session.getValidationCycles()).toEqual([
         expect.objectContaining({
           currentStage: null,
-          activeRunId: expect.any(String),
+          activeRunId: null,
           signals: [
             expect.objectContaining({
               kind: 'memory-extraction',
@@ -1084,6 +1184,330 @@ describe('AgentSession', () => {
       expect(capturedSystemPrompt).toContain('## Project Memory');
     });
 
+    it('keeps runtime prompt modules in Chinese when the session locale is zh', async () => {
+      const projectMemory = createMockProjectMemory(
+        '## User Preferences\n- Tool result: docs updated\n',
+      );
+      const session = new AgentSession(
+        createConfig({
+          systemPrompt: '## 项目背景\n中文基础提示词',
+          locale: 'zh',
+          projectMemoryManager: projectMemory,
+          memoryRecall: false,
+          promptFragments: [
+            {
+              id: 'neko-canvas:rendering-guide',
+              content: '## Canvas Rendering Guide\nUse English fallback.',
+              locales: {
+                zh: { content: '## 画布渲染指南\n使用中文提示词。' },
+              },
+            },
+          ],
+        }),
+      );
+      const scriptSkill = getScriptGenerationSkill('zh-CN');
+      session.applySkillInjection(
+        {
+          name: scriptSkill.name,
+          systemPrompt: scriptSkill.content,
+          allowedTools: scriptSkill.allowedTools ? [...scriptSkill.allowedTools] : undefined,
+          type: 'skill',
+        },
+        scriptSkill,
+      );
+      const steps: AgentStep[] = [{ type: 'think', content: '好的', timestamp: Date.now() }];
+      const mockExec = injectMockExecutor(session, steps);
+      let capturedSystemPrompt = '';
+      let capturedModelSectionsPrompt = '';
+      mockExec.executeStream.mockImplementationOnce(async function* (...args: unknown[]) {
+        const serviceOptions = mockExec.updateServiceOptions.mock.calls.at(-1)?.[0] as
+          | { systemPromptSections?: Array<{ content: string }> }
+          | undefined;
+        capturedModelSectionsPrompt =
+          serviceOptions?.systemPromptSections?.map((section) => section.content).join('\n\n') ??
+          '';
+        const options = args[1] as { messages?: ChatMessage[] } | undefined;
+        capturedSystemPrompt = String(options?.messages?.[0]?.content ?? '');
+        for (const step of steps) {
+          yield step;
+        }
+      });
+
+      await collectEvents(session.execute('请继续'));
+
+      expect(capturedSystemPrompt).toContain('## 创作文档契约');
+      expect(capturedSystemPrompt).toContain('## 项目记忆');
+      expect(capturedSystemPrompt).toContain('## 用户偏好');
+      expect(capturedSystemPrompt).toContain('- 工具结果: docs updated');
+      expect(capturedSystemPrompt).toContain('## 画布渲染指南');
+      expect(capturedSystemPrompt).toContain('Fountain 语法');
+      expect(capturedSystemPrompt).not.toContain('## Creation document contract');
+      expect(capturedSystemPrompt).not.toContain('## Project Memory');
+      expect(capturedSystemPrompt).not.toContain('## User Preferences');
+      expect(capturedSystemPrompt).not.toContain('## Canvas Rendering Guide');
+      expect(capturedSystemPrompt).not.toContain('Fountain Syntax Reference');
+      expect(capturedSystemPrompt).not.toContain('Tool result:');
+      expect(capturedModelSectionsPrompt).toContain('## 创作文档契约');
+      expect(capturedModelSectionsPrompt).toContain('## 项目记忆');
+      expect(capturedModelSectionsPrompt).toContain('## 用户偏好');
+      expect(capturedModelSectionsPrompt).toContain('- 工具结果: docs updated');
+      expect(capturedModelSectionsPrompt).toContain('## 画布渲染指南');
+      expect(capturedModelSectionsPrompt).toContain('Fountain 语法');
+      expect(capturedModelSectionsPrompt).not.toContain('## Creation document contract');
+      expect(capturedModelSectionsPrompt).not.toContain('## Project Memory');
+      expect(capturedModelSectionsPrompt).not.toContain('## User Preferences');
+      expect(capturedModelSectionsPrompt).not.toContain('## Canvas Rendering Guide');
+      expect(capturedModelSectionsPrompt).not.toContain('Fountain Syntax Reference');
+      expect(capturedModelSectionsPrompt).not.toContain('Tool result:');
+    });
+
+    it('sends the localized Chinese prompt to the final model service call', async () => {
+      const service = createMockService();
+      const projectMemory = createMockProjectMemory(
+        '## User Preferences\n- Tool result: docs updated\n',
+      );
+      let capturedMessages: readonly ChatMessage[] = [];
+      let capturedOptions: ServiceOptions = {};
+      vi.mocked(service.chatStream).mockImplementation(async function* (messages, options) {
+        capturedMessages = messages;
+        capturedOptions = options ?? {};
+        yield { type: 'content', content: '好的' };
+        yield {
+          type: 'done',
+          finishReason: 'stop',
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        };
+      });
+
+      const session = new AgentSession(
+        createConfig({
+          service,
+          systemPrompt: '## 项目背景\n中文基础提示词',
+          locale: 'zh',
+          projectMemoryManager: projectMemory,
+          memoryRecall: false,
+        }),
+      );
+      const executionSkill = getExecutionPersonaSkill('zh-CN');
+      session.applySkillInjection(
+        {
+          name: executionSkill.name,
+          systemPrompt: executionSkill.content,
+          allowedTools: executionSkill.allowedTools
+            ? [...executionSkill.allowedTools]
+            : undefined,
+          type: 'skill',
+        },
+        executionSkill,
+      );
+
+      await collectEvents(session.execute('请继续生成中文分镜表'));
+
+      const modelSystemPrompt = String(capturedMessages[0]?.content ?? '');
+      const modelSectionsPrompt =
+        capturedOptions.systemPromptSections?.map((section) => section.content).join('\n\n') ?? '';
+      const finalModelPrompt = `${modelSystemPrompt}\n\n${modelSectionsPrompt}`;
+      expect(modelSystemPrompt).toContain('## 项目记忆');
+      expect(modelSystemPrompt).toContain('## 用户偏好');
+      expect(modelSystemPrompt).toContain('系统操作员');
+      expect(modelSystemPrompt).not.toContain('## Project Memory');
+      expect(modelSystemPrompt).not.toContain('## User Preferences');
+      expect(modelSystemPrompt).not.toContain('System Operator');
+      expect(finalModelPrompt).toContain('## 创作文档契约');
+      expect(finalModelPrompt).not.toContain('## Creation document contract');
+      expect(modelSectionsPrompt).toContain('## 创作文档契约');
+      expect(modelSectionsPrompt).toContain('## 项目记忆');
+      expect(modelSectionsPrompt).toContain('系统操作员');
+      expect(modelSectionsPrompt).not.toContain('## Creation document contract');
+      expect(modelSectionsPrompt).not.toContain('## Project Memory');
+      expect(modelSectionsPrompt).not.toContain('System Operator');
+    });
+
+    it('sends localized TS-inline builtin skill prompts to the final model service call', async () => {
+      const service = createMockService();
+      let capturedMessages: readonly ChatMessage[] = [];
+      let capturedOptions: ServiceOptions = {};
+      vi.mocked(service.chatStream).mockImplementation(async function* (messages, options) {
+        capturedMessages = messages;
+        capturedOptions = options ?? {};
+        yield { type: 'content', content: '好的' };
+        yield {
+          type: 'done',
+          finishReason: 'stop',
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        };
+      });
+
+      const session = new AgentSession(
+        createConfig({
+          service,
+          systemPrompt: '## 项目背景\n中文基础提示词',
+          locale: 'zh',
+          memoryRecall: false,
+        }),
+      );
+      const videoEditingSkill = getBuiltinSkills({ locale: 'zh-CN' }).find(
+        (skill) => skill.name === 'video-editing',
+      );
+      expect(videoEditingSkill).toBeDefined();
+      session.applySkillInjection(
+        {
+          name: videoEditingSkill!.name,
+          systemPrompt: videoEditingSkill!.content,
+          allowedTools: videoEditingSkill!.allowedTools
+            ? [...videoEditingSkill!.allowedTools]
+            : undefined,
+          type: 'skill',
+        },
+        videoEditingSkill!,
+      );
+
+      await collectEvents(session.execute('请裁掉开头两秒并加转场'));
+
+      const modelSystemPrompt = String(capturedMessages[0]?.content ?? '');
+      const modelSectionsPrompt =
+        capturedOptions.systemPromptSections?.map((section) => section.content).join('\n\n') ?? '';
+      const finalModelPrompt = `${modelSystemPrompt}\n\n${modelSectionsPrompt}`;
+
+      expect(finalModelPrompt).toContain('视频剪辑助手');
+      expect(finalModelPrompt).toContain('时间线');
+      expect(finalModelPrompt).not.toContain('Video Editing Assistant');
+      expect(finalModelPrompt).not.toContain('You are an expert video editor');
+    });
+
+    it('sends localized tool schemas to the final model service call', async () => {
+      const service = createMockService();
+      const toolRegistry = new ToolRegistry();
+      const toolGroupRegistry = new ToolGroupRegistry();
+      toolRegistry.register(
+        createTool({
+          name: 'GenerateStoryboardFrame',
+          description: 'Create an image generation task.',
+          localization: {
+            zh: {
+              description: '创建图像生成任务。',
+              parameters: {
+                prompt: '图像生成或编辑提示词。',
+              },
+            },
+          },
+          parameters: {
+            type: 'object',
+            properties: {
+              prompt: {
+                type: 'string',
+                description: 'Image generation or editing prompt.',
+              },
+            },
+            required: ['prompt'],
+          },
+          category: 'media',
+          execute: vi.fn(async () => ({ success: true, data: {} })),
+        }),
+      );
+      toolGroupRegistry.register({
+        name: 'storyboard-frame-tools',
+        description: 'Storyboard frame media generation tools.',
+        tools: ['GenerateStoryboardFrame'],
+        source: 'builtin',
+        enabled: true,
+        loadingTier: 'resident',
+      });
+      let capturedOptions: ServiceOptions = {};
+      vi.mocked(service.chatStream).mockImplementation(async function* (_messages, options) {
+        capturedOptions = options ?? {};
+        yield { type: 'content', content: '好的' };
+        yield {
+          type: 'done',
+          finishReason: 'stop',
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        };
+      });
+
+      const session = new AgentSession(
+        createConfig({
+          service,
+          toolRegistry,
+          toolGroupRegistry,
+          systemPrompt: '## 项目背景\n中文基础提示词',
+          locale: 'zh',
+          memoryRecall: false,
+        }),
+      );
+
+      await collectEvents(session.execute('请生成分镜图像提示词'));
+
+      const tool = capturedOptions.tools?.find(
+        (definition) => definition.function.name === 'GenerateStoryboardFrame',
+      )?.function;
+      const parameters = tool?.parameters as
+        | { properties?: Record<string, { description?: string }> }
+        | undefined;
+      expect(tool?.description).toBe('创建图像生成任务。');
+      expect(parameters?.properties?.prompt?.description).toBe('图像生成或编辑提示词。');
+      expect(tool?.description).not.toContain('Create an image');
+      expect(parameters?.properties?.prompt?.description).not.toContain('Image generation');
+    });
+
+    it.each([
+      {
+        label: 'execution-persona',
+        skill: getExecutionPersonaSkill('zh-CN'),
+        expected: '系统操作员',
+        forbidden: 'System Operator',
+      },
+      {
+        label: 'iteration-persona',
+        skill: getIterationPersonaSkill('zh-CN'),
+        expected: '一致性迭代',
+        forbidden: 'Consistency Iterator',
+      },
+    ])(
+      'keeps localized built-in persona skill body in final Chinese prompts: $label',
+      async ({ skill, expected, forbidden }) => {
+        const session = new AgentSession(
+          createConfig({
+            systemPrompt: '## 项目背景\n中文基础提示词',
+            locale: 'zh',
+            memoryRecall: false,
+          }),
+        );
+        session.applySkillInjection(
+          {
+            name: skill.name,
+            systemPrompt: skill.content,
+            allowedTools: skill.allowedTools ? [...skill.allowedTools] : undefined,
+            type: 'skill',
+          },
+          skill,
+        );
+        const steps: AgentStep[] = [{ type: 'think', content: '好的', timestamp: Date.now() }];
+        const mockExec = injectMockExecutor(session, steps);
+        let capturedSystemPrompt = '';
+        let capturedModelSectionsPrompt = '';
+        mockExec.executeStream.mockImplementationOnce(async function* (...args: unknown[]) {
+          const serviceOptions = mockExec.updateServiceOptions.mock.calls.at(-1)?.[0] as
+            | { systemPromptSections?: Array<{ content: string }> }
+            | undefined;
+          capturedModelSectionsPrompt =
+            serviceOptions?.systemPromptSections?.map((section) => section.content).join('\n\n') ??
+            '';
+          const options = args[1] as { messages?: ChatMessage[] } | undefined;
+          capturedSystemPrompt = String(options?.messages?.[0]?.content ?? '');
+          for (const step of steps) {
+            yield step;
+          }
+        });
+
+        await collectEvents(session.execute('请继续'));
+
+        expect(capturedSystemPrompt).toContain(expected);
+        expect(capturedSystemPrompt).not.toContain(forbidden);
+        expect(capturedModelSectionsPrompt).toContain(expected);
+        expect(capturedModelSectionsPrompt).not.toContain(forbidden);
+      },
+    );
+
     it('does not backfill loaded history into project memory on the next turn', async () => {
       const projectMemory = createMockProjectMemory();
       const session = new AgentSession(
@@ -1236,6 +1660,34 @@ describe('AgentSession', () => {
       }
     });
 
+    it('keeps lifecycle ToolGuard restricted when persistent shell allow rules are filtered', () => {
+      const session = new AgentSession(config);
+      const permHooks = (session as unknown as Record<string, unknown>)['_permissionHooks'] as
+        | { addAllowRule: ReturnType<typeof vi.fn> }
+        | undefined;
+      if (!permHooks) {
+        throw new Error('permission hooks missing');
+      }
+      const addSpy = vi.spyOn(permHooks, 'addAllowRule');
+      const projection: SkillLifecycleProjection = {
+        promptSections: [],
+        toolPolicy: {
+          mode: 'restricted',
+          allowedTools: ['Bash(git:*)'],
+          contributingRecordIds: ['record-1'],
+          diagnostics: [],
+        },
+        diagnostics: [],
+        visibleIndicators: [],
+      };
+
+      session.applySkillLifecycleProjection(projection);
+
+      expect(addSpy).not.toHaveBeenCalledWith('Bash(git:*)');
+      expect(session.isToolAllowed('Read')).toBe(false);
+      expect(session.isToolAllowed('Bash')).toBe(false);
+    });
+
     it('should clear tracked rules even without permissionHooks', () => {
       const session = new AgentSession(config);
 
@@ -1359,6 +1811,7 @@ describe('AgentSession', () => {
       });
       const session = new AgentSession(
         createConfig({
+          conversationId: 'test-conversation',
           stageTracking: {},
           workspace: {
             root: '/tmp/proj',
@@ -1379,7 +1832,7 @@ describe('AgentSession', () => {
         }),
       );
       expect(getWatcherCreationId).toBeDefined();
-      expect(getWatcherCreationId?.()).toBe('test-conversation');
+      expect(getWatcherCreationId?.()).toEqual(expect.stringMatching(/^run-test-conversation-/));
       expect(start).toHaveBeenCalledTimes(1);
 
       session.dispose();
@@ -1541,7 +1994,7 @@ describe('AgentSession', () => {
       expect(session.getValidationCycles()).toEqual([
         expect.objectContaining({
           currentStage: null,
-          activeRunId: expect.any(String),
+          activeRunId: null,
           signals: [
             expect.objectContaining({
               kind: 'tool-failure',
@@ -1768,7 +2221,7 @@ describe('AgentSession', () => {
       expect(session.getValidationCycles()).toEqual([
         expect.objectContaining({
           currentStage: null,
-          activeRunId: expect.any(String),
+          activeRunId: null,
           signals: [
             expect.objectContaining({
               kind: 'tool-review',
@@ -2519,6 +2972,7 @@ describe('AgentSession', () => {
 
       const session = new AgentSession(
         createConfig({
+          conversationId: 'conv-workspace-log',
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
@@ -2532,6 +2986,9 @@ describe('AgentSession', () => {
       expect(paths).not.toBeNull();
       expect(paths!.root).toBe('/tmp/proj/.neko');
       expect(paths!.log('events')).toBe('/tmp/proj/.neko/logs/events.jsonl');
+      expect(paths!.conversationLog('events', 'conv-workspace-log')).toBe(
+        conversationLogPath('conv-workspace-log', 'events'),
+      );
 
       const bus = session.getEventBus()!;
       bus.emit({
@@ -2542,9 +2999,9 @@ describe('AgentSession', () => {
       });
       await session.flushWorkspaceSink();
 
-      expect(dirs).toContain('/tmp/proj/.neko/logs');
+      expect(dirs).toContain('/tmp/proj/.neko/logs/conversations/conv-workspace-log');
       expect(writes).toHaveLength(1);
-      expect(writes[0]!.path).toBe('/tmp/proj/.neko/logs/events.jsonl');
+      expect(writes[0]!.path).toBe(conversationLogPath('conv-workspace-log', 'events'));
       const parsed = JSON.parse(writes[0]!.data.trim()) as {
         seq: number;
         event: { channel: string; kind: string };
@@ -2676,6 +3133,7 @@ describe('AgentSession', () => {
       };
       const session = new AgentSession(
         createConfig({
+          conversationId: 'conv-restore',
           workspace: { root: '/tmp/proj', fsOps },
           artifactService: artifactService as never,
           creationTaskProjection: projection as never,
@@ -2687,6 +3145,7 @@ describe('AgentSession', () => {
       expect(artifactService.restore).toHaveBeenCalledTimes(1);
       expect(session.getArtifactsForRun('run-restore')).toEqual([taskRecord]);
       expect(projection.syncTask).toHaveBeenCalledWith({
+        conversationId: 'conv-restore',
         runId: 'run-restore',
         task: restoredTask,
         artifact: {
@@ -2914,6 +3373,7 @@ describe('AgentSession', () => {
       };
       const session = new AgentSession(
         createConfig({
+          conversationId: 'conv-projected-task',
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
@@ -2943,6 +3403,7 @@ describe('AgentSession', () => {
       await session.flushWorkspaceSink();
 
       expect(creationTaskProjection.syncTask).toHaveBeenCalledWith({
+        conversationId: 'conv-projected-task',
         runId,
         task,
         artifact: {
@@ -2966,6 +3427,7 @@ describe('AgentSession', () => {
 
       const session = new AgentSession(
         createConfig({
+          conversationId: 'conv-approval-audit',
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
@@ -2991,11 +3453,20 @@ describe('AgentSession', () => {
       await session.flushWorkspaceSink();
 
       const auditRows = writes
-        .filter((w) => w.path === '/tmp/proj/.neko/logs/audits.jsonl')
-        .map((w) => JSON.parse(w.data.trim()) as { event: { channel: string; decision: string } });
+        .filter((w) => w.path === conversationLogPath('conv-approval-audit', 'audits'))
+        .map(
+          (w) =>
+            JSON.parse(w.data.trim()) as {
+              event: { channel: string; conversationId?: string; decision: string; runId?: string };
+            },
+        );
       expect(auditRows).toHaveLength(1);
       expect(auditRows[0]!.event.channel).toBe('execution.approve.decided');
       expect(auditRows[0]!.event.decision).toBe('auto-approved');
+      expect(auditRows[0]!.event.conversationId).toBe('conv-approval-audit');
+      expect(auditRows[0]!.event.runId).toEqual(
+        expect.stringMatching(/^run-conv-approval-audit-/),
+      );
     });
 
     it('auto-reject (destructive + non-idempotent) maps to decision="reject"', async () => {
@@ -3009,6 +3480,7 @@ describe('AgentSession', () => {
       };
       const session = new AgentSession(
         createConfig({
+          conversationId: 'conv-approval-reject',
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
@@ -3033,10 +3505,19 @@ describe('AgentSession', () => {
       await session.flushWorkspaceSink();
 
       const auditRows = writes
-        .filter((w) => w.path === '/tmp/proj/.neko/logs/audits.jsonl')
-        .map((w) => JSON.parse(w.data.trim()) as { event: { decision: string } });
+        .filter((w) => w.path === conversationLogPath('conv-approval-reject', 'audits'))
+        .map(
+          (w) =>
+            JSON.parse(w.data.trim()) as {
+              event: { conversationId?: string; decision: string; runId?: string };
+            },
+        );
       expect(auditRows).toHaveLength(1);
       expect(auditRows[0]!.event.decision).toBe('reject');
+      expect(auditRows[0]!.event.conversationId).toBe('conv-approval-reject');
+      expect(auditRows[0]!.event.runId).toEqual(
+        expect.stringMatching(/^run-conv-approval-reject-/),
+      );
     });
 
     it('execution.step.completed events land in steps.jsonl', async () => {
@@ -3050,6 +3531,7 @@ describe('AgentSession', () => {
       };
       const session = new AgentSession(
         createConfig({
+          conversationId: 'test-conversation',
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
@@ -3077,7 +3559,7 @@ describe('AgentSession', () => {
       await session.flushWorkspaceSink();
 
       const stepRows = writes
-        .filter((w) => w.path === '/tmp/proj/.neko/logs/steps.jsonl')
+        .filter((w) => w.path === conversationLogPath('test-conversation', 'steps'))
         .map((w) => JSON.parse(w.data.trim()) as { event: { round: number; thinkOnly: boolean } });
       expect(stepRows).toHaveLength(2);
       expect(stepRows[0]!.event.round).toBe(0);
@@ -3087,8 +3569,285 @@ describe('AgentSession', () => {
 
       // And the audits sink should NOT have captured these — filter
       // predicates keep the streams separate.
-      const auditRows = writes.filter((w) => w.path === '/tmp/proj/.neko/logs/audits.jsonl');
+      const auditRows = writes.filter(
+        (w) => w.path === conversationLogPath('test-conversation', 'audits'),
+      );
       expect(auditRows).toHaveLength(0);
+    });
+
+    it('workspace durable JSONL logs include conversation and run identity', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+      };
+      const session = new AgentSession(
+        createConfig({
+          conversationId: 'conv-durable-log',
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'apply',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+
+      const bus = session.getEventBus()!;
+      bus.emit({
+        channel: 'execution.apply.committed',
+        runId: 'run-durable-1',
+        kind: 'tool:Render',
+        at: 1000,
+      });
+      bus.emit({
+        channel: 'execution.step.completed',
+        runId: 'run-durable-1',
+        round: 0,
+        thinkOnly: false,
+        at: 1001,
+      });
+      await session.flushWorkspaceSink();
+
+      const eventRows = parseJsonlWrites<{
+        event: { channel: string; conversationId?: string; runId?: string };
+      }>(writes, conversationLogPath('conv-durable-log', 'events'));
+      const stepRows = parseJsonlWrites<{
+        event: { channel: string; conversationId?: string; runId?: string };
+      }>(writes, conversationLogPath('conv-durable-log', 'steps'));
+      const applyRow = eventRows.find(
+        (row) => row.event.channel === 'execution.apply.committed',
+      );
+
+      expect(applyRow?.event).toEqual(
+        expect.objectContaining({
+          conversationId: 'conv-durable-log',
+          runId: 'run-durable-1',
+        }),
+      );
+      expect(stepRows[0]?.event).toEqual(
+        expect.objectContaining({
+          conversationId: 'conv-durable-log',
+          runId: 'run-durable-1',
+        }),
+      );
+
+      const turnSession = new AgentSession(
+        createConfig({
+          conversationId: 'conv-durable-turn-log',
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'apply',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      const turnExecutor = createMockExecutorModule([]);
+      turnExecutor.executeStream.mockImplementation(async function* () {
+        turnSession.getEventBus()!.emit({
+          channel: 'execution.step.completed',
+          runId: 'run-durable-turn-1',
+          round: 1,
+          thinkOnly: false,
+          at: 1002,
+        });
+        yield { type: 'think', content: 'turn logged', timestamp: Date.now() };
+      });
+      (turnSession as unknown as Record<string, unknown>)['_executor'] = turnExecutor;
+
+      await collectEvents(turnSession.execute('log durable turn'));
+      await turnSession.flushWorkspaceSink();
+
+      const turnRows = parseJsonlWrites<{
+        event: { channel: string; conversationId?: string; runId?: string; turnId?: string };
+      }>(writes, conversationLogPath('conv-durable-turn-log', 'events'));
+      const turnRow = turnRows.find(
+        (row) =>
+          row.event.channel === 'execution.step.completed' &&
+          row.event.runId === 'run-durable-turn-1',
+      );
+
+      expect(turnRow?.event).toEqual(
+        expect.objectContaining({
+          conversationId: 'conv-durable-turn-log',
+          runId: 'run-durable-turn-1',
+          turnId: expect.stringMatching(/^turn-conv-durable-turn-log-/),
+        }),
+      );
+    });
+
+    it('new conversation sessions do not inherit log partition, active turn, or active run identity', async () => {
+      const { registry, service } = minimalStageTrackingConfig();
+      const writes: Array<{ path: string; data: string }> = [];
+      const fsOps = {
+        async mkdir(): Promise<void> {},
+        async appendFile(path: string, data: string): Promise<void> {
+          writes.push({ path, data });
+        },
+      };
+      const sessionA = new AgentSession(
+        createConfig({
+          conversationId: 'conv-newtab-a',
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'apply',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      const sessionB = new AgentSession(
+        createConfig({
+          conversationId: 'conv-newtab-b',
+          stageTracking: {
+            skillRegistry: registry as never,
+            skillService: service as never,
+            initialStage: 'apply',
+          },
+          workspace: { root: '/tmp/proj', fsOps },
+        }),
+      );
+      const executorA = createMockExecutorModule([]);
+      executorA.executeStream.mockImplementation(async function* () {
+        sessionA.getEventBus()!.emit({
+          channel: 'execution.step.completed',
+          runId: 'run-newtab-a',
+          round: 1,
+          thinkOnly: false,
+          at: 1000,
+        });
+        yield { type: 'think', content: 'A', timestamp: Date.now() };
+      });
+      const executorB = createMockExecutorModule([]);
+      executorB.executeStream.mockImplementation(async function* () {
+        sessionB.getEventBus()!.emit({
+          channel: 'execution.step.completed',
+          runId: 'run-newtab-b',
+          round: 1,
+          thinkOnly: false,
+          at: 1001,
+        });
+        yield { type: 'think', content: 'B', timestamp: Date.now() };
+      });
+      (sessionA as unknown as Record<string, unknown>)['_executor'] = executorA;
+      (sessionB as unknown as Record<string, unknown>)['_executor'] = executorB;
+
+      await collectEvents(sessionA.execute('log A'));
+      await collectEvents(sessionB.execute('log B'));
+      await sessionA.getApprovalEngine()!.evaluate({
+        channel: 'permission',
+        paradigm: 'imperative',
+        subject: { label: 'a', kind: 'tool:a', destructive: false, idempotent: true },
+        id: 'req-a',
+        at: 1002,
+      });
+      await sessionB.getApprovalEngine()!.evaluate({
+        channel: 'permission',
+        paradigm: 'imperative',
+        subject: { label: 'b', kind: 'tool:b', destructive: false, idempotent: true },
+        id: 'req-b',
+        at: 1003,
+      });
+      await sessionA.flushWorkspaceSink();
+      await sessionB.flushWorkspaceSink();
+
+      expect(writes.map((write) => write.path)).toEqual(
+        expect.arrayContaining([
+          conversationLogPath('conv-newtab-a', 'events'),
+          conversationLogPath('conv-newtab-b', 'events'),
+          conversationLogPath('conv-newtab-a', 'audits'),
+          conversationLogPath('conv-newtab-b', 'audits'),
+        ]),
+      );
+      expect(writes.map((write) => write.path)).not.toContain('/tmp/proj/.neko/logs/events.jsonl');
+      expect(writes.map((write) => write.path)).not.toContain('/tmp/proj/.neko/logs/audits.jsonl');
+
+      type LoggedStepRow = {
+        seq: number;
+        partitionSeq: number;
+        partition: { conversationId?: string; runId?: string; turnId?: string };
+        event: { channel: string; conversationId?: string; runId?: string; turnId?: string };
+      };
+      const stepRows = [
+        ...parseJsonlWrites<LoggedStepRow>(writes, conversationLogPath('conv-newtab-a', 'events')),
+        ...parseJsonlWrites<LoggedStepRow>(writes, conversationLogPath('conv-newtab-b', 'events')),
+      ].filter(
+        (row) => row.event.channel === 'execution.step.completed',
+      );
+      const rowA = stepRows.find((row) => row.event.runId === 'run-newtab-a');
+      const rowB = stepRows.find((row) => row.event.runId === 'run-newtab-b');
+
+      expect(rowA).toEqual(
+        expect.objectContaining({
+          seq: 1,
+          partitionSeq: 1,
+          partition: expect.objectContaining({
+            conversationId: 'conv-newtab-a',
+            runId: 'run-newtab-a',
+            turnId: expect.stringMatching(/^turn-conv-newtab-a-/),
+          }),
+          event: expect.objectContaining({
+            conversationId: 'conv-newtab-a',
+            runId: 'run-newtab-a',
+            turnId: expect.stringMatching(/^turn-conv-newtab-a-/),
+          }),
+        }),
+      );
+      expect(rowB).toEqual(
+        expect.objectContaining({
+          seq: 1,
+          partitionSeq: 1,
+          partition: expect.objectContaining({
+            conversationId: 'conv-newtab-b',
+            runId: 'run-newtab-b',
+            turnId: expect.stringMatching(/^turn-conv-newtab-b-/),
+          }),
+          event: expect.objectContaining({
+            conversationId: 'conv-newtab-b',
+            runId: 'run-newtab-b',
+            turnId: expect.stringMatching(/^turn-conv-newtab-b-/),
+          }),
+        }),
+      );
+
+      type LoggedAuditRow = {
+        partition: { conversationId?: string; runId?: string };
+        event: { channel: string; conversationId?: string; runId?: string };
+      };
+      const auditRows = [
+        ...parseJsonlWrites<LoggedAuditRow>(
+          writes,
+          conversationLogPath('conv-newtab-a', 'audits'),
+        ),
+        ...parseJsonlWrites<LoggedAuditRow>(
+          writes,
+          conversationLogPath('conv-newtab-b', 'audits'),
+        ),
+      ];
+      expect(auditRows.map((row) => row.event)).toEqual([
+        expect.objectContaining({
+          conversationId: 'conv-newtab-a',
+          runId: expect.stringMatching(/^run-conv-newtab-a-/),
+        }),
+        expect.objectContaining({
+          conversationId: 'conv-newtab-b',
+          runId: expect.stringMatching(/^run-conv-newtab-b-/),
+        }),
+      ]);
+      expect(auditRows.map((row) => row.partition)).toEqual([
+        expect.objectContaining({
+          conversationId: 'conv-newtab-a',
+          runId: expect.stringMatching(/^run-conv-newtab-a-/),
+        }),
+        expect.objectContaining({
+          conversationId: 'conv-newtab-b',
+          runId: expect.stringMatching(/^run-conv-newtab-b-/),
+        }),
+      ]);
     });
 
     it('approval decisions emit approve.decided through the Agent-native creation scope', async () => {
@@ -3102,6 +3861,7 @@ describe('AgentSession', () => {
       };
       const session = new AgentSession(
         createConfig({
+          conversationId: 'test-conversation',
           stageTracking: {
             skillRegistry: registry as never,
             skillService: service as never,
@@ -3120,13 +3880,19 @@ describe('AgentSession', () => {
       await session.flushWorkspaceSink();
 
       const auditRows = writes
-        .filter((w) => w.path === '/tmp/proj/.neko/logs/audits.jsonl')
-        .map((w) => JSON.parse(w.data.trim()) as { event: { channel: string; runId?: string } });
+        .filter((w) => w.path === conversationLogPath('test-conversation', 'audits'))
+        .map(
+          (w) =>
+            JSON.parse(w.data.trim()) as {
+              event: { channel: string; conversationId?: string; runId?: string };
+            },
+        );
       expect(auditRows).toHaveLength(1);
       expect(auditRows[0]!.event).toEqual(
         expect.objectContaining({
           channel: 'execution.approve.decided',
-          runId: 'test-conversation',
+          conversationId: 'test-conversation',
+          runId: expect.stringMatching(/^run-test-conversation-/),
         }),
       );
     });

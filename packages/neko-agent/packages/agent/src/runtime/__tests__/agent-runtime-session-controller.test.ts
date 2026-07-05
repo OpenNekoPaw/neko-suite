@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { IService, IToolRegistry, PromptFragment } from '@neko/shared';
-import { createAgentRuntimeSessionController } from '../agent-runtime-session-controller';
+import { createAgentRuntimeSessionController } from '../session/agent-runtime-session-controller';
 
 const sessionFactoryMocks = vi.hoisted(() => ({
   createAgentRuntimeSession: vi.fn(),
@@ -8,7 +8,7 @@ const sessionFactoryMocks = vi.hoisted(() => ({
   unregisterAgentRuntimeSession: vi.fn(),
 }));
 
-vi.mock('../agent-session-factory', () => sessionFactoryMocks);
+vi.mock('../session/agent-session-factory', () => sessionFactoryMocks);
 
 function createService(): IService {
   return {

@@ -163,6 +163,52 @@ describe('SubAgentManager', () => {
       expect(agentConfig.systemPrompt).toContain(SPECIALIZED_PRESETS['code-search'].systemPrompt);
     });
 
+    it('should localize SubAgent prompt assembly and tool schema projection', async () => {
+      (deps.toolRegistry.toToolDefinitions as ReturnType<typeof vi.fn>).mockImplementation(
+        (_filter, options?: { locale?: string }) => [
+          {
+            type: 'function',
+            function: {
+              name: 'read_file',
+              description: options?.locale === 'zh-CN' ? '读取文件' : 'Read file',
+              parameters: {},
+            },
+          },
+        ],
+      );
+      const config = createTestConfig({
+        id: 'localized-agent',
+        type: 'general',
+        locale: 'zh-CN',
+        inheritContext: true,
+        contextSummary: '父任务：分析中文分镜提示词',
+      });
+
+      await manager.spawn('parent-1', 'conv-1', config);
+      await manager.getResult('localized-agent', 5000);
+
+      const agentConfig = (deps.createAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      const executor = (deps.createAgent as ReturnType<typeof vi.fn>).mock.results[0]!.value as {
+        execute: ReturnType<typeof vi.fn>;
+      };
+      expect(deps.toolRegistry.toToolDefinitions).toHaveBeenCalledWith(undefined, {
+        locale: 'zh-CN',
+      });
+      expect(agentConfig.systemPrompt).toContain('你是通用 Agent');
+      expect(agentConfig.systemPrompt).toContain('## 你的任务');
+      expect(agentConfig.systemPrompt).not.toContain('You are a general-purpose agent');
+      expect(agentConfig.systemPrompt).not.toContain('## Your Task');
+      expect(agentConfig.tools[0]!.function.description).toBe('读取文件');
+      expect(executor.execute).toHaveBeenCalledWith(
+        expect.stringContaining('## 父 Agent 上下文'),
+        expect.anything(),
+      );
+      expect(executor.execute).toHaveBeenCalledWith(
+        expect.not.stringContaining('## Context from Parent Agent'),
+        expect.anything(),
+      );
+    });
+
     it('should resolve primary model through injected model tier resolver', async () => {
       const config = createTestConfig({
         id: 'model-resolver-agent',

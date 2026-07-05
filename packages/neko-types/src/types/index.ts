@@ -120,6 +120,7 @@ export * from './reference-contributor';
 // Agent execution trace contracts
 export * from './agent-trace';
 export * from './agent-token-budget';
+export * from './agent-task-result-observation';
 
 // Memory types (for agent context management)
 export * from './memory';

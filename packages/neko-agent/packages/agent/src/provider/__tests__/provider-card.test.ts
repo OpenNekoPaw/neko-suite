@@ -275,6 +275,22 @@ capabilities: [image.generate]
     expect(fragments[0]?.content).toContain('Soft expression hint: cluttercore is unknown');
   });
 
+  it('renders provider expression framing in Chinese for zh locale', () => {
+    const card = parseProviderCardMarkdown(readCard('flux.card.md'), { sourceLayer: 'builtin' });
+
+    const fragments = createProviderExpressionPromptFragments({ cards: [card], locale: 'zh' });
+
+    expect(fragments).toHaveLength(1);
+    const content = fragments[0]?.content ?? '';
+    expect(content).toContain('## 供应方表达上下文');
+    expect(content).toContain('软性指导');
+    expect(content).toContain('不是确定性的替换规则');
+    expect(content).toContain('- 能力: image.generate');
+    expect(content).toContain('- 软性表达提示: cluttercore 是 unknown');
+    expect(content).not.toContain('Use this selected provider card as soft guidance');
+    expect(content).not.toContain('Capabilities:');
+  });
+
   it('filters provider expression context by capability and style tendency in candidate mode', () => {
     const flux = parseProviderCardMarkdown(readCard('flux.card.md'), { sourceLayer: 'builtin' });
     const sdxl = parseProviderCardMarkdown(readCard('sdxl.card.md'), { sourceLayer: 'builtin' });

@@ -5,7 +5,7 @@ import type {
   IService,
   IToolRegistry,
 } from '@neko/shared';
-import { buildAgentRuntimeSessionFactoryConfig } from '../runtime-host-bindings';
+import { buildAgentRuntimeSessionFactoryConfig } from '../session/runtime-host-bindings';
 
 function createService(): IService {
   return {

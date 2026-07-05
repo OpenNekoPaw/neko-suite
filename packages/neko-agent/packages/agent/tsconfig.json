@@ -14,7 +14,8 @@
     "outDir": "./dist",
     "resolveJsonModule": true,
     "noEmit": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    "types": ["node"]
   },
   "include": ["src/**/*", "src/**/*.d.ts"],
   "exclude": [

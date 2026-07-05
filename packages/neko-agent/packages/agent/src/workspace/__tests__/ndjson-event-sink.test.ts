@@ -49,6 +49,7 @@ describe('NdjsonEventSink', () => {
     const sink = createNdjsonEventSink({
       filePath: '/r/.neko/logs/events.jsonl',
       fsOps: fs,
+      writerId: 'writer-events',
       now: () => now++,
     });
     const bus = createEventBus();
@@ -70,10 +71,54 @@ describe('NdjsonEventSink', () => {
 
     const lines = parseLines(fs.files.get('/r/.neko/logs/events.jsonl') ?? '');
     expect(lines).toHaveLength(2);
+    expect(lines.map((line) => line.writerId)).toEqual(['writer-events', 'writer-events']);
     expect(lines[0]!.seq).toBe(1);
     expect(lines[1]!.seq).toBe(2);
     expect((lines[0]!.event as { channel: string }).channel).toBe('creation.run.started');
     expect((lines[1]!.event as { channel: string }).channel).toBe('execution.apply.committed');
+  });
+
+  it('keeps global seq diagnostic while partition seq is conversation-run local', async () => {
+    const fs = memFs();
+    const sink = createNdjsonEventSink({
+      filePath: '/r/.neko/logs/events.jsonl',
+      fsOps: fs,
+      mapEvent: (event) => ({
+        ...event,
+        conversationId: event.runId === 'run-a' ? 'conv-a' : 'conv-b',
+      }),
+    });
+    const bus = createEventBus();
+    sink.attach(bus);
+
+    bus.emit({
+      channel: CREATION_CHANNELS.RUN_STARTED,
+      runId: 'run-a',
+      creationKind: 'w-a',
+      at: 0,
+    });
+    bus.emit({
+      channel: CREATION_CHANNELS.RUN_STARTED,
+      runId: 'run-b',
+      creationKind: 'w-b',
+      at: 0,
+    });
+    bus.emit({
+      channel: EXECUTION_CHANNELS.APPLY_COMMITTED,
+      runId: 'run-a',
+      kind: 'tool:x',
+      at: 0,
+    });
+    await sink.flush();
+
+    const lines = parseLines(fs.files.get('/r/.neko/logs/events.jsonl') ?? '');
+    expect(lines.map((line) => line.seq)).toEqual([1, 2, 3]);
+    expect(lines.map((line) => line.partitionSeq)).toEqual([1, 1, 2]);
+    expect(lines.map((line) => line.partition)).toEqual([
+      { conversationId: 'conv-a', runId: 'run-a' },
+      { conversationId: 'conv-b', runId: 'run-b' },
+      { conversationId: 'conv-a', runId: 'run-a' },
+    ]);
   });
 
   it('ensureDir runs exactly once regardless of event volume', async () => {

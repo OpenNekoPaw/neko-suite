@@ -3,6 +3,7 @@ import type { CreativeEntityRef, NpcProfileSource } from '@neko/shared';
 import {
   EMBODY_CHARACTER_BLOCKED_TOOL_NAMES,
   EmbodyCharacterSession,
+  buildEmbodyCharacterTurnSystemPrompt,
   isToolAllowedForEmbodyCharacter,
   projectEmbodyCharacterFeedbackPrompt,
   projectEmbodyCharacterTranscriptToChatMessages,
@@ -185,6 +186,30 @@ describe('EmbodyCharacterSession', () => {
     expect(prompt).toContain('Relationships available: 0.');
     expect(prompt).toContain('Occurrences available: 0.');
     expect(prompt).toContain('Script context facts available: 0.');
+  });
+
+  it('renders Chinese feedback prompts without English wrapper drift', () => {
+    const prompt = projectEmbodyCharacterFeedbackPrompt({
+      profile,
+      evidence,
+      prompt: '只检查项目证据支持的内容。',
+      locale: 'zh-CN',
+    });
+
+    expect(prompt).toContain('你是 Lin 的只读角色代入反馈教练。');
+    expect(prompt).toContain('请求处理：');
+    expect(prompt).toContain('已确认事实：');
+    expect(prompt).toContain('用户设置说明：只检查项目证据支持的内容。');
+    expect(prompt).not.toContain('read-only character embodiment coach');
+    expect(prompt).not.toContain('Request handling:');
+
+    const turnPrompt = buildEmbodyCharacterTurnSystemPrompt({
+      baseSystemPrompt: prompt,
+      turnEvidence: makeEvidenceBundle('Lin stays with the team.'),
+      locale: 'zh',
+    });
+    expect(turnPrompt).toContain('仅将这些证据用于当前用户角色扮演回合的只读反馈');
+    expect(turnPrompt).not.toContain('Use this evidence only for read-only feedback');
   });
 
   it('includes script context fact content in feedback prompt evidence', () => {

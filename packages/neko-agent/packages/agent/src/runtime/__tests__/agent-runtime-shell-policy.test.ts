@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IService, IToolRegistry, Tool, ToolCategory, ToolResult } from '@neko/shared';
-import { createAgentRuntimeSession, updateAgentRuntimeSession } from '../agent-session-factory';
+import { createAgentRuntimeSession, updateAgentRuntimeSession } from '../session/agent-session-factory';
 import { ToolCategoryRegistry } from '../../tools/tool-category-registry';
 
 class MemoryToolRegistry implements IToolRegistry {

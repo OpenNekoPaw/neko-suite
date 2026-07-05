@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createTaskTool, createTaskOutputTool, registerSubAgentTools } from '../task-tool';
 import type { ISubAgentManager, SubAgentStatus, SubAgentResult } from '../types';
+import { ToolRegistry } from '../../tools';
 
 // =============================================================================
 // Mocks
@@ -101,6 +102,34 @@ describe('createTaskTool', () => {
       expect(params.properties.subagent_type.enum).toBeUndefined();
       expect(params.properties.quality_tier).toBeUndefined();
     });
+
+    it('should project Chinese model-facing schema text through ToolRegistry', () => {
+      const registry = new ToolRegistry();
+      registry.register(createTaskTool(manager));
+      registry.register(createTaskOutputTool(manager));
+
+      const definitions = registry.toToolDefinitions(undefined, { locale: 'zh-CN' });
+      const byName = new Map(definitions.map((tool) => [tool.function.name, tool.function]));
+      const task = byName.get('task');
+      const taskOutput = byName.get('task_output');
+      const taskParameters = task?.parameters as
+        | { properties?: Record<string, { description?: string }> }
+        | undefined;
+      const outputParameters = taskOutput?.parameters as
+        | { properties?: Record<string, { description?: string }> }
+        | undefined;
+
+      expect(task?.description).toContain('启动一个 SubAgent');
+      expect(taskParameters?.properties?.prompt?.description).toBe(
+        '给 SubAgent 的详细任务说明。',
+      );
+      expect(taskOutput?.description).toContain('获取后台 SubAgent 任务的输出');
+      expect(outputParameters?.properties?.task_id?.description).toBe('SubAgent 任务 ID。');
+      expect(task?.description).not.toContain('Launch a SubAgent');
+      expect(taskParameters?.properties?.prompt?.description).not.toContain(
+        'Detailed task instructions',
+      );
+    });
   });
 
   describe('execute', () => {
@@ -162,6 +191,32 @@ describe('createTaskTool', () => {
         parentMessageId: 'msg-1',
         parentToolCallId: 'tool-1',
       });
+    });
+
+    it('should pass parent runtime locale into spawned SubAgent config', async () => {
+      const tool = createTaskTool(manager);
+
+      await tool.execute(
+        {
+          description: '中文分镜检查',
+          prompt: '检查分镜提示词语言',
+        },
+        {
+          metadata: {
+            parentAgentId: 'parent-1',
+            conversationId: 'conv-1',
+            locale: 'zh-CN',
+          },
+        },
+      );
+
+      expect(manager.spawn).toHaveBeenCalledWith(
+        'parent-1',
+        'conv-1',
+        expect.objectContaining({
+          locale: 'zh-CN',
+        }),
+      );
     });
 
     it('should fail closed when conversationId metadata is missing', async () => {

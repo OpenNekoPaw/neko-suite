@@ -4,7 +4,7 @@ import {
   buildContextTokenCountMessage,
   type CompressionResultData,
   type ContextHostMessage,
-} from './context-webview-presenter';
+} from '../../session/context-host-message';
 
 export type AgentContextControlAction = 'getTokenCount' | 'compressContext';
 

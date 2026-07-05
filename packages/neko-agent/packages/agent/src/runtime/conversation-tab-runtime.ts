@@ -183,12 +183,7 @@ export function buildInvalidWebviewPayloadMessage(): GlobalErrorMessage {
 }
 
 export function buildChatRestorePlan(input: BuildChatRestorePlanInput): ChatRestorePlan {
-  const actions: ChatRestorePlanAction[] = [
-    { type: 'syncActiveConversation' },
-    { type: 'syncCanvasAmbientScope' },
-    { type: 'sendConversationList' },
-    { type: 'sendActiveConversation' },
-  ];
+  const actions: ChatRestorePlanAction[] = [{ type: 'sendConversationList' }];
 
   if (!input.hasWebview) {
     return { actions };

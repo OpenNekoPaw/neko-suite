@@ -6,7 +6,7 @@ import {
   projectAgentStreamEventToHostMessages,
   type AgentStreamProjectionState,
   type AgentStreamProjectionMessage,
-} from './agent-stream-state';
+} from './stream/agent-stream-state';
 
 export interface BackfillCoordinatorSessionPort {
   patchToolResult(payload: ToolResultBackfillPayload): Promise<ToolResultPatchResult>;

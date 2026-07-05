@@ -12,7 +12,10 @@ import { describe, it, expect } from 'vitest';
 import { MemoryProjectModule } from '../modules/memory/memory-project-module';
 import { MemoryRecallModule } from '../modules/memory/memory-recall-module';
 import { CreativeVersionLogModule } from '../modules/ephemeral/creative-version-log-module';
+import { ValidationGuidanceModule } from '../modules/ephemeral/validation-guidance-module';
 import { AgentsMdModule } from '../modules/environment/agents-md-module';
+import { SubpackageFragmentsModule } from '../modules/environment/subpackage-fragments-module';
+import type { PromptContext } from '../context';
 
 type ProjectionSetter = (content: string | null) => void;
 
@@ -21,7 +24,9 @@ interface ModuleSpec {
   make: () => {
     mod: {
       manifest: { id: string; layers: readonly string[]; priority: number };
-      render: () => Promise<readonly { sectionId: string; content: string }[] | null>;
+      render: (
+        ctx?: PromptContext,
+      ) => Promise<readonly { sectionId: string; content: string }[] | null>;
     };
     setContent: ProjectionSetter;
   };
@@ -31,6 +36,15 @@ interface ModuleSpec {
   expectedSectionId: string;
   headingPrefix: string | null; // null = verbatim (no heading wrapping)
 }
+
+const ZH_PROMPT_CONTEXT: PromptContext = {
+  runId: null,
+  stage: null,
+  locale: 'zh',
+  projectPath: '',
+  activeSkillName: null,
+  activeTools: [],
+};
 
 const SPECS: ModuleSpec[] = [
   {
@@ -110,6 +124,24 @@ for (const spec of SPECS) {
       expect(section.content).toBe(expectedContent);
     });
 
+    it('projects Chinese headings when the prompt context locale is zh', async () => {
+      const { mod, setContent } = spec.make();
+      setContent('## User Preferences\n- Tool result: docs updated');
+
+      const result = await mod.render(ZH_PROMPT_CONTEXT);
+      expect(result).not.toBeNull();
+      const content = result![0]!.content;
+
+      if (spec.name === 'MemoryProjectModule') {
+        expect(content).toContain('## 项目记忆');
+        expect(content).toContain('## 用户偏好');
+        expect(content).toContain('- 工具结果: docs updated');
+        expect(content).not.toContain('## Project Memory');
+        expect(content).not.toContain('## User Preferences');
+        expect(content).not.toContain('Tool result:');
+      }
+    });
+
     it('setContent(null) clears prior content', async () => {
       const { mod, setContent } = spec.make();
       setContent('BODY');
@@ -126,6 +158,55 @@ for (const spec of SPECS) {
     });
   });
 }
+
+describe('MemoryRecallModule locale projection', () => {
+  it('projects Chinese headings and known memory labels for zh locale', async () => {
+    const mod = new MemoryRecallModule();
+    mod.setContent('## Recent Actions\n- Tool result: image generated');
+
+    const result = await mod.render(ZH_PROMPT_CONTEXT);
+
+    expect(result?.[0]?.content).toContain('## 回忆记忆');
+    expect(result?.[0]?.content).toContain('## 最近操作');
+    expect(result?.[0]?.content).toContain('- 工具结果: image generated');
+    expect(result?.[0]?.content).not.toContain('## Recalled Memories');
+    expect(result?.[0]?.content).not.toContain('## Recent Actions');
+    expect(result?.[0]?.content).not.toContain('Tool result:');
+  });
+});
+
+describe('ValidationGuidanceModule locale projection', () => {
+  it('projects the guidance heading in Chinese for zh locale', async () => {
+    const mod = new ValidationGuidanceModule();
+    mod.setContent('permission denied');
+
+    const result = await mod.render(ZH_PROMPT_CONTEXT);
+
+    expect(result?.[0]?.content).toContain('## 验证指导');
+    expect(result?.[0]?.content).not.toContain('## Validation Guidance');
+  });
+});
+
+describe('SubpackageFragmentsModule locale projection', () => {
+  it('selects localized fragment content during render for zh locale', async () => {
+    const mod = new SubpackageFragmentsModule();
+    mod.setFragments([
+      {
+        id: 'neko-canvas:test-fragment',
+        content: '## Canvas Rendering Guide\nUse English fallback.',
+        locales: {
+          zh: { content: '## 画布渲染指南\n使用中文提示词。' },
+        },
+      },
+    ]);
+
+    const result = await mod.render(ZH_PROMPT_CONTEXT);
+
+    expect(result?.[0]?.content).toContain('## 画布渲染指南');
+    expect(result?.[0]?.content).not.toContain('## Canvas Rendering Guide');
+    expect(result?.[0]?.content).not.toContain('Use English fallback.');
+  });
+});
 
 // Module-specific regression: the content-getter shape differs per module
 // (getContent vs getSummary), which some callers depend on.

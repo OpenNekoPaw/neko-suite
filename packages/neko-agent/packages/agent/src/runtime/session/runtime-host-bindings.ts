@@ -13,22 +13,22 @@ import type {
   ToolConfirmationRequest,
   ValidationError,
   ValidationWarning,
-} from '../session';
-import type { IRuntimeTaskManager } from '../task';
+} from '../../session';
+import type { IRuntimeTaskManager } from '../../task';
 import type {
   AgentRuntimeSessionFactoryConfig,
   AgentRuntimeSessionFactoryLogger,
 } from './agent-session-factory';
-import type { ProviderExpressionTargetConfig } from './message-runtime';
-import type { SubAgentRuntimeCoordinator } from './subagent-runtime';
+import type { ProviderExpressionTargetConfig } from '../turn/message-runtime';
+import type { SubAgentRuntimeCoordinator } from '../subagent-runtime';
 import type {
   IArtifactStore,
   ICapabilityRuntime,
   ICreationGuidanceRuntime,
   IValidationLoop,
-} from './types';
-import type { ModelTierResolver, SpecializedAgentPreset } from '../subagent';
-import type { WorkspaceFileIgnoreRules } from '../input/workspace-ignore';
+} from '../types';
+import type { ModelTierResolver, SpecializedAgentPreset } from '../../subagent';
+import type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
 
 export interface AgentRuntimeHostBindings {
   readonly createService: () => IService;
