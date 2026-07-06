@@ -167,6 +167,8 @@ function ContentBlockRenderer({
             markdown: projection.content,
             siblingBlocks: projection.siblingBlocks,
             toolCalls: projection.toolCalls,
+            contextChips,
+            ambientNodes,
           })
         : undefined;
       const canvasMarkdownHandoff =

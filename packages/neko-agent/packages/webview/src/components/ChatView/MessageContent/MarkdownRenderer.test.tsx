@@ -12,9 +12,22 @@ vi.mock('@/i18n/I18nContext', () => ({
 }));
 
 vi.mock('@/i18n', () => ({
-  t: (key: string) =>
+  t: (key: string, params?: Record<string, string | number>) =>
     ({
       'chat.structuredArtifact.generating': 'Generating structured content...',
+      'chat.markdown.resourceStatus.image': '图像',
+      'chat.markdown.resourceStatus.images': `${String(params?.['count'] ?? '')} 张图像`,
+      'chat.markdown.resourceStatus.candidates': `${String(params?.['count'] ?? '')} 个候选`,
+      'chat.markdown.resourceStatus.ambiguous': '有歧义',
+      'chat.markdown.resourceStatus.missing': '缺失',
+      'chat.markdown.resourceStatus.unsupported': '不支持',
+      'chat.markdown.resourceStatus.unbound': '未绑定',
+      'chat.markdown.diagnostic.missingResourceToken': `Markdown 资源标记 "${String(params?.['token'] ?? '')}" 未匹配到已知资源。`,
+      'chat.markdown.diagnostic.missingResourceContext': `Markdown 资源标记 "${String(params?.['token'] ?? '')}" 无法解析，因为这条消息没有图像资源上下文。`,
+      'chat.markdown.diagnostic.ambiguousResourceToken': `Markdown 资源标记 "${String(params?.['token'] ?? '')}" 匹配到多个资源。`,
+      'chat.markdown.diagnostic.unsupportedResourceReference': 'Agent Markdown 渲染暂未启用 Neko 资源引用嵌入和链接。',
+      'chat.markdown.image.unprojected': `图像引用 "${String(params?.['src'] ?? '')}" 尚未由宿主投影。`,
+      'chat.markdown.image.missingSource': '图像引用缺少来源。',
     })[key] ?? key,
   getLocale: () => 'zh-cn',
 }));
@@ -202,7 +215,7 @@ describe('MarkdownRenderer structured artifacts', () => {
     expect(screen.queryByText('P1')).toBeNull();
   });
 
-  it('preserves emitted creative table headers including extension headers', () => {
+  it('localizes emitted creative table headers while preserving extension headers', () => {
     render(
       <MarkdownRenderer
         content={[
@@ -213,14 +226,14 @@ describe('MarkdownRenderer structured artifacts', () => {
       />,
     );
 
-    expect(screen.getByRole('columnheader', { name: 'scene' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'imagePrompt' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'videoPrompt' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '场景' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '图像提示词' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '视频提示词' })).toBeTruthy();
     expect(screen.getByRole('columnheader', { name: '自定义审阅' })).toBeTruthy();
-    expect(screen.queryByRole('columnheader', { name: '图像提示词' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'imagePrompt' })).toBeNull();
   });
 
-  it('preserves storyboard creative table field headers while preserving cell content', () => {
+  it('localizes storyboard creative table field headers and known enum cell values', () => {
     renderMarkdown(
       [
         '| scene | shot | source | sourcePanel | nextAction |',
@@ -229,13 +242,30 @@ describe('MarkdownRenderer structured artifacts', () => {
       ].join('\n'),
     );
 
-    expect(screen.getByRole('columnheader', { name: 'scene' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'shot' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'source' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'sourcePanel' })).toBeTruthy();
-    expect(screen.getByRole('columnheader', { name: 'nextAction' })).toBeTruthy();
-    expect(screen.queryByRole('columnheader', { name: '来源分格' })).toBeNull();
+    expect(screen.getByRole('columnheader', { name: '场景' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '镜头' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '来源' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '来源分格' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '建议操作' })).toBeTruthy();
+    expect(screen.queryByRole('columnheader', { name: 'sourcePanel' })).toBeNull();
     expect(screen.getByText('use-as-reference')).toBeTruthy();
+  });
+
+  it('localizes storyboard creative table enum cells for display only', () => {
+    renderMarkdown(
+      [
+        '| scene | shot | decision | reviewStatus | contentType | requiresSplit |',
+        '| --- | --- | --- | --- | --- | --- |',
+        '| 正文 | 1 | reference-only | needs-review | cover | false |',
+      ].join('\n'),
+    );
+
+    expect(screen.getByText('仅作参考')).toBeTruthy();
+    expect(screen.getByText('待审阅')).toBeTruthy();
+    expect(screen.getByText('封面')).toBeTruthy();
+    expect(screen.getByText('否')).toBeTruthy();
+    expect(screen.queryByText('reference-only')).toBeNull();
+    expect(screen.queryByText('needs-review')).toBeNull();
   });
 
   it('preserves Chinese storyboard header aliases emitted by the agent', () => {
@@ -335,9 +365,9 @@ describe('MarkdownRenderer structured artifacts', () => {
 
     expect(screen.getAllByText('missing').length).toBeGreaterThanOrEqual(1);
     expect(
-      screen.getByText('missing', { selector: '[data-markdown-resource-status="missing"]' }),
+      screen.getByText('缺失', { selector: '[data-markdown-resource-status="missing"]' }),
     ).toBeTruthy();
-    expect(screen.getAllByText(/does not match a known resource/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/未匹配到已知资源/).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText('-')).toBeNull();
   });
 
@@ -409,6 +439,51 @@ describe('MarkdownRenderer structured artifacts', () => {
     expect(screen.queryByText('P1#panel_1')).toBeNull();
   });
 
+  it('localizes ambiguous resource status labels and diagnostics', () => {
+    renderMarkdown(
+      [
+        '| scene | shot | source | visual |',
+        '| --- | --- | --- | --- |',
+        '| Opening | 1 | P1 | Frame |',
+      ].join('\n'),
+      false,
+      {
+        status: 'diagnostic',
+        diagnostics: [
+          {
+            code: 'ambiguous-resource-token',
+            severity: 'error',
+            token: 'P1',
+            message: 'Markdown resource token "P1" matches multiple resources.',
+            candidates: [{ label: 'Page 1' }, { label: 'Page 1 duplicate' }],
+          },
+        ],
+        tokens: [
+          {
+            token: 'P1',
+            status: 'ambiguous',
+            refs: [{ label: 'Page 1' }, { label: 'Page 1 duplicate' }],
+            resources: [],
+            renderUris: [],
+            diagnostics: [
+              {
+                code: 'ambiguous-resource-token',
+                severity: 'error',
+                token: 'P1',
+                message: 'Markdown resource token "P1" matches multiple resources.',
+                candidates: [{ label: 'Page 1' }, { label: 'Page 1 duplicate' }],
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(screen.getByText('2 个候选')).toBeTruthy();
+    expect(screen.getAllByText('Markdown 资源标记 "P1" 匹配到多个资源。').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText(/matches multiple resources/)).toBeNull();
+  });
+
   it('renders missing resource context diagnostics distinctly', () => {
     renderMarkdown(
       [
@@ -449,7 +524,7 @@ describe('MarkdownRenderer structured artifacts', () => {
       },
     );
 
-    expect(screen.getByRole('alert').textContent).toContain('no image resource context');
+    expect(screen.getByRole('alert').textContent).toContain('没有图像资源上下文');
   });
 
   it('shows unsupported-extension diagnostics for Neko resource-reference embeds', () => {
@@ -467,7 +542,61 @@ describe('MarkdownRenderer structured artifacts', () => {
       ],
     });
 
-    expect(screen.getByRole('note').textContent).toContain('Neko resource-reference embeds');
+    expect(screen.getByRole('note').textContent).toContain('Neko 资源引用嵌入和链接');
+  });
+
+  it('renders read-only semantic prompt span chips with Canvas handoff metadata', () => {
+    const { container } = renderMarkdown('Alley at night. Rin enters.', false, {
+      status: 'ready',
+      tokens: [],
+      diagnostics: [],
+      promptSpans: [
+        {
+          kind: 'scene',
+          range: { start: 0, end: 14 },
+          fieldId: 'scene.location',
+          label: 'Alley',
+          tone: 'scene',
+          tooltip: 'Scene location span',
+          ref: { kind: 'canvas-node', id: 'scene-1', namespace: 'canvas' },
+        },
+      ],
+    });
+
+    expect(screen.getByText('Alley at night. Rin enters.')).toBeTruthy();
+    const chip = container.querySelector('[data-markdown-prompt-span="true"]');
+    expect(chip?.textContent).toContain('Alley');
+    expect(chip?.textContent).toContain('scene.location');
+    expect(chip?.textContent).toContain('@scene-1');
+    expect(chip?.className).toContain('border-b-2');
+    expect(chip?.getAttribute('data-markdown-prompt-span-kind')).toBe('scene');
+    expect(chip?.getAttribute('data-markdown-prompt-span-field-id')).toBe('scene.location');
+    expect(chip?.getAttribute('data-markdown-prompt-span-range')).toBe('0:14');
+    expect(chip?.getAttribute('data-canvas-handoff-ref-kind')).toBe('canvas-node');
+    expect(chip?.getAttribute('data-canvas-handoff-ref-id')).toBe('scene-1');
+    expect(chip?.getAttribute('title')).toContain('Scene location span');
+    expect(chip?.getAttribute('title')).toContain('source: Alley at night');
+  });
+
+  it('renders semantic prompt span diagnostics without routing through resource fallback copy', () => {
+    renderMarkdown('Use @Rin in the voice prompt.', false, {
+      status: 'diagnostic',
+      tokens: [],
+      promptSpans: [],
+      diagnostics: [
+        {
+          severity: 'warning',
+          code: 'prompt-span-unresolved-ref',
+          token: '@Rin',
+          message: 'Prompt span @Rin does not resolve to a stable ref.',
+        },
+      ],
+    });
+
+    expect(screen.getByRole('note').textContent).toContain(
+      'Prompt span @Rin does not resolve to a stable ref.',
+    );
+    expect(screen.queryByText(/Markdown 资源标记/)).toBeNull();
   });
 });
 

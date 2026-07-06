@@ -339,17 +339,23 @@ describe('PluginTransferBridge', () => {
     });
   });
 
-  it('does not execute removed Canvas structured transfer payloads', async () => {
+  it.each([
+    ['canvasStoryboard', { kind: 'canvasStoryboard', storyboard: {} }],
+    ['canvasPrompt', { kind: 'canvasPrompt', prompt: 'legacy prompt' }],
+    ['canvasText', { kind: 'canvasText', text: '| visual |\\n| --- |\\n| open |' }],
+    ['canvasStructuredContent', { kind: 'canvasStructuredContent', content: { beats: ['open'] } }],
+    [
+      'canvasAuthoringHandoff',
+      { kind: 'canvasAuthoringHandoff', content: '{"kind":"storyboard-draft"}' },
+    ],
+  ])('does not execute removed Canvas authoring transfer payload %s', async (kind, payload) => {
     const executeCommand = vi.fn();
 
     const result = await sendGeneratedAssetToPlugin(
       'canvas',
       undefined,
       undefined,
-      {
-        kind: 'canvasStoryboard',
-        storyboard: {},
-      } as never,
+      payload as never,
       {
         workspaceRoot: '/workspace',
         executeCommand,
@@ -361,34 +367,7 @@ describe('PluginTransferBridge', () => {
       executed: 0,
       results: [],
       unsupported: [],
-      error: 'Unsupported plugin transfer payload kind: canvasStoryboard',
-    });
-    expect(executeCommand).not.toHaveBeenCalled();
-  });
-
-  it('does not execute removed Canvas content transfer payloads', async () => {
-    const executeCommand = vi.fn();
-
-    const result = await sendGeneratedAssetToPlugin(
-      'canvas',
-      undefined,
-      undefined,
-      {
-        kind: 'canvasText',
-        text: '| visual |\\n| --- |\\n| open |',
-      } as never,
-      {
-        workspaceRoot: '/workspace',
-        executeCommand,
-      },
-    );
-
-    expect(result).toEqual({
-      success: false,
-      executed: 0,
-      results: [],
-      unsupported: [],
-      error: 'Unsupported plugin transfer payload kind: canvasText',
+      error: `Unsupported plugin transfer payload kind: ${kind}`,
     });
     expect(executeCommand).not.toHaveBeenCalled();
   });

@@ -100,6 +100,134 @@ export const chat = {
   'chat.activation.source.agent-tool.agent': 'Agent tool',
   'chat.activation.source.agent-tool.user': 'Agent tool',
   'chat.structuredArtifact.generating': 'Generating structured content...',
+  'chat.markdown.resourceStatus.image': 'image',
+  'chat.markdown.resourceStatus.images': '{count} images',
+  'chat.markdown.resourceStatus.candidates': '{count} candidates',
+  'chat.markdown.resourceStatus.ambiguous': 'ambiguous',
+  'chat.markdown.resourceStatus.missing': 'missing',
+  'chat.markdown.resourceStatus.unsupported': 'unsupported',
+  'chat.markdown.resourceStatus.unbound': 'unbound',
+  'chat.markdown.diagnostic.missingResourceToken':
+    'Markdown resource token "{token}" does not match a known resource.',
+  'chat.markdown.diagnostic.missingResourceContext':
+    'Markdown resource token "{token}" cannot be resolved because this message has no image resource context.',
+  'chat.markdown.diagnostic.ambiguousResourceToken':
+    'Markdown resource token "{token}" matches multiple resources.',
+  'chat.markdown.diagnostic.unsupportedResourceReference':
+    'Neko resource-reference embeds and links are not enabled for Agent Markdown rendering yet.',
+  'chat.markdown.image.unprojected': 'Image reference "{src}" is not projected by the host.',
+  'chat.markdown.image.missingSource': 'Image reference is missing a source.',
+  'chat.transfer.sendTo': 'Send to',
+  'chat.transfer.sendToTarget': 'Send to {target}',
+  'chat.transfer.importToCanvas': 'Import',
+  'chat.transfer.importToCanvasTitle': 'Import asset to Canvas',
+  'chat.canvasLifecycle.status.described': 'described',
+  'chat.canvasLifecycle.status.validated': 'validated',
+  'chat.canvasLifecycle.status.needs-review': 'needs review',
+  'chat.canvasLifecycle.status.waiting-approval': 'waiting approval',
+  'chat.canvasLifecycle.status.applied': 'applied',
+  'chat.canvasLifecycle.status.executed': 'executed',
+  'chat.canvasLifecycle.status.blocked': 'blocked',
+  'chat.canvasLifecycle.badge.displayFallback': 'display-only fallback',
+  'chat.canvasLifecycle.badge.genericTable': 'generic table',
+  'chat.canvasLifecycle.badge.creativeTable': 'creative table',
+  'chat.canvasLifecycle.blocked': 'blocked',
+  'chat.canvasLifecycle.reviewArtifact': 'Review artifact: {artifact}',
+  'chat.canvasLifecycle.changedRefs': 'Changed refs: {refs}',
+  'chat.canvasLifecycle.approvalRequired': 'approve',
+  'chat.canvasLifecycle.action.createStoryboardNodes': 'Create storyboard nodes',
+  'chat.canvasLifecycle.disabled.conversationUnavailable': 'Conversation unavailable',
+  'chat.canvasLifecycle.disabled.unsupportedActionPayload': 'Unsupported action payload',
+  'chat.canvasLifecycle.capabilityStatus.created': 'created',
+  'chat.canvasLifecycle.capabilityStatus.changed': 'changed',
+  'chat.canvasLifecycle.capabilityStatus.validated': 'validated',
+  'chat.canvasLifecycle.capabilityStatus.needs-review': 'needs review',
+  'chat.canvasLifecycle.capabilityStatus.blocked': 'blocked',
+  'chat.canvasLifecycle.summary.lifecycleAction': 'Canvas lifecycle action {status}: {capability}',
+  'chat.canvasLifecycle.summary.markdownAction': 'Canvas Markdown action {status}: {capability}',
+  'chat.canvasLifecycle.summary.markdownActionFailed': 'Canvas Markdown action failed: {error}',
+  'chat.canvasLifecycle.summary.unknownError': 'Unknown error.',
+  'chat.canvasLifecycle.summary.diagnostics': 'Diagnostics',
+  'chat.canvasLifecycle.summary.createdNodes': 'Created nodes: {nodes}',
+  'chat.canvasLifecycle.summary.createdDraft': 'Created draft: {node}',
+  'chat.canvasLifecycle.summary.createdTable': 'Created table: {node}',
+  'chat.canvasLifecycle.summary.availableActions': 'Available Canvas actions:',
+  'chat.canvasLifecycle.summary.availableLifecycleActions': 'Available Canvas lifecycle actions:',
+  'chat.canvasLifecycle.summary.approvalRequired': 'approval required',
+  'chat.canvasLifecycle.summary.noApprovalRequired': 'no approval required',
+  'chat.canvasLifecycle.summary.sourceRef': 'source {ref}',
+  'chat.canvasLifecycle.summary.error': 'Error: {error}',
+  'chat.canvasLifecycle.diagnosticSeverity.info': 'info',
+  'chat.canvasLifecycle.diagnosticSeverity.warning': 'warning',
+  'chat.canvasLifecycle.diagnosticSeverity.error': 'error',
+  'chat.canvasLifecycle.diagnostic.unlocalized': 'Diagnostic message is not localized: {code}',
+  'chat.canvasLifecycle.diagnostic.canvasCreativeProfileUnsupported':
+    'The creative profile is not supported.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownAmbiguousResourceToken':
+    'Markdown resource token "{token}" matches multiple resources.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownAttachResourceMissingStableRef':
+    'Canvas resource attachment requires a stable resource reference or stable source path.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownAttachResourceMissingTargetNode':
+    'Canvas resource attachment requires a target node.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownCapabilityInvocationFailed':
+    'Canvas Markdown capability invocation failed.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidApproval':
+    'The approval context is invalid.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidDocumentResourceRef':
+    'The document resource reference is invalid.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidInput': 'Canvas Markdown input is invalid.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidMode': 'Canvas Markdown mode is invalid.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidResource':
+    'The Markdown resource is invalid.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidResourceRef':
+    'The resource reference is invalid.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidResources':
+    'The Markdown resource list is invalid.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidStringField': 'The string field is invalid.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidTarget': 'The Canvas target is invalid.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownMissingMarkdown': 'Markdown content is missing.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownMissingResourceToken':
+    'Markdown resource token "{token}" does not match a known resource.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownMissingStableResource':
+    'The Markdown resource is missing a stable reference or stable source path.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownOperationProfileMismatch':
+    'This operation requires the storyboard creative table profile.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownOperationRequiredFieldMissing':
+    'This operation is missing required field "{field}".',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownRuntimeResourcePath':
+    'The Markdown resource path is a runtime temporary address and cannot be written to Canvas.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownRuntimeResourceToken':
+    'The Markdown resource token points to a runtime temporary address and cannot be written to Canvas.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardCreateApprovalRequired':
+    'Creating production storyboard nodes requires lifecycle approval context.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardCreateNotConfirmed':
+    'Creating production storyboard nodes requires an explicit creation mode.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardNextActionMissing':
+    'The storyboard table is missing a next action.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardNoProductionRows':
+    'The storyboard table has no production-ready rows.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardVisualColumnRequired':
+    'The storyboard table requires a visual or prompt column.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardVisualOrPromptMissing':
+    'A storyboard row is missing visual description or prompt text.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownTableEmpty':
+    'Markdown table must contain at least one data row.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownTableMissing':
+    'A GFM table is required before Canvas can create table or storyboard nodes.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownTableProfileUnknownColumn':
+    'The creative table includes a column that the current profile does not accept.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownTableRowWidthMismatch':
+    'Markdown table row cell count does not match the header.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownUnknownCapability':
+    'Unknown Canvas Markdown capability.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownUnsupportedIngestIntent':
+    'The Markdown ingest intent is not supported.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownUnsupportedOperationHint':
+    'The storyboard creative table profile does not support this operation hint.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownUnsupportedSourceFormat':
+    'The Markdown source format is not supported.',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownUnsupportedTableProfile':
+    'The Canvas Markdown table profile is not supported.',
 
   'chat.input.placeholder':
     'Ask anything... (/ for commands, @ for files, Shift+Enter for new line)',

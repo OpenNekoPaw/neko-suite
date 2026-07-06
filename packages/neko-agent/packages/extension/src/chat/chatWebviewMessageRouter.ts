@@ -57,6 +57,7 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'sendToPlugin',
   'invokeAgentCapabilityLifecycle',
   'requestCanvasMarkdownHandoff',
+  'requestCanvasAuthoringHandoff',
   'dnd:start',
   'invokePluginSlashCommand',
   'exitCharacterDialogueSession',

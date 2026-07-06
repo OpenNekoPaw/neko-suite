@@ -5,6 +5,7 @@ import {
   parseDocumentArchiveResourceRef,
   parseDocumentLocator,
   parseDocumentSourceRef,
+  validateCanvasAuthoringResultEnvelope,
 } from '@neko/shared';
 import {
   AUDIO_GENERATION_TOOLS,
@@ -35,6 +36,53 @@ export interface DocumentImageThumbnailProjection {
   referenceJson: string;
 }
 
+export interface CanvasAuthoringRefProjection {
+  readonly key: string;
+  readonly kind: string;
+  readonly id: string;
+  readonly label: string;
+  readonly details: readonly string[];
+}
+
+export interface CanvasAuthoringDiagnosticProjection {
+  readonly key: string;
+  readonly severity: 'info' | 'warning' | 'error';
+  readonly code: string;
+  readonly message: string;
+  readonly target?: string;
+  readonly requiredQuery?: string;
+  readonly retryable?: boolean;
+}
+
+export interface CanvasAuthoringNextActionProjection {
+  readonly key: string;
+  readonly id: string;
+  readonly label: string;
+  readonly toolName?: string;
+  readonly requiresApproval: boolean;
+  readonly argumentsJson?: string;
+}
+
+export interface CanvasAuthoringPromptFieldAlignmentProjection {
+  readonly key: string;
+  readonly fieldId: string;
+  readonly alignmentState: string;
+  readonly sourceSpanId?: string;
+  readonly userOverride?: boolean;
+}
+
+export interface CanvasAuthoringResultProjection {
+  readonly isValid: boolean;
+  readonly status: string;
+  readonly summary?: string;
+  readonly refs: readonly CanvasAuthoringRefProjection[];
+  readonly diagnostics: readonly CanvasAuthoringDiagnosticProjection[];
+  readonly blockedReason?: string;
+  readonly changedFields: readonly string[];
+  readonly nextActions: readonly CanvasAuthoringNextActionProjection[];
+  readonly promptFieldAlignments: readonly CanvasAuthoringPromptFieldAlignmentProjection[];
+}
+
 export interface ToolCallDisplayProjection {
   argsJson: string;
   resultJson: string | null;
@@ -57,6 +105,7 @@ export interface ToolCallDisplayProjection {
   isSuccess: boolean;
   isFailed: boolean;
   needsConfirmation: boolean;
+  canvasAuthoringResult: CanvasAuthoringResultProjection | null;
 }
 
 export function projectToolCallDisplayState(toolCall: ToolCall): ToolCallDisplayProjection {
@@ -65,6 +114,7 @@ export function projectToolCallDisplayState(toolCall: ToolCall): ToolCallDisplay
   const resultJson =
     sanitizedResultData !== undefined ? JSON.stringify(sanitizedResultData, null, 2) : null;
   const resultData = asRecord(sanitizedResultData);
+  const canvasAuthoringResult = projectCanvasAuthoringResult(sanitizedResultData);
   const isBackgroundMode = resultData?.backgroundMode === true;
   const backgroundTaskStatus = readString(resultData, 'status');
   const shouldShowMediaPreview = !isBackgroundMode || backgroundTaskStatus === 'completed';
@@ -102,7 +152,221 @@ export function projectToolCallDisplayState(toolCall: ToolCall): ToolCallDisplay
     isSuccess: resultSuccess,
     isFailed: toolCall.result?.success === false,
     needsConfirmation: toolCall.pendingConfirmation === true,
+    canvasAuthoringResult,
   };
+}
+
+function projectCanvasAuthoringResult(data: unknown): CanvasAuthoringResultProjection | null {
+  const result = asRecord(data);
+  const authoringResult = asRecord(result?.authoringResult);
+  if (!authoringResult) return null;
+
+  const validation = validateCanvasAuthoringResultEnvelope(authoringResult);
+  const validationDiagnostics = validation.valid
+    ? []
+    : validation.diagnostics.map(projectCanvasAuthoringDiagnostic);
+  if (!validation.valid) {
+    return {
+      isValid: false,
+      status: readString(authoringResult, 'status') ?? 'malformed',
+      refs: [],
+      diagnostics: validationDiagnostics,
+      changedFields: [],
+      nextActions: [],
+      promptFieldAlignments: collectPromptFieldAlignments(data),
+    };
+  }
+
+  const diagnostics = readRecordArray(authoringResult, 'diagnostics').map(
+    projectCanvasAuthoringDiagnostic,
+  );
+  return {
+    isValid: true,
+    status: readString(authoringResult, 'status') ?? 'unknown',
+    ...(readString(authoringResult, 'summary')
+      ? { summary: readString(authoringResult, 'summary') }
+      : {}),
+    refs: readRecordArray(authoringResult, 'refs').map(projectCanvasAuthoringRef),
+    diagnostics,
+    ...(readString(authoringResult, 'blockedReason')
+      ? { blockedReason: readString(authoringResult, 'blockedReason') }
+      : {}),
+    changedFields: readStringArray(authoringResult.changedFields),
+    nextActions: projectCanvasAuthoringNextActions(authoringResult, diagnostics),
+    promptFieldAlignments: collectPromptFieldAlignments(data),
+  };
+}
+
+function projectCanvasAuthoringRef(
+  ref: Record<string, unknown>,
+  index: number,
+): CanvasAuthoringRefProjection {
+  const kind = readString(ref, 'kind') ?? 'ref';
+  const id = readString(ref, 'id') ?? `#${index + 1}`;
+  const label = readString(ref, 'label') ?? id;
+  const fieldPath = readString(ref, 'fieldPath');
+  const details = [
+    readString(ref, 'canvasId') ? `canvas:${readString(ref, 'canvasId')}` : undefined,
+    readString(ref, 'nodeId') ? `node:${readString(ref, 'nodeId')}` : undefined,
+    readString(ref, 'connectionId') ? `connection:${readString(ref, 'connectionId')}` : undefined,
+    fieldPath ? `field:${fieldPath}` : undefined,
+  ].filter(isPresentString);
+
+  return {
+    key: `${kind}:${id}:${index}`,
+    kind,
+    id,
+    label,
+    details,
+  };
+}
+
+function projectCanvasAuthoringDiagnostic(
+  diagnostic: unknown,
+  index: number,
+): CanvasAuthoringDiagnosticProjection {
+  const record = asRecord(diagnostic);
+  if (!record) {
+    return {
+      key: `error:malformed-authoring-diagnostic:${index}`,
+      severity: 'error',
+      code: 'malformed-authoring-diagnostic',
+      message: 'Canvas authoring diagnostic is malformed.',
+    };
+  }
+  const severity = readDiagnosticSeverity(record.severity);
+  const code = readString(record, 'code') ?? `canvas-authoring-diagnostic-${index + 1}`;
+  const message = readString(record, 'message') ?? code;
+  return {
+    key: `${severity}:${code}:${index}`,
+    severity,
+    code,
+    message,
+    ...(readString(record, 'target') ? { target: readString(record, 'target') } : {}),
+    ...(readString(record, 'requiredQuery')
+      ? { requiredQuery: readString(record, 'requiredQuery') }
+      : {}),
+    ...(typeof record.retryable === 'boolean' ? { retryable: record.retryable } : {}),
+  };
+}
+
+function projectCanvasAuthoringNextActions(
+  authoringResult: Record<string, unknown>,
+  diagnostics: readonly CanvasAuthoringDiagnosticProjection[],
+): readonly CanvasAuthoringNextActionProjection[] {
+  const actions = [
+    ...readRecordArray(authoringResult, 'nextActions'),
+    ...readRecordArrayFromDiagnostics(authoringResult),
+  ];
+  const seen = new Set<string>();
+  const seenToolNames = new Set<string>();
+  const projected: CanvasAuthoringNextActionProjection[] = [];
+  for (let index = 0; index < actions.length; index += 1) {
+    const action = actions[index]!;
+    const id = readString(action, 'id') ?? `next-action-${index + 1}`;
+    const toolName = readString(action, 'toolName');
+    const dedupeKey = `${id}:${toolName ?? ''}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    if (toolName) seenToolNames.add(toolName);
+    projected.push({
+      key: `${dedupeKey}:${index}`,
+      id,
+      label: readString(action, 'label') ?? toolName ?? id,
+      ...(toolName ? { toolName } : {}),
+      requiresApproval: action.requiresApproval === true,
+      ...(asRecord(action.arguments)
+        ? { argumentsJson: JSON.stringify(action.arguments, null, 2) }
+        : {}),
+    });
+  }
+
+  for (const diagnostic of diagnostics) {
+    if (!diagnostic.requiredQuery) continue;
+    if (seenToolNames.has(diagnostic.requiredQuery)) continue;
+    const id = `required-query:${diagnostic.requiredQuery}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    projected.push({
+      key: `${id}:${projected.length}`,
+      id,
+      label: `Query ${diagnostic.requiredQuery}`,
+      toolName: diagnostic.requiredQuery,
+      requiresApproval: false,
+    });
+  }
+  return projected;
+}
+
+function readRecordArrayFromDiagnostics(
+  authoringResult: Record<string, unknown>,
+): readonly Record<string, unknown>[] {
+  const diagnostics = readRecordArray(authoringResult, 'diagnostics');
+  return diagnostics.flatMap((diagnostic) => readRecordArray(diagnostic, 'suggestedActions'));
+}
+
+function collectPromptFieldAlignments(
+  data: unknown,
+): readonly CanvasAuthoringPromptFieldAlignmentProjection[] {
+  const alignments: CanvasAuthoringPromptFieldAlignmentProjection[] = [];
+  const seenAlignments = new Set<string>();
+  collectPromptFieldAlignmentsFromValue(data, new WeakSet<object>(), alignments, seenAlignments);
+  return alignments;
+}
+
+function collectPromptFieldAlignmentsFromValue(
+  value: unknown,
+  seen: WeakSet<object>,
+  alignments: CanvasAuthoringPromptFieldAlignmentProjection[],
+  seenAlignments: Set<string>,
+): void {
+  if (!value || typeof value !== 'object' || alignments.length >= 12) return;
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectPromptFieldAlignmentsFromValue(item, seen, alignments, seenAlignments);
+    }
+    return;
+  }
+
+  const record = value as Record<string, unknown>;
+  addPromptFieldAlignment(record, alignments, seenAlignments);
+  for (const item of readRecordArray(record, 'fieldProjections')) {
+    addPromptFieldAlignment(item, alignments, seenAlignments);
+  }
+  for (const item of readRecordArray(record, 'promptFieldAlignments')) {
+    addPromptFieldAlignment(item, alignments, seenAlignments);
+  }
+  for (const item of readRecordArray(record, 'promptFieldAlignment')) {
+    addPromptFieldAlignment(item, alignments, seenAlignments);
+  }
+
+  for (const child of Object.values(record)) {
+    collectPromptFieldAlignmentsFromValue(child, seen, alignments, seenAlignments);
+  }
+}
+
+function addPromptFieldAlignment(
+  record: Record<string, unknown>,
+  alignments: CanvasAuthoringPromptFieldAlignmentProjection[],
+  seenAlignments: Set<string>,
+): void {
+  const fieldId = readString(record, 'fieldId');
+  const alignmentState = readString(record, 'alignmentState');
+  if (!fieldId || !alignmentState) return;
+  const sourceSpanId = readString(record, 'sourceSpanId');
+  const key = `${fieldId}:${alignmentState}:${sourceSpanId ?? ''}`;
+  if (seenAlignments.has(key)) return;
+  seenAlignments.add(key);
+  alignments.push({
+    key,
+    fieldId,
+    alignmentState,
+    ...(sourceSpanId ? { sourceSpanId } : {}),
+    ...(typeof record.userOverride === 'boolean' ? { userOverride: record.userOverride } : {}),
+  });
 }
 
 function extractDocumentImageThumbnails(data: unknown): DocumentImageThumbnailProjection[] {
@@ -493,6 +757,33 @@ function readFiniteNumber(
 ): number | undefined {
   const value = obj?.[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function readStringArray(value: unknown): readonly string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+    : [];
+}
+
+function readRecordArray(
+  obj: Record<string, unknown> | undefined,
+  key: string,
+): readonly Record<string, unknown>[] {
+  const value = obj?.[key];
+  return Array.isArray(value)
+    ? value.flatMap((item) => {
+        const record = asRecord(item);
+        return record ? [record] : [];
+      })
+    : [];
+}
+
+function readDiagnosticSeverity(value: unknown): 'info' | 'warning' | 'error' {
+  return value === 'info' || value === 'warning' || value === 'error' ? value : 'error';
+}
+
+function isPresentString(value: string | undefined): value is string {
+  return typeof value === 'string' && value.length > 0;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

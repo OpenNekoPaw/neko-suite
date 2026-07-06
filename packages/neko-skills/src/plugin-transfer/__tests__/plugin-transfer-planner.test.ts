@@ -148,14 +148,25 @@ describe('neko-suite plugin transfer planner', () => {
     });
   });
 
-  it('fails visibly for unsupported direct payload kinds', () => {
+  it.each([
+    ['canvasStoryboard', { kind: 'canvasStoryboard', storyboard: {} }],
+    ['canvasPrompt', { kind: 'canvasPrompt', prompt: 'legacy prompt' }],
+    ['canvasText', { kind: 'canvasText', text: '| visual |\\n| --- |\\n| open |' }],
+    ['canvasStructuredContent', { kind: 'canvasStructuredContent', content: { beats: ['open'] } }],
+    [
+      'canvasAuthoringHandoff',
+      { kind: 'canvasAuthoringHandoff', content: '{"kind":"storyboard-draft"}' },
+    ],
+  ])('fails visibly for unsupported Canvas authoring payload kind %s', (kind, payload) => {
     expect(() =>
       buildNekoSuitePluginTransferPlan({
         target: 'canvas',
-        payload: { kind: 'canvasStoryboard', storyboard: {} } as never,
+        payload: payload as never,
       }),
-    ).toThrow('Unsupported plugin transfer payload kind: canvasStoryboard');
+    ).toThrow(`Unsupported plugin transfer payload kind: ${kind}`);
+  });
 
+  it('fails visibly for unsupported direct payload kinds', () => {
     expect(() =>
       buildNekoSuitePluginTransferPlan({
         target: 'cut',

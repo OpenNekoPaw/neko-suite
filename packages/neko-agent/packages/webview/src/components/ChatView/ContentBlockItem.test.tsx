@@ -39,7 +39,23 @@ vi.mock('@neko/shared/vscode', () => ({
 vi.mock('@/i18n/I18nContext', () => ({
   useTranslation: () => ({
     t: (key: string, vars?: Record<string, unknown>) =>
-      vars?.['count'] !== undefined ? `${String(vars['count'])} ${key}` : key,
+      ({
+        'chat.canvasLifecycle.status.needs-review': '待审阅',
+        'chat.canvasLifecycle.badge.displayFallback': '仅显示兜底',
+        'chat.canvasLifecycle.badge.genericTable': '通用表格',
+        'chat.canvasLifecycle.badge.creativeTable': '创作表格',
+        'chat.canvasLifecycle.blocked': '已阻止',
+        'chat.canvasLifecycle.diagnosticSeverity.warning': '警告',
+        'chat.canvasLifecycle.diagnostic.canvasCreativeProfileUnsupported':
+          '不支持的创作配置。',
+        'chat.canvasLifecycle.reviewArtifact': `审阅产物：${String(vars?.['artifact'] ?? '')}`,
+        'chat.canvasLifecycle.changedRefs': `变更引用：${String(vars?.['refs'] ?? '')}`,
+        'chat.canvasLifecycle.approvalRequired': '需确认',
+        'chat.canvasLifecycle.action.createStoryboardNodes': '创建分镜节点',
+        'chat.canvasLifecycle.disabled.conversationUnavailable': '对话不可用',
+        'chat.canvasLifecycle.disabled.unsupportedActionPayload': '不支持的动作载荷',
+      })[key] ??
+      (vars?.['count'] !== undefined ? `${String(vars['count'])} ${key}` : key),
   }),
 }));
 
@@ -88,11 +104,13 @@ describe('ContentBlockItem Canvas transfer actions', () => {
 
     expect(mockPostMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'requestCanvasMarkdownHandoff',
+        type: 'requestCanvasAuthoringHandoff',
         conversationId: 'conv-1',
-        requestId: expect.stringMatching(/^canvas-markdown-handoff:/),
-        markdown: expect.stringContaining('| scene | shot | source |'),
+        requestId: expect.stringMatching(/^canvas-authoring-handoff:/),
+        sourceKind: 'markdown',
+        content: expect.stringContaining('| scene | shot | source |'),
         sourceFormat: 'gfm-table',
+        targetHints: { sourceFormat: 'gfm-table' },
       }),
     );
     expect(JSON.stringify(mockPostMessage.mock.calls)).not.toContain('declaredIntentHint');
@@ -272,8 +290,9 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       },
     });
 
-    expect(screen.getByText('Canvas needs-review')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Create storyboard nodes/ }));
+    expect(screen.getByText('Canvas 待审阅')).toBeTruthy();
+    expect(screen.queryByText('Create storyboard nodes')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /创建分镜节点/ }));
 
     expect(mockPostMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -322,7 +341,10 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       },
     });
 
-    expect(screen.getByText('display-only fallback')).toBeTruthy();
+    expect(screen.getByText('仅显示兜底')).toBeTruthy();
+    expect(screen.getByText('警告')).toBeTruthy();
+    expect(screen.getByText('不支持的创作配置。')).toBeTruthy();
+    expect(screen.queryByText(/Unsupported creative profile/)).toBeNull();
     expect(screen.queryByRole('button', { name: /Create storyboard nodes/ })).toBeNull();
   });
 
@@ -353,9 +375,10 @@ describe('ContentBlockItem Canvas transfer actions', () => {
       },
     });
 
-    const action = screen.getByRole('button', { name: /Run external action/ });
+    const action = screen.getByRole('button', { name: /run-external/ });
+    expect(screen.queryByText('Run external action')).toBeNull();
     expect(action.hasAttribute('disabled')).toBe(true);
-    expect(action.getAttribute('title')).toBe('Unsupported action payload');
+    expect(action.getAttribute('title')).toBe('不支持的动作载荷');
   });
 });
 

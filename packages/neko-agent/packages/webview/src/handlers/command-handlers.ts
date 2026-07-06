@@ -17,6 +17,14 @@ import {
   projectCloseCurrentConversationTab,
   projectSlashCommandResultMessage,
 } from '../presenters/command-result-presenter';
+import {
+  formatCanvasLifecycleActionLabel,
+  formatCanvasLifecycleArtifactRef,
+  formatCanvasLifecycleDiagnosticMessage,
+  formatCanvasLifecycleDiagnosticSeverity,
+  formatCanvasLifecycleStatus,
+} from '../presenters/canvas-lifecycle-localization-presenter';
+import { t } from '../i18n';
 import { updateConversation } from './message-updater';
 
 /**
@@ -129,29 +137,26 @@ function projectCanvasMarkdownCapabilityResultContent(
 ): string {
   const lifecycle = message.lifecycleResult;
   if (lifecycle) {
-    const diagnostics = lifecycle.diagnostics
-      .map((diagnostic) => `- ${diagnostic.severity} ${diagnostic.code}: ${diagnostic.message}`)
-      .join('\n');
+    const diagnostics = projectCanvasLifecycleDiagnostics(lifecycle.diagnostics);
     const changed = lifecycle.changedRefs?.length
-      ? `\nChanged refs: ${lifecycle.changedRefs
-          .map((ref) => [ref.packageId, ref.kind, ref.id].filter(Boolean).join(':'))
-          .join(', ')}`
+      ? `\n${t('chat.canvasLifecycle.changedRefs', {
+          refs: lifecycle.changedRefs.map(formatCanvasLifecycleArtifactRef).join(', '),
+        })}`
       : lifecycle.reviewArtifact
-        ? `\nReview artifact: ${[
-            lifecycle.reviewArtifact.packageId,
-            lifecycle.reviewArtifact.kind,
-            lifecycle.reviewArtifact.id,
-          ]
-            .filter(Boolean)
-            .join(':')}`
+        ? `\n${t('chat.canvasLifecycle.reviewArtifact', {
+            artifact: formatCanvasLifecycleArtifactRef(lifecycle.reviewArtifact),
+          })}`
         : '';
     const actions = projectLifecycleActions(lifecycle.actions);
     return [
-      `Canvas lifecycle action ${lifecycle.status}: ${lifecycle.capabilityId}`,
-      diagnostics ? `Diagnostics:\n${diagnostics}` : '',
+      t('chat.canvasLifecycle.summary.lifecycleAction', {
+        status: formatCanvasLifecycleStatus(t, lifecycle.status),
+        capability: lifecycle.capabilityId,
+      }),
+      diagnostics ? `${t('chat.canvasLifecycle.summary.diagnostics')}:\n${diagnostics}` : '',
       changed.trim(),
       actions.trim(),
-      message.error ? `Error: ${message.error}` : '',
+      message.error ? t('chat.canvasLifecycle.summary.error', { error: message.error }) : '',
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -159,38 +164,62 @@ function projectCanvasMarkdownCapabilityResultContent(
 
   const result = message.result;
   if (!result) {
-    return `Canvas Markdown action failed: ${message.error ?? 'Unknown error.'}`;
+    return t('chat.canvasLifecycle.summary.markdownActionFailed', {
+      error: message.error ?? t('chat.canvasLifecycle.summary.unknownError'),
+    });
   }
 
-  const diagnostics = result.diagnostics
-    .map((diagnostic) => `- ${diagnostic.severity} ${diagnostic.code}: ${diagnostic.message}`)
-    .join('\n');
+  const diagnostics = projectCanvasLifecycleDiagnostics(result.diagnostics);
   const created = result.nodeIds?.length
-    ? `\nCreated nodes: ${result.nodeIds.join(', ')}`
+    ? `\n${t('chat.canvasLifecycle.summary.createdNodes', {
+        nodes: result.nodeIds.join(', '),
+      })}`
     : result.draftNodeId
-      ? `\nCreated draft: ${result.draftNodeId}`
+      ? `\n${t('chat.canvasLifecycle.summary.createdDraft', { node: result.draftNodeId })}`
       : result.tableNodeId
-        ? `\nCreated table: ${result.tableNodeId}`
+        ? `\n${t('chat.canvasLifecycle.summary.createdTable', { node: result.tableNodeId })}`
         : '';
   const actions = result.actions?.length
     ? [
-        'Available Canvas actions:',
+        t('chat.canvasLifecycle.summary.availableActions'),
         ...result.actions.map(
           (action) =>
-            `- ${action.label ?? action.actionId} (${action.capabilityId ?? result.capabilityId})`,
+            `- ${formatCanvasLifecycleActionLabel(t, action)} (${
+              action.capabilityId ?? result.capabilityId
+            })`,
         ),
       ].join('\n')
     : '';
   const status = message.success ? result.status : 'blocked';
   return [
-    `Canvas Markdown action ${status}: ${result.capabilityId}`,
-    diagnostics ? `Diagnostics:\n${diagnostics}` : '',
+    t('chat.canvasLifecycle.summary.markdownAction', {
+      status: formatCanvasMarkdownCapabilityStatus(status),
+      capability: result.capabilityId,
+    }),
+    diagnostics ? `${t('chat.canvasLifecycle.summary.diagnostics')}:\n${diagnostics}` : '',
     created.trim(),
     actions.trim(),
-    message.error ? `Error: ${message.error}` : '',
+    message.error ? t('chat.canvasLifecycle.summary.error', { error: message.error }) : '',
   ]
     .filter(Boolean)
     .join('\n\n');
+}
+
+type CanvasCapabilityDiagnostics =
+  | NonNullable<AgentCapabilityLifecycleResultMessage['lifecycleResult']>['diagnostics']
+  | NonNullable<AgentCapabilityLifecycleResultMessage['result']>['diagnostics'];
+
+function projectCanvasLifecycleDiagnostics(
+  diagnostics: CanvasCapabilityDiagnostics,
+): string {
+  return diagnostics
+    .map(
+      (diagnostic) =>
+        `- ${formatCanvasLifecycleDiagnosticSeverity(t, diagnostic.severity)} ${
+          diagnostic.code
+        }: ${formatCanvasLifecycleDiagnosticMessage(t, diagnostic)}`,
+    )
+    .join('\n');
 }
 
 function projectLifecycleActions(
@@ -200,21 +229,40 @@ function projectLifecycleActions(
 ): string {
   if (!actions?.length) return '';
   return [
-    'Available Canvas lifecycle actions:',
+    t('chat.canvasLifecycle.summary.availableLifecycleActions'),
     ...actions.map((action) => {
       const detail = [
         action.capabilityId,
         action.phase,
-        action.requiresApproval ? 'approval required' : 'no approval required',
+        action.requiresApproval
+          ? t('chat.canvasLifecycle.summary.approvalRequired')
+          : t('chat.canvasLifecycle.summary.noApprovalRequired'),
         action.sourceRef
-          ? `source ${[action.sourceRef.packageId, action.sourceRef.kind, action.sourceRef.id]
-              .filter(Boolean)
-              .join(':')}`
+          ? t('chat.canvasLifecycle.summary.sourceRef', {
+              ref: formatCanvasLifecycleArtifactRef(action.sourceRef),
+            })
           : undefined,
       ]
         .filter(Boolean)
         .join(', ');
-      return `- ${action.label ?? action.actionId}${detail ? ` (${detail})` : ''}`;
+      return `- ${formatCanvasLifecycleActionLabel(t, action)}${detail ? ` (${detail})` : ''}`;
     }),
   ].join('\n');
+}
+
+function formatCanvasMarkdownCapabilityStatus(
+  status: NonNullable<AgentCapabilityLifecycleResultMessage['result']>['status'] | 'blocked',
+): string {
+  switch (status) {
+    case 'created':
+      return t('chat.canvasLifecycle.capabilityStatus.created');
+    case 'changed':
+      return t('chat.canvasLifecycle.capabilityStatus.changed');
+    case 'validated':
+      return t('chat.canvasLifecycle.capabilityStatus.validated');
+    case 'needs-review':
+      return t('chat.canvasLifecycle.capabilityStatus.needs-review');
+    case 'blocked':
+      return t('chat.canvasLifecycle.capabilityStatus.blocked');
+  }
 }

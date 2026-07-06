@@ -96,6 +96,127 @@ export const chat = {
   'chat.activation.source.agent-tool.agent': 'Agent 工具',
   'chat.activation.source.agent-tool.user': 'Agent 工具',
   'chat.structuredArtifact.generating': '正在生成结构化内容...',
+  'chat.markdown.resourceStatus.image': '图像',
+  'chat.markdown.resourceStatus.images': '{count} 张图像',
+  'chat.markdown.resourceStatus.candidates': '{count} 个候选',
+  'chat.markdown.resourceStatus.ambiguous': '有歧义',
+  'chat.markdown.resourceStatus.missing': '缺失',
+  'chat.markdown.resourceStatus.unsupported': '不支持',
+  'chat.markdown.resourceStatus.unbound': '未绑定',
+  'chat.markdown.diagnostic.missingResourceToken':
+    'Markdown 资源标记 "{token}" 未匹配到已知资源。',
+  'chat.markdown.diagnostic.missingResourceContext':
+    'Markdown 资源标记 "{token}" 无法解析，因为这条消息没有图像资源上下文。',
+  'chat.markdown.diagnostic.ambiguousResourceToken':
+    'Markdown 资源标记 "{token}" 匹配到多个资源。',
+  'chat.markdown.diagnostic.unsupportedResourceReference':
+    'Agent Markdown 渲染暂未启用 Neko 资源引用嵌入和链接。',
+  'chat.markdown.image.unprojected': '图像引用 "{src}" 尚未由宿主投影。',
+  'chat.markdown.image.missingSource': '图像引用缺少来源。',
+  'chat.transfer.sendTo': '发送到',
+  'chat.transfer.sendToTarget': '发送到 {target}',
+  'chat.transfer.importToCanvas': '导入',
+  'chat.transfer.importToCanvasTitle': '导入素材到 Canvas',
+  'chat.canvasLifecycle.status.described': '已描述',
+  'chat.canvasLifecycle.status.validated': '已验证',
+  'chat.canvasLifecycle.status.needs-review': '待审阅',
+  'chat.canvasLifecycle.status.waiting-approval': '等待确认',
+  'chat.canvasLifecycle.status.applied': '已应用',
+  'chat.canvasLifecycle.status.executed': '已执行',
+  'chat.canvasLifecycle.status.blocked': '已阻止',
+  'chat.canvasLifecycle.badge.displayFallback': '仅显示兜底',
+  'chat.canvasLifecycle.badge.genericTable': '通用表格',
+  'chat.canvasLifecycle.badge.creativeTable': '创作表格',
+  'chat.canvasLifecycle.blocked': '已阻止',
+  'chat.canvasLifecycle.reviewArtifact': '审阅产物：{artifact}',
+  'chat.canvasLifecycle.changedRefs': '变更引用：{refs}',
+  'chat.canvasLifecycle.approvalRequired': '需确认',
+  'chat.canvasLifecycle.action.createStoryboardNodes': '创建分镜节点',
+  'chat.canvasLifecycle.disabled.conversationUnavailable': '对话不可用',
+  'chat.canvasLifecycle.disabled.unsupportedActionPayload': '不支持的动作载荷',
+  'chat.canvasLifecycle.capabilityStatus.created': '已创建',
+  'chat.canvasLifecycle.capabilityStatus.changed': '已变更',
+  'chat.canvasLifecycle.capabilityStatus.validated': '已验证',
+  'chat.canvasLifecycle.capabilityStatus.needs-review': '待审阅',
+  'chat.canvasLifecycle.capabilityStatus.blocked': '已阻止',
+  'chat.canvasLifecycle.summary.lifecycleAction': 'Canvas 生命周期动作 {status}: {capability}',
+  'chat.canvasLifecycle.summary.markdownAction': 'Canvas Markdown 动作 {status}: {capability}',
+  'chat.canvasLifecycle.summary.markdownActionFailed': 'Canvas Markdown 动作失败：{error}',
+  'chat.canvasLifecycle.summary.unknownError': '未知错误。',
+  'chat.canvasLifecycle.summary.diagnostics': '诊断',
+  'chat.canvasLifecycle.summary.createdNodes': '已创建节点：{nodes}',
+  'chat.canvasLifecycle.summary.createdDraft': '已创建草稿：{node}',
+  'chat.canvasLifecycle.summary.createdTable': '已创建表格：{node}',
+  'chat.canvasLifecycle.summary.availableActions': '可用 Canvas 动作：',
+  'chat.canvasLifecycle.summary.availableLifecycleActions': '可用 Canvas 生命周期动作：',
+  'chat.canvasLifecycle.summary.approvalRequired': '需要确认',
+  'chat.canvasLifecycle.summary.noApprovalRequired': '不需要确认',
+  'chat.canvasLifecycle.summary.sourceRef': '来源 {ref}',
+  'chat.canvasLifecycle.summary.error': '错误：{error}',
+  'chat.canvasLifecycle.diagnosticSeverity.info': '信息',
+  'chat.canvasLifecycle.diagnosticSeverity.warning': '警告',
+  'chat.canvasLifecycle.diagnosticSeverity.error': '错误',
+  'chat.canvasLifecycle.diagnostic.unlocalized': '诊断消息尚未本地化：{code}',
+  'chat.canvasLifecycle.diagnostic.canvasCreativeProfileUnsupported': '不支持的创作配置。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownAmbiguousResourceToken':
+    'Markdown 资源标记 "{token}" 匹配到多个资源。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownAttachResourceMissingStableRef':
+    '画布资源附加需要稳定资源引用或稳定来源路径。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownAttachResourceMissingTargetNode':
+    '画布资源附加需要目标节点。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownCapabilityInvocationFailed':
+    '画布 Markdown 能力调用失败。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidApproval': '审批上下文无效。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidDocumentResourceRef':
+    '文档资源引用无效。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidInput': '画布 Markdown 输入无效。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidMode': '画布 Markdown 模式无效。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidResource': 'Markdown 资源无效。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidResourceRef': '资源引用无效。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidResources': 'Markdown 资源列表无效。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidStringField': '字符串字段无效。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownInvalidTarget': '画布目标无效。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownMissingMarkdown': '缺少 Markdown 内容。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownMissingResourceToken':
+    'Markdown 资源标记 "{token}" 未匹配到已知资源。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownMissingStableResource':
+    'Markdown 资源缺少稳定引用或稳定来源路径。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownOperationProfileMismatch':
+    '当前操作需要分镜创作表格配置。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownOperationRequiredFieldMissing':
+    '当前操作缺少必需字段 "{field}"。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownRuntimeResourcePath':
+    'Markdown 资源路径来自运行时临时地址，不能写入画布。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownRuntimeResourceToken':
+    'Markdown 资源标记来自运行时临时地址，不能写入画布。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardCreateApprovalRequired':
+    '创建正式分镜节点需要生命周期审批上下文。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardCreateNotConfirmed':
+    '创建正式分镜节点需要明确的创建模式。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardNextActionMissing':
+    '分镜表缺少下一步动作。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardNoProductionRows':
+    '分镜表没有可生产的行。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardVisualColumnRequired':
+    '分镜表需要画面或提示词列。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardVisualOrPromptMissing':
+    '分镜行缺少画面描述或提示词。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownTableEmpty': 'Markdown 表格至少需要一行数据。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownTableMissing':
+    '需要一个 GFM 表格才能创建画布表格或分镜节点。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownTableProfileUnknownColumn':
+    '创作表格包含当前配置不接受的列。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownTableRowWidthMismatch':
+    'Markdown 表格行的单元格数量与表头不一致。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownUnknownCapability': '未知的画布 Markdown 能力。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownUnsupportedIngestIntent':
+    '不支持的 Markdown 摄取意图。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownUnsupportedOperationHint':
+    '分镜创作表格配置不支持该操作提示。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownUnsupportedSourceFormat':
+    '不支持的 Markdown 来源格式。',
+  'chat.canvasLifecycle.diagnostic.canvasMarkdownUnsupportedTableProfile':
+    '不支持的画布 Markdown 表格配置。',
 
   'chat.input.placeholder': '输入任何问题... (/ 命令, @ 文件, Shift+Enter 换行)',
   'chat.input.thinkingPlaceholder': '正在回答... 请等待或取消后再发送',

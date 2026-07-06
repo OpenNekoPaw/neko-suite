@@ -15,10 +15,19 @@ import { MarkdownRenderer, ThinkingBlock } from '@/components/ChatView/MessageCo
 import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
+import { useTranslation } from '@/i18n/I18nContext';
 import { VSCodeMessages } from '@/messages';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
 import { projectCanvasMarkdownHandoffRequest } from '@/presenters/canvas-markdown-handoff-presenter';
 import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
+import {
+  formatCanvasLifecycleActionLabel,
+  formatCanvasLifecycleArtifactRef,
+  formatCanvasLifecycleDiagnosticMessage,
+  formatCanvasLifecycleDiagnosticSeverity,
+  formatCanvasLifecycleStatus,
+  type ChatTranslation,
+} from '@/presenters/canvas-lifecycle-localization-presenter';
 import {
   CodeIcon,
   EditIcon,
@@ -37,7 +46,6 @@ import {
   isCanvasMarkdownCapabilityInput,
   isCanvasMarkdownCapabilityResult,
   type AgentCapabilityAction,
-  type AgentCapabilityArtifactRef,
   type AgentCapabilityInvocationInput,
   type AgentCapabilityInvocationResult,
   type CanvasMarkdownCapabilityResult,
@@ -95,6 +103,7 @@ export const ContentBlockItem = memo(function ContentBlockItem({
   ambientToolCalls,
   assistantIdentity,
 }: ContentBlockItemProps) {
+  const { t } = useTranslation();
   const actions = useMessageActions();
   const projection =
     projectedBlock ??
@@ -150,7 +159,7 @@ export const ContentBlockItem = memo(function ContentBlockItem({
           </div>
 
           {/* Block content */}
-          {renderBlockContent(projection, conversationId, actions, workItemIds)}
+          {renderBlockContent(projection, conversationId, actions, t, workItemIds)}
         </div>
       </div>
     </div>
@@ -199,6 +208,7 @@ function renderBlockContent(
     | 'contextChips'
     | 'ambientNodes'
   >,
+  t: ChatTranslation,
   workItemIds?: string[],
 ) {
   switch (projection.renderKind) {
@@ -213,6 +223,8 @@ function renderBlockContent(
             markdown: projection.content,
             siblingBlocks: projection.siblingBlocks,
             toolCalls: projection.toolCalls,
+            contextChips: callbacks.contextChips,
+            ambientNodes: callbacks.ambientNodes,
           })
         : undefined;
       const canvasMarkdownHandoff =
@@ -340,6 +352,7 @@ function renderBlockContent(
           requestId={projection.canvasLifecycle.requestId}
           error={projection.canvasLifecycle.error}
           conversationId={conversationId}
+          t={t}
         />
       );
 
@@ -354,35 +367,43 @@ function CanvasLifecycleResultCard({
   requestId,
   error,
   conversationId,
+  t,
 }: {
   lifecycle: AgentCapabilityInvocationResult;
   success: boolean;
   requestId: string;
   error?: string;
   conversationId: string | null;
+  t: ChatTranslation;
 }) {
   return (
     <div className="agent-bubble agent-bubble-assistant w-fit max-w-full rounded-2xl rounded-tl-md px-2.5 py-2 text-[12px] leading-relaxed">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="font-medium text-[var(--agent-fg)]">Canvas {lifecycle.status}</span>
+        <span className="font-medium text-[var(--agent-fg)]">
+          Canvas {formatCanvasLifecycleStatus(t, lifecycle.status)}
+        </span>
         <span className="font-mono text-[10px] text-[var(--vscode-descriptionForeground)]">
           {lifecycle.capabilityId}
         </span>
-        <CanvasLifecycleDataBadge result={readCanvasMarkdownLifecycleData(lifecycle)} />
+        <CanvasLifecycleDataBadge result={readCanvasMarkdownLifecycleData(lifecycle)} t={t} />
         {!success && (
           <span className="rounded border border-[var(--vscode-errorForeground)] px-1.5 py-0.5 text-[10px] text-[var(--vscode-errorForeground)]">
-            blocked
+            {t('chat.canvasLifecycle.blocked')}
           </span>
         )}
       </div>
       {lifecycle.reviewArtifact && (
         <div className="mt-1 text-[11px] text-[var(--agent-fg-secondary)]">
-          Review artifact: {formatArtifactRef(lifecycle.reviewArtifact)}
+          {t('chat.canvasLifecycle.reviewArtifact', {
+            artifact: formatCanvasLifecycleArtifactRef(lifecycle.reviewArtifact),
+          })}
         </div>
       )}
       {lifecycle.changedRefs?.length ? (
         <div className="mt-1 text-[11px] text-[var(--agent-fg-secondary)]">
-          Changed refs: {lifecycle.changedRefs.map(formatArtifactRef).join(', ')}
+          {t('chat.canvasLifecycle.changedRefs', {
+            refs: lifecycle.changedRefs.map(formatCanvasLifecycleArtifactRef).join(', '),
+          })}
         </div>
       ) : null}
       {lifecycle.diagnostics.length > 0 && (
@@ -392,8 +413,11 @@ function CanvasLifecycleResultCard({
               key={`${diagnostic.code}:${index}`}
               className="rounded border border-[var(--agent-divider)] bg-[var(--agent-elevated)] px-1.5 py-1 text-[11px]"
             >
-              <span className="font-medium">{diagnostic.severity}</span>{' '}
-              <span className="font-mono">{diagnostic.code}</span>: {diagnostic.message}
+              <span className="font-medium">
+                {formatCanvasLifecycleDiagnosticSeverity(t, diagnostic.severity)}
+              </span>{' '}
+              <span className="font-mono">{diagnostic.code}</span>:{' '}
+              <span>{formatCanvasLifecycleDiagnosticMessage(t, diagnostic)}</span>
             </div>
           ))}
         </div>
@@ -407,31 +431,38 @@ function CanvasLifecycleResultCard({
         actions={lifecycle.actions}
         conversationId={conversationId}
         parentRequestId={requestId}
+        t={t}
       />
     </div>
   );
 }
 
-function CanvasLifecycleDataBadge({ result }: { result: CanvasMarkdownCapabilityResult | null }) {
+function CanvasLifecycleDataBadge({
+  result,
+  t,
+}: {
+  result: CanvasMarkdownCapabilityResult | null;
+  t: ChatTranslation;
+}) {
   if (!result) return null;
   if (result.displayFallback) {
     return (
       <span className="rounded border border-[var(--vscode-editorWarning-foreground)] px-1.5 py-0.5 text-[10px] text-[var(--vscode-editorWarning-foreground)]">
-        display-only fallback
+        {t('chat.canvasLifecycle.badge.displayFallback')}
       </span>
     );
   }
   if (result.resolvedKind === 'generic-table') {
     return (
       <span className="rounded border border-[var(--agent-divider)] px-1.5 py-0.5 text-[10px] text-[var(--vscode-descriptionForeground)]">
-        generic table
+        {t('chat.canvasLifecycle.badge.genericTable')}
       </span>
     );
   }
   if (result.resolvedKind === 'creative-table') {
     return (
       <span className="rounded border border-[var(--agent-divider)] px-1.5 py-0.5 text-[10px] text-[var(--vscode-descriptionForeground)]">
-        creative table
+        {t('chat.canvasLifecycle.badge.creativeTable')}
       </span>
     );
   }
@@ -448,10 +479,12 @@ function CanvasLifecycleActionList({
   actions,
   conversationId,
   parentRequestId,
+  t,
 }: {
   actions: AgentCapabilityInvocationResult['actions'];
   conversationId: string | null;
   parentRequestId: string;
+  t: ChatTranslation;
 }) {
   if (!actions?.length) return null;
   return (
@@ -462,6 +495,7 @@ function CanvasLifecycleActionList({
           action={action}
           conversationId={conversationId}
           parentRequestId={parentRequestId}
+          t={t}
         />
       ))}
     </div>
@@ -472,16 +506,18 @@ function CanvasLifecycleActionButton({
   action,
   conversationId,
   parentRequestId,
+  t,
 }: {
   action: AgentCapabilityAction;
   conversationId: string | null;
   parentRequestId: string;
+  t: ChatTranslation;
 }) {
   const invocation = projectCanvasLifecycleActionInvocation(action);
   const disabledReason = !conversationId
-    ? 'Conversation unavailable'
+    ? t('chat.canvasLifecycle.disabled.conversationUnavailable')
     : !invocation
-      ? 'Unsupported action payload'
+      ? t('chat.canvasLifecycle.disabled.unsupportedActionPayload')
       : undefined;
   const disabled = disabledReason !== undefined;
 
@@ -500,8 +536,12 @@ function CanvasLifecycleActionButton({
       }}
       className="inline-flex min-h-6 max-w-full items-center gap-1 rounded border border-[var(--agent-input-border)] bg-[var(--agent-surface)] px-2 py-1 text-[11px] font-medium text-[var(--agent-fg)] transition-colors hover:border-[var(--agent-accent)] hover:bg-[var(--agent-hover)] disabled:cursor-not-allowed disabled:opacity-50"
     >
-      <span className="truncate">{action.label ?? action.actionId}</span>
-      {action.requiresApproval && <span className="text-[10px] opacity-70">approve</span>}
+      <span className="truncate">{formatCanvasLifecycleActionLabel(t, action)}</span>
+      {action.requiresApproval && (
+        <span className="text-[10px] opacity-70">
+          {t('chat.canvasLifecycle.approvalRequired')}
+        </span>
+      )}
     </button>
   );
 }
@@ -526,8 +566,4 @@ function projectCanvasLifecycleActionInvocation(
     ...(approval ? { approval } : {}),
     provenance: { source: 'webview' },
   };
-}
-
-function formatArtifactRef(ref: AgentCapabilityArtifactRef): string {
-  return [ref.packageId, ref.kind, ref.id].filter(Boolean).join(':');
 }

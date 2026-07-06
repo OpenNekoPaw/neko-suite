@@ -1,8 +1,15 @@
 import {
   type CanvasMarkdownCapabilityTarget,
   type CanvasMarkdownResourceRef,
+  isRuntimeOnlyCanvasMarkdownResourceValue,
 } from '@neko/shared';
-import type { PluginTransferProvenance, PluginTransferTargetRef } from '@neko-agent/types';
+import type {
+  CanvasAuthoringHandoffDiagnostic,
+  CanvasAuthoringHandoffPromptSpan,
+  CanvasAuthoringHandoffStableRef,
+  PluginTransferProvenance,
+  PluginTransferTargetRef,
+} from '@neko-agent/types';
 import type { MarkdownResourceRenderingProjection } from './markdown-resource-rendering-presenter';
 
 export interface CanvasMarkdownHandoffRequest {
@@ -11,6 +18,9 @@ export interface CanvasMarkdownHandoffRequest {
   readonly sourceFormat?:
     'markdown' | 'markdown-table' | 'gfm-table' | 'resource-reference-markdown';
   readonly resources?: readonly CanvasMarkdownResourceRef[];
+  readonly stableRefs?: readonly CanvasAuthoringHandoffStableRef[];
+  readonly diagnostics?: readonly CanvasAuthoringHandoffDiagnostic[];
+  readonly promptSpans?: readonly CanvasAuthoringHandoffPromptSpan[];
   readonly target?: CanvasMarkdownCapabilityTarget;
   readonly provenance?: PluginTransferProvenance;
   readonly userIntent?: string;
@@ -39,6 +49,9 @@ export function projectCanvasMarkdownHandoffRequest(
   if (!handoffKind) return null;
 
   const resources = projectCanvasMarkdownResources(options.markdownResources);
+  const stableRefs = projectCanvasMarkdownStableRefs(options.markdownResources);
+  const diagnostics = projectCanvasMarkdownDiagnostics(options.markdownResources);
+  const promptSpans = projectCanvasMarkdownPromptSpans(options.markdownResources);
   const target = projectCanvasMarkdownTarget(options.target);
   const provenance = projectCanvasMarkdownProvenance(options.provenance);
   const declaredIntentHint = options.declaredIntentHint ?? handoffKind.declaredIntentHint;
@@ -52,9 +65,58 @@ export function projectCanvasMarkdownHandoffRequest(
     ...(declaredIntentHint ? { declaredIntentHint } : {}),
     ...(declaredProfileHint ? { declaredProfileHint } : {}),
     ...(resources.length > 0 ? { resources } : {}),
+    ...(stableRefs.length > 0 ? { stableRefs } : {}),
+    ...(diagnostics.length > 0 ? { diagnostics } : {}),
+    ...(promptSpans.length > 0 ? { promptSpans } : {}),
     ...(target ? { target } : {}),
     ...(provenance ? { provenance } : {}),
   };
+}
+
+function projectCanvasMarkdownStableRefs(
+  projection: MarkdownResourceRenderingProjection | undefined,
+): readonly CanvasAuthoringHandoffStableRef[] {
+  if (!projection) return [];
+  const byKey = new Map<string, CanvasAuthoringHandoffStableRef>();
+  for (const mention of projection.mentions ?? []) {
+    if (!mention.ref) continue;
+    const ref = {
+      ...mention.ref,
+      token: mention.raw,
+    };
+    byKey.set(canvasAuthoringStableRefKey(ref), ref);
+  }
+  return Array.from(byKey.values());
+}
+
+function projectCanvasMarkdownDiagnostics(
+  projection: MarkdownResourceRenderingProjection | undefined,
+): readonly CanvasAuthoringHandoffDiagnostic[] {
+  return (
+    projection?.diagnostics.map((diagnostic) => ({
+      severity: diagnostic.severity,
+      code: diagnostic.code,
+      message: diagnostic.message,
+      ...(diagnostic.token ? { token: diagnostic.token } : {}),
+      ...(diagnostic.range ? { range: diagnostic.range } : {}),
+    })) ?? []
+  );
+}
+
+function projectCanvasMarkdownPromptSpans(
+  projection: MarkdownResourceRenderingProjection | undefined,
+): readonly CanvasAuthoringHandoffPromptSpan[] {
+  return (
+    projection?.promptSpans?.map((span) => ({
+      kind: span.kind,
+      range: span.range,
+      ...(span.fieldId ? { fieldId: span.fieldId } : {}),
+      ...(span.label ? { label: span.label } : {}),
+      ...(span.ref ? { ref: span.ref } : {}),
+      ...(span.tone ? { tone: span.tone } : {}),
+      ...(span.tooltip ? { tooltip: span.tooltip } : {}),
+    })) ?? []
+  );
 }
 
 function projectCanvasMarkdownResources(
@@ -64,11 +126,20 @@ function projectCanvasMarkdownResources(
   const byKey = new Map<string, CanvasMarkdownResourceRef>();
   for (const token of projection.tokens) {
     for (const resource of token.resources) {
+      if (!isSafeCanvasMarkdownHandoffResource(resource)) continue;
       const key = canvasMarkdownResourceKey(resource);
       if (!byKey.has(key)) byKey.set(key, resource);
     }
   }
   return Array.from(byKey.values());
+}
+
+function isSafeCanvasMarkdownHandoffResource(resource: CanvasMarkdownResourceRef): boolean {
+  if (resource.token && isRuntimeOnlyCanvasMarkdownResourceValue(resource.token)) return false;
+  if (resource.sourcePath && isRuntimeOnlyCanvasMarkdownResourceValue(resource.sourcePath)) {
+    return false;
+  }
+  return true;
 }
 
 interface CanvasMarkdownHandoffKind {
@@ -153,4 +224,8 @@ function canvasMarkdownResourceKey(resource: CanvasMarkdownResourceRef): string 
     (resource.sourcePath ? `path:${resource.sourcePath}` : undefined) ??
     `token:${resource.token ?? ''}`
   );
+}
+
+function canvasAuthoringStableRefKey(ref: CanvasAuthoringHandoffStableRef): string {
+  return `${ref.namespace ?? 'default'}:${ref.kind}:${ref.id}:${ref.token ?? ''}`;
 }

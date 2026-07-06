@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ToolCall } from '@neko-agent/types';
+import type { AgentContextPayload } from '@neko/shared';
 import {
   projectMarkdownResourceRendering,
   normalizeMarkdownResourceLookupToken,
 } from '../markdown-resource-rendering-presenter';
+import type { AmbientCanvasNodeProjection } from '../plugin-transfer-presenter';
 
 describe('markdown resource rendering presenter', () => {
   it('projects markdown table resource tokens from stable tool result resources', () => {
@@ -492,7 +494,185 @@ describe('markdown resource rendering presenter', () => {
     );
     expect(normalizeMarkdownResourceLookupToken('Page 1')).toBe('page_1');
   });
+
+  it('resolves markdown mentions from Agent context chips to stable refs', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: 'Use @Rin in the image prompt.',
+      contextChips: [
+        createContextChip({
+          type: 'character',
+          id: 'character-rin',
+          label: 'Rin',
+          summary: 'Lead character',
+        }),
+      ],
+      requireResolvedReferences: true,
+    });
+
+    expect(projection.status).toBe('ready');
+    expect(projection.mentions).toEqual([
+      expect.objectContaining({
+        raw: '@Rin',
+        label: 'Rin',
+        status: 'bound',
+        ref: { kind: 'character', id: 'character-rin', namespace: 'entity' },
+      }),
+    ]);
+    expect(projection.diagnostics).toEqual([]);
+  });
+
+  it('resolves markdown mentions from ambient Canvas nodes', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: 'Extend @shot-01 with a close-up panel.',
+      ambientNodes: [createAmbientCanvasNode({ nodeId: 'shot-01', type: 'shot' })],
+      requireResolvedReferences: true,
+    });
+
+    expect(projection.status).toBe('ready');
+    expect(projection.mentions).toEqual([
+      expect.objectContaining({
+        raw: '@shot-01',
+        status: 'bound',
+        ref: { kind: 'canvas-node', id: 'shot-01', namespace: 'canvas' },
+      }),
+    ]);
+  });
+
+  it('resolves markdown mentions from explicit mention items', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: 'Attach @OpeningScript as source context.',
+      mentionItems: [
+        {
+          id: 'script-1',
+          kind: 'file',
+          label: 'OpeningScript',
+          filePath: 'story/opening-script.md',
+          description: 'Opening scene source',
+        },
+      ],
+      requireResolvedReferences: true,
+    });
+
+    expect(projection.status).toBe('ready');
+    expect(projection.mentions).toEqual([
+      expect.objectContaining({
+        raw: '@OpeningScript',
+        status: 'bound',
+        ref: { kind: 'file', id: 'story/opening-script.md' },
+      }),
+    ]);
+  });
+
+  it('does not resolve ambiguous markdown mentions by display order', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: 'Compare @Rin references before handoff.',
+      contextChips: [
+        createContextChip({
+          type: 'character',
+          id: 'character-rin-main',
+          label: 'Rin',
+          summary: 'Main continuity',
+        }),
+        createContextChip({
+          type: 'character',
+          id: 'character-rin-alt',
+          label: 'Rin',
+          summary: 'Alternate costume',
+        }),
+      ],
+      requireResolvedReferences: true,
+    });
+
+    expect(projection.status).toBe('diagnostic');
+    expect(projection.mentions).toEqual([
+      expect.objectContaining({
+        raw: '@Rin',
+        status: 'ambiguous',
+        candidates: [
+          { kind: 'character', id: 'character-rin-main', namespace: 'entity' },
+          { kind: 'character', id: 'character-rin-alt', namespace: 'entity' },
+        ],
+      }),
+    ]);
+    expect(projection.mentions?.[0]?.ref).toBeUndefined();
+    expect(projection.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'ambiguous-mention-reference',
+        token: '@Rin',
+      }),
+    ]);
+  });
+
+  it('emits diagnostics for unresolved mentions when stable refs are required', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: 'Generate a shot for @UnknownCharacter.',
+      requireResolvedReferences: true,
+    });
+
+    expect(projection.status).toBe('diagnostic');
+    expect(projection.mentions).toEqual([
+      expect.objectContaining({
+        raw: '@UnknownCharacter',
+        status: 'missing',
+      }),
+    ]);
+    expect(projection.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'missing-mention-reference',
+        token: '@UnknownCharacter',
+      }),
+    ]);
+  });
+
+  it('projects semantic prompt spans for read-only renderer metadata', () => {
+    const projection = projectMarkdownResourceRendering({
+      markdown: 'Alley at night. Rin enters.',
+      promptSpans: [
+        {
+          kind: 'scene',
+          range: { start: 0, end: 14 },
+          fieldId: 'scene.location',
+          label: 'Alley',
+          tone: 'scene',
+          tooltip: 'Scene location span',
+          ref: { kind: 'canvas-node', id: 'scene-1', namespace: 'canvas' },
+        },
+      ],
+    });
+
+    expect(projection.status).toBe('ready');
+    expect(projection.promptSpans).toEqual([
+      {
+        kind: 'scene',
+        range: { start: 0, end: 14 },
+        fieldId: 'scene.location',
+        label: 'Alley',
+        tone: 'scene',
+        tooltip: 'Scene location span',
+        ref: { kind: 'canvas-node', id: 'scene-1', namespace: 'canvas' },
+      },
+    ]);
+    expect(projection.diagnostics).toEqual([]);
+  });
 });
+
+function createContextChip(
+  overrides: Pick<AgentContextPayload, 'type' | 'id' | 'label' | 'summary'>,
+): AgentContextPayload {
+  return {
+    ...overrides,
+    data: {},
+  };
+}
+
+function createAmbientCanvasNode(
+  overrides: Pick<AmbientCanvasNodeProjection, 'nodeId' | 'type'>,
+): AmbientCanvasNodeProjection {
+  return {
+    summary: `${overrides.nodeId} ${overrides.type}`,
+    ...overrides,
+  };
+}
 
 function createReadImageToolCall(
   overrides: {

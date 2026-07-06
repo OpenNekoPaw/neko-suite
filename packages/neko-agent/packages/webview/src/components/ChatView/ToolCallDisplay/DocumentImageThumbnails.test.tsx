@@ -16,6 +16,18 @@ vi.mock('@neko/shared/vscode', () => ({
   postMessage: (message: unknown) => mockPostMessage(message),
 }));
 
+vi.mock('@/i18n/I18nContext', () => ({
+  useTranslation: () => ({
+    t: (key: string, vars?: Record<string, unknown>) =>
+      ({
+        'chat.transfer.sendTo': 'Send to',
+        'chat.transfer.sendToTarget': `Send to ${String(vars?.['target'] ?? '')}`,
+        'chat.transfer.importToCanvas': 'Import',
+        'chat.transfer.importToCanvasTitle': 'Import asset to Canvas',
+      })[key] ?? key,
+  }),
+}));
+
 describe('DocumentImageThumbnails', () => {
   it('copies document entry locations when a thumbnail has no page locator', async () => {
     const writeText = vi.fn();
@@ -24,7 +36,7 @@ describe('DocumentImageThumbnails', () => {
     });
 
     render(
-      <MessageActionsProvider pluginsAvailable={{ canvas: true }}>
+      <MessageActionsProvider pluginsAvailable={{ canvas: true }} activeConversationId="conv-1">
         <DocumentImageThumbnails
           thumbnails={[
             {
@@ -64,7 +76,7 @@ describe('DocumentImageThumbnails', () => {
 
   it('renders a Send to Canvas action for document image thumbnails', () => {
     render(
-      <MessageActionsProvider pluginsAvailable={{ canvas: true }}>
+      <MessageActionsProvider pluginsAvailable={{ canvas: true }} activeConversationId="conv-1">
         <DocumentImageThumbnails
           thumbnails={[
             {
@@ -96,29 +108,17 @@ describe('DocumentImageThumbnails', () => {
 
     fireEvent.click(sendButton);
 
-    expect(mockPostMessage).toHaveBeenCalledWith({
-      type: 'sendToPlugin',
-      target: 'canvas',
-      payload: {
-        kind: 'singleAsset',
-        asset: {
-          mediaType: 'image',
-          name: 'page-1.jpg',
-          documentResourceRef: {
-            kind: 'document-entry',
-            source: { filePath: '/books/a.epub', format: 'epub' },
-            entryPath: 'image/Page_1.jpg',
-            versionPolicy: 'versioned-export',
-          },
-        },
-        target: {
-          plugin: 'canvas',
-          mode: 'insert',
-        },
-        provenance: {
-          source: 'webview',
-          label: 'document-image:C2',
-          metadata: {
+    expect(mockPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'requestCanvasAuthoringHandoff',
+        conversationId: 'conv-1',
+        sourceKind: 'resource-backed-content',
+        title: 'page-1.jpg',
+        resources: [
+          {
+            token: 'page-1.jpg',
+            label: 'page-1.jpg',
+            role: 'source',
             documentResourceRef: {
               kind: 'document-entry',
               source: { filePath: '/books/a.epub', format: 'epub' },
@@ -126,8 +126,32 @@ describe('DocumentImageThumbnails', () => {
               versionPolicy: 'versioned-export',
             },
           },
-        },
-      },
-    });
+        ],
+        target: { mode: 'insert' },
+        provenance: expect.objectContaining({
+          source: 'webview',
+          label: 'document-image:C2',
+        }),
+      }),
+    );
+    expect(mockPostMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'sendToPlugin' }),
+    );
+
+    mockPostMessage.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+    expect(screen.getByRole('button', { name: 'Import' }).getAttribute('title')).toBe(
+      'Import asset to Canvas',
+    );
+    expect(mockPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'sendToPlugin',
+        target: 'canvas',
+        payload: expect.objectContaining({
+          kind: 'singleAsset',
+        }),
+      }),
+    );
   });
 });

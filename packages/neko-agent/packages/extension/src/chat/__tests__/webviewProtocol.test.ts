@@ -236,6 +236,15 @@ describe('parseWebviewToExtensionMessage', () => {
       },
     ],
     [
+      'canvas authoring handoff',
+      {
+        type: 'requestCanvasAuthoringHandoff',
+        requestId: 'request-1',
+        sourceKind: 'generated-text',
+        content: 'Create a Canvas scene note.',
+      },
+    ],
+    [
       'Mermaid error feedback',
       {
         type: 'mermaidError',

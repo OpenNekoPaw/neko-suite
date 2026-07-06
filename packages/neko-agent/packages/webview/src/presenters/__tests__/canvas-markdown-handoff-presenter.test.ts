@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { projectCanvasMarkdownHandoffRequest } from '../canvas-markdown-handoff-presenter';
-import type { MarkdownResourceRenderingProjection } from '../markdown-resource-rendering-presenter';
+import {
+  projectMarkdownResourceRendering,
+  type MarkdownResourceRenderingProjection,
+} from '../markdown-resource-rendering-presenter';
 
 describe('canvas markdown handoff presenter', () => {
   it('projects storyboard creative tables to an Agent handoff request without choosing a Canvas capability', () => {
@@ -127,23 +130,223 @@ describe('canvas markdown handoff presenter', () => {
   });
 
   it('preserves provider extension columns without splitting prompt field contracts', () => {
+    const markdown = [
+      '| scene | shot | imagePrompt | videoPrompt | model |',
+      '| --- | --- | --- | --- | --- |',
+      '| S1 | 1 | generate keyframe; edit shadows if source is provided | generate slow push in | seedance-2-5 |',
+    ].join('\n');
     const projection = projectCanvasMarkdownHandoffRequest({
-      markdown: [
-        '| scene | shot | imagePrompt | videoPrompt | model |',
-        '| --- | --- | --- | --- | --- |',
-        '| S1 | 1 | generate keyframe; edit shadows if source is provided | generate slow push in | seedance-2-5 |',
-      ].join('\n'),
+      markdown,
       declaredIntentHint: 'creative-table',
       declaredProfileHint: 'storyboard',
     });
 
     expect(projection).toEqual(
       expect.objectContaining({
+        markdown,
         sourceFormat: 'gfm-table',
         declaredIntentHint: 'creative-table',
         declaredProfileHint: 'storyboard',
       }),
     );
+    expect(projection?.markdown).toContain('model');
+    expect(projection?.markdown).toContain('seedance-2-5');
+  });
+
+  it('does not hand runtime-only resource refs to Canvas', () => {
+    const projection = projectCanvasMarkdownHandoffRequest({
+      markdown: createStoryboardCreativeTable(),
+      markdownResources: {
+        status: 'ready',
+        diagnostics: [],
+        tokens: [
+          {
+            token: 'P1',
+            status: 'bound',
+            refs: [{ token: 'P1', label: 'Panel 1', role: 'source' }],
+            resources: [
+              {
+                token: 'vscode-webview://panel/image.png',
+                label: 'Runtime Webview Preview',
+                role: 'source',
+                sourcePath: 'vscode-webview://panel/image.png',
+              },
+              {
+                token: 'blob:vscode/preview',
+                label: 'Runtime Blob Preview',
+                role: 'source',
+                sourcePath: 'blob:vscode/preview',
+              },
+              {
+                token: 'P1',
+                label: 'Stable Panel',
+                role: 'source',
+                sourcePath: '${PROJECT}/assets/panel-1.png',
+              },
+            ],
+            renderUris: ['vscode-webview://panel/image.png'],
+            diagnostics: [],
+          },
+        ],
+      },
+    });
+
+    expect(projection?.resources).toEqual([
+      {
+        token: 'P1',
+        label: 'Stable Panel',
+        role: 'source',
+        sourcePath: '${PROJECT}/assets/panel-1.png',
+      },
+    ]);
+    expect(JSON.stringify(projection)).not.toContain('vscode-webview://panel/image.png');
+    expect(JSON.stringify(projection)).not.toContain('blob:vscode/preview');
+  });
+
+  it('projects Markdown stable refs, prompt spans, and diagnostics into handoff metadata', () => {
+    const projection = projectCanvasMarkdownHandoffRequest({
+      markdown: createStoryboardCreativeTable(),
+      markdownResources: {
+        status: 'diagnostic',
+        tokens: [],
+        mentions: [
+          {
+            raw: '@Rin',
+            label: 'Rin',
+            status: 'bound',
+            ref: { kind: 'character', id: 'character-rin', namespace: 'entity' },
+            candidates: [],
+            range: { start: 0, end: 4 },
+          },
+        ],
+        promptSpans: [
+          {
+            kind: 'character',
+            range: { start: 0, end: 4 },
+            fieldId: 'character.ref',
+            label: 'Rin',
+            ref: { kind: 'character', id: 'character-rin', namespace: 'entity' },
+            tone: 'character',
+            tooltip: 'Character reference',
+          },
+        ],
+        diagnostics: [
+          {
+            severity: 'warning',
+            code: 'prompt-span-needs-review',
+            message: 'Prompt span needs review.',
+            token: '@Rin',
+            range: { start: 0, end: 4 },
+          },
+        ],
+      },
+    });
+
+    expect(projection).toEqual(
+      expect.objectContaining({
+        stableRefs: [
+          {
+            kind: 'character',
+            id: 'character-rin',
+            namespace: 'entity',
+            token: '@Rin',
+          },
+        ],
+        promptSpans: [
+          {
+            kind: 'character',
+            range: { start: 0, end: 4 },
+            fieldId: 'character.ref',
+            label: 'Rin',
+            ref: { kind: 'character', id: 'character-rin', namespace: 'entity' },
+            tone: 'character',
+            tooltip: 'Character reference',
+          },
+        ],
+        diagnostics: [
+          {
+            severity: 'warning',
+            code: 'prompt-span-needs-review',
+            message: 'Prompt span needs review.',
+            token: '@Rin',
+            range: { start: 0, end: 4 },
+          },
+        ],
+      }),
+    );
+  });
+
+  it('keeps @neko/markdown projection data as handoff metadata instead of Canvas mutation authority', () => {
+    const markdown = [
+      '| scene | shot | character | voice | imagePrompt | unknown review field |',
+      '| --- | --- | --- | --- | --- | --- |',
+      '| Opening | 1 | @Rin | whisper | quiet corridor | keep as note |',
+    ].join('\n');
+    const markdownResources = projectMarkdownResourceRendering({
+      markdown,
+      mentionItems: [{ id: 'character-rin', kind: 'character', label: 'Rin' }],
+      promptSpans: [
+        {
+          kind: 'character',
+          range: { start: markdown.indexOf('@Rin'), end: markdown.indexOf('@Rin') + 4 },
+          fieldId: 'character.ref',
+          label: 'Rin',
+          ref: { kind: 'character', id: 'character-rin', namespace: 'entity' },
+          tone: 'character',
+        },
+        {
+          kind: 'voice',
+          range: { start: markdown.indexOf('whisper'), end: markdown.indexOf('whisper') + 7 },
+          fieldId: 'voice.cue',
+          label: 'whisper',
+          tone: 'voice',
+        },
+      ],
+    });
+
+    const handoff = projectCanvasMarkdownHandoffRequest({
+      markdown,
+      markdownResources,
+      declaredIntentHint: 'creative-table',
+      declaredProfileHint: 'storyboard',
+    });
+
+    expect(handoff).toEqual(
+      expect.objectContaining({
+        markdown,
+        sourceFormat: 'gfm-table',
+        stableRefs: [
+          expect.objectContaining({
+            kind: 'character',
+            id: 'character-rin',
+            token: '@Rin',
+          }),
+        ],
+        promptSpans: [
+          expect.objectContaining({
+            kind: 'character',
+            fieldId: 'character.ref',
+            label: 'Rin',
+          }),
+          expect.objectContaining({
+            kind: 'voice',
+            fieldId: 'voice.cue',
+            label: 'whisper',
+          }),
+        ],
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+      }),
+    );
+    expect(handoff).not.toHaveProperty('capabilityId');
+    expect(handoff).not.toHaveProperty('input');
+    expect(handoff).not.toHaveProperty('profileHint');
+    expect(handoff).not.toHaveProperty('intentHint');
+    expect(handoff).not.toHaveProperty('fields');
+    expect(handoff).not.toHaveProperty('fieldValues');
+    expect(JSON.stringify(handoff)).not.toContain('canvas.ingestMarkdown');
+    expect(JSON.stringify(handoff)).not.toContain('canvas.createStoryboardFromMarkdown');
+    expect(JSON.stringify(handoff)).not.toContain('canvas_create_node');
   });
 
   it('projects localized Chinese storyboard creative tables', () => {

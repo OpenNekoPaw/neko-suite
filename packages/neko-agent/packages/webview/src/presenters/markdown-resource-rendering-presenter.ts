@@ -1,5 +1,16 @@
 import type { ContentBlock, ToolCall } from '@neko-agent/types';
 import {
+  normalizeMarkdownResourceLookupToken,
+  projectNekoMarkdownExtensions,
+  stripMarkdownPlacementHint,
+  type NekoMarkdownDiagnostic,
+  type NekoMarkdownMentionResolver,
+  type NekoMarkdownMentionToken,
+  type NekoMarkdownSemanticPromptSpan,
+  type NekoMarkdownStableRef,
+} from '@neko/markdown';
+import {
+  type AgentContextPayload,
   isRuntimeOnlyCanvasMarkdownResourceValue,
   isResourceRef,
   parseDocumentArchiveResourceRef,
@@ -11,6 +22,7 @@ import {
   type ResourceSourceRef,
   type ToolResultAttachment,
 } from '@neko/shared';
+import type { AmbientCanvasNodeProjection } from './plugin-transfer-presenter';
 
 export type MarkdownResourceStatus = 'bound' | 'ambiguous' | 'missing' | 'unsupported';
 
@@ -19,6 +31,7 @@ export interface MarkdownResourceDiagnostic {
   readonly code: string;
   readonly message: string;
   readonly token?: string;
+  readonly range?: NekoMarkdownDiagnostic['range'];
   readonly candidates?: readonly MarkdownResourceCandidateSummary[];
 }
 
@@ -42,9 +55,39 @@ export interface MarkdownRenderedResourceToken {
   readonly diagnostics: readonly MarkdownResourceDiagnostic[];
 }
 
+export interface MarkdownMentionResolverItem {
+  readonly id: string;
+  readonly kind: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly filePath?: string;
+  readonly contextPayload?: AgentContextPayload;
+}
+
+export interface MarkdownMentionProjection {
+  readonly raw: string;
+  readonly label: string;
+  readonly status: MarkdownResourceStatus;
+  readonly ref?: NekoMarkdownStableRef;
+  readonly candidates: readonly NekoMarkdownStableRef[];
+  readonly range: NekoMarkdownMentionToken['range'];
+}
+
+export interface MarkdownSemanticPromptSpanProjection {
+  readonly kind: string;
+  readonly range: NekoMarkdownSemanticPromptSpan['range'];
+  readonly fieldId?: string;
+  readonly label?: string;
+  readonly ref?: NekoMarkdownStableRef;
+  readonly tone?: string;
+  readonly tooltip?: string;
+}
+
 export interface MarkdownResourceRenderingProjection {
   readonly status: 'none' | 'ready' | 'diagnostic';
   readonly tokens: readonly MarkdownRenderedResourceToken[];
+  readonly mentions?: readonly MarkdownMentionProjection[];
+  readonly promptSpans?: readonly MarkdownSemanticPromptSpanProjection[];
   readonly diagnostics: readonly MarkdownResourceDiagnostic[];
 }
 
@@ -73,10 +116,16 @@ export interface ProjectMarkdownResourceRenderingInput {
   readonly markdown: string;
   readonly siblingBlocks?: readonly ContentBlock[];
   readonly toolCalls?: readonly ToolCall[];
+  readonly contextChips?: readonly AgentContextPayload[];
+  readonly ambientNodes?: readonly AmbientCanvasNodeProjection[];
+  readonly mentionItems?: readonly MarkdownMentionResolverItem[];
+  readonly promptSpans?: readonly NekoMarkdownSemanticPromptSpan[];
+  readonly requireResolvedReferences?: boolean;
 }
 
+export { normalizeMarkdownResourceLookupToken } from '@neko/markdown';
+
 const COMMONMARK_IMAGE_RE = /!\[[^\]]*]\(([^)]+)\)/g;
-const RESOURCE_REFERENCE_EMBED_OR_LINK_RE = /!?\[\[([^\]]+)]]/g;
 const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
 const RESOURCE_CELL_TOKEN_RE =
   /`?([A-Za-z][A-Za-z0-9_.-]{0,80})(?:#[A-Za-z][A-Za-z0-9_.:-]{0,80})?`?/g;
@@ -111,9 +160,19 @@ const RESOURCE_COLUMN_HINTS = new Set([
 export function projectMarkdownResourceRendering(
   input: ProjectMarkdownResourceRenderingInput,
 ): MarkdownResourceRenderingProjection {
+  const extensionProjection = projectNekoMarkdownExtensions(input.markdown, {
+    mentionResolver: createMarkdownMentionResolver(input),
+    ...(input.promptSpans ? { promptSpans: input.promptSpans } : {}),
+    requireResolvedReferences: input.requireResolvedReferences === true,
+  });
   const refs = collectMarkdownToolResultImageRefs(input);
   const resourceIndex = createResourceIndex(refs);
-  const diagnostics = detectUnsupportedResourceReferenceSyntax(input.markdown);
+  const diagnostics = [
+    ...detectUnsupportedResourceReferenceSyntax(extensionProjection.diagnostics),
+    ...extensionProjection.diagnostics
+      .filter((diagnostic) => diagnostic.code !== 'unsupported-resource-reference-markdown-extension')
+      .map(toMarkdownResourceDiagnostic),
+  ];
   const tokens = extractMarkdownResourceTokens(input.markdown, refs.length > 0).map((token) =>
     projectMarkdownResourceToken(token, resourceIndex, refs.length),
   );
@@ -121,7 +180,14 @@ export function projectMarkdownResourceRendering(
     ...diagnostics,
     ...tokens.flatMap((projection) => projection.diagnostics),
   ];
-  if (tokens.length === 0 && allDiagnostics.length === 0) {
+  const mentions = extensionProjection.mentions.map(projectMarkdownMention);
+  const promptSpans = extensionProjection.promptSpans.map(projectMarkdownSemanticPromptSpan);
+  if (
+    tokens.length === 0 &&
+    mentions.length === 0 &&
+    promptSpans.length === 0 &&
+    allDiagnostics.length === 0
+  ) {
     return { status: 'none', tokens: [], diagnostics: [] };
   }
   return {
@@ -129,18 +195,10 @@ export function projectMarkdownResourceRendering(
       ? 'diagnostic'
       : 'ready',
     tokens,
+    ...(mentions.length > 0 ? { mentions } : {}),
+    ...(promptSpans.length > 0 ? { promptSpans } : {}),
     diagnostics: allDiagnostics,
   };
-}
-
-export function normalizeMarkdownResourceLookupToken(value: string): string {
-  return stripResourcePlacementHint(stripMarkdownToken(value))
-    .trim()
-    .toLowerCase()
-    .replace(/[/|、，,]+/g, '_')
-    .replace(/[\s-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '');
 }
 
 function projectMarkdownResourceToken(
@@ -203,6 +261,162 @@ function projectMarkdownResourceToken(
   };
 }
 
+function createMarkdownMentionResolver(
+  input: Pick<
+    ProjectMarkdownResourceRenderingInput,
+    'contextChips' | 'ambientNodes' | 'mentionItems'
+  >,
+): NekoMarkdownMentionResolver | undefined {
+  const candidates = collectMarkdownMentionCandidates(input);
+  if (candidates.length === 0) return undefined;
+  return {
+    resolveMention(mention) {
+      const mentionKey = normalizeMarkdownResourceLookupToken(mention.label);
+      const matches = candidates.filter((candidate) => candidate.lookupTokens.includes(mentionKey));
+      const uniqueMatches = dedupeMarkdownMentionCandidates(matches);
+      if (uniqueMatches.length === 0) return { status: 'unresolved' };
+      if (uniqueMatches.length > 1) {
+        return {
+          status: 'ambiguous',
+          candidates: uniqueMatches.map((candidate) => candidate.ref),
+        };
+      }
+      const match = uniqueMatches[0];
+      return match ? { status: 'resolved', ref: match.ref } : { status: 'unresolved' };
+    },
+  };
+}
+
+interface MarkdownMentionCandidate {
+  readonly ref: NekoMarkdownStableRef;
+  readonly lookupTokens: readonly string[];
+}
+
+function collectMarkdownMentionCandidates(
+  input: Pick<
+    ProjectMarkdownResourceRenderingInput,
+    'contextChips' | 'ambientNodes' | 'mentionItems'
+  >,
+): readonly MarkdownMentionCandidate[] {
+  return [
+    ...(input.contextChips ?? []).map(markdownMentionCandidateFromContextChip),
+    ...(input.ambientNodes ?? []).map(markdownMentionCandidateFromAmbientCanvasNode),
+    ...(input.mentionItems ?? []).map(markdownMentionCandidateFromMentionItem),
+  ];
+}
+
+function markdownMentionCandidateFromContextChip(
+  chip: AgentContextPayload,
+): MarkdownMentionCandidate {
+  return {
+    ref: { kind: chip.type, id: chip.id, namespace: contextPayloadNamespace(chip.type) },
+    lookupTokens: mentionLookupTokens([chip.label, chip.id, chip.summary]),
+  };
+}
+
+function markdownMentionCandidateFromAmbientCanvasNode(
+  node: AmbientCanvasNodeProjection,
+): MarkdownMentionCandidate {
+  return {
+    ref: { kind: 'canvas-node', id: node.nodeId, namespace: 'canvas' },
+    lookupTokens: mentionLookupTokens([node.nodeId, node.summary]),
+  };
+}
+
+function markdownMentionCandidateFromMentionItem(
+  item: MarkdownMentionResolverItem,
+): MarkdownMentionCandidate {
+  const ref = item.contextPayload
+    ? {
+        kind: item.contextPayload.type,
+        id: item.contextPayload.id,
+        namespace: contextPayloadNamespace(item.contextPayload.type),
+      }
+    : {
+        kind: item.kind,
+        id: item.filePath ?? item.id,
+        namespace: item.kind === 'canvas-node' ? 'canvas' : undefined,
+      };
+  return {
+    ref,
+    lookupTokens: mentionLookupTokens([
+      item.label,
+      item.id,
+      item.filePath,
+      item.description,
+      item.contextPayload?.label,
+      item.contextPayload?.summary,
+    ]),
+  };
+}
+
+function contextPayloadNamespace(type: AgentContextPayload['type']): string | undefined {
+  if (type === 'canvas-node') return 'canvas';
+  if (type === 'character' || type === 'scene' || type === 'entity') return 'entity';
+  if (type === 'asset' || type === 'media' || type === 'image' || type === 'audio-clip') {
+    return 'asset';
+  }
+  return undefined;
+}
+
+function mentionLookupTokens(values: readonly (string | undefined)[]): readonly string[] {
+  return uniqueStrings(
+    values
+      .filter(isNonEmptyString)
+      .flatMap((value) => [value, fileName(value), fileStem(value)])
+      .filter(isNonEmptyString)
+      .map(normalizeMarkdownResourceLookupToken),
+  );
+}
+
+function dedupeMarkdownMentionCandidates(
+  candidates: readonly MarkdownMentionCandidate[],
+): readonly MarkdownMentionCandidate[] {
+  const byRef = new Map<string, MarkdownMentionCandidate>();
+  for (const candidate of candidates) {
+    byRef.set(`${candidate.ref.kind}:${candidate.ref.id}`, candidate);
+  }
+  return [...byRef.values()];
+}
+
+function projectMarkdownMention(token: NekoMarkdownMentionToken): MarkdownMentionProjection {
+  return {
+    raw: token.raw,
+    label: token.label,
+    status:
+      token.status === 'resolved' ? 'bound' : token.status === 'ambiguous' ? 'ambiguous' : 'missing',
+    ...(token.ref ? { ref: token.ref } : {}),
+    candidates: token.candidates,
+    range: token.range,
+  };
+}
+
+function projectMarkdownSemanticPromptSpan(
+  span: NekoMarkdownSemanticPromptSpan,
+): MarkdownSemanticPromptSpanProjection {
+  return {
+    kind: span.kind,
+    range: span.range,
+    ...(span.fieldId ? { fieldId: span.fieldId } : {}),
+    ...(span.label ? { label: span.label } : {}),
+    ...(span.ref ? { ref: span.ref } : {}),
+    ...(span.tone ? { tone: span.tone } : {}),
+    ...(span.tooltip ? { tooltip: span.tooltip } : {}),
+  };
+}
+
+function toMarkdownResourceDiagnostic(
+  diagnostic: NekoMarkdownDiagnostic,
+): MarkdownResourceDiagnostic {
+  return {
+    severity: diagnostic.severity,
+    code: diagnostic.code,
+    message: diagnostic.message,
+    ...(diagnostic.token ? { token: diagnostic.token } : {}),
+    ...(diagnostic.range ? { range: diagnostic.range } : {}),
+  };
+}
+
 function projectCanvasMarkdownResourceRef(
   token: string,
   ref: MarkdownToolResultImageRef,
@@ -247,10 +461,7 @@ function extractMarkdownResourceTokens(
 }
 
 function extractCommonMarkImageTargets(markdown: string): readonly string[] {
-  return Array.from(markdown.matchAll(COMMONMARK_IMAGE_RE))
-    .map((match) => match[1])
-    .filter(isNonEmptyString)
-    .map((target) => stripResourcePlacementHint(stripMarkdownToken(target)));
+  return projectNekoMarkdownExtensions(markdown).images.map((image) => image.lookupToken);
 }
 
 function extractTableResourceCellTokens(markdown: string): readonly string[] {
@@ -279,7 +490,9 @@ function extractCellTokens(value: string): readonly string[] {
   const imageTargets = extractCommonMarkImageTargets(value);
   const valueWithoutImages = value.replace(COMMONMARK_IMAGE_RE, ' ');
   const plainTokens = Array.from(valueWithoutImages.matchAll(RESOURCE_CELL_TOKEN_RE))
-    .map((match) => stripMarkdownToken(match[1] ?? match[0]))
+    .map(
+      (match) => stripMarkdownPlacementHint(stripMarkdownToken(match[1] ?? match[0])).lookupToken,
+    )
     .filter((token) => token.length > 0 && !isIgnoredResourceWord(token));
   return uniqueStrings([...imageTargets, ...plainTokens]);
 }
@@ -292,15 +505,19 @@ function isResourceColumnHeader(label: string): boolean {
 }
 
 function detectUnsupportedResourceReferenceSyntax(
-  markdown: string,
+  diagnostics: readonly NekoMarkdownDiagnostic[],
 ): readonly MarkdownResourceDiagnostic[] {
-  return Array.from(markdown.matchAll(RESOURCE_REFERENCE_EMBED_OR_LINK_RE)).map((match) => ({
-    severity: 'warning',
-    code: 'unsupported-resource-reference-markdown-extension',
-    token: match[1],
-    message:
-      'Neko resource-reference embeds and links are not enabled for Agent Markdown rendering yet.',
-  }));
+  return diagnostics
+    .filter(
+      (diagnostic) => diagnostic.code === 'unsupported-resource-reference-markdown-extension',
+    )
+    .map((diagnostic) => ({
+      severity: diagnostic.severity,
+      code: diagnostic.code,
+      ...(diagnostic.token ? { token: diagnostic.token } : {}),
+      message:
+        'Neko resource-reference embeds and links are not enabled for Agent Markdown rendering yet.',
+    }));
 }
 
 function parseTableLine(line: string): readonly string[] | undefined {
@@ -796,14 +1013,6 @@ function sequenceNumberLookupTokens(value: number | undefined): readonly string[
 
 function stripMarkdownToken(value: string): string {
   return value.trim().replace(/^`+|`+$/g, '');
-}
-
-function stripResourcePlacementHint(value: string): string {
-  const trimmed = value.trim();
-  if (/^[A-Za-z][A-Za-z0-9_.~:@/%+-]*#[A-Za-z][A-Za-z0-9_.:-]*$/.test(trimmed)) {
-    return trimmed.slice(0, trimmed.indexOf('#'));
-  }
-  return trimmed;
 }
 
 function resourceRefLookupTokens(resourceRef: ResourceRef): readonly string[] {

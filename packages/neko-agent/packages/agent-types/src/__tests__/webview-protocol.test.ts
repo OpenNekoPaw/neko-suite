@@ -1555,6 +1555,7 @@ describe('webview protocol projectors', () => {
       { kind: 'canvasPrompt', prompt: 'legacy prompt' },
       { kind: 'canvasText', text: 'legacy text' },
       { kind: 'canvasStructuredContent', content: { beats: ['opening'] } },
+      { kind: 'canvasAuthoringHandoff', content: '{"kind":"storyboard-draft"}' },
     ]) {
       expect(
         parseWebviewToExtensionMessage({
@@ -1783,6 +1784,122 @@ describe('webview protocol projectors', () => {
         markdown: '| A |\\n| --- |\\n| B |',
         sourceFormat: 'gfm-table',
         intentHint: 'creative-table',
+      }),
+    ).toBeNull();
+  });
+
+  it('parses Agent-led Canvas authoring handoff requests without a selected capability', () => {
+    const parsed = parseWebviewToExtensionMessage({
+      type: 'requestCanvasAuthoringHandoff',
+      requestId: 'authoring-handoff-1',
+      conversationId: 'conv-1',
+      sourceKind: 'structured-content',
+      sourceFormat: 'json',
+      content: '{"kind":"storyboard-draft"}',
+      title: 'Storyboard Draft',
+      resources: [
+        {
+          token: 'P1',
+          sourcePath: '${PROJECT}/assets/panel-1.png',
+        },
+      ],
+      stableRefs: [
+        {
+          kind: 'character',
+          id: 'character-rin',
+          namespace: 'entity',
+          token: '@Rin',
+        },
+      ],
+      diagnostics: [
+        {
+          severity: 'warning',
+          code: 'prompt-span-unresolved-ref',
+          message: 'Prompt span needs review.',
+          token: '@Rin',
+          range: { start: 0, end: 4 },
+        },
+      ],
+      promptSpans: [
+        {
+          kind: 'character',
+          range: { start: 0, end: 4 },
+          fieldId: 'character.ref',
+          label: 'Rin',
+          ref: { kind: 'character', id: 'character-rin', namespace: 'entity', token: '@Rin' },
+        },
+      ],
+      target: { containerId: 'board-1', mode: 'create-child' },
+      provenance: { source: 'webview', label: 'assistant-structured-content' },
+      userIntent: 'Create a Canvas storyboard draft.',
+      targetHints: {
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+        operationHint: 'create-storyboard-draft',
+      },
+    });
+
+    expect(parsed).toEqual({
+      type: 'requestCanvasAuthoringHandoff',
+      requestId: 'authoring-handoff-1',
+      conversationId: 'conv-1',
+      sourceKind: 'structured-content',
+      sourceFormat: 'json',
+      content: '{"kind":"storyboard-draft"}',
+      title: 'Storyboard Draft',
+      resources: [
+        {
+          token: 'P1',
+          sourcePath: '${PROJECT}/assets/panel-1.png',
+        },
+      ],
+      stableRefs: [
+        {
+          kind: 'character',
+          id: 'character-rin',
+          namespace: 'entity',
+          token: '@Rin',
+        },
+      ],
+      diagnostics: [
+        {
+          severity: 'warning',
+          code: 'prompt-span-unresolved-ref',
+          message: 'Prompt span needs review.',
+          token: '@Rin',
+          range: { start: 0, end: 4 },
+        },
+      ],
+      promptSpans: [
+        {
+          kind: 'character',
+          range: { start: 0, end: 4 },
+          fieldId: 'character.ref',
+          label: 'Rin',
+          ref: { kind: 'character', id: 'character-rin', namespace: 'entity', token: '@Rin' },
+        },
+      ],
+      target: { containerId: 'board-1', mode: 'create-child' },
+      provenance: { source: 'webview', label: 'assistant-structured-content' },
+      userIntent: 'Create a Canvas storyboard draft.',
+      targetHints: {
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+        operationHint: 'create-storyboard-draft',
+      },
+    });
+    expect(JSON.stringify(parsed)).not.toContain('capabilityId');
+  });
+
+  it('rejects Canvas authoring handoff requests that preselect a capability', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'requestCanvasAuthoringHandoff',
+        requestId: 'authoring-handoff-1',
+        conversationId: 'conv-1',
+        sourceKind: 'generated-text',
+        content: 'Create a scene card.',
+        capabilityId: 'canvas_create_node',
       }),
     ).toBeNull();
   });

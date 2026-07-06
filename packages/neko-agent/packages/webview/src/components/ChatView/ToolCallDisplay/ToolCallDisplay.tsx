@@ -5,7 +5,7 @@
  * Delegates media extraction and rendering to sub-modules.
  */
 
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, memo, type ReactNode } from 'react';
 import { ToolCall } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
@@ -16,7 +16,12 @@ import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
 import type { AgentArtifactTransferPayload } from '@neko-agent/types';
 import type { CompositeArtifactPageRichData } from '@/components/ChatView/RichContent/renderers';
 import { getTaskWorkItemById, selectRelatedSubAgentWorkItems } from '@/components/AgentWorkItem';
-import { projectToolCallDisplayState } from '@/presenters/tool-call-presenter';
+import {
+  projectToolCallDisplayState,
+  type CanvasAuthoringResultProjection,
+  type CanvasAuthoringDiagnosticProjection,
+  type CanvasAuthoringPromptFieldAlignmentProjection,
+} from '@/presenters/tool-call-presenter';
 import { isTaskWorkItem } from '@/presenters/work-item-projection-presenter';
 import { getLogger } from '../../../utils/logger';
 import { CopyIcon } from '@neko/shared/icons';
@@ -95,6 +100,7 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
     isSuccess,
     isFailed,
     needsConfirmation,
+    canvasAuthoringResult,
   } = projection;
   const liveTask = backgroundTaskId
     ? getTaskWorkItemById(workItems, backgroundTaskId)?.task
@@ -263,6 +269,10 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
           </div>
         )}
 
+        {canvasAuthoringResult && (
+          <CanvasAuthoringResultSummary result={canvasAuthoringResult} />
+        )}
+
         {/* Expanded content */}
         {isExpanded && (
           <div className="border-t border-[var(--agent-divider)] px-3 py-2 text-[10px]">
@@ -374,6 +384,197 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
       )}
     </div>
   );
+}
+
+function CanvasAuthoringResultSummary({ result }: { result: CanvasAuthoringResultProjection }) {
+  return (
+    <div className="border-t border-[var(--agent-divider)] px-2 py-2 text-[10px] text-[var(--agent-fg)]">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <span className="shrink-0 font-medium">Canvas authoring</span>
+        <span
+          className={`shrink-0 rounded border px-1.5 py-0.5 font-mono uppercase ${getCanvasAuthoringStatusClass(result.status, result.isValid)}`}
+          title={result.isValid ? result.status : 'Malformed Canvas authoring result'}
+        >
+          {result.isValid ? result.status : 'malformed'}
+        </span>
+        {result.summary && (
+          <span className="min-w-[12rem] flex-1 truncate text-[var(--agent-fg-secondary)]">
+            {result.summary}
+          </span>
+        )}
+      </div>
+
+      {result.blockedReason && (
+        <div className="mt-1.5 rounded border border-[color-mix(in_srgb,var(--agent-danger)_24%,transparent)] bg-[color-mix(in_srgb,var(--agent-danger)_10%,transparent)] px-1.5 py-1 text-[var(--agent-danger)]">
+          {result.blockedReason}
+        </div>
+      )}
+
+      {result.refs.length > 0 && (
+        <CanvasAuthoringChipRow label="Refs">
+          {result.refs.map((ref) => (
+            <span
+              key={ref.key}
+              className="max-w-full truncate rounded border border-[var(--agent-input-border)] bg-[var(--agent-elevated)] px-1.5 py-0.5 font-mono text-[9px]"
+              title={formatCanvasAuthoringRefTitle(ref)}
+            >
+              {ref.kind}:{ref.id}
+            </span>
+          ))}
+        </CanvasAuthoringChipRow>
+      )}
+
+      {result.changedFields.length > 0 && (
+        <CanvasAuthoringChipRow label="Fields">
+          {result.changedFields.map((field) => (
+            <span
+              key={field}
+              className="max-w-full truncate rounded border border-[var(--agent-input-border)] px-1.5 py-0.5 font-mono text-[9px] text-[var(--agent-fg-secondary)]"
+              title={field}
+            >
+              {field}
+            </span>
+          ))}
+        </CanvasAuthoringChipRow>
+      )}
+
+      {result.promptFieldAlignments.length > 0 && (
+        <CanvasAuthoringChipRow label="Prompt alignment">
+          {result.promptFieldAlignments.map((alignment) => (
+            <span
+              key={alignment.key}
+              className={`max-w-full truncate rounded border px-1.5 py-0.5 font-mono text-[9px] ${getPromptFieldAlignmentClass(alignment)}`}
+              title={formatPromptFieldAlignmentTitle(alignment)}
+            >
+              {alignment.fieldId}:{alignment.alignmentState}
+            </span>
+          ))}
+        </CanvasAuthoringChipRow>
+      )}
+
+      {result.diagnostics.length > 0 && (
+        <div className="mt-1.5 space-y-1">
+          {result.diagnostics.map((diagnostic) => (
+            <div
+              key={diagnostic.key}
+              className={`rounded border px-1.5 py-1 ${getCanvasAuthoringDiagnosticClass(diagnostic)}`}
+            >
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <span className="shrink-0 font-mono uppercase">{diagnostic.severity}</span>
+                <span className="min-w-[10rem] flex-1">{diagnostic.message}</span>
+                <span className="shrink-0 font-mono text-[9px] opacity-75">
+                  {diagnostic.code}
+                </span>
+              </div>
+              {(diagnostic.target || diagnostic.requiredQuery || diagnostic.retryable) && (
+                <div className="mt-0.5 flex flex-wrap gap-1 font-mono text-[9px] opacity-80">
+                  {diagnostic.target && <span>target:{diagnostic.target}</span>}
+                  {diagnostic.requiredQuery && <span>query:{diagnostic.requiredQuery}</span>}
+                  {diagnostic.retryable && <span>retryable</span>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {result.nextActions.length > 0 && (
+        <CanvasAuthoringChipRow label="Next actions">
+          {result.nextActions.map((action) => (
+            <span
+              key={action.key}
+              className="inline-flex max-w-full items-center gap-1 rounded border border-[var(--agent-input-border)] bg-[var(--agent-elevated)] px-1.5 py-0.5"
+              title={action.argumentsJson}
+            >
+              <span className="truncate">{action.label}</span>
+              {action.toolName && (
+                <span className="shrink-0 font-mono text-[9px] text-[var(--agent-fg-secondary)]">
+                  {action.toolName}
+                </span>
+              )}
+              {action.requiresApproval && (
+                <span className="shrink-0 rounded bg-[color-mix(in_srgb,var(--agent-warning)_18%,transparent)] px-1 font-mono text-[9px] text-[var(--agent-warning-fg)]">
+                  Approval required
+                </span>
+              )}
+            </span>
+          ))}
+        </CanvasAuthoringChipRow>
+      )}
+    </div>
+  );
+}
+
+function CanvasAuthoringChipRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
+      <span className="shrink-0 text-[var(--agent-fg-secondary)]">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function getCanvasAuthoringStatusClass(status: string, isValid: boolean): string {
+  if (!isValid) {
+    return 'border-[color-mix(in_srgb,var(--agent-danger)_30%,transparent)] text-[var(--agent-danger)]';
+  }
+  if (status === 'success') {
+    return 'border-[color-mix(in_srgb,var(--agent-success)_30%,transparent)] text-[var(--agent-success)]';
+  }
+  if (status === 'blocked') {
+    return 'border-[color-mix(in_srgb,var(--agent-danger)_30%,transparent)] text-[var(--agent-danger)]';
+  }
+  if (status === 'partial') {
+    return 'border-[color-mix(in_srgb,var(--agent-warning)_30%,transparent)] text-[var(--agent-warning-fg)]';
+  }
+  return 'border-[var(--agent-input-border)] text-[var(--agent-fg-secondary)]';
+}
+
+function getCanvasAuthoringDiagnosticClass(
+  diagnostic: CanvasAuthoringDiagnosticProjection,
+): string {
+  if (diagnostic.severity === 'error') {
+    return 'border-[color-mix(in_srgb,var(--agent-danger)_24%,transparent)] bg-[color-mix(in_srgb,var(--agent-danger)_8%,transparent)] text-[var(--agent-danger)]';
+  }
+  if (diagnostic.severity === 'warning') {
+    return 'border-[color-mix(in_srgb,var(--agent-warning)_24%,transparent)] bg-[color-mix(in_srgb,var(--agent-warning)_8%,transparent)] text-[var(--agent-warning-fg)]';
+  }
+  return 'border-[color-mix(in_srgb,var(--agent-info)_24%,transparent)] bg-[color-mix(in_srgb,var(--agent-info)_8%,transparent)] text-[var(--agent-fg)]';
+}
+
+function getPromptFieldAlignmentClass(
+  alignment: CanvasAuthoringPromptFieldAlignmentProjection,
+): string {
+  if (alignment.alignmentState === 'in-sync') {
+    return 'border-[color-mix(in_srgb,var(--agent-success)_24%,transparent)] text-[var(--agent-success)]';
+  }
+  if (alignment.alignmentState === 'unbound') {
+    return 'border-[var(--agent-input-border)] text-[var(--agent-fg-secondary)]';
+  }
+  return 'border-[color-mix(in_srgb,var(--agent-warning)_24%,transparent)] text-[var(--agent-warning-fg)]';
+}
+
+function formatCanvasAuthoringRefTitle(ref: CanvasAuthoringResultProjection['refs'][number]): string {
+  return [ref.label, `${ref.kind}:${ref.id}`, ...ref.details].filter(Boolean).join(' · ');
+}
+
+function formatPromptFieldAlignmentTitle(
+  alignment: CanvasAuthoringPromptFieldAlignmentProjection,
+): string {
+  return [
+    alignment.fieldId,
+    alignment.alignmentState,
+    alignment.sourceSpanId ? `span:${alignment.sourceSpanId}` : undefined,
+    alignment.userOverride ? 'user override' : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function ArtifactTransferSummary({

@@ -13,16 +13,26 @@ import {
   parseCompositeContentJson,
   parseCompositeContentJsonCandidates,
 } from '@neko-agent/types';
+import {
+  classifyCreativeTableHeaders,
+  resolveCreativeTableField,
+  STORYBOARD_CREATIVE_TABLE_PROFILE,
+  validateCompositeArtifact,
+  type CreativeTableFieldDescriptor,
+  type CompositeArtifact,
+} from '@neko/shared';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
 import { projectCompositeBlockRichContent } from '@/presenters/composite-content-presenter';
 import {
   normalizeMarkdownResourceLookupToken,
+  type MarkdownResourceDiagnostic,
   type MarkdownResourceRenderingProjection,
 } from '@/presenters/markdown-resource-rendering-presenter';
-import { t } from '@/i18n';
-import { validateCompositeArtifact, type CompositeArtifact } from '@neko/shared';
+import { getLocale, t } from '@/i18n';
 import { CodeBlock } from './CodeBlock';
 import { MermaidBlock } from './MermaidBlock';
+
+type MarkdownDisplayLocale = 'en' | 'zh-cn';
 
 interface MarkdownRendererProps {
   content: string;
@@ -205,8 +215,8 @@ function createMarkdownComponents(
           data-markdown-image-status="unprojected"
         >
           {src
-            ? `Image reference "${src}" is not projected by the host.`
-            : 'Image reference is missing a source.'}
+            ? t('chat.markdown.image.unprojected', { src })
+            : t('chat.markdown.image.missingSource')}
         </span>
       );
     },
@@ -266,7 +276,7 @@ function projectMarkdownResourceTokenCell(
       ) : null}
       {projection.diagnostics.length > 0 ? (
         <span className="text-[10px] text-[var(--vscode-errorForeground)]">
-          {projection.diagnostics[0]?.message}
+          {formatMarkdownResourceDiagnostic(projection.diagnostics[0])}
         </span>
       ) : null}
     </span>
@@ -313,15 +323,19 @@ function markdownResourceStatusLabel(
   projection: MarkdownResourceRenderingProjection['tokens'][number],
 ): string {
   if (projection.status === 'bound') {
-    return projection.refs.length > 1 ? `${projection.refs.length} images` : 'image';
+    return projection.refs.length > 1
+      ? t('chat.markdown.resourceStatus.images', { count: projection.refs.length })
+      : t('chat.markdown.resourceStatus.image');
   }
   if (projection.status === 'ambiguous') {
     const candidateCount = projection.diagnostics[0]?.candidates?.length;
-    return candidateCount ? `${candidateCount} candidates` : 'ambiguous';
+    return candidateCount
+      ? t('chat.markdown.resourceStatus.candidates', { count: candidateCount })
+      : t('chat.markdown.resourceStatus.ambiguous');
   }
-  if (projection.status === 'missing') return 'missing';
-  if (projection.status === 'unsupported') return 'unsupported';
-  return 'unbound';
+  if (projection.status === 'missing') return t('chat.markdown.resourceStatus.missing');
+  if (projection.status === 'unsupported') return t('chat.markdown.resourceStatus.unsupported');
+  return t('chat.markdown.resourceStatus.unbound');
 }
 
 function readPlainText(node: ReactNode): string | undefined {
@@ -405,6 +419,7 @@ function CreativeDraftDiagnostics({
     markdownResources?.status === 'diagnostic'
       ? markdownResources.diagnostics
           .filter((diagnostic) => diagnostic.severity === 'error')
+          .filter((diagnostic) => !isSemanticPromptDiagnostic(diagnostic))
           .slice(0, 3)
       : [];
   if (diagnostics.length === 0) return null;
@@ -416,11 +431,147 @@ function CreativeDraftDiagnostics({
     >
       {diagnostics.map((diagnostic, index) => (
         <div key={`${diagnostic.code}-${diagnostic.token ?? 'markdown'}-${index}`}>
-          {diagnostic.message}
+          {formatMarkdownResourceDiagnostic(diagnostic)}
         </div>
       ))}
     </div>
   );
+}
+
+function SemanticPromptSpanProjectionList({
+  content,
+  markdownResources,
+}: {
+  readonly content: string;
+  readonly markdownResources?: MarkdownResourceRenderingProjection;
+}) {
+  const spans = markdownResources?.promptSpans ?? [];
+  if (spans.length === 0) return null;
+
+  return (
+    <div className="mt-2 flex max-w-full flex-wrap gap-1.5" data-markdown-prompt-spans="true">
+      {spans.map((span, index) => (
+        <SemanticPromptSpanChip
+          key={`${span.kind}:${span.range.start}:${span.range.end}:${span.fieldId ?? index}`}
+          content={content}
+          span={span}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SemanticPromptSpanChip({
+  content,
+  span,
+}: {
+  readonly content: string;
+  readonly span: NonNullable<MarkdownResourceRenderingProjection['promptSpans']>[number];
+}) {
+  const sourceText = readPromptSpanSourceText(content, span);
+  const displayLabel = span.label ?? sourceText ?? span.kind;
+  const title = formatPromptSpanTitle(span, sourceText);
+
+  return (
+    <span
+      className="inline-flex min-h-6 max-w-full items-center gap-1 rounded border border-[var(--vscode-panel-border)] bg-[var(--vscode-editorWidget-background)] px-1.5 py-0.5 text-[11px] text-[var(--vscode-foreground)] border-b-2"
+      style={{ borderBottomColor: promptSpanColor(span) }}
+      title={title}
+      data-markdown-prompt-span="true"
+      data-markdown-prompt-span-kind={span.kind}
+      data-markdown-prompt-span-field-id={span.fieldId}
+      data-markdown-prompt-span-ref-kind={span.ref?.kind}
+      data-markdown-prompt-span-ref-id={span.ref?.id}
+      data-markdown-prompt-span-ref-namespace={span.ref?.namespace}
+      data-markdown-prompt-span-range={`${span.range.start}:${span.range.end}`}
+      data-canvas-handoff-ref-kind={span.ref?.kind}
+      data-canvas-handoff-ref-id={span.ref?.id}
+      data-canvas-handoff-ref-namespace={span.ref?.namespace}
+    >
+      <span className="max-w-[14rem] truncate underline decoration-[var(--vscode-descriptionForeground)] underline-offset-2">
+        {displayLabel}
+      </span>
+      {span.fieldId ? (
+        <span className="max-w-[10rem] truncate font-mono text-[10px] text-[var(--vscode-descriptionForeground)]">
+          {span.fieldId}
+        </span>
+      ) : null}
+      {span.ref ? (
+        <span className="max-w-[10rem] truncate font-mono text-[10px] text-[var(--vscode-descriptionForeground)]">
+          @{span.ref.id}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function SemanticPromptSpanDiagnostics({
+  markdownResources,
+}: {
+  readonly markdownResources?: MarkdownResourceRenderingProjection;
+}) {
+  const diagnostics =
+    markdownResources?.diagnostics.filter(isSemanticPromptDiagnostic).slice(0, 3) ?? [];
+  if (diagnostics.length === 0) return null;
+
+  const hasError = diagnostics.some((diagnostic) => diagnostic.severity === 'error');
+  return (
+    <div
+      role={hasError ? 'alert' : 'note'}
+      className={`mt-2 rounded border px-2 py-1.5 text-[11px] ${
+        hasError
+          ? 'border-[var(--vscode-inputValidation-errorBorder)] bg-[var(--vscode-inputValidation-errorBackground)] text-[var(--vscode-inputValidation-errorForeground)]'
+          : 'border-[var(--vscode-inputValidation-warningBorder)] bg-[var(--vscode-inputValidation-warningBackground)] text-[var(--vscode-inputValidation-warningForeground)]'
+      }`}
+    >
+      {diagnostics.map((diagnostic, index) => (
+        <div key={`${diagnostic.code}-${diagnostic.token ?? 'prompt-span'}-${index}`}>
+          {formatMarkdownResourceDiagnostic(diagnostic)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function readPromptSpanSourceText(
+  content: string,
+  span: NonNullable<MarkdownResourceRenderingProjection['promptSpans']>[number],
+): string | undefined {
+  if (span.range.start < 0 || span.range.end <= span.range.start || span.range.end > content.length) {
+    return undefined;
+  }
+  const value = content.slice(span.range.start, span.range.end).trim();
+  return value.length > 0 ? value : undefined;
+}
+
+function formatPromptSpanTitle(
+  span: NonNullable<MarkdownResourceRenderingProjection['promptSpans']>[number],
+  sourceText: string | undefined,
+): string {
+  return [
+    span.tooltip,
+    sourceText ? `source: ${sourceText}` : undefined,
+    span.fieldId ? `field: ${span.fieldId}` : undefined,
+    span.ref ? `ref: ${span.ref.kind}:${span.ref.id}` : undefined,
+  ]
+    .filter((part): part is string => typeof part === 'string' && part.length > 0)
+    .join('\n');
+}
+
+function promptSpanColor(
+  span: NonNullable<MarkdownResourceRenderingProjection['promptSpans']>[number],
+): string {
+  const tone = (span.tone ?? span.kind).toLowerCase();
+  if (tone.includes('scene') || tone.includes('location')) return 'var(--vscode-charts-green)';
+  if (tone.includes('character') || tone.includes('entity')) return 'var(--vscode-charts-purple)';
+  if (tone.includes('voice') || tone.includes('audio') || tone.includes('dialogue')) {
+    return 'var(--vscode-charts-yellow)';
+  }
+  if (tone.includes('resource') || tone.includes('media') || tone.includes('asset')) {
+    return 'var(--vscode-charts-orange)';
+  }
+  if (tone.includes('style')) return 'var(--vscode-charts-red)';
+  return 'var(--vscode-charts-blue)';
 }
 
 function MarkdownRendererComponent({
@@ -429,8 +580,13 @@ function MarkdownRendererComponent({
   className,
   markdownResources,
 }: MarkdownRendererProps) {
+  const locale = normalizeMarkdownDisplayLocale(getLocale());
   // Memoize remark plugins
   const remarkPlugins = useMemo(() => [remarkGfm], []);
+  const displayContent = useMemo(
+    () => localizeMarkdownCreativeTablesForDisplay(content, locale),
+    [content, locale],
+  );
   const markdownComponents = useMemo(
     () => createMarkdownComponents(isStreaming, markdownResources),
     [isStreaming, markdownResources],
@@ -441,8 +597,10 @@ function MarkdownRendererComponent({
       className={`markdown-content min-w-0 max-w-full overflow-hidden text-[13px] leading-relaxed break-words ${className || ''}`}
     >
       <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
-        {content}
+        {displayContent}
       </ReactMarkdown>
+      <SemanticPromptSpanProjectionList content={content} markdownResources={markdownResources} />
+      <SemanticPromptSpanDiagnostics markdownResources={markdownResources} />
       <MarkdownExtensionDiagnostics markdownResources={markdownResources} />
       <CreativeDraftDiagnostics markdownResources={markdownResources} />
       {isStreaming && (
@@ -475,9 +633,158 @@ function MarkdownExtensionDiagnostics({
     >
       {diagnostics.map((diagnostic, index) => (
         <div key={`${diagnostic.code}-${diagnostic.token ?? 'embed'}-${index}`}>
-          {diagnostic.message}
+          {formatMarkdownResourceDiagnostic(diagnostic)}
         </div>
       ))}
     </div>
   );
+}
+
+function normalizeMarkdownDisplayLocale(locale: string | undefined): MarkdownDisplayLocale {
+  return locale?.trim().toLowerCase().startsWith('zh') ? 'zh-cn' : 'en';
+}
+
+function localizeMarkdownCreativeTablesForDisplay(
+  markdown: string,
+  locale: MarkdownDisplayLocale,
+): string {
+  const newline = markdown.includes('\r\n') ? '\r\n' : '\n';
+  const lines = markdown.split(/\r?\n/);
+  let inFence = false;
+
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const line = lines[index] ?? '';
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+
+    const separatorLine = lines[index + 1] ?? '';
+    const headers = parseMarkdownTableCells(line);
+    const separator = parseMarkdownTableCells(separatorLine);
+    if (!headers || !separator || !isMarkdownTableSeparator(separator)) continue;
+
+    const classification = classifyCreativeTableHeaders(STORYBOARD_CREATIVE_TABLE_PROFILE, headers);
+    if (!shouldLocalizeStoryboardCreativeTable(classification.knownFields)) continue;
+
+    const fields = headers.map((header) =>
+      resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, header),
+    );
+    lines[index] = formatMarkdownTableRow(
+      headers.map((header, headerIndex) =>
+        fields[headerIndex] ? fields[headerIndex].labels[locale] : header,
+      ),
+    );
+
+    for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
+      const cells = parseMarkdownTableCells(lines[rowIndex] ?? '');
+      if (!cells) break;
+      lines[rowIndex] = formatMarkdownTableRow(
+        cells.map((cell, cellIndex) => localizeCreativeTableCell(cell, fields[cellIndex], locale)),
+      );
+    }
+  }
+
+  return lines.join(newline);
+}
+
+function shouldLocalizeStoryboardCreativeTable(
+  knownFields: readonly CreativeTableFieldDescriptor[],
+): boolean {
+  if (knownFields.length < 3) return false;
+  const fieldIds = new Set(knownFields.map((field) => field.id));
+  return fieldIds.has('scene') || fieldIds.has('shot');
+}
+
+function parseMarkdownTableCells(line: string): readonly string[] | undefined {
+  const trimmed = line.trim();
+  if (!trimmed.includes('|')) return undefined;
+  const withoutLeading = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed;
+  const withoutTrailing = withoutLeading.endsWith('|')
+    ? withoutLeading.slice(0, -1)
+    : withoutLeading;
+  const cells = withoutTrailing.split('|').map((cell) => cell.trim());
+  return cells.length > 1 ? cells : undefined;
+}
+
+function isMarkdownTableSeparator(cells: readonly string[]): boolean {
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function formatMarkdownTableRow(cells: readonly string[]): string {
+  return `| ${cells.join(' | ')} |`;
+}
+
+function localizeCreativeTableCell(
+  cell: string,
+  field: CreativeTableFieldDescriptor | undefined,
+  locale: MarkdownDisplayLocale,
+): string {
+  if (!field) return cell;
+  const value = stripInlineMarkdown(cell).trim();
+  if (!value) return cell;
+  const label = STORYBOARD_CREATIVE_TABLE_VALUE_LABELS[field.id]?.[value.toLowerCase()]?.[locale];
+  return label ?? cell;
+}
+
+function stripInlineMarkdown(value: string): string {
+  return value.replace(/^`(.+)`$/, '$1').trim();
+}
+
+const STORYBOARD_CREATIVE_TABLE_VALUE_LABELS: Readonly<
+  Record<string, Readonly<Record<string, Readonly<Record<MarkdownDisplayLocale, string>>>>>
+> = {
+  decision: {
+    keep: { en: 'Keep', 'zh-cn': '保留' },
+    skip: { en: 'Skip', 'zh-cn': '跳过' },
+    merge: { en: 'Merge', 'zh-cn': '合并' },
+    split: { en: 'Split', 'zh-cn': '拆分' },
+    duplicate: { en: 'Duplicate', 'zh-cn': '重复' },
+    'reference-only': { en: 'Reference only', 'zh-cn': '仅作参考' },
+  },
+  reviewStatus: {
+    'needs-review': { en: 'Needs review', 'zh-cn': '待审阅' },
+    'needs-panel-analysis': { en: 'Needs panel analysis', 'zh-cn': '待分析分格' },
+    'needs-resource-binding': { en: 'Needs resource binding', 'zh-cn': '待绑定资源' },
+    'needs-prompt': { en: 'Needs prompt', 'zh-cn': '待补提示词' },
+    approved: { en: 'Approved', 'zh-cn': '已通过' },
+    rejected: { en: 'Rejected', 'zh-cn': '已拒绝' },
+  },
+  contentType: {
+    story: { en: 'Story', 'zh-cn': '正片' },
+    cover: { en: 'Cover', 'zh-cn': '封面' },
+    metadata: { en: 'Metadata', 'zh-cn': '元数据' },
+    reference: { en: 'Reference', 'zh-cn': '参考' },
+    transition: { en: 'Transition', 'zh-cn': '转场' },
+  },
+  requiresSplit: {
+    true: { en: 'Yes', 'zh-cn': '是' },
+    false: { en: 'No', 'zh-cn': '否' },
+  },
+};
+
+function formatMarkdownResourceDiagnostic(
+  diagnostic: MarkdownResourceDiagnostic | undefined,
+): string {
+  if (!diagnostic) return '';
+  const token = diagnostic.token ?? '';
+  if (diagnostic.code === 'missing-resource-token') {
+    return t('chat.markdown.diagnostic.missingResourceToken', { token });
+  }
+  if (diagnostic.code === 'missing-resource-context') {
+    return t('chat.markdown.diagnostic.missingResourceContext', { token });
+  }
+  if (diagnostic.code === 'ambiguous-resource-token') {
+    return t('chat.markdown.diagnostic.ambiguousResourceToken', { token });
+  }
+  if (diagnostic.code === 'unsupported-resource-reference-markdown-extension') {
+    return t('chat.markdown.diagnostic.unsupportedResourceReference');
+  }
+  return diagnostic.message;
+}
+
+function isSemanticPromptDiagnostic(diagnostic: MarkdownResourceDiagnostic): boolean {
+  const code = diagnostic.code.toLowerCase();
+  return code.includes('prompt-span') || code.includes('semantic-prompt');
 }

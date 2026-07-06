@@ -607,6 +607,7 @@ describe('handleChatWebviewMessage', () => {
 
     expect(invoke).not.toHaveBeenCalled();
     expect(sendGeneratedAssetToPlugin).not.toHaveBeenCalled();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
     expect(deps.messages?.handleUserMessage).toHaveBeenCalledWith(
       deps.webview,
       expect.objectContaining({
@@ -618,26 +619,329 @@ describe('handleChatWebviewMessage', () => {
           expect.objectContaining({
             type: 'document-selection',
             id: 'req-1',
-            label: 'Canvas Markdown 交接: Assistant Markdown',
-            summary: 'gfm-table, 1 个稳定 resource ref',
-            intent: '通过 Agent 工具选择把这段 Markdown 发送到 Canvas。',
+            label: 'Canvas 创作交接: Assistant Markdown',
+            summary: 'gfm-table, 1 个稳定 resource ref, 0 个稳定语义 ref, 0 个 handoff diagnostic',
+            intent: '通过 Agent 工具选择把这段内容发送到 Canvas。',
             data: expect.objectContaining({
-              kind: 'canvas-markdown-handoff',
-              markdown:
+              kind: 'canvas-authoring-handoff',
+              sourceKind: 'markdown',
+              content:
                 '| scene | shot id | visual | image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
-              declaredIntentHint: 'creative-table',
-              declaredProfileHint: 'storyboard',
               resources: [{ token: 'P1', sourcePath: '${PROJECT}/assets/panel-1.png' }],
+              targetHints: {
+                sourceFormat: 'gfm-table',
+                declaredIntentHint: 'creative-table',
+                declaredProfileHint: 'storyboard',
+              },
             }),
           }),
         ],
       }),
     );
     const routedRequest = (deps.messages?.handleUserMessage as any).mock.calls[0]?.[1];
+    expect(routedRequest.messageText).toContain('Canvas authoring handoff intent');
     expect(routedRequest.messageText).not.toContain('Decide whether to call Canvas');
     expect(routedRequest.messageText).not.toContain('Do not assume a generic table');
     expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
       'capabilityId',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'neko.canvas.importAsset',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas.ingestMarkdown',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas.createStoryboardFromMarkdown',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas_create_node',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas_create_composite',
+    );
+  });
+
+  it('routes general Canvas authoring handoff through Agent context without choosing Canvas tools', async () => {
+    const deps = createDeps();
+    const invoke = vi.fn();
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      id: 'neko.neko-canvas',
+      isActive: true,
+      exports: {
+        markdown: { invoke },
+      },
+      activate: vi.fn(),
+    } as any);
+
+    handleChatWebviewMessage(
+      {
+        type: 'requestCanvasAuthoringHandoff',
+        requestId: 'authoring-1',
+        conversationId: 'conv-1',
+        sourceKind: 'structured-content',
+        sourceFormat: 'json',
+        content: '{"kind":"storyboard-draft","rows":[]}',
+        title: 'Storyboard Draft',
+        stableRefs: [{ kind: 'character', id: 'character-rin', namespace: 'entity', token: '@Rin' }],
+        diagnostics: [
+          {
+            severity: 'warning',
+            code: 'prompt-span-needs-review',
+            message: 'Prompt span needs review.',
+            token: '@Rin',
+          },
+        ],
+        promptSpans: [
+          {
+            kind: 'character',
+            range: { start: 0, end: 4 },
+            fieldId: 'character.ref',
+            label: 'Rin',
+            ref: { kind: 'character', id: 'character-rin', namespace: 'entity' },
+          },
+        ],
+        targetHints: { declaredProfileHint: 'storyboard' },
+      },
+      deps,
+    );
+
+    await flushAsyncWork();
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(sendGeneratedAssetToPlugin).not.toHaveBeenCalled();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+    expect(deps.messages?.handleUserMessage).toHaveBeenCalledWith(
+      deps.webview,
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        sessionMode: 'agent',
+        messageText: expect.stringContaining('Canvas authoring handoff intent'),
+        contextPayloads: [
+          expect.objectContaining({
+            type: 'document-selection',
+            id: 'authoring-1',
+            label: 'Canvas 创作交接: Storyboard Draft',
+            summary: 'json, 0 个稳定 resource ref, 1 个稳定语义 ref, 1 个 handoff diagnostic',
+            data: expect.objectContaining({
+              kind: 'canvas-authoring-handoff',
+              sourceKind: 'structured-content',
+              content: '{"kind":"storyboard-draft","rows":[]}',
+              stableRefs: [
+                { kind: 'character', id: 'character-rin', namespace: 'entity', token: '@Rin' },
+              ],
+              diagnostics: [
+                {
+                  severity: 'warning',
+                  code: 'prompt-span-needs-review',
+                  message: 'Prompt span needs review.',
+                  token: '@Rin',
+                },
+              ],
+              promptSpans: [
+                {
+                  kind: 'character',
+                  range: { start: 0, end: 4 },
+                  fieldId: 'character.ref',
+                  label: 'Rin',
+                  ref: { kind: 'character', id: 'character-rin', namespace: 'entity' },
+                },
+              ],
+              targetHints: { declaredProfileHint: 'storyboard' },
+            }),
+          }),
+        ],
+      }),
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas_create_node',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas_create_composite',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'neko.canvas.importAsset',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas.ingestMarkdown',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas.createStoryboardFromMarkdown',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'capabilityId',
+    );
+  });
+
+  it('keeps Markdown projection hints as Agent handoff metadata instead of Canvas validation authority', async () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage(
+      {
+        type: 'requestCanvasAuthoringHandoff',
+        requestId: 'markdown-projection-1',
+        conversationId: 'conv-1',
+        sourceKind: 'markdown',
+        sourceFormat: 'gfm-table',
+        content: [
+          '| scene | shot | character | voice | imagePrompt | unknown review field |',
+          '| --- | --- | --- | --- | --- | --- |',
+          '| Opening | 1 | @Rin | whisper | quiet corridor ![panel](P1#panel_2) | keep as note |',
+        ].join('\\n'),
+        title: 'Prompt-first Storyboard Table',
+        resources: [
+          {
+            token: 'P1',
+            label: 'Panel 1',
+            role: 'source',
+            sourcePath: '${PROJECT}/assets/panel-1.png',
+          },
+        ],
+        stableRefs: [
+          {
+            kind: 'character',
+            id: 'character-rin',
+            namespace: 'entity',
+            token: '@Rin',
+          },
+        ],
+        diagnostics: [
+          {
+            severity: 'warning',
+            code: 'unknown-creative-table-column',
+            message: 'Unknown Markdown column is preserved for Canvas review.',
+            token: 'unknown review field',
+          },
+        ],
+        promptSpans: [
+          {
+            kind: 'character',
+            range: { start: 178, end: 182 },
+            fieldId: 'character.ref',
+            label: 'Rin',
+            ref: {
+              kind: 'character',
+              id: 'character-rin',
+              namespace: 'entity',
+              token: '@Rin',
+            },
+            tone: 'character',
+          },
+          {
+            kind: 'voice',
+            range: { start: 185, end: 192 },
+            fieldId: 'voice.cue',
+            label: 'whisper',
+            tone: 'voice',
+          },
+        ],
+        userIntent: 'Review this Markdown projection in Canvas if useful.',
+        targetHints: {
+          sourceFormat: 'gfm-table',
+          declaredIntentHint: 'creative-table',
+          declaredProfileHint: 'storyboard',
+        },
+      },
+      deps,
+    );
+
+    await flushAsyncWork();
+
+    expect(deps.resolveLifecycleCapabilityDescriptor).not.toHaveBeenCalled();
+    expect(deps.skillHandler.handleSkillInvocation).not.toHaveBeenCalled();
+    expect(sendGeneratedAssetToPlugin).not.toHaveBeenCalled();
+    expect(vscode.extensions.getExtension).not.toHaveBeenCalled();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+
+    const routedRequest = (deps.messages?.handleUserMessage as any).mock.calls[0]?.[1];
+    const contextPayload = routedRequest?.contextPayloads?.[0];
+    const handoffData = contextPayload?.data;
+    expect(routedRequest).toEqual(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        sessionMode: 'agent',
+        messageText: expect.stringContaining('Agent 可见的 Canvas authoring handoff intent'),
+      }),
+    );
+    expect(contextPayload).toEqual(
+      expect.objectContaining({
+        type: 'document-selection',
+        id: 'markdown-projection-1',
+        label: 'Canvas 创作交接: Prompt-first Storyboard Table',
+        intent: 'Review this Markdown projection in Canvas if useful.',
+      }),
+    );
+    expect(handoffData).toEqual(
+      expect.objectContaining({
+        kind: 'canvas-authoring-handoff',
+        requestId: 'markdown-projection-1',
+        sourceKind: 'markdown',
+        sourceFormat: 'gfm-table',
+        resources: [
+          {
+            token: 'P1',
+            label: 'Panel 1',
+            role: 'source',
+            sourcePath: '${PROJECT}/assets/panel-1.png',
+          },
+        ],
+        stableRefs: [
+          {
+            kind: 'character',
+            id: 'character-rin',
+            namespace: 'entity',
+            token: '@Rin',
+          },
+        ],
+        diagnostics: [
+          {
+            severity: 'warning',
+            code: 'unknown-creative-table-column',
+            message: 'Unknown Markdown column is preserved for Canvas review.',
+            token: 'unknown review field',
+          },
+        ],
+        promptSpans: [
+          expect.objectContaining({
+            kind: 'character',
+            fieldId: 'character.ref',
+            label: 'Rin',
+          }),
+          expect.objectContaining({
+            kind: 'voice',
+            fieldId: 'voice.cue',
+            label: 'whisper',
+          }),
+        ],
+        targetHints: {
+          sourceFormat: 'gfm-table',
+          declaredIntentHint: 'creative-table',
+          declaredProfileHint: 'storyboard',
+        },
+      }),
+    );
+
+    expect(handoffData).not.toHaveProperty('capabilityId');
+    expect(handoffData).not.toHaveProperty('input');
+    expect(handoffData).not.toHaveProperty('intentHint');
+    expect(handoffData).not.toHaveProperty('profileHint');
+    expect(handoffData).not.toHaveProperty('fields');
+    expect(handoffData).not.toHaveProperty('fieldValues');
+    expect(handoffData).not.toHaveProperty('validatedFields');
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas.ingestMarkdown',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas.createStoryboardFromMarkdown',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas_create_node',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'canvas_create_composite',
+    );
+    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
+      'neko.canvas.importAsset',
     );
   });
 
@@ -800,6 +1104,9 @@ describe('handleChatWebviewMessage', () => {
       mode: 'create-nodes',
       approval: { source: 'user-confirmation', approvedAt: 123 },
     });
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(sendGeneratedAssetToPlugin).not.toHaveBeenCalled();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
     expect(deps.webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'agentCapabilityLifecycleResult',

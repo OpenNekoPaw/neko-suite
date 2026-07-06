@@ -11,6 +11,7 @@
 import { getVSCodeAPI, postMessage as postRawMessage, type VSCodeAPI } from '@neko/shared/vscode';
 import type {
   InvokeAgentCapabilityLifecycleWebviewMessage,
+  RequestCanvasAuthoringHandoffWebviewMessage,
   RequestCanvasMarkdownHandoffWebviewMessage,
   PluginTransferPayload,
   SendMessageWebviewMessage,
@@ -512,6 +513,13 @@ export const VSCodeMessages = {
     payload: Omit<RequestCanvasMarkdownHandoffWebviewMessage, 'type'>,
   ) => {
     postConversationMessage({ type: 'requestCanvasMarkdownHandoff', ...payload });
+  },
+
+  /** Request an Agent-led Canvas authoring handoff. Agent chooses Canvas skills/tools. */
+  requestCanvasAuthoringHandoff: (
+    payload: Omit<RequestCanvasAuthoringHandoffWebviewMessage, 'type'>,
+  ) => {
+    postConversationMessage({ type: 'requestCanvasAuthoringHandoff', ...payload });
   },
 
   /** Retry a failed background task */

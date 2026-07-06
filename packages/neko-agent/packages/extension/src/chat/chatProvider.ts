@@ -124,6 +124,7 @@ const SESSION_SCOPED_WEBVIEW_MESSAGE_TYPES = new Set([
   'invokePluginSlashCommand',
   'invokeAgentCapabilityLifecycle',
   'requestCanvasMarkdownHandoff',
+  'requestCanvasAuthoringHandoff',
   'mermaidError',
   'clearActiveSkill',
 ]);

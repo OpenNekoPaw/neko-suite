@@ -1,13 +1,18 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExtensionToWebviewMessage } from '@neko-agent/types';
 import type { Message } from '@neko-agent/types';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
+import { setLocale } from '@/i18n';
 import { commandHandlers } from '../command-handlers';
 import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
 
 describe('command handlers conversation isolation', () => {
+  beforeEach(() => {
+    setLocale('en');
+  });
+
   it('routes slash command assistant messages to the result conversation', () => {
     const visibleMessage = message('visible-message', 'assistant', '当前会话内容');
     const harness = createContextHarness({
@@ -97,6 +102,7 @@ describe('command handlers conversation isolation', () => {
   });
 
   it('appends Canvas lifecycle capability diagnostics to the result conversation', () => {
+    setLocale('zh-cn');
     const visibleMessage = message('visible-message', 'assistant', '当前会话内容');
     const harness = createContextHarness({
       activeConversationId: 'conv-b',
@@ -117,7 +123,7 @@ describe('command handlers conversation isolation', () => {
           diagnostics: [
             {
               severity: 'error',
-              code: 'missing-resource-token',
+              code: 'canvas-markdown-missing-resource-token',
               message: 'Markdown resource token "P1" does not match a known resource.',
               token: 'P1',
             },
@@ -140,7 +146,7 @@ describe('command handlers conversation isolation', () => {
     expect(harness.conversationMessages().get('conv-a')).toEqual([
       expect.objectContaining({
         role: 'assistant',
-        content: expect.stringContaining('missing-resource-token'),
+        content: expect.stringContaining('canvas-markdown-missing-resource-token'),
         contentBlocks: [
           expect.objectContaining({
             type: 'canvas_lifecycle',
@@ -161,12 +167,15 @@ describe('command handlers conversation isolation', () => {
         ],
       }),
     ]);
-    expect(harness.conversationMessages().get('conv-a')?.[0]?.content).toContain(
-      'Repair resource references',
-    );
-    expect(harness.conversationMessages().get('conv-a')?.[0]?.content).toContain(
-      'Available Canvas lifecycle actions',
-    );
+    const content = harness.conversationMessages().get('conv-a')?.[0]?.content ?? '';
+    expect(content).toContain('Canvas 生命周期动作 已阻止');
+    expect(content).toContain('诊断');
+    expect(content).toContain('Markdown 资源标记 "P1" 未匹配到已知资源。');
+    expect(content).toContain('可用 Canvas 生命周期动作');
+    expect(content).toContain('repair-resource');
+    expect(content).not.toContain('Repair resource references');
+    expect(content).not.toContain('Available Canvas lifecycle actions');
+    expect(content).not.toContain('Markdown resource token');
     expect(harness.conversationMessages().get('conv-a')?.[0]?.content).not.toContain(
       'Next actions',
     );

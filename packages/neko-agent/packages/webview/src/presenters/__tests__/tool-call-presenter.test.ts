@@ -2,6 +2,156 @@ import { describe, expect, it } from 'vitest';
 import { projectToolCallDisplayState } from '../tool-call-presenter';
 
 describe('tool-call-presenter', () => {
+  it('projects Canvas authoring feedback for follow-up turns', () => {
+    const projection = projectToolCallDisplayState({
+      id: 'tool-canvas-1',
+      name: 'canvas_create_composite',
+      arguments: {},
+      result: {
+        success: false,
+        data: {
+          authoringResult: {
+            version: 1,
+            status: 'blocked',
+            summary: 'Composite needs a supported shot preset.',
+            refs: [
+              {
+                kind: 'node',
+                id: 'scene-1',
+                canvasId: 'canvas-1',
+                label: 'Scene',
+              },
+            ],
+            diagnostics: [
+              {
+                severity: 'error',
+                code: 'unsupported-child-preset',
+                message: 'Unsupported child preset "shot.magic".',
+                target: 'children[0].preset',
+                requiredQuery: 'canvas_describe_authoring_capabilities',
+                retryable: true,
+                suggestedActions: [
+                  {
+                    id: 'query-authoring-catalog',
+                    label: 'Query Canvas authoring catalog',
+                    toolName: 'canvas_describe_authoring_capabilities',
+                  },
+                ],
+              },
+            ],
+            changedFields: ['/generationPrompt'],
+            blockedReason: 'Unsupported child preset "shot.magic".',
+            nextActions: [
+              {
+                id: 'create-replacement-shot',
+                label: 'Create replacement shot',
+                toolName: 'canvas_create_node',
+                requiresApproval: true,
+                arguments: { preset: 'shot.basic' },
+              },
+            ],
+          },
+          semanticPrompt: {
+            text: 'Wide rain street with @hero.',
+            fieldProjections: [
+              {
+                fieldId: 'scene.environment',
+                sourceSpanId: 'span-scene',
+                alignmentState: 'prompt-overridden',
+                userOverride: true,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(projection.canvasAuthoringResult).toMatchObject({
+      isValid: true,
+      status: 'blocked',
+      summary: 'Composite needs a supported shot preset.',
+      blockedReason: 'Unsupported child preset "shot.magic".',
+      refs: [
+        {
+          kind: 'node',
+          id: 'scene-1',
+          label: 'Scene',
+          details: ['canvas:canvas-1'],
+        },
+      ],
+      diagnostics: [
+        {
+          severity: 'error',
+          code: 'unsupported-child-preset',
+          message: 'Unsupported child preset "shot.magic".',
+          target: 'children[0].preset',
+          requiredQuery: 'canvas_describe_authoring_capabilities',
+          retryable: true,
+        },
+      ],
+      changedFields: ['/generationPrompt'],
+      nextActions: [
+        {
+          id: 'create-replacement-shot',
+          label: 'Create replacement shot',
+          toolName: 'canvas_create_node',
+          requiresApproval: true,
+          argumentsJson: '{\n  "preset": "shot.basic"\n}',
+        },
+        {
+          id: 'query-authoring-catalog',
+          label: 'Query Canvas authoring catalog',
+          toolName: 'canvas_describe_authoring_capabilities',
+          requiresApproval: false,
+        },
+      ],
+      promptFieldAlignments: [
+        {
+          fieldId: 'scene.environment',
+          sourceSpanId: 'span-scene',
+          alignmentState: 'prompt-overridden',
+          userOverride: true,
+        },
+      ],
+    });
+    expect(projection.resultJson).toContain('"authoringResult"');
+    expect(projection.resultJson).toContain('"scene-1"');
+  });
+
+  it('surfaces malformed Canvas authoring envelopes as diagnostics', () => {
+    const projection = projectToolCallDisplayState({
+      id: 'tool-canvas-2',
+      name: 'canvas_create_node',
+      arguments: {},
+      result: {
+        success: true,
+        data: {
+          authoringResult: {
+            version: 99,
+            status: 'ok',
+            refs: 'node-1',
+            diagnostics: [],
+          },
+        },
+      },
+    });
+
+    expect(projection.canvasAuthoringResult).toMatchObject({
+      isValid: false,
+      status: 'ok',
+      refs: [],
+      changedFields: [],
+      nextActions: [],
+    });
+    expect(projection.canvasAuthoringResult?.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'unsupported-catalog-version' }),
+        expect.objectContaining({ code: 'malformed-authoring-status' }),
+        expect.objectContaining({ code: 'malformed-authoring-ref' }),
+      ]),
+    );
+  });
+
   it('projects ReadImage result images into thumbnail view models', () => {
     const projection = projectToolCallDisplayState({
       id: 'tool-2',

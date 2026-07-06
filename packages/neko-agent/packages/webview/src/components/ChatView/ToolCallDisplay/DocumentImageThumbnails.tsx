@@ -11,7 +11,8 @@ interface DocumentImageThumbnailsProps {
 }
 
 function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnailsProps) {
-  const { pluginsAvailable, contextChips, ambientNodes } = useMessageActions();
+  const { pluginsAvailable, contextChips, ambientNodes, activeConversationId } =
+    useMessageActions();
 
   const handleOpen = useCallback((thumbnail: DocumentImageThumbnailProjection) => {
     if (!thumbnail.locator) return;
@@ -112,7 +113,9 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
                     }}
                     mediaType="image"
                     plugins={pluginsAvailable}
+                    conversationId={activeConversationId}
                     allowedTargets={['canvas']}
+                    showDirectCanvasImport
                     hidePrefixLabel
                     className="justify-center"
                   />

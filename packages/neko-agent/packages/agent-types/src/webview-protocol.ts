@@ -300,6 +300,74 @@ export interface RequestCanvasMarkdownHandoffWebviewMessage {
   declaredProfileHint?: string;
 }
 
+export type CanvasAuthoringHandoffSourceKind =
+  | 'markdown'
+  | 'generated-text'
+  | 'structured-content'
+  | 'resource-backed-content';
+
+export type CanvasAuthoringHandoffSourceFormat =
+  | RequestCanvasMarkdownHandoffWebviewMessage['sourceFormat']
+  | 'plain-text'
+  | 'json'
+  | 'composite-artifact';
+
+export interface CanvasAuthoringHandoffStableRef {
+  readonly kind: string;
+  readonly id: string;
+  readonly namespace?: string;
+  readonly token?: string;
+  readonly placementHint?: string;
+}
+
+export interface CanvasAuthoringHandoffSourceRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+export interface CanvasAuthoringHandoffDiagnostic {
+  readonly severity: 'info' | 'warning' | 'error';
+  readonly code: string;
+  readonly message: string;
+  readonly token?: string;
+  readonly range?: CanvasAuthoringHandoffSourceRange;
+}
+
+export interface CanvasAuthoringHandoffPromptSpan {
+  readonly kind: string;
+  readonly range: CanvasAuthoringHandoffSourceRange;
+  readonly fieldId?: string;
+  readonly label?: string;
+  readonly ref?: CanvasAuthoringHandoffStableRef;
+  readonly tone?: string;
+  readonly tooltip?: string;
+}
+
+export interface CanvasAuthoringHandoffTargetHints {
+  readonly sourceFormat?: CanvasAuthoringHandoffSourceFormat;
+  readonly declaredIntentHint?: RequestCanvasMarkdownHandoffWebviewMessage['declaredIntentHint'];
+  readonly declaredProfileHint?: string;
+  readonly operationHint?: string;
+}
+
+export interface RequestCanvasAuthoringHandoffWebviewMessage {
+  type: 'requestCanvasAuthoringHandoff';
+  requestId: string;
+  conversationId: string;
+  sourceKind: CanvasAuthoringHandoffSourceKind;
+  content: string;
+  sourceFormat?: CanvasAuthoringHandoffSourceFormat;
+  title?: string;
+  resources?: readonly CanvasMarkdownResourceRef[];
+  stableRefs?: readonly CanvasAuthoringHandoffStableRef[];
+  diagnostics?: readonly CanvasAuthoringHandoffDiagnostic[];
+  promptSpans?: readonly CanvasAuthoringHandoffPromptSpan[];
+  target?: CanvasMarkdownCapabilityTarget;
+  provenance?: PluginTransferProvenance;
+  userIntent?: string;
+  targetHints?: CanvasAuthoringHandoffTargetHints;
+}
+
 export interface DragStartWebviewMessage {
   type: 'dnd:start';
   asset: { path: string; mediaType: 'image' | 'video' | 'audio'; name: string };
@@ -402,6 +470,7 @@ export type WebviewToExtensionMessage =
   | SendToPluginWebviewMessage
   | InvokeAgentCapabilityLifecycleWebviewMessage
   | RequestCanvasMarkdownHandoffWebviewMessage
+  | RequestCanvasAuthoringHandoffWebviewMessage
   | DragStartWebviewMessage
   | MermaidErrorWebviewMessage
   | DownloadSvgWebviewMessage
@@ -1113,6 +1182,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'sendToPlugin',
   'invokeAgentCapabilityLifecycle',
   'requestCanvasMarkdownHandoff',
+  'requestCanvasAuthoringHandoff',
   'dnd:start',
   'mermaidError',
   'downloadSvg',
@@ -1686,6 +1756,8 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseInvokeAgentCapabilityLifecycleMessage(raw);
     case 'requestCanvasMarkdownHandoff':
       return parseRequestCanvasMarkdownHandoffMessage(raw);
+    case 'requestCanvasAuthoringHandoff':
+      return parseRequestCanvasAuthoringHandoffMessage(raw);
     case 'dnd:start':
       return parseDragStartMessage(raw);
     case 'mermaidError':
@@ -2165,6 +2237,86 @@ function parseRequestCanvasMarkdownHandoffMessage(
   };
 }
 
+function parseRequestCanvasAuthoringHandoffMessage(
+  raw: Record<string, unknown>,
+): RequestCanvasAuthoringHandoffWebviewMessage | null {
+  if (
+    raw.capabilityId !== undefined ||
+    raw.input !== undefined ||
+    raw.intentHint !== undefined ||
+    raw.profileHint !== undefined
+  ) {
+    return null;
+  }
+
+  const requestId = requiredString(raw.requestId);
+  const conversationId = requiredString(raw.conversationId);
+  const content = requiredString(raw.content);
+  const sourceKind = parseCanvasAuthoringSourceKind(raw.sourceKind);
+  if (!requestId || !conversationId || !content || !sourceKind) return null;
+
+  const sourceFormat =
+    raw.sourceFormat === undefined ? undefined : parseCanvasAuthoringSourceFormat(raw.sourceFormat);
+  if (raw.sourceFormat !== undefined && sourceFormat === undefined) return null;
+  const title = optionalString(raw.title);
+  if (raw.title !== undefined && title === undefined) return null;
+  const resources =
+    raw.resources === undefined
+      ? undefined
+      : Array.isArray(raw.resources) && raw.resources.every(isCanvasMarkdownResourceRef)
+        ? raw.resources
+        : null;
+  if (resources === null) return null;
+  const stableRefs =
+    raw.stableRefs === undefined ? undefined : parseCanvasAuthoringStableRefs(raw.stableRefs);
+  if (stableRefs === null) return null;
+  const diagnostics =
+    raw.diagnostics === undefined
+      ? undefined
+      : parseCanvasAuthoringHandoffDiagnostics(raw.diagnostics);
+  if (diagnostics === null) return null;
+  const promptSpans =
+    raw.promptSpans === undefined
+      ? undefined
+      : parseCanvasAuthoringHandoffPromptSpans(raw.promptSpans);
+  if (promptSpans === null) return null;
+  const target =
+    raw.target === undefined
+      ? undefined
+      : isCanvasMarkdownCapabilityTarget(raw.target)
+        ? raw.target
+        : null;
+  if (target === null) return null;
+  const provenance =
+    raw.provenance === undefined
+      ? undefined
+      : parseOptionalPluginTransferProvenance(raw.provenance);
+  if (provenance === null) return null;
+  const userIntent = optionalString(raw.userIntent);
+  if (raw.userIntent !== undefined && userIntent === undefined) return null;
+  const targetHints =
+    raw.targetHints === undefined ? undefined : parseCanvasAuthoringTargetHints(raw.targetHints);
+  if (targetHints === null) return null;
+
+  return {
+    type: 'requestCanvasAuthoringHandoff',
+    requestId,
+    conversationId,
+    sourceKind,
+    content,
+    ...(sourceFormat ? { sourceFormat } : {}),
+    ...(title ? { title } : {}),
+    ...(resources ? { resources } : {}),
+    ...(stableRefs ? { stableRefs } : {}),
+    ...(diagnostics ? { diagnostics } : {}),
+    ...(promptSpans ? { promptSpans } : {}),
+    ...(target ? { target } : {}),
+    ...(provenance ? { provenance } : {}),
+    ...(userIntent ? { userIntent } : {}),
+    ...(targetHints ? { targetHints } : {}),
+  };
+}
+
 function parseCanvasMarkdownSourceFormat(
   value: unknown,
 ): RequestCanvasMarkdownHandoffWebviewMessage['sourceFormat'] | undefined {
@@ -2176,12 +2328,166 @@ function parseCanvasMarkdownSourceFormat(
     : undefined;
 }
 
+function parseCanvasAuthoringSourceKind(
+  value: unknown,
+): CanvasAuthoringHandoffSourceKind | undefined {
+  return value === 'markdown' ||
+    value === 'generated-text' ||
+    value === 'structured-content' ||
+    value === 'resource-backed-content'
+    ? value
+    : undefined;
+}
+
+function parseCanvasAuthoringSourceFormat(
+  value: unknown,
+): CanvasAuthoringHandoffSourceFormat | undefined {
+  const markdownFormat = parseCanvasMarkdownSourceFormat(value);
+  if (markdownFormat) return markdownFormat;
+  return value === 'plain-text' || value === 'json' || value === 'composite-artifact'
+    ? value
+    : undefined;
+}
+
 function parseCanvasMarkdownIntentHint(
   value: unknown,
 ): RequestCanvasMarkdownHandoffWebviewMessage['declaredIntentHint'] | undefined {
   return value === 'auto' || value === 'note' || value === 'table' || value === 'creative-table'
     ? value
     : undefined;
+}
+
+function parseCanvasAuthoringStableRefs(
+  value: unknown,
+): readonly CanvasAuthoringHandoffStableRef[] | null {
+  if (!Array.isArray(value)) return null;
+  const refs: CanvasAuthoringHandoffStableRef[] = [];
+  for (const item of value) {
+    const ref = parseCanvasAuthoringStableRef(item);
+    if (!ref) return null;
+    refs.push(ref);
+  }
+  return refs;
+}
+
+function parseCanvasAuthoringTargetHints(
+  value: unknown,
+): CanvasAuthoringHandoffTargetHints | null {
+  if (!isRecord(value)) return null;
+  const sourceFormat =
+    value.sourceFormat === undefined
+      ? undefined
+      : parseCanvasAuthoringSourceFormat(value.sourceFormat);
+  if (value.sourceFormat !== undefined && sourceFormat === undefined) return null;
+  const declaredIntentHint =
+    value.declaredIntentHint === undefined
+      ? undefined
+      : parseCanvasMarkdownIntentHint(value.declaredIntentHint);
+  if (value.declaredIntentHint !== undefined && declaredIntentHint === undefined) return null;
+  const declaredProfileHint = optionalString(value.declaredProfileHint);
+  if (value.declaredProfileHint !== undefined && declaredProfileHint === undefined) return null;
+  const operationHint = optionalString(value.operationHint);
+  if (value.operationHint !== undefined && operationHint === undefined) return null;
+
+  return {
+    ...(sourceFormat ? { sourceFormat } : {}),
+    ...(declaredIntentHint ? { declaredIntentHint } : {}),
+    ...(declaredProfileHint ? { declaredProfileHint } : {}),
+    ...(operationHint ? { operationHint } : {}),
+  };
+}
+
+function parseCanvasAuthoringSourceRange(
+  value: unknown,
+): CanvasAuthoringHandoffSourceRange | null {
+  if (!isRecord(value)) return null;
+  const start = typeof value.start === 'number' && Number.isFinite(value.start) ? value.start : null;
+  const end = typeof value.end === 'number' && Number.isFinite(value.end) ? value.end : null;
+  if (start === null || end === null || start < 0 || end < start) return null;
+  return { start, end };
+}
+
+function parseCanvasAuthoringHandoffDiagnostics(
+  value: unknown,
+): readonly CanvasAuthoringHandoffDiagnostic[] | null {
+  if (!Array.isArray(value)) return null;
+  const diagnostics: CanvasAuthoringHandoffDiagnostic[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) return null;
+    if (item.severity !== 'info' && item.severity !== 'warning' && item.severity !== 'error') {
+      return null;
+    }
+    const code = requiredString(item.code);
+    const message = requiredString(item.message);
+    if (!code || !message) return null;
+    const token = optionalString(item.token);
+    if (item.token !== undefined && token === undefined) return null;
+    const range = item.range === undefined ? undefined : parseCanvasAuthoringSourceRange(item.range);
+    if (range === null) return null;
+    diagnostics.push({
+      severity: item.severity,
+      code,
+      message,
+      ...(token ? { token } : {}),
+      ...(range ? { range } : {}),
+    });
+  }
+  return diagnostics;
+}
+
+function parseCanvasAuthoringHandoffPromptSpans(
+  value: unknown,
+): readonly CanvasAuthoringHandoffPromptSpan[] | null {
+  if (!Array.isArray(value)) return null;
+  const spans: CanvasAuthoringHandoffPromptSpan[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) return null;
+    const kind = requiredString(item.kind);
+    const range = parseCanvasAuthoringSourceRange(item.range);
+    if (!kind || !range) return null;
+    const fieldId = optionalString(item.fieldId);
+    if (item.fieldId !== undefined && fieldId === undefined) return null;
+    const label = optionalString(item.label);
+    if (item.label !== undefined && label === undefined) return null;
+    const ref = item.ref === undefined ? undefined : parseCanvasAuthoringStableRef(item.ref);
+    if (ref === null) return null;
+    const tone = optionalString(item.tone);
+    if (item.tone !== undefined && tone === undefined) return null;
+    const tooltip = optionalString(item.tooltip);
+    if (item.tooltip !== undefined && tooltip === undefined) return null;
+    spans.push({
+      kind,
+      range,
+      ...(fieldId ? { fieldId } : {}),
+      ...(label ? { label } : {}),
+      ...(ref ? { ref } : {}),
+      ...(tone ? { tone } : {}),
+      ...(tooltip ? { tooltip } : {}),
+    });
+  }
+  return spans;
+}
+
+function parseCanvasAuthoringStableRef(
+  value: unknown,
+): CanvasAuthoringHandoffStableRef | null {
+  if (!isRecord(value)) return null;
+  const kind = requiredString(value.kind);
+  const id = requiredString(value.id);
+  if (!kind || !id) return null;
+  const namespace = optionalString(value.namespace);
+  if (value.namespace !== undefined && namespace === undefined) return null;
+  const token = optionalString(value.token);
+  if (value.token !== undefined && token === undefined) return null;
+  const placementHint = optionalString(value.placementHint);
+  if (value.placementHint !== undefined && placementHint === undefined) return null;
+  return {
+    kind,
+    id,
+    ...(namespace ? { namespace } : {}),
+    ...(token ? { token } : {}),
+    ...(placementHint ? { placementHint } : {}),
+  };
 }
 
 function parsePluginTransferPayload(value: unknown): PluginTransferPayload | null {
