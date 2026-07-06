@@ -7,7 +7,11 @@ import type {
   ICapabilityMediaService,
   NekoCanvasAPI,
 } from '@neko/shared';
-import { TOOL_NAMES_CANVAS } from '@neko/shared';
+import {
+  TOOL_NAMES_CANVAS,
+  validateCanvasAuthoringCatalog,
+  validateCanvasAuthoringResultEnvelope,
+} from '@neko/shared';
 import { createNekoCanvasCapabilityProvider } from '../agentCapabilityProvider';
 
 const vscodeCommandState = vi.hoisted(() => ({
@@ -210,6 +214,9 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_EXTRACT_STRUCTURED_CONTENT');
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT');
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT');
+    expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS');
+    expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_GET_CONNECTION');
+    expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_CREATE_CONNECTION');
     expect(providerSource).toContain('TOOL_NAMES_CANVAS.CANVAS_NARRATIVE_TRAVERSE');
   });
 
@@ -253,6 +260,17 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('projection adapters');
   });
 
+  it('localizes mixed-purpose Canvas subsystem prompt fragments for Chinese prompts', () => {
+    const provider = createNekoCanvasCapabilityProvider(createApi());
+    const [fragment] = provider.getPromptFragments({ extensionContext: {}, locale: 'zh' });
+    const localized = fragment?.locales?.['zh']?.content;
+
+    expect(localized).toBeDefined();
+    expect(localized).toContain('同一图中混合分镜、叙事、行为、实体和记忆子系统');
+    expect(localized).toContain('includeSubsystemMetadata: true');
+    expect(localized).not.toContain('Neko Canvas .nkc files can mix');
+  });
+
   it('registers review-only artifact rendering and lifecycle Canvas Markdown facets', () => {
     expect(providerSource).toContain('getArtifactFacets(');
     expect(providerSource).toContain('renderer:neko-canvas:generic-artifact-preview');
@@ -261,6 +279,29 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).not.toContain("capabilityId: 'canvas.importStoryboard'");
     expect(providerSource).toContain("capabilityId: 'canvas.ingestMarkdown'");
     expect(providerSource).toContain('requiresApproval: true');
+  });
+
+  it('exposes Canvas authoring as a provider-owned capability family', () => {
+    const provider = createNekoCanvasCapabilityProvider(createApi());
+    const facets = provider.getArtifactFacets({ extensionContext: {} });
+
+    expect(facets.capabilities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          capabilityId: 'canvas.authoring',
+          packageId: 'neko-canvas',
+          accepts: expect.arrayContaining(['CanvasAuthoringIntent', 'Markdown', 'ResourceRef']),
+          produces: expect.arrayContaining(['CanvasAuthoringResultEnvelope', 'canvas-node-ref']),
+          actions: expect.arrayContaining([
+            TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+            TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+            TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
+          ]),
+          risk: 'medium',
+          requiresApproval: true,
+        }),
+      ]),
+    );
   });
 
   it('registers narrative traversal as a read-only mixed Canvas tool', () => {
@@ -312,6 +353,35 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
 
     const provider = createNekoCanvasCapabilityProvider(createApi());
     const facets = provider.getArtifactFacets({ extensionContext: {} });
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: createMediaService(),
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const toolNames = tools.map((tool) => tool.name);
+    const authoringFacet = facets.capabilities.find(
+      (capability) => capability.capabilityId === 'canvas.authoring',
+    );
+    const authoringSkill = provider.getSkills?.().find((skill) => skill.name === 'canvas-authoring');
+
+    expect(authoringSkill).toBeDefined();
+    expect(authoringFacet).toEqual(
+      expect.objectContaining({
+        packageId: 'neko-canvas',
+        accepts: expect.arrayContaining(['Markdown']),
+      }),
+    );
+    expect(toolNames).toEqual(
+      expect.arrayContaining([
+        'canvas.ingestMarkdown',
+        'canvas.createMarkdownNote',
+        'canvas.createTableFromMarkdown',
+        'canvas.createStoryboardDraftFromMarkdown',
+        'canvas.createStoryboardFromMarkdown',
+        'canvas.validateMarkdownStoryboard',
+      ]),
+    );
     expect(facets.lifecycleCapabilities?.map((descriptor) => descriptor.capabilityId)).toEqual([
       'canvas.ingestMarkdown',
       'canvas.createMarkdownNote',
@@ -352,41 +422,515 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     );
   });
 
-  it('provides Canvas-owned domain skills for Canvas Markdown workflows', () => {
+  it('registers a read-only Canvas authoring capability catalog tool with section filtering', async () => {
+    const provider = createNekoCanvasCapabilityProvider(createApi());
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const catalogTool = tools.find(
+      (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+    );
+
+    expect(catalogTool).toMatchObject({
+      isReadOnly: true,
+      safetyKind: 'read-only-query',
+      traits: {
+        cost: 'free',
+        reversible: true,
+        locality: 'local',
+        impactLevel: 'none',
+      },
+      localization: {
+        zh: expect.objectContaining({
+          description: expect.stringContaining('Canvas authoring 能力目录'),
+        }),
+      },
+    });
+
+    await expect(
+      catalogTool!.execute({ sections: ['presets', 'operations', 'fieldProfiles', 'semanticPrompts'] }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        version: 1,
+        sections: ['presets', 'operations', 'fieldProfiles', 'semanticPrompts'],
+        presets: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'scene.basic',
+            nodeType: 'scene',
+            containerPolicyId: 'scene',
+          }),
+          expect.objectContaining({
+            id: 'shot.basic',
+            nodeType: 'shot',
+          }),
+        ]),
+        operations: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'describe-authoring-capabilities',
+            kind: 'query',
+            risk: 'read-only',
+            toolName: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+          }),
+          expect.objectContaining({
+            id: 'create-composite',
+            kind: 'mutation',
+            toolName: TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
+            requiresConfirmation: true,
+            preferredQueryTools: expect.arrayContaining([
+              TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+              TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+            ]),
+          }),
+          expect.objectContaining({
+            id: 'create-connection',
+            kind: 'mutation',
+            toolName: TOOL_NAMES_CANVAS.CANVAS_CREATE_CONNECTION,
+            requiresConfirmation: true,
+            preferredQueryTools: expect.arrayContaining([
+              TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+              TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+            ]),
+          }),
+          expect.objectContaining({
+            id: 'delete-connection',
+            kind: 'mutation',
+            status: 'unavailable',
+          }),
+        ]),
+        fieldProfiles: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'storyboard.ai-native',
+            unknownFieldPolicy: 'preserve-custom',
+            fields: expect.arrayContaining([
+              expect.objectContaining({
+                id: 'character.appearance',
+                valueType: 'character-appearance',
+                capabilityBinding: expect.objectContaining({
+                  capabilityId: 'entity.bindCharacterAppearance',
+                  stableRefRequired: true,
+                }),
+              }),
+              expect.objectContaining({
+                id: 'voice.cue',
+                valueType: 'voice-cue',
+                capabilityBinding: expect.objectContaining({
+                  capabilityId: 'audio.tts.generate',
+                  requiresApproval: true,
+                }),
+              }),
+            ]),
+          }),
+        ]),
+        semanticPrompts: expect.objectContaining({
+          supported: true,
+          alignmentStates: expect.arrayContaining(['in-sync', 'fields-changed', 'conflict']),
+        }),
+        diagnostics: [],
+      },
+    });
+
+    const result = await catalogTool!.execute({ sections: ['operations'] });
+    expect(result.success).toBe(true);
+    expect(validateCanvasAuthoringCatalog(result.data).valid).toBe(true);
+    expect(result.data).not.toHaveProperty('nodeTypes');
+  });
+
+  it('returns structured Canvas authoring envelopes from mutation tools', async () => {
+    const api = createApi();
+    vi.mocked(api.nodes.create).mockResolvedValue('node-1');
+    vi.mocked(api.nodes.createComposite).mockResolvedValue({
+      containerId: 'scene-1',
+      childIds: ['shot-1', 'shot-2'],
+      connectionIds: ['connection-1'],
+    });
+    vi.mocked(api.nodes.updateBlock).mockResolvedValue({
+      nodeId: 'shot-1',
+      changed: true,
+      data: { generationPrompt: 'new prompt' },
+    });
+    vi.mocked(api.nodes.applyAgentContent).mockResolvedValue({
+      changed: true,
+      mode: 'apply',
+      nodeId: 'shot-1',
+      target: { nodeId: 'shot-1', fieldPath: '/generationPrompt', mode: 'apply' },
+    });
+    vi.mocked(api.nodes.generateImage).mockResolvedValue(undefined);
+
+    const provider = createNekoCanvasCapabilityProvider(api);
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const getTool = (name: string) => tools.find((tool) => tool.name === name)!;
+
+    const createNodeResult = await getTool(TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE).execute({
+      type: 'text',
+      x: 12,
+      y: 24,
+      data: { content: 'hello' },
+    });
+    expect(createNodeResult).toMatchObject({
+      success: true,
+      data: {
+        value: 'node-1',
+        authoringResult: {
+          version: 1,
+          status: 'success',
+          refs: [expect.objectContaining({ kind: 'node', id: 'node-1' })],
+        },
+      },
+    });
+    expect(
+      validateCanvasAuthoringResultEnvelope(
+        (createNodeResult.data as { authoringResult: unknown }).authoringResult,
+      ).valid,
+    ).toBe(true);
+
+    await expect(
+      getTool(TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE).execute({
+        containerPreset: 'scene.basic',
+        children: [{ preset: 'shot.basic', data: { shotNumber: 1 } }],
+      }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        containerId: 'scene-1',
+        childIds: ['shot-1', 'shot-2'],
+        authoringResult: {
+          status: 'success',
+          refs: expect.arrayContaining([
+            expect.objectContaining({ kind: 'node', id: 'scene-1' }),
+            expect.objectContaining({ kind: 'node', id: 'shot-1' }),
+            expect.objectContaining({ kind: 'connection', id: 'connection-1' }),
+          ]),
+        },
+      },
+    });
+
+    await expect(
+      getTool(TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK).execute({
+        nodeId: 'shot-1',
+        path: '/generationPrompt',
+        value: 'new prompt',
+      }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        authoringResult: {
+          status: 'success',
+          refs: [expect.objectContaining({ kind: 'node', id: 'shot-1' })],
+          changedFields: ['/generationPrompt'],
+        },
+      },
+    });
+
+    await expect(
+      getTool(TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT).execute({
+        kind: 'prompt',
+        prompt: 'cinematic wide shot',
+        nodeId: 'shot-1',
+        fieldPath: '/generationPrompt',
+        mode: 'apply',
+      }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        authoringResult: {
+          status: 'success',
+          refs: [expect.objectContaining({ kind: 'node', id: 'shot-1' })],
+          changedFields: ['/generationPrompt'],
+        },
+      },
+    });
+
+    await expect(
+      getTool(TOOL_NAMES_CANVAS.CANVAS_GENERATE_IMAGE).execute({ nodeId: 'shot-1' }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        authoringResult: {
+          status: 'success',
+          refs: [expect.objectContaining({ kind: 'node', id: 'shot-1' })],
+          nextActions: [
+            expect.objectContaining({ toolName: TOOL_NAMES_CANVAS.CANVAS_GET_NODE }),
+          ],
+        },
+      },
+    });
+  });
+
+  it('returns blocked Canvas authoring envelopes when mutation tools fail', async () => {
+    const api = createApi();
+    vi.mocked(api.nodes.createComposite).mockRejectedValue(
+      new Error('Unsupported child preset "shot.magic"'),
+    );
+    const provider = createNekoCanvasCapabilityProvider(api);
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const createComposite = tools.find(
+      (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
+    )!;
+
+    await expect(
+      createComposite.execute({
+        containerPreset: 'scene.basic',
+        children: [{ preset: 'shot.magic', data: {} }],
+      }),
+    ).resolves.toMatchObject({
+      success: false,
+      data: {
+        authoringResult: {
+          status: 'blocked',
+          blockedReason: 'Unsupported child preset "shot.magic"',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'canvas-authoring-operation-blocked',
+              target: 'create-composite',
+              requiredQuery: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+            }),
+          ],
+          nextActions: expect.arrayContaining([
+            expect.objectContaining({
+              toolName: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+            }),
+          ]),
+        },
+      },
+    });
+  });
+
+  it('lists, reads, and creates Canvas connections through structured tools', async () => {
+    const api = createApi();
+    const existingConnection = {
+      id: 'connection-1',
+      sourceId: 'shot-1',
+      targetId: 'shot-2',
+      type: 'sequence',
+      sourceEndpoint: { nodeId: 'shot-1', scope: 'node' },
+      targetEndpoint: { nodeId: 'shot-2', scope: 'node' },
+    };
+    vi.mocked(api.nodes.getActiveContext).mockResolvedValue({
+      selectedNodeIds: [],
+      selectedNodes: [],
+      connections: [existingConnection],
+    });
+    vi.mocked(api.nodes.createConnection).mockResolvedValue({
+      connectionId: 'connection-2',
+      connection: {
+        id: 'connection-2',
+        sourceId: 'shot-2',
+        targetId: 'shot-3',
+        type: 'reference',
+        label: 'Reference',
+        sourceEndpoint: { nodeId: 'shot-2', scope: 'node' },
+        targetEndpoint: { nodeId: 'shot-3', scope: 'node' },
+      },
+    });
+
+    const provider = createNekoCanvasCapabilityProvider(api);
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const getTool = (name: string) => tools.find((tool) => tool.name === name)!;
+
+    await expect(
+      getTool(TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS).execute({ type: 'sequence' }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        connections: [expect.objectContaining({ id: 'connection-1', type: 'sequence' })],
+      },
+    });
+
+    await expect(
+      getTool(TOOL_NAMES_CANVAS.CANVAS_GET_CONNECTION).execute({
+        connectionId: 'connection-1',
+      }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        connection: expect.objectContaining({ id: 'connection-1' }),
+      },
+    });
+
+    await expect(
+      getTool(TOOL_NAMES_CANVAS.CANVAS_CREATE_CONNECTION).execute({
+        sourceId: 'shot-2',
+        targetId: 'shot-3',
+        type: 'reference',
+        label: 'Reference',
+      }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        connectionId: 'connection-2',
+        authoringResult: {
+          status: 'success',
+          refs: expect.arrayContaining([
+            expect.objectContaining({ kind: 'connection', id: 'connection-2' }),
+            expect.objectContaining({ kind: 'node', id: 'shot-2' }),
+            expect.objectContaining({ kind: 'node', id: 'shot-3' }),
+          ]),
+        },
+      },
+    });
+    expect(api.nodes.createConnection).toHaveBeenCalledWith({
+      sourceId: 'shot-2',
+      targetId: 'shot-3',
+      sourceEndpoint: { nodeId: 'shot-2', scope: 'node' },
+      targetEndpoint: { nodeId: 'shot-3', scope: 'node' },
+      type: 'reference',
+      label: 'Reference',
+    });
+
+    await expect(
+      getTool(TOOL_NAMES_CANVAS.CANVAS_CREATE_CONNECTION).execute({
+        sourceId: 'shot-2',
+        targetId: 'shot-3',
+        sourceEndpoint: { nodeId: 'other-node', scope: 'node' },
+      }),
+    ).resolves.toMatchObject({
+      success: false,
+      data: {
+        authoringResult: {
+          status: 'blocked',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'canvas-authoring-operation-blocked',
+              target: 'create-connection',
+              requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+            }),
+          ],
+        },
+      },
+    });
+  });
+
+  it('reports repairable diagnostics for stale refs and approval-gated Canvas mutations', async () => {
+    const api = createApi();
+    vi.mocked(api.nodes.updateBlock).mockRejectedValue(
+      new Error('Target node "stale-node" not found'),
+    );
+    const provider = createNekoCanvasCapabilityProvider(api);
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const updateBlock = tools.find(
+      (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK,
+    )!;
+    const createConnection = tools.find(
+      (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_CREATE_CONNECTION,
+    )!;
+
+    expect(updateBlock).toMatchObject({
+      requiresConfirmation: true,
+      safetyKind: 'confirmation-gated',
+      queryBeforeMutate: expect.objectContaining({
+        preferredQueryTools: expect.arrayContaining([TOOL_NAMES_CANVAS.CANVAS_GET_NODE]),
+      }),
+    });
+    expect(createConnection).toMatchObject({
+      requiresConfirmation: true,
+      safetyKind: 'confirmation-gated',
+      targetRequirements: expect.objectContaining({
+        required: ['sourceId', 'targetId'],
+      }),
+    });
+
+    await expect(
+      updateBlock.execute({
+        nodeId: 'stale-node',
+        path: '/generationPrompt',
+        value: 'prompt',
+      }),
+    ).resolves.toMatchObject({
+      success: false,
+      data: {
+        authoringResult: {
+          status: 'blocked',
+          blockedReason: 'Target node "stale-node" not found',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'canvas-authoring-operation-blocked',
+              target: 'update-block',
+              requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+              retryable: true,
+            }),
+          ],
+          nextActions: expect.arrayContaining([
+            expect.objectContaining({ toolName: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT }),
+          ]),
+        },
+      },
+    });
+  });
+
+  it('provides Canvas-owned general authoring Skill with Markdown storyboard as an alias', () => {
     const provider = createNekoCanvasCapabilityProvider(createApi());
     const skills = provider.getSkills?.() ?? [];
+    const authoringSkill = skills.find((skill) => skill.name === 'canvas-authoring');
+    const storyboardAlias = skills.find((skill) => skill.name === 'canvas-markdown-storyboard');
 
-    expect(skills).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: 'canvas-markdown-storyboard',
-          source: 'builtin',
-          enabled: true,
-          allowedTools: expect.arrayContaining(['canvas.createStoryboardFromMarkdown']),
-          mediaWorkflow: expect.objectContaining({
-            validationRequirements: ['CanvasMarkdownCapabilityInput'],
-          }),
-        }),
+    expect(authoringSkill).toMatchObject({
+      name: 'canvas-authoring',
+      source: 'builtin',
+      enabled: true,
+      allowedTools: expect.arrayContaining([
+        TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+        TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+        TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
+        TOOL_NAMES_CANVAS.CANVAS_CREATE_CONNECTION,
+        'canvas.createStoryboardFromMarkdown',
       ]),
-    );
-    expect(skills.find((skill) => skill.name === 'canvas-markdown-storyboard')?.content).toContain(
-      'canvas.createStoryboardFromMarkdown',
-    );
-    expect(
-      'validationRequirements' in
-        (skills.find((skill) => skill.name === 'canvas-markdown-storyboard') ?? {}),
-    ).toBe(false);
+      mediaWorkflow: expect.objectContaining({
+        validationRequirements: ['CanvasAuthoringCatalog', 'CanvasAuthoringResultEnvelope'],
+      }),
+    });
+    expect(authoringSkill?.content).toContain('canvas_describe_authoring_capabilities');
+    expect(authoringSkill?.content).toContain('scene.basic + shot.basic');
+    expect(authoringSkill?.content).toContain('prompt-first');
+
+    expect(storyboardAlias).toMatchObject({
+      name: 'canvas-markdown-storyboard',
+      source: 'builtin',
+      enabled: true,
+      allowedTools: authoringSkill?.allowedTools,
+    });
+    expect(storyboardAlias?.content).toContain('Compatibility alias');
+    expect(storyboardAlias?.content).toContain('canvas-authoring');
+    expect(storyboardAlias?.content).toContain('canvas.createStoryboardFromMarkdown');
+    expect('validationRequirements' in (storyboardAlias ?? {})).toBe(false);
   });
 
   it('localizes Canvas-owned domain skills from the capability context locale', () => {
     const provider = createNekoCanvasCapabilityProvider(createApi());
     const skills = provider.getSkills?.({ extensionContext: {}, locale: 'zh' }) ?? [];
-    const skill = skills.find((candidate) => candidate.name === 'canvas-markdown-storyboard');
+    const authoringSkill = skills.find((candidate) => candidate.name === 'canvas-authoring');
+    const storyboardAlias = skills.find((candidate) => candidate.name === 'canvas-markdown-storyboard');
 
-    expect(skill?.description).toContain('Canvas 摄入');
-    expect(skill?.content).toContain('# Canvas Markdown 分镜');
-    expect(skill?.content).toContain('使用 canvas.validateMarkdownStoryboard');
-    expect(skill?.content).not.toContain('Use this skill only after');
+    expect(authoringSkill?.description).toContain('Canvas authoring');
+    expect(authoringSkill?.content).toContain('# Canvas Authoring');
+    expect(authoringSkill?.content).toContain('先查询 canvas_describe_authoring_capabilities');
+    expect(authoringSkill?.content).toContain('prompt-first');
+    expect(storyboardAlias?.content).toContain('兼容别名');
+    expect(storyboardAlias?.content).toContain('canvas-authoring');
+    expect(authoringSkill?.content).not.toContain('Use this skill only after');
   });
 
   it('executes Markdown capability tools through the Canvas Markdown API', async () => {
@@ -427,6 +971,11 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
         data: {
           capabilityId: 'canvas.validateMarkdownStoryboard',
           status: 'validated',
+          authoringResult: {
+            status: 'success',
+            diagnostics: [],
+            summary: 'Validate Markdown Storyboard: validated.',
+          },
         },
       },
     });
@@ -452,6 +1001,14 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
         data: {
           capabilityId: 'canvas.ingestMarkdown',
           status: 'blocked',
+          authoringResult: {
+            status: 'blocked',
+            diagnostics: [
+              expect.objectContaining({
+                code: 'canvas-markdown-capability-not-implemented',
+              }),
+            ],
+          },
         },
       },
     });

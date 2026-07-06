@@ -40,22 +40,49 @@ import type {
   AgentCapabilityInvocationResult,
   AgentCapabilityLifecycleDescriptor,
   Skill,
+  CanvasAuthoringCatalog,
+  CanvasAuthoringCatalogRequest,
+  CanvasAuthoringCatalogSection,
+  CanvasAuthoringDiagnostic,
+  CanvasAuthoringFieldProfileDescriptor,
+  CanvasAuthoringOperationDescriptor,
+  CanvasAuthoringRef,
+  CanvasAuthoringResultEnvelope,
+  CanvasAuthoringResultStatus,
+  CanvasAgentApplyContentResult,
+  CanvasConnectionEndpoint,
+  CanvasCreateCompositeResult,
+  CanvasCreateConnectionRequest,
+  CanvasCreateConnectionResult,
+  CanvasDeriveNodeResult,
+  CanvasUpdateBlockRequest,
+  CanvasUpdateBlockResult,
 } from '@neko/shared';
 import {
   TOOL_NAMES_CANVAS,
+  BUILT_IN_CANVAS_NODE_PRESETS,
+  CANVAS_AUTHORING_CATALOG_SECTIONS,
+  CANVAS_AUTHORING_CATALOG_VERSION,
+  CANVAS_AUTHORING_FIELD_PROFILE_ALIGNMENT_STATES,
   CANVAS_AGENT_CHILD_PRESETS,
   CANVAS_AGENT_CONTAINER_PRESETS,
   CANVAS_AGENT_CREATE_NODE_TYPES,
   CANVAS_AGENT_DERIVE_TARGET_PRESETS,
   CANVAS_AGENT_NODE_PRESETS,
+  CANVAS_CONNECTION_TYPES,
   applyCanvasTimelineSyncToCanvas,
   applyStoryboardPayloadToCanvas,
   buildStoryboardImportTimelineSyncPayload,
   createStoryboardPayload,
   extractCanvasNodeGenerationLineage,
+  getDefaultCanvasNodePresetName,
   getNodeParentId,
+  isCanvasAuthoringCatalogSection,
+  isCanvasConnectionType,
   isCanvasNodeType,
   traverseNarrativeFlow,
+  validateCanvasAuthoringCatalogRequest,
+  validateCanvasAuthoringFieldProfileDescriptor,
 } from '@neko/shared';
 import { resolveCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import { getRootLogger } from './utils/logger';
@@ -144,14 +171,312 @@ function readOptionalCanvasNodeType(
   throw new Error(`Unsupported Canvas ${label} "${String(value)}"`);
 }
 
+function readRequiredString(value: unknown, label: string): string {
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
+  }
+  throw new Error(`Canvas ${label} is required`);
+}
+
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readOptionalCanvasConnectionType(value: unknown): CanvasConnection['type'] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (isCanvasConnectionType(value)) {
+    return value;
+  }
+  throw new Error(`Unsupported Canvas connection type "${String(value)}"`);
+}
+
+function readOptionalConnectionPriority(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  throw new Error('Canvas connection priority must be a finite number');
+}
+
+function readOptionalConnectionExtension(value: unknown): CanvasConnection['extension'] | undefined {
+  if (value === undefined) return undefined;
+  if (isRecord(value)) return value as CanvasConnection['extension'];
+  throw new Error('Canvas connection extension must be an object');
+}
+
+function readOptionalConnectionEndpoint(
+  value: unknown,
+  nodeId: string,
+  endpointLabel: 'source' | 'target',
+): CanvasConnectionEndpoint {
+  if (value === undefined) {
+    return { nodeId, scope: 'node' };
+  }
+  if (!isRecord(value)) {
+    throw new Error(`Canvas ${endpointLabel} endpoint must be an object`);
+  }
+  const endpointNodeId = readOptionalString(value.nodeId) ?? nodeId;
+  if (endpointNodeId !== nodeId) {
+    throw new Error(
+      `Canvas ${endpointLabel} endpoint nodeId "${endpointNodeId}" must match "${nodeId}"`,
+    );
+  }
+  const scope = readOptionalConnectionEndpointScope(value.scope);
+  const portId = readOptionalString(value.portId);
+  const blockId = readOptionalString(value.blockId);
+  const fieldPath = normalizeJsonPointerPath(value.fieldPath);
+  const endpoint: CanvasConnectionEndpoint = {
+    nodeId,
+    ...(scope ? { scope } : { scope: 'node' }),
+    ...(portId ? { portId } : {}),
+    ...(blockId ? { blockId } : {}),
+    ...(fieldPath ? { fieldPath } : {}),
+  };
+  if (endpoint.scope === 'port' && !endpoint.portId) {
+    throw new Error(`Canvas ${endpointLabel} port endpoint requires portId`);
+  }
+  if (endpoint.scope === 'block' && !endpoint.blockId) {
+    throw new Error(`Canvas ${endpointLabel} block endpoint requires blockId`);
+  }
+  if (endpoint.scope === 'field' && !endpoint.fieldPath) {
+    throw new Error(`Canvas ${endpointLabel} field endpoint requires fieldPath`);
+  }
+  return endpoint;
+}
+
+function readOptionalConnectionEndpointScope(
+  value: unknown,
+): CanvasConnectionEndpoint['scope'] | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'node' || value === 'port' || value === 'block' || value === 'field') {
+    return value;
+  }
+  throw new Error(`Unsupported Canvas connection endpoint scope "${String(value)}"`);
 }
 
 function readStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string' && item.length > 0)
     : [];
+}
+
+type CanvasAuthoringResultCarrier<T> = T extends Record<string, unknown>
+  ? T & { readonly authoringResult: CanvasAuthoringResultEnvelope }
+  : { readonly value: T; readonly authoringResult: CanvasAuthoringResultEnvelope };
+
+function withCanvasAuthoringResult<T>(
+  data: T,
+  authoringResult: CanvasAuthoringResultEnvelope,
+): CanvasAuthoringResultCarrier<T> {
+  if (isRecord(data)) {
+    return { ...data, authoringResult } as CanvasAuthoringResultCarrier<T>;
+  }
+  return { value: data, authoringResult } as CanvasAuthoringResultCarrier<T>;
+}
+
+function createCanvasAuthoringResultEnvelope(input: {
+  readonly status?: CanvasAuthoringResultStatus;
+  readonly refs?: readonly CanvasAuthoringRef[];
+  readonly diagnostics?: readonly CanvasAuthoringDiagnostic[];
+  readonly changedFields?: readonly string[];
+  readonly blockedReason?: string;
+  readonly nextActions?: CanvasAuthoringResultEnvelope['nextActions'];
+  readonly target?: CanvasAuthoringResultEnvelope['target'];
+  readonly provenance?: CanvasAuthoringResultEnvelope['provenance'];
+  readonly summary?: string;
+}): CanvasAuthoringResultEnvelope {
+  return {
+    version: CANVAS_AUTHORING_CATALOG_VERSION,
+    status: input.status ?? 'success',
+    refs: input.refs ?? [],
+    diagnostics: input.diagnostics ?? [],
+    ...(input.changedFields?.length ? { changedFields: input.changedFields } : {}),
+    ...(input.blockedReason ? { blockedReason: input.blockedReason } : {}),
+    ...(input.nextActions?.length ? { nextActions: input.nextActions } : {}),
+    ...(input.target ? { target: input.target } : {}),
+    ...(input.provenance ? { provenance: input.provenance } : {}),
+    ...(input.summary ? { summary: input.summary } : {}),
+  };
+}
+
+function createBlockedCanvasAuthoringResultEnvelope(
+  operationId: string,
+  err: unknown,
+  options: {
+    readonly requiredQuery?: string;
+    readonly target?: CanvasAuthoringResultEnvelope['target'];
+    readonly provenance?: CanvasAuthoringResultEnvelope['provenance'];
+  } = {},
+): CanvasAuthoringResultEnvelope {
+  const message = readErrorMessage(err);
+  const suggestedActions = [
+    {
+      id: 'query-authoring-catalog',
+      label: 'Query Canvas authoring catalog',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+    },
+    {
+      id: 'query-active-context',
+      label: 'Query active Canvas context',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+    },
+  ];
+  return createCanvasAuthoringResultEnvelope({
+    status: 'blocked',
+    blockedReason: message,
+    target: options.target,
+    provenance: options.provenance,
+    nextActions: suggestedActions,
+    diagnostics: [
+      {
+        severity: 'error',
+        code: 'canvas-authoring-operation-blocked',
+        message,
+        target: operationId,
+        retryable: true,
+        ...(options.requiredQuery ? { requiredQuery: options.requiredQuery } : {}),
+        suggestedActions,
+      },
+    ],
+  });
+}
+
+function readErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function nodeRef(nodeId: string, label?: string): CanvasAuthoringRef {
+  return { kind: 'node', id: nodeId, ...(label ? { label } : {}) };
+}
+
+function connectionRef(connectionId: string): CanvasAuthoringRef {
+  return { kind: 'connection', id: connectionId };
+}
+
+function blockRef(nodeId: string, blockId: string): CanvasAuthoringRef {
+  return { kind: 'block', id: blockId, nodeId };
+}
+
+function uniqueAuthoringRefs(refs: readonly CanvasAuthoringRef[]): readonly CanvasAuthoringRef[] {
+  const seen = new Set<string>();
+  return refs.filter((ref) => {
+    const key = `${ref.kind}:${ref.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function createNodeMutationAuthoringResult(
+  nodeId: string,
+  summary: string,
+): CanvasAuthoringResultEnvelope {
+  return createCanvasAuthoringResultEnvelope({
+    refs: [nodeRef(nodeId)],
+    summary,
+  });
+}
+
+function createUpdateNodeAuthoringResult(
+  nodeId: string,
+  data: unknown,
+): CanvasAuthoringResultEnvelope {
+  return createCanvasAuthoringResultEnvelope({
+    refs: [nodeRef(nodeId)],
+    changedFields: isRecord(data) ? Object.keys(data) : undefined,
+    target: { nodeId },
+    summary: 'Updated Canvas node data.',
+  });
+}
+
+function createDeriveNodeAuthoringResult(result: CanvasDeriveNodeResult): CanvasAuthoringResultEnvelope {
+  return createCanvasAuthoringResultEnvelope({
+    refs: uniqueAuthoringRefs([
+      nodeRef(result.nodeId),
+      ...(result.connectionId ? [connectionRef(result.connectionId)] : []),
+    ]),
+    summary: 'Derived a Canvas node from an existing node.',
+  });
+}
+
+function createCompositeAuthoringResult(
+  result: CanvasCreateCompositeResult,
+): CanvasAuthoringResultEnvelope {
+  return createCanvasAuthoringResultEnvelope({
+    refs: uniqueAuthoringRefs([
+      nodeRef(result.containerId, 'container'),
+      ...result.childIds.map((childId) => nodeRef(childId, 'child')),
+      ...(result.connectionIds?.map(connectionRef) ?? []),
+    ]),
+    summary: 'Created a Canvas composite.',
+  });
+}
+
+function createConnectionAuthoringResult(
+  result: CanvasCreateConnectionResult,
+): CanvasAuthoringResultEnvelope {
+  return createCanvasAuthoringResultEnvelope({
+    refs: uniqueAuthoringRefs([
+      connectionRef(result.connectionId),
+      ...(result.connection
+        ? [nodeRef(result.connection.sourceId, 'source'), nodeRef(result.connection.targetId, 'target')]
+        : []),
+    ]),
+    summary: 'Created a Canvas connection.',
+  });
+}
+
+function createUpdateBlockAuthoringResult(
+  request: CanvasUpdateBlockRequest,
+  result: CanvasUpdateBlockResult,
+): CanvasAuthoringResultEnvelope {
+  const changedFields = [
+    ...(request.path ? [request.path] : []),
+    ...(request.blockId ? [`block:${request.blockId}`] : []),
+  ];
+  return createCanvasAuthoringResultEnvelope({
+    status: result.changed ? 'success' : 'noop',
+    refs: uniqueAuthoringRefs([
+      nodeRef(result.nodeId),
+      ...(request.blockId ? [blockRef(result.nodeId, request.blockId)] : []),
+    ]),
+    changedFields,
+    target: { nodeId: result.nodeId, ...(request.path ? { fieldPath: request.path } : {}) },
+    summary: result.changed ? 'Updated a Canvas block.' : 'Canvas block update made no changes.',
+  });
+}
+
+function createApplyAgentContentAuthoringResult(
+  result: CanvasAgentApplyContentResult,
+): CanvasAuthoringResultEnvelope {
+  return createCanvasAuthoringResultEnvelope({
+    status: result.changed ? 'success' : 'noop',
+    refs: uniqueAuthoringRefs([
+      ...(result.nodeId ? [nodeRef(result.nodeId)] : []),
+      ...(result.containerId ? [nodeRef(result.containerId, 'container')] : []),
+      ...(result.createdNodeIds?.map((nodeId) => nodeRef(nodeId, 'created')) ?? []),
+    ]),
+    changedFields: result.target?.fieldPath ? [result.target.fieldPath] : undefined,
+    target: result.target,
+    summary: result.reason ?? `Applied Canvas Agent content in ${result.mode} mode.`,
+  });
+}
+
+function createGenerationAuthoringResult(
+  operationId: string,
+  nodeIds: readonly string[],
+): CanvasAuthoringResultEnvelope {
+  return createCanvasAuthoringResultEnvelope({
+    refs: nodeIds.map((nodeId) => nodeRef(nodeId)),
+    nextActions: [
+      {
+        id: 'query-generation-result',
+        label: 'Query updated Canvas node state',
+        toolName: TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+      },
+    ],
+    summary: `${operationId} accepted by Canvas generation scheduler.`,
+  });
 }
 
 function readPlaybackReorderApprovalContext(
@@ -270,9 +595,17 @@ function createMarkdownCapabilityTool(
         const lifecycle = toCanvasMarkdownLifecycleResult(definition, input, data);
         return { success: lifecycle.status !== 'blocked', data: lifecycle };
       } catch (err) {
+        const authoringResult = createBlockedCanvasAuthoringResultEnvelope(
+          definition.capabilityId,
+          err,
+          { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES },
+        );
         return {
           success: false,
           error: `Failed to invoke Canvas Markdown capability: ${String(err)}`,
+          data: {
+            authoringResult,
+          },
         };
       }
     },
@@ -373,8 +706,58 @@ function toCanvasMarkdownLifecycleResult(
           }),
         }
       : {}),
-    data: result,
+    data: {
+      ...result,
+      authoringResult: createCanvasMarkdownAuthoringResult(definition, input, result),
+    },
   };
+}
+
+function createCanvasMarkdownAuthoringResult(
+  definition: CanvasMarkdownToolDefinition,
+  input: CanvasMarkdownCapabilityInput,
+  result: CanvasMarkdownCapabilityResult,
+): CanvasAuthoringResultEnvelope {
+  const refs = uniqueAuthoringRefs([
+    ...(result.draftNodeId ? [nodeRef(result.draftNodeId, 'draft')] : []),
+    ...(result.tableNodeId ? [nodeRef(result.tableNodeId, 'table')] : []),
+    ...(result.nodeIds?.map((nodeId) => nodeRef(nodeId)) ?? []),
+  ]);
+  return createCanvasAuthoringResultEnvelope({
+    status: toCanvasMarkdownAuthoringStatus(result.status),
+    refs,
+    diagnostics: result.diagnostics.map((diagnostic): CanvasAuthoringDiagnostic => ({
+      severity: diagnostic.severity,
+      code: diagnostic.code,
+      message: diagnostic.message,
+      ...(diagnostic.fieldKey ? { target: diagnostic.fieldKey } : {}),
+      ...(diagnostic.token ? { received: diagnostic.token } : {}),
+      retryable: diagnostic.severity !== 'error',
+    })),
+    target: 'target' in input ? input.target : undefined,
+    provenance: 'provenance' in input ? input.provenance : undefined,
+    blockedReason:
+      result.status === 'blocked'
+        ? result.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+          'Canvas Markdown capability blocked the authoring request.'
+        : undefined,
+    nextActions: result.actions?.map((action) => ({
+      id: action.actionId,
+      ...(action.label ? { label: action.label } : {}),
+      toolName: findCanvasMarkdownToolDefinition(action.capabilityId ?? definition.capabilityId)
+        ?.name,
+      requiresApproval: action.capabilityId !== 'canvas.validateMarkdownStoryboard',
+    })),
+    summary: `${definition.displayName}: ${result.status}.`,
+  });
+}
+
+function toCanvasMarkdownAuthoringStatus(
+  status: CanvasMarkdownCapabilityResult['status'],
+): CanvasAuthoringResultStatus {
+  if (status === 'blocked') return 'blocked';
+  if (status === 'needs-review') return 'partial';
+  return 'success';
 }
 
 function readCanvasMarkdownProfileFromResult(
@@ -677,6 +1060,9 @@ const CANVAS_READ_ONLY_TOOL_NAMES: ReadonlySet<CanvasToolName> = new Set([
   TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
   TOOL_NAMES_CANVAS.CANVAS_EXTRACT_STRUCTURED_CONTENT,
   TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+  TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+  TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS,
+  TOOL_NAMES_CANVAS.CANVAS_GET_CONNECTION,
   TOOL_NAMES_CANVAS.CANVAS_NARRATIVE_TRAVERSE,
   TOOL_NAMES_CANVAS.CANVAS_GET_STORYBOARD_EXECUTION_SUMMARY,
 ]);
@@ -937,6 +1323,42 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
         '是否包含 narrative、behavior、entity、memory 子系统的有界 metadata 摘要。',
     },
   },
+  [TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES]: {
+    description:
+      '读取 Canvas authoring 能力目录，包括节点、预设、容器、连接、字段、操作和推荐 recipe。',
+    parameters: {
+      version: '可选目录版本；当前为 1。',
+      sections: '可选目录 section 列表；省略时返回所有支持的 section。',
+      includeDetails: '是否包含更详细的描述；当前目录保持有界摘要。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS]: {
+    description: '列出当前画布连接，可按类型、来源节点或目标节点过滤。',
+    parameters: {
+      type: '可选连接类型过滤条件。',
+      sourceId: '可选来源节点 ID。',
+      targetId: '可选目标节点 ID。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_GET_CONNECTION]: {
+    description: '按连接 ID 读取当前画布中的单个连接。',
+    parameters: {
+      connectionId: 'Canvas 连接 ID。',
+    },
+  },
+  [TOOL_NAMES_CANVAS.CANVAS_CREATE_CONNECTION]: {
+    description: '在已有 Canvas 节点之间创建连接，并返回结构化连接引用。',
+    parameters: {
+      sourceId: '来源 Canvas 节点 ID。',
+      targetId: '目标 Canvas 节点 ID。',
+      sourceEndpoint: '可选来源 endpoint；nodeId 必须匹配 sourceId。',
+      targetEndpoint: '可选目标 endpoint；nodeId 必须匹配 targetId。',
+      type: '可选连接类型。',
+      label: '可选连接标签。',
+      priority: '可选连接优先级。',
+      extension: '可选安全扩展数据对象。',
+    },
+  },
   [TOOL_NAMES_CANVAS.CANVAS_NARRATIVE_TRAVERSE]: {
     description:
       '遍历混合 Canvas 中的 narrative flow 节点；不会遍历 storyboard、behavior、entity 或 memory 节点。',
@@ -1067,62 +1489,580 @@ function readCanvasToolTraits(toolName: CanvasToolName): CanvasToolTraits {
   return { cost: 'free', reversible: true, locality: 'local', impactLevel: 'low' };
 }
 
-function createCanvasMarkdownStoryboardSkill(locale?: AgentCapabilityContext['locale']): Skill {
+function buildCanvasAuthoringCapabilityCatalog(
+  request: CanvasAuthoringCatalogRequest = {},
+): CanvasAuthoringCatalog {
+  const sections =
+    request.sections && request.sections.length > 0
+      ? request.sections
+      : CANVAS_AUTHORING_CATALOG_SECTIONS;
+  const catalog: Partial<CanvasAuthoringCatalog> &
+    Pick<CanvasAuthoringCatalog, 'version' | 'sections' | 'diagnostics'> = {
+    version: CANVAS_AUTHORING_CATALOG_VERSION,
+    sections,
+    diagnostics: [],
+  };
+
+  if (sections.includes('nodeTypes')) {
+    catalog.nodeTypes = CANVAS_AGENT_CREATE_NODE_TYPES.map((type) => ({
+      type,
+      label: { default: type },
+      defaultPreset: getDefaultCanvasNodePresetName(type),
+      presets: BUILT_IN_CANVAS_NODE_PRESETS.filter((preset) => preset.nodeType === type).map(
+        (preset) => preset.name,
+      ),
+    }));
+  }
+
+  if (sections.includes('presets')) {
+    catalog.presets = BUILT_IN_CANVAS_NODE_PRESETS.map((preset) => ({
+      id: preset.name,
+      nodeType: preset.nodeType,
+      label: { default: preset.label },
+      ...(preset.description ? { summary: preset.description } : {}),
+      ...(preset.containerPolicy ? { containerPolicyId: preset.containerPolicy } : {}),
+      traits: preset.composable ? ['composable'] : [],
+    }));
+  }
+
+  if (sections.includes('containers')) {
+    catalog.containers = [
+      {
+        id: 'scene',
+        label: { default: 'Scene container', zhCN: '场景容器' },
+        acceptedChildNodeTypes: ['shot', 'media', 'gallery', 'annotation', 'text'],
+        acceptedChildPresets: ['shot.basic', 'media.basic', 'gallery.basic', 'annotation.basic', 'text.basic'],
+        layoutModes: ['sequence', 'grid'],
+      },
+      {
+        id: 'gallery',
+        label: { default: 'Gallery container', zhCN: '图库容器' },
+        acceptedChildNodeTypes: ['media'],
+        acceptedChildPresets: ['media.basic'],
+        layoutModes: ['grid'],
+      },
+      {
+        id: 'group',
+        label: { default: 'Group container', zhCN: '分组容器' },
+        acceptedChildNodeTypes: [...CANVAS_AGENT_CREATE_NODE_TYPES],
+        acceptedChildPresets: [...CANVAS_AGENT_CHILD_PRESETS],
+        layoutModes: ['freeform'],
+      },
+    ];
+  }
+
+  if (sections.includes('connections')) {
+    catalog.connections = CANVAS_CONNECTION_TYPES.map((type) => ({
+      type,
+      label: { default: type },
+      sourceEndpointScopes: ['node', 'port'],
+      targetEndpointScopes: ['node', 'port'],
+    }));
+  }
+
+  if (sections.includes('targetableFields')) {
+    catalog.targetableFields = [
+      {
+        id: 'node.title',
+        namespace: 'canvas.node',
+        path: '/title',
+        label: { default: 'Title', zhCN: '标题' },
+        valueType: 'text',
+        roles: ['metadata'],
+        storageTarget: 'node-data',
+      },
+      {
+        id: 'shot.visualDescription',
+        namespace: 'canvas.storyboard',
+        path: '/visualDescription',
+        label: { default: 'Visual description', zhCN: '画面描述' },
+        valueType: 'prompt',
+        roles: ['prompt', 'shot'],
+        storageTarget: 'prompt-span',
+      },
+      {
+        id: 'shot.generatedImage',
+        namespace: 'canvas.storyboard',
+        path: '/generatedImage',
+        label: { default: 'Generated image', zhCN: '生成图片' },
+        valueType: 'resource-ref',
+        roles: ['media', 'execution'],
+        storageTarget: 'node-data',
+      },
+    ];
+  }
+
+  if (sections.includes('resourcePolicies')) {
+    catalog.resourcePolicies = [
+      {
+        id: 'durable-canvas-authoring-resource',
+        label: { default: 'Durable Canvas authoring resource' },
+        stableRefKinds: ['ResourceRef', 'DocumentArchiveResourceRef', 'project-relative-path'],
+        rejectedRuntimeKinds: [
+          'vscode-webview-uri',
+          'blob-url',
+          'cache-path',
+          'engine-runtime-token',
+          'chat-attachment-order',
+        ],
+      },
+    ];
+  }
+
+  if (sections.includes('operations')) {
+    catalog.operations = buildCanvasAuthoringOperationDescriptors();
+  }
+
+  if (sections.includes('recipes')) {
+    catalog.recipes = [
+      {
+        id: 'storyboard.scene-with-shots',
+        label: { default: 'Create storyboard scene with shots', zhCN: '创建场景和镜头分镜' },
+        summary:
+          'Query catalog/context, then create scene.basic with shot.basic children through canvas_create_composite.',
+        preferredTools: [
+          TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+          TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+          TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
+        ],
+        requiredQueries: [
+          TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+          TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+        ],
+        targetHints: ['scene.basic', 'shot.basic'],
+      },
+      {
+        id: 'media.single-asset',
+        label: { default: 'Create media node for one asset', zhCN: '为单个素材创建媒体节点' },
+        summary:
+          'Use media.basic for one stable resource; direct import remains a separate add-source action.',
+        preferredTools: [
+          TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+          TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE,
+        ],
+        targetHints: ['media.basic'],
+      },
+      {
+        id: 'markdown.review-ingest',
+        label: { default: 'Review and ingest Markdown', zhCN: '审阅并摄入 Markdown' },
+        summary:
+          'Use Canvas Markdown capabilities for Markdown or GFM table review and apply actions.',
+        preferredTools: [
+          TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD,
+          TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN,
+        ],
+      },
+    ];
+  }
+
+  if (sections.includes('fieldProfiles')) {
+    const profileValidation =
+      validateCanvasAuthoringFieldProfileDescriptor(AI_NATIVE_STORYBOARD_FIELD_PROFILE);
+    catalog.fieldProfiles = [AI_NATIVE_STORYBOARD_FIELD_PROFILE];
+    catalog.diagnostics = [...catalog.diagnostics, ...profileValidation.diagnostics];
+  }
+
+  if (sections.includes('semanticPrompts')) {
+    catalog.semanticPrompts = {
+      supported: true,
+      spanKinds: [
+        'scene',
+        'character',
+        'character-appearance',
+        'visual-action',
+        'camera',
+        'style',
+        'voice-cue',
+        'resource-ref',
+      ],
+      alignmentStates: [...CANVAS_AUTHORING_FIELD_PROFILE_ALIGNMENT_STATES],
+      commands: ['keep-prompt', 'regenerate-prompt', 'merge-fields-into-prompt', 'apply-field-suggestion'],
+    };
+  }
+
+  return catalog as CanvasAuthoringCatalog;
+}
+
+function buildCanvasAuthoringOperationDescriptors(): readonly CanvasAuthoringOperationDescriptor[] {
+  return [
+    {
+      id: 'describe-authoring-capabilities',
+      kind: 'query',
+      risk: 'read-only',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+      label: { default: 'Describe Canvas authoring capabilities' },
+      summary: 'Read versioned Canvas-owned node, preset, field, operation, and recipe summaries.',
+    },
+    {
+      id: 'get-active-context',
+      kind: 'query',
+      risk: 'read-only',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+      label: { default: 'Get active Canvas context' },
+      summary: 'Read bounded active editor context before choosing mutation targets.',
+    },
+    {
+      id: 'create-node',
+      kind: 'mutation',
+      risk: 'medium',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE,
+      label: { default: 'Create Canvas node' },
+      requiresConfirmation: true,
+      preferredQueryTools: [
+        TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+        TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+      ],
+      targetRequirements: ['type-or-preset', 'position-or-active-context'],
+    },
+    {
+      id: 'update-node',
+      kind: 'mutation',
+      risk: 'medium',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_UPDATE_NODE,
+      label: { default: 'Update Canvas node' },
+      requiresConfirmation: true,
+      preferredQueryTools: [
+        TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+        TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+      ],
+      targetRequirements: ['nodeId', 'data'],
+    },
+    {
+      id: 'derive-node',
+      kind: 'mutation',
+      risk: 'medium',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_DERIVE_NODE,
+      label: { default: 'Derive Canvas node' },
+      requiresConfirmation: true,
+      preferredQueryTools: [
+        TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+        TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+      ],
+      targetRequirements: ['sourceNodeId'],
+    },
+    {
+      id: 'create-composite',
+      kind: 'mutation',
+      risk: 'medium',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
+      label: { default: 'Create Canvas composite' },
+      requiresConfirmation: true,
+      preferredQueryTools: [
+        TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+        TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+      ],
+      targetRequirements: ['containerPreset', 'children'],
+    },
+    {
+      id: 'list-connections',
+      kind: 'query',
+      risk: 'read-only',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS,
+      label: { default: 'List Canvas connections' },
+      summary: 'Read bounded active Canvas connections by type, source, or target.',
+      preferredQueryTools: [TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT],
+    },
+    {
+      id: 'get-connection',
+      kind: 'query',
+      risk: 'read-only',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_GET_CONNECTION,
+      label: { default: 'Get Canvas connection' },
+      summary: 'Read one active Canvas connection by stable connection id.',
+      targetRequirements: ['connectionId'],
+      preferredQueryTools: [TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS],
+    },
+    {
+      id: 'create-connection',
+      kind: 'mutation',
+      risk: 'medium',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_CREATE_CONNECTION,
+      label: { default: 'Create Canvas connection' },
+      requiresConfirmation: true,
+      preferredQueryTools: [
+        TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+        TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+      ],
+      targetRequirements: ['sourceId', 'targetId'],
+    },
+    {
+      id: 'update-block',
+      kind: 'mutation',
+      risk: 'medium',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK,
+      label: { default: 'Update Canvas block' },
+      requiresConfirmation: true,
+      preferredQueryTools: [
+        TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+        TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+      ],
+      targetRequirements: ['nodeId', 'blockId-or-path'],
+    },
+    {
+      id: 'apply-agent-content',
+      kind: 'mutation',
+      risk: 'medium',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT,
+      label: { default: 'Apply Agent content' },
+      requiresConfirmation: true,
+      preferredQueryTools: [
+        TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+        TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+      ],
+      targetRequirements: ['content-kind', 'target-or-insertion-point'],
+    },
+    {
+      id: 'ingest-markdown',
+      kind: 'mutation',
+      risk: 'medium',
+      status: 'available',
+      toolName: TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN,
+      label: { default: 'Ingest Markdown' },
+      requiresConfirmation: true,
+      preferredQueryTools: [TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD],
+      targetRequirements: ['markdown'],
+    },
+    {
+      id: 'delete-node',
+      kind: 'mutation',
+      risk: 'high',
+      status: 'unavailable',
+      label: { default: 'Delete Canvas node' },
+      requiresConfirmation: true,
+      unavailableReason:
+        'Not advertised until confirmation, undo/history, affected-ref feedback, and diagnostics are covered.',
+      targetRequirements: ['nodeId'],
+    },
+    {
+      id: 'update-connection',
+      kind: 'mutation',
+      risk: 'high',
+      status: 'unavailable',
+      label: { default: 'Update Canvas connection' },
+      requiresConfirmation: true,
+      unavailableReason:
+        'Not advertised until connection update validation, undo/history, and affected-ref feedback are covered.',
+      targetRequirements: ['connectionId'],
+    },
+    {
+      id: 'delete-connection',
+      kind: 'mutation',
+      risk: 'high',
+      status: 'unavailable',
+      label: { default: 'Delete Canvas connection' },
+      requiresConfirmation: true,
+      unavailableReason:
+        'Not advertised until confirmation, undo/history, and affected-ref feedback are covered.',
+      targetRequirements: ['connectionId'],
+    },
+  ];
+}
+
+const AI_NATIVE_STORYBOARD_FIELD_PROFILE: CanvasAuthoringFieldProfileDescriptor = {
+  id: 'storyboard.ai-native',
+  namespace: 'canvas.storyboard',
+  version: 1,
+  aliases: ['storyboard', 'markdown-storyboard', '分镜'],
+  label: { default: 'AI-native storyboard', zhCN: 'AI 原生分镜' },
+  unknownFieldPolicy: 'preserve-custom',
+  fields: [
+    {
+      id: 'scene.info',
+      namespace: 'canvas.storyboard',
+      aliases: ['scene', '场景', '场景信息'],
+      label: { default: 'Scene information', zhCN: '场景信息' },
+      valueType: 'text',
+      roles: ['scene', 'metadata'],
+      cardinality: 'optional',
+      storageTarget: 'prompt-span',
+      promptSpan: {
+        behavior: 'bidirectional',
+        spanKind: 'scene',
+        alignmentState: 'in-sync',
+      },
+    },
+    {
+      id: 'character.appearance',
+      namespace: 'entity.character',
+      aliases: ['character appearance', '人物形象', '角色外观'],
+      label: { default: 'Character appearance', zhCN: '人物形象' },
+      valueType: 'character-appearance',
+      roles: ['character-appearance'],
+      cardinality: 'optional',
+      storageTarget: 'prompt-span',
+      promptSpan: {
+        behavior: 'bidirectional',
+        spanKind: 'character-appearance',
+        alignmentState: 'in-sync',
+      },
+      capabilityBinding: {
+        capabilityId: 'entity.bindCharacterAppearance',
+        stableRefRequired: true,
+      },
+    },
+    {
+      id: 'voice.cue',
+      namespace: 'audio.voice',
+      aliases: ['voice', 'voice cue', '语音'],
+      label: { default: 'Voice cue', zhCN: '语音' },
+      valueType: 'voice-cue',
+      roles: ['voice'],
+      cardinality: 'optional',
+      storageTarget: 'capability-input',
+      promptSpan: {
+        behavior: 'field-projection',
+        spanKind: 'voice-cue',
+        alignmentState: 'fields-changed',
+      },
+      capabilityBinding: {
+        capabilityId: 'audio.tts.generate',
+        operationId: 'voice.generate',
+        requiresApproval: true,
+        stableRefRequired: true,
+      },
+    },
+  ],
+};
+
+function createCanvasAuthoringSkill(locale?: AgentCapabilityContext['locale']): Skill {
   return {
-    name: 'canvas-markdown-storyboard',
+    name: 'canvas-authoring',
     description:
       locale === 'zh'
-        ? '准备已审阅的 Markdown 分镜表或表格内容供 Canvas 摄入。仅在 Agent 已检查素材并确认 Canvas 需要创建或校验分镜节点后使用。'
-        : 'Prepare reviewed Markdown storyboard or table content for Canvas ingestion. Use after the Agent has inspected the source material and decided Canvas should create or validate storyboard nodes.',
-    content: (locale === 'zh'
-      ? CANVAS_MARKDOWN_STORYBOARD_SKILL_ZH
-      : CANVAS_MARKDOWN_STORYBOARD_SKILL_EN
-    ).join('\n'),
-    allowedTools: CANVAS_MARKDOWN_STORYBOARD_TOOLS,
+        ? 'Canvas authoring 通用能力：查询目录和上下文后，由 Agent 选择 Canvas 工具创建节点、组合、Markdown 草稿、媒体绑定、提示词和生成准备。'
+        : 'General Canvas authoring capability: query catalog/context, then let Agent choose Canvas tools for nodes, composites, Markdown drafts, media binding, prompts, and generation preparation.',
+    content: (locale === 'zh' ? CANVAS_AUTHORING_SKILL_ZH : CANVAS_AUTHORING_SKILL_EN).join('\n'),
+    allowedTools: CANVAS_AUTHORING_TOOLS,
     source: 'builtin',
     enabled: true,
     icon: 'canvas',
     mediaWorkflow: {
-      referencedCapabilities: CANVAS_MARKDOWN_STORYBOARD_TOOLS,
-      validationRequirements: ['CanvasMarkdownCapabilityInput'],
-      tags: ['canvas', 'markdown', 'storyboard'],
+      referencedCapabilities: CANVAS_AUTHORING_TOOLS,
+      validationRequirements: ['CanvasAuthoringCatalog', 'CanvasAuthoringResultEnvelope'],
+      tags: ['canvas', 'authoring', 'markdown', 'storyboard', 'media', 'prompt'],
     },
   };
 }
 
-const CANVAS_MARKDOWN_STORYBOARD_TOOLS = [
+function createCanvasMarkdownStoryboardAliasSkill(
+  locale?: AgentCapabilityContext['locale'],
+): Skill {
+  return {
+    name: 'canvas-markdown-storyboard',
+    description:
+      locale === 'zh'
+        ? '兼容别名：Markdown 分镜表能力已并入 canvas-authoring。'
+        : 'Compatibility alias: Markdown storyboard guidance now lives under canvas-authoring.',
+    content: (locale === 'zh'
+      ? CANVAS_MARKDOWN_STORYBOARD_ALIAS_SKILL_ZH
+      : CANVAS_MARKDOWN_STORYBOARD_ALIAS_SKILL_EN
+    ).join('\n'),
+    allowedTools: CANVAS_AUTHORING_TOOLS,
+    source: 'builtin',
+    enabled: true,
+    icon: 'canvas',
+    mediaWorkflow: {
+      referencedCapabilities: CANVAS_AUTHORING_TOOLS,
+      validationRequirements: ['CanvasAuthoringCatalog', 'CanvasAuthoringResultEnvelope'],
+      tags: ['canvas', 'authoring', 'markdown', 'storyboard', 'compatibility-alias'],
+    },
+  };
+}
+
+const CANVAS_AUTHORING_TOOLS = [
+  TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+  TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+  TOOL_NAMES_CANVAS.CANVAS_LIST_NODES,
+  TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+  TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE,
+  TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
+  TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK,
+  TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT,
+  TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS,
+  TOOL_NAMES_CANVAS.CANVAS_GET_CONNECTION,
+  TOOL_NAMES_CANVAS.CANVAS_CREATE_CONNECTION,
   'canvas.validateMarkdownStoryboard',
+  'canvas.ingestMarkdown',
+  'canvas.createMarkdownNote',
+  'canvas.createTableFromMarkdown',
   'canvas.createStoryboardDraftFromMarkdown',
   'canvas.createStoryboardFromMarkdown',
   'canvas.attachResource',
 ];
 
-const CANVAS_MARKDOWN_STORYBOARD_SKILL_EN = [
-  '# Canvas Markdown Storyboard',
+const CANVAS_AUTHORING_SKILL_EN = [
+  '# Canvas Authoring',
   '',
-  'Use this skill only after you have understood the user request and inspected required source material.',
+  'Use Canvas as a domain-owned authoring surface. Agent chooses tools; Canvas owns node schemas, field/profile validation, resource binding, active editor state, undo/history, and diagnostics.',
   '',
-  '## Canvas Lifecycle',
-  '- Use canvas.validateMarkdownStoryboard to validate Markdown storyboard content without mutating Canvas.',
-  '- Use canvas.createStoryboardDraftFromMarkdown when the user needs a draft Canvas representation for review.',
-  '- Use canvas.createStoryboardFromMarkdown only after review/approval for Canvas mutation.',
-  '- Use canvas.attachResource when reviewed rows need explicit resource refs bound to Canvas targets.',
+  '## Query Before Mutation',
+  '- Call canvas_describe_authoring_capabilities when you need supported node types, presets, containers, connections, fields, operations, recipes, or prompt support.',
+  '- Call canvas_get_active_context before choosing insertion points, selected nodes, focused containers, or targetable fields.',
+  '- For relationships between nodes, query canvas_list_connections or canvas_get_connection before canvas_create_connection.',
+  '- Treat Canvas diagnostics as repair instructions. Retry only after correcting the target, preset, field, resource ref, or approval state.',
   '',
-  'Do not invent fixed storyboard table headers in the Agent runtime. Preserve user/source language and field names in Markdown, and let Canvas profile validation decide whether a field is supported.',
+  '## Recipes',
+  '- Storyboard creation is a Canvas recipe, not a separate Agent workflow. Prefer scene.basic + shot.basic through canvas_create_composite for scene/shot structures.',
+  '- Use media.basic through canvas_create_node for one stable asset or reference.',
+  '- Use Canvas Markdown capabilities for Markdown/GFM table review and ingestion. They remain Canvas-owned tools inside the broader authoring model.',
+  '- Write prompts and generation parameters back to Canvas nodes before generation tools run.',
+  '',
+  '## Prompt-First Fields',
+  '- Storyboard authoring is prompt-first and field-backed. Preserve prompt text, semantic spans, @ references, media refs, field projections, and alignment diagnostics.',
+  '- Unknown fields from Markdown or Skill text are hints until Canvas field/profile descriptors validate them.',
+  '- Never bind resources by Webview URI, blob URL, row order, display label, or raw cache path.',
 ];
 
-const CANVAS_MARKDOWN_STORYBOARD_SKILL_ZH = [
-  '# Canvas Markdown 分镜',
+const CANVAS_AUTHORING_SKILL_ZH = [
+  '# Canvas Authoring',
   '',
-  '仅在已经理解用户请求并检查必要素材后使用本 Skill。',
+  '将 Canvas 视为领域自有的 authoring surface。Agent 选择工具；Canvas 负责节点 schema、字段/profile 校验、资源绑定、活动编辑器状态、undo/history 和 diagnostics。',
   '',
-  '## Canvas 生命周期',
-  '- 使用 canvas.validateMarkdownStoryboard 校验 Markdown 分镜内容，不修改 Canvas。',
-  '- 用户需要可审阅的 Canvas 草稿时，使用 canvas.createStoryboardDraftFromMarkdown。',
-  '- 只有在审阅/确认后，才使用 canvas.createStoryboardFromMarkdown 修改 Canvas。',
-  '- 已审阅行需要绑定明确资源引用到 Canvas 目标时，使用 canvas.attachResource。',
+  '## Query Before Mutation',
+  '- 需要节点类型、预设、容器、连接、字段、操作、recipe 或 prompt 支持时，先查询 canvas_describe_authoring_capabilities。',
+  '- 选择插入点、选中节点、焦点容器或目标字段前，先调用 canvas_get_active_context。',
+  '- 节点关系变更前先查询 canvas_list_connections 或 canvas_get_connection，再调用 canvas_create_connection。',
+  '- 把 Canvas diagnostics 当作修复指令。只有修正 target、preset、field、resource ref 或审批状态后才重试。',
   '',
-  '不要在 Agent runtime 中发明固定分镜表头。保留用户/来源语言和字段名，由 Canvas profile validation 判断字段是否支持。',
+  '## Recipes',
+  '- 分镜创建是 Canvas recipe，不是单独的 Agent 工作流。场景/镜头结构优先使用 scene.basic + shot.basic，并通过 canvas_create_composite 创建。',
+  '- 单个稳定素材或引用使用 media.basic，并通过 canvas_create_node 创建。',
+  '- Markdown/GFM 表格的审阅和摄入继续使用 Canvas Markdown capabilities；它们是更广义 authoring 模型里的 Canvas-owned tools。',
+  '- 生成工具运行前，先把 prompts 和生成参数写回 Canvas 节点。',
+  '',
+  '## Prompt-First Fields',
+  '- 分镜 authoring 是 prompt-first 且 field-backed。保留 prompt text、semantic spans、@ references、media refs、field projections 和 alignment diagnostics。',
+  '- Markdown 或 Skill 文本里的未知字段只是 hints，直到 Canvas field/profile descriptors 校验通过。',
+  '- 不要通过 Webview URI、blob URL、行号、显示标签或原始 cache path 绑定资源。',
+];
+
+const CANVAS_MARKDOWN_STORYBOARD_ALIAS_SKILL_EN = [
+  '# Canvas Markdown Storyboard Compatibility Alias',
+  '',
+  'Compatibility alias for canvas-authoring. Use the general Canvas authoring guidance first.',
+  '',
+  '- Query canvas_describe_authoring_capabilities and canvas_get_active_context before mutation.',
+  '- Use canvas.validateMarkdownStoryboard, canvas.createStoryboardDraftFromMarkdown, and canvas.createStoryboardFromMarkdown only as Canvas-owned tools inside the broader authoring loop.',
+];
+
+const CANVAS_MARKDOWN_STORYBOARD_ALIAS_SKILL_ZH = [
+  '# Canvas Markdown 分镜兼容别名',
+  '',
+  '兼容别名：请优先使用 canvas-authoring 的通用 Canvas authoring 指引。',
+  '',
+  '- 变更前先查询 canvas_describe_authoring_capabilities 和 canvas_get_active_context。',
+  '- canvas.validateMarkdownStoryboard、canvas.createStoryboardDraftFromMarkdown、canvas.createStoryboardFromMarkdown 只是更广义 authoring 闭环里的 Canvas-owned tools。',
 ];
 
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
@@ -1132,7 +2072,10 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
   constructor(private readonly _api: NekoCanvasAPI) {}
 
   getSkills(context?: AgentCapabilityContext): Skill[] {
-    return [createCanvasMarkdownStoryboardSkill(context?.locale)];
+    return [
+      createCanvasAuthoringSkill(context?.locale),
+      createCanvasMarkdownStoryboardAliasSkill(context?.locale),
+    ];
   }
 
   getArtifactFacets(_context: AgentCapabilityContext): AgentArtifactFacetsContribution {
@@ -1155,6 +2098,26 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         },
       ],
       capabilities: [
+        {
+          capabilityId: 'canvas.authoring',
+          packageId: 'neko-canvas',
+          accepts: ['CanvasAuthoringIntent', 'Markdown', 'ResourceRef', 'Prompt'],
+          produces: ['CanvasAuthoringResultEnvelope', 'canvas-node-ref'],
+          actions: [
+            TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+            TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+            TOOL_NAMES_CANVAS.CANVAS_LIST_NODES,
+            TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+            TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE,
+            TOOL_NAMES_CANVAS.CANVAS_CREATE_COMPOSITE,
+            TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK,
+            TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT,
+            TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN,
+            TOOL_NAMES_CANVAS.CANVAS_ATTACH_RESOURCE,
+          ],
+          risk: 'medium',
+          requiresApproval: true,
+        },
         {
           capabilityId: 'canvas.getPlaybackPlan',
           packageId: 'neko-canvas',
@@ -1269,6 +2232,16 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
           'Narrative traversal applies only to narrative nodes and choice connections. It ignores storyboard, behavior, entity, and memory nodes by design.',
           'Projected Canvas documents are adapter-backed views. Do not assume direct .nkc edits write to the source document; route source write-back through projection adapters.',
         ].join('\n'),
+        locales: {
+          zh: {
+            content: [
+              'Neko Canvas .nkc 文件可在同一图中混合分镜、叙事、行为、实体和记忆子系统。',
+              '进行子系统感知编辑前，先调用 canvas_get_active_context({ includeSubsystemMetadata: true })；选择工具或变更前检查 activeSubsystems 和子系统元数据。',
+              '叙事遍历只适用于 narrative 节点和 choice 连接。按设计会忽略 storyboard、behavior、entity 和 memory 节点。',
+              '投影 Canvas 文档是 adapter 支持的视图。不要假设直接编辑 .nkc 会写回源文档；源写回应通过 projection adapter 路由。',
+            ].join('\n'),
+          },
+        },
       },
     ];
   }
@@ -1283,6 +2256,68 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
       ...CANVAS_MARKDOWN_TOOL_DEFINITIONS.map((definition) =>
         createMarkdownCapabilityTool(api, definition),
       ),
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+        description:
+          'Read the versioned Canvas-owned authoring capability catalog: node types, presets, container policies, connection rules, targetable fields, operations, recipes, and prompt support.',
+        category: 'project',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        safetyKind: 'read-only-query',
+        parameters: {
+          type: 'object',
+          properties: {
+            version: {
+              type: 'number',
+              enum: [CANVAS_AUTHORING_CATALOG_VERSION],
+              description: 'Optional catalog schema version. Current version is 1.',
+            },
+            sections: {
+              type: 'array',
+              items: {
+                type: 'string',
+                enum: [...CANVAS_AUTHORING_CATALOG_SECTIONS],
+              },
+              description:
+                'Optional catalog sections to return. Omit to return every supported bounded section.',
+            },
+            includeDetails: {
+              type: 'boolean',
+              description:
+                'Request more detailed descriptors when available. The catalog remains bounded.',
+            },
+          },
+        } satisfies ToolParameters,
+        async execute(args) {
+          const request = {
+            ...(args.version !== undefined ? { version: args.version } : {}),
+            ...(args.sections !== undefined ? { sections: args.sections } : {}),
+            ...(args.includeDetails !== undefined ? { includeDetails: args.includeDetails } : {}),
+          };
+          const validation = validateCanvasAuthoringCatalogRequest(request);
+          if (!validation.valid) {
+            return {
+              success: false,
+              error: 'Invalid Canvas authoring capability catalog request.',
+              data: {
+                version: CANVAS_AUTHORING_CATALOG_VERSION,
+                sections: [],
+                diagnostics: validation.diagnostics,
+              },
+            };
+          }
+          const sections = Array.isArray(args.sections)
+            ? args.sections.filter(isCanvasAuthoringCatalogSection)
+            : undefined;
+          return {
+            success: true,
+            data: buildCanvasAuthoringCapabilityCatalog({
+              ...(sections ? { sections } : {}),
+              includeDetails: args.includeDetails === true,
+            }),
+          };
+        },
+      },
       // -----------------------------------------------------------------------
       // Canvas playback route tools
       // -----------------------------------------------------------------------
@@ -1662,6 +2697,20 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
           'camera settings, or generation parameters. Always write generation params to the node ' +
           'before calling canvas_generate_image so they persist across sessions.',
         category: 'project',
+        requiresConfirmation: true,
+        safetyKind: 'confirmation-gated',
+        targetRequirements: {
+          required: ['nodeId', 'data'],
+          allowedFallbacks: ['explicit-user-input'],
+          confirmationModes: ['update-node'],
+        },
+        queryBeforeMutate: {
+          preferredQueryTools: [
+            TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+            TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+          ],
+          reason: 'Resolve the stable Canvas node id and current writable fields before updating.',
+        },
         parameters: {
           type: 'object',
           properties: {
@@ -1679,9 +2728,24 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         async execute(args) {
           try {
             await api.nodes.update(args.nodeId as string, args.data as Record<string, unknown>);
-            return { success: true };
+            return {
+              success: true,
+              data: {
+                authoringResult: createUpdateNodeAuthoringResult(args.nodeId as string, args.data),
+              },
+            };
           } catch (err) {
-            return { success: false, error: `Failed to update node: ${String(err)}` };
+            return {
+              success: false,
+              error: `Failed to update node: ${String(err)}`,
+              data: {
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
+                  'update-node',
+                  err,
+                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE },
+                ),
+              },
+            };
           }
         },
       },
@@ -1689,6 +2753,20 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         name: TOOL_NAMES_CANVAS.CANVAS_CREATE_NODE,
         description: "Create a new node on the active canvas. Returns the new node's ID.",
         category: 'project',
+        requiresConfirmation: true,
+        safetyKind: 'confirmation-gated',
+        targetRequirements: {
+          required: ['type'],
+          allowedFallbacks: ['viewport-insertion', 'explicit-user-input'],
+          confirmationModes: ['create-node'],
+        },
+        queryBeforeMutate: {
+          preferredQueryTools: [
+            TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+            TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+          ],
+          reason: 'Resolve supported node types, presets, and insertion context before creating.',
+        },
         parameters: {
           type: 'object',
           properties: {
@@ -1726,9 +2804,25 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               args.data as object,
               args.preset as string | undefined,
             );
-            return { success: true, data };
+            return {
+              success: true,
+              data: withCanvasAuthoringResult(
+                data,
+                createNodeMutationAuthoringResult(data, 'Created a Canvas node.'),
+              ),
+            };
           } catch (err) {
-            return { success: false, error: `Failed to create node: ${String(err)}` };
+            return {
+              success: false,
+              error: `Failed to create node: ${String(err)}`,
+              data: {
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
+                  'create-node',
+                  err,
+                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES },
+                ),
+              },
+            };
           }
         },
       },
@@ -1737,6 +2831,21 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         description:
           'Derive a successor node from an existing Canvas node using registered preset rules, shared placement, and a normal Canvas connection.',
         category: 'project',
+        requiresConfirmation: true,
+        safetyKind: 'confirmation-gated',
+        targetRequirements: {
+          required: ['sourceNodeId'],
+          allowedFallbacks: ['selection', 'explicit-user-input'],
+          confirmationModes: ['derive-node'],
+        },
+        queryBeforeMutate: {
+          preferredQueryTools: [
+            TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+            TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+          ],
+          reason:
+            'Resolve source node preset rules and allowed derive targets before creating a successor.',
+        },
         parameters: {
           type: 'object',
           properties: {
@@ -1773,9 +2882,22 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               data: args.data as Record<string, unknown> | undefined,
               connect: args.connect as boolean | undefined,
             });
-            return { success: true, data };
+            return {
+              success: true,
+              data: withCanvasAuthoringResult(data, createDeriveNodeAuthoringResult(data)),
+            };
           } catch (err) {
-            return { success: false, error: `Failed to derive node: ${String(err)}` };
+            return {
+              success: false,
+              error: `Failed to derive node: ${String(err)}`,
+              data: {
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
+                  'derive-node',
+                  err,
+                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE },
+                ),
+              },
+            };
           }
         },
       },
@@ -1784,6 +2906,21 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         description:
           'Create a container and child nodes as one atomic Canvas mutation using container policy validation and shared auto-layout.',
         category: 'project',
+        requiresConfirmation: true,
+        safetyKind: 'confirmation-gated',
+        targetRequirements: {
+          required: ['containerPreset', 'children'],
+          allowedFallbacks: ['viewport-insertion', 'explicit-user-input'],
+          confirmationModes: ['create-composite'],
+        },
+        queryBeforeMutate: {
+          preferredQueryTools: [
+            TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+            TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+          ],
+          reason:
+            'Resolve container policy, child presets, insertion point, and layout risk before creating.',
+        },
         parameters: {
           type: 'object',
           properties: {
@@ -1852,9 +2989,22 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               children,
               autoLayout: args.autoLayout as boolean | undefined,
             });
-            return { success: true, data };
+            return {
+              success: true,
+              data: withCanvasAuthoringResult(data, createCompositeAuthoringResult(data)),
+            };
           } catch (err) {
-            return { success: false, error: `Failed to create composite: ${String(err)}` };
+            return {
+              success: false,
+              error: `Failed to create composite: ${String(err)}`,
+              data: {
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
+                  'create-composite',
+                  err,
+                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES },
+                ),
+              },
+            };
           }
         },
       },
@@ -1863,6 +3013,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         description:
           'Update a composable Canvas block through its binding or an explicit JSON Pointer path into node.data.',
         category: 'project',
+        requiresConfirmation: true,
         safetyKind: 'confirmation-gated',
         targetRequirements: {
           required: ['nodeId'],
@@ -1894,15 +3045,29 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         } satisfies ToolParameters,
         async execute(args) {
           try {
-            const data = await api.nodes.updateBlock({
+            const request = {
               nodeId: args.nodeId as string,
               blockId: args.blockId as string | undefined,
               path: normalizeJsonPointerPath(args.path),
               value: parseToolValue(args.value),
-            });
-            return { success: true, data };
+            };
+            const data = await api.nodes.updateBlock(request);
+            return {
+              success: true,
+              data: withCanvasAuthoringResult(data, createUpdateBlockAuthoringResult(request, data)),
+            };
           } catch (err) {
-            return { success: false, error: `Failed to update block: ${String(err)}` };
+            return {
+              success: false,
+              error: `Failed to update block: ${String(err)}`,
+              data: {
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
+                  'update-block',
+                  err,
+                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE },
+                ),
+              },
+            };
           }
         },
       },
@@ -1996,6 +3161,178 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             return {
               success: false,
               error: `Failed to get active Canvas context: ${String(err)}`,
+            };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS,
+        description:
+          'List active Canvas connections with optional filtering by type, source node, or target node.',
+        category: 'project',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        safetyKind: 'read-only-query',
+        parameters: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+              enum: [...CANVAS_CONNECTION_TYPES],
+              description: 'Optional connection type filter.',
+            },
+            sourceId: { type: 'string', description: 'Optional source node id filter.' },
+            targetId: { type: 'string', description: 'Optional target node id filter.' },
+          },
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const type = readOptionalCanvasConnectionType(args.type);
+            const sourceId = readOptionalString(args.sourceId);
+            const targetId = readOptionalString(args.targetId);
+            const context = await api.nodes.getActiveContext({ includeNodeDetails: false });
+            const connections = (context.connections ?? []).filter((connection) => {
+              if (type && connection.type !== type) return false;
+              if (sourceId && connection.sourceId !== sourceId) return false;
+              if (targetId && connection.targetId !== targetId) return false;
+              return true;
+            });
+            return { success: true, data: { connections } };
+          } catch (err) {
+            return {
+              success: false,
+              error: `Failed to list Canvas connections: ${String(err)}`,
+              data: {
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
+                  'list-connections',
+                  err,
+                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT },
+                ),
+              },
+            };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_GET_CONNECTION,
+        description: 'Get one active Canvas connection by its stable connection id.',
+        category: 'project',
+        isReadOnly: true,
+        isConcurrencySafe: true,
+        safetyKind: 'read-only-query',
+        parameters: {
+          type: 'object',
+          properties: {
+            connectionId: { type: 'string', description: 'Canvas connection ID.' },
+          },
+          required: ['connectionId'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const connectionId = readRequiredString(args.connectionId, 'connectionId');
+            const context = await api.nodes.getActiveContext({ includeNodeDetails: false });
+            const connection = context.connections?.find((item) => item.id === connectionId);
+            if (!connection) {
+              throw new Error(`Canvas connection "${connectionId}" was not found`);
+            }
+            return { success: true, data: { connection } };
+          } catch (err) {
+            return {
+              success: false,
+              error: `Failed to get Canvas connection: ${String(err)}`,
+              data: {
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
+                  'get-connection',
+                  err,
+                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS },
+                ),
+              },
+            };
+          }
+        },
+      },
+      {
+        name: TOOL_NAMES_CANVAS.CANVAS_CREATE_CONNECTION,
+        description:
+          'Create a validated connection between existing Canvas nodes through the active Canvas editor.',
+        category: 'project',
+        requiresConfirmation: true,
+        safetyKind: 'confirmation-gated',
+        targetRequirements: {
+          required: ['sourceId', 'targetId'],
+          allowedFallbacks: ['selection', 'explicit-user-input'],
+          confirmationModes: ['create-connection'],
+        },
+        queryBeforeMutate: {
+          preferredQueryTools: [
+            TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+            TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+            TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS,
+          ],
+          reason:
+            'Resolve stable source/target node ids, endpoint scopes, and existing connections before mutating.',
+        },
+        parameters: {
+          type: 'object',
+          properties: {
+            sourceId: { type: 'string', description: 'Source Canvas node id.' },
+            targetId: { type: 'string', description: 'Target Canvas node id.' },
+            sourceEndpoint: {
+              type: 'object',
+              description: 'Optional source endpoint. nodeId must match sourceId.',
+            },
+            targetEndpoint: {
+              type: 'object',
+              description: 'Optional target endpoint. nodeId must match targetId.',
+            },
+            type: {
+              type: 'string',
+              enum: [...CANVAS_CONNECTION_TYPES],
+              description: 'Optional Canvas connection type.',
+            },
+            label: { type: 'string', description: 'Optional connection label.' },
+            priority: { type: 'number', description: 'Optional connection priority.' },
+            extension: {
+              type: 'object',
+              description: 'Optional safe extension data object owned by Canvas/domain rules.',
+            },
+          },
+          required: ['sourceId', 'targetId'],
+        } satisfies ToolParameters,
+        async execute(args) {
+          try {
+            const sourceId = readRequiredString(args.sourceId, 'sourceId');
+            const targetId = readRequiredString(args.targetId, 'targetId');
+            const type = readOptionalCanvasConnectionType(args.type);
+            const label = readOptionalString(args.label);
+            const priority = readOptionalConnectionPriority(args.priority);
+            const extension = readOptionalConnectionExtension(args.extension);
+            const request: CanvasCreateConnectionRequest = {
+              sourceId,
+              targetId,
+              sourceEndpoint: readOptionalConnectionEndpoint(args.sourceEndpoint, sourceId, 'source'),
+              targetEndpoint: readOptionalConnectionEndpoint(args.targetEndpoint, targetId, 'target'),
+              ...(type ? { type } : {}),
+              ...(label ? { label } : {}),
+              ...(priority !== undefined ? { priority } : {}),
+              ...(extension ? { extension } : {}),
+            };
+            const data = await api.nodes.createConnection(request);
+            return {
+              success: true,
+              data: withCanvasAuthoringResult(data, createConnectionAuthoringResult(data)),
+            };
+          } catch (err) {
+            return {
+              success: false,
+              error: `Failed to create Canvas connection: ${String(err)}`,
+              data: {
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
+                  'create-connection',
+                  err,
+                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT },
+                ),
+              },
             };
           }
         },
@@ -2097,7 +3434,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         } satisfies ToolParameters,
         async execute(args) {
           try {
-            const data = await api.nodes.applyAgentContent({
+            const payload = {
               kind: args.kind === 'prompt' || args.kind === 'structured' ? args.kind : 'text',
               text: args.text as string | undefined,
               prompt: args.prompt as string | undefined,
@@ -2116,12 +3453,23 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
                     : undefined,
               },
               provenance: { source: 'tool', label: TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT },
-            });
-            return { success: true, data };
+            };
+            const data = await api.nodes.applyAgentContent(payload);
+            return {
+              success: true,
+              data: withCanvasAuthoringResult(data, createApplyAgentContentAuthoringResult(data)),
+            };
           } catch (err) {
             return {
               success: false,
               error: `Failed to apply Agent content to Canvas: ${String(err)}`,
+              data: {
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
+                  'apply-agent-content',
+                  err,
+                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT },
+                ),
+              },
             };
           }
         },
@@ -2201,9 +3549,26 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               args.nodeId as string,
               args.childNodeId as string | undefined,
             );
-            return { success: true };
+            return {
+              success: true,
+              data: {
+                authoringResult: createGenerationAuthoringResult('generate-image', [
+                  args.nodeId as string,
+                ]),
+              },
+            };
           } catch (err) {
-            return { success: false, error: `Failed to generate image: ${String(err)}` };
+            return {
+              success: false,
+              error: `Failed to generate image: ${String(err)}`,
+              data: {
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
+                  'generate-image',
+                  err,
+                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE },
+                ),
+              },
+            };
           }
         },
       },
@@ -2230,9 +3595,27 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
           try {
             await ensureProjectModel(configManager, 'image');
             await api.nodes.generateBatch(args.nodeIds as string[]);
-            return { success: true };
+            return {
+              success: true,
+              data: {
+                authoringResult: createGenerationAuthoringResult(
+                  'generate-batch',
+                  readStringArray(args.nodeIds),
+                ),
+              },
+            };
           } catch (err) {
-            return { success: false, error: `Failed to generate batch: ${String(err)}` };
+            return {
+              success: false,
+              error: `Failed to generate batch: ${String(err)}`,
+              data: {
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
+                  'generate-batch',
+                  err,
+                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT },
+                ),
+              },
+            };
           }
         },
       },

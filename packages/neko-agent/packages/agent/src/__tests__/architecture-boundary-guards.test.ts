@@ -321,6 +321,10 @@ describe('agent architecture boundary guards', () => {
       'canvas_get_active_context',
       'canvas_narrative_traverse',
       'canvas_apply_agent_content',
+      'canvas_describe_authoring_capabilities',
+      'canvas_list_connections',
+      'canvas_get_connection',
+      'canvas_create_connection',
       'canvas_get_storyboard_execution_summary',
       'canvas_generate_image',
       'canvas_generate_batch',
@@ -380,10 +384,49 @@ describe('agent architecture boundary guards', () => {
       'canvas_get_node',
       'canvas_update_node',
       'canvas_generate_image',
+      'canvas_describe_authoring_capabilities',
+      'canvas_list_connections',
+      'canvas_create_connection',
     ];
     const violations = forbiddenPromptToolNames
       .filter((toolName) => messageRuntimeSource.includes(toolName))
       .map((toolName) => `runtime/turn/message-runtime.ts contains provider tool ${toolName}`);
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps Canvas authoring semantics in Canvas provider, Skill, and catalog contracts', () => {
+    const sourceFiles = [
+      ...listFiles(agentSrc),
+      ...listFiles(join(packageRoot, 'platform/src')),
+    ]
+      .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
+      .filter((file) => !isTestFile(file))
+      .map((file) => ({
+        relativePath: relative(repoRoot, file).replace(/\\/g, '/'),
+        source: stripTypeScriptComments(readFileSync(file, 'utf-8')),
+      }))
+      .filter(({ relativePath }) => !relativePath.endsWith('architecture-boundary-guards.test.ts'));
+
+    const forbiddenCanvasAuthoringTerms = [
+      /['"`]canvas-authoring['"`]/,
+      /['"`]canvas-markdown-storyboard['"`]/,
+      /\bscene\.basic\b/,
+      /\bshot\.basic\b/,
+      /\bCanvasAuthoringCatalog\b/,
+      /\bCanvasAuthoringFieldProfileDescriptor\b/,
+      /\bCanvasAuthoringOperationDescriptor\b/,
+      /\bCanvasAuthoringRecipeDescriptor\b/,
+      /\bAI_NATIVE_STORYBOARD_FIELD_PROFILE\b/,
+      /fieldProfiles/,
+      /semanticPrompts/,
+      /prompt-field alignment/i,
+    ];
+    const violations = sourceFiles.flatMap(({ relativePath, source }) =>
+      forbiddenCanvasAuthoringTerms
+        .filter((pattern) => pattern.test(source))
+        .map((pattern) => `${relativePath} matches ${pattern}`),
+    );
 
     expect(violations).toEqual([]);
   });
