@@ -14,6 +14,7 @@
   "dependencies": {
     "@neko-agent/types": "workspace:*",
     "@tanstack/react-virtual": "^3.13.14",
+    "@neko/markdown": "workspace:*",
     "@neko/neko-client": "workspace:*",
     "@neko/shared": "workspace:*",
     "@neko/ui": "workspace:*",
