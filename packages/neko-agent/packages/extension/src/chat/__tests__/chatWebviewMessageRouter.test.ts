@@ -588,17 +588,21 @@ describe('handleChatWebviewMessage', () => {
 
     handleChatWebviewMessage(
       {
-        type: 'requestCanvasMarkdownHandoff',
+        type: 'requestCanvasAuthoringHandoff',
         requestId: 'req-1',
         conversationId: 'conv-1',
-        markdown:
+        sourceKind: 'markdown',
+        content:
           '| scene | shot id | visual | image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
         title: 'Assistant Markdown',
         sourceFormat: 'gfm-table',
-        declaredIntentHint: 'creative-table',
-        declaredProfileHint: 'storyboard',
         resources: [{ token: 'P1', sourcePath: '${PROJECT}/assets/panel-1.png' }],
         provenance: { source: 'webview', label: 'assistant-markdown-block' },
+        targetHints: {
+          sourceFormat: 'gfm-table',
+          declaredIntentHint: 'creative-table',
+          declaredProfileHint: 'storyboard',
+        },
       },
       deps,
     );

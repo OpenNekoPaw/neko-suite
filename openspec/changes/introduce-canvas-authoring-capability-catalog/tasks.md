@@ -13,7 +13,7 @@
 - [x] 2.1 Implement a Canvas-owned authoring catalog builder from existing node types, presets, container policies, subsystem manifests, connection types/rules, targetable field summaries, recipes, and registered tools.
 - [x] 2.2 Register `canvas_describe_authoring_capabilities` as a read-only Canvas Agent tool with section/filter parameters, localized metadata, traits, and bounded output.
 - [x] 2.3 Replace the primary `canvas-markdown-storyboard` Skill contribution with a general `canvas-authoring` Skill that covers query-before-mutate, Markdown/table routing, storyboard recipes, media/resource binding, prompt persistence, generation prep, and repair loops.
-- [x] 2.4 If a `canvas-markdown-storyboard` compatibility alias remains, route it to the general Canvas authoring guidance and document its removal condition in code comments or tests.
+- [x] 2.4 Remove the `canvas-markdown-storyboard` compatibility alias during prelaunch cleanup and assert storyboard guidance is available only through `canvas-authoring`.
 - [x] 2.5 Update Canvas capability facets or provider metadata so Agent can discover Canvas authoring as a capability family without embedding Canvas semantics in Agent core.
 - [x] 2.6 Add Canvas provider tests for catalog tool registration, section filtering, Skill metadata, zh/en localization, and absence of storyboard-only canonical Skill dependence.
 - [x] 2.7 Implement Canvas field/profile descriptor validation for new scene, character appearance, voice cue, prompt span, and execution fields without requiring Agent core changes.

@@ -1955,31 +1955,6 @@ function createCanvasAuthoringSkill(locale?: AgentCapabilityContext['locale']): 
   };
 }
 
-function createCanvasMarkdownStoryboardAliasSkill(
-  locale?: AgentCapabilityContext['locale'],
-): Skill {
-  return {
-    name: 'canvas-markdown-storyboard',
-    description:
-      locale === 'zh'
-        ? '兼容别名：Markdown 分镜表能力已并入 canvas-authoring。'
-        : 'Compatibility alias: Markdown storyboard guidance now lives under canvas-authoring.',
-    content: (locale === 'zh'
-      ? CANVAS_MARKDOWN_STORYBOARD_ALIAS_SKILL_ZH
-      : CANVAS_MARKDOWN_STORYBOARD_ALIAS_SKILL_EN
-    ).join('\n'),
-    allowedTools: CANVAS_AUTHORING_TOOLS,
-    source: 'builtin',
-    enabled: true,
-    icon: 'canvas',
-    mediaWorkflow: {
-      referencedCapabilities: CANVAS_AUTHORING_TOOLS,
-      validationRequirements: ['CanvasAuthoringCatalog', 'CanvasAuthoringResultEnvelope'],
-      tags: ['canvas', 'authoring', 'markdown', 'storyboard', 'compatibility-alias'],
-    },
-  };
-}
-
 const CANVAS_AUTHORING_TOOLS = [
   TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
   TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
@@ -2047,24 +2022,6 @@ const CANVAS_AUTHORING_SKILL_ZH = [
   '- 不要通过 Webview URI、blob URL、行号、显示标签或原始 cache path 绑定资源。',
 ];
 
-const CANVAS_MARKDOWN_STORYBOARD_ALIAS_SKILL_EN = [
-  '# Canvas Markdown Storyboard Compatibility Alias',
-  '',
-  'Compatibility alias for canvas-authoring. Use the general Canvas authoring guidance first.',
-  '',
-  '- Query canvas_describe_authoring_capabilities and canvas_get_active_context before mutation.',
-  '- Use canvas.validateMarkdownStoryboard, canvas.createStoryboardDraftFromMarkdown, and canvas.createStoryboardFromMarkdown only as Canvas-owned tools inside the broader authoring loop.',
-];
-
-const CANVAS_MARKDOWN_STORYBOARD_ALIAS_SKILL_ZH = [
-  '# Canvas Markdown 分镜兼容别名',
-  '',
-  '兼容别名：请优先使用 canvas-authoring 的通用 Canvas authoring 指引。',
-  '',
-  '- 变更前先查询 canvas_describe_authoring_capabilities 和 canvas_get_active_context。',
-  '- canvas.validateMarkdownStoryboard、canvas.createStoryboardDraftFromMarkdown、canvas.createStoryboardFromMarkdown 只是更广义 authoring 闭环里的 Canvas-owned tools。',
-];
-
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
   readonly id = 'neko-canvas';
   readonly version = '1.0.0';
@@ -2072,10 +2029,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
   constructor(private readonly _api: NekoCanvasAPI) {}
 
   getSkills(context?: AgentCapabilityContext): Skill[] {
-    return [
-      createCanvasAuthoringSkill(context?.locale),
-      createCanvasMarkdownStoryboardAliasSkill(context?.locale),
-    ];
+    return [createCanvasAuthoringSkill(context?.locale)];
   }
 
   getArtifactFacets(_context: AgentCapabilityContext): AgentArtifactFacetsContribution {

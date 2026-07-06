@@ -16,7 +16,7 @@ Date: 2026-07-06
 - `packages/neko-types/src/types/tool-names.ts`
   - Reuse existing Canvas tool-name constants for node, composite, block, context, generation, and Markdown lifecycle tools.
 - `packages/neko-agent/packages/webview/src/components/ChatView/SendToMenu.tsx`
-  - Reuse the current split between Markdown handoff and direct asset transfer as the migration target for Agent-led handoff semantics.
+  - Reuse the visible split between Agent-led Canvas authoring and explicit direct asset transfer; Markdown content now uses the general authoring handoff instead of a Markdown-specific Webview protocol message.
 
 ### Extended Contracts
 
@@ -31,7 +31,9 @@ Date: 2026-07-06
 ### Deprecated Or Migration-Only Paths
 
 - `canvas-markdown-storyboard`
-  - Must stop being the primary Canvas Skill. If retained, it should become an alias or recipe reference to general `canvas-authoring`.
+  - Removed during prelaunch cleanup. Storyboard guidance now lives only inside the general `canvas-authoring` Skill.
+- `requestCanvasMarkdownHandoff`
+  - Removed during prelaunch cleanup. Markdown/table shortcuts now send `requestCanvasAuthoringHandoff` with `sourceKind: "markdown"` and Markdown source/profile hints.
 - Hidden Send to Canvas mutation through Webview/Extension heuristics
   - New authoring requests must become Agent-visible handoff intent before Canvas mutation.
 - Structured plugin-transfer payloads that masquerade as authoring

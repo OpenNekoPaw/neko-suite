@@ -1001,7 +1001,7 @@ describe('webview protocol projectors', () => {
           phase: 'acting',
           toolName: 'Read',
           startedAt: 1777392000000,
-        },
+        } as never,
       ]),
     ).toThrow('agentStateSnapshot requires non-empty conversationId');
     expect(() => buildThinkingMessage('')).toThrow('thinking requires non-empty conversationId');
@@ -1720,52 +1720,28 @@ describe('webview protocol projectors', () => {
     ).toBeNull();
   });
 
-  it('parses Agent-led Canvas Markdown handoff requests without a selected capability', () => {
-    const parsed = parseWebviewToExtensionMessage({
-      type: 'requestCanvasMarkdownHandoff',
-      requestId: 'handoff-1',
-      conversationId: 'conv-1',
-      markdown:
-        '| Scene | Shot | Visual | Image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
-      sourceFormat: 'gfm-table',
-      declaredIntentHint: 'creative-table',
-      declaredProfileHint: 'storyboard',
-      resources: [
-        {
-          token: 'P1',
-          label: 'Panel 1',
-          sourcePath: '${PROJECT}/assets/panel-1.png',
-        },
-      ],
-      target: { nodeId: 'board-1', mode: 'append' },
-      provenance: { source: 'webview', label: 'assistant-storyboard-block' },
-    });
-
-    expect(parsed).toEqual({
-      type: 'requestCanvasMarkdownHandoff',
-      requestId: 'handoff-1',
-      conversationId: 'conv-1',
-      markdown:
-        '| Scene | Shot | Visual | Image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
-      sourceFormat: 'gfm-table',
-      declaredIntentHint: 'creative-table',
-      declaredProfileHint: 'storyboard',
-      resources: [
-        {
-          token: 'P1',
-          label: 'Panel 1',
-          sourcePath: '${PROJECT}/assets/panel-1.png',
-        },
-      ],
-      target: { nodeId: 'board-1', mode: 'append' },
-      provenance: { source: 'webview', label: 'assistant-storyboard-block' },
-    });
-    expect(JSON.stringify(parsed)).not.toContain('capabilityId');
-    expect(JSON.stringify(parsed)).not.toContain('intentHint');
-    expect(JSON.stringify(parsed)).not.toContain('profileHint');
-  });
-
-  it('rejects Canvas Markdown handoff requests that preselect a capability', () => {
+  it('rejects the removed Canvas Markdown handoff protocol path', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'requestCanvasMarkdownHandoff',
+        requestId: 'handoff-1',
+        conversationId: 'conv-1',
+        markdown:
+          '| Scene | Shot | Visual | Image |\\n| --- | --- | --- | --- |\\n| S1 | 1 | open | P1 |',
+        sourceFormat: 'gfm-table',
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+        resources: [
+          {
+            token: 'P1',
+            label: 'Panel 1',
+            sourcePath: '${PROJECT}/assets/panel-1.png',
+          },
+        ],
+        target: { nodeId: 'board-1', mode: 'append' },
+        provenance: { source: 'webview', label: 'assistant-storyboard-block' },
+      }),
+    ).toBeNull();
     expect(
       parseWebviewToExtensionMessage({
         type: 'requestCanvasMarkdownHandoff',

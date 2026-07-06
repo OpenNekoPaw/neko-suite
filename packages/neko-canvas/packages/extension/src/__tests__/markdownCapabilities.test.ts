@@ -193,7 +193,7 @@ describe('Canvas Markdown capabilities', () => {
 
     expect(blocked.status).toBe('blocked');
     expect(blocked.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      'canvas-markdown-storyboard-create-not-confirmed',
+      'canvas-storyboard-profile-create-not-confirmed',
     ]);
     expect(operations.createComposite).not.toHaveBeenCalled();
 
@@ -209,7 +209,7 @@ describe('Canvas Markdown capabilities', () => {
 
     expect(unapproved.status).toBe('blocked');
     expect(unapproved.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      'canvas-markdown-storyboard-create-approval-required',
+      'canvas-storyboard-profile-create-approval-required',
     ]);
     expect(operations.createComposite).not.toHaveBeenCalled();
 
@@ -572,7 +572,7 @@ describe('Canvas Markdown capabilities', () => {
 
     expect(result.status).toBe('created');
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
-      'canvas-markdown-storyboard-next-action-missing',
+      'canvas-storyboard-profile-next-action-missing',
     );
     expect(operations.createNode).toHaveBeenCalledWith(
       'table',
@@ -1062,7 +1062,7 @@ describe('Canvas Markdown capabilities', () => {
     expect(result.diagnostics).toEqual([
       expect.objectContaining({
         severity: 'error',
-        code: 'canvas-markdown-storyboard-no-production-rows',
+        code: 'canvas-storyboard-profile-no-production-rows',
       }),
     ]);
     expect(operations.createComposite).not.toHaveBeenCalled();
@@ -1286,7 +1286,7 @@ describe('Canvas Markdown capabilities', () => {
 
     expect(draft.status).toBe('needs-review');
     expect(draft.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
-      'canvas-markdown-storyboard-visual-or-prompt-missing',
+      'canvas-storyboard-profile-visual-or-prompt-missing',
     );
 
     const production = await invokeCanvasMarkdownCapability(
@@ -1311,7 +1311,7 @@ describe('Canvas Markdown capabilities', () => {
 
     expect(production.status).toBe('blocked');
     expect(production.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      'canvas-markdown-storyboard-visual-column-required',
+      'canvas-storyboard-profile-visual-column-required',
     ]);
   });
 

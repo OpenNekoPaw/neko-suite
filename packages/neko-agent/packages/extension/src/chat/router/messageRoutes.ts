@@ -70,19 +70,6 @@ export function tryHandleMessageRoute(
       return true;
     }
 
-    case 'requestCanvasMarkdownHandoff': {
-      const locale = vscode.env.language;
-      const handoff = canvasAuthoringHandoffFromMarkdownMessage(message);
-      deps.messages?.handleUserMessage(webview, {
-        conversationId: message.conversationId,
-        messageText: buildCanvasAuthoringHandoffPrompt(handoff, locale),
-        sessionMode: 'agent',
-        contextPayloads: [buildCanvasAuthoringHandoffContextPayload(handoff, locale)],
-        locale,
-      });
-      return true;
-    }
-
     case 'requestCanvasAuthoringHandoff': {
       const locale = vscode.env.language;
       deps.messages?.handleUserMessage(webview, {
@@ -104,28 +91,6 @@ type CanvasAuthoringHandoffRouteMessage = Omit<
   Extract<WebviewToExtensionMessage, { type: 'requestCanvasAuthoringHandoff' }>,
   'type'
 >;
-
-function canvasAuthoringHandoffFromMarkdownMessage(
-  message: Extract<WebviewToExtensionMessage, { type: 'requestCanvasMarkdownHandoff' }>,
-): CanvasAuthoringHandoffRouteMessage {
-  return {
-    requestId: message.requestId,
-    conversationId: message.conversationId,
-    sourceKind: 'markdown',
-    content: message.markdown,
-    ...(message.sourceFormat ? { sourceFormat: message.sourceFormat } : {}),
-    ...(message.title ? { title: message.title } : {}),
-    ...(message.resources ? { resources: message.resources } : {}),
-    ...(message.target ? { target: message.target } : {}),
-    ...(message.provenance ? { provenance: message.provenance } : {}),
-    ...(message.userIntent ? { userIntent: message.userIntent } : {}),
-    targetHints: {
-      ...(message.sourceFormat ? { sourceFormat: message.sourceFormat } : {}),
-      ...(message.declaredIntentHint ? { declaredIntentHint: message.declaredIntentHint } : {}),
-      ...(message.declaredProfileHint ? { declaredProfileHint: message.declaredProfileHint } : {}),
-    },
-  };
-}
 
 function buildCanvasAuthoringHandoffPrompt(
   message: CanvasAuthoringHandoffRouteMessage,

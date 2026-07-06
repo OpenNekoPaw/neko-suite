@@ -114,17 +114,17 @@ const CANVAS_LIFECYCLE_DIAGNOSTIC_MESSAGE_KEY_BY_CODE: Record<string, string> = 
     'chat.canvasLifecycle.diagnostic.canvasMarkdownRuntimeResourcePath',
   'canvas-markdown-runtime-resource-token':
     'chat.canvasLifecycle.diagnostic.canvasMarkdownRuntimeResourceToken',
-  'canvas-markdown-storyboard-create-approval-required':
+  'canvas-storyboard-profile-create-approval-required':
     'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardCreateApprovalRequired',
-  'canvas-markdown-storyboard-create-not-confirmed':
+  'canvas-storyboard-profile-create-not-confirmed':
     'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardCreateNotConfirmed',
-  'canvas-markdown-storyboard-next-action-missing':
+  'canvas-storyboard-profile-next-action-missing':
     'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardNextActionMissing',
-  'canvas-markdown-storyboard-no-production-rows':
+  'canvas-storyboard-profile-no-production-rows':
     'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardNoProductionRows',
-  'canvas-markdown-storyboard-visual-column-required':
+  'canvas-storyboard-profile-visual-column-required':
     'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardVisualColumnRequired',
-  'canvas-markdown-storyboard-visual-or-prompt-missing':
+  'canvas-storyboard-profile-visual-or-prompt-missing':
     'chat.canvasLifecycle.diagnostic.canvasMarkdownStoryboardVisualOrPromptMissing',
   'canvas-markdown-table-empty': 'chat.canvasLifecycle.diagnostic.canvasMarkdownTableEmpty',
   'canvas-markdown-table-missing': 'chat.canvasLifecycle.diagnostic.canvasMarkdownTableMissing',

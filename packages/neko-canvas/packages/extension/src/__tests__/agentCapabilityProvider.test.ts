@@ -881,7 +881,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     });
   });
 
-  it('provides Canvas-owned general authoring Skill with Markdown storyboard as an alias', () => {
+  it('provides Canvas-owned general authoring Skill without storyboard compatibility aliases', () => {
     const provider = createNekoCanvasCapabilityProvider(createApi());
     const skills = provider.getSkills?.() ?? [];
     const authoringSkill = skills.find((skill) => skill.name === 'canvas-authoring');
@@ -905,31 +905,19 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(authoringSkill?.content).toContain('canvas_describe_authoring_capabilities');
     expect(authoringSkill?.content).toContain('scene.basic + shot.basic');
     expect(authoringSkill?.content).toContain('prompt-first');
-
-    expect(storyboardAlias).toMatchObject({
-      name: 'canvas-markdown-storyboard',
-      source: 'builtin',
-      enabled: true,
-      allowedTools: authoringSkill?.allowedTools,
-    });
-    expect(storyboardAlias?.content).toContain('Compatibility alias');
-    expect(storyboardAlias?.content).toContain('canvas-authoring');
-    expect(storyboardAlias?.content).toContain('canvas.createStoryboardFromMarkdown');
-    expect('validationRequirements' in (storyboardAlias ?? {})).toBe(false);
+    expect(storyboardAlias).toBeUndefined();
   });
 
   it('localizes Canvas-owned domain skills from the capability context locale', () => {
     const provider = createNekoCanvasCapabilityProvider(createApi());
     const skills = provider.getSkills?.({ extensionContext: {}, locale: 'zh' }) ?? [];
     const authoringSkill = skills.find((candidate) => candidate.name === 'canvas-authoring');
-    const storyboardAlias = skills.find((candidate) => candidate.name === 'canvas-markdown-storyboard');
 
     expect(authoringSkill?.description).toContain('Canvas authoring');
     expect(authoringSkill?.content).toContain('# Canvas Authoring');
     expect(authoringSkill?.content).toContain('先查询 canvas_describe_authoring_capabilities');
     expect(authoringSkill?.content).toContain('prompt-first');
-    expect(storyboardAlias?.content).toContain('兼容别名');
-    expect(storyboardAlias?.content).toContain('canvas-authoring');
+    expect(skills.some((candidate) => candidate.name === 'canvas-markdown-storyboard')).toBe(false);
     expect(authoringSkill?.content).not.toContain('Use this skill only after');
   });
 

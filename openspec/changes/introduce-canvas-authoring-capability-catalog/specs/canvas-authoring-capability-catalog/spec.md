@@ -31,10 +31,10 @@ Canvas SHALL provide a general Canvas authoring Skill for Agent reasoning instea
 - **THEN** the general Canvas authoring Skill MUST describe storyboard as a Canvas recipe using Canvas-owned capabilities such as Markdown ingest or `scene.basic` plus `shot.basic` composites
 - **AND** Agent MUST NOT need a specialized storyboard-table Skill to understand Canvas authoring
 
-#### Scenario: Old storyboard Skill remains temporarily available
-- **WHEN** a compatibility alias for `canvas-markdown-storyboard` is retained
-- **THEN** it MUST route to or reference the general Canvas authoring guidance
-- **AND** tests MUST prove new Agent-to-Canvas authoring behavior does not depend on the old Skill as the canonical path
+#### Scenario: Old storyboard Skill is removed
+- **WHEN** Agent queries registered Skills or Canvas contributes Skills
+- **THEN** Canvas MUST NOT expose `canvas-markdown-storyboard` as a compatibility alias
+- **AND** tests MUST prove `canvas-authoring` is the only Canvas-owned Skill entry for storyboard guidance
 
 ### Requirement: Canvas owns declarative field and profile descriptors
 Canvas SHALL own field and profile authority through validated descriptors that can be extended without requiring Agent runtime changes.

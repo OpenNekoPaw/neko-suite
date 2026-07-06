@@ -3,10 +3,10 @@
 Current Agent-to-Canvas behavior has useful pieces but not a unified authoring contract:
 
 - Asset/image handoff uses `sendToPlugin` and `neko.canvas.importAsset`. This is an add-source/import path, not Canvas authoring.
-- Markdown/table handoff uses `requestCanvasMarkdownHandoff` so Agent can select Canvas Markdown capabilities. This is closer to the desired boundary, but it remains Markdown-oriented.
+- Markdown/table handoff previously used `requestCanvasMarkdownHandoff` so Agent could select Canvas Markdown capabilities. The canonical path is now `requestCanvasAuthoringHandoff`; Canvas Markdown remains available only as an Agent-selected Canvas tool.
 - Canvas already exposes Agent tools such as `canvas_get_active_context`, `canvas_list_nodes`, `canvas_get_node`, `canvas_create_node`, `canvas_create_composite`, `canvas_update_node`, `canvas_update_block`, `canvas_apply_agent_content`, and Markdown lifecycle capabilities.
 - Shared Canvas contracts already define node types, presets, connection types, container policies, active context summaries, and agent operation DTOs.
-- The current Canvas Skill is `canvas-markdown-storyboard`, which is too narrow. It teaches a specific Markdown storyboard workflow instead of Canvas as a general authoring surface.
+- The former Canvas Skill `canvas-markdown-storyboard` was too narrow. Canvas now exposes `canvas-authoring` as the only canonical Skill entry, with storyboard guidance as a recipe.
 - Storyboard authoring is increasingly prompt-first: users directly modify image/video/voice prompts, while table fields exist to make the creative state reviewable, bindable, and batch-operable.
 - Agent Markdown rendering already supports GFM, resource token projection, CommonMark image projection, and Canvas Markdown handoff, but the extension handling lives in Agent Webview and is not yet a public `@neko/markdown` package shared by Agent, Canvas, and future Markdown-capable surfaces.
 
@@ -65,7 +65,7 @@ The architectural gap is not lack of a single mutation tool. The gap is that Age
    - Alternative rejected: inject all Canvas semantics into the system prompt. That increases context cost and still cannot reflect active Canvas state or installed descriptor changes.
 
 3. **Make the Canvas Skill general, not storyboard-specific.**
-   - Replace or deprecate `canvas-markdown-storyboard` as the primary Skill with `canvas-authoring`.
+   - Replace `canvas-markdown-storyboard` with `canvas-authoring` and remove the compatibility alias during prelaunch cleanup.
    - The Skill describes how Agent should reason with Canvas: query catalog/context first, prefer composable presets, create scene/shot structures through composites, use media nodes for single assets, use Markdown capabilities for Markdown review/ingest, write prompts/params before generation, and repair from diagnostics.
    - Storyboard guidance remains a recipe inside Canvas authoring, not a dedicated Skill that owns the Agent route.
    - Alternative rejected: keep adding specialized Skills such as storyboard table, image board, prompt table, gallery prep. That makes Agent pick workflow names instead of Canvas capabilities and duplicates common Canvas rules.
@@ -146,7 +146,7 @@ The architectural gap is not lack of a single mutation tool. The gap is that Age
 11. Add path-level tests proving Canvas mutations occur only after Agent-selected Canvas tool/capability calls.
 12. Update docs/architecture references after implementation stabilizes.
 
-Rollback is local to Agent/Canvas Extension/Webview contracts. Before removing old aliases, the existing Markdown handoff and asset import paths can remain operational as explicit lower-level actions. If the general Skill or catalog fails validation, disable the new catalog tool and keep direct Markdown capabilities available, but do not restore hidden Webview mutation as the default `Send to Canvas` behavior.
+Rollback is local to Agent/Canvas Extension/Webview contracts. The old `requestCanvasMarkdownHandoff` Webview protocol message and `canvas-markdown-storyboard` Skill alias are removed during prelaunch cleanup; direct Markdown capabilities remain available only as Agent-selected Canvas tools. If the general Skill or catalog fails validation, disable the new catalog tool and keep direct Markdown capabilities available, but do not restore hidden Webview mutation as the default `Send to Canvas` behavior.
 
 ## Implementation Slice Notes
 
@@ -158,6 +158,6 @@ Rollback is local to Agent/Canvas Extension/Webview contracts. Before removing o
 ## Open Questions
 
 - Should the first catalog version expose detailed targetable field schemas for every preset, or only compact summaries plus `canvas_get_node`/`canvas_get_active_context` for details?
-- Should `canvas-markdown-storyboard` remain as a compatibility alias for one release cycle, or be removed immediately because the product is prelaunch?
+- Resolved: `canvas-markdown-storyboard` is removed immediately because the product is prelaunch.
 - Should delete/update connection commands be in the first implementation slice, or should the first slice expose read/list/create only and add destructive connection edits after undo/history tests are stronger?
 - Should semantic prompt span editing ship first in Canvas only, or should Agent Markdown rendering show read-only spans first and defer editing to Canvas?

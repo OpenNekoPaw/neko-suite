@@ -18,7 +18,7 @@ Neko needs a general Canvas authoring capability surface: Canvas should expose i
 - Standardize Canvas authoring command results so Agent receives stable created/updated/deleted node refs, connection refs, diagnostics, blocked reasons, and suggested next actions instead of opaque success/error strings.
 - Reframe `Send to Canvas` and related chat buttons as Agent handoff shortcuts. A click creates an Agent-visible intent envelope with source content/resources/provenance; it does not directly execute Canvas commands or bypass Agent tool selection.
 - Keep ordinary asset import as a distinct, explicitly named add-source/import operation. Asset transfer remains useful, but it is not the canonical Canvas authoring path.
-- **BREAKING** for unreleased internal Skill/capability behavior: new Agent-to-Canvas authoring requests must not depend on `canvas-markdown-storyboard` as the primary Skill, direct Webview Canvas commands, old structured plugin-transfer payloads, or hidden Webview/Extension routing that mutates Canvas before Agent chooses tools.
+- **BREAKING** for unreleased internal Skill/capability behavior: new Agent-to-Canvas authoring requests must use `canvas-authoring` and `requestCanvasAuthoringHandoff`; they must not depend on `canvas-markdown-storyboard`, `requestCanvasMarkdownHandoff`, direct Webview Canvas commands, old structured plugin-transfer payloads, or hidden Webview/Extension routing that mutates Canvas before Agent chooses tools.
 
 ### Non-Goals
 

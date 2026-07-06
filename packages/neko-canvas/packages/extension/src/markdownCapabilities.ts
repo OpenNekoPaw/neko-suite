@@ -202,7 +202,7 @@ const CANVAS_STORYBOARD_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
       phases: ['review'],
       fieldIds: STORYBOARD_PRODUCTION_CONTENT_FIELD_IDS,
       severity: 'warning',
-      code: 'canvas-markdown-storyboard-visual-or-prompt-missing',
+      code: 'canvas-storyboard-profile-visual-or-prompt-missing',
       message:
         'Storyboard draft table has no visual/画面内容 or prompt column; Canvas will keep it as review metadata.',
     },
@@ -210,7 +210,7 @@ const CANVAS_STORYBOARD_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
       phases: ['review'],
       fieldIds: ['nextAction', 'actionId'],
       severity: 'info',
-      code: 'canvas-markdown-storyboard-next-action-missing',
+      code: 'canvas-storyboard-profile-next-action-missing',
       message:
         'Storyboard draft table has no nextAction/建议操作 or trusted actionId column; Canvas can still keep it for review.',
     },
@@ -218,7 +218,7 @@ const CANVAS_STORYBOARD_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
       phases: ['apply'],
       fieldIds: STORYBOARD_PRODUCTION_CONTENT_FIELD_IDS,
       severity: 'error',
-      code: 'canvas-markdown-storyboard-visual-column-required',
+      code: 'canvas-storyboard-profile-visual-column-required',
       message: 'Production storyboard creation requires a visual/画面内容 or prompt column.',
     },
   ],
@@ -584,7 +584,7 @@ async function createStoryboardFromMarkdown(
       diagnostics: [
         createCanvasMarkdownDiagnostic(
           'error',
-          'canvas-markdown-storyboard-create-not-confirmed',
+          'canvas-storyboard-profile-create-not-confirmed',
           'Production storyboard creation requires mode "create-nodes".',
           'mode',
         ),
@@ -599,7 +599,7 @@ async function createStoryboardFromMarkdown(
       diagnostics: [
         createCanvasMarkdownDiagnostic(
           'error',
-          'canvas-markdown-storyboard-create-approval-required',
+          'canvas-storyboard-profile-create-approval-required',
           'Production storyboard creation requires lifecycle approval context.',
           'approval',
         ),
@@ -1220,7 +1220,7 @@ function buildStoryboardProductionRequest(
         ...diagnostics,
         createCanvasMarkdownDiagnostic(
           'error',
-          'canvas-markdown-storyboard-no-production-rows',
+          'canvas-storyboard-profile-no-production-rows',
           'Production storyboard creation requires at least one row whose decision is not skip, reference-only, or duplicate.',
           'decision',
         ),

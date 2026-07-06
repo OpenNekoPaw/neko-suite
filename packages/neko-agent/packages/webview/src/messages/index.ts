@@ -12,7 +12,6 @@ import { getVSCodeAPI, postMessage as postRawMessage, type VSCodeAPI } from '@ne
 import type {
   InvokeAgentCapabilityLifecycleWebviewMessage,
   RequestCanvasAuthoringHandoffWebviewMessage,
-  RequestCanvasMarkdownHandoffWebviewMessage,
   PluginTransferPayload,
   SendMessageWebviewMessage,
   WebviewToExtensionMessage,
@@ -506,13 +505,6 @@ export const VSCodeMessages = {
       requestId,
       invocation,
     });
-  },
-
-  /** Request an Agent-led Canvas Markdown handoff. Agent chooses the Canvas tool. */
-  requestCanvasMarkdownHandoff: (
-    payload: Omit<RequestCanvasMarkdownHandoffWebviewMessage, 'type'>,
-  ) => {
-    postConversationMessage({ type: 'requestCanvasMarkdownHandoff', ...payload });
   },
 
   /** Request an Agent-led Canvas authoring handoff. Agent chooses Canvas skills/tools. */

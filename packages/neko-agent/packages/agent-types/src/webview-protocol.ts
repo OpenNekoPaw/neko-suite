@@ -285,32 +285,29 @@ export interface InvokeAgentCapabilityLifecycleWebviewMessage {
   invocation: AgentCapabilityInvocationInput;
 }
 
-export interface RequestCanvasMarkdownHandoffWebviewMessage {
-  type: 'requestCanvasMarkdownHandoff';
-  requestId: string;
-  conversationId: string;
-  markdown: string;
-  title?: string;
-  sourceFormat?: 'markdown' | 'markdown-table' | 'gfm-table' | 'resource-reference-markdown';
-  resources?: readonly CanvasMarkdownResourceRef[];
-  target?: CanvasMarkdownCapabilityTarget;
-  provenance?: PluginTransferProvenance;
-  userIntent?: string;
-  declaredIntentHint?: 'auto' | 'note' | 'table' | 'creative-table';
-  declaredProfileHint?: string;
-}
-
 export type CanvasAuthoringHandoffSourceKind =
   | 'markdown'
   | 'generated-text'
   | 'structured-content'
   | 'resource-backed-content';
 
+export type CanvasAuthoringMarkdownSourceFormat =
+  | 'markdown'
+  | 'markdown-table'
+  | 'gfm-table'
+  | 'resource-reference-markdown';
+
 export type CanvasAuthoringHandoffSourceFormat =
-  | RequestCanvasMarkdownHandoffWebviewMessage['sourceFormat']
+  | CanvasAuthoringMarkdownSourceFormat
   | 'plain-text'
   | 'json'
   | 'composite-artifact';
+
+export type CanvasAuthoringHandoffDeclaredIntentHint =
+  | 'auto'
+  | 'note'
+  | 'table'
+  | 'creative-table';
 
 export interface CanvasAuthoringHandoffStableRef {
   readonly kind: string;
@@ -345,7 +342,7 @@ export interface CanvasAuthoringHandoffPromptSpan {
 
 export interface CanvasAuthoringHandoffTargetHints {
   readonly sourceFormat?: CanvasAuthoringHandoffSourceFormat;
-  readonly declaredIntentHint?: RequestCanvasMarkdownHandoffWebviewMessage['declaredIntentHint'];
+  readonly declaredIntentHint?: CanvasAuthoringHandoffDeclaredIntentHint;
   readonly declaredProfileHint?: string;
   readonly operationHint?: string;
 }
@@ -469,7 +466,6 @@ export type WebviewToExtensionMessage =
   | SetPromptModeWebviewMessage
   | SendToPluginWebviewMessage
   | InvokeAgentCapabilityLifecycleWebviewMessage
-  | RequestCanvasMarkdownHandoffWebviewMessage
   | RequestCanvasAuthoringHandoffWebviewMessage
   | DragStartWebviewMessage
   | MermaidErrorWebviewMessage
@@ -1181,7 +1177,6 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'setPromptMode',
   'sendToPlugin',
   'invokeAgentCapabilityLifecycle',
-  'requestCanvasMarkdownHandoff',
   'requestCanvasAuthoringHandoff',
   'dnd:start',
   'mermaidError',
@@ -1754,8 +1749,6 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
       return parseSendToPluginMessage(raw);
     case 'invokeAgentCapabilityLifecycle':
       return parseInvokeAgentCapabilityLifecycleMessage(raw);
-    case 'requestCanvasMarkdownHandoff':
-      return parseRequestCanvasMarkdownHandoffMessage(raw);
     case 'requestCanvasAuthoringHandoff':
       return parseRequestCanvasAuthoringHandoffMessage(raw);
     case 'dnd:start':
@@ -2170,73 +2163,6 @@ function parseInvokeAgentCapabilityLifecycleMessage(
   };
 }
 
-function parseRequestCanvasMarkdownHandoffMessage(
-  raw: Record<string, unknown>,
-): RequestCanvasMarkdownHandoffWebviewMessage | null {
-  if (
-    raw.capabilityId !== undefined ||
-    raw.input !== undefined ||
-    raw.intentHint !== undefined ||
-    raw.profileHint !== undefined
-  ) {
-    return null;
-  }
-
-  const requestId = requiredString(raw.requestId);
-  const conversationId = requiredString(raw.conversationId);
-  const markdown = requiredString(raw.markdown);
-  if (!requestId || !conversationId || !markdown) return null;
-
-  const title = optionalString(raw.title);
-  if (raw.title !== undefined && title === undefined) return null;
-  const sourceFormat =
-    raw.sourceFormat === undefined ? undefined : parseCanvasMarkdownSourceFormat(raw.sourceFormat);
-  if (raw.sourceFormat !== undefined && sourceFormat === undefined) return null;
-  const resources =
-    raw.resources === undefined
-      ? undefined
-      : Array.isArray(raw.resources) && raw.resources.every(isCanvasMarkdownResourceRef)
-        ? raw.resources
-        : null;
-  if (resources === null) return null;
-  const target =
-    raw.target === undefined
-      ? undefined
-      : isCanvasMarkdownCapabilityTarget(raw.target)
-        ? raw.target
-        : null;
-  if (target === null) return null;
-  const provenance =
-    raw.provenance === undefined
-      ? undefined
-      : parseOptionalPluginTransferProvenance(raw.provenance);
-  if (provenance === null) return null;
-  const userIntent = optionalString(raw.userIntent);
-  if (raw.userIntent !== undefined && userIntent === undefined) return null;
-  const declaredIntentHint =
-    raw.declaredIntentHint === undefined
-      ? undefined
-      : parseCanvasMarkdownIntentHint(raw.declaredIntentHint);
-  if (raw.declaredIntentHint !== undefined && declaredIntentHint === undefined) return null;
-  const declaredProfileHint = optionalString(raw.declaredProfileHint);
-  if (raw.declaredProfileHint !== undefined && declaredProfileHint === undefined) return null;
-
-  return {
-    type: 'requestCanvasMarkdownHandoff',
-    requestId,
-    conversationId,
-    markdown,
-    ...(title ? { title } : {}),
-    ...(sourceFormat ? { sourceFormat } : {}),
-    ...(resources ? { resources } : {}),
-    ...(target ? { target } : {}),
-    ...(provenance ? { provenance } : {}),
-    ...(userIntent ? { userIntent } : {}),
-    ...(declaredIntentHint ? { declaredIntentHint } : {}),
-    ...(declaredProfileHint ? { declaredProfileHint } : {}),
-  };
-}
-
 function parseRequestCanvasAuthoringHandoffMessage(
   raw: Record<string, unknown>,
 ): RequestCanvasAuthoringHandoffWebviewMessage | null {
@@ -2319,7 +2245,7 @@ function parseRequestCanvasAuthoringHandoffMessage(
 
 function parseCanvasMarkdownSourceFormat(
   value: unknown,
-): RequestCanvasMarkdownHandoffWebviewMessage['sourceFormat'] | undefined {
+): CanvasAuthoringMarkdownSourceFormat | undefined {
   return value === 'markdown' ||
     value === 'markdown-table' ||
     value === 'gfm-table' ||
@@ -2351,7 +2277,7 @@ function parseCanvasAuthoringSourceFormat(
 
 function parseCanvasMarkdownIntentHint(
   value: unknown,
-): RequestCanvasMarkdownHandoffWebviewMessage['declaredIntentHint'] | undefined {
+): CanvasAuthoringHandoffDeclaredIntentHint | undefined {
   return value === 'auto' || value === 'note' || value === 'table' || value === 'creative-table'
     ? value
     : undefined;

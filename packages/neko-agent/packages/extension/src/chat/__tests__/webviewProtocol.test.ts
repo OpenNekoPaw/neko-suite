@@ -228,14 +228,6 @@ describe('parseWebviewToExtensionMessage', () => {
       },
     ],
     [
-      'canvas markdown handoff',
-      {
-        type: 'requestCanvasMarkdownHandoff',
-        requestId: 'request-1',
-        markdown: '| Shot |\\n| --- |\\n| opening |',
-      },
-    ],
-    [
       'canvas authoring handoff',
       {
         type: 'requestCanvasAuthoringHandoff',
