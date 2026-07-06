@@ -200,6 +200,30 @@ packages/neko-canvas/
 
 Agent 对 Canvas 播放顺序的参与仅限读取 `CanvasPlaybackPlan`、展示 route card、触发 reveal/import/reorder capability 和执行确认门控。Agent 不持有 `PlaybackSession`、playhead、播放器或私有 route 顺序；播放请求应定位到 Canvas `PlaybackWorkspace`，后续剪辑请求应投递到 Cut。
 
+### Agent Canvas Authoring
+
+Canvas 对 Agent 暴露的是 Canvas-owned authoring surface，而不是 Webview 私有命令或 `.nkc` 原始 JSON。Agent 可以按需查询 `canvas_describe_authoring_capabilities`、`canvas_get_active_context`、节点/连接详情和 Canvas Markdown lifecycle capabilities；Canvas 返回版本化、分段的 authoring catalog，描述节点类型、presets、容器策略、连接规则、目标字段、风险级别、确认要求和推荐 recipe。
+
+Canonical authoring path：
+
+```text
+Agent / Agent Webview handoff
+  -> Agent 查询 Canvas authoring catalog / active context
+  -> Agent 选择 Canvas-owned query 或 mutation tool
+  -> Canvas Extension Host 校验 active editor、refs、字段/profile、资源和 approval
+  -> Canvas Webview/Store 执行节点、连接、block 或 content mutation
+  -> Canvas 返回 structured authoring result envelope
+```
+
+边界约束：
+
+- `Send to Canvas` 是 Agent-visible handoff intent。Agent Webview/Extension 不得把按钮点击隐式转成 `neko.canvas.importAsset`、Canvas Markdown capability 或 `canvas_create_node`。
+- 直接素材导入保留为显式 Import / Add Source 路径，只传输已授权 stable resource/source，不代表 Agent-authored Canvas composition。
+- Canvas 是 durable field/profile authority。Skill、Markdown 表头、`@` 文本和 prompt span 只能作为 hint；未知字段进入 review/custom metadata 或 diagnostic，不直接写 semantic node field。
+- 分镜表按 prompt-first、field-backed 处理：prompt text 与 semantic spans 是用户直接编辑对象；表格列是审阅投影。prompt 与字段不一致时返回 alignment diagnostics 或 explicit merge/regenerate next actions，不静默反向解析覆盖字段。
+- Mutation tool 必须返回 structured authoring result：status、refs、diagnostics、blocked reason、changed fields、prompt-field alignment 和 approval-gated next actions。渲染这些结果不能自动执行下一步 action。
+- 未来如果提供 Canvas MCP server，它只能作为 Extension Host typed Canvas API 的 adapter。它不能绕过 active editor、Webview state、resource authorization、undo/history 或 Canvas descriptor registry 成为第二套状态权威。
+
 ### 文件拖放
 
 ```

@@ -1,10 +1,13 @@
 # ADR: Canvas MCP 式能力与 Markdown 资源增强渲染边界
 
-状态：Proposed
+状态：Accepted
 日期：2026-06-29
-范围：`neko-agent`、`neko-canvas`、`neko-content`、`@neko/shared`、`@neko/ui`、Agent Webview Markdown、Canvas MCP-like capabilities、Canvas 文本/表格/分镜节点、CompositeArtifact / GenericTable、Markdown 文档和资源投影。
+更新：2026-07-06
+范围：`neko-agent`、`neko-canvas`、`@neko/markdown`、`@neko/shared`、`@neko/ui`、Agent Webview Markdown、Canvas authoring capabilities、Canvas 文本/表格/分镜节点、CompositeArtifact / GenericTable、Markdown 文档和资源投影。
 
 本文记录 Neko Suite 对 “Agent 生成 Markdown、Agent Webview 增强渲染、Canvas 通过 MCP 式能力创建/校验/渲染内容” 的系统级边界。它补充 [`cache-file-access-and-paths.md`](cache-file-access-and-paths.md)、[`adr-agent-autonomous-filmmaking-creation-boundary.md`](adr-agent-autonomous-filmmaking-creation-boundary.md)、[`adr-markdown-storyboard-draft-protocol.md`](adr-markdown-storyboard-draft-protocol.md)、[`adr-canvas-cut-playback-route-and-timeline-boundary.md`](adr-canvas-cut-playback-route-and-timeline-boundary.md) 和 [`proto-and-wire-contracts.md`](proto-and-wire-contracts.md)。
+
+> 2026-07-06 更新：本文早期把默认 `Send to Canvas` 描述为直接调用 `canvas.ingestMarkdown`。当前 canonical path 已收敛为：Agent Webview 创建 Agent-visible Canvas authoring handoff intent；Agent 自主决定是否激活 `canvas-authoring` Skill、查询 Canvas authoring catalog/context、选择 Canvas Markdown capability 或其它 Canvas tool。`canvas.ingestMarkdown` 等 Markdown capabilities 仍是 Canvas-owned tools，但不再由 Webview/Extension 作为按钮副作用直接调用。
 
 ## 背景
 
@@ -15,31 +18,38 @@ Agent 适合生成和解释 Markdown：它可以快速输出分析、计划、�
 - 新场景如互动视频、角色关系图、分支剧情、素材审查可能继续复制一套 parser + compiler。
 - 用户真正想做的是 “把这段内容放进 Canvas / 创建分镜 / 创建草稿表”，不是理解某个 compiler。
 
-因此 Neko 采用 MCP-like 能力模型：
+因此 Neko 采用 Canvas-owned authoring 能力模型：
 
 ```text
-Agent 生成 Markdown 和意图
-  -> Agent Webview 增强渲染，显示表格、图片引用和诊断
-  -> 用户或 Agent 调用 Canvas capability
-  -> Canvas 校验输入、绑定资源、创建节点、返回结果
+Agent 生成 Markdown / 文本 / 结构化内容和意图
+  -> @neko/markdown 生成 host-agnostic syntax projection
+  -> Agent Webview 增强渲染，显示表格、图片引用、@引用、semantic spans 和诊断
+  -> Send to Canvas 创建 Agent-visible handoff intent
+  -> Agent 查询 Canvas authoring catalog/context，按需激活 Canvas Skill
+  -> Agent 选择 Canvas-owned tool / Markdown capability
+  -> Canvas 校验输入、绑定资源、创建节点、返回结构化 authoring result
 ```
 
 ## 决策
 
-Canvas 是 Canvas 节点创建和渲染的权威。Agent 不直接写 `CanvasNode[]`，Agent Webview 不拥有 Canvas 编译管线。Send to Canvas 不再被建模为 “发送最终 Canvas payload”，而是调用 Canvas 暴露的 MCP-like capability。
+Canvas 是 Canvas 节点、连接、字段/profile、资源绑定、undo/history 和持久化的权威。Agent 不直接写 `CanvasNode[]`，Agent Webview 不拥有 Canvas 编译管线。`Send to Canvas` 不再被建模为“发送最终 Canvas payload”或“按钮直接调用 Canvas capability”，而是创建 Agent-visible handoff intent；是否调用 `canvas.ingestMarkdown`、`canvas_create_composite`、`canvas_update_block` 或其它 tool 由 Agent 在当前上下文中决定。
 
 ```text
 Agent Markdown
-  headings / paragraphs / tables / prompts / resource embeds
+  headings / paragraphs / tables / prompts / resource embeds / @mentions
         |
         v
-Agent Webview enhanced markdown rendering
-  preview, table display, resource-token thumbnails, diagnostics
+@neko/markdown projection
+  CommonMark/GFM tables, images, resource-reference tokens, mentions, semantic prompt spans
         |
         v
-Canvas capability invocation
-  canvas.ingestMarkdown
-  lower-level wrappers for explicit note/table/storyboard production actions
+Agent Webview enhanced rendering + handoff envelope
+  stable refs, diagnostics, prompt spans, target hints, provenance
+        |
+        v
+Agent-selected Canvas authoring operation
+  query: canvas_describe_authoring_capabilities / canvas_get_active_context / canvas_list_nodes
+  mutate: canvas_create_node / canvas_create_composite / canvas_update_block / Canvas Markdown capabilities
         |
         v
 Canvas runtime
@@ -68,7 +78,7 @@ Canvas capability 以工具 schema 的方式暴露给 Agent、Agent Webview 和�
 
 | Capability | 输入 | 输出 | 用途 |
 | --- | --- | --- | --- |
-| `canvas.ingestMarkdown` | Markdown、title、resourceRefs、target、intent/profile hints | note/table node id、resolved kind、diagnostics、actions | 默认入口：由 Canvas 解析为 Markdown note、generic table 或 creative table |
+| `canvas.ingestMarkdown` | Markdown、title、resourceRefs、target、intent/profile hints | note/table node id、resolved kind、diagnostics、actions | Agent 选中 Markdown review/apply 后的通用入口：由 Canvas 解析为 Markdown note、generic table 或 creative table |
 | `canvas.createMarkdownNote` | Markdown、title、resourceRefs、target | text/document node ids、diagnostics | 显式把分析、计划、提示词说明放到 Canvas |
 | `canvas.createTableFromMarkdown` | Markdown table、resourceRefs、target | table node id、diagnostics | lower-level generic table wrapper |
 | `canvas.createStoryboardDraftFromMarkdown` | Markdown 分镜表、profile hint、resourceRefs、target | draft/review node id、diagnostics、actions | lower-level storyboard review wrapper；storyboard 只是 creative table profile |
@@ -249,34 +259,33 @@ interface CanvasMarkdownCapabilityResult {
 
 ## Send to Canvas
 
-Agent Webview 的 Send to Canvas 应从 payload transfer 演进为 capability invocation。
+Agent Webview 的 `Send to Canvas` 是快捷 handoff，而不是 Canvas 命令按钮。它构造 typed context payload：source content、source kind、stable resource refs、semantic stable refs、diagnostics、prompt spans、title、provenance、user intent 和 target hints。Extension Host 只把它转成普通 Agent user message + context payload，不预激活 Canvas Skill，不选择 Canvas tool，不调用 `neko.canvas.importAsset`。
 
-| 用户动作 | 调用 |
-| --- | --- |
-| Send to Canvas | `canvas.ingestMarkdown` |
-| Explicit Add Markdown Note | `canvas.createMarkdownNote` |
-| Explicit Add Table | `canvas.createTableFromMarkdown` |
-| Explicit Add Storyboard Review Table | `canvas.createStoryboardDraftFromMarkdown` |
-| Create Storyboard Nodes | `canvas.createStoryboardFromMarkdown` |
-| Attach Image/Media | `canvas.attachResource` |
+| 用户动作 | 语义 | 允许的后续路径 |
+| --- | --- | --- |
+| Send to Canvas | Agent-visible authoring handoff | Agent 查询 catalog/context 后选择 Canvas tool、Markdown capability、直接 import、询问用户或拒绝 |
+| Import / Add Source to Canvas | 显式素材导入 | Extension 可调用 `neko.canvas.importAsset` 或 Canvas add-source path |
+| Agent-selected Markdown review/apply | Canvas-owned Markdown capability | `canvas.ingestMarkdown`、`canvas.createTableFromMarkdown`、`canvas.createStoryboardFromMarkdown` 等 lifecycle/tool invocation |
+| Agent-selected node/composite authoring | Canvas-owned node tools | `canvas_create_node`、`canvas_create_composite`、`canvas_update_block`、`canvas_apply_agent_content` 等 |
 
 默认动作应偏 review-first：
 
-- 普通 Markdown 由 `canvas.ingestMarkdown` 解析为 Markdown note/text node。
-- 普通 GFM table 由 `canvas.ingestMarkdown` 解析为 generic table，并保留媒体 token 与未知列。
-- Markdown 分镜表是 `storyboard` creative table profile；默认创建 review table 或先 validate，不自动写 scene/shot/media 生产节点。
-- 只有用户明确点击 Create Storyboard Nodes，或 Agent 在已获批准的 Apply 阶段调用，才创建 Canvas 分镜节点。
+- 普通 Markdown/GFM table 被 handoff 给 Agent；Agent 应在需要 Canvas 语义时先查询 Canvas authoring catalog/context。
+- Markdown 分镜表是 prompt-first creative authoring 内容，`storyboard` 只是 Canvas profile hint；profile/field authority 仍由 Canvas descriptor registry 校验。
+- 只有 Agent 选中对应 Canvas mutation tool/capability，并满足确认/approval 要求时，才创建或更新 Canvas 节点。
+- 显式素材导入必须使用单独 UI 文案（如 Import / Add Source），不得伪装成 Agent-authored Canvas composition。
 
 ## Markdown 增强渲染
 
 Agent Webview Markdown renderer 应支持资源增强渲染，但只作为当前消息的展示投影。该能力必须分阶段实施，避免把 Neko resource-reference parser、文档 resolver 和 Canvas capability 同时塞进同一轮变更。
 
-第一阶段：
+当前实现阶段：
 
 - 保持 `react-markdown + remark-gfm` 的普通 Markdown/GFM 渲染。
-- 支持 Markdown table 内的资源 token 显示状态。
-- 支持 CommonMark image `![alt](assets/cover.png)` 的 host-projected URI 或 diagnostic。
-- Send to Canvas 通过 typed Canvas capability DTO 调用，不依赖 `![[...]]`。
+- `@neko/markdown` core 提供 host-agnostic projection：GFM creative tables、CommonMark images、`@` mentions、Neko resource-reference token、semantic prompt spans、diagnostics 和 handoff refs。
+- Agent Webview 消费 `@neko/markdown` projection，负责 React composition、resource thumbnail/chip display 和 handoff payload 组装。
+- `![[...]]` / `[[...]]` 在 resolver-backed 完整实现前必须保留文本并返回 unsupported diagnostic，不能被当作稳定资源成功解析。
+- Send to Canvas 通过 `requestCanvasAuthoringHandoff` 进入 Agent，不直接调用 Canvas capability。
 
 第二阶段：
 
@@ -310,7 +319,7 @@ Agent Webview Markdown renderer 应支持资源增强渲染，但只作为当前
 - 未解析、歧义、越权、非 portable 路径必须显示 diagnostic，不静默隐藏。
 - `![[Chapter 1#Section]]` 这类非媒体引用应显示为文档/章节引用，而不是强行图片。
 
-`![[...]]` 解析应作为独立 OpenSpec/ADR 或本 ADR 的独立实施 Phase，不阻塞 Canvas capability schema 和 Send to Canvas 的第一阶段落地。实现时必须定义 `#` 的歧义规则：文件 locator、文档 section、panel hint 和 crop hint 不得靠字符串猜测静默成功。
+`![[...]]` 解析应作为独立 OpenSpec/ADR 或本 ADR 的独立实施 Phase，不阻塞 Canvas authoring catalog、handoff intent 和 Canvas capability schema 的第一阶段落地。实现时必须定义 `#` 的歧义规则：文件 locator、文档 section、panel hint 和 crop hint 不得靠字符串猜测静默成功。
 
 ## Skill / 提示词输出声明
 
@@ -354,7 +363,7 @@ Skill 可以要求 Agent 输出：
 
 - Markdown table for review；
 - explicit resource token column；
-- next-step Canvas ingest hint such as `intentHint: "creative-table"` and `profileHint: "storyboard"`；
+- next-step Canvas handoff hints such as `declaredIntentHint: "creative-table"` and `declaredProfileHint: "storyboard"`；Agent 只有在选中 Canvas Markdown capability 时才把它们转为 tool input；
 - no direct Canvas node JSON.
 
 Canvas capability invocation carries the actual `ResourceRef` / `DocumentArchiveResourceRef` array separately. Markdown remains human-readable; resource refs remain structured tool input.
@@ -402,10 +411,10 @@ Markdown token、`![[...]]`、CommonMark image URL 和表格单元格文本都�
 
 | 包 | 职责 |
 | --- | --- |
-| `neko-agent` | 生成 Markdown、展示增强 Markdown、发起 Canvas capability 调用 |
-| `neko-canvas` | 暴露 MCP-like capabilities；校验、绑定资源、创建节点、渲染 Canvas 内容 |
-| `@neko/shared` | 跨包 DTO：ResourceRef、DocumentArchiveResourceRef、capability input/output 的最小共享契约 |
-| `@neko/content` | 文档/资源 locator、document image resource metadata、内容解析语义 |
+| `neko-agent` | 生成 Markdown/文本/结构化内容、展示增强 Markdown、创建 Agent-visible Canvas handoff、由 Agent runtime 自主选择 Skill/tool |
+| `neko-canvas` | 暴露 authoring catalog、Canvas-owned Skills/tools/capabilities；校验、绑定资源、创建节点、渲染 Canvas 内容 |
+| `@neko/markdown` | Markdown 扩展语法、纯 projection DTO、diagnostics、resolver/renderer adapter contracts；不做 Canvas 校验或 mutation |
+| `@neko/shared` | 跨包 DTO：ResourceRef、DocumentArchiveResourceRef、Canvas authoring catalog/result、capability input/output 的最小共享契约 |
 | Extension Host | stable ref -> bytes/cache/renderUri；路径授权、CSP、diagnostics |
 | `@neko/ui` | 可复用的无业务 Markdown/table/resource cell UI 原语，成熟后再提取 |
 
@@ -413,17 +422,19 @@ Markdown token、`![[...]]`、CommonMark image URL 和表格单元格文本都�
 
 - Agent 不依赖 Canvas internals。
 - Canvas capability 不依赖 Agent Webview。
+- `@neko/markdown` core 不依赖 Agent、Canvas、VS Code、React、DOM 或 feature package internals。
 - Webview 不直接读取文件系统。
 - Shared/content 不依赖 React、VS Code、DOM 或功能包 internals。
 
 ## 验收要求
 
-- Agent Webview 能把 `![[cover.png]]`、`![[Chapter 1#Section]]`、`![cover](assets/cover.png)` 渲染为预览、文档引用或明确 diagnostic。
-- Send to Canvas 调用 Canvas capability，而不是让 Agent/Webview 直接构造 `CanvasNode[]`。
-- Send to Canvas 默认调用 `canvas.ingestMarkdown`，不是直接调用 generic/storyboard wrapper 或旧 plugin-transfer payload。
+- Agent Webview 能把 `![[cover.png]]`、`![[Chapter 1#Section]]`、`![cover](assets/cover.png)`、`@mention` 和 semantic prompt spans 渲染为 projection、预览、文档引用或明确 diagnostic。
+- Send to Canvas 创建 Agent-visible handoff intent，而不是让 Agent/Webview 直接构造 `CanvasNode[]`、调用 Canvas capability 或走旧 plugin-transfer payload。
+- Extension route 测试证明 handoff 不调用 `neko.canvas.importAsset`、Canvas Markdown capabilities 或 Canvas mutation tools。
+- `@neko/markdown` projection 测试证明 stable refs、diagnostics、prompt spans 只进入 handoff metadata，不成为 Canvas validation 或 mutation authority。
 - Canvas capability 测试证明节点由 Canvas runtime 创建，并返回 node ids、diagnostics 和 actions。
 - Markdown 分镜表创建 Canvas 节点时，测试证明资源来自 stable refs，而不是 token、文件名或 cache path。
-- 新 Skill/prompt 示例声明 Markdown 扩展和 resource reference policy。
+- Canvas `canvas-authoring` Skill 和 catalog 声明 Markdown 扩展、resource reference policy、query-before-mutate、prompt-field alignment 和 repair loop。
 - 新路径不 import `@neko/draft-runtime`；旧包已在预发布清理中删除，Canvas capability 私有实现和 Agent Webview presentation helper 承接仍有价值的解析/资源展示行为。
 
 ## 后果

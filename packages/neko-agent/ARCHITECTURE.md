@@ -276,7 +276,8 @@ Webview → Extension:
   newConversation, switchConversation, deleteConversation,
   getSettings, updateSettings, invokeSlashCommand,
   clearActiveSkill, planApprove/Reject,
-  searchProjectFiles, getTasks, cancelTask
+  searchProjectFiles, getTasks, cancelTask,
+  requestCanvasAuthoringHandoff
 
 Extension → Webview:
   thinking, streamText, streamThinking,
@@ -287,6 +288,29 @@ Extension → Webview:
   contextTokenCount,
   conversations, activeConversation, settings, tabState
 ```
+
+### Canvas Authoring Handoff
+
+Agent 是 Canvas Skill activation 和 tool selection 的拥有者。Agent Webview 的 `Send to Canvas` 不直接调用 Canvas command，也不选择 `canvas.ingestMarkdown`、`canvas_create_node` 或 `neko.canvas.importAsset`。它只发送 `requestCanvasAuthoringHandoff`，携带 source content、source kind、stable resource refs、semantic stable refs、diagnostics、prompt spans、provenance、user intent 和 target hints。
+
+Extension Host 路由该消息时只创建普通 Agent user message + `document-selection` context payload：
+
+```text
+Agent Webview button
+  -> requestCanvasAuthoringHandoff
+  -> Extension message route
+  -> Agent-visible user message + context payload
+  -> Agent may query GetContext(includeTools), activate canvas-authoring Skill,
+     call canvas_describe_authoring_capabilities / active context,
+     choose Canvas tools, ask approval, import explicitly, or decline
+```
+
+边界规则：
+
+- Extension/Webview 不通过关键词、表头、profile hint 或资源类型预激活 Canvas Skill。
+- Markdown projections from `@neko/markdown` are metadata only：stable refs、diagnostics、prompt spans 和 `declared*Hint` 可帮助 Agent 决策，但不成为 Canvas validation/mutation authority。
+- Canvas authoring tool results are rendered read-only in Agent Webview: refs、diagnostics、blocked reason、prompt-field alignment 和 next actions 会展示给用户，但 approval-gated next actions 不能因渲染自动执行。
+- 直接素材导入必须使用显式 Import / Add Source affordance；`Send to Canvas` 对资源型内容仍先进入 Agent handoff。
 
 ### Agent 执行流
 
