@@ -56,13 +56,20 @@ export class MemoryRecall {
     }
 
     const results: RecalledMemory[] = [];
+    const resultsByContentKey = new Map<string, RecalledMemory>();
     const sections = this._parseMarkdownSections(this._project.getContent());
     for (const section of sections) {
-      const relevance = this._computeRelevance(query, section);
+      const content = this._normalizeSectionForRecall(section);
+      const relevance = this._computeRelevance(query, content);
       if (relevance > 0.1) {
-        results.push({ source: 'project', content: section, relevance });
+        const contentKey = this._computeContentDedupeKey(content);
+        const existing = resultsByContentKey.get(contentKey);
+        if (!existing || relevance > existing.relevance) {
+          resultsByContentKey.set(contentKey, { source: 'project', content, relevance });
+        }
       }
     }
+    results.push(...resultsByContentKey.values());
 
     // Sort by relevance (descending), return top N
     return results.sort((a, b) => b.relevance - a.relevance).slice(0, limit);
@@ -126,5 +133,54 @@ export class MemoryRecall {
     }
 
     return sections;
+  }
+
+  private _normalizeSectionForRecall(section: string): string {
+    const lines = section.split('\n');
+    const output: string[] = [];
+    const seenListEntries = new Set<string>();
+    let currentListEntry: string[] | null = null;
+
+    const flushListEntry = () => {
+      if (!currentListEntry) return;
+      const key = this._normalizeTextForDedupe(currentListEntry.join('\n'));
+      if (!seenListEntries.has(key)) {
+        output.push(...currentListEntry);
+        seenListEntries.add(key);
+      }
+      currentListEntry = null;
+    };
+
+    for (const line of lines) {
+      if (line.startsWith('- ')) {
+        flushListEntry();
+        currentListEntry = [line];
+        continue;
+      }
+
+      if (currentListEntry) {
+        currentListEntry.push(line);
+      } else {
+        output.push(line);
+      }
+    }
+
+    flushListEntry();
+    return this._collapseExcessBlankLines(output.join('\n')).trim();
+  }
+
+  private _computeContentDedupeKey(content: string): string {
+    const lines = content.split('\n');
+    const body = lines[0]?.startsWith('## ') ? lines.slice(1).join('\n') : content;
+    const keySource = body.trim() ? body : content;
+    return this._normalizeTextForDedupe(keySource);
+  }
+
+  private _normalizeTextForDedupe(text: string): string {
+    return text.toLowerCase().replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').trim();
+  }
+
+  private _collapseExcessBlankLines(text: string): string {
+    return text.replace(/\n{3,}/g, '\n\n');
   }
 }

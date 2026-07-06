@@ -76,6 +76,8 @@ export interface ChatOptions {
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
   responseFormat?: { type: 'text' | 'json_object' };
   stream?: boolean;
+  /** Runtime prompt locale used by model-facing projection wrappers. */
+  locale?: string;
   /** Enable extended thinking (Claude only) - budget tokens for thinking */
   thinkingBudget?: number;
   /**
@@ -108,6 +110,7 @@ export interface ChatOptions {
     providerId?: string;
     modelId?: string;
     modelCapabilities?: readonly string[];
+    locale?: string;
   }) => Promise<readonly ChatMessage[]> | readonly ChatMessage[];
 }
 

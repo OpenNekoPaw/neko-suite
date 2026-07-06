@@ -421,7 +421,7 @@ export function buildEmbodyCharacterTurnSystemPrompt(input: {
   return [
     input.baseSystemPrompt,
     '',
-    renderCharacterEvidenceBundle(input.turnEvidence),
+    renderCharacterEvidenceBundle(input.turnEvidence, { locale: input.locale }),
     '',
     guidance,
   ].join('\n');

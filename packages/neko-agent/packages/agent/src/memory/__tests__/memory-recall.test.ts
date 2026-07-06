@@ -109,6 +109,59 @@ describe('MemoryRecall', () => {
 
       expect(results.length).toBeLessThanOrEqual(3);
     });
+
+    it('should collapse duplicate recalled project sections before applying the result limit', async () => {
+      const repeatedRequest =
+        '分析前10页，生成分镜表 @${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub';
+      const repeatedReference = [
+        repeatedRequest,
+        '',
+        '--- 引用文档 ---',
+        '',
+        '[文档: ${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub]',
+        '分析该文档前，先调用 ReadDocument。',
+      ].join('\n');
+      const project = createMockProjectMemory(
+        [
+          '## 近期决策',
+          repeatedReference,
+          '',
+          '## Recent Decisions',
+          repeatedReference,
+          '',
+        ].join('\n'),
+      );
+
+      const recall = new MemoryRecall({ projectMemory: project });
+      const results = await recall.recall('分析前10页', 5);
+
+      expect(results).toHaveLength(1);
+      expect(
+        results.filter((result) => result.content.includes('BLAME！(新裝版)]卷01.epub')),
+      ).toHaveLength(1);
+    });
+
+    it('should collapse duplicate list entries inside a recalled project section', async () => {
+      const repeatedEntry = [
+        '- 分析前10页，生成分镜表 @${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub',
+        '',
+        '--- 引用文档 ---',
+        '',
+        '[文档: ${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub]',
+        '分析该文档前，先调用 ReadDocument。',
+      ].join('\n');
+      const project = createMockProjectMemory(
+        ['## 近期决策', repeatedEntry, repeatedEntry, repeatedEntry].join('\n'),
+      );
+
+      const recall = new MemoryRecall({ projectMemory: project });
+      const results = await recall.recall('分析前10页', 5);
+
+      expect(results).toHaveLength(1);
+      const content = results[0]!.content;
+      expect(content.match(/分析前10页，生成分镜表/g)).toHaveLength(1);
+      expect(content.match(/--- 引用文档 ---/g)).toHaveLength(1);
+    });
   });
 
   describe('relevance scoring', () => {

@@ -478,8 +478,18 @@ const ZH_TOOL_DEFINITION_LOCALIZATIONS: Readonly<Record<string, ToolDefinitionLo
     description: '读取文档文件，返回文本、结构信息和可供 ReadImage 使用的 imageInfo/resourceRef。',
     parameters: {
       source: '文档来源。读取本地文件时使用 { kind: "file", path }，path 可为 ${VAR}/path。',
+      'source.path': '读取本地文件时使用的 source.path，可为项目相对路径或 ${VAR}/path。',
       mode: '读取模式，例如 manifest、next 或 text。',
       pageRange: '可选页码范围；需要图片证据时优先使用 ReadDocument 返回的 imageInfo。',
+      range:
+        '语义文档范围，用于 mode="range"；包含 locator、可选 endLocator 和读取限制。',
+      cursor: '先前 ReadDocument 结果返回的批量读取游标。',
+      start_batch: 'mode="manifest" 时是否同时返回第一个按 manifest 顺序读取的游标。',
+      max_chars: '最多返回的文本字符数，默认 20000，最大 100000。',
+      include_metadata: '是否返回提取到的文档元数据，默认 true。',
+      include_manifest: 'range/next 结果是否包含完整文档 manifest，默认 false。',
+      include_images: '是否返回文档图片元数据和稳定 resourceRef，默认 true。',
+      max_images: '最多返回的文档图片引用数量，默认 50，最大 500。',
       limit: '最多读取的条目数量。',
     },
   },
@@ -488,9 +498,14 @@ const ZH_TOOL_DEFINITION_LOCALIZATIONS: Readonly<Record<string, ToolDefinitionLo
       '读取图片内容。EPUB/PDF/CBZ 图片必须使用 ReadDocument.imageInfo 返回的 resourceRef，不能自行拼接路径。',
     parameters: {
       images: '要读取的图片列表。',
+      'images.[].metadata': '从 ReadDocument.imageInfo 复制的可选图片元数据。',
+      'images.[].resourceRef':
+        '稳定资源引用，必须原样来自 ReadDocument.imageInfo[].resourceRef 或统一内容访问结果。',
       resourceRef: '稳定资源引用，必须来自 ReadDocument.imageInfo 或统一内容访问结果。',
       mode: '读取模式。vision 会请求视觉理解；metadata 只返回尺寸等元数据。',
       analysis: '希望图片分析回答的问题或分析类型。',
+      prompt: '给下一次原生多模态 Agent 推理使用的可选提示；此工具本身不执行模型分析。',
+      max_images: '最多处理的图片数量，默认 4，最大 16。',
     },
   },
   QuerySemanticCoverage: {
@@ -498,6 +513,8 @@ const ZH_TOOL_DEFINITION_LOCALIZATIONS: Readonly<Record<string, ToolDefinitionLo
     parameters: {
       query: '覆盖查询条件。',
       sourceRef: '文档或资源来源引用。',
+      range: '可选语义范围，使用共享 MediaTextRange 字段。',
+      analysisKind: '要查询的语义分析类型。',
     },
   },
   Read: {

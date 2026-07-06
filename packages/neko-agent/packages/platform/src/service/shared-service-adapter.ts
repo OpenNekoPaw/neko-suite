@@ -160,6 +160,7 @@ export class SharedServiceAdapter implements SharedIService {
           providerId: input.providerId,
           modelId: input.modelId,
           modelCapabilities: input.modelCapabilities,
+          locale: input.locale ?? options?.locale,
           providerCardRegistry: this._options.providerCardRegistry,
           assetLoader: this._options.assetLoader,
           visionPolicy: this._options.visionPolicy,
@@ -185,6 +186,7 @@ interface ProviderAwareMessageProjectionInput {
   readonly providerId?: string;
   readonly modelId?: string;
   readonly modelCapabilities?: readonly string[];
+  readonly locale?: string;
   readonly providerCardRegistry?: Pick<IProviderCardRegistry, 'get'>;
   readonly assetLoader?: PerceptionAssetLoader;
   readonly visionPolicy?: VisionPreprocessPolicy;
@@ -214,6 +216,7 @@ export async function projectProviderAwareMessages(
     perceptionCards,
     assetLoader: input.assetLoader,
     visionPolicy: input.visionPolicy,
+    locale: input.locale,
   });
 
   if (result.diagnostics.length > 0) {

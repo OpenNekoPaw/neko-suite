@@ -704,6 +704,7 @@ async function projectMessagesForProvider(
     providerId: routing.providerId,
     modelId: routing.modelId,
     modelCapabilities: options.modelCapabilities,
+    locale: options.locale,
   });
   return [...projected];
 }
@@ -997,6 +998,7 @@ function createModelCallRequestDebugLog(input: {
       parameters: tool.function.parameters,
     })),
     toolChoice: summarizeToolChoice(input.options.toolChoice),
+    locale: input.options.locale,
   };
 }
 

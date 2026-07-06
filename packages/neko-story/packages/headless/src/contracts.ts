@@ -9,6 +9,7 @@
 
 export interface AgentCapabilityContext {
   readonly extensionContext: unknown;
+  readonly locale?: string;
 }
 
 export interface AgentCapabilityProvider {
@@ -40,6 +41,11 @@ export interface PromptFragment {
   readonly id: string;
   readonly content: string;
   readonly priority?: number;
+  readonly locales?: Readonly<Record<string, PromptFragmentLocalizedContent>>;
+}
+
+export interface PromptFragmentLocalizedContent {
+  readonly content: string;
 }
 
 export interface ToolParameters {

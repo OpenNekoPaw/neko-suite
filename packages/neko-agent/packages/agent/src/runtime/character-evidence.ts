@@ -810,35 +810,81 @@ export function trimCharacterEvidenceChunks(input: {
   return { chunks, omitted };
 }
 
-export function renderCharacterEvidenceBundle(bundle: CharacterEvidenceBundle): string {
+export function renderCharacterEvidenceBundle(
+  bundle: CharacterEvidenceBundle,
+  options: { readonly locale?: string } = {},
+): string {
+  const zh = options.locale?.trim().toLowerCase().startsWith('zh') === true;
   const lines = [
-    'Turn-scoped project evidence:',
-    `Mode: ${bundle.mode}`,
-    `Freshness: ${bundle.freshness}`,
-    `Loaded chunks: ${bundle.chunks.length}`,
+    zh ? '本回合项目证据:' : 'Turn-scoped project evidence:',
+    `${zh ? '模式' : 'Mode'}: ${bundle.mode}`,
+    `${zh ? '新鲜度' : 'Freshness'}: ${bundle.freshness}`,
+    `${zh ? '已加载片段' : 'Loaded chunks'}: ${bundle.chunks.length}`,
   ];
 
   if (bundle.chunks.length === 0) {
-    lines.push('- No relevant project evidence was loaded for this turn.');
+    lines.push(
+      zh
+        ? '- 本回合没有加载到相关项目证据。'
+        : '- No relevant project evidence was loaded for this turn.',
+    );
   }
 
   bundle.chunks.forEach((chunk, index) => {
+    const heading = `[${zh ? '证据' : 'Evidence'} ${index + 1}]`;
+    const metadata = [
+      `score=${chunk.relevance.score}`,
+      `authority=${chunk.authority}`,
+      `freshness=${chunk.freshness}`,
+    ].join(' ');
     lines.push(
       '',
-      `[Evidence ${index + 1}] score=${chunk.relevance.score} authority=${chunk.authority} freshness=${chunk.freshness}`,
-      `Source: ${formatPrimarySource(chunk.sourceRefs[0])}`,
-      chunk.text,
+      `${heading} ${metadata}`,
+      `${zh ? '来源' : 'Source'}: ${formatPrimarySource(chunk.sourceRefs[0])}`,
+      zh ? localizeCharacterEvidenceChunkTextForPrompt(chunk.text) : chunk.text,
     );
   });
 
   if (bundle.omitted.length > 0) {
-    lines.push('', 'Omitted evidence:');
+    lines.push('', zh ? '已省略证据:' : 'Omitted evidence:');
     for (const omission of bundle.omitted.slice(0, 12)) {
-      lines.push(`- ${omission.reason}: ${omission.message}`);
+      const message = zh
+        ? localizeCharacterEvidenceOmissionMessage(omission.message)
+        : omission.message;
+      lines.push(`- ${omission.reason}: ${message}`);
     }
   }
 
   return lines.join('\n');
+}
+
+function localizeCharacterEvidenceChunkTextForPrompt(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      if (line.startsWith('Script file:')) {
+        return line.replace(/^Script file:/, '剧本文件:');
+      }
+      if (line.startsWith('Lines:')) {
+        return line.replace(/^Lines:/, '行:');
+      }
+      if (line === 'Evidence:') {
+        return '证据:';
+      }
+      return line;
+    })
+    .join('\n');
+}
+
+function localizeCharacterEvidenceOmissionMessage(message: string): string {
+  switch (message) {
+    case 'Chunk was truncated to fit evidence budget.':
+      return '证据片段已截断以适配证据预算。';
+    case 'Chunk was below the minimum relevance score.':
+      return '证据片段低于最低相关性分数。';
+    default:
+      return message;
+  }
 }
 
 export function projectCharacterEvidenceBundleToProfileFacts(

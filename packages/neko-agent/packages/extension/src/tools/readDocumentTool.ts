@@ -12,6 +12,7 @@ import {
   type DocumentReadResult,
   type ResourceRef,
   type Tool,
+  type ToolExecuteOptions,
   type ToolParameterProperty,
   type ToolResult,
 } from '@neko/shared';
@@ -129,13 +130,14 @@ export function createReadDocumentTool(deps: ReadDocumentToolDeps): Tool {
       },
       required: ['source'],
     },
-    execute: async (args) => executeReadDocument(deps, args),
+    execute: async (args, options) => executeReadDocument(deps, args, options),
   });
 }
 
 async function executeReadDocument(
   deps: ReadDocumentToolDeps,
   args: Record<string, unknown>,
+  options?: ToolExecuteOptions,
 ): Promise<ToolResult> {
   const source = readContentSourceRef(args['source']);
   if (!source) {
@@ -193,7 +195,7 @@ async function executeReadDocument(
     };
   }
 
-  const text = result.text ?? '';
+  const text = localizeGeneratedDocumentPlaceholder(result.text ?? '', options?.metadata?.['locale']);
   const truncatedText =
     result.text === undefined ? undefined : truncateText(text, maxChars, result.truncated);
   return {
@@ -333,6 +335,29 @@ function readOptionalPositiveInteger(value: unknown): number | null | undefined 
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+}
+
+function localizeGeneratedDocumentPlaceholder(text: string, locale: unknown): string {
+  if (typeof locale !== 'string' || !locale.trim().toLowerCase().startsWith('zh')) {
+    return text;
+  }
+
+  const epubChapterRange = /^EPUB chapter range with (\d+) image pages$/.exec(text);
+  if (epubChapterRange) {
+    return `EPUB 章节范围包含 ${epubChapterRange[1]} 张图片页面`;
+  }
+
+  const epubImageDocument = /^EPUB image document with (\d+) image pages$/.exec(text);
+  if (epubImageDocument) {
+    return `EPUB 图片文档包含 ${epubImageDocument[1]} 张图片页面`;
+  }
+
+  const cbzPageRange = /^CBZ page range ([^:]+): (\d+) image pages$/.exec(text);
+  if (cbzPageRange) {
+    return `CBZ 页面范围 ${cbzPageRange[1]} 包含 ${cbzPageRange[2]} 张图片页面`;
+  }
+
+  return text;
 }
 
 function truncateText(

@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AISdkAdapter } from '../ai-sdk-adapter';
+import { AnthropicAdapter } from '../anthropic-adapter';
 import { OpenAIAdapter } from '../openai-adapter';
 import type { LanguageModel } from 'ai';
 import type { Model, Provider } from '../../../types/provider';
@@ -19,6 +20,15 @@ const loggerMock = vi.hoisted(() => ({
   warn: vi.fn(),
   error: vi.fn(),
 }));
+
+const mockLanguageModel = vi.hoisted(
+  () =>
+    ({
+      modelId: 'test-model',
+      provider: 'test',
+      specificationVersion: 'v1',
+    }) as unknown as LanguageModel,
+);
 
 const openAIProviderMock = vi.hoisted(() => {
   const languageModel = {
@@ -70,6 +80,13 @@ vi.mock('@ai-sdk/openai', () => ({
   createOpenAI: openAIProviderMock.createOpenAI,
 }));
 
+vi.mock('@ai-sdk/anthropic', () => ({
+  createAnthropic: vi.fn(() => {
+    const anthropic = vi.fn(() => mockLanguageModel);
+    return anthropic;
+  }),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock logger so adapter doesn't throw on import
 // ---------------------------------------------------------------------------
@@ -80,12 +97,6 @@ vi.mock('../../../utils/logger', () => ({
 // ---------------------------------------------------------------------------
 // Concrete test subclass
 // ---------------------------------------------------------------------------
-const mockLanguageModel = {
-  modelId: 'test-model',
-  provider: 'test',
-  specificationVersion: 'v1',
-} as unknown as LanguageModel;
-
 class TestAdapter extends AISdkAdapter {
   readonly type = 'test';
 
@@ -324,6 +335,30 @@ describe('OpenAIAdapter provider options', () => {
     vi.clearAllMocks();
   });
 
+  it('sends the history system message once when structured sections are present', async () => {
+    const { generateText } = await import('ai');
+    const adapter = new OpenAIAdapter();
+
+    await adapter.chat(
+      [
+        { role: 'system', content: 'System prompt from history' },
+        { role: 'user', content: 'hello' },
+      ],
+      {
+        systemPromptSections: [
+          { content: 'Section prompt A', cacheControl: 'ephemeral' },
+          { content: 'Section prompt B' },
+        ],
+      },
+      makeModel({ providerId: 'openai', name: 'gpt-test' }),
+      { ...makeProvider(), id: 'openai', type: 'openai' },
+    );
+
+    const callArgs = vi.mocked(generateText).mock.calls[0]![0];
+    expect(callArgs.system).toBe('System prompt from history');
+    expect(callArgs.messages).toEqual([{ role: 'user', content: 'hello' }]);
+  });
+
   it('merges projected OpenAI options with strictJsonSchema without moving responseFormat', async () => {
     const { generateText } = await import('ai');
     const adapter = new OpenAIAdapter();
@@ -361,6 +396,44 @@ describe('OpenAIAdapter provider options', () => {
       },
     });
     expect(callArgs).toEqual(expect.objectContaining({ responseFormat }));
+  });
+});
+
+describe('AnthropicAdapter system prompt sections', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('sends structured system sections without also sending the system message content', async () => {
+    const { generateText } = await import('ai');
+    const adapter = new AnthropicAdapter();
+
+    await adapter.chat(
+      [
+        { role: 'system', content: 'System prompt from history' },
+        { role: 'user', content: 'hello' },
+      ],
+      {
+        systemPromptSections: [
+          { content: 'Section prompt A', cacheControl: 'ephemeral' },
+          { content: 'Section prompt B' },
+        ],
+      },
+      makeModel({ providerId: 'anthropic', name: 'claude-test' }),
+      { ...makeProvider(), id: 'anthropic', type: 'anthropic' },
+    );
+
+    const callArgs = vi.mocked(generateText).mock.calls[0]![0];
+    expect(callArgs.system).toEqual([
+      {
+        type: 'text',
+        text: 'Section prompt A',
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+      },
+      { type: 'text', text: 'Section prompt B' },
+    ]);
+    expect(callArgs.system).not.toBe('System prompt from history');
+    expect(callArgs.messages).toEqual([{ role: 'user', content: 'hello' }]);
   });
 });
 

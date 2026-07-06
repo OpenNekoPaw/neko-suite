@@ -10,13 +10,24 @@ import {
   type ToolExecuteOptions,
 } from '@neko/shared';
 
+interface TestJsonSchema {
+  readonly description?: string;
+  readonly properties?: Readonly<Record<string, TestJsonSchema>>;
+  readonly items?: TestJsonSchema;
+}
+
 describe('ToolRegistry trace isolation', () => {
   it('logs trace without adding trace to model-authored tool arguments', async () => {
     const transport = new CapturedLogTransport();
     const { setRootLogger } = await import('../../utils/logger');
     setRootLogger(new ConsoleLogger('Agent', LogLevel.Debug, [transport]));
     const { ToolRegistry } = await import('../tool-registry');
-    const execute = vi.fn(async () => ({ success: true, data: 'ok' }));
+    const execute = vi.fn(
+      async (_args: Record<string, unknown>, _options?: ToolExecuteOptions) => ({
+        success: true,
+        data: 'ok',
+      }),
+    );
     const registry = new ToolRegistry();
     registry.register(
       createTool({
@@ -323,11 +334,29 @@ describe('ToolRegistry provider schema projection', () => {
             source: {
               type: 'object',
               description: 'Document source. Use a file source with a stable path.',
+              properties: {
+                path: {
+                  type: 'string',
+                  description: 'Source path for kind="file"; may be project-relative.',
+                },
+              },
             },
             mode: {
               type: 'string',
               enum: ['manifest', 'next'],
               description: 'Read mode.',
+            },
+            range: {
+              type: 'object',
+              description: 'Semantic document range for mode="range".',
+            },
+            cursor: {
+              type: 'object',
+              description: 'Document batch cursor returned by a prior ReadDocument result.',
+            },
+            include_images: {
+              type: 'boolean',
+              description: 'Whether to include document image metadata.',
             },
           },
         },
@@ -336,9 +365,8 @@ describe('ToolRegistry provider schema projection', () => {
     );
 
     const [definition] = registry.toToolDefinitions(undefined, { locale: 'zh' });
-    const properties = definition?.function.parameters['properties'] as Record<
-      string,
-      { description?: string }
+    const properties = definition?.function.parameters['properties'] as Readonly<
+      Record<string, TestJsonSchema>
     >;
 
     expect(definition?.function.description).toBe(
@@ -347,7 +375,118 @@ describe('ToolRegistry provider schema projection', () => {
     expect(properties['source']?.description).toBe(
       '文档来源。读取本地文件时使用 { kind: "file", path }，path 可为 ${VAR}/path。',
     );
+    expect(properties['source']?.properties?.path?.description).toBe(
+      '读取本地文件时使用的 source.path，可为项目相对路径或 ${VAR}/path。',
+    );
     expect(properties['mode']?.description).toBe('读取模式，例如 manifest、next 或 text。');
+    expect(properties['range']?.description).toBe(
+      '语义文档范围，用于 mode="range"；包含 locator、可选 endLocator 和读取限制。',
+    );
+    expect(properties['cursor']?.description).toBe('先前 ReadDocument 结果返回的批量读取游标。');
+    expect(properties['include_images']?.description).toBe(
+      '是否返回文档图片元数据和稳定 resourceRef，默认 true。',
+    );
+  });
+
+  it('localizes nested ReadImage and semantic coverage schema descriptions for Chinese runtime prompts', async () => {
+    const { ToolRegistry } = await import('../tool-registry');
+    const registry = new ToolRegistry();
+    registry.register(
+      createTool({
+        name: 'ReadImage',
+        description: 'Read image content.',
+        category: 'analysis',
+        isConcurrencySafe: true,
+        isReadOnly: true,
+        parameters: {
+          type: 'object',
+          required: ['images'],
+          properties: {
+            images: {
+              type: 'array',
+              description: 'Structured image inputs.',
+              items: {
+                type: 'object',
+                required: ['resourceRef'],
+                properties: {
+                  metadata: {
+                    type: 'object',
+                    description: 'Optional metadata copied from ReadDocument.imageInfo.',
+                  },
+                  resourceRef: {
+                    type: 'object',
+                    description: 'Stable resource ref returned by ReadDocument.',
+                  },
+                },
+              },
+            },
+            prompt: {
+              type: 'string',
+              description: 'Optional hint for the next native multimodal Agent reasoning step.',
+            },
+            max_images: {
+              type: 'integer',
+              description: 'Maximum number of images to process.',
+            },
+          },
+        },
+        execute: async () => ({ success: true, data: 'ok' }),
+      }),
+    );
+    registry.register(
+      createTool({
+        name: 'QuerySemanticCoverage',
+        description: 'Query semantic coverage.',
+        category: 'analysis',
+        isConcurrencySafe: true,
+        isReadOnly: true,
+        parameters: {
+          type: 'object',
+          required: ['sourceRef', 'analysisKind'],
+          properties: {
+            sourceRef: {
+              type: 'object',
+              description: 'Stable content source reference.',
+            },
+            range: {
+              type: 'object',
+              description: 'Optional range using the shared MediaTextRange fields.',
+            },
+            analysisKind: {
+              type: 'string',
+              enum: ['storyboard'],
+            },
+          },
+        },
+        execute: async () => ({ success: true, data: 'ok' }),
+      }),
+    );
+
+    const definitions = registry.toToolDefinitions(undefined, { locale: 'zh-CN' });
+    const readImage = definitions.find((definition) => definition.function.name === 'ReadImage');
+    const semanticCoverage = definitions.find(
+      (definition) => definition.function.name === 'QuerySemanticCoverage',
+    );
+    const readImageProperties = readImage?.function.parameters['properties'] as Readonly<
+      Record<string, TestJsonSchema>
+    >;
+    const imageItemProperties = readImageProperties['images']?.items?.properties;
+    const coverageProperties = semanticCoverage?.function.parameters['properties'] as Readonly<
+      Record<string, TestJsonSchema>
+    >;
+
+    expect(imageItemProperties?.['metadata']?.description).toBe(
+      '从 ReadDocument.imageInfo 复制的可选图片元数据。',
+    );
+    expect(readImageProperties['prompt']?.description).toBe(
+      '给下一次原生多模态 Agent 推理使用的可选提示；此工具本身不执行模型分析。',
+    );
+    expect(readImageProperties['max_images']?.description).toBe(
+      '最多处理的图片数量，默认 4，最大 16。',
+    );
+    expect(coverageProperties['range']?.description).toBe(
+      '可选语义范围，使用共享 MediaTextRange 字段。',
+    );
   });
 
   it('prefers tool-provided localization metadata for dynamically registered tools', async () => {

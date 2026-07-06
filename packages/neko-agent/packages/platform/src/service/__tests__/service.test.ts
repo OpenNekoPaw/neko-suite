@@ -3,8 +3,9 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { createAgentTraceContext } from '@neko/shared';
+import { createAgentTraceContext, type PerceptionCard } from '@neko/shared';
 import { Service, ServiceConfig } from '../service';
+import { toSharedService } from '../shared-service-adapter';
 import { ConfigManager } from '../../config/config-manager';
 import { ProviderRegistry } from '../../provider/provider-registry';
 import type { ChatMessage, ChatResponse, Adapter, ChatChunk } from '../../types/adapter';
@@ -202,6 +203,27 @@ function createRoutingConfig(input: {
   };
 }
 
+function createImagePerceptionCard(): PerceptionCard {
+  return {
+    version: 1,
+    assetId: 'asset-1',
+    modality: 'image',
+    createdAt: 1,
+    layerStatus: { layer0: 'complete', layer1: 'complete', layer2: 'complete' },
+    structural: { format: 'png', mimeType: 'image/png', byteSize: 10, width: 512, height: 512 },
+    semantic: {
+      evidences: [{ kind: 'description', confidence: 0.9, value: 'rainy street' }],
+    },
+    perceptual: {
+      thumbnailRef: {
+        assetId: 'thumb-1',
+        uri: '${WORKSPACE}/thumb.png',
+        mimeType: 'image/png',
+      },
+    },
+  };
+}
+
 describe('Service', () => {
   describe('chat', () => {
     it('should send chat request successfully with an explicit provider/model', async () => {
@@ -320,6 +342,53 @@ describe('Service', () => {
           }),
         }),
       );
+    });
+
+    it('records localized final projected perception messages for Chinese shared-service calls', async () => {
+      const record = vi.fn();
+      const config = {
+        ...createMockConfig(),
+        modelCallRecorder: { record },
+      };
+      const service = new Service(config);
+      const sharedService = toSharedService(service, {
+        assetLoader: {
+          load: async () => ({ kind: 'image', url: 'data:image/png;base64,thumb' }),
+        },
+      });
+
+      await sharedService.chat(
+        [
+          { role: 'user', content: '分析图片' },
+          {
+            role: 'tool',
+            toolCallId: 'call-read-image',
+            content: JSON.stringify({
+              schema: 'neko.tool-result.v1',
+              data: { mode: 'metadata' },
+              perceptionCards: [createImagePerceptionCard()],
+            }),
+          },
+        ],
+        {
+          providerId: 'openai',
+          modelId: 'gpt-4',
+          locale: 'zh-CN',
+        },
+      );
+
+      const requestRecord = record.mock.calls[0]?.[0] as
+        | {
+            readonly payload?: {
+              readonly projectedMessages?: Array<{ readonly content?: unknown }>;
+            };
+          }
+        | undefined;
+      const projectedMessages = requestRecord?.payload?.projectedMessages ?? [];
+      const projectedText = JSON.stringify(projectedMessages.at(-1)?.content);
+
+      expect(projectedText).toContain('感知卡片 asset-1');
+      expect(projectedText).not.toContain('PerceptionCard');
     });
 
     it('rejects model-only chat routing instead of inferring a provider', async () => {

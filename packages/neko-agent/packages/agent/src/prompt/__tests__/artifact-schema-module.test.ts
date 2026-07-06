@@ -59,6 +59,12 @@ describe('ArtifactSchemaModule', () => {
     expect(content).toContain('不要自行创建、读取或修复创作文档文件');
     expect(content).not.toContain('Creation document contract');
     expect(content).not.toContain('The active IDC run id is');
+    expect(content).not.toContain('# preserve across rewrites');
+    expect(content).not.toContain('# current time on every write');
+    expect(content).not.toContain('# ... kind-specific fields below');
+    expect(content).not.toContain('<id of the Draft this plan compiles from>');
+    expect(content).not.toContain('<headline>');
+    expect(content).not.toContain('# optional');
   });
 
   it('tells the agent that persistence is host-owned', () => {

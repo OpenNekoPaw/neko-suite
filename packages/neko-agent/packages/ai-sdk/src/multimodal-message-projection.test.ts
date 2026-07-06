@@ -146,6 +146,24 @@ describe('multimodal-message-projection', () => {
     ]);
   });
 
+  it('localizes perception-card wrapper text for Chinese prompt projection', async () => {
+    const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
+      provider: { providerId: 'openai' },
+      perceptionCards: [imageCard()],
+      locale: 'zh-CN',
+    });
+
+    const [summary] = result.message.content as Array<{
+      readonly type: string;
+      readonly text: string;
+    }>;
+
+    expect(summary?.text).toContain('感知卡片 asset-1 [image] image/png 512x512');
+    expect(summary?.text).toContain('证据: description(0.9): rainy street');
+    expect(summary?.text).not.toContain('PerceptionCard');
+    expect(summary?.text).not.toContain('Evidence:');
+  });
+
   it('records unsupported native image input diagnostics for text-only providers', async () => {
     const packet: MultimodalContextPacket = {
       id: 'packet-image',

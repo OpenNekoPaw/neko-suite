@@ -116,6 +116,84 @@ describe('GenericAdapter DeepSeek reasoning compatibility', () => {
     expect(body.max_tokens).toBe(8192);
   });
 
+  it('projects invalid OpenAI-compatible tool names and maps tool calls back', async () => {
+    const adapter = new GenericAdapter();
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        id: 'resp-1',
+        model: 'deepseek-v4-pro',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: {
+                    name: 'canvas_getPlaybackPlan',
+                    arguments: '{"sourceCanvasUri":"file:///tmp/board.nkc"}',
+                  },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+      }),
+    );
+
+    const response = await adapter.chat(
+      [
+        { role: 'system', content: 'system' },
+        {
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            {
+              id: 'call_prev',
+              type: 'function',
+              function: { name: 'canvas.getPlaybackPlan', arguments: '{}' },
+            },
+          ],
+        },
+        { role: 'tool', content: '{}', toolCallId: 'call_prev' },
+        { role: 'user', content: 'read playback plan' },
+      ],
+      {
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'canvas.getPlaybackPlan',
+              description: 'Read playback plan.',
+              parameters: { type: 'object', properties: {} },
+            },
+          },
+        ],
+        toolChoice: {
+          type: 'function',
+          function: { name: 'canvas.getPlaybackPlan' },
+        },
+      },
+      model,
+      provider,
+    );
+
+    const body = JSON.parse(fetchSpy.mock.calls[0]![1]!.body as string) as {
+      tools: Array<{ function: { name: string } }>;
+      tool_choice?: { type: 'function'; function: { name: string } };
+      messages: Array<{ tool_calls?: Array<{ function: { name: string } }> }>;
+    };
+    expect(body.tools[0]?.function.name).toBe('canvas_getPlaybackPlan');
+    expect(body.tool_choice?.function.name).toBe('canvas_getPlaybackPlan');
+    expect(body.messages[1]?.tool_calls?.[0]?.function.name).toBe('canvas_getPlaybackPlan');
+    expect(response.message.toolCalls?.[0]?.function.name).toBe('canvas.getPlaybackPlan');
+  });
+
   it('streams reasoning_content and fragmented tool-call deltas without creating text-token tools', async () => {
     const adapter = new GenericAdapter();
     const stream = [
@@ -192,6 +270,76 @@ describe('GenericAdapter DeepSeek reasoning compatibility', () => {
     );
     expect(toolNames).toEqual(['Get', 'Context', '']);
     expect(toolArguments).toEqual(['', '{"include', 'Tools":true}']);
+  });
+
+  it('maps fragmented projected streaming tool names back to original names', async () => {
+    const adapter = new GenericAdapter();
+    const stream = [
+      sse({
+        id: 'chunk-1',
+        model: 'deepseek-v4-pro',
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_1',
+                  type: 'function',
+                  function: { name: 'canvas_get', arguments: '' },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      }),
+      sse({
+        id: 'chunk-1',
+        model: 'deepseek-v4-pro',
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [
+                { index: 0, function: { name: 'PlaybackPlan', arguments: '{"ok":true}' } },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+      }),
+      'data: [DONE]\n\n',
+    ].join('');
+
+    fetchSpy.mockResolvedValueOnce(streamResponse(stream));
+
+    const chunks = [];
+    for await (const chunk of adapter.chatStream(
+      [{ role: 'user', content: 'read playback plan' }],
+      {
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'canvas.getPlaybackPlan',
+              description: 'Read playback plan.',
+              parameters: { type: 'object', properties: {} },
+            },
+          },
+        ],
+      },
+      model,
+      provider,
+    )) {
+      chunks.push(chunk);
+    }
+
+    const toolNames = chunks.flatMap(
+      (chunk) => chunk.delta.toolCalls?.map((call) => call.function.name) ?? [],
+    );
+    expect(toolNames).toEqual(['', 'canvas.getPlaybackPlan']);
   });
 });
 

@@ -534,8 +534,9 @@ async function prepareThinkContext(
   const lastUserMessage = modifiedContext.messages.filter((m) => m.role === 'user').pop();
   const userInput = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
   const toolFilter = getToolFilter(deps, userInput);
+  const runtimeLocale = readRuntimeToolDefinitionLocale(modifiedContext.metadata);
   const tools = deps.toolRegistry.toToolDefinitions(toolFilter, {
-    locale: readRuntimeToolDefinitionLocale(modifiedContext.metadata),
+    locale: runtimeLocale,
   });
   logger.debug(
     'neko.agent.think.prepare.end',
@@ -549,6 +550,7 @@ async function prepareThinkContext(
 
   const options = {
     ...deps.config.serviceOptions,
+    ...(runtimeLocale ? { locale: runtimeLocale } : {}),
     messageProjector: createTurnMultimodalMessageProjector(
       modifiedContext.metadata['multimodalContextPacket'],
       deps.config.serviceOptions?.messageProjector,

@@ -20,6 +20,7 @@ import type {
   SkillMediaWorkflowHint,
   ActiveSkillLifecycleRecordProjection,
   SkillLifecycleDiagnostic,
+  ToolExecuteOptions,
 } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
 import type { ExecutionMode } from '../../session/types';
@@ -200,7 +201,7 @@ export class ActivateSkillTool extends BuiltinTool {
     this._skillProvider = provider;
   }
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, options?: ToolExecuteOptions): Promise<ToolResult> {
     const validation = this.validateArgs(args);
     if (!validation.valid) {
       return this.error(validation.error ?? 'Invalid arguments');
@@ -226,7 +227,7 @@ export class ActivateSkillTool extends BuiltinTool {
       activated: true,
       skillName,
       reason,
-      message: result.message,
+      message: formatSkillActivatedMessage(skillName, options?.metadata?.['locale']),
       ...(result.allowedTools ? { allowedTools: result.allowedTools } : {}),
       ...(result.lifecycleRecordId ? { lifecycleRecordId: result.lifecycleRecordId } : {}),
       ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
@@ -381,4 +382,10 @@ export function createCoreMetaTools(
 
 function readExecutionMode(value: unknown): ExecutionMode | null {
   return value === 'plan' || value === 'ask' || value === 'auto' ? value : null;
+}
+
+function formatSkillActivatedMessage(skillName: string, locale: unknown): string {
+  return typeof locale === 'string' && locale.trim().toLowerCase().startsWith('zh')
+    ? `已激活技能 "${skillName}"`
+    : `Activated skill "${skillName}"`;
 }

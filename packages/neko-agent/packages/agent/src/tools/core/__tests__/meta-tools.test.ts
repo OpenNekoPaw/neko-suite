@@ -98,6 +98,40 @@ describe('core meta tools', () => {
     });
   });
 
+  it('localizes skill activation result messages for Chinese tool execution context', async () => {
+    const activateSkill = vi.fn(async () => ({
+      success: true,
+      message: 'Activated skill "commit"',
+      allowedTools: ['bash'],
+    }));
+    const tool = new ActivateSkillTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill,
+      deactivateSkill: vi.fn(),
+    });
+
+    await expect(
+      tool.execute(
+        {
+          skillName: 'commit',
+          reason: '用户要求提交说明。',
+        },
+        { metadata: { locale: 'zh-CN' } },
+      ),
+    ).resolves.toEqual({
+      success: true,
+      data: {
+        activated: true,
+        skillName: 'commit',
+        reason: '用户要求提交说明。',
+        message: '已激活技能 "commit"',
+        allowedTools: ['bash'],
+      },
+    });
+  });
+
   it('rejects agent-driven skill activation without a non-empty reason', async () => {
     const activateSkill = vi.fn();
     const tool = new ActivateSkillTool();

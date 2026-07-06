@@ -244,6 +244,11 @@ class NekoStoryHeadlessCapabilityProvider implements AgentCapabilityProvider {
         id: 'neko-story:fountain-syntax',
         content: FOUNTAIN_SYNTAX_PROMPT,
         priority: 70,
+        locales: {
+          zh: {
+            content: FOUNTAIN_SYNTAX_PROMPT_ZH,
+          },
+        },
       },
     ];
   }
@@ -451,4 +456,13 @@ const FOUNTAIN_SYNTAX_PROMPT = [
   'Use uppercase character names before dialogue. Use parentheticals sparingly.',
   'Use `[[KEY: value]]` notes for structured creative directives such as MOOD, SHOT, ANGLE, MOVEMENT, PROMPT, STYLE, REF, IMAGE, VIDEO, AUDIO, VFX, SFX, MUSIC, and DURATION.',
   'Reference scenes by stable `sceneId` values from GetScriptIndex/SearchScriptIndex when planning or requesting follow-up work.',
+].join('\n');
+
+const FOUNTAIN_SYNTAX_PROMPT_ZH = [
+  '## Fountain 语法参考（neko-story）',
+  '',
+  '使用标准 Fountain 场景标题，例如 `INT. OFFICE - DAY` 或 `EXT. STREET - NIGHT`。',
+  '对白前使用大写角色名。括号说明应少量使用。',
+  '使用 `[[KEY: value]]` 注释表达结构化创作指令，例如 MOOD、SHOT、ANGLE、MOVEMENT、PROMPT、STYLE、REF、IMAGE、VIDEO、AUDIO、VFX、SFX、MUSIC 和 DURATION。',
+  '规划或请求后续工作时，使用 GetScriptIndex/SearchScriptIndex 返回的稳定 `sceneId` 引用场景。',
 ].join('\n');

@@ -111,6 +111,8 @@ export interface ServiceOptions {
   tools?: ToolDefinition[];
   /** Tool choice behavior */
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
+  /** Runtime prompt locale used by model-facing projection wrappers. */
+  locale?: string;
   /** Enable extended thinking (Claude only) */
   thinkingBudget?: number;
   /**
@@ -142,6 +144,7 @@ export interface ServiceOptions {
     providerId?: string;
     modelId?: string;
     modelCapabilities?: readonly string[];
+    locale?: string;
   }) => Promise<readonly ChatMessage[]> | readonly ChatMessage[];
 }
 

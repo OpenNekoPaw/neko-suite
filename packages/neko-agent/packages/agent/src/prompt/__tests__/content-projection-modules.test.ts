@@ -162,16 +162,51 @@ for (const spec of SPECS) {
 describe('MemoryRecallModule locale projection', () => {
   it('projects Chinese headings and known memory labels for zh locale', async () => {
     const mod = new MemoryRecallModule();
-    mod.setContent('## Recent Actions\n- Tool result: image generated');
+    mod.setContent(
+      [
+        '## Recent Actions',
+        '- Tool result: image generated',
+        '- [project] ## Recent Decisions (relevance: 0.42)',
+      ].join('\n'),
+    );
 
     const result = await mod.render(ZH_PROMPT_CONTEXT);
 
     expect(result?.[0]?.content).toContain('## 回忆记忆');
     expect(result?.[0]?.content).toContain('## 最近操作');
     expect(result?.[0]?.content).toContain('- 工具结果: image generated');
+    expect(result?.[0]?.content).toContain('- [project] ## 近期决策 (相关度: 0.42)');
     expect(result?.[0]?.content).not.toContain('## Recalled Memories');
     expect(result?.[0]?.content).not.toContain('## Recent Actions');
+    expect(result?.[0]?.content).not.toContain('## Recent Decisions');
+    expect(result?.[0]?.content).not.toContain('relevance:');
     expect(result?.[0]?.content).not.toContain('Tool result:');
+  });
+
+  it('localizes known generated tool-result snippets from persisted memory for zh locale', async () => {
+    const mod = new MemoryProjectModule();
+    mod.setContent(
+      [
+        '## Recent Actions',
+        '- Tool result: {"activated":true,"skillName":"ai-generate","message":"Activated skill \\"ai-generate\\""}',
+        '- Tool result: {"text":"EPUB image document with 10 image pages"}',
+        '- Tool result: {"text":"EPUB chapter range with 3 image pages"}',
+        '- Tool result: {"text":"CBZ page range 1-4: 4 image pages"}',
+      ].join('\n'),
+    );
+
+    const result = await mod.render(ZH_PROMPT_CONTEXT);
+    const content = result?.[0]?.content ?? '';
+
+    expect(content).toContain('## 最近操作');
+    expect(content).toContain('已激活技能 \\"ai-generate\\"');
+    expect(content).toContain('EPUB 图片文档包含 10 张图片页面');
+    expect(content).toContain('EPUB 章节范围包含 3 张图片页面');
+    expect(content).toContain('CBZ 页面范围 1-4 包含 4 张图片页面');
+    expect(content).not.toContain('Activated skill');
+    expect(content).not.toContain('EPUB image document with');
+    expect(content).not.toContain('EPUB chapter range with');
+    expect(content).not.toContain('CBZ page range 1-4:');
   });
 });
 

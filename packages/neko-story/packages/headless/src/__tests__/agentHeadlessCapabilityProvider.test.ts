@@ -146,6 +146,19 @@ describe('createNekoStoryHeadlessCapabilityProvider', () => {
     expect(api.generateShotPlan).toHaveBeenCalledWith('/project/story.fountain', 'scene-office', 1);
   });
 
+  it('localizes Fountain syntax prompt fragments for Chinese prompts', () => {
+    const provider = createNekoStoryHeadlessCapabilityProvider(createStoryApi());
+    const context: AgentCapabilityContext = { extensionContext: {}, locale: 'zh' };
+    const [fragment] = provider.getPromptFragments?.(context) ?? [];
+    const localized = fragment?.locales?.['zh']?.content;
+
+    expect(localized).toBeDefined();
+    expect(localized).toContain('## Fountain 语法参考（neko-story）');
+    expect(localized).toContain('场景标题');
+    expect(localized).not.toContain('## Fountain Syntax Reference');
+    expect(localized).not.toContain('Use standard Fountain scene headings');
+  });
+
   it('does not import vscode or extension implementation from headless provider source', () => {
     const source = readFileSync(join(__dirname, '../agentHeadlessCapabilityProvider.ts'), 'utf8');
 

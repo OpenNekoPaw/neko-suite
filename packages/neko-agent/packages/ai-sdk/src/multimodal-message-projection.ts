@@ -13,6 +13,7 @@ export type { ProviderInputModalities } from '@neko/shared';
 export interface MultimodalMessageProjectionOptions {
   readonly includeTextInputs?: boolean;
   readonly imageDetail?: 'auto' | 'low' | 'high';
+  readonly locale?: string;
 }
 
 export interface ProviderInputModalityResolverInput {
@@ -108,17 +109,17 @@ export function projectMultimodalPacketToChatMessage(
     }
 
     if (input.modality === 'audio') {
-      parts.push({ type: 'text', text: summarizeAudioInput(input) });
+      parts.push({ type: 'text', text: summarizeAudioInput(input, options.locale) });
     }
   }
 
-  const evidenceSummary = summarizeEvidenceRefs(readEvidenceRefs(packet));
+  const evidenceSummary = summarizeEvidenceRefs(readEvidenceRefs(packet), options.locale);
   if (evidenceSummary) {
     parts.push({ type: 'text', text: evidenceSummary });
   }
 
   if (parts.length === 0) {
-    return { role: 'user', content: summarizePacket(packet) };
+    return { role: 'user', content: summarizePacket(packet, options.locale) };
   }
 
   return { role: 'user', content: parts };
@@ -152,6 +153,7 @@ export async function projectMultimodalPacketToChatMessageAsync(
       assetLoader: options.assetLoader,
       visionPolicy: options.visionPolicy,
       imageDetail: options.imageDetail,
+      locale: options.locale,
     });
     baseParts.push(...projected.parts);
     diagnostics.push(...projected.diagnostics);
@@ -186,6 +188,7 @@ export async function projectPerceptionCardToContentParts(
     readonly assetLoader?: PerceptionAssetLoader;
     readonly visionPolicy?: VisionPreprocessPolicy;
     readonly imageDetail?: 'auto' | 'low' | 'high';
+    readonly locale?: string;
   } = {},
 ): Promise<{
   readonly parts: ContentPart[];
@@ -193,7 +196,9 @@ export async function projectPerceptionCardToContentParts(
 }> {
   const providerModalities = options.providerModalities ?? TEXT_ONLY_MODALITIES;
   const diagnostics: ProjectionDiagnostic[] = [];
-  const parts: ContentPart[] = [{ type: 'text', text: summarizePerceptionCard(card) }];
+  const parts: ContentPart[] = [
+    { type: 'text', text: summarizePerceptionCard(card, options.locale) },
+  ];
 
   if (card.modality === 'image' && providerModalities.image) {
     const imageRef = selectImagePerceptualRef(card);
@@ -284,7 +289,8 @@ function findUnsupportedPacketInputModalities(
   }));
 }
 
-function summarizePerceptionCard(card: PerceptionCard): string {
+function summarizePerceptionCard(card: PerceptionCard, locale: string | undefined): string {
+  const labels = getMultimodalProjectionLabels(locale);
   const structural = [
     card.structural.mimeType,
     card.structural.width && card.structural.height
@@ -302,8 +308,8 @@ function summarizePerceptionCard(card: PerceptionCard): string {
     .join('; ');
 
   return [
-    `PerceptionCard ${card.assetId} [${card.modality}] ${structural}`.trim(),
-    evidence ? `Evidence: ${evidence}` : undefined,
+    `${labels.perceptionCard} ${card.assetId} [${card.modality}] ${structural}`.trim(),
+    evidence ? `${labels.evidence}: ${evidence}` : undefined,
   ]
     .filter(Boolean)
     .join('\n');
@@ -326,11 +332,12 @@ function stringifyEvidenceValue(value: unknown): string {
   }
 }
 
-function summarizePacket(packet: MultimodalContextPacket): string {
+function summarizePacket(packet: MultimodalContextPacket, locale: string | undefined): string {
+  const labels = getMultimodalProjectionLabels(locale);
   const modalities = Array.from(new Set(packet.perceptionInputs.map((input) => input.modality)));
-  const evidenceSummary = summarizeEvidenceRefs(readEvidenceRefs(packet));
+  const evidenceSummary = summarizeEvidenceRefs(readEvidenceRefs(packet), locale);
   return [
-    `Multimodal context packet ${packet.id}: ${modalities.join(', ') || 'no inputs'}`,
+    `${labels.multimodalPacket} ${packet.id}: ${modalities.join(', ') || labels.noInputs}`,
     evidenceSummary,
   ]
     .filter(Boolean)
@@ -346,13 +353,17 @@ function readMimeType(metadata: Readonly<Record<string, unknown>> | undefined): 
   return typeof value === 'string' ? value : undefined;
 }
 
-function summarizeAudioInput(input: {
-  readonly id: string;
-  readonly uri?: string;
-  readonly metadata?: Readonly<Record<string, unknown>>;
-}): string {
+function summarizeAudioInput(
+  input: {
+    readonly id: string;
+    readonly uri?: string;
+    readonly metadata?: Readonly<Record<string, unknown>>;
+  },
+  locale: string | undefined,
+): string {
+  const labels = getMultimodalProjectionLabels(locale);
   return [
-    `Audio context: ${input.id}`,
+    `${labels.audioContext}: ${input.id}`,
     input.uri ? `uri=${input.uri}` : undefined,
     readMimeType(input.metadata) ? `mimeType=${readMimeType(input.metadata)}` : undefined,
     readDurationMs(input.metadata) ? `durationMs=${readDurationMs(input.metadata)}` : undefined,
@@ -384,24 +395,63 @@ function isEvidenceRef(value: unknown): value is AgentMultimodalEvidenceRef {
   );
 }
 
-function summarizeEvidenceRefs(evidenceRefs: readonly AgentMultimodalEvidenceRef[]): string {
+function summarizeEvidenceRefs(
+  evidenceRefs: readonly AgentMultimodalEvidenceRef[],
+  locale: string | undefined,
+): string {
   if (evidenceRefs.length === 0) return '';
+  const labels = getMultimodalProjectionLabels(locale);
   const included = evidenceRefs.filter((evidence) => !evidence.withheld);
   const withheld = evidenceRefs.filter((evidence) => evidence.withheld);
   return [
     included.length > 0
-      ? `Included feedback evidence: ${included.map(formatEvidenceRef).join('; ')}`
-      : 'Included feedback evidence: none',
+      ? `${labels.includedFeedbackEvidence}: ${included.map(formatEvidenceRef).join('; ')}`
+      : `${labels.includedFeedbackEvidence}: ${labels.none}`,
     withheld.length > 0
-      ? `Withheld feedback evidence: ${withheld
+      ? `${labels.withheldFeedbackEvidence}: ${withheld
           .map(
             (evidence) => `${formatEvidenceRef(evidence)} (${evidence.withheldReason ?? 'policy'})`,
           )
           .join('; ')}`
-      : 'Withheld feedback evidence: none',
+      : `${labels.withheldFeedbackEvidence}: ${labels.none}`,
   ].join('\n');
 }
 
 function formatEvidenceRef(evidence: AgentMultimodalEvidenceRef): string {
   return `${evidence.id} [${evidence.modality}]${evidence.summary ? ` ${evidence.summary}` : ''}`;
+}
+
+function getMultimodalProjectionLabels(locale: string | undefined): {
+  readonly perceptionCard: string;
+  readonly evidence: string;
+  readonly multimodalPacket: string;
+  readonly noInputs: string;
+  readonly audioContext: string;
+  readonly includedFeedbackEvidence: string;
+  readonly withheldFeedbackEvidence: string;
+  readonly none: string;
+} {
+  if (locale?.trim().toLowerCase().startsWith('zh')) {
+    return {
+      perceptionCard: '感知卡片',
+      evidence: '证据',
+      multimodalPacket: '多模态上下文包',
+      noInputs: '无输入',
+      audioContext: '音频上下文',
+      includedFeedbackEvidence: '已包含反馈证据',
+      withheldFeedbackEvidence: '已隐藏反馈证据',
+      none: '无',
+    };
+  }
+
+  return {
+    perceptionCard: 'PerceptionCard',
+    evidence: 'Evidence',
+    multimodalPacket: 'Multimodal context packet',
+    noInputs: 'no inputs',
+    audioContext: 'Audio context',
+    includedFeedbackEvidence: 'Included feedback evidence',
+    withheldFeedbackEvidence: 'Withheld feedback evidence',
+    none: 'none',
+  };
 }

@@ -150,6 +150,35 @@ describe('content access tools', () => {
     });
   });
 
+  it('localizes generated ReadDocument image-only placeholder text for Chinese prompt context', async () => {
+    const runtime = createRuntime();
+    runtime.resolveDocumentContent.mockResolvedValueOnce({
+      status: 'ready',
+      source: { kind: 'file', path: '${A}/books/book.epub' },
+      diagnostics: [],
+      text: 'EPUB chapter range with 10 image pages',
+      imageInfo: [],
+      imageCount: 10,
+      imagesTruncated: false,
+    });
+
+    const result = await createReadDocumentTool({ contentAccessRuntime: runtime }).execute(
+      {
+        source: { kind: 'file', path: '${A}/books/book.epub' },
+        mode: 'range',
+        range: {
+          locator: { kind: 'chapter', chapterHref: 'Page_1', spineIndex: 1 },
+        },
+      },
+      { metadata: { locale: 'zh-CN' } },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      text: 'EPUB 章节范围包含 10 张图片页面',
+    });
+  });
+
   it('passes ReadDocument imageInfo entries to ReadImage through unified content refs', async () => {
     const runtime = createRuntime();
     runtime.resolveDocumentContent.mockResolvedValueOnce({

@@ -10,6 +10,7 @@ import type {
   ChatResponse,
   ChatChunk,
   ContentPart,
+  ToolDefinition,
   ModelInfo,
   ModelInfoCapability,
 } from '../../types/adapter';
@@ -156,17 +157,17 @@ export class GenericAdapter extends BaseAdapter {
   ): Promise<ChatResponse> {
     const url = this.buildUrl(provider, 'chat/completions');
     const headers = this.buildHeaders(provider);
-    const body = this.buildRequestBody(messages, options, model);
+    const request = this.buildRequestBody(messages, options, model);
 
     const data = await this.httpRequest<GenericResponse>({
       url,
       method: 'POST',
       headers,
-      body,
+      body: request.body,
       errorPrefix: 'Generic API error',
     });
 
-    return this.transformResponse(data);
+    return this.transformResponse(data, request.toolNameCodec);
   }
 
   async *chatStream(
@@ -177,7 +178,7 @@ export class GenericAdapter extends BaseAdapter {
   ): AsyncIterable<ChatChunk> {
     const url = this.buildUrl(provider, 'chat/completions');
     const headers = this.buildHeaders(provider);
-    const body = this.buildRequestBody(messages, { ...options, stream: true }, model);
+    const request = this.buildRequestBody(messages, { ...options, stream: true }, model);
     const variant = this.getVariant(provider);
     const toolCallsBuffer = new Map<
       number,
@@ -188,7 +189,7 @@ export class GenericAdapter extends BaseAdapter {
       url,
       method: 'POST',
       headers,
-      body,
+      body: request.body,
       errorPrefix: 'Generic API error',
     })) {
       // Skip empty lines and SSE comments
@@ -213,6 +214,7 @@ export class GenericAdapter extends BaseAdapter {
         const toolCallsDelta = this.consumeToolCallDeltas(
           choice.delta?.tool_calls,
           toolCallsBuffer,
+          request.toolNameCodec,
         );
         const reasoningDelta = readString(choice.delta?.reasoning_content);
 
@@ -242,10 +244,11 @@ export class GenericAdapter extends BaseAdapter {
     messages: ChatMessage[],
     options: ChatOptions,
     model: Model,
-  ): Record<string, unknown> {
+  ): { body: Record<string, unknown>; toolNameCodec: OpenAICompatibleToolNameCodec } {
+    const toolNameCodec = createOpenAICompatibleToolNameCodec(options.tools);
     const body: Record<string, unknown> = {
       model: options.model || model.name,
-      messages: messages.map((m) => this.transformMessage(m)),
+      messages: messages.map((m) => this.transformMessage(m, toolNameCodec)),
     };
 
     if (options.temperature !== undefined) body.temperature = options.temperature;
@@ -255,17 +258,25 @@ export class GenericAdapter extends BaseAdapter {
     if (options.stream) body.stream = true;
 
     if (options.tools && options.tools.length > 0) {
-      body.tools = options.tools;
-      if (options.toolChoice) body.tool_choice = options.toolChoice;
+      body.tools = projectToolDefinitionsForOpenAICompatibleProvider(options.tools, toolNameCodec);
+      if (options.toolChoice) {
+        body.tool_choice = projectToolChoiceForOpenAICompatibleProvider(
+          options.toolChoice,
+          toolNameCodec,
+        );
+      }
 
       // Debug: log tools structure
-      logger.debug('Tools being sent', { tools: options.tools });
+      logger.debug('Tools being sent', { tools: body.tools });
     }
 
-    return body;
+    return { body, toolNameCodec };
   }
 
-  private transformMessage(message: ChatMessage): GenericMessage {
+  private transformMessage(
+    message: ChatMessage,
+    toolNameCodec: OpenAICompatibleToolNameCodec,
+  ): GenericMessage {
     let content: GenericMessage['content'];
 
     if (typeof message.content === 'string') {
@@ -289,12 +300,23 @@ export class GenericAdapter extends BaseAdapter {
     if (message.name) result.name = message.name;
     if (message.reasoningContent) result.reasoning_content = message.reasoningContent;
     if (message.toolCallId) result.tool_call_id = message.toolCallId;
-    if (message.toolCalls) result.tool_calls = message.toolCalls;
+    if (message.toolCalls) {
+      result.tool_calls = message.toolCalls.map((toolCall) => ({
+        ...toolCall,
+        function: {
+          ...toolCall.function,
+          name: toolNameCodec.encode(toolCall.function.name),
+        },
+      }));
+    }
 
     return result;
   }
 
-  private transformResponse(data: GenericResponse): ChatResponse {
+  private transformResponse(
+    data: GenericResponse,
+    toolNameCodec: OpenAICompatibleToolNameCodec,
+  ): ChatResponse {
     const choice = data.choices[0];
     return {
       id: data.id,
@@ -303,7 +325,13 @@ export class GenericAdapter extends BaseAdapter {
         role: 'assistant',
         content: choice?.message.content || '',
         reasoningContent: choice?.message.reasoning_content || undefined,
-        toolCalls: choice?.message.tool_calls,
+        toolCalls: choice?.message.tool_calls?.map((toolCall) => ({
+          ...toolCall,
+          function: {
+            ...toolCall.function,
+            name: toolNameCodec.decode(toolCall.function.name),
+          },
+        })),
       },
       finishReason: (choice?.finish_reason as ChatResponse['finishReason']) || 'stop',
       usage: {
@@ -322,6 +350,7 @@ export class GenericAdapter extends BaseAdapter {
       number,
       { id: string; type: 'function'; function: { name: string; arguments: string } }
     >,
+    toolNameCodec: OpenAICompatibleToolNameCodec,
   ): NonNullable<ChatChunk['delta']['toolCalls']> {
     if (!Array.isArray(rawToolCalls)) {
       return [];
@@ -363,7 +392,7 @@ export class GenericAdapter extends BaseAdapter {
         id: current.id,
         type: 'function',
         function: {
-          name: nameDelta || '',
+          name: nameDelta ? toolNameCodec.decodeDelta(current.function.name, nameDelta) : '',
           arguments: argumentDelta || '',
         },
       };
@@ -462,4 +491,100 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+const OPENAI_COMPATIBLE_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+interface OpenAICompatibleToolNameCodec {
+  encode(name: string): string;
+  decode(name: string): string;
+  decodeDelta(accumulatedProviderName: string, delta: string): string;
+}
+
+function createOpenAICompatibleToolNameCodec(
+  tools: readonly ToolDefinition[] | undefined,
+): OpenAICompatibleToolNameCodec {
+  const originalToProvider = new Map<string, string>();
+  const providerToOriginal = new Map<string, string>();
+  const projectedNamePrefixes = new Set<string>();
+
+  for (const [index, tool] of (tools ?? []).entries()) {
+    const original = tool.function.name;
+    let providerName = toOpenAICompatibleToolName(original, index);
+    const baseProviderName = providerName;
+    let collisionIndex = 2;
+    while (
+      providerToOriginal.has(providerName) &&
+      providerToOriginal.get(providerName) !== original
+    ) {
+      providerName = `${baseProviderName}_${collisionIndex}`;
+      collisionIndex += 1;
+    }
+
+    originalToProvider.set(original, providerName);
+    providerToOriginal.set(providerName, original);
+    if (providerName !== original) {
+      for (let i = 1; i < providerName.length; i += 1) {
+        projectedNamePrefixes.add(providerName.slice(0, i));
+      }
+    }
+  }
+
+  return {
+    encode(name: string): string {
+      return originalToProvider.get(name) ?? toOpenAICompatibleToolName(name, 0);
+    },
+    decode(name: string): string {
+      return providerToOriginal.get(name) ?? name;
+    },
+    decodeDelta(accumulatedProviderName: string, delta: string): string {
+      const decoded = providerToOriginal.get(accumulatedProviderName);
+      if (decoded && decoded !== accumulatedProviderName) {
+        return decoded;
+      }
+      if (!decoded && projectedNamePrefixes.has(accumulatedProviderName)) {
+        return '';
+      }
+      return delta;
+    },
+  };
+}
+
+function projectToolDefinitionsForOpenAICompatibleProvider(
+  tools: readonly ToolDefinition[],
+  toolNameCodec: OpenAICompatibleToolNameCodec,
+): ToolDefinition[] {
+  return tools.map((tool) => ({
+    ...tool,
+    function: {
+      ...tool.function,
+      name: toolNameCodec.encode(tool.function.name),
+    },
+  }));
+}
+
+function projectToolChoiceForOpenAICompatibleProvider(
+  toolChoice: ChatOptions['toolChoice'],
+  toolNameCodec: OpenAICompatibleToolNameCodec,
+): ChatOptions['toolChoice'] {
+  if (toolChoice === undefined || typeof toolChoice === 'string') {
+    return toolChoice;
+  }
+
+  return {
+    ...toolChoice,
+    function: {
+      ...toolChoice.function,
+      name: toolNameCodec.encode(toolChoice.function.name),
+    },
+  };
+}
+
+function toOpenAICompatibleToolName(name: string, index: number): string {
+  if (OPENAI_COMPATIBLE_TOOL_NAME_PATTERN.test(name)) {
+    return name;
+  }
+
+  const projected = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return projected.length > 0 ? projected : `tool_${index}`;
 }

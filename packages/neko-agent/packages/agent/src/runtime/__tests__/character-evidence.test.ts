@@ -147,6 +147,53 @@ describe('character evidence runtime helpers', () => {
     ]);
   });
 
+  it('localizes generated evidence wrapper labels for Chinese prompts', () => {
+    const chunk = makeChunk(
+      'evidence-1',
+      ['Script file: cases/test.fountain', 'Lines: 30-32', 'Evidence:', '30: 林只知道线索。'].join(
+        '\n',
+      ),
+      30,
+      {
+        score: 12,
+        signals: [],
+      },
+    );
+    const bundle = {
+      entityRef,
+      mode: 'character-dialogue' as const,
+      query: '林知道什么？',
+      chunks: [chunk],
+      omitted: [
+        {
+          reason: 'budget' as const,
+          message: 'Chunk was truncated to fit evidence budget.',
+        },
+      ],
+      freshness: 'fresh' as const,
+      budget: {
+        maxChunks: 4,
+        maxCharacters: 4000,
+        perChunkMaxCharacters: 1000,
+      },
+    };
+
+    const text = renderCharacterEvidenceBundle(bundle, { locale: 'zh-CN' });
+
+    expect(text).toContain('本回合项目证据:');
+    expect(text).toContain('[证据 1]');
+    expect(text).toContain('来源: cases/test.fountain:30');
+    expect(text).toContain('剧本文件: cases/test.fountain');
+    expect(text).toContain('行: 30-32');
+    expect(text).toContain('证据:');
+    expect(text).toContain('已省略证据:');
+    expect(text).toContain('证据片段已截断以适配证据预算。');
+    expect(text).not.toContain('Turn-scoped project evidence');
+    expect(text).not.toContain('Script file:');
+    expect(text).not.toContain('Evidence:');
+    expect(text).not.toContain('Omitted evidence:');
+  });
+
   it('loads late scene evidence through host-agnostic reader ports', async () => {
     const strategy = createCharacterEvidenceStrategy({
       projectRoot: '/project',
@@ -386,7 +433,7 @@ function makeSearchItem(
     kind: 'story-scene' as const,
     label: 'Scene',
     source: {
-      partition: 'story-symbols',
+      partition: 'story-symbols' as const,
       sourceId: id,
       sourceKind: 'story-scene',
       filePath,

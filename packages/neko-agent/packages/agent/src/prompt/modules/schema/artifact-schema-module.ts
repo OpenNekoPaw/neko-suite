@@ -104,25 +104,25 @@ Draft / Plan / Task 是面向创作者的文档。不要调用通用 \`Read\`、
 不要写入或读取隐藏的托管运行时目录来处理创作文档。
 托管运行时/cache 路径不是有效的创作文档表面。
 
-### 仅 runtime-persisted creation documents 使用的必需 frontmatter
+### 仅运行时持久化的创作文档使用的必需 frontmatter
 
 \`\`\`yaml
 ---
-id: <stable artifact id>
+id: <稳定产物 id>
 kind: draft | plan | task
-createdAt: <ISO 8601>   # preserve across rewrites
-updatedAt: <ISO 8601>   # current time on every write
-# ... kind-specific fields below
+createdAt: <ISO 8601>   # 重写时保持不变
+updatedAt: <ISO 8601>   # 每次写入时使用当前时间
+# 下方是各文档类型专用字段
 ---
 \`\`\`
 
 ### Draft frontmatter（附加字段）
 
 \`\`\`yaml
-title: <headline>
+title: <标题>
 status: draft | pending_review | approved | refined | rejected
 domain: cut | canvas | story | puppet | ...
-# optional
+# 可选
 referenceChain:
   - asset://characters/hero
 \`\`\`
@@ -130,14 +130,14 @@ referenceChain:
 ### Plan frontmatter（附加字段）
 
 \`\`\`yaml
-title: <headline>
-draftId: <id of the Draft this plan compiles from>
+title: <标题>
+draftId: <该 Plan 来源 Draft 的 id>
 status: draft | ready | in_progress | completed | failed | aborted
 \`\`\`
 
 ### Task frontmatter
 
-Task 只需要 shared fields（id / kind / createdAt / updatedAt）。
+Task 只需要共享字段（id / kind / createdAt / updatedAt）。
 
 ### 写入规则
 
@@ -145,7 +145,7 @@ Task 只需要 shared fields（id / kind / createdAt / updatedAt）。
 2. 不要通过读取文件路径来保留 \`createdAt\`；运行时服务在持久化修订文档时负责保留 metadata。
 3. 不要为创作文档发明隐藏路径、cache 路径、Webview URI 或 provider 私有路径。
 4. 如果宿主报告创作文档 diagnostic，解释该 diagnostic，并在聊天中提供修正后的产物正文；
-   除非 diagnostic 明确要求 persisted creation-document Markdown block，否则不要输出 YAML frontmatter。`;
+   除非 diagnostic 明确要求持久化创作文档 Markdown block，否则不要输出 YAML frontmatter。`;
 
 export class ArtifactSchemaModule implements PromptModule {
   readonly manifest: PromptModuleManifest = {
