@@ -157,11 +157,24 @@ export function createTuiSkillInvocationCatalog(
     description?: string;
     enabled?: boolean;
   }>,
+  locale: TuiLocale = detectTuiLocale(),
 ): TuiSkillInvocationOption[] {
   return (skills ?? [])
     .filter((skill) => skill.enabled !== false)
     .map((skill) => ({
       name: `$${skill.name}`,
-      description: skill.description ?? '',
+      description: readSkillDescription(skill.description, skill.name, locale),
     }));
+}
+
+function readSkillDescription(
+  description: string | undefined,
+  skillName: string,
+  locale: TuiLocale,
+): string {
+  const trimmed = description?.trim();
+  if (trimmed && trimmed.length > 0) {
+    return description;
+  }
+  return locale === 'zh' ? `激活技能 ${skillName}` : `Activate skill ${skillName}`;
 }

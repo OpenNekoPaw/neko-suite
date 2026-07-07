@@ -95,4 +95,23 @@ describe('createTuiSlashCommandCatalog', () => {
       },
     ]);
   });
+
+  it('keeps skill invocation keywords stable while localizing fallback descriptions', () => {
+    const skillCommands = createTuiSkillInvocationCatalog(
+      [
+        {
+          name: 'quality-review',
+          enabled: true,
+        },
+      ],
+      'zh',
+    );
+
+    expect(skillCommands).toEqual([
+      {
+        name: '$quality-review',
+        description: '激活技能 quality-review',
+      },
+    ]);
+  });
 });

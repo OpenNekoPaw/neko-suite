@@ -251,9 +251,12 @@ describe('slash-command-catalog', () => {
 
     expect(sections.map((section) => section.source)).toEqual(['builtin', 'plugin']);
     expect(
-      formatSlashCommandHelpCatalog(commands, (key) =>
-        key === 'chat.commands.help' ? 'Show help message' : key,
-      ),
+      formatSlashCommandHelpCatalog(commands, (key) => {
+        if (key === 'chat.commands.help') return 'Show help message';
+        if (key === 'chat.commands.help.availableCommands') return 'Available Commands';
+        if (key === 'chat.commands.help.pluginCommands') return 'Plugin Commands';
+        return key;
+      }),
     ).toContain('- `/help` - Show help message');
     expect(formatSlashCommandHelpCatalog(commands, (key) => key)).not.toContain('`/as`');
     expect(
@@ -281,5 +284,39 @@ describe('slash-command-catalog', () => {
       '- `$commit-skill` - Create a commit message',
     );
     expect(resolveSkillInvocationSourceLabel(commands[0]!)).toBe('project');
+  });
+
+  it('keeps help command keywords in English while localizing help headings and descriptions', () => {
+    const commands = createSlashCommandCatalog();
+    const help = formatSlashCommandHelpCatalog(commands, (key) => {
+      if (key === 'chat.commands.help') return '显示帮助信息';
+      if (key === 'chat.commands.help.availableCommands') return '可用命令';
+      return key;
+    });
+
+    expect(help).toContain('**可用命令:**');
+    expect(help).toContain('- `/help` - 显示帮助信息');
+    expect(help).not.toContain('**Available Commands:**');
+    expect(help).not.toContain('Show help message');
+  });
+
+  it('keeps skill keywords in English while localizing skill help headings', () => {
+    const commands = createSkillInvocationCatalog([
+      {
+        id: 'quality-review',
+        name: 'quality-review',
+        description: '检查变更文件',
+        tags: [],
+        source: 'project',
+        enabled: true,
+      },
+    ]);
+    const help = formatSkillInvocationHelpCatalog(commands, (key) =>
+      key === 'chat.commands.help.availableSkills' ? '可用技能' : key,
+    );
+
+    expect(help).toContain('**可用技能:**');
+    expect(help).toContain('- `$quality-review` - 检查变更文件');
+    expect(help).not.toContain('**Available Skills:**');
   });
 });

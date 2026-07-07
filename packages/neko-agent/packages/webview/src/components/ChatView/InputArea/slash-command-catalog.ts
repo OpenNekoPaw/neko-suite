@@ -79,12 +79,6 @@ const SLASH_COMMAND_SECTION_ORDER: readonly SlashCommandSource[] = [
   'plugin',
 ];
 
-const SLASH_COMMAND_SECTION_TITLES: Record<SlashCommandSource, string> = {
-  builtin: '**Available Commands:**',
-  'command-artifact': '**Command Artifacts:**',
-  plugin: '**Plugin Commands:**',
-};
-
 const SLASH_COMMAND_SOURCE_LABELS: Record<SlashCommandSource, string | null> = {
   builtin: null,
   'command-artifact': 'command',
@@ -136,7 +130,7 @@ export function createSlashCommandCatalogSections(
     return [
       {
         source,
-        title: SLASH_COMMAND_SECTION_TITLES[source],
+        title: source,
         commands: sectionCommands,
       },
     ];
@@ -171,7 +165,7 @@ export function formatSlashCommandHelpCatalog(
   return createSlashCommandCatalogSections(commands)
     .map((section) =>
       [
-        section.title,
+        `**${resolveSlashCommandHelpSectionTitle(section.source, translate)}:**`,
         ...section.commands.map(
           (entry) => `- \`${entry.name}\` - ${resolveSlashCommandDescription(entry, translate)}`,
         ),
@@ -185,12 +179,51 @@ export function formatSkillInvocationHelpCatalog(
   translate: SlashCommandTranslateFn,
 ): string {
   if (commands.length === 0) return '';
+  const title = resolveSlashCommandHelpLabel(
+    'chat.commands.help.availableSkills',
+    'Available Skills',
+    translate,
+  );
   return [
-    '**Available Skills:**',
+    `**${title}:**`,
     ...commands.map(
       (entry) => `- \`${entry.name}\` - ${resolveSlashCommandDescription(entry, translate)}`,
     ),
   ].join('\n');
+}
+
+function resolveSlashCommandHelpSectionTitle(
+  source: SlashCommandSource,
+  translate: SlashCommandTranslateFn,
+): string {
+  if (source === 'command-artifact') {
+    return resolveSlashCommandHelpLabel(
+      'chat.commands.help.commandArtifacts',
+      'Command Artifacts',
+      translate,
+    );
+  }
+  if (source === 'plugin') {
+    return resolveSlashCommandHelpLabel(
+      'chat.commands.help.pluginCommands',
+      'Plugin Commands',
+      translate,
+    );
+  }
+  return resolveSlashCommandHelpLabel(
+    'chat.commands.help.availableCommands',
+    'Available Commands',
+    translate,
+  );
+}
+
+function resolveSlashCommandHelpLabel(
+  key: string,
+  fallback: string,
+  translate: SlashCommandTranslateFn,
+): string {
+  const translated = translate(key);
+  return translated === key ? fallback : translated;
 }
 
 export function filterSlashCommands(

@@ -92,6 +92,15 @@ export function localizeBuiltinCommandDescription(
     : description;
 }
 
+export function localizeCommandArtifactFallbackDescription(
+  commandName: string,
+  locale: CommandLocale | undefined,
+): string {
+  return normalizeCommandLocale(locale) === 'zh'
+    ? `激活命令 /${commandName}`
+    : `Activate command /${commandName}`;
+}
+
 export function getCommandCategoryLabel(
   category: CommandCategory,
   locale: CommandLocale | undefined,

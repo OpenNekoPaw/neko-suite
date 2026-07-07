@@ -1,6 +1,9 @@
 import type { BuiltinCommand, BuiltinCommandName } from './types';
 import { getBuiltinCommand, getCliCommands, getExtensionCommands } from './builtin-commands';
-import { localizeBuiltinCommandDescription } from './command-localization';
+import {
+  localizeBuiltinCommandDescription,
+  localizeCommandArtifactFallbackDescription,
+} from './command-localization';
 import type { CommandLocale } from './types';
 
 export type SlashCommandSurface = 'cli' | 'extension';
@@ -73,7 +76,9 @@ export function listSlashCommandCatalog<TSkill extends SlashCommandSkillLike>(op
     entries.set(commandName, {
       source: 'command-artifact',
       name: commandName,
-      description: skill.description ?? `Activate skill /${commandName}`,
+      description:
+        readNonEmptyDescription(skill.description) ??
+        localizeCommandArtifactFallbackDescription(commandName, options.locale),
       aliases: [],
       category: 'command-artifact',
       supportsArguments: skill.supportsArguments ?? false,
@@ -127,7 +132,9 @@ export function resolveSlashCommandCatalogEntry<TSkill extends SlashCommandSkill
     return {
       source: 'command-artifact',
       name: commandName,
-      description: skill.description ?? `Activate skill /${commandName}`,
+      description:
+        readNonEmptyDescription(skill.description) ??
+        localizeCommandArtifactFallbackDescription(commandName, options.locale),
       aliases: [],
       category: 'command-artifact',
       supportsArguments: skill.supportsArguments ?? false,
@@ -137,6 +144,11 @@ export function resolveSlashCommandCatalogEntry<TSkill extends SlashCommandSkill
   }
 
   return undefined;
+}
+
+function readNonEmptyDescription(description: string | undefined): string | undefined {
+  const trimmed = description?.trim();
+  return trimmed && trimmed.length > 0 ? description : undefined;
 }
 
 export function coerceSlashCommandSkills(
