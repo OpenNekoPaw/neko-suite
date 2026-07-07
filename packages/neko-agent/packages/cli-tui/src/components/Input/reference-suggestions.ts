@@ -15,6 +15,7 @@ import { formatTuiLabel, getTuiLabels } from '../../core/tui-locale';
 
 export interface TuiReferenceSuggestionOptions {
   readonly workspaceRoot: string;
+  readonly query?: string;
   readonly limit?: number;
   readonly maxDepth?: number;
   readonly excludedDirectories?: readonly string[];
@@ -170,23 +171,28 @@ export async function createTuiReferenceSuggestions(
 ): Promise<readonly InputSuggestionOption[]> {
   const root = path.resolve(options.workspaceRoot);
   const limit = options.limit ?? DEFAULT_REFERENCE_LIMIT;
+  const query = normalizeSuggestionQuery(options.query);
   const resolvedMediaLibraries = await readResolvedMediaLibraries(root);
   const localLibraryCandidates = await listLocalLibraryReferenceFiles(root, {
     limit,
     maxDepth: LOCAL_LIBRARY_MAX_DEPTH,
     resolvedMediaLibraries,
+    query,
   });
   const assetLibraryCandidates = await listAssetLibraryReferenceCandidates(root, {
     limit,
+    query,
   });
   const searchIndexCandidates = await listSearchIndexReferenceCandidates(root, {
     limit,
     resolvedMediaLibraries,
+    query,
   });
   const contributedReferenceSuggestions = await listContributedReferenceSuggestions({
     contributors: options.referenceContributors ?? [],
     workspaceRoot: root,
     limit,
+    query,
   });
   const assetLibrarySuggestions = assetLibraryCandidates.map(mentionReferenceCandidateToSuggestion);
   const searchIndexSuggestions = searchIndexCandidates.map(mentionReferenceCandidateToSuggestion);
@@ -213,24 +219,27 @@ export async function createTuiReferenceSuggestions(
 
   const remainingFileLimit = Math.max(
     0,
-    limit -
-      localLibraryCandidates.length -
-      assetLibrarySuggestions.length -
-      searchIndexSuggestions.length -
-      contributedReferenceSuggestions.length -
-      extraReferenceSuggestions.length,
+    query
+      ? limit
+      : limit -
+          localLibraryCandidates.length -
+          assetLibrarySuggestions.length -
+          searchIndexSuggestions.length -
+          contributedReferenceSuggestions.length -
+          extraReferenceSuggestions.length,
   );
   const files = await listWorkspaceReferenceFiles(root, {
     limit: limit,
     maxDepth: options.maxDepth ?? DEFAULT_REFERENCE_MAX_DEPTH,
     excludedDirectories: options.excludedDirectories,
+    query,
   });
   const workspaceFileSuggestions = files
     .filter((file) => !pathBackedLibraryRefs.has(file.relativePath))
     .slice(0, remainingFileLimit)
     .map(workspaceFileCandidateToSuggestion);
 
-  return [
+  const suggestions = [
     ...localLibraryCandidates.map(localLibraryCandidateToSuggestion),
     ...assetLibrarySuggestions,
     ...searchIndexSuggestions,
@@ -238,14 +247,21 @@ export async function createTuiReferenceSuggestions(
     ...extraReferenceSuggestions,
     ...workspaceFileSuggestions,
   ]
-    .filter(uniqueSuggestion())
-    .slice(0, limit);
+    .filter(uniqueSuggestion());
+
+  return (query
+    ? suggestions
+        .filter((suggestion) => matchesSuggestionQuery(suggestion, query))
+        .sort((left, right) => compareSuggestionByQuery(left, right, query))
+    : suggestions
+  ).slice(0, limit);
 }
 
 async function listContributedReferenceSuggestions(input: {
   readonly contributors: readonly AgentReferenceContributor[];
   readonly workspaceRoot: string;
   readonly limit: number;
+  readonly query?: string;
 }): Promise<readonly InputSuggestionOption[]> {
   const suggestions: InputSuggestionOption[] = [];
   for (const contributor of input.contributors) {
@@ -253,7 +269,7 @@ async function listContributedReferenceSuggestions(input: {
       break;
     }
     const result = await contributor.search({
-      query: '',
+      query: input.query ?? '',
       limit: input.limit - suggestions.length,
       workspaceRoot: input.workspaceRoot,
     });
@@ -273,6 +289,7 @@ async function listWorkspaceReferenceFiles(
     readonly limit: number;
     readonly maxDepth: number;
     readonly excludedDirectories?: readonly string[];
+    readonly query?: string;
   },
 ): Promise<readonly WorkspaceFileCandidate[]> {
   const results: WorkspaceFileCandidate[] = [];
@@ -316,6 +333,10 @@ async function listWorkspaceReferenceFiles(
         continue;
       }
 
+      if (options.query && !matchesQuery(relativePath, options.query)) {
+        continue;
+      }
+
       let stat: { readonly size: number };
       try {
         stat = await fs.stat(absolutePath);
@@ -337,6 +358,7 @@ async function listLocalLibraryReferenceFiles(
     readonly limit: number;
     readonly maxDepth: number;
     readonly resolvedMediaLibraries?: readonly ResolvedMediaLibrary[];
+    readonly query?: string;
   },
 ): Promise<readonly LocalLibraryReferenceCandidate[]> {
   const results: LocalLibraryReferenceCandidate[] = [];
@@ -366,6 +388,7 @@ async function listLocalLibraryReferenceFiles(
       relativeRoot: root.displayRoot,
       limit: options.limit - results.length,
       maxDepth: options.maxDepth,
+      query: options.query,
     });
 
     for (const file of files) {
@@ -374,6 +397,9 @@ async function listLocalLibraryReferenceFiles(
       }
       const mediaType = detectMentionMediaType(file.relativePath);
       if (!mediaType) {
+        continue;
+      }
+      if (options.query && !matchesQuery(file.relativePath, options.query)) {
         continue;
       }
       seen.add(file.relativePath);
@@ -408,6 +434,7 @@ async function listAssetLibraryReferenceCandidates(
   workspaceRoot: string,
   options: {
     readonly limit: number;
+    readonly query?: string;
   },
 ): Promise<readonly TuiMentionReferenceCandidate[]> {
   const library = await readAssetLibraryFile(path.join(workspaceRoot, ASSET_LIBRARY_FILE));
@@ -426,7 +453,7 @@ async function listAssetLibraryReferenceCandidates(
     const filePath =
       firstFile?.path && isTerminalSafeReferencePath(firstFile.path) ? firstFile.path : undefined;
 
-    candidates.push({
+    const candidate: TuiMentionReferenceCandidate = {
       kind: 'asset',
       id: entity.id,
       label: entity.name,
@@ -436,7 +463,10 @@ async function listAssetLibraryReferenceCandidates(
       description: formatAssetLibraryDescription(entity),
       searchText: formatAssetLibrarySearchText(entity, files),
       insertText: `@asset:${entity.id} `,
-    });
+    };
+    if (!options.query || matchesMentionCandidateQuery(candidate, options.query)) {
+      candidates.push(candidate);
+    }
   }
   return candidates;
 }
@@ -446,6 +476,7 @@ async function listSearchIndexReferenceCandidates(
   options: {
     readonly limit: number;
     readonly resolvedMediaLibraries: readonly ResolvedMediaLibrary[];
+    readonly query?: string;
   },
 ): Promise<readonly TuiMentionReferenceCandidate[]> {
   const index = await readSearchIndexFile(path.join(workspaceRoot, SEARCH_INDEX_CACHE_FILE));
@@ -467,7 +498,7 @@ async function listSearchIndexReferenceCandidates(
 
     const mediaType = toTuiMentionMediaType(entry.mediaType) ?? detectMentionMediaType(durableRef);
     const label = entry.fileName ?? path.basename(durableRef);
-    candidates.push({
+    const candidate: TuiMentionReferenceCandidate = {
       kind: toSearchIndexMentionKind(mediaType),
       label,
       source: 'media-library',
@@ -478,7 +509,10 @@ async function listSearchIndexReferenceCandidates(
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .join(' '),
       insertText: `${formatMentionInsertText(durableRef)} `,
-    });
+    };
+    if (!options.query || matchesMentionCandidateQuery(candidate, options.query)) {
+      candidates.push(candidate);
+    }
   }
   return candidates;
 }
@@ -739,6 +773,7 @@ async function listLibraryRootFiles(input: {
   readonly relativeRoot: string;
   readonly limit: number;
   readonly maxDepth: number;
+  readonly query?: string;
 }): Promise<readonly WorkspaceFileCandidate[]> {
   const results: WorkspaceFileCandidate[] = [];
 
@@ -776,6 +811,10 @@ async function listLibraryRootFiles(input: {
         continue;
       }
       if (!entry.isFile()) {
+        continue;
+      }
+
+      if (input.query && !matchesQuery(relativePath, input.query)) {
         continue;
       }
 
@@ -1048,6 +1087,64 @@ function uniqueSuggestion(): (suggestion: InputSuggestionOption) => boolean {
     seen.add(key);
     return true;
   };
+}
+
+function normalizeSuggestionQuery(value: string | undefined): string | undefined {
+  const trimmed = value?.trim().replace(/^@+/, '').trim();
+  return trimmed && trimmed.length > 0 ? trimmed.toLowerCase() : undefined;
+}
+
+function matchesMentionCandidateQuery(
+  candidate: TuiMentionReferenceCandidate,
+  query: string,
+): boolean {
+  return matchesQuery(
+    [
+      candidate.label,
+      candidate.id,
+      candidate.description,
+      candidate.filePath,
+      candidate.source,
+      candidate.mediaType,
+      candidate.entityType,
+      candidate.searchText,
+    ]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      .join(' '),
+    query,
+  );
+}
+
+function matchesSuggestionQuery(suggestion: InputSuggestionOption, query: string): boolean {
+  return matchesQuery([suggestion.name, suggestion.matchText].filter(Boolean).join(' '), query);
+}
+
+function compareSuggestionByQuery(
+  left: InputSuggestionOption,
+  right: InputSuggestionOption,
+  query: string,
+): number {
+  const scoreDiff = scoreSuggestionQuery(left, query) - scoreSuggestionQuery(right, query);
+  if (scoreDiff !== 0) {
+    return scoreDiff;
+  }
+  return left.name.localeCompare(right.name);
+}
+
+function scoreSuggestionQuery(suggestion: InputSuggestionOption, query: string): number {
+  const name = suggestion.name.toLowerCase();
+  const basename = path.basename(name);
+  const matchText = (suggestion.matchText ?? '').toLowerCase();
+  if (name === query || basename === query) return 0;
+  if (name.startsWith(query) || basename.startsWith(query)) return 1;
+  if (name.includes(`/${query}`) || basename.includes(query)) return 2;
+  if (name.includes(query)) return 3;
+  if (matchText.includes(query)) return 4;
+  return 100;
+}
+
+function matchesQuery(value: string, query: string): boolean {
+  return value.toLowerCase().includes(query);
 }
 
 function isLocalLibraryExcludedName(name: string): boolean {

@@ -223,6 +223,30 @@ describe('createTuiReferenceSuggestions', () => {
     });
   });
 
+  it('finds workspace file query matches even when library candidates fill the default list', async () => {
+    await fs.mkdir(path.join(tempRoot, 'neko', 'generated', 'image'), { recursive: true });
+    await fs.mkdir(path.join(tempRoot, 'cases'), { recursive: true });
+    for (let index = 0; index < 100; index += 1) {
+      await fs.writeFile(
+        path.join(tempRoot, 'neko', 'generated', 'image', `asset-${index}.png`),
+        'image\n',
+      );
+    }
+    await fs.writeFile(path.join(tempRoot, 'cases', 'target-shot.fountain'), 'shot\n');
+
+    const suggestions = await createTuiReferenceSuggestions({
+      workspaceRoot: tempRoot,
+      query: 'target-shot',
+      limit: 20,
+    });
+
+    expect(suggestions[0]).toMatchObject({
+      name: 'cases/target-shot.fountain',
+      kind: 'file',
+      insertText: '@cases/target-shot.fountain ',
+    });
+  });
+
   it('projects search index media paths through configured library variables', async () => {
     const mediaRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-index-media-'));
     try {

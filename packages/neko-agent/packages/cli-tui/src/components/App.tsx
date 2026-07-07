@@ -53,6 +53,7 @@ export function App({
     readonly InputSuggestionOption[]
   >([]);
   const submittedInitialPromptRef = useRef<string | null>(null);
+  const referenceRequestIdRef = useRef(0);
 
   // Track terminal size changes
   useTerminalSize();
@@ -98,19 +99,22 @@ export function App({
     capabilityProviders,
   });
 
-  useEffect(() => {
+  const refreshReferenceSuggestions = useCallback((query = '') => {
     let cancelled = false;
+    const requestId = referenceRequestIdRef.current + 1;
+    referenceRequestIdRef.current = requestId;
     void createTuiReferenceSuggestions({
       workspaceRoot: config.workDir,
+      query,
       referenceContributors: getReferenceContributors(),
     }).then(
       (suggestions) => {
-        if (!cancelled) {
+        if (!cancelled && referenceRequestIdRef.current === requestId) {
           setReferenceSuggestions(suggestions);
         }
       },
       (error) => {
-        if (!cancelled) {
+        if (!cancelled && referenceRequestIdRef.current === requestId) {
           const message = error instanceof Error ? error.message : String(error);
           useConversationStore
             .getState()
@@ -122,6 +126,8 @@ export function App({
       cancelled = true;
     };
   }, [config.workDir, getReferenceContributors, slashCommands]);
+
+  useEffect(() => refreshReferenceSuggestions(), [refreshReferenceSuggestions]);
 
   // Slash command handling
   const { handleCommand, onClear } = useSlashCommands({
@@ -278,6 +284,7 @@ export function App({
           commands={slashCommands}
           skills={skillSuggestions}
           references={referenceSuggestions}
+          onReferenceQueryChange={refreshReferenceSuggestions}
         />
 
         {/* Status bar — fixed at very bottom */}

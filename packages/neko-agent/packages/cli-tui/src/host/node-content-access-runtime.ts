@@ -6,6 +6,8 @@ import {
   type DocumentReaderRuntimeDeps,
   type IDocumentAccessService,
 } from '@neko/content/document';
+import AdmZipModule from 'adm-zip';
+import * as Epub2Module from 'epub2';
 import type { NekoHostPorts } from '@neko/host';
 import {
   isResourceRef,
@@ -351,7 +353,7 @@ class NodeContentAccessRuntime implements AgentContentAccessRuntime {
       readTextFile: (filePath) => this.readText(filePath),
       readBinaryFile: (filePath) => this.readBytes(filePath),
       readEntry: (filePath, entryPath) => this.readEntry(filePath, entryPath),
-      loadModule: <T>(packageName: string) => tryImport<T>(packageName),
+      loadModule: <T>(packageName: string) => loadTuiDocumentReaderModule<T>(packageName),
     };
   }
 
@@ -367,7 +369,7 @@ class NodeContentAccessRuntime implements AgentContentAccessRuntime {
 
   private async readEntry(filePath: string, entryPath: string): Promise<Uint8Array | null> {
     const resolved = await this.requireLocalPath(filePath);
-    const AdmZip = await tryImport<AdmZipConstructor>('adm-zip');
+    const AdmZip = readAdmZipConstructor(AdmZipModule);
     if (!AdmZip) {
       throw new Error('Document archive entry reader is unavailable in this Neko TUI build.');
     }
@@ -515,11 +517,17 @@ function readCaller(caller: string | undefined): AgentContentAccessCaller {
   }
 }
 
-async function tryImport<T>(packageName: string): Promise<T | null> {
-  try {
-    const mod = (await import(packageName)) as { default?: unknown };
-    return (mod.default ?? mod) as T;
-  } catch {
-    return null;
+async function loadTuiDocumentReaderModule<T>(packageName: string): Promise<T | null> {
+  switch (packageName) {
+    case 'adm-zip':
+      return readAdmZipConstructor(AdmZipModule) as T;
+    case 'epub2':
+      return Epub2Module as T;
+    default:
+      return null;
   }
+}
+
+function readAdmZipConstructor(value: unknown): AdmZipConstructor | null {
+  return typeof value === 'function' ? (value as AdmZipConstructor) : null;
 }

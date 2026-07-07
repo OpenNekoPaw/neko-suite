@@ -19,10 +19,15 @@ const workspacePackages = new Map<string, string>([
   ['@neko-agent/types', resolve(repoRoot, 'packages/neko-agent/packages/agent-types')],
   ['@neko/agent', resolve(repoRoot, 'packages/neko-agent/packages/agent')],
   ['@neko/ai-sdk', resolve(repoRoot, 'packages/neko-agent/packages/ai-sdk')],
+  ['@neko/asset', resolve(repoRoot, 'packages/neko-assets/packages/asset')],
   ['@neko/content', resolve(repoRoot, 'packages/neko-content')],
+  ['@neko/entity', resolve(repoRoot, 'packages/neko-entity')],
+  ['@neko/host', resolve(repoRoot, 'packages/neko-host')],
   ['@neko/market-core', resolve(repoRoot, 'packages/neko-market/packages/core')],
   ['@neko/platform', resolve(repoRoot, 'packages/neko-agent/packages/platform')],
+  ['@neko/search', resolve(repoRoot, 'packages/neko-search')],
   ['@neko/shared', resolve(repoRoot, 'packages/neko-types')],
+  ['neko-assets', resolve(repoRoot, 'packages/neko-assets')],
 ]);
 
 const rootPnpmStore = resolve(repoRoot, 'node_modules/.pnpm');

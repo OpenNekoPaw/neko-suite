@@ -201,6 +201,9 @@ importers:
       commander:
         specifier: ^12.0.0
         version: 12.1.0
+      epub2:
+        specifier: ^3.0.2
+        version: 3.0.2(ts-toolbelt@9.6.0)
       ink:
         specifier: ^5.0.1
         version: 5.2.1(@types/react@18.3.27)(react@18.3.1)

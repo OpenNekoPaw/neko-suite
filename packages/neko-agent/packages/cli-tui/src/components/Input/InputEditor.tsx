@@ -10,7 +10,7 @@
  * - Tab: select menu item
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { tokens } from '../../theme/tokens';
 import { TUI_COMMANDS, type SlashCommandOption } from './SlashCommandMenu';
@@ -38,6 +38,8 @@ interface InputEditorProps {
   readonly skills?: readonly InputSuggestionOption[];
   /** Terminal-safe file/context/reference suggestions for `@` namespace */
   readonly references?: readonly InputSuggestionOption[];
+  /** Called when the active `@` filter changes so hosts can refresh references lazily. */
+  readonly onReferenceQueryChange?: (query: string) => void;
 }
 
 const MAX_HISTORY = 50;
@@ -73,6 +75,7 @@ export function InputEditor({
   commands = TUI_COMMANDS,
   skills = [],
   references = [],
+  onReferenceQueryChange,
 }: InputEditorProps): React.JSX.Element {
   const [value, setValue] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -116,6 +119,13 @@ export function InputEditor({
     menuIndexRef.current = next;
     setMenuIndex(next);
   }, []);
+
+  useEffect(() => {
+    if (activeMenu?.trigger !== '@') {
+      return;
+    }
+    onReferenceQueryChange?.(activeMenu.filterText);
+  }, [activeMenu?.filterText, activeMenu?.trigger, onReferenceQueryChange]);
 
   useInput((input, key) => {
     if (disabled) return;

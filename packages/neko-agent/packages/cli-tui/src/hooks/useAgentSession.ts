@@ -211,6 +211,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const isReadyRef = useRef(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [capabilityRevision, setCapabilityRevision] = useState(0);
   const [slashCommands, setSlashCommands] = useState<readonly TuiSlashCommandOption[]>(
     createTuiSlashCommandCatalog(),
   );
@@ -222,6 +223,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       try {
         isReadyRef.current = false;
         setIsReady(false);
+        setCapabilityRevision((revision) => revision + 1);
         // Resolve effective model — block on model picker if defaultModel is invalid
         let effectiveModel = config.model;
 
@@ -332,6 +334,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           }),
         );
         capabilityLoadResultRef.current = capabilityLoadResult;
+        setCapabilityRevision((revision) => revision + 1);
 
         // 4. LLM Service — use Platform for multi-provider routing
         let llmService: IService;
@@ -838,11 +841,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
   const getCapabilityProviderSummaries = useCallback(() => {
     return capabilityLoadResultRef.current?.providers ?? [];
-  }, []);
+  }, [capabilityRevision]);
 
   const getCapabilityDiagnostics = useCallback(() => {
     return capabilityLoadResultRef.current?.diagnostics ?? [];
-  }, []);
+  }, [capabilityRevision]);
 
   const listCapabilityTools = useCallback((providerId?: string): readonly string[] => {
     const tools = toolRegistryRef.current?.list() ?? [];
@@ -861,11 +864,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         .map((contribution) => contribution.name),
     );
     return tools.map((tool) => tool.name).filter((toolName) => providerToolNames.has(toolName));
-  }, []);
+  }, [capabilityRevision]);
 
   const getReferenceContributors = useCallback(() => {
     return capabilityLoadResultRef.current?.referenceContributors ?? [];
-  }, []);
+  }, [capabilityRevision]);
 
   return {
     submit,

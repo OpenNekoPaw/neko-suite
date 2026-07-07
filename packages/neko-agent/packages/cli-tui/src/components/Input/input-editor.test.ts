@@ -2,7 +2,10 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from 'ink-testing-library';
 import { InputEditor } from './InputEditor';
-import { createTuiSlashCommandCatalog } from '../../core/slash-command-catalog';
+import {
+  createTuiSkillInvocationCatalog,
+  createTuiSlashCommandCatalog,
+} from '../../core/slash-command-catalog';
 
 const originalNekoLocale = process.env.NEKO_LOCALE;
 
@@ -104,6 +107,33 @@ describe('InputEditor prefix suggestions', () => {
     expect(onSkillInvocation).toHaveBeenCalledWith('$review');
   });
 
+  it('keeps Skill keywords in English while localizing tags and fallback descriptions', async () => {
+    process.env.NEKO_LOCALE = 'zh-CN';
+    const skills = createTuiSkillInvocationCatalog(
+      [{ name: 'quality-review', enabled: true }],
+      'zh',
+    ).map((skill) => ({
+      trigger: '$' as const,
+      name: skill.name.slice(1),
+      description: skill.description,
+      kind: 'skill',
+    }));
+    const instance = render(
+      React.createElement(InputEditor, {
+        onSubmit: vi.fn(),
+        skills,
+      }),
+    );
+
+    await writeInput(instance, '$');
+
+    expect(instance.lastFrame()).toContain('$quality-review');
+    expect(instance.lastFrame()).toContain('[技能]');
+    expect(instance.lastFrame()).toContain('激活技能 quality-review');
+    expect(instance.lastFrame()).not.toContain('[skill]');
+    expect(instance.lastFrame()).not.toContain('Activate skill quality-review');
+  });
+
   it('filters reference suggestions and inserts text-only mentions', async () => {
     const onSubmit = vi.fn();
     const instance = render(
@@ -134,6 +164,22 @@ describe('InputEditor prefix suggestions', () => {
     await writeInput(instance, 'summarize');
     await writeInput(instance, '\r');
     expect(onSubmit).toHaveBeenCalledWith('@docs/story.md summarize');
+  });
+
+  it('notifies hosts when the active reference query changes', async () => {
+    const onReferenceQueryChange = vi.fn();
+    const instance = render(
+      React.createElement(InputEditor, {
+        onSubmit: vi.fn(),
+        onReferenceQueryChange,
+      }),
+    );
+
+    await writeInput(instance, '@cases');
+
+    await waitFor(() =>
+      onReferenceQueryChange.mock.calls.some(([query]) => query === 'cases'),
+    );
   });
 
   it('closes the active namespace menu on Escape without submitting', async () => {
@@ -233,4 +279,14 @@ function waitForInkUpdate(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, 0);
   });
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) {
+      return;
+    }
+    await waitForInkUpdate();
+  }
+  throw new Error('Timed out waiting for assertion.');
 }
