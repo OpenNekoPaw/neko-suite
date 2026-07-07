@@ -14,6 +14,7 @@ import type {
   CanvasCompositeConnectionSpec,
   CanvasCreateConnectionRequest,
 } from '../types/canvas-agent-operations';
+import { migrateLegacyCanvasStoryboardShot } from '../types/canvas-semantic-storyboard';
 
 const DEFAULT_START_X = 100;
 const DEFAULT_START_Y = 100;
@@ -135,42 +136,7 @@ export async function applyStoryboardPayloadToCanvas(
           {
             type: 'shot',
             position: { x: shotX, y: shotY },
-            data: {
-              shotId: shot.shotId,
-              shotNumber: shot.shotNumber,
-              duration: shot.duration,
-              visualDescription: shot.visualDescription,
-              shotScale: shot.shotScale,
-              characters: [...shot.characters],
-              cameraMovement: shot.cameraMovement,
-              cameraAngle: shot.cameraAngle,
-              characterAction: shot.characterAction,
-              emotion: [...shot.emotion],
-              sceneTags: [...shot.sceneTags],
-              generationStatus: 'idle' as const,
-              generationHistory: [] as unknown[],
-              dialogue: shot.dialogue,
-              voiceOver: shot.voiceOver,
-              soundCue: shot.soundCue,
-              textCues: shot.textCues ? [...shot.textCues] : undefined,
-              voiceCues: shot.voiceCues ? [...shot.voiceCues] : undefined,
-              generationPrompt: shot.generationPrompt,
-              visualStyle: shot.visualStyle,
-              referenceImagePath: shot.referenceImagePath,
-              referenceResourceRef: shot.referenceResourceRef,
-              referenceImageResourceRef: shot.referenceImageResourceRef,
-              vfx: shot.vfx ? [...shot.vfx] : undefined,
-              sourceMediaRefs: shot.sourceMediaRefs ? [...shot.sourceMediaRefs] : undefined,
-              generatedMediaRefs: shot.generatedMediaRefs
-                ? [...shot.generatedMediaRefs]
-                : undefined,
-              mediaRefs: shot.mediaRefs ? [...shot.mediaRefs] : undefined,
-              shotImagePrepPlan: shot.shotImagePrepPlan,
-              // Phase 6.3 — stamp plan provenance when orchestrated
-              ...(options.workflowPlanId !== undefined && {
-                workflowPlanId: options.workflowPlanId,
-              }),
-            },
+            data: createCanvasStoryboardShotNodeData(shot, options),
           },
         ];
       }),
@@ -202,6 +168,79 @@ export async function applyStoryboardPayloadToCanvas(
     scenesCreated: createdScenes.length,
     totalShots: createdScenes.reduce((total, scene) => total + scene.shotIds.length, 0),
     scenes: createdScenes,
+  };
+}
+
+function createCanvasStoryboardShotNodeData(
+  shot: CanvasStoryboardShotPlan,
+  options: ApplyCanvasStoryboardOptions,
+): Record<string, unknown> {
+  const migrationInput = {
+    shotId: shot.shotId,
+    shotNumber: shot.shotNumber,
+    duration: shot.duration,
+    visualDescription: shot.visualDescription,
+    shotScale: shot.shotScale,
+    characters: [...shot.characters],
+    cameraMovement: shot.cameraMovement,
+    cameraAngle: shot.cameraAngle,
+    characterAction: shot.characterAction,
+    emotion: [...shot.emotion],
+    sceneTags: [...shot.sceneTags],
+    dialogue: shot.dialogue,
+    voiceOver: shot.voiceOver,
+    soundCue: shot.soundCue,
+    textCues: shot.textCues ? [...shot.textCues] : undefined,
+    voiceCues: shot.voiceCues ? [...shot.voiceCues] : undefined,
+    generationPrompt: shot.generationPrompt,
+    visualStyle: shot.visualStyle,
+    referenceImagePath: shot.referenceImagePath,
+    referenceResourceRef: shot.referenceResourceRef,
+    referenceImageResourceRef: shot.referenceImageResourceRef,
+    vfx: shot.vfx ? [...shot.vfx] : undefined,
+    sourceMediaRefs: shot.sourceMediaRefs ? [...shot.sourceMediaRefs] : undefined,
+    generatedMediaRefs: shot.generatedMediaRefs ? [...shot.generatedMediaRefs] : undefined,
+    mediaRefs: shot.mediaRefs ? [...shot.mediaRefs] : undefined,
+    shotImagePrepPlan: shot.shotImagePrepPlan,
+  };
+  const migration = migrateLegacyCanvasStoryboardShot({
+    shotData: migrationInput,
+    shotId: shot.shotId,
+  });
+
+  return {
+    shotId: shot.shotId,
+    shotNumber: shot.shotNumber,
+    duration: shot.duration,
+    visualDescription: shot.visualDescription,
+    shotScale: shot.shotScale,
+    characters: [...shot.characters],
+    cameraMovement: shot.cameraMovement,
+    cameraAngle: shot.cameraAngle,
+    characterAction: shot.characterAction,
+    emotion: [...shot.emotion],
+    sceneTags: [...shot.sceneTags],
+    generationStatus: 'idle' as const,
+    generationHistory: [] as unknown[],
+    dialogue: shot.dialogue,
+    voiceOver: shot.voiceOver,
+    soundCue: shot.soundCue,
+    textCues: shot.textCues ? [...shot.textCues] : undefined,
+    voiceCues: shot.voiceCues ? [...shot.voiceCues] : undefined,
+    storyboardPrompt: migration.promptState,
+    visualStyle: shot.visualStyle,
+    referenceImagePath: shot.referenceImagePath,
+    referenceResourceRef: shot.referenceResourceRef,
+    referenceImageResourceRef: shot.referenceImageResourceRef,
+    vfx: shot.vfx ? [...shot.vfx] : undefined,
+    sourceMediaRefs: shot.sourceMediaRefs ? [...shot.sourceMediaRefs] : undefined,
+    generatedMediaRefs: shot.generatedMediaRefs ? [...shot.generatedMediaRefs] : undefined,
+    mediaRefs: shot.mediaRefs ? [...shot.mediaRefs] : undefined,
+    shotImagePrepPlan: shot.shotImagePrepPlan,
+    // Phase 6.3 — stamp plan provenance when orchestrated.
+    ...(options.workflowPlanId !== undefined && {
+      workflowPlanId: options.workflowPlanId,
+    }),
   };
 }
 

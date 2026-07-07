@@ -59,8 +59,6 @@ export const TOOL_NAMES_TIMELINE = {
 // =============================================================================
 
 export const TOOL_NAMES_CANVAS = {
-  CREATE_CANVAS: 'CreateCanvas',
-  ADD_CANVAS_SHAPE: 'AddCanvasShape',
   CANVAS_GET_PLAYBACK_PLAN: 'canvas.getPlaybackPlan',
   CANVAS_GET_PLAYBACK_ROUTES: 'canvas.getPlaybackRoutes',
   CANVAS_REVEAL_PLAYBACK_WORKSPACE: 'canvas.revealPlaybackWorkspace',
@@ -69,7 +67,6 @@ export const TOOL_NAMES_CANVAS = {
   CANVAS_INGEST_MARKDOWN: 'canvas.ingestMarkdown',
   CANVAS_CREATE_MARKDOWN_NOTE: 'canvas.createMarkdownNote',
   CANVAS_CREATE_TABLE_FROM_MARKDOWN: 'canvas.createTableFromMarkdown',
-  CANVAS_CREATE_STORYBOARD_DRAFT_FROM_MARKDOWN: 'canvas.createStoryboardDraftFromMarkdown',
   CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN: 'canvas.createStoryboardFromMarkdown',
   CANVAS_ATTACH_RESOURCE: 'canvas.attachResource',
   CANVAS_VALIDATE_MARKDOWN_STORYBOARD: 'canvas.validateMarkdownStoryboard',
@@ -165,6 +162,23 @@ export const TOOL_NAMES_ASSETS = {
   LIST_ASSETS: 'ListAssets',
   GET_ASSET: 'GetAsset',
   IMPORT_ASSET: 'ImportAsset',
+} as const;
+
+// =============================================================================
+// Creative Entities — Entity Facts and Projections
+// =============================================================================
+
+export const TOOL_NAMES_ENTITY = {
+  LIST_CREATIVE_ENTITIES: 'ListCreativeEntities',
+  GET_CREATIVE_ENTITY: 'GetCreativeEntity',
+} as const;
+
+// =============================================================================
+// Project Search — Sanitized Project-Wide Search
+// =============================================================================
+
+export const TOOL_NAMES_SEARCH = {
+  QUERY_PROJECT_SEARCH: 'QueryProjectSearch',
 } as const;
 
 // =============================================================================

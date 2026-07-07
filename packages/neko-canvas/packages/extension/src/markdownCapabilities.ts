@@ -6,13 +6,15 @@ import {
   isCanvasMarkdownCapabilityId,
   isResourceRef,
   isRuntimeOnlyCanvasMarkdownResourceValue,
+  CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+  CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
   STORYBOARD_CREATIVE_TABLE_PROFILE,
+  resolveCanvasStoryboardNextCreativeState,
   validateCanvasMarkdownCapabilityInput,
   type CanvasAgentApplyContentResult,
   type CanvasAgentContentPayload,
   type CanvasCreateCompositeRequest,
   type CanvasCreateCompositeResult,
-  type CanvasCreativePromptSlot,
   type CreativeTableFieldDescriptor,
   type CanvasMarkdownCapabilityDiagnostic,
   type CanvasMarkdownCapabilityInput,
@@ -26,6 +28,10 @@ import {
   type CanvasSerializableValue,
   type CanvasCreativeTableFieldRole,
   type CanvasCreativeTableValueType,
+  type CanvasStoryboardPromptBlocks,
+  type CanvasStoryboardPromptBlockKind,
+  type CanvasStoryboardPromptState,
+  type CanvasStoryboardSemanticPromptDocument,
   type TableColumnDef,
 } from '@neko/shared';
 
@@ -71,6 +77,19 @@ interface ResourceBindingResult {
 }
 
 type CanvasMarkdownTableProfileId = 'generic' | 'storyboard';
+
+type CanvasMarkdownTableCapabilityInput = Extract<
+  CanvasMarkdownCapabilityInput,
+  {
+    capabilityId:
+      | 'canvas.ingestMarkdown'
+      | 'canvas.createTableFromMarkdown'
+      | 'canvas.createStoryboardFromMarkdown'
+      | 'canvas.validateMarkdownStoryboard';
+  }
+>;
+
+type CanvasMarkdownTableOperationHint = CanvasMarkdownTableCapabilityInput['operationHint'];
 
 type CanvasMarkdownTableUnknownColumnPolicy = 'preserve' | 'reject';
 
@@ -186,12 +205,7 @@ function createCanvasProfileFieldsFromCreativeProfile(
 
 const CANVAS_STORYBOARD_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
   profileId: 'storyboard',
-  aliases: [
-    'storyboard',
-    'storyboard-draft',
-    'markdown-storyboard-draft',
-    'canvas.tableProfile.storyboard-draft',
-  ],
+  aliases: ['storyboard', 'storyboard.ai-native', 'canvas.tableProfile.storyboard'],
   displayName: 'Storyboard',
   reviewKind: 'storyboard',
   creative: true,
@@ -204,7 +218,7 @@ const CANVAS_STORYBOARD_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
       severity: 'warning',
       code: 'canvas-storyboard-profile-visual-or-prompt-missing',
       message:
-        'Storyboard draft table has no visual/画面内容 or prompt column; Canvas will keep it as review metadata.',
+        'Storyboard review table has no visual/画面内容 or prompt column; Canvas will keep it as review metadata.',
     },
     {
       phases: ['review'],
@@ -212,7 +226,7 @@ const CANVAS_STORYBOARD_TABLE_PROFILE: CanvasMarkdownTableProfileDescriptor = {
       severity: 'info',
       code: 'canvas-storyboard-profile-next-action-missing',
       message:
-        'Storyboard draft table has no nextAction/建议操作 or trusted actionId column; Canvas can still keep it for review.',
+        'Storyboard review table has no nextAction/建议操作 or trusted actionId column; Canvas can still keep it for review.',
     },
     {
       phases: ['apply'],
@@ -267,8 +281,6 @@ export async function invokeCanvasMarkdownCapability(
       return createMarkdownNote(input, requireOperations(input, operations));
     case 'canvas.createTableFromMarkdown':
       return createTableFromMarkdown(input, requireOperations(input, operations));
-    case 'canvas.createStoryboardDraftFromMarkdown':
-      return createStoryboardDraftFromMarkdown(input, requireOperations(input, operations));
     case 'canvas.createStoryboardFromMarkdown':
       return createStoryboardFromMarkdown(input, requireOperations(input, operations));
     case 'canvas.attachResource':
@@ -421,46 +433,8 @@ async function createTableFromMarkdown(
   });
 }
 
-async function createStoryboardDraftFromMarkdown(
-  input: Extract<
-    CanvasMarkdownCapabilityInput,
-    { capabilityId: 'canvas.createStoryboardDraftFromMarkdown' }
-  >,
-  operations: CanvasMarkdownCapabilityOperations,
-): Promise<CanvasMarkdownCapabilityResult> {
-  const parsed = parseSingleMarkdownTable(input.markdown);
-  if (parsed.diagnostics.length > 0 || !parsed.table) {
-    return {
-      capabilityId: input.capabilityId,
-      status: 'blocked',
-      diagnostics: parsed.diagnostics,
-      preview: createTablePreview(input, parsed.table, []),
-    };
-  }
-
-  const profileResult = resolveTableProfile(input.profileHint, 'storyboard-draft');
-  if (profileResult.diagnostics.length > 0 || !profileResult.profile) {
-    return {
-      capabilityId: input.capabilityId,
-      status: 'blocked',
-      diagnostics: profileResult.diagnostics,
-      preview: createTablePreview(input, parsed.table, []),
-    };
-  }
-
-  return createProfiledTableFromParsed({
-    input,
-    operations,
-    parsedTable: parsed.table,
-    profile: profileResult.profile,
-    actionCapabilityId: input.capabilityId,
-    fallbackLabel: input.title ?? 'Storyboard',
-    includeActions: true,
-  });
-}
-
 async function createProfiledTableFromParsed(options: {
-  readonly input: CanvasMarkdownCapabilityInput & { markdown: string; title?: string };
+  readonly input: CanvasMarkdownTableCapabilityInput;
   readonly operations: CanvasMarkdownCapabilityOperations;
   readonly parsedTable: MarkdownTable;
   readonly profile: CanvasMarkdownTableProfileDescriptor;
@@ -544,7 +518,6 @@ async function createProfiledTableFromParsed(options: {
     profileId: options.profile.profileId,
     displayFallback: Boolean(options.displayFallback),
     nodeIds: [nodeId],
-    ...(isCreativeReviewNode ? { draftNodeId: nodeId } : {}),
     tableNodeId: nodeId,
     diagnostics,
     ...(options.includeActions &&
@@ -608,7 +581,7 @@ async function createStoryboardFromMarkdown(
     };
   }
 
-  const profileResult = resolveTableProfile(input.profileHint, 'storyboard-draft');
+  const profileResult = resolveTableProfile(input.profileHint, 'storyboard');
   if (profileResult.diagnostics.length > 0 || !profileResult.profile) {
     return {
       capabilityId: input.capabilityId,
@@ -649,7 +622,6 @@ async function createStoryboardFromMarkdown(
     capabilityId: input.capabilityId,
     status: 'created',
     nodeIds,
-    draftNodeId: result.containerId,
     diagnostics: [],
     preview: {
       ...createTablePreview(input, parsed.table, []),
@@ -710,7 +682,7 @@ function validateMarkdownStoryboard(
   >,
 ): CanvasMarkdownCapabilityResult {
   const parsed = parseSingleMarkdownTable(input.markdown);
-  const profileResult = resolveTableProfile(input.profileHint, 'storyboard-draft');
+  const profileResult = resolveTableProfile(input.profileHint, 'storyboard');
   const diagnostics = parsed.table
     ? [
         ...parsed.diagnostics,
@@ -731,7 +703,7 @@ function validateMarkdownStoryboard(
 }
 
 function validateResolvedStoryboardTable(
-  input: CanvasMarkdownCapabilityInput & { markdown: string },
+  input: CanvasMarkdownTableCapabilityInput,
   profile: CanvasMarkdownTableProfileDescriptor,
   table: MarkdownTable,
 ): readonly CanvasMarkdownCapabilityDiagnostic[] {
@@ -1034,7 +1006,7 @@ function validateTableProfile(
 }
 
 function validateOperationProfileMatch(
-  input: CanvasMarkdownCapabilityInput & { markdown: string },
+  input: CanvasMarkdownTableCapabilityInput,
   profile: CanvasMarkdownTableProfileDescriptor,
 ): readonly CanvasMarkdownCapabilityDiagnostic[] {
   if (!input.operationHint || (profile.creative && profile.profileId === 'storyboard')) {
@@ -1052,7 +1024,7 @@ function validateOperationProfileMatch(
 }
 
 function validateOperationRequiredFields(
-  input: CanvasMarkdownCapabilityInput & { markdown: string },
+  input: CanvasMarkdownTableCapabilityInput,
   profile: CanvasMarkdownTableProfileDescriptor,
   table: MarkdownTable,
   profileColumns: CanvasMarkdownResolvedTableProfileColumns,
@@ -1092,7 +1064,7 @@ function hasOperationRequiredFieldValue(
 }
 
 function createTableNodeData(
-  input: CanvasMarkdownCapabilityInput & { markdown: string },
+  input: CanvasMarkdownTableCapabilityInput,
   table: MarkdownTable,
   resourceBindings: ResourceBindingResult,
   profile: CanvasMarkdownTableProfileDescriptor,
@@ -1125,7 +1097,7 @@ function createTableNodeData(
 }
 
 function createTableMarkdownMetadata(
-  input: CanvasMarkdownCapabilityInput & { markdown: string },
+  input: CanvasMarkdownTableCapabilityInput,
   table: MarkdownTable,
   resourceBindings: ResourceBindingResult,
   profile: CanvasMarkdownTableProfileDescriptor,
@@ -1184,7 +1156,10 @@ function createTableMarkdownMetadata(
 }
 
 function buildStoryboardProductionRequest(
-  input: CanvasMarkdownCapabilityInput & { markdown: string; title?: string },
+  input: Extract<
+    CanvasMarkdownTableCapabilityInput,
+    { capabilityId: 'canvas.createStoryboardFromMarkdown' }
+  >,
   table: MarkdownTable,
   profile: CanvasMarkdownTableProfileDescriptor,
   profileColumns: CanvasMarkdownResolvedTableProfileColumns,
@@ -1203,8 +1178,11 @@ function buildStoryboardProductionRequest(
 
   const sceneColumn = profileColumns.columnsByField.get('scene');
   const shotColumn = profileColumns.columnsByField.get('shot');
+  const sourceColumn = profileColumns.columnsByField.get('source');
+  const sourcePanelColumn = profileColumns.columnsByField.get('sourcePanel');
   const imagePromptColumn =
     profileColumns.columnsByField.get('imagePrompt') ?? profileColumns.columnsByField.get('prompt');
+  const videoPromptColumn = profileColumns.columnsByField.get('videoPrompt');
   const motionColumn = profileColumns.columnsByField.get('motion');
   const durationColumn = profileColumns.columnsByField.get('duration');
   const characterColumn = profileColumns.columnsByField.get('characters');
@@ -1227,12 +1205,12 @@ function buildStoryboardProductionRequest(
       ],
     };
   }
-  const scenePromptSlots = uniquePromptSlots(
-    productionRows.flatMap((row) =>
-      extractPromptSlots(row, profileColumns, 'scene', input.operationHint),
-    ),
-  );
-
+  const sceneVideoPromptByRow = createSceneVideoPromptByRow({
+    rows: productionRows,
+    sceneColumn,
+    videoPromptColumn,
+    defaultSceneTitle: sceneTitle,
+  });
   return {
     request: {
       containerType: 'scene',
@@ -1242,16 +1220,19 @@ function buildStoryboardProductionRequest(
         sceneTitle,
         sceneNumber: 1,
         markdownSource: input.markdown,
-        ...(scenePromptSlots.length > 0 ? { promptSlots: scenePromptSlots } : {}),
       },
       autoLayout: true,
       children: productionRows.map((row, index) => {
         const visual = getCell(row, visualColumn);
-        const prompt = imagePromptColumn ? getCell(row, imagePromptColumn) : undefined;
-        const promptSlots = uniquePromptSlots(
-          extractPromptSlots(row, profileColumns, 'shot', input.operationHint).filter((slot) =>
-            shouldKeepShotPromptSlot(slot),
-          ),
+        const imagePrompt = imagePromptColumn ? getCell(row, imagePromptColumn) : '';
+        const videoPrompt = sceneVideoPromptByRow.get(row) ?? '';
+        const dialogue = dialogueColumn ? getCell(row, dialogueColumn) : '';
+        const duration = parseDurationSeconds(
+          durationColumn ? getCell(row, durationColumn) : undefined,
+        );
+        const shotNumber = parseShotNumber(
+          shotColumn ? getCell(row, shotColumn) : undefined,
+          index,
         );
         const characters = characterColumn
           ? parseCharacters(getCell(row, characterColumn))
@@ -1260,19 +1241,25 @@ function buildStoryboardProductionRequest(
           type: 'shot' as const,
           preset: 'shot.basic',
           data: {
-            shotNumber: parseShotNumber(shotColumn ? getCell(row, shotColumn) : undefined, index),
-            duration: parseDurationSeconds(
-              durationColumn ? getCell(row, durationColumn) : undefined,
-            ),
+            shotNumber,
+            duration,
             visualDescription: visual,
             characterAction: motionColumn ? (getCell(row, motionColumn) ?? visual) : visual,
-            ...(prompt ? { generationPrompt: prompt } : {}),
-            ...(promptSlots.length > 0 ? { promptSlots } : {}),
+            storyboardPrompt: createMarkdownStoryboardPromptState({
+              shotKey: createMarkdownStoryboardShotKey(input.title, row, shotNumber),
+              visual,
+              imagePrompt,
+              videoPrompt,
+              dialogue,
+              duration,
+            }),
             ...(motionColumn
               ? { cameraMovement: normalizeCameraMovement(getCell(row, motionColumn)) }
               : {}),
             ...(characters && characters.length > 0 ? { characters } : {}),
-            ...(dialogueColumn ? { dialogue: getCell(row, dialogueColumn) } : {}),
+            ...(dialogue ? { dialogue } : {}),
+            ...(sourceColumn ? { markdownSourceRef: getCell(row, sourceColumn) } : {}),
+            ...(sourcePanelColumn ? { markdownSourcePanel: getCell(row, sourcePanelColumn) } : {}),
             sceneTags: sceneColumn ? [getCell(row, sceneColumn)].filter(Boolean) : [],
           },
         };
@@ -1280,6 +1267,141 @@ function buildStoryboardProductionRequest(
     },
     diagnostics,
   };
+}
+
+function createSceneVideoPromptByRow(input: {
+  readonly rows: readonly MarkdownTableRow[];
+  readonly sceneColumn: MarkdownTableColumn | undefined;
+  readonly videoPromptColumn: MarkdownTableColumn | undefined;
+  readonly defaultSceneTitle: string;
+}): ReadonlyMap<MarkdownTableRow, string> {
+  const promptByRow = new Map<MarkdownTableRow, string>();
+  if (!input.videoPromptColumn) return promptByRow;
+  let activeSceneKey = input.defaultSceneTitle;
+  let activeSceneVideoPrompt = '';
+  for (const row of input.rows) {
+    const explicitSceneKey = input.sceneColumn ? getCell(row, input.sceneColumn).trim() : '';
+    const sceneKey = explicitSceneKey || activeSceneKey || input.defaultSceneTitle;
+    if (sceneKey !== activeSceneKey) {
+      activeSceneKey = sceneKey;
+      activeSceneVideoPrompt = '';
+    }
+    const explicitVideoPrompt = getCell(row, input.videoPromptColumn).trim();
+    if (explicitVideoPrompt) {
+      activeSceneVideoPrompt = explicitVideoPrompt;
+    }
+    if (activeSceneVideoPrompt) {
+      promptByRow.set(row, activeSceneVideoPrompt);
+    }
+  }
+  return promptByRow;
+}
+
+function createMarkdownStoryboardPromptState(input: {
+  readonly shotKey: string;
+  readonly visual: string;
+  readonly imagePrompt: string;
+  readonly videoPrompt: string;
+  readonly dialogue: string;
+  readonly duration: number;
+}): CanvasStoryboardPromptState {
+  const imagePromptText = input.imagePrompt.trim();
+  const videoPromptText = input.videoPrompt.trim();
+  const voicePromptText = input.dialogue.trim();
+  const promptBlocks: CanvasStoryboardPromptBlocks = {
+    ...(imagePromptText
+      ? {
+          imagePromptDocument: createMarkdownStoryboardPromptDocument({
+            shotKey: input.shotKey,
+            blockKind: 'image',
+            text: imagePromptText,
+            fieldId: 'shot.imagePrompt',
+          }),
+        }
+      : {}),
+    ...(videoPromptText
+      ? {
+          videoPromptDocument: createMarkdownStoryboardPromptDocument({
+            shotKey: input.shotKey,
+            blockKind: 'video',
+            text: videoPromptText,
+            fieldId: 'scene.videoPrompt',
+          }),
+        }
+      : {}),
+    ...(voicePromptText
+      ? {
+          voicePromptDocument: createMarkdownStoryboardPromptDocument({
+            shotKey: input.shotKey,
+            blockKind: 'voice',
+            text: voicePromptText,
+            fieldId: 'voice.dialogue',
+          }),
+        }
+      : {}),
+  };
+  const generationParams = {
+    duration: input.duration,
+    ...(voicePromptText ? { dialogue: voicePromptText } : {}),
+  };
+  return {
+    version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+    ...(hasMarkdownPromptBlocks(promptBlocks) ? { promptBlocks } : {}),
+    generationParams,
+    nextCreativeState: resolveCanvasStoryboardNextCreativeState({
+      promptBlocks,
+      generationParams,
+    }),
+  };
+}
+
+function createMarkdownStoryboardPromptDocument(input: {
+  readonly shotKey: string;
+  readonly blockKind: CanvasStoryboardPromptBlockKind;
+  readonly text: string;
+  readonly fieldId: string;
+}): CanvasStoryboardSemanticPromptDocument {
+  return {
+    version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+    documentId: `${input.shotKey}:${input.blockKind}:prompt`,
+    blockKind: input.blockKind,
+    text: input.text,
+    fieldProjections: [
+      {
+        fieldId: input.fieldId,
+        value: input.text,
+        alignmentState: 'in-sync',
+      },
+    ],
+    profileId: 'canvas.storyboard.semantic-prompt',
+  };
+}
+
+function hasMarkdownPromptBlocks(promptBlocks: CanvasStoryboardPromptBlocks): boolean {
+  return Boolean(
+    promptBlocks.imagePromptDocument ||
+    promptBlocks.videoPromptDocument ||
+    promptBlocks.voicePromptDocument,
+  );
+}
+
+function createMarkdownStoryboardShotKey(
+  title: string | undefined,
+  row: MarkdownTableRow,
+  shotNumber: number,
+): string {
+  return sanitizeMarkdownStoryboardId(
+    `${title ?? 'markdown-storyboard'}-shot-${shotNumber}-${row.line}`,
+  );
+}
+
+function sanitizeMarkdownStoryboardId(value: string): string {
+  return (
+    value
+      .trim()
+      .replace(/[^A-Za-z0-9:._-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'shot'
+  );
 }
 
 function getStoryboardProductionContentColumn(
@@ -1305,101 +1427,6 @@ function shouldCreateStoryboardShot(
   const decisionColumn = profileColumns.columnsByField.get('decision');
   const decision = decisionColumn ? getCell(row, decisionColumn).trim().toLowerCase() : '';
   return decision !== 'skip' && decision !== 'reference-only' && decision !== 'duplicate';
-}
-
-function extractPromptSlots(
-  row: MarkdownTableRow,
-  profileColumns: CanvasMarkdownResolvedTableProfileColumns,
-  scope: 'shot' | 'scene',
-  operationHint: CanvasMarkdownCapabilityInput['operationHint'] | undefined,
-): readonly CanvasCreativePromptSlot[] {
-  const slots: CanvasCreativePromptSlot[] = [];
-  for (const consumed of profileColumns.consumedColumns) {
-    const descriptor = STORYBOARD_CREATIVE_TABLE_PROFILE.fields.find(
-      (field) => field.id === consumed.fieldId,
-    );
-    if (!descriptor?.promptSlot) continue;
-    const promptSlotContext = resolvePromptSlotContext(descriptor.promptSlot, operationHint);
-    if (promptSlotContext.scope !== scope) continue;
-    const prompt = row.cells[consumed.columnId]?.trim() ?? '';
-    if (!prompt) continue;
-    slots.push({
-      fieldId: consumed.fieldId,
-      scope: promptSlotContext.scope,
-      mediaType: promptSlotContext.mediaType,
-      operation: promptSlotContext.operation,
-      prompt,
-    });
-  }
-  return slots;
-}
-
-function shouldKeepShotPromptSlot(promptSlot: CanvasCreativePromptSlot): boolean {
-  if (promptSlot.fieldId !== 'imagePrompt' && promptSlot.fieldId !== 'prompt') {
-    return true;
-  }
-  return promptSlot.operation !== 'generate';
-}
-
-function resolvePromptSlotContext(
-  descriptor: CreativeTableFieldDescriptor['promptSlot'],
-  operationHint: CanvasMarkdownCapabilityInput['operationHint'] | undefined,
-): Pick<CanvasCreativePromptSlot, 'scope' | 'mediaType' | 'operation'> {
-  if (!descriptor) {
-    throw new Error('Prompt slot context requires a descriptor.');
-  }
-  const operationContext = parseOperationHint(operationHint);
-  if (operationContext && operationContext.mediaType === descriptor.mediaType) {
-    return operationContext;
-  }
-  return descriptor;
-}
-
-function parseOperationHint(
-  operationHint: CanvasMarkdownCapabilityInput['operationHint'] | undefined,
-): Pick<CanvasCreativePromptSlot, 'scope' | 'mediaType' | 'operation'> | undefined {
-  if (!operationHint) return undefined;
-  const [mediaType, scope, operation] = operationHint.split('.');
-  if (isPromptMediaType(mediaType) && isPromptScope(scope) && isPromptOperation(operation)) {
-    return { mediaType, scope, operation };
-  }
-  throw new Error(`Unsupported Canvas Markdown operation hint "${operationHint}".`);
-}
-
-function isPromptMediaType(
-  value: string | undefined,
-): value is CanvasCreativePromptSlot['mediaType'] {
-  return value === 'image' || value === 'video' || value === 'audio';
-}
-
-function isPromptScope(value: string | undefined): value is CanvasCreativePromptSlot['scope'] {
-  return value === 'shot' || value === 'scene';
-}
-
-function isPromptOperation(
-  value: string | undefined,
-): value is CanvasCreativePromptSlot['operation'] {
-  return value === 'generate' || value === 'edit';
-}
-
-function uniquePromptSlots(
-  promptSlots: readonly CanvasCreativePromptSlot[],
-): readonly CanvasCreativePromptSlot[] {
-  const seen = new Set<string>();
-  const unique: CanvasCreativePromptSlot[] = [];
-  for (const promptSlot of promptSlots) {
-    const key = [
-      promptSlot.fieldId,
-      promptSlot.scope,
-      promptSlot.mediaType,
-      promptSlot.operation,
-      promptSlot.prompt,
-    ].join('\u0000');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(promptSlot);
-  }
-  return unique;
 }
 
 function getCell(
@@ -1515,7 +1542,7 @@ function resourceLookupTokens(resource: CanvasMarkdownResourceRef): readonly str
     resource.sourcePath ? resource.sourcePath.split(/[\\/]/).pop() : undefined,
     resource.resourceRef?.id,
     resource.documentResourceRef?.entryPath,
-    resource.documentResourceRef?.entryPath.split(/[\\/]/).pop(),
+    resource.documentResourceRef?.entryPath?.split(/[\\/]/).pop(),
   ];
   return uniqueStrings(tokens.filter(isNonEmptyString));
 }

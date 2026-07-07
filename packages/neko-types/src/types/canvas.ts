@@ -19,6 +19,7 @@ import type {
   VariableEffect,
 } from './narrative-preview';
 import type { ResourceRef } from './resource-cache';
+import type { CanvasStoryboardPromptState } from './canvas-semantic-storyboard';
 import type { StoryboardMediaRef, StoryboardTextCue, StoryboardVoiceCue } from './storyboard-table';
 import type {
   BatchExecutionPlan,
@@ -511,7 +512,9 @@ export interface ShotCanvasNode extends CanvasNodeBase {
     textCues?: readonly StoryboardTextCue[];
     /** Structured voice/dialogue cues with speaker and voice asset bindings. */
     voiceCues?: readonly StoryboardVoiceCue[];
-    /** AI generation prompt — overrides visualDescription for image generation */
+    /** Semantic prompt-first storyboard authority for image/video/voice prompt authoring. */
+    storyboardPrompt?: CanvasStoryboardPromptState;
+    /** @deprecated Migration/import input only. Use storyboardPrompt prompt documents as authority. */
     generationPrompt?: string;
     /** Provider-neutral prompt slots imported from Creative Tables. */
     promptSlots?: readonly CanvasCreativePromptSlot[];

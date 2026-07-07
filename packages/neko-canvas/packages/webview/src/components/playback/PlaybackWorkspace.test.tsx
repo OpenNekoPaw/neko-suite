@@ -162,6 +162,32 @@ describe('PlaybackWorkspace', () => {
     expect(host.textContent).toContain('Shot 2');
   });
 
+  it('localizes preview metadata field labels without changing playback metadata keys', () => {
+    setLocale('zh-cn');
+
+    act(() => {
+      useCanvasStore.setState({
+        canvasData: {
+          ...storyboardCanvas(),
+          nodes: [scene('scene-a', ['shot-a1']), shot('shot-a1', 1, 'scene-a', '')],
+        },
+      });
+      usePlaybackStore.getState().revealPlaybackWorkspace({
+        panes: { canvas: true, stage: true, route: false },
+      });
+      root.render(<PlaybackWorkspace canvasPane={<div data-testid="canvas-pane">Canvas</div>} />);
+    });
+
+    expect(host.textContent).toContain('镜头 1');
+    expect(host.textContent).toContain('镜头号');
+    expect(host.textContent).toContain('时长');
+    expect(host.textContent).toContain('画面描述');
+    expect(host.textContent).toContain('角色');
+    expect(host.textContent).not.toContain('shotNumber');
+    expect(host.textContent).not.toContain('visualDescription');
+    expect(host.textContent).not.toContain('characters');
+  });
+
   it('changes current unit from the route matrix without writing private order to canvas data', () => {
     const before = JSON.stringify(useCanvasStore.getState().canvasData);
 

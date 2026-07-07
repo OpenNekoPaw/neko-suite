@@ -1,4 +1,9 @@
 import type { CanvasNode, ShotCanvasNode } from '../types/canvas';
+import {
+  isCanvasStoryboardPromptState,
+  type CanvasStoryboardPromptBlockKind,
+  type CanvasStoryboardPromptState,
+} from '../types/canvas-semantic-storyboard';
 
 export interface CanvasGenerationLineage {
   readonly sourceNodeId: string;
@@ -34,16 +39,23 @@ export function extractCanvasNodeGenerationLineage(
 
 export interface CanvasShotPromptProjection {
   readonly prompt: string;
-  readonly source: 'generationPrompt' | 'assembled' | 'empty';
+  readonly source: 'semantic-prompt-document' | 'assembled' | 'legacy-migration-required' | 'empty';
+  readonly promptBlockKind?: CanvasStoryboardPromptBlockKind;
+  readonly legacyMigrationPrompt?: string;
   readonly shotScale?: string;
   readonly cameraMovement?: string;
   readonly cameraAngle?: string;
+}
+
+export interface ProjectCanvasShotPromptOptions {
+  readonly preferredBlockKind?: CanvasStoryboardPromptBlockKind;
 }
 
 export type CanvasShotPromptProjectableData = Partial<
   Pick<
     ShotCanvasNode['data'],
     | 'generationPrompt'
+    | 'storyboardPrompt'
     | 'visualDescription'
     | 'characters'
     | 'characterAction'
@@ -60,28 +72,34 @@ export type CanvasShotPromptProjectableData = Partial<
 >;
 
 /**
- * Project Shot fields into the creator-facing generation prompt used by
- * one-click and batch generation. `generationPrompt` is an explicit override;
- * otherwise durable structured fields remain the source of truth.
+ * Project Shot fields into the creator-facing prompt used by authoring and
+ * generation entry points. Semantic storyboard prompt documents are canonical;
+ * legacy `generationPrompt` is migration/import input only.
  */
-export function projectCanvasShotPrompt(node: CanvasNode): CanvasShotPromptProjection | undefined {
+export function projectCanvasShotPrompt(
+  node: CanvasNode,
+  options: ProjectCanvasShotPromptOptions = {},
+): CanvasShotPromptProjection | undefined {
   if (node.type !== 'shot') return undefined;
-  return projectShotDataPrompt(node.data);
+  return projectShotDataPrompt(node.data, options);
 }
 
 export function projectShotDataPrompt(
   data: CanvasShotPromptProjectableData,
+  options: ProjectCanvasShotPromptOptions = {},
 ): CanvasShotPromptProjection {
-  const explicitPrompt = readTrimmedString(data.generationPrompt);
   const result = buildProjectionResult(data);
-  if (explicitPrompt) {
+  const semanticPrompt = projectSemanticStoryboardPrompt(data.storyboardPrompt, options);
+  if (semanticPrompt) {
     return {
       ...result,
-      prompt: explicitPrompt,
-      source: 'generationPrompt',
+      prompt: semanticPrompt.prompt,
+      source: 'semantic-prompt-document',
+      promptBlockKind: semanticPrompt.blockKind,
     };
   }
 
+  const legacyMigrationPrompt = readTrimmedString(data.generationPrompt);
   const parts: string[] = [];
   const visualDescription = readTrimmedString(data.visualDescription);
   if (visualDescription) parts.push(visualDescription);
@@ -113,8 +131,48 @@ export function projectShotDataPrompt(
   return {
     ...result,
     prompt: parts.join('. '),
-    source: parts.length > 0 ? 'assembled' : 'empty',
+    source:
+      parts.length > 0
+        ? 'assembled'
+        : legacyMigrationPrompt
+          ? 'legacy-migration-required'
+          : 'empty',
+    ...(legacyMigrationPrompt ? { legacyMigrationPrompt } : {}),
   };
+}
+
+function projectSemanticStoryboardPrompt(
+  value: unknown,
+  options: ProjectCanvasShotPromptOptions,
+): { readonly blockKind: CanvasStoryboardPromptBlockKind; readonly prompt: string } | undefined {
+  if (!isCanvasStoryboardPromptState(value)) return undefined;
+  const promptBlocks = value.promptBlocks;
+  if (!promptBlocks) return undefined;
+
+  const preferred = options.preferredBlockKind
+    ? readSemanticPromptBlock(value, options.preferredBlockKind)
+    : undefined;
+  if (preferred) return preferred;
+
+  return (
+    readSemanticPromptBlock(value, 'video') ??
+    readSemanticPromptBlock(value, 'image') ??
+    readSemanticPromptBlock(value, 'voice')
+  );
+}
+
+function readSemanticPromptBlock(
+  state: CanvasStoryboardPromptState,
+  blockKind: CanvasStoryboardPromptBlockKind,
+): { readonly blockKind: CanvasStoryboardPromptBlockKind; readonly prompt: string } | undefined {
+  const document =
+    blockKind === 'image'
+      ? state.promptBlocks?.imagePromptDocument
+      : blockKind === 'video'
+        ? state.promptBlocks?.videoPromptDocument
+        : state.promptBlocks?.voicePromptDocument;
+  const prompt = readTrimmedString(document?.text);
+  return prompt ? { blockKind, prompt } : undefined;
 }
 
 function buildProjectionResult(

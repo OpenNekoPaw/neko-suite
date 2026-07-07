@@ -3083,8 +3083,8 @@ export class NarrativePreviewBridge implements vscode.Disposable {
       const metadata = getMetadata(unit);
       if (unit.kind === 'shot') {
         return (
+          readStoryboardPromptText(metadata) ||
           readString(metadata.visualDescription) ||
-          readString(metadata.generationPrompt) ||
           readString(metadata.dialogue) ||
           t('defaultShotBody')
         );
@@ -3139,6 +3139,29 @@ export class NarrativePreviewBridge implements vscode.Disposable {
         }
       }
       return undefined;
+    }
+
+    function readStoryboardPromptText(metadata) {
+      const state = metadata.storyboardPrompt;
+      if (!state || typeof state !== 'object' || Array.isArray(state)) {
+        return undefined;
+      }
+      const blocks = state.promptBlocks;
+      if (!blocks || typeof blocks !== 'object' || Array.isArray(blocks)) {
+        return undefined;
+      }
+      return (
+        readPromptDocumentText(blocks.videoPromptDocument) ||
+        readPromptDocumentText(blocks.imagePromptDocument) ||
+        readPromptDocumentText(blocks.voicePromptDocument)
+      );
+    }
+
+    function readPromptDocumentText(document) {
+      if (!document || typeof document !== 'object' || Array.isArray(document)) {
+        return undefined;
+      }
+      return readString(document.text);
     }
 
     function readString(value) {

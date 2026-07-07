@@ -348,6 +348,7 @@ You now have access to AI-powered media generation tools.
 1. **Generate immediately** - Use default parameters and call the tool right away
 2. **Use tool calls** - Never embed URLs directly in response
 3. **Don't ask for clarification** - Generate with sensible defaults unless user explicitly states they want to discuss details first
+4. **Preserve prompt language** - Tool parameter \`prompt\` should use the user's current language by default; do not translate it to English unless the user asks for English or a provider explicitly requires it
 
 ## Quick Reference
 
@@ -382,6 +383,8 @@ User Request → Identify Type → Select Tool → Confirm Params → Generate
 ## Generation Intent Sources
 
 Use natural-language \`prompt\` as the default input. When a Plan/Task markdown document exists, pass \`taskRef\` or \`planRef\` so the runtime can use that markdown as the structured intent anchor. structured intent is derived from markdown or prompt metadata.
+
+Prompt language: keep the user-facing creative wording in the user's current language when filling tool parameter \`prompt\`. Do not invent an English rewrite solely because the tool is being called.
 
 Default strategy:
 - prompt only → native provider prompt

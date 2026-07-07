@@ -2,6 +2,7 @@ import type {
   CanvasNodeType,
   CanvasSerializableRecord,
   CanvasSerializableValue,
+  CanvasStoryboardPromptState,
   BatchExecutionPlan,
   ComicAnimationDiagnostic,
   GalleryPreset,
@@ -27,6 +28,7 @@ import {
   getBuiltInCanvasNodePresetMetadata,
   getDefaultCanvasNodePresetName,
   isDocumentArchiveResourceRef,
+  isCanvasStoryboardPromptState,
   isResourceRef,
   parseDocumentResourceStatus,
 } from '@neko/shared';
@@ -374,6 +376,9 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             textCues: asObjectArray<StoryboardTextCue>(data.textCues) ?? DEFAULT_EMPTY_TEXT_CUES,
             voiceCues:
               asObjectArray<StoryboardVoiceCue>(data.voiceCues) ?? DEFAULT_EMPTY_VOICE_CUES,
+            storyboardPrompt: isCanvasStoryboardPromptState(data.storyboardPrompt)
+              ? (data.storyboardPrompt as CanvasStoryboardPromptState)
+              : undefined,
             generationPrompt: asString(data.generationPrompt) || undefined,
             visualStyle: asString(data.visualStyle) || undefined,
             vfx: asStringArray(data.vfx),

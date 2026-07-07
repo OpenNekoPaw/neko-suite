@@ -118,13 +118,12 @@ export const mediaToVideoSkill: Skill = {
       'workflow-execution-summary',
     ],
     artifactProfiles: ['storyboard', 'comic-shot-asset-prep'],
-    referencedCapabilities: ['canvas.ingestMarkdown', 'canvas.validateMarkdownStoryboard'],
-    suggestedProjectors: ['capability:canvas.ingestMarkdown'],
+    referencedCapabilities: ['canvas.authoring'],
     tags: ['media-to-video', 'orchestration', 'storyboard', 'animation'],
     operations: ['coordinate-media-production', 'select-focused-skill', 'plan-handoff'],
     costLevel: 'medium',
     riskLevel: 'medium',
-    validationRequirements: ['CreativeTable', 'CanvasMarkdownCapabilityInput', 'AnimationPlan'],
+    validationRequirements: ['CreativeTable', 'AnimationPlan'],
   },
 };
 
@@ -197,12 +196,7 @@ export const comicToAnimationSkill: Skill = {
       'workflow-execution-summary',
     ],
     artifactProfiles: ['storyboard', 'comic-shot-asset-prep'],
-    referencedCapabilities: [
-      'comic-image-prep-pipeline',
-      'canvas.ingestMarkdown',
-      'canvas.validateMarkdownStoryboard',
-    ],
-    suggestedProjectors: ['capability:canvas.ingestMarkdown'],
+    referencedCapabilities: ['comic-image-prep-pipeline', 'canvas.authoring'],
     tags: ['comic-to-animation', 'comic', 'storyboard', 'animation', 'media-to-video'],
     operations: [
       'create-animation-plan',
@@ -212,12 +206,7 @@ export const comicToAnimationSkill: Skill = {
     ],
     costLevel: 'high',
     riskLevel: 'medium',
-    validationRequirements: [
-      'CreativeTable',
-      'CanvasMarkdownCapabilityInput',
-      'AnimationPlan',
-      'ShotImagePrepPlan',
-    ],
+    validationRequirements: ['CreativeTable', 'AnimationPlan', 'ShotImagePrepPlan'],
   },
 };
 
@@ -261,7 +250,7 @@ export const imageToShotSkill: Skill = {
     operations: ['image-to-shot', 'create-shot-plan', 'reference-image-breakdown'],
     costLevel: 'medium',
     riskLevel: 'medium',
-    validationRequirements: ['CreativeTable', 'CanvasMarkdownCapabilityInput', 'AnimationPlan'],
+    validationRequirements: ['CreativeTable', 'AnimationPlan'],
   },
 };
 

@@ -89,22 +89,26 @@ describe('creative table profile descriptor', () => {
       operation: 'generate',
     });
     expect(videoPrompt?.promptSlot).toEqual({
-      scope: 'shot',
+      scope: 'scene',
       mediaType: 'video',
       operation: 'generate',
     });
+    expect(imagePrompt?.productionMapping?.target).toBe('storyboardPrompt.imagePromptDocument');
+    expect(videoPrompt?.productionMapping?.target).toBe('storyboardPrompt.videoPromptDocument');
+    expect(JSON.stringify(STORYBOARD_CREATIVE_TABLE_PROFILE)).not.toContain(
+      'shot.generationPrompt',
+    );
+    expect(JSON.stringify(STORYBOARD_CREATIVE_TABLE_PROFILE)).not.toContain('shot.promptSlots');
+    expect(JSON.stringify(STORYBOARD_CREATIVE_TABLE_PROFILE)).not.toContain('scene.promptSlots');
   });
 
-  it('maps legacy split prompt headers to canonical prompt fields', () => {
+  it('maps split prompt headers to canonical prompt fields without making video shot-scoped', () => {
     expect(resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, '图像编辑提示词')?.id).toBe(
       'imagePrompt',
     );
     expect(
       resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, 'sceneStylePrompt')?.id,
     ).toBe('imagePrompt');
-    expect(
-      resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, 'shotVideoPrompt')?.id,
-    ).toBe('videoPrompt');
     expect(
       resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, 'videoEditPrompt')?.id,
     ).toBe('videoPrompt');
@@ -135,6 +139,15 @@ describe('creative table profile descriptor', () => {
       acceptedPromptFieldIds: ['videoPrompt'],
     });
     expect(
+      getCreativeTableOperationRequirement(
+        STORYBOARD_CREATIVE_TABLE_PROFILE,
+        'video.shot.generate',
+      ),
+    ).toBeUndefined();
+    expect(
+      getCreativeTableOperationRequirement(STORYBOARD_CREATIVE_TABLE_PROFILE, 'video.shot.edit'),
+    ).toBeUndefined();
+    expect(
       getCreativeTableOperationRequirement(STORYBOARD_CREATIVE_TABLE_PROFILE, 'image.shot.edit')
         ?.requiredFieldIds,
     ).toEqual(['imagePrompt']);
@@ -143,9 +156,16 @@ describe('creative table profile descriptor', () => {
   it('normalizes headers consistently with existing storyboard behavior', () => {
     expect(normalizeCreativeTableHeader('Source Panel')).toBe('sourcepanel');
     expect(normalizeCreativeTableHeader('source_panel')).toBe('sourcepanel');
-    expect(STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS).toEqual(
-      expect.arrayContaining(['imagePrompt', 'videoPrompt']),
-    );
+    expect(STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS).toEqual([
+      'scene',
+      'shot',
+      'source',
+      'imagePrompt',
+      'videoPrompt',
+      'duration',
+      'dialogue',
+    ]);
+    expect(STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS).not.toContain('decisionReason');
   });
 
   it('keeps storyboard descriptor references internally consistent', () => {

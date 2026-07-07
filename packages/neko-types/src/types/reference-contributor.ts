@@ -1,7 +1,7 @@
 import type { AgentCapabilityAvailabilityDiagnostic } from './agent-capability-diagnostics';
 
 export type AgentReferenceCandidateKind =
-  'file' | 'asset' | 'story-scene' | 'canvas' | 'document' | 'media' | 'artifact';
+  'file' | 'asset' | 'entity' | 'story-scene' | 'canvas' | 'document' | 'media' | 'artifact';
 
 export type AgentReferenceMetadataPrimitive = string | number | boolean | null;
 

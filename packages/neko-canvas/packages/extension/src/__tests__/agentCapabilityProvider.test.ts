@@ -8,9 +8,12 @@ import type {
   NekoCanvasAPI,
 } from '@neko/shared';
 import {
+  CANVAS_STORYBOARD_ACTION_INTENT_IDS,
+  CANVAS_STORYBOARD_ADVANCED_PARAMETER_IDS,
   TOOL_NAMES_CANVAS,
   validateCanvasAuthoringCatalog,
   validateCanvasAuthoringResultEnvelope,
+  validateCanvasStoryboardActionIntent,
 } from '@neko/shared';
 import { createNekoCanvasCapabilityProvider } from '../agentCapabilityProvider';
 
@@ -336,9 +339,8 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(toolNamesSource).toContain(
       "CANVAS_CREATE_TABLE_FROM_MARKDOWN: 'canvas.createTableFromMarkdown'",
     );
-    expect(toolNamesSource).toContain(
-      "CANVAS_CREATE_STORYBOARD_DRAFT_FROM_MARKDOWN: 'canvas.createStoryboardDraftFromMarkdown'",
-    );
+    expect(toolNamesSource).not.toContain('CANVAS_CREATE_STORYBOARD_DRAFT_FROM_MARKDOWN');
+    expect(toolNamesSource).not.toContain('canvas.createStoryboardDraftFromMarkdown');
     expect(toolNamesSource).toContain(
       "CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN: 'canvas.createStoryboardFromMarkdown'",
     );
@@ -349,7 +351,11 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).toContain('CANVAS_MARKDOWN_TOOL_DEFINITIONS');
     expect(providerSource).toContain("capabilityId: 'canvas.ingestMarkdown'");
     expect(providerSource).toContain("capabilityId: 'canvas.validateMarkdownStoryboard'");
+    expect(providerSource).toContain(
+      'document-entry DocumentArchiveResourceRef values must use documentResourceRef',
+    );
     expect(providerSource).toContain("accepts: ['Markdown', 'GfmTable']");
+    expect(providerSource).not.toContain('MarkdownStoryboardDraft');
 
     const provider = createNekoCanvasCapabilityProvider(createApi());
     const facets = provider.getArtifactFacets({ extensionContext: {} });
@@ -363,21 +369,43 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     const authoringFacet = facets.capabilities.find(
       (capability) => capability.capabilityId === 'canvas.authoring',
     );
-    const authoringSkill = provider.getSkills?.().find((skill) => skill.name === 'canvas-authoring');
+    const storyboardMarkdownFacets = facets.capabilities.filter(
+      (capability) =>
+        capability.capabilityId === 'canvas.createStoryboardFromMarkdown' ||
+        capability.capabilityId === 'canvas.validateMarkdownStoryboard',
+    );
+    const authoringSkill = provider
+      .getSkills?.()
+      .find((skill) => skill.name === 'canvas-authoring');
 
     expect(authoringSkill).toBeDefined();
+    expect(toolNames).not.toContain('CreateCanvas');
+    expect(toolNames).not.toContain('AddCanvasShape');
+    expect(toolNames).not.toContain('canvas.createStoryboardDraftFromMarkdown');
     expect(authoringFacet).toEqual(
       expect.objectContaining({
         packageId: 'neko-canvas',
         accepts: expect.arrayContaining(['Markdown']),
       }),
     );
+    expect(storyboardMarkdownFacets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          capabilityId: 'canvas.createStoryboardFromMarkdown',
+          accepts: expect.arrayContaining(['GfmCreativeTable', 'SemanticStoryboardProjection']),
+        }),
+        expect.objectContaining({
+          capabilityId: 'canvas.validateMarkdownStoryboard',
+          accepts: expect.arrayContaining(['GfmCreativeTable', 'SemanticStoryboardProjection']),
+        }),
+      ]),
+    );
+    expect(JSON.stringify(storyboardMarkdownFacets)).not.toContain('MarkdownStoryboardDraft');
     expect(toolNames).toEqual(
       expect.arrayContaining([
         'canvas.ingestMarkdown',
         'canvas.createMarkdownNote',
         'canvas.createTableFromMarkdown',
-        'canvas.createStoryboardDraftFromMarkdown',
         'canvas.createStoryboardFromMarkdown',
         'canvas.validateMarkdownStoryboard',
       ]),
@@ -386,7 +414,6 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
       'canvas.ingestMarkdown',
       'canvas.createMarkdownNote',
       'canvas.createTableFromMarkdown',
-      'canvas.createStoryboardDraftFromMarkdown',
       'canvas.createStoryboardFromMarkdown',
       'canvas.attachResource',
       'canvas.validateMarkdownStoryboard',
@@ -451,7 +478,9 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     });
 
     await expect(
-      catalogTool!.execute({ sections: ['presets', 'operations', 'fieldProfiles', 'semanticPrompts'] }),
+      catalogTool!.execute({
+        sections: ['presets', 'operations', 'fieldProfiles', 'semanticPrompts'],
+      }),
     ).resolves.toMatchObject({
       success: true,
       data: {
@@ -527,7 +556,80 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
         ]),
         semanticPrompts: expect.objectContaining({
           supported: true,
+          promptBlockKinds: expect.arrayContaining(['image', 'video', 'voice']),
+          promptContentProfiles: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'storyboard.image-prompt.v1',
+              blockKind: 'image',
+              generationEffectiveParts: expect.arrayContaining([
+                expect.objectContaining({ id: 'image.intent', required: true }),
+                expect.objectContaining({
+                  id: 'character.appearance',
+                  mapsToFieldId: 'character.appearance',
+                }),
+              ]),
+            }),
+            expect.objectContaining({
+              id: 'storyboard.video-prompt.v1',
+              blockKind: 'video',
+              generationEffectiveParts: expect.arrayContaining([
+                expect.objectContaining({ id: 'video.intent', required: true }),
+                expect.objectContaining({
+                  id: 'duration.rhythm',
+                  mapsToFieldId: 'generation.duration',
+                }),
+              ]),
+            }),
+            expect.objectContaining({
+              id: 'storyboard.voice-prompt.v1',
+              blockKind: 'voice',
+              generationEffectiveParts: expect.arrayContaining([
+                expect.objectContaining({ id: 'voice.dialogue', required: true }),
+              ]),
+            }),
+          ]),
           alignmentStates: expect.arrayContaining(['in-sync', 'fields-changed', 'conflict']),
+          referenceMediaKinds: expect.arrayContaining(['image', 'video', 'audio']),
+          metadataPolicies: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'storyboard.review-metadata',
+              generationEffect: 'suggestion-only',
+              fieldIds: expect.arrayContaining(['sourcePanel', 'ocrNotes', 'risk']),
+            }),
+            expect.objectContaining({
+              id: 'storyboard.custom-metadata',
+              generationEffect: 'none',
+            }),
+          ]),
+          promotionRules: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'metadata-to-prompt-span',
+              requiresConfirmation: true,
+            }),
+            expect.objectContaining({
+              id: 'skill-field-to-prompt-content',
+              to: 'semantic-prompt-span',
+            }),
+          ]),
+          advancedParameterIds: [...CANVAS_STORYBOARD_ADVANCED_PARAMETER_IDS],
+          nextCreativeStateIds: expect.arrayContaining([
+            'missing-reference',
+            'ready-to-generate-video',
+            'needs-result-review',
+            'accepted',
+          ]),
+          actionIntentIds: [...CANVAS_STORYBOARD_ACTION_INTENT_IDS],
+          primaryStoryboardColumns: [
+            'shot',
+            'reference-media',
+            'image-prompt',
+            'video-prompt',
+            'duration',
+            'dialogue',
+            'state',
+            'action',
+          ],
+          progressOwner: 'agent',
         }),
         diagnostics: [],
       },
@@ -537,6 +639,111 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(result.success).toBe(true);
     expect(validateCanvasAuthoringCatalog(result.data).valid).toBe(true);
     expect(result.data).not.toHaveProperty('nodeTypes');
+  });
+
+  it('exposes prompt-first storyboard targetable fields without relying on Skill columns', async () => {
+    const provider = createNekoCanvasCapabilityProvider(createApi());
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const catalogTool = tools.find(
+      (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+    );
+
+    await expect(
+      catalogTool!.execute({ sections: ['targetableFields', 'fieldProfiles'] }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        targetableFields: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'shot.imagePrompt',
+            path: '/storyboardPrompt/promptBlocks/imagePromptDocument/text',
+            storageTarget: 'prompt-span',
+          }),
+          expect.objectContaining({
+            id: 'scene.videoPrompt',
+            path: '/storyboardPrompt/promptBlocks/videoPromptDocument/text',
+            storageTarget: 'prompt-span',
+          }),
+          expect.objectContaining({
+            id: 'referenceMedia.imageRefs',
+            storageTarget: 'node-data',
+          }),
+          expect.objectContaining({
+            id: 'review.ocrNotes',
+            storageTarget: 'review-metadata',
+          }),
+        ]),
+        fieldProfiles: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'storyboard.ai-native',
+            fields: expect.arrayContaining([
+              expect.objectContaining({
+                id: 'shot.imagePrompt',
+                promptSpan: expect.objectContaining({ behavior: 'source-of-truth' }),
+              }),
+              expect.objectContaining({
+                id: 'scene.videoPrompt',
+                promptSpan: expect.objectContaining({ behavior: 'source-of-truth' }),
+              }),
+              expect.objectContaining({
+                id: 'generation.duration',
+                storageTarget: 'capability-input',
+              }),
+              expect.objectContaining({
+                id: 'review.risk',
+                storageTarget: 'review-metadata',
+              }),
+            ]),
+          }),
+        ]),
+      },
+    });
+  });
+
+  it('diagnoses unsupported storyboard action parameters against model capability slices', () => {
+    const validation = validateCanvasStoryboardActionIntent(
+      {
+        version: 1,
+        actionId: 'generate-video',
+        target: { nodeId: 'shot-1', sceneNodeId: 'scene-1', shotNumber: 1 },
+        generationParams: {
+          duration: 4,
+          advancedParameters: {
+            aspectRatio: '16:9',
+            seed: 1234,
+            videoReference: { refId: 'video-ref' },
+            loraStack: ['unsupported-custom-param'],
+          },
+        },
+      },
+      { supportedAdvancedParameters: ['aspectRatio'] },
+    );
+
+    expect(validation.valid).toBe(false);
+    expect(validation.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'unsupported-storyboard-advanced-parameter',
+          target: 'advancedParameters.seed',
+          expected: ['aspectRatio'],
+        }),
+        expect.objectContaining({
+          code: 'unsupported-storyboard-advanced-parameter',
+          target: 'advancedParameters.videoReference',
+          expected: ['aspectRatio'],
+        }),
+        expect.objectContaining({
+          code: 'unsupported-storyboard-advanced-parameter',
+          target: 'advancedParameters.loraStack',
+          expected: CANVAS_STORYBOARD_ADVANCED_PARAMETER_IDS,
+        }),
+      ]),
+    );
   });
 
   it('returns structured Canvas authoring envelopes from mutation tools', async () => {
@@ -550,13 +757,13 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     vi.mocked(api.nodes.updateBlock).mockResolvedValue({
       nodeId: 'shot-1',
       changed: true,
-      data: { generationPrompt: 'new prompt' },
+      data: { storyboardPrompt: { version: 1 } },
     });
     vi.mocked(api.nodes.applyAgentContent).mockResolvedValue({
       changed: true,
       mode: 'apply',
       nodeId: 'shot-1',
-      target: { nodeId: 'shot-1', fieldPath: '/generationPrompt', mode: 'apply' },
+      target: { nodeId: 'shot-1', fieldPath: '/storyboardPrompt', mode: 'apply' },
     });
     vi.mocked(api.nodes.generateImage).mockResolvedValue(undefined);
 
@@ -616,8 +823,8 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     await expect(
       getTool(TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK).execute({
         nodeId: 'shot-1',
-        path: '/generationPrompt',
-        value: 'new prompt',
+        path: '/storyboardPrompt',
+        value: { version: 1 },
       }),
     ).resolves.toMatchObject({
       success: true,
@@ -625,17 +832,17 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
         authoringResult: {
           status: 'success',
           refs: [expect.objectContaining({ kind: 'node', id: 'shot-1' })],
-          changedFields: ['/generationPrompt'],
+          changedFields: ['/storyboardPrompt'],
         },
       },
     });
 
     await expect(
       getTool(TOOL_NAMES_CANVAS.CANVAS_APPLY_AGENT_CONTENT).execute({
-        kind: 'prompt',
-        prompt: 'cinematic wide shot',
+        kind: 'structured',
+        contentJson: '{"version":1}',
         nodeId: 'shot-1',
-        fieldPath: '/generationPrompt',
+        fieldPath: '/storyboardPrompt',
         mode: 'apply',
       }),
     ).resolves.toMatchObject({
@@ -644,7 +851,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
         authoringResult: {
           status: 'success',
           refs: [expect.objectContaining({ kind: 'node', id: 'shot-1' })],
-          changedFields: ['/generationPrompt'],
+          changedFields: ['/storyboardPrompt'],
         },
       },
     });
@@ -657,9 +864,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
         authoringResult: {
           status: 'success',
           refs: [expect.objectContaining({ kind: 'node', id: 'shot-1' })],
-          nextActions: [
-            expect.objectContaining({ toolName: TOOL_NAMES_CANVAS.CANVAS_GET_NODE }),
-          ],
+          nextActions: [expect.objectContaining({ toolName: TOOL_NAMES_CANVAS.CANVAS_GET_NODE })],
         },
       },
     });
@@ -831,9 +1036,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
       configManager: undefined,
       embedFn: undefined,
     });
-    const updateBlock = tools.find(
-      (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK,
-    )!;
+    const updateBlock = tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_UPDATE_BLOCK)!;
     const createConnection = tools.find(
       (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_CREATE_CONNECTION,
     )!;
@@ -856,7 +1059,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     await expect(
       updateBlock.execute({
         nodeId: 'stale-node',
-        path: '/generationPrompt',
+        path: '/storyboardPrompt',
         value: 'prompt',
       }),
     ).resolves.toMatchObject({
@@ -904,7 +1107,16 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     });
     expect(authoringSkill?.content).toContain('canvas_describe_authoring_capabilities');
     expect(authoringSkill?.content).toContain('scene.basic + shot.basic');
+    expect(authoringSkill?.content).toContain('Send-to-Canvas storyboard creative tables');
+    expect(authoringSkill?.content).toContain('mode=create-nodes');
+    expect(authoringSkill?.content).toContain('review-only table/draft ingestion');
+    expect(authoringSkill?.content).toContain('not scene/shot nodes');
     expect(authoringSkill?.content).toContain('prompt-first');
+    expect(authoringSkill?.content).toContain('Semantic Prompt Document');
+    expect(authoringSkill?.content).toContain('videoPrompt is scene-scoped');
+    expect(authoringSkill?.content).toContain(
+      'Agent owns approval, provider calls, async task progress',
+    );
     expect(storyboardAlias).toBeUndefined();
   });
 
@@ -916,6 +1128,9 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(authoringSkill?.description).toContain('Canvas authoring');
     expect(authoringSkill?.content).toContain('# Canvas Authoring');
     expect(authoringSkill?.content).toContain('先查询 canvas_describe_authoring_capabilities');
+    expect(authoringSkill?.content).toContain('Send to Canvas 分镜 creative table');
+    expect(authoringSkill?.content).toContain('mode=create-nodes');
+    expect(authoringSkill?.content).toContain('不创建 scene/shot 节点');
     expect(authoringSkill?.content).toContain('prompt-first');
     expect(skills.some((candidate) => candidate.name === 'canvas-markdown-storyboard')).toBe(false);
     expect(authoringSkill?.content).not.toContain('Use this skill only after');
@@ -1002,6 +1217,123 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     });
   });
 
+  it('fails visibly when Canvas Markdown API returns an invalid result', async () => {
+    const api = createApi();
+    api.markdown.invoke = vi.fn(async () => ({}) as never);
+    const provider = createNekoCanvasCapabilityProvider(api);
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const ingestTool = tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN);
+
+    await expect(
+      ingestTool!.execute({
+        markdown:
+          '| scene | shot | source | imagePrompt |\n| --- | --- | --- | --- |\n| S1 | 1 | P1 | prep |',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
+      }),
+    ).resolves.toMatchObject({
+      success: false,
+      error: 'Canvas Markdown capability returned an invalid result.',
+      data: {
+        capabilityId: 'canvas.ingestMarkdown',
+        phase: 'review',
+        status: 'blocked',
+        diagnostics: [
+          expect.objectContaining({
+            severity: 'error',
+            code: 'canvas-markdown-invalid-result',
+          }),
+        ],
+        data: {
+          authoringResult: {
+            status: 'blocked',
+          },
+        },
+      },
+    });
+  });
+
+  it('blocks Markdown capability tools before invoking Canvas when markdown is missing', async () => {
+    const api = createApi();
+    const provider = createNekoCanvasCapabilityProvider(api);
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const ingestTool = tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN);
+
+    expect(ingestTool?.parameters.required).toEqual(['markdown']);
+    await expect(
+      ingestTool!.execute({
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
+      }),
+    ).resolves.toMatchObject({
+      success: false,
+      error: 'Canvas Markdown capability requires non-empty markdown.',
+      data: {
+        capabilityId: 'canvas.ingestMarkdown',
+        phase: 'review',
+        status: 'blocked',
+        diagnostics: [
+          expect.objectContaining({
+            severity: 'error',
+            code: 'canvas-markdown-missing-markdown',
+          }),
+        ],
+      },
+    });
+    expect(api.markdown.invoke).not.toHaveBeenCalled();
+  });
+
+  it('fails visibly when Canvas Markdown mutation result has no Canvas refs', async () => {
+    const api = createApi();
+    api.markdown.invoke = vi.fn(async (input) => ({
+      capabilityId: input.capabilityId,
+      status: 'created',
+      diagnostics: [],
+    }));
+    const provider = createNekoCanvasCapabilityProvider(api);
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const ingestTool = tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN);
+
+    await expect(
+      ingestTool!.execute({
+        markdown:
+          '| scene | shot | source | imagePrompt |\n| --- | --- | --- | --- |\n| S1 | 1 | P1 | prep |',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
+      }),
+    ).resolves.toMatchObject({
+      success: false,
+      error:
+        'Canvas Markdown capability reported a mutation status but did not return any Canvas node reference.',
+      data: {
+        capabilityId: 'canvas.ingestMarkdown',
+        phase: 'review',
+        status: 'blocked',
+        diagnostics: [
+          expect.objectContaining({
+            severity: 'error',
+            code: 'canvas-markdown-mutation-result-missing-ref',
+          }),
+        ],
+      },
+    });
+  });
+
   it('localizes Canvas-owned tool definitions in the Canvas provider', () => {
     const provider = createNekoCanvasCapabilityProvider(createApi());
     const tools = provider.getTools({
@@ -1032,6 +1364,25 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
       parameters: {
         markdown: '要校验的 Markdown 分镜内容。',
         sourceFormat: '来源格式提示。',
+      },
+    });
+    expect(
+      tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN)?.localization
+        ?.zh,
+    ).toMatchObject({
+      description:
+        '将 Markdown 内容作为可审阅 Note、表格或 creative table 导入 Canvas；不会创建生产 scene/shot 节点。',
+    });
+    expect(
+      tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN)
+        ?.localization?.zh,
+    ).toMatchObject({
+      description:
+        '在显式确认后，从已校验 Markdown 创建生产 Canvas 分镜节点（scene.basic + shot.basic）。',
+      parameters: {
+        mode: '分镜创建模式；生产节点创建必须使用 create-nodes。',
+        approval:
+          '生产级 apply 变更所需的审批上下文；Send to Canvas 分镜创建可使用 creation-apply。',
       },
     });
     expect(
@@ -1099,7 +1450,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     api.markdown.invoke = vi.fn(async (input) => ({
       capabilityId: input.capabilityId,
       status: 'needs-review',
-      draftNodeId: 'draft-node-1',
+      tableNodeId: 'table-node-1',
       diagnostics: [],
       actions: [
         {
@@ -1138,7 +1489,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
             requiresApproval: true,
             sourceRef: {
               kind: 'node',
-              id: 'draft-node-1',
+              id: 'table-node-1',
               packageId: 'neko-canvas',
             },
           },

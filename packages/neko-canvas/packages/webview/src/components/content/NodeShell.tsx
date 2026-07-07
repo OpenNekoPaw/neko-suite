@@ -8,6 +8,7 @@ import { createBuiltInNodeTypeDescriptors } from '../nodes/nodeTypeDescriptors';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { getGlobalVSCodeApi } from '../../utils/vscode';
 import { t } from '../../i18n';
+import { resolveCanvasStatusLabel } from '../../i18n/canvasValueLabels';
 import { ContainerActionBar, readDocumentResourceRef, readResourceRef } from './node-card';
 
 export interface NodeShellProps {
@@ -114,6 +115,8 @@ function resolveNodeHeaderBadges(
   previewBadges: NodeHeaderBadge[],
 ): NodeHeaderBadge[] {
   switch (node.type) {
+    case 'shot':
+      return localizeShotGenerationBadges(node, previewBadges);
     case 'scene':
       return [
         {
@@ -131,6 +134,25 @@ function resolveNodeHeaderBadges(
     default:
       return previewBadges;
   }
+}
+
+function localizeShotGenerationBadges(
+  node: NodeShellProps['context']['node'],
+  previewBadges: NodeHeaderBadge[],
+): NodeHeaderBadge[] {
+  const generationStatus = readShotGenerationStatus(node);
+  if (!generationStatus) return previewBadges;
+  return previewBadges.map((badge) =>
+    badge.label === generationStatus
+      ? { ...badge, label: resolveCanvasStatusLabel(generationStatus) }
+      : badge,
+  );
+}
+
+function readShotGenerationStatus(node: NodeShellProps['context']['node']): string | undefined {
+  const data = node.data as Record<string, unknown> | undefined;
+  const value = data?.['generationStatus'];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 interface NodeAssetInfo {

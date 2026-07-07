@@ -220,13 +220,13 @@ export function RouteStoryboardMatrix({
                   className="canvas-route-storyboard-matrix-step"
                   title={t('playback.matrix.stepTitle', {
                     index: index + 1,
-                    title: column.title,
+                    title: formatMatrixDisplayLabel(column.title),
                   })}
                   role="columnheader"
                   aria-colindex={index + 1}
                   aria-label={t('playback.matrix.stepTitle', {
                     index: index + 1,
-                    title: column.title,
+                    title: formatMatrixDisplayLabel(column.title),
                   })}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={() => onSelectColumn(column.id)}
@@ -295,8 +295,9 @@ function MatrixRow({
   readonly onFocusCell: (cell: RouteStoryboardMatrixCell) => void;
   readonly onSendToCut: (row: RouteStoryboardMatrixRow) => void;
 }) {
+  const displayRowTitle = formatMatrixDisplayLabel(row.title);
   const routeTitle = t('playback.matrix.rowTitle', {
-    title: row.title,
+    title: displayRowTitle,
     units: row.unitIds.length,
     duration: formatDurationMs(row.totalDurationMs),
   });
@@ -317,7 +318,7 @@ function MatrixRow({
           onMouseDown={(event) => event.stopPropagation()}
           onClick={() => onSelectRoute(row)}
         >
-          <span>{row.title}</span>
+          <span>{displayRowTitle}</span>
           <small>
             <ClockIcon size={11} />
             {t('playback.matrix.rowMeta', {
@@ -330,7 +331,7 @@ function MatrixRow({
           type="button"
           className="canvas-route-storyboard-matrix-send"
           title={t('playback.matrix.sendToCut')}
-          aria-label={t('playback.matrix.sendRouteToCut', { title: row.title })}
+          aria-label={t('playback.matrix.sendRouteToCut', { title: displayRowTitle })}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
@@ -373,8 +374,9 @@ function MatrixCell({
   readonly onFocusCell: (cell: RouteStoryboardMatrixCell) => void;
 }) {
   if (cell.kind === 'summary') {
+    const displayLabel = formatMatrixDisplayLabel(cell.label);
     const title = t('playback.matrix.summaryCellTitle', {
-      label: cell.label,
+      label: displayLabel,
       count: cell.playableCount,
       duration: formatDurationMs(cell.durationMs),
     });
@@ -397,7 +399,7 @@ function MatrixCell({
           onSelectSummaryCell?.(cell);
         }}
       >
-        <span>{cell.label}</span>
+        <span>{displayLabel}</span>
         <small>
           {t('playback.matrix.foldedSummary', {
             count: cell.playableCount,
@@ -423,8 +425,9 @@ function MatrixCell({
     );
   }
 
+  const displayLabel = formatMatrixDisplayLabel(cell.label);
   const cellTitle = t('playback.matrix.cellTitle', {
-    label: cell.label,
+    label: displayLabel,
     kind: formatUnitKind(cell.unitKind),
     timing: cell.sourceRange
       ? formatSourceRange(cell.sourceRange)
@@ -466,12 +469,16 @@ function MatrixCell({
         data-has-image={cell.thumbnail ? 'true' : 'false'}
       >
         {cell.thumbnail ? (
-          <img src={cell.thumbnail.src} alt={cell.thumbnail.alt} draggable={false} />
+          <img
+            src={cell.thumbnail.src}
+            alt={formatMatrixDisplayLabel(cell.thumbnail.alt)}
+            draggable={false}
+          />
         ) : (
           cell.label.slice(0, 1).toUpperCase()
         )}
       </span>
-      <span className="canvas-route-storyboard-matrix-cell-title">{cell.label}</span>
+      <span className="canvas-route-storyboard-matrix-cell-title">{displayLabel}</span>
       <span className="canvas-route-storyboard-matrix-cell-meta">
         <span>{formatUnitKind(cell.unitKind)}</span>
         <span>{timingLabel}</span>
@@ -481,7 +488,9 @@ function MatrixCell({
 }
 
 function formatFamilyLabel(family: RouteStoryboardMatrixFamily): string {
-  return family.id === 'family:primary' ? t('playback.matrix.primaryRoutes') : family.title;
+  return family.id === 'family:primary'
+    ? t('playback.matrix.primaryRoutes')
+    : formatMatrixDisplayLabel(family.title);
 }
 
 function formatFamilyTitle(family: RouteStoryboardMatrixFamily): string {
@@ -494,7 +503,15 @@ function formatFamilyTitle(family: RouteStoryboardMatrixFamily): string {
 function formatContainerLabel(container: RouteStoryboardMatrixContainerGroup): string {
   return container.id === 'container:__root__'
     ? t('playback.matrix.rootContainer')
-    : container.title;
+    : formatMatrixDisplayLabel(container.title);
+}
+
+function formatMatrixDisplayLabel(label: string): string {
+  const defaultShotMatch = /^Shot\s+(\d+)$/i.exec(label.trim());
+  if (defaultShotMatch?.[1]) {
+    return t('playback.label.defaultShot', { number: defaultShotMatch[1] });
+  }
+  return label;
 }
 
 function formatContainerTitle(container: RouteStoryboardMatrixContainerGroup): string {

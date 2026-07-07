@@ -44,6 +44,10 @@ const canvasAppSource = readFileSync(
   join(__dirname, '../../../webview/src/CanvasApp.tsx'),
   'utf-8',
 );
+const containerRendererSource = readFileSync(
+  join(__dirname, '../../../webview/src/components/content/ContainerRenderer.tsx'),
+  'utf-8',
+);
 const playbackWorkspaceSource = readFileSync(
   join(__dirname, '../../../webview/src/components/playback/PlaybackWorkspace.tsx'),
   'utf-8',
@@ -378,8 +382,12 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain('readStoryboardMediaRefPreviewSource(');
       expect(providerSource).toContain('this.readPreviewSourceCandidate(ref)');
       expect(providerSource).toContain("this.readNestedRecord(ref['locator'])");
-      expect(providerSource).toContain("record['cacheResourceRef']");
       expect(providerSource).toContain("record['resourceRef']");
+      expect(providerSource).toContain("record['assetRef']");
+      expect(providerSource).toContain("record['metadata']");
+      expect(providerSource).toContain('this.readPreviewResourceRef(nestedAssetRef)');
+      expect(providerSource).toContain('this.readPreviewDocumentResourceRef(nestedMetadata)');
+      expect(providerSource).not.toContain("record['cacheResourceRef']");
       expect(providerSource).toContain("'previewUrl'");
       expect(providerSource).toContain("'dataUrl'");
       expect(providerSource).toContain("'webviewUri'");
@@ -741,9 +749,8 @@ describe('canvasEditorProvider message contracts', () => {
 
     it('sends lightweight canvasAction intents from the webview toolbar', () => {
       expect(canvasAppSource).toContain("type: 'canvasAction'");
-      expect(canvasAppSource).toContain(
-        "reportAction('revealPlaybackWorkspace', t('toolbar.playbackWorkspace'))",
-      );
+      expect(canvasAppSource).toContain("reportAction('toggleWorkspaceSurface', pane)");
+      expect(canvasAppSource).toContain('onToggleWorkspaceSurface={handleToggleWorkspaceSurface}');
       expect(webviewSource).toContain("case 'playback:revealWorkspace'");
       expect(providerSource).toContain("case 'playback:getPreviewPlan'");
       expect(providerSource).toContain("type: 'playback:previewPlanResult'");
@@ -759,6 +766,19 @@ describe('canvasEditorProvider message contracts', () => {
       );
       expect(canvasAppSource).not.toContain("type: 'exportStoryboard'");
       expect(canvasAppSource).not.toContain("type: 'packageCanvas'");
+    });
+
+    it('routes storyboard action intents through Agent context instead of Canvas providers', () => {
+      const storyboardIntentCase = providerSource.slice(
+        providerSource.indexOf("case 'storyboardActionIntent'"),
+        providerSource.indexOf("case 'getScriptIndex'"),
+      );
+      expect(containerRendererSource).toContain("type: 'storyboardActionIntent'");
+      expect(providerSource).toContain("case 'storyboardActionIntent'");
+      expect(providerSource).toContain('validateCanvasStoryboardActionIntent(intent)');
+      expect(providerSource).toContain("type: 'canvas-storyboard-action-intent'");
+      expect(providerSource).toContain("vscode.commands.executeCommand('neko.agent.sendContext'");
+      expect(storyboardIntentCase).not.toContain('scheduler.enqueue');
     });
 
     it('routes Agent playback reorder through Canvas Webview graph commands', () => {

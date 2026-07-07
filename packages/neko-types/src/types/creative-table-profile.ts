@@ -42,7 +42,12 @@ export interface CreativeTablePromptSlotDescriptor {
 
 export interface CreativeTableProductionMapping {
   readonly target:
-    'shot.generationPrompt' | 'shot.promptSlots' | 'scene.promptSlots' | 'review.metadata' | 'none';
+    | 'storyboardPrompt.imagePromptDocument'
+    | 'storyboardPrompt.videoPromptDocument'
+    | 'storyboardPrompt.voicePromptDocument'
+    | 'storyboardPrompt.generationParams'
+    | 'review.metadata'
+    | 'none';
 }
 
 export interface CreativeTableFieldDescriptor {
@@ -59,12 +64,7 @@ export interface CreativeTableFieldDescriptor {
 
 export interface CreativeTableOperationRequirement {
   readonly operationId:
-    | 'image.shot.generate'
-    | 'image.shot.edit'
-    | 'video.shot.generate'
-    | 'video.shot.edit'
-    | 'video.scene.generate'
-    | 'video.scene.edit';
+    'image.shot.generate' | 'image.shot.edit' | 'video.scene.generate' | 'video.scene.edit';
   readonly label: string;
   readonly requiredFieldIds: readonly string[];
   readonly acceptedPromptFieldIds: readonly string[];
@@ -111,31 +111,18 @@ export const STORYBOARD_CREATIVE_TABLE_RECOMMENDED_HEADERS = [
   'scene',
   'shot',
   'source',
-  'sourcePanel',
-  'decision',
-  'duration',
-  'visual',
-  'motion',
-  'audio',
-  'characters',
-  'dialogue',
   'imagePrompt',
   'videoPrompt',
-  'reviewStatus',
-  'nextAction',
-  'contentType',
-  'decisionReason',
-  'requiresSplit',
-  'duplicateOf',
+  'duration',
+  'dialogue',
 ] as const;
 
 export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor = {
   profileId: 'storyboard',
   aliases: [
     'storyboard',
-    'storyboard-draft',
-    'markdown-storyboard-draft',
-    'canvas.tableProfile.storyboard-draft',
+    'storyboard.ai-native',
+    'canvas.tableProfile.storyboard',
     'creative-table.storyboard',
   ],
   displayName: 'Storyboard',
@@ -158,18 +145,6 @@ export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor =
       label: 'Edit shot image',
       requiredFieldIds: ['imagePrompt'],
       acceptedPromptFieldIds: ['imagePrompt', 'prompt'],
-    },
-    {
-      operationId: 'video.shot.generate',
-      label: 'Generate shot video',
-      requiredFieldIds: ['videoPrompt'],
-      acceptedPromptFieldIds: ['videoPrompt'],
-    },
-    {
-      operationId: 'video.shot.edit',
-      label: 'Edit shot video',
-      requiredFieldIds: ['videoPrompt'],
-      acceptedPromptFieldIds: ['videoPrompt'],
     },
     {
       operationId: 'video.scene.generate',
@@ -296,7 +271,7 @@ export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor =
       {
         valueType: 'prompt',
         promptSlot: { scope: 'shot', mediaType: 'image', operation: 'generate' },
-        productionMapping: { target: 'shot.generationPrompt' },
+        productionMapping: { target: 'storyboardPrompt.imagePromptDocument' },
       },
     ),
     planField(
@@ -330,7 +305,7 @@ export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor =
       {
         valueType: 'prompt',
         promptSlot: { scope: 'shot', mediaType: 'image', operation: 'generate' },
-        productionMapping: { target: 'shot.generationPrompt' },
+        productionMapping: { target: 'storyboardPrompt.imagePromptDocument' },
       },
     ),
     planField(
@@ -340,8 +315,6 @@ export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor =
       [
         'video prompt',
         'videoprompt',
-        'shot video prompt',
-        'shotvideoprompt',
         'video edit prompt',
         'videoeditprompt',
         'scene video prompt',
@@ -349,9 +322,7 @@ export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor =
         'scene video edit prompt',
         'scenevideoeditprompt',
         'scene edit prompt',
-        '镜头视频提示词',
         '视频提示词',
-        '单镜视频提示词',
         '视频编辑提示词',
         '视频重绘提示词',
         '局部视频编辑提示词',
@@ -364,8 +335,8 @@ export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor =
       ],
       {
         valueType: 'prompt',
-        promptSlot: { scope: 'shot', mediaType: 'video', operation: 'generate' },
-        productionMapping: { target: 'shot.promptSlots' },
+        promptSlot: { scope: 'scene', mediaType: 'video', operation: 'generate' },
+        productionMapping: { target: 'storyboardPrompt.videoPromptDocument' },
       },
     ),
     planField(
@@ -375,7 +346,7 @@ export const STORYBOARD_CREATIVE_TABLE_PROFILE: CreativeTableProfileDescriptor =
       ['scene duration', 'sceneduration', '场景时长', '总时长'],
       {
         valueType: 'duration',
-        productionMapping: { target: 'scene.promptSlots' },
+        productionMapping: { target: 'storyboardPrompt.generationParams' },
       },
     ),
     approvalField(
@@ -514,7 +485,7 @@ export function classifyCreativeTableHeaders(
 
 export function getCreativeTableOperationRequirement(
   profile: CreativeTableProfileDescriptor,
-  operationId: CreativeTableOperationRequirement['operationId'] | undefined,
+  operationId: string | undefined,
 ): CreativeTableOperationRequirement | undefined {
   if (!operationId) return undefined;
   return profile.operationRequirements.find(

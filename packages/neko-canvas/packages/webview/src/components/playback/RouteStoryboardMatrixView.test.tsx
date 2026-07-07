@@ -274,6 +274,38 @@ describe('RouteStoryboardMatrix', () => {
         ?.getAttribute('aria-label'),
     ).toContain('镜头');
   });
+
+  it('localizes system default shot labels in matrix rows and cells', () => {
+    setLocale('zh-cn');
+
+    act(() => {
+      root.render(
+        <RouteStoryboardMatrix
+          matrix={defaultShotLabelMatrixFixture()}
+          selectedRouteId="route-a"
+          currentUnitId="unit-a"
+          onSelectRoute={() => undefined}
+          onSelectCell={() => undefined}
+          onSelectColumn={() => undefined}
+          onSelectFamily={() => undefined}
+          onToggleContainerFold={() => undefined}
+          onSendToCut={() => undefined}
+        />,
+      );
+    });
+
+    const rowButton = host.querySelector<HTMLButtonElement>(
+      '.canvas-route-storyboard-matrix-row-button',
+    );
+    const playableCell = host.querySelector<HTMLButtonElement>(
+      '.canvas-route-storyboard-matrix-cell-playable',
+    );
+
+    expect(rowButton?.textContent).toContain('镜头 1');
+    expect(playableCell?.textContent).toContain('镜头 1');
+    expect(playableCell?.getAttribute('aria-label')).toContain('镜头 1');
+    expect(playableCell?.getAttribute('aria-label')).not.toContain('Shot 1');
+  });
 });
 
 function createKeyEvent(key: string): KeyboardEvent {
@@ -436,5 +468,32 @@ function matrixFixture(): RouteStoryboardMatrixViewModel {
         message: 'Third diagnostic',
       },
     ],
+  };
+}
+
+function defaultShotLabelMatrixFixture(): RouteStoryboardMatrixViewModel {
+  const fixture = matrixFixture();
+  return {
+    ...fixture,
+    rows: fixture.rows.map((row, index) =>
+      index === 0
+        ? {
+            ...row,
+            title: 'Shot 1',
+            cells: row.cells.map((cell) =>
+              cell.kind === 'playable'
+                ? {
+                    ...cell,
+                    label: 'Shot 1',
+                    ...(cell.thumbnail ? { thumbnail: { ...cell.thumbnail, alt: 'Shot 1' } } : {}),
+                  }
+                : cell,
+            ),
+          }
+        : row,
+    ),
+    columns: fixture.columns.map((column, index) =>
+      index === 0 ? { ...column, title: 'Shot 1' } : column,
+    ),
   };
 }

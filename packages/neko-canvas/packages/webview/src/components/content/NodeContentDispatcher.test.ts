@@ -2,7 +2,15 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import type { AnnotationCanvasNode, CanvasNode, CanvasViewport } from '@neko/shared';
+import {
+  CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+  CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+  type AnnotationCanvasNode,
+  type CanvasNode,
+  type CanvasStoryboardActionIntentId,
+  type CanvasStoryboardNextCreativeStateTarget,
+  type CanvasViewport,
+} from '@neko/shared';
 import { ContainerRenderer } from './ContainerRenderer';
 import { createNodeCollapseUpdate, NodeContentDispatcher } from './NodeContentDispatcher';
 import {
@@ -216,7 +224,9 @@ describe('NodeContentDispatcher', () => {
     );
 
     expect(markup).toContain('data:image/png;base64,aaa');
-    expect(markup).toContain('data-content-block-id="shot-generated-preview"');
+    expect(markup).toContain('data-shot-canvas-review-surface="true"');
+    expect(markup).toContain('data-shot-canvas-review-preview="true"');
+    expect(markup).not.toContain('data-content-block-id="shot-generated-preview"');
     expect(markup).not.toContain('Default path');
   });
 
@@ -244,7 +254,9 @@ describe('NodeContentDispatcher', () => {
     );
 
     expect(markup).toContain('data:image/png;base64,reference');
-    expect(markup).toContain('data-content-block-id="shot-generated-preview"');
+    expect(markup).toContain('data-shot-canvas-review-surface="true"');
+    expect(markup).toContain('data-shot-canvas-review-preview="true"');
+    expect(markup).not.toContain('data-content-block-id="shot-generated-preview"');
     expect(markup).not.toContain('Default path');
   });
 
@@ -280,12 +292,19 @@ describe('NodeContentDispatcher', () => {
     );
 
     expect(markup).toContain('https://file+.vscode-resource.vscode-cdn.net/cache/page-1.jpg');
-    expect(markup).toContain('data-content-block-id="shot-generated-preview"');
+    expect(markup).toContain('data-shot-canvas-review-surface="true"');
+    expect(markup).toContain('data-shot-canvas-review-preview="true"');
+    expect(markup).not.toContain('data-content-block-id="shot-generated-preview"');
     expect(markup).not.toContain('src="/cache/page-1.jpg"');
     expect(markup).not.toContain('Default path');
   });
 
-  it('keeps composable node content visible when the node is not selected', () => {
+  it('renders standalone shots with the prompt-first canvas review surface', () => {
+    const videoPrompt = 'rainy hallway, Aki turns back, slow dolly-in';
+    const sceneStart = videoPrompt.indexOf('rainy hallway');
+    const characterStart = videoPrompt.indexOf('Aki');
+    const actionStart = videoPrompt.indexOf('turns back');
+    const cameraStart = videoPrompt.indexOf('slow dolly-in');
     const node = {
       ...buildCanvasNode({
         type: 'shot',
@@ -297,6 +316,55 @@ describe('NodeContentDispatcher', () => {
           duration: 3,
           visualDescription: 'Wide establishing frame',
           characterAction: 'Look toward the skyline',
+          dialogue: '你怎么会在这里？',
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-unselected-video',
+                blockKind: 'video',
+                text: videoPrompt,
+                spans: [
+                  {
+                    kind: 'scene',
+                    range: { start: sceneStart, end: sceneStart + 'rainy hallway'.length },
+                    fieldId: 'scene.location',
+                    source: 'agent',
+                  },
+                  {
+                    kind: 'character',
+                    range: { start: characterStart, end: characterStart + 'Aki'.length },
+                    fieldId: 'character.ref',
+                    source: 'agent',
+                  },
+                  {
+                    kind: 'action',
+                    range: { start: actionStart, end: actionStart + 'turns back'.length },
+                    fieldId: 'shot.action',
+                    source: 'agent',
+                  },
+                  {
+                    kind: 'camera',
+                    range: { start: cameraStart, end: cameraStart + 'slow dolly-in'.length },
+                    fieldId: 'camera.movement',
+                    source: 'agent',
+                  },
+                ],
+              },
+            },
+            generationParams: {
+              duration: 3,
+              dialogue: '你怎么会在这里？',
+            },
+            nextCreativeState: {
+              id: 'ready-to-generate-video',
+              label: 'Ready to generate video',
+              severity: 'info',
+              target: 'video-prompt',
+              nextActionId: 'generate-video',
+            },
+          },
         },
       }),
       id: 'shot-unselected',
@@ -309,12 +377,25 @@ describe('NodeContentDispatcher', () => {
       }),
     );
 
-    expect(markup).toContain('data-content-block-id="shot-status"');
-    expect(markup).toContain('data-content-block-id="shot-generated-preview"');
-    expect(markup).toContain('data-content-block-id="shot-visual-description"');
-    expect(markup).toContain('data-content-block-id="shot-character-action"');
-    expect(markup).toContain('Visual');
-    expect(markup).toContain('Characters');
+    expect(markup).toContain('data-shot-canvas-review-surface="true"');
+    expect(markup).toContain('data-shot-canvas-review-block="video"');
+    expect(markup).toContain('data-shot-canvas-review-field="duration"');
+    expect(markup).toContain('data-shot-canvas-review-state-id="ready-to-generate-video"');
+    expect(markup).toContain('data-shot-canvas-review-action-id="generate-video"');
+    expect(markup).toContain('data-semantic-prompt-text="true"');
+    expect(markup).toContain('data-semantic-prompt-visual-style="subtle"');
+    expect(markup).toContain('data-semantic-prompt-span-kind="scene"');
+    expect(markup).toContain('data-semantic-prompt-span-kind="character"');
+    expect(markup).toContain('data-semantic-prompt-span-kind="camera"');
+    expect(markup).toContain('text-current');
+    expect(markup).not.toContain('text-emerald-800');
+    expect(markup).not.toContain('text-cyan-800');
+    expect(markup).not.toContain('text-amber-800');
+    expect(markup).toContain('rainy hallway');
+    expect(markup).toContain('你怎么会在这里？');
+    expect(markup).not.toContain('data-content-block-id="shot-status"');
+    expect(markup).not.toContain('data-content-block-id="shot-visual-description"');
+    expect(markup).not.toContain('data-container-section-id="shot-controls"');
     expect(markup).not.toContain('Default path');
   });
 
@@ -761,12 +842,16 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-scene-view-mode="storyboard-table"');
     expect(markup).toContain('data-scene-shot-table="true"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-1"');
-    expect(markup).toContain('data-scene-shot-table-column="visual-action"');
+    expect(markup).toContain('data-scene-shot-table-column="reference-media"');
+    expect(markup).toContain('data-scene-shot-table-column="image-prompt"');
+    expect(markup).toContain('data-scene-shot-table-column="video-prompt"');
+    expect(markup).toContain('data-scene-shot-table-column="state"');
+    expect(markup).toContain('data-scene-shot-table-column="action"');
     expect(markup).toContain('Storyboard Table');
     expect(markup).toContain('Creative View');
-    expect(markup).toContain('Visual / Action');
-    expect(markup).toContain('Dialogue / SFX');
-    expect(markup).toContain('Train door');
+    expect(markup).toContain('Reference Media');
+    expect(markup).toContain('Scene Video Prompt');
+    expect(markup).toContain('Optimize scene video prompt');
     expect(markup).toContain('data-scene-cell-text-bounded="true"');
     expect(markup).not.toContain('data-scene-shot-rail="true"');
     expect(markup).not.toContain('data-child-card-layout="detail"');
@@ -810,9 +895,338 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-child-slot-kind="scene-shot-table"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-parent-linked"');
     expect(markup).toContain('data-scene-shot-table-cell="shot"');
-    expect(markup).toContain('Visible through parentId');
+    expect(markup).toContain('data-scene-shot-action-id="optimize-video-prompt"');
     expect(markup).not.toContain('No shots');
     expect(markup).not.toContain('Default path');
+  });
+
+  it('projects missing and directly usable reference media states in the storyboard table', () => {
+    const scene = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: { sceneTitle: 'Reference States', sceneNumber: 4 },
+      }),
+      id: 'scene-reference-states',
+      container: {
+        policy: 'scene',
+        childIds: ['shot-missing-reference', 'shot-usable-reference'],
+      },
+    } as CanvasNode;
+    const missingReferenceShot = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 20, y: 20 },
+        zIndex: 1,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 1,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+          },
+        },
+      }),
+      id: 'shot-missing-reference',
+      parentId: 'scene-reference-states',
+    } as CanvasNode;
+    const usableVideoPrompt = 'Animate the usable reference frame with slow camera drift.';
+    const usableCameraStart = usableVideoPrompt.indexOf('slow camera drift');
+    const usableReferenceShot = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 40, y: 20 },
+        zIndex: 2,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 2,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            referenceMedia: {
+              imageRefs: [
+                {
+                  refId: 'ref-image-1',
+                  role: 'source',
+                  label: 'Reference frame',
+                  locator: {
+                    type: 'asset',
+                    assetId: 'asset-ref-image-1',
+                    uri: 'assets/ref-image-1.png',
+                  },
+                  mimeType: 'image/png',
+                },
+              ],
+            },
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-usable-reference:video:prompt',
+                blockKind: 'video',
+                text: usableVideoPrompt,
+                spans: [
+                  {
+                    id: 'camera:slow-camera-drift',
+                    kind: 'camera',
+                    range: {
+                      start: usableCameraStart,
+                      end: usableCameraStart + 'slow camera drift'.length,
+                    },
+                    fieldId: 'camera.movement',
+                    source: 'agent',
+                  },
+                ],
+              },
+            },
+          },
+        },
+      }),
+      id: 'shot-usable-reference',
+      parentId: 'scene-reference-states',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(scene, [scene, missingReferenceShot, usableReferenceShot]),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
+      }),
+    );
+
+    expect(markup).toContain('data-scene-shot-table-row-id="shot-missing-reference"');
+    expect(markup).toContain('Add or process reference');
+    expect(markup).toContain('data-scene-shot-action-id="process-reference"');
+    expect(markup).toContain('data-scene-shot-table-row-id="shot-usable-reference"');
+    expect(markup).toContain('image:1');
+    expect(markup).toContain('Image prompt skipped');
+    expect(markup).toContain('data-semantic-prompt-text="true"');
+    expect(markup).toContain('data-semantic-prompt-visual-style="subtle"');
+    expect(markup).toContain('data-semantic-prompt-span-kind="camera"');
+    expect(markup).toContain('text-current');
+    expect(markup).toContain('slow camera drift');
+    expect(markup).toContain('data-scene-shot-action-id="generate-video"');
+  });
+
+  it('renders fixed storyboard next-action buttons from semantic next state', () => {
+    const actions = [
+      'process-reference',
+      'optimize-image-prompt',
+      'optimize-video-prompt',
+      'generate-image',
+      'generate-video',
+      'review-result',
+      'fix-alignment',
+      'accept-result',
+      'retry',
+    ] as const;
+    const scene = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: { sceneTitle: 'Actions', sceneNumber: 6 },
+      }),
+      id: 'scene-actions',
+      container: { policy: 'scene', childIds: actions.map((action) => `shot-${action}`) },
+    } as CanvasNode;
+    const shots = actions.map(
+      (action, index) =>
+        ({
+          ...buildCanvasNode({
+            type: 'shot',
+            position: { x: 20 + index * 20, y: 20 },
+            zIndex: index + 1,
+            preset: 'shot.basic',
+            data: {
+              shotNumber: index + 1,
+              storyboardPrompt: {
+                version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+                nextCreativeState: {
+                  id: `state-${action}`,
+                  label: `State ${action}`,
+                  severity: action === 'retry' ? 'error' : 'info',
+                  target: actionTarget(action),
+                  nextActionId: action,
+                },
+              },
+            },
+          }),
+          id: `shot-${action}`,
+          parentId: 'scene-actions',
+        }) as CanvasNode,
+    );
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(scene, [scene, ...shots]),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
+      }),
+    );
+
+    for (const action of actions) {
+      expect(markup).toContain(`data-scene-shot-action-id="${action}"`);
+    }
+    expect(markup).toContain('Process reference');
+    expect(markup).toContain('Optimize image prompt');
+    expect(markup).toContain('Optimize scene video prompt');
+    expect(markup).toContain('Generate image');
+    expect(markup).toContain('Generate video');
+    expect(markup).toContain('Review result');
+    expect(markup).toContain('Fix alignment');
+    expect(markup).toContain('Accept result');
+    expect(markup).toContain('Retry');
+  });
+
+  it('localizes storyboard next state labels and targets in Chinese', () => {
+    setLocale('zh-cn');
+    const scene = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: { sceneTitle: '状态本地化', sceneNumber: 9 },
+      }),
+      id: 'scene-state-i18n',
+      container: { policy: 'scene', childIds: ['shot-state-i18n'] },
+    } as CanvasNode;
+    const shot = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 20, y: 20 },
+        zIndex: 1,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 1,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            referenceMedia: {
+              imageRefs: [
+                {
+                  refId: 'ref-image',
+                  role: 'source',
+                  locator: { type: 'asset', assetId: 'ref-image', uri: 'assets/ref-image.png' },
+                  mimeType: 'image/png',
+                },
+              ],
+            },
+          },
+        },
+      }),
+      id: 'shot-state-i18n',
+      parentId: 'scene-state-i18n',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(scene, [scene, shot]),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
+      }),
+    );
+
+    expect(markup).toContain('aria-label="下一步创作状态: 优化场景视频提示词"');
+    expect(markup).toContain('>优化场景视频提示词<');
+    expect(markup).toContain('>场景视频提示词</span>');
+    expect(markup).not.toContain('Optimize scene video prompt');
+    expect(markup).not.toContain('>video-prompt</span>');
+  });
+
+  it('keeps storyboard table navigation local and reserves Agent handoff for next-action intents', () => {
+    const source = readFileSync(new URL('./ContainerRenderer.tsx', import.meta.url), 'utf8');
+    const openDetailsStart = source.indexOf('const handleOpenDetails = useCallback(() => {');
+    const actionIntentStart = source.indexOf(
+      'const handleDispatchActionIntent = useCallback(() => {',
+    );
+    expect(openDetailsStart).toBeGreaterThanOrEqual(0);
+    expect(actionIntentStart).toBeGreaterThan(openDetailsStart);
+
+    const localActionSource = source.slice(openDetailsStart, actionIntentStart);
+    expect(localActionSource).toContain("'open-content-overlay'");
+    expect(localActionSource).toContain('dispatchNodeCardAction');
+    expect(localActionSource).not.toContain('storyboardActionIntent');
+    expect(localActionSource).not.toContain('neko.agent');
+
+    const intentActionSource = source.slice(
+      actionIntentStart,
+      source.indexOf('}, [parentNode, row]);'),
+    );
+    expect(intentActionSource).toContain("type: 'storyboardActionIntent'");
+    expect(intentActionSource).toContain('createStoryboardActionIntent(parentNode, row)');
+    const intentFactorySource = source.slice(
+      source.indexOf('function createStoryboardActionIntent('),
+      source.indexOf('function resolveSceneTableMinWidth('),
+    );
+    expect(intentFactorySource).toContain('promptDocuments');
+    expect(intentFactorySource).toContain('referenceMedia');
+    expect(intentFactorySource).toContain('generationParams');
+    expect(intentFactorySource).toContain('expectedNextStateId');
+    expect(intentFactorySource).toContain('resultRef');
+  });
+
+  it('keeps provider progress out of storyboard table state and shows completed result review', () => {
+    const scene = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: { sceneTitle: 'Result Review', sceneNumber: 7 },
+      }),
+      id: 'scene-result-review',
+      container: { policy: 'scene', childIds: ['shot-result-review'] },
+    } as CanvasNode;
+    const shot = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 20, y: 20 },
+        zIndex: 1,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 1,
+          generationStatus: 'running',
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-result-review:video:prompt',
+                blockKind: 'video',
+                text: 'Slow camera push after the result arrives',
+              },
+            },
+            executionRefs: {
+              resultRefs: [
+                {
+                  mediaRef: {
+                    refId: 'generated-video',
+                    role: 'generated',
+                    locator: {
+                      type: 'asset',
+                      assetId: 'generated-video',
+                      uri: 'assets/generated-video.mp4',
+                    },
+                    mimeType: 'video/mp4',
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+      id: 'shot-result-review',
+      parentId: 'scene-result-review',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(scene, [scene, shot]),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
+      }),
+    );
+
+    expect(markup).toContain('Review result');
+    expect(markup).toContain('data-scene-shot-action-id="review-result"');
+    expect(markup).not.toContain('running');
   });
 
   it('keeps generic detail-card child slots scrollable in constrained containers', () => {
@@ -850,6 +1264,54 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-child-slot-overflow="scroll"');
     expect(markup).toContain('flex min-h-0 min-w-0 flex-1 basis-0 flex-col gap-1.5 overflow-auto');
     expect(markup).toContain('Scrollable child summary');
+    expect(markup).not.toContain('Default path');
+  });
+
+  it('renders Markdown review rows inside table.basic nodes', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'table',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'table.basic',
+        data: {
+          label: 'Storyboard Review',
+          columnCount: 4,
+          rowCount: 1,
+          markdown: {
+            tableProfile: 'storyboard',
+            rows: [
+              {
+                id: 'row-1',
+                cells: {
+                  scene: 'Rain hallway',
+                  shot: '1',
+                  imagePrompt: 'colorize and repair the panel',
+                  videoPrompt: 'slow dolly-in as Aki turns back',
+                },
+                resources: [{ token: 'P1', status: 'bound' }],
+                actionId: 'create-storyboard-nodes',
+              },
+            ],
+          },
+        },
+      }),
+      id: 'table-markdown-review',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(node),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
+      }),
+    );
+
+    expect(markup).toContain('data-content-block-id="table-markdown-rows"');
+    expect(markup).toContain('Rain hallway');
+    expect(markup).toContain('colorize and repair the panel');
+    expect(markup).toContain('slow dolly-in as Aki turns back');
+    expect(markup).toContain('P1');
+    expect(markup).toContain('create-storyboard-nodes');
     expect(markup).not.toContain('Default path');
   });
 
@@ -899,17 +1361,16 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-child-slot-card-max-height="280"');
     expect(markup).toContain('data-scene-shot-table="true"');
     expect(markup).toContain('overflow-auto');
-    expect(markup).toContain('min-width:2004px');
-    expect(markup).toContain('inline-flex max-h-[220px] max-w-[180px] overflow-hidden');
-    expect(markup).toContain('h-auto max-h-[220px] w-auto max-w-full object-contain');
+    expect(markup).toContain('min-width:1160px');
+    expect(markup).toContain('data-scene-prompt-cell-text="true"');
+    expect(markup).not.toContain('data-scene-prompt-cell-text="true"><div class="line-clamp');
     expect(markup).not.toContain('max-h-[720px]');
-    expect(markup).toContain('data-scene-shot-table-column="image-prep"');
-    expect(markup).toContain('data-scene-shot-image-preview="large"');
-    expect(markup).toContain('data-scene-shot-table-column="storyboard-prompt"');
+    expect(markup).toContain('data-scene-shot-table-column="reference-media"');
+    expect(markup).toContain('data-scene-shot-table-column="image-prompt"');
+    expect(markup).toContain('data-scene-shot-table-column="video-prompt"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-1"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-2"');
-    expect(markup).toContain('Beat 1');
-    expect(markup).toContain('Beat 2');
+    expect(markup).toContain('Optimize scene video prompt');
     expect(markup).not.toContain('data-child-card-layout="detail"');
     expect(markup).not.toContain('data-scene-shot-rail="true"');
     expect(markup).not.toContain('Default path');
@@ -942,6 +1403,38 @@ describe('NodeContentDispatcher', () => {
           dialogue: 'We start now.',
           sceneTags: ['interior'],
           generationPrompt: 'Mika turns toward the neon window, storyboard frame',
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              imagePromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-a:image:prompt',
+                blockKind: 'image',
+                text: 'Clean the neon window keyframe',
+              },
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-a:video:prompt',
+                blockKind: 'video',
+                text: 'Mika turns toward the neon window, slow dolly in',
+              },
+            },
+            referenceMedia: {
+              imageRefs: [
+                {
+                  refId: 'source-panel',
+                  role: 'reference',
+                  locator: {
+                    type: 'asset',
+                    assetId: 'source-panel',
+                    uri: 'assets/source-panel.png',
+                  },
+                  mimeType: 'image/png',
+                },
+              ],
+            },
+            generationParams: { duration: 2.5, dialogue: 'We start now.' },
+          },
           generationStatus: 'done',
           generatedImage: 'data:image/png;base64,done',
           shotImagePrepPlan: imagePrepPlan,
@@ -974,10 +1467,17 @@ describe('NodeContentDispatcher', () => {
     expect(rows.map((row) => row.id)).toEqual(['shot-b', 'shot-a']);
     expect(rows[0]?.visualAction).toBe('First row visual');
     expect(rows[0]?.camera).toContain('dolly-in');
-    expect(rows[0]?.diagnosticCount).toBe(1);
+    expect(rows[0]?.diagnosticCount).toBe(2);
     expect(rows[1]?.duration).toBe('2.5s');
+    expect(rows[1]?.dialogue).toBe('We start now.');
     expect(rows[1]?.characters).toBe('Mika');
-    expect(rows[1]?.storyboardPrompt).toBe('Mika turns toward the neon window, storyboard frame');
+    expect(rows[1]?.imagePrompt).toBe('Clean the neon window keyframe');
+    expect(rows[1]?.imagePromptDocument?.documentId).toBe('shot-a:image:prompt');
+    expect(rows[1]?.videoPrompt).toBe('Mika turns toward the neon window, slow dolly in');
+    expect(rows[1]?.videoPromptDocument?.documentId).toBe('shot-a:video:prompt');
+    expect(rows[1]?.referenceMedia).toBe('image:1');
+    expect(rows[1]?.state).toBe('Ready to generate video');
+    expect(rows[1]?.nextActionId).toBe('generate-video');
     expect(rows[1]?.imagePrep).toContain('transform-original');
     expect(rows[1]?.imagePrep).toContain('rotate');
     expect(rows[1]?.imagePrep).toContain('split-panels');
@@ -988,16 +1488,13 @@ describe('NodeContentDispatcher', () => {
     expect(rows[1]?.hasImage).toBe(true);
     expect(resolveSceneShotTableColumns('creator-review')).toEqual([
       'shot',
-      'image',
+      'reference-media',
+      'image-prompt',
+      'video-prompt',
       'duration',
-      'camera',
-      'visual-action',
-      'characters',
-      'dialogue-sfx',
-      'tags-style',
-      'image-prep',
-      'storyboard-prompt',
-      'status',
+      'dialogue',
+      'state',
+      'action',
     ]);
     expect(filterSceneShotTableRows(rows, 'missing-image').map((row) => row.id)).toEqual([
       'shot-b',
@@ -1063,7 +1560,9 @@ describe('NodeContentDispatcher', () => {
     expect(rows[0]?.imagePrep).toContain('use-as-reference');
     expect(rows[0]?.imagePrep).toContain('remove-text');
     expect(rows[0]?.imagePrep).toContain('upscale');
-    expect(rows[0]?.storyboardPrompt).toContain('cinematic rain motion');
+    expect(rows[0]?.storyboardPrompt).toBe('');
+    expect(rows[0]?.state).toBe('Migrate prompt document');
+    expect(rows[0]?.nextActionId).toBe('fix-alignment');
   });
 
   it('reuses shot preview-source behavior for scene table generated and referenced images', () => {
@@ -1485,10 +1984,13 @@ describe('NodeContentDispatcher', () => {
       .join('\n');
 
     expect(markup).toContain('data-node-id="shot-parity"');
-    expect(markup).toContain('data-content-block-id="shot-status"');
-    expect(markup).toContain('data-content-block-id="shot-generated-preview"');
+    expect(markup).toContain('data-shot-canvas-review-surface="true"');
+    expect(markup).toContain('data-shot-canvas-review-preview="true"');
     expect(markup).toContain('data:image/png;base64,shot');
-    expect(markup).toContain('data-content-block-id="shot-visual-description"');
+    expect(markup).toContain('data-shot-canvas-review-field="duration"');
+    expect(markup).not.toContain('data-content-block-id="shot-status"');
+    expect(markup).not.toContain('data-content-block-id="shot-visual-description"');
+    expect(markup).not.toContain('data-container-section-id="shot-controls"');
     expect(markup).toContain('data-node-id="scene-parity"');
     expect(markup).toContain('No children');
     expect(markup).toContain('data-content-block-id="scene-title"');
@@ -1544,4 +2046,25 @@ function createCanvasContentRenderContext(node: CanvasNode): NodeContentRenderCo
     depth: 0,
     previewSurfaceKind: 'inline',
   };
+}
+
+function actionTarget(
+  actionId: CanvasStoryboardActionIntentId,
+): CanvasStoryboardNextCreativeStateTarget {
+  switch (actionId) {
+    case 'process-reference':
+      return 'reference-media';
+    case 'optimize-image-prompt':
+    case 'generate-image':
+      return 'image-prompt';
+    case 'optimize-video-prompt':
+    case 'generate-video':
+      return 'video-prompt';
+    case 'review-result':
+    case 'accept-result':
+    case 'retry':
+      return 'result-review';
+    case 'fix-alignment':
+      return 'prompt-alignment';
+  }
 }

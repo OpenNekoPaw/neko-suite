@@ -39,12 +39,7 @@ export const CANVAS_AUTHORING_OPERATION_STATUSES = ['available', 'unavailable'] 
 
 export type CanvasAuthoringOperationStatus = (typeof CANVAS_AUTHORING_OPERATION_STATUSES)[number];
 
-export const CANVAS_AUTHORING_RESULT_STATUSES = [
-  'success',
-  'partial',
-  'blocked',
-  'noop',
-] as const;
+export const CANVAS_AUTHORING_RESULT_STATUSES = ['success', 'partial', 'blocked', 'noop'] as const;
 
 export type CanvasAuthoringResultStatus = (typeof CANVAS_AUTHORING_RESULT_STATUSES)[number];
 
@@ -89,8 +84,7 @@ export type CanvasAuthoringFieldRole = (typeof CANVAS_AUTHORING_FIELD_ROLES)[num
 
 export const CANVAS_AUTHORING_FIELD_CARDINALITIES = ['optional', 'required', 'repeated'] as const;
 
-export type CanvasAuthoringFieldCardinality =
-  (typeof CANVAS_AUTHORING_FIELD_CARDINALITIES)[number];
+export type CanvasAuthoringFieldCardinality = (typeof CANVAS_AUTHORING_FIELD_CARDINALITIES)[number];
 
 export const CANVAS_AUTHORING_FIELD_STORAGE_TARGETS = [
   'node-data',
@@ -350,9 +344,59 @@ export interface CanvasAuthoringCapabilityBindingDescriptor {
 
 export interface CanvasAuthoringSemanticPromptSupportDescriptor {
   readonly supported: boolean;
+  readonly promptBlockKinds?: readonly string[];
+  readonly promptContentProfiles?: readonly CanvasAuthoringPromptContentProfileDescriptor[];
   readonly spanKinds?: readonly string[];
   readonly alignmentStates?: readonly string[];
+  readonly referenceMediaRoles?: readonly string[];
+  readonly referenceMediaKinds?: readonly string[];
+  readonly metadataPolicies?: readonly CanvasAuthoringPromptMetadataPolicyDescriptor[];
+  readonly promotionRules?: readonly CanvasAuthoringPromptMetadataPromotionRuleDescriptor[];
+  readonly advancedParameterIds?: readonly string[];
+  readonly nextCreativeStateIds?: readonly string[];
+  readonly nextCreativeStateTargets?: readonly string[];
+  readonly actionIntentIds?: readonly string[];
+  readonly primaryStoryboardColumns?: readonly string[];
+  readonly progressOwner?: 'agent' | 'canvas';
   readonly commands?: readonly string[];
+}
+
+export interface CanvasAuthoringPromptContentPartDescriptor {
+  readonly id: string;
+  readonly label?: CanvasAuthoringLocalizedText;
+  readonly summary?: string;
+  readonly required?: boolean;
+  readonly mapsToSpanKind?: string;
+  readonly mapsToFieldId?: string;
+  readonly mapsToParameterId?: string;
+}
+
+export interface CanvasAuthoringPromptContentProfileDescriptor {
+  readonly id: string;
+  readonly blockKind: string;
+  readonly label?: CanvasAuthoringLocalizedText;
+  readonly summary?: string;
+  readonly generationEffectiveParts: readonly CanvasAuthoringPromptContentPartDescriptor[];
+  readonly referenceKinds?: readonly string[];
+  readonly parameterIds?: readonly string[];
+}
+
+export interface CanvasAuthoringPromptMetadataPolicyDescriptor {
+  readonly id: string;
+  readonly label?: CanvasAuthoringLocalizedText;
+  readonly fieldIds: readonly string[];
+  readonly defaultStorageTarget: 'review-metadata' | 'custom-metadata';
+  readonly generationEffect: 'none' | 'suggestion-only';
+  readonly summary?: string;
+}
+
+export interface CanvasAuthoringPromptMetadataPromotionRuleDescriptor {
+  readonly id: string;
+  readonly from: 'markdown-extension' | 'review-metadata' | 'skill-field';
+  readonly to:
+    'semantic-prompt-span' | 'generation-parameter' | 'reference-media' | 'action-payload';
+  readonly requiresConfirmation: boolean;
+  readonly summary: string;
 }
 
 export interface CanvasAuthoringSourceRange {
@@ -433,17 +477,24 @@ export function validateCanvasAuthoringCatalogRequest(
   if (!isRecord(value)) {
     return {
       valid: false,
-      diagnostics: [diagnostic('error', 'malformed-catalog-request', 'Catalog request must be an object.')],
+      diagnostics: [
+        diagnostic('error', 'malformed-catalog-request', 'Catalog request must be an object.'),
+      ],
     };
   }
   const version = value['version'];
   if (version !== undefined && version !== CANVAS_AUTHORING_CATALOG_VERSION) {
     diagnostics.push(
-      diagnostic('error', 'unsupported-catalog-version', 'Unsupported Canvas authoring catalog version.', {
-        target: 'version',
-        expected: CANVAS_AUTHORING_CATALOG_VERSION,
-        received: version,
-      }),
+      diagnostic(
+        'error',
+        'unsupported-catalog-version',
+        'Unsupported Canvas authoring catalog version.',
+        {
+          target: 'version',
+          expected: CANVAS_AUTHORING_CATALOG_VERSION,
+          received: version,
+        },
+      ),
     );
   }
   const sections = value['sections'];
@@ -482,35 +533,52 @@ export function validateCanvasAuthoringCatalog(value: unknown): CanvasAuthoringV
   if (!isRecord(value)) {
     return {
       valid: false,
-      diagnostics: [diagnostic('error', 'malformed-catalog', 'Canvas authoring catalog must be an object.')],
+      diagnostics: [
+        diagnostic('error', 'malformed-catalog', 'Canvas authoring catalog must be an object.'),
+      ],
     };
   }
   if (value['version'] !== CANVAS_AUTHORING_CATALOG_VERSION) {
     diagnostics.push(
-      diagnostic('error', 'unsupported-catalog-version', 'Unsupported Canvas authoring catalog version.', {
-        target: 'version',
-        expected: CANVAS_AUTHORING_CATALOG_VERSION,
-        received: value['version'],
-      }),
+      diagnostic(
+        'error',
+        'unsupported-catalog-version',
+        'Unsupported Canvas authoring catalog version.',
+        {
+          target: 'version',
+          expected: CANVAS_AUTHORING_CATALOG_VERSION,
+          received: value['version'],
+        },
+      ),
     );
   }
   const sections = value['sections'];
   if (!Array.isArray(sections) || !sections.every(isCanvasAuthoringCatalogSection)) {
     diagnostics.push(
-      diagnostic('error', 'malformed-catalog-sections', 'Catalog sections must be supported section ids.', {
-        target: 'sections',
-        received: sections,
-      }),
+      diagnostic(
+        'error',
+        'malformed-catalog-sections',
+        'Catalog sections must be supported section ids.',
+        {
+          target: 'sections',
+          received: sections,
+        },
+      ),
     );
   }
   const operations = value['operations'];
   if (operations !== undefined) {
     if (!Array.isArray(operations)) {
       diagnostics.push(
-        diagnostic('error', 'malformed-operation-descriptor', 'Catalog operations must be an array.', {
-          target: 'operations',
-          received: operations,
-        }),
+        diagnostic(
+          'error',
+          'malformed-operation-descriptor',
+          'Catalog operations must be an array.',
+          {
+            target: 'operations',
+            received: operations,
+          },
+        ),
       );
     } else {
       operations.forEach((operation, index) => {
@@ -530,8 +598,7 @@ export function validateCanvasAuthoringCatalog(value: unknown): CanvasAuthoringV
   const catalogDiagnostics = value['diagnostics'];
   if (
     catalogDiagnostics !== undefined &&
-    (!Array.isArray(catalogDiagnostics) ||
-      !catalogDiagnostics.every(isCanvasAuthoringDiagnostic))
+    (!Array.isArray(catalogDiagnostics) || !catalogDiagnostics.every(isCanvasAuthoringDiagnostic))
   ) {
     diagnostics.push(
       diagnostic('error', 'malformed-authoring-diagnostic', 'Catalog diagnostics are malformed.', {
@@ -551,26 +618,40 @@ export function validateCanvasAuthoringResultEnvelope(
     return {
       valid: false,
       diagnostics: [
-        diagnostic('error', 'malformed-authoring-result', 'Canvas authoring result must be an object.'),
+        diagnostic(
+          'error',
+          'malformed-authoring-result',
+          'Canvas authoring result must be an object.',
+        ),
       ],
     };
   }
   if (value['version'] !== CANVAS_AUTHORING_CATALOG_VERSION) {
     diagnostics.push(
-      diagnostic('error', 'unsupported-catalog-version', 'Unsupported Canvas authoring result version.', {
-        target: 'version',
-        expected: CANVAS_AUTHORING_CATALOG_VERSION,
-        received: value['version'],
-      }),
+      diagnostic(
+        'error',
+        'unsupported-catalog-version',
+        'Unsupported Canvas authoring result version.',
+        {
+          target: 'version',
+          expected: CANVAS_AUTHORING_CATALOG_VERSION,
+          received: value['version'],
+        },
+      ),
     );
   }
   if (!includesString(CANVAS_AUTHORING_RESULT_STATUSES, value['status'])) {
     diagnostics.push(
-      diagnostic('error', 'malformed-authoring-status', 'Canvas authoring result status is unsupported.', {
-        target: 'status',
-        expected: CANVAS_AUTHORING_RESULT_STATUSES,
-        received: value['status'],
-      }),
+      diagnostic(
+        'error',
+        'malformed-authoring-status',
+        'Canvas authoring result status is unsupported.',
+        {
+          target: 'status',
+          expected: CANVAS_AUTHORING_RESULT_STATUSES,
+          received: value['status'],
+        },
+      ),
     );
   }
   const refs = value['refs'];
@@ -593,10 +674,7 @@ export function validateCanvasAuthoringResultEnvelope(
         );
         return;
       }
-      if (
-        ref.kind === 'resource' &&
-        isRuntimeOnlyCanvasAuthoringResourceIdentityValue(ref.id)
-      ) {
+      if (ref.kind === 'resource' && isRuntimeOnlyCanvasAuthoringResourceIdentityValue(ref.id)) {
         diagnostics.push(
           diagnostic(
             'error',
@@ -609,15 +687,17 @@ export function validateCanvasAuthoringResultEnvelope(
     });
   }
   const resultDiagnostics = value['diagnostics'];
-  if (
-    !Array.isArray(resultDiagnostics) ||
-    !resultDiagnostics.every(isCanvasAuthoringDiagnostic)
-  ) {
+  if (!Array.isArray(resultDiagnostics) || !resultDiagnostics.every(isCanvasAuthoringDiagnostic)) {
     diagnostics.push(
-      diagnostic('error', 'malformed-authoring-diagnostic', 'Canvas authoring diagnostics are malformed.', {
-        target: 'diagnostics',
-        received: resultDiagnostics,
-      }),
+      diagnostic(
+        'error',
+        'malformed-authoring-diagnostic',
+        'Canvas authoring diagnostics are malformed.',
+        {
+          target: 'diagnostics',
+          received: resultDiagnostics,
+        },
+      ),
     );
   }
   return validationResult(diagnostics);
@@ -831,12 +911,10 @@ function validateCanvasAuthoringFieldDescriptor(
   }
   if (!isNonEmptyString(value['namespace'])) {
     diagnostics.push(
-      diagnostic(
-        'error',
-        'malformed-field-descriptor',
-        'Field descriptor namespace is required.',
-        { target: `${target}.namespace`, received: value['namespace'] },
-      ),
+      diagnostic('error', 'malformed-field-descriptor', 'Field descriptor namespace is required.', {
+        target: `${target}.namespace`,
+        received: value['namespace'],
+      }),
     );
   }
   if (value['aliases'] !== undefined && !optionalStringArray(value['aliases'])) {
@@ -949,7 +1027,9 @@ function validateCanvasAuthoringSemanticPromptSpan(
       }),
     );
   }
-  diagnostics.push(...validateCanvasAuthoringSourceRange(value['range'], `${target}.range`, textLength));
+  diagnostics.push(
+    ...validateCanvasAuthoringSourceRange(value['range'], `${target}.range`, textLength),
+  );
   const fieldId = value['fieldId'];
   if (fieldId !== undefined) {
     if (!isNonEmptyString(fieldId)) {
@@ -1014,7 +1094,10 @@ function validateCanvasAuthoringSemanticPromptSpan(
           received: ref,
         }),
       );
-    } else if (ref.kind === 'resource' && isRuntimeOnlyCanvasAuthoringResourceIdentityValue(ref.id)) {
+    } else if (
+      ref.kind === 'resource' &&
+      isRuntimeOnlyCanvasAuthoringResourceIdentityValue(ref.id)
+    ) {
       diagnostics.push(
         diagnostic(
           'error',
@@ -1088,7 +1171,11 @@ function validateCanvasAuthoringPromptFieldProjection(
           target,
           suggestedActions: [
             { id: 'keep-prompt', label: 'Keep prompt override' },
-            { id: 'apply-field-suggestion', label: 'Apply field suggestion', requiresApproval: true },
+            {
+              id: 'apply-field-suggestion',
+              label: 'Apply field suggestion',
+              requiresApproval: true,
+            },
           ],
         },
       ),
@@ -1104,7 +1191,11 @@ function validateCanvasAuthoringPromptFieldProjection(
           target,
           suggestedActions: [
             { id: 'regenerate-prompt', label: 'Regenerate prompt', requiresApproval: true },
-            { id: 'merge-fields-into-prompt', label: 'Merge fields into prompt', requiresApproval: true },
+            {
+              id: 'merge-fields-into-prompt',
+              label: 'Merge fields into prompt',
+              requiresApproval: true,
+            },
           ],
         },
       ),
@@ -1175,7 +1266,11 @@ function validateCanvasAuthoringPromptFieldSuggestion(
   }
   if (value['sourceRange'] !== undefined) {
     diagnostics.push(
-      ...validateCanvasAuthoringSourceRange(value['sourceRange'], `${target}.sourceRange`, textLength),
+      ...validateCanvasAuthoringSourceRange(
+        value['sourceRange'],
+        `${target}.sourceRange`,
+        textLength,
+      ),
     );
   }
   diagnostics.push(
@@ -1222,7 +1317,9 @@ function validateCanvasAuthoringSourceRange(
 function collectCanvasAuthoringFieldIds(
   fieldProfiles: readonly CanvasAuthoringFieldProfileDescriptor[] | undefined,
 ): ReadonlySet<string> {
-  return new Set(fieldProfiles?.flatMap((profile) => profile.fields.map((field) => field.id)) ?? []);
+  return new Set(
+    fieldProfiles?.flatMap((profile) => profile.fields.map((field) => field.id)) ?? [],
+  );
 }
 
 function validateCanvasAuthoringPromptSpanDescriptor(
@@ -1414,10 +1511,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function includesString<T extends string>(
-  values: readonly T[],
-  value: unknown,
-): value is T {
+function includesString<T extends string>(values: readonly T[], value: unknown): value is T {
   return typeof value === 'string' && values.includes(value as T);
 }
 
@@ -1434,5 +1528,7 @@ function optionalBoolean(value: unknown): boolean {
 }
 
 function optionalStringArray(value: unknown): boolean {
-  return value === undefined || (Array.isArray(value) && value.every((item) => typeof item === 'string'));
+  return (
+    value === undefined || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+  );
 }

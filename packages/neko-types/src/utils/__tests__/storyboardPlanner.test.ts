@@ -141,6 +141,7 @@ describe('storyboardPlanner', () => {
                 ...payload.scenes[0]!.shotPlans[0]!,
                 referenceResourceRef: resourceRef,
                 generationPrompt: 'animated comic panel',
+                characterAction: 'Mika starts typing.',
                 textCues: [
                   {
                     cueId: 'text-1',
@@ -221,7 +222,16 @@ describe('storyboardPlanner', () => {
     expect(request?.children.every((child) => child.type === 'shot')).toBe(true);
     expect(request?.children[0]?.data).toMatchObject({
       referenceResourceRef: resourceRef,
-      generationPrompt: 'animated comic panel',
+      storyboardPrompt: expect.objectContaining({
+        promptBlocks: expect.objectContaining({
+          imagePromptDocument: expect.objectContaining({
+            text: 'animated comic panel',
+          }),
+          videoPromptDocument: expect.objectContaining({
+            text: expect.stringContaining('Mika starts typing.'),
+          }),
+        }),
+      }),
       textCues: [
         {
           cueId: 'text-1',
@@ -267,6 +277,7 @@ describe('storyboardPlanner', () => {
         },
       ],
     });
+    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
     expect(createConnection).not.toHaveBeenCalled();
   });
 

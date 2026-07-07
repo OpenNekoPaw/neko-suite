@@ -136,7 +136,7 @@ describe('comic-to-animation composite artifact sample', () => {
     expect(sampleArtifact.suggestedActions).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          actionId: 'canvas.ingestMarkdown',
+          actionId: 'canvas.authoring',
           disabled: true,
           disabledReason: 'Provider unavailable',
         }),

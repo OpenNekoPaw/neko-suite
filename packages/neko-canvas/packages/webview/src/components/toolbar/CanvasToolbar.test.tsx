@@ -179,7 +179,7 @@ describe('CanvasToolbar', () => {
     expect(onOpenPackage).toHaveBeenCalledTimes(1);
   });
 
-  it('controls canvas workspace surfaces as top-level left toolbar buttons', () => {
+  it('controls playback workspace surfaces without exposing the main canvas pane', () => {
     const onToggleWorkspaceSurface = vi.fn();
 
     act(() => {
@@ -187,7 +187,7 @@ describe('CanvasToolbar', () => {
         <CanvasToolbar
           onUndo={() => undefined}
           onRedo={() => undefined}
-          workspaceSurfaceState={{ canvas: true, stage: false, route: true }}
+          workspaceSurfaceState={{ stage: false, route: true }}
           onToggleWorkspaceSurface={onToggleWorkspaceSurface}
         />,
       );
@@ -203,10 +203,7 @@ describe('CanvasToolbar', () => {
       '[data-creative-left-rail-action="toggle-playback-route-pane"]',
     );
 
-    expect(canvasButton?.getAttribute('aria-controls')).toBe('canvas-playback-canvas-pane');
-    expect(canvasButton?.getAttribute('aria-expanded')).toBe('true');
-    expect(canvasButton?.getAttribute('aria-pressed')).toBe('true');
-    expect(canvasButton?.getAttribute('aria-label')).toBe('Hide canvas pane');
+    expect(canvasButton).toBeNull();
     expect(stageButton?.getAttribute('aria-controls')).toBe('canvas-playback-stage-pane');
     expect(stageButton?.getAttribute('aria-expanded')).toBe('false');
     expect(stageButton?.getAttribute('aria-pressed')).toBe('false');
@@ -223,12 +220,11 @@ describe('CanvasToolbar', () => {
     ).toBeNull();
 
     act(() => {
-      canvasButton?.click();
       stageButton?.click();
       routeButton?.click();
     });
 
-    expect(onToggleWorkspaceSurface.mock.calls).toEqual([['canvas'], ['stage'], ['route']]);
+    expect(onToggleWorkspaceSurface.mock.calls).toEqual([['stage'], ['route']]);
   });
 
   it('keeps surface buttons available before playback panes are visible', () => {
@@ -239,7 +235,7 @@ describe('CanvasToolbar', () => {
         <CanvasToolbar
           onUndo={() => undefined}
           onRedo={() => undefined}
-          workspaceSurfaceState={{ canvas: true, stage: false, route: false }}
+          workspaceSurfaceState={{ stage: false, route: false }}
           onToggleWorkspaceSurface={onToggleWorkspaceSurface}
         />,
       );
@@ -273,7 +269,7 @@ describe('CanvasToolbar', () => {
           onSelectTool={() => undefined}
           isNodeLibraryVisible={true}
           onToggleNodeLibrary={() => undefined}
-          workspaceSurfaceState={{ canvas: true, stage: false, route: false }}
+          workspaceSurfaceState={{ stage: false, route: false }}
           onToggleWorkspaceSurface={() => undefined}
           onOpenExport={() => undefined}
           onOpenPackage={() => undefined}
@@ -295,7 +291,6 @@ describe('CanvasToolbar', () => {
       'toggle-right-node-tree',
       'undo',
       'redo',
-      'toggle-playback-canvas-pane',
       'toggle-playback-stage-pane',
       'toggle-playback-route-pane',
       'open-export',

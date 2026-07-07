@@ -484,9 +484,6 @@ export class DocumentEntryContentAccessProvider implements ContentAccessProvider
   supports(request: ContentAccessRequest): boolean {
     const documentRef = getDocumentRef(request.ref);
     if (!documentRef) return false;
-    if (isPreviewLikeContentAccessIntent(request.intent) && this.resourceCacheProvider) {
-      return isResourceRef(request.ref) || documentRef.resource !== undefined;
-    }
     if (
       request.intent === 'agent-context' &&
       request.target === 'bytes' &&
@@ -500,6 +497,9 @@ export class DocumentEntryContentAccessProvider implements ContentAccessProvider
       documentRef.entryPath === undefined
     ) {
       return true;
+    }
+    if (isPreviewLikeContentAccessIntent(request.intent) && this.resourceCacheProvider) {
+      return isResourceRef(request.ref) || documentRef.resource !== undefined;
     }
     return request.intent === 'package' && request.target === 'bytes';
   }

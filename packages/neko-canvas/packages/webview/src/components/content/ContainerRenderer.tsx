@@ -1,8 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
-import type { CanvasBlock, CanvasNode, ChildNodeSlot } from '@neko/shared';
-import { getContainerChildIds, getNodeParentId } from '@neko/shared';
+import type {
+  CanvasBlock,
+  CanvasNode,
+  CanvasStoryboardActionIntent,
+  CanvasStoryboardPromptBlockKind,
+  CanvasStoryboardPromptState,
+  CanvasStoryboardSemanticPromptDocument,
+  ChildNodeSlot,
+} from '@neko/shared';
+import {
+  CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+  getContainerChildIds,
+  getNodeParentId,
+  isCanvasStoryboardPromptState,
+} from '@neko/shared';
 import { createBuiltInBlockRendererRegistry, renderCanvasBlock } from './blockRendererRegistry';
+import { SemanticPromptText } from '../common/SemanticPromptText';
+import { ShotCanvasReviewSurface } from './ShotCanvasReviewSurface';
 import type {
   BlockRendererRegistry,
   ContainerRendererProps,
@@ -17,7 +32,6 @@ import {
   NODE_CARD_ACTION_DISPATCHER,
   readNumber,
   readString,
-  resolveShotReviewPreviewSource,
 } from './node-card';
 import type {
   CreatorSceneViewMode,
@@ -63,44 +77,24 @@ const SCENE_TOOL_SELECT_CLASS =
 
 const SCENE_COLUMN_LABELS: Record<SceneShotTableColumnId, string> = {
   shot: 'scene.column.shot',
-  image: 'scene.column.image',
+  'reference-media': 'scene.column.referenceMedia',
+  'image-prompt': 'scene.column.imagePrompt',
+  'video-prompt': 'scene.column.videoPrompt',
   duration: 'scene.column.duration',
-  camera: 'scene.column.camera',
-  'visual-action': 'scene.column.visualAction',
-  characters: 'scene.column.characters',
-  'dialogue-sfx': 'scene.column.dialogueSfx',
-  'tags-style': 'scene.column.tagsStyle',
-  'image-prep': 'scene.column.imagePrep',
-  status: 'scene.column.status',
-  'character-description': 'scene.column.characterDescription',
-  'character-reference': 'scene.column.characterReference',
-  'reference-image': 'scene.column.referenceImage',
-  'storyboard-prompt': 'scene.column.storyboardPrompt',
-  'video-camera-prompt': 'scene.column.videoCameraPrompt',
-  'image-strategy': 'scene.column.imageStrategy',
-  'media-refs': 'scene.column.mediaRefs',
-  diagnostics: 'scene.column.diagnostics',
+  dialogue: 'scene.column.dialogue',
+  state: 'scene.column.state',
+  action: 'scene.column.action',
 };
 
 const SCENE_TABLE_COLUMN_WIDTHS: Record<SceneShotTableColumnId, number> = {
-  shot: 96,
-  image: 200,
-  duration: 88,
-  camera: 150,
-  'visual-action': 260,
-  characters: 160,
-  'dialogue-sfx': 220,
-  'tags-style': 180,
-  'image-prep': 240,
-  status: 150,
-  'character-description': 220,
-  'character-reference': 180,
-  'reference-image': 190,
-  'storyboard-prompt': 260,
-  'video-camera-prompt': 260,
-  'image-strategy': 160,
-  'media-refs': 220,
-  diagnostics: 240,
+  shot: 76,
+  'reference-media': 132,
+  'image-prompt': 216,
+  'video-prompt': 248,
+  duration: 72,
+  dialogue: 176,
+  state: 128,
+  action: 112,
 };
 
 const SCENE_FILTER_OPTIONS = [
@@ -134,6 +128,10 @@ export function ContainerRenderer({ section, context }: ContainerRendererProps) 
         {t('content.depthLimitReached')}
       </div>
     );
+  }
+
+  if (isShotCanvasReviewSection(section, context)) {
+    return <ShotCanvasReviewSurface context={context} />;
   }
 
   const sectionCollapsible = section.collapsible === true;
@@ -290,6 +288,17 @@ function renderChildSlotContent({
         />
       );
   }
+}
+
+function isShotCanvasReviewSection(
+  section: ContainerRendererProps['section'],
+  context: ContainerRendererProps['context'],
+): boolean {
+  return (
+    context.layout.surface === 'canvas' &&
+    context.node.type === 'shot' &&
+    section.metadata?.['presentation'] === 'shot-canvas-review'
+  );
 }
 
 function ChildSummaryGrid({
@@ -853,6 +862,13 @@ function SceneShotTableRowView({
       postMessage: (message) => getGlobalVSCodeApi()?.postMessage(message),
     });
   }, [parentNode.id, row.node]);
+  const handleDispatchActionIntent = useCallback(() => {
+    if (!row.nextActionId) return;
+    getGlobalVSCodeApi()?.postMessage({
+      type: 'storyboardActionIntent',
+      intent: createStoryboardActionIntent(parentNode, row),
+    });
+  }, [parentNode, row]);
 
   return (
     <tr
@@ -876,6 +892,7 @@ function SceneShotTableRowView({
           {renderSceneShotTableCell(columnId, row, {
             context,
             onOpenDetails: handleOpenDetails,
+            onDispatchActionIntent: handleDispatchActionIntent,
           })}
         </td>
       ))}
@@ -889,6 +906,7 @@ function renderSceneShotTableCell(
   options: {
     context: ContainerRendererProps['context'];
     onOpenDetails: () => void;
+    onDispatchActionIntent: () => void;
   },
 ): React.ReactNode {
   switch (columnId) {
@@ -910,143 +928,141 @@ function renderSceneShotTableCell(
           <span className="truncate">{row.shotNumber}</span>
         </button>
       );
-    case 'image':
-      return <SceneShotTableImageCell row={row} context={options.context} />;
+    case 'reference-media':
+      return (
+        <BoundedSceneCellText
+          value={row.referenceMedia}
+          placeholder={t('scene.referenceMediaUnavailable')}
+          ariaLabel={t('scene.referenceMediaStatus')}
+        />
+      );
+    case 'image-prompt':
+      return (
+        <ScenePromptCellText
+          document={row.imagePromptDocument}
+          value={row.imagePrompt}
+          placeholder={t('scene.imagePromptSkipped')}
+          ariaLabel={t('scene.column.imagePrompt')}
+        />
+      );
+    case 'video-prompt':
+      return (
+        <ScenePromptCellText
+          document={row.videoPromptDocument}
+          value={row.videoPrompt}
+          placeholder={t('scene.valueUnavailable')}
+          ariaLabel={t('scene.column.videoPrompt')}
+        />
+      );
     case 'duration':
       return (
-        <BoundedSceneCellText value={row.duration} placeholder={t('scene.valueUnavailable')} />
-      );
-    case 'camera':
-      return <BoundedSceneCellText value={row.camera} placeholder={t('scene.valueUnavailable')} />;
-    case 'visual-action':
-      return (
         <BoundedSceneCellText
-          value={row.visualAction}
-          placeholder={t('scene.shotVisualFallback')}
+          value={row.duration}
+          placeholder={t('scene.valueUnavailable')}
+          ariaLabel={t('scene.column.duration')}
         />
       );
-    case 'characters':
+    case 'dialogue':
       return (
-        <BoundedSceneCellText value={row.characters} placeholder={t('preset.shot.noCharacters')} />
+        <BoundedSceneCellText
+          value={row.dialogue}
+          placeholder={t('scene.noDialogue')}
+          ariaLabel={t('scene.column.dialogue')}
+        />
       );
-    case 'dialogue-sfx':
-      return <BoundedSceneCellText value={row.dialogueSfx} placeholder={t('scene.noDialogue')} />;
-    case 'tags-style':
-      return (
-        <BoundedSceneCellText value={row.tagsStyle} placeholder={t('scene.valueUnavailable')} />
-      );
-    case 'image-prep':
-      return (
-        <BoundedSceneCellText value={row.imagePrep} placeholder={t('scene.valueUnavailable')} />
-      );
-    case 'status':
+    case 'state':
       return <SceneShotStatusCell row={row} />;
-    case 'character-description':
+    case 'action':
       return (
-        <BoundedSceneCellText
-          value={row.characterDescription}
-          placeholder={t('scene.valueUnavailable')}
-        />
-      );
-    case 'character-reference':
-      return (
-        <BoundedSceneCellText
-          value={row.characterReference}
-          placeholder={t('scene.valueUnavailable')}
-        />
-      );
-    case 'reference-image':
-      return (
-        <BoundedSceneCellText
-          value={row.referenceImage}
-          placeholder={t('scene.imageUnavailable')}
-        />
-      );
-    case 'storyboard-prompt':
-      return (
-        <BoundedSceneCellText
-          value={row.storyboardPrompt}
-          placeholder={t('scene.valueUnavailable')}
-        />
-      );
-    case 'video-camera-prompt':
-      return (
-        <BoundedSceneCellText
-          value={row.videoCameraPrompt}
-          placeholder={t('scene.valueUnavailable')}
-        />
-      );
-    case 'image-strategy':
-      return (
-        <BoundedSceneCellText value={row.imageStrategy} placeholder={t('scene.valueUnavailable')} />
-      );
-    case 'media-refs':
-      return (
-        <BoundedSceneCellText value={row.mediaRefs} placeholder={t('scene.valueUnavailable')} />
-      );
-    case 'diagnostics':
-      return (
-        <BoundedSceneCellText
-          value={row.diagnostics}
-          placeholder={t('preset.shot.noDiagnostics')}
-        />
+        <SceneShotActionCell row={row} onDispatchActionIntent={options.onDispatchActionIntent} />
       );
   }
 }
 
-function SceneShotTableImageCell({
-  row,
-  context,
-}: {
-  row: SceneShotTableRow;
-  context: ContainerRendererProps['context'];
-}): React.ReactNode {
-  const previewSource = resolveShotReviewPreviewSource(row.node);
-  if (!row.hasImage && previewSource.renderForm === 'asset-thumbnail') {
-    return (
-      <div
-        className="flex h-[220px] max-w-[180px] items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 px-2 text-[10px] text-gray-400"
-        data-scene-shot-image-preview="large"
-      >
-        {t('scene.imageUnavailable')}
-      </div>
-    );
-  }
+function SceneShotStatusCell({ row }: { row: SceneShotTableRow }): React.ReactNode {
+  const stateLabel = formatSceneShotStateLabel(row.stateId, row.state);
+  const stateTargetLabel = formatSceneShotStateTargetLabel(row.stateTarget);
+  const tone =
+    row.stateSeverity === 'blocked' || row.stateSeverity === 'error'
+      ? 'error'
+      : row.stateSeverity === 'warning' || row.diagnosticCount > 0
+        ? 'warning'
+        : 'neutral';
   return (
     <div
-      className="inline-flex max-h-[220px] max-w-[180px] overflow-hidden rounded border border-gray-200 bg-gray-50 align-top"
-      data-scene-shot-image-preview="large"
+      className="flex min-w-0 flex-col gap-1"
+      aria-label={`${t('scene.nextCreativeState')}: ${stateLabel}`}
     >
-      <CardPreviewSlot
-        source={previewSource}
-        title={row.shotNumber}
-        variant="review-full"
-        imageFit="contain"
-        interactionRenderMode={context.interactionRenderMode}
-      />
+      <span className={getSceneStatusBadgeClassName(tone)}>{stateLabel}</span>
+      {stateTargetLabel ? (
+        <span className="text-[10px] text-gray-500">{stateTargetLabel}</span>
+      ) : null}
     </div>
   );
 }
 
-function SceneShotStatusCell({ row }: { row: SceneShotTableRow }): React.ReactNode {
-  const status = row.generationStatus ? resolveCanvasStatusLabel(row.generationStatus) : undefined;
-  const tone =
-    row.diagnosticCount > 0 || !row.hasImage
-      ? 'warning'
-      : row.generationStatus === 'error'
-        ? 'error'
-        : 'neutral';
+function SceneShotActionCell({
+  row,
+  onDispatchActionIntent,
+}: {
+  row: SceneShotTableRow;
+  onDispatchActionIntent: () => void;
+}): React.ReactNode {
+  if (!row.nextActionId) {
+    return (
+      <BoundedSceneCellText
+        value=""
+        placeholder={t('scene.valueUnavailable')}
+        ariaLabel={t('scene.nextActionControl')}
+      />
+    );
+  }
+  const actionLabel =
+    formatSceneShotActionLabel(row.nextActionId) || row.actionLabel || row.nextActionId;
   return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <span className={getSceneStatusBadgeClassName(tone)}>
-        {status ?? t('scene.statusUngenerated')}
-      </span>
-      {!row.hasImage ? (
-        <span className="text-[10px] text-amber-700">{t('scene.missingImage')}</span>
-      ) : null}
-      {!row.hasDialogue ? (
-        <span className="text-[10px] text-gray-500">{t('scene.missingDialogue')}</span>
-      ) : null}
+    <button
+      type="button"
+      className="inline-flex max-w-full items-center rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] leading-none text-blue-700 hover:bg-blue-100"
+      data-scene-shot-action-id={row.nextActionId}
+      title={row.nextActionId}
+      aria-label={`${t('scene.nextActionControl')}: ${actionLabel}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onDispatchActionIntent();
+      }}
+      onMouseDown={(event) => event.stopPropagation()}
+      {...getKeyboardBoundaryMetadata({
+        scope: 'toolbar',
+        ownerId: `scene-shot-action:${row.id}`,
+        ownedKeys: ['Enter', 'Space'],
+      })}
+    >
+      <span className="truncate">{actionLabel}</span>
+    </button>
+  );
+}
+
+function ScenePromptCellText({
+  document,
+  value,
+  placeholder,
+  ariaLabel,
+}: {
+  document?: CanvasStoryboardSemanticPromptDocument;
+  value: string;
+  placeholder: string;
+  ariaLabel?: string;
+}): React.ReactNode {
+  return (
+    <div data-scene-prompt-cell-text="true">
+      <SemanticPromptText
+        text={document?.text || value}
+        spans={document?.spans}
+        placeholder={placeholder}
+        ariaLabel={ariaLabel}
+        className="min-w-0 whitespace-pre-wrap break-words text-[11px] leading-[1.35] text-gray-700"
+        placeholderClassName="text-gray-400"
+      />
     </div>
   );
 }
@@ -1054,14 +1070,18 @@ function SceneShotStatusCell({ row }: { row: SceneShotTableRow }): React.ReactNo
 function BoundedSceneCellText({
   value,
   placeholder,
+  ariaLabel,
 }: {
   value: string;
   placeholder: string;
+  ariaLabel?: string;
 }): React.ReactNode {
   return (
     <div
-      className="max-h-[5.25rem] min-w-0 overflow-y-auto whitespace-pre-wrap break-words text-[11px] leading-[1.35] text-gray-700"
+      className="line-clamp-2 min-w-0 break-words text-[11px] leading-[1.35] text-gray-700"
       data-scene-cell-text-bounded="true"
+      aria-label={ariaLabel}
+      title={value || placeholder}
     >
       {value || <span className="text-gray-400">{placeholder}</span>}
     </div>
@@ -1827,10 +1847,7 @@ function getSceneToolButtonClassName(active: boolean): string {
 
 function getSceneTableCellClassName(columnId: SceneShotTableColumnId): string {
   const base = 'align-top border border-gray-200 px-2 py-2';
-  if (columnId === 'image') {
-    return `${base} bg-white`;
-  }
-  if (columnId === 'shot' || columnId === 'status') {
+  if (columnId === 'shot' || columnId === 'state' || columnId === 'action') {
     return `${base} bg-white`;
   }
   return `${base} bg-white`;
@@ -1845,6 +1862,119 @@ function getSceneStatusBadgeClassName(tone: 'error' | 'warning' | 'neutral'): st
     return `${base} border-amber-200 bg-amber-50 text-amber-700`;
   }
   return `${base} border-gray-200 bg-gray-50 text-gray-600`;
+}
+
+function formatSceneShotStateLabel(stateId: string, fallback: string): string {
+  const value = t(`scene.nextState.${stateId}`);
+  if (value !== `scene.nextState.${stateId}`) {
+    return value;
+  }
+  return fallback || t('scene.statusNeedsAction');
+}
+
+function formatSceneShotStateTargetLabel(target: string): string {
+  if (!target) return '';
+  const value = t(`scene.stateTarget.${target}`);
+  return value === `scene.stateTarget.${target}` ? target : value;
+}
+
+function formatSceneShotActionLabel(actionId: SceneShotTableRow['nextActionId']): string {
+  switch (actionId) {
+    case 'process-reference':
+      return t('scene.action.processReference');
+    case 'optimize-image-prompt':
+      return t('scene.action.optimizeImagePrompt');
+    case 'optimize-video-prompt':
+      return t('scene.action.optimizeVideoPrompt');
+    case 'generate-image':
+      return t('scene.action.generateImage');
+    case 'generate-video':
+      return t('scene.action.generateVideo');
+    case 'review-result':
+      return t('scene.action.reviewResult');
+    case 'fix-alignment':
+      return t('scene.action.fixAlignment');
+    case 'accept-result':
+      return t('scene.action.acceptResult');
+    case 'retry':
+      return t('scene.action.retry');
+    case undefined:
+      return '';
+  }
+}
+
+function createStoryboardActionIntent(
+  sceneNode: CanvasNode,
+  row: SceneShotTableRow,
+): CanvasStoryboardActionIntent {
+  if (!row.nextActionId) {
+    throw new Error(`Cannot create storyboard action intent without nextActionId for ${row.id}.`);
+  }
+  const promptState = readShotStoryboardPromptState(row.node);
+  return {
+    version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+    actionId: row.nextActionId,
+    target: {
+      nodeId: row.node.id,
+      sceneNodeId: sceneNode.id,
+      shotNumber: row.ordinal,
+    },
+    ...(promptState?.promptBlocks
+      ? { promptDocuments: listPromptDocumentRefs(promptState, row.node.id) }
+      : {}),
+    ...(promptState?.referenceMedia ? { referenceMedia: promptState.referenceMedia } : {}),
+    ...(promptState?.generationParams ? { generationParams: promptState.generationParams } : {}),
+    ...(promptState?.nextCreativeState?.id
+      ? { expectedNextStateId: promptState.nextCreativeState.id }
+      : {}),
+    ...(promptState?.nextCreativeState?.taskRef
+      ? { taskRef: promptState.nextCreativeState.taskRef }
+      : {}),
+    ...(promptState?.nextCreativeState?.resultRef
+      ? { resultRef: promptState.nextCreativeState.resultRef }
+      : {}),
+    createdAt: Date.now(),
+  };
+}
+
+function readShotStoryboardPromptState(node: CanvasNode): CanvasStoryboardPromptState | undefined {
+  if (node.type !== 'shot') return undefined;
+  const state = node.data.storyboardPrompt;
+  if (state === undefined) return undefined;
+  if (!isCanvasStoryboardPromptState(state)) {
+    throw new Error(`Invalid storyboardPrompt state on shot node ${node.id}.`);
+  }
+  return state;
+}
+
+function listPromptDocumentRefs(
+  state: CanvasStoryboardPromptState,
+  nodeId: string,
+): CanvasStoryboardActionIntent['promptDocuments'] {
+  const refs = [
+    promptDocumentRef('image', state.promptBlocks?.imagePromptDocument),
+    promptDocumentRef('video', state.promptBlocks?.videoPromptDocument),
+    promptDocumentRef('voice', state.promptBlocks?.voicePromptDocument),
+  ].filter((ref): ref is NonNullable<typeof ref> => Boolean(ref));
+  if (refs.length === 0) {
+    throw new Error(
+      `Cannot create storyboard action intent without prompt document refs for ${nodeId}.`,
+    );
+  }
+  return refs;
+}
+
+function promptDocumentRef(
+  blockKind: CanvasStoryboardPromptBlockKind,
+  document: CanvasStoryboardSemanticPromptDocument | undefined,
+): NonNullable<CanvasStoryboardActionIntent['promptDocuments']>[number] | undefined {
+  if (!document) return undefined;
+  return {
+    blockKind,
+    documentId: document.documentId,
+    version: document.version,
+    ...(document.baseRevision ? { baseRevision: document.baseRevision } : {}),
+  };
 }
 
 function resolveSceneTableMinWidth(columns: readonly SceneShotTableColumnId[]): number {
@@ -1898,11 +2028,7 @@ function getChildSlotFrameClassName(
 }
 
 type ChildSlotPresentation =
-  | 'scene-shot-table'
-  | 'scene-shot-rail'
-  | 'group-summary'
-  | 'gallery-grid'
-  | 'detail-cards';
+  'scene-shot-table' | 'scene-shot-rail' | 'group-summary' | 'gallery-grid' | 'detail-cards';
 
 function resolveChildSlotPresentation(
   node: CanvasNode,

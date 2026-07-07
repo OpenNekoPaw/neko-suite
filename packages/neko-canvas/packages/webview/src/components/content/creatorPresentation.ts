@@ -1,27 +1,27 @@
-import type { CanvasNode } from '@neko/shared';
-import { SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_EXTENSION_KEY } from '@neko/shared';
+import type {
+  CanvasNode,
+  CanvasStoryboardActionIntentId,
+  CanvasStoryboardNextCreativeStateSeverity,
+  CanvasStoryboardPromptState,
+  CanvasStoryboardSemanticPromptDocument,
+} from '@neko/shared';
+import {
+  isCanvasStoryboardPromptState,
+  projectCanvasStoryboardReviewRow,
+  SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_EXTENSION_KEY,
+} from '@neko/shared';
 
 export type CreatorSceneViewMode = 'storyboard-table' | 'creative-view';
 
 export type SceneShotTableColumnId =
   | 'shot'
-  | 'image'
+  | 'reference-media'
+  | 'image-prompt'
+  | 'video-prompt'
   | 'duration'
-  | 'camera'
-  | 'visual-action'
-  | 'characters'
-  | 'dialogue-sfx'
-  | 'tags-style'
-  | 'image-prep'
-  | 'status'
-  | 'character-description'
-  | 'character-reference'
-  | 'reference-image'
-  | 'storyboard-prompt'
-  | 'video-camera-prompt'
-  | 'image-strategy'
-  | 'media-refs'
-  | 'diagnostics';
+  | 'dialogue'
+  | 'state'
+  | 'action';
 
 export type SceneShotTableColumnProfileId = 'creator-review' | 'professional';
 
@@ -50,7 +50,19 @@ export interface SceneShotTableRow {
   readonly node: CanvasNode;
   readonly ordinal: number;
   readonly shotNumber: string;
+  readonly referenceMedia: string;
+  readonly imagePrompt: string;
+  readonly imagePromptDocument?: CanvasStoryboardSemanticPromptDocument;
+  readonly videoPrompt: string;
+  readonly videoPromptDocument?: CanvasStoryboardSemanticPromptDocument;
   readonly duration: string;
+  readonly dialogue: string;
+  readonly stateId: string;
+  readonly state: string;
+  readonly stateSeverity: CanvasStoryboardNextCreativeStateSeverity;
+  readonly stateTarget: string;
+  readonly nextActionId?: CanvasStoryboardActionIntentId;
+  readonly actionLabel: string;
   readonly camera: string;
   readonly visualAction: string;
   readonly characters: string;
@@ -76,27 +88,17 @@ export interface SceneShotTableRow {
 
 export const DEFAULT_SCENE_SHOT_TABLE_COLUMNS = [
   'shot',
-  'image',
+  'reference-media',
+  'image-prompt',
+  'video-prompt',
   'duration',
-  'camera',
-  'visual-action',
-  'characters',
-  'dialogue-sfx',
-  'tags-style',
-  'image-prep',
-  'storyboard-prompt',
-  'status',
+  'dialogue',
+  'state',
+  'action',
 ] as const satisfies readonly SceneShotTableColumnId[];
 
-export const PROFESSIONAL_SCENE_SHOT_TABLE_COLUMNS = [
-  'character-description',
-  'character-reference',
-  'reference-image',
-  'video-camera-prompt',
-  'image-strategy',
-  'media-refs',
-  'diagnostics',
-] as const satisfies readonly SceneShotTableColumnId[];
+export const PROFESSIONAL_SCENE_SHOT_TABLE_COLUMNS =
+  [] as const satisfies readonly SceneShotTableColumnId[];
 
 export const SCENE_SHOT_TABLE_COLUMN_PROFILES = [
   {
@@ -149,13 +151,9 @@ export function matchesSceneShotTableFilter(
     case 'missing-dialogue':
       return !row.hasDialogue;
     case 'failed-generation':
-      return row.generationStatus === 'error' || row.generationStatus === 'failed';
+      return row.stateSeverity === 'error' || row.stateSeverity === 'blocked';
     case 'ungenerated':
-      return (
-        !row.generationStatus ||
-        row.generationStatus === 'idle' ||
-        row.generationStatus === 'pending'
-      );
+      return row.nextActionId === 'generate-video' || row.nextActionId === 'generate-image';
     case 'has-diagnostics':
       return row.diagnosticCount > 0;
     case 'current-character': {
@@ -202,13 +200,32 @@ function projectSceneShotTableRow(
   const shotImagePrepPlan = readRecord(data['shotImagePrepPlan']);
   const imageStrategy =
     readString(shotImagePrepPlan, 'imageStrategy') ?? readString(data, 'imageStrategy');
+  const storyboardPromptState = readStoryboardPromptStateForRow(shot.id, data['storyboardPrompt']);
+  const semanticRow = projectCanvasStoryboardReviewRow({
+    nodeId: shot.id,
+    sceneNodeId: scene.id,
+    data,
+  });
+  const semanticDiagnostics = semanticRow.diagnostics.map((diagnostic) => diagnostic.message);
 
   return {
     id: shot.id,
     node: shot,
     ordinal: index + 1,
     shotNumber: readShotNumber(shot, index),
-    duration: duration === undefined ? '' : formatSeconds(duration),
+    referenceMedia: semanticRow.referenceMedia || summarizeLegacyReferenceMedia(data),
+    imagePrompt: semanticRow.imagePrompt,
+    imagePromptDocument: storyboardPromptState?.promptBlocks?.imagePromptDocument,
+    videoPrompt: semanticRow.videoPrompt,
+    videoPromptDocument: storyboardPromptState?.promptBlocks?.videoPromptDocument,
+    duration: semanticRow.duration || (duration === undefined ? '' : formatSeconds(duration)),
+    dialogue: semanticRow.dialogue,
+    stateId: semanticRow.state.id,
+    state: semanticRow.state.label,
+    stateSeverity: semanticRow.state.severity,
+    stateTarget: semanticRow.state.target,
+    nextActionId: semanticRow.actionId,
+    actionLabel: semanticRow.actionId ? formatStoryboardActionLabel(semanticRow.actionId) : '',
     camera: joinDisplayParts([
       readString(data, 'shotScale'),
       readString(data, 'cameraAngle'),
@@ -233,7 +250,7 @@ function projectSceneShotTableRow(
       ...readStringArray(data['vfx']),
     ]),
     imagePrep: summarizeImagePrep(shot, data, shotImagePrepPlan),
-    status: joinDisplayParts([generationStatus, summarizeImageStatus(data)]),
+    status: semanticRow.state.label,
     characterDescription: summarizeCharacterField(data['characters'], 'appearanceNotes'),
     characterReference: summarizeCharacterRefs(data['characters']),
     referenceImage: joinDisplayParts([
@@ -241,25 +258,33 @@ function projectSceneShotTableRow(
       summarizeRecordRef(data['referenceImageResourceRef']),
       summarizeRecordRef(data['referenceResourceRef']),
     ]),
-    storyboardPrompt:
-      readString(data, 'generationPrompt') ??
-      readString(shotImagePrepPlan, 'generationPrompt') ??
-      '',
-    videoCameraPrompt: readString(readRecord(data['generatedVideoAsset']), 'prompt') ?? '',
+    storyboardPrompt: semanticRow.imagePrompt || semanticRow.videoPrompt,
+    videoCameraPrompt: semanticRow.videoPrompt,
     imageStrategy: imageStrategy ?? readString(data, 'imageStrategy') ?? '',
     mediaRefs: joinDisplayParts([
       summarizeMediaRefs(sourceMediaRefs, 'source'),
       summarizeMediaRefs(generatedMediaRefs, 'generated'),
       summarizeMediaRefs(mediaRefs, 'media'),
     ]),
-    diagnostics: diagnostics.join(' · '),
-    hasImage: hasShotImage(data),
+    diagnostics: [...semanticDiagnostics, ...diagnostics].join(' · '),
+    hasImage: hasShotImage(data) || Boolean(semanticRow.referenceMedia),
     hasDialogue: hasShotDialogue(data),
     generationStatus,
     sceneTags: sceneTags.length > 0 ? sceneTags : readStringArray(sceneData['sceneTags']),
     characterNames,
-    diagnosticCount: diagnostics.length,
+    diagnosticCount: semanticDiagnostics.length + diagnostics.length,
   };
+}
+
+function readStoryboardPromptStateForRow(
+  nodeId: string,
+  value: unknown,
+): CanvasStoryboardPromptState | undefined {
+  if (value === undefined) return undefined;
+  if (!isCanvasStoryboardPromptState(value)) {
+    throw new Error(`Invalid storyboardPrompt state on shot node ${nodeId}.`);
+  }
+  return value;
 }
 
 function summarizeImagePrep(
@@ -276,6 +301,39 @@ function summarizeImagePrep(
     summarizeComicImageAudit(planMetadata['imageAudit']),
     summarizeComicImageAudit(readStoryboardComicImageAuditExtension(node, data)),
   ]);
+}
+
+function summarizeLegacyReferenceMedia(data: Record<string, unknown>): string {
+  return joinDisplayParts([
+    summarizeMediaRefs(readReadonlyArray(data['sourceMediaRefs']), 'source'),
+    summarizeMediaRefs(readReadonlyArray(data['mediaRefs']), 'media'),
+    readString(data, 'referenceImagePath'),
+    summarizeRecordRef(data['referenceImageResourceRef']),
+    summarizeRecordRef(data['referenceResourceRef']),
+  ]);
+}
+
+function formatStoryboardActionLabel(actionId: CanvasStoryboardActionIntentId): string {
+  switch (actionId) {
+    case 'process-reference':
+      return 'Process reference';
+    case 'optimize-image-prompt':
+      return 'Optimize image prompt';
+    case 'optimize-video-prompt':
+      return 'Optimize scene video prompt';
+    case 'generate-image':
+      return 'Generate image';
+    case 'generate-video':
+      return 'Generate video';
+    case 'review-result':
+      return 'Review result';
+    case 'fix-alignment':
+      return 'Fix alignment';
+    case 'accept-result':
+      return 'Accept result';
+    case 'retry':
+      return 'Retry';
+  }
 }
 
 function readStoryboardComicImageAuditExtension(
@@ -384,13 +442,6 @@ function hasShotDialogue(data: Record<string, unknown>): boolean {
     ) ||
     readReadonlyArray(data['voiceCues']).some((cue) => Boolean(readString(readRecord(cue), 'text')))
   );
-}
-
-function summarizeImageStatus(data: Record<string, unknown>): string {
-  if (hasShotImage(data)) {
-    return 'image';
-  }
-  return 'missing image';
 }
 
 function readCharacterNames(value: unknown): readonly string[] {

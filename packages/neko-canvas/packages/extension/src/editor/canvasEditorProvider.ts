@@ -74,6 +74,7 @@ import {
   resolveWorkspaceMediaPath,
   summarizeCanvasSubsystems,
   resolveStorageLayout,
+  validateCanvasStoryboardActionIntent,
   validateCanvasBoardRef,
 } from '@neko/shared';
 import type {
@@ -106,6 +107,7 @@ import type {
   CreativeEntityChangedRef,
   CanvasStoryboardExecutionSummary,
   CanvasStoryboardExecutionSummaryRequest,
+  CanvasStoryboardActionIntent,
   CanvasStoryboardPayload,
   CanvasRelatedBoardRef,
   CreatedCanvasStoryboard,
@@ -183,11 +185,7 @@ const CANVAS_EDITOR_LEVEL_KEYBOARD_ACTIONS = new Set([
 ]);
 
 type CanvasPlaybackPreviewSourceKind =
-  | 'generated-image'
-  | 'generated-media'
-  | 'reference-image'
-  | 'source-media'
-  | 'media-asset';
+  'generated-image' | 'generated-media' | 'reference-image' | 'source-media' | 'media-asset';
 
 interface CanvasPlaybackPreviewSourceProjection {
   readonly url: string;
@@ -2790,11 +2788,9 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
       case 'preview:delegateAction': {
         const action = message.action as
-          | { target?: string; command?: string; route?: string }
-          | undefined;
+          { target?: string; command?: string; route?: string } | undefined;
         const asset = message.asset as
-          | { path?: string; uri?: string; mediaType?: string }
-          | undefined;
+          { path?: string; uri?: string; mediaType?: string } | undefined;
         const assetPath = asset?.path ?? asset?.uri;
 
         if (action?.command) {
@@ -3038,8 +3034,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           let assetSrc: string | undefined;
           if (projectType === 'nkv') {
             const tracks = projectData['tracks'] as
-              | Array<{ elements?: Array<{ src?: string }> }>
-              | undefined;
+              Array<{ elements?: Array<{ src?: string }> }> | undefined;
             assetSrc = tracks?.[0]?.elements?.[0]?.src;
           } else if (projectType === 'nkm') {
             const model = projectData['model'] as { src?: string } | undefined;
@@ -3195,6 +3190,40 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
             nodeId,
             prompt: '',
             error: 'neko-agent not available',
+          });
+        }
+        break;
+      }
+
+      case 'storyboardActionIntent': {
+        const intent = message.intent as CanvasStoryboardActionIntent | undefined;
+        const validation = validateCanvasStoryboardActionIntent(intent);
+        if (!validation.valid || !intent) {
+          logger.warn(
+            `storyboardActionIntent rejected: ${validation.diagnostics
+              .map((diagnostic) => diagnostic.message)
+              .join('; ')}`,
+          );
+          void handleError(new Error('Invalid storyboard action intent.'), {
+            showToUser: true,
+            severity: 'warning',
+          });
+          break;
+        }
+        try {
+          await vscode.commands.executeCommand('neko.agent.sendContext', {
+            type: 'canvas-storyboard-action-intent',
+            id: intent.requestId ?? `${intent.target.nodeId}:${intent.actionId}`,
+            label: `Storyboard action: ${intent.actionId}`,
+            summary: `Canvas storyboard action ${intent.actionId} for ${intent.target.nodeId}`,
+            data: { intent },
+            intent: intent.actionId,
+          });
+        } catch (err) {
+          logger.error(`storyboardActionIntent failed: ${err}`);
+          void handleError(err instanceof Error ? err : new Error(String(err)), {
+            showToUser: true,
+            severity: 'warning',
           });
         }
         break;

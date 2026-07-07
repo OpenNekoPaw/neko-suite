@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { extractCanvasNodeGenerationLineage, projectCanvasShotPrompt } from '../canvasGeneration';
+import {
+  CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+  CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+} from '../../types/canvas-semantic-storyboard';
 import type { GalleryCanvasNode, ShotCanvasNode, TextCanvasNode } from '../../types/canvas';
 
 describe('extractCanvasNodeGenerationLineage', () => {
@@ -113,7 +117,59 @@ describe('projectCanvasShotPrompt', () => {
     });
   });
 
-  it('uses generationPrompt as an explicit generation override', () => {
+  it('projects semantic prompt documents before legacy generationPrompt input', () => {
+    const node: ShotCanvasNode = {
+      id: 'shot-semantic',
+      type: 'shot',
+      position: { x: 0, y: 0 },
+      size: { width: 100, height: 100 },
+      zIndex: 1,
+      data: {
+        shotNumber: 1,
+        duration: 3,
+        visualDescription: 'Field description',
+        generationPrompt: 'legacy prompt must not win',
+        storyboardPrompt: {
+          version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+          promptBlocks: {
+            videoPromptDocument: {
+              version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+              documentId: 'shot-semantic:video:prompt',
+              blockKind: 'video',
+              text: 'semantic video prompt wins',
+            },
+          },
+        },
+        characters: [],
+        shotScale: 'CU',
+        characterAction: '',
+        emotion: [],
+        sceneTags: [],
+        generationStatus: 'idle',
+        generationHistory: [],
+      },
+    };
+
+    expect(projectCanvasShotPrompt(node)).toEqual({
+      prompt: 'semantic video prompt wins',
+      source: 'semantic-prompt-document',
+      promptBlockKind: 'video',
+      shotScale: 'CU',
+      cameraMovement: undefined,
+      cameraAngle: undefined,
+    });
+
+    expect(projectCanvasShotPrompt(node, { preferredBlockKind: 'image' })).toEqual({
+      prompt: 'semantic video prompt wins',
+      source: 'semantic-prompt-document',
+      promptBlockKind: 'video',
+      shotScale: 'CU',
+      cameraMovement: undefined,
+      cameraAngle: undefined,
+    });
+  });
+
+  it('treats generationPrompt as migration input instead of a prompt override', () => {
     const node: ShotCanvasNode = {
       id: 'shot-custom',
       type: 'shot',
@@ -136,8 +192,41 @@ describe('projectCanvasShotPrompt', () => {
     };
 
     expect(projectCanvasShotPrompt(node)).toEqual({
-      prompt: 'Custom prompt wins',
-      source: 'generationPrompt',
+      prompt: 'Field description',
+      source: 'assembled',
+      legacyMigrationPrompt: 'Custom prompt wins',
+      shotScale: 'CU',
+      cameraMovement: undefined,
+      cameraAngle: undefined,
+    });
+  });
+
+  it('poisons legacy-only generationPrompt acceptance for canonical prompt projection', () => {
+    const node: ShotCanvasNode = {
+      id: 'shot-legacy-only',
+      type: 'shot',
+      position: { x: 0, y: 0 },
+      size: { width: 100, height: 100 },
+      zIndex: 1,
+      data: {
+        shotNumber: 1,
+        duration: 3,
+        visualDescription: '',
+        generationPrompt: 'legacy-only prompt',
+        characters: [],
+        shotScale: 'CU',
+        characterAction: '',
+        emotion: [],
+        sceneTags: [],
+        generationStatus: 'idle',
+        generationHistory: [],
+      },
+    };
+
+    expect(projectCanvasShotPrompt(node)).toEqual({
+      prompt: '',
+      source: 'legacy-migration-required',
+      legacyMigrationPrompt: 'legacy-only prompt',
       shotScale: 'CU',
       cameraMovement: undefined,
       cameraAngle: undefined,

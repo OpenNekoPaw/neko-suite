@@ -27,17 +27,23 @@ export interface NodeContentDispatcherProps {
 
 const PRESET_REGISTRY = createBuiltInCanvasNodePresetRegistry();
 const COLLAPSED_NODE_RENDER_HEIGHT = 42;
+const SHOT_CANVAS_REVIEW_CONTENT: ContainerSection = {
+  id: 'shot-canvas-review-root',
+  layout: 'stack',
+  metadata: { presentation: 'shot-canvas-review' },
+};
 
 export function NodeContentDispatcher({ context, renderDefaultNode }: NodeContentDispatcherProps) {
   const { node } = context;
 
   const content = useMemo(() => resolveContent(node), [node]);
+  const renderContent = useMemo(() => resolveCanvasRenderContent(node, content), [content, node]);
 
-  if (!content) {
+  if (!renderContent) {
     return renderDefaultNode ? <>{renderDefaultNode(context)}</> : null;
   }
 
-  return <ComposableNodeContent context={context} node={node} content={content} />;
+  return <ComposableNodeContent context={context} node={node} content={renderContent} />;
 }
 
 function resolveContent(node: CanvasNode): ContainerSection | undefined {
@@ -50,6 +56,16 @@ function resolveContent(node: CanvasNode): ContainerSection | undefined {
   if (node.content) return node.content;
 
   return undefined;
+}
+
+function resolveCanvasRenderContent(
+  node: CanvasNode,
+  content: ContainerSection | undefined,
+): ContainerSection | undefined {
+  if (node.type === 'shot') {
+    return SHOT_CANVAS_REVIEW_CONTENT;
+  }
+  return content;
 }
 
 function ComposableNodeContent({

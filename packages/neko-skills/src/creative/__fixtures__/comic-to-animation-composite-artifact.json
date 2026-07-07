@@ -278,19 +278,19 @@
         {
           "severity": "warning",
           "code": "provider-unavailable",
-          "path": ["suggestedActions", "canvas.ingestMarkdown"],
-          "message": "Canvas review is lifecycle-backed and requires a registered Canvas Markdown provider."
+          "path": ["suggestedActions", "canvas.authoring"],
+          "message": "Canvas review is authoring-backed and requires the Canvas authoring provider."
         }
       ]
     }
   ],
   "suggestedActions": [
     {
-      "actionId": "canvas.ingestMarkdown",
+      "actionId": "canvas.authoring",
       "kind": "review",
       "label": "Review in Canvas",
-      "capabilityId": "canvas.ingestMarkdown",
-      "projectorId": "capability:canvas.ingestMarkdown",
+      "capabilityId": "canvas.authoring",
+      "projectorId": "capability:canvas.authoring",
       "risk": "medium",
       "requiresApproval": true,
       "disabled": true,

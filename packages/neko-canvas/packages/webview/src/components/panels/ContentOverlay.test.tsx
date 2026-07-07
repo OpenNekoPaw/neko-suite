@@ -4,7 +4,12 @@ import React from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CanvasData, CanvasNode } from '@neko/shared';
+import {
+  CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+  CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+  type CanvasData,
+  type CanvasNode,
+} from '@neko/shared';
 import { ContentOverlay } from './ContentOverlay';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { buildCanvasNode } from '../../utils/nodeFactory';
@@ -14,13 +19,15 @@ import { setLocale } from '../../i18n';
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 describe('ContentOverlay', () => {
-  let host: HTMLDivElement;
+  let host: HTMLElement;
+  let reactHost: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    host = document.createElement('div');
-    document.body.appendChild(host);
-    root = createRoot(host);
+    reactHost = document.createElement('div');
+    document.body.appendChild(reactHost);
+    host = document.body;
+    root = createRoot(reactHost);
     setLocale('en');
     useCanvasStore.setState({
       canvasData: null,
@@ -33,7 +40,7 @@ describe('ContentOverlay', () => {
     act(() => {
       root.unmount();
     });
-    host.remove();
+    reactHost.remove();
   });
 
   it('owns fullscreen content scrolling in the overlay body viewport', () => {
@@ -52,7 +59,18 @@ describe('ContentOverlay', () => {
           dialogue: 'The useful content stays visible.',
           voiceOver: 'A concise note remains available.',
           soundCue: 'soft pulse',
-          generationPrompt: 'Machine-facing prompt should stay behind details.',
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-scroll:video:prompt',
+                blockKind: 'video',
+                text: 'Semantic video prompt should stay in the creator surface.',
+              },
+            },
+          },
+          generationPrompt: 'Legacy prompt should stay migration-only.',
           referenceImagePath: 'data:image/png;base64,reference',
         },
       }),
@@ -72,15 +90,20 @@ describe('ContentOverlay', () => {
       '[data-content-overlay-scroll-region="true"]',
     );
     expect(scrollRegion).not.toBeNull();
+    expect(reactHost.querySelector('[data-content-overlay-root="true"]')).toBeNull();
+    expect(
+      host.querySelector<HTMLElement>('[data-content-overlay-panel="true"]')?.style.zIndex,
+    ).toBe('20001');
     expect(scrollRegion?.className).toContain('flex min-h-0 flex-1 flex-col overflow-auto');
-    expect(host.querySelector('[data-shot-creator-overlay="true"]')).not.toBeNull();
+    const shotOverlay = host.querySelector<HTMLElement>('[data-shot-creator-overlay="true"]');
+    expect(shotOverlay).not.toBeNull();
+    expect(shotOverlay?.className).toContain('max-w-[1440px]');
+    expect(shotOverlay?.className).toContain('minmax(320px,0.9fr)');
     expect(host.querySelector('[data-shot-creator-summary="true"]')).not.toBeNull();
     expect(host.querySelector('[data-shot-creator-preview="true"]')).not.toBeNull();
     expect(host.querySelector('[data-content-block-id="shot-generated-preview"]')).not.toBeNull();
-    expect(host.querySelector('[data-shot-creator-details="true"]')).not.toBeNull();
-    expect(host.querySelector('[data-shot-creator-details="true"]')?.hasAttribute('open')).toBe(
-      false,
-    );
+    expect(host.querySelector('[data-shot-creator-details="true"]')).toBeNull();
+    expect(host.textContent).not.toContain('Edit details and advanced metadata');
     expect(host.textContent).toContain('A dense shot with enough metadata to require scrolling.');
     expect(host.textContent).toContain('The creator-facing summary stays readable.');
     expect(host.textContent).toContain('Lead (primary)');
@@ -90,11 +113,12 @@ describe('ContentOverlay', () => {
       host
         .querySelector('[data-shot-creator-prompt-source]')
         ?.getAttribute('data-shot-creator-prompt-source'),
-    ).toBe('generationPrompt');
-    expect(host.textContent).toContain('Custom override');
-    expect(host.querySelector('textarea')?.value).toBe(
-      'Machine-facing prompt should stay behind details.',
-    );
+    ).toBe('semantic-prompt-document');
+    expect(host.textContent).toContain('Semantic document');
+    expect(
+      host.querySelector<HTMLTextAreaElement>('[data-shot-creator-prompt-block-input="video"]')
+        ?.value,
+    ).toBe('Semantic video prompt should stay in the creator surface.');
     expect(host.querySelector('[data-content-block-id="shot-visual-description"]')).toBeNull();
     expect(host.querySelector('[data-content-block-id="shot-generation-prompt"]')).toBeNull();
   });
@@ -137,12 +161,304 @@ describe('ContentOverlay', () => {
         ?.getAttribute('data-shot-creator-prompt-source'),
     ).toBe('assembled');
     expect(host.textContent).toContain('Assembled from fields');
-    expect(host.querySelector('textarea')?.value).toContain('White title page with calligraphy.');
-    expect(host.querySelector('textarea')?.value).toContain('Style: minimal ink');
-    expect(host.querySelector('textarea')?.value).toContain('Sound: soft ambient tone');
+    const videoPrompt = host.querySelector<HTMLTextAreaElement>(
+      '[data-shot-creator-prompt-block-input="video"]',
+    );
+    expect(videoPrompt?.value).toContain('White title page with calligraphy.');
+    expect(videoPrompt?.value).toContain('Style: minimal ink');
+    expect(videoPrompt?.value).toContain('Sound: soft ambient tone');
   });
 
-  it('commits prompt edits as generationPrompt and cancels Escape edits', async () => {
+  it('renders semantic prompt spans, alignment state, and prompt diagnostics', () => {
+    const videoPromptText =
+      'Rainy hallway Aki turns back with slow dolly-in, cinematic anime still using @RefFrame';
+    const voicePromptText = 'tense whisper: Where are you?';
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 7,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-spans:video:prompt',
+                blockKind: 'video',
+                text: videoPromptText,
+                spans: [
+                  createPromptSpan(videoPromptText, 'Rainy hallway', 'scene', 'scene.location'),
+                  createPromptSpan(videoPromptText, 'Aki', 'character', 'character.ref'),
+                  createPromptSpan(videoPromptText, 'turns back', 'action', 'shot.action'),
+                  createPromptSpan(videoPromptText, 'slow dolly-in', 'camera', 'camera.movement'),
+                  createPromptSpan(videoPromptText, 'cinematic anime still', 'style', 'style.look'),
+                  createPromptSpan(videoPromptText, '@RefFrame', 'resource', 'reference.media'),
+                ],
+                fieldProjections: [
+                  {
+                    fieldId: 'scene.videoPrompt',
+                    value: videoPromptText,
+                    alignmentState: 'in-sync',
+                  },
+                ],
+              },
+              voicePromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-spans:voice:prompt',
+                blockKind: 'voice',
+                text: voicePromptText,
+                spans: [
+                  createPromptSpan(voicePromptText, 'tense whisper', 'voice', 'voice.emotion'),
+                ],
+                fieldProjections: [
+                  {
+                    fieldId: 'voice.dialogue',
+                    value: voicePromptText,
+                    alignmentState: 'suggestion-pending',
+                  },
+                ],
+              },
+            },
+            diagnostics: [
+              {
+                severity: 'warning',
+                code: 'prompt-alignment-review',
+                message: 'Review wet hair as character appearance.',
+              },
+            ],
+          },
+        },
+      }),
+      id: 'shot-overlay-spans',
+    } as CanvasNode;
+
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
+    });
+
+    const videoEditor = host.querySelector('[data-shot-creator-prompt-block-editor="video"]');
+    const voiceEditor = host.querySelector('[data-shot-creator-prompt-block-editor="voice"]');
+    const videoPromptDisplay = videoEditor?.querySelector('[data-semantic-prompt-text="true"]');
+    expect(videoEditor).not.toBeNull();
+    expect(videoPromptDisplay).not.toBeNull();
+    expect(videoPromptDisplay?.getAttribute('data-semantic-prompt-visual-style')).toBe('subtle');
+    expect(videoEditor?.querySelector('[data-semantic-prompt-span-kind="scene"]')).not.toBeNull();
+    expect(
+      videoEditor?.querySelector('[data-semantic-prompt-span-kind="character"]'),
+    ).not.toBeNull();
+    expect(videoEditor?.querySelector('[data-semantic-prompt-span-kind="action"]')).not.toBeNull();
+    expect(videoEditor?.querySelector('[data-semantic-prompt-span-kind="camera"]')).not.toBeNull();
+    expect(videoEditor?.querySelector('[data-semantic-prompt-span-kind="style"]')).not.toBeNull();
+    expect(
+      videoEditor?.querySelector('[data-semantic-prompt-span-kind="resource"]'),
+    ).not.toBeNull();
+    expect(voiceEditor?.querySelector('[data-semantic-prompt-span-kind="voice"]')).not.toBeNull();
+    const semanticPromptSpans = Array.from(
+      videoEditor?.querySelectorAll('[data-semantic-prompt-span-kind]') ?? [],
+    );
+    expect(semanticPromptSpans.length).toBeGreaterThan(0);
+    for (const span of semanticPromptSpans) {
+      expect(span.className).toContain('text-current');
+      expect(span.className).toContain('underline');
+      expect(span.className).not.toContain('text-emerald-800');
+      expect(span.className).not.toContain('text-cyan-800');
+      expect(span.className).not.toContain('text-amber-800');
+    }
+    expect(videoEditor?.textContent).toContain(videoPromptText);
+    expect(
+      videoEditor?.querySelector('[data-semantic-prompt-span-kind="scene"]')?.getAttribute('title'),
+    ).toContain('Scene location');
+    expect(host.querySelector(`[aria-label="Semantic prompt spans"]`)).toBeNull();
+    expect(
+      host.querySelector('[data-shot-creator-prompt-alignment-state="in-sync"]'),
+    ).not.toBeNull();
+    expect(
+      host.querySelector('[data-shot-creator-prompt-alignment-state="suggestion-pending"]'),
+    ).not.toBeNull();
+    expect(
+      host.querySelector('[data-shot-creator-prompt-diagnostic="prompt-alignment-review"]'),
+    ).not.toBeNull();
+    expect(host.textContent).toContain('Scene video prompt: In sync');
+    expect(host.textContent).toContain('Dialogue: Suggestion pending');
+    expect(host.textContent).toContain('Review wet hair as character appearance.');
+  });
+
+  it('renders capability-driven storyboard parameters in shot prompt details', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 8,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-advanced:video:prompt',
+                blockKind: 'video',
+                text: 'Generate a careful slow push-in.',
+              },
+            },
+            referenceMedia: {
+              imageRefs: [],
+              videoRefs: [
+                {
+                  refId: 'ref-video',
+                  role: 'reference',
+                  locator: {
+                    type: 'asset',
+                    assetId: 'ref-video',
+                    uri: 'assets/ref-video.mp4',
+                  },
+                  mimeType: 'video/mp4',
+                },
+              ],
+              audioRefs: [
+                {
+                  refId: 'ref-audio',
+                  role: 'reference',
+                  locator: {
+                    type: 'asset',
+                    assetId: 'ref-audio',
+                    uri: 'assets/ref-audio.wav',
+                  },
+                  mimeType: 'audio/wav',
+                },
+              ],
+            },
+            generationParams: {
+              duration: 4,
+              aspectRatio: '16:9',
+              advancedParameters: {
+                seed: 1234,
+                negativePrompt: 'blur',
+                motionStrength: 0.6,
+              },
+            },
+          },
+        },
+      }),
+      id: 'shot-overlay-advanced',
+    } as CanvasNode;
+
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
+    });
+
+    expect(host.querySelector('[data-shot-creator-advanced-params="true"]')).not.toBeNull();
+    expect(host.querySelector('[data-shot-creator-advanced-param="seed"]')).not.toBeNull();
+    expect(
+      host.querySelector('[data-shot-creator-advanced-param="negativePrompt"]'),
+    ).not.toBeNull();
+    expect(
+      host.querySelector('[data-shot-creator-advanced-param="motionStrength"]'),
+    ).not.toBeNull();
+    expect(host.querySelector('[data-shot-creator-advanced-param="aspectRatio"]')).not.toBeNull();
+    expect(
+      host.querySelector('[data-shot-creator-advanced-param="videoReference"]'),
+    ).not.toBeNull();
+    expect(
+      host.querySelector('[data-shot-creator-advanced-param="audioReference"]'),
+    ).not.toBeNull();
+    expect(host.textContent).toContain('Advanced parameters');
+    expect(host.textContent).toContain('Seed: 1234');
+    expect(host.textContent).toContain('Negative prompt: blur');
+  });
+
+  it('localizes semantic prompt inline spans and advanced parameter labels in Chinese', () => {
+    setLocale('zh-cn');
+    const videoPromptText = 'rainy school hallway, Aki turns back, slow dolly-in';
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 9,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-zh-labels:video:prompt',
+                blockKind: 'video',
+                text: videoPromptText,
+                spans: [
+                  createPromptSpan(videoPromptText, 'slow dolly-in', 'camera', 'camera.movement'),
+                  createPromptSpan(videoPromptText, 'Aki turns back', 'action', 'shot.action'),
+                ],
+                fieldProjections: [
+                  {
+                    fieldId: 'camera.movement',
+                    value: 'slow dolly-in',
+                    alignmentState: 'in-sync',
+                  },
+                  {
+                    fieldId: 'shot.action',
+                    value: 'Aki turns back',
+                    alignmentState: 'in-sync',
+                  },
+                ],
+              },
+            },
+            generationParams: {
+              duration: 4,
+              aspectRatio: '16:9',
+              advancedParameters: {
+                negativePrompt: 'low quality',
+                motionStrength: 0.55,
+              },
+            },
+          },
+        },
+      }),
+      id: 'shot-overlay-zh-labels',
+    } as CanvasNode;
+
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
+    });
+
+    const cameraSpan = host.querySelector('[data-semantic-prompt-span-kind="camera"]');
+    const actionSpan = host.querySelector('[data-semantic-prompt-span-kind="action"]');
+    expect(cameraSpan?.textContent).toBe('slow dolly-in');
+    expect(cameraSpan?.getAttribute('title')).toContain('运镜');
+    expect(actionSpan?.textContent).toBe('Aki turns back');
+    expect(actionSpan?.getAttribute('title')).toContain('动作');
+    const text = host.textContent ?? '';
+    expect(text).toContain('镜头动作: 已同步');
+    expect(text).toContain('负向提示词: low quality');
+    expect(text).toContain('运动强度: 0.55');
+    expect(text).toContain('画幅比例: 16:9');
+    expect(text).not.toContain('camera.movement: in-sync');
+    expect(text).not.toContain('shot.action: in-sync');
+    expect(text).not.toContain('negativePrompt: low quality');
+    expect(text).not.toContain('motionStrength: 0.55');
+  });
+
+  it('commits prompt edits as semantic storyboardPrompt and cancels Escape edits', async () => {
     const node = {
       ...buildCanvasNode({
         type: 'shot',
@@ -169,7 +485,9 @@ describe('ContentOverlay', () => {
       root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
     });
 
-    const textarea = host.querySelector('textarea');
+    const textarea = host.querySelector<HTMLTextAreaElement>(
+      '[data-shot-creator-prompt-block-input="video"]',
+    );
     expect(textarea).not.toBeNull();
 
     await act(async () => {
@@ -181,8 +499,21 @@ describe('ContentOverlay', () => {
     });
 
     expect(updateNodeData).toHaveBeenCalledWith(node.id, {
-      generationPrompt: 'Custom title prompt',
+      storyboardPrompt: expect.objectContaining({
+        version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+        promptBlocks: expect.objectContaining({
+          videoPromptDocument: expect.objectContaining({
+            version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+            documentId: 'shot-overlay-edit-prompt:video:prompt',
+            blockKind: 'video',
+            text: 'Custom title prompt',
+            userOverride: true,
+          }),
+        }),
+      }),
     });
+    const payload = updateNodeData.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    expect(payload).not.toHaveProperty('generationPrompt');
 
     updateNodeData.mockClear();
 
@@ -198,6 +529,166 @@ describe('ContentOverlay', () => {
     });
 
     expect(updateNodeData).not.toHaveBeenCalled();
+  });
+
+  it('synchronizes tagged span edits into field projections', async () => {
+    const promptText = 'Rainy hallway, Aki turns back.';
+    const sceneSpan = createPromptSpan(promptText, 'Rainy hallway', 'scene', 'scene.location');
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 4,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-tagged-edit:video:prompt',
+                blockKind: 'video',
+                text: promptText,
+                spans: [sceneSpan],
+                fieldProjections: [
+                  {
+                    fieldId: 'scene.location',
+                    value: 'Rainy hallway',
+                    sourceSpanId: sceneSpan.id,
+                    alignmentState: 'in-sync',
+                  },
+                ],
+              },
+            },
+          },
+        },
+      }),
+      id: 'shot-overlay-tagged-edit',
+    } as CanvasNode;
+
+    const updateNodeData = vi.fn();
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+      updateNodeData,
+    });
+
+    act(() => {
+      root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
+    });
+
+    const textarea = host.querySelector<HTMLTextAreaElement>(
+      '[data-shot-creator-prompt-block-input="video"]',
+    );
+    expect(textarea).not.toBeNull();
+
+    await act(async () => {
+      setTextareaValue(textarea!, 'Sunset rooftop, Aki turns back.');
+      textarea!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      textarea!.dispatchEvent(new Event('focusout', { bubbles: true }));
+    });
+
+    const payload = updateNodeData.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    const document = readPromptDocumentFromUpdate(payload, 'videoPromptDocument');
+    expect(document).toMatchObject({
+      text: 'Sunset rooftop, Aki turns back.',
+      userOverride: false,
+      fieldProjections: [
+        expect.objectContaining({
+          fieldId: 'scene.location',
+          value: 'Sunset rooftop',
+          alignmentState: 'in-sync',
+          userOverride: false,
+        }),
+      ],
+    });
+    expect(readArray(document?.spans)?.[0]).toMatchObject({
+      range: { start: 0, end: 'Sunset rooftop'.length },
+      source: 'user',
+    });
+    expect(readArray(readRecord(payload?.storyboardPrompt)?.diagnostics) ?? []).toEqual([]);
+  });
+
+  it('preserves free-form prompt edits as suggestions with alignment diagnostics', async () => {
+    const promptText = 'Rainy hallway, Aki turns back.';
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 5,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-freeform-edit:video:prompt',
+                blockKind: 'video',
+                text: promptText,
+                spans: [createPromptSpan(promptText, 'Rainy hallway', 'scene', 'scene.location')],
+              },
+            },
+          },
+        },
+      }),
+      id: 'shot-overlay-freeform-edit',
+    } as CanvasNode;
+
+    const updateNodeData = vi.fn();
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+      updateNodeData,
+    });
+
+    act(() => {
+      root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
+    });
+
+    const textarea = host.querySelector<HTMLTextAreaElement>(
+      '[data-shot-creator-prompt-block-input="video"]',
+    );
+    expect(textarea).not.toBeNull();
+
+    await act(async () => {
+      setTextareaValue(textarea!, `${promptText} Wet hair catches the cold light.`);
+      textarea!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      textarea!.dispatchEvent(new Event('focusout', { bubbles: true }));
+    });
+
+    const payload = updateNodeData.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    const document = readPromptDocumentFromUpdate(payload, 'videoPromptDocument');
+    expect(document).toMatchObject({
+      text: `${promptText} Wet hair catches the cold light.`,
+      userOverride: true,
+      fieldProjections: [
+        expect.objectContaining({
+          fieldId: 'scene.videoPrompt',
+          alignmentState: 'prompt-overridden',
+          userOverride: true,
+        }),
+      ],
+      fieldSuggestions: [
+        expect.objectContaining({
+          fieldId: 'scene.videoPrompt',
+          suggestedValue: `${promptText} Wet hair catches the cold light.`,
+        }),
+      ],
+    });
+    expect(readArray(readRecord(payload?.storyboardPrompt)?.diagnostics)).toEqual([
+      expect.objectContaining({
+        severity: 'warning',
+        code: 'semantic-prompt-freeform-edit',
+        target: '/storyboardPrompt/promptBlocks/videoPromptDocument',
+      }),
+    ]);
   });
 
   it('keeps scene storyboard table visible in fullscreen overlay', () => {
@@ -222,6 +713,23 @@ describe('ContentOverlay', () => {
           shotNumber: 1,
           visualDescription: 'Visible fullscreen shot row',
           dialogue: 'The table is still here.',
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              imagePromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-row:image:prompt',
+                blockKind: 'image',
+                text: 'Use the imported reference frame.',
+              },
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-row:video:prompt',
+                blockKind: 'video',
+                text: 'Visible fullscreen video prompt',
+              },
+            },
+          },
           referenceImagePath: 'data:image/png;base64,reference',
         },
       }),
@@ -245,8 +753,10 @@ describe('ContentOverlay', () => {
     ).toBe('fill');
     expect(host.querySelector('[data-scene-shot-table="true"]')).not.toBeNull();
     expect(host.querySelector('[data-scene-shot-table-row-id="shot-overlay-row"]')).not.toBeNull();
-    expect(host.textContent).toContain('Visible fullscreen shot row');
+    expect(host.textContent).toContain('Visible fullscreen video prompt');
     expect(host.textContent).toContain('The table is still here.');
+    expect(host.textContent).toContain('Generate reference image');
+    expect(host.textContent).toContain('Generate image');
   });
 });
 
@@ -262,4 +772,48 @@ function createCanvasData(nodes: CanvasNode[]): CanvasData {
 function setTextareaValue(textarea: HTMLTextAreaElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
   setter?.call(textarea, value);
+}
+
+function readPromptDocumentFromUpdate(
+  payload: Record<string, unknown> | undefined,
+  key: 'imagePromptDocument' | 'videoPromptDocument' | 'voicePromptDocument',
+): Record<string, unknown> | undefined {
+  const promptState = readRecord(payload?.storyboardPrompt);
+  const promptBlocks = readRecord(promptState?.promptBlocks);
+  return readRecord(promptBlocks?.[key]);
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function readArray(value: unknown): readonly unknown[] | undefined {
+  return Array.isArray(value) ? value : undefined;
+}
+
+function createPromptSpan(
+  text: string,
+  value: string,
+  kind: string,
+  fieldId: string,
+): {
+  readonly id: string;
+  readonly kind: string;
+  readonly range: { readonly start: number; readonly end: number };
+  readonly fieldId: string;
+  readonly source: 'agent';
+} {
+  const start = text.indexOf(value);
+  if (start < 0) {
+    throw new Error(`Prompt span value not found: ${value}`);
+  }
+  return {
+    id: `${kind}:${fieldId}`,
+    kind,
+    range: { start, end: start + value.length },
+    fieldId,
+    source: 'agent',
+  };
 }

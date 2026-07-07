@@ -41,10 +41,6 @@ describe('CanvasSettingsPanel', () => {
           onGridVisibleChange={() => undefined}
           isHudVisible={false}
           onHudVisibleChange={() => undefined}
-          isNodeTreeVisible={true}
-          onNodeTreeVisibleChange={() => undefined}
-          nodeTreeMode="professional"
-          onNodeTreeModeChange={() => undefined}
           onClose={() => undefined}
         />,
       );
@@ -57,13 +53,13 @@ describe('CanvasSettingsPanel', () => {
     expect(host.textContent).toContain('storyboard, narrative');
     expect(host.textContent).toContain('scene 1 / shot 2');
     expect(host.textContent).toContain('project.nkp');
+    expect(host.textContent).not.toContain('Right Node Tree');
+    expect(host.textContent).not.toContain('Node tree mode');
   });
 
-  it('dispatches view and node-tree setting changes', () => {
+  it('dispatches view setting changes', () => {
     const onGridVisibleChange = vi.fn();
     const onHudVisibleChange = vi.fn();
-    const onNodeTreeVisibleChange = vi.fn();
-    const onNodeTreeModeChange = vi.fn();
     const onClose = vi.fn();
 
     act(() => {
@@ -77,35 +73,27 @@ describe('CanvasSettingsPanel', () => {
           onGridVisibleChange={onGridVisibleChange}
           isHudVisible={true}
           onHudVisibleChange={onHudVisibleChange}
-          isNodeTreeVisible={false}
-          onNodeTreeVisibleChange={onNodeTreeVisibleChange}
-          nodeTreeMode="basic"
-          onNodeTreeModeChange={onNodeTreeModeChange}
           onClose={onClose}
         />,
       );
     });
 
     const switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
-    const professionalTab = Array.from(
-      host.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
-    ).find((button) => button.textContent === 'Professional');
     const closeButton = host.querySelector<HTMLButtonElement>(
       '[aria-label="Close canvas settings"]',
     );
 
+    expect(switches).toHaveLength(2);
+    expect(host.querySelectorAll<HTMLButtonElement>('[role="tab"]')).toHaveLength(0);
+
     act(() => {
       switches[0]?.click();
       switches[1]?.click();
-      switches[2]?.click();
-      professionalTab?.click();
       closeButton?.click();
     });
 
     expect(onGridVisibleChange).toHaveBeenCalledWith(true);
     expect(onHudVisibleChange).toHaveBeenCalledWith(false);
-    expect(onNodeTreeVisibleChange).toHaveBeenCalledWith(true);
-    expect(onNodeTreeModeChange).toHaveBeenCalledWith('professional');
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

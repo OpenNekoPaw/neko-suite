@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { CanvasNode } from '@neko/shared';
-import { getContainerChildIds, getDefaultCanvasNodePresetName } from '@neko/shared';
+import {
+  CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+  CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+  getContainerChildIds,
+  getDefaultCanvasNodePresetName,
+} from '@neko/shared';
 import {
   applyCanvasAgentContent,
   createCanvasComposite,
@@ -433,6 +438,9 @@ describe('canvasAgentOperations', () => {
       parentId: 'scene-1',
     });
     expect(result.selectedNodes[0]?.targetableFields?.map((field) => field.path)).toContain(
+      '/storyboardPrompt',
+    );
+    expect(result.selectedNodes[0]?.targetableFields?.map((field) => field.path)).not.toContain(
       '/generationPrompt',
     );
     expect(result.focusedContainer).toMatchObject({
@@ -674,24 +682,174 @@ describe('canvasAgentOperations', () => {
     });
   });
 
-  it('applies prompt content to a validated Shot field without replacing unrelated data', () => {
+  it('rejects legacy prompt authority writes to Shot nodes', () => {
     const shot = node('shot-1', 'shot');
+
+    expect(() =>
+      applyCanvasAgentContent(
+        { nodes: [shot], connections: [], generateId: ids() },
+        {
+          kind: 'prompt',
+          prompt: 'cinematic rim light',
+          target: { nodeId: 'shot-1', fieldPath: '/generationPrompt', mode: 'replace' },
+        },
+      ),
+    ).toThrow(/migration input only/);
+    expect(() =>
+      applyCanvasAgentContent(
+        { nodes: [shot], connections: [], generateId: ids() },
+        {
+          kind: 'prompt',
+          prompt: 'cinematic rim light',
+          target: { nodeId: 'shot-1', mode: 'replace' },
+        },
+      ),
+    ).toThrow(/structured storyboardPrompt writeback/);
+    expect(() =>
+      updateCanvasBlock(shot, {
+        nodeId: 'shot-1',
+        path: '/generationPrompt',
+        value: 'cinematic rim light',
+      }),
+    ).toThrow(/migration input only/);
+  });
+
+  it('validates semantic storyboard prompt writeback before persisting', () => {
+    const shot = {
+      ...node('shot-1', 'shot'),
+      data: {
+        ...node('shot-1', 'shot').data,
+        storyboardPrompt: {
+          version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+          promptBlocks: {
+            videoPromptDocument: {
+              version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+              documentId: 'shot-1:video:prompt',
+              blockKind: 'video',
+              text: 'Initial video prompt',
+            },
+          },
+        },
+      },
+    } as CanvasNode;
 
     const result = applyCanvasAgentContent(
       { nodes: [shot], connections: [], generateId: ids() },
       {
-        kind: 'prompt',
-        prompt: 'cinematic rim light',
-        target: { nodeId: 'shot-1', fieldPath: '/generationPrompt', mode: 'replace' },
+        kind: 'structured',
+        content: {
+          version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+          promptBlocks: {
+            videoPromptDocument: {
+              version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+              documentId: 'shot-1:video:prompt',
+              blockKind: 'video',
+              text: 'Updated video prompt',
+            },
+          },
+          executionRefs: {
+            taskRefs: [{ source: 'agent', sourceTaskId: 'task-1' }],
+            resultRefs: [
+              {
+                mediaRef: {
+                  refId: 'result-video',
+                  role: 'generated',
+                  locator: {
+                    type: 'asset',
+                    assetId: 'result-video',
+                    uri: 'assets/result-video.mp4',
+                  },
+                  mimeType: 'video/mp4',
+                },
+              },
+            ],
+          },
+        },
+        target: { nodeId: 'shot-1', fieldPath: '/storyboardPrompt', mode: 'replace' },
       },
     );
 
     const nextShot = result.nodes.find((item) => item.id === 'shot-1') as CanvasNode;
-    expect(result.result).toMatchObject({ changed: true, mode: 'replace', nodeId: 'shot-1' });
-    expect(nextShot.data).toMatchObject({
-      visualDescription: 'A quiet hallway',
-      generationPrompt: 'cinematic rim light',
+    expect(result.result).toMatchObject({ changed: true, nodeId: 'shot-1' });
+    expect((nextShot.data as Record<string, unknown>).storyboardPrompt).toMatchObject({
+      promptBlocks: {
+        videoPromptDocument: {
+          documentId: 'shot-1:video:prompt',
+          text: 'Updated video prompt',
+        },
+      },
+      executionRefs: {
+        taskRefs: [expect.objectContaining({ sourceTaskId: 'task-1' })],
+        resultRefs: [
+          expect.objectContaining({
+            mediaRef: expect.objectContaining({
+              refId: 'result-video',
+              locator: expect.objectContaining({
+                type: 'asset',
+                uri: 'assets/result-video.mp4',
+              }),
+            }),
+          }),
+        ],
+      },
     });
+
+    expect(() =>
+      applyCanvasAgentContent(
+        { nodes: [shot], connections: [], generateId: ids() },
+        {
+          kind: 'structured',
+          content: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'different-doc',
+                blockKind: 'video',
+                text: 'Wrong identity',
+              },
+            },
+          },
+          target: { nodeId: 'shot-1', fieldPath: '/storyboardPrompt', mode: 'replace' },
+        },
+      ),
+    ).toThrow(/document identity changed/);
+
+    expect(() =>
+      applyCanvasAgentContent(
+        { nodes: [shot], connections: [], generateId: ids() },
+        {
+          kind: 'structured',
+          content: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-1:video:prompt',
+                blockKind: 'video',
+                text: 'Runtime-only result',
+              },
+            },
+            executionRefs: {
+              resultRefs: [
+                {
+                  mediaRef: {
+                    refId: 'runtime-video',
+                    role: 'generated',
+                    locator: {
+                      type: 'asset',
+                      assetId: 'runtime-video',
+                      uri: 'blob:vscode/runtime-video',
+                    },
+                  },
+                },
+              ],
+            },
+          },
+          target: { nodeId: 'shot-1', fieldPath: '/storyboardPrompt', mode: 'replace' },
+        },
+      ),
+    ).toThrow(/runtime-only/);
   });
 
   it('inserts Agent text into a container through generic membership actions', () => {

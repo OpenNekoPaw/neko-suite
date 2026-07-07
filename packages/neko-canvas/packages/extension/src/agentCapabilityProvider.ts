@@ -70,6 +70,11 @@ import {
   CANVAS_AGENT_DERIVE_TARGET_PRESETS,
   CANVAS_AGENT_NODE_PRESETS,
   CANVAS_CONNECTION_TYPES,
+  CANVAS_STORYBOARD_ADVANCED_PARAMETER_IDS,
+  CANVAS_STORYBOARD_ACTION_INTENT_IDS,
+  CANVAS_STORYBOARD_NEXT_CREATIVE_STATE_TARGETS,
+  CANVAS_STORYBOARD_PROMPT_BLOCK_KINDS,
+  STORYBOARD_MEDIA_ROLES,
   applyCanvasTimelineSyncToCanvas,
   applyStoryboardPayloadToCanvas,
   buildStoryboardImportTimelineSyncPayload,
@@ -81,6 +86,7 @@ import {
   isCanvasConnectionType,
   isCanvasNodeType,
   traverseNarrativeFlow,
+  isCanvasMarkdownCapabilityResult,
   validateCanvasAuthoringCatalogRequest,
   validateCanvasAuthoringFieldProfileDescriptor,
 } from '@neko/shared';
@@ -198,7 +204,9 @@ function readOptionalConnectionPriority(value: unknown): number | undefined {
   throw new Error('Canvas connection priority must be a finite number');
 }
 
-function readOptionalConnectionExtension(value: unknown): CanvasConnection['extension'] | undefined {
+function readOptionalConnectionExtension(
+  value: unknown,
+): CanvasConnection['extension'] | undefined {
   if (value === undefined) return undefined;
   if (isRecord(value)) return value as CanvasConnection['extension'];
   throw new Error('Canvas connection extension must be an object');
@@ -260,9 +268,10 @@ function readStringArray(value: unknown): string[] {
     : [];
 }
 
-type CanvasAuthoringResultCarrier<T> = T extends Record<string, unknown>
-  ? T & { readonly authoringResult: CanvasAuthoringResultEnvelope }
-  : { readonly value: T; readonly authoringResult: CanvasAuthoringResultEnvelope };
+type CanvasAuthoringResultCarrier<T> =
+  T extends Record<string, unknown>
+    ? T & { readonly authoringResult: CanvasAuthoringResultEnvelope }
+    : { readonly value: T; readonly authoringResult: CanvasAuthoringResultEnvelope };
 
 function withCanvasAuthoringResult<T>(
   data: T,
@@ -389,7 +398,9 @@ function createUpdateNodeAuthoringResult(
   });
 }
 
-function createDeriveNodeAuthoringResult(result: CanvasDeriveNodeResult): CanvasAuthoringResultEnvelope {
+function createDeriveNodeAuthoringResult(
+  result: CanvasDeriveNodeResult,
+): CanvasAuthoringResultEnvelope {
   return createCanvasAuthoringResultEnvelope({
     refs: uniqueAuthoringRefs([
       nodeRef(result.nodeId),
@@ -419,7 +430,10 @@ function createConnectionAuthoringResult(
     refs: uniqueAuthoringRefs([
       connectionRef(result.connectionId),
       ...(result.connection
-        ? [nodeRef(result.connection.sourceId, 'source'), nodeRef(result.connection.targetId, 'target')]
+        ? [
+            nodeRef(result.connection.sourceId, 'source'),
+            nodeRef(result.connection.targetId, 'target'),
+          ]
         : []),
     ]),
     summary: 'Created a Canvas connection.',
@@ -545,7 +559,7 @@ function createMarkdownCapabilityTool(
               },
               resource: {
                 type: 'object',
-                description: 'Stable ResourceRef or DocumentArchiveResourceRef wrapper.',
+                description: CANVAS_MARKDOWN_RESOURCE_CONTRACT_DESCRIPTION,
               },
               role: { type: 'string', description: 'Optional resource role.' },
               provenance: { type: 'object', description: 'Optional Agent provenance.' },
@@ -564,7 +578,7 @@ function createMarkdownCapabilityTool(
               resources: {
                 type: 'array',
                 items: { type: 'object' },
-                description: 'Stable resource refs keyed by Markdown tokens.',
+                description: `Stable resource refs keyed by Markdown tokens. ${CANVAS_MARKDOWN_RESOURCE_CONTRACT_DESCRIPTION}`,
               },
               target: { type: 'object', description: 'Optional Canvas insertion target.' },
               provenance: { type: 'object', description: 'Optional Agent provenance.' },
@@ -579,20 +593,52 @@ function createMarkdownCapabilityTool(
               mode: {
                 type: 'string',
                 enum: ['review-first', 'create-nodes'],
-                description: 'Optional storyboard creation mode.',
+                description:
+                  'Storyboard creation mode. Use create-nodes for canvas.createStoryboardFromMarkdown production scene/shot creation.',
               },
               approval: {
                 type: 'object',
-                description: 'Required approval context for production apply mutations.',
+                description:
+                  'Required approval context for production apply mutations. Send-to-Canvas storyboard creation can use a creation-apply approval context for that explicit handoff.',
               },
             },
-      required: definition.capabilityId === 'canvas.attachResource' ? ['target', 'resource'] : [],
+      required:
+        definition.capabilityId === 'canvas.attachResource' ? ['target', 'resource'] : ['markdown'],
     } satisfies ToolParameters,
+    domain: { id: 'canvas', source: 'capability', operationDomain: 'markdown-authoring' },
     async execute(args) {
       try {
         const input = buildCanvasMarkdownCapabilityInput(definition.capabilityId, args);
+        if (
+          definition.capabilityId !== 'canvas.attachResource' &&
+          (!('markdown' in input) || input.markdown.trim().length === 0)
+        ) {
+          return createBlockedCanvasMarkdownToolResult(
+            definition,
+            input,
+            'Canvas Markdown capability requires non-empty markdown.',
+            'canvas-markdown-missing-markdown',
+          );
+        }
         const data = await api.markdown.invoke(input);
+        if (!isCanvasMarkdownCapabilityResult(data)) {
+          return createBlockedCanvasMarkdownToolResult(
+            definition,
+            input,
+            'Canvas Markdown capability returned an invalid result.',
+            'canvas-markdown-invalid-result',
+          );
+        }
         const lifecycle = toCanvasMarkdownLifecycleResult(definition, input, data);
+        const missingMutationRef = readMissingCanvasMarkdownMutationRefDiagnostic(definition, data);
+        if (missingMutationRef) {
+          return createBlockedCanvasMarkdownToolResult(
+            definition,
+            input,
+            missingMutationRef.message,
+            missingMutationRef.code,
+          );
+        }
         return { success: lifecycle.status !== 'blocked', data: lifecycle };
       } catch (err) {
         const authoringResult = createBlockedCanvasAuthoringResultEnvelope(
@@ -609,6 +655,76 @@ function createMarkdownCapabilityTool(
         };
       }
     },
+  };
+}
+
+function createBlockedCanvasMarkdownToolResult(
+  definition: CanvasMarkdownToolDefinition,
+  input: CanvasMarkdownCapabilityInput,
+  message: string,
+  code: string,
+): {
+  readonly success: false;
+  readonly error: string;
+  readonly data: AgentCapabilityInvocationResult;
+} {
+  const authoringResult = createBlockedCanvasAuthoringResultEnvelope(
+    definition.capabilityId,
+    message,
+    {
+      target: 'target' in input ? input.target : undefined,
+      provenance: 'provenance' in input ? input.provenance : undefined,
+      requiredQuery: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+    },
+  );
+  return {
+    success: false,
+    error: message,
+    data: {
+      capabilityId: definition.capabilityId,
+      phase: definition.phase,
+      status: 'blocked',
+      diagnostics: [
+        {
+          severity: 'error',
+          code,
+          message,
+        },
+      ],
+      data: {
+        capabilityId: definition.capabilityId,
+        status: 'blocked',
+        diagnostics: authoringResult.diagnostics.map((diagnostic) => ({
+          severity: diagnostic.severity,
+          code: diagnostic.code,
+          message: diagnostic.message,
+        })),
+        authoringResult,
+      },
+    },
+  };
+}
+
+function readMissingCanvasMarkdownMutationRefDiagnostic(
+  definition: CanvasMarkdownToolDefinition,
+  result: CanvasMarkdownCapabilityResult,
+): { readonly code: string; readonly message: string } | undefined {
+  if (definition.isReadOnly || result.status === 'blocked' || result.status === 'validated') {
+    return undefined;
+  }
+  if (
+    result.status !== 'created' &&
+    result.status !== 'changed' &&
+    result.status !== 'needs-review'
+  ) {
+    return undefined;
+  }
+  const hasRef = Boolean(result.tableNodeId) || (result.nodeIds?.length ?? 0) > 0;
+  if (hasRef) return undefined;
+  return {
+    code: 'canvas-markdown-mutation-result-missing-ref',
+    message:
+      'Canvas Markdown capability reported a mutation status but did not return any Canvas node reference.',
   };
 }
 
@@ -658,11 +774,11 @@ function toCanvasMarkdownLifecycleResult(
       ...(diagnostic.line !== undefined ? { line: diagnostic.line } : {}),
       ...(diagnostic.column !== undefined ? { column: diagnostic.column } : {}),
     })),
-    ...(result.draftNodeId
+    ...(result.tableNodeId
       ? {
           reviewArtifact: {
             kind: 'node',
-            id: result.draftNodeId,
+            id: result.tableNodeId,
             packageId: 'neko-canvas',
             artifactKind: 'canvas.table',
             profile: readCanvasMarkdownProfileFromResult(result) ?? 'storyboard',
@@ -691,11 +807,11 @@ function toCanvasMarkdownLifecycleResult(
               requiresApproval:
                 actionDefinition?.requiresConfirmation ??
                 capabilityId !== 'canvas.validateMarkdownStoryboard',
-              ...(result.draftNodeId
+              ...(result.tableNodeId
                 ? {
                     sourceRef: {
                       kind: 'node' as const,
-                      id: result.draftNodeId,
+                      id: result.tableNodeId,
                       packageId: 'neko-canvas',
                     },
                   }
@@ -719,7 +835,6 @@ function createCanvasMarkdownAuthoringResult(
   result: CanvasMarkdownCapabilityResult,
 ): CanvasAuthoringResultEnvelope {
   const refs = uniqueAuthoringRefs([
-    ...(result.draftNodeId ? [nodeRef(result.draftNodeId, 'draft')] : []),
     ...(result.tableNodeId ? [nodeRef(result.tableNodeId, 'table')] : []),
     ...(result.nodeIds?.map((nodeId) => nodeRef(nodeId)) ?? []),
   ]);
@@ -738,8 +853,8 @@ function createCanvasMarkdownAuthoringResult(
     provenance: 'provenance' in input ? input.provenance : undefined,
     blockedReason:
       result.status === 'blocked'
-        ? result.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
-          'Canvas Markdown capability blocked the authoring request.'
+        ? (result.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+          'Canvas Markdown capability blocked the authoring request.')
         : undefined,
     nextActions: result.actions?.map((action) => ({
       id: action.actionId,
@@ -948,6 +1063,9 @@ type CanvasToolName = (typeof TOOL_NAMES_CANVAS)[keyof typeof TOOL_NAMES_CANVAS]
 type CanvasToolLocalization = NonNullable<Tool['localization']>[string];
 type CanvasToolTraits = NonNullable<Tool['traits']>;
 
+const CANVAS_MARKDOWN_RESOURCE_CONTRACT_DESCRIPTION =
+  'Resource wrappers must preserve field contracts: unified ResourceRef values use resourceRef; document-entry DocumentArchiveResourceRef values must use documentResourceRef.';
+
 const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] = [
   {
     name: TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN,
@@ -955,7 +1073,7 @@ const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] 
     displayName: 'Ingest Markdown to Canvas',
     phase: 'review',
     description:
-      'Ingest Markdown into Canvas as a note, generic table, or creative table. Canvas owns parsing, profile resolution, resource binding, diagnostics, and follow-up actions.',
+      'Review-ingest Markdown into Canvas as a note, generic table, or creative review table. This does not create production scene/shot nodes; use canvas.createStoryboardFromMarkdown for storyboard node creation.',
     requiresConfirmation: true,
   },
   {
@@ -973,16 +1091,7 @@ const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] 
     displayName: 'Create Markdown Table',
     phase: 'review',
     description:
-      'Create a Canvas table/draft node from a Markdown or GFM table. Canvas owns parsing and diagnostics.',
-    requiresConfirmation: true,
-  },
-  {
-    name: TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_DRAFT_FROM_MARKDOWN,
-    capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
-    displayName: 'Create Storyboard Review Table',
-    phase: 'review',
-    description:
-      'Create a review-first Canvas storyboard draft from Markdown. Does not create production storyboard nodes by default.',
+      'Create a Canvas table node from a Markdown or GFM table. Canvas owns parsing and diagnostics.',
     requiresConfirmation: true,
   },
   {
@@ -991,7 +1100,7 @@ const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] 
     displayName: 'Create Storyboard Nodes',
     phase: 'apply',
     description:
-      'Create production Canvas storyboard nodes from validated Markdown after explicit confirmation.',
+      'Create production Canvas storyboard nodes (scene.basic + shot.basic) from validated Markdown after explicit confirmation. Requires mode=create-nodes and approval context.',
     requiresConfirmation: true,
   },
   {
@@ -1009,7 +1118,7 @@ const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] 
     displayName: 'Validate Markdown Storyboard',
     phase: 'validate',
     description:
-      'Validate a Markdown storyboard draft and return diagnostics without mutating Canvas state.',
+      'Validate a Markdown semantic storyboard table and return diagnostics without mutating Canvas state.',
     requiresConfirmation: false,
     isReadOnly: true,
   },
@@ -1074,28 +1183,6 @@ const CANVAS_NETWORK_GENERATION_TOOL_NAMES: ReadonlySet<CanvasToolName> = new Se
 ]);
 
 const CANVAS_TOOL_ZH_LOCALIZATIONS = {
-  [TOOL_NAMES_CANVAS.CREATE_CANVAS]: {
-    description: '创建新的画布。',
-    parameters: {
-      name: '画布名称。',
-      width: '画布宽度，单位像素。',
-      height: '画布高度，单位像素。',
-      backgroundColor: '背景颜色，使用十六进制颜色值。',
-    },
-  },
-  [TOOL_NAMES_CANVAS.ADD_CANVAS_SHAPE]: {
-    description: '向画布添加一个基础形状。',
-    parameters: {
-      canvasId: 'Canvas ID。',
-      type: '形状类型。',
-      x: 'X 坐标。',
-      y: 'Y 坐标。',
-      width: '宽度。',
-      height: '高度。',
-      fill: '填充颜色。',
-      stroke: '描边颜色。',
-    },
-  },
   [TOOL_NAMES_CANVAS.CANVAS_GET_PLAYBACK_PLAN]: {
     description:
       '读取当前 CanvasPlaybackPlan 投影；仅展示画布顺序，不持久化路由顺序、播放头或播放状态。',
@@ -1139,7 +1226,8 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
     },
   },
   [TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN]: {
-    description: '将 Markdown 内容作为可审阅草稿导入 Canvas。',
+    description:
+      '将 Markdown 内容作为可审阅 Note、表格或 creative table 导入 Canvas；不会创建生产 scene/shot 节点。',
     parameters: {
       markdown: '原始 Markdown 内容；不要传入渲染后的 HTML。',
       title: '可选标题。',
@@ -1150,8 +1238,8 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
       intentHint: '可选内容意图提示。',
       profileHint: '可选 Canvas profile 提示。',
       tableTitle: '可选表格标题。',
-      mode: '可选分镜创建模式。',
-      approval: '生产级 apply 变更所需的审批上下文。',
+      mode: '分镜创建模式；生产 scene/shot 创建使用 create-nodes。',
+      approval: '生产级 apply 变更所需的审批上下文；Send to Canvas 分镜创建可使用 creation-apply。',
     },
   },
   [TOOL_NAMES_CANVAS.CANVAS_CREATE_MARKDOWN_NOTE]: {
@@ -1186,24 +1274,9 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
       approval: '生产级 apply 变更所需的审批上下文。',
     },
   },
-  [TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_DRAFT_FROM_MARKDOWN]: {
-    description: '从 Markdown 创建 review-first Canvas 分镜草稿，默认不创建生产分镜节点。',
-    parameters: {
-      markdown: '原始 Markdown 分镜内容。',
-      title: '可选标题。',
-      sourceFormat: '来源格式提示。',
-      resources: 'Markdown 中引用的稳定资源列表。',
-      target: '可选 Canvas 插入目标。',
-      provenance: '可选 Agent 来源信息。',
-      intentHint: '可选内容意图提示。',
-      profileHint: '可选 Canvas profile 提示。',
-      tableTitle: '可选表格标题。',
-      mode: '可选分镜创建模式。',
-      approval: '生产级 apply 变更所需的审批上下文。',
-    },
-  },
   [TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN]: {
-    description: '在显式确认后，从已校验 Markdown 创建生产 Canvas 分镜节点。',
+    description:
+      '在显式确认后，从已校验 Markdown 创建生产 Canvas 分镜节点（scene.basic + shot.basic）。',
     parameters: {
       markdown: '原始 Markdown 分镜内容。',
       title: '可选标题。',
@@ -1214,8 +1287,8 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
       intentHint: '可选内容意图提示。',
       profileHint: '可选 Canvas profile 提示。',
       tableTitle: '可选表格标题。',
-      mode: '可选分镜创建模式。',
-      approval: '生产级 apply 变更所需的审批上下文。',
+      mode: '分镜创建模式；生产节点创建必须使用 create-nodes。',
+      approval: '生产级 apply 变更所需的审批上下文；Send to Canvas 分镜创建可使用 creation-apply。',
     },
   },
   [TOOL_NAMES_CANVAS.CANVAS_ATTACH_RESOURCE]: {
@@ -1379,7 +1452,7 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
       nodeId: '显式 Canvas 节点目标。',
       containerId: '显式 Canvas 容器目标。',
       slotId: '显式 Canvas 槽位目标。',
-      fieldPath: 'node.data 内的 JSON Pointer 路径，例如 /generationPrompt。',
+      fieldPath: 'node.data 内的 JSON Pointer 路径，例如 /storyboardPrompt。',
       mode: '变更模式；replace/apply 需要显式目标数据。',
       x: '画布插入 X 坐标。',
       y: '画布插入 Y 坐标。',
@@ -1397,7 +1470,7 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
   },
   [TOOL_NAMES_CANVAS.CANVAS_GENERATE_IMAGE]: {
     description:
-      '触发 ShotNode 或 Gallery 子媒体节点的图片生成。调用前先用 canvas_update_node 写入提示词/参数。',
+      '触发 ShotNode 或 Gallery 子媒体节点的图片生成。调用前先用结构化 storyboardPrompt 写回语义提示词和参数。',
     parameters: {
       nodeId: 'ShotNode 或 GalleryNode ID。',
       childNodeId: 'GalleryNode 的子媒体节点 ID。',
@@ -1531,7 +1604,13 @@ function buildCanvasAuthoringCapabilityCatalog(
         id: 'scene',
         label: { default: 'Scene container', zhCN: '场景容器' },
         acceptedChildNodeTypes: ['shot', 'media', 'gallery', 'annotation', 'text'],
-        acceptedChildPresets: ['shot.basic', 'media.basic', 'gallery.basic', 'annotation.basic', 'text.basic'],
+        acceptedChildPresets: [
+          'shot.basic',
+          'media.basic',
+          'gallery.basic',
+          'annotation.basic',
+          'text.basic',
+        ],
         layoutModes: ['sequence', 'grid'],
       },
       {
@@ -1572,13 +1651,142 @@ function buildCanvasAuthoringCapabilityCatalog(
         storageTarget: 'node-data',
       },
       {
-        id: 'shot.visualDescription',
+        id: 'shot.imagePrompt',
         namespace: 'canvas.storyboard',
-        path: '/visualDescription',
-        label: { default: 'Visual description', zhCN: '画面描述' },
+        path: '/storyboardPrompt/promptBlocks/imagePromptDocument/text',
+        label: { default: 'Image prompt', zhCN: '图片提示词' },
         valueType: 'prompt',
         roles: ['prompt', 'shot'],
         storageTarget: 'prompt-span',
+        aliases: ['imagePrompt', 'image prompt', '图像提示词', '图片提示词'],
+        promptSpan: {
+          behavior: 'source-of-truth',
+          spanKind: 'image-prompt',
+          fieldId: 'shot.imagePrompt',
+          alignmentState: 'in-sync',
+        },
+      },
+      {
+        id: 'scene.videoPrompt',
+        namespace: 'canvas.storyboard',
+        path: '/storyboardPrompt/promptBlocks/videoPromptDocument/text',
+        label: { default: 'Scene video prompt', zhCN: '场景视频提示词' },
+        valueType: 'prompt',
+        roles: ['prompt', 'scene'],
+        storageTarget: 'prompt-span',
+        aliases: [
+          'videoPrompt',
+          'video prompt',
+          'scene video prompt',
+          '视频提示词',
+          '场景视频提示词',
+        ],
+        promptSpan: {
+          behavior: 'source-of-truth',
+          spanKind: 'video-prompt',
+          fieldId: 'scene.videoPrompt',
+          alignmentState: 'in-sync',
+        },
+      },
+      {
+        id: 'voice.dialogue',
+        namespace: 'audio.voice',
+        path: '/storyboardPrompt/promptBlocks/voicePromptDocument/text',
+        label: { default: 'Dialogue / voice prompt', zhCN: '对白 / 语音提示词' },
+        valueType: 'voice-cue',
+        roles: ['voice', 'dialogue', 'prompt'],
+        storageTarget: 'prompt-span',
+        aliases: ['dialogue', 'voicePrompt', '台词', '对白', '语音'],
+        promptSpan: {
+          behavior: 'bidirectional',
+          spanKind: 'voice-cue',
+          fieldId: 'voice.dialogue',
+          alignmentState: 'in-sync',
+        },
+      },
+      {
+        id: 'generation.duration',
+        namespace: 'canvas.storyboard',
+        path: '/storyboardPrompt/generationParams/duration',
+        label: { default: 'Duration', zhCN: '时长' },
+        valueType: 'duration',
+        roles: ['shot'],
+        storageTarget: 'capability-input',
+        aliases: ['duration', '时长'],
+        capabilityBinding: {
+          capabilityId: 'video.generate',
+          inputField: 'duration',
+        },
+      },
+      {
+        id: 'referenceMedia.imageRefs',
+        namespace: 'canvas.storyboard',
+        path: '/storyboardPrompt/referenceMedia/imageRefs',
+        label: { default: 'Reference images', zhCN: '参考图片' },
+        valueType: 'resource-ref',
+        roles: ['media', 'shot'],
+        storageTarget: 'node-data',
+        aliases: ['source', 'referenceImage', 'reference media', '来源', '参考图'],
+      },
+      {
+        id: 'referenceMedia.videoRefs',
+        namespace: 'canvas.storyboard',
+        path: '/storyboardPrompt/referenceMedia/videoRefs',
+        label: { default: 'Reference videos', zhCN: '参考视频' },
+        valueType: 'resource-ref',
+        roles: ['media', 'shot'],
+        storageTarget: 'node-data',
+        aliases: ['video reference', 'videoReference', '参考视频'],
+      },
+      {
+        id: 'referenceMedia.audioRefs',
+        namespace: 'canvas.storyboard',
+        path: '/storyboardPrompt/referenceMedia/audioRefs',
+        label: { default: 'Reference audio', zhCN: '参考音频' },
+        valueType: 'resource-ref',
+        roles: ['media', 'voice'],
+        storageTarget: 'node-data',
+        aliases: ['audio reference', 'audioReference', '参考音频'],
+      },
+      {
+        id: 'review.sourcePanel',
+        namespace: 'canvas.storyboard.review',
+        path: '/reviewMetadata/sourcePanel',
+        label: { default: 'Source panel', zhCN: '来源分格' },
+        valueType: 'text',
+        roles: ['review', 'metadata'],
+        storageTarget: 'review-metadata',
+        aliases: ['sourcePanel', 'panel', '来源分格', '分格'],
+      },
+      {
+        id: 'review.ocrNotes',
+        namespace: 'canvas.storyboard.review',
+        path: '/reviewMetadata/ocrNotes',
+        label: { default: 'OCR notes', zhCN: 'OCR 备注' },
+        valueType: 'text',
+        roles: ['review', 'metadata'],
+        storageTarget: 'review-metadata',
+        aliases: ['ocrNotes', 'ocr notes', 'OCR 备注'],
+      },
+      {
+        id: 'review.decisionReason',
+        namespace: 'canvas.storyboard.review',
+        path: '/reviewMetadata/decisionReason',
+        label: { default: 'Decision reason', zhCN: '决策理由' },
+        valueType: 'text',
+        roles: ['review', 'metadata'],
+        storageTarget: 'review-metadata',
+        aliases: ['decisionReason', 'reason', '决策理由'],
+      },
+      {
+        id: 'review.risk',
+        namespace: 'canvas.storyboard.review',
+        path: '/reviewMetadata/risk',
+        label: { default: 'Risk', zhCN: '风险' },
+        valueType: 'text',
+        roles: ['review', 'metadata'],
+        storageTarget: 'review-metadata',
+        aliases: ['risk', '风险'],
       },
       {
         id: 'shot.generatedImage',
@@ -1656,8 +1864,9 @@ function buildCanvasAuthoringCapabilityCatalog(
   }
 
   if (sections.includes('fieldProfiles')) {
-    const profileValidation =
-      validateCanvasAuthoringFieldProfileDescriptor(AI_NATIVE_STORYBOARD_FIELD_PROFILE);
+    const profileValidation = validateCanvasAuthoringFieldProfileDescriptor(
+      AI_NATIVE_STORYBOARD_FIELD_PROFILE,
+    );
     catalog.fieldProfiles = [AI_NATIVE_STORYBOARD_FIELD_PROFILE];
     catalog.diagnostics = [...catalog.diagnostics, ...profileValidation.diagnostics];
   }
@@ -1665,6 +1874,148 @@ function buildCanvasAuthoringCapabilityCatalog(
   if (sections.includes('semanticPrompts')) {
     catalog.semanticPrompts = {
       supported: true,
+      promptBlockKinds: [...CANVAS_STORYBOARD_PROMPT_BLOCK_KINDS],
+      promptContentProfiles: [
+        {
+          id: 'storyboard.image-prompt.v1',
+          blockKind: 'image',
+          label: { default: 'Storyboard image prompt', zhCN: '分镜图片提示词' },
+          summary:
+            'Generation-effective image prompt content for keyframe generation, image editing, cleanup, color, repair, redraw, inpaint, outpaint, and reference preparation.',
+          referenceKinds: ['image'],
+          parameterIds: ['negativePrompt', 'seed', 'aspectRatio'],
+          generationEffectiveParts: [
+            {
+              id: 'image.intent',
+              label: { default: 'Image generation or edit intent', zhCN: '图片生成/编辑意图' },
+              required: true,
+            },
+            {
+              id: 'reference.usage',
+              label: { default: 'Reference usage', zhCN: '参考图使用方式' },
+              mapsToFieldId: 'referenceMedia.imageRefs',
+            },
+            {
+              id: 'scene.context',
+              label: { default: 'Scene context', zhCN: '场景上下文' },
+              mapsToSpanKind: 'scene',
+              mapsToFieldId: 'scene.info',
+            },
+            {
+              id: 'character.appearance',
+              label: { default: 'Character appearance', zhCN: '人物形象' },
+              mapsToSpanKind: 'character-appearance',
+              mapsToFieldId: 'character.appearance',
+            },
+            {
+              id: 'visual.action',
+              label: { default: 'Visible action and pose', zhCN: '画面动作和姿态' },
+              mapsToSpanKind: 'visual-action',
+            },
+            {
+              id: 'composition.camera',
+              label: { default: 'Composition and camera', zhCN: '构图和镜头' },
+              mapsToSpanKind: 'camera',
+            },
+            {
+              id: 'style.look',
+              label: { default: 'Style, light, color, texture', zhCN: '风格、光线、色彩、质感' },
+              mapsToSpanKind: 'style',
+            },
+            {
+              id: 'image.constraints',
+              label: { default: 'Constraints and negative requirements', zhCN: '约束和负向要求' },
+              mapsToParameterId: 'negativePrompt',
+            },
+          ],
+        },
+        {
+          id: 'storyboard.video-prompt.v1',
+          blockKind: 'video',
+          label: { default: 'Scene video prompt', zhCN: '场景视频提示词' },
+          summary:
+            'Generation-effective scene video prompt content for scene video generation and edit actions.',
+          referenceKinds: ['image', 'video', 'audio'],
+          parameterIds: [
+            'duration',
+            'cameraControl',
+            'motionStrength',
+            'videoReference',
+            'audioReference',
+          ],
+          generationEffectiveParts: [
+            {
+              id: 'video.intent',
+              label: { default: 'Video generation or edit intent', zhCN: '视频生成/编辑意图' },
+              required: true,
+            },
+            {
+              id: 'reference.start',
+              label: { default: 'Starting reference media', zhCN: '起始参考素材' },
+              mapsToFieldId: 'referenceMedia.imageRefs',
+            },
+            {
+              id: 'action.beats',
+              label: { default: 'Action beats', zhCN: '动作节拍' },
+              mapsToSpanKind: 'visual-action',
+            },
+            {
+              id: 'camera.motion',
+              label: { default: 'Camera movement', zhCN: '运镜' },
+              mapsToSpanKind: 'camera',
+            },
+            {
+              id: 'duration.rhythm',
+              label: { default: 'Duration and rhythm', zhCN: '时长和节奏' },
+              mapsToFieldId: 'generation.duration',
+              mapsToParameterId: 'duration',
+            },
+            {
+              id: 'continuity.constraints',
+              label: { default: 'Continuity constraints', zhCN: '连续性约束' },
+            },
+            {
+              id: 'style.consistency',
+              label: { default: 'Style consistency', zhCN: '风格一致性' },
+              mapsToSpanKind: 'style',
+            },
+          ],
+        },
+        {
+          id: 'storyboard.voice-prompt.v1',
+          blockKind: 'voice',
+          label: { default: 'Storyboard voice prompt', zhCN: '分镜语音提示词' },
+          summary:
+            'Generation-effective voice prompt content for dialogue, narration, voice over, emotion, delivery, and optional voice references.',
+          referenceKinds: ['audio'],
+          parameterIds: ['audioReference'],
+          generationEffectiveParts: [
+            {
+              id: 'voice.dialogue',
+              label: { default: 'Dialogue text', zhCN: '台词文本' },
+              required: true,
+              mapsToFieldId: 'voice.dialogue',
+            },
+            {
+              id: 'voice.speaker',
+              label: { default: 'Speaker', zhCN: '说话人' },
+              mapsToSpanKind: 'character',
+            },
+            {
+              id: 'voice.emotion',
+              label: { default: 'Emotion and delivery', zhCN: '情绪和语气' },
+              mapsToSpanKind: 'voice-cue',
+              mapsToFieldId: 'voice.cue',
+            },
+            {
+              id: 'voice.reference',
+              label: { default: 'Voice or audio reference', zhCN: '声线或音频参考' },
+              mapsToFieldId: 'referenceMedia.audioRefs',
+              mapsToParameterId: 'audioReference',
+            },
+          ],
+        },
+      ],
       spanKinds: [
         'scene',
         'character',
@@ -1676,7 +2027,96 @@ function buildCanvasAuthoringCapabilityCatalog(
         'resource-ref',
       ],
       alignmentStates: [...CANVAS_AUTHORING_FIELD_PROFILE_ALIGNMENT_STATES],
-      commands: ['keep-prompt', 'regenerate-prompt', 'merge-fields-into-prompt', 'apply-field-suggestion'],
+      referenceMediaRoles: [...STORYBOARD_MEDIA_ROLES],
+      referenceMediaKinds: ['image', 'video', 'audio'],
+      metadataPolicies: [
+        {
+          id: 'storyboard.review-metadata',
+          label: { default: 'Storyboard review metadata', zhCN: '分镜审阅元数据' },
+          fieldIds: [
+            'sourcePanel',
+            'decision',
+            'decisionReason',
+            'requiresSplit',
+            'duplicateOf',
+            'contentType',
+            'ocrNotes',
+            'risk',
+          ],
+          defaultStorageTarget: 'review-metadata',
+          generationEffect: 'suggestion-only',
+          summary:
+            'Markdown extension fields and Skill custom fields preserve evidence, notes, risk, and diagnostics. They do not affect generation until promoted.',
+        },
+        {
+          id: 'storyboard.custom-metadata',
+          label: { default: 'Unregistered Skill fields', zhCN: '未注册 Skill 字段' },
+          fieldIds: ['*'],
+          defaultStorageTarget: 'custom-metadata',
+          generationEffect: 'none',
+          summary:
+            'Unknown Skill-declared fields are preserved as custom metadata and are not Canvas production fields unless a Canvas field profile accepts them.',
+        },
+      ],
+      promotionRules: [
+        {
+          id: 'metadata-to-prompt-span',
+          from: 'review-metadata',
+          to: 'semantic-prompt-span',
+          requiresConfirmation: true,
+          summary:
+            'Review metadata may affect generation only after Agent or user explicitly promotes it into a prompt span.',
+        },
+        {
+          id: 'skill-field-to-prompt-content',
+          from: 'skill-field',
+          to: 'semantic-prompt-span',
+          requiresConfirmation: true,
+          summary:
+            'Skill-declared generation-effective fields must be merged into image/video/voice prompt content or registered in Canvas field profiles.',
+        },
+        {
+          id: 'metadata-to-action-parameter',
+          from: 'review-metadata',
+          to: 'generation-parameter',
+          requiresConfirmation: true,
+          summary:
+            'Metadata such as duration, split intent, or negative constraints must be converted into supported action parameters before execution.',
+        },
+      ],
+      advancedParameterIds: [...CANVAS_STORYBOARD_ADVANCED_PARAMETER_IDS],
+      nextCreativeStateIds: [
+        'missing-reference',
+        'needs-reference-processing',
+        'image-prompt-ready',
+        'image-prompt-skipped',
+        'missing-video-prompt',
+        'ready-to-generate-video',
+        'needs-result-review',
+        'prompt-conflict',
+        'waiting-confirmation',
+        'failed-retry',
+        'accepted',
+      ],
+      nextCreativeStateTargets: [...CANVAS_STORYBOARD_NEXT_CREATIVE_STATE_TARGETS],
+      actionIntentIds: [...CANVAS_STORYBOARD_ACTION_INTENT_IDS],
+      primaryStoryboardColumns: [
+        'shot',
+        'reference-media',
+        'image-prompt',
+        'video-prompt',
+        'duration',
+        'dialogue',
+        'state',
+        'action',
+      ],
+      progressOwner: 'agent',
+      commands: [
+        'keep-prompt',
+        'regenerate-prompt',
+        'merge-fields-into-prompt',
+        'apply-field-suggestion',
+      ],
     };
   }
 
@@ -1878,6 +2318,108 @@ const AI_NATIVE_STORYBOARD_FIELD_PROFILE: CanvasAuthoringFieldProfileDescriptor 
   unknownFieldPolicy: 'preserve-custom',
   fields: [
     {
+      id: 'shot.imagePrompt',
+      namespace: 'canvas.storyboard',
+      aliases: ['imagePrompt', 'image prompt', '图像提示词', '图片提示词'],
+      label: { default: 'Image prompt', zhCN: '图片提示词' },
+      valueType: 'prompt',
+      roles: ['prompt', 'shot'],
+      cardinality: 'optional',
+      storageTarget: 'prompt-span',
+      path: '/storyboardPrompt/promptBlocks/imagePromptDocument/text',
+      promptSpan: {
+        behavior: 'source-of-truth',
+        spanKind: 'image-prompt',
+        alignmentState: 'in-sync',
+      },
+    },
+    {
+      id: 'scene.videoPrompt',
+      namespace: 'canvas.storyboard',
+      aliases: [
+        'videoPrompt',
+        'video prompt',
+        'scene video prompt',
+        '视频提示词',
+        '场景视频提示词',
+      ],
+      label: { default: 'Scene video prompt', zhCN: '场景视频提示词' },
+      valueType: 'prompt',
+      roles: ['prompt', 'scene'],
+      cardinality: 'optional',
+      storageTarget: 'prompt-span',
+      path: '/storyboardPrompt/promptBlocks/videoPromptDocument/text',
+      promptSpan: {
+        behavior: 'source-of-truth',
+        spanKind: 'video-prompt',
+        alignmentState: 'in-sync',
+      },
+    },
+    {
+      id: 'referenceMedia.imageRefs',
+      namespace: 'canvas.storyboard',
+      aliases: ['source', 'referenceImage', 'reference media', '来源', '参考图'],
+      label: { default: 'Reference images', zhCN: '参考图片' },
+      valueType: 'resource-ref',
+      roles: ['media', 'shot'],
+      cardinality: 'repeated',
+      storageTarget: 'node-data',
+      path: '/storyboardPrompt/referenceMedia/imageRefs',
+    },
+    {
+      id: 'referenceMedia.videoRefs',
+      namespace: 'canvas.storyboard',
+      aliases: ['videoReference', 'video reference', '参考视频'],
+      label: { default: 'Reference videos', zhCN: '参考视频' },
+      valueType: 'resource-ref',
+      roles: ['media', 'shot'],
+      cardinality: 'repeated',
+      storageTarget: 'node-data',
+      path: '/storyboardPrompt/referenceMedia/videoRefs',
+    },
+    {
+      id: 'referenceMedia.audioRefs',
+      namespace: 'canvas.storyboard',
+      aliases: ['audioReference', 'audio reference', '参考音频'],
+      label: { default: 'Reference audio', zhCN: '参考音频' },
+      valueType: 'resource-ref',
+      roles: ['media', 'voice'],
+      cardinality: 'repeated',
+      storageTarget: 'node-data',
+      path: '/storyboardPrompt/referenceMedia/audioRefs',
+    },
+    {
+      id: 'generation.duration',
+      namespace: 'canvas.storyboard',
+      aliases: ['duration', '时长'],
+      label: { default: 'Duration', zhCN: '时长' },
+      valueType: 'duration',
+      roles: ['shot'],
+      cardinality: 'optional',
+      storageTarget: 'capability-input',
+      path: '/storyboardPrompt/generationParams/duration',
+      capabilityBinding: {
+        capabilityId: 'video.generate',
+        inputField: 'duration',
+      },
+    },
+    {
+      id: 'voice.dialogue',
+      namespace: 'audio.voice',
+      aliases: ['dialogue', 'voicePrompt', '台词', '对白', '语音'],
+      label: { default: 'Dialogue / voice prompt', zhCN: '对白 / 语音提示词' },
+      valueType: 'voice-cue',
+      roles: ['voice', 'dialogue', 'prompt'],
+      cardinality: 'optional',
+      storageTarget: 'prompt-span',
+      path: '/storyboardPrompt/promptBlocks/voicePromptDocument/text',
+      promptSpan: {
+        behavior: 'bidirectional',
+        spanKind: 'voice-cue',
+        alignmentState: 'in-sync',
+      },
+    },
+    {
       id: 'scene.info',
       namespace: 'canvas.storyboard',
       aliases: ['scene', '场景', '场景信息'],
@@ -1932,6 +2474,50 @@ const AI_NATIVE_STORYBOARD_FIELD_PROFILE: CanvasAuthoringFieldProfileDescriptor 
         stableRefRequired: true,
       },
     },
+    {
+      id: 'review.sourcePanel',
+      namespace: 'canvas.storyboard.review',
+      aliases: ['sourcePanel', 'panel', '来源分格', '分格'],
+      label: { default: 'Source panel', zhCN: '来源分格' },
+      valueType: 'text',
+      roles: ['review', 'metadata'],
+      cardinality: 'optional',
+      storageTarget: 'review-metadata',
+      path: '/reviewMetadata/sourcePanel',
+    },
+    {
+      id: 'review.ocrNotes',
+      namespace: 'canvas.storyboard.review',
+      aliases: ['ocrNotes', 'ocr notes', 'OCR 备注'],
+      label: { default: 'OCR notes', zhCN: 'OCR 备注' },
+      valueType: 'text',
+      roles: ['review', 'metadata'],
+      cardinality: 'optional',
+      storageTarget: 'review-metadata',
+      path: '/reviewMetadata/ocrNotes',
+    },
+    {
+      id: 'review.decisionReason',
+      namespace: 'canvas.storyboard.review',
+      aliases: ['decisionReason', 'reason', '决策理由'],
+      label: { default: 'Decision reason', zhCN: '决策理由' },
+      valueType: 'text',
+      roles: ['review', 'metadata'],
+      cardinality: 'optional',
+      storageTarget: 'review-metadata',
+      path: '/reviewMetadata/decisionReason',
+    },
+    {
+      id: 'review.risk',
+      namespace: 'canvas.storyboard.review',
+      aliases: ['risk', '风险'],
+      label: { default: 'Risk', zhCN: '风险' },
+      valueType: 'text',
+      roles: ['review', 'metadata'],
+      cardinality: 'optional',
+      storageTarget: 'review-metadata',
+      path: '/reviewMetadata/risk',
+    },
   ],
 };
 
@@ -1940,8 +2526,8 @@ function createCanvasAuthoringSkill(locale?: AgentCapabilityContext['locale']): 
     name: 'canvas-authoring',
     description:
       locale === 'zh'
-        ? 'Canvas authoring 通用能力：查询目录和上下文后，由 Agent 选择 Canvas 工具创建节点、组合、Markdown 草稿、媒体绑定、提示词和生成准备。'
-        : 'General Canvas authoring capability: query catalog/context, then let Agent choose Canvas tools for nodes, composites, Markdown drafts, media binding, prompts, and generation preparation.',
+        ? 'Canvas authoring 通用能力：查询目录和上下文后，由 Agent 选择 Canvas 工具创建节点、组合、Markdown 审阅表、媒体绑定、语义分镜提示词和 Agent action intents。'
+        : 'General Canvas authoring capability: query catalog/context, then let Agent choose Canvas tools for nodes, composites, Markdown review tables, media binding, semantic storyboard prompts, and Agent action intents.',
     content: (locale === 'zh' ? CANVAS_AUTHORING_SKILL_ZH : CANVAS_AUTHORING_SKILL_EN).join('\n'),
     allowedTools: CANVAS_AUTHORING_TOOLS,
     source: 'builtin',
@@ -1971,7 +2557,6 @@ const CANVAS_AUTHORING_TOOLS = [
   'canvas.ingestMarkdown',
   'canvas.createMarkdownNote',
   'canvas.createTableFromMarkdown',
-  'canvas.createStoryboardDraftFromMarkdown',
   'canvas.createStoryboardFromMarkdown',
   'canvas.attachResource',
 ];
@@ -1990,13 +2575,23 @@ const CANVAS_AUTHORING_SKILL_EN = [
   '## Recipes',
   '- Storyboard creation is a Canvas recipe, not a separate Agent workflow. Prefer scene.basic + shot.basic through canvas_create_composite for scene/shot structures.',
   '- Use media.basic through canvas_create_node for one stable asset or reference.',
-  '- Use Canvas Markdown capabilities for Markdown/GFM table review and ingestion. They remain Canvas-owned tools inside the broader authoring model.',
+  '- For Send-to-Canvas storyboard creative tables that should become Canvas storyboard nodes, validate if useful, then call canvas.createStoryboardFromMarkdown with profileHint=storyboard, mode=create-nodes, and explicit approval. This creates scene.basic + shot.basic nodes.',
+  '- Use canvas.ingestMarkdown with intentHint=creative-table and profileHint=storyboard only for review-only table/draft ingestion. It creates a table/note review artifact, not scene/shot nodes.',
   '- Write prompts and generation parameters back to Canvas nodes before generation tools run.',
   '',
   '## Prompt-First Fields',
   '- Storyboard authoring is prompt-first and field-backed. Preserve prompt text, semantic spans, @ references, media refs, field projections, and alignment diagnostics.',
   '- Unknown fields from Markdown or Skill text are hints until Canvas field/profile descriptors validate them.',
+  '- Use promptContentProfiles to decide what generation-effective content belongs in image/video/voice prompts. Keep review metadata out of provider inputs unless promoted through Canvas rules.',
   '- Never bind resources by Webview URI, blob URL, row order, display label, or raw cache path.',
+  `- ${CANVAS_MARKDOWN_RESOURCE_CONTRACT_DESCRIPTION}`,
+  '',
+  '## Semantic Storyboard Authoring',
+  '- Treat Semantic Prompt Document as the prompt authority. Image and voice prompts remain shot-scoped; videoPrompt is scene-scoped and should describe the connected beat sequence for the scene.',
+  '- Scene storyboard tables are review projections with primary columns: shot, reference media, image prompt, scene video prompt, duration, dialogue, state, action.',
+  '- Image prompt is optional and only needed for reference preparation, keyframe generation, repair, or transformation. Video prompt is the core video generation/editing input.',
+  '- Canvas row actions are fixed creative intents such as process reference, optimize image prompt, optimize video prompt, generate video, review result, fix alignment, accept result, and retry.',
+  '- Agent owns approval, provider calls, async task progress, queue/logs, subagents/workers, and structured writeback. Canvas stores task refs, result refs, diagnostics, and next creative state.',
 ];
 
 const CANVAS_AUTHORING_SKILL_ZH = [
@@ -2013,13 +2608,23 @@ const CANVAS_AUTHORING_SKILL_ZH = [
   '## Recipes',
   '- 分镜创建是 Canvas recipe，不是单独的 Agent 工作流。场景/镜头结构优先使用 scene.basic + shot.basic，并通过 canvas_create_composite 创建。',
   '- 单个稳定素材或引用使用 media.basic，并通过 canvas_create_node 创建。',
-  '- Markdown/GFM 表格的审阅和摄入继续使用 Canvas Markdown capabilities；它们是更广义 authoring 模型里的 Canvas-owned tools。',
+  '- Send to Canvas 分镜 creative table 如果要变成 Canvas 分镜节点，必要时先校验，然后调用 canvas.createStoryboardFromMarkdown，并传入 profileHint=storyboard、mode=create-nodes 和显式审批。该路径创建 scene.basic + shot.basic 节点。',
+  '- canvas.ingestMarkdown 传入 intentHint=creative-table、profileHint=storyboard 时只用于 review-only 表格/草稿摄入。它创建 table/note 审阅产物，不创建 scene/shot 节点。',
   '- 生成工具运行前，先把 prompts 和生成参数写回 Canvas 节点。',
   '',
   '## Prompt-First Fields',
   '- 分镜 authoring 是 prompt-first 且 field-backed。保留 prompt text、semantic spans、@ references、media refs、field projections 和 alignment diagnostics。',
   '- Markdown 或 Skill 文本里的未知字段只是 hints，直到 Canvas field/profile descriptors 校验通过。',
+  '- 使用 promptContentProfiles 判断哪些生成有效内容应进入 image/video/voice prompts。review metadata 不要进入 provider input，除非按 Canvas 规则显式提升。',
   '- 不要通过 Webview URI、blob URL、行号、显示标签或原始 cache path 绑定资源。',
+  '- 资源包装对象必须保持字段契约：统一 ResourceRef 使用 resourceRef；document-entry DocumentArchiveResourceRef 使用 documentResourceRef。',
+  '',
+  '## Semantic Storyboard Authoring',
+  '- 将 Semantic Prompt Document 作为提示词权威。图片和语音提示词保持镜头级；videoPrompt 是场景级，应描述该场景内连续镜头节拍。',
+  '- 场景分镜表是 review projection，主列固定为：镜号、参考素材、图片提示词、场景视频提示词、时长、台词、状态、操作。',
+  '- 图片提示词是可选项，只在参考图处理、关键帧生成、修复或转换时需要。视频提示词是视频生成/编辑的核心输入。',
+  '- Canvas 行操作是固定 creative intents，例如处理参考、优化图片提示词、优化视频提示词、生成视频、审阅结果、修复对齐、接受结果和重试。',
+  '- Agent 负责审批、provider 调用、异步任务进度、队列/日志、subagent/worker 和结构化写回。Canvas 只保存 task refs、result refs、diagnostics 和 next creative state。',
 ];
 
 class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
@@ -2135,18 +2740,9 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
           requiresApproval: true,
         },
         {
-          capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
-          packageId: 'neko-canvas',
-          accepts: ['MarkdownStoryboardDraft', 'GfmTable'],
-          produces: ['canvas-node-ref'],
-          actions: ['canvas.createStoryboardDraftFromMarkdown'],
-          risk: 'medium',
-          requiresApproval: true,
-        },
-        {
           capabilityId: 'canvas.createStoryboardFromMarkdown',
           packageId: 'neko-canvas',
-          accepts: ['MarkdownStoryboardDraft'],
+          accepts: ['GfmCreativeTable', 'SemanticStoryboardProjection'],
           produces: ['canvas-node-ref'],
           actions: ['canvas.createStoryboardFromMarkdown'],
           risk: 'medium',
@@ -2164,7 +2760,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         {
           capabilityId: 'canvas.validateMarkdownStoryboard',
           packageId: 'neko-canvas',
-          accepts: ['MarkdownStoryboardDraft', 'GfmTable'],
+          accepts: ['GfmCreativeTable', 'SemanticStoryboardProjection'],
           produces: ['CanvasMarkdownCapabilityDiagnostics'],
           actions: ['canvas.validateMarkdownStoryboard'],
           risk: 'low',
@@ -2490,111 +3086,6 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         },
       },
       // -----------------------------------------------------------------------
-      // Canvas management tools
-      // -----------------------------------------------------------------------
-      {
-        name: TOOL_NAMES_CANVAS.CREATE_CANVAS,
-        description: 'Create a new canvas',
-        category: 'project',
-        parameters: {
-          type: 'object',
-          properties: {
-            name: {
-              type: 'string',
-              description: 'Canvas name',
-            },
-            width: {
-              type: 'number',
-              description: 'Canvas width in pixels',
-            },
-            height: {
-              type: 'number',
-              description: 'Canvas height in pixels',
-            },
-            backgroundColor: {
-              type: 'string',
-              description: 'Background color (hex)',
-            },
-          },
-          required: ['name', 'width', 'height'],
-        } satisfies ToolParameters,
-        async execute(args) {
-          try {
-            const data = await api.canvas.create({
-              name: args.name as string,
-              width: args.width as number,
-              height: args.height as number,
-              backgroundColor: args.backgroundColor as string | undefined,
-            });
-            return { success: true, data };
-          } catch (err) {
-            return { success: false, error: `Failed to create canvas: ${String(err)}` };
-          }
-        },
-      },
-      {
-        name: TOOL_NAMES_CANVAS.ADD_CANVAS_SHAPE,
-        description: 'Add a shape to a canvas',
-        category: 'project',
-        parameters: {
-          type: 'object',
-          properties: {
-            canvasId: {
-              type: 'string',
-              description: 'Canvas ID',
-            },
-            type: {
-              type: 'string',
-              enum: ['rectangle', 'ellipse', 'polygon', 'path', 'text'],
-              description: 'Shape type',
-            },
-            x: {
-              type: 'number',
-              description: 'X position',
-            },
-            y: {
-              type: 'number',
-              description: 'Y position',
-            },
-            width: {
-              type: 'number',
-              description: 'Width',
-            },
-            height: {
-              type: 'number',
-              description: 'Height',
-            },
-            fill: {
-              type: 'string',
-              description: 'Fill color',
-            },
-            stroke: {
-              type: 'string',
-              description: 'Stroke color',
-            },
-          },
-          required: ['canvasId', 'type', 'x', 'y'],
-        } satisfies ToolParameters,
-        async execute(args) {
-          try {
-            const { canvasId, ...shape } = args;
-            const data = await api.canvas.addShape(canvasId as string, {
-              type: shape.type as 'rectangle' | 'ellipse' | 'polygon' | 'path' | 'text',
-              x: shape.x as number,
-              y: shape.y as number,
-              width: shape.width as number | undefined,
-              height: shape.height as number | undefined,
-              fill: shape.fill as string | undefined,
-              stroke: shape.stroke as string | undefined,
-            });
-            return { success: true, data };
-          } catch (err) {
-            return { success: false, error: `Failed to add shape: ${String(err)}` };
-          }
-        },
-      },
-
-      // -----------------------------------------------------------------------
       // Storyboard / Node tools
       // -----------------------------------------------------------------------
       {
@@ -2693,11 +3184,9 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               success: false,
               error: `Failed to update node: ${String(err)}`,
               data: {
-                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
-                  'update-node',
-                  err,
-                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE },
-                ),
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope('update-node', err, {
+                  requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+                }),
               },
             };
           }
@@ -2770,11 +3259,9 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               success: false,
               error: `Failed to create node: ${String(err)}`,
               data: {
-                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
-                  'create-node',
-                  err,
-                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES },
-                ),
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope('create-node', err, {
+                  requiredQuery: TOOL_NAMES_CANVAS.CANVAS_DESCRIBE_AUTHORING_CAPABILITIES,
+                }),
               },
             };
           }
@@ -2845,11 +3332,9 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               success: false,
               error: `Failed to derive node: ${String(err)}`,
               data: {
-                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
-                  'derive-node',
-                  err,
-                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE },
-                ),
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope('derive-node', err, {
+                  requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+                }),
               },
             };
           }
@@ -3008,18 +3493,19 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             const data = await api.nodes.updateBlock(request);
             return {
               success: true,
-              data: withCanvasAuthoringResult(data, createUpdateBlockAuthoringResult(request, data)),
+              data: withCanvasAuthoringResult(
+                data,
+                createUpdateBlockAuthoringResult(request, data),
+              ),
             };
           } catch (err) {
             return {
               success: false,
               error: `Failed to update block: ${String(err)}`,
               data: {
-                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
-                  'update-block',
-                  err,
-                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE },
-                ),
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope('update-block', err, {
+                  requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+                }),
               },
             };
           }
@@ -3195,11 +3681,9 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               success: false,
               error: `Failed to get Canvas connection: ${String(err)}`,
               data: {
-                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
-                  'get-connection',
-                  err,
-                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS },
-                ),
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope('get-connection', err, {
+                  requiredQuery: TOOL_NAMES_CANVAS.CANVAS_LIST_CONNECTIONS,
+                }),
               },
             };
           }
@@ -3264,8 +3748,16 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             const request: CanvasCreateConnectionRequest = {
               sourceId,
               targetId,
-              sourceEndpoint: readOptionalConnectionEndpoint(args.sourceEndpoint, sourceId, 'source'),
-              targetEndpoint: readOptionalConnectionEndpoint(args.targetEndpoint, targetId, 'target'),
+              sourceEndpoint: readOptionalConnectionEndpoint(
+                args.sourceEndpoint,
+                sourceId,
+                'source',
+              ),
+              targetEndpoint: readOptionalConnectionEndpoint(
+                args.targetEndpoint,
+                targetId,
+                'target',
+              ),
               ...(type ? { type } : {}),
               ...(label ? { label } : {}),
               ...(priority !== undefined ? { priority } : {}),
@@ -3374,7 +3866,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
             slotId: { type: 'string', description: 'Explicit Canvas slot target.' },
             fieldPath: {
               type: 'string',
-              description: 'JSON Pointer path into node.data, such as /generationPrompt.',
+              description: 'JSON Pointer path into node.data, such as /storyboardPrompt.',
             },
             mode: {
               type: 'string',
@@ -3481,7 +3973,7 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
         name: TOOL_NAMES_CANVAS.CANVAS_GENERATE_IMAGE,
         description:
           'Trigger image generation for a ShotNode or a specific gallery child media node. ' +
-          'Call canvas_update_node first to write the prompt/params to the node ' +
+          'Write semantic storyboardPrompt prompt blocks and params before generation ' +
           'so they are persisted. Generation runs asynchronously in the background.',
         category: 'generation',
         isConcurrencySafe: true,
@@ -3516,11 +4008,9 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               success: false,
               error: `Failed to generate image: ${String(err)}`,
               data: {
-                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
-                  'generate-image',
-                  err,
-                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE },
-                ),
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope('generate-image', err, {
+                  requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_NODE,
+                }),
               },
             };
           }
@@ -3563,11 +4053,9 @@ class NekoCanvasCapabilityProviderImpl implements AgentCapabilityProvider {
               success: false,
               error: `Failed to generate batch: ${String(err)}`,
               data: {
-                authoringResult: createBlockedCanvasAuthoringResultEnvelope(
-                  'generate-batch',
-                  err,
-                  { requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT },
-                ),
+                authoringResult: createBlockedCanvasAuthoringResultEnvelope('generate-batch', err, {
+                  requiredQuery: TOOL_NAMES_CANVAS.CANVAS_GET_ACTIVE_CONTEXT,
+                }),
               },
             };
           }

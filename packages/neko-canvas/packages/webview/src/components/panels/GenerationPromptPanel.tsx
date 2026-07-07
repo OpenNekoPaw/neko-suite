@@ -13,7 +13,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import { EditIcon } from '@neko/shared/icons';
-import type { ShotScale, CameraMovement, CameraAngle } from '@neko/shared';
+import type {
+  CameraAngle,
+  CameraMovement,
+  CanvasStoryboardActionIntentId,
+  CanvasStoryboardPromptBlockKind,
+  ShotScale,
+} from '@neko/shared';
 import { t } from '../../i18n';
 import { resolveCanvasOptionLabel } from '../../i18n/canvasValueLabels';
 
@@ -41,14 +47,36 @@ export interface GenerationParams {
   generateVideo?: boolean;
   /** Video duration in seconds */
   videoDuration?: number;
+  /** Semantic storyboard prompt document used as the prompt source, when available. */
+  storyboardPromptDocument?: GenerationPanelSemanticPromptDocument;
+  /** Canvas storyboard action context for Agent intent routing. */
+  storyboardActionContext?: GenerationPanelActionContext;
+}
+
+export interface GenerationPanelSemanticPromptDocument {
+  readonly blockKind: CanvasStoryboardPromptBlockKind;
+  readonly documentId: string;
+  readonly version: number;
+  readonly text: string;
+}
+
+export interface GenerationPanelActionContext {
+  readonly actionId: CanvasStoryboardActionIntentId;
+  readonly promptSource:
+    'semantic-prompt-document' | 'assembled' | 'legacy-migration-required' | 'empty';
+  readonly legacyMigrationPrompt?: string;
 }
 
 export interface GenerationPanelTarget {
   nodeId: string;
   /** childNodeId is set when generating for a gallery child node */
   childNodeId?: string;
-  /** Pre-filled values from shot data */
+  /** Pre-filled display seed. Not durable storyboard prompt authority. */
   initialPrompt?: string;
+  /** Canvas-owned semantic prompt document used as prompt authority. */
+  semanticPromptDocument?: GenerationPanelSemanticPromptDocument;
+  /** Agent-facing storyboard action metadata for this panel invocation. */
+  actionContext?: GenerationPanelActionContext;
   initialShotScale?: ShotScale;
   initialCameraMovement?: CameraMovement;
   initialCameraAngle?: CameraAngle;
@@ -163,6 +191,19 @@ function SelectPill<T extends string>({
   );
 }
 
+function formatPromptSourceLabel(source: GenerationPanelActionContext['promptSource']): string {
+  switch (source) {
+    case 'semantic-prompt-document':
+      return t('content.overlayShotPromptSemantic');
+    case 'assembled':
+      return t('content.overlayShotPromptAssembled');
+    case 'legacy-migration-required':
+      return t('content.overlayShotPromptMigrationRequired');
+    case 'empty':
+      return t('content.overlayShotPromptEmpty');
+  }
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -192,7 +233,7 @@ export function GenerationPromptPanel({
   // Sync initial values when target changes
   useEffect(() => {
     if (!target) return;
-    setPrompt(target.initialPrompt ?? '');
+    setPrompt(target.semanticPromptDocument?.text ?? target.initialPrompt ?? '');
     setShotScale(target.initialShotScale);
     setCameraMovement(target.initialCameraMovement);
     setCameraAngle(target.initialCameraAngle);
@@ -202,7 +243,12 @@ export function GenerationPromptPanel({
     setEditInstruction('');
     setControlStrength(0.7);
     setVideoDuration(5);
-  }, [target?.nodeId, target?.childNodeId]);
+  }, [
+    target?.nodeId,
+    target?.childNodeId,
+    target?.semanticPromptDocument?.documentId,
+    target?.semanticPromptDocument?.text,
+  ]);
 
   // Focus prompt textarea when panel opens
   useEffect(() => {
@@ -240,6 +286,12 @@ export function GenerationPromptPanel({
     if (generateVideo) {
       params.generateVideo = true;
       params.videoDuration = videoDuration;
+    }
+    if (target.semanticPromptDocument) {
+      params.storyboardPromptDocument = target.semanticPromptDocument;
+    }
+    if (target.actionContext) {
+      params.storyboardActionContext = target.actionContext;
     }
     onGenerate(target, params);
   }
@@ -316,6 +368,18 @@ export function GenerationPromptPanel({
               <label className="text-xs font-medium" style={{ color: 'var(--neko-fg-secondary)' }}>
                 提示词
               </label>
+              {target.actionContext ? (
+                <span
+                  className="rounded border px-1.5 py-0.5 text-[10px]"
+                  data-generation-prompt-source={target.actionContext.promptSource}
+                  style={{
+                    borderColor: 'var(--neko-border)',
+                    color: 'var(--neko-fg-secondary)',
+                  }}
+                >
+                  {formatPromptSourceLabel(target.actionContext.promptSource)}
+                </span>
+              ) : null}
               {onRequestAutoPrompt && (
                 <button
                   onClick={handleAutoPrompt}

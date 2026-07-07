@@ -109,6 +109,10 @@ describe('canvas markdown capability contracts', () => {
       capabilityId: 'canvas.createEverything',
       markdown: 'hello',
     });
+    const removedStoryboardDraftCapability = validateCanvasMarkdownCapabilityInput({
+      capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+      markdown: '| scene | shot |\n| --- | --- |\n| Opening | 1 |',
+    });
     const unsupportedFormat = validateCanvasMarkdownCapabilityInput({
       capabilityId: 'canvas.createMarkdownNote',
       markdown: 'hello',
@@ -116,6 +120,9 @@ describe('canvas markdown capability contracts', () => {
     });
 
     expect(unknownCapability.map((diagnostic) => diagnostic.code)).toEqual([
+      'canvas-markdown-unknown-capability',
+    ]);
+    expect(removedStoryboardDraftCapability.map((diagnostic) => diagnostic.code)).toEqual([
       'canvas-markdown-unknown-capability',
     ]);
     expect(unsupportedFormat.map((diagnostic) => diagnostic.code)).toEqual([
@@ -153,8 +160,10 @@ describe('canvas markdown capability contracts', () => {
 
   it('rejects runtime-only resource identity and missing stable refs', () => {
     const diagnostics = validateCanvasMarkdownCapabilityInput({
-      capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+      capabilityId: 'canvas.ingestMarkdown',
       markdown: '| image | visual |\n| --- | --- |\n| P1 | shot |',
+      intentHint: 'creative-table',
+      profileHint: 'storyboard',
       resources: [
         {
           token: 'vscode-webview://panel/image.png',
@@ -191,10 +200,10 @@ describe('canvas markdown capability contracts', () => {
 
   it('accepts a valid capability result with diagnostics and actions', () => {
     const result: CanvasMarkdownCapabilityResult = {
-      capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+      capabilityId: 'canvas.ingestMarkdown',
       status: 'needs-review',
-      draftNodeId: 'draft-1',
-      nodeIds: ['draft-1'],
+      tableNodeId: 'table-1',
+      nodeIds: ['table-1'],
       diagnostics: [
         {
           severity: 'warning',

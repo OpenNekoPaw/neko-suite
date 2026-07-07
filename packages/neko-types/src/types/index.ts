@@ -198,6 +198,7 @@ export * from './canvas-serializable';
 export * from './canvas-presets';
 export * from './canvas-agent-operations';
 export * from './canvas-authoring-contracts';
+export * from './canvas-semantic-storyboard';
 export * from './canvas-markdown-capabilities';
 export * from './canvas-drop';
 export * from './canvas-subsystem';

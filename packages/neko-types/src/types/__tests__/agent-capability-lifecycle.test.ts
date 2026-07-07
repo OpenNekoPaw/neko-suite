@@ -20,10 +20,10 @@ describe('agent capability lifecycle contracts', () => {
 
   it('accepts valid lifecycle descriptors exposed through artifact facets', () => {
     const descriptor: AgentCapabilityLifecycleDescriptor = {
-      capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+      capabilityId: 'canvas.ingestMarkdown',
       providerId: 'neko-canvas',
-      displayName: 'Create storyboard draft',
-      description: 'Create a review-first storyboard draft from Markdown.',
+      displayName: 'Create storyboard review table',
+      description: 'Create a review-first semantic storyboard table from Markdown.',
       phases: ['validate', 'review', 'apply'],
       inputSchema: { id: 'canvas.markdown.input', version: 1 },
       resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
@@ -108,7 +108,7 @@ describe('agent capability lifecycle contracts', () => {
 
   it('accepts invocation result envelopes with executable actions and stable refs', () => {
     const result: AgentCapabilityInvocationResult = {
-      capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+      capabilityId: 'canvas.ingestMarkdown',
       phase: 'review',
       status: 'needs-review',
       diagnostics: [
@@ -121,10 +121,10 @@ describe('agent capability lifecycle contracts', () => {
       ],
       reviewArtifact: {
         kind: 'node',
-        id: 'draft-node-1',
+        id: 'table-node-1',
         packageId: 'neko-canvas',
         artifactKind: 'canvas.table',
-        profile: 'canvas.tableProfile.storyboard-draft',
+        profile: 'canvas.tableProfile.storyboard',
       },
       changedRefs: [
         {
@@ -141,13 +141,13 @@ describe('agent capability lifecycle contracts', () => {
           requiresApproval: true,
           sourceRef: {
             kind: 'node',
-            id: 'draft-node-1',
+            id: 'table-node-1',
             packageId: 'neko-canvas',
           },
         },
       ],
       data: {
-        draftNodeId: 'draft-node-1',
+        tableNodeId: 'table-node-1',
       },
     };
 

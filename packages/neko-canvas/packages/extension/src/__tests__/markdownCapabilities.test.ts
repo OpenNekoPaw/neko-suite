@@ -109,11 +109,13 @@ describe('Canvas Markdown capabilities', () => {
     );
   });
 
-  it('creates review-first storyboard drafts with resource diagnostics instead of guessing order', async () => {
+  it('creates review-first storyboard tables with resource diagnostics instead of guessing order', async () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(
       {
-        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        capabilityId: 'canvas.ingestMarkdown',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
         markdown: [
           '| Scene | Shot | Image | Prompt | Next Action |',
           '| --- | --- | --- | --- | --- |',
@@ -129,7 +131,7 @@ describe('Canvas Markdown capabilities', () => {
     expect(result.status).toBe('needs-review');
     expect(result.resolvedKind).toBe('creative-table');
     expect(result.profileId).toBe('storyboard');
-    expect(result.draftNodeId).toBe('table-1');
+    expect(result.tableNodeId).toBe('table-1');
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
       'canvas-markdown-missing-resource-token',
     );
@@ -243,7 +245,21 @@ describe('Canvas Markdown capabilities', () => {
           data: expect.objectContaining({
             shotNumber: 1,
             visualDescription: 'Wide view',
-            generationPrompt: 'cinematic wide prompt',
+            storyboardPrompt: expect.objectContaining({
+              promptBlocks: expect.objectContaining({
+                imagePromptDocument: expect.objectContaining({
+                  text: 'cinematic wide prompt',
+                  blockKind: 'image',
+                }),
+                videoPromptDocument: expect.objectContaining({
+                  text: 'scene video: wide view establishes the room, then cut to close-up',
+                  blockKind: 'video',
+                  fieldProjections: expect.arrayContaining([
+                    expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
+                  ]),
+                }),
+              }),
+            }),
           }),
         },
         {
@@ -252,11 +268,27 @@ describe('Canvas Markdown capabilities', () => {
           data: expect.objectContaining({
             shotNumber: 2,
             visualDescription: 'Close-up',
-            generationPrompt: 'close prompt',
+            storyboardPrompt: expect.objectContaining({
+              promptBlocks: expect.objectContaining({
+                imagePromptDocument: expect.objectContaining({
+                  text: 'close prompt',
+                  blockKind: 'image',
+                }),
+                videoPromptDocument: expect.objectContaining({
+                  text: 'scene video: wide view establishes the room, then cut to close-up',
+                  blockKind: 'video',
+                  fieldProjections: expect.arrayContaining([
+                    expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
+                  ]),
+                }),
+              }),
+            }),
           }),
         },
       ],
     } satisfies Partial<CanvasCreateCompositeRequest>);
+    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
+    expect(request?.children[1]?.data).not.toHaveProperty('generationPrompt');
   });
 
   it('attaches stable resource refs to an existing Canvas target', async () => {
@@ -293,12 +325,16 @@ describe('Canvas Markdown capabilities', () => {
     const result = await invokeCanvasMarkdownCapability(
       {
         capabilityId: 'canvas.validateMarkdownStoryboard',
+        profileHint: 'storyboard.ai-native',
         markdown: STORYBOARD_MARKDOWN,
       },
       operations,
     );
 
     expect(result.status).toBe('validated');
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+      'canvas-markdown-unsupported-table-profile',
+    );
     expect(result.preview).toMatchObject({ tableCount: 1, rowCount: 2 });
     expect(operations.createNode).not.toHaveBeenCalled();
     expect(operations.createComposite).not.toHaveBeenCalled();
@@ -414,7 +450,7 @@ describe('Canvas Markdown capabilities', () => {
       {
         capabilityId: 'canvas.ingestMarkdown',
         intentHint: 'creative-table',
-        profileHint: 'storyboard-draft',
+        profileHint: 'storyboard',
         markdown: [
           '| Scene | Shot | Image | Visual | Prompt | Next Action |',
           '| --- | --- | --- | --- | --- | --- |',
@@ -430,7 +466,7 @@ describe('Canvas Markdown capabilities', () => {
       status: 'created',
       resolvedKind: 'creative-table',
       profileId: 'storyboard',
-      draftNodeId: 'table-1',
+      tableNodeId: 'table-1',
       actions: [
         {
           actionId: 'create-storyboard-nodes',
@@ -473,7 +509,6 @@ describe('Canvas Markdown capabilities', () => {
       status: 'created',
       resolvedKind: 'creative-table',
       profileId: 'storyboard',
-      draftNodeId: 'table-1',
       tableNodeId: 'table-1',
     });
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
@@ -598,11 +633,13 @@ describe('Canvas Markdown capabilities', () => {
     );
   });
 
-  it('keeps operation-targeted storyboard drafts reviewable when required fields are missing', async () => {
+  it('keeps operation-targeted storyboard tables reviewable when required fields are missing', async () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(
       {
-        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        capabilityId: 'canvas.ingestMarkdown',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
         operationHint: 'video.scene.generate',
         markdown: [
           '| scene | shot | visual | imagePrompt |',
@@ -614,7 +651,7 @@ describe('Canvas Markdown capabilities', () => {
     );
 
     expect(result.status).toBe('needs-review');
-    expect(result.draftNodeId).toBe('table-1');
+    expect(result.tableNodeId).toBe('table-1');
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({
         severity: 'warning',
@@ -645,7 +682,9 @@ describe('Canvas Markdown capabilities', () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(
       {
-        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        capabilityId: 'canvas.ingestMarkdown',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
         operationHint: 'video.scene.generate',
         markdown: [
           '| scene | shot | visual | videoPrompt |',
@@ -787,7 +826,9 @@ describe('Canvas Markdown capabilities', () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(
       {
-        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        capabilityId: 'canvas.ingestMarkdown',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
         markdown: [
           '| Scene | Shot | Image | Prompt | Next Action |',
           '| --- | --- | --- | --- | --- |',
@@ -834,7 +875,9 @@ describe('Canvas Markdown capabilities', () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(
       {
-        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        capabilityId: 'canvas.ingestMarkdown',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
         markdown: [
           '| Scene | Shot | Image | Prompt | Next Action |',
           '| --- | --- | --- | --- | --- |',
@@ -912,11 +955,13 @@ describe('Canvas Markdown capabilities', () => {
     );
   });
 
-  it('keeps scene grouping hints and extra columns as draft metadata', async () => {
+  it('keeps scene grouping hints and extra columns as review metadata', async () => {
     const operations = createOperations();
     await invokeCanvasMarkdownCapability(
       {
-        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        capabilityId: 'canvas.ingestMarkdown',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
         markdown: [
           '| Scene | Shot | Image | Prompt | Beat Group | Execution Status |',
           '| --- | --- | --- | --- | --- | --- |',
@@ -962,9 +1007,9 @@ describe('Canvas Markdown capabilities', () => {
           stageId: 'apply',
         },
         markdown: [
-          '| 场景 | 镜号 | 画面描述 | 生成提示词 | 镜头运动 | 时长秒 | 角色 | 台词 |',
-          '| --- | --- | --- | --- | --- | --- | --- | --- |',
-          '| 夜市 | S01 | 灯牌下的远景 | neon market | 推进 | 4s | Mika、Ren | 走吧 |',
+          '| 场景 | 镜号 | 画面描述 | 生成提示词 | 场景视频提示词 | 镜头运动 | 时长秒 | 角色 | 台词 |',
+          '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+          '| 夜市 | S01 | 灯牌下的远景 | neon market | 场景视频生成：灯牌下慢速推进，角色穿过夜市 | 推进 | 4s | Mika、Ren | 走吧 |',
         ].join('\n'),
       },
       operations,
@@ -982,7 +1027,22 @@ describe('Canvas Markdown capabilities', () => {
             shotNumber: 1,
             duration: 4,
             visualDescription: '灯牌下的远景',
-            generationPrompt: 'neon market',
+            storyboardPrompt: expect.objectContaining({
+              promptBlocks: expect.objectContaining({
+                imagePromptDocument: expect.objectContaining({ text: 'neon market' }),
+                videoPromptDocument: expect.objectContaining({
+                  text: '场景视频生成：灯牌下慢速推进，角色穿过夜市',
+                  fieldProjections: expect.arrayContaining([
+                    expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
+                  ]),
+                }),
+                voicePromptDocument: expect.objectContaining({ text: '走吧' }),
+              }),
+              generationParams: expect.objectContaining({
+                duration: 4,
+                dialogue: '走吧',
+              }),
+            }),
             cameraMovement: 'zoom-in',
             characters: [{ characterName: 'Mika' }, { characterName: 'Ren' }],
             dialogue: '走吧',
@@ -991,6 +1051,7 @@ describe('Canvas Markdown capabilities', () => {
         },
       ],
     } satisfies Partial<CanvasCreateCompositeRequest>);
+    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
   });
 
   it('does not create production shot nodes for skip, reference-only, or duplicate rows', async () => {
@@ -1030,8 +1091,16 @@ describe('Canvas Markdown capabilities', () => {
     expect(request?.children[0]?.data).toMatchObject({
       shotNumber: 4,
       visualDescription: 'corridor shot',
-      generationPrompt: 'corridor keyframe',
+      storyboardPrompt: expect.objectContaining({
+        promptBlocks: expect.objectContaining({
+          imagePromptDocument: expect.objectContaining({ text: 'corridor keyframe' }),
+        }),
+      }),
     });
+    expect(
+      readStoryboardPromptBlocks(request?.children[0]?.data)?.['videoPromptDocument'],
+    ).toBeUndefined();
+    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
   });
 
   it('blocks production creation when every storyboard row is non-production', async () => {
@@ -1068,7 +1137,7 @@ describe('Canvas Markdown capabilities', () => {
     expect(operations.createComposite).not.toHaveBeenCalled();
   });
 
-  it('preserves shot and scene prompt slots during production node creation', async () => {
+  it('creates semantic prompt documents instead of shot prompt slots during production node creation', async () => {
     const operations = createOperations();
     await invokeCanvasMarkdownCapability(
       {
@@ -1093,22 +1162,29 @@ describe('Canvas Markdown capabilities', () => {
     const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
     expect(request?.data).not.toHaveProperty('promptSlots');
     expect(request?.children[0]?.data).toMatchObject({
-      generationPrompt: 'image generation: keyframe prompt',
-      promptSlots: expect.arrayContaining([
-        expect.objectContaining({
-          fieldId: 'videoPrompt',
-          scope: 'shot',
-          mediaType: 'video',
-          operation: 'generate',
-          prompt: 'video generation: slow dolly',
+      storyboardPrompt: expect.objectContaining({
+        promptBlocks: expect.objectContaining({
+          imagePromptDocument: expect.objectContaining({
+            text: 'image generation: keyframe prompt',
+          }),
+          videoPromptDocument: expect.objectContaining({
+            text: 'video generation: slow dolly',
+            fieldProjections: expect.arrayContaining([
+              expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
+            ]),
+          }),
         }),
-      ]),
+        nextCreativeState: expect.objectContaining({
+          id: 'image-prompt-ready',
+          nextActionId: 'generate-image',
+        }),
+      }),
     });
-    const shotPromptSlots = request?.children[0]?.data?.['promptSlots'];
-    expect(shotPromptSlots).toEqual([expect.objectContaining({ fieldId: 'videoPrompt' })]);
+    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
+    expect(request?.children[0]?.data).not.toHaveProperty('promptSlots');
   });
 
-  it('derives scene video prompt slot operation from operation hint', async () => {
+  it('keeps scene operation hints in semantic prompt documents without legacy scene prompt slots', async () => {
     const operations = createOperations();
     await invokeCanvasMarkdownCapability(
       {
@@ -1132,20 +1208,22 @@ describe('Canvas Markdown capabilities', () => {
     );
 
     const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
-    expect(request?.data).toMatchObject({
-      promptSlots: [
-        expect.objectContaining({
-          fieldId: 'videoPrompt',
-          scope: 'scene',
-          mediaType: 'video',
-          operation: 'generate',
-          prompt: 'generate one continuous scene video across this beat',
+    expect(request?.data).not.toHaveProperty('promptSlots');
+    expect(request?.children[0]?.data).toMatchObject({
+      storyboardPrompt: expect.objectContaining({
+        promptBlocks: expect.objectContaining({
+          videoPromptDocument: expect.objectContaining({
+            text: 'generate one continuous scene video across this beat',
+            fieldProjections: expect.arrayContaining([
+              expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
+            ]),
+          }),
         }),
-      ],
+      }),
     });
   });
 
-  it('derives production prompt fallback from storyboard prompt slot descriptors', async () => {
+  it('does not derive scene video prompts from image prompt fallback columns', async () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(
       {
@@ -1171,15 +1249,72 @@ describe('Canvas Markdown capabilities', () => {
     const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
     expect(request?.children[0]?.data).toMatchObject({
       visualDescription: 'edit image: remove lettering from source panel',
-      generationPrompt: 'edit image: remove lettering from source panel',
+      storyboardPrompt: expect.objectContaining({
+        promptBlocks: expect.objectContaining({
+          imagePromptDocument: expect.objectContaining({
+            text: 'edit image: remove lettering from source panel',
+          }),
+        }),
+      }),
     });
+    expect(
+      readStoryboardPromptBlocks(request?.children[0]?.data)?.['videoPromptDocument'],
+    ).toBeUndefined();
+    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
+  });
+
+  it('does not let generationPrompt-like Markdown columns recreate legacy prompt authority', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        mode: 'create-nodes',
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
+        markdown: [
+          '| scene | shot | visual | Generation Prompt |',
+          '| --- | --- | --- | --- |',
+          '| Opening | 1 | rain corridor | legacy-looking prompt text |',
+        ].join('\n'),
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('created');
+    const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
+    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
+    expect(request?.children[0]?.data).toMatchObject({
+      storyboardPrompt: expect.objectContaining({
+        promptBlocks: expect.objectContaining({
+          imagePromptDocument: expect.objectContaining({
+            text: 'legacy-looking prompt text',
+          }),
+        }),
+      }),
+    });
+    expect(
+      readStoryboardPromptBlocks(request?.children[0]?.data)?.['videoPromptDocument'],
+    ).toBeUndefined();
   });
 
   it('rejects unsupported storyboard table profile hints visibly', async () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(
       {
-        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        mode: 'create-nodes',
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
         profileHint: 'canvas.tableProfile.interactive-branch-map',
         markdown: STORYBOARD_MARKDOWN,
       },
@@ -1269,11 +1404,13 @@ describe('Canvas Markdown capabilities', () => {
     );
   });
 
-  it('keeps drafts reviewable when visual is missing but blocks production creation', async () => {
+  it('keeps review tables reviewable when visual is missing but blocks production creation', async () => {
     const operations = createOperations();
-    const draft = await invokeCanvasMarkdownCapability(
+    const review = await invokeCanvasMarkdownCapability(
       {
-        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        capabilityId: 'canvas.ingestMarkdown',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
         markdown: [
           '| Scene | Shot | Image | Next Action |',
           '| --- | --- | --- | --- |',
@@ -1284,8 +1421,8 @@ describe('Canvas Markdown capabilities', () => {
       operations,
     );
 
-    expect(draft.status).toBe('needs-review');
-    expect(draft.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+    expect(review.status).toBe('needs-review');
+    expect(review.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
       'canvas-storyboard-profile-visual-or-prompt-missing',
     );
 
@@ -1353,7 +1490,9 @@ describe('Canvas Markdown capabilities', () => {
     const operations = createOperations();
     const result = await invokeCanvasMarkdownCapability(
       {
-        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+        capabilityId: 'canvas.ingestMarkdown',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
         markdown: [
           '| Scene | Shot | Image | Prompt | Next Action |',
           '| --- | --- | --- | --- | --- |',
@@ -1382,10 +1521,10 @@ describe('Canvas Markdown capabilities', () => {
 });
 
 const STORYBOARD_MARKDOWN = [
-  '| Scene | Shot | Visual | Prompt | Duration | Character | Next Action |',
-  '| --- | --- | --- | --- | --- | --- | --- |',
-  '| Opening | 1 | Wide view | cinematic wide prompt | 2.5s | Mika | create |',
-  '| Opening | 2 | Close-up | close prompt | 0s | Mika | create |',
+  '| Scene | Shot | Visual | Prompt | Video Prompt | Duration | Character | Next Action |',
+  '| --- | --- | --- | --- | --- | --- | --- | --- |',
+  '| Opening | 1 | Wide view | cinematic wide prompt | scene video: wide view establishes the room, then cut to close-up | 2.5s | Mika | create |',
+  '| Opening | 2 | Close-up | close prompt |  | 0s | Mika | create |',
 ].join('\n');
 
 function createOperations(): CanvasMarkdownCapabilityOperations {
@@ -1403,6 +1542,15 @@ function createOperations(): CanvasMarkdownCapabilityOperations {
       childIds: ['shot-1', 'shot-2'],
     })),
   };
+}
+
+function readStoryboardPromptBlocks(data: unknown): Record<string, unknown> | undefined {
+  if (!data || typeof data !== 'object') return undefined;
+  const storyboardPrompt = (data as Record<string, unknown>)['storyboardPrompt'];
+  if (!storyboardPrompt || typeof storyboardPrompt !== 'object') return undefined;
+  const promptBlocks = (storyboardPrompt as Record<string, unknown>)['promptBlocks'];
+  if (!promptBlocks || typeof promptBlocks !== 'object') return undefined;
+  return promptBlocks as Record<string, unknown>;
 }
 
 function createResource(token: string): CanvasMarkdownResourceRef {

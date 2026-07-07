@@ -1,3 +1,5 @@
+import type { ResourceRef } from './resource-cache';
+
 /**
  * Agent task-result observation contracts.
  *
@@ -7,10 +9,7 @@
  */
 
 export type AgentTaskResultSource =
-  | 'task-manager'
-  | 'media-task'
-  | 'subagent'
-  | 'tool-background-task';
+  'task-manager' | 'media-task' | 'subagent' | 'tool-background-task';
 
 export type AgentTaskResultTerminalStatus = 'completed' | 'failed' | 'cancelled';
 
@@ -21,6 +20,7 @@ export interface AgentTaskResultRef {
   readonly id: string;
   readonly mimeType?: string;
   readonly label?: string;
+  readonly resourceRef?: ResourceRef;
 }
 
 export interface AgentTaskResultObservation {

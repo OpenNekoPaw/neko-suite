@@ -31,6 +31,8 @@ import type {
   NarrativeProductionBinding,
   CanvasSerializableRecord,
   CanvasSerializableValue,
+  CanvasStoryboardPromptBlockKind,
+  CanvasStoryboardPromptState,
 } from '@neko/shared';
 import {
   analyzeCanvasNarrativeForAgent,
@@ -48,6 +50,7 @@ import {
   writeJsonPointer,
   writeFieldBinding,
   validateNarrativeProductionBinding,
+  validateCanvasStoryboardPromptState,
 } from '@neko/shared';
 import { addContainerChild, createContainerComposite } from './containerActions';
 import { autoArrangeContainer, findFreePosition } from './containerLayout';
@@ -200,7 +203,7 @@ const TARGETABLE_FIELD_PATHS_BY_TYPE: Partial<Record<CanvasNodeType, readonly Js
     annotation: ['/content'],
     text: ['/content'],
     shot: [
-      '/generationPrompt',
+      '/storyboardPrompt',
       '/visualDescription',
       '/characterAction',
       '/dialogue',
@@ -484,6 +487,7 @@ function applyContentToNodeTarget(
     mode === 'append'
       ? appendCanvasAgentContentValue(node, fieldPath, payload)
       : coerceCanvasAgentContentValue(payload, fieldPath);
+  validateStoryboardPromptWriteback(node, fieldPath, nextValue);
   const written = writeJsonPointer(node.data, fieldPath, nextValue);
   const nextNode = refreshCanvasNodePreview({
     ...node,
@@ -500,6 +504,60 @@ function applyContentToNodeTarget(
     nodes: context.nodes.map((candidate) => (candidate.id === node.id ? nextNode : candidate)),
     connections: context.connections,
   };
+}
+
+function validateStoryboardPromptWriteback(
+  node: CanvasNode,
+  fieldPath: JsonPointerPath,
+  value: unknown,
+): void {
+  if (node.type !== 'shot' || fieldPath !== '/storyboardPrompt') return;
+  const validation = validateCanvasStoryboardPromptState(value);
+  if (!validation.valid) {
+    throw new Error(
+      `Invalid storyboardPrompt writeback: ${validation.diagnostics
+        .map((diagnostic) => diagnostic.message)
+        .join('; ')}`,
+    );
+  }
+  const currentState = node.data.storyboardPrompt as CanvasStoryboardPromptState | undefined;
+  if (!currentState) return;
+  const nextState = value as CanvasStoryboardPromptState;
+  for (const blockKind of ['image', 'video', 'voice'] as const) {
+    validatePromptDocumentIdentity(blockKind, currentState, nextState);
+  }
+}
+
+function validatePromptDocumentIdentity(
+  blockKind: CanvasStoryboardPromptBlockKind,
+  currentState: CanvasStoryboardPromptState,
+  nextState: CanvasStoryboardPromptState,
+): void {
+  const currentDocument = readStoryboardPromptDocument(currentState, blockKind);
+  const nextDocument = readStoryboardPromptDocument(nextState, blockKind);
+  if (!currentDocument || !nextDocument) return;
+  if (
+    currentDocument.documentId !== nextDocument.documentId ||
+    currentDocument.version !== nextDocument.version
+  ) {
+    throw new Error(
+      `Invalid storyboardPrompt writeback: ${blockKind} prompt document identity changed.`,
+    );
+  }
+}
+
+function readStoryboardPromptDocument(
+  state: CanvasStoryboardPromptState,
+  blockKind: CanvasStoryboardPromptBlockKind,
+) {
+  switch (blockKind) {
+    case 'image':
+      return state.promptBlocks?.imagePromptDocument;
+    case 'video':
+      return state.promptBlocks?.videoPromptDocument;
+    case 'voice':
+      return state.promptBlocks?.voicePromptDocument;
+  }
 }
 
 function insertContentNode(
@@ -601,7 +659,9 @@ function defaultFieldPathForPayload(
   payload: CanvasAgentContentPayload,
 ): JsonPointerPath | undefined {
   if (payload.kind === 'prompt' && node.type === 'shot') {
-    return '/generationPrompt';
+    throw new Error(
+      'Shot prompt authoring requires structured storyboardPrompt writeback; legacy generationPrompt is migration input only.',
+    );
   }
   if (payload.kind === 'text' || payload.kind === 'structured') {
     if (node.type === 'text' || node.type === 'annotation') {
@@ -615,9 +675,19 @@ function defaultFieldPathForPayload(
 }
 
 function assertTargetableField(node: CanvasNode, fieldPath: JsonPointerPath): void {
+  assertWritableStoryboardPromptPath(node, fieldPath);
   const paths = new Set(getTargetableFields(node).map((field) => field.path));
   if (!paths.has(fieldPath)) {
     throw new Error(`Field "${fieldPath}" is not targetable on ${node.type} node "${node.id}"`);
+  }
+}
+
+function assertWritableStoryboardPromptPath(node: CanvasNode, fieldPath: JsonPointerPath): void {
+  if (node.type !== 'shot') return;
+  if (fieldPath === '/generationPrompt' || fieldPath === '/promptSlots') {
+    throw new Error(
+      `Legacy field "${fieldPath}" is migration input only; write semantic storyboard prompts through /storyboardPrompt.`,
+    );
   }
 }
 
@@ -648,6 +718,9 @@ function coerceCanvasAgentContentValue(
   }
   if (payload.kind === 'prompt') {
     return payload.prompt ?? '';
+  }
+  if (payload.kind === 'structured' && fieldPath === '/storyboardPrompt') {
+    return payload.content;
   }
   if (payload.format === 'json' && !expectsStringField(fieldPath)) {
     return payload.content;
@@ -690,14 +763,19 @@ function getTargetableFields(
     { path: JsonPointerPath; label?: string; valueType?: string }
   >();
   for (const path of TARGETABLE_FIELD_PATHS_BY_TYPE[node.type] ?? []) {
-    fields.set(path, { path, label: labelFromFieldPath(path), valueType: 'string' });
+    fields.set(path, {
+      path,
+      label: labelFromFieldPath(path),
+      valueType: path === '/storyboardPrompt' ? 'object' : 'string',
+    });
   }
-  for (const binding of collectBindings(node) ?? []) {
+  for (const targetableBinding of collectTargetableBindings(node)) {
+    const { binding, label, value } = targetableBinding;
     if (!fields.has(binding.path)) {
       fields.set(binding.path, {
         path: binding.path,
-        ...(binding.label ? { label: binding.label } : {}),
-        valueType: inferValueType(binding.value),
+        ...(label ? { label } : {}),
+        valueType: inferValueType(value),
       });
     }
   }
@@ -713,6 +791,47 @@ function inferValueType(value: unknown): string {
   if (Array.isArray(value)) return 'array';
   if (value === null) return 'unknown';
   return typeof value;
+}
+
+function collectTargetableBindings(
+  node: CanvasNode,
+): Array<{ binding: FieldBinding; label?: string; value: unknown }> {
+  if (!node.content) return [];
+  const bindings: Array<{ binding: FieldBinding; label?: string; value: unknown }> = [];
+  const sections = [node.content];
+  while (sections.length > 0) {
+    const section = sections.shift();
+    if (!section) continue;
+    for (const block of section.blocks ?? []) {
+      collectTargetableBlockBindings(node, block, bindings);
+    }
+    sections.push(...(section.sections ?? []));
+  }
+  return bindings;
+}
+
+function collectTargetableBlockBindings(
+  node: CanvasNode,
+  block: CanvasBlock,
+  bindings: Array<{ binding: FieldBinding; label?: string; value: unknown }>,
+): void {
+  if (block.binding && block.binding.mode !== 'read') {
+    bindings.push({
+      binding: block.binding,
+      ...(block.label ? { label: block.label } : {}),
+      value: readFieldBinding(node.data, block.binding).value,
+    });
+  }
+  if (block.collection && block.collection.source.mode !== 'read') {
+    bindings.push({
+      binding: block.collection.source,
+      ...(block.label ? { label: block.label } : {}),
+      value: readFieldBinding(node.data, block.collection.source).value,
+    });
+  }
+  for (const child of block.children ?? []) {
+    collectTargetableBlockBindings(node, child, bindings);
+  }
 }
 
 function renderNodeDataSummary(node: CanvasNode): string | undefined {
@@ -869,6 +988,8 @@ export function updateCanvasBlock(
   request: CanvasUpdateBlockRequest,
 ): CanvasUpdateBlockResult & { node: CanvasNode } {
   const binding = resolveUpdateBinding(node, request);
+  assertWritableStoryboardPromptPath(node, binding.path);
+  validateStoryboardPromptWriteback(node, binding.path, request.value);
   const written = writeFieldBinding(node.data, binding, request.value);
   const nextNode = written.changed
     ? refreshCanvasNodePreview({

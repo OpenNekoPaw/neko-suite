@@ -81,6 +81,103 @@ describe('@neko/skills builtins', () => {
     );
   });
 
+  it('keeps comic storyboard visual evidence contract aligned with ReadImage native multimodal flow', () => {
+    const english = getComicToStoryboardSkill().content;
+    const zhCn = getComicToStoryboardSkill('zh-CN').content;
+
+    expect(english).toContain('native multimodal attachments');
+    expect(english).toContain('vision-capable native multimodal Agent reasoning');
+    expect(english).toContain('do not output any Markdown table');
+    expect(english).not.toContain('non metadata');
+
+    expect(zhCn).toContain('原生多模态附件');
+    expect(zhCn).toContain('具备 vision 能力');
+    expect(zhCn).toContain('不要输出任何 Markdown 表格');
+    expect(zhCn).not.toContain('非 metadata');
+  });
+
+  it('keeps comic storyboard prompts actionable for image and video generation/editing', () => {
+    const english = getComicToStoryboardSkill().content;
+    const zhCn = getComicToStoryboardSkill('zh-CN').content;
+
+    expect(english).toContain(
+      'Image generation prompts must include character appearance, scene/location, composition/camera, style/color/lighting, and reference-consistency constraints.',
+    );
+    expect(english).toContain(
+      'Image edit prompts must describe ordered operations such as crop/split/rotate/colorize/redraw/remove text/inpaint/outpaint/upscale/style normalization.',
+    );
+    expect(english).toContain(
+      "Video prompts must summarize the scene's source/reference, character, scene, emotion, shot-ordered action beats, dialogue or silence, camera movement, environmental change, pacing/total duration, and constraints.",
+    );
+    expect(english).toContain(
+      '`videoPrompt` is scene-level. Write at most one video prompt per scene, preferably on the first row of that scene.',
+    );
+    expect(english).toContain(
+      'Do not write shot-level or single-shot video prompts in new storyboard output.',
+    );
+    expect(english).toContain(
+      'Prompt cells are generation instructions, not visual-analysis notes or review labels.',
+    );
+    expect(english).toContain(
+      'Do not write prompt fragments like only "crop the standing character panel", "black-haired man walks past bodies", or "low-angle follow".',
+    );
+    expect(english).toContain(
+      'When a reference image is directly usable, leave `imagePrompt` blank instead of inventing image-edit work.',
+    );
+    expect(english).toContain('Resource references must state their purpose.');
+    expect(english).toContain(
+      'Use the base shape "scene intent / reference resources and their roles / subject characters and emotion / scene environment / shot-numbered or time-coded action beats / camera transitions / environmental change or effects / dialogue, narration, SFX, or silence / total duration / constraints".',
+    );
+    expect(english).toContain('For long scenes or intents over 10 seconds');
+    expect(english).toContain('Prompt self-check: every non-empty `imagePrompt` / `videoPrompt`');
+
+    expect(zhCn).toContain(
+      '图片生成提示词必须包含人物外观、场景/地点、构图/镜头、风格/色彩/光影和参考一致性约束。',
+    );
+    expect(zhCn).toContain(
+      '图片编辑提示词必须写清有顺序的操作步骤，例如裁切/切分/旋转/上色/重绘/去文字/局部重绘/扩图/放大/统一风格。',
+    );
+    expect(zhCn).toContain(
+      '视频提示词必须按 scene 汇总来源/参考、人物、场景、情绪、按镜号排列的动作节拍、对白或无对白、运镜、环境变化、节奏/总时长和约束。',
+    );
+    expect(zhCn).toContain(
+      '`videoPrompt` 是 scene 级字段。每个 scene 最多写一个视频提示词，优先写在该 scene 的第一行；同一 scene 的后续 shot 行默认继承该 scene 的视频提示词，除非新 scene 开始。',
+    );
+    expect(zhCn).toContain('新的分镜输出不要写 shot 级或单镜视频提示词。');
+    expect(zhCn).toContain('提示词单元格是生成指导，不是视觉分析笔记、审阅标签或操作摘要。');
+    expect(zhCn).toContain(
+      '不要只写“裁切主角站立分格”“黑发男性从尸体旁走过”“镜头低角度跟随”这类提示词碎片。',
+    );
+    expect(zhCn).toContain(
+      '参考图可直接用于视频时，`imagePrompt` 留空，不要为了填表编造图像编辑任务。',
+    );
+    expect(zhCn).toContain('资源引用必须说明用途。');
+    expect(zhCn).toContain(
+      '基础结构是“场景意图 / 参考资源及用途 / 主体人物与情绪 / 场景环境 / 按镜号或时间段排列的动作节拍 / 运镜连接 / 环境变化或特效 / 对白、旁白、音效或无对白 / 总时长 / 约束”。',
+    );
+    expect(zhCn).toContain('长 scene 或 10 秒以上意图');
+    expect(zhCn).toContain('提示词自检：每个非空 `imagePrompt` / `videoPrompt`');
+  });
+
+  it('keeps image-to-shot prompt guidance aligned with storyboard prompt style', () => {
+    const english = getBuiltinSkills().find((skill) => skill.name === 'image-to-shot')?.content;
+    const zhCn = getBuiltinSkills({ locale: 'zh-CN' }).find(
+      (skill) => skill.name === 'image-to-shot',
+    )?.content;
+
+    expect(english).toContain('Resource references must state their purpose.');
+    expect(english).toContain('scene intent / reference resource roles');
+    expect(english).toContain(
+      'Prefer time-coded beats for long scenes or intents over 10 seconds.',
+    );
+    expect(english).toContain('Every non-empty prompt must answer');
+
+    expect(zhCn).toContain('资源引用必须说明用途。');
+    expect(zhCn).toContain('场景意图 / 参考资源用途');
+    expect(zhCn).toContain('长 scene 或 10 秒以上意图优先分时段描述。');
+    expect(zhCn).toContain('每个非空提示词都必须能回答');
+  });
+
   it('owns all non-runtime builtin skill and tool group definitions', () => {
     expect(aiGenerateSkill.name).toBe('ai-generate');
     expect(aiGenerateToolDefinitions.map((definition) => definition.name)).toContain(
@@ -141,13 +238,17 @@ describe('@neko/skills builtins', () => {
         ?.content,
     ).not.toContain('Video Editing Assistant');
     expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')
-        ?.content,
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')?.content,
     ).toContain('AI 媒体生成');
     expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')
-        ?.content,
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')?.content,
     ).not.toContain('AI Media Generation');
+    expect(
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')?.content,
+    ).toContain('工具参数 prompt 默认使用用户当前语言');
+    expect(
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')?.content,
+    ).not.toContain('[Subject] + [Style] + [Details] + [Atmosphere] + [Technical]');
     expect(
       getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'quality-assessment')
         ?.content,
@@ -167,9 +268,7 @@ describe('@neko/skills builtins', () => {
       }),
     );
     expect(builtinSkillLocales['media-to-video']?.['zh-cn']?.name).toBe('媒体转视频');
-    expect(builtinSkillLocales['creation-persona']?.['zh-cn']?.description).toContain(
-      '共创伙伴',
-    );
+    expect(builtinSkillLocales['creation-persona']?.['zh-cn']?.description).toContain('共创伙伴');
   });
 
   it('keeps localized markdown-backed builtin prompts structurally aligned', () => {

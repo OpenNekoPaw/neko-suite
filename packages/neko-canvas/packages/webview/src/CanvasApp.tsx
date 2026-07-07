@@ -6,7 +6,11 @@ import {
   useReportWebviewKeyboardFocus,
 } from '@neko/ui/keyboard';
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
-import { projectCanvasShotPrompt, validateCanvasBoardRef } from '@neko/shared';
+import {
+  isCanvasStoryboardPromptState,
+  projectCanvasShotPrompt,
+  validateCanvasBoardRef,
+} from '@neko/shared';
 import type {
   CanvasBoardNavigationDiagnostic,
   CanvasBoardRef,
@@ -14,6 +18,7 @@ import type {
   CanvasDroppedAsset,
   CanvasNode,
   CanvasNodeType,
+  CanvasStoryboardPromptBlockKind,
   CanvasSubsystemId,
   CanvasViewport,
   GeneratedImageVersion,
@@ -104,8 +109,58 @@ const BASIC_CANVAS_SUBSYSTEM_IDS: readonly CanvasSubsystemId[] = ['storyboard'];
 const logger = getLogger('CanvasApp');
 type CanvasRightDockMode = 'basic' | 'professional';
 
-function resolveNodeGenerationPrompt(node: CanvasData['nodes'][number] | undefined): string {
-  return node ? (projectCanvasShotPrompt(node)?.prompt ?? '') : '';
+function resolveGenerationPanelPromptContext(
+  node: CanvasData['nodes'][number] | undefined,
+  preferredBlockKind: CanvasStoryboardPromptBlockKind,
+): Pick<GenerationPanelTarget, 'initialPrompt' | 'semanticPromptDocument' | 'actionContext'> {
+  if (!node) {
+    return {
+      initialPrompt: '',
+      actionContext: {
+        actionId: preferredBlockKind === 'video' ? 'generate-video' : 'generate-image',
+        promptSource: 'empty',
+      },
+    };
+  }
+  const projection = projectCanvasShotPrompt(node, { preferredBlockKind });
+  const semanticPromptDocument =
+    projection?.source === 'semantic-prompt-document' && projection.promptBlockKind
+      ? readGenerationPanelSemanticPromptDocument(node, projection.promptBlockKind)
+      : undefined;
+  return {
+    initialPrompt: semanticPromptDocument?.text ?? projection?.prompt ?? '',
+    ...(semanticPromptDocument ? { semanticPromptDocument } : {}),
+    actionContext: {
+      actionId: preferredBlockKind === 'video' ? 'generate-video' : 'generate-image',
+      promptSource: projection?.source ?? 'empty',
+      ...(projection?.legacyMigrationPrompt
+        ? { legacyMigrationPrompt: projection.legacyMigrationPrompt }
+        : {}),
+    },
+  };
+}
+
+function readGenerationPanelSemanticPromptDocument(
+  node: CanvasData['nodes'][number],
+  blockKind: CanvasStoryboardPromptBlockKind,
+): GenerationPanelTarget['semanticPromptDocument'] {
+  if (node.type !== 'shot') return undefined;
+  const state = node.data.storyboardPrompt;
+  if (!isCanvasStoryboardPromptState(state)) return undefined;
+  const document =
+    blockKind === 'image'
+      ? state.promptBlocks?.imagePromptDocument
+      : blockKind === 'video'
+        ? state.promptBlocks?.videoPromptDocument
+        : state.promptBlocks?.voicePromptDocument;
+  return document
+    ? {
+        blockKind: document.blockKind,
+        documentId: document.documentId,
+        version: document.version,
+        text: document.text,
+      }
+    : undefined;
 }
 
 function updateGalleryChildGeneration(
@@ -904,7 +959,11 @@ export function CanvasApp() {
     const nodeId = selectedNodeIds[0];
     if (!nodeId) return;
     const node = nodes.find((n) => n.id === nodeId);
-    openGenerationPanel(nodeId, undefined, resolveNodeGenerationPrompt(node));
+    openGenerationPanel(
+      nodeId,
+      undefined,
+      resolveGenerationPanelPromptContext(node, 'image').initialPrompt,
+    );
   }, [selectedNodeIds, nodes, openGenerationPanel]);
 
   /** Batch-generate all selected ShotNodes via Agent */
@@ -930,9 +989,14 @@ export function CanvasApp() {
     const nodeId = selectedNodeIds[0];
     if (!nodeId) return;
     const node = nodes.find((n) => n.id === nodeId);
-    openGenerationPanel(nodeId, undefined, resolveNodeGenerationPrompt(node), {
-      generateVideo: true,
-    });
+    openGenerationPanel(
+      nodeId,
+      undefined,
+      resolveGenerationPanelPromptContext(node, 'video').initialPrompt,
+      {
+        generateVideo: true,
+      },
+    );
   }, [selectedNodeIds, nodes, openGenerationPanel]);
 
   /** Open GenerationPromptPanel with ControlNet pre-selected */
@@ -940,9 +1004,14 @@ export function CanvasApp() {
     const nodeId = selectedNodeIds[0];
     if (!nodeId) return;
     const node = nodes.find((n) => n.id === nodeId);
-    openGenerationPanel(nodeId, undefined, resolveNodeGenerationPrompt(node), {
-      controlMode: 'depth',
-    });
+    openGenerationPanel(
+      nodeId,
+      undefined,
+      resolveGenerationPanelPromptContext(node, 'image').initialPrompt,
+      {
+        controlMode: 'depth',
+      },
+    );
   }, [selectedNodeIds, nodes, openGenerationPanel]);
 
   /** Open the selected ShotNode's generated image in neko-sketch for editing */
@@ -1008,12 +1077,26 @@ export function CanvasApp() {
   // Generation panel
   // =========================================================================
 
+  const generationPanelPromptContext = useMemo(() => {
+    if (!generationPanelState.nodeId) {
+      return resolveGenerationPanelPromptContext(undefined, 'image');
+    }
+    const node = nodes.find((candidate) => candidate.id === generationPanelState.nodeId);
+    return resolveGenerationPanelPromptContext(
+      node,
+      generationPanelState.initialGenerateVideo ? 'video' : 'image',
+    );
+  }, [generationPanelState.initialGenerateVideo, generationPanelState.nodeId, nodes]);
+
   const generationPanelTarget: GenerationPanelTarget | null =
     generationPanelState.visible && generationPanelState.nodeId
       ? {
           nodeId: generationPanelState.nodeId,
           childNodeId: generationPanelState.childNodeId ?? undefined,
-          initialPrompt: generationPanelState.initialPrompt,
+          initialPrompt:
+            generationPanelPromptContext.initialPrompt || generationPanelState.initialPrompt,
+          semanticPromptDocument: generationPanelPromptContext.semanticPromptDocument,
+          actionContext: generationPanelPromptContext.actionContext,
           initialControlMode: generationPanelState.initialControlMode,
           initialGenerateVideo: generationPanelState.initialGenerateVideo,
         }
@@ -1663,10 +1746,6 @@ export function CanvasApp() {
                     onGridVisibleChange={setIsGridVisible}
                     isHudVisible={isHudVisible}
                     onHudVisibleChange={setIsHudVisible}
-                    isNodeTreeVisible={isRightNodeTreeVisible}
-                    onNodeTreeVisibleChange={setIsRightNodeTreeVisible}
-                    nodeTreeMode={rightDockMode}
-                    onNodeTreeModeChange={setRightDockMode}
                     onClose={() => setIsCanvasSettingsVisible(false)}
                   />
                 )}

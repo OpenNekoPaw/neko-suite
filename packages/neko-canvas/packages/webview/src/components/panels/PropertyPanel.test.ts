@@ -147,7 +147,7 @@ describe('PropertyPanel node properties registry', () => {
 
     expect(fieldPaths).toContain('/visualDescription');
     expect(fieldPaths).toContain('/duration');
-    expect(fieldPaths).toContain('/generationPrompt');
+    expect(fieldPaths).not.toContain('/generationPrompt');
     expect(fieldPaths).toContain('/dialogue');
     expect(fieldPaths).toContain('/shotImagePrepPlan/status');
     expect(fieldPaths).toContain('/shotImagePrepPlan/imageStrategy');

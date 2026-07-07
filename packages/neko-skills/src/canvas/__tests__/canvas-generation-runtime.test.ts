@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+  CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+} from '@neko/shared';
+import {
   CanvasGenerationRuntime,
   buildCanvasMediaOutputDataUrl,
   buildCanvasImageGenerationRequest,
@@ -41,8 +45,19 @@ describe('canvas generation runtime', () => {
     expect(messages[1]?.content).toBe('Generate an image prompt for this shot.');
   });
 
-  it('prefers generationPrompt over visualDescription and includes style/vfx', () => {
+  it('prefers semantic storyboardPrompt over legacy generationPrompt and includes style/vfx', () => {
     const userContent = buildCanvasShotPromptUserContent({
+      storyboardPrompt: {
+        version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+        promptBlocks: {
+          imagePromptDocument: {
+            version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+            documentId: 'shot-1:image:prompt',
+            blockKind: 'image',
+            text: '语义图片提示词，雨夜咖啡厅，霓虹倒影',
+          },
+        },
+      },
       generationPrompt: '赛博朋克咖啡厅，霓虹雨夜',
       visualDescription: 'A coffee shop scene',
       visualStyle: 'noir',
@@ -50,10 +65,30 @@ describe('canvas generation runtime', () => {
       shotScale: 'CU',
     });
 
-    expect(userContent).toContain('Scene: 赛博朋克咖啡厅，霓虹雨夜');
+    expect(userContent).toContain('Semantic prompt: 语义图片提示词，雨夜咖啡厅，霓虹倒影');
+    expect(userContent).not.toContain('赛博朋克咖啡厅，霓虹雨夜');
     expect(userContent).not.toContain('A coffee shop scene');
     expect(userContent).toContain('Style: noir');
     expect(userContent).toContain('VFX: rain, neon glow');
+  });
+
+  it('treats legacy generationPrompt as migration input instead of AutoPrompt authority', () => {
+    const userContent = buildCanvasShotPromptUserContent({
+      generationPrompt: 'legacy prompt should not be used',
+      visualDescription: 'A coffee shop scene',
+      shotScale: 'CU',
+    });
+
+    expect(userContent).toContain('Scene: A coffee shop scene');
+    expect(userContent).not.toContain('legacy prompt should not be used');
+  });
+
+  it('does not use legacy-only generationPrompt as AutoPrompt input', () => {
+    const userContent = buildCanvasShotPromptUserContent({
+      generationPrompt: 'legacy-only prompt should not generate success',
+    });
+
+    expect(userContent).toBe('Generate an image prompt for this shot.');
   });
 
   it('localizes AutoPrompt wrapper text while preserving English prompt output policy', () => {

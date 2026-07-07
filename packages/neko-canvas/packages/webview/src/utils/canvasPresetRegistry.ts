@@ -355,12 +355,6 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
           collapsible: true,
           defaultCollapsed: true,
           blocks: [
-            fieldBlock(
-              'shot-generation-prompt',
-              'textarea',
-              '/generationPrompt',
-              'preset.shot.generationPrompt',
-            ),
             readonlyFieldBlock(
               'shot-generated-video-prompt',
               'textarea',
@@ -1052,7 +1046,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
   {
     name: 'table.basic',
     nodeType: 'table',
-    createContent: () => ({
+    createContent: (node) => ({
       id: 'table-root',
       layout: 'stack',
       sections: [
@@ -1065,6 +1059,45 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
             fieldBlock('table-rows', 'number', '/rowCount', 'preset.table.rows'),
           ],
         },
+        ...(hasMarkdownReviewRows(node)
+          ? [
+              {
+                id: 'table-markdown-review',
+                title: 'preset.table.markdownReview',
+                layout: 'stack' as const,
+                blocks: [
+                  readonlyCollectionBlock(
+                    'table-markdown-rows',
+                    '/markdown/rows',
+                    'preset.table.markdownRows',
+                    'preset.table.noMarkdownRows',
+                    '/id',
+                    '/id',
+                    [
+                      readonlyFieldBlock(
+                        'table-markdown-row-cells',
+                        'textarea',
+                        '/cells',
+                        'preset.table.markdownCells',
+                      ),
+                      readonlyFieldBlock(
+                        'table-markdown-row-resources',
+                        'text',
+                        '/resources',
+                        'preset.table.markdownResources',
+                      ),
+                      readonlyFieldBlock(
+                        'table-markdown-row-action',
+                        'text',
+                        '/actionId',
+                        'preset.table.markdownAction',
+                      ),
+                    ],
+                  ),
+                ],
+              },
+            ]
+          : []),
       ],
       childSlots: [
         {
@@ -1454,6 +1487,15 @@ function areValuesEqual(left: unknown, right: unknown): boolean {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasMarkdownReviewRows(node: CanvasNodeDraft): boolean {
+  const rawData: unknown = node.data;
+  if (!isPlainRecord(rawData)) return false;
+  const rawMarkdown = rawData['markdown'];
+  if (!isPlainRecord(rawMarkdown)) return false;
+  const rawRows = rawMarkdown['rows'];
+  return Array.isArray(rawRows) && rawRows.length > 0;
 }
 
 function getMediaRuntimeBindingPath(node: CanvasNodeDraft): JsonPointerPath {

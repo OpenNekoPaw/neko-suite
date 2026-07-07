@@ -204,6 +204,15 @@ export interface ToolTraits {
   impactLevel: 'none' | 'low' | 'high' | 'critical';
 }
 
+export interface ToolRuntimeRequirements {
+  readonly vscode?: boolean;
+  readonly activeEditor?: boolean;
+  readonly mediaService?: boolean;
+  readonly engineBridge?: boolean;
+  readonly contentAccess?: boolean;
+  readonly writableProject?: boolean;
+}
+
 /**
  * Default traits for tools without explicit declaration.
  * Assumes safe, local, free, reversible — the most permissive defaults.
@@ -258,6 +267,8 @@ export interface Tool {
   safetyKind?: ToolSafetyKind;
   /** Target data needed before executing stateful mutation tools. */
   targetRequirements?: ToolTargetRequirements;
+  /** Runtime ports or host affordances required before this tool can be used. */
+  requirements?: ToolRuntimeRequirements;
   /** Query-before-mutate hints for planners and capability introspection. */
   queryBeforeMutate?: ToolQueryBeforeMutateGuidance;
   /** Behavioral traits for creative permission system */

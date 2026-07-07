@@ -647,7 +647,9 @@ function PlaybackStage({
       </div>
       <div className="canvas-playback-stage-details">
         <div className="canvas-playback-stage-kicker">{formatUnitKind(unit)}</div>
-        <div className="canvas-playback-stage-title">{unit.label ?? unit.id}</div>
+        <div className="canvas-playback-stage-title">
+          {formatPlaybackDisplayLabel(unit.label ?? unit.id)}
+        </div>
         <div className="canvas-playback-stage-meta">
           {t('playback.stage.position', {
             position: formatDurationMs(playheadMs),
@@ -743,11 +745,11 @@ function PlaybackRouteStrip({
               type="button"
               className="canvas-playback-route-tab"
               data-active={route.id === selectedRoute?.id ? 'true' : 'false'}
-              title={`${route.title} · ${route.unitIds.length}`}
+              title={`${formatPlaybackDisplayLabel(route.title)} · ${route.unitIds.length}`}
               onMouseDown={(event) => event.stopPropagation()}
               onClick={() => onSelectRoute(route)}
             >
-              {route.title}
+              {formatPlaybackDisplayLabel(route.title)}
             </button>
           ))}
           {hiddenRouteCount > 0 ? (
@@ -764,7 +766,9 @@ function PlaybackRouteStrip({
       <div className="canvas-playback-route-timeline">
         <div className="canvas-playback-route-track-label">
           <span className="canvas-playback-route-track-label-title">
-            {selectedRoute?.title ?? t('playback.route.title')}
+            {selectedRoute
+              ? formatPlaybackDisplayLabel(selectedRoute.title)
+              : t('playback.route.title')}
           </span>
           <span className="canvas-playback-route-track-label-meta">
             {segments.length} · {formatDurationMs(totalDurationMs)}
@@ -841,7 +845,7 @@ function PlaybackRouteStrip({
                   style={{
                     flexGrow: segment.durationMs,
                   }}
-                  title={segment.unit.label ?? segment.unit.id}
+                  title={formatPlaybackDisplayLabel(segment.unit.label ?? segment.unit.id)}
                   onMouseDown={(event) => event.stopPropagation()}
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
@@ -850,7 +854,7 @@ function PlaybackRouteStrip({
                   }}
                 >
                   <span className="canvas-playback-route-time-segment-label">
-                    {segment.unit.label ?? segment.unit.id}
+                    {formatPlaybackDisplayLabel(segment.unit.label ?? segment.unit.id)}
                   </span>
                   <span className="canvas-playback-route-time-segment-duration">
                     {formatDurationMs(segment.durationMs)}
@@ -981,12 +985,14 @@ function PlaybackUnitSummary({ unit }: { readonly unit: CanvasPlaybackUnit }) {
   return (
     <div className="canvas-playback-unit-summary">
       <PlayIcon size={28} />
-      <div className="canvas-playback-unit-summary-title">{unit.label ?? unit.id}</div>
+      <div className="canvas-playback-unit-summary-title">
+        {formatPlaybackDisplayLabel(unit.label ?? unit.id)}
+      </div>
       {metadataEntries.length > 0 ? (
         <dl className="canvas-playback-unit-summary-list">
           {metadataEntries.map(([key, value]) => (
             <div key={key} className="canvas-playback-unit-summary-row">
-              <dt>{key}</dt>
+              <dt>{formatSummaryKey(key)}</dt>
               <dd>{formatSummaryValue(value)}</dd>
             </div>
           ))}
@@ -1016,7 +1022,7 @@ function createPreviewSourceForUnit(unit: CanvasPlaybackUnit): PreviewSourceDesc
   return {
     id: `playback:${unit.id}`,
     role,
-    title: unit.label ?? unit.id,
+    title: formatPlaybackDisplayLabel(unit.label ?? unit.id),
     ...(previewUrl
       ? {
           variants: [
@@ -1109,6 +1115,45 @@ function formatSummaryValue(value: unknown): string {
   if (Array.isArray(value)) return `${value.length}`;
   if (isRecord(value)) return '{...}';
   return '';
+}
+
+function formatSummaryKey(key: string): string {
+  switch (key) {
+    case 'shotNumber':
+      return t('playback.metadata.shotNumber');
+    case 'duration':
+      return t('playback.metadata.duration');
+    case 'visualDescription':
+      return t('playback.metadata.visualDescription');
+    case 'characters':
+      return t('playback.metadata.characters');
+    case 'shotScale':
+      return t('playback.metadata.shotScale');
+    case 'cameraAngle':
+      return t('playback.metadata.cameraAngle');
+    case 'cameraMovement':
+      return t('playback.metadata.cameraMovement');
+    case 'characterAction':
+      return t('playback.metadata.characterAction');
+    case 'generationStatus':
+      return t('playback.metadata.generationStatus');
+    case 'mediaType':
+      return t('playback.metadata.mediaType');
+    case 'previewMediaType':
+      return t('playback.metadata.previewMediaType');
+    case 'sourceCanvasName':
+      return t('playback.metadata.sourceCanvasName');
+    default:
+      return key;
+  }
+}
+
+function formatPlaybackDisplayLabel(label: string): string {
+  const defaultShotMatch = /^Shot\s+(\d+)$/i.exec(label.trim());
+  if (defaultShotMatch?.[1]) {
+    return t('playback.label.defaultShot', { number: defaultShotMatch[1] });
+  }
+  return label;
 }
 
 function readString(value: unknown): string | undefined {

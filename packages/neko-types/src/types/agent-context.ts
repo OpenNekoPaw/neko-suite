@@ -22,7 +22,8 @@ export type AgentContextType =
   | 'audio-clip'
   | 'file'
   | 'image'
-  | 'document-selection';
+  | 'document-selection'
+  | 'canvas-storyboard-action-intent';
 
 /**
  * Unified context payload sent from any sub-package to the agent panel.

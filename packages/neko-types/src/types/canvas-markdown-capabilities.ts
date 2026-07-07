@@ -15,7 +15,6 @@ export const CANVAS_MARKDOWN_CAPABILITY_IDS = [
   'canvas.ingestMarkdown',
   'canvas.createMarkdownNote',
   'canvas.createTableFromMarkdown',
-  'canvas.createStoryboardDraftFromMarkdown',
   'canvas.createStoryboardFromMarkdown',
   'canvas.attachResource',
   'canvas.validateMarkdownStoryboard',
@@ -179,10 +178,6 @@ export interface CanvasCreateTableFromMarkdownInput extends CanvasMarkdownCapabi
   readonly tableTitle?: string;
 }
 
-export interface CanvasCreateStoryboardDraftFromMarkdownInput extends CanvasMarkdownCapabilityBaseInput {
-  readonly capabilityId: 'canvas.createStoryboardDraftFromMarkdown';
-}
-
 export interface CanvasCreateStoryboardFromMarkdownInput extends CanvasMarkdownCapabilityBaseInput {
   readonly capabilityId: 'canvas.createStoryboardFromMarkdown';
   readonly mode?: 'review-first' | 'create-nodes';
@@ -205,7 +200,6 @@ export type CanvasMarkdownCapabilityInput =
   | CanvasIngestMarkdownInput
   | CanvasCreateMarkdownNoteInput
   | CanvasCreateTableFromMarkdownInput
-  | CanvasCreateStoryboardDraftFromMarkdownInput
   | CanvasCreateStoryboardFromMarkdownInput
   | CanvasAttachResourceInput
   | CanvasValidateMarkdownStoryboardInput;
@@ -217,7 +211,6 @@ export interface CanvasMarkdownCapabilityResult {
   readonly profileId?: string;
   readonly displayFallback?: boolean;
   readonly nodeIds?: readonly string[];
-  readonly draftNodeId?: string;
   readonly tableNodeId?: string;
   readonly diagnostics: readonly CanvasMarkdownCapabilityDiagnostic[];
   readonly actions?: readonly CanvasMarkdownCapabilityAction[];
@@ -401,7 +394,6 @@ export function isCanvasMarkdownCapabilityResult(
     (value['displayFallback'] === undefined || typeof value['displayFallback'] === 'boolean') &&
     (value['nodeIds'] === undefined ||
       (Array.isArray(value['nodeIds']) && value['nodeIds'].every(isNonEmptyString))) &&
-    optionalString(value['draftNodeId']) &&
     optionalString(value['tableNodeId']) &&
     Array.isArray(value['diagnostics']) &&
     value['diagnostics'].every(isCanvasMarkdownCapabilityDiagnostic) &&

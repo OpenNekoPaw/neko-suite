@@ -1,11 +1,9 @@
 import { useMemo, type ReactNode } from 'react';
 import type { CanvasData, CanvasSubsystemId } from '@neko/shared';
 import { CloseIcon } from '@neko/ui/icons';
-import { SegmentedControl, Switch } from '@neko/ui/primitives';
+import { Switch } from '@neko/ui/primitives';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
 import { t } from '../../i18n';
-
-export type CanvasNodeTreeMode = 'basic' | 'professional';
 
 export interface CanvasSettingsPanelProps {
   canvasData: CanvasData;
@@ -16,10 +14,6 @@ export interface CanvasSettingsPanelProps {
   onGridVisibleChange: (visible: boolean) => void;
   isHudVisible: boolean;
   onHudVisibleChange: (visible: boolean) => void;
-  isNodeTreeVisible: boolean;
-  onNodeTreeVisibleChange: (visible: boolean) => void;
-  nodeTreeMode: CanvasNodeTreeMode;
-  onNodeTreeModeChange: (mode: CanvasNodeTreeMode) => void;
   onClose: () => void;
 }
 
@@ -32,10 +26,6 @@ export function CanvasSettingsPanel({
   onGridVisibleChange,
   isHudVisible,
   onHudVisibleChange,
-  isNodeTreeVisible,
-  onNodeTreeVisibleChange,
-  nodeTreeMode,
-  onNodeTreeModeChange,
   onClose,
 }: CanvasSettingsPanelProps) {
   const nodeTypeSummaryText = useMemo(
@@ -175,34 +165,6 @@ export function CanvasSettingsPanel({
             onCheckedChange={onHudVisibleChange}
           />
         </SettingsSection>
-
-        <SettingsSection title={t('settings.nodeTree')}>
-          <SettingSwitch
-            checked={isNodeTreeVisible}
-            id="canvas-settings-node-tree-visible"
-            label={t('settings.nodeTreeVisible')}
-            onCheckedChange={onNodeTreeVisibleChange}
-          />
-          <div className="flex min-w-0 items-center justify-between gap-3 py-1">
-            <span
-              className="min-w-0 truncate"
-              style={{ color: 'var(--toolbar-fg-secondary)' }}
-            >
-              {t('settings.nodeTreeMode')}
-            </span>
-            <SegmentedControl
-              className="shrink-0"
-              controls="canvas-right-node-tree-panel"
-              label={t('settings.nodeTreeMode')}
-              options={[
-                { value: 'basic', label: t('rightDock.mode.basic') },
-                { value: 'professional', label: t('rightDock.mode.professional') },
-              ]}
-              value={nodeTreeMode}
-              onValueChange={(value) => onNodeTreeModeChange(toCanvasNodeTreeMode(value))}
-            />
-          </div>
-        </SettingsSection>
       </div>
     </section>
   );
@@ -286,10 +248,7 @@ function SettingSwitch({
         label={label}
         onCheckedChange={onCheckedChange}
       />
-      <span
-        className="shrink-0 text-[11px]"
-        style={{ color: 'var(--toolbar-fg-secondary)' }}
-      >
+      <span className="shrink-0 text-[11px]" style={{ color: 'var(--toolbar-fg-secondary)' }}>
         {checked ? t('settings.enabled') : t('settings.disabled')}
       </span>
     </div>
@@ -303,8 +262,4 @@ function formatNodeTypeSummary(summary: Readonly<Record<string, number>>): strin
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([type, count]) => `${type} ${count}`)
     .join(' / ');
-}
-
-function toCanvasNodeTreeMode(value: string): CanvasNodeTreeMode {
-  return value === 'professional' ? 'professional' : 'basic';
 }

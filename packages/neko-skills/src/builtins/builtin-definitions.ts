@@ -677,6 +677,7 @@ const localizedAiGenerateContent: LocalizedBuiltinSkillContent = {
 1. **立即生成** - 使用默认参数并直接调用工具
 2. **使用工具调用** - 不要在回复中直接嵌入 URL
 3. **不要先追问** - 除非用户明确说想先讨论细节，否则用合理默认值生成
+4. **保持提示词语言** - 工具参数 prompt 默认使用用户当前语言；除非用户要求英文或 provider 明确要求，否则不要自动翻译成英文
 
 ## 快速参考
 
@@ -714,6 +715,8 @@ User Request → Identify Type → Select Tool → Confirm Params → Generate
 \`taskRef\` 或 \`planRef\`，让运行时把该 markdown 作为结构化意图锚点。
 structured intent 来自 markdown 或 prompt metadata。
 
+提示词语言：填写工具参数 \`prompt\` 时保留用户当前语言的创意表达；不要只因为要调用工具就改写成英文。
+
 默认策略：
 - prompt only → native provider prompt
 - taskRef / planRef → 从 markdown 提取 generation intent，同时保留文档作为 structured anchor
@@ -723,17 +726,17 @@ structured intent 来自 markdown 或 prompt metadata。
 ## 图像生成技巧
 
 ### 提示词结构
-[Subject] + [Style] + [Details] + [Atmosphere] + [Technical]
+主体 + 风格 + 细节 + 氛围 + 技术要求
 
 ### 尺寸选择
-- Social media cover: 1792x1024 (16:9)
-- Square avatar: 1024x1024 (1:1)
-- Phone wallpaper: 1024x1792 (9:16)
+- 社交媒体封面：1792x1024 (16:9)
+- 方形头像：1024x1024 (1:1)
+- 手机壁纸：1024x1792 (9:16)
 
 ### 风格关键词
-- Art styles: oil painting, watercolor, digital art, anime style, pixel art
-- Lighting: golden hour, soft lighting, dramatic lighting, neon lights
-- Technical: 4k, highly detailed, sharp focus, bokeh
+- 艺术风格：油画、水彩、数字艺术、日系动画、像素艺术
+- 光线：黄金时刻、柔和光、戏剧化光线、霓虹灯
+- 技术要求：4k、高细节、清晰对焦、浅景深
 
 ## 视频生成技巧
 
@@ -1202,11 +1205,7 @@ export function getScriptToTimelineSkill(locale?: string): Skill {
 }
 
 export function getQualityAssessmentSkill(locale?: string): Skill {
-  return localizeBuiltinSkill(
-    qualityAssessmentSkill,
-    localizedQualityAssessmentContent,
-    locale,
-  );
+  return localizeBuiltinSkill(qualityAssessmentSkill, localizedQualityAssessmentContent, locale);
 }
 
 // Note: pipelineDiagnosticsSkill removed — pipeline introspection used to

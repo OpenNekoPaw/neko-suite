@@ -6,7 +6,7 @@
  */
 
 import type { Skill } from '@neko/shared';
-import { TOOL_NAMES_CANVAS, TOOL_NAMES_SYSTEM } from '@neko/shared';
+import { TOOL_NAMES_SYSTEM } from '@neko/shared';
 import { localizeBuiltinSkill, normalizeBuiltinSkillLocale } from './builtin-skill-content';
 import comicToStoryboardContent from './markdown/comic-to-storyboard.md?raw';
 import comicToStoryboardZhCnContent from './markdown/comic-to-storyboard.zh-cn.md?raw';
@@ -38,11 +38,6 @@ export const comicToStoryboardSkill: Skill = {
     TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,
     TOOL_NAMES_SYSTEM.GLOB,
-    // Agent-led Canvas handoff. These remain confirmation/lifecycle gated by Canvas.
-    TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN,
-    TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_DRAFT_FROM_MARKDOWN,
-    TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN,
-    TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD,
   ],
   icon: '📚',
   source: 'builtin',
@@ -69,13 +64,12 @@ export const comicToStoryboardSkill: Skill = {
     inputArtifacts: ['comic', 'manga', 'webtoon', 'PDF', 'image-sequence', 'MediaTextSegment'],
     producedArtifacts: ['CreativeTable'],
     artifactProfiles: ['storyboard'],
-    referencedCapabilities: ['canvas.ingestMarkdown', 'canvas.validateMarkdownStoryboard'],
-    suggestedProjectors: ['capability:canvas.ingestMarkdown'],
+    referencedCapabilities: ['canvas.authoring'],
     tags: ['comic', 'manga', 'storyboard'],
     operations: ['create-storyboard', 'shot-breakdown', 'panel-analysis', 'ocr-to-storyboard'],
     costLevel: 'low',
     riskLevel: 'low',
-    validationRequirements: ['CanvasMarkdownCapabilityInput'],
+    validationRequirements: ['CreativeTable'],
     optionalTools: [TOOL_NAMES_SYSTEM.READ_IMAGE, TOOL_NAMES_SYSTEM.QUERY_SEMANTIC_COVERAGE],
   },
 };

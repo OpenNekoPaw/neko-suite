@@ -4,6 +4,7 @@ import {
   createResourceFingerprint,
   createResourceRef,
   type ContentAccessRequest,
+  type ContentDocumentSourceRef,
   type ContentIngestRequest,
   type ResourceRef,
   type ResourceVariantRequest,
@@ -353,6 +354,51 @@ describe('content access providers', () => {
       providerId: 'document-entry-content-access',
     });
     expect(text(result.bytes)).toBe('/media/books/comic.epub:OPS/page-1.jpg');
+  });
+
+  it('reads content document source entry bytes for agent image context before cache fallback', async () => {
+    const cache = createResourceCache({
+      absolutePath: '/workspace/demo/.neko/.cache/resources/page-1.jpg',
+      bytes: bytes('cached-image'),
+    });
+    const provider = new DocumentEntryContentAccessProvider({
+      projectRoot: '/workspace/demo',
+      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      resourceCache: cache,
+      entryReader: async ({ sourcePath, entryPath }) => bytes(`${sourcePath}:${entryPath}`),
+    });
+    const documentSource: ContentDocumentSourceRef = {
+      kind: 'document',
+      source: {
+        kind: 'document',
+        document: {
+          filePath: '${BOOKS}/comic.epub',
+          format: 'epub',
+        },
+      },
+      entryPath: 'OPS/page-1.jpg',
+      locator: {
+        kind: 'document',
+        entryPath: 'OPS/page-1.jpg',
+        locator: { kind: 'chapter', chapterHref: 'OPS/page-1.xhtml' },
+      },
+    };
+    const request: ContentAccessRequest = {
+      ref: documentSource,
+      intent: 'agent-context',
+      target: 'bytes',
+    };
+
+    expect(provider.supports(request)).toBe(true);
+
+    const result = await provider.resolve({ request });
+
+    expect(result).toMatchObject({
+      status: 'ready',
+      providerId: 'document-entry-content-access',
+    });
+    expect(text(result.bytes)).toBe('/media/books/comic.epub:OPS/page-1.jpg');
+    expect(cache.resolve).not.toHaveBeenCalled();
   });
 
   it('rejects whole document archive bytes instead of falling back to source-file reads', async () => {

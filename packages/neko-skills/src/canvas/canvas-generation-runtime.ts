@@ -1,3 +1,4 @@
+import { projectShotDataPrompt, type CanvasStoryboardPromptState } from '@neko/shared';
 import type { ReferenceDescriptor } from '@neko/shared';
 
 export type CanvasPromptRole = 'system' | 'user' | 'assistant';
@@ -16,6 +17,7 @@ export interface CanvasPromptLLM {
 
 export interface CanvasShotPromptData {
   readonly visualDescription?: string;
+  readonly storyboardPrompt?: CanvasStoryboardPromptState;
   readonly characters?: readonly { readonly characterName: string }[];
   readonly shotScale?: string;
   readonly cameraMovement?: string;
@@ -32,14 +34,7 @@ export interface CanvasShotPromptData {
 export type CanvasGenerationStatus = 'pending' | 'generating' | 'done' | 'error';
 
 export type CanvasControlMode =
-  | 'canny'
-  | 'depth'
-  | 'pose'
-  | 'normal'
-  | 'segment'
-  | 'lineart'
-  | 'softedge'
-  | 'scribble';
+  'canny' | 'depth' | 'pose' | 'normal' | 'segment' | 'lineart' | 'softedge' | 'scribble';
 
 export interface CanvasIpAdapterReferenceInput {
   readonly imageBase64: string;
@@ -215,10 +210,7 @@ export class CanvasGenerationRuntime {
     }
 
     const response = await this.deps.chat.chat(
-      buildCanvasShotPromptMessages(
-        shotData,
-        this.deps.locale ? { locale: this.deps.locale } : {},
-      ),
+      buildCanvasShotPromptMessages(shotData, this.deps.locale ? { locale: this.deps.locale } : {}),
       {
         maxTokens: CANVAS_PROMPT_MAX_TOKENS,
       },
@@ -299,6 +291,7 @@ export function buildCanvasShotPromptUserContent(
   const labels = isChineseCanvasLocale(options.locale)
     ? {
         scene: '场景',
+        promptDocument: '语义提示词',
         style: '风格',
         characters: '角色',
         shotScale: '景别',
@@ -312,6 +305,7 @@ export function buildCanvasShotPromptUserContent(
       }
     : {
         scene: 'Scene',
+        promptDocument: 'Semantic prompt',
         style: 'Style',
         characters: 'Characters',
         shotScale: 'Shot scale',
@@ -324,8 +318,9 @@ export function buildCanvasShotPromptUserContent(
         fallback: 'Generate an image prompt for this shot.',
       };
   const parts: string[] = [];
-  if (shotData.generationPrompt) {
-    parts.push(`${labels.scene}: ${shotData.generationPrompt}`);
+  const promptProjection = projectShotDataPrompt(shotData, { preferredBlockKind: 'image' });
+  if (promptProjection.source === 'semantic-prompt-document') {
+    parts.push(`${labels.promptDocument}: ${promptProjection.prompt}`);
   } else if (shotData.visualDescription) {
     parts.push(`${labels.scene}: ${shotData.visualDescription}`);
   }

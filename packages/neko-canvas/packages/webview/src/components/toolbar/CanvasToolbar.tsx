@@ -5,7 +5,7 @@
  * - Select / Hand tools
  * - Right node tree/library panel toggle
  * - Undo / Redo
- * - Canvas workspace surfaces
+ * - Playback workspace surfaces
  * - Canvas settings
  *
  * Uses shared ToolbarButton for consistent active state and hover styling.
@@ -33,6 +33,8 @@ import {
 } from '@neko/ui/icons';
 import type { PlaybackWorkspacePane } from '../../stores/playbackStore';
 
+type PlaybackToolbarSurfacePane = Exclude<PlaybackWorkspacePane, 'canvas'>;
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -46,9 +48,9 @@ export interface CanvasToolbarProps {
   /** Node tree/library panel visibility */
   isNodeLibraryVisible?: boolean;
   onToggleNodeLibrary?: () => void;
-  /** Canvas workspace surface visibility, controlled from the left rail. */
-  workspaceSurfaceState?: Readonly<Record<PlaybackWorkspacePane, boolean>>;
-  onToggleWorkspaceSurface?: (pane: PlaybackWorkspacePane) => void;
+  /** Playback workspace surface visibility, controlled from the left rail. */
+  workspaceSurfaceState?: Readonly<Record<PlaybackToolbarSurfacePane, boolean>>;
+  onToggleWorkspaceSurface?: (pane: PlaybackToolbarSurfacePane) => void;
   /** Opens the Extension Host-owned rendered export picker */
   onOpenExport?: () => void;
   /** Opens the Extension Host-owned no-engine project package flow */
@@ -165,21 +167,6 @@ export function CanvasToolbar({
         <>
           <ToolbarSeparator />
 
-          <ToolbarButton
-            aria-controls="canvas-playback-canvas-pane"
-            aria-expanded={workspaceSurfaceState.canvas}
-            data-creative-left-rail-action="toggle-playback-canvas-pane"
-            data-creative-left-rail-kind="visibility-toggle"
-            data-creative-left-rail-target="playback-canvas"
-            icon={<RightPanelIcon size={18} />}
-            title={
-              workspaceSurfaceState.canvas
-                ? t('playback.workspace.hideCanvas')
-                : t('playback.workspace.showCanvas')
-            }
-            active={workspaceSurfaceState.canvas}
-            onClick={() => onToggleWorkspaceSurface('canvas')}
-          />
           <ToolbarButton
             aria-controls="canvas-playback-stage-pane"
             aria-expanded={workspaceSurfaceState.stage}
