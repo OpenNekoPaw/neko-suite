@@ -113,6 +113,12 @@ These rules adapt general multimodal video prompt-engineering practice as writin
 - Video generation prompts must direct the model to create video: include character appearance, motion continuity, camera movement, visible change, rhythm, and constraints. Do not use OCR, panel-analysis notes, status codes, plan summaries, or "needs reference processing" as the video prompt.
 - Video editing prompts must say what to preserve, what to change, and how it changes: preserve composition, character identity, scene relation, or action rhythm from the source; target changes to character motion, expression, dialogue, background, effects, camera, or audio; state what must not change.
 - When audio has generation value, include it in `videoPrompt` or `dialogue`: dialogue text, speaker, emotion, delivery, ambience, music beat, and audio-visual sync. Put visible SFX lettering or uncertain OCR in extension metadata instead.
+- Operation-specific prompt intent:
+  - `generate-video`: write a complete scene video generation prompt with subject/character, scene, emotion, shot-ordered or time-coded beats, camera, transition/effects, audio/dialogue, style, duration, and constraints.
+  - `edit-video`: write what to preserve, what to modify, and how scene, character, action, dialogue, camera, background, effects, or audio should change.
+  - `optimize-video-prompt`: complete missing subject, scene, beat timing, camera movement, audio, style, duration, and constraints before generation.
+  - `process-reference` / `optimize-image-prompt`: write image preparation or image generation steps, not a video prompt. Include crop/split/rotate, text removal, colorization, inpaint/outpaint, redraw, repair, style normalization, and output constraints when relevant.
+- Common prompt failure checks: ambiguous references, conflicting instructions, overloaded content, unassigned resources, and duration mismatch. These are prompt-writing diagnostics, not extra table fields or Canvas schema.
 - Prompt self-check: every non-empty `imagePrompt` / `videoPrompt` must answer "which reference is used, what is being made, who the subject is, where it happens, how it moves or changes, how the camera behaves, how long it lasts, and what must be preserved or avoided". If it cannot, leave the prompt blank and use `nextAction` to request visual analysis or prompt optimization.
 
 ### Field Roles
@@ -140,7 +146,15 @@ Add more extension columns after the primary stable headers when useful, for exa
 
 ## Canvas Handoff
 
-If the user asks to send the table to Canvas, use the available Canvas lifecycle tool/capability from the runtime tool list. Local UI/tool adapters carry the actual stable resource refs. Do not claim Canvas success unless a Canvas capability/tool returns success.
+When the user asks to generate a storyboard and send it to Canvas, first finish and output the single Markdown creative table. Do not call Canvas tools instead of generating the storyboard table.
+
+The first storyboard draft must be visible as an assistant Markdown block before any Canvas Markdown tool is called. Do not hide the initial table inside `canvas.validateMarkdownStoryboard`, `canvas.createStoryboardFromMarkdown`, `canvas.ingestMarkdown`, or any other tool arguments. If no visible assistant Markdown block or UI handoff source exists yet, output the table and stop; wait for the user/UI Send to Canvas handoff before calling Canvas tools.
+
+After that table exists, use the available Canvas lifecycle tool/capability from the runtime tool list. Local UI/tool adapters carry the actual stable resource refs. Do not claim Canvas success unless a Canvas capability/tool returns success.
+
+Use canvas.createStoryboardFromMarkdown for production scene/shot nodes. Pass the completed table as the Markdown source with `profileHint=storyboard`, `mode=create-nodes`, and explicit approval context when the tool supports those fields. If Canvas blocks creation, report the diagnostics and repair the table/approval/resource binding before retrying.
+
+canvas.ingestMarkdown is only a review-only table fallback. Use it only when the user explicitly wants a Canvas review table/draft node, and never present a review-only table node as successful production storyboard delivery.
 
 Use validation or review actions before mutating production nodes. Do not output domain node JSON or other project-internal handoff objects.
 

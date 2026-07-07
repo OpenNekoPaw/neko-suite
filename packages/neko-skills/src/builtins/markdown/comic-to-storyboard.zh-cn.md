@@ -113,6 +113,12 @@ validator 支持开放的审阅 metadata，不要求证据不足或任务不需�
 - 视频生成提示词要指导模型生成新视频：描述人物外观、动作连续性、镜头运动、画面变化、节奏和约束。不要把 OCR、分格分析、状态码、计划摘要或“需要处理参考图”写成视频提示词。
 - 视频编辑提示词要写清保留什么、修改什么、如何变化：保留原视频/参考的构图、人物身份、场景关系或动作节奏；定向修改人物动作、表情、对白、背景、特效、镜头或音频；说明不能改变的元素。
 - 音频内容有生成意义时，写进 `videoPrompt` 或 `dialogue`：对白文本、说话者、情绪、语气、环境声、音乐节拍和音画同步。只有可见音效字或不确定 OCR 时，放入扩展 metadata。
+- 按操作类型写提示词意图：
+  - `generate-video`：写完整场景视频生成提示词，包含主体/人物、场景、情绪、按镜号或时间段排列的节拍、运镜、转场/特效、音频/对白、风格、时长和约束。
+  - `edit-video`：写清保留什么、修改什么，以及场景、人物、动作、对白、镜头、背景、特效或音频如何变化。
+  - `optimize-video-prompt`：在生成前补齐主体、场景、节拍时间、运镜、音频、风格、时长和约束。
+  - `process-reference` / `optimize-image-prompt`：写图片准备或图片生成步骤，不要写成视频提示词。需要时包含裁切/切分/旋转、去文字、上色、局部重绘/扩图、重绘、修复、风格统一和输出约束。
+- 常见提示词错误自检：引用模糊、指令冲突、内容过载、素材无归属、时长不匹配。这些是提示词写作 diagnostics，不是新增表格字段或 Canvas schema。
 - 提示词自检：每个非空 `imagePrompt` / `videoPrompt` 都必须回答“用哪个参考、做什么、主体是谁、在哪里、怎么运动或变化、镜头怎么拍、持续多久、保留/禁止什么”。答不出来就留空并用 `nextAction` 说明需要补充视觉分析或提示词优化。
 
 ### 字段角色
@@ -140,7 +146,15 @@ validator 支持开放的审阅 metadata，不要求证据不足或任务不需�
 
 ## Canvas 交接
 
-如果用户要求发送到 Canvas，使用运行时工具列表中可用的 Canvas lifecycle tool/capability。本地 UI/tool adapter 会携带真实稳定 resource refs。除非 Canvas capability/tool 返回成功，不要声称 Canvas 成功。
+当用户要求“生成分镜表并发送到 Canvas”时，先完成并输出唯一的 Markdown creative table。不要用 Canvas 工具替代分镜表生成。
+
+分镜初稿必须先作为可见 assistant Markdown 块出现在聊天中，才能调用任何 Canvas Markdown 工具。不要把初次生成的表格藏进 `canvas.validateMarkdownStoryboard`、`canvas.createStoryboardFromMarkdown`、`canvas.ingestMarkdown` 或其他工具参数里。如果当前还没有可见 assistant Markdown 块或 UI handoff 来源，先输出表格并停止；等待用户/UI 的 Send to Canvas handoff 后再调用 Canvas 工具。
+
+这张表已经存在后，再使用运行时工具列表中可用的 Canvas lifecycle tool/capability。本地 UI/tool adapter 会携带真实稳定 resource refs。除非 Canvas capability/tool 返回成功，不要声称 Canvas 成功。
+
+生产 scene/shot 节点使用 canvas.createStoryboardFromMarkdown。将已完成的表格作为 Markdown 来源传入，并在工具支持时传入 `profileHint=storyboard`、`mode=create-nodes` 和显式 approval context。如果 Canvas 阻塞创建，报告 diagnostics，并修复表格、审批或资源绑定后再重试。
+
+canvas.ingestMarkdown 只能作为 review-only 表格/草稿摄入。只有用户明确需要 Canvas 审阅表格/草稿节点时才使用它，不要把 review-only table 节点说成生产分镜交付成功。
 
 变更生产节点前，先走 validation 或 review action。不要输出领域节点 JSON 或其他项目内部交接对象。
 

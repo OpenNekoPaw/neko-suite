@@ -1065,36 +1065,7 @@ const BUILT_IN_CONTENT_PRESETS: CanvasNodePreset[] = [
                 id: 'table-markdown-review',
                 title: 'preset.table.markdownReview',
                 layout: 'stack' as const,
-                blocks: [
-                  readonlyCollectionBlock(
-                    'table-markdown-rows',
-                    '/markdown/rows',
-                    'preset.table.markdownRows',
-                    'preset.table.noMarkdownRows',
-                    '/id',
-                    '/id',
-                    [
-                      readonlyFieldBlock(
-                        'table-markdown-row-cells',
-                        'textarea',
-                        '/cells',
-                        'preset.table.markdownCells',
-                      ),
-                      readonlyFieldBlock(
-                        'table-markdown-row-resources',
-                        'text',
-                        '/resources',
-                        'preset.table.markdownResources',
-                      ),
-                      readonlyFieldBlock(
-                        'table-markdown-row-action',
-                        'text',
-                        '/actionId',
-                        'preset.table.markdownAction',
-                      ),
-                    ],
-                  ),
-                ],
+                blocks: [markdownReviewTableBlock('table-markdown-rows', '/markdown')],
               },
             ]
           : []),
@@ -1286,6 +1257,19 @@ function readonlyFieldBlock(
     kind,
     label,
     binding: { path, valueType: kind === 'number' ? 'number' : 'string', mode: 'read' },
+  };
+}
+
+function markdownReviewTableBlock(id: string, path: JsonPointerPath): CanvasBlock {
+  return {
+    id,
+    kind: 'custom',
+    label: 'preset.table.markdownRows',
+    binding: { path, valueType: 'object', mode: 'read' },
+    metadata: {
+      presentation: 'markdown-review-table',
+      emptyLabel: 'preset.table.noMarkdownRows',
+    },
   };
 }
 

@@ -592,6 +592,7 @@ export const zhCN = {
   'scene.action.retry': '重试',
   'scene.missingImage': '缺少图片',
   'scene.missingDialogue': '缺少台词',
+  'scene.column.scene': '场景',
   'scene.column.shot': '镜头',
   'scene.column.image': '图片',
   'scene.column.referenceMedia': '参考素材',

@@ -129,6 +129,20 @@ describe('@neko/skills builtins', () => {
       'Use the base shape "scene intent / reference resources and their roles / subject characters and emotion / scene environment / shot-numbered or time-coded action beats / camera transitions / environmental change or effects / dialogue, narration, SFX, or silence / total duration / constraints".',
     );
     expect(english).toContain('For long scenes or intents over 10 seconds');
+    expect(english).toContain('Operation-specific prompt intent:');
+    expect(english).toContain(
+      '`generate-video`: write a complete scene video generation prompt',
+    );
+    expect(english).toContain(
+      '`edit-video`: write what to preserve, what to modify, and how scene, character, action, dialogue, camera, background, effects, or audio should change.',
+    );
+    expect(english).toContain(
+      '`process-reference` / `optimize-image-prompt`: write image preparation or image generation steps, not a video prompt.',
+    );
+    expect(english).toContain(
+      'Common prompt failure checks: ambiguous references, conflicting instructions, overloaded content, unassigned resources, and duration mismatch.',
+    );
+    expect(english).toContain('not extra table fields or Canvas schema');
     expect(english).toContain('Prompt self-check: every non-empty `imagePrompt` / `videoPrompt`');
 
     expect(zhCn).toContain(
@@ -156,7 +170,50 @@ describe('@neko/skills builtins', () => {
       '基础结构是“场景意图 / 参考资源及用途 / 主体人物与情绪 / 场景环境 / 按镜号或时间段排列的动作节拍 / 运镜连接 / 环境变化或特效 / 对白、旁白、音效或无对白 / 总时长 / 约束”。',
     );
     expect(zhCn).toContain('长 scene 或 10 秒以上意图');
+    expect(zhCn).toContain('按操作类型写提示词意图：');
+    expect(zhCn).toContain(
+      '`generate-video`：写完整场景视频生成提示词，包含主体/人物、场景、情绪、按镜号或时间段排列的节拍、运镜、转场/特效、音频/对白、风格、时长和约束。',
+    );
+    expect(zhCn).toContain(
+      '`edit-video`：写清保留什么、修改什么，以及场景、人物、动作、对白、镜头、背景、特效或音频如何变化。',
+    );
+    expect(zhCn).toContain(
+      '`process-reference` / `optimize-image-prompt`：写图片准备或图片生成步骤，不要写成视频提示词。',
+    );
+    expect(zhCn).toContain(
+      '常见提示词错误自检：引用模糊、指令冲突、内容过载、素材无归属、时长不匹配。',
+    );
+    expect(zhCn).toContain('不是新增表格字段或 Canvas schema');
     expect(zhCn).toContain('提示词自检：每个非空 `imagePrompt` / `videoPrompt`');
+  });
+
+  it('keeps comic storyboard Canvas handoff after the reviewable table is complete', () => {
+    const english = getComicToStoryboardSkill().content;
+    const zhCn = getComicToStoryboardSkill('zh-CN').content;
+
+    expect(english).toContain(
+      'When the user asks to generate a storyboard and send it to Canvas, first finish and output the single Markdown creative table.',
+    );
+    expect(english).toContain(
+      'Do not call Canvas tools instead of generating the storyboard table.',
+    );
+    expect(english).toContain(
+      'The first storyboard draft must be visible as an assistant Markdown block before any Canvas Markdown tool is called.',
+    );
+    expect(english).toContain('If no visible assistant Markdown block or UI handoff source exists yet');
+    expect(english).toContain(
+      'Use canvas.createStoryboardFromMarkdown for production scene/shot nodes.',
+    );
+    expect(english).toContain('canvas.ingestMarkdown is only a review-only table fallback.');
+
+    expect(zhCn).toContain(
+      '当用户要求“生成分镜表并发送到 Canvas”时，先完成并输出唯一的 Markdown creative table。',
+    );
+    expect(zhCn).toContain('不要用 Canvas 工具替代分镜表生成。');
+    expect(zhCn).toContain('分镜初稿必须先作为可见 assistant Markdown 块出现在聊天中');
+    expect(zhCn).toContain('先输出表格并停止');
+    expect(zhCn).toContain('生产 scene/shot 节点使用 canvas.createStoryboardFromMarkdown。');
+    expect(zhCn).toContain('canvas.ingestMarkdown 只能作为 review-only 表格/草稿摄入。');
   });
 
   it('keeps image-to-shot prompt guidance aligned with storyboard prompt style', () => {

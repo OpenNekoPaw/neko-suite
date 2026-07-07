@@ -1267,7 +1267,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).not.toContain('Default path');
   });
 
-  it('renders Markdown review rows inside table.basic nodes', () => {
+  it('renders Markdown review rows as a table inside table.basic nodes', () => {
     const node = {
       ...buildCanvasNode({
         type: 'table',
@@ -1280,12 +1280,20 @@ describe('NodeContentDispatcher', () => {
           rowCount: 1,
           markdown: {
             tableProfile: 'storyboard',
+            columns: [
+              { id: 'scene', label: 'scene' },
+              { id: 'shot', label: 'shot' },
+              { id: 'source', label: 'source' },
+              { id: 'imagePrompt', label: 'imagePrompt' },
+              { id: 'videoPrompt', label: 'videoPrompt' },
+            ],
             rows: [
               {
                 id: 'row-1',
                 cells: {
                   scene: 'Rain hallway',
                   shot: '1',
+                  source: 'P1#panel_1',
                   imagePrompt: 'colorize and repair the panel',
                   videoPrompt: 'slow dolly-in as Aki turns back',
                 },
@@ -1307,11 +1315,19 @@ describe('NodeContentDispatcher', () => {
     );
 
     expect(markup).toContain('data-content-block-id="table-markdown-rows"');
+    expect(markup).toContain('data-markdown-review-table="true"');
+    expect(markup).toContain('<table');
+    expect(markup).toContain('<thead');
+    expect(markup).toContain('<tbody');
+    expect(markup).toContain('data-markdown-review-column="scene"');
+    expect(markup).toContain('data-markdown-review-cell="imagePrompt"');
     expect(markup).toContain('Rain hallway');
+    expect(markup).toContain('P1#panel_1');
     expect(markup).toContain('colorize and repair the panel');
     expect(markup).toContain('slow dolly-in as Aki turns back');
-    expect(markup).toContain('P1');
-    expect(markup).toContain('create-storyboard-nodes');
+    expect(markup).not.toContain('data-content-block-id="table-markdown-row-cells"');
+    expect(markup).not.toContain('Cells');
+    expect(markup).not.toContain('Item 1');
     expect(markup).not.toContain('Default path');
   });
 

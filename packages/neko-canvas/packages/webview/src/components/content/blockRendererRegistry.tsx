@@ -42,7 +42,7 @@ export function createBuiltInBlockRendererRegistry(): BlockRendererRegistry {
     projection: renderProjectionBlock,
     'child-node-slot': renderChildNodeSlotBlock,
     select: renderSelectBlock,
-    custom: renderDefaultBlock,
+    custom: renderCustomBlock,
   };
 }
 
@@ -262,6 +262,68 @@ function renderProjectionBlock(context: BlockRendererContext): React.ReactNode {
   return (
     <div className="rounded border border-dashed border-[var(--node-border)] px-2 py-1 text-xs text-[var(--node-fg-secondary)]">
       {context.block.label ?? context.block.projection?.kind ?? 'Projection'}
+    </div>
+  );
+}
+
+function renderCustomBlock(context: BlockRendererContext): React.ReactNode {
+  if (context.block.metadata?.['presentation'] === 'markdown-review-table') {
+    return renderMarkdownReviewTableBlock(context);
+  }
+
+  return renderDefaultBlock(context);
+}
+
+function renderMarkdownReviewTableBlock(context: BlockRendererContext): React.ReactNode {
+  const table = projectMarkdownReviewTable(context);
+  if (!table || table.rows.length === 0 || table.columns.length === 0) {
+    const emptyLabel = readStringValue(context.block.metadata?.['emptyLabel']);
+    return (
+      <div
+        className="rounded border border-[var(--node-border)] px-2 py-1 text-xs text-[var(--node-fg-secondary)]"
+        data-markdown-review-table="true"
+      >
+        {resolveLabel(emptyLabel) ?? t('preset.table.noMarkdownRows')}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="min-w-0 overflow-x-auto rounded border border-[var(--node-border)] bg-white/70"
+      data-markdown-review-table="true"
+    >
+      <table className="min-w-full table-fixed border-collapse text-xs">
+        <thead className="bg-black/[0.04] text-[var(--node-fg-secondary)]">
+          <tr>
+            {table.columns.map((column) => (
+              <th
+                key={column.id}
+                className="border-b border-[var(--node-border)] px-2 py-1 text-left font-medium"
+                data-markdown-review-column={column.id}
+                style={{ width: `${resolveMarkdownReviewColumnWidth(column.id)}px` }}
+              >
+                {resolveMarkdownReviewColumnLabel(column)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="text-[var(--node-fg)]">
+          {table.rows.map((row) => (
+            <tr key={row.key} className="align-top">
+              {table.columns.map((column) => (
+                <td
+                  key={`${row.key}:${column.id}`}
+                  className="border-t border-[var(--node-border)] px-2 py-1 align-top whitespace-pre-wrap break-words"
+                  data-markdown-review-cell={column.id}
+                >
+                  {stringifyValue(row.cells[column.id], '')}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -511,6 +573,135 @@ function compactStrings(values: readonly (string | undefined)[]): string[] {
 function readStringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }
+
+function readRecordValue(value: unknown, key: string): unknown {
+  if (!isRecord(value) || !Object.prototype.hasOwnProperty.call(value, key)) {
+    return undefined;
+  }
+  return value[key];
+}
+
+interface MarkdownReviewTableProjection {
+  readonly columns: readonly MarkdownReviewColumn[];
+  readonly rows: readonly MarkdownReviewRow[];
+}
+
+interface MarkdownReviewColumn {
+  readonly id: string;
+  readonly label: string;
+}
+
+interface MarkdownReviewRow {
+  readonly key: string;
+  readonly cells: Readonly<Record<string, unknown>>;
+}
+
+function projectMarkdownReviewTable(
+  context: BlockRendererContext,
+): MarkdownReviewTableProjection | undefined {
+  const value = getBlockValue(context);
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const rows = normalizeMarkdownReviewRows(value['rows']);
+  const nodeColumns = readRecordValue(context.node.data, 'columns');
+  const columns =
+    normalizeMarkdownReviewColumns(value['columns']) ??
+    normalizeMarkdownReviewColumns(nodeColumns) ??
+    deriveMarkdownReviewColumns(rows);
+
+  return { columns, rows };
+}
+
+function normalizeMarkdownReviewColumns(value: unknown): readonly MarkdownReviewColumn[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const columns = value.flatMap((item): MarkdownReviewColumn[] => {
+    if (!isRecord(item)) {
+      return [];
+    }
+    const id = readStringValue(item['id']);
+    if (!id) {
+      return [];
+    }
+    return [{ id, label: readStringValue(item['label']) ?? id }];
+  });
+
+  return columns.length > 0 ? columns : undefined;
+}
+
+function normalizeMarkdownReviewRows(value: unknown): readonly MarkdownReviewRow[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((item, index): MarkdownReviewRow[] => {
+    if (!isRecord(item)) {
+      return [];
+    }
+    const cells = isRecord(item['cells']) ? item['cells'] : {};
+    return [
+      {
+        key:
+          readStringValue(item['id']) ??
+          readStringValue(item['rowId']) ??
+          readStringValue(item['line']) ??
+          String(index + 1),
+        cells,
+      },
+    ];
+  });
+}
+
+function deriveMarkdownReviewColumns(
+  rows: readonly MarkdownReviewRow[],
+): readonly MarkdownReviewColumn[] {
+  const columnIds: string[] = [];
+  for (const row of rows) {
+    for (const key of Object.keys(row.cells)) {
+      if (!columnIds.includes(key)) {
+        columnIds.push(key);
+      }
+    }
+  }
+  return columnIds.map((id) => ({ id, label: id }));
+}
+
+function resolveMarkdownReviewColumnLabel(column: MarkdownReviewColumn): string {
+  const labelKey = MARKDOWN_REVIEW_COLUMN_LABEL_KEYS[column.id];
+  if (labelKey) {
+    return t(labelKey);
+  }
+  return column.label;
+}
+
+function resolveMarkdownReviewColumnWidth(columnId: string): number {
+  if (columnId === 'imagePrompt') return 260;
+  if (columnId === 'videoPrompt') return 320;
+  if (columnId === 'dialogue') return 180;
+  if (columnId === 'source') return 150;
+  if (columnId === 'scene') return 150;
+  if (columnId === 'shot' || columnId === 'duration') return 88;
+  return 180;
+}
+
+const MARKDOWN_REVIEW_COLUMN_LABEL_KEYS: Readonly<Record<string, string>> = {
+  scene: 'scene.column.scene',
+  shot: 'scene.column.shot',
+  source: 'scene.column.referenceMedia',
+  imagePrompt: 'scene.column.imagePrompt',
+  videoPrompt: 'scene.column.videoPrompt',
+  duration: 'scene.column.duration',
+  dialogue: 'scene.column.dialogue',
+  reviewStatus: 'scene.column.state',
+  state: 'scene.column.state',
+  action: 'scene.column.action',
+  nextAction: 'scene.column.action',
+  actionId: 'scene.column.action',
+};
 
 function stringifyFieldValue(
   value: unknown,

@@ -598,6 +598,7 @@ export const en = {
   'scene.action.retry': 'Retry',
   'scene.missingImage': 'Missing image',
   'scene.missingDialogue': 'Missing dialogue',
+  'scene.column.scene': 'Scene',
   'scene.column.shot': 'Shot',
   'scene.column.image': 'Image',
   'scene.column.referenceMedia': 'Reference Media',
