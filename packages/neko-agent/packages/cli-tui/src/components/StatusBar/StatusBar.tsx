@@ -13,6 +13,7 @@ import { resolveAgentTokenBudget } from '@neko/shared';
 import { useAgentStore } from '../../stores/agent-store';
 import { useConfigStore } from '../../stores/config-store';
 import { tokens } from '../../theme/tokens';
+import { formatTuiLabel, getTuiLabels, type TuiLabels } from '../../core/tui-locale';
 import { TokenUsage } from './TokenUsage';
 
 export function StatusBar(): React.JSX.Element {
@@ -23,11 +24,12 @@ export function StatusBar(): React.JSX.Element {
   const queueSnapshot = useAgentStore((s) => s.messageQueue.snapshot);
   const usage = useAgentStore((s) => s.usage);
   const config = useConfigStore((s) => s.config);
+  const labels = getTuiLabels();
 
   const chatModel = truncateModel(
     `${config.chatModel?.providerId ?? config.provider}:${config.chatModel?.modelId ?? config.model}`,
   );
-  const mediaModels = formatMediaModels(config.defaultMediaModels);
+  const mediaModels = formatMediaModels(config.defaultMediaModels, labels);
   const tokenBudget = resolveAgentTokenBudget({
     modelId: config.chatModel?.modelId ?? config.model,
     contextWindow: config.chatModel?.contextWindow,
@@ -39,39 +41,45 @@ export function StatusBar(): React.JSX.Element {
   return (
     <Box paddingLeft={1} paddingRight={1}>
       {/* Mode badge — leftmost */}
-      <Text color={sessionModeColor(sessionMode)}>{sessionMode}</Text>
+      <Text color={sessionModeColor(sessionMode)}>
+        {formatTuiLabel(labels.sessionModes, sessionMode)}
+      </Text>
       <Text dimColor>:</Text>
-      <Text color={modeColor(mode)}>{mode}</Text>
+      <Text color={modeColor(mode)}>{formatTuiLabel(labels.executionModes, mode)}</Text>
       <Text dimColor> | </Text>
 
       {/* Active skill badge */}
       {lifecycleRecords.length > 0 ? (
         <>
-          <Text color={tokens.info}>skills:</Text>
-          <Text color={tokens.info}>{formatLifecycleRecords(lifecycleRecords)}</Text>
+          <Text color={tokens.info}>{labels.chrome.skills}:</Text>
+          <Text color={tokens.info}>{formatLifecycleRecords(lifecycleRecords, labels)}</Text>
           <Text dimColor> | </Text>
         </>
       ) : activeSkill ? (
         <>
-          <Text color={tokens.info}>skill:</Text>
+          <Text color={tokens.info}>{labels.chrome.skill}:</Text>
           <Text color={tokens.info}>{activeSkill}</Text>
           <Text dimColor> | </Text>
         </>
       ) : null}
 
       {/* Chat model */}
-      <Text dimColor>chat:</Text>
+      <Text dimColor>{labels.chrome.chat}:</Text>
       <Text>{chatModel}</Text>
       <Text dimColor> | </Text>
 
       {/* Media models */}
-      <Text dimColor>media:</Text>
-      {mediaModels ? <Text>{mediaModels}</Text> : <Text color={tokens.muted}>none</Text>}
+      <Text dimColor>{labels.chrome.media}:</Text>
+      {mediaModels ? (
+        <Text>{mediaModels}</Text>
+      ) : (
+        <Text color={tokens.muted}>{labels.chrome.none}</Text>
+      )}
 
       {queueSnapshot && queueSnapshot.pendingCount > 0 ? (
         <>
           <Text dimColor> | </Text>
-          <Text color={tokens.warning}>queue:</Text>
+          <Text color={tokens.warning}>{labels.chrome.queue}:</Text>
           <Text color={tokens.warning}>{queueSnapshot.pendingCount}</Text>
         </>
       ) : null}
@@ -129,11 +137,14 @@ function truncateModel(model: string): string {
 
 function formatMediaModels(
   mediaModels: { image?: string; video?: string; audio?: string } | undefined,
+  labels: TuiLabels,
 ): string | null {
   if (!mediaModels) return null;
   const values = (['image', 'video', 'audio'] as const)
     .map((category) =>
-      mediaModels[category] ? `${category}:${truncateModel(mediaModels[category])}` : undefined,
+      mediaModels[category]
+        ? `${formatTuiLabel(labels.mediaCategories, category)}:${truncateModel(mediaModels[category])}`
+        : undefined,
     )
     .filter((value): value is string => Boolean(value));
   return values.length > 0 ? values.join(',') : null;
@@ -141,10 +152,11 @@ function formatMediaModels(
 
 function formatLifecycleRecords(
   records: readonly import('@neko/shared').ActiveSkillLifecycleRecordProjection[],
+  labels: TuiLabels,
 ): string {
   const first = records[0];
   if (!first) return '0';
   const suffix = records.length > 1 ? `+${records.length - 1}` : '';
-  const lock = first.clearable ? '' : ' locked';
+  const lock = first.clearable ? '' : ` ${labels.chrome.locked}`;
   return `${first.skillName}[${first.slot}]${suffix}${lock}`;
 }

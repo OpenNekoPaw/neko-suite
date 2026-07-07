@@ -48,6 +48,42 @@ pnpm test:agent:real:tui          # supported TUI runner with real Platform serv
 pnpm test:agent:real:gui          # Agent GUI through VS Code Webview runtime smoke
 ```
 
+## Agent Development Validation
+
+Agent changes that affect provider/model selection, AI SDK message projection,
+prompt or Skill behavior, tool schemas, AgentSession workflow, validator or
+recovery policy, or TUI/GUI projection of live Agent events must include a local
+real API validation attempt with an explicit `config.toml`.
+
+Use focused mock tests first, then run the relevant real lane:
+
+```bash
+pnpm test:agent:mock
+
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:platform
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:workflow
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:tui
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:gui
+```
+
+Choose the lane by the changed surface:
+
+- `platform`: provider catalog, selected provider/model, credentials, model
+  capability, config loading, or shared service adapter behavior.
+- `workflow`: AgentSession, prompts, Skills, tool schemas, tool-use behavior,
+  IDC metadata, validator diagnostics, recovery, cancellation, or timeout.
+- `tui`: supported `cli-tui` stream, tool, diagnostic, task/media, or failure
+  projection.
+- `gui`: Extension/Webview bridge, Agent Webview projection, VS Code Webview
+  lifecycle, CSP-sensitive behavior, focus, task/media cards, diagnostics, or
+  recovery UI.
+
+If a developer machine cannot run a required real lane because `config.toml`,
+credentials, provider/network access, or VS Code debugger setup is unavailable,
+the delivery notes must record the attempted command, why it could not run, and
+the residual risk. Mock-only evidence is still required, but it does not replace
+the real API or VS Code runtime requirement for these Agent surfaces.
+
 If a local pnpm 11 wrapper stops before test execution with `ERR_PNPM_IGNORED_BUILDS`,
 use this only as a developer-machine workaround after dependencies are already installed:
 

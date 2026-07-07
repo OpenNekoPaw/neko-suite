@@ -4,6 +4,7 @@ import path from 'node:path';
 
 export interface CliWorkDirOptions {
   readonly positionalWorkDir?: unknown;
+  readonly cd?: unknown;
   readonly cwd?: unknown;
   readonly workDir?: unknown;
 }
@@ -18,9 +19,10 @@ export function resolveCliWorkDir(options: CliWorkDirOptions = {}): string {
     options.positionalWorkDir,
     'Positional working directory',
   );
+  const cdValue = readWorkDirOption(options.cd, '--cd option');
   const cwdValue = readWorkDirOption(options.cwd, '--cwd option');
   const workDirValue = readWorkDirOption(options.workDir, '--work-dir option');
-  const optionValue = resolveOptionWorkDir(cwdValue, workDirValue);
+  const optionValue = resolveOptionWorkDir(cdValue, cwdValue, workDirValue);
   if (positionalValue && optionValue) {
     const positionalResolved = path.resolve(expandHomeDir(positionalValue));
     const optionResolved = path.resolve(expandHomeDir(optionValue));
@@ -46,19 +48,31 @@ function readWorkDirOption(value: unknown, label: string): string | undefined {
 }
 
 function resolveOptionWorkDir(
+  cdValue: string | undefined,
   cwdValue: string | undefined,
   workDirValue: string | undefined,
 ): string | undefined {
-  if (cwdValue && workDirValue) {
-    const cwdResolved = path.resolve(expandHomeDir(cwdValue));
-    const workDirResolved = path.resolve(expandHomeDir(workDirValue));
-    if (cwdResolved !== workDirResolved) {
+  const provided = [
+    { label: '--cd', value: cdValue },
+    { label: '--cwd', value: cwdValue },
+    { label: '--work-dir', value: workDirValue },
+  ].filter((entry): entry is { label: string; value: string } => entry.value !== undefined);
+
+  const first = provided[0];
+  if (!first) {
+    return undefined;
+  }
+
+  const firstResolved = path.resolve(expandHomeDir(first.value));
+  for (const next of provided.slice(1)) {
+    const nextResolved = path.resolve(expandHomeDir(next.value));
+    if (firstResolved !== nextResolved) {
       throw new Error(
-        `Conflicting working directories: --cwd ${cwdResolved} differs from --work-dir ${workDirResolved}`,
+        `Conflicting working directories: ${first.label} ${firstResolved} differs from ${next.label} ${nextResolved}`,
       );
     }
   }
-  return cwdValue ?? workDirValue;
+  return first.value;
 }
 
 function assertExistingDirectory(resolved: string): void {

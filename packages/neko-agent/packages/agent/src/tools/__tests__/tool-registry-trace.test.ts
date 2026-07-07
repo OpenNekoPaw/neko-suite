@@ -129,11 +129,9 @@ describe('ToolRegistry trace isolation', () => {
       .list()
       .find((entry) => entry.message === 'neko.agent.tool.execute.result');
     const requestData = requestLog?.data as
-      | { requestId?: string; trace?: Record<string, unknown> }
-      | undefined;
+      { requestId?: string; trace?: Record<string, unknown> } | undefined;
     const resultData = resultLog?.data as
-      | { requestId?: string; trace?: Record<string, unknown> }
-      | undefined;
+      { requestId?: string; trace?: Record<string, unknown> } | undefined;
 
     expect(requestData).toBeDefined();
     expect(resultData).toBeDefined();
@@ -424,6 +422,12 @@ describe('ToolRegistry provider schema projection', () => {
               type: 'string',
               description: 'Optional hint for the next native multimodal Agent reasoning step.',
             },
+            mode: {
+              type: 'string',
+              enum: ['metadata'],
+              description:
+                'metadata reads local file/image metadata and exposes images to the native multimodal Agent turn.',
+            },
             max_images: {
               type: 'integer',
               description: 'Maximum number of images to process.',
@@ -480,6 +484,9 @@ describe('ToolRegistry provider schema projection', () => {
     );
     expect(readImageProperties['prompt']?.description).toBe(
       '给下一次原生多模态 Agent 推理使用的可选提示；此工具本身不执行模型分析。',
+    );
+    expect(readImageProperties['mode']?.description).toBe(
+      '读取模式。当前只支持 metadata：读取元数据并把图片暴露给原生多模态 Agent 推理；不要使用 vision。',
     );
     expect(readImageProperties['max_images']?.description).toBe(
       '最多处理的图片数量，默认 4，最大 16。',

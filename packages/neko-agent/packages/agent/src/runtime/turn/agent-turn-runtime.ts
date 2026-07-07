@@ -27,7 +27,11 @@ import {
   AGENT_SESSION_BUSY_MESSAGE,
   AGENT_SESSION_CONFIG_LOCKED_MESSAGE,
 } from '../runner/agent-session-runner';
-import type { AgentPendingMessageItem, EnqueuePendingMessageInput } from '../runner/agent-runner-port';
+import type {
+  AgentPendingMessageItem,
+  AgentPendingMessageSource,
+  EnqueuePendingMessageInput,
+} from '../runner/agent-runner-port';
 import type { IRuntimeTaskManager } from '../../task';
 import type { IOperationToolAdapterRegistry } from '@neko/shared';
 import {
@@ -218,6 +222,7 @@ export interface ExecuteAgentTurnInput<
 > {
   readonly conversationId: string;
   readonly message: string;
+  readonly pendingMessageSource?: AgentPendingMessageSource;
   readonly platform?: TPlatform | null;
   readonly chatModel?: ModelRef<'llm'>;
   readonly agentModels?: AgentModelSlots;
@@ -634,6 +639,7 @@ export async function executeAgentTurn<
     const queuedItem = agentRunner.enqueuePendingMessage({
       conversationId: input.conversationId,
       content: input.message,
+      ...(input.pendingMessageSource ? { source: input.pendingMessageSource } : {}),
       now: now(),
     });
     if (!queuedItem) {
@@ -720,13 +726,15 @@ export async function executeAgentTurn<
         releasedItem: projectPendingMessageItem(queuedMessage),
         snapshot,
       });
-      input.conversations.addUserMessage?.(
-        input.conversationId,
-        buildReleasedQueuedUserMessage({
-          item: queuedMessage,
-          id: `released:${queuedMessage.id}`,
-        }),
-      );
+      if (shouldPersistReleasedQueuedUserMessage(queuedMessage)) {
+        input.conversations.addUserMessage?.(
+          input.conversationId,
+          buildReleasedQueuedUserMessage({
+            item: queuedMessage,
+            id: `released:${queuedMessage.id}`,
+          }),
+        );
+      }
 
       assistantMessage = await executeAgentTurnMessage({
         input,
@@ -1038,6 +1046,10 @@ function buildReleasedQueuedUserMessage(input: {
     content: input.item.content,
     timestamp: input.item.createdAt,
   };
+}
+
+function shouldPersistReleasedQueuedUserMessage(item: AgentPendingMessageItem): boolean {
+  return item.source === 'composer';
 }
 
 function hydrateAgentHistoryIfNeeded<

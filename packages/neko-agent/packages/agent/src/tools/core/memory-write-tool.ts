@@ -1,22 +1,38 @@
 /**
  * MemoryWrite Tool
  *
- * Allows the Agent to persist facts, decisions, and preferences to the
- * project-level memory file (`.neko/memory.md`).  The file is organised as
- * H2 Markdown sections; each call targets one named section.
- *
- * Does NOT require user confirmation — writes are non-destructive upserts.
+ * Allows the Agent to propose facts, decisions, and preferences for the
+ * project-level memory file. The Agent does not commit `.neko/memory.md`
+ * directly; clients or domain runtimes validate and persist accepted proposals.
  */
 
 import type { ToolResult, ToolCategory, ToolParameters } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
-import type { IProjectMemoryManager } from '@neko/shared';
+
+export type ProjectMemoryMutationAction = 'upsert' | 'remove';
+
+export interface ProjectMemoryMutationProposal {
+  readonly kind: 'project-memory-mutation';
+  readonly action: ProjectMemoryMutationAction;
+  readonly key: string;
+  readonly content?: string;
+}
+
+export interface ProjectMemoryMutationProposalSink {
+  proposeProjectMemoryMutation(
+    proposal: ProjectMemoryMutationProposal,
+  ): Promise<{ readonly proposalId?: string; readonly message?: string } | void>;
+}
+
+export interface MemoryWriteToolOptions {
+  readonly proposalSink?: ProjectMemoryMutationProposalSink;
+}
 
 export class MemoryWriteTool extends BuiltinTool {
   readonly name = 'MemoryWrite';
   readonly description =
-    'Persist a fact, decision, or preference to the project memory file (.neko/memory.md) so it is available in future sessions. ' +
-    'Use `upsert` to create or update a named section; use `remove` to delete one. ' +
+    'Propose a fact, decision, or preference update for project memory. The Agent does not write .neko/memory.md directly; the client or entity/runtime owner validates and commits accepted proposals. ' +
+    'Use `upsert` to propose creating or updating a named section; use `remove` to propose deleting one. ' +
     'Good sections: "User Preferences", "Project Architecture", "Recent Decisions", "Key Conventions".';
 
   readonly parameters: ToolParameters = {
@@ -45,7 +61,7 @@ export class MemoryWriteTool extends BuiltinTool {
   readonly category: ToolCategory = 'system';
   override readonly requiresConfirmation = false;
 
-  constructor(private readonly _memory: IProjectMemoryManager) {
+  constructor(private readonly options: MemoryWriteToolOptions = {}) {
     super();
   }
 
@@ -62,30 +78,48 @@ export class MemoryWriteTool extends BuiltinTool {
       return this.error('`key` must not be empty');
     }
 
+    const proposal = createProjectMemoryMutationProposal(action, key, args.content);
+    if (!proposal) {
+      return this.error('`content` is required for action `upsert`');
+    }
+
     try {
-      if (action === 'upsert') {
-        const content = args.content as string | undefined;
-        if (content === undefined || content === null) {
-          return this.error('`content` is required for action `upsert`');
-        }
-        await this._memory.upsertEntry(key, content);
-        return this.success({
-          action: 'upsert',
-          key,
-          message: `Section "${key}" saved to project memory.`,
-        });
-      } else {
-        await this._memory.removeEntry(key);
-        return this.success({
-          action: 'remove',
-          key,
-          message: `Section "${key}" removed from project memory.`,
-        });
-      }
+      const sinkResult = await this.options.proposalSink?.proposeProjectMemoryMutation(proposal);
+      return this.success({
+        proposal,
+        committed: false,
+        ...(sinkResult?.proposalId ? { proposalId: sinkResult.proposalId } : {}),
+        message:
+          sinkResult?.message ??
+          `Project memory ${action} proposal created for section "${key}". Client/domain runtime must validate and commit it.`,
+      });
     } catch (err) {
       return this.error(
-        `Failed to write project memory: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to propose project memory update: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
+}
+
+function createProjectMemoryMutationProposal(
+  action: ProjectMemoryMutationAction,
+  key: string,
+  rawContent: unknown,
+): ProjectMemoryMutationProposal | undefined {
+  if (action === 'upsert') {
+    if (rawContent === undefined || rawContent === null) {
+      return undefined;
+    }
+    return {
+      kind: 'project-memory-mutation',
+      action,
+      key,
+      content: String(rawContent),
+    };
+  }
+  return {
+    kind: 'project-memory-mutation',
+    action,
+    key,
+  };
 }

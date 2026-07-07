@@ -13,10 +13,7 @@ import { useState, useCallback, memo } from 'react';
 import { ChevronDownIcon as ChevronIcon } from '@neko/shared/icons';
 import { VSCodeMessages } from '@/messages';
 import { SendToMenu, type PluginsAvailable } from '@/components/ChatView/SendToMenu';
-import {
-  projectStoryboardScenesAssetBatch,
-  projectStoryboardScenesCutTimelinePayload,
-} from '@/presenters/storyboard-transfer-presenter';
+import { projectStoryboardScenesAssetBatch } from '@/presenters/storyboard-transfer-presenter';
 
 /** A single shot within a scene */
 export interface StoryboardShot {
@@ -54,7 +51,6 @@ function StoryboardMessageComponent({
   onRegenerateScene,
   className,
 }: StoryboardMessageProps) {
-  const cutPayload = projectStoryboardScenesCutTimelinePayload(scenes);
   const assetBatchPayload = projectStoryboardScenesAssetBatch(scenes);
 
   return (
@@ -64,7 +60,6 @@ function StoryboardMessageComponent({
           key={`scene-${scene.sceneIndex}`}
           scene={scene}
           plugins={plugins}
-          cutPayload={cutPayload}
           assetBatchPayload={assetBatchPayload}
           onRegenerate={onRegenerateScene}
         />
@@ -80,13 +75,11 @@ function StoryboardMessageComponent({
 function SceneGroup({
   scene,
   plugins,
-  cutPayload,
   assetBatchPayload,
   onRegenerate,
 }: {
   scene: StoryboardScene;
   plugins?: PluginsAvailable;
-  cutPayload?: ReturnType<typeof projectStoryboardScenesCutTimelinePayload>;
   assetBatchPayload?: ReturnType<typeof projectStoryboardScenesAssetBatch>;
   onRegenerate?: (sceneIndex: number) => void;
 }) {
@@ -168,24 +161,14 @@ function SceneGroup({
               </button>
             )}
             <span className="flex-1" />
-            {(cutPayload || assetBatchPayload) && plugins && (
+            {assetBatchPayload && plugins && (
               <>
-                {cutPayload && (
-                  <SendToMenu
-                    payload={cutPayload}
-                    mediaType="image"
-                    plugins={plugins}
-                    allowedTargets={['cut']}
-                  />
-                )}
-                {assetBatchPayload && (
-                  <SendToMenu
-                    payload={assetBatchPayload}
-                    mediaType="image"
-                    plugins={plugins}
-                    allowedTargets={['explorer']}
-                  />
-                )}
+                <SendToMenu
+                  payload={assetBatchPayload}
+                  mediaType="image"
+                  plugins={plugins}
+                  allowedTargets={['explorer']}
+                />
               </>
             )}
           </div>

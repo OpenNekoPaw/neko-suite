@@ -32,6 +32,7 @@ import type {
   AgentTurnTimelineContextInput,
   RunAgentTurnRuntimeInput,
 } from './agent-turn-runtime';
+import type { AgentPendingMessageSource } from '../runner/agent-runner-port';
 import type { TimelineContextEditorLike, TimelineContextRuntime } from './timeline-context-runtime';
 import type { WorkspaceFileIgnoreRules } from '../../input/workspace-ignore';
 import {
@@ -141,6 +142,7 @@ export interface AgentTurnAssemblyInput<
 > {
   readonly conversationId: string;
   readonly message: string;
+  readonly pendingMessageSource?: AgentPendingMessageSource;
   readonly platform?: TPlatform | null;
   readonly chatModel?: ModelRef<'llm'>;
   readonly agentModels?: AgentModelSlots;
@@ -214,6 +216,7 @@ export function buildAgentTurnRuntimeInput<
   return {
     conversationId: input.conversationId,
     message: input.message,
+    ...(input.pendingMessageSource ? { pendingMessageSource: input.pendingMessageSource } : {}),
     platform: input.platform,
     chatModel: input.chatModel,
     agentModels: input.agentModels,

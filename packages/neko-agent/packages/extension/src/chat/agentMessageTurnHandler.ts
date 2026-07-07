@@ -282,6 +282,7 @@ export class AgentMessageTurnHandler {
           ? ({
               conversationId,
               message,
+              pendingMessageSource,
               chatModel,
               agentModels,
               llmConfig,
@@ -296,6 +297,7 @@ export class AgentMessageTurnHandler {
                 webview,
                 conversationId,
                 message,
+                ...(pendingMessageSource ? { pendingMessageSource } : {}),
                 chatModel,
                 agentModels,
                 llmConfig,
@@ -425,9 +427,7 @@ export class AgentMessageTurnHandler {
       .handleTerminalTask(toSubAgentTaskResultObservationTask(event), {
         source: 'subagent',
         ...(event.data?.parentMessageId ? { parentMessageId: event.data.parentMessageId } : {}),
-        ...(event.data?.parentToolCallId
-          ? { parentToolCallId: event.data.parentToolCallId }
-          : {}),
+        ...(event.data?.parentToolCallId ? { parentToolCallId: event.data.parentToolCallId } : {}),
       })
       .catch((error) => {
         logger.warn('Failed to record SubAgent task-result observation', {
@@ -607,7 +607,9 @@ function toSubAgentTaskResultObservationTask(event: SubAgentEvent): Task {
   const lifecycle: TaskLifecycleMetadata = {
     ownerConversationId: event.conversationId,
     ...(event.data?.runId ? { ownerRunId: event.data.runId } : {}),
-    ...(event.data?.runStartedAt !== undefined ? { ownerRunStartedAt: event.data.runStartedAt } : {}),
+    ...(event.data?.runStartedAt !== undefined
+      ? { ownerRunStartedAt: event.data.runStartedAt }
+      : {}),
     runMode: event.data?.runMode ?? 'background',
     costPhase: 'idle',
     interruptPolicy: 'detach-and-continue',

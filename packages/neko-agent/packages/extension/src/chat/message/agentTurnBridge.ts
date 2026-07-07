@@ -20,6 +20,7 @@ import {
   buildAgentTurnRuntimeInput,
   createTimelineContextRuntime,
   runAgentTurnRuntime,
+  type AgentPendingMessageSource,
   type AgentLlmRuntimeOptions,
   type AgentMessageExecutionOverrides,
   type AgentTurnAgentManager,
@@ -76,6 +77,7 @@ export interface ExecuteAgentTurnForWebviewInput {
   webview: vscode.Webview;
   conversationId: string;
   message: string;
+  pendingMessageSource?: AgentPendingMessageSource;
   chatModel?: ModelRef<'llm'>;
   agentModels?: AgentModelSlots;
   llmConfig?: AgentLlmConfig;
@@ -121,6 +123,7 @@ export class AgentTurnBridge {
       buildAgentTurnRuntimeInput({
         conversationId: input.conversationId,
         message: input.message,
+        ...(input.pendingMessageSource ? { pendingMessageSource: input.pendingMessageSource } : {}),
         platform: this.deps.platform,
         locale: input.locale,
         chatModel: input.chatModel,

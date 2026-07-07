@@ -22,6 +22,7 @@ import {
   type DownloadMediaOptions,
   type MediaTask,
   type MediaTaskProgressViewDelivery,
+  type MediaTaskViewDelivery,
   type MediaTaskView,
 } from '@neko/platform';
 import {
@@ -72,12 +73,20 @@ export class MediaTaskDeliveryHost {
       return createMediaTaskView(task);
     }
 
+    const delivery = await this.createTaskViewDelivery(webview, task);
+    return delivery.view;
+  }
+
+  async createTaskViewDelivery(
+    webview: vscode.Webview,
+    task: MediaTask,
+  ): Promise<MediaTaskViewDelivery> {
     const delivery = await buildMediaTaskViewDelivery({
       ...this.createDeliveryInput(webview, task, toMediaBackgroundTaskType(task.type)),
       task,
     });
     this.showSaveNotification(delivery.deliveryPlan.notification);
-    return delivery.view;
+    return delivery;
   }
 
   async createProgressViewDelivery(

@@ -25,6 +25,15 @@ function createMockWebview() {
   };
 }
 
+function createDocumentEntryResourceRef() {
+  return {
+    kind: 'document-entry',
+    source: { filePath: '/workspace/books/story.epub', format: 'epub' },
+    entryPath: 'OPS/page-1.jpg',
+    versionPolicy: 'versioned-export',
+  };
+}
+
 describe('ConversationBridge', () => {
   let handler: ConversationBridge;
   let ctx: ReturnType<typeof createMockContext>;
@@ -241,19 +250,19 @@ describe('ConversationBridge', () => {
   });
 
   describe('sendActiveConversation', () => {
-    it('should post activeConversation with null when no active', () => {
+    it('should post activeConversation with null when no active', async () => {
       const webview = createMockWebview();
-      handler.sendActiveConversation(webview as any);
+      await handler.sendActiveConversation(webview as any);
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'activeConversation',
         conversation: null,
       });
     });
 
-    it('should post activeConversation with conversation data when active', () => {
+    it('should post activeConversation with conversation data when active', async () => {
       const webview = createMockWebview();
       handler.ensureActive();
-      handler.sendActiveConversation(webview as any);
+      await handler.sendActiveConversation(webview as any);
 
       expect(webview.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -262,10 +271,173 @@ describe('ConversationBridge', () => {
         }),
       );
     });
+
+    it('reprojects document resource refs to webview URIs without mutating persisted messages', async () => {
+      const webview = createMockWebview();
+      const materializedPath = '/workspace/.neko/.cache/document/page-1.jpg';
+      const contentAccessRuntime = {
+        loadProviderAsset: vi.fn().mockResolvedValue({
+          status: 'ready',
+          uri: materializedPath,
+        }),
+      };
+      const localResourceAccess = {
+        toWebviewUri: vi.fn((_webview: unknown, source: string) => `vscode-webview://${source}`),
+      };
+      handler = new ConversationBridge(
+        ctx as any,
+        '/workspace',
+        localResourceAccess as any,
+        () => contentAccessRuntime as any,
+      );
+      const conversationId = handler.ensureActive();
+      const resourceRef = createDocumentEntryResourceRef();
+      handler.addMessage({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        timestamp: 1,
+        contentBlocks: [
+          {
+            id: 'block-1',
+            type: 'tool_call',
+            timestamp: 1,
+            toolCall: {
+              id: 'read-image-1',
+              name: 'ReadImage',
+              arguments: {},
+              result: {
+                success: true,
+                data: {
+                  images: [
+                    {
+                      label: 'Page 1',
+                      width: 1511,
+                      height: 2160,
+                      mimeType: 'image/jpeg',
+                      byteSize: 341000,
+                      resourceRef,
+                      documentImage: { resourceRef },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      });
+
+      await handler.sendActiveConversation(webview as any);
+
+      expect(contentAccessRuntime.loadProviderAsset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          caller: 'message-resource-projection',
+          preferredTarget: 'local-path',
+          variant: expect.objectContaining({
+            role: 'document-entry',
+            mimeType: 'image/jpeg',
+            width: 1511,
+            height: 2160,
+          }),
+        }),
+      );
+      expect(localResourceAccess.toWebviewUri).toHaveBeenCalledWith(
+        webview,
+        materializedPath,
+        'neko-agent.document-resource',
+      );
+      const posted = vi.mocked(webview.postMessage).mock.calls[0]?.[0] as any;
+      const image = posted.conversation.messages[0].contentBlocks[0].toolCall.result.data.images[0];
+      expect(posted.conversation.id).toBe(conversationId);
+      expect(image.renderUri).toBe(`vscode-webview://${materializedPath}`);
+      expect(image.src).toBe(`vscode-webview://${materializedPath}`);
+      expect(image.documentImage.renderUri).toBe(`vscode-webview://${materializedPath}`);
+      expect(image.documentImage.src).toBe(`vscode-webview://${materializedPath}`);
+      expect(image.path).toBeUndefined();
+      expect(image.documentImage.path).toBeUndefined();
+      expect(JSON.stringify(handler.get(conversationId)?.messages)).not.toContain('"renderUri"');
+      expect(JSON.stringify(handler.get(conversationId)?.messages)).not.toContain('"src"');
+    });
+
+    it('overwrites stale document render fields when sending active conversation', async () => {
+      const webview = createMockWebview();
+      const materializedPath = '/workspace/.neko/.cache/document/page-2.jpg';
+      const contentAccessRuntime = {
+        loadProviderAsset: vi.fn().mockResolvedValue({
+          status: 'ready',
+          uri: materializedPath,
+        }),
+      };
+      const localResourceAccess = {
+        toWebviewUri: vi.fn((_webview: unknown, source: string) => `vscode-webview://${source}`),
+      };
+      handler = new ConversationBridge(
+        ctx as any,
+        '/workspace',
+        localResourceAccess as any,
+        () => contentAccessRuntime as any,
+      );
+      const conversationId = handler.ensureActive();
+      const resourceRef = createDocumentEntryResourceRef();
+      handler.addMessage({
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        timestamp: 1,
+        contentBlocks: [
+          {
+            id: 'block-1',
+            type: 'tool_call',
+            timestamp: 1,
+            toolCall: {
+              id: 'read-image-1',
+              name: 'ReadImage',
+              arguments: {},
+              result: {
+                success: true,
+                data: {
+                  images: [
+                    {
+                      label: 'Page 2',
+                      width: 1511,
+                      height: 2160,
+                      mimeType: 'image/jpeg',
+                      path: '/workspace/.neko/.cache/document/stale-page.jpg',
+                      renderUri: 'vscode-webview://stale-page.jpg',
+                      src: 'vscode-webview://stale-page.jpg',
+                      resourceRef,
+                      documentImage: {
+                        path: '/workspace/.neko/.cache/document/stale-page.jpg',
+                        renderUri: 'vscode-webview://stale-page.jpg',
+                        src: 'vscode-webview://stale-page.jpg',
+                        resourceRef,
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      } as any);
+
+      await handler.sendActiveConversation(webview as any);
+
+      const posted = vi.mocked(webview.postMessage).mock.calls[0]?.[0] as any;
+      const image = posted.conversation.messages[0].contentBlocks[0].toolCall.result.data.images[0];
+      expect(posted.conversation.id).toBe(conversationId);
+      expect(image.renderUri).toBe(`vscode-webview://${materializedPath}`);
+      expect(image.src).toBe(`vscode-webview://${materializedPath}`);
+      expect(image.path).toBeUndefined();
+      expect(image.documentImage.renderUri).toBe(`vscode-webview://${materializedPath}`);
+      expect(image.documentImage.src).toBe(`vscode-webview://${materializedPath}`);
+      expect(image.documentImage.path).toBeUndefined();
+      expect(JSON.stringify(webview.postMessage.mock.calls)).not.toContain('stale-page.jpg');
+    });
   });
 
   describe('sendConversationSnapshot', () => {
-    it('posts a specific conversation without changing host active state', () => {
+    it('posts a specific conversation without changing host active state', async () => {
       const webview = createMockWebview();
       const activeId = handler.create();
       const backgroundId = handler.create();
@@ -274,7 +446,9 @@ describe('ConversationBridge', () => {
         { id: 'm-bg', role: 'user', content: 'background', timestamp: 1 },
       ]);
 
-      expect(handler.sendConversationSnapshot(webview as any, backgroundId)).toBe(true);
+      await expect(handler.sendConversationSnapshot(webview as any, backgroundId)).resolves.toBe(
+        true,
+      );
 
       expect(handler.getActiveId()).toBe(activeId);
       expect(webview.postMessage).toHaveBeenCalledWith({
@@ -286,10 +460,12 @@ describe('ConversationBridge', () => {
       });
     });
 
-    it('does not post a snapshot for an unknown conversation', () => {
+    it('does not post a snapshot for an unknown conversation', async () => {
       const webview = createMockWebview();
 
-      expect(handler.sendConversationSnapshot(webview as any, 'missing-conv')).toBe(false);
+      await expect(handler.sendConversationSnapshot(webview as any, 'missing-conv')).resolves.toBe(
+        false,
+      );
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'sessionDiagnostic',
         code: 'unknown-conversation',
@@ -300,12 +476,14 @@ describe('ConversationBridge', () => {
       });
     });
 
-    it('reports deleted conversation snapshots with a typed diagnostic', () => {
+    it('reports deleted conversation snapshots with a typed diagnostic', async () => {
       const webview = createMockWebview();
       const conversationId = handler.create();
       handler.delete(conversationId);
 
-      expect(handler.sendConversationSnapshot(webview as any, conversationId)).toBe(false);
+      await expect(handler.sendConversationSnapshot(webview as any, conversationId)).resolves.toBe(
+        false,
+      );
       expect(webview.postMessage).toHaveBeenCalledWith({
         type: 'sessionDiagnostic',
         code: 'deleted-conversation',

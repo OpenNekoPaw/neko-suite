@@ -52,6 +52,7 @@ export interface TaskResultObservationTerminalOptions {
 
 export class TaskResultObservationCoordinator {
   private readonly unsubscribe: () => void;
+  private readonly terminalTaskHandling = new Map<string, Promise<void>>();
   private continuation: TaskResultObservationContinuationPort | undefined;
 
   constructor(private readonly options: TaskResultObservationCoordinatorOptions) {
@@ -81,6 +82,25 @@ export class TaskResultObservationCoordinator {
   async handleTerminalTask(
     task: Task,
     options: TaskResultObservationTerminalOptions = {},
+  ): Promise<void> {
+    const key = createTerminalTaskObservationKey(task, options);
+    const previous = this.terminalTaskHandling.get(key) ?? Promise.resolve();
+    const current = previous
+      .catch(() => undefined)
+      .then(() => this.handleTerminalTaskSerialized(task, options));
+    this.terminalTaskHandling.set(key, current);
+    try {
+      await current;
+    } finally {
+      if (this.terminalTaskHandling.get(key) === current) {
+        this.terminalTaskHandling.delete(key);
+      }
+    }
+  }
+
+  private async handleTerminalTaskSerialized(
+    task: Task,
+    options: TaskResultObservationTerminalOptions,
   ): Promise<void> {
     const coordinator = createAgentTaskResultObservationCoordinator({
       recorder: {
@@ -113,10 +133,7 @@ export class TaskResultObservationCoordinator {
     );
     return agent.recordTaskResultObservation({
       ...input,
-      existingEntries: [
-        ...(input.existingEntries ?? []),
-        ...(existingEntries ?? []),
-      ],
+      existingEntries: [...(input.existingEntries ?? []), ...(existingEntries ?? [])],
     });
   }
 
@@ -159,4 +176,13 @@ export class TaskResultObservationCoordinator {
     logger.warn('Agent task-result observation diagnostic', diagnostic);
     this.options.onDiagnostic?.(diagnostic);
   }
+}
+
+function createTerminalTaskObservationKey(
+  task: Task,
+  options: TaskResultObservationTerminalOptions,
+): string {
+  const conversationId = options.lease?.conversationId ?? task.lifecycle?.ownerConversationId ?? '';
+  const runId = options.lease?.runId ?? task.lifecycle?.ownerRunId ?? '';
+  return `${conversationId}:${runId}:${task.id}:${task.status}`;
 }

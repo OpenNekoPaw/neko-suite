@@ -29,10 +29,7 @@ describe('ToolCallDisplay Canvas authoring results', () => {
 
     render(
       <MessageActionsProvider>
-        <ToolCallDisplay
-          conversationId="conv-1"
-          toolCall={createCanvasAuthoringToolCall()}
-        />
+        <ToolCallDisplay conversationId="conv-1" toolCall={createCanvasAuthoringToolCall()} />
       </MessageActionsProvider>,
     );
 
@@ -40,7 +37,7 @@ describe('ToolCallDisplay Canvas authoring results', () => {
     expect(screen.getByText('blocked')).toBeTruthy();
     expect(screen.getByText('node:scene-1')).toBeTruthy();
     expect(screen.getAllByText('Unsupported child preset "shot.magic".')).toHaveLength(2);
-    expect(screen.getByText('/generationPrompt')).toBeTruthy();
+    expect(screen.getByText('/storyboardPrompt')).toBeTruthy();
     expect(screen.getByText('scene.environment:prompt-overridden')).toBeTruthy();
     expect(screen.getByText('Create replacement shot')).toBeTruthy();
     expect(screen.getByText('canvas_create_node')).toBeTruthy();
@@ -80,7 +77,7 @@ function createCanvasAuthoringToolCall(): ToolCall {
               retryable: true,
             },
           ],
-          changedFields: ['/generationPrompt'],
+          changedFields: ['/storyboardPrompt'],
           blockedReason: 'Unsupported child preset "shot.magic".',
           nextActions: [
             {

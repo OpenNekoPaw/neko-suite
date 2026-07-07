@@ -137,21 +137,22 @@ function SemanticStoryboardTable({ rows }: { rows: readonly SemanticStoryboardRo
   const groups = groupStoryboardRowsByScene(rows);
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-[1124px] max-w-none table-fixed border-separate border-spacing-0 text-left">
+    <div className="min-w-0 overflow-x-auto" data-agent-storyboard-canvas-scene-table="true">
+      <table
+        className="table-fixed border-collapse text-left text-[11px] text-[var(--agent-fg)]"
+        style={{ width: 1160 }}
+      >
         <colgroup>
-          <col className="w-[96px]" />
-          <col className="w-[180px]" />
-          <col className="w-[56px]" />
+          <col className="w-[76px]" />
+          <col className="w-[132px]" />
+          <col className="w-[216px]" />
+          <col className="w-[248px]" />
           <col className="w-[72px]" />
-          <col className="w-[160px]" />
-          <col className="w-[100px]" />
-          <col className="w-[120px]" />
-          <col className="w-[130px]" />
-          <col className="w-[90px]" />
-          <col className="w-[120px]" />
+          <col className="w-[176px]" />
+          <col className="w-[128px]" />
+          <col className="w-[112px]" />
         </colgroup>
-        <thead>
+        <thead className="bg-[var(--agent-elevated)] text-[10px] uppercase tracking-normal text-[var(--agent-fg-secondary)]">
           <tr className="bg-[var(--agent-elevated)] text-[10px] uppercase text-[var(--agent-fg-secondary)]">
             {STORYBOARD_TABLE_COLUMNS.map((columnKey) => (
               <TableHeader key={columnKey}>{t(columnKey)}</TableHeader>
@@ -268,28 +269,24 @@ function SemanticStoryboardSceneHeader({
 function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
   const { t } = useTranslation();
   const { shot, section } = row;
-  const camera = compactStrings([shot.shotScale, shot.cameraAngle, shot.cameraMovement]).join(
-    ' / ',
-  );
-  const characters = formatCharacters(shot.characters);
-  const emotion = formatList(shot.emotion);
-  const tags = formatList(shot.sceneTags);
-  const vfx = formatList(shot.vfx);
   const dialogue = formatStoryboardTextAndVoice(shot, t);
   const supplementalAudio = formatSupplementalAudio(shot, t);
   const cueDisplay = compactStrings([dialogue, supplementalAudio]).join('\n');
-  const style = compactStrings([
-    shot.visualStyle ? `${t('chat.storyboardTable.labels.style')}: ${shot.visualStyle}` : undefined,
-    vfx ? `${t('chat.storyboardTable.labels.vfx')}: ${vfx}` : undefined,
-    shot.generationPrompt
-      ? `${t('chat.storyboardTable.labels.prompt')}: ${shot.generationPrompt}`
-      : undefined,
-  ]).join('\n');
-  const animation = formatAnimationOverlay(row.animationOverlay, t);
+  const imagePrompt = formatShotImagePrompt(shot);
+  const videoPrompt = formatSceneVideoPrompt(row.animationOverlay);
+  const referenceMediaLabel = formatShotReferenceMediaLabel(shot, t);
+  const state = resolveStoryboardSceneReviewState({
+    shot,
+    section,
+    imagePrompt,
+    videoPrompt,
+    animationOverlay: row.animationOverlay,
+    t,
+  });
 
   return (
-    <tr className="align-top text-[11px] text-[var(--agent-fg)] odd:bg-[color-mix(in_srgb,var(--agent-elevated)_40%,transparent)]">
-      <TableCell className="w-[96px]">
+    <tr className="align-top text-[11px] text-[var(--agent-fg)] odd:bg-[color-mix(in_srgb,var(--agent-elevated)_40%,transparent)] hover:bg-[var(--agent-hover)]">
+      <TableCell>
         <div className="font-mono text-[11px] font-medium">{formatShotNumber(shot.shotNumber)}</div>
         {shot.shotId && (
           <div className="mt-1 break-words font-mono text-[10px] text-[var(--agent-fg-secondary)]">
@@ -297,7 +294,7 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
           </div>
         )}
       </TableCell>
-      <TableCell className="w-[180px] max-w-[180px]">
+      <TableCell>
         {section && section.media.length > 0 ? (
           <div className="grid gap-1">
             {section.media.map((media) => (
@@ -305,43 +302,39 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
             ))}
           </div>
         ) : (
-          <span className="text-[var(--agent-fg-secondary)]">-</span>
+          <BoundedStoryboardTableText
+            value={referenceMediaLabel}
+            placeholder={t('chat.storyboardTable.placeholders.noReference')}
+          />
         )}
         {section && <Diagnostics diagnostics={section.diagnostics} />}
       </TableCell>
-      <TableCell className="w-[56px] font-mono">{formatDuration(shot.duration)}</TableCell>
-      <TableCell className="w-[72px] whitespace-pre-wrap">{camera || '-'}</TableCell>
-      <TableCell className="w-[160px]">
-        <div className="whitespace-pre-wrap break-words">{shot.visualDescription}</div>
-        <div className="mt-1 whitespace-pre-wrap break-words text-[var(--agent-fg-secondary)]">
-          {shot.characterAction}
-        </div>
-        {emotion && (
-          <div className="mt-1 break-words text-[10px] text-[var(--agent-fg-secondary)]">
-            {t('chat.storyboardTable.labels.emotion')}: {emotion}
-          </div>
-        )}
-        {tags && (
-          <div className="mt-1 break-words text-[10px] text-[var(--agent-fg-secondary)]">
-            {t('chat.storyboardTable.labels.tags')}: {tags}
-          </div>
-        )}
+      <TableCell>
+        <BoundedStoryboardTableText
+          value={imagePrompt}
+          placeholder={t('chat.storyboardTable.placeholders.imagePromptSkipped')}
+        />
       </TableCell>
-      <TableCell className="w-[100px] whitespace-pre-wrap break-words">
-        {characters || '-'}
+      <TableCell>
+        <BoundedStoryboardTableText
+          value={videoPrompt}
+          placeholder={t('chat.storyboardTable.placeholders.none')}
+        />
       </TableCell>
-      <TableCell className="w-[120px] whitespace-pre-wrap break-words">
-        {cueDisplay || supplementalAudio || '-'}
+      <TableCell>
+        <BoundedStoryboardTableText value={formatDuration(shot.duration)} />
       </TableCell>
-      <TableCell className="w-[130px] whitespace-pre-wrap break-words">{style || '-'}</TableCell>
-      <TableCell className="w-[90px] whitespace-pre-wrap break-words">
-        <div className="font-medium">{shot.imageStrategy}</div>
-        {shot.decisionReason && (
-          <div className="mt-1 text-[var(--agent-fg-secondary)]">{shot.decisionReason}</div>
-        )}
+      <TableCell>
+        <BoundedStoryboardTableText
+          value={cueDisplay}
+          placeholder={t('chat.storyboardTable.placeholders.noDialogue')}
+        />
       </TableCell>
-      <TableCell className="w-[120px] whitespace-pre-wrap break-words">
-        {animation || '-'}
+      <TableCell>
+        <StoryboardReviewStateCell state={state} />
+      </TableCell>
+      <TableCell>
+        <StoryboardReviewActionCell state={state} />
       </TableCell>
     </tr>
   );
@@ -349,7 +342,7 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
 
 function TableHeader({ children }: { children: React.ReactNode }) {
   return (
-    <th className="border-b border-[var(--agent-divider)] px-2 py-1.5 font-medium tracking-normal">
+    <th className="border border-[var(--agent-divider)] px-2 py-1.5 font-medium tracking-normal">
       {children}
     </th>
   );
@@ -357,7 +350,7 @@ function TableHeader({ children }: { children: React.ReactNode }) {
 
 function TableCell({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <td className={`border-b border-[var(--agent-divider)] px-2 py-2 ${className ?? ''}`}>
+    <td className={`border border-[var(--agent-divider)] px-2 py-2 ${className ?? ''}`}>
       {children}
     </td>
   );
@@ -365,18 +358,76 @@ function TableCell({ children, className }: { children: React.ReactNode; classNa
 
 const STORYBOARD_TABLE_COLUMNS = [
   'chat.storyboardTable.columns.shot',
-  'chat.storyboardTable.columns.image',
+  'chat.storyboardTable.columns.referenceMedia',
+  'chat.storyboardTable.columns.imagePrompt',
+  'chat.storyboardTable.columns.videoPrompt',
   'chat.storyboardTable.columns.duration',
-  'chat.storyboardTable.columns.camera',
-  'chat.storyboardTable.columns.visualAction',
-  'chat.storyboardTable.columns.characters',
-  'chat.storyboardTable.columns.dialogueSfx',
-  'chat.storyboardTable.columns.stylePrompt',
-  'chat.storyboardTable.columns.strategy',
-  'chat.storyboardTable.columns.animation',
+  'chat.storyboardTable.columns.dialogue',
+  'chat.storyboardTable.columns.state',
+  'chat.storyboardTable.columns.action',
 ] as const;
 
 const STORYBOARD_TABLE_COLUMN_COUNT = STORYBOARD_TABLE_COLUMNS.length;
+
+interface StoryboardSceneReviewState {
+  readonly label: string;
+  readonly targetLabel: string;
+  readonly actionLabel: string;
+  readonly tone: 'neutral' | 'warning' | 'error';
+}
+
+function BoundedStoryboardTableText({
+  value,
+  placeholder = '-',
+}: {
+  readonly value: string | undefined;
+  readonly placeholder?: string;
+}) {
+  return (
+    <div
+      className="line-clamp-2 min-w-0 whitespace-pre-wrap break-words text-[11px] leading-[1.35] text-[var(--agent-fg)]"
+      title={value || placeholder}
+    >
+      {value || <span className="text-[var(--agent-fg-secondary)]">{placeholder}</span>}
+    </div>
+  );
+}
+
+function StoryboardReviewStateCell({ state }: { state: StoryboardSceneReviewState }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className={getStoryboardReviewStateClassName(state.tone)}>
+        <span className="truncate">{state.label}</span>
+      </span>
+      <span className="truncate text-[10px] text-[var(--agent-fg-secondary)]">
+        {state.targetLabel}
+      </span>
+    </div>
+  );
+}
+
+function StoryboardReviewActionCell({ state }: { state: StoryboardSceneReviewState }) {
+  return (
+    <span
+      className="inline-flex max-w-full rounded border border-[var(--agent-input-border)] bg-[var(--agent-elevated)] px-2 py-1 text-[11px] leading-none text-[var(--agent-fg)]"
+      title={state.actionLabel}
+      data-agent-storyboard-action={state.actionLabel}
+    >
+      <span className="truncate">{state.actionLabel}</span>
+    </span>
+  );
+}
+
+function getStoryboardReviewStateClassName(tone: StoryboardSceneReviewState['tone']): string {
+  const base = 'inline-flex max-w-full rounded border px-1.5 py-0.5 text-[11px] leading-none';
+  if (tone === 'error') {
+    return `${base} border-[var(--agent-error-fg)] bg-[color-mix(in_srgb,var(--agent-error-fg)_12%,transparent)] text-[var(--agent-error-fg)]`;
+  }
+  if (tone === 'warning') {
+    return `${base} border-[var(--agent-warning-fg)] bg-[color-mix(in_srgb,var(--agent-warning-fg)_12%,transparent)] text-[var(--agent-warning-fg)]`;
+  }
+  return `${base} border-[var(--agent-divider)] bg-[var(--agent-elevated)] text-[var(--agent-fg-secondary)]`;
+}
 
 function ProjectedStoryboardRows({ sections }: { sections: readonly ResolvedCompositeSection[] }) {
   return (
@@ -415,28 +466,126 @@ function ProjectedStoryboardRows({ sections }: { sections: readonly ResolvedComp
   );
 }
 
+function formatShotImagePrompt(_shot: StoryboardShotRow): string | undefined {
+  return undefined;
+}
+
+function formatSceneVideoPrompt(
+  animationOverlay: StoryboardShotPlanOverlay | undefined,
+): string | undefined {
+  return animationOverlay?.videoPromptIntent?.positive?.trim() || undefined;
+}
+
+function formatShotReferenceMediaLabel(
+  shot: StoryboardShotRow,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): string | undefined {
+  const refs = [...(shot.sourceMediaRefs ?? []), ...(shot.mediaRefs ?? [])];
+  if (refs.length === 0) return undefined;
+  if (refs.length === 1) {
+    const ref = refs[0];
+    return ref?.label ?? ref?.refId ?? t('chat.storyboardTable.placeholders.referenceBound');
+  }
+  return t('chat.storyboardTable.placeholders.referenceCount', { count: refs.length });
+}
+
+function resolveStoryboardSceneReviewState(input: {
+  readonly shot: StoryboardShotRow;
+  readonly section?: ResolvedCompositeSection;
+  readonly imagePrompt: string | undefined;
+  readonly videoPrompt: string | undefined;
+  readonly animationOverlay: StoryboardShotPlanOverlay | undefined;
+  readonly t: (key: string) => string;
+}): StoryboardSceneReviewState {
+  if (input.section?.diagnostics.some((diagnostic) => diagnostic.code !== undefined)) {
+    return {
+      label: input.t('chat.storyboardTable.state.fixReference'),
+      targetLabel: input.t('chat.storyboardTable.stateTarget.referenceMedia'),
+      actionLabel: input.t('chat.storyboardTable.actions.fixReference'),
+      tone: 'error',
+    };
+  }
+
+  if ((input.shot.generatedMediaRefs ?? []).length > 0) {
+    return {
+      label: input.t('chat.storyboardTable.state.reviewResult'),
+      targetLabel: input.t('chat.storyboardTable.stateTarget.resultReview'),
+      actionLabel: input.t('chat.storyboardTable.actions.reviewResult'),
+      tone: 'neutral',
+    };
+  }
+
+  if (!input.videoPrompt) {
+    return {
+      label: input.t('chat.storyboardTable.state.optimizeVideoPrompt'),
+      targetLabel: input.t('chat.storyboardTable.stateTarget.videoPrompt'),
+      actionLabel: input.t('chat.storyboardTable.actions.optimizeVideoPrompt'),
+      tone: 'warning',
+    };
+  }
+
+  const hasReferenceMedia = hasStoryboardReferenceMedia(input.shot, input.section);
+  if (input.animationOverlay?.requiresImagePrep) {
+    return {
+      label: input.t('chat.storyboardTable.state.processReference'),
+      targetLabel: input.t('chat.storyboardTable.stateTarget.referenceMedia'),
+      actionLabel: input.t('chat.storyboardTable.actions.processReference'),
+      tone: 'warning',
+    };
+  }
+
+  if (!hasReferenceMedia && input.shot.imageStrategy === 'generate-new' && !input.imagePrompt) {
+    return {
+      label: input.t('chat.storyboardTable.state.optimizeImagePrompt'),
+      targetLabel: input.t('chat.storyboardTable.stateTarget.imagePrompt'),
+      actionLabel: input.t('chat.storyboardTable.actions.optimizeImagePrompt'),
+      tone: 'warning',
+    };
+  }
+
+  if (!hasReferenceMedia && input.imagePrompt) {
+    return {
+      label: input.t('chat.storyboardTable.state.generateReferenceImage'),
+      targetLabel: input.t('chat.storyboardTable.stateTarget.imagePrompt'),
+      actionLabel: input.t('chat.storyboardTable.actions.generateImage'),
+      tone: 'neutral',
+    };
+  }
+
+  if (hasReferenceMedia && !input.imagePrompt) {
+    return {
+      label: input.t('chat.storyboardTable.state.imagePromptSkipped'),
+      targetLabel: input.t('chat.storyboardTable.stateTarget.videoPrompt'),
+      actionLabel: input.t('chat.storyboardTable.actions.generateVideo'),
+      tone: 'neutral',
+    };
+  }
+
+  return {
+    label: input.t('chat.storyboardTable.state.readyForVideo'),
+    targetLabel: input.t('chat.storyboardTable.stateTarget.videoPrompt'),
+    actionLabel: input.t('chat.storyboardTable.actions.generateVideo'),
+    tone: 'neutral',
+  };
+}
+
+function hasStoryboardReferenceMedia(
+  shot: StoryboardShotRow,
+  section: ResolvedCompositeSection | undefined,
+): boolean {
+  return (
+    (shot.sourceMediaRefs ?? []).length > 0 ||
+    (shot.mediaRefs ?? []).length > 0 ||
+    (section?.media.length ?? 0) > 0
+  );
+}
+
 function formatShotNumber(shotNumber: number): string {
   return `#${String(shotNumber).padStart(2, '0')}`;
 }
 
 function formatDuration(duration: number): string {
   return `${Number.isFinite(duration) ? duration : 0}s`;
-}
-
-function formatCharacters(characters: StoryboardShotRow['characters']): string | undefined {
-  const text = (characters ?? [])
-    .map((character) =>
-      compactStrings([
-        character.name,
-        character.role ? `(${character.role})` : undefined,
-        character.action,
-        character.emotion,
-        character.appearanceNotes,
-      ]).join(' '),
-    )
-    .filter((value) => value.length > 0)
-    .join(', ');
-  return text || undefined;
 }
 
 function formatStoryboardTextAndVoice(
@@ -511,46 +660,6 @@ function formatSupplementalAudio(
   ]).join('\n');
 }
 
-function formatAnimationOverlay(
-  overlay: StoryboardShotPlanOverlay | undefined,
-  t: (key: string) => string,
-): string | undefined {
-  if (!overlay) return undefined;
-  const imagePrep = overlay.imagePrep?.operations?.join(', ') ?? overlay.imagePrep?.notes;
-  const providerHints = overlay.providerHints
-    ?.map((hint) => compactStrings([hint.providerId, hint.modelId, hint.capabilityId]).join('/'))
-    .filter((value) => value.length > 0)
-    .join(', ');
-  const requirements = compactStrings([
-    overlay.requiresImagePrep ? t('chat.storyboardTable.animation.requiresImagePrep') : undefined,
-    overlay.requiresVideoGeneration
-      ? t('chat.storyboardTable.animation.requiresVideoGeneration')
-      : undefined,
-  ]).join(', ');
-  return compactStrings([
-    overlay.motionIntent
-      ? `${t('chat.storyboardTable.animation.motion')}: ${overlay.motionIntent}`
-      : undefined,
-    overlay.cameraIntent
-      ? `${t('chat.storyboardTable.animation.camera')}: ${overlay.cameraIntent}`
-      : undefined,
-    imagePrep ? `${t('chat.storyboardTable.animation.imagePrep')}: ${imagePrep}` : undefined,
-    overlay.videoPromptIntent?.positive
-      ? `${t('chat.storyboardTable.animation.videoPrompt')}: ${overlay.videoPromptIntent.positive}`
-      : undefined,
-    overlay.audioPromptIntent?.positive
-      ? `${t('chat.storyboardTable.animation.audioPrompt')}: ${overlay.audioPromptIntent.positive}`
-      : undefined,
-    requirements ? `${t('chat.storyboardTable.animation.requires')}: ${requirements}` : undefined,
-    providerHints
-      ? `${t('chat.storyboardTable.animation.providerHints')}: ${providerHints}`
-      : undefined,
-    overlay.approvalNotes
-      ? `${t('chat.storyboardTable.animation.approval')}: ${overlay.approvalNotes}`
-      : undefined,
-  ]).join('\n');
-}
-
 function formatCueSpeaker(
   speakerName: string | undefined,
   speakerCharacterId: string | undefined,
@@ -567,11 +676,6 @@ function formatCueSpeaker(
 
 function normalizeCueDisplayText(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
-}
-
-function formatList(values: readonly string[] | undefined): string | undefined {
-  const text = compactStrings(values).join(', ');
-  return text || undefined;
 }
 
 function compactStrings(values: readonly (string | undefined | null)[] | undefined): string[] {

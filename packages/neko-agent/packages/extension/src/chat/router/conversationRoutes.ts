@@ -56,7 +56,7 @@ export function tryHandleConversationRoute(
       return true;
 
     case 'getActiveConversation':
-      deps.conversationMessageHandler.sendActiveConversation();
+      void deps.conversationMessageHandler.sendActiveConversation();
       return true;
 
     case 'getAgentStates':

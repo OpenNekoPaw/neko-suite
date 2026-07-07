@@ -84,13 +84,15 @@ describe('createLocalPerceptionAssetLoader', () => {
 
     expect(runtime.loadProviderAsset).toHaveBeenCalledWith({
       caller: 'perception-asset-loader',
-      source: expect.objectContaining({
+      source: {
         kind: 'document',
-        source: expect.objectContaining({
+        source: {
+          kind: 'document',
           document: { filePath: '/workspace/book.epub', format: 'epub' },
-        }),
+        },
+        entryPath: 'OPS/images/page-1.jpg',
         locator: { kind: 'document', entryPath: 'OPS/images/page-1.jpg' },
-      }),
+      },
       preferredTarget: 'bytes',
       mimeTypeHint: 'image/jpeg',
     });

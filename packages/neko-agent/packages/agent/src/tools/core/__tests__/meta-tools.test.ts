@@ -98,6 +98,47 @@ describe('core meta tools', () => {
     });
   });
 
+  it('describes and forwards lifecycle slots for supplemental skill activation', async () => {
+    const activateSkill = vi.fn(async () => ({
+      success: true,
+      message: 'Activated skill "canvas-authoring"',
+      lifecycleRecordId: 'record-canvas',
+    }));
+    const tool = new ActivateSkillTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill,
+      deactivateSkill: vi.fn(),
+    });
+
+    expect(tool.description).toContain('referenceSkill');
+    expect(tool.description).not.toContain('Only one skill can be active at a time');
+
+    await expect(
+      tool.execute({
+        skillName: 'canvas-authoring',
+        reason: 'Need Canvas authoring guidance without replacing comic storyboard output rules.',
+        slot: 'referenceSkill',
+      }),
+    ).resolves.toEqual({
+      success: true,
+      data: {
+        activated: true,
+        skillName: 'canvas-authoring',
+        reason: 'Need Canvas authoring guidance without replacing comic storyboard output rules.',
+        slot: 'referenceSkill',
+        message: 'Activated skill "canvas-authoring"',
+        lifecycleRecordId: 'record-canvas',
+      },
+    });
+    expect(activateSkill).toHaveBeenCalledWith({
+      name: 'canvas-authoring',
+      reason: 'Need Canvas authoring guidance without replacing comic storyboard output rules.',
+      slot: 'referenceSkill',
+    });
+  });
+
   it('localizes skill activation result messages for Chinese tool execution context', async () => {
     const activateSkill = vi.fn(async () => ({
       success: true,

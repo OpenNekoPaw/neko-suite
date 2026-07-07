@@ -319,6 +319,41 @@ describe('recordStepInHistory', () => {
     expect(history[1]!.content).toBe(JSON.stringify({ error: 'fail' }));
   });
 
+  it('should preserve failed tool result data for act step history', () => {
+    const history: ChatMessage[] = [];
+    const step: AgentStep = {
+      type: 'act',
+      content: '',
+      toolResults: [
+        {
+          callId: 'c1',
+          success: false,
+          error: 'Canvas failed',
+          data: {
+            capabilityId: 'canvas.ingestMarkdown',
+            status: 'blocked',
+            diagnostics: [{ severity: 'error', code: 'canvas-error', message: 'No node' }],
+          },
+          name: 'canvas.ingestMarkdown',
+        },
+      ] as any,
+      timestamp: Date.now(),
+    };
+
+    recordStepInHistory(step, 1, history);
+
+    expect(JSON.parse(history[0]!.content as string)).toMatchObject({
+      schema: 'neko.tool-result.v1',
+      success: false,
+      error: 'Canvas failed',
+      data: {
+        capabilityId: 'canvas.ingestMarkdown',
+        status: 'blocked',
+        diagnostics: [{ severity: 'error', code: 'canvas-error', message: 'No node' }],
+      },
+    });
+  });
+
   it('should add assistant message for respond step', () => {
     const history: ChatMessage[] = [];
     const step: AgentStep = { type: 'respond', content: 'Done!', timestamp: Date.now() };

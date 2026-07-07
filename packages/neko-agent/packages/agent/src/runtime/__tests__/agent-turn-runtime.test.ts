@@ -676,6 +676,47 @@ describe('executeAgentTurn', () => {
     expect(agentRunner.execute).toHaveBeenNthCalledWith(2, 'queued follow-up', expect.any(Object));
   });
 
+  it('does not persist released task-result queued items as user messages', async () => {
+    const agentRunner = createAgentRunner();
+    const queuedMessage = {
+      id: 'queue-1',
+      conversationId: 'conv-1',
+      content: 'Continue from the completed async task result.',
+      createdAt: 456,
+      source: 'task-result-observation' as const,
+    };
+    vi.mocked(agentRunner.dequeuePendingMessage)
+      .mockReturnValueOnce(queuedMessage)
+      .mockReturnValueOnce(null);
+    vi.mocked(agentRunner.getPendingMessageQueue).mockReturnValue([]);
+    const { input } = createBaseInput({
+      agentManager: {
+        getOrCreate: vi.fn(() => agentRunner),
+        loadHistoryWithContext: vi.fn(),
+        nextMessageQueueSnapshotVersion: vi.fn().mockReturnValueOnce(7),
+      },
+      onMessageQueued: vi.fn(),
+    });
+
+    await expect(executeAgentTurn(input)).resolves.toEqual({
+      status: 'completed',
+      assistantMessage: expect.any(Object),
+    });
+
+    expect(input.conversations.addUserMessage).not.toHaveBeenCalledWith(
+      'conv-1',
+      expect.objectContaining({
+        content: 'Continue from the completed async task result.',
+      }),
+    );
+    expect(agentRunner.execute).toHaveBeenNthCalledWith(1, 'current request', expect.any(Object));
+    expect(agentRunner.execute).toHaveBeenNthCalledWith(
+      2,
+      'Continue from the completed async task result.',
+      expect.any(Object),
+    );
+  });
+
   it('lets normalized per-turn LLM options override global settings for runner configuration', async () => {
     const { input, agentRunner } = createBaseInput({
       chatModel: { providerId: 'openai', modelId: 'gpt-4.1', category: 'llm' },

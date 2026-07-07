@@ -170,7 +170,9 @@ export function projectMarkdownResourceRendering(
   const diagnostics = [
     ...detectUnsupportedResourceReferenceSyntax(extensionProjection.diagnostics),
     ...extensionProjection.diagnostics
-      .filter((diagnostic) => diagnostic.code !== 'unsupported-resource-reference-markdown-extension')
+      .filter(
+        (diagnostic) => diagnostic.code !== 'unsupported-resource-reference-markdown-extension',
+      )
       .map(toMarkdownResourceDiagnostic),
   ];
   const tokens = extractMarkdownResourceTokens(input.markdown, refs.length > 0).map((token) =>
@@ -352,6 +354,7 @@ function markdownMentionCandidateFromMentionItem(
 
 function contextPayloadNamespace(type: AgentContextPayload['type']): string | undefined {
   if (type === 'canvas-node') return 'canvas';
+  if (type === 'canvas-storyboard-action-intent') return 'canvas';
   if (type === 'character' || type === 'scene' || type === 'entity') return 'entity';
   if (type === 'asset' || type === 'media' || type === 'image' || type === 'audio-clip') {
     return 'asset';
@@ -384,7 +387,11 @@ function projectMarkdownMention(token: NekoMarkdownMentionToken): MarkdownMentio
     raw: token.raw,
     label: token.label,
     status:
-      token.status === 'resolved' ? 'bound' : token.status === 'ambiguous' ? 'ambiguous' : 'missing',
+      token.status === 'resolved'
+        ? 'bound'
+        : token.status === 'ambiguous'
+          ? 'ambiguous'
+          : 'missing',
     ...(token.ref ? { ref: token.ref } : {}),
     candidates: token.candidates,
     range: token.range,
@@ -508,9 +515,7 @@ function detectUnsupportedResourceReferenceSyntax(
   diagnostics: readonly NekoMarkdownDiagnostic[],
 ): readonly MarkdownResourceDiagnostic[] {
   return diagnostics
-    .filter(
-      (diagnostic) => diagnostic.code === 'unsupported-resource-reference-markdown-extension',
-    )
+    .filter((diagnostic) => diagnostic.code === 'unsupported-resource-reference-markdown-extension')
     .map((diagnostic) => ({
       severity: diagnostic.severity,
       code: diagnostic.code,
@@ -689,7 +694,9 @@ function collectMarkdownImageRefsFromPerceptionCards(
       mimeType: imageRef.mimeType ?? card.structural.mimeType,
       width: card.structural.width,
       height: card.structural.height,
-      ...(imageRef.documentResourceRef ? { resourceRef: imageRef.documentResourceRef } : {}),
+      ...(imageRef.documentResourceRef
+        ? { documentResourceRef: imageRef.documentResourceRef }
+        : {}),
       entryPath: imageRef.documentResourceRef?.entryPath ?? imageRef.uri,
     };
     return [
@@ -716,7 +723,9 @@ function projectMarkdownImageRef(
   extraTokens?: readonly string[],
 ): MarkdownToolResultImageRef {
   const locator = asRecord(image['locator']);
-  const documentResourceRef = parseStableDocumentArchiveResourceRef(image['resourceRef']);
+  const documentResourceRef =
+    parseStableDocumentArchiveResourceRef(image['documentResourceRef']) ??
+    parseStableDocumentArchiveResourceRef(image['resourceRef']);
   const resourceRef = parseStableResourceRef(image['resourceRef']);
   const label = readString(image, 'label');
   const alias = readString(image, 'alias');

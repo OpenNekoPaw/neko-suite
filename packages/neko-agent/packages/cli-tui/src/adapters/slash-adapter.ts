@@ -14,10 +14,12 @@ import {
 } from '../core/slash-commands';
 import type { CLIConfig } from '../core/types';
 import type { SkillService, ToolRegistry } from '@neko/agent';
+import type { TuiLocale } from '../core/tui-locale';
 
 export { isSlashCommand, isSkillInvocation };
 
 export interface TUISlashCommandContext {
+  readonly locale?: TuiLocale;
   readonly config: CLIConfig;
   skillService?: SkillService;
   toolRegistry?: ToolRegistry;
@@ -46,6 +48,7 @@ export async function handleTUISlashCommand(
   };
 }> {
   const cliContext: SlashCommandContext = {
+    locale: context.locale,
     config: context.config,
     skillService: context.skillService,
     toolRegistry: context.toolRegistry,
@@ -85,6 +88,7 @@ export async function handleTUISkillInvocation(
   };
 }> {
   const cliContext: SlashCommandContext = {
+    locale: context.locale,
     config: context.config,
     skillService: context.skillService,
     toolRegistry: context.toolRegistry,

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { Tool } from '@neko/shared';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { IProjectMemoryManager, Tool } from '@neko/shared';
 import { createCoreTools } from '../core-tools';
 
 describe('createCoreTools', () => {
@@ -18,6 +18,10 @@ describe('createCoreTools', () => {
     await fs.mkdir(path.join(workspaceRoot, 'src'), { recursive: true });
     await fs.mkdir(path.join(workspaceRoot, '.neko', '.cache', 'resources'), { recursive: true });
     await fs.mkdir(path.join(workspaceRoot, '.neko', 'logs'), { recursive: true });
+    await fs.mkdir(path.join(workspaceRoot, '.neko', 'tmp'), { recursive: true });
+    await fs.mkdir(path.join(workspaceRoot, '.neko', 'semantic-index'), { recursive: true });
+    await fs.mkdir(path.join(workspaceRoot, '.neko', 'entities'), { recursive: true });
+    await fs.mkdir(path.join(workspaceRoot, '.neko', 'search'), { recursive: true });
     await fs.mkdir(path.join(workspaceRoot, 'ignored'), { recursive: true });
     await fs.mkdir(outsideRoot, { recursive: true });
     await fs.writeFile(path.join(workspaceRoot, 'src', 'story.txt'), 'hello neko\n', 'utf-8');
@@ -28,6 +32,18 @@ describe('createCoreTools', () => {
       'utf-8',
     );
     await fs.writeFile(path.join(workspaceRoot, '.neko', 'logs', 'events.jsonl'), '{}\n', 'utf-8');
+    await fs.writeFile(path.join(workspaceRoot, '.neko', 'tmp', 'scratch.txt'), 'tmp\n', 'utf-8');
+    await fs.writeFile(
+      path.join(workspaceRoot, '.neko', 'semantic-index', 'index.json'),
+      '{}\n',
+      'utf-8',
+    );
+    await fs.writeFile(
+      path.join(workspaceRoot, '.neko', 'entities', 'store.json'),
+      '{}\n',
+      'utf-8',
+    );
+    await fs.writeFile(path.join(workspaceRoot, '.neko', 'search', 'index.json'), '{}\n', 'utf-8');
     await fs.writeFile(path.join(workspaceRoot, 'ignored', 'secret.txt'), 'ignored\n', 'utf-8');
     await fs.writeFile(path.join(outsideRoot, 'secret.txt'), 'outside\n', 'utf-8');
   });
@@ -187,6 +203,30 @@ describe('createCoreTools', () => {
       success: false,
       error: expect.stringContaining('managed workspace runtime or cache directory'),
     });
+    await expect(
+      getTool(tools, 'Read').execute({ file_path: '.neko/tmp/scratch.txt' }),
+    ).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('managed workspace runtime or cache directory'),
+    });
+    await expect(
+      getTool(tools, 'Read').execute({ file_path: '.neko/semantic-index/index.json' }),
+    ).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('managed workspace runtime or cache directory'),
+    });
+    await expect(
+      getTool(tools, 'Read').execute({ file_path: '.neko/entities/store.json' }),
+    ).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('managed workspace runtime or cache directory'),
+    });
+    await expect(
+      getTool(tools, 'Read').execute({ file_path: '.neko/search/index.json' }),
+    ).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('managed workspace runtime or cache directory'),
+    });
   });
 
   it('does not reveal managed cache entries through recursive workspace listing or search', async () => {
@@ -210,15 +250,42 @@ describe('createCoreTools', () => {
     expect(JSON.stringify(grep.data)).not.toContain('page.txt');
   });
 
-  it('keeps project memory reachable while hiding managed .neko runtime subtrees', async () => {
+  it('blocks generic Agent reads from project memory backing files', async () => {
     const read = getTool(createCoreTools({ defaultCwd: workspaceRoot }), 'Read');
 
     await expect(read.execute({ file_path: '.neko/memory.md' })).resolves.toMatchObject({
-      success: true,
-      data: expect.objectContaining({
-        content: expect.stringContaining('# Memory'),
-      }),
+      success: false,
+      error: expect.stringContaining('managed workspace runtime or cache directory'),
     });
+  });
+
+  it('exposes project memory updates as proposals instead of direct .neko writes', async () => {
+    const projectMemoryManager = createMockProjectMemoryManager();
+    const memoryWrite = getTool(
+      createCoreTools({ defaultCwd: workspaceRoot, projectMemoryManager }),
+      'MemoryWrite',
+    );
+
+    await expect(
+      memoryWrite.execute({
+        action: 'upsert',
+        key: 'Recent Decisions',
+        content: '- Keep host adapters at composition roots.',
+      }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        committed: false,
+        proposal: {
+          kind: 'project-memory-mutation',
+          action: 'upsert',
+          key: 'Recent Decisions',
+          content: '- Keep host adapters at composition roots.',
+        },
+      },
+    });
+    expect(projectMemoryManager.upsertEntry).not.toHaveBeenCalled();
+    expect(projectMemoryManager.removeEntry).not.toHaveBeenCalled();
   });
 
   it('blocks generic file tools from workspace .gitignore matches', async () => {
@@ -250,4 +317,18 @@ function getTool(tools: readonly Tool[], name: string): Tool {
     throw new Error(`Missing tool: ${name}`);
   }
   return tool;
+}
+
+function createMockProjectMemoryManager(): IProjectMemoryManager & {
+  readonly upsertEntry: ReturnType<typeof vi.fn>;
+  readonly removeEntry: ReturnType<typeof vi.fn>;
+} {
+  return {
+    load: vi.fn(async () => undefined),
+    getContent: vi.fn(() => null),
+    upsertEntry: vi.fn(async () => undefined),
+    removeEntry: vi.fn(async () => undefined),
+    on: vi.fn(),
+    off: vi.fn(),
+  };
 }

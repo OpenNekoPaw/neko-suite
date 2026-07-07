@@ -8,6 +8,7 @@ import {
 import type {
   Skill,
   SkillLifecycleDeactivationRequest,
+  SkillLifecycleDiagnostic,
   SkillLifecycleProjection,
 } from '@neko/shared';
 
@@ -58,34 +59,37 @@ export function wireCliSkillLifecycleSession(input: {
         diagnostics: projection.diagnostics,
       };
     },
-    activateSkill: async (name: string) => {
+    activateSkill: async (request) => {
       const result = await input.lifecycleRuntime.activate(
         defaultSkillLifecycleRequest({
           conversationId: input.conversationId,
-          skillName: name,
+          skillName: request.name,
+          ...(request.slot ? { slot: request.slot } : {}),
           owner: 'agent',
           source: 'explicit-agent',
         }),
       );
+      const diagnostics = withActivationReasonDetails(result.diagnostics, request.reason);
       syncProjection();
       if (!result.ok) {
         return {
           success: false,
-          message: result.diagnostics[0]?.message ?? `Skill "${name}" was not activated`,
-          diagnostics: result.diagnostics,
+          message: diagnostics[0]?.message ?? `Skill "${request.name}" was not activated`,
+          diagnostics,
         };
       }
       return {
         success: true,
-        message: `Activated skill "${result.record?.skillName ?? name}"`,
+        message: `Activated skill "${result.record?.skillName ?? request.name}"`,
         ...(result.record?.injection.allowedTools
           ? { allowedTools: result.record.injection.allowedTools }
           : {}),
         ...(result.record?.id ? { lifecycleRecordId: result.record.id } : {}),
-        diagnostics: result.diagnostics,
+        diagnostics,
       };
     },
     deactivateSkill: (target) => {
+      const requestedSlot = target?.slot;
       const defaultSlot =
         !target?.recordId && !target?.slot && !target?.skillName
           ? ('domainSkill' as const)
@@ -93,7 +97,7 @@ export function wireCliSkillLifecycleSession(input: {
       const result = input.lifecycleRuntime.deactivate({
         conversationId: input.conversationId,
         ...(target?.recordId ? { recordId: target.recordId } : {}),
-        ...(isSkillLifecycleSlot(target?.slot) ? { slot: target.slot } : {}),
+        ...(isSkillLifecycleSlot(requestedSlot) ? { slot: requestedSlot } : {}),
         ...(defaultSlot ? { slot: defaultSlot } : {}),
         ...(target?.skillName ? { skillName: target.skillName } : {}),
         actor: 'agent',
@@ -227,4 +231,20 @@ function isSkillLifecycleSlot(value: unknown): value is SkillLifecycleDeactivati
     value === 'ephemeralSkill' ||
     value === 'promptChainSkill'
   );
+}
+
+function withActivationReasonDetails(
+  diagnostics: readonly SkillLifecycleDiagnostic[],
+  reason: string,
+): readonly SkillLifecycleDiagnostic[] {
+  if (diagnostics.length === 0) {
+    return diagnostics;
+  }
+  return diagnostics.map((diagnostic) => ({
+    ...diagnostic,
+    details: {
+      ...diagnostic.details,
+      activationReason: reason,
+    },
+  }));
 }

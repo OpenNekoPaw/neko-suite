@@ -50,7 +50,7 @@ describe('MessageList auto-scroll lifecycle', () => {
   });
 
   it('cancels pending auto-scroll frames when the list unmounts', () => {
-    const { unmount } = render(
+    const { unmount } = renderWithI18n(
       <MessageActionsProvider>
         <MessageList
           messages={[createMessage('message-1')]}
@@ -72,7 +72,7 @@ describe('MessageList auto-scroll lifecycle', () => {
   it('renders repeated tool blocks as a collapsed group in the virtualized list', () => {
     virtualItems = [{ index: 0, key: 'tool-group', start: 0 }];
 
-    render(
+    renderWithI18n(
       <MessageActionsProvider>
         <MessageList
           messages={[createToolMessage()]}

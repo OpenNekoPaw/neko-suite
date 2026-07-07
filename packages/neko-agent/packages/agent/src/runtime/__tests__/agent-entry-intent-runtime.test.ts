@@ -4,10 +4,13 @@ import {
   AGENT_RETRY_CREATION_MESSAGE,
   buildAgentCreationMessage,
   buildAgentFileContextPayload,
+  buildCanvasStoryboardActionIntentContextPayload,
+  buildCanvasStoryboardActionIntentPrompt,
   buildAgentPromptCommandMessage,
   buildAgentRetryCreationMessage,
   buildAgentScriptCommandMessage,
   createAgentFileContextPayloadId,
+  decideCanvasStoryboardActionIntent,
   inferAgentCreationIntentFromFilePath,
   inferAgentFileContextType,
 } from '../agent-entry-intent-runtime';
@@ -85,6 +88,167 @@ describe('agent entry intent runtime', () => {
         relativePath: 'assets/frame.webp',
       },
       intent: '请分析这张图片：',
+    });
+  });
+
+  it('builds Canvas storyboard action intent prompts for Agent routing', () => {
+    const payload = buildCanvasStoryboardActionIntentContextPayload({
+      locale: 'zh-cn',
+      payload: {
+        type: 'canvas-storyboard-action-intent',
+        id: 'shot-1:generate-video',
+        label: 'Storyboard action: generate-video',
+        summary: 'raw summary',
+        data: {
+          intent: {
+            version: 1,
+            actionId: 'generate-video',
+            target: { nodeId: 'shot-1', sceneNodeId: 'scene-1', shotNumber: 2 },
+            expectedNextStateId: 'ready-to-generate-video',
+          },
+        },
+        intent: 'generate-video',
+      },
+    });
+
+    expect(payload).toMatchObject({
+      type: 'canvas-storyboard-action-intent',
+      summary: 'Generate Video for shot-1',
+    });
+    expect(payload?.intent).toContain('处理 Canvas 分镜下一步动作');
+    expect(payload?.intent).toContain('Action intent: generate-video');
+    expect(payload?.intent).toContain('nodeId=shot-1');
+    expect(payload?.intent).toContain('异步任务');
+    expect(payload?.intent).toContain('不要把它当作普通文本表格或旧 generationPrompt 路径');
+  });
+
+  it('returns null for ordinary context payloads and fails visibly for malformed storyboard intents', () => {
+    expect(
+      buildCanvasStoryboardActionIntentContextPayload({
+        payload: {
+          type: 'file',
+          id: 'file-1',
+          label: 'story.md',
+          summary: 'File: story.md',
+          data: { filePath: '/workspace/story.md' },
+        },
+      }),
+    ).toBeNull();
+
+    expect(() =>
+      buildCanvasStoryboardActionIntentPrompt({
+        intent: {
+          version: 1,
+          actionId: 'review-result',
+          target: { nodeId: 'shot-2' },
+        },
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      buildCanvasStoryboardActionIntentContextPayload({
+        payload: {
+          type: 'canvas-storyboard-action-intent',
+          id: 'bad',
+          label: 'Bad intent',
+          summary: 'Bad intent',
+          data: { intent: { version: 1, actionId: 'future-action', target: { nodeId: 'shot' } } },
+        },
+      }),
+    ).toThrow(/Invalid Canvas storyboard action intent context payload/);
+  });
+
+  it('decides storyboard action readiness from inputs, approval, and model capabilities', () => {
+    expect(
+      decideCanvasStoryboardActionIntent({
+        intent: {
+          version: 1,
+          actionId: 'generate-video',
+          target: { nodeId: 'shot-1' },
+        },
+      }),
+    ).toMatchObject({
+      status: 'blocked',
+      diagnostics: [
+        expect.objectContaining({ code: 'storyboard-video-prompt-required' }),
+        expect.objectContaining({ code: 'storyboard-model-capability-required' }),
+      ],
+    });
+
+    const intent = {
+      version: 1,
+      actionId: 'generate-video',
+      target: { nodeId: 'shot-1', sceneNodeId: 'scene-1' },
+      promptDocuments: [{ blockKind: 'video', documentId: 'shot-1:video:prompt', version: 1 }],
+      generationParams: {
+        duration: 4,
+        advancedParameters: { aspectRatio: '16:9' },
+      },
+    } as const;
+
+    expect(
+      decideCanvasStoryboardActionIntent({
+        intent,
+        modelCapability: {
+          providerId: 'test',
+          modelId: 'video-model',
+          videoGeneration: true,
+          duration: { maxSeconds: 8 },
+          advancedParameters: ['aspectRatio'],
+        },
+      }),
+    ).toMatchObject({
+      status: 'requires-approval',
+      requiresApproval: true,
+      diagnostics: [expect.objectContaining({ code: 'approval-required' })],
+    });
+
+    expect(
+      decideCanvasStoryboardActionIntent({
+        intent,
+        approvalGranted: true,
+        modelCapability: {
+          providerId: 'test',
+          modelId: 'video-model',
+          videoGeneration: true,
+          duration: { maxSeconds: 8 },
+          advancedParameters: ['aspectRatio'],
+        },
+      }),
+    ).toMatchObject({
+      status: 'ready',
+      diagnostics: [],
+    });
+  });
+
+  it('rejects unsupported storyboard action parameters and model capabilities', () => {
+    expect(
+      decideCanvasStoryboardActionIntent({
+        intent: {
+          version: 1,
+          actionId: 'generate-video',
+          target: { nodeId: 'shot-1' },
+          promptDocuments: [{ blockKind: 'video', documentId: 'shot-1:video:prompt', version: 1 }],
+          generationParams: {
+            duration: 12,
+            advancedParameters: { seed: 42 },
+          },
+        },
+        approvalGranted: true,
+        modelCapability: {
+          videoGeneration: false,
+          videoEditing: false,
+          duration: { maxSeconds: 6 },
+          advancedParameters: ['aspectRatio'],
+        },
+      }),
+    ).toMatchObject({
+      status: 'blocked',
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({ code: 'unsupported-storyboard-advanced-parameter' }),
+        expect.objectContaining({ code: 'storyboard-video-capability-unsupported' }),
+        expect.objectContaining({ code: 'storyboard-duration-unsupported' }),
+      ]),
     });
   });
 });

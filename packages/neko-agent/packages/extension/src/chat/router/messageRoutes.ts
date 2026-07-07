@@ -104,6 +104,8 @@ function buildCanvasAuthoringHandoffPrompt(
       '请根据内容和附加 handoff 上下文判断是否需要 Canvas authoring Skill、Canvas catalog/context 查询，以及应该使用哪个 Canvas capability/tool。',
       ...projectCanvasAuthoringSourceGuidanceZh(message),
       '使用 handoff 上下文里的稳定 resource refs。不要使用 Webview render URI、blob URL、runtime handle、旧 plugin-transfer payload 或 CanvasNode JSON。',
+      '资源字段必须保持原始契约：统一 ResourceRef 使用 resourceRef；EPUB/PDF/CBZ 等 document-entry DocumentArchiveResourceRef 必须使用 documentResourceRef，不能放进 resourceRef。',
+      '如果 Canvas 工具返回 blocked、error diagnostic 或没有返回新增/变更的 Canvas 引用，不要宣称已发送成功；应直接报告阻塞诊断。',
       '',
       message.content,
     ].join('\n');
@@ -114,6 +116,8 @@ function buildCanvasAuthoringHandoffPrompt(
     'Decide whether to use the Canvas authoring Skill, query Canvas catalog/context, and which Canvas capability/tool to call based on the content and attached handoff context.',
     ...projectCanvasAuthoringSourceGuidanceEn(message),
     'Use stable resource refs from the handoff context. Do not use Webview render URIs, blob URLs, runtime handles, old plugin-transfer payloads, or CanvasNode JSON.',
+    'Preserve resource field contracts: unified ResourceRef values use resourceRef; EPUB/PDF/CBZ document-entry DocumentArchiveResourceRef values must use documentResourceRef and must not be placed in resourceRef.',
+    'If a Canvas tool returns blocked, an error diagnostic, or no created/changed Canvas reference, do not claim the content was sent successfully; report the blocking diagnostic instead.',
     '',
     message.content,
   ].join('\n');
@@ -187,6 +191,20 @@ function defaultCanvasAuthoringHandoffTitle(
 function projectCanvasAuthoringSourceGuidanceZh(
   message: CanvasAuthoringHandoffRouteMessage,
 ): readonly string[] {
+  if (isStoryboardCreativeTableHandoff(message)) {
+    if (isReviewOnlyCanvasHandoffIntent(message.userIntent)) {
+      return [
+        '这是 storyboard creative table 的审阅交接；仅在用户明确要求审阅表格/草稿时使用 canvas.ingestMarkdown。',
+        '如果用户要把分镜发送为 Canvas 生产节点，应改用 canvas.createStoryboardFromMarkdown，传入 profileHint=storyboard、mode=create-nodes，并带显式 approval context。',
+      ];
+    }
+    return [
+      '这是 storyboard creative table 的 Send to Canvas；默认目标是创建 Canvas 分镜生产节点，而不是审阅 table 节点。',
+      '可先调用 canvas.validateMarkdownStoryboard 做只读校验；校验通过后调用 canvas.createStoryboardFromMarkdown，传入 profileHint=storyboard、mode=create-nodes，并用本次明确 Send to Canvas 指令作为 creation-apply approval context。',
+      'canvas.ingestMarkdown 只用于审阅表格/草稿，不会创建 scene/shot；用户要求发送为分镜时不要停在 ingestMarkdown 的 table 节点。',
+      '创建结果应返回 scene.basic + shot.basic 节点引用；没有新增/变更 Canvas refs 时按阻塞处理。',
+    ];
+  }
   if (message.sourceKind === 'markdown') {
     return [
       '不要默认当作普通表格；只有合适时才选择笔记、通用表格、creative table、storyboard profile 或其他 Canvas 工具。',
@@ -198,6 +216,20 @@ function projectCanvasAuthoringSourceGuidanceZh(
 function projectCanvasAuthoringSourceGuidanceEn(
   message: CanvasAuthoringHandoffRouteMessage,
 ): readonly string[] {
+  if (isStoryboardCreativeTableHandoff(message)) {
+    if (isReviewOnlyCanvasHandoffIntent(message.userIntent)) {
+      return [
+        'This is a storyboard creative table review handoff; use canvas.ingestMarkdown only when the user explicitly asks for table/draft review.',
+        'If the user wants the storyboard sent as production Canvas nodes, use canvas.createStoryboardFromMarkdown with profileHint=storyboard, mode=create-nodes, and explicit approval context.',
+      ];
+    }
+    return [
+      'This is a storyboard creative table Send to Canvas handoff; the default target is production Canvas storyboard nodes, not a review table node.',
+      'You may call canvas.validateMarkdownStoryboard first for read-only validation; after validation, call canvas.createStoryboardFromMarkdown with profileHint=storyboard, mode=create-nodes, and use this explicit Send to Canvas instruction as creation-apply approval context.',
+      'canvas.ingestMarkdown is only for table/draft review and does not create scene/shot nodes; do not stop at an ingestMarkdown table node when the user asked to send a storyboard.',
+      'Creation should return scene.basic + shot.basic node refs; if no created/changed Canvas refs are returned, treat the result as blocked.',
+    ];
+  }
   if (message.sourceKind === 'markdown') {
     return [
       'Do not assume a generic table; choose a note, generic table, creative table, storyboard profile, or another Canvas tool only when appropriate.',
@@ -206,6 +238,24 @@ function projectCanvasAuthoringSourceGuidanceEn(
   return [
     'Create or update Canvas nodes only when appropriate; otherwise explain why Canvas is not the right target.',
   ];
+}
+
+function isStoryboardCreativeTableHandoff(message: CanvasAuthoringHandoffRouteMessage): boolean {
+  const targetHints = message.targetHints;
+  const declaredProfileHint = targetHints?.declaredProfileHint?.toLowerCase();
+  return (
+    message.sourceKind === 'markdown' &&
+    targetHints?.declaredIntentHint === 'creative-table' &&
+    declaredProfileHint === 'storyboard'
+  );
+}
+
+function isReviewOnlyCanvasHandoffIntent(userIntent: string | undefined): boolean {
+  if (!userIntent) return false;
+  const normalized = userIntent.toLowerCase();
+  return (
+    normalized.includes('review') || normalized.includes('审阅') || normalized.includes('草稿')
+  );
 }
 
 function formatCanvasAuthoringSourceKindZh(

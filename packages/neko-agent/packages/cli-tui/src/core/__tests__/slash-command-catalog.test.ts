@@ -56,6 +56,22 @@ describe('createTuiSlashCommandCatalog', () => {
     expect(commands.some((command) => command.name === 'draft-only')).toBe(false);
   });
 
+  it('localizes builtin and TUI-local command descriptions for Chinese autocomplete', () => {
+    const commands = createTuiSlashCommandCatalog(undefined, 'zh');
+
+    expect(commands).toContainEqual({
+      name: 'help',
+      description: '显示可用命令帮助',
+    });
+    expect(commands).toContainEqual({
+      name: 'media',
+      description: '列出或切换图像、视频、音频模型',
+    });
+    expect(commands.map((command) => command.description)).not.toContain(
+      'Show help message with available commands',
+    );
+  });
+
   it('projects ordinary skills and legacy aliases into the dollar catalog without slash entries', () => {
     const slashCommands = createTuiSlashCommandCatalog([]);
     const skillCommands = createTuiSkillInvocationCatalog([

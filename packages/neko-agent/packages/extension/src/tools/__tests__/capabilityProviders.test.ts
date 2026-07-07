@@ -34,6 +34,12 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
+vi.mock('vscode', () => ({
+  commands: {
+    executeCommand: vi.fn(),
+  },
+}));
+
 vi.mock('../../services/engineClientProvider', () => ({
   getEngineClientProvider: mocks.getEngineClientProvider,
 }));

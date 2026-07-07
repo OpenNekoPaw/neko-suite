@@ -19,12 +19,6 @@ import type {
 } from '@neko/shared';
 import { TOOL_NAMES_ASSETS } from '@neko/shared';
 
-type RuntimeRequirementsTool = Tool & {
-  readonly requirements?: {
-    readonly writableProject?: boolean;
-  };
-};
-
 export function createNekoAssetsHeadlessCapabilityProvider(
   api: NekoAssetsAPI,
 ): AgentCapabilityProvider {
@@ -172,7 +166,7 @@ class NekoAssetsHeadlessCapabilityProvider implements AgentCapabilityProvider {
             return { success: false, error: `Failed to import asset: ${String(err)}` };
           }
         },
-      } satisfies RuntimeRequirementsTool,
+      },
     ];
   }
 
@@ -244,15 +238,11 @@ function filterAssetEntities(
 function toAssetSummary(entity: AssetEntity): AssetSummary {
   const files = entity.variants.flatMap((variant) => variant.files);
   const mediaTypes = [...new Set(files.map((file) => file.mediaType))].sort();
-  const assetDimensions = [
-    ...new Set(files.map((file) => file.characterAsset?.assetDimension).filter(isString)),
-  ].sort();
-  const mediaKinds = [
-    ...new Set(files.map((file) => file.characterAsset?.mediaKind).filter(isString)),
-  ].sort();
-  const storageModes = [
-    ...new Set(files.map((file) => file.characterAsset?.storageMode).filter(isString)),
-  ].sort();
+  const assetDimensions = uniqueSortedStrings(
+    files.map((file) => file.characterAsset?.assetDimension),
+  );
+  const mediaKinds = uniqueSortedStrings(files.map((file) => file.characterAsset?.mediaKind));
+  const storageModes = uniqueSortedStrings(files.map((file) => file.characterAsset?.storageMode));
   return {
     id: entity.id,
     name: entity.name,
@@ -290,9 +280,7 @@ function toReferenceCandidate(entity: AssetEntity) {
 }
 
 function formatReferenceDescription(entity: AssetEntity): string {
-  return [entity.category, entity.description, entity.tags.join(', ')]
-    .filter((part) => part.length > 0)
-    .join(' · ');
+  return [entity.category, entity.description, entity.tags.join(', ')].filter(isString).join(' · ');
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -301,6 +289,10 @@ function optionalString(value: unknown): string | undefined {
 
 function isString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+function uniqueSortedStrings(values: readonly (string | undefined)[]): readonly string[] {
+  return [...new Set(values.filter(isString))].sort();
 }
 
 function clampLimit(value: unknown, defaultValue: number, maxValue: number): number {

@@ -907,6 +907,81 @@ describe('agent event stream runtime processor', () => {
     expect(streamCompleteCallIndex).toBeGreaterThan(completedTaskCallIndex);
   });
 
+  it('keeps the source stream suspended at done until background tasks settle', async () => {
+    const processor = new AgentEventStreamRuntimeProcessor<SourceTask>();
+    const postMessage = vi.fn();
+    let observerInput: ObserveAgentStreamBackgroundTaskProgressInput<SourceTask> | undefined;
+    let sourceFinished = false;
+
+    async function* sourceEvents(): AsyncIterable<AgentEvent> {
+      try {
+        yield createBackgroundToolResultEvent();
+        yield { type: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } };
+      } finally {
+        sourceFinished = true;
+      }
+    }
+
+    const processing = processor.process({
+      conversationId: 'conv-1',
+      messageId: 'msg-stream',
+      events: sourceEvents(),
+      postMessage,
+      backgroundTasks: {
+        observeProgress: (input) => {
+          observerInput = input;
+          return vi.fn();
+        },
+        createRecoveryProgress: (task) => ({
+          id: task.id,
+          status: 'failed',
+          progress: 100,
+          error: 'Progress delivery failed',
+          updatedAt: '2026-01-01T00:00:01.000Z',
+        }),
+        createProgressDelivery: (task) => ({
+          progress: {
+            id: task.id,
+            status: 'completed',
+            progress: 100,
+            updatedAt: '2026-01-01T00:00:02.000Z',
+          },
+        }),
+      },
+    });
+
+    const stateBeforeTerminalProgress = await Promise.race([
+      processing.then(() => 'resolved' as const),
+      new Promise<'pending'>((resolve) => {
+        setTimeout(() => resolve('pending'), 0);
+      }),
+    ]);
+
+    expect(observerInput).toBeDefined();
+    expect(stateBeforeTerminalProgress).toBe('pending');
+    expect(sourceFinished).toBe(false);
+
+    await observerInput!.onTaskProgress({
+      lease: {
+        conversationId: 'conv-1',
+        runId: 'run-1',
+      },
+      conversationId: 'conv-1',
+      sourceTask: { id: 'task-1' },
+      task: {
+        progress: {
+          id: 'task-1',
+          status: 'completed',
+          progress: 100,
+          updatedAt: '2026-01-01T00:00:02.000Z',
+        },
+      },
+    });
+    await processing;
+
+    expect(sourceFinished).toBe(true);
+  });
+
   it('disposes all tracked background task subscriptions', async () => {
     const processor = new AgentEventStreamRuntimeProcessor<SourceTask>();
     const unsubscribeA = vi.fn();
@@ -924,7 +999,9 @@ describe('agent event stream runtime processor', () => {
     ): ProcessAgentEventStreamRuntimeInput<SourceTask> => ({
       conversationId,
       messageId: 'msg-stream',
-      events: toAsyncIterable([createBackgroundToolResultEvent(conversationId, `run-${conversationId}`)]),
+      events: toAsyncIterable([
+        createBackgroundToolResultEvent(conversationId, `run-${conversationId}`),
+      ]),
       postMessage: () => undefined,
       backgroundTasks: {
         observeProgress,

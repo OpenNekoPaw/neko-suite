@@ -224,6 +224,7 @@ export async function projectProviderAwareMessages(
       diagnostics: result.diagnostics,
     });
     assertNoUnsupportedNativeMultimodalInputs(result.diagnostics);
+    assertNoUnavailableNativeMultimodalAssets(result.diagnostics);
   }
 
   return [
@@ -273,6 +274,34 @@ function assertNoUnsupportedNativeMultimodalInputs(
     retryable: false,
     context: {
       ...(unsupported.modality ? { modality: unsupported.modality } : {}),
+      diagnostics,
+    },
+  });
+}
+
+function assertNoUnavailableNativeMultimodalAssets(
+  diagnostics: readonly ProjectionDiagnostic[],
+): void {
+  const unavailable = diagnostics.find(
+    (diagnostic) =>
+      diagnostic.code === 'asset-load-failed' ||
+      diagnostic.code === 'asset-loader-missing' ||
+      diagnostic.code === 'asset-ref-missing',
+  );
+  if (!unavailable) {
+    return;
+  }
+
+  throw new PlatformError({
+    category: 'validation',
+    code: 'CHAT_MODEL_NATIVE_MULTIMODAL_ASSET_UNAVAILABLE',
+    message:
+      unavailable.message ||
+      'The selected chat model supports native multimodal input, but Neko could not prepare the referenced asset for provider input.',
+    retryable: false,
+    context: {
+      ...(unavailable.assetId ? { assetId: unavailable.assetId } : {}),
+      ...(unavailable.modality ? { modality: unavailable.modality } : {}),
       diagnostics,
     },
   });

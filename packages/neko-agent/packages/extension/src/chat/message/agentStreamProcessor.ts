@@ -12,7 +12,6 @@ import { createMediaTaskProgressView } from '@neko/platform/media/media-task-vie
 import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import {
   AgentEventStreamRuntimeProcessor,
-  projectResourceValue,
   persistAgentStreamBackgroundTaskResultUrls,
   type BackfillSink,
   type AgentEventStreamRuntimeMessage,
@@ -24,14 +23,8 @@ import {
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import type { AgentEvent } from '@neko/agent';
 import {
-  createManagedDocumentResourceRef,
-  projectDocumentResourceRefsInValue,
-} from '@neko/content/document';
-import {
-  type DocumentArchiveResourceRef,
   type AgentTaskResultDeliveryPolicy,
   type GeneratedAsset,
-  type ResourceVariantRequest,
   type Task,
   type ToolResultBackfillPayload,
 } from '@neko/shared';
@@ -50,6 +43,7 @@ import {
   observeEntityMemoryContributionAutomation,
   type EntityMemoryContributionAutomationPort,
 } from './entityMemoryContributionAutomation';
+import { projectValueForWebviewResourceDisplay } from './webviewResourceProjection';
 import { getLogger } from '../../base';
 
 const logger = getLogger('AgentStreamProcessor');
@@ -424,48 +418,27 @@ function projectStreamMessageResourcesForWebview(
     readonly contentAccessRuntime?: AgentContentAccessRuntime;
   },
 ): Promise<AgentEventStreamRuntimeMessage> {
-  const resolveLocalMediaPath = (filePath: string): string | undefined => {
-    return options.localResourceAccess?.toWebviewUri(
+  const projectValue = (value: unknown) =>
+    projectValueForWebviewResourceDisplay(value, {
       webview,
-      filePath,
-      'neko-agent.stream-tool-result',
-    );
-  };
-  const projector = {
-    resolveLocalMediaPath,
-    projectDocumentResourceRef: (
-      ref: DocumentArchiveResourceRef,
-      variant: ResourceVariantRequest,
-    ) =>
-      projectDocumentResourceRefForWebview(
-        webview,
-        options.contentAccessRuntime,
-        options.localResourceAccess,
-        ref,
-        variant,
-      ),
-  };
+      localResourceAccess: options.localResourceAccess,
+      contentAccessRuntime: options.contentAccessRuntime,
+      localMediaCaller: 'neko-agent.stream-tool-result',
+      documentResourceCaller: 'neko-agent.document-resource',
+    });
 
   if (message.type === 'toolCall' && message.arguments !== undefined) {
-    return projectResourceValueForWebview(message.arguments, projector).then(
-      (projectedArguments) => ({
-        ...message,
-        arguments: isRecord(projectedArguments) ? projectedArguments : message.arguments,
-      }),
-    );
+    return projectValue(message.arguments).then((projectedArguments) => ({
+      ...message,
+      arguments: isRecord(projectedArguments) ? projectedArguments : message.arguments,
+    }));
   }
 
   if (message.type === 'toolResult') {
     return Promise.all([
-      message.data !== undefined
-        ? projectResourceValueForWebview(message.data, projector)
-        : undefined,
-      message.attachments
-        ? projectResourceValueForWebview(message.attachments, projector)
-        : undefined,
-      message.perceptionCards
-        ? projectResourceValueForWebview(message.perceptionCards, projector)
-        : undefined,
+      message.data !== undefined ? projectValue(message.data) : undefined,
+      message.attachments ? projectValue(message.attachments) : undefined,
+      message.perceptionCards ? projectValue(message.perceptionCards) : undefined,
     ]).then(([data, attachments, perceptionCards]) => ({
       ...message,
       ...(data !== undefined ? { data } : {}),
@@ -478,13 +451,9 @@ function projectStreamMessageResourcesForWebview(
 
   if (message.type === 'toolResultBackfill') {
     return Promise.all([
-      projectResourceValueForWebview(message.dataPatch, projector),
-      message.attachments
-        ? projectResourceValueForWebview(message.attachments, projector)
-        : undefined,
-      message.perceptionCards
-        ? projectResourceValueForWebview(message.perceptionCards, projector)
-        : undefined,
+      projectValue(message.dataPatch),
+      message.attachments ? projectValue(message.attachments) : undefined,
+      message.perceptionCards ? projectValue(message.perceptionCards) : undefined,
     ]).then(([dataPatch, attachments, perceptionCards]) => ({
       ...message,
       dataPatch: isRecord(dataPatch) ? dataPatch : message.dataPatch,
@@ -496,20 +465,16 @@ function projectStreamMessageResourcesForWebview(
   }
 
   if (message.type === 'streamComplete' && message.contentBlocks) {
-    return projectResourceValueForWebview(message.contentBlocks, projector).then(
-      (contentBlocks) => ({
-        ...message,
-        contentBlocks: Array.isArray(contentBlocks) ? contentBlocks : message.contentBlocks,
-      }),
-    );
+    return projectValue(message.contentBlocks).then((contentBlocks) => ({
+      ...message,
+      contentBlocks: Array.isArray(contentBlocks) ? contentBlocks : message.contentBlocks,
+    }));
   }
 
   if (message.type === 'agentTurnTimeline') {
     return Promise.all([
-      projectResourceValueForWebview(message.events, projector),
-      message.finalContentBlocks
-        ? projectResourceValueForWebview(message.finalContentBlocks, projector)
-        : undefined,
+      projectValue(message.events),
+      message.finalContentBlocks ? projectValue(message.finalContentBlocks) : undefined,
     ]).then(([events, finalContentBlocks]) => ({
       ...message,
       events: Array.isArray(events) ? (events as typeof message.events) : message.events,
@@ -522,72 +487,6 @@ function projectStreamMessageResourcesForWebview(
   }
 
   return Promise.resolve(message);
-}
-
-interface AsyncResourceProjector {
-  readonly resolveLocalMediaPath: (filePath: string) => string | undefined;
-  readonly projectDocumentResourceRef: (
-    ref: DocumentArchiveResourceRef,
-    variant: ResourceVariantRequest,
-  ) => Promise<string | undefined>;
-}
-
-async function projectResourceValueForWebview(
-  value: unknown,
-  projector: AsyncResourceProjector,
-): Promise<unknown> {
-  const projected = projectResourceValue(value, {
-    resolveLocalMediaPath: projector.resolveLocalMediaPath,
-  });
-  return projectDocumentResourceRefsInValue(projected, {
-    project: (ref, variant) => projector.projectDocumentResourceRef(ref, variant),
-    onMissingProjection: appendResourceProjectionDiagnostic,
-  });
-}
-
-async function projectDocumentResourceRefForWebview(
-  webview: vscode.Webview,
-  contentAccessRuntime: AgentContentAccessRuntime | undefined,
-  localResourceAccess: AgentLocalResourceAccess | undefined,
-  ref: DocumentArchiveResourceRef,
-  variant: ResourceVariantRequest,
-): Promise<string | undefined> {
-  if (!contentAccessRuntime || !localResourceAccess) return undefined;
-  const managedRef = createManagedDocumentResourceRef(ref, resolveDocumentResourceScope());
-  try {
-    const result = await contentAccessRuntime.loadProviderAsset({
-      caller: 'message-resource-projection',
-      source: managedRef,
-      preferredTarget: 'local-path',
-      variant,
-    });
-    if (result.status !== 'ready' || !result.uri) return undefined;
-    return localResourceAccess.toWebviewUri(webview, result.uri, 'neko-agent.document-resource');
-  } catch (error) {
-    logger.warn('Failed to project document resource for Webview display', { error });
-    return undefined;
-  }
-}
-
-function appendResourceProjectionDiagnostic(
-  projected: Record<string, unknown>,
-  field: string,
-): void {
-  const diagnostics = Array.isArray(projected['resourceProjectionDiagnostics'])
-    ? [...projected['resourceProjectionDiagnostics']]
-    : [];
-  diagnostics.push({
-    code: 'resource-projection-denied',
-    severity: 'error',
-    field,
-    message:
-      'Document resource could not be projected for Webview display. Use ResourceRef through unified content access.',
-  });
-  projected['resourceProjectionDiagnostics'] = diagnostics;
-}
-
-function resolveDocumentResourceScope(): 'project' | 'extension-private' {
-  return vscode.workspace.workspaceFolders?.[0] ? 'project' : 'extension-private';
 }
 
 function waitForMediaTask(

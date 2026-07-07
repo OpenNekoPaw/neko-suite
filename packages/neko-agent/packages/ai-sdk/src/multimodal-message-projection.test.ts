@@ -229,7 +229,31 @@ describe('multimodal-message-projection', () => {
     });
 
     expect(result.diagnostics).toEqual([
-      { code: 'asset-load-failed', assetId: 'thumb-1', message: 'cannot read asset' },
+      {
+        code: 'asset-load-failed',
+        assetId: 'thumb-1',
+        modality: 'image',
+        message: 'cannot read asset',
+      },
+    ]);
+    expect(result.message.content).toEqual([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('PerceptionCard') }),
+    ]);
+  });
+
+  it('records missing loader diagnostics for image-capable providers', async () => {
+    const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
+      provider: { runtime: { image: true } },
+      perceptionCards: [imageCard()],
+    });
+
+    expect(result.diagnostics).toEqual([
+      {
+        code: 'asset-loader-missing',
+        assetId: 'thumb-1',
+        modality: 'image',
+        message: 'Native image projection requires a perception asset loader.',
+      },
     ]);
     expect(result.message.content).toEqual([
       expect.objectContaining({ type: 'text', text: expect.stringContaining('PerceptionCard') }),

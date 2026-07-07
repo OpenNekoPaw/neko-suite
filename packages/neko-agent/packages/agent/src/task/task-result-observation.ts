@@ -14,7 +14,7 @@ import type {
   TaskRunLease,
   TaskStatus,
 } from '@neko/shared';
-import { extractTaskRunLease } from '@neko/shared';
+import { extractTaskRunLease, isResourceRef } from '@neko/shared';
 
 export type AgentTaskResultObservationDiagnosticCode =
   | 'task-not-terminal'
@@ -268,11 +268,10 @@ function assertTerminalTaskStatus(
     return;
   }
 
-  throw new AgentTaskResultObservationError(
-    'task-not-terminal',
-    `Task ${taskId} is not terminal`,
-    { taskId, status },
-  );
+  throw new AgentTaskResultObservationError('task-not-terminal', `Task ${taskId} is not terminal`, {
+    taskId,
+    status,
+  });
 }
 
 function assertTaskRunLeaseMatches(
@@ -324,6 +323,9 @@ function normalizeAgentTaskResultRef(ref: AgentTaskResultRef): AgentTaskResultRe
     id,
     ...(ref.mimeType?.trim() ? { mimeType: ref.mimeType.trim() } : {}),
     ...(ref.label?.trim() ? { label: ref.label.trim() } : {}),
+    ...(ref.kind === 'resource' && isResourceRef(ref.resourceRef)
+      ? { resourceRef: ref.resourceRef }
+      : {}),
   };
 }
 
@@ -367,6 +369,7 @@ function readRefArray(value: unknown): AgentTaskResultRef[] {
       id: readRequiredString(item, 'id'),
       ...(typeof item['mimeType'] === 'string' ? { mimeType: item['mimeType'] } : {}),
       ...(typeof item['label'] === 'string' ? { label: item['label'] } : {}),
+      ...(isResourceRef(item['resourceRef']) ? { resourceRef: item['resourceRef'] } : {}),
     };
   });
 }
@@ -395,6 +398,15 @@ function readAssetRefs(value: unknown): AgentTaskResultRef[] {
         id,
         ...(typeof asset['mimeType'] === 'string' ? { mimeType: asset['mimeType'] } : {}),
         ...(typeof asset['label'] === 'string' ? { label: asset['label'] } : {}),
+      });
+    }
+    if (isResourceRef(asset['resourceRef'])) {
+      refs.push({
+        kind: 'resource',
+        id: asset['resourceRef'].id,
+        ...(typeof asset['mimeType'] === 'string' ? { mimeType: asset['mimeType'] } : {}),
+        ...(typeof asset['label'] === 'string' ? { label: asset['label'] } : {}),
+        resourceRef: asset['resourceRef'],
       });
     }
   }
@@ -478,7 +490,9 @@ function buildAgentTaskResultSummary(
 ): string {
   if (task.status === 'completed') {
     const suffix =
-      refs.length > 0 ? ` with ${refs.length} stable result reference${refs.length === 1 ? '' : 's'}` : '';
+      refs.length > 0
+        ? ` with ${refs.length} stable result reference${refs.length === 1 ? '' : 's'}`
+        : '';
     return `Task ${task.id} (${task.type}) completed${suffix}.`;
   }
   if (task.status === 'failed') {
@@ -518,7 +532,52 @@ function buildDefaultAgentTaskResultFollowUpPrompt(
     policyKind === 'auto-resume-agent'
       ? 'Continue from the completed async task result.'
       : 'Review the completed async task result before continuing.';
-  return `${prefix}\n\nObservation: ${observation.summary}\nTask: ${observation.taskId}`;
+  const lines = [prefix, '', `Observation: ${observation.summary}`, `Task: ${observation.taskId}`];
+  const resultRefs = formatAgentTaskResultRefs(observation.resultRefs ?? []);
+  if (resultRefs.length > 0) {
+    lines.push('', 'Stable result references:', ...resultRefs);
+  }
+
+  const readImageInputs = formatReadImageInputs(observation.resultRefs ?? []);
+  if (readImageInputs.length > 0) {
+    lines.push(
+      '',
+      'Generated image inputs for ReadImage:',
+      ...readImageInputs,
+      'For visual analysis, call ReadImage with images[] entries copied from these resourceRef objects. Do not use the task id, assetRef URI, or local path as a resourceRef.',
+    );
+  }
+
+  return lines.join('\n');
+}
+
+function formatAgentTaskResultRefs(refs: readonly AgentTaskResultRef[]): string[] {
+  return refs.slice(0, 8).map((ref) => {
+    const details = [
+      ref.mimeType ? `mimeType=${ref.mimeType}` : undefined,
+      ref.label ? `label=${ref.label}` : undefined,
+    ].filter((detail): detail is string => detail !== undefined);
+    return `- ${ref.kind}: ${ref.id}${details.length > 0 ? ` (${details.join(', ')})` : ''}`;
+  });
+}
+
+function formatReadImageInputs(refs: readonly AgentTaskResultRef[]): string[] {
+  return refs
+    .filter(
+      (ref) =>
+        ref.kind === 'resource' &&
+        isResourceRef(ref.resourceRef) &&
+        ref.mimeType?.startsWith('image/'),
+    )
+    .slice(0, 4)
+    .map((ref, index) => {
+      const imageInput = {
+        ...(ref.label ? { label: ref.label } : {}),
+        ...(ref.mimeType ? { mimeType: ref.mimeType } : {}),
+        resourceRef: ref.resourceRef,
+      };
+      return `- images[${index}]: ${JSON.stringify(imageInput)}`;
+    });
 }
 
 function stableHash(value: unknown): string {

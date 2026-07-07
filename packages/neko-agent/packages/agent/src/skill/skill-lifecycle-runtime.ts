@@ -365,6 +365,7 @@ export class SkillLifecycleRuntime {
 export function defaultSkillLifecycleRequest(input: {
   readonly conversationId: string;
   readonly skillName: string;
+  readonly slot?: SkillLifecycleSlot;
   readonly owner: SkillLifecycleOwner;
   readonly source: SkillLifecycleActivationRequest['source'];
   readonly args?: string;
@@ -374,7 +375,7 @@ export function defaultSkillLifecycleRequest(input: {
   return {
     conversationId: input.conversationId,
     skillName: input.skillName,
-    slot: 'domainSkill',
+    slot: input.slot ?? 'domainSkill',
     owner: input.owner,
     lifetime: { kind: 'conversation', untilCleared: true },
     source: input.source,

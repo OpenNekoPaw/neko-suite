@@ -6,8 +6,9 @@
  */
 
 import * as vscode from 'vscode';
-import type { Platform } from '@neko/platform';
+import type { MediaTaskView, Platform } from '@neko/platform';
 import { createMediaTaskView, isTerminalMediaTaskStatus, runMediaTurn } from '@neko/platform';
+import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import type { MediaModelCategory, ModelRef } from '@neko-agent/types';
 import { runAgentMediaTurn } from '@neko/agent/runtime';
 import type { AgentTaskResultDeliveryPolicy, Task } from '@neko/shared';
@@ -49,6 +50,11 @@ export interface ExecuteMediaTurnForWebviewInput {
   mediaModel: ModelRef<MediaModelCategory>;
 }
 
+interface MediaTurnTaskDelivery {
+  readonly view: MediaTaskView;
+  readonly deliveryPlan?: MediaTaskProgressDeliveryPlan;
+}
+
 export class MediaTurnBridge {
   constructor(private readonly deps: MediaTurnBridgeDeps) {}
 
@@ -80,25 +86,27 @@ export class MediaTurnBridge {
                 prompt: runtimeInput.prompt,
                 mediaModel: runtimeInput.mediaModel,
                 conversationId: runtimeInput.conversationId,
-                createTaskView: (task) =>
-                  this.deps.mediaDeliveryHost.createTaskView(input.webview, task),
-                createRecoveryTaskView: (task) => createMediaTaskView(task),
+                createTaskView: (task) => this.createTaskDelivery(input.webview, task),
+                createRecoveryTaskView: (task): MediaTurnTaskDelivery => ({
+                  view: createMediaTaskView(task),
+                }),
                 onTaskCreated: ({ conversationId, task, mediaTask }) =>
                   runtimeInput.onTaskCreated({
                     conversationId,
-                    task,
+                    task: task.view,
                     sourceTask: mediaTask,
                   }),
                 onTaskProgress: async ({ conversationId, task, mediaTask }) => {
                   runtimeInput.onTaskProgress({
                     conversationId,
-                    task,
+                    task: task.view,
                     sourceTask: mediaTask,
                   });
                   if (isTerminalMediaTaskStatus(mediaTask.status)) {
                     await this.recordTerminalMediaTaskObservation({
                       conversationId,
-                      task,
+                      task: task.view,
+                      ...(task.deliveryPlan ? { deliveryPlan: task.deliveryPlan } : {}),
                       mediaTask,
                     });
                   }
@@ -129,7 +137,7 @@ export class MediaTurnBridge {
                     conversationId,
                     sourceTask: mediaTask,
                     error,
-                    ...(recoveryTask ? { recoveryTask } : {}),
+                    ...(recoveryTask ? { recoveryTask: recoveryTask.view } : {}),
                   });
                 },
               }),
@@ -157,7 +165,8 @@ export class MediaTurnBridge {
 
   private async recordTerminalMediaTaskObservation(input: {
     readonly conversationId: string;
-    readonly task: Awaited<ReturnType<MediaTaskDeliveryHost['createTaskView']>>;
+    readonly task: MediaTaskView;
+    readonly deliveryPlan?: MediaTaskProgressDeliveryPlan;
     readonly mediaTask: Parameters<MediaTaskDeliveryHost['createTaskView']>[1];
   }): Promise<void> {
     if (!this.deps.taskResultObservations) {
@@ -170,6 +179,7 @@ export class MediaTurnBridge {
         taskId: input.task.id,
         progress: input.task.progress,
         mediaTask: input.mediaTask,
+        ...(input.deliveryPlan ? { deliveryPlan: input.deliveryPlan } : {}),
         ...(input.task.result?.assets ? { assets: input.task.result.assets } : {}),
         ...(input.task.result?.urls ? { resultUrls: input.task.result.urls } : {}),
         ...(input.task.error?.message ? { error: input.task.error.message } : {}),
@@ -179,5 +189,25 @@ export class MediaTurnBridge {
         ...(deliveryPolicy ? { deliveryPolicy } : {}),
       },
     );
+  }
+
+  private async createTaskDelivery(
+    webview: vscode.Webview,
+    task: Parameters<MediaTaskDeliveryHost['createTaskView']>[1],
+  ): Promise<MediaTurnTaskDelivery> {
+    if (
+      isTerminalMediaTaskStatus(task.status) &&
+      typeof this.deps.mediaDeliveryHost.createTaskViewDelivery === 'function'
+    ) {
+      const delivery = await this.deps.mediaDeliveryHost.createTaskViewDelivery(webview, task);
+      return {
+        view: delivery.view,
+        deliveryPlan: delivery.deliveryPlan,
+      };
+    }
+
+    return {
+      view: await this.deps.mediaDeliveryHost.createTaskView(webview, task),
+    };
   }
 }

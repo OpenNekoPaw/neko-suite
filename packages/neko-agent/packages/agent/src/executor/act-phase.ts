@@ -12,7 +12,9 @@ import type {
   ChatMessage,
   IToolRegistry,
   ExecutorHooks,
+  Tool,
   ToolCallInfo,
+  ToolResult,
   ToolResultWithMeta,
   ToolResultArtifactTransfer,
   ToolResultAttachment,
@@ -182,6 +184,7 @@ export function observe(results: ToolResultWithMeta[]): AgentStep {
 }
 
 const TOOL_RESULT_ENVELOPE_SCHEMA = 'neko.tool-result.v1';
+const CAPABILITY_TOOL_RESULT_SCHEMA = 'neko.capability-tool-result.v1';
 
 /**
  * Build tool result messages for context history.
@@ -194,7 +197,16 @@ export function buildToolResultMessages(results: ToolResultWithMeta[]): ChatMess
   return results.map((result) => {
     const textContent = result.success
       ? JSON.stringify(result.data)
-      : JSON.stringify({ error: result.error });
+      : JSON.stringify(
+          result.data === undefined
+            ? { error: result.error }
+            : {
+                schema: TOOL_RESULT_ENVELOPE_SCHEMA,
+                success: false,
+                error: result.error ?? 'Unknown error',
+                data: result.data,
+              },
+        );
 
     const hasExtendedFields =
       (result.attachments?.length ?? 0) > 0 ||
@@ -304,7 +316,9 @@ async function executeToolCall(
             durationMs: Date.now() - startedAt,
           }),
         );
-        if (result !== null) return result;
+        if (result !== null) {
+          return completeToolResult(info, result, deps.toolRegistry.get(info.name));
+        }
       } catch (error) {
         logger.warn(
           'neko.agent.hook.error',
@@ -323,5 +337,62 @@ async function executeToolCall(
 
   // No hook handled it, execute directly
   const toolResult = await execute();
-  return { ...toolResult, callId: info.id, name: info.name };
+  return completeToolResult(info, toolResult, deps.toolRegistry.get(info.name));
+}
+
+function completeToolResult(
+  info: ToolCallInfo,
+  result: ToolResult,
+  tool: Tool | undefined,
+): ToolResultWithMeta {
+  const withMeta: ToolResultWithMeta = {
+    ...result,
+    callId: info.id,
+    name: info.name,
+  };
+
+  if (shouldFailEmptyCapabilityResult(tool, withMeta)) {
+    const message = `Capability tool "${info.name}" reported success without structured result data.`;
+    return {
+      success: false,
+      error: message,
+      callId: info.id,
+      name: info.name,
+      data: {
+        schema: CAPABILITY_TOOL_RESULT_SCHEMA,
+        capabilityId: info.name,
+        status: 'blocked',
+        diagnostics: [
+          {
+            severity: 'error',
+            code: 'capability-tool-empty-result',
+            message,
+          },
+        ],
+      },
+    };
+  }
+
+  return withMeta;
+}
+
+function shouldFailEmptyCapabilityResult(
+  tool: Tool | undefined,
+  result: ToolResultWithMeta,
+): boolean {
+  return (
+    result.success &&
+    tool?.domain?.source === 'capability' &&
+    isEmptyStructuredResultData(result.data)
+  );
+}
+
+function isEmptyStructuredResultData(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  if (!isRecord(value)) return false;
+  return Object.keys(value).length === 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

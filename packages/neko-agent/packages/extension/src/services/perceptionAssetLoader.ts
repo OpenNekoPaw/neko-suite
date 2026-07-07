@@ -1,6 +1,11 @@
 import type { PerceptionAssetLoader, ProviderReadyAssetPayload } from '@neko/ai-sdk';
-import { getMimeType, type ContentSourceRef, type PerceptualAssetRef } from '@neko/shared';
-import { createManagedDocumentResourceRef } from '@neko/content/document';
+import {
+  getMimeType,
+  type ContentDocumentSourceRef,
+  type ContentSourceRef,
+  type DocumentArchiveResourceRef,
+  type PerceptualAssetRef,
+} from '@neko/shared';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 
 export function createLocalPerceptionAssetLoader(
@@ -49,11 +54,31 @@ async function loadPerceptionAsset(
 
 function createPerceptionAssetSource(ref: PerceptualAssetRef): ContentSourceRef {
   if (ref.documentResourceRef) {
-    return createManagedDocumentResourceRef(ref.documentResourceRef, 'project');
+    return createDocumentEntrySource(ref.documentResourceRef);
   }
   return {
     kind: 'file',
     path: ref.uri,
+  };
+}
+
+function createDocumentEntrySource(ref: DocumentArchiveResourceRef): ContentDocumentSourceRef {
+  return {
+    kind: 'document',
+    source: {
+      kind: 'document',
+      document: ref.source,
+    },
+    ...(ref.entryPath ? { entryPath: ref.entryPath } : {}),
+    ...(ref.entryPath || ref.locator
+      ? {
+          locator: {
+            kind: 'document',
+            ...(ref.entryPath ? { entryPath: ref.entryPath } : {}),
+            ...(ref.locator ? { locator: ref.locator } : {}),
+          },
+        }
+      : {}),
   };
 }
 

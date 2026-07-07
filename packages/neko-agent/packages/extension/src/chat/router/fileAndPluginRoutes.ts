@@ -9,6 +9,7 @@ import {
   isAgentCapabilityInvocationResult,
   isCanvasMarkdownCapabilityId,
   isCanvasMarkdownCapabilityInput,
+  isCanvasMarkdownCapabilityResult,
   validateAgentCapabilityInvocationInput,
   validateAgentCapabilityInvocationResult,
   type CanvasMarkdownCapabilityResult,
@@ -136,7 +137,7 @@ async function invokeAgentCapabilityLifecycle(
 ): Promise<void> {
   try {
     const lifecycleResult = await invokeAgentCapabilityLifecycleBackend(message.invocation, deps);
-    const canvasResult = isCanvasMarkdownCapabilityResultData(lifecycleResult.data)
+    const canvasResult = isCanvasMarkdownCapabilityResult(lifecycleResult.data)
       ? lifecycleResult.data
       : undefined;
     await deps.webview.postMessage(
@@ -244,7 +245,24 @@ async function invokeCanvasMarkdownLifecycleCapability(
     };
   }
 
-  const canvasResult = await canvasApi.markdown.invoke(input);
+  const canvasResult: unknown = await canvasApi.markdown.invoke(input);
+  if (!isCanvasMarkdownCapabilityResult(canvasResult)) {
+    return createBlockedCanvasMarkdownLifecycleResult(
+      invocation.capabilityId,
+      invocation.phase,
+      'Canvas Markdown capability returned an invalid result.',
+      'canvas-markdown-invalid-result',
+    );
+  }
+  const missingMutationRef = readMissingCanvasMarkdownMutationRefDiagnostic(canvasResult);
+  if (missingMutationRef) {
+    return createBlockedCanvasMarkdownLifecycleResult(
+      invocation.capabilityId,
+      invocation.phase,
+      missingMutationRef.message,
+      missingMutationRef.code,
+    );
+  }
   const lifecycleResult = toCanvasMarkdownLifecycleResult(descriptor, invocation, canvasResult);
   if (isAgentCapabilityInvocationResult(lifecycleResult)) {
     return lifecycleResult;
@@ -311,11 +329,11 @@ function toCanvasMarkdownLifecycleResult(
       ...(diagnostic.line !== undefined ? { line: diagnostic.line } : {}),
       ...(diagnostic.column !== undefined ? { column: diagnostic.column } : {}),
     })),
-    ...(result.draftNodeId
+    ...(result.tableNodeId
       ? {
           reviewArtifact: {
             kind: 'node' as const,
-            id: result.draftNodeId,
+            id: result.tableNodeId,
             packageId: 'neko-canvas',
             artifactKind: 'canvas.table',
             profile: readCanvasMarkdownProfileFromResult(result) ?? 'storyboard',
@@ -340,11 +358,11 @@ function toCanvasMarkdownLifecycleResult(
             phase:
               action.capabilityId === 'canvas.createStoryboardFromMarkdown' ? 'apply' : 'review',
             requiresApproval: action.capabilityId !== 'canvas.validateMarkdownStoryboard',
-            ...(result.draftNodeId
+            ...(result.tableNodeId
               ? {
                   sourceRef: {
                     kind: 'node' as const,
-                    id: result.draftNodeId,
+                    id: result.tableNodeId,
                     packageId: 'neko-canvas',
                   },
                 }
@@ -390,8 +408,6 @@ function projectCanvasMarkdownActionPayload(
         ...base,
         ...('tableTitle' in input && input.tableTitle ? { tableTitle: input.tableTitle } : {}),
       };
-    case 'canvas.createStoryboardDraftFromMarkdown':
-      return { capabilityId, ...base };
     case 'canvas.createStoryboardFromMarkdown':
       return {
         capabilityId,
@@ -497,15 +513,23 @@ function createBlockedCanvasMarkdownLifecycleResult(
   };
 }
 
-function isCanvasMarkdownCapabilityResultData(
-  value: unknown,
-): value is CanvasMarkdownCapabilityResult {
-  return (
-    isRecord(value) &&
-    typeof value['capabilityId'] === 'string' &&
-    typeof value['status'] === 'string' &&
-    Array.isArray(value['diagnostics'])
-  );
+function readMissingCanvasMarkdownMutationRefDiagnostic(
+  result: CanvasMarkdownCapabilityResult,
+): { readonly code: string; readonly message: string } | undefined {
+  if (
+    result.status !== 'created' &&
+    result.status !== 'changed' &&
+    result.status !== 'needs-review'
+  ) {
+    return undefined;
+  }
+  const hasRef = Boolean(result.tableNodeId) || (result.nodeIds?.length ?? 0) > 0;
+  if (hasRef) return undefined;
+  return {
+    code: 'canvas-markdown-mutation-result-missing-ref',
+    message:
+      'Canvas Markdown capability reported a mutation status but did not return any Canvas node reference.',
+  };
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

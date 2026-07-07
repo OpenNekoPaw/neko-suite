@@ -481,8 +481,7 @@ const ZH_TOOL_DEFINITION_LOCALIZATIONS: Readonly<Record<string, ToolDefinitionLo
       'source.path': '读取本地文件时使用的 source.path，可为项目相对路径或 ${VAR}/path。',
       mode: '读取模式，例如 manifest、next 或 text。',
       pageRange: '可选页码范围；需要图片证据时优先使用 ReadDocument 返回的 imageInfo。',
-      range:
-        '语义文档范围，用于 mode="range"；包含 locator、可选 endLocator 和读取限制。',
+      range: '语义文档范围，用于 mode="range"；包含 locator、可选 endLocator 和读取限制。',
       cursor: '先前 ReadDocument 结果返回的批量读取游标。',
       start_batch: 'mode="manifest" 时是否同时返回第一个按 manifest 顺序读取的游标。',
       max_chars: '最多返回的文本字符数，默认 20000，最大 100000。',
@@ -502,7 +501,7 @@ const ZH_TOOL_DEFINITION_LOCALIZATIONS: Readonly<Record<string, ToolDefinitionLo
       'images.[].resourceRef':
         '稳定资源引用，必须原样来自 ReadDocument.imageInfo[].resourceRef 或统一内容访问结果。',
       resourceRef: '稳定资源引用，必须来自 ReadDocument.imageInfo 或统一内容访问结果。',
-      mode: '读取模式。vision 会请求视觉理解；metadata 只返回尺寸等元数据。',
+      mode: '读取模式。当前只支持 metadata：读取元数据并把图片暴露给原生多模态 Agent 推理；不要使用 vision。',
       analysis: '希望图片分析回答的问题或分析类型。',
       prompt: '给下一次原生多模态 Agent 推理使用的可选提示；此工具本身不执行模型分析。',
       max_images: '最多处理的图片数量，默认 4，最大 16。',

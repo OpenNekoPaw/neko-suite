@@ -94,20 +94,23 @@ function projectActiveConversationMessages(input: {
   cachedStreaming?: ConversationStreamingState;
 }): { messages: readonly Message[]; restoredFromCache: boolean } {
   const cachedMessages = input.cachedMessages;
-  if (!cachedMessages || cachedMessages.length === 0) {
-    return { messages: input.persistedMessages ?? [], restoredFromCache: false };
-  }
-
-  if (hasRecoverableLocalActivity(cachedMessages, input.cachedStreaming)) {
-    return { messages: cachedMessages, restoredFromCache: true };
-  }
-
   const persistedMessages = input.persistedMessages;
-  if (!persistedMessages) {
+  if (!cachedMessages || cachedMessages.length === 0) {
+    return { messages: persistedMessages ?? [], restoredFromCache: false };
+  }
+
+  if (persistedMessages && areMessageListsEquivalent(cachedMessages, persistedMessages)) {
     return { messages: cachedMessages, restoredFromCache: true };
   }
 
-  if (areMessageListsEquivalent(cachedMessages, persistedMessages)) {
+  if (!persistedMessages || persistedMessages.length === 0) {
+    return { messages: cachedMessages, restoredFromCache: true };
+  }
+
+  if (
+    hasRecoverableLocalActivity(cachedMessages, input.cachedStreaming) &&
+    arePersistedMessagesPrefixOfCache(persistedMessages, cachedMessages)
+  ) {
     return { messages: cachedMessages, restoredFromCache: true };
   }
 
@@ -126,10 +129,7 @@ function hasRecoverableLocalActivity(
   );
 }
 
-function areMessageListsEquivalent(
-  left: readonly Message[],
-  right: readonly Message[],
-): boolean {
+function areMessageListsEquivalent(left: readonly Message[], right: readonly Message[]): boolean {
   if (left.length !== right.length) {
     return false;
   }
@@ -137,6 +137,20 @@ function areMessageListsEquivalent(
   return left.every((message, index) => {
     const other = right[index];
     return other !== undefined && areMessagesEquivalent(message, other);
+  });
+}
+
+function arePersistedMessagesPrefixOfCache(
+  persistedMessages: readonly Message[],
+  cachedMessages: readonly Message[],
+): boolean {
+  if (persistedMessages.length > cachedMessages.length) {
+    return false;
+  }
+
+  return persistedMessages.every((message, index) => {
+    const cachedMessage = cachedMessages[index];
+    return cachedMessage !== undefined && areMessagesEquivalent(message, cachedMessage);
   });
 }
 

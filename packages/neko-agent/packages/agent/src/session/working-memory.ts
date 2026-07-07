@@ -391,7 +391,7 @@ function serializeToolResultMessageContent(
     (artifacts?.length ?? 0) > 0;
 
   if (!result.success) {
-    if (!hasExtendedFields) {
+    if (!hasExtendedFields && data === undefined) {
       return `Error: ${result.error ?? 'Unknown error'}`;
     }
     return stringifyToolResultContent({

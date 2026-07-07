@@ -118,7 +118,16 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
       now: input.now,
     });
     const backgroundTaskCompletions: Promise<AgentStreamBackgroundTaskCompletion>[] = [];
+    let awaitedBackgroundTaskCompletionCount = 0;
     let lastPartialSnapshotAt = 0;
+    const awaitBackgroundTaskCompletions = async (): Promise<void> => {
+      if (awaitedBackgroundTaskCompletionCount >= backgroundTaskCompletions.length) {
+        return;
+      }
+      const pending = backgroundTaskCompletions.slice(awaitedBackgroundTaskCompletionCount);
+      awaitedBackgroundTaskCompletionCount = backgroundTaskCompletions.length;
+      await Promise.all(pending);
+    };
 
     for await (const event of input.events) {
       const eventTime = input.now?.() ?? Date.now();
@@ -191,14 +200,16 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
           });
         }
       }
+
+      if (event.type === 'done') {
+        await awaitBackgroundTaskCompletions();
+      }
     }
 
     finalizeAgentStreamProjectionState(streamState, {
       projectCompositeBlock: input.projectCompositeBlock,
     });
-    if (backgroundTaskCompletions.length > 0) {
-      await Promise.all(backgroundTaskCompletions);
-    }
+    await awaitBackgroundTaskCompletions();
     const finalTimelineMessage = timeline.complete(streamState.contentBlocks);
     if (finalTimelineMessage) {
       await input.postMessage(finalTimelineMessage);

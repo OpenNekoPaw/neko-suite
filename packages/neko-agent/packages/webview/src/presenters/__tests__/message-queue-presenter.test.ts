@@ -3,6 +3,7 @@ import type { Message } from '@neko-agent/types';
 import {
   hasQueuedUserMessages,
   isOptimisticQueuedMessageItem,
+  projectAuthoritativeQueuedMessagesIntoTranscript,
   projectOptimisticQueuedMessageItem,
   projectReleasedQueuedMessageIntoTranscript,
   projectQueuedMessagesCleared,
@@ -71,6 +72,30 @@ describe('message queue presenter', () => {
     ).toEqual([
       message({ id: 'user-1', role: 'user', content: '原始请求' }),
       message({ id: 'assistant-1', role: 'assistant', content: '处理中' }),
+    ]);
+  });
+
+  it('removes trailing local composer mirrors once authoritative queued items arrive', () => {
+    expect(
+      projectAuthoritativeQueuedMessagesIntoTranscript({
+        messages: [
+          message({ id: 'user-1', role: 'user', content: '生成图片', timestamp: 100 }),
+          message({ id: 'assistant-1', role: 'assistant', content: '处理中', timestamp: 200 }),
+          message({ id: 'local-hi', role: 'user', content: 'hi', timestamp: 1_000 }),
+        ],
+        items: [
+          {
+            id: 'runtime-hi',
+            conversationId: 'conv-1',
+            content: 'hi',
+            createdAt: 1_005,
+            source: 'composer',
+          },
+        ],
+      }),
+    ).toEqual([
+      message({ id: 'user-1', role: 'user', content: '生成图片', timestamp: 100 }),
+      message({ id: 'assistant-1', role: 'assistant', content: '处理中', timestamp: 200 }),
     ]);
   });
 

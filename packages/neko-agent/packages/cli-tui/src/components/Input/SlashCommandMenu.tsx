@@ -8,6 +8,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { tokens } from '../../theme/tokens';
+import { getTuiLabels } from '../../core/tui-locale';
 import {
   createTuiSlashCommandCatalog,
   type TuiSlashCommandOption,
@@ -33,6 +34,7 @@ export function SlashCommandMenu({
   onDismiss,
 }: SlashCommandMenuProps): React.JSX.Element {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const labels = getTuiLabels();
 
   // Filter commands based on input
   const filterText = filter.startsWith('/') ? filter.slice(1).toLowerCase() : filter.toLowerCase();
@@ -66,7 +68,7 @@ export function SlashCommandMenu({
   if (filtered.length === 0) {
     return (
       <Box marginLeft={2}>
-        <Text dimColor>No matching commands</Text>
+        <Text dimColor>{labels.chrome.noMatchingCommands}</Text>
       </Box>
     );
   }
@@ -84,7 +86,12 @@ export function SlashCommandMenu({
           <Text dimColor> {cmd.description}</Text>
         </Box>
       ))}
-      {filtered.length > 8 ? <Text dimColor> ... {filtered.length - 8} more</Text> : null}
+      {filtered.length > 8 ? (
+        <Text dimColor>
+          {' '}
+          ... {filtered.length - 8} {labels.chrome.more}
+        </Text>
+      ) : null}
     </Box>
   );
 }

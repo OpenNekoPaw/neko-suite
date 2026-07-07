@@ -174,11 +174,9 @@ function projectCanvasMarkdownCapabilityResultContent(
     ? `\n${t('chat.canvasLifecycle.summary.createdNodes', {
         nodes: result.nodeIds.join(', '),
       })}`
-    : result.draftNodeId
-      ? `\n${t('chat.canvasLifecycle.summary.createdDraft', { node: result.draftNodeId })}`
-      : result.tableNodeId
-        ? `\n${t('chat.canvasLifecycle.summary.createdTable', { node: result.tableNodeId })}`
-        : '';
+    : result.tableNodeId
+      ? `\n${t('chat.canvasLifecycle.summary.createdTable', { node: result.tableNodeId })}`
+      : '';
   const actions = result.actions?.length
     ? [
         t('chat.canvasLifecycle.summary.availableActions'),
@@ -209,9 +207,7 @@ type CanvasCapabilityDiagnostics =
   | NonNullable<AgentCapabilityLifecycleResultMessage['lifecycleResult']>['diagnostics']
   | NonNullable<AgentCapabilityLifecycleResultMessage['result']>['diagnostics'];
 
-function projectCanvasLifecycleDiagnostics(
-  diagnostics: CanvasCapabilityDiagnostics,
-): string {
+function projectCanvasLifecycleDiagnostics(diagnostics: CanvasCapabilityDiagnostics): string {
   return diagnostics
     .map(
       (diagnostic) =>

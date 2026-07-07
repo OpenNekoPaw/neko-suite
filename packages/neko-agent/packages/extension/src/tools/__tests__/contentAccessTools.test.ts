@@ -70,6 +70,22 @@ describe('content access tools', () => {
     expect(images.items?.required).toContain('resourceRef');
   });
 
+  it('advertises metadata-only ReadImage mode and rejects legacy model-backed vision mode', async () => {
+    const tool = createReadImageTool({ contentAccessRuntime: createRuntime() });
+    const mode = tool.parameters.properties['mode'] as {
+      readonly enum?: readonly string[];
+      readonly description?: string;
+    };
+
+    expect(mode.enum).toEqual(['metadata']);
+    expect(mode.description).toContain('native multimodal Agent turn');
+
+    await expect(tool.execute({ mode: 'vision' })).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining('no longer performs model-backed vision analysis'),
+    });
+  });
+
   it('routes ReadDocument through AgentContentAccessRuntime', async () => {
     const runtime = createRuntime();
     runtime.resolveDocumentContent.mockResolvedValueOnce({

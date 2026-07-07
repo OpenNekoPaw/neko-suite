@@ -4,22 +4,30 @@
  * Handlers for: help, status, clear, exit
  */
 
-import type { CommandHandler, CommandContext } from '../types';
+import type { CommandCategory, CommandHandler, CommandContext } from '../types';
 import {
   coerceSlashCommandSkills,
   listSlashCommandCatalog,
   type SlashCommandCatalogEntry,
   type SlashCommandSkillLike,
 } from '../command-catalog';
+import {
+  getCliHelpLabels,
+  getCommandCategoryLabel,
+  normalizeCommandLocale,
+} from '../command-localization';
 import { getExtensionCommands } from '../builtin-commands';
 
 /**
  * Generate help text for CLI
  */
 export function generateCliHelpText(context?: CommandContext): string {
+  const locale = normalizeCommandLocale(context?.locale);
+  const labels = getCliHelpLabels(locale);
   const commands = listSlashCommandCatalog({
     surface: 'cli',
     skills: listContextSlashCommandSkills(context),
+    locale,
   });
   const builtinCommands = commands.filter(
     (entry): entry is Extract<SlashCommandCatalogEntry, { source: 'builtin' }> =>
@@ -31,13 +39,13 @@ export function generateCliHelpText(context?: CommandContext): string {
   );
   const lines: string[] = [
     '',
-    'Available Commands:',
+    labels.availableCommands,
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '',
   ];
 
   // Group by category
-  const categories = new Map<string, typeof builtinCommands>();
+  const categories = new Map<CommandCategory, typeof builtinCommands>();
   for (const cmd of builtinCommands) {
     const cat = cmd.category;
     if (!categories.has(cat)) {
@@ -46,18 +54,8 @@ export function generateCliHelpText(context?: CommandContext): string {
     categories.get(cat)!.push(cmd);
   }
 
-  // Format each category
-  const categoryNames: Record<string, string> = {
-    core: 'Core Commands',
-    session: 'Session Management',
-    configuration: 'Configuration',
-    context: 'Context Management',
-    mode: 'Mode Switching',
-    resources: 'Resource Management',
-  };
-
   for (const [category, cmds] of categories) {
-    lines.push(`${categoryNames[category] || category}:`);
+    lines.push(`${getCommandCategoryLabel(category, locale)}:`);
     for (const cmd of cmds) {
       const aliases = cmd.aliases ? `, /${cmd.aliases.join(', /')}` : '';
       const usage = cmd.usage ? ` ${cmd.usage}` : '';
@@ -68,7 +66,7 @@ export function generateCliHelpText(context?: CommandContext): string {
   }
 
   if (skillCommands.length > 0) {
-    lines.push('Command Artifacts:');
+    lines.push(labels.commandArtifacts);
     for (const command of skillCommands) {
       lines.push(`  /${command.name}${formatSkillUsage(command)}`);
       lines.push(`      ${command.description}`);

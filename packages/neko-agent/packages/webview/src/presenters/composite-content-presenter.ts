@@ -566,7 +566,6 @@ function inferStoryboardShotPageNumber(
     ...(shot.sceneTags ?? []),
     shot.visualDescription,
     shot.characterAction,
-    shot.generationPrompt,
     stringifyStoryboardExtensions(shot.extensions),
     section?.heading,
     section?.content,

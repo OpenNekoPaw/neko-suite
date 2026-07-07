@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentContextPayload } from '@neko/shared';
-import type {
-  AgentQueuedMessageItem,
-  AgentState,
-  AgentWorkItem,
-  Message,
-} from '@neko-agent/types';
+import type { AgentQueuedMessageItem, AgentState, AgentWorkItem, Message } from '@neko-agent/types';
 import type { ActiveTurnTimelineState } from '../active-turn-timeline-presenter';
 import type { ActivationProgressTimeline } from '../activation-progress-presenter';
 import {
@@ -140,6 +135,67 @@ describe('conversation UI presenter', () => {
       queuedMessages: [],
     });
     expect(projected.restoredFromCache).toBe(false);
+  });
+
+  it('does not let local task-resume prompt cache replace authoritative host messages', () => {
+    const cachedPromptMessage: Message = {
+      id: 'user-prompt',
+      role: 'user',
+      content: 'Continue from the completed async task result.',
+      timestamp: 1,
+    };
+    const persistedMessages: Message[] = [
+      {
+        id: 'assistant-persisted',
+        role: 'assistant',
+        content: 'visible conversation message',
+        timestamp: 2,
+      },
+    ];
+
+    const projected = projectActiveConversation({
+      conversation: {
+        id: 'conv-1',
+        title: 'Foreground chat',
+        messages: persistedMessages,
+      },
+      cachedMessages: [cachedPromptMessage],
+      cachedStreaming: { streamingMessageId: null, isThinking: true },
+      openTabs: [{ id: 'tab-1', title: 'Foreground chat', conversationId: 'conv-1' }],
+    });
+
+    expect(projected.messages).toEqual(persistedMessages);
+    expect(projected.restoredFromCache).toBe(false);
+  });
+
+  it('keeps recoverable local activity when cached messages extend host messages', () => {
+    const persistedMessage: Message = {
+      id: 'user-1',
+      role: 'user',
+      content: 'generate a sketch',
+      timestamp: 1,
+    };
+    const streamingMessage: Message = {
+      id: 'assistant-stream',
+      role: 'assistant',
+      content: 'Working',
+      timestamp: 2,
+      isStreaming: true,
+    };
+
+    const projected = projectActiveConversation({
+      conversation: {
+        id: 'conv-1',
+        title: 'Foreground chat',
+        messages: [persistedMessage],
+      },
+      cachedMessages: [persistedMessage, streamingMessage],
+      cachedStreaming: { streamingMessageId: 'assistant-stream', isThinking: true },
+      openTabs: [{ id: 'tab-1', title: 'Foreground chat', conversationId: 'conv-1' }],
+    });
+
+    expect(projected.messages).toEqual([persistedMessage, streamingMessage]);
+    expect(projected.restoredFromCache).toBe(true);
   });
 
   it('uses host messages when cached and persisted message payloads differ', () => {
@@ -322,7 +378,10 @@ describe('conversation UI presenter', () => {
         ['conv-b', [messageB]],
       ]),
       streamingByConversation: new Map([
-        ['conv-a', { streamingMessageId: 'message-a', isThinking: true, queuedMessages: [queuedA] }],
+        [
+          'conv-a',
+          { streamingMessageId: 'message-a', isThinking: true, queuedMessages: [queuedA] },
+        ],
         [
           'conv-b',
           {

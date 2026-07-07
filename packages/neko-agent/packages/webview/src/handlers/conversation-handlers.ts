@@ -23,9 +23,7 @@ import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-pre
 import { findActiveTab, isCharacterRoleTab } from '@/presenters/character-role-session-presenter';
 import { shouldActivateForegroundConversation } from './foreground-activation';
 import { projectQueuedMessagesCleared } from '@/presenters/message-queue-presenter';
-import {
-  getActiveTimelineForMessage,
-} from './timeline-handlers';
+import { getActiveTimelineForMessage } from './timeline-handlers';
 
 /**
  * Handle 'error' message - Error occurred
@@ -193,7 +191,12 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
   context.setActiveConversationId(projection.activeConversationId);
   context.activeConversationIdRef.current = projection.activeConversationId;
   if (conversationId) {
-    const activeTurnTimeline = getProjectedActiveTurnTimeline(projection.streaming);
+    const cachedStreaming = context.conversationStreamingRef.current.get(conversationId);
+    const projectedActiveTurnTimeline = getProjectedActiveTurnTimeline(projection.streaming);
+    const activeTurnTimeline =
+      projectedActiveTurnTimeline !== undefined
+        ? projectedActiveTurnTimeline
+        : getRecoverableCachedActiveTurnTimeline(cachedStreaming);
     const nextStreaming = {
       streamingMessageId: projection.streaming.streamingMessageId,
       isThinking: projection.streaming.isThinking,
@@ -222,6 +225,15 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
     );
   }
 };
+
+function getRecoverableCachedActiveTurnTimeline(
+  streaming: StreamingState | undefined,
+): StreamingState['activeTurnTimeline'] {
+  if (!streaming?.isThinking || !streaming.streamingMessageId) {
+    return undefined;
+  }
+  return getProjectedActiveTurnTimeline(streaming);
+}
 
 function getProjectedActiveTurnTimeline(streaming: object): StreamingState['activeTurnTimeline'] {
   const value: unknown = Reflect.get(streaming, 'activeTurnTimeline');

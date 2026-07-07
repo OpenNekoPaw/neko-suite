@@ -144,7 +144,9 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     updateTabState: vi.fn(),
     syncCanvasAmbientScopeFromActiveConversation: vi.fn(),
     resolveLifecycleCapabilityDescriptor: vi.fn((capabilityId: string) =>
-      capabilityId.startsWith('canvas.') ? createCanvasLifecycleDescriptor(capabilityId) : undefined,
+      capabilityId.startsWith('canvas.')
+        ? createCanvasLifecycleDescriptor(capabilityId)
+        : undefined,
     ),
   };
 }
@@ -574,7 +576,7 @@ describe('handleChatWebviewMessage', () => {
     expect(sendGeneratedAssetToPlugin).toHaveBeenCalledWith('cut', undefined, undefined, payload);
   });
 
-  it('routes Markdown Send to Canvas through Agent handoff, not direct Canvas ingest', async () => {
+  it('routes storyboard Markdown Send to Canvas through Agent handoff toward scene/shot creation', async () => {
     const deps = createDeps();
     const invoke = vi.fn();
     vi.mocked(vscode.extensions.getExtension).mockReturnValue({
@@ -644,20 +646,20 @@ describe('handleChatWebviewMessage', () => {
     );
     const routedRequest = (deps.messages?.handleUserMessage as any).mock.calls[0]?.[1];
     expect(routedRequest.messageText).toContain('Canvas authoring handoff intent');
+    expect(routedRequest.messageText).toContain('storyboard creative table');
+    expect(routedRequest.messageText).toContain('canvas.createStoryboardFromMarkdown');
+    expect(routedRequest.messageText).toContain('mode=create-nodes');
+    expect(routedRequest.messageText).toContain('scene.basic + shot.basic');
+    expect(routedRequest.messageText).toContain('canvas.ingestMarkdown');
+    expect(routedRequest.messageText).toContain('只用于审阅表格');
+    expect(routedRequest.messageText).toContain('documentResourceRef');
     expect(routedRequest.messageText).not.toContain('Decide whether to call Canvas');
     expect(routedRequest.messageText).not.toContain('Do not assume a generic table');
-    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
-      'capabilityId',
-    );
-    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
-      'neko.canvas.importAsset',
-    );
-    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
-      'canvas.ingestMarkdown',
-    );
-    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
-      'canvas.createStoryboardFromMarkdown',
-    );
+    const handoffData = routedRequest.contextPayloads[0].data;
+    expect(JSON.stringify(handoffData)).not.toContain('capabilityId');
+    expect(JSON.stringify(handoffData)).not.toContain('neko.canvas.importAsset');
+    expect(JSON.stringify(handoffData)).not.toContain('canvas.ingestMarkdown');
+    expect(JSON.stringify(handoffData)).not.toContain('canvas.createStoryboardFromMarkdown');
     expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
       'canvas_create_node',
     );
@@ -685,9 +687,11 @@ describe('handleChatWebviewMessage', () => {
         conversationId: 'conv-1',
         sourceKind: 'structured-content',
         sourceFormat: 'json',
-        content: '{"kind":"storyboard-draft","rows":[]}',
-        title: 'Storyboard Draft',
-        stableRefs: [{ kind: 'character', id: 'character-rin', namespace: 'entity', token: '@Rin' }],
+        content: '{"kind":"semantic-storyboard-review","rows":[]}',
+        title: 'Storyboard Review',
+        stableRefs: [
+          { kind: 'character', id: 'character-rin', namespace: 'entity', token: '@Rin' },
+        ],
         diagnostics: [
           {
             severity: 'warning',
@@ -725,12 +729,12 @@ describe('handleChatWebviewMessage', () => {
           expect.objectContaining({
             type: 'document-selection',
             id: 'authoring-1',
-            label: 'Canvas 创作交接: Storyboard Draft',
+            label: 'Canvas 创作交接: Storyboard Review',
             summary: 'json, 0 个稳定 resource ref, 1 个稳定语义 ref, 1 个 handoff diagnostic',
             data: expect.objectContaining({
               kind: 'canvas-authoring-handoff',
               sourceKind: 'structured-content',
-              content: '{"kind":"storyboard-draft","rows":[]}',
+              content: '{"kind":"semantic-storyboard-review","rows":[]}',
               stableRefs: [
                 { kind: 'character', id: 'character-rin', namespace: 'entity', token: '@Rin' },
               ],
@@ -932,12 +936,8 @@ describe('handleChatWebviewMessage', () => {
     expect(handoffData).not.toHaveProperty('fields');
     expect(handoffData).not.toHaveProperty('fieldValues');
     expect(handoffData).not.toHaveProperty('validatedFields');
-    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
-      'canvas.ingestMarkdown',
-    );
-    expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
-      'canvas.createStoryboardFromMarkdown',
-    );
+    expect(JSON.stringify(handoffData)).not.toContain('canvas.ingestMarkdown');
+    expect(JSON.stringify(handoffData)).not.toContain('canvas.createStoryboardFromMarkdown');
     expect(JSON.stringify((deps.messages?.handleUserMessage as any).mock.calls)).not.toContain(
       'canvas_create_node',
     );
@@ -1061,6 +1061,123 @@ describe('handleChatWebviewMessage', () => {
     );
   });
 
+  it('fails visibly when Canvas Markdown lifecycle returns an invalid result', async () => {
+    const deps = createDeps();
+    const invoke = vi.fn().mockResolvedValue({});
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      id: 'neko.neko-canvas',
+      isActive: true,
+      exports: {
+        markdown: { invoke },
+      },
+      activate: vi.fn(),
+    } as any);
+
+    handleChatWebviewMessage(
+      {
+        type: 'invokeAgentCapabilityLifecycle',
+        requestId: 'req-invalid-canvas-result',
+        conversationId: 'conv-1',
+        invocation: {
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          payload: {
+            capabilityId: 'canvas.ingestMarkdown',
+            markdown: '| visual |\\n| --- |\\n| open |',
+            sourceFormat: 'gfm-table',
+          },
+          provenance: { source: 'webview' },
+        },
+      },
+      deps,
+    );
+
+    await flushAsyncWork();
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(deps.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'agentCapabilityLifecycleResult',
+        requestId: 'req-invalid-canvas-result',
+        conversationId: 'conv-1',
+        success: false,
+        lifecycleResult: expect.objectContaining({
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          status: 'blocked',
+          diagnostics: [
+            expect.objectContaining({
+              severity: 'error',
+              code: 'canvas-markdown-invalid-result',
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
+  it('fails visibly when Canvas Markdown lifecycle mutation returns no Canvas refs', async () => {
+    const deps = createDeps();
+    const invoke = vi.fn().mockResolvedValue({
+      capabilityId: 'canvas.ingestMarkdown',
+      status: 'created',
+      diagnostics: [],
+    });
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      id: 'neko.neko-canvas',
+      isActive: true,
+      exports: {
+        markdown: { invoke },
+      },
+      activate: vi.fn(),
+    } as any);
+
+    handleChatWebviewMessage(
+      {
+        type: 'invokeAgentCapabilityLifecycle',
+        requestId: 'req-missing-canvas-refs',
+        conversationId: 'conv-1',
+        invocation: {
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          payload: {
+            capabilityId: 'canvas.ingestMarkdown',
+            markdown:
+              '| scene | shot | source | imagePrompt |\\n| --- | --- | --- | --- |\\n| S1 | 1 | P1 | prep |',
+            sourceFormat: 'gfm-table',
+            intentHint: 'creative-table',
+            profileHint: 'storyboard',
+          },
+          provenance: { source: 'webview' },
+        },
+      },
+      deps,
+    );
+
+    await flushAsyncWork();
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(deps.webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'agentCapabilityLifecycleResult',
+        requestId: 'req-missing-canvas-refs',
+        conversationId: 'conv-1',
+        success: false,
+        lifecycleResult: expect.objectContaining({
+          capabilityId: 'canvas.ingestMarkdown',
+          phase: 'review',
+          status: 'blocked',
+          diagnostics: [
+            expect.objectContaining({
+              severity: 'error',
+              code: 'canvas-markdown-mutation-result-missing-ref',
+            }),
+          ],
+        }),
+      }),
+    );
+  });
+
   it('routes approved Markdown production apply through Canvas lifecycle backend', async () => {
     const deps = createDeps();
     const invoke = vi.fn().mockResolvedValue({
@@ -1138,7 +1255,7 @@ describe('handleChatWebviewMessage', () => {
       resolvedKind: 'creative-table',
       profileId: 'storyboard',
       diagnostics: [],
-      draftNodeId: 'draft-1',
+      tableNodeId: 'table-1',
       actions: [
         {
           actionId: 'create-storyboard-nodes',

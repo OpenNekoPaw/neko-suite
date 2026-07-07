@@ -132,14 +132,14 @@ export class ConversationMessageHandler {
     }
   }
 
-  sendActiveConversation(): void {
+  async sendActiveConversation(): Promise<void> {
     const webview = this.deps.getWebview();
     if (webview) {
-      this.deps.conversations.sendActiveConversation(webview);
+      await this.deps.conversations.sendActiveConversation(webview);
     }
   }
 
-  sendConversationSnapshot(conversationId: string): boolean {
+  async sendConversationSnapshot(conversationId: string): Promise<boolean> {
     const webview = this.deps.getWebview();
     if (!webview) {
       return false;
@@ -274,7 +274,9 @@ export class ConversationMessageHandler {
         this.deps.conversations.list().map((conversation) => conversation.id),
       clearConversations: () => this.deps.conversations.clearAll(),
       refreshConversationList: () => this.sendConversationList(),
-      refreshActiveConversation: () => this.sendActiveConversation(),
+      refreshActiveConversation: () => {
+        void this.sendActiveConversation();
+      },
       removeAgent: (conversationId) => this.deps.agentManager?.remove(conversationId),
       clearAgentState: (conversationId) => this.deps.messages?.clearAgentState(conversationId),
       clearAgentHistory: (conversationId) => this.deps.agentManager?.clearHistory(conversationId),

@@ -374,7 +374,7 @@ function createMockAgentRunner() {
     conversationId: string;
     content: string;
     createdAt: number;
-    source: 'composer';
+    source: 'composer' | 'task-result-observation';
   }> = [];
   return {
     getHistory: vi.fn().mockReturnValue([]),
@@ -383,13 +383,18 @@ function createMockAgentRunner() {
     execute: vi.fn().mockReturnValue((async function* () {})()),
     isRunning: vi.fn().mockReturnValue(false),
     enqueuePendingMessage: vi.fn(
-      (input: { conversationId: string; content: string; now?: number }) => {
+      (input: {
+        conversationId: string;
+        content: string;
+        now?: number;
+        source?: 'composer' | 'task-result-observation';
+      }) => {
         const item = {
           id: `queue-${pendingMessages.length + 1}`,
           conversationId: input.conversationId,
           content: input.content,
           createdAt: input.now ?? 1000 + pendingMessages.length,
-          source: 'composer' as const,
+          source: input.source ?? 'composer',
         };
         pendingMessages.push(item);
         return item;
@@ -588,10 +593,7 @@ describe('AgentMessageTurnHandler', () => {
           locale: 'zh',
         }),
       );
-      expect(agentRunner.execute).toHaveBeenCalledWith(
-        '继续生成中文分镜表',
-        expect.anything(),
-      );
+      expect(agentRunner.execute).toHaveBeenCalledWith('继续生成中文分镜表', expect.anything());
     });
   });
 
@@ -1133,6 +1135,35 @@ describe('AgentMessageTurnHandler', () => {
         expect.objectContaining({ role: 'user', content: 'test message' }),
       );
     });
+
+    it('does not store hidden task-result follow-up prompts as user messages', async () => {
+      const webview = createMockWebview();
+      const conversations = createMockConversations();
+      const agentRunner = createMockAgentRunner();
+      const handler = buildHandler({
+        conversations,
+        agentManager: createMockAgentManager(agentRunner),
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createChatModelRequest('Continue from the completed async task result.', {
+          userMessageVisibility: 'hidden',
+        }),
+      );
+
+      expect(conversations.addMessageToConversation).not.toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          role: 'user',
+          content: 'Continue from the completed async task result.',
+        }),
+      );
+      expect(agentRunner.execute).toHaveBeenCalledWith(
+        'Continue from the completed async task result.',
+        expect.any(Object),
+      );
+    });
   });
 
   describe('handleUserMessage() — SubAgent event bridge', () => {
@@ -1298,7 +1329,7 @@ describe('AgentMessageTurnHandler', () => {
             'type' in message &&
             (message as { type?: unknown }).type === 'subagentEvent'
           );
-      });
+        });
       expect(subAgentMessages).toEqual([]);
     });
 

@@ -1,6 +1,7 @@
 import type { AgentQueuedMessageItem, Message } from '@neko-agent/types';
 
 const OPTIMISTIC_QUEUED_MESSAGE_ID_PREFIX = 'optimistic:';
+const QUEUE_MIRROR_MATCH_WINDOW_MS = 30_000;
 
 export interface QueuedMessageReleaseInput {
   messages: readonly Message[];
@@ -11,6 +12,11 @@ export interface QueuedMessageReleaseInput {
 export interface ReleasedQueuedMessageProjectionInput {
   messages: readonly Message[];
   item: AgentQueuedMessageItem;
+}
+
+export interface AuthoritativeQueuedMessagesProjectionInput {
+  messages: readonly Message[];
+  items: readonly AgentQueuedMessageItem[];
 }
 
 export function projectQueuedMessagesForPendingCount(input: QueuedMessageReleaseInput): Message[] {
@@ -43,11 +49,25 @@ export function projectQueuedMessagesCleared(messages: readonly Message[]): Mess
   return messages.filter((message) => !isQueuedUserMessage(message));
 }
 
+export function projectAuthoritativeQueuedMessagesIntoTranscript(
+  input: AuthoritativeQueuedMessagesProjectionInput,
+): Message[] {
+  const withoutPendingItems = projectQueuedMessagesCleared(input.messages);
+  if (input.items.length === 0) {
+    return withoutPendingItems;
+  }
+
+  return removeTrailingVisibleQueueMirrors(withoutPendingItems, input.items);
+}
+
 export function projectReleasedQueuedMessageIntoTranscript(
   input: ReleasedQueuedMessageProjectionInput,
 ): Message[] {
   const releasedMessageId = buildReleasedQueuedMessageId(input.item.id);
-  const withoutPendingItems = projectQueuedMessagesCleared(input.messages);
+  const withoutPendingItems = removeTrailingVisibleQueueMirrors(
+    projectQueuedMessagesCleared(input.messages),
+    [input.item],
+  );
   if (
     withoutPendingItems.some(
       (message) =>
@@ -97,6 +117,46 @@ export function isOptimisticQueuedMessageItem(item: Pick<AgentQueuedMessageItem,
 
 function isQueuedUserMessage(message: Message): boolean {
   return message.role === 'user' && message.isQueued === true;
+}
+
+function removeTrailingVisibleQueueMirrors(
+  messages: readonly Message[],
+  items: readonly AgentQueuedMessageItem[],
+): Message[] {
+  if (messages.length === 0 || items.length === 0) {
+    return [...messages];
+  }
+
+  const nextMessages = [...messages];
+  let itemIndex = items.length - 1;
+
+  while (nextMessages.length > 0 && itemIndex >= 0) {
+    const lastMessage = nextMessages[nextMessages.length - 1];
+    const item = items[itemIndex];
+    if (!lastMessage || !item || !isVisibleQueueMirrorMessage(lastMessage, item)) {
+      break;
+    }
+
+    nextMessages.pop();
+    itemIndex -= 1;
+  }
+
+  return nextMessages;
+}
+
+function isVisibleQueueMirrorMessage(message: Message, item: AgentQueuedMessageItem): boolean {
+  return (
+    item.source === 'composer' &&
+    message.role === 'user' &&
+    message.isQueued !== true &&
+    message.id !== buildReleasedQueuedMessageId(item.id) &&
+    message.content === item.content &&
+    isQueueMirrorTimestamp(message.timestamp, item.createdAt)
+  );
+}
+
+function isQueueMirrorTimestamp(messageTimestamp: number, itemCreatedAt: number): boolean {
+  return Math.abs(itemCreatedAt - messageTimestamp) <= QUEUE_MIRROR_MATCH_WINDOW_MS;
 }
 
 function buildReleasedQueuedMessageId(queueItemId: string): string {

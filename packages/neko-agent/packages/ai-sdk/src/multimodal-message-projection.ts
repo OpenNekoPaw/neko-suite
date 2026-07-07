@@ -27,6 +27,8 @@ export interface ProviderInputModalityResolverInput {
 export interface ProjectionDiagnostic {
   readonly code:
     | 'asset-load-failed'
+    | 'asset-loader-missing'
+    | 'asset-ref-missing'
     | 'unsupported-modality'
     | 'provider-input-modality-unsupported';
   readonly message: string;
@@ -202,7 +204,21 @@ export async function projectPerceptionCardToContentParts(
 
   if (card.modality === 'image' && providerModalities.image) {
     const imageRef = selectImagePerceptualRef(card);
-    if (imageRef && options.assetLoader) {
+    if (!imageRef) {
+      diagnostics.push({
+        code: 'asset-ref-missing',
+        assetId: card.assetId,
+        modality: 'image',
+        message: 'Image perception card does not include a provider-loadable asset reference.',
+      });
+    } else if (!options.assetLoader) {
+      diagnostics.push({
+        code: 'asset-loader-missing',
+        assetId: imageRef.assetId,
+        modality: 'image',
+        message: 'Native image projection requires a perception asset loader.',
+      });
+    } else {
       try {
         const loaded = await options.assetLoader.load(imageRef, options.visionPolicy);
         parts.push({
@@ -214,6 +230,7 @@ export async function projectPerceptionCardToContentParts(
         diagnostics.push({
           code: 'asset-load-failed',
           assetId: imageRef.assetId,
+          modality: 'image',
           message: error instanceof Error ? error.message : String(error),
         });
       }
@@ -229,7 +246,21 @@ export async function projectPerceptionCardToContentParts(
 
   if (card.modality === 'video' && providerModalities.video) {
     const videoRef = selectVideoPerceptualRef(card);
-    if (videoRef && options.assetLoader) {
+    if (!videoRef) {
+      diagnostics.push({
+        code: 'asset-ref-missing',
+        assetId: card.assetId,
+        modality: 'video',
+        message: 'Video perception card does not include a provider-loadable asset reference.',
+      });
+    } else if (!options.assetLoader) {
+      diagnostics.push({
+        code: 'asset-loader-missing',
+        assetId: videoRef.assetId,
+        modality: 'video',
+        message: 'Native video projection requires a perception asset loader.',
+      });
+    } else {
       try {
         const loaded = await options.assetLoader.load(videoRef, options.visionPolicy);
         parts.push({
@@ -241,6 +272,7 @@ export async function projectPerceptionCardToContentParts(
         diagnostics.push({
           code: 'asset-load-failed',
           assetId: videoRef.assetId,
+          modality: 'video',
           message: error instanceof Error ? error.message : String(error),
         });
       }

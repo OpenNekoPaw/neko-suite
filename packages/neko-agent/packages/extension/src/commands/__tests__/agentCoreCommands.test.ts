@@ -55,6 +55,61 @@ describe('agentCoreCommands bridge', () => {
     );
   });
 
+  it('routes Canvas storyboard action intent context through Agent prompt prefill', async () => {
+    const context = { subscriptions: [] as Array<{ dispose(): void }> };
+    const chatViewProvider = {
+      sendMessageToAssistant: vi.fn(),
+      sendContextPayload: vi.fn(),
+      startCharacterDialogue: vi.fn(),
+      startEmbodyCharacter: vi.fn(),
+      dndBroker: { getPayload: vi.fn(), clearPayload: vi.fn() },
+      setPluginCommandsGetter: vi.fn(),
+      sendPluginSlashCommands: vi.fn(),
+    };
+
+    registerAgentCoreCommands(
+      context as never,
+      chatViewProvider as never,
+      { get: vi.fn() } as never,
+    );
+
+    const callback = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.find(([command]) => command === 'neko.agent.sendContext')?.[1];
+    expect(callback).toBeDefined();
+
+    await callback?.({
+      type: 'canvas-storyboard-action-intent',
+      id: 'shot-1:generate-video',
+      label: 'Storyboard action: generate-video',
+      summary: 'Raw Canvas summary',
+      data: {
+        intent: {
+          version: 1,
+          actionId: 'generate-video',
+          target: { nodeId: 'shot-1', sceneNodeId: 'scene-1', shotNumber: 1 },
+        },
+      },
+      intent: 'generate-video',
+    });
+
+    expect(chatViewProvider.sendContextPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'canvas-storyboard-action-intent',
+        id: 'shot-1:generate-video',
+        summary: 'Generate Video for shot-1',
+        intent: expect.stringContaining('处理 Canvas 分镜下一步动作'),
+      }),
+    );
+    expect(chatViewProvider.sendContextPayload.mock.calls[0]?.[0].intent).toContain(
+      'Action intent: generate-video',
+    );
+    expect(chatViewProvider.sendContextPayload.mock.calls[0]?.[0].intent).toContain(
+      'Agent 拥有 provider 调用、异步任务',
+    );
+    expect(chatViewProvider.sendMessageToAssistant).not.toHaveBeenCalled();
+  });
+
   it('registers the Character Dialogue command through the Agent-owned launch path', async () => {
     const context = { subscriptions: [] as Array<{ dispose(): void }> };
     const chatViewProvider = {

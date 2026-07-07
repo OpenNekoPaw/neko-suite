@@ -296,6 +296,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       _context,
       getCurrentWorkspaceRoot,
       this._localResourceAccess,
+      () => getCapabilityRuntimeBindings().contentAccessRuntime,
     );
 
     this._taskDeliveryBridge = new TaskDeliveryBridge({
@@ -364,7 +365,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       planModeHandler: this._planModeHandler,
       characterDialogue: this._characterDialogue,
       sendConversationList: () => this._conversationMessageHandler.sendConversationList(),
-      sendActiveConversation: () => this._conversationMessageHandler.sendActiveConversation(),
+      sendActiveConversation: () => {
+        void this._conversationMessageHandler.sendActiveConversation();
+      },
     });
 
     // Get services - deferred initialization
@@ -519,10 +522,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
                 diagnostics: skillRuntime.projectSkillLifecycle(conversationId).diagnostics,
               }),
               activateLifecycleSkill: (conversationId, input) =>
-                skillRuntime.activateDomainSkill({
+                skillRuntime.activateLifecycleSkill({
                   conversationId,
                   skillName: input.name,
                   reason: input.reason,
+                  ...(input.slot ? { slot: input.slot } : {}),
                 }),
               deactivateLifecycleSkill: (conversationId, input) =>
                 skillRuntime.deactivateLifecycleSkill({
@@ -708,10 +712,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
     this._conversations.switchTo(request.conversationId);
     this._syncCanvasAmbientScopeFromActiveConversation();
-    this._conversationMessageHandler.sendActiveConversation();
+    void this._conversationMessageHandler.sendActiveConversation();
     await this._messages.handleUserMessage(webview, {
       conversationId: request.conversationId,
       messageText: request.prompt,
+      userMessageVisibility: 'hidden',
+      pendingMessageSource: 'task-result-observation',
       sessionMode: 'agent',
       locale: vscode.env.language,
     });
@@ -857,7 +863,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
           this._conversationMessageHandler.sendConversationList();
           break;
         case 'sendActiveConversation':
-          this._conversationMessageHandler.sendActiveConversation();
+          void this._conversationMessageHandler.sendActiveConversation();
           break;
         case 'sendSettings':
           if (webview) {
@@ -1012,7 +1018,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     }
 
     if (result.sync.kind === 'switched') {
-      this._conversationMessageHandler.sendActiveConversation();
+      void this._conversationMessageHandler.sendActiveConversation();
     }
   }
 

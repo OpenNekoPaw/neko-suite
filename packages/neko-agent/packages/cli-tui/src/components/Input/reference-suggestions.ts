@@ -1,9 +1,17 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { Dirent } from 'node:fs';
+import { constants as fsConstants, type Dirent } from 'node:fs';
 import { isMentionExcludedPath } from '@neko/agent';
-import type { AgentReferenceCandidate, AgentReferenceContributor } from '@neko/shared';
+import type {
+  AgentReferenceCandidate,
+  AgentReferenceContributor,
+  AssetEntity,
+  MediaLibraryEntry,
+  MediaLibraryLocalSettings,
+  ResolvedMediaLibrary,
+} from '@neko/shared';
 import type { InputSuggestionOption } from './input-suggestions';
+import { formatTuiLabel, getTuiLabels } from '../../core/tui-locale';
 
 export interface TuiReferenceSuggestionOptions {
   readonly workspaceRoot: string;
@@ -54,9 +62,38 @@ interface LocalLibraryRoot {
   readonly label: string;
 }
 
+interface LocalLibraryScanRoot {
+  readonly absoluteRoot: string;
+  readonly displayRoot: string;
+  readonly kind: 'asset' | 'media';
+  readonly source: 'asset-library' | 'media-library';
+  readonly label: string;
+}
+
+interface AssetLibraryFile {
+  readonly entities: readonly AssetEntity[];
+}
+
+interface SearchIndexEntry {
+  readonly filePath?: string;
+  readonly fileName?: string;
+  readonly libraryName?: string;
+  readonly mediaType?: string;
+}
+
+interface SearchIndexFile {
+  readonly entries: readonly SearchIndexEntry[];
+}
+
+type AssetLibraryEntityFile = AssetEntity['variants'][number]['files'][number];
+
 const DEFAULT_REFERENCE_LIMIT = 80;
 const DEFAULT_REFERENCE_MAX_DEPTH = 4;
 const LOCAL_LIBRARY_MAX_DEPTH = 5;
+const MEDIA_LIBRARY_SETTINGS_FILE = path.join('neko', 'settings.json');
+const MEDIA_LIBRARY_LOCAL_SETTINGS_FILE = path.join('.neko', 'settings.local.json');
+const ASSET_LIBRARY_FILE = path.join('neko', 'assets', 'library.json');
+const SEARCH_INDEX_CACHE_FILE = path.join('.neko', '.cache', 'search-index.json');
 const DEFAULT_LOCAL_LIBRARY_ROOTS: readonly LocalLibraryRoot[] = [
   { relativeDir: 'assets', kind: 'asset', source: 'asset-library', label: 'asset-library' },
   { relativeDir: 'neko/assets', kind: 'asset', source: 'asset-library', label: 'asset-library' },
@@ -133,15 +170,26 @@ export async function createTuiReferenceSuggestions(
 ): Promise<readonly InputSuggestionOption[]> {
   const root = path.resolve(options.workspaceRoot);
   const limit = options.limit ?? DEFAULT_REFERENCE_LIMIT;
+  const resolvedMediaLibraries = await readResolvedMediaLibraries(root);
   const localLibraryCandidates = await listLocalLibraryReferenceFiles(root, {
     limit,
     maxDepth: LOCAL_LIBRARY_MAX_DEPTH,
+    resolvedMediaLibraries,
+  });
+  const assetLibraryCandidates = await listAssetLibraryReferenceCandidates(root, {
+    limit,
+  });
+  const searchIndexCandidates = await listSearchIndexReferenceCandidates(root, {
+    limit,
+    resolvedMediaLibraries,
   });
   const contributedReferenceSuggestions = await listContributedReferenceSuggestions({
     contributors: options.referenceContributors ?? [],
     workspaceRoot: root,
     limit,
   });
+  const assetLibrarySuggestions = assetLibraryCandidates.map(mentionReferenceCandidateToSuggestion);
+  const searchIndexSuggestions = searchIndexCandidates.map(mentionReferenceCandidateToSuggestion);
   const extraReferenceSuggestions = (options.extraReferences ?? []).map(
     mentionReferenceCandidateToSuggestion,
   );
@@ -149,7 +197,11 @@ export async function createTuiReferenceSuggestions(
   for (const candidate of localLibraryCandidates) {
     pathBackedLibraryRefs.add(candidate.relativePath);
   }
-  for (const candidate of options.extraReferences ?? []) {
+  for (const candidate of [
+    ...assetLibraryCandidates,
+    ...searchIndexCandidates,
+    ...(options.extraReferences ?? []),
+  ]) {
     const relativePath =
       candidate.filePath && isTerminalSafeReferencePath(candidate.filePath)
         ? normalizeTerminalPath(candidate.filePath)
@@ -163,6 +215,8 @@ export async function createTuiReferenceSuggestions(
     0,
     limit -
       localLibraryCandidates.length -
+      assetLibrarySuggestions.length -
+      searchIndexSuggestions.length -
       contributedReferenceSuggestions.length -
       extraReferenceSuggestions.length,
   );
@@ -178,10 +232,14 @@ export async function createTuiReferenceSuggestions(
 
   return [
     ...localLibraryCandidates.map(localLibraryCandidateToSuggestion),
+    ...assetLibrarySuggestions,
+    ...searchIndexSuggestions,
     ...contributedReferenceSuggestions,
     ...extraReferenceSuggestions,
     ...workspaceFileSuggestions,
-  ].slice(0, limit);
+  ]
+    .filter(uniqueSuggestion())
+    .slice(0, limit);
 }
 
 async function listContributedReferenceSuggestions(input: {
@@ -278,21 +336,34 @@ async function listLocalLibraryReferenceFiles(
   options: {
     readonly limit: number;
     readonly maxDepth: number;
+    readonly resolvedMediaLibraries?: readonly ResolvedMediaLibrary[];
   },
 ): Promise<readonly LocalLibraryReferenceCandidate[]> {
   const results: LocalLibraryReferenceCandidate[] = [];
   const seen = new Set<string>();
+  const configuredMediaLibraryRoots = listConfiguredMediaLibraryRoots(
+    options.resolvedMediaLibraries ?? (await readResolvedMediaLibraries(workspaceRoot)),
+  );
+  const scanRoots: LocalLibraryScanRoot[] = [
+    ...configuredMediaLibraryRoots,
+    ...DEFAULT_LOCAL_LIBRARY_ROOTS.map((root) => ({
+      absoluteRoot: path.join(workspaceRoot, root.relativeDir),
+      displayRoot: root.relativeDir,
+      kind: root.kind,
+      source: root.source,
+      label: root.label,
+    })),
+  ];
 
-  for (const root of DEFAULT_LOCAL_LIBRARY_ROOTS) {
+  for (const root of scanRoots) {
     if (results.length >= options.limit) break;
-    const absoluteRoot = path.join(workspaceRoot, root.relativeDir);
-    if (!(await directoryExists(absoluteRoot))) {
+    if (!(await directoryExists(root.absoluteRoot))) {
       continue;
     }
 
     const files = await listLibraryRootFiles({
-      absoluteRoot,
-      relativeRoot: root.relativeDir,
+      absoluteRoot: root.absoluteRoot,
+      relativeRoot: root.displayRoot,
       limit: options.limit - results.length,
       maxDepth: options.maxDepth,
     });
@@ -317,6 +388,350 @@ async function listLocalLibraryReferenceFiles(
   }
 
   return results;
+}
+
+function listConfiguredMediaLibraryRoots(
+  libraries: readonly ResolvedMediaLibrary[],
+): readonly LocalLibraryScanRoot[] {
+  return libraries
+    .filter((library) => library.enabled && library.accessible)
+    .map((library) => ({
+      absoluteRoot: library.resolvedPath,
+      displayRoot: formatPathVariableReference(library.variable),
+      kind: 'media' as const,
+      source: 'media-library' as const,
+      label: library.name,
+    }));
+}
+
+async function listAssetLibraryReferenceCandidates(
+  workspaceRoot: string,
+  options: {
+    readonly limit: number;
+  },
+): Promise<readonly TuiMentionReferenceCandidate[]> {
+  const library = await readAssetLibraryFile(path.join(workspaceRoot, ASSET_LIBRARY_FILE));
+  if (!library) {
+    return [];
+  }
+
+  const candidates: TuiMentionReferenceCandidate[] = [];
+  for (const entity of library.entities) {
+    if (candidates.length >= options.limit) {
+      break;
+    }
+    const files = readAssetEntityFiles(entity);
+    const firstFile = files[0];
+    const mediaType = firstFile ? toTuiMentionMediaType(firstFile.mediaType) : undefined;
+    const filePath =
+      firstFile?.path && isTerminalSafeReferencePath(firstFile.path) ? firstFile.path : undefined;
+
+    candidates.push({
+      kind: 'asset',
+      id: entity.id,
+      label: entity.name,
+      source: 'asset-library',
+      ...(mediaType ? { mediaType } : {}),
+      ...(filePath ? { filePath } : {}),
+      description: formatAssetLibraryDescription(entity),
+      searchText: formatAssetLibrarySearchText(entity, files),
+      insertText: `@asset:${entity.id} `,
+    });
+  }
+  return candidates;
+}
+
+async function listSearchIndexReferenceCandidates(
+  workspaceRoot: string,
+  options: {
+    readonly limit: number;
+    readonly resolvedMediaLibraries: readonly ResolvedMediaLibrary[];
+  },
+): Promise<readonly TuiMentionReferenceCandidate[]> {
+  const index = await readSearchIndexFile(path.join(workspaceRoot, SEARCH_INDEX_CACHE_FILE));
+  if (!index) {
+    return [];
+  }
+
+  const candidates: TuiMentionReferenceCandidate[] = [];
+  const seen = new Set<string>();
+  for (const entry of index.entries) {
+    if (candidates.length >= options.limit) {
+      break;
+    }
+    const durableRef = resolveSearchIndexDurableReference(entry, options.resolvedMediaLibraries);
+    if (!durableRef || seen.has(durableRef)) {
+      continue;
+    }
+    seen.add(durableRef);
+
+    const mediaType = toTuiMentionMediaType(entry.mediaType) ?? detectMentionMediaType(durableRef);
+    const label = entry.fileName ?? path.basename(durableRef);
+    candidates.push({
+      kind: toSearchIndexMentionKind(mediaType),
+      label,
+      source: 'media-library',
+      ...(mediaType ? { mediaType } : {}),
+      filePath: durableRef,
+      ...(entry.libraryName ? { description: entry.libraryName } : {}),
+      searchText: [label, durableRef, entry.libraryName, entry.mediaType]
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
+        .join(' '),
+      insertText: `${formatMentionInsertText(durableRef)} `,
+    });
+  }
+  return candidates;
+}
+
+async function readResolvedMediaLibraries(
+  workspaceRoot: string,
+): Promise<readonly ResolvedMediaLibrary[]> {
+  const settingsPath = path.join(workspaceRoot, MEDIA_LIBRARY_SETTINGS_FILE);
+  const localSettingsPath = path.join(workspaceRoot, MEDIA_LIBRARY_LOCAL_SETTINGS_FILE);
+  const settings = await readOptionalJsonFile(settingsPath);
+  const localSettings = await readOptionalJsonFile(localSettingsPath);
+  const entries = readMediaLibraryEntries(settings, MEDIA_LIBRARY_SETTINGS_FILE);
+  const overrides = readMediaLibraryOverrides(localSettings, MEDIA_LIBRARY_LOCAL_SETTINGS_FILE);
+  const libraries: ResolvedMediaLibrary[] = [];
+
+  for (const entry of entries) {
+    const override = overrides[entry.variable];
+    const resolvedPath = resolveMediaLibraryPath(workspaceRoot, override ?? entry.path);
+    libraries.push({
+      name: entry.name,
+      resolvedPath,
+      originalPath: entry.path,
+      variable: entry.variable,
+      enabled: entry.enabled !== false,
+      accessible: await isReadableDirectory(resolvedPath),
+      overridden: override !== undefined,
+    });
+  }
+
+  return libraries;
+}
+
+async function readOptionalJsonFile(filePath: string): Promise<unknown | undefined> {
+  let content: string;
+  try {
+    content = await fs.readFile(filePath, 'utf-8');
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return undefined;
+    }
+    throw new Error(`Failed to read ${filePath}: ${formatUnknownError(error)}`);
+  }
+
+  try {
+    return JSON.parse(content) as unknown;
+  } catch (error) {
+    throw new Error(`Failed to parse ${filePath}: ${formatUnknownError(error)}`);
+  }
+}
+
+async function readAssetLibraryFile(filePath: string): Promise<AssetLibraryFile | undefined> {
+  const value = await readOptionalJsonFile(filePath);
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new Error(`${ASSET_LIBRARY_FILE} must contain a JSON object.`);
+  }
+  const entities = value['entities'];
+  if (entities === undefined) {
+    return { entities: [] };
+  }
+  if (!Array.isArray(entities)) {
+    throw new Error(`${ASSET_LIBRARY_FILE}.entities must be an array.`);
+  }
+  return {
+    entities: entities.map((entity, index) => readAssetEntity(entity, index)),
+  };
+}
+
+function readAssetEntity(value: unknown, index: number): AssetEntity {
+  if (!isRecord(value)) {
+    throw new Error(`${ASSET_LIBRARY_FILE}.entities[${index}] must be a JSON object.`);
+  }
+  if (!isAssetEntity(value)) {
+    throw new Error(
+      `${ASSET_LIBRARY_FILE}.entities[${index}] must be a valid asset entity with id, name, category, metadata, variants, tags, usageCount, createdAt, and updatedAt.`,
+    );
+  }
+  return value;
+}
+
+function isAssetEntity(value: unknown): value is AssetEntity {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value['id'] === 'string' &&
+    value['id'].length > 0 &&
+    typeof value['name'] === 'string' &&
+    value['name'].length > 0 &&
+    typeof value['category'] === 'string' &&
+    value['category'].length > 0 &&
+    isRecord(value['metadata']) &&
+    Array.isArray(value['variants']) &&
+    Array.isArray(value['tags']) &&
+    value['tags'].every((tag) => typeof tag === 'string') &&
+    typeof value['usageCount'] === 'number' &&
+    typeof value['createdAt'] === 'number' &&
+    typeof value['updatedAt'] === 'number'
+  );
+}
+
+async function readSearchIndexFile(filePath: string): Promise<SearchIndexFile | undefined> {
+  const value = await readOptionalJsonFile(filePath);
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isRecord(value)) {
+    throw new Error(`${SEARCH_INDEX_CACHE_FILE} must contain a JSON object.`);
+  }
+  const entries = value['entries'];
+  if (entries === undefined) {
+    return { entries: [] };
+  }
+  if (!Array.isArray(entries)) {
+    throw new Error(`${SEARCH_INDEX_CACHE_FILE}.entries must be an array.`);
+  }
+  return {
+    entries: entries.map((entry, index) => readSearchIndexEntry(entry, index)),
+  };
+}
+
+function readSearchIndexEntry(value: unknown, index: number): SearchIndexEntry {
+  if (!isRecord(value)) {
+    throw new Error(`${SEARCH_INDEX_CACHE_FILE}.entries[${index}] must be a JSON object.`);
+  }
+  return {
+    ...readOptionalStringProperty(
+      value,
+      'filePath',
+      `${SEARCH_INDEX_CACHE_FILE}.entries[${index}]`,
+    ),
+    ...readOptionalStringProperty(
+      value,
+      'fileName',
+      `${SEARCH_INDEX_CACHE_FILE}.entries[${index}]`,
+    ),
+    ...readOptionalStringProperty(
+      value,
+      'libraryName',
+      `${SEARCH_INDEX_CACHE_FILE}.entries[${index}]`,
+    ),
+    ...readOptionalStringProperty(
+      value,
+      'mediaType',
+      `${SEARCH_INDEX_CACHE_FILE}.entries[${index}]`,
+    ),
+  };
+}
+
+function readOptionalStringProperty(
+  value: Record<string, unknown>,
+  key: keyof SearchIndexEntry,
+  sourceLabel: string,
+): Partial<SearchIndexEntry> {
+  const property = value[key];
+  if (property === undefined) {
+    return {};
+  }
+  if (typeof property !== 'string') {
+    throw new Error(`${sourceLabel}.${key} must be a string.`);
+  }
+  return property.length > 0 ? { [key]: property } : {};
+}
+
+function readMediaLibraryEntries(
+  settings: unknown,
+  sourceLabel: string,
+): readonly MediaLibraryEntry[] {
+  if (settings === undefined) {
+    return [];
+  }
+  if (!isRecord(settings)) {
+    throw new Error(`${sourceLabel} must contain a JSON object.`);
+  }
+
+  const mediaLibraries = settings['mediaLibraries'];
+  if (mediaLibraries === undefined) {
+    return [];
+  }
+  if (!Array.isArray(mediaLibraries)) {
+    throw new Error(`${sourceLabel}.mediaLibraries must be an array.`);
+  }
+
+  return mediaLibraries.map((entry, index) => readMediaLibraryEntry(entry, sourceLabel, index));
+}
+
+function readMediaLibraryEntry(
+  entry: unknown,
+  sourceLabel: string,
+  index: number,
+): MediaLibraryEntry {
+  if (!isRecord(entry)) {
+    throw new Error(`${sourceLabel}.mediaLibraries[${index}] must be a JSON object.`);
+  }
+  const name = entry['name'];
+  const libraryPath = entry['path'];
+  const variable = entry['variable'];
+  const enabled = entry['enabled'];
+
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    throw new Error(`${sourceLabel}.mediaLibraries[${index}].name must be a non-empty string.`);
+  }
+  if (typeof libraryPath !== 'string' || libraryPath.trim().length === 0) {
+    throw new Error(`${sourceLabel}.mediaLibraries[${index}].path must be a non-empty string.`);
+  }
+  if (typeof variable !== 'string' || !isPathVariableName(variable)) {
+    throw new Error(
+      `${sourceLabel}.mediaLibraries[${index}].variable must be a valid path variable name.`,
+    );
+  }
+  if (enabled !== undefined && typeof enabled !== 'boolean') {
+    throw new Error(`${sourceLabel}.mediaLibraries[${index}].enabled must be a boolean.`);
+  }
+
+  return {
+    name,
+    path: libraryPath,
+    variable,
+    ...(enabled !== undefined ? { enabled } : {}),
+  };
+}
+
+function readMediaLibraryOverrides(
+  localSettings: unknown,
+  sourceLabel: string,
+): NonNullable<MediaLibraryLocalSettings['mediaLibraryOverrides']> {
+  if (localSettings === undefined) {
+    return {};
+  }
+  if (!isRecord(localSettings)) {
+    throw new Error(`${sourceLabel} must contain a JSON object.`);
+  }
+
+  const overrides = localSettings['mediaLibraryOverrides'];
+  if (overrides === undefined) {
+    return {};
+  }
+  if (!isRecord(overrides)) {
+    throw new Error(`${sourceLabel}.mediaLibraryOverrides must be a JSON object.`);
+  }
+
+  const result: Record<string, string> = {};
+  for (const [variable, libraryPath] of Object.entries(overrides)) {
+    if (!isPathVariableName(variable) || typeof libraryPath !== 'string') {
+      throw new Error(
+        `${sourceLabel}.mediaLibraryOverrides must map path variable names to strings.`,
+      );
+    }
+    result[variable] = libraryPath;
+  }
+  return result;
 }
 
 async function listLibraryRootFiles(input: {
@@ -379,11 +794,12 @@ async function listLibraryRootFiles(input: {
 }
 
 function workspaceFileCandidateToSuggestion(file: WorkspaceFileCandidate): InputSuggestionOption {
+  const labels = getTuiLabels();
   return {
     trigger: '@' as const,
     name: file.relativePath,
     matchText: file.relativePath,
-    description: `workspace file · ${formatByteSize(file.size)}`,
+    description: `${labels.referenceSources['workspace file']} · ${formatByteSize(file.size)}`,
     kind: 'file',
     insertText: `${formatMentionInsertText(file.relativePath)} `,
   };
@@ -392,6 +808,9 @@ function workspaceFileCandidateToSuggestion(file: WorkspaceFileCandidate): Input
 function localLibraryCandidateToSuggestion(
   file: LocalLibraryReferenceCandidate,
 ): InputSuggestionOption {
+  const labels = getTuiLabels();
+  const libraryLabel = formatTuiLabel(labels.referenceSources, file.libraryLabel);
+  const mediaType = formatTuiLabel(labels.mediaCategories, file.mediaType);
   return {
     trigger: '@' as const,
     name: file.relativePath,
@@ -402,8 +821,10 @@ function localLibraryCandidateToSuggestion(
       file.source,
       file.mediaType,
       file.libraryLabel,
+      libraryLabel,
+      mediaType,
     ].join(' '),
-    description: `${file.libraryLabel} · ${file.mediaType} · ${formatByteSize(file.size)}`,
+    description: `${libraryLabel} · ${mediaType} · ${formatByteSize(file.size)}`,
     kind: file.kind,
     insertText: `${formatMentionInsertText(file.relativePath)} `,
   };
@@ -443,10 +864,13 @@ function mentionReferenceCandidateToSuggestion(
 function agentReferenceCandidateToSuggestion(
   candidate: AgentReferenceCandidate,
 ): InputSuggestionOption {
+  const labels = getTuiLabels();
   const safePath =
     candidate.path && isTerminalSafeReferencePath(candidate.path)
       ? normalizeTerminalPath(candidate.path)
       : undefined;
+  const source = formatTuiLabel(labels.referenceSources, candidate.source);
+  const kind = formatTuiLabel(labels.suggestionKinds, candidate.kind);
   const insertText = candidate.insertText.endsWith(' ')
     ? candidate.insertText
     : `${candidate.insertText} `;
@@ -459,11 +883,13 @@ function agentReferenceCandidateToSuggestion(
       candidate.description,
       candidate.source,
       candidate.kind,
+      source,
+      kind,
       safePath,
     ]
       .filter((value): value is string => typeof value === 'string' && value.length > 0)
       .join(' '),
-    description: [candidate.source, candidate.kind, candidate.description, safePath]
+    description: [source, kind, candidate.description, safePath]
       .filter((value): value is string => typeof value === 'string' && value.length > 0)
       .join(' · '),
     kind: toTuiMentionReferenceKind(candidate.kind),
@@ -492,9 +918,10 @@ function formatMentionCandidateDescription(
   candidate: TuiMentionReferenceCandidate,
   safeFilePath: string | undefined,
 ): string {
+  const labels = getTuiLabels();
   return [
-    candidate.source,
-    candidate.mediaType,
+    candidate.source ? formatTuiLabel(labels.referenceSources, candidate.source) : undefined,
+    candidate.mediaType ? formatTuiLabel(labels.mediaCategories, candidate.mediaType) : undefined,
     candidate.entityType,
     candidate.description,
     safeFilePath,
@@ -526,10 +953,134 @@ function detectMentionMediaType(filePath: string): TuiMentionMediaType | null {
   return null;
 }
 
+function readAssetEntityFiles(entity: AssetEntity): readonly AssetLibraryEntityFile[] {
+  return entity.variants.flatMap((variant) => (Array.isArray(variant.files) ? variant.files : []));
+}
+
+function formatAssetLibraryDescription(entity: AssetEntity): string {
+  return [entity.category, entity.description, entity.tags.join(', ')]
+    .filter((part): part is string => typeof part === 'string' && part.length > 0)
+    .join(' · ');
+}
+
+function formatAssetLibrarySearchText(
+  entity: AssetEntity,
+  files: readonly AssetLibraryEntityFile[],
+): string {
+  return [
+    entity.id,
+    entity.name,
+    entity.category,
+    entity.description,
+    ...(entity.tags ?? []),
+    ...(entity.aliases ?? []),
+    ...files.flatMap((file) => [file.id, file.name, file.path, file.mediaType]),
+  ]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .join(' ');
+}
+
+function toTuiMentionMediaType(value: unknown): TuiMentionMediaType | undefined {
+  switch (value) {
+    case 'video':
+    case 'audio':
+    case 'image':
+    case 'sequence':
+    case 'text':
+    case 'document':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function toSearchIndexMentionKind(mediaType: TuiMentionMediaType | null | undefined) {
+  return mediaType === 'document' || mediaType === 'text' ? 'file' : 'media';
+}
+
+function resolveSearchIndexDurableReference(
+  entry: SearchIndexEntry,
+  libraries: readonly ResolvedMediaLibrary[],
+): string | undefined {
+  if (!entry.filePath) {
+    return undefined;
+  }
+  if (isTerminalSafeReferencePath(entry.filePath)) {
+    return normalizeTerminalPath(entry.filePath);
+  }
+  return contractMediaLibraryPath(entry.filePath, libraries);
+}
+
+function contractMediaLibraryPath(
+  filePath: string,
+  libraries: readonly ResolvedMediaLibrary[],
+): string | undefined {
+  const absolutePath = path.resolve(filePath);
+  const roots = libraries
+    .filter((library) => library.enabled)
+    .flatMap((library) => [
+      { variable: library.variable, root: library.resolvedPath },
+      { variable: library.variable, root: library.originalPath },
+    ])
+    .filter((entry) => path.isAbsolute(entry.root))
+    .map((entry) => ({ ...entry, root: path.resolve(entry.root) }))
+    .sort((left, right) => right.root.length - left.root.length);
+
+  for (const entry of roots) {
+    const relative = path.relative(entry.root, absolutePath);
+    if (relative === '') {
+      return formatPathVariableReference(entry.variable);
+    }
+    if (!relative.startsWith('..') && !path.isAbsolute(relative)) {
+      return `${formatPathVariableReference(entry.variable)}/${toPosixPath(relative)}`;
+    }
+  }
+  return undefined;
+}
+
+function uniqueSuggestion(): (suggestion: InputSuggestionOption) => boolean {
+  const seen = new Set<string>();
+  return (suggestion) => {
+    const key = suggestion.insertText ?? `${suggestion.kind ?? 'unknown'}:${suggestion.name}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  };
+}
+
 function isLocalLibraryExcludedName(name: string): boolean {
   return (
     name === '.cache' || name === '.DS_Store' || name === 'node_modules' || name === 'thumbnails'
   );
+}
+
+function resolveMediaLibraryPath(workspaceRoot: string, libraryPath: string): string {
+  return path.isAbsolute(libraryPath)
+    ? path.resolve(libraryPath)
+    : path.resolve(workspaceRoot, libraryPath);
+}
+
+function formatPathVariableReference(variable: string): string {
+  return '${' + variable + '}';
+}
+
+function isPathVariableName(value: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
+}
+
+async function isReadableDirectory(dirPath: string): Promise<boolean> {
+  try {
+    const stat = await fs.stat(dirPath);
+    if (!stat.isDirectory()) {
+      return false;
+    }
+    await fs.access(dirPath, fsConstants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function directoryExists(dirPath: string): Promise<boolean> {
@@ -562,4 +1113,16 @@ function normalizeTerminalPath(filePath: string): string {
 
 function toPosixPath(filePath: string): string {
   return filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isFileNotFoundError(error: unknown): boolean {
+  return isRecord(error) && error['code'] === 'ENOENT';
+}
+
+function formatUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

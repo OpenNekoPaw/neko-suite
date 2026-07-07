@@ -4,8 +4,10 @@ import type {
   SkillApplicationResult,
   SkillDiscoveryResult,
   SkillInjection,
+  SkillLifecycleLifetime,
   SkillLifecycleProjection,
   SkillLifecycleRecord,
+  SkillLifecycleSlot,
 } from '@neko/shared';
 import {
   buildAgentPromptChainStartedObservation,
@@ -84,6 +86,8 @@ export interface ApplySkillInvocationInput {
   readonly source?: 'user-explicit' | 'agent-tool';
   readonly requestedBy?: 'user' | 'agent';
   readonly reason?: string;
+  readonly slot?: SkillLifecycleSlot;
+  readonly lifetime?: SkillLifecycleLifetime;
   readonly creation?: ConversationSkillPromptChainContext;
 }
 
@@ -231,6 +235,8 @@ export class ConversationSkillRuntime {
         source: input.source ?? 'user-explicit',
         requestedBy: input.requestedBy ?? 'user',
         reason: input.reason ?? `Skill invocation ${formatSkillInvocationName(skillName)}`,
+        ...(input.slot ? { slot: input.slot } : {}),
+        ...(input.lifetime ? { lifetime: input.lifetime } : {}),
       },
       input.creation,
     );
@@ -270,11 +276,23 @@ export class ConversationSkillRuntime {
     lifecycleRecordId?: string;
     diagnostics?: readonly import('@neko/shared').SkillLifecycleDiagnostic[];
   }> {
+    return this.activateLifecycleSkill({ ...input, slot: 'domainSkill' });
+  }
+
+  async activateLifecycleSkill(input: ApplySkillInvocationInput): Promise<{
+    success: boolean;
+    message: string;
+    allowedTools?: string[];
+    lifecycleRecordId?: string;
+    diagnostics?: readonly import('@neko/shared').SkillLifecycleDiagnostic[];
+  }> {
+    const slot = input.slot ?? 'domainSkill';
     const result = await this.applySkillInvocation({
       ...input,
       source: input.source ?? 'agent-tool',
       requestedBy: input.requestedBy ?? 'agent',
       reason: input.reason ?? `ActivateSkill requested ${input.skillName}`,
+      slot,
     });
     if (!result?.applied) {
       return {
@@ -284,7 +302,7 @@ export class ConversationSkillRuntime {
     }
 
     const record = this.getActiveLifecycleRecords(input.conversationId).find(
-      (candidate) => candidate.slot === 'domainSkill' && candidate.skillName === result.skill?.name,
+      (candidate) => candidate.slot === slot && candidate.skillName === result.skill?.name,
     );
     return {
       success: true,
@@ -431,6 +449,8 @@ export class ConversationSkillRuntime {
       readonly source: 'user-explicit' | 'agent-tool';
       readonly requestedBy: 'user' | 'agent';
       readonly reason?: string;
+      readonly slot?: SkillLifecycleSlot;
+      readonly lifetime?: SkillLifecycleLifetime;
     } = { source: 'user-explicit', requestedBy: 'user' },
     creation?: ConversationSkillPromptChainContext,
   ): Promise<SkillApplicationResult> {
@@ -501,15 +521,18 @@ export class ConversationSkillRuntime {
       const lifecycle = this._getLifecycleRuntime();
       let lifecycleRecordId: string | undefined;
       if (lifecycle) {
+        const lifecycleRequest = defaultSkillLifecycleRequest({
+          conversationId,
+          skillName: skill.name,
+          owner: activation.requestedBy,
+          source: activation.source === 'agent-tool' ? 'explicit-agent' : 'explicit-user',
+          ...(args !== undefined ? { args } : {}),
+          now,
+        });
         const result = lifecycle.activatePrepared({
-          ...defaultSkillLifecycleRequest({
-            conversationId,
-            skillName: skill.name,
-            owner: activation.requestedBy,
-            source: activation.source === 'agent-tool' ? 'explicit-agent' : 'explicit-user',
-            ...(args !== undefined ? { args } : {}),
-            now,
-          }),
+          ...lifecycleRequest,
+          ...(activation.slot ? { slot: activation.slot } : {}),
+          ...(activation.lifetime ? { lifetime: activation.lifetime } : {}),
           provenance: {
             intentId: intent.id,
             source: activation.source,

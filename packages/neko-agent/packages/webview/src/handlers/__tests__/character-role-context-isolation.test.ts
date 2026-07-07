@@ -143,9 +143,7 @@ describe('character role context isolation', () => {
       harness.context,
     );
 
-    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toBe(
-      activeTimeline,
-    );
+    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toBe(activeTimeline);
   });
 
   it('caches ordinary activeConversation updates without replacing an active role session view', () => {
@@ -559,6 +557,66 @@ describe('character role context isolation', () => {
     expect(harness.context.activeConversationIdRef.current).toBe('conv-a');
     expect(harness.activeTabId()).toBe('tab-conv-a');
     expect(harness.messages()).toEqual([ordinaryMessage]);
+  });
+
+  it('replaces restored ordinary tab prompt cache with authoritative activeConversation messages', () => {
+    const promptCache = message(
+      'user-prompt',
+      'user',
+      'Continue from the completed async task result.',
+    );
+    const ordinaryMessage = message('ordinary-message', 'assistant', '普通 Agent 回复');
+    const harness = createContextHarness({
+      activeConversationId: null,
+      activeTabId: null,
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null, queuedMessageCount: 0 },
+      openTabs: [],
+      cachedMessages: new Map([['conv-a', [promptCache]]]),
+      cachedStreaming: new Map([
+        [
+          'conv-a',
+          {
+            isThinking: true,
+            streamingMessageId: null,
+            queuedMessageCount: 0,
+            queuedMessages: [],
+          },
+        ],
+      ]),
+      isTablessConversationView: true,
+      includeQueueSetters: true,
+    });
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        tabState: {
+          openTabs: [{ id: 'tab-conv-a', title: 'Ordinary chat', conversationId: 'conv-a' }],
+          activeTabId: 'tab-conv-a',
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.messages()).toEqual([promptCache]);
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-a',
+          title: 'Ordinary chat',
+          messages: [ordinaryMessage],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.messages()).toEqual([ordinaryMessage]);
+    expect(harness.conversationMessages().get('conv-a')).toEqual([ordinaryMessage]);
   });
 
   it('keeps an explicitly empty tab state from restoring the closed active conversation', () => {

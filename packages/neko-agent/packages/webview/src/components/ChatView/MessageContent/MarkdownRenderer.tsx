@@ -4,7 +4,7 @@
  * 支持 Mermaid 图表渲染
  */
 
-import { isValidElement, memo, useMemo, type ReactNode } from 'react';
+import { Fragment, isValidElement, memo, useMemo, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -15,6 +15,7 @@ import {
 } from '@neko-agent/types';
 import {
   classifyCreativeTableHeaders,
+  isCanvasStoryboardReferenceImageProcessingPrompt,
   resolveCreativeTableField,
   STORYBOARD_CREATIVE_TABLE_PROFILE,
   validateCompositeArtifact,
@@ -44,6 +45,7 @@ interface MarkdownRendererProps {
 function createMarkdownComponents(
   isStreaming?: boolean,
   markdownResources?: MarkdownResourceRenderingProjection,
+  locale: MarkdownDisplayLocale = 'en',
 ): Components {
   return {
     // Code blocks
@@ -149,7 +151,15 @@ function createMarkdownComponents(
     },
 
     // Tables
-    table({ children }) {
+    table({ node, children }) {
+      const storyboardProjection = projectStoryboardCreativeTableNode(
+        node,
+        markdownResources,
+        locale,
+      );
+      if (storyboardProjection) {
+        return storyboardProjection;
+      }
       return (
         <div className="overflow-x-auto my-2 w-full max-w-full">
           <table className="w-full border-collapse border border-[var(--vscode-panel-border)]">
@@ -283,6 +293,47 @@ function projectMarkdownResourceTokenCell(
   );
 }
 
+function projectStoryboardResourceTokenCell(
+  token: string,
+  markdownResources: MarkdownResourceRenderingProjection | undefined,
+): ReactNode | null {
+  const normalizedToken = normalizeMarkdownResourceLookupToken(token);
+  const projection = markdownResources?.tokens.find(
+    (candidate) => normalizeMarkdownResourceLookupToken(candidate.token) === normalizedToken,
+  );
+  if (!projection) return null;
+  if (projection.status === 'bound' && projection.renderUris.length > 0) {
+    return (
+      <span className="flex max-w-full flex-wrap gap-1.5 align-top">
+        {projection.renderUris.slice(0, 2).map((uri, index) => (
+          <img
+            key={`${uri}-${index}`}
+            src={uri}
+            alt={projection.refs[index]?.label ?? token}
+            title={projection.refs[index]?.label ?? token}
+            className="max-h-28 min-h-16 w-auto max-w-[7rem] rounded border border-[var(--vscode-panel-border)] object-contain"
+            loading="lazy"
+          />
+        ))}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 align-top">
+      <span className="min-w-0 truncate font-mono text-[11px] text-[var(--vscode-foreground)]">
+        {token}
+      </span>
+      <span
+        className="shrink-0 rounded border border-[var(--vscode-panel-border)] px-1 py-0.5 text-[10px] text-[var(--vscode-descriptionForeground)]"
+        data-markdown-resource-status={projection.status}
+      >
+        {markdownResourceStatusLabel(projection)}
+      </span>
+    </span>
+  );
+}
+
 function projectMarkdownImageResource(
   src: string | undefined,
   markdownResources: MarkdownResourceRenderingProjection | undefined,
@@ -309,6 +360,534 @@ function projectMarkdownImageResource(
       />
     </span>
   );
+}
+
+interface MarkdownTableProjection {
+  readonly headers: readonly string[];
+  readonly rows: readonly (readonly string[])[];
+  readonly fields: readonly (CreativeTableFieldDescriptor | undefined)[];
+}
+
+type StoryboardSceneColumnId =
+  'shot' | 'referenceMedia' | 'imagePrompt' | 'videoPrompt' | 'duration' | 'dialogue' | 'action';
+
+type StoryboardPromptCellKind = 'image' | 'video';
+
+type StoryboardPromptPartKind =
+  'intent' | 'reference' | 'operation' | 'camera' | 'dialogue' | 'constraint' | 'detail';
+
+interface StoryboardPromptPart {
+  readonly kind: StoryboardPromptPartKind;
+  readonly text: string;
+}
+
+const STORYBOARD_SCENE_COLUMNS = [
+  'shot',
+  'referenceMedia',
+  'imagePrompt',
+  'videoPrompt',
+  'duration',
+  'dialogue',
+  'action',
+] as const;
+
+const STORYBOARD_SCENE_COLUMN_WIDTHS: Record<StoryboardSceneColumnId, number> = {
+  shot: 76,
+  referenceMedia: 132,
+  imagePrompt: 216,
+  videoPrompt: 248,
+  duration: 72,
+  dialogue: 176,
+  action: 112,
+};
+
+const STORYBOARD_SCENE_TABLE_MIN_WIDTH = STORYBOARD_SCENE_COLUMNS.reduce(
+  (total, columnId) => total + STORYBOARD_SCENE_COLUMN_WIDTHS[columnId],
+  0,
+);
+
+function projectStoryboardCreativeTableNode(
+  node: unknown,
+  markdownResources: MarkdownResourceRenderingProjection | undefined,
+  locale: MarkdownDisplayLocale,
+): ReactNode | null {
+  const table = readMarkdownTableProjectionFromNode(node);
+  if (!table || !shouldRenderCanvasSceneStoryboardTable(table)) return null;
+
+  return (
+    <div
+      className="my-2 min-w-0 max-w-full overflow-x-auto"
+      data-markdown-storyboard-scene-table="true"
+    >
+      <table
+        className="table-fixed border-collapse text-left text-[11px] text-[var(--vscode-foreground)]"
+        style={{ minWidth: STORYBOARD_SCENE_TABLE_MIN_WIDTH }}
+      >
+        <colgroup>
+          {STORYBOARD_SCENE_COLUMNS.map((columnId) => (
+            <col key={columnId} style={{ width: STORYBOARD_SCENE_COLUMN_WIDTHS[columnId] }} />
+          ))}
+        </colgroup>
+        <thead className="bg-[var(--vscode-editorWidget-background)] text-[10px] uppercase tracking-normal text-[var(--vscode-descriptionForeground)]">
+          <tr>
+            {STORYBOARD_SCENE_COLUMNS.map((columnId) => (
+              <th
+                key={columnId}
+                className="border border-[var(--vscode-panel-border)] px-2 py-1.5 font-medium"
+                data-markdown-storyboard-scene-column={columnId}
+              >
+                {storyboardSceneColumnLabel(columnId, locale)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((row, rowIndex) => (
+            <MarkdownStoryboardSceneTableRow
+              key={`${readCellByField(table, row, 'scene')}:${readCellByField(table, row, 'shot')}:${rowIndex}`}
+              table={table}
+              row={row}
+              rowIndex={rowIndex}
+              markdownResources={markdownResources}
+              locale={locale}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MarkdownStoryboardSceneTableRow({
+  table,
+  row,
+  rowIndex,
+  markdownResources,
+  locale,
+}: {
+  readonly table: MarkdownTableProjection;
+  readonly row: readonly string[];
+  readonly rowIndex: number;
+  readonly markdownResources: MarkdownResourceRenderingProjection | undefined;
+  readonly locale: MarkdownDisplayLocale;
+}) {
+  const shot = readCellByField(table, row, 'shot') || String(rowIndex + 1);
+  const source = readCellByField(table, row, 'source');
+  const imagePrompt =
+    readCellByField(table, row, 'imagePrompt') || readCellByField(table, row, 'prompt');
+  const videoPrompt = readCellByField(table, row, 'videoPrompt');
+  const duration = readCellByField(table, row, 'duration');
+  const dialogue = readCellByField(table, row, 'dialogue');
+  const action =
+    readCellByField(table, row, 'nextAction') ||
+    deriveStoryboardSceneAction({
+      source,
+      imagePrompt,
+      videoPrompt,
+      locale,
+    });
+
+  return (
+    <tr
+      className="align-top text-[11px] text-[var(--vscode-foreground)] odd:bg-[color-mix(in_srgb,var(--vscode-editorWidget-background)_44%,transparent)] hover:bg-[var(--vscode-list-hoverBackground)]"
+      data-markdown-storyboard-scene-row="true"
+    >
+      <StoryboardSceneTableCell columnId="shot">
+        <span className="flex min-w-0 items-center gap-1 text-left text-[12px] font-medium text-[var(--vscode-foreground)]">
+          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[var(--vscode-button-background)] text-[10px] leading-none text-[var(--vscode-button-foreground)]">
+            {rowIndex + 1}
+          </span>
+          <span className="truncate">{shot}</span>
+        </span>
+      </StoryboardSceneTableCell>
+      <StoryboardSceneTableCell columnId="referenceMedia">
+        {source ? (
+          (projectStoryboardResourceCell(source, markdownResources) ?? (
+            <BoundedStoryboardSceneCellText value={source} />
+          ))
+        ) : (
+          <BoundedStoryboardSceneCellText
+            value=""
+            placeholder={storyboardScenePlaceholder('referenceMedia', locale)}
+          />
+        )}
+      </StoryboardSceneTableCell>
+      <StoryboardSceneTableCell columnId="imagePrompt">
+        <StoryboardPromptCellText
+          kind="image"
+          value={imagePrompt}
+          placeholder={storyboardScenePlaceholder('imagePrompt', locale)}
+        />
+      </StoryboardSceneTableCell>
+      <StoryboardSceneTableCell columnId="videoPrompt">
+        <StoryboardPromptCellText
+          kind="video"
+          value={videoPrompt}
+          placeholder={storyboardScenePlaceholder('videoPrompt', locale)}
+        />
+      </StoryboardSceneTableCell>
+      <StoryboardSceneTableCell columnId="duration">
+        <BoundedStoryboardSceneCellText
+          value={duration}
+          placeholder={storyboardScenePlaceholder('duration', locale)}
+        />
+      </StoryboardSceneTableCell>
+      <StoryboardSceneTableCell columnId="dialogue">
+        <BoundedStoryboardSceneCellText
+          value={dialogue}
+          placeholder={storyboardScenePlaceholder('dialogue', locale)}
+        />
+      </StoryboardSceneTableCell>
+      <StoryboardSceneTableCell columnId="action">
+        <StoryboardSceneActionPill value={action} locale={locale} />
+      </StoryboardSceneTableCell>
+    </tr>
+  );
+}
+
+function StoryboardSceneTableCell({
+  columnId,
+  children,
+}: {
+  readonly columnId: StoryboardSceneColumnId;
+  readonly children: ReactNode;
+}) {
+  return (
+    <td
+      className="border border-[var(--vscode-panel-border)] px-2 py-2"
+      data-markdown-storyboard-scene-cell={columnId}
+    >
+      {children}
+    </td>
+  );
+}
+
+function StoryboardPromptCellText({
+  kind,
+  value,
+  placeholder,
+}: {
+  readonly kind: StoryboardPromptCellKind;
+  readonly value: string;
+  readonly placeholder: string;
+}) {
+  if (!value) {
+    return <BoundedStoryboardSceneCellText value="" placeholder={placeholder} />;
+  }
+  const parts = projectStoryboardPromptParts(value);
+  return (
+    <div
+      className="min-w-0 whitespace-pre-wrap break-words text-[11px] leading-[1.45] text-[var(--vscode-foreground)]"
+      title={value}
+      data-markdown-storyboard-prompt-cell={kind}
+      data-markdown-storyboard-prompt-visual-style="subtle-inline"
+    >
+      {parts.map((part, index) => {
+        const separator = index === 0 ? '' : ' ';
+        return (
+          <Fragment key={`${part.kind}:${index}:${part.text}`}>
+            {separator}
+            <span
+              className={getStoryboardPromptPartClassName(part.kind)}
+              data-markdown-storyboard-prompt-part="true"
+              data-markdown-storyboard-prompt-part-kind={part.kind}
+            >
+              {part.text}
+            </span>
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function BoundedStoryboardSceneCellText({
+  value,
+  placeholder = '-',
+}: {
+  readonly value: string;
+  readonly placeholder?: string;
+}) {
+  return (
+    <div
+      className="line-clamp-2 min-w-0 whitespace-pre-wrap break-words text-[11px] leading-[1.35] text-[var(--vscode-foreground)]"
+      title={value || placeholder}
+    >
+      {value || <span className="text-[var(--vscode-descriptionForeground)]">{placeholder}</span>}
+    </div>
+  );
+}
+
+function projectStoryboardPromptParts(value: string): readonly StoryboardPromptPart[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  const intentMatch = /^([^：:]{2,32})[：:]\s*(.*)$/u.exec(trimmed);
+  const parts: StoryboardPromptPart[] = [];
+  const body = intentMatch?.[2]?.trim() ?? trimmed;
+  const intent = intentMatch?.[1]?.trim();
+  if (intent) {
+    parts.push({ kind: 'intent', text: intent });
+  }
+
+  const chunks = body
+    .split(/[。；;，,]/u)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+  for (const chunk of chunks.length > 0 ? chunks : [body]) {
+    parts.push({
+      kind: classifyStoryboardPromptPart(chunk),
+      text: chunk,
+    });
+  }
+  return parts;
+}
+
+function classifyStoryboardPromptPart(value: string): StoryboardPromptPartKind {
+  const lower = value.toLocaleLowerCase();
+  if (
+    /(^|\s)(p\d+(?:#panel_\d+)?|page_\d+(?:#panel_\d+)?)(\s|$)/iu.test(value) ||
+    /参考|来源|reference|source/u.test(lower)
+  ) {
+    return 'reference';
+  }
+  if (isCanvasStoryboardReferenceImageProcessingPrompt(value)) {
+    return 'operation';
+  }
+  if (
+    /镜头|运镜|推近|推远|下移|上移|横移|摇镜|特写|视差|camera|dolly|pan|tilt|zoom|push-in|pull-back/u.test(
+      lower,
+    )
+  ) {
+    return 'camera';
+  }
+  if (/对白|台词|无对白|旁白|dialogue|voice|silence|no dialogue/u.test(lower)) {
+    return 'dialogue';
+  }
+  if (
+    /保持|保留|不新增|不要|一致|约束|preserve|keep|consistent|constraint|do not|without adding/u.test(
+      lower,
+    )
+  ) {
+    return 'constraint';
+  }
+  return 'detail';
+}
+
+function getStoryboardPromptPartClassName(kind: StoryboardPromptPartKind): string {
+  const base =
+    'rounded-sm border px-0.5 py-[1px] text-[var(--vscode-foreground)] underline decoration-2 underline-offset-[3px] box-decoration-clone';
+  switch (kind) {
+    case 'intent':
+      return `${base} border-[color-mix(in_srgb,var(--vscode-button-background)_42%,transparent)] bg-[color-mix(in_srgb,var(--vscode-button-background)_8%,transparent)] font-medium decoration-[color-mix(in_srgb,var(--vscode-button-background)_70%,transparent)]`;
+    case 'reference':
+      return `${base} border-cyan-300/60 bg-cyan-50/40 decoration-cyan-400/75`;
+    case 'operation':
+      return `${base} border-amber-300/60 bg-amber-50/45 decoration-amber-400/80`;
+    case 'camera':
+      return `${base} border-blue-300/60 bg-blue-50/40 decoration-blue-400/75`;
+    case 'dialogue':
+      return `${base} border-indigo-300/60 bg-indigo-50/40 decoration-indigo-400/75`;
+    case 'constraint':
+      return `${base} border-emerald-300/60 bg-emerald-50/40 decoration-emerald-400/75`;
+    case 'detail':
+      return `${base} border-[color-mix(in_srgb,var(--vscode-foreground)_16%,transparent)] bg-[color-mix(in_srgb,var(--vscode-foreground)_4%,transparent)] decoration-[color-mix(in_srgb,var(--vscode-foreground)_30%,transparent)]`;
+  }
+}
+
+function StoryboardSceneActionPill({
+  value,
+  locale,
+}: {
+  readonly value: string;
+  readonly locale: MarkdownDisplayLocale;
+}) {
+  if (!value) {
+    return (
+      <BoundedStoryboardSceneCellText
+        value=""
+        placeholder={storyboardScenePlaceholder('action', locale)}
+      />
+    );
+  }
+  return (
+    <span
+      className="inline-flex max-w-full rounded border border-[var(--vscode-button-background)] bg-[var(--vscode-button-secondaryBackground)] px-2 py-1 text-[11px] leading-none text-[var(--vscode-button-secondaryForeground)]"
+      title={value}
+      data-markdown-storyboard-scene-action={value}
+    >
+      <span className="truncate">{value}</span>
+    </span>
+  );
+}
+
+function projectStoryboardResourceCell(
+  value: string,
+  markdownResources: MarkdownResourceRenderingProjection | undefined,
+): ReactNode | null {
+  const tokens = extractStoryboardResourceCellTokens(value);
+  const projected = tokens.flatMap((token, index) => {
+    const projection = projectStoryboardResourceTokenCell(token, markdownResources);
+    return projection ? [<Fragment key={`${token}:${index}`}>{projection}</Fragment>] : [];
+  });
+  if (projected.length === 0) return null;
+  return <span className="flex max-w-full flex-wrap gap-1.5">{projected}</span>;
+}
+
+function extractStoryboardResourceCellTokens(value: string): readonly string[] {
+  const imageTargets = Array.from(value.matchAll(/!\[[^\]]*]\(([^)]+)\)/g))
+    .map((match) => match[1])
+    .filter((target): target is string => Boolean(target));
+  if (imageTargets.length > 0) {
+    return imageTargets.map(stripResourcePlacementHint);
+  }
+  return value
+    .split(/[\s,，、;；]+/)
+    .map((token) => stripInlineMarkdown(token.trim()))
+    .filter(Boolean);
+}
+
+function readCellByField(
+  table: MarkdownTableProjection,
+  row: readonly string[],
+  fieldId: string,
+): string {
+  const index = table.fields.findIndex((field) => field?.id === fieldId);
+  return index >= 0 ? (row[index]?.trim() ?? '') : '';
+}
+
+function shouldRenderCanvasSceneStoryboardTable(table: MarkdownTableProjection): boolean {
+  return shouldRenderCanvasSceneStoryboardFields(table.fields);
+}
+
+function shouldRenderCanvasSceneStoryboardFields(
+  fields: readonly (CreativeTableFieldDescriptor | undefined)[],
+): boolean {
+  const fieldIds = new Set(fields.flatMap((field) => (field ? [field.id] : [])));
+  const hasPromptFirstSurface =
+    fieldIds.has('imagePrompt') ||
+    fieldIds.has('videoPrompt') ||
+    fieldIds.has('duration') ||
+    fieldIds.has('dialogue');
+  return fieldIds.has('scene') && fieldIds.has('shot') && hasPromptFirstSurface;
+}
+
+function storyboardSceneColumnLabel(
+  columnId: StoryboardSceneColumnId,
+  locale: MarkdownDisplayLocale,
+): string {
+  const labels: Record<StoryboardSceneColumnId, Record<MarkdownDisplayLocale, string>> = {
+    shot: { en: 'Shot', 'zh-cn': '镜头' },
+    referenceMedia: { en: 'Reference', 'zh-cn': '参考素材' },
+    imagePrompt: { en: 'Image Prompt', 'zh-cn': '图片提示词' },
+    videoPrompt: { en: 'Scene Video Prompt', 'zh-cn': '场景视频提示词' },
+    duration: { en: 'Duration', 'zh-cn': '时长' },
+    dialogue: { en: 'Dialogue', 'zh-cn': '台词' },
+    action: { en: 'Action', 'zh-cn': '操作' },
+  };
+  return labels[columnId][locale];
+}
+
+function storyboardScenePlaceholder(
+  columnId: StoryboardSceneColumnId,
+  locale: MarkdownDisplayLocale,
+): string {
+  const labels: Partial<Record<StoryboardSceneColumnId, Record<MarkdownDisplayLocale, string>>> = {
+    referenceMedia: { en: 'No reference', 'zh-cn': '无参考' },
+    imagePrompt: { en: 'Not needed', 'zh-cn': '不需要' },
+    videoPrompt: { en: 'None', 'zh-cn': '暂无' },
+    duration: { en: '-', 'zh-cn': '-' },
+    dialogue: { en: 'No dialogue', 'zh-cn': '无台词' },
+    action: { en: 'None', 'zh-cn': '暂无' },
+  };
+  return labels[columnId]?.[locale] ?? '-';
+}
+
+function deriveStoryboardSceneAction(input: {
+  readonly source: string;
+  readonly imagePrompt: string;
+  readonly videoPrompt: string;
+  readonly locale: MarkdownDisplayLocale;
+}): string {
+  if (input.source && isCanvasStoryboardReferenceImageProcessingPrompt(input.imagePrompt)) {
+    return input.locale === 'zh-cn' ? '处理参考素材' : 'Process reference';
+  }
+  if (!input.videoPrompt) {
+    return input.locale === 'zh-cn' ? '优化场景视频提示词' : 'Optimize scene video prompt';
+  }
+  if (!input.source && input.imagePrompt) {
+    return input.locale === 'zh-cn' ? '生成图片' : 'Generate image';
+  }
+  return input.locale === 'zh-cn' ? '生成视频' : 'Generate video';
+}
+
+function readMarkdownTableProjectionFromNode(node: unknown): MarkdownTableProjection | undefined {
+  const rows = collectMarkdownTableRowsFromNode(node);
+  const headerRowIndex = rows.findIndex((row) => row.kind === 'header');
+  const headerRow = rows[headerRowIndex >= 0 ? headerRowIndex : 0];
+  if (!headerRow || headerRow.cells.length < 2) return undefined;
+  const bodyRows = rows
+    .slice((headerRowIndex >= 0 ? headerRowIndex : 0) + 1)
+    .filter((row) => row.cells.length === headerRow.cells.length)
+    .map((row) => row.cells);
+  if (bodyRows.length === 0) return undefined;
+  const fields = headerRow.cells.map((header) =>
+    resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, header),
+  );
+  return {
+    headers: headerRow.cells,
+    rows: bodyRows,
+    fields,
+  };
+}
+
+function collectMarkdownTableRowsFromNode(
+  node: unknown,
+): readonly { readonly kind: 'header' | 'body'; readonly cells: readonly string[] }[] {
+  const rows: Array<{ kind: 'header' | 'body'; cells: string[] }> = [];
+  const visit = (value: unknown): void => {
+    const element = readHastElement(value);
+    if (!element) return;
+    if (element.tagName === 'tr') {
+      const cellElements = element.children
+        .map(readHastElement)
+        .filter((child): child is HastElement =>
+          Boolean(child && (child.tagName === 'th' || child.tagName === 'td')),
+        );
+      if (cellElements.length > 0) {
+        rows.push({
+          kind: cellElements.some((cell) => cell.tagName === 'th') ? 'header' : 'body',
+          cells: cellElements.map((cell) => readHastText(cell).trim()),
+        });
+      }
+      return;
+    }
+    for (const child of element.children) visit(child);
+  };
+  visit(node);
+  return rows;
+}
+
+interface HastElement {
+  readonly tagName: string;
+  readonly children: readonly unknown[];
+}
+
+function readHastElement(value: unknown): HastElement | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const tagName = record['tagName'];
+  const children = record['children'];
+  if (typeof tagName !== 'string' || !Array.isArray(children)) return undefined;
+  return { tagName, children };
+}
+
+function readHastText(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+  const record = value as Record<string, unknown>;
+  if (record['type'] === 'text' && typeof record['value'] === 'string') return record['value'];
+  const children = record['children'];
+  if (Array.isArray(children)) return children.map(readHastText).join('');
+  return '';
 }
 
 function stripResourcePlacementHint(value: string): string {
@@ -411,15 +990,22 @@ function StructuredArtifactPending() {
 }
 
 function CreativeDraftDiagnostics({
+  content,
   markdownResources,
 }: {
+  readonly content: string;
   readonly markdownResources?: MarkdownResourceRenderingProjection;
 }) {
+  const storyboardReferenceTokens = collectStoryboardReferenceResourceTokens(content);
   const diagnostics =
     markdownResources?.status === 'diagnostic'
       ? markdownResources.diagnostics
           .filter((diagnostic) => diagnostic.severity === 'error')
           .filter((diagnostic) => !isSemanticPromptDiagnostic(diagnostic))
+          .filter(
+            (diagnostic) =>
+              !isStoryboardReferenceResourceDiagnostic(diagnostic, storyboardReferenceTokens),
+          )
           .slice(0, 3)
       : [];
   if (diagnostics.length === 0) return null;
@@ -435,6 +1021,64 @@ function CreativeDraftDiagnostics({
         </div>
       ))}
     </div>
+  );
+}
+
+const STORYBOARD_REFERENCE_RESOURCE_DIAGNOSTIC_CODES = new Set([
+  'ambiguous-resource-token',
+  'missing-resource-context',
+  'missing-resource-token',
+]);
+
+function collectStoryboardReferenceResourceTokens(markdown: string): ReadonlySet<string> {
+  const tokens = new Set<string>();
+  const lines = markdown.split(/\r?\n/);
+  let inFence = false;
+
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const line = lines[index] ?? '';
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+
+    const headers = parseMarkdownTableCells(line);
+    const separator = parseMarkdownTableCells(lines[index + 1] ?? '');
+    if (!headers || !separator || !isMarkdownTableSeparator(separator)) continue;
+
+    const fields = headers.map((header) =>
+      resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, header),
+    );
+    if (!shouldRenderCanvasSceneStoryboardFields(fields)) continue;
+
+    const sourceIndexes = fields
+      .map((field, fieldIndex) => (field?.id === 'source' ? fieldIndex : -1))
+      .filter((fieldIndex) => fieldIndex >= 0);
+    if (sourceIndexes.length === 0) continue;
+
+    for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
+      const cells = parseMarkdownTableCells(lines[rowIndex] ?? '');
+      if (!cells) break;
+      for (const sourceIndex of sourceIndexes) {
+        for (const token of extractStoryboardResourceCellTokens(cells[sourceIndex] ?? '')) {
+          tokens.add(normalizeMarkdownResourceLookupToken(token));
+        }
+      }
+    }
+  }
+
+  return tokens;
+}
+
+function isStoryboardReferenceResourceDiagnostic(
+  diagnostic: MarkdownResourceDiagnostic,
+  storyboardReferenceTokens: ReadonlySet<string>,
+): boolean {
+  return Boolean(
+    diagnostic.token &&
+    STORYBOARD_REFERENCE_RESOURCE_DIAGNOSTIC_CODES.has(diagnostic.code) &&
+    storyboardReferenceTokens.has(normalizeMarkdownResourceLookupToken(diagnostic.token)),
   );
 }
 
@@ -537,7 +1181,11 @@ function readPromptSpanSourceText(
   content: string,
   span: NonNullable<MarkdownResourceRenderingProjection['promptSpans']>[number],
 ): string | undefined {
-  if (span.range.start < 0 || span.range.end <= span.range.start || span.range.end > content.length) {
+  if (
+    span.range.start < 0 ||
+    span.range.end <= span.range.start ||
+    span.range.end > content.length
+  ) {
     return undefined;
   }
   const value = content.slice(span.range.start, span.range.end).trim();
@@ -584,12 +1232,18 @@ function MarkdownRendererComponent({
   // Memoize remark plugins
   const remarkPlugins = useMemo(() => [remarkGfm], []);
   const displayContent = useMemo(
-    () => localizeMarkdownCreativeTablesForDisplay(content, locale),
+    () =>
+      localizeMarkdownCreativeTablesForDisplay(
+        removeNonActionableDiagnosticTablesForDisplay(
+          removeMarkdownResourceIndexSectionsForDisplay(content),
+        ),
+        locale,
+      ),
     [content, locale],
   );
   const markdownComponents = useMemo(
-    () => createMarkdownComponents(isStreaming, markdownResources),
-    [isStreaming, markdownResources],
+    () => createMarkdownComponents(isStreaming, markdownResources, locale),
+    [isStreaming, markdownResources, locale],
   );
 
   return (
@@ -602,7 +1256,7 @@ function MarkdownRendererComponent({
       <SemanticPromptSpanProjectionList content={content} markdownResources={markdownResources} />
       <SemanticPromptSpanDiagnostics markdownResources={markdownResources} />
       <MarkdownExtensionDiagnostics markdownResources={markdownResources} />
-      <CreativeDraftDiagnostics markdownResources={markdownResources} />
+      <CreativeDraftDiagnostics content={content} markdownResources={markdownResources} />
       {isStreaming && (
         <span className="inline-block w-1.5 h-4 ml-1 bg-[var(--vscode-foreground)] animate-pulse" />
       )}
@@ -642,6 +1296,156 @@ function MarkdownExtensionDiagnostics({
 
 function normalizeMarkdownDisplayLocale(locale: string | undefined): MarkdownDisplayLocale {
   return locale?.trim().toLowerCase().startsWith('zh') ? 'zh-cn' : 'en';
+}
+
+const MARKDOWN_RESOURCE_INDEX_HEADING_RE =
+  /^\s{0,3}#{1,6}\s*(?:资源索引|图片索引|资源图片索引|resource\s+index|image\s+index|resource\s+image\s+index)\s*#*\s*$/i;
+
+function removeMarkdownResourceIndexSectionsForDisplay(markdown: string): string {
+  const newline = markdown.includes('\r\n') ? '\r\n' : '\n';
+  const lines = markdown.split(/\r?\n/);
+  const visibleLines: string[] = [];
+  let inFence = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+      visibleLines.push(line);
+      continue;
+    }
+    if (!inFence && MARKDOWN_RESOURCE_INDEX_HEADING_RE.test(line)) {
+      const tableStartIndex = findNextNonBlankLineIndex(lines, index + 1);
+      if (isMarkdownTableStart(lines, tableStartIndex)) {
+        index = skipMarkdownTableLines(lines, tableStartIndex) - 1;
+        continue;
+      }
+    }
+    visibleLines.push(line);
+  }
+
+  return visibleLines.join(newline);
+}
+
+function removeNonActionableDiagnosticTablesForDisplay(markdown: string): string {
+  const newline = markdown.includes('\r\n') ? '\r\n' : '\n';
+  const lines = markdown.split(/\r?\n/);
+  const visibleLines: string[] = [];
+  let inFence = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence;
+      visibleLines.push(line);
+      continue;
+    }
+    if (!inFence && isMarkdownTableStart(lines, index)) {
+      const headers = parseMarkdownTableCells(line) ?? [];
+      const tableEndIndex = skipMarkdownTableLines(lines, index);
+      const rowCount = countMarkdownTableDataRows(lines, index, headers.length);
+      if (
+        isResourceMetadataInventoryDisplayTable(headers) ||
+        (rowCount === 0 && isStoryboardCreativeDisplayTable(headers))
+      ) {
+        index = tableEndIndex - 1;
+        continue;
+      }
+    }
+    visibleLines.push(line);
+  }
+
+  return visibleLines.join(newline);
+}
+
+function countMarkdownTableDataRows(
+  lines: readonly string[],
+  tableStartIndex: number,
+  headerCellCount: number,
+): number {
+  let count = 0;
+  for (let index = tableStartIndex + 2; index < lines.length; index += 1) {
+    const cells = parseMarkdownTableCells(lines[index] ?? '');
+    if (!cells || cells.length !== headerCellCount) break;
+    if (cells.some((cell) => cell.length > 0)) count += 1;
+  }
+  return count;
+}
+
+function isStoryboardCreativeDisplayTable(headers: readonly string[]): boolean {
+  const fields = headers.map((header) =>
+    resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, header),
+  );
+  return shouldRenderCanvasSceneStoryboardFields(fields);
+}
+
+function isResourceMetadataInventoryDisplayTable(headers: readonly string[]): boolean {
+  const normalizedHeaders = headers.map(normalizeMarkdownTableHeader);
+  if (hasStoryboardCreativeDisplayAnchors(normalizedHeaders)) return false;
+
+  const hasPage = normalizedHeaders.some((header) =>
+    ['page', 'pageno', 'pagenumber', 'sourcepage', '页', '页码', '页面', '来源页'].includes(header),
+  );
+  const hasAsset = normalizedHeaders.some((header) =>
+    [
+      'asset',
+      'assetid',
+      'resource',
+      'resourceid',
+      'image',
+      'imageid',
+      'source',
+      'token',
+      '感知卡',
+      '图片卡片',
+      '资源',
+      '素材',
+      '来源',
+    ].includes(header),
+  );
+  const hasSize = normalizedHeaders.some((header) =>
+    ['size', 'dimensions', 'resolution', '尺寸', '分辨率'].includes(header),
+  );
+  const hasType = normalizedHeaders.some((header) =>
+    ['type', 'mimetype', 'mime', '类型'].includes(header),
+  );
+
+  return (hasPage && hasAsset && hasSize) || (hasAsset && hasSize && hasType);
+}
+
+function hasStoryboardCreativeDisplayAnchors(normalizedHeaders: readonly string[]): boolean {
+  const hasScene = normalizedHeaders.some((header) => header === 'scene' || header === '场景');
+  const hasShot = normalizedHeaders.some((header) => header === 'shot' || header === '镜头');
+  return hasScene && hasShot;
+}
+
+function normalizeMarkdownTableHeader(header: string): string {
+  return header
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-/#:：]+/g, '');
+}
+
+function findNextNonBlankLineIndex(lines: readonly string[], startIndex: number): number {
+  let index = startIndex;
+  while (index < lines.length && (lines[index] ?? '').trim().length === 0) {
+    index += 1;
+  }
+  return index;
+}
+
+function isMarkdownTableStart(lines: readonly string[], index: number): boolean {
+  const header = parseMarkdownTableCells(lines[index] ?? '');
+  const separator = parseMarkdownTableCells(lines[index + 1] ?? '');
+  return Boolean(header && separator && isMarkdownTableSeparator(separator));
+}
+
+function skipMarkdownTableLines(lines: readonly string[], tableStartIndex: number): number {
+  let index = tableStartIndex + 2;
+  while (index < lines.length && parseMarkdownTableCells(lines[index] ?? '')) {
+    index += 1;
+  }
+  return index;
 }
 
 function localizeMarkdownCreativeTablesForDisplay(

@@ -180,15 +180,15 @@ describe('agent-capability-injection-runtime', () => {
         ],
         lifecycleCapabilities: [
           {
-            capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
+            capabilityId: 'canvas.ingestMarkdown',
             providerId: 'neko-canvas',
-            displayName: 'Create storyboard draft',
-            description: 'Create a review-first storyboard draft from Markdown.',
-            phases: ['validate', 'review', 'apply'],
+            displayName: 'Ingest Markdown to Canvas',
+            description: 'Ingest a review-first semantic storyboard table from Markdown.',
+            phases: ['review'],
             inputSchema: { id: 'canvas.markdown.input', version: 1 },
             resultSchema: { id: 'agent.capability.lifecycle.result', version: 1 },
             accepts: ['markdown', 'gfm-table'],
-            produces: ['canvas.table', 'canvas.storyboard'],
+            produces: ['canvas.table'],
             risk: 'medium',
             requiresApproval: true,
             safetyKind: 'confirmation-gated',
@@ -204,8 +204,8 @@ describe('agent-capability-injection-runtime', () => {
     expect(runtime.findArtifactCapabilities('canvas.importStoryboard')).toEqual([]);
     expect(runtime.getArtifactFacets().lifecycleCapabilities).toEqual([
       expect.objectContaining({
-        capabilityId: 'canvas.createStoryboardDraftFromMarkdown',
-        phases: ['validate', 'review', 'apply'],
+        capabilityId: 'canvas.ingestMarkdown',
+        phases: ['review'],
         requiresApproval: true,
       }),
     ]);
@@ -356,16 +356,14 @@ describe('agent-capability-injection-runtime', () => {
         mediaWorkflow: {
           producedArtifacts: ['CompositeArtifact'],
           artifactProfiles: ['comic-shot-asset-prep'],
-          referencedCapabilities: ['canvas.createStoryboardDraftFromMarkdown'],
-          suggestedProjectors: ['capability:canvas.createStoryboardDraftFromMarkdown'],
+          referencedCapabilities: ['canvas.ingestMarkdown'],
+          suggestedProjectors: ['capability:canvas.ingestMarkdown'],
         },
       },
     });
 
     expect(runtime.getArtifactFacets().capabilities).toEqual([]);
-    expect(runtime.findArtifactCapabilities('canvas.createStoryboardDraftFromMarkdown')).toEqual(
-      [],
-    );
+    expect(runtime.findArtifactCapabilities('canvas.ingestMarkdown')).toEqual([]);
   });
 
   it('registers entity memory and semantic index facets as discoverable metadata', () => {

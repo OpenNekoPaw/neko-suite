@@ -69,6 +69,7 @@ import { formatTuiReferenceDiagnostics } from './reference-diagnostics';
 import { createTuiMessageQueue, type TuiMessageQueue } from './message-queue';
 import { createCliAgentRuntime, createCliToolGroupRegistry } from './runtime-bootstrap';
 import { createTuiCapabilityLoader, type TuiCapabilityLoaderResult } from './tui-capability-loader';
+import { detectTuiLocale } from './tui-locale';
 import { loadSkillArtifactsAsSkills } from './skill-artifacts';
 import {
   activateCliDomainSkill,
@@ -83,6 +84,7 @@ import {
   listRegisteredTuiMcpTools,
   reconnectTuiMcpServer,
 } from './tui-mcp-ports';
+import { withTuiDefaultCapabilityProviders } from '../host/tui-default-capabilities';
 
 interface CliLifecycleActivationHint {
   readonly skillName: string;
@@ -118,7 +120,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     runOptions,
     service,
     taskManager: providedTaskManager,
-    capabilityProviders = [],
+    capabilityProviders,
     hooks,
     onOutput,
     onToolCall,
@@ -126,6 +128,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     executionMode = 'auto',
   } = options;
   const startTime = Date.now();
+  const locale = detectTuiLocale();
 
   try {
     // Block if configured model was not found — do not waste API calls
@@ -187,9 +190,14 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       ...(skillService ? { skillRegistry: skillService.registry } : {}),
       toolGroupRegistry,
       providerCardRegistry,
-      locale: 'en',
+      locale,
     });
-    const capabilityLoadResult = capabilityLoader.registerProviders(capabilityProviders);
+    const capabilityLoadResult = capabilityLoader.registerProviders(
+      withTuiDefaultCapabilityProviders({
+        workDir: config.workDir,
+        capabilityProviders,
+      }),
+    );
 
     // Create LLM service via Platform
     let llmService: IService;
@@ -210,7 +218,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
 
     // Build system prompt
     const promptBuilder = createSystemPromptBuilder({
-      locale: 'en',
+      locale,
       mode: executionMode === 'plan' ? 'plan' : 'default',
     });
     await promptBuilder.loadAgentsFile(config.workDir, getDefaultPersonalPath());
@@ -222,6 +230,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       service: llmService,
       toolRegistry,
       systemPrompt,
+      locale,
       executionMode,
       maxIterations: runOptions.maxIterations,
       temperature: config.temperature,
@@ -274,6 +283,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     const preparedInput = await prepareSingleRunPrompt({
       prompt: runOptions.prompt,
       slashContext: {
+        locale,
         config,
         skillService,
         toolRegistry,
@@ -499,6 +509,7 @@ async function prepareSingleRunPrompt(input: {
     const commandEntry = resolveSlashCommandCatalogEntry(command, {
       surface: 'cli',
       skills: input.slashContext.skillService?.registry.listAllSkills(),
+      locale: input.slashContext.locale,
     });
     if (commandEntry?.source !== 'command-artifact') {
       return { ok: true, prompt: input.prompt };
@@ -1172,6 +1183,7 @@ async function initializeInteractiveSession(
 ): Promise<InteractiveSessionState> {
   // Track tools the user has approved with "always"
   const alwaysAllowedTools = new Set<string>();
+  const locale = detectTuiLocale();
 
   // Initialize MCP Manager
   const mcpManager = new MCPManager();
@@ -1212,9 +1224,14 @@ async function initializeInteractiveSession(
     ...(skillService ? { skillRegistry: skillService.registry } : {}),
     toolGroupRegistry,
     providerCardRegistry,
-    locale: 'en',
+    locale,
   });
-  const capabilityLoadResult = capabilityLoader.registerProviders(capabilityProviders);
+  const capabilityLoadResult = capabilityLoader.registerProviders(
+    withTuiDefaultCapabilityProviders({
+      workDir: config.workDir,
+      capabilityProviders,
+    }),
+  );
 
   // Create LLM service via Platform
   let platform: Platform | undefined;
@@ -1233,7 +1250,7 @@ async function initializeInteractiveSession(
   }
 
   // Build system prompt
-  const promptBuilder = createSystemPromptBuilder({ locale: 'en' });
+  const promptBuilder = createSystemPromptBuilder({ locale });
   await promptBuilder.loadAgentsFile(config.workDir, getDefaultPersonalPath());
   const systemPrompt = promptBuilder.build();
 
@@ -1274,6 +1291,7 @@ async function initializeInteractiveSession(
     service: llmService,
     toolRegistry,
     systemPrompt,
+    locale,
     executionMode: 'auto',
     maxIterations: 50,
     temperature: config.temperature,
@@ -1389,6 +1407,7 @@ export async function runInteractive(
   _hooks?: Partial<ExecutorHooks>,
   options?: {
     resumeId?: string;
+    initialPrompt?: string;
     taskManager?: IRuntimeTaskManager;
     capabilityProviders?: readonly AgentCapabilityProvider[];
   },
@@ -1417,6 +1436,7 @@ export async function runInteractive(
 
     // Create slash command context
     const slashContext: SlashCommandContext = {
+      locale: detectTuiLocale(),
       config: sessionConfig,
       skillService: state.skillService,
       toolRegistry: state.toolRegistry,
@@ -1452,219 +1472,228 @@ export async function runInteractive(
     console.log(theme.muted(`Provider: ${sessionConfig.provider}, Model: ${sessionConfig.model}`));
     console.log(theme.muted('Type /help for commands, /exit to quit.\n'));
 
-    const prompt = (): void => {
-      rl.question('> ', async (input) => {
-        const trimmed = input.trim();
-        let executionPrompt = trimmed;
-        let executionMetadata: Record<string, unknown> | undefined;
+    let readlineClosed = false;
+    const closeReadline = (): void => {
+      readlineClosed = true;
+      rl.close();
+    };
 
-        if (!trimmed) {
-          prompt();
+    const handleInput = async (input: string, continuePrompt: () => void): Promise<void> => {
+      const trimmed = input.trim();
+      let executionPrompt = trimmed;
+      let executionMetadata: Record<string, unknown> | undefined;
+
+      if (!trimmed) {
+        continuePrompt();
+        return;
+      }
+
+      if (isSkillInvocation(trimmed)) {
+        const result = await handleSkillInvocation(trimmed, slashContext);
+
+        if (result.output) {
+          console.log(result.output);
+        }
+        if (result.error) {
+          console.error(theme.error(`Error: ${result.error}`));
+          continuePrompt();
           return;
         }
-
-        if (isSkillInvocation(trimmed)) {
-          const result = await handleSkillInvocation(trimmed, slashContext);
-
-          if (result.output) {
-            console.log(result.output);
-          }
-          if (result.error) {
-            console.error(theme.error(`Error: ${result.error}`));
-            prompt();
-            return;
-          }
-          if (result.lifecycleActivation) {
-            const activation = await activateCliLifecycleHint({
-              bridge: state!.skillLifecycleBridge,
-              conversationId: state!.conversationId,
-              hint: result.lifecycleActivation,
-            });
-            if (!activation.ok) {
-              console.error(theme.error(`Error: ${activation.message}`));
-              prompt();
-              return;
-            }
-          } else {
-            console.error(
-              theme.error('Error: Skill invocation did not return lifecycle activation'),
-            );
-            prompt();
-            return;
-          }
-
-          if (result.agentPrompt) {
-            executionPrompt = result.agentPrompt;
-            executionMetadata = mergeCreationExecutionMetadata(
-              state!.session.getExecutionMode() === 'plan'
-                ? createPlanModeCreationMetadata()
-                : undefined,
-              result.executionOverrides?.metadata,
-            );
-          } else {
-            console.log('');
-            prompt();
-            return;
-          }
-        }
-
-        // Handle slash commands
-        if (isSlashCommand(trimmed)) {
-          const result = await handleTuiControlCommand(
-            trimmed,
-            createInteractiveRouterContext({
-              slashContext,
-              getState: () => state!,
-              getSessionConfig: () => sessionConfig,
-              setSessionConfig: (nextConfig) => {
-                sessionConfig = nextConfig;
-                slashContext.config = sessionConfig;
-              },
-              service,
-            }),
-          );
-
-          projectInteractiveCommandResult(result);
-
-          if (result.lifecycleActivation) {
-            const activation = await activateCliLifecycleHint({
-              bridge: state!.skillLifecycleBridge,
-              conversationId: state!.conversationId,
-              hint: result.lifecycleActivation,
-            });
-            if (!activation.ok) {
-              console.error(theme.error(`Error: ${activation.message}`));
-              prompt();
-              return;
-            }
-          }
-
-          if (!result.continueExecution) {
-            state!.session.dispose();
-            await state!.mcpManager.disconnectAll();
-            rl.close();
-            return;
-          }
-
-          if (result.agentPrompt) {
-            executionPrompt = result.agentPrompt;
-            executionMetadata = mergeCreationExecutionMetadata(
-              state!.session.getExecutionMode() === 'plan'
-                ? createPlanModeCreationMetadata()
-                : undefined,
-              result.executionOverrides?.metadata,
-            );
-          }
-
-          // If the slash command was handled and doesn't need agent execution
-          if (result.handled && !trimmed.startsWith('/run ') && !result.agentPrompt) {
-            console.log('');
-            prompt();
-            return;
-          }
-        }
-
-        // Run agent for non-slash commands or /run commands
-        const agentPrompt = trimmed.startsWith('/run ') ? trimmed.slice(5).trim() : executionPrompt;
-
-        if (!agentPrompt) {
-          prompt();
-          return;
-        }
-
-        // Process input for file references
-        const processedInput = await state!.inputProcessor.process(agentPrompt);
-
-        // Build final prompt with file contents
-        let finalPrompt = processedInput.message;
-        if (processedInput.hasFiles) {
-          finalPrompt = `${processedInput.message}\n\n## Referenced Files\n\n${processedInput.fileContents}`;
-        }
-
-        // Report any file loading errors
-        if (processedInput.errors.length > 0) {
-          const errorMessages = processedInput.errors
-            .map((e) => `- ${e.reference}: ${e.error}`)
-            .join('\n');
-          console.log(
-            theme.warning(`\n[Warning] Some files could not be loaded:\n${errorMessages}\n`),
-          );
-        }
-
-        // Execute via session
-        try {
-          if (!executionMetadata) {
-            executionMetadata =
-              state!.session.getExecutionMode() === 'plan'
-                ? createPlanModeCreationMetadata()
-                : undefined;
-          }
-          executionMetadata = mergeInteractiveMediaModelMetadata(
-            executionMetadata,
-            state!.mediaModelRefs,
-          );
-
-          for await (const event of state!.session.execute(finalPrompt, {
-            workspaceRoot: sessionConfig.workDir,
-            ...(executionMetadata ? { metadata: executionMetadata } : {}),
-          })) {
-            handleAgentEvent(event, {
-              onOutput: (text) => process.stdout.write(text),
-              onToolCall: (name, args) => {
-                const argsRecord = args as Record<string, unknown>;
-                process.stdout.write('\n');
-                console.log(formatToolCall(name, argsRecord, 'pending'));
-              },
-              onThinking: (thought) => console.log(theme.muted(`\n[Thinking] ${thought}`)),
-            });
-            if (event.type === 'tool_result') {
-              subscribeToMediaSave(
-                state!.platform,
-                event,
-                sessionConfig.workDir,
-                (taskId, paths) => {
-                  console.log(
-                    theme.success(`\n${formatCliMediaSaveSummary(taskId, paths.length)}`),
-                  );
-                },
-              );
-            }
-          }
-          console.log('\n');
-
-          // Persist conversation after each turn
-          if (!state!.conversationTitle) {
-            state!.conversationTitle =
-              agentPrompt.slice(0, 50) + (agentPrompt.length > 50 ? '…' : '');
-          }
-          const record: ConversationRecord = {
-            id: state!.conversationId,
-            version: 1,
-            title: state!.conversationTitle,
-            workDir: sessionConfig.workDir,
-            messages: state!.session.getHistory(),
-            createdAt: state!.conversationCreatedAt,
-            updatedAt: Date.now(),
-            source: 'tui',
-            mediaModelSelection:
-              Object.keys(state!.mediaModelOverrides).length > 0
-                ? state!.mediaModelOverrides
-                : undefined,
-          };
-          state!.conversationStorage.save(record).catch(() => {
-            /* silent — storage is best-effort */
+        if (result.lifecycleActivation) {
+          const activation = await activateCliLifecycleHint({
+            bridge: state!.skillLifecycleBridge,
+            conversationId: state!.conversationId,
+            hint: result.lifecycleActivation,
           });
-        } catch (error) {
-          console.error(
-            theme.error(`Error: ${error instanceof Error ? error.message : String(error)}`),
+          if (!activation.ok) {
+            console.error(theme.error(`Error: ${activation.message}`));
+            continuePrompt();
+            return;
+          }
+        } else {
+          console.error(theme.error('Error: Skill invocation did not return lifecycle activation'));
+          continuePrompt();
+          return;
+        }
+
+        if (result.agentPrompt) {
+          executionPrompt = result.agentPrompt;
+          executionMetadata = mergeCreationExecutionMetadata(
+            state!.session.getExecutionMode() === 'plan'
+              ? createPlanModeCreationMetadata()
+              : undefined,
+            result.executionOverrides?.metadata,
+          );
+        } else {
+          console.log('');
+          continuePrompt();
+          return;
+        }
+      }
+
+      // Handle slash commands
+      if (isSlashCommand(trimmed)) {
+        const result = await handleTuiControlCommand(
+          trimmed,
+          createInteractiveRouterContext({
+            slashContext,
+            getState: () => state!,
+            getSessionConfig: () => sessionConfig,
+            setSessionConfig: (nextConfig) => {
+              sessionConfig = nextConfig;
+              slashContext.config = sessionConfig;
+            },
+            service,
+          }),
+        );
+
+        projectInteractiveCommandResult(result);
+
+        if (result.lifecycleActivation) {
+          const activation = await activateCliLifecycleHint({
+            bridge: state!.skillLifecycleBridge,
+            conversationId: state!.conversationId,
+            hint: result.lifecycleActivation,
+          });
+          if (!activation.ok) {
+            console.error(theme.error(`Error: ${activation.message}`));
+            continuePrompt();
+            return;
+          }
+        }
+
+        if (!result.continueExecution) {
+          state!.session.dispose();
+          await state!.mcpManager.disconnectAll();
+          closeReadline();
+          return;
+        }
+
+        if (result.agentPrompt) {
+          executionPrompt = result.agentPrompt;
+          executionMetadata = mergeCreationExecutionMetadata(
+            state!.session.getExecutionMode() === 'plan'
+              ? createPlanModeCreationMetadata()
+              : undefined,
+            result.executionOverrides?.metadata,
           );
         }
 
-        prompt();
+        // If the slash command was handled and doesn't need agent execution
+        if (result.handled && !trimmed.startsWith('/run ') && !result.agentPrompt) {
+          console.log('');
+          continuePrompt();
+          return;
+        }
+      }
+
+      // Run agent for non-slash commands or /run commands
+      const agentPrompt = trimmed.startsWith('/run ') ? trimmed.slice(5).trim() : executionPrompt;
+
+      if (!agentPrompt) {
+        continuePrompt();
+        return;
+      }
+
+      // Process input for file references
+      const processedInput = await state!.inputProcessor.process(agentPrompt);
+
+      // Build final prompt with file contents
+      let finalPrompt = processedInput.message;
+      if (processedInput.hasFiles) {
+        finalPrompt = `${processedInput.message}\n\n## Referenced Files\n\n${processedInput.fileContents}`;
+      }
+
+      // Report any file loading errors
+      if (processedInput.errors.length > 0) {
+        const errorMessages = processedInput.errors
+          .map((e) => `- ${e.reference}: ${e.error}`)
+          .join('\n');
+        console.log(
+          theme.warning(`\n[Warning] Some files could not be loaded:\n${errorMessages}\n`),
+        );
+      }
+
+      // Execute via session
+      try {
+        if (!executionMetadata) {
+          executionMetadata =
+            state!.session.getExecutionMode() === 'plan'
+              ? createPlanModeCreationMetadata()
+              : undefined;
+        }
+        executionMetadata = mergeInteractiveMediaModelMetadata(
+          executionMetadata,
+          state!.mediaModelRefs,
+        );
+
+        for await (const event of state!.session.execute(finalPrompt, {
+          workspaceRoot: sessionConfig.workDir,
+          ...(executionMetadata ? { metadata: executionMetadata } : {}),
+        })) {
+          handleAgentEvent(event, {
+            onOutput: (text) => process.stdout.write(text),
+            onToolCall: (name, args) => {
+              const argsRecord = args as Record<string, unknown>;
+              process.stdout.write('\n');
+              console.log(formatToolCall(name, argsRecord, 'pending'));
+            },
+            onThinking: (thought) => console.log(theme.muted(`\n[Thinking] ${thought}`)),
+          });
+          if (event.type === 'tool_result') {
+            subscribeToMediaSave(state!.platform, event, sessionConfig.workDir, (taskId, paths) => {
+              console.log(theme.success(`\n${formatCliMediaSaveSummary(taskId, paths.length)}`));
+            });
+          }
+        }
+        console.log('\n');
+
+        // Persist conversation after each turn
+        if (!state!.conversationTitle) {
+          state!.conversationTitle =
+            agentPrompt.slice(0, 50) + (agentPrompt.length > 50 ? '…' : '');
+        }
+        const record: ConversationRecord = {
+          id: state!.conversationId,
+          version: 1,
+          title: state!.conversationTitle,
+          workDir: sessionConfig.workDir,
+          messages: state!.session.getHistory(),
+          createdAt: state!.conversationCreatedAt,
+          updatedAt: Date.now(),
+          source: 'tui',
+          mediaModelSelection:
+            Object.keys(state!.mediaModelOverrides).length > 0
+              ? state!.mediaModelOverrides
+              : undefined,
+        };
+        state!.conversationStorage.save(record).catch(() => {
+          /* silent — storage is best-effort */
+        });
+      } catch (error) {
+        console.error(
+          theme.error(`Error: ${error instanceof Error ? error.message : String(error)}`),
+        );
+      }
+
+      continuePrompt();
+    };
+
+    const prompt = (): void => {
+      rl.question('> ', (input) => {
+        void handleInput(input, prompt);
       });
     };
 
-    prompt();
+    const initialPrompt = options?.initialPrompt?.trim();
+    if (initialPrompt) {
+      console.log(theme.muted(`> ${initialPrompt}`));
+      await handleInput(initialPrompt, () => {});
+    }
+
+    if (!readlineClosed) {
+      prompt();
+    }
   } catch (error) {
     console.error('Failed to initialize:', error);
     if (state) {

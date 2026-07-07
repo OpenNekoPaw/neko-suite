@@ -149,13 +149,21 @@ interface CanvasMarkdownHandoffKind {
 
 function inferCanvasMarkdownHandoffKind(markdown: string): CanvasMarkdownHandoffKind | null {
   const tables = extractGfmTables(markdown);
-  if (tables.length === 0) return null;
+  const handoffTables = tables.filter(
+    (table) => table.rowCount > 0 && !isResourceMetadataInventoryTable(table.headers),
+  );
+  if (handoffTables.length === 0) return null;
   return {};
 }
 
-function extractGfmTables(markdown: string): readonly (readonly string[])[] {
+interface GfmTableSummary {
+  readonly headers: readonly string[];
+  readonly rowCount: number;
+}
+
+function extractGfmTables(markdown: string): readonly GfmTableSummary[] {
   const lines = markdown.split(/\r?\n/);
-  const tables: string[][] = [];
+  const tables: GfmTableSummary[] = [];
   let inFence = false;
 
   for (let index = 0; index < lines.length - 1; index += 1) {
@@ -168,11 +176,68 @@ function extractGfmTables(markdown: string): readonly (readonly string[])[] {
 
     const next = lines[index + 1] ?? '';
     if (looksLikeTableRow(line) && looksLikeDividerRow(next)) {
-      tables.push(parseTableCells(line));
+      const headers = parseTableCells(line);
+      let rowCount = 0;
+      let rowIndex = index + 2;
+      for (; rowIndex < lines.length; rowIndex += 1) {
+        if (!looksLikeTableRow(lines[rowIndex] ?? '')) break;
+        const cells = parseTableCells(lines[rowIndex] ?? '');
+        if (cells.length !== headers.length) break;
+        if (cells.some((cell) => cell.length > 0)) rowCount += 1;
+      }
+      tables.push({ headers, rowCount });
+      index = rowIndex - 1;
     }
   }
 
   return tables;
+}
+
+function isResourceMetadataInventoryTable(headers: readonly string[]): boolean {
+  const normalizedHeaders = headers.map(normalizeTableHeader);
+  if (hasStoryboardCreativeAnchors(normalizedHeaders)) return false;
+
+  const hasPage = normalizedHeaders.some((header) =>
+    ['page', 'pageno', 'pagenumber', 'sourcepage', '页', '页码', '页面', '来源页'].includes(header),
+  );
+  const hasAsset = normalizedHeaders.some((header) =>
+    [
+      'asset',
+      'assetid',
+      'resource',
+      'resourceid',
+      'image',
+      'imageid',
+      'source',
+      'token',
+      '感知卡',
+      '图片卡片',
+      '资源',
+      '素材',
+      '来源',
+    ].includes(header),
+  );
+  const hasSize = normalizedHeaders.some((header) =>
+    ['size', 'dimensions', 'resolution', '尺寸', '分辨率'].includes(header),
+  );
+  const hasType = normalizedHeaders.some((header) =>
+    ['type', 'mimetype', 'mime', '类型'].includes(header),
+  );
+
+  return (hasPage && hasAsset && hasSize) || (hasAsset && hasSize && hasType);
+}
+
+function hasStoryboardCreativeAnchors(normalizedHeaders: readonly string[]): boolean {
+  const hasScene = normalizedHeaders.some((header) => header === 'scene' || header === '场景');
+  const hasShot = normalizedHeaders.some((header) => header === 'shot' || header === '镜头');
+  return hasScene && hasShot;
+}
+
+function normalizeTableHeader(header: string): string {
+  return header
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-/#:：]+/g, '');
 }
 
 function looksLikeTableRow(line: string): boolean {

@@ -358,8 +358,7 @@ describe('AgentExecutor', () => {
         createOptions({
           service,
           toolRegistry,
-          getActiveSkillValidationRequirements: () =>
-            activated ? ['CanvasMarkdownCapabilityInput'] : undefined,
+          getActiveSkillValidationRequirements: () => (activated ? ['CreativeTable'] : undefined),
           hooks: [
             new ValidationHooks({
               outputConstraints: {
@@ -420,8 +419,7 @@ describe('AgentExecutor', () => {
         createOptions({
           service,
           toolRegistry,
-          getActiveSkillValidationRequirements: () =>
-            activated ? ['CanvasMarkdownCapabilityInput'] : undefined,
+          getActiveSkillValidationRequirements: () => (activated ? ['CreativeTable'] : undefined),
           hooks: [
             new ValidationHooks({
               outputConstraints: {

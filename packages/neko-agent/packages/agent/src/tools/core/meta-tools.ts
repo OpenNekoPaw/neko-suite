@@ -2,9 +2,9 @@
  * Core Meta Tools
  *
  * With 1M context, all tools are always visible. Meta tools now focus on:
- * - GetContext: Current state overview (active skill, registered skills, tool categories)
- * - ActivateSkill: AI-driven skill activation (injects domain-specific instructions)
- * - DeactivateSkill: Clear the active skill
+ * - GetContext: Current state overview (active skill lifecycle, registered skills, tool categories)
+ * - ActivateSkill: AI-driven skill activation (injects lifecycle-scoped instructions)
+ * - DeactivateSkill: Clear targeted active skill lifecycle records
  * - SetExecutionMode: AI-driven capability activation through typed intents
  */
 
@@ -20,6 +20,7 @@ import type {
   SkillMediaWorkflowHint,
   ActiveSkillLifecycleRecordProjection,
   SkillLifecycleDiagnostic,
+  SkillLifecycleSlot,
   ToolExecuteOptions,
 } from '@neko/shared';
 import { BuiltinTool } from '@neko/shared';
@@ -40,6 +41,7 @@ export interface SkillContextSummary {
 export interface SkillActivationRequest {
   readonly name: string;
   readonly reason: string;
+  readonly slot?: SkillLifecycleSlot;
 }
 
 /**
@@ -100,7 +102,7 @@ export type SkillProviderMaybePromise<T> = T | Promise<T>;
 export class GetContextTool extends BuiltinTool {
   readonly name = 'GetContext';
   readonly description =
-    'Get current context: active skill, registered skills, and available tool categories.';
+    'Get current context: active skill lifecycle records, registered skills, and available tool categories.';
   readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
@@ -158,6 +160,11 @@ export class GetContextTool extends BuiltinTool {
         category: cat.displayName,
         tools: this.categoryRegistry.getToolsByCategory(cat.id).map((t) => t.name),
       }));
+      result.toolDiscoveryNotes = [
+        'The tools list contains currently categorized callable tools only.',
+        'Provider capability catalogs and lifecycle descriptors are separate from callable tool availability.',
+        'If a needed provider tool is absent, inspect registered skills and activate the relevant supplemental skill in referenceSkill when it should not replace the domain skill.',
+      ];
     }
 
     return this.success(result);
@@ -171,13 +178,14 @@ export class GetContextTool extends BuiltinTool {
 /**
  * ActivateSkill - AI-driven skill activation
  *
- * Activates a registered skill, injecting domain-specific instructions
- * into the conversation context. Only one skill can be active at a time.
+ * Activates a registered skill, injecting lifecycle-scoped instructions
+ * into the conversation context. Multiple skills can coexist in different
+ * slots; referenceSkill guidance does not replace the current domain skill.
  */
 export class ActivateSkillTool extends BuiltinTool {
   readonly name = 'ActivateSkill';
   readonly description =
-    'Activate a skill after ordinary Agent understanding confirms a domain skill is needed. Do not use keyword matching alone. Briefly state the activation reason before calling this tool. Only one skill can be active at a time.';
+    'Activate a skill after ordinary Agent understanding confirms it is needed. Do not use keyword matching alone. Briefly state the activation reason before calling this tool. Use slot=domainSkill for the main task domain, and slot=referenceSkill for supplemental capability guidance such as Canvas authoring so the current domain skill stays active.';
   readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
@@ -189,6 +197,18 @@ export class ActivateSkillTool extends BuiltinTool {
         type: 'string',
         description:
           'Concise reason based on the current conversation and gathered context, explaining why this skill is needed now.',
+      },
+      slot: {
+        type: 'string',
+        enum: [
+          'domainSkill',
+          'referenceSkill',
+          'promptChainSkill',
+          'ephemeralSkill',
+          'stagePersona',
+        ],
+        description:
+          'Optional lifecycle slot. Defaults to domainSkill. Use referenceSkill for supplemental guidance that must coexist with the active domain skill.',
       },
     },
     required: ['skillName', 'reason'],
@@ -216,8 +236,16 @@ export class ActivateSkillTool extends BuiltinTool {
     if (reason.length === 0) {
       return this.error('Activation reason is required');
     }
+    const slot = readOptionalSkillLifecycleSlot(args.slot);
+    if (args.slot !== undefined && slot === undefined) {
+      return this.error(`Invalid skill lifecycle slot: ${String(args.slot)}`);
+    }
 
-    const result = await this._skillProvider.activateSkill({ name: skillName, reason });
+    const result = await this._skillProvider.activateSkill({
+      name: skillName,
+      reason,
+      ...(slot ? { slot } : {}),
+    });
 
     if (!result.success) {
       return this.error(result.message);
@@ -227,6 +255,7 @@ export class ActivateSkillTool extends BuiltinTool {
       activated: true,
       skillName,
       reason,
+      ...(slot ? { slot } : {}),
       message: formatSkillActivatedMessage(skillName, options?.metadata?.['locale']),
       ...(result.allowedTools ? { allowedTools: result.allowedTools } : {}),
       ...(result.lifecycleRecordId ? { lifecycleRecordId: result.lifecycleRecordId } : {}),
@@ -245,7 +274,7 @@ export class ActivateSkillTool extends BuiltinTool {
 export class DeactivateSkillTool extends BuiltinTool {
   readonly name = 'DeactivateSkill';
   readonly description =
-    'Deactivate the currently active skill, removing its specialized instructions.';
+    'Deactivate an active skill lifecycle record. Do not clear the current domain skill merely to use a supplemental handoff or reference skill; target recordId, slot, or skillName only when explicit cleanup is needed.';
   readonly parameters: ToolParameters = {
     type: 'object',
     properties: {
@@ -382,6 +411,21 @@ export function createCoreMetaTools(
 
 function readExecutionMode(value: unknown): ExecutionMode | null {
   return value === 'plan' || value === 'ask' || value === 'auto' ? value : null;
+}
+
+function readOptionalSkillLifecycleSlot(value: unknown): SkillLifecycleSlot | undefined {
+  switch (value) {
+    case undefined:
+      return undefined;
+    case 'stagePersona':
+    case 'domainSkill':
+    case 'referenceSkill':
+    case 'ephemeralSkill':
+    case 'promptChainSkill':
+      return value;
+    default:
+      return undefined;
+  }
 }
 
 function formatSkillActivatedMessage(skillName: string, locale: unknown): string {

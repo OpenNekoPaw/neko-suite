@@ -38,6 +38,10 @@
     "onInstallKind:media.voice-pack"
   ],
   "main": "./dist/extension.js",
+  "exports": {
+    "./agent-headless": "./src/agentHeadlessCapabilityProvider.ts",
+    "./agent-capability": "./src/agentCapabilityProvider.ts"
+  },
   "contributes": {
     "neko.installTargets": [
       {

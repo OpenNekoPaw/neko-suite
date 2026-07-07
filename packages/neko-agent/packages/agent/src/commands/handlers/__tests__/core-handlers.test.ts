@@ -98,6 +98,17 @@ describe('generateCliHelpText', () => {
     expect(helpText).toContain('Resource Management');
   });
 
+  it('should localize CLI help text for Chinese command contexts', () => {
+    const helpText = generateCliHelpText({ locale: 'zh' });
+
+    expect(helpText).toContain('可用命令');
+    expect(helpText).toContain('核心命令');
+    expect(helpText).toContain('显示可用命令帮助');
+    expect(helpText).toContain('压缩当前 Agent 上下文以节省 token');
+    expect(helpText).not.toContain('Available Commands');
+    expect(helpText).not.toContain('Show help message with available commands');
+  });
+
   it('should include command aliases', () => {
     const helpText = generateCliHelpText();
     expect(helpText).toContain('/h');

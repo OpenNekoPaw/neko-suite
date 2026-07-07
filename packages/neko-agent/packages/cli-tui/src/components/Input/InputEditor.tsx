@@ -19,6 +19,7 @@ import {
   selectInputSuggestion,
   type InputSuggestionOption,
 } from './input-suggestions';
+import { formatTuiLabel, getTuiLabels } from '../../core/tui-locale';
 
 interface InputEditorProps {
   /** Called when user submits a prompt */
@@ -41,6 +42,28 @@ interface InputEditorProps {
 
 const MAX_HISTORY = 50;
 
+interface InputKey {
+  readonly upArrow: boolean;
+  readonly downArrow: boolean;
+  readonly leftArrow: boolean;
+  readonly rightArrow: boolean;
+  readonly pageDown: boolean;
+  readonly pageUp: boolean;
+  readonly return: boolean;
+  readonly escape: boolean;
+  readonly ctrl: boolean;
+  readonly shift: boolean;
+  readonly tab: boolean;
+  readonly backspace: boolean;
+  readonly delete: boolean;
+  readonly meta: boolean;
+}
+
+interface InputEvent {
+  readonly input: string;
+  readonly key: InputKey;
+}
+
 export function InputEditor({
   onSubmit,
   disabled = false,
@@ -56,11 +79,19 @@ export function InputEditor({
   const [menuIndex, setMenuIndex] = useState(0);
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
+  const valueRef = useRef(value);
+  const menuOpenRef = useRef(menuOpen);
+  const menuIndexRef = useRef(menuIndex);
 
   const activeMenu = menuOpen
     ? deriveInputSuggestionMenu(value, { commands, skills, references })
     : null;
   const filtered = activeMenu?.options ?? [];
+  const labels = getTuiLabels();
+
+  valueRef.current = value;
+  menuOpenRef.current = menuOpen;
+  menuIndexRef.current = menuIndex;
 
   const addToHistory = useCallback((entry: string) => {
     const history = historyRef.current;
@@ -71,138 +102,169 @@ export function InputEditor({
     historyIndexRef.current = -1;
   }, []);
 
+  const updateValue = useCallback((next: string) => {
+    valueRef.current = next;
+    setValue(next);
+  }, []);
+
+  const updateMenuOpen = useCallback((next: boolean) => {
+    menuOpenRef.current = next;
+    setMenuOpen(next);
+  }, []);
+
+  const updateMenuIndex = useCallback((next: number) => {
+    menuIndexRef.current = next;
+    setMenuIndex(next);
+  }, []);
+
   useInput((input, key) => {
     if (disabled) return;
 
-    // --- Menu open: intercept navigation keys ---
-    if (menuOpen) {
-      if (key.escape) {
-        setMenuOpen(false);
-        return;
-      }
+    for (const event of normalizeInputEvents(input, key)) {
+      const eventInput = event.input;
+      const eventKey = event.key;
+      const currentValue = valueRef.current;
+      const currentMenuOpen = menuOpenRef.current;
+      const currentMenuIndex = menuIndexRef.current;
+      const currentMenu = deriveInputSuggestionMenu(currentValue, {
+        commands,
+        skills,
+        references,
+      });
+      const currentFiltered = currentMenu?.options ?? [];
+      const isReturnKey = eventKey.return || eventInput === '\r' || eventInput === '\n';
+      const isBackspaceKey =
+        eventKey.backspace || eventKey.delete || eventInput === '\b' || eventInput === '\u007F';
+      const isEscapeKey = eventKey.escape || eventInput === '\u001B';
 
-      if (key.upArrow) {
-        setMenuIndex((prev) => Math.max(0, prev - 1));
-        return;
-      }
-
-      if (key.downArrow) {
-        setMenuIndex((prev) => Math.min(filtered.length - 1, prev + 1));
-        return;
-      }
-
-      // Tab or Enter on menu → select command and fill input
-      if (key.tab || (key.return && !key.shift)) {
-        const selected = filtered[menuIndex];
-        if (selected) {
-          setValue(selectInputSuggestion(selected));
-          setMenuOpen(false);
-          setMenuIndex(0);
+      // --- Menu open: intercept navigation keys ---
+      if (currentMenuOpen) {
+        if (isEscapeKey) {
+          updateMenuOpen(false);
+          return;
         }
-        return;
-      }
 
-      // Backspace in menu
-      if (key.backspace || key.delete) {
-        const next = value.slice(0, -1);
-        if (!deriveInputSuggestionMenu(next, { commands, skills, references })) {
-          setMenuOpen(false);
+        if (eventKey.upArrow) {
+          updateMenuIndex(Math.max(0, currentMenuIndex - 1));
+          return;
         }
-        setValue(next);
-        setMenuIndex(0);
-        return;
-      }
 
-      // Regular typing while menu open — update filter
-      if (input && !key.ctrl && !key.meta) {
-        const next = value + input;
-        if (!deriveInputSuggestionMenu(next, { commands, skills, references })) {
-          setMenuOpen(false);
-          setValue(next);
-        } else {
-          setValue(next);
-          setMenuIndex(0);
+        if (eventKey.downArrow) {
+          updateMenuIndex(Math.min(currentFiltered.length - 1, currentMenuIndex + 1));
+          return;
         }
+
+        // Tab or Enter on menu → select command and fill input
+        if (eventKey.tab || (isReturnKey && !eventKey.shift)) {
+          const selected = currentFiltered[currentMenuIndex];
+          if (selected) {
+            updateValue(selectInputSuggestion(selected));
+            updateMenuOpen(false);
+            updateMenuIndex(0);
+          }
+          return;
+        }
+
+        // Backspace in menu
+        if (isBackspaceKey) {
+          const next = currentValue.slice(0, -1);
+          if (!deriveInputSuggestionMenu(next, { commands, skills, references })) {
+            updateMenuOpen(false);
+          }
+          updateValue(next);
+          updateMenuIndex(0);
+          return;
+        }
+
+        // Regular typing while menu open — update filter
+        if (eventInput && !eventKey.ctrl && !eventKey.meta && isPrintableInput(eventInput)) {
+          const next = currentValue + eventInput;
+          if (!deriveInputSuggestionMenu(next, { commands, skills, references })) {
+            updateMenuOpen(false);
+          }
+          updateValue(next);
+          updateMenuIndex(0);
+          return;
+        }
+
         return;
       }
 
-      return;
-    }
+      // --- Normal mode ---
 
-    // --- Normal mode ---
+      // Enter → submit
+      if (isReturnKey && !eventKey.shift) {
+        const trimmed = currentValue.trim();
+        if (!trimmed) return;
 
-    // Enter → submit
-    if (key.return && !key.shift) {
-      const trimmed = value.trim();
-      if (!trimmed) return;
+        if (trimmed.startsWith('/') && onSlashCommand) {
+          onSlashCommand(trimmed);
+          updateValue('');
+          return;
+        }
 
-      if (trimmed.startsWith('/') && onSlashCommand) {
-        onSlashCommand(trimmed);
-        setValue('');
+        if (trimmed.startsWith('$') && onSkillInvocation) {
+          onSkillInvocation(trimmed);
+          updateValue('');
+          return;
+        }
+
+        addToHistory(trimmed);
+        onSubmit(trimmed);
+        updateValue('');
         return;
       }
 
-      if (trimmed.startsWith('$') && onSkillInvocation) {
-        onSkillInvocation(trimmed);
-        setValue('');
+      // Shift+Enter or Ctrl+J → newline
+      if ((eventKey.return && eventKey.shift) || (eventInput === 'j' && eventKey.ctrl)) {
+        updateValue(currentValue + '\n');
         return;
       }
 
-      addToHistory(trimmed);
-      onSubmit(trimmed);
-      setValue('');
-      return;
-    }
+      // Up arrow → previous history entry
+      if (eventKey.upArrow) {
+        const history = historyRef.current;
+        if (history.length === 0) return;
+        const idx = Math.min(historyIndexRef.current + 1, history.length - 1);
+        historyIndexRef.current = idx;
+        const entry = history[idx];
+        if (entry !== undefined) updateValue(entry);
+        return;
+      }
 
-    // Shift+Enter or Ctrl+J → newline
-    if ((key.return && key.shift) || (input === 'j' && key.ctrl)) {
-      setValue((prev) => prev + '\n');
-      return;
-    }
+      // Down arrow → next history entry
+      if (eventKey.downArrow) {
+        if (historyIndexRef.current <= 0) {
+          historyIndexRef.current = -1;
+          updateValue('');
+          return;
+        }
+        historyIndexRef.current -= 1;
+        const entry = historyRef.current[historyIndexRef.current];
+        if (entry !== undefined) updateValue(entry);
+        return;
+      }
 
-    // Up arrow → previous history entry
-    if (key.upArrow) {
-      const history = historyRef.current;
-      if (history.length === 0) return;
-      const idx = Math.min(historyIndexRef.current + 1, history.length - 1);
-      historyIndexRef.current = idx;
-      const entry = history[idx];
-      if (entry !== undefined) setValue(entry);
-      return;
-    }
+      // Backspace
+      if (isBackspaceKey) {
+        updateValue(currentValue.slice(0, -1));
+        return;
+      }
 
-    // Down arrow → next history entry
-    if (key.downArrow) {
-      if (historyIndexRef.current <= 0) {
+      // Ignore other control keys
+      if (eventKey.ctrl || eventKey.meta) return;
+
+      // Regular character input
+      if (eventInput && isPrintableInput(eventInput)) {
+        const next = currentValue + eventInput;
+        updateValue(next);
         historyIndexRef.current = -1;
-        setValue('');
-        return;
-      }
-      historyIndexRef.current -= 1;
-      const entry = historyRef.current[historyIndexRef.current];
-      if (entry !== undefined) setValue(entry);
-      return;
-    }
 
-    // Backspace
-    if (key.backspace || key.delete) {
-      setValue((prev) => prev.slice(0, -1));
-      return;
-    }
-
-    // Ignore other control keys
-    if (key.ctrl || key.meta) return;
-
-    // Regular character input
-    if (input) {
-      const next = value + input;
-      setValue(next);
-      historyIndexRef.current = -1;
-
-      // Open menu when typing `/` at the start
-      if (deriveInputSuggestionMenu(next, { commands, skills, references })) {
-        setMenuOpen(true);
-        setMenuIndex(0);
+        // Open menu when typing `/` at the start
+        if (deriveInputSuggestionMenu(next, { commands, skills, references })) {
+          updateMenuOpen(true);
+          updateMenuIndex(0);
+        }
       }
     }
   });
@@ -219,6 +281,8 @@ export function InputEditor({
           trigger={activeMenu.trigger}
           items={filtered}
           selectedIndex={menuIndex}
+          moreLabel={labels.chrome.more}
+          kindLabels={labels.suggestionKinds}
           maxVisible={8}
         />
       ) : null}
@@ -231,7 +295,7 @@ export function InputEditor({
         paddingLeft={1}
         paddingRight={1}
       >
-        {isMultiLine ? <Text dimColor> [multi-line: Shift+Enter for newline]</Text> : null}
+        {isMultiLine ? <Text dimColor> {labels.chrome.multiLineHint}</Text> : null}
 
         {isEmpty && !disabled ? (
           <Box>
@@ -256,6 +320,43 @@ export function InputEditor({
   );
 }
 
+function isPrintableInput(input: string): boolean {
+  return Array.from(input).every((char) => {
+    const codePoint = char.codePointAt(0);
+    return codePoint !== undefined && codePoint >= 32 && codePoint !== 127;
+  });
+}
+
+function normalizeInputEvents(input: string, key: InputKey): readonly InputEvent[] {
+  if (input.length <= 1) {
+    return [{ input, key }];
+  }
+
+  return Array.from(input, (char) => ({
+    input: char,
+    key: keyForInputChar(char),
+  }));
+}
+
+function keyForInputChar(input: string): InputKey {
+  return {
+    upArrow: false,
+    downArrow: false,
+    leftArrow: false,
+    rightArrow: false,
+    pageDown: false,
+    pageUp: false,
+    return: input === '\r' || input === '\n',
+    escape: input === '\u001B',
+    ctrl: false,
+    shift: /^[A-Z]$/.test(input),
+    tab: input === '\t',
+    backspace: input === '\b' || input === '\u007F',
+    delete: input === '\u007F',
+    meta: false,
+  };
+}
+
 // =============================================================================
 // SlashMenu — bordered, scrollable command menu
 // =============================================================================
@@ -264,6 +365,8 @@ interface SuggestionMenuProps {
   readonly trigger: '/' | '$' | '@';
   readonly items: readonly InputSuggestionOption[];
   readonly selectedIndex: number;
+  readonly moreLabel: string;
+  readonly kindLabels: Readonly<Record<string, string>>;
   /** Max visible rows before scrolling */
   readonly maxVisible?: number;
 }
@@ -272,6 +375,8 @@ function SuggestionMenu({
   trigger,
   items,
   selectedIndex,
+  moreLabel,
+  kindLabels,
   maxVisible = 8,
 }: SuggestionMenuProps): React.JSX.Element {
   const total = items.length;
@@ -301,7 +406,12 @@ function SuggestionMenu({
       marginLeft={2}
     >
       {/* Scroll-up indicator */}
-      {hasScrollUp ? <Text dimColor> ↑ {scrollTop} more</Text> : null}
+      {hasScrollUp ? (
+        <Text dimColor>
+          {' '}
+          ↑ {scrollTop} {moreLabel}
+        </Text>
+      ) : null}
 
       {visible.map((item, visIdx) => {
         const realIdx = scrollTop + visIdx;
@@ -313,14 +423,19 @@ function SuggestionMenu({
               {trigger}
               {item.name}
             </Text>
-            {item.kind ? <Text dimColor> [{item.kind}]</Text> : null}
+            {item.kind ? <Text dimColor> [{formatTuiLabel(kindLabels, item.kind)}]</Text> : null}
             {item.description ? <Text dimColor> {item.description}</Text> : null}
           </Box>
         );
       })}
 
       {/* Scroll-down indicator */}
-      {hasScrollDown ? <Text dimColor> ↓ {total - scrollTop - visibleCount} more</Text> : null}
+      {hasScrollDown ? (
+        <Text dimColor>
+          {' '}
+          ↓ {total - scrollTop - visibleCount} {moreLabel}
+        </Text>
+      ) : null}
     </Box>
   );
 }

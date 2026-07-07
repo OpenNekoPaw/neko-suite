@@ -141,6 +141,61 @@ describe('JournalProjection', () => {
     ]);
   });
 
+  it('preserves failed tool result diagnostics when projecting journal history', async () => {
+    const filePath = '/tmp/journals/conv-tool-failure-data.jsonl';
+    const entries: JournalEntry[] = [
+      {
+        seq: 1,
+        ts: 1000,
+        type: 'event',
+        event: {
+          type: 'tool_call',
+          toolCall: {
+            id: 'call-1',
+            name: 'canvas.ingestMarkdown',
+            arguments: { markdown: '| scene | shot |' },
+          },
+        },
+      },
+      {
+        seq: 2,
+        ts: 1100,
+        type: 'event',
+        event: {
+          type: 'tool_result',
+          toolResult: {
+            toolCallId: 'call-1',
+            success: false,
+            error: 'Canvas failed',
+            data: {
+              capabilityId: 'canvas.ingestMarkdown',
+              status: 'blocked',
+              diagnostics: [{ severity: 'error', code: 'canvas-error', message: 'No node' }],
+            },
+          },
+        },
+      },
+    ];
+    const projection = new JournalProjection(
+      '/tmp/journals',
+      createMockFsOps({ [filePath]: entriesToJsonl(entries) }),
+    );
+
+    const history = await projection.projectToHistory('conv-tool-failure-data');
+    const content = JSON.parse(history[1]!.content as string);
+
+    expect(content).toMatchObject({
+      schema: 'neko.tool-result.v1',
+      success: false,
+      error: 'Canvas failed',
+      data: {
+        capabilityId: 'canvas.ingestMarkdown',
+        status: 'blocked',
+        diagnostics: [{ severity: 'error', code: 'canvas-error', message: 'No node' }],
+      },
+    });
+  });
+
   it('preserves reasoning content on assistant messages with tool calls', async () => {
     const filePath = '/tmp/journals/conv-reasoning.jsonl';
     const entries: JournalEntry[] = [

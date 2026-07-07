@@ -16,7 +16,7 @@ describe('canvas markdown handoff presenter', () => {
         label: 'assistant-markdown-block',
         metadata: { renderUri: 'vscode-webview://must-not-leak' },
       },
-      title: 'Storyboard Draft',
+      title: 'Storyboard Review',
       declaredIntentHint: 'creative-table',
       declaredProfileHint: 'storyboard',
     });
@@ -24,7 +24,7 @@ describe('canvas markdown handoff presenter', () => {
     expect(projection).toEqual(
       expect.objectContaining({
         sourceFormat: 'gfm-table',
-        title: 'Storyboard Draft',
+        title: 'Storyboard Review',
         target: { nodeId: 'board-1', mode: 'append' },
         provenance: { source: 'webview', label: 'assistant-markdown-block' },
         declaredIntentHint: 'creative-table',
@@ -64,6 +64,36 @@ describe('canvas markdown handoff presenter', () => {
     expect(
       projectCanvasMarkdownHandoffRequest({
         markdown: '# Plan\n\n- Review panels\n- Create draft',
+      }),
+    ).toBeNull();
+  });
+
+  it('does not expose Canvas handoff for header-only storyboard tables', () => {
+    expect(
+      projectCanvasMarkdownHandoffRequest({
+        markdown: [
+          '视觉分析未完成，当前不能可靠生成分镜表。',
+          '',
+          '| 场景 | 镜头 | 来源 | 图像提示词 | 视频提示词 | 时长 | 对白 |',
+          '| --- | --- | --- | --- | --- | --- | --- |',
+        ].join('\n'),
+        declaredIntentHint: 'creative-table',
+        declaredProfileHint: 'storyboard',
+      }),
+    ).toBeNull();
+  });
+
+  it('does not expose Canvas handoff for resource metadata inventory tables', () => {
+    expect(
+      projectCanvasMarkdownHandoffRequest({
+        markdown: [
+          '当前只拿到了图片资源 metadata，不能可靠生成分镜表。',
+          '',
+          '| page | assetId | 尺寸 |',
+          '| --- | --- | --- |',
+          '| P01 | read-image-p01-cover | 1511x2160 |',
+          '| P02 | read-image-p02 | 1365x1920 |',
+        ].join('\n'),
       }),
     ).toBeNull();
   });

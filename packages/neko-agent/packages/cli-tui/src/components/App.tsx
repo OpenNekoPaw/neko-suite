@@ -8,7 +8,7 @@
  * - StatusBar (fixed at bottom)
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box } from 'ink';
 import type { CLIConfig } from '../core/types';
 import type { AgentCapabilityProvider, IService } from '@neko/shared';
@@ -24,7 +24,6 @@ import { useAgentSession } from '../hooks/useAgentSession';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useSlashCommands } from '../hooks/useSlashCommands';
 import { useTerminalSize } from '../hooks/useTerminalSize';
-import { useAgentStore } from '../stores/agent-store';
 import { useConversationStore } from '../stores/conversation-store';
 import { useConfigStore } from '../stores/config-store';
 import { useUIStore } from '../stores/ui-store';
@@ -37,16 +36,23 @@ interface AppProps {
   readonly service?: IService;
   /** Host-agnostic capability providers injected by embedding hosts. */
   readonly capabilityProviders?: readonly AgentCapabilityProvider[];
+  /** Optional prompt submitted once after the TUI session is initialized. */
+  readonly initialPrompt?: string;
 }
 
-export function App({ config, service, capabilityProviders }: AppProps): React.JSX.Element {
-  const status = useAgentStore((s) => s.status);
+export function App({
+  config,
+  service,
+  capabilityProviders,
+  initialPrompt,
+}: AppProps): React.JSX.Element {
   const pendingApproval = useUIStore((s) => s.pendingApproval);
   const pendingSelection = useUIStore((s) => s.pendingSelection);
   const pendingPlanReview = useUIStore((s) => s.pendingPlanReview);
   const [referenceSuggestions, setReferenceSuggestions] = useState<
     readonly InputSuggestionOption[]
   >([]);
+  const submittedInitialPromptRef = useRef<string | null>(null);
 
   // Track terminal size changes
   useTerminalSize();
@@ -166,6 +172,15 @@ export function App({ config, service, capabilityProviders }: AppProps): React.J
     [submit],
   );
 
+  useEffect(() => {
+    const trimmed = initialPrompt?.trim();
+    if (!trimmed || submittedInitialPromptRef.current === trimmed) {
+      return;
+    }
+    submittedInitialPromptRef.current = trimmed;
+    void submit(trimmed);
+  }, [initialPrompt, submit]);
+
   // Handle tool approval
   const handleApprove = useCallback(() => {
     if (pendingApproval) {
@@ -215,7 +230,6 @@ export function App({ config, service, capabilityProviders }: AppProps): React.J
       }
     : null;
 
-  const isRunning = status === 'running' || status === 'waiting_confirmation';
   const inputDisabled = !!pendingSelection || pendingPlanReview;
   const skillSuggestions = createTuiSkillInvocationCatalog(
     getSkillService()

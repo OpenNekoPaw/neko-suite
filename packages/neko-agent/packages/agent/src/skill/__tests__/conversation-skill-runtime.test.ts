@@ -161,6 +161,48 @@ describe('ConversationSkillRuntime', () => {
     expect(result).toEqual(expect.objectContaining({ applied: true, skill: commit }));
   });
 
+  it('keeps supplemental reference skills active without replacing the domain skill', async () => {
+    const storyboard = createSkill('comic-to-storyboard');
+    const canvas = createSkill('canvas-authoring');
+    const skillService = createSkillService([storyboard, canvas]);
+    const runtime = new ConversationSkillRuntime({
+      skillService: skillService as any,
+      now: () => 100,
+    });
+
+    const domain = await runtime.activateDomainSkill({
+      skillName: 'comic-to-storyboard',
+      conversationId: 'conv-1',
+      reason: 'Create a storyboard creative table from comic evidence.',
+    });
+    const reference = await runtime.activateLifecycleSkill({
+      skillName: 'canvas-authoring',
+      conversationId: 'conv-1',
+      reason: 'Use Canvas authoring guidance for Send to Canvas handoff.',
+      slot: 'referenceSkill',
+    });
+    const records = runtime.getActiveLifecycleRecords('conv-1');
+    const projection = runtime.projectSkillLifecycle('conv-1');
+
+    expect(domain.success).toBe(true);
+    expect(reference.success).toBe(true);
+    expect(runtime.getActiveSkill('conv-1')?.skill.name).toBe('comic-to-storyboard');
+    expect(records.map((record) => [record.slot, record.skillName])).toEqual([
+      ['domainSkill', 'comic-to-storyboard'],
+      ['referenceSkill', 'canvas-authoring'],
+    ]);
+    expect(projection.promptSections.map((section) => section.skillName)).toEqual([
+      'comic-to-storyboard',
+      'canvas-authoring',
+    ]);
+    expect(projection.toolPolicy).toEqual({
+      mode: 'allowlist',
+      allowedTools: ['read'],
+      contributingRecordIds: [records[0]?.id],
+      diagnostics: [],
+    });
+  });
+
   it('returns fail-visible diagnostics for unknown and disabled skill invocation', async () => {
     const disabled = { ...createSkill('disabled-skill'), enabled: false };
     const skillService = createSkillService([disabled]);
@@ -267,7 +309,8 @@ describe('ConversationSkillRuntime', () => {
   it('rejects natural-language auto activation without discovery, apply, or active state', async () => {
     const storyboard = createSkill('comic-to-storyboard', undefined, undefined, {
       producedArtifacts: ['CreativeTable'],
-      validationRequirements: ['CanvasMarkdownCapabilityInput'],
+      referencedCapabilities: ['canvas.authoring'],
+      validationRequirements: ['CreativeTable'],
     });
     const skillService = createSkillService([storyboard], {
       found: true,

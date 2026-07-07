@@ -14,6 +14,7 @@ import {
   NEKO_AI_ASSISTANT_FOCUS_COMMAND,
 } from '@neko-agent/types';
 import {
+  buildCanvasStoryboardActionIntentContextPayload,
   buildAgentPromptCommandMessage,
   buildAgentScriptCommandMessage,
 } from '@neko/agent/runtime';
@@ -71,7 +72,12 @@ export function registerAgentCoreCommands(
     vscode.commands.registerCommand(
       'neko.agent.sendContext',
       async (payload: AgentContextPayload) => {
-        await chatViewProvider.sendContextPayload(payload);
+        const routedPayload =
+          buildCanvasStoryboardActionIntentContextPayload({
+            payload,
+            locale: vscode.env.language,
+          }) ?? payload;
+        await chatViewProvider.sendContextPayload(routedPayload);
       },
     ),
   );

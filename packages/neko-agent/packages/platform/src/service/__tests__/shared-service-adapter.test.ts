@@ -435,6 +435,86 @@ describe('projectProviderAwareMessages', () => {
     });
   });
 
+  it('rejects tool perception images when native asset projection fails for a vision model', async () => {
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'analyze the exposed page image' },
+      {
+        role: 'tool',
+        toolCallId: 'call-1',
+        content: JSON.stringify({
+          schema: 'neko.tool-result.v1',
+          data: { mode: 'metadata' },
+          perceptionCards: [imageCard()],
+        }),
+      },
+    ];
+
+    await expect(
+      projectProviderAwareMessages({
+        messages,
+        providerId: 'nekoapi-chat',
+        modelId: 'gpt-5.5',
+        modelCapabilities: ['chat', 'streaming', 'vision'],
+        assetLoader: {
+          load: async () => {
+            throw new Error('document entry bytes unavailable');
+          },
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: 'CHAT_MODEL_NATIVE_MULTIMODAL_ASSET_UNAVAILABLE',
+      context: expect.objectContaining({
+        assetId: 'thumb-1',
+        modality: 'image',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'asset-load-failed',
+            assetId: 'thumb-1',
+            modality: 'image',
+            message: 'document entry bytes unavailable',
+          }),
+        ],
+      }),
+    });
+  });
+
+  it('rejects tool perception images when the vision model has no asset loader', async () => {
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'analyze the exposed page image' },
+      {
+        role: 'tool',
+        toolCallId: 'call-1',
+        content: JSON.stringify({
+          schema: 'neko.tool-result.v1',
+          data: { mode: 'metadata' },
+          perceptionCards: [imageCard()],
+        }),
+      },
+    ];
+
+    await expect(
+      projectProviderAwareMessages({
+        messages,
+        providerId: 'nekoapi-chat',
+        modelId: 'gpt-5.5',
+        modelCapabilities: ['chat', 'streaming', 'vision'],
+      }),
+    ).rejects.toMatchObject({
+      code: 'CHAT_MODEL_NATIVE_MULTIMODAL_ASSET_UNAVAILABLE',
+      context: expect.objectContaining({
+        assetId: 'thumb-1',
+        modality: 'image',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'asset-loader-missing',
+            assetId: 'thumb-1',
+            modality: 'image',
+          }),
+        ],
+      }),
+    });
+  });
+
   it('projects perception cards even when the turn packet was not serialized in chat history', async () => {
     const messages: ChatMessage[] = [
       { role: 'system', content: 'system' },

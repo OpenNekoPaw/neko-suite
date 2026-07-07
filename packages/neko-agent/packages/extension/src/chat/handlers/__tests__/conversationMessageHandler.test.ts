@@ -207,13 +207,13 @@ describe('ConversationMessageHandler', () => {
     expect(conversations.getActiveId).not.toHaveBeenCalled();
   });
 
-  it('separates host active snapshots from explicit conversation snapshots', () => {
-    handler.sendActiveConversation();
+  it('separates host active snapshots from explicit conversation snapshots', async () => {
+    await handler.sendActiveConversation();
 
     expect(conversations.sendActiveConversation).toHaveBeenCalledWith(webview);
     expect(conversations.sendConversationSnapshot).not.toHaveBeenCalled();
 
-    expect(handler.sendConversationSnapshot('conv-b')).toBe(true);
+    await expect(handler.sendConversationSnapshot('conv-b')).resolves.toBe(true);
     expect(conversations.sendConversationSnapshot).toHaveBeenCalledWith(webview, 'conv-b');
     expect(conversations.getActiveId).not.toHaveBeenCalled();
   });

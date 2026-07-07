@@ -1174,6 +1174,68 @@ describe('work item message handlers', () => {
     ]);
   });
 
+  it('removes a stale visible user message when the runtime confirms it is queued', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '生成图片',
+          timestamp: 100,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '正在生成...',
+          timestamp: 200,
+        },
+        {
+          id: 'local-hi',
+          role: 'user',
+          content: 'hi',
+          timestamp: 1_000,
+        },
+      ],
+      currentStreaming: {
+        isThinking: true,
+        streamingMessageId: 'assistant-1',
+        queuedMessageCount: 0,
+        queuedMessages: [],
+        messageQueueVersion: 0,
+      },
+    });
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'messageQueueSnapshot',
+        snapshot: {
+          conversationId: 'conv-a',
+          pendingCount: 1,
+          version: 1,
+          items: [
+            {
+              id: 'runtime-hi',
+              conversationId: 'conv-a',
+              content: 'hi',
+              createdAt: 1_005,
+              source: 'composer',
+            },
+          ],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming().queuedMessageCount).toBe(1);
+    expect(harness.streaming().queuedMessages?.map((item) => item.id)).toEqual(['runtime-hi']);
+    expect(harness.messages()).toEqual([
+      expect.objectContaining({ id: 'user-1' }),
+      expect.objectContaining({ id: 'assistant-1' }),
+    ]);
+  });
+
   it('ignores stale queue snapshots by conversation-local version', () => {
     const harness = createContextHarness({
       activeConversationId: 'conv-a',

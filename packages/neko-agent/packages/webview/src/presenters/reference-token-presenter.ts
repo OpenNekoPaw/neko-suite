@@ -6,13 +6,7 @@ import {
 } from '@neko/shared';
 
 export type ReferenceTokenProjectionKind =
-  | 'file'
-  | 'image'
-  | 'video'
-  | 'audio'
-  | 'canvas'
-  | 'clip'
-  | 'entity';
+  'file' | 'image' | 'video' | 'audio' | 'canvas' | 'clip' | 'entity';
 
 export type ReferenceTokenProjectionVariant = 'ambient' | 'attached' | 'inline';
 
@@ -187,7 +181,12 @@ function toAttachmentReferenceKind(attachment: MessageAttachment): ReferenceToke
 }
 
 function toContextReferenceKind(type: string): ReferenceTokenProjectionKind {
-  if (type === 'canvas-node' || type === 'model-scene' || type === 'sketch-layer') {
+  if (
+    type === 'canvas-node' ||
+    type === 'canvas-storyboard-action-intent' ||
+    type === 'model-scene' ||
+    type === 'sketch-layer'
+  ) {
     return 'canvas';
   }
   if (type === 'asset' || type === 'entity' || type === 'character' || type === 'scene') {

@@ -33,6 +33,7 @@ import type {
   ProviderGenerationCapability,
 } from '@neko/shared';
 import { isDocumentFile } from '@neko/shared';
+import type { AgentPendingMessageSource } from '../runner/agent-runner-port';
 import type { AgentEvent } from '../../session/types';
 import {
   createPlanModeCreationMetadata,
@@ -85,6 +86,8 @@ export interface AgentMessageIdOptions {
 export interface AgentMessageRuntimeRequest {
   readonly conversationId: string;
   readonly messageText: string;
+  readonly userMessageVisibility?: 'visible' | 'hidden';
+  readonly pendingMessageSource?: AgentPendingMessageSource;
   readonly sessionMode: SessionMode;
   readonly chatModel?: ModelRef<'llm'>;
   readonly agentModels?: AgentModelSlots;
@@ -244,6 +247,7 @@ export interface AgentMessageTurnMediaExecutionInput {
 export interface AgentMessageTurnAgentExecutionInput {
   readonly conversationId: string;
   readonly message: string;
+  readonly pendingMessageSource?: AgentPendingMessageSource;
   readonly chatModel?: ModelRef<'llm'>;
   readonly agentModels?: AgentModelSlots;
   readonly llmConfig?: AgentLlmConfig;
@@ -976,7 +980,10 @@ export async function runAgentMessageTurnRuntime(
     now: input.now,
   });
 
-  input.persistUserMessage(conversationId, prepared.userMessage);
+  const shouldPersistUserMessage = input.request.userMessageVisibility !== 'hidden';
+  if (shouldPersistUserMessage) {
+    input.persistUserMessage(conversationId, prepared.userMessage);
+  }
   input.postMessage(buildThinkingMessage(conversationId));
 
   if (prepared.route.kind === 'media' && input.executeMediaTurn) {
@@ -992,6 +999,9 @@ export async function runAgentMessageTurnRuntime(
     const result = await input.executeAgentTurn({
       conversationId,
       message: prepared.enhancedMessage,
+      ...(input.request.pendingMessageSource
+        ? { pendingMessageSource: input.request.pendingMessageSource }
+        : {}),
       chatModel: input.request.chatModel,
       agentModels: input.request.agentModels,
       llmConfig: input.request.llmConfig,
@@ -1006,7 +1016,9 @@ export async function runAgentMessageTurnRuntime(
       locale: input.request.locale,
     });
     if (result?.status === 'queued') {
-      input.removeUserMessage?.(conversationId, prepared.userMessage.id);
+      if (shouldPersistUserMessage) {
+        input.removeUserMessage?.(conversationId, prepared.userMessage.id);
+      }
       return { status: 'agent-queued', pendingCount: result.pendingCount };
     }
     if (result?.status === 'precondition-unmet') {

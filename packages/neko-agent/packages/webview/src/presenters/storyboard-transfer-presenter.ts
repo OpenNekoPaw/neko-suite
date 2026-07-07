@@ -1,23 +1,15 @@
 import {
-  hasBlockingStoryboardDiagnostics,
   projectStoryboardTableToCutPayload as projectSemanticStoryboardTableToCutPayload,
   type DocumentArchiveResourceRef,
   type StoryboardMediaRef,
 } from '@neko/shared';
-import type {
-  PluginTransferAssetRef,
-  PluginTransferCutStoryboardPayload,
-  PluginTransferCutStoryboardShot,
-  PluginTransferPayload,
-} from '@neko-agent/types';
+import type { PluginTransferAssetRef, PluginTransferPayload } from '@neko-agent/types';
 import type { StoryboardScene } from '@/components/ChatView/MediaPreview';
 import type {
   ResolvedCompositeMedia,
   ResolvedCompositeSection,
   StoryboardTableRichData,
 } from './composite-content-presenter';
-
-const DEFAULT_SHOT_DURATION_SECONDS = 3;
 
 export function projectStoryboardScenesAssetBatch(
   scenes: readonly StoryboardScene[],
@@ -37,13 +29,6 @@ export function projectStoryboardScenesAssetBatch(
     }),
   );
   return assets.length > 0 ? { kind: 'assetBatch', assets } : null;
-}
-
-export function projectStoryboardScenesCutTimelinePayload(
-  scenes: readonly StoryboardScene[],
-): PluginTransferPayload | null {
-  const storyboard = projectStoryboardScenesToCutPayload(scenes);
-  return storyboard ? { kind: 'cutStoryboard', storyboard } : null;
 }
 
 export function projectStoryboardTableAssetBatch(
@@ -67,9 +52,7 @@ export function projectStoryboardTableCutTimelinePayload(
     });
     return storyboard ? { kind: 'cutStoryboard', storyboard } : null;
   }
-  if (hasBlockingStoryboardDiagnostics(data.storyboardDiagnostics ?? [])) return null;
-  const storyboard = projectStoryboardTableToCutPayload(data);
-  return storyboard ? { kind: 'cutStoryboard', storyboard } : null;
+  return null;
 }
 
 function resolveStoryboardMediaPath(
@@ -131,55 +114,6 @@ function getLocalImageMediaPath(media: ResolvedCompositeMedia | undefined): stri
 
 function isCanvasPortableImageUrl(value: string): boolean {
   return value.startsWith('data:') || value.startsWith('http://') || value.startsWith('https://');
-}
-
-function projectStoryboardScenesToCutPayload(
-  scenes: readonly StoryboardScene[],
-): PluginTransferCutStoryboardPayload | null {
-  const shots: PluginTransferCutStoryboardShot[] = [];
-  let nextShotNumber = 1;
-  for (const scene of scenes) {
-    for (const shot of scene.shots) {
-      const imagePath = readPortableTransferPath(shot.localPath);
-      if (!imagePath) continue;
-      const shotNumber = nextShotNumber++;
-      shots.push({
-        id: `agent-scene-${scene.sceneIndex}-shot-${shot.shotIndex}`,
-        shotNumber,
-        duration: DEFAULT_SHOT_DURATION_SECONDS,
-        imagePath,
-        label: `#${String(shotNumber).padStart(3, '0')} ${shot.shotScale ?? ''}`.trim(),
-      });
-    }
-  }
-
-  return shots.length > 0 ? { projectName: 'Agent Storyboard', shots } : null;
-}
-
-function projectStoryboardTableToCutPayload(
-  data: StoryboardTableRichData,
-): PluginTransferCutStoryboardPayload | null {
-  let nextShotNumber = 1;
-  const shots = data.sections.flatMap((section) =>
-    section.media.flatMap((media, mediaIndex) => {
-      const imagePath = getLocalImageMediaPath(media);
-      if (media.type !== 'image' || !imagePath) return [];
-      const shotNumber = nextShotNumber++;
-      const label = media.caption ?? section.heading ?? `#${String(shotNumber).padStart(3, '0')}`;
-      return [
-        {
-          id: media.assetId ?? media.id,
-          shotNumber,
-          duration: DEFAULT_SHOT_DURATION_SECONDS,
-          imagePath,
-          ...(section.content ? { dialogue: section.content } : {}),
-          label: mediaIndex === 0 ? label : `${label} ${mediaIndex + 1}`,
-        } satisfies PluginTransferCutStoryboardShot,
-      ];
-    }),
-  );
-
-  return shots.length > 0 ? { projectName: data.title ?? 'Agent Storyboard', shots } : null;
 }
 
 function isAbsolutePath(value: string): boolean {

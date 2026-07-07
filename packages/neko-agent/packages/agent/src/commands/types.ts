@@ -13,6 +13,8 @@ import { BUILTIN_SLASH_COMMAND_ALIASES } from '@neko-agent/types';
  */
 export type BuiltinCommandName = BuiltinSlashCommandName;
 
+export type CommandLocale = 'en' | 'zh';
+
 /**
  * Command aliases mapping
  */
@@ -55,6 +57,8 @@ export type CommandCategory = BuiltinSlashCommandCategory;
  * Command execution context - provides access to services and state
  */
 export interface CommandContext {
+  /** UI/runtime locale for command-facing text */
+  locale?: CommandLocale;
   /** Skill service for skill management */
   skillService?: {
     /** Skill registry */

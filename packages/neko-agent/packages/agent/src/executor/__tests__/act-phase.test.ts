@@ -75,6 +75,40 @@ describe('act', () => {
     expect((step.toolResults as ToolResultWithMeta[])[0]!.error).toBe('Tool failed');
   });
 
+  it('should fail capability tools visibly when they report success without structured data', async () => {
+    const registry = createMockToolRegistry();
+    registry.get = vi.fn().mockReturnValue({
+      name: 'canvas.ingestMarkdown',
+      description: 'Ingest Markdown',
+      category: 'project',
+      parameters: { type: 'object', properties: {} },
+      domain: { id: 'canvas', source: 'capability' },
+      execute: vi.fn(),
+    });
+    (registry.execute as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, data: {} });
+    const deps = createDeps({ toolRegistry: registry });
+
+    const step = await act(deps, [{ id: 'call_1', name: 'canvas.ingestMarkdown', arguments: {} }]);
+
+    expect(step.toolResults).toHaveLength(1);
+    expect((step.toolResults as ToolResultWithMeta[])[0]).toMatchObject({
+      success: false,
+      error:
+        'Capability tool "canvas.ingestMarkdown" reported success without structured result data.',
+      data: {
+        schema: 'neko.capability-tool-result.v1',
+        capabilityId: 'canvas.ingestMarkdown',
+        status: 'blocked',
+        diagnostics: [
+          expect.objectContaining({
+            severity: 'error',
+            code: 'capability-tool-empty-result',
+          }),
+        ],
+      },
+    });
+  });
+
   it('should return aborted result when signal is aborted', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -246,6 +280,36 @@ describe('buildToolResultMessages', () => {
     expect(messages[0]!.role).toBe('tool');
     expect(messages[0]!.content).toBe(JSON.stringify({ output: 'hello' }));
     expect(messages[1]!.content).toBe(JSON.stringify({ error: 'fail' }));
+  });
+
+  it('should preserve structured diagnostics for failed tool results', () => {
+    const results: ToolResultWithMeta[] = [
+      {
+        success: false,
+        error: 'Canvas failed',
+        data: {
+          capabilityId: 'canvas.ingestMarkdown',
+          status: 'blocked',
+          diagnostics: [{ severity: 'error', code: 'canvas-error', message: 'No node' }],
+        },
+        callId: 'c1',
+        name: 'canvas.ingestMarkdown',
+      },
+    ];
+
+    const messages = buildToolResultMessages(results);
+    const content = JSON.parse(messages[0]!.content as string);
+
+    expect(content).toMatchObject({
+      schema: 'neko.tool-result.v1',
+      success: false,
+      error: 'Canvas failed',
+      data: {
+        capabilityId: 'canvas.ingestMarkdown',
+        status: 'blocked',
+        diagnostics: [{ severity: 'error', code: 'canvas-error', message: 'No node' }],
+      },
+    });
   });
 
   it('should return plain string content when no attachments', () => {

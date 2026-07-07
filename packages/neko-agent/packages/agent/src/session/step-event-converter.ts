@@ -229,7 +229,16 @@ export function recordStepInHistory(
             role: 'tool',
             content: result.success
               ? JSON.stringify(result.data)
-              : JSON.stringify({ error: result.error }),
+              : JSON.stringify(
+                  result.data === undefined
+                    ? { error: result.error }
+                    : {
+                        schema: 'neko.tool-result.v1',
+                        success: false,
+                        error: result.error ?? 'Unknown error',
+                        data: result.data,
+                      },
+                ),
             toolCallId: result.callId || `call_${iteration}_${i}`,
           } as ChatMessage);
         }

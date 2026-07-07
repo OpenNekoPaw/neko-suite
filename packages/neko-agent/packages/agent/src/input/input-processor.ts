@@ -241,6 +241,10 @@ export class InputProcessor implements IInputProcessor {
   // ---------------------------------------------------------------------------
 
   private _parseReference(ref: string): FileReference | null {
+    if (isDurableNonWorkspaceReference(ref)) {
+      return null;
+    }
+
     // Check for line range (e.g., file.ts:10-20)
     const lineRangeMatch = ref.match(/^(.+):(\d+)-(\d+)$/);
     if (lineRangeMatch) {
@@ -364,6 +368,28 @@ export class InputProcessor implements IInputProcessor {
 interface ReferenceToken {
   original: string;
   value: string;
+}
+
+const DURABLE_REFERENCE_SCHEMES = new Set([
+  'asset',
+  'media',
+  'entity',
+  'canvas',
+  'canvas-node',
+  'character',
+  'scene',
+  'story-scene',
+  'artifact',
+  'resource',
+  'ref',
+]);
+
+function isDurableNonWorkspaceReference(ref: string): boolean {
+  if (/^\$\{[A-Za-z_][A-Za-z0-9_]*\}(?:\/|$)/.test(ref)) {
+    return true;
+  }
+  const schemeMatch = ref.match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
+  return schemeMatch ? DURABLE_REFERENCE_SCHEMES.has(schemeMatch[1].toLowerCase()) : false;
 }
 
 function scanReferenceTokens(input: string): ReferenceToken[] {

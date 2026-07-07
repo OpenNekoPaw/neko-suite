@@ -342,28 +342,24 @@ describe('composite rich content renderers', () => {
     expect(screen.getByText(/Time: Day/)).toBeTruthy();
     expect(screen.getByText('Rin finds the signal.')).toBeTruthy();
     expect(screen.getByText('4s')).toBeTruthy();
-    expect(screen.getByText('CU / low-angle / zoom-in')).toBeTruthy();
-    expect(screen.getByText('Rin notices a blue pulse under the table.')).toBeTruthy();
-    expect(screen.getByText('Rin kneels and reaches toward the light.')).toBeTruthy();
-    expect(screen.getByText('Characters')).toBeTruthy();
-    expect(screen.getByText('Rin (primary) kneels focused')).toBeTruthy();
-    expect(screen.getByText('Emotion: focused, curious')).toBeTruthy();
-    expect(screen.getByText(/Dialogue \/ Rin \[char-rin\]: 找到了。/)).toBeTruthy();
-    expect(screen.getByText(/Narration: 她终于看见线索。/)).toBeTruthy();
-    expect(screen.getByText(/SFX Text: 嗡/)).toBeTruthy();
-    expect(screen.getByText(/Background Text: CAFE/)).toBeTruthy();
-    expect(screen.getByText(/Style: noir manga/)).toBeTruthy();
-    expect(screen.getByText(/VFX: blue glow/)).toBeTruthy();
-    expect(screen.getByText(/Prompt: close-up, blue pulse, manga noir/)).toBeTruthy();
-    expect(screen.getByText('use-as-reference')).toBeTruthy();
-    expect(screen.getByText('Keep the manga panel composition as reference.')).toBeTruthy();
-    expect(screen.getByText(/Motion: subtle hand motion and pulsing blue light/)).toBeTruthy();
-    expect(screen.getByText(/Camera: slow push-in/)).toBeTruthy();
-    expect(screen.getByText(/Image prep: upscale, text-removal/)).toBeTruthy();
-    expect(screen.getByText(/Video prompt: animated blue pulse under the table/)).toBeTruthy();
-    expect(screen.getByText(/Audio prompt: low electric hum/)).toBeTruthy();
-    expect(screen.getByText(/Requires: image prep, video generation/)).toBeTruthy();
-    expect(screen.getByText(/Approval: Review before bulk generation./)).toBeTruthy();
+    expect(document.body.textContent).not.toContain('Rin notices a blue pulse under the table.');
+    expect(document.body.textContent).not.toContain('Rin kneels and reaches toward the light.');
+    expect(screen.getByText('Image Prompt')).toBeTruthy();
+    expect(screen.getByText('Reference')).toBeTruthy();
+    expect(screen.getByText('Scene Video Prompt')).toBeTruthy();
+    expect(screen.getByText('State')).toBeTruthy();
+    expect(screen.getByText('Action')).toBeTruthy();
+    expect(screen.queryByText('Metadata')).toBeNull();
+    expect(document.body.textContent).not.toContain('Camera: CU / low-angle / zoom-in');
+    expect(document.body.textContent).toContain('Dialogue / Rin [char-rin]: 找到了。');
+    expect(document.body.textContent).toContain('Narration: 她终于看见线索。');
+    expect(document.body.textContent).toContain('SFX Text: 嗡');
+    expect(document.body.textContent).toContain('Background Text: CAFE');
+    expect(document.body.textContent).not.toContain('close-up, blue pulse, manga noir');
+    expect(document.body.textContent).not.toContain('noir manga');
+    expect(document.body.textContent).toContain('animated blue pulse under the table');
+    expect(document.body.textContent).toContain('Process reference');
+    expect(document.body.textContent).toContain('reference media');
     expect(screen.getByAltText('Original panel')).toBeTruthy();
   });
 
@@ -421,8 +417,9 @@ describe('composite rich content renderers', () => {
       />,
     );
 
-    expect(markup).toContain('w-[1124px] max-w-none');
-    expect(markup).toContain('w-[180px] max-w-[180px]');
+    expect(markup).toContain('data-agent-storyboard-canvas-scene-table="true"');
+    expect(markup).toContain('style="width:1160px"');
+    expect(markup).toContain('w-[132px]');
     expect(markup).toContain('inline-flex max-h-[220px] max-w-[170px]');
     expect(markup).toContain('h-auto max-h-[220px] w-auto max-w-full object-contain');
     expect(markup).toContain('object-contain');
@@ -557,15 +554,19 @@ describe('composite rich content renderers', () => {
     expect(screen.getByText(/时间: 黃昏/)).toBeTruthy();
     expect(screen.getByText('角色准备出发。')).toBeTruthy();
     expect(screen.getByText('镜头')).toBeTruthy();
-    expect(screen.getByText('图片')).toBeTruthy();
+    expect(screen.getByText('参考素材')).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '图片提示词' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: '场景视频提示词' })).toBeTruthy();
     expect(screen.getByText('时长')).toBeTruthy();
-    expect(screen.getByText('画面 / 动作')).toBeTruthy();
-    expect(screen.getByText('人物')).toBeTruthy();
-    expect(screen.getByText(/燈神/)).toBeTruthy();
-    expect(screen.getByText(/对白: 開始吧。/)).toBeTruthy();
-    expect(screen.getByText(/音效: 沙/)).toBeTruthy();
-    expect(screen.getByText(/风格: 繁中漫画/)).toBeTruthy();
-    expect(screen.getByText(/提示词: 漫画分镜/)).toBeTruthy();
+    expect(screen.getByText('台词')).toBeTruthy();
+    expect(screen.getByText('状态')).toBeTruthy();
+    expect(screen.getByText('操作')).toBeTruthy();
+    expect(screen.queryByText('元数据')).toBeNull();
+    expect(document.body.textContent).toContain('对白: 開始吧。');
+    expect(document.body.textContent).toContain('音效: 沙');
+    expect(screen.queryByText(/繁中漫画/)).toBeNull();
+    expect(screen.queryByText(/漫画分镜/)).toBeNull();
+    expect(screen.getAllByText('优化场景视频提示词').length).toBeGreaterThan(0);
   });
 
   it('renders comparison variants', () => {

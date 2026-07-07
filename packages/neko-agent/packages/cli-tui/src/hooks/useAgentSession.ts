@@ -57,6 +57,7 @@ import {
   createTuiCapabilityLoader,
   type TuiCapabilityLoaderResult,
 } from '../core/tui-capability-loader';
+import { detectTuiLocale } from '../core/tui-locale';
 import { formatTuiReferenceDiagnostics } from '../core/reference-diagnostics';
 import {
   TuiMessageQueueError,
@@ -85,6 +86,7 @@ import {
   createTuiSlashCommandCatalog,
   type TuiSlashCommandOption,
 } from '../core/slash-command-catalog';
+import { withTuiDefaultCapabilityProviders } from '../host/tui-default-capabilities';
 import {
   activateCliDomainSkill,
   type CliSkillLifecycleSessionBridge,
@@ -92,6 +94,7 @@ import {
   deactivateCliSkillLifecycle,
   wireCliSkillLifecycleSession,
 } from '../core/skill-lifecycle-session';
+import { createCliConversationId } from '../core/tui-conversation-id';
 
 export interface UseAgentSessionOptions {
   readonly config: CLIConfig;
@@ -190,7 +193,7 @@ export interface AgentSessionHandle {
  * 3. Route events through EventAdapter → stores
  */
 export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHandle {
-  const { config, service, taskManager: providedTaskManager, capabilityProviders = [] } = options;
+  const { config, service, taskManager: providedTaskManager, capabilityProviders } = options;
   const sessionRef = useRef<IAgentSession | null>(null);
   const adapterRef = useRef<IEventAdapter | null>(null);
   const inputProcessorRef = useRef<InputProcessor | null>(null);
@@ -207,6 +210,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const drainingQueueRef = useRef(false);
   const isReadyRef = useRef(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
+  const [isReady, setIsReady] = useState(false);
   const [slashCommands, setSlashCommands] = useState<readonly TuiSlashCommandOption[]>(
     createTuiSlashCommandCatalog(),
   );
@@ -216,6 +220,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   useEffect(() => {
     const init = async () => {
       try {
+        isReadyRef.current = false;
+        setIsReady(false);
         // Resolve effective model — block on model picker if defaultModel is invalid
         let effectiveModel = config.model;
 
@@ -297,7 +303,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const providerCardRegistry = new ProviderCardRegistry();
 
         // 3. Skills
-        const detectedLocale = detectLocale();
+        const detectedLocale = detectTuiLocale();
         const skillLoader = createNodeSkillLoader(fs, path);
         const skillService = createSkillService();
         skillServiceRef.current = skillService;
@@ -305,7 +311,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         for (const skill of loadedSkills) {
           skillService.registry.registerSkill(skill);
         }
-        setSlashCommands(createTuiSlashCommandCatalog(loadedSkills));
+        setSlashCommands(createTuiSlashCommandCatalog(loadedSkills, detectedLocale));
         setSkillCatalogVersion((version) => version + 1);
 
         const skillLifecycleRuntime = ensureHookSkillLifecycleRuntime(
@@ -319,7 +325,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           providerCardRegistry,
           locale: detectedLocale,
         });
-        const capabilityLoadResult = capabilityLoader.registerProviders(capabilityProviders);
+        const capabilityLoadResult = capabilityLoader.registerProviders(
+          withTuiDefaultCapabilityProviders({
+            workDir: config.workDir,
+            capabilityProviders,
+          }),
+        );
         capabilityLoadResultRef.current = capabilityLoadResult;
 
         // 4. LLM Service — use Platform for multi-provider routing
@@ -356,6 +367,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           service: llmService,
           toolRegistry,
           systemPrompt,
+          locale: detectedLocale,
           executionMode,
           maxIterations: 50,
           temperature: config.temperature,
@@ -422,15 +434,19 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         });
 
         isReadyRef.current = true;
+        setIsReady(true);
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         useAgentStore.getState().setError(err);
+        useConversationStore.getState().addError(err);
       }
     };
 
     initPromiseRef.current = init();
 
     return () => {
+      isReadyRef.current = false;
+      setIsReady(false);
       sessionRef.current?.dispose();
       platformRef.current?.dispose();
       mcpManagerRef.current?.disconnectAll().catch(() => {});
@@ -755,7 +771,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     const session = sessionRef.current;
     if (!session) return;
     const config = useConfigStore.getState().config;
-    const locale = detectLocale();
+    const locale = detectTuiLocale();
     const builder = createSystemPromptBuilder({
       locale,
       mode: mode === 'plan' ? 'plan' : 'default',
@@ -768,7 +784,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       );
     }
     const systemPrompt = buildSystemPromptWithContext(builder, config);
-    session.configure({ systemPrompt });
+    session.configure({ systemPrompt, locale });
     session.setExecutionMode(mode);
   }, []);
 
@@ -880,7 +896,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     listCapabilityTools,
     getReferenceContributors,
     slashCommands,
-    isReady: isReadyRef.current,
+    isReady,
   };
 }
 
@@ -929,12 +945,6 @@ function readConfigWorkDir(): string {
   return useConfigStore.getState().config.workDir;
 }
 
-/** Detect locale from environment */
-function detectLocale(): 'en' | 'zh' {
-  const lang = process.env.LANG ?? process.env.LANGUAGE ?? process.env.LC_ALL ?? '';
-  return lang.startsWith('zh') ? 'zh' : 'en';
-}
-
 /** Build system prompt with runtime context appended */
 function buildSystemPromptWithContext(builder: SystemPromptBuilder, config: CLIConfig): string {
   const base = builder.build();
@@ -946,10 +956,6 @@ function buildSystemPromptWithContext(builder: SystemPromptBuilder, config: CLIC
     `- Provider: ${config.provider}`,
   ];
   return base + context.join('\n');
-}
-
-function createCliConversationId(): string {
-  return `cli:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function ensureHookSkillLifecycleRuntime(

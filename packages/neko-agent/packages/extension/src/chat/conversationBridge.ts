@@ -5,7 +5,8 @@
 
 import * as vscode from 'vscode';
 import { getLogger } from '../base';
-import { buildActiveConversationMessage, buildConversationListMessage } from '@neko/agent/runtime';
+import { buildConversationListMessage } from '@neko/agent/runtime';
+import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import {
   createConversationId,
   createFileConversationPersistenceRuntime,
@@ -17,30 +18,9 @@ import {
 } from '@neko/agent';
 import { buildAgentSessionDiagnosticMessage, type Message } from '@neko-agent/types';
 import type { AgentLocalResourceAccess } from '../services/localResourceAccess';
+import { projectMessagesForWebviewResourceDisplay } from './message/webviewResourceProjection';
 
 const logger = getLogger('ConversationBridge');
-
-/**
- * Convert local file path to webview URI
- */
-function toWebviewUri(
-  webview: vscode.Webview,
-  filePath: string,
-  localResourceAccess?: AgentLocalResourceAccess,
-): string | undefined {
-  try {
-    if (localResourceAccess) {
-      return localResourceAccess.toWebviewUri(webview, filePath, 'neko-agent.conversation');
-    }
-    logger.warn('Local resource access service unavailable for conversation media projection', {
-      filePath,
-    });
-    return undefined;
-  } catch {
-    logger.warn(`Failed to convert path to webview URI: ${filePath}`);
-    return undefined;
-  }
-}
 
 /**
  * VSCode Memento storage adapter for ConversationManager
@@ -67,6 +47,7 @@ export class ConversationBridge {
     context: vscode.ExtensionContext,
     workspaceRoot?: string | (() => string | undefined),
     private readonly localResourceAccess?: AgentLocalResourceAccess,
+    private readonly getContentAccessRuntime?: () => AgentContentAccessRuntime | undefined,
   ) {
     const initialWorkspaceRoot =
       typeof workspaceRoot === 'function' ? workspaceRoot() : workspaceRoot;
@@ -295,23 +276,37 @@ export class ConversationBridge {
   /**
    * Send active conversation to webview
    */
-  sendActiveConversation(webview: vscode.Webview): void {
-    webview.postMessage(
-      buildActiveConversationMessage(this._conversationManager.getActive(), {
-        resolveLocalMediaPath: (filePath) =>
-          toWebviewUri(webview, filePath, this.localResourceAccess),
-      }),
-    );
+  async sendActiveConversation(webview: vscode.Webview): Promise<void> {
+    const conversation = this._conversationManager.getActive();
+    if (!conversation) {
+      await webview.postMessage({
+        type: 'activeConversation',
+        conversation: null,
+      });
+      return;
+    }
+
+    await webview.postMessage({
+      type: 'activeConversation',
+      conversation: {
+        id: conversation.id,
+        title: conversation.title,
+        messages: await this._projectMessagesForWebview(webview, conversation.messages),
+      },
+    });
   }
 
   /**
    * Send a specific conversation snapshot to webview without changing host active state.
    */
-  sendConversationSnapshot(webview: vscode.Webview, conversationId: string): boolean {
+  async sendConversationSnapshot(
+    webview: vscode.Webview,
+    conversationId: string,
+  ): Promise<boolean> {
     const conversation = this._conversationManager.get(conversationId);
     if (!conversation) {
       const deleted = this.deletedConversationIds.has(conversationId);
-      webview.postMessage(
+      await webview.postMessage(
         buildAgentSessionDiagnosticMessage({
           code: deleted ? 'deleted-conversation' : 'unknown-conversation',
           action: 'sendConversationSnapshot',
@@ -324,13 +319,28 @@ export class ConversationBridge {
       return false;
     }
 
-    webview.postMessage(
-      buildActiveConversationMessage(conversation, {
-        resolveLocalMediaPath: (filePath) =>
-          toWebviewUri(webview, filePath, this.localResourceAccess),
-      }),
-    );
+    await webview.postMessage({
+      type: 'activeConversation',
+      conversation: {
+        id: conversation.id,
+        title: conversation.title,
+        messages: await this._projectMessagesForWebview(webview, conversation.messages),
+      },
+    });
     return true;
+  }
+
+  private async _projectMessagesForWebview(
+    webview: vscode.Webview,
+    messages: readonly Message[],
+  ): Promise<Message[]> {
+    return projectMessagesForWebviewResourceDisplay(messages, {
+      webview,
+      localResourceAccess: this.localResourceAccess,
+      contentAccessRuntime: this.getContentAccessRuntime?.(),
+      localMediaCaller: 'neko-agent.conversation',
+      documentResourceCaller: 'neko-agent.document-resource',
+    });
   }
 
   dispose(): void {

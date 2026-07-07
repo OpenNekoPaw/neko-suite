@@ -35,6 +35,7 @@ import {
 } from '../presenters/message-presenter';
 import {
   hasQueuedUserMessages,
+  projectAuthoritativeQueuedMessagesIntoTranscript,
   projectReleasedQueuedMessageIntoTranscript,
   projectQueuedMessagesCleared,
   projectQueuedMessagesForPendingCount,
@@ -344,7 +345,10 @@ function applyMessageQueueSnapshot(
           messages: msgs,
           item: options.releasedItem,
         })
-      : projectQueuedMessagesCleared(msgs),
+      : projectAuthoritativeQueuedMessagesIntoTranscript({
+          messages: msgs,
+          items: snapshot.items,
+        }),
     streamingMessageId: streamingId,
     isThinking:
       snapshot.items.length > 0 || options.releasedItem

@@ -29,6 +29,7 @@ import {
   isAgentCapabilityInvocationInput,
   isCanvasMarkdownCapabilityTarget,
   isCanvasMarkdownResourceRef,
+  isCanvasStoryboardActionIntent,
   isResourceRef,
   parseDocumentArchiveResourceRef,
   parseDocumentLocator,
@@ -286,28 +287,15 @@ export interface InvokeAgentCapabilityLifecycleWebviewMessage {
 }
 
 export type CanvasAuthoringHandoffSourceKind =
-  | 'markdown'
-  | 'generated-text'
-  | 'structured-content'
-  | 'resource-backed-content';
+  'markdown' | 'generated-text' | 'structured-content' | 'resource-backed-content';
 
 export type CanvasAuthoringMarkdownSourceFormat =
-  | 'markdown'
-  | 'markdown-table'
-  | 'gfm-table'
-  | 'resource-reference-markdown';
+  'markdown' | 'markdown-table' | 'gfm-table' | 'resource-reference-markdown';
 
 export type CanvasAuthoringHandoffSourceFormat =
-  | CanvasAuthoringMarkdownSourceFormat
-  | 'plain-text'
-  | 'json'
-  | 'composite-artifact';
+  CanvasAuthoringMarkdownSourceFormat | 'plain-text' | 'json' | 'composite-artifact';
 
-export type CanvasAuthoringHandoffDeclaredIntentHint =
-  | 'auto'
-  | 'note'
-  | 'table'
-  | 'creative-table';
+export type CanvasAuthoringHandoffDeclaredIntentHint = 'auto' | 'note' | 'table' | 'creative-table';
 
 export interface CanvasAuthoringHandoffStableRef {
   readonly kind: string;
@@ -1417,10 +1405,7 @@ export function buildAgentStateSnapshotMessage(
     type: 'agentStateSnapshot',
     agentStates: agentStates.map((state) => ({
       ...state,
-      conversationId: requireBuilderConversationId(
-        state.conversationId,
-        'agentStateSnapshot',
-      ),
+      conversationId: requireBuilderConversationId(state.conversationId, 'agentStateSnapshot'),
     })),
   };
 }
@@ -1655,7 +1640,9 @@ function cloneAgentMessageQueueSnapshot(
     conversationId,
     pendingCount: snapshot.pendingCount,
     version: snapshot.version,
-    items: snapshot.items.map((item) => cloneAgentQueuedMessageItem(item, conversationId, messageType)),
+    items: snapshot.items.map((item) =>
+      cloneAgentQueuedMessageItem(item, conversationId, messageType),
+    ),
   };
 }
 
@@ -1948,9 +1935,16 @@ function isAgentContextPayload(raw: unknown): raw is AgentContextPayload {
     isNonEmptyString(raw.label) &&
     typeof raw.summary === 'string' &&
     'data' in raw &&
+    isAgentContextPayloadData(raw.type, raw.data) &&
     (raw.intent === undefined || typeof raw.intent === 'string') &&
     (raw.generationParams === undefined || isRecord(raw.generationParams))
   );
+}
+
+function isAgentContextPayloadData(type: AgentContextPayload['type'], data: unknown): boolean {
+  if (type !== 'canvas-storyboard-action-intent') return true;
+  if (!isRecord(data)) return false;
+  return isCanvasStoryboardActionIntent(data.intent);
 }
 
 function isAgentContextPayloadType(type: unknown): type is AgentContextPayload['type'] {
@@ -1968,7 +1962,8 @@ function isAgentContextPayloadType(type: unknown): type is AgentContextPayload['
     type === 'audio-clip' ||
     type === 'file' ||
     type === 'image' ||
-    type === 'document-selection'
+    type === 'document-selection' ||
+    type === 'canvas-storyboard-action-intent'
   );
 }
 
@@ -2296,9 +2291,7 @@ function parseCanvasAuthoringStableRefs(
   return refs;
 }
 
-function parseCanvasAuthoringTargetHints(
-  value: unknown,
-): CanvasAuthoringHandoffTargetHints | null {
+function parseCanvasAuthoringTargetHints(value: unknown): CanvasAuthoringHandoffTargetHints | null {
   if (!isRecord(value)) return null;
   const sourceFormat =
     value.sourceFormat === undefined
@@ -2323,11 +2316,10 @@ function parseCanvasAuthoringTargetHints(
   };
 }
 
-function parseCanvasAuthoringSourceRange(
-  value: unknown,
-): CanvasAuthoringHandoffSourceRange | null {
+function parseCanvasAuthoringSourceRange(value: unknown): CanvasAuthoringHandoffSourceRange | null {
   if (!isRecord(value)) return null;
-  const start = typeof value.start === 'number' && Number.isFinite(value.start) ? value.start : null;
+  const start =
+    typeof value.start === 'number' && Number.isFinite(value.start) ? value.start : null;
   const end = typeof value.end === 'number' && Number.isFinite(value.end) ? value.end : null;
   if (start === null || end === null || start < 0 || end < start) return null;
   return { start, end };
@@ -2348,7 +2340,8 @@ function parseCanvasAuthoringHandoffDiagnostics(
     if (!code || !message) return null;
     const token = optionalString(item.token);
     if (item.token !== undefined && token === undefined) return null;
-    const range = item.range === undefined ? undefined : parseCanvasAuthoringSourceRange(item.range);
+    const range =
+      item.range === undefined ? undefined : parseCanvasAuthoringSourceRange(item.range);
     if (range === null) return null;
     diagnostics.push({
       severity: item.severity,
@@ -2394,9 +2387,7 @@ function parseCanvasAuthoringHandoffPromptSpans(
   return spans;
 }
 
-function parseCanvasAuthoringStableRef(
-  value: unknown,
-): CanvasAuthoringHandoffStableRef | null {
+function parseCanvasAuthoringStableRef(value: unknown): CanvasAuthoringHandoffStableRef | null {
   if (!isRecord(value)) return null;
   const kind = requiredString(value.kind);
   const id = requiredString(value.id);
@@ -3060,7 +3051,8 @@ function isAgentContextType(value: unknown): value is AgentContextType {
     value === 'audio-clip' ||
     value === 'file' ||
     value === 'image' ||
-    value === 'document-selection'
+    value === 'document-selection' ||
+    value === 'canvas-storyboard-action-intent'
   );
 }
 

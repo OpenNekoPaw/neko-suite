@@ -122,6 +122,36 @@ describe('MessageItem tool aggregation', () => {
     expect(screen.getByRole('button', { name: /Canvas/ })).toBeTruthy();
   });
 
+  it('does not render Canvas handoff for empty storyboard skeletons or metadata tables', () => {
+    renderMessageItem({
+      message: createMessage({
+        role: 'assistant',
+        content: '',
+        contentBlocks: [
+          {
+            id: 'text-1',
+            type: 'text',
+            timestamp: 1,
+            content: [
+              '当前只拿到了图片资源 metadata，不能可靠生成分镜表。',
+              '',
+              '| page | assetId | 尺寸 |',
+              '| --- | --- | --- |',
+              '| P01 | read-image-p01-cover | 1511x2160 |',
+              '',
+              '| 场景 | 镜头 | 来源 | 图像提示词 | 视频提示词 | 时长 | 对白 |',
+              '| --- | --- | --- | --- | --- | --- | --- |',
+            ].join('\n'),
+          },
+        ],
+      }),
+      identities: defaultIdentities(),
+      pluginsAvailable: { canvas: true },
+    });
+
+    expect(screen.queryByRole('button', { name: /Canvas/ })).toBeNull();
+  });
+
   it('renders storyboard source thumbnails from same-message ReadImage tool context', () => {
     renderMessageItem({
       message: createMessage({
@@ -146,7 +176,6 @@ describe('MessageItem tool aggregation', () => {
     });
 
     expect(screen.getAllByAltText('Page 1').map((image) => image.getAttribute('src'))).toEqual([
-      'vscode-webview://page-1',
       'vscode-webview://page-1',
     ]);
     expect(screen.queryByText(/no image resource context/)).toBeNull();

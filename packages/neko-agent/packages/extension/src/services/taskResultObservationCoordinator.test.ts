@@ -233,6 +233,67 @@ describe('TaskResultObservationCoordinator', () => {
     expect(dispatchIdleAgentTurn).not.toHaveBeenCalled();
     coordinator.dispose();
   });
+
+  it('serializes duplicate terminal task observations before dispatching follow-up', async () => {
+    const task = createTask({
+      lifecycle: {
+        ...createTask().lifecycle!,
+        resultDeliveryPolicy: { kind: 'auto-resume-agent', prompt: 'Continue' },
+      },
+    });
+    const dispatchIdleAgentTurn = vi.fn(async () => undefined);
+    let committed = false;
+    let activeRecordings = 0;
+    let maxActiveRecordings = 0;
+    const recordTaskResultObservation = vi.fn(async (input) => {
+      activeRecordings += 1;
+      maxActiveRecordings = Math.max(maxActiveRecordings, activeRecordings);
+      const followUpRecorded = !committed;
+      await Promise.resolve();
+      committed = true;
+      activeRecordings -= 1;
+      return {
+        observationRecorded: followUpRecorded,
+        evidenceRecorded: followUpRecorded,
+        followUpRecorded,
+        eventIds: followUpRecorded ? ['event-1'] : [],
+        deliveryDecision: {
+          kind: 'auto-resume-agent' as const,
+          followUpRequest: {
+            id: 'followup-1',
+            conversationId: input.observation.conversationId,
+            runId: input.observation.runId,
+            observationId: input.observation.id,
+            taskId: input.observation.taskId,
+            policy: { kind: 'auto-resume-agent' as const, prompt: 'Continue' },
+            prompt: 'Continue',
+            createdAt: 30,
+          },
+        },
+      };
+    });
+    const coordinator = new TaskResultObservationCoordinator({
+      tasks: createTaskPort(),
+      agents: {
+        get: vi.fn(() => ({
+          recordTaskResultObservation,
+          enqueuePendingMessage: vi.fn(),
+        })),
+        isRunning: vi.fn(() => false),
+      } as never,
+      continuation: { dispatchIdleAgentTurn },
+    });
+
+    await Promise.all([
+      coordinator.handleTerminalTask(task, { source: 'media-task' }),
+      coordinator.handleTerminalTask(task, { source: 'task-manager' }),
+    ]);
+
+    expect(recordTaskResultObservation).toHaveBeenCalledTimes(2);
+    expect(maxActiveRecordings).toBe(1);
+    expect(dispatchIdleAgentTurn).toHaveBeenCalledTimes(1);
+    coordinator.dispose();
+  });
 });
 
 function createTaskPort() {

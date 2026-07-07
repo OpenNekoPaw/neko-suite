@@ -154,7 +154,11 @@ export async function executeSlashCommand(
   const { command, args } = parseSlashCommand(input);
   const skills = toSlashCommandSkillList(context);
   const surface = context.conversations ? 'extension' : 'cli';
-  const entry = resolveSlashCommandCatalogEntry(command, { surface, skills });
+  const entry = resolveSlashCommandCatalogEntry(command, {
+    surface,
+    skills,
+    locale: context.locale,
+  });
   const resolvedSkill = entry?.source === 'command-artifact' ? entry.skill : undefined;
 
   if (entry?.source === 'builtin') {

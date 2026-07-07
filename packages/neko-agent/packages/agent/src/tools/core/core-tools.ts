@@ -11,7 +11,7 @@ import { WriteTool } from './write-tool';
 import { BashTool, type BashToolOptions } from './bash-tool';
 import { ListDirectoryTool } from './list-directory-tool';
 import { GrepTool } from './grep-tool';
-import { MemoryWriteTool } from './memory-write-tool';
+import { MemoryWriteTool, type ProjectMemoryMutationProposalSink } from './memory-write-tool';
 import {
   createNoWorkspaceFileAccessPolicy,
   createWorkspaceFileAccessPolicy,
@@ -32,6 +32,8 @@ export interface CoreToolsOptions {
   includeShell?: boolean;
   /** Project memory manager — enables MemoryWrite tool when provided */
   projectMemoryManager?: IProjectMemoryManager;
+  /** Client/domain proposal sink for MemoryWrite. The tool never commits `.neko` directly. */
+  projectMemoryProposalSink?: ProjectMemoryMutationProposalSink;
   /** Explicit file access policy for core file/search tools. */
   fileAccessPolicy?: CoreFileAccessPolicy;
 }
@@ -68,7 +70,7 @@ export function createCoreTools(options?: CoreToolsOptions): Tool[] {
   }
 
   if (options?.projectMemoryManager) {
-    tools.push(new MemoryWriteTool(options.projectMemoryManager));
+    tools.push(new MemoryWriteTool({ proposalSink: options.projectMemoryProposalSink }));
   }
 
   return tools;

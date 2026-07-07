@@ -155,6 +155,24 @@ describe('InputProcessor', () => {
 
       expect(refs).toHaveLength(0);
     });
+
+    it('should leave durable asset and media-library references out of file loading', () => {
+      const processor = createInputProcessor({
+        workspaceRoot: '/workspace',
+      });
+
+      const refs = processor.parseReferences(
+        'Use @asset:hero and @${MEDIA}/shots/take.mov with @src/index.ts',
+      );
+
+      expect(refs).toEqual([
+        {
+          original: '@src/index.ts',
+          path: 'src/index.ts',
+          type: 'file',
+        },
+      ]);
+    });
   });
 
   describe('process', () => {
@@ -256,6 +274,7 @@ describe('InputProcessor', () => {
     it('should exclude workspace runtime and cache directories by default', async () => {
       const mockReader = createMockFileReader({
         '.neko/logs/events.jsonl': 'runtime log',
+        '.neko/memory.md': 'memory',
         '.cache/generated.json': 'cache payload',
         'src/cacheable.ts': 'source code',
       });
@@ -267,11 +286,12 @@ describe('InputProcessor', () => {
       });
 
       const result = await processor.process(
-        'Check @.neko/logs/events.jsonl @.cache/generated.json @src/cacheable.ts',
+        'Check @.neko/logs/events.jsonl @.neko/memory.md @.cache/generated.json @src/cacheable.ts',
       );
 
       expect(result.errors.map((error) => error.reference)).toEqual([
         '@.neko/logs/events.jsonl',
+        '@.neko/memory.md',
         '@.cache/generated.json',
       ]);
       expect(result.fileReferences.find((r) => r.path === 'src/cacheable.ts')?.content).toBe(

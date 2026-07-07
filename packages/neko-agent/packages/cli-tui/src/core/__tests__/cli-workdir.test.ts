@@ -20,6 +20,13 @@ describe('resolveCliWorkDir', () => {
     expect(resolveCliWorkDir({ cwd: dir })).toBe(path.resolve(dir));
   });
 
+  it('supports --cd as the Codex-style working directory option', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-cli-workdir-'));
+    createdPaths.push(dir);
+
+    expect(resolveCliWorkDir({ cd: dir })).toBe(path.resolve(dir));
+  });
+
   it('supports --work-dir as an alias for --cwd', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-cli-workdir-'));
     createdPaths.push(dir);
@@ -55,6 +62,18 @@ describe('resolveCliWorkDir', () => {
       `Conflicting working directories: --cwd ${path.resolve(
         cwdDir,
       )} differs from --work-dir ${path.resolve(workDir)}`,
+    );
+  });
+
+  it('rejects conflicting --cd and --cwd options', () => {
+    const cdDir = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-cli-workdir-'));
+    const cwdDir = fs.mkdtempSync(path.join(os.tmpdir(), 'neko-cli-workdir-'));
+    createdPaths.push(cdDir, cwdDir);
+
+    expect(() => resolveCliWorkDir({ cd: cdDir, cwd: cwdDir })).toThrow(
+      `Conflicting working directories: --cd ${path.resolve(cdDir)} differs from --cwd ${path.resolve(
+        cwdDir,
+      )}`,
     );
   });
 

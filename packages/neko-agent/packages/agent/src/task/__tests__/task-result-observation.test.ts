@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { Task } from '@neko/shared';
+import {
+  createResourceFingerprint,
+  createResourceRef,
+  type ResourceRef,
+  type Task,
+} from '@neko/shared';
 import {
   AgentTaskResultObservationError,
   createAgentTaskResultObservationRecords,
@@ -46,6 +51,63 @@ describe('task result observation', () => {
     expect(records.evidence.data).toMatchObject({
       taskResultObservation: observation,
     });
+  });
+
+  it('preserves generated ResourceRef handles for ReadImage follow-up turns', () => {
+    const resourceRef = createGeneratedResourceRef();
+    const task = createTask({
+      output: {
+        data: {
+          assets: [
+            {
+              id: 'asset-1',
+              mimeType: 'image/png',
+              label: 'generated-assets/asset-1.png',
+              resourceRef,
+              localPath: '/workspace/neko/generated/image/asset-1.png',
+            },
+          ],
+        },
+      },
+    });
+
+    const observation = normalizeAgentTaskResultObservation({
+      task,
+      source: 'media-task',
+    });
+    const decision = evaluateAgentTaskResultDelivery({
+      observation,
+      policy: { kind: 'auto-resume-agent' },
+      now: 40,
+    });
+
+    expect(observation.resultRefs).toEqual([
+      {
+        kind: 'asset',
+        id: 'asset-1',
+        mimeType: 'image/png',
+        label: 'generated-assets/asset-1.png',
+      },
+      {
+        kind: 'resource',
+        id: resourceRef.id,
+        mimeType: 'image/png',
+        label: 'generated-assets/asset-1.png',
+        resourceRef,
+      },
+    ]);
+    expect(decision).toMatchObject({
+      kind: 'auto-resume-agent',
+      followUpRequest: {
+        prompt: expect.stringContaining('Generated image inputs for ReadImage:'),
+      },
+    });
+    if (decision.kind !== 'auto-resume-agent') {
+      throw new Error('Expected auto-resume decision');
+    }
+    expect(decision.followUpRequest.prompt).toContain('"resourceRef"');
+    expect(decision.followUpRequest.prompt).toContain(resourceRef.id);
+    expect(decision.followUpRequest.prompt).toContain('Do not use the task id');
   });
 
   it('rejects unowned terminal tasks', () => {
@@ -186,4 +248,30 @@ function createTask(overrides: Partial<Task> = {}): Task {
     },
     ...overrides,
   };
+}
+
+function createGeneratedResourceRef(): ResourceRef {
+  return createResourceRef({
+    scope: 'project',
+    provider: 'generated-asset',
+    kind: 'generated',
+    source: {
+      kind: 'generated-asset',
+      generatedAssetId: 'asset-1',
+      filePath: '/workspace/neko/generated/image/asset-1.png',
+      metadata: {
+        path: '/workspace/neko/generated/image/asset-1.png',
+        mimeType: 'image/png',
+      },
+    },
+    locator: {
+      kind: 'generated-asset',
+      assetId: 'asset-1',
+    },
+    fingerprint: createResourceFingerprint({
+      strategy: 'provider',
+      value: 'asset-1',
+      providerId: 'generated-asset',
+    }),
+  });
 }

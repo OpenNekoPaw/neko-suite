@@ -24,6 +24,7 @@ import { parseAgentInputTrigger } from '@neko-agent/types';
 import { handleMarketCommand } from '../commands/market';
 import type { CLIConfig } from './types';
 import { listProviders, getProviderModels } from './config';
+import type { TuiLocale } from './tui-locale';
 
 /** Per-category media model overrides for the current session */
 export interface MediaModelOverrides {
@@ -76,6 +77,7 @@ export interface SkillInvocationResult {
  * Slash command context (CLI-specific)
  */
 export interface SlashCommandContext {
+  locale?: TuiLocale;
   config: CLIConfig;
   skillService?: SkillService;
   toolRegistry?: ToolRegistry;
@@ -127,6 +129,7 @@ export function parseSlashCommand(input: string): { command: string; args: strin
  */
 function toCommandContext(context: SlashCommandContext): CommandContext {
   return {
+    locale: context.locale,
     skillService: context.skillService
       ? {
           registry: {
@@ -226,6 +229,7 @@ export async function handleSlashCommand(
   const commandEntry = resolveSlashCommandCatalogEntry(command, {
     surface: 'cli',
     skills: context.skillService?.registry.listAllSkills(),
+    locale: context.locale,
   });
   const skill =
     commandEntry?.source === 'command-artifact' ? (commandEntry.skill as Skill) : undefined;

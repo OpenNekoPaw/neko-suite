@@ -10,6 +10,7 @@ import {
   listSlashCommandCatalog,
   type SlashCommandCatalogEntry,
 } from '../command-catalog';
+import { getSlashCommandListLabels, normalizeCommandLocale } from '../command-localization';
 
 /**
  * Handle /skills command
@@ -124,6 +125,9 @@ export const handleSkills: CommandHandler = (args, context) => {
  * Handle /commands command
  */
 export const handleCommands: CommandHandler = (args, context) => {
+  const locale = normalizeCommandLocale(context.locale);
+  const labels = getSlashCommandListLabels(locale);
+
   if (args.length > 0) {
     return {
       handled: true,
@@ -135,6 +139,7 @@ export const handleCommands: CommandHandler = (args, context) => {
   const commands = listSlashCommandCatalog({
     surface: 'cli',
     skills: listContextSlashCommandSkills(context),
+    locale,
   });
   const builtinCommands = commands.filter(
     (entry): entry is Extract<SlashCommandCatalogEntry, { source: 'builtin' }> =>
@@ -147,10 +152,10 @@ export const handleCommands: CommandHandler = (args, context) => {
 
   const lines = [
     '',
-    'Available Slash Commands:',
+    labels.availableSlashCommands,
     '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '',
-    `Builtin Commands (${builtinCommands.length}):`,
+    `${labels.builtinCommands} (${builtinCommands.length}):`,
     ...builtinCommands.flatMap((command) => [
       `  /${command.name}${command.aliases.length > 0 ? ` (${command.aliases.map((alias) => `/${alias}`).join(', ')})` : ''}${command.usage ? ` ${command.usage}` : ''}`,
       `      ${command.description}`,
@@ -159,7 +164,7 @@ export const handleCommands: CommandHandler = (args, context) => {
 
   if (skillCommands.length > 0) {
     lines.push('');
-    lines.push(`Command Artifacts (${skillCommands.length}):`);
+    lines.push(`${labels.commandArtifacts} (${skillCommands.length}):`);
     for (const command of skillCommands) {
       lines.push(`  /${command.name}${formatSkillUsage(command)}`);
       lines.push(`      ${command.description}`);

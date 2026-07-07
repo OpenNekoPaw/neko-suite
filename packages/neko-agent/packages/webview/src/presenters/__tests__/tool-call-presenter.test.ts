@@ -39,7 +39,7 @@ describe('tool-call-presenter', () => {
                 ],
               },
             ],
-            changedFields: ['/generationPrompt'],
+            changedFields: ['/storyboardPrompt'],
             blockedReason: 'Unsupported child preset "shot.magic".',
             nextActions: [
               {
@@ -89,7 +89,7 @@ describe('tool-call-presenter', () => {
           retryable: true,
         },
       ],
-      changedFields: ['/generationPrompt'],
+      changedFields: ['/storyboardPrompt'],
       nextActions: [
         {
           id: 'create-replacement-shot',
@@ -161,7 +161,7 @@ describe('tool-call-presenter', () => {
         success: true,
         data: {
           source: { filePath: '/books/a.epub', format: 'epub' },
-          mode: 'vision',
+          mode: 'metadata',
           analysis: 'custom',
           images: [
             {
@@ -274,7 +274,7 @@ describe('tool-call-presenter', () => {
             renderUri: 'vscode-webview://page-10.jpg',
           },
         ],
-        mode: 'vision',
+        mode: 'metadata',
       },
     });
 

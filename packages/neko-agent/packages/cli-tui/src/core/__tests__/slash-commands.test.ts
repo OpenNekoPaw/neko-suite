@@ -101,6 +101,19 @@ describe('handleSlashCommand', () => {
     expect(result.agentPrompt).toBeUndefined();
   });
 
+  it('localizes help output when the TUI slash context is Chinese', async () => {
+    const result = await handleSlashCommand('/help', {
+      locale: 'zh',
+      config: createConfig(),
+    });
+
+    expect(result.handled).toBe(true);
+    expect(result.output).toContain('可用命令');
+    expect(result.output).toContain('显示可用命令帮助');
+    expect(result.output).not.toContain('Available Commands');
+    expect(result.output).not.toContain('Show help message with available commands');
+  });
+
   it('rejects removed config migration subcommand', async () => {
     const result = await handleSlashCommand('/config migrate', {
       config: createConfig(),

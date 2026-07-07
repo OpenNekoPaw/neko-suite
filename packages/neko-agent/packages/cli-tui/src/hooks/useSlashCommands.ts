@@ -24,6 +24,7 @@ import {
   type TuiMcpPorts,
   type TuiCapabilityPorts,
 } from '../core/tui-command-router';
+import { detectTuiLocale } from '../core/tui-locale';
 import { TuiMessageQueueError, formatTuiQueueError } from '../core/message-queue';
 import { useAgentStore } from '../stores/agent-store';
 import { useConfigStore } from '../stores/config-store';
@@ -194,6 +195,7 @@ function createInkRouterContext(
   const config = useConfigStore.getState().config;
   return {
     slash: {
+      locale: detectTuiLocale(),
       config,
       skillService: sessionActions.getSkillService?.(),
       toolRegistry: sessionActions.getToolRegistry?.(),

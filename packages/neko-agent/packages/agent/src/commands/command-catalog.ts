@@ -1,5 +1,7 @@
 import type { BuiltinCommand, BuiltinCommandName } from './types';
 import { getBuiltinCommand, getCliCommands, getExtensionCommands } from './builtin-commands';
+import { localizeBuiltinCommandDescription } from './command-localization';
+import type { CommandLocale } from './types';
 
 export type SlashCommandSurface = 'cli' | 'extension';
 
@@ -37,6 +39,7 @@ export type SlashCommandCatalogEntry<TSkill extends SlashCommandSkillLike = Slas
 export function listSlashCommandCatalog<TSkill extends SlashCommandSkillLike>(options: {
   readonly surface: SlashCommandSurface;
   readonly skills?: readonly TSkill[];
+  readonly locale?: CommandLocale;
 }): SlashCommandCatalogEntry<TSkill>[] {
   const entries = new Map<string, SlashCommandCatalogEntry<TSkill>>();
 
@@ -44,7 +47,11 @@ export function listSlashCommandCatalog<TSkill extends SlashCommandSkillLike>(op
     entries.set(builtin.name, {
       source: 'builtin',
       name: builtin.name,
-      description: builtin.description,
+      description: localizeBuiltinCommandDescription(
+        builtin.name,
+        builtin.description,
+        options.locale,
+      ),
       aliases: builtin.aliases ?? [],
       ...(builtin.usage ? { usage: builtin.usage } : {}),
       category: builtin.category,
@@ -83,6 +90,7 @@ export function resolveSlashCommandCatalogEntry<TSkill extends SlashCommandSkill
   options: {
     readonly surface: SlashCommandSurface;
     readonly skills?: readonly TSkill[];
+    readonly locale?: CommandLocale;
   },
 ): SlashCommandCatalogEntry<TSkill> | undefined {
   const normalized = normalizeCommandName(name);
@@ -95,7 +103,11 @@ export function resolveSlashCommandCatalogEntry<TSkill extends SlashCommandSkill
     return {
       source: 'builtin',
       name: builtin.name,
-      description: builtin.description,
+      description: localizeBuiltinCommandDescription(
+        builtin.name,
+        builtin.description,
+        options.locale,
+      ),
       aliases: builtin.aliases ?? [],
       ...(builtin.usage ? { usage: builtin.usage } : {}),
       category: builtin.category,

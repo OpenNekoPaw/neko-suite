@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ToolCall } from '@neko-agent/types';
-import type { AgentContextPayload } from '@neko/shared';
+import { validateCanvasMarkdownCapabilityInput, type AgentContextPayload } from '@neko/shared';
 import {
   projectMarkdownResourceRendering,
   normalizeMarkdownResourceLookupToken,
@@ -433,6 +433,39 @@ describe('markdown resource rendering presenter', () => {
         renderUris: ['vscode-webview://page-1'],
       }),
     ]);
+  });
+
+  it('keeps explicit document resource refs as documentResourceRef for Canvas handoff', () => {
+    const markdown = [
+      '| scene | shot | source | visual |',
+      '| --- | --- | --- | --- |',
+      '| Opening | 1 | P1 | Wide panel |',
+    ].join('\n');
+    const projection = projectMarkdownResourceRendering({
+      markdown,
+      toolCalls: [createReadImageDocumentResourceFieldToolCall()],
+    });
+    const resource = projection.tokens[0]?.resources[0];
+
+    expect(projection.status).toBe('ready');
+    expect(resource).toEqual(
+      expect.objectContaining({
+        token: 'P1',
+        documentResourceRef: expect.objectContaining({ entryPath: 'OPS/page-1.jpg' }),
+      }),
+    );
+    expect(resource).not.toHaveProperty('resourceRef');
+    expect(resource).not.toHaveProperty('sourcePath');
+    expect(
+      validateCanvasMarkdownCapabilityInput({
+        capabilityId: 'canvas.ingestMarkdown',
+        markdown,
+        sourceFormat: 'gfm-table',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
+        resources: projection.tokens.flatMap((token) => token.resources),
+      }),
+    ).toEqual([]);
   });
 
   it('does not turn plain table source tokens into diagnostics without image resource context', () => {
@@ -1057,6 +1090,50 @@ function createPerceptionOnlyToolCall(): ToolCall {
               label: 'Page 1',
               documentResourceRef,
             },
+          },
+        },
+      ],
+    },
+  };
+}
+
+function createReadImageDocumentResourceFieldToolCall(): ToolCall {
+  const documentResourceRef = {
+    kind: 'document-entry' as const,
+    source: {
+      filePath: '/books/story.epub',
+      format: 'epub' as const,
+    },
+    entryPath: 'OPS/page-1.jpg',
+    versionPolicy: 'versioned-export' as const,
+  };
+  return {
+    id: 'read-image-document-ref-field',
+    name: 'ReadImage',
+    arguments: {},
+    result: {
+      success: true,
+      data: {
+        images: [
+          {
+            label: 'Page 1',
+            entryPath: 'OPS/page-1.jpg',
+            mimeType: 'image/jpeg',
+            documentResourceRef,
+          },
+        ],
+      },
+      attachments: [
+        {
+          type: 'image',
+          path: 'vscode-webview://page-1',
+          mimeType: 'image/jpeg',
+          assetRef: {
+            assetId: 'read-image-page-1',
+            uri: 'OPS/page-1.jpg',
+            mimeType: 'image/jpeg',
+            label: 'Page 1',
+            documentResourceRef,
           },
         },
       ],

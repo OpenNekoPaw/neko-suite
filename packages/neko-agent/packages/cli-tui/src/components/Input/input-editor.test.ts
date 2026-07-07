@@ -1,9 +1,21 @@
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from 'ink-testing-library';
 import { InputEditor } from './InputEditor';
+import { createTuiSlashCommandCatalog } from '../../core/slash-command-catalog';
+
+const originalNekoLocale = process.env.NEKO_LOCALE;
+
+beforeEach(() => {
+  process.env.NEKO_LOCALE = 'en';
+});
 
 afterEach(() => {
+  if (originalNekoLocale === undefined) {
+    delete process.env.NEKO_LOCALE;
+  } else {
+    process.env.NEKO_LOCALE = originalNekoLocale;
+  }
   cleanup();
 });
 
@@ -50,6 +62,23 @@ describe('InputEditor prefix suggestions', () => {
     await writeInput(instance, '\r');
     await writeInput(instance, '\r');
     expect(onSlashCommand).toHaveBeenCalledWith('/model');
+  });
+
+  it('renders localized slash command descriptions in Chinese suggestion menus', async () => {
+    process.env.NEKO_LOCALE = 'zh-CN';
+    const instance = render(
+      React.createElement(InputEditor, {
+        onSubmit: vi.fn(),
+        commands: createTuiSlashCommandCatalog(undefined, 'zh'),
+      }),
+    );
+
+    await writeInput(instance, '/');
+
+    expect(instance.lastFrame()).toContain('/help');
+    expect(instance.lastFrame()).toContain('[命令]');
+    expect(instance.lastFrame()).toContain('显示可用命令帮助');
+    expect(instance.lastFrame()).not.toContain('Show help message with available commands');
   });
 
   it('filters Skill suggestions and submits selected Skill invocation', async () => {
@@ -124,6 +153,71 @@ describe('InputEditor prefix suggestions', () => {
 
     await writeInput(instance, '\r');
     expect(onSubmit).toHaveBeenCalledWith('$r');
+  });
+
+  it('submits when a terminal sends a raw line-feed character', async () => {
+    const onSubmit = vi.fn();
+    const instance = render(
+      React.createElement(InputEditor, {
+        onSubmit,
+      }),
+    );
+
+    await writeInput(instance, 'hello\n');
+
+    expect(onSubmit).toHaveBeenCalledWith('hello');
+    expect(instance.lastFrame()).not.toContain('hello');
+  });
+
+  it('submits when terminal input coalesces text and line-feed into one chunk', async () => {
+    const onSubmit = vi.fn();
+    const instance = render(
+      React.createElement(InputEditor, {
+        onSubmit,
+      }),
+    );
+
+    await waitForInkUpdate();
+    instance.stdin.write('你好\n');
+    await waitForInkUpdate();
+
+    expect(onSubmit).toHaveBeenCalledWith('你好');
+    expect(instance.lastFrame()).not.toContain('你好');
+  });
+
+  it('handles raw backspace characters without inserting control text', async () => {
+    const instance = render(
+      React.createElement(InputEditor, {
+        onSubmit: vi.fn(),
+      }),
+    );
+
+    await writeInput(instance, 'abc\u007Fz');
+
+    expect(instance.lastFrame()).toContain('> abz');
+    expect(instance.lastFrame()).not.toContain('\u007F');
+  });
+
+  it('localizes reference overflow chrome when TUI locale is Chinese', async () => {
+    process.env.NEKO_LOCALE = 'zh-CN';
+    const references = Array.from({ length: 10 }, (_, index) => ({
+      trigger: '@' as const,
+      name: `asset-${index}.png`,
+      insertText: `@asset-${index}.png `,
+      kind: 'asset',
+    }));
+    const instance = render(
+      React.createElement(InputEditor, {
+        onSubmit: vi.fn(),
+        references,
+      }),
+    );
+
+    await writeInput(instance, '@');
+
+    expect(instance.lastFrame()).toContain('↓ 2 更多');
+    expect(instance.lastFrame()).toContain('[素材]');
+    expect(instance.lastFrame()).not.toContain('more');
   });
 });
 

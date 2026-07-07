@@ -102,6 +102,24 @@ describe('TaskCard result actions', () => {
 
     expect(onViewResult).toHaveBeenCalledWith('task-1', 'generated-assets/asset-1.png');
   });
+
+  it('shows storyboard generation progress, provider metadata and task steps in Agent UI', () => {
+    render(<TaskCard task={createRunningStoryboardVideoTask()} onCancel={vi.fn()} />);
+
+    expect(screen.getByText('42%')).toBeTruthy();
+    expect(screen.getByText('video-model-1')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('tasks.videoGeneration'));
+
+    expect(screen.getByText(/Steps: 1\/3/)).toBeTruthy();
+    expect(screen.getByText(/Generate video media/)).toBeTruthy();
+
+    fireEvent.click(screen.getByText(/Steps: 1\/3/));
+
+    expect(screen.getByText(/1\. Validate Canvas storyboard intent/)).toBeTruthy();
+    expect(screen.getByText(/2\. Generate video media/)).toBeTruthy();
+    expect(screen.getByText(/3\. Write structured task result to Canvas/)).toBeTruthy();
+  });
 });
 
 function createCompletedImageTask(): BackgroundTask {
@@ -138,5 +156,41 @@ function createCompletedImageTask(): BackgroundTask {
       width: 1024,
       height: 1024,
     },
+  };
+}
+
+function createRunningStoryboardVideoTask(): BackgroundTask {
+  return {
+    id: 'storyboard-generate-video-shot-1',
+    type: 'video',
+    name: 'Canvas storyboard: Generate Video for shot 1',
+    prompt: 'Storyboard action generate-video for shot 1.',
+    providerId: 'neko-video',
+    providerName: 'video-model-1',
+    status: 'processing',
+    progress: 42,
+    createdAt: '2026-06-20T00:00:00.000Z',
+    updatedAt: '2026-06-20T00:00:01.000Z',
+    currentStepId: 'execute-agent-action',
+    steps: [
+      {
+        id: 'validate-intent',
+        name: 'Validate Canvas storyboard intent',
+        status: 'completed',
+        startTime: 1,
+        endTime: 1,
+      },
+      {
+        id: 'execute-agent-action',
+        name: 'Generate video media',
+        status: 'running',
+        startTime: 1,
+      },
+      {
+        id: 'writeback-canvas',
+        name: 'Write structured task result to Canvas',
+        status: 'pending',
+      },
+    ],
   };
 }

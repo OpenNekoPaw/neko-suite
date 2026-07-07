@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { MediaTurnBridge } from './mediaTurnBridge';
 import type { MediaTask } from '@neko/platform';
+import type { GeneratedAsset, Task } from '@neko/shared';
 
 vi.mock('vscode', async () => await import('../__mocks__/vscode'));
 
@@ -98,6 +99,85 @@ describe('MediaTurnBridge', () => {
       { source: 'media-task' },
     );
   });
+
+  it('passes saved generated asset resource refs to direct task-result observations', async () => {
+    const created = createMediaTask({ status: 'pending', progress: 0 });
+    const completed = createMediaTask({ status: 'completed', progress: 100 });
+    const localPath = '/workspace/neko/generated/image/asset-1.png';
+    const asset = createGeneratedImageAsset(localPath);
+    const handleTerminalTask = vi.fn(async () => undefined);
+    const media = {
+      generateImage: vi.fn().mockResolvedValue(created),
+      getTask: vi.fn().mockResolvedValue(completed),
+      onProgress: vi.fn().mockReturnValue(vi.fn()),
+    };
+    const webview = createWebview();
+    const bridge = new MediaTurnBridge({
+      platform: { media } as never,
+      mediaDeliveryHost: {
+        createTaskView: vi.fn(async (_webview: vscode.Webview, task: MediaTask) => ({
+          id: task.id,
+          type: 'image',
+          status: task.status,
+          progress: task.progress,
+          providerId: task.providerId,
+          modelId: task.modelId,
+          createdAt: task.createdAt.toISOString(),
+          updatedAt: task.updatedAt.toISOString(),
+          request: { prompt: task.request.prompt },
+        })),
+        createTaskViewDelivery: vi.fn(async (_webview: vscode.Webview, task: MediaTask) => ({
+          view: {
+            id: task.id,
+            type: 'image',
+            status: task.status,
+            progress: task.progress,
+            providerId: task.providerId,
+            modelId: task.modelId,
+            createdAt: task.createdAt.toISOString(),
+            updatedAt: task.updatedAt.toISOString(),
+            request: { prompt: task.request.prompt },
+          },
+          deliveryPlan: {
+            resultUrls: ['generated-assets/asset-1.png'],
+            thumbnailUrl: 'generated-assets/asset-1.png',
+            hostOutputPaths: [localPath],
+            generatedAssets: [asset],
+            shouldPersistResultUrls: true,
+            shouldUnsubscribe: true,
+          },
+        })),
+      } as never,
+      taskResultObservations: { handleTerminalTask },
+    });
+
+    await bridge.execute({
+      webview,
+      conversationId: 'conv-1',
+      prompt: 'cat',
+      mediaModel: { providerId: 'openai', modelId: 'gpt-image-1', category: 'image' },
+    });
+
+    const observedTask = handleTerminalTask.mock.calls[0]?.[0] as Task;
+    const data = observedTask.output?.data as {
+      readonly assets?: readonly Array<Record<string, unknown>>;
+      readonly hostOutputPaths?: readonly string[];
+    };
+    expect(data.hostOutputPaths).toEqual([localPath]);
+    expect(data.assets?.[0]).toMatchObject({
+      id: 'asset-1',
+      localPath,
+      resourceRef: {
+        provider: 'generated-asset',
+        kind: 'generated',
+        source: {
+          kind: 'generated-asset',
+          generatedAssetId: 'asset-1',
+          filePath: localPath,
+        },
+      },
+    });
+  });
 });
 
 function createWebview(): vscode.Webview & {
@@ -131,5 +211,25 @@ function createMediaTask(input: {
       input.status === 'completed'
         ? [{ type: 'image', url: 'https://example.test/image.png', mimeType: 'image/png' }]
         : [],
+  };
+}
+
+function createGeneratedImageAsset(localPath: string): GeneratedAsset {
+  return {
+    id: 'asset-1',
+    type: 'generated-image',
+    path: localPath,
+    mimeType: 'image/png',
+    generatedAt: '2026-01-01T00:00:00.000Z',
+    prompt: 'cat',
+    model: 'gpt-image-1',
+    width: 1024,
+    height: 1024,
+    ratio: '1:1',
+    assetRef: {
+      assetId: 'asset-1',
+      uri: 'generated-assets/asset-1.png',
+      mimeType: 'image/png',
+    },
   };
 }

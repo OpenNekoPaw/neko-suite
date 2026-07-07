@@ -413,8 +413,8 @@ describe('ValidationHooks', () => {
       const step = createTestStep(
         [
           '---',
-          'id: storyboard-draft',
-          'kind: draft',
+          'id: storyboard-review',
+          'kind: review',
           '---',
           '',
           '| scene | shot | source |',
@@ -445,9 +445,11 @@ describe('ValidationHooks', () => {
         },
       });
       const step = createTestStep(
-        ['| 镜号 | 来源页 | 画面内容 |', '| --- | --- | --- |', '| S01 | P1 | 主角站在巨构前 |'].join(
-          '\n',
-        ),
+        [
+          '| 镜号 | 来源页 | 画面内容 |',
+          '| --- | --- | --- |',
+          '| S01 | P1 | 主角站在巨构前 |',
+        ].join('\n'),
       );
       const context = createTestContextWithMetadata({
         skillValidationRequirements: ['creative-table.storyboard'],

@@ -529,6 +529,40 @@ describe('webview protocol parser', () => {
     });
   });
 
+  it('accepts Canvas storyboard action intent context payloads on sendMessage', () => {
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'handle storyboard action',
+        sessionMode: 'agent',
+        contextPayloads: [
+          {
+            type: 'canvas-storyboard-action-intent',
+            id: 'shot-1:generate-video',
+            label: 'Storyboard action: generate-video',
+            summary: 'Canvas storyboard action generate-video for shot-1',
+            data: {
+              intent: {
+                version: 1,
+                actionId: 'generate-video',
+                target: { nodeId: 'shot-1', sceneNodeId: 'scene-1', shotNumber: 1 },
+              },
+            },
+          },
+        ],
+      }),
+    ).toMatchObject({
+      type: 'sendMessage',
+      contextPayloads: [
+        {
+          type: 'canvas-storyboard-action-intent',
+          id: 'shot-1:generate-video',
+        },
+      ],
+    });
+  });
+
   it('rejects malformed structured context payloads', () => {
     expect(
       parseSendMessageWebviewMessage({
@@ -543,6 +577,24 @@ describe('webview protocol parser', () => {
             label: 'Selection',
             summary: 'Selected document text',
             data: {},
+          },
+        ],
+      }),
+    ).toBeNull();
+
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'handle storyboard action',
+        sessionMode: 'agent',
+        contextPayloads: [
+          {
+            type: 'canvas-storyboard-action-intent',
+            id: 'bad',
+            label: 'Bad storyboard action',
+            summary: 'Bad storyboard action',
+            data: { intent: { version: 1, actionId: 'future-action', target: { nodeId: 'shot' } } },
           },
         ],
       }),
@@ -1005,9 +1057,9 @@ describe('webview protocol projectors', () => {
       ]),
     ).toThrow('agentStateSnapshot requires non-empty conversationId');
     expect(() => buildThinkingMessage('')).toThrow('thinking requires non-empty conversationId');
-    expect(() =>
-      buildStreamTextMessage({ conversationId: ' ', content: 'stream' }),
-    ).toThrow('streamText requires non-empty conversationId');
+    expect(() => buildStreamTextMessage({ conversationId: ' ', content: 'stream' })).toThrow(
+      'streamText requires non-empty conversationId',
+    );
     expect(() =>
       buildMessageQueueSnapshotMessage({
         conversationId: '',
@@ -1771,8 +1823,8 @@ describe('webview protocol projectors', () => {
       conversationId: 'conv-1',
       sourceKind: 'structured-content',
       sourceFormat: 'json',
-      content: '{"kind":"storyboard-draft"}',
-      title: 'Storyboard Draft',
+      content: '{"kind":"semantic-storyboard-review"}',
+      title: 'Storyboard Review',
       resources: [
         {
           token: 'P1',
@@ -1807,11 +1859,11 @@ describe('webview protocol projectors', () => {
       ],
       target: { containerId: 'board-1', mode: 'create-child' },
       provenance: { source: 'webview', label: 'assistant-structured-content' },
-      userIntent: 'Create a Canvas storyboard draft.',
+      userIntent: 'Create a Canvas semantic storyboard review table.',
       targetHints: {
         declaredIntentHint: 'creative-table',
         declaredProfileHint: 'storyboard',
-        operationHint: 'create-storyboard-draft',
+        operationHint: 'create-storyboard-review',
       },
     });
 
@@ -1821,8 +1873,8 @@ describe('webview protocol projectors', () => {
       conversationId: 'conv-1',
       sourceKind: 'structured-content',
       sourceFormat: 'json',
-      content: '{"kind":"storyboard-draft"}',
-      title: 'Storyboard Draft',
+      content: '{"kind":"semantic-storyboard-review"}',
+      title: 'Storyboard Review',
       resources: [
         {
           token: 'P1',
@@ -1857,11 +1909,11 @@ describe('webview protocol projectors', () => {
       ],
       target: { containerId: 'board-1', mode: 'create-child' },
       provenance: { source: 'webview', label: 'assistant-structured-content' },
-      userIntent: 'Create a Canvas storyboard draft.',
+      userIntent: 'Create a Canvas semantic storyboard review table.',
       targetHints: {
         declaredIntentHint: 'creative-table',
         declaredProfileHint: 'storyboard',
-        operationHint: 'create-storyboard-draft',
+        operationHint: 'create-storyboard-review',
       },
     });
     expect(JSON.stringify(parsed)).not.toContain('capabilityId');

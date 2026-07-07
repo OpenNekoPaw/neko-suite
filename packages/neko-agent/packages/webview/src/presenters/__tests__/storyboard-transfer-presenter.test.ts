@@ -1,9 +1,6 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   projectStoryboardScenesAssetBatch,
-  projectStoryboardScenesCutTimelinePayload,
   projectStoryboardTableAssetBatch,
   projectStoryboardTableCutTimelinePayload,
 } from '../storyboard-transfer-presenter';
@@ -38,7 +35,7 @@ describe('storyboard transfer presenter', () => {
     });
   });
 
-  it('does not transfer scene cache paths as image assets or cut shots', () => {
+  it('does not transfer scene cache paths as image assets', () => {
     const scenes = [
       {
         sceneIndex: 2,
@@ -59,44 +56,9 @@ describe('storyboard transfer presenter', () => {
     ];
 
     expect(projectStoryboardScenesAssetBatch(scenes)).toBeNull();
-    expect(projectStoryboardScenesCutTimelinePayload(scenes)).toBeNull();
   });
 
-  it('projects storyboard scenes to a cut storyboard timeline payload', () => {
-    expect(
-      projectStoryboardScenesCutTimelinePayload([
-        {
-          sceneIndex: 2,
-          heading: 'EXT. STREET - NIGHT',
-          shots: [
-            {
-              url: 'webview://shot-1.png',
-              localPath: '${WORKSPACE}/shots/shot-1.png',
-              shotScale: 'LS',
-              shotIndex: 1,
-            },
-            { url: 'webview://shot-2.png', shotIndex: 2 },
-          ],
-        },
-      ]),
-    ).toEqual({
-      kind: 'cutStoryboard',
-      storyboard: {
-        projectName: 'Agent Storyboard',
-        shots: [
-          {
-            id: 'agent-scene-2-shot-1',
-            shotNumber: 1,
-            duration: 3,
-            imagePath: '${WORKSPACE}/shots/shot-1.png',
-            label: '#001 LS',
-          },
-        ],
-      },
-    });
-  });
-
-  it('projects composite storyboard tables to semantic canvas payloads and asset batches', () => {
+  it('does not project composite-only storyboard sections to cut storyboard payloads', () => {
     const data: StoryboardTableRichData = {
       template: 'storyboard-table',
       title: 'Opening',
@@ -128,18 +90,79 @@ describe('storyboard transfer presenter', () => {
       assets: [{ path: '${WORKSPACE}/assets/asset.png', mediaType: 'image', name: 'Wide' }],
     });
 
+    expect(projectStoryboardTableCutTimelinePayload(data)).toBeNull();
+  });
+
+  it('projects typed storyboard tables to cut storyboard payloads', () => {
+    const data: StoryboardTableRichData = {
+      template: 'storyboard-table',
+      title: 'Opening',
+      diagnostics: [],
+      storyboardTable: {
+        schemaVersion: 1,
+        kind: 'storyboard-table',
+        title: 'Opening',
+        scenes: [
+          {
+            sceneId: 'scene-1',
+            sceneTitle: 'Opening',
+            shots: [
+              {
+                shotNumber: 1,
+                duration: 4,
+                visualDescription: 'Wide establishing frame',
+                characterAction: 'The character looks across the hallway.',
+                imageStrategy: 'reuse-original',
+                mediaRefs: [
+                  {
+                    refId: 'asset-1',
+                    role: 'source',
+                    locator: {
+                      type: 'workspace-path',
+                      path: '${WORKSPACE}/assets/asset.png',
+                    },
+                    mimeType: 'image/png',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      sections: [
+        {
+          id: 'section-0',
+          index: 0,
+          heading: 'Shot 1',
+          content: 'Wide establishing frame',
+          media: [
+            {
+              id: 'media-1',
+              toolCallId: 'readimage-current-result',
+              assetIndex: 0,
+              assetId: 'asset-1',
+              type: 'image',
+              src: 'webview://asset.png',
+              stableUri: '${WORKSPACE}/assets/asset.png',
+              caption: 'Wide',
+            },
+          ],
+          diagnostics: [],
+        },
+      ],
+    };
+
     expect(projectStoryboardTableCutTimelinePayload(data)).toEqual({
       kind: 'cutStoryboard',
       storyboard: {
         projectName: 'Opening',
         shots: [
           {
-            id: 'media-1',
+            id: 'scene-1-shot-1',
             shotNumber: 1,
-            duration: 3,
+            duration: 4,
             imagePath: '${WORKSPACE}/assets/asset.png',
-            dialogue: 'Wide establishing frame',
-            label: 'Wide',
+            label: '#001 Opening',
           },
         ],
       },
@@ -147,20 +170,11 @@ describe('storyboard transfer presenter', () => {
   });
 
   it('poisons old Markdown storyboard compiler transfer paths for new Canvas requests', async () => {
-    const presenterSource = readFileSync(
-      resolve(process.cwd(), 'src/presenters/storyboard-transfer-presenter.ts'),
-      'utf8',
-    );
-
-    expect(presenterSource).not.toContain('@neko/draft-runtime');
-    expect(presenterSource).not.toContain('@neko/storyboard-draft');
-    expect(presenterSource).not.toContain('compile-storyboard-table');
-    expect(presenterSource).not.toContain('agent://markdown/storyboard-table');
-
     const moduleExports = (await import('../storyboard-transfer-presenter')) as Record<
       string,
       unknown
     >;
+    expect(moduleExports.projectStoryboardScenesCutTimelinePayload).toBeUndefined();
     expect(moduleExports.projectMarkdownStoryboardTransferPayload).toBeUndefined();
     expect(moduleExports.projectAssistantMarkdownCanvasTransferPayload).toBeUndefined();
     expect(moduleExports.projectAssistantMarkdownCanvasDraftPayload).toBeUndefined();

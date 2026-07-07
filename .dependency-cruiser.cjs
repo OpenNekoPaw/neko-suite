@@ -18,11 +18,12 @@ module.exports = {
     {
       name: 'layer0-no-internal-deps',
       comment:
-        'Foundation packages (@neko/shared, @neko/neko-client, @neko/proto) must not depend on other workspace packages',
+        'Foundation packages (@neko/shared, @neko/host, @neko/neko-client, @neko/proto) must not depend on other workspace packages',
       severity: 'error',
       from: {
         path: [
           '^packages/neko-types/',
+          '^packages/neko-host/',
           '^packages/neko-client/',
           '^packages/neko-proto/',
           '^packages/neko-market/packages/core/',
@@ -34,6 +35,7 @@ module.exports = {
         pathNot: [
           // Allow self-references and Layer 0 peers
           '^packages/neko-types/',
+          '^packages/neko-host/',
           '^packages/neko-client/',
           '^packages/neko-proto/',
           '^packages/neko-market/packages/core/',
