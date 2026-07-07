@@ -9,6 +9,8 @@
 
 > 2026-07-06 更新：本文早期把默认 `Send to Canvas` 描述为直接调用 `canvas.ingestMarkdown`。当前 canonical path 已收敛为：Agent Webview 创建 Agent-visible Canvas authoring handoff intent；Agent 自主决定是否激活 `canvas-authoring` Skill、查询 Canvas authoring catalog/context、选择 Canvas Markdown capability 或其它 Canvas tool。`canvas.ingestMarkdown` 等 Markdown capabilities 仍是 Canvas-owned tools，但不再由 Webview/Extension 作为按钮副作用直接调用。
 
+> 2026-07-06 更新：Markdown 分镜表的生产导入已经收敛到 Canvas semantic storyboard authoring。`canvas.createStoryboardFromMarkdown` 创建 `storyboardPrompt` semantic prompt documents；Markdown 中名为 `Generation Prompt` 或 `generationPrompt` 的列只作为 prompt 输入，不重新写入 `/generationPrompt` 作为分镜提示词权威。
+
 ## 背景
 
 Agent 适合生成和解释 Markdown：它可以快速输出分析、计划、分镜表、提示词、资源引用和下一步建议。Canvas 则拥有节点 schema、布局、preset、资源预览、持久化和用户交互状态。如果用一个公开 `draft-runtime/compiler` 管线把 Markdown 先转成中间协议，再由 Agent Webview 发送 payload 给 Canvas，会产生几个问题：
@@ -272,6 +274,7 @@ Agent Webview 的 `Send to Canvas` 是快捷 handoff，而不是 Canvas 命令�
 
 - 普通 Markdown/GFM table 被 handoff 给 Agent；Agent 应在需要 Canvas 语义时先查询 Canvas authoring catalog/context。
 - Markdown 分镜表是 prompt-first creative authoring 内容，`storyboard` 只是 Canvas profile hint；profile/field authority 仍由 Canvas descriptor registry 校验。
+- Markdown 分镜表进入生产 Canvas 节点时，Canvas Markdown capability 必须写入 `storyboardPrompt` semantic prompt documents。旧 `generationPrompt` 字段只允许作为 migration/import input、derived display 或 diagnostics 来源；新路径不得通过 `/generationPrompt` 报告 prompt-first authoring 成功。
 - 只有 Agent 选中对应 Canvas mutation tool/capability，并满足确认/approval 要求时，才创建或更新 Canvas 节点。
 - 显式素材导入必须使用单独 UI 文案（如 Import / Add Source），不得伪装成 Agent-authored Canvas composition。
 

@@ -59,6 +59,7 @@
 - [x] 8.2 Document config env vars such as `NEKO_AGENT_TEST_PROFILE`, `NEKO_AGENT_TEST_CONFIG`, `NEKO_AGENT_REAL_API`, `NEKO_AGENT_TEST_WORKDIR`, and timeout controls.
 - [x] 8.3 Document that default CI remains mock-only and that explicit real commands fail on missing config, provider, model, credentials, or unsupported media.
 - [x] 8.4 Document the supported validation surfaces: Platform and Agent core harnesses, TUI user entry, GUI VS Code Webview runtime, and deprecated CLI exclusion.
+- [x] 8.5 Document that Agent development affecting provider/model, prompt/Skill, tool schema, workflow, validator/recovery, or live TUI/GUI projection must attempt the relevant real API lane with explicit `config.toml`, while CI remains mock-only.
 
 ## 9. Validation
 

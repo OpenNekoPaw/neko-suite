@@ -309,6 +309,27 @@ pnpm ci:local:rust       # Rust engine changes
 pnpm ci:local:proto      # Proto contract and generated type sync
 ```
 
+Agent development must separate the mock baseline from real API acceptance.
+CI and the default `pnpm test` remain mock-only and must not require real
+credentials. Local changes that affect provider/model selection, AI SDK message
+projection, prompt or Skill behavior, tool schemas, AgentSession workflow,
+validator/recovery policy, or TUI/GUI projection of live Agent events must load
+an explicit `config.toml` and run the relevant real lane:
+
+```bash
+pnpm test:agent:mock
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:platform
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:workflow
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:tui
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:gui
+```
+
+If a local machine lacks `config.toml`, credentials, provider/network
+availability, or VS Code debugger setup, delivery notes must record the
+attempted command, why it could not run, and the residual risk. Mock-only,
+browser-only, jsdom-only, or final-text-only evidence does not replace real API
+or VS Code Webview runtime acceptance for those Agent surfaces.
+
 When changing `.github/workflows/ci.yml`, dependency installation, Corepack/pnpm, FFmpeg setup, or Linux runner shell logic, use `act` as a local GitHub Actions shape check:
 
 ```bash

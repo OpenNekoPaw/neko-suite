@@ -307,6 +307,25 @@ pnpm ci:local:rust       # Rust engine 相关改动
 pnpm ci:local:proto      # Proto 契约与生成类型同步
 ```
 
+Agent 开发需要额外区分 mock 基线和真实 API 验收。CI 和默认 `pnpm test`
+保持 mock-only，不需要真实凭据；但本地改动如果影响 provider/model 选择、
+AI SDK message projection、prompt / Skill 行为、tool schema、AgentSession
+workflow、validator/recovery 策略，或 TUI/GUI 对实时 Agent 事件的投影，必须
+加载显式 `config.toml` 并运行相关 real lane：
+
+```bash
+pnpm test:agent:mock
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:platform
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:workflow
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:tui
+NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:gui
+```
+
+如果本地缺少 `config.toml`、凭据、网络/provider 可用性或 VS Code debugger
+运行条件，交付说明必须记录尝试过的命令、未能运行的原因和残余风险；不能用
+mock-only、browser-only、jsdom-only 或只看最终文本的证据替代真实 API /
+VS Code Webview runtime 验收。
+
 当修改 `.github/workflows/ci.yml`、依赖安装、Corepack/pnpm、FFmpeg setup 或 Linux runner shell 逻辑时，可用 `act` 做 GitHub Actions 形状预检：
 
 ```bash

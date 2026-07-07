@@ -1,6 +1,6 @@
 # 视频创作领域架构
 
-更新日期：2026-06-15
+更新日期：2026-07-06
 
 视频创作领域围绕“素材 -> 剧本/Agent 预处理 -> Canvas 分镜产物 -> 时间线剪辑 -> 预览 -> 导出/审阅”的创作闭环组织。该领域会跨 `neko-story`、`neko-canvas`、`neko-cut`、`neko-preview`、`neko-tools` 和 Engine/Agent/Assets 等横切能力。
 
@@ -30,6 +30,37 @@
 - 被动状态进入 native StatusBar，Timeline 和画布交互状态留在 Webview。
 
 Canvas 预览路线、Cut 剪辑时间线、Agent 顺序感知和跨包协议边界见系统级 ADR：[`../../architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md`](../../architecture/adr-canvas-cut-playback-route-and-timeline-boundary.md)。
+
+## Canvas 分镜语义提示词 Authoring
+
+Canvas 分镜表采用 prompt-first authoring，但提示词权威不是裸字符串，而是 Canvas 持久化的 Semantic Prompt Document。每个镜头可以在 `storyboardPrompt` 下保存 image、video、voice prompt documents；文档包含 prompt text、semantic spans、字段投影、资源引用、diagnostics、alignment state、task/result refs 和 `nextCreativeState`。旧 `generationPrompt` 只作为 prelaunch migration/import input 或只读诊断来源，不能作为新分镜提示词权威。
+
+Scene 是长视频制作的审阅单位。Canvas scene storyboard table 是 review projection，不是字段数据库，也不是生成任务 dashboard；主列固定为：
+
+```text
+Shot | Reference Media | Image Prompt | Video Prompt | Duration | Dialogue | State | Action
+```
+
+- `Image Prompt` 仅在参考图需要切分、上色、补全、修复、重绘、风格统一或关键帧生成时成为创作输入；参考图可直接用于视频时可为空。
+- `Video Prompt` 是视频生成/编辑的核心提示词输入。
+- `Reference Media` 可承载图片引用；video/audio reference、seed、negative prompt、camera control、motion strength、aspect ratio 等模型参数只在 capability 支持时出现在详情或确认面板，不进入主表固定列。
+- `State` 来自 `nextCreativeState`，表示当前阻塞点或下一步创作操作，例如缺参考图、需处理参考图、缺视频提示词、等待确认、需审查结果、需修复 alignment、可接受结果；它不展示 provider progress、queue logs 或成本事件。
+- `Action` 是固定 creative intent，例如 process reference、optimize image prompt、optimize video prompt、generate video、review result、fix alignment、accept result、retry。纯 UI 操作如 open details、locate shot、reveal reference、view queue 仍由 Canvas Webview 本地处理。
+
+跨包闭环保持以下边界：
+
+```text
+Canvas storyboard row action
+  -> typed storyboard action intent
+  -> Agent approval / capability check / async task
+  -> structured task writeback
+  -> Canvas validates /storyboardPrompt and resource identity
+  -> scene table projection updates nextCreativeState
+```
+
+Canvas 负责 semantic prompt documents、字段/profile validation、资源/实体绑定、节点创建、结构化写回校验、表格投影和持久化。Agent 负责推理、是否需要用户确认、provider/subagent/worker 编排、异步任务进度、日志、失败重试和结果审阅。Agent 内部可以派发 worker 或 subagent，但 Canvas 只保存 task refs、result refs、diagnostics 和下一步状态，不保存 worker/subagent identity。
+
+`@neko/markdown` 只提供 Markdown 扩展语法、纯 projection DTO、diagnostics 和 renderer/resolver adapter contract。Markdown 分镜表、`@mention`、CommonMark image、Neko resource reference 和 semantic prompt spans 可以帮助 Agent Webview 展示和 handoff，但不会执行 Canvas validation，也不会成为 Canvas 节点或分镜字段权威。生产导入 Markdown 分镜时由 Canvas Markdown capability 创建 `storyboardPrompt` semantic prompt documents；名为 `Generation Prompt` 或 `generationPrompt` 的 Markdown 列只被解释为 prompt 输入，不允许重建 `/generationPrompt` 新权威路径。
 
 ## 基础模式与专业模式
 

@@ -42,6 +42,7 @@ Dependency direction flows toward contracts and engine/client boundaries. Featur
 |----------|-----------------|
 | Cross-layer IDL | `packages/neko-proto` |
 | Shared TypeScript contracts and infrastructure | `packages/neko-types` |
+| Host Adapter ports | `packages/neko-host` |
 | Cross-domain content semantics | `packages/neko-content` |
 | Engine client and stream clients | `packages/neko-client` |
 | Media and runtime authority | `packages/neko-engine` |

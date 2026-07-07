@@ -29,7 +29,7 @@
 
 | 平面              | 典型目录                                                                                                                                              | 职责                                                                       | 禁止事项                                                        |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| L0 共享契约       | `packages/neko-types` 主入口、`packages/neko-proto`、`packages/neko-client`、`packages/neko-market/packages/core`、`packages/neko-auth/packages/core` | 类型、IDL、基础设施、Engine client、领域无关核心                           | 依赖功能包、依赖具体 Extension/Webview 实现                     |
+| L0 共享契约       | `packages/neko-types` 主入口、`packages/neko-host`、`packages/neko-proto`、`packages/neko-client`、`packages/neko-market/packages/core`、`packages/neko-auth/packages/core` | 类型、IDL、基础设施、Host adapter ports、Engine client、领域无关核心        | 依赖功能包、依赖具体 Extension/Webview/Node/Rust 实现           |
 | L1 Extension Host | `packages/*/packages/extension/src`、部分历史根包 `src`                                                                                               | VS Code API、工作区访问、资源授权、命令注册、状态栏、Engine 启动和权限代理 | 引入 React、引入 Webview 实现、转发高频媒体帧                   |
 | L2 Webview UI     | `packages/*/packages/webview/src`、`packages/neko-ui/src`                                                                                             | React UI、Zustand 状态、浏览器流消费、用户交互                             | 引入 `vscode`、Node API、Extension 实现、持久化运行时 URI/token |
 | Engine            | `packages/neko-engine/packages/*`                                                                                                                     | 媒体、音频、设备、ML、Scene、Puppet、GPU 渲染和运行时权威                  | 把权威计算复制到 TypeScript 层                                  |
@@ -64,6 +64,22 @@
 - 不得在 Agent、Canvas、Cut、Preview 等功能包内拥有跨领域 document/content parser、manifest/range reader、image metadata probe 或 container locator 规则；需要扩展时进入 `@neko/content`，通过 provider/adapter 注入 Host 读写和 Engine 文件访问。
 - 不得在功能包内直接 `new HostContentAccessService`、`new HostContentIngestService`、`new VSCodeResourceCacheService`、使用 `ResourceCacheContentAccessProvider` / `SourceFileContentAccessProvider` / `DocumentEntryContentAccessProvider` 等公共底层 provider 重新拼装 runtime，或调用 `createDefaultLocalResourceAccessService` 形成第二套 Webview root 规则。跨领域内容访问必须从 `createHostContentAccessRuntime(...)` 进入；`scripts/check-content-access-boundaries.mjs` 会阻止回退。
 - 若决定不更新公共层，需在 OpenSpec、PR 或交付说明中记录审计结论、保留原因、后续提取条件和验证命令。
+
+### `@neko/host`
+
+`packages/neko-host` 是 Host Adapter ports 的共享契约包，只描述本机/宿主原语，不承载具体实现或领域能力。
+
+约束：
+
+- 可依赖 `@neko/shared` 的基础类型、路径和存储布局契约。
+- 不得依赖 `vscode`、`node:*`、React、Webview、Agent runtime、Engine client、Content、Assets、Entity、Search 或任何功能包实现。
+- 只定义 workspace、filesystem、path、secret、external opener、diagnostic、access policy 等宿主原语接口。
+- 不定义 `ReadDocument`、`ReadImage`、素材库、entity query、search index、cache manifest、Agent tool 或 Webview projection 等领域能力。
+- VSCode、Node/TUI、Electron、Tauri/Rust native 和 test adapters 应在各自 composition root 或后续 `neko-host-*` 实现包中实现这些 ports。
+- `workspace/.neko` 是客户端拥有的领域数据根；`@neko/host` 只负责定位和访问策略表达，不解释内部目录语义。
+- Agent 工具不得直接感知、枚举、读取或修改 `.neko` 内部文件；Agent 只能消费 owning domain runtime 提供的净化投影或提交 mutation proposal，最终写入由客户端进程通过领域 runtime 完成。
+- TUI 是 headless client composition root：可以用 Node host adapter 读取本机文件、用户配置和工作区 domain data，但必须通过 owning domain provider 注册 Agent 能力。TUI 不导入 VSCode Extension 内部工具实现，也不暴露 Webview URI、cache path、index manifest 或 `.neko` backing file 给 Agent。
+- Auth、Market 和 Engine 的 TUI headless 能力 owner 分别是 `@neko/auth`/`@neko-auth-core`、`@neko/market-core`/market host adapter、`@neko/neko-client`/Engine host services；在对应 owner 提供 host-neutral provider 前，不应把它们塞进 `@neko/host` 或 `@neko/agent`。
 
 ### 跨子包能力复用
 
@@ -136,6 +152,8 @@
 - core/projections 不依赖 `vscode`、React、Webview、Extension、Agent 或具体功能包实现。
 - Dashboard Webview 不做直接文件 mutation。
 - entity facts 不写入 `.neko/.cache` 等缓存路径；缓存和事实分层管理。
+- Agent-facing entity/search tools 由 owning package 暴露 headless provider：entity provider 返回实体/候选摘要，search provider 返回 `ProjectSearchService` 的净化投影。TUI 和 VSCode 只在 composition root 注入 host ports 与 runtime，不直接解析 search index 或 entity store backing file。
+- Search/entity projection 不返回 `.neko` index/store/cache/log/tmp path、Webview URI、blob URL、token 或 manifest path；需要 mutation 时返回 proposal 或调用 client/domain-approved command。
 
 ## Extension Host 层
 

@@ -42,6 +42,7 @@ Neko Suite 是集成在 VS Code 内的创意工作套件，由三个协作平面
 |------|--------------|
 | 跨层 IDL | `packages/neko-proto` |
 | TypeScript 共享契约和基础设施 | `packages/neko-types` |
+| Host Adapter ports | `packages/neko-host` |
 | 跨领域内容语义服务 | `packages/neko-content` |
 | Engine client 与流客户端 | `packages/neko-client` |
 | 媒体与运行时权威 | `packages/neko-engine` |
