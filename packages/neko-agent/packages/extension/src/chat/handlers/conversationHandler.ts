@@ -14,13 +14,22 @@ import {
   type AgentPendingMessageItem,
 } from '@neko/agent/runtime';
 import {
+  buildConversationLifecycleResultMessage,
   buildMessageQueueErrorMessage,
   buildMessageQueueSnapshotMessage,
   buildQueuedMessageEditRequestedMessage,
+  type ConversationLifecycleWebviewMessage,
   type AgentMessageQueueErrorCode,
   type AgentMessageQueueSnapshot,
   type AgentQueuedMessageItem,
 } from '@neko-agent/types';
+import {
+  CREATIVE_AI_INVOCATION_SCHEMA_VERSION,
+  createCreativeAiDiagnostic,
+  type ConversationLifecycleCommand,
+  type CreativeAiConversationState,
+  type CreativeAiDiagnostic,
+} from '@neko/shared/types/creative-ai-invocation';
 import {
   runCancelMessageRuntime,
   runClearAllConversationsRuntime,
@@ -45,6 +54,22 @@ export interface ConversationPromptModeCleanup {
   clearAllPromptModes?(): void;
 }
 
+export type ConversationLifecycleCommandResult =
+  | {
+      readonly ok: true;
+      readonly conversationId: string;
+      readonly state: CreativeAiConversationState;
+      readonly diagnostics: readonly CreativeAiDiagnostic[];
+    }
+  | {
+      readonly ok: false;
+      readonly diagnostics: readonly CreativeAiDiagnostic[];
+    };
+
+export interface ConversationLifecycleCommandHandler {
+  handleCommand(command: ConversationLifecycleCommand): Promise<ConversationLifecycleCommandResult>;
+}
+
 /**
  * Dependencies for ConversationMessageHandler
  */
@@ -52,6 +77,7 @@ export interface ConversationMessageHandlerDeps {
   conversations: ConversationBridge;
   agentManager?: IAgentManager;
   messages?: AgentMessageTurnHandler;
+  creativeAiLifecycle?: ConversationLifecycleCommandHandler;
   promptModeCleanup?: ConversationPromptModeCleanup;
   getWebview: () => vscode.Webview | undefined;
 }
@@ -92,6 +118,61 @@ export class ConversationMessageHandler {
         this._createConversationRuntimeEffects(),
       ),
     );
+  }
+
+  async handleConversationLifecycle(
+    webview: vscode.Webview,
+    message: ConversationLifecycleWebviewMessage,
+  ): Promise<void> {
+    const command = this._buildConversationLifecycleCommand(message);
+    if (!this.deps.creativeAiLifecycle) {
+      await webview.postMessage(
+        buildConversationLifecycleResultMessage({
+          conversationId: message.conversationId,
+          action: message.action,
+          success: false,
+          diagnostics: [
+            createCreativeAiDiagnostic(
+              'error',
+              'creative-ai-lifecycle-service-unavailable',
+              'Creative AI conversation lifecycle service is not available.',
+              'conversationLifecycle',
+            ),
+          ],
+        }),
+      );
+      return;
+    }
+
+    try {
+      const result = await this.deps.creativeAiLifecycle.handleCommand(command);
+      await webview.postMessage(
+        buildConversationLifecycleResultMessage({
+          conversationId: message.conversationId,
+          action: message.action,
+          success: result.ok,
+          ...(result.ok ? { state: result.state } : {}),
+          diagnostics: result.diagnostics,
+        }),
+      );
+      this.sendConversationList();
+    } catch (error) {
+      await webview.postMessage(
+        buildConversationLifecycleResultMessage({
+          conversationId: message.conversationId,
+          action: message.action,
+          success: false,
+          diagnostics: [
+            createCreativeAiDiagnostic(
+              'error',
+              'creative-ai-lifecycle-command-failed',
+              error instanceof Error ? error.message : 'Conversation lifecycle command failed.',
+              'conversationLifecycle',
+            ),
+          ],
+        }),
+      );
+    }
   }
 
   handleClearHistory(webview: vscode.Webview, conversationId: string): Promise<void> {
@@ -259,6 +340,24 @@ export class ConversationMessageHandler {
     const nextVersion = (this.localQueueSnapshotVersions.get(conversationId) ?? 0) + 1;
     this.localQueueSnapshotVersions.set(conversationId, nextVersion);
     return nextVersion;
+  }
+
+  private _buildConversationLifecycleCommand(
+    message: ConversationLifecycleWebviewMessage,
+  ): ConversationLifecycleCommand {
+    const requestedAt = new Date().toISOString();
+    return {
+      schemaVersion: CREATIVE_AI_INVOCATION_SCHEMA_VERSION,
+      commandId:
+        message.commandId ??
+        `webview:${message.conversationId}:${message.action}:${Date.now().toString(36)}`,
+      conversationId: message.conversationId,
+      action: message.action,
+      ...(message.expectedState !== undefined ? { expectedState: message.expectedState } : {}),
+      ...(message.activeRunIds !== undefined ? { activeRunIds: message.activeRunIds } : {}),
+      ...(message.reason !== undefined ? { reason: message.reason } : {}),
+      requestedAt,
+    };
   }
 
   private _createConversationRuntimeEffects(

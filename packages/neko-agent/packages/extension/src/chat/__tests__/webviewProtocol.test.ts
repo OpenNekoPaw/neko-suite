@@ -189,6 +189,36 @@ describe('parseWebviewToExtensionMessage', () => {
     ).toBeNull();
   });
 
+  it('accepts creative background conversation lifecycle commands', () => {
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'conversationLifecycle',
+        conversationId: 'background-1',
+        action: 'stop-and-delete',
+        commandId: 'command-1',
+        expectedState: 'active',
+        activeRunIds: ['run-1'],
+        reason: 'user-requested-delete',
+      }),
+    ).toEqual({
+      type: 'conversationLifecycle',
+      conversationId: 'background-1',
+      action: 'stop-and-delete',
+      commandId: 'command-1',
+      expectedState: 'active',
+      activeRunIds: ['run-1'],
+      reason: 'user-requested-delete',
+    });
+
+    expect(
+      parseWebviewToExtensionMessage({
+        type: 'conversationLifecycle',
+        conversationId: 'background-1',
+        action: 'teleport',
+      }),
+    ).toBeNull();
+  });
+
   it.each([
     ['confirm tool approvals', { type: 'confirmTool', toolCallId: 'tool-1', approved: true }],
     ['history clearing', { type: 'clearHistory' }],
@@ -199,6 +229,7 @@ describe('parseWebviewToExtensionMessage', () => {
     ['prompt mode refresh', { type: 'getPromptMode' }],
     ['active Skill clearing', { type: 'clearActiveSkill', recordId: 'record-1' }],
     ['conversation deletion', { type: 'deleteConversation' }],
+    ['conversation lifecycle', { type: 'conversationLifecycle', action: 'archive' }],
     ['queued message promotion', { type: 'promoteQueuedMessage', queueItemId: 'queue-1' }],
     ['queued message cancellation', { type: 'cancelQueuedMessage', queueItemId: 'queue-1' }],
     ['queued message editing', { type: 'editQueuedMessage', queueItemId: 'queue-1' }],

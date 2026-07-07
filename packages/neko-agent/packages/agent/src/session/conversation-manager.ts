@@ -150,6 +150,18 @@ export class ConversationManager {
     this.scheduleSave();
   }
 
+  setTitle(id: string, title: string): void {
+    const conversation = this.conversations.get(id);
+    if (!conversation) return;
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle || conversation.title === normalizedTitle) return;
+
+    conversation.title = normalizedTitle.slice(0, 120);
+    conversation.updatedAt = Date.now();
+    this.markDirty(id);
+    this.scheduleSave();
+  }
+
   updateLastMessage(id: string, updater: (message: Message) => Message): void {
     const conversation = this.conversations.get(id);
     if (!conversation || conversation.messages.length === 0) return;

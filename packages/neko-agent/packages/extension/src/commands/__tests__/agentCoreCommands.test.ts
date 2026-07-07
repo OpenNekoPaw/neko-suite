@@ -3,8 +3,13 @@ import { readFileSync } from 'node:fs';
 import * as vscode from 'vscode';
 import { buildAgentPromptCommandMessage } from '@neko/agent/runtime';
 import {
+  CREATIVE_AI_INVOCATION_SCHEMA_VERSION,
   NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
   NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
+  type CreativeAiDocumentRef,
+  type CreativeAiSourceRef,
+  type CreativeAiTargetRef,
+  type ExternalCreativeAiInvocation,
 } from '@neko/shared';
 import { registerAgentCoreCommands } from '../agentCoreCommands';
 
@@ -15,6 +20,68 @@ vi.mock('@neko/agent/runtime', async (importOriginal) => {
     buildAgentPromptCommandMessage: vi.fn(actual.buildAgentPromptCommandMessage),
   };
 });
+
+function createMemoryMemento(): vscode.Memento {
+  const values = new Map<string, unknown>();
+  return {
+    keys: () => Array.from(values.keys()),
+    get: <T>(key: string, defaultValue?: T): T | undefined =>
+      values.has(key) ? (values.get(key) as T) : defaultValue,
+    update: async (key: string, value: unknown) => {
+      values.set(key, value);
+    },
+  } as vscode.Memento;
+}
+
+function externalInvocation(): ExternalCreativeAiInvocation {
+  const documentRef: CreativeAiDocumentRef = {
+    kind: 'nk-document',
+    packageId: 'neko-canvas',
+    documentId: 'doc-1',
+    projectRelativePath: 'boards/intro.nkc',
+    label: 'Intro',
+  };
+  const sourceRef: CreativeAiSourceRef = {
+    kind: 'canvas-node',
+    packageId: 'neko-canvas',
+    id: 'canvas-node:shot-1',
+    documentRef,
+    entityId: 'shot-1',
+    revision: 'source-rev-1',
+  };
+  const targetRef: CreativeAiTargetRef = {
+    kind: 'canvas-field',
+    packageId: 'neko-canvas',
+    id: 'canvas-node:shot-1#/generatedImage',
+    documentRef,
+    entityId: 'shot-1',
+    fieldPath: '/generatedImage',
+    revision: 'target-rev-1',
+  };
+  return {
+    schemaVersion: CREATIVE_AI_INVOCATION_SCHEMA_VERSION,
+    domain: 'external-creative-package',
+    invocationId: 'invoke-1',
+    sourcePackage: 'neko-canvas',
+    documentRef,
+    sourceRef,
+    targetRef,
+    intent: 'Generate a stable image output.',
+    mode: 'generate',
+    writeback: {
+      kind: 'mutating',
+      atomicity: 'per-target',
+      requiresRevisionMatch: true,
+    },
+    documentRevision: 'doc-rev-1',
+    targetRevision: 'target-rev-1',
+    routing: {
+      associationKey: 'neko-canvas:document:boards/intro.nkc',
+      allowCreateBackgroundConversation: true,
+    },
+    idempotencyKey: 'canvas-ai:doc-1:shot-1:target-rev-1',
+  };
+}
 
 describe('agentCoreCommands bridge', () => {
   beforeEach(() => {
@@ -108,6 +175,62 @@ describe('agentCoreCommands bridge', () => {
       'Agent 拥有 provider 调用、异步任务',
     );
     expect(chatViewProvider.sendMessageToAssistant).not.toHaveBeenCalled();
+  });
+
+  it('accepts external creative AI invocations into background conversations', async () => {
+    const context = {
+      subscriptions: [] as Array<{ dispose(): void }>,
+      workspaceState: createMemoryMemento(),
+    };
+    const conversations = new Set(['agent-selected']);
+    const chatViewProvider = {
+      sendMessageToAssistant: vi.fn(),
+      sendContextPayload: vi.fn(),
+      startCharacterDialogue: vi.fn(),
+      startEmbodyCharacter: vi.fn(),
+      dndBroker: { getPayload: vi.fn(), clearPayload: vi.fn() },
+      setPluginCommandsGetter: vi.fn(),
+      sendPluginSlashCommands: vi.fn(),
+      getSelectedAgentConversationId: vi.fn(() => 'agent-selected'),
+      hasConversation: vi.fn((conversationId: string) => conversations.has(conversationId)),
+      createBackgroundCreativeAiConversation: vi.fn(({ title }: { title?: string }) => {
+        expect(title).toContain('neko-canvas AI');
+        conversations.add('background-1');
+        return 'background-1';
+      }),
+    };
+
+    registerAgentCoreCommands(
+      context as never,
+      chatViewProvider as never,
+      { get: vi.fn() } as never,
+    );
+
+    const callback = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.find(([command]) => command === 'neko.agent.creativeAi.invokeExternal')?.[1];
+    expect(callback).toBeDefined();
+
+    const result = await callback?.(externalInvocation());
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        status: 'created',
+        decision: expect.objectContaining({
+          conversationId: 'background-1',
+          domain: 'external-creative-package',
+          routingReason: 'created-new-background-conversation',
+        }),
+        snapshot: expect.objectContaining({
+          conversationId: 'background-1',
+          invocationId: 'invoke-1',
+          sourcePackage: 'neko-canvas',
+        }),
+      }),
+    );
+    expect(result.decision.conversationId).not.toBe('agent-selected');
+    expect(chatViewProvider.createBackgroundCreativeAiConversation).toHaveBeenCalled();
   });
 
   it('registers the Character Dialogue command through the Agent-owned launch path', async () => {

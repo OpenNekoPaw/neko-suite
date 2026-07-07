@@ -21,6 +21,7 @@ export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'newConversation',
   'switchConversation',
   'deleteConversation',
+  'conversationLifecycle',
   'getConversations',
   'getActiveConversation',
   'getAgentStates',

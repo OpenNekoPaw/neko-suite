@@ -99,6 +99,7 @@ const SESSION_SCOPED_WEBVIEW_MESSAGE_TYPES = new Set([
   'sendMessage',
   'switchConversation',
   'deleteConversation',
+  'conversationLifecycle',
   'clearHistory',
   'confirmTool',
   'cancelMessage',
@@ -638,6 +639,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
 
   public get webview(): vscode.Webview | undefined {
     return this._view?.webview;
+  }
+
+  public getSelectedAgentConversationId(): string | null {
+    return this._conversations.getActiveId();
+  }
+
+  public hasConversation(conversationId: string): boolean {
+    return Boolean(this._conversations.get(conversationId));
+  }
+
+  public createBackgroundCreativeAiConversation(options: { readonly title?: string }): string {
+    const conversationId = this._conversations.createBackground(options);
+    if (this._view?.webview) {
+      this._conversationMessageHandler.sendConversationList();
+    }
+    return conversationId;
   }
 
   /** Expose the DnD broker so the command host can register query/clear commands. */

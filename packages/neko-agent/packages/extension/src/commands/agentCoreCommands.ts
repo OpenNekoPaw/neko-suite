@@ -17,7 +17,14 @@ import {
   buildCanvasStoryboardActionIntentContextPayload,
   buildAgentPromptCommandMessage,
   buildAgentScriptCommandMessage,
+  createCreativeAiRunRuntime,
 } from '@neko/agent/runtime';
+import {
+  type CreativeAiDiagnostic,
+  type CreativeAiRoutingDecision,
+  type CreativeAiRunSnapshot,
+  type ExternalCreativeAiInvocation,
+} from '@neko/shared/types/creative-ai-invocation';
 import type { CanvasGenerationInput, CanvasShotPromptData } from '@neko/skills';
 import { getRootLogger, handleError, ServiceCollection } from '../base';
 import { IPlatform } from '../bootstrap';
@@ -27,7 +34,26 @@ import {
   getSlashCommandRegistry,
   type PluginSlashCommandDef,
 } from '../services/slashCommandRegistry';
+import {
+  CreativeAiConversationRoutingService,
+  type CreativeAiConversationAssociationStorage,
+} from '../services/creativeAiConversationRoutingService';
 import { createCanvasGenerationRuntime } from './canvasGenerationHost';
+
+const NEKO_AGENT_CREATIVE_AI_INVOKE_EXTERNAL_COMMAND = 'neko.agent.creativeAi.invokeExternal';
+
+type CreativeAiExternalInvocationCommandResult =
+  | {
+      readonly ok: true;
+      readonly decision: CreativeAiRoutingDecision;
+      readonly snapshot: CreativeAiRunSnapshot;
+      readonly status: 'created' | 'existing';
+      readonly diagnostics: readonly CreativeAiDiagnostic[];
+    }
+  | {
+      readonly ok: false;
+      readonly diagnostics: readonly CreativeAiDiagnostic[];
+    };
 
 /**
  * Register core extension commands.
@@ -137,7 +163,7 @@ export function registerAgentCoreCommands(
 
   registerScriptCommands(context, chatViewProvider);
   registerServiceCommands(context, services);
-  registerCanvasCommands(context, services);
+  registerCanvasCommands(context, chatViewProvider, services);
   registerPluginCommands(context, chatViewProvider);
   registerDragAndDropCommands(context, chatViewProvider);
   registerInternalApiCommands(context, services);
@@ -245,8 +271,57 @@ function registerServiceCommands(
 
 function registerCanvasCommands(
   context: vscode.ExtensionContext,
+  chatViewProvider: ChatViewProvider,
   services: ServiceCollection,
 ): void {
+  const creativeAiRunRuntime = createCreativeAiRunRuntime();
+  const creativeAiRouting = new CreativeAiConversationRoutingService({
+    conversations: {
+      getSelectedAgentConversationId: () => chatViewProvider.getSelectedAgentConversationId(),
+      hasConversation: (conversationId) => chatViewProvider.hasConversation(conversationId),
+      createBackgroundConversation: (input) =>
+        chatViewProvider.createBackgroundCreativeAiConversation({ title: input.title }),
+    },
+    storage: createMementoCreativeAiAssociationStorage(context.workspaceState),
+  });
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      NEKO_AGENT_CREATIVE_AI_INVOKE_EXTERNAL_COMMAND,
+      async (
+        invocation: ExternalCreativeAiInvocation,
+      ): Promise<CreativeAiExternalInvocationCommandResult> => {
+        const routed = await creativeAiRouting.routeExternalInvocation(invocation);
+        if (!routed.ok) {
+          return { ok: false, diagnostics: routed.diagnostics };
+        }
+
+        const accepted = creativeAiRunRuntime.acceptInvocation({
+          invocation,
+          routingDecision: routed.decision,
+        });
+        if (accepted.status === 'rejected') {
+          return { ok: false, diagnostics: accepted.diagnostics };
+        }
+
+        getRootLogger().info('Accepted external creative AI invocation', {
+          invocationId: invocation.invocationId,
+          conversationId: routed.decision.conversationId,
+          runId: accepted.snapshot.runId,
+          status: accepted.status,
+        });
+
+        return {
+          ok: true,
+          decision: routed.decision,
+          snapshot: accepted.snapshot,
+          status: accepted.status,
+          diagnostics: routed.decision.diagnostics,
+        };
+      },
+    ),
+  );
+
   context.subscriptions.push(
     vscode.commands.registerCommand(
       'neko.agent.buildPrompt',
@@ -274,6 +349,15 @@ function registerCanvasCommands(
       },
     ),
   );
+}
+
+function createMementoCreativeAiAssociationStorage(
+  state: vscode.Memento,
+): CreativeAiConversationAssociationStorage {
+  return {
+    get: <T>(key: string): T | undefined => state.get<T>(key),
+    update: (key: string, value: unknown): Promise<void> => Promise.resolve(state.update(key, value)),
+  };
 }
 
 function registerPluginCommands(

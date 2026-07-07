@@ -277,11 +277,7 @@ export {
 } from './hooks';
 
 // Export memory
-export {
-  FileProjectMemoryManager,
-  createFileProjectMemoryManager,
-  MemoryRecall,
-} from './memory';
+export { FileProjectMemoryManager, createFileProjectMemoryManager, MemoryRecall } from './memory';
 export type { MemoryRecallOptions, RecalledMemory } from './memory';
 
 // Export MCP
@@ -879,6 +875,21 @@ export {
   type CharacterEvidenceSourceRef,
   type CharacterEvidenceTrimResult,
 } from './runtime/character-evidence';
+
+export {
+  CreativeAiRunRuntime,
+  createCreativeAiRunRuntime,
+  type AcceptCreativeAiInvocationInput,
+  type CreativeAiBackgroundWorkItemContext,
+  type CreativeAiRunAcceptResult,
+  type CreativeAiRunEvent,
+  type CreativeAiRunEventType,
+  type CreativeAiRunIdInput,
+  type CreativeAiRunRuntimeOptions,
+  type CreativeAiWorkItemIdInput,
+  type ProjectCreativeAiSubAgentEventInput,
+  type StartCreativeAiWorkItemInput,
+} from './runtime/creative-ai-run-runtime';
 
 // Export task management
 export {

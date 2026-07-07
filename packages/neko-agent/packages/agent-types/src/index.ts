@@ -401,6 +401,8 @@ export type {
   ConfigStateMessage,
   ConfirmToolWebviewMessage,
   ContextTokenCountMessage,
+  ConversationLifecycleResultMessage,
+  ConversationLifecycleWebviewMessage,
   ConversationListMessage,
   ConversationOnlyWebviewMessage,
   DeleteConversationWebviewMessage,
@@ -511,6 +513,7 @@ export {
   buildAgentSessionDiagnosticMessage,
   buildConfigChangedMessage,
   buildConfigStateMessage,
+  buildConversationLifecycleResultMessage,
   buildErrorMessage,
   buildExternalInputMessage,
   buildGlobalErrorMessage,
@@ -653,6 +656,8 @@ export { EXECUTION_CHANNELS } from './execution-events';
 
 // UI types
 export type {
+  CreativeAiConversationProjection,
+  CreativeAiConversationRunSummary,
   ConversationSummary,
   ConversationKind,
   CharacterDialogueSessionProjection,

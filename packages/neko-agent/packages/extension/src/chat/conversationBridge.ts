@@ -97,6 +97,27 @@ export class ConversationBridge {
   }
 
   /**
+   * Create a background conversation without stealing the currently selected
+   * Agent conversation. The background thread remains visible in history and
+   * can be opened explicitly from the Agent surface.
+   */
+  createBackground(options: { readonly title?: string } = {}): string {
+    const previousActiveId = this._conversationManager.getActiveId();
+    const conversationId = this._conversationManager.create();
+    if (options.title) {
+      this._conversationManager.setTitle(conversationId, options.title);
+    }
+    if (previousActiveId && this._conversationManager.get(previousActiveId)) {
+      this._conversationManager.setActive(previousActiveId);
+    } else {
+      this._conversationManager.clearActive();
+    }
+    this._conversationManager.flush();
+    this._queueConversationPersistence(conversationId);
+    return conversationId;
+  }
+
+  /**
    * Get active conversation
    */
   getActive() {

@@ -23,6 +23,11 @@ import type {
   NpcTranscriptArtifact,
   SkillSummary,
 } from '@neko/shared';
+import type {
+  ConversationLifecycleAction,
+  CreativeAiConversationState,
+  CreativeAiDiagnostic,
+} from '@neko/shared/types/creative-ai-invocation';
 import type { StoryboardTextCue, StoryboardVoiceCue } from '@neko/shared';
 import {
   STORYBOARD_TEXT_CUE_KINDS,
@@ -35,6 +40,10 @@ import {
   parseDocumentLocator,
   parseDocumentSourceRef,
 } from '@neko/shared';
+import {
+  isConversationLifecycleAction,
+  isCreativeAiConversationState,
+} from '@neko/shared/types/creative-ai-invocation';
 import type { AgentPhase } from './phase';
 import type { AgentFileReference, ContentBlock, Message } from './message';
 import type { Plan } from './plan';
@@ -184,6 +193,16 @@ export interface DeleteConversationWebviewMessage {
   type: 'deleteConversation';
   conversationId: string;
   activateNext?: boolean;
+}
+
+export interface ConversationLifecycleWebviewMessage {
+  type: 'conversationLifecycle';
+  conversationId: string;
+  action: ConversationLifecycleAction;
+  commandId?: string;
+  expectedState?: CreativeAiConversationState;
+  activeRunIds?: readonly string[];
+  reason?: string;
 }
 
 export interface EmptyWebviewMessage {
@@ -440,6 +459,7 @@ export type WebviewToExtensionMessage =
   | GetMessageQueueWebviewMessage
   | QueuedMessageActionWebviewMessage
   | DeleteConversationWebviewMessage
+  | ConversationLifecycleWebviewMessage
   | EmptyWebviewMessage
   | PlanActionWebviewMessage
   | PlanStepActionWebviewMessage
@@ -665,6 +685,15 @@ export interface HistoryClearedMessage {
 export interface ConversationListMessage {
   type: 'conversationList';
   conversations: ConversationSummary[];
+}
+
+export interface ConversationLifecycleResultMessage {
+  type: 'conversationLifecycleResult';
+  conversationId: string;
+  action: ConversationLifecycleAction;
+  success: boolean;
+  state?: CreativeAiConversationState;
+  diagnostics?: readonly CreativeAiDiagnostic[];
 }
 
 export interface ActiveConversationMessage {
@@ -1021,6 +1050,7 @@ export type ExtensionToWebviewMessage =
   | AgentSessionDiagnosticMessage
   | HistoryClearedMessage
   | ConversationListMessage
+  | ConversationLifecycleResultMessage
   | ActiveConversationMessage
   | SettingsDataMessage
   | ProjectFilesMessage
@@ -1151,6 +1181,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   ...CONVERSATION_ONLY_MESSAGE_TYPES,
   'getMessageQueue',
   ...QUEUED_MESSAGE_ACTION_TYPES,
+  'conversationLifecycle',
   ...EMPTY_MESSAGE_TYPES,
   ...PLAN_ACTION_MESSAGE_TYPES,
   ...PLAN_STEP_ACTION_MESSAGE_TYPES,
@@ -1318,6 +1349,23 @@ export function buildHistoryClearedMessage(conversationId: string): HistoryClear
   return {
     type: 'historyCleared',
     conversationId: requireBuilderConversationId(conversationId, 'historyCleared'),
+  };
+}
+
+export function buildConversationLifecycleResultMessage(input: {
+  readonly conversationId: string;
+  readonly action: ConversationLifecycleAction;
+  readonly success: boolean;
+  readonly state?: CreativeAiConversationState;
+  readonly diagnostics?: readonly CreativeAiDiagnostic[];
+}): ConversationLifecycleResultMessage {
+  return {
+    type: 'conversationLifecycleResult',
+    conversationId: requireBuilderConversationId(input.conversationId, 'conversationLifecycle'),
+    action: input.action,
+    success: input.success,
+    ...(input.state !== undefined ? { state: input.state } : {}),
+    ...(input.diagnostics !== undefined ? { diagnostics: input.diagnostics } : {}),
   };
 }
 
@@ -1699,6 +1747,9 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
   if (isQueuedMessageActionType(type)) {
     return parseQueuedMessageActionMessage(type, raw);
   }
+  if (type === 'conversationLifecycle') {
+    return parseConversationLifecycleMessage(raw);
+  }
   if (isPlanActionMessageType(type)) {
     return parsePlanActionMessage(type, raw);
   }
@@ -2000,6 +2051,41 @@ function parseDeleteConversationMessage(
     type: 'deleteConversation',
     conversationId,
     ...(activateNext !== undefined ? { activateNext } : {}),
+  };
+}
+
+function parseConversationLifecycleMessage(
+  raw: Record<string, unknown>,
+): ConversationLifecycleWebviewMessage | null {
+  const conversationId = requiredString(raw.conversationId);
+  if (!conversationId || !isConversationLifecycleAction(raw.action)) return null;
+
+  const activeRunIds =
+    raw.activeRunIds === undefined
+      ? undefined
+      : Array.isArray(raw.activeRunIds)
+        ? raw.activeRunIds.filter(
+            (item): item is string => typeof item === 'string' && item.length > 0,
+          )
+        : null;
+  if (activeRunIds === null) return null;
+
+  const expectedState =
+    raw.expectedState === undefined
+      ? undefined
+      : isCreativeAiConversationState(raw.expectedState)
+        ? raw.expectedState
+        : null;
+  if (expectedState === null) return null;
+
+  return {
+    type: 'conversationLifecycle',
+    conversationId,
+    action: raw.action,
+    ...(typeof raw.commandId === 'string' && raw.commandId ? { commandId: raw.commandId } : {}),
+    ...(expectedState !== undefined ? { expectedState } : {}),
+    ...(activeRunIds !== undefined ? { activeRunIds } : {}),
+    ...(typeof raw.reason === 'string' && raw.reason ? { reason: raw.reason } : {}),
   };
 }
 

@@ -3,6 +3,13 @@
  */
 
 import type { ChatModelOption, ModelSourceGroup } from '@neko/shared';
+import type {
+  ConversationLifecycleAction,
+  CreativeAiConversationState,
+  CreativeAiDiagnostic,
+  CreativeAiRunStatus,
+  CreativeAiWorkItemStatus,
+} from '@neko/shared/types/creative-ai-invocation';
 import type { ConfiguredProvider } from './provider';
 import type { ShellExecutionMode } from './settings';
 import type { NpcProfileSource } from '@neko/shared';
@@ -17,6 +24,29 @@ export interface ConversationSummary {
   title: string;
   messageCount: number;
   updatedAt: number;
+  creativeAi?: CreativeAiConversationProjection;
+}
+
+export interface CreativeAiConversationRunSummary {
+  readonly activeRunCount: number;
+  readonly activeWorkItemCount: number;
+  readonly latestRunId?: string;
+  readonly latestRunStatus?: CreativeAiRunStatus;
+  readonly latestWorkItemStatus?: CreativeAiWorkItemStatus;
+  readonly label?: string;
+  readonly progress?: number;
+}
+
+export interface CreativeAiConversationProjection {
+  readonly lifecycleState: CreativeAiConversationState;
+  readonly sourcePackage: string;
+  readonly associationKey: string;
+  readonly documentLabel?: string;
+  readonly sourceLabel?: string;
+  readonly lastActivityAt?: number;
+  readonly activeRunSummary?: CreativeAiConversationRunSummary;
+  readonly availableLifecycleActions?: readonly ConversationLifecycleAction[];
+  readonly diagnostics?: readonly CreativeAiDiagnostic[];
 }
 
 export interface OpenTab {

@@ -126,6 +126,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
       handleNewConversation: vi.fn(),
       handleSwitchConversation: vi.fn(),
       handleDeleteConversation: vi.fn(),
+      handleConversationLifecycle: vi.fn(),
       sendConversationList: vi.fn(),
       sendActiveConversation: vi.fn(),
       sendAgentStateSnapshot: vi.fn(),
@@ -435,6 +436,24 @@ describe('handleChatWebviewMessage', () => {
       'conv-2',
       { activateNext: false },
     );
+    expect(deps.syncCanvasAmbientScopeFromActiveConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes creative background lifecycle actions to the conversation handler', () => {
+    const deps = createDeps();
+    const message = {
+      type: 'conversationLifecycle',
+      conversationId: 'background-1',
+      action: 'archive',
+    } as const;
+
+    handleChatWebviewMessage(message, deps);
+
+    expect(deps.conversationMessageHandler.handleConversationLifecycle).toHaveBeenCalledWith(
+      deps.webview,
+      message,
+    );
+    expect(deps.conversationMessageHandler.handleDeleteConversation).not.toHaveBeenCalled();
     expect(deps.syncCanvasAmbientScopeFromActiveConversation).toHaveBeenCalledTimes(1);
   });
 

@@ -51,6 +51,11 @@ export function tryHandleConversationRoute(
       deps.syncCanvasAmbientScopeFromActiveConversation();
       return true;
 
+    case 'conversationLifecycle':
+      void deps.conversationMessageHandler.handleConversationLifecycle(webview, message);
+      deps.syncCanvasAmbientScopeFromActiveConversation();
+      return true;
+
     case 'getConversations':
       deps.conversationMessageHandler.sendConversationList();
       return true;

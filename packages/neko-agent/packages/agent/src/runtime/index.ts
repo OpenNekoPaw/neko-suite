@@ -142,6 +142,21 @@ export {
 } from './runner/agent-session-runner';
 
 export {
+  CreativeAiRunRuntime,
+  createCreativeAiRunRuntime,
+  type AcceptCreativeAiInvocationInput,
+  type CreativeAiBackgroundWorkItemContext,
+  type CreativeAiRunAcceptResult,
+  type CreativeAiRunEvent,
+  type CreativeAiRunEventType,
+  type CreativeAiRunIdInput,
+  type CreativeAiRunRuntimeOptions,
+  type CreativeAiWorkItemIdInput,
+  type ProjectCreativeAiSubAgentEventInput,
+  type StartCreativeAiWorkItemInput,
+} from './creative-ai-run-runtime';
+
+export {
   buildAgentRuntimeSessionFactoryConfig,
   type AgentRuntimeHostBindings,
   type AgentRuntimeSessionAssemblyInput,

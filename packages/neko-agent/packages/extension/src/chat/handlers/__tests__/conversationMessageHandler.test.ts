@@ -157,6 +157,70 @@ describe('ConversationMessageHandler', () => {
     expect(conversations.getActiveId).not.toHaveBeenCalled();
   });
 
+  it('handles creative conversation lifecycle commands with full shared command identity', async () => {
+    const lifecycle = {
+      handleCommand: vi.fn().mockResolvedValue({
+        ok: true,
+        conversationId: 'background-1',
+        state: 'archived',
+        diagnostics: [],
+      }),
+    };
+    handler.updateDeps({ creativeAiLifecycle: lifecycle });
+
+    await handler.handleConversationLifecycle(webview as any, {
+      type: 'conversationLifecycle',
+      conversationId: 'background-1',
+      action: 'archive',
+      commandId: 'command-1',
+      expectedState: 'active',
+      activeRunIds: ['run-1'],
+      reason: 'user-requested',
+    });
+
+    expect(lifecycle.handleCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        schemaVersion: 1,
+        commandId: 'command-1',
+        conversationId: 'background-1',
+        action: 'archive',
+        expectedState: 'active',
+        activeRunIds: ['run-1'],
+        reason: 'user-requested',
+      }),
+    );
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'conversationLifecycleResult',
+      conversationId: 'background-1',
+      action: 'archive',
+      success: true,
+      state: 'archived',
+      diagnostics: [],
+    });
+    expect(conversations.sendConversationList).toHaveBeenCalledWith(webview);
+  });
+
+  it('reports lifecycle service availability instead of silently succeeding', async () => {
+    await handler.handleConversationLifecycle(webview as any, {
+      type: 'conversationLifecycle',
+      conversationId: 'background-1',
+      action: 'archive',
+    });
+
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'conversationLifecycleResult',
+      conversationId: 'background-1',
+      action: 'archive',
+      success: false,
+      diagnostics: [
+        expect.objectContaining({
+          code: 'creative-ai-lifecycle-service-unavailable',
+          severity: 'error',
+        }),
+      ],
+    });
+  });
+
   it('cancels the provided conversationId', async () => {
     await handler.handleCancelMessage(webview as any, 'conv-a');
 
