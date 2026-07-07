@@ -19,6 +19,7 @@ export type {
   ConfigChangedMessage,
   ConfigStateMessage,
   ContextTokenCountMessage,
+  ConversationLifecycleResultMessage,
   ConversationListMessage,
   ErrorMessage,
   ExtensionToWebviewMessage,

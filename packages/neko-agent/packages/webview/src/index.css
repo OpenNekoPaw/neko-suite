@@ -2188,6 +2188,8 @@ body {
 }
 
 .agent-history-menu-meta,
+.agent-history-menu-context,
+.agent-history-menu-run,
 .agent-history-menu-footer-hint,
 .agent-history-menu-empty {
   color: var(--agent-fg-secondary);
@@ -2195,11 +2197,50 @@ body {
   line-height: 14px;
 }
 
-.agent-history-menu-meta {
+.agent-history-menu-meta,
+.agent-history-menu-context {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.agent-history-menu-context,
+.agent-history-menu-run {
+  margin-top: 1px;
+}
+
+.agent-history-menu-run {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-history-lifecycle-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.agent-history-menu-item:hover .agent-history-lifecycle-actions,
+.agent-history-menu-item:focus-within .agent-history-lifecycle-actions {
+  opacity: 1;
+}
+
+.agent-history-lifecycle-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.agent-history-lifecycle-danger {
+  color: var(--agent-danger);
+}
+
+.agent-history-lifecycle-warning {
+  color: var(--vscode-charts-yellow);
 }
 
 .agent-history-menu-status-running {
@@ -2213,6 +2254,14 @@ body {
 .agent-history-menu-empty {
   padding: 10px 8px;
   text-align: center;
+}
+
+.agent-workitem-shelf {
+  border-bottom: 1px solid var(--agent-divider);
+}
+
+.agent-chat-empty-scroll .agent-workitem-shelf {
+  border-bottom: 0;
 }
 
 .agent-history-menu-footer {

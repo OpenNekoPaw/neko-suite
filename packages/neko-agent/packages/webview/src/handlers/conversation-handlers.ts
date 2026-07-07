@@ -12,6 +12,7 @@ import type {
   AgentSessionDiagnosticMessage,
   HistoryClearedMessage,
   ConversationListMessage,
+  ConversationLifecycleResultMessage,
   ActiveConversationMessage,
 } from './messages';
 import {
@@ -109,6 +110,38 @@ const handleConversationList: MessageHandler<'conversationList'> = (
   context,
 ) => {
   context.setConversations(message.conversations || []);
+};
+
+const handleConversationLifecycleResult: MessageHandler<'conversationLifecycleResult'> = (
+  message: ConversationLifecycleResultMessage,
+  context,
+) => {
+  if (!message.success) {
+    context.setGlobalError(
+      message.diagnostics?.map((diagnostic) => diagnostic.message).join('\n') ||
+        'Conversation lifecycle command failed.',
+    );
+    return;
+  }
+
+  const state = message.state;
+  if (!state) return;
+  context.setConversations((previous) => {
+    if (state === 'deleted') {
+      return previous.filter((conversation) => conversation.id !== message.conversationId);
+    }
+    return previous.map((conversation) =>
+      conversation.id === message.conversationId && conversation.creativeAi
+        ? {
+            ...conversation,
+            creativeAi: {
+              ...conversation.creativeAi,
+              lifecycleState: state,
+            },
+          }
+        : conversation,
+    );
+  });
 };
 
 /**
@@ -267,5 +300,6 @@ export const conversationHandlers: HandlerRegistration[] = [
   defineHandler('sessionDiagnostic', handleSessionDiagnostic),
   defineHandler('historyCleared', handleHistoryCleared),
   defineHandler('conversationList', handleConversationList),
+  defineHandler('conversationLifecycleResult', handleConversationLifecycleResult),
   defineHandler('activeConversation', handleActiveConversation),
 ];

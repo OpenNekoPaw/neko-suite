@@ -1,6 +1,11 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { describe, expect, it } from 'vitest';
-import type { AgentQueuedMessageItem, ExtensionToWebviewMessage, OpenTab } from '@neko-agent/types';
+import type {
+  AgentQueuedMessageItem,
+  ConversationSummary,
+  ExtensionToWebviewMessage,
+  OpenTab,
+} from '@neko-agent/types';
 import type { Message } from '@neko-agent/types';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
@@ -15,6 +20,74 @@ import type {
 } from '../types';
 
 describe('character role context isolation', () => {
+  it('projects creative lifecycle success into conversation list state', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'background-1',
+      activeTabId: null,
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      openTabs: [],
+      conversations: [
+        {
+          id: 'background-1',
+          title: 'Canvas AI',
+          messageCount: 0,
+          updatedAt: 10,
+          creativeAi: {
+            lifecycleState: 'active',
+            sourcePackage: 'neko-canvas',
+            associationKey: 'neko-canvas:document:doc-1',
+          },
+        },
+      ],
+    });
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'conversationLifecycleResult',
+        conversationId: 'background-1',
+        action: 'archive',
+        success: true,
+        state: 'archived',
+        diagnostics: [],
+      },
+      harness.context,
+    );
+
+    expect(harness.conversations()[0]?.creativeAi?.lifecycleState).toBe('archived');
+  });
+
+  it('projects creative lifecycle diagnostics into a visible global error', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'background-1',
+      activeTabId: null,
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      openTabs: [],
+    });
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'conversationLifecycleResult',
+        conversationId: 'background-1',
+        action: 'delete',
+        success: false,
+        diagnostics: [
+          {
+            severity: 'error',
+            code: 'creative-ai-lifecycle-active-runs',
+            message: 'Conversation has active creative AI runs.',
+          },
+        ],
+      },
+      harness.context,
+    );
+
+    expect(harness.globalError()).toBe('Conversation has active creative AI runs.');
+  });
+
   it('keeps active conversation refs aligned for ordinary activeConversation updates', () => {
     const ordinaryMessage = message('ordinary-message', 'assistant', '普通 Agent 回复');
     const harness = createContextHarness({
@@ -689,6 +762,7 @@ interface ContextHarnessOptions {
   pendingForegroundActivation?: PendingForegroundConversationActivation | null;
   isTablessConversationView?: boolean;
   includeQueueSetters?: boolean;
+  conversations?: ConversationSummary[];
 }
 
 interface ContextHarness {
@@ -700,6 +774,8 @@ interface ContextHarness {
   openTabs(): OpenTab[];
   conversationMessages(): Map<string, Message[]>;
   conversationStreaming(): Map<string, StreamingState>;
+  conversations(): ConversationSummary[];
+  globalError(): string | null;
   pendingForegroundActivation(): PendingForegroundConversationActivation | null;
   completedForegroundActivations(): string[];
 }
@@ -712,6 +788,8 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   let streaming: StreamingState = options.currentStreaming;
   let workItems: AgentWorkItemStore = new Map();
   let pluginsAvailable: PluginsAvailable = {};
+  let conversations: ConversationSummary[] = options.conversations ?? [];
+  let globalError: string | null = null;
   const activeConversationIdRef = ref<string | null>(options.activeConversationId);
   const streamingMessageIdRef = ref<string | null>(streaming.streamingMessageId);
   const isTablessConversationViewRef = ref(options.isTablessConversationView ?? false);
@@ -817,7 +895,12 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     setSkills: noopDispatch(),
     setActiveSkill: noopDispatch(),
     setActivationProgressByConversation: noopDispatch(),
-    setGlobalError: noopDispatch(),
+    setGlobalError: createSetter(
+      () => globalError,
+      (next) => {
+        globalError = next;
+      },
+    ),
     conversationTokenCountRef: ref(new Map()),
     conversationCompressingRef: ref(new Map()),
     forceUpdate: () => undefined,
@@ -834,7 +917,12 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
       conversationMessagesRef.current.set(conversationId, result.messages);
       conversationStreamingRef.current.set(conversationId, result.streaming);
     },
-    setConversations: noopDispatch(),
+    setConversations: createSetter(
+      () => conversations,
+      (next) => {
+        conversations = next;
+      },
+    ),
     setActiveConversationId: createSetter(
       () => activeConversationId,
       (next) => {
@@ -870,6 +958,8 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     openTabs: () => openTabs,
     conversationMessages: () => conversationMessagesRef.current,
     conversationStreaming: () => conversationStreamingRef.current,
+    conversations: () => conversations,
+    globalError: () => globalError,
     pendingForegroundActivation: () => pendingForegroundConversationActivationRef.current,
     completedForegroundActivations: () => completedForegroundActivations,
   };

@@ -603,6 +603,10 @@ export const chat = {
   'chat.commands.source.user': 'Personal',
   'chat.commands.source.project': 'Project',
   'chat.commands.source.community': 'Community',
+  'chat.commands.help.availableCommands': 'Available Commands',
+  'chat.commands.help.commandArtifacts': 'Command Artifacts',
+  'chat.commands.help.pluginCommands': 'Plugin Commands',
+  'chat.commands.help.availableSkills': 'Available Skills',
 
   'chat.helpMessage':
     '**Available Commands:**\n- `/clear` - Clear conversation history\n- `/new` - Start a new conversation\n- `/resume` - Resume a previous conversation\n- `/help` - Show this help message\n- `/compact` - Compress conversation to save context\n- `/status` - Show status information\n- `/model` - Select AI model\n- `/plan` - Enter plan mode\n- `/mcp` - Manage MCP servers\n- `/tasks` - Manage background tasks\n- `/settings` - Open settings\n\n**Skills:**\n- Use `$skill-name` to explicitly activate a Skill lifecycle record\n- Active records show slot, owner, clearability, locks, and expiry\n- Use `/skills` to list or inspect Skills; clear actions only remove records allowed by policy\n\n**Tips:**\n- Use `@` to reference files\n- Attach files using the 📎 button\n- Press Enter to send, Shift+Enter for new line',

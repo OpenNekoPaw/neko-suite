@@ -15,6 +15,7 @@
 
 import { type ReactNode, useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import type { AgentContextPayload } from '@neko/shared';
+import type { ConversationLifecycleAction } from '@neko/shared/types/creative-ai-invocation';
 import type {
   SettingsState,
   AgentState,
@@ -94,6 +95,10 @@ interface HeaderRenderProps {
   onNewChat: () => void;
   onOpenConversation: (conversationId: string, title: string) => void;
   onDeleteConversation: (conversationId: string) => void;
+  onConversationLifecycleAction: (
+    conversationId: string,
+    action: ConversationLifecycleAction,
+  ) => void;
   onClearClosedConversations: () => void;
   clearableConversationCount: number;
   protectedConversationCount: number;
@@ -1147,6 +1152,13 @@ export function ConversationController({
     [cleanupClosedConversation, isProtectedConversation],
   );
 
+  const handleConversationLifecycleAction = useCallback(
+    (conversationId: string, action: ConversationLifecycleAction) => {
+      VSCodeMessages.conversationLifecycle(conversationId, action);
+    },
+    [],
+  );
+
   const handleClearClosedConversations = useCallback(() => {
     const historyItems = projectHistoryConversationItems({
       conversations,
@@ -1217,13 +1229,7 @@ export function ConversationController({
         streamingByConversation: conversationStreamingRef.current,
         agentStateByConversation: conversationAgentStateRef.current,
       }),
-    [
-      openTabs,
-      conversations,
-      visibleConversationId,
-      visibleSessionState,
-      projectionVersion,
-    ],
+    [openTabs, conversations, visibleConversationId, visibleSessionState, projectionVersion],
   );
   const historyConversations = useMemo(
     () =>
@@ -1235,13 +1241,7 @@ export function ConversationController({
         streamingByConversation: conversationStreamingRef.current,
         agentStateByConversation: conversationAgentStateRef.current,
       }),
-    [
-      conversations,
-      openTabs,
-      visibleConversationId,
-      visibleSessionState,
-      projectionVersion,
-    ],
+    [conversations, openTabs, visibleConversationId, visibleSessionState, projectionVersion],
   );
   const historyCleanup = useMemo(
     () => projectHistoryCleanup({ historyItems: historyConversations }),
@@ -1261,6 +1261,7 @@ export function ConversationController({
         onNewChat: handleNewChat,
         onOpenConversation: handleOpenTab,
         onDeleteConversation: handleDeleteConversation,
+        onConversationLifecycleAction: handleConversationLifecycleAction,
         onClearClosedConversations: handleClearClosedConversations,
         clearableConversationCount: historyCleanup.deletableConversationIds.length,
         protectedConversationCount: historyCleanup.protectedConversationCount,

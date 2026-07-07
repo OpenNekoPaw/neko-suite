@@ -25,6 +25,19 @@ const translations: Record<string, string> = {
   'history.status.open': 'Open',
   'history.status.running': 'Running',
   'history.status.completed': 'Completed',
+  'history.lifecycle.archive': 'Archive',
+  'history.lifecycle.restore': 'Restore',
+  'history.lifecycle.delete': 'Delete',
+  'history.lifecycle.stop-and-archive': 'Stop and archive',
+  'history.lifecycle.stop-and-delete': 'Stop and delete',
+  'history.lifecycleDisabled.activeWork': 'Active work is running',
+  'history.lifecycleDisabled.noActiveWork': 'No active work',
+  'history.lifecycleState.active': 'Active',
+  'history.lifecycleState.archived': 'Archived',
+  'history.runSummary.workItems': '{count} active items',
+  'history.runSummary.runs': '{count} active runs',
+  'history.runSummary.idle': 'Idle',
+  'history.runStatus.running': 'Running',
 };
 
 vi.mock('@/i18n/I18nContext', () => ({
@@ -168,7 +181,9 @@ describe('HistoryMenu', () => {
             updatedAt: Date.now(),
             isOpen: true,
             isActive: true,
+            isBackground: false,
             executionStatus: 'running',
+            lifecycleActions: [],
             canDelete: false,
             protectedReason: 'running',
           },
@@ -186,6 +201,69 @@ describe('HistoryMenu', () => {
     fireEvent.click(deleteButton);
     expect(onDeleteConversation).not.toHaveBeenCalled();
   });
+
+  it('shows creative background lifecycle actions with active work diagnostics', () => {
+    const onLifecycle = vi.fn();
+
+    render(
+      <HistoryMenu
+        conversations={[
+          {
+            id: 'background-1',
+            title: 'Canvas AI: intro',
+            messageCount: 0,
+            updatedAt: Date.now(),
+            isOpen: false,
+            isActive: false,
+            isBackground: true,
+            executionStatus: 'running',
+            lifecycleState: 'active',
+            sourcePackage: 'neko-canvas',
+            documentLabel: 'boards/intro.nkc',
+            associationKey: 'neko-canvas:document:doc-1',
+            activeRunSummary: {
+              activeRunCount: 1,
+              activeWorkItemCount: 2,
+              latestRunStatus: 'running',
+            },
+            lifecycleActions: [
+              {
+                action: 'archive',
+                enabled: false,
+                labelKey: 'history.lifecycle.archive',
+                titleKey: 'history.lifecycleDisabled.activeWork',
+                tone: 'neutral',
+              },
+              {
+                action: 'stop-and-delete',
+                enabled: true,
+                labelKey: 'history.lifecycle.stop-and-delete',
+                titleKey: 'history.lifecycle.stop-and-delete',
+                tone: 'danger',
+              },
+            ],
+            canDelete: false,
+            protectedReason: 'running',
+          },
+        ]}
+        activeConversationId={null}
+        onOpenConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        onConversationLifecycleAction={onLifecycle}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+
+    expect(screen.getByText('neko-canvas')).toBeTruthy();
+    expect(screen.getByText('boards/intro.nkc')).toBeTruthy();
+    expect(screen.getByText('2 active items')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Archive' }).hasAttribute('disabled')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop and delete' }));
+
+    expect(onLifecycle).toHaveBeenCalledWith('background-1', 'stop-and-delete');
+  });
 });
 
 function createConversations(): HistoryConversationItem[] {
@@ -198,7 +276,9 @@ function createConversations(): HistoryConversationItem[] {
       updatedAt: now - 120_000,
       isOpen: false,
       isActive: false,
+      isBackground: false,
       executionStatus: 'completed',
+      lifecycleActions: [],
       canDelete: true,
     },
     {
@@ -208,7 +288,9 @@ function createConversations(): HistoryConversationItem[] {
       updatedAt: now - 3_600_000,
       isOpen: true,
       isActive: true,
+      isBackground: false,
       executionStatus: 'completed',
+      lifecycleActions: [],
       canDelete: false,
       protectedReason: 'open',
     },
@@ -224,7 +306,9 @@ function createManyConversations(): HistoryConversationItem[] {
     updatedAt: now - index * 60_000,
     isOpen: index === 0,
     isActive: false,
+    isBackground: false,
     executionStatus: index === 0 ? 'running' : 'completed',
+    lifecycleActions: [],
     canDelete: index !== 0,
     ...(index === 0 ? { protectedReason: 'running' as const } : {}),
   }));

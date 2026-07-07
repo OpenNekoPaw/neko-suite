@@ -1,13 +1,29 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { useTranslation } from '@/i18n/I18nContext';
-import { ClockIcon, CloseIcon, SearchIcon, TrashIcon } from '@neko/shared/icons';
-import type { HistoryConversationItem } from '@/presenters/history-menu-presenter';
+import {
+  ClockIcon,
+  CloseIcon,
+  PackageIcon,
+  RefreshIcon,
+  SearchIcon,
+  StopIcon,
+  TrashIcon,
+} from '@neko/shared/icons';
+import type {
+  HistoryConversationItem,
+  HistoryConversationLifecycleActionItem,
+} from '@/presenters/history-menu-presenter';
+import type { ConversationLifecycleAction } from '@neko/shared/types/creative-ai-invocation';
 
 interface HistoryMenuProps {
   conversations: HistoryConversationItem[];
   activeConversationId: string | null;
   onOpenConversation: (conversationId: string, title: string) => void;
   onDeleteConversation: (conversationId: string) => void;
+  onConversationLifecycleAction?: (
+    conversationId: string,
+    action: ConversationLifecycleAction,
+  ) => void;
   onClearClosedConversations?: () => void;
   clearableConversationCount?: number;
   protectedConversationCount?: number;
@@ -36,6 +52,7 @@ export function HistoryMenu({
   activeConversationId,
   onOpenConversation,
   onDeleteConversation,
+  onConversationLifecycleAction,
   onClearClosedConversations,
   clearableConversationCount,
   protectedConversationCount = 0,
@@ -72,7 +89,9 @@ export function HistoryMenu({
       return conversations.slice(0, 10);
     }
     const query = searchQuery.toLowerCase();
-    return conversations.filter((conv) => conv.title.toLowerCase().includes(query)).slice(0, 20);
+    return conversations
+      .filter((conv) => getSearchableConversationText(conv).includes(query))
+      .slice(0, 20);
   }, [conversations, searchQuery]);
   const resolvedClearableConversationCount =
     clearableConversationCount ?? conversations.filter((conv) => conv.canDelete).length;
@@ -182,33 +201,58 @@ export function HistoryMenu({
                         </>
                       )}
                     </div>
+                    {conv.isBackground && (
+                      <div className="agent-history-menu-context">
+                        <span>{conv.sourcePackage}</span>
+                        {conv.documentLabel && (
+                          <>
+                            <span aria-hidden="true">•</span>
+                            <span>{conv.documentLabel}</span>
+                          </>
+                        )}
+                        {conv.lifecycleState && (
+                          <>
+                            <span aria-hidden="true">•</span>
+                            <span>{t(`history.lifecycleState.${conv.lifecycleState}`)}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                    {conv.activeRunSummary && (
+                      <div className="agent-history-menu-run">
+                        {formatRunSummary(conv.activeRunSummary, t)}
+                      </div>
+                    )}
                   </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (!conv.canDelete) return;
-                      onDeleteConversation(conv.id);
-                    }}
-                    className="agent-menu-icon-button agent-history-delete-button flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                    disabled={!conv.canDelete}
-                    title={
-                      conv.canDelete
-                        ? t('history.deleteConversation')
-                        : conv.protectedReason === 'running'
-                          ? t('history.deleteDisabled.running')
-                          : t('history.deleteDisabled.open')
-                    }
-                    aria-label={
-                      conv.canDelete
-                        ? t('history.deleteConversation')
-                        : conv.protectedReason === 'running'
-                          ? t('history.deleteDisabled.running')
-                          : t('history.deleteDisabled.open')
-                    }
-                  >
-                    <TrashIcon className="w-3 h-3" />
-                  </button>
+                  {conv.isBackground ? (
+                    <div className="agent-history-lifecycle-actions">
+                      {conv.lifecycleActions.map((action) => (
+                        <LifecycleActionButton
+                          key={action.action}
+                          action={action}
+                          label={t(action.labelKey)}
+                          title={t(action.titleKey)}
+                          onClick={() => onConversationLifecycleAction?.(conv.id, action.action)}
+                          disabled={!action.enabled || !onConversationLifecycleAction}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!conv.canDelete) return;
+                        onDeleteConversation(conv.id);
+                      }}
+                      className="agent-menu-icon-button agent-history-delete-button flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                      disabled={!conv.canDelete}
+                      title={resolveDeleteTitle(conv, t)}
+                      aria-label={resolveDeleteTitle(conv, t)}
+                    >
+                      <TrashIcon className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               ))
             )}
@@ -244,4 +288,81 @@ export function HistoryMenu({
       )}
     </div>
   );
+}
+
+function LifecycleActionButton({
+  action,
+  label,
+  title,
+  disabled,
+  onClick,
+}: {
+  readonly action: HistoryConversationLifecycleActionItem;
+  readonly label: string;
+  readonly title: string;
+  readonly disabled: boolean;
+  readonly onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!disabled) onClick();
+      }}
+      className={`agent-menu-icon-button agent-history-lifecycle-button agent-history-lifecycle-${action.tone}`}
+      disabled={disabled}
+      title={title}
+      aria-label={label}
+    >
+      {renderLifecycleIcon(action.action)}
+    </button>
+  );
+}
+
+function renderLifecycleIcon(action: ConversationLifecycleAction) {
+  if (action === 'restore') return <RefreshIcon className="w-3 h-3" />;
+  if (action === 'delete' || action === 'stop-and-delete') {
+    return <TrashIcon className="w-3 h-3" />;
+  }
+  if (action === 'stop-and-archive') return <StopIcon className="w-3 h-3" />;
+  return <PackageIcon className="w-3 h-3" />;
+}
+
+function resolveDeleteTitle(
+  conv: HistoryConversationItem,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (conv.canDelete) return t('history.deleteConversation');
+  if (conv.protectedReason === 'running') return t('history.deleteDisabled.running');
+  return t('history.deleteDisabled.open');
+}
+
+function getSearchableConversationText(conv: HistoryConversationItem): string {
+  return [
+    conv.title,
+    conv.sourcePackage,
+    conv.documentLabel,
+    conv.associationKey,
+    conv.activeRunSummary?.label,
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ')
+    .toLowerCase();
+}
+
+function formatRunSummary(
+  summary: NonNullable<HistoryConversationItem['activeRunSummary']>,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (summary.label) return summary.label;
+  if (summary.activeWorkItemCount > 0) {
+    return t('history.runSummary.workItems', { count: summary.activeWorkItemCount });
+  }
+  if (summary.activeRunCount > 0) {
+    return t('history.runSummary.runs', { count: summary.activeRunCount });
+  }
+  return summary.latestRunStatus
+    ? t(`history.runStatus.${summary.latestRunStatus}`)
+    : t('history.runSummary.idle');
 }

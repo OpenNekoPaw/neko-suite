@@ -10,6 +10,7 @@
 
 import { getVSCodeAPI, postMessage as postRawMessage, type VSCodeAPI } from '@neko/shared/vscode';
 import type {
+  ConversationLifecycleWebviewMessage,
   InvokeAgentCapabilityLifecycleWebviewMessage,
   RequestCanvasAuthoringHandoffWebviewMessage,
   PluginTransferPayload,
@@ -37,9 +38,11 @@ function requireConversationId(messageType: string, conversationId: string): str
   return conversationId;
 }
 
-function postConversationMessage<TMessage extends WebviewToExtensionMessage & {
-  readonly conversationId: string;
-}>(message: TMessage): void {
+function postConversationMessage<
+  TMessage extends WebviewToExtensionMessage & {
+    readonly conversationId: string;
+  },
+>(message: TMessage): void {
   requireConversationId(message.type, message.conversationId);
   postWebviewMessage(message);
 }
@@ -79,6 +82,20 @@ export const VSCodeMessages = {
       type: 'deleteConversation',
       conversationId,
       ...(options?.activateNext !== undefined ? { activateNext: options.activateNext } : {}),
+    });
+  },
+
+  /** Apply archive/restore/delete lifecycle commands for creative background conversations. */
+  conversationLifecycle: (
+    conversationId: string,
+    action: ConversationLifecycleWebviewMessage['action'],
+    options: Omit<ConversationLifecycleWebviewMessage, 'type' | 'conversationId' | 'action'> = {},
+  ) => {
+    postConversationMessage({
+      type: 'conversationLifecycle',
+      conversationId,
+      action,
+      ...options,
     });
   },
 

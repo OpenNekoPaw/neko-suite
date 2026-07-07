@@ -7,6 +7,7 @@ import type { SsoSession, ConfiguredProvider } from '@neko-agent/types';
 import { PlusIcon } from '@neko/shared/icons';
 import type { DisplayTab } from '@/presenters/tab-display-presenter';
 import type { HistoryConversationItem } from '@/presenters/history-menu-presenter';
+import type { ConversationLifecycleAction } from '@neko/shared/types/creative-ai-invocation';
 
 interface HeaderProps {
   tabs: DisplayTab[];
@@ -19,6 +20,10 @@ interface HeaderProps {
   onNewChat: () => void;
   onOpenConversation: (conversationId: string, title: string) => void;
   onDeleteConversation: (conversationId: string) => void;
+  onConversationLifecycleAction?: (
+    conversationId: string,
+    action: ConversationLifecycleAction,
+  ) => void;
   onClearClosedConversations?: () => void;
   clearableConversationCount?: number;
   protectedConversationCount?: number;
@@ -39,6 +44,7 @@ export function Header({
   onNewChat,
   onOpenConversation,
   onDeleteConversation,
+  onConversationLifecycleAction,
   onClearClosedConversations,
   clearableConversationCount,
   protectedConversationCount,
@@ -78,6 +84,7 @@ export function Header({
           activeConversationId={activeConversationId}
           onOpenConversation={onOpenConversation}
           onDeleteConversation={onDeleteConversation}
+          onConversationLifecycleAction={onConversationLifecycleAction}
           onClearClosedConversations={onClearClosedConversations}
           clearableConversationCount={clearableConversationCount}
           protectedConversationCount={protectedConversationCount}

@@ -15,7 +15,7 @@ import { InputArea, MessageAttachment } from '@/components/ChatView/InputArea';
 import type { EntryPromptMenu, SelectedFileReference } from '@/components/ChatView/InputArea/types';
 import { DropZone } from '@/components/ChatView/DropZone';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
-import type { AgentWorkItem } from '@/components/AgentWorkItem';
+import type { AgentWorkItem, SubAgentWorkItem } from '@/components/AgentWorkItem';
 import type { AgentContextPayload } from '@neko/shared';
 import type { AmbientCanvasNodeProjection } from '@/presenters/plugin-transfer-presenter';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
@@ -23,6 +23,8 @@ import type { ActiveSkillIndicator } from '@/components/ChatView/SkillIndicator'
 import { CharacterDialogueHeader } from '@/components/ChatView/CharacterDialogueHeader';
 import { EmbodyCharacterHeader } from '@/components/ChatView/EmbodyCharacterHeader';
 import { projectMessageIdentities } from '@/components/ChatView/message-identity';
+import { TaskCard, BatchTaskCard } from '@/components/ChatView/TaskCard';
+import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
 interface ChatViewProps {
   messages: Message[];
   inputValue: string;
@@ -137,6 +139,10 @@ export function ChatView({
       }),
     [characterDialogueSession, conversationKind, embodyCharacterSession],
   );
+  const unanchoredWorkItems = useMemo(
+    () => selectUnanchoredWorkItems(messages, workItems ?? []),
+    [messages, workItems],
+  );
   // P2: Dropped files state for DropZone integration
   const [droppedFiles, setDroppedFiles] = useState<MessageAttachment[]>([]);
 
@@ -160,38 +166,55 @@ export function ChatView({
         )}
 
         {/* Messages Container */}
-        {isEmpty ? (
-          <div className="agent-chat-empty-scroll flex-1 overflow-y-auto" />
-        ) : (
-          <MessageActionsProvider
-            activeConversationId={activeConversationId}
-            workItems={workItems}
-            pluginsAvailable={pluginsAvailable}
-            contextChips={contextChips}
-            ambientNodes={ambientNodes}
-            onCancelTask={onCancelTask}
-            onRetryTask={onRetryTask}
-            onViewTaskResult={onViewTaskResult}
-            onAcceptDiff={onAcceptDiff}
-            onRejectDiff={onRejectDiff}
-            onApprovePlanStep={onApprovePlanStep}
-            onRejectPlanStep={onRejectPlanStep}
-            onModifyPlanStep={onModifyPlanStep}
-            onApproveAllPlanSteps={onApproveAllPlanSteps}
-            onRejectAllPlanSteps={onRejectAllPlanSteps}
-          >
-            <MessageList
-              messages={messages}
-              isThinking={isThinking}
-              streamingMessageId={streamingMessageId}
-              activeConversationId={activeConversationId}
-              identities={messageIdentities}
-              activeSkillNotice={activeSkill}
-              activationProgress={activationProgress}
-              onClearActiveSkill={onClearActiveSkill}
-            />
-          </MessageActionsProvider>
-        )}
+        <MessageActionsProvider
+          activeConversationId={activeConversationId}
+          workItems={workItems}
+          pluginsAvailable={pluginsAvailable}
+          contextChips={contextChips}
+          ambientNodes={ambientNodes}
+          onCancelTask={onCancelTask}
+          onRetryTask={onRetryTask}
+          onViewTaskResult={onViewTaskResult}
+          onAcceptDiff={onAcceptDiff}
+          onRejectDiff={onRejectDiff}
+          onApprovePlanStep={onApprovePlanStep}
+          onRejectPlanStep={onRejectPlanStep}
+          onModifyPlanStep={onModifyPlanStep}
+          onApproveAllPlanSteps={onApproveAllPlanSteps}
+          onRejectAllPlanSteps={onRejectAllPlanSteps}
+        >
+          {isEmpty ? (
+            <div className="agent-chat-empty-scroll flex-1 overflow-y-auto">
+              <ConversationWorkItemShelf
+                workItems={unanchoredWorkItems}
+                pluginsAvailable={pluginsAvailable}
+                onCancelTask={onCancelTask}
+                onRetryTask={onRetryTask}
+                onViewTaskResult={onViewTaskResult}
+              />
+            </div>
+          ) : (
+            <>
+              <ConversationWorkItemShelf
+                workItems={unanchoredWorkItems}
+                pluginsAvailable={pluginsAvailable}
+                onCancelTask={onCancelTask}
+                onRetryTask={onRetryTask}
+                onViewTaskResult={onViewTaskResult}
+              />
+              <MessageList
+                messages={messages}
+                isThinking={isThinking}
+                streamingMessageId={streamingMessageId}
+                activeConversationId={activeConversationId}
+                identities={messageIdentities}
+                activeSkillNotice={activeSkill}
+                activationProgress={activationProgress}
+                onClearActiveSkill={onClearActiveSkill}
+              />
+            </>
+          )}
+        </MessageActionsProvider>
 
         {/* Input Area */}
         <InputArea
@@ -218,4 +241,66 @@ export function ChatView({
       </div>
     </DropZone>
   );
+}
+
+function ConversationWorkItemShelf({
+  workItems,
+  pluginsAvailable,
+  onCancelTask,
+  onRetryTask,
+  onViewTaskResult,
+}: {
+  readonly workItems: readonly AgentWorkItem[];
+  readonly pluginsAvailable?: PluginsAvailable;
+  readonly onCancelTask?: (taskId: string) => void;
+  readonly onRetryTask?: (taskId: string) => void;
+  readonly onViewTaskResult?: (taskId: string, resultRef?: string) => void;
+}) {
+  if (workItems.length === 0) return null;
+  const taskItems = workItems.filter(isTaskWorkItem);
+  const subAgentItems = workItems.filter(isSubAgentWorkItem);
+
+  return (
+    <div className="agent-workitem-shelf px-3 py-2">
+      {taskItems.length === 1 && (
+        <TaskCard
+          task={taskItems[0].task}
+          onCancel={onCancelTask}
+          onRetry={onRetryTask}
+          onViewResult={onViewTaskResult}
+          plugins={pluginsAvailable}
+        />
+      )}
+      {taskItems.length > 1 && (
+        <BatchTaskCard
+          tasks={taskItems.map((item) => item.task)}
+          onCancel={onCancelTask}
+          onCancelAll={() => taskItems.forEach((item) => onCancelTask?.(item.id))}
+          onViewResult={onViewTaskResult}
+        />
+      )}
+      {subAgentItems.map((item) => (
+        <SubAgentCard key={item.id} item={item} />
+      ))}
+    </div>
+  );
+}
+
+function selectUnanchoredWorkItems(
+  messages: readonly Message[],
+  workItems: readonly AgentWorkItem[],
+): AgentWorkItem[] {
+  if (workItems.length === 0) return [];
+  const linkedIds = new Set(messages.flatMap((message) => message.workItemIds ?? []));
+  return workItems.filter((item) => !linkedIds.has(item.id));
+}
+
+function isTaskWorkItem(
+  item: AgentWorkItem,
+): item is Extract<AgentWorkItem, { kind: 'media-task' | 'tool-background-task' }> {
+  return item.kind !== 'subagent';
+}
+
+function isSubAgentWorkItem(item: AgentWorkItem): item is SubAgentWorkItem {
+  return item.kind === 'subagent';
 }
