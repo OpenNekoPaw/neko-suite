@@ -23,6 +23,7 @@
     "./types/dashboard-task": "./src/types/dashboard-task.ts",
     "./types/dashboard-project": "./src/types/dashboard-project.ts",
     "./types/dashboard-creative-entity": "./src/types/dashboard-creative-entity.ts",
+    "./types/creative-ai-invocation": "./src/types/creative-ai-invocation.ts",
     "./types/npc-test-bench": "./src/types/npc-test-bench.ts",
     "./types/agent-autoheal": "./src/types/agent-autoheal.ts",
     "./vscode/extension/command-args": "./src/vscode/extension/command-args.ts",

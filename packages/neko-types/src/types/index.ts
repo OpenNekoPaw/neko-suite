@@ -185,6 +185,7 @@ export * from './prompt';
 
 // Agent message types (unified message types for Extension ↔ Webview ↔ CLI)
 export * from './agent-message';
+export * from './creative-ai-invocation';
 
 // Media engine types (progressive media processing architecture)
 export * from './mediaEngine';
