@@ -111,6 +111,7 @@ import type {
   CanvasStoryboardPayload,
   CanvasRelatedBoardRef,
   CreatedCanvasStoryboard,
+  ExternalCreativeAiInvocation,
   CanvasAgentActiveContextRequest,
   CanvasAgentActiveContextResult,
   CanvasAgentApplyContentResult,
@@ -157,6 +158,13 @@ import {
   type CanvasEntityBackfillDiagnostic,
   type CanvasEntityPendingBackfill,
 } from './canvasEntityBackfill';
+import {
+  buildCanvasGenerateExternalInvocation,
+  CANVAS_CREATIVE_AI_INVOKE_EXTERNAL_COMMAND,
+  createCanvasDocumentRevision,
+  type CanvasCreativeAiAgentInvocationResult,
+  type CanvasCreativeAiDocumentIdentity,
+} from '../creativeAiCanvasAdapter';
 
 const logger = getLogger('CanvasEditorProvider');
 const CANVAS_KEYBOARD_OWNER_PREFIX = 'neko.canvasEditor:';
@@ -2205,24 +2213,38 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
   }
 
-  async generateImageForNode(nodeId: string, childNodeId?: string): Promise<void> {
+  async generateImageForNode(
+    nodeId: string,
+    childNodeId?: string,
+    options: { readonly routeCreativeAi?: boolean } = {},
+  ): Promise<void> {
     const node = await this.getNode(nodeId);
     const lineage = node ? extractCanvasNodeGenerationLineage(node) : { sourceNodeId: nodeId };
     const referenceRefs = node ? extractReferenceRefs(node) : undefined;
     const shotFields = node ? extractShotPromptFields(node) : undefined;
+    const params = {
+      prompt: shotFields?.prompt ?? '',
+      shotScale: shotFields?.shotScale,
+      cameraMovement: shotFields?.cameraMovement,
+      cameraAngle: shotFields?.cameraAngle,
+      sourceNodeId: lineage?.sourceNodeId ?? nodeId,
+      characterIds: lineage?.characterIds ? [...lineage.characterIds] : undefined,
+      referenceRefs,
+    };
+
+    if (options.routeCreativeAi !== false && node) {
+      const routed = await this.routeCreativeAiGenerationForNode({
+        node,
+        childNodeId,
+        params,
+      });
+      if (!routed) return;
+    }
 
     this.scheduler.enqueue({
       nodeId,
       childNodeId,
-      params: {
-        prompt: shotFields?.prompt ?? '',
-        shotScale: shotFields?.shotScale,
-        cameraMovement: shotFields?.cameraMovement,
-        cameraAngle: shotFields?.cameraAngle,
-        sourceNodeId: lineage?.sourceNodeId ?? nodeId,
-        characterIds: lineage?.characterIds ? [...lineage.characterIds] : undefined,
-        referenceRefs,
-      },
+      params,
       onProgress: (status, dataUrl) => {
         this.activeWebviewPanel?.webview.postMessage({
           type: 'generationProgress',
@@ -2239,8 +2261,123 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   async generateBatchForNodes(nodeIds: string[]): Promise<void> {
+    const nodes = (await Promise.all(nodeIds.map((nodeId) => this.getNode(nodeId)))).filter(
+      (node): node is CanvasNode => Boolean(node),
+    );
+    if (nodes.length > 0) {
+      const routed = await this.routeCreativeAiGenerationBatch(nodes);
+      if (!routed) return;
+    }
+
     for (const nodeId of nodeIds) {
-      await this.generateImageForNode(nodeId);
+      await this.generateImageForNode(nodeId, undefined, { routeCreativeAi: false });
+    }
+  }
+
+  private async routeCreativeAiGenerationForNode(input: {
+    readonly node: CanvasNode;
+    readonly childNodeId?: string;
+    readonly params?: Readonly<Record<string, unknown>>;
+  }): Promise<boolean> {
+    const documentIdentity = this.createCreativeAiDocumentIdentity();
+    if (!documentIdentity) {
+      await handleError(
+        new Error('Cannot route Canvas AI generation without an active .nkc document.'),
+        {
+          showToUser: true,
+          severity: 'warning',
+        },
+      );
+      return false;
+    }
+
+    const invocation = buildCanvasGenerateExternalInvocation({
+      document: documentIdentity,
+      node: input.node,
+      childNodeId: input.childNodeId,
+      params: input.params,
+      mode: 'generate',
+      intent: 'Generate a stable image output for this Canvas node.',
+      requestedAt: new Date().toISOString(),
+    });
+    return this.invokeExternalCreativeAi(invocation);
+  }
+
+  private async routeCreativeAiGenerationBatch(nodes: readonly CanvasNode[]): Promise<boolean> {
+    const documentIdentity = this.createCreativeAiDocumentIdentity();
+    if (!documentIdentity) {
+      await handleError(
+        new Error('Cannot route Canvas batch AI generation without an active .nkc document.'),
+        {
+          showToUser: true,
+          severity: 'warning',
+        },
+      );
+      return false;
+    }
+    const firstNode = nodes[0];
+    if (!firstNode) return false;
+
+    const invocation = buildCanvasGenerateExternalInvocation({
+      document: documentIdentity,
+      node: firstNode,
+      batchNodes: nodes,
+      batchNodeIds: nodes.map((node) => node.id),
+      mode: 'batch',
+      intent: 'Batch-generate stable image outputs for selected Canvas nodes.',
+      requestedAt: new Date().toISOString(),
+    });
+    return this.invokeExternalCreativeAi(invocation);
+  }
+
+  private createCreativeAiDocumentIdentity(): CanvasCreativeAiDocumentIdentity | null {
+    const document = this.activeDocument;
+    if (!document) return null;
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+    const projectRelativePath =
+      workspaceFolder && document.uri.scheme === 'file'
+        ? path.relative(workspaceFolder.uri.fsPath, document.uri.fsPath).replace(/\\/g, '/')
+        : undefined;
+    const normalizedProjectRelativePath =
+      projectRelativePath &&
+      !projectRelativePath.startsWith('..') &&
+      !path.isAbsolute(projectRelativePath)
+        ? projectRelativePath
+        : undefined;
+    const canvasSnapshot = this.canvasSnapshotsByDocumentUri.get(document.uri.toString());
+    return {
+      documentId: `canvas-document:${hashProjectionSource(document.uri.toString())}`,
+      ...(normalizedProjectRelativePath
+        ? { projectRelativePath: normalizedProjectRelativePath }
+        : {}),
+      label: path.basename(document.uri.fsPath || document.uri.path),
+      revision: canvasSnapshot
+        ? createCanvasDocumentRevision(canvasSnapshot)
+        : `canvas-doc-revision:${this.getCanvasRevision(document.uri.toString())}`,
+    };
+  }
+
+  private async invokeExternalCreativeAi(
+    invocation: ExternalCreativeAiInvocation,
+  ): Promise<boolean> {
+    try {
+      const result = await vscode.commands.executeCommand<
+        CanvasCreativeAiAgentInvocationResult | undefined
+      >(CANVAS_CREATIVE_AI_INVOKE_EXTERNAL_COMMAND, invocation);
+      if (result?.ok) {
+        return true;
+      }
+      const message =
+        result?.diagnostics.map((diagnostic) => diagnostic.message).join('; ') ??
+        'Agent creative AI routing returned no result.';
+      await handleError(new Error(message), { showToUser: true, severity: 'warning' });
+      return false;
+    } catch (error) {
+      await handleError(error instanceof Error ? error : new Error(String(error)), {
+        showToUser: true,
+        severity: 'warning',
+      });
+      return false;
     }
   }
 
@@ -3153,6 +3290,20 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               )
             : refsFromNode,
         };
+
+        if (!node) {
+          await handleError(new Error(`Cannot generate Canvas node "${nodeId}": node not found.`), {
+            showToUser: true,
+            severity: 'warning',
+          });
+          break;
+        }
+        const routed = await this.routeCreativeAiGenerationForNode({
+          node,
+          childNodeId,
+          params,
+        });
+        if (!routed) break;
 
         this.scheduler.enqueue({
           nodeId,

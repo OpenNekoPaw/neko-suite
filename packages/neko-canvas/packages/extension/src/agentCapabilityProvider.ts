@@ -536,6 +536,29 @@ function buildCanvasMarkdownCapabilityInput(
   } as CanvasMarkdownCapabilityInput;
 }
 
+function requiresVisibleStoryboardMarkdownSource(
+  definition: CanvasMarkdownToolDefinition,
+  input: CanvasMarkdownCapabilityInput,
+): boolean {
+  if (input.capabilityId === 'canvas.attachResource') return false;
+  if (
+    definition.capabilityId === 'canvas.validateMarkdownStoryboard' ||
+    definition.capabilityId === 'canvas.createStoryboardFromMarkdown'
+  ) {
+    return true;
+  }
+  return input.profileHint?.toLowerCase() === 'storyboard';
+}
+
+function hasVisibleAssistantMarkdownBlockSource(input: CanvasMarkdownCapabilityInput): boolean {
+  if (!('provenance' in input)) return false;
+  const provenance = input.provenance;
+  return (
+    provenance?.source === 'webview' &&
+    provenance.label === CANVAS_VISIBLE_ASSISTANT_MARKDOWN_PROVENANCE_LABEL
+  );
+}
+
 function createMarkdownCapabilityTool(
   api: NekoCanvasAPI,
   definition: CanvasMarkdownToolDefinition,
@@ -618,6 +641,17 @@ function createMarkdownCapabilityTool(
             input,
             'Canvas Markdown capability requires non-empty markdown.',
             'canvas-markdown-missing-markdown',
+          );
+        }
+        if (
+          requiresVisibleStoryboardMarkdownSource(definition, input) &&
+          !hasVisibleAssistantMarkdownBlockSource(input)
+        ) {
+          return createBlockedCanvasMarkdownToolResult(
+            definition,
+            input,
+            CANVAS_STORYBOARD_VISIBLE_SOURCE_REQUIRED_MESSAGE,
+            CANVAS_STORYBOARD_VISIBLE_SOURCE_REQUIRED_CODE,
           );
         }
         const data = await api.markdown.invoke(input);
@@ -1065,6 +1099,11 @@ type CanvasToolTraits = NonNullable<Tool['traits']>;
 
 const CANVAS_MARKDOWN_RESOURCE_CONTRACT_DESCRIPTION =
   'Resource wrappers must preserve field contracts: unified ResourceRef values use resourceRef; document-entry DocumentArchiveResourceRef values must use documentResourceRef.';
+const CANVAS_VISIBLE_ASSISTANT_MARKDOWN_PROVENANCE_LABEL = 'assistant-markdown-block';
+const CANVAS_STORYBOARD_VISIBLE_SOURCE_REQUIRED_CODE =
+  'canvas-storyboard-visible-source-required';
+const CANVAS_STORYBOARD_VISIBLE_SOURCE_REQUIRED_MESSAGE =
+  'Canvas storyboard Markdown requires a visible assistant Markdown block source before validation or node creation.';
 
 const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] = [
   {
@@ -1073,7 +1112,7 @@ const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] 
     displayName: 'Ingest Markdown to Canvas',
     phase: 'review',
     description:
-      'Review-ingest Markdown into Canvas as a note, generic table, or creative review table. This does not create production scene/shot nodes; use canvas.createStoryboardFromMarkdown for storyboard node creation.',
+      'Review-ingest visible Markdown into Canvas as a note, generic table, or creative review table. Storyboard profile input must come from a visible assistant Markdown block or UI handoff source. This does not create production scene/shot nodes; use canvas.createStoryboardFromMarkdown for storyboard node creation.',
     requiresConfirmation: true,
   },
   {
@@ -1100,7 +1139,7 @@ const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] 
     displayName: 'Create Storyboard Nodes',
     phase: 'apply',
     description:
-      'Create production Canvas storyboard nodes (scene.basic + shot.basic) from validated Markdown after explicit confirmation. Requires mode=create-nodes and approval context.',
+      'Create production Canvas storyboard nodes (scene.basic + shot.basic) from validated visible Markdown after explicit confirmation. Requires a completed storyboard creative table from a visible assistant Markdown block or UI handoff source, mode=create-nodes, and approval context.',
     requiresConfirmation: true,
   },
   {
@@ -1118,7 +1157,7 @@ const CANVAS_MARKDOWN_TOOL_DEFINITIONS: readonly CanvasMarkdownToolDefinition[] 
     displayName: 'Validate Markdown Storyboard',
     phase: 'validate',
     description:
-      'Validate a Markdown semantic storyboard table and return diagnostics without mutating Canvas state.',
+      'Validate a visible Markdown semantic storyboard table and return diagnostics without mutating Canvas state. The source table must already be visible as an assistant Markdown block or UI handoff source.',
     requiresConfirmation: false,
     isReadOnly: true,
   },
@@ -1227,7 +1266,7 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
   },
   [TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN]: {
     description:
-      '将 Markdown 内容作为可审阅 Note、表格或 creative table 导入 Canvas；不会创建生产 scene/shot 节点。',
+      '将可见 Markdown 内容作为可审阅 Note、表格或 creative table 导入 Canvas；storyboard profile 输入必须来自可见 assistant Markdown 块或 UI handoff 来源；不会创建生产 scene/shot 节点。',
     parameters: {
       markdown: '原始 Markdown 内容；不要传入渲染后的 HTML。',
       title: '可选标题。',
@@ -1276,7 +1315,7 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
   },
   [TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN]: {
     description:
-      '在显式确认后，从已校验 Markdown 创建生产 Canvas 分镜节点（scene.basic + shot.basic）。',
+      '在显式确认后，从已校验的可见 Markdown 创建生产 Canvas 分镜节点（scene.basic + shot.basic）；来源必须是可见 assistant Markdown 块或 UI handoff。',
     parameters: {
       markdown: '原始 Markdown 分镜内容。',
       title: '可选标题。',
@@ -1301,7 +1340,7 @@ const CANVAS_TOOL_ZH_LOCALIZATIONS = {
     },
   },
   [TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD]: {
-    description: '只读校验 Markdown 分镜内容是否可被 Canvas 接收。',
+    description: '只读校验可见 Markdown 分镜内容是否可被 Canvas 接收；来源必须是可见 assistant Markdown 块或 UI handoff。',
     parameters: {
       markdown: '要校验的 Markdown 分镜内容。',
       title: '可选标题。',
@@ -2575,8 +2614,12 @@ const CANVAS_AUTHORING_SKILL_EN = [
   '## Recipes',
   '- Storyboard creation is a Canvas recipe, not a separate Agent workflow. Prefer scene.basic + shot.basic through canvas_create_composite for scene/shot structures.',
   '- Use media.basic through canvas_create_node for one stable asset or reference.',
+  '- A completed source storyboard creative table must already exist before Canvas Markdown tools are called.',
+  '- The source storyboard table must be visible as an assistant Markdown block or UI handoff source. If the table only exists inside tool arguments, output the table and stop instead of calling Canvas tools.',
+  '- Do not call Canvas tools to skip comic/page visual analysis or storyboard table generation.',
   '- For Send-to-Canvas storyboard creative tables that should become Canvas storyboard nodes, validate if useful, then call canvas.createStoryboardFromMarkdown with profileHint=storyboard, mode=create-nodes, and explicit approval. This creates scene.basic + shot.basic nodes.',
   '- Use canvas.ingestMarkdown with intentHint=creative-table and profileHint=storyboard only for review-only table/draft ingestion. It creates a table/note review artifact, not scene/shot nodes.',
+  '- If canvas.createStoryboardFromMarkdown is blocked, report the diagnostics and repair the table, approval, target, or resource refs. Do not fall back to canvas.ingestMarkdown as successful storyboard delivery unless the user explicitly asks for a review-only table node.',
   '- Write prompts and generation parameters back to Canvas nodes before generation tools run.',
   '',
   '## Prompt-First Fields',
@@ -2608,8 +2651,12 @@ const CANVAS_AUTHORING_SKILL_ZH = [
   '## Recipes',
   '- 分镜创建是 Canvas recipe，不是单独的 Agent 工作流。场景/镜头结构优先使用 scene.basic + shot.basic，并通过 canvas_create_composite 创建。',
   '- 单个稳定素材或引用使用 media.basic，并通过 canvas_create_node 创建。',
+  '- 调用 Canvas Markdown 工具前，必须已经存在完成的来源分镜 creative table。',
+  '- 来源分镜表必须是可见 assistant Markdown 块或 UI handoff 来源。如果表格只存在于工具参数中，先输出表格并停止，不要调用 Canvas 工具。',
+  '- 不要用 Canvas 工具跳过漫画/页面视觉分析或分镜表生成。',
   '- Send to Canvas 分镜 creative table 如果要变成 Canvas 分镜节点，必要时先校验，然后调用 canvas.createStoryboardFromMarkdown，并传入 profileHint=storyboard、mode=create-nodes 和显式审批。该路径创建 scene.basic + shot.basic 节点。',
   '- canvas.ingestMarkdown 传入 intentHint=creative-table、profileHint=storyboard 时只用于 review-only 表格/草稿摄入。它创建 table/note 审阅产物，不创建 scene/shot 节点。',
+  '- 如果 canvas.createStoryboardFromMarkdown 被阻塞，报告 diagnostics，并修复表格、approval、target 或 resource refs。除非用户明确要求 review-only table 节点，不要 fallback 到 canvas.ingestMarkdown 并声称分镜交付成功。',
   '- 生成工具运行前，先把 prompts 和生成参数写回 Canvas 节点。',
   '',
   '## Prompt-First Fields',

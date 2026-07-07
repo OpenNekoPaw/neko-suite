@@ -377,8 +377,32 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     const authoringSkill = provider
       .getSkills?.()
       .find((skill) => skill.name === 'canvas-authoring');
+    const authoringSkillZh = provider
+      .getSkills?.({ extensionContext: {}, locale: 'zh' })
+      .find((skill) => skill.name === 'canvas-authoring');
+    const createStoryboardTool = tools.find(
+      (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN,
+    );
 
     expect(authoringSkill).toBeDefined();
+    expect(authoringSkill?.content).toContain(
+      'A completed source storyboard creative table must already exist before Canvas Markdown tools are called.',
+    );
+    expect(authoringSkill?.content).toContain(
+      'The source storyboard table must be visible as an assistant Markdown block or UI handoff source.',
+    );
+    expect(authoringSkill?.content).toContain(
+      'Do not call Canvas tools to skip comic/page visual analysis or storyboard table generation.',
+    );
+    expect(authoringSkillZh?.content).toContain(
+      '调用 Canvas Markdown 工具前，必须已经存在完成的来源分镜 creative table。',
+    );
+    expect(authoringSkillZh?.content).toContain('来源分镜表必须是可见 assistant Markdown 块或 UI handoff 来源。');
+    expect(authoringSkillZh?.content).toContain('不要用 Canvas 工具跳过漫画/页面视觉分析或分镜表生成。');
+    expect(createStoryboardTool?.description).toContain(
+      'Requires a completed storyboard creative table',
+    );
+    expect(createStoryboardTool?.description).toContain('visible assistant Markdown block');
     expect(toolNames).not.toContain('CreateCanvas');
     expect(toolNames).not.toContain('AddCanvasShape');
     expect(toolNames).not.toContain('canvas.createStoryboardDraftFromMarkdown');
@@ -1164,6 +1188,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
       validateTool!.execute({
         markdown: '| image | visual |\n| --- | --- |\n| P1 | shot |',
         sourceFormat: 'gfm-table',
+        provenance: { source: 'webview', label: 'assistant-markdown-block' },
       }),
     ).resolves.toMatchObject({
       success: true,
@@ -1186,6 +1211,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
       capabilityId: 'canvas.validateMarkdownStoryboard',
       markdown: '| image | visual |\n| --- | --- |\n| P1 | shot |',
       sourceFormat: 'gfm-table',
+      provenance: { source: 'webview', label: 'assistant-markdown-block' },
     });
 
     await expect(
@@ -1194,6 +1220,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
         intentHint: 'creative-table',
         profileHint: 'storyboard',
         resources: [{ token: 'P1', sourcePath: 'assets/page-1.png' }],
+        provenance: { source: 'webview', label: 'assistant-markdown-block' },
       }),
     ).resolves.toMatchObject({
       success: false,
@@ -1235,6 +1262,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
           '| scene | shot | source | imagePrompt |\n| --- | --- | --- | --- |\n| S1 | 1 | P1 | prep |',
         intentHint: 'creative-table',
         profileHint: 'storyboard',
+        provenance: { source: 'webview', label: 'assistant-markdown-block' },
       }),
     ).resolves.toMatchObject({
       success: false,
@@ -1293,6 +1321,155 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(api.markdown.invoke).not.toHaveBeenCalled();
   });
 
+  it('blocks storyboard Markdown tools when the source table is not a visible assistant Markdown block', async () => {
+    const api = createApi();
+    const provider = createNekoCanvasCapabilityProvider(api);
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const validateTool = tools.find(
+      (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD,
+    );
+    const ingestTool = tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_INGEST_MARKDOWN);
+    const createStoryboardTool = tools.find(
+      (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN,
+    );
+    const storyboardMarkdown =
+      '| scene | shot | reference media | image prompt | scene video prompt | duration | dialogue | state | action |\n' +
+      '| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n' +
+      '| S1 | 1 | @P1 as first frame | restore panel colors | scene video prompt | 4s | hello | ready | generate-video |';
+
+    await expect(
+      validateTool!.execute({
+        markdown: storyboardMarkdown,
+        sourceFormat: 'gfm-table',
+        profileHint: 'storyboard',
+      }),
+    ).resolves.toMatchObject({
+      success: false,
+      error:
+        'Canvas storyboard Markdown requires a visible assistant Markdown block source before validation or node creation.',
+      data: {
+        capabilityId: 'canvas.validateMarkdownStoryboard',
+        status: 'blocked',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'canvas-storyboard-visible-source-required',
+          }),
+        ],
+      },
+    });
+
+    await expect(
+      ingestTool!.execute({
+        markdown: storyboardMarkdown,
+        sourceFormat: 'gfm-table',
+        intentHint: 'creative-table',
+        profileHint: 'storyboard',
+      }),
+    ).resolves.toMatchObject({
+      success: false,
+      error:
+        'Canvas storyboard Markdown requires a visible assistant Markdown block source before validation or node creation.',
+      data: {
+        capabilityId: 'canvas.ingestMarkdown',
+        status: 'blocked',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'canvas-storyboard-visible-source-required',
+          }),
+        ],
+      },
+    });
+
+    await expect(
+      createStoryboardTool!.execute({
+        markdown: storyboardMarkdown,
+        sourceFormat: 'gfm-table',
+        profileHint: 'storyboard',
+        mode: 'create-nodes',
+        approval: { source: 'user', reason: 'Send visible storyboard to Canvas' },
+      }),
+    ).resolves.toMatchObject({
+      success: false,
+      error:
+        'Canvas storyboard Markdown requires a visible assistant Markdown block source before validation or node creation.',
+      data: {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        status: 'blocked',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'canvas-storyboard-visible-source-required',
+          }),
+        ],
+      },
+    });
+
+    expect(api.markdown.invoke).not.toHaveBeenCalled();
+  });
+
+  it('allows storyboard Markdown handoff from a visible assistant Markdown block', async () => {
+    const api = createApi();
+    api.markdown.invoke = vi.fn(async (input) => ({
+      capabilityId: input.capabilityId,
+      status: input.capabilityId === 'canvas.validateMarkdownStoryboard' ? 'validated' : 'created',
+      diagnostics: [],
+      ...(input.capabilityId === 'canvas.createStoryboardFromMarkdown'
+        ? { nodeIds: ['scene-1', 'shot-1'] }
+        : {}),
+    }));
+    const provider = createNekoCanvasCapabilityProvider(api);
+    const tools = provider.getTools({
+      extensionContext: {},
+      mediaService: undefined,
+      configManager: undefined,
+      embedFn: undefined,
+    });
+    const createStoryboardTool = tools.find(
+      (tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN,
+    );
+    const storyboardMarkdown =
+      '| scene | shot | reference media | image prompt | scene video prompt | duration | dialogue | state | action |\n' +
+      '| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n' +
+      '| S1 | 1 | @P1 as first frame | restore panel colors | scene video prompt | 4s | hello | ready | generate-video |';
+
+    await expect(
+      createStoryboardTool!.execute({
+        markdown: storyboardMarkdown,
+        sourceFormat: 'gfm-table',
+        profileHint: 'storyboard',
+        mode: 'create-nodes',
+        approval: { source: 'user', reason: 'Send visible storyboard to Canvas' },
+        provenance: { source: 'webview', label: 'assistant-markdown-block' },
+      }),
+    ).resolves.toMatchObject({
+      success: true,
+      data: {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        status: 'applied',
+        data: {
+          authoringResult: {
+            status: 'success',
+            refs: expect.arrayContaining([
+              expect.objectContaining({ kind: 'node', id: 'scene-1' }),
+              expect.objectContaining({ kind: 'node', id: 'shot-1' }),
+            ]),
+          },
+        },
+      },
+    });
+
+    expect(api.markdown.invoke).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        provenance: { source: 'webview', label: 'assistant-markdown-block' },
+      }),
+    );
+  });
+
   it('fails visibly when Canvas Markdown mutation result has no Canvas refs', async () => {
     const api = createApi();
     api.markdown.invoke = vi.fn(async (input) => ({
@@ -1315,6 +1492,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
           '| scene | shot | source | imagePrompt |\n| --- | --- | --- | --- |\n| S1 | 1 | P1 | prep |',
         intentHint: 'creative-table',
         profileHint: 'storyboard',
+        provenance: { source: 'webview', label: 'assistant-markdown-block' },
       }),
     ).resolves.toMatchObject({
       success: false,
@@ -1360,7 +1538,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
       tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_VALIDATE_MARKDOWN_STORYBOARD)
         ?.localization?.zh,
     ).toMatchObject({
-      description: '只读校验 Markdown 分镜内容是否可被 Canvas 接收。',
+      description: '只读校验可见 Markdown 分镜内容是否可被 Canvas 接收；来源必须是可见 assistant Markdown 块或 UI handoff。',
       parameters: {
         markdown: '要校验的 Markdown 分镜内容。',
         sourceFormat: '来源格式提示。',
@@ -1371,14 +1549,14 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
         ?.zh,
     ).toMatchObject({
       description:
-        '将 Markdown 内容作为可审阅 Note、表格或 creative table 导入 Canvas；不会创建生产 scene/shot 节点。',
+        '将可见 Markdown 内容作为可审阅 Note、表格或 creative table 导入 Canvas；storyboard profile 输入必须来自可见 assistant Markdown 块或 UI handoff 来源；不会创建生产 scene/shot 节点。',
     });
     expect(
       tools.find((tool) => tool.name === TOOL_NAMES_CANVAS.CANVAS_CREATE_STORYBOARD_FROM_MARKDOWN)
         ?.localization?.zh,
     ).toMatchObject({
       description:
-        '在显式确认后，从已校验 Markdown 创建生产 Canvas 分镜节点（scene.basic + shot.basic）。',
+        '在显式确认后，从已校验的可见 Markdown 创建生产 Canvas 分镜节点（scene.basic + shot.basic）；来源必须是可见 assistant Markdown 块或 UI handoff。',
       parameters: {
         mode: '分镜创建模式；生产节点创建必须使用 create-nodes。',
         approval:
@@ -1474,6 +1652,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
         markdown: '| image | visual |\n| --- | --- |\n| P1 | shot |',
         intentHint: 'creative-table',
         profileHint: 'storyboard',
+        provenance: { source: 'webview', label: 'assistant-markdown-block' },
       }),
     ).resolves.toMatchObject({
       success: true,

@@ -15,6 +15,7 @@ import {
   type CanvasStoryboardExecutionSummaryRequest,
   type CanvasStoryboardPayload,
   type CreatedCanvasStoryboard,
+  type CreativeAiApplyRequest,
   type DocumentArchiveResourceRef,
   type ResourceRef,
 } from '@neko/shared';
@@ -40,6 +41,7 @@ import {
   NARRATIVE_PREVIEW_CONFIG_SECTION,
   readNarrativePreviewFeatureToggles,
 } from './editor/narrativePreviewFeatureGate';
+import { CanvasCreativeAiApplyAdapter } from './creativeAiCanvasAdapter';
 
 // Extension state
 let canvasEditorProvider: CanvasEditorProvider;
@@ -175,6 +177,10 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
     undefined,
     getNarrativePreviewFeatureToggles,
   );
+  const creativeAiApplyAdapter = new CanvasCreativeAiApplyAdapter({
+    getNode: (nodeId) => canvasEditorProvider.getNode(nodeId),
+    updateNode: (nodeId, data) => canvasEditorProvider.updateNode(nodeId, data),
+  });
   canvasOutlineProvider = new CanvasOutlineProvider();
   canvasStatusBar = new CanvasStatusBar();
 
@@ -378,7 +384,12 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
   };
 
   // Register commands
-  registerCommands(context, api.storyboard.getExecutionSummary, getNarrativePreviewFeatureToggles);
+  registerCommands(
+    context,
+    api.storyboard.getExecutionSummary,
+    getNarrativePreviewFeatureToggles,
+    creativeAiApplyAdapter,
+  );
 
   // Register plugin slash commands into neko-agent chat panel
   registerAgentSlashCommands(context);
@@ -427,6 +438,7 @@ function registerCommands(
     request?: CanvasStoryboardExecutionSummaryRequest,
   ) => Promise<CanvasStoryboardExecutionSummary>,
   getNarrativePreviewFeatureToggles: () => ReturnType<typeof readNarrativePreviewFeatureToggles>,
+  creativeAiApplyAdapter: CanvasCreativeAiApplyAdapter,
 ): void {
   // New Canvas - create file with inline rename (like neko-story)
   context.subscriptions.push(
@@ -552,6 +564,13 @@ function registerCommands(
       'neko.canvas.getStoryboardExecutionSummary',
       async (request?: CanvasStoryboardExecutionSummaryRequest) =>
         getExecutionSummary(request ?? {}),
+    ),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'neko.canvas.creativeAi.apply',
+      async (request: CreativeAiApplyRequest) => creativeAiApplyAdapter.apply(request),
     ),
   );
 
