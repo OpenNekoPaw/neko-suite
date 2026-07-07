@@ -157,6 +157,16 @@ Alternative rejected: automatic semantic recall over archived conversations. Thi
 
 No existing conversation history needs destructive migration. If old package-local AI shortcuts remain during migration, new-path tests must poison or assert against legacy success paths for migrated buttons.
 
+## Legacy AI Button Paths Intentionally Left During This Change
+
+The first Canvas integration migrates AI button routing and apply contracts, but it does not replace the existing image provider execution/writeback path in the same change. This keeps the current Canvas generation UX working while the generated binary output lifecycle moves from Webview `dataUrl` payloads to stable generated asset/resource refs.
+
+- Owner: Canvas Extension and Agent Extension.
+- Current path: Canvas Webview posts `generateForNode`; `CanvasEditorProvider` emits an `ExternalCreativeAiInvocation` through `neko.agent.creativeAi.invokeExternal`; after that routing succeeds, `BatchGenerationScheduler` still calls `neko.agent.generateForNode` and reports `generationProgress` with the returned `dataUrl`.
+- Replacement path: Agent run/workItems should execute the provider under the creative AI run identity, promote binary outputs to stable generated asset/resource refs, then call `neko.canvas.creativeAi.apply` with a `CreativeAiApplyRequest` carrying target revision preconditions and idempotency identity.
+- Validation command: `/opt/homebrew/bin/pnpm exec vitest run packages/neko-canvas/packages/extension/src/__tests__/creativeAiCanvasAdapter.test.ts packages/neko-canvas/packages/extension/src/__tests__/agentCapabilityProvider.test.ts`, plus the Agent extension command/routing focused test set in this change.
+- Removal condition: remove the `neko.agent.generateForNode` scheduler writeback path for migrated Canvas buttons after Canvas image generation returns stable refs and tests prove the migrated buttons no longer rely on Webview `dataUrl` writeback or direct `generationProgress` success to mutate Canvas state.
+
 ## Open Questions
 
 - Which package should be the first canonical implementation target: Canvas generation panel, Canvas node AI buttons, or another `nk*` editor?
