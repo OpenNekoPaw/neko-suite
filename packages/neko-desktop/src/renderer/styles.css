@@ -635,6 +635,10 @@ html[data-neko-desktop-platform="darwin"] .title-bar {
 
 .code-editor-panel {
   display: grid;
+  grid-template-rows: 34px minmax(0, 1fr);
+}
+
+.code-editor-panel[data-truncated="true"] {
   grid-template-rows: 34px auto minmax(0, 1fr);
 }
 
@@ -667,13 +671,48 @@ html[data-neko-desktop-platform="darwin"] .title-bar {
   background: color-mix(in srgb, var(--neko-warning) 11%, white);
 }
 
+.code-editor-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .code-editor-panel__host {
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
 
 .code-editor-panel__host .cm-editor {
   height: 100%;
+}
+
+.code-editor-panel__host .cm-scroller {
+  min-height: 0;
+  overflow: auto;
+}
+
+.code-editor-minimap {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--neko-border);
+  padding: 4px 7px;
+  background: color-mix(in srgb, var(--vscode-editor-background) 94%, var(--neko-workbench-chrome));
+}
+
+.code-editor-minimap__line {
+  display: block;
+  flex: 0 0 2px;
+  max-width: 100%;
+  min-width: 5px;
+  border-radius: 999px;
+  background: var(--vscode-editor-foreground);
 }
 
 .desktop-editor-loading {

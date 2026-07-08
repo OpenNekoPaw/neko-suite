@@ -63,8 +63,8 @@ describe('desktop workbench layout', () => {
     expect(styles).not.toContain('.desktop-full-webview-runtime');
     expect(styles).not.toContain('.agent-');
     expect(styles).not.toContain('.cut-');
-    expect(styles).not.toMatch(/^\.neko-creative-tree-view \[role="treeitem"\]/mu);
-    expect(styles).toContain('.workspace-file-tree.neko-creative-tree-view [role="treeitem"]');
+    expect(styles).not.toMatch(/^\.neko-creative-tree-view \[role=['"]treeitem['"]\]/mu);
+    expect(styles).toMatch(/\.workspace-file-tree\.neko-creative-tree-view \[role=['"]treeitem['"]\]/u);
 
     expect(adapterSource).toContain("@neko-canvas/webview/host-adapter");
     expect(adapterSource).toContain("@neko/webview/root");
