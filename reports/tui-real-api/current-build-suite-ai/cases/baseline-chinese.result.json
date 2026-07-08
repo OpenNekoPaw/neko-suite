@@ -1,0 +1,139 @@
+{
+  "case": {
+    "id": "baseline-chinese",
+    "promptId": "baseline",
+    "prompt": "不要调用工具；只根据这句话用中文一句话回答：Neko TUI 真实 API 验证正在检查什么？",
+    "checks": [
+      {
+        "kind": "exit-code",
+        "equals": 0
+      },
+      {
+        "kind": "non-empty-output"
+      }
+    ]
+  },
+  "verdict": "pass",
+  "checks": [
+    {
+      "kind": "exit-code",
+      "passed": true,
+      "message": "exitCode=0, expected=0"
+    },
+    {
+      "kind": "non-empty-output",
+      "passed": true,
+      "message": "assistant output must be non-empty"
+    }
+  ],
+  "execution": {
+    "caseId": "baseline-chinese",
+    "promptId": "baseline",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--max-iterations",
+      "8",
+      "--timeout",
+      "120000",
+      "不要调用工具；只根据这句话用中文一句话回答：Neko TUI 真实 API 验证正在检查什么？"
+    ],
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "stdout": "Neko TUI 真实 API 验证是在检查 TUI 是否能通过实际后端接口完成关键流程，而不是只验证前端假数据或模拟逻辑。",
+    "stderr": "",
+    "exitCode": 0,
+    "durationMs": 3121,
+    "timedOut": false,
+    "result": {
+      "success": true,
+      "output": "Neko TUI 真实 API 验证是在检查 TUI 是否能通过实际后端接口完成关键流程，而不是只验证前端假数据或模拟逻辑。",
+      "agentResult": {
+        "success": true,
+        "response": "Neko TUI 真实 API 验证是在检查 TUI 是否能通过实际后端接口完成关键流程，而不是只验证前端假数据或模拟逻辑。",
+        "steps": [],
+        "iterations": 37,
+        "timing": {
+          "startTime": 1783450229083,
+          "endTime": 1783450232204,
+          "duration": 3121
+        }
+      },
+      "duration": 3121
+    }
+  },
+  "resultArtifact": {
+    "schema": "neko.cli-run-result.v1",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--max-iterations",
+      "8",
+      "--timeout",
+      "120000",
+      "不要调用工具；只根据这句话用中文一句话回答：Neko TUI 真实 API 验证正在检查什么？"
+    ],
+    "prompt": "不要调用工具；只根据这句话用中文一句话回答：Neko TUI 真实 API 验证正在检查什么？",
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "config": {
+      "provider": "nekoapi-chat",
+      "providerType": "newapi",
+      "providerRequiresApiKey": true,
+      "model": "gpt-5.5",
+      "chatModel": {
+        "providerId": "nekoapi-chat",
+        "modelId": "gpt-5.5",
+        "capabilities": [
+          "chat",
+          "function_calling",
+          "streaming",
+          "json_mode",
+          "code",
+          "vision"
+        ]
+      },
+      "workDir": "/Users/feng/Git/neko-test",
+      "hasApiKey": true,
+      "apiKey": "<redacted>",
+      "baseUrl": "https://www.nekoapi.com/v1",
+      "maxTokens": 8192,
+      "temperature": 0.7,
+      "outputFormat": "text"
+    },
+    "runOptions": {
+      "interactive": false,
+      "stream": false,
+      "maxIterations": 8,
+      "timeout": 120000
+    },
+    "success": true,
+    "exitCode": 0,
+    "durationMs": 3121,
+    "output": "Neko TUI 真实 API 验证是在检查 TUI 是否能通过实际后端接口完成关键流程，而不是只验证前端假数据或模拟逻辑。",
+    "stepCount": 0,
+    "steps": []
+  }
+}

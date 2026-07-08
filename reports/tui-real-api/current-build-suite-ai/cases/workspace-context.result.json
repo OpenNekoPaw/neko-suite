@@ -1,0 +1,139 @@
+{
+  "case": {
+    "id": "workspace-context",
+    "promptId": "workspace",
+    "prompt": "请说明当前工作目录在本轮任务中有什么作用。不要编造文件内容。",
+    "checks": [
+      {
+        "kind": "exit-code",
+        "equals": 0
+      },
+      {
+        "kind": "non-empty-output"
+      }
+    ]
+  },
+  "verdict": "pass",
+  "checks": [
+    {
+      "kind": "exit-code",
+      "passed": true,
+      "message": "exitCode=0, expected=0"
+    },
+    {
+      "kind": "non-empty-output",
+      "passed": true,
+      "message": "assistant output must be non-empty"
+    }
+  ],
+  "execution": {
+    "caseId": "workspace-context",
+    "promptId": "workspace",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--max-iterations",
+      "8",
+      "--timeout",
+      "120000",
+      "请说明当前工作目录在本轮任务中有什么作用。不要编造文件内容。"
+    ],
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "stdout": "## 当前工作目录的作用\n\n本轮任务里，当前工作目录主要只是**工具执行的默认上下文**：如果后续需要读取普通项目文件、搜索代码、运行命令或写入非创作文档文件，所有相对路径通常会以当前工作目录作为基准解析。\n\n但在你这轮请求中，我还没有读取目录、搜索文件或检查文件内容，所以我不能说明当前目录里具体有哪些文件，也不会编造文件内容。\n\n另外，根据你给出的创作文档契约，像 proposal、需求、计划、任务列表、分镜草稿这类**面向创作者的文档**，不应该通过当前工作目录里的普通路径自行读取或写入；应由宿主的 creation-document 服务负责存储、审批和路径选择。因此当前工作目录不能被当作创作文档的权威存储位置。\n\n简要说：当前工作目录在本轮中只是潜在的项目操作基准，不是当前请求的信息来源，也不是创作文档的持久化依据。",
+    "stderr": "",
+    "exitCode": 0,
+    "durationMs": 9107,
+    "timedOut": false,
+    "result": {
+      "success": true,
+      "output": "## 当前工作目录的作用\n\n本轮任务里，当前工作目录主要只是**工具执行的默认上下文**：如果后续需要读取普通项目文件、搜索代码、运行命令或写入非创作文档文件，所有相对路径通常会以当前工作目录作为基准解析。\n\n但在你这轮请求中，我还没有读取目录、搜索文件或检查文件内容，所以我不能说明当前目录里具体有哪些文件，也不会编造文件内容。\n\n另外，根据你给出的创作文档契约，像 proposal、需求、计划、任务列表、分镜草稿这类**面向创作者的文档**，不应该通过当前工作目录里的普通路径自行读取或写入；应由宿主的 creation-document 服务负责存储、审批和路径选择。因此当前工作目录不能被当作创作文档的权威存储位置。\n\n简要说：当前工作目录在本轮中只是潜在的项目操作基准，不是当前请求的信息来源，也不是创作文档的持久化依据。",
+      "agentResult": {
+        "success": true,
+        "response": "## 当前工作目录的作用\n\n本轮任务里，当前工作目录主要只是**工具执行的默认上下文**：如果后续需要读取普通项目文件、搜索代码、运行命令或写入非创作文档文件，所有相对路径通常会以当前工作目录作为基准解析。\n\n但在你这轮请求中，我还没有读取目录、搜索文件或检查文件内容，所以我不能说明当前目录里具体有哪些文件，也不会编造文件内容。\n\n另外，根据你给出的创作文档契约，像 proposal、需求、计划、任务列表、分镜草稿这类**面向创作者的文档**，不应该通过当前工作目录里的普通路径自行读取或写入；应由宿主的 creation-document 服务负责存储、审批和路径选择。因此当前工作目录不能被当作创作文档的权威存储位置。\n\n简要说：当前工作目录在本轮中只是潜在的项目操作基准，不是当前请求的信息来源，也不是创作文档的持久化依据。",
+        "steps": [],
+        "iterations": 224,
+        "timing": {
+          "startTime": 1783450232208,
+          "endTime": 1783450241315,
+          "duration": 9107
+        }
+      },
+      "duration": 9107
+    }
+  },
+  "resultArtifact": {
+    "schema": "neko.cli-run-result.v1",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--max-iterations",
+      "8",
+      "--timeout",
+      "120000",
+      "请说明当前工作目录在本轮任务中有什么作用。不要编造文件内容。"
+    ],
+    "prompt": "请说明当前工作目录在本轮任务中有什么作用。不要编造文件内容。",
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "config": {
+      "provider": "nekoapi-chat",
+      "providerType": "newapi",
+      "providerRequiresApiKey": true,
+      "model": "gpt-5.5",
+      "chatModel": {
+        "providerId": "nekoapi-chat",
+        "modelId": "gpt-5.5",
+        "capabilities": [
+          "chat",
+          "function_calling",
+          "streaming",
+          "json_mode",
+          "code",
+          "vision"
+        ]
+      },
+      "workDir": "/Users/feng/Git/neko-test",
+      "hasApiKey": true,
+      "apiKey": "<redacted>",
+      "baseUrl": "https://www.nekoapi.com/v1",
+      "maxTokens": 8192,
+      "temperature": 0.7,
+      "outputFormat": "text"
+    },
+    "runOptions": {
+      "interactive": false,
+      "stream": false,
+      "maxIterations": 8,
+      "timeout": 120000
+    },
+    "success": true,
+    "exitCode": 0,
+    "durationMs": 9107,
+    "output": "## 当前工作目录的作用\n\n本轮任务里，当前工作目录主要只是**工具执行的默认上下文**：如果后续需要读取普通项目文件、搜索代码、运行命令或写入非创作文档文件，所有相对路径通常会以当前工作目录作为基准解析。\n\n但在你这轮请求中，我还没有读取目录、搜索文件或检查文件内容，所以我不能说明当前目录里具体有哪些文件，也不会编造文件内容。\n\n另外，根据你给出的创作文档契约，像 proposal、需求、计划、任务列表、分镜草稿这类**面向创作者的文档**，不应该通过当前工作目录里的普通路径自行读取或写入；应由宿主的 creation-document 服务负责存储、审批和路径选择。因此当前工作目录不能被当作创作文档的权威存储位置。\n\n简要说：当前工作目录在本轮中只是潜在的项目操作基准，不是当前请求的信息来源，也不是创作文档的持久化依据。",
+    "stepCount": 0,
+    "steps": []
+  }
+}

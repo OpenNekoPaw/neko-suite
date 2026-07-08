@@ -1,0 +1,341 @@
+{
+  "case": {
+    "id": "epub-vision-two-pages",
+    "prompt": "@${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub 分析前2页内容。必须按 ReadDocument -> ReadImage 的顺序读取图片证据，并在回答中包含标记 EPUB_VISION_OK、图片总数、前2页 entryPath 和尺寸。",
+    "promptId": "epub-vision",
+    "description": "EPUB document-entry image projection and vision-capable model behavior.",
+    "requiredCapabilities": [
+      "vision"
+    ],
+    "checks": [
+      {
+        "kind": "exit-code",
+        "equals": 0
+      },
+      {
+        "kind": "model-capability",
+        "capability": "vision",
+        "expected": true
+      },
+      {
+        "kind": "content-evidence",
+        "text": "ReadDocument"
+      },
+      {
+        "kind": "content-evidence",
+        "text": "ReadImage"
+      },
+      {
+        "kind": "output-contains",
+        "text": "EPUB_VISION_OK"
+      }
+    ]
+  },
+  "verdict": "pass",
+  "checks": [
+    {
+      "kind": "model-capability",
+      "passed": true,
+      "message": "model capability vision=true, expected=true"
+    },
+    {
+      "kind": "exit-code",
+      "passed": true,
+      "message": "exitCode=0, expected=0"
+    },
+    {
+      "kind": "model-capability",
+      "passed": true,
+      "message": "model capability vision=true, expected=true"
+    },
+    {
+      "kind": "content-evidence",
+      "passed": true,
+      "message": "content evidence contains \"ReadDocument\""
+    },
+    {
+      "kind": "content-evidence",
+      "passed": true,
+      "message": "content evidence contains \"ReadImage\""
+    },
+    {
+      "kind": "output-contains",
+      "passed": true,
+      "message": "output contains \"EPUB_VISION_OK\""
+    }
+  ],
+  "execution": {
+    "caseId": "epub-vision-two-pages",
+    "promptId": "epub-vision",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--max-iterations",
+      "12",
+      "--timeout",
+      "240000",
+      "@${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub 分析前2页内容。必须按 ReadDocument -> ReadImage 的顺序读取图片证据，并在回答中包含标记 EPUB_VISION_OK、图片总数、前2页 entryPath 和尺寸。"
+    ],
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "stdout": "我会先用 `ReadDocument` 读取 EPUB 的稳定文档信息和图片引用，再把返回的前 2 个 `imageInfo` 原样交给 `ReadImage`，之后只基于这条链路给出分析。\n[tool] ReadDocument\n`ReadDocument` 已确认这是 402 张图片页的 EPUB，并返回了可传递的 `resourceRef`。现在我会读取前 2 页图片元数据，保持工具链完整。\n[tool] ReadImage\n## EPUB_VISION_OK\n\n已按 `ReadDocument -> ReadImage` 顺序读取图片证据，并基于返回的前 2 张图片进行分析。\n\n### 基本信息\n\n| 项目 | 内容 |\n|---|---|\n| EPUB 图片总数 | 402 |\n| 本次分析页数 | 2 |\n| 读取链路 | `ReadDocument -> ReadImage` |\n| 视觉证据状态 | EPUB_VISION_OK |\n\n### 前 2 页图片信息\n\n| 页序 | entryPath | 尺寸 | 内容类型 |\n|---:|---|---|---|\n| 1 | `image/cover.jpg` | 1511x2160 | 封面 |\n| 2 | `image/moe-010564.jpg` | 1365x1920 | 扉页 / 内封图 |\n\n## 内容分析\n\n### 第 1 页：封面\n\n封面以白底、高对比黑字和黑色装甲人物为核心。顶部巨大的 `BLAME!` 标题占据视觉主导，中央是一名黑发青年，正面站立，穿着厚重的黑色科幻装甲服，手持或佩戴小型武器装备。人物脸部有伤痕或污迹，表情冷淡，整体气质压抑、孤绝。\n\n可见文字包括：\n\n| 文字 | 含义 |\n|---|---|\n| `BLAME!` | 作品标题 |\n| `新裝版` | 版本信息 |\n| `貳瓶勉 / TSUTOMU NIHEI` | 作者 |\n| `東亞重工漫畫制作部` | 作品/设定相关标识 |\n| `JD COMICS` | 出版标识 |\n| `日本講談社正式授權香港中文版` | 授权版本信息 |\n| `Kox.moe` | 扫描/来源水印 |\n\n画面下方有倒地的白色类人或机械残骸，并伴随红色飞溅笔触，暗示暴力、毁灭或战斗后的场景。整体设计突出工业科幻、孤独行者和末世暴力感。\n\n### 第 2 页：扉页 / 内封图\n\n第二页延续封面视觉系统，但构图改为人物侧身站立。左侧有竖排黑色 `BLAME!` 字样，右侧人物面向画面右方，仍穿着同一套黑色重装装备。背景中有红色横向矩形块和浅灰色巨大文字图形，形成类似工业标识或警示标签的版式。\n\n人物脚下同样是白色类人/机械残骸，画面右侧有红色痕迹，继续强化“战斗后现场”的感觉。与第 1 页相比，这一页更像角色视觉设定页或卷首扉页：没有漫画分格叙事，主要用于建立主角形象、作品标识和冷硬的世界观氛围。\n\n## 综合判断\n\n前 2 页尚未进入正式漫画剧情分镜，主要承担封面与扉页功能。核心信息是：作品为《BLAME! 新裝版》卷 01，作者貳瓶勉；视觉基调为黑白灰工业科幻，点缀红色警示/血迹元素；主角形象是沉默、武装、带伤的孤独探索者，脚下残骸提示故事世界存在强烈冲突、暴力和非人/机械生命体威胁。",
+    "stderr": "",
+    "exitCode": 0,
+    "durationMs": 72734,
+    "timedOut": false,
+    "result": {
+      "success": true,
+      "output": "我会先用 `ReadDocument` 读取 EPUB 的稳定文档信息和图片引用，再把返回的前 2 个 `imageInfo` 原样交给 `ReadImage`，之后只基于这条链路给出分析。`ReadDocument` 已确认这是 402 张图片页的 EPUB，并返回了可传递的 `resourceRef`。现在我会读取前 2 页图片元数据，保持工具链完整。## EPUB_VISION_OK\n\n已按 `ReadDocument -> ReadImage` 顺序读取图片证据，并基于返回的前 2 张图片进行分析。\n\n### 基本信息\n\n| 项目 | 内容 |\n|---|---|\n| EPUB 图片总数 | 402 |\n| 本次分析页数 | 2 |\n| 读取链路 | `ReadDocument -> ReadImage` |\n| 视觉证据状态 | EPUB_VISION_OK |\n\n### 前 2 页图片信息\n\n| 页序 | entryPath | 尺寸 | 内容类型 |\n|---:|---|---|---|\n| 1 | `image/cover.jpg` | 1511x2160 | 封面 |\n| 2 | `image/moe-010564.jpg` | 1365x1920 | 扉页 / 内封图 |\n\n## 内容分析\n\n### 第 1 页：封面\n\n封面以白底、高对比黑字和黑色装甲人物为核心。顶部巨大的 `BLAME!` 标题占据视觉主导，中央是一名黑发青年，正面站立，穿着厚重的黑色科幻装甲服，手持或佩戴小型武器装备。人物脸部有伤痕或污迹，表情冷淡，整体气质压抑、孤绝。\n\n可见文字包括：\n\n| 文字 | 含义 |\n|---|---|\n| `BLAME!` | 作品标题 |\n| `新裝版` | 版本信息 |\n| `貳瓶勉 / TSUTOMU NIHEI` | 作者 |\n| `東亞重工漫畫制作部` | 作品/设定相关标识 |\n| `JD COMICS` | 出版标识 |\n| `日本講談社正式授權香港中文版` | 授权版本信息 |\n| `Kox.moe` | 扫描/来源水印 |\n\n画面下方有倒地的白色类人或机械残骸，并伴随红色飞溅笔触，暗示暴力、毁灭或战斗后的场景。整体设计突出工业科幻、孤独行者和末世暴力感。\n\n### 第 2 页：扉页 / 内封图\n\n第二页延续封面视觉系统，但构图改为人物侧身站立。左侧有竖排黑色 `BLAME!` 字样，右侧人物面向画面右方，仍穿着同一套黑色重装装备。背景中有红色横向矩形块和浅灰色巨大文字图形，形成类似工业标识或警示标签的版式。\n\n人物脚下同样是白色类人/机械残骸，画面右侧有红色痕迹，继续强化“战斗后现场”的感觉。与第 1 页相比，这一页更像角色视觉设定页或卷首扉页：没有漫画分格叙事，主要用于建立主角形象、作品标识和冷硬的世界观氛围。\n\n## 综合判断\n\n前 2 页尚未进入正式漫画剧情分镜，主要承担封面与扉页功能。核心信息是：作品为《BLAME! 新裝版》卷 01，作者貳瓶勉；视觉基调为黑白灰工业科幻，点缀红色警示/血迹元素；主角形象是沉默、武装、带伤的孤独探索者，脚下残骸提示故事世界存在强烈冲突、暴力和非人/机械生命体威胁。",
+      "agentResult": {
+        "success": true,
+        "response": "我会先用 `ReadDocument` 读取 EPUB 的稳定文档信息和图片引用，再把返回的前 2 个 `imageInfo` 原样交给 `ReadImage`，之后只基于这条链路给出分析。`ReadDocument` 已确认这是 402 张图片页的 EPUB，并返回了可传递的 `resourceRef`。现在我会读取前 2 页图片元数据，保持工具链完整。## EPUB_VISION_OK\n\n已按 `ReadDocument -> ReadImage` 顺序读取图片证据，并基于返回的前 2 张图片进行分析。\n\n### 基本信息\n\n| 项目 | 内容 |\n|---|---|\n| EPUB 图片总数 | 402 |\n| 本次分析页数 | 2 |\n| 读取链路 | `ReadDocument -> ReadImage` |\n| 视觉证据状态 | EPUB_VISION_OK |\n\n### 前 2 页图片信息\n\n| 页序 | entryPath | 尺寸 | 内容类型 |\n|---:|---|---|---|\n| 1 | `image/cover.jpg` | 1511x2160 | 封面 |\n| 2 | `image/moe-010564.jpg` | 1365x1920 | 扉页 / 内封图 |\n\n## 内容分析\n\n### 第 1 页：封面\n\n封面以白底、高对比黑字和黑色装甲人物为核心。顶部巨大的 `BLAME!` 标题占据视觉主导，中央是一名黑发青年，正面站立，穿着厚重的黑色科幻装甲服，手持或佩戴小型武器装备。人物脸部有伤痕或污迹，表情冷淡，整体气质压抑、孤绝。\n\n可见文字包括：\n\n| 文字 | 含义 |\n|---|---|\n| `BLAME!` | 作品标题 |\n| `新裝版` | 版本信息 |\n| `貳瓶勉 / TSUTOMU NIHEI` | 作者 |\n| `東亞重工漫畫制作部` | 作品/设定相关标识 |\n| `JD COMICS` | 出版标识 |\n| `日本講談社正式授權香港中文版` | 授权版本信息 |\n| `Kox.moe` | 扫描/来源水印 |\n\n画面下方有倒地的白色类人或机械残骸，并伴随红色飞溅笔触，暗示暴力、毁灭或战斗后的场景。整体设计突出工业科幻、孤独行者和末世暴力感。\n\n### 第 2 页：扉页 / 内封图\n\n第二页延续封面视觉系统，但构图改为人物侧身站立。左侧有竖排黑色 `BLAME!` 字样，右侧人物面向画面右方，仍穿着同一套黑色重装装备。背景中有红色横向矩形块和浅灰色巨大文字图形，形成类似工业标识或警示标签的版式。\n\n人物脚下同样是白色类人/机械残骸，画面右侧有红色痕迹，继续强化“战斗后现场”的感觉。与第 1 页相比，这一页更像角色视觉设定页或卷首扉页：没有漫画分格叙事，主要用于建立主角形象、作品标识和冷硬的世界观氛围。\n\n## 综合判断\n\n前 2 页尚未进入正式漫画剧情分镜，主要承担封面与扉页功能。核心信息是：作品为《BLAME! 新裝版》卷 01，作者貳瓶勉；视觉基调为黑白灰工业科幻，点缀红色警示/血迹元素；主角形象是沉默、武装、带伤的孤独探索者，脚下残骸提示故事世界存在强烈冲突、暴力和非人/机械生命体威胁。",
+        "steps": [
+          {
+            "type": "act",
+            "content": "ReadDocument",
+            "timestamp": 1783450898628,
+            "toolCalls": [
+              {
+                "id": "call_YjzcStTzvWNxhDJDtke0ShPg",
+                "name": "ReadDocument",
+                "arguments": {
+                  "source": {
+                    "kind": "file",
+                    "path": "${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub"
+                  },
+                  "mode": "content",
+                  "max_chars": 20000,
+                  "max_images": 10,
+                  "include_images": true,
+                  "include_metadata": true
+                }
+              }
+            ]
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783450938160,
+            "content": "[object Object]"
+          },
+          {
+            "type": "act",
+            "content": "ReadImage",
+            "timestamp": 1783450945923,
+            "toolCalls": [
+              {
+                "id": "call_Av0cQnqnk9W0WaDOw2uf9rIc",
+                "name": "ReadImage",
+                "arguments": {
+                  "mode": "metadata",
+                  "analysis": "custom",
+                  "max_images": 2,
+                  "prompt": "请将这两张 EPUB 图片作为视觉证据，用于分析前2页内容；回答需包含封面/页面内容判断、可见文字、构图和尺寸。",
+                  "images": [
+                    {
+                      "entryPath": "image/cover.jpg",
+                      "width": 1511,
+                      "height": 2160,
+                      "mimeType": "image/jpeg",
+                      "resourceRef": {
+                        "kind": "document-entry",
+                        "source": {
+                          "filePath": "/Users/feng/Assets/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub",
+                          "format": "epub"
+                        },
+                        "entryPath": "image/cover.jpg",
+                        "versionPolicy": "versioned-export"
+                      }
+                    },
+                    {
+                      "entryPath": "image/moe-010564.jpg",
+                      "width": 1365,
+                      "height": 1920,
+                      "mimeType": "image/jpeg",
+                      "resourceRef": {
+                        "kind": "document-entry",
+                        "source": {
+                          "filePath": "/Users/feng/Assets/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub",
+                          "format": "epub"
+                        },
+                        "entryPath": "image/moe-010564.jpg",
+                        "versionPolicy": "versioned-export"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783450946273,
+            "content": "[object Object]"
+          }
+        ],
+        "iterations": 864,
+        "timing": {
+          "startTime": 1783450892819,
+          "endTime": 1783450965553,
+          "duration": 72734
+        }
+      },
+      "duration": 72734
+    }
+  },
+  "resultArtifact": {
+    "schema": "neko.cli-run-result.v1",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--max-iterations",
+      "12",
+      "--timeout",
+      "240000",
+      "@${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub 分析前2页内容。必须按 ReadDocument -> ReadImage 的顺序读取图片证据，并在回答中包含标记 EPUB_VISION_OK、图片总数、前2页 entryPath 和尺寸。"
+    ],
+    "prompt": "@${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub 分析前2页内容。必须按 ReadDocument -> ReadImage 的顺序读取图片证据，并在回答中包含标记 EPUB_VISION_OK、图片总数、前2页 entryPath 和尺寸。",
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "config": {
+      "provider": "nekoapi-chat",
+      "providerType": "newapi",
+      "providerRequiresApiKey": true,
+      "model": "gpt-5.5",
+      "chatModel": {
+        "providerId": "nekoapi-chat",
+        "modelId": "gpt-5.5",
+        "capabilities": [
+          "chat",
+          "function_calling",
+          "streaming",
+          "json_mode",
+          "code",
+          "vision"
+        ]
+      },
+      "workDir": "/Users/feng/Git/neko-test",
+      "hasApiKey": true,
+      "apiKey": "<redacted>",
+      "baseUrl": "https://www.nekoapi.com/v1",
+      "maxTokens": 8192,
+      "temperature": 0.7,
+      "outputFormat": "text"
+    },
+    "runOptions": {
+      "interactive": false,
+      "stream": false,
+      "maxIterations": 12,
+      "timeout": 240000
+    },
+    "success": true,
+    "exitCode": 0,
+    "durationMs": 72734,
+    "output": "我会先用 `ReadDocument` 读取 EPUB 的稳定文档信息和图片引用，再把返回的前 2 个 `imageInfo` 原样交给 `ReadImage`，之后只基于这条链路给出分析。`ReadDocument` 已确认这是 402 张图片页的 EPUB，并返回了可传递的 `resourceRef`。现在我会读取前 2 页图片元数据，保持工具链完整。## EPUB_VISION_OK\n\n已按 `ReadDocument -> ReadImage` 顺序读取图片证据，并基于返回的前 2 张图片进行分析。\n\n### 基本信息\n\n| 项目 | 内容 |\n|---|---|\n| EPUB 图片总数 | 402 |\n| 本次分析页数 | 2 |\n| 读取链路 | `ReadDocument -> ReadImage` |\n| 视觉证据状态 | EPUB_VISION_OK |\n\n### 前 2 页图片信息\n\n| 页序 | entryPath | 尺寸 | 内容类型 |\n|---:|---|---|---|\n| 1 | `image/cover.jpg` | 1511x2160 | 封面 |\n| 2 | `image/moe-010564.jpg` | 1365x1920 | 扉页 / 内封图 |\n\n## 内容分析\n\n### 第 1 页：封面\n\n封面以白底、高对比黑字和黑色装甲人物为核心。顶部巨大的 `BLAME!` 标题占据视觉主导，中央是一名黑发青年，正面站立，穿着厚重的黑色科幻装甲服，手持或佩戴小型武器装备。人物脸部有伤痕或污迹，表情冷淡，整体气质压抑、孤绝。\n\n可见文字包括：\n\n| 文字 | 含义 |\n|---|---|\n| `BLAME!` | 作品标题 |\n| `新裝版` | 版本信息 |\n| `貳瓶勉 / TSUTOMU NIHEI` | 作者 |\n| `東亞重工漫畫制作部` | 作品/设定相关标识 |\n| `JD COMICS` | 出版标识 |\n| `日本講談社正式授權香港中文版` | 授权版本信息 |\n| `Kox.moe` | 扫描/来源水印 |\n\n画面下方有倒地的白色类人或机械残骸，并伴随红色飞溅笔触，暗示暴力、毁灭或战斗后的场景。整体设计突出工业科幻、孤独行者和末世暴力感。\n\n### 第 2 页：扉页 / 内封图\n\n第二页延续封面视觉系统，但构图改为人物侧身站立。左侧有竖排黑色 `BLAME!` 字样，右侧人物面向画面右方，仍穿着同一套黑色重装装备。背景中有红色横向矩形块和浅灰色巨大文字图形，形成类似工业标识或警示标签的版式。\n\n人物脚下同样是白色类人/机械残骸，画面右侧有红色痕迹，继续强化“战斗后现场”的感觉。与第 1 页相比，这一页更像角色视觉设定页或卷首扉页：没有漫画分格叙事，主要用于建立主角形象、作品标识和冷硬的世界观氛围。\n\n## 综合判断\n\n前 2 页尚未进入正式漫画剧情分镜，主要承担封面与扉页功能。核心信息是：作品为《BLAME! 新裝版》卷 01，作者貳瓶勉；视觉基调为黑白灰工业科幻，点缀红色警示/血迹元素；主角形象是沉默、武装、带伤的孤独探索者，脚下残骸提示故事世界存在强烈冲突、暴力和非人/机械生命体威胁。",
+    "stepCount": 4,
+    "steps": [
+      {
+        "type": "act",
+        "content": "ReadDocument",
+        "timestamp": 1783450898628,
+        "toolCalls": [
+          {
+            "id": "call_YjzcStTzvWNxhDJDtke0ShPg",
+            "name": "ReadDocument",
+            "arguments": {
+              "source": {
+                "kind": "file",
+                "path": "${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub"
+              },
+              "mode": "content",
+              "max_chars": 20000,
+              "max_images": 10,
+              "include_images": true,
+              "include_metadata": true
+            }
+          }
+        ]
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783450938160,
+        "content": "[object Object]"
+      },
+      {
+        "type": "act",
+        "content": "ReadImage",
+        "timestamp": 1783450945923,
+        "toolCalls": [
+          {
+            "id": "call_Av0cQnqnk9W0WaDOw2uf9rIc",
+            "name": "ReadImage",
+            "arguments": {
+              "mode": "metadata",
+              "analysis": "custom",
+              "max_images": 2,
+              "prompt": "请将这两张 EPUB 图片作为视觉证据，用于分析前2页内容；回答需包含封面/页面内容判断、可见文字、构图和尺寸。",
+              "images": [
+                {
+                  "entryPath": "image/cover.jpg",
+                  "width": 1511,
+                  "height": 2160,
+                  "mimeType": "image/jpeg",
+                  "resourceRef": {
+                    "kind": "document-entry",
+                    "source": {
+                      "filePath": "/Users/feng/Assets/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub",
+                      "format": "epub"
+                    },
+                    "entryPath": "image/cover.jpg",
+                    "versionPolicy": "versioned-export"
+                  }
+                },
+                {
+                  "entryPath": "image/moe-010564.jpg",
+                  "width": 1365,
+                  "height": 1920,
+                  "mimeType": "image/jpeg",
+                  "resourceRef": {
+                    "kind": "document-entry",
+                    "source": {
+                      "filePath": "/Users/feng/Assets/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub",
+                      "format": "epub"
+                    },
+                    "entryPath": "image/moe-010564.jpg",
+                    "versionPolicy": "versioned-export"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783450946273,
+        "content": "[object Object]"
+      }
+    ]
+  }
+}

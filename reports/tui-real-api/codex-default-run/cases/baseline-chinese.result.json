@@ -1,0 +1,312 @@
+{
+  "case": {
+    "id": "baseline-chinese",
+    "promptId": "baseline",
+    "prompt": "请用中文用一句话回答：Neko TUI 真实 API 验证正在检查什么？",
+    "checks": [
+      {
+        "kind": "exit-code",
+        "equals": 0
+      },
+      {
+        "kind": "non-empty-output"
+      },
+      {
+        "kind": "output-contains",
+        "text": "TUI"
+      }
+    ]
+  },
+  "verdict": "fail",
+  "checks": [
+    {
+      "kind": "exit-code",
+      "passed": true,
+      "message": "exitCode=0, expected=0"
+    },
+    {
+      "kind": "non-empty-output",
+      "passed": true,
+      "message": "assistant output must be non-empty"
+    },
+    {
+      "kind": "output-contains",
+      "passed": false,
+      "message": "output contains \"TUI\""
+    }
+  ],
+  "execution": {
+    "caseId": "baseline-chinese",
+    "promptId": "baseline",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--max-iterations",
+      "4",
+      "--timeout",
+      "120000",
+      "请用中文用一句话回答：Neko TUI 真实 API 验证正在检查什么？"
+    ],
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "stdout": "我会先在工作区里找一下“Neko TUI 真实 API 验证”的相关说明或测试文件，避免凭记忆概括。\n[tool] GetContext\n\n[tool] Grep\n当前工具的读权限不覆盖 `/Users/feng/Git`，我改用可访问的当前工作区范围继续查找。\n[tool] ListDirectory\n\n[tool] ListDirectory\nMaximum iterations reached",
+    "stderr": "",
+    "exitCode": 0,
+    "durationMs": 16560,
+    "timedOut": false,
+    "result": {
+      "success": true,
+      "output": "Maximum iterations reached",
+      "agentResult": {
+        "success": true,
+        "response": "Maximum iterations reached",
+        "steps": [
+          {
+            "type": "act",
+            "content": "GetContext",
+            "timestamp": 1783447904743,
+            "toolCalls": [
+              {
+                "id": "call_zYbiIaJ80QRitMICHbVMFM0i",
+                "name": "GetContext",
+                "arguments": {
+                  "includeTools": true
+                }
+              }
+            ]
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783447904748,
+            "content": "[object Object]"
+          },
+          {
+            "type": "act",
+            "content": "Grep",
+            "timestamp": 1783447907995,
+            "toolCalls": [
+              {
+                "id": "call_kxuWjMks3VblkOE2zBXLJYxB",
+                "name": "Grep",
+                "arguments": {
+                  "path": "/Users/feng/Git",
+                  "pattern": "Neko TUI|真实 API|real API|api 验证",
+                  "include": "*",
+                  "context": 2
+                }
+              }
+            ]
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783447907997,
+            "content": "Error: Path is outside authorized read roots: /Users/feng/Git"
+          },
+          {
+            "type": "act",
+            "content": "ListDirectory",
+            "timestamp": 1783447911336,
+            "toolCalls": [
+              {
+                "id": "call_kH3KUBjrqv875v2OF9x8nMdY",
+                "name": "ListDirectory",
+                "arguments": {
+                  "path": "/",
+                  "recursive": false
+                }
+              }
+            ]
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783447911337,
+            "content": "Error: Path is outside authorized read roots: /"
+          },
+          {
+            "type": "act",
+            "content": "ListDirectory",
+            "timestamp": 1783447914836,
+            "toolCalls": [
+              {
+                "id": "call_7OGB43CZbIevvacQWXvJdjJd",
+                "name": "ListDirectory",
+                "arguments": {
+                  "path": "/workspace",
+                  "recursive": false
+                }
+              }
+            ]
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783447914837,
+            "content": "Error: Path is outside authorized read roots: /workspace"
+          }
+        ],
+        "iterations": 74,
+        "timing": {
+          "startTime": 1783447898282,
+          "endTime": 1783447914842,
+          "duration": 16560
+        }
+      },
+      "duration": 16560
+    }
+  },
+  "resultArtifact": {
+    "schema": "neko.cli-run-result.v1",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--max-iterations",
+      "4",
+      "--timeout",
+      "120000",
+      "请用中文用一句话回答：Neko TUI 真实 API 验证正在检查什么？"
+    ],
+    "prompt": "请用中文用一句话回答：Neko TUI 真实 API 验证正在检查什么？",
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "config": {
+      "provider": "nekoapi-chat",
+      "providerType": "newapi",
+      "providerRequiresApiKey": true,
+      "model": "gpt-5.5",
+      "chatModel": {
+        "providerId": "nekoapi-chat",
+        "modelId": "gpt-5.5",
+        "capabilities": [
+          "chat",
+          "function_calling",
+          "streaming",
+          "json_mode",
+          "code",
+          "vision"
+        ]
+      },
+      "workDir": "/Users/feng/Git/neko-test",
+      "hasApiKey": true,
+      "apiKey": "<redacted>",
+      "baseUrl": "https://www.nekoapi.com/v1",
+      "maxTokens": 8192,
+      "temperature": 0.7,
+      "outputFormat": "text"
+    },
+    "runOptions": {
+      "interactive": false,
+      "stream": false,
+      "maxIterations": 4,
+      "timeout": 120000
+    },
+    "success": true,
+    "exitCode": 0,
+    "durationMs": 16560,
+    "output": "Maximum iterations reached",
+    "stepCount": 8,
+    "steps": [
+      {
+        "type": "act",
+        "content": "GetContext",
+        "timestamp": 1783447904743,
+        "toolCalls": [
+          {
+            "id": "call_zYbiIaJ80QRitMICHbVMFM0i",
+            "name": "GetContext",
+            "arguments": {
+              "includeTools": true
+            }
+          }
+        ]
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783447904748,
+        "content": "[object Object]"
+      },
+      {
+        "type": "act",
+        "content": "Grep",
+        "timestamp": 1783447907995,
+        "toolCalls": [
+          {
+            "id": "call_kxuWjMks3VblkOE2zBXLJYxB",
+            "name": "Grep",
+            "arguments": {
+              "path": "/Users/feng/Git",
+              "pattern": "Neko TUI|真实 API|real API|api 验证",
+              "include": "*",
+              "context": 2
+            }
+          }
+        ]
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783447907997,
+        "content": "Error: Path is outside authorized read roots: /Users/feng/Git"
+      },
+      {
+        "type": "act",
+        "content": "ListDirectory",
+        "timestamp": 1783447911336,
+        "toolCalls": [
+          {
+            "id": "call_kH3KUBjrqv875v2OF9x8nMdY",
+            "name": "ListDirectory",
+            "arguments": {
+              "path": "/",
+              "recursive": false
+            }
+          }
+        ]
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783447911337,
+        "content": "Error: Path is outside authorized read roots: /"
+      },
+      {
+        "type": "act",
+        "content": "ListDirectory",
+        "timestamp": 1783447914836,
+        "toolCalls": [
+          {
+            "id": "call_7OGB43CZbIevvacQWXvJdjJd",
+            "name": "ListDirectory",
+            "arguments": {
+              "path": "/workspace",
+              "recursive": false
+            }
+          }
+        ]
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783447914837,
+        "content": "Error: Path is outside authorized read roots: /workspace"
+      }
+    ]
+  }
+}

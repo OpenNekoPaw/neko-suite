@@ -1,0 +1,109 @@
+{
+  "case": {
+    "id": "invalid-model-visible-error",
+    "promptId": "invalid-model",
+    "model": "__neko_invalid_real_api_suite_model__",
+    "prompt": "这个用例应在调用真实 provider 前失败。",
+    "checks": [
+      {
+        "kind": "exit-code",
+        "equals": 1
+      },
+      {
+        "kind": "error-contains",
+        "text": "not found"
+      }
+    ]
+  },
+  "verdict": "pass",
+  "checks": [
+    {
+      "kind": "exit-code",
+      "passed": true,
+      "message": "exitCode=1, expected=1"
+    },
+    {
+      "kind": "error-contains",
+      "passed": true,
+      "message": "error contains \"not found\""
+    }
+  ],
+  "execution": {
+    "caseId": "invalid-model-visible-error",
+    "promptId": "invalid-model",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--model",
+      "__neko_invalid_real_api_suite_model__",
+      "--max-iterations",
+      "8",
+      "--timeout",
+      "120000",
+      "这个用例应在调用真实 provider 前失败。"
+    ],
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "__neko_invalid_real_api_suite_model__",
+    "stdout": "",
+    "stderr": "Model \"__neko_invalid_real_api_suite_model__\" not found in config. Available: gpt-5.5, gpt-5.5-high, gpt-5.5-xhigh, gpt-5.5-openai-compact Use --model to specify a valid model.",
+    "exitCode": 1,
+    "durationMs": 2,
+    "timedOut": false,
+    "result": {
+      "success": false,
+      "error": "Model \"__neko_invalid_real_api_suite_model__\" not found in config. Available: gpt-5.5, gpt-5.5-high, gpt-5.5-xhigh, gpt-5.5-openai-compact Use --model to specify a valid model.",
+      "duration": 2
+    }
+  },
+  "resultArtifact": {
+    "schema": "neko.cli-run-result.v1",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--model",
+      "__neko_invalid_real_api_suite_model__",
+      "--max-iterations",
+      "8",
+      "--timeout",
+      "120000",
+      "这个用例应在调用真实 provider 前失败。"
+    ],
+    "prompt": "这个用例应在调用真实 provider 前失败。",
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "__neko_invalid_real_api_suite_model__",
+    "config": {
+      "provider": "nekoapi-chat",
+      "providerType": "newapi",
+      "providerRequiresApiKey": true,
+      "model": "__neko_invalid_real_api_suite_model__",
+      "chatModel": {
+        "providerId": "nekoapi-chat",
+        "modelId": "__neko_invalid_real_api_suite_model__"
+      },
+      "workDir": "/Users/feng/Git/neko-test",
+      "hasApiKey": true,
+      "apiKey": "<redacted>",
+      "baseUrl": "https://www.nekoapi.com/v1",
+      "maxTokens": 8192,
+      "temperature": 0.7,
+      "outputFormat": "text"
+    },
+    "runOptions": {
+      "interactive": false,
+      "stream": false,
+      "maxIterations": 8,
+      "timeout": 120000
+    },
+    "success": false,
+    "exitCode": 1,
+    "durationMs": 2,
+    "error": "Model \"__neko_invalid_real_api_suite_model__\" not found in config. Available: gpt-5.5, gpt-5.5-high, gpt-5.5-xhigh, gpt-5.5-openai-compact Use --model to specify a valid model.",
+    "stepCount": 0
+  }
+}

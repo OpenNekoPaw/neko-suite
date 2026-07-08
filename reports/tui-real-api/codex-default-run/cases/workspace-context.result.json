@@ -1,0 +1,139 @@
+{
+  "case": {
+    "id": "workspace-context",
+    "promptId": "workspace",
+    "prompt": "请说明当前工作目录在本轮任务中有什么作用。不要编造文件内容。",
+    "checks": [
+      {
+        "kind": "exit-code",
+        "equals": 0
+      },
+      {
+        "kind": "non-empty-output"
+      }
+    ]
+  },
+  "verdict": "fail",
+  "checks": [
+    {
+      "kind": "exit-code",
+      "passed": true,
+      "message": "exitCode=0, expected=0"
+    },
+    {
+      "kind": "non-empty-output",
+      "passed": false,
+      "message": "assistant output must be non-empty"
+    }
+  ],
+  "execution": {
+    "caseId": "workspace-context",
+    "promptId": "workspace",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--max-iterations",
+      "4",
+      "--timeout",
+      "120000",
+      "请说明当前工作目录在本轮任务中有什么作用。不要编造文件内容。"
+    ],
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "stdout": "## 当前工作目录的作用\n\n在本轮任务中，我还没有读取、搜索或修改任何工作目录里的文件，因此**当前工作目录没有被实际用于判断文件内容或项目状态**。\n\n它目前只起到一个潜在作用：如果后续需要使用相对路径读取代码、列目录、搜索文件或写入普通项目文件，相对路径会按工作区根目录解析。但这不等于我已经知道其中有哪些文件，也不等于我可以推断文件内容。\n\n## 相关限制\n\n对于你提到的创作文档契约，Draft / Plan / Task 这类面向创作者的文档不应通过当前工作目录、隐藏 cache/runtime 路径或通用文件读写工具来检查或持久化；应由宿主的 creation-document 服务负责。\n\n所以本轮里，当前工作目录只是普通代码/资源操作的默认路径上下文，并没有成为创作文档的存储依据，也没有提供任何可被我引用的文件事实。",
+    "stderr": "",
+    "exitCode": 0,
+    "durationMs": 10368,
+    "timedOut": false,
+    "result": {
+      "success": true,
+      "output": "",
+      "agentResult": {
+        "success": true,
+        "response": "",
+        "steps": [],
+        "iterations": 215,
+        "timing": {
+          "startTime": 1783447914844,
+          "endTime": 1783447925212,
+          "duration": 10368
+        }
+      },
+      "duration": 10368
+    }
+  },
+  "resultArtifact": {
+    "schema": "neko.cli-run-result.v1",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-test",
+      "--max-iterations",
+      "4",
+      "--timeout",
+      "120000",
+      "请说明当前工作目录在本轮任务中有什么作用。不要编造文件内容。"
+    ],
+    "prompt": "请说明当前工作目录在本轮任务中有什么作用。不要编造文件内容。",
+    "workDir": "/Users/feng/Git/neko-test",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "config": {
+      "provider": "nekoapi-chat",
+      "providerType": "newapi",
+      "providerRequiresApiKey": true,
+      "model": "gpt-5.5",
+      "chatModel": {
+        "providerId": "nekoapi-chat",
+        "modelId": "gpt-5.5",
+        "capabilities": [
+          "chat",
+          "function_calling",
+          "streaming",
+          "json_mode",
+          "code",
+          "vision"
+        ]
+      },
+      "workDir": "/Users/feng/Git/neko-test",
+      "hasApiKey": true,
+      "apiKey": "<redacted>",
+      "baseUrl": "https://www.nekoapi.com/v1",
+      "maxTokens": 8192,
+      "temperature": 0.7,
+      "outputFormat": "text"
+    },
+    "runOptions": {
+      "interactive": false,
+      "stream": false,
+      "maxIterations": 4,
+      "timeout": 120000
+    },
+    "success": true,
+    "exitCode": 0,
+    "durationMs": 10368,
+    "output": "",
+    "stepCount": 0,
+    "steps": []
+  }
+}

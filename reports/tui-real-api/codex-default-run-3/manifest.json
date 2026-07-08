@@ -1,0 +1,52 @@
+{
+  "schema": "neko.tui-real-api-suite-run.v1",
+  "name": "default-tui-real-api-validation",
+  "startedAt": "2026-07-07T18:20:24.654Z",
+  "completedAt": "2026-07-07T18:20:45.039Z",
+  "outputDir": "/Users/feng/Git/neko-suite/reports/tui-real-api/codex-default-run-3",
+  "configSource": {
+    "userConfigPath": "/Users/feng/.neko/config.toml",
+    "workspaceConfigPath": "/Users/feng/Git/neko-test/.neko/config.toml"
+  },
+  "cases": [
+    {
+      "id": "baseline-chinese",
+      "verdict": "pass",
+      "provider": "nekoapi-chat",
+      "model": "gpt-5.5",
+      "stdoutPath": "/Users/feng/Git/neko-suite/reports/tui-real-api/codex-default-run-3/cases/baseline-chinese.stdout.md",
+      "stderrPath": "/Users/feng/Git/neko-suite/reports/tui-real-api/codex-default-run-3/cases/baseline-chinese.stderr.log",
+      "resultPath": "/Users/feng/Git/neko-suite/reports/tui-real-api/codex-default-run-3/cases/baseline-chinese.result.json"
+    },
+    {
+      "id": "workspace-context",
+      "verdict": "pass",
+      "provider": "nekoapi-chat",
+      "model": "gpt-5.5",
+      "stdoutPath": "/Users/feng/Git/neko-suite/reports/tui-real-api/codex-default-run-3/cases/workspace-context.stdout.md",
+      "stderrPath": "/Users/feng/Git/neko-suite/reports/tui-real-api/codex-default-run-3/cases/workspace-context.stderr.log",
+      "resultPath": "/Users/feng/Git/neko-suite/reports/tui-real-api/codex-default-run-3/cases/workspace-context.result.json"
+    },
+    {
+      "id": "invalid-model-visible-error",
+      "verdict": "pass",
+      "provider": "nekoapi-chat",
+      "model": "__neko_invalid_real_api_suite_model__",
+      "stdoutPath": "/Users/feng/Git/neko-suite/reports/tui-real-api/codex-default-run-3/cases/invalid-model-visible-error.stdout.md",
+      "stderrPath": "/Users/feng/Git/neko-suite/reports/tui-real-api/codex-default-run-3/cases/invalid-model-visible-error.stderr.log",
+      "resultPath": "/Users/feng/Git/neko-suite/reports/tui-real-api/codex-default-run-3/cases/invalid-model-visible-error.result.json"
+    },
+    {
+      "id": "media-library-variable",
+      "verdict": "skipped"
+    },
+    {
+      "id": "epub-vision",
+      "verdict": "skipped"
+    },
+    {
+      "id": "timeout-visible-error",
+      "verdict": "skipped"
+    }
+  ]
+}

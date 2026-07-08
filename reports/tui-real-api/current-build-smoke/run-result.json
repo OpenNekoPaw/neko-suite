@@ -1,0 +1,67 @@
+{
+  "schema": "neko.cli-run-result.v1",
+  "command": [
+    "/$bunfs/root/cli.js",
+    "run",
+    "--cd",
+    "/Users/feng/Git/neko-test",
+    "--max-iterations",
+    "3",
+    "--timeout",
+    "120000",
+    "--format",
+    "json",
+    "--result-file",
+    "reports/tui-real-api/current-build-smoke/run-result.json",
+    "不要调用工具；用中文一句话回答：当前构建 smoke 测试是否可用？"
+  ],
+  "prompt": "不要调用工具；用中文一句话回答：当前构建 smoke 测试是否可用？",
+  "workDir": "/Users/feng/Git/neko-test",
+  "provider": "nekoapi-chat",
+  "model": "gpt-5.5",
+  "modelCapabilities": [
+    "chat",
+    "function_calling",
+    "streaming",
+    "json_mode",
+    "code",
+    "vision"
+  ],
+  "config": {
+    "provider": "nekoapi-chat",
+    "providerType": "newapi",
+    "providerRequiresApiKey": true,
+    "model": "gpt-5.5",
+    "chatModel": {
+      "providerId": "nekoapi-chat",
+      "modelId": "gpt-5.5",
+      "capabilities": [
+        "chat",
+        "function_calling",
+        "streaming",
+        "json_mode",
+        "code",
+        "vision"
+      ]
+    },
+    "workDir": "/Users/feng/Git/neko-test",
+    "hasApiKey": true,
+    "apiKey": "<redacted>",
+    "baseUrl": "https://www.nekoapi.com/v1",
+    "maxTokens": 8192,
+    "temperature": 0.7,
+    "outputFormat": "text"
+  },
+  "runOptions": {
+    "interactive": false,
+    "stream": false,
+    "maxIterations": 3,
+    "timeout": 120000
+  },
+  "success": true,
+  "exitCode": 0,
+  "durationMs": 11002,
+  "output": "无法在不调用工具的情况下确认当前构建的 smoke 测试是否可用。",
+  "stepCount": 0,
+  "steps": []
+}

@@ -1,0 +1,480 @@
+{
+  "case": {
+    "id": "skill-tool-reading",
+    "prompt": "$tool-reading 请读取 skill-fixture.txt 并报告证据。",
+    "promptId": "skill-tool",
+    "description": "Skill with allowed tool reads a fixture file.",
+    "workDir": "/Users/feng/Git/neko-suite/reports/tui-real-api/extended-current-build/workspace",
+    "checks": [
+      {
+        "kind": "exit-code",
+        "equals": 0
+      },
+      {
+        "kind": "content-evidence",
+        "text": "Read"
+      },
+      {
+        "kind": "output-contains",
+        "text": "SKILL_TOOL_READING_ACTIVE"
+      },
+      {
+        "kind": "output-contains",
+        "text": "SKILL_FIXTURE_FILE_OK"
+      }
+    ]
+  },
+  "verdict": "pass",
+  "checks": [
+    {
+      "kind": "exit-code",
+      "passed": true,
+      "message": "exitCode=0, expected=0"
+    },
+    {
+      "kind": "content-evidence",
+      "passed": true,
+      "message": "content evidence contains \"Read\""
+    },
+    {
+      "kind": "output-contains",
+      "passed": true,
+      "message": "output contains \"SKILL_TOOL_READING_ACTIVE\""
+    },
+    {
+      "kind": "output-contains",
+      "passed": true,
+      "message": "output contains \"SKILL_FIXTURE_FILE_OK\""
+    }
+  ],
+  "execution": {
+    "caseId": "skill-tool-reading",
+    "promptId": "skill-tool",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-suite/reports/tui-real-api/extended-current-build/workspace",
+      "--max-iterations",
+      "12",
+      "--timeout",
+      "240000",
+      "$tool-reading 请读取 skill-fixture.txt 并报告证据。"
+    ],
+    "workDir": "/Users/feng/Git/neko-suite/reports/tui-real-api/extended-current-build/workspace",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "stdout": "我会先确认当前可用技能和工作区工具状态，然后按要求读取工作区里的 `skill-fixture.txt`，只报告文件里的证据。\n[tool] GetContext\n当前 `tool-reading` 技能已经激活。接下来直接用 `Read` 读取夹具文件，并从内容中取一条原文证据。\n[tool] Read\n`/workspace/skill-fixture.txt` 不在当前授权读取根里，我需要定位实际工作区路径后再读取同名文件。\n[tool] ListDirectory\n授权根没有暴露为 `/`，我会尝试常见的工作区挂载位置来找到可读根；找到后只读取目标文件。\n[tool] Read\n\n[tool] Read\n\n[tool] Read\n\n[tool] Read\n这些绝对路径都被授权边界拒绝；我会改用工作区相对路径读取，因为当前工具说明里相对路径按工作区根解析的能力可能由宿主提供。\n[tool] Read\n## 读取结果\n\nSKILL_TOOL_READING_ACTIVE\n\n证据字符串：`Evidence marker: SKILL_FIXTURE_FILE_OK.`",
+    "stderr": "",
+    "exitCode": 0,
+    "durationMs": 27875,
+    "timedOut": false,
+    "result": {
+      "success": true,
+      "output": "我会先确认当前可用技能和工作区工具状态，然后按要求读取工作区里的 `skill-fixture.txt`，只报告文件里的证据。当前 `tool-reading` 技能已经激活。接下来直接用 `Read` 读取夹具文件，并从内容中取一条原文证据。`/workspace/skill-fixture.txt` 不在当前授权读取根里，我需要定位实际工作区路径后再读取同名文件。授权根没有暴露为 `/`，我会尝试常见的工作区挂载位置来找到可读根；找到后只读取目标文件。这些绝对路径都被授权边界拒绝；我会改用工作区相对路径读取，因为当前工具说明里相对路径按工作区根解析的能力可能由宿主提供。## 读取结果\n\nSKILL_TOOL_READING_ACTIVE\n\n证据字符串：`Evidence marker: SKILL_FIXTURE_FILE_OK.`",
+      "agentResult": {
+        "success": true,
+        "response": "我会先确认当前可用技能和工作区工具状态，然后按要求读取工作区里的 `skill-fixture.txt`，只报告文件里的证据。当前 `tool-reading` 技能已经激活。接下来直接用 `Read` 读取夹具文件，并从内容中取一条原文证据。`/workspace/skill-fixture.txt` 不在当前授权读取根里，我需要定位实际工作区路径后再读取同名文件。授权根没有暴露为 `/`，我会尝试常见的工作区挂载位置来找到可读根；找到后只读取目标文件。这些绝对路径都被授权边界拒绝；我会改用工作区相对路径读取，因为当前工具说明里相对路径按工作区根解析的能力可能由宿主提供。## 读取结果\n\nSKILL_TOOL_READING_ACTIVE\n\n证据字符串：`Evidence marker: SKILL_FIXTURE_FILE_OK.`",
+        "steps": [
+          {
+            "type": "act",
+            "content": "GetContext",
+            "timestamp": 1783450974833,
+            "toolCalls": [
+              {
+                "id": "call_L9yuyCHCpfiPTOz0P99iE6la",
+                "name": "GetContext",
+                "arguments": {
+                  "includeTools": true
+                }
+              }
+            ]
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783450974834,
+            "content": "[object Object]"
+          },
+          {
+            "type": "act",
+            "content": "Read",
+            "timestamp": 1783450980508,
+            "toolCalls": [
+              {
+                "id": "call_AYK2g5Zh2z6rMZo3qFgvIMDl",
+                "name": "Read",
+                "arguments": {
+                  "file_path": "/workspace/skill-fixture.txt",
+                  "limit": 20
+                }
+              }
+            ]
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783450980509,
+            "content": "Error: Path is outside authorized read roots: /workspace/skill-fixture.txt"
+          },
+          {
+            "type": "act",
+            "content": "ListDirectory",
+            "timestamp": 1783450985006,
+            "toolCalls": [
+              {
+                "id": "call_6j7jElnrM5uSTcTLX0xOUDen",
+                "name": "ListDirectory",
+                "arguments": {
+                  "path": "/",
+                  "recursive": false
+                }
+              }
+            ]
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783450985011,
+            "content": "Error: Path is outside authorized read roots: /"
+          },
+          {
+            "type": "act",
+            "content": "Read",
+            "timestamp": 1783450991054,
+            "toolCalls": [
+              {
+                "id": "call_Mj3Dyqyvs6aC0EdWN0n3ST80",
+                "name": "Read",
+                "arguments": {
+                  "file_path": "/mnt/data/skill-fixture.txt",
+                  "limit": 20
+                }
+              }
+            ]
+          },
+          {
+            "type": "act",
+            "content": "Read",
+            "timestamp": 1783450991054,
+            "toolCalls": [
+              {
+                "id": "call_TqhENmCnff065J4bBJYrf63x",
+                "name": "Read",
+                "arguments": {
+                  "file_path": "/home/oai/share/skill-fixture.txt",
+                  "limit": 20
+                }
+              }
+            ]
+          },
+          {
+            "type": "act",
+            "content": "Read",
+            "timestamp": 1783450991054,
+            "toolCalls": [
+              {
+                "id": "call_FAe7elSm5wNDBD5mXRNofeUK",
+                "name": "Read",
+                "arguments": {
+                  "file_path": "/workspace/default/skill-fixture.txt",
+                  "limit": 20
+                }
+              }
+            ]
+          },
+          {
+            "type": "act",
+            "content": "Read",
+            "timestamp": 1783450991054,
+            "toolCalls": [
+              {
+                "id": "call_3bk7qzNiynWMJb04lMzngVOL",
+                "name": "Read",
+                "arguments": {
+                  "file_path": "/home/project/skill-fixture.txt",
+                  "limit": 20
+                }
+              }
+            ]
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783450991056,
+            "content": "Error: Path is outside authorized read roots: /mnt/data/skill-fixture.txt"
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783450991056,
+            "content": "Error: Path is outside authorized read roots: /home/oai/share/skill-fixture.txt"
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783450991056,
+            "content": "Error: Path is outside authorized read roots: /workspace/default/skill-fixture.txt"
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783450991056,
+            "content": "Error: Path is outside authorized read roots: /home/project/skill-fixture.txt"
+          },
+          {
+            "type": "act",
+            "content": "Read",
+            "timestamp": 1783450995648,
+            "toolCalls": [
+              {
+                "id": "call_ZoGy49x9zIFVxswYONE8wcsO",
+                "name": "Read",
+                "arguments": {
+                  "file_path": "skill-fixture.txt",
+                  "limit": 20
+                }
+              }
+            ]
+          },
+          {
+            "type": "observe",
+            "timestamp": 1783450995652,
+            "content": "[object Object]"
+          }
+        ],
+        "iterations": 219,
+        "timing": {
+          "startTime": 1783450970251,
+          "endTime": 1783450998126,
+          "duration": 27875
+        }
+      },
+      "duration": 27875
+    }
+  },
+  "resultArtifact": {
+    "schema": "neko.cli-run-result.v1",
+    "command": [
+      "neko",
+      "run",
+      "--cd",
+      "/Users/feng/Git/neko-suite/reports/tui-real-api/extended-current-build/workspace",
+      "--max-iterations",
+      "12",
+      "--timeout",
+      "240000",
+      "$tool-reading 请读取 skill-fixture.txt 并报告证据。"
+    ],
+    "prompt": "$tool-reading 请读取 skill-fixture.txt 并报告证据。",
+    "workDir": "/Users/feng/Git/neko-suite/reports/tui-real-api/extended-current-build/workspace",
+    "provider": "nekoapi-chat",
+    "model": "gpt-5.5",
+    "modelCapabilities": [
+      "chat",
+      "function_calling",
+      "streaming",
+      "json_mode",
+      "code",
+      "vision"
+    ],
+    "config": {
+      "provider": "nekoapi-chat",
+      "providerType": "newapi",
+      "providerRequiresApiKey": true,
+      "model": "gpt-5.5",
+      "chatModel": {
+        "providerId": "nekoapi-chat",
+        "modelId": "gpt-5.5",
+        "capabilities": [
+          "chat",
+          "function_calling",
+          "streaming",
+          "json_mode",
+          "code",
+          "vision"
+        ]
+      },
+      "workDir": "/Users/feng/Git/neko-suite/reports/tui-real-api/extended-current-build/workspace",
+      "hasApiKey": true,
+      "apiKey": "<redacted>",
+      "baseUrl": "https://www.nekoapi.com/v1",
+      "maxTokens": 8192,
+      "temperature": 0.7,
+      "outputFormat": "text"
+    },
+    "runOptions": {
+      "interactive": false,
+      "stream": false,
+      "maxIterations": 12,
+      "timeout": 240000
+    },
+    "success": true,
+    "exitCode": 0,
+    "durationMs": 27875,
+    "output": "我会先确认当前可用技能和工作区工具状态，然后按要求读取工作区里的 `skill-fixture.txt`，只报告文件里的证据。当前 `tool-reading` 技能已经激活。接下来直接用 `Read` 读取夹具文件，并从内容中取一条原文证据。`/workspace/skill-fixture.txt` 不在当前授权读取根里，我需要定位实际工作区路径后再读取同名文件。授权根没有暴露为 `/`，我会尝试常见的工作区挂载位置来找到可读根；找到后只读取目标文件。这些绝对路径都被授权边界拒绝；我会改用工作区相对路径读取，因为当前工具说明里相对路径按工作区根解析的能力可能由宿主提供。## 读取结果\n\nSKILL_TOOL_READING_ACTIVE\n\n证据字符串：`Evidence marker: SKILL_FIXTURE_FILE_OK.`",
+    "stepCount": 16,
+    "steps": [
+      {
+        "type": "act",
+        "content": "GetContext",
+        "timestamp": 1783450974833,
+        "toolCalls": [
+          {
+            "id": "call_L9yuyCHCpfiPTOz0P99iE6la",
+            "name": "GetContext",
+            "arguments": {
+              "includeTools": true
+            }
+          }
+        ]
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783450974834,
+        "content": "[object Object]"
+      },
+      {
+        "type": "act",
+        "content": "Read",
+        "timestamp": 1783450980508,
+        "toolCalls": [
+          {
+            "id": "call_AYK2g5Zh2z6rMZo3qFgvIMDl",
+            "name": "Read",
+            "arguments": {
+              "file_path": "/workspace/skill-fixture.txt",
+              "limit": 20
+            }
+          }
+        ]
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783450980509,
+        "content": "Error: Path is outside authorized read roots: /workspace/skill-fixture.txt"
+      },
+      {
+        "type": "act",
+        "content": "ListDirectory",
+        "timestamp": 1783450985006,
+        "toolCalls": [
+          {
+            "id": "call_6j7jElnrM5uSTcTLX0xOUDen",
+            "name": "ListDirectory",
+            "arguments": {
+              "path": "/",
+              "recursive": false
+            }
+          }
+        ]
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783450985011,
+        "content": "Error: Path is outside authorized read roots: /"
+      },
+      {
+        "type": "act",
+        "content": "Read",
+        "timestamp": 1783450991054,
+        "toolCalls": [
+          {
+            "id": "call_Mj3Dyqyvs6aC0EdWN0n3ST80",
+            "name": "Read",
+            "arguments": {
+              "file_path": "/mnt/data/skill-fixture.txt",
+              "limit": 20
+            }
+          }
+        ]
+      },
+      {
+        "type": "act",
+        "content": "Read",
+        "timestamp": 1783450991054,
+        "toolCalls": [
+          {
+            "id": "call_TqhENmCnff065J4bBJYrf63x",
+            "name": "Read",
+            "arguments": {
+              "file_path": "/home/oai/share/skill-fixture.txt",
+              "limit": 20
+            }
+          }
+        ]
+      },
+      {
+        "type": "act",
+        "content": "Read",
+        "timestamp": 1783450991054,
+        "toolCalls": [
+          {
+            "id": "call_FAe7elSm5wNDBD5mXRNofeUK",
+            "name": "Read",
+            "arguments": {
+              "file_path": "/workspace/default/skill-fixture.txt",
+              "limit": 20
+            }
+          }
+        ]
+      },
+      {
+        "type": "act",
+        "content": "Read",
+        "timestamp": 1783450991054,
+        "toolCalls": [
+          {
+            "id": "call_3bk7qzNiynWMJb04lMzngVOL",
+            "name": "Read",
+            "arguments": {
+              "file_path": "/home/project/skill-fixture.txt",
+              "limit": 20
+            }
+          }
+        ]
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783450991056,
+        "content": "Error: Path is outside authorized read roots: /mnt/data/skill-fixture.txt"
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783450991056,
+        "content": "Error: Path is outside authorized read roots: /home/oai/share/skill-fixture.txt"
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783450991056,
+        "content": "Error: Path is outside authorized read roots: /workspace/default/skill-fixture.txt"
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783450991056,
+        "content": "Error: Path is outside authorized read roots: /home/project/skill-fixture.txt"
+      },
+      {
+        "type": "act",
+        "content": "Read",
+        "timestamp": 1783450995648,
+        "toolCalls": [
+          {
+            "id": "call_ZoGy49x9zIFVxswYONE8wcsO",
+            "name": "Read",
+            "arguments": {
+              "file_path": "skill-fixture.txt",
+              "limit": 20
+            }
+          }
+        ]
+      },
+      {
+        "type": "observe",
+        "timestamp": 1783450995652,
+        "content": "[object Object]"
+      }
+    ]
+  }
+}
