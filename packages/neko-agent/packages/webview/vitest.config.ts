@@ -18,6 +18,7 @@ export default defineConfig({
       '@neko/markdown': resolve(__dirname, '../../../neko-markdown/src'),
       '@neko/shared/vscode': resolve(__dirname, '../../../neko-types/src/vscode'),
       '@neko/shared': resolve(__dirname, '../../../neko-types/src'),
+      '@neko/workbench-core': resolve(__dirname, '../../../neko-workbench-core/src/index.ts'),
     },
   },
 });

@@ -2,7 +2,7 @@
  * Agent CLI Types
  */
 
-import type { AgentResult, MCPServerConfig } from '@neko/agent';
+import type { AgentResult, AgentSessionConfig, MCPServerConfig } from '@neko/agent';
 import type { AgentLlmConfig } from '@neko-agent/types';
 
 /**
@@ -47,16 +47,14 @@ export interface CLIConfig {
   workDir: string;
   /** MCP server configurations */
   mcpServers: MCPServerConfig[];
-  /** Skills directory */
-  skillsDir?: string;
   /** Output format */
   outputFormat: 'text' | 'json' | 'markdown';
   /** Extended thinking budget in tokens (0 = disabled, Anthropic/DeepSeek only) */
   thinkingBudget: number;
   /** Runtime LLM parameter presets and advanced values for Agent turns. */
   llmConfig?: AgentLlmConfig;
-  /** Original defaultModel value that was not found in models list (triggers model switch UI) */
-  modelNotFound?: string;
+  /** Session-only context compaction/settings forwarded through shared runtime assembly. */
+  contextSettings?: AgentSessionConfig['contextSettings'];
 }
 
 /**

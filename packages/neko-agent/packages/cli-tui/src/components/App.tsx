@@ -38,6 +38,8 @@ interface AppProps {
   readonly capabilityProviders?: readonly AgentCapabilityProvider[];
   /** Optional prompt submitted once after the TUI session is initialized. */
   readonly initialPrompt?: string;
+  /** Optional persisted conversation id to resume inside the Ink TUI session. */
+  readonly resumeConversationId?: string;
 }
 
 export function App({
@@ -45,6 +47,7 @@ export function App({
   service,
   capabilityProviders,
   initialPrompt,
+  resumeConversationId,
 }: AppProps): React.JSX.Element {
   const pendingApproval = useUIStore((s) => s.pendingApproval);
   const pendingSelection = useUIStore((s) => s.pendingSelection);
@@ -76,6 +79,7 @@ export function App({
     getContextTokenCount,
     compactContext,
     getMessageQueueSnapshot,
+    listTasks,
     promoteQueuedMessage,
     cancelQueuedMessage,
     editQueuedMessage,
@@ -102,6 +106,7 @@ export function App({
     config,
     service,
     capabilityProviders,
+    resumeConversationId,
   });
 
   const refreshReferenceSuggestions = useCallback((query = '') => {
@@ -145,6 +150,7 @@ export function App({
     getContextTokenCount,
     compactContext,
     getMessageQueueSnapshot,
+    listTasks,
     promoteQueuedMessage,
     cancelQueuedMessage,
     editQueuedMessage,

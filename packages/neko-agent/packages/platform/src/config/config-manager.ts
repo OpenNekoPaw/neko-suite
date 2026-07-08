@@ -64,6 +64,11 @@ import {
   type AssistantStatusBarPresentation,
 } from './assistant-status-bar';
 import {
+  resolveEffectiveAgentWorkspaceConfigSnapshot,
+  type EffectiveAgentRuntimeOverrides,
+  type EffectiveAgentWorkspaceConfigSnapshot,
+} from './effective-agent-config';
+import {
   buildProviderCredentialImports,
   type ProviderCredentialImportApplyResult,
   type ProviderCredentialImport,
@@ -270,8 +275,13 @@ export class ConfigManager {
   getAssistantStatusBarPresentation(
     generationConfig?: GenerationModelConfig,
   ): AssistantStatusBarPresentation {
+    const effective = this.getEffectiveAgentWorkspaceConfigSnapshot();
+    const enabledModels = this.getEnabledModels();
+    const statusModels = effective.model
+      ? [effective.model, ...enabledModels.filter((model) => model.id !== effective.model?.id)]
+      : enabledModels;
     return buildAssistantStatusBarPresentation({
-      enabledModels: this.getEnabledModels(),
+      enabledModels: statusModels,
       ...(generationConfig ? { generationConfig } : {}),
     });
   }
@@ -309,6 +319,10 @@ export class ConfigManager {
   }
 
   getAssistantDefaultProvider(): AssistantProviderSelection | undefined {
+    const effective = this.getEffectiveAgentWorkspaceConfigSnapshot();
+    if (effective.providerId) {
+      return selectAssistantProvider(this.getConfig(), effective.providerId);
+    }
     return selectAssistantDefaultProvider(this.getConfig());
   }
 
@@ -317,6 +331,7 @@ export class ConfigManager {
   }
 
   getAssistantSettingsSnapshot(): AssistantSettingsSnapshot {
+    const effective = this.getEffectiveAgentWorkspaceConfigSnapshot();
     return {
       ...buildAssistantSettingsSnapshot({
         defaultProvider: this.getAssistantDefaultProviderScalarForSettings(),
@@ -330,10 +345,16 @@ export class ConfigManager {
         executionMode: this.getExecutionMode(),
       }),
       ...this.runtimeAssistantSettings,
+      selectedProviderId: effective.providerId,
+      selectedModelId: effective.modelId,
+      temperature: effective.temperature,
+      maxTokens: effective.maxTokens,
+      executionMode: effective.executionMode,
     };
   }
 
   getAssistantRuntimeSettingsSnapshot(): AssistantRuntimeSettingsSnapshot {
+    const effective = this.getEffectiveAgentWorkspaceConfigSnapshot();
     return {
       ...buildAssistantRuntimeSettingsSnapshot({
         defaultProvider: this.getAssistantDefaultProviderScalarForSettings(),
@@ -348,7 +369,30 @@ export class ConfigManager {
         thinkingBudget: this.getThinkingBudget(),
       }),
       ...this.runtimeAssistantSettings,
+      selectedProviderId: effective.providerId,
+      selectedModelId: effective.modelId,
+      temperature: effective.temperature,
+      maxTokens: effective.maxTokens,
+      executionMode: effective.executionMode,
+      thinkingBudget: effective.thinkingBudget,
     };
+  }
+
+  getEffectiveAgentWorkspaceConfigSnapshot(
+    runtimeOverrides: EffectiveAgentRuntimeOverrides = {},
+  ): EffectiveAgentWorkspaceConfigSnapshot {
+    const config = this.getConfig();
+    return resolveEffectiveAgentWorkspaceConfigSnapshot({
+      userConfigReadResult: this.userConfigReadResult,
+      workspaceConfigReadResult: this.workspaceConfigReadResult,
+      providers: [...config.providers.values()],
+      models: [...config.models.values()],
+      mcpServers: [...config.mcpServers.values()],
+      runtimeOverrides: {
+        ...projectRuntimeAssistantSettingsOverrides(this.runtimeAssistantSettings),
+        ...runtimeOverrides,
+      },
+    });
   }
 
   getAssistantSettingsData(
@@ -369,7 +413,7 @@ export class ConfigManager {
       modelGroups: [...providerSourceProjection.modelGroups],
       chatModelOptions,
       defaultMediaModels: buildDefaultMediaModelOptionIds({
-        defaultMediaModels: this.getDefaultMediaModels(),
+        defaultMediaModels: this.getEffectiveAgentWorkspaceConfigSnapshot().defaultMediaModels,
         chatModelOptions,
         models: config.models.values(),
       }),
@@ -807,7 +851,10 @@ export class ConfigManager {
       : undefined;
     if (workspaceDiagnostic) return workspaceDiagnostic;
 
-    return this.buildAssistantAvailabilityDiagnostic();
+    const availabilityDiagnostic = this.buildAssistantAvailabilityDiagnostic();
+    if (availabilityDiagnostic) return availabilityDiagnostic;
+
+    return this.getEffectiveAgentWorkspaceConfigSnapshot().blockingDiagnostic;
   }
 
   private buildAssistantAvailabilityDiagnostic(): AssistantConfigDiagnostic | undefined {
@@ -1143,6 +1190,32 @@ function isClearingRuntimeModelSelection(settings: Record<string, unknown>): boo
     settings.modelId == null
   );
 }
+
+function projectRuntimeAssistantSettingsOverrides(
+  settings: Partial<AssistantSettingsSnapshot>,
+): EffectiveAgentRuntimeOverrides {
+  const overrides: MutableEffectiveAgentRuntimeOverrides = {};
+  if ('selectedProviderId' in settings) {
+    overrides.selectedProviderId = settings.selectedProviderId ?? null;
+  }
+  if ('selectedModelId' in settings) {
+    overrides.selectedModelId = settings.selectedModelId ?? null;
+  }
+  if (settings.temperature !== undefined) {
+    overrides.temperature = settings.temperature;
+  }
+  if (settings.maxTokens !== undefined) {
+    overrides.maxTokens = settings.maxTokens;
+  }
+  if (settings.executionMode !== undefined) {
+    overrides.executionMode = settings.executionMode;
+  }
+  return overrides;
+}
+
+type MutableEffectiveAgentRuntimeOverrides = {
+  -readonly [K in keyof EffectiveAgentRuntimeOverrides]: EffectiveAgentRuntimeOverrides[K];
+};
 
 function toModelOptionId(ref: ModelRefConfig): string {
   return `${ref.providerId}:${ref.modelId}`;

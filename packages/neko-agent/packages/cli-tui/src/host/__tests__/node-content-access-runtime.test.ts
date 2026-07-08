@@ -4,7 +4,11 @@ import * as path from 'node:path';
 import AdmZipModule from 'adm-zip';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDocumentResourceRef } from '@neko/shared/content-access';
-import { createNodeContentAccessRuntime } from '../node-content-access-runtime';
+import {
+  createNodeContentAccessRuntime,
+  loadTuiDocumentReaderModule,
+} from '../node-content-access-runtime';
+import { createNodeProjectResourceCacheStartupGcTarget } from '../node-resource-cache-startup-gc';
 import { createNodeWorkspaceContentHostAdapter } from '../node-workspace-content-host';
 
 const runtimeSourcePath = path.resolve(__dirname, '..', 'node-content-access-runtime.ts');
@@ -35,6 +39,12 @@ describe('node content access runtime packaging', () => {
     expect(source).toContain("from 'epub2'");
     expect(source).toContain("from 'adm-zip'");
     expect(source).not.toContain('import(packageName)');
+  });
+
+  it('fails visibly when a document reader dependency is not bundled for TUI', async () => {
+    await expect(loadTuiDocumentReaderModule('pdf-parse')).rejects.toThrow(
+      'Agent document reader module "pdf-parse" is unavailable on tui.',
+    );
   });
 });
 
@@ -72,6 +82,7 @@ describe('node content access runtime path variables', () => {
 
   it('materializes document resource refs through the shared resource cache', async () => {
     const workDir = createTempDir();
+    const cacheTarget = createNodeProjectResourceCacheStartupGcTarget({ workDir });
     const archivePath = path.join(workDir, 'book.epub');
     const imageBytes = Buffer.from('cached-document-image');
     const archive = new (AdmZipModule as unknown as AdmZipConstructor)();
@@ -95,7 +106,8 @@ describe('node content access runtime path variables', () => {
     });
 
     expect(result.status).toBe('ready');
-    expect(result.uri).toContain(path.join(workDir, '.neko', '.cache', 'resources'));
+    expect(result.uri).toContain(cacheTarget.cacheRoot);
+    expect(fs.existsSync(cacheTarget.manifestPath)).toBe(true);
     expect(Buffer.from(fs.readFileSync(result.uri ?? '')).toString('utf8')).toBe(
       'cached-document-image',
     );

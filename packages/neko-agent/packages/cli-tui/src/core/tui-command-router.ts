@@ -4,6 +4,8 @@ import type {
   AgentCapabilityProviderAvailabilitySummary,
   ChatModelOption,
   SkillLifecycleSlot,
+  Task,
+  TaskStatus,
 } from '@neko/shared';
 import type { AgentMessageQueueSnapshot, AgentQueuedMessageItem } from '@neko-agent/types';
 import type { AgentLlmAdvancedParams, AgentLlmConfig } from '@neko-agent/types';
@@ -24,6 +26,13 @@ export type TuiSessionMode = 'agent' | 'image' | 'video' | 'audio';
 const TUI_SESSION_MODES: readonly TuiSessionMode[] = ['agent', 'image', 'video', 'audio'];
 type TuiMediaCategory = 'image' | 'video' | 'audio';
 const TUI_MEDIA_CATEGORIES: readonly TuiMediaCategory[] = ['image', 'video', 'audio'];
+const TUI_TASK_STATUSES = [
+  'pending',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+] as const satisfies readonly TaskStatus[];
 type TuiParamPresetKey = 'reasoning' | 'verbosity' | 'creativity';
 const TUI_PARAM_PRESET_KEYS: readonly TuiParamPresetKey[] = [
   'reasoning',
@@ -148,6 +157,10 @@ export interface TuiQueuePorts {
   readonly edit: (queueItemId: string, content: string) => AgentQueuedMessageItem;
 }
 
+export interface TuiTaskPorts {
+  readonly list: (status?: TaskStatus) => readonly Task[] | Promise<readonly Task[]>;
+}
+
 export interface TuiMcpServerSnapshot {
   readonly id: string;
   readonly name: string;
@@ -196,6 +209,7 @@ export interface TuiCommandRouterPorts {
   readonly skill?: TuiSkillPorts;
   readonly context?: TuiContextPorts;
   readonly queue?: TuiQueuePorts;
+  readonly task?: TuiTaskPorts;
   readonly mcp?: TuiMcpPorts;
   readonly capability?: TuiCapabilityPorts;
   readonly artifact?: TuiArtifactPorts;
@@ -265,6 +279,10 @@ export async function handleTuiControlCommand(
 
     case 'queue':
       return handleQueue(commandText, context);
+
+    case 'task':
+    case 'tasks':
+      return handleTasks(commandText, context);
 
     case 'mcp':
       return handleMcp(commandText, context);
@@ -1218,12 +1236,12 @@ async function handleSkill(
   const skillPorts = context.ports.skill;
 
   if (!skillPorts) {
-    return handled({ output: 'No skills loaded. Configure skillsDir in your config.' });
+    return handled({ output: 'No skills loaded from the standard Neko Skill catalog.' });
   }
 
   const skills = skillPorts.listEnabled?.() ?? [];
   if (skills.length === 0) {
-    return handled({ output: 'No skills available in skillsDir.' });
+    return handled({ output: 'No skills available in the standard Neko Skill catalog.' });
   }
 
   if (skillArg === 'off' || skillArg.startsWith('off ')) {
@@ -1327,6 +1345,82 @@ function handleQueue(input: string, context: TuiCommandRouterContext): TuiComman
   return handled({
     error: `Unknown queue command: ${subcommand}. Usage: /queue list | /queue promote <id> | /queue cancel <id> | /queue edit <id> <text>`,
   });
+}
+
+async function handleTasks(
+  input: string,
+  context: TuiCommandRouterContext,
+): Promise<TuiCommandRouterResult> {
+  const taskPorts = context.ports.task;
+  if (!taskPorts) {
+    return handled({ error: 'Task status is not available for this session.' });
+  }
+
+  const args = input.trim().split(/\s+/).slice(1);
+  const subcommand = args[0]?.toLowerCase();
+  const statusArg =
+    subcommand === 'list' || subcommand === 'status' ? args[1]?.toLowerCase() : subcommand;
+
+  if (statusArg && statusArg !== 'all' && !isTuiTaskStatus(statusArg)) {
+    return handled({
+      error:
+        'Usage: /tasks [pending|running|completed|failed|cancelled|all] or /tasks status [status]',
+    });
+  }
+
+  const status = isTuiTaskStatus(statusArg) ? statusArg : undefined;
+  const tasks = await taskPorts.list(status);
+  return handled({ output: formatTaskList(tasks, status) });
+}
+
+function isTuiTaskStatus(value: string | undefined): value is TaskStatus {
+  return TUI_TASK_STATUSES.includes(value as TaskStatus);
+}
+
+function formatTaskList(tasks: readonly Task[], status?: TaskStatus): string {
+  if (tasks.length === 0) {
+    return status ? `No ${status} tasks.` : 'No tasks.';
+  }
+
+  const sortedTasks = [...tasks].sort((left, right) => right.updatedAt - left.updatedAt);
+  return [
+    status ? `Tasks (${status}):` : 'Tasks:',
+    ...sortedTasks.map(formatTaskLine),
+    '',
+    'Usage: /tasks [pending|running|completed|failed|cancelled|all]',
+  ].join('\n');
+}
+
+function formatTaskLine(task: Task): string {
+  const progress = Number.isFinite(task.progress) ? Math.round(task.progress) : 0;
+  const runMode = task.lifecycle?.runMode ?? task.input.lifecycle?.runMode ?? 'foreground';
+  const title = readTaskTitle(task);
+  const error = task.error ?? task.output?.error;
+  return [
+    `  ${task.id}`,
+    task.status,
+    `${progress}%`,
+    runMode,
+    title,
+    error ? `error=${error}` : undefined,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join('  ');
+}
+
+function readTaskTitle(task: Task): string {
+  const payload = task.input.payload;
+  for (const key of ['prompt', 'title', 'name', 'description', 'content'] as const) {
+    const value = payload[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return trimTaskTitle(value.trim());
+    }
+  }
+  return task.type;
+}
+
+function trimTaskTitle(value: string): string {
+  return value.length > 80 ? `${value.slice(0, 77)}...` : value;
 }
 
 async function handleMcp(

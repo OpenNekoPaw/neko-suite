@@ -1,17 +1,30 @@
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { Skill, SkillLoader } from '@neko/agent';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import {
+  createCommandBackedSkill,
+  createSkillFileRuntime,
+  type Skill,
+  type SkillFileRuntime,
+  type SkillFileScanGroup,
+  type SkillFileScanResult,
+  type SkillLoader,
+} from '@neko/agent';
 import { getBuiltinSkills } from '@neko/skills';
 import type { CLIConfig } from './types';
-import { loadCodexSkillArtifactsAsSkills, loadSkillArtifactsAsSkills } from './skill-artifacts';
 
-export type TuiSessionSkillLoader = Pick<SkillLoader, 'loadFromDirectory'>;
+export type TuiSessionSkillLoader = Pick<
+  SkillLoader,
+  'loadFromDirectory' | 'loadLazyFromDirectory'
+>;
 export type TuiSessionSkillLocale = 'en' | 'zh';
 
 export async function loadTuiSessionSkills(input: {
   readonly skillLoader: TuiSessionSkillLoader;
   readonly config: CLIConfig;
   readonly locale: TuiSessionSkillLocale;
+  readonly homeDir?: string;
+  readonly skillFileRuntime?: Pick<SkillFileRuntime, 'scanSkills'>;
 }): Promise<Skill[]> {
   const merged = new Map<string, Skill>();
 
@@ -19,31 +32,50 @@ export async function loadTuiSessionSkills(input: {
     merged.set(skill.name, skill);
   }
 
-  for (const skillsDir of resolveNekoTuiSkillDirectories(input.config)) {
-    const loadedSkills = await loadSkillArtifactsAsSkills(input.skillLoader, skillsDir);
-    for (const skill of loadedSkills) {
-      merged.set(skill.name, skill);
-    }
-  }
-
-  const codexSkillsDir = path.join(input.config.workDir, '.codex', 'skills');
-  const codexSkills = await loadCodexSkillArtifactsAsSkills(fs, path, codexSkillsDir);
-  for (const skill of codexSkills) {
-    merged.set(skill.name, skill);
-  }
+  const runtime =
+    input.skillFileRuntime ??
+    createTuiSessionSkillFileRuntime({
+      skillLoader: input.skillLoader,
+      config: input.config,
+      homeDir: input.homeDir,
+    });
+  appendTuiSessionSkillScanResult(merged, await runtime.scanSkills());
 
   return Array.from(merged.values());
 }
 
-export function resolveNekoTuiSkillDirectories(config: CLIConfig): string[] {
-  const dirs: string[] = [];
+export function createTuiSessionSkillFileRuntime(input: {
+  readonly skillLoader: TuiSessionSkillLoader;
+  readonly config: CLIConfig;
+  readonly homeDir?: string;
+}): SkillFileRuntime {
+  return createSkillFileRuntime({
+    fs,
+    path,
+    loader: input.skillLoader,
+    homeDir: input.homeDir ?? os.homedir(),
+    getWorkspaceRoot: () => input.config.workDir,
+  });
+}
 
-  if (config.skillsDir) {
-    const configuredDir = path.resolve(config.workDir, config.skillsDir);
-    if (!dirs.some((dir) => path.resolve(dir) === configuredDir)) {
-      dirs.push(configuredDir);
-    }
+function appendTuiSessionSkillScanResult(
+  merged: Map<string, Skill>,
+  result: SkillFileScanResult,
+): void {
+  appendTuiSessionSkillScanGroup(merged, result.personal);
+  appendTuiSessionSkillScanGroup(merged, result.project);
+}
+
+function appendTuiSessionSkillScanGroup(
+  merged: Map<string, Skill>,
+  group: SkillFileScanGroup,
+): void {
+  for (const skill of group.skills) {
+    merged.set(skill.name, skill);
   }
 
-  return dirs;
+  for (const command of group.commands) {
+    const skill = createCommandBackedSkill(command);
+    merged.set(skill.name, skill);
+  }
 }

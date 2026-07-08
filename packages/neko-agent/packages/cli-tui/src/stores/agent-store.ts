@@ -11,6 +11,7 @@ import type {
   ExecutionMode,
   MessageQueueState,
   SessionMode,
+  TaskStatusState,
   TokenUsage,
   IterationProgress,
 } from '../types/state';
@@ -26,6 +27,7 @@ export interface AgentSlice {
   readonly startTime: number | null;
   readonly error: Error | null;
   readonly messageQueue: MessageQueueState;
+  readonly tasks: TaskStatusState;
   /** Currently active skill name (null if none) */
   readonly activeSkill: string | null;
   /** Active Skill lifecycle records projected for CLI/TUI surfaces. */
@@ -40,6 +42,7 @@ export interface AgentSlice {
   updateUsage: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
   setMessageQueueSnapshot: (snapshot: MessageQueueState['snapshot']) => void;
   setMessageQueueDiagnostic: (diagnostic: string | null) => void;
+  setRunningTaskSummary: (summary: string | null) => void;
   setSessionMode: (mode: SessionMode) => void;
   setExecutionMode: (mode: ExecutionMode) => void;
   setActiveSkill: (name: string | null) => void;
@@ -61,6 +64,9 @@ const initialState = {
     snapshot: null,
     diagnostic: null,
   } as MessageQueueState,
+  tasks: {
+    runningSummary: null,
+  } as TaskStatusState,
   activeSkill: null as string | null,
   activeSkillLifecycleRecords: [] as readonly ActiveSkillLifecycleRecordProjection[],
 };
@@ -114,6 +120,14 @@ export const useAgentStore = create<AgentSlice>((set) => ({
         diagnostic,
       },
     }));
+  },
+
+  setRunningTaskSummary: (summary) => {
+    set({
+      tasks: {
+        runningSummary: summary,
+      },
+    });
   },
 
   setSessionMode: (mode) => {

@@ -39,8 +39,88 @@ const state = vi.hoisted(() => ({
 vi.mock('@neko/platform', () => ({
   FileUserConfigManager: class FileUserConfigManager {},
   ConfigManager: class ConfigManager {
+    private providerOverrides = new Map<string, Partial<MockProvider>>();
+
+    getEffectiveAgentWorkspaceConfigSnapshot(runtimeOverrides: {
+      selectedProviderId?: string;
+      selectedModelId?: string;
+      temperature?: number;
+      maxTokens?: number;
+    } = {}) {
+      const providerId =
+        runtimeOverrides.selectedProviderId ??
+        state.workspaceConfig.defaultModels?.llm?.providerId ??
+        state.userConfig.defaultModels?.llm?.providerId ??
+        state.workspaceConfig.defaultProvider ??
+        state.userConfig.defaultProvider ??
+        null;
+      const provider = providerId ? this.getProvider(providerId) : undefined;
+      const modelId =
+        runtimeOverrides.selectedModelId ??
+        (state.workspaceConfig.defaultModels?.llm?.providerId === providerId
+          ? state.workspaceConfig.defaultModels.llm.modelId
+          : undefined) ??
+        (state.userConfig.defaultModels?.llm?.providerId === providerId
+          ? state.userConfig.defaultModels.llm.modelId
+          : undefined) ??
+        state.workspaceConfig.defaultModel ??
+        state.userConfig.defaultModel ??
+        null;
+      const model = modelId ? this.getModel(modelId) : undefined;
+      return {
+        providerId,
+        modelId,
+        provider,
+        model,
+        modelCapabilities: model?.capabilities,
+        temperature:
+          runtimeOverrides.temperature ??
+          state.workspaceConfig.temperature ??
+          state.userConfig.temperature ??
+          0.7,
+        maxTokens:
+          runtimeOverrides.maxTokens ??
+          state.workspaceConfig.maxTokens ??
+          state.userConfig.maxTokens ??
+          8192,
+        thinkingBudget:
+          state.workspaceConfig.thinkingBudget ?? state.userConfig.thinkingBudget ?? 10000,
+        executionMode:
+          state.workspaceConfig.executionMode ?? state.userConfig.executionMode ?? 'ask',
+        defaultMediaModels: {
+          image: toOptionId(state.workspaceConfig.defaultModels?.image),
+          video: toOptionId(state.workspaceConfig.defaultModels?.video),
+          audio: toOptionId(state.workspaceConfig.defaultModels?.audio),
+        },
+        mcpServers: this.getEnabledMCPServers(),
+        diagnostics: [],
+        sources: {
+          temperature: 'workspace',
+          maxTokens: 'workspace',
+          thinkingBudget: 'workspace',
+          executionMode: 'workspace',
+          mediaDefaults: {},
+        },
+      };
+    }
+
+    setRuntimeProviderOverride(providerId: string, override: Partial<MockProvider>): void {
+      this.providerOverrides.set(providerId, {
+        ...this.providerOverrides.get(providerId),
+        ...override,
+      });
+    }
+
+    getProviders(): MockProvider[] {
+      return state.providers.map((provider) => ({
+        ...provider,
+        ...this.providerOverrides.get(provider.id),
+      }));
+    }
+
     getProvider(providerId: string): MockProvider | undefined {
-      return state.providers.find((provider) => provider.id === providerId);
+      const provider = state.providers.find((candidate) => candidate.id === providerId);
+      return provider ? { ...provider, ...this.providerOverrides.get(provider.id) } : undefined;
     }
 
     getModel(modelId: string): MockModel | undefined {
@@ -62,6 +142,10 @@ vi.mock('@neko/platform', () => ({
     dispose(): void {}
   },
 }));
+
+function toOptionId(ref: { providerId: string; modelId: string } | undefined): string | undefined {
+  return ref ? `${ref.providerId}:${ref.modelId}` : undefined;
+}
 
 vi.mock('@neko/shared/config/config-reader.ts', () => ({
   getUserConfigDir: () => '/tmp/neko-user',
@@ -170,7 +254,7 @@ describe('loadConfig', () => {
     expect(config.model).toBe('local-chat');
   });
 
-  it('does not apply [default_models.llm] model when provider override selects another provider', () => {
+  it('fails visibly when provider override conflicts with the only configured default model', () => {
     state.userConfig = {
       defaultModels: {
         llm: {
@@ -180,10 +264,55 @@ describe('loadConfig', () => {
       },
     };
 
-    const config = loadConfig('/tmp/project', { provider: 'gateway' });
+    expect(() => loadConfig('/tmp/project', { provider: 'gateway' })).toThrow(
+      'No model is configured for provider "gateway".',
+    );
+  });
 
-    expect(config.provider).toBe('gateway');
-    expect(config.model).toBe('gpt-4.1');
+  it('uses effective workspace scalar and media defaults from ConfigManager', () => {
+    state.userConfig = {
+      defaultModels: {
+        llm: {
+          providerId: 'gateway',
+          modelId: 'gateway-chat',
+        },
+        image: {
+          providerId: 'gateway',
+          modelId: 'gateway-image',
+        },
+      },
+      temperature: 0.2,
+      maxTokens: 4096,
+      thinkingBudget: 2048,
+    };
+    state.workspaceConfig = {
+      defaultModels: {
+        llm: {
+          providerId: 'local',
+          modelId: 'local-chat',
+        },
+        image: {
+          providerId: 'local',
+          modelId: 'local-image',
+        },
+      },
+      temperature: 0.55,
+      maxTokens: 1024,
+      thinkingBudget: 512,
+    };
+
+    const config = loadConfig('/tmp/project');
+
+    expect(config.provider).toBe('local');
+    expect(config.model).toBe('local-chat');
+    expect(config.temperature).toBe(0.55);
+    expect(config.maxTokens).toBe(1024);
+    expect(config.thinkingBudget).toBe(512);
+    expect(config.defaultMediaModels).toEqual({
+      image: 'local:local-image',
+      video: undefined,
+      audio: undefined,
+    });
   });
 
   it('projects selected chat model token metadata into CLI config', () => {

@@ -55,6 +55,16 @@ export {
 } from './capability/agent-content-access-runtime';
 
 export {
+  createAgentProjectResourceCacheTarget,
+  type AgentProjectResourceCacheTarget,
+} from './resource-cache-runtime';
+
+export {
+  createAgentDocumentReaderModuleUnavailableError,
+  type AgentDocumentReaderHostSurface,
+} from './document-module-diagnostics';
+
+export {
   createHostAgentContentAccessRuntime,
   type CreateHostAgentContentAccessRuntimeOptions,
 } from './capability/host-content-access-runtime-adapter';
@@ -162,9 +172,13 @@ export {
 } from './creative-ai-run-runtime';
 
 export {
+  buildAgentWorkspaceRuntimeSessionAssemblyInput,
   buildAgentRuntimeSessionFactoryConfig,
   type AgentRuntimeHostBindings,
   type AgentRuntimeSessionAssemblyInput,
+  type AgentWorkspaceRuntimeConfigProjection,
+  type AgentWorkspaceRuntimeSessionAssemblyInput,
+  type AgentWorkspaceRuntimeSurface,
 } from './session/runtime-host-bindings';
 
 export {

@@ -5,13 +5,13 @@
 ## Context Summary
 
 - 项目：Neko Suite - VSCode 创意工作套件
-- 架构：Extension Host (Agent/Platform) + Webview (React 对话 UI) + CLI (Ink TUI)
+- 架构：Extension Host (Agent/Platform) + Webview (React 对话 UI) + Terminal TUI (Ink) / headless tools
 - 详细架构：[ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ## Quick Reference
 
 - **职责**：自然语言 → 多模型 LLM 推理 → 工具调用 / AI 生成 API
-- **入口**：`packages/extension/src/index.ts`（Extension）、`packages/cli-tui/src/cli.tsx`（CLI）
+- **入口**：`packages/extension/src/index.ts`（Extension）、`packages/cli-tui/src/cli.tsx`（Terminal TUI / headless）
 - **子包**：`agent`（运行时）、`platform`（LLM 路由）、`extension`（VSCode 宿主）、`webview`（对话 UI）、`cli-tui`（终端 TUI）
 - **依赖**：`@neko/agent`、`@neko/platform`、`@neko/shared`
 - **激活依赖**：neko-engine、neko-tools、neko-preview
@@ -23,7 +23,7 @@
   │
   ├─ VSCode ──→ Webview (React) ──postMessage──→ Extension Host
   │                                                  │
-  └─ Terminal ──→ CLI (Ink TUI) ─────────────────────┤
+  └─ Terminal ──→ Ink TUI / headless tools ──────────┤
                                                      │
                                                @neko/agent
                                           ReAct: Think → Act → Observe
@@ -42,7 +42,7 @@
 
 ```
 packages/
-├── agent/      # @neko/agent — Agent 运行时（零 VSCode 依赖，CLI/Extension 复用）
+├── agent/      # @neko/agent — Agent 运行时（零 VSCode 依赖，TUI/Extension 复用）
 │   ├── executor/     ReAct 循环引擎（think-phase + act-phase + hook-runner）
 │   ├── session/      Agent 会话生命周期 + 事件转换
 │   ├── skill/        技能系统（SkillService + 3-track 原子注入 + ToolGuard + 显式技能激活）
@@ -84,13 +84,21 @@ packages/
 │   ├── messages/     type-safe postMessage 构建器
 │   ├── config/       预设配置
 │   └── i18n/         国际化
-└── cli-tui/    # @neko/cli — Ink TUI 终端界面
+└── cli-tui/    # @neko/cli — Ink TUI 终端界面 + headless 工具
     ├── components/   Ink React 组件（ChatView/Input/StatusBar/ToolCall）
     ├── adapters/     LLMServiceAdapter（IService 桥接）
     ├── stores/       Zustand 终端状态（agent/conversation/config/ui）
     ├── hooks/        useAgentSession + useKeyboardShortcuts
     └── core/         createCLIPlatform + bootstrap
 ```
+
+## TUI/Webview 工作区共享边界
+
+Webview/Extension 与 Terminal TUI/headless 是不同本地宿主，功能差异需要保留：Webview 可以拥有 VS Code API、`postMessage`、Webview URI、watcher、memento/recovery 和 Extension command；TUI/headless 可以拥有 Ink 终端交互、进程生命周期、stdout/stderr 报告和真实 API 验证 lane。
+
+共享的是同一工作区的业务逻辑和数据面，而不是 UI 表现。Webview 和 TUI 必须通过共享 runtime/config/catalog/task/cache contract 使用以下输入：`~/.neko/config.toml`、`.neko/config.toml`、workspace-scoped canonical conversation id、`~/.neko/skills`、`~/.neko/commands`、`.neko/skills`、`.neko/commands`、workspace-visible task record、project memory、AGENTS overlays、context settings、授权读根，以及 `.neko/.cache/resources` 下的 project resource-cache manifest/quota/GC 策略。运行时模型/参数选择只影响当前 session，不自动重写 TOML；`skillsDir` 之类非标准 Skill 来源不能让 TUI/headless 单独看到不同 catalog。
+
+Host-private 能力不互通，也不能伪装为共享成功结果。VS Code handle、Webview URI、Extension-private cache、memento/recovery、TUI process handle、终端键盘状态和 headless 报告路径跨宿主请求时必须返回 host-private 或 unavailable diagnostic，不允许 no-op、转成普通 prompt、读取另一端私有缓存或回退旧实现。旧 `cli-*` conversation id 不作为 TUI resume 兼容输入；共享 command catalog 的 surface scope 使用 `tui` / `extension`。
 
 ## 多模型支持
 
@@ -103,11 +111,11 @@ Neko Agent 现在有两条 AI 配置路径：
 
 Provider 配置区分连接模式和协议 profile。`type` 仍用于 adapter 路由，`connectionKind` 只用于区分中转、本地和官方直连路径。自建或第三方 endpoint 仍按实际路径配置为 `gateway` 或 `direct`，不会被自动转换到 NewAPI 网关。
 
-| 连接模式 | MVP 状态 | 配置方式 | 说明 |
-|----------|----------|----------|------|
-| `gateway` | MVP | 用户配置 `neko-gateway` + `newapi`，或 OAuth `neko-account-gateway` | NewAPI 中转。OAuth 官方账号网关由 Neko catalog 注入，用户配置网关需要 endpoint 与凭据。 |
-| `local` | MVP | `ollama-local` + `ollama` | 默认聊天入口。本地私有 LLM，无需 API key；需要本地服务地址。 |
-| `direct` | 显式配置支持 | 官方厂商 API | DeepSeek、GPT、Claude、Gemini、GLM 等官方直连按显式 `type` / `protocol_profile` 调用。默认预设和 provider-specific 参数仍需逐项验证后扩展。 |
+| 连接模式  | MVP 状态     | 配置方式                                                            | 说明                                                                                                                                        |
+| --------- | ------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gateway` | MVP          | 用户配置 `neko-gateway` + `newapi`，或 OAuth `neko-account-gateway` | NewAPI 中转。OAuth 官方账号网关由 Neko catalog 注入，用户配置网关需要 endpoint 与凭据。                                                     |
+| `local`   | MVP          | `ollama-local` + `ollama`                                           | 默认聊天入口。本地私有 LLM，无需 API key；需要本地服务地址。                                                                                |
+| `direct`  | 显式配置支持 | 官方厂商 API                                                        | DeepSeek、GPT、Claude、Gemini、GLM 等官方直连按显式 `type` / `protocol_profile` 调用。默认预设和 provider-specific 参数仍需逐项验证后扩展。 |
 
 **LLM 视觉理解**：不是所有 LLM 的强需求。文本聊天只要求 `chat` 能力；图像理解/多模态工作流必须选择声明了 `vision` 能力的模型。
 
@@ -151,30 +159,30 @@ model_id = "neko-gateway-tts"
 
 ### 执行模式
 
-| 模式 | 行为 | 场景 |
-|------|------|------|
-| `plan` | 生成计划后展示，逐步批准执行 | 高风险操作 |
-| `ask` | 只读工具自动执行；写入、Shell、生成和外部副作用需用户确认 | 需要监督 |
-| `auto` | 按规则自动执行工具 | 可信操作 |
+| 模式   | 行为                                                      | 场景       |
+| ------ | --------------------------------------------------------- | ---------- |
+| `plan` | 生成计划后展示，逐步批准执行                              | 高风险操作 |
+| `ask`  | 只读工具自动执行；写入、Shell、生成和外部副作用需用户确认 | 需要监督   |
+| `auto` | 按规则自动执行工具                                        | 可信操作   |
 
 ### 技能系统
 
 从 `.neko/skills/<name>/SKILL.md` 加载技能（YAML frontmatter + Markdown body），3-track 原子注入/移除：
 
-| Track | 注入内容 |
-|-------|---------|
-| A | 系统提示词 section（SystemPromptComposer） |
-| B | 权限允许规则（PermissionHooks） |
-| C | 工具白名单（ToolGuard，运行时 isToolAllowed） |
+| Track | 注入内容                                      |
+| ----- | --------------------------------------------- |
+| A     | 系统提示词 section（SystemPromptComposer）    |
+| B     | 权限允许规则（PermissionHooks）               |
+| C     | 工具白名单（ToolGuard，运行时 isToolAllowed） |
 
 显式输入触发被拆成独立命名空间：
 
-| 前缀 | 用途 | 示例 |
-|------|------|------|
-| `/` | Agent、Host、Plugin 命令，以及 `.neko/commands/*.md` 命令工件 | `/help`, `/status`, `/commit fix typo` |
-| `$` | 显式激活 Skill，按 canonical Skill name/id 分发到 Skill 注入路径 | `$quality-review changed files` |
-| `@` | 文件、素材、实体或上下文引用 | `@scene.md` |
-| 自然语言 | 普通对话输入，由 Agent 通过 `GetContext` 查看 Skill catalog 后自主判断是否 `ActivateSkill` | `帮我审一下这次修改` |
+| 前缀     | 用途                                                                                       | 示例                                   |
+| -------- | ------------------------------------------------------------------------------------------ | -------------------------------------- |
+| `/`      | Agent、Host、Plugin 命令，以及 `.neko/commands/*.md` 命令工件                              | `/help`, `/status`, `/commit fix typo` |
+| `$`      | 显式激活 Skill，按 canonical Skill name/id 分发到 Skill 注入路径                           | `$quality-review changed files`        |
+| `@`      | 文件、素材、实体或上下文引用                                                               | `@scene.md`                            |
+| 自然语言 | 普通对话输入，由 Agent 通过 `GetContext` 查看 Skill catalog 后自主判断是否 `ActivateSkill` | `帮我审一下这次修改`                   |
 
 `/skills` 是 Skill 管理命令，用于查看、检查 active Skill 或清除 active Skill；直接应用某个 Skill 使用 `$skill-name`。普通 `.neko/skills/<name>/SKILL.md` 不再自动生成 `/skill` 入口，即使旧 frontmatter 里仍带 `command` 字段也只视为 prelaunch migration 元数据。需要 `/command` 体验时，应把提示词写成 `.neko/commands/<command>.md` 命令工件；命令工件复用 Skill 注入 runtime，并显式标记为 `entryPointKind: "command-artifact"`。
 
@@ -189,6 +197,19 @@ model_id = "neko-gateway-tts"
 - **来源**：内置 typed tools、MCP 服务器、扩展工具（NekoCut/NekoCanvas）和受管 External Processor
 - **本地命令边界**：普通创作 Agent 不默认注入任意 `Bash`/shell。图片、视频、音频和脚本类本地工具通过 External Processor manifest、PathAccessPolicy、env allowlist、approval 和 `ResourceRef` 输出进入运行时；Developer Mode 的一次性命令也走同一策略，不生成持久 `Bash(*)` allow。
 - **资源交接**：Agent Webview、Canvas、Storyboard 和 `neko-composite` 传递图片时使用 `ResourceRef`、`documentResourceRef`、source ref、workspace-relative path 或 `${VAR}/path`。Webview URI、blob/object URL、系统 temp、旧 `cachePath` 和 `.neko/.cache/resources` 下的实体路径只属于 runtime/display，不作为 durable identity。
+
+### Package Authoring Transfer
+
+Agent/plugin transfer 只选择能力和投影诊断，不直接调用领域 Webview 私有命令。生成媒体、分镜、模型或素材要写入 `.nk*` 项目时，planner 输出 canonical package authoring command，并通过 host-neutral transfer adapter 执行：
+
+| 目标 | Canonical command |
+| --- | --- |
+| Cut generated clip | `neko.cut.authoring.importGeneratedClip` |
+| Cut storyboard / Canvas draft | `neko.cut.authoring.importStoryboard` / `neko.cut.authoring.importCanvasDraft` |
+| Sketch image source | `neko.sketch.authoring.importImageSource` |
+| Model asset | `neko.model.authoring.importAsset` |
+
+Transfer payload 必须携带结构化 `target`、`reveal`、stable source/ref 和 provenance。命令返回 `ok: false` 时，Agent/Extension/TUI/Electron adapter 展示 diagnostic，不允许 fallback 到旧 `neko.cut.importGeneratedClip`、`neko.sketch.importAsset`、`neko.model.importAsset`、打开隐藏 Webview 或声称发送成功。
 
 ### MCP 集成
 
@@ -219,14 +240,14 @@ NekoAgent 支持读取多种文档格式用于 AI 内容分析和视频生成工
 
 ### 支持的格式
 
-| 类型 | 格式 | 说明 |
-|------|------|------|
-| **文本文档** | PDF, DOC/DOCX, MD, TXT, Fountain, HTML, JSON, YAML | 提取文本和结构信息 |
-| **电子书** | EPUB | 提取章节文本；图像型 EPUB 返回受管图片资源引用和图片元数据 |
-| **漫画档案** | CBZ, CBR | 提取图片页面、受管 `ResourceRef` 及宽高/MIME/大小信息供 AI 视觉分析 |
-| **网页内容** | URL (HTTP/HTTPS) | 抓取网页主要内容 |
-| **演示/表格** | PPT/PPTX, XLS/XLSX | 读取文本/表格数据，提取内嵌图片 |
-| **专业剧本** | Final Draft (FDX) | 影视行业标准格式 |
+| 类型          | 格式                                               | 说明                                                                |
+| ------------- | -------------------------------------------------- | ------------------------------------------------------------------- |
+| **文本文档**  | PDF, DOC/DOCX, MD, TXT, Fountain, HTML, JSON, YAML | 提取文本和结构信息                                                  |
+| **电子书**    | EPUB                                               | 提取章节文本；图像型 EPUB 返回受管图片资源引用和图片元数据          |
+| **漫画档案**  | CBZ, CBR                                           | 提取图片页面、受管 `ResourceRef` 及宽高/MIME/大小信息供 AI 视觉分析 |
+| **网页内容**  | URL (HTTP/HTTPS)                                   | 抓取网页主要内容                                                    |
+| **演示/表格** | PPT/PPTX, XLS/XLSX                                 | 读取文本/表格数据，提取内嵌图片                                     |
+| **专业剧本**  | Final Draft (FDX)                                  | 影视行业标准格式                                                    |
 
 解析由扩展内部库完成，不要求创作者安装 Python、unzip、unrar 等外部命令行工具。图片页基础元数据通过 `ReadDocument.imageInfo` 返回，Skill 不应再调用外部命令探测尺寸。文档图片缓存对上层透明：跨包传递使用结构化 `imageInfo.resourceRef` / `documentResourceRef`，统一 documents resource cache 负责按需物化、MD5 去重和缓存重建。
 
@@ -248,9 +269,10 @@ pnpm check                  # 代码质量检查
 ```
 
 **调试**：
+
 - Extension Host：项目 Logger / VS Code 输出面板
 - Webview DevTools：`Cmd+Shift+P → Developer: Open Webview Developer Tools`
-- CLI：直接终端输出
+- Terminal TUI/headless：直接终端输出
 
 ## 测试
 

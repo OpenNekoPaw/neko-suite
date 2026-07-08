@@ -14,7 +14,12 @@ import {
   toSharedService,
   type Platform,
 } from '@neko/platform';
-import { TaskManager, createFileTaskStorage, type IRuntimeTaskManager } from '@neko/agent';
+import {
+  TaskManager,
+  createFileTaskStorage,
+  createFileWorkspaceVisibleAgentTaskStorage,
+  type IRuntimeTaskManager,
+} from '@neko/agent';
 import type { IProviderCardRegistry, IService, IToolRegistry } from '@neko/shared';
 import { getEnvKeyMap } from '@neko/shared';
 import { createNodeContentAccessRuntime } from '../host/node-content-access-runtime';
@@ -42,9 +47,20 @@ export interface CLISharedServiceOptions {
   providerCardRegistry?: Pick<IProviderCardRegistry, 'get'>;
 }
 
-export function createCLITaskManager(): IRuntimeTaskManager {
-  const taskStoragePath = path.join(os.homedir(), '.neko', 'tasks.json');
-  const taskStorage = createFileTaskStorage(taskStoragePath);
+export interface CLITaskManagerOptions {
+  readonly workspacePath?: string;
+  readonly storageScope?: 'workspace-visible' | 'host-private';
+}
+
+export function createCLITaskManager(options: CLITaskManagerOptions = {}): IRuntimeTaskManager {
+  const workspacePath = options.workspacePath?.trim();
+  const taskStorage =
+    workspacePath && options.storageScope !== 'host-private'
+      ? createFileWorkspaceVisibleAgentTaskStorage({
+          workspaceRoot: workspacePath,
+          writerId: 'tui-workspace-task-storage',
+        })
+      : createFileTaskStorage(path.join(os.homedir(), '.neko', 'tasks.json'));
   return new TaskManager({ storage: taskStorage });
 }
 
@@ -77,7 +93,9 @@ function collectEnvApiKeys(): Record<string, string> {
 export function createCLIPlatform(options: CLIPlatformOptions): CLIPlatformResult {
   const userConfigManager = new FileUserConfigManager();
 
-  const taskManager = options.taskManager ?? createCLITaskManager();
+  const taskManager = options.taskManager ?? createCLITaskManager({
+    workspacePath: options.workspacePath,
+  });
 
   const platform = createPlatform({
     userConfigManager,

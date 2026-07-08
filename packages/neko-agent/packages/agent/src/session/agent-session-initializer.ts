@@ -110,7 +110,7 @@ export interface SessionComponents {
  */
 export interface SessionCallbacks {
   onToolConfirmation: (request: ToolConfirmationRequest) => void;
-  getActiveSkillValidationRequirements?: () => readonly string[] | undefined;
+  getActiveArtifactValidationRequirements?: () => readonly string[] | undefined;
 }
 
 // =============================================================================
@@ -274,8 +274,8 @@ export function initializeSession(
     toolGroupRegistry,
     toolInjectionManager,
     onToolConfirmation: (request) => callbacks.onToolConfirmation(request),
-    ...(callbacks.getActiveSkillValidationRequirements
-      ? { getActiveSkillValidationRequirements: callbacks.getActiveSkillValidationRequirements }
+    ...(callbacks.getActiveArtifactValidationRequirements
+      ? { getActiveArtifactValidationRequirements: callbacks.getActiveArtifactValidationRequirements }
       : {}),
   });
 
@@ -398,7 +398,7 @@ export interface CreateExecutorDeps {
   toolGroupRegistry: ToolGroupRegistry;
   toolInjectionManager: ToolInjectionManager;
   onToolConfirmation: (request: ToolConfirmationRequest) => void;
-  getActiveSkillValidationRequirements?: () => readonly string[] | undefined;
+  getActiveArtifactValidationRequirements?: () => readonly string[] | undefined;
 }
 
 /**
@@ -467,8 +467,8 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
       },
     },
     hooks,
-    ...(deps.getActiveSkillValidationRequirements
-      ? { getActiveSkillValidationRequirements: deps.getActiveSkillValidationRequirements }
+    ...(deps.getActiveArtifactValidationRequirements
+      ? { getActiveArtifactValidationRequirements: deps.getActiveArtifactValidationRequirements }
       : {}),
     toolSkillRegistry: toolGroupRegistry,
     toolInjectionManager,

@@ -57,6 +57,52 @@ describe('runAgent locale projection', () => {
     }
   });
 
+  it('keeps explicit TUI locale override ahead of VS Code injection', async () => {
+    const previousEnv = snapshotLocaleEnv();
+    process.env.NEKO_LOCALE = 'en-US';
+    process.env.VSCODE_NLS_CONFIG = JSON.stringify({
+      locale: 'zh-cn',
+      osLocale: 'en-us',
+      availableLanguages: {},
+    });
+    process.env.LANG = 'en_US.UTF-8';
+    process.env.LC_ALL = 'C.UTF-8';
+    delete process.env.LANGUAGE;
+    delete process.env.LC_MESSAGES;
+    let observedLocale: unknown;
+
+    try {
+      const workDir = await createTempRoot();
+      const result = await runAgent({
+        config: {
+          ...DEFAULT_CLI_CONFIG,
+          provider: 'mock',
+          providerType: 'mock',
+          providerRequiresApiKey: false,
+          model: 'mock-agent-harness-model',
+          workDir,
+        },
+        runOptions: {
+          prompt: '你好',
+          interactive: false,
+          stream: true,
+          maxIterations: 1,
+        },
+        service: createScriptedService({
+          content: '好的',
+          onStreamOptions: (options) => {
+            observedLocale = options?.locale;
+          },
+        }),
+      });
+
+      expect(result.success).toBe(true);
+      expect(observedLocale).toBe('en');
+    } finally {
+      restoreLocaleEnv(previousEnv);
+    }
+  });
+
   it('registers builtin ai-generate skill for non-interactive skill invocation', async () => {
     const previousLocale = process.env.NEKO_LOCALE;
     process.env.NEKO_LOCALE = 'zh-CN';
@@ -129,7 +175,7 @@ describe('runAgent locale projection', () => {
       capabilityProviders: [createImageGenerationCapabilityProvider()],
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success, result.error).toBe(true);
     expect(observedTools).toContain('GenerateImage');
   });
 });
@@ -180,14 +226,38 @@ function createImageGenerationCapabilityProvider(): AgentCapabilityProvider {
         description: 'Test image generation tool',
         category: 'generation',
         parameters: {
-          prompt: {
-            type: 'string',
-            required: true,
-            description: 'Prompt',
+          type: 'object',
+          properties: {
+            prompt: {
+              type: 'string',
+              description: 'Prompt',
+            },
           },
+          required: ['prompt'],
         },
         execute: async () => ({ success: true, data: { taskId: 'test-task' } }),
       }),
     ],
   };
+}
+
+function snapshotLocaleEnv(): Record<string, string | undefined> {
+  return {
+    NEKO_LOCALE: process.env.NEKO_LOCALE,
+    VSCODE_NLS_CONFIG: process.env.VSCODE_NLS_CONFIG,
+    LC_ALL: process.env.LC_ALL,
+    LC_MESSAGES: process.env.LC_MESSAGES,
+    LANGUAGE: process.env.LANGUAGE,
+    LANG: process.env.LANG,
+  };
+}
+
+function restoreLocaleEnv(snapshot: Record<string, string | undefined>): void {
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
 }

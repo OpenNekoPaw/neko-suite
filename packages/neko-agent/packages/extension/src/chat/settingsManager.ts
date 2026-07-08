@@ -61,12 +61,23 @@ export class SettingsManager {
   }
 
   private get snapshot(): AssistantRuntimeSettingsSnapshot {
-    return (
+    const base =
       this._configManager?.getAssistantRuntimeSettingsSnapshot() ??
       buildAssistantRuntimeSettingsSnapshot({
         defaultProvider: null,
         defaultModel: null,
-      })
-    );
+      });
+    const effective = this._configManager?.getEffectiveAgentWorkspaceConfigSnapshot();
+    return effective
+      ? {
+          ...base,
+          selectedProviderId: effective.providerId,
+          selectedModelId: effective.modelId,
+          temperature: effective.temperature,
+          maxTokens: effective.maxTokens,
+          thinkingBudget: effective.thinkingBudget,
+          executionMode: effective.executionMode,
+        }
+      : base;
   }
 }

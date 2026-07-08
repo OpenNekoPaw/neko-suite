@@ -14,6 +14,16 @@ import type {
   JsonBlockValidationResult,
   ValidationResultWithBlocks,
 } from './types';
+import {
+  projectNekoMarkdownExtensions,
+  type NekoMarkdownCreativeTableProjection,
+} from '@neko/markdown';
+import {
+  classifyCreativeTableHeaders,
+  normalizeCreativeTableHeader,
+  resolveCreativeTableField,
+  STORYBOARD_CREATIVE_TABLE_PROFILE,
+} from '@neko/shared';
 import { DEFAULT_OUTPUT_CONSTRAINTS } from './types';
 
 // Import specialized components
@@ -39,7 +49,14 @@ interface ArtifactValidatorDefinition {
   readonly validate: ArtifactValidator;
 }
 
-const ARTIFACT_VALIDATOR_DEFINITIONS: readonly ArtifactValidatorDefinition[] = [] as const;
+const ARTIFACT_VALIDATOR_DEFINITIONS: readonly ArtifactValidatorDefinition[] = [
+  {
+    id: 'creative-table.storyboard',
+    aliases: ['CreativeTable', 'StoryboardTable', 'storyboard', 'storyboard.creative-table'],
+    shouldValidate: shouldValidateStoryboardCreativeTableOutput,
+    validate: validateStoryboardCreativeTableOutput,
+  },
+] as const;
 
 const ARTIFACT_VALIDATOR_REGISTRY = createArtifactValidatorRegistry(ARTIFACT_VALIDATOR_DEFINITIONS);
 
@@ -364,4 +381,140 @@ function mergeArtifactValidators(
     return undefined;
   }
   return [...new Set([...(configured ?? []), ...(runtime ?? [])])];
+}
+
+function shouldValidateStoryboardCreativeTableOutput(content: string): boolean {
+  return (
+    hasForbiddenStoryboardDocumentMetadata(content) ||
+    projectNekoMarkdownExtensions(content).creativeTables.length > 0
+  );
+}
+
+function validateStoryboardCreativeTableOutput(content: string): ArtifactValidatorResult {
+  const errors: ValidationError[] = [];
+  const tables = projectStoryboardCreativeTables(content);
+
+  if (hasForbiddenStoryboardDocumentMetadata(content)) {
+    errors.push({
+      type: 'output',
+      code: 'storyboard-table-document-metadata-forbidden',
+      message:
+        'Storyboard creative table output must not include YAML frontmatter or creation-document metadata.',
+    });
+  }
+
+  if (tables.length === 0) {
+    return { errors, warnings: [] };
+  }
+
+  if (tables.length > 1) {
+    errors.push({
+      type: 'output',
+      code: 'storyboard-table-single-table-required',
+      message: 'Storyboard output must contain exactly one Markdown creative table.',
+      details: { tableCount: tables.length },
+    });
+  }
+
+  const [table] = tables;
+  if (!table) {
+    return { errors, warnings: [] };
+  }
+
+  const classification = classifyCreativeTableHeaders(
+    STORYBOARD_CREATIVE_TABLE_PROFILE,
+    table.headers,
+  );
+  const knownFieldIds = new Set(classification.knownFields.map((field) => field.id));
+  const missingRecommendedHeaders = STORYBOARD_CREATIVE_TABLE_PROFILE.recommendedHeaders.filter(
+    (fieldId) => !knownFieldIds.has(fieldId),
+  );
+
+  if (table.rows.length === 0) {
+    errors.push({
+      type: 'output',
+      code: 'storyboard-table-empty',
+      message: 'Storyboard creative table must include at least one data row.',
+    });
+  }
+
+  if (missingRecommendedHeaders.length > 0 || !classification.matchedProfile) {
+    errors.push({
+      type: 'output',
+      code: 'storyboard-table-required-fields-missing',
+      message:
+        'Storyboard creative table must use the prompt-first canonical headers: scene, shot, source, imagePrompt, videoPrompt, duration, dialogue.',
+      details: {
+        missingRecommendedHeaders,
+        missingMinimumGroups: classification.missingMinimumGroups,
+        headers: table.headers,
+      },
+    });
+  }
+
+  const nonCanonicalKnownHeaders = table.headers.flatMap((header) => {
+    const field = resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, header);
+    if (!field) return [];
+    return header.trim() === field.id ? [] : [{ header, canonical: field.id }];
+  });
+  if (nonCanonicalKnownHeaders.length > 0) {
+    errors.push({
+      type: 'output',
+      code: 'storyboard-table-noncanonical-header',
+      message:
+        'Storyboard creative table known fields must use canonical field ids; localization is applied by the renderer.',
+      details: { headers: nonCanonicalKnownHeaders },
+    });
+  }
+
+  const forbiddenHeaders = table.headers.filter(isForbiddenStoryboardAnalysisHeader);
+  if (forbiddenHeaders.length > 0) {
+    errors.push({
+      type: 'output',
+      code: 'storyboard-table-forbidden-header',
+      message:
+        'Storyboard creative table must not be a page-analysis table with visual-analysis headers.',
+      details: { headers: forbiddenHeaders },
+    });
+  }
+
+  return { errors, warnings: [] };
+}
+
+function projectStoryboardCreativeTables(
+  content: string,
+): readonly NekoMarkdownCreativeTableProjection[] {
+  return projectNekoMarkdownExtensions(content, {
+    creativeTableKnownColumns: STORYBOARD_CREATIVE_TABLE_PROFILE.fields.map((field) => field.id),
+  }).creativeTables;
+}
+
+function hasForbiddenStoryboardDocumentMetadata(content: string): boolean {
+  const trimmed = content.trimStart();
+  if (!trimmed.startsWith('---')) return false;
+  return /(^|\n)(id|kind|status|domain|referenceChain):\s*/i.test(trimmed);
+}
+
+function isForbiddenStoryboardAnalysisHeader(header: string): boolean {
+  const normalized = normalizeCreativeTableHeader(header);
+  return [
+    '页码',
+    '页码图像',
+    '页面',
+    '来源页',
+    'page',
+    'pagenumber',
+    'image reference',
+    'imagereference',
+    '类型',
+    '构图景别',
+    '景别构图',
+    '动画镜头建议',
+    '镜头建议',
+    '动作叙事功能',
+    '氛围',
+    '节奏情绪',
+    'analysis',
+    'suggestion',
+  ].includes(normalized);
 }

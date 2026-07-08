@@ -190,3 +190,15 @@ export const CONFIG_FIXTURES = {
     apiKey: 'custom-api-key',
   },
 };
+
+export {
+  createAgentWorkspaceRuntimeFixture,
+  createAgentWorkspaceRuntimeFixturePaths,
+  createAgentWorkspaceRuntimeTaskRecord,
+  createDefaultAgentWorkspaceRuntimeUserConfig,
+  createDefaultAgentWorkspaceRuntimeWorkspaceConfig,
+  writeAgentWorkspaceRuntimeFixture,
+  type AgentWorkspaceRuntimeFixture,
+  type AgentWorkspaceRuntimeFixtureOptions,
+  type AgentWorkspaceRuntimeFixturePaths,
+} from './workspace-runtime';

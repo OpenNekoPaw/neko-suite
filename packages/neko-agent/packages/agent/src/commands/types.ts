@@ -2,7 +2,7 @@
  * Builtin Command Types
  *
  * Defines interfaces for builtin slash commands that are shared
- * between cli and extension.
+ * between TUI and extension.
  */
 
 import type { BuiltinSlashCommandCategory, BuiltinSlashCommandName } from '@neko-agent/types';
@@ -42,7 +42,7 @@ export interface BuiltinCommand {
   usage?: string;
   /** Category for grouping in help */
   category: CommandCategory;
-  /** Whether this command is available in CLI */
+  /** Whether this command is available in the terminal TUI/headless surface */
   availableInCli: boolean;
   /** Whether this command is available in extension */
   availableInExtension: boolean;
@@ -93,7 +93,6 @@ export interface CommandContext {
     maxTokens?: number;
     temperature?: number;
     workDir?: string;
-    skillsDir?: string;
     outputFormat?: string;
     verbose?: boolean;
     mcpServers?: unknown[];

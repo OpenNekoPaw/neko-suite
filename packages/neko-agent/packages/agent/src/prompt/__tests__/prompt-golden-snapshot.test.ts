@@ -79,8 +79,14 @@ describe('prompt golden snapshots', () => {
 
   it('base prompts keep domain-specific creative artifact contracts out of the default layer', () => {
     for (const prompt of [BUILTIN_DEFAULT_PROMPT_EN, BUILTIN_DEFAULT_PROMPT_ZH]) {
+      expect(prompt).toMatch(/Markdown Extensions And Generation Prompts|Markdown 扩展与生成提示词/);
+      expect(prompt).toMatch(/shared Markdown\/profile|shared Markdown\/profile 层/);
+      expect(prompt).toMatch(/@entity|@asset/);
+      expect(prompt).toContain('![alt](resource-token#hint)');
+      expect(prompt).toMatch(/Generation prompt cells|生成提示词单元格/);
       expect(prompt).toMatch(/Structured Creative Artifacts|结构化创作产物/);
-      expect(prompt).toMatch(/active skill|当前激活 Skill/);
+      expect(prompt).toMatch(/artifact profile|当前 artifact profile/);
+      expect(prompt).toMatch(/runtime capability contract/);
       expect(prompt).toMatch(/validation requirements/);
       expect(prompt).toMatch(/domain node JSON|领域节点 JSON/);
       expect(prompt).toMatch(

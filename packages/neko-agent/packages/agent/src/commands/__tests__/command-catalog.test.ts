@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { listSlashCommandCatalog, resolveSlashCommandCatalogEntry } from '../command-catalog';
 
 describe('command catalog localization', () => {
-  it('keeps command keywords stable while localizing command-artifact fallback descriptions', () => {
+  it('keeps command keywords stable while localizing command-artifact default descriptions', () => {
     const skills = [
       {
         name: 'Commit Helper',
@@ -12,7 +12,7 @@ describe('command catalog localization', () => {
       },
     ];
     const commands = listSlashCommandCatalog({
-      surface: 'cli',
+      surface: 'tui',
       skills,
       locale: 'zh',
     });
@@ -28,9 +28,9 @@ describe('command catalog localization', () => {
     expect(commands.map((command) => command.name)).not.toContain('提交');
   });
 
-  it('uses the same localized fallback when resolving a command directly', () => {
+  it('uses the same localized default description when resolving a command directly', () => {
     const command = resolveSlashCommandCatalogEntry('commit', {
-      surface: 'cli',
+      surface: 'tui',
       skills: [
         {
           name: 'Commit Helper',

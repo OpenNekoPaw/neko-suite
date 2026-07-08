@@ -250,6 +250,7 @@ describe('chatProvider', () => {
       ((message: unknown) => void | Promise<void>) | undefined;
     await receiveSecondMessage?.({ type: 'getActiveConversation' });
     await receiveSecondMessage?.({ type: 'getTabState' });
+    await flushWebviewAsyncWork();
 
     expect(secondWebview.postMessage).toHaveBeenCalledWith({
       type: 'activeConversation',
@@ -259,6 +260,72 @@ describe('chatProvider', () => {
       type: 'tabState',
       tabState: { openTabs: [], activeTabId: null },
     });
+
+    provider.dispose();
+  });
+
+  it('preserves the active conversation when an empty tab state arrives during an agent turn', async () => {
+    const now = Date.now();
+    const historicalConversation = {
+      id: 'conv-history',
+      title: 'History',
+      messages: [{ id: 'msg-1', role: 'user', content: 'hi', timestamp: now }],
+      createdAt: now,
+      updatedAt: now,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [['conv-history', historicalConversation]],
+        activeId: null,
+      },
+    });
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    await receiveMessage?.({
+      type: 'updateTabState',
+      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+      activeTabId: 'tab-history',
+    });
+
+    const providerInternals = provider as unknown as {
+      _conversations: { getActiveId(): string | null };
+      _messages?: {
+        getAgentStateSnapshot(): readonly {
+          readonly conversationId: 'conv-history';
+          readonly phase: 'thinking';
+          readonly startedAt: 1;
+        }[];
+        dispose(): void;
+      };
+    };
+    expect(providerInternals._conversations.getActiveId()).toBe('conv-history');
+    providerInternals._messages = {
+      getAgentStateSnapshot: () => [
+        { conversationId: 'conv-history', phase: 'thinking', startedAt: 1 },
+      ],
+      dispose: vi.fn(),
+    };
+
+    await receiveMessage?.({ type: 'updateTabState', openTabs: [], activeTabId: null });
+    expect(providerInternals._conversations.getActiveId()).toBe('conv-history');
 
     provider.dispose();
   });
@@ -320,6 +387,7 @@ describe('chatProvider', () => {
       ((message: unknown) => void | Promise<void>) | undefined;
     await receiveSecondMessage?.({ type: 'getActiveConversation' });
     await receiveSecondMessage?.({ type: 'getTabState' });
+    await flushWebviewAsyncWork();
 
     expect(secondWebview.postMessage).toHaveBeenCalledWith({
       type: 'activeConversation',
@@ -392,6 +460,7 @@ describe('chatProvider', () => {
       openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
       activeTabId: 'tab-history',
     });
+    await flushWebviewAsyncWork();
 
     expect(context.workspaceState.update).toHaveBeenCalledWith('neko.tabState', {
       openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
@@ -1039,6 +1108,13 @@ function createImmediateLocalResourceAccess() {
     toWebviewAsset: vi.fn(),
     dispose: vi.fn(),
   };
+}
+
+async function flushWebviewAsyncWork(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function createSpyLogger(): ILogger & {

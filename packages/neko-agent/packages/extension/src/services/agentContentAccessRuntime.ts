@@ -18,7 +18,10 @@ import {
   type LocalResourceAccessService,
   type ResourceCacheService,
 } from '@neko/shared/vscode/extension';
-import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
+import {
+  createAgentDocumentReaderModuleUnavailableError,
+  type AgentContentAccessRuntime,
+} from '@neko/agent/runtime';
 import type { IEngineClientProvider } from './engineClientProvider';
 import { createExtensionAgentContentAccessRuntimeAdapter } from './agentContentAccessRuntimeAdapter';
 import { getLogger } from '../base';
@@ -145,7 +148,11 @@ async function tryImport<T>(packageName: string): Promise<T | null> {
   try {
     const mod = (await import(packageName)) as { default?: unknown };
     return (mod.default ?? mod) as T;
-  } catch {
-    return null;
+  } catch (error) {
+    throw createAgentDocumentReaderModuleUnavailableError({
+      packageName,
+      host: 'extension',
+      cause: error,
+    });
   }
 }

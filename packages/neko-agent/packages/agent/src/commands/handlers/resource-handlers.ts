@@ -137,7 +137,7 @@ export const handleCommands: CommandHandler = (args, context) => {
   }
 
   const commands = listSlashCommandCatalog({
-    surface: 'cli',
+    surface: 'tui',
     skills: listContextSlashCommandSkills(context),
     locale,
   });

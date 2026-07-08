@@ -30,6 +30,7 @@ import {
   filterTasksForConversation,
   toBackgroundTaskView,
 } from './task-view-projector';
+import type { AgentTaskLeaseControl, AgentTaskLeaseDiagnostic } from './task-storage-policy';
 
 export type TaskRuntimeMessage =
   TasksUpdatedMessage | TaskUpdatedMessage | TaskRemovedMessage | MediaTaskProgressMessage;
@@ -50,9 +51,17 @@ export interface TaskRuntimeMediaGateway {
   deleteTask(taskId: string): Promise<unknown>;
 }
 
+export interface TaskRuntimeHostPrivateLeaseGuard {
+  getDiagnostic(input: {
+    readonly taskId: string;
+    readonly control: AgentTaskLeaseControl;
+  }): AgentTaskLeaseDiagnostic | undefined | Promise<AgentTaskLeaseDiagnostic | undefined>;
+}
+
 export interface TaskRuntimeDeps {
   taskManager?: TaskRuntimeTaskManager;
   media?: TaskRuntimeMediaGateway;
+  hostPrivateLeaseGuard?: TaskRuntimeHostPrivateLeaseGuard;
 }
 
 export interface TaskRuntimeEffects {
@@ -64,6 +73,7 @@ export interface TaskRuntimeEffects {
   onTaskRetried?(input: { taskId: string; newTaskId: string; conversationId: string }): void;
   onRetryFailed?(input: { taskId: string; conversationId: string; error: unknown }): void;
   onMediaDeleteFailed?(input: { taskId: string; conversationId: string; error: unknown }): void;
+  onHostPrivateLeaseDiagnostic?(diagnostic: AgentTaskLeaseDiagnostic): void | Promise<void>;
 }
 
 export interface TaskRuntimeInput {
@@ -124,6 +134,13 @@ export async function runCancelTaskRuntime(
   if (!deps.taskManager && !deps.media) {
     return { kind: 'noop', conversationId: input.conversationId, taskId: input.taskId };
   }
+  if (await rejectHostPrivateLease(input, 'cancel', deps, effects)) {
+    return {
+      kind: 'host-private-lease',
+      conversationId: input.conversationId,
+      taskId: input.taskId,
+    };
+  }
 
   const task = await deps.taskManager?.get(input.taskId);
   const media = await deps.media?.getCandidate(input.taskId);
@@ -167,6 +184,13 @@ export async function runRetryTaskRuntime(
 ): Promise<TaskRuntimeResult> {
   if (!deps.taskManager) {
     return { kind: 'noop', conversationId: input.conversationId, taskId: input.taskId };
+  }
+  if (await rejectHostPrivateLease(input, 'recover', deps, effects)) {
+    return {
+      kind: 'host-private-lease',
+      conversationId: input.conversationId,
+      taskId: input.taskId,
+    };
   }
 
   const task = await deps.taskManager.get(input.taskId);
@@ -234,6 +258,14 @@ export async function runViewTaskResultRuntime(
   deps: TaskRuntimeDeps,
   effects: TaskRuntimeEffects,
 ): Promise<TaskRuntimeResult> {
+  if (await rejectHostPrivateLease(input, 'attach', deps, effects)) {
+    return {
+      kind: 'host-private-lease',
+      conversationId: input.conversationId,
+      taskId: input.taskId,
+    };
+  }
+
   const task = await deps.taskManager?.get(input.taskId);
   const media = await deps.media?.getCandidate(input.taskId);
   const plan = buildViewTaskResultActionPlan({ ...input, task, media });
@@ -250,6 +282,23 @@ export async function runViewTaskResultRuntime(
 
   await effects.openTaskResult?.(buildTaskResultOpenPlan(plan.url));
   return { kind: 'opened-result', conversationId: input.conversationId, taskId: input.taskId };
+}
+
+async function rejectHostPrivateLease(
+  input: TaskRuntimeInput,
+  control: AgentTaskLeaseControl,
+  deps: TaskRuntimeDeps,
+  effects: TaskRuntimeEffects,
+): Promise<boolean> {
+  const diagnostic = await deps.hostPrivateLeaseGuard?.getDiagnostic({
+    taskId: input.taskId,
+    control,
+  });
+  if (!diagnostic) {
+    return false;
+  }
+  await effects.onHostPrivateLeaseDiagnostic?.(diagnostic);
+  return true;
 }
 
 export async function runClearCompletedTasksRuntime(

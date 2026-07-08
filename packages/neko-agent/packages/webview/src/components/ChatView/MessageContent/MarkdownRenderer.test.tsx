@@ -26,7 +26,7 @@ vi.mock('@/i18n', () => ({
       'chat.markdown.diagnostic.missingResourceContext': `Markdown 资源标记 "${String(params?.['token'] ?? '')}" 无法解析，因为这条消息没有图像资源上下文。`,
       'chat.markdown.diagnostic.ambiguousResourceToken': `Markdown 资源标记 "${String(params?.['token'] ?? '')}" 匹配到多个资源。`,
       'chat.markdown.diagnostic.unsupportedResourceReference':
-        'Agent Markdown 渲染暂未启用 Neko 资源引用嵌入和链接。',
+        '这条消息需要宿主提供资源投影后才能渲染 Neko 资源引用嵌入和链接。',
       'chat.markdown.image.unprojected': `图像引用 "${String(params?.['src'] ?? '')}" 尚未由宿主投影。`,
       'chat.markdown.image.missingSource': '图像引用缺少来源。',
     })[key] ?? key,
@@ -743,12 +743,12 @@ describe('MarkdownRenderer structured artifacts', () => {
           code: 'unsupported-resource-reference-markdown-extension',
           token: 'cover.png',
           message:
-            'Neko resource-reference embeds and links are not enabled for Agent Markdown rendering yet.',
+            'Neko resource-reference embeds and links need host resource projection for this message.',
         },
       ],
     });
 
-    expect(screen.getByRole('note').textContent).toContain('Neko 资源引用嵌入和链接');
+    expect(screen.getByRole('note').textContent).toContain('宿主提供资源投影');
   });
 
   it('renders read-only semantic prompt span chips with Canvas handoff metadata', () => {
@@ -803,6 +803,95 @@ describe('MarkdownRenderer structured artifacts', () => {
       'Prompt span @Rin does not resolve to a stable ref.',
     );
     expect(screen.queryByText(/Markdown 资源标记/)).toBeNull();
+  });
+
+  it('renders inline mentions as Markdown reference tokens', () => {
+    const { container } = renderMarkdown('Use @Aki as the character reference.', false, {
+      status: 'ready',
+      tokens: [],
+      diagnostics: [],
+      mentions: [
+        {
+          raw: '@Aki',
+          label: 'Aki',
+          status: 'bound',
+          ref: { kind: 'character', id: 'character-aki' },
+          candidates: [],
+          range: { start: 4, end: 8 },
+        },
+      ],
+    });
+
+    const mention = container.querySelector('[data-markdown-mention="true"]');
+    expect(mention?.textContent).toBe('@Aki');
+    expect(mention?.getAttribute('data-markdown-mention-status')).toBe('bound');
+    expect(mention?.getAttribute('title')).toBe('character:character-aki');
+  });
+
+  it('renders Neko resource-reference embeds through projected Markdown resources', () => {
+    renderMarkdown('Use ![[cover.png#panel_1]] as the first frame.', false, {
+      status: 'ready',
+      tokens: [
+        {
+          token: 'cover.png',
+          status: 'bound',
+          refs: [{ label: 'cover.png', role: 'source' }],
+          resources: [
+            {
+              token: 'cover.png',
+              label: 'cover.png',
+              role: 'source',
+              sourcePath: 'cover.png',
+            },
+          ],
+          renderUris: ['vscode-webview://cover'],
+          diagnostics: [],
+        },
+      ],
+      resourceReferences: [
+        {
+          raw: '![[cover.png#panel_1]]',
+          target: 'cover.png#panel_1',
+          lookupToken: 'cover.png',
+          embed: true,
+          status: 'bound',
+          ref: { kind: 'asset', id: 'asset-cover' },
+          candidates: [],
+          placementHint: 'panel_1',
+          range: { start: 4, end: 26 },
+        },
+      ],
+      diagnostics: [],
+    });
+
+    expect(screen.getByAltText('cover.png').getAttribute('src')).toBe('vscode-webview://cover');
+    expect(screen.queryByText('![[cover.png#panel_1]]')).toBeNull();
+  });
+
+  it('renders Neko resource-reference links as inline reference tokens', () => {
+    const { container } = renderMarkdown('Read [[script.md#Scene 2]] before editing.', false, {
+      status: 'ready',
+      tokens: [],
+      resourceReferences: [
+        {
+          raw: '[[script.md#Scene 2]]',
+          target: 'script.md#Scene 2',
+          lookupToken: 'script.md',
+          embed: false,
+          status: 'bound',
+          ref: { kind: 'file', id: 'script.md' },
+          candidates: [],
+          placementHint: 'Scene 2',
+          range: { start: 5, end: 26 },
+        },
+      ],
+      diagnostics: [],
+    });
+
+    const reference = container.querySelector('[data-markdown-resource-reference="true"]');
+    expect(reference?.textContent).toBe('[[script.md#Scene 2]]');
+    expect(reference?.getAttribute('data-markdown-resource-reference-status')).toBe('bound');
+    expect(reference?.getAttribute('title')).toBe('file:script.md');
   });
 });
 

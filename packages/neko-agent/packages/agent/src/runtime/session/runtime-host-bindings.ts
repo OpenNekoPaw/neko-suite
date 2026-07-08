@@ -81,6 +81,49 @@ export interface AgentRuntimeSessionAssemblyInput extends AgentRuntimeHostBindin
   readonly logger?: AgentRuntimeSessionFactoryLogger;
 }
 
+export type AgentWorkspaceRuntimeSurface = 'extension' | 'tui' | 'headless';
+
+export interface AgentWorkspaceRuntimeConfigProjection {
+  readonly providerId: string | null;
+  readonly modelId: string | null;
+  readonly modelCapabilities?: readonly string[];
+  readonly temperature: number;
+  readonly maxTokens: number;
+  readonly thinkingBudget: number;
+  readonly executionMode: ExecutionMode;
+}
+
+export interface AgentWorkspaceRuntimeSessionAssemblyInput
+  extends Omit<
+    AgentRuntimeSessionAssemblyInput,
+    | 'providerId'
+    | 'modelId'
+    | 'modelCapabilities'
+    | 'temperature'
+    | 'maxTokens'
+    | 'thinkingBudget'
+    | 'executionMode'
+  > {
+  readonly surface: AgentWorkspaceRuntimeSurface;
+  readonly effectiveConfig: AgentWorkspaceRuntimeConfigProjection;
+}
+
+export function buildAgentWorkspaceRuntimeSessionAssemblyInput(
+  input: AgentWorkspaceRuntimeSessionAssemblyInput,
+): AgentRuntimeSessionAssemblyInput {
+  const { effectiveConfig, surface: _surface, ...hostInput } = input;
+  return {
+    ...hostInput,
+    providerId: effectiveConfig.providerId ?? undefined,
+    modelId: effectiveConfig.modelId ?? undefined,
+    modelCapabilities: effectiveConfig.modelCapabilities,
+    temperature: effectiveConfig.temperature,
+    maxTokens: effectiveConfig.maxTokens,
+    thinkingBudget: effectiveConfig.thinkingBudget,
+    executionMode: effectiveConfig.executionMode,
+  };
+}
+
 /**
  * Assemble the runtime-session factory config from host bindings.
  *

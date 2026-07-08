@@ -5,7 +5,10 @@ import type {
   IService,
   IToolRegistry,
 } from '@neko/shared';
-import { buildAgentRuntimeSessionFactoryConfig } from '../session/runtime-host-bindings';
+import {
+  buildAgentRuntimeSessionFactoryConfig,
+  buildAgentWorkspaceRuntimeSessionAssemblyInput,
+} from '../session/runtime-host-bindings';
 
 function createService(): IService {
   return {
@@ -134,5 +137,43 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
       'Failed to resolve capability prompt fragments:',
       expect.any(Error),
     );
+  });
+
+  it('projects effective workspace config into host-neutral session assembly input', () => {
+    const service = createService();
+    const toolRegistry = createToolRegistry();
+
+    const input = buildAgentWorkspaceRuntimeSessionAssemblyInput({
+      surface: 'tui',
+      effectiveConfig: {
+        providerId: 'explicit-user',
+        modelId: 'user-chat',
+        modelCapabilities: ['chat', 'function_calling'],
+        temperature: 0.2,
+        maxTokens: 2048,
+        thinkingBudget: 256,
+        executionMode: 'ask',
+      },
+      createService: () => service,
+      toolRegistry,
+      workspaceRoot: '/workspace',
+      conversationId: 'workspace-conversation',
+    });
+
+    expect(input).toEqual(
+      expect.objectContaining({
+        providerId: 'explicit-user',
+        modelId: 'user-chat',
+        modelCapabilities: ['chat', 'function_calling'],
+        temperature: 0.2,
+        maxTokens: 2048,
+        thinkingBudget: 256,
+        executionMode: 'ask',
+        workspaceRoot: '/workspace',
+        conversationId: 'workspace-conversation',
+      }),
+    );
+    expect('effectiveConfig' in input).toBe(false);
+    expect('surface' in input).toBe(false);
   });
 });

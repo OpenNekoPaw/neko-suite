@@ -82,6 +82,14 @@ export {
   type BuildAssistantStatusBarPresentationInput,
 } from './assistant-status-bar';
 export {
+  resolveEffectiveAgentWorkspaceConfigSnapshot,
+  type EffectiveAgentConfigSelectionSource,
+  type EffectiveAgentConfigValueSource,
+  type EffectiveAgentRuntimeOverrides,
+  type EffectiveAgentWorkspaceConfigSnapshot,
+  type ResolveEffectiveAgentWorkspaceConfigInput,
+} from './effective-agent-config';
+export {
   runAssistantProviderConfigMutationRuntime,
   runAssistantProviderConfigMutationNotificationRuntime,
   runAssistantProviderMutationRuntime,

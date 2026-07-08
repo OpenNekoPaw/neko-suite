@@ -31,7 +31,7 @@ import type { IRuntimeTaskManager } from '@neko/agent';
 import type { CLIConfig } from './types';
 import { createCLIPlatform, createCLITaskManager } from './platform-bootstrap';
 import { createCliAgentRuntime } from './runtime-bootstrap';
-import { loadSkillArtifactsAsSkills } from './skill-artifacts';
+import { loadTuiSessionSkills } from './tui-session-skills';
 import { createNodeWorkspaceContentPolicy } from '../host/node-workspace-content-host';
 
 export type ExperimentSuiteName = 'standard' | 'group' | 'parameter';
@@ -128,10 +128,6 @@ function createNodeExperimentOutputWriter() {
 async function buildCliExperimentSessionConfig(
   options: CLIExperimentOptions,
 ): Promise<AgentSessionConfig> {
-  if (options.config.modelNotFound) {
-    throw new Error(`Model "${options.config.modelNotFound}" not found in config.`);
-  }
-
   const mcpManager = new MCPManager();
   for (const serverConfig of options.config.mcpServers) {
     mcpManager.register(serverConfig);
@@ -156,17 +152,19 @@ async function buildCliExperimentSessionConfig(
     }),
   );
 
-  let skillService: ReturnType<typeof createSkillService> | undefined;
-  if (options.config.skillsDir) {
-    const skillLoader = createNodeSkillLoader(fs, path);
-    skillService = createSkillService();
-    const loadedSkills = await loadSkillArtifactsAsSkills(skillLoader, options.config.skillsDir);
-    for (const skill of loadedSkills) {
-      skillService.registry.registerSkill(skill);
-    }
+  const skillLoader = createNodeSkillLoader(fs, path);
+  const skillService = createSkillService();
+  const loadedSkills = await loadTuiSessionSkills({
+    skillLoader,
+    config: options.config,
+    locale: 'en',
+  });
+  for (const skill of loadedSkills) {
+    skillService.registry.registerSkill(skill);
   }
 
-  const taskManager = options.taskManager ?? createCLITaskManager();
+  const taskManager =
+    options.taskManager ?? createCLITaskManager({ workspacePath: options.config.workDir });
   const service =
     options.service ??
     createCLIPlatform({
@@ -192,7 +190,7 @@ async function buildCliExperimentSessionConfig(
     runtime: createCliAgentRuntime({
       workspaceRoot: options.config.workDir,
       taskManager,
-      ...(skillService ? { skillService } : {}),
+      skillService,
       projectMemoryManager,
     }),
   });

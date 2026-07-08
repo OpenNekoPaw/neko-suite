@@ -338,20 +338,30 @@ describe('markdown resource rendering presenter', () => {
     );
   });
 
-  it('marks Neko resource-reference embeds unsupported without resolving paths', () => {
+  it('binds Neko resource-reference embeds through the shared resource index', () => {
     const projection = projectMarkdownResourceRendering({
       markdown: '![[cover.png]]',
-      toolCalls: [createReadImageToolCall()],
+      toolCalls: [createReadImageToolCall({ label: 'cover.png', entryPath: 'cover.png' })],
     });
 
     expect(projection.status).toBe('ready');
-    expect(projection.diagnostics).toEqual([
+    expect(projection.diagnostics).toEqual([]);
+    expect(projection.resourceReferences).toEqual([
       expect.objectContaining({
-        code: 'unsupported-resource-reference-markdown-extension',
-        token: 'cover.png',
+        raw: '![[cover.png]]',
+        lookupToken: 'cover.png',
+        embed: true,
+        status: 'bound',
+        ref: expect.objectContaining({ kind: 'media', id: 'read-image-cover' }),
       }),
     ]);
-    expect(projection.tokens).toEqual([]);
+    expect(projection.tokens).toEqual([
+      expect.objectContaining({
+        token: 'cover.png',
+        status: 'bound',
+        renderUris: ['vscode-webview://cover'],
+      }),
+    ]);
   });
 
   it('treats panel hints as placement intent without requiring separate resources', () => {

@@ -4,10 +4,14 @@
  * 支持 Mermaid 图表渲染
  */
 
-import { Fragment, isValidElement, memo, useMemo, type ReactNode } from 'react';
+import { cloneElement, Fragment, isValidElement, memo, useMemo, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+import {
+  projectNekoMarkdownGenerationPromptParts,
+  type NekoMarkdownGenerationPromptPartKind,
+} from '@neko/markdown';
 import {
   isCompositeContentFenceLanguage,
   parseCompositeContentJson,
@@ -83,7 +87,11 @@ function createMarkdownComponents(
 
     // Paragraphs
     p({ children }) {
-      return <p className="mb-2 last:mb-0">{children}</p>;
+      return (
+        <p className="mb-2 last:mb-0">
+          {renderMarkdownInlineExtensions(children, markdownResources)}
+        </p>
+      );
     },
 
     // Headers
@@ -188,7 +196,7 @@ function createMarkdownComponents(
       const tokenProjection = projectMarkdownResourceTokenCell(children, markdownResources);
       return (
         <td className="px-3 py-1.5 text-[12px] text-[var(--vscode-foreground)] border border-[var(--vscode-panel-border)]">
-          {tokenProjection ?? children}
+          {tokenProjection ?? renderMarkdownInlineExtensions(children, markdownResources)}
         </td>
       );
     },
@@ -362,6 +370,206 @@ function projectMarkdownImageResource(
   );
 }
 
+function renderMarkdownInlineExtensions(
+  children: ReactNode,
+  markdownResources: MarkdownResourceRenderingProjection | undefined,
+): ReactNode {
+  if (
+    (!markdownResources?.mentions || markdownResources.mentions.length === 0) &&
+    (!markdownResources?.resourceReferences || markdownResources.resourceReferences.length === 0)
+  ) {
+    return children;
+  }
+  return mapMarkdownInlineNode(children, markdownResources);
+}
+
+function mapMarkdownInlineNode(
+  node: ReactNode,
+  markdownResources: MarkdownResourceRenderingProjection,
+): ReactNode {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return projectMarkdownInlineText(String(node), markdownResources);
+  }
+  if (Array.isArray(node)) {
+    return node.map((child, index) => (
+      <Fragment key={index}>{mapMarkdownInlineNode(child, markdownResources)}</Fragment>
+    ));
+  }
+  if (isValidElement<{ children?: ReactNode }>(node) && node.props.children !== undefined) {
+    return cloneElement(node, {
+      children: mapMarkdownInlineNode(node.props.children, markdownResources),
+    });
+  }
+  return node;
+}
+
+function projectMarkdownInlineText(
+  text: string,
+  markdownResources: MarkdownResourceRenderingProjection,
+): ReactNode {
+  const resourceNodes = projectMarkdownResourceReferenceText(text, markdownResources);
+  return flatMapInlineText(resourceNodes, (value) =>
+    projectMarkdownMentionText(value, markdownResources),
+  );
+}
+
+function projectMarkdownResourceReferenceText(
+  text: string,
+  markdownResources: MarkdownResourceRenderingProjection,
+): readonly ReactNode[] {
+  const referenceRegex = /(!?)\[\[([^\]]+)]]/g;
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(referenceRegex)) {
+    const raw = match[0] ?? '';
+    const embed = match[1] === '!';
+    const target = match[2] ?? '';
+    const start = match.index ?? 0;
+    if (start > cursor) nodes.push(text.slice(cursor, start));
+    nodes.push(projectMarkdownInlineResourceReference(raw, target, embed, markdownResources));
+    cursor = start + raw.length;
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return nodes.length > 0 ? nodes : [text];
+}
+
+function projectMarkdownMentionText(
+  text: string,
+  markdownResources: MarkdownResourceRenderingProjection,
+): readonly ReactNode[] {
+  const mentionRegex = /(^|[^\p{L}\p{N}_./-])@([\p{L}\p{N}_.-]{1,80})/gu;
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(mentionRegex)) {
+    const full = match[0] ?? '';
+    const prefix = match[1] ?? '';
+    const label = match[2] ?? '';
+    const start = match.index ?? 0;
+    const mentionStart = start + prefix.length;
+    const raw = `@${label}`;
+    if (mentionStart > cursor) {
+      nodes.push(text.slice(cursor, mentionStart));
+    }
+    const projection = findMarkdownMentionProjection(raw, label, markdownResources);
+    nodes.push(
+      projection ? (
+        <span
+          key={`${raw}:${mentionStart}`}
+          className={markdownMentionClassName(projection.status)}
+          data-markdown-mention="true"
+          data-markdown-mention-status={projection.status}
+          title={projection.ref ? `${projection.ref.kind}:${projection.ref.id}` : raw}
+        >
+          {raw}
+        </span>
+      ) : (
+        raw
+      ),
+    );
+    cursor = mentionStart + raw.length;
+    if (full.length > prefix.length + raw.length) {
+      nodes.push(full.slice(prefix.length + raw.length));
+      cursor = start + full.length;
+    }
+  }
+  if (cursor < text.length) {
+    nodes.push(text.slice(cursor));
+  }
+  return nodes.length > 0 ? nodes : [text];
+}
+
+function flatMapInlineText(
+  nodes: readonly ReactNode[],
+  project: (value: string) => readonly ReactNode[],
+): readonly ReactNode[] {
+  return nodes.flatMap((node) =>
+    typeof node === 'string' || typeof node === 'number' ? project(String(node)) : [node],
+  );
+}
+
+function projectMarkdownInlineResourceReference(
+  raw: string,
+  target: string,
+  embed: boolean,
+  markdownResources: MarkdownResourceRenderingProjection,
+): ReactNode {
+  if (embed) {
+    const imageProjection =
+      projectMarkdownImageResource(target, markdownResources) ??
+      projectMarkdownResourceTokenCell(stripResourcePlacementHint(target), markdownResources);
+    if (imageProjection) return imageProjection;
+  }
+  const projection = findMarkdownResourceReferenceProjection(raw, target, markdownResources);
+  return (
+    <span
+      className={markdownResourceReferenceClassName(projection?.status ?? 'missing')}
+      data-markdown-resource-reference="true"
+      data-markdown-resource-reference-status={projection?.status ?? 'missing'}
+      title={projection?.ref ? `${projection.ref.kind}:${projection.ref.id}` : target}
+    >
+      {raw}
+    </span>
+  );
+}
+
+function findMarkdownResourceReferenceProjection(
+  raw: string,
+  target: string,
+  markdownResources: MarkdownResourceRenderingProjection,
+): NonNullable<MarkdownResourceRenderingProjection['resourceReferences']>[number] | undefined {
+  const normalizedRaw = normalizeMarkdownResourceLookupToken(raw);
+  const normalizedTarget = normalizeMarkdownResourceLookupToken(target);
+  const normalizedBaseTarget = normalizeMarkdownResourceLookupToken(stripResourcePlacementHint(target));
+  return markdownResources.resourceReferences?.find(
+    (reference) =>
+      normalizeMarkdownResourceLookupToken(reference.raw) === normalizedRaw ||
+      normalizeMarkdownResourceLookupToken(reference.target) === normalizedTarget ||
+      normalizeMarkdownResourceLookupToken(reference.lookupToken) === normalizedBaseTarget,
+  );
+}
+
+function markdownResourceReferenceClassName(
+  status: NonNullable<MarkdownResourceRenderingProjection['resourceReferences']>[number]['status'],
+): string {
+  const base =
+    'rounded-sm border px-1 py-[1px] font-mono text-[11px] underline decoration-2 underline-offset-[3px]';
+  if (status === 'bound') {
+    return `${base} border-[var(--vscode-textLink-foreground)] text-[var(--vscode-textLink-foreground)] decoration-[color-mix(in_srgb,var(--vscode-textLink-foreground)_72%,transparent)]`;
+  }
+  if (status === 'ambiguous') {
+    return `${base} border-[var(--vscode-inputValidation-warningBorder)] text-[var(--vscode-inputValidation-warningForeground)] decoration-[var(--vscode-inputValidation-warningBorder)]`;
+  }
+  return `${base} border-[var(--vscode-inputValidation-errorBorder)] text-[var(--vscode-errorForeground)] decoration-[var(--vscode-inputValidation-errorBorder)]`;
+}
+
+function findMarkdownMentionProjection(
+  raw: string,
+  label: string,
+  markdownResources: MarkdownResourceRenderingProjection,
+): NonNullable<MarkdownResourceRenderingProjection['mentions']>[number] | undefined {
+  const normalizedRaw = normalizeMarkdownResourceLookupToken(raw);
+  const normalizedLabel = normalizeMarkdownResourceLookupToken(label);
+  return markdownResources.mentions?.find(
+    (mention) =>
+      normalizeMarkdownResourceLookupToken(mention.raw) === normalizedRaw ||
+      normalizeMarkdownResourceLookupToken(mention.label) === normalizedLabel,
+  );
+}
+
+function markdownMentionClassName(
+  status: NonNullable<MarkdownResourceRenderingProjection['mentions']>[number]['status'],
+): string {
+  const base =
+    'rounded-sm border-b px-0.5 font-medium underline decoration-2 underline-offset-[3px]';
+  if (status === 'bound') {
+    return `${base} border-[var(--vscode-textLink-foreground)] text-[var(--vscode-textLink-foreground)] decoration-[color-mix(in_srgb,var(--vscode-textLink-foreground)_72%,transparent)]`;
+  }
+  if (status === 'ambiguous') {
+    return `${base} border-[var(--vscode-inputValidation-warningBorder)] text-[var(--vscode-inputValidation-warningForeground)] decoration-[var(--vscode-inputValidation-warningBorder)]`;
+  }
+  return `${base} border-[var(--vscode-inputValidation-errorBorder)] text-[var(--vscode-errorForeground)] decoration-[var(--vscode-inputValidation-errorBorder)]`;
+}
+
 interface MarkdownTableProjection {
   readonly headers: readonly string[];
   readonly rows: readonly (readonly string[])[];
@@ -372,14 +580,6 @@ type StoryboardSceneColumnId =
   'shot' | 'referenceMedia' | 'imagePrompt' | 'videoPrompt' | 'duration' | 'dialogue' | 'action';
 
 type StoryboardPromptCellKind = 'image' | 'video';
-
-type StoryboardPromptPartKind =
-  'intent' | 'reference' | 'operation' | 'camera' | 'dialogue' | 'constraint' | 'detail';
-
-interface StoryboardPromptPart {
-  readonly kind: StoryboardPromptPartKind;
-  readonly text: string;
-}
 
 const STORYBOARD_SCENE_COLUMNS = [
   'shot',
@@ -574,7 +774,7 @@ function StoryboardPromptCellText({
   if (!value) {
     return <BoundedStoryboardSceneCellText value="" placeholder={placeholder} />;
   }
-  const parts = projectStoryboardPromptParts(value);
+  const parts = projectNekoMarkdownGenerationPromptParts(value);
   return (
     <div
       className="min-w-0 whitespace-pre-wrap break-words text-[11px] leading-[1.45] text-[var(--vscode-foreground)]"
@@ -618,62 +818,7 @@ function BoundedStoryboardSceneCellText({
   );
 }
 
-function projectStoryboardPromptParts(value: string): readonly StoryboardPromptPart[] {
-  const trimmed = value.trim();
-  if (!trimmed) return [];
-  const intentMatch = /^([^：:]{2,32})[：:]\s*(.*)$/u.exec(trimmed);
-  const parts: StoryboardPromptPart[] = [];
-  const body = intentMatch?.[2]?.trim() ?? trimmed;
-  const intent = intentMatch?.[1]?.trim();
-  if (intent) {
-    parts.push({ kind: 'intent', text: intent });
-  }
-
-  const chunks = body
-    .split(/[。；;，,]/u)
-    .map((chunk) => chunk.trim())
-    .filter(Boolean);
-  for (const chunk of chunks.length > 0 ? chunks : [body]) {
-    parts.push({
-      kind: classifyStoryboardPromptPart(chunk),
-      text: chunk,
-    });
-  }
-  return parts;
-}
-
-function classifyStoryboardPromptPart(value: string): StoryboardPromptPartKind {
-  const lower = value.toLocaleLowerCase();
-  if (
-    /(^|\s)(p\d+(?:#panel_\d+)?|page_\d+(?:#panel_\d+)?)(\s|$)/iu.test(value) ||
-    /参考|来源|reference|source/u.test(lower)
-  ) {
-    return 'reference';
-  }
-  if (isCanvasStoryboardReferenceImageProcessingPrompt(value)) {
-    return 'operation';
-  }
-  if (
-    /镜头|运镜|推近|推远|下移|上移|横移|摇镜|特写|视差|camera|dolly|pan|tilt|zoom|push-in|pull-back/u.test(
-      lower,
-    )
-  ) {
-    return 'camera';
-  }
-  if (/对白|台词|无对白|旁白|dialogue|voice|silence|no dialogue/u.test(lower)) {
-    return 'dialogue';
-  }
-  if (
-    /保持|保留|不新增|不要|一致|约束|preserve|keep|consistent|constraint|do not|without adding/u.test(
-      lower,
-    )
-  ) {
-    return 'constraint';
-  }
-  return 'detail';
-}
-
-function getStoryboardPromptPartClassName(kind: StoryboardPromptPartKind): string {
+function getStoryboardPromptPartClassName(kind: NekoMarkdownGenerationPromptPartKind): string {
   const base =
     'rounded-sm border px-0.5 py-[1px] text-[var(--vscode-foreground)] underline decoration-2 underline-offset-[3px] box-decoration-clone';
   switch (kind) {

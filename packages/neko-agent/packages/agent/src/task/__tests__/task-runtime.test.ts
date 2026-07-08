@@ -20,6 +20,7 @@ describe('task runtime', () => {
   let openTaskResult: MockOpenTaskResult;
   let onRejectedAction: MockRejectedAction;
   let onRetryFailed: MockRetryFailed;
+  let onHostPrivateLeaseDiagnostic: MockHostPrivateLeaseDiagnostic;
   let effects: TaskRuntimeEffects;
 
   beforeEach(() => {
@@ -29,11 +30,13 @@ describe('task runtime', () => {
     openTaskResult = vi.fn<MockOpenTaskResult>();
     onRejectedAction = vi.fn<MockRejectedAction>();
     onRetryFailed = vi.fn<MockRetryFailed>();
+    onHostPrivateLeaseDiagnostic = vi.fn<MockHostPrivateLeaseDiagnostic>();
     effects = {
       postMessage,
       openTaskResult,
       onRejectedAction,
       onRetryFailed,
+      onHostPrivateLeaseDiagnostic,
     };
   });
 
@@ -91,6 +94,37 @@ describe('task runtime', () => {
         }),
       }),
     );
+  });
+
+  it('rejects task live controls when another host owns a private lease', async () => {
+    const diagnostic = {
+      code: 'hostPrivateLease' as const,
+      taskId: 'task-1',
+      ownerSurface: 'extension' as const,
+      requestingSurface: 'tui' as const,
+      control: 'cancel' as const,
+      message: 'Task is owned by Extension',
+    };
+
+    const result = await runCancelTaskRuntime(
+      { taskId: 'task-1', conversationId: 'conv-1' },
+      {
+        taskManager,
+        hostPrivateLeaseGuard: {
+          getDiagnostic: vi.fn().mockResolvedValue(diagnostic),
+        },
+      },
+      effects,
+    );
+
+    expect(result).toEqual({
+      kind: 'host-private-lease',
+      conversationId: 'conv-1',
+      taskId: 'task-1',
+    });
+    expect(taskManager.get).not.toHaveBeenCalled();
+    expect(taskManager.cancel).not.toHaveBeenCalled();
+    expect(onHostPrivateLeaseDiagnostic).toHaveBeenCalledWith(diagnostic);
   });
 
   it('projects retry failures through the shared task schema', async () => {
@@ -244,6 +278,9 @@ type MockPostMessage = TaskRuntimeEffects['postMessage'];
 type MockOpenTaskResult = NonNullable<TaskRuntimeEffects['openTaskResult']>;
 type MockRejectedAction = NonNullable<TaskRuntimeEffects['onRejectedAction']>;
 type MockRetryFailed = NonNullable<TaskRuntimeEffects['onRetryFailed']>;
+type MockHostPrivateLeaseDiagnostic = NonNullable<
+  TaskRuntimeEffects['onHostPrivateLeaseDiagnostic']
+>;
 
 function createTaskManager(): MockTaskManager & TaskRuntimeTaskManager {
   return {

@@ -22,7 +22,8 @@ import type { AgentContextPayload } from '@neko/shared';
 export type ConversationTabSyncReason =
   | 'no-active-tab-conversation'
   | 'already-active'
-  | 'switch-rejected';
+  | 'switch-rejected'
+  | 'empty-tab-state-preserved-active-conversation';
 
 export type ConversationTabSyncResult =
   | {
@@ -52,6 +53,7 @@ export interface ConversationTabRuntimeEffects {
   hasEmbodyCharacterSession?(sessionId: string): boolean;
   getActiveConversationId(): string | null;
   switchConversation(conversationId: string): boolean;
+  shouldClearActiveConversationForEmptyTabState?(conversationId: string): boolean;
   clearActiveConversation?(): void;
   onConversationSwitched?(conversationId: string): void;
 }
@@ -96,7 +98,15 @@ export function syncActiveConversationFromTabState(
   effects: ConversationTabRuntimeEffects,
 ): ConversationTabSyncResult {
   if (input.tabState.openTabs.length === 0) {
-    if (effects.getActiveConversationId()) {
+    const activeConversationId = effects.getActiveConversationId();
+    if (activeConversationId) {
+      if (!effects.shouldClearActiveConversationForEmptyTabState?.(activeConversationId)) {
+        return {
+          kind: 'skipped',
+          reason: 'empty-tab-state-preserved-active-conversation',
+          conversationId: activeConversationId,
+        };
+      }
       effects.clearActiveConversation?.();
       return { kind: 'active-conversation-cleared' };
     }

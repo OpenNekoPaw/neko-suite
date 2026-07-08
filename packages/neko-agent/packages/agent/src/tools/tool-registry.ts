@@ -441,11 +441,22 @@ function normalizeToolArguments(args: Record<string, unknown>): Record<string, u
     return args;
   }
 
+  const parsed = parseRawToolArgumentObject(args['_raw'], 0);
+  return parsed ?? args;
+}
+
+function parseRawToolArgumentObject(
+  raw: string,
+  depth: number,
+): Record<string, unknown> | undefined {
+  if (depth > 1) return undefined;
   try {
-    const parsed = JSON.parse(args['_raw']);
-    return isPlainRecord(parsed) ? parsed : args;
+    const parsed = JSON.parse(raw);
+    if (isPlainRecord(parsed)) return parsed;
+    if (typeof parsed === 'string') return parseRawToolArgumentObject(parsed, depth + 1);
+    return undefined;
   } catch {
-    return args;
+    return undefined;
   }
 }
 

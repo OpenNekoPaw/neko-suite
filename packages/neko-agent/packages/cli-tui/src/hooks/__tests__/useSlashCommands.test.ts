@@ -33,7 +33,6 @@ describe('useSlashCommands Skill lifecycle commands', () => {
     useConversationStore.getState().clearMessages();
     useConfigStore.getState().replaceConfig({
       ...DEFAULT_CLI_CONFIG,
-      skillsDir: '/workspace/.neko/skills',
     });
   });
 
@@ -189,6 +188,21 @@ describe('useSlashCommands Skill lifecycle commands', () => {
     expect(lastSystemMessage()).toBe('Queue: empty (version 0)');
   });
 
+  it('allows task status commands while running', async () => {
+    const listTasks = vi.fn(async () => []);
+    const handleCommand = renderHarness({
+      activateSkill: vi.fn(() => true),
+      deactivateSkill: vi.fn(),
+      listTasks,
+    });
+    useAgentStore.getState().setRunning();
+
+    await handleCommand('/tasks');
+
+    expect(listTasks).toHaveBeenCalledTimes(1);
+    expect(lastSystemMessage()).toBe('No tasks.');
+  });
+
   it('updates default media models through /model media commands', async () => {
     const handleCommand = renderHarness({
       activateSkill: vi.fn(() => true),
@@ -216,6 +230,7 @@ function renderHarness(actions: {
   readonly getMessageQueueSnapshot?: NonNullable<
     import('../useAgentSession').AgentSessionHandle['getMessageQueueSnapshot']
   >;
+  readonly listTasks?: import('../useAgentSession').AgentSessionHandle['listTasks'];
 }): (input: string) => Promise<void> {
   let handleCommand: ((input: string) => Promise<void>) | undefined;
 
@@ -230,6 +245,7 @@ function renderHarness(actions: {
       activateSkill: actions.activateSkill,
       deactivateSkill: actions.deactivateSkill,
       getMessageQueueSnapshot: actions.getMessageQueueSnapshot,
+      listTasks: actions.listTasks,
       getSkillService: () => createSkillServiceMock(),
     }));
     return React.createElement(React.Fragment);

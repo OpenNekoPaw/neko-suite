@@ -11,11 +11,15 @@ export interface TuiSkillInvocationOption {
   readonly description: string;
 }
 
-const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
+export interface TuiLocalCommandEffect extends TuiSlashCommandOption {
+  readonly surface: 'tui';
   readonly descriptions: Readonly<Record<TuiLocale, string>>;
-})[] = [
+}
+
+const TUI_LOCAL_COMMANDS: readonly TuiLocalCommandEffect[] = [
   {
     name: 'mode',
+    surface: 'tui',
     description: 'Show or switch session mode',
     descriptions: {
       en: 'Show or switch session mode',
@@ -24,6 +28,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'model',
+    surface: 'tui',
     description: 'List or switch the current chat model',
     descriptions: {
       en: 'List or switch the current chat model',
@@ -32,6 +37,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'media',
+    surface: 'tui',
     description: 'List or switch image/video/audio models',
     descriptions: {
       en: 'List or switch image/video/audio models',
@@ -40,6 +46,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'param',
+    surface: 'tui',
     description: 'Show or set LLM and media parameters',
     descriptions: {
       en: 'Show or set LLM and media parameters',
@@ -48,6 +55,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'queue',
+    surface: 'tui',
     description: 'List, promote, cancel, or edit queued prompts',
     descriptions: {
       en: 'List, promote, cancel, or edit queued prompts',
@@ -56,6 +64,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'mcp',
+    surface: 'tui',
     description: 'Show MCP server status, tools, and connection controls',
     descriptions: {
       en: 'Show MCP server status, tools, and connection controls',
@@ -64,6 +73,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'capability',
+    surface: 'tui',
     description: 'Show TUI capability providers, diagnostics, and tools',
     descriptions: {
       en: 'Show TUI capability providers, diagnostics, and tools',
@@ -72,6 +82,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'artifact',
+    surface: 'tui',
     description: 'List, show, open, or send terminal artifact references',
     descriptions: {
       en: 'List, show, open, or send terminal artifact references',
@@ -80,6 +91,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'compact',
+    surface: 'tui',
     description: 'Compact the current Agent context',
     descriptions: {
       en: 'Compact the current Agent context',
@@ -88,6 +100,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'status',
+    surface: 'tui',
     description: 'Show mode, model, queue, Skill, task, and context state',
     descriptions: {
       en: 'Show mode, model, queue, Skill, task, and context state',
@@ -96,6 +109,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'auto',
+    surface: 'tui',
     description: 'Switch to auto execution mode',
     descriptions: {
       en: 'Switch to auto execution mode',
@@ -104,6 +118,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'ask',
+    surface: 'tui',
     description: 'Switch to ask-before-action execution mode',
     descriptions: {
       en: 'Switch to ask-before-action execution mode',
@@ -112,6 +127,7 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
   },
   {
     name: 'skill',
+    surface: 'tui',
     description: 'Activate or deactivate a Skill lifecycle record',
     descriptions: {
       en: 'Activate or deactivate a Skill lifecycle record',
@@ -119,6 +135,16 @@ const TUI_LOCAL_COMMANDS: readonly (TuiSlashCommandOption & {
     },
   },
 ];
+
+export function listTuiLocalCommandEffects(
+  locale: TuiLocale = detectTuiLocale(),
+): readonly (TuiSlashCommandOption & { readonly surface: 'tui' })[] {
+  return TUI_LOCAL_COMMANDS.map((command) => ({
+    name: command.name,
+    description: command.descriptions[locale],
+    surface: command.surface,
+  }));
+}
 
 export function createTuiSlashCommandCatalog(
   skills?: ReadonlyArray<{
@@ -132,7 +158,7 @@ export function createTuiSlashCommandCatalog(
   locale: TuiLocale = detectTuiLocale(),
 ): TuiSlashCommandOption[] {
   const commands = listSlashCommandCatalog({
-    surface: 'cli',
+    surface: 'tui',
     skills,
     locale,
   }).map((command) => ({
@@ -140,11 +166,11 @@ export function createTuiSlashCommandCatalog(
     description: command.description,
   }));
   const names = new Set(commands.map((command) => command.name));
-  for (const command of TUI_LOCAL_COMMANDS) {
+  for (const command of listTuiLocalCommandEffects(locale)) {
     if (!names.has(command.name)) {
       commands.push({
         name: command.name,
-        description: command.descriptions[locale],
+        description: command.description,
       });
     }
   }
@@ -174,7 +200,7 @@ function readSkillDescription(
 ): string {
   const trimmed = description?.trim();
   if (trimmed && trimmed.length > 0) {
-    return description;
+    return trimmed;
   }
   return locale === 'zh' ? `激活技能 ${skillName}` : `Activate skill ${skillName}`;
 }

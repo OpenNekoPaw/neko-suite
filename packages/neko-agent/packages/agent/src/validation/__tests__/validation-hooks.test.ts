@@ -385,8 +385,8 @@ describe('ValidationHooks', () => {
     });
   });
 
-  describe('afterThink - skill artifact validators', () => {
-    it('does not run Canvas CreativeTable validators inside Agent output validation', async () => {
+  describe('afterThink - artifact profile validators', () => {
+    it('rejects page-analysis tables when storyboard CreativeTable validation is active', async () => {
       const hooks = new ValidationHooks({
         outputConstraints: {
           mermaidPreValidate: false,
@@ -397,13 +397,15 @@ describe('ValidationHooks', () => {
         ['| 镜头 | 画面 |', '| --- | --- |', '| 1 | 角色进入森林 |'].join('\n'),
       );
       const context = createTestContextWithMetadata({
-        skillValidationRequirements: ['creative-table.storyboard'],
+        artifactValidationRequirements: ['creative-table.storyboard'],
       });
 
-      await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
+      await expect(hooks.afterThink(step, context)).rejects.toMatchObject({
+        code: 'storyboard-table-required-fields-missing',
+      });
     });
 
-    it('does not queue storyboard repair requests from Agent retry mode', async () => {
+    it('queues storyboard repair requests from Agent retry mode', async () => {
       const hooks = new ValidationHooks({
         outputConstraints: {
           mermaidPreValidate: false,
@@ -424,16 +426,24 @@ describe('ValidationHooks', () => {
       );
       const context = createTestContextWithMetadata({
         locale: 'zh',
-        skillValidationRequirements: ['creative-table.storyboard'],
+        artifactValidationRequirements: ['creative-table.storyboard'],
       });
       const messageCountBefore = context.messages.length;
 
       await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
 
-      expect(context.messages).toHaveLength(messageCountBefore);
+      expect(context.messages).toHaveLength(messageCountBefore + 1);
+      expect(context.messages.at(-1)).toMatchObject({
+        role: 'user',
+        content: expect.stringContaining('请重写为唯一一张 storyboard creative table'),
+      });
+      expect(context.metadata['outputValidationRetry']).toMatchObject({
+        reason: 'artifact-validation',
+        attempt: 1,
+      });
     });
 
-    it('does not record Agent-native feedback for Canvas CreativeTable validators', async () => {
+    it('records Agent-native feedback for storyboard CreativeTable validators', async () => {
       const recordValidationFeedback = vi.fn();
       const hooks = new ValidationHooks({
         outputConstraints: {
@@ -452,7 +462,7 @@ describe('ValidationHooks', () => {
         ].join('\n'),
       );
       const context = createTestContextWithMetadata({
-        skillValidationRequirements: ['creative-table.storyboard'],
+        artifactValidationRequirements: ['creative-table.storyboard'],
         agentCreation: {
           creationId: 'creation-1',
           iterationId: 'iteration-1',
@@ -461,7 +471,21 @@ describe('ValidationHooks', () => {
 
       await expect(hooks.afterThink(step, context)).resolves.toBeUndefined();
 
-      expect(recordValidationFeedback).not.toHaveBeenCalled();
+      expect(recordValidationFeedback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          validatorId: 'creative-table.storyboard',
+          status: 'failed',
+          diagnostics: expect.arrayContaining([
+            expect.objectContaining({
+              code: 'storyboard-table-required-fields-missing',
+            }),
+          ]),
+          metadata: expect.objectContaining({
+            feedbackAction: 'revise',
+            preserveStreamedOutput: false,
+          }),
+        }),
+      );
     });
 
     it('does not require ReadImage evidence from Agent validation hooks', async () => {
@@ -473,14 +497,14 @@ describe('ValidationHooks', () => {
       });
       const step = createTestStep(
         [
-          '| scene | shot | source | visual | imagePrompt | reviewStatus | nextAction |',
+          '| scene | shot | source | imagePrompt | videoPrompt | duration | dialogue |',
           '| --- | --- | --- | --- | --- | --- | --- |',
-          '| Opening | 1 | P1 | 主角站在巨构前 | 黑白工业巨构前的孤独主角 | needs-review | inspect panels |',
+          '| Opening | 1 | P1 | 黑白工业巨构前的孤独主角 | 场景视频生成：以 P1 为参考，镜头缓慢推近，保持巨构空间关系 | 3s |  |',
         ].join('\n'),
       );
       const context = createTestContextWithMetadata({
         locale: 'zh',
-        skillValidationRequirements: ['creative-table.storyboard'],
+        artifactValidationRequirements: ['creative-table.storyboard'],
       });
       context.messages.push({
         role: 'tool',

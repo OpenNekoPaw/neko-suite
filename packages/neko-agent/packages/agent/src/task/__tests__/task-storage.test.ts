@@ -3,7 +3,14 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { FileTaskStorage, MemoryTaskStorage, StateTaskStorage } from '../task-storage';
+import {
+  FileTaskStorage,
+  FileTaskStorageLoadError,
+  MemoryTaskStorage,
+  StateTaskStorage,
+  WorkspaceVisibleAgentTaskStorage,
+  getWorkspaceVisibleAgentTaskRecordsFilePath,
+} from '../task-storage';
 import type { SerializableTask } from '@neko/shared';
 
 const createTask = (overrides: Partial<SerializableTask> = {}): SerializableTask => ({
@@ -264,6 +271,22 @@ describe('StateTaskStorage', () => {
 });
 
 describe('FileTaskStorage', () => {
+  it('fails visibly when an existing task storage file is malformed', async () => {
+    const filePath = '/tmp/tasks.json';
+    const files = new Map<string, string>([[filePath, '{not-json']]);
+    const storage = new FileTaskStorage({
+      filePath,
+      ...createMemoryFileTaskStorageFs(files),
+      writerId: 'task-writer-a',
+    });
+
+    await expect(storage.loadAll()).rejects.toBeInstanceOf(FileTaskStorageLoadError);
+    await expect(storage.loadAll()).rejects.toMatchObject({
+      code: 'agent-task-storage-load-failed',
+      filePath,
+    });
+  });
+
   it('rejects stale whole-file writers before overwriting another task partition', async () => {
     const filePath = '/tmp/tasks.json';
     const files = new Map<string, string>();
@@ -318,3 +341,95 @@ describe('FileTaskStorage', () => {
     expect(persisted.tasks?.map((task) => task.id)).toEqual(['task-a']);
   });
 });
+
+describe('WorkspaceVisibleAgentTaskStorage', () => {
+  it('projects workspace-visible task records from the shared workspace task file', async () => {
+    const filePath = '/workspace/.neko/tasks.json';
+    const files = new Map<string, string>();
+    const fsOps = createMemoryFileTaskStorageFs(files);
+    const extensionStorage = new WorkspaceVisibleAgentTaskStorage({
+      workspaceRoot: '/workspace',
+      filePath,
+      ...fsOps,
+      writerId: 'extension-task-storage',
+      now: () => 1000,
+    });
+    const tuiStorage = new WorkspaceVisibleAgentTaskStorage({
+      workspaceRoot: '/workspace',
+      filePath,
+      ...fsOps,
+      writerId: 'tui-task-storage',
+      now: () => 2000,
+    });
+
+    await extensionStorage.save(createTask({ id: 'workspace-task', status: 'running' }));
+    await extensionStorage.flush();
+
+    await expect(tuiStorage.loadAllRecords()).resolves.toEqual([
+      expect.objectContaining({
+        scope: 'workspace-visible',
+        workspaceRoot: '/workspace',
+        task: expect.objectContaining({ id: 'workspace-task' }),
+      }),
+    ]);
+    expect(getWorkspaceVisibleAgentTaskRecordsFilePath('/workspace')).toBe(
+      '/workspace/.neko/tasks.json',
+    );
+  });
+
+  it('rejects stale cross-surface writes to the workspace task plane', async () => {
+    const filePath = '/workspace/.neko/tasks.json';
+    const files = new Map<string, string>();
+    const fsOps = createMemoryFileTaskStorageFs(files);
+    const extensionStorage = new WorkspaceVisibleAgentTaskStorage({
+      workspaceRoot: '/workspace',
+      filePath,
+      ...fsOps,
+      writerId: 'extension-task-storage',
+      now: () => 1000,
+    });
+    const tuiStorage = new WorkspaceVisibleAgentTaskStorage({
+      workspaceRoot: '/workspace',
+      filePath,
+      ...fsOps,
+      writerId: 'tui-task-storage',
+      now: () => 2000,
+    });
+
+    await extensionStorage.save(createTask({ id: 'extension-task' }));
+    await tuiStorage.loadAll();
+    await extensionStorage.flush();
+    await tuiStorage.save(createTask({ id: 'tui-task' }));
+
+    await expect(tuiStorage.flush()).rejects.toMatchObject({
+      code: 'stale-json-file-write',
+      details: {
+        filePath,
+        ownerId: 'tui-task-storage',
+        loadedRevision: 0,
+        currentRevision: 1,
+        currentOwnerId: 'extension-task-storage',
+      },
+    });
+  });
+});
+
+function createMemoryFileTaskStorageFs(files: Map<string, string>): {
+  readonly readFile: (path: string) => Promise<string>;
+  readonly writeFile: (path: string, content: string) => Promise<void>;
+  readonly exists: (path: string) => Promise<boolean>;
+} {
+  return {
+    readFile: async (path) => {
+      const content = files.get(path);
+      if (content === undefined) {
+        throw new Error(`File not found: ${path}`);
+      }
+      return content;
+    },
+    writeFile: async (path, content) => {
+      files.set(path, content);
+    },
+    exists: async (path) => files.has(path),
+  };
+}

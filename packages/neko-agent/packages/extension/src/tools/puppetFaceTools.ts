@@ -49,7 +49,13 @@ export function createPuppetFaceTools(): Tool[] {
     readImagePayload,
     getCurrentFaceParams: async () => (await getAPI()).getCurrentFaceParams(),
     applyFaceParams: async (params) => {
-      await (await getAPI()).setFaceParams(params);
+      const api = await getAPI();
+      if (!api.isActive()) {
+        throw new Error(
+          'interactive-editor-required: No active puppet editor is available for parameter writes.',
+        );
+      }
+      await api.setFaceParams(params);
     },
     locale: vscode.env.language,
     logger,

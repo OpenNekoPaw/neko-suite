@@ -324,7 +324,7 @@ describe('AgentExecutor', () => {
       expect(types).toEqual(['think', 'act', 'observe', 'content_delta', 'think']);
     });
 
-    it('does not run Canvas CreativeTable validation after ActivateSkill in the same turn', async () => {
+    it('runs CreativeTable validation after ActivateSkill before accepting final storyboard output', async () => {
       const chatStreamMock = service.chatStream as ReturnType<typeof vi.fn>;
       const activationResp = toolCallResponse(
         'ActivateSkill',
@@ -358,7 +358,8 @@ describe('AgentExecutor', () => {
         createOptions({
           service,
           toolRegistry,
-          getActiveSkillValidationRequirements: () => (activated ? ['CreativeTable'] : undefined),
+          getActiveArtifactValidationRequirements: () =>
+            activated ? ['CreativeTable'] : undefined,
           hooks: [
             new ValidationHooks({
               outputConstraints: {
@@ -376,17 +377,12 @@ describe('AgentExecutor', () => {
         }),
       );
 
-      await expect(collectSteps(executor.executeStream('生成分镜表'))).resolves.toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            type: 'think',
-            content: invalidStoryboardResp.message.content,
-          }),
-        ]),
-      );
+      await expect(collectSteps(executor.executeStream('生成分镜表'))).rejects.toMatchObject({
+        code: 'storyboard-table-required-fields-missing',
+      });
     });
 
-    it('streams storyboard tables without Agent-owned validator repair replacement', async () => {
+    it('retries streamed storyboard tables after Agent-owned CreativeTable validation failure', async () => {
       const activationResp = toolCallResponse(
         'ActivateSkill',
         {
@@ -402,9 +398,17 @@ describe('AgentExecutor', () => {
           '| S01 | P1 | 主角站在巨构前 |',
         ].join('\n'),
       );
+      const fixedStoryboardResp = textResponse(
+        [
+          '| scene | shot | source | imagePrompt | videoPrompt | duration | dialogue |',
+          '| --- | --- | --- | --- | --- | --- | --- |',
+          '| 正文 | 1 | P1 | 图像编辑：以 P1 为输入，裁切巨构前主角分格，清理文字并保持黑白漫画线稿一致 | 场景视频生成：以 P1 为构图和人物参考，主角站在压迫性的巨构前，镜头 3 秒缓慢推近，保持原分格空间比例，无对白 | 3s |  |',
+        ].join('\n'),
+      );
       const chatStreamMock = service.chatStream as ReturnType<typeof vi.fn>;
       chatStreamMock.mockReturnValueOnce(responseToStream(activationResp));
       chatStreamMock.mockReturnValueOnce(responseToStream(invalidStoryboardResp));
+      chatStreamMock.mockReturnValueOnce(responseToStream(fixedStoryboardResp));
       (toolRegistry.execute as ReturnType<typeof vi.fn>).mockResolvedValue({
         success: true,
         data: {
@@ -419,7 +423,8 @@ describe('AgentExecutor', () => {
         createOptions({
           service,
           toolRegistry,
-          getActiveSkillValidationRequirements: () => (activated ? ['CreativeTable'] : undefined),
+          getActiveArtifactValidationRequirements: () =>
+            activated ? ['CreativeTable'] : undefined,
           hooks: [
             new ValidationHooks({
               outputConstraints: {
@@ -442,21 +447,31 @@ describe('AgentExecutor', () => {
       );
       const deltas = steps.filter((step) => step.type === 'content_delta');
 
-      expect(deltas.map((step) => step.content)).toEqual([invalidStoryboardResp.message.content]);
-      expect(deltas).not.toEqual(
+      expect(deltas).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ deltaKind: 'assistant_text_replacement' }),
+          expect.objectContaining({ content: invalidStoryboardResp.message.content }),
+          expect.objectContaining({
+            content: '',
+            deltaKind: 'assistant_text_replacement',
+            replacement: { reason: 'output-validation-retry', attempt: 1 },
+          }),
+          expect.objectContaining({ content: fixedStoryboardResp.message.content }),
         ]),
       );
       expect(steps.filter((step) => step.type === 'think').map((step) => step.content)).toEqual([
         '',
-        invalidStoryboardResp.message.content,
+        fixedStoryboardResp.message.content,
       ]);
       expect(steps.at(-1)).toMatchObject({
         type: 'think',
-        content: invalidStoryboardResp.message.content,
+        content: fixedStoryboardResp.message.content,
       });
-      expect(chatStreamMock).toHaveBeenCalledTimes(2);
+      expect(chatStreamMock).toHaveBeenCalledTimes(3);
+      const repairMessages = chatStreamMock.mock.calls[2]?.[0] as ChatMessage[] | undefined;
+      expect(repairMessages?.at(-1)).toMatchObject({
+        role: 'user',
+        content: expect.stringContaining('请重写为唯一一张 storyboard creative table'),
+      });
     });
   });
 

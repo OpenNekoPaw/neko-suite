@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ActiveSkillLifecycleRecordProjection, ChatModelOption } from '@neko/shared';
+import type { ActiveSkillLifecycleRecordProjection, ChatModelOption, Task } from '@neko/shared';
 import {
   handleTuiControlCommand,
   type TuiCommandRouterContext,
@@ -256,6 +256,35 @@ describe('handleTuiControlCommand', () => {
     expect(result.output).toContain('Media: image=openai:gpt-image-1');
     expect(result.output).toContain('Params: reasoning=deep');
     expect(result.output).toContain('Context Tokens: 321');
+  });
+
+  it('lists background tasks through the task port', async () => {
+    const context = createContext({
+      tasks: [
+        createTask({
+          id: 'task_1783527068036_1',
+          status: 'running',
+          progress: 35,
+          payload: {
+            prompt: '猫咪玩耍',
+            providerId: 'nekoapi-media',
+          },
+          lifecycle: {
+            ownerConversationId: 'conversation-1',
+            runMode: 'background',
+          },
+        }),
+      ],
+    });
+
+    const result = await handleTuiControlCommand('/tasks', context);
+
+    expect(result.source).toBe('tui-router');
+    expect(result.output).toContain('Tasks:');
+    expect(result.output).toContain('task_1783527068036_1');
+    expect(result.output).toContain('running');
+    expect(result.output).toContain('35%');
+    expect(result.output).toContain('猫咪玩耍');
   });
 
   it('reports missing context token estimate visibly in status', async () => {
@@ -520,6 +549,7 @@ function createContext(
     readonly mediaModelOptions?: readonly ChatModelOption[];
     readonly selectedMenuItem?: string | null;
     readonly queue?: ReturnType<typeof createTuiMessageQueue>;
+    readonly tasks?: readonly Task[];
     readonly mcp?: TuiCommandRouterContext['ports']['mcp'];
     readonly capability?: TuiCapabilityPorts;
     readonly artifact?: TuiArtifactPorts;
@@ -651,6 +681,11 @@ function createContext(
             edit: (queueItemId, content) => overrides.queue!.edit(queueItemId, content),
           }
         : undefined,
+      task: overrides.tasks
+        ? {
+            list: vi.fn(() => overrides.tasks!),
+          }
+        : undefined,
       mcp:
         overrides.mcp === undefined && 'mcp' in overrides
           ? undefined
@@ -749,8 +784,47 @@ function createContext(
           mediaModelSummary: 'image=openai:gpt-image-1',
           llmParameterSummary: 'reasoning=deep',
           queueCount: overrides.queue?.snapshot().pendingCount ?? 0,
+          runningTaskSummary: overrides.tasks
+            ?.filter((task) => task.status === 'pending' || task.status === 'running')
+            .map((task) => `${task.status}:${task.id}`)
+            .join(', '),
         })),
       },
     },
+  };
+}
+
+function createTask(
+  overrides: {
+    readonly id: string;
+    readonly status: Task['status'];
+    readonly progress: number;
+    readonly payload?: Record<string, unknown>;
+    readonly lifecycle?: Partial<NonNullable<Task['lifecycle']>>;
+  },
+): Task {
+  return {
+    id: overrides.id,
+    type: 'image_generation',
+    status: overrides.status,
+    input: {
+      type: 'image_generation',
+      payload: overrides.payload ?? {},
+      ...(overrides.lifecycle ? { lifecycle: overrides.lifecycle } : {}),
+    },
+    progress: overrides.progress,
+    createdAt: 1,
+    updatedAt: 2,
+    ...(overrides.lifecycle
+      ? {
+          lifecycle: {
+            runMode: 'foreground',
+            costPhase: 'idle',
+            interruptPolicy: 'cancel-with-agent',
+            recoverPolicy: 'retry-executor',
+            ...overrides.lifecycle,
+          },
+        }
+      : {}),
   };
 }

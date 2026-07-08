@@ -4,7 +4,12 @@
 
 import type { ITaskStorage, SerializableTask } from '@neko/shared';
 import { getLogger } from '../utils/logger';
-import { buildTaskStorageCleanupPlan, filterRecoverableTasks } from './task-storage-policy';
+import {
+  buildTaskStorageCleanupPlan,
+  createWorkspaceVisibleAgentTaskRecord,
+  filterRecoverableTasks,
+  type WorkspaceVisibleAgentTaskRecord,
+} from './task-storage-policy';
 import {
   assertJsonFileRevisionCurrent,
   createJsonFileWriteMetadata,
@@ -121,6 +126,80 @@ export function createStateTaskStorage(options: StateTaskStorageOptions): StateT
   return new StateTaskStorage(options);
 }
 
+export interface WorkspaceVisibleAgentTaskStorageOptions extends FileTaskStorageOptions {
+  readonly workspaceRoot: string;
+}
+
+export class WorkspaceVisibleAgentTaskStorage implements ITaskStorage {
+  readonly workspaceRoot: string;
+  readonly filePath: string;
+
+  private readonly storage: FileTaskStorage;
+
+  constructor(options: WorkspaceVisibleAgentTaskStorageOptions) {
+    const workspaceRoot = options.workspaceRoot.trim();
+    if (!workspaceRoot) {
+      throw new Error('Workspace-visible Agent task storage requires a workspace root');
+    }
+    this.workspaceRoot = workspaceRoot;
+    this.filePath = options.filePath;
+    this.storage = new FileTaskStorage(options);
+  }
+
+  async save(task: SerializableTask): Promise<void> {
+    await this.storage.save(task);
+  }
+
+  async saveRecord(record: WorkspaceVisibleAgentTaskRecord): Promise<void> {
+    if (record.workspaceRoot !== this.workspaceRoot) {
+      throw new Error('Workspace-visible Agent task record belongs to a different workspace');
+    }
+    await this.save(record.task);
+  }
+
+  async load(id: string): Promise<SerializableTask | undefined> {
+    return this.storage.load(id);
+  }
+
+  async loadRecord(id: string): Promise<WorkspaceVisibleAgentTaskRecord | undefined> {
+    const task = await this.load(id);
+    return task
+      ? createWorkspaceVisibleAgentTaskRecord({ workspaceRoot: this.workspaceRoot, task })
+      : undefined;
+  }
+
+  async loadPending(): Promise<SerializableTask[]> {
+    return this.storage.loadPending();
+  }
+
+  async loadAll(): Promise<SerializableTask[]> {
+    return this.storage.loadAll();
+  }
+
+  async loadAllRecords(): Promise<WorkspaceVisibleAgentTaskRecord[]> {
+    const tasks = await this.loadAll();
+    return tasks.map((task) =>
+      createWorkspaceVisibleAgentTaskRecord({ workspaceRoot: this.workspaceRoot, task }),
+    );
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.storage.delete(id);
+  }
+
+  async cleanup(olderThanMs: number): Promise<number> {
+    return this.storage.cleanup(olderThanMs);
+  }
+
+  async flush(): Promise<void> {
+    await this.storage.flush();
+  }
+
+  async dispose(): Promise<void> {
+    await this.storage.dispose();
+  }
+}
+
 /**
  * File-based task storage options
  */
@@ -137,6 +216,20 @@ export interface FileTaskStorageOptions {
   writerId?: string;
   /** Clock injection for write metadata. */
   now?: () => number;
+}
+
+export class FileTaskStorageLoadError extends Error {
+  override name = 'FileTaskStorageLoadError';
+  readonly code = 'agent-task-storage-load-failed';
+  readonly filePath: string;
+  override readonly cause: unknown;
+
+  constructor(filePath: string, cause: unknown) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    super(`Failed to load Agent task storage file: ${filePath}: ${message}`);
+    this.filePath = filePath;
+    this.cause = cause;
+  }
 }
 
 /**
@@ -219,11 +312,7 @@ export class FileTaskStorage implements ITaskStorage {
       loadedRevision: this.loadedRevision,
       fsOps: this.options,
     });
-    const writeMetadata = createJsonFileWriteMetadata(
-      this.writerId,
-      this.loadedRevision,
-      this.now,
-    );
+    const writeMetadata = createJsonFileWriteMetadata(this.writerId, this.loadedRevision, this.now);
     const data = {
       version: 1,
       writeMetadata,
@@ -254,7 +343,7 @@ export class FileTaskStorage implements ITaskStorage {
         }
       }
     } catch (error) {
-      logger.warn('Failed to load task storage file', { error });
+      throw new FileTaskStorageLoadError(this.options.filePath, error);
     }
     this.initialized = true;
   }
@@ -317,5 +406,46 @@ export function createFileTaskStorage(filePath: string): FileTaskStorage {
         return false;
       }
     },
+  });
+}
+
+export function getWorkspaceVisibleAgentTaskRecordsFilePath(workspaceRoot: string): string {
+  const path = require('path') as typeof import('path');
+  const root = workspaceRoot.trim();
+  if (!root) {
+    throw new Error('Workspace-visible Agent task records require a workspace root');
+  }
+  return path.join(root, '.neko', 'tasks.json');
+}
+
+export function createFileWorkspaceVisibleAgentTaskStorage(options: {
+  readonly workspaceRoot: string;
+  readonly filePath?: string;
+  readonly writerId?: string;
+  readonly now?: () => number;
+}): WorkspaceVisibleAgentTaskStorage {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const filePath =
+    options.filePath ?? getWorkspaceVisibleAgentTaskRecordsFilePath(options.workspaceRoot);
+
+  return new WorkspaceVisibleAgentTaskStorage({
+    workspaceRoot: options.workspaceRoot,
+    filePath,
+    readFile: (p) => fs.promises.readFile(p, 'utf-8'),
+    writeFile: async (p, content) => {
+      await fs.promises.mkdir(path.dirname(p), { recursive: true });
+      await fs.promises.writeFile(p, content, 'utf-8');
+    },
+    exists: async (p) => {
+      try {
+        await fs.promises.access(p);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    ...(options.writerId ? { writerId: options.writerId } : {}),
+    ...(options.now ? { now: options.now } : {}),
   });
 }

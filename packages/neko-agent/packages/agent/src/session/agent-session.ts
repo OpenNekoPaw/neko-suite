@@ -386,7 +386,7 @@ export class AgentSession implements IAgentSession {
     // Delegate component creation to initializer (SRP: init logic separate from runtime)
     const components = initializeSession(config, {
       onToolConfirmation: (request) => this._handleToolConfirmation(request),
-      getActiveSkillValidationRequirements: () =>
+      getActiveArtifactValidationRequirements: () =>
         this.getActiveSkill()?.mediaWorkflow?.validationRequirements,
     });
 
@@ -1048,7 +1048,7 @@ export class AgentSession implements IAgentSession {
           ...(activeSkill
             ? {
                 activeSkillName: activeSkill.name,
-                skillValidationRequirements:
+                artifactValidationRequirements:
                   activeSkill.mediaWorkflow?.validationRequirements ?? [],
               }
             : {}),
@@ -2255,7 +2255,7 @@ export class AgentSession implements IAgentSession {
       toolGroupRegistry: this._toolGroupRegistry,
       toolInjectionManager: this._toolInjectionManager,
       onToolConfirmation: (request) => this._handleToolConfirmation(request),
-      getActiveSkillValidationRequirements: () =>
+      getActiveArtifactValidationRequirements: () =>
         this.getActiveSkill()?.mediaWorkflow?.validationRequirements,
     });
 

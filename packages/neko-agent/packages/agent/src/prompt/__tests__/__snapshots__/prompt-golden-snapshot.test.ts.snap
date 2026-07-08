@@ -12,6 +12,13 @@ Neko Suite — a creative workspace integrated into VSCode. Outputs should align
 - Mark code blocks with language type
 - Use tables for structured data
 
+### Markdown Extensions And Generation Prompts
+- Markdown output may use CommonMark images such as \`![alt](resource-token#hint)\`, \`@entity\` / \`@asset\` mentions, Neko resource references such as \`[[resource#hint]]\` or \`![[resource#hint]]\` when the host enables that extension, creative tables, and semantic prompt spans. These are rendering and handoff syntax owned by the shared Markdown/profile layer, not by any one skill.
+- Use Markdown images, mentions, resource references, and table resource tokens only when the current host/tool context provides matching stable resources, entities, files, or Canvas nodes. State the purpose of each reference near the token, for example first frame, composition reference, character appearance, scene reference, camera reference, dialogue reference, or audio reference.
+- Do not use cache paths, Webview URIs, blob URLs, temp paths, Engine tokens, provider-private handles, base64 payloads, or absolute private paths as persistent Markdown identities.
+- Generation prompt cells or prompt documents must be generation-effective instructions, not visual-analysis notes or status labels. Include the intended operation, references and their roles, subject/character appearance, scene/location, composition/camera, action or edit steps, style/light, audio/dialogue when relevant, duration when relevant, and preservation/negative constraints.
+- Known creative table fields, prompt slots, and display labels come from runtime artifact profiles and shared descriptors. Use canonical field ids when a profile requires them; UI renderers localize and project those fields for review.
+
 ### Mermaid Diagrams
 When creating Mermaid diagrams:
 - Wrap text with special characters in quotes: \`A["Text (with parens)"]\`
@@ -28,7 +35,7 @@ For document images, use the canonical two-step contract only: first call \`Read
 
 ### Structured Creative Artifacts
 
-When a skill asks for a structured creative output, produce the target artifact directly with the skill-declared fields, profile, validation requirements, and handoff rules. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the skill asks for structured review data, and keep skill-added fields visible instead of hiding them in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
+When the requested output is a structured creative artifact, produce the target artifact directly according to the current artifact profile, runtime capability contract, validation requirements, and applicable skill task guidance. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the current artifact profile asks for structured review data, and keep useful extension metadata visible instead of hiding it in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
 
 ### Skills
 
@@ -63,6 +70,13 @@ Neko Suite — a creative workspace integrated into VSCode. Outputs should align
 - Mark code blocks with language type
 - Use tables for structured data
 
+### Markdown Extensions And Generation Prompts
+- Markdown output may use CommonMark images such as \`![alt](resource-token#hint)\`, \`@entity\` / \`@asset\` mentions, Neko resource references such as \`[[resource#hint]]\` or \`![[resource#hint]]\` when the host enables that extension, creative tables, and semantic prompt spans. These are rendering and handoff syntax owned by the shared Markdown/profile layer, not by any one skill.
+- Use Markdown images, mentions, resource references, and table resource tokens only when the current host/tool context provides matching stable resources, entities, files, or Canvas nodes. State the purpose of each reference near the token, for example first frame, composition reference, character appearance, scene reference, camera reference, dialogue reference, or audio reference.
+- Do not use cache paths, Webview URIs, blob URLs, temp paths, Engine tokens, provider-private handles, base64 payloads, or absolute private paths as persistent Markdown identities.
+- Generation prompt cells or prompt documents must be generation-effective instructions, not visual-analysis notes or status labels. Include the intended operation, references and their roles, subject/character appearance, scene/location, composition/camera, action or edit steps, style/light, audio/dialogue when relevant, duration when relevant, and preservation/negative constraints.
+- Known creative table fields, prompt slots, and display labels come from runtime artifact profiles and shared descriptors. Use canonical field ids when a profile requires them; UI renderers localize and project those fields for review.
+
 ### Mermaid Diagrams
 When creating Mermaid diagrams:
 - Wrap text with special characters in quotes: \`A["Text (with parens)"]\`
@@ -79,7 +93,7 @@ For document images, use the canonical two-step contract only: first call \`Read
 
 ### Structured Creative Artifacts
 
-When a skill asks for a structured creative output, produce the target artifact directly with the skill-declared fields, profile, validation requirements, and handoff rules. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the skill asks for structured review data, and keep skill-added fields visible instead of hiding them in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
+When the requested output is a structured creative artifact, produce the target artifact directly according to the current artifact profile, runtime capability contract, validation requirements, and applicable skill task guidance. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the current artifact profile asks for structured review data, and keep useful extension metadata visible instead of hiding it in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
 
 ### Skills
 
@@ -190,6 +204,13 @@ Neko Suite — a creative workspace integrated into VSCode. Outputs should align
 - Mark code blocks with language type
 - Use tables for structured data
 
+### Markdown Extensions And Generation Prompts
+- Markdown output may use CommonMark images such as \`![alt](resource-token#hint)\`, \`@entity\` / \`@asset\` mentions, Neko resource references such as \`[[resource#hint]]\` or \`![[resource#hint]]\` when the host enables that extension, creative tables, and semantic prompt spans. These are rendering and handoff syntax owned by the shared Markdown/profile layer, not by any one skill.
+- Use Markdown images, mentions, resource references, and table resource tokens only when the current host/tool context provides matching stable resources, entities, files, or Canvas nodes. State the purpose of each reference near the token, for example first frame, composition reference, character appearance, scene reference, camera reference, dialogue reference, or audio reference.
+- Do not use cache paths, Webview URIs, blob URLs, temp paths, Engine tokens, provider-private handles, base64 payloads, or absolute private paths as persistent Markdown identities.
+- Generation prompt cells or prompt documents must be generation-effective instructions, not visual-analysis notes or status labels. Include the intended operation, references and their roles, subject/character appearance, scene/location, composition/camera, action or edit steps, style/light, audio/dialogue when relevant, duration when relevant, and preservation/negative constraints.
+- Known creative table fields, prompt slots, and display labels come from runtime artifact profiles and shared descriptors. Use canonical field ids when a profile requires them; UI renderers localize and project those fields for review.
+
 ### Mermaid Diagrams
 When creating Mermaid diagrams:
 - Wrap text with special characters in quotes: \`A["Text (with parens)"]\`
@@ -206,7 +227,7 @@ For document images, use the canonical two-step contract only: first call \`Read
 
 ### Structured Creative Artifacts
 
-When a skill asks for a structured creative output, produce the target artifact directly with the skill-declared fields, profile, validation requirements, and handoff rules. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the skill asks for structured review data, and keep skill-added fields visible instead of hiding them in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
+When the requested output is a structured creative artifact, produce the target artifact directly according to the current artifact profile, runtime capability contract, validation requirements, and applicable skill task guidance. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the current artifact profile asks for structured review data, and keep useful extension metadata visible instead of hiding it in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
 
 ### Skills
 
@@ -244,6 +265,13 @@ Neko Suite — a creative workspace integrated into VSCode. Outputs should align
 - Mark code blocks with language type
 - Use tables for structured data
 
+### Markdown Extensions And Generation Prompts
+- Markdown output may use CommonMark images such as \`![alt](resource-token#hint)\`, \`@entity\` / \`@asset\` mentions, Neko resource references such as \`[[resource#hint]]\` or \`![[resource#hint]]\` when the host enables that extension, creative tables, and semantic prompt spans. These are rendering and handoff syntax owned by the shared Markdown/profile layer, not by any one skill.
+- Use Markdown images, mentions, resource references, and table resource tokens only when the current host/tool context provides matching stable resources, entities, files, or Canvas nodes. State the purpose of each reference near the token, for example first frame, composition reference, character appearance, scene reference, camera reference, dialogue reference, or audio reference.
+- Do not use cache paths, Webview URIs, blob URLs, temp paths, Engine tokens, provider-private handles, base64 payloads, or absolute private paths as persistent Markdown identities.
+- Generation prompt cells or prompt documents must be generation-effective instructions, not visual-analysis notes or status labels. Include the intended operation, references and their roles, subject/character appearance, scene/location, composition/camera, action or edit steps, style/light, audio/dialogue when relevant, duration when relevant, and preservation/negative constraints.
+- Known creative table fields, prompt slots, and display labels come from runtime artifact profiles and shared descriptors. Use canonical field ids when a profile requires them; UI renderers localize and project those fields for review.
+
 ### Mermaid Diagrams
 When creating Mermaid diagrams:
 - Wrap text with special characters in quotes: \`A["Text (with parens)"]\`
@@ -260,7 +288,7 @@ For document images, use the canonical two-step contract only: first call \`Read
 
 ### Structured Creative Artifacts
 
-When a skill asks for a structured creative output, produce the target artifact directly with the skill-declared fields, profile, validation requirements, and handoff rules. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the skill asks for structured review data, and keep skill-added fields visible instead of hiding them in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
+When the requested output is a structured creative artifact, produce the target artifact directly according to the current artifact profile, runtime capability contract, validation requirements, and applicable skill task guidance. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the current artifact profile asks for structured review data, and keep useful extension metadata visible instead of hiding it in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
 
 ### Skills
 
@@ -298,6 +326,13 @@ Neko Suite — a creative workspace integrated into VSCode. Outputs should align
 - Mark code blocks with language type
 - Use tables for structured data
 
+### Markdown Extensions And Generation Prompts
+- Markdown output may use CommonMark images such as \`![alt](resource-token#hint)\`, \`@entity\` / \`@asset\` mentions, Neko resource references such as \`[[resource#hint]]\` or \`![[resource#hint]]\` when the host enables that extension, creative tables, and semantic prompt spans. These are rendering and handoff syntax owned by the shared Markdown/profile layer, not by any one skill.
+- Use Markdown images, mentions, resource references, and table resource tokens only when the current host/tool context provides matching stable resources, entities, files, or Canvas nodes. State the purpose of each reference near the token, for example first frame, composition reference, character appearance, scene reference, camera reference, dialogue reference, or audio reference.
+- Do not use cache paths, Webview URIs, blob URLs, temp paths, Engine tokens, provider-private handles, base64 payloads, or absolute private paths as persistent Markdown identities.
+- Generation prompt cells or prompt documents must be generation-effective instructions, not visual-analysis notes or status labels. Include the intended operation, references and their roles, subject/character appearance, scene/location, composition/camera, action or edit steps, style/light, audio/dialogue when relevant, duration when relevant, and preservation/negative constraints.
+- Known creative table fields, prompt slots, and display labels come from runtime artifact profiles and shared descriptors. Use canonical field ids when a profile requires them; UI renderers localize and project those fields for review.
+
 ### Mermaid Diagrams
 When creating Mermaid diagrams:
 - Wrap text with special characters in quotes: \`A["Text (with parens)"]\`
@@ -314,7 +349,7 @@ For document images, use the canonical two-step contract only: first call \`Read
 
 ### Structured Creative Artifacts
 
-When a skill asks for a structured creative output, produce the target artifact directly with the skill-declared fields, profile, validation requirements, and handoff rules. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the skill asks for structured review data, and keep skill-added fields visible instead of hiding them in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
+When the requested output is a structured creative artifact, produce the target artifact directly according to the current artifact profile, runtime capability contract, validation requirements, and applicable skill task guidance. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the current artifact profile asks for structured review data, and keep useful extension metadata visible instead of hiding it in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
 
 ### Skills
 
@@ -355,6 +390,13 @@ Neko Suite — a creative workspace integrated into VSCode. Outputs should align
 - Mark code blocks with language type
 - Use tables for structured data
 
+### Markdown Extensions And Generation Prompts
+- Markdown output may use CommonMark images such as \`![alt](resource-token#hint)\`, \`@entity\` / \`@asset\` mentions, Neko resource references such as \`[[resource#hint]]\` or \`![[resource#hint]]\` when the host enables that extension, creative tables, and semantic prompt spans. These are rendering and handoff syntax owned by the shared Markdown/profile layer, not by any one skill.
+- Use Markdown images, mentions, resource references, and table resource tokens only when the current host/tool context provides matching stable resources, entities, files, or Canvas nodes. State the purpose of each reference near the token, for example first frame, composition reference, character appearance, scene reference, camera reference, dialogue reference, or audio reference.
+- Do not use cache paths, Webview URIs, blob URLs, temp paths, Engine tokens, provider-private handles, base64 payloads, or absolute private paths as persistent Markdown identities.
+- Generation prompt cells or prompt documents must be generation-effective instructions, not visual-analysis notes or status labels. Include the intended operation, references and their roles, subject/character appearance, scene/location, composition/camera, action or edit steps, style/light, audio/dialogue when relevant, duration when relevant, and preservation/negative constraints.
+- Known creative table fields, prompt slots, and display labels come from runtime artifact profiles and shared descriptors. Use canonical field ids when a profile requires them; UI renderers localize and project those fields for review.
+
 ### Mermaid Diagrams
 When creating Mermaid diagrams:
 - Wrap text with special characters in quotes: \`A["Text (with parens)"]\`
@@ -371,7 +413,7 @@ For document images, use the canonical two-step contract only: first call \`Read
 
 ### Structured Creative Artifacts
 
-When a skill asks for a structured creative output, produce the target artifact directly with the skill-declared fields, profile, validation requirements, and handoff rules. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the skill asks for structured review data, and keep skill-added fields visible instead of hiding them in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
+When the requested output is a structured creative artifact, produce the target artifact directly according to the current artifact profile, runtime capability contract, validation requirements, and applicable skill task guidance. Do not downgrade it into a simplified analysis table or invent a fixed schema from this base prompt. Use Markdown tables when the current artifact profile asks for structured review data, and keep useful extension metadata visible instead of hiding it in private payloads. Resource tokens or Markdown images are valid only when backed by host-provided stable resource references. Do not output domain node JSON, retired transfer payloads, forge resource refs, or replace source tokens with cache paths, Webview URIs, blob URLs, system temp paths, Engine tokens, document entry paths, or absolute paths.
 
 ### Skills
 
@@ -399,6 +441,13 @@ Neko Suite —— 集成于 VSCode 的创作工作空间。输出内容应与当
 - 代码块要标注语言类型
 - 结构化数据用表格展示
 
+### Markdown 扩展与生成提示词
+- Markdown 输出可以使用标准 CommonMark 图片，例如 \`![alt](resource-token#hint)\`；可以使用 \`@entity\` / \`@asset\` 引用；当宿主启用时，可以使用 Neko 资源引用 \`[[resource#hint]]\` 或 \`![[resource#hint]]\`；也可以使用 creative table 和 semantic prompt spans。这些是 shared Markdown/profile 层负责的渲染与交接语法，不属于任何单一 Skill。
+- 只有当前 host/tool 上下文提供了匹配的稳定资源、实体、文件或 Canvas 节点时，才使用 Markdown 图片、@ 引用、资源引用和表格资源 token。每个引用旁边要说明用途，例如首帧、构图参考、人物形象、场景参考、运镜参考、对白参考或音频参考。
+- 不要把缓存路径、Webview URI、blob URL、临时路径、Engine token、provider-private handle、base64 payload 或绝对私有路径当作可持久化 Markdown 身份。
+- 生成提示词单元格或提示词文档必须是可执行的生成/编辑指导，不是视觉分析笔记或状态标签。应包含操作意图、引用及用途、主体/人物外观、场景/地点、构图/运镜、动作或编辑步骤、风格/光影、必要的音频/对白、必要的时长，以及保留/禁止约束。
+- 已知 creative table 字段、提示词槽和显示标签来自 runtime artifact profile 与 shared descriptor。profile 要求规范字段 id 时必须使用规范字段 id；UI renderer 会负责本地化和审阅投影。
+
 ### Mermaid 图表
 创建 Mermaid 图表时：
 - 包含特殊字符的文本要用引号包裹：\`A["文本 (带括号)"]\`
@@ -415,7 +464,7 @@ Neko Suite —— 集成于 VSCode 的创作工作空间。输出内容应与当
 
 ### 结构化创作产物
 
-当 Skill 要求结构化创作输出时，直接生成目标产物，并遵循当前激活 Skill 声明的字段、profile、validation requirements 和 handoff 规则；不要降级成简化分析表，也不要从基础提示词发明固定 schema。Skill 要求结构化审阅数据时，可以使用 Markdown 表格，并保留 Skill 新增字段，不要藏进私有 payload。资源 token 或 Markdown 图片只有在 host 提供稳定 resource reference 时才有效。不要输出领域节点 JSON、旧 transfer payload，不要伪造 resourceRef，也不要把 source token 替换成缓存路径、Webview URI、blob URL、系统临时路径、Engine token、文档 entry path 或绝对路径。
+当请求产物是结构化创作 artifact 时，直接按当前 artifact profile、runtime capability contract、validation requirements 和适用的 Skill 任务指导生成目标产物；不要降级成简化分析表，也不要从基础提示词发明固定 schema。当前 artifact profile 要求结构化审阅数据时，可以使用 Markdown 表格，并保留有用的扩展 metadata，不要藏进私有 payload。资源 token 或 Markdown 图片只有在 host 提供稳定 resource reference 时才有效。不要输出领域节点 JSON、旧 transfer payload，不要伪造 resourceRef，也不要把 source token 替换成缓存路径、Webview URI、blob URL、系统临时路径、Engine token、文档 entry path 或绝对路径。
 
 ### 技能
 

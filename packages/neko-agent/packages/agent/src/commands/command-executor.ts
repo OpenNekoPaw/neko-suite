@@ -153,7 +153,7 @@ export async function executeSlashCommand(
 ): Promise<CommandResult> {
   const { command, args } = parseSlashCommand(input);
   const skills = toSlashCommandSkillList(context);
-  const surface = context.conversations ? 'extension' : 'cli';
+  const surface = context.conversations ? 'extension' : 'tui';
   const entry = resolveSlashCommandCatalogEntry(command, {
     surface,
     skills,

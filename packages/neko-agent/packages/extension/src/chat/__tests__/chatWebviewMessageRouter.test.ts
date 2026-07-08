@@ -687,6 +687,46 @@ describe('handleChatWebviewMessage', () => {
     );
   });
 
+  it('treats Markdown wording as source format instead of review-only Canvas ingestion', async () => {
+    const deps = createDeps();
+
+    handleChatWebviewMessage(
+      {
+        type: 'requestCanvasAuthoringHandoff',
+        requestId: 'req-markdown-source-format',
+        conversationId: 'conv-1',
+        sourceKind: 'markdown',
+        sourceFormat: 'gfm-table',
+        title: '前 10 页分镜表',
+        content:
+          '| scene | shot | source | videoPrompt |\\n| --- | --- | --- | --- |\\n| S1 | 1 | P1 | scene prompt |',
+        userIntent: '作为 Markdown 发送到 Canvas',
+        provenance: { source: 'webview', label: 'assistant-markdown-block' },
+        targetHints: {
+          sourceFormat: 'gfm-table',
+          declaredIntentHint: 'creative-table',
+          declaredProfileHint: 'storyboard',
+        },
+      },
+      deps,
+    );
+
+    await flushAsyncWork();
+
+    const routedRequest = (deps.messages?.handleUserMessage as any).mock.calls[0]?.[1];
+    expect(routedRequest.messageText).toContain(
+      '“作为 Markdown/Markdown 发送”只表示来源格式',
+    );
+    expect(routedRequest.messageText).toContain('默认仍使用 canvas.createStoryboardFromMarkdown');
+    expect(routedRequest.messageText).toContain(
+      '没有暴露为可调用工具时，报告 Canvas tool-surface blocked',
+    );
+    expect(routedRequest.messageText).toContain(
+      '不要降级调用 canvas.ingestMarkdown 或把 review table 当作成功',
+    );
+    expect(routedRequest.messageText).not.toContain('这是 storyboard creative table 的审阅交接');
+  });
+
   it('routes general Canvas authoring handoff through Agent context without choosing Canvas tools', async () => {
     const deps = createDeps();
     const invoke = vi.fn();

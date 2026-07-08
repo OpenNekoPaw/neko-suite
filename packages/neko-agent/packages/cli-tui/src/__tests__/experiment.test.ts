@@ -21,6 +21,7 @@ const createConversationId = vi.fn(() => 'conversation-id');
 const loadProjectMemory = vi.fn(async () => undefined);
 const createCLIPlatform = vi.fn(() => ({ service: makeService() }));
 const createCLITaskManager = vi.fn(() => ({ id: 'task-manager' }));
+const loadTuiSessionSkills = vi.fn(async () => []);
 
 vi.mock('@neko/agent/runtime', () => ({
   buildAgentSessionConfigWithRuntime,
@@ -64,7 +65,9 @@ vi.mock('@neko/agent', () => ({
 
 vi.mock('@neko/skills', () => ({
   createAutohealChain: vi.fn(() => ({ id: 'autoheal-chain' })),
-  createDefaultCreativeProcessRecoveryPolicy: vi.fn(() => ({ id: 'creative-process-recovery-policy' })),
+  createDefaultCreativeProcessRecoveryPolicy: vi.fn(() => ({
+    id: 'creative-process-recovery-policy',
+  })),
   createValidationCoordinatorFactory: vi.fn(() => ({ id: 'validation-coordinator-factory' })),
   createQualityReviewValidationAdapter: vi.fn(() => ({ id: 'quality-review-validation' })),
   registerBuiltinToolGroups,
@@ -75,8 +78,8 @@ vi.mock('../core/platform-bootstrap', () => ({
   createCLITaskManager,
 }));
 
-vi.mock('../core/skill-artifacts', () => ({
-  loadSkillArtifactsAsSkills: vi.fn(async () => []),
+vi.mock('../core/tui-session-skills', () => ({
+  loadTuiSessionSkills,
 }));
 
 function makeVariant(name: string) {
@@ -99,7 +102,6 @@ function makeConfig(): CLIConfig {
     verbose: false,
     workDir: '/workspace',
     mcpServers: [],
-    skillsDir: undefined,
     outputFormat: 'text',
     thinkingBudget: 0,
   };
@@ -155,6 +157,12 @@ describe('CLI experiment runner', () => {
 
     expect(createCLIPlatform).not.toHaveBeenCalled();
     expect(loadProjectMemory).toHaveBeenCalledOnce();
+    expect(loadTuiSessionSkills).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({ workDir: '/workspace' }),
+        locale: 'en',
+      }),
+    );
     expect(createCoreTools).toHaveBeenCalledWith(
       expect.objectContaining({ defaultCwd: '/workspace' }),
     );

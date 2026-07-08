@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/assistant.js",
   "exports": {
-    "./root": "./src/root.tsx"
+    "./root": "./src/root.tsx",
+    "./workbench-surfaces": "./src/workbench-surfaces.ts"
   },
   "scripts": {
     "dev": "vite",
@@ -21,6 +22,7 @@
     "@neko/neko-client": "workspace:*",
     "@neko/shared": "workspace:*",
     "@neko/ui": "workspace:*",
+    "@neko/workbench-core": "workspace:*",
     "clsx": "^2.1.1",
     "d3": "^7.9.0",
     "devlop": "^1.1.0",

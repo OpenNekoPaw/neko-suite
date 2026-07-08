@@ -1,13 +1,14 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { resolveStorageLayout, type ResourceCacheSettings } from '@neko/shared';
+import { type ResourceCacheSettings } from '@neko/shared';
 import {
   createHostContentAccessRuntime,
   resolveResourceCacheQuotaPolicy,
   type ResourceCacheGcResult,
   type ResourceCacheService,
 } from '@neko/shared/vscode/extension';
+import { createAgentProjectResourceCacheTarget } from '@neko/agent/runtime';
 import { getLogger } from '../base';
 
 const logger = getLogger('ResourceCacheStartupGc');
@@ -39,13 +40,10 @@ export function createStartupGcTargets(
   const targets: ResourceCacheStartupGcTarget[] = [];
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (workspaceRoot) {
-    const layout = resolveStorageLayout(workspaceRoot, os.homedir() || workspaceRoot);
-    targets.push({
-      scope: 'project',
-      cacheRoot: layout.project.local.cache.resources,
-      manifestPath: layout.project.local.cache.resourceManifest,
-      projectRoot: workspaceRoot,
-    });
+    targets.push(createAgentProjectResourceCacheTarget({
+      workspaceRoot,
+      homedir: os.homedir() || workspaceRoot,
+    }));
   }
 
   if (context.globalStorageUri.scheme === 'file') {

@@ -24,8 +24,8 @@ export interface OutputConstraints {
   mermaidPreValidate: boolean;
   /**
    * Artifact/table validators to apply to final assistant output.
-   * Dynamic Skill-specific requirements may also be supplied through
-   * AgentContext.metadata.skillValidationRequirements.
+   * Runtime artifact/profile requirements may also be supplied through
+   * AgentContext.metadata.artifactValidationRequirements.
    */
   artifactValidators?: readonly string[];
   /** JSON Schema for validation */

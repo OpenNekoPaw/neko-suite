@@ -6,13 +6,9 @@ import type {
 import type { AgentMessageQueueSnapshot, AgentPhase } from '@neko-agent/types';
 import { getConversationWorkDirHash } from './conversation-id';
 
-export type AgentWorkspaceRuntimeStateSource = 'extension' | 'tui' | 'cli';
+export type AgentWorkspaceRuntimeStateSource = 'extension' | 'tui';
 export type AgentWorkspaceRuntimeStatus =
-  | 'idle'
-  | 'running'
-  | 'waiting_confirmation'
-  | 'error'
-  | 'interactive';
+  'idle' | 'running' | 'waiting_confirmation' | 'error' | 'interactive';
 export type AgentWorkspaceRuntimeExecutionMode = 'plan' | 'ask' | 'auto';
 export type AgentWorkspaceRuntimeSessionMode = 'agent' | 'image' | 'video' | 'audio';
 export type AgentWorkspaceRuntimeMediaCategory = 'image' | 'video' | 'audio';
@@ -105,9 +101,7 @@ export class AgentWorkspaceRuntimeStateCorruptJsonError extends Error {
 
 const runtimeStateOperationQueues = new Map<string, Promise<void>>();
 
-export class FileAgentWorkspaceRuntimeStateRuntime
-  implements AgentWorkspaceRuntimeStateRuntime
-{
+export class FileAgentWorkspaceRuntimeStateRuntime implements AgentWorkspaceRuntimeStateRuntime {
   readonly filePath: string;
 
   constructor(private readonly options: AgentWorkspaceRuntimeStateRuntimeOptions) {
@@ -115,7 +109,7 @@ export class FileAgentWorkspaceRuntimeStateRuntime
   }
 
   async read(): Promise<AgentWorkspaceRuntimeState> {
-    return enqueueRuntimeStateOperation(this.filePath, () => this.readState());
+    return enqueueRuntimeStateOperation(this.filePath, () => this.readRecoverableState());
   }
 
   async patch(input: AgentWorkspaceRuntimeStatePatch): Promise<AgentWorkspaceRuntimeState> {
@@ -174,6 +168,10 @@ export class FileAgentWorkspaceRuntimeStateRuntime
   }
 
   private async readStateForMutation(): Promise<AgentWorkspaceRuntimeState> {
+    return this.readRecoverableState();
+  }
+
+  private async readRecoverableState(): Promise<AgentWorkspaceRuntimeState> {
     try {
       return await this.readState();
     } catch (error) {
@@ -441,7 +439,7 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 function isRuntimeSource(value: unknown): value is AgentWorkspaceRuntimeStateSource {
-  return value === 'extension' || value === 'tui' || value === 'cli';
+  return value === 'extension' || value === 'tui';
 }
 
 function isRuntimeStatus(value: unknown): value is AgentWorkspaceRuntimeStatus {
@@ -601,8 +599,8 @@ function parseCapabilityProviders(
   if (!Array.isArray(value)) return undefined;
   const providers = value
     .map(parseCapabilityProvider)
-    .filter(
-      (provider): provider is AgentCapabilityProviderAvailabilitySummary => Boolean(provider),
+    .filter((provider): provider is AgentCapabilityProviderAvailabilitySummary =>
+      Boolean(provider),
     );
   return providers.length === value.length ? providers : undefined;
 }
@@ -627,9 +625,9 @@ function parseCapabilityProvider(
   };
 }
 
-function parseCapabilityContributionSummary(value: unknown):
-  | AgentCapabilityProviderAvailabilitySummary['loaded'][number]
-  | undefined {
+function parseCapabilityContributionSummary(
+  value: unknown,
+): AgentCapabilityProviderAvailabilitySummary['loaded'][number] | undefined {
   if (!isRecord(value)) return undefined;
   if (!isCapabilityContributionKind(value.kind) || typeof value.name !== 'string') {
     return undefined;
@@ -691,7 +689,9 @@ function isSkillLifecycleSlot(
 function isSkillLifecycleOwner(
   value: unknown,
 ): value is ActiveSkillLifecycleRecordProjection['owner'] {
-  return value === 'user' || value === 'agent' || value === 'creation-profile' || value === 'runtime';
+  return (
+    value === 'user' || value === 'agent' || value === 'creation-profile' || value === 'runtime'
+  );
 }
 
 function isSkillLifecycleRecordStatus(

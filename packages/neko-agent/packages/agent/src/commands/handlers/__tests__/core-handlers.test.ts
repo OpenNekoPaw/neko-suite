@@ -38,7 +38,6 @@ function createMockContext(overrides?: Partial<CommandContext>): CommandContext 
       maxTokens: 4096,
       temperature: 0.7,
       workDir: '/test/workspace',
-      skillsDir: '/test/skills',
       outputFormat: 'text',
       verbose: false,
       mcpServers: [],

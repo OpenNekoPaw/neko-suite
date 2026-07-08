@@ -20,6 +20,7 @@
   "dependencies": {
     "@neko-agent/types": "workspace:*",
     "@neko/content": "workspace:*",
+    "@neko/markdown": "workspace:*",
     "@neko/shared": "workspace:*",
     "ajv": "^8.17.1"
   },

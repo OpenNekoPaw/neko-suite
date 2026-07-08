@@ -12,7 +12,6 @@
  * 4. Default values
  */
 
-import path from 'path';
 import { ConfigManager, FileUserConfigManager, type ConfigManagerOptions } from '@neko/platform';
 import type { CLIConfig } from './types';
 import { DEFAULT_CLI_CONFIG } from './types';
@@ -24,9 +23,6 @@ import {
   getWorkspaceConfigDir,
   getWorkspaceConfigPath,
   getConfigLocations,
-  readUserConfigResult,
-  readWorkspaceConfigResult,
-  writeUserConfig,
 } from '@neko/shared/config/config-reader.ts';
 import { getEnvKeyMap } from '@neko/shared';
 
@@ -105,24 +101,23 @@ export function loadConfig(
   const cm = createConfigManager(workDir);
 
   try {
-    // Read scalar fields from raw UnifiedConfig (not UserConfig which lacks them)
-    const rawUserResult = readUserConfigResult();
-    const rawWorkspaceResult = readWorkspaceConfigResult(workDir);
-    assertCliConfigReadable(rawUserResult);
-    assertCliConfigReadable(rawWorkspaceResult);
-    const rawUser = rawUserResult.status === 'ok' ? rawUserResult.config : {};
-    const rawWorkspace = rawWorkspaceResult.status === 'ok' ? rawWorkspaceResult.config : {};
+    applyRuntimeCredentialOverrides(cm, overrides);
 
-    const llmDefaultRef = rawWorkspace.defaultModels?.llm ?? rawUser.defaultModels?.llm;
-    const providerId =
-      overrides.provider ??
-      llmDefaultRef?.providerId ??
-      rawWorkspace.defaultProvider ??
-      rawUser.defaultProvider;
+    const effectiveConfig = cm.getEffectiveAgentWorkspaceConfigSnapshot({
+      selectedProviderId: overrides.provider,
+      selectedModelId: overrides.model,
+      temperature: overrides.temperature,
+      maxTokens: overrides.maxTokens,
+    });
+    if (effectiveConfig.blockingDiagnostic) {
+      throw new Error(effectiveConfig.blockingDiagnostic.message);
+    }
+
+    const providerId = effectiveConfig.providerId ?? undefined;
     if (!providerId) {
       throw new Error('Default provider is not configured in ~/.neko/config.toml.');
     }
-    const provider = cm.getProvider(providerId);
+    const provider = effectiveConfig.provider ?? cm.getProvider(providerId);
     const providerType = provider?.type;
     if (!providerType) {
       throw new Error(`Provider "${providerId}" is not configured in ~/.neko/config.toml.`);
@@ -133,34 +128,18 @@ export function loadConfig(
     const envApiKey = getApiKeyFromEnv(providerId) ?? getApiKeyFromEnv(providerType);
     const apiKey = overrides.apiKey ?? envApiKey ?? provider?.apiKey;
 
-    const llmDefaultModel =
-      llmDefaultRef && llmDefaultRef.providerId === providerId ? llmDefaultRef.modelId : undefined;
-
-    // Model: override > [default_models.llm] > defaultModel scalar > first enabled model for provider
-    const model =
-      overrides.model ??
-      llmDefaultModel ??
-      rawWorkspace.defaultModel ??
-      rawUser.defaultModel ??
-      findDefaultModel(cm, providerId);
+    const model = effectiveConfig.modelId ?? undefined;
     if (!model) {
       throw new Error(`No model is configured for provider "${providerId}".`);
     }
 
-    // Check if the configured model exists in ConfigManager.
-    // If not, mark it as modelNotFound but do NOT fallback —
-    // callers must block and let the user choose before proceeding.
-    let modelNotFound: string | undefined;
-    const selectedModelConfig = cm.getModel(model);
-    if (!selectedModelConfig) {
-      modelNotFound = model;
-    }
+    const selectedModelConfig = effectiveConfig.model ?? cm.getModel(model);
 
     // Base URL
     const baseUrl = overrides.baseUrl ?? provider?.apiUrl;
 
     // MCP servers → MCPServerConfig[]
-    const mcpServers = cm.getEnabledMCPServers().map((s) => ({
+    const mcpServers = effectiveConfig.mcpServers.map((s) => ({
       id: s.id,
       name: s.name,
       description: s.description ?? '',
@@ -182,33 +161,10 @@ export function loadConfig(
       })
       .map((m) => m.id);
 
-    // Default media models by type. Platform normalizes these to ChatModelOption
-    // ids (`provider:model`) when possible so CLI/TUI commands keep explicit
-    // provider/model identity instead of ambiguous model labels.
-    const defaultMediaModels = {
-      image: modelRefToOptionId(rawWorkspace.defaultModels?.image ?? rawUser.defaultModels?.image),
-      video: modelRefToOptionId(rawWorkspace.defaultModels?.video ?? rawUser.defaultModels?.video),
-      audio: modelRefToOptionId(rawWorkspace.defaultModels?.audio ?? rawUser.defaultModels?.audio),
-    };
-
-    // Workspace overrides user for scalars
-    const maxTokens =
-      overrides.maxTokens ??
-      rawWorkspace.maxTokens ??
-      rawUser.maxTokens ??
-      DEFAULT_CLI_CONFIG.maxTokens;
-    const temperature =
-      overrides.temperature ??
-      rawWorkspace.temperature ??
-      rawUser.temperature ??
-      DEFAULT_CLI_CONFIG.temperature;
-    const skillsDir =
-      overrides.skillsDir ??
-      rawWorkspace.skillsDir ??
-      rawUser.skillsDir ??
-      path.join(workDir, '.neko', 'skills');
-    const thinkingBudget =
-      rawWorkspace.thinkingBudget ?? rawUser.thinkingBudget ?? DEFAULT_CLI_CONFIG.thinkingBudget;
+    const defaultMediaModels = effectiveConfig.defaultMediaModels;
+    const maxTokens = effectiveConfig.maxTokens;
+    const temperature = effectiveConfig.temperature;
+    const thinkingBudget = effectiveConfig.thinkingBudget;
 
     const config: CLIConfig = {
       provider: providerId,
@@ -237,10 +193,9 @@ export function loadConfig(
       verbose: overrides.verbose ?? DEFAULT_CLI_CONFIG.verbose,
       workDir,
       mcpServers,
-      skillsDir,
       outputFormat: overrides.outputFormat ?? DEFAULT_CLI_CONFIG.outputFormat,
       thinkingBudget,
-      modelNotFound,
+      ...(overrides.contextSettings ? { contextSettings: overrides.contextSettings } : {}),
     };
 
     return config;
@@ -249,19 +204,14 @@ export function loadConfig(
   }
 }
 
-/**
- * Find the first enabled model for a provider.
- */
-function findDefaultModel(cm: ConfigManager, providerId: string): string | undefined {
-  const models = cm.getModelsByProvider(providerId);
-  const enabled = models.find((m) => m.enabled !== false);
-  return enabled?.name ?? enabled?.id ?? models[0]?.name ?? models[0]?.id;
-}
-
-function modelRefToOptionId(
-  ref: { providerId: string; modelId: string } | undefined,
-): string | undefined {
-  return ref ? `${ref.providerId}:${ref.modelId}` : undefined;
+function applyRuntimeCredentialOverrides(cm: ConfigManager, overrides: Partial<CLIConfig>): void {
+  for (const provider of cm.getProviders()) {
+    const apiKey =
+      overrides.apiKey ?? getApiKeyFromEnv(provider.id) ?? getApiKeyFromEnv(provider.type);
+    if (apiKey) {
+      cm.setRuntimeProviderOverride(provider.id, { apiKey });
+    }
+  }
 }
 
 function isPositiveInteger(value: unknown): value is number {
@@ -345,22 +295,6 @@ export function listConfiguredProviders(workDir?: string): string[] {
   } finally {
     cm.dispose();
   }
-}
-
-/**
- * Update defaultModel in user config and persist to disk.
- */
-export function updateDefaultModel(modelId: string): void {
-  const result = readUserConfigResult();
-  assertCliConfigReadable(result);
-  const raw = result.status === 'ok' ? result.config : {};
-  raw.defaultModel = modelId;
-  writeUserConfig(raw);
-}
-
-function assertCliConfigReadable(result: ReturnType<typeof readUserConfigResult>): void {
-  if (result.status === 'ok' || result.status === 'missing') return;
-  throw new Error(result.diagnostic.message);
 }
 
 // =============================================================================

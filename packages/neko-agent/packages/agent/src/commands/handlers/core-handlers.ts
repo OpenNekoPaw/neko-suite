@@ -25,7 +25,7 @@ export function generateCliHelpText(context?: CommandContext): string {
   const locale = normalizeCommandLocale(context?.locale);
   const labels = getCliHelpLabels(locale);
   const commands = listSlashCommandCatalog({
-    surface: 'cli',
+    surface: 'tui',
     skills: listContextSlashCommandSkills(context),
     locale,
   });
@@ -157,7 +157,6 @@ export function generateCliStatusText(context: CommandContext): string {
     '',
     'Environment:',
     `  Work Dir:     ${config?.workDir ?? '(not set)'}`,
-    `  Skills Dir:   ${config?.skillsDir ?? '(not set)'}`,
     `  Output:       ${config?.outputFormat ?? 'text'}`,
     `  Verbose:      ${config?.verbose ?? false}`,
     '',

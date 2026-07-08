@@ -16,6 +16,7 @@ export interface TuiLabels {
     readonly skill: string;
     readonly skills: string;
     readonly queue: string;
+    readonly task: string;
     readonly locked: string;
     readonly more: string;
     readonly multiLineHint: string;
@@ -51,6 +52,7 @@ const TUI_LABELS: Readonly<Record<TuiLocale, TuiLabels>> = {
       skill: 'skill',
       skills: 'skills',
       queue: 'queue',
+      task: 'task',
       locked: 'locked',
       more: 'more',
       multiLineHint: '[multi-line: Shift+Enter for newline]',
@@ -109,6 +111,7 @@ const TUI_LABELS: Readonly<Record<TuiLocale, TuiLabels>> = {
       skill: '技能',
       skills: '技能',
       queue: '队列',
+      task: '任务',
       locked: '锁定',
       more: '更多',
       multiLineHint: '[多行: Shift+Enter 换行]',
@@ -153,7 +156,7 @@ export function detectTuiLocale(
   env: Record<string, string | undefined> = process.env,
   readHostLocale: () => string | undefined = detectHostLocale,
 ): TuiLocale {
-  const raw = readEnvironmentLocale(env) ?? readHostLocale() ?? '';
+  const raw = readExplicitTuiLocale(env) ?? readHostLocale() ?? readTerminalLocale(env) ?? '';
   return normalizeLocale(raw) === 'zh-cn' ? 'zh' : 'en';
 }
 
@@ -165,12 +168,15 @@ export function formatTuiLabel(labels: Readonly<Record<string, string>>, value: 
   return labels[value] ?? value;
 }
 
-function readEnvironmentLocale(env: Record<string, string | undefined>): string | undefined {
+function readExplicitTuiLocale(env: Record<string, string | undefined>): string | undefined {
   const explicitLocale = env['NEKO_LOCALE'];
   if (explicitLocale && explicitLocale.trim().length > 0) {
     return explicitLocale;
   }
+  return undefined;
+}
 
+function readTerminalLocale(env: Record<string, string | undefined>): string | undefined {
   for (const key of ['LC_ALL', 'LC_MESSAGES', 'LANGUAGE', 'LANG'] as const) {
     const value = env[key];
     if (value && value.trim().length > 0 && !isNeutralLocale(value)) {

@@ -23,6 +23,7 @@ import {
 } from '@neko/shared/content-access';
 import {
   createHostAgentContentAccessRuntime,
+  createAgentDocumentReaderModuleUnavailableError,
   type AgentContentAccessRuntime,
   type AgentContentAccessRuntimeRequest,
   type AgentDocumentContentInput,
@@ -381,15 +382,28 @@ interface AdmZipConstructor {
   new (filePath: string): AdmZipInstance;
 }
 
-async function loadTuiDocumentReaderModule<T>(packageName: string): Promise<T | null> {
+export async function loadTuiDocumentReaderModule<T>(packageName: string): Promise<T | null> {
   switch (packageName) {
     case 'adm-zip':
-      return readAdmZipConstructor(AdmZipModule) as T;
+      return requireTuiDocumentReaderModule(packageName, readAdmZipConstructor(AdmZipModule)) as T;
     case 'epub2':
       return Epub2Module as T;
     default:
-      return null;
+      throw createAgentDocumentReaderModuleUnavailableError({
+        packageName,
+        host: 'tui',
+      });
   }
+}
+
+function requireTuiDocumentReaderModule<T>(packageName: string, value: T | null): T {
+  if (!value) {
+    throw createAgentDocumentReaderModuleUnavailableError({
+      packageName,
+      host: 'tui',
+    });
+  }
+  return value;
 }
 
 function readAdmZipConstructor(value: unknown): AdmZipConstructor | null {

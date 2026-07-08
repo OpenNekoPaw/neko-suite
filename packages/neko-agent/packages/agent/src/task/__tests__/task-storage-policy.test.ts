@@ -3,7 +3,10 @@ import {
   DEFAULT_TASK_CLEANUP_INTERVAL_MS,
   DEFAULT_TASK_RETENTION_PERIOD_MS,
   DEFAULT_TASK_STORAGE_KEY,
+  buildAgentTaskHostPrivateLeaseDiagnostic,
   buildTaskStorageCleanupPlan,
+  createAgentTaskHostPrivateLease,
+  createWorkspaceVisibleAgentTaskRecord,
   filterRecoverableTasks,
   isRecoverableTaskStatus,
   isTaskCleanupCandidate,
@@ -75,5 +78,71 @@ describe('task storage policy', () => {
       'old-cancelled',
     ]);
     expect(plan.retained.map((task) => task.id)).toEqual(['old-running', 'fresh-completed']);
+  });
+
+  it('classifies workspace-visible task records with a required workspace root', () => {
+    const task = makeTask('workspace-task', 'running', 100);
+
+    const record = createWorkspaceVisibleAgentTaskRecord({
+      workspaceRoot: ' /workspace ',
+      task,
+    });
+
+    expect(record).toEqual({
+      scope: 'workspace-visible',
+      workspaceRoot: '/workspace',
+      task,
+    });
+    expect(record.task).not.toBe(task);
+    expect(() =>
+      createWorkspaceVisibleAgentTaskRecord({ workspaceRoot: ' ', task }),
+    ).toThrow('Workspace-visible Agent task records require a workspace root');
+  });
+
+  it('returns a host-private lease diagnostic when another surface asks for live controls', () => {
+    const task = makeTask('task-1', 'running', 100);
+    const record = createWorkspaceVisibleAgentTaskRecord({
+      workspaceRoot: '/workspace',
+      task,
+    });
+    const lease = createAgentTaskHostPrivateLease({
+      taskId: 'task-1',
+      ownerSurface: 'extension',
+      leaseId: 'lease-1',
+      recoveryHandle: 'vscode-state-key',
+      controls: ['cancel', 'recover'],
+    });
+
+    expect(record.task.id).toBe(lease.taskId);
+    expect(lease).toEqual({
+      scope: 'host-private',
+      taskId: 'task-1',
+      ownerSurface: 'extension',
+      leaseId: 'lease-1',
+      recoveryHandle: 'vscode-state-key',
+      controls: ['cancel', 'recover'],
+    });
+    expect(
+      buildAgentTaskHostPrivateLeaseDiagnostic({
+        lease,
+        requestingSurface: 'extension',
+        control: 'cancel',
+      }),
+    ).toBeUndefined();
+    expect(
+      buildAgentTaskHostPrivateLeaseDiagnostic({
+        lease,
+        requestingSurface: 'tui',
+        control: 'cancel',
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        code: 'hostPrivateLease',
+        taskId: 'task-1',
+        ownerSurface: 'extension',
+        requestingSurface: 'tui',
+        control: 'cancel',
+      }),
+    );
   });
 });

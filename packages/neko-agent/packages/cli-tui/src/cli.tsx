@@ -17,13 +17,17 @@ import { Command } from 'commander';
 import { createFileConversationStorage, ToolRegistry } from '@neko/agent';
 import { loadConfig, validateConfig, listProviders, getProviderModels } from './core/config';
 import type { CLIConfig } from './core/types';
-import { runAgent, runInteractive } from './core/runner';
+import { runAgent } from './core/runner';
 import { formatExperimentReport, runExperiment, type ExperimentSuiteName } from './core/experiment';
 import { formatResult } from './core/formatter';
 import { createCLIPlatform } from './core/platform-bootstrap';
 import { resolveCliWorkDir } from './core/cli-workdir';
 import { joinPromptParts, resolveDefaultCliInvocation } from './core/cli-invocation';
 import { createCliRunResultArtifact, writeCliRunResultArtifact } from './core/run-result';
+import {
+  assertCanonicalTuiConversationId,
+  isCanonicalTuiConversationId,
+} from './core/tui-conversation-id';
 import {
   createDefaultTuiRealApiSuiteManifest,
   loadTuiRealApiSuiteManifest,
@@ -33,6 +37,27 @@ import { formatTuiLabel, getTuiLabels } from './core/tui-locale';
 import { App } from './components/App';
 import { detectCapabilities } from './utils/terminal';
 import chalk from 'chalk';
+
+export type CliCommandRuntimeClass = 'interactive-tui' | 'headless' | 'validation' | 'utility';
+
+export function classifyCliCommandRuntime(commandName: string | undefined): CliCommandRuntimeClass {
+  switch (commandName) {
+    case undefined:
+    case 'interactive':
+    case 'resume':
+      return 'interactive-tui';
+    case 'run':
+      return 'headless';
+    case 'experiment':
+    case 'real-api-suite':
+      return 'validation';
+    case 'completion':
+    case 'config':
+      return 'utility';
+    default:
+      throw new Error(`Unknown CLI command runtime class: ${commandName}`);
+  }
+}
 
 function addWorkDirOptions(command: Command): Command {
   return command
@@ -152,7 +177,10 @@ export function createCliProgram(): Command {
         .command('real-api-suite')
         .description('Run TUI real API validation cases and write a Markdown report')
         .option('--manifest <path>', 'Suite manifest JSON path')
-        .option('-o, --output-dir <dir>', 'Output directory (default: reports/tui-real-api/<timestamp>)')
+        .option(
+          '-o, --output-dir <dir>',
+          'Output directory (default: reports/tui-real-api/<timestamp>)',
+        )
         .option('--ai-summary', 'Generate an optional AI-assisted qualitative summary')
         .option('--summary-provider <provider>', 'Provider override for AI summary')
         .option('--summary-model <model>', 'Model override for AI summary'),
@@ -237,7 +265,6 @@ function registerConfigCommands(program: Command): void {
         console.log(`  Max Output Tokens: ${config.maxTokens}`);
         console.log(`  Temperature: ${config.temperature}`);
         console.log(`  Work Dir:    ${config.workDir}`);
-        console.log(`  Skills Dir:  ${config.skillsDir ?? 'Not set'}`);
         console.log(`  MCP Servers: ${config.mcpServers.length}`);
         console.log('');
       });
@@ -347,12 +374,6 @@ async function handleInteractive(opts: Record<string, unknown>): Promise<void> {
     process.exit(1);
   }
 
-  const capabilities = detectCapabilities();
-  if (!capabilities.supportsColor) {
-    chalk.level = 0;
-  }
-
-  // --resume flag: use readline-based interactive mode (supports resume prompt)
   const resumeFlag = opts['resume'];
   if (resumeFlag !== undefined) {
     await handleResume({
@@ -365,6 +386,20 @@ async function handleInteractive(opts: Record<string, unknown>): Promise<void> {
     return;
   }
 
+  await renderTuiSession({ config, initialPrompt });
+}
+
+async function renderTuiSession(input: {
+  readonly config: CLIConfig;
+  readonly initialPrompt?: string;
+  readonly resumeConversationId?: string;
+}): Promise<void> {
+  const { config, initialPrompt, resumeConversationId } = input;
+  const capabilities = detectCapabilities();
+  if (!capabilities.supportsColor) {
+    chalk.level = 0;
+  }
+
   const labels = getTuiLabels();
   console.log(chalk.cyan.bold('\n  Neko Agent'));
   console.log(chalk.gray(`  ${labels.chrome.model}: ${config.model}`));
@@ -374,7 +409,13 @@ async function handleInteractive(opts: Record<string, unknown>): Promise<void> {
   );
   console.log(chalk.gray(`  ${labels.chrome.startupHelp}\n`));
 
-  const { waitUntilExit } = render(<App config={config} initialPrompt={initialPrompt} />);
+  const { waitUntilExit } = render(
+    <App
+      config={config}
+      initialPrompt={initialPrompt}
+      resumeConversationId={resumeConversationId}
+    />,
+  );
   await waitUntilExit();
 }
 
@@ -441,10 +482,7 @@ async function handleRun(
   process.exit(result.success ? 0 : 1);
 }
 
-async function handleRealApiSuite(
-  opts: Record<string, unknown>,
-  program: Command,
-): Promise<void> {
+async function handleRealApiSuite(opts: Record<string, unknown>, program: Command): Promise<void> {
   const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
   const provider = typeof opts['provider'] === 'string' ? opts['provider'] : undefined;
   const model = typeof opts['model'] === 'string' ? opts['model'] : undefined;
@@ -463,7 +501,8 @@ async function handleRealApiSuite(
       opts['aiSummary'] === true
         ? (() => {
             const config = loadConfig(workDir, {
-              provider: typeof opts['summaryProvider'] === 'string' ? opts['summaryProvider'] : provider,
+              provider:
+                typeof opts['summaryProvider'] === 'string' ? opts['summaryProvider'] : provider,
               model: typeof opts['summaryModel'] === 'string' ? opts['summaryModel'] : model,
             });
             summaryPlatform = createCLIPlatform({
@@ -536,8 +575,10 @@ async function handleResume(opts: Record<string, unknown>): Promise<void> {
     typeof opts['resumeId'] === 'string' && opts['resumeId'].trim().length > 0
       ? opts['resumeId']
       : await resolveLatestResumeId(config.workDir);
-  await runInteractive(config, undefined, undefined, {
-    resumeId,
+  const canonicalResumeId = assertCanonicalTuiConversationId(resumeId);
+  await renderTuiSession({
+    config,
+    resumeConversationId: canonicalResumeId,
     initialPrompt: typeof opts['prompt'] === 'string' ? opts['prompt'] : undefined,
   });
 }
@@ -641,9 +682,11 @@ async function resolveLatestResumeId(workDir: string): Promise<string> {
   const storage = createFileConversationStorage(workDir);
   try {
     const conversations = await storage.list();
-    const latest = conversations[0];
+    const latest = conversations.find((conversation) =>
+      isCanonicalTuiConversationId(conversation.id),
+    );
     if (!latest) {
-      throw new Error(`No saved conversations found for workDir: ${workDir}`);
+      throw new Error(`No canonical saved conversations found for workDir: ${workDir}`);
     }
     return latest.id;
   } finally {

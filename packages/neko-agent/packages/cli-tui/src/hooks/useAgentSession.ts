@@ -11,14 +11,11 @@ import {
   MCPManager,
   createAllMCPTools,
   createPlanModeCreationMetadata,
-  createFileProjectMemoryManager,
   createSkillService,
   createNodeSkillLoader,
   ToolRegistry,
   createSystemPromptBuilder,
-  getDefaultPersonalPath,
   createInputProcessor,
-  createCoreTools,
   createFileAgentWorkspaceRuntimeStateRuntime,
   createFileConversationStorage,
   mergeCreationExecutionMetadata,
@@ -37,7 +34,11 @@ import {
   type ConversationRecord,
   type FileConversationStorage,
 } from '@neko/agent';
-import { createAgentSessionWithRuntime } from '@neko/agent/runtime';
+import {
+  buildAgentRuntimeSessionFactoryConfig,
+  buildAgentWorkspaceRuntimeSessionAssemblyInput,
+  createAgentRuntimeSession,
+} from '@neko/agent/runtime';
 import {
   projectLlmParameters,
   ConfigManager,
@@ -49,8 +50,13 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CLIConfig } from '../core/types';
 import type { ExecutionMode, Message as TuiMessage } from '../types/state';
-import { type AgentCapabilityProvider, type ChatMessage, type IService } from '@neko/shared';
-import { getProviderModels, updateDefaultModel } from '../core/config';
+import {
+  type AgentCapabilityProvider,
+  type ChatMessage,
+  type IService,
+  type Task,
+  type TaskStatus,
+} from '@neko/shared';
 import type {
   TuiCapabilityPorts,
   TuiMcpServerSnapshot,
@@ -83,7 +89,7 @@ import { mergeTuiMediaModelMetadata } from '../core/media-model-metadata';
 import { useConfigStore } from '../stores/config-store';
 import { useAgentStore } from '../stores/agent-store';
 import { useConversationStore } from '../stores/conversation-store';
-import { useUIStore, type SelectionMenuItem } from '../stores/ui-store';
+import { useUIStore } from '../stores/ui-store';
 import { createEventAdapter, type IEventAdapter } from '../adapters/event-adapter';
 import {
   createTuiSlashCommandCatalog,
@@ -97,8 +103,12 @@ import {
   deactivateCliSkillLifecycle,
   wireCliSkillLifecycleSession,
 } from '../core/skill-lifecycle-session';
-import { createCliConversationId } from '../core/tui-conversation-id';
+import {
+  assertCanonicalTuiConversationId,
+  createTuiConversationId,
+} from '../core/tui-conversation-id';
 import { createNodeWorkspaceContentPolicy } from '../host/node-workspace-content-host';
+import { runNodeResourceCacheStartupGc } from '../host/node-resource-cache-startup-gc';
 
 export interface UseAgentSessionOptions {
   readonly config: CLIConfig;
@@ -108,6 +118,8 @@ export interface UseAgentSessionOptions {
   readonly taskManager?: IRuntimeTaskManager;
   /** Host-agnostic package capability providers injected by the CLI host. */
   readonly capabilityProviders?: readonly AgentCapabilityProvider[];
+  /** Optional persisted conversation id to load through the Ink TUI session path. */
+  readonly resumeConversationId?: string;
 }
 
 export interface AgentSessionHandle {
@@ -141,6 +153,8 @@ export interface AgentSessionHandle {
     queueItemId: string,
     content: string,
   ) => import('@neko-agent/types').AgentQueuedMessageItem;
+  /** List async runtime tasks owned by the shared task plane. */
+  listTasks: (status?: TaskStatus) => Promise<readonly Task[]>;
   /** Validate and apply LLM parameter config. */
   validateLlmConfig: (config: AgentLlmConfig) => TuiParameterValidationResult;
   /** Apply a previously validated LLM parameter config. */
@@ -207,7 +221,13 @@ export interface AgentSessionHandle {
  * 3. Route events through EventAdapter → stores
  */
 export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHandle {
-  const { config, service, taskManager: providedTaskManager, capabilityProviders } = options;
+  const {
+    config,
+    service,
+    taskManager: providedTaskManager,
+    capabilityProviders,
+    resumeConversationId,
+  } = options;
   const sessionRef = useRef<IAgentSession | null>(null);
   const adapterRef = useRef<IEventAdapter | null>(null);
   const inputProcessorRef = useRef<InputProcessor | null>(null);
@@ -218,16 +238,19 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const skillLifecycleRuntimeRef = useRef<SkillLifecycleRuntime | null>(null);
   const skillLifecycleBridgeRef = useRef<CliSkillLifecycleSessionBridge | null>(null);
   const toolRegistryRef = useRef<ToolRegistry | null>(null);
+  const taskManagerRef = useRef<IRuntimeTaskManager | null>(null);
+  const taskTerminalUnsubscribeRef = useRef<(() => void) | null>(null);
   const capabilityLoadResultRef = useRef<TuiCapabilityLoaderResult | null>(null);
   const conversationStorageRef = useRef<FileConversationStorage | null>(null);
   const workspaceRuntimeStateRef = useRef<AgentWorkspaceRuntimeStateRuntime | null>(null);
   const runtimeConfigRef = useRef<ReturnType<typeof createCliAgentRuntime> | null>(null);
-  const conversationIdRef = useRef(createCliConversationId());
+  const conversationIdRef = useRef(createTuiConversationId(config.workDir));
   const conversationCreatedAtRef = useRef(Date.now());
   const conversationTitleRef = useRef('');
   const messageQueueRef = useRef<TuiMessageQueue | null>(null);
   const drainingQueueRef = useRef(false);
   const workspaceRuntimeStateErrorRef = useRef<string | null>(null);
+  const taskSummaryErrorRef = useRef<string | null>(null);
   const isReadyRef = useRef(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -246,6 +269,29 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     useConversationStore
       .getState()
       .addError(new Error(`Workspace runtime state sync failed: ${message}`));
+  }, []);
+
+  const refreshTaskSummary = useCallback(async (): Promise<void> => {
+    const taskManager = taskManagerRef.current;
+    if (!taskManager) {
+      useAgentStore.getState().setRunningTaskSummary(null);
+      return;
+    }
+
+    try {
+      const tasks = await taskManager.list();
+      taskSummaryErrorRef.current = null;
+      useAgentStore.getState().setRunningTaskSummary(formatRunningTaskSummary(tasks));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (taskSummaryErrorRef.current !== message) {
+        taskSummaryErrorRef.current = message;
+        useConversationStore
+          .getState()
+          .addError(new Error(`Task status refresh failed: ${message}`));
+      }
+      useAgentStore.getState().setRunningTaskSummary(null);
+    }
   }, []);
 
   const syncWorkspaceRuntimeState = useCallback(
@@ -326,8 +372,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     }
 
     const currentConfig = useConfigStore.getState().config;
-    const title =
-      conversationTitleRef.current || deriveConversationTitle(messages) || 'New Chat';
+    const title = conversationTitleRef.current || deriveConversationTitle(messages) || 'New Chat';
     conversationTitleRef.current = title;
     const mediaModelSelection = currentConfig.defaultMediaModels;
     const record: ConversationRecord = {
@@ -374,12 +419,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       useConversationStore
         .getState()
         .replaceMessages(projectAgentHistoryToTuiMessages(record.messages));
+      void refreshTaskSummary();
       syncWorkspaceRuntimeState({
         status: 'idle',
         contextTokenCount: session.getTokenCount(),
       });
     },
-    [syncWorkspaceRuntimeState],
+    [refreshTaskSummary, syncWorkspaceRuntimeState],
   );
 
   // Initialize session on mount
@@ -389,57 +435,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         isReadyRef.current = false;
         setIsReady(false);
         setCapabilityRevision((revision) => revision + 1);
-        // Resolve effective model — block on model picker if defaultModel is invalid
-        let effectiveModel = config.model;
-
-        if (config.modelNotFound) {
-          const chatModels = getProviderModels(config.provider, config.workDir);
-          if (chatModels.length > 0) {
-            useConversationStore
-              .getState()
-              .addSystemMessage(
-                `Model "${config.modelNotFound}" not found. Please select a model:`,
-              );
-            const items: SelectionMenuItem[] = chatModels.map((m) => ({
-              id: m,
-              label: m,
-            }));
-            const selectedId = await new Promise<string | null>((resolve) => {
-              useUIStore.getState().showSelection({
-                title: 'Select Model',
-                items,
-                resolve: (id) => {
-                  useUIStore.getState().dismissSelection();
-                  resolve(id);
-                },
-              });
-            });
-            if (selectedId) {
-              effectiveModel = selectedId;
-              updateDefaultModel(selectedId);
-              useConfigStore.getState().setConfig({ model: selectedId });
-              useConversationStore.getState().addSystemMessage(`Model set to: ${selectedId}`);
-            } else {
-              const fallbackModel = chatModels[0];
-              if (!fallbackModel) {
-                throw new Error('No models available after model picker dismissal.');
-              }
-              effectiveModel = fallbackModel;
-              useConversationStore
-                .getState()
-                .addSystemMessage(`No model selected, using: ${effectiveModel}`);
-            }
-          } else {
-            useAgentStore
-              .getState()
-              .setError(
-                new Error(
-                  `Model "${config.modelNotFound}" not found and no models available. Configure models first.`,
-                ),
-              );
-            return;
-          }
-        }
+        const effectiveModel = config.model;
 
         // 1. MCP Manager
         const mcpManager = new MCPManager();
@@ -457,10 +453,20 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const mcpTools = await createAllMCPTools(mcpManager);
         toolRegistry.registerMany(mcpTools);
 
-        const memoryFilePath = path.join(config.workDir, '.neko', 'memory.md');
-        const projectMemoryManager = createFileProjectMemoryManager(memoryFilePath);
-        await projectMemoryManager.load();
         const contentPolicy = createNodeWorkspaceContentPolicy({ workDir: config.workDir });
+        const memoryFilePath = path.join(config.workDir, '.neko', 'memory.md');
+        const resourceCacheGcResults = await runNodeResourceCacheStartupGc({
+          workDir: config.workDir,
+        });
+        for (const result of resourceCacheGcResults) {
+          if (result.error) {
+            const message =
+              result.error instanceof Error ? result.error.message : String(result.error);
+            useConversationStore
+              .getState()
+              .addError(new Error(`Resource cache startup GC failed: ${message}`));
+          }
+        }
         conversationStorageRef.current = createFileConversationStorage(config.workDir);
         workspaceRuntimeStateRef.current = createFileAgentWorkspaceRuntimeStateRuntime({
           workDir: config.workDir,
@@ -468,13 +474,22 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         });
         conversationCreatedAtRef.current = Date.now();
         conversationTitleRef.current = '';
+        const requestedResumeId = resumeConversationId?.trim();
+        let resumeRecord: ConversationRecord | undefined;
+        if (requestedResumeId) {
+          const canonicalResumeId = assertCanonicalTuiConversationId(requestedResumeId);
+          resumeRecord = await conversationStorageRef.current.load(canonicalResumeId);
+          if (resumeRecord) {
+            conversationIdRef.current = resumeRecord.id;
+            conversationCreatedAtRef.current = resumeRecord.createdAt;
+            conversationTitleRef.current = resumeRecord.title;
+          } else {
+            useConversationStore
+              .getState()
+              .addSystemMessage(`Conversation "${requestedResumeId}" not found; starting fresh.`);
+          }
+        }
 
-        const coreTools = createCoreTools({
-          defaultCwd: config.workDir,
-          authorizedReadRoots: contentPolicy.authorizedReadRoots,
-          projectMemoryManager,
-        });
-        toolRegistry.registerMany(coreTools);
         const toolGroupRegistry = createCliToolGroupRegistry();
         const providerCardRegistry = new ProviderCardRegistry();
 
@@ -516,7 +531,17 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
         // 4. LLM Service — use Platform for multi-provider routing
         let llmService: IService;
-        const taskManager = providedTaskManager ?? createCLITaskManager();
+        const taskManager =
+          providedTaskManager ?? createCLITaskManager({ workspacePath: config.workDir });
+        await taskManager.initialize();
+        taskManagerRef.current = taskManager;
+        taskTerminalUnsubscribeRef.current?.();
+        taskTerminalUnsubscribeRef.current = taskManager.onTerminalTask(
+          () => {
+            void refreshTaskSummary();
+          },
+          { replayExisting: false },
+        );
         if (service) {
           // Extension mode: use injected service directly
           llmService = service;
@@ -534,13 +559,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
         // 5. System Prompt
         const executionMode = useAgentStore.getState().executionMode;
-        const promptBuilder = createSystemPromptBuilder({
+        const basePromptBuilder = createSystemPromptBuilder({
           locale: detectedLocale,
           mode: executionMode === 'plan' ? 'plan' : 'default',
         });
-        await promptBuilder.loadAgentsFile(config.workDir, getDefaultPersonalPath());
-        promptBuilderRef.current = promptBuilder;
-        const systemPrompt = buildSystemPromptWithContext(promptBuilder, {
+        const systemPrompt = buildSystemPromptWithContext(basePromptBuilder, {
           ...config,
           model: effectiveModel,
         });
@@ -551,25 +574,38 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
           toolGroupRegistry,
           providerCardRegistry,
-          promptFragments: capabilityLoadResult.promptFragments,
-          projectMemoryManager,
         });
         runtimeConfigRef.current = runtimeConfig;
         // 6. Create Session (with validated model)
-        const session = createAgentSessionWithRuntime({
-          service: llmService,
+        const sessionAssembly = buildAgentWorkspaceRuntimeSessionAssemblyInput({
+          surface: 'tui',
+          effectiveConfig: {
+            providerId: config.chatModel?.providerId ?? config.provider,
+            modelId: effectiveModel,
+            temperature: config.temperature,
+            maxTokens: config.maxTokens,
+            thinkingBudget: config.thinkingBudget,
+            executionMode,
+            ...(config.chatModel?.capabilities
+              ? { modelCapabilities: config.chatModel.capabilities }
+              : {}),
+          },
+          createService: () => llmService,
           toolRegistry,
           systemPrompt,
+          workspaceRoot: config.workDir,
+          authorizedReadRoots: contentPolicy.authorizedReadRoots,
+          contextSettings: config.contextSettings,
           locale: detectedLocale,
-          executionMode,
           maxIterations: 50,
-          temperature: config.temperature,
-          maxTokens: config.maxTokens,
-          providerId: config.chatModel?.providerId ?? config.provider,
-          modelId: effectiveModel,
-          modelCapabilities: config.chatModel?.capabilities,
-          runtime: runtimeConfig,
+          taskManager,
           conversationId: conversationIdRef.current,
+          capabilityRuntime: runtimeConfig.capabilityRuntime,
+          getCapabilityPromptFragments: () => capabilityLoadResult.promptFragments,
+          creationGuidance: runtimeConfig.creationGuidance,
+          artifactStore: runtimeConfig.artifactStore,
+          validationLoop: runtimeConfig.validationLoop,
+          projectMemoryFilePath: memoryFilePath,
           onConfirmTool: async (request) => {
             // Show approval UI and wait for user decision
             return new Promise<boolean>((resolve) => {
@@ -582,12 +618,24 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             });
           },
         });
+        const runtimeSession = await createAgentRuntimeSession(
+          buildAgentRuntimeSessionFactoryConfig(sessionAssembly),
+        );
+        const session = runtimeSession.session;
+        promptBuilderRef.current = runtimeSession.promptBuilder;
 
         sessionRef.current = session;
+        if (resumeRecord) {
+          session.loadHistory(resumeRecord.messages, resumeRecord.messageEventIds);
+          useConversationStore
+            .getState()
+            .replaceMessages(projectAgentHistoryToTuiMessages(resumeRecord.messages));
+        }
         messageQueueRef.current = createTuiMessageQueue({
           conversationId: conversationIdRef.current,
         });
         useAgentStore.getState().setMessageQueueSnapshot(messageQueueRef.current.snapshot());
+        void refreshTaskSummary();
         void syncWorkspaceRuntimeState({
           status: 'idle',
           contextTokenCount: session.getTokenCount(),
@@ -637,6 +685,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     return () => {
       isReadyRef.current = false;
       setIsReady(false);
+      taskTerminalUnsubscribeRef.current?.();
+      taskTerminalUnsubscribeRef.current = null;
+      taskManagerRef.current = null;
+      useAgentStore.getState().setRunningTaskSummary(null);
       sessionRef.current?.dispose();
       platformRef.current?.dispose();
       mcpManagerRef.current?.disconnectAll().catch(() => {});
@@ -690,15 +742,19 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       })) {
         adapter.handleEvent(event);
         syncWorkspaceRuntimeState(projectRuntimeStateFromEvent(event, session));
+        if (shouldRefreshTaskSummaryFromEvent(event)) {
+          void refreshTaskSummary();
+        }
       }
       await persistCurrentConversation();
+      void refreshTaskSummary();
       syncWorkspaceRuntimeState({
         status: useAgentStore.getState().status,
         phase: 'idle',
         contextTokenCount: session.getTokenCount(),
       });
     },
-    [persistCurrentConversation, syncWorkspaceRuntimeState],
+    [persistCurrentConversation, refreshTaskSummary, syncWorkspaceRuntimeState],
   );
 
   const drainQueuedPrompts = useCallback(async (): Promise<void> => {
@@ -793,54 +849,81 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const err = error instanceof Error ? error : new Error(String(error));
         useAgentStore.getState().setError(err);
         useConversationStore.getState().addError(err);
+        void refreshTaskSummary();
         syncWorkspaceRuntimeState({ status: 'error', phase: 'idle', errorMessage: err.message });
       }
     },
-    [drainQueuedPrompts, executePrompt, syncWorkspaceRuntimeState],
+    [drainQueuedPrompts, executePrompt, refreshTaskSummary, syncWorkspaceRuntimeState],
   );
 
   const cancel = useCallback(() => {
     sessionRef.current?.cancel();
     useAgentStore.getState().setIdle();
+    void refreshTaskSummary();
     syncWorkspaceRuntimeState({ status: 'idle', phase: 'idle' });
-  }, [syncWorkspaceRuntimeState]);
+  }, [refreshTaskSummary, syncWorkspaceRuntimeState]);
 
   const getMessageQueueSnapshot = useCallback(() => {
     return messageQueueRef.current?.snapshot() ?? null;
   }, []);
 
-  const promoteQueuedMessage = useCallback((queueItemId: string) => {
-    const queue = messageQueueRef.current;
-    if (!queue) {
-      throw new Error('Message queue is not initialized');
-    }
-    const item = queue.promote(queueItemId);
-    useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
-    syncWorkspaceRuntimeState();
-    return item;
-  }, [syncWorkspaceRuntimeState]);
+  const listTasks = useCallback(
+    async (status?: TaskStatus): Promise<readonly Task[]> => {
+      if (initPromiseRef.current) {
+        await initPromiseRef.current;
+      }
+      const taskManager = taskManagerRef.current;
+      if (!taskManager) {
+        throw new Error('Task manager is not initialized');
+      }
+      const tasks = await taskManager.list(status);
+      void refreshTaskSummary();
+      return tasks;
+    },
+    [refreshTaskSummary],
+  );
 
-  const cancelQueuedMessage = useCallback((queueItemId: string) => {
-    const queue = messageQueueRef.current;
-    if (!queue) {
-      throw new Error('Message queue is not initialized');
-    }
-    const item = queue.cancel(queueItemId);
-    useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
-    syncWorkspaceRuntimeState();
-    return item;
-  }, [syncWorkspaceRuntimeState]);
+  const promoteQueuedMessage = useCallback(
+    (queueItemId: string) => {
+      const queue = messageQueueRef.current;
+      if (!queue) {
+        throw new Error('Message queue is not initialized');
+      }
+      const item = queue.promote(queueItemId);
+      useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+      syncWorkspaceRuntimeState();
+      return item;
+    },
+    [syncWorkspaceRuntimeState],
+  );
 
-  const editQueuedMessage = useCallback((queueItemId: string, content: string) => {
-    const queue = messageQueueRef.current;
-    if (!queue) {
-      throw new Error('Message queue is not initialized');
-    }
-    const item = queue.edit(queueItemId, content);
-    useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
-    syncWorkspaceRuntimeState();
-    return item;
-  }, [syncWorkspaceRuntimeState]);
+  const cancelQueuedMessage = useCallback(
+    (queueItemId: string) => {
+      const queue = messageQueueRef.current;
+      if (!queue) {
+        throw new Error('Message queue is not initialized');
+      }
+      const item = queue.cancel(queueItemId);
+      useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+      syncWorkspaceRuntimeState();
+      return item;
+    },
+    [syncWorkspaceRuntimeState],
+  );
+
+  const editQueuedMessage = useCallback(
+    (queueItemId: string, content: string) => {
+      const queue = messageQueueRef.current;
+      if (!queue) {
+        throw new Error('Message queue is not initialized');
+      }
+      const item = queue.edit(queueItemId, content);
+      useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+      syncWorkspaceRuntimeState();
+      return item;
+    },
+    [syncWorkspaceRuntimeState],
+  );
 
   const clearHistory = useCallback(() => {
     sessionRef.current?.clearHistory();
@@ -850,43 +933,49 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       .catch(reportWorkspaceRuntimeStateError);
   }, [reportWorkspaceRuntimeStateError]);
 
-  const confirmTool = useCallback((toolCallId: string, approved: boolean) => {
-    sessionRef.current?.confirmTool(toolCallId, approved);
-    useUIStore.getState().dismissToolApproval();
-    if (approved) {
-      useAgentStore.getState().setRunning();
-      syncWorkspaceRuntimeState({ status: 'running' });
-    } else {
-      syncWorkspaceRuntimeState({ status: 'idle', phase: 'idle' });
-    }
-  }, [syncWorkspaceRuntimeState]);
+  const confirmTool = useCallback(
+    (toolCallId: string, approved: boolean) => {
+      sessionRef.current?.confirmTool(toolCallId, approved);
+      useUIStore.getState().dismissToolApproval();
+      if (approved) {
+        useAgentStore.getState().setRunning();
+        syncWorkspaceRuntimeState({ status: 'running' });
+      } else {
+        syncWorkspaceRuntimeState({ status: 'idle', phase: 'idle' });
+      }
+    },
+    [syncWorkspaceRuntimeState],
+  );
 
-  const updateModel = useCallback((model: string | TuiModelIdentity) => {
-    const identity =
-      typeof model === 'string'
-        ? { providerId: useConfigStore.getState().config.provider, modelId: model }
-        : model;
-    useConfigStore.getState().setConfig({
-      provider: identity.providerId,
-      model: identity.modelId,
-      chatModel: {
-        providerId: identity.providerId,
-        modelId: identity.modelId,
-        ...(identity.capabilities ? { capabilities: identity.capabilities } : {}),
-      },
-    });
-    // Platform's Service uses ModelSelector which reads from ConfigManager,
-    // so we just need to pass the new modelId to the session
-    const session = sessionRef.current;
-    if (session) {
-      session.configure({
-        providerId: identity.providerId,
-        modelId: identity.modelId,
-        modelCapabilities: identity.capabilities,
+  const updateModel = useCallback(
+    (model: string | TuiModelIdentity) => {
+      const identity =
+        typeof model === 'string'
+          ? { providerId: useConfigStore.getState().config.provider, modelId: model }
+          : model;
+      useConfigStore.getState().setConfig({
+        provider: identity.providerId,
+        model: identity.modelId,
+        chatModel: {
+          providerId: identity.providerId,
+          modelId: identity.modelId,
+          ...(identity.capabilities ? { capabilities: identity.capabilities } : {}),
+        },
       });
-    }
-    syncWorkspaceRuntimeState();
-  }, [syncWorkspaceRuntimeState]);
+      // Platform's Service uses ModelSelector which reads from ConfigManager,
+      // so we just need to pass the new modelId to the session
+      const session = sessionRef.current;
+      if (session) {
+        session.configure({
+          providerId: identity.providerId,
+          modelId: identity.modelId,
+          modelCapabilities: identity.capabilities,
+        });
+      }
+      syncWorkspaceRuntimeState();
+    },
+    [syncWorkspaceRuntimeState],
+  );
 
   const validateLlmConfig = useCallback(
     (llmConfig: AgentLlmConfig): TuiParameterValidationResult => {
@@ -909,53 +998,59 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     [],
   );
 
-  const applyLlmConfig = useCallback((result: TuiParameterValidationResult): void => {
-    const config = useConfigStore.getState().config;
-    useConfigStore.getState().setConfig({
-      llmConfig: result.config,
-      temperature: result.chatOptions?.temperature ?? config.temperature,
-      maxTokens: result.chatOptions?.maxTokens ?? config.maxTokens,
-      thinkingBudget: result.chatOptions?.thinkingBudget ?? config.thinkingBudget,
-    });
+  const applyLlmConfig = useCallback(
+    (result: TuiParameterValidationResult): void => {
+      const config = useConfigStore.getState().config;
+      useConfigStore.getState().setConfig({
+        llmConfig: result.config,
+        temperature: result.chatOptions?.temperature ?? config.temperature,
+        maxTokens: result.chatOptions?.maxTokens ?? config.maxTokens,
+        thinkingBudget: result.chatOptions?.thinkingBudget ?? config.thinkingBudget,
+      });
 
-    sessionRef.current?.configure({
-      temperature: result.chatOptions?.temperature ?? config.temperature,
-      topP: result.chatOptions?.topP,
-      maxTokens: result.chatOptions?.maxTokens ?? config.maxTokens,
-      thinkingBudget: result.chatOptions?.thinkingBudget ?? config.thinkingBudget,
-      providerOptions: result.providerOptions,
-    });
-    syncWorkspaceRuntimeState();
-  }, [syncWorkspaceRuntimeState]);
+      sessionRef.current?.configure({
+        temperature: result.chatOptions?.temperature ?? config.temperature,
+        topP: result.chatOptions?.topP,
+        maxTokens: result.chatOptions?.maxTokens ?? config.maxTokens,
+        thinkingBudget: result.chatOptions?.thinkingBudget ?? config.thinkingBudget,
+        providerOptions: result.providerOptions,
+      });
+      syncWorkspaceRuntimeState();
+    },
+    [syncWorkspaceRuntimeState],
+  );
 
-  const activateSkill = useCallback(async (name: string, args?: string): Promise<boolean> => {
-    const skillService = skillServiceRef.current;
-    const session = sessionRef.current;
-    if (!skillService || !session) return false;
+  const activateSkill = useCallback(
+    async (name: string, args?: string): Promise<boolean> => {
+      const skillService = skillServiceRef.current;
+      const session = sessionRef.current;
+      if (!skillService || !session) return false;
 
-    const lifecycleRuntime = ensureHookSkillLifecycleRuntime(
-      skillService,
-      skillLifecycleRuntimeRef,
-    );
-    const result = await activateCliDomainSkill({
-      lifecycleRuntime,
-      conversationId: conversationIdRef.current,
-      skillName: name,
-      ...(args !== undefined ? { args } : {}),
-      actor: 'user',
-      syncProjection: () =>
-        skillLifecycleBridgeRef.current?.syncProjection() ??
-        lifecycleRuntime.project(conversationIdRef.current),
-    });
-    if (!result.ok) {
-      useConversationStore
-        .getState()
-        .addSystemMessage(result.message ?? `Skill "${name}" was not activated`);
-      return false;
-    }
-    syncWorkspaceRuntimeState();
-    return true;
-  }, [syncWorkspaceRuntimeState]);
+      const lifecycleRuntime = ensureHookSkillLifecycleRuntime(
+        skillService,
+        skillLifecycleRuntimeRef,
+      );
+      const result = await activateCliDomainSkill({
+        lifecycleRuntime,
+        conversationId: conversationIdRef.current,
+        skillName: name,
+        ...(args !== undefined ? { args } : {}),
+        actor: 'user',
+        syncProjection: () =>
+          skillLifecycleBridgeRef.current?.syncProjection() ??
+          lifecycleRuntime.project(conversationIdRef.current),
+      });
+      if (!result.ok) {
+        useConversationStore
+          .getState()
+          .addSystemMessage(result.message ?? `Skill "${name}" was not activated`);
+        return false;
+      }
+      syncWorkspaceRuntimeState();
+      return true;
+    },
+    [syncWorkspaceRuntimeState],
+  );
 
   const deactivateSkill = useCallback(
     (_input?: {
@@ -991,28 +1086,35 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     [syncWorkspaceRuntimeState],
   );
 
-  const updateMode = useCallback((mode: ExecutionMode) => {
-    const session = sessionRef.current;
-    if (!session) return;
-    const config = useConfigStore.getState().config;
-    const locale = detectTuiLocale();
-    const builder = createSystemPromptBuilder({
-      locale,
-      mode: mode === 'plan' ? 'plan' : 'default',
-    });
-    // Reuse previously loaded AGENTS.md via sync rebuild
-    if (promptBuilderRef.current) {
-      builder.setAgentsContent(
-        promptBuilderRef.current.getAgentsContent(),
-        promptBuilderRef.current.getAgentsSource(),
-      );
-    }
-    const systemPrompt = buildSystemPromptWithContext(builder, config);
-    session.configure({ systemPrompt, locale });
-    session.setExecutionMode(mode);
-    useAgentStore.getState().setExecutionMode(mode);
-    syncWorkspaceRuntimeState();
-  }, [syncWorkspaceRuntimeState]);
+  const updateMode = useCallback(
+    (mode: ExecutionMode) => {
+      const session = sessionRef.current;
+      if (!session) return;
+      const config = useConfigStore.getState().config;
+      const locale = detectTuiLocale();
+      const builder = createSystemPromptBuilder({
+        locale,
+        mode: mode === 'plan' ? 'plan' : 'default',
+      });
+      // Reuse previously loaded AGENTS.md via sync rebuild
+      if (promptBuilderRef.current) {
+        builder.setAgentsContent(
+          promptBuilderRef.current.getAgentsContent(),
+          promptBuilderRef.current.getAgentsSource(),
+        );
+      }
+      const systemPrompt = buildSystemPromptWithContext(builder, config);
+      session.configure({
+        systemPrompt,
+        locale,
+        agentsOverride: builder.buildAgentsOverlay() ?? undefined,
+      });
+      session.setExecutionMode(mode);
+      useAgentStore.getState().setExecutionMode(mode);
+      syncWorkspaceRuntimeState();
+    },
+    [syncWorkspaceRuntimeState],
+  );
 
   const getContextTokenCount = useCallback((): number | null => {
     const session = sessionRef.current;
@@ -1070,24 +1172,27 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     return capabilityLoadResultRef.current?.diagnostics ?? [];
   }, [capabilityRevision]);
 
-  const listCapabilityTools = useCallback((providerId?: string): readonly string[] => {
-    const tools = toolRegistryRef.current?.list() ?? [];
-    if (!providerId) {
-      return tools.map((tool) => tool.name);
-    }
-    const summary = capabilityLoadResultRef.current?.providers.find(
-      (provider) => provider.providerId === providerId,
-    );
-    if (!summary) {
-      return [];
-    }
-    const providerToolNames = new Set(
-      summary.loaded
-        .filter((contribution) => contribution.kind === 'tool')
-        .map((contribution) => contribution.name),
-    );
-    return tools.map((tool) => tool.name).filter((toolName) => providerToolNames.has(toolName));
-  }, [capabilityRevision]);
+  const listCapabilityTools = useCallback(
+    (providerId?: string): readonly string[] => {
+      const tools = toolRegistryRef.current?.list() ?? [];
+      if (!providerId) {
+        return tools.map((tool) => tool.name);
+      }
+      const summary = capabilityLoadResultRef.current?.providers.find(
+        (provider) => provider.providerId === providerId,
+      );
+      if (!summary) {
+        return [];
+      }
+      const providerToolNames = new Set(
+        summary.loaded
+          .filter((contribution) => contribution.kind === 'tool')
+          .map((contribution) => contribution.name),
+      );
+      return tools.map((tool) => tool.name).filter((toolName) => providerToolNames.has(toolName));
+    },
+    [capabilityRevision],
+  );
 
   const getReferenceContributors = useCallback(() => {
     return capabilityLoadResultRef.current?.referenceContributors ?? [];
@@ -1103,6 +1208,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     getContextTokenCount,
     compactContext,
     getMessageQueueSnapshot,
+    listTasks,
     promoteQueuedMessage,
     cancelQueuedMessage,
     editQueuedMessage,
@@ -1258,6 +1364,34 @@ function projectRuntimeStateFromEvent(
     default:
       return { contextTokenCount: session.getTokenCount() };
   }
+}
+
+function shouldRefreshTaskSummaryFromEvent(event: AgentEvent): boolean {
+  return (
+    event.type === 'tool_result' ||
+    event.type === 'tool_result_backfill' ||
+    event.type === 'tool_progress' ||
+    event.type === 'done' ||
+    event.type === 'error'
+  );
+}
+
+function formatRunningTaskSummary(tasks: readonly Task[]): string | null {
+  const activeTasks = tasks
+    .filter((task) => task.status === 'pending' || task.status === 'running')
+    .sort((left, right) => right.updatedAt - left.updatedAt);
+  const first = activeTasks[0];
+  if (!first) {
+    return null;
+  }
+
+  const progress = Number.isFinite(first.progress) ? Math.round(first.progress) : 0;
+  const suffix = activeTasks.length > 1 ? ` +${activeTasks.length - 1}` : '';
+  return `${activeTasks.length} ${first.status} ${trimTaskId(first.id)} ${progress}%${suffix}`;
+}
+
+function trimTaskId(taskId: string): string {
+  return taskId.length > 28 ? `${taskId.slice(0, 25)}...` : taskId;
 }
 
 function deriveConversationTitle(messages: readonly ChatMessage[]): string {

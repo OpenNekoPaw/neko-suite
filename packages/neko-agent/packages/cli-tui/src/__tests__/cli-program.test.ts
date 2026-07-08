@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createCliProgram } from '../cli';
+import { classifyCliCommandRuntime, createCliProgram } from '../cli';
 
 describe('createCliProgram', () => {
   it('advertises Codex-style top-level prompt and command forms', () => {
@@ -37,5 +37,15 @@ describe('createCliProgram', () => {
     expect(help).toContain('Usage: neko resume [options] [id] [prompt...]');
     expect(help).toContain('--last');
     expect(help).toContain('Optional prompt to submit after resume');
+  });
+
+  it('classifies headless and validation commands separately from interactive TUI ownership', () => {
+    expect(classifyCliCommandRuntime(undefined)).toBe('interactive-tui');
+    expect(classifyCliCommandRuntime('interactive')).toBe('interactive-tui');
+    expect(classifyCliCommandRuntime('resume')).toBe('interactive-tui');
+    expect(classifyCliCommandRuntime('run')).toBe('headless');
+    expect(classifyCliCommandRuntime('experiment')).toBe('validation');
+    expect(classifyCliCommandRuntime('real-api-suite')).toBe('validation');
+    expect(classifyCliCommandRuntime('completion')).toBe('utility');
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createTuiSkillInvocationCatalog,
   createTuiSlashCommandCatalog,
+  listTuiLocalCommandEffects,
 } from '../slash-command-catalog';
 
 describe('createTuiSlashCommandCatalog', () => {
@@ -70,6 +71,19 @@ describe('createTuiSlashCommandCatalog', () => {
     expect(commands.map((command) => command.description)).not.toContain(
       'Show help message with available commands',
     );
+  });
+
+  it('declares TUI-local command effects with explicit surface scope', () => {
+    const localEffects = listTuiLocalCommandEffects('en');
+
+    expect(localEffects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'model', surface: 'tui' }),
+        expect.objectContaining({ name: 'queue', surface: 'tui' }),
+        expect.objectContaining({ name: 'artifact', surface: 'tui' }),
+      ]),
+    );
+    expect(localEffects.every((effect) => effect.surface === 'tui')).toBe(true);
   });
 
   it('projects ordinary skills and legacy aliases into the dollar catalog without slash entries', () => {

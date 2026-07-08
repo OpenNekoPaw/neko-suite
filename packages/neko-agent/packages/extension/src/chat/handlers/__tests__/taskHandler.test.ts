@@ -210,6 +210,35 @@ describe('TaskHandler', () => {
       );
     });
 
+    it('should surface host-private lease diagnostics without touching task handles', async () => {
+      const getDiagnostic = vi.fn().mockResolvedValue({
+        code: 'hostPrivateLease',
+        taskId: 'task-lease',
+        ownerSurface: 'tui',
+        requestingSurface: 'extension',
+        control: 'cancel',
+        message:
+          'Agent task task-lease has a host-private tui lease and cannot cancel from extension.',
+      });
+      handler = new TaskHandler({
+        taskManager: taskManager as any,
+        platform: platform as any,
+        hostPrivateTaskLeaseGuard: { getDiagnostic },
+      });
+
+      await handler.handleCancelTask(webview as any, 'task-lease', conversationId);
+
+      expect(getDiagnostic).toHaveBeenCalledWith({
+        taskId: 'task-lease',
+        control: 'cancel',
+      });
+      expect(taskManager.get).not.toHaveBeenCalled();
+      expect(taskManager.cancel).not.toHaveBeenCalled();
+      expect(platform.media.getTask).not.toHaveBeenCalled();
+      expect(platform.media.cancelTask).not.toHaveBeenCalled();
+      expect(webview.postMessage).not.toHaveBeenCalled();
+    });
+
     it('should refuse tasks from another conversation', async () => {
       taskManager.get.mockResolvedValue({
         id: 'task-1',

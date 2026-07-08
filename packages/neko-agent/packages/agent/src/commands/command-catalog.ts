@@ -2,11 +2,11 @@ import type { BuiltinCommand, BuiltinCommandName } from './types';
 import { getBuiltinCommand, getCliCommands, getExtensionCommands } from './builtin-commands';
 import {
   localizeBuiltinCommandDescription,
-  localizeCommandArtifactFallbackDescription,
+  localizeCommandArtifactDefaultDescription,
 } from './command-localization';
 import type { CommandLocale } from './types';
 
-export type SlashCommandSurface = 'cli' | 'extension';
+export type SlashCommandSurface = 'tui' | 'extension';
 
 export interface SlashCommandSkillLike {
   readonly name?: string;
@@ -78,7 +78,7 @@ export function listSlashCommandCatalog<TSkill extends SlashCommandSkillLike>(op
       name: commandName,
       description:
         readNonEmptyDescription(skill.description) ??
-        localizeCommandArtifactFallbackDescription(commandName, options.locale),
+        localizeCommandArtifactDefaultDescription(commandName, options.locale),
       aliases: [],
       category: 'command-artifact',
       supportsArguments: skill.supportsArguments ?? false,
@@ -134,7 +134,7 @@ export function resolveSlashCommandCatalogEntry<TSkill extends SlashCommandSkill
       name: commandName,
       description:
         readNonEmptyDescription(skill.description) ??
-        localizeCommandArtifactFallbackDescription(commandName, options.locale),
+        localizeCommandArtifactDefaultDescription(commandName, options.locale),
       aliases: [],
       category: 'command-artifact',
       supportsArguments: skill.supportsArguments ?? false,
@@ -162,14 +162,14 @@ export function coerceSlashCommandSkills(
 }
 
 function getBuiltinCommandsForSurface(surface: SlashCommandSurface): readonly BuiltinCommand[] {
-  return surface === 'cli' ? getCliCommands() : getExtensionCommands();
+  return surface === 'tui' ? getCliCommands() : getExtensionCommands();
 }
 
 function isBuiltinAvailableOnSurface(
   builtin: BuiltinCommand,
   surface: SlashCommandSurface,
 ): boolean {
-  return surface === 'cli' ? builtin.availableInCli : builtin.availableInExtension;
+  return surface === 'tui' ? builtin.availableInCli : builtin.availableInExtension;
 }
 
 function normalizeCommandName(name: string): string {

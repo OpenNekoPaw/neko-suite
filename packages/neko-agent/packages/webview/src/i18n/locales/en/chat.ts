@@ -114,7 +114,7 @@ export const chat = {
   'chat.markdown.diagnostic.ambiguousResourceToken':
     'Markdown resource token "{token}" matches multiple resources.',
   'chat.markdown.diagnostic.unsupportedResourceReference':
-    'Neko resource-reference embeds and links are not enabled for Agent Markdown rendering yet.',
+    'Neko resource-reference embeds and links need host resource projection for this message.',
   'chat.markdown.image.unprojected': 'Image reference "{src}" is not projected by the host.',
   'chat.markdown.image.missingSource': 'Image reference is missing a source.',
   'chat.transfer.sendTo': 'Send to',

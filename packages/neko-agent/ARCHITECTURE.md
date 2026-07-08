@@ -6,7 +6,7 @@
 
 ## 系统定位
 
-neko-agent 是 Neko Suite 的 AI 能力中枢。它将 LLM 对话、工具执行、技能系统、MCP 协议整合为统一的 Agent 运行时，支持 VSCode 扩展和 CLI 两种接入方式。
+neko-agent 是 Neko Suite 的 AI 能力中枢。它将 LLM 对话、工具执行、技能系统、MCP 协议整合为统一的 Agent 运行时，支持 VSCode 扩展、终端 TUI 和 headless 工具接入方式。
 
 ---
 
@@ -19,7 +19,7 @@ packages/neko-agent/
 │   ├── platform/     # @neko/platform — AI 服务平台（LLM 适配 + 媒体生成）
 │   ├── extension/    # @neko-agent/extension — VSCode Extension Host（纯胶水层）
 │   ├── webview/      # @neko-agent/webview — React 对话 UI
-│   └── cli-tui/      # @neko/cli — Ink TUI 终端界面
+│   └── cli-tui/      # @neko/cli — Ink TUI 终端界面 + headless 工具
 ```
 
 **依赖方向**（严格单向）：
@@ -36,7 +36,7 @@ cli-tui ──→ agent ──→ platform ──→ shared
 
 > **说明**：`agent` 通过 `@neko/shared` 的 `IService` 接口抽象 LLM 调用，`platform` 提供具体实现。
 > `cli-tui` 直接复用 `@neko/platform`，通过 `createCLIPlatform()` 创建实例，`toSharedService()` 适配为 `IService`。
-> 两种接入方式（Extension / CLI）共享同一套 LLM 和 Provider 管理。
+> Extension、Terminal TUI 和 headless 工具共享同一套 LLM 和 Provider 管理。
 
 ---
 
@@ -89,10 +89,10 @@ cli-tui ──→ agent ──→ platform ──→ shared
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
-│                  CLI 终端（独立进程）                      │
+│            Terminal TUI / headless（独立进程）             │
 │                                                         │
 │  ┌──────────────────────────────────────────┐           │
-│  │     @neko/cli (cli-tui)  — Ink React     │           │
+│  │ @neko/cli (cli-tui) — Ink React + tools  │           │
 │  │                                          │           │
 │  │  App                                     │           │
 │  │    ├─ ChatView + Input + StatusBar       │           │
@@ -115,33 +115,59 @@ cli-tui ──→ agent ──→ platform ──→ shared
 
 ---
 
+## TUI/Webview 工作区运行时边界
+
+Neko Agent 的 VS Code Extension/Webview 与 Terminal TUI/headless 是两个本地宿主，功能差异必须保留。Extension/Webview 可以拥有 VS Code API、`postMessage`、`webview.asWebviewUri()`、文件 watcher、memento/recovery、Extension command 和 Webview timeline projection；Terminal TUI/headless 可以拥有 Ink 键盘流、终端展示、进程生命周期、stdout/stderr 报告和真实 API 验证 lane。
+
+对齐目标不是统一 UI，而是让同一个工作区配置和工作区数据能同时被 TUI 与 Webview 使用。业务逻辑进入共享 runtime/config/catalog/task/cache contract，宿主只提供 adapter 和 presentation。
+
+| 工作区共享业务面          | 共享规则                                                                                                                                                                                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Effective config snapshot | `~/.neko/config.toml`、`.neko/config.toml`、环境凭据和账号 catalog 通过共享 resolver 形成同一份快照；Webview 与 TUI 不得分别手写 provider/model/scalar/MCP 解析策略。运行时模型/参数选择只影响当前 session，不自动重写 TOML。                |
+| Session/runtime assembly  | 交互式 Webview 和 TUI 会话都走 `createAgentSessionWithRuntime()` 及 host-neutral runtime bindings；AGENTS overlay、project memory、context settings、capability prompt fragments 和 task projection 在共享路径注入。                         |
+| Conversation identity     | 交互式会话使用 workspace-scoped canonical conversation id。旧 `cli-*` 记录不作为 TUI resume 兼容输入，不读取、不迁移、不重写、不删除；旧 runtime state source 不能作为共享状态成功读入。                                                     |
+| Skill/catalog             | 标准来源是 `~/.neko/skills`、`~/.neko/commands`、`.neko/skills`、`.neko/commands`，由共享 Skill file runtime 与 command catalog 解析；`.codex/skills` 或 `skillsDir` 之类非标准来源只能通过显式 source provider 进入，并必须带 diagnostics。 |
+| Command effects           | `/command` 工件、内置命令和 `$skill` 激活使用共享 catalog。TUI-only 或 Extension-only 行为必须注册为 `tui` / `extension` surface scope 的 effect，另一端请求时返回 unavailable diagnostic。                                                  |
+| Async tasks               | 工作区可见任务事实进入 workspace-visible task record；VS Code terminal handle、process handle、recovery token、no-workspace state 等 live lease 是 host-private。                                                                            |
+| Context                   | 项目记忆、AGENTS overlays、context settings、授权读根、capability fragments 通过共享 runtime assembly 进入会话；Webview/TUI 只负责展示或输入采集。                                                                                           |
+| Content access / cache    | 工作区资源使用同一个 project resource-cache root、manifest、quota 和 GC 策略；Extension-private cache 只服务 no-workspace 或 Extension 私有资源，TUI 不反向读取。                                                                            |
+| Dependency injection      | 文档、图片和可选解析依赖通过 host content-access runtime 注入；缺失依赖要返回一致 diagnostic，不能在某个宿主静默 fallback 成空内容。                                                                                                         |
+
+Host-private 数据不能伪装成共享业务结果。Webview URI、blob URL、Extension memento、VS Code handle、Extension-private cache、TUI 进程 handle、终端尺寸、键盘状态和 headless 报告路径都不是 durable workspace identity。跨宿主请求遇到这些能力时，应返回 host-private/unavailable diagnostic，而不是 no-op、当作普通 prompt、读另一端私有缓存，或回退旧实现。
+
+新增 Agent 业务能力时，默认接入顺序是：先定义共享 contract 和 path-level 测试，再实现 Extension/TUI adapter，最后做 Webview 或终端展示。测试应能证明 canonical runtime、catalog、task/cache path 被命中，并能 poison legacy path 证明旧 readline interactive、TUI-local raw config、TUI-local Skill loader 或结果型 fallback 没有参与成功路径。
+
+新增 Agent 功能的验收顺序是：先用 mock 与 real workflow/TUI lane 验证 Agent 核心行为、Skill/Tool/prompt 效果、长时间任务、失败诊断和稳定性；确认核心路径可用后，再用 VS Code Extension Development Host + `vscode-extension-debugger` 验证 Webview UI 投影、交互、`invokeSkill` / active Skill 指示器和 UI Skill 使用效果。Webview 验收不能替代 Agent/TUI 核心行为验证，TUI/headless 验收也不能替代 VS Code Webview runtime 验收。
+
+---
+
 ## 核心模块
 
 ### @neko/agent — Agent 运行时
 
-Agent 的核心执行引擎，零 VSCode 依赖，CLI/Extension 复用。109 个源文件。
+Agent 的核心执行引擎，零 VSCode 依赖，Terminal TUI/headless 与 Extension 复用。
 
-| 模块 | 职责 |
-|------|------|
-| `executor/` | AgentExecutor — ReAct 循环（think-phase → act-phase → hook-runner） |
-| `session/` | AgentSession 生命周期 + stepToEvents/recordStepInHistory 纯函数 + Initializer |
-| `tools/` | ToolRegistry + 内置工具（Read/Write/Bash/Grep）+ ToolSet 双层注入（always/dynamic）+ 元工具 |
-| `skill/` | SkillService + SkillRegistry + Loader + Matcher + 3-track 原子注入（Coordinator + Injector + ToolGuard）+ 斜杠命令（command 字段） |
-| `mcp/` | MCP Client（Stdio/HTTP）+ 工具桥接 + 测试服务 |
-| `context/` | ContextManager + TokenBudgetManager + ConversationCompressor |
-| `permission/` | IPermissionManager 接口 + 规则匹配（plan/ask/auto 三模式） |
-| `hooks/` | ExecutorHooks + composeHooks + factory |
-| `hook-loader/` | SettingsHookLoader + Markdown hook catalog（`.neko/settings.json` 执行 hooks，`.neko/hooks/*.md` 配置展示） |
-| `prompt/` | SystemPromptComposer（分层合成）+ SystemPromptBuilder（多语言 + AGENTS.md） |
-| `runtime/` | 统一 runtime bootstrap 契约（workflow/artifact/capability/feedback）+ `createAgentSessionWithRuntime()` |
-| `plan/` | Plan 管理器 + Markdown 解析 |
-| `input/` | InputProcessor — @ 文件引用解析（IFileReader 接口） |
-| `subagent/` | 子 Agent 管理 |
-| `task/` | 后台任务管理器 + 持久化 + 恢复 |
-| `validation/` | 输出验证器（Image/Output/Mermaid/JSON/Length） |
-| `memory/` | 项目记忆（`.neko/memory.md`）+ recall / extraction |
-| `commands/` | 内置斜杠命令处理（help/status/clear/config/skills/tools/plan 等） |
-| `errors/` | 统一错误类型 |
+| 模块           | 职责                                                                                                                               |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `executor/`    | AgentExecutor — ReAct 循环（think-phase → act-phase → hook-runner）                                                                |
+| `session/`     | AgentSession 生命周期 + stepToEvents/recordStepInHistory 纯函数 + Initializer                                                      |
+| `tools/`       | ToolRegistry + 内置工具（Read/Write/Bash/Grep）+ ToolSet 双层注入（always/dynamic）+ 元工具                                        |
+| `skill/`       | SkillService + SkillRegistry + Loader + Matcher + 3-track 原子注入（Coordinator + Injector + ToolGuard）+ 斜杠命令（command 字段） |
+| `mcp/`         | MCP Client（Stdio/HTTP）+ 工具桥接 + 测试服务                                                                                      |
+| `context/`     | ContextManager + TokenBudgetManager + ConversationCompressor                                                                       |
+| `permission/`  | IPermissionManager 接口 + 规则匹配（plan/ask/auto 三模式）                                                                         |
+| `hooks/`       | ExecutorHooks + composeHooks + factory                                                                                             |
+| `hook-loader/` | SettingsHookLoader + Markdown hook catalog（`.neko/settings.json` 执行 hooks，`.neko/hooks/*.md` 配置展示）                        |
+| `prompt/`      | SystemPromptComposer（分层合成）+ SystemPromptBuilder（多语言 + AGENTS.md）                                                        |
+| `runtime/`     | 统一 runtime bootstrap 契约（workflow/artifact/capability/feedback）+ `createAgentSessionWithRuntime()`                            |
+| `plan/`        | Plan 管理器 + Markdown 解析                                                                                                        |
+| `input/`       | InputProcessor — @ 文件引用解析（IFileReader 接口）                                                                                |
+| `subagent/`    | 子 Agent 管理                                                                                                                      |
+| `task/`        | 后台任务管理器 + 持久化 + 恢复                                                                                                     |
+| `validation/`  | 输出验证器（Image/Output/Mermaid/JSON/Length）                                                                                     |
+| `memory/`      | 项目记忆（`.neko/memory.md`）+ recall / extraction                                                                                 |
+| `commands/`    | 内置斜杠命令处理（help/status/clear/config/skills/tools/plan 等）                                                                  |
+| `errors/`      | 统一错误类型                                                                                                                       |
 
 ### @neko/platform — AI 服务平台
 
@@ -149,56 +175,59 @@ LLM 适配和媒体生成服务。62 个源文件。
 
 ```
 配置策略：
-├─ Providers/Models: 用户配置（~/.neko/config.toml），显式打开配置时生成 TOML 模板
+├─ Effective Snapshot: 共享 resolver 输出同一份 Webview/TUI 工作区快照
+├─ Providers/Models/Credentials: 用户配置（~/.neko/config.toml）、环境凭据、账号 catalog
+├─ Workspace defaults/scalars: 工作区配置（.neko/config.toml）只能通过 snapshot policy 选择或覆盖
 ├─ MCP Servers: 用户配置 + 工作区配置（workspace 按 id 覆盖 user）
-└─ 标量设置: 用户配置 + @neko/shared DEFAULT_CONFIG fallback
+└─ Runtime controls: 当前会话状态，不自动回写 TOML
 
-模型选择: 显式 provider/model 失败即报错；未显式选择时才从可用 chat 模型中解析
+模型选择: 显式 provider/model 失败即报错；未显式选择时才从可用 chat 模型中解析；Webview/TUI 对同一工作区必须得到同一结果或同一 diagnostic
 ```
 
-| 模块 | 职责 |
-|------|------|
+| 模块           | 职责                                                                                                              |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `llm/adapter/` | 7 个 LLM 适配器（Anthropic/OpenAI/Google/Azure/Ollama/Generic + AI-SDK 统一）+ AdapterRegistry + StreamAggregator |
-| `provider/` | ProviderRegistry（适配器查找）+ PlatformError（统一错误分类） |
-| `config/` | ConfigManager（用户配置 + 工作区 MCP 合并）+ ChatModelService + 导入导出 + 首次运行默认值 |
-| `media/` | MediaService + 8 个适配器（Runway/Luma/MiniMax/Suno/Vidu/Midjourney/LibLib/OpenAI-compat）+ 路由 + 任务执行 |
-| `service/` | IService 门面 + ModelSelector（优先级 fallback）+ PromptManager + ToolRegistry |
-| `core/` | BaseRegistry + HttpClient + ConcurrencyPool（re-export from @neko/shared） |
-| `types/` | Provider/Model/Config 类型定义 |
+| `provider/`    | ProviderRegistry（适配器查找）+ PlatformError（统一错误分类）                                                     |
+| `config/`      | ConfigManager（用户配置 + 工作区 MCP 合并）+ ChatModelService + 导入导出 + 首次运行默认值                         |
+| `media/`       | MediaService + 8 个适配器（Runway/Luma/MiniMax/Suno/Vidu/Midjourney/LibLib/OpenAI-compat）+ 路由 + 任务执行       |
+| `service/`     | IService 门面 + ModelSelector（优先级 fallback）+ PromptManager + ToolRegistry                                    |
+| `core/`        | BaseRegistry + HttpClient + ConcurrencyPool（re-export from @neko/shared）                                        |
+| `types/`       | Provider/Model/Config 类型定义                                                                                    |
 
 ### @neko-agent/extension — VSCode 扩展
 
 纯 VSCode 集成层（胶水代码），不含 AI 业务逻辑。52 个源文件。
 
 所有 AI 功能委托给 `@neko/agent` 和 `@neko/platform`。Extension 只负责：
+
 - VSCode EventEmitter 桥接
 - postMessage 消息路由
 - 文件系统操作（IFileReader 与 HookFileService 的 VSCode 实现）
 - Webview 生命周期管理
 
-| 模块 | 职责 |
-|------|------|
-| `bootstrap/` | 服务初始化 + ServiceCollection 组装 |
-| `chat/` | ChatViewProvider + Webview 消息 Router + 专用桥接 Handler（task/skill/plan/settings/context/conversation/file/integration/slashCommand） |
-| `chat/message/` | AgentMessageTurnHandler（消息回合桥接）+ AgentTurnBridge + AgentStreamProcessor（AgentEvent → postMessage）+ AttachmentProcessor |
-| `ai/` | AgentRunner（薄包装 AgentSessionRunner）+ AgentManager（多会话池委托 @neko/agent/runtime）+ AgentContext |
-| `services/` | ConfigBridge（配置消息路由）+ SkillFileService/HookFileService（文件监听）+ ConnectionStateManager |
-| `editor/` | EditorModel + EditorRegistry（活动编辑器抽象） |
-| `tools/` | 扩展工具注册（NekoCut/NekoCanvas/NekoStory API 桥接） |
-| `pipeline/` | Pipeline 编排层：7 stages（readDocument → parseStoryboard → importStoryboardToCanvas → generatePrompts → generatePilot → batchGenerate → arrangeOnTimeline）+ pipeline-adapters（IStructuredStoryPlanner / IStoryboardCanvasSink 等桥接器）+ pipeline-progress-bridge（事件转发 + 回写） |
+| 模块            | 职责                                                                                                                                                                                                                                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bootstrap/`    | 服务初始化 + ServiceCollection 组装                                                                                                                                                                                                                                                      |
+| `chat/`         | ChatViewProvider + Webview 消息 Router + 专用桥接 Handler（task/skill/plan/settings/context/conversation/file/integration/slashCommand）                                                                                                                                                 |
+| `chat/message/` | AgentMessageTurnHandler（消息回合桥接）+ AgentTurnBridge + AgentStreamProcessor（AgentEvent → postMessage）+ AttachmentProcessor                                                                                                                                                         |
+| `ai/`           | AgentRunner（薄包装 AgentSessionRunner）+ AgentManager（多会话池委托 @neko/agent/runtime）+ AgentContext                                                                                                                                                                                 |
+| `services/`     | ConfigBridge（配置消息路由）+ SkillFileService/HookFileService（文件监听）+ ConnectionStateManager                                                                                                                                                                                       |
+| `editor/`       | EditorModel + EditorRegistry（活动编辑器抽象）                                                                                                                                                                                                                                           |
+| `tools/`        | 扩展工具注册（NekoCut/NekoCanvas/NekoStory API 桥接）                                                                                                                                                                                                                                    |
+| `pipeline/`     | Pipeline 编排层：7 stages（readDocument → parseStoryboard → importStoryboardToCanvas → generatePrompts → generatePilot → batchGenerate → arrangeOnTimeline）+ pipeline-adapters（IStructuredStoryPlanner / IStoryboardCanvasSink 等桥接器）+ pipeline-progress-bridge（事件转发 + 回写） |
 
 ### @neko-agent/webview — 对话 UI
 
 React 对话界面，通过 postMessage 与 Extension Host 通信。117 个源文件。
 
-| 模块 | 职责 |
-|------|------|
+| 模块          | 职责                                                                              |
+| ------------- | --------------------------------------------------------------------------------- |
 | `components/` | ChatView + ContentBlocks 时序渲染 + SettingsView + ToolCallDisplay + MermaidBlock |
-| `handlers/` | 消息处理注册表（streaming/tool/conversation/config/task） |
-| `hooks/` | Zustand 状态管理（多会话隔离：conversation/config/ui/resource） |
-| `messages/` | type-safe postMessage 构建器 |
-| `config/` | 预设配置（providers/prompts/MCP servers） |
-| `i18n/` | 国际化 |
+| `handlers/`   | 消息处理注册表（streaming/tool/conversation/config/task）                         |
+| `hooks/`      | Zustand 状态管理（多会话隔离：conversation/config/ui/resource）                   |
+| `messages/`   | type-safe postMessage 构建器                                                      |
+| `config/`     | 预设配置（providers/prompts/MCP servers）                                         |
+| `i18n/`       | 国际化                                                                            |
 
 ### Agent Webview 回合时间线
 
@@ -214,22 +243,23 @@ Agent Webview 的活动回合使用 `agentTurnTimeline` 作为实时展示顺序
 
 这个时间线是 `neko-agent` 本地 Extension/Webview 边界内的展示契约，不是跨包通用 timeline 框架。只有当其他包出现相同的回合、工具、异步任务生命周期语义时，才考虑提取公共抽象。
 
-### @neko/cli — 命令行界面
+### @neko/cli — Terminal TUI 与 headless 工具
 
-独立可执行 CLI，直接复用 `@neko/agent` + `@neko/platform`。52 个源文件。
+独立终端 TUI 与 headless/validation 命令包，直接复用 `@neko/agent` + `@neko/platform`。
 
-CLI 特有的 bootstrap 层（`createCLIPlatform()`）负责：
+TUI/headless 特有的 bootstrap 层（`createCLIPlatform()`）负责：
+
 - 从环境变量注入 API Key（`ANTHROPIC_API_KEY`、`OPENAI_API_KEY` 等）
 - 基于文件的用户配置（`~/.neko/config.toml`，与 Extension 共享）
 - `toSharedService()` 适配 platform Service → `@neko/shared.IService`
 
-| 模块 | 职责 |
-|------|------|
+| 模块          | 职责                                                       |
+| ------------- | ---------------------------------------------------------- |
 | `components/` | Ink React 组件（ChatView/Input/StatusBar/ToolCallDisplay） |
-| `adapters/` | LLMServiceAdapter（IService 桥接） |
-| `stores/` | Zustand 状态（agent/conversation/config/ui） |
-| `hooks/` | useAgentSession + useKeyboardShortcuts |
-| `core/` | createCLIPlatform + bootstrap |
+| `adapters/`   | LLMServiceAdapter（IService 桥接）                         |
+| `stores/`     | Zustand 状态（agent/conversation/config/ui）               |
+| `hooks/`      | useAgentSession + useKeyboardShortcuts                     |
+| `core/`       | createCLIPlatform + bootstrap                              |
 
 ---
 
@@ -259,7 +289,7 @@ host bootstrap
 关键约束：
 
 - 宿主的显式 `AgentSessionConfig` 字段优先于 runtime 默认值
-- extension、CLI、TUI 不再各自手写一套 session bootstrap 映射逻辑
+- extension、Terminal TUI 和 headless 工具不再各自手写一套 session bootstrap 映射逻辑
 - Node 宿主统一复用 `createNodeArtifactStore()` 组装 artifact plane
 
 这层收口是 P1-P5 的前置条件：后续 IDC 主链、Prompt/Skill/Command 编排、Capability 注入、Artifact 主链化、FeedbackCoordinator，都应该优先接到 runtime plane，而不是继续把新字段散落进宿主入口。
@@ -312,6 +342,21 @@ Agent Webview button
 - Canvas authoring tool results are rendered read-only in Agent Webview: refs、diagnostics、blocked reason、prompt-field alignment 和 next actions 会展示给用户，但 approval-gated next actions 不能因渲染自动执行。
 - 直接素材导入必须使用显式 Import / Add Source affordance；`Send to Canvas` 对资源型内容仍先进入 Agent handoff。
 
+### Package Authoring Transfer
+
+Agent/plugin transfer planner 负责选择包级 authoring 能力，具体 `.nk*` 项目写入由 owning package service 执行。VS Code、Terminal TUI、Electron 和 Agent host adapter 共享同一 transfer contract：`target`、`reveal`、stable source/ref、provenance 和 structured diagnostics。
+
+Canonical durable authoring commands:
+
+| 目标 | 命令 |
+| --- | --- |
+| Cut generated clip | `neko.cut.authoring.importGeneratedClip` |
+| Cut storyboard / Canvas draft | `neko.cut.authoring.importStoryboard` / `neko.cut.authoring.importCanvasDraft` |
+| Sketch image source | `neko.sketch.authoring.importImageSource` |
+| Model asset | `neko.model.authoring.importAsset` |
+
+旧 UI-bound command id 不是 Agent/Assets 默认投递目标。`neko.cut.importGeneratedClip`、`neko.sketch.importAsset`、`neko.model.importAsset`、隐藏打开编辑器、Webview pending import 或 temp project 都不能作为 durable write 成功路径。package authoring 返回 `ok: false` 时，Agent 展示 diagnostic 并停止，不改用 Webview fallback。
+
 ### Agent 执行流
 
 ```
@@ -349,28 +394,28 @@ AgentStreamProcessor（Extension — 事件翻译）
 
 ## 关键设计模式
 
-| 模式 | 应用 |
-|------|------|
-| **Factory** | `createPlatform()`、`createAgentSession()`、`createAgentSessionWithRuntime()`、`createCLIPlatform()` |
-| **Registry** | ToolRegistry、SkillRegistry、ProviderRegistry、AdapterRegistry、MediaAdapterRegistry |
-| **Adapter** | 7 个 LLMAdapter + 8 个 MediaAdapter — 统一接口适配异构 API |
-| **Facade** | Service（platform 门面）、ChatViewProvider（extension 门面） |
-| **Observer** | vscode.EventEmitter（AgentRunner）、onProgress（MediaService） |
-| **Strategy** | ExecutionMode（plan/ask/auto）、ToolInjectionLayer（always/dynamic） |
-| **Composite** | composeHooks — 多个 ExecutorHooks 组合 |
-| **Coordinator** | SkillInjectionCoordinator — 3-track 原子注入/回滚 |
-| **LRU Cache** | AgentManager — 多会话池化（max=10，驱逐非运行中最久未用） |
-| **依赖注入** | 构造函数注入 — AgentSession/Service/ConfigManager 均通过接口解耦 |
+| 模式            | 应用                                                                                                 |
+| --------------- | ---------------------------------------------------------------------------------------------------- |
+| **Factory**     | `createPlatform()`、`createAgentSession()`、`createAgentSessionWithRuntime()`、`createCLIPlatform()` |
+| **Registry**    | ToolRegistry、SkillRegistry、ProviderRegistry、AdapterRegistry、MediaAdapterRegistry                 |
+| **Adapter**     | 7 个 LLMAdapter + 8 个 MediaAdapter — 统一接口适配异构 API                                           |
+| **Facade**      | Service（platform 门面）、ChatViewProvider（extension 门面）                                         |
+| **Observer**    | vscode.EventEmitter（AgentRunner）、onProgress（MediaService）                                       |
+| **Strategy**    | ExecutionMode（plan/ask/auto）、ToolInjectionLayer（always/dynamic）                                 |
+| **Composite**   | composeHooks — 多个 ExecutorHooks 组合                                                               |
+| **Coordinator** | SkillInjectionCoordinator — 3-track 原子注入/回滚                                                    |
+| **LRU Cache**   | AgentManager — 多会话池化（max=10，驱逐非运行中最久未用）                                            |
+| **依赖注入**    | 构造函数注入 — AgentSession/Service/ConfigManager 均通过接口解耦                                     |
 
 ---
 
 ## 技术栈
 
-| 层级 | 技术 |
-|------|------|
-| Extension Host | VSCode Extension API + TypeScript + esbuild |
-| Webview | React 18 + Zustand + Tailwind + Vite |
-| AI SDK | Vercel AI SDK (@ai-sdk/anthropic, @ai-sdk/openai, @ai-sdk/google) |
-| MCP | MCP Protocol（Stdio/HTTP 传输） |
-| CLI | Ink 5 + React 18 + Zustand + commander + chalk |
-| 测试 | Vitest v4 |
+| 层级                  | 技术                                                              |
+| --------------------- | ----------------------------------------------------------------- |
+| Extension Host        | VSCode Extension API + TypeScript + esbuild                       |
+| Webview               | React 18 + Zustand + Tailwind + Vite                              |
+| AI SDK                | Vercel AI SDK (@ai-sdk/anthropic, @ai-sdk/openai, @ai-sdk/google) |
+| MCP                   | MCP Protocol（Stdio/HTTP 传输）                                   |
+| Terminal TUI/headless | Ink 5 + React 18 + Zustand + commander + chalk                    |
+| 测试                  | Vitest v4                                                         |

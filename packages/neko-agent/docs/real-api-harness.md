@@ -57,6 +57,21 @@ real API validation attempt with an explicit `config.toml`.
 
 Use focused mock tests first, then run the relevant real lane:
 
+For new Agent features, use this acceptance order:
+
+1. Define the shared contract, runtime path, and path-level tests before host UI
+   work.
+2. Validate Agent core behavior, Skill/Tool/prompt effects, long-running tasks,
+   failure diagnostics, and stability through mock, real workflow, and real TUI
+   lanes.
+3. After the core path is stable, validate Webview UI projection,
+   interactions, the `invokeSkill` / active Skill indicator, and UI Skill
+   behavior through VS Code Extension Development Host plus the
+   `vscode-extension-debugger` Skill.
+
+Webview acceptance does not replace Agent/TUI core behavior validation, and
+TUI/headless acceptance does not replace VS Code Webview runtime acceptance.
+
 ```bash
 pnpm test:agent:mock
 

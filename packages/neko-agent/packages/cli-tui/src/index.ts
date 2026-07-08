@@ -1,7 +1,7 @@
 /**
- * @neko/cli — Professional CLI for Neko AI Agent
+ * @neko/cli — Terminal TUI and headless tools for Neko AI Agent
  *
- * Unified package: Ink-based TUI + core CLI capabilities (config, runner).
+ * Unified package: Ink-based TUI + headless run/validation utilities.
  * Public API exports for programmatic usage.
  */
 
@@ -42,7 +42,6 @@ export {
 export {
   runAgent,
   runAgentWithContext,
-  runInteractive,
   type AgentRunnerOptions,
   type AgentRunnerWithContextOptions,
 } from './core/runner';

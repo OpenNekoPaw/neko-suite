@@ -70,7 +70,7 @@ function formatSkillPromptDescription(skill: SkillPromptEntry, locale: SkillProm
   if (locale === 'en') {
     return firstLine;
   }
-  return containsCjk(firstLine) ? firstLine : ZH_SKILL_DESCRIPTION_FALLBACK;
+  return containsCjk(firstLine) ? firstLine : ZH_SKILL_DESCRIPTION_DEFAULT;
 }
 
 function containsCjk(text: string): boolean {
@@ -99,4 +99,4 @@ const ZH_SKILL_PROMPT_RULES = [
   '使用 `GetContext` 查看已注册技能和当前状态。',
 ];
 
-const ZH_SKILL_DESCRIPTION_FALLBACK = '领域能力说明以技能正文为准；仅在 Agent 判断需要后激活。';
+const ZH_SKILL_DESCRIPTION_DEFAULT = '领域能力说明以技能正文为准；仅在 Agent 判断需要后激活。';

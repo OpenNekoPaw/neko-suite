@@ -18,6 +18,7 @@ import {
   DEFAULT_TASK_RETENTION_PERIOD_MS,
   DEFAULT_TASK_STORAGE_KEY,
   connectMCPServersRuntime,
+  createFileWorkspaceVisibleAgentTaskStorage,
   createStateTaskRecoveryStorage,
   createStateTaskStorage,
   JournalProjection,
@@ -66,6 +67,10 @@ interface MementoArrayWriteMetadata {
   readonly updatedAt: number;
 }
 
+type ExtensionAgentTaskStorage =
+  | ReturnType<typeof createStateTaskStorage>
+  | ReturnType<typeof createFileWorkspaceVisibleAgentTaskStorage>;
+
 // Re-export IEditorRegistry
 export { IEditorRegistry };
 
@@ -95,17 +100,16 @@ export async function bootstrapCoreServices(
   services: ServiceCollection,
   context: vscode.ExtensionContext,
 ): Promise<IServiceBootstrapResult> {
+  const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+
   // ==========================================================================
   // 1. Task Manager with Persistence
   // ==========================================================================
-  const taskStorage = createStateTaskStorage({
-    storageKey: DEFAULT_TASK_STORAGE_KEY,
-    adapter: createMementoArrayAdapter<SerializableTask>(context, 'task-storage'),
+  const taskStorage = createExtensionAgentTaskStorage({
+    context,
+    ...(workspacePath ? { workspacePath } : {}),
   });
-  const recoveryStorage = createStateTaskRecoveryStorage({
-    storageKey: DEFAULT_TASK_RECOVERY_STORAGE_KEY,
-    adapter: createMementoArrayAdapter<TaskRecoveryInfo>(context, 'task-recovery'),
-  });
+  const recoveryStorage = createExtensionAgentTaskRecoveryStorage(context);
   const taskManager = new TaskManager({
     storage: taskStorage,
     recoveryStorage,
@@ -132,7 +136,6 @@ export async function bootstrapCoreServices(
   );
   context.subscriptions.push({ dispose: () => userConfigManager.dispose() });
 
-  const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   const nekoPaths = workspacePath ? createNekoPaths(workspacePath) : undefined;
   const modelCallRecorder = nekoPaths
     ? createModelCallJsonlRecorder({
@@ -261,6 +264,32 @@ function createMementoArrayAdapter<T>(
       loadedRevision = nextMetadata.revision;
     },
   };
+}
+
+export function createExtensionAgentTaskStorage(input: {
+  readonly context: vscode.ExtensionContext;
+  readonly workspacePath?: string;
+}): ExtensionAgentTaskStorage {
+  if (input.workspacePath) {
+    return createFileWorkspaceVisibleAgentTaskStorage({
+      workspaceRoot: input.workspacePath,
+      writerId: 'extension-workspace-task-storage',
+    });
+  }
+
+  return createStateTaskStorage({
+    storageKey: DEFAULT_TASK_STORAGE_KEY,
+    adapter: createMementoArrayAdapter<SerializableTask>(input.context, 'task-storage'),
+  });
+}
+
+export function createExtensionAgentTaskRecoveryStorage(
+  context: vscode.ExtensionContext,
+): ReturnType<typeof createStateTaskRecoveryStorage> {
+  return createStateTaskRecoveryStorage({
+    storageKey: DEFAULT_TASK_RECOVERY_STORAGE_KEY,
+    adapter: createMementoArrayAdapter<TaskRecoveryInfo>(context, 'task-recovery'),
+  });
 }
 
 function readMementoArrayWriteMetadata(

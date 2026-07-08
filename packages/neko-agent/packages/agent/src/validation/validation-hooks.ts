@@ -103,10 +103,10 @@ export class ValidationHooks implements ExecutorHooks {
    * - Output length (if configured)
    */
   async afterThink(step: AgentStep, context: AgentContext): Promise<void> {
-    const skillValidationRequirements = readSkillValidationRequirements(context.metadata);
+    const artifactValidationRequirements = readArtifactValidationRequirements(context.metadata);
     const result = await this.outputValidator.validateWithBlockInfo(
       step.content,
-      skillValidationRequirements,
+      artifactValidationRequirements,
     );
 
     // Process warnings
@@ -126,7 +126,14 @@ export class ValidationHooks implements ExecutorHooks {
       for (const error of result.errors) {
         this.options.onValidationError?.(error);
       }
-      this.recordAgentNativeValidationFeedback(context, result.errors, result.warnings);
+      const shouldRetryArtifactOutput =
+        action === 'retry' && result.errors.some(isStoryboardCreativeTableValidationError);
+      this.recordAgentNativeValidationFeedback(
+        context,
+        result.errors,
+        result.warnings,
+        !shouldRetryArtifactOutput,
+      );
 
       if (action === 'error') {
         const firstError = result.errors[0];
@@ -152,6 +159,10 @@ export class ValidationHooks implements ExecutorHooks {
           content = this.replaceJsonErrorBlocks(content, result.jsonBlocks);
         }
 
+        if (shouldRetryArtifactOutput) {
+          queueOutputValidationRetry(context, result.errors);
+        }
+
         step.content = content;
       }
       // 'warn' and 'silent' modes don't throw or modify content
@@ -162,10 +173,11 @@ export class ValidationHooks implements ExecutorHooks {
     context: AgentContext,
     errors: readonly ValidationError[],
     warnings: readonly ValidationWarning[],
+    preserveStreamedOutput: boolean,
   ): void {
     const creation = readAgentCreationValidationContext(context.metadata);
     if (!creation || errors.length === 0) return;
-    const validators = readSkillValidationRequirements(context.metadata) ?? ['output'];
+    const validators = readArtifactValidationRequirements(context.metadata) ?? ['output'];
     for (const validatorId of validators) {
       this.options.creationFeedback?.recordValidationFeedback({
         creationId: creation.creationId,
@@ -180,7 +192,7 @@ export class ValidationHooks implements ExecutorHooks {
         })),
         metadata: {
           feedbackAction: 'revise',
-          preserveStreamedOutput: true,
+          preserveStreamedOutput,
           warningCount: warnings.length,
         },
       });
@@ -326,10 +338,10 @@ export function createValidationHooks(options?: ValidationHooksOptions): Validat
   return new ValidationHooks(options);
 }
 
-function readSkillValidationRequirements(
+function readArtifactValidationRequirements(
   metadata: Record<string, unknown>,
 ): readonly string[] | undefined {
-  const value = metadata['skillValidationRequirements'];
+  const value = metadata['artifactValidationRequirements'];
   if (!Array.isArray(value)) return undefined;
   const validators = value.filter((item): item is string => typeof item === 'string');
   return validators.length > 0 ? validators : undefined;
@@ -347,4 +359,59 @@ function readAgentCreationValidationContext(
     record['iterationId'].trim().length > 0
     ? { creationId: record['creationId'], iterationId: record['iterationId'] }
     : null;
+}
+
+function isStoryboardCreativeTableValidationError(error: ValidationError): boolean {
+  return error.code.startsWith('storyboard-table-');
+}
+
+function queueOutputValidationRetry(
+  context: AgentContext,
+  errors: readonly ValidationError[],
+): void {
+  const previousRetry = readOutputValidationRetry(context.metadata);
+  const attempt = (previousRetry?.attempt ?? 0) + 1;
+  const codes = errors.map((error) => error.code);
+  context.messages.push({
+    role: 'user',
+    content: buildStoryboardCreativeTableRetryInstruction(errors),
+  });
+  context.metadata = {
+    ...context.metadata,
+    outputValidationRetry: {
+      reason: 'artifact-validation',
+      attempt,
+      codes,
+    },
+  };
+}
+
+function readOutputValidationRetry(
+  metadata: Record<string, unknown>,
+): { readonly attempt: number } | undefined {
+  const value = metadata['outputValidationRetry'];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const attempt = (value as Record<string, unknown>)['attempt'];
+  return typeof attempt === 'number' && Number.isFinite(attempt) ? { attempt } : undefined;
+}
+
+function buildStoryboardCreativeTableRetryInstruction(
+  errors: readonly ValidationError[],
+): string {
+  const diagnostics = errors
+    .map((error) => {
+      const details = error.details ? ` ${JSON.stringify(error.details)}` : '';
+      return `- ${error.code}: ${error.message}${details}`;
+    })
+    .join('\n');
+
+  return [
+    '上一版分镜表不符合 storyboard creative table 输出契约，请重写为唯一一张 storyboard creative table。',
+    '必须使用规范字段 id 作为已知表头：scene, shot, source, imagePrompt, videoPrompt, duration, dialogue。可以在这些字段之后追加必要的扩展 metadata。',
+    '不要输出页级分析表、资源索引、第二张“分镜结构建议”表、YAML/frontmatter、状态列表或 Canvas/领域 JSON。',
+    '提示词必须是生成/编辑指导：imagePrompt 写图片生成或图片编辑步骤；videoPrompt 写 scene 级视频生成/编辑提示词，并汇总同一 scene 的镜头节拍。',
+    '如果视觉证据不足以可靠写提示词，不要输出表格，改为纯文本说明视觉分析未完成。',
+    '校验错误：',
+    diagnostics,
+  ].join('\n');
 }

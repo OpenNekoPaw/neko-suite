@@ -193,6 +193,46 @@ describe('ToolRegistry argument normalization', () => {
     );
   });
 
+  it('unwraps double-encoded raw JSON object arguments before schema validation', async () => {
+    const { ToolRegistry } = await import('../tool-registry');
+    const execute = vi.fn(async () => ({ success: true, data: 'ok' }));
+    const registry = new ToolRegistry();
+    registry.register(
+      createTool({
+        name: 'canvas.createStoryboardFromMarkdown',
+        description: 'Create storyboard nodes',
+        category: 'project',
+        parameters: {
+          type: 'object',
+          properties: {
+            markdown: { type: 'string' },
+            mode: { type: 'string' },
+          },
+          required: ['markdown'],
+        },
+        execute,
+      }),
+    );
+
+    const result = await registry.execute('canvas.createStoryboardFromMarkdown', {
+      _raw: JSON.stringify(
+        JSON.stringify({
+          markdown: '| scene | shot |\\n| --- | --- |\\n| Opening | 1 |',
+          mode: 'create-nodes',
+        }),
+      ),
+    });
+
+    expect(result.success).toBe(true);
+    expect(execute).toHaveBeenCalledWith(
+      {
+        markdown: '| scene | shot |\\n| --- | --- |\\n| Opening | 1 |',
+        mode: 'create-nodes',
+      },
+      undefined,
+    );
+  });
+
   it('keeps malformed raw arguments fail-visible', async () => {
     const { ToolRegistry } = await import('../tool-registry');
     const execute = vi.fn(async () => ({ success: true, data: 'ok' }));

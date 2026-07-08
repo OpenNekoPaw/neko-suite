@@ -123,6 +123,10 @@ export interface MessageQueueState {
   readonly diagnostic: string | null;
 }
 
+export interface TaskStatusState {
+  readonly runningSummary: string | null;
+}
+
 /**
  * Terminal dimensions
  */

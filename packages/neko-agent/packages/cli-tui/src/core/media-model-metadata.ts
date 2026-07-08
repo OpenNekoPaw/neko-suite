@@ -20,7 +20,7 @@ export function mergeTuiMediaModelMetadata(
   if (Object.keys(mediaModels).length === 0) {
     return metadata;
   }
-  return mergeCreationExecutionMetadata(metadata, { mediaModels });
+  return mergeCreationExecutionMetadata(metadata ?? {}, { mediaModels });
 }
 
 export function buildTuiMediaModelMetadata(

@@ -45,8 +45,8 @@ export interface AgentExecutorOptions {
   config: AgentConfig;
   /** Extensible hooks for additional capabilities */
   hooks?: ExecutorHooks[];
-  /** Reads active Skill artifact validators after meta-tools mutate Skill state. */
-  getActiveSkillValidationRequirements?: () => readonly string[] | undefined;
+  /** Reads active artifact/profile validators after tools mutate turn state. */
+  getActiveArtifactValidationRequirements?: () => readonly string[] | undefined;
   /** ToolSkill registry for dynamic tool injection */
   toolSkillRegistry?: IToolGroupRegistry;
   /** Tool injection manager for three-layer injection */
@@ -74,7 +74,7 @@ export class AgentExecutor implements IAgentExecutor {
   private toolRegistry: IToolRegistry;
   private config: AgentConfig;
   private hooks: ExecutorHooks[];
-  private getActiveSkillValidationRequirements?: () => readonly string[] | undefined;
+  private getActiveArtifactValidationRequirements?: () => readonly string[] | undefined;
   private onStep?: (step: AgentStep) => void;
   private onStateChange?: (state: AgentState) => void;
   private state: AgentState = 'init';
@@ -90,7 +90,7 @@ export class AgentExecutor implements IAgentExecutor {
     this.toolRegistry = options.toolRegistry;
     this.config = options.config;
     this.hooks = options.hooks || [];
-    this.getActiveSkillValidationRequirements = options.getActiveSkillValidationRequirements;
+    this.getActiveArtifactValidationRequirements = options.getActiveArtifactValidationRequirements;
     this.onStep = options.onStep;
     this.onStateChange = options.onStateChange;
     this.toolSkillRegistry = options.toolSkillRegistry;
@@ -277,6 +277,30 @@ export class AgentExecutor implements IAgentExecutor {
           }),
         );
 
+        const outputRetry = consumeOutputValidationRetry(agentContext);
+        if (outputRetry && !(thinkStep.toolCalls && thinkStep.toolCalls.length > 0)) {
+          const replacementStep: AgentStep = {
+            type: 'content_delta',
+            content: '',
+            deltaKind: 'assistant_text_replacement',
+            replacement: {
+              reason: 'output-validation-retry',
+              attempt: outputRetry.attempt,
+            },
+            timestamp: Date.now(),
+          };
+          yield replacementStep;
+          logger.debug(
+            'neko.agent.output-validation.retry',
+            withAgentTrace(thinkTrace, {
+              iteration: agentContext.iteration,
+              attempt: outputRetry.attempt,
+              codes: outputRetry.codes,
+            }),
+          );
+          continue;
+        }
+
         steps.push(thinkStep);
         yield thinkStep;
 
@@ -312,7 +336,7 @@ export class AgentExecutor implements IAgentExecutor {
 
           // Add tool results to context
           agentContext.messages.push(...buildToolResultMessages(toolResults));
-          this.syncActiveSkillValidationRequirements(agentContext);
+          this.syncActiveArtifactValidationRequirements(agentContext);
 
           // Hook: onIterationComplete
           await runHooksWithTrace(
@@ -492,21 +516,21 @@ export class AgentExecutor implements IAgentExecutor {
     };
   }
 
-  private syncActiveSkillValidationRequirements(context: AgentContext): void {
-    const requirements = this.getActiveSkillValidationRequirements?.();
+  private syncActiveArtifactValidationRequirements(context: AgentContext): void {
+    const requirements = this.getActiveArtifactValidationRequirements?.();
     if (requirements && requirements.length > 0) {
       context.metadata = {
         ...context.metadata,
-        skillValidationRequirements: [...requirements],
+        artifactValidationRequirements: [...requirements],
       };
       return;
     }
 
-    if (context.metadata['skillValidationRequirements'] === undefined) {
+    if (context.metadata['artifactValidationRequirements'] === undefined) {
       return;
     }
 
-    const { skillValidationRequirements: _removed, ...metadata } = context.metadata;
+    const { artifactValidationRequirements: _removed, ...metadata } = context.metadata;
     void _removed;
     context.metadata = metadata;
   }
@@ -585,6 +609,19 @@ export class AgentExecutor implements IAgentExecutor {
         }),
       );
 
+      const outputRetry = consumeOutputValidationRetry(context);
+      if (outputRetry && !(thinkStep.toolCalls && thinkStep.toolCalls.length > 0)) {
+        logger.debug(
+          'neko.agent.output-validation.retry',
+          withAgentTrace(thinkTrace, {
+            iteration: context.iteration,
+            attempt: outputRetry.attempt,
+            codes: outputRetry.codes,
+          }),
+        );
+        continue;
+      }
+
       steps.push(thinkStep);
       this.onStep?.(thinkStep);
 
@@ -621,7 +658,7 @@ export class AgentExecutor implements IAgentExecutor {
 
         // Add tool results to context
         context.messages.push(...buildToolResultMessages(toolResults));
-        this.syncActiveSkillValidationRequirements(context);
+        this.syncActiveArtifactValidationRequirements(context);
 
         // Hook: onIterationComplete
         await runHooksWithTrace(
@@ -691,4 +728,28 @@ export class AgentExecutor implements IAgentExecutor {
  */
 export function createAgentExecutor(options: AgentExecutorOptions): AgentExecutor {
   return new AgentExecutor(options);
+}
+
+interface OutputValidationRetryMetadata {
+  readonly attempt: number;
+  readonly codes: readonly string[];
+}
+
+function consumeOutputValidationRetry(context: AgentContext): OutputValidationRetryMetadata | null {
+  const value = context.metadata['outputValidationRetry'];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const attempt = record['attempt'];
+  const codes = record['codes'];
+  if (typeof attempt !== 'number' || !Number.isFinite(attempt)) return null;
+  const normalizedCodes = Array.isArray(codes)
+    ? codes.filter((code): code is string => typeof code === 'string')
+    : [];
+  const { outputValidationRetry: _removed, ...metadata } = context.metadata;
+  void _removed;
+  context.metadata = metadata;
+  return {
+    attempt,
+    codes: normalizedCodes,
+  };
 }

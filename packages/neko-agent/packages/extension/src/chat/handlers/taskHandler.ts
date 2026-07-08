@@ -14,6 +14,7 @@ import {
   runRetryTaskRuntime,
   runSendTasksRuntime,
   runViewTaskResultRuntime,
+  type AgentTaskLeaseDiagnostic,
   type TaskActionRejectPlan,
   type TaskResultOpenPlan,
   type TaskRuntimeDeps,
@@ -46,6 +47,7 @@ export interface TaskHandlerDeps {
   dashboardWorkItems?: AgentDashboardWorkItemSource;
   localResourceAccess?: AgentLocalResourceAccess;
   generatedAssetLookup?: GeneratedAssetLookup;
+  hostPrivateTaskLeaseGuard?: TaskRuntimeDeps['hostPrivateLeaseGuard'];
 }
 
 /**
@@ -130,6 +132,9 @@ export class TaskHandler {
     return {
       ...(this.deps.taskManager ? { taskManager: this.deps.taskManager } : {}),
       ...(media ? { media } : {}),
+      ...(this.deps.hostPrivateTaskLeaseGuard
+        ? { hostPrivateLeaseGuard: this.deps.hostPrivateTaskLeaseGuard }
+        : {}),
     };
   }
 
@@ -150,6 +155,7 @@ export class TaskHandler {
       onMediaDeleteFailed: ({ taskId, error }) => {
         logger.debug('Ignoring media task delete failure during task cleanup', { taskId, error });
       },
+      onHostPrivateLeaseDiagnostic: (diagnostic) => this.logHostPrivateLeaseDiagnostic(diagnostic),
     };
   }
 
@@ -190,6 +196,15 @@ export class TaskHandler {
       conversationId: plan.conversationId,
       taskConversationId: plan.taskConversationId,
       reason: plan.reason,
+    });
+  }
+
+  private logHostPrivateLeaseDiagnostic(diagnostic: AgentTaskLeaseDiagnostic): void {
+    logger.warn(diagnostic.message, {
+      taskId: diagnostic.taskId,
+      ownerSurface: diagnostic.ownerSurface,
+      requestingSurface: diagnostic.requestingSurface,
+      control: diagnostic.control,
     });
   }
 

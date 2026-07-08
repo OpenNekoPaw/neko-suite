@@ -173,7 +173,6 @@ function toCommandContext(context: SlashCommandContext): CommandContext {
       maxTokens: context.config.maxTokens,
       temperature: context.config.temperature,
       workDir: context.config.workDir,
-      skillsDir: context.config.skillsDir,
       outputFormat: context.config.outputFormat,
       verbose: context.config.verbose,
       mcpServers: context.config.mcpServers,
@@ -230,7 +229,7 @@ export async function handleSlashCommand(
 
   // Use shared command executor for other commands
   const commandEntry = resolveSlashCommandCatalogEntry(command, {
-    surface: 'cli',
+    surface: 'tui',
     skills: context.skillService?.registry.listAllSkills(),
     locale: context.locale,
   });

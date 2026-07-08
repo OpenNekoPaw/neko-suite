@@ -23,7 +23,9 @@
       "@neko/markdown": ["../../../neko-markdown/src/index.ts"],
       "@neko/markdown/*": ["../../../neko-markdown/src/*"],
       "@neko/shared": ["../../../neko-types/src/index.ts"],
-      "@neko/shared/*": ["../../../neko-types/src/*"]
+      "@neko/shared/*": ["../../../neko-types/src/*"],
+      "@neko/workbench-core": ["../../../neko-workbench-core/src/index.ts"],
+      "@neko/workbench-core/*": ["../../../neko-workbench-core/src/*"]
     }
   },
   "include": ["src"],

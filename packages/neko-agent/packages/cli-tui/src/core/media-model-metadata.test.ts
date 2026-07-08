@@ -42,4 +42,13 @@ describe('TUI media model metadata', () => {
       },
     });
   });
+
+  it('injects media models when no execution metadata exists yet', () => {
+    expect(mergeTuiMediaModelMetadata(undefined, { image: 'openai:gpt-image-1' }, 'anthropic'))
+      .toEqual({
+        mediaModels: {
+          image: { providerId: 'openai', modelId: 'gpt-image-1' },
+        },
+      });
+  });
 });

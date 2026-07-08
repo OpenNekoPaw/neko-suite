@@ -92,7 +92,7 @@ export function localizeBuiltinCommandDescription(
     : description;
 }
 
-export function localizeCommandArtifactFallbackDescription(
+export function localizeCommandArtifactDefaultDescription(
   commandName: string,
   locale: CommandLocale | undefined,
 ): string {

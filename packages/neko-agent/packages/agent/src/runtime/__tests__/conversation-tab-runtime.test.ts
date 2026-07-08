@@ -147,6 +147,7 @@ describe('conversation-tab-runtime', () => {
   it('clears the active conversation when the persisted tab state is empty', () => {
     const effects = createEffects({
       getActiveConversationId: () => 'conv-1',
+      shouldClearActiveConversationForEmptyTabState: () => true,
       clearActiveConversation: vi.fn(),
     });
 
@@ -158,6 +159,28 @@ describe('conversation-tab-runtime', () => {
       sync: { kind: 'active-conversation-cleared' },
     });
     expect(effects.clearActiveConversation).toHaveBeenCalledTimes(1);
+    expect(effects.switchConversation).not.toHaveBeenCalled();
+  });
+
+  it('preserves the active conversation when an empty tab state is not clearable', () => {
+    const effects = createEffects({
+      getActiveConversationId: () => 'conv-1',
+      shouldClearActiveConversationForEmptyTabState: () => false,
+      clearActiveConversation: vi.fn(),
+    });
+
+    expect(updateTabStateRuntime({ openTabs: [], activeTabId: null }, effects)).toEqual({
+      tabState: {
+        openTabs: [],
+        activeTabId: null,
+      },
+      sync: {
+        kind: 'skipped',
+        reason: 'empty-tab-state-preserved-active-conversation',
+        conversationId: 'conv-1',
+      },
+    });
+    expect(effects.clearActiveConversation).not.toHaveBeenCalled();
     expect(effects.switchConversation).not.toHaveBeenCalled();
   });
 

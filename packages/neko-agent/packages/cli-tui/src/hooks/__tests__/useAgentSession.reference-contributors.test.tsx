@@ -6,6 +6,7 @@ import { Text } from 'ink';
 import { cleanup, render } from 'ink-testing-library';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AgentCapabilityProvider, IService } from '@neko/shared';
+import { isCanonicalConversationId } from '@neko/agent';
 import { DEFAULT_CLI_CONFIG, type CLIConfig } from '../../core/types';
 import { createTuiReferenceSuggestions } from '../../components/Input/reference-suggestions';
 import { useAgentSession } from '../useAgentSession';
@@ -24,6 +25,7 @@ afterEach(async () => {
 describe('useAgentSession reference contributors', () => {
   it('refreshes @ reference suggestions after capability providers load', async () => {
     const snapshots: readonly string[][] = [];
+    const conversationIds: string[] = [];
 
     render(
       <ReferenceContributorProbe
@@ -32,12 +34,19 @@ describe('useAgentSession reference contributors', () => {
         onSnapshot={(names) => {
           snapshots.push(names);
         }}
+        onConversationId={(conversationId) => {
+          conversationIds.push(conversationId);
+        }}
       />,
     );
 
     await waitFor(() => snapshots.some((names) => names.includes('浪客参考')));
 
     expect(snapshots.at(-1)).toContain('浪客参考');
+    expect(conversationIds.some((conversationId) => isCanonicalConversationId(conversationId))).toBe(
+      true,
+    );
+    expect(conversationIds.every((conversationId) => !conversationId.startsWith('cli-'))).toBe(true);
   });
 });
 
@@ -45,6 +54,7 @@ function ReferenceContributorProbe(props: {
   readonly config: CLIConfig;
   readonly capabilityProviders: readonly AgentCapabilityProvider[];
   readonly onSnapshot: (names: readonly string[]) => void;
+  readonly onConversationId?: (conversationId: string) => void;
 }): React.JSX.Element {
   const session = useAgentSession({
     config: props.config,
@@ -67,6 +77,10 @@ function ReferenceContributorProbe(props: {
       cancelled = true;
     };
   }, [props, session.getReferenceContributors]);
+
+  useEffect(() => {
+    props.onConversationId?.(session.getCurrentConversationId());
+  }, [props, session.getCurrentConversationId]);
 
   return <Text>reference-contributor-probe</Text>;
 }

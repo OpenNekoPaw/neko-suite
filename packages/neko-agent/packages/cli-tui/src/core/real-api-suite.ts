@@ -179,21 +179,14 @@ export function createDefaultTuiRealApiSuiteManifest(input: {
       {
         id: 'baseline-chinese',
         promptId: 'baseline',
-        prompt:
-          '不要调用工具；只根据这句话用中文一句话回答：Neko TUI 真实 API 验证正在检查什么？',
-        checks: [
-          { kind: 'exit-code', equals: 0 },
-          { kind: 'non-empty-output' },
-        ],
+        prompt: '不要调用工具；只根据这句话用中文一句话回答：Neko TUI 真实 API 验证正在检查什么？',
+        checks: [{ kind: 'exit-code', equals: 0 }, { kind: 'non-empty-output' }],
       },
       {
         id: 'workspace-context',
         promptId: 'workspace',
         prompt: '请说明当前工作目录在本轮任务中有什么作用。不要编造文件内容。',
-        checks: [
-          { kind: 'exit-code', equals: 0 },
-          { kind: 'non-empty-output' },
-        ],
+        checks: [{ kind: 'exit-code', equals: 0 }, { kind: 'non-empty-output' }],
       },
       {
         id: 'invalid-model-visible-error',
@@ -271,9 +264,7 @@ export function parseTuiRealApiSuiteManifest(
   if (!Array.isArray(rawCases) || rawCases.length === 0) {
     throw new Error(`${sourceLabel}.cases must be a non-empty array.`);
   }
-  const cases = rawCases.map((item, index) =>
-    readCase(item, `${sourceLabel}.cases[${index}]`),
-  );
+  const cases = rawCases.map((item, index) => readCase(item, `${sourceLabel}.cases[${index}]`));
   return {
     schema: TUI_REAL_API_SUITE_SCHEMA,
     name,
@@ -316,7 +307,7 @@ export async function runTuiRealApiSuite(
     const stderrPath = path.join(casesDir, `${basename}.stderr.log`);
     const resultPath = path.join(casesDir, `${basename}.result.json`);
     const resultArtifact = createCliRunResultArtifact({
-      config: execution.config ?? createFallbackConfig(execution),
+      config: execution.config ?? createDefaultExecutionConfig(execution),
       runOptions: createRunOptionsForExecution(executionInput),
       result: execution.result,
       command: execution.command,
@@ -327,7 +318,13 @@ export async function runTuiRealApiSuite(
     await fs.writeFile(
       resultPath,
       `${JSON.stringify(
-        { case: testCase, verdict, checks, execution: serializeExecution(execution), resultArtifact },
+        {
+          case: testCase,
+          verdict,
+          checks,
+          execution: serializeExecution(execution),
+          resultArtifact,
+        },
         null,
         2,
       )}\n`,
@@ -365,13 +362,21 @@ export async function runTuiRealApiSuite(
     configSource: {
       userConfigPath: path.join(process.env['HOME'] ?? '~', '.neko', 'config.toml'),
       ...(options.manifest.defaults?.workDir
-        ? { workspaceConfigPath: path.join(options.manifest.defaults.workDir, '.neko', 'config.toml') }
+        ? {
+            workspaceConfigPath: path.join(
+              options.manifest.defaults.workDir,
+              '.neko',
+              'config.toml',
+            ),
+          }
         : {}),
     },
     cases: caseResults.map((result) => ({
       id: result.case.id,
       verdict: result.verdict,
-      ...(result.execution ? { provider: result.execution.provider, model: result.execution.model } : {}),
+      ...(result.execution
+        ? { provider: result.execution.provider, model: result.execution.model }
+        : {}),
       ...(result.stdoutPath ? { stdoutPath: result.stdoutPath } : {}),
       ...(result.stderrPath ? { stderrPath: result.stderrPath } : {}),
       ...(result.resultPath ? { resultPath: result.resultPath } : {}),
@@ -561,7 +566,9 @@ async function createAiSuiteSummary(
   }
 }
 
-function serializeExecution(execution: TuiRealApiCaseExecution): Omit<TuiRealApiCaseExecution, 'config'> {
+function serializeExecution(
+  execution: TuiRealApiCaseExecution,
+): Omit<TuiRealApiCaseExecution, 'config'> {
   return {
     caseId: execution.caseId,
     ...(execution.promptId ? { promptId: execution.promptId } : {}),
@@ -634,22 +641,54 @@ function evaluateCheck(
 ): TuiRealApiCheckResult {
   switch (check.kind) {
     case 'exit-code':
-      return checkResult(check.kind, execution.exitCode === check.equals, `exitCode=${execution.exitCode}, expected=${check.equals}`);
+      return checkResult(
+        check.kind,
+        execution.exitCode === check.equals,
+        `exitCode=${execution.exitCode}, expected=${check.equals}`,
+      );
     case 'non-empty-output':
-      return checkResult(check.kind, Boolean(execution.result.output?.trim()), 'assistant output must be non-empty');
+      return checkResult(
+        check.kind,
+        Boolean(execution.result.output?.trim()),
+        'assistant output must be non-empty',
+      );
     case 'output-contains':
-      return checkResult(check.kind, (execution.result.output ?? execution.stdout).includes(check.text), `output contains "${check.text}"`);
+      return checkResult(
+        check.kind,
+        (execution.result.output ?? execution.stdout).includes(check.text),
+        `output contains "${check.text}"`,
+      );
     case 'output-not-contains':
-      return checkResult(check.kind, !(execution.result.output ?? execution.stdout).includes(check.text), `output does not contain "${check.text}"`);
+      return checkResult(
+        check.kind,
+        !(execution.result.output ?? execution.stdout).includes(check.text),
+        `output does not contain "${check.text}"`,
+      );
     case 'error-contains':
-      return checkResult(check.kind, (execution.result.error ?? '').includes(check.text), `error contains "${check.text}"`);
+      return checkResult(
+        check.kind,
+        (execution.result.error ?? '').includes(check.text),
+        `error contains "${check.text}"`,
+      );
     case 'stderr-contains':
-      return checkResult(check.kind, execution.stderr.includes(check.text), `stderr contains "${check.text}"`);
+      return checkResult(
+        check.kind,
+        execution.stderr.includes(check.text),
+        `stderr contains "${check.text}"`,
+      );
     case 'timeout':
-      return checkResult(check.kind, execution.timedOut === check.expected, `timedOut=${execution.timedOut}, expected=${check.expected}`);
+      return checkResult(
+        check.kind,
+        execution.timedOut === check.expected,
+        `timedOut=${execution.timedOut}, expected=${check.expected}`,
+      );
     case 'model-capability': {
       const hasCapability = execution.modelCapabilities?.includes(check.capability) ?? false;
-      return checkResult(check.kind, hasCapability === check.expected, `model capability ${check.capability}=${hasCapability}, expected=${check.expected}`);
+      return checkResult(
+        check.kind,
+        hasCapability === check.expected,
+        `model capability ${check.capability}=${hasCapability}, expected=${check.expected}`,
+      );
     }
     case 'content-evidence':
       return checkResult(
@@ -687,7 +726,9 @@ function readDefaults(value: unknown, label: string): TuiRealApiSuiteDefaults | 
     ...(model ? { model } : {}),
     ...(maxIterations !== undefined ? { maxIterations } : {}),
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-    ...(value['stream'] !== undefined ? { stream: readBoolean(value['stream'], `${label}.stream`) } : {}),
+    ...(value['stream'] !== undefined
+      ? { stream: readBoolean(value['stream'], `${label}.stream`) }
+      : {}),
   };
 }
 
@@ -719,14 +760,18 @@ function readCase(value: unknown, label: string): TuiRealApiCase {
     prompt,
     ...(promptId ? { promptId } : {}),
     ...(description ? { description } : {}),
-    ...(value['enabled'] !== undefined ? { enabled: readBoolean(value['enabled'], `${label}.enabled`) } : {}),
+    ...(value['enabled'] !== undefined
+      ? { enabled: readBoolean(value['enabled'], `${label}.enabled`) }
+      : {}),
     ...(skipReason ? { skipReason } : {}),
     ...(workDir ? { workDir } : {}),
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
     ...(maxIterations !== undefined ? { maxIterations } : {}),
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
-    ...(value['stream'] !== undefined ? { stream: readBoolean(value['stream'], `${label}.stream`) } : {}),
+    ...(value['stream'] !== undefined
+      ? { stream: readBoolean(value['stream'], `${label}.stream`) }
+      : {}),
     ...(requiredCapabilities ? { requiredCapabilities } : {}),
     checks: checksValue.map((check, index) => readCheck(check, `${label}.checks[${index}]`)),
   };
@@ -774,7 +819,7 @@ function buildCaseCommand(input: TuiRealApiCaseExecutionInput): readonly string[
   ];
 }
 
-function createFallbackConfig(execution: TuiRealApiCaseExecution): CLIConfig {
+function createDefaultExecutionConfig(execution: TuiRealApiCaseExecution): CLIConfig {
   return {
     ...DEFAULT_CLI_CONFIG,
     provider: execution.provider,
@@ -812,12 +857,19 @@ function formatCaseRow(result: TuiRealApiCaseResult): string {
 
 function formatCaseChecks(result: TuiRealApiCaseResult): readonly string[] {
   if (result.verdict === 'skipped') {
-    return [`### ${result.case.id}`, '', `- skipped: ${result.skippedReason ?? 'Case is disabled.'}`, ''];
+    return [
+      `### ${result.case.id}`,
+      '',
+      `- skipped: ${result.skippedReason ?? 'Case is disabled.'}`,
+      '',
+    ];
   }
   return [
     `### ${result.case.id}`,
     '',
-    ...result.checks.map((check) => `- ${check.passed ? 'pass' : 'fail'}: ${check.kind} - ${check.message}`),
+    ...result.checks.map(
+      (check) => `- ${check.passed ? 'pass' : 'fail'}: ${check.kind} - ${check.message}`,
+    ),
     '',
   ];
 }

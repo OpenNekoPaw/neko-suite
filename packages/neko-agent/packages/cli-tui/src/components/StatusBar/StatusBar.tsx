@@ -22,6 +22,7 @@ export function StatusBar(): React.JSX.Element {
   const activeSkill = useAgentStore((s) => s.activeSkill);
   const lifecycleRecords = useAgentStore((s) => s.activeSkillLifecycleRecords);
   const queueSnapshot = useAgentStore((s) => s.messageQueue.snapshot);
+  const runningTaskSummary = useAgentStore((s) => s.tasks.runningSummary);
   const usage = useAgentStore((s) => s.usage);
   const config = useConfigStore((s) => s.config);
   const labels = getTuiLabels();
@@ -81,6 +82,14 @@ export function StatusBar(): React.JSX.Element {
           <Text dimColor> | </Text>
           <Text color={tokens.warning}>{labels.chrome.queue}:</Text>
           <Text color={tokens.warning}>{queueSnapshot.pendingCount}</Text>
+        </>
+      ) : null}
+
+      {runningTaskSummary ? (
+        <>
+          <Text dimColor> | </Text>
+          <Text color={tokens.info}>{labels.chrome.task}:</Text>
+          <Text color={tokens.info}>{runningTaskSummary}</Text>
         </>
       ) : null}
 

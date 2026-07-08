@@ -71,6 +71,7 @@ interface SlashCommandSessionActions {
   editQueuedMessage?: NonNullable<
     import('./useAgentSession').AgentSessionHandle['editQueuedMessage']
   >;
+  listTasks?: import('./useAgentSession').AgentSessionHandle['listTasks'];
   activateSkill?: (name: string, args?: string) => boolean | Promise<boolean>;
   deactivateSkill?: (input?: TuiSkillClearTarget) => boolean | Promise<boolean>;
   getSkillService?: () => SkillService | undefined;
@@ -156,7 +157,13 @@ function isAllowedRunningCommand(input: string): boolean {
     return false;
   }
   const commandName = input.trim().split(/\s+/)[0]?.slice(1).toLowerCase();
-  if (commandName === 'queue' || commandName === 'status' || commandName === 's') {
+  if (
+    commandName === 'queue' ||
+    commandName === 'task' ||
+    commandName === 'tasks' ||
+    commandName === 'status' ||
+    commandName === 's'
+  ) {
     return true;
   }
   return false;
@@ -338,6 +345,11 @@ function createInkRouterContext(
             },
           }
         : undefined,
+      task: sessionActions.listTasks
+        ? {
+            list: sessionActions.listTasks,
+          }
+        : undefined,
       mcp: sessionActions.listMcpServers
         ? {
             listServers: sessionActions.listMcpServers,
@@ -370,6 +382,7 @@ function createInkRouterContext(
             llmParameterSummary: formatLlmParameterSummary(useConfigStore.getState().config),
             activeSkillSummary: formatActiveSkillSummary(status.activeSkillLifecycleRecords),
             queueCount: status.messageQueue.snapshot?.pendingCount ?? 0,
+            runningTaskSummary: status.tasks.runningSummary ?? undefined,
           };
         },
       },

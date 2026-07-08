@@ -200,8 +200,10 @@ function projectCanvasAuthoringSourceGuidanceZh(
     }
     return [
       '这是 storyboard creative table 的 Send to Canvas；默认目标是创建 Canvas 分镜生产节点，而不是审阅 table 节点。',
+      '“作为 Markdown/Markdown 发送”只表示来源格式，不表示 review-only；默认仍使用 canvas.createStoryboardFromMarkdown 创建 scene/shot。',
       '可先调用 canvas.validateMarkdownStoryboard 做只读校验；校验通过后调用 canvas.createStoryboardFromMarkdown，传入 profileHint=storyboard、mode=create-nodes，并用本次明确 Send to Canvas 指令作为 creation-apply approval context。',
       'canvas.ingestMarkdown 只用于审阅表格/草稿，不会创建 scene/shot；用户要求发送为分镜时不要停在 ingestMarkdown 的 table 节点。',
+      'canvas.createStoryboardFromMarkdown 没有暴露为可调用工具时，报告 Canvas tool-surface blocked，不要降级调用 canvas.ingestMarkdown 或把 review table 当作成功。',
       '创建结果应返回 scene.basic + shot.basic 节点引用；没有新增/变更 Canvas refs 时按阻塞处理。',
     ];
   }
@@ -225,8 +227,10 @@ function projectCanvasAuthoringSourceGuidanceEn(
     }
     return [
       'This is a storyboard creative table Send to Canvas handoff; the default target is production Canvas storyboard nodes, not a review table node.',
+      '"Send as Markdown" describes the source format, not a review-only intent; still default to canvas.createStoryboardFromMarkdown for scene/shot creation.',
       'You may call canvas.validateMarkdownStoryboard first for read-only validation; after validation, call canvas.createStoryboardFromMarkdown with profileHint=storyboard, mode=create-nodes, and use this explicit Send to Canvas instruction as creation-apply approval context.',
       'canvas.ingestMarkdown is only for table/draft review and does not create scene/shot nodes; do not stop at an ingestMarkdown table node when the user asked to send a storyboard.',
+      'If canvas.createStoryboardFromMarkdown is not exposed as a callable tool, report Canvas tool-surface blocked; do not downgrade to canvas.ingestMarkdown or treat a review table as success.',
       'Creation should return scene.basic + shot.basic node refs; if no created/changed Canvas refs are returned, treat the result as blocked.',
     ];
   }
@@ -253,8 +257,36 @@ function isStoryboardCreativeTableHandoff(message: CanvasAuthoringHandoffRouteMe
 function isReviewOnlyCanvasHandoffIntent(userIntent: string | undefined): boolean {
   if (!userIntent) return false;
   const normalized = userIntent.toLowerCase();
+  const asksForMarkdownSourceFormat =
+    normalized.includes('as markdown') ||
+    normalized.includes('作为 markdown') ||
+    normalized.includes('markdown 发送') ||
+    normalized.includes('发送为 markdown') ||
+    normalized.includes('send markdown') ||
+    normalized.includes('send as markdown');
+  const asksForReviewArtifact =
+    normalized.includes('review-only') ||
+    normalized.includes('review only') ||
+    normalized.includes('review table') ||
+    normalized.includes('table review') ||
+    normalized.includes('draft table') ||
+    normalized.includes('table node') ||
+    normalized.includes('审阅表格') ||
+    normalized.includes('表格审阅') ||
+    normalized.includes('草稿表格') ||
+    normalized.includes('表格节点');
+  const asksForOnly =
+    normalized.includes('only') || normalized.includes('只') || normalized.includes('仅');
+
+  if (asksForMarkdownSourceFormat && !asksForReviewArtifact && !asksForOnly) return false;
+
   return (
-    normalized.includes('review') || normalized.includes('审阅') || normalized.includes('草稿')
+    asksForReviewArtifact ||
+    (asksForOnly &&
+      (normalized.includes('review') ||
+        normalized.includes('审阅') ||
+        normalized.includes('draft') ||
+        normalized.includes('草稿')))
   );
 }
 

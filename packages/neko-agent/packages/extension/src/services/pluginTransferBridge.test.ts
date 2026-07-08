@@ -284,7 +284,7 @@ describe('PluginTransferBridge', () => {
     );
   });
 
-  it('sends generated clips to the Cut timeline command without requiring Canvas promotion', async () => {
+  it('sends generated clips to the Cut authoring command without requiring Canvas promotion', async () => {
     const ingest = vi.fn();
     const executeCommand = vi.fn().mockResolvedValue(undefined);
 
@@ -305,14 +305,14 @@ describe('PluginTransferBridge', () => {
 
     expect(result.success).toBe(true);
     expect(ingest).not.toHaveBeenCalled();
-    expect(executeCommand).toHaveBeenCalledWith('neko.cut.importGeneratedClip', {
+    expect(executeCommand).toHaveBeenCalledWith('neko.cut.authoring.importGeneratedClip', {
       assetPath: '/tmp/agent-private/shot.png',
       mediaType: 'image',
       name: 'shot.png',
     });
   });
 
-  it('sends generated image assets to the Sketch import command', async () => {
+  it('sends generated image assets to the Sketch authoring import command', async () => {
     const ingest = vi.fn();
     const executeCommand = vi.fn().mockResolvedValue(undefined);
 
@@ -333,7 +333,123 @@ describe('PluginTransferBridge', () => {
 
     expect(result.success).toBe(true);
     expect(ingest).not.toHaveBeenCalled();
-    expect(executeCommand).toHaveBeenCalledWith('neko.sketch.importAsset', {
+    expect(executeCommand).toHaveBeenCalledWith('neko.sketch.authoring.importImageSource', {
+      path: '/tmp/agent-private/frame.png',
+      name: 'frame.png',
+    });
+  });
+
+  it('passes package authoring target and provenance without hitting legacy command ids', async () => {
+    const ingest = vi.fn();
+    const executeCommand = vi.fn(async (command: string) => {
+      if (
+        command === 'neko.cut.importGeneratedClip' ||
+        command === 'neko.sketch.importAsset' ||
+        command === 'neko.model.importAsset'
+      ) {
+        throw new Error(`legacy command called: ${command}`);
+      }
+      return { ok: true };
+    });
+
+    const result = await sendGeneratedAssetToPlugin(
+      'model',
+      undefined,
+      undefined,
+      {
+        kind: 'singleAsset',
+        asset: {
+          path: '/tmp/agent-private/character.glb',
+          mediaType: 'model',
+          name: 'Character',
+        },
+        target: {
+          kind: 'file',
+          documentUri: 'file:///workspace/characters/character.nkm',
+          reveal: true,
+        },
+        provenance: {
+          source: 'agent',
+          conversationId: 'conv-1',
+          messageId: 'msg-1',
+        },
+      },
+      createDeps({ ingest, executeCommand }),
+    );
+
+    expect(result.success).toBe(true);
+    expect(ingest).not.toHaveBeenCalled();
+    expect(executeCommand).toHaveBeenCalledWith('neko.model.authoring.importAsset', {
+      path: '/tmp/agent-private/character.glb',
+      name: 'Character',
+      target: {
+        kind: 'file',
+        documentUri: 'file:///workspace/characters/character.nkm',
+        reveal: true,
+      },
+      reveal: true,
+      provenance: {
+        source: 'agent',
+        conversationId: 'conv-1',
+        messageId: 'msg-1',
+      },
+    });
+  });
+
+  it('reports canonical authoring diagnostics instead of treating command completion as delivery', async () => {
+    const ingest = vi.fn();
+    const executeCommand = vi.fn().mockResolvedValue({
+      version: 1,
+      ok: false,
+      diagnostics: [
+        {
+          code: 'missing-authoring-target',
+          severity: 'error',
+          message: 'Sketch image import authoring requires documentUri.',
+        },
+      ],
+    });
+
+    const result = await sendGeneratedAssetToPlugin(
+      'sketch',
+      undefined,
+      undefined,
+      {
+        kind: 'singleAsset',
+        asset: {
+          path: '/tmp/agent-private/frame.png',
+          mediaType: 'image',
+          name: 'frame.png',
+        },
+      },
+      createDeps({ ingest, executeCommand }),
+    );
+
+    expect(result).toEqual({
+      success: false,
+      executed: 1,
+      results: [
+        {
+          version: 1,
+          ok: false,
+          diagnostics: [
+            {
+              code: 'missing-authoring-target',
+              severity: 'error',
+              message: 'Sketch image import authoring requires documentUri.',
+            },
+          ],
+        },
+      ],
+      unsupported: [
+        {
+          target: 'sketch',
+          reason:
+            'missing-authoring-target: Sketch image import authoring requires documentUri.',
+        },
+      ],
+    });
+    expect(executeCommand).toHaveBeenCalledWith('neko.sketch.authoring.importImageSource', {
       path: '/tmp/agent-private/frame.png',
       name: 'frame.png',
     });

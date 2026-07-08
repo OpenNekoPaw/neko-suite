@@ -4,6 +4,7 @@ import {
   DEFAULT_RESOURCE_CACHE_GLOBAL_MAX_BYTES,
   DEFAULT_RESOURCE_CACHE_PROJECT_MAX_BYTES,
 } from '@neko/shared';
+import { createAgentProjectResourceCacheTarget } from '@neko/agent/runtime';
 import type { ResourceCacheService } from '@neko/shared/vscode/extension';
 import {
   createStartupGcTargets,
@@ -23,6 +24,11 @@ describe('resource cache startup GC service', () => {
   it('creates project and extension-private resource cache GC targets', () => {
     const targets = createStartupGcTargets(createExtensionContext());
 
+    const sharedProjectTarget = createAgentProjectResourceCacheTarget({
+      workspaceRoot: '/mock/workspace',
+      homedir: '/mock/workspace',
+    });
+    expect(targets[0]).toEqual(sharedProjectTarget);
     expect(targets).toEqual([
       {
         scope: 'project',

@@ -4,7 +4,10 @@ import {
   buildRuntimePluginsAvailableMessage,
   expandRuntimePluginTransferInputs,
 } from '@neko/agent/runtime';
-import { buildNekoSuitePluginTransferPlan } from '@neko/skills';
+import {
+  buildNekoSuitePluginTransferPlan,
+  executeNekoSuitePluginTransferPlan,
+} from '@neko/skills';
 import type { PluginTransferAssetRef, PluginTransferPayload } from '@neko-agent/types';
 import {
   PathResolver,
@@ -78,19 +81,22 @@ export async function sendGeneratedAssetToPlugin(
 
     for (const input of inputs) {
       const plan = buildNekoSuitePluginTransferPlan(input);
-
-      if (plan.status === 'execute-command') {
-        results.push(await executeCommand(plan.command, plan.payload));
-        continue;
+      const execution = await executeNekoSuitePluginTransferPlan(
+        plan,
+        {
+          client: 'vscode',
+          executeCommand: async (command, commandPayload) =>
+            await executeCommand(command, commandPayload),
+          revealFile: async (filePath) =>
+            await executeCommand('revealFileInOS', vscode.Uri.file(filePath)),
+        },
+        { target: input.target },
+      );
+      results.push(...execution.results);
+      unsupported.push(...execution.unsupported);
+      for (const item of execution.unsupported) {
+        logger.warn(`Unsupported sendToPlugin target: ${item.target}`, { reason: item.reason });
       }
-
-      if (plan.status === 'reveal-file') {
-        results.push(await executeCommand('revealFileInOS', vscode.Uri.file(plan.filePath)));
-        continue;
-      }
-
-      unsupported.push({ target: plan.target, reason: plan.reason });
-      logger.warn(`Unsupported sendToPlugin target: ${plan.target}`, { reason: plan.reason });
     }
     return {
       success: unsupported.length === 0,

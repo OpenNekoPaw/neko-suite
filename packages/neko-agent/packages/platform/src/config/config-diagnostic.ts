@@ -12,6 +12,9 @@ export type AssistantConfigAvailabilityCode =
   | 'invalidDefaultProvider'
   | 'invalidDefaultModel'
   | 'invalidDefaultModelBinding'
+  | 'unsupportedWorkspaceProviderDefinition'
+  | 'unsupportedWorkspaceModelDefinition'
+  | 'unsupportedSkillSource'
   | 'missingAccountCatalog'
   | 'accountCatalogUnavailable'
   | 'accountModelNotEntitled';
@@ -117,6 +120,12 @@ export function buildSafeConfigDiagnosticMessage(
       return `Configuration file contains an unsupported default_models key: ${filePath}. Use llm, image, video, or audio, then open a new Agent session or tab.`;
     case 'invalidDefaultModelBinding':
       return `Configuration file contains a default_models entry that references an unavailable provider/model or mismatched type: ${filePath}. Fix the default binding, then open a new Agent session or tab.`;
+    case 'unsupportedWorkspaceProviderDefinition':
+      return `Workspace configuration defines provider entries: ${filePath}. Move provider definitions and credentials to the user config, then open a new Agent session or tab.`;
+    case 'unsupportedWorkspaceModelDefinition':
+      return `Workspace configuration defines model entries: ${filePath}. Move model definitions to the user config or account catalog, then open a new Agent session or tab.`;
+    case 'unsupportedSkillSource':
+      return `Configuration references a non-standard Skill source: ${filePath}. Register an explicit Skill source provider or use .neko/skills and .neko/commands.`;
     case 'readError':
       return `Unable to read configuration file: ${filePath}. Check file permissions, then open a new Agent session or tab.`;
     case 'missingConfig':

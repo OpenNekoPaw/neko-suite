@@ -20,6 +20,14 @@ function createMemoryFs(): AgentWorkspaceRuntimeStateFsOps & {
     writeFile: async (filePath, content) => {
       files.set(filePath, content);
     },
+    renameFile: async (sourcePath, targetPath) => {
+      const content = files.get(sourcePath);
+      if (content === undefined) {
+        throw new Error(`File not found: ${sourcePath}`);
+      }
+      files.delete(sourcePath);
+      files.set(targetPath, content);
+    },
     exists: async (filePath) => files.has(filePath),
   };
 }
@@ -132,7 +140,30 @@ describe('AgentWorkspaceRuntimeStateRuntime', () => {
     await expect(runtime.read()).rejects.toThrow('workDir mismatch');
   });
 
-  it('recovers a corrupt runtime projection when writing a new patch', async () => {
+  it('fails visibly when a stored state still uses the removed cli source', async () => {
+    const fs = createMemoryFs();
+    fs.files.set(
+      '/state/agent-runtime-state.json',
+      JSON.stringify({
+        version: 1,
+        workDir: '/repo/project',
+        updatedAt: 1,
+        updatedBy: 'cli',
+        activeConversationId: null,
+        conversations: {},
+      }),
+    );
+    const runtime = createAgentWorkspaceRuntimeStateRuntime({
+      workDir: '/repo/project',
+      source: 'tui',
+      filePath: '/state/agent-runtime-state.json',
+      fs,
+    });
+
+    await expect(runtime.read()).rejects.toThrow('updatedBy is invalid');
+  });
+
+  it('recovers a corrupt runtime projection when reading', async () => {
     const fs = createMemoryFs();
     fs.files.set('/state/agent-runtime-state.json', '{"version":1}\n}');
     const runtime = createAgentWorkspaceRuntimeStateRuntime({
@@ -143,7 +174,30 @@ describe('AgentWorkspaceRuntimeStateRuntime', () => {
       now: () => 300,
     });
 
-    await expect(runtime.read()).rejects.toThrow('JSON is invalid');
+    const state = await runtime.read();
+
+    expect(state).toEqual({
+      version: 1,
+      workDir: '/repo/project',
+      updatedAt: 300,
+      updatedBy: 'tui',
+      activeConversationId: null,
+      conversations: {},
+    });
+    expect(fs.files.has('/state/agent-runtime-state.json')).toBe(false);
+    expect(fs.files.get('/state/agent-runtime-state.json.corrupt.300')).toBe('{"version":1}\n}');
+  });
+
+  it('recovers a corrupt runtime projection when writing a new patch', async () => {
+    const fs = createMemoryFs();
+    fs.files.set('/state/agent-runtime-state.json', '{"version":1}\n}');
+    const runtime = createAgentWorkspaceRuntimeStateRuntime({
+      workDir: '/repo/project',
+      source: 'tui',
+      filePath: '/state/agent-runtime-state.json',
+      fs,
+      now: () => 300,
+    });
 
     const state = await runtime.patch({
       activeConversationId: 'conv-recovered',
@@ -157,6 +211,7 @@ describe('AgentWorkspaceRuntimeStateRuntime', () => {
       workDir: '/repo/project',
       activeConversationId: 'conv-recovered',
     });
+    expect(fs.files.get('/state/agent-runtime-state.json.corrupt.300')).toBe('{"version":1}\n}');
   });
 
   it('serializes concurrent patches for the same runtime state file', async () => {

@@ -945,6 +945,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         hasEmbodyCharacterSession: (sessionId) => this._embodyCharacter.hasSession(sessionId),
         getActiveConversationId: () => this._conversations.getActiveId(),
         switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
+        shouldClearActiveConversationForEmptyTabState: (conversationId) =>
+          this._shouldClearActiveConversationForEmptyTabState(conversationId),
         clearActiveConversation: () => this._conversations.clearActive(),
       },
     );
@@ -1013,8 +1015,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         hasEmbodyCharacterSession: (sessionId) => this._embodyCharacter.hasSession(sessionId),
         getActiveConversationId: () => this._conversations.getActiveId(),
         switchConversation: (conversationId) => this._conversations.switchTo(conversationId),
+        shouldClearActiveConversationForEmptyTabState: (conversationId) =>
+          this._shouldClearActiveConversationForEmptyTabState(conversationId),
         clearActiveConversation: () => this._conversations.clearActive(),
-        onConversationSwitched: () => this._syncCanvasAmbientScopeFromActiveConversation(),
+        onConversationSwitched: () => {
+          this._syncCanvasAmbientScopeFromActiveConversation();
+          void this._conversationMessageHandler.sendActiveConversation();
+        },
       },
     );
     this._tabState = result.tabState;
@@ -1034,9 +1041,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
       });
     }
 
-    if (result.sync.kind === 'switched') {
-      void this._conversationMessageHandler.sendActiveConversation();
-    }
+  }
+
+  private _shouldClearActiveConversationForEmptyTabState(conversationId: string): boolean {
+    return !this._messages
+      ?.getAgentStateSnapshot()
+      .some((state) => state.conversationId === conversationId);
   }
 
   private _getActiveTabLogIdentity(): {

@@ -1,6 +1,7 @@
 import type {
   CanvasAgentTargetRef,
   DocumentArchiveResourceRef,
+  NekoProjectAuthoringTarget,
   ResourceRef,
   StoryboardTextCue,
   StoryboardVoiceCue,
@@ -21,7 +22,7 @@ export type PluginTransferMediaType = 'image' | 'video' | 'audio' | 'model';
 
 export type PluginTransferTargetMode = 'insert' | 'append' | 'replace' | 'apply' | 'create-child';
 
-export interface PluginTransferTargetRef extends CanvasAgentTargetRef {
+export interface PluginTransferTargetRef extends CanvasAgentTargetRef, NekoProjectAuthoringTarget {
   readonly plugin?: PluginTransferTarget;
 }
 
@@ -106,7 +107,14 @@ export interface PluginTransferCanvasImportAssetPayload {
   readonly provenance?: PluginTransferProvenance;
 }
 
-export interface PluginTransferCutImportGeneratedClipPayload {
+export interface PluginTransferAuthoringPayloadBase {
+  readonly target?: NekoProjectAuthoringTarget;
+  readonly reveal?: boolean;
+  readonly provenance?: PluginTransferProvenance;
+}
+
+export interface PluginTransferCutImportGeneratedClipPayload
+  extends PluginTransferAuthoringPayloadBase {
   readonly assetPath: string;
   readonly mediaType?: PluginTransferMediaType;
   readonly name?: string;
@@ -114,17 +122,21 @@ export interface PluginTransferCutImportGeneratedClipPayload {
   readonly trackIndex?: number;
 }
 
-export interface PluginTransferPathImportAssetPayload {
+export interface PluginTransferPathImportAssetPayload extends PluginTransferAuthoringPayloadBase {
   readonly path: string;
   readonly name?: string;
 }
 
+export interface PluginTransferCutStoryboardAuthoringPayload
+  extends PluginTransferCutStoryboardPayload,
+    PluginTransferAuthoringPayloadBase {}
+
 export interface PluginTransferCommandPlanMap {
   readonly 'neko.canvas.importAsset': PluginTransferCanvasImportAssetPayload;
-  readonly 'neko.sketch.importAsset': PluginTransferPathImportAssetPayload;
-  readonly 'neko.model.importAsset': PluginTransferPathImportAssetPayload;
-  readonly 'neko.cut.importStoryboard': PluginTransferCutStoryboardPayload;
-  readonly 'neko.cut.importGeneratedClip': PluginTransferCutImportGeneratedClipPayload;
+  readonly 'neko.sketch.authoring.importImageSource': PluginTransferPathImportAssetPayload;
+  readonly 'neko.model.authoring.importAsset': PluginTransferPathImportAssetPayload;
+  readonly 'neko.cut.authoring.importStoryboard': PluginTransferCutStoryboardAuthoringPayload;
+  readonly 'neko.cut.authoring.importGeneratedClip': PluginTransferCutImportGeneratedClipPayload;
 }
 
 export type PluginTransferCommand = keyof PluginTransferCommandPlanMap;

@@ -108,7 +108,7 @@ export const chat = {
     'Markdown 资源标记 "{token}" 无法解析，因为这条消息没有图像资源上下文。',
   'chat.markdown.diagnostic.ambiguousResourceToken': 'Markdown 资源标记 "{token}" 匹配到多个资源。',
   'chat.markdown.diagnostic.unsupportedResourceReference':
-    'Agent Markdown 渲染暂未启用 Neko 资源引用嵌入和链接。',
+    '这条消息需要宿主提供资源投影后才能渲染 Neko 资源引用嵌入和链接。',
   'chat.markdown.image.unprojected': '图像引用 "{src}" 尚未由宿主投影。',
   'chat.markdown.image.missingSource': '图像引用缺少来源。',
   'chat.transfer.sendTo': '发送到',
