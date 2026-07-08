@@ -17,6 +17,7 @@ import {
   type CreatedCanvasStoryboard,
   type CreativeAiApplyRequest,
   type DocumentArchiveResourceRef,
+  type CanvasMarkdownCapabilityInput,
   type ResourceRef,
 } from '@neko/shared';
 import {
@@ -281,14 +282,16 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       getExecutionSummary: (request) => canvasEditorProvider.getStoryboardExecutionSummary(request),
     },
     markdown: {
-      invoke: (input) =>
-        invokeCanvasMarkdownCapability(input, {
+      invoke: async (input) => {
+        await ensureCanvasEditorForMarkdownMutation(input);
+        return invokeCanvasMarkdownCapability(input, {
           applyAgentContent: (payload) => canvasEditorProvider.applyAgentContent(payload),
           createNode: (type, position, data, preset) =>
             canvasEditorProvider.createNode(type, position, data, preset),
           updateNode: (nodeId, data) => canvasEditorProvider.updateNode(nodeId, data),
           createComposite: (request) => canvasEditorProvider.createComposite(request),
-        }),
+        });
+      },
     },
     playback: {
       getPlan: async (sourceCanvasUri) => canvasEditorProvider.getPlaybackPlan(sourceCanvasUri),
@@ -823,6 +826,53 @@ async function ensureCanvasEditorForAssetImport(asset: {
   await waitForActiveCanvasEditorReady();
 }
 
+async function ensureCanvasEditorForMarkdownMutation(
+  input: CanvasMarkdownCapabilityInput,
+): Promise<void> {
+  if (!isCanvasMarkdownCreationMutation(input)) {
+    return;
+  }
+  if (canvasEditorProvider.hasActiveCanvasEditorReady()) {
+    return;
+  }
+  if (canvasEditorProvider.revealAnyCanvasEditor()) {
+    await waitForActiveCanvasEditorReady();
+    return;
+  }
+
+  const title = createMarkdownCanvasName(input);
+  const canvasFile = await createCanvas({
+    name: title,
+    width: isStoryboardMarkdownInput(input) ? 1600 : 1200,
+    height: isStoryboardMarkdownInput(input) ? 1000 : 800,
+    ...(isStoryboardMarkdownInput(input)
+      ? { creativeScope: { kind: 'sequence', title } }
+      : {}),
+  });
+  await vscode.commands.executeCommand(
+    'vscode.openWith',
+    vscode.Uri.file(canvasFile),
+    CanvasEditorProvider.viewType,
+  );
+  await waitForActiveCanvasEditorReady();
+}
+
+function isCanvasMarkdownCreationMutation(input: CanvasMarkdownCapabilityInput): boolean {
+  return (
+    input.capabilityId === 'canvas.ingestMarkdown' ||
+    input.capabilityId === 'canvas.createMarkdownNote' ||
+    input.capabilityId === 'canvas.createTableFromMarkdown' ||
+    input.capabilityId === 'canvas.createStoryboardFromMarkdown'
+  );
+}
+
+function isStoryboardMarkdownInput(input: CanvasMarkdownCapabilityInput): boolean {
+  return (
+    input.capabilityId === 'canvas.createStoryboardFromMarkdown' ||
+    ('profileHint' in input && input.profileHint?.toLowerCase() === 'storyboard')
+  );
+}
+
 async function waitForActiveCanvasEditorReady(): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < CANVAS_EDITOR_READY_TIMEOUT_MS) {
@@ -886,6 +936,18 @@ function inferStoryboardCanvasCreativeScope(
 function createAssetCanvasName(asset: { readonly path?: string; readonly name?: string }): string {
   const sourceTitle = asset.name?.trim() || (asset.path ? path.parse(asset.path).name : '');
   return sanitizeCanvasFileName(sourceTitle).slice(0, 80) || 'Agent Canvas';
+}
+
+function createMarkdownCanvasName(input: CanvasMarkdownCapabilityInput): string {
+  const tableTitle =
+    input.capabilityId === 'canvas.createTableFromMarkdown' ? input.tableTitle?.trim() : '';
+  const sourceTitle = 'title' in input ? input.title?.trim() : '';
+  const profileHint = 'profileHint' in input ? input.profileHint?.trim() : '';
+  const fallbackTitle = isStoryboardMarkdownInput(input) ? 'Agent Storyboard' : 'Agent Canvas';
+  return sanitizeCanvasFileName(sourceTitle || tableTitle || profileHint || fallbackTitle).slice(
+    0,
+    80,
+  );
 }
 
 function sanitizeCanvasFileName(value: string): string {

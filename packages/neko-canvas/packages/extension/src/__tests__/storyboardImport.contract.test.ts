@@ -40,6 +40,17 @@ describe('canvas storyboard import contracts', () => {
     );
   });
 
+  it('opens or creates a canvas before Markdown capabilities create nodes', () => {
+    expect(extensionSource).toContain('await ensureCanvasEditorForMarkdownMutation(input);');
+    expect(extensionSource).toContain('async function ensureCanvasEditorForMarkdownMutation');
+    expect(extensionSource).toContain('function isCanvasMarkdownCreationMutation');
+    expect(extensionSource).toContain("input.capabilityId === 'canvas.createStoryboardFromMarkdown'");
+    expect(extensionSource).toContain("input.capabilityId === 'canvas.ingestMarkdown'");
+    expect(extensionSource).toContain("input.capabilityId === 'canvas.createMarkdownNote'");
+    expect(extensionSource).toContain("input.capabilityId === 'canvas.createTableFromMarkdown'");
+    expect(extensionSource).not.toContain("input.capabilityId === 'canvas.validateMarkdownStoryboard'");
+  });
+
   it('allows linked resource asset imports without a runtime path', () => {
     expect(extensionSource).toContain(
       'if (!asset?.path && !asset?.documentResourceRef && !asset?.resourceRef)',
