@@ -6,12 +6,11 @@ import type {
   AgentReferenceCandidate,
   AgentReferenceContributor,
   AssetEntity,
-  MediaLibraryEntry,
-  MediaLibraryLocalSettings,
   ResolvedMediaLibrary,
 } from '@neko/shared';
 import type { InputSuggestionOption } from './input-suggestions';
 import { formatTuiLabel, getTuiLabels } from '../../core/tui-locale';
+import { createNodeWorkspaceContentPolicy } from '../../host/node-workspace-content-host';
 
 export interface TuiReferenceSuggestionOptions {
   readonly workspaceRoot: string;
@@ -91,8 +90,6 @@ type AssetLibraryEntityFile = AssetEntity['variants'][number]['files'][number];
 const DEFAULT_REFERENCE_LIMIT = 80;
 const DEFAULT_REFERENCE_MAX_DEPTH = 4;
 const LOCAL_LIBRARY_MAX_DEPTH = 5;
-const MEDIA_LIBRARY_SETTINGS_FILE = path.join('neko', 'settings.json');
-const MEDIA_LIBRARY_LOCAL_SETTINGS_FILE = path.join('.neko', 'settings.local.json');
 const ASSET_LIBRARY_FILE = path.join('neko', 'assets', 'library.json');
 const SEARCH_INDEX_CACHE_FILE = path.join('.neko', '.cache', 'search-index.json');
 const DEFAULT_LOCAL_LIBRARY_ROOTS: readonly LocalLibraryRoot[] = [
@@ -520,29 +517,7 @@ async function listSearchIndexReferenceCandidates(
 async function readResolvedMediaLibraries(
   workspaceRoot: string,
 ): Promise<readonly ResolvedMediaLibrary[]> {
-  const settingsPath = path.join(workspaceRoot, MEDIA_LIBRARY_SETTINGS_FILE);
-  const localSettingsPath = path.join(workspaceRoot, MEDIA_LIBRARY_LOCAL_SETTINGS_FILE);
-  const settings = await readOptionalJsonFile(settingsPath);
-  const localSettings = await readOptionalJsonFile(localSettingsPath);
-  const entries = readMediaLibraryEntries(settings, MEDIA_LIBRARY_SETTINGS_FILE);
-  const overrides = readMediaLibraryOverrides(localSettings, MEDIA_LIBRARY_LOCAL_SETTINGS_FILE);
-  const libraries: ResolvedMediaLibrary[] = [];
-
-  for (const entry of entries) {
-    const override = overrides[entry.variable];
-    const resolvedPath = resolveMediaLibraryPath(workspaceRoot, override ?? entry.path);
-    libraries.push({
-      name: entry.name,
-      resolvedPath,
-      originalPath: entry.path,
-      variable: entry.variable,
-      enabled: entry.enabled !== false,
-      accessible: await isReadableDirectory(resolvedPath),
-      overridden: override !== undefined,
-    });
-  }
-
-  return libraries;
+  return createNodeWorkspaceContentPolicy({ workDir: workspaceRoot }).mediaLibraries;
 }
 
 async function readOptionalJsonFile(filePath: string): Promise<unknown | undefined> {
@@ -677,95 +652,6 @@ function readOptionalStringProperty(
     throw new Error(`${sourceLabel}.${key} must be a string.`);
   }
   return property.length > 0 ? { [key]: property } : {};
-}
-
-function readMediaLibraryEntries(
-  settings: unknown,
-  sourceLabel: string,
-): readonly MediaLibraryEntry[] {
-  if (settings === undefined) {
-    return [];
-  }
-  if (!isRecord(settings)) {
-    throw new Error(`${sourceLabel} must contain a JSON object.`);
-  }
-
-  const mediaLibraries = settings['mediaLibraries'];
-  if (mediaLibraries === undefined) {
-    return [];
-  }
-  if (!Array.isArray(mediaLibraries)) {
-    throw new Error(`${sourceLabel}.mediaLibraries must be an array.`);
-  }
-
-  return mediaLibraries.map((entry, index) => readMediaLibraryEntry(entry, sourceLabel, index));
-}
-
-function readMediaLibraryEntry(
-  entry: unknown,
-  sourceLabel: string,
-  index: number,
-): MediaLibraryEntry {
-  if (!isRecord(entry)) {
-    throw new Error(`${sourceLabel}.mediaLibraries[${index}] must be a JSON object.`);
-  }
-  const name = entry['name'];
-  const libraryPath = entry['path'];
-  const variable = entry['variable'];
-  const enabled = entry['enabled'];
-
-  if (typeof name !== 'string' || name.trim().length === 0) {
-    throw new Error(`${sourceLabel}.mediaLibraries[${index}].name must be a non-empty string.`);
-  }
-  if (typeof libraryPath !== 'string' || libraryPath.trim().length === 0) {
-    throw new Error(`${sourceLabel}.mediaLibraries[${index}].path must be a non-empty string.`);
-  }
-  if (typeof variable !== 'string' || !isPathVariableName(variable)) {
-    throw new Error(
-      `${sourceLabel}.mediaLibraries[${index}].variable must be a valid path variable name.`,
-    );
-  }
-  if (enabled !== undefined && typeof enabled !== 'boolean') {
-    throw new Error(`${sourceLabel}.mediaLibraries[${index}].enabled must be a boolean.`);
-  }
-
-  return {
-    name,
-    path: libraryPath,
-    variable,
-    ...(enabled !== undefined ? { enabled } : {}),
-  };
-}
-
-function readMediaLibraryOverrides(
-  localSettings: unknown,
-  sourceLabel: string,
-): NonNullable<MediaLibraryLocalSettings['mediaLibraryOverrides']> {
-  if (localSettings === undefined) {
-    return {};
-  }
-  if (!isRecord(localSettings)) {
-    throw new Error(`${sourceLabel} must contain a JSON object.`);
-  }
-
-  const overrides = localSettings['mediaLibraryOverrides'];
-  if (overrides === undefined) {
-    return {};
-  }
-  if (!isRecord(overrides)) {
-    throw new Error(`${sourceLabel}.mediaLibraryOverrides must be a JSON object.`);
-  }
-
-  const result: Record<string, string> = {};
-  for (const [variable, libraryPath] of Object.entries(overrides)) {
-    if (!isPathVariableName(variable) || typeof libraryPath !== 'string') {
-      throw new Error(
-        `${sourceLabel}.mediaLibraryOverrides must map path variable names to strings.`,
-      );
-    }
-    result[variable] = libraryPath;
-  }
-  return result;
 }
 
 async function listLibraryRootFiles(input: {
@@ -942,6 +828,8 @@ function toTuiMentionReferenceKind(kind: AgentReferenceCandidate['kind']): TuiMe
       return 'asset';
     case 'media':
       return 'media';
+    case 'entity':
+      return 'entity';
     case 'canvas':
       return 'canvas-node';
     case 'story-scene':
@@ -1153,18 +1041,8 @@ function isLocalLibraryExcludedName(name: string): boolean {
   );
 }
 
-function resolveMediaLibraryPath(workspaceRoot: string, libraryPath: string): string {
-  return path.isAbsolute(libraryPath)
-    ? path.resolve(libraryPath)
-    : path.resolve(workspaceRoot, libraryPath);
-}
-
 function formatPathVariableReference(variable: string): string {
   return '${' + variable + '}';
-}
-
-function isPathVariableName(value: string): boolean {
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
 }
 
 async function isReadableDirectory(dirPath: string): Promise<boolean> {
