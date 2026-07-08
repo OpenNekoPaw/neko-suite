@@ -313,6 +313,14 @@ AI SDK message projection、prompt / Skill 行为、tool schema、AgentSession
 workflow、validator/recovery 策略，或 TUI/GUI 对实时 Agent 事件的投影，必须
 加载显式 `config.toml` 并运行相关 real lane：
 
+新增 Agent 功能的默认开发/验收顺序是：先定义共享 contract、runtime path 和
+path-level 测试；再用 mock、real workflow 和 real TUI lane 验证 Agent 核心
+行为、Skill/Tool/prompt 效果、长时间任务、失败诊断和稳定性；确认核心路径可用后，
+再用 VS Code Extension Development Host + `vscode-extension-debugger` 验证
+Webview UI 投影、交互、`invokeSkill` / active Skill 指示器和 UI Skill 使用效果。
+Webview 验收不能替代 Agent/TUI 核心行为验证，TUI/headless 验收也不能替代
+VS Code Webview runtime 验收。
+
 ```bash
 pnpm test:agent:mock
 NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:platform

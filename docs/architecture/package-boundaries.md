@@ -29,7 +29,7 @@
 
 | 平面              | 典型目录                                                                                                                                              | 职责                                                                       | 禁止事项                                                        |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| L0 共享契约       | `packages/neko-types` 主入口、`packages/neko-host`、`packages/neko-proto`、`packages/neko-client`、`packages/neko-market/packages/core`、`packages/neko-auth/packages/core` | 类型、IDL、基础设施、Host adapter ports、Engine client、领域无关核心        | 依赖功能包、依赖具体 Extension/Webview/Node/Rust 实现           |
+| L0 共享契约       | `packages/neko-types` 主入口、`packages/neko-host`、`packages/neko-workbench-core`、`packages/neko-proto`、`packages/neko-client`、`packages/neko-market/packages/core`、`packages/neko-auth/packages/core` | 类型、IDL、基础设施、Host adapter ports、Workbench/Plugin Host 契约、Engine client、领域无关核心 | 依赖功能包、依赖具体 Extension/Webview/Node/Rust 实现           |
 | L1 Extension Host | `packages/*/packages/extension/src`、部分历史根包 `src`                                                                                               | VS Code API、工作区访问、资源授权、命令注册、状态栏、Engine 启动和权限代理 | 引入 React、引入 Webview 实现、转发高频媒体帧                   |
 | L2 Webview UI     | `packages/*/packages/webview/src`、`packages/neko-ui/src`                                                                                             | React UI、Zustand 状态、浏览器流消费、用户交互                             | 引入 `vscode`、Node API、Extension 实现、持久化运行时 URI/token |
 | Engine            | `packages/neko-engine/packages/*`                                                                                                                     | 媒体、音频、设备、ML、Scene、Puppet、GPU 渲染和运行时权威                  | 把权威计算复制到 TypeScript 层                                  |
@@ -80,6 +80,20 @@
 - Agent 工具不得直接感知、枚举、读取或修改 `.neko` 内部文件；Agent 只能消费 owning domain runtime 提供的净化投影或提交 mutation proposal，最终写入由客户端进程通过领域 runtime 完成。
 - TUI 是 headless client composition root：可以用 Node host adapter 读取本机文件、用户配置和工作区 domain data，但必须通过 owning domain provider 注册 Agent 能力。TUI 不导入 VSCode Extension 内部工具实现，也不暴露 Webview URI、cache path、index manifest 或 `.neko` backing file 给 Agent。
 - Auth、Market 和 Engine 的 TUI headless 能力 owner 分别是 `@neko/auth`/`@neko-auth-core`、`@neko/market-core`/market host adapter、`@neko/neko-client`/Engine host services；在对应 owner 提供 host-neutral provider 前，不应把它们塞进 `@neko/host` 或 `@neko/agent`。
+
+### `@neko/workbench-core`
+
+`packages/neko-workbench-core` 是 Workbench contribution 与 Plugin Host manifest 的 host-neutral 契约层。它描述多宿主编辑器如何注册、验证和投影 commands、menus、keybindings、view containers、views、custom editors、resource sources、Agent surfaces、viewport descriptors、themes、icons、skills 和 Agent tools。
+
+约束：
+
+- 不得依赖 React、DOM、VSCode、Electron、Node-only API 或任何功能包内部实现。
+- 不得拥有具体 UI 渲染、Extension activation、Electron 窗口、TUI 输出、Engine 连接、Market 安装、Skill 执行或 Agent runtime。
+- 不得把 `@neko/host` 扩展成领域/插件 registry；Host ports 仍只表达宿主原语，Workbench Core 只表达 contribution/plugin 契约。
+- Plugin manifest/schema/version、permission、trust、activation event 和 contribution id 校验必须 fail-visible。
+- Resource source contribution 只能表达 stable ref 与 runtime projection 边界；不得把 `.neko/.cache`、Webview URI、blob URL、Engine token 或绝对路径作为持久事实。
+- Desktop、VSCode 和未来 Tauri/native host 应作为 adapter 消费 Workbench Core；TUI 只消费 headless projection。
+- VSCode 兼容只能是显式 subset mapping，不承诺完整 VSCode API 兼容。
 
 ### 跨子包能力复用
 
@@ -136,6 +150,7 @@
 
 - 不导入 `vscode`、Node-only module、功能包或 `acquireVsCodeApi`。
 - 不放 package-specific 业务逻辑、命令协议、Engine 操作或 Agent runtime。
+- `@neko/ui/workbench` 消费 `@neko/workbench-core` 的 host-neutral model/projection；不要把 contribution registry、plugin manifest、permission/trust 或宿主 adapter 逻辑放入 React UI 层。
 - `@neko/ui/error-boundary` 是 Webview React ErrorBoundary 捕获、日志、fallback/retry 的共享入口；功能包需要品牌 copy 或错误 handler 时保留薄 wrapper，不复制 catch/log/reset 实现。
 - `@neko/ui/keyboard` 是 Webview 键盘焦点、editable target、shortcut suppression 和 focused root metadata 的共享入口；功能包不要保留本地 `editable-target` copy 或旧 keyboard reporter。
 - Agent Header/Input/selector 等 Agent 专属交互留在 `neko-agent` Webview，不迁入 `@neko/ui`。

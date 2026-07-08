@@ -1,6 +1,6 @@
 # Agent 横切架构
 
-更新日期：2026-07-02
+更新日期：2026-07-08
 
 Agent 是 Neko Suite 的横切创作智能层，不是一个创作领域。它为视频、音频、模型、2D 和互动创作提供意图理解、计划、工具调用、上下文压缩、审阅和修复能力。
 
@@ -22,36 +22,37 @@ Agent 是 Neko Suite 的横切创作智能层，不是一个创作领域。它�
 - Grounded-output：Agent 输出要进入持久上下文，必须接地到 `ResourceRef`、asset/entity ID、Search source、Engine output 或领域项目格式。
 - Human-governed：不可逆、高成本、外部副作用、信任边界变化和项目事实改写必须经过 Approval/Policy。
 - Host-agnostic runtime：Agent runtime 不知道 VS Code、React、Webview、Node 文件系统细节；这些都通过 host adapter 注入。
+- Workspace-shared business plane：同一工作区的配置、会话身份、Skill/command catalog、任务事实、上下文和资源缓存策略必须复用共享 contract；平台差异保留在 host adapter 和 projection。
 - Projection-only UI：Webview 展示消息、任务、Agent-native creation 状态、artifact 和设置投影，不拥有 Agent 业务策略。
 
 ## 分层
 
-| 层            | 职责                                                                     |
-| ------------- | ------------------------------------------------------------------------ |
-| `agent-types` | Webview/Extension/runtime 共享协议、消息、投影和状态 contract            |
+| 层            | 职责                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------- |
+| `agent-types` | Webview/Extension/runtime 共享协议、消息、投影和状态 contract                         |
 | `agent`       | host-agnostic runtime、Agent-native creation、prompt、skill、memory、tool、evaluation |
-| `ai-sdk`      | Provider/AI SDK adapter，不承载 UI 或 VS Code 逻辑                       |
-| `platform`    | host-agnostic 平台桥、配置、provider glue 和能力注入                     |
-| `extension`   | VS Code commands、配置桥、host adapters、会话入口、资源授权              |
-| `webview`     | Chat UI、输入、消息投影、用户反馈、短生命周期 UI 状态                    |
-| `cli-tui`     | 非 VS Code shell，复用 runtime 能力                                      |
+| `ai-sdk`      | Provider/AI SDK adapter，不承载 UI 或 VS Code 逻辑                                    |
+| `platform`    | host-agnostic 平台桥、配置、provider glue 和能力注入                                  |
+| `extension`   | VS Code commands、配置桥、host adapters、会话入口、资源授权                           |
+| `webview`     | Chat UI、输入、消息投影、用户反馈、短生命周期 UI 状态                                 |
+| `cli-tui`     | Terminal TUI/headless shell，复用 runtime 能力                                        |
 
 ## 包职责边界
 
-| 包/层         | 可以做                                                                                                      | 不可以做                                             |
-| ------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `agent-types` | 定义 Webview/Extension/runtime 共享消息、Agent-native creation、provider、prompt schema、work item、artifact projection | 导入 runtime、VS Code、React 或 provider SDK         |
+| 包/层         | 可以做                                                                                                                    | 不可以做                                             |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `agent-types` | 定义 Webview/Extension/runtime 共享消息、Agent-native creation、provider、prompt schema、work item、artifact projection   | 导入 runtime、VS Code、React 或 provider SDK         |
 | `agent`       | session、turn assembly、creation profile/stage/iteration、prompt/schema、memory、tool orchestration、approval、evaluation | 读写 VS Code API、渲染 UI、直接访问 Webview          |
-| `ai-sdk`      | provider adapter、model invocation、tool/structured-output projection、多模态消息投影                       | 拥有创作 lifecycle、读取项目文件、决定领域语义       |
-| `platform`    | host-agnostic platform glue、tool provider、market skill adapter、配置解析、能力注入                        | 依赖 React/Webview，实现 VS Code UI                  |
-| `extension`   | VS Code command、Webview bridge、file/resource/auth/engine/entity/search host adapter、lifecycle/disposable | 沉淀 Agent runtime 决策或 prompt 拼装                |
-| `webview`     | Chat、settings、skill catalog、creation/task/artifact projection、用户确认                                  | 导入 runtime/platform/ai-sdk，执行工具或访问文件系统 |
-| `cli-tui`     | 非 VS Code shell 和 TUI adapter                                                                             | 绕过 runtime 另建 Agent 业务路径                     |
+| `ai-sdk`      | provider adapter、model invocation、tool/structured-output projection、多模态消息投影                                     | 拥有创作 lifecycle、读取项目文件、决定领域语义       |
+| `platform`    | host-agnostic platform glue、tool provider、market skill adapter、配置解析、能力注入                                      | 依赖 React/Webview，实现 VS Code UI                  |
+| `extension`   | VS Code command、Webview bridge、file/resource/auth/engine/entity/search host adapter、lifecycle/disposable               | 沉淀 Agent runtime 决策或 prompt 拼装                |
+| `webview`     | Chat、settings、skill catalog、creation/task/artifact projection、用户确认                                                | 导入 runtime/platform/ai-sdk，执行工具或访问文件系统 |
+| `cli-tui`     | Terminal TUI/headless shell 和 TUI adapter                                                                                | 绕过 runtime 另建 Agent 业务路径                     |
 
 ## 架构视图
 
 ```text
-Webview / CLI projection
+Webview / Terminal TUI projection
   -> Extension or shell host adapter
   -> Agent runtime
   -> Platform, provider, skill and capability adapters
@@ -60,13 +61,13 @@ Webview / CLI projection
 
 ### 五层设计约束
 
-| 维度   | 约束                                                                                                                                                                                                             |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 职责   | Webview/CLI 只投影交互；Extension/shell 只注入宿主能力；Agent runtime 拥有 turn、creation profile/stage/iteration、skill、prompt、tool、memory、approval、evaluation；Platform/AI SDK 只适配 provider；领域服务拥有具体创作事实 |
-| 依赖   | Webview 依赖 `agent-types`，不依赖 runtime；Extension 可依赖 runtime 和 platform，但不沉淀策略；`agent`、`platform`、`ai-sdk` 保持 host-agnostic；领域包通过 capability、command、facade 或 shared contract 接入 |
-| 接口   | Webview protocol、runtime ports、provider adapter、capability contribution、tool schema、artifact projection 和 grounded refs 分层定义，不能用自由 JSON 在层间扩散                                               |
-| 扩展   | 新 provider、新 skill、新 market capability、新领域工具先进入 registration，再按 creation profile/context/policy 注入；扩展点不能绕过 approval、grounding 和 diagnostics                                      |
-| 可测性 | 通过 prompt snapshot/hash、protocol schema、adapter fake、creation profile/iteration、tool allowlist、boundary import guard 和 projection fixture 固化行为，不依赖真实 UI 或真实 provider 才能验证核心策略       |
+| 维度   | 约束                                                                                                                                                                                                                                     |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 职责   | Webview/Terminal TUI 只投影交互；Extension/shell 只注入宿主能力；Agent runtime 拥有 turn、creation profile/stage/iteration、skill、prompt、tool、memory、approval、evaluation；Platform/AI SDK 只适配 provider；领域服务拥有具体创作事实 |
+| 依赖   | Webview 依赖 `agent-types`，不依赖 runtime；Extension 可依赖 runtime 和 platform，但不沉淀策略；`agent`、`platform`、`ai-sdk` 保持 host-agnostic；领域包通过 capability、command、facade 或 shared contract 接入                         |
+| 接口   | Webview protocol、runtime ports、provider adapter、capability contribution、tool schema、artifact projection 和 grounded refs 分层定义，不能用自由 JSON 在层间扩散                                                                       |
+| 扩展   | 新 provider、新 skill、新 market capability、新领域工具先进入 registration，再按 creation profile/context/policy 注入；扩展点不能绕过 approval、grounding 和 diagnostics                                                                 |
+| 可测性 | 通过 prompt snapshot/hash、protocol schema、adapter fake、creation profile/iteration、tool allowlist、boundary import guard 和 projection fixture 固化行为，不依赖真实 UI 或真实 provider 才能验证核心策略                               |
 
 ## 运行时入口与平面
 
@@ -82,14 +83,32 @@ host bootstrap
   -> AgentSession
 ```
 
-| 平面                | 职责                                                                          | 约束                                                              |
-| ------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 平面                | 职责                                                                                            | 约束                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `creationGuidance`  | Agent-native creation profile guidance、stage projection、validator feedback、review projection | 不拥有 lifecycle/state，不执行领域副作用，不创建 workflow run/node/transition |
-| `artifactStore`     | workspace artifact、journal writer、artifact projection、grounded output refs | 不保存 Webview URI、runtime token、临时绝对路径或 provider secret |
-| `capabilityRuntime` | skill、toolGroup、prompt fragments、provider cards、capability diagnostics    | registration 与 injection 分离，不能注册即注入 LLM                |
-| `feedbackLoop`      | memory recall/extraction、evaluation signal、recovery decision、user feedback | feedback 是控制信号，不是私有阶段 runtime                         |
+| `artifactStore`     | workspace artifact、journal writer、artifact projection、grounded output refs                   | 不保存 Webview URI、runtime token、临时绝对路径或 provider secret             |
+| `capabilityRuntime` | skill、toolGroup、prompt fragments、provider cards、capability diagnostics                      | registration 与 injection 分离，不能注册即注入 LLM                            |
+| `feedbackLoop`      | memory recall/extraction、evaluation signal、recovery decision、user feedback                   | feedback 是控制信号，不是私有阶段 runtime                                     |
 
-宿主显式配置优先于 runtime 默认值。Extension、CLI 和 TUI 不应各自维护一套 session bootstrap 映射；差异通过 host adapter 注入。
+宿主显式配置优先于 runtime 默认值。Extension、Terminal TUI 和 headless 工具不应各自维护一套 session bootstrap 映射；差异通过 host adapter 注入。
+
+## 工作区 Runtime 共享与宿主差异
+
+Webview/Extension 与 Terminal TUI/headless 是不同本地宿主，不要求功能完全一致。差异本身不是债务：VS Code API、`postMessage`、Webview URI、watcher、memento/recovery、Extension command、Ink 键盘流、终端进程生命周期、stdout/stderr 报告和真实 API 验证 lane 都可以保留在各自宿主。债务来自两端为同一工作区重复实现配置、会话、Skill、命令、任务、上下文或缓存业务规则。
+
+同一工作区必须共享以下业务数据面：
+
+| 数据面                    | 共享规则                                                                                                                                                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Effective config snapshot | `~/.neko/config.toml`、`.neko/config.toml`、环境凭据和账号 catalog 统一解析；Webview/TUI 对 provider、model、scalar、MCP 得到同一结果或同一 diagnostic。运行时模型/参数选择只影响当前 session，不自动重写 TOML。  |
+| Conversation/session      | 交互式会话使用 canonical runtime assembly 和 workspace-scoped canonical conversation id；旧 `cli-*` id 不作为 TUI resume 兼容输入，旧 runtime state source 也不能作为共享状态成功读入。                           |
+| Skill/command catalog     | 标准用户/工作区来源是 `~/.neko/skills`、`~/.neko/commands`、`.neko/skills`、`.neko/commands`；`skillsDir` 之类非标准来源不能让 TUI/headless 单独看到不同 catalog，必须通过显式 source provider 暴露 diagnostics。 |
+| Async task facts          | 可跨宿主观察的任务状态进入 workspace-visible task record；live handle、lease、recovery token 和 no-workspace state 保持 host-private。                                                                            |
+| Context/memory            | project memory、AGENTS overlays、context settings、授权读根和 capability prompt fragments 通过 shared runtime assembly 注入。                                                                                     |
+| Content/cache             | 工作区资源使用 project resource-cache root、manifest、quota 和 GC 策略；cache path、Webview URI、blob URL 和 provider-private payload 不是 durable identity。                                                     |
+| Dependency diagnostics    | 文档、图片和可选解析依赖由 host content-access runtime 注入；缺失依赖返回 typed diagnostic，不在某个宿主静默降级为空结果。                                                                                        |
+
+跨宿主请求遇到 host-private 能力时，应返回 host-private/unavailable diagnostic，不能 no-op、转成普通 prompt、读取另一端私有缓存或回退旧实现。共享 command catalog 的 surface scope 使用 `tui` / `extension`；headless 只作为执行 lane，不伪装成交互式 CLI surface。新增 Agent 能力默认先进入共享 contract 和 path-level 测试，再由 Webview/Extension 与 Terminal TUI/headless 分别实现 adapter 与 projection。
 
 ## 控制面
 
@@ -148,12 +167,12 @@ User intent
 
 ### 阶段语义
 
-| 阶段             | 回答                               | 主要产物                                             | 不应承担               |
-| ---------------- | ---------------------------------- | ---------------------------------------------------- | ---------------------- |
-| Draft            | 用户想创作什么，约束和参考是什么   | intent summary、context refs、draft artifacts        | 直接执行不可逆工具     |
+| 阶段             | 回答                               | 主要产物                                                  | 不应承担               |
+| ---------------- | ---------------------------------- | --------------------------------------------------------- | ---------------------- |
+| Draft            | 用户想创作什么，约束和参考是什么   | intent summary、context refs、draft artifacts             | 直接执行不可逆工具     |
 | Plan             | 用哪些能力、顺序和审批完成目标     | next actions、tool/capability hints、artifact expectation | 私自扩大权限或隐藏工具 |
-| Apply            | 执行工具、生成媒体、写入事实或产物 | tool results、artifacts、entity/asset/resource refs  | 重新解释用户目标       |
-| Observe/Evaluate | 结果是否达标，如何恢复             | diagnostics、feedback、repair suggestions            | 绕过审批自动改事实     |
+| Apply            | 执行工具、生成媒体、写入事实或产物 | tool results、artifacts、entity/asset/resource refs       | 重新解释用户目标       |
+| Observe/Evaluate | 结果是否达标，如何恢复             | diagnostics、feedback、repair suggestions                 | 绕过审批自动改事实     |
 
 内置 IDC profile 不要求每个 turn 都完整走三阶段。简单、低风险、无副作用问题可以直接回答或进入轻量执行；多步骤、跨领域、高成本、写项目事实或需要媒体生成的请求应让 Agent 显式说明当前 stage、validator 和下一步。
 
@@ -161,7 +180,7 @@ User intent
 
 | 用户意图                                   | 默认路径                           | 说明                                                                   |
 | ------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------------- |
-| 解释、查询、只读总结                       | 直接回答或轻量 Apply               | 不创建 workflow run，除非需要持久 artifact 或 creation iteration         |
+| 解释、查询、只读总结                       | 直接回答或轻量 Apply               | 不创建 workflow run，除非需要持久 artifact 或 creation iteration       |
 | 单一低风险工具                             | 隐式 Draft -> Apply                | runtime 可内部选择工具，但仍保留 tool trace                            |
 | 多领域创作、媒体生成、批量变更             | Draft -> Plan -> Apply             | 明确目标、参考、能力路径、预期产物和审批点                             |
 | 删除、覆盖、安装、外部副作用、信任边界变化 | Draft -> Plan -> Approval -> Apply | Policy 决定是否需要用户确认和更高信任能力                              |
@@ -177,11 +196,11 @@ User intent
 
 Agent 有三类协议面，不能混用：
 
-| 协议面            | 参与方                            | 内容                                                                           | 约束                                                 |
-| ----------------- | --------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------- |
-| Webview protocol  | Webview ↔ Extension               | `sendMessage`、confirm tool、plan action、slash command、settings、open/reveal | 只传投影和用户意图，不传 secret 和 runtime internals |
+| 协议面            | 参与方                            | 内容                                                                                | 约束                                                 |
+| ----------------- | --------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Webview protocol  | Webview ↔ Extension               | `sendMessage`、confirm tool、plan action、slash command、settings、open/reveal      | 只传投影和用户意图，不传 secret 和 runtime internals |
 | Runtime protocol  | Extension adapter ↔ Agent runtime | turn assembly、creation iteration、tool call、approval、memory、artifact projection | host-agnostic，使用 ports/adapters                   |
-| Provider protocol | Runtime/AI SDK ↔ model provider   | messages、tool schemas、structured output、多模态 payload                      | provider-specific 差异在 adapter 内消化              |
+| Provider protocol | Runtime/AI SDK ↔ model provider   | messages、tool schemas、structured output、多模态 payload                           | provider-specific 差异在 adapter 内消化              |
 
 ### 消息与产物
 
@@ -204,12 +223,12 @@ Agent 有三类协议面，不能混用：
 
 Agent 可以把领域状态投影成消息卡片、确认清单和操作按钮，但不拥有领域 Webview 的运行时状态。对于 Canvas/Cut/Preview，Agent 的职责是理解、展示、确认和调度：
 
-| 能力 | Agent 负责 | Owning surface 负责 |
-| ---- | ---------- | ------------------- |
-| Canvas 播放顺序 | 读取 `CanvasPlaybackPlan`，展示 route 摘要、有序清单、诊断和导入确认 | Canvas 保存顺序事实，Canvas Editor Webview 内的 `PlaybackWorkspace` 拥有 route playback session |
-| Canvas 预览播放 | 发起 `revealCanvasPlaybackWorkspace(sourceCanvasUri, routeId, unitId?)` 意图 | Canvas Editor Webview 显示/聚焦 `PlaybackWorkspace`、seek、播放、维护 playhead 和当前 unit |
-| Cut 剪辑结果 | 读取 timeline 摘要、展示导入或审阅建议 | Cut 管理 `.nkv`、timeline、clip、trim、效果、字幕、音频和播放 |
-| 媒体预览 | 展示缩略图、poster、probe、关键帧和资源卡片 | `neko-preview` / Engine 负责解码、stream、seek、音频同步和资源授权 |
+| 能力            | Agent 负责                                                                   | Owning surface 负责                                                                             |
+| --------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Canvas 播放顺序 | 读取 `CanvasPlaybackPlan`，展示 route 摘要、有序清单、诊断和导入确认         | Canvas 保存顺序事实，Canvas Editor Webview 内的 `PlaybackWorkspace` 拥有 route playback session |
+| Canvas 预览播放 | 发起 `revealCanvasPlaybackWorkspace(sourceCanvasUri, routeId, unitId?)` 意图 | Canvas Editor Webview 显示/聚焦 `PlaybackWorkspace`、seek、播放、维护 playhead 和当前 unit      |
+| Cut 剪辑结果    | 读取 timeline 摘要、展示导入或审阅建议                                       | Cut 管理 `.nkv`、timeline、clip、trim、效果、字幕、音频和播放                                   |
+| 媒体预览        | 展示缩略图、poster、probe、关键帧和资源卡片                                  | `neko-preview` / Engine 负责解码、stream、seek、音频同步和资源授权                              |
 
 Agent Chat 不应复制完整播放器、route timeline 或剪辑 timeline。Chat 内只展示轻量预览卡片，例如缩略图、当前 shot 图片、时长、素材状态、diagnostic、source mapping 和按钮：
 
@@ -222,6 +241,10 @@ Agent Chat 不应复制完整播放器、route timeline 或剪辑 timeline。Cha
 这些按钮发送的是 reveal/open 或 confirmation intent，不是直接文件访问或 Webview store mutation。Extension adapter 负责解析资源、检查 policy、显示或聚焦对应 Webview 区域，并返回可审计 diagnostic。
 
 Agent 可以分析视频内容，但分析路径应调用 Engine、Preview、Media LSP 或领域工具读取 probe、关键帧、字幕、音频峰值、质量诊断和 ResourceRef，而不是通过在 Chat 内播放视频来获得状态。
+
+### Package Authoring Transfer
+
+当 Agent/Assets/Skill 要把生成结果、分镜、素材或模型写入 Cut、Sketch、Audio、Model 或 Canvas 项目时，Agent 只负责选择能力、传递 stable source/ref、`target`、`reveal` 和 provenance，并展示 structured diagnostics。项目事实写入必须走 owning package 的 canonical authoring service/command，遵循 [`headless-project-authoring.md`](headless-project-authoring.md)；旧 UI-bound command、隐藏打开 Webview、Webview pending import、temp project 和“打开即成功”都不是 durable authoring 成功路径。
 
 ## Capability、Skill、Prompt
 
@@ -251,15 +274,15 @@ Injection
 
 ### Skill 生命周期
 
-| 阶段       | 设计规则                                                                                                                       |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Discover   | 从 builtin、workspace、market、local、MCP 或 provider contribution 发现，不执行副作用                                          |
-| Validate   | 校验 manifest、schema、trust、host requirements、tool references、prompt fragment 形状                                         |
-| Register   | 进入 registry，产出 diagnostics 和 capability metadata                                                                         |
-| Activate   | 根据用户意图、slash command、active skill、creation stage/profile 或领域上下文选择候选                                        |
+| 阶段       | 设计规则                                                                                                                               |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Discover   | 从 builtin、workspace、market、local、MCP 或 provider contribution 发现，不执行副作用                                                  |
+| Validate   | 校验 manifest、schema、trust、host requirements、tool references、prompt fragment 形状                                                 |
+| Register   | 进入 registry，产出 diagnostics 和 capability metadata                                                                                 |
+| Activate   | 根据用户意图、slash command、active skill、creation stage/profile 或领域上下文选择候选                                                 |
 | Inject     | 在 policy、token budget、provider capability 和 creation stage/profile 允许时注入 prompt fragments、tool schemas 和 structured schemas |
-| Observe    | 记录 capability diagnostics、tool result metadata、artifact refs 和 feedback signal                                            |
-| Deactivate | 切换会话、清除 active skill、失去 trust/host requirement 或上下文不再匹配时移出 injection set                                  |
+| Observe    | 记录 capability diagnostics、tool result metadata、artifact refs 和 feedback signal                                                    |
+| Deactivate | 切换会话、清除 active skill、失去 trust/host requirement 或上下文不再匹配时移出 injection set                                          |
 
 Skill-first 的含义是“领域策略包先行”，不是“Skill 拥有执行引擎”。跨领域创作应通过多个 capability 的显式注入组合完成，而不是在某个 skill 中硬编码对其他包的内部调用。
 
@@ -339,13 +362,13 @@ Evaluation 是横切审阅面，不是默认 IDC 阶段，也不是独立 workfl
 - Recovery 不得绕过 Approval/Policy，也不得把 evaluator 建议直接写入 confirmed fact。
 - 普通用户流不应隐式插入消融或评测节点；研发验证与普通创作主路径分离。
 
-| Recovery signal | 含义                                 | 约束                            |
-| --------------- | ------------------------------------ | ------------------------------- |
-| retry-tool      | 同一工具参数或小范围修正后重试       | 只适合幂等或可回滚工具          |
-| retry-stage     | 保持用户目标，重新执行当前 creation stage | 需要保留失败 diagnostics    |
-| regress         | 回到 Draft 或 Plan 修正目标/方案     | 不自动丢弃用户已确认内容        |
-| restart-creation | 重新创建 creation session 或 iteration | 需要明确 lineage 和用户可见说明 |
-| escalate-user   | 请求用户决策、授权或补充素材         | 不用模型臆造缺失事实            |
+| Recovery signal  | 含义                                      | 约束                            |
+| ---------------- | ----------------------------------------- | ------------------------------- |
+| retry-tool       | 同一工具参数或小范围修正后重试            | 只适合幂等或可回滚工具          |
+| retry-stage      | 保持用户目标，重新执行当前 creation stage | 需要保留失败 diagnostics        |
+| regress          | 回到 Draft 或 Plan 修正目标/方案          | 不自动丢弃用户已确认内容        |
+| restart-creation | 重新创建 creation session 或 iteration    | 需要明确 lineage 和用户可见说明 |
+| escalate-user    | 请求用户决策、授权或补充素材              | 不用模型臆造缺失事实            |
 
 ## 跨领域接入规则
 
@@ -385,12 +408,12 @@ Evaluation 是横切审阅面，不是默认 IDC 阶段，也不是独立 workfl
 
 ## 与创作领域的关系
 
-| 创作领域 | Agent 参与方式                                    |
-| -------- | ------------------------------------------------- |
-| 视频     | 分镜、视频理解、自动后期、剪辑建议、质量审阅      |
-| 音频     | 转写、效果链建议、混音/后期建议、音频质量审阅     |
-| 模型     | LookDev、材质/灯光建议、捏脸、场景编辑和验证      |
-| 2D       | 图像准备、PSD 分层建议、Puppet 辅助、角色素材整理 |
+| 创作领域 | Agent 参与方式                                     |
+| -------- | -------------------------------------------------- |
+| 视频     | 分镜、视频理解、自动后期、剪辑建议、质量审阅       |
+| 音频     | 转写、效果链建议、混音/后期建议、音频质量审阅      |
+| 模型     | LookDev、材质/灯光建议、捏脸、场景编辑和验证       |
+| 2D       | 图像准备、PSD 分层建议、Puppet 辅助、角色素材整理  |
 | 互动     | 交互结构生成、状态解释、自动连接、运行态审阅与修复 |
 
 领域文档应说明 Agent 如何参与某个创作目标；本文只定义 Agent 自身横切边界。

@@ -27,6 +27,7 @@
 | [`adr-code-review-quality-gates.md`](adr-code-review-quality-gates.md)                                             | 代码审查、风险分级、验证矩阵和功能偏离检查                                          |
 | [`adr-local-metadata-store-sqlite.md`](adr-local-metadata-store-sqlite.md)                                         | SQLite 本地元数据 Store、JSON 事实文件和缓存索引边界                                |
 | [`adr-neko-desktop-apphost-resource-viewport-boundary.md`](adr-neko-desktop-apphost-resource-viewport-boundary.md) | Neko Desktop AppHost、资源工作台、Market/Skills 管理面和 Engine-owned viewport 边界 |
+| [`adr-neko-workbench-core-plugin-host.md`](adr-neko-workbench-core-plugin-host.md)                                 | Neko Workbench Core、Plugin Host、VSCode 设计参考和 Desktop Host Adapter 边界       |
 | [`adr-unified-markdown-resource-rendering.md`](adr-unified-markdown-resource-rendering.md)                         | Canvas MCP 式能力、Markdown 扩展语法、资源增强渲染和 Send to Canvas 边界            |
 | [`adr-canvas-cut-playback-route-and-timeline-boundary.md`](adr-canvas-cut-playback-route-and-timeline-boundary.md) | Canvas 预览路线矩阵、Cut 剪辑时间线、Agent 顺序感知和跨包协议边界                   |
 | [`adr-ui-domain-panels-and-shared-primitives.md`](adr-ui-domain-panels-and-shared-primitives.md)                   | 创作领域面板与共享 UI 原语的复用边界                                                |
@@ -36,6 +37,7 @@
 | [`cache-file-access-and-paths.md`](cache-file-access-and-paths.md)                                                 | 缓存、文件读写服务、路径变量、ContentAccess 和 Webview 投影                         |
 | [`client-targets.md`](client-targets.md)                                                                           | TUI、VSCode 插件客户端和独立编辑器的产品目标、职责边界和验证重点                    |
 | [`engine-runtime.md`](engine-runtime.md)                                                                           | Rust Engine runtime、GPU/0-copy、2D/3D/Live2D、ECS/OOP 与数据路径                   |
+| [`headless-project-authoring.md`](headless-project-authoring.md)                                                   | `.nk*` 持久项目写入的无 UI authoring 边界、operation 分类、canonical 入口和客户端适配 |
 | [`marketplace.md`](marketplace.md)                                                                                 | Marketplace/Registry、manifest、install target 和 trust 边界                        |
 | [`package-boundaries.md`](package-boundaries.md)                                                                   | 子包边界、UI 层、公共代码、Extension/Webview/Engine 约束和验证命令                  |
 | [`proto-and-wire-contracts.md`](proto-and-wire-contracts.md)                                                       | Proto、wire contract、生成类型、UI projection 和项目格式关系                        |

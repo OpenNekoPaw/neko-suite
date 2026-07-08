@@ -316,6 +316,16 @@ projection, prompt or Skill behavior, tool schemas, AgentSession workflow,
 validator/recovery policy, or TUI/GUI projection of live Agent events must load
 an explicit `config.toml` and run the relevant real lane:
 
+The default development and acceptance order for new Agent features is: define
+the shared contract, runtime path, and path-level tests first; validate Agent
+core behavior, Skill/Tool/prompt effects, long-running tasks, failure
+diagnostics, and stability through mock, real workflow, and real TUI lanes; then
+validate Webview UI projection, interactions, the `invokeSkill` / active Skill
+indicator, and UI Skill behavior through VS Code Extension Development Host +
+the `vscode-extension-debugger` Skill. Webview acceptance does not replace
+Agent/TUI core behavior validation, and TUI/headless acceptance does not replace
+VS Code Webview runtime acceptance.
+
 ```bash
 pnpm test:agent:mock
 NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:platform

@@ -32,7 +32,7 @@ Neko Suite 的客户端产物按目标分工：
 
 | 层级          | 所有者                                             | 规则                                              |
 | ------------- | -------------------------------------------------- | ------------------------------------------------- |
-| L0 共享契约   | `neko-types`、`neko-proto`、部分 schema 和工具模块 | 零内部包依赖，可被 Extension 和 Webview 复用      |
+| L0 共享契约   | `neko-types`、`neko-proto`、`neko-workbench-core`、部分 schema 和工具模块 | 零内部包依赖，可被 Extension 和 Webview 复用      |
 | L1 宿主服务   | Extension Host 包与 `neko-client` 适配层           | 可使用 VS Code API；不得导入 React                |
 | L2 Webview UI | React 包与 `neko-ui`                               | 只运行在浏览器沙箱；不得导入 `vscode` 或 Node API |
 | Engine        | `neko-engine` Rust crates                          | 权威计算和运行时状态；宿主无关                    |
@@ -55,6 +55,7 @@ Neko Suite 的客户端产物按目标分工：
 | 跨层 IDL                      | `packages/neko-proto`                        |
 | TypeScript 共享契约和基础设施 | `packages/neko-types`                        |
 | Host Adapter ports            | `packages/neko-host`                         |
+| Workbench / Plugin Host 契约  | `packages/neko-workbench-core`               |
 | 跨领域内容语义服务            | `packages/neko-content`                      |
 | Engine client 与流客户端      | `packages/neko-client`                       |
 | 媒体与运行时权威              | `packages/neko-engine`                       |
