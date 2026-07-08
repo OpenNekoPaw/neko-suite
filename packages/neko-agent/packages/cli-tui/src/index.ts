@@ -66,6 +66,34 @@ export {
 // Formatter
 export { formatResult, formatText, formatJson, formatMarkdown } from './core/formatter';
 
+export {
+  CLI_RUN_RESULT_SCHEMA,
+  createCliRunResultArtifact,
+  writeCliRunResultArtifact,
+  type CliRunResultArtifact,
+  type CliRunResultConfigSnapshot,
+} from './core/run-result';
+
+export {
+  TUI_REAL_API_SUITE_SCHEMA,
+  TUI_REAL_API_SUITE_RUN_SCHEMA,
+  createDefaultTuiRealApiSuiteManifest,
+  loadTuiRealApiSuiteManifest,
+  parseTuiRealApiSuiteManifest,
+  runTuiRealApiSuite,
+  evaluateTuiRealApiCase,
+  formatTuiRealApiSuiteReport,
+  type TuiRealApiAiSummaryOptions,
+  type TuiRealApiCase,
+  type TuiRealApiCaseExecution,
+  type TuiRealApiCaseResult,
+  type TuiRealApiCaseVerdict,
+  type TuiRealApiCheck,
+  type TuiRealApiCheckResult,
+  type TuiRealApiSuiteManifest,
+  type TuiRealApiSuiteResult,
+} from './core/real-api-suite';
+
 // ============================================================================
 // TUI Types
 // ============================================================================

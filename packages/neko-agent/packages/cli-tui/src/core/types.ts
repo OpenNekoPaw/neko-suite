@@ -21,6 +21,7 @@ export interface CLIConfig {
   chatModel?: {
     providerId: string;
     modelId: string;
+    capabilities?: readonly string[];
     contextWindow?: number;
     maxOutputTokens?: number;
   };

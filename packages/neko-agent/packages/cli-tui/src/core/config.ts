@@ -218,6 +218,9 @@ export function loadConfig(
       chatModel: {
         providerId,
         modelId: model,
+        ...(isStringArray(selectedModelConfig?.capabilities)
+          ? { capabilities: selectedModelConfig.capabilities }
+          : {}),
         ...(isPositiveInteger(selectedModelConfig?.contextWindow)
           ? { contextWindow: selectedModelConfig.contextWindow }
           : {}),
@@ -263,6 +266,10 @@ function modelRefToOptionId(
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function isStringArray(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
 
 // =============================================================================

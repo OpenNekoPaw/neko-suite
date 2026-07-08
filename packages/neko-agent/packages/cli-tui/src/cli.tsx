@@ -11,16 +11,24 @@
  */
 
 import React from 'react';
+import * as path from 'node:path';
 import { render } from 'ink';
 import { Command } from 'commander';
-import { createFileConversationStorage } from '@neko/agent';
+import { createFileConversationStorage, ToolRegistry } from '@neko/agent';
 import { loadConfig, validateConfig, listProviders, getProviderModels } from './core/config';
 import type { CLIConfig } from './core/types';
 import { runAgent, runInteractive } from './core/runner';
 import { formatExperimentReport, runExperiment, type ExperimentSuiteName } from './core/experiment';
 import { formatResult } from './core/formatter';
+import { createCLIPlatform } from './core/platform-bootstrap';
 import { resolveCliWorkDir } from './core/cli-workdir';
 import { joinPromptParts, resolveDefaultCliInvocation } from './core/cli-invocation';
+import { createCliRunResultArtifact, writeCliRunResultArtifact } from './core/run-result';
+import {
+  createDefaultTuiRealApiSuiteManifest,
+  loadTuiRealApiSuiteManifest,
+  runTuiRealApiSuite,
+} from './core/real-api-suite';
 import { formatTuiLabel, getTuiLabels } from './core/tui-locale';
 import { App } from './components/App';
 import { detectCapabilities } from './utils/terminal';
@@ -53,7 +61,8 @@ function addRunOptions(command: Command): Command {
     .option('-s, --stream', 'Stream output')
     .option('-n, --max-iterations <n>', 'Max iterations', '10')
     .option('-t, --timeout <ms>', 'Timeout in milliseconds')
-    .option('-f, --format <format>', 'Output format (text, json, markdown)', 'text');
+    .option('-f, --format <format>', 'Output format (text, json, markdown)', 'text')
+    .option('--result-file <path>', 'Write structured run result JSON to a file');
 }
 
 function withGlobalOptions(
@@ -135,6 +144,21 @@ export function createCliProgram(): Command {
     ),
   ).action(async (promptParts: string[], opts: Record<string, unknown>) => {
     await runCliAction(() => handleExperiment(joinRequiredPromptParts(promptParts), opts, program));
+  });
+
+  addInteractiveOptions(
+    addWorkDirOptions(
+      program
+        .command('real-api-suite')
+        .description('Run TUI real API validation cases and write a Markdown report')
+        .option('--manifest <path>', 'Suite manifest JSON path')
+        .option('-o, --output-dir <dir>', 'Output directory (default: reports/tui-real-api/<timestamp>)')
+        .option('--ai-summary', 'Generate an optional AI-assisted qualitative summary')
+        .option('--summary-provider <provider>', 'Provider override for AI summary')
+        .option('--summary-model <model>', 'Model override for AI summary'),
+    ),
+  ).action(async (opts: Record<string, unknown>) => {
+    await runCliAction(() => handleRealApiSuite(opts, program));
   });
 
   addInteractiveOptions(
@@ -381,26 +405,94 @@ async function handleRun(
   const format = (opts['format'] as 'text' | 'json' | 'markdown') ?? 'text';
   const maxIterations = parseInt(String(opts['maxIterations'] ?? '10'), 10);
   const timeout = opts['timeout'] ? parseInt(String(opts['timeout']), 10) : undefined;
+  const resultFile = typeof opts['resultFile'] === 'string' ? opts['resultFile'] : undefined;
+  const runOptions = {
+    prompt,
+    interactive: false,
+    stream: Boolean(opts['stream']),
+    maxIterations,
+    timeout,
+  };
 
   const result = await runAgent({
     config,
-    runOptions: {
-      prompt,
-      interactive: false,
-      stream: Boolean(opts['stream']),
-      maxIterations,
-      timeout,
-    },
+    runOptions,
     onOutput: (text) => process.stdout.write(text),
     onToolCall: (name) => console.log(chalk.dim(`  [tool] ${name}`)),
     onThinking: (thought) => console.log(chalk.dim(`  [thinking] ${thought.slice(0, 100)}`)),
   });
+
+  if (resultFile) {
+    await writeCliRunResultArtifact(
+      path.resolve(resultFile),
+      createCliRunResultArtifact({
+        config,
+        runOptions,
+        result,
+        command: process.argv.slice(1),
+      }),
+    );
+  }
 
   if (format !== 'text' || !result.success) {
     console.log(formatResult(result, format));
   }
 
   process.exit(result.success ? 0 : 1);
+}
+
+async function handleRealApiSuite(
+  opts: Record<string, unknown>,
+  program: Command,
+): Promise<void> {
+  const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
+  const provider = typeof opts['provider'] === 'string' ? opts['provider'] : undefined;
+  const model = typeof opts['model'] === 'string' ? opts['model'] : undefined;
+  const manifest =
+    typeof opts['manifest'] === 'string'
+      ? await loadTuiRealApiSuiteManifest(opts['manifest'])
+      : createDefaultTuiRealApiSuiteManifest({
+          workDir,
+          ...(provider ? { provider } : {}),
+          ...(model ? { model } : {}),
+        });
+
+  let summaryPlatform: ReturnType<typeof createCLIPlatform> | undefined;
+  try {
+    const aiSummary =
+      opts['aiSummary'] === true
+        ? (() => {
+            const config = loadConfig(workDir, {
+              provider: typeof opts['summaryProvider'] === 'string' ? opts['summaryProvider'] : provider,
+              model: typeof opts['summaryModel'] === 'string' ? opts['summaryModel'] : model,
+            });
+            summaryPlatform = createCLIPlatform({
+              workspacePath: workDir,
+              toolRegistry: new ToolRegistry(),
+            });
+            return {
+              service: summaryPlatform.service,
+              providerId: config.chatModel?.providerId ?? config.provider,
+              modelId: config.chatModel?.modelId ?? config.model,
+              modelCapabilities: config.chatModel?.capabilities,
+            };
+          })()
+        : undefined;
+
+    const result = await runTuiRealApiSuite({
+      manifest,
+      ...(typeof opts['outputDir'] === 'string' ? { outputDir: opts['outputDir'] } : {}),
+      ...(aiSummary ? { aiSummary } : {}),
+    });
+    console.log(chalk.cyan.bold('\nTUI real API validation complete'));
+    console.log(`Report: ${result.reportPath}`);
+    console.log(`Passed: ${result.passed}/${result.caseResults.length}`);
+    console.log(`Failed: ${result.failed}`);
+    console.log(`Skipped: ${result.skipped}`);
+    process.exit(result.failed === 0 ? 0 : 1);
+  } finally {
+    summaryPlatform?.platform.dispose();
+  }
 }
 
 async function handleResumeCommand(

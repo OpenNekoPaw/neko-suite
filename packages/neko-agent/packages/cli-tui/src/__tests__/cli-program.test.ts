@@ -11,6 +11,7 @@ describe('createCliProgram', () => {
     expect(help).toContain('--cd <dir>');
     expect(help).toContain('resume');
     expect(help).toContain('completion');
+    expect(help).toContain('real-api-suite');
   });
 
   it('uses variadic prompt arguments for interactive, run, and experiment commands', () => {
@@ -18,12 +19,15 @@ describe('createCliProgram', () => {
     const interactive = program.commands.find((command) => command.name() === 'interactive');
     const run = program.commands.find((command) => command.name() === 'run');
     const experiment = program.commands.find((command) => command.name() === 'experiment');
+    const realApiSuite = program.commands.find((command) => command.name() === 'real-api-suite');
 
     expect(interactive?.helpInformation()).toContain(
       'Usage: neko interactive|i [options] [workDir] [prompt...]',
     );
     expect(run?.helpInformation()).toContain('Usage: neko run [options] <prompt...>');
+    expect(run?.helpInformation()).toContain('--result-file <path>');
     expect(experiment?.helpInformation()).toContain('Usage: neko experiment [options] <prompt...>');
+    expect(realApiSuite?.helpInformation()).toContain('Run TUI real API validation cases');
   });
 
   it('documents resume id, prompt, and latest-session options', () => {

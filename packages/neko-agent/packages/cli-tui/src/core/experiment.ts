@@ -32,6 +32,7 @@ import type { CLIConfig } from './types';
 import { createCLIPlatform, createCLITaskManager } from './platform-bootstrap';
 import { createCliAgentRuntime } from './runtime-bootstrap';
 import { loadSkillArtifactsAsSkills } from './skill-artifacts';
+import { createNodeWorkspaceContentPolicy } from '../host/node-workspace-content-host';
 
 export type ExperimentSuiteName = 'standard' | 'group' | 'parameter';
 
@@ -145,9 +146,14 @@ async function buildCliExperimentSessionConfig(
   const memoryFilePath = path.join(options.config.workDir, '.neko', 'memory.md');
   const projectMemoryManager = createFileProjectMemoryManager(memoryFilePath);
   await projectMemoryManager.load();
+  const contentPolicy = createNodeWorkspaceContentPolicy({ workDir: options.config.workDir });
 
   toolRegistry.registerMany(
-    createCoreTools({ defaultCwd: options.config.workDir, projectMemoryManager }),
+    createCoreTools({
+      defaultCwd: options.config.workDir,
+      authorizedReadRoots: contentPolicy.authorizedReadRoots,
+      projectMemoryManager,
+    }),
   );
 
   let skillService: ReturnType<typeof createSkillService> | undefined;

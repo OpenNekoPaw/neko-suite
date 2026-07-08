@@ -36,7 +36,6 @@ import {
   ConfigManager,
   FileUserConfigManager,
   projectLlmParameters,
-  toSharedService,
   type Platform,
 } from '@neko/platform';
 import type { AgentLlmConfig, ModelRef } from '@neko-agent/types';
@@ -64,13 +63,18 @@ import {
   type TuiParameterValidationResult,
 } from './tui-command-router';
 import { getProviderModels, listChatModelOptions } from './config';
-import { createCLIPlatform, createCLITaskManager } from './platform-bootstrap';
+import {
+  createCLIPlatform,
+  createCLISharedService,
+  createCLITaskManager,
+} from './platform-bootstrap';
 import { formatTuiReferenceDiagnostics } from './reference-diagnostics';
 import { createTuiMessageQueue, type TuiMessageQueue } from './message-queue';
 import { createCliAgentRuntime, createCliToolGroupRegistry } from './runtime-bootstrap';
 import { createTuiCapabilityLoader, type TuiCapabilityLoaderResult } from './tui-capability-loader';
 import { detectTuiLocale } from './tui-locale';
-import { loadSkillArtifactsAsSkills } from './skill-artifacts';
+import { mergeTuiMediaModelMetadata } from './media-model-metadata';
+import { loadTuiSessionSkills } from './tui-session-skills';
 import {
   activateCliDomainSkill,
   type CliSkillLifecycleSessionBridge,
@@ -85,6 +89,7 @@ import {
   reconnectTuiMcpServer,
 } from './tui-mcp-ports';
 import { withTuiDefaultCapabilityProviders } from '../host/tui-default-capabilities';
+import { createNodeWorkspaceContentPolicy } from '../host/node-workspace-content-host';
 
 interface CliLifecycleActivationHint {
   readonly skillName: string;
@@ -166,28 +171,33 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     const memoryFilePath = path.join(config.workDir, '.neko', 'memory.md');
     const projectMemoryManager = createFileProjectMemoryManager(memoryFilePath);
     await projectMemoryManager.load();
+    const contentPolicy = createNodeWorkspaceContentPolicy({ workDir: config.workDir });
 
     // Register core file/system tools
-    const coreTools = createCoreTools({ defaultCwd: config.workDir, projectMemoryManager });
+    const coreTools = createCoreTools({
+      defaultCwd: config.workDir,
+      authorizedReadRoots: contentPolicy.authorizedReadRoots,
+      projectMemoryManager,
+    });
     toolRegistry.registerMany(coreTools);
 
     // Initialize Skill Service
-    let skillService: ReturnType<typeof createSkillService> | undefined;
-    let skillLifecycleRuntime: SkillLifecycleRuntime | undefined;
-    if (config.skillsDir) {
-      const skillLoader = createNodeSkillLoader(fs, path);
-      skillService = createSkillService();
-      const loadedSkills = await loadSkillArtifactsAsSkills(skillLoader, config.skillsDir);
-      for (const skill of loadedSkills) {
-        skillService.registry.registerSkill(skill);
-      }
-      skillLifecycleRuntime = createCliSkillLifecycleRuntime(skillService);
+    const skillLoader = createNodeSkillLoader(fs, path);
+    const skillService = createSkillService();
+    const loadedSkills = await loadTuiSessionSkills({
+      skillLoader,
+      config,
+      locale,
+    });
+    for (const skill of loadedSkills) {
+      skillService.registry.registerSkill(skill);
     }
+    const skillLifecycleRuntime = createCliSkillLifecycleRuntime(skillService);
     const toolGroupRegistry = createCliToolGroupRegistry();
     const providerCardRegistry = new ProviderCardRegistry();
     const capabilityLoader = createTuiCapabilityLoader({
       toolRegistry,
-      ...(skillService ? { skillRegistry: skillService.registry } : {}),
+      skillRegistry: skillService.registry,
       toolGroupRegistry,
       providerCardRegistry,
       locale,
@@ -211,6 +221,7 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
         workspacePath: config.workDir,
         toolRegistry,
         taskManager,
+        providerCardRegistry,
       });
       platform = cliPlatform.platform;
       llmService = cliPlatform.service;
@@ -237,12 +248,13 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
       maxTokens: config.maxTokens,
       providerId: config.chatModel?.providerId ?? config.provider,
       modelId: config.model,
+      modelCapabilities: config.chatModel?.capabilities,
       hooks: hooks ? [hooks as ExecutorHooks] : undefined,
       runtime: createCliAgentRuntime({
         workspaceRoot: config.workDir,
         taskManager,
-        ...(skillService ? { skillService } : {}),
-        ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
+        skillService,
+        skillLifecycleRuntime,
         toolGroupRegistry,
         providerCardRegistry,
         promptFragments: capabilityLoadResult.promptFragments,
@@ -262,14 +274,12 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
 
     // Wire skill provider to meta tools
     let skillLifecycleBridge: CliSkillLifecycleSessionBridge | undefined;
-    if (skillService && skillLifecycleRuntime) {
-      skillLifecycleBridge = wireCliSkillLifecycleSession({
-        session,
-        skillService,
-        conversationId,
-        lifecycleRuntime: skillLifecycleRuntime,
-      });
-    }
+    skillLifecycleBridge = wireCliSkillLifecycleSession({
+      session,
+      skillService,
+      conversationId,
+      lifecycleRuntime: skillLifecycleRuntime,
+    });
 
     // Create input processor for file references
     const inputProcessor = createInputProcessor({
@@ -342,9 +352,14 @@ export async function runAgent(options: AgentRunnerOptions): Promise<CLIResult> 
     }
 
     try {
-      const executionMetadata = mergeCreationExecutionMetadata(
+      const creationMetadata = mergeCreationExecutionMetadata(
         session.getExecutionMode() === 'plan' ? createPlanModeCreationMetadata() : undefined,
         preparedInput.executionMetadata,
+      );
+      const executionMetadata = mergeTuiMediaModelMetadata(
+        creationMetadata,
+        config.defaultMediaModels,
+        config.chatModel?.providerId ?? config.provider,
       );
       for await (const event of session.execute(finalPrompt, {
         workspaceRoot: config.workDir,
@@ -623,6 +638,7 @@ function handleAgentEvent(
       // Streaming text chunk — write incrementally
       if (event.content) {
         onOutput?.(event.content);
+        onText?.(event.content);
       }
       break;
 
@@ -911,6 +927,7 @@ function createInteractiveRouterContext(
             chatModel: {
               providerId: identity.providerId,
               modelId: identity.modelId,
+              ...(identity.capabilities ? { capabilities: identity.capabilities } : {}),
             },
           };
           input.setSessionConfig(nextConfig);
@@ -1204,24 +1221,30 @@ async function initializeInteractiveSession(
   toolRegistry.registerMany(mcpTools);
 
   // Register core file/system tools
-  const coreTools = createCoreTools({ defaultCwd: config.workDir });
+  const contentPolicy = createNodeWorkspaceContentPolicy({ workDir: config.workDir });
+  const coreTools = createCoreTools({
+    defaultCwd: config.workDir,
+    authorizedReadRoots: contentPolicy.authorizedReadRoots,
+  });
   toolRegistry.registerMany(coreTools);
 
   // Initialize Skill Service
-  if (config.skillsDir) {
-    const skillLoader = createNodeSkillLoader(fs, path);
-    skillService = createSkillService();
-    const loadedSkills = await loadSkillArtifactsAsSkills(skillLoader, config.skillsDir);
-    for (const skill of loadedSkills) {
-      skillService.registry.registerSkill(skill);
-    }
-    skillLifecycleRuntime = createCliSkillLifecycleRuntime(skillService);
+  const skillLoader = createNodeSkillLoader(fs, path);
+  skillService = createSkillService();
+  const loadedSkills = await loadTuiSessionSkills({
+    skillLoader,
+    config,
+    locale,
+  });
+  for (const skill of loadedSkills) {
+    skillService.registry.registerSkill(skill);
   }
+  skillLifecycleRuntime = createCliSkillLifecycleRuntime(skillService);
   const toolGroupRegistry = createCliToolGroupRegistry();
   const providerCardRegistry = new ProviderCardRegistry();
   const capabilityLoader = createTuiCapabilityLoader({
     toolRegistry,
-    ...(skillService ? { skillRegistry: skillService.registry } : {}),
+    skillRegistry: skillService.registry,
     toolGroupRegistry,
     providerCardRegistry,
     locale,
@@ -1244,6 +1267,7 @@ async function initializeInteractiveSession(
       workspacePath: config.workDir,
       toolRegistry,
       taskManager,
+      providerCardRegistry,
     });
     platform = cliPlatform.platform;
     llmService = cliPlatform.service;
@@ -1298,11 +1322,12 @@ async function initializeInteractiveSession(
     maxTokens: config.maxTokens,
     providerId: config.chatModel?.providerId ?? config.provider,
     modelId: config.model,
+    modelCapabilities: config.chatModel?.capabilities,
     runtime: createCliAgentRuntime({
       workspaceRoot: config.workDir,
       taskManager,
-      ...(skillService ? { skillService } : {}),
-      ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
+      skillService,
+      skillLifecycleRuntime,
       toolGroupRegistry,
       providerCardRegistry,
       promptFragments: capabilityLoadResult.promptFragments,
@@ -1332,14 +1357,12 @@ async function initializeInteractiveSession(
 
   // Wire skill provider to meta tools
   let skillLifecycleBridge: CliSkillLifecycleSessionBridge | undefined;
-  if (skillService && skillLifecycleRuntime) {
-    skillLifecycleBridge = wireCliSkillLifecycleSession({
-      session,
-      skillService,
-      conversationId,
-      lifecycleRuntime: skillLifecycleRuntime,
-    });
-  }
+  skillLifecycleBridge = wireCliSkillLifecycleSession({
+    session,
+    skillService,
+    conversationId,
+    lifecycleRuntime: skillLifecycleRuntime,
+  });
 
   // Create input processor for file references
   const inputProcessor = createInputProcessor({
@@ -1355,12 +1378,16 @@ async function initializeInteractiveSession(
     if (svc) {
       llmService = svc;
     } else if (platform) {
-      llmService = toSharedService(platform.createService());
+      llmService = createCLISharedService(platform, {
+        workspacePath: newConfig.workDir,
+        providerCardRegistry,
+      });
     }
     session.configure({
       service: llmService,
       providerId: newConfig.chatModel?.providerId ?? newConfig.provider,
       modelId: newConfig.model,
+      modelCapabilities: newConfig.chatModel?.capabilities,
       temperature: newConfig.temperature,
       maxTokens: newConfig.maxTokens,
       thinkingBudget: newConfig.thinkingBudget,

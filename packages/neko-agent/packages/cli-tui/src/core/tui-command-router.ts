@@ -81,6 +81,7 @@ export interface TuiModelIdentity {
   readonly optionId?: string;
   readonly label?: string;
   readonly category?: ChatModelOption['category'];
+  readonly capabilities?: readonly string[];
 }
 
 export interface TuiMediaModelPorts {
@@ -729,6 +730,7 @@ function chatModelOptionToIdentity(option: ChatModelOption): TuiModelIdentity {
     optionId: option.id,
     label: option.label,
     category: option.category,
+    ...(option.capabilities ? { capabilities: option.capabilities } : {}),
   };
 }
 

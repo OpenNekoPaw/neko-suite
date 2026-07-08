@@ -197,7 +197,12 @@ describe('loadConfig', () => {
     };
     state.models = state.models.map((model) =>
       model.id === 'gateway-chat'
-        ? { ...model, contextWindow: 256000, maxOutputTokens: 128000 }
+        ? {
+            ...model,
+            capabilities: ['chat', 'vision'],
+            contextWindow: 256000,
+            maxOutputTokens: 128000,
+          }
         : model,
     );
 
@@ -206,6 +211,7 @@ describe('loadConfig', () => {
     expect(config.chatModel).toEqual({
       providerId: 'gateway',
       modelId: 'gateway-chat',
+      capabilities: ['chat', 'vision'],
       contextWindow: 256000,
       maxOutputTokens: 128000,
     });

@@ -15,8 +15,11 @@ import {
   type Platform,
 } from '@neko/platform';
 import { TaskManager, createFileTaskStorage, type IRuntimeTaskManager } from '@neko/agent';
-import type { IService, IToolRegistry } from '@neko/shared';
+import type { IProviderCardRegistry, IService, IToolRegistry } from '@neko/shared';
 import { getEnvKeyMap } from '@neko/shared';
+import { createNodeContentAccessRuntime } from '../host/node-content-access-runtime';
+import { createNodePerceptionAssetLoader } from '../host/node-perception-asset-loader';
+import { createNodeWorkspaceContentHostAdapter } from '../host/node-workspace-content-host';
 
 // Shared env var mapping from @neko/shared/config/credential-resolver
 const ENV_KEY_MAP = getEnvKeyMap();
@@ -25,12 +28,18 @@ export interface CLIPlatformOptions {
   workspacePath?: string;
   toolRegistry: IToolRegistry;
   taskManager?: IRuntimeTaskManager;
+  providerCardRegistry?: Pick<IProviderCardRegistry, 'get'>;
 }
 
 export interface CLIPlatformResult {
   platform: Platform;
   service: IService;
   taskManager: IRuntimeTaskManager;
+}
+
+export interface CLISharedServiceOptions {
+  workspacePath?: string;
+  providerCardRegistry?: Pick<IProviderCardRegistry, 'get'>;
 }
 
 export function createCLITaskManager(): IRuntimeTaskManager {
@@ -99,6 +108,24 @@ export function createCLIPlatform(options: CLIPlatformOptions): CLIPlatformResul
     }
   }
 
-  const service = toSharedService(platform.createService());
+  const service = createCLISharedService(platform, {
+    workspacePath: options.workspacePath,
+    providerCardRegistry: options.providerCardRegistry,
+  });
   return { platform, service, taskManager };
+}
+
+export function createCLISharedService(
+  platform: Platform,
+  options: CLISharedServiceOptions = {},
+): IService {
+  const workspacePath = path.resolve(options.workspacePath ?? process.cwd());
+  const host = createNodeWorkspaceContentHostAdapter({ workDir: workspacePath });
+  const contentAccessRuntime = createNodeContentAccessRuntime({ host });
+  return toSharedService(platform.createService(), {
+    ...(options.providerCardRegistry
+      ? { providerCardRegistry: options.providerCardRegistry }
+      : {}),
+    assetLoader: createNodePerceptionAssetLoader(contentAccessRuntime),
+  });
 }

@@ -24,14 +24,12 @@ import {
   type IAgentSession,
   type InputProcessor,
   type SystemPromptBuilder,
-  type Skill,
   type SkillService,
   type SkillLifecycleRuntime,
   type IRuntimeTaskManager,
   type AgentEvent,
 } from '@neko/agent';
 import { createAgentSessionWithRuntime } from '@neko/agent/runtime';
-import { getBuiltinSkills } from '@neko/skills';
 import {
   projectLlmParameters,
   ConfigManager,
@@ -72,10 +70,7 @@ import {
   listRegisteredTuiMcpTools,
   reconnectTuiMcpServer,
 } from '../core/tui-mcp-ports';
-import {
-  loadCodexSkillArtifactsAsSkills,
-  loadSkillArtifactsAsSkills,
-} from '../core/skill-artifacts';
+import { loadTuiSessionSkills } from '../core/tui-session-skills';
 import { mergeTuiMediaModelMetadata } from '../core/media-model-metadata';
 import { useConfigStore } from '../stores/config-store';
 import { useAgentStore } from '../stores/agent-store';
@@ -95,6 +90,7 @@ import {
   wireCliSkillLifecycleSession,
 } from '../core/skill-lifecycle-session';
 import { createCliConversationId } from '../core/tui-conversation-id';
+import { createNodeWorkspaceContentPolicy } from '../host/node-workspace-content-host';
 
 export interface UseAgentSessionOptions {
   readonly config: CLIConfig;
@@ -295,9 +291,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const memoryFilePath = path.join(config.workDir, '.neko', 'memory.md');
         const projectMemoryManager = createFileProjectMemoryManager(memoryFilePath);
         await projectMemoryManager.load();
+        const contentPolicy = createNodeWorkspaceContentPolicy({ workDir: config.workDir });
 
         const coreTools = createCoreTools({
           defaultCwd: config.workDir,
+          authorizedReadRoots: contentPolicy.authorizedReadRoots,
           projectMemoryManager,
         });
         toolRegistry.registerMany(coreTools);
@@ -309,7 +307,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const skillLoader = createNodeSkillLoader(fs, path);
         const skillService = createSkillService();
         skillServiceRef.current = skillService;
-        const loadedSkills = await loadTuiSessionSkills(skillLoader, config, detectedLocale);
+        const loadedSkills = await loadTuiSessionSkills({
+          skillLoader,
+          config,
+          locale: detectedLocale,
+        });
         for (const skill of loadedSkills) {
           skillService.registry.registerSkill(skill);
         }
@@ -348,6 +350,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             workspacePath: config.workDir,
             toolRegistry,
             taskManager,
+            providerCardRegistry,
           });
           platformRef.current = cliPlatform.platform;
           llmService = cliPlatform.service;
@@ -377,6 +380,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           maxTokens: config.maxTokens,
           providerId: config.chatModel?.providerId ?? config.provider,
           modelId: effectiveModel,
+          modelCapabilities: config.chatModel?.capabilities,
           runtime: createCliAgentRuntime({
             workspaceRoot: config.workDir,
             taskManager,
@@ -660,13 +664,18 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       chatModel: {
         providerId: identity.providerId,
         modelId: identity.modelId,
+        ...(identity.capabilities ? { capabilities: identity.capabilities } : {}),
       },
     });
     // Platform's Service uses ModelSelector which reads from ConfigManager,
     // so we just need to pass the new modelId to the session
     const session = sessionRef.current;
     if (session) {
-      session.configure({ providerId: identity.providerId, modelId: identity.modelId });
+      session.configure({
+        providerId: identity.providerId,
+        modelId: identity.modelId,
+        modelCapabilities: identity.capabilities,
+      });
     }
   }, []);
 
@@ -901,46 +910,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     slashCommands,
     isReady,
   };
-}
-
-async function loadTuiSessionSkills(
-  skillLoader: Parameters<typeof loadSkillArtifactsAsSkills>[0],
-  config: CLIConfig,
-  locale: 'en' | 'zh',
-): Promise<Skill[]> {
-  const merged = new Map<string, Skill>();
-
-  for (const skill of getBuiltinSkills({ locale: locale === 'zh' ? 'zh-CN' : 'en' })) {
-    merged.set(skill.name, skill);
-  }
-
-  for (const skillsDir of resolveNekoTuiSkillDirectories(config)) {
-    const loadedSkills = await loadSkillArtifactsAsSkills(skillLoader, skillsDir);
-    for (const skill of loadedSkills) {
-      merged.set(skill.name, skill);
-    }
-  }
-
-  const codexSkillsDir = path.join(config.workDir, '.codex', 'skills');
-  const codexSkills = await loadCodexSkillArtifactsAsSkills(fs, path, codexSkillsDir);
-  for (const skill of codexSkills) {
-    merged.set(skill.name, skill);
-  }
-
-  return Array.from(merged.values());
-}
-
-function resolveNekoTuiSkillDirectories(config: CLIConfig): string[] {
-  const dirs: string[] = [];
-
-  if (config.skillsDir) {
-    const configuredDir = path.resolve(config.workDir, config.skillsDir);
-    if (!dirs.some((dir) => path.resolve(dir) === configuredDir)) {
-      dirs.push(configuredDir);
-    }
-  }
-
-  return dirs;
 }
 
 /** Helper to get workDir from config store */
