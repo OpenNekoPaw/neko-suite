@@ -457,6 +457,9 @@ importers:
       '@neko/asset':
         specifier: workspace:*
         version: link:packages/asset
+      '@neko/host':
+        specifier: workspace:*
+        version: link:../neko-host
       '@neko/shared':
         specifier: workspace:*
         version: link:../neko-types

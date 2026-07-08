@@ -629,6 +629,7 @@
   },
   "dependencies": {
     "@neko/asset": "workspace:*",
+    "@neko/host": "workspace:*",
     "@neko/shared": "workspace:*",
     "adm-zip": "^0.5.16"
   },

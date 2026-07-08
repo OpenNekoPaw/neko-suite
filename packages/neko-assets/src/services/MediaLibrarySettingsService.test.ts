@@ -174,6 +174,35 @@ describe('MediaLibrarySettingsService', () => {
     service.dispose();
   });
 
+  it('resolves workspace path variables before checking media library accessibility', async () => {
+    writeJson(settingsPath, {
+      mediaLibraries: [
+        {
+          name: 'Workspace Assets',
+          path: '${WORKSPACE}/libraries/enabled',
+          variable: 'ASSETS',
+        },
+      ],
+    });
+    markReadableDirectory(path.join(workspaceRoot, 'libraries', 'enabled'));
+
+    const service = new MediaLibrarySettingsService(workspaceRoot);
+    await service.load();
+
+    await expect(service.getResolvedLibraries()).resolves.toEqual([
+      expect.objectContaining({
+        variable: 'ASSETS',
+        resolvedPath: path.join(workspaceRoot, 'libraries', 'enabled'),
+        accessible: true,
+      }),
+    ]);
+    await expect(service.getPathVariableMap()).resolves.toEqual(
+      new Map([['ASSETS', path.join(workspaceRoot, 'libraries', 'enabled')]]),
+    );
+
+    service.dispose();
+  });
+
   it('validates readable directories before saving new libraries', async () => {
     writeJson(settingsPath, { mediaLibraries: [] });
     markReadableDirectory('/libraries/new');

@@ -11,13 +11,20 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import * as os from 'os';
 import type {
   MediaLibrarySettings,
   MediaLibraryLocalSettings,
   MediaLibraryEntry,
   ResolvedMediaLibrary,
-  type PathVariableMap,
+  PathVariableMap,
 } from '@neko/shared';
+import { PathResolver } from '@neko/shared';
+import {
+  createHostWorkspacePathVariables,
+  createMediaLibraryPathVariableMap,
+  resolveWorkspaceMediaLibraries,
+} from '@neko/host';
 import { getLogger } from '../utils/logger';
 
 const logger = getLogger('MediaLibrarySettings');
@@ -53,27 +60,15 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
    * Get resolved libraries (after applying local overrides and checking accessibility).
    */
   async getResolvedLibraries(): Promise<ResolvedMediaLibrary[]> {
-    const entries = this.settings.mediaLibraries ?? [];
-    const overrides = this.localSettings.mediaLibraryOverrides ?? {};
-    const results: ResolvedMediaLibrary[] = [];
-
-    for (const entry of entries) {
-      const override = overrides[entry.variable];
-      const resolvedPath = override ?? entry.path;
-      const accessible = await this.checkAccessible(resolvedPath);
-
-      results.push({
-        name: entry.name,
-        resolvedPath,
-        originalPath: entry.path,
-        variable: entry.variable,
-        enabled: entry.enabled !== false,
-        accessible,
-        overridden: override !== undefined,
-      });
-    }
-
-    return results;
+    return [
+      ...(await resolveWorkspaceMediaLibraries({
+        settings: this.settings,
+        localSettings: this.localSettings,
+        workspaceRoot: this.workspaceRoot,
+        resolvePath: (source) => this.resolveConfiguredPath(source),
+        checkAccessible: (resolvedPath) => this.checkAccessible(resolvedPath),
+      })),
+    ];
   }
 
   /**
@@ -91,15 +86,7 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
    */
   async getPathVariableMap(): Promise<PathVariableMap> {
     const libraries = await this.getResolvedLibraries();
-    const map: PathVariableMap = new Map();
-
-    for (const lib of libraries) {
-      if (lib.enabled) {
-        map.set(lib.variable, lib.resolvedPath);
-      }
-    }
-
-    return map;
+    return createMediaLibraryPathVariableMap(libraries);
   }
 
   /**
@@ -116,7 +103,7 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
       throw new Error(`Variable "${entry.variable}" already exists`);
     }
 
-    await this.assertDirectoryReadable(entry.path);
+    await this.assertDirectoryReadable(this.resolveConfiguredPath(entry.path));
 
     this.settings.mediaLibraries.push(entry);
     await this.writeSettings();
@@ -143,7 +130,7 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
     if (!this.localSettings.mediaLibraryOverrides) {
       this.localSettings.mediaLibraryOverrides = {};
     }
-    await this.assertDirectoryReadable(localPath);
+    await this.assertDirectoryReadable(this.resolveConfiguredPath(localPath));
     this.localSettings.mediaLibraryOverrides[variable] = localPath;
     await this.writeLocalSettings();
     await this.fireChanged();
@@ -205,6 +192,20 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
     await fs.access(dirPath, fs.constants.R_OK);
   }
 
+  private resolveConfiguredPath(source: string): string {
+    const homedir = os.homedir();
+    const variables = createHostWorkspacePathVariables({
+      workspaceRoot: this.workspaceRoot,
+      homedir,
+      nekoHome: path.join(homedir, '.neko'),
+    });
+    const resolved = new PathResolver(variables).resolveSource(
+      expandHomeMarker(source, homedir),
+      this.workspaceRoot,
+    );
+    return resolved.type === 'local' ? path.resolve(resolved.path) : source;
+  }
+
   // =========================================================================
   // File Watcher
   // =========================================================================
@@ -260,4 +261,14 @@ export class MediaLibrarySettingsService implements vscode.Disposable {
     }
     this.disposables = [];
   }
+}
+
+function expandHomeMarker(value: string, homedir: string): string {
+  if (value === '~') {
+    return homedir;
+  }
+  if (value.startsWith('~/') || value.startsWith('~\\')) {
+    return path.join(homedir, value.slice(2));
+  }
+  return value;
 }
