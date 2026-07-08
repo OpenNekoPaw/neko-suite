@@ -71,9 +71,11 @@ export interface AgentRunnerDeps {
 export class AgentRunner implements IAgentRunner {
   private readonly port: AgentRunnerRuntimeAdapter;
   private readonly eventBridge: AgentRunnerVscodeEventBridge;
+  private readonly engineClientProvider: IEngineClientProvider;
 
   constructor(deps: AgentRunnerDeps) {
     const engineClientProvider = deps.engineClientProvider ?? getEngineClientProvider();
+    this.engineClientProvider = engineClientProvider;
     const agentContentAccess =
       getCapabilityRuntimeBindings().contentAccessRuntime ??
       (deps.extensionContext
@@ -119,7 +121,9 @@ export class AgentRunner implements IAgentRunner {
   }
 
   async configure(config: IAgentConfig): Promise<void> {
-    return this.port.configure(await projectHostFileAccessPolicy(config));
+    const projectedConfig = await projectHostFileAccessPolicy(config);
+    await this.syncEngineAuthorizedReadRoots(projectedConfig);
+    return this.port.configure(projectedConfig);
   }
 
   getConfig(): IAgentConfig | undefined {
@@ -271,6 +275,14 @@ export class AgentRunner implements IAgentRunner {
   dispose(): void {
     this.eventBridge.dispose();
     this.port.dispose();
+  }
+
+  private async syncEngineAuthorizedReadRoots(config: IAgentConfig): Promise<void> {
+    const roots = dedupePaths([
+      ...(config.workspaceRoot ? [config.workspaceRoot] : []),
+      ...(config.authorizedReadRoots ?? []),
+    ]);
+    await this.engineClientProvider.setAuthorizedReadRoots?.(roots);
   }
 }
 

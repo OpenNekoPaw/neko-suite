@@ -20,8 +20,12 @@ describe('AudioProjectProvider workspace media path contract', () => {
 
   it('contracts saved .nka absolute sources with explicit document/workspace context', () => {
     expect(providerSource).toContain('contractWorkspaceMediaPath(element.src, context)');
-    expect(providerSource).toContain("'neko.assets.contractPath'");
-    expect(providerSource).toContain('this.createWorkspacePathCommandContext(projectUri, context)');
+    expect(providerSource).toContain('contractHostContentMediaPath(');
+    expect(providerSource).toContain('resolveHostContentMediaPath(');
+    expect(providerSource).toContain('this.createHostContentPathOptions(projectUri, context)');
+    expect(providerSource).not.toContain("'neko.assets.contractPath'");
+    expect(providerSource).not.toContain("'neko.assets.resolvePath'");
+    expect(providerSource).not.toContain('createWorkspacePathCommandContext');
     expect(providerSource).toContain('createVSCodeWorkspaceMediaPathContext({');
     expect(providerSource).toContain("pathVariables: new Map([['PROJECT', documentDir]])");
     expect(providerSource).toContain(

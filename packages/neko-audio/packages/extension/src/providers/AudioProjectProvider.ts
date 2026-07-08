@@ -55,6 +55,7 @@ import {
   type WorkspaceMediaPathContext,
 } from '@neko/shared';
 import {
+  contractHostContentMediaPath,
   createHostContentAccessRuntime,
   createFocusedWebviewRegistry,
   createProjectSnapshotPackage,
@@ -63,6 +64,8 @@ import {
   formatProjectFileDiagnostics,
   normalizeVSCodeProjectSourceAddRequest,
   ProjectFileSaveSession,
+  resolveHostContentMediaPath,
+  type HostContentPathResolverOptions,
   type IFocusedWebviewRegistry,
 } from '@neko/shared/vscode/extension';
 import type { MixStreamConfig } from '@neko/shared';
@@ -155,14 +158,6 @@ function readProjectSourceAddDisplayName(
     return metadataName;
   }
   return request.browserFile?.name ?? path.basename(request.sourcePath ?? fallbackPath);
-}
-
-interface AudioWorkspacePathCommandContext {
-  readonly sourceDocumentUri?: string;
-  readonly documentPath?: string;
-  readonly owningWorkspaceRoot?: string;
-  readonly workspaceRoots?: readonly string[];
-  readonly allowedRoots?: readonly string[];
 }
 
 // =============================================================================
@@ -1278,17 +1273,12 @@ export class AudioProjectProvider
     projectUri: vscode.Uri,
   ): Promise<string | undefined> {
     const context = this.createWorkspaceMediaPathContext(projectUri);
-    try {
-      const contracted = await vscode.commands.executeCommand<string>(
-        'neko.assets.contractPath',
-        absolutePath,
-        this.createWorkspacePathCommandContext(projectUri, context),
-      );
-      if (contracted && !path.isAbsolute(contracted)) {
-        return contracted;
-      }
-    } catch {
-      // neko-assets not active
+    const contracted = await contractHostContentMediaPath(
+      absolutePath,
+      this.createHostContentPathOptions(projectUri, context),
+    );
+    if (contracted && !path.isAbsolute(contracted)) {
+      return contracted;
     }
     return undefined;
   }
@@ -1430,16 +1420,12 @@ export class AudioProjectProvider
     const context = this.createWorkspaceMediaPathContext(nkaUri);
 
     try {
-      const resolved = await vscode.commands.executeCommand<string>(
-        'neko.assets.resolvePath',
+      return await resolveHostContentMediaPath(
         src,
-        this.createWorkspacePathCommandContext(nkaUri, context),
+        this.createHostContentPathOptions(nkaUri, context, { fileExists: isExistingLocalFile }),
       );
-      if (typeof resolved === 'string' && resolved.length > 0 && resolved !== src) {
-        return resolved;
-      }
     } catch (error) {
-      logger.warn(`Unable to resolve audio source path through assets service: ${src}`, error);
+      logger.warn(`Unable to resolve audio source path through shared content policy: ${src}`, error);
     }
 
     const resolved = resolveWorkspaceMediaPath({
@@ -1619,18 +1605,12 @@ export class AudioProjectProvider
       for (const element of track.elements) {
         if (isAudioElementWithSrc(element) && path.isAbsolute(element.src)) {
           // Try PathVariable for external paths
-          let portable: string | undefined;
-          try {
-            const contracted = await vscode.commands.executeCommand<string>(
-              'neko.assets.contractPath',
-              element.src,
-              this.createWorkspacePathCommandContext(projectUri, context),
-            );
-            if (contracted && !path.isAbsolute(contracted)) {
-              portable = contracted;
-            }
-          } catch {
-            // neko-assets not active
+          let portable = await contractHostContentMediaPath(
+            element.src,
+            this.createHostContentPathOptions(projectUri, context),
+          );
+          if (portable && path.isAbsolute(portable)) {
+            portable = undefined;
           }
 
           if (!portable) {
@@ -1665,16 +1645,18 @@ export class AudioProjectProvider
     };
   }
 
-  private createWorkspacePathCommandContext(
+  private createHostContentPathOptions(
     nkaUri: vscode.Uri,
     context: WorkspaceMediaPathContext,
-  ): AudioWorkspacePathCommandContext {
+    options: Pick<HostContentPathResolverOptions, 'fileExists'> = {},
+  ): HostContentPathResolverOptions {
     return {
-      sourceDocumentUri: nkaUri.toString(),
-      documentPath: nkaUri.fsPath,
-      ...(context.owningWorkspaceRoot ? { owningWorkspaceRoot: context.owningWorkspaceRoot } : {}),
-      ...(context.workspaceRoots ? { workspaceRoots: context.workspaceRoots } : {}),
-      ...(context.allowedRoots ? { allowedRoots: context.allowedRoots } : {}),
+      documentUri: nkaUri,
+      ...(context.owningWorkspaceRoot ? { workspaceRoot: context.owningWorkspaceRoot } : {}),
+      workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+      allowedRoots: context.allowedRoots,
+      ...(options.fileExists ? { fileExists: options.fileExists } : {}),
+      getExtension: vscode.extensions.getExtension,
     };
   }
 

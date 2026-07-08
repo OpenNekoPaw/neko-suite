@@ -33,6 +33,7 @@ import type {
   IRuntimeTaskManager,
 } from '@neko/agent';
 import type { SkillLifecycleProjection } from '@neko/shared';
+import { getHostContentAuthorizedReadRoots } from '@neko/shared/vscode/extension';
 import type { IAgentManager } from '../../ai/agentManager';
 import type { IAgentRunner } from '../../ai/agentRunner';
 import type { IAgentContext } from '../../ai/agentContext';
@@ -102,6 +103,10 @@ export class AgentTurnBridge {
     const workspaceIgnoreRules = workspaceRoot
       ? await loadWorkspaceFileIgnoreRules(workspaceRoot)
       : undefined;
+    const authorizedReadRoots = await getHostContentAuthorizedReadRoots({
+      workspaceRoot,
+      getExtension: vscode.extensions.getExtension,
+    });
     const agentManagerBridge:
       | AgentTurnAgentManager<
           Platform,
@@ -165,6 +170,9 @@ export class AgentTurnBridge {
         host: {
           agentManager: agentManagerBridge,
           getWorkspaceRoot: () => vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+          ...(authorizedReadRoots.length > 0
+            ? { getAuthorizedReadRoots: () => authorizedReadRoots }
+            : {}),
           ...(workspaceIgnoreRules ? { getWorkspaceIgnoreRules: () => workspaceIgnoreRules } : {}),
           getActiveEditor: () => this.deps.editorRegistry?.getActiveEditor(),
           getAmbientCanvas: (id) => getCanvasSelection(id),

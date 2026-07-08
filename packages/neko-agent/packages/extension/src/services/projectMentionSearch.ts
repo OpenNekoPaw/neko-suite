@@ -9,6 +9,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { ProjectSearchItem, ProjectSearchItemKind, ProjectSearchResult } from '@neko/shared';
+import { contractHostContentMediaPath } from '@neko/shared/vscode/extension';
 import type { AgentProjectFileSearchPlan, AgentProjectMentionCandidate } from '@neko/agent/runtime';
 import type {
   ProjectMentionExtraType,
@@ -37,7 +38,6 @@ const ROLEPLAY_SEARCH_KINDS: readonly ProjectSearchItemKind[] = [
   'generated-asset',
 ];
 
-const ASSETS_CONTRACT_PATH_COMMAND = 'neko.assets.contractPath';
 const WINDOWS_DRIVE_RE = /^[A-Za-z]:[\\/]/;
 const WINDOWS_UNC_RE = /^\\\\/;
 
@@ -145,7 +145,7 @@ async function projectMentionReferencePath(item: ProjectSearchItem): Promise<str
     return projectRelativePath;
   }
 
-  const contractedPath = await contractPathWithAssets(filePath, item);
+  const contractedPath = await contractPathWithContentPolicy(filePath, item);
   if (contractedPath && !isLocalAbsolutePath(contractedPath)) {
     return normalizeMentionPath(contractedPath);
   }
@@ -153,24 +153,19 @@ async function projectMentionReferencePath(item: ProjectSearchItem): Promise<str
   return undefined;
 }
 
-async function contractPathWithAssets(
+async function contractPathWithContentPolicy(
   filePath: string,
   item: ProjectSearchItem,
 ): Promise<string | undefined> {
-  let contracted: unknown;
   try {
-    contracted = await vscode.commands.executeCommand<unknown>(
-      ASSETS_CONTRACT_PATH_COMMAND,
-      filePath,
-      {
-        owningWorkspaceRoot: item.projectRoot,
-        workspaceRoots: [item.projectRoot],
-      },
-    );
+    return await contractHostContentMediaPath(filePath, {
+      workspaceRoot: item.projectRoot,
+      workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+      getExtension: vscode.extensions.getExtension,
+    });
   } catch {
     return undefined;
   }
-  return typeof contracted === 'string' && contracted.length > 0 ? contracted : undefined;
 }
 
 function projectMentionNavigationData(

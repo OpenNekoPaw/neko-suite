@@ -472,6 +472,35 @@ describe('AgentRunner', () => {
       });
     });
 
+    it('syncs workspace and authorized read roots into the engine file-access policy', async () => {
+      const setAuthorizedReadRoots = vi.fn().mockResolvedValue(undefined);
+      const engineProvider = {
+        getOptionalClient: vi.fn(),
+        getRequiredClient: vi.fn(),
+        setAuthorizedReadRoots,
+        transcodeFile: vi.fn(),
+        createPerceptionClient: vi.fn(),
+        createPerceptionClients: vi.fn(() => ({})),
+      };
+      const runnerWithEngine = new AgentRunner({
+        createRuntimeController: createMockRuntimeController,
+        engineClientProvider: engineProvider as never,
+        subAgentRuntime,
+      });
+
+      await runnerWithEngine.configure({
+        platform: mockPlatform,
+        workspaceRoot: '/workspace/project',
+        authorizedReadRoots: ['/Users/feng/Assets', '/workspace/project'],
+      });
+
+      expect(setAuthorizedReadRoots).toHaveBeenCalledWith([
+        '/workspace/project',
+        '/Users/feng/Assets',
+      ]);
+      runnerWithEngine.dispose();
+    });
+
     it('未配置时 getConfig 应该返回 undefined', () => {
       expect(runner.getConfig()).toBeUndefined();
     });

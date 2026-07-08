@@ -504,6 +504,7 @@ describe('AgentMessageTurnHandler', () => {
     agentStreamProcessorInstances.length = 0;
     (vscode.env as any).language = 'en';
     (vscode.workspace as any).workspaceFolders = undefined;
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue(undefined);
     vi.mocked(vscode.workspace.fs.readFile).mockRejectedValue(new Error('missing fixture'));
     vi.mocked(vscode.workspace.findFiles).mockResolvedValue([]);
     vi.mocked(vscode.workspace.asRelativePath).mockImplementation(
@@ -554,6 +555,38 @@ describe('AgentMessageTurnHandler', () => {
   });
 
   describe('Agent-first Skill activation boundary', () => {
+    it('injects media library roots into the Agent turn read policy', async () => {
+      (vscode.workspace as any).workspaceFolders = [
+        { uri: { fsPath: '/workspace/neko-test' } },
+      ];
+      vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+        isActive: true,
+        exports: {
+          getMediaLibraryRoots: vi.fn(async () => ['/Users/feng/Assets']),
+          getPathVariables: vi.fn(async () => [['ASSETS', '/Users/feng/Assets']]),
+        },
+      } as any);
+      const webview = createMockWebview();
+      const agentManager = createMockAgentManager();
+      const agentRunner = agentManager.getOrCreate();
+      const handler = buildHandler({
+        agentManager,
+        providers: createMockProviders(true),
+      });
+
+      await handler.handleUserMessage(
+        webview as any,
+        createChatModelRequest('分析媒体库 EPUB', { conversationId: 'conv-1' }),
+      );
+
+      expect(agentRunner.configure).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceRoot: '/workspace/neko-test',
+          authorizedReadRoots: ['/workspace/neko-test', '/Users/feng/Assets'],
+        }),
+      );
+    });
+
     it('dispatches natural-language agent turns without pre-turn Skill injection', async () => {
       const webview = createMockWebview();
       const agentManager = createMockAgentManager();
@@ -782,6 +815,7 @@ describe('AgentMessageTurnHandler', () => {
         modelId: 'claude-3',
         modelCapabilities: ['chat', 'thinking', 'sampling'],
         executionMode: 'ask',
+        locale: 'en',
         conversationId: 'conv-1',
       });
       const handler = buildHandler({
@@ -1448,10 +1482,15 @@ describe('AgentMessageTurnHandler', () => {
       const handler = buildHandler({ localResourceAccess });
 
       (vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: '/workspace' } }];
+      vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+        isActive: true,
+        exports: {
+          getMediaLibraryRoots: vi.fn(async () => ['/library']),
+          getPathVariables: vi.fn(async () => [['FOOTAGE', '/library']]),
+        },
+        activate: vi.fn(),
+      } as any);
       vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command: string) => {
-        if (command === 'neko.assets.contractPath') {
-          return '${FOOTAGE}/hero-shot.mp4';
-        }
         return {
           items: [
             {
@@ -1571,6 +1610,11 @@ describe('AgentMessageTurnHandler', () => {
           }),
         ]),
       });
+      expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+        'neko.assets.contractPath',
+        expect.anything(),
+        expect.anything(),
+      );
     });
 
     it('uses a roleplay-scoped candidate search without scanning workspace files', async () => {

@@ -8,6 +8,7 @@ vi.mock('vscode', async () => await import('../../__mocks__/vscode'));
 describe('projectMentionSearch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue(undefined);
     vscode.window.activeTextEditor = {
       document: { uri: vscode.Uri.file('/workspace/cases/test.fountain') },
     } as any;
@@ -15,9 +16,6 @@ describe('projectMentionSearch', () => {
 
   it('queries the project search service and maps shared items to mention candidates', async () => {
     vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command: string) => {
-      if (command === 'neko.assets.contractPath') {
-        throw new Error('Unexpected contractPath call for workspace-relative fixture.');
-      }
       return {
         items: [
           {
@@ -247,12 +245,14 @@ describe('projectMentionSearch', () => {
   });
 
   it('contracts media library absolute paths before exposing path-backed mention candidates', async () => {
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue(
+      createAssetsExtension({
+        mediaLibraryRoots: ['/Users/feng/Assets/epub'],
+        pathVariables: [['EPUBS', '/Users/feng/Assets/epub']],
+      }),
+    );
     vi.mocked(vscode.commands.executeCommand).mockImplementation(
-      async (command: string, arg: unknown) => {
-        if (command === 'neko.assets.contractPath') {
-          expect(arg).toBe('/Users/feng/Assets/epub/Blame/book.epub');
-          return '${EPUBS}/Blame/book.epub';
-        }
+      async (command: string) => {
         if (command === PROJECT_SEARCH_QUERY_COMMAND) {
           return {
             items: [
@@ -311,16 +311,18 @@ describe('projectMentionSearch', () => {
           resolvedPath: '/Users/feng/Assets/epub/Blame/book.epub',
           sourceId: '${EPUBS}/Blame/book.epub',
           variable: 'EPUBS',
-        }),
+          }),
       }),
     ]);
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'neko.assets.contractPath',
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('uses media library portable paths emitted by project search without re-contracting', async () => {
     vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command: string) => {
-      if (command === 'neko.assets.contractPath') {
-        throw new Error('Unexpected contractPath call for portable media-library fixture.');
-      }
       if (command === PROJECT_SEARCH_QUERY_COMMAND) {
         return {
           items: [
@@ -387,11 +389,7 @@ describe('projectMentionSearch', () => {
 
   it('does not expose unmanaged absolute paths as successful file mention paths', async () => {
     vi.mocked(vscode.commands.executeCommand).mockImplementation(
-      async (command: string, arg: unknown) => {
-        if (command === 'neko.assets.contractPath') {
-          expect(arg).toBe('/tmp/random.png');
-          return '/tmp/random.png';
-        }
+      async (command: string) => {
         if (command === PROJECT_SEARCH_QUERY_COMMAND) {
           return {
             items: [
@@ -446,5 +444,24 @@ describe('projectMentionSearch', () => {
     expect(candidates[0]?.navigationData).not.toHaveProperty('filePath');
     expect(candidates[0]?.navigationData).not.toHaveProperty('resolvedPath');
     expect(candidates[0]?.navigationData).not.toHaveProperty('sourceId');
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'neko.assets.contractPath',
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });
+
+function createAssetsExtension(options: {
+  readonly mediaLibraryRoots: readonly string[];
+  readonly pathVariables: ReadonlyArray<readonly [string, string]>;
+}): vscode.Extension<unknown> {
+  return {
+    isActive: true,
+    exports: {
+      getMediaLibraryRoots: vi.fn(async () => [...options.mediaLibraryRoots]),
+      getPathVariables: vi.fn(async () => [...options.pathVariables]),
+    },
+    activate: vi.fn(),
+  } as unknown as vscode.Extension<unknown>;
+}
