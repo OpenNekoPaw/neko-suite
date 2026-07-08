@@ -27,4 +27,9 @@ export const common = {
   'rightDock.mode.basic.description': 'AI 辅助剪辑与常用属性',
   'rightDock.mode.professional': '专业',
   'rightDock.mode.professional.description': '高级编辑、关键帧与精细控制',
+  'hostAdapter.dock': '{label} 宿主适配器',
+  'hostAdapter.package': '包',
+  'hostAdapter.panel': '面板',
+  'hostAdapter.runtime': '运行时',
+  'hostAdapter.file': '文件',
 } as const satisfies MessageBundle;

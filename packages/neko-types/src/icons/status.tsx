@@ -1,4 +1,7 @@
+import React from 'react';
 import type { IconProps } from './types';
+
+void React;
 
 const base = (strokeWidth: number) => ({
   fill: 'none',

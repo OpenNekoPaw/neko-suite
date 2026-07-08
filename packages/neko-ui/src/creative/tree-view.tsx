@@ -280,7 +280,7 @@ function TreeViewRow({
     <div
       aria-disabled={item.disabled || undefined}
       aria-expanded={hasChildren ? row.expanded : undefined}
-      aria-label={item.label}
+      aria-label={item.title ?? item.label}
       aria-selected={row.selected}
       className={cn(
         'group relative grid items-center gap-1 px-1 text-xs outline-none',
@@ -302,6 +302,7 @@ function TreeViewRow({
       role="treeitem"
       style={{ height: itemHeight, paddingLeft: 4 + row.depth * 14 }}
       tabIndex={focused ? 0 : -1}
+      title={item.title}
       onClick={(event) => {
         if (!item.disabled) {
           onFocusItem?.(item.id);
@@ -350,6 +351,14 @@ function TreeViewRow({
       <span className="flex min-w-0 items-center gap-1 truncate">
         {item.icon ? <span className="shrink-0">{item.icon}</span> : null}
         <span className={cn('truncate', row.selected ? 'font-medium' : null)}>{item.label}</span>
+        {item.description ? (
+          <span
+            className="min-w-0 shrink truncate text-[var(--vscode-descriptionForeground)]"
+            data-tree-item-description="true"
+          >
+            {item.description}
+          </span>
+        ) : null}
         {item.badges?.map((badge) => (
           <span
             key={badge.id}
@@ -435,9 +444,18 @@ function TreeViewRow({
           role="img"
         />
       ) : null}
-      {item.actions?.length ? (
-        <span className="flex items-center justify-end gap-0.5">
-          {item.actions.map((action) => (
+      {item.decoration || item.actions?.length ? (
+        <span className="flex min-w-0 items-center justify-end gap-1">
+          {item.decoration ? (
+            <span
+              className="shrink-0 text-[var(--vscode-descriptionForeground)]"
+              data-tree-item-decoration="true"
+              title={item.decorationTitle}
+            >
+              {item.decoration}
+            </span>
+          ) : null}
+          {item.actions?.map((action) => (
             <button
               key={action.id}
               aria-label={action.label}

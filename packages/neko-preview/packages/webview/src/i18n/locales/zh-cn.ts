@@ -4,6 +4,13 @@
 import type { MessageBundle } from '@neko/shared';
 
 const preview: MessageBundle = {
+  // Host adapter
+  'preview.hostAdapter.tools': '预览工具',
+  'preview.hostAdapter.dock': '{label} 宿主适配器',
+  'preview.hostAdapter.package': '包',
+  'preview.hostAdapter.panel': '面板',
+  'preview.hostAdapter.runtime': '运行时',
+  'preview.hostAdapter.file': '文件',
   // Video player
   'preview.video.loading': '正在加载视频...',
   'preview.video.error': '错误：{error}',

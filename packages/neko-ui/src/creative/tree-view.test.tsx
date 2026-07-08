@@ -206,6 +206,52 @@ describe('@neko/ui TreeView', () => {
     expect(host.querySelector('[aria-label="Unlocked"]')).toBeNull();
   });
 
+  it('renders optional item descriptions and tooltips without using badges', () => {
+    act(() => {
+      root.render(
+        <TreeView
+          items={[
+            {
+              id: 'shot',
+              label: 'shot.nkv',
+              description: '2 KB',
+              title: 'cuts/shot.nkv · timeline · 2 KB',
+            },
+          ]}
+          showStaticStateIndicators={false}
+        />,
+      );
+    });
+
+    const row = host.querySelector<HTMLElement>('[data-tree-item-id="shot"]');
+    expect(row?.getAttribute('title')).toBe('cuts/shot.nkv · timeline · 2 KB');
+    expect(row?.getAttribute('aria-label')).toBe('cuts/shot.nkv · timeline · 2 KB');
+    expect(host.querySelector('[data-tree-item-description="true"]')?.textContent).toBe('2 KB');
+    expect(host.querySelector('[title="2 KB"]')).toBeNull();
+  });
+
+  it('renders optional item decorations in the trailing column', () => {
+    act(() => {
+      root.render(
+        <TreeView
+          items={[
+            {
+              id: 'asset',
+              label: 'asset.png',
+              decoration: 'U',
+              decorationTitle: 'Untracked',
+            },
+          ]}
+          showStaticStateIndicators={false}
+        />,
+      );
+    });
+
+    const decoration = host.querySelector('[data-tree-item-decoration="true"]');
+    expect(decoration?.textContent).toBe('U');
+    expect(decoration?.getAttribute('title')).toBe('Untracked');
+  });
+
   it('uses an explicit height as the scroll viewport even for small trees', () => {
     act(() => {
       root.render(

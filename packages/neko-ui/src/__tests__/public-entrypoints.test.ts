@@ -46,7 +46,15 @@ describe('@neko/ui public entrypoints', () => {
     expect(workbench.CreativeWorkbenchShell).toBe(ui.CreativeWorkbenchShell);
     expect(workbench.CreativeLeftRail).toBe(ui.CreativeLeftRail);
     expect(workbench.MainPanelControlLayer).toBe(ui.MainPanelControlLayer);
+    expect(workbench.EditorWorkbenchShell).toBe(ui.EditorWorkbenchShell);
+    expect(workbench.WorkbenchActivityBar).toBe(ui.WorkbenchActivityBar);
+    expect(workbench.WorkbenchEditorTabs).toBe(ui.WorkbenchEditorTabs);
+    expect(workbench.WorkbenchListCard).toBe(ui.WorkbenchListCard);
+    expect(workbench.WorkbenchThumbnailStrip).toBe(ui.WorkbenchThumbnailStrip);
+    expect(workbench.CreativeHostAdapterFrame).toBe(ui.CreativeHostAdapterFrame);
     expect(workbench).toHaveProperty('CreativeWorkbenchShell');
+    expect(workbench).toHaveProperty('EditorWorkbenchShell');
+    expect(workbench).toHaveProperty('CreativeHostAdapterFrame');
     expect(ui.ResizeHandle).toBeTypeOf('function');
     expect(testUtils.hasAccessibleName).toBeTypeOf('function');
     expect(keyboard.KeyboardBoundary).toBe(ui.KeyboardBoundary);

@@ -56,6 +56,11 @@ export const zhCN = {
   'toolbar.video': '视频',
   'toolbar.audio': '音频',
   'scopeNavigation.issueCount': '{count} 个画布问题',
+  'hostAdapter.dock': '{label} 宿主适配器',
+  'hostAdapter.package': '包',
+  'hostAdapter.panel': '面板',
+  'hostAdapter.runtime': '运行时',
+  'hostAdapter.file': '文件',
 
   // Canvas settings
   'settings.title': '画布设置',

@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.1",
   "type": "module",
+  "exports": {
+    "./host-adapter": "./src/host-adapter/index.tsx"
+  },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

@@ -27,4 +27,9 @@ export const common = {
   'rightDock.mode.basic.description': 'AI-assisted cuts and common properties',
   'rightDock.mode.professional': 'Professional',
   'rightDock.mode.professional.description': 'Advanced editing, keyframes, and precision controls',
+  'hostAdapter.dock': '{label} adapter',
+  'hostAdapter.package': 'Package',
+  'hostAdapter.panel': 'Panel',
+  'hostAdapter.runtime': 'Runtime',
+  'hostAdapter.file': 'File',
 } as const satisfies MessageBundle;

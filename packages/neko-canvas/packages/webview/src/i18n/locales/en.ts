@@ -56,6 +56,11 @@ export const en = {
   'toolbar.video': 'Video',
   'toolbar.audio': 'Audio',
   'scopeNavigation.issueCount': '{count} board issues',
+  'hostAdapter.dock': '{label} adapter',
+  'hostAdapter.package': 'Package',
+  'hostAdapter.panel': 'Panel',
+  'hostAdapter.runtime': 'Runtime',
+  'hostAdapter.file': 'File',
 
   // Canvas settings
   'settings.title': 'Canvas Settings',

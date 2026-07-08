@@ -3,6 +3,10 @@ import type { ReactNode } from 'react';
 export interface TreeViewItem<TMetadata = unknown> {
   readonly id: string;
   readonly label: string;
+  readonly description?: ReactNode;
+  readonly title?: string;
+  readonly decoration?: ReactNode;
+  readonly decorationTitle?: string;
   readonly icon?: ReactNode;
   readonly children?: readonly TreeViewItem<TMetadata>[];
   readonly disabled?: boolean;

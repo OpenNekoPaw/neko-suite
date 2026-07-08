@@ -1,0 +1,16 @@
+.sketch-host-adapter__surface {
+  display: grid;
+  justify-items: start;
+  align-items: start;
+  width: 100%;
+  height: 100%;
+  padding: 18px 0 0 28px;
+  color: #9ca3af;
+  background-image: radial-gradient(#d7dce2 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.sketch-host-adapter__icon {
+  font-size: 9px;
+  font-weight: 900;
+}
