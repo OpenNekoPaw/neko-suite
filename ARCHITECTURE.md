@@ -8,46 +8,58 @@ This document is the current architecture entry point for Neko Suite. It describ
 
 Neko Suite is a VS Code integrated creative suite with three cooperating planes:
 
-| Plane | Responsibility |
-|-------|----------------|
-| Authoring plane | React Webviews for story, canvas, timeline, preview, model, sketch, puppet, audio, assets, market, dashboard, and search |
+| Plane               | Responsibility                                                                                                                      |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Authoring plane     | React Webviews for story, canvas, timeline, preview, model, sketch, puppet, audio, assets, market, dashboard, and search            |
 | Orchestration plane | VS Code Extension Host packages for workspace access, activation, cross-extension coordination, Agent sessions, and command routing |
-| Engine plane | Rust sidecar for media authority, GPU rendering, codecs, audio, device I/O, ML inference, runtime scene and puppet state |
+| Engine plane        | Rust sidecar for media authority, GPU rendering, codecs, audio, device I/O, ML inference, runtime scene and puppet state            |
 
 The product challenge is to expose professional creative and AI workflows inside VS Code without violating Webview sandbox constraints or duplicating engine-owned computation in TypeScript.
 
+## Client Targets
+
+Neko Suite splits client targets by product goal:
+
+| Client                   | Goal                                                                                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TUI client               | Agent feature validation, model quality validation, real API runs, ablation experiments, regression tests, and structured reports                        |
+| VS Code extension client | Lightweight plugin-based creative client for future extension capabilities and fast authoring/editing                                                    |
+| Standalone editor        | Professional creative client that raises the editing and rendering ceiling, avoids VS Code constraints, and provides a more controllable automation host |
+
+The three clients share the Agent runtime, domain capabilities, Host adapter ports, Engine client, and Rust Engine, but they do not aim for full feature parity. See [`docs/architecture/client-targets.md`](./docs/architecture/client-targets.md) for the detailed boundary.
+
 ## Layering
 
-| Layer | Owner | Rules |
-|-------|-------|-------|
+| Layer               | Owner                                                           | Rules                                                               |
+| ------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------- |
 | L0 shared contracts | `neko-types`, `neko-proto`, selected schema and utility modules | Zero internal package dependency; reusable by Extension and Webview |
-| L1 host services | Extension Host packages and `neko-client` adapters | May use VS Code APIs; must not import React |
-| L2 Webview UI | React packages and `neko-ui` | Browser sandbox only; must not import `vscode` or Node APIs |
-| Engine | `neko-engine` Rust crates | Authoritative compute and runtime state; host agnostic |
+| L1 host services    | Extension Host packages and `neko-client` adapters              | May use VS Code APIs; must not import React                         |
+| L2 Webview UI       | React packages and `neko-ui`                                    | Browser sandbox only; must not import `vscode` or Node APIs         |
+| Engine              | `neko-engine` Rust crates                                       | Authoritative compute and runtime state; host agnostic              |
 
 Dependency direction flows toward contracts and engine/client boundaries. Feature extensions should not depend directly on each other when a shared contract, command bus, or exported API can express the relationship.
 
 ## Communication
 
-| Boundary | Mechanism | Invariant |
-|----------|-----------|-----------|
-| Webview to Extension Host | `postMessage` through a typed bridge | Webview never calls VS Code or Node APIs directly |
-| Extension Host to Engine | `EngineClient` over HTTP/WebSocket, plus controlled N-API surfaces | Extension Host does not duplicate engine compute |
-| Webview streaming to Engine | Authorized WebSocket stream descriptors | Extension Host brokers authority; media frames avoid Node relay where possible |
-| Extension to Extension | Shared exported APIs or VS Code command bus | No hidden package-level dependency between feature extensions |
+| Boundary                    | Mechanism                                                          | Invariant                                                                      |
+| --------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Webview to Extension Host   | `postMessage` through a typed bridge                               | Webview never calls VS Code or Node APIs directly                              |
+| Extension Host to Engine    | `EngineClient` over HTTP/WebSocket, plus controlled N-API surfaces | Extension Host does not duplicate engine compute                               |
+| Webview streaming to Engine | Authorized WebSocket stream descriptors                            | Extension Host brokers authority; media frames avoid Node relay where possible |
+| Extension to Extension      | Shared exported APIs or VS Code command bus                        | No hidden package-level dependency between feature extensions                  |
 
 ## Core Contracts
 
-| Contract | Source of truth |
-|----------|-----------------|
-| Cross-layer IDL | `packages/neko-proto` |
-| Shared TypeScript contracts and infrastructure | `packages/neko-types` |
-| Host Adapter ports | `packages/neko-host` |
-| Cross-domain content semantics | `packages/neko-content` |
-| Engine client and stream clients | `packages/neko-client` |
-| Media and runtime authority | `packages/neko-engine` |
-| Architecture decisions | This document and `docs/architecture/` |
-| Quality gates | `AGENTS.md`, `CONTRIBUTING.md`, and package-level checks |
+| Contract                                       | Source of truth                                          |
+| ---------------------------------------------- | -------------------------------------------------------- |
+| Cross-layer IDL                                | `packages/neko-proto`                                    |
+| Shared TypeScript contracts and infrastructure | `packages/neko-types`                                    |
+| Host Adapter ports                             | `packages/neko-host`                                     |
+| Cross-domain content semantics                 | `packages/neko-content`                                  |
+| Engine client and stream clients               | `packages/neko-client`                                   |
+| Media and runtime authority                    | `packages/neko-engine`                                   |
+| Architecture decisions                         | This document and `docs/architecture/`                   |
+| Quality gates                                  | `AGENTS.md`, `CONTRIBUTING.md`, and package-level checks |
 
 ## Engine Authority
 

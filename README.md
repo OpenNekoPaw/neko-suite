@@ -28,6 +28,18 @@ Neko Suite has three connected product layers:
 | Creative Agent     | Intent understanding, Skill activation, capability discovery, planning, tool execution, rich media delivery, perception, memory |
 | Interactive Engine | Scene, puppet, media, audio, device, ML, preview, and future stage runtimes powered by the Rust sidecar                         |
 
+## Client Targets
+
+Neko Suite currently splits product goals across three client targets instead of making every client carry the same full experience:
+
+| Client             | Primary Goal                                                                                                                                               |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TUI client         | Agent feature validation, model quality validation, real API runs, ablation experiments, regression tests, and structured reports                          |
+| VS Code extensions | Lightweight plugin-based creative client for fast authoring, editing, preview, orchestration, and future extension capabilities                            |
+| Standalone editor  | Professional creative client with a friendlier UI, higher rendering ceiling, fewer VS Code Webview constraints, and a more controllable automation surface |
+
+See [Client Targets And Responsibilities](./docs/architecture/client-targets.md) for the detailed boundary.
+
 ## Workspace Packages
 
 | Group                   | Packages                                                              |

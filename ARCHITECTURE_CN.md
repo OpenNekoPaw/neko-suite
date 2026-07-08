@@ -8,46 +8,58 @@
 
 Neko Suite 是集成在 VS Code 内的创意工作套件，由三个协作平面组成：
 
-| 平面 | 职责 |
-|------|------|
+| 平面     | 职责                                                                                                               |
+| -------- | ------------------------------------------------------------------------------------------------------------------ |
 | 创作平面 | Story、Canvas、Timeline、Preview、Model、Sketch、Puppet、Audio、Assets、Market、Dashboard、Search 等 React Webview |
-| 编排平面 | VS Code Extension Host 包，负责工作区访问、扩展激活、跨扩展协调、Agent 会话和命令路由 |
-| 引擎平面 | Rust sidecar，负责媒体权威、GPU 渲染、编解码、音频、设备 I/O、ML 推理、场景和 Puppet 运行时 |
+| 编排平面 | VS Code Extension Host 包，负责工作区访问、扩展激活、跨扩展协调、Agent 会话和命令路由                              |
+| 引擎平面 | Rust sidecar，负责媒体权威、GPU 渲染、编解码、音频、设备 I/O、ML 推理、场景和 Puppet 运行时                        |
 
 核心挑战是在 VS Code 沙箱内暴露专业创作和 AI 工作流，同时不破坏 Webview 安全边界，也不在 TypeScript 层重复引擎权威计算。
 
+## 客户端产物目标
+
+Neko Suite 的客户端产物按目标分工：
+
+| 产物              | 目标                                                                                     |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| TUI 客户端        | Agent 功能验证、模型效果验证、真实 API、消融实验、回归测试和结构化报告                   |
+| VSCode 插件客户端 | 插件化轻量创作客户端，方便 VSCode 等插件继续扩展能力，并支持快速创作编辑                 |
+| 独立编辑器        | 专业创作客户端，提高编辑器上限和渲染效果，绕开 VSCode 限制，并提供更可控的自动化测试宿主 |
+
+三个客户端共享 Agent runtime、领域 capability、Host adapter ports、Engine client 与 Rust Engine，但不追求功能完全等价。详细边界见 [`docs/architecture/client-targets.md`](./docs/architecture/client-targets.md)。
+
 ## 分层
 
-| 层级 | 所有者 | 规则 |
-|------|--------|------|
-| L0 共享契约 | `neko-types`、`neko-proto`、部分 schema 和工具模块 | 零内部包依赖，可被 Extension 和 Webview 复用 |
-| L1 宿主服务 | Extension Host 包与 `neko-client` 适配层 | 可使用 VS Code API；不得导入 React |
-| L2 Webview UI | React 包与 `neko-ui` | 只运行在浏览器沙箱；不得导入 `vscode` 或 Node API |
-| Engine | `neko-engine` Rust crates | 权威计算和运行时状态；宿主无关 |
+| 层级          | 所有者                                             | 规则                                              |
+| ------------- | -------------------------------------------------- | ------------------------------------------------- |
+| L0 共享契约   | `neko-types`、`neko-proto`、部分 schema 和工具模块 | 零内部包依赖，可被 Extension 和 Webview 复用      |
+| L1 宿主服务   | Extension Host 包与 `neko-client` 适配层           | 可使用 VS Code API；不得导入 React                |
+| L2 Webview UI | React 包与 `neko-ui`                               | 只运行在浏览器沙箱；不得导入 `vscode` 或 Node API |
+| Engine        | `neko-engine` Rust crates                          | 权威计算和运行时状态；宿主无关                    |
 
 依赖方向应流向契约层和 engine/client 边界。功能扩展之间不要直接依赖；能用共享契约、命令总线或 exported API 表达的关系，不要用包级耦合表达。
 
 ## 通信
 
-| 边界 | 机制 | 不变量 |
-|------|------|--------|
-| Webview 到 Extension Host | typed bridge 上的 `postMessage` | Webview 不直接调用 VS Code 或 Node API |
-| Extension Host 到 Engine | `EngineClient` 的 HTTP/WebSocket，以及受控 N-API 表面 | Extension Host 不重复引擎计算 |
-| Webview 到 Engine 流媒体 | Extension Host 授权后的 WebSocket stream descriptor | Extension Host 负责授权，媒体帧尽量不经 Node 中继 |
-| Extension 到 Extension | 共享 exported API 或 VS Code command bus | 功能扩展之间不隐藏包级依赖 |
+| 边界                      | 机制                                                  | 不变量                                            |
+| ------------------------- | ----------------------------------------------------- | ------------------------------------------------- |
+| Webview 到 Extension Host | typed bridge 上的 `postMessage`                       | Webview 不直接调用 VS Code 或 Node API            |
+| Extension Host 到 Engine  | `EngineClient` 的 HTTP/WebSocket，以及受控 N-API 表面 | Extension Host 不重复引擎计算                     |
+| Webview 到 Engine 流媒体  | Extension Host 授权后的 WebSocket stream descriptor   | Extension Host 负责授权，媒体帧尽量不经 Node 中继 |
+| Extension 到 Extension    | 共享 exported API 或 VS Code command bus              | 功能扩展之间不隐藏包级依赖                        |
 
 ## 核心契约
 
-| 契约 | 单一事实来源 |
-|------|--------------|
-| 跨层 IDL | `packages/neko-proto` |
-| TypeScript 共享契约和基础设施 | `packages/neko-types` |
-| Host Adapter ports | `packages/neko-host` |
-| 跨领域内容语义服务 | `packages/neko-content` |
-| Engine client 与流客户端 | `packages/neko-client` |
-| 媒体与运行时权威 | `packages/neko-engine` |
-| 架构决策 | 本文与 `docs/architecture/` |
-| 质量门禁 | `AGENTS.md`、`CONTRIBUTING_CN.md` 与包级检查 |
+| 契约                          | 单一事实来源                                 |
+| ----------------------------- | -------------------------------------------- |
+| 跨层 IDL                      | `packages/neko-proto`                        |
+| TypeScript 共享契约和基础设施 | `packages/neko-types`                        |
+| Host Adapter ports            | `packages/neko-host`                         |
+| 跨领域内容语义服务            | `packages/neko-content`                      |
+| Engine client 与流客户端      | `packages/neko-client`                       |
+| 媒体与运行时权威              | `packages/neko-engine`                       |
+| 架构决策                      | 本文与 `docs/architecture/`                  |
+| 质量门禁                      | `AGENTS.md`、`CONTRIBUTING_CN.md` 与包级检查 |
 
 ## 引擎权威
 
