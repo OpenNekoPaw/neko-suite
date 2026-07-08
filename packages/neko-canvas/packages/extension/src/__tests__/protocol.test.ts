@@ -326,6 +326,13 @@ describe('canvasEditorProvider message contracts', () => {
       expect(providerSource).toContain("materialization: 'if-missing'");
     });
 
+    it('routes asset path variables through shared host content policy instead of neko-assets commands', () => {
+      expect(providerSource).toContain('resolveHostContentMediaPath');
+      expect(providerSource).toContain('contractHostContentMediaPath');
+      expect(providerSource).not.toContain("'neko.assets.resolvePath'");
+      expect(providerSource).not.toContain("'neko.assets.contractPath'");
+    });
+
     it('binds Webview URI projection to the requesting Webview instead of the active editor', () => {
       expect(providerSource).toContain('CONTENT_ACCESS_WEBVIEW_RESOLVER_TOKEN_METADATA_KEY');
       expect(providerSource).toContain('private readonly contentAccessWebviewsByToken');

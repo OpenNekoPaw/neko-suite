@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import * as vscode from 'vscode';
 import type {
   ProjectData,
   TimelineElement,
@@ -34,7 +35,15 @@ vi.mock('vscode', () => ({
   commands: {
     executeCommand: vi.fn(async () => null),
   },
+  extensions: {
+    getExtension: vi.fn(() => undefined),
+  },
 }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(vscode.extensions.getExtension).mockReturnValue(undefined);
+});
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -252,6 +261,22 @@ describe('normalizePathsForSave', () => {
       }),
     ).rejects.toThrow('absolute local path that cannot be made portable');
   });
+
+  it('contracts media-library paths through shared host content policy', async () => {
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue(createAssetsExtension());
+    const el = makeElement({ id: 'e1', src: '/library/books/clip.mp4' });
+    const project = makeProject([makeTrack([el])]);
+
+    const result = await normalizePathsForSave(project, '/workspace/b/projects/cut/project.nkv');
+    const resultEl = result.tracks[0]!.elements[0]! as unknown as { src: string };
+
+    expect(resultEl.src).toBe('${BOOKS}/clip.mp4');
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'neko.assets.contractPath',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -263,7 +288,6 @@ describe('resolveMediaPath', () => {
     const result = await resolveMediaPath(
       'cases/clip.mp4',
       '/workspace/b/projects/cut',
-      undefined,
       {
         projectFilePath: '/workspace/b/projects/cut/project.nkv',
         fileExists: (filePath) =>
@@ -278,13 +302,39 @@ describe('resolveMediaPath', () => {
 
   it('rejects document-relative project media when no workspace candidate exists', async () => {
     await expect(
-      resolveMediaPath('../cases/clip.mp4', '/workspace/b/projects/cut', undefined, {
+      resolveMediaPath('../cases/clip.mp4', '/workspace/b/projects/cut', {
         projectFilePath: '/workspace/b/projects/cut/project.nkv',
         fileExists: (filePath) => filePath === '/workspace/b/projects/cases/clip.mp4',
       }),
     ).rejects.toThrow('No existing local file matched the media path candidates.');
   });
+
+  it('resolves media-library variable paths through shared host content policy', async () => {
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue(createAssetsExtension());
+
+    const result = await resolveMediaPath('${BOOKS}/clip.mp4', '/workspace/b/projects/cut', {
+      fileExists: (filePath) => filePath === '/library/books/clip.mp4',
+    });
+
+    expect(result).toBe('/library/books/clip.mp4');
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'neko.assets.resolvePath',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
 });
+
+function createAssetsExtension(): vscode.Extension<unknown> {
+  return {
+    isActive: true,
+    exports: {
+      getMediaLibraryRoots: vi.fn(async () => ['/library/books']),
+      getPathVariables: vi.fn(async () => [['BOOKS', '/library/books']] as const),
+    },
+    activate: vi.fn(),
+  } as unknown as vscode.Extension<unknown>;
+}
 
 // ---------------------------------------------------------------------------
 // findElement

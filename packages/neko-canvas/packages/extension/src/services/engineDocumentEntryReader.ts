@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import { EngineClient } from '@neko/neko-client';
-import type { DocumentEntryReader } from '@neko/shared/vscode/extension';
+import {
+  createHostContentPathResolver,
+  getHostContentAuthorizedReadRoots,
+  type DocumentEntryReader,
+} from '@neko/shared/vscode/extension';
 
 export function createCanvasEngineDocumentEntryReader(): DocumentEntryReader {
   let engineClient: EngineClient | undefined;
@@ -35,22 +39,25 @@ async function getEngineClient(
 }
 
 async function resolveCanvasDocumentSourcePath(filePath: string): Promise<string> {
-  const resolved = await vscode.commands.executeCommand<string | undefined>(
-    'neko.assets.resolvePath',
-    filePath,
-  );
-  return resolved && resolved.trim().length > 0 ? resolved : filePath;
+  const resolver = await createHostContentPathResolver({
+    workspaceRoot: getWorkspaceRoot(),
+    getExtension: vscode.extensions.getExtension,
+  });
+  const resolved = resolver.resolve(filePath);
+  if (resolver.hasVariable(resolved)) {
+    throw new Error(`Canvas document source path uses an unknown path variable: ${filePath}`);
+  }
+  return resolved;
 }
 
 async function readAuthorizedDocumentRoots(sourceFilePath: string): Promise<readonly string[]> {
-  return dedupeNonEmptyPaths([...(await readAuthorizedMediaLibraryRoots()), sourceFilePath]);
-}
-
-async function readAuthorizedMediaLibraryRoots(): Promise<readonly string[]> {
-  const roots = await vscode.commands.executeCommand<readonly string[] | undefined>(
-    'neko.assets.getMediaLibraryRoots',
-  );
-  return Array.isArray(roots) ? dedupeNonEmptyPaths(roots) : [];
+  return dedupeNonEmptyPaths([
+    ...(await getHostContentAuthorizedReadRoots({
+      workspaceRoot: getWorkspaceRoot(),
+      getExtension: vscode.extensions.getExtension,
+    })),
+    sourceFilePath,
+  ]);
 }
 
 function dedupeNonEmptyPaths(paths: readonly string[]): string[] {
@@ -63,4 +70,8 @@ function dedupeNonEmptyPaths(paths: readonly string[]): string[] {
     result.push(trimmed);
   }
   return result;
+}
+
+function getWorkspaceRoot(): string | undefined {
+  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 }

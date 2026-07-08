@@ -6,16 +6,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
-  PathResolver,
   applyPortableSourcePathPolicy,
   contractWorkspaceMediaPath,
   nkvSourcePathPolicy,
-  resolveWorkspaceMediaPath,
   type ProjectData,
   type TimelineElement,
   type TimelineTrack,
   type WorkspaceMediaPathContext,
 } from '@neko/shared';
+import {
+  contractHostContentMediaPath,
+  resolveHostContentMediaPath,
+  type HostContentPathResolverOptions,
+} from '@neko/shared/vscode/extension';
 
 // =============================================================================
 // Tool Element Types
@@ -88,14 +91,6 @@ export interface CutMediaPathContextOptions {
   readonly fileExists?: (filePath: string) => boolean;
 }
 
-interface AssetPathCommandContext {
-  readonly sourceDocumentUri?: string;
-  readonly documentPath?: string;
-  readonly owningWorkspaceRoot?: string;
-  readonly workspaceRoots?: readonly string[];
-  readonly allowedRoots?: readonly string[];
-}
-
 /**
  * Contract an absolute path to a portable path for storage.
  *
@@ -109,18 +104,11 @@ async function contractPath(
   options: CutMediaPathContextOptions = {},
 ): Promise<string | undefined> {
   const context = createCutWorkspaceMediaPathContext(baseDir, options);
-  const commandContext = createAssetPathCommandContext(context, options);
-
-  try {
-    const contracted = await vscode.commands.executeCommand<string>(
-      'neko.assets.contractPath',
-      absolutePath,
-      commandContext,
-    );
-    if (contracted && !path.isAbsolute(contracted)) return contracted;
-  } catch {
-    // neko-assets not active, fallback to relative
-  }
+  const contractedByPolicy = await contractHostContentMediaPath(
+    absolutePath,
+    createHostContentPathOptions(context, options),
+  );
+  if (contractedByPolicy && !path.isAbsolute(contractedByPolicy)) return contractedByPolicy;
 
   const contracted = contractWorkspaceMediaPath(absolutePath, context);
   if (
@@ -137,53 +125,18 @@ async function contractPath(
 /**
  * Resolve a stored path (PathVariable or relative) to an absolute path.
  *
- * Uses @neko/shared PathResolver for variable expansion when a resolver
- * is available, otherwise falls back to neko.assets VSCode command.
+ * Uses the shared host content policy and fails visibly when no authorized
+ * local candidate exists.
  */
 export async function resolveMediaPath(
   storedPath: string,
   baseDir: string,
-  resolver?: PathResolver,
   options: CutMediaPathContextOptions = {},
 ): Promise<string> {
   const context = createCutWorkspaceMediaPathContext(baseDir, options);
-  const commandContext = createAssetPathCommandContext(context, options);
-
-  try {
-    const resolved = await vscode.commands.executeCommand<string>(
-      'neko.assets.resolvePath',
-      storedPath,
-      commandContext,
-    );
-    if (resolved && resolved !== storedPath) {
-      return resolved;
-    }
-  } catch {
-    // neko-assets not active
-  }
-
-  const planned = resolveWorkspaceMediaPath({
-    source: storedPath,
-    context,
-    fileExists: options.fileExists,
-    isPathAuthorized: (filePath) => isPathAuthorized(filePath, context.allowedRoots),
-  });
-
-  if (planned.status === 'resolved-local') return planned.path;
-  if (planned.status === 'remote') return planned.url;
-
-  // If resolver is provided, use it as a final compatibility path-variable source.
-  if (resolver) {
-    const result = resolver.resolveSource(storedPath, baseDir);
-    if (result.type === 'remote') return result.url;
-    if (!result.path.includes('${') && (path.isAbsolute(result.path) || isRemoteUrl(result.path))) {
-      return result.path;
-    }
-  }
-
-  const diagnostic = planned.diagnostics[planned.diagnostics.length - 1];
-  throw new Error(
-    diagnostic?.message ?? `Unable to resolve media path with project context: ${storedPath}`,
+  return resolveHostContentMediaPath(
+    storedPath,
+    createHostContentPathOptions(context, options),
   );
 }
 
@@ -265,12 +218,7 @@ export async function resolveProjectMediaSourcesForRuntime(
             typeof element.src === 'string' &&
             !isRemoteUrl(element.src)
           ) {
-            const resolved = await resolveMediaPath(
-              element.src,
-              baseDir,
-              undefined,
-              contextOptions,
-            );
+            const resolved = await resolveMediaPath(element.src, baseDir, contextOptions);
             return { ...element, src: resolved } as TimelineElement;
           }
           return element;
@@ -317,17 +265,17 @@ export function createCutWorkspaceMediaPathContext(
   };
 }
 
-function createAssetPathCommandContext(
+function createHostContentPathOptions(
   context: WorkspaceMediaPathContext,
   options: CutMediaPathContextOptions,
-): AssetPathCommandContext {
-  const documentPath = options.projectFilePath ?? options.documentUri?.fsPath;
+): HostContentPathResolverOptions {
   return {
-    ...(context.sourceDocumentUri ? { sourceDocumentUri: context.sourceDocumentUri } : {}),
-    ...(documentPath ? { documentPath } : {}),
-    ...(context.owningWorkspaceRoot ? { owningWorkspaceRoot: context.owningWorkspaceRoot } : {}),
-    ...(context.workspaceRoots ? { workspaceRoots: context.workspaceRoots } : {}),
-    ...(options.allowedRoots ? { allowedRoots: options.allowedRoots } : {}),
+    ...(context.owningWorkspaceRoot ? { workspaceRoot: context.owningWorkspaceRoot } : {}),
+    ...(options.documentUri ? { documentUri: options.documentUri } : {}),
+    workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+    allowedRoots: context.allowedRoots,
+    fileExists: options.fileExists ?? isExistingLocalFile,
+    getExtension: vscode.extensions.getExtension,
   };
 }
 
@@ -347,11 +295,6 @@ export function isExistingLocalFile(filePath: string): boolean {
   } catch {
     return false;
   }
-}
-
-function isPathAuthorized(filePath: string, roots: readonly string[] | undefined): boolean {
-  if (!roots || roots.length === 0) return true;
-  return roots.some((root) => isPathInsideOrEqual(filePath, root));
 }
 
 function isPathInsideOrEqual(candidatePath: string, rootPath: string): boolean {

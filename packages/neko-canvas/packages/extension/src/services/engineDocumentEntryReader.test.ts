@@ -6,6 +6,12 @@ vi.mock('vscode', () => ({
   commands: {
     executeCommand: vi.fn(),
   },
+  extensions: {
+    getExtension: vi.fn(),
+  },
+  workspace: {
+    workspaceFolders: [{ uri: { fsPath: '/workspace/project' }, name: 'project', index: 0 }],
+  },
 }));
 
 vi.mock('@neko/neko-client', () => ({
@@ -28,13 +34,15 @@ vi.mock('@neko/neko-client', () => ({
 describe('createCanvasEngineDocumentEntryReader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(vscode.extensions.getExtension).mockReturnValue({
+      isActive: true,
+      exports: {
+        getMediaLibraryRoots: vi.fn(async () => ['/library/books']),
+        getPathVariables: vi.fn(async () => [['BOOKS', '/library/books']] as const),
+      },
+      activate: vi.fn(),
+    } as unknown as vscode.Extension<unknown>);
     vi.mocked(vscode.commands.executeCommand).mockImplementation(async (command, argument) => {
-      if (command === 'neko.assets.resolvePath') {
-        return argument === '${BOOKS}/comic.epub' ? '/library/books/comic.epub' : argument;
-      }
-      if (command === 'neko.assets.getMediaLibraryRoots') {
-        return ['/library/books'];
-      }
       if (command === 'neko.engine.ensureFrameServer') {
         return { port: 1234 };
       }
@@ -54,11 +62,15 @@ describe('createCanvasEngineDocumentEntryReader', () => {
     );
 
     expect(bytes).toEqual(new Uint8Array([1, 2, 3]));
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
       'neko.assets.resolvePath',
-      '${BOOKS}/comic.epub',
+      expect.anything(),
+    );
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'neko.assets.getMediaLibraryRoots',
     );
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('neko.engine.ensureFrameServer', [
+      '/workspace/project',
       '/library/books',
       '/library/books/comic.epub',
     ]);

@@ -1,7 +1,7 @@
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import * as vscode from 'vscode';
-import { PathResolver, type PathVariableMap } from '@neko/shared';
+import { resolveHostContentMediaPath } from '@neko/shared/vscode/extension';
 
 const PATH_VARIABLE_RE = /\$\{[^}]+\}/;
 
@@ -15,58 +15,30 @@ export async function resolveMediaSrcPath(jviDir: string, src: string): Promise<
     return path.resolve(jviDir, src);
   }
 
+  return resolveHostContentMediaPath(src, {
+    workspaceRoot: findOwningWorkspaceRoot(jviDir),
+    workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+    getExtension: vscode.extensions.getExtension,
+    fileExists: isExistingLocalFile,
+  });
+}
+
+function findOwningWorkspaceRoot(filePath: string): string | undefined {
+  return (vscode.workspace.workspaceFolders ?? [])
+    .map((folder) => folder.uri.fsPath)
+    .filter((root) => isPathInsideOrEqual(filePath, root))
+    .sort((left, right) => right.length - left.length)[0];
+}
+
+function isPathInsideOrEqual(candidatePath: string, rootPath: string): boolean {
+  const relativePath = path.relative(rootPath, candidatePath);
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
+
+function isExistingLocalFile(filePath: string): boolean {
   try {
-    const resolved = await vscode.commands.executeCommand<string>('neko.assets.resolvePath', src);
-    if (resolved && !hasPathVariable(resolved)) return resolved;
+    return fs.statSync(filePath).isFile();
   } catch {
-    // neko-assets not active
+    return false;
   }
-
-  const resolver = new PathResolver(await loadWorkspacePathVariables());
-  const expanded = resolver.resolve(src);
-  return path.isAbsolute(expanded) ? expanded : path.resolve(jviDir, expanded);
-}
-
-interface MediaLibraryEntry {
-  variable?: string;
-  path?: string;
-  enabled?: boolean;
-}
-
-interface MediaLibrarySettings {
-  mediaLibraries?: MediaLibraryEntry[];
-}
-
-interface MediaLibraryLocalSettings {
-  mediaLibraryOverrides?: Record<string, string>;
-}
-
-async function readJsonFile<T>(filePath: string): Promise<T | null> {
-  try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(content) as T;
-  } catch {
-    return null;
-  }
-}
-
-async function loadWorkspacePathVariables(): Promise<PathVariableMap> {
-  const variables: PathVariableMap = new Map();
-  const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
-
-  for (const folder of workspaceFolders) {
-    const settingsPath = path.join(folder.uri.fsPath, 'neko', 'settings.json');
-    const localSettingsPath = path.join(folder.uri.fsPath, '.neko', 'settings.local.json');
-    const settings = await readJsonFile<MediaLibrarySettings>(settingsPath);
-    const localSettings = await readJsonFile<MediaLibraryLocalSettings>(localSettingsPath);
-    const overrides = localSettings?.mediaLibraryOverrides ?? {};
-
-    for (const entry of settings?.mediaLibraries ?? []) {
-      if (entry.enabled === false) continue;
-      if (!entry.variable || !entry.path) continue;
-      variables.set(entry.variable, overrides[entry.variable] ?? entry.path);
-    }
-  }
-
-  return variables;
 }

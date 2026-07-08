@@ -17,6 +17,7 @@ import * as vscode from 'vscode';
 import { EngineClient } from '@neko/neko-client';
 import type { ContentAccessRequest, ContentEngineSource } from '@neko/shared';
 import {
+  createHostContentMediaPathContext,
   createHostContentAccessRuntime,
   readStringMetadata,
   type ContentAccessService,
@@ -271,7 +272,8 @@ class PreviewFileServer {
     filePath: string,
     purpose: 'document' | 'preview',
   ): Promise<{ readonly token: string }> {
-    const result = await this.getContentAccess(filePath).resolve({
+    const contentAccess = await this.getContentAccess(filePath);
+    const result = await contentAccess.resolve({
       ref: { kind: 'file', path: filePath },
       intent: 'interactive-preview',
       target: 'engine-source',
@@ -284,12 +286,19 @@ class PreviewFileServer {
     return { token: result.engineSource.token };
   }
 
-  private getContentAccess(filePath: string): ContentAccessService {
+  private async getContentAccess(filePath: string): Promise<ContentAccessService> {
     const workspaceRoot = this.resolveWorkspaceRoot(filePath);
     const existing = this._contentAccessByWorkspaceRoot.get(workspaceRoot);
     if (existing) return existing;
+    const mediaPathContext = await createHostContentMediaPathContext({
+      workspaceRoot,
+      workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+      getExtension: vscode.extensions.getExtension,
+      logger,
+    });
     const contentAccess = createHostContentAccessRuntime({
       workspaceRoot,
+      mediaPathContext,
       sourceFileProvider: {
         engineSourceResolver: ({ request, path: resolvedPath }) =>
           this.createEngineSource(request, resolvedPath),

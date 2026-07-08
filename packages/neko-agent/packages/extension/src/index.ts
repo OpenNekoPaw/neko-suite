@@ -62,6 +62,7 @@ import { runResourceCacheStartupGc } from './services/resourceCacheStartupGcServ
 import { getEngineClientProvider } from './services/engineClientProvider';
 import { createExtensionAgentContentAccessRuntime } from './services/agentContentAccessRuntime';
 import {
+  createHostContentMediaPathContext,
   createHostContentPathResolver,
   getHostContentAuthorizedReadRoots,
 } from '@neko/shared/vscode/extension';
@@ -152,6 +153,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
     context,
     engineClientProvider,
     workspaceRoot,
+    mediaPathContext: await createHostContentMediaPathContext({
+      workspaceRoot,
+      workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+      getExtension: vscode.extensions.getExtension,
+      logger,
+    }),
     pathResolver: await createHostContentPathResolver({
       workspaceRoot,
       getExtension: vscode.extensions.getExtension,

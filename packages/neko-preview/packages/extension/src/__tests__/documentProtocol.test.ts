@@ -4,12 +4,39 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock vscode module
 // ============================================================================
 
-const { executeCommand, showWarningMessage, workspaceFolders, readFile } = vi.hoisted(() => ({
-  executeCommand: vi.fn(),
-  showWarningMessage: vi.fn(),
-  workspaceFolders: [] as Array<{ uri: { fsPath: string } }>,
-  readFile: vi.fn(),
-}));
+const {
+  executeCommand,
+  showWarningMessage,
+  workspaceFolders,
+  readFile,
+  getExtension,
+  existingFiles,
+} = vi.hoisted(() => ({
+    executeCommand: vi.fn(),
+    showWarningMessage: vi.fn(),
+    workspaceFolders: [] as Array<{ uri: { fsPath: string } }>,
+    readFile: vi.fn(),
+    getExtension: vi.fn(),
+    existingFiles: new Set<string>(),
+  }));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  const statSync = vi.fn((filePath: string) => {
+    if (existingFiles.has(filePath)) {
+      return {
+        isFile: () => true,
+        isDirectory: () => false,
+      };
+    }
+    return actual.statSync(filePath);
+  });
+  return {
+    ...actual,
+    default: { ...actual, statSync },
+    statSync,
+  };
+});
 
 vi.mock('vscode', () => ({
   Uri: {
@@ -23,7 +50,7 @@ vi.mock('vscode', () => ({
   commands: { executeCommand },
   window: { showWarningMessage },
   workspace: { workspaceFolders },
-  extensions: { getExtension: vi.fn() },
+  extensions: { getExtension },
   env: { language: 'en' },
   EventEmitter: vi.fn(),
 }));
@@ -60,8 +87,26 @@ beforeEach(() => {
   executeCommand.mockReset();
   showWarningMessage.mockReset();
   readFile.mockReset();
+  getExtension.mockReset();
+  getExtension.mockReturnValue(undefined);
+  existingFiles.clear();
   workspaceFolders.length = 0;
 });
+
+function mockAssetsContentPolicy(options: {
+  readonly roots?: readonly string[];
+  readonly variables?: ReadonlyArray<readonly [string, string]>;
+}): void {
+  const api = {
+    getMediaLibraryRoots: vi.fn(async () => [...(options.roots ?? [])]),
+    getPathVariables: vi.fn(async () => [...(options.variables ?? [])]),
+  };
+  getExtension.mockReturnValue({
+    isActive: true,
+    exports: api,
+    activate: vi.fn(async () => api),
+  });
+}
 
 describe('document preview to Agent context bridge', () => {
   it('enriches document selections with source locator and excerpt metadata', async () => {
@@ -256,18 +301,14 @@ describe('PreviewFileServer path resolution fallback', () => {
     }
   });
 
-  it('falls back to workspace media library settings when neko-assets does not resolve', async () => {
+  it('resolves media library variables through the shared assets content policy', async () => {
     workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
     executeCommand.mockResolvedValueOnce('/${A}/epub/book.epub');
-    readFile.mockImplementation(async (filePath: string) => {
-      if (filePath === '/workspace-a/neko/settings.json') {
-        return JSON.stringify({
-          mediaLibraries: [{ variable: 'A', path: '/Volumes/LibraryA', enabled: true }],
-        });
-      }
-      const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-      throw error;
+    mockAssetsContentPolicy({
+      roots: ['/Volumes/LibraryA'],
+      variables: [['A', '/Volumes/LibraryA']],
     });
+    existingFiles.add('/Volumes/LibraryA/epub/book.epub');
 
     const resolved = await (
       previewFileServer as unknown as { resolvePath: (filePath: string) => Promise<string> }
@@ -276,23 +317,14 @@ describe('PreviewFileServer path resolution fallback', () => {
     expect(resolved).toBe('/Volumes/LibraryA/epub/book.epub');
   });
 
-  it('prefers settings.local.json overrides when resolving workspace media library paths', async () => {
+  it('uses media library local overrides exported by the shared assets content policy', async () => {
     workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
     executeCommand.mockResolvedValueOnce('/${A}/epub/book.epub');
-    readFile.mockImplementation(async (filePath: string) => {
-      if (filePath === '/workspace-a/neko/settings.json') {
-        return JSON.stringify({
-          mediaLibraries: [{ variable: 'A', path: '/Volumes/LibraryA', enabled: true }],
-        });
-      }
-      if (filePath === '/workspace-a/.neko/settings.local.json') {
-        return JSON.stringify({
-          mediaLibraryOverrides: { A: '/Users/feng/LibraryA' },
-        });
-      }
-      const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-      throw error;
+    mockAssetsContentPolicy({
+      roots: ['/Users/feng/LibraryA'],
+      variables: [['A', '/Users/feng/LibraryA']],
     });
+    existingFiles.add('/Users/feng/LibraryA/epub/book.epub');
 
     const resolved = await (
       previewFileServer as unknown as { resolvePath: (filePath: string) => Promise<string> }
@@ -305,18 +337,11 @@ describe('PreviewFileServer path resolution fallback', () => {
 describe('PreviewFileServer engine allow-list roots', () => {
   it('includes workspace and configured media library roots', async () => {
     workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
-    readFile.mockImplementation(async (filePath: string) => {
-      if (filePath === '/workspace-a/neko/settings.json') {
-        return JSON.stringify({
-          mediaLibraries: [
-            { variable: 'EPUB', path: '/Users/feng/Assets/epub', enabled: true },
-            { variable: 'OFFLINE', path: '/disabled', enabled: false },
-          ],
-        });
-      }
-      const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-      throw error;
+    mockAssetsContentPolicy({
+      roots: ['/Users/feng/Assets/epub'],
+      variables: [['EPUB', '/Users/feng/Assets/epub']],
     });
+    existingFiles.add('/Users/feng/Assets/epub/book.epub');
 
     await expect(getPreviewAllowedRoots()).resolves.toEqual([
       '/workspace-a',
@@ -326,15 +351,11 @@ describe('PreviewFileServer engine allow-list roots', () => {
 
   it('passes media library roots to neko-engine before registering files', async () => {
     workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
-    readFile.mockImplementation(async (filePath: string) => {
-      if (filePath === '/workspace-a/neko/settings.json') {
-        return JSON.stringify({
-          mediaLibraries: [{ variable: 'EPUB', path: '/Users/feng/Assets/epub' }],
-        });
-      }
-      const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-      throw error;
+    mockAssetsContentPolicy({
+      roots: ['/Users/feng/Assets/epub'],
+      variables: [['EPUB', '/Users/feng/Assets/epub']],
     });
+    existingFiles.add('/Users/feng/Assets/epub/book.epub');
     executeCommand.mockImplementation(async (command: string) => {
       if (command === 'neko.engine.ensureFrameServer') {
         return { port: 5010 };
@@ -375,23 +396,23 @@ describe('PreviewFileServer engine allow-list roots', () => {
     ]);
   });
 
-  it('normalizes supported media library root address forms before syncing to engine', async () => {
+  it('uses normalized media library roots exported by the shared assets content policy', async () => {
     workspaceFolders.push({ uri: { fsPath: '/workspace-a' } });
-    readFile.mockImplementation(async (filePath: string) => {
-      if (filePath === '/workspace-a/neko/settings.json') {
-        return JSON.stringify({
-          mediaLibraries: [
-            { variable: 'REL', path: 'assets/epub' },
-            { variable: 'WS', path: '${WORKSPACE}/shared/books' },
-            { variable: 'HOME_LIB', path: '~/Books' },
-            { variable: 'FILE_URI', path: 'file:///Volumes/Library%20A/epub' },
-            { variable: 'CHAINED', path: '${REL}/nested' },
-            { variable: 'REMOTE', path: 'https://cdn.example.test/epub' },
-          ],
-        });
-      }
-      const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-      throw error;
+    mockAssetsContentPolicy({
+      roots: [
+        '/workspace-a/assets/epub',
+        '/workspace-a/shared/books',
+        '/Users/tester/Books',
+        '/Volumes/Library A/epub',
+        '/workspace-a/assets/epub/nested',
+      ],
+      variables: [
+        ['REL', '/workspace-a/assets/epub'],
+        ['WS', '/workspace-a/shared/books'],
+        ['HOME_LIB', '/Users/tester/Books'],
+        ['FILE_URI', '/Volumes/Library A/epub'],
+        ['CHAINED', '/workspace-a/assets/epub/nested'],
+      ],
     });
 
     await expect(getPreviewAllowedRoots()).resolves.toEqual([

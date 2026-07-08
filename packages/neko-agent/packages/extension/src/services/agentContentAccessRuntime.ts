@@ -9,10 +9,11 @@ import {
   type DocumentReaderRuntimeDeps,
   type IDocumentAccessService,
 } from '@neko/content/document';
-import type { PathResolver, ContentAccessRequest } from '@neko/shared';
+import type { ContentAccessRequest, PathResolver, WorkspaceMediaPathContext } from '@neko/shared';
 import {
   DocumentResourceCacheProvider,
   createHostContentAccessRuntime,
+  type ContentAccessFileExists,
   type ContentAccessService,
   type LocalResourceAccessService,
   type ResourceCacheService,
@@ -39,6 +40,8 @@ export interface CreateExtensionAgentContentAccessRuntimeOptions {
   readonly webviewResolver?: (request: ContentAccessRequest) => vscode.Webview | undefined;
   readonly workspaceRoot?: string;
   readonly pathResolver?: PathResolver;
+  readonly mediaPathContext?: WorkspaceMediaPathContext;
+  readonly fileExists?: ContentAccessFileExists;
   readonly maxProviderAssetBytes?: number;
 }
 
@@ -63,6 +66,8 @@ export function createExtensionAgentContentAccessRuntime(
     resourceCache: options.resourceCache,
     localResourceAccess: options.localResourceAccess,
     pathResolver: options.pathResolver,
+    mediaPathContext: options.mediaPathContext,
+    fileExists: options.fileExists,
     webviewResolver: options.webviewResolver,
     resourceCacheOptions: options.context
       ? {

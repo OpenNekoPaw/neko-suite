@@ -3,7 +3,7 @@ import type { AgentCapabilityProvider } from '@neko/shared';
 import { createNodeAssetsCapabilityProvider } from './node-assets-capability';
 import { createNodeContentAccessRuntime } from './node-content-access-runtime';
 import { createNodeEntitySearchCapabilityProviders } from './node-entity-search-capability';
-import { createNodeHostAdapter } from './node-host-adapter';
+import { createNodeWorkspaceContentHostAdapter } from './node-workspace-content-host';
 
 export interface CreateTuiDefaultCapabilityProvidersOptions {
   readonly workDir: string;
@@ -12,7 +12,7 @@ export interface CreateTuiDefaultCapabilityProvidersOptions {
 export function createTuiDefaultCapabilityProviders(
   options: CreateTuiDefaultCapabilityProvidersOptions,
 ): readonly AgentCapabilityProvider[] {
-  const host = createNodeHostAdapter({ workDir: options.workDir });
+  const host = createNodeWorkspaceContentHostAdapter({ workDir: options.workDir });
   const contentAccessRuntime = createNodeContentAccessRuntime({ host });
   return [
     createContentReadCapabilityProvider({

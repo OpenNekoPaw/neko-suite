@@ -24,9 +24,11 @@ import {
   injectLocaleAttribute,
   normalizeLocalFilePath,
   ProjectFileSaveSession,
+  contractHostContentMediaPath,
   requestWebviewProjectSnapshot,
   createVSCodeProjectSourceAddRequest,
   normalizeVSCodeProjectSourceAddRequest,
+  resolveHostContentMediaPath,
   updateWebviewKeyboardEditableOwner,
   type IFocusedWebviewRegistry,
   type ContentAccessService,
@@ -3717,15 +3719,13 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     }
 
     if (source.startsWith('${') && !isWorkspaceScopedVariablePath(source)) {
-      try {
-        const resolved = await vscode.commands.executeCommand<string>(
-          'neko.assets.resolvePath',
-          source,
-        );
-        if (resolved && !resolved.startsWith('${')) return resolved;
-      } catch {
-        // neko-assets not active
-      }
+      return resolveHostContentMediaPath(source, {
+        documentUri,
+        workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+        allowedRoots: this.getCanvasLocalResourceRoots(documentUri).map((root) => root.fsPath),
+        getExtension: vscode.extensions.getExtension,
+        fileExists: (filePath) => this.isExistingLocalFile(filePath),
+      });
     }
 
     const resolved = resolveWorkspaceMediaPath({
@@ -5883,18 +5883,14 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return contractedWorkspacePath.path;
     }
 
-    // Try PathVariable for external paths. WORKSPACE/PROJECT are document-scoped in Canvas,
-    // so they are intentionally not persisted as global asset-library contractions.
-    try {
-      const contracted = await vscode.commands.executeCommand<string>(
-        'neko.assets.contractPath',
-        absolutePath,
-      );
-      if (contracted && contracted.startsWith('${') && !isWorkspaceScopedVariablePath(contracted)) {
-        return contracted;
-      }
-    } catch {
-      // neko-assets not active
+    const contracted = await contractHostContentMediaPath(absolutePath, {
+      documentUri,
+      workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+      allowedRoots: this.getCanvasLocalResourceRoots(documentUri).map((root) => root.fsPath),
+      getExtension: vscode.extensions.getExtension,
+    });
+    if (contracted && contracted.startsWith('${') && !isWorkspaceScopedVariablePath(contracted)) {
+      return contracted;
     }
 
     logger.warn(
@@ -5904,16 +5900,12 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   }
 
   private async contractExternalAssetPath(absolutePath: string): Promise<string | undefined> {
-    try {
-      const contracted = await vscode.commands.executeCommand<string>(
-        'neko.assets.contractPath',
-        absolutePath,
-      );
-      if (contracted && contracted.startsWith('${') && !isWorkspaceScopedVariablePath(contracted)) {
-        return contracted;
-      }
-    } catch {
-      // neko-assets not active
+    const contracted = await contractHostContentMediaPath(absolutePath, {
+      workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+      getExtension: vscode.extensions.getExtension,
+    });
+    if (contracted && contracted.startsWith('${') && !isWorkspaceScopedVariablePath(contracted)) {
+      return contracted;
     }
     return undefined;
   }

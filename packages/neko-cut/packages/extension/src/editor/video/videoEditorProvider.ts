@@ -815,7 +815,7 @@ export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoPro
             const fs = await import('fs');
 
             const jviDir = path.dirname(document.uri.fsPath);
-            absolutePath = await resolveMediaPath(filePath, jviDir, undefined, {
+            absolutePath = await resolveMediaPath(filePath, jviDir, {
               documentUri: document.uri,
               projectFilePath: document.uri.fsPath,
             });

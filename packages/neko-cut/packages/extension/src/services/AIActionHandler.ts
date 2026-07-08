@@ -568,7 +568,7 @@ export class AIActionHandler implements vscode.Disposable {
 
   private async resolveMediaSource(source: string): Promise<string> {
     if (!this._documentUri) return source;
-    return resolveMediaPath(source, path.dirname(this._documentUri.fsPath), undefined, {
+    return resolveMediaPath(source, path.dirname(this._documentUri.fsPath), {
       documentUri: this._documentUri,
       projectFilePath: this._documentUri.fsPath,
       fileExists: (filePath) => fs.existsSync(filePath) && fs.statSync(filePath).isFile(),

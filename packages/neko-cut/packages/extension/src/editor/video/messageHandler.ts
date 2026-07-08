@@ -250,7 +250,7 @@ export class MessageHandler {
    */
   private async resolveStoredMediaPath(filePath: string): Promise<string> {
     const jviDir = path.dirname(this.model.uri.fsPath);
-    return resolveMediaPath(filePath, jviDir, undefined, {
+    return resolveMediaPath(filePath, jviDir, {
       documentUri: this.model.uri,
       projectFilePath: this.model.uri.fsPath,
       fileExists: isExistingLocalFile,

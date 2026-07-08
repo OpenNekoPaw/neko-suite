@@ -55,6 +55,11 @@ export {
 } from './capability/agent-content-access-runtime';
 
 export {
+  createHostAgentContentAccessRuntime,
+  type CreateHostAgentContentAccessRuntimeOptions,
+} from './capability/host-content-access-runtime-adapter';
+
+export {
   buildAgentSessionConfigWithRuntime,
   createAgentSessionWithRuntime,
   type AgentSessionRuntimeBootstrapConfig,

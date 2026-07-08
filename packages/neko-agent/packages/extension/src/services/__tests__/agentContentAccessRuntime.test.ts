@@ -35,6 +35,7 @@ describe('createExtensionAgentContentAccessRuntime', () => {
     const { runtime } = createExtensionAgentContentAccessRuntime({
       engineClientProvider,
       workspaceRoot: '/workspace/demo',
+      fileExists: (filePath) => filePath === '/workspace/demo/assets/page.png',
     });
     const signal = new AbortController().signal;
 
@@ -65,6 +66,7 @@ describe('createExtensionAgentContentAccessRuntime', () => {
     const { runtime } = createExtensionAgentContentAccessRuntime({
       engineClientProvider: createEngineClientProvider(null),
       workspaceRoot: '/workspace/demo',
+      fileExists: (filePath) => filePath === '/workspace/demo/assets/page.png',
     });
 
     const result = await runtime.loadProviderAsset({
@@ -155,6 +157,13 @@ describe('createExtensionAgentContentAccessRuntime', () => {
       engineClientProvider: createEngineClientProvider(engine),
       workspaceRoot: '/workspace/demo',
       pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      mediaPathContext: {
+        owningWorkspaceRoot: '/workspace/demo',
+        workspaceRoots: ['/workspace/demo'],
+        pathVariables: new Map([['BOOKS', '/media/books']]),
+        allowedRoots: ['/workspace/demo', '/media/books'],
+      },
+      fileExists: (filePath) => filePath === '/media/books/comic.epub',
     });
     const documentEntryRef = createResourceRef({
       id: 'res-page-1',
