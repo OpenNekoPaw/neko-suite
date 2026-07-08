@@ -1,4 +1,5 @@
 import type { IStorageLayout, PathVariableMap, ResolvedPath } from '@neko/shared';
+import type { HostContentPolicySnapshot } from './workspace-content-settings';
 
 export type HostMaybePromise<T> = T | Promise<T>;
 
@@ -60,6 +61,7 @@ export interface HostFileSystemPort {
   readBytes(path: string): Promise<Uint8Array>;
   writeText(path: string, content: string): Promise<void>;
   writeBytes(path: string, content: Uint8Array): Promise<void>;
+  rename(oldPath: string, newPath: string): Promise<void>;
   readDirectory(path: string): Promise<readonly HostDirEntry[]>;
   stat(path: string): Promise<HostFileStat>;
   createDirectory(path: string): Promise<void>;
@@ -138,6 +140,10 @@ export interface HostAccessPolicyPort {
   decide(request: HostAccessPolicyRequest): HostMaybePromise<HostAccessDecision>;
 }
 
+export interface HostContentPolicyPort {
+  getSnapshot(): HostMaybePromise<HostContentPolicySnapshot>;
+}
+
 export type HostDiagnosticSeverity = 'info' | 'warning' | 'error';
 
 export interface HostDiagnostic {
@@ -157,6 +163,7 @@ export interface NekoHostPorts {
   readonly files: HostFileSystemPort;
   readonly paths: HostPathPort;
   readonly accessPolicy?: HostAccessPolicyPort;
+  readonly contentPolicy?: HostContentPolicyPort;
   readonly secrets?: HostSecretPort;
   readonly external?: HostExternalPort;
   readonly diagnostics?: HostDiagnosticSink;

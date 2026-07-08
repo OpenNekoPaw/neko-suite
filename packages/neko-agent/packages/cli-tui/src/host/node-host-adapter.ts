@@ -22,6 +22,7 @@ import type {
   NekoHostIdentity,
   NekoHostPorts,
 } from '@neko/host';
+import { createHostWorkspacePathVariables } from '@neko/host';
 import { PathResolver, resolveStorageLayout, type PathVariableMap } from '@neko/shared';
 
 export interface NodeHostAdapterOptions {
@@ -32,6 +33,7 @@ export interface NodeHostAdapterOptions {
   readonly trust?: HostWorkspaceTrust;
   readonly hostId?: string;
   readonly displayName?: string;
+  readonly extraPathVariables?: PathVariableMap | ReadonlyMap<string, string>;
 }
 
 export interface NodeHostAdapter extends NekoHostPorts {
@@ -41,7 +43,11 @@ export interface NodeHostAdapter extends NekoHostPorts {
 export function createNodeHostAdapter(options: NodeHostAdapterOptions): NodeHostAdapter {
   const workspaceRoot = path.resolve(options.workDir);
   const homedir = path.resolve(options.homedir ?? os.homedir());
-  const pathVariables = createNodeHostPathVariables({ workspaceRoot, homedir });
+  const pathVariables = createNodeHostPathVariables({
+    workspaceRoot,
+    homedir,
+    extraPathVariables: options.extraPathVariables,
+  });
   const environment = createNodeEnvironmentPort(options);
   const workspace = createNodeWorkspacePort({
     workspaceRoot,
@@ -66,14 +72,14 @@ export function createNodeHostAdapter(options: NodeHostAdapterOptions): NodeHost
 export function createNodeHostPathVariables(input: {
   readonly workspaceRoot: string;
   readonly homedir: string;
+  readonly extraPathVariables?: PathVariableMap | ReadonlyMap<string, string>;
 }): PathVariableMap {
-  const variables: PathVariableMap = new Map();
-  variables.set('A', input.workspaceRoot);
-  variables.set('WORKSPACE', input.workspaceRoot);
-  variables.set('PROJECT', input.workspaceRoot);
-  variables.set('NEKO_HOME', path.join(input.homedir, '.neko'));
-  variables.set('HOME', input.homedir);
-  return variables;
+  return createHostWorkspacePathVariables({
+    workspaceRoot: input.workspaceRoot,
+    homedir: input.homedir,
+    nekoHome: path.join(input.homedir, '.neko'),
+    extraPathVariables: input.extraPathVariables,
+  });
 }
 
 function createNodeEnvironmentPort(options: NodeHostAdapterOptions): HostEnvironmentPort {
@@ -168,6 +174,9 @@ function createNodeFileSystemPort(): HostFileSystemPort {
     },
     async writeBytes(filePath: string, content: Uint8Array): Promise<void> {
       await fs.writeFile(filePath, content);
+    },
+    async rename(oldPath: string, newPath: string): Promise<void> {
+      await fs.rename(oldPath, newPath);
     },
     async readDirectory(dirPath: string): Promise<readonly HostDirEntry[]> {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
