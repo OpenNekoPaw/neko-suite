@@ -22,8 +22,9 @@ import type {
   SketchAIImageResultRequest,
   SketchAIOperationType,
   SketchSelectionData,
+  NekoProjectAuthoringDiagnostic,
 } from '@neko/shared';
-import { TOOL_NAMES_SKETCH } from '@neko/shared';
+import { TOOL_NAMES_SKETCH, createNekoProjectAuthoringDiagnostic } from '@neko/shared';
 import { getRootLogger } from './utils/logger';
 
 type SketchAiFeature =
@@ -68,6 +69,7 @@ type CapabilityMediaTaskResult = Awaited<ReturnType<ICapabilityMediaService['wai
 type CapabilityToolFailure = {
   readonly success: false;
   readonly error: string;
+  readonly diagnostics?: readonly NekoProjectAuthoringDiagnostic[];
 };
 
 type MediaImageInput = {
@@ -93,9 +95,19 @@ function requireActiveSketchEditor(api: NekoSketchAPI): CapabilityToolFailure | 
   if (api.isActive()) {
     return null;
   }
+  return interactiveEditorFailure('No active sketch editor is currently open.');
+}
+
+function interactiveEditorFailure(error: string): CapabilityToolFailure {
   return {
     success: false,
-    error: 'No active sketch editor is currently open.',
+    error,
+    diagnostics: [
+      createNekoProjectAuthoringDiagnostic({
+        code: 'interactive-editor-required',
+        message: error,
+      }),
+    ],
   };
 }
 
@@ -437,7 +449,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
             const imageInput = await getScopedImageInput(api, 'smart-selection', scope);
 
             if (!imageInput) {
-              return { success: false, error: 'No image data available from sketch editor' };
+              return interactiveEditorFailure('No image data available from sketch editor');
             }
 
             try {
@@ -542,11 +554,9 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
 
             const inpaintInput = await getInpaintInput(api);
             if (!inpaintInput) {
-              return {
-                success: false,
-                error:
-                  'No active selection in sketch editor. Use a selection tool first (rect/lasso/wand).',
-              };
+              return interactiveEditorFailure(
+                'No active selection in sketch editor. Use a selection tool first (rect/lasso/wand).',
+              );
             }
 
             const prompt = args.prompt as string;
@@ -684,7 +694,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
             const imageInput = await getScopedImageInput(api, 'style-transfer', scope);
 
             if (!imageInput) {
-              return { success: false, error: 'No image data available from sketch editor' };
+              return interactiveEditorFailure('No image data available from sketch editor');
             }
 
             const stylePromptMap: Record<string, string> = {
@@ -809,7 +819,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
             const imageInput = await getScopedImageInput(api, 'upscale', scope);
 
             if (!imageInput) {
-              return { success: false, error: 'No image data available from sketch editor' };
+              return interactiveEditorFailure('No image data available from sketch editor');
             }
 
             try {
@@ -917,7 +927,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
             const imageInput = await getScopedImageInput(api, 'lineart-colorize', scope);
 
             if (!imageInput) {
-              return { success: false, error: 'No image data available from sketch editor' };
+              return interactiveEditorFailure('No image data available from sketch editor');
             }
 
             try {
@@ -1017,7 +1027,7 @@ class NekoSketchCapabilityProviderImpl implements AgentCapabilityProvider {
 
             const imageInput = await getScopedImageInput(api, 'auto-layer', 'canvas');
             if (!imageInput) {
-              return { success: false, error: 'No canvas image data available' };
+              return interactiveEditorFailure('No canvas image data available');
             }
 
             // Generate each layer component via style-transfer approach

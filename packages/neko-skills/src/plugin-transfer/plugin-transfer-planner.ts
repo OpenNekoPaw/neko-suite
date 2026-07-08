@@ -2,8 +2,13 @@ import type {
   PluginTransferAssetRef,
   PluginTransferCommandPlan,
   PluginTransferPayload,
+  PluginTransferTargetRef,
 } from '@neko-agent/types';
-import { isDocumentArchiveResourceRef, type DocumentArchiveResourceRef } from '@neko/shared';
+import {
+  isDocumentArchiveResourceRef,
+  type DocumentArchiveResourceRef,
+  type NekoProjectAuthoringTarget,
+} from '@neko/shared';
 
 type NekoSuitePluginTransferBuildPayload = Exclude<PluginTransferPayload, { kind: 'assetBatch' }>;
 
@@ -35,16 +40,25 @@ export function buildNekoSuitePluginTransferPlan(
 
   if (payload.kind === 'cutStoryboard') {
     if (input.target === 'cut') {
+      const target = readAuthoringTarget(payload.target);
       return {
         status: 'execute-command',
-        command: 'neko.cut.importStoryboard',
-        payload: payload.storyboard,
+        command: 'neko.cut.authoring.importStoryboard',
+        payload: {
+          ...payload.storyboard,
+          ...(target ? { target } : {}),
+          ...(target?.reveal !== undefined ? { reveal: target.reveal } : {}),
+          ...(payload.provenance ? { provenance: payload.provenance } : {}),
+        },
       };
     }
     return { status: 'unsupported', target: input.target, reason: 'unsupported-structured-target' };
   }
 
   assertSingleTransferPayload(payload);
+  const transferTarget = payload.target ?? payload.asset.target;
+  const authoringTarget = readAuthoringTarget(transferTarget);
+  const provenance = payload.provenance ?? payload.asset.provenance;
 
   if (input.target === 'canvas') {
     const documentResourceRef = readDocumentResourceRef(payload.asset, payload.provenance);
@@ -78,11 +92,14 @@ export function buildNekoSuitePluginTransferPlan(
   if (input.target === 'cut') {
     return {
       status: 'execute-command',
-      command: 'neko.cut.importGeneratedClip',
+      command: 'neko.cut.authoring.importGeneratedClip',
       payload: {
         assetPath: payload.asset.path,
         ...(payload.asset.mediaType ? { mediaType: payload.asset.mediaType } : {}),
         ...(payload.asset.name ? { name: payload.asset.name } : {}),
+        ...(authoringTarget ? { target: authoringTarget } : {}),
+        ...(authoringTarget?.reveal !== undefined ? { reveal: authoringTarget.reveal } : {}),
+        ...(provenance ? { provenance } : {}),
       },
     };
   }
@@ -90,10 +107,13 @@ export function buildNekoSuitePluginTransferPlan(
   if (input.target === 'sketch' && payload.asset.mediaType === 'image') {
     return {
       status: 'execute-command',
-      command: 'neko.sketch.importAsset',
+      command: 'neko.sketch.authoring.importImageSource',
       payload: {
         path: payload.asset.path,
         ...(payload.asset.name ? { name: payload.asset.name } : {}),
+        ...(authoringTarget ? { target: authoringTarget } : {}),
+        ...(authoringTarget?.reveal !== undefined ? { reveal: authoringTarget.reveal } : {}),
+        ...(provenance ? { provenance } : {}),
       },
     };
   }
@@ -101,10 +121,13 @@ export function buildNekoSuitePluginTransferPlan(
   if (input.target === 'model' && payload.asset.mediaType === 'model') {
     return {
       status: 'execute-command',
-      command: 'neko.model.importAsset',
+      command: 'neko.model.authoring.importAsset',
       payload: {
         path: payload.asset.path,
         ...(payload.asset.name ? { name: payload.asset.name } : {}),
+        ...(authoringTarget ? { target: authoringTarget } : {}),
+        ...(authoringTarget?.reveal !== undefined ? { reveal: authoringTarget.reveal } : {}),
+        ...(provenance ? { provenance } : {}),
       },
     };
   }
@@ -143,4 +166,23 @@ function readDocumentResourceRef(
     payloadProvenance?.metadata?.['documentResourceRef'],
   ];
   return candidates.find(isDocumentArchiveResourceRef);
+}
+
+function readAuthoringTarget(
+  target: PluginTransferTargetRef | undefined,
+): NekoProjectAuthoringTarget | undefined {
+  if (!target) return undefined;
+  const kind = readAuthoringTargetKind(target.kind);
+  const reveal = typeof target.reveal === 'boolean' ? target.reveal : undefined;
+  if (!kind && !target.documentUri && !target.title && reveal === undefined) return undefined;
+  return {
+    ...(kind ? { kind } : {}),
+    ...(target.documentUri ? { documentUri: target.documentUri } : {}),
+    ...(target.title ? { title: target.title } : {}),
+    ...(reveal !== undefined ? { reveal } : {}),
+  };
+}
+
+function readAuthoringTargetKind(value: unknown): NekoProjectAuthoringTarget['kind'] | undefined {
+  return value === 'active' || value === 'file' || value === 'new' ? value : undefined;
 }

@@ -27,6 +27,9 @@
 
 - Markdown creative table 是可审阅的 authoring artifact。Canvas ingest、生成、Cut、导出和执行交接应走 lifecycle capability 或聚焦领域工具。
 - 对 Markdown 表格做 Canvas 审阅时，使用运行时工具列表暴露的 Canvas lifecycle tool/capability，并按需传递原始 Markdown 和稳定 resources。
+- 发送生成媒体或分镜到 Cut、Sketch、Model 等项目文件时，优先使用 canonical `neko.<domain>.authoring.*` 能力/命令并传递 `target`、`reveal`、稳定 source/ref 和 provenance；不要调用旧的 UI-bound import 命令作为持久写入路径。
+- 播放、选择区、视口、相机、聚焦编辑器状态和实时预览属于 interactive-editor 操作。缺少活动编辑器/运行时时必须返回诊断，不要打开隐藏 Webview 后声称写入成功。
+- authoring capability 返回 `ok:false` 或 diagnostics 时，必须向用户报告失败原因；不能把“命令调用完成”解释为 Canvas/Cut/Sketch/Model 已交付。
 - 不要输出领域节点 JSON、项目内部交接对象、Webview URI、blob URL、localhost URL、provider 临时句柄、缓存路径、临时路径或绝对私有路径。
 - 媒体引用必须来自真实 tool-result、generated-asset、Canvas node 或 workspace-safe ref，不要编造 id。
 - 分镜、动画计划、图像准备计划、实体证据、生成媒体引用和执行总结应保持独立，但通过稳定 shot/source id 交叉引用。

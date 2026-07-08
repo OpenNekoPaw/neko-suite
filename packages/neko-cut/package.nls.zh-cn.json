@@ -2,7 +2,7 @@
   "neko.outline.title": "时间线大纲",
   "neko.outline.contextualTitle": "项目大纲",
   "neko.newProject.title": "新建视频项目",
-  "neko.addToTimeline.title": "添加到时间线",
+  "neko.cut.authoring.addSourceToTimeline.title": "添加到时间线",
   "neko.openInEditor.title": "在编辑器中打开",
   "neko.timeline.getInfo.title": "获取时间线信息",
   "neko.timeline.listElements.title": "列出时间线元素",
@@ -46,7 +46,7 @@
   "neko.export.video.title": "导出视频",
   "neko.export.getProgress.title": "获取导出进度",
   "neko.cut.previewMedia.title": "预览媒体",
-  "neko.cut.importGeneratedClip.title": "导入生成的片段",
-  "neko.cut.importStoryboard.title": "导入分镜",
-  "neko.cut.importCanvasDraft.title": "导入 Canvas 草稿"
+  "neko.cut.authoring.importGeneratedClip.title": "导入生成的片段",
+  "neko.cut.authoring.importStoryboard.title": "导入分镜",
+  "neko.cut.authoring.importCanvasDraft.title": "导入 Canvas 草稿"
 }

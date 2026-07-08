@@ -43,6 +43,10 @@ Webview (React + Vite)
   └── AssetLibrary          → 素材导入管理
 ```
 
+### Headless Authoring Boundary
+
+Host-originated durable `.nkv` writes use `CutProjectAuthoringService` and canonical commands such as `neko.cut.authoring.importGeneratedClip`, `neko.cut.authoring.addSourceToTimeline`, `neko.cut.authoring.importStoryboard`, and `neko.cut.authoring.importCanvasDraft`. These paths can create or edit a target project file without an open Webview, then optionally reveal/sync the editor after save. Timeline selection, playback, focused UI commands, export panel display, and custom-editor save snapshots remain interactive editor behavior.
+
 ### 包结构
 
 ```

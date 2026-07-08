@@ -51,6 +51,8 @@ Before writing the table, build an internal image index and panel mapping:
 
 For normal review output, provide concise notes first, then output exactly one Markdown creative table. This is the storyboard table; do not introduce a second artifact name or offer to convert it later.
 
+General Markdown extension syntax, image rendering, `@` mentions, Neko resource references, and semantic prompt spans are owned by the system prompt and the shared Markdown/profile layer. This skill does not define Markdown renderer behavior; it only chooses storyboard fields, evidence constraints, and storyboard prompt content.
+
 Do not output YAML frontmatter or creation-document metadata in normal chat replies. Forbidden blocks/keys include `---`, `id:`, `kind: draft`, `status: draft`, `domain: storyboard`, and `referenceChain:`. Those keys are only for host/runtime-persisted creation documents, not storyboard creative tables.
 
 For production-ready storyboard output, use canonical stable field ids exactly for known columns. Do not localize known field headers in new Markdown output. Known fields are resolved through the shared storyboard profile, and the Webview displays those fields in the current UI locale. Unknown extension columns keep their raw Markdown headers, so write extension headers in the user's/output language and keep their meaning clear.
@@ -134,15 +136,16 @@ Prompt slots are important input for later generation or repair actions. `source
 
 Add more extension columns after the primary stable headers when useful, for example `sourcePanel`, `decisionReason`, `requiresSplit`, `requiresTextRemoval`, `requiresInpaint`, `referenceImage`, `styleRef`, `textCueType`, `speaker`, `ocrNotes`, or `risk`. Known fields should remain stable; useful extra columns should stay visible as review metadata. Omit execution fields unless backed by trusted lifecycle results.
 
-## Resource References
+## Storyboard Source References
 
+- Follow the Markdown extension protocol in the system prompt. This section only defines how storyboard `source` cells express comic page/panel origins.
 - Preferred plain tokens: `P1`, `P1#panel_2`, `page_2#panel_1`, `P3,P4`.
 - Use standard CommonMark images in the `source` cell only when that exact target is present in the current tool/host resource index, for example `![P1](P1)` or `![panel](page_2#panel_1)`. The alt text is display-only; the target is the resource identity.
 - If no stable resource binding is visible, use a plain token and explain the needed binding in `nextAction` using the user's language. Do not invent a Markdown image or emit the `needs-resource-binding` status code.
 - CommonMark image targets may be stable tokens or stable document image paths returned by tools, for example `![page](image/moe-010564.jpg)`. Do not use relative project paths unless the tool/resource index returned that exact token.
 - `#panel_1`, `#crop_top`, and similar suffixes are placement/crop intent on the base image token, not separate resources.
 - Do not write render URIs, Webview URIs, blob URLs, `.neko/.cache` paths, provider cache paths, system temp paths, Engine tokens, base64 image data, absolute private paths, provider-private handles, or domain node JSON.
-- Do not use Neko/Obsidian-style resource-reference syntax such as `![[cover.png]]` or `[[Chapter 1#Section]]` in storyboard tables. This skill follows Codex-style standard Markdown: `![alt](resource-token)`.
+- Use Neko resource-reference syntax such as `![[...]]` / `[[...#...]]` only when the current host explicitly enables that extension and can resolve a stable identity. Normal storyboard tables should prefer source tokens or CommonMark image targets.
 
 ## Canvas Handoff
 
@@ -153,6 +156,8 @@ The first storyboard draft must be visible as an assistant Markdown block before
 After that table exists, use the available Canvas lifecycle tool/capability from the runtime tool list. Local UI/tool adapters carry the actual stable resource refs. Do not claim Canvas success unless a Canvas capability/tool returns success.
 
 Use canvas.createStoryboardFromMarkdown for production scene/shot nodes. Pass the completed table as the Markdown source with `profileHint=storyboard`, `mode=create-nodes`, and explicit approval context when the tool supports those fields. If Canvas blocks creation, report the diagnostics and repair the table/approval/resource binding before retrying.
+
+"Send as Markdown" means Markdown is the source format/transport; it is not a review-only request. If canvas.createStoryboardFromMarkdown is not exposed as a callable tool, report Canvas tool-surface blocked instead of using canvas.ingestMarkdown as a substitute.
 
 canvas.ingestMarkdown is only a review-only table fallback. Use it only when the user explicitly wants a Canvas review table/draft node, and never present a review-only table node as successful production storyboard delivery.
 

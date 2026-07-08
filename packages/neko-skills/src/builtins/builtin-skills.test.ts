@@ -204,6 +204,10 @@ describe('@neko/skills builtins', () => {
     expect(english).toContain(
       'Use canvas.createStoryboardFromMarkdown for production scene/shot nodes.',
     );
+    expect(english).toContain(
+      '"Send as Markdown" means Markdown is the source format/transport',
+    );
+    expect(english).toContain('report Canvas tool-surface blocked');
     expect(english).toContain('canvas.ingestMarkdown is only a review-only table fallback.');
 
     expect(zhCn).toContain(
@@ -213,6 +217,10 @@ describe('@neko/skills builtins', () => {
     expect(zhCn).toContain('分镜初稿必须先作为可见 assistant Markdown 块出现在聊天中');
     expect(zhCn).toContain('先输出表格并停止');
     expect(zhCn).toContain('生产 scene/shot 节点使用 canvas.createStoryboardFromMarkdown。');
+    expect(zhCn).toContain(
+      '“作为 Markdown/Markdown 发送”表示 Markdown 是来源格式/传输格式',
+    );
+    expect(zhCn).toContain('报告 Canvas tool-surface blocked');
     expect(zhCn).toContain('canvas.ingestMarkdown 只能作为 review-only 表格/草稿摄入。');
   });
 

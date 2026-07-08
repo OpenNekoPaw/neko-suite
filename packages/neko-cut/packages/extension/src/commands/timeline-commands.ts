@@ -8,20 +8,27 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 import type {
-  CanvasCutDraftDiagnostic,
   CanvasCutDraftPayload,
-  CanvasTimelineSyncPayload,
   CutCanvasDraftImportResult,
+  NekoProjectAuthoringResult,
+  NekoProjectAuthoringTarget,
   ReferenceDescriptor,
   StoryboardMediaRef,
+} from '@neko/shared';
+import {
+  createNekoProjectAuthoringDiagnostic,
+  createNekoProjectAuthoringResult,
 } from '@neko/shared';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
 import { TimelineToolExecutor } from '../services/TimelineToolExecutor';
 import type { TimelineToolResult } from '../bootstrap/toolsBootstrap';
 import { handleError } from '../base';
-
-const CANVAS_DRAFT_IMPORT_TIMEOUT_MS = 15_000;
+import type {
+  CutProjectAuthoringImportedStoryboard,
+  ICutProjectAuthoringService,
+} from '../services/CutProjectAuthoringService';
 
 /**
  * Register timeline-related VSCode commands
@@ -29,6 +36,7 @@ const CANVAS_DRAFT_IMPORT_TIMEOUT_MS = 15_000;
 export function registerTimelineCommands(
   context: vscode.ExtensionContext,
   _videoEditorProvider: VideoEditorProvider,
+  cutProjectAuthoringService?: ICutProjectAuthoringService,
 ): void {
   const executor = new TimelineToolExecutor();
 
@@ -436,11 +444,14 @@ export function registerTimelineCommands(
     }),
   );
 
-  // Storyboard Import Command — receives shots from neko-canvas storyboard export
+  // Storyboard Import Command — receives shots from neko-canvas storyboard export.
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      'neko.cut.importStoryboard',
+      'neko.cut.authoring.importStoryboard',
       async (params: {
+        target?: NekoProjectAuthoringTarget;
+        documentUri?: string;
+        reveal?: boolean;
         projectName: string;
         shots: Array<{
           id: string;
@@ -456,184 +467,297 @@ export function registerTimelineCommands(
           label: string;
         }>;
       }) => {
-        const webview = _videoEditorProvider.getActiveWebview();
-        if (!webview) {
-          void handleError(new Error(vscode.l10n.t('editor.warning.noProjectOpen')), {
-            showToUser: true,
-            severity: 'warning',
-          });
-          return;
-        }
-        webview.postMessage({
-          type: 'importStoryboard',
-          projectName: params.projectName,
-          shots: params.shots,
-        });
-        vscode.window.showInformationMessage(
-          `Importing ${params.shots.length} shots from "${params.projectName}" storyboard…`,
+        const target = await resolveTimelineAuthoringTarget(
+          {
+            target: params.target,
+            documentUri: params.documentUri,
+            reveal: params.reveal,
+            title: params.projectName,
+          },
+          _videoEditorProvider,
         );
+        if (!target.ok) return reportStoryboardAuthoringResult(target.result);
+
+        const serviceResult = cutProjectAuthoringService
+          ? await cutProjectAuthoringService.importStoryboard({
+              target: target.target,
+              payload: params,
+            })
+          : createMissingCutAuthoringServiceResult();
+        const result = await revealStoryboardAuthoringResult(
+          serviceResult,
+          target.target.reveal === true,
+        );
+        reportStoryboardAuthoringResult(result);
+        if (result.ok) {
+          vscode.window.showInformationMessage(
+            `Imported ${params.shots.length} shots from "${params.projectName}" storyboard.`,
+          );
+        }
+        return result;
       },
     ),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      'neko.cut.importCanvasDraft',
-      async (payload: CanvasCutDraftPayload) => {
-        const webview = _videoEditorProvider.getActiveWebview();
-        const projectUri = _videoEditorProvider.getActiveDocumentUri() ?? undefined;
-        if (!webview) {
-          const error = vscode.l10n.t('editor.warning.noProjectOpen');
-          void handleError(new Error(error), {
-            showToUser: true,
-            severity: 'warning',
-          });
-          return {
-            accepted: false,
-            status: 'unavailable',
-            error,
-          } satisfies CutCanvasDraftImportResult;
-        }
-
-        const requestId = createCanvasDraftImportRequestId();
-        const waiter = createCanvasDraftImportResultWaiter(webview, requestId, projectUri);
-        let posted = false;
-        try {
-          posted = await webview.postMessage({
-            type: 'importCanvasDraft',
-            requestId,
-            payload,
-          });
-        } catch (error) {
-          return waiter.cancel({
-            accepted: false,
-            status: 'post-failed',
-            ...(projectUri ? { projectUri } : {}),
-            error:
-              error instanceof Error
-                ? error.message
-                : 'Failed to deliver Canvas draft import request to Cut Webview.',
-          });
-        }
-        if (!posted) {
-          return waiter.cancel({
-            accepted: false,
-            status: 'post-failed',
-            ...(projectUri ? { projectUri } : {}),
-            error: 'Failed to deliver Canvas draft import request to Cut Webview.',
-          });
-        }
-        vscode.window.showInformationMessage(
-          `Importing Canvas route "${readCanvasDraftRouteTitle(payload)}" into Cut timeline…`,
+      'neko.cut.authoring.importCanvasDraft',
+      async (
+        input:
+          | CanvasCutDraftPayload
+          | {
+              payload: CanvasCutDraftPayload;
+              target?: NekoProjectAuthoringTarget;
+              documentUri?: string;
+              reveal?: boolean;
+            },
+      ) => {
+        const payload = readCanvasDraftPayload(input);
+        const target = await resolveTimelineAuthoringTarget(
+          {
+            ...readCanvasDraftTarget(input),
+            title: readCanvasDraftRouteTitle(payload),
+          },
+          _videoEditorProvider,
         );
-        return waiter.promise;
+        if (!target.ok) return storyboardAuthoringResultToCanvasDraftResult(target.result);
+
+        const serviceResult = cutProjectAuthoringService
+          ? await cutProjectAuthoringService.importCanvasDraft({
+              target: target.target,
+              payload,
+            })
+          : createMissingCutAuthoringServiceResult();
+        const result = await revealStoryboardAuthoringResult(
+          serviceResult,
+          target.target.reveal === true,
+        );
+        reportStoryboardAuthoringResult(result);
+        const canvasResult = storyboardAuthoringResultToCanvasDraftResult(result);
+        if (canvasResult.accepted) {
+          vscode.window.showInformationMessage(
+            `Imported Canvas route "${readCanvasDraftRouteTitle(payload)}" into Cut timeline.`,
+          );
+        }
+        return canvasResult;
       },
     ),
   );
-}
-
-function createCanvasDraftImportResultWaiter(
-  webview: Pick<vscode.Webview, 'onDidReceiveMessage'>,
-  requestId: string,
-  projectUri: string | undefined,
-): {
-  readonly promise: Promise<CutCanvasDraftImportResult>;
-  readonly cancel: (result: CutCanvasDraftImportResult) => Promise<CutCanvasDraftImportResult>;
-} {
-  let settled = false;
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  let subscription: vscode.Disposable | undefined;
-  let settle: (result: CutCanvasDraftImportResult) => void = () => {};
-
-  const promise = new Promise<CutCanvasDraftImportResult>((resolve) => {
-    settle = (result: CutCanvasDraftImportResult) => {
-      if (settled) return;
-      settled = true;
-      if (timeout) {
-        clearTimeout(timeout);
-      }
-      subscription?.dispose();
-      resolve({
-        ...result,
-        ...(projectUri && !result.projectUri ? { projectUri } : {}),
-      });
-    };
-
-    timeout = setTimeout(() => {
-      settle({
-        accepted: false,
-        status: 'timeout',
-        ...(projectUri ? { projectUri } : {}),
-        error: 'Timed out waiting for Cut Webview to import Canvas draft.',
-      });
-    }, CANVAS_DRAFT_IMPORT_TIMEOUT_MS);
-
-    subscription = webview.onDidReceiveMessage((message: unknown) => {
-      const response = readCanvasDraftImportResultMessage(message, requestId);
-      if (response) {
-        settle(response);
-      }
-    });
-  });
-
-  return {
-    promise,
-    cancel: async (result) => {
-      settle(result);
-      return promise;
-    },
-  };
-}
-
-function readCanvasDraftImportResultMessage(
-  message: unknown,
-  requestId: string,
-): CutCanvasDraftImportResult | null {
-  if (!isRecord(message) || message.requestId !== requestId) {
-    return null;
-  }
-
-  if (message.type === 'canvasTimelineSync') {
-    return {
-      accepted: true,
-      status: 'imported',
-      syncPayload: message.payload as CanvasTimelineSyncPayload,
-    };
-  }
-
-  if (message.type === 'canvasDraftImportRejected') {
-    return {
-      accepted: false,
-      status: 'rejected',
-      diagnostics: Array.isArray(message.diagnostics)
-        ? (message.diagnostics as CanvasCutDraftDiagnostic[])
-        : [],
-      error: 'Cut Webview rejected Canvas draft import.',
-    };
-  }
-
-  if (message.type === 'canvasDraftImportFailed') {
-    return {
-      accepted: false,
-      status: 'failed',
-      error:
-        typeof message.error === 'string'
-          ? message.error
-          : 'Cut Webview failed to import Canvas draft.',
-    };
-  }
-
-  return null;
-}
-
-function createCanvasDraftImportRequestId(): string {
-  return `canvas-draft-import-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function readCanvasDraftRouteTitle(payload: CanvasCutDraftPayload): string {
   const route = isRecord(payload.route) ? payload.route : undefined;
   const title = route?.title;
   return typeof title === 'string' && title.trim().length > 0 ? title : 'Canvas route';
+}
+
+type StoryboardAuthoringResult = NekoProjectAuthoringResult<CutProjectAuthoringImportedStoryboard>;
+
+async function resolveTimelineAuthoringTarget(
+  input: {
+    readonly target?: NekoProjectAuthoringTarget;
+    readonly documentUri?: string;
+    readonly reveal?: boolean;
+    readonly title?: string;
+  },
+  editorProvider: VideoEditorProvider,
+): Promise<
+  | { readonly ok: true; readonly target: NekoProjectAuthoringTarget }
+  | { readonly ok: false; readonly result: StoryboardAuthoringResult }
+> {
+  const reveal = input.reveal ?? input.target?.reveal ?? false;
+  if (input.target?.documentUri) {
+    return { ok: true, target: { ...input.target, reveal } };
+  }
+  if (input.documentUri) {
+    return { ok: true, target: { kind: 'file', documentUri: input.documentUri, reveal } };
+  }
+
+  const activeDocumentUri = readActiveDocumentUri(editorProvider);
+  if (activeDocumentUri) {
+    return { ok: true, target: { kind: 'active', documentUri: activeDocumentUri, reveal } };
+  }
+
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) {
+    return {
+      ok: false,
+      result: createNekoProjectAuthoringResult<CutProjectAuthoringImportedStoryboard>({
+        ok: false,
+        diagnostics: [
+          createNekoProjectAuthoringDiagnostic({
+            code: 'workspace-required',
+            message:
+              'Cut storyboard authoring needs documentUri, active Cut project, or workspace for create-new.',
+          }),
+        ],
+      }),
+    };
+  }
+
+  const title = sanitizeTimelineFileName(input.title ?? 'Storyboard Timeline');
+  const fileUri = await createAvailableTimelineFileUri(workspaceFolder.uri, title);
+  return {
+    ok: true,
+    target: {
+      kind: 'new',
+      documentUri: fileUri.toString(),
+      title,
+      reveal,
+    },
+  };
+}
+
+function readActiveDocumentUri(editorProvider: VideoEditorProvider): string | undefined {
+  const provider = editorProvider as Partial<{
+    getActiveDocumentVsCodeUri: () => vscode.Uri | undefined;
+    getActiveDocumentUri: () => string | null | undefined;
+  }>;
+  const activeVsCodeUri = provider.getActiveDocumentVsCodeUri?.();
+  return activeVsCodeUri?.toString() ?? provider.getActiveDocumentUri?.() ?? undefined;
+}
+
+async function createAvailableTimelineFileUri(
+  folderUri: vscode.Uri,
+  name: string,
+): Promise<vscode.Uri> {
+  const baseName = sanitizeTimelineFileName(name) || 'Storyboard Timeline';
+  for (let index = 0; index < 100; index += 1) {
+    const suffix = index === 0 ? '' : ` ${index + 1}`;
+    const candidate = vscode.Uri.joinPath(folderUri, `${baseName}${suffix}.nkv`);
+    try {
+      await vscode.workspace.fs.stat(candidate);
+    } catch {
+      return candidate;
+    }
+  }
+  return vscode.Uri.joinPath(folderUri, `${baseName}-${Date.now()}.nkv`);
+}
+
+function sanitizeTimelineFileName(value: string): string {
+  return path
+    .basename(value)
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function revealStoryboardAuthoringResult(
+  result: StoryboardAuthoringResult,
+  reveal: boolean,
+): Promise<StoryboardAuthoringResult> {
+  if (!result.ok || !result.documentUri || !reveal) return result;
+  try {
+    await vscode.commands.executeCommand(
+      'vscode.openWith',
+      vscode.Uri.parse(result.documentUri),
+      'neko.videoEditor',
+    );
+    return { ...result, revealed: true };
+  } catch (error) {
+    return {
+      ...result,
+      revealed: false,
+      diagnostics: [
+        ...result.diagnostics,
+        createNekoProjectAuthoringDiagnostic({
+          code: 'authoring-reveal-failed',
+          severity: 'warning',
+          message:
+            error instanceof Error
+              ? `Cut project was saved, but reveal failed: ${error.message}`
+              : 'Cut project was saved, but reveal failed.',
+        }),
+      ],
+    };
+  }
+}
+
+function createMissingCutAuthoringServiceResult(): StoryboardAuthoringResult {
+  return createNekoProjectAuthoringResult<CutProjectAuthoringImportedStoryboard>({
+    ok: false,
+    diagnostics: [
+      createNekoProjectAuthoringDiagnostic({
+        code: 'authoring-capability-unavailable',
+        message: 'Cut storyboard authoring service is not registered.',
+      }),
+    ],
+  });
+}
+
+function reportStoryboardAuthoringResult(
+  result: StoryboardAuthoringResult,
+): StoryboardAuthoringResult {
+  const blockingDiagnostic = result.diagnostics.find(
+    (diagnostic) => diagnostic.severity === 'error',
+  );
+  if (blockingDiagnostic) {
+    void handleError(new Error(blockingDiagnostic.message), { showToUser: true });
+  }
+  return result;
+}
+
+function storyboardAuthoringResultToCanvasDraftResult(
+  result: StoryboardAuthoringResult,
+): CutCanvasDraftImportResult {
+  if (!result.ok) {
+    const blockingDiagnostic = result.diagnostics.find(
+      (diagnostic) => diagnostic.severity === 'error',
+    );
+    return {
+      accepted: false,
+      status:
+        blockingDiagnostic?.code === 'authoring-capability-unavailable' ||
+        blockingDiagnostic?.code === 'workspace-required'
+          ? 'unavailable'
+          : 'rejected',
+      ...(result.documentUri ? { projectUri: result.documentUri } : {}),
+      error: blockingDiagnostic?.message ?? 'Cut rejected Canvas draft import.',
+    };
+  }
+  return {
+    accepted: true,
+    status: 'imported',
+    ...(result.documentUri ? { projectUri: result.documentUri } : {}),
+    ...(result.data?.syncPayload ? { syncPayload: result.data.syncPayload } : {}),
+  };
+}
+
+function readCanvasDraftPayload(
+  input:
+    | CanvasCutDraftPayload
+    | {
+        payload: CanvasCutDraftPayload;
+        target?: NekoProjectAuthoringTarget;
+        documentUri?: string;
+        reveal?: boolean;
+      },
+): CanvasCutDraftPayload {
+  return isRecord(input) && isRecord(input.payload)
+    ? (input.payload as unknown as CanvasCutDraftPayload)
+    : (input as CanvasCutDraftPayload);
+}
+
+function readCanvasDraftTarget(
+  input:
+    | CanvasCutDraftPayload
+    | {
+        payload: CanvasCutDraftPayload;
+        target?: NekoProjectAuthoringTarget;
+        documentUri?: string;
+        reveal?: boolean;
+      },
+): {
+  readonly target?: NekoProjectAuthoringTarget;
+  readonly documentUri?: string;
+  readonly reveal?: boolean;
+} {
+  if (!isRecord(input) || !isRecord(input.payload)) return {};
+  return {
+    ...(isRecord(input.target) ? { target: input.target as NekoProjectAuthoringTarget } : {}),
+    ...(typeof input.documentUri === 'string' ? { documentUri: input.documentUri } : {}),
+    ...(typeof input.reveal === 'boolean' ? { reveal: input.reveal } : {}),
+  };
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

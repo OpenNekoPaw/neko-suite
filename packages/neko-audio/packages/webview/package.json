@@ -4,7 +4,8 @@
   "version": "0.0.1",
   "type": "module",
   "exports": {
-    "./host-adapter": "./src/host-adapter/index.tsx"
+    "./host-adapter": "./src/host-adapter/index.tsx",
+    "./workbench-adapter": "./src/workbench-adapter.ts"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -12,7 +13,8 @@
     "zustand": "^4.5.0",
     "@neko/shared": "workspace:*",
     "@neko/ui": "workspace:*",
-    "@neko/neko-client": "workspace:*"
+    "@neko/neko-client": "workspace:*",
+    "@neko/workbench-core": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^18.2.45",

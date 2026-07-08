@@ -19,6 +19,8 @@ import type {
   CanvasExtractStructuredContentRequest,
   CanvasExtractStructuredContentResult,
   CanvasChangeEvent as SharedCanvasChangeEvent,
+  CanvasImportAssetRequest,
+  CanvasImportAssetResult,
   CanvasMarkdownCapabilityInput,
   CanvasMarkdownCapabilityResult,
   CanvasNode,
@@ -36,14 +38,12 @@ import type {
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
   CreatedCanvasStoryboard,
-  DocumentArchiveResourceRef,
   ProjectionAdapter,
   ProjectionDisposable,
   ProjectionWriteBack,
   ProjectionWriteBackResult,
   ProjectedCanvasData,
   ProjectedCanvasSource,
-  ResourceRef,
 } from '@neko/shared';
 
 // Types
@@ -125,15 +125,9 @@ export interface NekoCanvasAPI {
   };
 
   /**
-   * Import media into the active canvas editor.
+   * Import media/resource facts into a Canvas document through headless authoring.
    */
-  importAsset(asset: {
-    path?: string;
-    type?: 'image' | 'video' | 'audio' | 'model';
-    name?: string;
-    documentResourceRef?: DocumentArchiveResourceRef;
-    resourceRef?: ResourceRef;
-  }): Promise<boolean>;
+  importAsset(asset: CanvasImportAssetRequest): Promise<CanvasImportAssetResult>;
 
   /**
    * Canvas operations

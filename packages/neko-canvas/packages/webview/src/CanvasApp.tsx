@@ -68,7 +68,6 @@ import {
   requiresNodeLibrarySourceAdd,
 } from './utils/nodeLibraryPolicy';
 import { appendSelectedGenerationCandidate } from './utils/generationHistory';
-import { getImportedGeneratedAssetNodeInput } from './utils/importedGeneratedAsset';
 import { getGlobalVSCodeApi } from './utils/vscode';
 import { createBuiltInWebviewSubsystemRegistry } from './subsystems';
 import { createStoryboardNodeTypeDescriptors } from './subsystems/storyboard/descriptors';
@@ -702,16 +701,6 @@ export function CanvasApp() {
           data.viewport ??
           DEFAULT_RUNTIME_VIEWPORT,
       );
-    },
-    onImportGeneratedAsset: (asset) => {
-      const nodeInput = getImportedGeneratedAssetNodeInput(asset);
-      addMediaAt(getViewportCenter(), asset.mediaType, nodeInput.assetPath, asset.name, {
-        ...(nodeInput.documentResourceRef
-          ? { documentResourceRef: nodeInput.documentResourceRef }
-          : {}),
-        ...(nodeInput.resourceRef ? { resourceRef: nodeInput.resourceRef } : {}),
-        ...(nodeInput.runtimeAssetPath ? { runtimeAssetPath: nodeInput.runtimeAssetPath } : {}),
-      });
     },
     onBuildPromptResult: (prompt) => {
       buildPromptResolverRef.current?.(prompt);

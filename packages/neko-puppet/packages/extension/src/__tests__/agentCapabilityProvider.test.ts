@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import * as vscode from 'vscode';
 
 vi.mock('vscode', () => ({
   commands: { executeCommand: vi.fn() },
@@ -14,7 +15,7 @@ describe('createNekoPuppetCapabilityProvider', () => {
   it('advertises Live2D/Puppet character actions instead of generic 2D Scene creation', () => {
     const provider = createNekoPuppetCapabilityProvider({
       getCurrentFaceParams: vi.fn(() => ({})),
-      getParameterNames: vi.fn(() => []),
+      isActive: vi.fn(() => true),
       setFaceParams: vi.fn(async () => undefined),
     });
     const descriptions = provider
@@ -26,6 +27,31 @@ describe('createNekoPuppetCapabilityProvider', () => {
     expect(descriptions).toContain('Puppet character');
     expect(descriptions).toContain('Generic 2D Scene creation');
     expect(descriptions).toContain('belongs to neko-model');
+  });
+
+  it('fails visibly for runtime parameter writes without an active puppet editor', async () => {
+    const setFaceParams = vi.fn(async () => undefined);
+    const provider = createNekoPuppetCapabilityProvider({
+      getCurrentFaceParams: vi.fn(() => ({})),
+      isActive: vi.fn(() => false),
+      setFaceParams,
+    });
+    const tool = provider.getTools({ extensionContext: {} }).find(
+      (candidate) => candidate.name === 'PuppetGenerateParams',
+    );
+
+    await expect(tool?.execute({ description: 'smile softly' })).resolves.toEqual({
+      success: false,
+      error: 'No active puppet editor is available for parameter writes.',
+      diagnostics: [
+        expect.objectContaining({
+          code: 'interactive-editor-required',
+          message: 'No active puppet editor is available for parameter writes.',
+        }),
+      ],
+    });
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+    expect(setFaceParams).not.toHaveBeenCalled();
   });
 });
 

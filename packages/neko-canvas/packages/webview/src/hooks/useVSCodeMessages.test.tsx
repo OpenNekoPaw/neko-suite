@@ -121,6 +121,40 @@ describe('useVSCodeMessages keyboard action guards', () => {
     expect(vscode.postMessage).toHaveBeenCalledWith({ type: 'canvasDataReady' });
   });
 
+  it('applies host-authored Canvas document updates from headless authoring', () => {
+    const vscode = createVSCodeApi();
+    const setCanvasData = vi.fn();
+    const hostAppliedData: CanvasData = {
+      ...DEFAULT_CANVAS_DATA,
+      name: 'Host Applied Canvas',
+    };
+
+    act(() => {
+      root.render(
+        <VSCodeMessageHarness
+          action={action}
+          isComposingRef={isComposingRef}
+          options={{
+            vscode,
+            setCanvasData,
+          }}
+        />,
+      );
+    });
+
+    act(() => {
+      postHostMessage({
+        type: 'canvas.hostAppliedDocument',
+        documentUri: 'file:///workspace/Host.nkc',
+        data: hostAppliedData,
+        reason: 'headless-authoring',
+      });
+    });
+
+    expect(setCanvasData).toHaveBeenCalledWith(hostAppliedData);
+    expect(vscode.postMessage).toHaveBeenCalledWith({ type: 'canvasDataReady' });
+  });
+
   it('notifies the app when the extension confirms a custom document save', () => {
     const onSaved = vi.fn();
 

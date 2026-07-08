@@ -51,6 +51,8 @@
 
 普通审阅输出时，先给简洁说明，再输出一张 Markdown creative table。这张表就是分镜表；不要引入第二个产物名，也不要说之后再转换。
 
+通用 Markdown 扩展语法、图片渲染、`@` 引用、Neko resource-reference 和 semantic prompt span 由系统提示词与 shared Markdown/profile 层负责；本 Skill 不定义 Markdown renderer 行为，只选择分镜表字段、证据约束和分镜提示词内容。
+
 普通聊天回复不要输出 YAML frontmatter 或创作文档元数据。禁止输出 `---`、`id:`、`kind: draft`、`status: draft`、`domain: storyboard` 或 `referenceChain:` 这类块/键。它们只属于 host/runtime 持久化的创作文档，不属于分镜 creative table。
 
 生产可用的分镜输出必须对已知列精确使用规范稳定字段 id。新 Markdown 输出不要本地化已知字段表头。已知字段由 shared storyboard profile 解析，Webview 会按当前 UI 语言展示字段标签；未知扩展列会保留 Markdown 原表头，因此扩展列请使用用户/输出语言，并保持含义清晰。
@@ -134,15 +136,16 @@ validator 支持开放的审阅 metadata，不要求证据不足或任务不需�
 
 需要时，在主稳定表头之后继续追加扩展列，例如 `sourcePanel`、`decisionReason`、`requiresSplit`、`requiresTextRemoval`、`requiresInpaint`、`referenceImage`、`styleRef`、`textCueType`、`speaker`、`ocrNotes` 或 `risk`。已知字段应保持稳定；有用的扩展列应作为审阅 metadata 可见保留。没有可信 lifecycle 结果支撑时，不要输出执行字段。
 
-## 资源引用
+## 分镜 source 引用
 
+- 遵守系统提示词中的 Markdown 扩展协议。本节只说明分镜表 `source` 单元格如何表达漫画页/分格来源。
 - 推荐普通 token：`P1`、`P1#panel_2`、`page_2#panel_1`、`P3,P4`。
 - 只有当前工具/host 资源索引中存在完全相同 target 时，才在 `source` 单元格使用标准 CommonMark 图片，例如 `![P1](P1)` 或 `![panel](page_2#panel_1)`。alt text 只是展示文字，target 才是资源身份。
 - 如果看不到稳定资源绑定，使用普通 token，并在 `nextAction` 用用户语言说明需要绑定资源，不要编造 Markdown 图片或输出 `needs-resource-binding` 状态码。
 - CommonMark 图片 target 可以是稳定 token，也可以是工具返回的稳定文档图片路径，例如 `![page](image/moe-010564.jpg)`。不要使用相对项目路径，除非工具/资源索引返回了完全相同的 token。
 - `#panel_1`、`#crop_top` 等后缀表示 base image token 上的分格/裁切意图，不是另一张资源。
 - 不要写 render URI、Webview URI、blob URL、`.neko/.cache` 路径、provider cache path、系统临时路径、Engine token、base64 图片数据、绝对私有路径、provider-private handle 或领域节点 JSON。
-- 分镜表中不要使用 `![[cover.png]]` 或 `[[Chapter 1#Section]]` 这类 Neko/Obsidian-style resource-reference 语法。本 Skill 遵循 Codex-style 标准 Markdown：`![alt](resource-token)`。
+- `![[...]]` / `[[...#...]]` 这类 Neko resource-reference 只有在当前 host 明确启用并能解析稳定身份时才可使用；普通分镜表优先使用 source token 或 CommonMark 图片 target。
 
 ## Canvas 交接
 
@@ -153,6 +156,8 @@ validator 支持开放的审阅 metadata，不要求证据不足或任务不需�
 这张表已经存在后，再使用运行时工具列表中可用的 Canvas lifecycle tool/capability。本地 UI/tool adapter 会携带真实稳定 resource refs。除非 Canvas capability/tool 返回成功，不要声称 Canvas 成功。
 
 生产 scene/shot 节点使用 canvas.createStoryboardFromMarkdown。将已完成的表格作为 Markdown 来源传入，并在工具支持时传入 `profileHint=storyboard`、`mode=create-nodes` 和显式 approval context。如果 Canvas 阻塞创建，报告 diagnostics，并修复表格、审批或资源绑定后再重试。
+
+“作为 Markdown/Markdown 发送”表示 Markdown 是来源格式/传输格式，不是 review-only 请求。如果 canvas.createStoryboardFromMarkdown 没有作为可调用工具暴露，报告 Canvas tool-surface blocked，不要用 canvas.ingestMarkdown 替代。
 
 canvas.ingestMarkdown 只能作为 review-only 表格/草稿摄入。只有用户明确需要 Canvas 审阅表格/草稿节点时才使用它，不要把 review-only table 节点说成生产分镜交付成功。
 

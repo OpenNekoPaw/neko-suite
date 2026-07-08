@@ -22,6 +22,9 @@ Coordinate media-to-video work through focused skills and existing tools. This i
 
 - Markdown creative tables are reviewable authoring artifacts. For production animation, Cut, generated media, export, or execution summaries, invoke validated lifecycle capabilities before claiming handoff success.
 - For Canvas review of Markdown tables, use the Canvas lifecycle tool/capability exposed in the runtime tool list and pass original Markdown plus stable resource refs through local UI/tool adapters. Do not output domain node JSON or project-internal handoff objects. Keep useful unknown columns visible as review metadata.
+- Durable writes into Cut, Sketch, Model, or other project files must use canonical authoring capabilities/commands such as `neko.<domain>.authoring.*`, with explicit `target`, `reveal`, stable source/ref data, and provenance. Do not treat old UI-bound import commands, opening an editor, or showing a preview as durable delivery.
+- Operations tied to interactive state, including playback, selection, viewport, camera, active editor snapshots, and live preview, remain interactive-editor. If the required editor/runtime is missing, return typed diagnostics and stop.
+- If an authoring capability returns `ok:false` or diagnostics, report those diagnostics to the user; a command call that did not throw is not enough to claim delivery.
 - The reviewed storyboard creative table remains the creative shot source. AnimationPlan carries only provider-neutral execution intent in `shotOverlays[]`; runtime status belongs to Agent async tasks or execution summaries.
 - Use actual tool-result or generated-asset references for media. Do not invent ids.
 - Do not embed base64, blob URLs, localhost URLs, or absolute local cache paths.

@@ -2,7 +2,7 @@
   "neko.model.editor.title": "Neko Model 场景编辑器",
   "neko.model.new.title": "新建 3D 模型项目",
   "neko.model.new2dScene.title": "新建 2D 场景项目",
-  "neko.model.importAsset.title": "导入 3D 模型资产",
+  "neko.model.authoring.importAsset.title": "导入 3D 模型资产到项目",
   "neko.model.exportMotions.title": "导出模型动作资产",
   "neko.model.exportConfig.title": "导出模型配置资产",
   "neko.model.liveMode.start.title": "启动 Model Live Mode",

@@ -119,6 +119,8 @@ export interface LayerData {
   texture: WebGLTexture | null;
   /** Base64 PNG data from .nks file, consumed once to create WebGL texture */
   pendingData?: string;
+  /** Stable source used by host-side authoring to create or refresh this layer */
+  readonly source?: import('@neko/shared').NksLayerSourceRef;
   /** P1: Normal map texture, RGB encodes (nx*0.5+0.5, ny*0.5+0.5, nz*0.5+0.5) */
   normalTexture?: WebGLTexture | null;
   /** P1: Base64 normal map data from .nks file, consumed on first render */

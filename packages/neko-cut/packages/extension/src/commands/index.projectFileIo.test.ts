@@ -7,18 +7,50 @@ const messageHandlerSource = readFileSync(
   join(__dirname, '../editor/video/messageHandler.ts'),
   'utf-8',
 );
+const timelineCommandsSource = readFileSync(join(__dirname, 'timeline-commands.ts'), 'utf-8');
 const timelineToolExecutorSource = readFileSync(
   join(__dirname, '../services/TimelineToolExecutor.ts'),
   'utf-8',
 );
+const removedGeneratedClipEditorExecutor = ['ensureTimelineEditor', 'ForGeneratedClip('].join('');
+const removedGeneratedClipEditorTimeout = [
+  'Timeline editor did not ',
+  'become ready',
+  ' before import.',
+].join('');
+const removedAddToTimelineCommand = ['neko.', 'addToTimeline'].join('');
+const removedImportStoryboardCommand = ['neko.cut.', 'importStoryboard'].join('');
+const removedImportCanvasDraftCommand = ['neko.cut.', 'importCanvasDraft'].join('');
+const removedImportStoryboardMessage = ["type: '", "importStoryboard'"].join('');
+const removedImportCanvasDraftMessage = ["type: '", "importCanvasDraft'"].join('');
 
 describe('neko-cut command project-file I/O guardrails', () => {
-  it('routes command media adds through the shared Cut project source ingest flow', () => {
-    expect(commandSource).toContain('addCutProjectSource(');
-    expect(commandSource).toContain("type: 'project:sourceAdded'");
+  it('routes generated clip imports through Cut authoring instead of a Webview executor', () => {
+    expect(commandSource).toContain('neko.cut.authoring.importGeneratedClip');
+    expect(commandSource).toContain('cutProjectAuthoringService.importGeneratedClip(');
+    expect(commandSource).not.toContain(removedGeneratedClipEditorExecutor);
+    expect(commandSource).not.toContain(removedGeneratedClipEditorTimeout);
+  });
+
+  it('routes manual add-to-timeline media adds through Cut authoring', () => {
+    expect(commandSource).toContain('neko.cut.authoring.addSourceToTimeline');
+    expect(commandSource).toContain('cutProjectAuthoringService.importMediaSource(');
+    expect(commandSource).not.toContain(removedAddToTimelineCommand);
+    expect(commandSource).not.toContain("type: 'project:sourceAdded'");
     expect(commandSource).not.toContain('workspace.asRelativePath');
     expect(commandSource).not.toContain("type: 'addMediaFile'");
     expect(commandSource).not.toContain("type: 'importGeneratedClip'");
+  });
+
+  it('routes storyboard and Canvas draft imports through Cut authoring commands', () => {
+    expect(timelineCommandsSource).toContain('neko.cut.authoring.importStoryboard');
+    expect(timelineCommandsSource).toContain('neko.cut.authoring.importCanvasDraft');
+    expect(timelineCommandsSource).toContain('cutProjectAuthoringService.importStoryboard(');
+    expect(timelineCommandsSource).toContain('cutProjectAuthoringService.importCanvasDraft(');
+    expect(timelineCommandsSource).not.toContain(removedImportStoryboardCommand);
+    expect(timelineCommandsSource).not.toContain(removedImportCanvasDraftCommand);
+    expect(timelineCommandsSource).not.toContain(removedImportStoryboardMessage);
+    expect(timelineCommandsSource).not.toContain(removedImportCanvasDraftMessage);
   });
 
   it('does not keep the legacy addMediaToTimeline webview message path alive', () => {
@@ -32,4 +64,5 @@ describe('neko-cut command project-file I/O guardrails', () => {
     expect(timelineToolExecutorSource).not.toContain('model!.updateProjectData(');
     expect(timelineToolExecutorSource).toContain('projectSession.updateProjectData(');
   });
+
 });

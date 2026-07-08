@@ -32,6 +32,7 @@ import {
   NODE_CARD_ACTION_DISPATCHER,
   readNumber,
   readString,
+  resolveShotReviewPreviewSource,
 } from './node-card';
 import type {
   CreatorSceneViewMode,
@@ -596,6 +597,7 @@ function SceneShotReviewSurface({
     () => projectSceneShotTableRows(parentNode, childNodes),
     [childNodes, parentNode],
   );
+  const scenePromptState = useMemo(() => readSceneStoryboardPromptState(parentNode), [parentNode]);
   const activeColumns = useMemo(
     () => resolveSceneShotTableColumns(columnProfileId),
     [columnProfileId],
@@ -755,14 +757,43 @@ function SceneShotReviewSurface({
           slotLayout={slotLayout}
         />
       ) : (
-        <SceneShotTable
-          parentNode={parentNode}
-          rows={visibleRows}
-          columns={activeColumns}
-          context={context}
-        />
+        <>
+          <SceneVideoPromptSummary promptState={scenePromptState} />
+          <SceneShotTable
+            parentNode={parentNode}
+            rows={visibleRows}
+            columns={activeColumns}
+            context={context}
+          />
+        </>
       )}
     </div>
+  );
+}
+
+function SceneVideoPromptSummary({
+  promptState,
+}: {
+  promptState?: CanvasStoryboardPromptState;
+}): React.ReactNode {
+  const document = promptState?.promptBlocks?.videoPromptDocument;
+  if (!document?.text) return null;
+  return (
+    <section
+      className="mx-2 min-w-0 rounded border border-gray-200 bg-white px-2 py-1.5 text-[11px] text-gray-700"
+      data-scene-video-prompt-summary="true"
+    >
+      <div className="mb-1 text-[10px] font-medium uppercase tracking-normal text-gray-500">
+        {t('scene.column.videoPrompt')}
+      </div>
+      <SemanticPromptText
+        text={document.text}
+        spans={document.spans}
+        ariaLabel={t('scene.column.videoPrompt')}
+        className="line-clamp-3 min-w-0 whitespace-pre-wrap break-words text-[11px] leading-[1.35] text-gray-700"
+        placeholderClassName="text-gray-400"
+      />
+    </section>
   );
 }
 
@@ -930,11 +961,7 @@ function renderSceneShotTableCell(
       );
     case 'reference-media':
       return (
-        <BoundedSceneCellText
-          value={row.referenceMedia}
-          placeholder={t('scene.referenceMediaUnavailable')}
-          ariaLabel={t('scene.referenceMediaStatus')}
-        />
+        <SceneReferenceMediaCell row={row} />
       );
     case 'image-prompt':
       return (
@@ -977,6 +1004,35 @@ function renderSceneShotTableCell(
         <SceneShotActionCell row={row} onDispatchActionIntent={options.onDispatchActionIntent} />
       );
   }
+}
+
+function SceneReferenceMediaCell({ row }: { row: SceneShotTableRow }): React.ReactNode {
+  const previewSource = resolveShotReviewPreviewSource(row.node);
+  return (
+    <div
+      className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] items-start gap-1.5"
+      data-scene-reference-media-cell="true"
+    >
+      <div className="min-w-0 overflow-hidden rounded border border-gray-200 bg-gray-50">
+        <CardPreviewSlot
+          source={previewSource}
+          title={row.shotNumber}
+          variant="thumbnail"
+          imageFit="contain"
+        />
+      </div>
+      <BoundedSceneCellText
+        value={row.referenceMedia}
+        placeholder={t('scene.referenceMediaUnavailable')}
+        ariaLabel={t('scene.referenceMediaStatus')}
+      />
+    </div>
+  );
+}
+
+function readSceneStoryboardPromptState(node: CanvasNode): CanvasStoryboardPromptState | undefined {
+  const state = readRecordValue(node.data)['storyboardPrompt'];
+  return isCanvasStoryboardPromptState(state) ? state : undefined;
 }
 
 function SceneShotStatusCell({ row }: { row: SceneShotTableRow }): React.ReactNode {
@@ -1911,6 +1967,13 @@ function createStoryboardActionIntent(
     throw new Error(`Cannot create storyboard action intent without nextActionId for ${row.id}.`);
   }
   const promptState = readShotStoryboardPromptState(row.node);
+  const scenePromptState = readSceneStoryboardPromptState(sceneNode);
+  const promptDocuments = listPromptDocumentRefsForAction(
+    row.nextActionId,
+    promptState,
+    scenePromptState,
+    row.node.id,
+  );
   return {
     version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
     actionId: row.nextActionId,
@@ -1919,14 +1982,10 @@ function createStoryboardActionIntent(
       sceneNodeId: sceneNode.id,
       shotNumber: row.ordinal,
     },
-    ...(promptState?.promptBlocks
-      ? { promptDocuments: listPromptDocumentRefs(promptState, row.node.id) }
-      : {}),
+    ...(promptDocuments.length > 0 ? { promptDocuments } : {}),
     ...(promptState?.referenceMedia ? { referenceMedia: promptState.referenceMedia } : {}),
     ...(promptState?.generationParams ? { generationParams: promptState.generationParams } : {}),
-    ...(promptState?.nextCreativeState?.id
-      ? { expectedNextStateId: promptState.nextCreativeState.id }
-      : {}),
+    expectedNextStateId: row.stateId,
     ...(promptState?.nextCreativeState?.taskRef
       ? { taskRef: promptState.nextCreativeState.taskRef }
       : {}),
@@ -1947,14 +2006,23 @@ function readShotStoryboardPromptState(node: CanvasNode): CanvasStoryboardPrompt
   return state;
 }
 
-function listPromptDocumentRefs(
-  state: CanvasStoryboardPromptState,
+function listPromptDocumentRefsForAction(
+  actionId: SceneShotTableRow['nextActionId'],
+  shotState: CanvasStoryboardPromptState | undefined,
+  sceneState: CanvasStoryboardPromptState | undefined,
   nodeId: string,
-): CanvasStoryboardActionIntent['promptDocuments'] {
+): NonNullable<CanvasStoryboardActionIntent['promptDocuments']> {
+  if (!shotState?.promptBlocks && !sceneState?.promptBlocks) return [];
+  const sceneVideoDocument = shouldUseSceneVideoPromptDocument(actionId, shotState)
+    ? sceneState?.promptBlocks?.videoPromptDocument
+    : undefined;
   const refs = [
-    promptDocumentRef('image', state.promptBlocks?.imagePromptDocument),
-    promptDocumentRef('video', state.promptBlocks?.videoPromptDocument),
-    promptDocumentRef('voice', state.promptBlocks?.voicePromptDocument),
+    promptDocumentRef('image', shotState?.promptBlocks?.imagePromptDocument),
+    promptDocumentRef(
+      'video',
+      shotState?.promptBlocks?.videoPromptDocument ?? sceneVideoDocument,
+    ),
+    promptDocumentRef('voice', shotState?.promptBlocks?.voicePromptDocument),
   ].filter((ref): ref is NonNullable<typeof ref> => Boolean(ref));
   if (refs.length === 0) {
     throw new Error(
@@ -1962,6 +2030,14 @@ function listPromptDocumentRefs(
     );
   }
   return refs;
+}
+
+function shouldUseSceneVideoPromptDocument(
+  actionId: SceneShotTableRow['nextActionId'],
+  shotState: CanvasStoryboardPromptState | undefined,
+): boolean {
+  if (shotState?.promptBlocks?.videoPromptDocument) return false;
+  return actionId === 'generate-video' || actionId === 'optimize-video-prompt';
 }
 
 function promptDocumentRef(

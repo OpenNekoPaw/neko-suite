@@ -210,15 +210,19 @@ Canonical authoring path：
 Agent / Agent Webview handoff
   -> Agent 查询 Canvas authoring catalog / active context
   -> Agent 选择 Canvas-owned query 或 mutation tool
-  -> Canvas Extension Host 校验 active editor、refs、字段/profile、资源和 approval
-  -> Canvas Webview/Store 执行节点、连接、block 或 content mutation
+  -> Canvas Extension Host 校验 target、refs、字段/profile、资源和 approval
+  -> CanvasProjectAuthoringService 解析 active / explicit / new .nkc target
+  -> ProjectFileStore + .nkc codec 保存节点、连接、block 或 content mutation
+  -> 已打开 Canvas Webview 作为投影同步 host-applied document state
   -> Canvas 返回 structured authoring result envelope
 ```
 
 边界约束：
 
 - `Send to Canvas` 是 Agent-visible handoff intent。Agent Webview/Extension 不得把按钮点击隐式转成 `neko.canvas.importAsset`、Canvas Markdown capability 或 `canvas_create_node`。
-- 直接素材导入保留为显式 Import / Add Source 路径，只传输已授权 stable resource/source，不代表 Agent-authored Canvas composition。
+- 直接素材导入是显式 Import / Add Source 路径，只接收已授权 stable resource/source；如果需要写入 `.nkc` media/reference 节点，也必须通过 `CanvasProjectAuthoringService`，不能让 Webview 自行创建持久节点。
+- `CanvasProjectAuthoringService` 是生产 `.nkc` 写入路径：无活动 Canvas Webview 时可创建新的 `.nkc` 并写入；已有目标时写入显式 `documentUri` 或当前 active Canvas。打开/聚焦 Webview 只是显式 reveal 行为，不是写入前置条件。
+- Canvas Webview 是交互投影：负责选择、拖拽、视口、键盘、inspector、播放和预览；不再是 Agent/Send to Canvas/asset import 生产节点创建的 executor。
 - Canvas 是 durable field/profile authority。Skill、Markdown 表头、`@` 文本和 prompt span 只能作为 hint；未知字段进入 review/custom metadata 或 diagnostic，不直接写 semantic node field。
 - 分镜表按 prompt-first、field-backed 处理：prompt text 与 semantic spans 是用户直接编辑对象；表格列是审阅投影。prompt 与字段不一致时返回 alignment diagnostics 或 explicit merge/regenerate next actions，不静默反向解析覆盖字段。
 - Mutation tool 必须返回 structured authoring result：status、refs、diagnostics、blocked reason、changed fields、prompt-field alignment 和 approval-gated next actions。渲染这些结果不能自动执行下一步 action。

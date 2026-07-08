@@ -75,6 +75,10 @@ import type {
   AudioProjectSessionGateway,
   ProjectSession,
 } from '../services/audioProjectSessionGateway';
+import {
+  createAudioStreamRequiredError,
+  diagnosticsFromAudioRuntimeError,
+} from '../services/audioRuntimeDiagnostics';
 import { getWebviewHtml } from '../utils/html';
 import { getLogger } from '../utils/logger';
 import {
@@ -220,16 +224,12 @@ export class AudioProjectProvider
     const docKey = documentUri ? this.toDocumentKey(documentUri) : this.resolveFocusedProjectKey();
     if (!docKey) return null;
 
-    const projectData = this._projectDataCache.get(docKey);
-    if (!projectData) return null;
-    return { documentUri: docKey, projectData };
+    return await this.ensureProjectSession(docKey);
   }
 
   async linkAudioSource(session: ProjectSession, sourcePath: string): Promise<string> {
     const docKey = this.toDocumentKey(session.documentUri);
-    if (!this._projectDataCache.has(docKey)) {
-      throw new Error(`Audio project is not open: ${session.documentUri}`);
-    }
+    await this.ensureProjectSession(docKey);
     const projectUri = vscode.Uri.parse(docKey);
     const fileName = path.basename(sourcePath);
     const result = await this.acquireAudioProjectSource(
@@ -262,28 +262,28 @@ export class AudioProjectProvider
     options?: { syncReason?: 'agent-edit' | 'reload' | 'revert' | 'save' | 'external-change' },
   ): Promise<ProjectSession> {
     const docKey = this.toDocumentKey(session.documentUri);
-    const cached = this._projectDataCache.get(docKey);
-    if (!cached) {
-      throw new Error(`Audio project is not open: ${session.documentUri}`);
-    }
+    const current = await this.ensureProjectSession(docKey);
+    const syncReason = options?.syncReason ?? 'agent-edit';
 
-    const projectData = this.applyEditOperation(cached, operation);
-    this._projectDataCache.set(docKey, projectData);
-    this.fireDirty(docKey, {
-      operation,
-      before: cached,
-      after: projectData,
-      reason: options?.syncReason ?? 'agent-edit',
-    });
-    await this.postProjectSync(docKey, projectData, operation, options?.syncReason ?? 'agent-edit');
-    return { documentUri: docKey, projectData };
+    const projectData = this.applyEditOperation(current.projectData, operation);
+    const projectUri = vscode.Uri.parse(docKey);
+    const normalized = await this.normalizePathsForSave(projectData, projectUri);
+    const savedProjectData = await this.saveAuthoringProjectWithStore(
+      projectUri,
+      normalized,
+      this.toProjectFileSaveReason(syncReason),
+    );
+    this._projectDataCache.set(docKey, savedProjectData);
+    await this.postProjectSync(docKey, savedProjectData, operation, syncReason);
+    return { documentUri: docKey, projectData: savedProjectData };
   }
 
   async buildMixConfig(session: ProjectSession): Promise<{
     config: MixStreamConfig;
     warnings: MixConfigWarning[];
   }> {
-    return this.buildProjectMixConfig(vscode.Uri.parse(this.toDocumentKey(session.documentUri)));
+    const current = await this.ensureProjectSession(session.documentUri);
+    return this.buildProjectMixConfig(vscode.Uri.parse(current.documentUri));
   }
 
   /** Post message to all active webview panels */
@@ -459,6 +459,7 @@ export class AudioProjectProvider
         documentUri: document.uri.toString(),
         success: false,
         error: error instanceof Error ? error.message : String(error),
+        diagnostics: diagnosticsFromAudioRuntimeError(error),
       });
     };
 
@@ -560,7 +561,13 @@ export class AudioProjectProvider
             });
             break;
           case 'seek':
-            if (typeof request.time === 'number' && activeStreamId) {
+            if (!activeStreamId) {
+              throw createAudioStreamRequiredError(
+                'audio-project.playback.seek',
+                'Cannot seek because no audio stream is active.',
+              );
+            }
+            if (typeof request.time === 'number') {
               await this._audioService?.seekStream(activeStreamId, request.time);
             }
             await webviewPanel.webview.postMessage({
@@ -572,7 +579,13 @@ export class AudioProjectProvider
             });
             break;
           case 'setSpeed':
-            if (typeof request.speed === 'number' && activeStreamId) {
+            if (!activeStreamId) {
+              throw createAudioStreamRequiredError(
+                'audio-project.playback.setSpeed',
+                'Cannot set playback speed because no audio stream is active.',
+              );
+            }
+            if (typeof request.speed === 'number') {
               await this._audioService?.setStreamSpeed(activeStreamId, request.speed);
             }
             await webviewPanel.webview.postMessage({
@@ -584,15 +597,19 @@ export class AudioProjectProvider
             });
             break;
           case 'setLoop':
-            if (activeStreamId) {
-              const region =
-                request.loop &&
-                typeof request.startTime === 'number' &&
-                typeof request.time === 'number'
-                  ? { inPoint: request.startTime, outPoint: request.time }
-                  : null;
-              await this._audioService?.setStreamLoop(activeStreamId, region);
+            if (!activeStreamId) {
+              throw createAudioStreamRequiredError(
+                'audio-project.playback.setLoop',
+                'Cannot set playback loop because no audio stream is active.',
+              );
             }
+            const region =
+              request.loop &&
+              typeof request.startTime === 'number' &&
+              typeof request.time === 'number'
+                ? { inPoint: request.startTime, outPoint: request.time }
+                : null;
+            await this._audioService?.setStreamLoop(activeStreamId, region);
             await webviewPanel.webview.postMessage({
               type: 'audio:playbackResult',
               requestId: request.requestId,
@@ -1386,10 +1403,8 @@ export class AudioProjectProvider
     config: MixStreamConfig;
     warnings: MixConfigWarning[];
   }> {
-    const cached = this._projectDataCache.get(nkaUri.toString());
-    if (!cached) {
-      throw new Error('No audio project data is loaded');
-    }
+    const session = await this.ensureProjectSession(nkaUri.toString());
+    const cached = session.projectData;
     const projectDir = path.dirname(nkaUri.fsPath);
     const resolvedSources = await this.resolveProjectSources(cached, nkaUri);
 
@@ -1513,10 +1528,33 @@ export class AudioProjectProvider
 
   private toDocumentKey(documentUri: string): string {
     try {
+      if (path.isAbsolute(documentUri)) {
+        return vscode.Uri.file(documentUri).toString();
+      }
       return vscode.Uri.parse(documentUri).toString();
     } catch {
       return documentUri;
     }
+  }
+
+  private async ensureProjectSession(documentUri: string): Promise<ProjectSession> {
+    const docKey = this.toDocumentKey(documentUri);
+    const cached = this._projectDataCache.get(docKey);
+    if (cached) {
+      return { documentUri: docKey, projectData: cached };
+    }
+
+    const projectUri = vscode.Uri.parse(docKey);
+    const loaded = await this.loadProjectWithStore(projectUri);
+    if (!loaded.projectData) {
+      throw new Error(formatProjectFileDiagnostics(loaded.diagnostics, 'Failed to load NKA'));
+    }
+
+    this._projectDataCache.set(docKey, loaded.projectData);
+    if (loaded.compatibility) {
+      this._projectCompatibilityCache.set(docKey, loaded.compatibility);
+    }
+    return { documentUri: docKey, projectData: loaded.projectData };
   }
 
   private fireDirty(
@@ -1573,7 +1611,6 @@ export class AudioProjectProvider
   ): Promise<void> {
     const panel = this._activePanels.get(docKey);
     if (!panel) {
-      logger.warn(`No active audio project webview for sync: ${docKey}`);
       return;
     }
 
@@ -1721,6 +1758,52 @@ export class AudioProjectProvider
       useSaveAs: saveReason === 'save-as',
     });
     return true;
+  }
+
+  private async saveAuthoringProjectWithStore(
+    targetUri: vscode.Uri,
+    project: AudioProjectData,
+    saveReason: ProjectFileSaveReason,
+  ): Promise<AudioProjectData> {
+    const docKey = targetUri.toString();
+    const compatibility = this._projectCompatibilityCache.get(docKey);
+    if (compatibility?.readOnly) {
+      throw new Error(
+        `Audio project ${docKey} is read-only because it was created by a newer NKA version.`,
+      );
+    }
+
+    const result = await this._projectFileSession.save({
+      targetUri,
+      sourceUri: targetUri,
+      document: project,
+      saveReason,
+      defaultMessage: 'Failed to save NKA',
+    });
+    this._projectCompatibilityCache.set(docKey, {
+      loadedVersion: CURRENT_NKA_VERSION,
+      currentVersion: CURRENT_NKA_VERSION,
+      mode: 'current',
+      readOnly: false,
+      warnings: [],
+    });
+    return result.document ?? project;
+  }
+
+  private toProjectFileSaveReason(
+    syncReason: 'agent-edit' | 'reload' | 'revert' | 'save' | 'external-change',
+  ): ProjectFileSaveReason {
+    switch (syncReason) {
+      case 'agent-edit':
+        return 'agent-edit';
+      case 'external-change':
+        return 'external-sync';
+      case 'save':
+        return 'vscode-save';
+      case 'reload':
+      case 'revert':
+        return 'manual';
+    }
   }
 
   // =========================================================================

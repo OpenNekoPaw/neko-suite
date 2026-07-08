@@ -32,7 +32,7 @@ class NekoStoryCapabilityProviderImpl implements AgentCapabilityProvider {
   readonly id = 'neko-story';
   readonly version = '1.0.0';
   readonly hostRequirements = [{ host: 'vscode' }] as const;
-  readonly requirements = { vscode: true, activeEditor: true, contentAccess: true } as const;
+  readonly requirements = { vscode: true, contentAccess: true } as const;
 
   constructor(api: NekoStoryAPI) {
     this.headless = createNekoStoryHeadlessCapabilityProvider(api);

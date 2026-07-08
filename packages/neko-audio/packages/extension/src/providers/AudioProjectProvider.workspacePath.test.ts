@@ -3,6 +3,8 @@ import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
 const providerSource = readFileSync(join(__dirname, './AudioProjectProvider.ts'), 'utf-8');
+const audioFileProviderSource = readFileSync(join(__dirname, './AudioEditorProvider.ts'), 'utf-8');
+const extensionSource = readFileSync(join(__dirname, '../extension.ts'), 'utf-8');
 
 describe('AudioProjectProvider workspace media path contract', () => {
   it('resolves playback, waveform, and mix sources through the shared workspace resolver', () => {
@@ -64,5 +66,16 @@ describe('AudioProjectProvider workspace media path contract', () => {
     expect(providerSource).not.toContain(
       "await vscode.workspace.fs.writeFile(document.uri, Buffer.from(content, 'utf-8'))",
     );
+  });
+
+  it('keeps playback controls runtime-bound with typed stream diagnostics', () => {
+    for (const source of [providerSource, audioFileProviderSource]) {
+      expect(source).toContain('createAudioStreamRequiredError(');
+      expect(source).toContain("diagnostics: diagnosticsFromAudioRuntimeError(error)");
+      expect(source).not.toContain("if (typeof request.time === 'number' && activeStreamId)");
+      expect(source).not.toContain("if (typeof request.speed === 'number' && activeStreamId)");
+    }
+    expect(extensionSource).toContain('createAudioInteractiveEditorRequiredResult(');
+    expect(extensionSource).toContain('runInteractiveCommand(');
   });
 });

@@ -4,7 +4,8 @@
   "version": "0.0.1",
   "type": "module",
   "exports": {
-    "./host-adapter": "./src/host-adapter/index.tsx"
+    "./host-adapter": "./src/host-adapter/index.tsx",
+    "./workbench-adapter": "./src/workbench-adapter.ts"
   },
   "scripts": {
     "dev": "vite",
@@ -15,6 +16,7 @@
     "@neko/neko-client": "workspace:*",
     "@neko/shared": "workspace:*",
     "@neko/ui": "workspace:*",
+    "@neko/workbench-core": "workspace:*",
     "@zip.js/zip.js": "^2.7.52",
     "docx-preview": "^0.3.3",
     "epubjs": "^0.3.93",

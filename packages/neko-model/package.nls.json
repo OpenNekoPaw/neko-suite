@@ -2,7 +2,7 @@
   "neko.model.editor.title": "Neko Model Scene Editor",
   "neko.model.new.title": "New 3D Model Project",
   "neko.model.new2dScene.title": "New 2D Scene Project",
-  "neko.model.importAsset.title": "Import 3D Model Asset",
+  "neko.model.authoring.importAsset.title": "Import 3D Model Asset Into Project",
   "neko.model.exportMotions.title": "Export Model Motion Artifact",
   "neko.model.exportConfig.title": "Export Model Config Artifact",
   "neko.model.liveMode.start.title": "Start Model Live Mode",

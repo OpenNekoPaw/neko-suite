@@ -70,6 +70,12 @@ const messageHandlerSource = readFileSync(
 );
 const commandSource = readFileSync(join(__dirname, '../commands/index.ts'), 'utf-8');
 const exportServiceSource = readFileSync(join(__dirname, '../services/ExportService.ts'), 'utf-8');
+const removedGeneratedClipEditorExecutor = ['ensureTimelineEditor', 'ForGeneratedClip('].join('');
+const removedGeneratedClipEditorTimeout = [
+  'Timeline editor did not ',
+  'become ready',
+  ' before import.',
+].join('');
 
 describe('neko-cut protocol', () => {
   describe('isAssetMessage', () => {
@@ -182,40 +188,39 @@ describe('timeline command registration (NKC-010)', () => {
     expect(cmdState.commands.has('neko.element.add')).toBe(true);
     expect(cmdState.commands.has('neko.element.delete')).toBe(true);
     expect(cmdState.commands.has('neko.timeline.listElements')).toBe(true);
-    expect(cmdState.commands.has('neko.cut.importCanvasDraft')).toBe(true);
+    expect(cmdState.commands.has('neko.cut.authoring.importCanvasDraft')).toBe(true);
   });
 
-  it('posts Canvas draft imports to the active Cut webview and returns the sync payload', async () => {
-    let receiveMessage: ((message: unknown) => void) | undefined;
-    const postMessage = vi.fn();
-    postMessage.mockImplementation((message) => {
-      queueMicrotask(() => {
-        receiveMessage?.({
-          type: 'canvasTimelineSync',
-          requestId: message.requestId,
-          payload: {
+  it('routes Canvas draft imports through Cut authoring and returns the sync payload', async () => {
+    const mockContext = { subscriptions: [], extensionUri: { fsPath: '/test' } };
+    const mockProvider = {
+      getActiveDocumentUri: vi.fn(() => 'file:///workspace/cut.nkv'),
+      getActiveWebview: vi.fn(() => null),
+      getActiveExportService: vi.fn(),
+    };
+    const authoringService = {
+      importCanvasDraft: vi.fn(async () => ({
+        version: 1,
+        ok: true,
+        documentUri: 'file:///workspace/cut.nkv',
+        created: false,
+        revealed: false,
+        diagnostics: [],
+        data: {
+          projectName: 'Canvas Route',
+          shotCount: 1,
+          refs: [{ kind: 'media', shotId: 'unit-a', trackId: 'track-a', elementId: 'element-a' }],
+          importedAt: 123,
+          syncPayload: {
             source: 'neko-cut',
             reason: 'storyboard-import',
             shots: [{ shotId: 'node-a', selectedInTimeline: true }],
           },
-        });
-      });
-      return Promise.resolve(true);
-    });
-    const mockContext = { subscriptions: [], extensionUri: { fsPath: '/test' } };
-    const mockProvider = {
-      getActiveDocumentUri: vi.fn(() => 'file:///workspace/cut.nkv'),
-      getActiveWebview: vi.fn(() => ({
-        postMessage,
-        onDidReceiveMessage: vi.fn((listener) => {
-          receiveMessage = listener;
-          return { dispose: vi.fn() };
-        }),
+        },
       })),
-      getActiveExportService: vi.fn(),
     };
 
-    registerTimelineCommands(mockContext as any, mockProvider as any);
+    registerTimelineCommands(mockContext as any, mockProvider as any, authoringService as any);
 
     const draft = {
       kind: 'canvas-cut-draft',
@@ -245,13 +250,12 @@ describe('timeline command registration (NKC-010)', () => {
       ],
     };
 
-    const handler = cmdState.commands.get('neko.cut.importCanvasDraft');
+    const handler = cmdState.commands.get('neko.cut.authoring.importCanvasDraft');
     expect(handler).toBeDefined();
     const result = await handler!(draft);
 
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'importCanvasDraft',
-      requestId: expect.any(String),
+    expect(authoringService.importCanvasDraft).toHaveBeenCalledWith({
+      target: { kind: 'active', documentUri: 'file:///workspace/cut.nkv', reveal: false },
       payload: draft,
     });
     expect(result).toMatchObject({
@@ -265,7 +269,7 @@ describe('timeline command registration (NKC-010)', () => {
     });
   });
 
-  it('returns unavailable when Canvas draft import has no active Cut webview', async () => {
+  it('returns unavailable when Canvas draft import has no target or workspace', async () => {
     const mockContext = { subscriptions: [], extensionUri: { fsPath: '/test' } };
     const mockProvider = {
       getActiveDocumentUri: vi.fn(() => null),
@@ -275,7 +279,7 @@ describe('timeline command registration (NKC-010)', () => {
 
     registerTimelineCommands(mockContext as any, mockProvider as any);
 
-    const handler = cmdState.commands.get('neko.cut.importCanvasDraft');
+    const handler = cmdState.commands.get('neko.cut.authoring.importCanvasDraft');
     expect(handler).toBeDefined();
     await expect(handler!({ route: { title: 'Route' } } as any)).resolves.toMatchObject({
       accepted: false,
@@ -348,10 +352,12 @@ describe('intent-aware engine and export boundaries', () => {
 });
 
 describe('generated clip import command boundaries', () => {
-  it('opens a timeline editor before importing generated clips when none is active', () => {
-    expect(commandSource).toContain('ensureTimelineEditorForGeneratedClip(');
-    expect(commandSource).toContain("vscode.openWith', fileUri, 'neko.videoEditor'");
-    expect(commandSource).toContain('createDefaultProject(title)');
-    expect(commandSource).toContain('Timeline editor did not become ready before import.');
+  it('uses the Cut authoring service before optional editor reveal', () => {
+    expect(commandSource).toContain('neko.cut.authoring.importGeneratedClip');
+    expect(commandSource).toContain('cutProjectAuthoringService.importGeneratedClip(');
+    expect(commandSource).toContain('resolveGeneratedClipAuthoringTarget(');
+    expect(commandSource).toContain('revealCutAuthoringResult(');
+    expect(commandSource).not.toContain(removedGeneratedClipEditorExecutor);
+    expect(commandSource).not.toContain(removedGeneratedClipEditorTimeout);
   });
 });

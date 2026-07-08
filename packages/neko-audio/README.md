@@ -211,7 +211,7 @@ Agent 项目编辑工具不再通过 Webview `agent:*` postMessage 执行。`Aud
 - 只有操作已经应用成功后才返回 `{ success: true }`。
 - `SetTrackAutomation` 使用结构化 target 与 tick-based points；Extension 校验 track/effect/param、点位排序和数值范围后才应用 `track.mix.setAutomation`。
 
-读工具返回 `documentUri`，后续写工具应传回同一个 URI 以避免多项目误写。媒体生成类工具不编辑 `.nka`，仍可由 provider 直接处理。
+`documentUri` 写入可在目标 `.nka` 未打开时从磁盘 load/edit/save/reopen；如果同一文档的 Webview 已打开，Extension 在保存后发送 `project:sync` 作为投影更新。读工具返回 `documentUri`，后续写工具应传回同一个 URI 以避免多项目误写。媒体生成类工具不编辑 `.nka`，仍可由 provider 直接处理。播放、录音、seek、stream、波形展示和实时效果预览仍属于 interactive/runtime 能力，缺少活跃编辑器或 stream 时返回 typed diagnostic。
 
 ### 支持格式
 

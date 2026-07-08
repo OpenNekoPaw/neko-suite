@@ -8,18 +8,29 @@ import {
 } from './importModelAsset';
 
 describe('model import asset contract', () => {
-  it('treats missing or malformed args as interactive import', () => {
+  it('classifies missing or malformed args before authoring execution', () => {
     expect(parseModelImportAssetArgs(undefined)).toEqual({ status: 'missing' });
     expect(parseModelImportAssetArgs({ path: '   ' })).toEqual({ status: 'missing' });
     expect(parseModelImportAssetArgs(['/tmp/character.glb'])).toEqual({ status: 'missing' });
   });
 
   it('parses supported model asset paths and trims optional names', () => {
-    expect(parseModelImportAssetArgs({ path: ' /tmp/character.GLB ', name: ' Hero ' })).toEqual({
+    expect(
+      parseModelImportAssetArgs({
+        path: ' /tmp/character.GLB ',
+        name: ' Hero ',
+        documentUri: ' file:///workspace/hero.nkm ',
+        reveal: false,
+        target: { kind: 'file', documentUri: ' file:///workspace/target.nkm ', reveal: true },
+      }),
+    ).toEqual({
       status: 'valid',
       payload: {
         path: '/tmp/character.GLB',
         name: 'Hero',
+        documentUri: 'file:///workspace/hero.nkm',
+        reveal: false,
+        target: { kind: 'file', documentUri: 'file:///workspace/target.nkm', reveal: true },
       },
     });
   });

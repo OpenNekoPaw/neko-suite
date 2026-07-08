@@ -118,6 +118,9 @@ import type {
   CanvasAgentActiveContextResult,
   CanvasAgentApplyContentResult,
   CanvasAgentContentPayload,
+  CanvasImportAssetRequest,
+  CanvasImportAssetResult,
+  CanvasHostAppliedDocumentMessage,
   DocumentResourceStatusReason,
   DocumentArchiveResourceRef,
   ProjectionAdapter,
@@ -193,6 +196,10 @@ const CANVAS_EDITOR_LEVEL_KEYBOARD_ACTIONS = new Set([
   'resetZoom',
   'generateSelected',
 ]);
+
+type CanvasHeadlessAssetImporter = (
+  asset: CanvasImportAssetRequest,
+) => Promise<CanvasImportAssetResult>;
 
 type CanvasPlaybackPreviewSourceKind =
   'generated-image' | 'generated-media' | 'reference-image' | 'source-media' | 'media-asset';
@@ -753,6 +760,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     logger,
   });
   private entityChangeSubscription: vscode.Disposable | undefined;
+  private headlessAssetImporter: CanvasHeadlessAssetImporter | undefined;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -979,6 +987,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     this.statusBar = opts.statusBar;
   }
 
+  setHeadlessAssetImporter(importer: CanvasHeadlessAssetImporter): void {
+    this.headlessAssetImporter = importer;
+  }
+
   private setActiveCanvasEditor(
     webviewPanel: vscode.WebviewPanel,
     document: vscode.CustomDocument,
@@ -1013,13 +1025,44 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return documentUri !== undefined && this.canvasDataReadyDocumentUris.has(documentUri);
   }
 
-  revealAnyCanvasEditor(): boolean {
-    const nextPanel = this.webviewPanelsByDocumentUri.values().next();
-    if (nextPanel.done) {
-      return false;
+  hasActiveCanvasEditor(): boolean {
+    return this.activeWebviewPanel !== undefined && this.activeDocument !== undefined;
+  }
+
+  getActiveCanvasDocumentUri(): vscode.Uri | undefined {
+    return this.activeDocument?.uri;
+  }
+
+  applyHostCanvasData(uri: vscode.Uri, canvasData: CanvasData): void {
+    const documentUri = uri.toString();
+    const canvasRecord = canvasData as unknown as Record<string, unknown>;
+    this.updateRememberedCanvasSnapshot(documentUri, canvasRecord);
+    const panel = this.webviewPanelsByDocumentUri.get(documentUri);
+    const message: CanvasHostAppliedDocumentMessage = {
+      type: 'canvas.hostAppliedDocument',
+      documentUri,
+      data: canvasData,
+      reason: 'headless-authoring',
+    };
+    panel?.webview.postMessage(message);
+    if (this.activeDocument?.uri.toString() === documentUri) {
+      this.syncOutline(documentUri, canvasRecord);
+      this.syncStatusBar(canvasRecord);
     }
-    nextPanel.value.reveal();
-    return true;
+  }
+
+  async revealCanvasDocument(uri: vscode.Uri): Promise<void> {
+    const documentUri = uri.toString();
+    const panel = this.webviewPanelsByDocumentUri.get(documentUri);
+    const document = this.documentsByDocumentUri.get(documentUri);
+    if (panel) {
+      panel.reveal();
+      if (document) {
+        this.setActiveCanvasEditor(panel, document);
+      }
+      return;
+    }
+    await vscode.commands.executeCommand('vscode.openWith', uri, CanvasEditorProvider.viewType);
   }
 
   async revealPlaybackWorkspace(
@@ -1789,66 +1832,6 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       return false;
     }
     return this.focusedWebviews.postKeyboardAction(action, request);
-  }
-
-  /**
-   * Forward a GeneratedAsset import to the active canvas webview (ADR-5 P0).
-   * Returns false if no canvas editor is open.
-   */
-  async postImportAsset(asset: {
-    path?: string;
-    type?: string;
-    name?: string;
-    documentResourceRef?: DocumentArchiveResourceRef;
-    resourceRef?: ResourceRef;
-  }): Promise<boolean> {
-    const activePanel = this.activeWebviewPanel;
-    if (!activePanel) return false;
-    const webviewAsset = this.toWebviewImportAsset(activePanel.webview, asset);
-    activePanel.webview.postMessage({
-      type: 'importGeneratedAsset',
-      asset: webviewAsset,
-    });
-    return true;
-  }
-
-  private toWebviewImportAsset(
-    webview: vscode.Webview,
-    asset: {
-      path?: string;
-      type?: string;
-      name?: string;
-      documentResourceRef?: DocumentArchiveResourceRef;
-      resourceRef?: ResourceRef;
-    },
-  ): {
-    path?: string;
-    type?: string;
-    name?: string;
-    originalPath?: string;
-    documentResourceRef?: DocumentArchiveResourceRef;
-    resourceRef?: ResourceRef;
-  } {
-    if (!asset.path) return asset;
-    if (
-      asset.path.startsWith('http://') ||
-      asset.path.startsWith('https://') ||
-      asset.path.startsWith('blob:') ||
-      asset.path.includes('vscode-resource.vscode-cdn.net')
-    ) {
-      return asset;
-    }
-    if (!(asset.path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(asset.path))) {
-      return asset;
-    }
-
-    const webviewUri = this.projectLocalResource(webview, asset.path, 'neko-canvas.import-asset');
-    if (!webviewUri) return asset;
-    return {
-      ...asset,
-      originalPath: asset.path,
-      path: webviewUri,
-    };
   }
 
   /**
@@ -3015,9 +2998,17 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
           } | null>('neko.agent.getDndPayload');
 
           if (payload) {
-            await this.postImportAsset({ path: payload.path, type: payload.mediaType });
+            if (!this.headlessAssetImporter) {
+              throw new Error('Canvas headless asset importer is not registered.');
+            }
+            const result = await this.headlessAssetImporter({
+              path: payload.path,
+              type: payload.mediaType,
+              name: payload.name,
+              target: { documentUri: document.uri.toString() },
+            });
             await vscode.commands.executeCommand('neko.agent.clearDndPayload');
-            logger.info(`DnD drop accepted: ${payload.name}`);
+            logger.info(`DnD drop accepted: ${payload.name} -> ${result.nodeId}`);
           }
         } catch (error) {
           logger.warn(`DnD drop failed (agent extension may not be installed): ${error}`);

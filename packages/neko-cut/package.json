@@ -79,8 +79,8 @@
         "category": "NekoCut"
       },
       {
-        "command": "neko.addToTimeline",
-        "title": "%neko.addToTimeline.title%",
+        "command": "neko.cut.authoring.addSourceToTimeline",
+        "title": "%neko.cut.authoring.addSourceToTimeline.title%",
         "category": "NekoCut"
       },
       {
@@ -299,18 +299,18 @@
         "category": "NekoCut"
       },
       {
-        "command": "neko.cut.importGeneratedClip",
-        "title": "%neko.cut.importGeneratedClip.title%",
+        "command": "neko.cut.authoring.importGeneratedClip",
+        "title": "%neko.cut.authoring.importGeneratedClip.title%",
         "category": "NekoCut"
       },
       {
-        "command": "neko.cut.importStoryboard",
-        "title": "%neko.cut.importStoryboard.title%",
+        "command": "neko.cut.authoring.importStoryboard",
+        "title": "%neko.cut.authoring.importStoryboard.title%",
         "category": "NekoCut"
       },
       {
-        "command": "neko.cut.importCanvasDraft",
-        "title": "%neko.cut.importCanvasDraft.title%",
+        "command": "neko.cut.authoring.importCanvasDraft",
+        "title": "%neko.cut.authoring.importCanvasDraft.title%",
         "category": "NekoCut"
       }
     ],

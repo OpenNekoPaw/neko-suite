@@ -64,8 +64,13 @@ describe('MediaImportDispatcher', () => {
       importedAssets: [{ mediaKind: 'model-3d', storageMode: 'disk' }],
     });
     expect(fs.files.get('/repo/.neko/imports/models/hero.glb')).toEqual(new Uint8Array([1, 2, 3]));
-    expect(commands.executeCommand).toHaveBeenCalledWith('neko.model.importAsset', {
+    expect(commands.executeCommand).toHaveBeenCalledWith('neko.model.authoring.importAsset', {
       path: '/repo/.neko/imports/models/hero.glb',
+      target: {
+        kind: 'file',
+        documentUri: 'file:///repo/scenes/shot.nkm',
+        reveal: false,
+      },
     });
   });
 
@@ -159,8 +164,40 @@ describe('MediaImportDispatcher', () => {
       '/repo/.neko/imports/models/hero-123/hero/hero.gltf',
       '/repo/.neko/imports/models/hero-123/hero/textures/albedo.png',
     ]);
-    expect(commands.executeCommand).toHaveBeenCalledWith('neko.model.importAsset', {
+    expect(commands.executeCommand).toHaveBeenCalledWith('neko.model.authoring.importAsset', {
       path: '/repo/.neko/imports/models/hero-123/hero/hero.gltf',
+      target: {
+        kind: 'new',
+        reveal: false,
+      },
+    });
+  });
+
+  it('does not dispatch model imports through the legacy UI-bound command', async () => {
+    const commands = {
+      executeCommand: vi.fn(async (command: string) => {
+        if (command === 'neko.model.importAsset') {
+          throw new Error('legacy model import command called');
+        }
+      }),
+    };
+    const fs = createFs({ '/external/hero.glb': new Uint8Array([1, 2, 3]) });
+    const dispatcher = new MediaImportDispatcher({ fs, commands });
+
+    await expect(
+      dispatcher.importFile({
+        sourcePath: '/external/hero.glb',
+        workspaceFolderPaths: ['/repo'],
+      }),
+    ).resolves.toMatchObject({
+      importedAssets: [{ mediaKind: 'model-3d' }],
+    });
+    expect(commands.executeCommand).toHaveBeenCalledWith('neko.model.authoring.importAsset', {
+      path: '/repo/.neko/imports/models/hero.glb',
+      target: {
+        kind: 'new',
+        reveal: false,
+      },
     });
   });
 

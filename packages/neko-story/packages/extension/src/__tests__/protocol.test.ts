@@ -193,6 +193,12 @@ describe('neko-story protocol', () => {
     it('adapts the headless story capability provider and keeps VSCode-only edit tooling local', () => {
       expect(capabilityProviderSource).toContain('createNekoStoryHeadlessCapabilityProvider');
       expect(capabilityProviderSource).toContain('this.headless.getTools(context)');
+      expect(capabilityProviderSource).toContain(
+        'readonly requirements = { vscode: true, contentAccess: true }',
+      );
+      expect(capabilityProviderSource).not.toContain(
+        'readonly requirements = { vscode: true, activeEditor: true, contentAccess: true }',
+      );
       expect(capabilityProviderSource).toContain('TOOL_NAMES_STORY.STORY_APPLY_SUGGESTION');
       expect(capabilityProviderSource).toContain(
         'requirements: { vscode: true, activeEditor: true }',

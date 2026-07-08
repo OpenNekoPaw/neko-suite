@@ -1,6 +1,7 @@
 import type {
   CanvasNode,
   CanvasStoryboardActionIntentId,
+  CanvasStoryboardNextCreativeState,
   CanvasStoryboardNextCreativeStateSeverity,
   CanvasStoryboardPromptState,
   CanvasStoryboardSemanticPromptDocument,
@@ -8,6 +9,7 @@ import type {
 import {
   isCanvasStoryboardPromptState,
   projectCanvasStoryboardReviewRow,
+  resolveCanvasStoryboardNextCreativeState,
   SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_EXTENSION_KEY,
 } from '@neko/shared';
 
@@ -201,11 +203,20 @@ function projectSceneShotTableRow(
   const imageStrategy =
     readString(shotImagePrepPlan, 'imageStrategy') ?? readString(data, 'imageStrategy');
   const storyboardPromptState = readStoryboardPromptStateForRow(shot.id, data['storyboardPrompt']);
+  const sceneStoryboardPromptState = readStoryboardPromptStateForRow(
+    scene.id,
+    sceneData['storyboardPrompt'],
+  );
   const semanticRow = projectCanvasStoryboardReviewRow({
     nodeId: shot.id,
     sceneNodeId: scene.id,
     data,
   });
+  const nextCreativeState = resolveSceneAwareShotState(
+    storyboardPromptState,
+    sceneStoryboardPromptState,
+    semanticRow.state,
+  );
   const semanticDiagnostics = semanticRow.diagnostics.map((diagnostic) => diagnostic.message);
 
   return {
@@ -220,12 +231,14 @@ function projectSceneShotTableRow(
     videoPromptDocument: storyboardPromptState?.promptBlocks?.videoPromptDocument,
     duration: semanticRow.duration || (duration === undefined ? '' : formatSeconds(duration)),
     dialogue: semanticRow.dialogue,
-    stateId: semanticRow.state.id,
-    state: semanticRow.state.label,
-    stateSeverity: semanticRow.state.severity,
-    stateTarget: semanticRow.state.target,
-    nextActionId: semanticRow.actionId,
-    actionLabel: semanticRow.actionId ? formatStoryboardActionLabel(semanticRow.actionId) : '',
+    stateId: nextCreativeState.id,
+    state: nextCreativeState.label,
+    stateSeverity: nextCreativeState.severity,
+    stateTarget: nextCreativeState.target,
+    nextActionId: nextCreativeState.nextActionId,
+    actionLabel: nextCreativeState.nextActionId
+      ? formatStoryboardActionLabel(nextCreativeState.nextActionId)
+      : '',
     camera: joinDisplayParts([
       readString(data, 'shotScale'),
       readString(data, 'cameraAngle'),
@@ -274,6 +287,30 @@ function projectSceneShotTableRow(
     characterNames,
     diagnosticCount: semanticDiagnostics.length + diagnostics.length,
   };
+}
+
+function resolveSceneAwareShotState(
+  shotState: CanvasStoryboardPromptState | undefined,
+  sceneState: CanvasStoryboardPromptState | undefined,
+  fallback: CanvasStoryboardNextCreativeState,
+): CanvasStoryboardNextCreativeState {
+  const sceneVideoPromptDocument = sceneState?.promptBlocks?.videoPromptDocument;
+  if (!shotState || !sceneVideoPromptDocument || shotState.promptBlocks?.videoPromptDocument) {
+    return fallback;
+  }
+  if (fallback.taskRef || fallback.resultRef || fallback.target === 'result-review') {
+    return fallback;
+  }
+  return resolveCanvasStoryboardNextCreativeState({
+    promptBlocks: {
+      ...(shotState.promptBlocks ?? {}),
+      videoPromptDocument: sceneVideoPromptDocument,
+    },
+    referenceMedia: shotState.referenceMedia,
+    generationParams: shotState.generationParams,
+    executionRefs: shotState.executionRefs,
+    diagnostics: shotState.diagnostics,
+  });
 }
 
 function readStoryboardPromptStateForRow(

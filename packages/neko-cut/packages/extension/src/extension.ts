@@ -81,7 +81,12 @@ export async function activate(
   );
 
   // Register commands
-  registerCommands(context, bootstrapResult.outlineProvider, videoEditorProvider);
+  registerCommands(
+    context,
+    bootstrapResult.outlineProvider,
+    videoEditorProvider,
+    bootstrapResult.cutProjectAuthoringService,
+  );
 
   const dashboardTaskSource = new NekoCutDashboardTaskSource(videoEditorProvider);
   context.subscriptions.push(
@@ -126,7 +131,7 @@ export async function activate(
       reveal: async () => videoEditorProvider.focusActiveEditor(),
       importCanvasDraft: async (payload: CanvasCutDraftPayload) => {
         const result = await vscode.commands.executeCommand<CutCanvasDraftImportResult>(
-          'neko.cut.importCanvasDraft',
+          'neko.cut.authoring.importCanvasDraft',
           payload,
         );
         if (result) {
@@ -137,7 +142,7 @@ export async function activate(
           accepted: false,
           status: 'post-failed',
           ...(projectUri ? { projectUri } : {}),
-          error: 'neko.cut.importCanvasDraft did not return an import result.',
+          error: 'neko.cut.authoring.importCanvasDraft did not return an import result.',
         };
       },
     },

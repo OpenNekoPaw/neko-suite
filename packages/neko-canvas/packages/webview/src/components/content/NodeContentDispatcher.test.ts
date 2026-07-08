@@ -1157,6 +1157,10 @@ describe('NodeContentDispatcher', () => {
       source.indexOf('function resolveSceneTableMinWidth('),
     );
     expect(intentFactorySource).toContain('promptDocuments');
+    expect(intentFactorySource).toContain('readSceneStoryboardPromptState(sceneNode)');
+    expect(intentFactorySource).toContain('listPromptDocumentRefsForAction');
+    expect(intentFactorySource).toContain('sceneState?.promptBlocks?.videoPromptDocument');
+    expect(intentFactorySource).toContain('expectedNextStateId: row.stateId');
     expect(intentFactorySource).toContain('referenceMedia');
     expect(intentFactorySource).toContain('generationParams');
     expect(intentFactorySource).toContain('expectedNextStateId');
@@ -1518,6 +1522,76 @@ describe('NodeContentDispatcher', () => {
     expect(filterSceneShotTableRows(rows, 'has-diagnostics').map((row) => row.id)).toEqual([
       'shot-b',
     ]);
+  });
+
+  it('uses scene-level video prompts for row action state without copying them into shot rows', () => {
+    const scene = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: {
+          sceneTitle: 'Scene Video',
+          sceneNumber: 2,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'scene-video:video:prompt',
+                blockKind: 'video',
+                text: 'Use the source panels as a continuous snowy survival scene.',
+              },
+            },
+          },
+        },
+      }),
+      id: 'scene-video',
+      container: { policy: 'scene', childIds: ['shot-scene-video'] },
+    } as CanvasNode;
+    const shot = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 20, y: 20 },
+        zIndex: 1,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 1,
+          duration: 3,
+          visualDescription: 'Agni walks through snow.',
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            referenceMedia: {
+              imageRefs: [
+                {
+                  refId: 'P4',
+                  role: 'source',
+                  locator: { type: 'workspace-path', path: 'image/moe-015247.jpg' },
+                },
+              ],
+            },
+            generationParams: { duration: 3 },
+            nextCreativeState: {
+              id: 'missing-video-prompt',
+              label: 'Optimize scene video prompt',
+              severity: 'warning',
+              target: 'video-prompt',
+              nextActionId: 'optimize-video-prompt',
+            },
+          },
+        },
+      }),
+      id: 'shot-scene-video',
+      parentId: 'scene-video',
+    } as CanvasNode;
+
+    const rows = projectSceneShotTableRows(scene, [shot]);
+
+    expect(rows[0]?.videoPrompt).toBe('');
+    expect(rows[0]?.videoPromptDocument).toBeUndefined();
+    expect(rows[0]?.state).toBe('Image prompt skipped');
+    expect(rows[0]?.nextActionId).toBe('generate-video');
   });
 
   it('projects storyboard and animation plan fields into scene shot table rows', () => {

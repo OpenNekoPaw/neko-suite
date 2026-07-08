@@ -315,8 +315,7 @@ export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoPro
     }
     document.setProjectData(result.document);
     const model = getService<IEditorRegistry>(IEditorRegistry)?.getEditorByUri(document.uri) as
-      | VideoEditorModel
-      | undefined;
+      VideoEditorModel | undefined;
     model?.applyIncrementalUpdate(result.document);
     webviewPanel?.webview.postMessage({ type: 'saved' });
     logger.info('cut.customDocument.save.done', {
@@ -355,8 +354,7 @@ export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoPro
     const result = loadNkv(text);
     document.setProjectData(result.project);
     const model = getService<IEditorRegistry>(IEditorRegistry)?.getEditorByUri(document.uri) as
-      | VideoEditorModel
-      | undefined;
+      VideoEditorModel | undefined;
     model?.applyIncrementalUpdate(result.project);
     this.activeWebviewPanels
       .get(document.uri.toString())
@@ -891,7 +889,7 @@ export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoPro
               name: string;
             } | null>('neko.agent.getDndPayload');
             if (payload) {
-              await vscode.commands.executeCommand('neko.cut.importGeneratedClip', {
+              await vscode.commands.executeCommand('neko.cut.authoring.importGeneratedClip', {
                 assetPath: payload.path,
               });
               await vscode.commands.executeCommand('neko.agent.clearDndPayload');

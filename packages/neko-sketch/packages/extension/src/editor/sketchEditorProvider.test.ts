@@ -418,39 +418,6 @@ describe('SketchEditorProvider AI context snapshot', () => {
     );
   });
 
-  it('imports an image file asset into the active sketch webview', async () => {
-    const provider = createProvider({});
-    const postMessage = vi.fn(async () => true);
-    mockState.readFile.mockImplementationOnce(async () => Buffer.from('image-bytes'));
-    (provider as unknown as { activeWebviewPanel: unknown }).activeWebviewPanel = {
-      webview: { postMessage },
-    };
-    (provider as unknown as { activeDocument: unknown }).activeDocument = {
-      uri: mockState.MockUri.file('/tmp/doc.nks'),
-    };
-
-    await provider.importFileAsset(
-      mockState.MockUri.file('/tmp/frame.png') as unknown as vscode.Uri,
-      {
-        name: 'Generated Frame',
-      },
-    );
-
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'file:imported',
-      name: 'Generated Frame',
-      data: Buffer.from('image-bytes').toString('base64'),
-      path: '/tmp/frame.png',
-    });
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'project:sourceAdded',
-      result: expect.objectContaining({
-        ok: true,
-        durablePath: 'frame.png',
-      }),
-    });
-  });
-
   it('routes the file picker add-source request through canonical add-source before sketch import', async () => {
     const provider = createProvider({});
     const postMessage = vi.fn(async () => true);
@@ -499,37 +466,6 @@ describe('SketchEditorProvider AI context snapshot', () => {
     });
   });
 
-  it('imports a queued file asset after the next sketch document loads', async () => {
-    const provider = createProvider({});
-    const postMessage = vi.fn(async () => true);
-    mockState.readFile
-      .mockImplementationOnce(async () => Buffer.from('{"layers":[]}'))
-      .mockImplementationOnce(async () => Buffer.from('queued-image'));
-    provider.queueFileImport(mockState.MockUri.file('/tmp/queued.png') as unknown as vscode.Uri, {
-      name: 'Queued',
-    });
-
-    await (
-      provider as unknown as {
-        handleWebviewMessage(
-          message: { type: string; [key: string]: unknown },
-          webviewPanel: unknown,
-          document: unknown,
-        ): Promise<void>;
-      }
-    ).handleWebviewMessage(
-      { type: 'ready' },
-      { webview: { postMessage } },
-      { uri: mockState.MockUri.file('/tmp/doc.nks') },
-    );
-
-    expect(postMessage).toHaveBeenCalledWith({
-      type: 'file:imported',
-      name: 'Queued',
-      data: Buffer.from('queued-image').toString('base64'),
-      path: '/tmp/queued.png',
-    });
-  });
 });
 
 describe('PSD import report formatting', () => {

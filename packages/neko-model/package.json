@@ -89,8 +89,8 @@
         "category": "NekoModel"
       },
       {
-        "command": "neko.model.importAsset",
-        "title": "%neko.model.importAsset.title%",
+        "command": "neko.model.authoring.importAsset",
+        "title": "%neko.model.authoring.importAsset.title%",
         "category": "NekoModel"
       },
       {

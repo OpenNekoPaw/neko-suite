@@ -34,6 +34,10 @@ import type {
   AudioTrimRequestMessage,
 } from '@neko/shared';
 import type { AudioService } from '../services/AudioService';
+import {
+  createAudioStreamRequiredError,
+  diagnosticsFromAudioRuntimeError,
+} from '../services/audioRuntimeDiagnostics';
 import type { AudioOutlineProvider } from '../views/audioOutlineProvider';
 import type { AudioStatusBar } from '../views/audioStatusBar';
 import { getWebviewHtml } from '../utils/html';
@@ -197,6 +201,7 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
         documentUri: document.uri.toString(),
         success: false,
         error: message,
+        diagnostics: diagnosticsFromAudioRuntimeError(error),
       });
     };
 
@@ -264,7 +269,13 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
             });
             break;
           case 'seek':
-            if (typeof request.time === 'number' && activeStreamId) {
+            if (!activeStreamId) {
+              throw createAudioStreamRequiredError(
+                'audio-file.playback.seek',
+                'Cannot seek because no audio stream is active.',
+              );
+            }
+            if (typeof request.time === 'number') {
               await this._audioService?.seekStream(activeStreamId, request.time);
             }
             await webviewPanel.webview.postMessage({
@@ -276,7 +287,13 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
             });
             break;
           case 'setSpeed':
-            if (typeof request.speed === 'number' && activeStreamId) {
+            if (!activeStreamId) {
+              throw createAudioStreamRequiredError(
+                'audio-file.playback.setSpeed',
+                'Cannot set playback speed because no audio stream is active.',
+              );
+            }
+            if (typeof request.speed === 'number') {
               await this._audioService?.setStreamSpeed(activeStreamId, request.speed);
             }
             await webviewPanel.webview.postMessage({
@@ -288,15 +305,19 @@ export class AudioEditorProvider implements vscode.CustomReadonlyEditorProvider<
             });
             break;
           case 'setLoop':
-            if (activeStreamId) {
-              const region =
-                request.loop &&
-                typeof request.startTime === 'number' &&
-                typeof request.time === 'number'
-                  ? { inPoint: request.startTime, outPoint: request.time }
-                  : null;
-              await this._audioService?.setStreamLoop(activeStreamId, region);
+            if (!activeStreamId) {
+              throw createAudioStreamRequiredError(
+                'audio-file.playback.setLoop',
+                'Cannot set playback loop because no audio stream is active.',
+              );
             }
+            const region =
+              request.loop &&
+              typeof request.startTime === 'number' &&
+              typeof request.time === 'number'
+                ? { inPoint: request.startTime, outPoint: request.time }
+                : null;
+            await this._audioService?.setStreamLoop(activeStreamId, region);
             await webviewPanel.webview.postMessage({
               type: 'audio:playbackResult',
               requestId: request.requestId,

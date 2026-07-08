@@ -19,13 +19,14 @@
 - **核心功能**：富文本编辑、分组管理、连接标签、图层面板、画板导出（PNG/SVG）、原地粘贴、分镜候选审阅、场景容器排序、输入引用节点投放
 - **布局**：Webview 使用 Creative Workbench Shell：左侧 CanvasToolbar 承接 Pan/Add/Import/Undo/Redo 等全局画布工具，底部显隐组承接 HUD（MiniMap/ZoomControls）与右侧 NodeLibrary 显隐；FloatingPanelHost、PlaybackControllerHost、GenerationPromptPanel、ContentOverlay 保留为主面板控件或 overlay；NodeLibrary 作为右侧创建面板。
 - **状态显示**：subsystem summary 与 projection state 由 Extension 侧 CanvasStatusBar 显示，Webview 不再在无限画布左下角渲染状态徽章。
-- **已落地 AI / 编排能力**：GenerationPromptPanel、BatchGenerationScheduler、ScriptNode TOC、Document/Model/CanvasEmbed 引用、`NekoCanvasAPI.storyboard.import()` 内部 API、Canvas Markdown ingest lifecycle capability（`canvas.ingestMarkdown`，分镜为内置 creative table profile）、`NekoCanvasAPI.storyboard.getExecutionSummary()` 只读执行摘要
+- **已落地 AI / 编排能力**：GenerationPromptPanel、BatchGenerationScheduler、ScriptNode TOC、Document/Model/CanvasEmbed 引用、`CanvasProjectAuthoringService` 无 UI `.nkc` 写入路径、`NekoCanvasAPI.importAsset()` 无 UI media 节点导入、`NekoCanvasAPI.storyboard.import()` 内部 API、Canvas Markdown lifecycle capability（`canvas.ingestMarkdown` review-only、`canvas.createStoryboardFromMarkdown` 生产 scene/shot 创建）、`NekoCanvasAPI.storyboard.getExecutionSummary()` 只读执行摘要
 
 ## Architecture
 
 ```
 Extension Host
-  ├── CanvasEditorProvider  → CustomEditorProvider（.nkc 文件）
+  ├── CanvasProjectAuthoringService → 无 UI 创建/修改 .nkc 生产事实
+  ├── CanvasEditorProvider  → CustomEditorProvider（Webview 交互投影）
   └── AssetLibrary 视图
 
 Webview (React + Vite)
@@ -74,6 +75,8 @@ Webview 端通过 `canvasOperationStore` 作为运行时桥接层生成 `EditOpe
 | 工具栏文件选择器 | ✅ | `pickMedia` / `pickFile` 生成 `ProjectSourceAddRequest` 后再创建节点 |
 | 引用节点选择器 | ✅ | `pickScriptDocument` / `pickReferenceDocument` / `pickModelReference` / `pickCanvasDocument` |
 | 文档类型（ScriptNode 等）| ✅ | Explorer 拖入或工具栏选择均可创建 `ScriptNode` / `DocumentNode` / `ModelNode` / `CanvasEmbedNode` |
+
+外部 `neko.canvas.importAsset` / `NekoCanvasAPI.importAsset()` 不再要求 Canvas Webview 已打开；它通过 `CanvasProjectAuthoringService` 创建 media 节点，只持久化 `${VAR}/path`、workspace-relative path、`ResourceRef` 或 `DocumentArchiveResourceRef`。Webview URI、blob、cache path 和 temp path 不能作为 `.nkc` 身份写入。
 
 ### 分镜系统（现状）
 

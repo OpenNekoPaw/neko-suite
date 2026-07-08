@@ -32,6 +32,10 @@ export interface ProjectSessionInfo {
 export interface IProjectSessionService {
   load(filePath: string): Promise<void>;
   create(options?: { name?: string; width?: number; height?: number; fps?: number }): Promise<void>;
+  createFile(
+    filePath: string,
+    options?: { name?: string; width?: number; height?: number; fps?: number },
+  ): Promise<void>;
   isLoaded(): boolean;
   getInfo(): ProjectSessionInfo | null;
   getProjectData(): ProjectData | null;
@@ -100,18 +104,34 @@ export class ProjectSessionService implements IProjectSessionService {
     height?: number;
     fps?: number;
   }): Promise<void> {
-    const project = createDefaultProject(options?.name ?? 'Untitled Project');
-    if (options?.width && options?.height) {
-      project.resolution = { width: options.width, height: options.height };
-    }
-    if (options?.fps) {
-      project.fps = options.fps;
-    }
+    const project = createProjectData(options);
 
     this.session = {
       info: { loaded: true, source: 'memory' },
       project,
     };
+  }
+
+  async createFile(
+    filePath: string,
+    options?: {
+      name?: string;
+      width?: number;
+      height?: number;
+      fps?: number;
+    },
+  ): Promise<void> {
+    if (!filePath || typeof filePath !== 'string') {
+      throw new Error('Project path is required');
+    }
+
+    const normalizedPath = path.resolve(filePath);
+    const project = createProjectData(options);
+    this.session = {
+      info: { loaded: true, path: normalizedPath, source: 'file' },
+      project,
+    };
+    await this.updateProjectData(project);
   }
 
   isLoaded(): boolean {
@@ -154,6 +174,22 @@ export class ProjectSessionService implements IProjectSessionService {
   dispose(): void {
     this.clear();
   }
+}
+
+function createProjectData(options?: {
+  name?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+}): ProjectData {
+  const project = createDefaultProject(options?.name ?? 'Untitled Project');
+  if (options?.width && options?.height) {
+    project.resolution = { width: options.width, height: options.height };
+  }
+  if (options?.fps) {
+    project.fps = options.fps;
+  }
+  return project;
 }
 
 function createNodeProjectFileOps(): ProjectFileOps {

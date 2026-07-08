@@ -25,6 +25,7 @@ import type {
   CanvasUpdateBlockRequest,
   ProjectedCanvasStatus,
   ProjectionSourceChangeEvent,
+  CanvasHostAppliedDocumentMessage,
 } from '@neko/shared';
 import {
   isCanvasNodeType,
@@ -35,10 +36,6 @@ import {
 import { setLocale } from '../i18n';
 import { useCanvasStore } from '../stores/canvasStore';
 import { useCanvasOperationStore } from '../stores/canvasOperationStore';
-import {
-  normalizeImportedGeneratedAsset,
-  type ImportedGeneratedAssetPayload,
-} from '../utils/importedGeneratedAsset';
 import { normalizeScriptScenes } from '../utils/scriptScenes';
 import { isEditorLevelKeyboardAction } from './keyboardActionPolicy';
 
@@ -69,7 +66,6 @@ export interface UseVSCodeMessagesOptions {
     readonly routeId?: string;
     readonly currentUnitId?: string;
   }) => void;
-  onImportGeneratedAsset?: (asset: ImportedGeneratedAssetPayload) => void;
   /** Called when generation status/image arrives from the extension scheduler */
   onGenerationProgress?: (payload: GenerationProgressPayload) => void;
   /** Called with the AI-built prompt string for AutoPrompt */
@@ -188,7 +184,6 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     defaultCanvasData,
     setCanvasData,
     onRevealPlaybackWorkspace,
-    onImportGeneratedAsset,
     onGenerationProgress,
     onBuildPromptResult,
     onScriptIndexResult,
@@ -223,8 +218,6 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   // Stable refs for callbacks to avoid re-registering listener
   const onRevealPlaybackWorkspaceRef = useRef(onRevealPlaybackWorkspace);
   onRevealPlaybackWorkspaceRef.current = onRevealPlaybackWorkspace;
-  const onImportGeneratedAssetRef = useRef(onImportGeneratedAsset);
-  onImportGeneratedAssetRef.current = onImportGeneratedAsset;
   const onGenerationProgressRef = useRef(onGenerationProgress);
   onGenerationProgressRef.current = onGenerationProgress;
   const onBuildPromptResultRef = useRef(onBuildPromptResult);
@@ -313,6 +306,14 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
             vscode.postMessage({ type: 'canvasDataReady' });
             break;
           }
+          case 'canvas.hostAppliedDocument': {
+            const hostMessage = message as CanvasHostAppliedDocumentMessage;
+            setCanvasData(hostMessage.data);
+            onCanvasDataLoadedRef.current?.(hostMessage.data);
+            setIsReady(true);
+            vscode.postMessage({ type: 'canvasDataReady' });
+            break;
+          }
           case 'keyboardAction':
             if (isKeyboardFocusedRefRef.current?.current === false) {
               break;
@@ -337,13 +338,6 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
           case 'saved':
             onSavedRef.current?.();
             break;
-          case 'importGeneratedAsset': {
-            const asset = normalizeImportedGeneratedAsset(message.asset);
-            if (asset) {
-              onImportGeneratedAssetRef.current?.(asset);
-            }
-            break;
-          }
           case 'generationProgress':
             onGenerationProgressRef.current?.({
               nodeId: message.nodeId as string,

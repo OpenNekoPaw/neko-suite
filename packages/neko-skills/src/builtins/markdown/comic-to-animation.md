@@ -27,6 +27,9 @@ This is not a hardcoded pipeline. Choose the smallest next skill or lifecycle ca
 
 - Markdown creative tables are reviewable authoring artifacts. Canvas ingest, generation, Cut, export, and execution handoff should go through lifecycle capabilities or focused domain tools.
 - For Canvas review of Markdown tables, use the Canvas lifecycle tool/capability exposed in the runtime tool list with the original Markdown and stable resources when appropriate.
+- When sending generated media or storyboard data into Cut, Sketch, Model, or other project files, prefer canonical `neko.<domain>.authoring.*` capabilities/commands and pass `target`, `reveal`, stable source/ref data, and provenance. Do not call old UI-bound import commands as durable write paths.
+- Playback, selection, viewport, camera, focused editor state, and live preview are interactive-editor operations. If the required editor/runtime is missing, return diagnostics instead of opening a hidden Webview and claiming a write succeeded.
+- If an authoring capability returns `ok:false` or diagnostics, report the failure reason to the user; command completion alone is not Canvas/Cut/Sketch/Model delivery.
 - Do not output domain node JSON, project-internal handoff objects, Webview URIs, blob URLs, localhost URLs, provider-temporary handles, cache paths, temp paths, or absolute private paths.
 - Use actual tool-result, generated-asset, Canvas node, or workspace-safe refs for media. Do not invent ids.
 - Keep storyboard, animation plan, image-prep plan, entity evidence, generated media refs, and execution summaries separate but cross-referenceable through stable shot/source ids.

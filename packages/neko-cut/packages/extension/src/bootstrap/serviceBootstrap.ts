@@ -20,6 +20,11 @@ import {
   IConnectionStateManager,
 } from '../services/connectionStateManager';
 import { IProjectSessionService, ProjectSessionService } from '../services/ProjectSessionService';
+import {
+  CutProjectAuthoringService,
+  ICutProjectAuthoringService,
+} from '../services/CutProjectAuthoringService';
+import { addCutProjectSource } from '../editor/video/cutProjectSourceIngest';
 import { IAssetService, AssetService } from '../services/AssetService';
 import { MarketShaderService } from '../services/MarketShaderService';
 
@@ -42,6 +47,7 @@ export interface IServiceBootstrapResult {
   statusBar: StatusBar;
   outlineProvider: VideoProjectOutlineProvider;
   connectionStateManager: ConnectionStateManager;
+  cutProjectAuthoringService: CutProjectAuthoringService;
   assetService: AssetService;
   marketShaderService: MarketShaderService;
 }
@@ -76,6 +82,12 @@ export async function bootstrapCoreServices(
   // ==========================================================================
   const projectSessionService = new ProjectSessionService();
   services.set(IProjectSessionService, projectSessionService);
+
+  const cutProjectAuthoringService = new CutProjectAuthoringService(projectSessionService, {
+    ingestSource: (documentUri, request) =>
+      addCutProjectSource(vscode.Uri.parse(documentUri), request),
+  });
+  services.set(ICutProjectAuthoringService, cutProjectAuthoringService);
 
   // ==========================================================================
   // 4. 状态栏服务
@@ -118,6 +130,7 @@ export async function bootstrapCoreServices(
     statusBar,
     outlineProvider,
     connectionStateManager,
+    cutProjectAuthoringService,
     assetService,
     marketShaderService,
   };

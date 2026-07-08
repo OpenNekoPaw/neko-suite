@@ -41,6 +41,10 @@ Extension Host（Node.js）
   └── SketchEditorProvider（CustomEditorProvider .nks）
 ```
 
+### Headless Authoring Boundary
+
+Host-originated durable `.nks` writes use `SketchProjectAuthoringService` and `neko.sketch.authoring.importImageSource`. The command adapter resolves explicit, active, or create-new project targets before invoking the service; it does not use `neko.sketch.importAsset`, queued Webview import, or `.neko/temp` projects. Brush strokes, selection masks, canvas snapshots, focused tool changes, and Webview save/save-as snapshots remain interactive editor behavior.
+
 ## 工具栏
 
 | 工具 | 快捷键 | 功能 |

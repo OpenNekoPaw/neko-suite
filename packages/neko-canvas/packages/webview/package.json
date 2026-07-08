@@ -6,7 +6,8 @@
   "type": "module",
   "main": "dist/index.js",
   "exports": {
-    "./host-adapter": "./src/host-adapter/index.tsx"
+    "./host-adapter": "./src/host-adapter/index.tsx",
+    "./workbench-adapter": "./src/workbench-adapter.ts"
   },
   "scripts": {
     "dev": "vite",
@@ -19,6 +20,7 @@
     "@neko/neko-client": "workspace:*",
     "@neko/shared": "workspace:*",
     "@neko/ui": "workspace:*",
+    "@neko/workbench-core": "workspace:*",
     "clsx": "^2.1.1",
     "html-to-image": "^1.11.13",
     "react": "^18.2.0",

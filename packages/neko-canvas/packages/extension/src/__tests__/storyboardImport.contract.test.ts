@@ -10,7 +10,7 @@ describe('canvas storyboard import contracts', () => {
   it('exports a storyboard import API on NekoCanvasAPI implementation', () => {
     expect(extensionSource).toContain('storyboard: {');
     expect(extensionSource).toContain(
-      'const created = await importStoryboardToCanvas(api, payload, options);',
+      'const created = await importStoryboardToCanvas(payload, options);',
     );
     expect(extensionSource).toContain('return created;');
   });
@@ -25,30 +25,36 @@ describe('canvas storyboard import contracts', () => {
     );
   });
 
-  it('opens or creates a canvas before importing storyboard payloads', () => {
-    expect(extensionSource).toContain('await ensureCanvasEditorForStoryboardImport(payload);');
-    expect(extensionSource).toContain('waitForActiveCanvasEditorReady');
-    expect(extensionSource).toContain('canvasEditorProvider.hasActiveCanvasEditorReady()');
-    expect(extensionSource).toContain('vscode.openWith');
-    expect(extensionSource).toContain('CanvasEditorProvider.viewType');
+  it('imports storyboard payloads through headless Canvas project authoring', () => {
+    expect(extensionSource).toContain('new CanvasProjectAuthoringService');
+    expect(extensionSource).toContain('canvasProjectAuthoringService.createStoryboardFromPayload');
+    expect(extensionSource).not.toContain('await ensureCanvasEditorForStoryboardImport(payload);');
   });
 
-  it('opens or creates a canvas before importing generated assets', () => {
-    expect(extensionSource).toContain('await ensureCanvasEditorForAssetImport(asset);');
-    expect(extensionSource).toContain(
-      'const accepted = await canvasEditorProvider.postImportAsset(asset);',
-    );
+  it('imports generated assets through headless Canvas project authoring', () => {
+    expect(extensionSource).toContain('canvasProjectAuthoringService.importAsset({ asset })');
+    expect(extensionSource).not.toContain('ensureCanvasEditorForAssetImport');
+    expect(extensionSource).not.toContain('canvasEditorProvider.postImportAsset');
+    expect(providerSource).toContain('setHeadlessAssetImporter');
+    expect(providerSource).not.toContain("type: 'importGeneratedAsset'");
   });
 
-  it('opens or creates a canvas before Markdown capabilities create nodes', () => {
-    expect(extensionSource).toContain('await ensureCanvasEditorForMarkdownMutation(input);');
-    expect(extensionSource).toContain('async function ensureCanvasEditorForMarkdownMutation');
-    expect(extensionSource).toContain('function isCanvasMarkdownCreationMutation');
-    expect(extensionSource).toContain("input.capabilityId === 'canvas.createStoryboardFromMarkdown'");
-    expect(extensionSource).toContain("input.capabilityId === 'canvas.ingestMarkdown'");
-    expect(extensionSource).toContain("input.capabilityId === 'canvas.createMarkdownNote'");
-    expect(extensionSource).toContain("input.capabilityId === 'canvas.createTableFromMarkdown'");
-    expect(extensionSource).not.toContain("input.capabilityId === 'canvas.validateMarkdownStoryboard'");
+  it('routes Markdown authoring through the headless Canvas project service', () => {
+    expect(extensionSource).toContain('canvasProjectAuthoringService.applyAgentContent');
+    expect(extensionSource).toContain('canvasProjectAuthoringService.createNode');
+    expect(extensionSource).toContain('canvasProjectAuthoringService.createStoryboardFromPayload');
+    expect(extensionSource).not.toContain('ensureCanvasEditorForMarkdownMutation');
+    expect(extensionSource).not.toContain('isCanvasMarkdownCreationMutation');
+  });
+
+  it('does not reveal an arbitrary background canvas for imports or markdown mutations', () => {
+    expect(extensionSource).not.toContain('revealAnyCanvasEditor');
+    expect(providerSource).not.toContain('revealAnyCanvasEditor');
+  });
+
+  it('notifies open Canvas Webviews with a typed host-applied document message', () => {
+    expect(providerSource).toContain("type: 'canvas.hostAppliedDocument'");
+    expect(providerSource).toContain("reason: 'headless-authoring'");
   });
 
   it('allows linked resource asset imports without a runtime path', () => {
@@ -69,7 +75,8 @@ describe('canvas storyboard import contracts', () => {
     );
     const importBody = extensionSource.slice(importStart, importEnd);
 
-    expect(importBody).toContain('return applyStoryboardPayloadToCanvas(api, payload, options);');
+    expect(importBody).toContain('canvasProjectAuthoringService.createStoryboardFromPayload');
+    expect(importBody).toContain('return result.storyboard;');
     expect(importBody).not.toContain("type: 'entity'");
     expect(importBody).not.toContain("type: 'representation-slot'");
     expect(importBody).not.toContain("type: 'occurrence'");

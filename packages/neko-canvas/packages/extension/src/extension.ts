@@ -7,7 +7,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import {
-  applyStoryboardPayloadToCanvas,
   type CanvasCreativeScope,
   getPanoramicPreviewRoute,
   type ApplyCanvasStoryboardOptions,
@@ -43,17 +42,16 @@ import {
   readNarrativePreviewFeatureToggles,
 } from './editor/narrativePreviewFeatureGate';
 import { CanvasCreativeAiApplyAdapter } from './creativeAiCanvasAdapter';
+import { CanvasProjectAuthoringService } from './services/canvasProjectAuthoringService';
 
 // Extension state
 let canvasEditorProvider: CanvasEditorProvider;
 let canvasOutlineProvider: CanvasOutlineProvider;
 let canvasStatusBar: CanvasStatusBar;
+let canvasProjectAuthoringService: CanvasProjectAuthoringService;
 
 /** Cached assets API reference (resolved once, reused across calls). */
 let assetsAPI: NekoAssetsAPI | undefined;
-
-const CANVAS_EDITOR_READY_TIMEOUT_MS = 5000;
-const CANVAS_EDITOR_READY_POLL_MS = 50;
 
 function parseCanvasDocumentUri(documentUri: string | undefined): vscode.Uri | undefined {
   return documentUri ? vscode.Uri.parse(documentUri) : undefined;
@@ -178,6 +176,14 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
     undefined,
     getNarrativePreviewFeatureToggles,
   );
+  canvasProjectAuthoringService = new CanvasProjectAuthoringService({
+    context,
+    canvasEditorProvider,
+    logger,
+  });
+  canvasEditorProvider.setHeadlessAssetImporter((asset) =>
+    canvasProjectAuthoringService.importAsset({ asset }),
+  );
   const creativeAiApplyAdapter = new CanvasCreativeAiApplyAdapter({
     getNode: (nodeId) => canvasEditorProvider.getNode(nodeId),
     updateNode: (nodeId, data) => canvasEditorProvider.updateNode(nodeId, data),
@@ -265,7 +271,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
         return entity ? mapAssetEntityToCanvasAsset(entity) : null;
       },
     },
-    importAsset: (asset) => canvasEditorProvider.postImportAsset(asset),
+    importAsset: (asset) => canvasProjectAuthoringService.importAsset({ asset }),
     canvas: {
       create: (config) => createCanvas(config),
       addShape: (canvasId, shape) => canvasEditorProvider.addShape(shape),
@@ -275,7 +281,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
     },
     storyboard: {
       import: async (payload, options) => {
-        const created = await importStoryboardToCanvas(api, payload, options);
+        const created = await importStoryboardToCanvas(payload, options);
         canvasEditorProvider.reportStoryboardImport(payload, created);
         return created;
       },
@@ -283,13 +289,44 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
     },
     markdown: {
       invoke: async (input) => {
-        await ensureCanvasEditorForMarkdownMutation(input);
         return invokeCanvasMarkdownCapability(input, {
-          applyAgentContent: (payload) => canvasEditorProvider.applyAgentContent(payload),
+          applyAgentContent: (payload) =>
+            canvasProjectAuthoringService.applyAgentContent({
+              payload,
+              fallbackTitle: createMarkdownCanvasName(input),
+            }),
           createNode: (type, position, data, preset) =>
-            canvasEditorProvider.createNode(type, position, data, preset),
+            canvasProjectAuthoringService
+              .createNode({
+                node: { type, position, data, preset },
+                fallbackTitle: createMarkdownCanvasName(input),
+              })
+              .then((result) => result.nodeId),
           updateNode: (nodeId, data) => canvasEditorProvider.updateNode(nodeId, data),
-          createComposite: (request) => canvasEditorProvider.createComposite(request),
+          createComposite: (request) =>
+            canvasProjectAuthoringService.createComposite({
+              request,
+              fallbackTitle: createCompositeCanvasName(request, createMarkdownCanvasName(input)),
+            }),
+          createStoryboard: (payload, options) =>
+            canvasProjectAuthoringService
+              .createStoryboardFromPayload({
+                target: {
+                  title: createStoryboardCanvasName(payload),
+                },
+                payload,
+                startX: options?.startX,
+                startY: options?.startY,
+                workflowPlanId: options?.workflowPlanId,
+              })
+              .then((result) => {
+                if (!result.storyboard) {
+                  throw new Error(
+                    'Headless storyboard Markdown creation did not return storyboard results.',
+                  );
+                }
+                return { ...result.storyboard, documentUri: result.documentUri };
+              }),
         });
       },
     },
@@ -305,15 +342,21 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       list: (type) => canvasEditorProvider.listNodes(type),
       get: (nodeId) => canvasEditorProvider.getNode(nodeId),
       update: (nodeId, data) => canvasEditorProvider.updateNode(nodeId, data),
-      create: (type, position, data, preset) =>
-        canvasEditorProvider.createNode(type, position, data, preset),
+      create: async (type, position, data, preset) => {
+        const result = await canvasProjectAuthoringService.createNode({
+          node: { type, position, data: data as Record<string, unknown>, preset },
+        });
+        return result.nodeId;
+      },
       derive: (request) => canvasEditorProvider.deriveNode(request),
-      createConnection: (request) => canvasEditorProvider.createConnection(request),
-      createComposite: (request) => canvasEditorProvider.createComposite(request),
-      updateBlock: (request) => canvasEditorProvider.updateBlock(request),
+      createConnection: (request) =>
+        canvasProjectAuthoringService.createConnection({ connection: request }),
+      createComposite: (request) =>
+        canvasProjectAuthoringService.createComposite({ request }),
+      updateBlock: (request) => canvasProjectAuthoringService.updateBlock({ request }),
       extractStructuredContent: (request) => canvasEditorProvider.extractStructuredContent(request),
       getActiveContext: (request) => canvasEditorProvider.getActiveContext(request),
-      applyAgentContent: (payload) => canvasEditorProvider.applyAgentContent(payload),
+      applyAgentContent: (payload) => canvasProjectAuthoringService.applyAgentContent({ payload }),
       generateImage: (nodeId, childNodeId) =>
         canvasEditorProvider.generateImageForNode(nodeId, childNodeId),
       generateBatch: (nodeIds) => canvasEditorProvider.generateBatchForNodes(nodeIds),
@@ -544,19 +587,15 @@ function registerCommands(
           return;
         }
 
-        await ensureCanvasEditorForAssetImport(asset);
+        const result = await canvasProjectAuthoringService.importAsset({ asset });
 
-        // Forward to the active canvas editor via a public method
-        const accepted = await canvasEditorProvider.postImportAsset(asset);
-        if (!accepted) {
-          vscode.window.showInformationMessage(
-            'Open a canvas file (.nkc) first, then try "Send to Canvas" again.',
-          );
-          return;
-        }
-
+        const source =
+          asset.path ??
+          asset.resourceRef?.id ??
+          asset.documentResourceRef?.entryPath ??
+          'linked-resource';
         getRootLogger().info(
-          `importAsset: received ${asset.path ?? asset.resourceRef?.id ?? asset.documentResourceRef?.entryPath ?? 'linked-resource'} (${asset.type ?? 'unknown'})`,
+          `importAsset: created media node ${result.nodeId} in ${result.documentUri} from ${source} (${result.mediaType})`,
         );
       },
     ),
@@ -765,105 +804,22 @@ function registerCommands(
 }
 
 async function importStoryboardToCanvas(
-  api: NekoCanvasAPI,
   payload: CanvasStoryboardPayload,
   options?: ApplyCanvasStoryboardOptions,
 ): Promise<CreatedCanvasStoryboard> {
-  await ensureCanvasEditorForStoryboardImport(payload);
-  return applyStoryboardPayloadToCanvas(api, payload, options);
-}
-
-async function ensureCanvasEditorForStoryboardImport(
-  payload: CanvasStoryboardPayload,
-): Promise<void> {
-  if (canvasEditorProvider.hasActiveCanvasEditorReady()) {
-    return;
-  }
-  if (canvasEditorProvider.revealAnyCanvasEditor()) {
-    await waitForActiveCanvasEditorReady();
-    return;
-  }
-
-  const title = createStoryboardCanvasName(payload);
-  const canvasFile = await createCanvas({
-    name: title,
-    width: 1600,
-    height: 1000,
-    creativeScope: inferStoryboardCanvasCreativeScope(payload),
-    relatedBoards: payload.relatedBoards,
+  const result = await canvasProjectAuthoringService.createStoryboardFromPayload({
+    target: {
+      title: createStoryboardCanvasName(payload),
+    },
+    payload,
+    startX: options?.startX,
+    startY: options?.startY,
+    workflowPlanId: options?.workflowPlanId,
   });
-  await vscode.commands.executeCommand(
-    'vscode.openWith',
-    vscode.Uri.file(canvasFile),
-    CanvasEditorProvider.viewType,
-  );
-  await waitForActiveCanvasEditorReady();
-}
-
-async function ensureCanvasEditorForAssetImport(asset: {
-  readonly path?: string;
-  readonly name?: string;
-}): Promise<void> {
-  if (canvasEditorProvider.hasActiveCanvasEditorReady()) {
-    return;
+  if (!result.storyboard) {
+    throw new Error('Headless storyboard import did not return created scene/shot results.');
   }
-  if (canvasEditorProvider.revealAnyCanvasEditor()) {
-    await waitForActiveCanvasEditorReady();
-    return;
-  }
-
-  const title = createAssetCanvasName(asset);
-  const canvasFile = await createCanvas({
-    name: title,
-    width: 1200,
-    height: 800,
-  });
-  await vscode.commands.executeCommand(
-    'vscode.openWith',
-    vscode.Uri.file(canvasFile),
-    CanvasEditorProvider.viewType,
-  );
-  await waitForActiveCanvasEditorReady();
-}
-
-async function ensureCanvasEditorForMarkdownMutation(
-  input: CanvasMarkdownCapabilityInput,
-): Promise<void> {
-  if (!isCanvasMarkdownCreationMutation(input)) {
-    return;
-  }
-  if (canvasEditorProvider.hasActiveCanvasEditorReady()) {
-    return;
-  }
-  if (canvasEditorProvider.revealAnyCanvasEditor()) {
-    await waitForActiveCanvasEditorReady();
-    return;
-  }
-
-  const title = createMarkdownCanvasName(input);
-  const canvasFile = await createCanvas({
-    name: title,
-    width: isStoryboardMarkdownInput(input) ? 1600 : 1200,
-    height: isStoryboardMarkdownInput(input) ? 1000 : 800,
-    ...(isStoryboardMarkdownInput(input)
-      ? { creativeScope: { kind: 'sequence', title } }
-      : {}),
-  });
-  await vscode.commands.executeCommand(
-    'vscode.openWith',
-    vscode.Uri.file(canvasFile),
-    CanvasEditorProvider.viewType,
-  );
-  await waitForActiveCanvasEditorReady();
-}
-
-function isCanvasMarkdownCreationMutation(input: CanvasMarkdownCapabilityInput): boolean {
-  return (
-    input.capabilityId === 'canvas.ingestMarkdown' ||
-    input.capabilityId === 'canvas.createMarkdownNote' ||
-    input.capabilityId === 'canvas.createTableFromMarkdown' ||
-    input.capabilityId === 'canvas.createStoryboardFromMarkdown'
-  );
+  return result.storyboard;
 }
 
 function isStoryboardMarkdownInput(input: CanvasMarkdownCapabilityInput): boolean {
@@ -871,17 +827,6 @@ function isStoryboardMarkdownInput(input: CanvasMarkdownCapabilityInput): boolea
     input.capabilityId === 'canvas.createStoryboardFromMarkdown' ||
     ('profileHint' in input && input.profileHint?.toLowerCase() === 'storyboard')
   );
-}
-
-async function waitForActiveCanvasEditorReady(): Promise<void> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < CANVAS_EDITOR_READY_TIMEOUT_MS) {
-    if (canvasEditorProvider.hasActiveCanvasEditorReady()) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, CANVAS_EDITOR_READY_POLL_MS));
-  }
-  throw new Error('Canvas editor did not become ready before import.');
 }
 
 function createStoryboardCanvasName(payload: CanvasStoryboardPayload): string {
@@ -899,45 +844,6 @@ function createStoryboardCanvasName(payload: CanvasStoryboardPayload): string {
   return sanitizeCanvasFileName(sourceTitle).slice(0, 80) || 'Agent Storyboard';
 }
 
-function inferStoryboardCanvasCreativeScope(
-  payload: CanvasStoryboardPayload,
-): CanvasCreativeScope | undefined {
-  if (payload.creativeScope) return payload.creativeScope;
-  const sceneIds = payload.scenes.map((scene) => scene.sceneId);
-  const shotIds = payload.scenes.flatMap((scene) =>
-    scene.shotPlans.map((shot) => `${scene.sceneId}-shot-${shot.shotNumber}`),
-  );
-  if (payload.scenes.length === 1) {
-    const scene = payload.scenes[0];
-    return scene
-      ? {
-          kind: 'scene',
-          workId: scene.sceneId,
-          title: scene.sceneTitle,
-          sceneIds: [scene.sceneId],
-          shotIds,
-          sourceStoryboardRef: payload.sourceScriptUri,
-        }
-      : undefined;
-  }
-  if (payload.scenes.length > 1) {
-    return {
-      kind: 'sequence',
-      workId: payload.sourceScriptUri,
-      title: createStoryboardCanvasName({ ...payload, creativeScope: undefined }),
-      sceneIds,
-      shotIds,
-      sourceStoryboardRef: payload.sourceScriptUri,
-    };
-  }
-  return undefined;
-}
-
-function createAssetCanvasName(asset: { readonly path?: string; readonly name?: string }): string {
-  const sourceTitle = asset.name?.trim() || (asset.path ? path.parse(asset.path).name : '');
-  return sanitizeCanvasFileName(sourceTitle).slice(0, 80) || 'Agent Canvas';
-}
-
 function createMarkdownCanvasName(input: CanvasMarkdownCapabilityInput): string {
   const tableTitle =
     input.capabilityId === 'canvas.createTableFromMarkdown' ? input.tableTitle?.trim() : '';
@@ -948,6 +854,23 @@ function createMarkdownCanvasName(input: CanvasMarkdownCapabilityInput): string 
     0,
     80,
   );
+}
+
+function createCompositeCanvasName(
+  request: { readonly data?: Readonly<Record<string, unknown>> },
+  fallback: string,
+): string {
+  const data = request.data ?? {};
+  const title =
+    asTrimmedString(data['sceneTitle']) ??
+    asTrimmedString(data['label']) ??
+    asTrimmedString(data['title']) ??
+    fallback;
+  return sanitizeCanvasFileName(title).slice(0, 80) || fallback;
+}
+
+function asTrimmedString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function sanitizeCanvasFileName(value: string): string {

@@ -11,7 +11,7 @@
   "neko.sketch.undo.title": "撤销",
   "neko.sketch.redo.title": "重做",
   "neko.sketch.import.title": "导入图片",
-  "neko.sketch.importAsset.title": "导入资产",
+  "neko.sketch.authoring.importImageSource.title": "导入图片来源到素描项目",
   "neko.sketch.export.title": "导出...",
   "neko.sketch.selectLayerFromOutline.title": "选择图层",
   "neko.sketch.resetZoom.title": "重置缩放",

@@ -1,5 +1,13 @@
 import * as vscode from 'vscode';
-import type { EnvironmentPlacement, ILogger, NekoModelAPI, NkmSceneProfile } from '@neko/shared';
+import {
+  createNekoProjectAuthoringDiagnostic,
+  createNekoProjectAuthoringResult,
+  type EnvironmentPlacement,
+  type ILogger,
+  type NekoModelAPI,
+  type NekoProjectAuthoringTarget,
+  type NkmSceneProfile,
+} from '@neko/shared';
 import {
   createNewFile,
   createVSCodeLogger,
@@ -13,13 +21,12 @@ import { ModelStatusBar } from './editor/ModelStatusBar';
 import { createNekoModelCapabilityProvider } from './agentCapabilityProvider';
 import {
   formatSupportedModelAssetExtensions,
-  getSupportedModelAssetFileExtensions,
   parseModelImportAssetArgs,
-  validateModelAssetPath,
 } from './importModelAsset';
 import { ModelLiveModeService } from './live';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 import { ModelAssetExportService } from './export/ModelAssetExportService';
+import { ModelProjectAuthoringService } from './services/ModelProjectAuthoringService';
 
 /** Default .nkm document template */
 function getModelTemplate(title: string, profile: NkmSceneProfile = '3d'): string {
@@ -89,6 +96,12 @@ export function activate(context: vscode.ExtensionContext): NekoModelAPI {
         vscode.workspace.fs.writeFile(vscode.Uri.file(filePath), data),
       createDirectory: async (dirPath) =>
         vscode.workspace.fs.createDirectory(vscode.Uri.file(dirPath)),
+    },
+  });
+  const authoringService = new ModelProjectAuthoringService({
+    getActiveDocumentUri: () => modelEditorProvider.getActiveDocumentUri(),
+    revealDocument: async (uri) => {
+      await vscode.commands.executeCommand('vscode.openWith', uri, ModelEditorProvider.viewType);
     },
   });
 
@@ -169,39 +182,36 @@ export function activate(context: vscode.ExtensionContext): NekoModelAPI {
       await liveModeService.stop();
       void vscode.window.showInformationMessage(vscode.l10n.t('neko.model.liveMode.stopped'));
     }),
-    vscode.commands.registerCommand('neko.model.importAsset', async (args?: unknown) => {
+    vscode.commands.registerCommand('neko.model.authoring.importAsset', async (args?: unknown) => {
       const parseResult = parseModelImportAssetArgs(args);
       if (parseResult.status === 'missing') {
-        const uris = await vscode.window.showOpenDialog({
-          canSelectFiles: true,
-          canSelectFolders: false,
-          canSelectMany: false,
-          filters: { '3D Models': Array.from(getSupportedModelAssetFileExtensions()) },
+        return createNekoProjectAuthoringResult({
+          ok: false,
+          diagnostics: [
+            createNekoProjectAuthoringDiagnostic({
+              code: 'invalid-authoring-operation',
+              message: 'Model authoring import requires a supported asset path.',
+            }),
+          ],
         });
-        if (uris?.[0]) {
-          await importModelAsset(modelEditorProvider, uris[0]);
-        }
-        return;
       }
-
       if (parseResult.status === 'invalid') {
-        const message = getUnsupportedModelAssetMessage();
-        getRootLogger().warn(`importAsset rejected unsupported format: ${parseResult.path}`);
-        await errorHandler.handleError(new Error(message), {
-          showToUser: true,
-          severity: 'error',
-        });
-        return;
-      }
-
-      try {
-        await importModelAsset(modelEditorProvider, vscode.Uri.file(parseResult.payload.path));
-      } catch (error) {
-        await errorHandler.handleError(toError(error), {
-          showToUser: true,
-          severity: 'error',
+        return createNekoProjectAuthoringResult({
+          ok: false,
+          diagnostics: [
+            createNekoProjectAuthoringDiagnostic({
+              code: 'invalid-authoring-operation',
+              message: getUnsupportedModelAssetMessage(),
+              context: { path: parseResult.path, extension: parseResult.extension },
+            }),
+          ],
         });
       }
+      return await authoringService.importAsset({
+        assetPath: parseResult.payload.path,
+        name: parseResult.payload.name,
+        target: resolveAuthoringImportTarget(parseResult.payload, false),
+      });
     }),
     vscode.commands.registerCommand('neko.model.exportMotions', async (input?: unknown) => {
       await runModelAssetExport(input, 'motions', exportService, errorHandler);
@@ -294,49 +304,27 @@ export function deactivate(): void {
   // No extension-level resources require explicit shutdown beyond VSCode disposables.
 }
 
-async function importModelAsset(provider: ModelEditorProvider, uri: vscode.Uri): Promise<void> {
-  if (!validateModelAssetPath(uri.fsPath).supported) {
-    throw new Error(getUnsupportedModelAssetMessage());
+function resolveAuthoringImportTarget(
+  payload: {
+    readonly name?: string;
+    readonly documentUri?: string;
+    readonly target?: NekoProjectAuthoringTarget;
+    readonly reveal?: boolean;
+  },
+  defaultReveal: boolean,
+): NekoProjectAuthoringTarget {
+  const reveal = payload.reveal ?? defaultReveal;
+  if (payload.target) {
+    return { ...payload.target, reveal: payload.target.reveal ?? reveal };
   }
-
-  if (provider.isActive()) {
-    await provider.importAsset(uri);
-    return;
+  if (payload.documentUri) {
+    return { kind: 'file', documentUri: payload.documentUri, reveal };
   }
-
-  await openModelProjectWithQueuedImport(provider, uri);
-}
-
-async function openModelProjectWithQueuedImport(
-  provider: ModelEditorProvider,
-  uri: vscode.Uri,
-): Promise<void> {
-  const workspaceFolders = vscode.workspace.workspaceFolders;
-  if (!workspaceFolders?.[0]) {
-    const message = vscode.l10n.t('neko.model.importAsset.noWorkspace');
-    getRootLogger().warn(message);
-    void vscode.window.showWarningMessage(message);
-    return;
-  }
-
-  const tempDir = vscode.Uri.joinPath(workspaceFolders[0].uri, '.neko', 'temp');
-  const tempFile = vscode.Uri.joinPath(tempDir, `model-import-${Date.now()}.nkm`);
-  try {
-    await vscode.workspace.fs.createDirectory(tempDir);
-    await vscode.workspace.fs.writeFile(
-      tempFile,
-      Buffer.from(getModelTemplate('Model Import'), 'utf-8'),
-    );
-    provider.queueModelImport(uri);
-    await vscode.commands.executeCommand('vscode.openWith', tempFile, ModelEditorProvider.viewType);
-  } catch (error) {
-    provider.clearQueuedModelImport();
-    throw error;
-  }
+  return { kind: 'new', ...(payload.name ? { title: payload.name } : {}), reveal };
 }
 
 function getUnsupportedModelAssetMessage(): string {
-  return vscode.l10n.t('neko.model.importAsset.unsupportedFormat', {
+  return vscode.l10n.t('neko.model.authoring.importAsset.unsupportedFormat', {
     extensions: formatSupportedModelAssetExtensions(),
   });
 }

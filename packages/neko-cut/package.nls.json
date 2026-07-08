@@ -2,7 +2,7 @@
   "neko.outline.title": "Timeline Outline",
   "neko.outline.contextualTitle": "Project Outline",
   "neko.newProject.title": "New Video Project",
-  "neko.addToTimeline.title": "Add to Timeline",
+  "neko.cut.authoring.addSourceToTimeline.title": "Add to Timeline",
   "neko.openInEditor.title": "Open in Editor",
   "neko.timeline.getInfo.title": "Get Timeline Info",
   "neko.timeline.listElements.title": "List Timeline Elements",
@@ -46,7 +46,7 @@
   "neko.export.video.title": "Export Video",
   "neko.export.getProgress.title": "Get Export Progress",
   "neko.cut.previewMedia.title": "Preview Media",
-  "neko.cut.importGeneratedClip.title": "Import Generated Clip",
-  "neko.cut.importStoryboard.title": "Import Storyboard",
-  "neko.cut.importCanvasDraft.title": "Import Canvas Draft"
+  "neko.cut.authoring.importGeneratedClip.title": "Import Generated Clip",
+  "neko.cut.authoring.importStoryboard.title": "Import Storyboard",
+  "neko.cut.authoring.importCanvasDraft.title": "Import Canvas Draft"
 }

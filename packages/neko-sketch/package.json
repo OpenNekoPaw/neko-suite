@@ -105,8 +105,8 @@
         "category": "NekoSketch"
       },
       {
-        "command": "neko.sketch.importAsset",
-        "title": "%neko.sketch.importAsset.title%",
+        "command": "neko.sketch.authoring.importImageSource",
+        "title": "%neko.sketch.authoring.importImageSource.title%",
         "category": "NekoSketch"
       },
       {

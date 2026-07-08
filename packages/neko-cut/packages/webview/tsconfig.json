@@ -23,7 +23,9 @@
       "@neko/ui": ["../../../neko-ui/src/index.ts"],
       "@neko/ui/*": ["../../../neko-ui/src/*"],
       "@neko/neko-client": ["../../../../packages/neko-client/src/index.ts"],
-      "@neko/neko-client/*": ["../../../../packages/neko-client/src/*"]
+      "@neko/neko-client/*": ["../../../../packages/neko-client/src/*"],
+      "@neko/workbench-core": ["../../../neko-workbench-core/src/index.ts"],
+      "@neko/workbench-core/*": ["../../../neko-workbench-core/src/*"]
     },
     "ignoreDeprecations": "5.0"
   },

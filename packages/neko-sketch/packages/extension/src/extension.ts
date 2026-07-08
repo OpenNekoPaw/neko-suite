@@ -7,6 +7,7 @@
 import * as vscode from 'vscode';
 import {
   createVSCodeLogger,
+  createVSCodeProjectFileIoAdapter,
   VSCodeErrorHandler,
   resolveLogLevelSetting,
   watchLogLevel,
@@ -14,6 +15,8 @@ import {
 import type { NekoSketchAPI, SketchImportContext } from '@neko/shared';
 import { createNekoSketchCapabilityProvider } from './agentCapabilityProvider';
 import { SketchEditorProvider } from './editor';
+import { SketchProjectAuthoringService } from './services/SketchProjectAuthoringService';
+import { createVSCodeSketchProjectSourceIngest } from './services/sketchSourceIngest';
 import { LayerOutlineProvider, SketchStatusBar } from './views';
 import { setRootLogger, getRootLogger } from './utils/logger';
 import { setErrorHandler } from './utils/errorHandler';
@@ -42,6 +45,11 @@ export function activate(context: vscode.ExtensionContext): NekoSketchAPI {
   logger.info('Activating extension...');
 
   // Create providers
+  const projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode });
+  const sketchAuthoringService = new SketchProjectAuthoringService({
+    fileOps: projectFileAdapter.fileOps,
+    ingestSource: createVSCodeSketchProjectSourceIngest(projectFileAdapter),
+  });
   sketchEditorProvider = new SketchEditorProvider(context);
   layerOutlineProvider = new LayerOutlineProvider();
   sketchStatusBar = new SketchStatusBar();
@@ -86,7 +94,7 @@ export function activate(context: vscode.ExtensionContext): NekoSketchAPI {
   );
 
   // Register commands
-  registerCommands(context, sketchEditorProvider);
+  registerCommands(context, sketchEditorProvider, sketchAuthoringService);
 
   logger.info('Extension activated');
 

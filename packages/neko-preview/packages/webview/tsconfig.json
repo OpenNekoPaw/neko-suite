@@ -18,7 +18,9 @@
       "@neko/shared": ["../../../neko-types/src/index.ts"],
       "@neko/shared/*": ["../../../neko-types/src/*"],
       "@neko/ui": ["../../../neko-ui/src/index.ts"],
-      "@neko/ui/*": ["../../../neko-ui/src/*"]
+      "@neko/ui/*": ["../../../neko-ui/src/*"],
+      "@neko/workbench-core": ["../../../neko-workbench-core/src/index.ts"],
+      "@neko/workbench-core/*": ["../../../neko-workbench-core/src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

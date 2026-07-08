@@ -5,19 +5,42 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { createDefaultProject, type ProjectSourceAddResult } from '@neko/shared';
+import {
+  createDefaultProject,
+  createNekoProjectAuthoringDiagnostic,
+  createNekoProjectAuthoringResult,
+  type NekoProjectAuthoringResult,
+  type NekoProjectAuthoringTarget,
+} from '@neko/shared';
 import { createNewFile } from '@neko/shared/vscode/extension';
 import type { VideoProjectOutlineProvider } from '../views/outlineProvider';
 import type { VideoEditorProvider } from '../editor/video/videoEditorProvider';
 import { getLogger, handleError } from '../base';
-import { addCutProjectSource } from '../editor/video/cutProjectSourceIngest';
+import type {
+  CutProjectAuthoringImportedClip,
+  ICutProjectAuthoringService,
+} from '../services/CutProjectAuthoringService';
 
 const logger = getLogger('Commands');
 import { registerTimelineCommands } from './timeline-commands';
 
 type GeneratedClipMediaType = 'image' | 'video' | 'audio';
-const TIMELINE_EDITOR_READY_TIMEOUT_MS = 5000;
-const TIMELINE_EDITOR_READY_POLL_MS = 50;
+type ImportGeneratedClipResult = NekoProjectAuthoringResult<CutProjectAuthoringImportedClip>;
+
+interface ImportGeneratedClipCommandParams {
+  readonly target?: NekoProjectAuthoringTarget;
+  readonly documentUri?: string;
+  readonly assetPath?: string;
+  readonly data?: string;
+  readonly type?: string;
+  readonly name?: string;
+  readonly mediaType?: string;
+  readonly duration?: number;
+  readonly startTime?: number;
+  readonly trackId?: string;
+  readonly trackIndex?: number;
+  readonly reveal?: boolean;
+}
 
 function inferGeneratedClipMediaType(
   assetPath: string,
@@ -41,6 +64,7 @@ export function registerCommands(
   context: vscode.ExtensionContext,
   _outlineProvider: VideoProjectOutlineProvider,
   videoEditorProvider: VideoEditorProvider,
+  cutProjectAuthoringService: ICutProjectAuthoringService,
 ): void {
   // Command: New Video Project
   context.subscriptions.push(
@@ -60,9 +84,11 @@ export function registerCommands(
 
   // Command: Add to Timeline
   context.subscriptions.push(
-    vscode.commands.registerCommand('neko.addToTimeline', async (uri: vscode.Uri) => {
-      await addToTimeline(uri, videoEditorProvider);
-    }),
+    vscode.commands.registerCommand(
+      'neko.cut.authoring.addSourceToTimeline',
+      async (uri: vscode.Uri) =>
+        addToTimeline(uri, videoEditorProvider, cutProjectAuthoringService),
+    ),
   );
 
   // Command: Open in Video Editor
@@ -135,140 +161,63 @@ export function registerCommands(
     }),
   );
 
-  // Command: Import a generated media clip (image/video) into the active timeline
-  // Used by neko-agent after AI generation completes (canvas_generate_image / sketch.generate)
+  // Command: Import a generated media clip through host-side Cut authoring.
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      'neko.cut.importGeneratedClip',
-      async (params?: {
-        assetPath?: string;
-        data?: string;
-        type?: string;
-        name?: string;
-        mediaType?: string;
-        duration?: number;
-        trackIndex?: number;
-      }) => {
+      'neko.cut.authoring.importGeneratedClip',
+      async (params?: ImportGeneratedClipCommandParams) => {
         if (!params) {
-          void handleError(new Error('Generated clip import requires assetPath or data bytes.'), {
-            showToUser: true,
-          });
-          return;
+          return reportGeneratedClipResult(
+            createNekoProjectAuthoringResult<CutProjectAuthoringImportedClip>({
+              ok: false,
+              diagnostics: [
+                createNekoProjectAuthoringDiagnostic({
+                  code: 'source-resolution-failed',
+                  message: 'Generated clip import requires assetPath or data bytes.',
+                }),
+              ],
+            }),
+          );
         }
-        await ensureTimelineEditorForGeneratedClip(params, videoEditorProvider);
-        const webview = videoEditorProvider.getActiveWebview();
-        const documentUri = videoEditorProvider.getActiveDocumentVsCodeUri();
-        if (!webview || !documentUri) {
-          void handleError(new Error(vscode.l10n.t('editor.warning.noProjectOpen')), {
-            showToUser: true,
-            severity: 'warning',
-          });
-          return;
-        }
-        const assetPath = params.assetPath;
-        const fileName = params.name
-          ? ensureMediaFileExtension(params.name, params.mediaType ?? params.type)
-          : assetPath
-            ? path.basename(assetPath)
-            : ensureMediaFileExtension('generated-clip', params.mediaType ?? params.type);
+
+        const target = await resolveGeneratedClipAuthoringTarget(params, videoEditorProvider);
+        if (!target.ok) return reportGeneratedClipResult(target.result);
+
         const mediaType = inferGeneratedClipMediaType(
-          assetPath ?? fileName,
+          params.assetPath ?? params.name ?? 'generated-clip',
           params.mediaType ?? params.type,
         );
         const bytes = typeof params.data === 'string' ? dataUrlToBytes(params.data) : undefined;
-        if (!bytes && !assetPath) {
-          void handleError(new Error('Generated clip import requires assetPath or data bytes.'), {
-            showToUser: true,
-          });
-          return;
-        }
 
-        const result = await addCutProjectSource(documentUri, {
-          requestId: `cut-import-generated-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-          kind: 'generated-output',
-          formatId: 'nkv',
-          ...(assetPath ? { sourcePath: assetPath } : {}),
+        const result = await cutProjectAuthoringService.importGeneratedClip({
+          target: target.target,
+          ...(params.assetPath ? { sourcePath: params.assetPath } : {}),
           ...(bytes ? { bytes } : {}),
-          browserFile: {
-            name: fileName,
-            type: mimeTypeForMedia(fileName, mediaType),
-            ...(bytes ? { size: bytes.byteLength } : {}),
-          },
-          destination: {
-            kind: 'project',
-            directory: 'media',
-            copyMode: bytes ? 'copy' : 'link',
-          },
-          ingestMode: bytes ? 'create-asset' : 'link',
-          metadata: {
-            addToTimeline: true,
-            mediaType,
-            ...(params.duration !== undefined
-              ? { duration: params.duration }
-              : mediaType === 'image'
-                ? { duration: 3 }
-                : {}),
-            ...(params.trackIndex !== undefined ? { trackIndex: params.trackIndex } : {}),
-            name: fileName,
-            sourceCommand: 'neko.cut.importGeneratedClip',
-          },
+          ...(params.name ? { name: params.name } : {}),
+          mediaType,
+          ...(params.duration !== undefined ? { duration: params.duration } : {}),
+          ...(params.startTime !== undefined ? { startTime: params.startTime } : {}),
+          ...(params.trackId ? { trackId: params.trackId } : {}),
+          ...(params.trackIndex !== undefined ? { trackIndex: params.trackIndex } : {}),
         });
-        await postProjectSourceAddResult(webview, result);
+        const revealedResult = await revealCutAuthoringResult(
+          result,
+          target.target.reveal === true,
+        );
+        reportGeneratedClipResult(revealedResult);
 
-        logger.info(`importGeneratedClip: ${assetPath ?? fileName} (${mediaType})`);
+        if (revealedResult.ok) {
+          logger.info(
+            `authoring.importGeneratedClip: ${params.assetPath ?? params.name ?? 'generated-clip'} (${mediaType})`,
+          );
+        }
+        return revealedResult;
       },
     ),
   );
 
   // Register timeline commands (element, track, effect, transition, animation, render, export)
-  registerTimelineCommands(context, videoEditorProvider);
-}
-
-async function ensureTimelineEditorForGeneratedClip(
-  params: {
-    readonly assetPath?: string;
-    readonly name?: string;
-    readonly mediaType?: string;
-    readonly type?: string;
-  },
-  editorProvider: VideoEditorProvider,
-): Promise<void> {
-  if (editorProvider.getActiveWebview() && editorProvider.getActiveDocumentVsCodeUri()) {
-    await editorProvider.focusActiveEditor();
-    return;
-  }
-
-  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-  if (!workspaceFolder) {
-    return;
-  }
-
-  const title = createGeneratedClipProjectName(params);
-  const fileUri = await createAvailableTimelineFileUri(workspaceFolder.uri, title);
-  await vscode.workspace.fs.writeFile(
-    fileUri,
-    Buffer.from(JSON.stringify(createDefaultProject(title), null, 2), 'utf-8'),
-  );
-  await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoEditor');
-  await waitForTimelineEditorReady(editorProvider, fileUri);
-}
-
-async function waitForTimelineEditorReady(
-  editorProvider: VideoEditorProvider,
-  fileUri: vscode.Uri,
-): Promise<void> {
-  const startedAt = Date.now();
-  const documentUri = fileUri.toString();
-  while (Date.now() - startedAt < TIMELINE_EDITOR_READY_TIMEOUT_MS) {
-    if (
-      editorProvider.getActiveDocumentVsCodeUri()?.toString() === documentUri &&
-      editorProvider.getActiveWebview()
-    ) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, TIMELINE_EDITOR_READY_POLL_MS));
-  }
-  throw new Error('Timeline editor did not become ready before import.');
+  registerTimelineCommands(context, videoEditorProvider, cutProjectAuthoringService);
 }
 
 function createGeneratedClipProjectName(params: {
@@ -287,6 +236,106 @@ function createGeneratedClipProjectName(params: {
         ? 'Agent Image Timeline'
         : 'Agent Timeline';
   return sanitizeTimelineFileName(sourceName).slice(0, 80) || generatedName;
+}
+
+async function resolveGeneratedClipAuthoringTarget(
+  params: ImportGeneratedClipCommandParams,
+  editorProvider: VideoEditorProvider,
+): Promise<
+  | { readonly ok: true; readonly target: NekoProjectAuthoringTarget }
+  | { readonly ok: false; readonly result: ImportGeneratedClipResult }
+> {
+  const reveal = params.reveal ?? params.target?.reveal ?? false;
+  if (params.target?.documentUri) {
+    return {
+      ok: true,
+      target: { ...params.target, reveal },
+    };
+  }
+  if (params.documentUri) {
+    return {
+      ok: true,
+      target: { kind: 'file', documentUri: params.documentUri, reveal },
+    };
+  }
+
+  const activeDocumentUri = editorProvider.getActiveDocumentVsCodeUri();
+  if (activeDocumentUri) {
+    return {
+      ok: true,
+      target: { kind: 'active', documentUri: activeDocumentUri.toString(), reveal },
+    };
+  }
+
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) {
+    return {
+      ok: false,
+      result: createNekoProjectAuthoringResult<CutProjectAuthoringImportedClip>({
+        ok: false,
+        diagnostics: [
+          createNekoProjectAuthoringDiagnostic({
+            code: 'workspace-required',
+            message:
+              'Cut generated clip import needs documentUri, active Cut project, or workspace for create-new.',
+          }),
+        ],
+      }),
+    };
+  }
+
+  const title = createGeneratedClipProjectName(params);
+  const fileUri = await createAvailableTimelineFileUri(workspaceFolder.uri, title);
+  return {
+    ok: true,
+    target: {
+      kind: 'new',
+      documentUri: fileUri.toString(),
+      title,
+      reveal,
+    },
+  };
+}
+
+async function revealCutAuthoringResult(
+  result: ImportGeneratedClipResult,
+  reveal: boolean,
+): Promise<ImportGeneratedClipResult> {
+  if (!result.ok || !result.documentUri || !reveal) return result;
+  try {
+    await vscode.commands.executeCommand(
+      'vscode.openWith',
+      vscode.Uri.parse(result.documentUri),
+      'neko.videoEditor',
+    );
+    return { ...result, revealed: true };
+  } catch (error) {
+    return {
+      ...result,
+      revealed: false,
+      diagnostics: [
+        ...result.diagnostics,
+        createNekoProjectAuthoringDiagnostic({
+          code: 'authoring-reveal-failed',
+          severity: 'warning',
+          message:
+            error instanceof Error
+              ? `Cut project was saved, but reveal failed: ${error.message}`
+              : 'Cut project was saved, but reveal failed.',
+        }),
+      ],
+    };
+  }
+}
+
+function reportGeneratedClipResult(result: ImportGeneratedClipResult): ImportGeneratedClipResult {
+  const blockingDiagnostic = result.diagnostics.find(
+    (diagnostic) => diagnostic.severity === 'error',
+  );
+  if (blockingDiagnostic) {
+    void handleError(new Error(blockingDiagnostic.message), { showToUser: true });
+  }
+  return result;
 }
 
 async function createAvailableTimelineFileUri(
@@ -319,19 +368,8 @@ function sanitizeTimelineFileName(value: string): string {
 async function addToTimeline(
   fileUri: vscode.Uri,
   editorProvider: VideoEditorProvider,
+  cutProjectAuthoringService: ICutProjectAuthoringService,
 ): Promise<void> {
-  // Get the active webview
-  const webview = editorProvider.getActiveWebview();
-  const documentUri = editorProvider.getActiveDocumentVsCodeUri();
-
-  if (!webview || !documentUri) {
-    void handleError(new Error(vscode.l10n.t('editor.warning.noProjectOpen')), {
-      showToUser: true,
-      severity: 'warning',
-    });
-    return;
-  }
-
   // Get file extension and determine media type
   const ext = path.extname(fileUri.fsPath).toLowerCase();
   let mediaType: 'video' | 'audio' | 'image';
@@ -349,34 +387,34 @@ async function addToTimeline(
     return;
   }
 
-  const result = await addCutProjectSource(documentUri, {
-    requestId: `cut-add-to-timeline-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-    kind: 'programmatic',
-    formatId: 'nkv',
-    sourcePath: fileUri.fsPath,
-    browserFile: {
+  const target = await resolveGeneratedClipAuthoringTarget(
+    {
+      assetPath: fileUri.fsPath,
       name: path.basename(fileUri.fsPath),
-      type: mimeTypeForMedia(fileUri.fsPath, mediaType),
-    },
-    destination: {
-      kind: 'project',
-      directory: 'media',
-      copyMode: 'link',
-    },
-    ingestMode: 'link',
-    metadata: {
-      addToTimeline: true,
       mediaType,
-      name: path.basename(fileUri.fsPath),
-      sourceCommand: 'neko.addToTimeline',
+      reveal: false,
     },
+    editorProvider,
+  );
+  if (!target.ok) {
+    reportGeneratedClipResult(target.result);
+    return;
+  }
+
+  const result = await cutProjectAuthoringService.importMediaSource({
+    target: target.target,
+    sourcePath: fileUri.fsPath,
+    name: path.basename(fileUri.fsPath),
+    mediaType,
   });
-  await postProjectSourceAddResult(webview, result);
-  if (!result.ok) return;
+  if (!result.ok) {
+    reportGeneratedClipResult(result);
+    return;
+  }
 
   vscode.window.showInformationMessage(
     vscode.l10n.t('timeline.info.addingToTimeline', {
-      filename: path.basename(result.durablePath ?? fileUri.fsPath),
+      filename: path.basename(result.data?.sourcePath ?? fileUri.fsPath),
     }),
   );
 }
@@ -388,46 +426,9 @@ async function openInEditor(fileUri: vscode.Uri): Promise<void> {
   await vscode.commands.executeCommand('vscode.openWith', fileUri, 'neko.videoEditor');
 }
 
-async function postProjectSourceAddResult(
-  webview: vscode.Webview,
-  result: ProjectSourceAddResult,
-): Promise<void> {
-  await webview.postMessage({ type: 'project:sourceAdded', result });
-  if (!result.ok) {
-    const message =
-      result.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
-      result.diagnostics[0]?.message ??
-      'Failed to add media to timeline.';
-    void handleError(new Error(message), { showToUser: true });
-  }
-}
-
 function dataUrlToBytes(data: string): Uint8Array {
   const base64 = data.includes(',') ? data.slice(data.indexOf(',') + 1) : data;
   return Buffer.from(base64, 'base64');
-}
-
-function ensureMediaFileExtension(name: string, mediaTypeHint?: string): string {
-  if (path.extname(name)) return name;
-  if (mediaTypeHint === 'image') return `${name}.png`;
-  if (mediaTypeHint === 'audio') return `${name}.wav`;
-  return `${name}.mp4`;
-}
-
-function mimeTypeForMedia(filePath: string, mediaType: GeneratedClipMediaType): string {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
-  if (ext === '.png') return 'image/png';
-  if (ext === '.webp') return 'image/webp';
-  if (ext === '.gif') return 'image/gif';
-  if (ext === '.wav') return 'audio/wav';
-  if (ext === '.mp3') return 'audio/mpeg';
-  if (ext === '.m4a') return 'audio/mp4';
-  if (ext === '.webm') return 'video/webm';
-  if (ext === '.mov') return 'video/quicktime';
-  if (mediaType === 'image') return 'image/png';
-  if (mediaType === 'audio') return 'audio/wav';
-  return 'video/mp4';
 }
 
 /**

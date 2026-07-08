@@ -22,6 +22,10 @@ Webview 不再内置 R3F/Three.js 可见模型 fallback。`R3FDevelopmentFallbac
 
 Extension Host 只处理 VSCode API、资源 URI、Engine discovery、导入导出对话框和文件操作。高频 transform、character slider、brush patch、SceneDelta、视频帧和 PCM 帧不得经 Extension 转发。
 
+### Headless Authoring Boundary
+
+Durable `.nkm` asset import uses `ModelProjectAuthoringService` and `neko.model.authoring.importAsset`. The service can write an explicit file target or create a new `.nkm` without opening the Model Webview first, then optional reveal happens after save. The legacy `neko.model.importAsset` command and temp/open-editor import prerequisites are not production authoring paths. Viewport camera, animation playback, live mode, selection, gizmo interaction, and Engine runtime scene controls remain interactive/runtime behavior.
+
 ## 性能与交互硬约束
 
 neko-model 的默认实时视口目标是 1080p / 60fps 级别的即时交互反馈。这里的 1080p 指按 Webview CSS 尺寸乘以 `devicePixelRatio` 后请求足够的 Engine stream 物理像素；720p 只能作为明确的降级档，并且 UI 必须暴露降级原因。VSCode/Electron Webview 或显示器刷新率可能限制最终 presentation FPS，这类限制要作为宿主呈现诊断暴露，不能误判为 Engine GPU 性能不足。

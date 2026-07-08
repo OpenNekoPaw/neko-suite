@@ -8,6 +8,7 @@
 
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import type {
   CharacterAssetMediaKind,
   ImportedAssetDescriptor,
@@ -202,9 +203,10 @@ export class MediaImportDispatcher {
     const plan = this.planImport(input);
     const sourceHash = await this.hashFile(plan.sourcePath);
     const modelPath = await this.materializePlannedFile(plan);
-    await this.commands.executeCommand('neko.model.importAsset', {
-      path: modelPath,
-    });
+    await this.commands.executeCommand(
+      'neko.model.authoring.importAsset',
+      createModelAuthoringImportPayload(input, modelPath),
+    );
     const importedAssets: ImportedAssetDescriptor[] = [
       {
         dimension: 'model',
@@ -276,7 +278,10 @@ export class MediaImportDispatcher {
     }
 
     const modelPath = path.join(targetDir, ...route.gltfEntryPath.split('/'));
-    await this.commands.executeCommand('neko.model.importAsset', { path: modelPath });
+    await this.commands.executeCommand(
+      'neko.model.authoring.importAsset',
+      createModelAuthoringImportPayload(input, modelPath),
+    );
     const importedAssets: ImportedAssetDescriptor[] = [
       {
         dimension: 'model',
@@ -591,6 +596,31 @@ function formatProjectRef(relativePath: string): string {
 
 function uriArg(filePath: string): { readonly fsPath: string; readonly path: string } {
   return { fsPath: filePath, path: filePath };
+}
+
+function createModelAuthoringImportPayload(
+  input: ImportPlanInput,
+  modelPath: string,
+): {
+  readonly path: string;
+  readonly target:
+    | {
+        readonly kind: 'file';
+        readonly documentUri: string;
+        readonly reveal: false;
+      }
+    | {
+        readonly kind: 'new';
+        readonly reveal: false;
+      };
+} {
+  const documentPath = input.documentPath ? path.resolve(input.documentPath) : undefined;
+  return {
+    path: modelPath,
+    target: documentPath
+      ? { kind: 'file', documentUri: pathToFileURL(documentPath).toString(), reveal: false }
+      : { kind: 'new', reveal: false },
+  };
 }
 
 function hashBytes(bytes: Uint8Array): string {

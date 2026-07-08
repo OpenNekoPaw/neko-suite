@@ -24,7 +24,7 @@ describe('neko-suite plugin transfer planner', () => {
       }),
     ).toEqual({
       status: 'execute-command',
-      command: 'neko.cut.importGeneratedClip',
+      command: 'neko.cut.authoring.importGeneratedClip',
       payload: { assetPath: '/tmp/sound.wav', mediaType: 'audio' },
     });
 
@@ -38,7 +38,7 @@ describe('neko-suite plugin transfer planner', () => {
       }),
     ).toEqual({
       status: 'execute-command',
-      command: 'neko.sketch.importAsset',
+      command: 'neko.sketch.authoring.importImageSource',
       payload: { path: '/tmp/frame.png', name: 'Frame' },
     });
 
@@ -52,7 +52,7 @@ describe('neko-suite plugin transfer planner', () => {
       }),
     ).toEqual({
       status: 'execute-command',
-      command: 'neko.model.importAsset',
+      command: 'neko.model.authoring.importAsset',
       payload: { path: '/tmp/character.glb', name: 'Character' },
     });
 
@@ -89,7 +89,7 @@ describe('neko-suite plugin transfer planner', () => {
       }),
     ).toEqual({
       status: 'execute-command',
-      command: 'neko.cut.importStoryboard',
+      command: 'neko.cut.authoring.importStoryboard',
       payload: storyboard,
     });
 
@@ -146,6 +146,79 @@ describe('neko-suite plugin transfer planner', () => {
         },
       },
     });
+  });
+
+  it('passes durable authoring target and provenance to canonical package commands', () => {
+    const target = {
+      kind: 'file' as const,
+      documentUri: 'file:///repo/shot.nks',
+      title: 'Shot paintover',
+      reveal: true,
+    };
+    const provenance = {
+      source: 'agent' as const,
+      conversationId: 'conv-1',
+      messageId: 'msg-1',
+    };
+
+    expect(
+      buildNekoSuitePluginTransferPlan({
+        target: 'sketch',
+        payload: {
+          kind: 'singleAsset',
+          asset: { path: '/tmp/frame.png', mediaType: 'image', name: 'Frame' },
+          target,
+          provenance,
+        },
+      }),
+    ).toEqual({
+      status: 'execute-command',
+      command: 'neko.sketch.authoring.importImageSource',
+      payload: {
+        path: '/tmp/frame.png',
+        name: 'Frame',
+        target,
+        reveal: true,
+        provenance,
+      },
+    });
+  });
+
+  it('does not emit legacy UI-bound durable command ids', () => {
+    const plans = [
+      buildNekoSuitePluginTransferPlan({
+        target: 'cut',
+        assetPath: '/tmp/shot.mp4',
+        mediaType: 'video',
+      }),
+      buildNekoSuitePluginTransferPlan({
+        target: 'sketch',
+        payload: {
+          kind: 'singleAsset',
+          asset: { path: '/tmp/frame.png', mediaType: 'image' },
+        },
+      }),
+      buildNekoSuitePluginTransferPlan({
+        target: 'model',
+        payload: {
+          kind: 'singleAsset',
+          asset: { path: '/tmp/character.glb', mediaType: 'model' },
+        },
+      }),
+    ];
+
+    expect(plans).toEqual([
+      expect.objectContaining({ command: 'neko.cut.authoring.importGeneratedClip' }),
+      expect.objectContaining({ command: 'neko.sketch.authoring.importImageSource' }),
+      expect.objectContaining({ command: 'neko.model.authoring.importAsset' }),
+    ]);
+    expect(plans.map((plan) => (plan.status === 'execute-command' ? plan.command : ''))).not.toEqual(
+      expect.arrayContaining([
+        'neko.cut.importGeneratedClip',
+        'neko.sketch.importAsset',
+        'neko.model.importAsset',
+      ]),
+    );
   });
 
   it.each([

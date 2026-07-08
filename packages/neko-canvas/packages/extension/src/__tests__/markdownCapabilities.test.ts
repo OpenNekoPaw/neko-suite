@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createResourceFingerprint,
   createResourceRef,
-  type CanvasCreateCompositeRequest,
+  type CanvasStoryboardPayload,
   type CanvasMarkdownCapabilityInput,
   type CanvasMarkdownResourceRef,
   type ResourceRef,
@@ -197,7 +197,7 @@ describe('Canvas Markdown capabilities', () => {
     expect(blocked.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'canvas-storyboard-profile-create-not-confirmed',
     ]);
-    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
 
     const unapproved = await invokeCanvasMarkdownCapability(
       {
@@ -213,7 +213,7 @@ describe('Canvas Markdown capabilities', () => {
     expect(unapproved.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'canvas-storyboard-profile-create-approval-required',
     ]);
-    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
 
     const created = await invokeCanvasMarkdownCapability(
       {
@@ -233,62 +233,110 @@ describe('Canvas Markdown capabilities', () => {
     );
 
     expect(created.status).toBe('created');
+    expect(created.documentUri).toBe('file:///workspace/Storyboard.nkc');
     expect(created.nodeIds).toEqual(['scene-1', 'shot-1', 'shot-2']);
-    const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
-    expect(request).toMatchObject({
-      containerType: 'scene',
-      containerPreset: 'scene.basic',
-      children: [
-        {
-          type: 'shot',
-          preset: 'shot.basic',
-          data: expect.objectContaining({
-            shotNumber: 1,
-            visualDescription: 'Wide view',
-            storyboardPrompt: expect.objectContaining({
-              promptBlocks: expect.objectContaining({
-                imagePromptDocument: expect.objectContaining({
-                  text: 'cinematic wide prompt',
-                  blockKind: 'image',
-                }),
-                videoPromptDocument: expect.objectContaining({
-                  text: 'scene video: wide view establishes the room, then cut to close-up',
-                  blockKind: 'video',
-                  fieldProjections: expect.arrayContaining([
-                    expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
-                  ]),
-                }),
+    const payload = readStoryboardPayload(operations);
+    expect(payload).toMatchObject({
+      mode: 'semantic',
+      scenes: [
+        expect.objectContaining({
+          sceneTitle: 'Opening',
+          storyboardPrompt: expect.objectContaining({
+            promptBlocks: expect.objectContaining({
+              videoPromptDocument: expect.objectContaining({
+                text: 'scene video: wide view establishes the room, then cut to close-up',
+                blockKind: 'video',
+                fieldProjections: expect.arrayContaining([
+                  expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
+                ]),
               }),
             }),
           }),
-        },
-        {
-          type: 'shot',
-          preset: 'shot.basic',
-          data: expect.objectContaining({
-            shotNumber: 2,
-            visualDescription: 'Close-up',
-            storyboardPrompt: expect.objectContaining({
-              promptBlocks: expect.objectContaining({
-                imagePromptDocument: expect.objectContaining({
-                  text: 'close prompt',
-                  blockKind: 'image',
-                }),
-                videoPromptDocument: expect.objectContaining({
-                  text: 'scene video: wide view establishes the room, then cut to close-up',
-                  blockKind: 'video',
-                  fieldProjections: expect.arrayContaining([
-                    expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
-                  ]),
+          shotPlans: expect.arrayContaining([
+            expect.objectContaining({
+              shotNumber: 1,
+              visualDescription: 'Wide view',
+              storyboardPrompt: expect.objectContaining({
+                promptBlocks: expect.objectContaining({
+                  imagePromptDocument: expect.objectContaining({
+                    text: 'cinematic wide prompt',
+                    blockKind: 'image',
+                  }),
                 }),
               }),
             }),
-          }),
-        },
+          ]),
+        }),
       ],
-    } satisfies Partial<CanvasCreateCompositeRequest>);
-    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
-    expect(request?.children[1]?.data).not.toHaveProperty('generationPrompt');
+    });
+    const secondShot = payload.scenes[0]?.shotPlans[1];
+    expect(secondShot).toMatchObject({
+      shotNumber: 2,
+      visualDescription: 'Close-up',
+      storyboardPrompt: expect.objectContaining({
+        promptBlocks: expect.objectContaining({
+          imagePromptDocument: expect.objectContaining({ text: 'close prompt' }),
+        }),
+      }),
+    });
+    expect(payload.scenes[0]?.shotPlans[0]?.storyboardPrompt?.promptBlocks?.videoPromptDocument).toBeUndefined();
+    expect(secondShot?.storyboardPrompt?.promptBlocks?.videoPromptDocument).toBeUndefined();
+    expect(payload.scenes[0]?.shotPlans[0]).not.toHaveProperty('generationPrompt');
+    expect(secondShot).not.toHaveProperty('generationPrompt');
+  });
+
+  it('binds Markdown storyboard resources by explicit alias during production creation', async () => {
+    const operations = createOperations();
+    const result = await invokeCanvasMarkdownCapability(
+      {
+        capabilityId: 'canvas.createStoryboardFromMarkdown',
+        markdown: [
+          '| scene | shot | source | visual | imagePrompt | videoPrompt |',
+          '| --- | --- | --- | --- | --- | --- |',
+          '| Opening | 1 | P1#panel_1 | Wide view | clean keyframe | scene video prompt |',
+        ].join('\n'),
+        title: 'Alias Binding',
+        mode: 'create-nodes',
+        resources: [
+          {
+            alias: 'P1',
+            label: 'read-image-cover.jpg',
+            documentResourceRef: {
+              kind: 'document-entry',
+              source: {
+                filePath: '${A}/epub/animation/test.epub',
+                format: 'epub',
+              },
+              entryPath: 'image/cover.jpg',
+              versionPolicy: 'versioned-export',
+            },
+          },
+        ],
+        approval: {
+          source: 'creation-apply',
+          creationId: 'creation-1',
+          iterationId: 'iteration-1',
+          profileId: 'idc.default',
+          stageId: 'apply',
+        },
+      },
+      operations,
+    );
+
+    expect(result.status).toBe('created');
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+      'canvas-markdown-missing-resource-token',
+    );
+    const shot = readFirstStoryboardShot(readStoryboardPayload(operations));
+    expect(shot.referenceImageResourceRef).toMatchObject({
+      kind: 'document-entry',
+      entryPath: 'image/cover.jpg',
+    });
+    expect(shot.sourceMediaRefs?.[0]).toMatchObject({
+      refId: 'P1',
+      documentResourceRef: expect.objectContaining({ entryPath: 'image/cover.jpg' }),
+      metadata: { markdownSourcePanel: 'panel_1' },
+    });
   });
 
   it('attaches stable resource refs to an existing Canvas target', async () => {
@@ -337,7 +385,7 @@ describe('Canvas Markdown capabilities', () => {
     );
     expect(result.preview).toMatchObject({ tableCount: 1, rowCount: 2 });
     expect(operations.createNode).not.toHaveBeenCalled();
-    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
     expect(operations.updateNode).not.toHaveBeenCalled();
   });
 
@@ -366,7 +414,7 @@ describe('Canvas Markdown capabilities', () => {
       }),
     ]);
     expect(operations.createNode).not.toHaveBeenCalled();
-    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
     expect(operations.updateNode).not.toHaveBeenCalled();
   });
 
@@ -584,7 +632,7 @@ describe('Canvas Markdown capabilities', () => {
     ]);
     expect(operations.applyAgentContent).not.toHaveBeenCalled();
     expect(operations.createNode).not.toHaveBeenCalled();
-    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
     expect(operations.updateNode).not.toHaveBeenCalled();
   });
 
@@ -819,7 +867,7 @@ describe('Canvas Markdown capabilities', () => {
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
       'canvas-markdown-unsupported-table-profile',
     );
-    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
   });
 
   it('preserves one-image-to-many-shots and many-images-to-one-shot bindings by explicit tokens', async () => {
@@ -1016,42 +1064,40 @@ describe('Canvas Markdown capabilities', () => {
     );
 
     expect(result.status).toBe('created');
-    const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
-    expect(request).toMatchObject({
-      data: expect.objectContaining({
-        sceneTitle: '夜市',
+    const payload = readStoryboardPayload(operations);
+    const shot = readFirstStoryboardShot(payload);
+    expect(payload.scenes[0]?.sceneTitle).toBe('夜市');
+    expect(payload.scenes[0]?.storyboardPrompt).toMatchObject({
+      promptBlocks: expect.objectContaining({
+        videoPromptDocument: expect.objectContaining({
+          text: '场景视频生成：灯牌下慢速推进，角色穿过夜市',
+          fieldProjections: expect.arrayContaining([
+            expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
+          ]),
+        }),
       }),
-      children: [
-        {
-          data: expect.objectContaining({
-            shotNumber: 1,
-            duration: 4,
-            visualDescription: '灯牌下的远景',
-            storyboardPrompt: expect.objectContaining({
-              promptBlocks: expect.objectContaining({
-                imagePromptDocument: expect.objectContaining({ text: 'neon market' }),
-                videoPromptDocument: expect.objectContaining({
-                  text: '场景视频生成：灯牌下慢速推进，角色穿过夜市',
-                  fieldProjections: expect.arrayContaining([
-                    expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
-                  ]),
-                }),
-                voicePromptDocument: expect.objectContaining({ text: '走吧' }),
-              }),
-              generationParams: expect.objectContaining({
-                duration: 4,
-                dialogue: '走吧',
-              }),
-            }),
-            cameraMovement: 'zoom-in',
-            characters: [{ characterName: 'Mika' }, { characterName: 'Ren' }],
-            dialogue: '走吧',
-            sceneTags: ['夜市'],
-          }),
-        },
-      ],
-    } satisfies Partial<CanvasCreateCompositeRequest>);
-    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
+    });
+    expect(shot).toMatchObject({
+      shotNumber: 1,
+      duration: 4,
+      visualDescription: '灯牌下的远景',
+      storyboardPrompt: expect.objectContaining({
+        promptBlocks: expect.objectContaining({
+          imagePromptDocument: expect.objectContaining({ text: 'neon market' }),
+          voicePromptDocument: expect.objectContaining({ text: '走吧' }),
+        }),
+        generationParams: expect.objectContaining({
+          duration: 4,
+          dialogue: '走吧',
+        }),
+      }),
+      cameraMovement: 'zoom-in',
+      characters: [{ characterName: 'Mika' }, { characterName: 'Ren' }],
+      dialogue: '走吧',
+      sceneTags: ['夜市'],
+    });
+    expect(shot.storyboardPrompt?.promptBlocks?.videoPromptDocument).toBeUndefined();
+    expect(shot).not.toHaveProperty('generationPrompt');
   });
 
   it('does not create production shot nodes for skip, reference-only, or duplicate rows', async () => {
@@ -1086,9 +1132,10 @@ describe('Canvas Markdown capabilities', () => {
     );
 
     expect(result.status).toBe('created');
-    const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
-    expect(request?.children).toHaveLength(1);
-    expect(request?.children[0]?.data).toMatchObject({
+    const payload = readStoryboardPayload(operations);
+    expect(payload.scenes[0]?.shotPlans).toHaveLength(1);
+    const shot = readFirstStoryboardShot(payload);
+    expect(shot).toMatchObject({
       shotNumber: 4,
       visualDescription: 'corridor shot',
       storyboardPrompt: expect.objectContaining({
@@ -1097,10 +1144,8 @@ describe('Canvas Markdown capabilities', () => {
         }),
       }),
     });
-    expect(
-      readStoryboardPromptBlocks(request?.children[0]?.data)?.['videoPromptDocument'],
-    ).toBeUndefined();
-    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
+    expect(shot.storyboardPrompt?.promptBlocks?.videoPromptDocument).toBeUndefined();
+    expect(shot).not.toHaveProperty('generationPrompt');
   });
 
   it('blocks production creation when every storyboard row is non-production', async () => {
@@ -1134,7 +1179,7 @@ describe('Canvas Markdown capabilities', () => {
         code: 'canvas-storyboard-profile-no-production-rows',
       }),
     ]);
-    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
   });
 
   it('creates semantic prompt documents instead of shot prompt slots during production node creation', async () => {
@@ -1159,19 +1204,23 @@ describe('Canvas Markdown capabilities', () => {
       operations,
     );
 
-    const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
-    expect(request?.data).not.toHaveProperty('promptSlots');
-    expect(request?.children[0]?.data).toMatchObject({
+    const payload = readStoryboardPayload(operations);
+    expect(payload.scenes[0]?.storyboardPrompt).toMatchObject({
+      promptBlocks: expect.objectContaining({
+        videoPromptDocument: expect.objectContaining({
+          text: 'video generation: slow dolly',
+          fieldProjections: expect.arrayContaining([
+            expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
+          ]),
+        }),
+      }),
+    });
+    const shot = readFirstStoryboardShot(payload);
+    expect(shot).toMatchObject({
       storyboardPrompt: expect.objectContaining({
         promptBlocks: expect.objectContaining({
           imagePromptDocument: expect.objectContaining({
             text: 'image generation: keyframe prompt',
-          }),
-          videoPromptDocument: expect.objectContaining({
-            text: 'video generation: slow dolly',
-            fieldProjections: expect.arrayContaining([
-              expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
-            ]),
           }),
         }),
         nextCreativeState: expect.objectContaining({
@@ -1180,8 +1229,9 @@ describe('Canvas Markdown capabilities', () => {
         }),
       }),
     });
-    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
-    expect(request?.children[0]?.data).not.toHaveProperty('promptSlots');
+    expect(shot.storyboardPrompt?.promptBlocks?.videoPromptDocument).toBeUndefined();
+    expect(shot).not.toHaveProperty('generationPrompt');
+    expect(shot).not.toHaveProperty('promptSlots');
   });
 
   it('keeps scene operation hints in semantic prompt documents without legacy scene prompt slots', async () => {
@@ -1207,20 +1257,20 @@ describe('Canvas Markdown capabilities', () => {
       operations,
     );
 
-    const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
-    expect(request?.data).not.toHaveProperty('promptSlots');
-    expect(request?.children[0]?.data).toMatchObject({
-      storyboardPrompt: expect.objectContaining({
-        promptBlocks: expect.objectContaining({
-          videoPromptDocument: expect.objectContaining({
-            text: 'generate one continuous scene video across this beat',
-            fieldProjections: expect.arrayContaining([
-              expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
-            ]),
-          }),
+    const payload = readStoryboardPayload(operations);
+    expect(payload.scenes[0]?.storyboardPrompt).toMatchObject({
+      promptBlocks: expect.objectContaining({
+        videoPromptDocument: expect.objectContaining({
+          text: 'generate one continuous scene video across this beat',
+          fieldProjections: expect.arrayContaining([
+            expect.objectContaining({ fieldId: 'scene.videoPrompt' }),
+          ]),
         }),
       }),
     });
+    const shot = readFirstStoryboardShot(payload);
+    expect(shot).not.toHaveProperty('promptSlots');
+    expect(shot.storyboardPrompt?.promptBlocks?.videoPromptDocument).toBeUndefined();
   });
 
   it('does not derive scene video prompts from image prompt fallback columns', async () => {
@@ -1246,8 +1296,8 @@ describe('Canvas Markdown capabilities', () => {
     );
 
     expect(result.status).toBe('created');
-    const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
-    expect(request?.children[0]?.data).toMatchObject({
+    const shot = readFirstStoryboardShot(readStoryboardPayload(operations));
+    expect(shot).toMatchObject({
       visualDescription: 'edit image: remove lettering from source panel',
       storyboardPrompt: expect.objectContaining({
         promptBlocks: expect.objectContaining({
@@ -1257,10 +1307,8 @@ describe('Canvas Markdown capabilities', () => {
         }),
       }),
     });
-    expect(
-      readStoryboardPromptBlocks(request?.children[0]?.data)?.['videoPromptDocument'],
-    ).toBeUndefined();
-    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
+    expect(shot.storyboardPrompt?.promptBlocks?.videoPromptDocument).toBeUndefined();
+    expect(shot).not.toHaveProperty('generationPrompt');
   });
 
   it('does not let generationPrompt-like Markdown columns recreate legacy prompt authority', async () => {
@@ -1286,9 +1334,9 @@ describe('Canvas Markdown capabilities', () => {
     );
 
     expect(result.status).toBe('created');
-    const request = vi.mocked(operations.createComposite).mock.calls[0]?.[0];
-    expect(request?.children[0]?.data).not.toHaveProperty('generationPrompt');
-    expect(request?.children[0]?.data).toMatchObject({
+    const shot = readFirstStoryboardShot(readStoryboardPayload(operations));
+    expect(shot).not.toHaveProperty('generationPrompt');
+    expect(shot).toMatchObject({
       storyboardPrompt: expect.objectContaining({
         promptBlocks: expect.objectContaining({
           imagePromptDocument: expect.objectContaining({
@@ -1297,9 +1345,7 @@ describe('Canvas Markdown capabilities', () => {
         }),
       }),
     });
-    expect(
-      readStoryboardPromptBlocks(request?.children[0]?.data)?.['videoPromptDocument'],
-    ).toBeUndefined();
+    expect(shot.storyboardPrompt?.promptBlocks?.videoPromptDocument).toBeUndefined();
   });
 
   it('rejects unsupported storyboard table profile hints visibly', async () => {
@@ -1364,7 +1410,7 @@ describe('Canvas Markdown capabilities', () => {
         fieldKey: 'operationHint',
       }),
     ]);
-    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
   });
 
   it('keeps generic tables generic even when they contain storyboard-like columns', async () => {
@@ -1384,7 +1430,7 @@ describe('Canvas Markdown capabilities', () => {
 
     expect(result.status).toBe('created');
     expect(result.actions).toBeUndefined();
-    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
     expect(operations.createNode).toHaveBeenCalledWith(
       'table',
       { x: 0, y: 0 },
@@ -1449,6 +1495,7 @@ describe('Canvas Markdown capabilities', () => {
     expect(production.status).toBe('blocked');
     expect(production.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'canvas-storyboard-profile-visual-column-required',
+      'canvas-markdown-missing-resource-token',
     ]);
   });
 
@@ -1483,7 +1530,7 @@ describe('Canvas Markdown capabilities', () => {
         fieldKey: 'videoPrompt',
       }),
     ]);
-    expect(operations.createComposite).not.toHaveBeenCalled();
+    expect(operations.createStoryboard).not.toHaveBeenCalled();
   });
 
   it('reports ambiguous resource tokens with safe candidate summaries', async () => {
@@ -1541,16 +1588,39 @@ function createOperations(): CanvasMarkdownCapabilityOperations {
       containerId: 'scene-1',
       childIds: ['shot-1', 'shot-2'],
     })),
+    createStoryboard: vi.fn(async (payload: CanvasStoryboardPayload) => {
+      let nextShotId = 1;
+      return {
+        mode: payload.mode,
+        scenesCreated: payload.scenes.length,
+        totalShots: payload.scenes.reduce((total, scene) => total + scene.shotPlans.length, 0),
+        documentUri: 'file:///workspace/Storyboard.nkc',
+        scenes: payload.scenes.map((scene, sceneIndex) => ({
+          sourceSceneId: scene.sceneId,
+          sceneNodeId: `scene-${sceneIndex + 1}`,
+          shotIds: scene.shotPlans.map(() => `shot-${nextShotId++}`),
+        })),
+      };
+    }),
   };
 }
 
-function readStoryboardPromptBlocks(data: unknown): Record<string, unknown> | undefined {
-  if (!data || typeof data !== 'object') return undefined;
-  const storyboardPrompt = (data as Record<string, unknown>)['storyboardPrompt'];
-  if (!storyboardPrompt || typeof storyboardPrompt !== 'object') return undefined;
-  const promptBlocks = (storyboardPrompt as Record<string, unknown>)['promptBlocks'];
-  if (!promptBlocks || typeof promptBlocks !== 'object') return undefined;
-  return promptBlocks as Record<string, unknown>;
+function readStoryboardPayload(operations: CanvasMarkdownCapabilityOperations): CanvasStoryboardPayload {
+  const payload = vi.mocked(operations.createStoryboard).mock.calls[0]?.[0];
+  if (!payload) {
+    throw new Error('Expected createStoryboard to be called');
+  }
+  return payload;
+}
+
+function readFirstStoryboardShot(
+  payload: CanvasStoryboardPayload,
+): CanvasStoryboardPayload['scenes'][number]['shotPlans'][number] {
+  const shot = payload.scenes[0]?.shotPlans[0];
+  if (!shot) {
+    throw new Error('Expected storyboard payload to contain a first shot');
+  }
+  return shot;
 }
 
 function createResource(token: string): CanvasMarkdownResourceRef {

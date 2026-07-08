@@ -37,6 +37,7 @@ interface NksLayerData {
   readonly maskLayerId: string | null;
   readonly children: NksLayerData[];
   readonly data?: string;
+  readonly source?: import('@neko/shared').NksLayerSourceRef;
   readonly normalData?: string;
   readonly alphaLock?: boolean;
   readonly adjustmentFilter?: string;
@@ -250,6 +251,7 @@ function deserializeLayers(raw: NksLayerData[]): LayerData[] {
     children: deserializeLayers(l.children ?? []),
     texture: null,
     pendingData: l.data,
+    source: l.source,
     pendingNormalData: l.normalData,
     alphaLock: l.alphaLock ?? false,
     adjustmentFilter: l.adjustmentFilter,
@@ -361,6 +363,7 @@ function serializeLayer(layer: LayerData, gl: WebGL2RenderingContext | null): Nk
     maskLayerId: layer.maskLayerId,
     children: layer.children.map((c) => serializeLayer(c, gl)),
     data,
+    source: layer.source,
     normalData:
       layer.normalTexture && gl
         ? readTextureAsBase64(gl, layer.normalTexture, layer.width, layer.height)

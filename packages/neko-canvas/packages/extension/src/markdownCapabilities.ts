@@ -15,6 +15,9 @@ import {
   type CanvasAgentContentPayload,
   type CanvasCreateCompositeRequest,
   type CanvasCreateCompositeResult,
+  type CanvasStoryboardPayload,
+  type CanvasStoryboardShotPlan,
+  type CreatedCanvasStoryboard,
   type CreativeTableFieldDescriptor,
   type CanvasMarkdownCapabilityDiagnostic,
   type CanvasMarkdownCapabilityInput,
@@ -30,6 +33,7 @@ import {
   type CanvasCreativeTableValueType,
   type CanvasStoryboardPromptBlocks,
   type CanvasStoryboardPromptBlockKind,
+  type CanvasStoryboardReferenceMedia,
   type CanvasStoryboardPromptState,
   type CanvasStoryboardSemanticPromptDocument,
   type TableColumnDef,
@@ -45,6 +49,10 @@ export interface CanvasMarkdownCapabilityOperations {
   ): Promise<string>;
   updateNode(nodeId: string, data: Record<string, unknown>): Promise<void>;
   createComposite(request: CanvasCreateCompositeRequest): Promise<CanvasCreateCompositeResult>;
+  createStoryboard(
+    payload: CanvasStoryboardPayload,
+    options?: { readonly startX?: number; readonly startY?: number; readonly workflowPlanId?: string },
+  ): Promise<CreatedCanvasStoryboard & { readonly documentUri?: string }>;
 }
 
 interface MarkdownTable {
@@ -601,13 +609,13 @@ async function createStoryboardFromMarkdown(
       preview: createTablePreview(input, parsed.table, []),
     };
   }
-  const production = buildStoryboardProductionRequest(
+  const production = buildStoryboardProductionPayload(
     input,
     parsed.table,
     profileResult.profile,
     profileColumns,
   );
-  if (production.diagnostics.length > 0 || !production.request) {
+  if (production.diagnostics.length > 0 || !production.payload) {
     return {
       capabilityId: input.capabilityId,
       status: 'blocked',
@@ -616,16 +624,20 @@ async function createStoryboardFromMarkdown(
     };
   }
 
-  const result = await operations.createComposite(production.request);
-  const nodeIds = [result.containerId, ...result.childIds];
+  const result = await operations.createStoryboard(production.payload, {
+    startX: input.target?.insertionPoint?.x,
+    startY: input.target?.insertionPoint?.y,
+  });
+  const nodeIds = result.scenes.flatMap((scene) => [scene.sceneNodeId, ...scene.shotIds]);
   return {
     capabilityId: input.capabilityId,
     status: 'created',
+    documentUri: result.documentUri,
     nodeIds,
     diagnostics: [],
     preview: {
       ...createTablePreview(input, parsed.table, []),
-      rowCount: result.childIds.length,
+      rowCount: result.totalShots,
     },
   };
 }
@@ -1155,7 +1167,7 @@ function createTableMarkdownMetadata(
   };
 }
 
-function buildStoryboardProductionRequest(
+function buildStoryboardProductionPayload(
   input: Extract<
     CanvasMarkdownTableCapabilityInput,
     { capabilityId: 'canvas.createStoryboardFromMarkdown' }
@@ -1164,12 +1176,18 @@ function buildStoryboardProductionRequest(
   profile: CanvasMarkdownTableProfileDescriptor,
   profileColumns: CanvasMarkdownResolvedTableProfileColumns,
 ): {
-  readonly request?: CanvasCreateCompositeRequest;
+  readonly payload?: CanvasStoryboardPayload;
   readonly diagnostics: readonly CanvasMarkdownCapabilityDiagnostic[];
 } {
+  const resourceBindings = bindResources(
+    table,
+    input.resources ?? [],
+    profileColumns.resourceColumns,
+  );
   const diagnostics = [
     ...validateTableProfile(profile, table, 'apply', profileColumns),
     ...validateOperationRequiredFields(input, profile, table, profileColumns, 'error'),
+    ...resourceBindings.diagnostics,
   ];
   const visualColumn = getStoryboardProductionContentColumn(profileColumns);
   if (diagnostics.some((diagnostic) => diagnostic.severity === 'error') || !visualColumn) {
@@ -1205,96 +1223,262 @@ function buildStoryboardProductionRequest(
       ],
     };
   }
-  const sceneVideoPromptByRow = createSceneVideoPromptByRow({
+  const scenes = createStoryboardScenesFromRows({
+    input,
     rows: productionRows,
     sceneColumn,
+    shotColumn,
+    sourceColumn,
+    sourcePanelColumn,
+    imagePromptColumn,
     videoPromptColumn,
+    motionColumn,
+    durationColumn,
+    characterColumn,
+    dialogueColumn,
+    visualColumn,
+    resourceBindings,
     defaultSceneTitle: sceneTitle,
   });
+  const sourceScriptUri = createMarkdownStoryboardSourceUri(input);
   return {
-    request: {
-      containerType: 'scene',
-      containerPreset: 'scene.basic',
-      position: input.target?.insertionPoint ?? { x: 0, y: 0 },
-      data: {
-        sceneTitle,
-        sceneNumber: 1,
-        markdownSource: input.markdown,
+    payload: {
+      mode: 'semantic',
+      sourceScriptUri,
+      creativeScope: {
+        kind: scenes.length > 1 ? 'sequence' : 'scene',
+        title: input.title ?? sceneTitle,
+        sourceStoryboardRef: sourceScriptUri,
+        sceneIds: scenes.map((scene) => scene.sceneId),
+        shotIds: scenes.flatMap((scene) =>
+          scene.shotPlans.map((shot) => shot.shotId ?? `${scene.sceneId}-shot-${shot.shotNumber}`),
+        ),
       },
-      autoLayout: true,
-      children: productionRows.map((row, index) => {
-        const visual = getCell(row, visualColumn);
-        const imagePrompt = imagePromptColumn ? getCell(row, imagePromptColumn) : '';
-        const videoPrompt = sceneVideoPromptByRow.get(row) ?? '';
-        const dialogue = dialogueColumn ? getCell(row, dialogueColumn) : '';
-        const duration = parseDurationSeconds(
-          durationColumn ? getCell(row, durationColumn) : undefined,
-        );
-        const shotNumber = parseShotNumber(
-          shotColumn ? getCell(row, shotColumn) : undefined,
-          index,
-        );
-        const characters = characterColumn
-          ? parseCharacters(getCell(row, characterColumn))
-          : undefined;
-        return {
-          type: 'shot' as const,
-          preset: 'shot.basic',
-          data: {
-            shotNumber,
-            duration,
-            visualDescription: visual,
-            characterAction: motionColumn ? (getCell(row, motionColumn) ?? visual) : visual,
-            storyboardPrompt: createMarkdownStoryboardPromptState({
-              shotKey: createMarkdownStoryboardShotKey(input.title, row, shotNumber),
-              visual,
-              imagePrompt,
-              videoPrompt,
-              dialogue,
-              duration,
-            }),
-            ...(motionColumn
-              ? { cameraMovement: normalizeCameraMovement(getCell(row, motionColumn)) }
-              : {}),
-            ...(characters && characters.length > 0 ? { characters } : {}),
-            ...(dialogue ? { dialogue } : {}),
-            ...(sourceColumn ? { markdownSourceRef: getCell(row, sourceColumn) } : {}),
-            ...(sourcePanelColumn ? { markdownSourcePanel: getCell(row, sourcePanelColumn) } : {}),
-            sceneTags: sceneColumn ? [getCell(row, sceneColumn)].filter(Boolean) : [],
-          },
-        };
-      }),
+      scenes,
     },
     diagnostics,
   };
 }
 
-function createSceneVideoPromptByRow(input: {
+function createStoryboardScenesFromRows(input: {
+  readonly input: Extract<
+    CanvasMarkdownTableCapabilityInput,
+    { capabilityId: 'canvas.createStoryboardFromMarkdown' }
+  >;
   readonly rows: readonly MarkdownTableRow[];
   readonly sceneColumn: MarkdownTableColumn | undefined;
+  readonly shotColumn: MarkdownTableColumn | undefined;
+  readonly sourceColumn: MarkdownTableColumn | undefined;
+  readonly sourcePanelColumn: MarkdownTableColumn | undefined;
+  readonly imagePromptColumn: MarkdownTableColumn | undefined;
   readonly videoPromptColumn: MarkdownTableColumn | undefined;
+  readonly motionColumn: MarkdownTableColumn | undefined;
+  readonly durationColumn: MarkdownTableColumn | undefined;
+  readonly characterColumn: MarkdownTableColumn | undefined;
+  readonly dialogueColumn: MarkdownTableColumn | undefined;
+  readonly visualColumn: MarkdownTableColumn;
+  readonly resourceBindings: ResourceBindingResult;
   readonly defaultSceneTitle: string;
-}): ReadonlyMap<MarkdownTableRow, string> {
-  const promptByRow = new Map<MarkdownTableRow, string>();
-  if (!input.videoPromptColumn) return promptByRow;
-  let activeSceneKey = input.defaultSceneTitle;
-  let activeSceneVideoPrompt = '';
-  for (const row of input.rows) {
-    const explicitSceneKey = input.sceneColumn ? getCell(row, input.sceneColumn).trim() : '';
-    const sceneKey = explicitSceneKey || activeSceneKey || input.defaultSceneTitle;
-    if (sceneKey !== activeSceneKey) {
-      activeSceneKey = sceneKey;
-      activeSceneVideoPrompt = '';
+}): CanvasStoryboardPayload['scenes'] {
+  const scenes: CanvasStoryboardPayload['scenes'][number][] = [];
+  let activeSceneTitle = input.defaultSceneTitle;
+  let activeScene = createStoryboardScenePlan(activeSceneTitle, 0);
+
+  for (const [rowIndex, row] of input.rows.entries()) {
+    const rowSceneTitle = input.sceneColumn ? getCell(row, input.sceneColumn).trim() : '';
+    if (rowSceneTitle && rowSceneTitle !== activeSceneTitle) {
+      if (activeScene.shotPlans.length > 0) {
+        scenes.push(activeScene);
+      }
+      activeSceneTitle = rowSceneTitle;
+      activeScene = createStoryboardScenePlan(activeSceneTitle, scenes.length);
     }
-    const explicitVideoPrompt = getCell(row, input.videoPromptColumn).trim();
-    if (explicitVideoPrompt) {
-      activeSceneVideoPrompt = explicitVideoPrompt;
+
+    const visual = getCell(row, input.visualColumn);
+    const imagePrompt = input.imagePromptColumn ? getCell(row, input.imagePromptColumn) : '';
+    const sceneVideoPrompt = input.videoPromptColumn ? getCell(row, input.videoPromptColumn) : '';
+    if (sceneVideoPrompt.trim()) {
+      activeScene = applyMarkdownStoryboardSceneVideoPrompt(
+        activeScene,
+        sceneVideoPrompt.trim(),
+      );
     }
-    if (activeSceneVideoPrompt) {
-      promptByRow.set(row, activeSceneVideoPrompt);
+    const dialogue = input.dialogueColumn ? getCell(row, input.dialogueColumn) : '';
+    const duration = parseDurationSeconds(
+      input.durationColumn ? getCell(row, input.durationColumn) : undefined,
+    );
+    const shotNumber = parseShotNumber(
+      input.shotColumn ? getCell(row, input.shotColumn) : undefined,
+      rowIndex,
+    );
+    const characters = input.characterColumn
+      ? parseCharacters(getCell(row, input.characterColumn))
+      : [];
+    const referenceFields = createStoryboardReferenceFieldsForRow({
+      row,
+      resourceBindings: input.resourceBindings,
+      resourceColumns: [input.sourceColumn].filter(
+        (column): column is MarkdownTableColumn => Boolean(column),
+      ),
+      sourcePanel: input.sourcePanelColumn ? getCell(row, input.sourcePanelColumn) : undefined,
+    });
+    const shotPlan: CanvasStoryboardShotPlan = {
+      shotId: createMarkdownStoryboardShotKey(input.input.title, row, shotNumber),
+      shotNumber,
+      duration,
+      visualDescription: visual || imagePrompt || sceneVideoPrompt,
+      characters,
+      shotScale: 'MS',
+      ...(input.motionColumn
+        ? { cameraMovement: normalizeCameraMovement(getCell(row, input.motionColumn)) }
+        : {}),
+      characterAction: input.motionColumn ? (getCell(row, input.motionColumn) || visual) : visual,
+      emotion: [],
+      sceneTags: [activeSceneTitle].filter(Boolean),
+      ...(dialogue ? { dialogue } : {}),
+      storyboardPrompt: createMarkdownStoryboardPromptState({
+        shotKey: createMarkdownStoryboardShotKey(input.input.title, row, shotNumber),
+        visual,
+        imagePrompt,
+        videoPrompt: '',
+        dialogue,
+        duration,
+        referenceMedia: createMarkdownStoryboardReferenceMedia(referenceFields),
+      }),
+      ...referenceFields,
+    };
+    activeScene = {
+      ...activeScene,
+      shotPlans: [...activeScene.shotPlans, shotPlan],
+    };
+  }
+
+  if (activeScene.shotPlans.length > 0) {
+    scenes.push(activeScene);
+  }
+
+  return scenes.map((scene, index) => ({
+    ...scene,
+    sceneNumber: index + 1,
+  }));
+}
+
+function createStoryboardScenePlan(
+  sceneTitle: string,
+  sceneIndex: number,
+): CanvasStoryboardPayload['scenes'][number] {
+  return {
+    sceneId: sanitizeMarkdownStoryboardId(`${sceneTitle || 'scene'}-${sceneIndex + 1}`),
+    sceneTitle: sceneTitle || `Scene ${sceneIndex + 1}`,
+    sceneNumber: sceneIndex + 1,
+    shotPlans: [],
+  };
+}
+
+function applyMarkdownStoryboardSceneVideoPrompt(
+  scene: CanvasStoryboardPayload['scenes'][number],
+  videoPrompt: string,
+): CanvasStoryboardPayload['scenes'][number] {
+  if (scene.storyboardPrompt?.promptBlocks?.videoPromptDocument) {
+    return scene;
+  }
+  return {
+    ...scene,
+    storyboardPrompt: createMarkdownStoryboardScenePromptState({
+      sceneKey: scene.sceneId,
+      videoPrompt,
+    }),
+  };
+}
+
+function createStoryboardReferenceFieldsForRow(input: {
+  readonly row: MarkdownTableRow;
+  readonly resourceBindings: ResourceBindingResult;
+  readonly resourceColumns: readonly MarkdownTableColumn[];
+  readonly sourcePanel: string | undefined;
+}): Partial<CanvasStoryboardShotPlan> {
+  const resourcesByToken = new Map(
+    input.resourceBindings.bindings
+      .filter(
+        (binding): binding is ResourceBindingSummary & { readonly resource: CanvasMarkdownResourceRef } =>
+          binding.status === 'bound' && Boolean(binding.resource),
+      )
+      .map((binding) => [normalizeResourceToken(binding.token), binding.resource] as const),
+  );
+  for (const column of input.resourceColumns) {
+    const cellValue = getCell(input.row, column);
+    const tokens = extractResourceTokensFromCell(cellValue);
+    for (const token of tokens) {
+      const resource = resourcesByToken.get(normalizeResourceToken(token));
+      if (!resource) continue;
+      const sourcePanel = input.sourcePanel?.trim() || extractResourceHintFromCell(cellValue, token);
+      const metadata = sourcePanel
+        ? { markdownSourcePanel: sourcePanel }
+        : undefined;
+      if (isResourceRef(resource.resourceRef)) {
+        return {
+          referenceResourceRef: resource.resourceRef,
+          sourceMediaRefs: [
+            {
+              refId: resource.token ?? resource.alias ?? token,
+              role: 'source',
+              locator: { type: 'asset', assetId: resource.resourceRef.id },
+              ...(resource.label ? { label: resource.label } : {}),
+              resourceRef: resource.resourceRef,
+              ...(metadata ? { metadata } : {}),
+            },
+          ],
+        };
+      }
+      if (resource.documentResourceRef) {
+        return {
+          referenceImageResourceRef: resource.documentResourceRef,
+          sourceMediaRefs: [
+            {
+              refId: resource.token ?? resource.alias ?? token,
+              role: 'source',
+              locator: {
+                type: 'workspace-path',
+                path: resource.documentResourceRef.entryPath ?? resource.token ?? resource.alias ?? token,
+              },
+              ...(resource.label ? { label: resource.label } : {}),
+              documentResourceRef: resource.documentResourceRef,
+              ...(metadata ? { metadata } : {}),
+            },
+          ],
+        };
+      }
+      if (resource.sourcePath) {
+        return {
+          referenceImagePath: resource.sourcePath,
+          sourceMediaRefs: [
+            {
+              refId: resource.token ?? resource.alias ?? token,
+              role: 'source',
+              locator: { type: 'workspace-path', path: resource.sourcePath },
+              ...(resource.label ? { label: resource.label } : {}),
+              ...(metadata ? { metadata } : {}),
+            },
+          ],
+        };
+      }
     }
   }
-  return promptByRow;
+  return {};
+}
+
+function createMarkdownStoryboardSourceUri(
+  input: Extract<
+    CanvasMarkdownTableCapabilityInput,
+    { capabilityId: 'canvas.createStoryboardFromMarkdown' }
+  >,
+): string {
+  const source =
+    input.provenance?.messageId ??
+    input.provenance?.toolCallId ??
+    input.title ??
+    'markdown-storyboard';
+  return `markdown:${sanitizeMarkdownStoryboardId(source)}`;
 }
 
 function createMarkdownStoryboardPromptState(input: {
@@ -1304,6 +1488,7 @@ function createMarkdownStoryboardPromptState(input: {
   readonly videoPrompt: string;
   readonly dialogue: string;
   readonly duration: number;
+  readonly referenceMedia?: CanvasStoryboardReferenceMedia;
 }): CanvasStoryboardPromptState {
   const imagePromptText = input.imagePrompt.trim();
   const videoPromptText = input.videoPrompt.trim();
@@ -1347,10 +1532,40 @@ function createMarkdownStoryboardPromptState(input: {
   return {
     version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
     ...(hasMarkdownPromptBlocks(promptBlocks) ? { promptBlocks } : {}),
+    ...(input.referenceMedia ? { referenceMedia: input.referenceMedia } : {}),
     generationParams,
     nextCreativeState: resolveCanvasStoryboardNextCreativeState({
       promptBlocks,
+      referenceMedia: input.referenceMedia,
       generationParams,
+    }),
+  };
+}
+
+function createMarkdownStoryboardReferenceMedia(
+  fields: Partial<CanvasStoryboardShotPlan>,
+): CanvasStoryboardReferenceMedia | undefined {
+  const imageRefs = fields.sourceMediaRefs?.filter((ref) => ref.role === 'source') ?? [];
+  return imageRefs.length > 0 ? { imageRefs } : undefined;
+}
+
+function createMarkdownStoryboardScenePromptState(input: {
+  readonly sceneKey: string;
+  readonly videoPrompt: string;
+}): CanvasStoryboardPromptState {
+  const promptBlocks: CanvasStoryboardPromptBlocks = {
+    videoPromptDocument: createMarkdownStoryboardPromptDocument({
+      shotKey: `${input.sceneKey}:scene`,
+      blockKind: 'video',
+      text: input.videoPrompt,
+      fieldId: 'scene.videoPrompt',
+    }),
+  };
+  return {
+    version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+    promptBlocks,
+    nextCreativeState: resolveCanvasStoryboardNextCreativeState({
+      promptBlocks,
     }),
   };
 }
@@ -1529,7 +1744,7 @@ function createSafeResourceCandidateSummary(
   return {
     ...(resource.label ? { label: resource.label } : {}),
     ...(resource.role ? { role: resource.role } : {}),
-    ...(resource.token ? { token: resource.token } : {}),
+    ...(resource.token || resource.alias ? { token: resource.token ?? resource.alias } : {}),
     ...(resource.label ? { sourceTitle: resource.label } : {}),
   };
 }
@@ -1537,6 +1752,7 @@ function createSafeResourceCandidateSummary(
 function resourceLookupTokens(resource: CanvasMarkdownResourceRef): readonly string[] {
   const tokens = [
     resource.token,
+    resource.alias,
     resource.label,
     resource.sourcePath,
     resource.sourcePath ? resource.sourcePath.split(/[\\/]/).pop() : undefined,
@@ -1565,7 +1781,10 @@ function extractResourceTokensFromCell(value: string): readonly string[] {
   const tokens: string[] = [];
   for (const match of value.matchAll(COMMONMARK_IMAGE_RE)) {
     if (match[1]) {
-      tokens.push(stripMarkdownToken(match[1]));
+      const token = normalizeResourceCellToken(match[1]);
+      if (token && isAllowedResourceCellToken(token) && !isIgnoredResourceWord(token)) {
+        tokens.push(token);
+      }
     }
   }
   const valueWithoutImages = value.replace(COMMONMARK_IMAGE_RE, ' ');
@@ -1580,8 +1799,37 @@ function extractResourceTokensFromCell(value: string): readonly string[] {
 
 function normalizeResourceCellToken(value: string): string {
   return stripMarkdownToken(value)
+    .replace(/^@+/, '')
     .replace(/^["'([{<]+|[>"'\])}.。!?！？]+$/g, '')
     .replace(/#.+$/, '');
+}
+
+function extractResourceHintFromCell(value: string, token: string): string | undefined {
+  const imageHint = extractResourceHintFromCandidates(
+    Array.from(value.matchAll(COMMONMARK_IMAGE_RE), (match) => match[1] ?? ''),
+    token,
+  );
+  if (imageHint) return imageHint;
+  const valueWithoutImages = value.replace(COMMONMARK_IMAGE_RE, ' ');
+  return extractResourceHintFromCandidates(valueWithoutImages.split(RESOURCE_TOKEN_SPLIT_RE), token);
+}
+
+function extractResourceHintFromCandidates(
+  candidates: readonly string[],
+  token: string,
+): string | undefined {
+  const expected = normalizeResourceToken(token);
+  for (const candidate of candidates) {
+    const stripped = stripMarkdownToken(candidate)
+      .replace(/^@+/, '')
+      .replace(/^["'([{<]+|[>"'\])}.。!?！？]+$/g, '');
+    if (normalizeResourceToken(normalizeResourceCellToken(stripped)) !== expected) {
+      continue;
+    }
+    const hint = stripped.match(/#([A-Za-z0-9_.:-]+)/u)?.[1]?.trim();
+    if (hint) return hint;
+  }
+  return undefined;
 }
 
 function isAllowedResourceCellToken(value: string): boolean {

@@ -15,10 +15,12 @@ import type {
   ToolParameters,
   NekoPuppetAPI,
   PuppetFaceParameter,
+  NekoProjectAuthoringDiagnostic,
 } from '@neko/shared';
 import {
   PUPPET_FACE_PARAMETERS,
   PUPPET_FACE_CATEGORIES,
+  createNekoProjectAuthoringDiagnostic,
   getDefaultPuppetFaceParams,
 } from '@neko/shared';
 import * as vscode from 'vscode';
@@ -117,6 +119,31 @@ export function parseJsonFromLLMResponse(text: string): Record<string, unknown> 
 
 const PARAM_SCHEMA_PROMPT = buildParameterSchemaPrompt();
 
+type PuppetCapabilityFailure = {
+  readonly success: false;
+  readonly error: string;
+  readonly diagnostics?: readonly NekoProjectAuthoringDiagnostic[];
+};
+
+function interactiveEditorFailure(error: string): PuppetCapabilityFailure {
+  return {
+    success: false,
+    error,
+    diagnostics: [
+      createNekoProjectAuthoringDiagnostic({
+        code: 'interactive-editor-required',
+        message: error,
+      }),
+    ],
+  };
+}
+
+function requireActivePuppetEditor(api: NekoPuppetAPI): PuppetCapabilityFailure | null {
+  return api.isActive()
+    ? null
+    : interactiveEditorFailure('No active puppet editor is available for parameter writes.');
+}
+
 async function generateWithLLM(systemPrompt: string, userPrompt: string): Promise<string> {
   const result = await vscode.commands.executeCommand<string>(
     'neko.agent.llm.generate',
@@ -173,6 +200,10 @@ class NekoPuppetCapabilityProviderImpl implements AgentCapabilityProvider {
         async execute(args) {
           const description = args.description as string;
           const shouldApply = (args.apply as boolean | undefined) ?? true;
+          if (shouldApply) {
+            const activeEditor = requireActivePuppetEditor(api);
+            if (activeEditor) return activeEditor;
+          }
 
           const systemPrompt =
             'You are a Live2D/Puppet character face parameter expert. Given a text description of a character face, ' +
@@ -250,6 +281,10 @@ class NekoPuppetCapabilityProviderImpl implements AgentCapabilityProvider {
         async execute(args) {
           const imagePath = args.imagePath as string;
           const shouldApply = (args.apply as boolean | undefined) ?? true;
+          if (shouldApply) {
+            const activeEditor = requireActivePuppetEditor(api);
+            if (activeEditor) return activeEditor;
+          }
 
           let imageBase64: string;
           let mimeType: string;
@@ -344,12 +379,22 @@ class NekoPuppetCapabilityProviderImpl implements AgentCapabilityProvider {
         async execute(args) {
           const instruction = args.instruction as string;
           const shouldApply = (args.apply as boolean | undefined) ?? true;
+          if (shouldApply) {
+            const activeEditor = requireActivePuppetEditor(api);
+            if (activeEditor) return activeEditor;
+          }
 
           const currentParams = api.getCurrentFaceParams();
           if (Object.keys(currentParams).length === 0) {
             return {
               success: false,
               error: 'No puppet editor is active or no face parameters are set',
+              diagnostics: [
+                createNekoProjectAuthoringDiagnostic({
+                  code: 'interactive-editor-required',
+                  message: 'No puppet editor is active or no face parameters are set',
+                }),
+              ],
             };
           }
 

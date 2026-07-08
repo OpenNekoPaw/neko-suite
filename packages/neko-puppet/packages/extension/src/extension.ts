@@ -65,6 +65,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<NekoPu
   // Expose NekoPuppetAPI for cross-extension communication (neko-agent tools)
   const api: NekoPuppetAPI = {
     getCurrentFaceParams: () => puppetEditorProvider.getCurrentFaceParams(),
+    isActive: () => puppetEditorProvider.isActive(),
     setFaceParams: (params: Record<string, number>) => puppetEditorProvider.setFaceParams(params),
   };
 

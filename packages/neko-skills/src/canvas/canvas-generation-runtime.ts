@@ -1,4 +1,8 @@
-import { projectShotDataPrompt, type CanvasStoryboardPromptState } from '@neko/shared';
+import {
+  projectShotDataPrompt,
+  type CanvasShotPromptProjectableData,
+  type CanvasStoryboardPromptState,
+} from '@neko/shared';
 import type { ReferenceDescriptor } from '@neko/shared';
 
 export type CanvasPromptRole = 'system' | 'user' | 'assistant';
@@ -318,7 +322,9 @@ export function buildCanvasShotPromptUserContent(
         fallback: 'Generate an image prompt for this shot.',
       };
   const parts: string[] = [];
-  const promptProjection = projectShotDataPrompt(shotData, { preferredBlockKind: 'image' });
+  const promptProjection = projectShotDataPrompt(toProjectableShotData(shotData), {
+    preferredBlockKind: 'image',
+  });
   if (promptProjection.source === 'semantic-prompt-document') {
     parts.push(`${labels.promptDocument}: ${promptProjection.prompt}`);
   } else if (shotData.visualDescription) {
@@ -344,6 +350,19 @@ export function buildCanvasShotPromptUserContent(
   if (shotData.vfx?.length) parts.push(`VFX: ${shotData.vfx.join(', ')}`);
 
   return parts.join('\n') || labels.fallback;
+}
+
+function toProjectableShotData(shotData: CanvasShotPromptData): CanvasShotPromptProjectableData {
+  const data: CanvasShotPromptProjectableData = {};
+  if (shotData.storyboardPrompt) data.storyboardPrompt = shotData.storyboardPrompt;
+  if (shotData.generationPrompt) data.generationPrompt = shotData.generationPrompt;
+  if (shotData.visualDescription) data.visualDescription = shotData.visualDescription;
+  if (shotData.characters) {
+    data.characters = shotData.characters.map((character) => ({
+      characterName: character.characterName,
+    }));
+  }
+  return data;
 }
 
 function isChineseCanvasLocale(locale: string | undefined): boolean {

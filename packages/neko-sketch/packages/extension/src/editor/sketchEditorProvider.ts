@@ -157,11 +157,6 @@ interface PendingRequest<T> {
   timer: ReturnType<typeof setTimeout>;
 }
 
-interface PendingFileImport {
-  readonly uri: vscode.Uri;
-  readonly name?: string;
-}
-
 export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.CustomDocument> {
   public static readonly viewType = 'neko.sketchEditor';
 
@@ -195,7 +190,6 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
   // Phase 2: import context for round-trip workflow
   private importContext: SketchImportContext | undefined;
   private pendingImport: { base64: string; name: string; context: SketchImportContext } | undefined;
-  private pendingFileImport: PendingFileImport | undefined;
 
   // Phase 2/3: pending Extension → Webview request/response round-trips
   // Key: requestId, Value: pending promise
@@ -394,6 +388,23 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     });
   }
 
+  async reloadProjectFromDisk(documentUri: vscode.Uri): Promise<boolean> {
+    if (this.activeDocument?.uri.toString() !== documentUri.toString()) {
+      return false;
+    }
+    const webviewPanel = this.activeWebviewPanel;
+    if (!webviewPanel) {
+      return false;
+    }
+    const result = await this.loadSketchProject(documentUri);
+    if (!result.ok || !result.data) {
+      return false;
+    }
+    await webviewPanel.webview.postMessage({ type: 'document:load', data: result.data });
+    this.syncOutline(result.data);
+    return true;
+  }
+
   private getWebviewPanelForDocument(
     document: vscode.CustomDocument,
   ): vscode.WebviewPanel | undefined {
@@ -411,36 +422,6 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       data: base64,
       path: '',
     });
-  }
-
-  /** Queue a file import until the next sketch editor reports ready. */
-  queueFileImport(uri: vscode.Uri, options?: { readonly name?: string }): void {
-    this.pendingFileImport = options?.name ? { uri, name: options.name } : { uri };
-  }
-
-  /** Clear a queued file import if opening the target sketch document fails. */
-  clearQueuedFileImport(): void {
-    this.pendingFileImport = undefined;
-  }
-
-  /** Import a local image/PSD file into the active sketch editor, or queue it for the next one. */
-  async importFileAsset(uri: vscode.Uri, options?: { readonly name?: string }): Promise<boolean> {
-    const webviewPanel = this.activeWebviewPanel;
-    if (!webviewPanel) {
-      this.queueFileImport(uri, options);
-      return true;
-    }
-
-    const document = this.activeDocument;
-    if (!document) {
-      this.queueFileImport(uri, options);
-      return true;
-    }
-    await this.importFileUriThroughAddSource(uri, document.uri, webviewPanel, {
-      caller: 'neko-sketch.external-import',
-      ...(options?.name ? { name: options.name } : {}),
-    });
-    return true;
   }
 
   private async postFeatureFlags(webviewPanel = this.activeWebviewPanel): Promise<void> {
@@ -555,9 +536,18 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
     return this.activeWebviewPanel !== undefined;
   }
 
+  getActiveDocumentUri(): vscode.Uri | undefined {
+    return this.activeDocument?.uri;
+  }
+
   /** Return the current import context (source for round-trip "send back" actions) */
   getImportContext(): SketchImportContext | undefined {
     return this.importContext;
+  }
+
+  setImportContext(context: SketchImportContext): void {
+    this.importContext = context;
+    this.statusBar?.updateContext(context);
   }
 
   /**
@@ -566,8 +556,7 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
    * and injects once the next editor sends its `ready` message.
    */
   importImageWithContext(base64: string, name: string, context: SketchImportContext): void {
-    this.importContext = context;
-    this.statusBar?.updateContext(context);
+    this.setImportContext(context);
     if (this.activeWebviewPanel) {
       this.postImageData(base64, name);
     } else {
@@ -899,14 +888,6 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
             path: '',
           });
         }
-        if (this.pendingFileImport) {
-          const pending = this.pendingFileImport;
-          this.pendingFileImport = undefined;
-          await this.importFileUriThroughAddSource(pending.uri, document.uri, webviewPanel, {
-            caller: 'neko-sketch.queued-import',
-            ...(pending.name ? { name: pending.name } : {}),
-          });
-        }
         break;
       }
       case 'webviewKeyboardFocus': {
@@ -1145,19 +1126,6 @@ export class SketchEditorProvider implements vscode.CustomEditorProvider<vscode.
       void vscode.window.showErrorMessage(message);
       await this.postImportFailure(webviewPanel, getImportFailureCode(error), message, uri);
     }
-  }
-
-  private async importFileUriThroughAddSource(
-    uri: vscode.Uri,
-    documentUri: vscode.Uri,
-    webviewPanel: vscode.WebviewPanel,
-    options: { readonly caller: string; readonly name?: string },
-  ): Promise<void> {
-    await this.handleSketchProjectAddSource(
-      this.createSketchFilePickerSourceAddRequest(uri, documentUri, options),
-      documentUri,
-      webviewPanel,
-    );
   }
 
   private async handleSketchProjectAddSource(

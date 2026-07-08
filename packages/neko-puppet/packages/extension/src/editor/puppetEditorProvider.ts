@@ -901,6 +901,11 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     return this._activeDocument?.projectData?.parameters ?? {};
   }
 
+  /** Whether there is an active puppet document for runtime parameter writes. */
+  isActive(): boolean {
+    return this._activeDocument?.projectData !== undefined;
+  }
+
   /** Get parameter names reported by the active puppet renderer */
   getAvailableFaceParamNames(): string[] {
     if (this.activeParameterNames.size > 0) return [...this.activeParameterNames];
@@ -912,7 +917,9 @@ export class PuppetEditorProvider implements vscode.CustomEditorProvider<PuppetD
     params: Record<string, number>,
     options: { persist?: boolean } = {},
   ): Promise<void> {
-    if (!this._activeDocument?.projectData) return;
+    if (!this._activeDocument?.projectData) {
+      throw new Error('No active puppet editor is available for face parameter writes.');
+    }
     const nextParameters = {
       ...this._activeDocument.projectData.parameters,
       ...params,

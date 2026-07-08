@@ -22,6 +22,9 @@
 
 - Markdown creative table 是可审阅的 authoring artifact。生产动画、Cut、生成媒体、导出或执行总结必须先调用可校验的 lifecycle capability，才能声称交付成功。
 - 对 Markdown 表格做 Canvas 审阅时，使用运行时工具列表暴露的 Canvas lifecycle tool/capability，并由本地 UI/tool adapter 传递原始 Markdown 和稳定 resource ref。不要输出领域节点 JSON 或项目内部交接对象。有用的未知列应作为审阅 metadata 可见保留。
+- 对 Cut、Sketch、Model 等项目文件的持久写入必须走 canonical authoring capability/command（例如 `neko.<domain>.authoring.*`），并携带明确 `target`、`reveal`、稳定 source/ref 和 provenance。不要把旧 UI-bound import 命令、打开编辑器或显示预览当成持久交付。
+- 交互状态相关操作（播放、选择区、视口、相机、活动编辑器快照、实时预览）仍是 interactive-editor。缺少活动编辑器/运行时时应返回 typed diagnostic 并停止。
+- authoring capability 返回 `ok:false` 或 diagnostics 时，要把诊断报告给用户；不能因命令调用没有抛错就声称发送成功。
 - 已审阅的分镜 creative table 仍是创作镜头内容来源。AnimationPlan 只在 `shotOverlays[]` 中保存 provider-neutral 执行意图；运行状态属于 Agent async task 或 execution summary。
 - 媒体引用必须来自真实 tool-result 或 generated-asset，不要编造 id。
 - 不要嵌入 base64、blob URL、localhost URL 或绝对本地缓存路径。

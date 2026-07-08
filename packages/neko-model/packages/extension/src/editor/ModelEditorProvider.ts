@@ -29,6 +29,8 @@ import {
   handleProjectSourceAddHostRequest,
   handleProjectSourceAddRequest,
   ingestProjectSourceAddRequest,
+  isWorkspaceMediaPathResolvedLocal,
+  resolveWorkspaceMediaPath,
 } from '@neko/shared';
 import {
   createProjectSnapshotPackage,
@@ -108,7 +110,6 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<
 
   private activeWebviewPanel: vscode.WebviewPanel | undefined;
   private activeDocument: ModelDocument | undefined;
-  private queuedModelImport: { uri: vscode.Uri } | undefined;
   private engineClient: EngineClient | undefined;
   private activeStream: ActiveSceneStream | undefined;
   private panelGeneration = 0;
@@ -257,12 +258,8 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<
     return Boolean(this.activeWebviewPanel && this.activeDocument);
   }
 
-  queueModelImport(uri: vscode.Uri): void {
-    this.queuedModelImport = { uri };
-  }
-
-  clearQueuedModelImport(): void {
-    this.queuedModelImport = undefined;
+  getActiveDocumentUri(): vscode.Uri | undefined {
+    return this.activeDocument?.uri;
   }
 
   async importAsset(uri: vscode.Uri): Promise<boolean> {
@@ -362,13 +359,6 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<
           await this.loadModelInEngine(filePath, webviewPanel, generation);
         }
 
-        const queued = this.queuedModelImport;
-        if (queued) {
-          this.queuedModelImport = undefined;
-          if (this.isPanelCurrent(webviewPanel, generation)) {
-            await this.importModelFile(queued.uri.fsPath, document, webviewPanel, generation);
-          }
-        }
         break;
       }
 
@@ -1027,11 +1017,19 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<
 
     const runtimePath =
       result.ingest?.outputPath ??
-      (await resolveNkmProjectModelSource(document.uri)) ??
       request.sourcePath ??
+      this.resolveProjectModelSourcePath(result.durablePath, document.uri) ??
       result.durablePath;
     await this.loadModelInEngine(runtimePath, webviewPanel, generation);
     return result;
+  }
+
+  private resolveProjectModelSourcePath(src: string, documentUri: vscode.Uri): string | undefined {
+    const resolved = resolveWorkspaceMediaPath({
+      source: src,
+      context: createNkmSourcePolicyOptions(documentUri).context,
+    });
+    return isWorkspaceMediaPathResolvedLocal(resolved) ? resolved.path : undefined;
   }
 
   private createModelProjectSourceAddRequest(input: {
@@ -1499,6 +1497,14 @@ export class ModelEditorProvider implements vscode.CustomReadonlyEditorProvider<
         vscode.workspace.getWorkspaceFolder?.(vscode.Uri.file(filePath))?.uri.fsPath ??
         vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
         path.dirname(filePath),
+      fileExists: async (candidatePath) => {
+        try {
+          await vscode.workspace.fs.stat(vscode.Uri.file(candidatePath));
+          return true;
+        } catch {
+          return false;
+        }
+      },
       sourceFileProvider: {
         engineSourceResolver: ({ request, path: resolvedPath }) =>
           this.createModelEngineSource(request, resolvedPath),
