@@ -1,0 +1,31 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "baseUrl": ".",
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "types": ["node", "vitest/globals"],
+    "paths": {
+      "@neko-agent/webview/root": ["src/renderer/webview-root-types.tsx"],
+      "@neko/webview/root": ["src/renderer/webview-root-types.tsx"],
+      "@/*": ["../neko-agent/packages/webview/src/*"],
+      "@neko-agent/types": ["../neko-agent/packages/agent-types/src/index.ts"],
+      "@neko-agent/types/*": ["../neko-agent/packages/agent-types/src/*"],
+      "@neko/markdown": ["../neko-markdown/src/index.ts"],
+      "@neko/markdown/*": ["../neko-markdown/src/*"]
+    }
+  },
+  "include": ["src/**/*", "vite.config.ts", "vitest.config.ts"]
+}
