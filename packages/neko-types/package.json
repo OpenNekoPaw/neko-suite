@@ -19,6 +19,7 @@
     "./nkplan": "./src/nkplan/index.ts",
     "./nkproj": "./src/nkproj/index.ts",
     "./components": "./src/components/index.ts",
+    "./content-access": "./src/content-access/index.ts",
     "./config/config-reader": "./src/config/config-reader.ts",
     "./types/dashboard-task": "./src/types/dashboard-task.ts",
     "./types/dashboard-project": "./src/types/dashboard-project.ts",
