@@ -33,6 +33,7 @@ import type {
   CanvasUpdateBlockRequest,
   CanvasUpdateBlockResult,
 } from './canvas-agent-operations';
+import type { CanvasHeadlessAuthoringTarget } from './canvas-headless-authoring';
 import type {
   CanvasMarkdownCapabilityInput,
   CanvasMarkdownCapabilityResult,
@@ -283,10 +284,19 @@ export type CanvasNodeUpdateData =
   | Partial<GalleryCanvasNode['data']>;
 
 export interface CanvasImportAssetRequest {
-  readonly path: string;
+  readonly path?: string;
   readonly type?: 'image' | 'video' | 'audio' | 'model';
   readonly name?: string;
   readonly documentResourceRef?: DocumentArchiveResourceRef;
+  readonly resourceRef?: ResourceRef;
+  readonly target?: CanvasHeadlessAuthoringTarget;
+  readonly position?: { readonly x: number; readonly y: number };
+}
+
+export interface CanvasImportAssetResult {
+  readonly documentUri: string;
+  readonly nodeId: string;
+  readonly mediaType: 'image' | 'video' | 'audio';
 }
 
 export interface CanvasPlaybackRevealWorkspaceRequest {
@@ -366,9 +376,9 @@ export interface NekoCanvasAPI {
   };
 
   /**
-   * Import media into the active canvas editor.
+   * Import media/resource facts into a Canvas document through headless authoring.
    */
-  importAsset(asset: CanvasImportAssetRequest): Promise<boolean>;
+  importAsset(asset: CanvasImportAssetRequest): Promise<CanvasImportAssetResult>;
 
   canvas: {
     /**
@@ -844,9 +854,14 @@ export interface NekoPuppetAPI {
   getCurrentFaceParams(): Record<string, number>;
 
   /**
+   * Whether a puppet editor/runtime document is active for interactive parameter writes.
+   */
+  isActive(): boolean;
+
+  /**
    * Set one or more face parameters on the active puppet character.
    * Keys must be valid PuppetFaceParameter ids. Values are clamped to each parameter's [min, max].
-   * Silently no-ops when no puppet editor is open.
+   * Throws or fails visibly when no puppet editor/runtime document is active.
    */
   setFaceParams(params: Record<string, number>): Promise<void>;
 }

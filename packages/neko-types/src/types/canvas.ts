@@ -575,6 +575,8 @@ export interface SceneGroupCanvasNode extends CanvasNodeBase {
     sceneNumber: number;
     location?: string;
     timeOfDay?: string;
+    /** Scene-scoped semantic prompt authority, especially continuous video generation prompts. */
+    storyboardPrompt?: CanvasStoryboardPromptState;
     /** Provider-neutral scene prompt slots imported from Creative Tables. */
     promptSlots?: readonly CanvasCreativePromptSlot[];
   };

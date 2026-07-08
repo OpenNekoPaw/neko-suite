@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   normalizeMarkdownResourceLookupToken,
+  projectNekoMarkdownGenerationPromptParts,
   projectNekoMarkdownExtensions,
   stripMarkdownPlacementHint,
 } from '../index';
@@ -58,6 +59,39 @@ describe('@neko/markdown extension projection', () => {
       }),
     ]);
     expect(projection.source).toBe('![[cover.png]] and [[script.md#Scene 2]]');
+  });
+
+  it('resolves enabled Neko resource references through caller-provided resolvers', () => {
+    const projection = projectNekoMarkdownExtensions('Use ![[cover.png#panel_1]] as reference.', {
+      resourceReferences: 'enabled',
+      requireResolvedReferences: true,
+      resourceResolver: {
+        resolveResource: (resource) =>
+          resource.lookupToken === 'cover.png'
+            ? { status: 'resolved', ref: { kind: 'asset', id: 'asset-cover' } }
+            : { status: 'unresolved' },
+      },
+    });
+
+    expect(projection.resourceReferences).toEqual([
+      expect.objectContaining({
+        embed: true,
+        raw: '![[cover.png#panel_1]]',
+        lookupToken: 'cover.png',
+        placementHint: 'panel_1',
+        status: 'resolved',
+        ref: { kind: 'asset', id: 'asset-cover' },
+      }),
+    ]);
+    expect(projection.handoffRefs).toEqual([
+      {
+        source: 'markdown',
+        ref: { kind: 'asset', id: 'asset-cover' },
+        token: '![[cover.png#panel_1]]',
+        placementHint: 'panel_1',
+      },
+    ]);
+    expect(projection.diagnostics).toEqual([]);
   });
 
   it('tokenizes mentions without resolving ambiguous labels by display order', () => {
@@ -130,6 +164,20 @@ describe('@neko/markdown extension projection', () => {
         rows: [['S1', 'Alley', 'whisper', 'keep me']],
         unknownColumns: ['voice', 'unexpected field'],
       }),
+    ]);
+  });
+
+  it('projects generation prompt chunks independently from skills and renderers', () => {
+    const parts = projectNekoMarkdownGenerationPromptParts(
+      '场景视频生成：以 P1#panel_1 作为首帧参考，镜头缓慢推近，无对白，保持原分格构图一致',
+    );
+
+    expect(parts).toEqual([
+      { kind: 'intent', text: '场景视频生成' },
+      { kind: 'reference', text: '以 P1#panel_1 作为首帧参考' },
+      { kind: 'camera', text: '镜头缓慢推近' },
+      { kind: 'dialogue', text: '无对白' },
+      { kind: 'constraint', text: '保持原分格构图一致' },
     ]);
   });
 

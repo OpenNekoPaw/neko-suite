@@ -13,6 +13,16 @@ export const CURRENT_NKS_VERSION: NksDocumentVersion = '1.2';
 /** Layer types in a sketch document */
 export type LayerType = 'raster' | 'group' | 'vector' | 'text' | 'fill' | 'adjustment';
 
+export type NksLayerSourceRole = 'image' | 'psd' | 'generated-image' | 'reference';
+
+export interface NksLayerSourceRef {
+  readonly kind: 'file';
+  readonly path: string;
+  readonly role: NksLayerSourceRole;
+  readonly mimeType?: string;
+  readonly originalName?: string;
+}
+
 export type NksVectorSegmentType = 'move' | 'line' | 'cubic' | 'quadratic';
 
 export interface NksVectorPathSegment {
@@ -85,6 +95,8 @@ export interface NksLayerData {
   readonly children: NksLayerData[];
   /** Base64-encoded pixel data for raster layers */
   readonly data?: string;
+  /** Stable source used to create or refresh this layer */
+  readonly source?: NksLayerSourceRef;
   /** Base64-encoded normal map data for lighting workflows */
   readonly normalData?: string;
   /** Paint only into existing layer alpha */

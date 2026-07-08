@@ -78,6 +78,24 @@ export {
 } from './fieldBinding';
 export { createStoryboardPayload, applyStoryboardPayloadToCanvas } from './storyboardPlanner';
 export {
+  applyCanvasHeadlessAuthoringOperations,
+  assertNoRuntimeResourceIdentity,
+  createCanvasAuthoringDiagnostic,
+  createCanvasAuthoringStableId,
+  createCanvasHeadlessAuthoringIdFactory,
+  createEmptyCanvasData,
+  planCanvasAgentContentApplication,
+  planCanvasBlockUpdate,
+  planCanvasCompositeCreation,
+  planCanvasConnectionCreation,
+  planCanvasNodeCreation,
+  planCanvasStoryboardSceneShotCreation,
+  validateCanvasDurableResourceIdentity,
+  type CanvasDurableResourceIdentityValidationOptions,
+  type CanvasHeadlessAuthoringIdFactoryOptions,
+  type CanvasHeadlessAuthoringPlannerContext,
+} from './canvasHeadlessAuthoring';
+export {
   createCanvasStoryboardExecutionSummary,
   type CreateCanvasStoryboardExecutionSummaryInput,
 } from './storyboardExecutionSummary';

@@ -101,6 +101,7 @@ export interface CanvasMarkdownCapabilityDiagnostic {
 
 export interface CanvasMarkdownResourceRef {
   readonly token?: string;
+  readonly alias?: string;
   readonly label?: string;
   readonly role?: string;
   readonly sourcePath?: string;
@@ -210,6 +211,7 @@ export interface CanvasMarkdownCapabilityResult {
   readonly resolvedKind?: CanvasMarkdownResolvedKind;
   readonly profileId?: string;
   readonly displayFallback?: boolean;
+  readonly documentUri?: string;
   readonly nodeIds?: readonly string[];
   readonly tableNodeId?: string;
   readonly diagnostics: readonly CanvasMarkdownCapabilityDiagnostic[];
@@ -392,6 +394,7 @@ export function isCanvasMarkdownCapabilityResult(
     (value['resolvedKind'] === undefined || isCanvasMarkdownResolvedKind(value['resolvedKind'])) &&
     optionalString(value['profileId']) &&
     (value['displayFallback'] === undefined || typeof value['displayFallback'] === 'boolean') &&
+    optionalString(value['documentUri']) &&
     (value['nodeIds'] === undefined ||
       (Array.isArray(value['nodeIds']) && value['nodeIds'].every(isNonEmptyString))) &&
     optionalString(value['tableNodeId']) &&

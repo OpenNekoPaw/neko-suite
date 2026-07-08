@@ -38,6 +38,9 @@ export interface NekoMarkdownResourceReferenceToken {
   readonly raw: string;
   readonly target: string;
   readonly lookupToken: string;
+  readonly status: NekoMarkdownReferenceStatus;
+  readonly ref?: NekoMarkdownStableRef;
+  readonly candidates: readonly NekoMarkdownStableRef[];
   readonly placementHint?: string;
   readonly range: NekoMarkdownSourceRange;
 }
@@ -58,6 +61,20 @@ export interface NekoMarkdownSemanticPromptSpan {
   readonly ref?: NekoMarkdownStableRef;
   readonly tone?: string;
   readonly tooltip?: string;
+}
+
+export type NekoMarkdownGenerationPromptPartKind =
+  | 'intent'
+  | 'reference'
+  | 'operation'
+  | 'camera'
+  | 'dialogue'
+  | 'constraint'
+  | 'detail';
+
+export interface NekoMarkdownGenerationPromptPart {
+  readonly kind: NekoMarkdownGenerationPromptPartKind;
+  readonly text: string;
 }
 
 export interface NekoMarkdownStableRef {
@@ -183,7 +200,7 @@ export function projectNekoMarkdownExtensions(
   options: NekoMarkdownProjectOptions = {},
 ): NekoMarkdownExtensionProjection {
   const images = extractCommonMarkImageReferences(markdown);
-  const resourceReferences = extractResourceReferences(markdown);
+  const resourceReferences = extractResourceReferences(markdown, options);
   const mentions = extractMentions(markdown, options);
   const diagnostics = [
     ...diagnoseResourceReferences(resourceReferences, options),
@@ -203,6 +220,18 @@ export function projectNekoMarkdownExtensions(
           ? [{ source: 'markdown' as const, ref: mention.ref, token: mention.raw }]
           : [],
       ),
+      ...resourceReferences.flatMap((reference) =>
+        reference.status === 'resolved' && reference.ref
+          ? [
+              {
+                source: 'markdown' as const,
+                ref: reference.ref,
+                token: reference.raw,
+                ...(reference.placementHint ? { placementHint: reference.placementHint } : {}),
+              },
+            ]
+          : [],
+      ),
     ],
   };
 }
@@ -215,6 +244,69 @@ export function normalizeMarkdownResourceLookupToken(value: string): string {
     .replace(/[\s-]+/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '');
+}
+
+export function projectNekoMarkdownGenerationPromptParts(
+  value: string,
+): readonly NekoMarkdownGenerationPromptPart[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  const intentMatch = /^([^：:]{2,32})[：:]\s*(.*)$/u.exec(trimmed);
+  const parts: NekoMarkdownGenerationPromptPart[] = [];
+  const body = intentMatch?.[2]?.trim() ?? trimmed;
+  const intent = intentMatch?.[1]?.trim();
+  if (intent) {
+    parts.push({ kind: 'intent', text: intent });
+  }
+
+  const chunks = body
+    .split(/[。；;，,]/u)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+  for (const chunk of chunks.length > 0 ? chunks : [body]) {
+    parts.push({
+      kind: classifyNekoMarkdownGenerationPromptPart(chunk),
+      text: chunk,
+    });
+  }
+  return parts;
+}
+
+export function classifyNekoMarkdownGenerationPromptPart(
+  value: string,
+): NekoMarkdownGenerationPromptPartKind {
+  const lower = value.toLocaleLowerCase();
+  if (
+    /(^|\s)(p\d+(?:#panel_\d+)?|page_\d+(?:#panel_\d+)?)(\s|$)/iu.test(value) ||
+    /参考|来源|reference|source/u.test(lower)
+  ) {
+    return 'reference';
+  }
+  if (
+    /裁切|切分|旋转|校正|上色|去字|去文字|去除|清理|补全|遮挡|重绘|修复|扩图|放大|统一风格|crop|split|rotate|correct|colori[sz]e|remove|clean|inpaint|outpaint|redraw|repair|upscale|normalize/u.test(
+      lower,
+    )
+  ) {
+    return 'operation';
+  }
+  if (
+    /镜头|运镜|推近|推远|下移|上移|横移|摇镜|特写|视差|camera|dolly|pan|tilt|zoom|push-in|pull-back/u.test(
+      lower,
+    )
+  ) {
+    return 'camera';
+  }
+  if (/对白|台词|无对白|旁白|dialogue|voice|silence|no dialogue/u.test(lower)) {
+    return 'dialogue';
+  }
+  if (
+    /保持|保留|不新增|不要|一致|约束|preserve|keep|consistent|constraint|do not|without adding/u.test(
+      lower,
+    )
+  ) {
+    return 'constraint';
+  }
+  return 'detail';
 }
 
 export function stripMarkdownPlacementHint(value: string): NekoMarkdownPlacementTarget {
@@ -248,22 +340,40 @@ function extractCommonMarkImageReferences(
 
 function extractResourceReferences(
   markdown: string,
+  options: NekoMarkdownProjectOptions,
 ): readonly NekoMarkdownResourceReferenceToken[] {
   return Array.from(markdown.matchAll(RESOURCE_REFERENCE_RE)).map((match) => {
     const raw = match[0] ?? '';
     const target = match[2] ?? '';
     const placementTarget = stripMarkdownPlacementHint(target);
-    return {
-      kind: 'resource-reference',
-      embed: match[1] === '!',
-      raw,
+    const lookup = {
       target,
       lookupToken: placementTarget.lookupToken,
-      ...(placementTarget.placementHint ? { placementHint: placementTarget.placementHint } : {}),
+      ...(placementTarget.placementHint
+        ? { placementHint: placementTarget.placementHint }
+        : {}),
+      embed: match[1] === '!',
       range: {
         start: match.index ?? 0,
         end: (match.index ?? 0) + raw.length,
       },
+    };
+    const resolution =
+      options.resourceReferences === 'enabled'
+        ? options.resourceResolver?.resolveResource(lookup)
+        : undefined;
+    const status = resolution?.status ?? 'unresolved';
+    return {
+      kind: 'resource-reference',
+      embed: lookup.embed,
+      raw,
+      target,
+      lookupToken: lookup.lookupToken,
+      status,
+      ...(resolution?.ref ? { ref: resolution.ref } : {}),
+      candidates: resolution?.candidates ?? [],
+      ...(lookup.placementHint ? { placementHint: lookup.placementHint } : {}),
+      range: lookup.range,
     };
   });
 }
@@ -349,14 +459,34 @@ function diagnoseResourceReferences(
   references: readonly NekoMarkdownResourceReferenceToken[],
   options: NekoMarkdownProjectOptions,
 ): readonly NekoMarkdownDiagnostic[] {
-  if (options.resourceReferences === 'enabled') return [];
-  return references.map((reference) => ({
-    severity: 'warning',
-    code: 'unsupported-resource-reference-markdown-extension',
-    token: reference.target,
-    message: 'Neko resource-reference embeds and links are not enabled for this projection.',
-    range: reference.range,
-  }));
+  if (options.resourceReferences !== 'enabled') {
+    return references.map((reference) => ({
+      severity: 'warning',
+      code: 'unsupported-resource-reference-markdown-extension',
+      token: reference.target,
+      message: 'Neko resource-reference embeds and links are not enabled for this projection.',
+      range: reference.range,
+    }));
+  }
+  if (!options.requireResolvedReferences) return [];
+  return references.flatMap((reference) => {
+    if (reference.status === 'resolved') return [];
+    return [
+      {
+        severity: 'error' as const,
+        code:
+          reference.status === 'ambiguous'
+            ? 'ambiguous-resource-reference'
+            : 'missing-resource-reference',
+        token: reference.raw,
+        message:
+          reference.status === 'ambiguous'
+            ? `Markdown resource reference "${reference.raw}" matches multiple references.`
+            : `Markdown resource reference "${reference.raw}" does not resolve to a stable reference.`,
+        range: reference.range,
+      },
+    ];
+  });
 }
 
 function diagnoseMentions(

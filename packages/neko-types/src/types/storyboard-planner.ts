@@ -10,6 +10,7 @@ import type { DocumentArchiveResourceRef } from './document-reading';
 import type { NekoStoryScriptIndex } from './extension-api';
 import type { ResourceRef } from './resource-cache';
 import type { ShotImagePrepPlan } from './shot-image-prep';
+import type { CanvasStoryboardPromptState } from './canvas-semantic-storyboard';
 
 export type StoryboardImportMode = 'mechanical' | 'semantic';
 
@@ -31,6 +32,7 @@ export interface StoryShotPlan {
   readonly textCues?: readonly StoryboardTextCue[];
   readonly voiceCues?: readonly StoryboardVoiceCue[];
   readonly generationPrompt?: string;
+  readonly storyboardPrompt?: CanvasStoryboardPromptState;
   readonly visualStyle?: string;
   readonly referenceImagePath?: string;
   readonly referenceResourceRef?: ResourceRef;
@@ -68,6 +70,7 @@ export interface CanvasStoryboardShotPlan {
   readonly textCues?: readonly StoryboardTextCue[];
   readonly voiceCues?: readonly StoryboardVoiceCue[];
   readonly generationPrompt?: string;
+  readonly storyboardPrompt?: CanvasStoryboardPromptState;
   readonly visualStyle?: string;
   readonly referenceImagePath?: string;
   readonly referenceResourceRef?: ResourceRef;
@@ -85,6 +88,7 @@ export interface CanvasStoryboardScenePlan {
   readonly sceneNumber: number;
   readonly location?: string;
   readonly timeOfDay?: string | null;
+  readonly storyboardPrompt?: CanvasStoryboardPromptState;
   readonly shotPlans: readonly CanvasStoryboardShotPlan[];
 }
 

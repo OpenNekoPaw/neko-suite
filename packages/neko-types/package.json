@@ -12,6 +12,8 @@
     ".": "./src/index.ts",
     "./path": "./src/path/index.ts",
     "./project-file-io": "./src/project-file-io/index.ts",
+    "./project-authoring": "./src/project-authoring/index.ts",
+    "./project-authoring/test-helpers": "./src/project-authoring/test-helpers.ts",
     "./nks": "./src/nks/index.ts",
     "./nkv": "./src/nkv/index.ts",
     "./nkc": "./src/nkc/index.ts",

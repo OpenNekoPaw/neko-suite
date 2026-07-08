@@ -36,6 +36,9 @@ export * from './path/index';
 // Project file I/O contracts and host-agnostic helpers
 export * from './project-file-io/index';
 
+// Client-neutral package authoring contracts
+export * from './project-authoring/index';
+
 // Entity URI (entity:// protocol parsing + building)
 export * from './entity-uri/index';
 

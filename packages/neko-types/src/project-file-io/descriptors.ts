@@ -13,6 +13,7 @@ import type {
 } from '../types/element';
 import type {
   PortableSourcePathPolicy,
+  ProjectSourceRole,
   ProjectSourceDescriptor,
   ProjectSourceReplacement,
 } from './source-policy';
@@ -46,13 +47,66 @@ export const nkcSourcePathPolicy: PortableSourcePathPolicy<CanvasData> = {
 };
 
 export const nksSourcePathPolicy: PortableSourcePathPolicy<NksDocument> = {
-  listSources() {
-    return [];
+  listSources(document) {
+    return listSketchLayerSources(document.layers);
   },
-  replaceSources(document) {
-    return document;
+  replaceSources(document, replacements) {
+    return {
+      ...document,
+      layers: replaceSketchLayerSources(document.layers, replacements),
+    };
   },
 };
+
+function listSketchLayerSources(
+  layers: readonly NksDocument['layers'][number][],
+): ProjectSourceDescriptor[] {
+  const descriptors: ProjectSourceDescriptor[] = [];
+  layers.forEach((layer, index) => {
+    if (layer.source?.path) {
+      descriptors.push({
+        id: `layers.${layer.id}.source`,
+        role: mapSketchLayerSourceRole(layer.source.role),
+        path: layer.source.path,
+        fieldPath: ['layers', index, 'source', 'path'],
+      });
+    }
+    descriptors.push(...listSketchLayerSources(layer.children));
+  });
+  return descriptors;
+}
+
+function replaceSketchLayerSources(
+  layers: NksDocument['layers'],
+  replacements: readonly ProjectSourceReplacement[],
+): NksDocument['layers'] {
+  return layers.map((layer) => {
+    const replacement = layer.source?.path
+      ? replacements.find((item) => item.descriptor.path === layer.source?.path)
+      : undefined;
+    return {
+      ...layer,
+      ...(replacement && layer.source
+        ? {
+            source: {
+              ...layer.source,
+              path: replacement.path,
+            },
+          }
+        : {}),
+      children: replaceSketchLayerSources(layer.children, replacements),
+    };
+  });
+}
+
+function mapSketchLayerSourceRole(
+  role: NonNullable<NksDocument['layers'][number]['source']>['role'],
+): ProjectSourceRole {
+  if (role === 'psd') return 'document';
+  if (role === 'generated-image') return 'generated';
+  if (role === 'reference') return 'other';
+  return 'image';
+}
 
 export const nkpSourcePathPolicy: PortableSourcePathPolicy<NkpProjectData> = {
   listSources(document) {

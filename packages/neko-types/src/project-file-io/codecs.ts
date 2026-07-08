@@ -403,7 +403,7 @@ function parseJson(
   }
 }
 
-function createDefaultNksDocument(): NksDocument {
+export function createDefaultNksDocument(): NksDocument {
   return {
     version: CURRENT_NKS_VERSION,
     canvas: {
