@@ -1,11 +1,13 @@
 import type { SupportedLocale } from '@neko/shared';
 import type {
   DesktopSnapshot,
+  DesktopWorkbenchCoreSnapshot,
   EngineViewportSummary,
   ResourceSurfaceSnapshot,
   WorkspaceFileTreeSnapshot,
   WorkbenchSurface,
 } from './contracts';
+import { createDesktopEngineViewportSessionContract } from './engine-viewport-session';
 
 export interface DesktopSnapshotOptions {
   readonly workspaceRoot: string;
@@ -14,6 +16,7 @@ export interface DesktopSnapshotOptions {
   readonly locale?: SupportedLocale;
   readonly resourceSurfaces?: readonly ResourceSurfaceSnapshot[];
   readonly workspaceTree?: WorkspaceFileTreeSnapshot;
+  readonly workbench?: DesktopWorkbenchCoreSnapshot;
   readonly viewport?: EngineViewportSummary;
 }
 
@@ -22,7 +25,7 @@ export const DESKTOP_WORKBENCH_SURFACES: readonly WorkbenchSurface[] = [
     id: 'explorer',
     label: 'Explorer',
     role: 'project-resources',
-    resourceSourceIds: ['project-files', 'project-scenes', 'project-timelines'],
+    resourceSourceIds: ['workspace-files'],
   },
   {
     id: 'assets',
@@ -40,7 +43,7 @@ export const DESKTOP_WORKBENCH_SURFACES: readonly WorkbenchSurface[] = [
     id: 'market',
     label: 'Market',
     role: 'catalog-manager',
-    resourceSourceIds: ['provider-cards', 'packages'],
+    resourceSourceIds: ['provider-cards'],
   },
   {
     id: 'skills',
@@ -52,11 +55,11 @@ export const DESKTOP_WORKBENCH_SURFACES: readonly WorkbenchSurface[] = [
     id: 'search',
     label: 'Search',
     role: 'search',
-    resourceSourceIds: ['project-search'],
+    resourceSourceIds: [],
   },
 ];
 
-export function createDesktopMvpSnapshot(options: DesktopSnapshotOptions): DesktopSnapshot {
+export function createDesktopAppHostSnapshot(options: DesktopSnapshotOptions): DesktopSnapshot {
   const viewport = options.viewport ?? createUnavailableEngineViewportSummary();
   return {
     host: {
@@ -74,7 +77,20 @@ export function createDesktopMvpSnapshot(options: DesktopSnapshotOptions): Deskt
     surfaces: DESKTOP_WORKBENCH_SURFACES,
     resourceSurfaces: options.resourceSurfaces ?? createEmptyResourceSurfaces(),
     workspaceTree: options.workspaceTree ?? createEmptyWorkspaceTreeSnapshot(options.workspaceName),
+    workbench: options.workbench ?? createEmptyDesktopWorkbenchCoreSnapshot(),
     viewport,
+  };
+}
+
+export function createEmptyDesktopWorkbenchCoreSnapshot(): DesktopWorkbenchCoreSnapshot {
+  return {
+    contributionSnapshot: {
+      contributions: [],
+      diagnostics: [],
+      temporaryBootstrapContributionIds: [],
+    },
+    resourceProviders: [],
+    diagnostics: [],
   };
 }
 
@@ -93,21 +109,23 @@ export function createEmptyWorkspaceTreeSnapshot(
 }
 
 export function createUnavailableEngineViewportSummary(): EngineViewportSummary {
+  const diagnostic =
+    'neko-engine has not been probed by the desktop AppHost. Runtime snapshots must inject the current Engine health result.';
+  const session = createDesktopEngineViewportSessionContract({
+    availability: 'unavailable',
+    diagnostic,
+  });
   return {
-    id: 'engine-viewport-primary',
+    id: session.id,
     owner: 'neko-engine',
     availability: 'unavailable',
-    label: 'Engine Viewport',
-    diagnostic:
-      'neko-engine has not been probed by the desktop AppHost. Runtime snapshots must inject the current Engine health result.',
-    capabilities: [
-      'engine-owned-output-truth',
-      'native-surface-target',
-      'texture-lease-boundary',
-      'color-managed-preview-contract',
-      '10bit-hdr-follow-up',
-    ],
-    nonAuthoritativeWebSurfaces: ['html-video', 'canvas', 'webcodecs', 'electron-webcontents'],
+    label: session.label,
+    diagnostic,
+    session,
+    capabilities: session.capabilities,
+    nonAuthoritativeWebSurfaces: session.nonAuthoritativeProjections.map(
+      (projection) => projection.id,
+    ),
   };
 }
 

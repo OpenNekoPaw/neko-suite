@@ -1,4 +1,10 @@
 import type { SupportedLocale } from '@neko/shared';
+import type {
+  WorkbenchEngineViewportSessionContract,
+  WorkbenchContributionSnapshot,
+  WorkbenchDiagnostic,
+  WorkbenchResourceProviderSnapshot,
+} from '@neko/workbench-core';
 
 export const DESKTOP_BRIDGE_GLOBAL = 'nekoDesktop';
 
@@ -209,8 +215,15 @@ export interface EngineViewportSummary {
   readonly availability: ViewportAvailability;
   readonly label: string;
   readonly diagnostic: string;
+  readonly session: WorkbenchEngineViewportSessionContract;
   readonly capabilities: readonly string[];
   readonly nonAuthoritativeWebSurfaces: readonly string[];
+}
+
+export interface DesktopWorkbenchCoreSnapshot {
+  readonly contributionSnapshot: WorkbenchContributionSnapshot;
+  readonly resourceProviders: readonly WorkbenchResourceProviderSnapshot[];
+  readonly diagnostics: readonly WorkbenchDiagnostic[];
 }
 
 export interface ViewportIntent {
@@ -258,6 +271,7 @@ export interface DesktopSnapshot {
   readonly surfaces: readonly WorkbenchSurface[];
   readonly resourceSurfaces: readonly ResourceSurfaceSnapshot[];
   readonly workspaceTree: WorkspaceFileTreeSnapshot;
+  readonly workbench: DesktopWorkbenchCoreSnapshot;
   readonly viewport: EngineViewportSummary;
 }
 

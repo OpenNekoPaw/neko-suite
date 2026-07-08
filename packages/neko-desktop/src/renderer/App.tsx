@@ -354,6 +354,9 @@ export function App(): ReactElement {
             `engine:${snapshot.viewport.availability}`,
             t('status.files', { count: snapshot.workspaceTree.totalFileCount }),
             t('status.media', { count: snapshot.workspaceTree.mediaFileCount }),
+            `workbench:${snapshot.workbench.contributionSnapshot.contributions.length}`,
+            `providers:${snapshot.workbench.resourceProviders.length}`,
+            `diagnostics:${snapshot.workbench.diagnostics.length}`,
             snapshot.workspace.trust,
           ]}
         />

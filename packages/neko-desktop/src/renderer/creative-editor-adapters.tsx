@@ -22,6 +22,10 @@ import type {
   ViewportIntent,
   WorkspaceFileNode,
 } from '../shared/contracts';
+import {
+  createDesktopFeatureEditorAdapterDescriptorForPanelKind,
+  listDesktopFeatureEditorPanelKinds,
+} from '../shared/feature-webview-adapters';
 import { CodeEditor } from './CodeEditor';
 
 export interface CreativeEditorAdapterHostProps {
@@ -35,8 +39,6 @@ export interface CreativeEditorAdapterHostProps {
 }
 
 interface DesktopAdapterRegistration {
-  readonly panelKind: DesktopCreativePanelKind;
-  readonly packageName: string;
   readonly render: (props: CreativeHostAdapterSurfaceProps) => ReactElement;
 }
 
@@ -54,45 +56,28 @@ const desktopViewportController: ISceneController = {
   handleViewportEvent: () => undefined,
 };
 
-const DESKTOP_ADAPTER_REGISTRY: Readonly<Record<DesktopCreativePanelKind, DesktopAdapterRegistration>> = {
+const DESKTOP_ADAPTER_RENDERERS: Readonly<
+  Partial<Record<DesktopCreativePanelKind, DesktopAdapterRegistration>>
+> = {
   'canvas-workbench': {
-    panelKind: 'canvas-workbench',
-    packageName: '@neko-canvas/webview',
     render: (props) => <CanvasHostAdapterSurface {...props} />,
   },
   'cut-timeline': {
-    panelKind: 'cut-timeline',
-    packageName: '@neko/webview',
     render: () => {
       throw new Error('Cut editor is rendered through the full @neko/webview/root runtime.');
     },
   },
   'audio-timeline': {
-    panelKind: 'audio-timeline',
-    packageName: '@neko-audio/webview',
     render: (props) => <AudioHostAdapterSurface {...props} />,
   },
   'sketch-editor': {
-    panelKind: 'sketch-editor',
-    packageName: '@neko-sketch/webview',
     render: (props) => <SketchHostAdapterSurface {...props} />,
   },
   'model-viewport': {
-    panelKind: 'model-viewport',
-    packageName: '@neko-model/webview',
     render: (props) => <ModelHostAdapterSurface {...props} />,
   },
   'media-preview': {
-    panelKind: 'media-preview',
-    packageName: '@neko/preview-webview',
     render: (props) => <PreviewHostAdapterSurface {...props} />,
-  },
-  'code-editor': {
-    panelKind: 'code-editor',
-    packageName: 'neko-desktop',
-    render: () => {
-      throw new Error('Code editor adapter is rendered through the desktop CodeMirror host.');
-    },
   },
 };
 
@@ -121,9 +106,10 @@ export function CreativeEditorAdapterHost({
   }
 
   if (selectedFile.editor.panelKind === 'cut-timeline') {
-    if (selectedFile.editor.packageName !== '@neko/webview') {
+    const expectedEditor = readFeatureEditorAdapterDescriptor(selectedFile.editor.panelKind);
+    if (selectedFile.editor.packageName !== expectedEditor.packageName) {
       throw new Error(
-        `Desktop Cut runtime package mismatch: expected @neko/webview, got ${selectedFile.editor.packageName}.`,
+        `Desktop Cut runtime package mismatch: expected ${expectedEditor.packageName}, got ${selectedFile.editor.packageName}.`,
       );
     }
     return selectedFileContent ? (
@@ -137,13 +123,14 @@ export function CreativeEditorAdapterHost({
     );
   }
 
-  const registration = DESKTOP_ADAPTER_REGISTRY[selectedFile.editor.panelKind];
+  const registration = DESKTOP_ADAPTER_RENDERERS[selectedFile.editor.panelKind];
   if (!registration) {
     throw new Error(`No desktop creative adapter registered for ${selectedFile.editor.panelKind}.`);
   }
-  if (registration.packageName !== selectedFile.editor.packageName) {
+  const expectedEditor = readFeatureEditorAdapterDescriptor(selectedFile.editor.panelKind);
+  if (expectedEditor.packageName !== selectedFile.editor.packageName) {
     throw new Error(
-      `Desktop adapter package mismatch for ${selectedFile.editor.panelKind}: expected ${selectedFile.editor.packageName}, got ${registration.packageName}.`,
+      `Desktop adapter package mismatch for ${selectedFile.editor.panelKind}: expected ${expectedEditor.packageName}, got ${selectedFile.editor.packageName}.`,
     );
   }
 
@@ -156,7 +143,7 @@ export function CreativeEditorAdapterHost({
 }
 
 export function listDesktopCreativeAdapterPanelKinds(): readonly DesktopCreativePanelKind[] {
-  return Object.keys(DESKTOP_ADAPTER_REGISTRY) as readonly DesktopCreativePanelKind[];
+  return listDesktopFeatureEditorPanelKinds();
 }
 
 function EmptyEditor({ snapshot }: { readonly snapshot: DesktopSnapshot }): ReactElement {
@@ -199,6 +186,16 @@ function toHostRuntimeProjection(file: WorkspaceFileNode): CreativeHostRuntimePr
     runtime: file.editor.desktopRuntime,
     hostAdapterInspector: 'hidden',
   };
+}
+
+function readFeatureEditorAdapterDescriptor(
+  panelKind: DesktopCreativePanelKind,
+): NonNullable<ReturnType<typeof createDesktopFeatureEditorAdapterDescriptorForPanelKind>> {
+  const editor = createDesktopFeatureEditorAdapterDescriptorForPanelKind(panelKind);
+  if (!editor) {
+    throw new Error(`No package-owned feature editor descriptor registered for ${panelKind}.`);
+  }
+  return editor;
 }
 
 function CutEditorSurface({

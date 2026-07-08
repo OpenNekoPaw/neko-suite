@@ -21,6 +21,7 @@ describe('workspace file tree scan', () => {
     await writeFile(join(tempRoot, '.neko/.cache/resources/cache.png'), 'cache');
     await writeFile(join(tempRoot, 'neko/generated/image/render.png'), 'image');
     await writeFile(join(tempRoot, 'Untitled-1.nkc'), '{}');
+    await writeFile(join(tempRoot, 'notes.md'), '# Notes');
 
     const snapshot = await createWorkspaceFileTreeSnapshot(tempRoot, {
       scmStatusByPath: new Map([
@@ -28,16 +29,28 @@ describe('workspace file tree scan', () => {
         ['cuts/shot.nkv', 'modified'],
       ]),
     });
-    const paths = flatten(snapshot.nodes).map((node) => node.relativePath);
+    const nodes = flatten(snapshot.nodes);
+    const paths = nodes.map((node) => node.relativePath);
 
     expect(paths).not.toContain('.neko/.cache');
     expect(paths).not.toContain('.neko/.cache/resources/cache.png');
     expect(paths).toContain('neko/generated/image/render.png');
-    const generatedImage = flatten(snapshot.nodes).find(
+    const generatedImage = nodes.find(
       (node) => node.relativePath === 'neko/generated/image/render.png',
     );
     expect(generatedImage?.thumbnail?.kind).toBe('image');
     expect(generatedImage?.thumbnail?.url).toContain('neko-resource://workspace/');
+    expect(nodes.find((node) => node.relativePath === 'Untitled-1.nkc')?.editor).toMatchObject({
+      panelKind: 'canvas-workbench',
+      packageName: '@neko-canvas/webview',
+      desktopRuntime: 'host-adapter-projection',
+    });
+    expect(nodes.find((node) => node.relativePath === 'notes.md')?.editor).toMatchObject({
+      panelKind: 'code-editor',
+      packageName: 'neko-desktop',
+      implementedInVsCodeWebview: false,
+      desktopRuntime: 'desktop-native',
+    });
   });
 
   it('preserves tree metadata for directories, media, and Live2D puppet sources', async () => {
@@ -77,6 +90,11 @@ describe('workspace file tree scan', () => {
     expect(nodes.find((node) => node.relativePath === 'cuts/shot.nkv')?.scmStatus).toBe(
       'modified',
     );
+    expect(nodes.find((node) => node.relativePath === 'cuts/shot.nkv')?.editor).toMatchObject({
+      panelKind: 'cut-timeline',
+      packageName: '@neko/webview',
+      desktopRuntime: 'full-webview-runtime',
+    });
   });
 });
 

@@ -4,6 +4,7 @@ import type {
   ViewportIntent,
   ViewportIntentAck,
 } from '../shared/contracts';
+import { createDesktopEngineViewportSessionContract } from '../shared/engine-viewport-session';
 
 export const DEFAULT_ENGINE_PORT = 8765;
 
@@ -68,21 +69,22 @@ export async function probeEngineConnection(
 export function createEngineViewportSummary(
   status: EngineConnectionStatus,
 ): EngineViewportSummary {
-  return {
-    id: 'engine-viewport-primary',
-    owner: 'neko-engine',
-    availability: status.reachable ? 'ready' : 'unavailable',
-    label: 'Engine Viewport',
+  const availability = status.reachable ? 'ready' : 'unavailable';
+  const session = createDesktopEngineViewportSessionContract({
+    availability,
     diagnostic: status.diagnostic,
-    capabilities: [
-      'engine-owned-output-truth',
-      'engine-http-health',
-      'native-surface-target',
-      'texture-lease-boundary',
-      'color-managed-preview-contract',
-      '10bit-hdr-follow-up',
-    ],
-    nonAuthoritativeWebSurfaces: ['html-video', 'canvas', 'webcodecs', 'electron-webcontents'],
+  });
+  return {
+    id: session.id,
+    owner: 'neko-engine',
+    availability,
+    label: session.label,
+    diagnostic: status.diagnostic,
+    session,
+    capabilities: session.capabilities,
+    nonAuthoritativeWebSurfaces: session.nonAuthoritativeProjections.map(
+      (projection) => projection.id,
+    ),
   };
 }
 

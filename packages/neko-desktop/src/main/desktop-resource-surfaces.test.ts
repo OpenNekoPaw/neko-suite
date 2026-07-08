@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createDesktopResourceSurfaces } from './desktop-resource-surfaces';
+import { createDesktopResourceSurfaceSnapshot } from './desktop-resource-surfaces';
 
 let tempRoot: string | undefined;
 
@@ -106,12 +106,14 @@ describe('desktop resource surfaces', () => {
       ].join('\n'),
     );
 
-    const surfaces = await createDesktopResourceSurfaces({ workspaceRoot: tempRoot });
+    const snapshot = await createDesktopResourceSurfaceSnapshot({ workspaceRoot: tempRoot });
+    const surfaces = snapshot.resourceSurfaces;
     const assets = surfaces.find((surface) => surface.surfaceId === 'assets');
     const generations = surfaces.find((surface) => surface.surfaceId === 'generations');
     const market = surfaces.find((surface) => surface.surfaceId === 'market');
     const skills = surfaces.find((surface) => surface.surfaceId === 'skills');
     const serialized = JSON.stringify(surfaces);
+    const serializedProviders = JSON.stringify(snapshot.providerSnapshots);
 
     expect(assets?.nodes.map((node) => node.label)).toEqual(['Scene Bible', 'References']);
     expect(generations?.nodes.map((node) => node.label)).toEqual([
@@ -124,12 +126,38 @@ describe('desktop resource surfaces', () => {
     expect(serialized).not.toContain('Quality Review');
     expect(serialized).not.toContain('Shot 001 keyframe');
     expect(serialized).not.toContain('Trailer export');
+    expect(snapshot.providerSnapshots.map((provider) => provider.provider.providerId)).toEqual([
+      'assets',
+      'media-library',
+      'generation-outputs',
+      'render-queue',
+      'provider-cards',
+      'skills',
+    ]);
+    expect(snapshot.providerSnapshots.map((provider) => provider.provider.providerKind)).toEqual(
+      Array.from({ length: 6 }, () => 'domain-provider'),
+    );
+    expect(snapshot.providerSnapshots.map((provider) => provider.provider.ownerId)).toEqual([
+      'neko-assets',
+      'neko-assets',
+      '@neko-agent/platform',
+      '@neko-agent/platform',
+      'neko-market',
+      '@neko/skills',
+    ]);
+    expect(
+      snapshot.providerSnapshots.find(
+        (provider) => provider.provider.providerId === 'media-library',
+      )?.resourceNodes?.[0]?.stableRef.id,
+    ).toBe('REF');
+    expect(serializedProviders).not.toContain(tempRoot);
   });
 
   it('keeps missing optional workspace resource files as empty surfaces', async () => {
     tempRoot = await mkdtemp(join(tmpdir(), 'neko-desktop-resources-empty-'));
 
-    const surfaces = await createDesktopResourceSurfaces({ workspaceRoot: tempRoot });
+    const snapshot = await createDesktopResourceSurfaceSnapshot({ workspaceRoot: tempRoot });
+    const surfaces = snapshot.resourceSurfaces;
 
     expect(surfaces.map((surface) => surface.surfaceId)).toEqual([
       'explorer',
@@ -140,6 +168,7 @@ describe('desktop resource surfaces', () => {
       'search',
     ]);
     expect(surfaces.every((surface) => surface.nodes.length === 0)).toBe(true);
+    expect(snapshot.providerSnapshots).toEqual([]);
   });
 
   it('fails visibly for malformed workspace resource configuration', async () => {
@@ -147,7 +176,7 @@ describe('desktop resource surfaces', () => {
     await mkdir(join(tempRoot, 'neko/assets'), { recursive: true });
     await writeFile(join(tempRoot, 'neko/assets/library.json'), JSON.stringify({ entities: {} }));
 
-    await expect(createDesktopResourceSurfaces({ workspaceRoot: tempRoot })).rejects.toThrow(
+    await expect(createDesktopResourceSurfaceSnapshot({ workspaceRoot: tempRoot })).rejects.toThrow(
       'neko/assets/library.json entities must be an array.',
     );
   });

@@ -13,17 +13,18 @@ import {
   type ReadWorkspaceFileResult,
   type ViewportIntentAck,
 } from '../shared/contracts';
-import { createDesktopMvpSnapshot } from '../shared/desktop-fixtures';
+import { createDesktopAppHostSnapshot } from '../shared/desktop-fixtures';
 import {
   NEKO_RESOURCE_SCHEME,
-  createWorkspaceFileTreeSnapshot,
 } from './workspace-scan';
-import { createDesktopResourceSurfaces } from './desktop-resource-surfaces';
+import { createDesktopWorkspaceResourceProviderSnapshot } from './workspace-resource-provider';
+import { createDesktopResourceSurfaceSnapshot } from './desktop-resource-surfaces';
 import {
   createEngineViewportSummary,
   createViewportIntentAck,
   probeEngineConnection,
 } from './engine-connection';
+import { createDesktopWorkbenchBootstrapSnapshot } from '../shared/desktop-workbench-adapter';
 
 const DEFAULT_WINDOW_WIDTH = 1440;
 const DEFAULT_WINDOW_HEIGHT = 920;
@@ -98,19 +99,51 @@ function resolveWorkspaceFilePath(workspaceRelativePath: string): string {
 
 async function createDesktopSnapshot(): Promise<DesktopSnapshot> {
   const workspaceRoot = resolveWorkspaceRoot();
-  const [workspaceTree, resourceSurfaces, engineStatus] = await Promise.all([
-    createWorkspaceFileTreeSnapshot(workspaceRoot),
-    createDesktopResourceSurfaces({ workspaceRoot }),
+  const [workspaceResourceProvider, resourceSurfaceSnapshot, engineStatus] = await Promise.all([
+    createDesktopWorkspaceResourceProviderSnapshot(workspaceRoot),
+    createDesktopResourceSurfaceSnapshot({ workspaceRoot }),
     probeEngineConnection(),
   ]);
-  return createDesktopMvpSnapshot({
+  const resourceProviders = [
+    workspaceResourceProvider.providerSnapshot,
+    ...resourceSurfaceSnapshot.providerSnapshots,
+  ];
+  const viewport = createEngineViewportSummary(engineStatus);
+  const baseSnapshot = createDesktopAppHostSnapshot({
     workspaceRoot,
     workspaceName: basename(workspaceRoot) || 'Neko Workspace',
     version: DESKTOP_VERSION,
     locale: normalizeLocale(app.getLocale()),
-    resourceSurfaces,
-    workspaceTree,
-    viewport: createEngineViewportSummary(engineStatus),
+    resourceSurfaces: resourceSurfaceSnapshot.resourceSurfaces,
+    workspaceTree: workspaceResourceProvider.workspaceTree,
+    workbench: {
+      contributionSnapshot: {
+        contributions: [],
+        diagnostics: [],
+        temporaryBootstrapContributionIds: [],
+      },
+      resourceProviders,
+      diagnostics: resourceProviders.flatMap((provider) => provider.diagnostics),
+    },
+    viewport,
+  });
+  const contributionSnapshot = createDesktopWorkbenchBootstrapSnapshot(baseSnapshot);
+  return createDesktopAppHostSnapshot({
+    workspaceRoot,
+    workspaceName: basename(workspaceRoot) || 'Neko Workspace',
+    version: DESKTOP_VERSION,
+    locale: normalizeLocale(app.getLocale()),
+    resourceSurfaces: resourceSurfaceSnapshot.resourceSurfaces,
+    workspaceTree: workspaceResourceProvider.workspaceTree,
+    workbench: {
+      contributionSnapshot,
+      resourceProviders,
+      diagnostics: [
+        ...contributionSnapshot.diagnostics,
+        ...resourceProviders.flatMap((provider) => provider.diagnostics),
+      ],
+    },
+    viewport,
   });
 }
 

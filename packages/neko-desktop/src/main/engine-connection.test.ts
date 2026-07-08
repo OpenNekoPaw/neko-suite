@@ -28,6 +28,17 @@ describe('desktop engine connection', () => {
     expect(status.reachable).toBe(true);
     expect(viewport.availability).toBe('ready');
     expect(viewport.diagnostic).toContain('127.0.0.1:9001');
+    expect(viewport.session.ownerRuntime).toBe('neko-engine');
+    expect(viewport.session.output.authoritative).toBe(true);
+    expect(viewport.session.output.textureBoundary.status).toBe('planned');
+    expect(viewport.session.controlSurfaces).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'desktop-webview-viewport-controls',
+          authoritative: false,
+        }),
+      ]),
+    );
   });
 
   it('rejects viewport intents visibly when neko-engine is unavailable', async () => {
@@ -44,6 +55,13 @@ describe('desktop engine connection', () => {
     );
 
     expect(viewport.availability).toBe('unavailable');
+    expect(viewport.session.output.textureBoundary.status).toBe('unavailable');
+    expect(viewport.session.nonAuthoritativeProjections.map((projection) => projection.id)).toEqual([
+      'html-video',
+      'canvas',
+      'webcodecs',
+      'electron-webcontents',
+    ]);
     expect(ack).toMatchObject({
       accepted: false,
       action: 'play',

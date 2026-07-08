@@ -26,6 +26,9 @@ describe('desktop workbench layout', () => {
     expect(appSource).toContain('WorkbenchWebviewRuntimeFrame');
     expect(appSource).toContain('runtimeId="agent"');
     expect(appSource).toContain('<WorkbenchStatusBar');
+    expect(appSource).toContain('snapshot.workbench.contributionSnapshot.contributions.length');
+    expect(appSource).toContain('snapshot.workbench.resourceProviders.length');
+    expect(appSource).toContain('snapshot.workbench.diagnostics.length');
     expect(appSource).not.toContain('bottomPanel={');
     expect(mainSource).toContain("@neko/ui/workbench/editor-workbench.css");
 
@@ -77,6 +80,14 @@ describe('desktop workbench layout', () => {
     expect(adapterSource).toContain("@neko/preview-webview/host-adapter");
     expect(adapterSource).toContain('ViewportShell');
     expect(adapterSource).toContain('listDesktopCreativeAdapterPanelKinds');
+    expect(adapterSource).toContain('createDesktopFeatureEditorAdapterDescriptorForPanelKind');
+    expect(adapterSource).toContain('listDesktopFeatureEditorPanelKinds');
+    expect(adapterSource).not.toContain("packageName: '@neko-canvas/webview'");
+    expect(adapterSource).not.toContain("packageName: '@neko/webview'");
+    expect(adapterSource).not.toContain("packageName: '@neko-audio/webview'");
+    expect(adapterSource).not.toContain("packageName: '@neko-sketch/webview'");
+    expect(adapterSource).not.toContain("packageName: '@neko-model/webview'");
+    expect(adapterSource).not.toContain("packageName: '@neko/preview-webview'");
     expect(adapterSource).not.toContain('data-creative-panel="canvas-workbench"');
     expect(adapterSource).not.toContain('data-creative-panel="cut-timeline"');
     expect(adapterSource).not.toContain('data-creative-panel="audio-timeline"');

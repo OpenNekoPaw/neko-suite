@@ -1,17 +1,21 @@
 import { access, readdir, readFile, stat } from 'node:fs/promises';
-import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import {
   readMediaLibraryLocalSettings,
   readMediaLibrarySettings,
   resolveWorkspaceMediaLibraries,
 } from '@neko/host';
 import type {
-  ResourceBadge,
+  WorkbenchContributionOwner,
+  WorkbenchResourceNodeProjection,
+  WorkbenchResourceProviderSnapshot,
+} from '@neko/workbench-core';
+import { validateWorkbenchResourceProviderSnapshot } from '@neko/workbench-core';
+import type {
   ResourceNode,
   ResourceNodeKind,
   ResourcePreviewDescriptor,
   ResourceSurfaceSnapshot,
-  ResourceThumbnailDescriptor,
   WorkbenchSurfaceId,
 } from '../shared/contracts';
 import { normalizeRelativePath } from './workspace-scan';
@@ -29,10 +33,22 @@ export interface DesktopResourceSurfaceInput {
   readonly workspaceRoot: string;
 }
 
+export interface DesktopResourceSurfaceSnapshot {
+  readonly resourceSurfaces: readonly ResourceSurfaceSnapshot[];
+  readonly providerSnapshots: readonly WorkbenchResourceProviderSnapshot[];
+}
+
 interface SurfaceDescriptor {
   readonly surfaceId: WorkbenchSurfaceId;
   readonly title: string;
   readonly description: string;
+}
+
+interface ResourceProviderDescriptor {
+  readonly sourceId: string;
+  readonly surfaceId: WorkbenchSurfaceId;
+  readonly label: string;
+  readonly owner: WorkbenchContributionOwner;
 }
 
 const SURFACE_DESCRIPTORS: readonly SurfaceDescriptor[] = [
@@ -68,9 +84,105 @@ const SURFACE_DESCRIPTORS: readonly SurfaceDescriptor[] = [
   },
 ];
 
+const NEKO_ASSETS_OWNER: WorkbenchContributionOwner = {
+  id: 'neko-assets',
+  kind: 'core-package',
+  displayName: 'Neko Assets',
+  trust: 'core',
+};
+
+const NEKO_AGENT_PLATFORM_OWNER: WorkbenchContributionOwner = {
+  id: '@neko-agent/platform',
+  kind: 'core-package',
+  displayName: 'Neko Agent Platform',
+  trust: 'core',
+};
+
+const NEKO_MARKET_OWNER: WorkbenchContributionOwner = {
+  id: 'neko-market',
+  kind: 'core-package',
+  displayName: 'Neko Market',
+  trust: 'core',
+};
+
+const NEKO_SKILLS_OWNER: WorkbenchContributionOwner = {
+  id: '@neko/skills',
+  kind: 'core-package',
+  displayName: 'Neko Skills',
+  trust: 'core',
+};
+
+const RESOURCE_PROVIDER_DESCRIPTORS: readonly ResourceProviderDescriptor[] = [
+  {
+    sourceId: 'assets',
+    surfaceId: 'assets',
+    label: 'Asset Library',
+    owner: NEKO_ASSETS_OWNER,
+  },
+  {
+    sourceId: 'entities',
+    surfaceId: 'assets',
+    label: 'Entity Resources',
+    owner: NEKO_ASSETS_OWNER,
+  },
+  {
+    sourceId: 'media-library',
+    surfaceId: 'assets',
+    label: 'Media Libraries',
+    owner: NEKO_ASSETS_OWNER,
+  },
+  {
+    sourceId: 'generation-outputs',
+    surfaceId: 'generations',
+    label: 'Generation Outputs',
+    owner: NEKO_AGENT_PLATFORM_OWNER,
+  },
+  {
+    sourceId: 'render-queue',
+    surfaceId: 'generations',
+    label: 'Render Queue',
+    owner: NEKO_AGENT_PLATFORM_OWNER,
+  },
+  {
+    sourceId: 'provider-cards',
+    surfaceId: 'market',
+    label: 'Provider Cards',
+    owner: NEKO_MARKET_OWNER,
+  },
+  {
+    sourceId: 'skills',
+    surfaceId: 'skills',
+    label: 'Workspace Skills',
+    owner: NEKO_SKILLS_OWNER,
+  },
+  {
+    sourceId: 'agent-capabilities',
+    surfaceId: 'skills',
+    label: 'Agent Commands',
+    owner: NEKO_SKILLS_OWNER,
+  },
+];
+
 export async function createDesktopResourceSurfaces({
   workspaceRoot,
 }: DesktopResourceSurfaceInput): Promise<readonly ResourceSurfaceSnapshot[]> {
+  const snapshot = await createDesktopResourceSurfaceSnapshot({ workspaceRoot });
+  return snapshot.resourceSurfaces;
+}
+
+export async function createDesktopResourceSurfaceSnapshot({
+  workspaceRoot,
+}: DesktopResourceSurfaceInput): Promise<DesktopResourceSurfaceSnapshot> {
+  const resourceSurfaces = await readDesktopResourceSurfaces(workspaceRoot);
+  return {
+    resourceSurfaces,
+    providerSnapshots: createResourceProviderSnapshots(resourceSurfaces),
+  };
+}
+
+async function readDesktopResourceSurfaces(
+  workspaceRoot: string,
+): Promise<readonly ResourceSurfaceSnapshot[]> {
   const [assetNodes, generationNodes, packageNodes, skillNodes] = await Promise.all([
     readAssetResourceNodes(workspaceRoot),
     readGenerationResourceNodes(workspaceRoot),
@@ -93,6 +205,51 @@ export async function createDesktopResourceSurfaces({
   }));
 }
 
+function createResourceProviderSnapshots(
+  resourceSurfaces: readonly ResourceSurfaceSnapshot[],
+): readonly WorkbenchResourceProviderSnapshot[] {
+  const nodesBySource = new Map<string, ResourceNode[]>();
+  for (const surface of resourceSurfaces) {
+    for (const node of surface.nodes) {
+      const nodes = nodesBySource.get(node.sourceId) ?? [];
+      nodes.push(node);
+      nodesBySource.set(node.sourceId, nodes);
+    }
+  }
+
+  return RESOURCE_PROVIDER_DESCRIPTORS.flatMap((descriptor) => {
+    const nodes = nodesBySource.get(descriptor.sourceId) ?? [];
+    if (nodes.length === 0) {
+      return [];
+    }
+    const providerSnapshot: WorkbenchResourceProviderSnapshot = {
+      provider: {
+        providerId: descriptor.sourceId,
+        ownerId: descriptor.owner.id,
+        owner: descriptor.owner,
+        surfaceId: descriptor.surfaceId,
+        providerKind: 'domain-provider',
+        label: descriptor.label,
+      },
+      nodes: [],
+      resourceNodes: nodes.map((node) => toWorkbenchResourceNodeProjection(node)),
+      diagnostics: [],
+      truncated: false,
+    };
+    validateWorkbenchResourceProviderSnapshot(providerSnapshot);
+    return [providerSnapshot];
+  });
+}
+
+function toWorkbenchResourceNodeProjection(node: ResourceNode): WorkbenchResourceNodeProjection {
+  return {
+    id: node.id,
+    sourceId: node.sourceId,
+    label: node.label,
+    stableRef: node.ref,
+  };
+}
+
 async function readAssetResourceNodes(workspaceRoot: string): Promise<readonly ResourceNode[]> {
   const [libraryJson, workspaceContent] = await Promise.all([
     readOptionalJson(join(workspaceRoot, ...ASSET_LIBRARY_PATH)),
@@ -113,7 +270,7 @@ async function readAssetResourceNodes(workspaceRoot: string): Promise<readonly R
         label: library.name,
         ref: {
           kind: 'asset',
-          id: contractWorkspacePath(library.resolvedPath, workspaceRoot),
+          id: library.variable,
           source: 'media-library',
         },
         thumbnail: {

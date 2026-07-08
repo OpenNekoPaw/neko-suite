@@ -1,7 +1,12 @@
 import { execFile } from 'node:child_process';
 import { readdir, stat } from 'node:fs/promises';
-import { basename, extname, join, relative, resolve, sep } from 'node:path';
+import { basename, join, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
+import {
+  classifyWorkspaceResourceName,
+  isWorkbenchWorkspaceMediaFileKind,
+  readWorkspaceResourceThumbnailLabel,
+} from '@neko/workbench-core';
 import type {
   DesktopEditorAdapterDescriptor,
   WorkspaceFileScmStatus,
@@ -10,6 +15,7 @@ import type {
   WorkspaceFileThumbnailDescriptor,
   WorkspaceFileTreeSnapshot,
 } from '../shared/contracts';
+import { createDesktopFeatureEditorAdapterDescriptorForFileName } from '../shared/feature-webview-adapters';
 
 export const NEKO_RESOURCE_SCHEME = 'neko-resource';
 
@@ -128,7 +134,7 @@ async function readDirectoryNodes(
 
     const fileStat = await stat(absolutePath);
     const kind = classifyWorkspaceFile(entry.name);
-    const editor = createEditorAdapterDescriptor(kind);
+    const editor = createEditorAdapterDescriptor(entry.name, kind);
     const thumbnail = createThumbnailDescriptor(kind, relativePath);
     const scmStatus = state.scmStatusByPath.get(relativePath);
     const node: WorkspaceFileNode = {
@@ -231,36 +237,7 @@ function toWorkspaceNodeId(relativePath: string): string {
 }
 
 function classifyWorkspaceFile(name: string): WorkspaceFileKind {
-  const lowerName = name.toLowerCase();
-  const extension = extname(name).toLowerCase();
-  if (isLive2dPuppetFileName(lowerName)) return 'puppet';
-  if (extension === '.nkc') return 'canvas';
-  if (extension === '.nkv') return 'timeline';
-  if (extension === '.nka') return 'audio-project';
-  if (extension === '.nks') return 'sketch';
-  if (extension === '.nkp' || extension === '.moc3') return 'puppet';
-  if (extension === '.nkm') return 'model';
-  if (extension === '.fountain' || extension === '.md' || extension === '.txt') return 'story';
-  if (extension === '.glb' || extension === '.gltf' || extension === '.fbx' || extension === '.obj') {
-    return 'model';
-  }
-  if (['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif'].includes(extension)) return 'image';
-  if (['.mp4', '.mov', '.m4v', '.webm', '.mkv'].includes(extension)) return 'video';
-  if (['.mp3', '.wav', '.aac', '.flac', '.ogg', '.m4a'].includes(extension)) return 'audio';
-  if (['.zip', '.7z', '.tar', '.gz'].includes(extension)) return 'archive';
-  if (['.json', '.jsonl', '.toml', '.yaml', '.yml'].includes(extension)) return 'config';
-  if (['.js', '.ts', '.tsx', '.html', '.css'].includes(extension)) return 'document';
-  return 'unknown';
-}
-
-function isLive2dPuppetFileName(lowerName: string): boolean {
-  return (
-    lowerName.endsWith('.model3.json') ||
-    lowerName.endsWith('.physics3.json') ||
-    lowerName.endsWith('.motion3.json') ||
-    lowerName.endsWith('.exp3.json') ||
-    lowerName.endsWith('.cdi3.json')
-  );
+  return classifyWorkspaceResourceName(name);
 }
 
 function createThumbnailDescriptor(
@@ -283,62 +260,31 @@ function createThumbnailDescriptor(
 }
 
 function readThumbnailLabel(kind: WorkspaceFileKind): string {
-  const labels: Readonly<Record<WorkspaceFileKind, string>> = {
-    directory: 'DIR',
-    image: 'IMG',
-    video: 'VID',
-    audio: 'AUD',
-    model: '3D',
-    puppet: 'PUP',
-    canvas: 'NKC',
-    timeline: 'NKV',
-    'audio-project': 'NKA',
-    sketch: 'NKS',
-    story: 'TXT',
-    document: 'DOC',
-    archive: 'ZIP',
-    config: 'CFG',
-    unknown: 'FILE',
-  };
-  return labels[kind];
+  return readWorkspaceResourceThumbnailLabel(kind);
 }
 
 function createEditorAdapterDescriptor(
+  name: string,
   kind: WorkspaceFileKind,
 ): DesktopEditorAdapterDescriptor | undefined {
+  const featureAdapter = createDesktopFeatureEditorAdapterDescriptorForFileName(name);
+  if (featureAdapter) {
+    return featureAdapter;
+  }
   switch (kind) {
-    case 'canvas':
-      return editorAdapter('canvas', 'canvas-workbench', 'Canvas', '@neko-canvas/webview');
-    case 'timeline':
-      return editorAdapter(
-        'timeline',
-        'cut-timeline',
-        'Timeline',
-        '@neko/webview',
-        'full-webview-runtime',
-      );
-    case 'audio-project':
-      return editorAdapter('audio', 'audio-timeline', 'Audio', '@neko-audio/webview');
-    case 'sketch':
-      return editorAdapter('sketch', 'sketch-editor', 'Sketch', '@neko-sketch/webview');
-    case 'model':
-      return editorAdapter('model', 'model-viewport', 'Model', '@neko-model/webview');
-    case 'puppet':
-      return undefined;
     case 'story':
     case 'document':
     case 'config':
-      return editorAdapter(
-        'code',
-        'code-editor',
-        'Text',
-        '@neko-story/webview',
-        'desktop-native',
-      );
+      return createDesktopNativeCodeEditorDescriptor();
+    case 'canvas':
+    case 'timeline':
+    case 'audio-project':
+    case 'sketch':
+    case 'model':
+    case 'puppet':
     case 'image':
     case 'video':
     case 'audio':
-      return editorAdapter('media-preview', 'media-preview', 'Media Preview', '@neko/preview-webview');
     case 'archive':
     case 'directory':
     case 'unknown':
@@ -346,29 +292,17 @@ function createEditorAdapterDescriptor(
   }
 }
 
-function editorAdapter(
-  kind: DesktopEditorAdapterDescriptor['kind'],
-  panelKind: DesktopEditorAdapterDescriptor['panelKind'],
-  label: string,
-  packageName: string,
-  desktopRuntime: DesktopEditorAdapterDescriptor['desktopRuntime'] = 'host-adapter-projection',
-): DesktopEditorAdapterDescriptor {
+function createDesktopNativeCodeEditorDescriptor(): DesktopEditorAdapterDescriptor {
   return {
-    kind,
-    panelKind,
-    label,
-    packageName,
-    implementedInVsCodeWebview: true,
-    desktopRuntime,
+    kind: 'code',
+    panelKind: 'code-editor',
+    label: 'Text',
+    packageName: 'neko-desktop',
+    implementedInVsCodeWebview: false,
+    desktopRuntime: 'desktop-native',
   };
 }
 
 function isMediaFileKind(kind: WorkspaceFileKind): boolean {
-  return (
-    kind === 'image' ||
-    kind === 'video' ||
-    kind === 'audio' ||
-    kind === 'model' ||
-    kind === 'puppet'
-  );
+  return isWorkbenchWorkspaceMediaFileKind(kind);
 }

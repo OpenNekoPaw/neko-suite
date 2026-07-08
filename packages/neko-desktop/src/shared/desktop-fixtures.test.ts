@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createDesktopMvpSnapshot } from './desktop-fixtures';
+import { createDesktopAppHostSnapshot } from './desktop-fixtures';
 
 describe('desktop snapshot factory', () => {
   it('lists distinct workbench surfaces for project, domain, catalog, and search workflows', () => {
-    const snapshot = createDesktopMvpSnapshot({ workspaceRoot: '${WORKSPACE}/neko-project' });
+    const snapshot = createDesktopAppHostSnapshot({ workspaceRoot: '${WORKSPACE}/neko-project' });
 
     expect(snapshot.surfaces.map((surface) => surface.id)).toEqual([
       'explorer',
@@ -21,10 +21,12 @@ describe('desktop snapshot factory', () => {
       'skills',
       'search',
     ]);
+    expect(snapshot.workbench.contributionSnapshot.contributions).toEqual([]);
+    expect(snapshot.workbench.resourceProviders).toEqual([]);
   });
 
   it('does not fabricate resource nodes or workspace files without runtime loaders', () => {
-    const snapshot = createDesktopMvpSnapshot({ workspaceRoot: '${WORKSPACE}/neko-project' });
+    const snapshot = createDesktopAppHostSnapshot({ workspaceRoot: '${WORKSPACE}/neko-project' });
 
     expect(snapshot.workspaceTree.nodes).toEqual([]);
     expect(snapshot.workspaceTree.totalFileCount).toBe(0);
@@ -36,7 +38,7 @@ describe('desktop snapshot factory', () => {
   });
 
   it('accepts real resource surfaces injected by the desktop AppHost loader', () => {
-    const snapshot = createDesktopMvpSnapshot({
+    const snapshot = createDesktopAppHostSnapshot({
       workspaceRoot: '${WORKSPACE}/neko-project',
       resourceSurfaces: [
         {
@@ -61,16 +63,20 @@ describe('desktop snapshot factory', () => {
   });
 
   it('marks the Engine viewport as unavailable until runtime health is injected', () => {
-    const snapshot = createDesktopMvpSnapshot({ workspaceRoot: '${WORKSPACE}/neko-project' });
+    const snapshot = createDesktopAppHostSnapshot({ workspaceRoot: '${WORKSPACE}/neko-project' });
 
     expect(snapshot.viewport.owner).toBe('neko-engine');
     expect(snapshot.viewport.availability).toBe('unavailable');
+    expect(snapshot.viewport.session.id).toBe(snapshot.viewport.id);
+    expect(snapshot.viewport.session.owner.id).toBe('neko-engine');
+    expect(snapshot.viewport.session.output.authoritative).toBe(true);
+    expect(snapshot.viewport.session.controlSurfaces[0]?.authoritative).toBe(false);
     expect(snapshot.viewport.capabilities).toContain('engine-owned-output-truth');
     expect(snapshot.viewport.nonAuthoritativeWebSurfaces).toContain('electron-webcontents');
   });
 
   it('keeps Agent UI state out of the desktop snapshot contract', () => {
-    const snapshot = createDesktopMvpSnapshot({ workspaceRoot: '${WORKSPACE}/neko-project' });
+    const snapshot = createDesktopAppHostSnapshot({ workspaceRoot: '${WORKSPACE}/neko-project' });
 
     expect(snapshot.host.locale).toBe('en');
     expect('agentConsole' in snapshot).toBe(false);
