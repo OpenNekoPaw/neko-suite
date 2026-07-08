@@ -428,14 +428,6 @@ html[data-neko-desktop-platform="darwin"] .title-bar {
   color: var(--vscode-list-activeSelectionForeground, var(--vscode-foreground));
 }
 
-.codicon-chevron-right::before {
-  content: "›";
-}
-
-.codicon-chevron-down::before {
-  content: "⌄";
-}
-
 .workspace-file-icon {
   display: block;
   color: var(--vscode-descriptionForeground);

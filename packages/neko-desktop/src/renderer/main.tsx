@@ -5,6 +5,7 @@ import { App } from './App';
 import { applyDesktopTheme } from './desktop-theme';
 import { i18nService } from './i18n';
 import '@neko/ui/workbench/editor-workbench.css';
+import '@neko/ui/icons/codicon.css';
 import './styles.css';
 
 const rootElement = document.getElementById('root');

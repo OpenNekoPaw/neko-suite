@@ -95,6 +95,40 @@ describe('desktop workbench layout', () => {
     expect(adapterSource).not.toContain('data-creative-panel="model-viewport"');
   });
 
+  it('scans mounted package webview sources for Tailwind utilities', () => {
+    const tailwindConfig = readFileSync(resolve(packageRoot, 'tailwind.config.js'), 'utf8');
+    const requiredContentSources = [
+      '../neko-agent/packages/webview/src/**/*.{js,ts,jsx,tsx}',
+      '../neko-cut/packages/webview/src/**/*.{js,ts,jsx,tsx}',
+      '../neko-canvas/packages/webview/src/**/*.{js,ts,jsx,tsx}',
+      '../neko-audio/packages/webview/src/**/*.{js,ts,jsx,tsx}',
+      '../neko-sketch/packages/webview/src/**/*.{js,ts,jsx,tsx}',
+      '../neko-model/packages/webview/src/**/*.{js,ts,jsx,tsx}',
+      '../neko-preview/packages/webview/src/**/*.{js,ts,jsx,tsx}',
+      '../neko-types/src/components/**/*.{js,ts,jsx,tsx}',
+      '../neko-ui/src/**/*.{js,ts,jsx,tsx}',
+    ] as const;
+
+    expect(tailwindConfig).toContain('nekoTailwindPreset');
+    for (const source of requiredContentSources) {
+      expect(tailwindConfig).toContain(source);
+    }
+  });
+
+  it('loads shared Codicon CSS through the @neko/ui icon entrypoint', () => {
+    const mainSource = readFileSync(resolve(packageRoot, 'src/renderer/main.tsx'), 'utf8');
+    const styles = readFileSync(resolve(packageRoot, 'src/renderer/styles.css'), 'utf8');
+    const uiPackage = readFileSync(resolve(packageRoot, '../neko-ui/package.json'), 'utf8');
+    const codiconCss = readFileSync(resolve(packageRoot, '../neko-ui/src/icons/codicon.css'), 'utf8');
+
+    expect(mainSource).toContain("@neko/ui/icons/codicon.css");
+    expect(uiPackage).toContain('"./icons/codicon.css": "./src/icons/codicon.css"');
+    expect(uiPackage).toContain('"@vscode/codicons"');
+    expect(codiconCss).toContain('@vscode/codicons/dist/codicon.css');
+    expect(styles).not.toContain('.codicon-chevron-right::before');
+    expect(styles).not.toContain('.codicon-chevron-down::before');
+  });
+
   it('keeps workspace tree selection separate from open editor selection', () => {
     const appSource = readFileSync(resolve(packageRoot, 'src/renderer/App.tsx'), 'utf8');
 

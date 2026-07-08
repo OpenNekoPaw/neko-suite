@@ -10,6 +10,7 @@
     "./primitives": "./src/primitives/index.ts",
     "./creative": "./src/creative/index.ts",
     "./icons": "./src/icons/index.ts",
+    "./icons/codicon.css": "./src/icons/codicon.css",
     "./hooks": "./src/hooks/index.ts",
     "./error-boundary": "./src/error-boundary/index.tsx",
     "./keyboard": "./src/keyboard/index.ts",
@@ -34,7 +35,8 @@
     "@radix-ui/react-slider": "^1.3.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toggle-group": "^1.1.11",
-    "@radix-ui/react-tooltip": "^1.2.8"
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "@vscode/codicons": "0.0.45"
   },
   "peerDependencies": {
     "react": ">=18",
