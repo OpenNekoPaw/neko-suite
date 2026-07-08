@@ -72,6 +72,7 @@ export interface AgentWorkspaceRuntimeStatePatch {
 export interface AgentWorkspaceRuntimeStateFsOps {
   readFile(path: string): Promise<string>;
   writeFile(path: string, content: string): Promise<void>;
+  renameFile?(sourcePath: string, targetPath: string): Promise<void>;
   exists(path: string): Promise<boolean>;
 }
 
@@ -90,6 +91,20 @@ export interface AgentWorkspaceRuntimeStateRuntime {
   clearConversation(conversationId: string): Promise<AgentWorkspaceRuntimeState>;
 }
 
+export class AgentWorkspaceRuntimeStateCorruptJsonError extends Error {
+  readonly filePath: string;
+  readonly originalError: unknown;
+
+  constructor(filePath: string, originalError: unknown) {
+    super(`Agent workspace runtime state JSON is invalid: ${filePath}`);
+    this.name = 'AgentWorkspaceRuntimeStateCorruptJsonError';
+    this.filePath = filePath;
+    this.originalError = originalError;
+  }
+}
+
+const runtimeStateOperationQueues = new Map<string, Promise<void>>();
+
 export class FileAgentWorkspaceRuntimeStateRuntime
   implements AgentWorkspaceRuntimeStateRuntime
 {
@@ -100,58 +115,88 @@ export class FileAgentWorkspaceRuntimeStateRuntime
   }
 
   async read(): Promise<AgentWorkspaceRuntimeState> {
-    return this.readState();
+    return enqueueRuntimeStateOperation(this.filePath, () => this.readState());
   }
 
   async patch(input: AgentWorkspaceRuntimeStatePatch): Promise<AgentWorkspaceRuntimeState> {
-    const current = await this.readState();
-    const now = this.readNow();
-    const conversations = { ...current.conversations };
+    return enqueueRuntimeStateOperation(this.filePath, async () => {
+      const current = await this.readStateForMutation();
+      const now = this.readNow();
+      const conversations = { ...current.conversations };
 
-    if (input.conversation) {
-      const previous = conversations[input.conversation.conversationId];
-      const next: AgentWorkspaceRuntimeConversationState = {
-        ...previous,
-        ...input.conversation,
-        conversationId: input.conversation.conversationId,
+      if (input.conversation) {
+        const previous = conversations[input.conversation.conversationId];
+        const next: AgentWorkspaceRuntimeConversationState = {
+          ...previous,
+          ...input.conversation,
+          conversationId: input.conversation.conversationId,
+          updatedAt: now,
+          updatedBy: this.options.source,
+          status: input.conversation.status ?? previous?.status ?? 'idle',
+        };
+        conversations[next.conversationId] = next;
+      }
+
+      const nextState: AgentWorkspaceRuntimeState = {
+        version: 1,
+        workDir: this.options.workDir,
         updatedAt: now,
         updatedBy: this.options.source,
-        status: input.conversation.status ?? previous?.status ?? 'idle',
+        activeConversationId:
+          input.activeConversationId !== undefined
+            ? input.activeConversationId
+            : current.activeConversationId,
+        conversations,
       };
-      conversations[next.conversationId] = next;
-    }
-
-    const nextState: AgentWorkspaceRuntimeState = {
-      version: 1,
-      workDir: this.options.workDir,
-      updatedAt: now,
-      updatedBy: this.options.source,
-      activeConversationId:
-        input.activeConversationId !== undefined
-          ? input.activeConversationId
-          : current.activeConversationId,
-      conversations,
-    };
-    await this.writeState(nextState);
-    return nextState;
+      await this.writeState(nextState);
+      return nextState;
+    });
   }
 
   async clearConversation(conversationId: string): Promise<AgentWorkspaceRuntimeState> {
-    const current = await this.readState();
-    const conversations = { ...current.conversations };
-    delete conversations[conversationId];
-    const now = this.readNow();
-    const nextState: AgentWorkspaceRuntimeState = {
-      version: 1,
-      workDir: this.options.workDir,
-      updatedAt: now,
-      updatedBy: this.options.source,
-      activeConversationId:
-        current.activeConversationId === conversationId ? null : current.activeConversationId,
-      conversations,
-    };
-    await this.writeState(nextState);
-    return nextState;
+    return enqueueRuntimeStateOperation(this.filePath, async () => {
+      const current = await this.readStateForMutation();
+      const conversations = { ...current.conversations };
+      delete conversations[conversationId];
+      const now = this.readNow();
+      const nextState: AgentWorkspaceRuntimeState = {
+        version: 1,
+        workDir: this.options.workDir,
+        updatedAt: now,
+        updatedBy: this.options.source,
+        activeConversationId:
+          current.activeConversationId === conversationId ? null : current.activeConversationId,
+        conversations,
+      };
+      await this.writeState(nextState);
+      return nextState;
+    });
+  }
+
+  private async readStateForMutation(): Promise<AgentWorkspaceRuntimeState> {
+    try {
+      return await this.readState();
+    } catch (error) {
+      if (!(error instanceof AgentWorkspaceRuntimeStateCorruptJsonError)) {
+        throw error;
+      }
+      await this.archiveCorruptStateFile();
+      return createEmptyAgentWorkspaceRuntimeState({
+        workDir: this.options.workDir,
+        source: this.options.source,
+        now: this.readNow(),
+      });
+    }
+  }
+
+  private async archiveCorruptStateFile(): Promise<void> {
+    if (!this.options.fs.renameFile) {
+      return;
+    }
+    await this.options.fs.renameFile(
+      this.options.filePath,
+      getCorruptAgentWorkspaceRuntimeStateFilePath(this.options.filePath, this.readNow()),
+    );
   }
 
   private async readState(): Promise<AgentWorkspaceRuntimeState> {
@@ -164,7 +209,12 @@ export class FileAgentWorkspaceRuntimeStateRuntime
     }
 
     const raw = await this.options.fs.readFile(this.options.filePath);
-    const parsed = JSON.parse(raw) as unknown;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw) as unknown;
+    } catch (error) {
+      throw new AgentWorkspaceRuntimeStateCorruptJsonError(this.options.filePath, error);
+    }
     return parseAgentWorkspaceRuntimeState(parsed, this.options.workDir);
   }
 
@@ -175,6 +225,29 @@ export class FileAgentWorkspaceRuntimeStateRuntime
   private readNow(): number {
     return this.options.now?.() ?? Date.now();
   }
+}
+
+function enqueueRuntimeStateOperation<T>(
+  filePath: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = runtimeStateOperationQueues.get(filePath) ?? Promise.resolve();
+  const current = previous.then(operation, operation);
+  const next = current.then(
+    () => undefined,
+    () => undefined,
+  );
+  runtimeStateOperationQueues.set(filePath, next);
+  void next.then(() => {
+    if (runtimeStateOperationQueues.get(filePath) === next) {
+      runtimeStateOperationQueues.delete(filePath);
+    }
+  });
+  return current;
+}
+
+function getCorruptAgentWorkspaceRuntimeStateFilePath(filePath: string, now: number): string {
+  return `${filePath}.corrupt.${Math.floor(now)}`;
 }
 
 export function createAgentWorkspaceRuntimeStateRuntime(
@@ -188,6 +261,7 @@ export function createFileAgentWorkspaceRuntimeStateRuntime(options: {
   readonly source: AgentWorkspaceRuntimeStateSource;
   readonly now?: () => number;
 }): AgentWorkspaceRuntimeStateRuntime {
+  const crypto = require('crypto') as typeof import('crypto');
   const fs = require('fs') as typeof import('fs');
   const path = require('path') as typeof import('path');
 
@@ -197,8 +271,25 @@ export function createFileAgentWorkspaceRuntimeStateRuntime(options: {
     fs: {
       readFile: (filePath) => fs.promises.readFile(filePath, 'utf-8'),
       writeFile: async (filePath, content) => {
-        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-        await fs.promises.writeFile(filePath, content, 'utf-8');
+        const directory = path.dirname(filePath);
+        const tempPath = path.join(
+          directory,
+          `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${crypto
+            .randomBytes(6)
+            .toString('hex')}.tmp`,
+        );
+        await fs.promises.mkdir(directory, { recursive: true });
+        try {
+          await fs.promises.writeFile(tempPath, content, 'utf-8');
+          await fs.promises.rename(tempPath, filePath);
+        } catch (error) {
+          await fs.promises.rm(tempPath, { force: true }).catch(() => undefined);
+          throw error;
+        }
+      },
+      renameFile: async (sourcePath, targetPath) => {
+        await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
+        await fs.promises.rename(sourcePath, targetPath);
       },
       exists: async (filePath) => {
         try {
