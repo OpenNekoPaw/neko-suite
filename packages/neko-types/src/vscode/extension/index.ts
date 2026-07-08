@@ -144,6 +144,7 @@ export {
 export type {
   CacheArtifactContentIngestProviderOptions,
   ContentAccessFileOps,
+  ContentAccessFileExists,
   ContentAccessWebviewResolver,
   ContentIngestFileProviderOptions,
   DocumentEntryContentAccessProviderOptions,
@@ -153,11 +154,15 @@ export type {
   VideoProxyContentAccessProviderOptions,
 } from './content-access-providers';
 export {
+  contractHostContentMediaPath,
+  createHostContentMediaPathContext,
   createHostContentPathResolver,
   createWorkspaceContentPathResolver,
   getHostContentAuthorizedReadRoots,
+  loadHostContentPathPolicy,
+  resolveHostContentMediaPath,
 } from './content-path-resolver';
-export type { HostContentPathResolverOptions } from './content-path-resolver';
+export type { HostContentPathPolicy, HostContentPathResolverOptions } from './content-path-resolver';
 export {
   createExtensionPrivateResourceCacheOptions,
   createHostContentAccessRuntime,

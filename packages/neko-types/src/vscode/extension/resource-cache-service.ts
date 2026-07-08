@@ -205,7 +205,7 @@ export interface VSCodeResourceCacheServiceOptions {
   readonly projectRoot?: string;
   readonly globalRoot?: string;
   readonly extensionPrivateRoot?: string;
-  readonly localResourceAccess: LocalResourceAccessService;
+  readonly localResourceAccess?: LocalResourceAccessService;
   readonly providers?: readonly ResourceCacheProvider[];
   readonly fsOps?: ResourceCacheFsOps;
   readonly now?: () => string;
@@ -330,7 +330,7 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
   private readonly projectRoot?: string;
   private readonly globalRoot?: string;
   private readonly extensionPrivateRoot?: string;
-  private readonly localResourceAccess: LocalResourceAccessService;
+  private readonly localResourceAccess?: LocalResourceAccessService;
   private readonly store: ResourceCacheManifestStore;
   private readonly providers = new Map<string, ResourceCacheProvider>();
   private readonly providerOrder: ResourceCacheProvider[] = [];
@@ -583,6 +583,18 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
     variant: ResourceVariantRequest,
     options: ResourceCacheProjectOptions = {},
   ): Promise<ResourceCacheProjectResult> {
+    if (!this.localResourceAccess) {
+      const resolved = await this.resolve(ref, variant, {
+        ...options,
+        materializeIfMissing: options.materializeIfMissing ?? true,
+      });
+      return {
+        ...resolved,
+        status: 'unsupported',
+        error: 'Resource cache projection requires a local resource projector.',
+      };
+    }
+
     if (ref.scope === 'extension-private') {
       return this.createResult(ref, variant, 'non-portable', {
         error:

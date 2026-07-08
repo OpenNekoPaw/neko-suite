@@ -192,10 +192,10 @@ describe('content access providers', () => {
 
   it('resolves source-first local paths, bytes, and engine source tokens', async () => {
     const fileOps = createFileOps({ '/media/books/comic.epub': bytes('book') });
-    const pathResolver = new PathResolver(new Map([['BOOKS', '/media/books']]));
     const provider = new SourceFileContentAccessProvider({
       projectRoot: '/workspace/demo',
-      pathResolver,
+      mediaPathContext: createMediaPathContext(),
+      fileExists: createFileExists(['/media/books/comic.epub']),
       fileOps,
       engineSourceResolver: async ({ path }) => ({
         token: `engine:${path}`,
@@ -224,7 +224,8 @@ describe('content access providers', () => {
   it('resolves agent document context local paths through PathResolver', async () => {
     const provider = new SourceFileContentAccessProvider({
       projectRoot: '/workspace/demo',
-      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      mediaPathContext: createMediaPathContext(),
+      fileExists: createFileExists(['/media/books/comic.epub']),
     });
 
     await expect(
@@ -245,7 +246,8 @@ describe('content access providers', () => {
     const fileOps = createFileOps({ '/media/books/comic.epub': bytes('whole-archive') });
     const provider = new SourceFileContentAccessProvider({
       projectRoot: '/workspace/demo',
-      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      mediaPathContext: createMediaPathContext(),
+      fileExists: createFileExists(['/media/books/comic.epub']),
       fileOps,
     });
 
@@ -261,6 +263,8 @@ describe('content access providers', () => {
   it('returns structured diagnostics when engine source resolution fails', async () => {
     const provider = new SourceFileContentAccessProvider({
       projectRoot: '/workspace/demo',
+      mediaPathContext: createMediaPathContext(),
+      fileExists: createFileExists(['/workspace/demo/media/shot.glb']),
       engineSourceResolver: async () => {
         throw new Error('engine offline');
       },
@@ -286,7 +290,16 @@ describe('content access providers', () => {
   });
 
   it('reports unresolved path variables as missing source', async () => {
-    const provider = new SourceFileContentAccessProvider({ projectRoot: '/workspace/demo' });
+    const provider = new SourceFileContentAccessProvider({
+      projectRoot: '/workspace/demo',
+      mediaPathContext: {
+        owningWorkspaceRoot: '/workspace/demo',
+        workspaceRoots: ['/workspace/demo'],
+        pathVariables: new Map(),
+        allowedRoots: ['/workspace/demo'],
+      },
+      fileExists: createFileExists([]),
+    });
 
     const result = await provider.resolve({
       request: { ref: resource, intent: 'verify', target: 'local-path' },
@@ -294,13 +307,15 @@ describe('content access providers', () => {
 
     expect(result).toMatchObject({
       status: 'missing-source',
-      error: 'Source path contains an unresolved path variable.',
     });
+    expect(result.diagnostics?.[0]?.code).toBe('content-source-unknown-variable');
   });
 
   it('reports unreadable source bytes as missing source instead of provider failure', async () => {
     const provider = new SourceFileContentAccessProvider({
       projectRoot: '/workspace/demo',
+      mediaPathContext: createMediaPathContext(),
+      fileExists: createFileExists(['/workspace/demo/missing.png']),
       fileOps: {
         readFile: async () => {
           throw new Error('ENOENT');
@@ -327,7 +342,8 @@ describe('content access providers', () => {
   it('reads original document entry bytes for package intent', async () => {
     const provider = new DocumentEntryContentAccessProvider({
       projectRoot: '/workspace/demo',
-      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      mediaPathContext: createMediaPathContext(),
+      fileExists: createFileExists(['/media/books/comic.epub']),
       entryReader: async ({ sourcePath, entryPath }) => bytes(`${sourcePath}:${entryPath}`),
     });
 
@@ -341,7 +357,8 @@ describe('content access providers', () => {
   it('reads document entry bytes for agent image context without registering the whole archive', async () => {
     const provider = new DocumentEntryContentAccessProvider({
       projectRoot: '/workspace/demo',
-      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      mediaPathContext: createMediaPathContext(),
+      fileExists: createFileExists(['/media/books/comic.epub']),
       entryReader: async ({ sourcePath, entryPath }) => bytes(`${sourcePath}:${entryPath}`),
     });
 
@@ -363,7 +380,8 @@ describe('content access providers', () => {
     });
     const provider = new DocumentEntryContentAccessProvider({
       projectRoot: '/workspace/demo',
-      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      mediaPathContext: createMediaPathContext(),
+      fileExists: createFileExists(['/media/books/comic.epub']),
       resourceCache: cache,
       entryReader: async ({ sourcePath, entryPath }) => bytes(`${sourcePath}:${entryPath}`),
     });
@@ -406,7 +424,8 @@ describe('content access providers', () => {
     const readFile = vi.fn(fileOps.readFile);
     const provider = new DocumentEntryContentAccessProvider({
       projectRoot: '/workspace/demo',
-      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      mediaPathContext: createMediaPathContext(),
+      fileExists: createFileExists(['/media/books/comic.epub']),
       fileOps: { ...fileOps, readFile },
       entryReader: async () => bytes('entry'),
     });
@@ -428,6 +447,8 @@ describe('content access providers', () => {
   it('rejects package entry reads without a stable document entry path', async () => {
     const provider = new DocumentEntryContentAccessProvider({
       projectRoot: '/workspace/demo',
+      mediaPathContext: createMediaPathContext(),
+      fileExists: createFileExists(['/media/books/comic.epub']),
       entryReader: async () => bytes('entry'),
     });
     const locatorOnlyResource = createResourceRef({
@@ -457,7 +478,8 @@ describe('content access providers', () => {
   it('returns structured diagnostics when document entry reading fails', async () => {
     const provider = new DocumentEntryContentAccessProvider({
       projectRoot: '/workspace/demo',
-      pathResolver: new PathResolver(new Map([['BOOKS', '/media/books']])),
+      mediaPathContext: createMediaPathContext(),
+      fileExists: createFileExists(['/media/books/comic.epub']),
       entryReader: async () => {
         throw new Error('zip read failed');
       },
@@ -1049,6 +1071,20 @@ function createLocalResourceAccess(uri: string): LocalResourceAccessService {
     }),
     createSyncProjector: () => () => uri,
   };
+}
+
+function createMediaPathContext() {
+  return {
+    owningWorkspaceRoot: '/workspace/demo',
+    workspaceRoots: ['/workspace/demo'],
+    pathVariables: new Map([['BOOKS', '/media/books']]),
+    allowedRoots: ['/workspace/demo', '/media/books'],
+  };
+}
+
+function createFileExists(existingPaths: readonly string[]) {
+  const existing = new Set(existingPaths);
+  return (filePath: string) => existing.has(filePath);
 }
 
 function bytes(value: string): Uint8Array {

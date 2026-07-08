@@ -4,6 +4,10 @@ import * as vscode from 'vscode';
 import type { ContentAccessService } from './content-access-service';
 import { HostContentAccessService } from './content-access-service';
 import { SourceFileContentAccessProvider } from './content-access-providers';
+import {
+  createHostContentMediaPathContext,
+  resolveHostContentMediaPath,
+} from './content-path-resolver';
 
 export interface ProjectPackageRequest {
   readonly packageId: string;
@@ -21,7 +25,6 @@ export interface ProjectPackageResult {
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
-const ASSET_RESOLVE_PATH_COMMAND = 'neko.assets.resolvePath';
 const MAX_REFERENCE_COUNT = 1000;
 const MAX_REFERENCE_SCAN_DEPTH = 4;
 const LOCAL_FILE_EXTENSIONS = new Set([
@@ -178,7 +181,7 @@ export async function createProjectSnapshotPackage(
     sourceDir: path.dirname(request.sourceUri.fsPath),
     contentAccess:
       request.contentAccess ??
-      createDefaultPackageContentAccessService(path.dirname(request.sourceUri.fsPath)),
+      (await createDefaultPackageContentAccessService(request.sourceUri)),
   });
 
   const manifest = {
@@ -448,11 +451,21 @@ async function readPackageReferenceBytes(
   return result.status === 'ready' ? result.bytes : undefined;
 }
 
-function createDefaultPackageContentAccessService(projectRoot: string): ContentAccessService {
+async function createDefaultPackageContentAccessService(
+  sourceUri: vscode.Uri,
+): Promise<ContentAccessService> {
+  const projectRoot = path.dirname(sourceUri.fsPath);
+  const mediaPathContext = await createHostContentMediaPathContext({
+    documentUri: sourceUri,
+    workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+    getExtension: vscode.extensions.getExtension,
+  });
   return new HostContentAccessService({
     providers: [
       new SourceFileContentAccessProvider({
         projectRoot,
+        mediaPathContext,
+        fileExists: isVSCodeFile,
         fileOps: {
           readFile: async (filePath) => vscode.workspace.fs.readFile(vscode.Uri.file(filePath)),
         },
@@ -587,25 +600,40 @@ async function resolvePathVariableReference(
 > {
   const source: PackageReferenceManifestSource = { kind: 'variable', reference };
   try {
-    const resolved = await vscode.commands.executeCommand<unknown>(
-      ASSET_RESOLVE_PATH_COMMAND,
-      reference,
-    );
-    if (typeof resolved === 'string') {
-      const filePath = resolveCommandFilePath(resolved, baseDir);
-      if (filePath) {
-        return {
-          filePath,
-          uri: vscode.Uri.file(filePath),
-          source,
-        };
-      }
+    const resolved = await resolveHostContentMediaPath(reference, {
+      workspaceRoot: resolvePackageWorkspaceRoot(baseDir),
+      workspaceFolders: vscode.workspace.workspaceFolders ?? [],
+      getExtension: vscode.extensions.getExtension,
+      fileExists: isVSCodeFile,
+    });
+    const filePath = resolveCommandFilePath(resolved, baseDir);
+    if (filePath) {
+      return {
+        filePath,
+        uri: vscode.Uri.file(filePath),
+        source,
+      };
     }
   } catch {
-    // neko-assets may be inactive; unresolved variables are reported in the manifest.
+    // Shared content policy may be unavailable; unresolved variables are reported in the manifest.
   }
 
   return { source, reason: 'unsupported-reference' };
+}
+
+function resolvePackageWorkspaceRoot(baseDir: string): string | undefined {
+  return (
+    vscode.workspace.getWorkspaceFolder?.(vscode.Uri.file(baseDir))?.uri.fsPath ??
+    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+  );
+}
+
+async function isVSCodeFile(filePath: string): Promise<boolean> {
+  try {
+    return (await vscode.workspace.fs.stat(vscode.Uri.file(filePath))).type === vscode.FileType.File;
+  } catch {
+    return false;
+  }
 }
 
 function resolveCommandFilePath(value: string, baseDir: string): string | undefined {

@@ -10,6 +10,8 @@ export {
   createWorkspaceMediaPathCandidates,
   isWorkspaceMediaPathResolvedLocal,
   resolveWorkspaceMediaPath,
+  resolveWorkspaceMediaPathAsync,
+  type ResolveWorkspaceMediaPathAsyncInput,
   type ResolveWorkspaceMediaPathInput,
   type WorkspaceMediaPathCandidate,
   type WorkspaceMediaPathCandidateReason,

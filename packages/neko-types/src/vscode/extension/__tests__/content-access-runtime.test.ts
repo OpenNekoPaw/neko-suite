@@ -242,6 +242,7 @@ describe('createHostContentAccessRuntime', () => {
   it('reports missing Engine source resolver at the shared source provider boundary', async () => {
     const runtime = createHostContentAccessRuntime({
       workspaceRoot: '/workspace/demo',
+      fileExists: (filePath) => filePath === '/workspace/demo/media/shot.png',
       sourceFileProvider: {},
       documentEntryProvider: { enabled: false },
       ingest: { enabled: false },
@@ -265,6 +266,7 @@ describe('createHostContentAccessRuntime', () => {
     }));
     const runtime = createHostContentAccessRuntime({
       workspaceRoot: '/workspace/demo',
+      fileExists: (filePath) => filePath === '/workspace/demo/media/shot.glb',
       sourceFileProvider: { engineSourceResolver },
       documentEntryProvider: { enabled: false },
       ingest: { enabled: false },

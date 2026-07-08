@@ -2,7 +2,13 @@ import * as fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
-import { PathResolver, type ResolvedPath } from '../../path';
+import {
+  PathResolver,
+  resolveWorkspaceMediaPathAsync,
+  type WorkspaceMediaPathContext,
+  type WorkspaceMediaPathDiagnostic,
+  type WorkspaceMediaPathResolution,
+} from '../../path';
 import {
   createResourceFingerprint,
   createResourceRef,
@@ -55,8 +61,9 @@ export interface ResourceCacheContentAccessProviderOptions {
 
 export interface SourceFileContentAccessProviderOptions {
   readonly id?: string;
-  readonly pathResolver?: PathResolver;
   readonly projectRoot: string;
+  readonly mediaPathContext: WorkspaceMediaPathContext;
+  readonly fileExists: ContentAccessFileExists;
   readonly fileOps?: Pick<ContentAccessFileOps, 'readFile'>;
   readonly localResourceAccess?: LocalResourceAccessService;
   readonly webviewResolver?: ContentAccessWebviewResolver;
@@ -76,8 +83,9 @@ export interface SourceFileContentAccessProviderOptions {
 
 export interface DocumentEntryContentAccessProviderOptions {
   readonly id?: string;
-  readonly pathResolver?: PathResolver;
   readonly projectRoot: string;
+  readonly mediaPathContext: WorkspaceMediaPathContext;
+  readonly fileExists: ContentAccessFileExists;
   readonly resourceCache?: ResourceCacheService;
   readonly fileOps?: Pick<ContentAccessFileOps, 'readFile'>;
   readonly webviewResolver?: ContentAccessWebviewResolver;
@@ -118,6 +126,10 @@ export interface ContentIngestFileProviderOptions {
   readonly pathResolver?: PathResolver;
   readonly projectRoot: string;
   readonly fileOps?: ContentAccessFileOps;
+}
+
+export interface ContentAccessFileExists {
+  (filePath: string): boolean | Promise<boolean>;
 }
 
 export interface CacheArtifactContentIngestProviderOptions {
@@ -283,8 +295,8 @@ export class ResourceCacheContentAccessProvider implements ContentAccessProvider
 
 export class SourceFileContentAccessProvider implements ContentAccessProvider {
   readonly id: string;
-  private readonly pathResolver: PathResolver;
-  private readonly projectRoot: string;
+  private readonly mediaPathContext: WorkspaceMediaPathContext;
+  private readonly fileExists: ContentAccessFileExists;
   private readonly fileOps: Pick<ContentAccessFileOps, 'readFile'>;
   private readonly localResourceAccess?: LocalResourceAccessService;
   private readonly webviewResolver?: ContentAccessWebviewResolver;
@@ -293,8 +305,8 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
 
   constructor(options: SourceFileContentAccessProviderOptions) {
     this.id = options.id ?? 'source-file-content-access';
-    this.pathResolver = options.pathResolver ?? new PathResolver();
-    this.projectRoot = options.projectRoot;
+    this.mediaPathContext = options.mediaPathContext;
+    this.fileExists = options.fileExists;
     this.fileOps = options.fileOps ?? nodeFileOps;
     this.localResourceAccess = options.localResourceAccess;
     this.webviewResolver = options.webviewResolver;
@@ -331,50 +343,72 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
       return missingSource(request, this.id, 'Source file provider requires a path-backed ref.');
     }
 
-    const resolved = this.pathResolver.resolveSource(sourcePath, this.projectRoot);
-    if (resolved.type === 'local' && this.pathResolver.hasVariable(resolved.path)) {
-      return missingSource(request, this.id, 'Source path contains an unresolved path variable.');
+    const resolved = await resolveContentSourcePath(
+      sourcePath,
+      this.mediaPathContext,
+      this.fileExists,
+    );
+    if (resolved.status === 'remote') {
+      return this.resolveRemoteSource(request, resolved.url, resolved.diagnostics);
+    }
+    if (resolved.status !== 'resolved-local') {
+      return createWorkspaceMediaPathFailure(request, this.id, resolved);
     }
 
-    return this.resolveResolvedPath(request, resolved);
+    return this.resolveResolvedPath(request, resolved.path, resolved.diagnostics);
+  }
+
+  private resolveRemoteSource(
+    request: ContentAccessRequest,
+    url: string,
+    diagnostics: readonly WorkspaceMediaPathDiagnostic[],
+  ): ContentAccessResult {
+    const result =
+      request.target === 'local-path'
+        ? unsupportedDestination(request, this.id, 'Remote URLs cannot resolve to local paths.')
+        : unsupportedDestination(request, this.id, 'Remote source reads are not supported yet.');
+    return appendWorkspaceMediaPathDiagnostics(result, this.id, diagnostics, request);
   }
 
   private async resolveResolvedPath(
     request: ContentAccessRequest,
-    resolved: ResolvedPath,
+    resolvedPath: string,
+    diagnostics: readonly WorkspaceMediaPathDiagnostic[],
   ): Promise<ContentAccessResult> {
-    if (resolved.type === 'remote') {
-      return request.target === 'local-path'
-        ? unsupportedDestination(request, this.id, 'Remote URLs cannot resolve to local paths.')
-        : unsupportedDestination(request, this.id, 'Remote source reads are not supported yet.');
-    }
-
     switch (request.target) {
       case 'local-path':
-        return {
-          status: 'ready',
-          request,
-          providerId: this.id,
-          source: stableSourceOrUndefined(request.ref),
-          localPath: resolved.path,
-          role: request.role ?? request.variant?.role,
-        };
-      case 'bytes':
-        try {
-          const resolvedBytes = this.bytesResolver
-            ? await this.bytesResolver({ request, path: resolved.path })
-            : { bytes: await this.fileOps.readFile(resolved.path) };
-          return {
+        return withWorkspaceMediaPathDiagnostics(
+          {
             status: 'ready',
             request,
             providerId: this.id,
             source: stableSourceOrUndefined(request.ref),
-            localPath: resolved.path,
-            bytes: resolvedBytes.bytes,
-            mimeType: resolvedBytes.mimeType,
-            sizeBytes: resolvedBytes.sizeBytes ?? resolvedBytes.bytes.byteLength,
+            localPath: resolvedPath,
             role: request.role ?? request.variant?.role,
-          };
+          },
+          this.id,
+          diagnostics,
+        );
+      case 'bytes':
+        try {
+          const resolvedBytes = this.bytesResolver
+            ? await this.bytesResolver({ request, path: resolvedPath })
+            : { bytes: await this.fileOps.readFile(resolvedPath) };
+          return withWorkspaceMediaPathDiagnostics(
+            {
+              status: 'ready',
+              request,
+              providerId: this.id,
+              source: stableSourceOrUndefined(request.ref),
+              localPath: resolvedPath,
+              bytes: resolvedBytes.bytes,
+              mimeType: resolvedBytes.mimeType,
+              sizeBytes: resolvedBytes.sizeBytes ?? resolvedBytes.bytes.byteLength,
+              role: request.role ?? request.variant?.role,
+            },
+            this.id,
+            diagnostics,
+          );
         } catch (error) {
           return missingSource(
             request,
@@ -394,15 +428,19 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
           );
         }
         try {
-          return {
-            status: 'ready',
-            request,
-            providerId: this.id,
-            source: stableSourceOrUndefined(request.ref),
-            localPath: resolved.path,
-            engineSource: await this.engineSourceResolver({ request, path: resolved.path }),
-            role: request.role ?? request.variant?.role,
-          };
+          return withWorkspaceMediaPathDiagnostics(
+            {
+              status: 'ready',
+              request,
+              providerId: this.id,
+              source: stableSourceOrUndefined(request.ref),
+              localPath: resolvedPath,
+              engineSource: await this.engineSourceResolver({ request, path: resolvedPath }),
+              role: request.role ?? request.variant?.role,
+            },
+            this.id,
+            diagnostics,
+          );
         } catch (error) {
           return providerResolverFailure(request, this.id, error);
         }
@@ -415,7 +453,7 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
             'Webview URI source access requires local resource access and a webview resolver.',
           );
         }
-        const projection = await this.localResourceAccess.toWebviewUri(webview, resolved.path, {
+        const projection = await this.localResourceAccess.toWebviewUri(webview, resolvedPath, {
           caller: request.caller,
         });
         if (projection.ok === false) {
@@ -424,21 +462,25 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
             request,
             providerId: this.id,
             source: stableSourceOrUndefined(request.ref),
-            localPath: resolved.path,
+            localPath: resolvedPath,
             diagnostics: [
               createProjectionDiagnostic(projection.reason, this.id, request, projection.message),
             ],
             error: projection.message,
           };
         }
-        return {
-          status: 'ready',
-          request,
-          providerId: this.id,
-          source: stableSourceOrUndefined(request.ref),
-          localPath: resolved.path,
-          uri: projection.uri,
-        };
+        return withWorkspaceMediaPathDiagnostics(
+          {
+            status: 'ready',
+            request,
+            providerId: this.id,
+            source: stableSourceOrUndefined(request.ref),
+            localPath: resolvedPath,
+            uri: projection.uri,
+          },
+          this.id,
+          diagnostics,
+        );
       }
       case 'runtime-stream':
         return unsupportedDestination(
@@ -454,20 +496,21 @@ export class SourceFileContentAccessProvider implements ContentAccessProvider {
 
 export class DocumentEntryContentAccessProvider implements ContentAccessProvider {
   readonly id: string;
-  private readonly pathResolver: PathResolver;
-  private readonly projectRoot: string;
+  private readonly mediaPathContext: WorkspaceMediaPathContext;
+  private readonly fileExists: ContentAccessFileExists;
   private readonly sourceProvider: SourceFileContentAccessProvider;
   private readonly resourceCacheProvider?: ResourceCacheContentAccessProvider;
   private readonly entryReader?: DocumentEntryContentAccessProviderOptions['entryReader'];
 
   constructor(options: DocumentEntryContentAccessProviderOptions) {
     this.id = options.id ?? 'document-entry-content-access';
-    this.pathResolver = options.pathResolver ?? new PathResolver();
-    this.projectRoot = options.projectRoot;
+    this.mediaPathContext = options.mediaPathContext;
+    this.fileExists = options.fileExists;
     this.sourceProvider = new SourceFileContentAccessProvider({
       id: `${this.id}:source`,
-      pathResolver: this.pathResolver,
+      mediaPathContext: this.mediaPathContext,
       projectRoot: options.projectRoot,
+      fileExists: this.fileExists,
       fileOps: options.fileOps,
     });
     this.entryReader = options.entryReader;
@@ -559,9 +602,13 @@ export class DocumentEntryContentAccessProvider implements ContentAccessProvider
       if (!sourcePath) {
         return missingSource(request, this.id, 'Document entry source path is missing.');
       }
-      const resolved = this.pathResolver.resolveSource(sourcePath, this.projectRoot);
-      if (resolved.type !== 'local' || this.pathResolver.hasVariable(resolved.path)) {
-        return missingSource(request, this.id, 'Document entry source path cannot be resolved.');
+      const resolved = await resolveContentSourcePath(
+        sourcePath,
+        this.mediaPathContext,
+        this.fileExists,
+      );
+      if (resolved.status !== 'resolved-local') {
+        return createWorkspaceMediaPathFailure(request, this.id, resolved);
       }
       let bytes: Uint8Array;
       try {
@@ -573,13 +620,18 @@ export class DocumentEntryContentAccessProvider implements ContentAccessProvider
       } catch (error) {
         return providerResolverFailure(request, this.id, error);
       }
-      return {
-        status: 'ready',
-        request,
-        providerId: this.id,
-        source: stableSourceOrUndefined(request.ref),
-        bytes,
-      };
+      return withWorkspaceMediaPathDiagnostics(
+        {
+          status: 'ready',
+          request,
+          providerId: this.id,
+          source: stableSourceOrUndefined(request.ref),
+          localPath: resolved.path,
+          bytes,
+        },
+        this.id,
+        resolved.diagnostics,
+      );
     }
 
     return unsupportedDestination(
@@ -991,6 +1043,100 @@ function getDocumentRef(ref: ContentSourceRef): ContentDocumentSourceRef | undef
 
 function stableSourceOrUndefined(ref: ContentSourceRef): ContentStableSourceRef | undefined {
   return ref.kind === 'runtime' ? ref.source : ref;
+}
+
+async function resolveContentSourcePath(
+  source: string,
+  context: WorkspaceMediaPathContext,
+  fileExists: ContentAccessFileExists,
+): Promise<WorkspaceMediaPathResolution> {
+  return resolveWorkspaceMediaPathAsync({
+    source,
+    context,
+    fileExists,
+    isPathAuthorized: (filePath) => isPathInsideAnyRoot(filePath, context.allowedRoots),
+  });
+}
+
+function createWorkspaceMediaPathFailure(
+  request: ContentAccessRequest,
+  providerId: string,
+  result: WorkspaceMediaPathResolution,
+): ContentAccessResult {
+  if (result.status === 'remote') {
+    return unsupportedDestination(request, providerId, 'Remote source reads are not supported yet.');
+  }
+  const diagnostics = mapWorkspaceMediaPathDiagnostics(providerId, request, result.diagnostics);
+  const errorDiagnostic =
+    diagnostics.find((diagnostic) => diagnostic.severity === 'error') ?? diagnostics[0];
+  return {
+    status: result.status === 'unauthorized' ? 'unauthorized' : 'missing-source',
+    request,
+    providerId,
+    source: stableSourceOrUndefined(request.ref),
+    ...(result.status === 'unauthorized' ? { localPath: result.path } : {}),
+    diagnostics,
+    error: errorDiagnostic?.message ?? 'Content source path could not be resolved.',
+  };
+}
+
+function appendWorkspaceMediaPathDiagnostics(
+  result: ContentAccessResult,
+  providerId: string,
+  diagnostics: readonly WorkspaceMediaPathDiagnostic[],
+  request: ContentAccessRequest,
+): ContentAccessResult {
+  return {
+    ...result,
+    diagnostics: [
+      ...(result.diagnostics ?? []),
+      ...mapWorkspaceMediaPathDiagnostics(providerId, request, diagnostics),
+    ],
+  };
+}
+
+function withWorkspaceMediaPathDiagnostics(
+  result: ContentAccessResult,
+  providerId: string,
+  diagnostics: readonly WorkspaceMediaPathDiagnostic[],
+): ContentAccessResult {
+  const mapped = mapWorkspaceMediaPathDiagnostics(providerId, result.request, diagnostics);
+  if (mapped.length === 0) return result;
+  return {
+    ...result,
+    diagnostics: [...(result.diagnostics ?? []), ...mapped],
+  };
+}
+
+function mapWorkspaceMediaPathDiagnostics(
+  providerId: string,
+  request: ContentAccessRequest,
+  diagnostics: readonly WorkspaceMediaPathDiagnostic[],
+): ContentAccessDiagnostic[] {
+  return diagnostics.map((diagnostic) => ({
+    code: `content-source-${diagnostic.code}`,
+    severity: diagnostic.code === 'multi-root-ambiguity' ? 'warning' : 'error',
+    message: diagnostic.message,
+    providerId,
+    intent: request.intent,
+    target: request.target,
+    metadata: {
+      ...(diagnostic.path ? { path: diagnostic.path } : {}),
+      ...(diagnostic.variable ? { variable: diagnostic.variable } : {}),
+    },
+  }));
+}
+
+function isPathInsideAnyRoot(filePath: string, roots: readonly string[] | undefined): boolean {
+  if (!roots || roots.length === 0) return false;
+  return roots.some((root) => isPathInsideOrEqual(filePath, root));
+}
+
+function isPathInsideOrEqual(candidatePath: string, rootPath: string): boolean {
+  const candidate = path.normalize(candidatePath);
+  const root = path.normalize(rootPath);
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
 function unsupported(

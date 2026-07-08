@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   writes: new Map<string, Uint8Array>(),
   saveUri: undefined as MockUri | undefined,
   resolvedPaths: new Map<string, string>(),
+  mediaLibraryRoots: [] as string[],
+  pathVariables: [] as Array<readonly [string, string]>,
 }));
 
 interface MockUri {
@@ -27,6 +29,10 @@ function fileUri(filePath: string): MockUri {
 }
 
 vi.mock('vscode', () => ({
+  FileType: {
+    File: 1,
+    Directory: 2,
+  },
   Uri: {
     file: (filePath: string) => fileUri(filePath),
     joinPath: (base: MockUri, ...segments: string[]) =>
@@ -37,7 +43,17 @@ vi.mock('vscode', () => ({
     showInformationMessage: vi.fn(),
   },
   workspace: {
+    workspaceFolders: [{ uri: fileUri('/workspace') }],
+    getWorkspaceFolder: vi.fn((uri: MockUri) =>
+      uri.fsPath.startsWith('/workspace') ? { uri: fileUri('/workspace') } : undefined,
+    ),
     fs: {
+      stat: vi.fn(async (uri: MockUri) => {
+        if (!mocks.reads.has(uri.fsPath) || mocks.readFailures.has(uri.fsPath)) {
+          throw new Error(`Missing file: ${uri.fsPath}`);
+        }
+        return { type: 1 };
+      }),
       readFile: vi.fn(async (uri: MockUri) => {
         if (mocks.readFailures.has(uri.fsPath)) {
           throw new Error(`Missing file: ${uri.fsPath}`);
@@ -54,6 +70,16 @@ vi.mock('vscode', () => ({
       return mocks.resolvedPaths.get(storedPath) ?? storedPath;
     }),
   },
+  extensions: {
+    getExtension: vi.fn(() => ({
+      isActive: true,
+      exports: {
+        getMediaLibraryRoots: vi.fn(async () => [...mocks.mediaLibraryRoots]),
+        getPathVariables: vi.fn(async () => [...mocks.pathVariables]),
+      },
+      activate: vi.fn(),
+    })),
+  },
 }));
 
 describe('createProjectSnapshotPackage', () => {
@@ -64,6 +90,8 @@ describe('createProjectSnapshotPackage', () => {
     mocks.readFailures.clear();
     mocks.writes.clear();
     mocks.resolvedPaths.clear();
+    mocks.mediaLibraryRoots = [];
+    mocks.pathVariables = [];
     mocks.saveUri = fileUri('/workspace/story.zip');
     vi.clearAllMocks();
   });
@@ -157,7 +185,8 @@ describe('createProjectSnapshotPackage', () => {
     );
     mocks.reads.set('/workspace/textures/hero.png', new Uint8Array([13]));
     mocks.reads.set('/media/voice.wav', new Uint8Array([14]));
-    mocks.resolvedPaths.set('${MEDIA_ROOT}/voice.wav', '/media/voice.wav');
+    mocks.mediaLibraryRoots = ['/media'];
+    mocks.pathVariables = [['MEDIA_ROOT', '/media']];
     mocks.readFailures.add('/workspace/assets/missing.wav');
 
     const result = await createProjectSnapshotPackage({
@@ -179,15 +208,13 @@ describe('createProjectSnapshotPackage', () => {
     );
     expect(zipEntries.get('textures/hero.png')).toEqual(new Uint8Array([13]));
 
-    const externalEntryName = [...zipEntries.keys()].find((name) => name.endsWith('-hero.glb'));
-    expect(externalEntryName?.startsWith('assets/external/')).toBe(true);
-    expect(zipEntries.get(externalEntryName!)).toEqual(new Uint8Array([12]));
+    expect([...zipEntries.keys()].find((name) => name.endsWith('-hero.glb'))).toBeUndefined();
     const variableEntryName = [...zipEntries.keys()].find((name) => name.endsWith('-voice.wav'));
     expect(variableEntryName?.startsWith('assets/external/')).toBe(true);
     expect(zipEntries.get(variableEntryName!)).toEqual(new Uint8Array([14]));
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
       'neko.assets.resolvePath',
-      '${MEDIA_ROOT}/voice.wav',
+      expect.anything(),
     );
 
     const manifest = JSON.parse(decoder.decode(zipEntries.get('package-manifest.json'))) as {
@@ -200,7 +227,6 @@ describe('createProjectSnapshotPackage', () => {
     };
     expect(manifest.assets.map((asset) => asset.packagePath)).toEqual([
       'assets/ref.png',
-      externalEntryName,
       'configs/hero.gltf',
       variableEntryName,
       'textures/hero.png',
@@ -211,6 +237,11 @@ describe('createProjectSnapshotPackage', () => {
           fileName: 'missing.wav',
           reason: 'read-failed',
           source: { kind: 'relative', reference: 'assets/missing.wav' },
+        }),
+        expect.objectContaining({
+          fileName: 'hero.glb',
+          reason: 'read-failed',
+          source: { kind: 'absolute', fileName: 'hero.glb' },
         }),
         expect.objectContaining({
           fileName: 'lost.wav',
@@ -231,7 +262,6 @@ describe('createProjectSnapshotPackage', () => {
       'package-manifest.json',
       'story.nkc',
       'assets/ref.png',
-      externalEntryName,
       'configs/hero.gltf',
       variableEntryName,
       'textures/hero.png',

@@ -1,7 +1,8 @@
 import * as os from 'node:os';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type * as vscode from 'vscode';
-import { PathResolver } from '../../path';
+import { PathResolver, type WorkspaceMediaPathContext } from '../../path';
 import {
   resolveStorageLayout,
   type ContentAccessProvider,
@@ -25,6 +26,7 @@ import {
   ResourceCacheContentAccessProvider,
   SourceFileContentAccessProvider,
   type ContentAccessFileOps,
+  type ContentAccessFileExists,
   type ContentAccessWebviewResolver,
   type DocumentEntryContentAccessProviderOptions,
   type SourceFileContentAccessProviderOptions,
@@ -74,7 +76,8 @@ export interface HostContentAccessRuntimeSourceProviderOptions {
   readonly enabled?: boolean;
   readonly id?: string;
   readonly projectRoot?: string;
-  readonly pathResolver?: PathResolver;
+  readonly mediaPathContext?: WorkspaceMediaPathContext;
+  readonly fileExists?: ContentAccessFileExists;
   readonly fileOps?: Pick<ContentAccessFileOps, 'readFile'>;
   readonly engineSourceResolver?: SourceFileContentAccessProviderOptions['engineSourceResolver'];
   readonly bytesResolver?: SourceFileContentAccessProviderOptions['bytesResolver'];
@@ -84,7 +87,8 @@ export interface HostContentAccessRuntimeDocumentProviderOptions {
   readonly enabled?: boolean;
   readonly id?: string;
   readonly projectRoot?: string;
-  readonly pathResolver?: PathResolver;
+  readonly mediaPathContext?: WorkspaceMediaPathContext;
+  readonly fileExists?: ContentAccessFileExists;
   readonly fileOps?: Pick<ContentAccessFileOps, 'readFile'>;
   readonly entryReader?: DocumentEntryContentAccessProviderOptions['entryReader'];
 }
@@ -107,6 +111,8 @@ export interface CreateHostContentAccessRuntimeOptions {
   readonly context?: vscode.ExtensionContext;
   readonly workspaceRoot?: string;
   readonly pathResolver?: PathResolver;
+  readonly mediaPathContext?: WorkspaceMediaPathContext;
+  readonly fileExists?: ContentAccessFileExists;
   readonly localResourceAccess?: LocalResourceAccessService;
   readonly localResourceAccessOptions?: Partial<DefaultLocalResourceAccessServiceOptions>;
   readonly extraLocalResourceRootProviders?: readonly LocalResourceRootProvider[];
@@ -127,6 +133,9 @@ export function createHostContentAccessRuntime(
 ): HostContentAccessRuntime {
   const pathResolver = options.pathResolver ?? new PathResolver();
   const workspaceRoot = options.workspaceRoot;
+  const mediaPathContext =
+    options.mediaPathContext ?? createWorkspaceOnlyMediaPathContext(pathResolver, workspaceRoot);
+  const fileExists = options.fileExists ?? isExistingLocalFile;
   const localResourceAccess =
     options.localResourceAccess ?? createLocalResourceAccessIfConfigured(options);
   const resourceCache =
@@ -143,6 +152,8 @@ export function createHostContentAccessRuntime(
     options,
     pathResolver,
     workspaceRoot,
+    mediaPathContext,
+    fileExists,
     localResourceAccess,
     resourceCache,
   })) {
@@ -267,11 +278,14 @@ function createDefaultAccessProviders(input: {
   readonly options: CreateHostContentAccessRuntimeOptions;
   readonly pathResolver: PathResolver;
   readonly workspaceRoot?: string;
+  readonly mediaPathContext?: WorkspaceMediaPathContext;
+  readonly fileExists: ContentAccessFileExists;
   readonly localResourceAccess?: LocalResourceAccessService;
   readonly resourceCache?: ResourceCacheService;
 }): ContentAccessProvider[] {
   const providers: ContentAccessProvider[] = [];
-  const { options, pathResolver, workspaceRoot, localResourceAccess, resourceCache } = input;
+  const { options, mediaPathContext, fileExists, workspaceRoot, localResourceAccess, resourceCache } =
+    input;
 
   if (resourceCache) {
     providers.push(
@@ -286,11 +300,17 @@ function createDefaultAccessProviders(input: {
   const documentProviderOptions = options.documentEntryProvider;
   const documentProjectRoot = documentProviderOptions?.projectRoot ?? workspaceRoot;
   if (documentProviderOptions?.enabled !== false && documentProjectRoot) {
+    const documentMediaPathContext =
+      documentProviderOptions?.mediaPathContext ?? mediaPathContext;
+    if (!documentMediaPathContext) {
+      throw new Error('Document content access requires a WorkspaceMediaPathContext.');
+    }
     providers.push(
       new DocumentEntryContentAccessProvider({
         ...(documentProviderOptions?.id ? { id: documentProviderOptions.id } : {}),
         projectRoot: documentProjectRoot,
-        pathResolver: documentProviderOptions?.pathResolver ?? pathResolver,
+        mediaPathContext: documentMediaPathContext,
+        fileExists: documentProviderOptions?.fileExists ?? fileExists,
         ...(resourceCache ? { resourceCache } : {}),
         fileOps: documentProviderOptions?.fileOps ?? options.fileOps,
         webviewResolver: options.webviewResolver,
@@ -304,11 +324,16 @@ function createDefaultAccessProviders(input: {
   const sourceProviderOptions = options.sourceFileProvider;
   const sourceProjectRoot = sourceProviderOptions?.projectRoot ?? workspaceRoot;
   if (sourceProviderOptions?.enabled !== false && sourceProjectRoot) {
+    const sourceMediaPathContext = sourceProviderOptions?.mediaPathContext ?? mediaPathContext;
+    if (!sourceMediaPathContext) {
+      throw new Error('Source file content access requires a WorkspaceMediaPathContext.');
+    }
     providers.push(
       new SourceFileContentAccessProvider({
         ...(sourceProviderOptions?.id ? { id: sourceProviderOptions.id } : {}),
         projectRoot: sourceProjectRoot,
-        pathResolver: sourceProviderOptions?.pathResolver ?? pathResolver,
+        mediaPathContext: sourceMediaPathContext,
+        fileExists: sourceProviderOptions?.fileExists ?? fileExists,
         fileOps: sourceProviderOptions?.fileOps ?? options.fileOps,
         ...(localResourceAccess ? { localResourceAccess } : {}),
         webviewResolver: options.webviewResolver,
@@ -375,6 +400,27 @@ function createDefaultIngestGuardOptions(
       ? { extensionPrivateRoot: options.resourceCacheOptions.extensionPrivateRoot }
       : {}),
   };
+}
+
+function createWorkspaceOnlyMediaPathContext(
+  pathResolver: PathResolver,
+  workspaceRoot: string | undefined,
+): WorkspaceMediaPathContext | undefined {
+  if (!workspaceRoot) return undefined;
+  return {
+    owningWorkspaceRoot: workspaceRoot,
+    workspaceRoots: [workspaceRoot],
+    pathVariables: pathResolver.getVariables(),
+    allowedRoots: [workspaceRoot],
+  };
+}
+
+function isExistingLocalFile(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).isFile();
+  } catch {
+    return false;
+  }
 }
 
 export function createWorkspaceResourceCacheOptions(

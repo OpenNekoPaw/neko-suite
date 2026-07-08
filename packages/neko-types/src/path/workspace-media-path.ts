@@ -96,6 +96,13 @@ export interface ResolveWorkspaceMediaPathInput {
   readonly isPathAuthorized?: (filePath: string) => boolean;
 }
 
+export interface ResolveWorkspaceMediaPathAsyncInput {
+  readonly source: string;
+  readonly context: WorkspaceMediaPathContext;
+  readonly fileExists: (filePath: string) => boolean | Promise<boolean>;
+  readonly isPathAuthorized?: (filePath: string) => boolean | Promise<boolean>;
+}
+
 export type WorkspaceMediaPathContractionFormat =
   | 'remote-url'
   | 'workspace-relative'
@@ -233,6 +240,87 @@ export function resolveWorkspaceMediaPath({
   }
 
   if (isPathAuthorized && !isPathAuthorized(selected.path)) {
+    diagnostics.push(
+      createDiagnostic(
+        'unauthorized-path',
+        'Resolved media path is outside authorized roots.',
+        selected.path,
+      ),
+    );
+    return {
+      status: 'unauthorized',
+      source,
+      path: selected.path,
+      classification: planned.classification,
+      diagnostics,
+      candidates: planned.candidates,
+    };
+  }
+
+  return {
+    status: 'resolved-local',
+    source,
+    path: selected.path,
+    candidate: selected,
+    classification: planned.classification,
+    diagnostics,
+    candidates: planned.candidates,
+  };
+}
+
+export async function resolveWorkspaceMediaPathAsync({
+  source,
+  context,
+  fileExists,
+  isPathAuthorized,
+}: ResolveWorkspaceMediaPathAsyncInput): Promise<WorkspaceMediaPathResolution> {
+  const planned = createWorkspaceMediaPathCandidates(source, context);
+  const diagnostics = [...planned.diagnostics];
+
+  if (planned.classification.kind === 'remote-url') {
+    return {
+      status: 'remote',
+      source,
+      url: planned.classification.source,
+      classification: planned.classification,
+      diagnostics,
+      candidates: planned.candidates,
+    };
+  }
+
+  const existingCandidates: WorkspaceMediaPathCandidate[] = [];
+  for (const candidate of planned.candidates) {
+    if (await fileExists(candidate.path)) {
+      existingCandidates.push(candidate);
+    }
+  }
+
+  if (existingCandidates.length > 1) {
+    const firstPath = existingCandidates[0]?.path;
+    diagnostics.push(
+      createDiagnostic(
+        'multi-root-ambiguity',
+        `Multiple media path candidates exist; using ${firstPath ?? 'the first candidate'}.`,
+        firstPath,
+      ),
+    );
+  }
+
+  const selected = existingCandidates[0];
+  if (!selected) {
+    diagnostics.push(
+      createDiagnostic('missing-file', 'No existing local file matched the media path candidates.'),
+    );
+    return {
+      status: 'unresolved',
+      source,
+      classification: planned.classification,
+      diagnostics,
+      candidates: planned.candidates,
+    };
+  }
+
+  if (isPathAuthorized && !(await isPathAuthorized(selected.path))) {
     diagnostics.push(
       createDiagnostic(
         'unauthorized-path',
