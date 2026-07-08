@@ -9,9 +9,11 @@ import { buildConversationListMessage } from '@neko/agent/runtime';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import {
   createConversationId,
+  createFileAgentWorkspaceRuntimeStateRuntime,
   createFileConversationPersistenceRuntime,
   ConversationManager,
   type AgentHistoryEntry,
+  type AgentWorkspaceRuntimeStateRuntime,
   type ConversationPersistenceRuntime,
   type ConversationStorage,
   type DeleteConversationOptions,
@@ -40,7 +42,10 @@ class VscodeConversationStorage implements ConversationStorage {
 export class ConversationBridge {
   private _conversationManager: ConversationManager;
   private _persistenceRuntime: ConversationPersistenceRuntime | null = null;
+  private _workspaceRuntimeState: AgentWorkspaceRuntimeStateRuntime | null = null;
+  private _workspaceRuntimeStateRoot: string | null = null;
   private readonly getWorkspaceRoot: (() => string | undefined) | undefined;
+  private readonly initialWorkspaceRoot: string | undefined;
   private readonly deletedConversationIds = new Set<string>();
 
   constructor(
@@ -51,6 +56,7 @@ export class ConversationBridge {
   ) {
     const initialWorkspaceRoot =
       typeof workspaceRoot === 'function' ? workspaceRoot() : workspaceRoot;
+    this.initialWorkspaceRoot = initialWorkspaceRoot;
     this.getWorkspaceRoot = typeof workspaceRoot === 'function' ? workspaceRoot : undefined;
     const storage = new VscodeConversationStorage(context.workspaceState);
     this._conversationManager = new ConversationManager(storage, undefined, {
@@ -79,6 +85,11 @@ export class ConversationBridge {
           });
         },
       });
+      this._workspaceRuntimeState = createFileAgentWorkspaceRuntimeStateRuntime({
+        workDir: initialWorkspaceRoot,
+        source: 'extension',
+      });
+      this._workspaceRuntimeStateRoot = initialWorkspaceRoot;
     }
   }
 
@@ -93,7 +104,9 @@ export class ConversationBridge {
    * Create new conversation
    */
   create(): string {
-    return this._conversationManager.create();
+    const conversationId = this._conversationManager.create();
+    this._queueWorkspaceRuntimeState(conversationId, true);
+    return conversationId;
   }
 
   /**
@@ -114,6 +127,7 @@ export class ConversationBridge {
     }
     this._conversationManager.flush();
     this._queueConversationPersistence(conversationId);
+    this._queueWorkspaceRuntimeState(conversationId, false);
     return conversationId;
   }
 
@@ -156,7 +170,11 @@ export class ConversationBridge {
    * Switch to a different conversation
    */
   switchTo(conversationId: string): boolean {
-    return this._conversationManager.setActive(conversationId);
+    const switched = this._conversationManager.setActive(conversationId);
+    if (switched) {
+      this._queueWorkspaceRuntimeState(conversationId, true);
+    }
+    return switched;
   }
 
   /**
@@ -164,6 +182,11 @@ export class ConversationBridge {
    */
   clearActive(): void {
     this._conversationManager.clearActive();
+    void this._getWorkspaceRuntimeState()
+      ?.patch({ activeConversationId: null })
+      .catch((error: unknown) => {
+        logger.warn('Failed to clear active workspace runtime conversation', error);
+      });
   }
 
   /**
@@ -173,6 +196,7 @@ export class ConversationBridge {
     this._conversationManager.delete(conversationId, options);
     this.deletedConversationIds.add(conversationId);
     this._queueConversationDelete(conversationId);
+    this._queueWorkspaceRuntimeStateDelete(conversationId);
   }
 
   /**
@@ -180,10 +204,11 @@ export class ConversationBridge {
    */
   clearAll(): void {
     const conversationIds = this._conversationManager.list().map((conversation) => conversation.id);
-    this._conversationManager.clear();
+      this._conversationManager.clear();
     for (const conversationId of conversationIds) {
       this.deletedConversationIds.add(conversationId);
       this._queueConversationDelete(conversationId);
+      this._queueWorkspaceRuntimeStateDelete(conversationId);
     }
   }
 
@@ -222,6 +247,10 @@ export class ConversationBridge {
     this._conversationManager.flush();
     // Queue shared resume-layer persistence (best-effort, non-blocking).
     this._queueConversationPersistence(conversationId);
+    this._queueWorkspaceRuntimeState(
+      conversationId,
+      this._conversationManager.getActiveId() === conversationId,
+    );
   }
 
   /**
@@ -261,6 +290,10 @@ export class ConversationBridge {
     this._conversationManager.updateMessages(conversationId, messages);
     this._conversationManager.flush();
     this._queueConversationPersistence(conversationId);
+    this._queueWorkspaceRuntimeState(
+      conversationId,
+      this._conversationManager.getActiveId() === conversationId,
+    );
   }
 
   /**
@@ -274,6 +307,56 @@ export class ConversationBridge {
 
   private _queueConversationDelete(conversationId: string): void {
     this._persistenceRuntime?.queueConversationDelete(conversationId);
+  }
+
+  private _queueWorkspaceRuntimeState(conversationId: string, setActive: boolean): void {
+    const runtime = this._getWorkspaceRuntimeState();
+    const conversation = this._conversationManager.get(conversationId);
+    if (!runtime || !conversation) return;
+    void runtime
+      .patch({
+        ...(setActive ? { activeConversationId: conversationId } : {}),
+        conversation: {
+          conversationId,
+          status: 'idle',
+          tokenUsage: {
+            input: conversation.tokenCount ?? 0,
+            output: 0,
+            total: conversation.tokenCount ?? 0,
+          },
+        },
+      })
+      .catch((error: unknown) => {
+        logger.warn('Failed to sync workspace runtime conversation state', {
+          conversationId,
+          error,
+        });
+      });
+  }
+
+  private _queueWorkspaceRuntimeStateDelete(conversationId: string): void {
+    void this._getWorkspaceRuntimeState()
+      ?.clearConversation(conversationId)
+      .catch((error: unknown) => {
+        logger.warn('Failed to delete workspace runtime conversation state', {
+          conversationId,
+          error,
+        });
+      });
+  }
+
+  private _getWorkspaceRuntimeState(): AgentWorkspaceRuntimeStateRuntime | null {
+    const workspaceRoot = this.getWorkspaceRoot?.() ?? this.initialWorkspaceRoot;
+    if (!workspaceRoot) return null;
+    if (this._workspaceRuntimeState && this._workspaceRuntimeStateRoot === workspaceRoot) {
+      return this._workspaceRuntimeState;
+    }
+    this._workspaceRuntimeState = createFileAgentWorkspaceRuntimeStateRuntime({
+      workDir: workspaceRoot,
+      source: 'extension',
+    });
+    this._workspaceRuntimeStateRoot = workspaceRoot;
+    return this._workspaceRuntimeState;
   }
 
   /**

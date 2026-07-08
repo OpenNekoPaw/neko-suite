@@ -37,6 +37,7 @@ export interface ConversationSlice {
   updateTodos: (todos: TodoItem[]) => void;
   addError: (error: Error) => void;
   addSystemMessage: (content: string) => void;
+  replaceMessages: (messages: Message[]) => void;
   clearMessages: () => void;
 }
 
@@ -216,6 +217,15 @@ export const useConversationStore = create<ConversationSlice>((set) => ({
         },
       ],
     }));
+  },
+
+  replaceMessages: (messages) => {
+    set({
+      messages: [...messages],
+      currentDelta: '',
+      isStreaming: false,
+      currentThinking: '',
+    });
   },
 
   clearMessages: () => {

@@ -97,6 +97,26 @@ export {
   type ConversationPersistenceRuntimeStorage,
   type ConversationPersistenceRuntimeWarning,
 } from './conversation-persistence-runtime';
+export {
+  FileAgentWorkspaceRuntimeStateRuntime,
+  createAgentWorkspaceRuntimeStateRuntime,
+  createEmptyAgentWorkspaceRuntimeState,
+  createFileAgentWorkspaceRuntimeStateRuntime,
+  getAgentWorkspaceRuntimeStateFilePath,
+  type AgentWorkspaceRuntimeConversationState,
+  type AgentWorkspaceRuntimeExecutionMode,
+  type AgentWorkspaceRuntimeMediaCategory,
+  type AgentWorkspaceRuntimeModelSelection,
+  type AgentWorkspaceRuntimeSessionMode,
+  type AgentWorkspaceRuntimeState,
+  type AgentWorkspaceRuntimeStateFsOps,
+  type AgentWorkspaceRuntimeStatePatch,
+  type AgentWorkspaceRuntimeStateRuntime,
+  type AgentWorkspaceRuntimeStateRuntimeOptions,
+  type AgentWorkspaceRuntimeStateSource,
+  type AgentWorkspaceRuntimeStatus,
+  type AgentWorkspaceRuntimeTokenUsage,
+} from './agent-workspace-runtime-state';
 
 // Journal (JSONL session persistence)
 export { JournalWriter } from './journal-writer';

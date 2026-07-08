@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { FileConversationStorage, type ConversationRecord } from '@neko/agent';
 import { handleSkillInvocation, handleSlashCommand, isSkillInvocation } from '../slash-commands';
 import type { CLIConfig } from '../types';
 
@@ -17,6 +18,25 @@ function createConfig(): CLIConfig {
     outputFormat: 'text',
     thinkingBudget: 0,
   };
+}
+
+function createMemoryConversationStorage(workDir: string): FileConversationStorage {
+  const files = new Map<string, string>();
+  return new FileConversationStorage({
+    indexFilePath: '/tmp/conversations-index.json',
+    workDir,
+    readFile: async (filePath) => {
+      const content = files.get(filePath);
+      if (content === undefined) {
+        throw new Error(`File not found: ${filePath}`);
+      }
+      return content;
+    },
+    writeFile: async (filePath, content) => {
+      files.set(filePath, content);
+    },
+    exists: async (filePath) => files.has(filePath),
+  });
 }
 
 describe('handleSlashCommand', () => {
@@ -38,11 +58,11 @@ describe('handleSlashCommand', () => {
       },
       skillCount: 1,
       apply: vi.fn(async () => ({ type: 'slash-command' })),
-    } as never;
+    };
 
     const result = await handleSlashCommand('/commit fix bug', {
       config: createConfig(),
-      skillService,
+      skillService: skillService as never,
     });
 
     expect(result.handled).toBe(true);
@@ -79,11 +99,11 @@ describe('handleSlashCommand', () => {
       },
       skillCount: 1,
       apply: vi.fn(async () => ({ type: 'slash-command' })),
-    } as never;
+    };
 
     const result = await handleSlashCommand('/commit fix bug', {
       config: createConfig(),
-      skillService,
+      skillService: skillService as never,
     });
 
     expect(skillService.registry.getSkillByCommand).not.toHaveBeenCalled();
@@ -124,6 +144,43 @@ describe('handleSlashCommand', () => {
     expect(result.error).toContain('Unknown config subcommand: migrate');
   });
 
+  it('resumes a full conversation record through the shared runtime callback', async () => {
+    const config = createConfig();
+    const storage = createMemoryConversationStorage(config.workDir);
+    const record: ConversationRecord = {
+      id: 'conv-resume',
+      version: 1,
+      title: 'Storyboard draft',
+      workDir: config.workDir,
+      messages: [
+        { role: 'user', content: '分析前10页' },
+        { role: 'assistant', content: '已生成分镜表' },
+      ],
+      createdAt: 10,
+      updatedAt: 20,
+      source: 'tui',
+    };
+    await storage.save(record);
+    await storage.flush();
+    const onResumeConversation = vi.fn();
+    const onLoadHistory = vi.fn();
+
+    const result = await handleSlashCommand('/resume conv-resume', {
+      config,
+      conversationStorage: storage,
+      currentConversationId: 'conv-current',
+      onResumeConversation,
+      onLoadHistory,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toContain('Resumed: "Storyboard draft"');
+    expect(onResumeConversation).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'conv-resume', title: 'Storyboard draft' }),
+    );
+    expect(onLoadHistory).not.toHaveBeenCalled();
+  });
+
   it('labels maxTokens as max output tokens in config output', async () => {
     const result = await handleSlashCommand('/config', {
       config: createConfig(),
@@ -156,7 +213,7 @@ describe('handleSkillInvocation', () => {
 
     const result = await handleSkillInvocation('$quality-review changed files', {
       config: createConfig(),
-      skillService,
+      skillService: skillService as never,
     });
 
     expect(isSkillInvocation('$quality-review changed files')).toBe(true);
@@ -196,10 +253,16 @@ describe('handleSkillInvocation', () => {
     const skillService = createSkillServiceMock([disabled]);
 
     await expect(
-      handleSkillInvocation('$missing', { config: createConfig(), skillService }),
+      handleSkillInvocation('$missing', {
+        config: createConfig(),
+        skillService: skillService as never,
+      }),
     ).resolves.toEqual({ handled: true, error: 'Unknown skill: $missing' });
     await expect(
-      handleSkillInvocation('$disabled-skill', { config: createConfig(), skillService }),
+      handleSkillInvocation('$disabled-skill', {
+        config: createConfig(),
+        skillService: skillService as never,
+      }),
     ).resolves.toEqual({ handled: true, error: 'Skill is disabled: $disabled-skill' });
   });
 });
@@ -223,5 +286,5 @@ function createSkillServiceMock(skills: Array<Record<string, unknown>>) {
       systemPrompt: args ? `${skill.content}: ${args}` : skill.content,
       type: 'skill',
     })),
-  } as never;
+  };
 }

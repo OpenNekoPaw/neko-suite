@@ -5,7 +5,14 @@
  */
 
 import { useCallback } from 'react';
-import type { CompressionResult, SkillService, ToolRegistry } from '@neko/agent';
+import type {
+  ChatMessage,
+  CompressionResult,
+  ConversationRecord,
+  FileConversationStorage,
+  SkillService,
+  ToolRegistry,
+} from '@neko/agent';
 import type { ActiveSkillLifecycleRecordProjection } from '@neko/shared';
 import type { AgentLlmConfig } from '@neko-agent/types';
 import {
@@ -76,6 +83,11 @@ interface SlashCommandSessionActions {
   getCapabilityProviderSummaries?: TuiCapabilityPorts['getProviderSummaries'];
   getCapabilityDiagnostics?: TuiCapabilityPorts['getDiagnostics'];
   listCapabilityTools?: TuiCapabilityPorts['listTools'];
+  getConversationStorage?: () => FileConversationStorage | undefined;
+  getCurrentConversationId?: () => string;
+  resumeConversation?: (record: ConversationRecord) => Promise<void>;
+  getHistory?: () => ChatMessage[];
+  syncRuntimeState?: () => void;
 }
 
 type AgentSessionHandleParameterValidator = NonNullable<
@@ -194,14 +206,19 @@ function createInkRouterContext(
 ): TuiCommandRouterContext {
   const config = useConfigStore.getState().config;
   return {
-    slash: {
-      locale: detectTuiLocale(),
-      config,
-      skillService: sessionActions.getSkillService?.(),
-      toolRegistry: sessionActions.getToolRegistry?.(),
-      onConfigUpdate: (updates) => {
-        useConfigStore.getState().setConfig(updates);
-      },
+      slash: {
+        locale: detectTuiLocale(),
+        config,
+        skillService: sessionActions.getSkillService?.(),
+        toolRegistry: sessionActions.getToolRegistry?.(),
+        conversationStorage: sessionActions.getConversationStorage?.(),
+        currentConversationId: sessionActions.getCurrentConversationId?.(),
+        onResumeConversation: sessionActions.resumeConversation,
+        getHistory: sessionActions.getHistory,
+        onConfigUpdate: (updates) => {
+          useConfigStore.getState().setConfig(updates);
+          sessionActions.syncRuntimeState?.();
+        },
     },
     ports: {
       output: {
@@ -222,6 +239,7 @@ function createInkRouterContext(
         getSessionMode: () => useAgentStore.getState().sessionMode,
         setSessionMode: (mode) => {
           useAgentStore.getState().setSessionMode(mode);
+          sessionActions.syncRuntimeState?.();
           return `Session mode set to: ${mode}`;
         },
         setExecutionMode: (mode) => {
@@ -260,9 +278,11 @@ function createInkRouterContext(
               [category]: nextValue,
             },
           });
+          sessionActions.syncRuntimeState?.();
         },
         resetMediaModels: () => {
           useConfigStore.getState().setConfig({ defaultMediaModels: {} });
+          sessionActions.syncRuntimeState?.();
         },
       },
       parameters: {

@@ -19,8 +19,11 @@ import {
   getDefaultPersonalPath,
   createInputProcessor,
   createCoreTools,
+  createFileAgentWorkspaceRuntimeStateRuntime,
+  createFileConversationStorage,
   mergeCreationExecutionMetadata,
   ProviderCardRegistry,
+  type AgentSessionConfig,
   type IAgentSession,
   type InputProcessor,
   type SystemPromptBuilder,
@@ -28,6 +31,11 @@ import {
   type SkillLifecycleRuntime,
   type IRuntimeTaskManager,
   type AgentEvent,
+  type AgentWorkspaceRuntimeStatePatch,
+  type AgentWorkspaceRuntimeStateRuntime,
+  type AgentWorkspaceRuntimeStatus,
+  type ConversationRecord,
+  type FileConversationStorage,
 } from '@neko/agent';
 import { createAgentSessionWithRuntime } from '@neko/agent/runtime';
 import {
@@ -36,12 +44,12 @@ import {
   FileUserConfigManager,
   type Platform,
 } from '@neko/platform';
-import type { AgentLlmConfig } from '@neko-agent/types';
+import type { AgentLlmConfig, AgentPhase } from '@neko-agent/types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CLIConfig } from '../core/types';
-import type { ExecutionMode } from '../types/state';
-import { type AgentCapabilityProvider, type IService } from '@neko/shared';
+import type { ExecutionMode, Message as TuiMessage } from '../types/state';
+import { type AgentCapabilityProvider, type ChatMessage, type IService } from '@neko/shared';
 import { getProviderModels, updateDefaultModel } from '../core/config';
 import type {
   TuiCapabilityPorts,
@@ -167,6 +175,16 @@ export interface AgentSessionHandle {
   readonly listCapabilityTools: TuiCapabilityPorts['listTools'];
   /** Terminal-safe `@` reference contributors loaded from capability providers. */
   readonly getReferenceContributors: () => TuiCapabilityLoaderResult['referenceContributors'];
+  /** Shared resume-layer conversation storage for command handlers. */
+  readonly getConversationStorage: () => FileConversationStorage | undefined;
+  /** Current conversation id bound to the Agent session journal. */
+  readonly getCurrentConversationId: () => string;
+  /** Load a persisted conversation into the current Agent session. */
+  readonly resumeConversation: (record: ConversationRecord) => Promise<void>;
+  /** Current Agent history for history commands. */
+  readonly getHistory: () => ChatMessage[];
+  /** Flush the current TUI runtime projection into shared workspace state. */
+  readonly syncRuntimeState: () => void;
   /** Slash command catalog for TUI autocomplete */
   readonly slashCommands: readonly TuiSlashCommandOption[];
   /** Whether session is initialized */
@@ -201,9 +219,15 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const skillLifecycleBridgeRef = useRef<CliSkillLifecycleSessionBridge | null>(null);
   const toolRegistryRef = useRef<ToolRegistry | null>(null);
   const capabilityLoadResultRef = useRef<TuiCapabilityLoaderResult | null>(null);
+  const conversationStorageRef = useRef<FileConversationStorage | null>(null);
+  const workspaceRuntimeStateRef = useRef<AgentWorkspaceRuntimeStateRuntime | null>(null);
+  const runtimeConfigRef = useRef<ReturnType<typeof createCliAgentRuntime> | null>(null);
   const conversationIdRef = useRef(createCliConversationId());
+  const conversationCreatedAtRef = useRef(Date.now());
+  const conversationTitleRef = useRef('');
   const messageQueueRef = useRef<TuiMessageQueue | null>(null);
   const drainingQueueRef = useRef(false);
+  const workspaceRuntimeStateErrorRef = useRef<string | null>(null);
   const isReadyRef = useRef(false);
   const initPromiseRef = useRef<Promise<void> | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -212,6 +236,151 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     createTuiSlashCommandCatalog(),
   );
   const [, setSkillCatalogVersion] = useState(0);
+
+  const reportWorkspaceRuntimeStateError = useCallback((error: unknown): void => {
+    const message = error instanceof Error ? error.message : String(error);
+    if (workspaceRuntimeStateErrorRef.current === message) {
+      return;
+    }
+    workspaceRuntimeStateErrorRef.current = message;
+    useConversationStore
+      .getState()
+      .addError(new Error(`Workspace runtime state sync failed: ${message}`));
+  }, []);
+
+  const syncWorkspaceRuntimeState = useCallback(
+    (
+      input: {
+        readonly status?: AgentWorkspaceRuntimeStatus;
+        readonly phase?: AgentPhase;
+        readonly toolName?: string;
+        readonly contextTokenCount?: number | null;
+        readonly errorMessage?: string | null;
+      } = {},
+    ): void => {
+      const runtime = workspaceRuntimeStateRef.current;
+      if (!runtime) {
+        return;
+      }
+
+      const agentState = useAgentStore.getState();
+      const currentConfig = useConfigStore.getState().config;
+      const contextTokenCount =
+        input.contextTokenCount !== undefined
+          ? input.contextTokenCount
+          : (sessionRef.current?.getTokenCount() ?? null);
+      const queueSnapshot = agentState.messageQueue.snapshot;
+      const capabilitySnapshot = capabilityLoadResultRef.current;
+      const mediaModels = currentConfig.defaultMediaModels ?? {};
+      const errorMessage =
+        input.errorMessage !== undefined ? input.errorMessage : agentState.error?.message;
+      const llmParameterSummary = formatLlmParameterSummary(currentConfig.llmConfig);
+
+      const conversation: AgentWorkspaceRuntimeStatePatch['conversation'] = {
+        conversationId: conversationIdRef.current,
+        status: input.status ?? agentState.status,
+        executionMode: agentState.executionMode,
+        sessionMode: agentState.sessionMode,
+        tokenUsage: agentState.usage,
+        chatModel: {
+          providerId: currentConfig.chatModel?.providerId ?? currentConfig.provider,
+          modelId: currentConfig.chatModel?.modelId ?? currentConfig.model,
+        },
+        ...(input.phase ? { phase: input.phase } : {}),
+        ...(input.toolName ? { toolName: input.toolName } : {}),
+        ...(contextTokenCount !== null ? { contextTokenCount } : {}),
+        ...(queueSnapshot ? { messageQueue: queueSnapshot } : {}),
+        ...(Object.keys(mediaModels).length > 0 ? { mediaModels } : {}),
+        ...(llmParameterSummary ? { llmParameterSummary } : {}),
+        ...(agentState.activeSkillLifecycleRecords.length > 0
+          ? { activeSkills: agentState.activeSkillLifecycleRecords }
+          : {}),
+        ...(capabilitySnapshot ? { capabilityProviders: capabilitySnapshot.providers } : {}),
+        ...(capabilitySnapshot ? { capabilityDiagnostics: capabilitySnapshot.diagnostics } : {}),
+        ...(errorMessage ? { errorMessage } : {}),
+      };
+
+      void runtime
+        .patch({
+          activeConversationId: conversationIdRef.current,
+          conversation,
+        })
+        .then(() => {
+          workspaceRuntimeStateErrorRef.current = null;
+        })
+        .catch(reportWorkspaceRuntimeStateError);
+    },
+    [reportWorkspaceRuntimeStateError],
+  );
+
+  const persistCurrentConversation = useCallback(async (): Promise<void> => {
+    const storage = conversationStorageRef.current;
+    const session = sessionRef.current;
+    if (!storage || !session) {
+      return;
+    }
+
+    const messages = session.getHistory();
+    if (messages.length === 0) {
+      return;
+    }
+
+    const currentConfig = useConfigStore.getState().config;
+    const title =
+      conversationTitleRef.current || deriveConversationTitle(messages) || 'New Chat';
+    conversationTitleRef.current = title;
+    const mediaModelSelection = currentConfig.defaultMediaModels;
+    const record: ConversationRecord = {
+      id: conversationIdRef.current,
+      version: 1,
+      title,
+      workDir: currentConfig.workDir,
+      messages,
+      createdAt: conversationCreatedAtRef.current,
+      updatedAt: Date.now(),
+      source: 'tui',
+      ...(mediaModelSelection && Object.keys(mediaModelSelection).length > 0
+        ? { mediaModelSelection }
+        : {}),
+    };
+
+    await storage.save(record);
+    await storage.flush();
+  }, []);
+
+  const resumeConversation = useCallback(
+    async (record: ConversationRecord): Promise<void> => {
+      const session = sessionRef.current;
+      if (!session) {
+        throw new Error('Session not initialized');
+      }
+      const runtimeConfig = runtimeConfigRef.current;
+      const journalWriter = runtimeConfig?.artifactStore?.createJournalWriter?.(record.id);
+      if (!journalWriter) {
+        throw new Error('Runtime journal writer is not available for resumed conversation');
+      }
+
+      const nextConfig: Partial<AgentSessionConfig> = {
+        conversationId: record.id,
+        journalWriter,
+      };
+      session.configure(nextConfig);
+      session.loadHistory(record.messages, record.messageEventIds);
+      conversationIdRef.current = record.id;
+      conversationCreatedAtRef.current = record.createdAt;
+      conversationTitleRef.current = record.title;
+      messageQueueRef.current = createTuiMessageQueue({ conversationId: record.id });
+      useAgentStore.getState().setMessageQueueSnapshot(messageQueueRef.current.snapshot());
+      useConversationStore
+        .getState()
+        .replaceMessages(projectAgentHistoryToTuiMessages(record.messages));
+      syncWorkspaceRuntimeState({
+        status: 'idle',
+        contextTokenCount: session.getTokenCount(),
+      });
+    },
+    [syncWorkspaceRuntimeState],
+  );
 
   // Initialize session on mount
   useEffect(() => {
@@ -292,6 +461,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const projectMemoryManager = createFileProjectMemoryManager(memoryFilePath);
         await projectMemoryManager.load();
         const contentPolicy = createNodeWorkspaceContentPolicy({ workDir: config.workDir });
+        conversationStorageRef.current = createFileConversationStorage(config.workDir);
+        workspaceRuntimeStateRef.current = createFileAgentWorkspaceRuntimeStateRuntime({
+          workDir: config.workDir,
+          source: 'tui',
+        });
+        conversationCreatedAtRef.current = Date.now();
+        conversationTitleRef.current = '';
 
         const coreTools = createCoreTools({
           defaultCwd: config.workDir,
@@ -368,6 +544,17 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           ...config,
           model: effectiveModel,
         });
+        const runtimeConfig = createCliAgentRuntime({
+          workspaceRoot: config.workDir,
+          taskManager,
+          ...(skillService ? { skillService } : {}),
+          ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
+          toolGroupRegistry,
+          providerCardRegistry,
+          promptFragments: capabilityLoadResult.promptFragments,
+          projectMemoryManager,
+        });
+        runtimeConfigRef.current = runtimeConfig;
         // 6. Create Session (with validated model)
         const session = createAgentSessionWithRuntime({
           service: llmService,
@@ -381,16 +568,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           providerId: config.chatModel?.providerId ?? config.provider,
           modelId: effectiveModel,
           modelCapabilities: config.chatModel?.capabilities,
-          runtime: createCliAgentRuntime({
-            workspaceRoot: config.workDir,
-            taskManager,
-            ...(skillService ? { skillService } : {}),
-            ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
-            toolGroupRegistry,
-            providerCardRegistry,
-            promptFragments: capabilityLoadResult.promptFragments,
-            projectMemoryManager,
-          }),
+          runtime: runtimeConfig,
           conversationId: conversationIdRef.current,
           onConfirmTool: async (request) => {
             // Show approval UI and wait for user decision
@@ -410,6 +588,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           conversationId: conversationIdRef.current,
         });
         useAgentStore.getState().setMessageQueueSnapshot(messageQueueRef.current.snapshot());
+        void syncWorkspaceRuntimeState({
+          status: 'idle',
+          contextTokenCount: session.getTokenCount(),
+        });
 
         // Wire skill provider to meta tools
         if (skillService && skillLifecycleRuntime) {
@@ -420,6 +602,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             lifecycleRuntime: skillLifecycleRuntime,
             onProjection: (projection) => {
               useAgentStore.getState().setActiveSkillLifecycleRecords(projection.visibleIndicators);
+              syncWorkspaceRuntimeState();
             },
           });
         }
@@ -485,6 +668,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       adapter.reset();
       useConversationStore.getState().addUserMessage(prompt);
       useAgentStore.getState().setRunning();
+      if (!conversationTitleRef.current) {
+        conversationTitleRef.current = deriveConversationTitle([{ role: 'user', content: prompt }]);
+      }
+      syncWorkspaceRuntimeState({ status: 'running', phase: 'thinking' });
 
       const creationMetadata = mergeCreationExecutionMetadata(
         session.getExecutionMode() === 'plan' ? createPlanModeCreationMetadata() : undefined,
@@ -502,9 +689,16 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         ...(metadata ? { metadata } : {}),
       })) {
         adapter.handleEvent(event);
+        syncWorkspaceRuntimeState(projectRuntimeStateFromEvent(event, session));
       }
+      await persistCurrentConversation();
+      syncWorkspaceRuntimeState({
+        status: useAgentStore.getState().status,
+        phase: 'idle',
+        contextTokenCount: session.getTokenCount(),
+      });
     },
-    [],
+    [persistCurrentConversation, syncWorkspaceRuntimeState],
   );
 
   const drainQueuedPrompts = useCallback(async (): Promise<void> => {
@@ -523,10 +717,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const released = queue.dequeue();
         if (!released) {
           useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+          syncWorkspaceRuntimeState();
           return;
         }
         const snapshot = queue.snapshot();
         useAgentStore.getState().setMessageQueueSnapshot(snapshot);
+        syncWorkspaceRuntimeState({ status: 'running' });
         adapter.handleEvent({
           type: 'messageQueued',
           pendingCount: snapshot.pendingCount,
@@ -538,7 +734,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     } finally {
       drainingQueueRef.current = false;
     }
-  }, [executePrompt]);
+  }, [executePrompt, syncWorkspaceRuntimeState]);
 
   const submit = useCallback(
     async (prompt: string, executionOverrides?: { metadata?: Record<string, unknown> }) => {
@@ -570,6 +766,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           const item = queue.enqueue(prompt);
           const snapshot = queue.snapshot();
           useAgentStore.getState().setMessageQueueSnapshot(snapshot);
+          syncWorkspaceRuntimeState({ status: 'running' });
           adapter.handleEvent({
             type: 'messageQueued',
             content: `Message queued (${snapshot.pendingCount} pending)`,
@@ -596,15 +793,17 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const err = error instanceof Error ? error : new Error(String(error));
         useAgentStore.getState().setError(err);
         useConversationStore.getState().addError(err);
+        syncWorkspaceRuntimeState({ status: 'error', phase: 'idle', errorMessage: err.message });
       }
     },
-    [drainQueuedPrompts, executePrompt],
+    [drainQueuedPrompts, executePrompt, syncWorkspaceRuntimeState],
   );
 
   const cancel = useCallback(() => {
     sessionRef.current?.cancel();
     useAgentStore.getState().setIdle();
-  }, []);
+    syncWorkspaceRuntimeState({ status: 'idle', phase: 'idle' });
+  }, [syncWorkspaceRuntimeState]);
 
   const getMessageQueueSnapshot = useCallback(() => {
     return messageQueueRef.current?.snapshot() ?? null;
@@ -617,8 +816,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     }
     const item = queue.promote(queueItemId);
     useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+    syncWorkspaceRuntimeState();
     return item;
-  }, []);
+  }, [syncWorkspaceRuntimeState]);
 
   const cancelQueuedMessage = useCallback((queueItemId: string) => {
     const queue = messageQueueRef.current;
@@ -627,8 +827,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     }
     const item = queue.cancel(queueItemId);
     useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+    syncWorkspaceRuntimeState();
     return item;
-  }, []);
+  }, [syncWorkspaceRuntimeState]);
 
   const editQueuedMessage = useCallback((queueItemId: string, content: string) => {
     const queue = messageQueueRef.current;
@@ -637,21 +838,28 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     }
     const item = queue.edit(queueItemId, content);
     useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+    syncWorkspaceRuntimeState();
     return item;
-  }, []);
+  }, [syncWorkspaceRuntimeState]);
 
   const clearHistory = useCallback(() => {
     sessionRef.current?.clearHistory();
     useConversationStore.getState().clearMessages();
-  }, []);
+    void workspaceRuntimeStateRef.current
+      ?.clearConversation(conversationIdRef.current)
+      .catch(reportWorkspaceRuntimeStateError);
+  }, [reportWorkspaceRuntimeStateError]);
 
   const confirmTool = useCallback((toolCallId: string, approved: boolean) => {
     sessionRef.current?.confirmTool(toolCallId, approved);
     useUIStore.getState().dismissToolApproval();
     if (approved) {
       useAgentStore.getState().setRunning();
+      syncWorkspaceRuntimeState({ status: 'running' });
+    } else {
+      syncWorkspaceRuntimeState({ status: 'idle', phase: 'idle' });
     }
-  }, []);
+  }, [syncWorkspaceRuntimeState]);
 
   const updateModel = useCallback((model: string | TuiModelIdentity) => {
     const identity =
@@ -677,7 +885,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         modelCapabilities: identity.capabilities,
       });
     }
-  }, []);
+    syncWorkspaceRuntimeState();
+  }, [syncWorkspaceRuntimeState]);
 
   const validateLlmConfig = useCallback(
     (llmConfig: AgentLlmConfig): TuiParameterValidationResult => {
@@ -716,7 +925,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       thinkingBudget: result.chatOptions?.thinkingBudget ?? config.thinkingBudget,
       providerOptions: result.providerOptions,
     });
-  }, []);
+    syncWorkspaceRuntimeState();
+  }, [syncWorkspaceRuntimeState]);
 
   const activateSkill = useCallback(async (name: string, args?: string): Promise<boolean> => {
     const skillService = skillServiceRef.current;
@@ -743,8 +953,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         .addSystemMessage(result.message ?? `Skill "${name}" was not activated`);
       return false;
     }
+    syncWorkspaceRuntimeState();
     return true;
-  }, []);
+  }, [syncWorkspaceRuntimeState]);
 
   const deactivateSkill = useCallback(
     (_input?: {
@@ -774,9 +985,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           .addSystemMessage(result.message ?? 'Skill lifecycle clear rejected');
         return false;
       }
+      syncWorkspaceRuntimeState();
       return true;
     },
-    [],
+    [syncWorkspaceRuntimeState],
   );
 
   const updateMode = useCallback((mode: ExecutionMode) => {
@@ -798,7 +1010,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     const systemPrompt = buildSystemPromptWithContext(builder, config);
     session.configure({ systemPrompt, locale });
     session.setExecutionMode(mode);
-  }, []);
+    useAgentStore.getState().setExecutionMode(mode);
+    syncWorkspaceRuntimeState();
+  }, [syncWorkspaceRuntimeState]);
 
   const getContextTokenCount = useCallback((): number | null => {
     const session = sessionRef.current;
@@ -907,6 +1121,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     getCapabilityDiagnostics,
     listCapabilityTools,
     getReferenceContributors,
+    getConversationStorage: () => conversationStorageRef.current ?? undefined,
+    getCurrentConversationId: () => conversationIdRef.current,
+    resumeConversation,
+    getHistory: () => sessionRef.current?.getHistory() ?? [],
+    syncRuntimeState: () => syncWorkspaceRuntimeState(),
     slashCommands,
     isReady,
   };
@@ -979,4 +1198,101 @@ function formatLlmProjectionSummary(result: ReturnType<typeof projectLlmParamete
       : undefined,
   ].filter(Boolean);
   return applied.length > 0 ? `Applied: ${applied.join(', ')}` : 'Applied: provider defaults';
+}
+
+function formatLlmParameterSummary(llmConfig: AgentLlmConfig | undefined): string | undefined {
+  if (!llmConfig) return undefined;
+  const entries = [
+    llmConfig.reasoningPreset ? `reasoning=${llmConfig.reasoningPreset}` : undefined,
+    llmConfig.verbosityPreset ? `verbosity=${llmConfig.verbosityPreset}` : undefined,
+    llmConfig.creativityPreset ? `creativity=${llmConfig.creativityPreset}` : undefined,
+    ...(llmConfig.advanced
+      ? Object.entries(llmConfig.advanced).map(([key, value]) =>
+          value !== undefined ? `${key}=${value}` : undefined,
+        )
+      : []),
+  ].filter((entry): entry is string => Boolean(entry));
+  return entries.length > 0 ? entries.join(', ') : undefined;
+}
+
+function projectRuntimeStateFromEvent(
+  event: AgentEvent,
+  session: IAgentSession,
+): {
+  readonly status?: AgentWorkspaceRuntimeStatus;
+  readonly phase?: AgentPhase;
+  readonly toolName?: string;
+  readonly contextTokenCount?: number | null;
+  readonly errorMessage?: string | null;
+} {
+  switch (event.type) {
+    case 'thinking':
+    case 'thinking_content':
+      return { status: 'running', phase: 'thinking', contextTokenCount: session.getTokenCount() };
+    case 'text':
+    case 'text_delta':
+      return { status: 'running', phase: 'streaming', contextTokenCount: session.getTokenCount() };
+    case 'tool_call':
+      return {
+        status: 'running',
+        phase: 'acting',
+        toolName: event.toolCall?.name,
+        contextTokenCount: session.getTokenCount(),
+      };
+    case 'tool_confirmation':
+      return {
+        status: 'waiting_confirmation',
+        phase: 'acting',
+        toolName: event.toolConfirmation?.toolCall.name,
+        contextTokenCount: session.getTokenCount(),
+      };
+    case 'done':
+      return { status: 'idle', phase: 'idle', contextTokenCount: session.getTokenCount() };
+    case 'error':
+      return {
+        status: 'error',
+        phase: 'idle',
+        contextTokenCount: session.getTokenCount(),
+        errorMessage: event.error?.message ?? 'Agent execution failed',
+      };
+    default:
+      return { contextTokenCount: session.getTokenCount() };
+  }
+}
+
+function deriveConversationTitle(messages: readonly ChatMessage[]): string {
+  const firstUserMessage = messages.find((message) => message.role === 'user');
+  if (!firstUserMessage) return '';
+  const content = stringifyChatMessageContent(firstUserMessage.content).trim();
+  if (!content) return '';
+  return content.length > 50 ? `${content.slice(0, 50)}...` : content;
+}
+
+function projectAgentHistoryToTuiMessages(messages: readonly ChatMessage[]): TuiMessage[] {
+  const now = Date.now();
+  return messages
+    .filter((message) => message.role !== 'tool')
+    .map((message, index) => ({
+      id: `history-${index + 1}`,
+      role: message.role === 'assistant' || message.role === 'user' ? message.role : 'system',
+      content: stringifyChatMessageContent(message.content),
+      toolCalls: [],
+      todos: [],
+      timestamp: now + index,
+      isError: false,
+    }));
+}
+
+function stringifyChatMessageContent(content: ChatMessage['content']): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  return content
+    .map((part) => {
+      if (part.type === 'text') return part.text;
+      if (part.type === 'image') return `[image] ${part.imageUrl}`;
+      if (part.type === 'video') return `[video] ${part.videoUrl}`;
+      return '[content]';
+    })
+    .join('\n');
 }

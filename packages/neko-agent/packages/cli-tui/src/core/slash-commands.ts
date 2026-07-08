@@ -19,6 +19,7 @@ import {
   resolveSlashCommandCatalogEntry,
   getCliCommands,
   type FileConversationStorage,
+  type ConversationRecord,
 } from '@neko/agent';
 import { parseAgentInputTrigger } from '@neko-agent/types';
 import { handleMarketCommand } from '../commands/market';
@@ -92,6 +93,8 @@ export interface SlashCommandContext {
     messages: ChatMessage[],
     messageEventIds?: readonly (readonly string[])[],
   ) => void;
+  /** Resume a full conversation record and switch the active runtime binding. */
+  onResumeConversation?: (record: ConversationRecord) => void | Promise<void>;
   /** Get current session history */
   getHistory?: () => ChatMessage[];
   /** Update media model overrides and propagate to platform */
@@ -498,7 +501,7 @@ async function handleResume(
   args: string[],
   context: SlashCommandContext,
 ): Promise<SlashCommandResult> {
-  const { conversationStorage, onLoadHistory } = context;
+  const { conversationStorage, onLoadHistory, onResumeConversation } = context;
   if (!conversationStorage) {
     return { handled: true, continueExecution: true, error: 'Conversation storage not available' };
   }
@@ -515,7 +518,11 @@ async function handleResume(
         error: `Conversation "${targetId}" not found`,
       };
     }
-    onLoadHistory?.(record.messages, record.messageEventIds);
+    if (onResumeConversation) {
+      await onResumeConversation(record);
+    } else {
+      onLoadHistory?.(record.messages, record.messageEventIds);
+    }
     const resumedMessageCount = record.messages.filter(
       (message) => message.role !== 'system',
     ).length;

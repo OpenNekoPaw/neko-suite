@@ -88,14 +88,12 @@ export function StatusBar(): React.JSX.Element {
       <Box flexGrow={1} />
 
       {/* Token usage bar */}
-      {usage.total > 0 ? (
-        <TokenUsage
-          usage={usage}
-          maxContextTokens={tokenBudget.effectiveInputBudget}
-          maxOutputTokens={tokenBudget.effectiveMaxOutputTokens}
-          modelMaxOutputTokens={tokenBudget.modelMaxOutputTokens}
-        />
-      ) : null}
+      <TokenUsage
+        usage={usage}
+        maxContextTokens={tokenBudget.effectiveInputBudget}
+        maxOutputTokens={tokenBudget.effectiveMaxOutputTokens}
+        modelMaxOutputTokens={tokenBudget.modelMaxOutputTokens}
+      />
     </Box>
   );
 }

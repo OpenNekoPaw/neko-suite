@@ -92,6 +92,11 @@ export function App({
     getCapabilityDiagnostics,
     listCapabilityTools,
     getReferenceContributors,
+    getConversationStorage,
+    getCurrentConversationId,
+    resumeConversation,
+    getHistory,
+    syncRuntimeState,
     slashCommands,
   } = useAgentSession({
     config,
@@ -155,6 +160,11 @@ export function App({
     getCapabilityProviderSummaries,
     getCapabilityDiagnostics,
     listCapabilityTools,
+    getConversationStorage,
+    getCurrentConversationId,
+    resumeConversation,
+    getHistory,
+    syncRuntimeState,
   });
 
   // Global keyboard shortcuts

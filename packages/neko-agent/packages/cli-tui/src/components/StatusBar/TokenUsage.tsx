@@ -28,8 +28,6 @@ export function TokenUsage({
   modelMaxOutputTokens,
   width = 15,
 }: TokenUsageProps): React.JSX.Element {
-  if (usage.total === 0) return <Text />;
-
   const outputWindow = getDisplayOutputWindow(maxOutputTokens, modelMaxOutputTokens);
   const displayTokenWindow = isPositiveInteger(maxContextTokens)
     ? maxContextTokens + (outputWindow ?? 0)

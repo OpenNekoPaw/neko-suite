@@ -730,6 +730,16 @@ export class AgentSession implements IAgentSession {
     if (config.operationToolAdapterRegistry !== undefined) {
       this._operationToolAdapterRegistry = config.operationToolAdapterRegistry ?? null;
     }
+    if ('journalWriter' in config) {
+      const previousJournalWriter = this._journalWriter;
+      this._journalWriter = config.journalWriter ?? null;
+      this._journalSeq = 0;
+      if (previousJournalWriter && previousJournalWriter !== this._journalWriter) {
+        void previousJournalWriter.dispose().catch((error: unknown) => {
+          logger.warn('Failed to dispose previous session journal writer', { error });
+        });
+      }
+    }
 
     // Update execution mode if changed
     if (config.executionMode !== undefined) {
@@ -1635,7 +1645,7 @@ export class AgentSession implements IAgentSession {
     this._validationRuntime.reset();
     this._markMessageEventIdsAsProcessed(this._historyEventIds);
     // Ensure system prompt is present
-    if (this._history.length === 0 || this._history[0].role !== 'system') {
+    if (this._history.length === 0 || this._history[0]?.role !== 'system') {
       this._history.unshift({ role: 'system', content: this._config.systemPrompt });
       this._historyEventIds.unshift([]);
     } else {
