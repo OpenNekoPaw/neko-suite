@@ -210,6 +210,11 @@ export class AgentMessageTurnHandler {
     this._agentStateRuntime.clear(conversationId);
     this._clearSubAgentEventSubscription(conversationId);
     this._streamProcessor.clearConversation(conversationId);
+    this._updateWorkspaceRuntimeState(conversationId, {
+      status: 'idle',
+      phase: 'idle',
+      ...this._projectContextTokenCount(conversationId),
+    });
   }
 
   /**
@@ -366,6 +371,32 @@ export class AgentMessageTurnHandler {
       toolName,
       startedAt,
     });
+    this._updateWorkspaceRuntimeState(conversationId, {
+      status: phase === 'idle' ? 'idle' : 'running',
+      phase,
+      ...(toolName ? { toolName } : {}),
+      startedAt,
+      ...this._projectContextTokenCount(conversationId),
+    });
+  }
+
+  private _updateWorkspaceRuntimeState(
+    conversationId: string,
+    patch: Parameters<ConversationBridge['updateWorkspaceRuntimeState']>[1],
+  ): void {
+    if (typeof this._conversations.updateWorkspaceRuntimeState !== 'function') {
+      return;
+    }
+    this._conversations.updateWorkspaceRuntimeState(conversationId, patch);
+  }
+
+  private _projectContextTokenCount(
+    conversationId: string,
+  ): { readonly contextTokenCount: number } | Record<string, never> {
+    if (typeof this._agentManager?.getContextTokenCount !== 'function') {
+      return {};
+    }
+    return { contextTokenCount: this._agentManager.getContextTokenCount(conversationId) };
   }
 
   private _ensureSubAgentEventSubscription(

@@ -14,6 +14,7 @@ import {
   ConversationManager,
   type AgentHistoryEntry,
   type AgentWorkspaceRuntimeStateRuntime,
+  type AgentWorkspaceRuntimeStatePatch,
   type ConversationPersistenceRuntime,
   type ConversationStorage,
   type DeleteConversationOptions,
@@ -294,6 +295,32 @@ export class ConversationBridge {
       conversationId,
       this._conversationManager.getActiveId() === conversationId,
     );
+  }
+
+  /**
+   * Project host runtime state for the shared TUI/Webview workspace surface.
+   * Conversation history remains owned by ConversationManager + journal storage.
+   */
+  updateWorkspaceRuntimeState(
+    conversationId: string,
+    patch: Omit<
+      NonNullable<AgentWorkspaceRuntimeStatePatch['conversation']>,
+      'conversationId'
+    >,
+  ): void {
+    void this._getWorkspaceRuntimeState()
+      ?.patch({
+        conversation: {
+          conversationId,
+          ...patch,
+        },
+      })
+      .catch((error: unknown) => {
+        logger.warn('Failed to update workspace runtime conversation state', {
+          conversationId,
+          error,
+        });
+      });
   }
 
   /**
