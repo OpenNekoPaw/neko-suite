@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import type {
   AgentStatus,
+  ContextTokenState,
   ExecutionMode,
   MessageQueueState,
   SessionMode,
@@ -24,6 +25,7 @@ export interface AgentSlice {
   readonly executionMode: ExecutionMode;
   readonly iteration: IterationProgress;
   readonly usage: TokenUsage;
+  readonly contextTokens: ContextTokenState;
   readonly startTime: number | null;
   readonly error: Error | null;
   readonly messageQueue: MessageQueueState;
@@ -40,6 +42,7 @@ export interface AgentSlice {
   setError: (error: Error) => void;
   setIteration: (current: number, max: number) => void;
   updateUsage: (usage: { inputTokens: number; outputTokens: number; totalTokens: number }) => void;
+  setContextTokenCount: (count: number | null) => void;
   setMessageQueueSnapshot: (snapshot: MessageQueueState['snapshot']) => void;
   setMessageQueueDiagnostic: (diagnostic: string | null) => void;
   setRunningTaskSummary: (summary: string | null) => void;
@@ -58,6 +61,7 @@ const initialState = {
   executionMode: 'auto' as ExecutionMode,
   iteration: { current: 0, max: 0 },
   usage: { input: 0, output: 0, total: 0 },
+  contextTokens: { count: null } as ContextTokenState,
   startTime: null as number | null,
   error: null as Error | null,
   messageQueue: {
@@ -100,6 +104,14 @@ export const useAgentStore = create<AgentSlice>((set) => ({
         input: usage.inputTokens,
         output: usage.outputTokens,
         total: usage.totalTokens,
+      },
+    });
+  },
+
+  setContextTokenCount: (count) => {
+    set({
+      contextTokens: {
+        count,
       },
     });
   },

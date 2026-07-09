@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { MediaTask } from '@neko/platform';
 import type { GeneratedAsset } from '@neko/shared';
-import { toMediaTaskResultObservationTask } from './mediaTaskResultObservation';
+import type { MediaTask } from '../types';
+import { toMediaTaskResultObservationTask } from '../media-task-result-observation';
 
 describe('media task result observation projection', () => {
   it('returns generated asset refs and host-local save paths for completed outputs', () => {

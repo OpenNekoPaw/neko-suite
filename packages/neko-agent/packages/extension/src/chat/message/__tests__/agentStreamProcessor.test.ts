@@ -6,6 +6,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentStreamProcessor } from '../agentStreamProcessor';
 import type { AgentTurnTimelineMessage } from '@neko-agent/types';
 import type { EntityMemoryContribution } from '@neko/shared';
+import {
+  evaluateAgentTaskResultDelivery,
+  normalizeAgentTaskResultObservation,
+} from '@neko/agent';
 
 vi.mock('vscode', () => ({
   Uri: {
@@ -1436,6 +1440,151 @@ describe('AgentStreamProcessor', () => {
           parentToolCallId: 'tc-media',
         }),
       );
+    });
+
+    it('records completed generated images with ReadImage follow-up resource refs', async () => {
+      let progressCallback: ((task: any) => Promise<void>) | undefined;
+      const waitForTask = createDeferred<any>();
+      const platform = {
+        media: {
+          onProgress: vi.fn((_taskId: string, callback: (task: any) => Promise<void>) => {
+            progressCallback = callback;
+            return vi.fn();
+          }),
+          waitForTask: vi.fn(() => waitForTask.promise),
+        },
+      };
+      const generatedPath = '/workspace/neko/generated/image/task-media_0.png';
+      const mediaDeliveryHost = {
+        createProgressViewDelivery: vi.fn(async () => ({
+          view: {
+            id: 'task-media',
+            type: 'image',
+            status: 'completed',
+            progress: 100,
+            result: { urls: ['webview-uri:/workspace/neko/generated/image/task-media_0.png'] },
+            updatedAt: '2026-01-01T00:00:01.000Z',
+          },
+          deliveryPlan: {
+            resultUrls: ['generated-assets/asset-1.png'],
+            thumbnailUrl: 'generated-assets/asset-1.png',
+            hostOutputPaths: [generatedPath],
+            shouldPersistResultUrls: true,
+            shouldUnsubscribe: true,
+            generatedAssets: [
+              {
+                id: 'asset-1',
+                type: 'generated-image',
+                path: generatedPath,
+                assetRef: {
+                  assetId: 'asset-1',
+                  uri: 'generated-assets/asset-1.png',
+                  mimeType: 'image/png',
+                },
+                mimeType: 'image/png',
+                generatedAt: '2026-01-01T00:00:01.000Z',
+                width: 1024,
+                height: 1024,
+                ratio: '1:1',
+              },
+            ],
+          },
+        })),
+      };
+      const followUpPrompts: string[] = [];
+      const handleTerminalTask = vi.fn(async (task, options) => {
+        const observation = normalizeAgentTaskResultObservation({
+          task,
+          source: 'media-task',
+          ...(options.parentMessageId ? { parentMessageId: options.parentMessageId } : {}),
+          ...(options.parentToolCallId ? { parentToolCallId: options.parentToolCallId } : {}),
+        });
+        const decision = evaluateAgentTaskResultDelivery({
+          observation,
+          policy: options.deliveryPolicy,
+          now: 40,
+        });
+        if (decision.kind === 'auto-resume-agent') {
+          followUpPrompts.push(decision.followUpRequest.prompt);
+        }
+      });
+      processor = new AgentStreamProcessor({
+        platform: platform as any,
+        mediaDeliveryHost: mediaDeliveryHost as any,
+        taskResultObservations: { handleTerminalTask },
+      });
+
+      const processing = processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          {
+            type: 'tool_result',
+            toolResult: {
+              toolCallId: 'tc-media',
+              success: true,
+              data: {
+                backgroundMode: true,
+                conversationId: 'conv-1',
+                runId: 'run-media',
+                runStartedAt: 101,
+                taskId: 'task-media',
+                type: 'image',
+                message: 'Generate a cat',
+                routedTo: { provider: 'openai' },
+              },
+            },
+          },
+        ]),
+        callbacks,
+      );
+      await waitForCondition(() => progressCallback !== undefined);
+
+      const completedTask = {
+        id: 'task-media',
+        type: 'text-to-image',
+        status: 'completed',
+        progress: 100,
+        providerId: 'openai',
+        modelId: 'gpt-image-1',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:01.000Z'),
+        completedAt: new Date('2026-01-01T00:00:01.000Z'),
+        outputs: [{ type: 'image', url: 'https://example.com/image.png', mimeType: 'image/png' }],
+        request: {
+          prompt: 'Generate a cat',
+          metadata: {
+            conversationId: 'conv-1',
+            runId: 'run-media',
+            runStartedAt: 101,
+            resultDeliveryPolicy: { kind: 'auto-resume-agent' },
+          },
+        },
+      };
+      waitForTask.resolve(completedTask);
+      await progressCallback?.(completedTask);
+      await processing;
+
+      const observedTask = handleTerminalTask.mock.calls[0]?.[0];
+      const assets = (observedTask?.output?.data as { assets?: readonly unknown[] } | undefined)
+        ?.assets;
+
+      expect(assets?.[0]).toMatchObject({
+        id: 'asset-1',
+        mimeType: 'image/png',
+        resourceRef: {
+          provider: 'generated-asset',
+          kind: 'generated',
+          source: {
+            kind: 'generated-asset',
+            generatedAssetId: 'asset-1',
+            filePath: generatedPath,
+          },
+        },
+      });
+      expect(followUpPrompts[0]).toContain('Generated image inputs for ReadImage:');
+      expect(followUpPrompts[0]).toContain('"resourceRef"');
+      expect(followUpPrompts[0]).toContain('Do not use the task id');
     });
 
     it('should backfill completed media assets with stable refs and trigger perception', async () => {

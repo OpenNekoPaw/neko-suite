@@ -114,6 +114,18 @@ export {
   type HandleAgentTaskResultTerminalResult,
 } from './task-result-observation-coordinator';
 export {
+  AgentTaskResultObservationRuntime,
+  createAgentTaskResultObservationRuntime,
+  type AgentTaskResultObservationContinuationPort,
+  type AgentTaskResultObservationJournalPort,
+  type AgentTaskResultObservationRuntimeAgentPort,
+  type AgentTaskResultObservationRuntimeAgentRegistry,
+  type AgentTaskResultObservationRuntimeOptions,
+  type AgentTaskResultObservationRuntimeTaskPort,
+  type AgentTaskResultObservationRuntimeTaskManagerTerminalInput,
+  type AgentTaskResultObservationTerminalOptions,
+} from './task-result-observation-runtime';
+export {
   MemoryTaskStorage,
   FileTaskStorage,
   FileTaskStorageLoadError,

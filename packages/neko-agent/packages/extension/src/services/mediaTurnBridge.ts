@@ -7,17 +7,19 @@
 
 import * as vscode from 'vscode';
 import type { MediaTaskView, Platform } from '@neko/platform';
-import { createMediaTaskView, isTerminalMediaTaskStatus, runMediaTurn } from '@neko/platform';
+import {
+  createMediaTaskView,
+  isTerminalMediaTaskStatus,
+  readMediaTaskResultDeliveryPolicy,
+  runMediaTurn,
+  toMediaTaskResultObservationTask,
+} from '@neko/platform';
 import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import type { MediaModelCategory, ModelRef } from '@neko-agent/types';
 import { runAgentMediaTurn } from '@neko/agent/runtime';
 import type { AgentTaskResultDeliveryPolicy, Task } from '@neko/shared';
 import { getLogger } from '../base';
 import { MediaTaskDeliveryHost } from './mediaTaskDeliveryHost';
-import {
-  readMediaTaskResultDeliveryPolicy,
-  toMediaTaskResultObservationTask,
-} from './mediaTaskResultObservation';
 import type { AgentDashboardWorkItemSource } from './dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from './localResourceAccess';
 import type { ConversationBridge } from '../chat/conversationBridge';

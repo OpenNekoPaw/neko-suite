@@ -103,6 +103,13 @@ export {
   type MediaTaskSaveNotificationPlan,
 } from './media-task-progress-plan';
 export {
+  readMediaTaskResultDeliveryPolicy,
+  toMediaTaskResultObservationTask,
+  type MediaTaskResultObservationAssetData,
+  type MediaTaskResultObservationAssetInput,
+  type MediaTaskResultObservationProjectionInput,
+} from './media-task-result-observation';
+export {
   buildMediaTaskViewDelivery,
   buildMediaTaskProgressViewDelivery,
   type BuildMediaTaskProgressViewDeliveryInput,

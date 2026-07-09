@@ -260,10 +260,13 @@ export {
 export type { MediaRequestAssetMaterializer } from './media/media-request-assets';
 export {
   createMediaTaskActionCandidate,
+  createMediaTaskProgressView,
   createMediaTaskView,
   getMediaTaskConversationId,
   matchesMediaTaskConversation,
   type MediaTaskActionCandidate,
+  type MediaTaskProgressView,
+  type MediaTaskProgressViewInput,
   type MediaTaskResultView,
   type MediaTaskView,
   type MediaTaskViewOptions,
@@ -277,6 +280,13 @@ export {
   type MediaTaskCreativeEntityContext,
 } from './media/media-task-creative-entity';
 export { isTerminalMediaTaskStatus } from './media/media-task-progress-plan';
+export {
+  readMediaTaskResultDeliveryPolicy,
+  toMediaTaskResultObservationTask,
+  type MediaTaskResultObservationAssetData,
+  type MediaTaskResultObservationAssetInput,
+  type MediaTaskResultObservationProjectionInput,
+} from './media/media-task-result-observation';
 export {
   buildMediaTaskViewDelivery,
   buildMediaTaskProgressViewDelivery,

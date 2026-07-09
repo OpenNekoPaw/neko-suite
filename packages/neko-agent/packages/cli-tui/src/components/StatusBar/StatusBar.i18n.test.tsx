@@ -38,4 +38,33 @@ describe('StatusBar i18n', () => {
     expect(lastFrame()).toContain('对话:');
     expect(lastFrame()).toContain('媒体:图像:');
   });
+
+  it('uses the live context token estimate instead of completed provider usage', () => {
+    process.env.NEKO_LOCALE = 'en-US';
+    useConfigStore.getState().replaceConfig({
+      ...DEFAULT_CLI_CONFIG,
+      provider: 'nekoapi-chat',
+      providerType: 'newapi',
+      providerRequiresApiKey: true,
+      model: 'gpt-5.5',
+      chatModel: {
+        providerId: 'nekoapi-chat',
+        modelId: 'gpt-5.5',
+        contextWindow: 256000,
+        maxOutputTokens: 128000,
+      },
+      maxTokens: 8192,
+    });
+    useAgentStore.getState().updateUsage({
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+    });
+    useAgentStore.getState().setContextTokenCount(12345);
+
+    const { lastFrame } = render(<StatusBar />);
+
+    expect(lastFrame()).toContain('ctx:12.3K/384.0K');
+    expect(lastFrame()).not.toContain('ctx:0/384.0K');
+  });
 });

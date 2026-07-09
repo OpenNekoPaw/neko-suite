@@ -1,5 +1,3 @@
-import type { MediaTask } from '@neko/platform';
-import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import type {
   AgentTaskResultDeliveryPolicy,
   GeneratedAsset,
@@ -10,8 +8,16 @@ import type {
   TaskStatus,
   TaskType,
 } from '@neko/shared';
-import { isResourceRef } from '@neko/shared';
-import { createGeneratedAssetResourceRef } from '@neko/shared/vscode/extension';
+import {
+  createResourceFingerprint,
+  createResourceRef,
+  hashStableValue,
+  isResourceRef,
+} from '@neko/shared';
+import type { MediaTaskProgressDeliveryPlan } from './media-task-progress-plan';
+import type { MediaTask } from './types';
+
+const GENERATED_RESOURCE_CACHE_PROVIDER_ID = 'generated-asset';
 
 export type MediaTaskResultObservationAssetInput = Pick<
   GeneratedAsset,
@@ -184,11 +190,29 @@ function createGeneratedResourceRef(
   if (!localPath) {
     return undefined;
   }
-  return createGeneratedAssetResourceRef({
-    assetId: asset.assetRef?.assetId ?? asset.id,
-    path: localPath,
-    mimeType: asset.mimeType,
+  const assetId = asset.assetRef?.assetId ?? asset.id;
+  return createResourceRef({
     scope: 'project',
+    provider: GENERATED_RESOURCE_CACHE_PROVIDER_ID,
+    kind: 'generated',
+    source: {
+      kind: 'generated-asset',
+      generatedAssetId: assetId,
+      filePath: localPath,
+      metadata: {
+        path: localPath,
+        ...(asset.mimeType ? { mimeType: asset.mimeType } : {}),
+      },
+    },
+    locator: {
+      kind: 'generated-asset',
+      assetId,
+    },
+    fingerprint: createResourceFingerprint({
+      strategy: 'provider',
+      value: hashStableValue({ assetId, path: localPath }),
+      providerId: GENERATED_RESOURCE_CACHE_PROVIDER_ID,
+    }),
   });
 }
 
@@ -199,9 +223,7 @@ function readAssetLocalPath(asset: MediaTaskResultObservationAssetInput): string
   return typeof asset.path === 'string' && asset.path.length > 0 ? asset.path : undefined;
 }
 
-function readAssetResourceRef(
-  asset: MediaTaskResultObservationAssetInput,
-): ResourceRef | undefined {
+function readAssetResourceRef(asset: MediaTaskResultObservationAssetInput): ResourceRef | undefined {
   return isResourceRef(asset.resourceRef) ? asset.resourceRef : undefined;
 }
 

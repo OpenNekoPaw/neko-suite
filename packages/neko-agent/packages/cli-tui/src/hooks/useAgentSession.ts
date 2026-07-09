@@ -33,18 +33,25 @@ import {
   type AgentWorkspaceRuntimeStatus,
   type ConversationRecord,
   type FileConversationStorage,
+  createAgentTaskResultObservationRuntime,
+  type AgentTaskResultObservationRuntime,
 } from '@neko/agent';
 import {
+  AgentEventStreamRuntimeProcessor,
+  type AgentEventStreamRuntimeMessage,
   buildAgentRuntimeSessionFactoryConfig,
   buildAgentWorkspaceRuntimeSessionAssemblyInput,
+  createAgentCapabilityRuntimeRegistries,
   createAgentRuntimeSession,
 } from '@neko/agent/runtime';
 import {
   projectLlmParameters,
   ConfigManager,
   FileUserConfigManager,
+  type MediaTask,
   type Platform,
 } from '@neko/platform';
+import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import type { AgentLlmConfig, AgentPhase } from '@neko-agent/types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -86,6 +93,7 @@ import {
 } from '../core/tui-mcp-ports';
 import { loadTuiSessionSkills } from '../core/tui-session-skills';
 import { mergeTuiMediaModelMetadata } from '../core/media-model-metadata';
+import { listChatModelOptions } from '../core/config';
 import { useConfigStore } from '../stores/config-store';
 import { useAgentStore } from '../stores/agent-store';
 import { useConversationStore } from '../stores/conversation-store';
@@ -109,6 +117,20 @@ import {
 } from '../core/tui-conversation-id';
 import { createNodeWorkspaceContentPolicy } from '../host/node-workspace-content-host';
 import { runNodeResourceCacheStartupGc } from '../host/node-resource-cache-startup-gc';
+import { NodeMediaTaskDeliveryHost } from '../host/node-media-task-delivery-host';
+import { createTuiMediaBackgroundTasks } from '../core/tui-media-background-tasks';
+import type { TerminalTimelineMessage } from '../core/timeline-projector';
+
+interface AgentUsageSnapshot {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+}
+
+type RuntimeTerminalTimelineMessage = Extract<
+  AgentEventStreamRuntimeMessage,
+  TerminalTimelineMessage
+>;
 
 export interface UseAgentSessionOptions {
   readonly config: CLIConfig;
@@ -239,6 +261,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const skillLifecycleBridgeRef = useRef<CliSkillLifecycleSessionBridge | null>(null);
   const toolRegistryRef = useRef<ToolRegistry | null>(null);
   const taskManagerRef = useRef<IRuntimeTaskManager | null>(null);
+  const streamRuntimeRef = useRef(
+    new AgentEventStreamRuntimeProcessor<MediaTask, MediaTaskProgressDeliveryPlan>(),
+  );
+  const taskResultObservationRuntimeRef = useRef<AgentTaskResultObservationRuntime | null>(null);
+  const mediaDeliveryHostRef = useRef<NodeMediaTaskDeliveryHost | null>(null);
   const taskTerminalUnsubscribeRef = useRef<(() => void) | null>(null);
   const capabilityLoadResultRef = useRef<TuiCapabilityLoaderResult | null>(null);
   const conversationStorageRef = useRef<FileConversationStorage | null>(null);
@@ -249,6 +276,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const conversationTitleRef = useRef('');
   const messageQueueRef = useRef<TuiMessageQueue | null>(null);
   const drainingQueueRef = useRef(false);
+  const submitRef = useRef<AgentSessionHandle['submit'] | null>(null);
   const workspaceRuntimeStateErrorRef = useRef<string | null>(null);
   const taskSummaryErrorRef = useRef<string | null>(null);
   const isReadyRef = useRef(false);
@@ -304,6 +332,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         readonly errorMessage?: string | null;
       } = {},
     ): void => {
+      const contextTokenCount =
+        input.contextTokenCount !== undefined
+          ? input.contextTokenCount
+          : (sessionRef.current?.getTokenCount() ?? null);
+      useAgentStore.getState().setContextTokenCount(contextTokenCount);
+
       const runtime = workspaceRuntimeStateRef.current;
       if (!runtime) {
         return;
@@ -311,10 +345,6 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
       const agentState = useAgentStore.getState();
       const currentConfig = useConfigStore.getState().config;
-      const contextTokenCount =
-        input.contextTokenCount !== undefined
-          ? input.contextTokenCount
-          : (sessionRef.current?.getTokenCount() ?? null);
       const queueSnapshot = agentState.messageQueue.snapshot;
       const capabilitySnapshot = capabilityLoadResultRef.current;
       const mediaModels = currentConfig.defaultMediaModels ?? {};
@@ -331,6 +361,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         chatModel: {
           providerId: currentConfig.chatModel?.providerId ?? currentConfig.provider,
           modelId: currentConfig.chatModel?.modelId ?? currentConfig.model,
+          ...(currentConfig.chatModel?.providerExpressionProfileId
+            ? { providerExpressionProfileId: currentConfig.chatModel.providerExpressionProfileId }
+            : {}),
         },
         ...(input.phase ? { phase: input.phase } : {}),
         ...(input.toolName ? { toolName: input.toolName } : {}),
@@ -492,6 +525,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
         const toolGroupRegistry = createCliToolGroupRegistry();
         const providerCardRegistry = new ProviderCardRegistry();
+        const profileRegistries = createAgentCapabilityRuntimeRegistries();
 
         // 3. Skills
         const detectedLocale = detectTuiLocale();
@@ -518,6 +552,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           skillRegistry: skillService.registry,
           toolGroupRegistry,
           providerCardRegistry,
+          artifactProfileRegistry: profileRegistries.artifactProfileRegistry,
+          creationProfileRegistry: profileRegistries.creationProfileRegistry,
+          providerExpressionProfileRegistry: profileRegistries.providerExpressionProfileRegistry,
           locale: detectedLocale,
         });
         const capabilityLoadResult = capabilityLoader.registerProviders(
@@ -574,6 +611,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
           toolGroupRegistry,
           providerCardRegistry,
+          artifactProfileRegistry: profileRegistries.artifactProfileRegistry,
+          creationProfileRegistry: profileRegistries.creationProfileRegistry,
+          providerExpressionProfileRegistry: profileRegistries.providerExpressionProfileRegistry,
+          promptFragments: capabilityLoadResult.promptFragments,
         });
         runtimeConfigRef.current = runtimeConfig;
         // 6. Create Session (with validated model)
@@ -635,6 +676,62 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           conversationId: conversationIdRef.current,
         });
         useAgentStore.getState().setMessageQueueSnapshot(messageQueueRef.current.snapshot());
+        mediaDeliveryHostRef.current?.dispose();
+        const mediaDeliveryHost = new NodeMediaTaskDeliveryHost({
+          ...(platformRef.current ? { platform: platformRef.current } : {}),
+          workspaceRoot: config.workDir,
+        });
+        mediaDeliveryHostRef.current = mediaDeliveryHost;
+        taskResultObservationRuntimeRef.current?.dispose();
+        taskResultObservationRuntimeRef.current = createAgentTaskResultObservationRuntime({
+          tasks: taskManager,
+          subscribeToTaskManagerTerminalTasks: false,
+          agents: {
+            get: (conversationId) =>
+              conversationId === conversationIdRef.current
+                ? {
+                    recordTaskResultObservation: (input) =>
+                      session.recordTaskResultObservation(input),
+                    enqueuePendingMessage: (input) => {
+                      const queue = messageQueueRef.current;
+                      if (!queue) return null;
+                      const item = queue.enqueue(input.content);
+                      const snapshot = queue.snapshot();
+                      useAgentStore.getState().setMessageQueueSnapshot(snapshot);
+                      syncWorkspaceRuntimeState({ status: 'running' });
+                      adapterRef.current?.handleEvent({
+                        type: 'messageQueued',
+                        content: `Message queued (${snapshot.pendingCount} pending)`,
+                        pendingCount: snapshot.pendingCount,
+                        queuedMessageItem: item,
+                        messageQueueSnapshot: snapshot,
+                      });
+                      return item;
+                    },
+                  }
+                : undefined,
+            isRunning: (conversationId) =>
+              conversationId === conversationIdRef.current &&
+              (session.isRunning() || useAgentStore.getState().status === 'running'),
+          },
+          continuation: {
+            requestUserContinuation: (request) => {
+              useConversationStore
+                .getState()
+                .addSystemMessage(`Task result is ready. Continue with: ${request.prompt}`);
+            },
+            dispatchIdleAgentTurn: async (request) => {
+              const submit = submitRef.current;
+              if (!submit) {
+                throw new Error('TUI submit port is not initialized for task-result follow-up');
+              }
+              await submit(request.prompt);
+            },
+          },
+          onDiagnostic: (diagnostic) => {
+            useConversationStore.getState().addError(new Error(diagnostic.message));
+          },
+        });
         void refreshTaskSummary();
         void syncWorkspaceRuntimeState({
           status: 'idle',
@@ -687,6 +784,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       setIsReady(false);
       taskTerminalUnsubscribeRef.current?.();
       taskTerminalUnsubscribeRef.current = null;
+      taskResultObservationRuntimeRef.current?.dispose();
+      taskResultObservationRuntimeRef.current = null;
+      mediaDeliveryHostRef.current?.dispose();
+      mediaDeliveryHostRef.current = null;
+      streamRuntimeRef.current.dispose();
       taskManagerRef.current = null;
       useAgentStore.getState().setRunningTaskSummary(null);
       sessionRef.current?.dispose();
@@ -734,17 +836,78 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         creationMetadata,
         currentConfig.defaultMediaModels,
         currentConfig.chatModel?.providerId ?? currentConfig.provider,
+        listChatModelOptions(currentConfig.workDir),
       );
 
-      for await (const event of session.execute(finalPrompt, {
-        workspaceRoot: readConfigWorkDir(),
-        ...(metadata ? { metadata } : {}),
-      })) {
-        adapter.handleEvent(event);
-        syncWorkspaceRuntimeState(projectRuntimeStateFromEvent(event, session));
-        if (shouldRefreshTaskSummaryFromEvent(event)) {
-          void refreshTaskSummary();
-        }
+      let finalUsage: AgentUsageSnapshot | undefined;
+      const events = observeTuiSessionEvents(
+        session.execute(finalPrompt, {
+          workspaceRoot: readConfigWorkDir(),
+          ...(metadata ? { metadata } : {}),
+        }),
+        {
+          onEvent: (event) => {
+            handleTuiRuntimeSideEffectEvent(event);
+            syncWorkspaceRuntimeState(projectRuntimeStateFromEvent(event, session));
+            if (event.type === 'done') {
+              finalUsage = event.usage;
+            }
+            if (shouldRefreshTaskSummaryFromEvent(event)) {
+              void refreshTaskSummary();
+            }
+          },
+        },
+      );
+      const backgroundTasks =
+        mediaDeliveryHostRef.current && taskResultObservationRuntimeRef.current
+          ? createTuiMediaBackgroundTasks({
+              ...(platformRef.current ? { platform: platformRef.current } : {}),
+              deliveryHost: mediaDeliveryHostRef.current,
+              taskResultObservations: taskResultObservationRuntimeRef.current,
+              persistResultUrls: ({ toolCallId, taskId, urls }) => {
+                if (!toolCallId || urls.length === 0) return;
+                void session
+                  .patchToolResult({
+                    toolCallId,
+                    timestamp: Date.now(),
+                    dataPatch: {
+                      status: 'completed',
+                      taskId,
+                      resultUrls: [...urls],
+                    },
+                  })
+                  .catch((error: unknown) => {
+                    const suffix = error instanceof Error ? `: ${error.message}` : '';
+                    useConversationStore
+                      .getState()
+                      .addError(new Error(`Failed to persist media task result URLs${suffix}`));
+                  });
+              },
+              onTaskProgress: () => {
+                void refreshTaskSummary();
+              },
+              onDiagnostic: (message, error) => {
+                const suffix = error instanceof Error ? `: ${error.message}` : '';
+                useConversationStore.getState().addError(new Error(`${message}${suffix}`));
+              },
+            })
+          : undefined;
+      await streamRuntimeRef.current.process({
+        conversationId: conversationIdRef.current,
+        events,
+        postMessage: (message) => {
+          if (isTerminalTimelineMessage(message)) {
+            adapter.handleMessage(message);
+          }
+        },
+        onPhaseChange: (phase, toolName) => {
+          syncWorkspaceRuntimeState({ status: 'running', phase, ...(toolName ? { toolName } : {}) });
+        },
+        ...(backgroundTasks ? { backgroundTasks } : {}),
+      });
+      useAgentStore.getState().setIdle();
+      if (finalUsage) {
+        useAgentStore.getState().updateUsage(finalUsage);
       }
       await persistCurrentConversation();
       void refreshTaskSummary();
@@ -928,6 +1091,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const clearHistory = useCallback(() => {
     sessionRef.current?.clearHistory();
     useConversationStore.getState().clearMessages();
+    useAgentStore.getState().setContextTokenCount(sessionRef.current?.getTokenCount() ?? null);
     void workspaceRuntimeStateRef.current
       ?.clearConversation(conversationIdRef.current)
       .catch(reportWorkspaceRuntimeStateError);
@@ -959,6 +1123,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         chatModel: {
           providerId: identity.providerId,
           modelId: identity.modelId,
+          ...(identity.providerExpressionProfileId
+            ? { providerExpressionProfileId: identity.providerExpressionProfileId }
+            : {}),
           ...(identity.capabilities ? { capabilities: identity.capabilities } : {}),
         },
       });
@@ -1198,6 +1365,15 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     return capabilityLoadResultRef.current?.referenceContributors ?? [];
   }, [capabilityRevision]);
 
+  useEffect(() => {
+    submitRef.current = submit;
+    return () => {
+      if (submitRef.current === submit) {
+        submitRef.current = null;
+      }
+    };
+  }, [submit]);
+
   return {
     submit,
     cancel,
@@ -1244,7 +1420,7 @@ function readConfigWorkDir(): string {
 
 /** Build system prompt with runtime context appended */
 function buildSystemPromptWithContext(builder: SystemPromptBuilder, config: CLIConfig): string {
-  const base = builder.build();
+  const base = builder.buildBaseOnly();
   const context = [
     `\n\n---\n\n## Runtime Context`,
     `- Working directory: ${config.workDir}`,
@@ -1319,6 +1495,61 @@ function formatLlmParameterSummary(llmConfig: AgentLlmConfig | undefined): strin
       : []),
   ].filter((entry): entry is string => Boolean(entry));
   return entries.length > 0 ? entries.join(', ') : undefined;
+}
+
+async function* observeTuiSessionEvents(
+  events: AsyncIterable<AgentEvent>,
+  options: {
+    readonly onEvent: (event: AgentEvent) => void;
+  },
+): AsyncIterable<AgentEvent> {
+  for await (const event of events) {
+    options.onEvent(event);
+    yield event;
+  }
+}
+
+function handleTuiRuntimeSideEffectEvent(event: AgentEvent): void {
+  switch (event.type) {
+    case 'tool_confirmation': {
+      if (!event.toolConfirmation) return;
+      useAgentStore.getState().setWaitingConfirmation();
+      useUIStore.getState().showToolApproval({
+        toolCallId: event.toolConfirmation.toolCall.id,
+        toolName: event.toolConfirmation.toolCall.name,
+        arguments: event.toolConfirmation.toolCall.arguments,
+        resolve: () => undefined,
+      });
+      return;
+    }
+    case 'iteration': {
+      if (event.iteration) {
+        useAgentStore.getState().setIteration(event.iteration.current, event.iteration.max);
+      }
+      return;
+    }
+    case 'error': {
+      const error =
+        event.error instanceof Error
+          ? event.error
+          : new Error(event.error?.message ?? 'Agent execution failed');
+      useAgentStore.getState().setError(error);
+      useConversationStore.getState().addError(error);
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+function isTerminalTimelineMessage(
+  message: AgentEventStreamRuntimeMessage,
+): message is RuntimeTerminalTimelineMessage {
+  return (
+    message.type === 'agentTurnTimeline' ||
+    message.type === 'taskCreated' ||
+    message.type === 'taskUpdated'
+  );
 }
 
 function projectRuntimeStateFromEvent(

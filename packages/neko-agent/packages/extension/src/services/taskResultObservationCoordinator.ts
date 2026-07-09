@@ -1,31 +1,31 @@
 import type {
-  AgentTaskResultFollowUpRequest,
   AgentTaskResultDeliveryPolicy,
+  AgentTaskResultFollowUpRequest,
   AgentTaskResultSource,
   Task,
   TaskRunLease,
-  TaskStatus,
 } from '@neko/shared';
 import {
-  createAgentTaskResultObservationCoordinator,
+  createAgentTaskResultObservationRuntime,
+  type AgentTaskResultObservationContinuationPort,
   type AgentTaskResultObservationCoordinatorDiagnostic,
+  type AgentTaskResultObservationJournalPort,
+  type AgentTaskResultObservationRuntime,
+  type AgentTaskResultObservationRuntimeTaskManagerTerminalInput,
   type IRuntimeTaskManager,
-  type RecordAgentTaskResultObservationInput,
-  type RecordAgentTaskResultObservationResult,
-  type TaskResultObservationJournalEntry,
 } from '@neko/agent';
 import type { IAgentManager } from '../ai/agentManager';
-import type { IAgentRunner } from '../ai/agentRunner';
 import { getLogger } from '../base';
 
 const logger = getLogger('TaskResultObservationCoordinator');
+const MEDIA_GENERATION_TASK_TYPES = new Set<Task['type']>([
+  'image_generation',
+  'video_generation',
+  'audio_generation',
+]);
 
-const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = ['completed', 'failed', 'cancelled'];
-
-export interface TaskResultObservationContinuationPort {
-  requestUserContinuation?(request: AgentTaskResultFollowUpRequest): void | Promise<void>;
-  dispatchIdleAgentTurn?(request: AgentTaskResultFollowUpRequest): void | Promise<void>;
-}
+export type TaskResultObservationContinuationPort = AgentTaskResultObservationContinuationPort;
+export type TaskResultObservationJournalPort = AgentTaskResultObservationJournalPort;
 
 export interface TaskResultObservationCoordinatorOptions {
   readonly tasks: IRuntimeTaskManager;
@@ -33,12 +33,6 @@ export interface TaskResultObservationCoordinatorOptions {
   readonly continuation?: TaskResultObservationContinuationPort;
   readonly journal?: TaskResultObservationJournalPort;
   readonly onDiagnostic?: (diagnostic: AgentTaskResultObservationCoordinatorDiagnostic) => void;
-}
-
-export interface TaskResultObservationJournalPort {
-  readExistingEntries(
-    conversationId: string,
-  ): Promise<readonly TaskResultObservationJournalEntry[]>;
 }
 
 export interface TaskResultObservationTerminalOptions {
@@ -51,138 +45,51 @@ export interface TaskResultObservationTerminalOptions {
 }
 
 export class TaskResultObservationCoordinator {
-  private readonly unsubscribe: () => void;
-  private readonly terminalTaskHandling = new Map<string, Promise<void>>();
-  private continuation: TaskResultObservationContinuationPort | undefined;
+  private readonly runtime: AgentTaskResultObservationRuntime;
 
-  constructor(private readonly options: TaskResultObservationCoordinatorOptions) {
-    this.continuation = options.continuation;
-    this.unsubscribe = options.tasks.onTerminalTask((event) => {
-      void this.handleTerminalTask(event.task, { lease: event.lease });
+  constructor(options: TaskResultObservationCoordinatorOptions) {
+    this.runtime = createAgentTaskResultObservationRuntime({
+      tasks: options.tasks,
+      agents: options.agents,
+      ...(options.continuation ? { continuation: options.continuation } : {}),
+      ...(options.journal ? { journal: options.journal } : {}),
+      shouldObserveTaskManagerTerminalTask,
+      onDiagnostic: (diagnostic) => {
+        logger.warn('Agent task-result observation diagnostic', diagnostic);
+        options.onDiagnostic?.(diagnostic);
+      },
     });
   }
 
   setContinuationPort(continuation: TaskResultObservationContinuationPort | undefined): void {
-    this.continuation = continuation;
+    this.runtime.setContinuationPort(continuation);
   }
 
   dispose(): void {
-    this.unsubscribe();
+    this.runtime.dispose();
   }
 
-  async reconcileTerminalTasks(): Promise<void> {
-    const taskGroups = await Promise.all(
-      TERMINAL_TASK_STATUSES.map((status) => this.options.tasks.list(status)),
-    );
-    for (const task of taskGroups.flat()) {
-      await this.handleTerminalTask(task);
-    }
+  reconcileTerminalTasks(): Promise<void> {
+    return this.runtime.reconcileTerminalTasks();
   }
 
-  async handleTerminalTask(
+  handleTerminalTask(
     task: Task,
     options: TaskResultObservationTerminalOptions = {},
   ): Promise<void> {
-    const key = createTerminalTaskObservationKey(task, options);
-    const previous = this.terminalTaskHandling.get(key) ?? Promise.resolve();
-    const current = previous
-      .catch(() => undefined)
-      .then(() => this.handleTerminalTaskSerialized(task, options));
-    this.terminalTaskHandling.set(key, current);
-    try {
-      await current;
-    } finally {
-      if (this.terminalTaskHandling.get(key) === current) {
-        this.terminalTaskHandling.delete(key);
-      }
-    }
-  }
-
-  private async handleTerminalTaskSerialized(
-    task: Task,
-    options: TaskResultObservationTerminalOptions,
-  ): Promise<void> {
-    const coordinator = createAgentTaskResultObservationCoordinator({
-      recorder: {
-        record: (input) => this.recordObservation(input),
-      },
-      followUpScheduler: {
-        askUserToContinue: (request) => this.askUserToContinue(request),
-        autoResumeAgent: (request) => this.autoResumeAgent(request),
-      },
-      onDiagnostic: (diagnostic) => this.emitDiagnostic(diagnostic),
-    });
-
-    await coordinator.handleTerminalTask({
-      task,
-      ...(options.lease ? { lease: options.lease } : {}),
-      source: options.source ?? 'task-manager',
-      ...(options.parentMessageId ? { parentMessageId: options.parentMessageId } : {}),
-      ...(options.parentToolCallId ? { parentToolCallId: options.parentToolCallId } : {}),
-      ...(options.deliveryPolicy ? { deliveryPolicy: options.deliveryPolicy } : {}),
-      ...(options.now !== undefined ? { now: options.now } : {}),
-    });
-  }
-
-  private async recordObservation(
-    input: RecordAgentTaskResultObservationInput,
-  ): Promise<RecordAgentTaskResultObservationResult> {
-    const agent = this.getConfiguredAgent(input.observation.conversationId);
-    const existingEntries = await this.options.journal?.readExistingEntries(
-      input.observation.conversationId,
-    );
-    return agent.recordTaskResultObservation({
-      ...input,
-      existingEntries: [...(input.existingEntries ?? []), ...(existingEntries ?? [])],
-    });
-  }
-
-  private async askUserToContinue(request: AgentTaskResultFollowUpRequest): Promise<void> {
-    if (!this.continuation?.requestUserContinuation) {
-      throw new Error('No task-result continuation UI is registered');
-    }
-    await this.continuation.requestUserContinuation(request);
-  }
-
-  private async autoResumeAgent(request: AgentTaskResultFollowUpRequest): Promise<void> {
-    const agent = this.getConfiguredAgent(request.conversationId);
-    if (this.options.agents.isRunning(request.conversationId)) {
-      const queued = agent.enqueuePendingMessage({
-        conversationId: request.conversationId,
-        content: request.prompt,
-        source: 'task-result-observation',
-      });
-      if (!queued) {
-        throw new Error('Agent was running but did not accept task-result follow-up queue item');
-      }
-      return;
-    }
-
-    if (!this.continuation?.dispatchIdleAgentTurn) {
-      throw new Error('No idle Agent turn dispatcher is registered for task-result follow-up');
-    }
-    await this.continuation.dispatchIdleAgentTurn(request);
-  }
-
-  private getConfiguredAgent(conversationId: string): IAgentRunner {
-    const agent = this.options.agents.get(conversationId);
-    if (!agent) {
-      throw new Error(`Agent runtime not found for task-result observation: ${conversationId}`);
-    }
-    return agent;
-  }
-
-  private emitDiagnostic(diagnostic: AgentTaskResultObservationCoordinatorDiagnostic): void {
-    logger.warn('Agent task-result observation diagnostic', diagnostic);
-    this.options.onDiagnostic?.(diagnostic);
+    return this.runtime.handleTerminalTask(task, options);
   }
 }
 
-function createTerminalTaskObservationKey(
-  task: Task,
-  options: TaskResultObservationTerminalOptions,
-): string {
-  const conversationId = options.lease?.conversationId ?? task.lifecycle?.ownerConversationId ?? '';
-  const runId = options.lease?.runId ?? task.lifecycle?.ownerRunId ?? '';
-  return `${conversationId}:${runId}:${task.id}:${task.status}`;
+function shouldObserveTaskManagerTerminalTask(
+  input: AgentTaskResultObservationRuntimeTaskManagerTerminalInput,
+): boolean {
+  return !isTaskManagerMediaGenerationTask(input.task);
+}
+
+function isTaskManagerMediaGenerationTask(task: Task): boolean {
+  return (
+    MEDIA_GENERATION_TASK_TYPES.has(task.type) &&
+    task.lifecycle?.recoverPolicy === 'resume-polling'
+  );
 }

@@ -1,0 +1,145 @@
+import { describe, expect, it, vi } from 'vitest';
+import type { Task } from '@neko/shared';
+import {
+  createAgentTaskResultObservationRuntime,
+  type AgentTaskResultObservationRuntimeTaskPort,
+} from '../task-result-observation-runtime';
+
+describe('AgentTaskResultObservationRuntime', () => {
+  it('records terminal task observations and dispatches auto-resume through injected host ports', async () => {
+    const terminalListeners: Array<(event: { readonly task: Task }) => void> = [];
+    const tasks: AgentTaskResultObservationRuntimeTaskPort = {
+      onTerminalTask: (listener) => {
+        terminalListeners.push(listener);
+        return () => undefined;
+      },
+      list: vi.fn(async () => []),
+    };
+    const recordTaskResultObservation = vi.fn(async (input) => ({
+      observationRecorded: true,
+      evidenceRecorded: true,
+      followUpRecorded: true,
+      eventIds: ['event-1'],
+      deliveryDecision: {
+        kind: 'auto-resume-agent' as const,
+        followUpRequest: {
+          id: 'followup-1',
+          conversationId: input.observation.conversationId,
+          runId: input.observation.runId,
+          observationId: input.observation.id,
+          taskId: input.observation.taskId,
+          policy: { kind: 'auto-resume-agent' as const, prompt: 'Continue' },
+          prompt: 'Continue',
+          createdAt: 30,
+        },
+      },
+    }));
+    const dispatchIdleAgentTurn = vi.fn(async () => undefined);
+    const runtime = createAgentTaskResultObservationRuntime({
+      tasks,
+      agents: {
+        get: () => ({ recordTaskResultObservation }),
+        isRunning: () => false,
+      },
+      continuation: { dispatchIdleAgentTurn },
+    });
+
+    terminalListeners[0]?.({ task: createTaskWithAutoResumePolicy() });
+    await runtime.flush();
+
+    expect(recordTaskResultObservation).toHaveBeenCalledOnce();
+    expect(recordTaskResultObservation.mock.calls[0]?.[0].observation).toMatchObject({
+      conversationId: 'conv-1',
+      runId: 'run-1',
+      taskId: 'task-1',
+    });
+    expect(dispatchIdleAgentTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+        runId: 'run-1',
+        taskId: 'task-1',
+        prompt: 'Continue',
+      }),
+    );
+    runtime.dispose();
+  });
+
+  it('lets the host skip TaskManager terminal observations during subscription and reconciliation', async () => {
+    const terminalListeners: Array<(event: { readonly task: Task }) => void> = [];
+    const task = createTaskWithAutoResumePolicy();
+    const tasks: AgentTaskResultObservationRuntimeTaskPort = {
+      onTerminalTask: (listener) => {
+        terminalListeners.push(listener);
+        return () => undefined;
+      },
+      list: vi.fn(async () => [task]),
+    };
+    const recordTaskResultObservation = vi.fn(async (input) => ({
+      observationRecorded: true,
+      evidenceRecorded: true,
+      followUpRecorded: true,
+      eventIds: ['event-1'],
+      deliveryDecision: {
+        kind: 'auto-resume-agent' as const,
+        followUpRequest: {
+          id: 'followup-1',
+          conversationId: input.observation.conversationId,
+          runId: input.observation.runId,
+          observationId: input.observation.id,
+          taskId: input.observation.taskId,
+          policy: { kind: 'auto-resume-agent' as const, prompt: 'Continue' },
+          prompt: 'Continue',
+          createdAt: 30,
+        },
+      },
+    }));
+    const shouldObserveTaskManagerTerminalTask = vi.fn(() => false);
+    const runtime = createAgentTaskResultObservationRuntime({
+      tasks,
+      agents: {
+        get: () => ({ recordTaskResultObservation }),
+        isRunning: () => false,
+      },
+      continuation: { dispatchIdleAgentTurn: vi.fn(async () => undefined) },
+      shouldObserveTaskManagerTerminalTask,
+    });
+
+    terminalListeners[0]?.({ task });
+    await runtime.flush();
+    await runtime.reconcileTerminalTasks();
+
+    expect(shouldObserveTaskManagerTerminalTask).toHaveBeenCalled();
+    expect(recordTaskResultObservation).not.toHaveBeenCalled();
+    runtime.dispose();
+  });
+});
+
+function createTaskWithAutoResumePolicy(): Task {
+  return {
+    id: 'task-1',
+    type: 'image_generation',
+    status: 'completed',
+    input: {
+      type: 'image_generation',
+      payload: {},
+    },
+    output: {
+      data: {
+        resultUrls: ['https://cdn.example.test/task-1.png'],
+      },
+    },
+    progress: 100,
+    createdAt: 10,
+    updatedAt: 20,
+    lifecycle: {
+      ownerConversationId: 'conv-1',
+      ownerRunId: 'run-1',
+      ownerRunStartedAt: 101,
+      runMode: 'background',
+      costPhase: 'idle',
+      interruptPolicy: 'detach-and-continue',
+      recoverPolicy: 'snapshot-only',
+      resultDeliveryPolicy: { kind: 'auto-resume-agent', prompt: 'Continue' },
+    },
+  };
+}

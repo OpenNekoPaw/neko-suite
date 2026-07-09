@@ -110,6 +110,10 @@ export interface TokenUsage {
   readonly total: number;
 }
 
+export interface ContextTokenState {
+  readonly count: number | null;
+}
+
 /**
  * Iteration progress
  */

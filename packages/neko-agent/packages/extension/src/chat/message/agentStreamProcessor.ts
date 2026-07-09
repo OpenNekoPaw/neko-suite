@@ -7,7 +7,11 @@
 
 import * as vscode from 'vscode';
 import type { MediaTask, Platform } from '@neko/platform';
-import { observeMediaTaskProgress } from '@neko/platform';
+import {
+  observeMediaTaskProgress,
+  readMediaTaskResultDeliveryPolicy,
+  toMediaTaskResultObservationTask,
+} from '@neko/platform';
 import { createMediaTaskProgressView } from '@neko/platform/media/media-task-view';
 import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import {
@@ -35,10 +39,6 @@ import { maybeAttachInferredEntityMemoryContribution } from '@neko/skills';
 import { MediaTaskDeliveryHost } from '../../services/mediaTaskDeliveryHost';
 import type { AgentDashboardWorkItemSource } from '../../services/dashboardWorkItemSource';
 import type { AgentLocalResourceAccess } from '../../services/localResourceAccess';
-import {
-  readMediaTaskResultDeliveryPolicy,
-  toMediaTaskResultObservationTask,
-} from '../../services/mediaTaskResultObservation';
 import {
   observeEntityMemoryContributionAutomation,
   type EntityMemoryContributionAutomationPort,

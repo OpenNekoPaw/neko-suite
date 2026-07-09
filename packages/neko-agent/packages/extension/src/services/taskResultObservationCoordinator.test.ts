@@ -6,6 +6,11 @@ import { TaskResultObservationCoordinator } from './taskResultObservationCoordin
 describe('TaskResultObservationCoordinator', () => {
   it('queues auto-resume follow-up through runner when the Agent is running', async () => {
     const task = createTask({
+      type: 'workflow',
+      input: {
+        type: 'workflow',
+        payload: {},
+      },
       lifecycle: {
         ...createTask().lifecycle!,
         resultDeliveryPolicy: { kind: 'auto-resume-agent', prompt: 'Continue' },
@@ -79,6 +84,79 @@ describe('TaskResultObservationCoordinator', () => {
       content: 'Continue',
       source: 'task-result-observation',
     });
+    coordinator.dispose();
+  });
+
+  it('does not auto-resume media generation tasks from the generic TaskManager observer', async () => {
+    const task = createTask({
+      lifecycle: {
+        ...createTask().lifecycle!,
+        recoverPolicy: 'resume-polling',
+        resultDeliveryPolicy: { kind: 'auto-resume-agent' },
+      },
+      output: {
+        data: {
+          outputs: [
+            {
+              type: 'image',
+              url: 'https://cdn.example.test/task-1.png',
+              mimeType: 'image/png',
+            },
+          ],
+        },
+      },
+    });
+    let terminalListener: ((event: TaskTerminalEvent) => void) | undefined;
+    const recordTaskResultObservation = vi.fn(async (input) => ({
+      observationRecorded: true,
+      evidenceRecorded: true,
+      followUpRecorded: true,
+      eventIds: ['event-1'],
+      deliveryDecision: {
+        kind: 'auto-resume-agent' as const,
+        followUpRequest: {
+          id: 'followup-1',
+          conversationId: input.observation.conversationId,
+          runId: input.observation.runId,
+          observationId: input.observation.id,
+          taskId: input.observation.taskId,
+          policy: { kind: 'auto-resume-agent' as const },
+          prompt: 'Continue from the completed async task result.',
+          createdAt: 30,
+        },
+      },
+    }));
+    const dispatchIdleAgentTurn = vi.fn(async () => undefined);
+    const coordinator = new TaskResultObservationCoordinator({
+      tasks: {
+        onTerminalTask: (listener) => {
+          terminalListener = listener;
+          return () => undefined;
+        },
+        list: vi.fn(),
+      } as never,
+      agents: {
+        get: vi.fn(() => ({
+          recordTaskResultObservation,
+          enqueuePendingMessage: vi.fn(),
+        })),
+        isRunning: vi.fn(() => false),
+      } as never,
+      continuation: { dispatchIdleAgentTurn },
+    });
+
+    terminalListener?.({
+      task,
+      lease: {
+        conversationId: 'conv-1',
+        runId: 'run-1',
+        runStartedAt: 101,
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(recordTaskResultObservation).not.toHaveBeenCalled();
+    expect(dispatchIdleAgentTurn).not.toHaveBeenCalled();
     coordinator.dispose();
   });
 
@@ -210,6 +288,11 @@ describe('TaskResultObservationCoordinator', () => {
         ...createTaskPort(),
         list: vi.fn(async () => [
           createTask({
+            type: 'workflow',
+            input: {
+              type: 'workflow',
+              payload: {},
+            },
             lifecycle: {
               ...createTask().lifecycle!,
               resultDeliveryPolicy: { kind: 'auto-resume-agent', prompt: 'Continue' },

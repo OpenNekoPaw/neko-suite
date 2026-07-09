@@ -12,7 +12,10 @@ import type { AgentEvent } from '@neko/agent';
 import type { useConversationStore } from '../stores/conversation-store';
 import type { useAgentStore } from '../stores/agent-store';
 import type { useUIStore, PendingApproval } from '../stores/ui-store';
-import { createTerminalTimelineProjector } from '../core/timeline-projector';
+import {
+  createTerminalTimelineProjector,
+  type TerminalTimelineMessage,
+} from '../core/timeline-projector';
 
 type ConversationStore = ReturnType<typeof useConversationStore.getState>;
 type AgentStore = ReturnType<typeof useAgentStore.getState>;
@@ -25,6 +28,8 @@ type StoreAccessor<TStore> = TStore | (() => TStore);
 export interface IEventAdapter {
   /** Process a single agent event and dispatch to stores */
   handleEvent(event: AgentEvent): void;
+  /** Process a host-neutral timeline/task message and dispatch to stores */
+  handleMessage(message: TerminalTimelineMessage): void;
   /** Reset adapter state between executions */
   reset(): void;
 }
@@ -204,6 +209,14 @@ export function createEventAdapter(deps: EventAdapterDeps): IEventAdapter {
             );
           }
           break;
+      }
+    },
+
+    handleMessage(message: TerminalTimelineMessage): void {
+      const rows = timelineProjector.projectMessage(message);
+      if (rows.length > 0) {
+        conversationStore().applyTimelineRows(rows);
+        hasStartedMessage = true;
       }
     },
 

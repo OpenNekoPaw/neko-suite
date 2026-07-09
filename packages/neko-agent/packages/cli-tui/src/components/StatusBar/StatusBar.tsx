@@ -24,6 +24,7 @@ export function StatusBar(): React.JSX.Element {
   const queueSnapshot = useAgentStore((s) => s.messageQueue.snapshot);
   const runningTaskSummary = useAgentStore((s) => s.tasks.runningSummary);
   const usage = useAgentStore((s) => s.usage);
+  const contextTokenCount = useAgentStore((s) => s.contextTokens.count);
   const config = useConfigStore((s) => s.config);
   const labels = getTuiLabels();
 
@@ -98,7 +99,10 @@ export function StatusBar(): React.JSX.Element {
 
       {/* Token usage bar */}
       <TokenUsage
-        usage={usage}
+        usage={{
+          ...usage,
+          input: contextTokenCount ?? usage.input,
+        }}
         maxContextTokens={tokenBudget.effectiveInputBudget}
         maxOutputTokens={tokenBudget.effectiveMaxOutputTokens}
         modelMaxOutputTokens={tokenBudget.modelMaxOutputTokens}
