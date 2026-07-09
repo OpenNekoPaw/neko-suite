@@ -16,7 +16,9 @@
 import { type ReactNode, useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import type { AgentContextPayload } from '@neko/shared';
 import type { ConversationLifecycleAction } from '@neko/shared/types/creative-ai-invocation';
-import type {
+import {
+  NEKO_AGENT_HOST_MESSAGE_EVENT,
+  type ExtensionToWebviewMessage,
   SettingsState,
   AgentState,
   AgentQueuedMessageItem,
@@ -26,7 +28,7 @@ import type {
   SessionMode,
   TabType,
 } from '@neko-agent/types';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import type {
   SkillSummary,
   EntryPromptMenu,
@@ -535,7 +537,7 @@ export function ConversationController({
         selectedProviderId,
         selectedModelId,
       });
-      VSCodeMessages.updateSettings({
+      AgentHostMessages.updateSettings({
         providerId: selectedProviderId,
         modelId: selectedModelId,
       });
@@ -547,13 +549,13 @@ export function ConversationController({
 
   const triggerForceUpdate = useCallback(() => forceUpdate((n) => n + 1), []);
   const requestConfigSnapshot = useCallback(() => {
-    VSCodeMessages.refreshConfigSnapshot();
+    AgentHostMessages.refreshConfigSnapshot();
   }, []);
   const requestConversationResourceSnapshot = useCallback((conversationId: string) => {
-    VSCodeMessages.getContextTokenCount(conversationId);
-    VSCodeMessages.getTasks(conversationId);
-    VSCodeMessages.getPromptMode(conversationId);
-    VSCodeMessages.getMessageQueue(conversationId);
+    AgentHostMessages.getContextTokenCount(conversationId);
+    AgentHostMessages.getTasks(conversationId);
+    AgentHostMessages.getPromptMode(conversationId);
+    AgentHostMessages.getMessageQueue(conversationId);
   }, []);
 
   const handleUserMessageSent = useCallback(
@@ -839,14 +841,26 @@ export function ConversationController({
     return () => window.removeEventListener('message', handleTablessMessage);
   }, [handleMessage, openTabs.length]);
 
+  useEffect(() => {
+    const handleScopedDesktopHostMessage = (event: Event) => {
+      const message = (event as CustomEvent<ExtensionToWebviewMessage>).detail;
+      if (!message?.type) return;
+      handleMessage({ data: message } as MessageEvent<ExtensionToWebviewMessage>);
+    };
+
+    window.addEventListener(NEKO_AGENT_HOST_MESSAGE_EVENT, handleScopedDesktopHostMessage);
+    return () =>
+      window.removeEventListener(NEKO_AGENT_HOST_MESSAGE_EVENT, handleScopedDesktopHostMessage);
+  }, [handleMessage]);
+
   // ---- Request data on mount ----
   useEffect(() => {
     isTablessConversationViewRef.current = true;
-    VSCodeMessages.getConversations();
-    VSCodeMessages.getActiveConversation();
+    AgentHostMessages.getConversations();
+    AgentHostMessages.getActiveConversation();
     requestConfigSnapshot();
-    VSCodeMessages.getAgentStates();
-    VSCodeMessages.getSkills();
+    AgentHostMessages.getAgentStates();
+    AgentHostMessages.getSkills();
   }, [requestConfigSnapshot]);
 
   // ---- Context token count on conversation change ----
@@ -872,7 +886,7 @@ export function ConversationController({
     persistCurrentVisibleConversation();
     beginForegroundConversationActivation();
     requestConfigSnapshot();
-    VSCodeMessages.newConversation();
+    AgentHostMessages.newConversation();
     setActiveTab('chat');
   }, [
     beginForegroundConversationActivation,
@@ -932,7 +946,7 @@ export function ConversationController({
           setInitialInputRequest(null);
           setEntryPromptMenu('roleplay');
           updateMentionSearchFilter('');
-          VSCodeMessages.searchProjectFiles('', undefined, { purpose: 'roleplay' });
+          AgentHostMessages.searchProjectFiles('', undefined, { purpose: 'roleplay' });
           return;
       }
     },
@@ -985,7 +999,7 @@ export function ConversationController({
           setInitialInputRequest(null);
           setEntryPromptMenu('roleplay');
           updateMentionSearchFilter('');
-          VSCodeMessages.searchProjectFiles('', undefined, { purpose: 'roleplay' });
+          AgentHostMessages.searchProjectFiles('', undefined, { purpose: 'roleplay' });
           return;
       }
     },
@@ -1147,14 +1161,14 @@ export function ConversationController({
       }
 
       cleanupClosedConversation(conversationId);
-      VSCodeMessages.deleteConversation(conversationId);
+      AgentHostMessages.deleteConversation(conversationId);
     },
     [cleanupClosedConversation, isProtectedConversation],
   );
 
   const handleConversationLifecycleAction = useCallback(
     (conversationId: string, action: ConversationLifecycleAction) => {
-      VSCodeMessages.conversationLifecycle(conversationId, action);
+      AgentHostMessages.conversationLifecycle(conversationId, action);
     },
     [],
   );
@@ -1175,7 +1189,7 @@ export function ConversationController({
     const cleanup = projectHistoryCleanup({ historyItems });
     for (const conversationId of cleanup.deletableConversationIds) {
       cleanupClosedConversation(conversationId);
-      VSCodeMessages.deleteConversation(conversationId);
+      AgentHostMessages.deleteConversation(conversationId);
     }
   }, [
     activeConversationId,
@@ -1298,7 +1312,7 @@ export function ConversationController({
               mentionItems={mentionItems}
               onRequestFiles={(filter) => {
                 updateMentionSearchFilter(filter);
-                VSCodeMessages.searchProjectFiles(filter, undefined, { purpose: 'entry' });
+                AgentHostMessages.searchProjectFiles(filter, undefined, { purpose: 'entry' });
               }}
               genCategory={entryGenCategory}
               genParams={entryGenParams}

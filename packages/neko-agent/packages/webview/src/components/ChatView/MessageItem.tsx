@@ -32,7 +32,7 @@ import {
   projectAttachmentReferenceToken,
   projectMessageContextReferenceToken,
 } from '@/presenters/reference-token-presenter';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
 import { projectCanvasMarkdownHandoffRequest } from '@/presenters/canvas-markdown-handoff-presenter';
@@ -115,7 +115,7 @@ function MessageContextReferenceDisplay({ reference }: { reference: MessageConte
       meta={token.meta}
       thumbnailSrc={token.thumbnailSrc}
       onClick={() =>
-        VSCodeMessages.revealContextSource(reference.type, reference.id, reference.navigationData)
+        AgentHostMessages.revealContextSource(reference.type, reference.id, reference.navigationData)
       }
     />
   );

@@ -9,7 +9,7 @@ import { useState, useCallback, memo, type ReactNode } from 'react';
 import { ToolCall } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
 import { RichContentRenderer } from '@/components/ChatView/RichContent';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { TaskCard } from '@/components/ChatView/TaskCard/TaskCard';
 import { SubAgentCard } from '@/components/ChatView/SubAgentCard';
@@ -54,7 +54,7 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
   }, []);
 
   const handleOpenFile = useCallback((filePath: string) => {
-    VSCodeMessages.openFile(filePath);
+    AgentHostMessages.openFile(filePath);
   }, []);
 
   const handleCopyText = useCallback((text: string) => {
@@ -73,7 +73,7 @@ function ToolCallDisplayComponent({ toolCall, conversationId, workItemIds }: Too
         logger.warn('Cannot confirm tool without conversationId');
         return;
       }
-      VSCodeMessages.confirmTool(toolCall.id, approved, conversationId);
+      AgentHostMessages.confirmTool(toolCall.id, approved, conversationId);
     },
     [toolCall.id, toolCall.name, conversationId],
   );

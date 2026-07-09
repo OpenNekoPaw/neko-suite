@@ -7,6 +7,7 @@ const mockVSCodeMessages = vi.hoisted(() => ({
 }));
 
 vi.mock('@/messages', () => ({
+  AgentHostMessages: mockVSCodeMessages,
   VSCodeMessages: mockVSCodeMessages,
 }));
 

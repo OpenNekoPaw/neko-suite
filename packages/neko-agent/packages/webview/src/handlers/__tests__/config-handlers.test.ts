@@ -8,6 +8,9 @@ const messageMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../messages', () => ({
+  AgentHostMessages: {
+    updateSettings: messageMocks.updateSettingsMessage,
+  },
   VSCodeMessages: {
     updateSettings: messageMocks.updateSettingsMessage,
   },

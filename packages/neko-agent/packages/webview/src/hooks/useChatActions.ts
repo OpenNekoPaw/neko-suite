@@ -21,7 +21,7 @@ import {
   type SessionMode,
   type TabType,
 } from '@neko-agent/types';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import type {
   MessageAttachment,
   SelectedFileReference,
@@ -178,7 +178,7 @@ export function useChatActions({
         clearInput();
         setAttachedFiles([]);
         setSelectedFileReferences?.([]);
-        VSCodeMessages.invokeSlashCommand(slashCommand.command, slashCommand.args, conversationId);
+        AgentHostMessages.invokeSlashCommand(slashCommand.command, slashCommand.args, conversationId);
         return;
       }
 
@@ -187,7 +187,7 @@ export function useChatActions({
         clearInput();
         setAttachedFiles([]);
         setSelectedFileReferences?.([]);
-        VSCodeMessages.invokeSkill(skillInvocation.skillName, skillInvocation.args, conversationId);
+        AgentHostMessages.invokeSkill(skillInvocation.skillName, skillInvocation.args, conversationId);
         return;
       }
 
@@ -237,7 +237,7 @@ export function useChatActions({
         mediaModelId,
         agentMediaModels,
       });
-      VSCodeMessages.sendMessage({
+      AgentHostMessages.sendMessage({
         conversationId,
         message: trimmed,
         sessionMode: effectiveSessionMode,
@@ -339,7 +339,7 @@ export function useChatActions({
         chatModelOptions: availableModels,
         sessionMode: 'agent',
       });
-      VSCodeMessages.sendMessage({
+      AgentHostMessages.sendMessage({
         conversationId,
         message: messageText,
         sessionMode: 'agent',
@@ -376,7 +376,7 @@ export function useChatActions({
 
     const conversationId = activeConversationIdRef.current;
     if (isThinking && conversationId) {
-      VSCodeMessages.cancelMessage(conversationId);
+      AgentHostMessages.cancelMessage(conversationId);
       setIsThinking(false);
     }
   }, [isThinking, isConversationSwitching, activeConversationIdRef, setIsThinking]);

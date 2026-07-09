@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { CopyIcon, FileIcon } from '@neko/shared/icons';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
@@ -16,7 +16,7 @@ function DocumentImageThumbnailsComponent({ thumbnails }: DocumentImageThumbnail
 
   const handleOpen = useCallback((thumbnail: DocumentImageThumbnailProjection) => {
     if (!thumbnail.locator) return;
-    VSCodeMessages.revealDocumentLocator({
+    AgentHostMessages.revealDocumentLocator({
       filePath: thumbnail.filePath,
       locator: thumbnail.locator,
       ...(thumbnail.source ? { source: thumbnail.source } : {}),

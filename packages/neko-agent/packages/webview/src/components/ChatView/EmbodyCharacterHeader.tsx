@@ -1,5 +1,5 @@
 import type { EmbodyCharacterSessionProjection } from '@neko-agent/types';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 
 interface EmbodyCharacterHeaderProps {
   session: EmbodyCharacterSessionProjection;
@@ -30,7 +30,7 @@ export function EmbodyCharacterHeader({ session }: EmbodyCharacterHeaderProps) {
         {active ? (
           <button
             type="button"
-            onClick={() => VSCodeMessages.exitEmbodyCharacterSession(session.sessionId)}
+            onClick={() => AgentHostMessages.exitEmbodyCharacterSession(session.sessionId)}
             className="rounded px-2 py-1 text-[11px] text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)]"
           >
             Exit

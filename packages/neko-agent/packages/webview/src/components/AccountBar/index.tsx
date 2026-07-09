@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { SsoSession, ConfiguredProvider } from '@neko-agent/types';
 import { useTranslation } from '@/i18n/I18nContext';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { EditIcon, FileIcon, SettingsIcon } from '@neko/shared/icons';
 
 interface AccountBarProps {
@@ -45,11 +45,11 @@ export function AccountBar({ ssoSession, configuredProviders, onOpenOnboarding }
     : (activeProvider?.name ?? t('accountBar.connectTitle'));
   const closeAndOpenConfigFile = () => {
     setOpen(false);
-    VSCodeMessages.openConfigFile();
+    AgentHostMessages.openConfigFile();
   };
   const closeAndOpenUserConfigFile = () => {
     setOpen(false);
-    VSCodeMessages.openUserConfigFile();
+    AgentHostMessages.openUserConfigFile();
   };
 
   if (!isConfigured) {
@@ -128,7 +128,7 @@ export function AccountBar({ ssoSession, configuredProviders, onOpenOnboarding }
                 type="button"
                 onClick={() => {
                   setOpen(false);
-                  VSCodeMessages.ssoLogout();
+                  AgentHostMessages.ssoLogout();
                 }}
                 className="agent-header-menu-item"
                 role="menuitem"

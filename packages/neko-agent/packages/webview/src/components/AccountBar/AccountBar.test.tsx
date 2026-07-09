@@ -25,6 +25,11 @@ vi.mock('@/i18n/I18nContext', () => ({
 }));
 
 vi.mock('@/messages', () => ({
+  AgentHostMessages: {
+    openConfigFile: messageMocks.openConfigFile,
+    openUserConfigFile: messageMocks.openUserConfigFile,
+    ssoLogout: messageMocks.ssoLogout,
+  },
   VSCodeMessages: {
     openConfigFile: messageMocks.openConfigFile,
     openUserConfigFile: messageMocks.openUserConfigFile,

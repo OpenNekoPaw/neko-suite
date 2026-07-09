@@ -27,7 +27,7 @@ import {
   type AgentQueuedMessageItem,
 } from '@neko-agent/types';
 import type { SettingsState, Message, TabType } from '@neko-agent/types';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { ChatView } from '@/components/ChatView';
 import { InputAreaProvider } from '@/components/ChatView/InputAreaContext';
 import type {
@@ -414,7 +414,7 @@ export function ChatWorkspace({
     const trailingMention = projectTrailingMention(initialInputRequest.messageText);
     if (trailingMention && !isCharacterRoleSession) {
       onMentionSearchFilterChange(trailingMention.requestFilter);
-      VSCodeMessages.searchProjectFiles(
+      AgentHostMessages.searchProjectFiles(
         trailingMention.requestFilter,
         sessionMutationConversationId,
       );
@@ -437,7 +437,7 @@ export function ChatWorkspace({
     setEntryPromptMenu(initialEntryPromptMenuRequest.menu);
     if (initialEntryPromptMenuRequest.menu === 'roleplay') {
       onMentionSearchFilterChange('');
-      VSCodeMessages.searchProjectFiles('', sessionMutationConversationId, {
+      AgentHostMessages.searchProjectFiles('', sessionMutationConversationId, {
         purpose: 'roleplay',
       });
     }
@@ -576,7 +576,7 @@ export function ChatWorkspace({
           clearInput();
           return;
         }
-        VSCodeMessages.clearHistory(sessionMutationConversationId);
+        AgentHostMessages.clearHistory(sessionMutationConversationId);
         clearMessages();
         clearInput();
       }),
@@ -607,7 +607,7 @@ export function ChatWorkspace({
     if (isCharacterRoleSession || isCompressing || !sessionMutationConversationId) return;
     conversationCompressingRef.current.set(sessionMutationConversationId, true);
     forceRender((n) => n + 1);
-    VSCodeMessages.compressContext(sessionMutationConversationId);
+    AgentHostMessages.compressContext(sessionMutationConversationId);
   }, [
     isCharacterRoleSession,
     isCompressing,
@@ -618,14 +618,14 @@ export function ChatWorkspace({
   const handleExecutionModeChange = (mode: ShellExecutionMode) => {
     updateSettings({ executionMode: mode });
     if (sessionMutationConversationId) {
-      VSCodeMessages.updateSettings({ executionMode: mode }, sessionMutationConversationId);
+      AgentHostMessages.updateSettings({ executionMode: mode }, sessionMutationConversationId);
     }
   };
 
   const handlePromptModeChange = (mode: PromptMode) => {
     if (!sessionMutationConversationId) return;
     updateSettings({ promptMode: mode });
-    VSCodeMessages.setPromptMode(mode, sessionMutationConversationId);
+    AgentHostMessages.setPromptMode(mode, sessionMutationConversationId);
   };
 
   const handleMediaModelSelect = useCallback(
@@ -655,7 +655,7 @@ export function ChatWorkspace({
   const handlePromoteQueuedMessage = useCallback(
     (queueItemId: string) => {
       if (!sessionMutationConversationId || isCharacterRoleSession) return;
-      VSCodeMessages.promoteQueuedMessage(sessionMutationConversationId, queueItemId);
+      AgentHostMessages.promoteQueuedMessage(sessionMutationConversationId, queueItemId);
     },
     [sessionMutationConversationId, isCharacterRoleSession],
   );
@@ -663,7 +663,7 @@ export function ChatWorkspace({
   const handleCancelQueuedMessage = useCallback(
     (queueItemId: string) => {
       if (!sessionMutationConversationId || isCharacterRoleSession) return;
-      VSCodeMessages.cancelQueuedMessage(sessionMutationConversationId, queueItemId);
+      AgentHostMessages.cancelQueuedMessage(sessionMutationConversationId, queueItemId);
     },
     [sessionMutationConversationId, isCharacterRoleSession],
   );
@@ -671,7 +671,7 @@ export function ChatWorkspace({
   const handleEditQueuedMessage = useCallback(
     (queueItemId: string) => {
       if (!sessionMutationConversationId || isCharacterRoleSession) return;
-      VSCodeMessages.editQueuedMessage(sessionMutationConversationId, queueItemId);
+      AgentHostMessages.editQueuedMessage(sessionMutationConversationId, queueItemId);
     },
     [sessionMutationConversationId, isCharacterRoleSession],
   );
@@ -706,7 +706,7 @@ export function ChatWorkspace({
       onRequestFiles={(filter) => {
         onMentionSearchFilterChange(filter);
         if (!isCharacterRoleSession && sessionMutationConversationId) {
-          VSCodeMessages.searchProjectFiles(filter, sessionMutationConversationId);
+          AgentHostMessages.searchProjectFiles(filter, sessionMutationConversationId);
         }
       }}
       mentionItems={mentionItems}
@@ -744,17 +744,17 @@ export function ChatWorkspace({
         ambientNodes={ambientNodes}
         onCancelTask={(taskId) => {
           if (!isCharacterRoleSession && sessionMutationConversationId) {
-            VSCodeMessages.cancelTask(taskId, sessionMutationConversationId);
+            AgentHostMessages.cancelTask(taskId, sessionMutationConversationId);
           }
         }}
         onRetryTask={(taskId) => {
           if (!isCharacterRoleSession && sessionMutationConversationId) {
-            VSCodeMessages.retryTask(taskId, sessionMutationConversationId);
+            AgentHostMessages.retryTask(taskId, sessionMutationConversationId);
           }
         }}
         onViewTaskResult={(taskId, resultRef) => {
           if (!isCharacterRoleSession && sessionMutationConversationId) {
-            VSCodeMessages.viewTaskResult(taskId, sessionMutationConversationId, resultRef);
+            AgentHostMessages.viewTaskResult(taskId, sessionMutationConversationId, resultRef);
           }
         }}
         onInputChange={setInputValue}

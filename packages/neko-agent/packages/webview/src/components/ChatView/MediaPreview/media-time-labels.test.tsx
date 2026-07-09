@@ -4,6 +4,10 @@ import { AudioCard } from './AudioCard';
 import { VideoCard } from './VideoCard';
 
 vi.mock('@/messages', () => ({
+  AgentHostMessages: {
+    openFile: vi.fn(),
+    openUrl: vi.fn(),
+  },
   VSCodeMessages: {
     openFile: vi.fn(),
     openUrl: vi.fn(),

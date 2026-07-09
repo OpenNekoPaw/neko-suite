@@ -11,7 +11,7 @@ import type {
 } from '@/presenters/composite-content-presenter';
 import type { StoryboardSceneRow, StoryboardShotRow, StoryboardTextCue } from '@neko/shared';
 import type { StoryboardShotPlanOverlay } from '@neko/shared';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { useTranslation } from '@/i18n/I18nContext';
 import {
@@ -748,7 +748,7 @@ function AssetGalleryRendererComponent({
                 <button
                   type="button"
                   className="rounded border border-[var(--agent-input-border)] px-1.5 py-0.5 text-[10px] text-[var(--agent-fg)] hover:bg-[var(--agent-hover)]"
-                  onClick={() => VSCodeMessages.openFile(media.localPath!)}
+                  onClick={() => AgentHostMessages.openFile(media.localPath!)}
                 >
                   Open
                 </button>
@@ -1041,11 +1041,11 @@ function Diagnostics({
 
 function openMedia(media: ResolvedCompositeMedia): void {
   if (media.localPath) {
-    VSCodeMessages.openFile(media.localPath);
+    AgentHostMessages.openFile(media.localPath);
     return;
   }
   if (media.src) {
-    VSCodeMessages.openUrl(media.src);
+    AgentHostMessages.openUrl(media.src);
   }
 }
 

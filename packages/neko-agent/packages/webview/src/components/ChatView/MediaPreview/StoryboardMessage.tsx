@@ -11,7 +11,7 @@
 
 import { useState, useCallback, memo } from 'react';
 import { ChevronDownIcon as ChevronIcon } from '@neko/shared/icons';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { SendToMenu, type PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import { projectStoryboardScenesAssetBatch } from '@/presenters/storyboard-transfer-presenter';
 
@@ -88,9 +88,9 @@ function SceneGroup({
   const handleOpenShot = useCallback((shot: StoryboardShot) => {
     const pathToOpen = shot.localPath ?? shot.url;
     if (pathToOpen.startsWith('/') || /^[A-Za-z]:[\\/]/.test(pathToOpen)) {
-      VSCodeMessages.openFile(pathToOpen);
+      AgentHostMessages.openFile(pathToOpen);
     } else {
-      VSCodeMessages.openUrl(pathToOpen);
+      AgentHostMessages.openUrl(pathToOpen);
     }
   }, []);
 

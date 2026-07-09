@@ -7,6 +7,9 @@ import { CharacterDialogueHeader } from './CharacterDialogueHeader';
 const exitCharacterDialogueSession = vi.fn();
 
 vi.mock('@/messages', () => ({
+  AgentHostMessages: {
+    exitCharacterDialogueSession: (...args: unknown[]) => exitCharacterDialogueSession(...args),
+  },
   VSCodeMessages: {
     exitCharacterDialogueSession: (...args: unknown[]) => exitCharacterDialogueSession(...args),
   },

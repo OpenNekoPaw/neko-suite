@@ -15,16 +15,24 @@ beforeAll(() => {
 
 // Dynamic import to ensure mock is set up first
 let postMessage: typeof import('../../../messages').postMessage;
+let AgentHostMessages: typeof import('../../../messages').AgentHostMessages;
 let VSCodeMessages: typeof import('../../../messages').VSCodeMessages;
 let vscode: typeof import('../../../messages').vscode;
+let getAgentHostRuntimeAdapter: typeof import('../../../messages').getAgentHostRuntimeAdapter;
+let setAgentHostRuntimeAdapter: typeof import('../../../messages').setAgentHostRuntimeAdapter;
+let createVSCodeAgentHostRuntimeAdapter: typeof import('../../../messages').createVSCodeAgentHostRuntimeAdapter;
 
 beforeAll(async () => {
   // Clear module cache to ensure fresh import with mock
   vi.resetModules();
   const module = await import('../../../messages');
   postMessage = module.postMessage;
+  AgentHostMessages = module.AgentHostMessages;
   VSCodeMessages = module.VSCodeMessages;
   vscode = module.vscode;
+  getAgentHostRuntimeAdapter = module.getAgentHostRuntimeAdapter;
+  setAgentHostRuntimeAdapter = module.setAgentHostRuntimeAdapter;
+  createVSCodeAgentHostRuntimeAdapter = module.createVSCodeAgentHostRuntimeAdapter;
 });
 
 describe('messages', () => {
@@ -58,6 +66,78 @@ describe('messages', () => {
   });
 
   describe('VSCodeMessages', () => {
+    it('keeps VSCodeMessages as a compatibility alias for AgentHostMessages', () => {
+      expect(VSCodeMessages).toBe(AgentHostMessages);
+    });
+
+    it('creates the default VSCode host runtime adapter around the shared bridge', () => {
+      const adapter = createVSCodeAgentHostRuntimeAdapter({
+        runtimeId: 'agent-vscode-test',
+      });
+
+      adapter.send({ type: 'getSettings' });
+      adapter.setState({ openTabs: [] });
+
+      expect(adapter.hostKind).toBe('vscode');
+      expect(adapter.runtimeId).toBe('agent-vscode-test');
+      expect(mockPostMessage).toHaveBeenCalledWith({ type: 'getSettings' });
+      expect(mockVSCodeApi.setState).toHaveBeenCalledWith({ openTabs: [] });
+    });
+
+    it('delegates message builders to the injected host runtime adapter', () => {
+      const sent: unknown[] = [];
+      const subscription = setAgentHostRuntimeAdapter({
+        hostKind: 'electron',
+        runtimeId: 'agent-test-runtime',
+        send(message) {
+          sent.push(message);
+        },
+        subscribe() {
+          return { dispose: vi.fn() };
+        },
+        getState<T>() {
+          return { source: 'fake-host' } as T;
+        },
+        setState: vi.fn(),
+      });
+
+      AgentHostMessages.getSettings();
+
+      expect(sent).toEqual([{ type: 'getSettings' }]);
+      expect(mockPostMessage).not.toHaveBeenCalled();
+      expect(getAgentHostRuntimeAdapter().getState()).toEqual({ source: 'fake-host' });
+      subscription.dispose();
+    });
+
+    it('supports subscribe/dispose through the injected host runtime adapter', () => {
+      const listenerDisposers: Array<() => void> = [];
+      const delivered: unknown[] = [];
+      let listener: ((message: { type: 'globalError'; message: string }) => void) | undefined;
+      const subscription = setAgentHostRuntimeAdapter({
+        hostKind: 'electron',
+        runtimeId: 'agent-test-runtime',
+        send: vi.fn(),
+        subscribe(next) {
+          listener = next as typeof listener;
+          const dispose = vi.fn();
+          listenerDisposers.push(dispose);
+          return { dispose };
+        },
+        getState: vi.fn(),
+        setState: vi.fn(),
+      });
+
+      const hostSubscription = getAgentHostRuntimeAdapter().subscribe((message) => {
+        delivered.push(message);
+      });
+      listener?.({ type: 'globalError', message: 'host diagnostic' });
+      hostSubscription.dispose();
+
+      expect(delivered).toEqual([{ type: 'globalError', message: 'host diagnostic' }]);
+      expect(listenerDisposers[0]).toHaveBeenCalled();
+      subscription.dispose();
+    });
+
     describe('sendMessage()', () => {
       it('should post sendMessage with basic params', () => {
         VSCodeMessages.sendMessage({

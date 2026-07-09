@@ -9,7 +9,7 @@
  */
 
 import { memo, useCallback } from 'react';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { ArrowRightIcon, FileIcon, LayersIcon, ScissorsIcon, UploadIcon } from '@neko/shared/icons';
 import { useTranslation } from '@/i18n/I18nContext';
 import type {
@@ -104,7 +104,7 @@ function SendToMenuComponent({
           ? projectCanvasAuthoringHandoffFromMarkdown(canvasMarkdownHandoff)
           : canvasAuthoringHandoff ?? projectCanvasAuthoringHandoffFromTransfer(transferPayload);
         if (!authoringHandoff) return;
-        VSCodeMessages.requestCanvasAuthoringHandoff({
+        AgentHostMessages.requestCanvasAuthoringHandoff({
           conversationId,
           requestId: createCanvasAuthoringHandoffRequestId(),
           ...authoringHandoff,
@@ -119,7 +119,7 @@ function SendToMenuComponent({
         payload,
       });
       if (!transferPayload) return;
-      VSCodeMessages.sendToPlugin(target, transferPayload);
+      AgentHostMessages.sendToPlugin(target, transferPayload);
     },
     [
       assetPath,
@@ -141,7 +141,7 @@ function SendToMenuComponent({
       payload,
     });
     if (!transferPayload) return;
-    VSCodeMessages.sendToPlugin('canvas', transferPayload);
+    AgentHostMessages.sendToPlugin('canvas', transferPayload);
   }, [assetPath, assetPaths, assets, mediaType, payload]);
 
   const projection = projectPluginTransferMenu({
@@ -224,7 +224,7 @@ function createCanvasAuthoringHandoffRequestId(): string {
 }
 
 type CanvasAuthoringHandoffRequestPayload = Parameters<
-  typeof VSCodeMessages.requestCanvasAuthoringHandoff
+  typeof AgentHostMessages.requestCanvasAuthoringHandoff
 >[0];
 
 type CanvasAuthoringHandoffRequestBody = Omit<

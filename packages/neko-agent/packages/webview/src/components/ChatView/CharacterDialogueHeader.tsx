@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { NpcProfileFact } from '@neko/shared';
 import type { CharacterDialogueSessionProjection } from '@neko-agent/types';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 
 interface CharacterDialogueHeaderProps {
   session: CharacterDialogueSessionProjection;
@@ -48,7 +48,7 @@ export function CharacterDialogueHeader({ session }: CharacterDialogueHeaderProp
         </button>
         <button
           type="button"
-          onClick={() => VSCodeMessages.exitCharacterDialogueSession(session.sessionId)}
+          onClick={() => AgentHostMessages.exitCharacterDialogueSession(session.sessionId)}
           className="rounded px-2 py-1 text-[11px] text-[var(--vscode-foreground)] hover:bg-[var(--vscode-toolbar-hoverBackground)]"
         >
           Exit

@@ -8,9 +8,18 @@
  * Each method constructs and sends a properly typed message.
  */
 
-import { getVSCodeAPI, postMessage as postRawMessage, type VSCodeAPI } from '@neko/shared/vscode';
+import {
+  getState as getVSCodeState,
+  getVSCodeAPI,
+  postMessage as postRawMessage,
+  setState as setVSCodeState,
+  type VSCodeAPI,
+} from '@neko/shared/vscode';
 import type {
+  AgentHostRuntimeAdapter,
+  AgentHostRuntimeSubscription,
   ConversationLifecycleWebviewMessage,
+  ExtensionToWebviewMessage,
   InvokeAgentCapabilityLifecycleWebviewMessage,
   RequestCanvasAuthoringHandoffWebviewMessage,
   PluginTransferPayload,
@@ -20,15 +29,69 @@ import type {
 import type { DocumentLocator, DocumentSourceRef } from '@neko/shared';
 import type { AgentContextType } from '@neko/shared';
 
-export { postRawMessage as postMessage, type VSCodeAPI };
+export type { AgentHostRuntimeAdapter, AgentHostRuntimeSubscription, VSCodeAPI };
 
 /**
  * VSCode API instance, or null if running outside VS Code
  */
 export const vscode = getVSCodeAPI();
 
+export function createVSCodeAgentHostRuntimeAdapter(
+  options: { readonly runtimeId?: string } = {},
+): AgentHostRuntimeAdapter {
+  return {
+    hostKind: 'vscode',
+    runtimeId: options.runtimeId ?? 'neko.agent.webview.vscode',
+    send(message: WebviewToExtensionMessage): void {
+      postRawMessage(message);
+    },
+    subscribe(
+      listener: (message: ExtensionToWebviewMessage) => void,
+    ): AgentHostRuntimeSubscription {
+      const handleMessage = (event: MessageEvent<ExtensionToWebviewMessage>) => {
+        listener(event.data);
+      };
+      window.addEventListener('message', handleMessage);
+      return {
+        dispose(): void {
+          window.removeEventListener('message', handleMessage);
+        },
+      };
+    },
+    getState<T>(): T | undefined {
+      return getVSCodeState<T>();
+    },
+    setState<T>(state: T): void {
+      setVSCodeState(state);
+    },
+  };
+}
+
+let currentAgentHostRuntimeAdapter: AgentHostRuntimeAdapter =
+  createVSCodeAgentHostRuntimeAdapter();
+
+export function setAgentHostRuntimeAdapter(
+  adapter: AgentHostRuntimeAdapter,
+): AgentHostRuntimeSubscription {
+  const previous = currentAgentHostRuntimeAdapter;
+  currentAgentHostRuntimeAdapter = adapter;
+  return {
+    dispose(): void {
+      currentAgentHostRuntimeAdapter = previous;
+    },
+  };
+}
+
+export function getAgentHostRuntimeAdapter(): AgentHostRuntimeAdapter {
+  return currentAgentHostRuntimeAdapter;
+}
+
+export function postMessage(message: unknown): void {
+  postWebviewMessage(message as WebviewToExtensionMessage);
+}
+
 function postWebviewMessage(message: WebviewToExtensionMessage): void {
-  postRawMessage(message);
+  currentAgentHostRuntimeAdapter.send(message);
 }
 
 function requireConversationId(messageType: string, conversationId: string): string {
@@ -48,10 +111,10 @@ function postConversationMessage<
 }
 
 /**
- * Type-safe message builders for Extension ↔ Webview communication.
+ * Type-safe message builders for Agent Webview ↔ host runtime communication.
  * Each method constructs and sends a properly typed message.
  */
-export const VSCodeMessages = {
+export const AgentHostMessages = {
   /**
    * Send a chat message to the AI assistant.
    * conversationId and model refs are explicit to avoid multi-tab leakage.
@@ -586,3 +649,7 @@ export const VSCodeMessages = {
     postWebviewMessage({ type: 'ssoLogout' });
   },
 };
+
+// Compatibility export for unmigrated call sites. New host-neutral Webview code
+// should import AgentHostMessages so VSCode remains only a transport adapter name.
+export const VSCodeMessages = AgentHostMessages;

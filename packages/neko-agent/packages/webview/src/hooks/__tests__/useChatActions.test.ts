@@ -11,6 +11,12 @@ const vscodeMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/messages', () => ({
+  AgentHostMessages: {
+    sendMessage: vscodeMocks.sendMessage,
+    invokeSlashCommand: vscodeMocks.invokeSlashCommand,
+    invokeSkill: vscodeMocks.invokeSkill,
+    cancelMessage: vscodeMocks.cancelMessage,
+  },
   VSCodeMessages: {
     sendMessage: vscodeMocks.sendMessage,
     invokeSlashCommand: vscodeMocks.invokeSlashCommand,

@@ -21,7 +21,7 @@ import {
   formatSlashCommandHelpCatalog,
 } from '@/components/ChatView/InputArea/slash-command-catalog';
 import { useTranslation } from '@/i18n/I18nContext';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 
 export interface UseSlashCommandsProps {
   skills: SkillSummary[];
@@ -57,7 +57,7 @@ export function useSlashCommands({
           return;
         }
         clearInput();
-        VSCodeMessages.invokePluginSlashCommand(
+        AgentHostMessages.invokePluginSlashCommand(
           command.extensionId,
           command.commandId ?? command.id,
           activeConversationId,
@@ -103,7 +103,7 @@ export function useSlashCommands({
       }
 
       clearInput();
-      VSCodeMessages.invokeSlashCommand(
+      AgentHostMessages.invokeSlashCommand(
         command.commandId ?? command.id,
         args,
         activeConversationId,
@@ -119,7 +119,7 @@ export function useSlashCommands({
       }
       const args = extractSkillInvocationArgs(inputValue, skill);
       clearInput();
-      VSCodeMessages.invokeSkill(skill.skillName, args, activeConversationId);
+      AgentHostMessages.invokeSkill(skill.skillName, args, activeConversationId);
     },
     [activeConversationId, clearInput, inputValue],
   );

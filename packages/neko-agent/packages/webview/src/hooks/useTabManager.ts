@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import type { OpenTab, ConversationSummary, TabType } from '@neko-agent/types';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { isCharacterRoleTab } from '@/presenters/character-role-session-presenter';
 
 export interface UseTabManagerProps {
@@ -57,7 +57,7 @@ export function useTabManager({
       isInitialTabStateRef.current = false;
       return;
     }
-    VSCodeMessages.updateTabState(openTabs, activeTabId);
+    AgentHostMessages.updateTabState(openTabs, activeTabId);
   }, [openTabs, activeTabId]);
 
   const handleOpenTab = useCallback(
@@ -71,7 +71,7 @@ export function useTabManager({
           onActivateCharacterRoleTab?.(existingTab);
         } else {
           onBeforeConversationActivation?.(conversationId);
-          VSCodeMessages.switchConversation(conversationId);
+          AgentHostMessages.switchConversation(conversationId);
           onConversationActivated?.(conversationId);
         }
       } else {
@@ -84,7 +84,7 @@ export function useTabManager({
         setActiveTabId(newTab.id);
         onConfigSnapshotRequested?.();
         onBeforeConversationActivation?.(conversationId);
-        VSCodeMessages.switchConversation(conversationId);
+        AgentHostMessages.switchConversation(conversationId);
         onConversationActivated?.(conversationId);
       }
       setActiveTab('chat');
@@ -127,11 +127,11 @@ export function useTabManager({
       const isClosingLastTab = newTabs.length === 0;
 
       if (tab.kind === 'character-dialogue') {
-        VSCodeMessages.exitCharacterDialogueSession(tab.conversationId);
+        AgentHostMessages.exitCharacterDialogueSession(tab.conversationId);
       } else if (tab.kind === 'embody-character') {
-        VSCodeMessages.exitEmbodyCharacterSession(tab.conversationId);
+        AgentHostMessages.exitEmbodyCharacterSession(tab.conversationId);
       } else if (shouldDeleteEmptyConversation) {
-        VSCodeMessages.deleteConversation(tab.conversationId, {
+        AgentHostMessages.deleteConversation(tab.conversationId, {
           activateNext: !isClosingLastTab,
         });
       }
@@ -146,7 +146,7 @@ export function useTabManager({
           onActivateCharacterRoleTab?.(newActiveTab);
         } else {
           onBeforeConversationActivation?.(newActiveTab.conversationId);
-          VSCodeMessages.switchConversation(newActiveTab.conversationId);
+          AgentHostMessages.switchConversation(newActiveTab.conversationId);
           onConversationActivated?.(newActiveTab.conversationId);
         }
       } else if (newTabs.length === 0) {
@@ -180,7 +180,7 @@ export function useTabManager({
           onActivateCharacterRoleTab?.(tab);
         } else {
           onBeforeConversationActivation?.(tab.conversationId);
-          VSCodeMessages.switchConversation(tab.conversationId);
+          AgentHostMessages.switchConversation(tab.conversationId);
           onConversationActivated?.(tab.conversationId);
         }
         setActiveTab('chat');

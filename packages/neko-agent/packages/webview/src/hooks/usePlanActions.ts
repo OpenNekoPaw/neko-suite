@@ -1,11 +1,11 @@
 /**
  * usePlanActions - Plan review action callbacks
  *
- * Wraps VSCodeMessages plan review calls with activeConversationId binding.
+ * Wraps AgentHostMessages plan review calls with activeConversationId binding.
  */
 
 import { useCallback } from 'react';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 
 export interface UsePlanActionsProps {
   activeConversationId: string | null;
@@ -25,7 +25,7 @@ export function usePlanActions({
   const handleApprovePlanStep = useCallback(
     (planId: string, stepId: string) => {
       if (!activeConversationId) return;
-      VSCodeMessages.approvePlanStep(planId, stepId, activeConversationId);
+      AgentHostMessages.approvePlanStep(planId, stepId, activeConversationId);
     },
     [activeConversationId],
   );
@@ -33,7 +33,7 @@ export function usePlanActions({
   const handleRejectPlanStep = useCallback(
     (planId: string, stepId: string) => {
       if (!activeConversationId) return;
-      VSCodeMessages.rejectPlanStep(planId, stepId, activeConversationId);
+      AgentHostMessages.rejectPlanStep(planId, stepId, activeConversationId);
     },
     [activeConversationId],
   );
@@ -41,7 +41,7 @@ export function usePlanActions({
   const handleModifyPlanStep = useCallback(
     (planId: string, stepId: string, newDescription: string) => {
       if (!activeConversationId) return;
-      VSCodeMessages.modifyPlanStep(planId, stepId, newDescription, activeConversationId);
+      AgentHostMessages.modifyPlanStep(planId, stepId, newDescription, activeConversationId);
     },
     [activeConversationId],
   );
@@ -49,7 +49,7 @@ export function usePlanActions({
   const handleApproveAllPlanSteps = useCallback(
     (planId: string) => {
       if (!activeConversationId) return;
-      VSCodeMessages.approveAllPlanSteps(planId, activeConversationId);
+      AgentHostMessages.approveAllPlanSteps(planId, activeConversationId);
     },
     [activeConversationId],
   );
@@ -57,7 +57,7 @@ export function usePlanActions({
   const handleRejectAllPlanSteps = useCallback(
     (planId: string) => {
       if (!activeConversationId) return;
-      VSCodeMessages.rejectAllPlanSteps(planId, activeConversationId);
+      AgentHostMessages.rejectAllPlanSteps(planId, activeConversationId);
     },
     [activeConversationId],
   );

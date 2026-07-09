@@ -30,7 +30,7 @@ import {
   projectSsoErrorMessage,
   projectSsoSessionChangedMessage,
 } from '../presenters/config-message-presenter';
-import { VSCodeMessages } from '../messages';
+import { AgentHostMessages } from '../messages';
 import type { SettingsDataProjection } from '@neko-agent/types';
 
 /**
@@ -60,7 +60,7 @@ const handleSettingsData: MessageHandler<'settingsData'> = (
       selectedProviderId: defaultChatModel.providerId,
       selectedModelId: defaultChatModel.modelId,
     });
-    VSCodeMessages.updateSettings({
+    AgentHostMessages.updateSettings({
       providerId: defaultChatModel.providerId,
       modelId: defaultChatModel.modelId,
     });

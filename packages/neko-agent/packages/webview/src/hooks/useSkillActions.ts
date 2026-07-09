@@ -5,7 +5,7 @@
  */
 
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import type { BoundActiveSkillIndicator } from '@/handlers';
 
 export interface UseSkillActionsProps {
@@ -38,7 +38,7 @@ export function useSkillActions({
               }
             : null,
         );
-        VSCodeMessages.clearActiveSkill(activeConversationId, recordId ? { recordId } : undefined);
+        AgentHostMessages.clearActiveSkill(activeConversationId, recordId ? { recordId } : undefined);
       }
     },
     [activeSkill, activeConversationId, setActiveSkill],

@@ -47,7 +47,7 @@ import { isOptimisticQueuedMessageItem } from '@/presenters/message-queue-presen
 import { projectComposerModeConfig } from '@/presenters/composer-mode-config-presenter';
 import { projectClipboardTextToContextPayload } from '@/presenters/clipboard-context-presenter';
 import type { AgentContextPayload, ChatModelOption } from '@neko/shared';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import type {
   AgentLlmConfig,
   AgentModelSlots,
@@ -737,7 +737,7 @@ export function InputArea({
 
   const handleEntryRoleplaySelect = (item: MentionItem) => {
     closeEntryPromptMenu();
-    VSCodeMessages.startCharacterDialogueFromSlash(
+    AgentHostMessages.startCharacterDialogueFromSlash(
       `${formatRoleplaySlashEntity(item)} --roleplay --skip-enrich${formatInitialRoleplayMessage(inputValue)}`,
     );
     textareaRef.current?.focus();

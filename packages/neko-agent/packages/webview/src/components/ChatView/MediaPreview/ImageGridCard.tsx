@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback, memo } from 'react';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { openMediaTarget } from './openMediaTarget';
 
 interface ImageGridCardProps {
@@ -48,7 +48,7 @@ function ImageGridCardComponent({
       const localPath = localPaths?.[index];
       if (!localPath) return;
       const fileName = localPath.split(/[\\/]/).pop() ?? 'image';
-      VSCodeMessages.dndStart({ path: localPath, mediaType: 'image', name: fileName });
+      AgentHostMessages.dndStart({ path: localPath, mediaType: 'image', name: fileName });
     },
     [localPaths],
   );

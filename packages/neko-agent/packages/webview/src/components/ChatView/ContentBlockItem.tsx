@@ -16,7 +16,7 @@ import { MessageAvatar } from '@/components/ChatView/MessageAvatar';
 import { useMessageActions } from '@/components/ChatView/MessageActionsContext';
 import { SendToMenu } from '@/components/ChatView/SendToMenu';
 import { useTranslation } from '@/i18n/I18nContext';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { projectCanvasContentTransferTarget } from '@/presenters/plugin-transfer-presenter';
 import { projectCanvasMarkdownHandoffRequest } from '@/presenters/canvas-markdown-handoff-presenter';
 import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
@@ -528,7 +528,7 @@ function CanvasLifecycleActionButton({
       title={disabledReason ?? `${action.capabilityId} ${action.phase}`}
       onClick={() => {
         if (!conversationId || !invocation) return;
-        VSCodeMessages.invokeAgentCapabilityLifecycle(
+        AgentHostMessages.invokeAgentCapabilityLifecycle(
           conversationId,
           `${action.capabilityId}:${action.actionId}:${parentRequestId}`,
           invocation,

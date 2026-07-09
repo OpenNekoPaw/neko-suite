@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 import { useMessageActions } from '../MessageActionsContext';
 import { getLogger } from '../../../utils/logger';
 import {
@@ -246,7 +246,7 @@ function MermaidBlockComponent({ code }: MermaidBlockProps) {
   const handleDownload = useCallback(() => {
     if (!svg) return;
 
-    VSCodeMessages.downloadSvg(svg, 'mermaid-diagram.svg');
+    AgentHostMessages.downloadSvg(svg, 'mermaid-diagram.svg');
   }, [svg]);
 
   // Send feedback to LLM about the error
@@ -268,7 +268,7 @@ Please fix the Mermaid syntax. Common issues:
 2. Escape special characters in node labels
 3. Ensure all brackets and quotes are properly matched`;
 
-    VSCodeMessages.mermaidError(error, code, feedbackMessage, activeConversationId);
+    AgentHostMessages.mermaidError(error, code, feedbackMessage, activeConversationId);
 
     setFeedbackSent(true);
   }, [error, code, feedbackSent, activeConversationId]);

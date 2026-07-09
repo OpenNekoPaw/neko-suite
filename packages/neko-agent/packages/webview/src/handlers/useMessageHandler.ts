@@ -38,6 +38,14 @@ import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { ExtensionToWebviewMessage } from './messages';
 
 const logger = getLogger('MessageHandler');
+const FOREIGN_FEATURE_HOST_MESSAGE_TYPES = new Set([
+  'canvas.hostAppliedDocument',
+  'document:load',
+  'documentContext',
+  'enginePort',
+  'featureFlags:update',
+  'project:init',
+]);
 
 /**
  * Props for useMessageHandler hook
@@ -350,6 +358,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     (event: MessageEvent<ExtensionToWebviewMessage>): void => {
       const message = event.data;
       if (!message || !message.type) return;
+      if (isForeignFeatureHostMessage(message)) return;
 
       const handled = registry.handle(message, context);
       if (!handled) {
@@ -360,4 +369,19 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
   );
 
   return { handleMessage };
+}
+
+function isForeignFeatureHostMessage(message: unknown): boolean {
+  if (!isRecord(message)) {
+    return false;
+  }
+  const type = message['type'];
+  return (
+    typeof type === 'string' &&
+    (FOREIGN_FEATURE_HOST_MESSAGE_TYPES.has(type) || type.startsWith('media:response:'))
+  );
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

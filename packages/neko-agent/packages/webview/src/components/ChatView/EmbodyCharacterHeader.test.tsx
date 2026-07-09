@@ -7,6 +7,9 @@ import { EmbodyCharacterHeader } from './EmbodyCharacterHeader';
 const exitEmbodyCharacterSession = vi.fn();
 
 vi.mock('@/messages', () => ({
+  AgentHostMessages: {
+    exitEmbodyCharacterSession: (...args: unknown[]) => exitEmbodyCharacterSession(...args),
+  },
   VSCodeMessages: {
     exitEmbodyCharacterSession: (...args: unknown[]) => exitEmbodyCharacterSession(...args),
   },

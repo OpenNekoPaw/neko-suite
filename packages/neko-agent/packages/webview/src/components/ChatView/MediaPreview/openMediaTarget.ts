@@ -1,12 +1,12 @@
-import { VSCodeMessages } from '@/messages';
+import { AgentHostMessages } from '@/messages';
 
 export function openMediaTarget(target: string): void {
   if (isHostFileOpenTarget(target)) {
-    VSCodeMessages.openFile(target);
+    AgentHostMessages.openFile(target);
     return;
   }
 
-  VSCodeMessages.openUrl(target);
+  AgentHostMessages.openUrl(target);
 }
 
 function isHostFileOpenTarget(target: string): boolean {
