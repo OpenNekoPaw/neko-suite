@@ -5,6 +5,17 @@
  * platform adapter implementations. See docs/architecture/adr-provider-expression-context.md.
  */
 
+import {
+  createAgentProfileDiagnostic,
+  toAgentProfileValidationResult,
+  validateAgentProfileIdentity,
+  type AgentProfileDiagnostic,
+  type AgentProfileIdentity,
+  type AgentProfileSource,
+  type AgentProfileValidationResult,
+  type IAgentProfileRegistry,
+} from './agent-profile';
+
 export type ProviderId = string;
 export type ProviderModelId = string;
 
@@ -34,6 +45,8 @@ export type StyleFamily =
   | 'mixed';
 
 export type ProviderCardLayer = 'builtin' | 'market' | 'project';
+
+export type ProviderExpressionProfileSource = AgentProfileSource;
 
 export type ConceptCoverageStatus = 'native' | 'partial' | 'unknown' | 'anti-pattern';
 
@@ -74,6 +87,14 @@ export interface ProviderTrainingProfile {
 }
 
 export interface ProviderCard {
+  /**
+   * Optional compatibility identity. Runtime registries normalize older
+   * ProviderCards into ProviderExpressionProfileDescriptor before treating them
+   * as first-class Agent profiles.
+   */
+  readonly profileId?: string;
+  readonly kind?: 'provider-expression';
+  readonly source?: ProviderExpressionProfileSource;
   readonly providerId: ProviderId;
   readonly modelId?: ProviderModelId;
   readonly displayName: string;
@@ -87,6 +108,21 @@ export interface ProviderCard {
   readonly trainingProfile: ProviderTrainingProfile;
   readonly rawMarkdown?: string;
 }
+
+export interface ProviderExpressionProfileDescriptor
+  extends Omit<ProviderCard, 'profileId' | 'kind' | 'source'>,
+    AgentProfileIdentity<'provider-expression', string> {
+  readonly kind: 'provider-expression';
+  readonly source: ProviderExpressionProfileSource;
+}
+
+/**
+ * Compatibility alias: ProviderCard remains the public contribution shape, and
+ * ProviderExpressionProfileDescriptor is the normalized profile contract.
+ */
+export type ProviderModelExpressionProfile = ProviderExpressionProfileDescriptor;
+
+export type ProviderCardExpressionProfile = ProviderExpressionProfileDescriptor;
 
 export interface ProviderTarget {
   readonly providerId: ProviderId;
@@ -184,7 +220,14 @@ export interface ProviderCardFilter {
   readonly capability?: ProviderGenerationCapability;
   readonly styleFamily?: StyleFamily;
   readonly sourceLayer?: ProviderCardLayer;
+  readonly profileId?: string;
+  readonly source?: ProviderExpressionProfileSource;
 }
+
+export type ProviderExpressionProfileFilter = ProviderCardFilter;
+
+export type IProviderExpressionProfileRegistry =
+  IAgentProfileRegistry<ProviderExpressionProfileDescriptor>;
 
 export interface IProviderCardRegistry {
   register(card: ProviderCard): void;
@@ -201,3 +244,139 @@ export interface IProviderCardRegistry {
 export interface IProviderRouter {
   route(input: ProviderRouteInput): ProviderSelection;
 }
+
+export function getProviderExpressionProfileId(
+  card: Pick<ProviderCard, 'providerId' | 'modelId' | 'profileId'>,
+): string {
+  if (card.profileId) return card.profileId;
+  return card.modelId
+    ? `provider-expression:${card.providerId}:${card.modelId}`
+    : `provider-expression:${card.providerId}`;
+}
+
+export function providerCardLayerToAgentProfileSource(
+  layer: ProviderCardLayer,
+): ProviderExpressionProfileSource {
+  switch (layer) {
+    case 'builtin':
+      return 'builtin';
+    case 'market':
+      return 'market';
+    case 'project':
+      return 'project';
+  }
+}
+
+export function toProviderExpressionProfile(
+  card: ProviderCard,
+): ProviderExpressionProfileDescriptor {
+  return {
+    ...card,
+    profileId: getProviderExpressionProfileId(card),
+    kind: 'provider-expression',
+    source: card.source ?? providerCardLayerToAgentProfileSource(card.sourceLayer),
+  };
+}
+
+export function validateProviderExpressionProfileDescriptor(
+  descriptor: unknown,
+): AgentProfileValidationResult {
+  const normalized = isRecord(descriptor)
+    ? {
+        ...descriptor,
+        profileId:
+          typeof descriptor['profileId'] === 'string'
+            ? descriptor['profileId']
+            : descriptor['providerId'] !== undefined
+              ? getProviderExpressionProfileId({
+                  providerId: String(descriptor['providerId']),
+                  modelId:
+                    typeof descriptor['modelId'] === 'string' ? descriptor['modelId'] : undefined,
+                })
+              : undefined,
+        kind: descriptor['kind'] ?? 'provider-expression',
+        source:
+          descriptor['source'] ??
+          (isProviderCardLayer(descriptor['sourceLayer'])
+            ? providerCardLayerToAgentProfileSource(descriptor['sourceLayer'])
+            : undefined),
+      }
+    : descriptor;
+  const diagnostics: AgentProfileDiagnostic[] = [
+    ...validateAgentProfileIdentity(normalized, {
+      expectedKind: 'provider-expression',
+    }).diagnostics,
+  ];
+  const normalizedProfileId =
+    isRecord(normalized) && typeof normalized['profileId'] === 'string'
+      ? normalized['profileId']
+      : undefined;
+
+  if (!isRecord(descriptor)) {
+    return toAgentProfileValidationResult(diagnostics);
+  }
+
+  if (typeof descriptor['providerId'] !== 'string' || !isValidProviderId(descriptor['providerId'])) {
+    diagnostics.push(
+      createAgentProfileDiagnostic({
+        severity: 'error',
+        code: 'malformed-profile-descriptor',
+        path: ['providerId'],
+        profileId: normalizedProfileId,
+        kind: 'provider-expression',
+        message: 'Provider expression profile must declare a valid providerId.',
+        actual: descriptor['providerId'],
+      }),
+    );
+  }
+
+  if (!Array.isArray(descriptor['capabilities']) || descriptor['capabilities'].length === 0) {
+    diagnostics.push(
+      createAgentProfileDiagnostic({
+        severity: 'error',
+        code: 'malformed-profile-descriptor',
+        path: ['capabilities'],
+        profileId: normalizedProfileId,
+        kind: 'provider-expression',
+        message: 'Provider expression profile must declare at least one generation capability.',
+      }),
+    );
+  }
+
+  for (const forbiddenKey of PROVIDER_EXPRESSION_PROFILE_FORBIDDEN_KEYS) {
+    if (forbiddenKey in descriptor) {
+      diagnostics.push(
+        createAgentProfileDiagnostic({
+          severity: 'error',
+          code: 'provider-expression-secrets-forbidden',
+          path: [forbiddenKey],
+          profileId: normalizedProfileId,
+          kind: 'provider-expression',
+          message:
+            'Provider expression profiles must not contain credentials, runtime handles, or adapter wire mappings.',
+          actual: forbiddenKey,
+        }),
+      );
+    }
+  }
+
+  return toAgentProfileValidationResult(diagnostics);
+}
+
+function isProviderCardLayer(value: unknown): value is ProviderCardLayer {
+  return value === 'builtin' || value === 'market' || value === 'project';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+const PROVIDER_EXPRESSION_PROFILE_FORBIDDEN_KEYS = [
+  'apiKey',
+  'accessToken',
+  'secret',
+  'credentials',
+  'runtimeHandle',
+  'adapterMapping',
+  'requestMapping',
+] as const;

@@ -152,6 +152,39 @@ describe('VSCodeLocalResourceAccessService', () => {
     });
   });
 
+  it('keeps VSCode Webview projections extension-owned and separate from source identity', async () => {
+    const vscode = await import('vscode');
+    const webview = {
+      options: {},
+      asWebviewUri: vi.fn((uri: { fsPath: string }) => ({
+        toString: () => `vscode-webview:${uri.fsPath}`,
+      })),
+    };
+    const service = new VSCodeLocalResourceAccessService({
+      rootProviders: [
+        createStaticLocalResourceRootProvider('workspace', 'workspace', [
+          vscode.Uri.file('/workspace'),
+        ]),
+      ],
+    });
+
+    const result = await service.toWebviewUri(
+      webview as never,
+      '/workspace/assets/image.png',
+      { caller: 'vscode-resource-projection' },
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      kind: 'local',
+      source: '/workspace/assets/image.png',
+      uri: 'vscode-webview:/workspace/assets/image.png',
+    });
+    expect(webview.asWebviewUri).toHaveBeenCalledWith(
+      expect.objectContaining({ fsPath: '/workspace/assets/image.png' }),
+    );
+  });
+
   it('returns unauthorized result and logs warning for local paths outside roots', async () => {
     const vscode = await import('vscode');
     const logger = { warn: vi.fn() };

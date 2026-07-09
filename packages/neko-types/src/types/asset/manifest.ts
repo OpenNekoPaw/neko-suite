@@ -21,6 +21,7 @@ export type AssetType =
   | 'model'
   | 'endpoint'
   | 'provider'
+  | 'profile'
   | 'skill'
   | 'processor'
   | 'plugin'
@@ -38,6 +39,7 @@ export const CATEGORY_MAP: Record<AssetType, AssetCategory> = {
   model: 'ai',
   endpoint: 'ai',
   provider: 'ai',
+  profile: 'tooling',
   skill: 'tooling',
   processor: 'tooling',
   plugin: 'tooling',
@@ -53,6 +55,7 @@ export const ASSET_TYPES: readonly AssetType[] = [
   'model',
   'endpoint',
   'provider',
+  'profile',
   'skill',
   'processor',
   'plugin',
@@ -260,6 +263,43 @@ export interface ProviderMetadata {
 /** Backward-compatible name for provider marketplace metadata. */
 export type ProviderCardMarketMetadata = ProviderMetadata;
 
+export type ProfilePackageKind = 'artifact' | 'creation' | 'provider-expression';
+export type ProfilePackageHost = 'vscode' | 'cli' | 'tui';
+
+export const PROFILE_PACKAGE_KINDS: readonly ProfilePackageKind[] = [
+  'artifact',
+  'creation',
+  'provider-expression',
+] as const;
+
+export const PROFILE_PACKAGE_HOSTS: readonly ProfilePackageHost[] = [
+  'vscode',
+  'cli',
+  'tui',
+] as const;
+
+export interface ProfilePackageHostRequirement {
+  readonly host: ProfilePackageHost;
+  readonly optional?: boolean;
+  readonly reason?: string;
+}
+
+export interface ProfilePackageEntry {
+  readonly profileId: string;
+  readonly kind: ProfilePackageKind;
+  readonly version: string | number;
+  readonly descriptorPath?: string;
+  readonly displayName?: string;
+}
+
+export interface ProfilePackageMetadata {
+  readonly profileKinds: readonly ProfilePackageKind[];
+  readonly profiles: readonly ProfilePackageEntry[];
+  readonly trustLevel?: AssetProviderTrustLevel;
+  readonly signature?: ProviderSignature;
+  readonly hostRequirements?: readonly ProfilePackageHostRequirement[];
+}
+
 export interface SkillMetadata {
   domain: string[];
   toolSets?: string[];
@@ -416,6 +456,7 @@ export type AssetTypeMetadata =
   | { type: 'model'; data: ModelMetadata }
   | { type: 'endpoint'; data: EndpointMetadata }
   | { type: 'provider'; data: ProviderMetadata }
+  | { type: 'profile'; data: ProfilePackageMetadata }
   | { type: 'skill'; data: SkillMetadata }
   | { type: 'processor'; data: ProcessorMetadata }
   | { type: 'plugin'; data: PluginMetadata }
@@ -569,6 +610,7 @@ export type AssetSemantics =
   | { type: 'plugin'; data: { domain: string[]; useCase: string } }
   | { type: 'endpoint'; data: { latencyTier: 'low' | 'medium' | 'high'; rateLimit?: string } }
   | { type: 'provider'; data: { syntaxStyle: string[]; conceptCoverage: string[] } }
+  | { type: 'profile'; data: { profileKinds: ProfilePackageKind[]; useCase: string } }
   | { type: 'starter'; data: { complexity: 1 | 2 | 3 | 4 | 5; scenario: string } }
   | { type: 'bundle'; data: { theme: string[]; collectionSize: number } };
 
@@ -784,6 +826,8 @@ export interface AssetManifestValidationResult {
 
 const ASSET_TYPE_SET = new Set<string>(ASSET_TYPES);
 const MEDIA_KIND_SET = new Set<string>(MEDIA_KINDS);
+const PROFILE_PACKAGE_KIND_SET = new Set<string>(PROFILE_PACKAGE_KINDS);
+const PROFILE_PACKAGE_HOST_SET = new Set<string>(PROFILE_PACKAGE_HOSTS);
 const BUNDLE_TYPE_SET = new Set<string>(BUNDLE_TYPES);
 const DISTRIBUTION_KIND_SET = new Set<string>(DISTRIBUTION_KINDS);
 const DISTRIBUTION_MODE_SET = new Set<string>(DISTRIBUTION_MODES);
@@ -800,6 +844,14 @@ export function isDistributionKind(value: unknown): value is DistributionKind {
 
 export function isMediaKind(value: unknown): value is MediaKind {
   return typeof value === 'string' && MEDIA_KIND_SET.has(value);
+}
+
+export function isProfilePackageKind(value: unknown): value is ProfilePackageKind {
+  return typeof value === 'string' && PROFILE_PACKAGE_KIND_SET.has(value);
+}
+
+export function isProfilePackageHost(value: unknown): value is ProfilePackageHost {
+  return typeof value === 'string' && PROFILE_PACKAGE_HOST_SET.has(value);
 }
 
 export function isBundleType(value: unknown): value is BundleType {
@@ -1214,6 +1266,9 @@ function validateTypeMetadata(
       requireString(data, 'typeMetadata.data.providerId', issues, 'providerId');
       requireNonEmptyArray(data, 'typeMetadata.data.capabilities', issues, 'capabilities');
       break;
+    case 'profile':
+      validateProfilePackageMetadata(data, issues);
+      break;
     case 'skill':
       requireNonEmptyArray(data, 'typeMetadata.data.domain', issues, 'domain');
       break;
@@ -1272,6 +1327,95 @@ function validateTypeMetadata(
   }
 }
 
+function validateProfilePackageMetadata(
+  data: Record<string, unknown>,
+  issues: AssetManifestValidationIssue[],
+): void {
+  requireNonEmptyArray(data, 'typeMetadata.data.profileKinds', issues, 'profileKinds');
+  if (Array.isArray(data['profileKinds'])) {
+    data['profileKinds'].forEach((kind, index) => {
+      if (!isProfilePackageKind(kind)) {
+        issues.push({
+          field: `typeMetadata.data.profileKinds.${index}`,
+          message: 'must be a known profile package kind',
+        });
+      }
+    });
+  }
+
+  requireNonEmptyArray(data, 'typeMetadata.data.profiles', issues, 'profiles');
+  if (Array.isArray(data['profiles'])) {
+    const declaredKinds = new Set(
+      Array.isArray(data['profileKinds'])
+        ? data['profileKinds'].filter(isProfilePackageKind)
+        : [],
+    );
+
+    data['profiles'].forEach((profile, index) => {
+      const field = `typeMetadata.data.profiles.${index}`;
+      if (!isRecord(profile)) {
+        issues.push({ field, message: 'must be an object' });
+        return;
+      }
+
+      requireString(profile, `${field}.profileId`, issues, 'profileId');
+      if (!isProfilePackageKind(profile['kind'])) {
+        issues.push({ field: `${field}.kind`, message: 'must be a known profile package kind' });
+      } else if (declaredKinds.size > 0 && !declaredKinds.has(profile['kind'])) {
+        issues.push({
+          field: `${field}.kind`,
+          message: 'must be declared in profileKinds',
+        });
+      }
+
+      if (!isProfilePackageVersion(profile['version'])) {
+        issues.push({
+          field: `${field}.version`,
+          message: 'must be a non-empty string or integer',
+        });
+      }
+
+      if (profile['descriptorPath'] !== undefined) {
+        if (!isPackageRelativePath(profile['descriptorPath'])) {
+          issues.push({
+            field: `${field}.descriptorPath`,
+            message: 'must be a package-relative path',
+          });
+        }
+      }
+    });
+  }
+
+  if (
+    data['trustLevel'] !== undefined &&
+    data['trustLevel'] !== 'core' &&
+    data['trustLevel'] !== 'community' &&
+    data['trustLevel'] !== 'untrusted'
+  ) {
+    issues.push({
+      field: 'typeMetadata.data.trustLevel',
+      message: 'profile trustLevel must be core, community, or untrusted',
+    });
+  }
+
+  if (data['hostRequirements'] !== undefined) {
+    if (!Array.isArray(data['hostRequirements'])) {
+      issues.push({ field: 'typeMetadata.data.hostRequirements', message: 'must be an array' });
+    } else {
+      data['hostRequirements'].forEach((requirement, index) => {
+        const field = `typeMetadata.data.hostRequirements.${index}`;
+        if (!isRecord(requirement)) {
+          issues.push({ field, message: 'must be an object' });
+          return;
+        }
+        if (!isProfilePackageHost(requirement['host'])) {
+          issues.push({ field: `${field}.host`, message: 'must be vscode, cli, or tui' });
+        }
+      });
+    }
+  }
+}
+
 function validateIntent(
   manifest: Record<string, unknown>,
   issues: AssetManifestValidationIssue[],
@@ -1301,6 +1445,22 @@ function validateIntent(
 
 function isDistributionMode(value: unknown): value is DistributionMode {
   return typeof value === 'string' && DISTRIBUTION_MODE_SET.has(value);
+}
+
+function isProfilePackageVersion(value: unknown): value is ProfilePackageEntry['version'] {
+  if (typeof value === 'number') {
+    return Number.isInteger(value) && value >= 0;
+  }
+  return isNonEmptyString(value);
+}
+
+function isPackageRelativePath(value: unknown): value is string {
+  return (
+    isNonEmptyString(value) &&
+    !isAbsolutePath(value) &&
+    !value.includes('..') &&
+    !value.startsWith('\\')
+  );
 }
 
 function requireString(

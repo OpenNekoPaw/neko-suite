@@ -231,6 +231,60 @@ describe('config-reader typed results', () => {
     );
   });
 
+  it('preserves model provider expression profile references from TOML metadata', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[[models]]',
+        'id = "flux-pro"',
+        'name = "flux-pro"',
+        'provider_id = "flux"',
+        'type = "image"',
+        'capabilities = ["image.generate"]',
+        'provider_expression_profile_id = "provider-expression:flux:flux-pro"',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') throw new Error('Expected ok result');
+    expect(result.config.models?.[0]).toEqual(
+      expect.objectContaining({
+        providerExpressionProfileId: 'provider-expression:flux:flux-pro',
+      }),
+    );
+  });
+
+  it('rejects user-authored profile schema sections in TOML', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[[models]]',
+        'id = "flux-pro"',
+        'name = "flux-pro"',
+        'provider_id = "flux"',
+        'type = "image"',
+        'capabilities = ["image.generate"]',
+        '',
+        '[[artifact_profiles]]',
+        'profile_id = "studio.storyboard"',
+        'version = 1',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('unsupportedProfileSchemaSection');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain(
+      'artifact_profiles is not a supported TOML profile schema section',
+    );
+  });
+
   it('keeps default output tokens separate from model context and output metadata', () => {
     const filePath = path.join(createTempRoot(), 'config.toml');
     fs.writeFileSync(

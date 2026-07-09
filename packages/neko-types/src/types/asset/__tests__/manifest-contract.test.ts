@@ -62,8 +62,86 @@ describe('AssetManifest v4 contract', () => {
     expect(CATEGORY_MAP.model).toBe('ai');
     expect(CATEGORY_MAP.endpoint).toBe('ai');
     expect(CATEGORY_MAP.provider).toBe('ai');
+    expect(CATEGORY_MAP.profile).toBe('tooling');
     expect(CATEGORY_MAP.processor).toBe('tooling');
     expect(getAssetCategory('bundle')).toBe('bundle');
+  });
+
+  it('accepts profile-only packages without skill metadata', () => {
+    const manifest = validManifest({
+      id: '@studio/storyboard-profiles',
+      name: 'storyboard-profiles',
+      type: 'profile',
+      typeMetadata: {
+        type: 'profile',
+        data: {
+          profileKinds: ['artifact', 'creation'],
+          trustLevel: 'community',
+          hostRequirements: [{ host: 'vscode' }, { host: 'tui', optional: true }],
+          profiles: [
+            {
+              profileId: 'studio.storyboard.v1',
+              kind: 'artifact',
+              version: 1,
+              descriptorPath: 'profiles/storyboard.profile.json',
+            },
+            {
+              profileId: 'studio.review.lifecycle',
+              kind: 'creation',
+              version: '1.0.0',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(isAssetType('profile')).toBe(true);
+    expect(parseAssetManifest(manifest).type).toBe('profile');
+  });
+
+  it('rejects malformed profile package catalog metadata', () => {
+    const result = validateAssetManifest(
+      validManifest({
+        type: 'profile',
+        typeMetadata: {
+          type: 'profile',
+          data: {
+            profileKinds: ['artifact'],
+            profiles: [
+              {
+                profileId: 'studio.creation',
+                kind: 'creation',
+                version: '',
+                descriptorPath: '../escape.json',
+              },
+            ],
+            hostRequirements: [{ host: 'browser' }],
+          },
+        },
+      }),
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        {
+          field: 'typeMetadata.data.profiles.0.kind',
+          message: 'must be declared in profileKinds',
+        },
+        {
+          field: 'typeMetadata.data.profiles.0.version',
+          message: 'must be a non-empty string or integer',
+        },
+        {
+          field: 'typeMetadata.data.profiles.0.descriptorPath',
+          message: 'must be a package-relative path',
+        },
+        {
+          field: 'typeMetadata.data.hostRequirements.0.host',
+          message: 'must be vscode, cli, or tui',
+        },
+      ]),
+    );
   });
 
   it('accepts processor market metadata with a package-relative processor manifest path', () => {

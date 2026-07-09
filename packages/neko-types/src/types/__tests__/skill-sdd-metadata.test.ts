@@ -20,6 +20,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  collectSkillProfileReferences,
   toConfiguredSkillCatalogEntry,
   toLazySkillCatalogEntry,
   toSkillCatalogEntry,
@@ -359,6 +360,19 @@ describe('validateSkillManifest — standalone manifest pass', () => {
         { uri: 'asset://styles/cinematic-lut', required: false, purpose: 'default LUT' },
       ],
       referencedSkills: [{ id: 'audio-expert', relationship: 'collaborator' }],
+      profileReferences: [
+        {
+          profileId: 'studio.creation.review',
+          kind: 'creation',
+          relationship: 'requires',
+          versionRange: '^1.0.0',
+        },
+        {
+          profileId: 'comic-shot-asset-prep',
+          kind: 'artifact',
+          relationship: 'produces',
+        },
+      ],
       mediaWorkflow: {
         acceptedModalities: ['comic', 'image-sequence'],
         producedArtifacts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
@@ -495,6 +509,45 @@ describe('validateSkillManifest — standalone manifest pass', () => {
         'mediaWorkflow.riskLevel must be "low", "medium", "high", or "destructive"',
       ]),
     );
+  });
+
+  it('rejects malformed profile references', () => {
+    const r = validateSkillManifest(
+      baseManifest({
+        profileReferences: [
+          {
+            profileId: '',
+            kind: 'workflow',
+            relationship: 'owns',
+            versionRange: '',
+          },
+        ] as unknown as SkillManifest['profileReferences'],
+      }),
+    );
+
+    expect(r.valid).toBe(false);
+    expect(r.errors).toEqual(
+      expect.arrayContaining([
+        'profileReferences[0].profileId must be a non-empty string',
+        'profileReferences[0].kind must be a supported Agent profile kind',
+        'profileReferences[0].relationship must be "consumes", "produces", "requires", or "prefers"',
+        'profileReferences[0].versionRange must be a non-empty string',
+      ]),
+    );
+  });
+
+  it('normalizes mediaWorkflow artifactProfiles as produced Artifact Profile references', () => {
+    expect(
+      collectSkillProfileReferences({
+        profileReferences: [
+          { profileId: 'studio.creation.review', kind: 'creation', relationship: 'requires' },
+        ],
+        mediaWorkflow: { artifactProfiles: ['comic-shot-asset-prep'] },
+      }),
+    ).toEqual([
+      { profileId: 'studio.creation.review', kind: 'creation', relationship: 'requires' },
+      { profileId: 'comic-shot-asset-prep', kind: 'artifact', relationship: 'produces' },
+    ]);
   });
 });
 

@@ -9,6 +9,9 @@ export type AgentCapabilityContributionKind =
   | 'toolGroup'
   | 'promptFragment'
   | 'providerCard'
+  | 'artifactProfile'
+  | 'creationProfile'
+  | 'providerExpressionProfile'
   | 'referenceContributor';
 
 export interface AgentCapabilityAvailabilityDiagnostic {

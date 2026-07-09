@@ -9,6 +9,7 @@ import {
 
 const profile: ArtifactProfileDescriptor = {
   profileId: 'comic-shot-asset-prep',
+  kind: 'artifact',
   protocol: 'GenericTable',
   version: 1,
   source: 'skill-local',
@@ -113,6 +114,19 @@ describe('composite artifact contracts', () => {
     );
   });
 
+  it('fails closed when a persisted artifact references a missing profile descriptor', () => {
+    const table = makeTable({ profile: 'studio.missing-profile' });
+
+    const result = validateGenericTable(table, { profiles: [], persisted: true });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'missing-profile-descriptor', severity: 'error' }),
+      ]),
+    );
+  });
+
   it('allows temporary profiled chat tables to omit profileVersion', () => {
     const result = validateGenericTable(makeTable({ profileVersion: undefined }), {
       profiles: [profile],
@@ -154,9 +168,10 @@ describe('composite artifact contracts', () => {
   it('enforces profile enum values, resource media types, schema refs, and suggested actions', () => {
     const strictProfile: ArtifactProfileDescriptor = {
       profileId: 'strict-shot-profile',
+      kind: 'artifact',
       protocol: 'GenericTable',
       version: 1,
-      source: 'shared',
+      source: 'builtin',
       columns: [
         { columnId: 'review', cellType: 'enum', required: true, enumValues: ['approved'] },
         {
@@ -222,6 +237,7 @@ describe('composite artifact contracts', () => {
   it('composes profile columns from reusable field groups with explicit column overrides', () => {
     const composedProfile: ArtifactProfileDescriptor = {
       profileId: 'comic-shot-review',
+      kind: 'artifact',
       protocol: 'GenericTable',
       version: 1,
       source: 'skill-local',
@@ -297,6 +313,7 @@ describe('composite artifact contracts', () => {
   it('fails closed when composed profile field groups reference unknown fields', () => {
     const brokenProfile: ArtifactProfileDescriptor = {
       profileId: 'broken-comic-shot-review',
+      kind: 'artifact',
       protocol: 'GenericTable',
       version: 1,
       source: 'skill-local',

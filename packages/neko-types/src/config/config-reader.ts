@@ -32,6 +32,7 @@ export type ConfigReadErrorCode =
   | 'duplicateModelId'
   | 'invalidDefaultMaxTokens'
   | 'invalidModelTokenMetadata'
+  | 'unsupportedProfileSchemaSection'
   | 'unsupportedModelType'
   | 'unsupportedDefaultMediaModelType'
   | 'unsupportedDefaultModelType'
@@ -220,6 +221,9 @@ function getConfigReadErrorCode(error: unknown): ConfigReadErrorCode {
   if (isTomlValidationError(error, 'invalidModelTokenMetadata')) {
     return 'invalidModelTokenMetadata';
   }
+  if (isTomlValidationError(error, 'unsupportedProfileSchemaSection')) {
+    return 'unsupportedProfileSchemaSection';
+  }
   if (isTomlValidationError(error, 'unsupportedModelType')) return 'unsupportedModelType';
   if (isTomlValidationError(error, 'unsupportedDefaultMediaModelType')) {
     return 'unsupportedDefaultMediaModelType';
@@ -351,6 +355,13 @@ function buildConfigReadDiagnostic(
         code,
         filePath,
         message: `Configuration file contains invalid model token metadata: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedProfileSchemaSection':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains unsupported Agent profile schema sections: ${filePath}`,
         ...(detail !== undefined ? { detail } : {}),
       };
     case 'unsupportedModelType':

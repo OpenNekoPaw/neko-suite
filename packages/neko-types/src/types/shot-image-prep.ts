@@ -263,9 +263,10 @@ export interface DeriveShotImagePrepPlansResult {
 
 export const COMIC_SHOT_ASSET_PREP_PROFILE: ArtifactProfileDescriptor = {
   profileId: COMIC_SHOT_ASSET_PREP_PROFILE_ID,
+  kind: 'artifact',
   protocol: 'GenericTable',
   version: COMIC_SHOT_ASSET_PREP_PROFILE_VERSION,
-  source: 'shared',
+  source: 'builtin',
   title: 'Comic Shot Asset Prep',
   fieldDefinitions: [
     { columnId: 'shotId', cellType: 'string', required: true },

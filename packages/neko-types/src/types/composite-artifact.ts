@@ -1,5 +1,17 @@
 import type { DocumentArchiveResourceRef, DocumentSourceRef } from './document-reading';
 import type { ResourceRef } from './resource-cache';
+import {
+  AGENT_PROFILE_SOURCES,
+  createAgentProfileDiagnostic,
+  toAgentProfileValidationResult,
+  validateAgentProfileDescriptorSet,
+  validateAgentProfileIdentity,
+  type AgentProfileIdentity,
+  type AgentProfileDiagnostic,
+  type AgentProfileSource,
+  type AgentProfileValidationResult,
+  type IAgentProfileRegistry,
+} from './agent-profile';
 
 export const COMPOSITE_ARTIFACT_SCHEMA_VERSION = 1 as const;
 export const COMPOSITE_ARTIFACT_PROTOCOL = 'CompositeArtifact' as const;
@@ -40,7 +52,7 @@ export const ARTIFACT_ACTION_RISK_LEVELS = ['low', 'medium', 'high', 'destructiv
 
 export const ARTIFACT_DIAGNOSTIC_SEVERITIES = ['error', 'warning', 'info', 'suggestion'] as const;
 
-export const ARTIFACT_PROFILE_SOURCES = ['skill-local', 'shared'] as const;
+export const ARTIFACT_PROFILE_SOURCES = AGENT_PROFILE_SOURCES;
 
 export const ARTIFACT_MEDIA_TYPES = [
   'image',
@@ -77,7 +89,7 @@ export type ArtifactActionRiskLevel = (typeof ARTIFACT_ACTION_RISK_LEVELS)[numbe
 
 export type ArtifactDiagnosticSeverity = (typeof ARTIFACT_DIAGNOSTIC_SEVERITIES)[number];
 
-export type ArtifactProfileSource = (typeof ARTIFACT_PROFILE_SOURCES)[number];
+export type ArtifactProfileSource = AgentProfileSource;
 
 export type ArtifactMediaType = (typeof ARTIFACT_MEDIA_TYPES)[number];
 
@@ -98,6 +110,7 @@ export type ArtifactDiagnosticCode =
   | 'invalid-profile'
   | 'unsupported-profile-version'
   | 'missing-profile-descriptor'
+  | 'skill-local-profile-persisted'
   | 'profile-field-group-missing'
   | 'profile-field-definition-missing'
   | 'profile-column-mismatch'
@@ -363,23 +376,25 @@ export type GenericTableCell =
     }
   | { readonly type: 'action'; readonly value: ArtifactAction };
 
-export interface ArtifactProfileDescriptor {
-  readonly profileId: string;
+export interface ArtifactProfileDescriptor extends AgentProfileIdentity<'artifact', number> {
   readonly protocol: typeof COMPOSITE_ARTIFACT_PROTOCOL | typeof GENERIC_TABLE_PROTOCOL | string;
-  readonly version: number;
-  readonly source: ArtifactProfileSource;
   readonly title?: string;
   readonly blockComposition?: readonly ArtifactProfileBlockRule[];
   readonly fieldDefinitions?: readonly ArtifactProfileFieldDefinition[];
   readonly fieldGroups?: readonly ArtifactProfileFieldGroup[];
   readonly includeFieldGroups?: readonly string[];
   readonly columns?: readonly ArtifactProfileColumnRule[];
+  readonly schemaRefs?: readonly ArtifactProfileSchemaRef[];
+  readonly resourceConstraints?: readonly ArtifactProfileResourceConstraint[];
+  readonly operationRequirements?: readonly ArtifactProfileOperationRequirement[];
   readonly display?: ArtifactProfileDisplayHints;
   readonly validators?: readonly string[];
   readonly suggestedActions?: readonly ArtifactAction[];
   readonly mappings?: readonly ArtifactProfileMapping[];
   readonly extensions?: ArtifactExtensionMap;
 }
+
+export type IArtifactProfileRegistry = IAgentProfileRegistry<ArtifactProfileDescriptor>;
 
 export interface ArtifactProfileBlockRule {
   readonly kind: CompositeArtifactBlockKind;
@@ -408,6 +423,28 @@ export interface ArtifactProfileColumnRule {
   readonly schemaRef?: string;
   readonly resourceMediaTypes?: readonly ArtifactMediaType[];
   readonly shape?: ArtifactJsonShapeRule;
+}
+
+export interface ArtifactProfileSchemaRef {
+  readonly schemaId: string;
+  readonly version?: string | number;
+  readonly required?: boolean;
+}
+
+export interface ArtifactProfileResourceConstraint {
+  readonly constraintId: string;
+  readonly mediaTypes?: readonly ArtifactMediaType[];
+  readonly required?: boolean;
+  readonly appliesToColumnIds?: readonly string[];
+  readonly appliesToBlockRoles?: readonly string[];
+}
+
+export interface ArtifactProfileOperationRequirement {
+  readonly operationId: string;
+  readonly capabilityId?: string;
+  readonly validatorId?: string;
+  readonly required?: boolean;
+  readonly risk?: ArtifactActionRiskLevel;
 }
 
 export interface ArtifactJsonShapeRule {
@@ -450,6 +487,63 @@ export interface ArtifactExecutionSummary {
   readonly updatedRefs?: readonly ArtifactResourceRef[];
   readonly diagnostics?: readonly ArtifactDiagnostic[];
   readonly metadata?: ArtifactJsonRecord;
+}
+
+export function validateArtifactProfileDescriptor(
+  descriptor: unknown,
+): AgentProfileValidationResult {
+  const diagnostics = [
+    ...validateAgentProfileIdentity(descriptor, { expectedKind: 'artifact' }).diagnostics,
+  ];
+
+  if (!isRecord(descriptor)) {
+    return toAgentProfileValidationResult(diagnostics);
+  }
+
+  if (
+    typeof descriptor['protocol'] !== 'string' ||
+    descriptor['protocol'].trim().length === 0
+  ) {
+    diagnostics.push(
+      createAgentProfileDiagnostic({
+        severity: 'error',
+        code: 'malformed-profile-descriptor',
+        path: ['protocol'],
+        profileId: readProfileIdFromDescriptor(descriptor),
+        kind: 'artifact',
+        message: 'Artifact profile descriptor must declare protocol.',
+      }),
+    );
+  }
+
+  validateArtifactProfileColumnRules(descriptor['columns'], ['columns'], descriptor, diagnostics);
+  validateArtifactProfileColumnRules(
+    descriptor['fieldDefinitions'],
+    ['fieldDefinitions'],
+    descriptor,
+    diagnostics,
+  );
+  validateStringArrayDescriptorField(descriptor['validators'], ['validators'], descriptor, diagnostics);
+  validateArtifactProfileSchemaRefs(descriptor['schemaRefs'], descriptor, diagnostics);
+
+  return toAgentProfileValidationResult(diagnostics);
+}
+
+export function validateArtifactProfileDescriptorSet(
+  descriptors: readonly ArtifactProfileDescriptor[],
+): AgentProfileValidationResult {
+  const diagnostics = [
+    ...validateAgentProfileDescriptorSet(descriptors, { expectedKind: 'artifact' }).diagnostics,
+  ];
+  for (const [index, descriptor] of descriptors.entries()) {
+    diagnostics.push(
+      ...validateArtifactProfileDescriptor(descriptor).diagnostics.map((diagnostic) => ({
+        ...diagnostic,
+        path: ['profiles', index, ...(diagnostic.path ?? [])],
+      })),
+    );
+  }
+  return toAgentProfileValidationResult(diagnostics);
 }
 
 export function validateCompositeArtifact(
@@ -528,6 +622,150 @@ export function validateGenericTable(
 
   validateProfileForGenericTable(value, diagnostics, options);
   return artifactValidationResult(diagnostics, options);
+}
+
+function validateArtifactProfileColumnRules(
+  value: unknown,
+  path: readonly ArtifactPathSegment[],
+  descriptor: Record<string, unknown>,
+  diagnostics: AgentProfileDiagnostic[],
+): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    diagnostics.push(
+      createAgentProfileDiagnostic({
+        severity: 'error',
+        code: 'malformed-profile-descriptor',
+        path,
+        profileId: readProfileIdFromDescriptor(descriptor),
+        kind: 'artifact',
+        message: 'Artifact profile column rules must be an array.',
+      }),
+    );
+    return;
+  }
+
+  value.forEach((rule, index) => {
+    if (!isRecord(rule)) {
+      diagnostics.push(
+        createAgentProfileDiagnostic({
+          severity: 'error',
+          code: 'malformed-profile-descriptor',
+          path: [...path, index],
+          profileId: readProfileIdFromDescriptor(descriptor),
+          kind: 'artifact',
+          message: 'Artifact profile column rule must be an object.',
+        }),
+      );
+      return;
+    }
+    if (typeof rule['columnId'] !== 'string' || rule['columnId'].trim().length === 0) {
+      diagnostics.push(
+        createAgentProfileDiagnostic({
+          severity: 'error',
+          code: 'malformed-profile-descriptor',
+          path: [...path, index, 'columnId'],
+          profileId: readProfileIdFromDescriptor(descriptor),
+          kind: 'artifact',
+          message: 'Artifact profile column rule must declare columnId.',
+        }),
+      );
+    }
+    if (!isGenericTableCellType(rule['cellType'])) {
+      diagnostics.push(
+        createAgentProfileDiagnostic({
+          severity: 'error',
+          code: 'malformed-profile-descriptor',
+          path: [...path, index, 'cellType'],
+          profileId: readProfileIdFromDescriptor(descriptor),
+          kind: 'artifact',
+          message: 'Artifact profile column rule must declare a supported cellType.',
+          expected: GENERIC_TABLE_CELL_TYPES.join(', '),
+          actual: rule['cellType'],
+        }),
+      );
+    }
+  });
+}
+
+function validateStringArrayDescriptorField(
+  value: unknown,
+  path: readonly ArtifactPathSegment[],
+  descriptor: Record<string, unknown>,
+  diagnostics: AgentProfileDiagnostic[],
+): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    diagnostics.push(
+      createAgentProfileDiagnostic({
+        severity: 'error',
+        code: 'malformed-profile-descriptor',
+        path,
+        profileId: readProfileIdFromDescriptor(descriptor),
+        kind: 'artifact',
+        message: 'Artifact profile descriptor field must be an array of strings.',
+      }),
+    );
+    return;
+  }
+  value.forEach((entry, index) => {
+    if (typeof entry !== 'string' || entry.trim().length === 0) {
+      diagnostics.push(
+        createAgentProfileDiagnostic({
+          severity: 'error',
+          code: 'malformed-profile-descriptor',
+          path: [...path, index],
+          profileId: readProfileIdFromDescriptor(descriptor),
+          kind: 'artifact',
+          message: 'Artifact profile descriptor field entry must be a non-empty string.',
+          actual: entry,
+        }),
+      );
+    }
+  });
+}
+
+function validateArtifactProfileSchemaRefs(
+  value: unknown,
+  descriptor: Record<string, unknown>,
+  diagnostics: AgentProfileDiagnostic[],
+): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    diagnostics.push(
+      createAgentProfileDiagnostic({
+        severity: 'error',
+        code: 'malformed-profile-descriptor',
+        path: ['schemaRefs'],
+        profileId: readProfileIdFromDescriptor(descriptor),
+        kind: 'artifact',
+        message: 'Artifact profile schemaRefs must be an array.',
+      }),
+    );
+    return;
+  }
+  value.forEach((schemaRef, index) => {
+    if (
+      !isRecord(schemaRef) ||
+      typeof schemaRef['schemaId'] !== 'string' ||
+      schemaRef['schemaId'].trim().length === 0
+    ) {
+      diagnostics.push(
+        createAgentProfileDiagnostic({
+          severity: 'error',
+          code: 'malformed-profile-descriptor',
+          path: ['schemaRefs', index, 'schemaId'],
+          profileId: readProfileIdFromDescriptor(descriptor),
+          kind: 'artifact',
+          message: 'Artifact profile schemaRef must declare schemaId.',
+        }),
+      );
+    }
+  });
+}
+
+function readProfileIdFromDescriptor(descriptor: Record<string, unknown>): string | undefined {
+  return typeof descriptor['profileId'] === 'string' ? descriptor['profileId'] : undefined;
 }
 
 function validateCompositeArtifactBlock(
@@ -1323,11 +1561,14 @@ function findProfileDescriptor(
     const exact = descriptors.find(
       (descriptor) => descriptor.profileId === profileId && descriptor.version === version,
     );
-    if (exact) return exact;
+    if (exact) {
+      return isArtifactProfileUsableForValidation(exact, diagnostics, options) ? exact : undefined;
+    }
     const profileExists = descriptors.some((descriptor) => descriptor.profileId === profileId);
+    const severity = profileExists || options.persisted ? 'error' : 'warning';
     diagnostics.push(
       artifactDiagnostic(
-        profileExists ? 'error' : 'warning',
+        severity,
         profileExists ? 'unsupported-profile-version' : 'missing-profile-descriptor',
         ['profile'],
         profileExists
@@ -1344,7 +1585,7 @@ function findProfileDescriptor(
   if (!descriptor) {
     diagnostics.push(
       artifactDiagnostic(
-        'warning',
+        options.persisted ? 'error' : 'warning',
         'missing-profile-descriptor',
         ['profile'],
         'No profile descriptor is available for this profile.',
@@ -1352,7 +1593,38 @@ function findProfileDescriptor(
       ),
     );
   }
-  return descriptor;
+  if (!descriptor) return undefined;
+  return isArtifactProfileUsableForValidation(descriptor, diagnostics, options)
+    ? descriptor
+    : undefined;
+}
+
+function isArtifactProfileUsableForValidation(
+  descriptor: ArtifactProfileDescriptor,
+  diagnostics: ArtifactDiagnostic[],
+  options: ArtifactValidationOptions,
+): boolean {
+  if (!options.persisted || descriptor.source !== 'skill-local') {
+    return true;
+  }
+
+  diagnostics.push(
+    artifactDiagnostic(
+      'error',
+      'skill-local-profile-persisted',
+      ['profile'],
+      'Persisted artifacts cannot reference skill-local profile descriptors.',
+      {
+        expected: 'builtin, package, market, project, personal',
+        actual: descriptor.source,
+        details: {
+          profileId: descriptor.profileId,
+          profileVersion: descriptor.version,
+        },
+      },
+    ),
+  );
+  return false;
 }
 
 function validateOptionalProfileVersion(

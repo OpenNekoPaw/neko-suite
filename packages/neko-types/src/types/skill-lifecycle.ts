@@ -183,6 +183,12 @@ export interface SkillLifecyclePromptSectionProjection {
 
 export interface SkillLifecycleToolPolicyProjection {
   readonly mode: SkillLifecycleToolPolicyMode;
+  /**
+   * Tools contributed by active lifecycle records for eager/lazy ToolSet activation.
+   * This is intentionally separate from allowedTools: reference skills may expose
+   * supplemental tools without tightening the effective ToolGuard allowlist.
+   */
+  readonly activationTools?: readonly string[];
   readonly allowedTools?: readonly string[];
   readonly contributingRecordIds: readonly string[];
   readonly diagnostics: readonly SkillLifecycleDiagnostic[];

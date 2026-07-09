@@ -15,7 +15,9 @@ import type { ToolGroup } from './tool-group';
 import type { Skill } from './skill';
 import type { LoadingTier } from './loading-tier';
 import type { PromptFragment } from './prompt-fragment';
-import type { ProviderCard } from './provider-card';
+import type { ProviderCard, ProviderExpressionProfileDescriptor } from './provider-card';
+import type { ArtifactProfileDescriptor } from './composite-artifact';
+import type { CreationProfileDescriptor } from './creation-profile';
 import type { PerceptionCapabilityFacet } from './comic-animation-indexing';
 import type { ReferenceContributorManifest } from './reference-resolution';
 import type { AgentCapabilityLifecycleDescriptor } from './agent-capability-lifecycle';
@@ -103,7 +105,13 @@ export interface AgentCapabilityManifest extends AgentCapabilityProtocolMetadata
  */
 export interface CapabilityDeclaration extends AgentCapabilityRuntimeRequirementDescriptor {
   /** Capability type */
-  type: 'tool' | 'skill' | 'toolGroup';
+  type:
+    | 'tool'
+    | 'skill'
+    | 'toolGroup'
+    | 'artifactProfile'
+    | 'creationProfile'
+    | 'providerExpressionProfile';
 
   /** Name (must match the runtime Tool.name / Skill.name / ToolGroup.name) */
   name: string;
@@ -304,6 +312,22 @@ export interface AgentCapabilityProvider extends AgentCapabilityProtocolMetadata
   getPromptFragments?(context: AgentCapabilityContext): PromptFragment[];
 
   /**
+   * Optional: Return Artifact Profiles contributed by this provider/package.
+   *
+   * Profiles are registered independently from Skills. Registration must not
+   * activate any Skill or inject prompt content.
+   */
+  getArtifactProfiles?(context: AgentCapabilityContext): ArtifactProfileDescriptor[];
+
+  /**
+   * Optional: Return Creation Profiles contributed by this provider/package.
+   *
+   * Creation Profiles describe lifecycle semantics and policy descriptors; they
+   * do not execute tools or mutate projects by themselves.
+   */
+  getCreationProfiles?(context: AgentCapabilityContext): CreationProfileDescriptor[];
+
+  /**
    * Optional: Return ProviderCards contributed by this sub-package.
    *
    * ProviderCards describe model syntax, concept coverage, and training-profile
@@ -312,6 +336,15 @@ export interface AgentCapabilityProvider extends AgentCapabilityProtocolMetadata
    * compatibility with existing AgentCapabilityProvider implementations.
    */
   getProviderCards?(context: AgentCapabilityContext): ProviderCard[];
+
+  /**
+   * Optional: Return provider/model expression profiles contributed by this
+   * provider/package. Implementations may initially derive these from
+   * getProviderCards() to preserve ProviderCard compatibility.
+   */
+  getProviderExpressionProfiles?(
+    context: AgentCapabilityContext,
+  ): ProviderExpressionProfileDescriptor[];
 
   /**
    * Optional: Return artifact protocol/profile/renderer/projector/capability

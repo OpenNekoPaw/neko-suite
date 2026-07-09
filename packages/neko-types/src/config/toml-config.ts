@@ -40,6 +40,9 @@ export interface NekoTomlConfig {
   readonly providers?: readonly TomlProviderConfig[];
   readonly models?: readonly TomlModelConfig[];
   readonly mcp_servers?: readonly TomlMcpServerConfig[];
+  readonly artifact_profiles?: unknown;
+  readonly creation_profiles?: unknown;
+  readonly provider_expression_profiles?: unknown;
   readonly provider_overrides?: Record<string, Partial<TomlProviderConfig>>;
   readonly model_overrides?: Record<string, Partial<TomlModelConfig>>;
   readonly mcp_server_overrides?: Record<string, Partial<TomlMcpServerConfig>>;
@@ -112,6 +115,7 @@ export interface TomlModelConfig {
   readonly output_cost_per_1k?: number;
   readonly enabled?: boolean;
   readonly options?: Record<string, unknown>;
+  readonly provider_expression_profile_id?: string;
 }
 
 export interface TomlMcpServerConfig {
@@ -146,6 +150,7 @@ export interface TomlConfigValidationIssue {
     | 'duplicateModelId'
     | 'invalidDefaultMaxTokens'
     | 'invalidModelTokenMetadata'
+    | 'unsupportedProfileSchemaSection'
     | 'unsupportedModelType'
     | 'unsupportedDefaultMediaModelType'
     | 'unsupportedDefaultModelType';
@@ -293,6 +298,7 @@ export function validateTomlConfig(config: NekoTomlConfig): void {
   collectUnsupportedProviderIssues(config.providers, 'providers', issues);
   collectUnsupportedProviderOverrideIssues(config.provider_overrides, issues);
   collectUnsupportedDefaultMediaModelIssues(config.default_media_models, issues);
+  collectUnsupportedProfileSchemaIssues(config, issues);
   collectUnsupportedModelTypeIssues(config.models, 'models', issues);
   collectUnsupportedModelProtocolProfileIssues(config.models, 'models', issues);
   collectUnsupportedModelProtocolIssues(config.models, 'models', issues);
@@ -458,6 +464,7 @@ function tomlModelToRuntime(model: TomlModelConfig): ModelConfig {
     maxOutputTokens: model.max_output_tokens,
     inputCostPer1k: model.input_cost_per_1k,
     outputCostPer1k: model.output_cost_per_1k,
+    providerExpressionProfileId: model.provider_expression_profile_id,
     enabled: model.enabled ?? true,
     options: model.options,
   }) as ModelConfig;
@@ -479,6 +486,7 @@ function runtimeModelToToml(model: ModelConfig): TomlModelConfig {
     max_output_tokens: model.maxOutputTokens,
     input_cost_per_1k: model.inputCostPer1k,
     output_cost_per_1k: model.outputCostPer1k,
+    provider_expression_profile_id: model.providerExpressionProfileId,
     enabled: model.enabled,
     options: model.options,
   }) as TomlModelConfig;
@@ -528,6 +536,7 @@ function tomlModelOverrideToRuntime(model: Partial<TomlModelConfig>): Partial<Mo
     maxOutputTokens: model.max_output_tokens,
     inputCostPer1k: model.input_cost_per_1k,
     outputCostPer1k: model.output_cost_per_1k,
+    providerExpressionProfileId: model.provider_expression_profile_id,
     enabled: model.enabled,
     options: model.options,
   });
@@ -549,6 +558,7 @@ function runtimeModelOverrideToToml(model: Partial<ModelConfig>): Partial<TomlMo
     max_output_tokens: model.maxOutputTokens,
     input_cost_per_1k: model.inputCostPer1k,
     output_cost_per_1k: model.outputCostPer1k,
+    provider_expression_profile_id: model.providerExpressionProfileId,
     enabled: model.enabled,
     options: model.options,
   });
@@ -584,6 +594,30 @@ function collectUnsupportedDefaultMediaModelIssues(
     message:
       'Unsupported default_media_models section. Configure default models under [default_models.llm], [default_models.image], [default_models.video], and [default_models.audio].',
   });
+}
+
+function collectUnsupportedProfileSchemaIssues(
+  config: Pick<
+    NekoTomlConfig,
+    'artifact_profiles' | 'creation_profiles' | 'provider_expression_profiles'
+  >,
+  issues: TomlConfigValidationIssue[],
+): void {
+  const sectionNames = [
+    'artifact_profiles',
+    'creation_profiles',
+    'provider_expression_profiles',
+  ] as const;
+  for (const sectionName of sectionNames) {
+    if (config[sectionName] === undefined) continue;
+    issues.push({
+      code: 'unsupportedProfileSchemaSection',
+      path: sectionName,
+      message:
+        `${sectionName} is not a supported TOML profile schema section. ` +
+        'Install or contribute Agent profile packages and reference provider_expression_profile_id from model metadata instead.',
+    });
+  }
 }
 
 function collectUnsupportedModelTypeIssues(

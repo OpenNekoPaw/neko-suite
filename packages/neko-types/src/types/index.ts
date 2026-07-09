@@ -115,6 +115,7 @@ export * from './agent-capability-activation';
 export * from './agent-capability-diagnostics';
 export * from './agent-capability-lifecycle';
 export * from './agent-feedback';
+export * from './agent-profile';
 export * from './reference-contributor';
 
 // Agent execution trace contracts
@@ -395,6 +396,7 @@ export * from './prompt-fragment';
 
 // Provider card expression context contracts
 export * from './provider-card';
+export * from './creation-profile';
 
 // Creative entity graph types (cross-modal relationship graph, ADR Phase 3)
 export * from './creative-entity-graph';

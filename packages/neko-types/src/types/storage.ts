@@ -27,6 +27,7 @@ export interface IGlobalStorageLayout {
   readonly marketInstalled: string;
   readonly conversations: string;
   readonly providerCards: string;
+  readonly profiles: string;
   readonly processors: string;
   readonly agentsMd: string;
   readonly config: string;
@@ -96,6 +97,7 @@ export function resolveGlobalStorageLayout(homedir: string): IGlobalStorageLayou
     marketInstalled: join(root, 'market-installed.json'),
     conversations: join(root, 'conversations'),
     providerCards: join(root, 'providers'),
+    profiles: join(root, 'profiles'),
     processors: join(root, 'processors'),
   };
 }

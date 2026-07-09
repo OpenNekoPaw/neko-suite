@@ -18,6 +18,13 @@
  * @see https://docs.anthropic.com/en/docs/claude-code/skills
  */
 
+import {
+  isAgentProfileKind,
+  isAgentProfileRelationship,
+  type AgentProfileKind,
+  type AgentProfileRelationship,
+} from './agent-profile';
+
 // =============================================================================
 // Tool Definition Types (for skills that inject tools)
 // =============================================================================
@@ -151,6 +158,19 @@ export interface RelatedSkill {
   id: string;
   /** Nature of the relationship. */
   relationship: 'collaborator' | 'delegator';
+}
+
+/**
+ * Typed profile reference declared by a Skill.
+ *
+ * The Skill references registered Profile contracts by id; it does not own
+ * durable profile definitions privately in prompt text.
+ */
+export interface SkillProfileReference {
+  readonly profileId: string;
+  readonly kind: AgentProfileKind;
+  readonly relationship: AgentProfileRelationship;
+  readonly versionRange?: string;
 }
 
 /**
@@ -519,6 +539,13 @@ export interface Skill {
    * crosses domain boundaries, or delegators the Skill hands off to.
    */
   referencedSkills?: RelatedSkill[];
+
+  /**
+   * Profiles this Skill consumes, produces, requires, or prefers. Canonical
+   * runtime contract; `mediaWorkflow.artifactProfiles` remains a shorthand for
+   * produced Artifact Profiles.
+   */
+  profileReferences?: SkillProfileReference[];
 
   /** Media workflow discovery hints. Not an executable workflow definition. */
   mediaWorkflow?: SkillMediaWorkflowHint;
@@ -921,6 +948,13 @@ export interface SkillManifest {
 
   /** Cross-Skill relationships surfaced by the runtime. */
   referencedSkills?: RelatedSkill[];
+
+  /**
+   * Profiles this Skill consumes, produces, requires, or prefers. Canonical
+   * runtime contract; `mediaWorkflow.artifactProfiles` remains supported as a
+   * shorthand for produced Artifact Profiles.
+   */
+  profileReferences?: SkillProfileReference[];
 
   /** Media workflow discovery hints. Not an executable workflow definition. */
   mediaWorkflow?: SkillMediaWorkflowHint;
@@ -1329,6 +1363,39 @@ export function isToolAllowed(
   });
 }
 
+export interface SkillProfileReferenceContainer {
+  readonly profileReferences?: readonly SkillProfileReference[];
+  readonly mediaWorkflow?: Pick<SkillMediaWorkflowHint, 'artifactProfiles'>;
+}
+
+export function collectSkillProfileReferences(
+  input: SkillProfileReferenceContainer,
+): readonly SkillProfileReference[] {
+  const references: SkillProfileReference[] = [];
+  const seen = new Set<string>();
+
+  for (const reference of input.profileReferences ?? []) {
+    const key = toSkillProfileReferenceKey(reference);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    references.push(reference);
+  }
+
+  for (const profileId of input.mediaWorkflow?.artifactProfiles ?? []) {
+    const reference: SkillProfileReference = {
+      profileId,
+      kind: 'artifact',
+      relationship: 'produces',
+    };
+    const key = toSkillProfileReferenceKey(reference);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    references.push(reference);
+  }
+
+  return references;
+}
+
 /**
  * Semver-ish regex: major.minor.patch with optional pre-release and build
  * metadata. Deliberately not importing a full semver library — Skills
@@ -1555,6 +1622,7 @@ export function validateSkillManifest(
     }
   }
 
+  validateSkillProfileReferences(manifest.profileReferences, errors);
   validateSkillMediaWorkflowHint(manifest.mediaWorkflow, errors);
   validateSkillCatalogManifest(manifest.catalog, errors);
 
@@ -1580,6 +1648,58 @@ export function validateSkillManifest(
   }
 
   return { valid: errors.length === 0, errors, warnings };
+}
+
+function validateSkillProfileReferences(
+  references: readonly SkillProfileReference[] | undefined,
+  errors: string[],
+): void {
+  if (references === undefined) return;
+  if (!Array.isArray(references)) {
+    errors.push('Field "profileReferences" must be an array');
+    return;
+  }
+
+  const seen = new Set<string>();
+  references.forEach((reference, index) => {
+    if (!reference || typeof reference !== 'object' || Array.isArray(reference)) {
+      errors.push(`profileReferences[${index}] must be an object`);
+      return;
+    }
+    if (typeof reference.profileId !== 'string' || reference.profileId.trim().length === 0) {
+      errors.push(`profileReferences[${index}].profileId must be a non-empty string`);
+    }
+    if (!isAgentProfileKind(reference.kind)) {
+      errors.push(`profileReferences[${index}].kind must be a supported Agent profile kind`);
+    }
+    if (!isAgentProfileRelationship(reference.relationship)) {
+      errors.push(
+        `profileReferences[${index}].relationship must be "consumes", "produces", "requires", or "prefers"`,
+      );
+    }
+    if (
+      reference.versionRange !== undefined &&
+      (typeof reference.versionRange !== 'string' || reference.versionRange.trim().length === 0)
+    ) {
+      errors.push(`profileReferences[${index}].versionRange must be a non-empty string`);
+    }
+
+    const key = toSkillProfileReferenceKey(reference);
+    if (seen.has(key)) {
+      errors.push(`Duplicate profileReferences entry for "${reference.profileId}"`);
+    } else {
+      seen.add(key);
+    }
+  });
+}
+
+function toSkillProfileReferenceKey(reference: SkillProfileReference): string {
+  return [
+    reference.kind,
+    reference.relationship,
+    reference.profileId,
+    reference.versionRange ?? '',
+  ].join('\u0000');
 }
 
 function validateSkillCatalogManifest(
