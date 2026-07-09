@@ -2,7 +2,7 @@
  * Agent CLI Types
  */
 
-import type { AgentResult, AgentSessionConfig, MCPServerConfig } from '@neko/agent';
+import type { AgentSessionConfig, MCPServerConfig } from '@neko/agent';
 import type { AgentLlmConfig } from '@neko-agent/types';
 
 /**
@@ -21,6 +21,7 @@ export interface CLIConfig {
   chatModel?: {
     providerId: string;
     modelId: string;
+    providerExpressionProfileId?: string;
     capabilities?: readonly string[];
     contextWindow?: number;
     maxOutputTokens?: number;
@@ -55,37 +56,6 @@ export interface CLIConfig {
   llmConfig?: AgentLlmConfig;
   /** Session-only context compaction/settings forwarded through shared runtime assembly. */
   contextSettings?: AgentSessionConfig['contextSettings'];
-}
-
-/**
- * CLI run options
- */
-export interface RunOptions {
-  /** The prompt/task to execute */
-  prompt: string;
-  /** Interactive mode */
-  interactive: boolean;
-  /** Stream output */
-  stream: boolean;
-  /** Max iterations */
-  maxIterations: number;
-  /** Timeout in milliseconds */
-  timeout?: number;
-  /** Input file (read prompt from file) */
-  inputFile?: string;
-  /** Output file (write result to file) */
-  outputFile?: string;
-}
-
-/**
- * CLI result
- */
-export interface CLIResult {
-  success: boolean;
-  output?: string;
-  error?: string;
-  agentResult?: AgentResult;
-  duration: number;
 }
 
 /**

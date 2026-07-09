@@ -1,7 +1,7 @@
 {
   "name": "@neko/cli",
   "version": "0.0.1",
-  "description": "Terminal TUI and headless tools for Neko AI Agent",
+  "description": "Terminal TUI and developer utilities for Neko AI Agent",
   "type": "module",
   "bin": {
     "nekoagent": "./dist/cli.js",
@@ -16,7 +16,6 @@
     "build:exe": "sh scripts/build-exe.sh",
     "build:bundle": "esbuild src/cli.tsx --bundle --platform=node --target=node18 --format=esm --outfile=dist/cli.bundle.js --minify --external:fsevents --external:ink --external:react --external:yoga-wasm-web",
     "dev": "tsx src/cli.tsx",
-    "test:real-api:tui": "tsx src/cli.tsx real-api-suite",
     "test": "vitest --passWithNoTests",
     "test:run": "vitest --run --passWithNoTests"
   },

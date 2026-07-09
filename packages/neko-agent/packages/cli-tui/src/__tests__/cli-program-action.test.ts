@@ -21,8 +21,10 @@ const mockState = vi.hoisted(
   (): {
     capturedAppProps?: CapturedAppProps;
     config?: CLIConfig;
-    runAgent?: Mock;
     poisonPaths?: AgentPoisonPaths;
+    debugManagerOptions?: unknown;
+    runDebugServer?: Mock;
+    disposeDebugManager?: Mock;
   } => ({}),
 );
 
@@ -49,17 +51,30 @@ vi.mock('../core/config', () => ({
   getProviderModels: vi.fn(() => []),
 }));
 
-vi.mock('../core/runner', () => ({
-  runAgent: (...args: readonly unknown[]) => {
-    if (!mockState.runAgent) {
-      throw new Error('Mock runAgent was not initialized');
+vi.mock('../utils/terminal', () => ({
+  detectCapabilities: () => ({ supportsColor: true }),
+}));
+
+vi.mock('../core/debug-automation/session-manager', () => ({
+  TuiDebugAutomationSessionManager: class {
+    constructor(options: unknown) {
+      mockState.debugManagerOptions = options;
+      mockState.disposeDebugManager = vi.fn(async () => undefined);
     }
-    return mockState.runAgent(...args);
+
+    async disposeAll(): Promise<void> {
+      await mockState.disposeDebugManager?.();
+    }
   },
 }));
 
-vi.mock('../utils/terminal', () => ({
-  detectCapabilities: () => ({ supportsColor: true }),
+vi.mock('../core/debug-automation/stdio', () => ({
+  runTuiDebugAutomationJsonLineServer: (...args: readonly unknown[]) => {
+    if (!mockState.runDebugServer) {
+      throw new Error('Mock debug automation server was not initialized');
+    }
+    return mockState.runDebugServer(...args);
+  },
 }));
 
 afterEach(async () => {
@@ -67,8 +82,10 @@ afterEach(async () => {
   vi.clearAllMocks();
   mockState.capturedAppProps = undefined;
   mockState.config = undefined;
-  mockState.runAgent = undefined;
   mockState.poisonPaths = undefined;
+  mockState.debugManagerOptions = undefined;
+  mockState.runDebugServer = undefined;
+  mockState.disposeDebugManager = undefined;
   if (tempRoot) {
     await fs.rm(tempRoot, { recursive: true, force: true });
     tempRoot = undefined;
@@ -158,59 +175,21 @@ describe('createCliProgram actions', () => {
     poison.readlineInteractiveResume.assertNotHit();
   });
 
-  it('writes structured run result JSON to --result-file without requiring stdout parsing', async () => {
+  it('routes debug automation through the local developer automation stdio server', async () => {
     tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-cli-action-'));
-    const config = createConfig(tempRoot);
-    const resultFile = path.join(tempRoot, 'reports', 'run-result.json');
-    const poison = createAgentPoisonPaths();
-    mockState.config = config;
-    mockState.poisonPaths = poison;
-    mockState.runAgent = vi.fn(async () => ({
-      success: true,
-      output: 'hello',
-      duration: 42,
-      agentResult: {
-        success: true,
-        response: 'hello',
-        steps: [],
-        iterations: 1,
-        timing: { startTime: 1, endTime: 2, duration: 1 },
-      },
-    }));
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    mockState.config = createConfig(tempRoot);
+    mockState.runDebugServer = vi.fn(async () => undefined);
 
     const { createCliProgram } = await import('../cli');
     const program = createCliProgram();
     program.exitOverride();
 
-    await program.parseAsync([
-      'node',
-      'neko',
-      'run',
-      '--cd',
-      tempRoot,
-      '--result-file',
-      resultFile,
-      'hello',
-    ]);
+    await program.parseAsync(['node', 'neko', 'debug', 'automation', '--stdio', '-C', tempRoot]);
 
-    const artifact = JSON.parse(await fs.readFile(resultFile, 'utf8')) as {
-      readonly schema?: string;
-      readonly success?: boolean;
-      readonly output?: string;
-      readonly config?: { readonly apiKey?: string };
-    };
-    expect(artifact).toMatchObject({
-      schema: 'neko.cli-run-result.v1',
-      success: true,
-      output: 'hello',
-      config: { apiKey: '<unset>' },
-    });
-    expect(mockState.runAgent).toHaveBeenCalledOnce();
     expect(mockState.capturedAppProps).toBeUndefined();
-    poison.readlineInteractiveResume.assertNotHit();
-    expect(exitSpy).toHaveBeenCalledWith(0);
-    exitSpy.mockRestore();
+    expect(mockState.debugManagerOptions).toMatchObject({ defaultWorkDir: tempRoot });
+    expect(mockState.runDebugServer).toHaveBeenCalledOnce();
+    expect(mockState.disposeDebugManager).toHaveBeenCalledOnce();
   });
 });
 

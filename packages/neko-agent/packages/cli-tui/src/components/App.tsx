@@ -28,6 +28,11 @@ import { useConversationStore } from '../stores/conversation-store';
 import { useConfigStore } from '../stores/config-store';
 import { useUIStore } from '../stores/ui-store';
 import { createTuiSkillInvocationCatalog } from '../core/slash-command-catalog';
+import {
+  createTuiAutomationAppPort,
+  type TuiAutomationSessionHandle,
+} from '../core/debug-automation/app-port';
+import type { TuiDebugAutomationController } from '../core/debug-automation/types';
 
 interface AppProps {
   /** CLI configuration (loaded before render) */
@@ -40,6 +45,8 @@ interface AppProps {
   readonly initialPrompt?: string;
   /** Optional persisted conversation id to resume inside the Ink TUI session. */
   readonly resumeConversationId?: string;
+  /** Optional local developer automation controller. */
+  readonly automation?: TuiDebugAutomationController;
 }
 
 export function App({
@@ -48,6 +55,7 @@ export function App({
   capabilityProviders,
   initialPrompt,
   resumeConversationId,
+  automation,
 }: AppProps): React.JSX.Element {
   const pendingApproval = useUIStore((s) => s.pendingApproval);
   const pendingSelection = useUIStore((s) => s.pendingSelection);
@@ -67,6 +75,15 @@ export function App({
   }, [config]);
 
   // Initialize agent session
+  const agentSession = useAgentSession({
+    config,
+    service,
+    capabilityProviders,
+    resumeConversationId,
+  });
+  const agentSessionRef = useRef<TuiAutomationSessionHandle>(agentSession);
+  agentSessionRef.current = agentSession;
+
   const {
     submit,
     cancel,
@@ -102,12 +119,20 @@ export function App({
     getHistory,
     syncRuntimeState,
     slashCommands,
-  } = useAgentSession({
-    config,
-    service,
-    capabilityProviders,
-    resumeConversationId,
-  });
+  } = agentSession;
+
+  useEffect(() => {
+    if (!automation) {
+      return;
+    }
+    const port = createTuiAutomationAppPort({
+      readHandle: () => agentSessionRef.current,
+    });
+    automation.bind(port);
+    return () => {
+      automation.unbind(port);
+    };
+  }, [automation]);
 
   const refreshReferenceSuggestions = useCallback((query = '') => {
     let cancelled = false;

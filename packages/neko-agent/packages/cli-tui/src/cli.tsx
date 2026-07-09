@@ -6,39 +6,30 @@
  *
  * Commands:
  * - (default) interactive mode → full TUI
- * - run <prompt>              → single-shot execution
  * - config                    → config management
  */
 
 import React from 'react';
-import * as path from 'node:path';
 import { render } from 'ink';
 import { Command } from 'commander';
-import { createFileConversationStorage, ToolRegistry } from '@neko/agent';
+import { createFileConversationStorage } from '@neko/agent';
 import { loadConfig, validateConfig, listProviders, getProviderModels } from './core/config';
 import type { CLIConfig } from './core/types';
-import { runAgent } from './core/runner';
 import { formatExperimentReport, runExperiment, type ExperimentSuiteName } from './core/experiment';
-import { formatResult } from './core/formatter';
-import { createCLIPlatform } from './core/platform-bootstrap';
 import { resolveCliWorkDir } from './core/cli-workdir';
 import { joinPromptParts, resolveDefaultCliInvocation } from './core/cli-invocation';
-import { createCliRunResultArtifact, writeCliRunResultArtifact } from './core/run-result';
 import {
   assertCanonicalTuiConversationId,
   isCanonicalTuiConversationId,
 } from './core/tui-conversation-id';
-import {
-  createDefaultTuiRealApiSuiteManifest,
-  loadTuiRealApiSuiteManifest,
-  runTuiRealApiSuite,
-} from './core/real-api-suite';
 import { formatTuiLabel, getTuiLabels } from './core/tui-locale';
 import { App } from './components/App';
 import { detectCapabilities } from './utils/terminal';
+import { TuiDebugAutomationSessionManager } from './core/debug-automation/session-manager';
+import { runTuiDebugAutomationJsonLineServer } from './core/debug-automation/stdio';
 import chalk from 'chalk';
 
-export type CliCommandRuntimeClass = 'interactive-tui' | 'headless' | 'validation' | 'utility';
+export type CliCommandRuntimeClass = 'interactive-tui' | 'validation' | 'utility';
 
 export function classifyCliCommandRuntime(commandName: string | undefined): CliCommandRuntimeClass {
   switch (commandName) {
@@ -46,13 +37,11 @@ export function classifyCliCommandRuntime(commandName: string | undefined): CliC
     case 'interactive':
     case 'resume':
       return 'interactive-tui';
-    case 'run':
-      return 'headless';
     case 'experiment':
-    case 'real-api-suite':
       return 'validation';
     case 'completion':
     case 'config':
+    case 'debug':
       return 'utility';
     default:
       throw new Error(`Unknown CLI command runtime class: ${commandName}`);
@@ -79,15 +68,6 @@ function addResumeOption(command: Command): Command {
     '-r, --resume [id]',
     'Resume a previous conversation (omit id to continue the most recent)',
   );
-}
-
-function addRunOptions(command: Command): Command {
-  return command
-    .option('-s, --stream', 'Stream output')
-    .option('-n, --max-iterations <n>', 'Max iterations', '10')
-    .option('-t, --timeout <ms>', 'Timeout in milliseconds')
-    .option('-f, --format <format>', 'Output format (text, json, markdown)', 'text')
-    .option('--result-file <path>', 'Write structured run result JSON to a file');
 }
 
 function withGlobalOptions(
@@ -143,19 +123,6 @@ export function createCliProgram(): Command {
   );
 
   addInteractiveOptions(
-    addRunOptions(
-      addWorkDirOptions(
-        program
-          .command('run')
-          .description('Run agent with a single prompt')
-          .argument('<prompt...>', 'Prompt to execute'),
-      ),
-    ),
-  ).action(async (promptParts: string[], opts: Record<string, unknown>) => {
-    await runCliAction(() => handleRun(joinRequiredPromptParts(promptParts), opts, program));
-  });
-
-  addInteractiveOptions(
     addWorkDirOptions(
       program
         .command('experiment')
@@ -169,24 +136,6 @@ export function createCliProgram(): Command {
     ),
   ).action(async (promptParts: string[], opts: Record<string, unknown>) => {
     await runCliAction(() => handleExperiment(joinRequiredPromptParts(promptParts), opts, program));
-  });
-
-  addInteractiveOptions(
-    addWorkDirOptions(
-      program
-        .command('real-api-suite')
-        .description('Run TUI real API validation cases and write a Markdown report')
-        .option('--manifest <path>', 'Suite manifest JSON path')
-        .option(
-          '-o, --output-dir <dir>',
-          'Output directory (default: reports/tui-real-api/<timestamp>)',
-        )
-        .option('--ai-summary', 'Generate an optional AI-assisted qualitative summary')
-        .option('--summary-provider <provider>', 'Provider override for AI summary')
-        .option('--summary-model <model>', 'Model override for AI summary'),
-    ),
-  ).action(async (opts: Record<string, unknown>) => {
-    await runCliAction(() => handleRealApiSuite(opts, program));
   });
 
   addInteractiveOptions(
@@ -219,6 +168,7 @@ export function createCliProgram(): Command {
     });
 
   registerConfigCommands(program);
+  registerDebugCommands(program);
   return program;
 }
 
@@ -315,6 +265,23 @@ function registerConfigCommands(program: Command): void {
         console.log('\n  (* = current model)\n');
       });
     });
+}
+
+function registerDebugCommands(program: Command): void {
+  const debugCmd = program
+    .command('debug')
+    .description('Local developer automation and diagnostics');
+
+  addInteractiveOptions(
+    addWorkDirOptions(
+      debugCmd
+        .command('automation')
+        .description('Start local developer automation protocol for the complete TUI session')
+        .option('--stdio', 'Use newline-delimited JSON over stdio'),
+    ),
+  ).action(async (opts: Record<string, unknown>) => {
+    await runCliAction(() => handleDebugAutomation(opts, program));
+  });
 }
 
 // ============================================================================
@@ -419,121 +386,6 @@ async function renderTuiSession(input: {
   await waitUntilExit();
 }
 
-/**
- * Handle single-shot run command
- */
-async function handleRun(
-  prompt: string,
-  opts: Record<string, unknown>,
-  program: Command,
-): Promise<void> {
-  const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
-  const config = loadConfig(workDir, {
-    provider: opts['provider'] as string | undefined,
-    model: opts['model'] as string | undefined,
-    apiKey: opts['apiKey'] as string | undefined,
-  });
-
-  const validation = validateConfig(config);
-  if (!validation.valid) {
-    console.error(chalk.red('Configuration errors:'));
-    for (const error of validation.errors) {
-      console.error(chalk.red(`  • ${error}`));
-    }
-    process.exit(1);
-  }
-
-  const format = (opts['format'] as 'text' | 'json' | 'markdown') ?? 'text';
-  const maxIterations = parseInt(String(opts['maxIterations'] ?? '10'), 10);
-  const timeout = opts['timeout'] ? parseInt(String(opts['timeout']), 10) : undefined;
-  const resultFile = typeof opts['resultFile'] === 'string' ? opts['resultFile'] : undefined;
-  const runOptions = {
-    prompt,
-    interactive: false,
-    stream: Boolean(opts['stream']),
-    maxIterations,
-    timeout,
-  };
-
-  const result = await runAgent({
-    config,
-    runOptions,
-    onOutput: (text) => process.stdout.write(text),
-    onToolCall: (name) => console.log(chalk.dim(`  [tool] ${name}`)),
-    onThinking: (thought) => console.log(chalk.dim(`  [thinking] ${thought.slice(0, 100)}`)),
-  });
-
-  if (resultFile) {
-    await writeCliRunResultArtifact(
-      path.resolve(resultFile),
-      createCliRunResultArtifact({
-        config,
-        runOptions,
-        result,
-        command: process.argv.slice(1),
-      }),
-    );
-  }
-
-  if (format !== 'text' || !result.success) {
-    console.log(formatResult(result, format));
-  }
-
-  process.exit(result.success ? 0 : 1);
-}
-
-async function handleRealApiSuite(opts: Record<string, unknown>, program: Command): Promise<void> {
-  const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
-  const provider = typeof opts['provider'] === 'string' ? opts['provider'] : undefined;
-  const model = typeof opts['model'] === 'string' ? opts['model'] : undefined;
-  const manifest =
-    typeof opts['manifest'] === 'string'
-      ? await loadTuiRealApiSuiteManifest(opts['manifest'])
-      : createDefaultTuiRealApiSuiteManifest({
-          workDir,
-          ...(provider ? { provider } : {}),
-          ...(model ? { model } : {}),
-        });
-
-  let summaryPlatform: ReturnType<typeof createCLIPlatform> | undefined;
-  try {
-    const aiSummary =
-      opts['aiSummary'] === true
-        ? (() => {
-            const config = loadConfig(workDir, {
-              provider:
-                typeof opts['summaryProvider'] === 'string' ? opts['summaryProvider'] : provider,
-              model: typeof opts['summaryModel'] === 'string' ? opts['summaryModel'] : model,
-            });
-            summaryPlatform = createCLIPlatform({
-              workspacePath: workDir,
-              toolRegistry: new ToolRegistry(),
-            });
-            return {
-              service: summaryPlatform.service,
-              providerId: config.chatModel?.providerId ?? config.provider,
-              modelId: config.chatModel?.modelId ?? config.model,
-              modelCapabilities: config.chatModel?.capabilities,
-            };
-          })()
-        : undefined;
-
-    const result = await runTuiRealApiSuite({
-      manifest,
-      ...(typeof opts['outputDir'] === 'string' ? { outputDir: opts['outputDir'] } : {}),
-      ...(aiSummary ? { aiSummary } : {}),
-    });
-    console.log(chalk.cyan.bold('\nTUI real API validation complete'));
-    console.log(`Report: ${result.reportPath}`);
-    console.log(`Passed: ${result.passed}/${result.caseResults.length}`);
-    console.log(`Failed: ${result.failed}`);
-    console.log(`Skipped: ${result.skipped}`);
-    process.exit(result.failed === 0 ? 0 : 1);
-  } finally {
-    summaryPlatform?.platform.dispose();
-  }
-}
-
 async function handleResumeCommand(
   id: string | undefined,
   promptParts: readonly string[] | undefined,
@@ -632,6 +484,31 @@ async function handleExperiment(
   } catch (error) {
     console.error(chalk.red(error instanceof Error ? error.message : String(error)));
     process.exit(1);
+  }
+}
+
+async function handleDebugAutomation(
+  opts: Record<string, unknown>,
+  program: Command,
+): Promise<void> {
+  if (opts['stdio'] !== true) {
+    throw new Error('debug automation requires --stdio.');
+  }
+  const workDir = resolveCliWorkDir(withGlobalOptions(program, opts));
+  const manager = new TuiDebugAutomationSessionManager({
+    defaultWorkDir: workDir,
+    provider: typeof opts['provider'] === 'string' ? opts['provider'] : undefined,
+    model: typeof opts['model'] === 'string' ? opts['model'] : undefined,
+    apiKey: typeof opts['apiKey'] === 'string' ? opts['apiKey'] : undefined,
+  });
+  try {
+    await runTuiDebugAutomationJsonLineServer({
+      input: process.stdin,
+      output: process.stdout,
+      handler: manager,
+    });
+  } finally {
+    await manager.disposeAll();
   }
 }
 

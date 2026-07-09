@@ -1,7 +1,7 @@
 /**
- * @neko/cli — Terminal TUI and headless tools for Neko AI Agent
+ * @neko/cli — Terminal TUI and developer utilities for Neko AI Agent
  *
- * Unified package: Ink-based TUI + headless run/validation utilities.
+ * Unified package: Ink-based TUI + local developer utilities.
  * Public API exports for programmatic usage.
  */
 
@@ -10,7 +10,7 @@
 // ============================================================================
 
 // Core Types
-export type { CLIConfig, RunOptions, CLIResult } from './core/types';
+export type { CLIConfig } from './core/types';
 
 export { DEFAULT_CLI_CONFIG } from './core/types';
 
@@ -38,14 +38,6 @@ export {
   type CLIPlatformResult,
 } from './core/platform-bootstrap';
 
-// Runner
-export {
-  runAgent,
-  runAgentWithContext,
-  type AgentRunnerOptions,
-  type AgentRunnerWithContextOptions,
-} from './core/runner';
-
 export {
   createTuiCapabilityLoader,
   type TuiCapabilityLoader,
@@ -61,37 +53,6 @@ export {
   type SlashCommandResult,
   type SlashCommandContext,
 } from './core/slash-commands';
-
-// Formatter
-export { formatResult, formatText, formatJson, formatMarkdown } from './core/formatter';
-
-export {
-  CLI_RUN_RESULT_SCHEMA,
-  createCliRunResultArtifact,
-  writeCliRunResultArtifact,
-  type CliRunResultArtifact,
-  type CliRunResultConfigSnapshot,
-} from './core/run-result';
-
-export {
-  TUI_REAL_API_SUITE_SCHEMA,
-  TUI_REAL_API_SUITE_RUN_SCHEMA,
-  createDefaultTuiRealApiSuiteManifest,
-  loadTuiRealApiSuiteManifest,
-  parseTuiRealApiSuiteManifest,
-  runTuiRealApiSuite,
-  evaluateTuiRealApiCase,
-  formatTuiRealApiSuiteReport,
-  type TuiRealApiAiSummaryOptions,
-  type TuiRealApiCase,
-  type TuiRealApiCaseExecution,
-  type TuiRealApiCaseResult,
-  type TuiRealApiCaseVerdict,
-  type TuiRealApiCheck,
-  type TuiRealApiCheckResult,
-  type TuiRealApiSuiteManifest,
-  type TuiRealApiSuiteResult,
-} from './core/real-api-suite';
 
 // ============================================================================
 // TUI Types
