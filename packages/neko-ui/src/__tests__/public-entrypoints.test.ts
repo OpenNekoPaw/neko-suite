@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import * as creative from '../creative';
+import * as foundation from '../foundation';
 import * as hooks from '../hooks';
 import * as icons from '../icons';
 import * as keyboard from '../keyboard';
+import * as markdown from '../markdown';
 import * as primitives from '../primitives';
 import * as testUtils from '../test-utils';
 import * as ui from '../index';
@@ -60,5 +62,12 @@ describe('@neko/ui public entrypoints', () => {
     expect(keyboard.KeyboardBoundary).toBe(ui.KeyboardBoundary);
     expect(keyboard.isEditableTarget).toBe(ui.isEditableTarget);
     expect(keyboard.useKeyboardDispatcher).toBe(ui.useKeyboardDispatcher);
+    expect(foundation.WebviewFoundationProvider).toBe(ui.WebviewFoundationProvider);
+    expect(foundation.createWebviewFoundation).toBe(ui.createWebviewFoundation);
+    expect(markdown.InlineMarkdownEditor).toBe(ui.InlineMarkdownEditor);
+    expect(markdown.MarkdownInlineText).toBe(ui.MarkdownInlineText);
+    expect(markdown.MarkdownGenerationPromptParts).toBe(ui.MarkdownGenerationPromptParts);
+    expect(markdown.MarkdownDiagnostics).toBe(ui.MarkdownDiagnostics);
+    expect(markdown.useMarkdownProjection).toBe(ui.useMarkdownProjection);
   });
 });

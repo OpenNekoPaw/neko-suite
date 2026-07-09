@@ -458,6 +458,75 @@ describe('ContentOverlay', () => {
     expect(text).not.toContain('motionStrength: 0.55');
   });
 
+  it('renders markdown inline tokens and keyboard isolation through the prompt editor adapter', () => {
+    const promptText = '**Rainy hallway** uses `slow dolly` with ![[ref/frame]] and @Aki';
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 11,
+          visualDescription: '**Rainy hallway** with ![[ref/frame]]',
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-markdown-editor:video:prompt',
+                blockKind: 'video',
+                text: promptText,
+              },
+            },
+          },
+        },
+      }),
+      id: 'shot-overlay-markdown-editor',
+    } as CanvasNode;
+
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
+    });
+
+    const editor = host.querySelector('[data-shot-creator-prompt-block-editor="video"]');
+    const textarea = editor?.querySelector<HTMLTextAreaElement>(
+      '[data-shot-creator-prompt-block-input="video"]',
+    );
+
+    expect(editor?.querySelector('[data-inline-markdown-highlight="true"]')).not.toBeNull();
+    expect(editor?.querySelector('[data-markdown-inline-strong="true"]')).not.toBeNull();
+    expect(editor?.querySelector('[data-markdown-inline-code="true"]')).not.toBeNull();
+    expect(editor?.querySelector('[data-markdown-resource-reference="true"]')).not.toBeNull();
+    expect(editor?.querySelector('[data-markdown-mention="true"]')).not.toBeNull();
+    expect(editor?.querySelector('[data-inline-markdown-highlight="true"]')?.textContent).toContain(
+      '**Rainy hallway**',
+    );
+    expect(textarea?.getAttribute('placeholder')).toBeNull();
+    expect(textarea?.getAttribute('aria-label')).toBe('Scene video prompt');
+    expect(textarea?.getAttribute('data-neko-keyboard-scope')).toBe('text-input');
+    expect(textarea?.getAttribute('data-neko-keyboard-owner')).toBe(
+      'shot-creator-prompt:shot-overlay-markdown-editor:video',
+    );
+    expect(textarea?.getAttribute('data-neko-keyboard-owned-keys')).toContain('Enter');
+    const imageTextarea = host.querySelector<HTMLTextAreaElement>(
+      '[data-shot-creator-prompt-block-input="image"]',
+    );
+    expect(imageTextarea?.getAttribute('placeholder')).toBeNull();
+    const summaryValues = Array.from(host.querySelectorAll('[data-shot-creator-summary-value]'));
+    expect(
+      summaryValues.some((value) => value.querySelector('[data-markdown-inline-strong="true"]')),
+    ).toBe(true);
+    expect(
+      summaryValues.some((value) => value.querySelector('[data-markdown-resource-reference="true"]')),
+    ).toBe(true);
+  });
+
   it('commits prompt edits as semantic storyboardPrompt and cancels Escape edits', async () => {
     const node = {
       ...buildCanvasNode({

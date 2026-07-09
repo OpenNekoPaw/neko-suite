@@ -92,6 +92,18 @@ describe('feature Webview host adapter registry', () => {
     });
 
     expect(() => registry.register(canvasAdapter)).toThrow(/does not support host 'tui'/);
+    try {
+      registry.register(canvasAdapter);
+    } catch (error) {
+      expect(error).toBeInstanceOf(WorkbenchFeatureWebviewAdapterRegistrationError);
+      const diagnostic = (error as WorkbenchFeatureWebviewAdapterRegistrationError)
+        .diagnostic;
+      expect(diagnostic.code).toBe('unsupportedFeatureWebviewAdapterHost');
+      expect(diagnostic.metadata).toEqual({
+        hostKind: 'tui',
+        supportedHosts: ['vscode', 'electron'],
+      });
+    }
   });
 
   it('fails visibly for unsupported host capabilities', () => {
@@ -103,6 +115,38 @@ describe('feature Webview host adapter registry', () => {
     expect(() => registry.register(canvasAdapter)).toThrow(
       /requires unsupported host capabilities/,
     );
+    try {
+      registry.register(canvasAdapter);
+    } catch (error) {
+      expect(error).toBeInstanceOf(WorkbenchFeatureWebviewAdapterRegistrationError);
+      const diagnostic = (error as WorkbenchFeatureWebviewAdapterRegistrationError)
+        .diagnostic;
+      expect(diagnostic.code).toBe('missingFeatureWebviewHostCapability');
+      expect(diagnostic.metadata).toEqual({ missing: ['workbench.customEditors'] });
+    }
+  });
+
+  it('fails visibly when a custom editor adapter omits editor metadata', () => {
+    const registry = createWorkbenchFeatureWebviewAdapterRegistry({
+      hostKind: 'electron',
+      hostCapabilities: ['workbench.customEditors', 'workbench.webviews'],
+    });
+    const invalidAdapter: WorkbenchFeatureWebviewHostAdapterDescriptor = {
+      ...canvasAdapter,
+      customEditor: undefined,
+    };
+
+    expect(() => registry.register(invalidAdapter)).toThrow(
+      WorkbenchFeatureWebviewAdapterRegistrationError,
+    );
+    try {
+      registry.register(invalidAdapter);
+    } catch (error) {
+      expect(error).toBeInstanceOf(WorkbenchFeatureWebviewAdapterRegistrationError);
+      expect((error as WorkbenchFeatureWebviewAdapterRegistrationError).diagnostic.code).toBe(
+        'missingFeatureWebviewCustomEditor',
+      );
+    }
   });
 
   it('rejects runtime handles and non-string runtime entries', () => {

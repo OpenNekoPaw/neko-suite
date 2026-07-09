@@ -1,4 +1,11 @@
 import type { ReactNode } from 'react';
+import {
+  MarkdownGenerationPromptParts,
+  MarkdownInlineText,
+  renderDefaultMarkdownToken,
+  type MarkdownSemanticSpan,
+  type MarkdownTokenRenderContext,
+} from '@neko/ui/markdown';
 import type { CanvasAuthoringSemanticPromptSpan } from '@neko/shared';
 import { t } from '../../i18n';
 
@@ -12,12 +19,6 @@ export interface SemanticPromptTextProps {
   readonly spanVariant?: 'compact' | 'editor';
 }
 
-interface RenderablePromptSpan {
-  readonly span: CanvasAuthoringSemanticPromptSpan;
-  readonly start: number;
-  readonly end: number;
-}
-
 export function SemanticPromptText({
   text,
   spans,
@@ -27,20 +28,36 @@ export function SemanticPromptText({
   placeholderClassName,
   spanVariant = 'compact',
 }: SemanticPromptTextProps): ReactNode {
-  const renderableSpans = normalizePromptSpans(text, spans ?? []);
+  const semanticSpans = createCanvasMarkdownSemanticSpans(text, spans ?? []);
+  const hasSemanticSpans = semanticSpans.length > 0;
   return (
     <div
       className={className}
       data-semantic-prompt-text="true"
       data-semantic-prompt-visual-style="subtle"
-      data-semantic-prompt-span-count={renderableSpans.length}
+      data-semantic-prompt-span-count={semanticSpans.length}
+      data-semantic-prompt-generation-parts={hasSemanticSpans ? undefined : 'true'}
       aria-label={ariaLabel}
       title={text || placeholder}
     >
-      {text ? (
-        renderPromptSegments(text, renderableSpans, spanVariant)
+      {hasSemanticSpans ? (
+        <MarkdownInlineText
+          value={text}
+          semanticSpans={semanticSpans}
+          placeholder={placeholder}
+          placeholderClassName={placeholderClassName}
+          spanVariant={spanVariant}
+          className="contents"
+          renderToken={(context) => renderCanvasSemanticPromptToken(context, spanVariant)}
+        />
       ) : (
-        <span className={placeholderClassName ?? 'text-gray-400'}>{placeholder}</span>
+        <MarkdownGenerationPromptParts
+          value={text}
+          placeholder={placeholder}
+          placeholderClassName={placeholderClassName}
+          ariaLabel={ariaLabel}
+          className="contents"
+        />
       )}
     </div>
   );
@@ -78,68 +95,61 @@ export function getSemanticPromptFieldLabel(fieldId: string): string {
   return translateDisplayKey(`content.promptField.${fieldId}`, fieldId);
 }
 
-function renderPromptSegments(
-  text: string,
-  spans: readonly RenderablePromptSpan[],
-  spanVariant: 'compact' | 'editor',
-): ReactNode {
-  if (spans.length === 0) return text;
-
-  const segments: ReactNode[] = [];
-  let cursor = 0;
-  spans.forEach((entry, index) => {
-    if (entry.start > cursor) {
-      segments.push(text.slice(cursor, entry.start));
-    }
-    segments.push(
-      <span
-        key={entry.span.id ?? `${entry.span.kind}-${entry.start}-${entry.end}-${index}`}
-        className={getSemanticPromptSpanClassName(entry.span.kind, spanVariant)}
-        data-semantic-prompt-span-kind={entry.span.kind}
-        data-semantic-prompt-field-id={entry.span.fieldId}
-        title={formatSemanticPromptSpanTitle(text, entry.span)}
-      >
-        {text.slice(entry.start, entry.end)}
-      </span>,
-    );
-    cursor = entry.end;
-  });
-  if (cursor < text.length) {
-    segments.push(text.slice(cursor));
-  }
-  return segments;
-}
-
-function normalizePromptSpans(
+export function createCanvasMarkdownSemanticSpans(
   text: string,
   spans: readonly CanvasAuthoringSemanticPromptSpan[],
-): readonly RenderablePromptSpan[] {
-  const sorted = spans
-    .map((span): RenderablePromptSpan | undefined => {
-      if (!Number.isInteger(span.range.start) || !Number.isInteger(span.range.end)) {
-        return undefined;
-      }
-      if (span.range.start < 0 || span.range.end <= span.range.start) {
-        return undefined;
-      }
-      if (span.range.end > text.length) {
-        return undefined;
-      }
-      return { span, start: span.range.start, end: span.range.end };
-    })
-    .filter((span): span is RenderablePromptSpan => Boolean(span))
-    .sort((left, right) => left.start - right.start || left.end - right.end);
-
-  const result: RenderablePromptSpan[] = [];
+): readonly MarkdownSemanticSpan[] {
+  const result: MarkdownSemanticSpan[] = [];
   let cursor = 0;
+  const sorted = spans
+    .filter((span) => isValidSpanRange(text, span))
+    .sort((left, right) => left.range.start - right.range.start || left.range.end - right.range.end);
+
   for (const span of sorted) {
-    if (span.start < cursor) {
-      continue;
-    }
-    result.push(span);
-    cursor = span.end;
+    if (span.range.start < cursor) continue;
+    result.push({
+      id: span.id,
+      kind: span.kind,
+      range: span.range,
+      fieldId: span.fieldId,
+      label: getSemanticPromptSpanKindLabel(span.kind),
+      tooltip: formatSemanticPromptSpanTitle(text, span),
+    });
+    cursor = span.range.end;
   }
   return result;
+}
+
+export function renderCanvasSemanticPromptToken(
+  context: MarkdownTokenRenderContext,
+  spanVariant: 'compact' | 'editor',
+): ReactNode {
+  const { token, key } = context;
+  if (token.kind !== 'semantic-span') {
+    return renderDefaultMarkdownToken(token, key, spanVariant);
+  }
+
+  return (
+    <span
+      key={key}
+      className={getSemanticPromptSpanClassName(token.span?.kind, spanVariant)}
+      data-semantic-prompt-span-kind={token.span?.kind}
+      data-semantic-prompt-field-id={token.span?.fieldId}
+      title={token.title ?? token.raw}
+    >
+      {token.display}
+    </span>
+  );
+}
+
+function isValidSpanRange(text: string, span: CanvasAuthoringSemanticPromptSpan): boolean {
+  return (
+    Number.isInteger(span.range.start) &&
+    Number.isInteger(span.range.end) &&
+    span.range.start >= 0 &&
+    span.range.end > span.range.start &&
+    span.range.end <= text.length
+  );
 }
 
 function clampPromptOffset(value: number, textLength: number): number {
@@ -147,7 +157,7 @@ function clampPromptOffset(value: number, textLength: number): number {
   return Math.min(Math.max(Math.trunc(value), 0), textLength);
 }
 
-function getSemanticPromptSpanClassName(kind: string, variant: 'compact' | 'editor'): string {
+function getSemanticPromptSpanClassName(kind: string | undefined, variant: 'compact' | 'editor'): string {
   const base =
     variant === 'editor'
       ? 'rounded-sm border px-0.5 py-[1px] font-medium text-current underline decoration-2 underline-offset-[3px] shadow-sm box-decoration-clone'

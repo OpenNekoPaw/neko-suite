@@ -14,6 +14,8 @@ const forbiddenImportPatterns = [
   /from\s+['"]url['"]/,
   /from\s+['"]@neko\/(?:cut|model|puppet|sketch|canvas|agent|market|dashboard|tools|preview|audio|live|story)(?:\/|['"])/,
 ];
+const markdownUiRoot = join(srcRoot, 'markdown');
+const markdownCoreRoot = join(srcRoot, '../../neko-markdown/src');
 
 describe('@neko/ui dependency boundary', () => {
   it('does not import vscode, node-only modules, or feature packages from source files', () => {
@@ -49,6 +51,40 @@ describe('@neko/ui dependency boundary', () => {
       const relativePath = relative(srcRoot, filePath);
       const text = readFileSync(filePath, 'utf-8');
       return forbiddenDomainSemantics
+        .filter((pattern) => pattern.test(text))
+        .map((pattern) => `${relativePath}: ${pattern}`);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps markdown UI as a React adapter over the host-agnostic markdown core', () => {
+    const markdownUiFiles = collectSourceFiles(markdownUiRoot);
+    expect(markdownUiFiles.length).toBeGreaterThan(0);
+
+    const violations = markdownUiFiles.flatMap((filePath) => {
+      const text = readFileSync(filePath, 'utf-8');
+      const relativePath = relative(srcRoot, filePath);
+      const reverseDependency = /from\s+['"]@neko\/ui/.test(text)
+        ? [`${relativePath}: @neko/ui`]
+        : [];
+
+      return [...reverseDependency];
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps markdown core free of React and shared UI reverse dependencies', () => {
+    const forbiddenMarkdownCorePatterns = [
+      /from\s+['"]react(?:\/|['"])/,
+      /from\s+['"]react-dom(?:\/|['"])/,
+      /from\s+['"]@neko\/ui(?:\/|['"])/,
+    ];
+    const violations = collectSourceFiles(markdownCoreRoot).flatMap((filePath) => {
+      const text = readFileSync(filePath, 'utf-8');
+      const relativePath = relative(markdownCoreRoot, filePath);
+      return forbiddenMarkdownCorePatterns
         .filter((pattern) => pattern.test(text))
         .map((pattern) => `${relativePath}: ${pattern}`);
     });

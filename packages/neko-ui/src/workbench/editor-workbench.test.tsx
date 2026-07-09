@@ -59,6 +59,33 @@ describe('editor workbench shell primitives', () => {
     expect(host.querySelector('.neko-editor-workbench-status [data-testid="status"]')).not.toBeNull();
   });
 
+  it('omits hidden docked side zones from the workbench shell', () => {
+    act(() => {
+      root.render(
+        <EditorWorkbenchShell
+          titleBar={<div data-testid="title" />}
+          activityBar={<div data-testid="activity" />}
+          sidebar={<div data-testid="sidebar" />}
+          activityBarVisible={false}
+          sidebarVisible={false}
+          secondarySidebarVisible={false}
+          editor={<div data-testid="editor" />}
+          secondarySidebar={<div data-testid="secondary" />}
+          statusBar={<div data-testid="status" />}
+        />,
+      );
+    });
+
+    const shell = host.querySelector('[data-neko-editor-workbench="true"]');
+    expect(shell?.getAttribute('data-activity-visible')).toBe('false');
+    expect(shell?.getAttribute('data-sidebar-visible')).toBe('false');
+    expect(shell?.getAttribute('data-secondary-visible')).toBe('false');
+    expect(host.querySelector('.neko-editor-workbench-activity')).toBeNull();
+    expect(host.querySelector('.neko-editor-workbench-sidebar')).toBeNull();
+    expect(host.querySelector('.neko-editor-workbench-secondary-sidebar')).toBeNull();
+    expect(host.querySelector('.neko-editor-workbench-editor [data-testid="editor"]')).not.toBeNull();
+  });
+
   it('renders reusable activity buttons, tabs, cards, thumbnails, and status chrome', () => {
     const onActivitySelect = vi.fn();
     const onTabSelect = vi.fn();
@@ -141,4 +168,81 @@ describe('editor workbench shell primitives', () => {
     expect(onCardAction).toHaveBeenCalledTimes(1);
     expect(onThumbSelect).toHaveBeenCalledWith('thumb');
   });
+
+  it('supports VSCode-style tab close and drag reorder callbacks', () => {
+    const onTabSelect = vi.fn();
+    const onTabClose = vi.fn();
+    const onTabReorder = vi.fn();
+
+    act(() => {
+      root.render(
+        <WorkbenchEditorTabs
+          label="Open editors"
+          activeId="a"
+          emptyLabel="No editors"
+          tabs={[
+            { id: 'a', label: 'A.nkc', closeLabel: 'Close A.nkc' },
+            { id: 'b', label: 'B.nkv', closeLabel: 'Close B.nkv' },
+          ]}
+          onClose={onTabClose}
+          onReorder={onTabReorder}
+          onSelect={onTabSelect}
+        />,
+      );
+    });
+
+    const tabs = host.querySelectorAll<HTMLElement>('[role="tab"]');
+    expect(tabs).toHaveLength(2);
+    expect(tabs[0]?.getAttribute('draggable')).toBe('true');
+
+    act(() => {
+      host.querySelector<HTMLButtonElement>('button[aria-label="Close A.nkc"]')?.click();
+    });
+
+    expect(onTabClose).toHaveBeenCalledWith('a');
+    expect(onTabSelect).not.toHaveBeenCalled();
+
+    const dataTransfer = createTestDataTransfer();
+    act(() => {
+      dispatchDragEvent(tabs[0]!, 'dragstart', dataTransfer);
+      dispatchDragEvent(tabs[1]!, 'drop', dataTransfer);
+    });
+
+    expect(onTabReorder).toHaveBeenCalledWith('a', 'b');
+  });
 });
+
+function createTestDataTransfer(): DataTransfer {
+  const values = new Map<string, string>();
+  return {
+    effectAllowed: 'uninitialized',
+    dropEffect: 'none',
+    files: [] as unknown as FileList,
+    items: [] as unknown as DataTransferItemList,
+    types: [],
+    clearData(format?: string): void {
+      if (format) {
+        values.delete(format);
+      } else {
+        values.clear();
+      }
+    },
+    getData(format: string): string {
+      return values.get(format) ?? '';
+    },
+    setData(format: string, data: string): void {
+      values.set(format, data);
+    },
+    setDragImage: vi.fn(),
+  };
+}
+
+function dispatchDragEvent(
+  element: HTMLElement,
+  type: 'dragstart' | 'drop',
+  dataTransfer: DataTransfer,
+): void {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
+  element.dispatchEvent(event);
+}

@@ -23,6 +23,125 @@
   grid-template-rows: 34px minmax(0, 1fr) 196px 24px;
 }
 
+.neko-editor-workbench-shell[data-activity-visible="true"][data-sidebar-visible="true"][data-secondary-visible="false"] {
+  grid-template-areas:
+    "title title title"
+    "activity sidebar editor"
+    "status status status";
+  grid-template-columns: 52px 320px minmax(460px, 1fr);
+  min-width: 760px;
+}
+
+.neko-editor-workbench-shell[data-activity-visible="true"][data-sidebar-visible="true"][data-secondary-visible="false"][data-has-bottom="true"] {
+  grid-template-areas:
+    "title title title"
+    "activity sidebar editor"
+    "activity sidebar bottom"
+    "status status status";
+}
+
+.neko-editor-workbench-shell[data-activity-visible="true"][data-sidebar-visible="false"][data-secondary-visible="true"] {
+  grid-template-areas:
+    "title title title"
+    "activity editor secondary"
+    "status status status";
+  grid-template-columns: 52px minmax(460px, 1fr) minmax(340px, 400px);
+  min-width: 860px;
+}
+
+.neko-editor-workbench-shell[data-activity-visible="true"][data-sidebar-visible="false"][data-secondary-visible="true"][data-has-bottom="true"] {
+  grid-template-areas:
+    "title title title"
+    "activity editor secondary"
+    "activity bottom secondary"
+    "status status status";
+}
+
+.neko-editor-workbench-shell[data-activity-visible="true"][data-sidebar-visible="false"][data-secondary-visible="false"] {
+  grid-template-areas:
+    "title title"
+    "activity editor"
+    "status status";
+  grid-template-columns: 52px minmax(460px, 1fr);
+  min-width: 560px;
+}
+
+.neko-editor-workbench-shell[data-activity-visible="true"][data-sidebar-visible="false"][data-secondary-visible="false"][data-has-bottom="true"] {
+  grid-template-areas:
+    "title title"
+    "activity editor"
+    "activity bottom"
+    "status status";
+}
+
+.neko-editor-workbench-shell[data-activity-visible="false"][data-sidebar-visible="true"][data-secondary-visible="true"] {
+  grid-template-areas:
+    "title title title"
+    "sidebar editor secondary"
+    "status status status";
+  grid-template-columns: 320px minmax(460px, 1fr) minmax(340px, 400px);
+  min-width: 880px;
+}
+
+.neko-editor-workbench-shell[data-activity-visible="false"][data-sidebar-visible="true"][data-secondary-visible="true"][data-has-bottom="true"] {
+  grid-template-areas:
+    "title title title"
+    "sidebar editor secondary"
+    "sidebar bottom secondary"
+    "status status status";
+}
+
+.neko-editor-workbench-shell[data-activity-visible="false"][data-sidebar-visible="true"][data-secondary-visible="false"] {
+  grid-template-areas:
+    "title title"
+    "sidebar editor"
+    "status status";
+  grid-template-columns: 320px minmax(460px, 1fr);
+  min-width: 760px;
+}
+
+.neko-editor-workbench-shell[data-activity-visible="false"][data-sidebar-visible="true"][data-secondary-visible="false"][data-has-bottom="true"] {
+  grid-template-areas:
+    "title title"
+    "sidebar editor"
+    "sidebar bottom"
+    "status status";
+}
+
+.neko-editor-workbench-shell[data-activity-visible="false"][data-sidebar-visible="false"][data-secondary-visible="true"] {
+  grid-template-areas:
+    "title title"
+    "editor secondary"
+    "status status";
+  grid-template-columns: minmax(460px, 1fr) minmax(340px, 400px);
+  min-width: 820px;
+}
+
+.neko-editor-workbench-shell[data-activity-visible="false"][data-sidebar-visible="false"][data-secondary-visible="true"][data-has-bottom="true"] {
+  grid-template-areas:
+    "title title"
+    "editor secondary"
+    "bottom secondary"
+    "status status";
+}
+
+.neko-editor-workbench-shell[data-activity-visible="false"][data-sidebar-visible="false"][data-secondary-visible="false"] {
+  grid-template-areas:
+    "title"
+    "editor"
+    "status";
+  grid-template-columns: minmax(460px, 1fr);
+  min-width: 520px;
+}
+
+.neko-editor-workbench-shell[data-activity-visible="false"][data-sidebar-visible="false"][data-secondary-visible="false"][data-has-bottom="true"] {
+  grid-template-areas:
+    "title"
+    "editor"
+    "bottom"
+    "status";
+}
+
 .neko-editor-workbench-title {
   grid-area: title;
   min-width: 0;
@@ -180,6 +299,11 @@
   white-space: nowrap;
 }
 
+.neko-workbench-editor-tab:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, var(--neko-accent, #1687d9));
+  outline-offset: -2px;
+}
+
 .neko-workbench-editor-tab[data-active="true"] {
   color: var(--vscode-foreground, #1d2b38);
   background: var(--vscode-editor-background, #ffffff);
@@ -195,6 +319,29 @@
 .neko-workbench-editor-tab__label {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.neko-workbench-editor-tab__close {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 3px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  opacity: 0.72;
+}
+
+.neko-workbench-editor-tab__close:hover,
+.neko-workbench-editor-tab__close:focus-visible {
+  background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.18));
+  opacity: 1;
+  outline: none;
 }
 
 .neko-workbench-panel-header {

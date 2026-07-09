@@ -8,6 +8,9 @@ export interface EditorWorkbenchShellProps {
   readonly sidebar: ReactNode;
   readonly editor: ReactNode;
   readonly secondarySidebar?: ReactNode;
+  readonly activityBarVisible?: boolean;
+  readonly sidebarVisible?: boolean;
+  readonly secondarySidebarVisible?: boolean;
   readonly inspector?: ReactNode;
   readonly bottomPanel?: ReactNode;
   readonly statusBar?: ReactNode;
@@ -37,6 +40,8 @@ export interface WorkbenchEditorTab {
   readonly icon?: ReactNode;
   readonly title?: string;
   readonly disabled?: boolean;
+  readonly closeLabel?: string;
+  readonly closable?: boolean;
 }
 
 export interface WorkbenchEditorTabsProps {
@@ -46,6 +51,8 @@ export interface WorkbenchEditorTabsProps {
   readonly emptyLabel: string;
   readonly className?: string;
   readonly onSelect: (id: string) => void;
+  readonly onClose?: (id: string) => void;
+  readonly onReorder?: (sourceId: string, targetId: string) => void;
 }
 
 export interface WorkbenchPanelHeaderProps {
@@ -113,29 +120,38 @@ export interface WorkbenchWebviewRuntimeFrameProps {
 
 export function EditorWorkbenchShell({
   activityBar,
+  activityBarVisible = true,
   bottomPanel,
   className,
   editor,
   inspector,
   secondarySidebar,
+  secondarySidebarVisible = true,
   sidebar,
+  sidebarVisible = true,
   statusBar,
   titleBar,
 }: EditorWorkbenchShellProps): React.ReactElement {
   const secondarySidebarContent = secondarySidebar ?? inspector;
+  const hasVisibleSecondarySidebar = Boolean(secondarySidebarContent) && secondarySidebarVisible;
 
   return (
     <main
       className={cn('neko-editor-workbench-shell', className)}
       data-neko-editor-workbench="true"
+      data-activity-visible={activityBarVisible ? 'true' : 'false'}
       data-has-bottom={bottomPanel ? 'true' : 'false'}
+      data-secondary-visible={hasVisibleSecondarySidebar ? 'true' : 'false'}
+      data-sidebar-visible={sidebarVisible ? 'true' : 'false'}
       data-workbench-layout="docked-editor"
     >
       <div className="neko-editor-workbench-title">{titleBar}</div>
-      <div className="neko-editor-workbench-activity">{activityBar}</div>
-      <div className="neko-editor-workbench-sidebar">{sidebar}</div>
+      {activityBarVisible ? (
+        <div className="neko-editor-workbench-activity">{activityBar}</div>
+      ) : null}
+      {sidebarVisible ? <div className="neko-editor-workbench-sidebar">{sidebar}</div> : null}
       <div className="neko-editor-workbench-editor">{editor}</div>
-      {secondarySidebarContent ? (
+      {hasVisibleSecondarySidebar ? (
         <div className="neko-editor-workbench-secondary-sidebar">{secondarySidebarContent}</div>
       ) : null}
       {bottomPanel ? <div className="neko-editor-workbench-bottom">{bottomPanel}</div> : null}
@@ -199,29 +215,76 @@ export function WorkbenchEditorTabs({
   className,
   emptyLabel,
   label,
+  onClose,
+  onReorder,
   onSelect,
   tabs,
 }: WorkbenchEditorTabsProps): React.ReactElement {
+  const handleDragStart = (event: React.DragEvent<HTMLDivElement>, tabId: string): void => {
+    if (!onReorder) return;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('application/x-neko-workbench-tab', tabId);
+    event.dataTransfer.setData('text/plain', tabId);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>, targetId: string): void => {
+    if (!onReorder) return;
+    event.preventDefault();
+    const sourceId =
+      event.dataTransfer.getData('application/x-neko-workbench-tab') ||
+      event.dataTransfer.getData('text/plain');
+    if (!sourceId || sourceId === targetId) return;
+    onReorder(sourceId, targetId);
+  };
+
   return (
     <div className={cn('neko-workbench-editor-tabs', className)} role="tablist" aria-label={label}>
       {tabs.length > 0 ? (
         tabs.map((tab) => {
           const active = tab.id === activeId;
+          const closable = tab.closable ?? Boolean(onClose);
           return (
-            <button
+            <div
               key={tab.id}
-              type="button"
               className="neko-workbench-editor-tab"
               data-active={active ? 'true' : 'false'}
+              draggable={Boolean(onReorder) && !tab.disabled}
               role="tab"
+              tabIndex={tab.disabled ? -1 : 0}
               aria-selected={active}
-              disabled={tab.disabled}
+              aria-disabled={tab.disabled ? 'true' : undefined}
               title={tab.title ?? tab.label}
-              onClick={() => onSelect(tab.id)}
+              onDragOver={(event) => {
+                if (onReorder) event.preventDefault();
+              }}
+              onDragStart={(event) => handleDragStart(event, tab.id)}
+              onDrop={(event) => handleDrop(event, tab.id)}
+              onClick={() => {
+                if (!tab.disabled) onSelect(tab.id);
+              }}
+              onKeyDown={(event) => {
+                if (tab.disabled || (event.key !== 'Enter' && event.key !== ' ')) return;
+                event.preventDefault();
+                onSelect(tab.id);
+              }}
             >
               {tab.icon ? <span className="neko-workbench-editor-tab__icon">{tab.icon}</span> : null}
               <span className="neko-workbench-editor-tab__label">{tab.label}</span>
-            </button>
+              {closable && onClose ? (
+                <button
+                  type="button"
+                  aria-label={tab.closeLabel ?? `Close ${tab.label}`}
+                  className="neko-workbench-editor-tab__close"
+                  title={tab.closeLabel ?? `Close ${tab.label}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onClose(tab.id);
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
           );
         })
       ) : (

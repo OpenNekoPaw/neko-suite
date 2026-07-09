@@ -1933,6 +1933,9 @@ importers:
 
   packages/neko-ui:
     dependencies:
+      '@neko/markdown':
+        specifier: workspace:*
+        version: link:../neko-markdown
       '@neko/shared':
         specifier: workspace:*
         version: link:../neko-types

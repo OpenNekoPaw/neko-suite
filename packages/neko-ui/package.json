@@ -13,8 +13,10 @@
     "./icons/codicon.css": "./src/icons/codicon.css",
     "./hooks": "./src/hooks/index.ts",
     "./error-boundary": "./src/error-boundary/index.tsx",
+    "./foundation": "./src/foundation/index.tsx",
     "./keyboard": "./src/keyboard/index.ts",
     "./keyboard/focus.css": "./src/keyboard/focus.css",
+    "./markdown": "./src/markdown/index.ts",
     "./workbench": "./src/workbench/index.ts",
     "./workbench/editor-workbench.css": "./src/workbench/editor-workbench.css",
     "./test-utils": "./src/test-utils/index.ts",
@@ -25,6 +27,7 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "@neko/markdown": "workspace:*",
     "@neko/shared": "workspace:*",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-context-menu": "^2.2.16",

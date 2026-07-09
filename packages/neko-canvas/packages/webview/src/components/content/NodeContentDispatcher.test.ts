@@ -996,7 +996,15 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('Add or process reference');
     expect(markup).toContain('data-scene-shot-action-id="process-reference"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-usable-reference"');
-    expect(markup).toContain('image:1');
+    expect(markup).not.toContain('image:1');
+    expect(markup).toContain('data-scene-reference-media-preview="true"');
+    expect(markup).toContain('data-scene-reference-media-preview-fit="intrinsic"');
+    expect(markup).toContain('w-fit');
+    expect(markup).toContain('max-h-[120px]');
+    expect(markup).toContain('max-h-[148px]');
+    expect(markup).toContain('grid-cols-[minmax(72px,1fr)]');
+    expect(markup).toContain('grid-cols-[minmax(72px,2fr)_minmax(0,1fr)]');
+    expect(markup).not.toContain('grid-cols-[44px');
     expect(markup).toContain('Image prompt skipped');
     expect(markup).toContain('data-semantic-prompt-text="true"');
     expect(markup).toContain('data-semantic-prompt-visual-style="subtle"');
@@ -1004,6 +1012,96 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('text-current');
     expect(markup).toContain('slow camera drift');
     expect(markup).toContain('data-scene-shot-action-id="generate-video"');
+  });
+
+  it('renders markdown extension syntax in scene and shot prompt cells', () => {
+    const sceneStoryboardPrompt = {
+      version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+      promptBlocks: {
+        videoPromptDocument: {
+          version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+          documentId: 'scene-markdown:video:prompt',
+          blockKind: 'video',
+          text: '场景视频生成：**远景** @Rui 使用 ![[p06#panel_1]] 作为连续参考。',
+        },
+      },
+    };
+    const scene = {
+      ...buildCanvasNode({
+        type: 'scene',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'scene.basic',
+        data: {
+          sceneTitle: 'Markdown Prompt Scene',
+          sceneNumber: 5,
+        },
+      }),
+      id: 'scene-markdown-prompts',
+      data: {
+        sceneTitle: 'Markdown Prompt Scene',
+        sceneNumber: 5,
+        storyboardPrompt: sceneStoryboardPrompt,
+      },
+      container: {
+        policy: 'scene',
+        childIds: ['shot-markdown-prompts'],
+      },
+    } as CanvasNode;
+    const shot = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 40, y: 20 },
+        zIndex: 2,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 1,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              imagePromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-markdown:image:prompt',
+                blockKind: 'image',
+                text: '图像编辑：`裁切` @Rui，并使用 ![p06](P6#panel_1) 作为参考。',
+              },
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-markdown:video:prompt',
+                blockKind: 'video',
+                text: '镜头视频：*推近* [[p07#panel_2]]，保持人物动作连续。',
+              },
+            },
+          },
+        },
+      }),
+      id: 'shot-markdown-prompts',
+      parentId: 'scene-markdown-prompts',
+    } as CanvasNode;
+
+    const markup = renderToStaticMarkup(
+      React.createElement(NodeContentDispatcher, {
+        context: createContext(scene, [scene, shot]),
+        renderDefaultNode: () => React.createElement('div', null, 'Default path'),
+      }),
+    );
+
+    expect(markup).toContain('data-scene-video-prompt-summary="true"');
+    expect(markup).toContain('data-scene-shot-table-cell="image-prompt"');
+    expect(markup).toContain('data-scene-shot-table-cell="video-prompt"');
+    expect(markup).toContain('data-markdown-inline-strong="true"');
+    expect(markup).toContain('data-markdown-inline-emphasis="true"');
+    expect(markup).toContain('data-markdown-inline-code="true"');
+    expect(markup).toContain('data-markdown-mention="true"');
+    expect(markup).toContain('data-markdown-image-reference="true"');
+    expect(markup).toContain('data-markdown-resource-reference="true"');
+    expect(markup).toContain('data-semantic-prompt-generation-parts="true"');
+    expect(markup).toContain('data-markdown-generation-prompt-parts="true"');
+    expect(markup).toContain('data-markdown-generation-prompt-part-kind="intent"');
+    expect(markup).toContain('data-markdown-generation-prompt-part-kind="reference"');
+    expect(markup).toContain('data-markdown-generation-prompt-part-kind="operation"');
+    expect(markup).toContain('data-markdown-generation-prompt-part-kind="camera"');
+    expect(markup).toContain('data-markdown-generation-prompt-part-kind="constraint"');
   });
 
   it('renders fixed storyboard next-action buttons from semantic next state', () => {

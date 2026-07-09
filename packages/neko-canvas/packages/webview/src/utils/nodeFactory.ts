@@ -426,6 +426,9 @@ export function buildCanvasNode(options: BuildCanvasNodeOptions): CanvasNodeDraf
             sceneNumber: asNumber(data.sceneNumber, zIndex + 1),
             location: asString(data.location) || undefined,
             timeOfDay: asString(data.timeOfDay) || undefined,
+            storyboardPrompt: isCanvasStoryboardPromptState(data.storyboardPrompt)
+              ? data.storyboardPrompt
+              : undefined,
           },
         },
         preset,

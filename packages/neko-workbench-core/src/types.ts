@@ -137,6 +137,7 @@ export interface WorkbenchDocumentSelector {
 
 export type WorkbenchCustomEditorRuntime =
   | 'package-host-adapter'
+  | 'package-webview-root'
   | 'plugin-webview'
   | 'desktop-native'
   | 'engine-native'

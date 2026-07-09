@@ -8,3 +8,5 @@ export * from './workbench';
 export * from './test-utils';
 export * from './utils';
 export * from './keyboard';
+export * from './foundation';
+export * from './markdown';

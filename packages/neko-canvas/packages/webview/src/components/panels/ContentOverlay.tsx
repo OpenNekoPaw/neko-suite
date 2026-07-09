@@ -5,10 +5,10 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
-  type UIEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
+import { InlineMarkdownEditor, MarkdownInlineText } from '@neko/ui/markdown';
 import type {
   CanvasAuthoringDiagnostic,
   CanvasAuthoringPromptFieldProjection,
@@ -40,7 +40,11 @@ import {
 } from '../../utils/canvasPresetRegistry';
 import type { CanvasNodeDraft } from '../../utils/canvasPresetRegistry';
 import type { FieldBindingUpdate, NodeContentRenderContext } from '../content/types';
-import { getSemanticPromptFieldLabel, SemanticPromptText } from '../common/SemanticPromptText';
+import {
+  createCanvasMarkdownSemanticSpans,
+  getSemanticPromptFieldLabel,
+  renderCanvasSemanticPromptToken,
+} from '../common/SemanticPromptText';
 import { t } from '../../i18n';
 
 const PRESET_REGISTRY = createBuiltInCanvasNodePresetRegistry();
@@ -600,66 +604,35 @@ function ShotPromptSemanticEditor({
   onKeyUp: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onKeyPress: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
 }) {
-  const highlightRef = useRef<HTMLDivElement>(null);
   const displayDocument = useMemo(
     () => resolvePromptDisplayDocument(document, value),
     [document, value],
   );
-  const handleScroll = useCallback((event: UIEvent<HTMLTextAreaElement>) => {
-    const highlight = highlightRef.current;
-    if (!highlight) return;
-    highlight.scrollTop = event.currentTarget.scrollTop;
-    highlight.scrollLeft = event.currentTarget.scrollLeft;
-  }, []);
+  const semanticSpans = useMemo(
+    () => createCanvasMarkdownSemanticSpans(value, displayDocument?.spans ?? []),
+    [displayDocument?.spans, value],
+  );
 
   return (
     <div
-      className="relative min-h-[5.5rem] rounded border border-gray-200 bg-white focus-within:border-blue-400"
       data-semantic-prompt-editor="true"
       data-shot-creator-prompt-block-editor={blockKind}
     >
-      <div
-        ref={highlightRef}
-        className="pointer-events-none absolute inset-0 overflow-hidden px-2 py-1.5 text-[12px] leading-5"
-        aria-hidden="true"
-      >
-        <SemanticPromptText
-          text={value}
-          spans={displayDocument?.spans}
-          className="min-h-full whitespace-pre-wrap break-words text-gray-900"
-          spanVariant="editor"
-        />
-      </div>
-      <textarea
+      <InlineMarkdownEditor
         value={value}
+        onChange={onInput}
+        profile="semantic-prompt"
+        semanticSpans={semanticSpans}
         rows={rows}
         placeholder={placeholder}
-        aria-label={ariaLabel}
-        data-shot-creator-prompt-block-input={blockKind}
-        onInput={(event) => onInput(event.currentTarget.value)}
+        ariaLabel={ariaLabel}
+        keyboardOwnerId={`shot-creator-prompt:${nodeId}:${blockKind}`}
+        textareaDataAttributes={{ 'data-shot-creator-prompt-block-input': blockKind }}
         onBlur={onBlur}
-        onScroll={handleScroll}
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
         onKeyPress={onKeyPress}
-        onMouseDown={(event) => event.stopPropagation()}
-        {...getKeyboardBoundaryMetadata({
-          scope: 'text-input',
-          ownerId: `shot-creator-prompt:${nodeId}:${blockKind}`,
-          ownedKeys: [
-            'Backspace',
-            'Delete',
-            'Enter',
-            'Escape',
-            'Space',
-            'Tab',
-            'ArrowUp',
-            'ArrowDown',
-            'ArrowLeft',
-            'ArrowRight',
-          ],
-        })}
-        className="relative z-10 block min-h-[5.5rem] w-full resize-y rounded bg-transparent px-2 py-1.5 text-[12px] leading-5 text-transparent caret-gray-900 outline-none placeholder:text-gray-400 selection:bg-blue-200"
+        renderToken={(context) => renderCanvasSemanticPromptToken(context, 'editor')}
       />
     </div>
   );
@@ -1259,7 +1232,11 @@ function ShotCreatorSummaryItem({
         className="max-h-32 min-h-[1.25rem] overflow-y-auto whitespace-pre-wrap break-words text-[12px] leading-5 text-gray-900"
         data-shot-creator-summary-value="true"
       >
-        {value || <span className="text-gray-400">{t('scene.valueUnavailable')}</span>}
+        {value ? (
+          <MarkdownInlineText value={value} className="contents" />
+        ) : (
+          <span className="text-gray-400">{t('scene.valueUnavailable')}</span>
+        )}
       </div>
     </div>
   );

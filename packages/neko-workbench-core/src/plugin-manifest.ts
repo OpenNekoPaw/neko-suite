@@ -912,6 +912,7 @@ function readViewRuntime(value: unknown, pluginId: string): WorkbenchViewRuntime
 function readCustomEditorRuntime(value: unknown, pluginId: string): WorkbenchCustomEditorRuntime {
   if (
     value === 'package-host-adapter' ||
+    value === 'package-webview-root' ||
     value === 'plugin-webview' ||
     value === 'desktop-native' ||
     value === 'engine-native' ||

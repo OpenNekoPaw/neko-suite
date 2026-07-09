@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { WorkbenchContributionRegistrationError } from './registry';
 import {
   classifyWorkspaceResourceName,
+  createWorkbenchThumbnailRuntimeProjection,
   createWorkspaceStableResourceRef,
   createWorkspaceTreeResourceNode,
   isWorkbenchWorkspaceMediaFileKind,
@@ -37,6 +38,39 @@ describe('workspace resource provider helpers', () => {
       id: 'assets/image.png',
       source: 'workspace-files',
     });
+  });
+
+  it('keeps thumbnail projections runtime-only while stable refs stay portable', () => {
+    expect(createWorkbenchThumbnailRuntimeProjection('neko-resource://workspace/assets%2Fimage.png')).toEqual({
+      kind: 'thumbnail',
+      uri: 'neko-resource://workspace/assets%2Fimage.png',
+      currentSessionOnly: true,
+    });
+
+    expect(() =>
+      validateWorkbenchResourceProviderSnapshot({
+        provider: {
+          providerId: 'workspace-files',
+          ownerId: 'neko-desktop-bootstrap',
+          surfaceId: 'explorer',
+          providerKind: 'bootstrap-temporary',
+        },
+        nodes: [
+          createWorkspaceTreeResourceNode({
+            id: 'workspace:assets/image.png',
+            name: 'image.png',
+            relativePath: 'assets/image.png',
+            stableRef: {
+              kind: 'file',
+              id: 'neko-resource://workspace/assets%2Fimage.png',
+              source: 'workspace-files',
+            },
+          }),
+        ],
+        diagnostics: [],
+        truncated: false,
+      }),
+    ).toThrow(WorkbenchContributionRegistrationError);
   });
 
   it('validates provider snapshots and rejects unsafe identities', () => {

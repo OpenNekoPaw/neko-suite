@@ -10,8 +10,9 @@
  * The panel is a position:fixed overlay, unaffected by canvas transforms.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
+import { InlineMarkdownEditor } from '@neko/ui/markdown';
 import { EditIcon } from '@neko/shared/icons';
 import type {
   CameraAngle,
@@ -228,7 +229,10 @@ export function GenerationPromptPanel({
   const [editInstruction, setEditInstruction] = useState('');
   const [generateVideo, setGenerateVideo] = useState(false);
   const [videoDuration, setVideoDuration] = useState(5);
-  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const promptRef = useRef<HTMLTextAreaElement | null>(null);
+  const bindPromptRef = useCallback((element: HTMLTextAreaElement | null) => {
+    promptRef.current = element;
+  }, []);
 
   // Sync initial values when target changes
   useEffect(() => {
@@ -400,39 +404,22 @@ export function GenerationPromptPanel({
                 </button>
               )}
             </div>
-            <textarea
-              ref={promptRef}
+            <InlineMarkdownEditor
+              textareaRef={bindPromptRef}
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              {...getKeyboardBoundaryMetadata({
-                scope: 'text-input',
-                ownerId: 'generation-prompt',
-                ownedKeys: [
-                  'Backspace',
-                  'Delete',
-                  'Enter',
-                  'Escape',
-                  'Space',
-                  'Tab',
-                  'ArrowUp',
-                  'ArrowDown',
-                  'ArrowLeft',
-                  'ArrowRight',
-                ],
-              })}
+              onChange={setPrompt}
+              profile={target.semanticPromptDocument ? 'semantic-prompt' : 'resource-markdown'}
               placeholder="描述画面内容，例如: A young woman standing in a modern office, looking at a screen..."
+              ariaLabel="提示词"
+              keyboardOwnerId="generation-prompt"
               rows={3}
-              style={{
-                width: '100%',
-                padding: '8px 10px',
-                fontSize: 12,
-                borderRadius: 6,
-                border: '1px solid var(--neko-border)',
+              textareaDataAttributes={{ 'data-generation-prompt-input': 'true' }}
+              surfaceStyle={{
                 backgroundColor: 'var(--neko-surface)',
-                color: 'var(--neko-fg)',
-                resize: 'vertical',
-                boxSizing: 'border-box',
+                borderColor: 'var(--neko-border)',
               }}
+              highlightClassName="text-[var(--neko-fg)]"
+              textareaClassName="caret-[var(--neko-fg)]"
             />
           </div>
 

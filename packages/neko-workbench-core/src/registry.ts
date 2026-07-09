@@ -292,7 +292,11 @@ function isNonEmptyString(value: string): boolean {
 
 function readUnsafeResourceIdentityReason(value: string): string | undefined {
   if (value.includes('.neko/.cache')) return 'cache paths are derived state';
-  if (value.startsWith('vscode-webview:') || value.startsWith('webview:')) {
+  if (
+    value.startsWith('vscode-webview:') ||
+    value.startsWith('webview:') ||
+    value.startsWith('neko-resource:')
+  ) {
     return 'Webview URIs are runtime projections';
   }
   if (value.startsWith('blob:')) return 'blob URLs are runtime projections';

@@ -1008,26 +1008,56 @@ function renderSceneShotTableCell(
 
 function SceneReferenceMediaCell({ row }: { row: SceneShotTableRow }): React.ReactNode {
   const previewSource = resolveShotReviewPreviewSource(row.node);
+  const visibleReferenceMedia = getVisibleReferenceMediaLabel(row.referenceMedia);
+  const shouldRenderText = Boolean(visibleReferenceMedia || !row.referenceMedia);
+  const title =
+    visibleReferenceMedia ||
+    (!row.referenceMedia ? t('scene.referenceMediaUnavailable') : undefined);
   return (
     <div
-      className="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] items-start gap-1.5"
+      className={
+        shouldRenderText
+          ? 'grid min-w-0 grid-cols-[minmax(72px,2fr)_minmax(0,1fr)] items-start gap-1.5'
+          : 'grid min-w-0 grid-cols-[minmax(72px,1fr)] items-start gap-1.5'
+      }
       data-scene-reference-media-cell="true"
+      title={title}
     >
-      <div className="min-w-0 overflow-hidden rounded border border-gray-200 bg-gray-50">
+      <div
+        className={
+          shouldRenderText
+            ? 'mx-auto flex max-h-[120px] w-fit max-w-full items-center justify-center overflow-hidden rounded border border-gray-200 bg-white [&_img]:max-h-[120px] [&_img]:max-w-full'
+            : 'mx-auto flex max-h-[148px] w-fit max-w-full items-center justify-center overflow-hidden rounded border border-gray-200 bg-white [&_img]:max-h-[148px] [&_img]:max-w-full'
+        }
+        data-scene-reference-media-preview="true"
+        data-scene-reference-media-preview-fit="intrinsic"
+      >
         <CardPreviewSlot
           source={previewSource}
           title={row.shotNumber}
-          variant="thumbnail"
+          variant="review-full"
           imageFit="contain"
         />
       </div>
-      <BoundedSceneCellText
-        value={row.referenceMedia}
-        placeholder={t('scene.referenceMediaUnavailable')}
-        ariaLabel={t('scene.referenceMediaStatus')}
-      />
+      {shouldRenderText ? (
+        <BoundedSceneCellText
+          value={visibleReferenceMedia}
+          placeholder={t('scene.referenceMediaUnavailable')}
+          ariaLabel={t('scene.referenceMediaStatus')}
+        />
+      ) : null}
     </div>
   );
+}
+
+function getVisibleReferenceMediaLabel(value: string): string {
+  return isMachineReferenceMediaSummary(value) ? '' : value;
+}
+
+function isMachineReferenceMediaSummary(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return /^(?:(?:image|video|audio):\d+\s*)+$/iu.test(trimmed);
 }
 
 function readSceneStoryboardPromptState(node: CanvasNode): CanvasStoryboardPromptState | undefined {

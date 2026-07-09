@@ -79,6 +79,12 @@ export interface WorkbenchWorkspaceTreeResourceNodeInput {
   readonly children?: readonly WorkbenchWorkspaceTreeResourceNodeInput[];
 }
 
+export interface WorkbenchResourceRuntimeProjectionInput {
+  readonly kind: WorkbenchResourceRuntimeProjection['kind'];
+  readonly uri?: string;
+  readonly descriptorId?: string;
+}
+
 export function createWorkspaceStableResourceRef(
   relativePath: string,
   source = 'workspace-files',
@@ -89,6 +95,32 @@ export function createWorkspaceStableResourceRef(
     id: normalizedPath.length > 0 ? normalizedPath : '.',
     source,
   };
+}
+
+export function createWorkbenchResourceRuntimeProjection(
+  input: WorkbenchResourceRuntimeProjectionInput,
+): WorkbenchResourceRuntimeProjection {
+  if (!input.uri && !input.descriptorId) {
+    throw new Error('Workbench runtime projection requires a uri or descriptorId.');
+  }
+  return {
+    kind: input.kind,
+    ...(input.uri ? { uri: input.uri } : {}),
+    ...(input.descriptorId ? { descriptorId: input.descriptorId } : {}),
+    currentSessionOnly: true,
+  };
+}
+
+export function createWorkbenchThumbnailRuntimeProjection(
+  uri: string,
+): WorkbenchResourceRuntimeProjection {
+  if (uri.trim().length === 0) {
+    throw new Error('Workbench thumbnail runtime projection uri is required.');
+  }
+  return createWorkbenchResourceRuntimeProjection({
+    kind: 'thumbnail',
+    uri,
+  });
 }
 
 export function createWorkspaceTreeResourceNode(
