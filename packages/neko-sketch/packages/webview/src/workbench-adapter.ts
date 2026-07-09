@@ -13,18 +13,18 @@ export const SKETCH_WEBVIEW_ADAPTER_OWNER: WorkbenchContributionOwner = {
 export function createSketchFeatureWebviewHostAdapters(): readonly WorkbenchFeatureWebviewHostAdapterDescriptor[] {
   return [
     {
-      id: 'neko.sketch.webview.host-adapter',
+      id: 'neko.sketch.webview.root',
       owner: SKETCH_WEBVIEW_ADAPTER_OWNER,
       label: 'Sketch',
       surface: 'custom-editor',
-      runtimeEntryId: '@neko-sketch/webview/host-adapter',
+      runtimeEntryId: '@neko-sketch/webview/root',
       supportedHosts: ['vscode', 'electron'],
       requiredHostCapabilities: ['workbench.customEditors', 'workbench.webviews'],
       customEditor: {
         contributionId: 'neko.sketch.editor.sketch-editor',
         viewType: 'sketch-editor',
         selectors: [{ extension: '.nks' }],
-        runtime: 'package-host-adapter',
+        runtime: 'package-webview-root',
         priority: 'default',
       },
       theme: {

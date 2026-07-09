@@ -13,11 +13,11 @@ export const MODEL_WEBVIEW_ADAPTER_OWNER: WorkbenchContributionOwner = {
 export function createModelFeatureWebviewHostAdapters(): readonly WorkbenchFeatureWebviewHostAdapterDescriptor[] {
   return [
     {
-      id: 'neko.model.webview.host-adapter',
+      id: 'neko.model.webview.root',
       owner: MODEL_WEBVIEW_ADAPTER_OWNER,
       label: 'Model',
       surface: 'custom-editor',
-      runtimeEntryId: '@neko-model/webview/host-adapter',
+      runtimeEntryId: '@neko-model/webview/root',
       supportedHosts: ['vscode', 'electron'],
       requiredHostCapabilities: ['workbench.customEditors', 'workbench.webviews'],
       customEditor: {
@@ -30,7 +30,7 @@ export function createModelFeatureWebviewHostAdapters(): readonly WorkbenchFeatu
           { extension: '.fbx' },
           { extension: '.obj' },
         ],
-        runtime: 'package-host-adapter',
+        runtime: 'package-webview-root',
         priority: 'default',
       },
       theme: {

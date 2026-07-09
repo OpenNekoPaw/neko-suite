@@ -13,18 +13,18 @@ export const CANVAS_WEBVIEW_ADAPTER_OWNER: WorkbenchContributionOwner = {
 export function createCanvasFeatureWebviewHostAdapters(): readonly WorkbenchFeatureWebviewHostAdapterDescriptor[] {
   return [
     {
-      id: 'neko.canvas.webview.host-adapter',
+      id: 'neko.canvas.webview.root',
       owner: CANVAS_WEBVIEW_ADAPTER_OWNER,
       label: 'Canvas',
       surface: 'custom-editor',
-      runtimeEntryId: '@neko-canvas/webview/host-adapter',
+      runtimeEntryId: '@neko-canvas/webview/root',
       supportedHosts: ['vscode', 'electron'],
       requiredHostCapabilities: ['workbench.customEditors', 'workbench.webviews'],
       customEditor: {
         contributionId: 'neko.canvas.editor.canvas-workbench',
         viewType: 'canvas-workbench',
         selectors: [{ extension: '.nkc' }],
-        runtime: 'package-host-adapter',
+        runtime: 'package-webview-root',
         priority: 'default',
       },
       theme: {

@@ -162,7 +162,7 @@ summary {
 
 .title-bar {
   display: grid;
-  grid-template-columns: minmax(220px, auto) minmax(0, 1fr) minmax(180px, auto);
+  grid-template-columns: minmax(220px, auto) minmax(0, 1fr) auto minmax(180px, auto);
   align-items: center;
   gap: 12px;
   height: 100%;
@@ -223,6 +223,38 @@ html[data-neko-desktop-platform="darwin"] .title-bar {
 .title-bar__menu button:hover {
   color: var(--vscode-foreground);
   background: var(--vscode-toolbar-hoverBackground, var(--neko-hover));
+}
+
+.title-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
+
+.title-bar__icon-button,
+.right-workbench-panel__close {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--vscode-descriptionForeground);
+  background: transparent;
+  cursor: pointer;
+}
+
+.title-bar__icon-button:hover,
+.title-bar__icon-button[aria-pressed="true"],
+.right-workbench-panel__close:hover {
+  color: var(--vscode-foreground);
+  background: var(--vscode-toolbar-hoverBackground, var(--neko-hover));
+}
+
+.title-bar__left-panel-icon {
+  transform: scaleX(-1);
 }
 
 .title-bar__workspace {
@@ -588,6 +620,10 @@ html[data-neko-desktop-platform="darwin"] .title-bar {
   background: var(--vscode-editor-background);
 }
 
+.editor-pane[data-editor-home="true"] {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .desktop-viewport-shell,
 .code-editor-panel {
   min-width: 0;
@@ -769,6 +805,22 @@ html[data-neko-desktop-platform="darwin"] .title-bar {
   min-height: 0;
   border-left: 1px solid var(--neko-border);
   background: var(--neko-workbench-chrome);
+}
+
+.right-workbench-panel__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-width: 0;
+  border-bottom: 1px solid var(--neko-border);
+}
+
+.right-workbench-panel__header .neko-workbench-editor-tabs {
+  border-bottom: 0;
+}
+
+.right-workbench-panel__close {
+  margin-right: 6px;
 }
 
 .right-workbench-panel__body {

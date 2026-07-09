@@ -10,11 +10,11 @@ describe('desktop feature Webview adapter descriptors', () => {
     const adapters = createDesktopFeatureWebviewHostAdapters();
 
     expect(adapters.map((adapter) => adapter.id)).toEqual([
-      'neko.canvas.webview.host-adapter',
+      'neko.canvas.webview.root',
       'neko.cut.webview.root',
-      'neko.audio.webview.host-adapter',
-      'neko.sketch.webview.host-adapter',
-      'neko.model.webview.host-adapter',
+      'neko.audio.webview.root',
+      'neko.sketch.webview.root',
+      'neko.model.webview.root',
       'neko.preview.webview.host-adapter',
     ]);
     expect(adapters.map((adapter) => adapter.owner.id)).toEqual([
@@ -36,13 +36,13 @@ describe('desktop feature Webview adapter descriptors', () => {
     const registry = createDesktopFeatureWebviewAdapterRegistry(DESKTOP_WORKBENCH_HOST_CAPABILITIES);
 
     expect(registry.snapshot().diagnostics).toEqual([]);
-    expect(registry.toCustomEditorContribution('neko.canvas.webview.host-adapter')).toEqual(
+    expect(registry.toCustomEditorContribution('neko.canvas.webview.root')).toEqual(
       expect.objectContaining({
         id: 'neko.canvas.editor.canvas-workbench',
         kind: 'custom-editor',
         owner: expect.objectContaining({ id: '@neko-canvas/webview' }),
         viewType: 'canvas-workbench',
-        runtime: 'package-host-adapter',
+        runtime: 'package-webview-root',
       }),
     );
   });

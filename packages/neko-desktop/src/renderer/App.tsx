@@ -1,6 +1,14 @@
 import clsx from 'clsx';
+import type { AgentHostRuntimeAdapter } from '@neko-agent/types';
 import { AgentWebviewRoot } from '@neko-agent/webview/root';
 import { useI18n, useTranslation } from '@neko/shared/i18n/react';
+import {
+  createWebviewFoundation,
+  type WebviewFoundationContextValue,
+  type WebviewFoundationDiagnostic,
+  type WebviewFoundationResourceProjectionInput,
+  type WebviewFoundationResourceProjectionResult,
+} from '@neko/ui/foundation';
 import { TreeView, type TreeViewItem } from '@neko/ui/creative';
 import {
   CameraIcon,
@@ -14,6 +22,8 @@ import {
   PlayIcon,
   PlusIcon,
   RefreshIcon,
+  RightPanelIcon,
+  RightPanelOffIcon,
   ScissorsIcon,
   VolumeIcon,
 } from '@neko/ui/icons';
@@ -40,8 +50,15 @@ import type {
   WorkspaceFileNode,
   WorkbenchSurfaceId,
 } from '../shared/contracts';
+import { createElectronAgentHostRuntimeAdapter } from './agent-host-runtime-adapter';
 import { CreativeEditorAdapterHost } from './creative-editor-adapters';
 import { getDesktopBridge } from './desktop-bridge';
+import {
+  closeDesktopEditorTab,
+  openDesktopEditorTab,
+  reorderDesktopEditorTab,
+  type DesktopEditorTabState,
+} from './editor-tab-state';
 
 const surfaceShortLabels: Record<WorkbenchSurfaceId, string> = {
   explorer: 'EX',
@@ -69,12 +86,17 @@ const MEDIA_PREVIEW_KIND_ORDER: readonly MediaPreviewFileKind[] = [
 
 export function App(): ReactElement {
   const { setLocale, t } = useI18n();
+  const agentHostRuntimeAdapter = useMemo(() => createElectronAgentHostRuntimeAdapter(), []);
   const [snapshot, setSnapshot] = useState<DesktopSnapshot | undefined>();
   const [activeSurfaceId, setActiveSurfaceId] = useState<WorkbenchSurfaceId>('explorer');
   const [rightPanelId, setRightPanelId] = useState<RightPanelId>('agent');
-  const [selectedFileId, setSelectedFileId] = useState<string | undefined>();
+  const [leftWorkbenchVisible, setLeftWorkbenchVisible] = useState(true);
+  const [secondarySidebarVisible, setSecondarySidebarVisible] = useState(true);
   const [selectedWorkspaceNodeId, setSelectedWorkspaceNodeId] = useState<string | undefined>();
-  const [openFileIds, setOpenFileIds] = useState<readonly string[]>([]);
+  const [editorTabState, setEditorTabState] = useState<DesktopEditorTabState>({
+    openFileIds: [],
+    activeFileId: undefined,
+  });
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [ack, setAck] = useState<ViewportIntentAck | undefined>();
   const [selectedFileContent, setSelectedFileContent] = useState<
@@ -105,11 +127,15 @@ export function App(): ReactElement {
         document.documentElement.lang = nextSnapshot.host.locale;
         setSnapshot(nextSnapshot);
         setActiveSurfaceId('explorer');
+        setLeftWorkbenchVisible(true);
+        setSecondarySidebarVisible(true);
         const initialOpenFiles = collectInitialOpenFiles(nextSnapshot.workspaceTree.nodes);
         const initialFileId = initialOpenFiles[0]?.id ?? nextSnapshot.workspaceTree.selectedFileId;
-        setSelectedFileId(initialFileId);
         setSelectedWorkspaceNodeId(initialFileId);
-        setOpenFileIds(initialOpenFiles.map((file) => file.id));
+        setEditorTabState({
+          openFileIds: initialOpenFiles.map((file) => file.id),
+          activeFileId: initialFileId,
+        });
         setSelectedNodeId(nextSnapshot.resourceSurfaces[0]?.nodes[0]?.id);
       })
       .catch((loadError: unknown) => {
@@ -124,17 +150,18 @@ export function App(): ReactElement {
   }, [setLocale]);
 
   const selectedFile = useMemo(() => {
-    return snapshot && selectedFileId
-      ? findWorkspaceFile(snapshot.workspaceTree.nodes, selectedFileId)
+    return snapshot && editorTabState.activeFileId
+      ? findWorkspaceFile(snapshot.workspaceTree.nodes, editorTabState.activeFileId)
       : undefined;
-  }, [selectedFileId, snapshot]);
+  }, [editorTabState.activeFileId, snapshot]);
 
   const openFiles = useMemo(() => {
     if (!snapshot) return [];
-    return openFileIds
+    return editorTabState.openFileIds
       .map((id) => findWorkspaceFile(snapshot.workspaceTree.nodes, id))
       .filter((file): file is WorkspaceFileNode => Boolean(file));
-  }, [openFileIds, snapshot]);
+  }, [editorTabState.openFileIds, snapshot]);
+  const showEditorHome = openFiles.length === 0;
 
   const activeResourceSurface = useMemo(() => {
     return snapshot?.resourceSurfaces.find((surface) => surface.surfaceId === activeSurfaceId);
@@ -147,6 +174,17 @@ export function App(): ReactElement {
     }
     return snapshot?.resourceSurfaces.flatMap((surface) => surface.nodes).find((node) => node.id === selectedNodeId);
   }, [activeResourceSurface, selectedNodeId, snapshot]);
+
+  const agentFoundation = useMemo(() => {
+    if (!snapshot) {
+      return undefined;
+    }
+    return createDesktopAgentFoundation({
+      snapshot,
+      runtimeId: agentHostRuntimeAdapter.runtimeId,
+      reportDiagnostic: (diagnostic) => setError(diagnostic.message),
+    });
+  }, [agentHostRuntimeAdapter.runtimeId, snapshot]);
 
   useEffect(() => {
     let disposed = false;
@@ -203,6 +241,7 @@ export function App(): ReactElement {
     if (!isWorkbenchSurfaceId(surfaceId)) {
       throw new Error(`Unknown workbench surface: ${surfaceId}`);
     }
+    setLeftWorkbenchVisible(true);
     handleSurfaceSelect(surfaceId);
   };
 
@@ -210,17 +249,27 @@ export function App(): ReactElement {
     if (!isRightPanelId(panelId)) {
       throw new Error(`Unknown right workbench panel: ${panelId}`);
     }
+    setSecondarySidebarVisible(true);
     setRightPanelId(panelId);
   };
 
   const handleEditorFileSelect = (fileId: string): void => {
-    setSelectedFileId(fileId);
     setSelectedWorkspaceNodeId(fileId);
     setActiveSurfaceId('explorer');
     const file = snapshot ? findWorkspaceFile(snapshot.workspaceTree.nodes, fileId) : undefined;
     if (file?.editor) {
-      setOpenFileIds((current) => (current.includes(fileId) ? current : [...current, fileId]));
+      setEditorTabState((current) => openDesktopEditorTab(current, fileId));
     }
+  };
+
+  const handleEditorFileClose = (fileId: string): void => {
+    setEditorTabState((current) => closeDesktopEditorTab(current, fileId));
+  };
+
+  const handleEditorFileReorder = (sourceFileId: string, targetFileId: string): void => {
+    setEditorTabState((current) =>
+      reorderDesktopEditorTab(current, sourceFileId, targetFileId),
+    );
   };
 
   const handleWorkspaceNodeSelect = (nodeId: string): void => {
@@ -230,8 +279,7 @@ export function App(): ReactElement {
     if (!node || node.kind === 'directory' || !node.editor) {
       return;
     }
-    setSelectedFileId(nodeId);
-    setOpenFileIds((current) => (current.includes(nodeId) ? current : [...current, nodeId]));
+    setEditorTabState((current) => openDesktopEditorTab(current, nodeId));
   };
 
   const handleNodeAction = (node: ResourceNode, action: ResourceActionDescriptor): void => {
@@ -272,7 +320,18 @@ export function App(): ReactElement {
   return (
     <EditorWorkbenchShell
       className="desktop-workbench-shell"
-      titleBar={<WorkbenchTitleBar snapshot={snapshot} />}
+      titleBar={
+        <WorkbenchTitleBar
+          leftWorkbenchVisible={leftWorkbenchVisible}
+          secondarySidebarVisible={secondarySidebarVisible}
+          snapshot={snapshot}
+          onToggleLeftWorkbench={() => setLeftWorkbenchVisible((visible) => !visible)}
+          onToggleSecondarySidebar={() =>
+            setSecondarySidebarVisible((visible) => !visible)
+          }
+        />
+      }
+      activityBarVisible={leftWorkbenchVisible}
       activityBar={
         <WorkbenchActivityBar
           activeId={activeSurfaceId}
@@ -285,6 +344,7 @@ export function App(): ReactElement {
           onSelect={handleActivitySelect}
         />
       }
+      sidebarVisible={leftWorkbenchVisible}
       sidebar={
         <section className="workspace-pane" aria-label={t(`surface.${activeSurfaceId}.title`)}>
           {activeSurfaceId === 'explorer' ? (
@@ -304,34 +364,55 @@ export function App(): ReactElement {
         </section>
       }
       editor={
-        <section className="editor-pane" aria-label={t('aria.editorViewport')}>
-          <WorkbenchEditorTabs
-            activeId={selectedFile?.id}
-            emptyLabel={t('selection.none')}
-            label={t('aria.openEditors')}
-            tabs={openFiles.map((file) => ({
-              id: file.id,
-              label: file.name,
-              title: file.relativePath,
-              icon: <span>{readFileIconLabel(file)}</span>,
-            }))}
-            onSelect={handleEditorFileSelect}
-          />
-          <CreativeEditorAdapterHost
-            snapshot={snapshot}
-            selectedFile={selectedFile}
-            selectedFileContent={selectedFileContent}
-            onIntent={handleViewportIntent}
-          />
+        <section
+          className="editor-pane"
+          data-editor-home={showEditorHome ? 'true' : 'false'}
+          aria-label={t('aria.editorViewport')}
+        >
+          {showEditorHome ? (
+            <DesktopEditorHome
+              foundation={agentFoundation}
+              hostRuntimeAdapter={agentHostRuntimeAdapter}
+              locale={snapshot.host.locale}
+            />
+          ) : (
+            <>
+              <WorkbenchEditorTabs
+                activeId={selectedFile?.id}
+                emptyLabel={t('selection.none')}
+                label={t('aria.openEditors')}
+                tabs={openFiles.map((file) => ({
+                  id: file.id,
+                  label: file.name,
+                  title: file.relativePath,
+                  closeLabel: t('editor.closeTab', { name: file.name }),
+                  icon: <span>{readFileIconLabel(file)}</span>,
+                }))}
+                onClose={handleEditorFileClose}
+                onReorder={handleEditorFileReorder}
+                onSelect={handleEditorFileSelect}
+              />
+              <CreativeEditorAdapterHost
+                snapshot={snapshot}
+                selectedFile={selectedFile}
+                selectedFileContent={selectedFileContent}
+                onIntent={handleViewportIntent}
+              />
+            </>
+          )}
         </section>
       }
+      secondarySidebarVisible={secondarySidebarVisible}
       secondarySidebar={
         <RightWorkbenchPanel
           activePanelId={rightPanelId}
           agent={
-            <WorkbenchWebviewRuntimeFrame runtimeId="agent">
-              <AgentWebviewRoot locale={snapshot.host.locale} />
-            </WorkbenchWebviewRuntimeFrame>
+            <DesktopAgentRuntimeSurface
+              foundation={agentFoundation}
+              hostRuntimeAdapter={agentHostRuntimeAdapter}
+              locale={snapshot.host.locale}
+              runtimeId="agent"
+            />
           }
           inspector={
             <InspectorPanel
@@ -344,6 +425,7 @@ export function App(): ReactElement {
             />
           }
           onPanelSelect={handleRightPanelSelect}
+          onClose={() => setSecondarySidebarVisible(false)}
         />
       }
       statusBar={
@@ -366,8 +448,67 @@ export function App(): ReactElement {
 }
 
 
-function WorkbenchTitleBar({ snapshot }: { readonly snapshot: DesktopSnapshot }): ReactElement {
+interface DesktopAgentRuntimeSurfaceProps {
+  readonly foundation: WebviewFoundationContextValue | undefined;
+  readonly hostRuntimeAdapter: AgentHostRuntimeAdapter;
+  readonly locale: DesktopSnapshot['host']['locale'];
+  readonly runtimeId: string;
+}
+
+function DesktopAgentRuntimeSurface({
+  foundation,
+  hostRuntimeAdapter,
+  locale,
+  runtimeId,
+}: DesktopAgentRuntimeSurfaceProps): ReactElement {
+  return (
+    <WorkbenchWebviewRuntimeFrame runtimeId={runtimeId}>
+      <AgentWebviewRoot
+        foundation={foundation}
+        hostRuntimeAdapter={hostRuntimeAdapter}
+        locale={locale}
+      />
+    </WorkbenchWebviewRuntimeFrame>
+  );
+}
+
+function DesktopEditorHome({
+  foundation,
+  hostRuntimeAdapter,
+  locale,
+}: Omit<DesktopAgentRuntimeSurfaceProps, 'runtimeId'>): ReactElement {
+  return (
+    <DesktopAgentRuntimeSurface
+      foundation={foundation}
+      hostRuntimeAdapter={hostRuntimeAdapter}
+      locale={locale}
+      runtimeId="agent-dashboard"
+    />
+  );
+}
+
+interface WorkbenchTitleBarProps {
+  readonly snapshot: DesktopSnapshot;
+  readonly leftWorkbenchVisible: boolean;
+  readonly secondarySidebarVisible: boolean;
+  readonly onToggleLeftWorkbench: () => void;
+  readonly onToggleSecondarySidebar: () => void;
+}
+
+function WorkbenchTitleBar({
+  leftWorkbenchVisible,
+  onToggleLeftWorkbench,
+  onToggleSecondarySidebar,
+  secondarySidebarVisible,
+  snapshot,
+}: WorkbenchTitleBarProps): ReactElement {
   const { t } = useTranslation();
+  const leftLabel = leftWorkbenchVisible
+    ? t('layout.hideLeftToolbar')
+    : t('layout.showLeftToolbar');
+  const rightLabel = secondarySidebarVisible
+    ? t('layout.hideRightToolbar')
+    : t('layout.showRightToolbar');
   return (
     <header className="title-bar">
       <div className="title-bar__brand">
@@ -381,6 +522,36 @@ function WorkbenchTitleBar({ snapshot }: { readonly snapshot: DesktopSnapshot })
         <button type="button">{t('title.menu.agent')}</button>
         <button type="button">{t('title.menu.render')}</button>
       </nav>
+      <div className="title-bar__actions" aria-label={t('aria.layoutControls')}>
+        <button
+          aria-label={leftLabel}
+          aria-pressed={leftWorkbenchVisible}
+          className="title-bar__icon-button"
+          title={leftLabel}
+          type="button"
+          onClick={onToggleLeftWorkbench}
+        >
+          {leftWorkbenchVisible ? (
+            <RightPanelIcon className="title-bar__left-panel-icon" size={15} />
+          ) : (
+            <RightPanelOffIcon className="title-bar__left-panel-icon" size={15} />
+          )}
+        </button>
+        <button
+          aria-label={rightLabel}
+          aria-pressed={secondarySidebarVisible}
+          className="title-bar__icon-button"
+          title={rightLabel}
+          type="button"
+          onClick={onToggleSecondarySidebar}
+        >
+          {secondarySidebarVisible ? (
+            <RightPanelIcon size={15} />
+          ) : (
+            <RightPanelOffIcon size={15} />
+          )}
+        </button>
+      </div>
       <div className="title-bar__workspace">{snapshot.workspace.name}</div>
     </header>
   );
@@ -592,6 +763,7 @@ interface RightWorkbenchPanelProps {
   readonly activePanelId: RightPanelId;
   readonly agent: ReactNode;
   readonly inspector: ReactNode;
+  readonly onClose: () => void;
   readonly onPanelSelect: (panelId: string) => void;
 }
 
@@ -599,21 +771,34 @@ function RightWorkbenchPanel({
   activePanelId,
   agent,
   inspector,
+  onClose,
   onPanelSelect,
 }: RightWorkbenchPanelProps): ReactElement {
   const { t } = useTranslation();
+  const closeLabel = t('layout.hideRightToolbar');
   return (
     <aside className="right-workbench-panel" aria-label={t('aria.secondarySidebar')}>
-      <WorkbenchEditorTabs
-        activeId={activePanelId}
-        emptyLabel={t('selection.none')}
-        label={t('aria.secondarySidebar')}
-        tabs={[
-          { id: 'agent', label: t('rightPanel.agent') },
-          { id: 'inspector', label: t('rightPanel.inspector') },
-        ]}
-        onSelect={onPanelSelect}
-      />
+      <div className="right-workbench-panel__header">
+        <WorkbenchEditorTabs
+          activeId={activePanelId}
+          emptyLabel={t('selection.none')}
+          label={t('aria.secondarySidebar')}
+          tabs={[
+            { id: 'agent', label: t('rightPanel.agent') },
+            { id: 'inspector', label: t('rightPanel.inspector') },
+          ]}
+          onSelect={onPanelSelect}
+        />
+        <button
+          aria-label={closeLabel}
+          className="right-workbench-panel__close"
+          title={closeLabel}
+          type="button"
+          onClick={onClose}
+        >
+          <RightPanelOffIcon size={15} />
+        </button>
+      </div>
       <div className="right-workbench-panel__body">
         {activePanelId === 'agent' ? agent : inspector}
       </div>
@@ -1053,6 +1238,44 @@ function readFileIconLabel(file: WorkspaceFileNode): string {
 
 function normalizeSortIndex(index: number): number {
   return index === -1 ? 999 : index;
+}
+
+function createDesktopAgentFoundation(input: {
+  readonly snapshot: DesktopSnapshot;
+  readonly runtimeId: string;
+  readonly reportDiagnostic: (diagnostic: WebviewFoundationDiagnostic) => void;
+}): WebviewFoundationContextValue {
+  return createWebviewFoundation({
+    hostKind: 'electron',
+    runtimeId: input.runtimeId,
+    locale: input.snapshot.host.locale,
+    theme: { kind: 'light' },
+    diagnostics: {
+      report: input.reportDiagnostic,
+    },
+    resources: {
+      projectResource: (request) => projectDesktopWorkspaceResource(input.snapshot, request),
+    },
+  });
+}
+
+function projectDesktopWorkspaceResource(
+  snapshot: DesktopSnapshot,
+  input: WebviewFoundationResourceProjectionInput,
+): WebviewFoundationResourceProjectionResult | undefined {
+  if (input.stableRef.kind !== 'file' || input.stableRef.source !== 'workspace-files') {
+    return undefined;
+  }
+  const file = flattenWorkspaceFiles(snapshot.workspaceTree.nodes).find(
+    (node) => node.relativePath === input.stableRef.id,
+  );
+  if (!file?.thumbnail?.url) {
+    return undefined;
+  }
+  return {
+    uri: file.thumbnail.url,
+    currentSessionOnly: true,
+  };
 }
 
 function formatBytes(bytes: number): string {

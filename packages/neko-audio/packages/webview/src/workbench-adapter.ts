@@ -13,18 +13,18 @@ export const AUDIO_WEBVIEW_ADAPTER_OWNER: WorkbenchContributionOwner = {
 export function createAudioFeatureWebviewHostAdapters(): readonly WorkbenchFeatureWebviewHostAdapterDescriptor[] {
   return [
     {
-      id: 'neko.audio.webview.host-adapter',
+      id: 'neko.audio.webview.root',
       owner: AUDIO_WEBVIEW_ADAPTER_OWNER,
       label: 'Audio',
       surface: 'custom-editor',
-      runtimeEntryId: '@neko-audio/webview/host-adapter',
+      runtimeEntryId: '@neko-audio/webview/root',
       supportedHosts: ['vscode', 'electron'],
       requiredHostCapabilities: ['workbench.customEditors', 'workbench.webviews'],
       customEditor: {
         contributionId: 'neko.audio.editor.timeline',
         viewType: 'audio-timeline',
         selectors: [{ extension: '.nka' }],
-        runtime: 'package-host-adapter',
+        runtime: 'package-webview-root',
         priority: 'default',
       },
       theme: {

@@ -6,16 +6,13 @@
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AudioEditor } from './AudioEditor';
-
-// Initialize i18n (side-effect: registers bundles)
-import '../i18n';
+import { AudioWebviewRoot } from '../root';
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
   createRoot(rootElement).render(
     <StrictMode>
-      <AudioEditor />
+      <AudioWebviewRoot />
     </StrictMode>,
   );
 }

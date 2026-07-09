@@ -1,7 +1,7 @@
-import { CanvasHostAdapterSurface } from '@neko-canvas/webview/host-adapter';
-import { AudioHostAdapterSurface } from '@neko-audio/webview/host-adapter';
-import { ModelHostAdapterSurface } from '@neko-model/webview/host-adapter';
-import { SketchHostAdapterSurface } from '@neko-sketch/webview/host-adapter';
+import { CanvasWebviewRoot } from '@neko-canvas/webview/root';
+import { AudioWebviewRoot } from '@neko-audio/webview/root';
+import { ModelWebviewRoot } from '@neko-model/webview/root';
+import { SketchWebviewRoot } from '@neko-sketch/webview/root';
 import { PreviewHostAdapterSurface } from '@neko/preview-webview/host-adapter';
 import { CutWebviewRoot } from '@neko/webview/root';
 import type { ISceneController } from '@neko/shared';
@@ -14,8 +14,9 @@ import type {
   CreativeHostRuntimeProjection,
 } from '@neko/ui/workbench';
 import { ViewportShell } from '@neko/ui/viewport';
-import { useMemo, type ReactElement } from 'react';
+import { useLayoutEffect, useMemo, type ReactElement, type ReactNode } from 'react';
 import type {
+  DesktopFeatureWebviewRuntimeId,
   DesktopCreativePanelKind,
   DesktopSnapshot,
   ReadWorkspaceFileResult,
@@ -27,6 +28,7 @@ import {
   listDesktopFeatureEditorPanelKinds,
 } from '../shared/feature-webview-adapters';
 import { CodeEditor } from './CodeEditor';
+import { getDesktopBridge } from './desktop-bridge';
 
 export interface CreativeEditorAdapterHostProps {
   readonly snapshot: DesktopSnapshot;
@@ -59,22 +61,10 @@ const desktopViewportController: ISceneController = {
 const DESKTOP_ADAPTER_RENDERERS: Readonly<
   Partial<Record<DesktopCreativePanelKind, DesktopAdapterRegistration>>
 > = {
-  'canvas-workbench': {
-    render: (props) => <CanvasHostAdapterSurface {...props} />,
-  },
   'cut-timeline': {
     render: () => {
       throw new Error('Cut editor is rendered through the full @neko/webview/root runtime.');
     },
-  },
-  'audio-timeline': {
-    render: (props) => <AudioHostAdapterSurface {...props} />,
-  },
-  'sketch-editor': {
-    render: (props) => <SketchHostAdapterSurface {...props} />,
-  },
-  'model-viewport': {
-    render: (props) => <ModelHostAdapterSurface {...props} />,
   },
   'media-preview': {
     render: (props) => <PreviewHostAdapterSurface {...props} />,
@@ -113,13 +103,67 @@ export function CreativeEditorAdapterHost({
       );
     }
     return selectedFileContent ? (
-      <CutEditorSurface
-        content={selectedFileContent}
-        locale={snapshot.host.locale}
-        workspaceRoot={snapshot.workspace.root}
-      />
+      <DesktopFeatureWebviewRuntimeFrame
+        file={selectedFile}
+        frameRuntimeId="cut"
+        runtimeId="@neko/webview/root"
+      >
+        <CutEditorSurface
+          content={selectedFileContent}
+          locale={snapshot.host.locale}
+          workspaceRoot={snapshot.workspace.root}
+        />
+      </DesktopFeatureWebviewRuntimeFrame>
     ) : (
       <div className="desktop-editor-loading">{t('editor.loading')}</div>
+    );
+  }
+
+  if (selectedFile.editor.panelKind === 'canvas-workbench') {
+    return (
+      <DesktopFeatureWebviewRuntimeFrame
+        file={selectedFile}
+        frameRuntimeId="canvas"
+        runtimeId="@neko-canvas/webview/root"
+      >
+        <CanvasWebviewRoot locale={snapshot.host.locale} />
+      </DesktopFeatureWebviewRuntimeFrame>
+    );
+  }
+
+  if (selectedFile.editor.panelKind === 'audio-timeline') {
+    return (
+      <DesktopFeatureWebviewRuntimeFrame
+        file={selectedFile}
+        frameRuntimeId="audio"
+        runtimeId="@neko-audio/webview/root"
+      >
+        <AudioWebviewRoot locale={snapshot.host.locale} />
+      </DesktopFeatureWebviewRuntimeFrame>
+    );
+  }
+
+  if (selectedFile.editor.panelKind === 'sketch-editor') {
+    return (
+      <DesktopFeatureWebviewRuntimeFrame
+        file={selectedFile}
+        frameRuntimeId="sketch"
+        runtimeId="@neko-sketch/webview/root"
+      >
+        <SketchWebviewRoot locale={snapshot.host.locale} />
+      </DesktopFeatureWebviewRuntimeFrame>
+    );
+  }
+
+  if (selectedFile.editor.panelKind === 'model-viewport') {
+    return (
+      <DesktopFeatureWebviewRuntimeFrame
+        file={selectedFile}
+        frameRuntimeId="model"
+        runtimeId="@neko-model/webview/root"
+      >
+        <ModelWebviewRoot locale={snapshot.host.locale} />
+      </DesktopFeatureWebviewRuntimeFrame>
     );
   }
 
@@ -223,12 +267,45 @@ function CutEditorSurface({
   }
 
   return (
-    <WorkbenchWebviewRuntimeFrame runtimeId="cut">
-      <CutWebviewRoot
-        initialProject={project.value}
-        locale={locale}
-        projectRoot={projectRoot}
-      />
+    <CutWebviewRoot
+      initialProject={project.value}
+      locale={locale}
+      projectRoot={projectRoot}
+    />
+  );
+}
+
+function DesktopFeatureWebviewRuntimeFrame({
+  children,
+  file,
+  frameRuntimeId,
+  runtimeId,
+}: {
+  readonly children: ReactNode;
+  readonly file: WorkspaceFileNode;
+  readonly frameRuntimeId: string;
+  readonly runtimeId: DesktopFeatureWebviewRuntimeId;
+}): ReactElement {
+  const editor = file.editor;
+  if (!editor) {
+    throw new Error(`Desktop feature Webview file has no editor: ${file.relativePath}`);
+  }
+
+  useLayoutEffect(() => {
+    const bridge = getDesktopBridge();
+    bridge.setFeatureWebviewContext({
+      runtimeId,
+      panelKind: editor.panelKind,
+      relativePath: file.relativePath,
+    });
+    return () => {
+      bridge.setFeatureWebviewContext(undefined);
+    };
+  }, [editor.panelKind, file.relativePath, runtimeId]);
+
+  return (
+    <WorkbenchWebviewRuntimeFrame runtimeId={frameRuntimeId}>
+      {children}
     </WorkbenchWebviewRuntimeFrame>
   );
 }

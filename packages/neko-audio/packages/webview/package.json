@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./host-adapter": "./src/host-adapter/index.tsx",
+    "./root": "./src/root.tsx",
     "./workbench-adapter": "./src/workbench-adapter.ts"
   },
   "dependencies": {

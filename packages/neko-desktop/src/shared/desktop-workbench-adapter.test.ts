@@ -249,7 +249,7 @@ describe('desktop workbench adapter', () => {
           id: 'neko.canvas.editor.canvas-workbench',
           owner: expect.objectContaining({ id: '@neko-canvas/webview' }),
           viewType: 'canvas-workbench',
-          runtime: 'package-host-adapter',
+          runtime: 'package-webview-root',
         }),
         expect.objectContaining({
           id: 'neko.cut.editor.timeline',
@@ -288,7 +288,7 @@ function createWorkspaceTreeWithCanvasAndCode(): WorkspaceFileTreeSnapshot {
           label: 'Canvas',
           packageName: '@neko-canvas/webview',
           implementedInVsCodeWebview: true,
-          desktopRuntime: 'host-adapter-projection',
+          desktopRuntime: 'full-webview-runtime',
         },
       },
       {

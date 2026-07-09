@@ -163,7 +163,7 @@ function readDesktopEditorKind(panelKind: DesktopCreativePanelKind): DesktopEdit
 function readDesktopRuntime(
   adapter: WorkbenchFeatureWebviewHostAdapterDescriptor,
 ): DesktopEditorAdapterDescriptor['desktopRuntime'] {
-  return adapter.runtimeEntryId === '@neko/webview/root'
+  return adapter.runtimeEntryId.endsWith('/root')
     ? 'full-webview-runtime'
     : 'host-adapter-projection';
 }

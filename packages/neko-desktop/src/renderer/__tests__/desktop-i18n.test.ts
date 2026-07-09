@@ -14,9 +14,12 @@ describe('desktop renderer i18n', () => {
     expect(i18n.t('explorer.scm.untracked')).toBe('未跟踪');
     expect(i18n.t('adapter.cutProjectInvalid')).toBe('无效的 Cut 项目');
     expect(i18n.t('editor.loading')).toBe('正在加载编辑器文档...');
+    expect(i18n.t('editor.closeTab', { name: 'scene.nkc' })).toBe('关闭 scene.nkc');
     expect(i18n.t('status.files', { count: 12 })).toBe('12 个文件');
     expect(i18n.t('inspector.title')).toBe('检查器');
     expect(i18n.t('viewport.activate')).toBe('激活');
+    expect(i18n.t('layout.hideLeftToolbar')).toBe('隐藏左侧工具栏');
+    expect(i18n.t('layout.showRightToolbar')).toBe('显示右侧工具栏');
 
     i18n.setLocale('en');
 
@@ -29,8 +32,11 @@ describe('desktop renderer i18n', () => {
     expect(i18n.t('explorer.scm.untracked')).toBe('Untracked');
     expect(i18n.t('adapter.cutProjectInvalid')).toBe('Invalid Cut project');
     expect(i18n.t('editor.loading')).toBe('Loading editor document...');
+    expect(i18n.t('editor.closeTab', { name: 'scene.nkc' })).toBe('Close scene.nkc');
     expect(i18n.t('status.files', { count: 12 })).toBe('12 files');
     expect(i18n.t('inspector.title')).toBe('Inspector');
     expect(i18n.t('viewport.activate')).toBe('Activate');
+    expect(i18n.t('layout.hideLeftToolbar')).toBe('Hide left toolbar');
+    expect(i18n.t('layout.showRightToolbar')).toBe('Show right toolbar');
   });
 });

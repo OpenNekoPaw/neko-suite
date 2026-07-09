@@ -38,6 +38,16 @@ describe('desktop workspace resource provider adapter', () => {
         }),
       ]),
     );
+    const imageNode = result.providerSnapshot.nodes[0]?.children?.[0];
+    expect(imageNode?.stableRef).toEqual({
+      kind: 'file',
+      id: 'assets/image.png',
+      source: 'workspace-files',
+    });
+    expect(imageNode?.runtimeProjections?.[0]?.uri).toBe(
+      'neko-resource://workspace/assets%2Fimage.png',
+    );
+    expect(JSON.stringify(imageNode?.stableRef)).not.toContain('neko-resource://');
   });
 
   it('exposes truncation diagnostics instead of hiding provider state', () => {

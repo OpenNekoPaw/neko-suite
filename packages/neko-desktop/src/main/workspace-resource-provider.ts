@@ -4,6 +4,7 @@ import type {
   WorkbenchWorkspaceTreeResourceNode,
 } from '@neko/workbench-core';
 import {
+  createWorkbenchThumbnailRuntimeProjection,
   createWorkspaceStableResourceRef,
   createWorkspaceTreeResourceNode,
   validateWorkbenchResourceProviderSnapshot,
@@ -89,11 +90,5 @@ function createRuntimeProjections(
   if (!node.thumbnail?.url) {
     return undefined;
   }
-  return [
-    {
-      kind: 'thumbnail',
-      uri: node.thumbnail.url,
-      currentSessionOnly: true,
-    },
-  ];
+  return [createWorkbenchThumbnailRuntimeProjection(node.thumbnail.url)];
 }

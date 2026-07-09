@@ -1,8 +1,12 @@
 import type { ReactElement } from 'react';
+import type { AgentHostRuntimeAdapter } from '@neko-agent/types';
 import type { ProjectData, SupportedLocale } from '@neko/shared';
+import type { WebviewFoundationContextValue } from '@neko/ui/foundation';
 
 export interface AgentWebviewRootProps {
   readonly locale?: SupportedLocale;
+  readonly hostRuntimeAdapter?: AgentHostRuntimeAdapter;
+  readonly foundation?: WebviewFoundationContextValue;
 }
 
 export interface CutWebviewRootProps {
