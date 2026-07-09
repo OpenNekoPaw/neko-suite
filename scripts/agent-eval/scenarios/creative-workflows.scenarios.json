@@ -1,0 +1,44 @@
+{
+  "schema": "neko.agent-eval.scenarios.v1",
+  "defaultCwd": "~/Git/neko-test/",
+  "defaultTimeoutMs": 600000,
+  "cases": [
+    {
+      "id": "cat-play-image-analysis",
+      "surface": "agent",
+      "prompt": "生成猫猫玩耍图片，并分析图片内容",
+      "expectations": [
+        "Agent creates or requests a cat-playing image generation task.",
+        "Agent waits for the generated image or task result observation before final analysis.",
+        "Final response describes visible image content rather than only restating the prompt."
+      ]
+    },
+    {
+      "id": "blame-epub-storyboard-to-canvas",
+      "surface": "agent",
+      "prompt": "@${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub 分析前10页，生成分镜表，发送到canvas",
+      "expectations": [
+        "Agent reads the referenced EPUB through normal content access.",
+        "Agent generates a storyboard table for the first 10 pages.",
+        "Agent sends Canvas-targeted content.",
+        "External checks verify a Canvas JSON file exists and contains storyboard/canvas node content."
+      ],
+      "postChecks": [
+        {
+          "kind": "canvas-json",
+          "expect": ["storyboard", "nodes"]
+        }
+      ]
+    },
+    {
+      "id": "lamp-god-epub-animation-plan",
+      "surface": "agent",
+      "prompt": "@${A}/epub/animation/灯神/[Kmoe][燈神·未償之願]卷01.epub ▋       分析漫画，设计动画化企划",
+      "expectations": [
+        "Agent reads the referenced EPUB through normal content access.",
+        "Agent analyzes the comic material.",
+        "Agent produces an animation planning proposal with structure suitable for review."
+      ]
+    }
+  ]
+}
