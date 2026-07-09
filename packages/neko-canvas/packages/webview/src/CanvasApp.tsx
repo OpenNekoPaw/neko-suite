@@ -8,10 +8,13 @@ import {
 import { CreativeWorkbenchShell } from '@neko/ui/workbench';
 import {
   isCanvasStoryboardPromptState,
+  isCanvasCreativeAiActionId,
   projectCanvasShotPrompt,
   validateCanvasBoardRef,
+  validateCreativeAiRunSnapshot,
 } from '@neko/shared';
 import type {
+  CanvasCreativeAiActionId,
   CanvasBoardNavigationDiagnostic,
   CanvasBoardRef,
   CanvasData,
@@ -23,6 +26,8 @@ import type {
   CanvasViewport,
   GeneratedImageVersion,
   ProjectedCanvasStatus,
+  CreativeAiDiagnostic,
+  CreativeAiRunSnapshot,
 } from '@neko/shared';
 import { createCanvasAgentActiveContext } from './utils/canvasAgentOperations';
 import { useCanvasStore } from './stores/canvasStore';
@@ -107,6 +112,33 @@ const WEBVIEW_SUBSYSTEM_REGISTRY = createBuiltInWebviewSubsystemRegistry();
 const BASIC_CANVAS_SUBSYSTEM_IDS: readonly CanvasSubsystemId[] = ['storyboard'];
 const logger = getLogger('CanvasApp');
 type CanvasRightDockMode = 'basic' | 'professional';
+
+interface CanvasCreativeAiActionStatusState {
+  readonly status: 'pending' | 'accepted' | 'failed';
+  readonly actionId: CanvasCreativeAiActionId;
+  readonly diagnostics: readonly CreativeAiDiagnostic[];
+  readonly snapshot?: CreativeAiRunSnapshot;
+}
+
+function normalizeCreativeAiDiagnostics(
+  value: readonly unknown[] | undefined,
+): CreativeAiDiagnostic[] {
+  if (!value) return [];
+  return value.filter(isCreativeAiDiagnosticLike);
+}
+
+function isCreativeAiDiagnosticLike(value: unknown): value is CreativeAiDiagnostic {
+  if (!isRecord(value)) return false;
+  return (
+    (value.severity === 'info' || value.severity === 'warning' || value.severity === 'error') &&
+    typeof value.code === 'string' &&
+    typeof value.message === 'string'
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 function resolveGenerationPanelPromptContext(
   node: CanvasData['nodes'][number] | undefined,
@@ -258,6 +290,9 @@ export function CanvasApp() {
   const [isSpacePanActive, setIsSpacePanActive] = useState(false);
   const [isRightNodeTreeVisible, setIsRightNodeTreeVisible] = useState(false);
   const [rightDockMode, setRightDockMode] = useState<CanvasRightDockMode>('basic');
+  const [creativeAiActionResults, setCreativeAiActionResults] = useState<
+    Record<string, CanvasCreativeAiActionStatusState>
+  >({});
   const [isHudVisible, setIsHudVisible] = useState(true);
   const [isGridVisible, setIsGridVisible] = useState(true);
   const [isCanvasSettingsVisible, setIsCanvasSettingsVisible] = useState(false);
@@ -765,6 +800,21 @@ export function CanvasApp() {
         });
       }
     },
+    onCanvasCreativeAiActionResult: ({ nodeId, actionId, ok, diagnostics, snapshot }) => {
+      if (!isCanvasCreativeAiActionId(actionId)) return;
+      const snapshotValidation = validateCreativeAiRunSnapshot(snapshot);
+      setCreativeAiActionResults((current) => ({
+        ...current,
+        [nodeId]: {
+          status: ok ? 'accepted' : 'failed',
+          actionId,
+          diagnostics: normalizeCreativeAiDiagnostics(diagnostics),
+          ...(snapshotValidation.valid && snapshotValidation.value
+            ? { snapshot: snapshotValidation.value }
+            : {}),
+        },
+      }));
+    },
     onScriptIndexResult: (nodeId, scenes) => {
       updateNodeData(nodeId, { scenes });
     },
@@ -973,6 +1023,114 @@ export function CanvasApp() {
     [selectedNodeIds],
   );
 
+  const postCanvasCreativeAiAction = useCallback(
+    (nodeId: string, actionId: CanvasCreativeAiActionId) => {
+      setCreativeAiActionResults((current) => ({
+        ...current,
+        [nodeId]: {
+          status: 'pending',
+          actionId,
+          diagnostics: [],
+        },
+      }));
+      vscode?.postMessage({
+        type: 'canvasCreativeAiAction',
+        nodeId,
+        actionId,
+      });
+    },
+    [vscode],
+  );
+
+  const handleOverlayOptimizePrompt = useCallback(
+    (nodeId: string) => {
+      postCanvasCreativeAiAction(nodeId, 'optimize-video-prompt');
+    },
+    [postCanvasCreativeAiAction],
+  );
+
+  const handleOverlayGenerateImage = useCallback(
+    (nodeId: string) => {
+      postCanvasCreativeAiAction(nodeId, 'generate-image');
+    },
+    [postCanvasCreativeAiAction],
+  );
+
+  const handleOverlayEditImage = useCallback(
+    (nodeId: string) => {
+      postCanvasCreativeAiAction(nodeId, 'edit-image');
+    },
+    [postCanvasCreativeAiAction],
+  );
+
+  const handleOverlayGenerateVideo = useCallback(
+    (nodeId: string) => {
+      postCanvasCreativeAiAction(nodeId, 'generate-video');
+    },
+    [postCanvasCreativeAiAction],
+  );
+
+  const handleOverlayEditVideo = useCallback(
+    (nodeId: string) => {
+      postCanvasCreativeAiAction(nodeId, 'edit-video');
+    },
+    [postCanvasCreativeAiAction],
+  );
+
+  const postCanvasCreativeAiCandidateAction = useCallback(
+    (
+      nodeId: string,
+      candidateId: string,
+      candidateAction: 'accept' | 'reject' | 'delete' | 'inspect',
+      actionId?: CanvasCreativeAiActionId,
+    ) => {
+      vscode?.postMessage({
+        type: 'canvasCreativeAiCandidateAction',
+        nodeId,
+        candidateId,
+        candidateAction,
+        actionId,
+      });
+    },
+    [],
+  );
+
+  const handleOverlayCandidateAccept = useCallback(
+    (nodeId: string, candidateId: string, actionId?: CanvasCreativeAiActionId) => {
+      postCanvasCreativeAiCandidateAction(nodeId, candidateId, 'accept', actionId);
+    },
+    [postCanvasCreativeAiCandidateAction],
+  );
+
+  const handleOverlayCandidateReject = useCallback(
+    (nodeId: string, candidateId: string, actionId?: CanvasCreativeAiActionId) => {
+      postCanvasCreativeAiCandidateAction(nodeId, candidateId, 'reject', actionId);
+    },
+    [postCanvasCreativeAiCandidateAction],
+  );
+
+  const handleOverlayCandidateRetry = useCallback(
+    (nodeId: string, candidateId: string, actionId: CanvasCreativeAiActionId) => {
+      void candidateId;
+      postCanvasCreativeAiAction(nodeId, actionId);
+    },
+    [postCanvasCreativeAiAction],
+  );
+
+  const handleOverlayCandidateDelete = useCallback(
+    (nodeId: string, candidateId: string, actionId?: CanvasCreativeAiActionId) => {
+      postCanvasCreativeAiCandidateAction(nodeId, candidateId, 'delete', actionId);
+    },
+    [postCanvasCreativeAiCandidateAction],
+  );
+
+  const handleOverlayCandidateInspect = useCallback(
+    (nodeId: string, candidateId: string, actionId?: CanvasCreativeAiActionId) => {
+      postCanvasCreativeAiCandidateAction(nodeId, candidateId, 'inspect', actionId);
+    },
+    [postCanvasCreativeAiCandidateAction],
+  );
+
   /** Open GenerationPromptPanel in video mode for the selected ShotNode */
   const handleGenerateVideo = useCallback(() => {
     const nodeId = selectedNodeIds[0];
@@ -1093,6 +1251,7 @@ export function CanvasApp() {
 
   const handlePanelGenerate = useCallback(
     (target: GenerationPanelTarget, params: GenerationParams) => {
+      // General GenerationPromptPanel path; Shot overlay AI buttons use canvasCreativeAiAction.
       vscode?.postMessage({
         type: 'generateForNode',
         nodeId: target.nodeId,
@@ -1751,6 +1910,17 @@ export function CanvasApp() {
                   <ContentOverlay
                     nodeId={contentOverlayState.nodeId}
                     onClose={closeContentOverlay}
+                    creativeAiStatus={creativeAiActionResults[contentOverlayState.nodeId]}
+                    onOptimizePrompt={handleOverlayOptimizePrompt}
+                    onGenerateImage={handleOverlayGenerateImage}
+                    onEditImage={handleOverlayEditImage}
+                    onGenerateVideo={handleOverlayGenerateVideo}
+                    onEditVideo={handleOverlayEditVideo}
+                    onCandidateAccept={handleOverlayCandidateAccept}
+                    onCandidateReject={handleOverlayCandidateReject}
+                    onCandidateRetry={handleOverlayCandidateRetry}
+                    onCandidateDelete={handleOverlayCandidateDelete}
+                    onCandidateInspect={handleOverlayCandidateInspect}
                   />
                 )}
 

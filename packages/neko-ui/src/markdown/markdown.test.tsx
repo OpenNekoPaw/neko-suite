@@ -244,6 +244,31 @@ describe('@neko/ui markdown primitives', () => {
     expect(onChange).toHaveBeenCalledWith('hello world');
   });
 
+  it('renders semantic-prompt editor highlights as generation prompt parts when spans are absent', () => {
+    act(() => {
+      root.render(
+        <InlineMarkdownEditor
+          value="图像编辑：以 P04#panel_1 为输入，裁切为竖幅，保持人物比例"
+          onChange={() => undefined}
+          profile="semantic-prompt"
+          keyboardOwnerId="markdown:semantic-prompt"
+          ariaLabel="Prompt"
+        />,
+      );
+    });
+
+    const highlight = host.querySelector<HTMLElement>('[data-inline-markdown-highlight="true"]');
+    expect(
+      highlight?.querySelector('[data-markdown-generation-prompt-parts="true"]'),
+    ).not.toBeNull();
+    expect(
+      highlight?.querySelector('[data-markdown-generation-prompt-part-kind="intent"]'),
+    ).not.toBeNull();
+    expect(
+      highlight?.querySelector('[data-markdown-generation-prompt-part-kind="operation"]'),
+    ).not.toBeNull();
+  });
+
   it('synchronizes the highlight layer with textarea scroll', () => {
     act(() => {
       root.render(
@@ -302,7 +327,9 @@ describe('@neko/ui markdown primitives', () => {
       textarea?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: '@' }));
     });
 
-    const completion = host.querySelector<HTMLButtonElement>('[data-markdown-completion-item="rin"]');
+    const completion = host.querySelector<HTMLButtonElement>(
+      '[data-markdown-completion-item="rin"]',
+    );
     expect(completion).not.toBeNull();
 
     act(() => {

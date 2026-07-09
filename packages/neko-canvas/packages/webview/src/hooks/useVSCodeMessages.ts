@@ -57,6 +57,14 @@ export interface GenerationProgressPayload {
   dataUrl?: string;
 }
 
+export interface CanvasCreativeAiActionResultPayload {
+  readonly nodeId: string;
+  readonly actionId?: string;
+  readonly ok: boolean;
+  readonly diagnostics?: readonly unknown[];
+  readonly snapshot?: unknown;
+}
+
 export interface UseVSCodeMessagesOptions {
   vscode: VSCodeAPI;
   defaultCanvasData: CanvasData;
@@ -68,6 +76,8 @@ export interface UseVSCodeMessagesOptions {
   }) => void;
   /** Called when generation status/image arrives from the extension scheduler */
   onGenerationProgress?: (payload: GenerationProgressPayload) => void;
+  /** Called when a typed Canvas creative AI action is accepted or rejected by the host. */
+  onCanvasCreativeAiActionResult?: (payload: CanvasCreativeAiActionResultPayload) => void;
   /** Called with the AI-built prompt string for AutoPrompt */
   onBuildPromptResult?: (prompt: string) => void;
   /** Called when scene TOC is available for a ScriptNode */
@@ -185,6 +195,7 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
     setCanvasData,
     onRevealPlaybackWorkspace,
     onGenerationProgress,
+    onCanvasCreativeAiActionResult,
     onBuildPromptResult,
     onScriptIndexResult,
     onModelInstalledResult,
@@ -220,6 +231,8 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
   onRevealPlaybackWorkspaceRef.current = onRevealPlaybackWorkspace;
   const onGenerationProgressRef = useRef(onGenerationProgress);
   onGenerationProgressRef.current = onGenerationProgress;
+  const onCanvasCreativeAiActionResultRef = useRef(onCanvasCreativeAiActionResult);
+  onCanvasCreativeAiActionResultRef.current = onCanvasCreativeAiActionResult;
   const onBuildPromptResultRef = useRef(onBuildPromptResult);
   onBuildPromptResultRef.current = onBuildPromptResult;
   const onScriptIndexResultRef = useRef(onScriptIndexResult);
@@ -345,6 +358,17 @@ export function useVSCodeMessages(options: UseVSCodeMessagesOptions): UseVSCodeM
               status: message.status as GenerationProgressPayload['status'],
               dataUrl: message.dataUrl as string | undefined,
             });
+            break;
+          case 'canvasCreativeAiActionResult':
+            if (typeof message.nodeId === 'string') {
+              onCanvasCreativeAiActionResultRef.current?.({
+                nodeId: message.nodeId,
+                actionId: typeof message.actionId === 'string' ? message.actionId : undefined,
+                ok: message.ok === true,
+                diagnostics: Array.isArray(message.diagnostics) ? message.diagnostics : undefined,
+                snapshot: message.snapshot,
+              });
+            }
             break;
           case 'buildPromptResult':
             onBuildPromptResultRef.current?.(message.prompt as string);

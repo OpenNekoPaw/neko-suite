@@ -6,6 +6,7 @@ import {
   CREATIVE_AI_INVOCATION_SCHEMA_VERSION,
   NEKO_AGENT_CHARACTER_DIALOGUE_COMMAND,
   NEKO_AGENT_EMBODY_CHARACTER_COMMAND,
+  type CanvasCreativeAiActionId,
   type CreativeAiDocumentRef,
   type CreativeAiSourceRef,
   type CreativeAiTargetRef,
@@ -33,7 +34,12 @@ function createMemoryMemento(): vscode.Memento {
   } as vscode.Memento;
 }
 
-function externalInvocation(): ExternalCreativeAiInvocation {
+function externalInvocation(
+  overrides: Partial<ExternalCreativeAiInvocation> & {
+    readonly actionId?: CanvasCreativeAiActionId;
+  } = {},
+): ExternalCreativeAiInvocation {
+  const actionId = overrides.actionId ?? 'generate-image';
   const documentRef: CreativeAiDocumentRef = {
     kind: 'nk-document',
     packageId: 'neko-canvas',
@@ -58,6 +64,39 @@ function externalInvocation(): ExternalCreativeAiInvocation {
     fieldPath: '/generatedImage',
     revision: 'target-rev-1',
   };
+  const candidateTargetRef: CreativeAiTargetRef = {
+    kind: 'candidate-target',
+    packageId: 'neko-canvas',
+    id: 'canvas-node:shot-1#/creativeAiCandidates/generatedImage',
+    documentRef,
+    entityId: 'shot-1',
+    fieldPath: '/creativeAiCandidates/generatedImage',
+    revision: 'candidate-rev-1',
+    candidateOnly: true,
+  };
+  const canvasCreativeAiAction = {
+    schemaVersion: CREATIVE_AI_INVOCATION_SCHEMA_VERSION,
+    requestId: 'canvas-action-1',
+    actionId,
+    documentRef,
+    sourceRef,
+    targetRef,
+    candidateTargetRef,
+    documentRevision: 'doc-rev-1',
+    targetRevision: 'target-rev-1',
+    idempotencyKey: 'canvas-ai:doc-1:shot-1:target-rev-1',
+    target: { nodeId: 'shot-1' },
+    creativeParameters: {
+      promptDocuments: [
+        {
+          blockKind: actionId.includes('video') ? 'video' : 'image',
+          documentId: 'prompt-doc-1',
+          version: 1,
+          text: 'A calm cat playing with yarn in a sunlit room.',
+        },
+      ],
+    },
+  };
   return {
     schemaVersion: CREATIVE_AI_INVOCATION_SCHEMA_VERSION,
     domain: 'external-creative-package',
@@ -66,10 +105,11 @@ function externalInvocation(): ExternalCreativeAiInvocation {
     documentRef,
     sourceRef,
     targetRef,
+    candidateTargetRef,
     intent: 'Generate a stable image output.',
     mode: 'generate',
     writeback: {
-      kind: 'mutating',
+      kind: 'candidate',
       atomicity: 'per-target',
       requiresRevisionMatch: true,
     },
@@ -80,6 +120,54 @@ function externalInvocation(): ExternalCreativeAiInvocation {
       allowCreateBackgroundConversation: true,
     },
     idempotencyKey: 'canvas-ai:doc-1:shot-1:target-rev-1',
+    metadata: {
+      actionId,
+      modality: actionId.includes('video') ? 'video' : 'image',
+      canvasCreativeAiAction,
+    },
+    ...overrides,
+  };
+}
+
+function createPlatformMock(options: { readonly imageCapabilities?: readonly string[] } = {}) {
+  const provider = { id: 'gateway', enabled: true };
+  const imageModel = {
+    id: 'image-model',
+    providerId: 'gateway',
+    enabled: true,
+    capabilities: options.imageCapabilities ?? ['image.generate', 'image.edit'],
+  };
+  const chatModel = {
+    id: 'chat-model',
+    providerId: 'gateway',
+    enabled: true,
+    capabilities: ['chat', 'llm.chat', 'llm.judge'],
+  };
+  const models = new Map([
+    [imageModel.id, imageModel],
+    [chatModel.id, chatModel],
+  ]);
+  return {
+    config: {
+      getDefaultModelRef: vi.fn((type: string) =>
+        type === 'image'
+          ? { providerId: 'gateway', modelId: 'image-model' }
+          : { providerId: 'gateway', modelId: 'chat-model' },
+      ),
+      resolveModelRefForPurpose: vi.fn((purpose: string) =>
+        purpose.startsWith('image.')
+          ? { providerId: 'gateway', modelId: 'image-model' }
+          : { providerId: 'gateway', modelId: 'chat-model' },
+      ),
+      getProvider: vi.fn((providerId: string) => (providerId === 'gateway' ? provider : undefined)),
+      getModel: vi.fn((modelId: string) => models.get(modelId)),
+    },
+    media: {
+      generateImage: vi.fn(() => new Promise(() => undefined)),
+      generateVideo: vi.fn(() => new Promise(() => undefined)),
+      waitForTask: vi.fn(),
+    },
+    createService: vi.fn(),
   };
 }
 
@@ -198,12 +286,14 @@ describe('agentCoreCommands bridge', () => {
         conversations.add('background-1');
         return 'background-1';
       }),
+      projectCreativeAiRunSnapshot: vi.fn(),
     };
+    const platform = createPlatformMock();
 
     registerAgentCoreCommands(
       context as never,
       chatViewProvider as never,
-      { get: vi.fn() } as never,
+      { get: vi.fn(() => platform) } as never,
     );
 
     const callback = vi
@@ -226,11 +316,83 @@ describe('agentCoreCommands bridge', () => {
           conversationId: 'background-1',
           invocationId: 'invoke-1',
           sourcePackage: 'neko-canvas',
+          status: 'running',
+          workItems: [
+            expect.objectContaining({
+              laneKind: 'image',
+              status: 'running',
+              targetRef: expect.objectContaining({ id: 'canvas-node:shot-1#/generatedImage' }),
+            }),
+          ],
+          aggregate: expect.objectContaining({
+            totalCount: 1,
+            runningCount: 1,
+          }),
+          modelSnapshot: expect.objectContaining({
+            providerId: 'gateway',
+            modelId: 'image-model',
+            capabilityId: 'image.generate',
+          }),
         }),
       }),
     );
     expect(result.decision.conversationId).not.toBe('agent-selected');
     expect(chatViewProvider.createBackgroundCreativeAiConversation).toHaveBeenCalled();
+    expect(chatViewProvider.projectCreativeAiRunSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: expect.any(String),
+        conversationId: 'background-1',
+        modelSnapshot: expect.objectContaining({ modelId: 'image-model' }),
+      }),
+    );
+  });
+
+  it('rejects Canvas creative AI invocations when configured model lacks the required capability', async () => {
+    const context = {
+      subscriptions: [] as Array<{ dispose(): void }>,
+      workspaceState: createMemoryMemento(),
+    };
+    const conversations = new Set(['agent-selected']);
+    const chatViewProvider = {
+      sendMessageToAssistant: vi.fn(),
+      sendContextPayload: vi.fn(),
+      startCharacterDialogue: vi.fn(),
+      startEmbodyCharacter: vi.fn(),
+      dndBroker: { getPayload: vi.fn(), clearPayload: vi.fn() },
+      setPluginCommandsGetter: vi.fn(),
+      sendPluginSlashCommands: vi.fn(),
+      getSelectedAgentConversationId: vi.fn(() => 'agent-selected'),
+      hasConversation: vi.fn((conversationId: string) => conversations.has(conversationId)),
+      createBackgroundCreativeAiConversation: vi.fn(),
+      projectCreativeAiRunSnapshot: vi.fn(),
+    };
+    const platform = createPlatformMock({ imageCapabilities: ['llm.chat'] });
+
+    registerAgentCoreCommands(
+      context as never,
+      chatViewProvider as never,
+      { get: vi.fn(() => platform) } as never,
+    );
+
+    const callback = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.find(([command]) => command === 'neko.agent.creativeAi.invokeExternal')?.[1];
+    const result = await callback?.(externalInvocation());
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        diagnostics: [
+          expect.objectContaining({
+            code: 'creative-ai-model-capability-mismatch',
+            target: 'modelId',
+          }),
+        ],
+      }),
+    );
+    expect(chatViewProvider.createBackgroundCreativeAiConversation).not.toHaveBeenCalled();
+    expect(chatViewProvider.projectCreativeAiRunSnapshot).not.toHaveBeenCalled();
+    expect(platform.media.generateImage).not.toHaveBeenCalled();
   });
 
   it('registers the Character Dialogue command through the Agent-owned launch path', async () => {

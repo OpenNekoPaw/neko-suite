@@ -18,6 +18,7 @@
 | [`adr-agent-message-task-queue-boundary.md`](adr-agent-message-task-queue-boundary.md)                             | Agent 消息队列、任务队列与任务卡的展示位置、权威来源和操作边界                      |
 | [`adr-agent-runtime-architecture-comparison-boundary.md`](adr-agent-runtime-architecture-comparison-boundary.md)   | Agent runtime 对比 Codex/OpenCode/Pi/OpenClaw/Hermes 等后的本地边界、协议面和演进约束 |
 | [`adr-agent-creative-invocation-run-boundary.md`](adr-agent-creative-invocation-run-boundary.md)                   | Agent 创作包 AI 调用、document/run 边界、ResourceRef 结果和 package-owned 写回约束  |
+| [`adr-canvas-creative-ai-candidate-actions.md`](adr-canvas-creative-ai-candidate-actions.md)                       | Canvas Shot/Scene AI 按钮、candidate-first 写回、后台 Agent run、媒体并发和晋升边界 |
 | [`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md)                 | Agent Skill catalog、用户新增 Skill metadata 和激活权威边界                         |
 | [`adr-agent-skill-creator-and-validation.md`](adr-agent-skill-creator-and-validation.md)                           | Agent Skill Creator、标准化技能创作、确定性校验和激活边界                           |
 | [`adr-agent-prompt-skill-validator-boundary.md`](adr-agent-prompt-skill-validator-boundary.md)                     | Agent 默认提示词、Skill 提示词、Validator 和 Capability 的职责边界                  |

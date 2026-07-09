@@ -625,11 +625,14 @@ describe('ContentOverlay', () => {
     expect(editor?.querySelector('[data-markdown-inline-code="true"]')).not.toBeNull();
     expect(editor?.querySelector('[data-markdown-resource-reference="true"]')).not.toBeNull();
     expect(editor?.querySelector('[data-markdown-mention="true"]')).not.toBeNull();
+    expect(editor?.querySelector('[data-markdown-generation-prompt-parts="true"]')).not.toBeNull();
     expect(editor?.querySelector('[data-inline-markdown-highlight="true"]')?.textContent).toContain(
-      '**Rainy hallway**',
+      'Rainy hallway',
     );
     expect(textarea?.getAttribute('placeholder')).toBeNull();
     expect(textarea?.getAttribute('aria-label')).toBe('Scene video prompt');
+    expect(textarea?.rows).toBe(10);
+    expect(textarea?.className).toContain('min-h-[14rem]');
     expect(textarea?.getAttribute('data-neko-keyboard-scope')).toBe('text-input');
     expect(textarea?.getAttribute('data-neko-keyboard-owner')).toBe(
       'shot-creator-prompt:shot-overlay-markdown-editor:video',
@@ -639,7 +642,383 @@ describe('ContentOverlay', () => {
       '[data-shot-creator-prompt-block-input="image"]',
     );
     expect(imageTextarea?.getAttribute('placeholder')).toBeNull();
+    expect(imageTextarea?.rows).toBe(10);
+    expect(imageTextarea?.className).toContain('min-h-[14rem]');
     expect(host.querySelector('[data-shot-creator-summary-item="visual-action"]')).toBeNull();
+  });
+
+  it('renders prompt action buttons and generation prompt parts in shot prompt editors', () => {
+    const promptText = '图像编辑：以 P04#panel_1 为输入，裁切为竖幅，保持人物比例';
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 13,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              imagePromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-actions:image:prompt',
+                blockKind: 'image',
+                text: promptText,
+              },
+            },
+          },
+        },
+      }),
+      id: 'shot-overlay-actions',
+    } as CanvasNode;
+    const onOptimizePrompt = vi.fn();
+    const onGenerateImage = vi.fn();
+    const onEditImage = vi.fn();
+    const onGenerateVideo = vi.fn();
+    const onEditVideo = vi.fn();
+
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(
+        <ContentOverlay
+          nodeId={node.id}
+          onClose={() => undefined}
+          onOptimizePrompt={onOptimizePrompt}
+          onGenerateImage={onGenerateImage}
+          onEditImage={onEditImage}
+          onGenerateVideo={onGenerateVideo}
+          onEditVideo={onEditVideo}
+        />,
+      );
+    });
+
+    const optimize = host.querySelector<HTMLButtonElement>(
+      '[data-shot-creator-prompt-action="optimize-video-prompt"]',
+    );
+    const generateImage = host.querySelector<HTMLButtonElement>(
+      '[data-shot-creator-prompt-action="generate-image"]',
+    );
+    const editImage = host.querySelector<HTMLButtonElement>(
+      '[data-shot-creator-prompt-action="edit-image"]',
+    );
+    const generateVideo = host.querySelector<HTMLButtonElement>(
+      '[data-shot-creator-prompt-action="generate-video"]',
+    );
+    const editVideo = host.querySelector<HTMLButtonElement>(
+      '[data-shot-creator-prompt-action="edit-video"]',
+    );
+    const videoActionGroup = host.querySelector('[data-shot-creator-prompt-action-group="video"]');
+    const imageActionGroup = host.querySelector('[data-shot-creator-prompt-action-group="image"]');
+    expect(videoActionGroup).not.toBeNull();
+    expect(imageActionGroup).not.toBeNull();
+    expect(
+      videoActionGroup?.querySelector('[data-shot-creator-prompt-action="optimize-video-prompt"]'),
+    ).not.toBeNull();
+    expect(
+      videoActionGroup?.querySelector('[data-shot-creator-prompt-action="generate-video"]'),
+    ).not.toBeNull();
+    expect(
+      videoActionGroup?.querySelector('[data-shot-creator-prompt-action="edit-video"]'),
+    ).not.toBeNull();
+    expect(
+      videoActionGroup?.querySelector('[data-shot-creator-prompt-action="generate-image"]'),
+    ).toBeNull();
+    expect(
+      imageActionGroup?.querySelector('[data-shot-creator-prompt-action="generate-image"]'),
+    ).not.toBeNull();
+    expect(
+      imageActionGroup?.querySelector('[data-shot-creator-prompt-action="edit-image"]'),
+    ).not.toBeNull();
+    expect(
+      imageActionGroup?.querySelector('[data-shot-creator-prompt-action="generate-video"]'),
+    ).toBeNull();
+    expect(optimize?.textContent).toContain('Optimize prompt');
+    expect(generateImage?.textContent).toContain('Generate image');
+    expect(editImage?.textContent).toContain('Edit image');
+    expect(generateVideo?.textContent).toContain('Generate video');
+    expect(editVideo?.textContent).toContain('Edit video');
+    expect(optimize?.disabled).toBe(false);
+    expect(generateImage?.disabled).toBe(false);
+    expect(editImage?.disabled).toBe(false);
+    expect(generateVideo?.disabled).toBe(false);
+    expect(editVideo?.disabled).toBe(false);
+
+    act(() => {
+      optimize?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      generateImage?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      editImage?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      generateVideo?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      editVideo?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onOptimizePrompt).toHaveBeenCalledWith(node.id);
+    expect(onGenerateImage).toHaveBeenCalledWith(node.id);
+    expect(onEditImage).toHaveBeenCalledWith(node.id);
+    expect(onGenerateVideo).toHaveBeenCalledWith(node.id);
+    expect(onEditVideo).toHaveBeenCalledWith(node.id);
+    const imageEditor = host.querySelector('[data-shot-creator-prompt-block-editor="image"]');
+    expect(
+      imageEditor?.querySelector('[data-markdown-generation-prompt-parts="true"]'),
+    ).not.toBeNull();
+    expect(
+      imageEditor?.querySelector('[data-markdown-generation-prompt-part-kind="intent"]'),
+    ).not.toBeNull();
+  });
+
+  it('renders typed creative AI action status and aggregate progress from Agent snapshots', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 7,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-ai-status:video:prompt',
+                blockKind: 'video',
+                text: 'Hold a slow push-in while dialogue stays in frame.',
+              },
+            },
+          },
+        },
+      }),
+      id: 'shot-overlay-ai-status',
+    } as CanvasNode;
+
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(
+        <ContentOverlay
+          nodeId={node.id}
+          onClose={() => undefined}
+          creativeAiStatus={{
+            status: 'accepted',
+            actionId: 'generate-video',
+            diagnostics: [
+              {
+                severity: 'warning',
+                code: 'canvas-creative-ai-model-capability-unsupported',
+                message: 'Selected model does not support video generation.',
+              },
+            ],
+            snapshot: {
+              aggregate: {
+                totalCount: 3,
+                completedCount: 1,
+                failedCount: 1,
+                runningCount: 1,
+                queuedCount: 0,
+              },
+            },
+          }}
+        />,
+      );
+    });
+
+    expect(host.querySelector('[data-shot-creator-ai-status="accepted"]')).not.toBeNull();
+    expect(host.querySelector('[data-shot-creator-ai-action-id="generate-video"]')).not.toBeNull();
+    expect(host.querySelector('[data-shot-creator-ai-aggregate="true"]')?.textContent).toContain(
+      'Progress 1/3',
+    );
+    expect(
+      host.querySelector(
+        '[data-shot-creator-ai-diagnostic="canvas-creative-ai-model-capability-unsupported"]',
+      )?.textContent,
+    ).toContain('Selected model does not support video generation.');
+  });
+
+  it('renders candidate-first AI results and candidate action controls', () => {
+    const nodeId = 'shot-overlay-ai-candidate';
+    const targetRef = {
+      kind: 'canvas-field',
+      packageId: 'neko-canvas',
+      id: `canvas-node:${nodeId}#/generatedAsset`,
+      entityId: nodeId,
+      fieldPath: '/generatedAsset',
+      metadata: { actionId: 'generate-image' },
+    };
+    const candidateTargetRef = {
+      kind: 'candidate-target',
+      packageId: 'neko-canvas',
+      id: `canvas-node:${nodeId}#candidate:generate-image`,
+      entityId: nodeId,
+      fieldPath: '/storyboardPrompt/candidates/generate-image',
+      candidateOnly: true,
+      metadata: { actionId: 'generate-image' },
+    };
+    const baseNode = buildCanvasNode({
+      type: 'shot',
+      position: { x: 0, y: 0 },
+      zIndex: 0,
+      preset: 'shot.basic',
+      data: {
+        shotNumber: 10,
+        storyboardPrompt: {
+          version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+          promptBlocks: {
+            imagePromptDocument: {
+              version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+              documentId: `${nodeId}:image:prompt`,
+              blockKind: 'image',
+              text: 'Generate a clean keyframe.',
+            },
+          },
+        },
+      },
+    });
+    const node = {
+      ...baseNode,
+      id: nodeId,
+      data: {
+        ...baseNode.data,
+        creativeAiCandidates: {
+          [candidateTargetRef.id]: {
+            candidateId: candidateTargetRef.id,
+            status: 'candidate',
+            sourcePackage: 'neko-canvas',
+            targetRef,
+            candidateTargetRef,
+            outputRefs: [
+              {
+                kind: 'generated-asset',
+                id: 'candidate-output-1',
+                generatedAssetId: 'image/shot-10.png',
+                mimeType: 'image/png',
+              },
+            ],
+            targetRevision: 'target-revision-1',
+            candidateRevision: 'candidate-revision-1',
+            runId: 'creative-run-1',
+            conversationId: 'creative-session-1',
+            idempotencyKey: 'candidate-idempotency-1',
+            createdAt: '2026-07-10T00:00:00.000Z',
+          },
+        },
+      },
+    } as CanvasNode;
+    const onCandidateAccept = vi.fn();
+    const onCandidateReject = vi.fn();
+    const onCandidateRetry = vi.fn();
+    const onCandidateDelete = vi.fn();
+    const onCandidateInspect = vi.fn();
+
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(
+        <ContentOverlay
+          nodeId={node.id}
+          onClose={() => undefined}
+          onCandidateAccept={onCandidateAccept}
+          onCandidateReject={onCandidateReject}
+          onCandidateRetry={onCandidateRetry}
+          onCandidateDelete={onCandidateDelete}
+          onCandidateInspect={onCandidateInspect}
+        />,
+      );
+    });
+
+    expect(host.querySelector('[data-shot-creator-ai-candidates="true"]')).not.toBeNull();
+    expect(
+      host.querySelector(`[data-shot-creator-ai-candidate="${candidateTargetRef.id}"]`),
+    ).not.toBeNull();
+    expect(host.textContent).toContain('Creative AI candidates');
+    expect(host.textContent).toContain('Generate image');
+    expect(host.textContent).toContain('Resource: generated-assets/image/shot-10.png');
+
+    for (const action of ['accept', 'reject', 'retry', 'delete', 'inspect']) {
+      const button = host.querySelector<HTMLButtonElement>(
+        `[data-shot-creator-ai-candidate-action="${action}"]`,
+      );
+      expect(button?.disabled).toBe(false);
+      act(() => {
+        button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+    }
+
+    expect(onCandidateAccept).toHaveBeenCalledWith(
+      node.id,
+      candidateTargetRef.id,
+      'generate-image',
+    );
+    expect(onCandidateReject).toHaveBeenCalledWith(
+      node.id,
+      candidateTargetRef.id,
+      'generate-image',
+    );
+    expect(onCandidateRetry).toHaveBeenCalledWith(node.id, candidateTargetRef.id, 'generate-image');
+    expect(onCandidateDelete).toHaveBeenCalledWith(
+      node.id,
+      candidateTargetRef.id,
+      'generate-image',
+    );
+    expect(onCandidateInspect).toHaveBeenCalledWith(
+      node.id,
+      candidateTargetRef.id,
+      'generate-image',
+    );
+  });
+
+  it('renders local diagnostics for missing prompt and edit source parameters', () => {
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 14,
+        },
+      }),
+      id: 'shot-overlay-ai-action-diagnostics',
+    } as CanvasNode;
+
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
+    });
+
+    expect(
+      host.querySelector(
+        '[data-shot-creator-ai-action-diagnostic="canvas-creative-ai-image-prompt-empty"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      host.querySelector(
+        '[data-shot-creator-ai-action-diagnostic="canvas-creative-ai-video-prompt-empty"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      host.querySelector(
+        '[data-shot-creator-ai-action-diagnostic="canvas-creative-ai-image-edit-source-missing"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      host.querySelector(
+        '[data-shot-creator-ai-action-diagnostic="canvas-creative-ai-video-edit-source-missing"]',
+      ),
+    ).not.toBeNull();
   });
 
   it('commits prompt edits as semantic storyboardPrompt and cancels Escape edits', async () => {

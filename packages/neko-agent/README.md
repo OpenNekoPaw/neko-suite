@@ -213,6 +213,16 @@ Agent/plugin transfer 只选择能力和投影诊断，不直接调用领域 Web
 
 Transfer payload 必须携带结构化 `target`、`reveal`、stable source/ref 和 provenance。命令返回 `ok: false` 时，Agent/Extension/TUI/Electron adapter 展示 diagnostic，不允许 fallback 到旧 `neko.cut.importGeneratedClip`、`neko.sketch.importAsset`、`neko.model.importAsset`、打开隐藏 Webview 或声称发送成功。
 
+### Canvas Creative Run
+
+Canvas Shot overlay AI 按钮通过 `external-creative-package` invocation 进入 Agent creative run/workItem，不使用前台选中会话、`sendToAgent` 文本意图或 Canvas Webview store mutation 作为成功路径。
+
+- Canvas 传入 action id、prompt/source refs、target/candidate refs、revision、idempotency、duration/aspect/style/reference 等创作需求；provider、model、profile、runtime 参数由 Agent 配置和能力 catalog 解析。
+- Agent run/workItem 是执行、进度、取消、重试、judge 和 apply orchestration 的权威；conversation/session projection 只用于用户查看和继续，不是 Canvas 写回状态源。
+- 图片、音频、视频、文本和 judge workItem 使用独立 lane limit。Canvas 只消费 aggregate snapshot，单个 workItem 进度和诊断由 Agent 记录。
+- 结果写回必须通过 owning package adapter，例如 `neko.canvas.creativeAi.apply` 和 Canvas candidate promotion；Agent 不持久化 Webview URI、blob URL、cache path、temp path 或 `dataUrl`。
+- judge/controller API 不可用按 infrastructure diagnostic 记录，不能自动 promotion；candidate 质量不通过时保持可检查，不写 Project Memory。
+
 ### MCP 集成
 
 支持 Stdio 和 HTTP 两种传输协议，配置在 `~/.neko/config.toml` 或 `.neko/config.toml`（工作区）。

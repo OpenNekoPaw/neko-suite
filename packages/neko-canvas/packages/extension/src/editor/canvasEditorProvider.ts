@@ -78,8 +78,11 @@ import {
   resolveStorageLayout,
   validateCanvasStoryboardActionIntent,
   validateCanvasBoardRef,
+  isCanvasCreativeAiActionId,
+  createCreativeAiDiagnostic,
 } from '@neko/shared';
 import type {
+  CanvasCreativeAiActionId,
   CanvasCutDraftPayload,
   CutCanvasDraftImportResult,
   CanvasPlaybackPlan,
@@ -114,6 +117,7 @@ import type {
   CanvasRelatedBoardRef,
   CreatedCanvasStoryboard,
   ExternalCreativeAiInvocation,
+  CreativeAiDiagnostic,
   CanvasAgentActiveContextRequest,
   CanvasAgentActiveContextResult,
   CanvasAgentApplyContentResult,
@@ -164,6 +168,8 @@ import {
   type CanvasEntityPendingBackfill,
 } from './canvasEntityBackfill';
 import {
+  CanvasCreativeAiApplyAdapter,
+  buildCanvasCreativeActionExternalInvocation,
   buildCanvasGenerateExternalInvocation,
   CANVAS_CREATIVE_AI_INVOKE_EXTERNAL_COMMAND,
   createCanvasDocumentRevision,
@@ -761,6 +767,7 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   });
   private entityChangeSubscription: vscode.Disposable | undefined;
   private headlessAssetImporter: CanvasHeadlessAssetImporter | undefined;
+  private creativeAiApplyAdapter: CanvasCreativeAiApplyAdapter | undefined;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -985,6 +992,10 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   setProviders(opts: { outline?: CanvasOutlineProvider; statusBar?: CanvasStatusBar }): void {
     this.outlineProvider = opts.outline;
     this.statusBar = opts.statusBar;
+  }
+
+  setCreativeAiApplyAdapter(adapter: CanvasCreativeAiApplyAdapter): void {
+    this.creativeAiApplyAdapter = adapter;
   }
 
   setHeadlessAssetImporter(importer: CanvasHeadlessAssetImporter): void {
@@ -2315,6 +2326,134 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
     return this.invokeExternalCreativeAi(invocation);
   }
 
+  private async routeCanvasCreativeAiAction(input: {
+    readonly node: CanvasNode;
+    readonly actionId: CanvasCreativeAiActionId;
+    readonly webview: vscode.Webview;
+  }): Promise<void> {
+    const documentIdentity = this.createCreativeAiDocumentIdentity();
+    if (!documentIdentity) {
+      const diagnostics = [
+        createCanvasCreativeAiEditorDiagnostic(
+          'canvas-creative-ai-missing-document',
+          'Cannot start Canvas creative AI action without an active .nkc document.',
+          'documentRef',
+        ),
+      ];
+      input.webview.postMessage({
+        type: 'canvasCreativeAiActionResult',
+        nodeId: input.node.id,
+        actionId: input.actionId,
+        ok: false,
+        diagnostics,
+      });
+      return;
+    }
+
+    const built = buildCanvasCreativeActionExternalInvocation({
+      document: documentIdentity,
+      node: input.node,
+      actionId: input.actionId,
+      requestedAt: new Date().toISOString(),
+    });
+    if (!built.ok) {
+      input.webview.postMessage({
+        type: 'canvasCreativeAiActionResult',
+        nodeId: input.node.id,
+        actionId: input.actionId,
+        ok: false,
+        diagnostics: built.diagnostics,
+      });
+      return;
+    }
+
+    const result = await this.invokeExternalCreativeAiDetailed(built.invocation);
+    input.webview.postMessage({
+      type: 'canvasCreativeAiActionResult',
+      nodeId: input.node.id,
+      actionId: input.actionId,
+      ok: result.ok,
+      diagnostics: result.diagnostics,
+      ...(result.ok ? { decision: result.decision, snapshot: result.snapshot } : {}),
+    });
+  }
+
+  private async routeCanvasCreativeAiCandidateAction(input: {
+    readonly nodeId: string;
+    readonly candidateId: string;
+    readonly candidateAction: 'accept' | 'reject' | 'delete' | 'inspect';
+    readonly actionId?: CanvasCreativeAiActionId;
+    readonly webview: vscode.Webview;
+  }): Promise<void> {
+    if (!this.creativeAiApplyAdapter) {
+      input.webview.postMessage({
+        type: 'canvasCreativeAiActionResult',
+        nodeId: input.nodeId,
+        actionId: input.actionId,
+        ok: false,
+        diagnostics: [
+          createCanvasCreativeAiEditorDiagnostic(
+            'canvas-creative-ai-apply-adapter-unavailable',
+            'Canvas creative AI candidate actions require the Canvas apply adapter.',
+          ),
+        ],
+      });
+      return;
+    }
+
+    const requestedAt = new Date().toISOString();
+    if (input.candidateAction === 'inspect') {
+      input.webview.postMessage({
+        type: 'canvasCreativeAiActionResult',
+        nodeId: input.nodeId,
+        actionId: input.actionId,
+        ok: true,
+        diagnostics: [
+          createCreativeAiDiagnostic(
+            'info',
+            'canvas-creative-ai-candidate-inspect',
+            'Canvas candidate details are available in the shot overlay.',
+            'candidateId',
+          ),
+        ],
+      });
+      return;
+    }
+
+    if (input.candidateAction === 'accept') {
+      const result = await this.creativeAiApplyAdapter.promoteStoredCandidate({
+        nodeId: input.nodeId,
+        candidateId: input.candidateId,
+        actor: 'user',
+        requestedAt,
+      });
+      input.webview.postMessage({
+        type: 'canvasCreativeAiActionResult',
+        nodeId: input.nodeId,
+        actionId: input.actionId,
+        ok: result.ok,
+        diagnostics: result.diagnostics,
+        promotion: result,
+      });
+      return;
+    }
+
+    const result = await this.creativeAiApplyAdapter.markStoredCandidateDisposition({
+      nodeId: input.nodeId,
+      candidateId: input.candidateId,
+      disposition: input.candidateAction === 'reject' ? 'rejected' : 'deleted',
+      requestedAt,
+    });
+    input.webview.postMessage({
+      type: 'canvasCreativeAiActionResult',
+      nodeId: input.nodeId,
+      actionId: input.actionId,
+      ok: result.ok,
+      diagnostics: result.diagnostics,
+      disposition: result,
+    });
+  }
+
   private createCreativeAiDocumentIdentity(): CanvasCreativeAiDocumentIdentity | null {
     const document = this.activeDocument;
     if (!document) return null;
@@ -2345,24 +2484,45 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
   private async invokeExternalCreativeAi(
     invocation: ExternalCreativeAiInvocation,
   ): Promise<boolean> {
+    const result = await this.invokeExternalCreativeAiDetailed(invocation);
+    if (result.ok) {
+      return true;
+    }
+    const message =
+      result.diagnostics.map((diagnostic) => diagnostic.message).join('; ') ??
+      'Agent creative AI routing returned no result.';
+    await handleError(new Error(message), { showToUser: true, severity: 'warning' });
+    return false;
+  }
+
+  private async invokeExternalCreativeAiDetailed(
+    invocation: ExternalCreativeAiInvocation,
+  ): Promise<CanvasCreativeAiAgentInvocationResult> {
     try {
       const result = await vscode.commands.executeCommand<
         CanvasCreativeAiAgentInvocationResult | undefined
       >(CANVAS_CREATIVE_AI_INVOKE_EXTERNAL_COMMAND, invocation);
-      if (result?.ok) {
-        return true;
-      }
-      const message =
-        result?.diagnostics.map((diagnostic) => diagnostic.message).join('; ') ??
-        'Agent creative AI routing returned no result.';
-      await handleError(new Error(message), { showToUser: true, severity: 'warning' });
-      return false;
+      return (
+        result ?? {
+          ok: false,
+          diagnostics: [
+            createCanvasCreativeAiEditorDiagnostic(
+              'canvas-creative-ai-agent-no-result',
+              'Agent creative AI routing returned no result.',
+            ),
+          ],
+        }
+      );
     } catch (error) {
-      await handleError(error instanceof Error ? error : new Error(String(error)), {
-        showToUser: true,
-        severity: 'warning',
-      });
-      return false;
+      return {
+        ok: false,
+        diagnostics: [
+          createCanvasCreativeAiEditorDiagnostic(
+            'canvas-creative-ai-agent-command-failed',
+            error instanceof Error ? error.message : String(error),
+          ),
+        ],
+      };
     }
   }
 
@@ -3249,7 +3409,8 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
       }
 
       case 'generateForNode': {
-        // Delegate image generation to BatchGenerationScheduler → neko-agent
+        // Legacy GenerationPromptPanel path. Migrated Shot overlay AI buttons use
+        // canvasCreativeAiAction and candidate apply instead of generationProgress/dataUrl.
         const nodeId = message.nodeId as string;
         const childNodeId = message.childNodeId as string | undefined;
         const rawParams = message.params as Record<string, unknown>;
@@ -3311,6 +3472,88 @@ export class CanvasEditorProvider implements vscode.CustomEditorProvider<vscode.
               dataUrl,
             });
           },
+        });
+        break;
+      }
+
+      case 'canvasCreativeAiAction': {
+        const nodeId = typeof message.nodeId === 'string' ? message.nodeId : undefined;
+        const actionId = message.actionId;
+        if (!nodeId || !isCanvasCreativeAiActionId(actionId)) {
+          webviewPanel.webview.postMessage({
+            type: 'canvasCreativeAiActionResult',
+            nodeId,
+            actionId,
+            ok: false,
+            diagnostics: [
+              createCanvasCreativeAiEditorDiagnostic(
+                'canvas-creative-ai-invalid-webview-request',
+                'Canvas creative AI action message requires nodeId and a valid actionId.',
+              ),
+            ],
+          });
+          break;
+        }
+        const node = await this.getNode(nodeId);
+        if (!node) {
+          webviewPanel.webview.postMessage({
+            type: 'canvasCreativeAiActionResult',
+            nodeId,
+            actionId,
+            ok: false,
+            diagnostics: [
+              createCanvasCreativeAiEditorDiagnostic(
+                'canvas-creative-ai-node-not-found',
+                `Canvas node "${nodeId}" was not found.`,
+                'nodeId',
+              ),
+            ],
+          });
+          break;
+        }
+        await this.routeCanvasCreativeAiAction({
+          node,
+          actionId,
+          webview: webviewPanel.webview,
+        });
+        break;
+      }
+
+      case 'canvasCreativeAiCandidateAction': {
+        const nodeId = typeof message.nodeId === 'string' ? message.nodeId : undefined;
+        const candidateId =
+          typeof message.candidateId === 'string' ? message.candidateId : undefined;
+        const candidateAction =
+          message.candidateAction === 'accept' ||
+          message.candidateAction === 'reject' ||
+          message.candidateAction === 'delete' ||
+          message.candidateAction === 'inspect'
+            ? message.candidateAction
+            : undefined;
+        const actionId = isCanvasCreativeAiActionId(message.actionId)
+          ? message.actionId
+          : undefined;
+        if (!nodeId || !candidateId || !candidateAction) {
+          webviewPanel.webview.postMessage({
+            type: 'canvasCreativeAiActionResult',
+            nodeId,
+            actionId,
+            ok: false,
+            diagnostics: [
+              createCanvasCreativeAiEditorDiagnostic(
+                'canvas-creative-ai-invalid-candidate-action-request',
+                'Canvas creative AI candidate action requires nodeId, candidateId, and a valid candidateAction.',
+              ),
+            ],
+          });
+          break;
+        }
+        await this.routeCanvasCreativeAiCandidateAction({
+          nodeId,
+          candidateId,
+          candidateAction,
+          actionId,
+          webview: webviewPanel.webview,
         });
         break;
       }
@@ -6099,6 +6342,19 @@ function isCanvasProjectSaveReason(value: string): value is ProjectFileSaveReaso
     value === 'add-source' ||
     value === 'save-as'
   );
+}
+
+function createCanvasCreativeAiEditorDiagnostic(
+  code: string,
+  message: string,
+  target?: string,
+): CreativeAiDiagnostic {
+  return {
+    severity: 'error',
+    code,
+    message,
+    ...(target ? { target } : {}),
+  };
 }
 
 function readCanvasProjectSourceAddMediaType(

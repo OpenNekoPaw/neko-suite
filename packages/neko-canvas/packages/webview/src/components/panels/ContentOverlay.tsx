@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { getKeyboardBoundaryMetadata } from '@neko/ui/keyboard';
@@ -18,18 +19,23 @@ import type {
   CanvasStoryboardPromptBlocks,
   CanvasStoryboardPromptState,
   CanvasStoryboardSemanticPromptDocument,
+  CanvasCreativeAiActionId,
   ContainerSection,
+  CreativeAiDiagnostic,
+  CreativeAiOutputRef,
+  CreativeAiTargetRef,
   FieldBinding,
 } from '@neko/shared';
 import {
   CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
   CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
   getDefaultCanvasNodePresetName,
+  isCanvasCreativeAiActionId,
   isCanvasStoryboardPromptState,
   projectCanvasShotPrompt,
   writeFieldBinding,
 } from '@neko/shared';
-import { CloseIcon } from '@neko/shared/icons';
+import { CameraIcon, CloseIcon, EditIcon, PlayIcon } from '@neko/shared/icons';
 import { useCanvasStore } from '../../stores/canvasStore';
 import { ContainerRenderer } from '../content/ContainerRenderer';
 import { ContainerActionBar, readNumber, readString } from '../content/node-card';
@@ -76,15 +82,104 @@ const STORYBOARD_PROMPT_BLOCKS = [
 }[];
 
 const SHOT_VIDEO_VOICE_PROMPT_SEPARATOR = '\n\n';
+const SHOT_PROMPT_EDITOR_ROWS = 10;
+const SHOT_PROMPT_EDITOR_SURFACE_CLASS_NAME =
+  'min-h-[14rem] border-slate-200 bg-white shadow-inner focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100';
+const SHOT_PROMPT_EDITOR_TEXT_CLASS_NAME = 'min-h-[14rem] px-2.5 py-2 text-[13px] leading-6';
+const SHOT_PROMPT_EDITOR_HIGHLIGHT_CLASS_NAME = 'px-2.5 py-2 text-[13px] leading-6 text-slate-900';
 type ShotPromptDrafts = Record<CanvasStoryboardPromptBlockKind, string>;
 type ShotPromptBlockSources = Record<CanvasStoryboardPromptBlockKind, string>;
+type ShotPromptActionButtonId =
+  'optimize-video-prompt' | 'generate-image' | 'edit-image' | 'generate-video' | 'edit-video';
+type ShotPromptCandidateAction = 'accept' | 'reject' | 'retry' | 'delete' | 'inspect';
+
+interface ShotPromptBlockAction {
+  readonly action: ShotPromptActionButtonId;
+  readonly label: string;
+  readonly icon: ReactNode;
+  readonly disabled: boolean;
+  readonly onClick: () => void;
+}
+
+interface ShotPromptCreativeAiCandidate {
+  readonly candidateId: string;
+  readonly status: 'candidate' | 'promoted' | 'rejected' | 'deleted';
+  readonly candidateTargetRef: CreativeAiTargetRef;
+  readonly targetRef?: CreativeAiTargetRef;
+  readonly outputRefs: readonly CreativeAiOutputRef[];
+  readonly diagnostics?: readonly CreativeAiDiagnostic[];
+  readonly createdAt?: string;
+  readonly promotedAt?: string;
+  readonly rejectedAt?: string;
+  readonly deletedAt?: string;
+}
+
+export interface ContentOverlayCreativeAiStatus {
+  readonly status: 'pending' | 'accepted' | 'failed';
+  readonly actionId: CanvasCreativeAiActionId;
+  readonly diagnostics: readonly CreativeAiDiagnostic[];
+  readonly snapshot?: {
+    readonly aggregate?: {
+      readonly totalCount: number;
+      readonly completedCount: number;
+      readonly failedCount: number;
+      readonly runningCount: number;
+      readonly queuedCount: number;
+    };
+  };
+}
 
 export interface ContentOverlayProps {
   nodeId: string;
   onClose: () => void;
+  creativeAiStatus?: ContentOverlayCreativeAiStatus;
+  onOptimizePrompt?: (nodeId: string) => void;
+  onGenerateImage?: (nodeId: string) => void;
+  onEditImage?: (nodeId: string) => void;
+  onGenerateVideo?: (nodeId: string) => void;
+  onEditVideo?: (nodeId: string) => void;
+  onCandidateAccept?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateReject?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateRetry?: (
+    nodeId: string,
+    candidateId: string,
+    actionId: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateDelete?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateInspect?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
 }
 
-export function ContentOverlay({ nodeId, onClose }: ContentOverlayProps) {
+export function ContentOverlay({
+  nodeId,
+  onClose,
+  creativeAiStatus,
+  onOptimizePrompt,
+  onGenerateImage,
+  onEditImage,
+  onGenerateVideo,
+  onEditVideo,
+  onCandidateAccept,
+  onCandidateReject,
+  onCandidateRetry,
+  onCandidateDelete,
+  onCandidateInspect,
+}: ContentOverlayProps) {
   const nodes = useCanvasStore((s) => s.canvasData?.nodes ?? []);
   const selectedNodeIds = useCanvasStore((s) => s.selection.nodeIds);
   const selectNode = useCanvasStore((s) => s.selectNode);
@@ -130,6 +225,17 @@ export function ContentOverlay({ nodeId, onClose }: ContentOverlayProps) {
             onUpdateData={updateNodeData}
             onSelectNode={selectNode}
             onRemoveChild={removeChildFromContainer}
+            creativeAiStatus={creativeAiStatus}
+            onOptimizePrompt={onOptimizePrompt}
+            onGenerateImage={onGenerateImage}
+            onEditImage={onEditImage}
+            onGenerateVideo={onGenerateVideo}
+            onEditVideo={onEditVideo}
+            onCandidateAccept={onCandidateAccept}
+            onCandidateReject={onCandidateReject}
+            onCandidateRetry={onCandidateRetry}
+            onCandidateDelete={onCandidateDelete}
+            onCandidateInspect={onCandidateInspect}
           />
         ) : (
           <OverlayBody
@@ -262,6 +368,17 @@ function ShotCreatorOverlayBody({
   onUpdateData,
   onSelectNode,
   onRemoveChild,
+  creativeAiStatus,
+  onOptimizePrompt,
+  onGenerateImage,
+  onEditImage,
+  onGenerateVideo,
+  onEditVideo,
+  onCandidateAccept,
+  onCandidateReject,
+  onCandidateRetry,
+  onCandidateDelete,
+  onCandidateInspect,
 }: {
   node: CanvasNode;
   content: ContainerSection;
@@ -270,6 +387,37 @@ function ShotCreatorOverlayBody({
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
   onSelectNode?: (nodeId: string, multi?: boolean) => void;
   onRemoveChild?: (containerId: string, childId: string) => void;
+  creativeAiStatus?: ContentOverlayCreativeAiStatus;
+  onOptimizePrompt?: (nodeId: string) => void;
+  onGenerateImage?: (nodeId: string) => void;
+  onEditImage?: (nodeId: string) => void;
+  onGenerateVideo?: (nodeId: string) => void;
+  onEditVideo?: (nodeId: string) => void;
+  onCandidateAccept?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateReject?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateRetry?: (
+    nodeId: string,
+    candidateId: string,
+    actionId: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateDelete?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateInspect?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
 }) {
   const previewContent = useMemo(() => createShotPreviewContent(content), [content]);
   const renderContext = useShotOverlayRenderContext({
@@ -303,7 +451,21 @@ function ShotCreatorOverlayBody({
             </div>
           </section>
           <section className="min-w-0" data-shot-creator-summary="true">
-            <ShotCreatorSummary node={node} onUpdateData={onUpdateData} />
+            <ShotCreatorSummary
+              node={node}
+              onUpdateData={onUpdateData}
+              creativeAiStatus={creativeAiStatus}
+              onOptimizePrompt={onOptimizePrompt}
+              onGenerateImage={onGenerateImage}
+              onEditImage={onEditImage}
+              onGenerateVideo={onGenerateVideo}
+              onEditVideo={onEditVideo}
+              onCandidateAccept={onCandidateAccept}
+              onCandidateReject={onCandidateReject}
+              onCandidateRetry={onCandidateRetry}
+              onCandidateDelete={onCandidateDelete}
+              onCandidateInspect={onCandidateInspect}
+            />
           </section>
         </div>
       </div>
@@ -362,9 +524,51 @@ function useShotOverlayRenderContext({
 function ShotCreatorSummary({
   node,
   onUpdateData,
+  creativeAiStatus,
+  onOptimizePrompt,
+  onGenerateImage,
+  onEditImage,
+  onGenerateVideo,
+  onEditVideo,
+  onCandidateAccept,
+  onCandidateReject,
+  onCandidateRetry,
+  onCandidateDelete,
+  onCandidateInspect,
 }: {
   node: CanvasNode;
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
+  creativeAiStatus?: ContentOverlayCreativeAiStatus;
+  onOptimizePrompt?: (nodeId: string) => void;
+  onGenerateImage?: (nodeId: string) => void;
+  onEditImage?: (nodeId: string) => void;
+  onGenerateVideo?: (nodeId: string) => void;
+  onEditVideo?: (nodeId: string) => void;
+  onCandidateAccept?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateReject?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateRetry?: (
+    nodeId: string,
+    candidateId: string,
+    actionId: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateDelete?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateInspect?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
 }) {
   const data = readRecordValue(node.data);
   const camera = joinDisplayValues([
@@ -406,7 +610,22 @@ function ShotCreatorSummary({
         value={audio}
         className="md:col-span-2"
       />
-      <ShotCreatorPromptEditor node={node} onUpdateData={onUpdateData} className="md:col-span-2" />
+      <ShotCreatorPromptEditor
+        node={node}
+        onUpdateData={onUpdateData}
+        creativeAiStatus={creativeAiStatus}
+        onOptimizePrompt={onOptimizePrompt}
+        onGenerateImage={onGenerateImage}
+        onEditImage={onEditImage}
+        onGenerateVideo={onGenerateVideo}
+        onEditVideo={onEditVideo}
+        onCandidateAccept={onCandidateAccept}
+        onCandidateReject={onCandidateReject}
+        onCandidateRetry={onCandidateRetry}
+        onCandidateDelete={onCandidateDelete}
+        onCandidateInspect={onCandidateInspect}
+        className="md:col-span-2"
+      />
     </div>
   );
 }
@@ -414,10 +633,52 @@ function ShotCreatorSummary({
 function ShotCreatorPromptEditor({
   node,
   onUpdateData,
+  creativeAiStatus,
+  onOptimizePrompt,
+  onGenerateImage,
+  onEditImage,
+  onGenerateVideo,
+  onEditVideo,
+  onCandidateAccept,
+  onCandidateReject,
+  onCandidateRetry,
+  onCandidateDelete,
+  onCandidateInspect,
   className,
 }: {
   node: CanvasNode;
   onUpdateData?: (nodeId: string, data: Record<string, unknown>) => void;
+  creativeAiStatus?: ContentOverlayCreativeAiStatus;
+  onOptimizePrompt?: (nodeId: string) => void;
+  onGenerateImage?: (nodeId: string) => void;
+  onEditImage?: (nodeId: string) => void;
+  onGenerateVideo?: (nodeId: string) => void;
+  onEditVideo?: (nodeId: string) => void;
+  onCandidateAccept?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateReject?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateRetry?: (
+    nodeId: string,
+    candidateId: string,
+    actionId: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateDelete?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
+  onCandidateInspect?: (
+    nodeId: string,
+    candidateId: string,
+    actionId?: CanvasCreativeAiActionId,
+  ) => void;
   className?: string;
 }) {
   if (node.type !== 'shot') return null;
@@ -432,6 +693,11 @@ function ShotCreatorPromptEditor({
     () => resolveShotPromptBlockSources(storyboardPromptState, projection),
     [projection, storyboardPromptState],
   );
+  const actionDiagnostics = useMemo(
+    () => createShotPromptActionDiagnostics(node, promptDrafts),
+    [node, promptDrafts],
+  );
+  const creativeAiCandidates = useMemo(() => readShotPromptCreativeAiCandidates(node), [node]);
   const [drafts, setDrafts] = useState<ShotPromptDrafts>(promptDrafts);
   const skipNextCommitBlockRef = useRef<CanvasStoryboardPromptBlockKind | undefined>();
 
@@ -481,10 +747,12 @@ function ShotCreatorPromptEditor({
 
   return (
     <div className={`min-w-0 ${className ?? ''}`} data-shot-creator-prompt="true">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <div className="text-[11px] text-gray-500">{t('content.overlayShotPrompt')}</div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="min-w-0 truncate text-[11px] font-medium text-slate-600">
+          {t('content.overlayShotPrompt')}
+        </div>
         <span
-          className="rounded border border-gray-200 px-1.5 py-0.5 text-[10px] text-gray-500"
+          className="shrink-0 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] leading-none text-slate-500"
           data-shot-creator-prompt-source={projection?.source ?? 'empty'}
         >
           {formatShotPromptSourceLabel(projection?.source ?? 'empty')}
@@ -492,6 +760,15 @@ function ShotCreatorPromptEditor({
       </div>
       <div className="grid min-w-0 gap-2 md:grid-cols-2">
         {STORYBOARD_PROMPT_BLOCKS.map((block) => {
+          const actions = createShotPromptBlockActions({
+            blockKind: block.kind,
+            nodeId: node.id,
+            onOptimizePrompt,
+            onGenerateImage,
+            onEditImage,
+            onGenerateVideo,
+            onEditVideo,
+          });
           const promptBlocks = storyboardPromptState?.promptBlocks ?? {};
           const document =
             block.kind === 'video'
@@ -502,22 +779,45 @@ function ShotCreatorPromptEditor({
                 })
               : readPromptDocument(promptBlocks, block.kind);
           return (
-            <div key={block.kind} className="min-w-0" data-shot-creator-prompt-block={block.kind}>
-              <div className="mb-1 flex min-w-0 items-center justify-between gap-2">
-                <div className="truncate text-[11px] text-gray-500">{t(block.labelKey)}</div>
-                <span
-                  className="shrink-0 rounded border border-gray-200 px-1.5 py-0.5 text-[10px] text-gray-500"
-                  data-shot-creator-prompt-block-source={blockSources[block.kind]}
+            <div
+              key={block.kind}
+              className="min-w-0 rounded-md border border-slate-200 bg-slate-50/70 p-2"
+              data-shot-creator-prompt-block={block.kind}
+            >
+              <div className="mb-2 flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <div className="truncate text-[11px] font-medium text-slate-700">
+                    {t(block.labelKey)}
+                  </div>
+                  <span
+                    className="shrink-0 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] leading-none text-slate-500"
+                    data-shot-creator-prompt-block-source={blockSources[block.kind]}
+                  >
+                    {formatShotPromptSourceLabel(blockSources[block.kind])}
+                  </span>
+                </div>
+                <div
+                  className="flex min-w-0 flex-wrap items-center gap-1 sm:justify-end"
+                  data-shot-creator-prompt-action-group={block.kind}
                 >
-                  {formatShotPromptSourceLabel(blockSources[block.kind])}
-                </span>
+                  {actions.map((action) => (
+                    <ShotPromptActionButton
+                      key={action.action}
+                      label={action.label}
+                      icon={action.icon}
+                      onClick={action.onClick}
+                      disabled={action.disabled}
+                      action={action.action}
+                    />
+                  ))}
+                </div>
               </div>
               <ShotPromptSemanticEditor
                 nodeId={node.id}
                 blockKind={block.kind}
                 value={drafts[block.kind]}
                 document={document}
-                rows={4}
+                rows={SHOT_PROMPT_EDITOR_ROWS}
                 placeholder={t(block.placeholderKey)}
                 ariaLabel={t(block.labelKey)}
                 onInput={(value) => updateDraft(block.kind, value)}
@@ -532,7 +832,18 @@ function ShotCreatorPromptEditor({
         })}
       </div>
       <ShotPromptDiagnostics diagnostics={storyboardPromptState?.diagnostics} />
+      <ShotPromptActionDiagnostics diagnostics={actionDiagnostics} />
       <ShotPromptAdvancedSummary state={storyboardPromptState} />
+      <ShotPromptCreativeAiStatus status={creativeAiStatus} />
+      <ShotPromptCandidateList
+        nodeId={node.id}
+        candidates={creativeAiCandidates}
+        onAccept={onCandidateAccept}
+        onReject={onCandidateReject}
+        onRetry={onCandidateRetry}
+        onDelete={onCandidateDelete}
+        onInspect={onCandidateInspect}
+      />
       {projection?.legacyMigrationPrompt ? (
         <div
           className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-4 text-amber-800"
@@ -543,6 +854,105 @@ function ShotCreatorPromptEditor({
       ) : null}
     </div>
   );
+}
+
+function ShotPromptActionButton({
+  label,
+  icon,
+  onClick,
+  disabled,
+  action,
+}: {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  disabled: boolean;
+  action: ShotPromptActionButtonId;
+}) {
+  return (
+    <button
+      type="button"
+      className="inline-flex h-7 max-w-full cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium leading-none text-slate-700 shadow-sm transition-colors duration-150 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400 disabled:opacity-70"
+      title={label}
+      aria-label={label}
+      data-shot-creator-prompt-action={action}
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+    >
+      <span className="shrink-0" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+function createShotPromptBlockActions({
+  blockKind,
+  nodeId,
+  onOptimizePrompt,
+  onGenerateImage,
+  onEditImage,
+  onGenerateVideo,
+  onEditVideo,
+}: {
+  blockKind: CanvasStoryboardPromptBlockKind;
+  nodeId: string;
+  onOptimizePrompt?: (nodeId: string) => void;
+  onGenerateImage?: (nodeId: string) => void;
+  onEditImage?: (nodeId: string) => void;
+  onGenerateVideo?: (nodeId: string) => void;
+  onEditVideo?: (nodeId: string) => void;
+}): readonly ShotPromptBlockAction[] {
+  if (blockKind === 'image') {
+    return [
+      {
+        action: 'generate-image',
+        label: t('scene.action.generateImage'),
+        icon: <CameraIcon size={13} strokeWidth={1.8} />,
+        disabled: !onGenerateImage,
+        onClick: () => onGenerateImage?.(nodeId),
+      },
+      {
+        action: 'edit-image',
+        label: t('scene.action.editImage'),
+        icon: <EditIcon size={13} strokeWidth={1.8} />,
+        disabled: !onEditImage,
+        onClick: () => onEditImage?.(nodeId),
+      },
+    ];
+  }
+
+  if (blockKind === 'video') {
+    return [
+      {
+        action: 'optimize-video-prompt',
+        label: t('content.overlayShotPromptActionOptimize'),
+        icon: <EditIcon size={13} strokeWidth={1.8} />,
+        disabled: !onOptimizePrompt,
+        onClick: () => onOptimizePrompt?.(nodeId),
+      },
+      {
+        action: 'generate-video',
+        label: t('scene.action.generateVideo'),
+        icon: <PlayIcon size={13} strokeWidth={1.8} />,
+        disabled: !onGenerateVideo,
+        onClick: () => onGenerateVideo?.(nodeId),
+      },
+      {
+        action: 'edit-video',
+        label: t('scene.action.editVideo'),
+        icon: <EditIcon size={13} strokeWidth={1.8} />,
+        disabled: !onEditVideo,
+        onClick: () => onEditVideo?.(nodeId),
+      },
+    ];
+  }
+
+  return [];
 }
 
 function ShotPromptAdvancedSummary({ state }: { state?: CanvasStoryboardPromptState }) {
@@ -612,10 +1022,7 @@ function ShotPromptSemanticEditor({
   );
 
   return (
-    <div
-      data-semantic-prompt-editor="true"
-      data-shot-creator-prompt-block-editor={blockKind}
-    >
+    <div data-semantic-prompt-editor="true" data-shot-creator-prompt-block-editor={blockKind}>
       <InlineMarkdownEditor
         value={value}
         onChange={onInput}
@@ -625,6 +1032,9 @@ function ShotPromptSemanticEditor({
         placeholder={placeholder}
         ariaLabel={ariaLabel}
         keyboardOwnerId={`shot-creator-prompt:${nodeId}:${blockKind}`}
+        surfaceClassName={SHOT_PROMPT_EDITOR_SURFACE_CLASS_NAME}
+        textareaClassName={SHOT_PROMPT_EDITOR_TEXT_CLASS_NAME}
+        highlightClassName={SHOT_PROMPT_EDITOR_HIGHLIGHT_CLASS_NAME}
         textareaDataAttributes={{ 'data-shot-creator-prompt-block-input': blockKind }}
         onBlur={onBlur}
         onKeyDown={onKeyDown}
@@ -688,9 +1098,230 @@ function ShotPromptDiagnostics({
   );
 }
 
+function ShotPromptActionDiagnostics({
+  diagnostics,
+}: {
+  diagnostics: readonly CreativeAiDiagnostic[];
+}) {
+  if (diagnostics.length === 0) return null;
+  return (
+    <div
+      className="mt-2 flex min-w-0 flex-col gap-1"
+      aria-label={t('content.overlayShotPromptActionDiagnostics')}
+    >
+      {diagnostics.map((diagnostic) => (
+        <div
+          key={`${diagnostic.code}:${diagnostic.target ?? ''}`}
+          className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] leading-4 text-amber-800"
+          data-shot-creator-ai-action-diagnostic={diagnostic.code}
+        >
+          {diagnostic.message}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ShotPromptCreativeAiStatus({ status }: { status?: ContentOverlayCreativeAiStatus }) {
+  if (!status) return null;
+  const aggregate = status.snapshot?.aggregate;
+  const diagnostics = status.diagnostics.filter((diagnostic) => diagnostic.severity !== 'info');
+  return (
+    <div
+      className="mt-2 rounded border border-blue-100 bg-blue-50 px-2 py-1.5 text-[11px] leading-4 text-blue-900"
+      data-shot-creator-ai-status={status.status}
+      data-shot-creator-ai-action-id={status.actionId}
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="font-medium">{formatCreativeAiActionLabel(status.actionId)}</span>
+        <span>
+          {status.status === 'pending'
+            ? t('content.overlayShotPromptAiPending')
+            : status.status === 'accepted'
+              ? t('content.overlayShotPromptAiAccepted')
+              : t('content.overlayShotPromptAiFailed')}
+        </span>
+      </div>
+      {aggregate ? (
+        <div className="mt-1" data-shot-creator-ai-aggregate="true">
+          {t('content.overlayShotPromptAiProgress', {
+            completed: aggregate.completedCount,
+            total: aggregate.totalCount,
+            running: aggregate.runningCount,
+            queued: aggregate.queuedCount,
+            failed: aggregate.failedCount,
+          })}
+        </div>
+      ) : null}
+      {diagnostics.length > 0 ? (
+        <div className="mt-1 flex min-w-0 flex-col gap-1">
+          {diagnostics.map((diagnostic, index) => (
+            <div
+              key={`${diagnostic.code}-${index}`}
+              data-shot-creator-ai-diagnostic={diagnostic.code}
+            >
+              {diagnostic.message}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ShotPromptCandidateList({
+  nodeId,
+  candidates,
+  onAccept,
+  onReject,
+  onRetry,
+  onDelete,
+  onInspect,
+}: {
+  nodeId: string;
+  candidates: readonly ShotPromptCreativeAiCandidate[];
+  onAccept?: (nodeId: string, candidateId: string, actionId?: CanvasCreativeAiActionId) => void;
+  onReject?: (nodeId: string, candidateId: string, actionId?: CanvasCreativeAiActionId) => void;
+  onRetry?: (nodeId: string, candidateId: string, actionId: CanvasCreativeAiActionId) => void;
+  onDelete?: (nodeId: string, candidateId: string, actionId?: CanvasCreativeAiActionId) => void;
+  onInspect?: (nodeId: string, candidateId: string, actionId?: CanvasCreativeAiActionId) => void;
+}) {
+  if (candidates.length === 0) return null;
+  return (
+    <div
+      className="mt-2 flex min-w-0 flex-col gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-1.5"
+      data-shot-creator-ai-candidates="true"
+    >
+      <div className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+        {t('content.overlayShotPromptCandidates')}
+      </div>
+      {candidates.map((candidate) => {
+        const actionId = readCandidateActionId(candidate);
+        return (
+          <div
+            key={candidate.candidateId}
+            className="min-w-0 rounded border border-slate-200 bg-white px-2 py-1.5 text-[11px] leading-4 text-slate-700"
+            data-shot-creator-ai-candidate={candidate.candidateId}
+            data-shot-creator-ai-candidate-status={candidate.status}
+          >
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <div className="min-w-0 truncate font-medium">
+                {actionId
+                  ? formatCreativeAiActionLabel(actionId)
+                  : t('content.overlayShotPromptCandidate')}
+              </div>
+              <span className="shrink-0 rounded border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-500">
+                {formatCandidateStatus(candidate.status)}
+              </span>
+            </div>
+            <div
+              className="mt-1 min-w-0 truncate text-slate-600"
+              data-shot-creator-ai-candidate-output="true"
+              title={formatCandidateOutputSummary(candidate)}
+            >
+              {formatCandidateOutputSummary(candidate)}
+            </div>
+            {candidate.diagnostics && candidate.diagnostics.length > 0 ? (
+              <div className="mt-1 flex min-w-0 flex-col gap-1">
+                {candidate.diagnostics.map((diagnostic, index) => (
+                  <div
+                    key={`${diagnostic.code}-${index}`}
+                    className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-amber-800"
+                    data-shot-creator-ai-candidate-diagnostic={diagnostic.code}
+                  >
+                    {diagnostic.message}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <div className="mt-1.5 flex min-w-0 flex-wrap gap-1">
+              <ShotCandidateActionButton
+                action="accept"
+                label={t('content.overlayShotPromptCandidateAccept')}
+                disabled={candidate.status !== 'candidate' || !onAccept}
+                onClick={() => onAccept?.(nodeId, candidate.candidateId, actionId)}
+              />
+              <ShotCandidateActionButton
+                action="reject"
+                label={t('content.overlayShotPromptCandidateReject')}
+                disabled={candidate.status !== 'candidate' || !onReject}
+                onClick={() => onReject?.(nodeId, candidate.candidateId, actionId)}
+              />
+              <ShotCandidateActionButton
+                action="retry"
+                label={t('content.overlayShotPromptCandidateRetry')}
+                disabled={!actionId || !onRetry}
+                onClick={() => {
+                  if (actionId) onRetry?.(nodeId, candidate.candidateId, actionId);
+                }}
+              />
+              <ShotCandidateActionButton
+                action="delete"
+                label={t('content.overlayShotPromptCandidateDelete')}
+                disabled={candidate.status === 'deleted' || !onDelete}
+                onClick={() => onDelete?.(nodeId, candidate.candidateId, actionId)}
+              />
+              <ShotCandidateActionButton
+                action="inspect"
+                label={t('content.overlayShotPromptCandidateInspect')}
+                disabled={!onInspect}
+                onClick={() => onInspect?.(nodeId, candidate.candidateId, actionId)}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ShotCandidateActionButton({
+  action,
+  label,
+  disabled,
+  onClick,
+}: {
+  action: ShotPromptCandidateAction;
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="inline-flex h-6 items-center rounded border border-slate-200 bg-white px-1.5 text-[10px] leading-none text-slate-600 hover:border-blue-300 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-45"
+      data-shot-creator-ai-candidate-action={action}
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function clampPromptOffset(value: number, textLength: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(Math.max(Math.trunc(value), 0), textLength);
+}
+
+function formatCreativeAiActionLabel(actionId: CanvasCreativeAiActionId): string {
+  switch (actionId) {
+    case 'optimize-image-prompt':
+      return t('scene.action.optimizeImagePrompt');
+    case 'optimize-video-prompt':
+      return t('scene.action.optimizeVideoPrompt');
+    case 'generate-image':
+      return t('scene.action.generateImage');
+    case 'edit-image':
+      return t('scene.action.editImage');
+    case 'generate-video':
+      return t('scene.action.generateVideo');
+    case 'edit-video':
+      return t('scene.action.editVideo');
+  }
 }
 
 function formatFieldProjectionLabel(projection: CanvasAuthoringPromptFieldProjection): string {
@@ -835,10 +1466,10 @@ function resolveShotPromptBlockSources(
     image: state?.promptBlocks?.imagePromptDocument ? 'semantic-prompt-document' : 'empty',
     video:
       state?.promptBlocks?.videoPromptDocument || state?.promptBlocks?.voicePromptDocument
-      ? 'semantic-prompt-document'
-      : projection?.source === 'assembled'
-        ? 'assembled'
-        : 'empty',
+        ? 'semantic-prompt-document'
+        : projection?.source === 'assembled'
+          ? 'assembled'
+          : 'empty',
     voice: state?.promptBlocks?.voicePromptDocument ? 'semantic-prompt-document' : 'empty',
   };
 }
@@ -966,7 +1597,11 @@ function createVideoPromptDisplayDocument(input: {
   }
   const videoDocument = input.videoDocument;
   const voiceText = input.voiceDocument.text;
-  const voiceOffset = readEmbeddedVoicePromptOffset(input.videoText, videoDocument?.text ?? '', voiceText);
+  const voiceOffset = readEmbeddedVoicePromptOffset(
+    input.videoText,
+    videoDocument?.text ?? '',
+    voiceText,
+  );
   const shiftedVoiceSpans =
     voiceOffset === undefined
       ? []
@@ -1295,6 +1930,182 @@ function formatShotPromptSourceLabel(source: string): string {
     default:
       return t('content.overlayShotPromptEmpty');
   }
+}
+
+function createShotPromptActionDiagnostics(
+  node: CanvasNode,
+  drafts: ShotPromptDrafts,
+): readonly CreativeAiDiagnostic[] {
+  const diagnostics: CreativeAiDiagnostic[] = [];
+  if (!drafts.image.trim()) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'canvas-creative-ai-image-prompt-empty',
+      message: t('content.overlayShotPromptImagePromptMissing'),
+      target: 'imagePromptDocument',
+    });
+  }
+  if (!drafts.video.trim()) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'canvas-creative-ai-video-prompt-empty',
+      message: t('content.overlayShotPromptVideoPromptMissing'),
+      target: 'videoPromptDocument',
+    });
+  }
+  if (!hasShotImageEditSource(node)) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'canvas-creative-ai-image-edit-source-missing',
+      message: t('content.overlayShotPromptImageEditSourceMissing'),
+      target: 'referenceMedia.imageRefs',
+    });
+  }
+  if (!hasShotVideoEditSource(node)) {
+    diagnostics.push({
+      severity: 'warning',
+      code: 'canvas-creative-ai-video-edit-source-missing',
+      message: t('content.overlayShotPromptVideoEditSourceMissing'),
+      target: 'referenceMedia.videoRefs',
+    });
+  }
+  return diagnostics;
+}
+
+function hasShotImageEditSource(node: CanvasNode): boolean {
+  const data = readRecordValue(node.data);
+  if (readString(data, 'generatedImage') || readString(data, 'referenceImagePath')) return true;
+  const generatedAsset = readRecordValue(data['generatedAsset']);
+  if (readString(generatedAsset, 'path')) return true;
+  const state = readShotStoryboardPromptState(node);
+  return (state?.referenceMedia?.imageRefs?.length ?? 0) > 0;
+}
+
+function hasShotVideoEditSource(node: CanvasNode): boolean {
+  const data = readRecordValue(node.data);
+  const generatedVideoAsset = readRecordValue(data['generatedVideoAsset']);
+  if (readString(generatedVideoAsset, 'path')) return true;
+  const state = readShotStoryboardPromptState(node);
+  return (state?.referenceMedia?.videoRefs?.length ?? 0) > 0;
+}
+
+function readShotPromptCreativeAiCandidates(
+  node: CanvasNode,
+): readonly ShotPromptCreativeAiCandidate[] {
+  const data = readRecordValue(node.data);
+  const rawCandidates = isRecord(data['creativeAiCandidates']) ? data['creativeAiCandidates'] : {};
+  return Object.values(rawCandidates)
+    .map(readShotPromptCreativeAiCandidate)
+    .filter((candidate): candidate is ShotPromptCreativeAiCandidate => Boolean(candidate))
+    .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')));
+}
+
+function readShotPromptCreativeAiCandidate(
+  value: unknown,
+): ShotPromptCreativeAiCandidate | undefined {
+  if (!isRecord(value)) return undefined;
+  const candidateId = readString(value, 'candidateId');
+  const status = value['status'];
+  const candidateTargetRef = readCreativeAiTargetRefLike(value['candidateTargetRef']);
+  const outputRefs = Array.isArray(value['outputRefs'])
+    ? value['outputRefs'].filter(isCreativeAiOutputRefLike)
+    : [];
+  if (
+    !candidateId ||
+    !candidateTargetRef ||
+    !(
+      status === 'candidate' ||
+      status === 'promoted' ||
+      status === 'rejected' ||
+      status === 'deleted'
+    )
+  ) {
+    return undefined;
+  }
+  const targetRef = readCreativeAiTargetRefLike(value['targetRef']);
+  const diagnostics = Array.isArray(value['diagnostics'])
+    ? value['diagnostics'].filter(isCreativeAiDiagnosticLike)
+    : undefined;
+  return {
+    candidateId,
+    status,
+    candidateTargetRef,
+    ...(targetRef ? { targetRef } : {}),
+    outputRefs,
+    ...(diagnostics ? { diagnostics } : {}),
+    ...(readString(value, 'createdAt') ? { createdAt: readString(value, 'createdAt') } : {}),
+    ...(readString(value, 'promotedAt') ? { promotedAt: readString(value, 'promotedAt') } : {}),
+    ...(readString(value, 'rejectedAt') ? { rejectedAt: readString(value, 'rejectedAt') } : {}),
+    ...(readString(value, 'deletedAt') ? { deletedAt: readString(value, 'deletedAt') } : {}),
+  };
+}
+
+function readCreativeAiTargetRefLike(value: unknown): CreativeAiTargetRef | undefined {
+  if (!isRecord(value)) return undefined;
+  return typeof value['kind'] === 'string' &&
+    typeof value['packageId'] === 'string' &&
+    typeof value['id'] === 'string'
+    ? (value as unknown as CreativeAiTargetRef)
+    : undefined;
+}
+
+function isCreativeAiOutputRefLike(value: unknown): value is CreativeAiOutputRef {
+  return isRecord(value) && typeof value['kind'] === 'string' && typeof value['id'] === 'string';
+}
+
+function isCreativeAiDiagnosticLike(value: unknown): value is CreativeAiDiagnostic {
+  return (
+    isRecord(value) &&
+    (value['severity'] === 'info' ||
+      value['severity'] === 'warning' ||
+      value['severity'] === 'error') &&
+    typeof value['code'] === 'string' &&
+    typeof value['message'] === 'string'
+  );
+}
+
+function readCandidateActionId(
+  candidate: ShotPromptCreativeAiCandidate,
+): CanvasCreativeAiActionId | undefined {
+  const value =
+    candidate.candidateTargetRef.metadata?.['actionId'] ??
+    candidate.targetRef?.metadata?.['actionId'];
+  return isCanvasCreativeAiActionId(value) ? value : undefined;
+}
+
+function formatCandidateStatus(status: ShotPromptCreativeAiCandidate['status']): string {
+  switch (status) {
+    case 'candidate':
+      return t('content.overlayShotPromptCandidateStatusCandidate');
+    case 'promoted':
+      return t('content.overlayShotPromptCandidateStatusPromoted');
+    case 'rejected':
+      return t('content.overlayShotPromptCandidateStatusRejected');
+    case 'deleted':
+      return t('content.overlayShotPromptCandidateStatusDeleted');
+  }
+}
+
+function formatCandidateOutputSummary(candidate: ShotPromptCreativeAiCandidate): string {
+  const output = candidate.outputRefs[0];
+  if (!output) return t('content.overlayShotPromptCandidateNoOutput');
+  const text = typeof output.metadata?.['text'] === 'string' ? output.metadata['text'] : undefined;
+  if (text) return `${t('content.overlayShotPromptCandidatePromptOutput')}: ${text}`;
+  const resourcePath = resolveCreativeAiOutputStablePath(output);
+  if (resourcePath)
+    return `${t('content.overlayShotPromptCandidateResourceOutput')}: ${resourcePath}`;
+  return `${output.kind}: ${output.generatedAssetId ?? output.resourceRef?.id ?? output.id}`;
+}
+
+function resolveCreativeAiOutputStablePath(output: CreativeAiOutputRef): string | undefined {
+  const variantResource = output.resourceVariantRef?.resource;
+  return (
+    variantResource?.source.projectRelativePath ??
+    (variantResource?.locator?.kind === 'file' ? variantResource.locator.path : undefined) ??
+    output.resourceRef?.source.projectRelativePath ??
+    (output.resourceRef?.locator?.kind === 'file' ? output.resourceRef.locator.path : undefined) ??
+    (output.generatedAssetId ? `generated-assets/${output.generatedAssetId}` : undefined)
+  );
 }
 
 function ShotCreatorSummaryItem({

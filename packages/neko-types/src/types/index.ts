@@ -202,6 +202,7 @@ export * from './canvas-agent-operations';
 export * from './canvas-authoring-contracts';
 export * from './canvas-headless-authoring';
 export * from './canvas-semantic-storyboard';
+export * from './canvas-creative-ai-actions';
 export * from './canvas-markdown-capabilities';
 export * from './canvas-drop';
 export * from './canvas-subsystem';

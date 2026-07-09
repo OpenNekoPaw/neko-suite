@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { getLogger } from '../base';
 import { buildConversationListMessage } from '@neko/agent/runtime';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
+import type { CreativeAiConversationProjection } from '@neko-agent/types';
 import {
   createConversationId,
   createFileAgentWorkspaceRuntimeStateRuntime,
@@ -45,6 +46,7 @@ export class ConversationBridge {
   private _persistenceRuntime: ConversationPersistenceRuntime | null = null;
   private _workspaceRuntimeState: AgentWorkspaceRuntimeStateRuntime | null = null;
   private _workspaceRuntimeStateRoot: string | null = null;
+  private readonly creativeAiProjections = new Map<string, CreativeAiConversationProjection>();
   private readonly getWorkspaceRoot: (() => string | undefined) | undefined;
   private readonly initialWorkspaceRoot: string | undefined;
   private readonly deletedConversationIds = new Set<string>();
@@ -205,7 +207,7 @@ export class ConversationBridge {
    */
   clearAll(): void {
     const conversationIds = this._conversationManager.list().map((conversation) => conversation.id);
-      this._conversationManager.clear();
+    this._conversationManager.clear();
     for (const conversationId of conversationIds) {
       this.deletedConversationIds.add(conversationId);
       this._queueConversationDelete(conversationId);
@@ -284,6 +286,14 @@ export class ConversationBridge {
     this.updateMessagesForConversation(conversationId, messages);
   }
 
+  upsertCreativeAiProjection(
+    conversationId: string,
+    projection: CreativeAiConversationProjection,
+  ): void {
+    if (!this._conversationManager.get(conversationId)) return;
+    this.creativeAiProjections.set(conversationId, projection);
+  }
+
   /**
    * Replace messages for a specific conversation and keep the shared resume layer in sync.
    */
@@ -303,10 +313,7 @@ export class ConversationBridge {
    */
   updateWorkspaceRuntimeState(
     conversationId: string,
-    patch: Omit<
-      NonNullable<AgentWorkspaceRuntimeStatePatch['conversation']>,
-      'conversationId'
-    >,
+    patch: Omit<NonNullable<AgentWorkspaceRuntimeStatePatch['conversation']>, 'conversationId'>,
   ): void {
     void this._getWorkspaceRuntimeState()
       ?.patch({
@@ -401,7 +408,14 @@ export class ConversationBridge {
    * Send conversation list to webview
    */
   sendConversationList(webview: vscode.Webview): void {
-    webview.postMessage(buildConversationListMessage(this._conversationManager.list()));
+    const conversations = this._conversationManager.list().map((conversation) => {
+      const creativeAi = this.creativeAiProjections.get(conversation.id);
+      return {
+        ...conversation,
+        ...(creativeAi ? { creativeAi } : {}),
+      };
+    });
+    webview.postMessage(buildConversationListMessage(conversations));
   }
 
   /**

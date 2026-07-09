@@ -188,6 +188,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
     getNode: (nodeId) => canvasEditorProvider.getNode(nodeId),
     updateNode: (nodeId, data) => canvasEditorProvider.updateNode(nodeId, data),
   });
+  canvasEditorProvider.setCreativeAiApplyAdapter(creativeAiApplyAdapter);
   canvasOutlineProvider = new CanvasOutlineProvider();
   canvasStatusBar = new CanvasStatusBar();
 
@@ -351,8 +352,7 @@ export function activate(context: vscode.ExtensionContext): NekoCanvasAPI & ISki
       derive: (request) => canvasEditorProvider.deriveNode(request),
       createConnection: (request) =>
         canvasProjectAuthoringService.createConnection({ connection: request }),
-      createComposite: (request) =>
-        canvasProjectAuthoringService.createComposite({ request }),
+      createComposite: (request) => canvasProjectAuthoringService.createComposite({ request }),
       updateBlock: (request) => canvasProjectAuthoringService.updateBlock({ request }),
       extractStructuredContent: (request) => canvasEditorProvider.extractStructuredContent(request),
       getActiveContext: (request) => canvasEditorProvider.getActiveContext(request),

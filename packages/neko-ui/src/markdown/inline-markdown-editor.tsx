@@ -1,12 +1,5 @@
 import type React from 'react';
-import {
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type UIEvent,
-} from 'react';
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type UIEvent } from 'react';
 import type {
   MarkdownCompletionItem,
   MarkdownCompletionProvider,
@@ -18,6 +11,7 @@ import type {
 } from './types';
 import { useMarkdownProjection } from './use-markdown-projection';
 import { MarkdownInlineText } from './markdown-inline-text';
+import { MarkdownGenerationPromptParts } from './markdown-generation-prompt-parts';
 import { MarkdownCompletionPopover } from './markdown-completion-popover';
 import { MarkdownDiagnostics } from './markdown-diagnostics';
 import { getKeyboardBoundaryMetadata } from '../keyboard';
@@ -215,15 +209,24 @@ export function InlineMarkdownEditor<TContext = unknown>({
           aria-hidden="true"
           data-inline-markdown-highlight="true"
         >
-          <MarkdownInlineText
-            value={value}
-            semanticSpans={projectionResult.semanticSpans}
-            placeholder={placeholder}
-            className="min-h-full whitespace-pre-wrap break-words text-current"
-            placeholderClassName="text-gray-400"
-            spanVariant="editor"
-            renderToken={renderToken}
-          />
+          {profile === 'semantic-prompt' && projectionResult.semanticSpans.length === 0 ? (
+            <MarkdownGenerationPromptParts
+              value={value}
+              placeholder={placeholder}
+              className="min-h-full text-current"
+              placeholderClassName="text-gray-400"
+            />
+          ) : (
+            <MarkdownInlineText
+              value={value}
+              semanticSpans={projectionResult.semanticSpans}
+              placeholder={placeholder}
+              className="min-h-full whitespace-pre-wrap break-words text-current"
+              placeholderClassName="text-gray-400"
+              spanVariant="editor"
+              renderToken={renderToken}
+            />
+          )}
         </div>
         <textarea
           ref={setTextareaElement}
@@ -283,7 +286,9 @@ function applyCompletion<TContext>(
   value: string,
   item: MarkdownCompletionItem,
   onChange: (value: string) => void,
-  setCompletionState: React.Dispatch<React.SetStateAction<MarkdownCompletionState<TContext> | null>>,
+  setCompletionState: React.Dispatch<
+    React.SetStateAction<MarkdownCompletionState<TContext> | null>
+  >,
 ): void {
   if (!isValidCompletionEdit(value, item)) {
     setCompletionState(null);

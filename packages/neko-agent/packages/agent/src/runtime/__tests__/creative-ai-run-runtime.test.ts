@@ -60,6 +60,24 @@ function createRuntime() {
   };
 }
 
+function createRuntimeWithLaneLimits(
+  laneLimits: Parameters<typeof createCreativeAiRunRuntime>[0]['laneLimits'],
+) {
+  let now = Date.parse('2026-07-07T00:00:00.000Z');
+  const runtime = createCreativeAiRunRuntime({
+    now: () => now,
+    createRunId: ({ sequence }) => `run-${sequence}`,
+    createWorkItemId: ({ sequence }) => `work-${sequence}`,
+    laneLimits,
+  });
+  return {
+    runtime,
+    advance(ms: number) {
+      now += ms;
+    },
+  };
+}
+
 function externalInvocation(
   overrides: Partial<ExternalCreativeAiInvocation> = {},
 ): ExternalCreativeAiInvocation {
@@ -217,6 +235,81 @@ describe('creative AI run runtime', () => {
     ]);
   });
 
+  it('queues work items per media lane and exposes aggregate run counts', async () => {
+    const { runtime } = createRuntimeWithLaneLimits({ image: 1, video: 1 });
+    const accepted = runtime.acceptInvocation({
+      invocation: externalInvocation(),
+      routingDecision,
+    });
+    expect(accepted.status).toBe('created');
+    if (accepted.status !== 'created') return;
+
+    const releaseImageA = deferred();
+    const imageA = runtime.startBackgroundWorkItem({
+      runId: 'run-1',
+      laneKind: 'image',
+      targetRef,
+      execute: async () => {
+        await releaseImageA.promise;
+      },
+    });
+    const imageB = runtime.startBackgroundWorkItem({
+      runId: 'run-1',
+      laneKind: 'image',
+      targetRef: { ...targetRef, id: 'node-2#/generatedAsset' },
+    });
+    const video = runtime.startBackgroundWorkItem({
+      runId: 'run-1',
+      laneKind: 'video',
+      targetRef: { ...targetRef, id: 'node-3#/generatedVideoAsset' },
+    });
+
+    expect(imageA.status).toBe('running');
+    expect(imageB.status).toBe('queued');
+    expect(video.status).toBe('running');
+    expect(runtime.getRunSnapshot('run-1')?.aggregate).toEqual(
+      expect.objectContaining({
+        totalCount: 3,
+        runningCount: 2,
+        queuedCount: 1,
+      }),
+    );
+    expect(runtime.getRunSnapshot('run-1')?.aggregate?.lanes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          laneKind: 'image',
+          maxActive: 1,
+          runningCount: 1,
+          queuedCount: 1,
+        }),
+        expect.objectContaining({
+          laneKind: 'video',
+          maxActive: 1,
+          runningCount: 1,
+          queuedCount: 0,
+        }),
+      ]),
+    );
+
+    releaseImageA.resolve();
+    await flushAsyncQueue();
+    await flushAsyncQueue();
+
+    expect(runtime.getRunSnapshot('run-1')?.workItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ workItemId: imageA.workItemId, status: 'completed' }),
+        expect.objectContaining({ workItemId: imageB.workItemId, status: 'running' }),
+      ]),
+    );
+    expect(runtime.getRunSnapshot('run-1')?.aggregate).toEqual(
+      expect.objectContaining({
+        completedCount: 1,
+        runningCount: 2,
+        queuedCount: 0,
+      }),
+    );
+  });
+
   it('projects work item lifecycle events for progress, generated output, stale target, failed apply, and cancellation', () => {
     const { runtime } = createRuntime();
     const accepted = runtime.acceptInvocation({
@@ -264,6 +357,106 @@ describe('creative AI run runtime', () => {
         expect.objectContaining({ workItemId: applyItem.workItemId, status: 'apply-failed' }),
         expect.objectContaining({ workItemId: cancelItem.workItemId, status: 'cancelled' }),
       ]),
+    );
+  });
+
+  it('projects retry, judge pass/fail, and infrastructure failure without conflating provider failure with apply failure', () => {
+    const { runtime } = createRuntime();
+    const accepted = runtime.acceptInvocation({
+      invocation: externalInvocation(),
+      routingDecision,
+    });
+    expect(accepted.status).toBe('created');
+    if (accepted.status !== 'created') return;
+
+    const original = runtime.startBackgroundWorkItem({
+      runId: 'run-1',
+      laneKind: 'image',
+      targetRef,
+    });
+    runtime.failWorkItem('run-1', original.workItemId, [
+      {
+        severity: 'error',
+        code: 'creative-ai-media-generation-failed',
+        message: 'Provider API failed.',
+        retryable: true,
+      },
+    ]);
+
+    const retry = runtime.startBackgroundWorkItem({
+      runId: 'run-1',
+      laneKind: 'image',
+      targetRef,
+      parentWorkItemId: original.workItemId,
+    });
+    runtime.completeWorkItem('run-1', retry.workItemId);
+
+    const judgePass = runtime.startBackgroundWorkItem({
+      runId: 'run-1',
+      laneKind: 'judge',
+      targetRef,
+      parentWorkItemId: retry.workItemId,
+    });
+    runtime.completeWorkItem('run-1', judgePass.workItemId);
+
+    const judgeReject = runtime.startBackgroundWorkItem({
+      runId: 'run-1',
+      laneKind: 'judge',
+      targetRef,
+      parentWorkItemId: retry.workItemId,
+    });
+    runtime.failWorkItem('run-1', judgeReject.workItemId, [
+      {
+        severity: 'error',
+        code: 'creative-ai-judge-rejected-candidate',
+        message: 'Judge rejected candidate.',
+      },
+    ]);
+
+    const snapshot = runtime.getRunSnapshot('run-1');
+    expect(snapshot?.workItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: original.workItemId,
+          status: 'failed',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'creative-ai-media-generation-failed',
+              retryable: true,
+            }),
+          ],
+        }),
+        expect.objectContaining({
+          workItemId: retry.workItemId,
+          parentWorkItemId: original.workItemId,
+          status: 'completed',
+        }),
+        expect.objectContaining({
+          workItemId: judgePass.workItemId,
+          laneKind: 'judge',
+          status: 'completed',
+        }),
+        expect.objectContaining({
+          workItemId: judgeReject.workItemId,
+          laneKind: 'judge',
+          status: 'failed',
+          diagnostics: [expect.objectContaining({ code: 'creative-ai-judge-rejected-candidate' })],
+        }),
+      ]),
+    );
+    expect(runtime.getEvents()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'work-item-failed', workItemId: original.workItemId }),
+        expect.objectContaining({ type: 'work-item-completed', workItemId: retry.workItemId }),
+        expect.objectContaining({ type: 'work-item-failed', workItemId: judgeReject.workItemId }),
+      ]),
+    );
+    expect(snapshot?.aggregate).toEqual(
+      expect.objectContaining({
+        totalCount: 4,
+        completedCount: 2,
+        failedCount: 2,
+      }),
     );
   });
 

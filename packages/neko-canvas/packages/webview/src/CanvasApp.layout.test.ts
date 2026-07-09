@@ -132,6 +132,44 @@ describe('Canvas creative workbench layout boundary', () => {
     expect(appSource).toMatch(/isCanvasSettingsVisible && \(/);
   });
 
+  it('routes Shot overlay AI buttons through typed Canvas creative actions', () => {
+    const overlayActionStart = appSource.indexOf('const postCanvasCreativeAiAction');
+    const overlayActionEnd = appSource.indexOf('/** Open GenerationPromptPanel in video mode');
+    expect(overlayActionStart).toBeGreaterThan(-1);
+    expect(overlayActionEnd).toBeGreaterThan(overlayActionStart);
+    const overlayActionSource = appSource.slice(overlayActionStart, overlayActionEnd);
+
+    expect(overlayActionSource).toMatch(/type: 'canvasCreativeAiAction'/);
+    expect(overlayActionSource).toMatch(/type: 'canvasCreativeAiCandidateAction'/);
+    for (const actionId of [
+      'optimize-video-prompt',
+      'generate-image',
+      'edit-image',
+      'generate-video',
+      'edit-video',
+    ]) {
+      expect(overlayActionSource).toContain(actionId);
+    }
+    expect(overlayActionSource).not.toContain("type: 'sendToAgent'");
+    expect(overlayActionSource).not.toContain("type: 'generateForNode'");
+    expect(overlayActionSource).not.toContain("type: 'generationProgress'");
+    expect(overlayActionSource).not.toContain('dataUrl');
+    expect(overlayActionSource).not.toContain('openGenerationPanel');
+  });
+
+  it('scopes generateForNode to the general GenerationPromptPanel path', () => {
+    expect(appSource).toContain(
+      'General GenerationPromptPanel path; Shot overlay AI buttons use canvasCreativeAiAction.',
+    );
+    const panelGenerateStart = appSource.indexOf('const handlePanelGenerate');
+    const panelGenerateEnd = appSource.indexOf('const handlePanelAutoPrompt');
+    expect(panelGenerateStart).toBeGreaterThan(-1);
+    expect(panelGenerateEnd).toBeGreaterThan(panelGenerateStart);
+    const panelGenerateSource = appSource.slice(panelGenerateStart, panelGenerateEnd);
+    expect(panelGenerateSource).toContain("type: 'generateForNode'");
+    expect(panelGenerateSource).not.toContain("type: 'canvasCreativeAiAction'");
+  });
+
   it('does not duplicate the document title as a canvas scope chip', () => {
     expect(appSource).toMatch(/function CanvasBoardNavigationBar/);
     expect(appSource).toMatch(/if \(relatedBoards\.length === 0\) return null/);

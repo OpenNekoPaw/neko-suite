@@ -204,6 +204,7 @@ export interface CanvasStoryboardPromptDocumentRef {
   readonly blockKind: CanvasStoryboardPromptBlockKind;
   readonly documentId: string;
   readonly version: typeof CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION;
+  readonly text?: string;
   readonly baseRevision?: string;
 }
 
@@ -1276,7 +1277,8 @@ function validatePromptDocumentRefs(
       !record ||
       !includesString(CANVAS_STORYBOARD_PROMPT_BLOCK_KINDS, record['blockKind']) ||
       !isNonEmptyString(record['documentId']) ||
-      record['version'] !== CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION
+      record['version'] !== CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION ||
+      (record['text'] !== undefined && typeof record['text'] !== 'string')
     ) {
       return [
         diagnostic(

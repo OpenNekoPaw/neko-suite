@@ -9,7 +9,11 @@ import {
   isRuntimeOnlyCreativeAiIdentityValue,
   validateAgentInternalInvocation,
   validateConversationLifecycleCommand,
+  validateCreativeAiCandidateApplyRequest,
+  validateCreativeAiCandidatePromotionRequest,
+  validateCreativeAiLaneSnapshot,
   validateCreativeAiRoutingDecision,
+  validateCreativeAiRunAggregateSnapshot,
   validateCreativeAiRunSnapshot,
   validateExternalCreativeAiInvocation,
 } from '../index';
@@ -247,5 +251,132 @@ describe('creative AI invocation contracts', () => {
     });
 
     expect(runSnapshot.valid).toBe(true);
+  });
+
+  it('validates candidate apply and promotion envelopes', () => {
+    const candidateTargetRef: CreativeAiTargetRef = {
+      ...targetRef,
+      kind: 'candidate-target',
+      id: 'canvas-node:node-1#/candidates/prompt-1',
+      candidateOnly: true,
+    };
+    const candidateApply = validateCreativeAiCandidateApplyRequest({
+      schemaVersion: CREATIVE_AI_INVOCATION_SCHEMA_VERSION,
+      requestId: 'candidate-apply-1',
+      conversationId: 'conversation-1',
+      runId: 'run-1',
+      workItemId: 'work-1',
+      sourcePackage: 'neko-canvas',
+      candidateTargetRef,
+      outputRefs: [{ kind: 'text', id: 'candidate-text-1' }],
+      writeback: { kind: 'candidate', requiresRevisionMatch: true },
+      targetRevision: 'target-rev-1',
+      idempotencyKey: 'candidate-apply:run-1:work-1',
+    });
+
+    expect(candidateApply.valid).toBe(true);
+
+    const wrongWriteback = validateCreativeAiCandidateApplyRequest({
+      schemaVersion: CREATIVE_AI_INVOCATION_SCHEMA_VERSION,
+      requestId: 'candidate-apply-2',
+      conversationId: 'conversation-1',
+      runId: 'run-1',
+      sourcePackage: 'neko-canvas',
+      candidateTargetRef,
+      outputRefs: [{ kind: 'text', id: 'candidate-text-1' }],
+      writeback: { kind: 'mutating', requiresRevisionMatch: true },
+      targetRevision: 'target-rev-1',
+      idempotencyKey: 'candidate-apply:run-1:work-2',
+    });
+
+    expect(wrongWriteback.valid).toBe(false);
+    expect(wrongWriteback.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'creative-ai-invalid-writeback-kind',
+        target: 'writeback.kind',
+      }),
+    ]);
+
+    const promotion = validateCreativeAiCandidatePromotionRequest({
+      schemaVersion: CREATIVE_AI_INVOCATION_SCHEMA_VERSION,
+      requestId: 'promote-1',
+      sourcePackage: 'neko-canvas',
+      targetRef,
+      candidateTargetRef,
+      targetRevision: 'target-rev-1',
+      runId: 'run-1',
+      workItemId: 'work-1',
+      conversationId: 'conversation-1',
+      outputRefs: [{ kind: 'text', id: 'candidate-text-1' }],
+      actor: 'judge',
+      judgeWorkItemId: 'judge-1',
+      judgeResultRef: { kind: 'structured-data', id: 'judge-result-1' },
+      idempotencyKey: 'promote:run-1:work-1',
+    });
+
+    expect(promotion.valid).toBe(true);
+
+    const missingRevision = validateCreativeAiCandidatePromotionRequest({
+      schemaVersion: CREATIVE_AI_INVOCATION_SCHEMA_VERSION,
+      requestId: 'promote-2',
+      sourcePackage: 'neko-canvas',
+      targetRef,
+      candidateTargetRef,
+      actor: 'user',
+      idempotencyKey: 'promote:run-1:work-2',
+    });
+
+    expect(missingRevision.valid).toBe(false);
+    expect(missingRevision.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'creative-ai-missing-revision',
+        target: 'targetRevision',
+      }),
+    ]);
+  });
+
+  it('validates lane and aggregate run snapshots', () => {
+    const lane = {
+      laneKind: 'video',
+      maxActive: 1,
+      activeCount: 1,
+      queuedCount: 2,
+      runningCount: 1,
+      completedCount: 3,
+      failedCount: 0,
+      cancelledCount: 0,
+      diagnostics: [],
+    } as const;
+
+    expect(validateCreativeAiLaneSnapshot(lane).valid).toBe(true);
+    expect(
+      validateCreativeAiRunAggregateSnapshot({
+        runId: 'run-1',
+        totalCount: 6,
+        completedCount: 3,
+        failedCount: 0,
+        runningCount: 1,
+        queuedCount: 2,
+        lanes: [lane],
+      }).valid,
+    ).toBe(true);
+
+    const invalidLane = validateCreativeAiLaneSnapshot({
+      ...lane,
+      laneKind: 'video-and-audio',
+      queuedCount: -1,
+    });
+
+    expect(invalidLane.valid).toBe(false);
+    expect(invalidLane.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'creative-ai-invalid-lane-kind',
+        target: 'lane.laneKind',
+      }),
+      expect.objectContaining({
+        code: 'creative-ai-invalid-count',
+        target: 'lane.queuedCount',
+      }),
+    ]);
   });
 });

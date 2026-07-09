@@ -84,10 +84,16 @@ import {
   buildAgentSessionDiagnosticMessage,
   normalizeTabState,
   parseWebviewToExtensionMessage,
+  type CreativeAiConversationProjection,
+  type Message,
   type OpenTab,
   type TabState,
 } from '@neko-agent/types';
 import type { AgentTaskResultFollowUpRequest, NpcAgentWorkflowRequest, Skill } from '@neko/shared';
+import type {
+  CreativeAiRunSnapshot,
+  CreativeAiWorkItemStatus,
+} from '@neko/shared/types/creative-ai-invocation';
 import { updateWebviewKeyboardEditableOwner } from '@neko/shared/vscode/extension';
 import { AccountAiCatalogCache } from '../services/accountAiCatalogCache';
 
@@ -148,6 +154,96 @@ function buildMissingSessionIdentityDiagnostic(raw: unknown) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function buildCreativeAiConversationProjection(
+  snapshot: CreativeAiRunSnapshot,
+): CreativeAiConversationProjection {
+  const workItems = snapshot.workItems ?? [];
+  const activeWorkItems = workItems.filter(
+    (item) => !isTerminalCreativeAiWorkItemStatus(item.status),
+  );
+  const latestWorkItem = workItems.at(-1);
+  const totalCount = snapshot.aggregate?.totalCount ?? workItems.length;
+  const completedCount =
+    snapshot.aggregate?.completedCount ??
+    workItems.filter((item) => item.status === 'completed').length;
+  const progress = totalCount > 0 ? completedCount / totalCount : undefined;
+  return {
+    lifecycleState: 'active',
+    sourcePackage: snapshot.sourcePackage,
+    associationKey: snapshot.associationKey ?? snapshot.conversationId,
+    documentLabel:
+      snapshot.documentRef?.label ??
+      snapshot.documentRef?.projectRelativePath ??
+      snapshot.documentRef?.documentId,
+    sourceLabel: snapshot.sourceRef.label ?? snapshot.sourceRef.id,
+    lastActivityAt: Date.parse(snapshot.updatedAt ?? snapshot.createdAt),
+    activeRunSummary: {
+      activeRunCount: isCreativeAiRunActive(snapshot) ? 1 : 0,
+      activeWorkItemCount: activeWorkItems.length,
+      latestRunId: snapshot.runId,
+      latestRunStatus: snapshot.status,
+      ...(latestWorkItem ? { latestWorkItemStatus: latestWorkItem.status } : {}),
+      label: snapshot.intent,
+      ...(progress !== undefined ? { progress } : {}),
+    },
+    availableLifecycleActions: ['archive', 'delete', 'stop-and-archive', 'stop-and-delete'],
+    ...(snapshot.diagnostics ? { diagnostics: snapshot.diagnostics } : {}),
+  };
+}
+
+function buildCreativeAiRunObservationMessage(snapshot: CreativeAiRunSnapshot): Message {
+  const payload = {
+    runId: snapshot.runId,
+    invocationId: snapshot.invocationId,
+    status: snapshot.status,
+    sourcePackage: snapshot.sourcePackage,
+    documentRef: snapshot.documentRef,
+    targetRef: snapshot.targetRef,
+    candidateTargetRef: snapshot.candidateTargetRef,
+    modelSnapshot: snapshot.modelSnapshot,
+    aggregate: snapshot.aggregate,
+    workItems: snapshot.workItems,
+    diagnostics: snapshot.diagnostics,
+    updatedAt: snapshot.updatedAt ?? snapshot.createdAt,
+  };
+  return {
+    id: `creative-ai-run-observation:${snapshot.runId}`,
+    role: 'assistant',
+    content: [
+      `Canvas creative AI run \`${snapshot.runId}\` is \`${snapshot.status}\`.`,
+      '',
+      '```json',
+      JSON.stringify(payload, null, 2),
+      '```',
+    ].join('\n'),
+    timestamp: Date.parse(snapshot.updatedAt ?? snapshot.createdAt),
+  };
+}
+
+function resolveCreativeAiSessionMode(
+  snapshot: CreativeAiRunSnapshot,
+): 'agent' | 'image' | 'video' | 'audio' {
+  const laneKind = snapshot.workItems?.find(
+    (item) => item.laneKind && item.laneKind !== 'judge',
+  )?.laneKind;
+  if (laneKind === 'image' || laneKind === 'video' || laneKind === 'audio') return laneKind;
+  return 'agent';
+}
+
+function isCreativeAiRunActive(snapshot: CreativeAiRunSnapshot): boolean {
+  return snapshot.status === 'accepted' || snapshot.status === 'running';
+}
+
+function isTerminalCreativeAiWorkItemStatus(status: CreativeAiWorkItemStatus): boolean {
+  return (
+    status === 'completed' ||
+    status === 'cancelled' ||
+    status === 'failed' ||
+    status === 'stale-target' ||
+    status === 'apply-failed'
+  );
 }
 
 interface TabStateWriteMetadata {
@@ -662,6 +758,38 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     return conversationId;
   }
 
+  public projectCreativeAiRunSnapshot(snapshot: CreativeAiRunSnapshot): void {
+    const projection = buildCreativeAiConversationProjection(snapshot);
+    this._conversations.upsertCreativeAiProjection(snapshot.conversationId, projection);
+    this._conversations.upsertMessageToConversation(
+      snapshot.conversationId,
+      buildCreativeAiRunObservationMessage(snapshot),
+    );
+    this._conversations.updateWorkspaceRuntimeState(snapshot.conversationId, {
+      status: isCreativeAiRunActive(snapshot)
+        ? 'running'
+        : snapshot.status === 'failed'
+          ? 'error'
+          : 'idle',
+      sessionMode: resolveCreativeAiSessionMode(snapshot),
+      ...(snapshot.modelSnapshot?.providerId && snapshot.modelSnapshot.modelId
+        ? {
+            chatModel: {
+              providerId: snapshot.modelSnapshot.providerId,
+              modelId: snapshot.modelSnapshot.modelId,
+            },
+          }
+        : {}),
+      ...(snapshot.diagnostics?.some((diagnostic) => diagnostic.severity === 'error')
+        ? { errorMessage: snapshot.diagnostics.map((diagnostic) => diagnostic.message).join('\n') }
+        : {}),
+    });
+    if (this._view?.webview) {
+      this._conversationMessageHandler.sendConversationList();
+      void this._conversationMessageHandler.sendConversationSnapshot(snapshot.conversationId);
+    }
+  }
+
   /** Expose the DnD broker so the command host can register query/clear commands. */
   get dndBroker(): DragDropBroker {
     return this._dndBroker;
@@ -1045,7 +1173,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
         sync: result.sync,
       });
     }
-
   }
 
   private _shouldClearActiveConversationForEmptyTabState(conversationId: string): boolean {

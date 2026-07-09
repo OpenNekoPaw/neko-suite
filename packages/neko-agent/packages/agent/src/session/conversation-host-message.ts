@@ -1,4 +1,5 @@
 import type { Message } from '@neko-agent/types';
+import type { CreativeAiConversationProjection } from '@neko-agent/types';
 import {
   projectMessagesForResourceDisplay,
   type MessageResourceProjectionOptions,
@@ -9,6 +10,7 @@ export interface ConversationViewSource {
   title: string;
   messages: readonly Message[];
   updatedAt: number;
+  creativeAi?: CreativeAiConversationProjection;
 }
 
 export interface ConversationListItemView {
@@ -16,6 +18,7 @@ export interface ConversationListItemView {
   title: string;
   messageCount: number;
   updatedAt: number;
+  creativeAi?: CreativeAiConversationProjection;
 }
 
 export interface ConversationListMessage {
@@ -44,6 +47,7 @@ export function buildConversationListMessage(
       title: conversation.title,
       messageCount: conversation.messages.length,
       updatedAt: conversation.updatedAt,
+      ...(conversation.creativeAi ? { creativeAi: conversation.creativeAi } : {}),
     })),
   };
 }

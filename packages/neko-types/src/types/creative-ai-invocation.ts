@@ -114,6 +114,26 @@ export const CREATIVE_AI_WORK_ITEM_STATUSES = [
 
 export type CreativeAiWorkItemStatus = (typeof CREATIVE_AI_WORK_ITEM_STATUSES)[number];
 
+export const CREATIVE_AI_LANE_KINDS = ['image', 'audio', 'video', 'text', 'judge'] as const;
+
+export type CreativeAiLaneKind = (typeof CREATIVE_AI_LANE_KINDS)[number];
+
+export const CREATIVE_AI_PROMOTION_ACTORS = ['user', 'judge'] as const;
+
+export type CreativeAiPromotionActor = (typeof CREATIVE_AI_PROMOTION_ACTORS)[number];
+
+export const CREATIVE_AI_PROMOTION_OUTCOMES = [
+  'promoted',
+  'stale-target',
+  'judge-rejected',
+  'candidate-missing',
+  'target-missing',
+  'idempotent',
+  'failed',
+] as const;
+
+export type CreativeAiPromotionOutcome = (typeof CREATIVE_AI_PROMOTION_OUTCOMES)[number];
+
 export const CREATIVE_AI_OUTPUT_REF_KINDS = [
   'resource',
   'resource-variant',
@@ -257,9 +277,33 @@ export interface CreativeAiModelSnapshotRef {
 export interface CreativeAiWorkItemSnapshot {
   readonly workItemId: string;
   readonly status: CreativeAiWorkItemStatus;
+  readonly laneKind?: CreativeAiLaneKind;
   readonly targetRef?: CreativeAiTargetRef;
   readonly candidateTargetRef?: CreativeAiTargetRef;
   readonly parentWorkItemId?: string;
+  readonly diagnostics?: readonly CreativeAiDiagnostic[];
+}
+
+export interface CreativeAiLaneSnapshot {
+  readonly laneKind: CreativeAiLaneKind;
+  readonly maxActive: number;
+  readonly activeCount: number;
+  readonly queuedCount: number;
+  readonly runningCount: number;
+  readonly completedCount: number;
+  readonly failedCount: number;
+  readonly cancelledCount?: number;
+  readonly diagnostics?: readonly CreativeAiDiagnostic[];
+}
+
+export interface CreativeAiRunAggregateSnapshot {
+  readonly runId: string;
+  readonly totalCount: number;
+  readonly completedCount: number;
+  readonly failedCount: number;
+  readonly runningCount: number;
+  readonly queuedCount: number;
+  readonly lanes?: readonly CreativeAiLaneSnapshot[];
   readonly diagnostics?: readonly CreativeAiDiagnostic[];
 }
 
@@ -285,6 +329,7 @@ export interface CreativeAiRunSnapshot {
   readonly idempotencyKey: string;
   readonly status: CreativeAiRunStatus;
   readonly workItems?: readonly CreativeAiWorkItemSnapshot[];
+  readonly aggregate?: CreativeAiRunAggregateSnapshot;
   readonly createdAt: string;
   readonly updatedAt?: string;
   readonly diagnostics?: readonly CreativeAiDiagnostic[];
@@ -329,6 +374,41 @@ export interface CreativeAiApplyRequest {
   readonly idempotencyKey: string;
   readonly requestedAt?: string;
   readonly diagnostics?: readonly CreativeAiDiagnostic[];
+}
+
+export interface CreativeAiCandidateApplyRequest extends CreativeAiApplyRequest {
+  readonly candidateTargetRef: CreativeAiTargetRef;
+  readonly writeback: CreativeAiWritebackPolicy & { readonly kind: 'candidate' };
+}
+
+export interface CreativeAiCandidatePromotionRequest {
+  readonly schemaVersion: CreativeAiInvocationSchemaVersion;
+  readonly requestId: string;
+  readonly sourcePackage: string;
+  readonly targetRef: CreativeAiTargetRef;
+  readonly candidateTargetRef: CreativeAiTargetRef;
+  readonly targetRevision: CreativeAiRevision;
+  readonly candidateRevision?: CreativeAiRevision;
+  readonly runId?: string;
+  readonly workItemId?: string;
+  readonly conversationId?: string;
+  readonly outputRefs?: readonly CreativeAiOutputRef[];
+  readonly actor: CreativeAiPromotionActor;
+  readonly judgeWorkItemId?: string;
+  readonly judgeResultRef?: CreativeAiOutputRef;
+  readonly idempotencyKey: string;
+  readonly requestedAt?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
+export interface CreativeAiCandidatePromotionResult {
+  readonly ok: boolean;
+  readonly outcome: CreativeAiPromotionOutcome;
+  readonly targetRef?: CreativeAiTargetRef;
+  readonly candidateTargetRef?: CreativeAiTargetRef;
+  readonly appliedOutputRefs?: readonly CreativeAiOutputRef[];
+  readonly diagnostics: readonly CreativeAiDiagnostic[];
+  readonly idempotencyKey?: string;
 }
 
 const RUNTIME_ONLY_IDENTITY_PATTERNS: readonly RegExp[] = [
@@ -388,6 +468,18 @@ export function isCreativeAiWorkItemStatus(value: unknown): value is CreativeAiW
   return includesString(CREATIVE_AI_WORK_ITEM_STATUSES, value);
 }
 
+export function isCreativeAiLaneKind(value: unknown): value is CreativeAiLaneKind {
+  return includesString(CREATIVE_AI_LANE_KINDS, value);
+}
+
+export function isCreativeAiPromotionActor(value: unknown): value is CreativeAiPromotionActor {
+  return includesString(CREATIVE_AI_PROMOTION_ACTORS, value);
+}
+
+export function isCreativeAiPromotionOutcome(value: unknown): value is CreativeAiPromotionOutcome {
+  return includesString(CREATIVE_AI_PROMOTION_OUTCOMES, value);
+}
+
 export function isCreativeAiOutputRefKind(value: unknown): value is CreativeAiOutputRefKind {
   return includesString(CREATIVE_AI_OUTPUT_REF_KINDS, value);
 }
@@ -439,6 +531,28 @@ export function isConversationLifecycleCommand(
 
 export function isCreativeAiApplyRequest(value: unknown): value is CreativeAiApplyRequest {
   return validateCreativeAiApplyRequest(value).valid;
+}
+
+export function isCreativeAiCandidateApplyRequest(
+  value: unknown,
+): value is CreativeAiCandidateApplyRequest {
+  return validateCreativeAiCandidateApplyRequest(value).valid;
+}
+
+export function isCreativeAiCandidatePromotionRequest(
+  value: unknown,
+): value is CreativeAiCandidatePromotionRequest {
+  return validateCreativeAiCandidatePromotionRequest(value).valid;
+}
+
+export function isCreativeAiLaneSnapshot(value: unknown): value is CreativeAiLaneSnapshot {
+  return validateCreativeAiLaneSnapshot(value).valid;
+}
+
+export function isCreativeAiRunAggregateSnapshot(
+  value: unknown,
+): value is CreativeAiRunAggregateSnapshot {
+  return validateCreativeAiRunAggregateSnapshot(value).valid;
 }
 
 export function validateAgentInternalInvocation(
@@ -705,6 +819,7 @@ export function validateCreativeAiRunSnapshot(
     );
   }
   validateOptionalWorkItemSnapshots(value['workItems'], 'workItems', diagnostics);
+  validateOptionalRunAggregateSnapshot(value['aggregate'], 'aggregate', diagnostics);
   requireStableString(value['createdAt'], 'createdAt', diagnostics);
   validateOptionalStableString(value['updatedAt'], 'updatedAt', diagnostics);
   validateOptionalDiagnosticsArray(value['diagnostics'], 'diagnostics', diagnostics);
@@ -799,6 +914,129 @@ export function validateCreativeAiApplyRequest(
   validateOptionalDiagnosticsArray(value['diagnostics'], 'diagnostics', diagnostics);
   validateMutatingTargetRequirement(value, diagnostics);
 
+  return validationResult(value, diagnostics);
+}
+
+export function validateCreativeAiCandidateApplyRequest(
+  value: unknown,
+): CreativeAiValidationResult<CreativeAiCandidateApplyRequest> {
+  const diagnostics: CreativeAiDiagnostic[] = [];
+  const base = validateCreativeAiApplyRequest(value);
+  diagnostics.push(...base.diagnostics);
+  if (isRecord(value)) {
+    if (value['candidateTargetRef'] === undefined) {
+      diagnostics.push(
+        diagnostic(
+          'error',
+          'creative-ai-missing-candidate-target-ref',
+          'Creative AI candidate apply request must include candidateTargetRef.',
+          'candidateTargetRef',
+        ),
+      );
+    }
+    const writeback = value['writeback'];
+    if (!isRecord(writeback) || writeback['kind'] !== 'candidate') {
+      diagnostics.push(
+        diagnostic(
+          'error',
+          'creative-ai-invalid-writeback-kind',
+          'Creative AI candidate apply request writeback kind must be candidate.',
+          'writeback.kind',
+          'candidate',
+          isRecord(writeback) ? writeback['kind'] : undefined,
+        ),
+      );
+    }
+  }
+
+  return validationResult(value, diagnostics);
+}
+
+export function validateCreativeAiCandidatePromotionRequest(
+  value: unknown,
+): CreativeAiValidationResult<CreativeAiCandidatePromotionRequest> {
+  const diagnostics: CreativeAiDiagnostic[] = [];
+  if (!isRecord(value)) {
+    return invalidRootResult('creative-ai-invalid-candidate-promotion-request');
+  }
+
+  validateSchemaVersion(value['schemaVersion'], diagnostics);
+  requireStableString(value['requestId'], 'requestId', diagnostics);
+  requireStableString(
+    value['sourcePackage'],
+    'sourcePackage',
+    diagnostics,
+    'creative-ai-missing-source-package',
+  );
+  if (value['targetRef'] === undefined) {
+    diagnostics.push(
+      diagnostic(
+        'error',
+        'creative-ai-missing-target-ref',
+        'Creative AI candidate promotion request must include targetRef.',
+        'targetRef',
+      ),
+    );
+  } else {
+    validateOptionalTargetRef(value['targetRef'], 'targetRef', diagnostics);
+  }
+  if (value['candidateTargetRef'] === undefined) {
+    diagnostics.push(
+      diagnostic(
+        'error',
+        'creative-ai-missing-candidate-target-ref',
+        'Creative AI candidate promotion request must include candidateTargetRef.',
+        'candidateTargetRef',
+      ),
+    );
+  } else {
+    validateOptionalTargetRef(value['candidateTargetRef'], 'candidateTargetRef', diagnostics);
+  }
+  requireRevision(value['targetRevision'], 'targetRevision', diagnostics);
+  validateOptionalRevision(value['candidateRevision'], 'candidateRevision', diagnostics);
+  validateOptionalStableString(value['runId'], 'runId', diagnostics);
+  validateOptionalStableString(value['workItemId'], 'workItemId', diagnostics);
+  validateOptionalStableString(value['conversationId'], 'conversationId', diagnostics);
+  validateOptionalOutputRefs(value['outputRefs'], 'outputRefs', diagnostics);
+  if (!isCreativeAiPromotionActor(value['actor'])) {
+    diagnostics.push(
+      diagnostic(
+        'error',
+        'creative-ai-invalid-promotion-actor',
+        'Creative AI candidate promotion actor is invalid.',
+        'actor',
+      ),
+    );
+  }
+  validateOptionalStableString(value['judgeWorkItemId'], 'judgeWorkItemId', diagnostics);
+  if (value['judgeResultRef'] !== undefined) {
+    validateOutputRef(value['judgeResultRef'], 'judgeResultRef', diagnostics);
+  }
+  requireStableString(
+    value['idempotencyKey'],
+    'idempotencyKey',
+    diagnostics,
+    'creative-ai-missing-idempotency-key',
+  );
+  validateOptionalStableString(value['requestedAt'], 'requestedAt', diagnostics);
+  validateOptionalRecord(value['metadata'], 'metadata', diagnostics);
+
+  return validationResult(value, diagnostics);
+}
+
+export function validateCreativeAiLaneSnapshot(
+  value: unknown,
+): CreativeAiValidationResult<CreativeAiLaneSnapshot> {
+  const diagnostics: CreativeAiDiagnostic[] = [];
+  validateLaneSnapshot(value, 'lane', diagnostics);
+  return validationResult(value, diagnostics);
+}
+
+export function validateCreativeAiRunAggregateSnapshot(
+  value: unknown,
+): CreativeAiValidationResult<CreativeAiRunAggregateSnapshot> {
+  const diagnostics: CreativeAiDiagnostic[] = [];
+  validateRunAggregateSnapshot(value, 'aggregate', diagnostics);
   return validationResult(value, diagnostics);
 }
 
@@ -1249,6 +1487,16 @@ function validateWorkItemSnapshot(
       ),
     );
   }
+  if (value['laneKind'] !== undefined && !isCreativeAiLaneKind(value['laneKind'])) {
+    diagnostics.push(
+      diagnostic(
+        'error',
+        'creative-ai-invalid-lane-kind',
+        'Creative AI work item lane kind is invalid.',
+        `${target}.laneKind`,
+      ),
+    );
+  }
   validateOptionalTargetRef(value['targetRef'], `${target}.targetRef`, diagnostics);
   validateOptionalTargetRef(
     value['candidateTargetRef'],
@@ -1258,6 +1506,103 @@ function validateWorkItemSnapshot(
   validateOptionalStableString(
     value['parentWorkItemId'],
     `${target}.parentWorkItemId`,
+    diagnostics,
+  );
+  validateOptionalDiagnosticsArray(value['diagnostics'], `${target}.diagnostics`, diagnostics);
+}
+
+function validateOptionalRunAggregateSnapshot(
+  value: unknown,
+  target: string,
+  diagnostics: CreativeAiDiagnostic[],
+): void {
+  if (value === undefined) return;
+  validateRunAggregateSnapshot(value, target, diagnostics);
+}
+
+function validateRunAggregateSnapshot(
+  value: unknown,
+  target: string,
+  diagnostics: CreativeAiDiagnostic[],
+): void {
+  if (!isRecord(value)) {
+    diagnostics.push(
+      diagnostic(
+        'error',
+        'creative-ai-invalid-run-aggregate',
+        'Creative AI run aggregate snapshot must be an object.',
+        target,
+      ),
+    );
+    return;
+  }
+  requireStableString(value['runId'], `${target}.runId`, diagnostics);
+  validateNonNegativeInteger(value['totalCount'], `${target}.totalCount`, diagnostics);
+  validateNonNegativeInteger(value['completedCount'], `${target}.completedCount`, diagnostics);
+  validateNonNegativeInteger(value['failedCount'], `${target}.failedCount`, diagnostics);
+  validateNonNegativeInteger(value['runningCount'], `${target}.runningCount`, diagnostics);
+  validateNonNegativeInteger(value['queuedCount'], `${target}.queuedCount`, diagnostics);
+  validateOptionalLaneSnapshots(value['lanes'], `${target}.lanes`, diagnostics);
+  validateOptionalDiagnosticsArray(value['diagnostics'], `${target}.diagnostics`, diagnostics);
+}
+
+function validateOptionalLaneSnapshots(
+  value: unknown,
+  target: string,
+  diagnostics: CreativeAiDiagnostic[],
+): void {
+  if (value === undefined) return;
+  if (!Array.isArray(value)) {
+    diagnostics.push(
+      diagnostic(
+        'error',
+        'creative-ai-invalid-lanes',
+        'Creative AI lanes must be an array.',
+        target,
+      ),
+    );
+    return;
+  }
+  for (const [index, lane] of value.entries()) {
+    validateLaneSnapshot(lane, `${target}[${index}]`, diagnostics);
+  }
+}
+
+function validateLaneSnapshot(
+  value: unknown,
+  target: string,
+  diagnostics: CreativeAiDiagnostic[],
+): void {
+  if (!isRecord(value)) {
+    diagnostics.push(
+      diagnostic(
+        'error',
+        'creative-ai-invalid-lane-snapshot',
+        'Creative AI lane snapshot must be an object.',
+        target,
+      ),
+    );
+    return;
+  }
+  if (!isCreativeAiLaneKind(value['laneKind'])) {
+    diagnostics.push(
+      diagnostic(
+        'error',
+        'creative-ai-invalid-lane-kind',
+        'Creative AI lane kind is invalid.',
+        `${target}.laneKind`,
+      ),
+    );
+  }
+  validateNonNegativeInteger(value['maxActive'], `${target}.maxActive`, diagnostics);
+  validateNonNegativeInteger(value['activeCount'], `${target}.activeCount`, diagnostics);
+  validateNonNegativeInteger(value['queuedCount'], `${target}.queuedCount`, diagnostics);
+  validateNonNegativeInteger(value['runningCount'], `${target}.runningCount`, diagnostics);
+  validateNonNegativeInteger(value['completedCount'], `${target}.completedCount`, diagnostics);
+  validateNonNegativeInteger(value['failedCount'], `${target}.failedCount`, diagnostics);
+  validateOptionalNonNegativeInteger(
+    value['cancelledCount'],
+    `${target}.cancelledCount`,
     diagnostics,
   );
   validateOptionalDiagnosticsArray(value['diagnostics'], `${target}.diagnostics`, diagnostics);
@@ -1283,6 +1628,15 @@ function validateOutputRefs(
   for (const [index, output] of value.entries()) {
     validateOutputRef(output, `${target}[${index}]`, diagnostics);
   }
+}
+
+function validateOptionalOutputRefs(
+  value: unknown,
+  target: string,
+  diagnostics: CreativeAiDiagnostic[],
+): void {
+  if (value === undefined) return;
+  validateOutputRefs(value, target, diagnostics);
 }
 
 function validateOutputRef(
@@ -1452,6 +1806,49 @@ function validateOptionalRevision(
   if (value === undefined) return;
   if (typeof value === 'number') return;
   validateStableString(value, target, diagnostics);
+}
+
+function requireRevision(
+  value: unknown,
+  target: string,
+  diagnostics: CreativeAiDiagnostic[],
+): void {
+  if (typeof value === 'number') return;
+  if (isStableString(value)) return;
+  diagnostics.push(
+    diagnostic(
+      'error',
+      'creative-ai-missing-revision',
+      'Creative AI revision is required.',
+      target,
+    ),
+  );
+}
+
+function validateOptionalNonNegativeInteger(
+  value: unknown,
+  target: string,
+  diagnostics: CreativeAiDiagnostic[],
+): void {
+  if (value === undefined) return;
+  validateNonNegativeInteger(value, target, diagnostics);
+}
+
+function validateNonNegativeInteger(
+  value: unknown,
+  target: string,
+  diagnostics: CreativeAiDiagnostic[],
+): void {
+  if (!Number.isInteger(value) || typeof value !== 'number' || value < 0) {
+    diagnostics.push(
+      diagnostic(
+        'error',
+        'creative-ai-invalid-count',
+        'Creative AI count must be a non-negative integer.',
+        target,
+      ),
+    );
+  }
 }
 
 function validateOptionalStableStringArray(

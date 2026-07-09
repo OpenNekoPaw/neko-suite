@@ -5,8 +5,11 @@ import {
   validateExternalCreativeAiInvocation,
   type AgentInternalInvocation,
   type CreativeAiDiagnostic,
+  type CreativeAiLaneKind,
+  type CreativeAiLaneSnapshot,
   type CreativeAiModelSnapshotRef,
   type CreativeAiRoutingDecision,
+  type CreativeAiRunAggregateSnapshot,
   type CreativeAiRunSnapshot,
   type CreativeAiRunStatus,
   type CreativeAiTargetRef,
@@ -25,6 +28,7 @@ export type CreativeAiRunEventType =
   | 'work-item-progress'
   | 'work-item-completed'
   | 'work-item-cancelled'
+  | 'work-item-failed'
   | 'work-item-stale-target'
   | 'work-item-apply-failed'
   | 'work-item-generated-observation';
@@ -46,6 +50,7 @@ export interface CreativeAiRunRuntimeOptions {
   readonly now?: () => number;
   readonly createRunId?: (input: CreativeAiRunIdInput) => string;
   readonly createWorkItemId?: (input: CreativeAiWorkItemIdInput) => string;
+  readonly laneLimits?: Partial<Record<CreativeAiLaneKind, number>>;
   readonly emit?: (event: CreativeAiRunEvent) => void;
 }
 
@@ -86,6 +91,7 @@ export type CreativeAiRunAcceptResult =
 
 export interface StartCreativeAiWorkItemInput {
   readonly runId: string;
+  readonly laneKind?: CreativeAiLaneKind;
   readonly targetRef?: CreativeAiTargetRef;
   readonly candidateTargetRef?: CreativeAiTargetRef;
   readonly parentWorkItemId?: string;
@@ -111,11 +117,37 @@ interface CreativeAiRunRecord {
   workItems: Map<string, CreativeAiWorkItemSnapshot>;
 }
 
+interface QueuedCreativeAiWorkItemExecution {
+  readonly runId: string;
+  readonly workItemId: string;
+  readonly execute?: (context: CreativeAiBackgroundWorkItemContext) => Promise<void> | void;
+}
+
+const CREATIVE_AI_LANE_KINDS: readonly CreativeAiLaneKind[] = [
+  'image',
+  'audio',
+  'video',
+  'text',
+  'judge',
+];
+
+const DEFAULT_CREATIVE_AI_LANE_LIMITS: Record<CreativeAiLaneKind, number> = {
+  image: 2,
+  audio: 1,
+  video: 1,
+  text: 4,
+  judge: 1,
+};
+
 export class CreativeAiRunRuntime {
   private readonly runs = new Map<string, CreativeAiRunRecord>();
   private readonly idempotencyIndex = new Map<string, string>();
   private readonly events: CreativeAiRunEvent[] = [];
   private readonly mainTurnChains = new Map<string, Promise<unknown>>();
+  private readonly queuedExecutions = new Map<
+    CreativeAiLaneKind,
+    QueuedCreativeAiWorkItemExecution[]
+  >();
   private runSequence = 0;
   private workItemSequence = 0;
 
@@ -194,41 +226,32 @@ export class CreativeAiRunRuntime {
     const record = this.requireRun(input.runId);
     const createdAt = this.now();
     const workItemId = this.createWorkItemId(input.runId, createdAt);
+    const laneKind = input.laneKind ?? 'text';
+    const canStart = this.getActiveLaneCount(laneKind) < this.getLaneLimit(laneKind);
     const workItem: CreativeAiWorkItemSnapshot = {
       workItemId,
-      status: 'running',
+      status: canStart ? 'running' : 'queued',
+      laneKind,
       ...(input.targetRef ? { targetRef: input.targetRef } : {}),
       ...(input.candidateTargetRef ? { candidateTargetRef: input.candidateTargetRef } : {}),
       ...(input.parentWorkItemId ? { parentWorkItemId: input.parentWorkItemId } : {}),
     };
     record.workItems.set(workItemId, workItem);
     this.updateRunSnapshot(record, 'running');
-    this.emitEvent('work-item-started', record.snapshot, workItem);
+    this.emitEvent(
+      canStart ? 'work-item-started' : 'work-item-progress',
+      record.snapshot,
+      workItem,
+    );
 
-    if (input.execute) {
-      void Promise.resolve()
-        .then(() =>
-          input.execute?.({
-            runId: input.runId,
-            workItemId,
-            conversationId: record.snapshot.conversationId,
-            runtime: this,
-          }),
-        )
-        .then(() => {
-          const latest = this.runs.get(input.runId)?.workItems.get(workItemId);
-          if (latest && latest.status === 'running') {
-            this.completeWorkItem(input.runId, workItemId);
-          }
-        })
-        .catch((error: unknown) => {
-          this.failWorkItemApply(input.runId, workItemId, [
-            diagnostic(
-              'creative-ai-background-work-item-failed',
-              error instanceof Error ? error.message : String(error),
-            ),
-          ]);
-        });
+    if (canStart) {
+      this.runBackgroundWorkItemExecution(input.runId, workItemId, input.execute);
+    } else {
+      this.enqueueLaneExecution(laneKind, {
+        runId: input.runId,
+        workItemId,
+        execute: input.execute,
+      });
     }
 
     return cloneWorkItem(workItem);
@@ -260,6 +283,16 @@ export class CreativeAiRunRuntime {
       'work-item-cancelled',
       diagnostics,
     );
+    this.completeRunIfTerminal(runId);
+    return item;
+  }
+
+  failWorkItem(
+    runId: string,
+    workItemId: string,
+    diagnostics: readonly CreativeAiDiagnostic[] = [],
+  ): CreativeAiWorkItemSnapshot {
+    const item = this.updateWorkItem(runId, workItemId, 'failed', 'work-item-failed', diagnostics);
     this.completeRunIfTerminal(runId);
     return item;
   }
@@ -400,6 +433,9 @@ export class CreativeAiRunRuntime {
     record.workItems.set(workItemId, updated);
     this.updateRunSnapshot(record, toRunStatusFromWorkItemStatus(status), diagnostics);
     this.emitEvent(eventType, record.snapshot, updated, diagnostics);
+    if (isTerminalWorkItemStatus(status) && existing.laneKind) {
+      this.drainLane(existing.laneKind);
+    }
     return cloneWorkItem(updated);
   }
 
@@ -435,6 +471,13 @@ export class CreativeAiRunRuntime {
       status,
       updatedAt: new Date(this.now()).toISOString(),
       workItems: Array.from(record.workItems.values()).map(cloneWorkItem),
+      aggregate: buildRunAggregateSnapshot(
+        record.snapshot.runId,
+        Array.from(record.workItems.values()),
+        {
+          laneLimits: (laneKind) => this.getLaneLimit(laneKind),
+        },
+      ),
       ...(diagnostics.length > 0 ? { diagnostics } : {}),
     };
   }
@@ -500,6 +543,95 @@ export class CreativeAiRunRuntime {
   private now(): number {
     return this.options.now?.() ?? Date.now();
   }
+
+  private getLaneLimit(laneKind: CreativeAiLaneKind): number {
+    const configured = this.options.laneLimits?.[laneKind];
+    if (configured !== undefined) {
+      if (!Number.isInteger(configured) || configured < 1) {
+        throw new Error(`Creative AI lane limit must be a positive integer: ${laneKind}`);
+      }
+      return configured;
+    }
+    return DEFAULT_CREATIVE_AI_LANE_LIMITS[laneKind];
+  }
+
+  private getActiveLaneCount(laneKind: CreativeAiLaneKind): number {
+    let count = 0;
+    for (const record of this.runs.values()) {
+      for (const workItem of record.workItems.values()) {
+        if (workItem.laneKind === laneKind && workItem.status === 'running') {
+          count += 1;
+        }
+      }
+    }
+    return count;
+  }
+
+  private enqueueLaneExecution(
+    laneKind: CreativeAiLaneKind,
+    execution: QueuedCreativeAiWorkItemExecution,
+  ): void {
+    const queue = this.queuedExecutions.get(laneKind) ?? [];
+    queue.push(execution);
+    this.queuedExecutions.set(laneKind, queue);
+  }
+
+  private drainLane(laneKind: CreativeAiLaneKind): void {
+    const queue = this.queuedExecutions.get(laneKind);
+    if (!queue || queue.length === 0) return;
+    while (queue.length > 0 && this.getActiveLaneCount(laneKind) < this.getLaneLimit(laneKind)) {
+      const next = queue.shift();
+      if (!next) return;
+      const record = this.runs.get(next.runId);
+      const workItem = record?.workItems.get(next.workItemId);
+      if (!record || !workItem || workItem.status !== 'queued') {
+        continue;
+      }
+      const running: CreativeAiWorkItemSnapshot = {
+        ...workItem,
+        status: 'running',
+      };
+      record.workItems.set(next.workItemId, running);
+      this.updateRunSnapshot(record, 'running');
+      this.emitEvent('work-item-started', record.snapshot, running);
+      this.runBackgroundWorkItemExecution(next.runId, next.workItemId, next.execute);
+    }
+    if (queue.length === 0) {
+      this.queuedExecutions.delete(laneKind);
+    }
+  }
+
+  private runBackgroundWorkItemExecution(
+    runId: string,
+    workItemId: string,
+    execute?: (context: CreativeAiBackgroundWorkItemContext) => Promise<void> | void,
+  ): void {
+    if (!execute) return;
+    const record = this.requireRun(runId);
+    void Promise.resolve()
+      .then(() =>
+        execute({
+          runId,
+          workItemId,
+          conversationId: record.snapshot.conversationId,
+          runtime: this,
+        }),
+      )
+      .then(() => {
+        const latest = this.runs.get(runId)?.workItems.get(workItemId);
+        if (latest && latest.status === 'running') {
+          this.completeWorkItem(runId, workItemId);
+        }
+      })
+      .catch((error: unknown) => {
+        this.failWorkItem(runId, workItemId, [
+          diagnostic(
+            'creative-ai-background-work-item-failed',
+            error instanceof Error ? error.message : String(error),
+          ),
+        ]);
+      });
+  }
 }
 
 export function createCreativeAiRunRuntime(
@@ -508,9 +640,7 @@ export function createCreativeAiRunRuntime(
   return new CreativeAiRunRuntime(options);
 }
 
-function normalizeInvocation(
-  invocation: unknown,
-):
+function normalizeInvocation(invocation: unknown):
   | {
       readonly status: 'accepted';
       readonly invocation: AgentInternalInvocation | ExternalCreativeAiInvocation;
@@ -611,6 +741,50 @@ function buildIdempotencyLookupKey(
   ].join('|');
 }
 
+function buildRunAggregateSnapshot(
+  runId: string,
+  workItems: readonly CreativeAiWorkItemSnapshot[],
+  options: { readonly laneLimits: (laneKind: CreativeAiLaneKind) => number },
+): CreativeAiRunAggregateSnapshot {
+  const lanes = CREATIVE_AI_LANE_KINDS.map((laneKind): CreativeAiLaneSnapshot => {
+    const laneItems = workItems.filter((item) => item.laneKind === laneKind);
+    const runningCount = laneItems.filter((item) => item.status === 'running').length;
+    const queuedCount = laneItems.filter((item) => item.status === 'queued').length;
+    const completedCount = laneItems.filter((item) => item.status === 'completed').length;
+    const failedCount = laneItems.filter(
+      (item) =>
+        item.status === 'failed' ||
+        item.status === 'stale-target' ||
+        item.status === 'apply-failed',
+    ).length;
+    const cancelledCount = laneItems.filter((item) => item.status === 'cancelled').length;
+    return {
+      laneKind,
+      maxActive: options.laneLimits(laneKind),
+      activeCount: runningCount,
+      queuedCount,
+      runningCount,
+      completedCount,
+      failedCount,
+      ...(cancelledCount > 0 ? { cancelledCount } : {}),
+    };
+  });
+  return {
+    runId,
+    totalCount: workItems.length,
+    completedCount: workItems.filter((item) => item.status === 'completed').length,
+    failedCount: workItems.filter(
+      (item) =>
+        item.status === 'failed' ||
+        item.status === 'stale-target' ||
+        item.status === 'apply-failed',
+    ).length,
+    runningCount: workItems.filter((item) => item.status === 'running').length,
+    queuedCount: workItems.filter((item) => item.status === 'queued').length,
+    lanes,
+  };
+}
+
 function toWorkItemStatusFromSubAgentEvent(event: SubAgentWorkItemEvent): CreativeAiWorkItemStatus {
   switch (event.type) {
     case 'completed':
@@ -635,8 +809,9 @@ function toEventTypeFromWorkItemStatus(status: CreativeAiWorkItemStatus): Creati
       return 'work-item-cancelled';
     case 'stale-target':
       return 'work-item-stale-target';
-    case 'apply-failed':
     case 'failed':
+      return 'work-item-failed';
+    case 'apply-failed':
       return 'work-item-apply-failed';
     case 'generated-observation':
       return 'work-item-generated-observation';

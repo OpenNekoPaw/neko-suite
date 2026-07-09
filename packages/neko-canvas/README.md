@@ -89,3 +89,13 @@ Webview 端通过 `canvasOperationStore` 作为运行时桥接层生成 `EditOpe
 - **cut 最小回流**：通过共享 `timelineSync` 契约仅回写 `lastImportedToTimeline*` 等操作元数据
 - **asset 代理边界**：`NekoCanvasAPI.asset` 仅代理 `neko-assets` 的 `import/list/getById`，不作为资产事实源
 - **执行摘要边界**：`storyboard.getExecutionSummary()` 与 `neko.canvas.getStoryboardExecutionSummary` 只投影 SceneGroup / ShotNode 的执行进度、选中资产引用、缩略图引用和 timeline import 元数据；它不是第二份 storyboard 数据源，也不暴露 Webview runtime URL、blob/data URL、播放状态或候选图墙 UI。
+
+### Shot 创作 AI 按钮
+
+Shot overlay 中的“优化提示词 / 生成图片 / 编辑图片 / 生成视频 / 编辑视频”是 Canvas creative AI action，不复用 `Send to Agent` 前台上下文交接，也不通过 Webview 直接调用 provider/model SDK。
+
+- Webview 只发送 `canvasCreativeAiAction` / `canvasCreativeAiCandidateAction` typed message，并显示本地可判断的参数诊断、Agent 聚合进度和候选卡片。
+- Extension Host 负责解析 `.nkc` 文档身份、shot/scene prompt document、source media、creative 参数、target/candidate refs、revision 和 idempotency，再调用 Agent 的 external creative invocation 命令。
+- Agent 返回的提示词、图片、视频结果先写入 `node.data.creativeAiCandidates`。正式 `generatedAsset`、`generatedVideoAsset`、`imagePromptDocument` 或 `videoPromptDocument` 只有在用户接受或 judge 通过且 revision re-check 成功后才会更新。
+- 候选卡片只展示 `ResourceRef`、generated asset id、workspace-relative path 或 `${VAR}/path` 等稳定身份摘要。Webview URI、blob/object URL、cache path、temp path 和 `dataUrl` 不能作为 durable result identity。
+- 现有 `GenerationPromptPanel` / `generateForNode` / `generationProgress` 仍保留给未迁移的旧面板路径；Shot overlay AI 按钮的成功路径必须通过 typed creative action、Agent run/workItem 和 Canvas candidate apply。
