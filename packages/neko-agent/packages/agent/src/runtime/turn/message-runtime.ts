@@ -108,6 +108,7 @@ export interface ProviderExpressionTargetConfig {
   readonly capability: ProviderGenerationCapability;
   readonly providerId: string;
   readonly modelId: string;
+  readonly providerExpressionProfileId?: string;
 }
 
 export interface AgentExecutionMetadataInput {
@@ -1669,6 +1670,9 @@ export function buildProviderExpressionTargets(
         capability: 'image.generate',
         providerId: agentMediaModels.image.providerId,
         modelId: agentMediaModels.image.modelId,
+        ...(agentMediaModels.image.providerExpressionProfileId
+          ? { providerExpressionProfileId: agentMediaModels.image.providerExpressionProfileId }
+          : {}),
       });
     }
     if (agentMediaModels.video) {
@@ -1676,6 +1680,9 @@ export function buildProviderExpressionTargets(
         capability: 'video.generate',
         providerId: agentMediaModels.video.providerId,
         modelId: agentMediaModels.video.modelId,
+        ...(agentMediaModels.video.providerExpressionProfileId
+          ? { providerExpressionProfileId: agentMediaModels.video.providerExpressionProfileId }
+          : {}),
       });
     }
     if (agentMediaModels.audio) {
@@ -1683,6 +1690,9 @@ export function buildProviderExpressionTargets(
         capability: 'audio.generate',
         providerId: agentMediaModels.audio.providerId,
         modelId: agentMediaModels.audio.modelId,
+        ...(agentMediaModels.audio.providerExpressionProfileId
+          ? { providerExpressionProfileId: agentMediaModels.audio.providerExpressionProfileId }
+          : {}),
       });
     }
     return targets;
@@ -1694,6 +1704,9 @@ export function buildProviderExpressionTargets(
     capability,
     providerId: mediaModel.providerId,
     modelId: mediaModel.modelId,
+    ...(mediaModel.providerExpressionProfileId
+      ? { providerExpressionProfileId: mediaModel.providerExpressionProfileId }
+      : {}),
   }));
 }
 

@@ -178,6 +178,63 @@ describe('agent-prompt-schema-generator', () => {
     });
   });
 
+  it('projects resolved profiles only when turn assembly supplies profile context', () => {
+    const bundle = generate({
+      basePrompt: 'BASE',
+      profiles: {
+        skillProfileReferences: [
+          { profileId: 'studio.creation.review', kind: 'creation', relationship: 'requires' },
+          { profileId: 'studio.shot-review', kind: 'artifact', relationship: 'produces' },
+        ],
+        creationProfile: {
+          profileId: 'studio.creation.review',
+          kind: 'creation',
+          version: '1.0.0',
+          source: 'package',
+          defaultStageId: 'research',
+          stages: [
+            { stageId: 'research', purpose: 'Research source context.' },
+            { stageId: 'review', purpose: 'Review output.' },
+          ],
+        },
+        artifactProfiles: [
+          {
+            profileId: 'studio.shot-review',
+            kind: 'artifact',
+            protocol: 'GenericTable',
+            version: 1,
+            source: 'package',
+            columns: [{ columnId: 'shotId', cellType: 'string', required: true }],
+          },
+        ],
+        providerExpressionProfiles: [
+          {
+            profileId: 'provider-expression:flux',
+            kind: 'provider-expression',
+            source: 'package',
+            providerId: 'flux',
+            displayName: 'Flux',
+            version: '1.0.0',
+            sourceLayer: 'builtin',
+            capabilities: ['image.generate'],
+            syntaxProfile: { notes: [] },
+            conceptCoverage: { entries: [] },
+            trainingProfile: {
+              styleAffinities: { photorealistic: 3 },
+              antiBiasStrategies: [],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(bundle.sections.map((section) => section.id)).toEqual(['base', 'profiles:resolved']);
+    expect(bundle.prompt).toContain('## Profile Projection');
+    expect(bundle.prompt).toContain('requires:creation:studio.creation.review');
+    expect(bundle.prompt).toContain('Artifact profiles: studio.shot-review@1 (GenericTable)');
+    expect(bundle.prompt).toContain('Provider expression profiles: provider-expression:flux@1.0.0');
+  });
+
   it('reports skipped fragments, missing tool schemas, provider incompatibility, and multimodal ablation', () => {
     const bundle = generate({
       basePrompt: 'BASE',

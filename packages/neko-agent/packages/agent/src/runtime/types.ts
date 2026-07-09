@@ -6,7 +6,10 @@ import type {
   ISkillRegistry,
   IToolCategoryRegistry,
   IToolGroupRegistry,
+  IArtifactProfileRegistry,
+  ICreationProfileRegistry,
   IProviderCardRegistry,
+  IProviderExpressionProfileRegistry,
   IOperationToolAdapterRegistry,
   PromptFragment,
 } from '@neko/shared';
@@ -120,6 +123,9 @@ export interface ICapabilityRuntime {
   readonly toolGroupRegistry?: IToolGroupRegistry;
   readonly toolCategoryRegistry?: IToolCategoryRegistry;
   readonly providerCardRegistry?: IProviderCardRegistry;
+  readonly artifactProfileRegistry?: IArtifactProfileRegistry;
+  readonly creationProfileRegistry?: ICreationProfileRegistry;
+  readonly providerExpressionProfileRegistry?: IProviderExpressionProfileRegistry;
   readonly promptFragments?: readonly PromptFragment[];
   readonly operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
   readonly externalProcessorRuntime?: AgentExternalProcessorRuntime;

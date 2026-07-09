@@ -2,9 +2,11 @@ import {
   resolveGlobalStorageLayout,
   resolveStorageLayout,
   type IProviderCardRegistry,
+  type IProviderExpressionProfileRegistry,
   type ProviderCard,
   type ProviderCardLayer,
 } from '@neko/shared';
+import { toProviderExpressionProfile } from '@neko/shared';
 import {
   registerProviderCardDirectory,
   type ProviderCardLoadError,
@@ -18,6 +20,7 @@ export interface ProviderCardRuntimeLogger {
 
 export interface RegisterRuntimeProviderCardDirectoriesOptions {
   readonly registry: IProviderCardRegistry;
+  readonly providerExpressionProfileRegistry?: Pick<IProviderExpressionProfileRegistry, 'register'>;
   readonly fs: ProviderCardLoaderFs;
   readonly homeDir: string;
   readonly workspaceRoot?: string;
@@ -74,7 +77,7 @@ async function registerProviderCardRuntimeDirectory(input: {
   readonly sourceRefPrefix: string;
 }): Promise<readonly ProviderCard[]> {
   try {
-    return await input.registerDirectory({
+    const cards = await input.registerDirectory({
       registry: input.options.registry,
       root: input.root,
       sourceLayer: input.layer,
@@ -83,6 +86,10 @@ async function registerProviderCardRuntimeDirectory(input: {
       sourceRefPrefix: input.sourceRefPrefix,
       onError: (error) => emitProviderCardLoadWarning(input.options.logger, error, input.layer),
     });
+    for (const card of cards) {
+      input.options.providerExpressionProfileRegistry?.register(toProviderExpressionProfile(card));
+    }
+    return cards;
   } catch (error) {
     emitProviderCardLoadWarning(
       input.options.logger,

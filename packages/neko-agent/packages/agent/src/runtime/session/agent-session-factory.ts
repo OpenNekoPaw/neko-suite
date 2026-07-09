@@ -4,12 +4,14 @@ import type {
   ExecutorHooks,
   IOperationToolAdapterRegistry,
   IProjectMemoryManager,
+  IProviderExpressionProfileRegistry,
   IService,
   IToolCategoryRegistry,
   IToolGroupRegistry,
   IToolRegistry,
   PromptFragment,
   ProviderCard,
+  ProviderExpressionProfileDescriptor,
 } from '@neko/shared';
 import {
   createSystemPromptBuilder,
@@ -336,7 +338,11 @@ export function resolveAgentRuntimePromptFragments(
     config.providerExpressionTargets,
     config.locale,
   );
-  const fragments = [...capabilityFragments, ...providerFragments];
+  const profileFragments = resolveProviderExpressionProfileFragments(
+    config.providerExpressionTargets,
+    config.capabilityRuntime?.providerExpressionProfileRegistry,
+  );
+  const fragments = [...capabilityFragments, ...providerFragments, ...profileFragments];
   return fragments.length > 0 ? fragments : undefined;
 }
 
@@ -365,6 +371,82 @@ function resolveProviderExpressionFragments(
       locale,
     }),
   );
+}
+
+function resolveProviderExpressionProfileFragments(
+  targets: readonly ProviderExpressionTargetConfig[] | undefined,
+  registry: Pick<IProviderExpressionProfileRegistry, 'get'> | undefined,
+): readonly PromptFragment[] {
+  const selectedTargets =
+    targets?.filter((target) => target.providerExpressionProfileId) ?? [];
+  if (selectedTargets.length === 0) return [];
+
+  return selectedTargets.map((target) => {
+    const profileId = target.providerExpressionProfileId as string;
+    const profile = registry?.get(profileId);
+    if (!profile) {
+      return createProviderExpressionProfileDiagnosticFragment(
+        profileId,
+        'missing-profile-descriptor',
+        `Referenced provider expression profile "${profileId}" is not registered.`,
+      );
+    }
+    if (!matchesProviderExpressionTarget(profile, target)) {
+      return createProviderExpressionProfileDiagnosticFragment(
+        profileId,
+        'incompatible-profile-target',
+        `Provider expression profile "${profileId}" does not match selected target ${target.providerId}/${target.modelId}.`,
+      );
+    }
+    return createProviderExpressionProfileFragment(profile, target);
+  });
+}
+
+function createProviderExpressionProfileFragment(
+  profile: ProviderExpressionProfileDescriptor,
+  target: ProviderExpressionTargetConfig,
+): PromptFragment {
+  const targetName = `${target.providerId}/${target.modelId}`;
+  return {
+    id: `provider:expression-profile:${sanitizeFragmentId(profile.profileId)}:${target.capability}`,
+    priority: 86,
+    content: [
+      `Provider expression profile resolved: ${profile.profileId}@${profile.version}.`,
+      `Selected target: ${targetName}; capability: ${target.capability}.`,
+      ...(profile.syntaxProfile.notes.length > 0
+        ? [`Syntax notes: ${profile.syntaxProfile.notes.join(' ')}`]
+        : []),
+    ].join('\n'),
+  };
+}
+
+function createProviderExpressionProfileDiagnosticFragment(
+  profileId: string,
+  reason: 'missing-profile-descriptor' | 'incompatible-profile-target',
+  message: string,
+): PromptFragment {
+  return {
+    id: `provider:expression-profile:diagnostic:${sanitizeFragmentId(profileId)}`,
+    priority: 86,
+    content: [
+      'Provider expression profile diagnostic.',
+      `Reason: ${reason}.`,
+      message,
+      'Continue only with provider-neutral expression guidance for this target.',
+    ].join('\n'),
+  };
+}
+
+function matchesProviderExpressionTarget(
+  profile: ProviderExpressionProfileDescriptor,
+  target: ProviderExpressionTargetConfig,
+): boolean {
+  if (profile.providerId !== target.providerId) return false;
+  return !profile.modelId || profile.modelId === target.modelId;
+}
+
+function sanitizeFragmentId(value: string): string {
+  return value.replace(/[^a-z0-9._:-]+/gi, '-');
 }
 
 function buildValidationLoop(
@@ -431,6 +513,18 @@ function buildAgentRuntimeConfig(
       ...(toolCategoryRegistry ? { toolCategoryRegistry } : {}),
       ...(config.capabilityRuntime?.providerCardRegistry
         ? { providerCardRegistry: config.capabilityRuntime.providerCardRegistry }
+        : {}),
+      ...(config.capabilityRuntime?.artifactProfileRegistry
+        ? { artifactProfileRegistry: config.capabilityRuntime.artifactProfileRegistry }
+        : {}),
+      ...(config.capabilityRuntime?.creationProfileRegistry
+        ? { creationProfileRegistry: config.capabilityRuntime.creationProfileRegistry }
+        : {}),
+      ...(config.capabilityRuntime?.providerExpressionProfileRegistry
+        ? {
+            providerExpressionProfileRegistry:
+              config.capabilityRuntime.providerExpressionProfileRegistry,
+          }
         : {}),
       ...(config.capabilityRuntime?.externalProcessorRuntime
         ? { externalProcessorRuntime: config.capabilityRuntime.externalProcessorRuntime }

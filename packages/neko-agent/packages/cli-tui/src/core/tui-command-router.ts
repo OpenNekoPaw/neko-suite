@@ -87,6 +87,7 @@ export interface TuiModelPorts {
 export interface TuiModelIdentity {
   readonly providerId: string;
   readonly modelId: string;
+  readonly providerExpressionProfileId?: string;
   readonly optionId?: string;
   readonly label?: string;
   readonly category?: ChatModelOption['category'];
@@ -682,6 +683,9 @@ function readCurrentChatModelIdentity(
     resolved ?? {
       providerId,
       modelId,
+      ...(config.chatModel?.providerExpressionProfileId
+        ? { providerExpressionProfileId: config.chatModel.providerExpressionProfileId }
+        : {}),
       optionId: `${providerId}:${modelId}`,
       label: `${providerId} / ${modelId}`,
     }
@@ -745,6 +749,9 @@ function chatModelOptionToIdentity(option: ChatModelOption): TuiModelIdentity {
   return {
     providerId: option.providerId,
     modelId: option.modelId,
+    ...(option.providerExpressionProfileId
+      ? { providerExpressionProfileId: option.providerExpressionProfileId }
+      : {}),
     optionId: option.id,
     label: option.label,
     category: option.category,

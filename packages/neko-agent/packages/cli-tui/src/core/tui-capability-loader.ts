@@ -7,11 +7,17 @@ import type {
   AgentCapabilityProviderAvailabilitySummary,
   AgentCapabilityRuntimeRequirements,
   AgentReferenceContributor,
+  ArtifactProfileDescriptor,
+  CreationProfileDescriptor,
+  IArtifactProfileRegistry,
+  ICreationProfileRegistry,
   IProviderCardRegistry,
+  IProviderExpressionProfileRegistry,
   ISkillRegistry,
   IToolRegistry,
   PromptFragment,
   ProviderCard,
+  ProviderExpressionProfileDescriptor,
   Skill,
   Tool,
   ToolGroup,
@@ -25,12 +31,21 @@ interface ToolGroupRegistryLike {
   listEnabled?(): ToolGroup[];
 }
 
-type RuntimeRequirementsContribution = Skill | Tool | ToolGroup | ProviderCard;
+type RuntimeRequirementsContribution =
+  | Skill
+  | Tool
+  | ToolGroup
+  | ProviderCard
+  | ArtifactProfileDescriptor
+  | CreationProfileDescriptor
+  | ProviderExpressionProfileDescriptor;
 
 interface ContributionWithRuntimeRequirements {
   readonly requirements?: AgentCapabilityRuntimeRequirements;
+  readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
   readonly metadata?: {
     readonly requirements?: AgentCapabilityRuntimeRequirements;
+    readonly hostRequirements?: readonly AgentCapabilityHostRequirement[];
   };
 }
 
@@ -39,6 +54,12 @@ export interface TuiCapabilityLoaderOptions {
   readonly skillRegistry?: ISkillRegistry;
   readonly toolGroupRegistry?: ToolGroupRegistryLike;
   readonly providerCardRegistry?: Pick<IProviderCardRegistry, 'register' | 'unregister'>;
+  readonly artifactProfileRegistry?: Pick<IArtifactProfileRegistry, 'register' | 'unregister'>;
+  readonly creationProfileRegistry?: Pick<ICreationProfileRegistry, 'register' | 'unregister'>;
+  readonly providerExpressionProfileRegistry?: Pick<
+    IProviderExpressionProfileRegistry,
+    'register' | 'unregister'
+  >;
   readonly referenceContributors?: readonly AgentReferenceContributor[];
   readonly locale?: 'en' | 'zh';
 }
@@ -78,6 +99,15 @@ class DefaultTuiCapabilityLoader implements TuiCapabilityLoader {
       ...(options.toolGroupRegistry ? { toolGroupRegistry: options.toolGroupRegistry } : {}),
       ...(options.providerCardRegistry
         ? { providerCardRegistry: options.providerCardRegistry }
+        : {}),
+      ...(options.artifactProfileRegistry
+        ? { artifactProfileRegistry: options.artifactProfileRegistry }
+        : {}),
+      ...(options.creationProfileRegistry
+        ? { creationProfileRegistry: options.creationProfileRegistry }
+        : {}),
+      ...(options.providerExpressionProfileRegistry
+        ? { providerExpressionProfileRegistry: options.providerExpressionProfileRegistry }
         : {}),
     });
     this.referenceContributors = [...(options.referenceContributors ?? [])];
@@ -144,6 +174,30 @@ class DefaultTuiCapabilityLoader implements TuiCapabilityLoader {
       skipped,
       diagnostics: this.diagnostics,
     });
+    const safeArtifactProfiles = filterContributions({
+      providerId: provider.id,
+      kind: 'artifactProfile',
+      contributions: provider.getArtifactProfiles?.(context) ?? [],
+      getName: formatProfileName,
+      skipped,
+      diagnostics: this.diagnostics,
+    });
+    const safeCreationProfiles = filterContributions({
+      providerId: provider.id,
+      kind: 'creationProfile',
+      contributions: provider.getCreationProfiles?.(context) ?? [],
+      getName: formatProfileName,
+      skipped,
+      diagnostics: this.diagnostics,
+    });
+    const safeProviderExpressionProfiles = filterContributions({
+      providerId: provider.id,
+      kind: 'providerExpressionProfile',
+      contributions: provider.getProviderExpressionProfiles?.(context) ?? [],
+      getName: formatProfileName,
+      skipped,
+      diagnostics: this.diagnostics,
+    });
 
     for (const tool of provider.getTools(context)) {
       const toolSkip = getToolSkipDiagnostic(provider.id, tool);
@@ -165,6 +219,15 @@ class DefaultTuiCapabilityLoader implements TuiCapabilityLoader {
       ...(provider.getSkills ? { getSkills: () => safeSkills } : {}),
       ...(provider.getToolGroups ? { getToolGroups: () => safeToolGroups } : {}),
       ...(provider.getProviderCards ? { getProviderCards: () => safeProviderCards } : {}),
+      ...(provider.getArtifactProfiles
+        ? { getArtifactProfiles: () => safeArtifactProfiles }
+        : {}),
+      ...(provider.getCreationProfiles
+        ? { getCreationProfiles: () => safeCreationProfiles }
+        : {}),
+      ...(provider.getProviderExpressionProfiles
+        ? { getProviderExpressionProfiles: () => safeProviderExpressionProfiles }
+        : {}),
       ...(provider.getPromptFragments ? { getPromptFragments: () => promptFragments } : {}),
       ...(provider.getReferenceContributors
         ? { getReferenceContributors: () => referenceContributors }
@@ -183,6 +246,18 @@ class DefaultTuiCapabilityLoader implements TuiCapabilityLoader {
         ...safeProviderCards.map((card) => ({
           kind: 'providerCard' as const,
           name: formatProviderCardName(card),
+        })),
+        ...safeArtifactProfiles.map((profile) => ({
+          kind: 'artifactProfile' as const,
+          name: formatProfileName(profile),
+        })),
+        ...safeCreationProfiles.map((profile) => ({
+          kind: 'creationProfile' as const,
+          name: formatProfileName(profile),
+        })),
+        ...safeProviderExpressionProfiles.map((profile) => ({
+          kind: 'providerExpressionProfile' as const,
+          name: formatProfileName(profile),
         })),
         ...promptFragments.map((fragment) => ({
           kind: 'promptFragment' as const,
@@ -255,21 +330,30 @@ function getToolSkipDiagnostic(
   providerId: string,
   tool: Tool,
 ): AgentCapabilityAvailabilityDiagnostic | null {
-  if (!requiresVsCode(readContributionRequirements(tool))) {
-    return null;
+  if (requiresVsCode(readContributionRequirements(tool))) {
+    return {
+      level: 'info',
+      providerId,
+      contributionKind: 'tool',
+      contributionName: tool.name,
+      code: 'capability.tool.unavailable',
+      reason: 'requires-vscode',
+      message: `Tool "${tool.name}" is unavailable in TUI because it requires VSCode.`,
+      requirement: 'vscode',
+      host: TUI_HOST,
+    };
   }
 
-  return {
-    level: 'info',
-    providerId,
-    contributionKind: 'tool',
-    contributionName: tool.name,
-    code: 'capability.tool.unavailable',
-    reason: 'requires-vscode',
-    message: `Tool "${tool.name}" is unavailable in TUI because it requires VSCode.`,
-    requirement: 'vscode',
-    host: TUI_HOST,
-  };
+  const hostRequirements = readContributionHostRequirements(tool);
+  if (hostRequirements && !supportsTuiOrCli(hostRequirements)) {
+    return createHostNotSupportedDiagnostic({
+      providerId,
+      kind: 'tool',
+      name: tool.name,
+    });
+  }
+
+  return null;
 }
 
 function filterContributions<TContribution extends RuntimeRequirementsContribution>(input: {
@@ -282,8 +366,18 @@ function filterContributions<TContribution extends RuntimeRequirementsContributi
 }): TContribution[] {
   const safe: TContribution[] = [];
   for (const contribution of input.contributions) {
-    if (requiresVsCode(readContributionRequirements(contribution))) {
+    const requirements = readContributionRequirements(contribution);
+    const hostRequirements = readContributionHostRequirements(contribution);
+    if (requiresVsCode(requirements)) {
       const diagnostic = createRequiresVsCodeDiagnostic({
+        providerId: input.providerId,
+        kind: input.kind,
+        name: input.getName(contribution),
+      });
+      input.skipped.push(diagnostic);
+      input.diagnostics.push(diagnostic);
+    } else if (hostRequirements && !supportsTuiOrCli(hostRequirements)) {
+      const diagnostic = createHostNotSupportedDiagnostic({
         providerId: input.providerId,
         kind: input.kind,
         name: input.getName(contribution),
@@ -315,6 +409,23 @@ function createRequiresVsCodeDiagnostic(input: {
   };
 }
 
+function createHostNotSupportedDiagnostic(input: {
+  readonly providerId: string;
+  readonly kind: AgentCapabilityAvailabilityDiagnostic['contributionKind'];
+  readonly name: string;
+}): AgentCapabilityAvailabilityDiagnostic {
+  return {
+    level: 'info',
+    providerId: input.providerId,
+    contributionKind: input.kind,
+    contributionName: input.name,
+    code: `capability.${input.kind}.host-not-supported`,
+    reason: 'host-not-supported',
+    message: `${input.kind} "${input.name}" is not declared as TUI-compatible.`,
+    host: TUI_HOST,
+  };
+}
+
 function supportsTuiOrCli(
   hostRequirements: readonly AgentCapabilityHostRequirement[] | undefined,
 ): boolean {
@@ -332,10 +443,26 @@ function readContributionRequirements(
   return candidate.requirements ?? candidate.metadata?.requirements ?? {};
 }
 
+function readContributionHostRequirements(
+  contribution: RuntimeRequirementsContribution,
+): readonly AgentCapabilityHostRequirement[] | undefined {
+  const candidate = contribution as ContributionWithRuntimeRequirements;
+  return candidate.hostRequirements ?? candidate.metadata?.hostRequirements;
+}
+
 function requiresVsCode(requirements: AgentCapabilityRuntimeRequirements | undefined): boolean {
   return requirements?.vscode === true;
 }
 
 function formatProviderCardName(card: ProviderCard): string {
   return card.modelId ? `${card.providerId}/${card.modelId}` : card.providerId;
+}
+
+function formatProfileName(
+  profile: Pick<
+    ArtifactProfileDescriptor | CreationProfileDescriptor | ProviderExpressionProfileDescriptor,
+    'profileId' | 'version'
+  >,
+): string {
+  return `${profile.profileId}@${String(profile.version)}`;
 }

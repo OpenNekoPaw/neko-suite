@@ -142,6 +142,9 @@ function buildAccountModelOptions(
         ...(catalog.provider.supportLevel ? { supportLevel: catalog.provider.supportLevel } : {}),
         capabilities: [...model.capabilities],
         category,
+        ...(model.providerExpressionProfileId
+          ? { providerExpressionProfileId: model.providerExpressionProfileId }
+          : {}),
         ...(isPositiveInteger(model.contextWindow) ? { contextWindow: model.contextWindow } : {}),
         ...(isPositiveInteger(model.maxOutputTokens)
           ? { maxOutputTokens: model.maxOutputTokens }
@@ -292,6 +295,9 @@ function toSecretSafeAccountModel(model: Model): SecretSafeModelProjection {
     ...(model.type ? { type: model.type } : {}),
     ...(model.protocolProfile ? { protocolProfile: model.protocolProfile } : {}),
     capabilities: [...model.capabilities],
+    ...(model.providerExpressionProfileId
+      ? { providerExpressionProfileId: model.providerExpressionProfileId }
+      : {}),
     ...(isPositiveInteger(model.contextWindow) ? { contextWindow: model.contextWindow } : {}),
     ...(isPositiveInteger(model.maxOutputTokens)
       ? { maxOutputTokens: model.maxOutputTokens }

@@ -34,6 +34,7 @@ describe('handleTuiControlCommand', () => {
     expect(context.ports.model?.selectChatModel).toHaveBeenCalledWith({
       providerId: 'anthropic',
       modelId: 'gpt-5.3-codex',
+      providerExpressionProfileId: 'provider-expression:anthropic:gpt-5.3-codex',
       optionId: 'anthropic:gpt-5.3-codex',
       label: 'Anthropic / GPT 5.3 Codex',
       category: 'llm',
@@ -119,6 +120,7 @@ describe('handleTuiControlCommand', () => {
     expect(context.ports.media?.setMediaModel).toHaveBeenCalledWith('image', {
       providerId: 'openai',
       modelId: 'gpt-image-1',
+      providerExpressionProfileId: 'provider-expression:openai:gpt-image-1',
       optionId: 'openai:gpt-image-1',
       label: 'OpenAI / GPT Image',
       category: 'image',
@@ -137,6 +139,7 @@ describe('handleTuiControlCommand', () => {
     expect(context.ports.media?.setMediaModel).toHaveBeenCalledWith('image', {
       providerId: 'openai',
       modelId: 'gpt-image-1',
+      providerExpressionProfileId: 'provider-expression:openai:gpt-image-1',
       optionId: 'openai:gpt-image-1',
       label: 'OpenAI / GPT Image',
       category: 'image',
@@ -179,6 +182,7 @@ describe('handleTuiControlCommand', () => {
     expect(context.ports.media?.setMediaModel).toHaveBeenCalledWith('image', {
       providerId: 'openai',
       modelId: 'gpt-image-1',
+      providerExpressionProfileId: 'provider-expression:openai:gpt-image-1',
       optionId: 'openai:gpt-image-1',
       label: 'OpenAI / GPT Image',
       category: 'image',
@@ -569,6 +573,7 @@ function createContext(
       label: 'Anthropic / GPT 5.3 Codex',
       providerId: 'anthropic',
       modelId: 'gpt-5.3-codex',
+      providerExpressionProfileId: 'provider-expression:anthropic:gpt-5.3-codex',
       category: 'llm',
     },
   ];
@@ -578,6 +583,7 @@ function createContext(
       label: 'OpenAI / GPT Image',
       providerId: 'openai',
       modelId: 'gpt-image-1',
+      providerExpressionProfileId: 'provider-expression:openai:gpt-image-1',
       category: 'image',
     },
     {
@@ -733,12 +739,14 @@ function createContext(
       capability:
         overrides.capability === undefined && 'capability' in overrides
           ? undefined
-          : (overrides.capability ?? {
-              getProviderSummaries: vi.fn(() => [
+          : (overrides.capability ??
+            ({
+              getProviderSummaries: vi.fn(
+                (): ReturnType<TuiCapabilityPorts['getProviderSummaries']> => [
                 {
                   providerId: 'neko-assets',
                   version: '1.0.0',
-                  loaded: [{ kind: 'tool', name: 'assets.list' }],
+                  loaded: [{ kind: 'tool' as const, name: 'assets.list' }],
                   skipped: [],
                 },
                 {
@@ -747,9 +755,9 @@ function createContext(
                   loaded: [],
                   skipped: [
                     {
-                      level: 'warn',
+                      level: 'warn' as const,
                       providerId: 'neko-cut',
-                      contributionKind: 'provider',
+                      contributionKind: 'provider' as const,
                       code: 'capability.provider.host-not-supported',
                       reason: 'host-not-supported',
                       message: 'Provider is not TUI-safe.',
@@ -758,21 +766,22 @@ function createContext(
                   ],
                 },
               ]),
-              getDiagnostics: vi.fn(() => [
+              getDiagnostics: vi.fn(
+                (): ReturnType<TuiCapabilityPorts['getDiagnostics']> => [
                 {
-                  level: 'warn',
+                  level: 'warn' as const,
                   providerId: 'neko-cut',
-                  contributionKind: 'provider',
+                  contributionKind: 'provider' as const,
                   code: 'capability.provider.host-not-supported',
                   reason: 'host-not-supported',
                   message: 'Provider is not TUI-safe.',
                   host: 'tui',
                 },
               ]),
-              listTools: vi.fn((providerId?: string) =>
+              listTools: vi.fn((providerId?: string): readonly string[] =>
                 providerId === undefined || providerId === 'neko-assets' ? ['assets.list'] : [],
               ),
-            }),
+            } satisfies TuiCapabilityPorts)),
       artifact: overrides.artifact,
       status: {
         getSnapshot: vi.fn(() => ({

@@ -24,6 +24,27 @@ describe('TUI media model metadata', () => {
     });
   });
 
+  it('projects provider expression profile ids from model options', () => {
+    expect(
+      buildTuiMediaModelMetadata({ image: 'openai:gpt-image-1' }, 'anthropic', [
+        {
+          id: 'openai:gpt-image-1',
+          label: 'OpenAI / GPT Image',
+          providerId: 'openai',
+          modelId: 'gpt-image-1',
+          category: 'image',
+          providerExpressionProfileId: 'provider-expression:openai:gpt-image-1',
+        },
+      ]),
+    ).toEqual({
+      image: {
+        providerId: 'openai',
+        modelId: 'gpt-image-1',
+        providerExpressionProfileId: 'provider-expression:openai:gpt-image-1',
+      },
+    });
+  });
+
   it('preserves existing execution metadata while injecting media models', () => {
     expect(
       mergeTuiMediaModelMetadata(

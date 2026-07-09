@@ -5,7 +5,11 @@ import {
   type SkillLifecycleRuntime,
   type SkillService,
 } from '@neko/agent';
-import { createNodeArtifactStore, type AgentRuntimeConfig } from '@neko/agent/runtime';
+import {
+  createAgentCapabilityRuntimeRegistries,
+  createNodeArtifactStore,
+  type AgentRuntimeConfig,
+} from '@neko/agent/runtime';
 import {
   createAutohealChain,
   createDefaultCreativeProcessRecoveryPolicy,
@@ -13,7 +17,14 @@ import {
   createQualityReviewValidationAdapter,
   registerBuiltinToolGroups,
 } from '@neko/skills';
-import type { IProjectMemoryManager, IProviderCardRegistry, PromptFragment } from '@neko/shared';
+import type {
+  IArtifactProfileRegistry,
+  ICreationProfileRegistry,
+  IProjectMemoryManager,
+  IProviderCardRegistry,
+  IProviderExpressionProfileRegistry,
+  PromptFragment,
+} from '@neko/shared';
 
 export interface CliAgentRuntimeConfig {
   readonly workspaceRoot: string;
@@ -22,6 +33,9 @@ export interface CliAgentRuntimeConfig {
   readonly skillLifecycleRuntime?: SkillLifecycleRuntime;
   readonly toolGroupRegistry?: ToolGroupRegistry;
   readonly providerCardRegistry?: IProviderCardRegistry;
+  readonly artifactProfileRegistry?: IArtifactProfileRegistry;
+  readonly creationProfileRegistry?: ICreationProfileRegistry;
+  readonly providerExpressionProfileRegistry?: IProviderExpressionProfileRegistry;
   readonly promptFragments?: readonly PromptFragment[];
   readonly projectMemoryManager?: IProjectMemoryManager;
 }
@@ -36,6 +50,19 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
   const toolGroupRegistry = config.toolGroupRegistry ?? createCliToolGroupRegistry();
   const skillService = config.skillService;
   const skillLifecycleRuntime = config.skillLifecycleRuntime;
+  const defaultCapabilityRegistries =
+    config.artifactProfileRegistry &&
+    config.creationProfileRegistry &&
+    config.providerExpressionProfileRegistry
+      ? undefined
+      : createAgentCapabilityRuntimeRegistries();
+  const artifactProfileRegistry =
+    config.artifactProfileRegistry ?? defaultCapabilityRegistries?.artifactProfileRegistry;
+  const creationProfileRegistry =
+    config.creationProfileRegistry ?? defaultCapabilityRegistries?.creationProfileRegistry;
+  const providerExpressionProfileRegistry =
+    config.providerExpressionProfileRegistry ??
+    defaultCapabilityRegistries?.providerExpressionProfileRegistry;
 
   return {
     creationGuidance: {
@@ -63,6 +90,9 @@ export function createCliAgentRuntime(config: CliAgentRuntimeConfig): AgentRunti
       ...(skillLifecycleRuntime ? { skillLifecycleRuntime } : {}),
       toolGroupRegistry,
       ...(config.providerCardRegistry ? { providerCardRegistry: config.providerCardRegistry } : {}),
+      ...(artifactProfileRegistry ? { artifactProfileRegistry } : {}),
+      ...(creationProfileRegistry ? { creationProfileRegistry } : {}),
+      ...(providerExpressionProfileRegistry ? { providerExpressionProfileRegistry } : {}),
       ...(config.promptFragments !== undefined ? { promptFragments: config.promptFragments } : {}),
     },
     artifactStore: createNodeArtifactStore({ workspaceRoot: config.workspaceRoot }),

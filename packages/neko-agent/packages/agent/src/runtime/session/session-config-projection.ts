@@ -40,6 +40,12 @@ export function buildAgentSessionConfigWithRuntime(
   const toolCategoryRegistry = capability?.toolCategoryRegistry ?? base.toolCategoryRegistry;
   const skillService = base.skillService ?? capability?.skillService;
   const providerCardRegistry = base.providerCardRegistry ?? capability?.providerCardRegistry;
+  const artifactProfileRegistry =
+    base.artifactProfileRegistry ?? capability?.artifactProfileRegistry;
+  const creationProfileRegistry =
+    base.creationProfileRegistry ?? capability?.creationProfileRegistry;
+  const providerExpressionProfileRegistry =
+    base.providerExpressionProfileRegistry ?? capability?.providerExpressionProfileRegistry;
   const projectMemoryManager = base.projectMemoryManager ?? validation?.projectMemoryManager;
   const validationCoordinator = base.validationCoordinator ?? validation?.validationCoordinator;
   const validationCoordinatorFactory =
@@ -68,6 +74,9 @@ export function buildAgentSessionConfigWithRuntime(
     ...(toolCategoryRegistry ? { toolCategoryRegistry } : {}),
     ...(skillService ? { skillService } : {}),
     ...(providerCardRegistry ? { providerCardRegistry } : {}),
+    ...(artifactProfileRegistry ? { artifactProfileRegistry } : {}),
+    ...(creationProfileRegistry ? { creationProfileRegistry } : {}),
+    ...(providerExpressionProfileRegistry ? { providerExpressionProfileRegistry } : {}),
     ...(projectMemoryManager ? { projectMemoryManager } : {}),
     ...(validationCoordinator ? { validationCoordinator } : {}),
     ...(validationCoordinatorFactory ? { validationCoordinatorFactory } : {}),

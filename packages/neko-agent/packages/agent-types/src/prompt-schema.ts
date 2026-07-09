@@ -1,4 +1,10 @@
-import type { ToolDefinition } from '@neko/shared';
+import type {
+  ArtifactProfileDescriptor,
+  CreationProfileDescriptor,
+  ProviderExpressionProfileDescriptor,
+  SkillProfileReference,
+  ToolDefinition,
+} from '@neko/shared';
 import type { AgentCapabilityDiagnostic, AgentInjectedCapabilitySet } from './capability';
 import type { AgentMultimodalEvidenceRef } from './multimodal-tooling';
 import type { AgentLegacyCreationTrace } from './legacy-trace';
@@ -31,6 +37,13 @@ export interface PromptGenerationProviderCapabilities {
   readonly structuredOutputMode?: PromptSchemaStructuredOutputMode;
 }
 
+export interface PromptGenerationProfileContext {
+  readonly skillProfileReferences?: readonly SkillProfileReference[];
+  readonly artifactProfiles?: readonly ArtifactProfileDescriptor[];
+  readonly creationProfile?: CreationProfileDescriptor;
+  readonly providerExpressionProfiles?: readonly ProviderExpressionProfileDescriptor[];
+}
+
 export interface PromptGenerationContext {
   readonly locale?: 'en' | 'zh';
   readonly basePrompt: string;
@@ -45,6 +58,7 @@ export interface PromptGenerationContext {
     readonly content: string;
     readonly priority?: number;
   }[];
+  readonly profiles?: PromptGenerationProfileContext;
   readonly memoryContextSummary?: string;
   readonly multimodalContextSummary?: string;
   readonly multimodalEvidenceRefs?: readonly AgentMultimodalEvidenceRef[];

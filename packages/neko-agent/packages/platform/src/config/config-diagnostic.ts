@@ -67,6 +67,7 @@ export function projectAssistantConfigReadResultDiagnostic(
     result.status === 'duplicateModelId' ||
     result.status === 'invalidDefaultMaxTokens' ||
     result.status === 'invalidModelTokenMetadata' ||
+    result.status === 'unsupportedProfileSchemaSection' ||
     result.status === 'unsupportedModelType' ||
     result.status === 'unsupportedDefaultMediaModelType' ||
     result.status === 'unsupportedDefaultModelType' ||
@@ -112,6 +113,8 @@ export function buildSafeConfigDiagnosticMessage(
       return `Configuration file contains an invalid [defaults].max_tokens output-token cap: ${filePath}. Use a positive integer for max output tokens, then open a new Agent session or tab.`;
     case 'invalidModelTokenMetadata':
       return `Configuration file contains invalid model token metadata: ${filePath}. Use positive integers for models[].context_window and models[].max_output_tokens, then open a new Agent session or tab.`;
+    case 'unsupportedProfileSchemaSection':
+      return `Configuration file contains unsupported Agent profile schema sections: ${filePath}. Install or contribute Agent profile packages instead of defining profile schemas in TOML, then open a new Agent session or tab.`;
     case 'unsupportedModelType':
       return `Configuration file contains an unsupported model type: ${filePath}. Use llm, image, video, or audio, then open a new Agent session or tab.`;
     case 'unsupportedDefaultMediaModelType':

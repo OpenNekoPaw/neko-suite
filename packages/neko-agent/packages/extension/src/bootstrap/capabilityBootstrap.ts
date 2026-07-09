@@ -14,7 +14,10 @@ import * as vscode from 'vscode';
 import type {
   ICapabilityMediaService,
   ICapabilityConfigManager,
+  IArtifactProfileRegistry,
+  ICreationProfileRegistry,
   IProviderCardRegistry,
+  IProviderExpressionProfileRegistry,
 } from '@neko/shared';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
@@ -44,7 +47,10 @@ const runtimeBindingStore = createCapabilityRuntimeBindingStore(logger);
 
 export interface CapabilityBootstrapOptions extends Omit<
   CapabilityDiscoveryDeps,
-  'providerCardRegistry'
+  | 'providerCardRegistry'
+  | 'artifactProfileRegistry'
+  | 'creationProfileRegistry'
+  | 'providerExpressionProfileRegistry'
 > {
   /** Media generation service from Platform */
   mediaService?: ICapabilityMediaService;
@@ -54,6 +60,12 @@ export interface CapabilityBootstrapOptions extends Omit<
   embedFn?: (texts: string[]) => Promise<number[][]>;
   /** Shared ProviderCard registry used by ProviderExpressionContext. */
   providerCardRegistry?: IProviderCardRegistry;
+  /** Shared Artifact Profile registry used by runtime prompt/schema composition. */
+  artifactProfileRegistry?: IArtifactProfileRegistry;
+  /** Shared Creation Profile registry used by runtime prompt/schema composition. */
+  creationProfileRegistry?: ICreationProfileRegistry;
+  /** Shared Provider/model Expression Profile registry used by runtime prompt composition. */
+  providerExpressionProfileRegistry?: IProviderExpressionProfileRegistry;
   /** Workspace root used to load project-level .neko/providers/*.card.md overrides. */
   workspaceRoot?: string;
 }
@@ -81,10 +93,14 @@ export function bootstrapCapabilities(
     toolGroupRegistry: options.toolGroupRegistry as ToolGroupRegistry | undefined,
     toolCategoryRegistry,
     providerCardRegistry,
+    artifactProfileRegistry: options.artifactProfileRegistry,
+    creationProfileRegistry: options.creationProfileRegistry,
+    providerExpressionProfileRegistry: options.providerExpressionProfileRegistry,
   });
 
   void registerRuntimeProviderCardDirectories({
     registry: providerCardRegistry,
+    providerExpressionProfileRegistry: options.providerExpressionProfileRegistry,
     fs,
     homeDir: os.homedir(),
     workspaceRoot: options.workspaceRoot ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
@@ -95,6 +111,9 @@ export function bootstrapCapabilities(
     ...options,
     toolCategoryRegistry,
     providerCardRegistry,
+    artifactProfileRegistry: options.artifactProfileRegistry,
+    creationProfileRegistry: options.creationProfileRegistry,
+    providerExpressionProfileRegistry: options.providerExpressionProfileRegistry,
   });
   _instance.activate(context, {
     mediaService: options.mediaService,

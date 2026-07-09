@@ -7,16 +7,26 @@ import type {
   AgentCapabilityProtocolVersion,
   AgentCapabilityProvider,
   AgentCapabilityTrustLevel,
+  AgentProfileRegistrationResult,
+  AgentProfileSource,
+  AgentProfileVersion,
+  ArtifactProfileDescriptor,
+  CreationProfileDescriptor,
+  IArtifactProfileRegistry,
+  ICreationProfileRegistry,
   IProviderCardRegistry,
+  IProviderExpressionProfileRegistry,
   ISkillRegistry,
   IToolCategoryRegistry,
   IToolRegistry,
   PromptFragment,
   ProviderCard,
+  ProviderExpressionProfileDescriptor,
   Skill,
   Tool,
   ToolGroup,
 } from '@neko/shared';
+import { toProviderExpressionProfile } from '@neko/shared';
 
 export interface CapabilityProtocolInfo {
   readonly providerId: string;
@@ -32,6 +42,12 @@ interface ProviderCardTarget {
   readonly modelId?: string;
 }
 
+interface ProfileTarget {
+  readonly profileId: string;
+  readonly version: AgentProfileVersion;
+  readonly source: AgentProfileSource;
+}
+
 interface RegisteredProvider {
   provider: AgentCapabilityProvider;
   protocol: CapabilityProtocolInfo;
@@ -39,6 +55,9 @@ interface RegisteredProvider {
   registeredSkills: string[];
   registeredToolGroups: string[];
   registeredProviderCards: ProviderCardTarget[];
+  registeredArtifactProfiles: ProfileTarget[];
+  registeredCreationProfiles: ProfileTarget[];
+  registeredProviderExpressionProfiles: ProfileTarget[];
 }
 
 export interface CapabilityRegistryRuntimeDeps {
@@ -53,6 +72,12 @@ export interface CapabilityRegistryRuntimeDeps {
     clearTools?(): void;
   };
   providerCardRegistry?: Pick<IProviderCardRegistry, 'register' | 'unregister'>;
+  artifactProfileRegistry?: Pick<IArtifactProfileRegistry, 'register' | 'unregister'>;
+  creationProfileRegistry?: Pick<ICreationProfileRegistry, 'register' | 'unregister'>;
+  providerExpressionProfileRegistry?: Pick<
+    IProviderExpressionProfileRegistry,
+    'register' | 'unregister'
+  >;
 }
 
 export type CapabilityDiscoveryDeps = CapabilityRegistryRuntimeDeps;
@@ -198,6 +223,9 @@ export class CapabilityRegistryRuntime {
     const registeredSkills: string[] = [];
     const registeredToolGroups: string[] = [];
     const registeredProviderCards: ProviderCardTarget[] = [];
+    const registeredArtifactProfiles: ProfileTarget[] = [];
+    const registeredCreationProfiles: ProfileTarget[] = [];
+    const registeredProviderExpressionProfiles: ProfileTarget[] = [];
 
     try {
       const tools: Tool[] = provider.getTools(context);
@@ -278,6 +306,59 @@ export class CapabilityRegistryRuntime {
       }
     }
 
+    if (provider.getArtifactProfiles && this.deps.artifactProfileRegistry) {
+      try {
+        const profiles: ArtifactProfileDescriptor[] = provider.getArtifactProfiles(context);
+        for (const profile of profiles) {
+          this.recordProfileRegistrationResult(
+            this.deps.artifactProfileRegistry.register(profile),
+            id,
+            'artifact-profile',
+          );
+          registeredArtifactProfiles.push(toProfileTarget(profile));
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to get artifact profiles from provider "${id}"`, { error: err });
+      }
+    }
+
+    if (provider.getCreationProfiles && this.deps.creationProfileRegistry) {
+      try {
+        const profiles: CreationProfileDescriptor[] = provider.getCreationProfiles(context);
+        for (const profile of profiles) {
+          this.recordProfileRegistrationResult(
+            this.deps.creationProfileRegistry.register(profile),
+            id,
+            'creation-profile',
+          );
+          registeredCreationProfiles.push(toProfileTarget(profile));
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to get creation profiles from provider "${id}"`, { error: err });
+      }
+    }
+
+    if (this.deps.providerExpressionProfileRegistry) {
+      try {
+        const profiles: ProviderExpressionProfileDescriptor[] =
+          provider.getProviderExpressionProfiles?.(context) ??
+          provider.getProviderCards?.(context)?.map(toProviderExpressionProfile) ??
+          [];
+        for (const profile of profiles) {
+          this.recordProfileRegistrationResult(
+            this.deps.providerExpressionProfileRegistry.register(profile),
+            id,
+            'provider-expression-profile',
+          );
+          registeredProviderExpressionProfiles.push(toProfileTarget(profile));
+        }
+      } catch (err) {
+        this.logger.warn(`Failed to get provider expression profiles from provider "${id}"`, {
+          error: err,
+        });
+      }
+    }
+
     this.providers.set(id, {
       provider,
       protocol: resolveCapabilityProtocolInfo(id, provider, 'provider'),
@@ -285,12 +366,18 @@ export class CapabilityRegistryRuntime {
       registeredSkills,
       registeredToolGroups,
       registeredProviderCards,
+      registeredArtifactProfiles,
+      registeredCreationProfiles,
+      registeredProviderExpressionProfiles,
     });
 
     this.logger.info(
       `Provider "${id}" v${provider.version} registered: ` +
         `${registeredTools.length} tools, ${registeredSkills.length} skills, ` +
-        `${registeredToolGroups.length} tool groups, ${registeredProviderCards.length} provider cards`,
+        `${registeredToolGroups.length} tool groups, ${registeredProviderCards.length} provider cards, ` +
+        `${registeredArtifactProfiles.length} artifact profiles, ` +
+        `${registeredCreationProfiles.length} creation profiles, ` +
+        `${registeredProviderExpressionProfiles.length} provider expression profiles`,
     );
 
     this.syncToolCategories();
@@ -336,6 +423,36 @@ export class CapabilityRegistryRuntime {
         if (this.providerCardOwners.get(key) === id) {
           this.providerCardOwners.delete(key);
         }
+      }
+    }
+
+    if (this.deps.artifactProfileRegistry) {
+      for (const target of entry.registeredArtifactProfiles) {
+        this.deps.artifactProfileRegistry.unregister(
+          target.profileId,
+          target.source,
+          target.version as ArtifactProfileDescriptor['version'],
+        );
+      }
+    }
+
+    if (this.deps.creationProfileRegistry) {
+      for (const target of entry.registeredCreationProfiles) {
+        this.deps.creationProfileRegistry.unregister(
+          target.profileId,
+          target.source,
+          target.version as CreationProfileDescriptor['version'],
+        );
+      }
+    }
+
+    if (this.deps.providerExpressionProfileRegistry) {
+      for (const target of entry.registeredProviderExpressionProfiles) {
+        this.deps.providerExpressionProfileRegistry.unregister(
+          target.profileId,
+          target.source,
+          target.version as ProviderExpressionProfileDescriptor['version'],
+        );
       }
     }
 
@@ -591,6 +708,36 @@ export class CapabilityRegistryRuntime {
     this.diagnostics.push(diagnostic);
     emitCapabilityDiagnostic(this.logger, level, diagnostic);
   }
+
+  private recordProfileRegistrationResult(
+    result: AgentProfileRegistrationResult,
+    providerId: string,
+    capabilityKind: 'artifact-profile' | 'creation-profile' | 'provider-expression-profile',
+  ): void {
+    for (const diagnostic of result.diagnostics) {
+      this.recordCapabilityDiagnostic(toCapabilityDiagnosticLevel(diagnostic.severity), {
+        code: `extension.capability.${capabilityKind}.${diagnostic.code}`,
+        reason: diagnostic.code,
+        message: diagnostic.message,
+        context: {
+          capabilityKind,
+          providerId,
+          profileId: diagnostic.profileId ?? null,
+          profileKind: diagnostic.kind ?? null,
+          source: diagnostic.source ?? null,
+          expected: diagnostic.expected ?? null,
+          actual: diagnostic.actual ?? null,
+          ...(diagnostic.details ? { details: diagnostic.details } : {}),
+        },
+      });
+    }
+  }
+}
+
+function toCapabilityDiagnosticLevel(
+  severity: AgentProfileRegistrationResult['diagnostics'][number]['severity'],
+): CapabilityDiagnosticLevel {
+  return severity === 'info' ? 'info' : 'warn';
 }
 
 function normalizeCapabilityShortName(name: string): string {
@@ -603,6 +750,18 @@ function toProviderCardTarget(card: ProviderCard): ProviderCardTarget {
   return {
     providerId: card.providerId,
     ...(card.modelId ? { modelId: card.modelId } : {}),
+  };
+}
+
+function toProfileTarget(profile: {
+  readonly profileId: string;
+  readonly version: AgentProfileVersion;
+  readonly source: AgentProfileSource;
+}): ProfileTarget {
+  return {
+    profileId: profile.profileId,
+    version: profile.version,
+    source: profile.source,
   };
 }
 

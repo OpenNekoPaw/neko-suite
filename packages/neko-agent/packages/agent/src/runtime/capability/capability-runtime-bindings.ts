@@ -1,4 +1,10 @@
-import type { IOperationToolAdapterRegistry, IProviderCardRegistry } from '@neko/shared';
+import type {
+  IArtifactProfileRegistry,
+  ICreationProfileRegistry,
+  IOperationToolAdapterRegistry,
+  IProviderCardRegistry,
+  IProviderExpressionProfileRegistry,
+} from '@neko/shared';
 import type { SkillRegistry } from '../../skill/skill-registry';
 import type { SkillService } from '../../skill/skill-service';
 import type { SkillLifecycleRuntime } from '../../skill/skill-lifecycle-runtime';
@@ -14,6 +20,9 @@ const CAPABILITY_RUNTIME_BINDING_KEYS = [
   'skillService',
   'skillLifecycleRuntime',
   'providerCardRegistry',
+  'artifactProfileRegistry',
+  'creationProfileRegistry',
+  'providerExpressionProfileRegistry',
   'operationToolAdapterRegistry',
   'externalProcessorRuntime',
   'contentAccessRuntime',
@@ -26,6 +35,9 @@ export interface CapabilityRuntimeBindings {
   skillService?: SkillService;
   skillLifecycleRuntime?: SkillLifecycleRuntime;
   providerCardRegistry?: IProviderCardRegistry;
+  artifactProfileRegistry?: IArtifactProfileRegistry;
+  creationProfileRegistry?: ICreationProfileRegistry;
+  providerExpressionProfileRegistry?: IProviderExpressionProfileRegistry;
   operationToolAdapterRegistry?: IOperationToolAdapterRegistry;
   externalProcessorRuntime?: AgentExternalProcessorRuntime;
   contentAccessRuntime?: AgentContentAccessRuntime;

@@ -156,6 +156,21 @@ export {
 } from './provider';
 
 export {
+  AgentProfileRegistry,
+  ArtifactProfileRegistry,
+  CreationProfileRegistry,
+  ProviderExpressionProfileRegistry,
+  createArtifactProfileRegistry,
+  createCreationProfileRegistry,
+  createProviderExpressionProfileRegistry,
+  BUILTIN_ARTIFACT_PROFILES,
+  BUILTIN_CREATION_PROFILES,
+  IDC_DEFAULT_CREATION_PROFILE,
+  type AgentProfileDescriptor,
+  type AgentProfileRegistryOptions,
+} from './profile';
+
+export {
   PERCEPTION_AUDIO_TRANSCRIBE_METADATA,
   PERCEPTION_IMAGE_SIMILARITY_METADATA,
   PERCEPTION_IMAGE_CLASSIFY_METADATA,

@@ -1,10 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ProviderCardRegistry, SkillRegistry, ToolGroupRegistry, ToolRegistry } from '@neko/agent';
+import {
+  ArtifactProfileRegistry,
+  CreationProfileRegistry,
+  ProviderCardRegistry,
+  ProviderExpressionProfileRegistry,
+  SkillRegistry,
+  ToolGroupRegistry,
+  ToolRegistry,
+} from '@neko/agent';
 import type {
   AgentCapabilityProvider,
+  ArtifactProfileDescriptor,
+  CreationProfileDescriptor,
   AgentReferenceContributor,
   PromptFragment,
   ProviderCard,
+  ProviderExpressionProfileDescriptor,
   Skill,
   Tool,
   ToolGroup,
@@ -37,16 +48,25 @@ function createLoader(toolRegistry = new ToolRegistry()) {
   const skillRegistry = new SkillRegistry();
   const toolGroupRegistry = new ToolGroupRegistry();
   const providerCardRegistry = new ProviderCardRegistry();
+  const artifactProfileRegistry = new ArtifactProfileRegistry();
+  const creationProfileRegistry = new CreationProfileRegistry();
+  const providerExpressionProfileRegistry = new ProviderExpressionProfileRegistry();
   return {
     toolRegistry,
     skillRegistry,
     toolGroupRegistry,
     providerCardRegistry,
+    artifactProfileRegistry,
+    creationProfileRegistry,
+    providerExpressionProfileRegistry,
     loader: createTuiCapabilityLoader({
       toolRegistry,
       skillRegistry,
       toolGroupRegistry,
       providerCardRegistry,
+      artifactProfileRegistry,
+      creationProfileRegistry,
+      providerExpressionProfileRegistry,
     }),
   };
 }
@@ -55,16 +75,25 @@ function createLocalizedLoader(toolRegistry = new ToolRegistry()) {
   const skillRegistry = new SkillRegistry();
   const toolGroupRegistry = new ToolGroupRegistry();
   const providerCardRegistry = new ProviderCardRegistry();
+  const artifactProfileRegistry = new ArtifactProfileRegistry();
+  const creationProfileRegistry = new CreationProfileRegistry();
+  const providerExpressionProfileRegistry = new ProviderExpressionProfileRegistry();
   return {
     toolRegistry,
     skillRegistry,
     toolGroupRegistry,
     providerCardRegistry,
+    artifactProfileRegistry,
+    creationProfileRegistry,
+    providerExpressionProfileRegistry,
     loader: createTuiCapabilityLoader({
       toolRegistry,
       skillRegistry,
       toolGroupRegistry,
       providerCardRegistry,
+      artifactProfileRegistry,
+      creationProfileRegistry,
+      providerExpressionProfileRegistry,
       locale: 'zh',
     }),
   };
@@ -322,4 +351,99 @@ describe('createTuiCapabilityLoader', () => {
       ]),
     );
   });
+
+  it('filters profile contributions before registering them into profile registries', () => {
+    const {
+      loader,
+      artifactProfileRegistry,
+      creationProfileRegistry,
+      providerExpressionProfileRegistry,
+    } = createLoader();
+    const artifactProfile = createArtifactProfile('studio.storyboard');
+    const vscodeArtifactProfile = {
+      ...createArtifactProfile('studio.vscode-storyboard'),
+      requirements: { vscode: true },
+    } satisfies ArtifactProfileDescriptor & { readonly requirements: { readonly vscode: true } };
+    const creationProfile = createCreationProfile('studio.creation');
+    const providerExpressionProfile = createProviderExpressionProfile('provider-expression:flux');
+    const vscodeExpressionProfile = {
+      ...createProviderExpressionProfile('provider-expression:vscode'),
+      hostRequirements: [{ host: 'vscode' }],
+    } satisfies ProviderExpressionProfileDescriptor & {
+      readonly hostRequirements: readonly [{ readonly host: 'vscode' }];
+    };
+    const provider = createProvider({
+      id: 'profile-provider',
+      getArtifactProfiles: () => [artifactProfile, vscodeArtifactProfile],
+      getCreationProfiles: () => [creationProfile],
+      getProviderExpressionProfiles: () => [providerExpressionProfile, vscodeExpressionProfile],
+    });
+
+    const result = loader.registerProviders([provider]);
+
+    expect(artifactProfileRegistry.get('studio.storyboard', 1)).toBe(artifactProfile);
+    expect(artifactProfileRegistry.get('studio.vscode-storyboard', 1)).toBeUndefined();
+    expect(creationProfileRegistry.get('studio.creation', '1.0.0')).toBe(creationProfile);
+    expect(providerExpressionProfileRegistry.get('provider-expression:flux', '1.0.0')).toBe(
+      providerExpressionProfile,
+    );
+    expect(providerExpressionProfileRegistry.get('provider-expression:vscode', '1.0.0')).toBeUndefined();
+    expect(result.providers[0]?.loaded).toEqual([
+      { kind: 'artifactProfile', name: 'studio.storyboard@1' },
+      { kind: 'creationProfile', name: 'studio.creation@1.0.0' },
+      { kind: 'providerExpressionProfile', name: 'provider-expression:flux@1.0.0' },
+    ]);
+    expect(result.providers[0]?.skipped).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          contributionKind: 'artifactProfile',
+          contributionName: 'studio.vscode-storyboard@1',
+          reason: 'requires-vscode',
+        }),
+        expect.objectContaining({
+          contributionKind: 'providerExpressionProfile',
+          contributionName: 'provider-expression:vscode@1.0.0',
+          reason: 'host-not-supported',
+        }),
+      ]),
+    );
+  });
 });
+
+function createArtifactProfile(profileId: string): ArtifactProfileDescriptor {
+  return {
+    profileId,
+    kind: 'artifact',
+    protocol: 'GenericTable',
+    version: 1,
+    source: 'package',
+    columns: [{ columnId: 'shotId', cellType: 'string', required: true }],
+  };
+}
+
+function createCreationProfile(profileId: string): CreationProfileDescriptor {
+  return {
+    profileId,
+    kind: 'creation',
+    version: '1.0.0',
+    source: 'package',
+    defaultStageId: 'draft',
+    stages: [{ stageId: 'draft', purpose: 'Draft the requested artifact.' }],
+  };
+}
+
+function createProviderExpressionProfile(profileId: string): ProviderExpressionProfileDescriptor {
+  return {
+    profileId,
+    kind: 'provider-expression',
+    source: 'package',
+    providerId: profileId.endsWith('vscode') ? 'vscode-provider' : 'flux',
+    displayName: 'Flux',
+    version: '1.0.0',
+    sourceLayer: 'market',
+    capabilities: ['image.generate'],
+    syntaxProfile: { notes: [] },
+    conceptCoverage: { entries: [] },
+    trainingProfile: { styleAffinities: { photorealistic: 3 }, antiBiasStrategies: [] },
+  };
+}

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('vscode', () => ({
   workspace: { workspaceFolders: undefined },
+  env: { language: 'zh-cn' },
   EventEmitter: class {
     event = vi.fn();
     fire = vi.fn();

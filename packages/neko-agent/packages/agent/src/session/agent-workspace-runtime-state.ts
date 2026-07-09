@@ -22,6 +22,7 @@ export interface AgentWorkspaceRuntimeTokenUsage {
 export interface AgentWorkspaceRuntimeModelSelection {
   readonly providerId: string;
   readonly modelId: string;
+  readonly providerExpressionProfileId?: string;
 }
 
 export interface AgentWorkspaceRuntimeConversationState {
@@ -543,6 +544,9 @@ function parseModelSelection(value: unknown): AgentWorkspaceRuntimeModelSelectio
   return {
     providerId: value.providerId,
     modelId: value.modelId,
+    ...(typeof value.providerExpressionProfileId === 'string'
+      ? { providerExpressionProfileId: value.providerExpressionProfileId }
+      : {}),
   };
 }
 
@@ -710,6 +714,9 @@ function isCapabilityContributionKind(
     value === 'toolGroup' ||
     value === 'promptFragment' ||
     value === 'providerCard' ||
+    value === 'artifactProfile' ||
+    value === 'creationProfile' ||
+    value === 'providerExpressionProfile' ||
     value === 'referenceContributor'
   );
 }

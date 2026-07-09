@@ -91,6 +91,16 @@ function buildPromptSections(
     });
   }
 
+  const profileProjectionSection = renderProfileProjectionSection(context);
+  if (profileProjectionSection) {
+    sections.push({
+      id: 'profiles:resolved',
+      layer: 'schema',
+      content: profileProjectionSection,
+      priority: 92,
+    });
+  }
+
   const structuredSchemaHint = renderStructuredSchemaHint(context);
   if (structuredSchemaHint) {
     sections.push({
@@ -417,6 +427,61 @@ function renderWorkflowSection(context: PromptGenerationContext): string | null 
   }
 
   return lines.join('\n');
+}
+
+function renderProfileProjectionSection(context: PromptGenerationContext): string | null {
+  const profiles = context.profiles;
+  if (!profiles) return null;
+
+  const lines = ['## Profile Projection'];
+
+  if (profiles.skillProfileReferences && profiles.skillProfileReferences.length > 0) {
+    lines.push(
+      `- Skill profile references: ${profiles.skillProfileReferences
+        .map(
+          (reference) =>
+            `${reference.relationship}:${reference.kind}:${reference.profileId}${
+              reference.versionRange ? `@${reference.versionRange}` : ''
+            }`,
+        )
+        .join(', ')}`,
+    );
+  }
+
+  if (profiles.creationProfile) {
+    lines.push(
+      `- Creation profile: ${profiles.creationProfile.profileId}@${profiles.creationProfile.version}`,
+    );
+    lines.push(
+      `- Creation stages: ${profiles.creationProfile.stages
+        .map((stage) => stage.stageId)
+        .join(' -> ')}`,
+    );
+  }
+
+  if (profiles.artifactProfiles && profiles.artifactProfiles.length > 0) {
+    lines.push(
+      `- Artifact profiles: ${profiles.artifactProfiles
+        .map((profile) => `${profile.profileId}@${profile.version} (${profile.protocol})`)
+        .join(', ')}`,
+    );
+  }
+
+  if (profiles.providerExpressionProfiles && profiles.providerExpressionProfiles.length > 0) {
+    lines.push(
+      `- Provider expression profiles: ${profiles.providerExpressionProfiles
+        .map((profile) =>
+          [
+            `${profile.profileId}@${profile.version}`,
+            profile.modelId ? `${profile.providerId}/${profile.modelId}` : profile.providerId,
+            profile.capabilities.join('+'),
+          ].join(' '),
+        )
+        .join(', ')}`,
+    );
+  }
+
+  return lines.length > 1 ? lines.join('\n') : null;
 }
 
 function renderEvidenceFeedbackSummary(

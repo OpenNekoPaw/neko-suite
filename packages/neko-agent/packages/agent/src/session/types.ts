@@ -15,6 +15,9 @@ import type {
   IToolGroupRegistry,
   IToolCategoryRegistry,
   IProviderCardRegistry,
+  IArtifactProfileRegistry,
+  ICreationProfileRegistry,
+  IProviderExpressionProfileRegistry,
   IOperationToolAdapterRegistry,
   PromptFragment,
   AgentTaskResultFollowUpRequest,
@@ -196,6 +199,9 @@ export interface AgentSessionConfig {
   toolGroupRegistry?: IToolGroupRegistry;
   toolCategoryRegistry?: IToolCategoryRegistry;
   providerCardRegistry?: IProviderCardRegistry;
+  artifactProfileRegistry?: IArtifactProfileRegistry;
+  creationProfileRegistry?: ICreationProfileRegistry;
+  providerExpressionProfileRegistry?: IProviderExpressionProfileRegistry;
 
   /**
    * Settings hook loader for executing shell hooks from .neko/settings.json

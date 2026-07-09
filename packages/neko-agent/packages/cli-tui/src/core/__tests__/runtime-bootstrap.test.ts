@@ -5,6 +5,11 @@ const createTaskManagerCreationTaskProjection = vi.fn((config: unknown) => ({
   kind: 'idc-projection',
   config,
 }));
+const createAgentCapabilityRuntimeRegistries = vi.fn(() => ({
+  artifactProfileRegistry: { id: 'default-artifact-profiles' },
+  creationProfileRegistry: { id: 'default-creation-profiles' },
+  providerExpressionProfileRegistry: { id: 'default-provider-expression-profiles' },
+}));
 const registerBuiltinToolGroups = vi.fn();
 const createQualityReviewValidationAdapter = vi.fn(() => ({ id: 'quality-review-validation' }));
 const createValidationCoordinatorFactory = vi.fn(() => ({ id: 'validation-coordinator-factory' }));
@@ -19,6 +24,7 @@ vi.mock('@neko/agent', () => ({
 }));
 
 vi.mock('@neko/agent/runtime', () => ({
+  createAgentCapabilityRuntimeRegistries,
   createNodeArtifactStore,
 }));
 
@@ -104,6 +110,9 @@ describe('createCliAgentRuntime', () => {
     const { createCliAgentRuntime } = await import('../runtime-bootstrap');
     const toolGroupRegistry = { id: 'injected-tool-groups' };
     const providerCardRegistry = { id: 'provider-cards' };
+    const artifactProfileRegistry = { id: 'artifact-profiles' };
+    const creationProfileRegistry = { id: 'creation-profiles' };
+    const providerExpressionProfileRegistry = { id: 'provider-expression-profiles' };
     const promptFragments = [{ id: 'neko-assets:references', content: 'Use asset IDs.' }];
 
     const runtime = createCliAgentRuntime({
@@ -111,11 +120,19 @@ describe('createCliAgentRuntime', () => {
       taskManager: { id: 'task-manager' } as never,
       toolGroupRegistry: toolGroupRegistry as never,
       providerCardRegistry: providerCardRegistry as never,
+      artifactProfileRegistry: artifactProfileRegistry as never,
+      creationProfileRegistry: creationProfileRegistry as never,
+      providerExpressionProfileRegistry: providerExpressionProfileRegistry as never,
       promptFragments,
     });
 
     expect(runtime.capabilityRuntime?.toolGroupRegistry).toBe(toolGroupRegistry);
     expect(runtime.capabilityRuntime?.providerCardRegistry).toBe(providerCardRegistry);
+    expect(runtime.capabilityRuntime?.artifactProfileRegistry).toBe(artifactProfileRegistry);
+    expect(runtime.capabilityRuntime?.creationProfileRegistry).toBe(creationProfileRegistry);
+    expect(runtime.capabilityRuntime?.providerExpressionProfileRegistry).toBe(
+      providerExpressionProfileRegistry,
+    );
     expect(runtime.capabilityRuntime?.promptFragments).toBe(promptFragments);
     expect(registerBuiltinToolGroups).not.toHaveBeenCalled();
   });

@@ -174,6 +174,9 @@ export function loadConfig(
       chatModel: {
         providerId,
         modelId: model,
+        ...(selectedModelConfig?.providerExpressionProfileId
+          ? { providerExpressionProfileId: selectedModelConfig.providerExpressionProfileId }
+          : {}),
         ...(isStringArray(selectedModelConfig?.capabilities)
           ? { capabilities: selectedModelConfig.capabilities }
           : {}),

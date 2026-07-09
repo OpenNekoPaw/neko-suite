@@ -19,6 +19,7 @@ export type AgentConfigDiagnosticCode =
   | 'duplicateModelId'
   | 'invalidDefaultMaxTokens'
   | 'invalidModelTokenMetadata'
+  | 'unsupportedProfileSchemaSection'
   | 'unsupportedModelType'
   | 'unsupportedDefaultMediaModelType'
   | 'unsupportedDefaultModelType'

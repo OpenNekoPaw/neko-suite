@@ -1,6 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentCapabilityProvider, PromptFragment, Skill, Tool } from '@neko/shared';
+import type {
+  AgentCapabilityProvider,
+  ArtifactProfileDescriptor,
+  CreationProfileDescriptor,
+  PromptFragment,
+  ProviderCard,
+  Skill,
+  Tool,
+} from '@neko/shared';
 import { ToolRegistry } from '../../tools';
+import {
+  ArtifactProfileRegistry,
+  CreationProfileRegistry,
+  ProviderExpressionProfileRegistry,
+  composeAgentProfiles,
+} from '../../profile';
 import { CapabilityRegistryRuntime } from '../capability/capability-registry-runtime';
 
 function createTool(name: string): Tool {
@@ -217,5 +231,116 @@ describe('CapabilityRegistryRuntime', () => {
         }),
       ]),
     );
+  });
+
+  it('registers profile contributions through canonical profile registries', () => {
+    const toolRegistry = new ToolRegistry();
+    const artifactProfileRegistry = new ArtifactProfileRegistry();
+    const creationProfileRegistry = new CreationProfileRegistry();
+    const providerExpressionProfileRegistry = new ProviderExpressionProfileRegistry();
+    const runtime = new CapabilityRegistryRuntime({
+      toolRegistry,
+      artifactProfileRegistry,
+      creationProfileRegistry,
+      providerExpressionProfileRegistry,
+    });
+    const artifactProfile: ArtifactProfileDescriptor = {
+      profileId: 'studio.shot-review',
+      kind: 'artifact',
+      protocol: 'GenericTable',
+      version: 1,
+      source: 'package',
+      columns: [{ columnId: 'shotId', cellType: 'string', required: true }],
+    };
+    const creationProfile: CreationProfileDescriptor = {
+      profileId: 'studio.creation.review',
+      kind: 'creation',
+      version: '1.0.0',
+      source: 'package',
+      defaultStageId: 'research',
+      stages: [{ stageId: 'research', purpose: 'Research.' }],
+    };
+    const providerCard: ProviderCard = {
+      providerId: 'flux',
+      displayName: 'Flux',
+      version: '1.0.0',
+      capabilities: ['image.generate'],
+      sourceLayer: 'builtin',
+      syntaxProfile: { notes: [] },
+      conceptCoverage: { entries: [] },
+      trainingProfile: { styleAffinities: { photorealistic: 3 }, antiBiasStrategies: [] },
+    };
+
+    runtime.registerProvider(
+      {
+        ...createProvider('neko.profiles', []),
+        getArtifactProfiles: () => [artifactProfile],
+        getCreationProfiles: () => [creationProfile],
+        getProviderCards: () => [providerCard],
+      },
+      { extensionContext: {} },
+    );
+
+    expect(artifactProfileRegistry.get('studio.shot-review', 1)).toEqual(artifactProfile);
+    expect(creationProfileRegistry.get('studio.creation.review', '1.0.0')).toEqual(
+      creationProfile,
+    );
+    expect(providerExpressionProfileRegistry.get('provider-expression:flux', '1.0.0')).toEqual(
+      expect.objectContaining({
+        profileId: 'provider-expression:flux',
+        kind: 'provider-expression',
+        source: 'builtin',
+      }),
+    );
+
+    runtime.unregisterProvider('neko.profiles');
+
+    expect(artifactProfileRegistry.get('studio.shot-review', 1)).toBeUndefined();
+    expect(creationProfileRegistry.get('studio.creation.review', '1.0.0')).toBeUndefined();
+    expect(providerExpressionProfileRegistry.get('provider-expression:flux', '1.0.0')).toBeUndefined();
+  });
+
+  it('lets a provider ship a Skill and profile in the same package while resolving by id', () => {
+    const toolRegistry = new ToolRegistry();
+    const artifactProfileRegistry = new ArtifactProfileRegistry();
+    const runtime = new CapabilityRegistryRuntime({
+      toolRegistry,
+      artifactProfileRegistry,
+    });
+    const profile: ArtifactProfileDescriptor = {
+      profileId: 'studio.same-package-table',
+      kind: 'artifact',
+      protocol: 'GenericTable',
+      version: 1,
+      source: 'package',
+      columns: [{ columnId: 'shotId', cellType: 'string', required: true }],
+    };
+    const skill: Skill = {
+      ...createSkill('same-package-skill'),
+      profileReferences: [
+        {
+          profileId: 'studio.same-package-table',
+          kind: 'artifact',
+          relationship: 'produces',
+        },
+      ],
+    };
+
+    runtime.registerProvider(
+      {
+        ...createProvider('neko.same-package', []),
+        getSkills: () => [skill],
+        getArtifactProfiles: () => [profile],
+      },
+      { extensionContext: {} },
+    );
+
+    const composition = composeAgentProfiles({
+      skill: runtime.getAllSkills()[0],
+      artifactProfileRegistry,
+    });
+
+    expect(composition.artifactProfiles).toEqual([profile]);
+    expect(composition.diagnostics).toEqual([]);
   });
 });
