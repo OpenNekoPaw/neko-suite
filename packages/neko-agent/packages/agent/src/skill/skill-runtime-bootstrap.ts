@@ -2,6 +2,7 @@ import type { ISkillRegistry, IToolRegistry, Skill, SkillInjection } from '@neko
 import type {
   ActiveSkillLifecycleProjection,
   SkillLifecycleDeactivationRequest,
+  SkillLifecycleProjection,
 } from '@neko/shared';
 import { SkillRegistry } from './skill-registry';
 import { createSkillService, type SkillService } from './skill-service';
@@ -77,6 +78,7 @@ export interface RuntimeSkillBootstrapOptions {
 export interface RuntimeSkillProviderState {
   getActiveSkill(conversationId: string): { readonly skill: Skill } | undefined;
   getActiveSkillLifecycle?(conversationId: string): ActiveSkillLifecycleProjection;
+  syncSkillLifecycleProjection?(conversationId: string): SkillLifecycleProjection | undefined;
   activateLifecycleSkill?(
     conversationId: string,
     input: SkillActivationRequest,
@@ -244,6 +246,7 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
   createSkillProviderFactory(state: RuntimeSkillProviderState): SkillProviderFactory {
     return (conversationId) => {
       const getActiveSkillLifecycle = state.getActiveSkillLifecycle;
+      const syncSkillLifecycleProjection = state.syncSkillLifecycleProjection;
       const activateLifecycleSkill = state.activateLifecycleSkill;
       const deactivateLifecycleSkill = state.deactivateLifecycleSkill;
 
@@ -258,13 +261,24 @@ class DefaultRuntimeSkillBootstrap implements RuntimeSkillBootstrap {
             : {}),
           ...(activateLifecycleSkill
             ? {
-                activateLifecycleSkill: (input) => activateLifecycleSkill(conversationId, input),
+                activateLifecycleSkill: async (input) => {
+                  const result = await activateLifecycleSkill(conversationId, input);
+                  if (result.success) {
+                    syncSkillLifecycleProjection?.(conversationId);
+                  }
+                  return result;
+                },
               }
             : {}),
           ...(deactivateLifecycleSkill
             ? {
-                deactivateLifecycleSkill: (input) =>
-                  deactivateLifecycleSkill(conversationId, input),
+                deactivateLifecycleSkill: async (input) => {
+                  const result = await deactivateLifecycleSkill(conversationId, input);
+                  if (result.success) {
+                    syncSkillLifecycleProjection?.(conversationId);
+                  }
+                  return result;
+                },
               }
             : {}),
           applySkillInjection: (injection, skill) =>

@@ -49,7 +49,8 @@ export const DEFAULT_NEW_PROMPT_NAME = 'New Prompt';
 export const DEFAULT_AGENTS_FILE_CONTENT = `# Global Agent Instructions
 
 <!-- 全局 Agent 指令 -->
-<!-- 此文件的内容会被注入到所有对话的系统提示词中 -->
+<!-- 此文件的内容会作为环境层 overlay 注入到对话中，不会替代内置 system prompt。 -->
+<!-- 请在这里放用户/项目偏好；不要在这里定义工具协议、权限规则或子包 schema。 -->
 
 ## 语言规范
 - 对话使用中文
@@ -58,6 +59,15 @@ export const DEFAULT_AGENTS_FILE_CONTENT = `# Global Agent Instructions
 ## 代码风格
 - 遵循项目现有代码风格
 - 保持代码简洁清晰
+
+## 工作方式
+- 优先遵循当前项目的架构、测试和文档约束
+- 修改前先理解已有实现和边界
+- 缺少必要上下文时先说明风险或提出澄清
+
+## 边界
+- 本文件只描述用户/项目偏好
+- 工具调用协议、资源授权、视觉证据规则和子包能力说明以运行时 system prompt、tool schema 和 capability catalog 为准
 `;
 
 export function buildPromptFileContent(name: string): string {

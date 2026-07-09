@@ -133,12 +133,10 @@ export class SystemPromptManager {
   }
 
   /**
-   * Get current system prompt
+   * Get current base system prompt.
    *
-   * Priority (handled by SystemPromptBuilder):
-   * 1. Plan mode prompt (if in plan mode)
-   * 2. AGENTS.md content (project > personal)
-   * 3. Built-in default prompt
+   * AGENTS.md is loaded by this manager but projected as an environment-layer
+   * overlay by the runtime session. It must not replace the base protocol.
    */
   getPrompt(conversationId: string): string {
     return this._builder.buildForMode(this.getMode(conversationId));

@@ -51,6 +51,11 @@ export interface AssistantProviderSelection {
 export interface AssistantSettingsSnapshot {
   selectedProviderId: string | null;
   selectedModelId: string | null;
+  /**
+   * Persisted legacy field name. Runtime consumers must treat this as
+   * user custom instructions layered over the built-in base prompt, not as
+   * a replacement system prompt.
+   */
   customSystemPrompt: string;
   autoExecuteTools: boolean;
   streamResponses: boolean;

@@ -489,6 +489,35 @@ describe('executeAgentTurn', () => {
     expect(agentRunner.applySkillInjection).not.toHaveBeenCalled();
   });
 
+  it('projects custom system prompt as an overlay instead of replacing the base protocol', async () => {
+    const { input, agentRunner } = createBaseInput({
+      settings: {
+        executionMode: 'ask',
+        autoExecuteTools: true,
+        customSystemPrompt: 'Prefer concise project-specific replies.',
+      },
+      getBaseSystemPrompt: vi.fn(() => 'base system prompt with tool protocol'),
+    });
+
+    await executeAgentTurn(input);
+
+    expect(agentRunner.configure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('base system prompt with tool protocol'),
+      }),
+    );
+    expect(agentRunner.configure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('## User Custom Instructions'),
+      }),
+    );
+    expect(agentRunner.configure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('Prefer concise project-specific replies.'),
+      }),
+    );
+  });
+
   it('queues same-config text input while the runner is already processing', async () => {
     const platform = { name: 'platform' };
     const agentRunner = createAgentRunner({
@@ -504,6 +533,7 @@ describe('executeAgentTurn', () => {
         executionMode: 'ask',
         workspaceRoot: '/repo',
         workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
+        locale: 'en',
         conversationId: 'conv-1',
       },
     });
@@ -564,6 +594,7 @@ describe('executeAgentTurn', () => {
         executionMode: 'ask',
         workspaceRoot: '/repo',
         workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
+        locale: 'en',
         conversationId: 'conv-1',
       },
     });
@@ -603,6 +634,7 @@ describe('executeAgentTurn', () => {
         executionMode: 'ask',
         workspaceRoot: '/repo',
         workspaceIgnoreRules: { gitignoreRules: ['ignored/'] },
+        locale: 'en',
         conversationId: 'conv-1',
       },
     });

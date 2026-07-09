@@ -171,6 +171,7 @@ import {
 } from './creation-turn-planning';
 
 const logger = getLogger('AgentSession');
+const SESSION_SYSTEM_PROMPT_REFRESH_HOOK_NAME = 'session-system-prompt-refresh';
 
 function getAgentSessionLogger() {
   return getLogger('AgentSession');
@@ -478,6 +479,7 @@ export class AgentSession implements IAgentSession {
         enableInjection: !this._ablationMarker.disableSkillInjection,
       }),
     });
+    this._installSessionSystemPromptRefreshHook();
 
     // Stage tracking: when the caller supplies a skill registry + service,
     // spin up a StageTracker and auto-swap the persona Skill on each stage
@@ -1394,13 +1396,18 @@ export class AgentSession implements IAgentSession {
       const effectiveAllowRuleTools = filterLifecycleProjectionAllowedTools(
         projection.toolPolicy.allowedTools,
       );
+      const effectiveActivationTools = filterLifecycleProjectionAllowedTools(
+        projection.toolPolicy.activationTools,
+      );
       if (effectiveAllowRuleTools && effectiveAllowRuleTools.length > 0) {
         for (const tool of effectiveAllowRuleTools) {
           this._permissionHooks?.addAllowRule(tool);
           allowRules.push(tool);
         }
+      }
+      if (effectiveActivationTools && effectiveActivationTools.length > 0) {
         activatedToolSets.push(
-          ...this._toolInjectionManager.activateToolSetsForTools(effectiveAllowRuleTools),
+          ...this._toolInjectionManager.activateToolSetsForTools(effectiveActivationTools),
         );
       }
 
@@ -2261,11 +2268,51 @@ export class AgentSession implements IAgentSession {
 
     this._permissionHooks = permissionHooks;
     this._executor = executor;
+    this._installSessionSystemPromptRefreshHook();
 
     // Dual-flow: re-register the ReAct-loop runner on the fresh executor.
     if (this._runnerHooks) {
       this._executor.addHook(this._runnerHooks);
     }
+  }
+
+  private _installSessionSystemPromptRefreshHook(): void {
+    if (!this._executor) {
+      return;
+    }
+
+    this._executor.removeHook(SESSION_SYSTEM_PROMPT_REFRESH_HOOK_NAME);
+    this._executor.addHook({
+      name: SESSION_SYSTEM_PROMPT_REFRESH_HOOK_NAME,
+      beforeThink: async (context) => {
+        this._refreshExecutorContextSystemPrompt(context);
+        return context;
+      },
+    });
+  }
+
+  private _refreshExecutorContextSystemPrompt(
+    context: import('@neko/shared').AgentContext,
+  ): void {
+    this._syncSystemPrompt();
+    const systemMessage = this._history[0];
+    if (!systemMessage || systemMessage.role !== 'system') {
+      throw new Error('AgentSession system prompt is missing from history');
+    }
+    if (typeof systemMessage.content !== 'string') {
+      throw new Error('AgentSession system prompt must be text content');
+    }
+
+    const refreshedSystemMessage: ChatMessage = {
+      role: 'system',
+      content: systemMessage.content,
+    };
+    const systemIndex = context.messages.findIndex((message) => message.role === 'system');
+    if (systemIndex >= 0) {
+      context.messages[systemIndex] = refreshedSystemMessage;
+      return;
+    }
+    context.messages.unshift(refreshedSystemMessage);
   }
 
   private _handleToolConfirmation(request: ToolConfirmationRequest): void {

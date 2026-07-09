@@ -131,12 +131,14 @@ function projectToolPolicy(
   conversationId: string,
   records: readonly SkillLifecycleRecord[],
 ): SkillLifecycleToolPolicyProjection {
+  const activationTools = collectActivationTools(records);
   const restrictedRecords = records.filter(
     (record) => record.slot !== 'referenceSkill' && (record.injection.allowedTools?.length ?? 0) > 0,
   );
   if (restrictedRecords.length === 0) {
     return {
       mode: 'unrestricted',
+      ...(activationTools.length > 0 ? { activationTools } : {}),
       contributingRecordIds: records.map((record) => record.id),
       diagnostics: [],
     };
@@ -168,9 +170,20 @@ function projectToolPolicy(
   return {
     mode: restrictedRecords.length === 1 ? 'allowlist' : 'intersection',
     allowedTools: [...allowed].sort(),
+    ...(activationTools.length > 0 ? { activationTools } : {}),
     contributingRecordIds: restrictedRecords.map((record) => record.id),
     diagnostics: [],
   };
+}
+
+function collectActivationTools(records: readonly SkillLifecycleRecord[]): readonly string[] {
+  const tools = new Set<string>();
+  for (const record of records) {
+    for (const tool of record.injection.allowedTools ?? []) {
+      tools.add(tool);
+    }
+  }
+  return [...tools].sort();
 }
 
 function projectModelOverride(

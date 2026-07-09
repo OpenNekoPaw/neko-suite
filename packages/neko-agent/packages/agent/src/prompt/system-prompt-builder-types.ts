@@ -117,18 +117,16 @@ export interface ISystemPromptBuilder {
   // ---------------------------------------------------------------------------
 
   /**
-   * Build the final system prompt
+   * Build the base system prompt for the current mode.
    *
-   * Priority:
-   * 1. Plan mode prompt (if in plan mode)
-   * 2. AGENTS.md content (project > personal)
-   * 3. Built-in default prompt (locale-aware)
+   * AGENTS.md is not included here; callers must inject
+   * {@link buildAgentsOverlay} through the environment layer.
    */
   build(): string;
 
   /**
-   * Build the final system prompt for a specific mode without mutating the
-   * builder's current mode. Useful for per-conversation mode projection.
+   * Build the base system prompt for a specific mode without mutating the
+   * builder's current mode. AGENTS.md remains an environment-layer overlay.
    */
   buildForMode(mode: PromptMode): string;
 

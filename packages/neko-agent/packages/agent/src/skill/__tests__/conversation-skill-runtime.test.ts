@@ -47,7 +47,7 @@ function createSkillService(
       name: skill.name,
       systemPrompt: args ? `${skill.content}: ${args}` : skill.content,
       type: 'skill',
-      allowedTools: ['read'],
+      allowedTools: skill.allowedTools ?? ['read'],
     })),
     discover: vi.fn(() => discoverResult),
   };
@@ -163,7 +163,10 @@ describe('ConversationSkillRuntime', () => {
 
   it('keeps supplemental reference skills active without replacing the domain skill', async () => {
     const storyboard = createSkill('comic-to-storyboard');
-    const canvas = createSkill('canvas-authoring');
+    const canvas: Skill = {
+      ...createSkill('canvas-authoring'),
+      allowedTools: ['canvas.createStoryboardFromMarkdown'],
+    };
     const skillService = createSkillService([storyboard, canvas]);
     const runtime = new ConversationSkillRuntime({
       skillService: skillService as any,
@@ -197,6 +200,7 @@ describe('ConversationSkillRuntime', () => {
     ]);
     expect(projection.toolPolicy).toEqual({
       mode: 'allowlist',
+      activationTools: ['canvas.createStoryboardFromMarkdown', 'read'],
       allowedTools: ['read'],
       contributingRecordIds: [records[0]?.id],
       diagnostics: [],

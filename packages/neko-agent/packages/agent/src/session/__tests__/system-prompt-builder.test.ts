@@ -133,14 +133,15 @@ describe('SystemPromptBuilder', () => {
       expect(prompt).toBe(BUILTIN_PLAN_PROMPT_ZH);
     });
 
-    it('should use AGENTS.md content when available', () => {
+    it('should keep base prompt when AGENTS.md content is available', () => {
       const builder = new SystemPromptBuilder();
       const agentsContent = '# My Custom Instructions\n\nDo this and that.';
 
       builder.setAgentsContent(agentsContent, 'project');
       const prompt = builder.build();
 
-      expect(prompt).toBe(agentsContent);
+      expect(prompt).toBe(BUILTIN_DEFAULT_PROMPT_EN);
+      expect(builder.buildAgentsOverlay()).toBe(agentsContent);
     });
 
     it('should use plan prompt even when AGENTS.md is set', () => {
@@ -182,7 +183,8 @@ describe('SystemPromptBuilder', () => {
 
       expect(builder.buildForMode('plan')).toBe(BUILTIN_PLAN_PROMPT_EN);
       expect(builder.getMode()).toBe('default');
-      expect(builder.buildForMode('default')).toBe('# Project rules');
+      expect(builder.buildForMode('default')).toBe(BUILTIN_DEFAULT_PROMPT_EN);
+      expect(builder.buildAgentsOverlay()).toBe('# Project rules');
       expect(builder.getMode()).toBe('default');
     });
   });
@@ -228,8 +230,7 @@ describe('SystemPromptBuilder', () => {
       const builder = new SystemPromptBuilder();
       builder.setAgentsContent('# Project rules\nUse strict mode.', 'project');
       expect(builder.buildBaseOnly()).toBe(BUILTIN_DEFAULT_PROMPT_EN);
-      // Legacy build() still replaces with AGENTS.md.
-      expect(builder.build()).toBe('# Project rules\nUse strict mode.');
+      expect(builder.build()).toBe(BUILTIN_DEFAULT_PROMPT_EN);
     });
 
     it('returns plan prompt in plan mode (ignoring AGENTS.md)', () => {

@@ -85,6 +85,12 @@ describe('prompt golden snapshots', () => {
       expect(prompt).toContain('![alt](resource-token#hint)');
       expect(prompt).toMatch(/Generation prompt cells|生成提示词单元格/);
       expect(prompt).toMatch(/Structured Creative Artifacts|结构化创作产物/);
+      expect(prompt).toMatch(/requires image-pixel evidence|需要图片像素证据/);
+      expect(prompt).toMatch(/native multimodal attachment|原生多模态附件/);
+      expect(prompt).toMatch(/do not call `ReadImage` merely because|不要只因为看到了/);
+      expect(prompt).toMatch(/stable `ResourceRef`|稳定 `ResourceRef`/);
+      expect(prompt).toMatch(/independent from `ReadDocument`|与 `ReadDocument` 是独立工具/);
+      expect(prompt).toMatch(/missing visual-analysis path|视觉分析链路缺失/);
       expect(prompt).toMatch(/artifact profile|当前 artifact profile/);
       expect(prompt).toMatch(/runtime capability contract/);
       expect(prompt).toMatch(/validation requirements/);

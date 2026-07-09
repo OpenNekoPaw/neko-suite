@@ -713,7 +713,15 @@ export interface SettingsDataMessage {
   configuredProviders?: ConfiguredProvider[];
   selectedProviderId?: string | null;
   selectedModelId?: string | null;
+  /**
+   * Stored user/workspace custom instructions. This is not the built-in base
+   * system prompt and must not replace runtime protocols.
+   */
   customSystemPrompt?: string;
+  /**
+   * Webview settings field for the same custom-instructions text. Kept as the
+   * UI message key used by the settings form; semantically it is an overlay.
+   */
   systemPrompt?: string;
   autoExecuteTools?: boolean;
   streamResponses?: boolean;

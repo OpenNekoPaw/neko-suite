@@ -442,6 +442,7 @@ describe('SkillLifecycleRuntime', () => {
     ]);
     expect(projection.toolPolicy).toEqual({
       mode: 'allowlist',
+      activationTools: ['ReadDocument', 'WriteDocument'],
       allowedTools: ['WriteDocument'],
       contributingRecordIds: [domain.record?.id],
       diagnostics: [],

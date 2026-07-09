@@ -1,9 +1,10 @@
 /**
  * System Prompt Builder — Initialization-phase prompt construction from static sources
  *
- * Responsibility: Load AGENTS.md from disk, handle locale/mode switching, and produce
- * the initial system prompt string. This output is typically passed to
- * SystemPromptComposer.setBase() for runtime management.
+ * Responsibility: Load AGENTS.md overlay content from disk, handle locale/mode
+ * switching, and produce the base system prompt string. The base output is
+ * typically passed to SystemPromptComposer.setBase(), while AGENTS.md is routed
+ * through the environment-layer overlay.
  *
  * Lifecycle:
  *   Builder.build() → initial prompt string → Composer.setBase() → runtime sections
@@ -168,13 +169,13 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
   }
 
   /**
-   * Base layer only — returns the plan prompt in plan mode, else the
-   * built-in (or custom) default prompt. AGENTS.md content is NOT merged
-   * in; callers wanting the overlay behaviour should additionally consume
+   * Base layer only — returns the plan prompt in plan mode, else the built-in
+   * (or custom) default prompt. AGENTS.md content is NOT merged in; callers
+   * wanting the overlay behaviour should additionally consume
    * {@link buildAgentsOverlay}.
    *
-   * Introduced in PR3b alongside the AGENTS.md overlay pattern — the
-   * session initializer uses this as `composer.setBase(...)` input so the
+   * Introduced in PR3b alongside the AGENTS.md overlay pattern. `build()` and
+   * `buildForMode()` now share this same non-replacing base semantics so the
    * base protocol stays visible even when the user supplies AGENTS.md.
    */
   buildBaseOnly(): string {
@@ -225,10 +226,6 @@ export class SystemPromptBuilder implements ISystemPromptBuilder {
   private _buildForMode(mode: PromptMode): string {
     if (mode === 'plan') {
       return this._getPlanPrompt();
-    }
-
-    if (this._agentsContent) {
-      return this._agentsContent;
     }
 
     return this._getDefaultPrompt();

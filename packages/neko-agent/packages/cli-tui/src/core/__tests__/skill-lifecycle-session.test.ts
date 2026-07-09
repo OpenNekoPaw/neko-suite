@@ -48,11 +48,39 @@ describe('wireCliSkillLifecycleSession', () => {
       }),
     );
   });
+
+  it('activates reference skill tool sets without projecting them as restrictive allowed tools', async () => {
+    const { provider, session } = createWiredProvider([
+      createSkill('canvas-authoring', ['canvas.createStoryboardFromMarkdown']),
+    ]);
+
+    const result = await provider.activateSkill({
+      name: 'canvas-authoring',
+      reason: 'Need supplemental Canvas authoring guidance.',
+      slot: 'referenceSkill',
+    });
+
+    expect(result.success).toBe(true);
+    expect(session.activateToolSetsForTools).toHaveBeenCalledWith([
+      'canvas.createStoryboardFromMarkdown',
+    ]);
+    expect(session.applySkillInjection).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({
+        allowedTools: expect.any(Array),
+      }),
+      expect.any(Object),
+    );
+
+    await provider.deactivateSkill({ slot: 'referenceSkill' });
+
+    expect(session.deactivateToolSet).toHaveBeenCalledWith('canvas-editing');
+  });
 });
 
 function createWiredProvider(skills: readonly Skill[]): {
   readonly provider: ISkillProvider;
   readonly lifecycleRuntime: ReturnType<typeof createCliSkillLifecycleRuntime>;
+  readonly session: IAgentSession;
 } {
   const registry = new SkillRegistry();
   for (const skill of skills) {
@@ -67,6 +95,8 @@ function createWiredProvider(skills: readonly Skill[]): {
     }),
     clearActiveSkill: vi.fn(),
     applySkillInjection: vi.fn(),
+    activateToolSetsForTools: vi.fn(() => ['canvas-editing']),
+    deactivateToolSet: vi.fn(),
   } as unknown as IAgentSession;
 
   wireCliSkillLifecycleSession({
@@ -79,14 +109,16 @@ function createWiredProvider(skills: readonly Skill[]): {
   return {
     provider: requireProvider(provider),
     lifecycleRuntime,
+    session,
   };
 }
 
-function createSkill(name: string): Skill {
+function createSkill(name: string, allowedTools?: readonly string[]): Skill {
   return {
     name,
     description: `${name} description`,
     content: `${name} prompt`,
+    ...(allowedTools ? { allowedTools: [...allowedTools] } : {}),
     source: 'builtin',
     enabled: true,
   };

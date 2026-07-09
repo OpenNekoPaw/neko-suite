@@ -19,9 +19,11 @@ import {
   getBuiltinSkills,
   getExecutionPersonaSkill,
   getIterationPersonaSkill,
+  registerBuiltinToolGroups,
   getScriptGenerationSkill,
 } from '@neko/skills';
 import type {
+  AgentContext,
   AgentToolResultValidationAdapter,
   AgentToolResultValidationAdapterInput,
   AgentToolReviewValidationSignal,
@@ -29,10 +31,13 @@ import type {
   IToolRegistry,
   AgentStep,
   ChatMessage,
+  ExecutorHooks,
   IProjectMemoryManager,
   PerceptionEvidence,
   ServiceOptions,
+  ServiceResponse,
   SkillLifecycleProjection,
+  StreamChunk,
   ToolResultWithMeta,
 } from '@neko/shared';
 import type { IJournalWriter } from '../types';
@@ -86,18 +91,56 @@ function conversationLogPath(
 
 /** Mock steps yielded by AgentExecutor.executeStream */
 function createMockExecutorModule(steps: AgentStep[]) {
+  const hooks: ExecutorHooks[] = [];
   return {
-    executeStream: vi.fn(async function* (..._args: unknown[]) {
+    executeStream: vi.fn(async function* (input: string, context?: Partial<AgentContext>) {
+      let agentContext: AgentContext = {
+        messages: context?.messages ? [...context.messages] : [{ role: 'user', content: input }],
+        state: context?.state ?? 'think',
+        iteration: context?.iteration ?? 0,
+        toolResults: context?.toolResults ? [...context.toolResults] : [],
+        metadata: { ...(context?.metadata ?? {}) },
+        ...(context?.trace ? { trace: context.trace } : {}),
+        ...(context?.skipUserMessage !== undefined
+          ? { skipUserMessage: context.skipUserMessage }
+          : {}),
+      };
+
+      for (const hook of hooks) {
+        await hook.onExecuteStart?.(input, agentContext);
+      }
+      agentContext.iteration += 1;
+      for (const hook of hooks) {
+        const nextContext = await hook.beforeThink?.(agentContext);
+        if (nextContext) {
+          agentContext = nextContext;
+        }
+      }
       for (const step of steps) {
+        if (step.type === 'think') {
+          for (const hook of hooks) {
+            await hook.afterThink?.(step, agentContext);
+          }
+        }
         yield step;
+      }
+      for (const hook of hooks) {
+        await hook.onIterationComplete?.(agentContext.iteration, agentContext);
       }
     }),
     execute: vi.fn(),
     abort: vi.fn(),
     getState: vi.fn().mockReturnValue('done'),
-    addHook: vi.fn(),
-    removeHook: vi.fn(),
-    getHook: vi.fn(),
+    addHook: vi.fn((hook: ExecutorHooks) => {
+      hooks.push(hook);
+    }),
+    removeHook: vi.fn((name: string) => {
+      const index = hooks.findIndex((hook) => hook.name === name);
+      if (index < 0) return false;
+      hooks.splice(index, 1);
+      return true;
+    }),
+    getHook: vi.fn((name: string) => hooks.find((hook) => hook.name === name)),
     createCheckpoint: vi.fn(),
     setToolInjectionManager: vi.fn(),
     updateServiceOptions: vi.fn(),
@@ -109,6 +152,64 @@ function createMockService(): IService {
     chat: vi.fn(),
     chatStream: vi.fn(),
     embed: vi.fn(),
+  };
+}
+
+async function* responseToStream(resp: ServiceResponse): AsyncIterable<StreamChunk> {
+  const content = typeof resp.message.content === 'string' ? resp.message.content : '';
+  if (content) {
+    yield { type: 'content', content };
+  }
+  if (resp.message.toolCalls) {
+    for (const toolCall of resp.message.toolCalls) {
+      yield {
+        type: 'tool_call',
+        toolCall: {
+          id: toolCall.id,
+          type: toolCall.type,
+          function: toolCall.function,
+        },
+      };
+    }
+  }
+  yield {
+    type: 'done',
+    finishReason: resp.finishReason,
+    usage: resp.usage,
+  };
+}
+
+function textResponse(content: string): ServiceResponse {
+  return {
+    id: 'resp_text',
+    model: 'test-model',
+    message: { role: 'assistant', content } as ChatMessage,
+    finishReason: 'stop',
+    usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+  };
+}
+
+function toolCallResponse(
+  toolName: string,
+  args: Record<string, unknown>,
+  callId = 'call_1',
+): ServiceResponse {
+  return {
+    id: 'resp_tool',
+    model: 'test-model',
+    message: {
+      role: 'assistant',
+      content: '',
+      toolCalls: [
+        {
+          id: callId,
+          type: 'function' as const,
+          function: { name: toolName, arguments: JSON.stringify(args) },
+        },
+      ],
+    } as ChatMessage,
+    finishReason: 'tool_calls',
+    usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
   };
 }
 
@@ -442,8 +543,29 @@ function parseSections(content: string | null): Array<{ key: string; body: strin
 function injectMockExecutor(session: AgentSession, steps: AgentStep[]) {
   const mockExec = createMockExecutorModule(steps);
   // Access private _executor via bracket notation
-  (session as unknown as Record<string, unknown>)['_executor'] = mockExec;
+  const internals = session as unknown as Record<string, unknown>;
+  internals['_executor'] = mockExec;
+  const runnerHooks = internals['_runnerHooks'];
+  if (isExecutorHooks(runnerHooks)) {
+    mockExec.addHook(runnerHooks);
+  }
+  const installRefreshHook = internals['_installSessionSystemPromptRefreshHook'];
+  if (typeof installRefreshHook === 'function') {
+    installRefreshHook.call(session);
+  }
   return mockExec;
+}
+
+function isExecutorHooks(value: unknown): value is ExecutorHooks {
+  if (typeof value !== 'object' || value === null) return false;
+  return (
+    'onExecuteStart' in value ||
+    'beforeThink' in value ||
+    'afterThink' in value ||
+    'beforeAct' in value ||
+    'afterAct' in value ||
+    'onIterationComplete' in value
+  );
 }
 
 // =============================================================================
@@ -1688,6 +1810,216 @@ describe('AgentSession', () => {
       expect(session.isToolAllowed('Bash')).toBe(false);
     });
 
+    it('refreshes executor context with a lifecycle skill prompt activated during the same turn', async () => {
+      const service = createMockService();
+      const toolRegistry = new ToolRegistry();
+      const session = new AgentSession(
+        createConfig({
+          service,
+          toolRegistry,
+          conversationId: 'conversation-skill-refresh',
+          systemPrompt: 'Base prompt.',
+          maxIterations: 3,
+        }),
+      );
+      const permHooks = (session as unknown as Record<string, unknown>)['_permissionHooks'] as
+        | { addAllowRule: (tool: string) => void }
+        | undefined;
+      permHooks?.addAllowRule('ActivateSkill');
+      const skillPrompt =
+        'Comic storyboard skill: use scene, shot, source, imagePrompt, videoPrompt, duration, dialogue.';
+      const activateSkill = vi.fn(async () => {
+        session.applySkillLifecycleProjection({
+          promptSections: [
+            {
+              id: 'skill:comic-to-storyboard',
+              layer: 'skill',
+              content: skillPrompt,
+              priority: 100,
+              recordId: 'record-comic',
+              slot: 'domainSkill',
+              skillName: 'comic-to-storyboard',
+            },
+          ],
+          toolPolicy: {
+            mode: 'unrestricted',
+            contributingRecordIds: ['record-comic'],
+            diagnostics: [],
+          },
+          diagnostics: [],
+          visibleIndicators: [
+            {
+              id: 'record-comic',
+              skillName: 'comic-to-storyboard',
+              slot: 'domainSkill',
+              owner: 'agent',
+              clearable: true,
+              status: 'active',
+            },
+          ],
+        });
+        return {
+          success: true,
+          message: 'Activated skill "comic-to-storyboard"',
+          lifecycleRecordId: 'record-comic',
+        };
+      });
+      session.setSkillProvider({
+        listSkills: vi.fn(() => [
+          {
+            name: 'comic-to-storyboard',
+            description: 'Create storyboard creative tables.',
+          },
+        ]),
+        getActiveSkill: vi.fn(() => null),
+        activateSkill,
+        deactivateSkill: vi.fn(),
+      });
+
+      const capturedSystemPrompts: string[] = [];
+      vi.mocked(service.chatStream).mockImplementation(async function* (messages) {
+        const systemMessage = messages.find((message) => message.role === 'system');
+        capturedSystemPrompts.push(
+          typeof systemMessage?.content === 'string' ? systemMessage.content : '',
+        );
+        if (capturedSystemPrompts.length === 1) {
+          yield* responseToStream(
+            toolCallResponse('ActivateSkill', {
+              skillName: 'comic-to-storyboard',
+              reason: 'The user requested a comic storyboard creative table.',
+            }),
+          );
+          return;
+        }
+        yield* responseToStream(
+          textResponse(
+            '| scene | shot | source | imagePrompt | videoPrompt | duration | dialogue |\n' +
+              '| --- | --- | --- | --- | --- | --- | --- |\n' +
+              '| 开场 | 1 | P1 |  | 场景视频生成：... | 3s |  |',
+          ),
+        );
+      });
+
+      await collectEvents(session.execute('分析前 10 页并生成分镜表'));
+
+      expect(activateSkill).toHaveBeenCalledOnce();
+      expect(capturedSystemPrompts).toHaveLength(2);
+      expect(capturedSystemPrompts[0]).not.toContain('imagePrompt, videoPrompt');
+      expect(capturedSystemPrompts[1]).toContain(skillPrompt);
+    });
+
+    it('exposes lifecycle reference skill tools on the next model call without restricting the domain policy', async () => {
+      const service = createMockService();
+      const toolRegistry = new ToolRegistry();
+      toolRegistry.register(
+        createTool({
+          name: 'canvas.createStoryboardFromMarkdown',
+          description: 'Create Canvas storyboard nodes from Markdown.',
+          category: 'project',
+          parameters: { type: 'object', properties: {} },
+          execute: async () => ({ success: true, data: { nodeIds: ['shot-1'] } }),
+        }),
+      );
+      const toolGroupRegistry = new ToolGroupRegistry();
+      toolGroupRegistry.register({
+        name: 'canvas-editing',
+        description: 'Canvas editing tools.',
+        tools: ['canvas.createStoryboardFromMarkdown'],
+        source: 'builtin',
+        enabled: true,
+        loadingTier: 'eager',
+      });
+      const session = new AgentSession(
+        createConfig({
+          service,
+          toolRegistry,
+          toolGroupRegistry,
+          conversationId: 'conversation-canvas-reference-skill',
+          systemPrompt: 'Base prompt.',
+          maxIterations: 3,
+        }),
+      );
+      const permHooks = (session as unknown as Record<string, unknown>)['_permissionHooks'] as
+        | { addAllowRule: (tool: string) => void }
+        | undefined;
+      permHooks?.addAllowRule('ActivateSkill');
+      const activateSkill = vi.fn(async () => {
+        session.applySkillLifecycleProjection({
+          promptSections: [
+            {
+              id: 'skill:referenceSkill:canvas-authoring:record-canvas',
+              layer: 'skill',
+              content: 'Canvas authoring guidance.',
+              priority: 100,
+              recordId: 'record-canvas',
+              slot: 'referenceSkill',
+              skillName: 'canvas-authoring',
+            },
+          ],
+          toolPolicy: {
+            mode: 'unrestricted',
+            activationTools: ['canvas.createStoryboardFromMarkdown'],
+            contributingRecordIds: ['record-canvas'],
+            diagnostics: [],
+          },
+          diagnostics: [],
+          visibleIndicators: [
+            {
+              id: 'record-canvas',
+              skillName: 'canvas-authoring',
+              slot: 'referenceSkill',
+              owner: 'agent',
+              clearable: true,
+              status: 'active',
+            },
+          ],
+        });
+        return {
+          success: true,
+          message: 'Activated skill "canvas-authoring"',
+          allowedTools: ['canvas.createStoryboardFromMarkdown'],
+          lifecycleRecordId: 'record-canvas',
+        };
+      });
+      session.setSkillProvider({
+        listSkills: vi.fn(() => [
+          {
+            name: 'canvas-authoring',
+            description: 'Canvas authoring guidance.',
+          },
+        ]),
+        getActiveSkill: vi.fn(() => null),
+        activateSkill,
+        deactivateSkill: vi.fn(),
+      });
+
+      const capturedToolNames: string[][] = [];
+      vi.mocked(service.chatStream).mockImplementation(async function* (_messages, options) {
+        capturedToolNames.push(
+          (options?.tools ?? []).map((tool) => tool.function.name),
+        );
+        if (capturedToolNames.length === 1) {
+          yield* responseToStream(
+            toolCallResponse('ActivateSkill', {
+              skillName: 'canvas-authoring',
+              reason: 'Send the completed storyboard table to Canvas.',
+              slot: 'referenceSkill',
+            }),
+          );
+          return;
+        }
+        yield* responseToStream(textResponse('Canvas tools are available.'));
+      });
+
+      await collectEvents(session.execute('发送到 Canvas'));
+
+      expect(activateSkill).toHaveBeenCalledOnce();
+      expect(capturedToolNames).toHaveLength(2);
+      expect(capturedToolNames[0]).not.toContain('canvas.createStoryboardFromMarkdown');
+      expect(capturedToolNames[1]).toContain('canvas.createStoryboardFromMarkdown');
+      expect(session.isToolAllowed('UnrelatedDomainTool')).toBe(true);
+    });
+
     it('should clear tracked rules even without permissionHooks', () => {
       const session = new AgentSession(config);
 
@@ -1723,7 +2055,9 @@ describe('AgentSession', () => {
     });
 
     it('should activate lazy ToolSets for allowed tools on applySkillInjection', () => {
-      const session = new AgentSession(config);
+      const toolGroupRegistry = new ToolGroupRegistry();
+      registerBuiltinToolGroups(toolGroupRegistry);
+      const session = new AgentSession(createConfig({ toolGroupRegistry }));
       const toolInjectionManager = (session as unknown as Record<string, unknown>)[
         '_toolInjectionManager'
       ] as { getState(): { activeToolSets: string[] }; getToolsForTurn(input: string): string[] };
@@ -1950,7 +2284,7 @@ describe('AgentSession', () => {
     it('does not require a separate creation runtime when execute() begins with stage tracking', async () => {
       const session = new AgentSession(
         createConfig({
-          executionMode: 'plan',
+          executionMode: 'auto',
           stageTracking: {},
         }),
       );
@@ -1958,7 +2292,7 @@ describe('AgentSession', () => {
         { type: 'think', content: 'Draft first', timestamp: Date.now() },
       ]);
 
-      await collectEvents(session.execute('Outline the implementation'));
+      await collectEvents(session.execute('Write the implementation note'));
 
       expect(session.getCurrentStage()).toBe('apply');
     });

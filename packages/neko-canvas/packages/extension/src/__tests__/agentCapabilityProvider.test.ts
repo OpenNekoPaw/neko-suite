@@ -257,6 +257,7 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
 
   it('contributes prompt fragments for mixed-purpose Canvas subsystem context', () => {
     expect(providerSource).toContain('getPromptFragments(');
+    expect(providerSource).toContain('neko-canvas:authoring-operation-routing');
     expect(providerSource).toContain('neko-canvas:multi-purpose-canvas-subsystems');
     expect(providerSource).toContain('activeSubsystems');
     expect(providerSource).toContain('includeSubsystemMetadata: true');
@@ -265,13 +266,30 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
 
   it('localizes mixed-purpose Canvas subsystem prompt fragments for Chinese prompts', () => {
     const provider = createNekoCanvasCapabilityProvider(createApi());
-    const [fragment] = provider.getPromptFragments({ extensionContext: {}, locale: 'zh' });
+    const fragment = provider
+      .getPromptFragments({ extensionContext: {}, locale: 'zh' })
+      .find((candidate) => candidate.id === 'neko-canvas:multi-purpose-canvas-subsystems');
     const localized = fragment?.locales?.['zh']?.content;
 
     expect(localized).toBeDefined();
     expect(localized).toContain('同一图中混合分镜、叙事、行为、实体和记忆子系统');
     expect(localized).toContain('includeSubsystemMetadata: true');
     expect(localized).not.toContain('Neko Canvas .nkc files can mix');
+  });
+
+  it('keeps concrete Canvas operation routing in provider capability prompts', () => {
+    const provider = createNekoCanvasCapabilityProvider(createApi());
+    const fragment = provider
+      .getPromptFragments({ extensionContext: {} })
+      .find((candidate) => candidate.id === 'neko-canvas:authoring-operation-routing');
+    const localized = fragment?.locales?.['zh']?.content;
+
+    expect(fragment?.content).toContain('canvas.createStoryboardFromMarkdown');
+    expect(fragment?.content).toContain('profileHint=storyboard');
+    expect(fragment?.content).toContain('mode=create-nodes');
+    expect(fragment?.content).toContain('documentResourceRef');
+    expect(localized).toContain('canvas.createStoryboardFromMarkdown');
+    expect(localized).toContain('documentResourceRef');
   });
 
   it('registers review-only artifact rendering and lifecycle Canvas Markdown facets', () => {
@@ -386,19 +404,19 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
 
     expect(authoringSkill).toBeDefined();
     expect(authoringSkill?.content).toContain(
-      'A completed source storyboard creative table must already exist before Canvas Markdown tools are called.',
+      'A completed source storyboard creative table must already exist before Canvas handoff.',
     );
     expect(authoringSkill?.content).toContain(
       'The source storyboard table must be visible as an assistant Markdown block or UI handoff source.',
     );
     expect(authoringSkill?.content).toContain(
-      'Do not call Canvas tools to skip comic/page visual analysis or storyboard table generation.',
+      'Do not use Canvas handoff to skip comic/page visual analysis or storyboard table generation.',
     );
     expect(authoringSkillZh?.content).toContain(
-      '调用 Canvas Markdown 工具前，必须已经存在完成的来源分镜 creative table。',
+      'Canvas handoff 前，必须已经存在完成的来源分镜 creative table。',
     );
     expect(authoringSkillZh?.content).toContain('来源分镜表必须是可见 assistant Markdown 块或 UI handoff 来源。');
-    expect(authoringSkillZh?.content).toContain('不要用 Canvas 工具跳过漫画/页面视觉分析或分镜表生成。');
+    expect(authoringSkillZh?.content).toContain('不要用 Canvas handoff 跳过漫画/页面视觉分析或分镜表生成。');
     expect(createStoryboardTool?.description).toContain(
       'Requires a completed storyboard creative table',
     );
@@ -1131,22 +1149,22 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
         validationRequirements: ['CanvasAuthoringCatalog', 'CanvasAuthoringResultEnvelope'],
       }),
     });
-    expect(authoringSkill?.content).toContain('canvas_describe_authoring_capabilities');
-    expect(authoringSkill?.content).toContain('scene.basic + shot.basic');
-    expect(authoringSkill?.content).toContain('Send-to-Canvas storyboard creative tables');
-    expect(authoringSkill?.content).toContain('mode=create-nodes');
+    expect(authoringSkill?.content).toContain('Inspect the Canvas-owned authoring catalog');
+    expect(authoringSkill?.content).toContain('scene and shot nodes');
     expect(authoringSkill?.content).toContain(
       '"Send as Markdown" means Markdown is the source format/transport',
     );
-    expect(authoringSkill?.content).toContain('report Canvas tool-surface blocked');
-    expect(authoringSkill?.content).toContain('review-only table/draft ingestion');
-    expect(authoringSkill?.content).toContain('not scene/shot nodes');
+    expect(authoringSkill?.content).toContain('review-only Canvas ingestion');
     expect(authoringSkill?.content).toContain('prompt-first');
     expect(authoringSkill?.content).toContain('Semantic Prompt Document');
     expect(authoringSkill?.content).toContain('videoPrompt is scene-scoped');
     expect(authoringSkill?.content).toContain(
       'Agent owns approval, provider calls, async task progress',
     );
+    expect(authoringSkill?.content).not.toContain('canvas.createStoryboardFromMarkdown');
+    expect(authoringSkill?.content).not.toContain('canvas.ingestMarkdown');
+    expect(authoringSkill?.content).not.toContain('mode=create-nodes');
+    expect(authoringSkill?.content).not.toContain('profileHint=storyboard');
     expect(storyboardAlias).toBeUndefined();
   });
 
@@ -1157,15 +1175,16 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
 
     expect(authoringSkill?.description).toContain('Canvas authoring');
     expect(authoringSkill?.content).toContain('# Canvas Authoring');
-    expect(authoringSkill?.content).toContain('先查询 canvas_describe_authoring_capabilities');
-    expect(authoringSkill?.content).toContain('Send to Canvas 分镜 creative table');
-    expect(authoringSkill?.content).toContain('mode=create-nodes');
+    expect(authoringSkill?.content).toContain('先查看 Canvas 拥有的 authoring catalog');
+    expect(authoringSkill?.content).toContain('完成的分镜 creative table 应成为 Canvas scene 和 shot 节点');
     expect(authoringSkill?.content).toContain(
       '“作为 Markdown/Markdown 发送”表示 Markdown 是来源格式/传输格式',
     );
-    expect(authoringSkill?.content).toContain('报告 Canvas tool-surface blocked');
-    expect(authoringSkill?.content).toContain('不创建 scene/shot 节点');
+    expect(authoringSkill?.content).toContain('review-only Canvas 摄入');
     expect(authoringSkill?.content).toContain('prompt-first');
+    expect(authoringSkill?.content).not.toContain('canvas.createStoryboardFromMarkdown');
+    expect(authoringSkill?.content).not.toContain('canvas.ingestMarkdown');
+    expect(authoringSkill?.content).not.toContain('mode=create-nodes');
     expect(skills.some((candidate) => candidate.name === 'canvas-markdown-storyboard')).toBe(false);
     expect(authoringSkill?.content).not.toContain('Use this skill only after');
   });

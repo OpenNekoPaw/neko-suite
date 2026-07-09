@@ -186,6 +186,58 @@ describe('skill runtime bootstrap', () => {
     expect(cleared).toEqual(['conversation-1']);
   });
 
+  it('syncs lifecycle projection after provider-driven lifecycle activation changes state', async () => {
+    const registry = new SkillRegistry();
+    const skill = makeSkill('storyboard');
+    registry.registerSkill(skill);
+    const bootstrap = createRuntimeSkillBootstrap({ registry });
+    const synced: string[] = [];
+    const state: RuntimeSkillProviderState = {
+      getActiveSkill: () => undefined,
+      getActiveSkillLifecycle: (conversationId) => ({
+        conversationId,
+        records: [],
+        diagnostics: [],
+      }),
+      syncSkillLifecycleProjection: (conversationId) => {
+        synced.push(conversationId);
+        return {
+          promptSections: [],
+          toolPolicy: {
+            mode: 'unrestricted',
+            contributingRecordIds: [],
+            diagnostics: [],
+          },
+          diagnostics: [],
+          visibleIndicators: [],
+        };
+      },
+      activateLifecycleSkill: async () => ({
+        success: true,
+        message: 'Activated skill "storyboard"',
+        lifecycleRecordId: 'record-storyboard',
+      }),
+      deactivateLifecycleSkill: async () => ({
+        success: true,
+        message: 'Skill deactivated',
+        removedRecordIds: ['record-storyboard'],
+      }),
+      applySkillInjection: vi.fn(),
+      clearActiveSkill: vi.fn(),
+    };
+
+    const provider = bootstrap.createSkillProviderFactory(state)('conversation-1');
+    const activation = await provider.activateSkill({
+      name: 'storyboard',
+      reason: 'Agent selected storyboard workflow',
+    });
+    const deactivation = await provider.deactivateSkill({ recordId: 'record-storyboard' });
+
+    expect(activation.success).toBe(true);
+    expect(deactivation.success).toBe(true);
+    expect(synced).toEqual(['conversation-1', 'conversation-1']);
+  });
+
   it('owns lazy skill sync error handling around host scan effects', async () => {
     const registry = new SkillRegistry();
     const bootstrap = createRuntimeSkillBootstrap({ registry });

@@ -1633,6 +1633,7 @@ describe('message runtime helpers', () => {
       buildAgentTurnConfigurationPlan({
         conversationId: 'conv-1',
         baseSystemPrompt: 'base',
+        customSystemPrompt: 'Prefer concise replies.',
         ambientCanvas: [{ nodeId: 'node-1', type: 'shot', summary: 'Opening shot' }],
         isPlanMode: true,
         executionMode: 'auto',
@@ -1648,6 +1649,7 @@ describe('message runtime helpers', () => {
     ).toEqual(
       expect.objectContaining({
         conversationId: 'conv-1',
+        systemPrompt: expect.stringContaining('base\n\n## User Custom Instructions'),
         executionMode: 'plan',
         modelId: 'gpt-4.1',
         temperature: 0.7,
@@ -1665,6 +1667,16 @@ describe('message runtime helpers', () => {
         }),
       }),
     );
+    const plan = buildAgentTurnConfigurationPlan({
+      conversationId: 'conv-1',
+      baseSystemPrompt: 'base',
+      customSystemPrompt: 'Prefer concise replies.',
+      isPlanMode: false,
+      executionMode: 'ask',
+    });
+    expect(plan.systemPrompt).toContain('base');
+    expect(plan.systemPrompt).toContain('Prefer concise replies.');
+    expect(plan.systemPrompt).toContain('runtime tool protocol');
   });
 
   it('lets per-turn execution overrides bypass prompt-mode defaults', () => {

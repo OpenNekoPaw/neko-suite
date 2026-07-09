@@ -68,7 +68,7 @@ export const settings = {
 
   'settings.prompts.title': '已配置的提示词',
   'settings.prompts.description':
-    '选择一个提示词预设进行对话。每个预设都有自己的系统提示词和参数配置。',
+    '选择一个提示词预设进行对话。预设提供自定义指令和参数配置；内置 system prompt 仍由 Neko 控制。',
   'settings.prompts.addPrompt': '+ 创建自定义提示词',
   'settings.prompts.editPrompt': '编辑提示词',
   'settings.prompts.createPrompt': '创建新提示词',
@@ -84,8 +84,9 @@ export const settings = {
   'settings.prompts.promptTypes.image': '图像 - AI 图像生成提示',
   'settings.prompts.promptTypes.video': '视频 - AI 视频生成提示',
   'settings.prompts.promptTypes.custom': '自定义 - 其他专业任务',
-  'settings.prompts.systemPrompt': '系统提示词 *',
-  'settings.prompts.systemPromptPlaceholder': '定义 AI 的行为、个性和能力...',
+  'settings.prompts.systemPrompt': '自定义指令 *',
+  'settings.prompts.systemPromptPlaceholder':
+    '添加用户或工作区偏好。运行时工具协议和能力 schema 仍由 Neko 控制。',
   'settings.prompts.characters': '{count} 个字符',
   'settings.prompts.behavior': '行为',
   'settings.prompts.autoExecuteTools': '自动执行工具',
@@ -122,7 +123,7 @@ export const settings = {
   'settings.prompts.editHelp': '用户和工作区提示词可在 VSCode 中编辑。内置提示词只能启用或禁用。',
   'settings.prompts.agentsTitle': '全局 Agent 指令 (AGENTS.md)',
   'settings.prompts.agentsDescription':
-    '全局指令会被注入到所有对话的系统提示词中。支持项目级和用户级配置。',
+    '全局指令会作为环境层 overlay 注入到所有对话中，不会替代内置 system prompt。支持项目级和用户级配置。',
   'settings.prompts.agentsPriorityHint':
     '优先级：项目级 (.neko/AGENTS.md) > 用户级 (~/.neko/AGENTS.md)',
   'settings.prompts.skillsHintTitle': '使用 Skills 自定义 AI 行为',

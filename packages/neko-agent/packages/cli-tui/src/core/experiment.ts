@@ -175,12 +175,14 @@ async function buildCliExperimentSessionConfig(
 
   const promptBuilder = createSystemPromptBuilder({ locale: 'en', mode: 'default' });
   await promptBuilder.loadAgentsFile(options.config.workDir, getDefaultPersonalPath());
+  const agentsOverride = promptBuilder.buildAgentsOverlay() ?? undefined;
   const conversationId = createConversationId(options.config.workDir);
 
   return buildAgentSessionConfigWithRuntime({
     service,
     toolRegistry,
-    systemPrompt: promptBuilder.build(),
+    systemPrompt: promptBuilder.buildBaseOnly(),
+    ...(agentsOverride !== undefined ? { agentsOverride } : {}),
     executionMode: 'auto',
     temperature: options.config.temperature,
     maxTokens: options.config.maxTokens,

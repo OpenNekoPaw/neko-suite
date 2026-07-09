@@ -17,6 +17,10 @@ export interface CliSkillLifecycleSessionBridge {
   syncProjection(): SkillLifecycleProjection;
 }
 
+interface CliSkillLifecycleProjectionState {
+  readonly activatedToolSets: Set<string>;
+}
+
 export function createCliSkillLifecycleRuntime(skillService: SkillService): SkillLifecycleRuntime {
   return new AgentSkillLifecycleRuntime({ skillService });
 }
@@ -28,10 +32,13 @@ export function wireCliSkillLifecycleSession(input: {
   readonly lifecycleRuntime: SkillLifecycleRuntime;
   readonly onProjection?: (projection: SkillLifecycleProjection) => void;
 }): CliSkillLifecycleSessionBridge {
+  const projectionState: CliSkillLifecycleProjectionState = {
+    activatedToolSets: new Set<string>(),
+  };
   const syncProjection = () => {
     const projection = input.lifecycleRuntime.project(input.conversationId);
     input.onProjection?.(projection);
-    synchronizeSessionProjectionAdapter(input.session, projection);
+    synchronizeSessionProjectionAdapter(input.session, projection, projectionState);
     return projection;
   };
 
@@ -196,7 +203,13 @@ export function deactivateCliSkillLifecycle(input: {
 function synchronizeSessionProjectionAdapter(
   session: IAgentSession,
   projection: SkillLifecycleProjection,
+  state: CliSkillLifecycleProjectionState,
 ): void {
+  for (const toolSetName of state.activatedToolSets) {
+    session.deactivateToolSet(toolSetName);
+  }
+  state.activatedToolSets.clear();
+
   if (projection.promptSections.length === 0 && projection.toolPolicy.mode === 'unrestricted') {
     session.clearActiveSkill();
     return;
@@ -221,6 +234,12 @@ function synchronizeSessionProjectionAdapter(
     },
     projectedSkill,
   );
+
+  if (projection.toolPolicy.activationTools?.length) {
+    for (const toolSetName of session.activateToolSetsForTools(projection.toolPolicy.activationTools)) {
+      state.activatedToolSets.add(toolSetName);
+    }
+  }
 }
 
 function isSkillLifecycleSlot(value: unknown): value is SkillLifecycleDeactivationRequest['slot'] {

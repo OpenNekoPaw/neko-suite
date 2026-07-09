@@ -522,6 +522,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
                 records: skillRuntime.projectSkillLifecycle(conversationId).visibleIndicators,
                 diagnostics: skillRuntime.projectSkillLifecycle(conversationId).diagnostics,
               }),
+              syncSkillLifecycleProjection: (conversationId) => {
+                const projection = skillRuntime.projectSkillLifecycle(conversationId);
+                this._agentManager?.applySkillLifecycleProjection(conversationId, projection);
+                return projection;
+              },
               activateLifecycleSkill: (conversationId, input) =>
                 skillRuntime.activateLifecycleSkill({
                   conversationId,

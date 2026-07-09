@@ -68,7 +68,7 @@ export const settings = {
 
   'settings.prompts.title': 'Configured Prompts',
   'settings.prompts.description':
-    'Select a prompt preset for conversations. Each preset has its own system prompt and parameter configuration.',
+    'Select a prompt preset for conversations. Presets provide custom instructions and parameter configuration; the built-in system prompt remains controlled by Neko.',
   'settings.prompts.addPrompt': '+ Create Custom Prompt',
   'settings.prompts.editPrompt': 'Edit Prompt',
   'settings.prompts.createPrompt': 'Create New Prompt',
@@ -84,9 +84,9 @@ export const settings = {
   'settings.prompts.promptTypes.image': 'Image - AI image generation prompts',
   'settings.prompts.promptTypes.video': 'Video - AI video generation prompts',
   'settings.prompts.promptTypes.custom': 'Custom - Other specialized tasks',
-  'settings.prompts.systemPrompt': 'System Prompt *',
+  'settings.prompts.systemPrompt': 'Custom Instructions *',
   'settings.prompts.systemPromptPlaceholder':
-    "Define the AI's behavior, personality, and capabilities...",
+    'Add user or workspace preferences. Runtime tool protocols and capability schemas remain controlled by Neko.',
   'settings.prompts.characters': '{count} characters',
   'settings.prompts.behavior': 'Behavior',
   'settings.prompts.autoExecuteTools': 'Auto-execute tools',
@@ -126,7 +126,7 @@ export const settings = {
     'User and workspace prompts can be edited in VSCode. Built-in prompts can only be enabled or disabled.',
   'settings.prompts.agentsTitle': 'Global Agent Instructions (AGENTS.md)',
   'settings.prompts.agentsDescription':
-    'Global instructions are injected into all conversations. Supports project-level and user-level configuration.',
+    'Global instructions are injected as an environment overlay in all conversations. They do not replace the built-in system prompt.',
   'settings.prompts.agentsPriorityHint':
     'Priority: Project (.neko/AGENTS.md) > User (~/.neko/AGENTS.md)',
   'settings.prompts.skillsHintTitle': 'Use Skills to Customize AI Behavior',

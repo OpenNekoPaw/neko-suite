@@ -533,6 +533,7 @@ export interface AgentTurnRuntimePlan {
 export interface AgentTurnConfigurationPlanInput {
   readonly conversationId: string;
   readonly baseSystemPrompt: string;
+  readonly customSystemPrompt?: string | null;
   readonly ambientCanvas?: readonly AgentAmbientCanvasNode[];
   readonly isPlanMode: boolean;
   readonly executionMode: 'auto' | 'ask' | 'plan';
@@ -1457,6 +1458,18 @@ export function appendAmbientCanvasSystemPrompt(
   );
 }
 
+export function appendCustomSystemPromptOverlay(
+  systemPrompt: string,
+  customSystemPrompt?: string | null,
+): string {
+  const trimmed = customSystemPrompt?.trim();
+  if (!trimmed) {
+    return systemPrompt;
+  }
+
+  return `${systemPrompt}\n\n## User Custom Instructions\n${trimmed}\n\nThese user-defined instructions are an overlay. Follow them when they do not conflict with the base system prompt, runtime tool protocol, capability schemas, permission policy, or safety boundaries.`;
+}
+
 function normalizeProjectFileFilter(filter?: string): string {
   return (filter ?? '').trim();
 }
@@ -1624,7 +1637,7 @@ export function buildAgentTurnConfigurationPlan(
 
   return {
     systemPrompt: appendAmbientCanvasSystemPrompt(
-      input.baseSystemPrompt,
+      appendCustomSystemPromptOverlay(input.baseSystemPrompt, input.customSystemPrompt),
       input.ambientCanvas ?? [],
     ),
     maxIterations: input.maxIterations ?? 200,

@@ -582,8 +582,8 @@ export async function executeAgentTurn<
 
   const turnConfig = buildAgentTurnConfigurationPlan({
     conversationId: input.conversationId,
-    baseSystemPrompt:
-      input.settings.customSystemPrompt || input.getBaseSystemPrompt(input.conversationId),
+    baseSystemPrompt: input.getBaseSystemPrompt(input.conversationId),
+    customSystemPrompt: input.settings.customSystemPrompt,
     ambientCanvas,
     isPlanMode: input.isPlanMode(input.conversationId),
     executionMode: input.settings.executionMode,

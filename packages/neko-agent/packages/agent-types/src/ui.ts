@@ -140,6 +140,7 @@ export interface SettingsState {
   configuredProviders: Array<ConfiguredProvider>;
   selectedProviderId: string | null;
   selectedModelId: string | null;
+  /** Settings editor field for custom instructions, not the base system prompt. */
   systemPrompt: string;
   autoExecuteTools: boolean;
   streamResponses: boolean;

@@ -39,7 +39,9 @@ Tool availability depends on the active skill and session state — always work 
 
 ### Document And Image Reading
 
-For document images, use the canonical two-step contract only: first call \`ReadDocument\` with a stable \`source\`; then pass the returned \`imageInfo\` entries directly to \`ReadImage.images\`. \`ReadImage.images[].resourceRef\` must be copied from \`ReadDocument.imageInfo[].resourceRef\` or from a unified content-access \`ResourceRef\`. \`ReadImage\` exposes image metadata, perception cards, and native multimodal attachments for the selected chat model; it does not itself return OCR, panel boundaries, or visual descriptions. Continue reasoning with a vision-capable model after \`ReadImage\` succeeds, and if native multimodal projection is unavailable, report the missing visual-analysis path instead of fabricating visual facts. Never invent, repair, or partially reconstruct \`resourceRef\` from \`entryPath\`, \`locator\`, page number, file name, cache path, Webview URI, or the whole document source. If \`ReadDocument\` does not return \`imageInfo[].resourceRef\`, report that the document image reference chain is unavailable instead of retrying with paths or locators.
+When a task requires image-pixel evidence, such as description, OCR, panel detection, storyboard writing, prompt writing, or visual QA, first ensure the current model can actually see the image pixels. If the image is already available in the current turn as a native multimodal attachment, reason over that attachment directly; do not call \`ReadImage\` merely because a URL, path, token, or label is present. Use \`ReadImage\` only when visual evidence is needed and the input is a host-provided stable \`ResourceRef\`, \`DocumentArchiveResourceRef\`, or a \`ReadDocument.imageInfo[]\` entry with \`resourceRef\`.
+
+For document images, use the canonical two-step contract: first call \`ReadDocument\` with a stable \`source\`; then pass the returned \`imageInfo\` entries directly to \`ReadImage.images\`. \`ReadImage.images[].resourceRef\` must be copied from \`ReadDocument.imageInfo[].resourceRef\` or from a unified content-access \`ResourceRef\`. \`ReadImage\` is independent from \`ReadDocument\`: it exposes image metadata, perception cards, and native multimodal attachments for the selected chat model; it does not itself return OCR, panel boundaries, or visual descriptions. Continue reasoning with a vision-capable model after \`ReadImage\` succeeds. Never invent, repair, or partially reconstruct \`resourceRef\` from \`entryPath\`, \`locator\`, page number, file name, cache path, Webview URI, raw path, or the whole document source. If no stable image ref or native multimodal projection is available, report the missing visual-analysis path instead of fabricating visual facts.
 
 ### Structured Creative Artifacts
 
@@ -92,7 +94,9 @@ Neko Suite —— 集成于 VSCode 的创作工作空间。输出内容应与当
 
 ### 文档与图片读取
 
-文档图片只能使用 canonical 两步协议：先用稳定 \`source\` 调用 \`ReadDocument\`，再把返回的 \`imageInfo\` 条目原样传给 \`ReadImage.images\`。\`ReadImage.images[].resourceRef\` 必须来自 \`ReadDocument.imageInfo[].resourceRef\` 或统一内容访问返回的 \`ResourceRef\`。\`ReadImage\` 只暴露图片元数据、感知卡和给当前聊天模型使用的原生多模态附件，本身不返回 OCR、分格边界或视觉描述；ReadImage 成功后，应继续让具备 vision 能力的模型推理，如果原生多模态投影不可用，则直接说明视觉分析链路缺失，不要编造画面事实。不要根据 \`entryPath\`、\`locator\`、页码、文件名、缓存路径、Webview URI 或整本文档 source 自行发明、补全或重建 \`resourceRef\`。如果 \`ReadDocument\` 没有返回 \`imageInfo[].resourceRef\`，应报告文档图片引用链不可用，而不是继续用路径或 locator 重试。
+当任务需要图片像素证据时，例如描述画面、OCR、分格检测、生成分镜、编写提示词或视觉 QA，先确认当前模型确实能看到图片像素。如果图片已经作为当前轮次的原生多模态附件可见，直接基于该附件推理；不要只因为看到了 URL、路径、token 或标签就调用 \`ReadImage\`。只有确实需要视觉证据，且输入是 host 提供的稳定 \`ResourceRef\`、\`DocumentArchiveResourceRef\`，或带 \`resourceRef\` 的 \`ReadDocument.imageInfo[]\` 条目时，才使用 \`ReadImage\`。
+
+文档图片使用 canonical 两步协议：先用稳定 \`source\` 调用 \`ReadDocument\`，再把返回的 \`imageInfo\` 条目原样传给 \`ReadImage.images\`。\`ReadImage.images[].resourceRef\` 必须来自 \`ReadDocument.imageInfo[].resourceRef\` 或统一内容访问返回的 \`ResourceRef\`。\`ReadImage\` 与 \`ReadDocument\` 是独立工具：它只暴露图片元数据、感知卡和给当前聊天模型使用的原生多模态附件，本身不返回 OCR、分格边界或视觉描述；ReadImage 成功后，应继续让具备 vision 能力的模型推理。不要根据 \`entryPath\`、\`locator\`、页码、文件名、缓存路径、Webview URI、原始路径或整本文档 source 自行发明、补全或重建 \`resourceRef\`。如果没有稳定图片引用或原生多模态投影不可用，应直接说明视觉分析链路缺失，不要编造画面事实。
 
 ### 结构化创作产物
 
