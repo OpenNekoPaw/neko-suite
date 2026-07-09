@@ -80,6 +80,8 @@ function getManifestKind(manifest: AssetManifest): string | undefined {
       return metadata.data.presetKind;
     case 'identity':
       return metadata.data.identityKind;
+    case 'profile':
+      return metadata.data.profileKinds.length === 1 ? metadata.data.profileKinds[0] : undefined;
     default:
       return undefined;
   }

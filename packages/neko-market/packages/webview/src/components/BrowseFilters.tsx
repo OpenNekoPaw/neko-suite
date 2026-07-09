@@ -30,7 +30,7 @@ const CATEGORY_OPTIONS: Array<{ key: BrowseFilterState['category']; i18nKey: str
 const TYPES_BY_CATEGORY: Record<AssetCategory, AssetType[]> = {
   media: ['media', 'starter', 'identity'],
   ai: ['model', 'endpoint', 'provider'],
-  tooling: ['skill', 'plugin', 'shader', 'preset'],
+  tooling: ['skill', 'profile', 'processor', 'plugin', 'shader', 'preset'],
   bundle: ['bundle'],
 };
 
@@ -50,6 +50,7 @@ const KIND_OPTIONS: Partial<Record<AssetType, string[]>> = {
     'convention',
   ],
   identity: ['character', 'location', 'object', 'style'],
+  profile: ['artifact', 'creation', 'provider-expression'],
 };
 
 const SORT_OPTIONS: Array<{ key: MarketSort; i18nKey: string }> = [

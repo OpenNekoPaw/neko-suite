@@ -12,6 +12,7 @@ import { EndpointInstallTarget } from './EndpointInstallTarget';
 import { ModelInstallTarget } from './ModelInstallTarget';
 import { ProcessorInstallTarget } from './ProcessorInstallTarget';
 import { NEKO_MARKET_EXTENSION_ID, type NekoMarketAPI } from './marketApi';
+import { ProfilePackageInstallTarget } from './ProfilePackageInstallTarget';
 import { ProviderCardInstallTarget } from './ProviderCardInstallTarget';
 
 export async function registerMarketInstallTargets(
@@ -56,6 +57,7 @@ export async function registerMarketInstallTargets(
       ),
       market.registerInstallTarget(new EndpointInstallTarget()),
       market.registerInstallTarget(new ProviderCardInstallTarget()),
+      market.registerInstallTarget(new ProfilePackageInstallTarget()),
       market.registerInstallTarget(new ModelInstallTarget(undefined, host)),
       market.registerInstallTarget(new ProcessorInstallTarget(undefined, host)),
     );
