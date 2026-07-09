@@ -3,6 +3,8 @@ import { DEFAULT_CONFIG } from '@neko/shared';
 import {
   CUSTOM_NEWAPI_PROVIDER_ID,
   DEFAULT_USER_CONFIG,
+  GOOGLE_GEMINI_MEDIA_UNDERSTAND_MODEL_ID,
+  GOOGLE_PROVIDER_ID,
   NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID,
   NEKO_GATEWAY_DEFAULT_CHAT_MODEL_ID,
   NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID,
@@ -45,6 +47,14 @@ describe('default agent provider configuration', () => {
       protocolProfile: 'ollama',
       requiresApiKey: false,
     });
+    expect(providers.get(GOOGLE_PROVIDER_ID)).toMatchObject({
+      type: 'google',
+      connectionKind: 'direct',
+      protocolProfile: 'google',
+      supportLevel: 'verified',
+      enabled: false,
+      requiresApiKey: true,
+    });
   });
 
   it('uses canonical provider/model refs for default models by type', () => {
@@ -82,5 +92,23 @@ describe('default agent provider configuration', () => {
     expect(musicModel).toBeDefined();
     if (!musicModel) throw new Error('Expected default music model');
     expect(modelSupportsPurpose(musicModel, 'audio.music.generate')).toBe(true);
+
+    const geminiVideoModel = models.get(GOOGLE_GEMINI_MEDIA_UNDERSTAND_MODEL_ID);
+    expect(geminiVideoModel).toMatchObject({
+      providerId: GOOGLE_PROVIDER_ID,
+      type: 'llm',
+      enabled: false,
+      capabilities: expect.arrayContaining([
+        'image.understand',
+        'audio.understand',
+        'video.understand',
+        'vision',
+        'llm.chat',
+      ]),
+    });
+    if (!geminiVideoModel) throw new Error('Expected default Gemini media understanding model');
+    expect(modelSupportsPurpose(geminiVideoModel, 'image.understand')).toBe(true);
+    expect(modelSupportsPurpose(geminiVideoModel, 'audio.understand')).toBe(true);
+    expect(modelSupportsPurpose(geminiVideoModel, 'video.understand')).toBe(true);
   });
 });

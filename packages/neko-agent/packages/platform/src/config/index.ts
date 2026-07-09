@@ -37,6 +37,7 @@ export {
   buildAssistantRuntimeSettingsSnapshot,
   buildAssistantSettingsSnapshot,
   buildDefaultMediaModelOptionIds,
+  MEDIA_UNDERSTANDING_PURPOSES,
   mapAssistantSettingsToUnifiedScalars,
   mapWebviewSettingsToUnifiedScalars,
   selectAssistantDefaultProvider,
@@ -51,6 +52,12 @@ export {
   type AssistantRuntimeSettingsSnapshot,
   type AssistantSettingsData,
   type AssistantSettingsSnapshot,
+  type MediaUnderstandingCategory,
+  type MediaUnderstandingModelSource,
+  type MediaUnderstandingModelStatus,
+  type MediaUnderstandingModelStatusValue,
+  type MediaUnderstandingModels,
+  type MediaUnderstandingPurpose,
 } from './assistant-config';
 export {
   projectAgentPresetIntent,

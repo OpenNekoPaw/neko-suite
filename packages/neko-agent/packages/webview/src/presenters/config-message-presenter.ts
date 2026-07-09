@@ -15,6 +15,12 @@ import type {
   MediaModelDefaults,
   MediaModelSelectionDefaultsProjection,
   MediaModelSelectionState,
+  MediaUnderstandingCategory,
+  MediaUnderstandingModelSource,
+  MediaUnderstandingModelStatus,
+  MediaUnderstandingModelStatusValue,
+  MediaUnderstandingModels,
+  MediaUnderstandingPurpose,
   MessageModelProjection,
   MessageModelProjectionInput,
   ModelRef,
@@ -39,12 +45,18 @@ import type {
 } from '@neko-agent/types';
 
 const AGENT_MEDIA_CATEGORIES: readonly AgentMediaModelCategory[] = ['image', 'video', 'audio'];
+const MEDIA_UNDERSTANDING_PURPOSES = {
+  image: 'image.understand',
+  audio: 'audio.understand',
+  video: 'video.understand',
+} as const satisfies Record<MediaUnderstandingCategory, MediaUnderstandingPurpose>;
 
 export function projectSettingsDataMessage(message: SettingsDataMessage): SettingsDataProjection {
   const source = asRecord(message) ?? {};
   const selectedProviderId = readString(source, 'selectedProviderId') ?? null;
   const selectedModelId = readString(source, 'selectedModelId') ?? null;
   const configDiagnostic = readConfigDiagnostic(source.configDiagnostic);
+  const mediaUnderstandingModels = readMediaUnderstandingModels(source.mediaUnderstandingModels);
 
   return {
     settingsPatch: {
@@ -62,6 +74,7 @@ export function projectSettingsDataMessage(message: SettingsDataMessage): Settin
       ...(Array.isArray(source.modelGroups)
         ? { modelGroups: readModelSourceGroups(source.modelGroups) }
         : {}),
+      ...(mediaUnderstandingModels ? { mediaUnderstandingModels } : {}),
       configDiagnostic,
     },
     selectedModel:
@@ -247,6 +260,9 @@ export function projectConfigStateMessage(
   message: ConfigStateMessage,
 ): Partial<SettingsState> | null {
   if (!message.config) return null;
+  const mediaUnderstandingModels = readMediaUnderstandingModels(
+    message.config.mediaUnderstandingModels,
+  );
   return {
     configuredProviders: message.config.configuredProviders ?? [],
     ...(Array.isArray(message.config.modelGroups)
@@ -254,6 +270,7 @@ export function projectConfigStateMessage(
           modelGroups: readModelSourceGroups(message.config.modelGroups),
         }
       : {}),
+    ...(mediaUnderstandingModels ? { mediaUnderstandingModels } : {}),
     configDiagnostic: readConfigDiagnostic(message.config.configDiagnostic),
   };
 }
@@ -315,6 +332,85 @@ function readMediaModelDefaults(value: unknown): MediaModelDefaults {
     if (model) defaults[category] = model;
   }
   return defaults;
+}
+
+function readMediaUnderstandingModels(value: unknown): MediaUnderstandingModels | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+
+  const image = readMediaUnderstandingModelStatus(
+    record.image,
+    'image',
+    MEDIA_UNDERSTANDING_PURPOSES.image,
+  );
+  const audio = readMediaUnderstandingModelStatus(
+    record.audio,
+    'audio',
+    MEDIA_UNDERSTANDING_PURPOSES.audio,
+  );
+  const video = readMediaUnderstandingModelStatus(
+    record.video,
+    'video',
+    MEDIA_UNDERSTANDING_PURPOSES.video,
+  );
+  if (!image || !audio || !video) return undefined;
+  return { image, audio, video };
+}
+
+function readMediaUnderstandingModelStatus(
+  value: unknown,
+  category: MediaUnderstandingCategory,
+  purpose: MediaUnderstandingPurpose,
+): MediaUnderstandingModelStatus | undefined {
+  const record = asRecord(value);
+  if (!record || record.category !== category || record.purpose !== purpose) {
+    return undefined;
+  }
+  const status = record.status;
+  if (!isMediaUnderstandingModelStatusValue(status)) {
+    return undefined;
+  }
+
+  const source = readMediaUnderstandingModelSource(record.source);
+  return {
+    category,
+    purpose,
+    status,
+    ...readOptionalStringProps(record, [
+      'providerId',
+      'modelId',
+      'optionId',
+      'label',
+      'providerLabel',
+    ]),
+    ...(source ? { source } : {}),
+  };
+}
+
+function isMediaUnderstandingModelStatusValue(
+  value: unknown,
+): value is MediaUnderstandingModelStatusValue {
+  return value === 'configured' || value === 'auto' || value === 'missing';
+}
+
+function readMediaUnderstandingModelSource(
+  value: unknown,
+): MediaUnderstandingModelSource | undefined {
+  return value === 'explicit-config' || value === 'account-gateway' ? value : undefined;
+}
+
+function readOptionalStringProps(
+  record: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const key of keys) {
+    const value = readString(record, key);
+    if (value !== undefined) {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 function readConfigDiagnostic(value: unknown): SettingsState['configDiagnostic'] | undefined {

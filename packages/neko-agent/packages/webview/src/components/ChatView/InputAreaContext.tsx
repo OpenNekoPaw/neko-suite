@@ -6,7 +6,12 @@
  */
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { ShellExecutionMode, PromptMode, SessionMode } from '@neko-agent/types';
+import type {
+  MediaUnderstandingModels,
+  ShellExecutionMode,
+  PromptMode,
+  SessionMode,
+} from '@neko-agent/types';
 import type { ConversationKind } from '@neko-agent/types';
 import type { ChatModelOption } from '@neko/shared';
 import type { AgentContextPayload } from '@neko/shared';
@@ -34,6 +39,8 @@ export interface InputAreaContextValue {
   // Media Models (per-category selection)
   mediaModelSelection: MediaModelSelection;
   availableMediaModels: ChatModelOption[];
+  /** Read-only model routing for native media understanding. */
+  mediaUnderstandingModels?: MediaUnderstandingModels;
   onMediaModelSelect: (category: MediaCategory, modelId: string) => void;
   // Session mode (top-level workflow routing)
   sessionMode: SessionMode;
@@ -91,6 +98,7 @@ export function InputAreaProvider({
       onModelSelect: value.onModelSelect,
       mediaModelSelection: value.mediaModelSelection,
       availableMediaModels: value.availableMediaModels,
+      mediaUnderstandingModels: value.mediaUnderstandingModels,
       onMediaModelSelect: value.onMediaModelSelect,
       sessionMode: value.sessionMode,
       conversationKind: value.conversationKind,
@@ -128,6 +136,7 @@ export function InputAreaProvider({
       value.onModelSelect,
       value.mediaModelSelection,
       value.availableMediaModels,
+      value.mediaUnderstandingModels,
       value.onMediaModelSelect,
       value.sessionMode,
       value.conversationKind,

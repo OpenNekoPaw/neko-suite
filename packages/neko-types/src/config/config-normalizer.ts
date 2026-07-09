@@ -34,6 +34,12 @@ export function mergeConfigs(base: UnifiedConfig, override: UnifiedConfig): Unif
       ...override.defaultModels,
     };
   }
+  if (base.defaultModelPurposes || override.defaultModelPurposes) {
+    merged.defaultModelPurposes = {
+      ...base.defaultModelPurposes,
+      ...override.defaultModelPurposes,
+    };
+  }
   if (override.maxTokens !== undefined) {
     merged.maxTokens = override.maxTokens;
   }

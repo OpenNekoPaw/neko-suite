@@ -265,6 +265,27 @@ describe('PerceptionPipeline', () => {
     ]);
   });
 
+  it('fails visibly when every Layer 1 client method rejects', async () => {
+    const pipeline = new PerceptionPipeline(
+      createPorts({
+        modality: 'image',
+        perceptionClient: {
+          describe: vi.fn(async () => {
+            throw new Error('image understanding model is not configured');
+          }),
+        },
+      }),
+      { now: () => 16 },
+    );
+
+    await expect(
+      pipeline.perceive({
+        asset: { assetId: 'image-1' },
+        policy: { timing: 'on-demand', layers: [0, 1], reason: 'test' },
+      }),
+    ).rejects.toThrow('image understanding model is not configured');
+  });
+
   it('keeps successful Layer 2 refs when another derived asset method fails', async () => {
     const pipeline = new PerceptionPipeline(
       createPorts({
@@ -282,7 +303,7 @@ describe('PerceptionPipeline', () => {
           ]),
         },
       }),
-      { now: () => 16 },
+      { now: () => 17 },
     );
 
     const result = await pipeline.perceive({
@@ -293,6 +314,61 @@ describe('PerceptionPipeline', () => {
     expect(result.card.layerStatus.layer2).toBe('complete');
     expect(result.card.perceptual).toEqual({
       keyframeRefs: [expect.objectContaining({ assetId: 'key-1' })],
+    });
+  });
+
+  it('keeps original provider-loadable video refs for native video understanding', async () => {
+    const pipeline = new PerceptionPipeline(createPorts({ modality: 'video' }), { now: () => 18 });
+
+    const result = await pipeline.perceive({
+      asset: {
+        assetId: 'video-1',
+        ref: {
+          assetId: 'video-1',
+          uri: '${WORKSPACE}/scene.mp4',
+          mimeType: 'video/mp4',
+        },
+      },
+      policy: { timing: 'on-demand', layers: [0, 2], reason: 'test' },
+    });
+
+    expect(result.card.layerStatus.layer2).toBe('complete');
+    expect(result.card.perceptual).toEqual({
+      multiViewRefs: [
+        {
+          assetId: 'video-1',
+          uri: '${WORKSPACE}/scene.mp4',
+          mimeType: 'video/mp4',
+        },
+      ],
+    });
+  });
+
+  it('keeps original provider-loadable image refs for native image understanding', async () => {
+    const pipeline = new PerceptionPipeline(
+      createPorts({ modality: 'image', mimeType: 'image/png' }),
+      { now: () => 19 },
+    );
+
+    const result = await pipeline.perceive({
+      asset: {
+        assetId: 'image-1',
+        ref: {
+          assetId: 'image-1',
+          uri: '${WORKSPACE}/frame.png',
+          mimeType: 'image/png',
+        },
+      },
+      policy: { timing: 'on-demand', layers: [0, 2], reason: 'test' },
+    });
+
+    expect(result.card.layerStatus.layer2).toBe('complete');
+    expect(result.card.perceptual).toEqual({
+      thumbnailRef: {
+        assetId: 'image-1',
+        uri: '${WORKSPACE}/frame.png',
+        mimeType: 'image/png',
+      },
     });
   });
 });
@@ -317,11 +393,27 @@ describe('PerceiveTool', () => {
     };
     const tool = new PerceiveTool({ pipeline, now: () => 20 });
 
-    const result = await tool.execute({ assetId: 'asset-1', depth: 1, focus: 'visual' });
+    const result = await tool.execute({
+      assetId: 'asset-1',
+      depth: 1,
+      focus: 'visual',
+      ref: {
+        assetId: 'asset-1',
+        uri: '${WORKSPACE}/asset.png',
+        mimeType: 'image/png',
+      },
+    });
 
     expect(pipeline.perceive).toHaveBeenCalledWith(
       expect.objectContaining({
-        asset: { assetId: 'asset-1' },
+        asset: {
+          assetId: 'asset-1',
+          ref: {
+            assetId: 'asset-1',
+            uri: '${WORKSPACE}/asset.png',
+            mimeType: 'image/png',
+          },
+        },
         focus: 'visual',
         policy: expect.objectContaining({ timing: 'on-demand', layers: [0, 1] }),
       }),
@@ -351,6 +443,7 @@ function createPorts(input: {
     resolver: {
       resolve: vi.fn(async (selector) => ({
         assetId: selector.assetId,
+        ...(selector.ref ? { ref: selector.ref, uri: selector.ref.uri } : {}),
         modality: input.modality,
         mimeType,
         resolvedPath: `/tmp/${selector.assetId}`,

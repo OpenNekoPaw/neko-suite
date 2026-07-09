@@ -23,6 +23,7 @@ export type AgentConfigDiagnosticCode =
   | 'unsupportedModelType'
   | 'unsupportedDefaultMediaModelType'
   | 'unsupportedDefaultModelType'
+  | 'unsupportedDefaultModelPurpose'
   | 'invalidDefaultModelBinding'
   | 'unsupportedWorkspaceProviderDefinition'
   | 'unsupportedWorkspaceModelDefinition'

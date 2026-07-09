@@ -201,9 +201,9 @@ export class ResourceCacheContentAccessProvider implements ContentAccessProvider
           role: variant.role,
           uri: projected.uri,
           localPath: projected.absolutePath,
-          mimeType: projected.variant.mimeType,
-          width: projected.variant.width,
-          height: projected.variant.height,
+          mimeType: readCacheResultMimeType(projected),
+          width: readCacheResultWidth(projected),
+          height: readCacheResultHeight(projected),
           sizeBytes: projected.variantEntry?.sizeBytes,
           diagnostics: [createCacheDiagnostic(projected.status, this.id, request, projected.error)],
           error: projected.error,
@@ -217,9 +217,9 @@ export class ResourceCacheContentAccessProvider implements ContentAccessProvider
         role: variant.role,
         uri: projected.uri,
         localPath: projected.absolutePath,
-        mimeType: projected.variant.mimeType,
-        width: projected.variant.width,
-        height: projected.variant.height,
+        mimeType: readCacheResultMimeType(projected),
+        width: readCacheResultWidth(projected),
+        height: readCacheResultHeight(projected),
         sizeBytes: projected.variantEntry?.sizeBytes,
         error: projected.error,
       };
@@ -235,9 +235,9 @@ export class ResourceCacheContentAccessProvider implements ContentAccessProvider
         source: request.ref,
         role: variant.role,
         localPath: result.absolutePath,
-        mimeType: result.variant.mimeType,
-        width: result.variant.width,
-        height: result.variant.height,
+        mimeType: readCacheResultMimeType(result),
+        width: readCacheResultWidth(result),
+        height: readCacheResultHeight(result),
         sizeBytes: result.variantEntry?.sizeBytes,
         diagnostics: [createCacheDiagnostic(result.status, this.id, request, result.error)],
         error: result.error,
@@ -270,9 +270,9 @@ export class ResourceCacheContentAccessProvider implements ContentAccessProvider
         role: variant.role,
         bytes: await this.fileOps.readFile(result.absolutePath),
         localPath: result.absolutePath,
-        mimeType: result.variant.mimeType,
-        width: result.variant.width,
-        height: result.variant.height,
+        mimeType: readCacheResultMimeType(result),
+        width: readCacheResultWidth(result),
+        height: readCacheResultHeight(result),
         sizeBytes: result.variantEntry?.sizeBytes,
       };
     }
@@ -284,9 +284,9 @@ export class ResourceCacheContentAccessProvider implements ContentAccessProvider
       source: request.ref,
       role: variant.role,
       localPath: result.absolutePath,
-      mimeType: result.variant.mimeType,
-      width: result.variant.width,
-      height: result.variant.height,
+      mimeType: readCacheResultMimeType(result),
+      width: readCacheResultWidth(result),
+      height: readCacheResultHeight(result),
       sizeBytes: result.variantEntry?.sizeBytes,
       error: result.error,
     };
@@ -978,6 +978,27 @@ function resolveVariant(request: ContentAccessRequest): ResourceVariantRequest {
   return request.variant ?? { role: request.role ?? 'preview' };
 }
 
+function readCacheResultMimeType(result: {
+  readonly variant: { readonly mimeType?: string };
+  readonly variantEntry?: { readonly mimeType?: string };
+}): string | undefined {
+  return result.variantEntry?.mimeType ?? result.variant.mimeType;
+}
+
+function readCacheResultWidth(result: {
+  readonly variant: { readonly width?: number };
+  readonly variantEntry?: { readonly width?: number };
+}): number | undefined {
+  return result.variantEntry?.width ?? result.variant.width;
+}
+
+function readCacheResultHeight(result: {
+  readonly variant: { readonly height?: number };
+  readonly variantEntry?: { readonly height?: number };
+}): number | undefined {
+  return result.variantEntry?.height ?? result.variant.height;
+}
+
 function mapCacheStatus(status: ResourceCacheStatus): ContentAccessStatus {
   switch (status) {
     case 'ready':
@@ -1064,7 +1085,11 @@ function createWorkspaceMediaPathFailure(
   result: WorkspaceMediaPathResolution,
 ): ContentAccessResult {
   if (result.status === 'remote') {
-    return unsupportedDestination(request, providerId, 'Remote source reads are not supported yet.');
+    return unsupportedDestination(
+      request,
+      providerId,
+      'Remote source reads are not supported yet.',
+    );
   }
   const diagnostics = mapWorkspaceMediaPathDiagnostics(providerId, request, result.diagnostics);
   const errorDiagnostic =

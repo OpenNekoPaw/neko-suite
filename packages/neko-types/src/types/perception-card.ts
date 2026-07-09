@@ -5,13 +5,7 @@ import type { ToolResultArtifactTransfer, ToolResultAttachment } from './tool';
 export type PerceptionLayerStatus = 'pending' | 'complete' | 'skipped' | 'failed';
 
 export type PerceptionEvidenceKind =
-  | 'description'
-  | 'transcript'
-  | 'loudness'
-  | 'clip-score'
-  | 'shot-boundaries'
-  | 'tags'
-  | 'custom';
+  'description' | 'transcript' | 'loudness' | 'clip-score' | 'shot-boundaries' | 'tags' | 'custom';
 
 export type PerceptionTiming = 'on-completion' | 'on-reference' | 'on-demand';
 
@@ -106,6 +100,7 @@ export type PerceptionFocus = 'transcript' | 'visual' | 'audio' | 'shots' | 'com
 
 export interface PerceiveToolInput {
   readonly assetId: string;
+  readonly ref?: PerceptualAssetRef;
   readonly depth: 1 | 2;
   readonly focus?: PerceptionFocus;
   readonly options?: {
@@ -116,14 +111,10 @@ export interface PerceiveToolInput {
 }
 
 export type ToolResultBackfillConflictStrategy =
-  | 'diagnostic'
-  | 'preserve-existing'
-  | 'overwrite-listed';
+  'diagnostic' | 'preserve-existing' | 'overwrite-listed';
 
 export type ToolResultBackfillDiagnosticReason =
-  | 'conflict'
-  | 'missing-tool-call'
-  | 'invalid-existing-result';
+  'conflict' | 'missing-tool-call' | 'invalid-existing-result';
 
 export interface ToolResultBackfillMergePolicy {
   readonly overwriteKeys: readonly string[];

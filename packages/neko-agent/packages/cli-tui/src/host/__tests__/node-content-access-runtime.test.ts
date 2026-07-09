@@ -3,7 +3,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import AdmZipModule from 'adm-zip';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createDocumentResourceRef } from '@neko/shared/content-access';
+import {
+  createDocumentResourceRef,
+  createGeneratedAssetResourceRef,
+} from '@neko/shared/content-access';
 import {
   createNodeContentAccessRuntime,
   loadTuiDocumentReaderModule,
@@ -111,6 +114,32 @@ describe('node content access runtime path variables', () => {
     expect(Buffer.from(fs.readFileSync(result.uri ?? '')).toString('utf8')).toBe(
       'cached-document-image',
     );
+  });
+
+  it('loads generated asset resource refs through the shared resource cache', async () => {
+    const workDir = createTempDir();
+    const generatedPath = path.join(workDir, 'neko/generated/image/asset-1.png');
+    const imageBytes = Buffer.from('generated-image-bytes');
+    fs.mkdirSync(path.dirname(generatedPath), { recursive: true });
+    fs.writeFileSync(generatedPath, imageBytes);
+    const runtime = createNodeContentAccessRuntime({
+      host: createNodeWorkspaceContentHostAdapter({ workDir }),
+    });
+    const resourceRef = createGeneratedAssetResourceRef({
+      assetId: 'asset-1',
+      path: '${WORKSPACE}/neko/generated/image/asset-1.png',
+      mimeType: 'image/png',
+    });
+
+    const result = await runtime.loadProviderAsset({
+      caller: 'read-image',
+      source: resourceRef,
+      preferredTarget: 'bytes',
+    });
+
+    expect(result.status).toBe('ready');
+    expect(result.mimeType).toBe('image/png');
+    expect(Buffer.from(result.bytes ?? []).toString('utf8')).toBe('generated-image-bytes');
   });
 });
 

@@ -1298,6 +1298,7 @@ export function ConversationController({
               onModelSelect={handleModelSelect}
               mediaModelSelection={mediaModelSelection}
               availableMediaModels={entryModelState.availableMediaModels}
+              mediaUnderstandingModels={activeSettings.mediaUnderstandingModels}
               onMediaModelSelect={handleEntryMediaModelSelect}
               executionMode={activeSettings.executionMode}
               onExecutionModeChange={(mode) => updateActiveSettings({ executionMode: mode })}
@@ -1364,6 +1365,7 @@ export function ConversationController({
             setSelectedModel={handleModelSelect}
             mediaModelSelection={mediaModelSelection}
             setMediaModelSelection={setMediaModelSelection}
+            mediaUnderstandingModels={activeSettings.mediaUnderstandingModels}
             mentionItems={mentionItems}
             onMentionSearchFilterChange={updateMentionSearchFilter}
             pluginCommands={pluginCommands}

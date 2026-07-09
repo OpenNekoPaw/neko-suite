@@ -118,9 +118,16 @@ export class PerceptionPipeline {
     }
 
     const results = await Promise.allSettled(tasks);
-    return results.flatMap((result) =>
+    const evidences = results.flatMap((result) =>
       result.status === 'fulfilled' && result.value ? [result.value] : [],
     );
+    if (evidences.length === 0) {
+      const rejection = results.find((result) => result.status === 'rejected');
+      if (rejection?.status === 'rejected') {
+        throwPerceptionClientError(rejection.reason);
+      }
+    }
+    return evidences;
   }
 
   private async runEvidenceWithRetry(
@@ -145,8 +152,16 @@ export class PerceptionPipeline {
     asset: ResolvedPerceptualAsset,
     input: PerceptionPipelineInput,
   ): Promise<PerceptionCard['perceptual'] | undefined> {
+    const providerReadyImageRef = asset.modality === 'image' && asset.ref ? asset.ref : undefined;
+    const providerReadyVideoRefs = asset.modality === 'video' && asset.ref ? [asset.ref] : [];
     const port = this.ports.perceptualAsset;
-    if (!port) return undefined;
+    if (!port) {
+      return providerReadyImageRef
+        ? { thumbnailRef: providerReadyImageRef }
+        : providerReadyVideoRefs.length > 0
+          ? { multiViewRefs: providerReadyVideoRefs }
+          : undefined;
+    }
 
     const request = {
       asset,
@@ -165,21 +180,24 @@ export class PerceptionPipeline {
         ? settleOptional(() => port.createMultiView?.(request))
         : Promise.resolve(undefined),
     ]);
+    const allMultiViewRefs = [...providerReadyVideoRefs, ...(multiViewRefs ?? [])];
 
     if (
-      !thumbnailRef &&
+      !(thumbnailRef ?? providerReadyImageRef) &&
       (!keyframeRefs || keyframeRefs.length === 0) &&
       !waveformRef &&
-      (!multiViewRefs || multiViewRefs.length === 0)
+      allMultiViewRefs.length === 0
     ) {
       return undefined;
     }
 
     return {
-      ...(thumbnailRef ? { thumbnailRef } : {}),
+      ...((thumbnailRef ?? providerReadyImageRef)
+        ? { thumbnailRef: thumbnailRef ?? providerReadyImageRef }
+        : {}),
       ...(keyframeRefs && keyframeRefs.length > 0 ? { keyframeRefs } : {}),
       ...(waveformRef ? { waveformRef } : {}),
-      ...(multiViewRefs && multiViewRefs.length > 0 ? { multiViewRefs } : {}),
+      ...(allMultiViewRefs.length > 0 ? { multiViewRefs: allMultiViewRefs } : {}),
     };
   }
 }
@@ -242,4 +260,11 @@ async function settleOptional<T>(
   } catch {
     return undefined;
   }
+}
+
+function throwPerceptionClientError(reason: unknown): never {
+  if (reason instanceof Error) {
+    throw reason;
+  }
+  throw new Error(String(reason));
 }

@@ -34,4 +34,58 @@ describe('model-purpose-registry', () => {
       ),
     ).toBe(true);
   });
+
+  it('requires explicit native video understanding instead of generic vision', () => {
+    expect(
+      modelSupportsPurpose(
+        createModel({ id: 'vision-only', type: 'llm', capabilities: ['chat', 'vision'] }),
+        'video.understand',
+      ),
+    ).toBe(false);
+    expect(
+      modelSupportsPurpose(
+        createModel({
+          id: 'gemini-video',
+          type: 'llm',
+          capabilities: ['chat', 'vision', 'video.understand'],
+        }),
+        'video.understand',
+      ),
+    ).toBe(true);
+  });
+
+  it('requires explicit native image and audio understanding capabilities', () => {
+    expect(
+      modelSupportsPurpose(
+        createModel({ id: 'vision-only', type: 'llm', capabilities: ['chat', 'vision'] }),
+        'image.understand',
+      ),
+    ).toBe(false);
+    expect(
+      modelSupportsPurpose(
+        createModel({ id: 'tts', type: 'audio', capabilities: ['text_to_audio', 'audio'] }),
+        'audio.understand',
+      ),
+    ).toBe(false);
+    expect(
+      modelSupportsPurpose(
+        createModel({
+          id: 'gemini-media',
+          type: 'llm',
+          capabilities: ['chat', 'vision', 'image.understand', 'audio.understand'],
+        }),
+        'image.understand',
+      ),
+    ).toBe(true);
+    expect(
+      modelSupportsPurpose(
+        createModel({
+          id: 'gemini-media',
+          type: 'llm',
+          capabilities: ['chat', 'vision', 'image.understand', 'audio.understand'],
+        }),
+        'audio.understand',
+      ),
+    ).toBe(true);
+  });
 });

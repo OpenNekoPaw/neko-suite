@@ -12,6 +12,7 @@ import {
 import type { ContentAccessRequest, PathResolver, WorkspaceMediaPathContext } from '@neko/shared';
 import {
   DocumentResourceCacheProvider,
+  GeneratedAssetDerivativeResourceCacheProvider,
   createHostContentAccessRuntime,
   type ContentAccessFileExists,
   type ContentAccessService,
@@ -75,6 +76,10 @@ export function createExtensionAgentContentAccessRuntime(
     resourceCacheOptions: options.context
       ? {
           providers: [
+            new GeneratedAssetDerivativeResourceCacheProvider({
+              pathResolver: options.pathResolver,
+              ...(workspaceRoot ? { projectRoot: workspaceRoot } : {}),
+            }),
             new DocumentResourceCacheProvider({
               pathResolver: options.pathResolver,
               ...(workspaceRoot ? { projectRoot: workspaceRoot } : {}),

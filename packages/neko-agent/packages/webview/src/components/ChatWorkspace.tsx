@@ -26,7 +26,7 @@ import {
   type EmbodyCharacterSessionProjection,
   type AgentQueuedMessageItem,
 } from '@neko-agent/types';
-import type { SettingsState, Message, TabType } from '@neko-agent/types';
+import type { MediaUnderstandingModels, SettingsState, Message, TabType } from '@neko-agent/types';
 import { AgentHostMessages } from '@/messages';
 import { ChatView } from '@/components/ChatView';
 import { InputAreaProvider } from '@/components/ChatView/InputAreaContext';
@@ -90,6 +90,7 @@ export interface ChatWorkspaceProps {
   setMediaModelSelection: React.Dispatch<
     React.SetStateAction<import('@/hooks/useUIState').MediaModelSelection>
   >;
+  mediaUnderstandingModels?: MediaUnderstandingModels;
   mentionItems: MentionItem[];
   onMentionSearchFilterChange: (filter: string) => void;
   pluginCommands: PluginSlashCommandDef[];
@@ -177,6 +178,7 @@ export function ChatWorkspace({
   setSelectedModel,
   mediaModelSelection,
   setMediaModelSelection,
+  mediaUnderstandingModels,
   mentionItems,
   onMentionSearchFilterChange,
   pluginCommands,
@@ -237,7 +239,7 @@ export function ChatWorkspace({
   );
   const isConversationSwitching = Boolean(
     hasActiveTabConversationMismatch ||
-      (isForegroundConversationActivationPending && !activeTabConversationId),
+    (isForegroundConversationActivationPending && !activeTabConversationId),
   );
   const sessionMutationConversationId = isConversationSwitching
     ? null
@@ -249,11 +251,7 @@ export function ChatWorkspace({
   }, [sessionMutationConversationId]);
 
   useEffect(() => {
-    if (
-      !isConversationSwitching ||
-      !hasActiveTabConversationMismatch ||
-      !activeTabConversationId
-    ) {
+    if (!isConversationSwitching || !hasActiveTabConversationMismatch || !activeTabConversationId) {
       return;
     }
     onSessionDiagnostic?.(
@@ -397,12 +395,7 @@ export function ChatWorkspace({
     consumedPendingSendRequestIdRef.current = pendingSendRequest.id;
     handleSend(pendingSendRequest.input);
     onPendingSendRequestConsumed?.(pendingSendRequest.id);
-  }, [
-    handleSend,
-    onPendingSendRequestConsumed,
-    pendingSendRequest,
-    sessionMutationConversationId,
-  ]);
+  }, [handleSend, onPendingSendRequestConsumed, pendingSendRequest, sessionMutationConversationId]);
 
   useEffect(() => {
     if (!initialInputRequest || !sessionMutationConversationId) return;
@@ -514,8 +507,7 @@ export function ChatWorkspace({
               break;
             }
             onInjectContextChip(msg.payload, injectConversationId);
-            const shouldPrefillActiveInput =
-              injectConversationId === sessionMutationConversationId;
+            const shouldPrefillActiveInput = injectConversationId === sessionMutationConversationId;
             if (shouldPrefillActiveInput && msg.payload.intent) {
               setInputValue(msg.payload.intent);
               inputValueRef.current = msg.payload.intent;
@@ -687,6 +679,7 @@ export function ChatWorkspace({
       onModelSelect={setSelectedModel}
       mediaModelSelection={mediaModelSelection}
       availableMediaModels={availableMediaModels}
+      mediaUnderstandingModels={mediaUnderstandingModels}
       onMediaModelSelect={handleMediaModelSelect}
       executionMode={settings.executionMode}
       onExecutionModeChange={handleExecutionModeChange}

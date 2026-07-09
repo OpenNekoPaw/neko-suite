@@ -80,5 +80,6 @@ function createDocumentEntrySource(ref: DocumentArchiveResourceRef): ContentDocu
 }
 
 function resolveProviderPayloadKind(mimeType: string): ProviderReadyAssetPayload['kind'] {
+  if (mimeType.startsWith('audio/')) return 'audio';
   return mimeType.startsWith('video/') ? 'video' : 'image';
 }

@@ -287,6 +287,8 @@ export class GenericAdapter extends BaseAdapter {
           return { type: 'text', text: part.text };
         } else if (part.type === 'image') {
           return { type: 'image_url', image_url: { url: part.imageUrl } };
+        } else if (part.type === 'audio') {
+          return { type: 'text', text: part.audioUrl };
         }
         return { type: 'text', text: part.videoUrl };
       });

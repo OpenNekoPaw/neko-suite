@@ -108,6 +108,29 @@ export type PromptMode = 'default' | 'plan';
  */
 export type SessionMode = 'agent' | 'image' | 'video' | 'audio';
 
+export type MediaUnderstandingCategory = 'image' | 'audio' | 'video';
+export type MediaUnderstandingPurpose =
+  'image.understand' | 'audio.understand' | 'video.understand';
+export type MediaUnderstandingModelStatusValue = 'configured' | 'auto' | 'missing';
+export type MediaUnderstandingModelSource = 'explicit-config' | 'account-gateway';
+
+export interface MediaUnderstandingModelStatus {
+  category: MediaUnderstandingCategory;
+  purpose: MediaUnderstandingPurpose;
+  status: MediaUnderstandingModelStatusValue;
+  providerId?: string;
+  modelId?: string;
+  optionId?: string;
+  label?: string;
+  providerLabel?: string;
+  source?: MediaUnderstandingModelSource;
+}
+
+export type MediaUnderstandingModels = Record<
+  MediaUnderstandingCategory,
+  MediaUnderstandingModelStatus
+>;
+
 // ---------------------------------------------------------------------------
 // SSO
 // ---------------------------------------------------------------------------
@@ -155,6 +178,8 @@ export interface SettingsState {
   chatModelOptions: Array<ChatModelOption>;
   /** Source/provider grouped model options for account gateway and explicit config providers. */
   modelGroups: Array<ModelSourceGroup>;
+  /** Read-only projection of the models Agent will use for native media understanding. */
+  mediaUnderstandingModels?: MediaUnderstandingModels;
   /** SSO session info (null when using custom key or not logged in) */
   ssoSession: SsoSession | null;
   /** Safe config file diagnostic for the active snapshot, if loading failed. */

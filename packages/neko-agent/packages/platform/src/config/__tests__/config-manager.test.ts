@@ -837,11 +837,242 @@ describe('ConfigManager', () => {
         code: 'invalidDefaultModelBinding',
         filePath: '/tmp/neko/config.toml',
         message:
-          'Configuration file contains a default_models entry that references an unavailable provider/model or mismatched type: /tmp/neko/config.toml. Fix the default binding, then open a new Agent session or tab.',
+          'Configuration file contains a default model binding that references an unavailable provider/model or mismatched capability: /tmp/neko/config.toml. Fix the default binding, then open a new Agent session or tab.',
       });
       expect(() => manager.assertConfigAvailable()).toThrow(
-        'Configuration file contains a default_models entry',
+        'Configuration file contains a default model binding',
       );
+    });
+
+    it('resolves purpose-specific model bindings before capability fallback', () => {
+      const googleProvider: Provider = {
+        id: 'google',
+        name: 'google',
+        displayName: 'Google Gemini',
+        type: 'google',
+        apiUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        enabled: true,
+        connectionKind: 'direct',
+        protocolProfile: 'google',
+        requiresApiKey: true,
+        apiKey: 'test-key',
+      };
+      const fastModel: Model = {
+        id: 'gemini-flash',
+        name: 'gemini-2.5-flash',
+        providerId: 'google',
+        type: 'llm',
+        capabilities: ['chat', 'vision', 'video.understand'],
+        enabled: true,
+      };
+      const proModel: Model = {
+        ...fastModel,
+        id: 'gemini-pro',
+        name: 'gemini-2.5-pro',
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            providers: [googleProvider],
+            models: [fastModel, proModel],
+            defaultModelPurposes: {
+              'video.understand': {
+                providerId: 'google',
+                modelId: 'gemini-pro',
+              },
+            },
+          },
+        }),
+      });
+
+      expect(manager.getConfigDiagnostic()).toBeUndefined();
+      expect(manager.getDefaultModelPurposeRef('video.understand')).toEqual({
+        providerId: 'google',
+        modelId: 'gemini-pro',
+      });
+      expect(manager.resolveModelRefForPurpose('video.understand')).toEqual({
+        providerId: 'google',
+        modelId: 'gemini-pro',
+      });
+    });
+
+    it('projects media understanding model routing for frontend confirmation', () => {
+      const googleProvider: Provider = {
+        id: 'google',
+        name: 'google',
+        displayName: 'Google Gemini',
+        type: 'google',
+        apiUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        enabled: true,
+        connectionKind: 'direct',
+        protocolProfile: 'google',
+        requiresApiKey: true,
+        apiKey: 'test-key',
+      };
+      const flashModel: Model = {
+        id: 'gemini-flash',
+        name: 'gemini-2.5-flash',
+        displayName: 'Gemini Flash',
+        providerId: 'google',
+        type: 'llm',
+        capabilities: [
+          'chat',
+          'vision',
+          'image.understand',
+          'audio.understand',
+          'video.understand',
+        ],
+        enabled: true,
+      };
+      const proModel: Model = {
+        ...flashModel,
+        id: 'gemini-pro',
+        name: 'gemini-2.5-pro',
+        displayName: 'Gemini Pro',
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            providers: [googleProvider],
+            models: [flashModel, proModel],
+            defaultModelPurposes: {
+              'video.understand': {
+                providerId: 'google',
+                modelId: 'gemini-pro',
+              },
+            },
+          },
+        }),
+      });
+
+      expect(manager.getAssistantSettingsData().mediaUnderstandingModels).toEqual({
+        image: {
+          category: 'image',
+          purpose: 'image.understand',
+          status: 'auto',
+          providerId: 'google',
+          modelId: 'gemini-flash',
+          optionId: 'google:gemini-flash',
+          label: 'Google Gemini / Gemini Flash',
+          providerLabel: 'Google Gemini',
+          source: 'explicit-config',
+        },
+        audio: {
+          category: 'audio',
+          purpose: 'audio.understand',
+          status: 'auto',
+          providerId: 'google',
+          modelId: 'gemini-flash',
+          optionId: 'google:gemini-flash',
+          label: 'Google Gemini / Gemini Flash',
+          providerLabel: 'Google Gemini',
+          source: 'explicit-config',
+        },
+        video: {
+          category: 'video',
+          purpose: 'video.understand',
+          status: 'configured',
+          providerId: 'google',
+          modelId: 'gemini-pro',
+          optionId: 'google:gemini-pro',
+          label: 'Google Gemini / Gemini Pro',
+          providerLabel: 'Google Gemini',
+          source: 'explicit-config',
+        },
+      });
+      expect(manager.getAssistantConfigState().mediaUnderstandingModels?.video.status).toBe(
+        'configured',
+      );
+    });
+
+    it('projects missing media understanding models when no enabled model supports the purpose', () => {
+      const localProvider: Provider = {
+        id: 'ollama-local',
+        name: 'ollama',
+        displayName: 'Ollama Local',
+        type: 'ollama',
+        apiUrl: 'http://localhost:11434/api',
+        enabled: true,
+        connectionKind: 'local',
+        protocolProfile: 'ollama',
+        requiresApiKey: false,
+      };
+      const textOnlyModel: Model = {
+        id: 'llama-text',
+        name: 'llama3.2',
+        displayName: 'Llama Text',
+        providerId: 'ollama-local',
+        type: 'llm',
+        capabilities: ['chat'],
+        enabled: true,
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            providers: [localProvider],
+            models: [textOnlyModel],
+          },
+        }),
+      });
+
+      expect(manager.getAssistantSettingsData().mediaUnderstandingModels).toEqual({
+        image: { category: 'image', purpose: 'image.understand', status: 'missing' },
+        audio: { category: 'audio', purpose: 'audio.understand', status: 'missing' },
+        video: { category: 'video', purpose: 'video.understand', status: 'missing' },
+      });
+    });
+
+    it('falls back to the first enabled model that supports a purpose', () => {
+      const googleProvider: Provider = {
+        id: 'google',
+        name: 'google',
+        displayName: 'Google Gemini',
+        type: 'google',
+        apiUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        enabled: true,
+        connectionKind: 'direct',
+        protocolProfile: 'google',
+        requiresApiKey: true,
+        apiKey: 'test-key',
+      };
+      const manager = new ConfigManager({
+        userConfigManager: createReadResultUserConfigManager({
+          status: 'ok',
+          filePath: '/tmp/neko/config.toml',
+          config: {
+            providers: [googleProvider],
+            models: [
+              {
+                id: 'text-only',
+                name: 'gemini-text',
+                providerId: 'google',
+                type: 'llm',
+                capabilities: ['chat'],
+                enabled: true,
+              },
+              {
+                id: 'gemini-flash',
+                name: 'gemini-2.5-flash',
+                providerId: 'google',
+                type: 'llm',
+                capabilities: ['chat', 'vision', 'video.understand'],
+                enabled: true,
+              },
+            ],
+          },
+        }),
+      });
+
+      expect(manager.resolveModelRefForPurpose('video.understand')).toEqual({
+        providerId: 'google',
+        modelId: 'gemini-flash',
+      });
     });
 
     it('keeps invalid type defaults visible instead of falling back to account gateway', () => {

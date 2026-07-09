@@ -672,6 +672,7 @@ export type {
   PerceptualAssetResolverPort,
   ResolvedPerceptualAsset,
 } from '../perception';
+export { createPerceptionPipeline, PerceptionPipeline } from '../perception';
 
 export {
   applyToolResultBackfillToResult,

@@ -42,6 +42,7 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
     const operationRegistry = createOperationRegistry();
     const fragments = [{ id: 'capability:test', content: 'capability prompt' }];
     const perceptionClients = { transcribe: { perception: { transcribe: vi.fn() } } };
+    const perceptionPipeline = { perceive: vi.fn() };
 
     const config = buildAgentRuntimeSessionFactoryConfig({
       createService: () => service,
@@ -54,6 +55,7 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
       operationToolAdapterRegistry: operationRegistry,
       getCapabilityPromptFragments: () => fragments,
       getPerceptionClients: () => perceptionClients,
+      getPerceptionPipeline: () => perceptionPipeline,
     });
 
     expect(config).toEqual(
@@ -69,6 +71,7 @@ describe('buildAgentRuntimeSessionFactoryConfig', () => {
         operationToolAdapterRegistry: operationRegistry,
         capabilityPromptFragments: fragments,
         perceptionClients,
+        perceptionPipeline,
       }),
     );
   });

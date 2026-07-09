@@ -732,6 +732,7 @@ export interface SettingsDataMessage {
   chatModelOptions?: ChatModelOption[];
   modelGroups?: SettingsState['modelGroups'];
   defaultMediaModels?: Partial<Record<MediaModelCategory, string>>;
+  mediaUnderstandingModels?: SettingsState['mediaUnderstandingModels'];
   configDiagnostic?: AgentConfigDiagnostic;
 }
 
@@ -743,6 +744,7 @@ export interface ConfigStateMessage {
     providers?: ConfiguredProvider[];
     configuredProviders?: ConfiguredProvider[];
     modelGroups?: SettingsState['modelGroups'];
+    mediaUnderstandingModels?: SettingsState['mediaUnderstandingModels'];
     configDiagnostic?: AgentConfigDiagnostic;
   };
 }

@@ -901,7 +901,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           }
         },
         onPhaseChange: (phase, toolName) => {
-          syncWorkspaceRuntimeState({ status: 'running', phase, ...(toolName ? { toolName } : {}) });
+          syncWorkspaceRuntimeState({
+            status: 'running',
+            phase,
+            ...(toolName ? { toolName } : {}),
+          });
         },
         ...(backgroundTasks ? { backgroundTasks } : {}),
       });
@@ -1656,6 +1660,7 @@ function stringifyChatMessageContent(content: ChatMessage['content']): string {
     .map((part) => {
       if (part.type === 'text') return part.text;
       if (part.type === 'image') return `[image] ${part.imageUrl}`;
+      if (part.type === 'audio') return `[audio] ${part.audioUrl}`;
       if (part.type === 'video') return `[video] ${part.videoUrl}`;
       return '[content]';
     })

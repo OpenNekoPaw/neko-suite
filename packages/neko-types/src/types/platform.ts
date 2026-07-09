@@ -31,7 +31,7 @@ export interface ChatMessage {
 /**
  * Content part for multimodal messages
  */
-export type ContentPart = TextPart | ImagePart | VideoPart;
+export type ContentPart = TextPart | ImagePart | AudioPart | VideoPart;
 
 export interface TextPart {
   type: 'text';
@@ -42,6 +42,14 @@ export interface ImagePart {
   type: 'image';
   imageUrl: string;
   detail?: 'auto' | 'low' | 'high';
+}
+
+export interface AudioPart {
+  type: 'audio';
+  /** Base64 data URI or URL to audio content */
+  audioUrl: string;
+  /** MIME type (e.g., 'audio/wav', 'audio/mpeg') */
+  mimeType?: string;
 }
 
 export interface VideoPart {

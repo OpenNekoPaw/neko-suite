@@ -167,12 +167,7 @@ export const PROVIDER_CONNECTION_KINDS = [
  * Protocol profile used by the provider endpoint.
  */
 export type ProviderProtocolProfile =
-  | 'newapi'
-  | 'openai-chat'
-  | 'openai-responses'
-  | 'anthropic'
-  | 'google'
-  | 'ollama';
+  'newapi' | 'openai-chat' | 'openai-responses' | 'anthropic' | 'google' | 'ollama';
 
 export const PROVIDER_PROTOCOL_PROFILES = [
   'newapi',
@@ -268,6 +263,7 @@ export type ModelCapability =
   | 'text_to_image'
   | 'image.generate'
   | 'image.edit'
+  | 'image.understand'
   | 'image_to_image'
   | 'text_to_video'
   | 'video.generate'
@@ -279,6 +275,7 @@ export type ModelCapability =
   | 'audio.generate'
   | 'audio.tts'
   | 'audio.asr'
+  | 'audio.understand'
   | 'audio.music.generate'
   | 'content.safety.moderate'
   | 'local.video.probe'
@@ -310,6 +307,7 @@ export const KNOWN_MODEL_CAPABILITIES = [
   'text_to_image',
   'image.generate',
   'image.edit',
+  'image.understand',
   'image_to_image',
   'text_to_video',
   'video.generate',
@@ -321,6 +319,7 @@ export const KNOWN_MODEL_CAPABILITIES = [
   'audio.generate',
   'audio.tts',
   'audio.asr',
+  'audio.understand',
   'audio.music.generate',
   'content.safety.moderate',
   'local.video.probe',
@@ -397,13 +396,7 @@ export interface ModelConfig {
 // =============================================================================
 
 export type MCPServerCategory =
-  | 'filesystem'
-  | 'database'
-  | 'api'
-  | 'development'
-  | 'productivity'
-  | 'ai'
-  | 'other';
+  'filesystem' | 'database' | 'api' | 'development' | 'productivity' | 'ai' | 'other';
 
 export interface MCPToolInfo {
   name: string;
@@ -544,6 +537,16 @@ export interface ModelRefConfig {
 }
 
 export type TypeDefaultModels = Partial<Record<ModelType, ModelRefConfig>>;
+
+/**
+ * Default model bindings by product purpose.
+ *
+ * These bindings are intentionally separate from TypeDefaultModels: for
+ * example `video.understand` is served by an LLM with native video input, while
+ * `defaultModels.video` remains reserved for video generation models. The same
+ * separation applies to `image.understand` and `audio.understand`.
+ */
+export type PurposeDefaultModels = Partial<Record<string, ModelRefConfig>>;
 
 export interface LlmParameterControlAvailability {
   readonly reasoning: boolean;

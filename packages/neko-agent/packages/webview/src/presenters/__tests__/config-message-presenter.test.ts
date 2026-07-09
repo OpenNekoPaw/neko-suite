@@ -50,6 +50,35 @@ describe('config message presenter', () => {
         defaultMediaModels: {
           image: 'image-provider:model',
         },
+        mediaUnderstandingModels: {
+          image: {
+            category: 'image',
+            purpose: 'image.understand',
+            status: 'auto',
+            providerId: 'google',
+            modelId: 'gemini-flash',
+            optionId: 'google:gemini-flash',
+            label: 'Google / Gemini Flash',
+            providerLabel: 'Google',
+            source: 'explicit-config',
+          },
+          audio: {
+            category: 'audio',
+            purpose: 'audio.understand',
+            status: 'missing',
+          },
+          video: {
+            category: 'video',
+            purpose: 'video.understand',
+            status: 'configured',
+            providerId: 'google',
+            modelId: 'gemini-pro',
+            optionId: 'google:gemini-pro',
+            label: 'Google / Gemini Pro',
+            providerLabel: 'Google',
+            source: 'explicit-config',
+          },
+        },
       }),
     ).toEqual({
       settingsPatch: {
@@ -80,12 +109,66 @@ describe('config message presenter', () => {
             contextWindow: 200000,
           },
         ],
+        mediaUnderstandingModels: {
+          image: {
+            category: 'image',
+            purpose: 'image.understand',
+            status: 'auto',
+            providerId: 'google',
+            modelId: 'gemini-flash',
+            optionId: 'google:gemini-flash',
+            label: 'Google / Gemini Flash',
+            providerLabel: 'Google',
+            source: 'explicit-config',
+          },
+          audio: {
+            category: 'audio',
+            purpose: 'audio.understand',
+            status: 'missing',
+          },
+          video: {
+            category: 'video',
+            purpose: 'video.understand',
+            status: 'configured',
+            providerId: 'google',
+            modelId: 'gemini-pro',
+            optionId: 'google:gemini-pro',
+            label: 'Google / Gemini Pro',
+            providerLabel: 'Google',
+            source: 'explicit-config',
+          },
+        },
       },
       selectedModel: 'openai:gpt',
       defaultMediaModels: {
         image: 'image-provider:model',
       },
     });
+  });
+
+  it('ignores malformed media understanding projections', () => {
+    expect(
+      projectSettingsDataMessage({
+        type: 'settingsData',
+        mediaUnderstandingModels: {
+          image: {
+            category: 'image',
+            purpose: 'video.understand',
+            status: 'auto',
+          },
+          audio: {
+            category: 'audio',
+            purpose: 'audio.understand',
+            status: 'missing',
+          },
+          video: {
+            category: 'video',
+            purpose: 'video.understand',
+            status: 'configured',
+          },
+        },
+      }).settingsPatch.mediaUnderstandingModels,
+    ).toBeUndefined();
   });
 
   it('projects project files and mention extras into mention items', () => {
@@ -521,6 +604,35 @@ describe('config message presenter', () => {
         type: 'configState',
         config: {
           configuredProviders,
+          mediaUnderstandingModels: {
+            image: {
+              category: 'image',
+              purpose: 'image.understand',
+              status: 'auto',
+              providerId: 'google',
+              modelId: 'gemini-flash',
+              optionId: 'google:gemini-flash',
+              label: 'Google / Gemini Flash',
+              providerLabel: 'Google',
+              source: 'explicit-config',
+            },
+            audio: {
+              category: 'audio',
+              purpose: 'audio.understand',
+              status: 'missing',
+            },
+            video: {
+              category: 'video',
+              purpose: 'video.understand',
+              status: 'configured',
+              providerId: 'google',
+              modelId: 'gemini-pro',
+              optionId: 'google:gemini-pro',
+              label: 'Google / Gemini Pro',
+              providerLabel: 'Google',
+              source: 'explicit-config',
+            },
+          },
           configDiagnostic: {
             code: 'readError',
             filePath: '/home/user/.neko/config.toml',
@@ -531,6 +643,35 @@ describe('config message presenter', () => {
       }),
     ).toEqual({
       configuredProviders,
+      mediaUnderstandingModels: {
+        image: {
+          category: 'image',
+          purpose: 'image.understand',
+          status: 'auto',
+          providerId: 'google',
+          modelId: 'gemini-flash',
+          optionId: 'google:gemini-flash',
+          label: 'Google / Gemini Flash',
+          providerLabel: 'Google',
+          source: 'explicit-config',
+        },
+        audio: {
+          category: 'audio',
+          purpose: 'audio.understand',
+          status: 'missing',
+        },
+        video: {
+          category: 'video',
+          purpose: 'video.understand',
+          status: 'configured',
+          providerId: 'google',
+          modelId: 'gemini-pro',
+          optionId: 'google:gemini-pro',
+          label: 'Google / Gemini Pro',
+          providerLabel: 'Google',
+          source: 'explicit-config',
+        },
+      },
       configDiagnostic: {
         code: 'readError',
         filePath: '/home/user/.neko/config.toml',

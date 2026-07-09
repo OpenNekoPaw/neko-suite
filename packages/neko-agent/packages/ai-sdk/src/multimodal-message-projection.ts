@@ -42,7 +42,7 @@ export interface VisionPreprocessPolicy {
 }
 
 export interface ProviderReadyAssetPayload {
-  readonly kind: 'image' | 'video';
+  readonly kind: 'image' | 'audio' | 'video';
   readonly url: string;
   readonly mimeType?: string;
 }
@@ -76,8 +76,8 @@ const TEXT_ONLY_MODALITIES: ProviderInputModalities = {
 const BUILT_IN_PROVIDER_MODALITIES: Record<string, ProviderInputModalities> = {
   openai: { text: true, image: true, video: false, audio: false },
   anthropic: { text: true, image: true, video: false, audio: false },
-  gemini: { text: true, image: true, video: true, audio: false },
-  google: { text: true, image: true, video: true, audio: false },
+  gemini: { text: true, image: true, video: true, audio: true },
+  google: { text: true, image: true, video: true, audio: true },
 };
 
 export function projectMultimodalPacketToChatMessage(
@@ -352,7 +352,10 @@ function selectImagePerceptualRef(card: PerceptionCard): PerceptualAssetRef | un
 }
 
 function selectVideoPerceptualRef(card: PerceptionCard): PerceptualAssetRef | undefined {
-  return card.perceptual?.keyframeRefs?.[0] ?? card.perceptual?.thumbnailRef;
+  return (
+    card.perceptual?.multiViewRefs?.find((ref) => ref.mimeType.startsWith('video/')) ??
+    card.perceptual?.keyframeRefs?.find((ref) => ref.mimeType.startsWith('video/'))
+  );
 }
 
 function stringifyEvidenceValue(value: unknown): string {

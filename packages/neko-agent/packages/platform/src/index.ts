@@ -26,6 +26,8 @@ export {
 export {
   CUSTOM_NEWAPI_PROVIDER_ID,
   DEFAULT_USER_CONFIG,
+  GOOGLE_GEMINI_MEDIA_UNDERSTAND_MODEL_ID,
+  GOOGLE_PROVIDER_ID,
   NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID,
   NEKO_GATEWAY_DEFAULT_CHAT_MODEL_ID,
   NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID,
@@ -68,6 +70,7 @@ export {
   buildAssistantProviderMutationSettingsUpdate,
   buildAssistantSettingsSnapshot,
   buildDefaultMediaModelOptionIds,
+  MEDIA_UNDERSTANDING_PURPOSES,
   mapAssistantSettingsToUnifiedScalars,
   mapWebviewSettingsToUnifiedScalars,
   selectAssistantDefaultProvider,
@@ -85,6 +88,12 @@ export {
   type AssistantSettingsDataMessage,
   type AssistantSettingsSnapshot,
   type AssistantSettingsUpdatedMessage,
+  type MediaUnderstandingCategory,
+  type MediaUnderstandingModelSource,
+  type MediaUnderstandingModelStatus,
+  type MediaUnderstandingModelStatusValue,
+  type MediaUnderstandingModels,
+  type MediaUnderstandingPurpose,
 } from './config/assistant-config';
 export {
   projectAgentPresetIntent,
@@ -185,6 +194,26 @@ export {
   type InternalChatRuntimeLogger,
   type InternalChatRuntimeService,
 } from './service/internal-chat-runtime';
+
+// =============================================================================
+// Perception Layer
+// =============================================================================
+
+export {
+  AUDIO_UNDERSTANDING_PURPOSE,
+  GeminiMediaUnderstandingClient,
+  IMAGE_UNDERSTANDING_PURPOSE,
+  type GeminiMediaUnderstandingClientConfig,
+  type MediaUnderstandingPerceptionAsset,
+  type MediaUnderstandingPerceptionRequest,
+} from './perception/gemini-media-understanding-client';
+export {
+  GeminiVideoUnderstandingClient,
+  VIDEO_UNDERSTANDING_PURPOSE,
+  type GeminiVideoUnderstandingClientConfig,
+  type VideoUnderstandingPerceptionAsset,
+  type VideoUnderstandingPerceptionRequest,
+} from './perception';
 
 // =============================================================================
 // File Operation Layer

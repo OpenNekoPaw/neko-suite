@@ -1373,6 +1373,10 @@ body {
   opacity: 0.62;
 }
 
+.agent-control-chip-static {
+  cursor: default;
+}
+
 .agent-control-chip-mode {
   max-width: 108px;
   padding-inline: 7px;
@@ -1392,6 +1396,10 @@ body {
 
 .agent-control-chip-model {
   max-width: 156px;
+}
+
+.agent-control-chip-understand {
+  max-width: 132px;
 }
 
 .agent-control-chip-param {

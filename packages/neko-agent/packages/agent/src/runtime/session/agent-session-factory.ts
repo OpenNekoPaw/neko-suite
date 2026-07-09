@@ -85,6 +85,7 @@ export interface AgentRuntimeSessionFactoryConfig {
   readonly projectMemoryFilePath?: string;
   readonly personalPath?: string;
   readonly perceptionClients?: AgentSessionConfig['perceptionClients'];
+  readonly perceptionPipeline?: AgentSessionConfig['perceptionPipeline'];
   readonly subAgentRuntime?: SubAgentRuntimeCoordinator;
   readonly modelTierResolver?: ModelTierResolver;
   readonly specializedSubAgentPresets?: Readonly<Record<string, SpecializedAgentPreset>>;
@@ -182,6 +183,7 @@ export async function createAgentRuntimeSession(
     runtime: buildAgentRuntimeConfig(config, promptFragments, toolCategoryRegistry, validationLoop),
     ...(config.conversationId ? { conversationId: config.conversationId } : {}),
     ...(config.perceptionClients ? { perceptionClients: config.perceptionClients } : {}),
+    ...(config.perceptionPipeline ? { perceptionPipeline: config.perceptionPipeline } : {}),
     ...(config.onConfirmTool ? { onConfirmTool: config.onConfirmTool } : {}),
     ...(config.onValidationWarning ? { onValidationWarning: config.onValidationWarning } : {}),
     ...(config.onValidationError ? { onValidationError: config.onValidationError } : {}),
@@ -248,6 +250,7 @@ export function updateAgentRuntimeSession(
       locale: config.locale,
       maxIterations: config.maxIterations,
       executionMode: config.executionMode ?? 'auto',
+      perceptionPipeline: config.perceptionPipeline,
       onActivationProgress: config.onActivationProgress,
     },
     ...(promptFragments ? { promptFragments } : {}),
@@ -377,8 +380,7 @@ function resolveProviderExpressionProfileFragments(
   targets: readonly ProviderExpressionTargetConfig[] | undefined,
   registry: Pick<IProviderExpressionProfileRegistry, 'get'> | undefined,
 ): readonly PromptFragment[] {
-  const selectedTargets =
-    targets?.filter((target) => target.providerExpressionProfileId) ?? [];
+  const selectedTargets = targets?.filter((target) => target.providerExpressionProfileId) ?? [];
   if (selectedTargets.length === 0) return [];
 
   return selectedTargets.map((target) => {

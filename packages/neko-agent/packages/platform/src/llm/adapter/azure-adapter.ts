@@ -17,8 +17,7 @@ import type { Model, Provider } from '../../types/provider';
 interface AzureMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content:
-    | string
-    | Array<{ type: string; text?: string; image_url?: { url: string; detail?: string } }>;
+    string | Array<{ type: string; text?: string; image_url?: { url: string; detail?: string } }>;
   name?: string;
   tool_call_id?: string;
   tool_calls?: Array<{
@@ -221,6 +220,8 @@ export class AzureAdapter extends BaseAdapter {
             type: 'image_url',
             image_url: { url: part.imageUrl, detail: part.detail },
           };
+        } else if (part.type === 'audio') {
+          return { type: 'text', text: part.audioUrl };
         }
         return { type: 'text', text: part.videoUrl };
       });

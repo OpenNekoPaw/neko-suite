@@ -52,6 +52,40 @@ describe('createNodePerceptionAssetLoader', () => {
     });
   });
 
+  it('preserves audio payload kind for media library audio refs', async () => {
+    const workDir = createTempDir();
+    const mediaRoot = createTempDir();
+    const audioBytes = Buffer.from('audio-bytes');
+    fs.mkdirSync(path.join(workDir, 'neko'), { recursive: true });
+    fs.mkdirSync(path.join(mediaRoot, 'audios'), { recursive: true });
+    fs.writeFileSync(
+      path.join(workDir, 'neko', 'settings.json'),
+      JSON.stringify({
+        mediaLibraries: [{ name: 'Assets', path: mediaRoot, variable: 'A' }],
+      }),
+      'utf8',
+    );
+    fs.writeFileSync(path.join(mediaRoot, 'audios', 'dialogue.wav'), audioBytes);
+
+    const loader = createNodePerceptionAssetLoader(
+      createNodeContentAccessRuntime({
+        host: createNodeWorkspaceContentHostAdapter({ workDir }),
+      }),
+    );
+
+    const result = await loader.load({
+      assetId: 'audio-1',
+      uri: '${A}/audios/dialogue.wav',
+      mimeType: 'audio/wav',
+    });
+
+    expect(result).toEqual({
+      kind: 'audio',
+      url: `data:audio/wav;base64,${audioBytes.toString('base64')}`,
+      mimeType: 'audio/wav',
+    });
+  });
+
   it('loads document-entry refs through the TUI content access runtime', async () => {
     const workDir = createTempDir();
     const archivePath = path.join(workDir, 'book.epub');

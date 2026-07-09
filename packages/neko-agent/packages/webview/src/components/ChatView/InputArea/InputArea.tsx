@@ -132,6 +132,7 @@ export function InputArea({
     mediaModelCallCount,
     mediaModelSelection,
     availableMediaModels,
+    mediaUnderstandingModels,
     onMediaModelSelect,
     skills,
     pluginCommands = [],
@@ -809,6 +810,7 @@ export function InputArea({
             onModelSelect={onModelSelect}
             mediaModelSelection={mediaModelSelection}
             availableMediaModels={availableMediaModels}
+            mediaUnderstandingModels={mediaUnderstandingModels}
             onMediaModelSelect={onMediaModelSelect}
             genCategory={genCategory}
             genParams={genParams}

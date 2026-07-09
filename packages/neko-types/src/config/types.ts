@@ -10,6 +10,7 @@
 import type {
   ProviderConfig,
   ModelConfig,
+  PurposeDefaultModels,
   MCPServerConfig,
   TypeDefaultModels,
 } from '../types/config';
@@ -40,6 +41,9 @@ export interface UnifiedConfig {
 
   /** Default models by broad model type */
   defaultModels?: TypeDefaultModels;
+
+  /** Default models by product purpose, e.g. image.understand or video.understand */
+  defaultModelPurposes?: PurposeDefaultModels;
 
   /** Global default max output tokens */
   maxTokens?: number;

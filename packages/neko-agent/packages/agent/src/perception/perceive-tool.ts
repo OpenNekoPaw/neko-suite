@@ -34,6 +34,19 @@ export class PerceiveTool extends BuiltinTool {
         enum: ['transcript', 'visual', 'audio', 'shots', 'composition'],
         description: 'Optional analysis focus.',
       },
+      ref: {
+        type: 'object',
+        description:
+          'Optional provider-loadable media reference. Use this for local or generated assets that are not resolvable by assetId alone.',
+        properties: {
+          assetId: { type: 'string' },
+          uri: { type: 'string' },
+          mimeType: { type: 'string' },
+          label: { type: 'string' },
+          timestampMs: { type: 'number' },
+        },
+        required: ['assetId', 'uri', 'mimeType'],
+      },
       options: {
         type: 'object',
         description: 'Optional analysis options such as language, time range, or frame density.',
@@ -67,7 +80,7 @@ export class PerceiveTool extends BuiltinTool {
     }
 
     const result = await this.pipeline.perceive({
-      asset: { assetId: input.assetId },
+      asset: { assetId: input.assetId, ...(input.ref ? { ref: input.ref } : {}) },
       focus: input.focus,
       options: input.options,
       policy: {
@@ -96,8 +109,13 @@ function readPerceiveToolInput(args: Record<string, unknown>): PerceiveToolInput
   }
 
   const focus = readFocus(args['focus']);
+  const ref = readPerceptualAssetRef(args['ref']);
+  if (ref && ref.assetId !== assetId) {
+    return undefined;
+  }
   return {
     assetId,
+    ...(ref ? { ref } : {}),
     depth,
     ...(focus ? { focus } : {}),
     ...(isRecord(args['options'])
@@ -110,6 +128,25 @@ function readNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function readPerceptualAssetRef(value: unknown): PerceiveToolInput['ref'] | undefined {
+  if (!isRecord(value)) return undefined;
+  const assetId = readNonEmptyString(value['assetId']);
+  const uri = readNonEmptyString(value['uri']);
+  const mimeType = readNonEmptyString(value['mimeType']);
+  if (!assetId || !uri || !mimeType) {
+    return undefined;
+  }
+  const label = readNonEmptyString(value['label']);
+  const timestampMs = typeof value['timestampMs'] === 'number' ? value['timestampMs'] : undefined;
+  return {
+    assetId,
+    uri,
+    mimeType,
+    ...(label ? { label } : {}),
+    ...(timestampMs !== undefined ? { timestampMs } : {}),
+  };
 }
 
 function readFocus(value: unknown): PerceiveToolInput['focus'] | undefined {

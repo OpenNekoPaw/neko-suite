@@ -36,6 +36,7 @@ export type ConfigReadErrorCode =
   | 'unsupportedModelType'
   | 'unsupportedDefaultMediaModelType'
   | 'unsupportedDefaultModelType'
+  | 'unsupportedDefaultModelPurpose'
   | 'readError';
 
 export interface ConfigReadDiagnostic {
@@ -231,6 +232,9 @@ function getConfigReadErrorCode(error: unknown): ConfigReadErrorCode {
   if (isTomlValidationError(error, 'unsupportedDefaultModelType')) {
     return 'unsupportedDefaultModelType';
   }
+  if (isTomlValidationError(error, 'unsupportedDefaultModelPurpose')) {
+    return 'unsupportedDefaultModelPurpose';
+  }
   return error instanceof TomlError ? 'invalidToml' : 'readError';
 }
 
@@ -383,6 +387,13 @@ function buildConfigReadDiagnostic(
         code,
         filePath,
         message: `Configuration file contains an unsupported default model type: ${filePath}`,
+        ...(detail !== undefined ? { detail } : {}),
+      };
+    case 'unsupportedDefaultModelPurpose':
+      return {
+        code,
+        filePath,
+        message: `Configuration file contains an unsupported default model purpose binding: ${filePath}`,
         ...(detail !== undefined ? { detail } : {}),
       };
     case 'readError':

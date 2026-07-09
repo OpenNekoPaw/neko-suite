@@ -3,6 +3,7 @@ import type {
   ModelConfig,
   ModelRefConfig,
   ModelType,
+  PurposeDefaultModels,
   ProviderConfig,
   ProtocolVariant,
   TypeDefaultModels,
@@ -27,6 +28,7 @@ export interface NekoTomlConfig {
   readonly default_model?: string;
   readonly default_media_models?: unknown;
   readonly default_models?: Partial<Record<ModelType, TomlModelRefConfig>>;
+  readonly default_model_purposes?: Record<string, TomlModelRefConfig>;
   readonly defaults?: TomlDefaultsConfig;
   readonly skills_dir?: string;
   readonly verbose?: boolean;
@@ -153,7 +155,8 @@ export interface TomlConfigValidationIssue {
     | 'unsupportedProfileSchemaSection'
     | 'unsupportedModelType'
     | 'unsupportedDefaultMediaModelType'
-    | 'unsupportedDefaultModelType';
+    | 'unsupportedDefaultModelType'
+    | 'unsupportedDefaultModelPurpose';
   readonly path: string;
   readonly message: string;
 }
@@ -172,6 +175,11 @@ export function tomlToUnifiedConfig(config: NekoTomlConfig): UnifiedConfig {
     ...(config.default_model !== undefined ? { defaultModel: config.default_model } : {}),
     ...(config.default_models !== undefined
       ? { defaultModels: tomlDefaultModelsToRuntime(config.default_models) }
+      : {}),
+    ...(config.default_model_purposes !== undefined
+      ? {
+          defaultModelPurposes: tomlDefaultModelPurposesToRuntime(config.default_model_purposes),
+        }
       : {}),
     ...(config.defaults?.max_tokens !== undefined ? { maxTokens: config.defaults.max_tokens } : {}),
     ...(config.defaults?.temperature !== undefined
@@ -229,6 +237,11 @@ export function unifiedConfigToToml(config: UnifiedConfig): NekoTomlConfig {
     ...(config.defaultModel !== undefined ? { default_model: config.defaultModel } : {}),
     ...(config.defaultModels !== undefined
       ? { default_models: runtimeDefaultModelsToToml(config.defaultModels) }
+      : {}),
+    ...(config.defaultModelPurposes !== undefined
+      ? {
+          default_model_purposes: runtimeDefaultModelPurposesToToml(config.defaultModelPurposes),
+        }
       : {}),
     ...(config.maxTokens !== undefined || config.temperature !== undefined
       ? {
@@ -306,6 +319,7 @@ export function validateTomlConfig(config: NekoTomlConfig): void {
   collectUnsupportedModelOverrideProtocolProfileIssues(config.model_overrides, issues);
   collectUnsupportedModelOverrideProtocolIssues(config.model_overrides, issues);
   collectDefaultModelIssues(config.default_models, issues);
+  collectDefaultModelPurposeIssues(config.default_model_purposes, issues);
   collectDefaultTokenIssues(config.defaults, issues);
   collectModelTokenIssues(config.models, 'models', issues);
   collectModelOverrideTokenIssues(config.model_overrides, issues);
@@ -504,6 +518,35 @@ function runtimeDefaultModelsToToml(
   return mapRecordValues(defaults, runtimeModelRefToToml) as Partial<
     Record<ModelType, TomlModelRefConfig>
   >;
+}
+
+function tomlDefaultModelPurposesToRuntime(
+  defaults: Record<string, TomlModelRefConfig>,
+): PurposeDefaultModels {
+  const result: PurposeDefaultModels = {};
+  for (const [key, ref] of Object.entries(defaults)) {
+    result[tomlModelPurposeKeyToRuntime(key)] = tomlModelRefToRuntime(ref);
+  }
+  return result;
+}
+
+function runtimeDefaultModelPurposesToToml(
+  defaults: PurposeDefaultModels,
+): Record<string, TomlModelRefConfig> {
+  const result: Record<string, TomlModelRefConfig> = {};
+  for (const [purpose, ref] of Object.entries(defaults)) {
+    if (!ref) continue;
+    result[runtimeModelPurposeKeyToToml(purpose)] = runtimeModelRefToToml(ref);
+  }
+  return result;
+}
+
+function tomlModelPurposeKeyToRuntime(key: string): string {
+  return key.includes('.') ? key : key.split('_').join('.');
+}
+
+function runtimeModelPurposeKeyToToml(purpose: string): string {
+  return purpose.split('.').join('_');
 }
 
 function tomlModelRefToRuntime(ref: TomlModelRefConfig): ModelRefConfig {
@@ -789,8 +832,7 @@ function collectDefaultTokenIssues(
     issues.push({
       code: 'invalidDefaultMaxTokens',
       path: 'defaults.max_tokens',
-      message:
-        `[defaults].max_tokens must be a positive integer output-token cap, got ${String(defaults.max_tokens)}.`,
+      message: `[defaults].max_tokens must be a positive integer output-token cap, got ${String(defaults.max_tokens)}.`,
     });
   }
 }
@@ -891,6 +933,22 @@ function collectDefaultModelIssues(
         code: 'unsupportedDefaultModelType',
         path: `default_models.${key}`,
         message: `Invalid default_models.${key}. Expected provider_id and model_id strings.`,
+      });
+    }
+  }
+}
+
+function collectDefaultModelPurposeIssues(
+  defaults: Record<string, TomlModelRefConfig> | undefined,
+  issues: TomlConfigValidationIssue[],
+): void {
+  if (!defaults) return;
+  for (const [key, ref] of Object.entries(defaults)) {
+    if (!isTomlModelRefConfig(ref)) {
+      issues.push({
+        code: 'unsupportedDefaultModelPurpose',
+        path: `default_model_purposes.${key}`,
+        message: `Invalid default_model_purposes.${key}. Expected provider_id and model_id strings.`,
       });
     }
   }

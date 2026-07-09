@@ -96,6 +96,7 @@ export function detectExplicitAiConfig(input: AiProviderSourceInput): ExplicitAi
     isNonEmptyString(raw.defaultProvider) ||
     isNonEmptyString(raw.defaultModel) ||
     hasNonEmptyRecord(raw.defaultModels) ||
+    hasNonEmptyRecord(raw.defaultModelPurposes) ||
     hasNonEmptyRecord(raw.providerOverrides) ||
     hasNonEmptyRecord(raw.modelOverrides);
 
@@ -299,9 +300,7 @@ function toSecretSafeAccountModel(model: Model): SecretSafeModelProjection {
       ? { providerExpressionProfileId: model.providerExpressionProfileId }
       : {}),
     ...(isPositiveInteger(model.contextWindow) ? { contextWindow: model.contextWindow } : {}),
-    ...(isPositiveInteger(model.maxOutputTokens)
-      ? { maxOutputTokens: model.maxOutputTokens }
-      : {}),
+    ...(isPositiveInteger(model.maxOutputTokens) ? { maxOutputTokens: model.maxOutputTokens } : {}),
     enabled: model.enabled !== false,
     source: 'account-gateway',
   };

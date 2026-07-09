@@ -251,9 +251,12 @@ function projectModelCapabilitiesToInputModalities(
   const capabilitySet = new Set(capabilities);
   return {
     text: capabilitySet.has('chat') || capabilitySet.has('llm.chat') || capabilities.length > 0,
-    image: capabilitySet.has('vision') || capabilitySet.has('llm.vision'),
+    image:
+      capabilitySet.has('image.understand') ||
+      capabilitySet.has('vision') ||
+      capabilitySet.has('llm.vision'),
     video: capabilitySet.has('video.understand'),
-    audio: capabilitySet.has('audio.asr') ? true : false,
+    audio: capabilitySet.has('audio.understand') || capabilitySet.has('audio.asr') ? true : false,
   };
 }
 

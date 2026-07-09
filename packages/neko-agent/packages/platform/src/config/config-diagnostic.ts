@@ -71,6 +71,7 @@ export function projectAssistantConfigReadResultDiagnostic(
     result.status === 'unsupportedModelType' ||
     result.status === 'unsupportedDefaultMediaModelType' ||
     result.status === 'unsupportedDefaultModelType' ||
+    result.status === 'unsupportedDefaultModelPurpose' ||
     result.status === 'readError'
   ) {
     return projectAssistantConfigDiagnostic(result.diagnostic);
@@ -121,8 +122,10 @@ export function buildSafeConfigDiagnosticMessage(
       return `Configuration file contains retired default_media_models: ${filePath}. Move defaults to [default_models.llm], [default_models.image], [default_models.video], or [default_models.audio], then open a new Agent session or tab.`;
     case 'unsupportedDefaultModelType':
       return `Configuration file contains an unsupported default_models key: ${filePath}. Use llm, image, video, or audio, then open a new Agent session or tab.`;
+    case 'unsupportedDefaultModelPurpose':
+      return `Configuration file contains an invalid default_model_purposes entry: ${filePath}. Use provider_id and model_id for each purpose binding, then open a new Agent session or tab.`;
     case 'invalidDefaultModelBinding':
-      return `Configuration file contains a default_models entry that references an unavailable provider/model or mismatched type: ${filePath}. Fix the default binding, then open a new Agent session or tab.`;
+      return `Configuration file contains a default model binding that references an unavailable provider/model or mismatched capability: ${filePath}. Fix the default binding, then open a new Agent session or tab.`;
     case 'unsupportedWorkspaceProviderDefinition':
       return `Workspace configuration defines provider entries: ${filePath}. Move provider definitions and credentials to the user config, then open a new Agent session or tab.`;
     case 'unsupportedWorkspaceModelDefinition':

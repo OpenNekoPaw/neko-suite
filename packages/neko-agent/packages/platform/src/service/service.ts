@@ -777,6 +777,7 @@ interface ChatMessageSummary {
   readonly partContentMessages: number;
   readonly textPartCount: number;
   readonly imagePartCount: number;
+  readonly audioPartCount: number;
   readonly videoPartCount: number;
   readonly textChars: number;
   readonly toolCallCount: number;
@@ -834,6 +835,11 @@ type RawContentPartSnapshot =
       readonly type: 'image';
       readonly imageUrl: string;
       readonly detail?: 'auto' | 'low' | 'high';
+    }
+  | {
+      readonly type: 'audio';
+      readonly audioUrl: string;
+      readonly mimeType?: string;
     }
   | {
       readonly type: 'video';
@@ -984,7 +990,7 @@ function createModelCallRequestDebugLog(input: {
     stream: input.stream,
     attempt: input.routing.attempt,
     debugPayloadIncludesRawText: true,
-    debugPayloadMediaPolicy: 'image/video URLs are preserved only for non-data URLs',
+    debugPayloadMediaPolicy: 'image/audio/video URLs are preserved only for non-data URLs',
     systemPromptSections: input.options.systemPromptSections?.map((section, index) => ({
       index,
       cacheControl: section.cacheControl,
@@ -1082,6 +1088,12 @@ function createRawContentSnapshot(content: ChatMessage['content']): RawContentSn
           imageUrl: sanitizeMediaUrlForDebugLog(part.imageUrl),
           detail: part.detail,
         };
+      case 'audio':
+        return {
+          type: 'audio',
+          audioUrl: sanitizeMediaUrlForDebugLog(part.audioUrl),
+          mimeType: part.mimeType,
+        };
       case 'video':
         return {
           type: 'video',
@@ -1143,6 +1155,7 @@ function summarizeChatMessages(messages: readonly ChatMessage[]): ChatMessageSum
   let partContentMessages = 0;
   let textPartCount = 0;
   let imagePartCount = 0;
+  let audioPartCount = 0;
   let videoPartCount = 0;
   let textChars = 0;
   let toolCallCount = 0;
@@ -1164,6 +1177,9 @@ function summarizeChatMessages(messages: readonly ChatMessage[]): ChatMessageSum
           case 'image':
             imagePartCount += 1;
             break;
+          case 'audio':
+            audioPartCount += 1;
+            break;
           case 'video':
             videoPartCount += 1;
             break;
@@ -1184,6 +1200,7 @@ function summarizeChatMessages(messages: readonly ChatMessage[]): ChatMessageSum
     partContentMessages,
     textPartCount,
     imagePartCount,
+    audioPartCount,
     videoPartCount,
     textChars,
     toolCallCount,

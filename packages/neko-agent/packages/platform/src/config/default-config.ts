@@ -11,6 +11,7 @@ import type { ModelConfig, ProviderConfig } from '@neko/shared';
 export const NEKO_GATEWAY_PROVIDER_ID = 'neko-gateway';
 export const CUSTOM_NEWAPI_PROVIDER_ID = 'custom-newapi';
 export const OLLAMA_LOCAL_PROVIDER_ID = 'ollama-local';
+export const GOOGLE_PROVIDER_ID = 'google';
 
 export const NEKO_GATEWAY_DEFAULT_CHAT_MODEL_ID = 'neko-gateway-default-chat';
 export const OLLAMA_LOCAL_DEFAULT_CHAT_MODEL_ID = 'ollama-local-default-chat';
@@ -18,9 +19,11 @@ export const NEKO_GATEWAY_DEFAULT_IMAGE_MODEL_ID = 'neko-gateway-gpt-image-2';
 export const NEKO_GATEWAY_DEFAULT_VIDEO_MODEL_ID = 'neko-gateway-seedance-lite';
 export const NEKO_GATEWAY_DEFAULT_AUDIO_MODEL_ID = 'neko-gateway-tts';
 export const NEKO_GATEWAY_DEFAULT_MUSIC_MODEL_ID = 'neko-gateway-suno';
+export const GOOGLE_GEMINI_MEDIA_UNDERSTAND_MODEL_ID = 'google-gemini-2.5-flash';
 
 const DEFAULT_NEWAPI_BASE_URL = '';
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/api';
+const DEFAULT_GOOGLE_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
 // =============================================================================
 // Default Providers
@@ -79,6 +82,20 @@ const DEFAULT_PROVIDERS: ProviderConfig[] = [
     protocolProfile: 'ollama',
     supportLevel: 'compatible',
     requiresApiKey: false,
+  },
+  {
+    id: GOOGLE_PROVIDER_ID,
+    name: 'google',
+    displayName: 'Google Gemini',
+    type: 'google',
+    apiUrl: DEFAULT_GOOGLE_BASE_URL,
+    enabled: false,
+    builtin: true,
+    connectionKind: 'direct',
+    protocolProfile: 'google',
+    supportLevel: 'verified',
+    requiresApiKey: true,
+    supportsBeta: true,
   },
 ];
 
@@ -140,6 +157,26 @@ const DEFAULT_MODELS: ModelConfig[] = [
     type: 'audio',
     capabilities: ['text_to_music'],
     enabled: true,
+  },
+  {
+    id: GOOGLE_GEMINI_MEDIA_UNDERSTAND_MODEL_ID,
+    name: 'gemini-2.5-flash',
+    displayName: 'Gemini 2.5 Flash Media Understanding',
+    providerId: GOOGLE_PROVIDER_ID,
+    type: 'llm',
+    capabilities: [
+      'chat',
+      'llm.chat',
+      'vision',
+      'llm.vision',
+      'image.understand',
+      'audio.understand',
+      'video.understand',
+      'function_calling',
+      'streaming',
+      'json_mode',
+    ],
+    enabled: false,
   },
 ];
 

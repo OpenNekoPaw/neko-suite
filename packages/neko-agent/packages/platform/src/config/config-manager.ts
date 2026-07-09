@@ -51,6 +51,10 @@ import {
   type AssistantRuntimeSettingsSnapshot,
   type AssistantSettingsData,
   type AssistantSettingsSnapshot,
+  type MediaUnderstandingCategory,
+  type MediaUnderstandingModelStatus,
+  type MediaUnderstandingModels,
+  type MediaUnderstandingPurpose,
 } from './assistant-config';
 import {
   buildAssistantConfigAvailabilityDiagnostic,
@@ -309,6 +313,7 @@ export class ConfigManager {
         ...explicitState.configuredProviders,
       ],
       modelGroups: [...projection.modelGroups],
+      mediaUnderstandingModels: this.buildMediaUnderstandingModels(),
       ...(options.accountCatalog?.diagnostics
         ? {
             accountDiagnostics: [...options.accountCatalog.diagnostics],
@@ -417,6 +422,7 @@ export class ConfigManager {
         chatModelOptions,
         models: config.models.values(),
       }),
+      mediaUnderstandingModels: this.buildMediaUnderstandingModels(),
       ...(settingsDiagnostic ? { configDiagnostic: settingsDiagnostic } : {}),
     };
   }
@@ -518,6 +524,30 @@ export class ConfigManager {
       return providerId && modelId ? { providerId, modelId } : undefined;
     }
     return defaults[type];
+  }
+
+  getDefaultModelPurposeRef(purpose: string): ModelRefConfig | undefined {
+    return this.getScalar('defaultModelPurposes')?.[purpose];
+  }
+
+  resolveModelRefForPurpose(purpose: string): ModelRefConfig | undefined {
+    const configured = this.getDefaultModelPurposeRef(purpose);
+    if (configured) {
+      return configured;
+    }
+
+    this.ensureMerged();
+    for (const model of this.models.values()) {
+      if (model.enabled === false || !modelSupportsPurpose(model, purpose)) {
+        continue;
+      }
+      const provider = this.providers.get(model.providerId);
+      if (!provider || provider.enabled === false) {
+        continue;
+      }
+      return { providerId: provider.id, modelId: model.id };
+    }
+    return undefined;
   }
 
   /**
@@ -743,6 +773,52 @@ export class ConfigManager {
     });
   }
 
+  private buildMediaUnderstandingModels(): MediaUnderstandingModels {
+    return {
+      image: this.buildMediaUnderstandingModelStatus('image', 'image.understand'),
+      audio: this.buildMediaUnderstandingModelStatus('audio', 'audio.understand'),
+      video: this.buildMediaUnderstandingModelStatus('video', 'video.understand'),
+    };
+  }
+
+  private buildMediaUnderstandingModelStatus(
+    category: MediaUnderstandingCategory,
+    purpose: MediaUnderstandingPurpose,
+  ): MediaUnderstandingModelStatus {
+    const configuredRef = this.getDefaultModelPurposeRef(purpose);
+    const resolvedRef = this.resolveModelRefForPurpose(purpose);
+
+    if (!resolvedRef) {
+      return { category, purpose, status: 'missing' };
+    }
+
+    this.ensureMerged();
+    const provider = this.providers.get(resolvedRef.providerId);
+    const model = this.models.get(resolvedRef.modelId);
+    const providerLabel = provider
+      ? provider.displayName || provider.name || provider.id
+      : undefined;
+    const modelLabel = model ? model.displayName || model.name || model.id : undefined;
+    const status: MediaUnderstandingModelStatus = {
+      category,
+      purpose,
+      status: configuredRef ? 'configured' : 'auto',
+      providerId: resolvedRef.providerId,
+      modelId: resolvedRef.modelId,
+      optionId: toModelOptionId(resolvedRef),
+      source: 'explicit-config',
+    };
+    if (providerLabel && modelLabel) {
+      status.label = `${providerLabel} / ${modelLabel}`;
+    } else if (modelLabel) {
+      status.label = modelLabel;
+    }
+    if (providerLabel) {
+      status.providerLabel = providerLabel;
+    }
+    return status;
+  }
+
   private resolveProviderSources(
     accountCatalog: AccountAiCatalogSnapshot | null,
   ): AiProviderSourceProjection {
@@ -785,6 +861,7 @@ export class ConfigManager {
       diagnostic?.code === 'unsupportedModelType' ||
       diagnostic?.code === 'unsupportedDefaultMediaModelType' ||
       diagnostic?.code === 'unsupportedDefaultModelType' ||
+      diagnostic?.code === 'unsupportedDefaultModelPurpose' ||
       diagnostic?.code === 'invalidDefaultProvider' ||
       diagnostic?.code === 'invalidDefaultModel' ||
       diagnostic?.code === 'invalidDefaultModelBinding' ||
@@ -980,6 +1057,22 @@ export class ConfigManager {
         model.enabled === false ||
         model.providerId !== provider.id ||
         (model.type ?? 'llm') !== modelType
+      ) {
+        return buildAssistantConfigAvailabilityDiagnostic('invalidDefaultModelBinding', filePath);
+      }
+    }
+    const purposeDefaults = config.defaultModelPurposes ?? {};
+    for (const [purpose, ref] of Object.entries(purposeDefaults)) {
+      if (!ref) continue;
+      const provider = this.providers.get(ref.providerId);
+      const model = this.models.get(ref.modelId);
+      if (
+        !provider ||
+        provider.enabled === false ||
+        !model ||
+        model.enabled === false ||
+        model.providerId !== provider.id ||
+        !modelSupportsPurpose(model, purpose)
       ) {
         return buildAssistantConfigAvailabilityDiagnostic('invalidDefaultModelBinding', filePath);
       }

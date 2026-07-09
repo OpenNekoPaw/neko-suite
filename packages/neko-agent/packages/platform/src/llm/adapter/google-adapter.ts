@@ -20,7 +20,18 @@ export class GoogleAdapter extends AISdkAdapter {
   private static readonly ENV_KEY_NAME = 'GOOGLE_API_KEY';
 
   protected getSupportedCapabilities(): string[] {
-    return ['chat', 'vision', 'function_calling', 'streaming', 'audio'];
+    return [
+      'chat',
+      'llm.chat',
+      'vision',
+      'llm.vision',
+      'image.understand',
+      'audio.understand',
+      'video.understand',
+      'function_calling',
+      'streaming',
+      'audio',
+    ];
   }
 
   /**
@@ -60,6 +71,10 @@ export class GoogleAdapter extends AISdkAdapter {
   override async listModels(_provider: Provider): Promise<string[]> {
     // Google doesn't have a public models list API, return known models
     return [
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-2.0-flash',
       'gemini-2.0-flash-exp',
       'gemini-1.5-pro',
       'gemini-1.5-flash',
@@ -85,6 +100,12 @@ export class GoogleAdapter extends AISdkAdapter {
     // All Gemini models support vision
     if (modelId.includes('gemini')) {
       capabilities.push('vision');
+      capabilities.push('image.understand');
+    }
+
+    if (modelId.includes('gemini-2.5') || modelId.includes('gemini-2.0')) {
+      capabilities.push('audio.understand');
+      capabilities.push('video.understand');
     }
 
     // Pro and Flash models support function calling
@@ -104,6 +125,10 @@ export class GoogleAdapter extends AISdkAdapter {
    * Get human-readable model name
    */
   private getModelDisplayName(modelId: string): string {
+    if (modelId.includes('2.5-pro')) return 'Gemini 2.5 Pro';
+    if (modelId.includes('2.5-flash-lite')) return 'Gemini 2.5 Flash-Lite';
+    if (modelId.includes('2.5-flash')) return 'Gemini 2.5 Flash';
+    if (modelId.includes('2.0-flash') && !modelId.includes('exp')) return 'Gemini 2.0 Flash';
     if (modelId.includes('2.0-flash')) return 'Gemini 2.0 Flash';
     if (modelId.includes('1.5-pro')) return 'Gemini 1.5 Pro';
     if (modelId.includes('1.5-flash-8b')) return 'Gemini 1.5 Flash 8B';

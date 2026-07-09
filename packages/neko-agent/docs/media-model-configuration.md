@@ -17,7 +17,7 @@ Provider 的 `protocol_profile` 是该 endpoint 的默认请求标准。模型�
 
 ## 配置格式
 
-`default_models` 是默认模型唯一配置入口。每个类型默认值都显式写 `provider_id` 和 `model_id`，不要拼成 `provider:model` 字符串。
+`default_models` 是类型默认模型入口。每个类型默认值都显式写 `provider_id` 和 `model_id`，不要拼成 `provider:model` 字符串。语义用途更细的模型选择使用 `default_model_purposes`，例如 Gemini 原生图片、音频、视频理解。
 
 ```toml
 version = 1
@@ -37,6 +37,18 @@ model_id = "neko-gateway-seedance-lite"
 [default_models.audio]
 provider_id = "neko-gateway"
 model_id = "neko-gateway-tts"
+
+[default_model_purposes.image_understand]
+provider_id = "google"
+model_id = "google-gemini-2.5-flash"
+
+[default_model_purposes.audio_understand]
+provider_id = "google"
+model_id = "google-gemini-2.5-flash"
+
+[default_model_purposes.video_understand]
+provider_id = "google"
+model_id = "google-gemini-2.5-flash"
 
 [[providers]]
 id = "neko-gateway"
@@ -59,6 +71,18 @@ connection_kind = "local"
 protocol_profile = "ollama"
 requires_api_key = false
 api_url = "http://localhost:11434/api"
+enabled = true
+
+[[providers]]
+id = "google"
+name = "google"
+display_name = "Google Gemini"
+type = "google"
+connection_kind = "direct"
+protocol_profile = "google"
+support_level = "verified"
+api_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key = "..."
 enabled = true
 
 [[models]]
@@ -100,22 +124,44 @@ provider_id = "neko-gateway"
 type = "audio"
 capabilities = ["text_to_music"]
 enabled = true
+
+[[models]]
+id = "google-gemini-2.5-flash"
+name = "gemini-2.5-flash"
+provider_id = "google"
+type = "llm"
+capabilities = ["chat", "vision", "image.understand", "audio.understand", "video.understand", "function_calling", "streaming", "json_mode"]
+enabled = true
 ```
 
 ## 字段说明
 
 ### `default_models`
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `llm` | `{ provider_id, model_id }` | 对话/Agent 默认 LLM |
-| `image` | `{ provider_id, model_id }` | 图片生成默认模型 |
-| `video` | `{ provider_id, model_id }` | 视频生成默认模型 |
+| 字段    | 类型                        | 说明                            |
+| ------- | --------------------------- | ------------------------------- |
+| `llm`   | `{ provider_id, model_id }` | 对话/Agent 默认 LLM             |
+| `image` | `{ provider_id, model_id }` | 图片生成默认模型                |
+| `video` | `{ provider_id, model_id }` | 视频生成默认模型                |
 | `audio` | `{ provider_id, model_id }` | 音频/TTS/音乐所属的默认音频模型 |
 
 `provider_id` 必须指向 `[[providers]].id`；`model_id` 必须指向同一 provider 下的 `[[models]].id`。如果 provider 不存在、model 不存在、provider/model 不匹配、模型被禁用或模型 `type` 不匹配，Agent 会直接报配置错误，不会 fallback。
 
 `default_provider` / `default_model` 是旧的 LLM 选择字段。新配置建议使用 `[default_models.llm]`；如果两者同时存在，运行时默认模型绑定优先使用 `[default_models.llm]`。
+
+### `default_model_purposes`
+
+`default_model_purposes` 用于按产品用途绑定模型。TOML key 使用下划线形式，运行时会映射到点号 purpose，例如 `[default_model_purposes.video_understand]` 对应 `video.understand`。
+
+`image.understand` 表示原生图片/静帧分析模型，适合审美、构图、影视化画面感、图片质量等理解任务。
+
+`audio.understand` 表示原生音频分析模型，适合对白转写、可懂度、噪声、响度、混音质量、音乐/环境声关系等理解任务。
+
+`video.understand` 表示原生视频分析/审阅模型，适合审美、影视化效果、视频质量等理解任务。
+
+这些理解用途通常由 `type = "llm"` 且声明 `capabilities = ["image.understand", "audio.understand", "video.understand", "vision"]` 的 Gemini 模型承担；不要把它们配置到 `[default_models.image]`、`[default_models.audio]` 或 `[default_models.video]`，这些类型默认值保留给生成模型。
+
+前端确认入口在 Composer 的媒体模型配置栏中。选择或切换图片、音频、视频生成模型时，同一行会显示对应的 understand 模型：`Configured` 表示来自 `[default_model_purposes.*]` 的显式绑定，`Auto` 表示没有显式绑定但已有启用模型声明对应 understand capability，`Missing` 表示当前 Agent 不会调用该类媒体理解模型。
 
 ### `models[].type`
 
@@ -190,11 +236,11 @@ MVP 合同预留了 `fast`、`deep`、`summarizer`、`vision` 槽位，用于未
 
 Agent presets 是创作意图，不是 provider 原始参数：
 
-| Composer preset | 说明 | 运行时映射 |
-|-----------------|------|------------|
-| Reasoning `fast/balanced/deep` | 控制推理预算或 reasoning effort | 仅在模型/provider 声明支持 reasoning effort 或 thinking budget 时映射 |
-| Verbosity `brief/standard/detailed` | 控制回复详略 | 仅在模型/provider 声明支持 verbosity 时映射 |
-| Creativity `stable/creative/wild` | 控制采样倾向 | 映射到 `temperature` / `topP`，前提是模型支持采样参数 |
+| Composer preset                     | 说明                            | 运行时映射                                                            |
+| ----------------------------------- | ------------------------------- | --------------------------------------------------------------------- |
+| Reasoning `fast/balanced/deep`      | 控制推理预算或 reasoning effort | 仅在模型/provider 声明支持 reasoning effort 或 thinking budget 时映射 |
+| Verbosity `brief/standard/detailed` | 控制回复详略                    | 仅在模型/provider 声明支持 verbosity 时映射                           |
+| Creativity `stable/creative/wild`   | 控制采样倾向                    | 映射到 `temperature` / `topP`，前提是模型支持采样参数                 |
 
 自定义 provider 如果缺少能力元数据，默认只开放保守通用能力，不假设支持 reasoning、verbosity、fast service tier 或 provider-specific thinking。要开启高级 LLM 控件，在 provider 或 model 的 `options.llmCapabilities` 中声明能力；这些能力只决定 UI 展示和参数投影，不改变 provider 的连接模式。
 

@@ -37,6 +37,7 @@ export interface AgentRuntimeHostBindings {
   readonly getCapabilityPromptFragments?: () => readonly PromptFragment[] | undefined;
   readonly syncToolCategories?: (registry: IToolCategoryRegistry) => void;
   readonly getPerceptionClients?: () => AgentSessionConfig['perceptionClients'];
+  readonly getPerceptionPipeline?: () => AgentSessionConfig['perceptionPipeline'];
   readonly subAgentRuntime?: SubAgentRuntimeCoordinator;
   readonly modelTierResolver?: ModelTierResolver;
   readonly specializedSubAgentPresets?: Readonly<Record<string, SpecializedAgentPreset>>;
@@ -93,17 +94,16 @@ export interface AgentWorkspaceRuntimeConfigProjection {
   readonly executionMode: ExecutionMode;
 }
 
-export interface AgentWorkspaceRuntimeSessionAssemblyInput
-  extends Omit<
-    AgentRuntimeSessionAssemblyInput,
-    | 'providerId'
-    | 'modelId'
-    | 'modelCapabilities'
-    | 'temperature'
-    | 'maxTokens'
-    | 'thinkingBudget'
-    | 'executionMode'
-  > {
+export interface AgentWorkspaceRuntimeSessionAssemblyInput extends Omit<
+  AgentRuntimeSessionAssemblyInput,
+  | 'providerId'
+  | 'modelId'
+  | 'modelCapabilities'
+  | 'temperature'
+  | 'maxTokens'
+  | 'thinkingBudget'
+  | 'executionMode'
+> {
   readonly surface: AgentWorkspaceRuntimeSurface;
   readonly effectiveConfig: AgentWorkspaceRuntimeConfigProjection;
 }
@@ -138,6 +138,7 @@ export function buildAgentRuntimeSessionFactoryConfig(
   const capabilityPromptFragments = resolveCapabilityPromptFragments(input);
   const hooks = resolveHooks(input);
   const perceptionClients = input.getPerceptionClients?.();
+  const perceptionPipeline = input.getPerceptionPipeline?.();
 
   return {
     service: input.createService(),
@@ -173,6 +174,7 @@ export function buildAgentRuntimeSessionFactoryConfig(
     projectMemoryFilePath: input.projectMemoryFilePath,
     personalPath: input.personalPath,
     perceptionClients,
+    perceptionPipeline,
     subAgentRuntime: input.subAgentRuntime,
     modelTierResolver: input.modelTierResolver,
     specializedSubAgentPresets: input.specializedSubAgentPresets,

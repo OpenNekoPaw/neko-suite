@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { PathResolver, createResourceFingerprint, createResourceRef } from '@neko/shared';
+import { createGeneratedAssetResourceRef } from '@neko/shared/vscode/extension';
 import type { IEngineClientProvider } from '../engineClientProvider';
 import { createExtensionAgentContentAccessRuntime } from '../agentContentAccessRuntime';
 
@@ -149,6 +150,43 @@ describe('createExtensionAgentContentAccessRuntime', () => {
       { role: 'document-entry', mimeType: 'image/png' },
       { materializeIfMissing: true },
     );
+  });
+
+  it('loads generated asset ResourceRefs as image bytes for ReadImage', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'neko-agent-generated-access-'));
+    tempDirs.push(tempDir);
+    const workspaceRoot = path.join(tempDir, 'workspace');
+    const generatedPath = path.join(workspaceRoot, 'neko/generated/image/asset-1.png');
+    await fs.mkdir(path.dirname(generatedPath), { recursive: true });
+    await fs.writeFile(generatedPath, PNG_1X1);
+    vscode.workspace.workspaceFolders = [
+      { uri: { fsPath: workspaceRoot } as vscode.Uri, name: 'workspace', index: 0 },
+    ];
+    const context = {
+      extensionUri: { fsPath: path.join(tempDir, 'extension') },
+      globalStorageUri: { fsPath: path.join(tempDir, 'global') },
+    } as vscode.ExtensionContext;
+    const { runtime } = createExtensionAgentContentAccessRuntime({
+      context,
+      engineClientProvider: createEngineClientProvider(createEngine(PNG_1X1)),
+      workspaceRoot,
+      pathResolver: new PathResolver(new Map([['WORKSPACE', workspaceRoot]])),
+    });
+    const ref = createGeneratedAssetResourceRef({
+      assetId: 'asset-1',
+      path: '${WORKSPACE}/neko/generated/image/asset-1.png',
+      mimeType: 'image/png',
+    });
+
+    const result = await runtime.loadProviderAsset({
+      caller: 'read-image',
+      source: ref,
+      preferredTarget: 'bytes',
+    });
+
+    expect(result.status).toBe('ready');
+    expect(Array.from(result.bytes ?? [])).toEqual(Array.from(PNG_1X1));
+    expect(result.mimeType).toBe('image/png');
   });
 
   it('loads document entry assets through resolved host paths for ReadImage', async () => {

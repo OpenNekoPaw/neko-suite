@@ -108,6 +108,12 @@ describe('multimodal-message-projection', () => {
       image: true,
       video: false,
     });
+    expect(resolveProviderInputModalities({ providerId: 'google' })).toMatchObject({
+      text: true,
+      image: true,
+      audio: true,
+      video: true,
+    });
     expect(
       resolveProviderInputModalities({
         providerId: 'unknown',
@@ -143,6 +149,56 @@ describe('multimodal-message-projection', () => {
     expect(result.message.content).toEqual([
       expect.objectContaining({ type: 'text', text: expect.stringContaining('PerceptionCard') }),
       { type: 'image', imageUrl: 'data:image/png;base64,thumb', detail: 'high' },
+    ]);
+  });
+
+  it('async projection uses provider-loadable video refs for Gemini video input', async () => {
+    const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
+      provider: { providerId: 'google' },
+      perceptionCards: [videoCard()],
+      assetLoader: {
+        load: async (ref) => ({
+          kind: 'video' as const,
+          url: `data:${ref.mimeType};base64,video`,
+          mimeType: ref.mimeType,
+        }),
+      },
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.message.content).toEqual([
+      expect.objectContaining({ type: 'text', text: expect.stringContaining('PerceptionCard') }),
+      { type: 'video', videoUrl: 'data:video/mp4;base64,video', mimeType: 'video/mp4' },
+    ]);
+  });
+
+  it('diagnoses video cards without provider-loadable video refs', async () => {
+    const result = await projectMultimodalPacketToChatMessageAsync(emptyPacket(), {
+      provider: { providerId: 'google' },
+      perceptionCards: [
+        {
+          ...videoCard(),
+          perceptual: {
+            thumbnailRef: {
+              assetId: 'thumb-1',
+              uri: '${WORKSPACE}/thumb.png',
+              mimeType: 'image/png',
+            },
+          },
+        },
+      ],
+      assetLoader: {
+        load: async () => {
+          throw new Error('should not load');
+        },
+      },
+    });
+
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'asset-ref-missing',
+        modality: 'video',
+      }),
     ]);
   });
 
@@ -307,6 +363,43 @@ function imageCard(): PerceptionCard {
         uri: '${WORKSPACE}/thumb.png',
         mimeType: 'image/png',
       },
+    },
+  };
+}
+
+function videoCard(): PerceptionCard {
+  return {
+    version: 1,
+    assetId: 'video-1',
+    modality: 'video',
+    createdAt: 1,
+    layerStatus: { layer0: 'complete', layer1: 'complete', layer2: 'complete' },
+    structural: {
+      format: 'mp4',
+      mimeType: 'video/mp4',
+      byteSize: 10,
+      width: 1920,
+      height: 1080,
+      durationMs: 2400,
+    },
+    semantic: {
+      evidences: [{ kind: 'custom', confidence: 0.9, value: { summary: 'rainy street' } }],
+    },
+    perceptual: {
+      multiViewRefs: [
+        {
+          assetId: 'video-1',
+          uri: '${WORKSPACE}/clip.mp4',
+          mimeType: 'video/mp4',
+        },
+      ],
+      keyframeRefs: [
+        {
+          assetId: 'key-1',
+          uri: '${WORKSPACE}/key.png',
+          mimeType: 'image/png',
+        },
+      ],
     },
   };
 }

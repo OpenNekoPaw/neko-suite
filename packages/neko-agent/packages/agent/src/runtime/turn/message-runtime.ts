@@ -1571,10 +1571,12 @@ const RUNTIME_MODEL_PURPOSE_CAPABILITIES: Readonly<Record<string, readonly strin
   'llm.vision': ['llm.vision', 'vision'],
   'image.generate': ['image.generate', 'text_to_image', 'image_generation'],
   'image.edit': ['image.edit', 'image_edit'],
+  'image.understand': ['image.understand'],
   'video.generate': ['video.generate', 'text_to_video', 'video_generation'],
-  'video.understand': ['video.understand', 'vision'],
+  'video.understand': ['video.understand'],
   'audio.generate': ['audio.generate', 'text_to_audio', 'audio'],
   'audio.tts': ['audio.tts', 'text_to_audio', 'audio'],
+  'audio.understand': ['audio.understand'],
   'audio.music.generate': ['audio.music.generate', 'text_to_music'],
 };
 

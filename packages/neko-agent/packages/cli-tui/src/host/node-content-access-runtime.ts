@@ -11,6 +11,7 @@ import { PathResolver, type WorkspaceMediaPathContext } from '@neko/shared';
 import {
   DocumentEntryContentAccessProvider,
   DocumentResourceCacheProvider,
+  GeneratedAssetDerivativeResourceCacheProvider,
   HostContentAccessService,
   HostResourceCacheService,
   ResourceCacheContentAccessProvider,
@@ -18,6 +19,7 @@ import {
   type ContentAccessFileOps,
   type ContentAccessService,
   type DocumentResourceCacheFsOps,
+  type ResourceCacheFileOps,
   type ResourceCacheFsOps,
   type ResourceCacheService,
 } from '@neko/shared/content-access';
@@ -76,9 +78,7 @@ class LazyNodeContentAccessRuntime implements AgentContentAccessRuntime {
     return this.runtime().then((runtime) => runtime.resolveImageMetadata(input));
   }
 
-  resolveDocumentContent(
-    input: AgentDocumentContentInput,
-  ): Promise<AgentDocumentContentResult> {
+  resolveDocumentContent(input: AgentDocumentContentInput): Promise<AgentDocumentContentResult> {
     return this.runtime().then((runtime) => runtime.resolveDocumentContent(input));
   }
 
@@ -128,6 +128,7 @@ class NodeContentAccessRuntimeBuilder {
       readFile: (filePath) => this.readBytes(filePath),
     };
     const resourceCacheFsOps = this.createResourceCacheFsOps();
+    const resourceCacheProviderFsOps = this.createResourceCacheProviderFsOps();
     const documentResourceCacheFsOps = this.createDocumentResourceCacheFsOps();
     const resourceCache = workspace.storageLayout
       ? this.createResourceCache({
@@ -135,6 +136,7 @@ class NodeContentAccessRuntimeBuilder {
           pathResolver,
           fileOps,
           resourceCacheFsOps,
+          resourceCacheProviderFsOps,
           documentResourceCacheFsOps,
           cacheRoot: workspace.storageLayout.project.local.cache.resources,
           manifestPath: workspace.storageLayout.project.local.cache.resourceManifest,
@@ -217,6 +219,7 @@ class NodeContentAccessRuntimeBuilder {
     readonly pathResolver: PathResolver;
     readonly fileOps: Pick<ContentAccessFileOps, 'readFile'>;
     readonly resourceCacheFsOps: ResourceCacheFsOps;
+    readonly resourceCacheProviderFsOps: ResourceCacheFileOps;
     readonly documentResourceCacheFsOps: DocumentResourceCacheFsOps;
     readonly cacheRoot: string;
     readonly manifestPath: string;
@@ -227,6 +230,11 @@ class NodeContentAccessRuntimeBuilder {
       projectRoot: input.workspaceRoot,
       fsOps: input.resourceCacheFsOps,
       providers: [
+        new GeneratedAssetDerivativeResourceCacheProvider({
+          pathResolver: input.pathResolver,
+          projectRoot: input.workspaceRoot,
+          fsOps: input.resourceCacheProviderFsOps,
+        }),
         new DocumentResourceCacheProvider({
           pathResolver: input.pathResolver,
           projectRoot: input.workspaceRoot,
@@ -275,6 +283,21 @@ class NodeContentAccessRuntimeBuilder {
       },
       rm: (filePath, options) =>
         this.options.host.files.delete(filePath, { idempotent: options.force }),
+    };
+  }
+
+  private createResourceCacheProviderFsOps(): ResourceCacheFileOps {
+    return {
+      copyFile: async (source, target) => {
+        await this.options.host.files.writeBytes(target, await this.readBytes(source));
+      },
+      mkdir: async (dirPath) => {
+        await this.options.host.files.createDirectory(dirPath);
+      },
+      stat: async (filePath) => {
+        const stat = await this.options.host.files.stat(filePath);
+        return { size: stat.sizeBytes ?? 0 };
+      },
     };
   }
 

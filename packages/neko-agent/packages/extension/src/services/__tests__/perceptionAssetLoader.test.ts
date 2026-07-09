@@ -40,6 +40,24 @@ describe('createLocalPerceptionAssetLoader', () => {
     expect(runtime.loadProviderAsset).not.toHaveBeenCalled();
   });
 
+  it('preserves audio payload kind for provider-ready audio refs', async () => {
+    const runtime = createContentAccessRuntime();
+    const loader = createLocalPerceptionAssetLoader(runtime);
+
+    const result = await loader.load({
+      assetId: 'audio-1',
+      uri: 'data:audio/wav;base64,abc',
+      mimeType: 'audio/wav',
+    });
+
+    expect(result).toEqual({
+      kind: 'audio',
+      url: 'data:audio/wav;base64,abc',
+      mimeType: 'audio/wav',
+    });
+    expect(runtime.loadProviderAsset).not.toHaveBeenCalled();
+  });
+
   it('loads local assets through Agent content access runtime', async () => {
     const bytes = Buffer.from('image-bytes');
     const runtime = createContentAccessRuntime(bytes, 'image/png');

@@ -195,6 +195,64 @@ describe('config-reader typed results', () => {
     );
   });
 
+  it('preserves purpose-specific default model bindings from TOML', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      [
+        '[default_model_purposes.image_understand]',
+        'provider_id = "google"',
+        'model_id = "google-gemini-2.5-flash"',
+        '',
+        '[default_model_purposes.audio_understand]',
+        'provider_id = "google"',
+        'model_id = "google-gemini-2.5-flash"',
+        '',
+        '[default_model_purposes.video_understand]',
+        'provider_id = "google"',
+        'model_id = "google-gemini-2.5-flash"',
+        '',
+        '[[models]]',
+        'id = "google-gemini-2.5-flash"',
+        'name = "gemini-2.5-flash"',
+        'provider_id = "google"',
+        'type = "llm"',
+        'capabilities = ["chat", "vision", "image.understand", "audio.understand", "video.understand"]',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') throw new Error('Expected ok result');
+    expect(result.config.defaultModelPurposes).toEqual({
+      'image.understand': {
+        providerId: 'google',
+        modelId: 'google-gemini-2.5-flash',
+      },
+      'audio.understand': {
+        providerId: 'google',
+        modelId: 'google-gemini-2.5-flash',
+      },
+      'video.understand': {
+        providerId: 'google',
+        modelId: 'google-gemini-2.5-flash',
+      },
+    });
+
+    writeConfigFile(filePath, result.config);
+    expect(fs.readFileSync(filePath, 'utf-8')).toContain(
+      '[default_model_purposes.image_understand]',
+    );
+    expect(fs.readFileSync(filePath, 'utf-8')).toContain(
+      '[default_model_purposes.audio_understand]',
+    );
+    expect(fs.readFileSync(filePath, 'utf-8')).toContain(
+      '[default_model_purposes.video_understand]',
+    );
+  });
+
   it('preserves model protocol profile overrides from TOML', () => {
     const filePath = path.join(createTempRoot(), 'config.toml');
     fs.writeFileSync(
@@ -347,14 +405,7 @@ describe('config-reader typed results', () => {
 
   it('diagnoses non-positive default max_tokens as an output-token config error', () => {
     const filePath = path.join(createTempRoot(), 'config.toml');
-    fs.writeFileSync(
-      filePath,
-      [
-        '[defaults]',
-        'max_tokens = 0',
-      ].join('\n'),
-      'utf-8',
-    );
+    fs.writeFileSync(filePath, ['[defaults]', 'max_tokens = 0'].join('\n'), 'utf-8');
 
     const result = readConfigFileResult(filePath);
 
@@ -657,6 +708,22 @@ describe('config-reader typed results', () => {
 
     expect(result.status).toBe('unsupportedDefaultModelType');
     expect(getConfigReadDiagnostic(result)?.detail).toContain('Unsupported default_models key');
+  });
+
+  it('rejects malformed purpose defaults', () => {
+    const filePath = path.join(createTempRoot(), 'config.toml');
+    fs.writeFileSync(
+      filePath,
+      ['[default_model_purposes.video_understand]', 'provider_id = "google"'].join('\n'),
+      'utf-8',
+    );
+
+    const result = readConfigFileResult(filePath);
+
+    expect(result.status).toBe('unsupportedDefaultModelPurpose');
+    expect(getConfigReadDiagnostic(result)?.detail).toContain(
+      'Invalid default_model_purposes.video_understand',
+    );
   });
 
   it('ignores adjacent config.json when canonical TOML is missing', () => {

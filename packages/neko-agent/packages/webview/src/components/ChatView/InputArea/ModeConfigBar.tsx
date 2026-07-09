@@ -4,6 +4,8 @@ import type {
   AgentLlmConfig,
   AgentReasoningPreset,
   AgentVerbosityPreset,
+  MediaUnderstandingModelStatus,
+  MediaUnderstandingModels,
   SessionMode,
 } from '@neko-agent/types';
 import type { ChatModelOption } from '@neko/shared';
@@ -38,6 +40,7 @@ interface ModeConfigBarProps {
   readonly onModelSelect: (modelId: string) => void;
   readonly mediaModelSelection: Readonly<MediaModelSelection>;
   readonly availableMediaModels: readonly ChatModelOption[];
+  readonly mediaUnderstandingModels?: MediaUnderstandingModels;
   readonly onMediaModelSelect: (category: MediaCategory, modelId: string) => void;
   readonly genCategory: GenCategory;
   readonly genParams: GenerationParams;
@@ -132,6 +135,7 @@ export function ModeConfigBar({
   onModelSelect,
   mediaModelSelection,
   availableMediaModels,
+  mediaUnderstandingModels,
   onMediaModelSelect,
   genCategory,
   genParams,
@@ -217,6 +221,7 @@ export function ModeConfigBar({
             onModelSelect={onModelSelect}
             mediaModelSelection={mediaModelSelection}
             availableMediaModels={availableMediaModels}
+            mediaUnderstandingModels={mediaUnderstandingModels}
             onMediaModelSelect={onMediaModelSelect}
             genParams={genParams}
             onGenParamsChange={onGenParamsChange}
@@ -229,6 +234,7 @@ export function ModeConfigBar({
             category={projection.mode}
             mediaModelSelection={mediaModelSelection}
             availableMediaModels={availableMediaModels}
+            mediaUnderstandingModels={mediaUnderstandingModels}
             onMediaModelSelect={onMediaModelSelect}
             genParams={genParams}
             onGenParamsChange={onGenParamsChange}
@@ -255,6 +261,7 @@ interface AgentModeConfigBarProps extends AgentLlmConfigBarProps {
   readonly onCategoryChange: (category: AgentConfigCategory) => void;
   readonly mediaModelSelection: Readonly<MediaModelSelection>;
   readonly availableMediaModels: readonly ChatModelOption[];
+  readonly mediaUnderstandingModels?: MediaUnderstandingModels;
   readonly onMediaModelSelect: (category: MediaCategory, modelId: string) => void;
   readonly genParams: GenerationParams;
   readonly onGenParamsChange: (params: Partial<GenerationParams>) => void;
@@ -269,6 +276,7 @@ function AgentModeConfigBar({
   onModelSelect,
   mediaModelSelection,
   availableMediaModels,
+  mediaUnderstandingModels,
   onMediaModelSelect,
   genParams,
   onGenParamsChange,
@@ -298,6 +306,7 @@ function AgentModeConfigBar({
           category={category}
           mediaModelSelection={mediaModelSelection}
           availableMediaModels={availableMediaModels}
+          mediaUnderstandingModels={mediaUnderstandingModels}
           onMediaModelSelect={onMediaModelSelect}
           genParams={genParams}
           onGenParamsChange={onGenParamsChange}
@@ -472,6 +481,7 @@ interface MediaModelParamsBarProps {
   readonly category: MediaCategory;
   readonly mediaModelSelection: Readonly<MediaModelSelection>;
   readonly availableMediaModels: readonly ChatModelOption[];
+  readonly mediaUnderstandingModels?: MediaUnderstandingModels;
   readonly onMediaModelSelect: (category: MediaCategory, modelId: string) => void;
   readonly genParams: GenerationParams;
   readonly onGenParamsChange: (params: Partial<GenerationParams>) => void;
@@ -482,6 +492,7 @@ function MediaModelParamsBar({
   category,
   mediaModelSelection,
   availableMediaModels,
+  mediaUnderstandingModels,
   onMediaModelSelect,
   genParams,
   onGenParamsChange,
@@ -497,6 +508,11 @@ function MediaModelParamsBar({
         selectedId={mediaModelSelection[category]}
         models={models}
         onSelect={(modelId) => onMediaModelSelect(category, modelId)}
+        disabled={disabled}
+      />
+      <MediaUnderstandingChip
+        category={category}
+        status={mediaUnderstandingModels?.[category]}
         disabled={disabled}
       />
       <MediaParamsPanel
@@ -638,6 +654,49 @@ function InlineMediaModelChip({
         </div>
       )}
     </div>
+  );
+}
+
+interface MediaUnderstandingChipProps {
+  readonly category: MediaCategory;
+  readonly status?: MediaUnderstandingModelStatus;
+  readonly disabled?: boolean;
+}
+
+function MediaUnderstandingChip({
+  category,
+  status,
+  disabled = false,
+}: MediaUnderstandingChipProps) {
+  const { t } = useTranslation();
+  if (!status) return null;
+
+  const color =
+    status.status === 'missing'
+      ? 'var(--vscode-descriptionForeground)'
+      : getCategoryColor(category);
+  const statusLabel = t(`chat.mediaUnderstanding.status.${status.status}`);
+  const modelLabel = getMediaUnderstandingModelLabel(status, t);
+  const visibleLabel = t('chat.mediaUnderstanding.chip', {
+    model: shortenMediaUnderstandingLabel(status, t),
+  });
+  const title = t('chat.mediaUnderstanding.title', {
+    category: getConfigCategoryLabel(t, category),
+    model: modelLabel,
+    status: statusLabel,
+  });
+
+  return (
+    <span
+      className={`agent-control-chip agent-control-chip-model agent-control-chip-understand agent-control-chip-static ${
+        status.status === 'missing' || disabled ? 'agent-control-chip-muted' : ''
+      }`}
+      style={{ color }}
+      title={title}
+      aria-label={title}
+    >
+      <span className="agent-control-chip-text">{visibleLabel}</span>
+    </span>
   );
 }
 
@@ -989,6 +1048,35 @@ function getConfigCategoryLabel(t: Translate, category: AgentConfigCategory): st
 
 function getConfigCategoryColor(category: AgentConfigCategory): string {
   return getCategoryColor(category);
+}
+
+function getMediaUnderstandingModelLabel(
+  status: MediaUnderstandingModelStatus,
+  t: Translate,
+): string {
+  if (status.status === 'missing') {
+    return t('chat.mediaUnderstanding.unavailable');
+  }
+  return (
+    status.label ?? status.optionId ?? status.modelId ?? t('chat.mediaUnderstanding.unavailable')
+  );
+}
+
+function shortenMediaUnderstandingLabel(
+  status: MediaUnderstandingModelStatus,
+  t: Translate,
+): string {
+  if (status.status === 'missing') {
+    return t('chat.mediaUnderstanding.unavailableShort');
+  }
+  return shortenModelLabel(
+    {
+      label: status.label ?? status.optionId ?? status.modelId ?? '',
+      modelId: status.modelId ?? status.optionId ?? '',
+    },
+    10,
+    '...',
+  );
 }
 
 function resolveParamOption(t: Translate, option: ParamOption | ResolvedParamOption) {

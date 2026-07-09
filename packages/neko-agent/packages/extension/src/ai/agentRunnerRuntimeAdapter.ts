@@ -1,4 +1,4 @@
-import { toSharedService } from '@neko/platform';
+import { GeminiMediaUnderstandingClient, toSharedService } from '@neko/platform';
 import type { ChatMessage, ConfiguredToolGroup } from '@neko/shared';
 import {
   buildAgentSessionExecutionContext,
@@ -6,6 +6,7 @@ import {
   createAgentRuntimeSessionController,
   createAgentRunnerEventEmitter,
   createAgentSessionRunner,
+  createPerceptionPipeline,
   type AgentRunnerConfirmationRequest,
   type AgentRunnerEventEmitter,
   type AgentPendingMessageItem,
@@ -14,6 +15,11 @@ import {
   type AgentRuntimeSessionAssemblyInput,
   type AgentRuntimeSessionController,
   type AgentRuntimeSessionControllerTarget,
+  type IPerceptionPipeline,
+  type MediaProbePort,
+  type PerceptionPipelinePorts,
+  type PerceptualAssetResolverPort,
+  type ResolvedPerceptualAsset,
   type SubAgentRuntimeCoordinator,
 } from '@neko/agent/runtime';
 import type { AgentEvent } from '@neko/agent';
@@ -295,14 +301,18 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
     config: IAgentConfig,
   ): AgentRuntimeSessionAssemblyInput {
     const capabilityRuntime = getCapabilityRuntimeBindings();
+    const createSharedService = () =>
+      toSharedService(config.platform.createService(), {
+        providerCardRegistry: capabilityRuntime.providerCardRegistry,
+        ...(this.deps.perceptionAssetLoader
+          ? { assetLoader: this.deps.perceptionAssetLoader }
+          : {}),
+      });
+    const perceptionPipeline = this.deps.perceptionAssetLoader
+      ? this.createMediaPerceptionPipeline(config, createSharedService)
+      : undefined;
     return {
-      createService: () =>
-        toSharedService(config.platform.createService(), {
-          providerCardRegistry: capabilityRuntime.providerCardRegistry,
-          ...(this.deps.perceptionAssetLoader
-            ? { assetLoader: this.deps.perceptionAssetLoader }
-            : {}),
-        }),
+      createService: createSharedService,
       toolRegistry: config.platform.tools,
       systemPrompt: config.systemPrompt,
       maxIterations: config.maxIterations,
@@ -339,6 +349,7 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
       toolCategoryRegistry: config.toolCategoryRegistry,
       getPerceptionClients: () =>
         this.deps.engineClientProvider.createPerceptionClients(config.engineClient),
+      ...(perceptionPipeline ? { getPerceptionPipeline: () => perceptionPipeline } : {}),
       subAgentRuntime: this.deps.subAgentRuntime,
       specializedSubAgentPresets: getCreativePresets({ locale: config.locale }),
       syncToolCategories: (registry) => {
@@ -362,6 +373,27 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
     };
   }
 
+  private createMediaPerceptionPipeline(
+    config: IAgentConfig,
+    createSharedService: () => ReturnType<typeof toSharedService>,
+  ): IPerceptionPipeline {
+    const assetLoader = this.deps.perceptionAssetLoader;
+    if (!assetLoader) {
+      throw new Error('Perception asset loader is required to create media perception pipeline.');
+    }
+    const client = new GeminiMediaUnderstandingClient({
+      service: createSharedService(),
+      configManager: config.platform.config,
+      assetLoader,
+    });
+    const ports: PerceptionPipelinePorts = {
+      resolver: createRefPerceptionResolver(),
+      mediaProbe: createEngineMediaProbe(this.deps.engineClientProvider),
+      perceptionClient: client,
+    };
+    return createPerceptionPipeline(ports);
+  }
+
   private buildExecutionContext(context: IAgentContext): import('@neko/agent').ExecutionContext {
     return buildAgentSessionExecutionContext({
       context: {
@@ -383,6 +415,84 @@ export class AgentRunnerRuntimeAdapter implements AgentRunnerPort<IAgentConfig, 
       this.runnerEvents.fire({ type: 'subagent', event });
     });
   }
+}
+
+function createRefPerceptionResolver(): PerceptualAssetResolverPort {
+  return {
+    resolve: async (selector) => {
+      if (!selector.ref) {
+        throw new Error(
+          'Perception pipeline requires a PerceptualAssetRef for native media analysis.',
+        );
+      }
+      const mimeType = selector.ref.mimeType;
+      return {
+        assetId: selector.assetId,
+        ref: selector.ref,
+        uri: selector.ref.uri,
+        modality: inferPerceptionModality(mimeType),
+        mimeType,
+        resolvedPath: isRemoteOrInlineUri(selector.ref.uri) ? undefined : selector.ref.uri,
+        metadata: {
+          ...(selector.ref.label ? { label: selector.ref.label } : {}),
+          ...(selector.ref.timestampMs !== undefined
+            ? { timestampMs: selector.ref.timestampMs }
+            : {}),
+        },
+      };
+    },
+  };
+}
+
+function createEngineMediaProbe(engineClientProvider: IEngineClientProvider): MediaProbePort {
+  return {
+    probe: async (asset) => {
+      if (
+        (asset.modality === 'video' || asset.modality === 'audio') &&
+        asset.resolvedPath &&
+        !isRemoteOrInlineUri(asset.resolvedPath)
+      ) {
+        const engine = await engineClientProvider.getRequiredClient();
+        const probe = await engine.probe(
+          asset.modality === 'audio' ? 'audios' : 'videos',
+          asset.resolvedPath,
+        );
+        return {
+          format: probe.format || inferFormatFromMimeType(asset.mimeType),
+          mimeType: asset.mimeType,
+          byteSize: asset.byteSize ?? 0,
+          ...(probe.width > 0 ? { width: probe.width } : {}),
+          ...(probe.height > 0 ? { height: probe.height } : {}),
+          ...(probe.duration > 0 ? { durationMs: Math.round(probe.duration * 1000) } : {}),
+          ...(probe.fps > 0 ? { frameRate: probe.fps } : {}),
+          ...(probe.audioChannels !== undefined ? { channels: probe.audioChannels } : {}),
+          ...(probe.audioSampleRate !== undefined ? { sampleRate: probe.audioSampleRate } : {}),
+        };
+      }
+
+      return {
+        format: inferFormatFromMimeType(asset.mimeType),
+        mimeType: asset.mimeType,
+        byteSize: asset.byteSize ?? 0,
+      };
+    },
+  };
+}
+
+function inferPerceptionModality(mimeType: string): ResolvedPerceptualAsset['modality'] {
+  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
+  if (mimeType.startsWith('image/')) return 'image';
+  return 'data';
+}
+
+function inferFormatFromMimeType(mimeType: string): string {
+  const slash = mimeType.indexOf('/');
+  return slash >= 0 ? mimeType.slice(slash + 1) : mimeType;
+}
+
+function isRemoteOrInlineUri(uri: string): boolean {
+  return uri.startsWith('data:') || uri.startsWith('http://') || uri.startsWith('https://');
 }
 
 function projectConfirmation(

@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { cloneElement, isValidElement, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentContextPayload, ChatModelOption, MessageAttachment } from '@neko/shared';
-import type { ConversationKind, SessionMode } from '@neko-agent/types';
+import type { ConversationKind, MediaUnderstandingModels, SessionMode } from '@neko-agent/types';
 import { InputAreaProvider } from '@/components/ChatView/InputAreaContext';
 import { DEFAULT_GENERATION_PARAMS } from './types';
 import { InputArea } from './InputArea';
@@ -107,6 +107,13 @@ const translations: Record<string, string> = {
   'chat.generation.model.noneShort': '无',
   'chat.generation.model.select': '选择{category}模型',
   'chat.generation.model.unconfigured': '未配置{category}模型',
+  'chat.mediaUnderstanding.chip': '理解 {model}',
+  'chat.mediaUnderstanding.title': '{category}理解：{model}（{status}）',
+  'chat.mediaUnderstanding.unavailable': '未配置',
+  'chat.mediaUnderstanding.unavailableShort': '无',
+  'chat.mediaUnderstanding.status.configured': '指定',
+  'chat.mediaUnderstanding.status.auto': '自动',
+  'chat.mediaUnderstanding.status.missing': '缺失',
   'chat.generation.param.ratio': '画面比例',
   'chat.generation.param.resolution': '分辨率',
   'chat.generation.param.videoDuration': '视频时长',
@@ -253,6 +260,36 @@ const allMediaModels: ChatModelOption[] = [
     capabilities: ['text_to_audio'],
   },
 ];
+
+const mediaUnderstandingModels: MediaUnderstandingModels = {
+  image: {
+    category: 'image',
+    purpose: 'image.understand',
+    status: 'auto',
+    providerId: 'google',
+    modelId: 'gemini-flash',
+    optionId: 'google:gemini-flash',
+    label: 'Google / Gemini Flash',
+    providerLabel: 'Google',
+    source: 'explicit-config',
+  },
+  audio: {
+    category: 'audio',
+    purpose: 'audio.understand',
+    status: 'missing',
+  },
+  video: {
+    category: 'video',
+    purpose: 'video.understand',
+    status: 'configured',
+    providerId: 'google',
+    modelId: 'gemini-flash',
+    optionId: 'google:gemini-flash',
+    label: 'Google / Gemini Flash',
+    providerLabel: 'Google',
+    source: 'explicit-config',
+  },
+};
 
 vi.mock('@/i18n/I18nContext', () => ({
   useTranslation: () => ({
@@ -506,6 +543,7 @@ describe('InputArea composer controls', () => {
     render(
       <Harness
         availableMediaModels={allMediaModels}
+        mediaUnderstandingModels={mediaUnderstandingModels}
         onSessionModeChange={onSessionModeChange}
         onGenCategoryChange={onGenCategoryChange}
       >
@@ -539,6 +577,7 @@ describe('InputArea composer controls', () => {
     expect(modelTagList?.querySelectorAll('.agent-model-tag')).toHaveLength(2);
     expect(modelTagList?.textContent).toBe('视频文生视频');
     fireEvent.click(screen.getByRole('menuitem', { name: /Model Video/ }));
+    expect(within(paramsGroup).getByTitle('视频理解：Google / Gemini Flash（指定）')).toBeTruthy();
     expect(within(paramsGroup).getByRole('button', { name: '画面比例' })).toBeTruthy();
     expect(within(paramsGroup).getByRole('button', { name: '分辨率' })).toBeTruthy();
     const durationTrigger = within(paramsGroup).getByRole('button', { name: '视频时长' });
@@ -1549,6 +1588,7 @@ function Harness({
   skills = [],
   availableModels = chatModels,
   availableMediaModels = mediaModels,
+  mediaUnderstandingModels,
   selectedFileReferences = [],
   onSelectedFileReferencesChange = vi.fn(),
   isBusy = false,
@@ -1576,6 +1616,7 @@ function Harness({
   readonly skills?: React.ComponentProps<typeof InputAreaProvider>['skills'];
   readonly availableModels?: ChatModelOption[];
   readonly availableMediaModels?: ChatModelOption[];
+  readonly mediaUnderstandingModels?: MediaUnderstandingModels;
   readonly selectedFileReferences?: React.ComponentProps<
     typeof InputArea
   >['selectedFileReferences'];
@@ -1597,6 +1638,7 @@ function Harness({
         audio: 'none',
       }}
       availableMediaModels={availableMediaModels}
+      mediaUnderstandingModels={mediaUnderstandingModels}
       onMediaModelSelect={onMediaModelSelect}
       sessionMode={sessionMode}
       conversationKind={conversationKind}

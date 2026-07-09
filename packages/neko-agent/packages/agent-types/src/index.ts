@@ -682,6 +682,12 @@ export type {
   TabType,
   PromptMode,
   SessionMode,
+  MediaUnderstandingCategory,
+  MediaUnderstandingPurpose,
+  MediaUnderstandingModelSource,
+  MediaUnderstandingModelStatus,
+  MediaUnderstandingModelStatusValue,
+  MediaUnderstandingModels,
   SsoSession,
   SettingsState,
 } from './ui';

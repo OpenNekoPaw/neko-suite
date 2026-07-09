@@ -1,4 +1,7 @@
-export { HostContentAccessService, HostContentIngestService } from '../vscode/extension/content-access-service';
+export {
+  HostContentAccessService,
+  HostContentIngestService,
+} from '../vscode/extension/content-access-service';
 export type {
   ContentAccessLogger,
   ContentAccessService,
@@ -73,3 +76,14 @@ export type {
   DocumentResourceCacheFsOps,
   DocumentResourceCacheProviderOptions,
 } from '../vscode/extension/document-resource-cache-provider';
+export {
+  GENERATED_RESOURCE_CACHE_PROVIDER_ID,
+  GeneratedAssetDerivativeResourceCacheProvider,
+  createGeneratedAssetResourceRef,
+} from '../vscode/extension/resource-cache-providers';
+export type {
+  CreateGeneratedAssetResourceRefInput,
+  GeneratedAssetDerivativeResourceCacheProviderOptions,
+  GeneratedAssetResourceResolverResult,
+  ResourceCacheFileOps,
+} from '../vscode/extension/resource-cache-providers';

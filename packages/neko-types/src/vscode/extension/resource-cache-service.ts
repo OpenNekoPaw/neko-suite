@@ -814,11 +814,21 @@ export class VSCodeResourceCacheService implements ResourceCacheService {
         signal: options.signal,
       });
       await this.recordEnsureResult(ensured);
-      return this.createResult(ref, variant, ensured.status, {
-        absolutePath: ensured.absolutePath,
-        relativePath: ensured.relativePath,
-        error: ensured.error,
-      });
+      return this.createResult(
+        ref,
+        {
+          ...variant,
+          ...(ensured.mimeType ? { mimeType: ensured.mimeType } : {}),
+          ...(ensured.width !== undefined ? { width: ensured.width } : {}),
+          ...(ensured.height !== undefined ? { height: ensured.height } : {}),
+        },
+        ensured.status,
+        {
+          absolutePath: ensured.absolutePath,
+          relativePath: ensured.relativePath,
+          error: ensured.error,
+        },
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger?.warn('Resource cache provider failed', {
