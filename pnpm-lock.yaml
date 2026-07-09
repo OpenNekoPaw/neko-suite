@@ -976,6 +976,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.43.6
         version: 6.43.6
+      '@neko-agent/types':
+        specifier: workspace:*
+        version: link:../neko-agent/packages/agent-types
       '@neko-agent/webview':
         specifier: workspace:*
         version: link:../neko-agent/packages/webview
@@ -997,6 +1000,9 @@ importers:
       '@neko/neko-client':
         specifier: workspace:*
         version: link:../neko-client
+      '@neko/platform':
+        specifier: workspace:*
+        version: link:../neko-agent/packages/platform
       '@neko/preview-webview':
         specifier: workspace:*
         version: link:../neko-preview/packages/webview

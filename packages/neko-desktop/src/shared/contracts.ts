@@ -1,4 +1,5 @@
 import type { SupportedLocale } from '@neko/shared';
+import type { ExtensionToWebviewMessage } from '@neko-agent/types';
 import type {
   WorkbenchEngineViewportSessionContract,
   WorkbenchContributionSnapshot,
@@ -7,17 +8,28 @@ import type {
 } from '@neko/workbench-core';
 
 export const DESKTOP_BRIDGE_GLOBAL = 'nekoDesktop';
+export const DESKTOP_LEGACY_VSCODE_API_GLOBAL = 'vscodeApi';
 
 export const DESKTOP_BRIDGE_CHANNELS = {
   getSnapshot: 'neko-desktop:getSnapshot',
   readWorkspaceFile: 'neko-desktop:readWorkspaceFile',
+  writeWorkspaceFile: 'neko-desktop:writeWorkspaceFile',
   sendViewportIntent: 'neko-desktop:sendViewportIntent',
+  sendFeatureWebviewMessage: 'neko-desktop:sendFeatureWebviewMessage',
+  sendAgentRuntimeMessage: 'neko-desktop:sendAgentRuntimeMessage',
 } as const;
 
 export type DesktopBridgeChannel =
   (typeof DESKTOP_BRIDGE_CHANNELS)[keyof typeof DESKTOP_BRIDGE_CHANNELS];
 
 export type DesktopHostKind = 'electron';
+
+export const DESKTOP_AGENT_RUNTIME_IDS = {
+  agentWebview: 'neko.agent.webview.electron',
+} as const;
+
+export type DesktopAgentRuntimeId =
+  (typeof DESKTOP_AGENT_RUNTIME_IDS)[keyof typeof DESKTOP_AGENT_RUNTIME_IDS];
 
 export type WorkbenchSurfaceId =
   | 'explorer'
@@ -244,6 +256,60 @@ export interface ReadWorkspaceFileResult {
   readonly truncated: boolean;
 }
 
+export interface WriteWorkspaceFileRequest {
+  readonly relativePath: string;
+  readonly content: string;
+  readonly encoding?: 'utf8';
+}
+
+export interface WriteWorkspaceFileResult {
+  readonly relativePath: string;
+  readonly encoding: 'utf8';
+  readonly bytesWritten: number;
+  readonly written: true;
+}
+
+export type DesktopFeatureWebviewRuntimeId =
+  | '@neko-canvas/webview/root'
+  | '@neko/webview/root'
+  | '@neko-audio/webview/root'
+  | '@neko-sketch/webview/root'
+  | '@neko-model/webview/root'
+  | '@neko/preview-webview/host-adapter';
+
+export interface DesktopFeatureWebviewContext {
+  readonly runtimeId: DesktopFeatureWebviewRuntimeId;
+  readonly panelKind: DesktopCreativePanelKind;
+  readonly relativePath: string;
+}
+
+export interface DesktopFeatureWebviewMessageRequest extends DesktopFeatureWebviewContext {
+  readonly message: unknown;
+}
+
+export type DesktopFeatureWebviewHostMessage = unknown;
+
+export type DesktopFeatureWebviewDiagnosticCode =
+  | 'invalid-feature-webview-message'
+  | 'unsupported-feature-webview-runtime'
+  | 'unsupported-feature-webview-route'
+  | 'feature-webview-document-load-failed'
+  | 'feature-webview-document-save-failed';
+
+export interface DesktopFeatureWebviewDiagnostic {
+  readonly code: DesktopFeatureWebviewDiagnosticCode;
+  readonly runtimeId?: string;
+  readonly panelKind?: string;
+  readonly route?: string;
+  readonly message: string;
+}
+
+export interface DesktopFeatureWebviewHostMessageResult {
+  readonly runtimeId?: DesktopFeatureWebviewRuntimeId;
+  readonly messages: readonly DesktopFeatureWebviewHostMessage[];
+  readonly diagnostics?: readonly DesktopFeatureWebviewDiagnostic[];
+}
+
 export type ViewportIntentRejectionReason =
   | 'engine-unavailable'
   | 'viewport-intent-unimplemented';
@@ -275,10 +341,45 @@ export interface DesktopSnapshot {
   readonly viewport: EngineViewportSummary;
 }
 
+export type DesktopAgentHostMessage = ExtensionToWebviewMessage;
+
+export type DesktopAgentRuntimeDiagnosticCode =
+  | 'unknown-agent-runtime'
+  | 'invalid-agent-runtime-request'
+  | 'invalid-agent-webview-message'
+  | 'unsupported-agent-route'
+  | 'agent-config-load-failed';
+
+export interface DesktopAgentRuntimeDiagnostic {
+  readonly code: DesktopAgentRuntimeDiagnosticCode;
+  readonly runtimeId?: string;
+  readonly message: string;
+  readonly route?: string;
+}
+
+export interface DesktopAgentRuntimeMessageRequest {
+  readonly runtimeId: string;
+  readonly message: unknown;
+}
+
+export interface DesktopAgentHostMessageResult {
+  readonly runtimeId?: string;
+  readonly messages: readonly DesktopAgentHostMessage[];
+  readonly diagnostics?: readonly DesktopAgentRuntimeDiagnostic[];
+}
+
 export interface NekoDesktopBridge {
   getSnapshot(): Promise<DesktopSnapshot>;
   readWorkspaceFile(request: ReadWorkspaceFileRequest): Promise<ReadWorkspaceFileResult>;
+  writeWorkspaceFile(request: WriteWorkspaceFileRequest): Promise<WriteWorkspaceFileResult>;
   sendViewportIntent(intent: ViewportIntent): Promise<ViewportIntentAck>;
+  setFeatureWebviewContext(context: DesktopFeatureWebviewContext | undefined): void;
+  sendFeatureWebviewMessage(
+    request: DesktopFeatureWebviewMessageRequest,
+  ): Promise<DesktopFeatureWebviewHostMessageResult>;
+  sendAgentRuntimeMessage(
+    request: DesktopAgentRuntimeMessageRequest,
+  ): Promise<DesktopAgentHostMessageResult>;
 }
 
 export function isDesktopBridgeChannel(value: string): value is DesktopBridgeChannel {
@@ -314,16 +415,64 @@ export function normalizeReadWorkspaceFileRequest(input: unknown): ReadWorkspace
   if (!isRecord(input)) {
     throw new Error('Read workspace file request must be an object.');
   }
-  const relativePath = readNonEmptyString(input['relativePath'], 'relativePath');
-  if (relativePath.startsWith('/') || relativePath.includes('..')) {
-    throw new Error('Read workspace file relativePath must stay inside the workspace.');
+  return { relativePath: normalizeWorkspaceRelativeRequestPath(input['relativePath']) };
+}
+
+export function normalizeWriteWorkspaceFileRequest(input: unknown): WriteWorkspaceFileRequest {
+  if (!isRecord(input)) {
+    throw new Error('Write workspace file request must be an object.');
   }
-  return { relativePath };
+  const relativePath = normalizeWorkspaceRelativeRequestPath(input['relativePath']);
+  const content = input['content'];
+  if (typeof content !== 'string') {
+    throw new Error('content is required.');
+  }
+  const encoding = input['encoding'];
+  if (encoding !== undefined && encoding !== 'utf8') {
+    throw new Error(`Unknown workspace file encoding: ${String(encoding)}`);
+  }
+  return {
+    relativePath,
+    content,
+    encoding: 'utf8',
+  };
+}
+
+export function isKnownDesktopAgentRuntimeId(value: string): value is DesktopAgentRuntimeId {
+  return Object.values(DESKTOP_AGENT_RUNTIME_IDS).includes(value as DesktopAgentRuntimeId);
+}
+
+export function normalizeDesktopAgentRuntimeMessageRequest(
+  input: unknown,
+): DesktopAgentRuntimeMessageRequest {
+  if (!isRecord(input)) {
+    throw new Error('Desktop Agent runtime message request must be an object.');
+  }
+  return {
+    runtimeId: readNonEmptyString(input['runtimeId'], 'runtimeId'),
+    message: input['message'],
+  };
+}
+
+export function normalizeDesktopFeatureWebviewMessageRequest(
+  input: unknown,
+): DesktopFeatureWebviewMessageRequest {
+  if (!isRecord(input)) {
+    throw new Error('Desktop feature Webview message request must be an object.');
+  }
+  const runtimeId = readDesktopFeatureWebviewRuntimeId(input['runtimeId']);
+  const panelKind = readDesktopCreativePanelKind(input['panelKind']);
+  return {
+    runtimeId,
+    panelKind,
+    relativePath: normalizeWorkspaceRelativeRequestPath(input['relativePath']),
+    message: input['message'],
+  };
 }
 
 function readNonEmptyString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`Viewport intent ${field} is required.`);
+    throw new Error(`${field} is required.`);
   }
   return value;
 }
@@ -341,6 +490,50 @@ function readViewportAction(value: unknown): ViewportIntent['action'] {
     return value as ViewportIntent['action'];
   }
   throw new Error(`Unknown viewport intent action: ${String(value)}`);
+}
+
+function readDesktopFeatureWebviewRuntimeId(value: unknown): DesktopFeatureWebviewRuntimeId {
+  const runtimeIds: readonly DesktopFeatureWebviewRuntimeId[] = [
+    '@neko-canvas/webview/root',
+    '@neko/webview/root',
+    '@neko-audio/webview/root',
+    '@neko-sketch/webview/root',
+    '@neko-model/webview/root',
+    '@neko/preview-webview/host-adapter',
+  ];
+  if (typeof value === 'string' && runtimeIds.includes(value as DesktopFeatureWebviewRuntimeId)) {
+    return value as DesktopFeatureWebviewRuntimeId;
+  }
+  throw new Error(`Unsupported desktop feature Webview runtime: ${String(value)}`);
+}
+
+function readDesktopCreativePanelKind(value: unknown): DesktopCreativePanelKind {
+  const panelKinds: readonly DesktopCreativePanelKind[] = [
+    'canvas-workbench',
+    'cut-timeline',
+    'audio-timeline',
+    'sketch-editor',
+    'model-viewport',
+    'code-editor',
+    'media-preview',
+  ];
+  if (typeof value === 'string' && panelKinds.includes(value as DesktopCreativePanelKind)) {
+    return value as DesktopCreativePanelKind;
+  }
+  throw new Error(`Unsupported desktop feature Webview panel: ${String(value)}`);
+}
+
+function normalizeWorkspaceRelativeRequestPath(value: unknown): string {
+  const relativePath = readNonEmptyString(value, 'relativePath').replace(/\\/g, '/');
+  const parts = relativePath.split('/').filter((part) => part.length > 0 && part !== '.');
+  if (
+    relativePath.startsWith('/') ||
+    parts.length === 0 ||
+    parts.some((part) => part === '..')
+  ) {
+    throw new Error('Workspace file relativePath must stay inside the workspace.');
+  }
+  return parts.join('/');
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

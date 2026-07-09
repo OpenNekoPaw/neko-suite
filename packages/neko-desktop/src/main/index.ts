@@ -1,17 +1,20 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { basename, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { normalizeLocale } from '@neko/shared';
+import { ConfigManager, FileUserConfigManager } from '@neko/platform/config/index';
 import desktopPackage from '../../package.json';
 import {
   DESKTOP_BRIDGE_CHANNELS,
   normalizeReadWorkspaceFileRequest,
   normalizeViewportIntent,
+  normalizeWriteWorkspaceFileRequest,
+  type DesktopFeatureWebviewHostMessageResult,
   type DesktopSnapshot,
   type ReadWorkspaceFileResult,
   type ViewportIntentAck,
+  type WriteWorkspaceFileResult,
 } from '../shared/contracts';
 import { createDesktopAppHostSnapshot } from '../shared/desktop-fixtures';
 import {
@@ -24,12 +27,26 @@ import {
   createViewportIntentAck,
   probeEngineConnection,
 } from './engine-connection';
+import { createDesktopProjectFileIoAdapter } from './project-file-io';
 import { createDesktopWorkbenchBootstrapSnapshot } from '../shared/desktop-workbench-adapter';
+import {
+  InMemoryDesktopAgentConversationRuntime,
+  type DesktopAgentConversationRuntime,
+  type DesktopAgentSnapshotRuntime,
+  handleRawDesktopAgentRuntimeMessageRequest,
+} from './agent-webview-host';
+import {
+  createElectronDesktopCommandExecutor,
+  type ElectronSaveDialogPort,
+  type ElectronShellPort,
+} from './desktop-electron-command-executor';
+import { createDesktopAgentConversationFileStorage } from './desktop-agent-conversation-storage';
+import { createDesktopSkillFileSnapshotRuntime } from './desktop-agent-snapshot-runtime';
+import { handleRawDesktopFeatureWebviewMessage } from './feature-webview-host';
 
 const DEFAULT_WINDOW_WIDTH = 1440;
 const DEFAULT_WINDOW_HEIGHT = 920;
 const DESKTOP_VERSION = desktopPackage.version;
-const MAX_TEXT_FILE_BYTES = 256 * 1024;
 const MACOS_TRAFFIC_LIGHT_POSITION = { x: 18, y: 14 } as const;
 
 protocol.registerSchemesAsPrivileged([
@@ -46,6 +63,25 @@ protocol.registerSchemesAsPrivileged([
 
 let mainWindow: BrowserWindow | undefined;
 let bridgeHandlersRegistered = false;
+let agentConfigRuntime: DesktopAgentConfigRuntime | undefined;
+let agentConversationRuntime: DesktopAgentConversationRuntimeState | undefined;
+let agentSnapshotRuntime: DesktopAgentSnapshotRuntimeState | undefined;
+
+interface DesktopAgentConfigRuntime {
+  readonly workspaceRoot: string;
+  readonly userConfigManager: FileUserConfigManager;
+  readonly configManager: ConfigManager;
+}
+
+interface DesktopAgentSnapshotRuntimeState {
+  readonly workspaceRoot: string;
+  readonly runtime: DesktopAgentSnapshotRuntime;
+}
+
+interface DesktopAgentConversationRuntimeState {
+  readonly workspaceRoot: string;
+  readonly runtime: DesktopAgentConversationRuntime;
+}
 
 function registerDesktopBridgeHandlers(): void {
   if (bridgeHandlersRegistered) {
@@ -57,16 +93,14 @@ function registerDesktopBridgeHandlers(): void {
     DESKTOP_BRIDGE_CHANNELS.readWorkspaceFile,
     async (_event, rawRequest): Promise<ReadWorkspaceFileResult> => {
       const request = normalizeReadWorkspaceFileRequest(rawRequest);
-      const absolutePath = resolveWorkspaceFilePath(request.relativePath);
-      const content = await readFile(absolutePath);
-      const truncated = content.byteLength > MAX_TEXT_FILE_BYTES;
-      const selectedContent = truncated ? content.subarray(0, MAX_TEXT_FILE_BYTES) : content;
-      return {
-        relativePath: request.relativePath,
-        content: selectedContent.toString('utf8'),
-        encoding: 'utf8',
-        truncated,
-      };
+      return getDesktopProjectFileIoAdapter().readWorkspaceTextFile(request);
+    },
+  );
+  ipcMain.handle(
+    DESKTOP_BRIDGE_CHANNELS.writeWorkspaceFile,
+    async (_event, rawRequest): Promise<WriteWorkspaceFileResult> => {
+      const request = normalizeWriteWorkspaceFileRequest(rawRequest);
+      return getDesktopProjectFileIoAdapter().writeWorkspaceTextFile(request);
     },
   );
   ipcMain.handle(
@@ -77,24 +111,94 @@ function registerDesktopBridgeHandlers(): void {
       return createViewportIntentAck(intent, createEngineViewportSummary(engineStatus));
     },
   );
-
+  ipcMain.handle(
+    DESKTOP_BRIDGE_CHANNELS.sendFeatureWebviewMessage,
+    async (_event, rawRequest): Promise<DesktopFeatureWebviewHostMessageResult> => {
+      return handleRawDesktopFeatureWebviewMessage(rawRequest, {
+        getProjectFileIo: () => getDesktopProjectFileIoAdapter(),
+        probeEngineConnection,
+      });
+    },
+  );
+  ipcMain.handle(
+    DESKTOP_BRIDGE_CHANNELS.sendAgentRuntimeMessage,
+    async (_event, rawRequest) =>
+      handleRawDesktopAgentRuntimeMessageRequest(rawRequest, {
+        getConfigManager: () => getDesktopAgentConfigRuntime().configManager,
+        getConversationRuntime: () => getDesktopAgentConversationRuntime(),
+        getCommandExecutor: () => getDesktopCommandExecutor(),
+        getSnapshotRuntime: () => getDesktopAgentSnapshotRuntime(),
+      }),
+  );
   bridgeHandlersRegistered = true;
 }
 
-function resolveWorkspaceFilePath(workspaceRelativePath: string): string {
+function getDesktopAgentConfigRuntime(): DesktopAgentConfigRuntime {
   const workspaceRoot = resolveWorkspaceRoot();
-  const absolutePath = resolve(workspaceRoot, workspaceRelativePath);
-  const relativeToWorkspace = relative(workspaceRoot, absolutePath);
-
-  if (
-    relativeToWorkspace.length === 0 ||
-    relativeToWorkspace.startsWith('..') ||
-    isAbsolute(relativeToWorkspace)
-  ) {
-    throw new Error(`Workspace file path is outside the workspace: ${workspaceRelativePath}`);
+  if (agentConfigRuntime?.workspaceRoot === workspaceRoot) {
+    return agentConfigRuntime;
   }
 
-  return absolutePath;
+  disposeDesktopAgentConfigRuntime();
+  const userConfigManager = new FileUserConfigManager();
+  const configManager = new ConfigManager({
+    userConfigManager,
+    workspacePath: workspaceRoot,
+  });
+  agentConfigRuntime = {
+    workspaceRoot,
+    userConfigManager,
+    configManager,
+  };
+  return agentConfigRuntime;
+}
+
+function getDesktopAgentSnapshotRuntime(): DesktopAgentSnapshotRuntime {
+  const workspaceRoot = resolveWorkspaceRoot();
+  if (agentSnapshotRuntime?.workspaceRoot === workspaceRoot) {
+    return agentSnapshotRuntime.runtime;
+  }
+
+  agentSnapshotRuntime = {
+    workspaceRoot,
+    runtime: createDesktopSkillFileSnapshotRuntime({ workspaceRoot }),
+  };
+  return agentSnapshotRuntime.runtime;
+}
+
+function getDesktopAgentConversationRuntime(): DesktopAgentConversationRuntime {
+  const workspaceRoot = resolveWorkspaceRoot();
+  if (agentConversationRuntime?.workspaceRoot === workspaceRoot) {
+    return agentConversationRuntime.runtime;
+  }
+
+  agentConversationRuntime = {
+    workspaceRoot,
+    runtime: new InMemoryDesktopAgentConversationRuntime({
+      storage: createDesktopAgentConversationFileStorage({ workspaceRoot }),
+    }),
+  };
+  return agentConversationRuntime.runtime;
+}
+
+function getDesktopCommandExecutor() {
+  const workspaceRoot = resolveWorkspaceRoot();
+  return createElectronDesktopCommandExecutor({
+    workspaceRoot,
+    getProjectFileIo: () => getDesktopProjectFileIoAdapter(),
+    shell: shell as ElectronShellPort,
+    dialog: dialog as ElectronSaveDialogPort,
+  });
+}
+
+function getDesktopProjectFileIoAdapter() {
+  return createDesktopProjectFileIoAdapter({ workspaceRoot: resolveWorkspaceRoot() });
+}
+
+function disposeDesktopAgentConfigRuntime(): void {
+  agentConfigRuntime?.configManager.dispose();
+  agentConfigRuntime?.userConfigManager.dispose();
+  agentConfigRuntime = undefined;
 }
 
 async function createDesktopSnapshot(): Promise<DesktopSnapshot> {
@@ -173,7 +277,7 @@ function registerWorkspaceResourceProtocol(): void {
     const relativePath = decodeURIComponent(requestUrl.pathname.slice(1));
     let absolutePath: string;
     try {
-      absolutePath = resolveWorkspaceFilePath(relativePath);
+      absolutePath = getDesktopProjectFileIoAdapter().resolveWorkspacePath(relativePath);
     } catch (_error: unknown) {
       return new Response('Neko resource path is outside the workspace.', { status: 403 });
     }
@@ -265,4 +369,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  disposeDesktopAgentConfigRuntime();
 });

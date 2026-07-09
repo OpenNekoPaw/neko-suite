@@ -15,6 +15,17 @@ describe('desktop workbench layout', () => {
     );
 
     expect(appSource).toContain('<EditorWorkbenchShell');
+    expect(appSource).toContain('leftWorkbenchVisible');
+    expect(appSource).toContain('secondarySidebarVisible');
+    expect(appSource).toContain('activityBarVisible={leftWorkbenchVisible}');
+    expect(appSource).toContain('sidebarVisible={leftWorkbenchVisible}');
+    expect(appSource).toContain('secondarySidebarVisible={secondarySidebarVisible}');
+    expect(appSource).toContain('onToggleLeftWorkbench');
+    expect(appSource).toContain('onToggleSecondarySidebar');
+    expect(appSource).toContain('const showEditorHome = openFiles.length === 0');
+    expect(appSource).toContain('data-editor-home={showEditorHome ?');
+    expect(appSource).toContain('<DesktopEditorHome');
+    expect(appSource).toContain('runtimeId="agent-dashboard"');
     expect(appSource).toContain('<WorkbenchActivityBar');
     expect(appSource).toContain('<WorkbenchEditorTabs');
     expect(appSource).toContain('className="workspace-pane"');
@@ -38,6 +49,8 @@ describe('desktop workbench layout', () => {
     expect(sharedStyles).toContain('grid-area: sidebar');
     expect(sharedStyles).toContain('grid-area: editor');
     expect(sharedStyles).toContain('grid-area: secondary');
+    expect(sharedStyles).toContain('data-activity-visible="false"');
+    expect(sharedStyles).toContain('data-secondary-visible="false"');
     expect(sharedStyles).toContain('grid-area: bottom');
     expect(sharedStyles).toContain('.neko-workbench-webview-runtime-frame');
     expect(sharedStyles).toContain('data-neko-webview-runtime="agent"');
@@ -63,20 +76,30 @@ describe('desktop workbench layout', () => {
     expect(styles).not.toContain('.desktop-full-webview-runtime');
     expect(styles).not.toContain('.agent-');
     expect(styles).not.toContain('.cut-');
+    expect(styles).toContain('.editor-pane[data-editor-home="true"]');
     expect(styles).not.toMatch(/^\.neko-creative-tree-view \[role=['"]treeitem['"]\]/mu);
     expect(styles).toMatch(/\.workspace-file-tree\.neko-creative-tree-view \[role=['"]treeitem['"]\]/u);
 
-    expect(adapterSource).toContain("@neko-canvas/webview/host-adapter");
+    expect(adapterSource).toContain("@neko-canvas/webview/root");
+    expect(adapterSource).toContain("@neko-audio/webview/root");
+    expect(adapterSource).toContain("@neko-sketch/webview/root");
+    expect(adapterSource).toContain("@neko-model/webview/root");
     expect(adapterSource).toContain("@neko/webview/root");
+    expect(adapterSource).not.toContain("@neko-canvas/webview/host-adapter");
+    expect(adapterSource).not.toContain("@neko-audio/webview/host-adapter");
+    expect(adapterSource).not.toContain("@neko-sketch/webview/host-adapter");
+    expect(adapterSource).not.toContain("@neko-model/webview/host-adapter");
     expect(adapterSource).not.toContain("@neko/webview/host-adapter");
     expect(adapterSource).not.toContain('CutHostAdapterSurface');
     expect(adapterSource).toContain('CutWebviewRoot');
+    expect(adapterSource).toContain('CanvasWebviewRoot');
+    expect(adapterSource).toContain('AudioWebviewRoot');
+    expect(adapterSource).toContain('SketchWebviewRoot');
+    expect(adapterSource).toContain('ModelWebviewRoot');
     expect(adapterSource).toContain('WorkbenchWebviewRuntimeFrame');
-    expect(adapterSource).toContain('runtimeId="cut"');
+    expect(adapterSource).toContain('frameRuntimeId="cut"');
+    expect(adapterSource).toContain('setFeatureWebviewContext');
     expect(adapterSource).toContain("hostAdapterInspector: 'hidden'");
-    expect(adapterSource).toContain("@neko-audio/webview/host-adapter");
-    expect(adapterSource).toContain("@neko-sketch/webview/host-adapter");
-    expect(adapterSource).toContain("@neko-model/webview/host-adapter");
     expect(adapterSource).toContain("@neko/preview-webview/host-adapter");
     expect(adapterSource).toContain('ViewportShell');
     expect(adapterSource).toContain('listDesktopCreativeAdapterPanelKinds');
@@ -162,14 +185,88 @@ describe('desktop workbench layout', () => {
 
     expect(appSource).toContain("@neko-agent/webview/root");
     expect(appSource).toContain('<AgentWebviewRoot');
+    expect(appSource).toContain('foundation={agentFoundation}');
+    expect(appSource).toContain('createDesktopAgentFoundation');
+    expect(appSource).toContain('@neko/ui/foundation');
+    expect(appSource).toContain('hostRuntimeAdapter={agentHostRuntimeAdapter}');
+    expect(appSource).toContain('createElectronAgentHostRuntimeAdapter');
     expect(appSource).not.toContain('snapshot.agentConsole');
     expect(appSource).not.toContain('function AgentConsole');
     expect(mainSource).toContain('<I18nProvider service={i18nService}>');
   });
 
-  it('exposes complete Cut and Agent webview roots as package-owned public entries', () => {
+  it('adapts the Agent package webview protocol through the desktop host bridge', () => {
+    const preloadSource = readFileSync(resolve(packageRoot, 'src/preload/index.ts'), 'utf8');
+    const mainSource = readFileSync(resolve(packageRoot, 'src/main/index.ts'), 'utf8');
+    const agentHostSource = readFileSync(
+      resolve(packageRoot, 'src/main/agent-webview-host.ts'),
+      'utf8',
+    );
+    const contractsSource = readFileSync(resolve(packageRoot, 'src/shared/contracts.ts'), 'utf8');
+    const packageJson = readFileSync(resolve(packageRoot, 'package.json'), 'utf8');
+
+    expect(contractsSource).toContain('sendAgentRuntimeMessage');
+    expect(contractsSource).toContain('DESKTOP_AGENT_RUNTIME_IDS');
+    expect(contractsSource).toContain('DESKTOP_LEGACY_VSCODE_API_GLOBAL');
+    expect(contractsSource).not.toContain('sendAgentWebviewMessage');
+    expect(preloadSource).toContain('sendAgentRuntimeMessage');
+    expect(preloadSource).toContain('Migration-only shim');
+    expect(preloadSource).toContain(
+      'contextBridge.exposeInMainWorld(DESKTOP_LEGACY_VSCODE_API_GLOBAL',
+    );
+    expect(preloadSource).toContain('dispatchAgentHostMessages');
+    expect(mainSource).toContain('handleRawDesktopAgentRuntimeMessageRequest');
+    expect(mainSource).not.toContain('handleRawDesktopAgentWebviewMessage');
+    expect(agentHostSource).toContain('parseWebviewToExtensionMessage');
+    expect(agentHostSource).toContain('DESKTOP_AGENT_HOST_ROUTE_SUPPORT');
+    expect(agentHostSource).toContain('buildAssistantSettingsRuntimeDataMessage');
+    expect(agentHostSource).toContain('buildConfigStateMessage');
+    expect(mainSource).toContain('ConfigManager');
+    expect(mainSource).toContain('FileUserConfigManager');
+    expect(agentHostSource).toContain('getAssistantSettingsData');
+    expect(agentHostSource).toContain('getAssistantConfigState');
+    expect(contractsSource).toContain('sendFeatureWebviewMessage');
+    expect(preloadSource).toContain('setFeatureWebviewContext');
+    expect(mainSource).toContain('handleRawDesktopFeatureWebviewMessage');
+    expect(packageJson).toContain('"@neko/platform"');
+    expect(packageJson).toContain('"@neko-agent/types"');
+  });
+
+  it('exposes complete package webview roots as package-owned public entries', () => {
+    const canvasPackage = readFileSync(
+      resolve(packageRoot, '../neko-canvas/packages/webview/package.json'),
+      'utf8',
+    );
+    const canvasMainSource = readFileSync(
+      resolve(packageRoot, '../neko-canvas/packages/webview/src/main.tsx'),
+      'utf8',
+    );
     const cutPackage = readFileSync(resolve(packageRoot, '../neko-cut/packages/webview/package.json'), 'utf8');
     const cutMainSource = readFileSync(resolve(packageRoot, '../neko-cut/packages/webview/src/main.tsx'), 'utf8');
+    const audioPackage = readFileSync(
+      resolve(packageRoot, '../neko-audio/packages/webview/package.json'),
+      'utf8',
+    );
+    const audioMainSource = readFileSync(
+      resolve(packageRoot, '../neko-audio/packages/webview/src/editor/main.tsx'),
+      'utf8',
+    );
+    const sketchPackage = readFileSync(
+      resolve(packageRoot, '../neko-sketch/packages/webview/package.json'),
+      'utf8',
+    );
+    const sketchMainSource = readFileSync(
+      resolve(packageRoot, '../neko-sketch/packages/webview/src/main.tsx'),
+      'utf8',
+    );
+    const modelPackage = readFileSync(
+      resolve(packageRoot, '../neko-model/packages/webview/package.json'),
+      'utf8',
+    );
+    const modelMainSource = readFileSync(
+      resolve(packageRoot, '../neko-model/packages/webview/src/main.tsx'),
+      'utf8',
+    );
     const agentPackage = readFileSync(
       resolve(packageRoot, '../neko-agent/packages/webview/package.json'),
       'utf8',
@@ -179,8 +276,16 @@ describe('desktop workbench layout', () => {
       'utf8',
     );
 
+    expect(canvasPackage).toContain('"./root": "./src/root.tsx"');
+    expect(canvasMainSource).toContain('<CanvasWebviewRoot />');
     expect(cutPackage).toContain('"./root": "./src/root.tsx"');
     expect(cutMainSource).toContain('<CutWebviewRoot />');
+    expect(audioPackage).toContain('"./root": "./src/root.tsx"');
+    expect(audioMainSource).toContain('<AudioWebviewRoot />');
+    expect(sketchPackage).toContain('"./root": "./src/root.tsx"');
+    expect(sketchMainSource).toContain('<SketchWebviewRoot />');
+    expect(modelPackage).toContain('"./root": "./src/root.tsx"');
+    expect(modelMainSource).toContain('<ModelWebviewRoot />');
     expect(agentPackage).toContain('"./root": "./src/root.tsx"');
     expect(agentMainSource).toContain('<AgentWebviewRoot />');
   });

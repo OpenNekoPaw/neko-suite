@@ -22,6 +22,14 @@ const forbiddenRendererImports = [
     reason: 'desktop renderer is not a VSCode Webview',
   },
   {
+    pattern: /window\.vscodeApi|acquireVsCodeApi/u,
+    reason: 'renderer package roots must use injected host adapters, not VSCode globals',
+  },
+  {
+    pattern: /sendAgentWebviewMessage/u,
+    reason: 'migrated Agent roots must use the scoped sendAgentRuntimeMessage bridge',
+  },
+  {
     pattern: /(?:from\s+|import\s*\(\s*)['"][^'"]*\/main(?:\/|['"])/u,
     reason: 'renderer must not import Electron main internals',
   },
@@ -67,6 +75,38 @@ describe('desktop renderer architecture boundary', () => {
       }
     }
 
+    expect(violations).toEqual([]);
+  });
+
+  it('quarantines the legacy VSCode-shaped global shim to preload only', async () => {
+    const files = [
+      ...(await listSourceFiles(join(packageRoot, 'src/shared'))),
+      ...(await listSourceFiles(mainRoot)),
+      ...(await listSourceFiles(preloadRoot)),
+      ...(await listSourceFiles(rendererRoot)),
+    ];
+    const violations: string[] = [];
+
+    for (const file of files) {
+      if (file.endsWith('.test.ts') || file.endsWith('.test.tsx')) {
+        continue;
+      }
+      const source = await readFile(file, 'utf8');
+      const relativePath = relative(packageRoot, file);
+      const mentionsLegacyGlobal =
+        source.includes('DESKTOP_LEGACY_VSCODE_API_GLOBAL') || source.includes('vscodeApi');
+      if (!mentionsLegacyGlobal) {
+        continue;
+      }
+      if (relativePath === 'src/shared/contracts.ts' || relativePath === 'src/preload/index.ts') {
+        continue;
+      }
+      violations.push(`${relativePath}: legacy VSCode shim is allowed only in contracts/preload`);
+    }
+
+    const preloadSource = await readFile(join(preloadRoot, 'index.ts'), 'utf8');
+    expect(preloadSource).toContain('Migration-only shim');
+    expect(preloadSource).toContain('sendAgentRuntimeMessage');
     expect(violations).toEqual([]);
   });
 });
