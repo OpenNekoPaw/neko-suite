@@ -83,6 +83,29 @@ Neko Suite 采用“架构优先、契约优先、风险分级、证据驱动”
 
 开发验证中若新增、修改或移除 `legacy`、`fallback`、`deprecated`、`compat`、`shim`、`dirty`、`hack`、`temporary`、`workaround`、dead code、unused 或 duplicate 相关代码，交付说明或 PR 必须记录 `pnpm check:legacy-debt`、`pnpm check:unused`，或说明已由 `pnpm ci:local` / `pnpm check:quality` 覆盖。
 
+## Agent Debug Automation 证据
+
+影响 AgentSession 多轮流程、对话历史、turn 执行、反馈提示词流、Skill 生命周期、Agent-owned Skill 触发、provider/model 路由、controller/judge 行为、产物生成工作流或真实 API 场景验收的变更，应记录聚焦的 TUI debug automation 证据。
+
+TUI debug automation 是 opt-in 的真实 TUI runtime 验收入口，不进入默认 key-free CI，也不提供 mock lane。外部 eval 脚本可以负责 manifest、controller、judge、check 和 report，但不得 import Agent、Canvas、media、Skill 或 provider 的业务内部实现来替代真实 TUI 行为。
+
+debug automation 必须复用完整 TUI App/session owner，并通过 TUI 输入队列提交消息。直接调用 Agent turn runner、绕过 TUI 输入队列或替换 runtime assembly 的结果不能作为 debug automation evidence。
+
+协议 parser、invalid request、stdio framing、timeout classification 等 debug protocol 单元测试可以 key-free；但 Agent behavior acceptance 必须使用真实配置 API，不得使用 mock provider 或 eval-only fake business tools。
+
+交付说明或 PR 中的 debug automation 证据应包含：
+
+- manifest 路径或 intended manifest。
+- 实际命令，例如外部 eval 脚本启动 `neko debug automation --stdio` 后提交的 case。
+- 输出目录、`result.json` / `summary.md` 路径和退出码。
+- target/controller/judge 的 provider/model identity。
+- 若未运行，明确记录阻塞原因，例如 credentials、provider availability、network、quota、model access、local workspace fixture、controller model 或 judge model 不可用。
+- 剩余风险。
+
+自然语言 Skill 触发证据必须区分 Agent 主动激活 Skill 和“没有激活但输出看起来不错”。对 `trigger: "natural-language"` 的 Skill case，缺少 Agent-owned activation 应视为 case fail，而不是通过 judge 文本弥补。
+
+Mock-only、direct-turn-injection-only、final-text-only、browser-only、jsdom-only、普通 TUI UI smoke、旧 `neko run` 单轮结果或旧 headless eval 结果不能声称满足 debug automation evidence；它们只能作为相邻验证记录。
+
 ## 新需求可行性检查
 
 L3/L4 变更在大规模实现前必须先证明关键路径可行：可以通过 spike、fixture、失败测试、Engine smoke、Webview runtime smoke、VSCode debugger Skill smoke、VSCode 调试证据或原型完成。可行性证据写入 OpenSpec design/tasks；若无法运行，必须记录原因、风险和后续关闭方式。
