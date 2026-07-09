@@ -4,7 +4,7 @@
 日期：2026-07-05
 范围：`neko-agent` runtime、session/turn/runner/capability/stream 分层、Extension host adapter、Skill/Capability/External Processor、Agent 协议面与测试边界。
 
-本文把 `neko-agent` 与 Codex、OpenCode 的代码级架构对比沉淀为 Neko Suite 的稳定架构决策。它补充 [`agent.md`](agent.md)、[`package-boundaries.md`](package-boundaries.md)、[`adr-agent-sandbox-and-external-processing-boundary.md`](adr-agent-sandbox-and-external-processing-boundary.md)、[`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md) 与 [`adr-agent-message-task-queue-boundary.md`](adr-agent-message-task-queue-boundary.md)。
+本文把 `neko-agent` 与 Codex、OpenCode、Pi、OpenClaw、Hermes、OpenAI Agents SDK、LangGraph 等 agent 模式的架构对比沉淀为 Neko Suite 的稳定架构决策。它补充 [`agent.md`](agent.md)、[`package-boundaries.md`](package-boundaries.md)、[`adr-agent-sandbox-and-external-processing-boundary.md`](adr-agent-sandbox-and-external-processing-boundary.md)、[`adr-agent-skill-catalog-activation-boundary.md`](adr-agent-skill-catalog-activation-boundary.md) 与 [`adr-agent-message-task-queue-boundary.md`](adr-agent-message-task-queue-boundary.md)。
 
 ## 背景
 
@@ -62,6 +62,26 @@ protocol Submission / Op / Event
 当前 OpenCode 是 TypeScript/Bun monorepo，包含 `core`、`server`、`protocol`、`sdk`、`tui`、`app`、`plugin` 等包；`core` 内有 `session`、`tool`、`permission`、`plugin`、`skill`、`provider`、`filesystem`、`database` 等 owner。它说明一个多入口 coding agent 产品也会自然分化出 core/server/protocol/plugin/sdk 层。
 
 对 Neko 的启发是：多入口、多前端和插件生态会推动 core/server/protocol/plugin/sdk 分层。Neko 应先把能力注册、客户端 adapter 和 runtime command/event contract 平台化；只有当跨进程共享 session、外部 SDK 或远程控制成为真实需求时，才升级为显式 protocol/server 层。
+
+### 各 Agent 模式优缺点与必要性
+
+本节只评估可借鉴设计，不把它们叠加成一个复杂功能。Neko 当前面向本地内容创作，优先选择低成本、可验证、可解释的运行边界；复杂平台层必须由真实需求触发。
+
+| Agent / 框架 | 优点 | 缺点 | 对 Neko 的必要性 |
+| --- | --- | --- | --- |
+| Codex | 任务闭环成熟：上下文读取、计划、执行、验证、汇总、sandbox、approval、Skill、subagent 和多 surface 投影形成稳定产品心智。官方文档可参考 [sandboxing](https://developers.openai.com/codex/concepts/sandboxing)、[subagents](https://developers.openai.com/codex/subagents) 与 Codex manual。 | coding-agent 取向强，shell、patch、workspace diff 和仓库验证是核心；直接照搬会把 Neko 推向通用代码执行器。 | 高。借鉴 plan/update/verify/summary、approval、Skill 渐进披露、subagent review；不借鉴 shell-first 和完整 app-server。 |
+| OpenCode | Plan/Build agent、primary/subagent、permission allow/ask/deny 和项目/全局规则边界清楚；参考 [agents](https://opencode.ai/docs/agents/) 与 [permissions](https://opencode.ai/docs/permissions/)。 | 仍以代码任务为中心，Plan/Build 二分不完全适合创作中的探索、生成、比较、修订循环。 | 中高。借鉴只读分析模式、执行模式和权限矩阵；不建立大型角色市场或多 agent 分身体系。 |
+| Pi / companion agent | 对话体验好，善于追问、共情、降低用户表达成本；适合作为创作 brief、风格澄清和反馈体验参考。参考 [Inflection](https://inflection.ai/) 与 [Pi](https://hey.pi.ai/)。 | action、artifact、验证、写回和可追溯性弱；容易停留在舒适对话，不能保证创作结果落地。 | 高但仅限 UX。借鉴 brief、澄清问题、反馈语气；不能用对话历史替代 run、ResourceRef 或 package-owned apply。 |
+| OpenClaw / gateway-session 模式 | 多渠道、多 agent、多 workspace/session routing 可以隔离长期会话；参考 [multi-agent routing](https://docs.openclaw.ai/concepts/multi-agent)。 | 对当前本地创作套件过重，会增加 gateway、session store、routing、成本、延迟和语义污染。 | 低。用户已明确不需要 gateway session routing；仅保留显式 identity、isolation diagnostic 这类概念。 |
+| Hermes / agent loop 模式 | prompt assembly、stable/context/volatile 分层、context compression、memory flush 和 agent loop 职责边界有参考价值；参考 [prompt assembly](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/developer-guide/prompt-assembly.md) 与 [agent loop](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/developer-guide/agent-loop.md)。 | 单一大 agent loop 容易吸收过多职责；自动 memory/self-improvement/fallback 会造成状态漂移和成本不可见。 | 中高。借鉴 prompt/context/memory 分层与压缩；不借鉴自动记忆写入、隐式 provider fallback 或万能 loop。 |
+| OpenAI Agents SDK | Agent/Runner/tools/handoff/guardrails/sessions/tracing 抽象清楚，适合固定工具和审批流的事务型 agent；参考 [Agents guide](https://developers.openai.com/api/docs/guides/agents)。 | SDK runtime 若成为核心，会压过 Neko 已有 host-neutral runtime、ResourceRef 和 owning package apply 边界。 | 中。借鉴 tracing、guardrails、handoff 语义；不把 SDK 作为 Neko runtime 主循环。 |
+| LangGraph | durable execution、persistence、human-in-the-loop、streaming 和 checkpoint/resume 适合复杂长任务；参考 [LangGraph overview](https://docs.langchain.com/oss/python/langgraph/overview)。 | 图编排对多数创作按钮和单文档 run 过重，容易形成第二套 workflow engine。 | 低到中。只在影视批量生成、跨媒体长任务中借鉴 checkpoint/interrupt/resume；不做通用 graph clone。 |
+
+由此得到的收敛判断：
+
+- 必要优化是 `Brief -> Plan -> Run/workItem -> Capability -> ResourceRef/artifact -> Verify -> package-owned apply -> Summary` 的轻量闭环。
+- 不必要优化是 gateway session routing、通用 workflow graph、通用 daemon/public SDK、自动记忆写入和 TypeScript extension。
+- 当前 `CreativeAiRunRuntime`、`TaskManager`、消息队列/任务队列/任务卡 ADR 已经覆盖大部分基础设施，应优先补齐边界和 UX，而不是新增平台层。
 
 ## 决策
 
@@ -191,14 +211,14 @@ Codex 的 `Submission/Op/Event` 适合多客户端 agent 平台。Neko 当前应
 
 ### 6. Skill/Plugin 采用渐进披露，不变成 workflow engine
 
-Skill 是 prompt、method、tool allowlist、capability guidance 和创作方法，不是独立 workflow engine。Neko 保持 Agent-first 激活：
+Skill 是 prompt、method、创作方法和扩展语义，不是独立 workflow engine，也不是工具协议或子包 schema 的承载层。工具范围只能作为机器可读 metadata/policy 输入；具体工具 schema、capability guidance 和运行时诊断由 runtime 与 owning subpackage capability 提供。Neko 保持 Agent-first 激活：
 
 ```text
 User message / explicit $skill
   -> Agent reads catalog/context
   -> Agent explicitly activates Skill or invokes typed capability
-  -> Runtime validates Skill/source/trust/tool/subpackage/lifecycle
-  -> Skill owner injects prompt/tool guard
+  -> Runtime validates Skill/source/trust/tool metadata/subpackage/lifecycle
+  -> Runtime injects Skill prompt content and capability/tool policy from the owning registries
 ```
 
 可借鉴 Codex/OpenCode 的地方：

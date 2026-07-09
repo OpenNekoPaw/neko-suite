@@ -12,7 +12,7 @@
 
 - builtin slash commands，例如 `/status`、`/model`、`/plan`、`/tools`、`/mcp`，用于控制 Agent 会话、配置、宿主 UI 或资源面板。
 - plugin slash commands，由其他扩展注册，可能触发宿主动作或领域包入口。
-- Skill 激活，注入 system prompt、allowed tools、model override 和工具集约束。
+- Skill 激活，注入 Skill prompt content，并让 runtime 根据 metadata、policy 和 capability catalog 投影工具约束。
 - command-backed skill / custom command，使用 `$ARGUMENTS`、`$1-$99` 进行参数插值。
 - 自然语言输入，由主 Agent 根据上下文和 Skill catalog 判断是否需要调用 `ActivateSkill`。
 
@@ -27,7 +27,7 @@ Neko Agent 采用以下触发入口边界：
 | 入口 | 归属 | 示例 | 语义 |
 | ---- | ---- | ---- | ---- |
 | `/` | Agent、宿主和插件命令 | `/status`、`/model`、`/plan`、`/tools`、`/mcp`、插件命令 | 控制会话、配置、宿主 UI、资源面板或插件动作 |
-| `$` | Skill 显式激活 | `$storyboard`、`$quality-review`、`$character-validation args` | 注入任务策略、工具约束、领域工作流或 prompt fragments |
+| `$` | Skill 显式激活 | `$storyboard`、`$quality-review`、`$character-validation args` | 注入领域方法、创作语义、输出标准或 prompt fragments；工具约束由 runtime/capability 投影 |
 | 自然语言 | Agent 自主判断 | “帮我做角色验证” | Agent 可通过 `GetContext` 查看 Skill catalog，并在需要时调用 `ActivateSkill` |
 | `/skills` | Skill 管理入口 | `/skills`、`/skills active`、`/skills clear` | 浏览、管理、清除 Skill，不替代 `$` 显式调用 |
 | `@` | 上下文引用 | `@scene.md`、`@character` | 引用文件、实体、素材、Canvas 节点或上下文 chip |
@@ -63,7 +63,7 @@ Neko Suite 尚处 prelaunch，可以清理未发布的内部 UI/协议混合入�
 ## 非目标
 
 - 不把插件 slash command 迁移到 `$`。
-- 不把 Skill 变成 workflow engine；Skill 仍只描述领域策略、prompt fragments、allowed tools 和适用场景。
+- 不把 Skill 变成 workflow engine；Skill 仍只描述领域方法、prompt fragments、创作语义、输出标准和适用场景，工具范围只出现在机器可读 metadata/policy 中。
 - 不阻止 Agent 在自然语言对话中自主判断并调用 `ActivateSkill`。
 - 不让 Webview 直接执行 Skill 或读取 Skill 文件。
 - 不为这一本地 VS Code 客户端引入远程多租户、分布式 command service 或云端治理层。

@@ -1,6 +1,6 @@
 # Agent 横切架构
 
-更新日期：2026-07-08
+更新日期：2026-07-09
 
 Agent 是 Neko Suite 的横切创作智能层，不是一个创作领域。它为视频、音频、模型、2D 和互动创作提供意图理解、计划、工具调用、上下文压缩、审阅和修复能力。
 
@@ -16,7 +16,7 @@ Agent 是 Neko Suite 的横切创作智能层，不是一个创作领域。它�
 - API-first：跨层交互先定义 shared contract、command、provider、port 或 message schema，再接 UI 和具体实现。
 - Prompt-first：Prompt 只表达上下文、角色、约束和行为策略，不隐藏宿主副作用。
 - Creation-first：创作 lifecycle、stage、iteration、validator feedback、review 和 approval 归 Agent 原生创作能力所有；IDC 只是 profile。
-- Skill-first：Skill 描述领域策略、prompt-chain guidance、工具组合、prompt fragments 和适用条件，不成为私有 workflow engine。
+- Skill-first：Skill 描述领域方法、prompt-chain guidance、创作语义、输出标准和适用条件；具体工具协议、命令列表和子包 schema 由系统提示词、子包 capability 和 tool schema 提供，不成为私有 workflow engine。
 - Tool-as-capability：Tool 是可审计能力入口，必须有来源、权限、schema、trust、输入输出 contract。
 - Provider-neutral：runtime 不依赖具体模型供应商语义，provider adapter 负责 tool calling、structured output、多模态消息投影差异。
 - Grounded-output：Agent 输出要进入持久上下文，必须接地到 `ResourceRef`、asset/entity ID、Search source、Engine output 或领域项目格式。
@@ -67,7 +67,7 @@ Webview / Terminal TUI projection
 | 依赖   | Webview 依赖 `agent-types`，不依赖 runtime；Extension 可依赖 runtime 和 platform，但不沉淀策略；`agent`、`platform`、`ai-sdk` 保持 host-agnostic；领域包通过 capability、command、facade 或 shared contract 接入                         |
 | 接口   | Webview protocol、runtime ports、provider adapter、capability contribution、tool schema、artifact projection 和 grounded refs 分层定义，不能用自由 JSON 在层间扩散                                                                       |
 | 扩展   | 新 provider、新 skill、新 market capability、新领域工具先进入 registration，再按 creation profile/context/policy 注入；扩展点不能绕过 approval、grounding 和 diagnostics                                                                 |
-| 可测性 | 通过 prompt snapshot/hash、protocol schema、adapter fake、creation profile/iteration、tool allowlist、boundary import guard 和 projection fixture 固化行为，不依赖真实 UI 或真实 provider 才能验证核心策略                               |
+| 可测性 | 通过 prompt snapshot/hash、protocol schema、adapter fake、creation profile/iteration、tool/capability policy、boundary import guard 和 projection fixture 固化行为，不依赖真实 UI 或真实 provider 才能验证核心策略                               |
 
 ## 运行时入口与平面
 
@@ -110,6 +110,17 @@ Webview/Extension 与 Terminal TUI/headless 是不同本地宿主，不要求功
 
 跨宿主请求遇到 host-private 能力时，应返回 host-private/unavailable diagnostic，不能 no-op、转成普通 prompt、读取另一端私有缓存或回退旧实现。共享 command catalog 的 surface scope 使用 `tui` / `extension`；headless 只作为执行 lane，不伪装成交互式 CLI surface。新增 Agent 能力默认先进入共享 contract 和 path-level 测试，再由 Webview/Extension 与 Terminal TUI/headless 分别实现 adapter 与 projection。
 
+### 异步任务结果观察
+
+后台任务的业务闭环归共享 runtime，而不是 Webview 或 TUI 私有实现：
+
+- `agent` 层拥有 task-result observation runtime，负责识别终态 task、记录 observation/evidence、根据 delivery policy 请求继续或自动续跑。
+- `platform` 层拥有媒体任务到 Agent task-result 的投影，负责把 provider/model、stable result refs、generated assets、host output paths 和 delivery policy 转成共享任务事实。
+- VS Code Extension、Terminal TUI、Desktop/Electron 只提供 host delivery port，例如 Webview URI、通知、Node workspace 保存目录、Electron IPC 或终端诊断。
+- 同一工作区的媒体生成结果必须能被任一宿主通过 workspace-visible task record、conversation journal、`ResourceRef` 或 generated asset index 观察；Webview URI、blob URL、临时下载路径和 host-private live handle 不能作为业务事实。
+
+TUI 不读取 VS Code 注入设置，也不模拟 Webview 消息；它通过 Node adapter 复用 `AgentEventStreamRuntimeProcessor`、task-result observation runtime 和 platform media delivery projection。Webview/Extension 可以有 VS Code 专属资源投影、setting bridge 和通知，但不能因此复制一套 task observation 或 token/usage 计算路径。
+
 ## 控制面
 
 ```text
@@ -128,7 +139,7 @@ Intent
 控制面必须分离：
 
 - Prompt 只描述上下文、角色和行为策略，不执行宿主副作用。
-- Skill 描述领域策略和工具组织，不成为工作流引擎。
+- Skill 描述领域方法、创作语义和输出标准，不描述运行时工具协议，也不成为工作流引擎。
 - Tool 是能力调用入口，必须有来源、权限和输入输出 contract。
 - Memory 保存可追溯上下文，不替代项目事实。
 - Provider 适配模型/服务差异，不拥有创作领域逻辑。
@@ -137,14 +148,16 @@ Intent
 
 ### 约束归属平面
 
-| 平面       | 负责                                                                               | 不负责                                     |
-| ---------- | ---------------------------------------------------------------------------------- | ------------------------------------------ |
-| Prompt     | 角色、语言、上下文摘要、行为偏好、skill fragments                                  | 执行工具、保存事实、注入 secret            |
-| Schema     | tool arguments、structured output、creation artifact、recovery decision 的结构约束 | 决定是否执行工具                           |
-| Runtime    | turn assembly、creation iteration、tool orchestration、artifact projection         | 读取 VS Code API 或渲染 UI                 |
-| Policy     | permission mode、trust level、approval gate、secret boundary、host availability    | 用 prompt 文案替代权限判断                 |
-| Memory     | journal、conversation projection、project memory、semantic recall                  | 替代 Assets、Entity、Engine 或领域项目格式 |
-| Evaluation | deterministic checks、LLM judge adapter、diagnostics、recovery signal              | 直接改 confirmed fact 或绕过 approval      |
+| 平面                  | 负责                                                                                   | 不负责                                     |
+| --------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------ |
+| System Prompt         | 默认 Agent 人设、通用工具协议、Markdown/引用/视觉证据规则、安全边界、失败处理          | 子包字段、运行时参数表、领域 authoring 细节 |
+| Capability Injection  | 子包工具/operation 名称、参数 schema、validation、diagnostics、资源绑定、能力目录       | 通用人设、跨领域 Markdown 协议、Skill 方法论 |
+| Skill Content         | 扩展能力、领域方法论、创作语义、任务判断、输出风格和提示词写作规则                     | 运行时工具协议、子包内部 schema、权限授予  |
+| Metadata / Schema     | tool arguments、structured output、creation artifact、recovery decision、allowed tools | 决定是否执行工具                           |
+| Runtime               | turn assembly、creation iteration、tool orchestration、artifact projection             | 读取 VS Code API 或渲染 UI                 |
+| Policy                | permission mode、trust level、approval gate、secret boundary、host availability        | 用 prompt 文案替代权限判断                 |
+| Memory                | journal、conversation projection、project memory、semantic recall                      | 替代 Assets、Entity、Engine 或领域项目格式 |
+| Evaluation            | deterministic checks、LLM judge adapter、diagnostics、recovery signal                  | 直接改 confirmed fact 或绕过 approval      |
 
 控制面是横切约束，不是 IDC 的第四阶段。内置 IDC profile 可以提供 Draft、Plan、Apply 三个默认 stage；其他 profile 可以声明更多或更少 stage。评估、记忆、审批和恢复只在需要时介入。
 
@@ -257,44 +270,57 @@ Registration
         |
         v
 Injection
-  active skill + creation stage/profile + provider capability + policy + context budget
-  -> prompt fragments + tool schemas + allowlist + structured output schemas
+  active skill + subpackage capability + creation stage/profile + provider capability + policy + context budget
+  -> system / skill / capability prompt fragments + tool schemas + metadata allowlists + structured output schemas
 ```
 
 ### 能力边界
 
-| 概念           | 负责                                                          | 不负责                   |
-| -------------- | ------------------------------------------------------------- | ------------------------ |
-| Skill          | 领域策略、prompt fragments、allowed tools、适用场景、信任要求 | 执行副作用、保存项目事实 |
-| Tool           | 原子能力调用、schema、权限、来源、结果和附件                  | 决定何时进入 LLM 上下文  |
-| ToolGroup      | 跨 Skill 共享的一组能力                                       | 为了视觉分组滥建         |
-| ProviderCard   | 模型能力、输入输出模态、表达偏好、结构化输出支持              | 改写领域事实             |
-| PromptFragment | 可组合提示片段                                                | 执行工具或读取文件       |
-| MCP            | 外部 tool/resource/prompt 后端                                | 替代 Skill 或 Policy     |
+| 概念                        | 负责                                                                      | 不负责                              |
+| --------------------------- | ------------------------------------------------------------------------- | ----------------------------------- |
+| Skill                       | 领域方法、prompt-chain guidance、创作语义、输出标准、适用场景；可通过 metadata 引用所需工具 | 拥有 durable profile schema、执行副作用、保存项目事实、在正文描述工具协议 |
+| Artifact Profile            | 持久 artifact/table 形状、字段、schema ref、资源模态、校验和建议 action   | 激活 Skill、执行工具、写项目事实    |
+| Creation Profile            | Agent creation stage、transition、stage persona Skill id、审批/复核/恢复策略 | 充当 workflow engine、执行工具、创建 workflow run |
+| ProviderCard / Expression Profile | provider/model 表达偏好、输入输出模态、generation capability、结构化输出支持 | 保存凭证、adapter wire mapping、改写领域事实 |
+| Tool                        | 原子能力调用、schema、权限、来源、结果和附件                              | 决定何时进入 LLM 上下文             |
+| ToolGroup                   | 跨 Skill 共享的一组能力                                                   | 为了视觉分组滥建                    |
+| PromptFragment              | 可组合提示片段                                                            | 执行工具或读取文件                  |
+| MCP                         | 外部 tool/resource/prompt 后端                                            | 替代 Skill 或 Policy                |
+
+### Profile 贡献边界
+
+Profile 是独立 capability contribution，不是 Skill 的私有提示词。内置 Artifact Profile、Creation Profile 和 ProviderCard 只是一组 standard-library contribution；market、personal、project 或 package provider 可以通过同一 registry 路径贡献新的 profile。Skill 可以随包一起分发 profile，也可以只引用其他包贡献的 profile id；注册后 profile 以 `profileId + version + kind + source` 作为稳定契约被验证和组合。
+
+Profile-only package 合法存在，用于分发团队表结构、创作 lifecycle 或 provider/model expression profile，而不会生成可运行 Skill catalog entry。安装和加载前必须通过 trust、signature/verified publisher、host requirement 与 descriptor path 检查。
+
+`skill-local` profile 只允许用于单轮临时推理 schema，不得作为 persisted artifact、project fact 或跨 Skill contract 的 profile id。持久 artifact 引用缺失、版本不支持或 `skill-local` profile 时必须返回可见 diagnostic，不允许静默当成 generic artifact。
+
+ProviderCard 保留为兼容名称；架构上它是 provider/model expression profile 的当前实现。它描述“某厂商或某模型适合怎样表达生成意图”，不描述 credential、adapter 请求格式或用户账号配置。模型目录和 TOML 只能引用 `providerExpressionProfileId`，不能内联定义 expression prompt/schema。
 
 ### Skill 生命周期
 
 | 阶段       | 设计规则                                                                                                                               |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Discover   | 从 builtin、workspace、market、local、MCP 或 provider contribution 发现，不执行副作用                                                  |
-| Validate   | 校验 manifest、schema、trust、host requirements、tool references、prompt fragment 形状                                                 |
+| Validate   | 校验 manifest、schema、trust、host requirements、metadata tool references、prompt fragment 形状                                        |
 | Register   | 进入 registry，产出 diagnostics 和 capability metadata                                                                                 |
 | Activate   | 根据用户意图、slash command、active skill、creation stage/profile 或领域上下文选择候选                                                 |
-| Inject     | 在 policy、token budget、provider capability 和 creation stage/profile 允许时注入 prompt fragments、tool schemas 和 structured schemas |
+| Inject     | 在 policy、token budget、provider capability 和 creation stage/profile 允许时注入 Skill prompt fragments；工具 schema、capability prompt 和 structured schemas 由对应 runtime/capability 提供 |
 | Observe    | 记录 capability diagnostics、tool result metadata、artifact refs 和 feedback signal                                                    |
 | Deactivate | 切换会话、清除 active skill、失去 trust/host requirement 或上下文不再匹配时移出 injection set                                          |
 
-Skill-first 的含义是“领域策略包先行”，不是“Skill 拥有执行引擎”。跨领域创作应通过多个 capability 的显式注入组合完成，而不是在某个 skill 中硬编码对其他包的内部调用。
+Skill-first 的含义是“领域方法包先行”，不是“Skill 拥有执行引擎或工具协议”。`allowedTools`、`optionalTools` 和 `toolDefinitions` 可以作为机器可读 metadata、registry 或测试 fixture 存在，但 Skill prompt content 不应以自然语言教程形式描述具体工具名、命令参数、轮询协议、缓存/Webview/path 协议或子包 authoring 细节。跨领域创作应通过多个 capability 的显式注入组合完成，而不是在某个 skill 中硬编码对其他包的内部调用。
 
 ### Prompt 层次
 
 | 层          | 内容                                                                             |
 | ----------- | -------------------------------------------------------------------------------- |
-| base        | 项目级行为边界、安全规则、Agent 角色                                             |
+| base        | 项目级行为边界、安全规则、Agent 角色、通用工具/Markdown/引用/视觉证据协议        |
 | schema      | 工具参数、creation artifact、structured output、recovery decision                |
-| skill       | active skill 和 capability prompt fragments                                      |
-| environment | locale、settings、AGENTS.md overlay、provider expression、memory/context summary |
-| ephemeral   | 当前 creation stage/iteration、selected context、tool allowlist、多模态 evidence |
+| capability  | 子包领域能力目录、operation 语义、validation/diagnostics 和资源绑定规则          |
+| skill       | active skill 的领域方法、创作语义、输出标准和任务判断                           |
+| environment | locale、custom instructions settings、AGENTS.md overlay、provider expression、memory/context summary |
+| ephemeral   | 当前 creation stage/iteration、selected context、tool/capability policy、多模态 evidence |
 
 Prompt 生成应输出 prompt snapshot/hash 和 diagnostics，便于追踪 drift。Provider 不支持 native tool calling 或 structured output 时，由 adapter 决定 prompt-only 投影或返回 capability diagnostic。
 
@@ -302,9 +328,9 @@ Prompt-first 的边界：
 
 - Prompt fragment 必须有稳定 id、来源、优先级和适用条件。
 - Prompt 不携带 provider credential、Webview URI、绝对路径、runtime token 或一次性 stream id。
-- Prompt 不隐藏工具调用或权限要求；需要工具时由 schema/allowlist 显式暴露。
+- Prompt 不隐藏工具调用或权限要求；需要工具时由 schema、capability catalog 和 tool policy 显式暴露。
 - Provider expression fragment 只能描述模型表达偏好，不能改写领域事实。
-- AGENTS.md overlay 属于 environment layer；它影响行为边界，不替代 package/domain contract。
+- AGENTS.md overlay 和设置里的自定义指令属于 environment layer；它们影响用户/项目偏好，不替代 base system prompt、tool protocol、capability schema 或 package/domain contract。
 
 ## Context、Memory 与 Grounding
 
@@ -347,10 +373,10 @@ Agent-first 不表示忽略 UI 或素材文件。UI 提供“用户正在指什�
 | 只读查询、搜索、解释                              | 可自动                                                                   |
 | 写项目事实、修改文件、安装 market package         | 需要 policy 允许，必要时用户确认                                         |
 | 删除、覆盖、外部网络、执行本地命令、native plugin | 高信任门槛和明确 approval                                                |
-| untrusted/local capability 注入                   | 默认不自动执行，不进入高风险 tool allowlist                              |
+| untrusted/local capability 注入                   | 默认不自动执行，不进入高风险 tool policy                                 |
 | secret/token/provider credential                  | 只通过 Auth/config/provider adapter，不写 prompt、skill 或 Webview state |
 
-Approval 是运行时 gate，不应埋在 prompt 文案里。Policy 可以影响 tool allowlist、creation stage、provider choice 和 recovery path。
+Approval 是运行时 gate，不应埋在 prompt 文案里。Policy 可以影响 tool policy、creation stage、provider choice 和 recovery path。
 
 ## Evaluation 与 Recovery
 
@@ -399,7 +425,7 @@ Evaluation 是横切审阅面，不是默认 IDC 阶段，也不是独立 workfl
 | ---------------------------------------------- | ---------------------------------- | ------------------------------------------------ |
 | Webview 直接导入 `@neko/agent` 或 provider SDK | UI 与 runtime 互相缠死             | Webview 只消费 `agent-types` 投影                |
 | Extension 拼 prompt 或决定 creation stage      | Host adapter 变成业务层            | runtime 负责 prompt/creation，Extension 注入能力 |
-| Skill 内藏执行逻辑                             | Skill 变成不可审计 workflow engine | Skill 只声明策略、片段、工具范围                 |
+| Skill 内藏执行逻辑或工具协议                   | Skill 变成不可审计 workflow engine | Skill 只声明领域方法、创作语义和输出标准         |
 | 注册能力即注入 LLM                             | token 爆炸和权限泄漏               | Registration 与 Injection 分离                   |
 | Tool 结果直接写项目事实                        | 副作用不可审计                     | 通过领域服务、审批和事实层                       |
 | Provider adapter 拥有领域逻辑                  | 模型供应商影响业务语义             | provider 只做消息/工具/多模态投影                |

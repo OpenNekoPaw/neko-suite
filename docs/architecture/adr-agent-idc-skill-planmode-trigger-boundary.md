@@ -17,7 +17,7 @@
 `neko-agent` 同时存在三类容易混淆的触发面：
 
 - IDC：Intent-Driven Creation，面向创作目标的 Draft -> Plan -> Apply 运行骨架。
-- Skill：领域策略、prompt fragments、allowed tools、适用场景和 trust/host requirements 的能力包。
+- Skill：领域方法、prompt fragments、创作语义、输出标准、适用场景和 trust/host requirements 的能力包；`allowedTools` 等只作为机器可读 metadata/policy 输入。
 - Plan Mode：用户主动进入的规划/审查模式，限制 Apply 和副作用工具。
 
 这些触发面服务不同问题，但都会影响同一 Agent turn 的 system prompt、tool schemas、权限模式、active Skill 状态、artifact contract 和用户审批体验。如果边界不清，典型故障包括：
@@ -25,7 +25,7 @@
 - 用户说“将漫画生成动画”，Agent 只激活 `comic-to-animation`，但没有进入可审阅的 Draft/Plan。
 - 用户显式 `$comic-to-animation` 后只注入 Skill prompt，却没有把该 turn 标记为 `prompt-chain-skill` IDC run。
 - Plan Mode 正确禁止 Apply，但没有自动选择漫画/分镜/动画领域 Skill，导致计划缺少领域约束。
-- 阶段 persona Skill 与业务 Skill 共用单 active injection 槽，互相覆盖 prompt 和 allowed tools。
+- 阶段 persona Skill 与业务 Skill 共用单 active injection 槽，互相覆盖 prompt 和 tool policy。
 - Agent 在 Auto Mode 中把多步骤、高成本媒体生产误判为单步工具调用，直接进入 Apply。
 
 ## 决策
@@ -37,7 +37,7 @@ User / Webview / CLI input
   -> Trigger classification
       -> Plan Mode state decides whether Apply is allowed
       -> IDC metadata decides Draft / Plan / Apply entry
-      -> Skill activation decides domain strategy and allowed tools
+      -> Skill activation decides domain method and metadata tool hints
   -> Agent runtime assembles prompt / schemas / tool policy
   -> Apply-time tools execute only after IDC, policy and approval gates pass
 ```
@@ -47,7 +47,7 @@ User / Webview / CLI input
 | 触发面 | 负责 | 不负责 |
 | ------ | ---- | ------ |
 | IDC | 创作阶段、runId、Draft/Plan/Apply 顺序、artifact expectation、Observe/Evaluate 回路 | 选择某个领域 Skill 的业务规则细节 |
-| Skill | 领域策略、prompt fragments、allowed tools、输入/输出 artifact 描述、trust/host requirement | 拥有工作流引擎、跳过 IDC、直接保存项目事实 |
+| Skill | 领域方法、prompt fragments、创作语义、输出标准、输入/输出 artifact 描述、trust/host requirement；metadata 可声明所需工具 | 拥有工作流引擎、跳过 IDC、直接保存项目事实、在正文描述工具协议 |
 | Plan Mode | 用户主动要求先规划和审查，禁止 Apply，切换 permission mode | 自动选择领域 Skill，自动证明计划可执行 |
 | Tool | 原子能力、参数 schema、权限、结果和 provenance | 决定是否进入 Draft/Plan 或替代用户审批 |
 | Webview/Extension | 发送 typed intent、展示 projection、转发确认 | 在 Agent reasoning 前用关键词选择 Skill 或推导 IDC 策略 |
@@ -63,13 +63,13 @@ User / Webview / CLI input
 | Agent `ActivateSkill` | Agent 自主激活领域 Skill | 不替代当前 IDC stage；激活后仍受 stage、permission 和 approval 限制 |
 | `/plan` 或 `setPromptMode: plan` | 切换 Plan Mode | 强制 Draft/Plan，禁止 Apply；不自动选择业务 Skill |
 | 引用 `@draft-*` / `@plan-*` | 恢复或继续 IDC artifact | 继续路径应保留原 run/artifact provenance |
-| 高风险或不可逆操作 | 强制 Draft/Plan/Approval | 不允许通过 Skill allowedTools 静默越权 |
+| 高风险或不可逆操作 | 强制 Draft/Plan/Approval | 不允许通过 Skill metadata 静默越权 |
 
 ## 冲突与干扰处理
 
 ### 1. IDC 与 Skill 不得互相替代
 
-Skill 是能力包，不是 workflow engine。创作类 Skill 可以描述“如何把漫画转动画”，但不能把 Draft/Plan/Approval 折叠成 prompt 文案。IDC 决定阶段顺序，Skill 只在该阶段内提供领域策略和工具范围。
+Skill 是能力包，不是 workflow engine。创作类 Skill 可以描述“如何把漫画转动画”，但不能把 Draft/Plan/Approval 折叠成 prompt 文案。IDC 决定阶段顺序，Skill 只在该阶段内提供领域方法、创作语义和输出标准；具体工具协议由 runtime catalog、tool schema 和子包 capability 提供。
 
 对于“漫画生成动画”这类请求，期望路径是：
 
@@ -92,7 +92,7 @@ Intent
 
 ### 2. Plan Mode 不得被 Skill 绕过
 
-Plan Mode 是用户主动审查边界。即使 active Skill 的 `allowedTools` 包含生成或写入类工具，Plan Mode 下仍只能执行只读工具和允许的计划文件写入。Skill allowed tools 是能力范围，不是越过模式和审批的授权。
+Plan Mode 是用户主动审查边界。即使 active Skill 的 `allowedTools` metadata 包含生成或写入类工具，Plan Mode 下仍只能执行只读工具和允许的计划文件写入。Skill tool metadata 是能力提示，不是越过模式和审批的授权。
 
 ### 3. Persona Skill 与业务 Skill 应拆分语义槽
 
@@ -103,7 +103,7 @@ IDC 阶段 persona（如 Draft/Plan 的 creation persona、Apply 的 execution p
 - `stagePersona`: 由 IDC stage tracker 管理。
 - `domainSkill`: 由 `$skill`、`invokeSkill` 或 Agent `ActivateSkill` 管理。
 
-Tool allowlist、prompt sections 和 diagnostics 必须能说明来自哪个槽位，冲突时 fail-visible。
+Tool policy、prompt sections 和 diagnostics 必须能说明来自哪个槽位，冲突时 fail-visible。
 
 ### 4. Webview 只触发 intent，不推导策略
 

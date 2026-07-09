@@ -6,7 +6,7 @@
 
 ## 背景
 
-`neko-agent` 曾经尝试用关键词或代码侧候选路由在 Agent turn 之前判断 Skill。这个方向违背 Agent-first / prompt-first：一旦代码在模型 reasoning 前替用户请求选择 Skill，就可能隐式改变 prompt injection、tool allowlist、model override 和 active Skill 状态。
+`neko-agent` 曾经尝试用关键词或代码侧候选路由在 Agent turn 之前判断 Skill。这个方向违背 Agent-first / prompt-first：一旦代码在模型 reasoning 前替用户请求选择 Skill，就可能隐式改变 prompt injection、tool policy、model override 和 active Skill 状态。
 
 当前对话模型上下文窗口约 1M tokens，已经足以让主 Agent 在需要时读取 Skill catalog、理解 metadata，并自主决定是否调用 `ActivateSkill`。因此 Skill 选择权应回到主 Agent，而不是放在 Extension/Webview 的关键词或候选系统中。
 
@@ -18,8 +18,8 @@
 User message
   -> Agent 可通过 GetContext 查看 registeredSkills/catalog metadata
   -> Agent 自主判断是否调用 ActivateSkill
-  -> Runtime 校验 Skill 是否存在、启用、满足工具/subpackage/trust 约束
-  -> SkillInjectionCoordinator 注入 prompt/tool 限制
+  -> Runtime 校验 Skill 是否存在、启用、满足 metadata tool hints/subpackage/trust 约束
+  -> SkillInjectionCoordinator 注入 Skill prompt content，并让 runtime/capability 投影 tool policy
 ```
 
 不是：

@@ -204,7 +204,7 @@ interface ExternalProcessorRegistryChange {
 
 `upsert` 是 register 和 update 的唯一写入口：同一 `registrationId` 的 manifest 版本升级、Market 更新、project 文件变更或 extension contribution 变化都产生新的 immutable registration snapshot，并递增 catalog revision。进行中的 processor invocation 持有开始时的 snapshot，不被中途修改；后续 invocation 使用新 revision。
 
-`unregister` 用于 Market 卸载、用户删除 personal manifest、project processor 文件删除、extension deactivation 或插件卸载。`setEnabled(..., false, ...)` 用于用户禁用、policy block、撤销或诊断隔离，它保留 registration 与 diagnostics 以便 UI 展示和恢复。Agent runtime、管理 UI 和 approval UI 不读取来源目录或 Market install record；它们通过 `onDidChange` 收到 revision 变化后重新 `list/resolve`。事件只通知 catalog 变化，不自动注入 processor 或改变当前 Agent turn 的 tool allowlist。
+`unregister` 用于 Market 卸载、用户删除 personal manifest、project processor 文件删除、extension deactivation 或插件卸载。`setEnabled(..., false, ...)` 用于用户禁用、policy block、撤销或诊断隔离，它保留 registration 与 diagnostics 以便 UI 展示和恢复。Agent runtime、管理 UI 和 approval UI 不读取来源目录或 Market install record；它们通过 `onDidChange` 收到 revision 变化后重新 `list/resolve`。事件只通知 catalog 变化，不自动注入 processor 或改变当前 Agent turn 的 tool policy。
 
 Project processor 的项目发现路径确定为 `.neko/processors/*.neko-processor.json`。如果未来迁移到 `neko/settings.json` 或 Market-style project package，迁移层也只能产生同一 `ExternalProcessorRegistration`，不能引入第二套 catalog。
 

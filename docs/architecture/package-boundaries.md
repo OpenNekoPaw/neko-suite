@@ -1,6 +1,6 @@
 # 子包边界与代码规范
 
-更新日期：2026-06-15
+更新日期：2026-07-09
 
 本文记录当前代码库中已经由包结构、依赖守卫和边界测试体现的稳定规则。它补充根目录 `ARCHITECTURE_CN.md`，用于指导 Agent 和开发者在多子包改动前快速判断代码应该放在哪里、应该依赖谁、不能跨过哪些边界。
 
@@ -36,6 +36,20 @@
 | 领域服务          | `packages/neko-entity/src`、`packages/neko-search/src` 等                                                                                             | 跨界面领域模型、索引、投影、port/adapters                                  | 依赖 UI、Webview、Agent 或具体功能实现                          |
 
 依赖方向应流向契约层、port 或 Engine/client 边界。功能扩展之间不要通过包级 import 互相调用。
+
+## 跨宿主 Adapter 组合边界
+
+Neko 当前存在 VSCode Extension/Webview、Node/TUI、Electron/Desktop 三个真实客户端宿主。宿主 adapter 的实现权归各自 composition root，而不是每个功能包各自实现一套 VSCode/Node/Electron UI 或桥接。
+
+约束：
+
+- VSCode adapter 放在 Extension composition root：负责 VSCode API、Webview CSP/resource projection、custom editor、storage、command/tree/status integration。
+- Node adapter 放在 TUI/headless composition root：负责 Node fs/path/env/process、Platform/Agent runtime、content access、task storage、artifact writes。
+- Electron adapter 放在 Desktop main/preload/renderer bridge：负责 Electron IPC、window/menu、workspace file/resource access、viewport session、scoped Webview/runtime messaging。
+- 功能包暴露 package-owned UI、runtime descriptor、typed message contract、facade 或 capability provider；不要新增平行的 `createVSCodeAdapter` / `createNodeAdapter` / `createElectronAdapter` 全栈实现。
+- Host-neutral Webview 代码需要宿主行为时，使用注入的 host facade、package-owned neutral port 或 Workbench/Agent runtime contract。不要直接调用 `window.vscodeApi`、`acquireVsCodeApi`、Electron IPC、Node fs/path 或未作用域的全局 shim。
+- Desktop 中的 `vscodeApi` 形状全局对象只能作为迁移 shim；已经迁移到 scoped runtime 的 Agent surface 必须走 `sendAgentRuntimeMessage` 和 `AgentHostRuntimeAdapter`。
+- Workbench resource stable ref 与 runtime projection 必须分离；`.neko/.cache`、Webview URI、Electron runtime protocol、blob URL、Engine token、绝对路径都不能作为 durable resource identity。
 
 ## 公共代码
 
@@ -137,7 +151,7 @@
 
 ### `@neko/ui`
 
-`packages/neko-ui` 是 L2 React UI 公共层，当前公共入口包括 `viewport`、`primitives`、`creative`、`icons`、`hooks`、`workbench`、`keyboard`、`utils` 和 `test-utils`。
+`packages/neko-ui` 是 L2 React UI 公共层，当前公共入口包括 `viewport`、`primitives`、`creative`、`icons`、`hooks`、`workbench`、`foundation`、`keyboard`、`utils` 和 `test-utils`。
 
 新增 Webview/React 组件前必须做组件复用审计：
 
@@ -151,6 +165,7 @@
 - 不导入 `vscode`、Node-only module、功能包或 `acquireVsCodeApi`。
 - 不放 package-specific 业务逻辑、命令协议、Engine 操作或 Agent runtime。
 - `@neko/ui/workbench` 消费 `@neko/workbench-core` 的 host-neutral model/projection；不要把 contribution registry、plugin manifest、permission/trust 或宿主 adapter 逻辑放入 React UI 层。
+- `@neko/ui/foundation` 是 Webview foundation context 的共享入口，只承载 host kind、runtime id、locale、theme tokens、logger、diagnostics、keyboard/focus 和 resource projection 等宿主注入语义；不要在功能包里复制 package-local theme/i18n/logger/error/focus runtime。
 - `@neko/ui/error-boundary` 是 Webview React ErrorBoundary 捕获、日志、fallback/retry 的共享入口；功能包需要品牌 copy 或错误 handler 时保留薄 wrapper，不复制 catch/log/reset 实现。
 - `@neko/ui/keyboard` 是 Webview 键盘焦点、editable target、shortcut suppression 和 focused root metadata 的共享入口；功能包不要保留本地 `editable-target` copy 或旧 keyboard reporter。
 - Agent Header/Input/selector 等 Agent 专属交互留在 `neko-agent` Webview，不迁入 `@neko/ui`。
@@ -257,7 +272,7 @@ Webview 包负责浏览器沙箱内的交互体验。
 - Agent-first：核心行为先进入 runtime、workflow、tool、memory 或 contract，不从 Webview UI 反推业务。
 - API-first：跨层消息、命令和 payload 先定义 contract，再接实现。
 - Prompt-first：Prompt 模块只表达上下文和行为策略，避免把宿主副作用藏进 prompt 拼装。
-- Skill-first：Skill 描述领域策略和工具组织，不变成工作流引擎。
+- Skill-first：Skill 描述领域方法、创作语义、输出标准和适用条件；具体工具协议和子包 schema 归系统提示词、capability/tool schema 和 runtime catalog。
 - `agent`、`platform`、`ai-sdk`、`agent-types` 保持 host-agnostic，不导入 `vscode`、React、Webview 或 Extension API。
 - Webview 不导入 `@neko/agent`、`@neko/platform`、`@neko/ai-sdk` 或 Extension API。
 - Extension 可以做 host adapter 和命令注册，但不能把 runtime 业务留在 Extension 里扩散。

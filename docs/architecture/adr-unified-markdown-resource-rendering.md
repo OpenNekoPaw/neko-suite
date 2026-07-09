@@ -326,7 +326,7 @@ Agent Webview Markdown renderer 应支持资源增强渲染，但只作为当前
 
 ## Skill / 提示词输出声明
 
-需要声明扩展渲染方式，但声明的是 authoring format 和 resource reference policy，不是 UI 组件细节。Skill 和系统提示词应告诉 Agent 使用哪些 Markdown 扩展，避免模型输出 cache path、Webview URI 或手写 Canvas 节点。
+需要声明扩展渲染方式，但声明的是 authoring format 和 resource reference policy，不是 UI 组件细节。通用 Markdown 扩展语法、资源引用协议、视觉证据要求和禁止输出 cache path / Webview URI 的规则由系统提示词、shared Markdown/profile 层和 capability catalog 提供；Skill 只声明领域输出意图、推荐字段和生成内容要求，避免把通用 Markdown/Canvas 工具协议塞进领域 Skill。
 
 推荐声明：
 

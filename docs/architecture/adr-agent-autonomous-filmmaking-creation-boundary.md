@@ -129,7 +129,7 @@ checklist.md
 
 ### 4. Skill 是能力包，prompt-chain 是动态指导
 
-Skill 提供领域策略、prompt fragments、allowed tools、输入输出 artifact 描述、trust/host requirement 和 SKILL.md 中的 prompt-chain 指导。
+Skill 提供领域方法、prompt fragments、创作语义、输出标准、输入输出 artifact 描述、trust/host requirement 和 SKILL.md 中的 prompt-chain 指导。`allowedTools` 等工具范围只能作为机器可读 metadata/policy 输入，不能在 Skill 正文中变成具体工具协议、命令参数或子包 authoring 细节。
 
 prompt-chain 表示 Skill 对执行流程的动态建议，例如先拆剧本、再生成分镜、再检查角色一致性、再生成视频。Agent 可以根据上下文选择执行、跳过、重排、重复或切换 Skill。
 
