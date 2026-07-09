@@ -36,7 +36,6 @@ import { AgentManager, IAgentManager as IAgentManagerInterface } from '../ai/age
 import { TaskLifecycleCoordinator } from '../services/taskLifecycleCoordinator';
 import { TaskResultObservationCoordinator } from '../services/taskResultObservationCoordinator';
 import { createModelCallJsonlRecorder } from '../services/modelCallJsonlRecorder';
-import { resolveAgentRealApiUserConfigManagerOptions } from './realApiConfigInjection';
 
 // =============================================================================
 // Service Identifiers
@@ -50,8 +49,9 @@ export const IAgentManager = createServiceId<IAgentManagerInterface>('agentManag
 export const ITaskLifecycleCoordinator = createServiceId<TaskLifecycleCoordinator>(
   'taskLifecycleCoordinator',
 );
-export const ITaskResultObservationCoordinator =
-  createServiceId<TaskResultObservationCoordinator>('taskResultObservationCoordinator');
+export const ITaskResultObservationCoordinator = createServiceId<TaskResultObservationCoordinator>(
+  'taskResultObservationCoordinator',
+);
 
 const DEFAULT_TASK_RECOVERY_STORAGE_KEY = 'neko.agent.taskRecovery';
 const TASK_RESULT_OBSERVATION_JOURNAL_EVENT_TYPES = [
@@ -127,19 +127,14 @@ export async function bootstrapCoreServices(
   // ==========================================================================
   // 3. Create Platform (with injected toolRegistry and file-based user config)
   // ==========================================================================
-  const userConfigManager = new FileUserConfigManager(
-    resolveAgentRealApiUserConfigManagerOptions({
-      extensionMode: context.extensionMode,
-      productionExtensionMode: vscode.ExtensionMode.Production,
-      env: process.env,
-    }),
-  );
+  const userConfigManager = new FileUserConfigManager();
   context.subscriptions.push({ dispose: () => userConfigManager.dispose() });
 
   const nekoPaths = workspacePath ? createNekoPaths(workspacePath) : undefined;
   const modelCallRecorder = nekoPaths
     ? createModelCallJsonlRecorder({
-        resolveFilePath: ({ trace }) => nekoPaths.conversationLog('modelCalls', trace.conversationId),
+        resolveFilePath: ({ trace }) =>
+          nekoPaths.conversationLog('modelCalls', trace.conversationId),
       })
     : undefined;
   if (modelCallRecorder?.dispose) {
@@ -319,7 +314,9 @@ function mementoArrayWriteMetadataKey(key: string): string {
 }
 
 function createTaskResultObservationJournalPort(): {
-  readExistingEntries(conversationId: string): Promise<readonly TaskResultObservationJournalEntry[]>;
+  readExistingEntries(
+    conversationId: string,
+  ): Promise<readonly TaskResultObservationJournalEntry[]>;
 } {
   const projection = new JournalProjection(nodePath.join(nodeOs.homedir(), '.neko', 'journals'), {
     readFile: (filePath) => nodeFs.readFile(filePath, 'utf-8'),

@@ -18,9 +18,5 @@
     "types": ["node"]
   },
   "include": ["src/**/*", "src/**/*.d.ts"],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "src/__tests__/real-api-agent-workflow.test.ts"
-  ]
+  "exclude": ["node_modules", "dist"]
 }

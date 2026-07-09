@@ -22,7 +22,7 @@ Neko Suite splits client targets by product goal:
 
 | Client                   | Goal                                                                                                                                                     |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TUI client               | Agent feature validation, model quality validation, real API runs, ablation experiments, regression tests, and structured reports                        |
+| TUI client               | Agent feature validation, model quality validation, eval scenario acceptance, ablation experiments, regression tests, and structured reports              |
 | VS Code extension client | Lightweight plugin-based creative client for future extension capabilities and fast authoring/editing                                                    |
 | Standalone editor        | Professional creative client that raises the editing and rendering ceiling, avoids VS Code constraints, and provides a more controllable automation host |
 

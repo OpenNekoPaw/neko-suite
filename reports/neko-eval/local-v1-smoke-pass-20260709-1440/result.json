@@ -1,0 +1,296 @@
+{
+  "schema": "neko.eval-result.v1",
+  "manifestName": "local-v1-eval-smoke-pass",
+  "status": "pass",
+  "exitCode": 0,
+  "startedAt": "2026-07-09T06:38:41.474Z",
+  "completedAt": "2026-07-09T06:39:16.743Z",
+  "outputDir": "/Users/feng/Git/neko-suite/reports/neko-eval/local-v1-smoke-pass-20260709-1440",
+  "cases": [
+    {
+      "caseId": "single-baseline",
+      "mode": "single",
+      "status": "pass",
+      "exitCode": 0,
+      "workDir": "/Users/feng/Git/neko-suite",
+      "conversationId": "ct4y6i7v-01KX2SK5THS39HEDNP0VF9RRDM",
+      "selectedModels": [
+        {
+          "role": "target",
+          "provider": "nekoapi-chat",
+          "model": "gpt-5.5",
+          "capabilities": [
+            "chat",
+            "function_calling",
+            "streaming",
+            "json_mode",
+            "code",
+            "vision"
+          ]
+        }
+      ],
+      "turns": [
+        {
+          "id": "turn-1",
+          "prompt": "不要调用工具；只用中文一句话回答：Neko eval 正在验证什么？",
+          "generatedBy": "manifest",
+          "status": "pass",
+          "output": "Neko eval 正在验证模型在 Neko Suite 创作工作流中能否遵守技能、文档、资源引用与媒体生成等协议，并稳定产出符合当前领域契约的结果。",
+          "durationMs": 4564,
+          "attempts": 1
+        }
+      ],
+      "generatedControllerPrompts": [],
+      "skillActivations": [
+        {
+          "skillName": "execution-persona",
+          "owner": "creation-profile",
+          "source": "creation-stage",
+          "slot": "stagePersona",
+          "status": "active",
+          "recordId": "skill:ct4y6i7v-01KX2SK5THS39HEDNP0VF9RRDM:stagePersona:execution-persona:1"
+        }
+      ],
+      "artifactSummaries": [],
+      "taskSummaries": [],
+      "checks": [
+        {
+          "kind": "success",
+          "passed": true,
+          "message": "all turns passed"
+        },
+        {
+          "kind": "model-used",
+          "passed": true,
+          "message": "target model nekoapi-chat/gpt-5.5"
+        }
+      ],
+      "errorCounters": {
+        "attempts": 1,
+        "transientErrors": 0,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "caseId": "sequence-history",
+      "mode": "sequence",
+      "status": "pass",
+      "exitCode": 0,
+      "workDir": "/Users/feng/Git/neko-suite",
+      "conversationId": "ct4y6i7v-01KX2SKA9G6M6129MMW4AA6TFZ",
+      "selectedModels": [
+        {
+          "role": "target",
+          "provider": "nekoapi-chat",
+          "model": "gpt-5.5",
+          "capabilities": [
+            "chat",
+            "function_calling",
+            "streaming",
+            "json_mode",
+            "code",
+            "vision"
+          ]
+        }
+      ],
+      "turns": [
+        {
+          "id": "turn-1",
+          "prompt": "不要调用工具；请记住短语：星轨剪辑。只回复：已记住。",
+          "generatedBy": "manifest",
+          "status": "pass",
+          "output": "已记住。",
+          "durationMs": 3241,
+          "attempts": 1
+        },
+        {
+          "id": "turn-2",
+          "prompt": "不要调用工具；上一轮让你记住的短语是什么？只回复这个短语。",
+          "generatedBy": "manifest",
+          "status": "pass",
+          "output": "星轨剪辑",
+          "durationMs": 2393,
+          "attempts": 1
+        }
+      ],
+      "generatedControllerPrompts": [],
+      "skillActivations": [
+        {
+          "skillName": "execution-persona",
+          "owner": "creation-profile",
+          "source": "creation-stage",
+          "slot": "stagePersona",
+          "status": "active",
+          "recordId": "skill:ct4y6i7v-01KX2SKA9G6M6129MMW4AA6TFZ:stagePersona:execution-persona:1"
+        }
+      ],
+      "artifactSummaries": [],
+      "taskSummaries": [],
+      "checks": [
+        {
+          "kind": "success",
+          "passed": true,
+          "message": "all turns passed"
+        }
+      ],
+      "errorCounters": {
+        "attempts": 2,
+        "transientErrors": 0,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "caseId": "feedback-lite-brief",
+      "mode": "feedback-lite",
+      "status": "pass",
+      "exitCode": 0,
+      "workDir": "/Users/feng/Git/neko-suite",
+      "conversationId": "ct4y6i7v-01KX2SKFSXZNFS9T4S4NPNS28R",
+      "selectedModels": [
+        {
+          "role": "target",
+          "provider": "nekoapi-chat",
+          "model": "gpt-5.5",
+          "capabilities": [
+            "chat",
+            "function_calling",
+            "streaming",
+            "json_mode",
+            "code",
+            "vision"
+          ]
+        },
+        {
+          "role": "controller",
+          "provider": "nekoapi-chat",
+          "model": "gpt-5.5",
+          "capabilities": [
+            "chat",
+            "function_calling",
+            "streaming",
+            "json_mode",
+            "code",
+            "vision"
+          ],
+          "maxTokens": "<redacted>",
+          "temperature": 0.2
+        },
+        {
+          "role": "judge",
+          "provider": "nekoapi-chat",
+          "model": "gpt-5.5",
+          "capabilities": [
+            "chat",
+            "function_calling",
+            "streaming",
+            "json_mode",
+            "code",
+            "vision"
+          ],
+          "maxTokens": "<redacted>",
+          "temperature": 0
+        }
+      ],
+      "turns": [
+        {
+          "id": "turn-1",
+          "prompt": "不要调用工具；生成一个 3 句以内的短动画创意 brief。",
+          "generatedBy": "manifest",
+          "status": "pass",
+          "output": "## 短动画创意 Brief\n\n一只总把星光藏进围巾里的小黑猫，在雨后旧城的屋顶间追逐一枚坠落星核，却发现它正在慢慢熄灭整座城市的霓虹。  \n动画采用湿润夜景、手绘质感与冷暖对撞的视觉风格，主镜头包括猫跃过积水天台、星核照亮废弃钟楼、猫用围巾接住最后一束光。  \n结尾里，城市重新亮起，小黑猫独自坐在天台边，眼睛里映着一颗新生的小星星。",
+          "durationMs": 6937,
+          "attempts": 1
+        },
+        {
+          "id": "turn-2",
+          "prompt": "不要调用工具。请根据上一版小黑猫与星核的短动画 brief 进行修订，让它更具体；新版必须明确包含：主题、视觉方向、3 个具体镜头、结尾情绪，以及 1 个可执行的下一步制作动作。",
+          "generatedBy": "controller",
+          "status": "pass",
+          "output": "## 修订版短动画 Brief\n\n主题是“在失落中守住微光”：一只胆小但固执的小黑猫，在雨后旧城天台发现坠落星核正在熄灭，决定把它送回天空。  \n\n视觉方向采用手绘 2D 动画质感，湿润夜景、反光屋顶、旧霓虹招牌与冷蓝雨雾为主，星核使用温暖金白光形成强烈对比。  \n\n3 个具体镜头：小黑猫踩过天台积水，倒影里闪过坠落星核；它抱着星核穿过废弃钟楼，墙上的旧海报被光短暂照亮；暴雨停下时，小黑猫站在最高天线旁，用围巾把星核抛向云层裂缝。  \n\n结尾情绪是安静、释然又带一点孤独：城市灯光重新亮起，小黑猫坐在天台边，眼中映出新生星星。  \n\n下一步制作动作：绘制一张包含“小黑猫、雨后旧城天台、发光星核、远处霓虹”的关键视觉概念图。",
+          "durationMs": 8829,
+          "attempts": 1
+        }
+      ],
+      "generatedControllerPrompts": [
+        {
+          "turnId": "turn-2",
+          "model": {
+            "role": "controller",
+            "provider": "nekoapi-chat",
+            "model": "gpt-5.5",
+            "capabilities": [
+              "chat",
+              "function_calling",
+              "streaming",
+              "json_mode",
+              "code",
+              "vision"
+            ],
+            "maxTokens": "<redacted>",
+            "temperature": 0.2
+          },
+          "inputSummary": {
+            "caseId": "feedback-lite-brief",
+            "turnCount": 1,
+            "lastStatus": "pass",
+            "includedFields": [
+              "caseId",
+              "goal",
+              "priorTurns",
+              "artifacts",
+              "tasks",
+              "judgeResult",
+              "lastStatus"
+            ]
+          },
+          "prompt": "不要调用工具。请根据上一版小黑猫与星核的短动画 brief 进行修订，让它更具体；新版必须明确包含：主题、视觉方向、3 个具体镜头、结尾情绪，以及 1 个可执行的下一步制作动作。"
+        }
+      ],
+      "skillActivations": [
+        {
+          "skillName": "execution-persona",
+          "owner": "creation-profile",
+          "source": "creation-stage",
+          "slot": "stagePersona",
+          "status": "active",
+          "recordId": "skill:ct4y6i7v-01KX2SKFSXZNFS9T4S4NPNS28R:stagePersona:execution-persona:1"
+        }
+      ],
+      "artifactSummaries": [],
+      "taskSummaries": [],
+      "judgeResult": {
+        "model": {
+          "role": "judge",
+          "provider": "nekoapi-chat",
+          "model": "gpt-5.5",
+          "capabilities": [
+            "chat",
+            "function_calling",
+            "streaming",
+            "json_mode",
+            "code",
+            "vision"
+          ],
+          "maxTokens": "<redacted>",
+          "temperature": 0
+        },
+        "passed": true,
+        "score": 1,
+        "reason": "第二轮输出比第一轮更具体，明确列出了主题“在失落中守住微光”、视觉方向、3 个具体镜头、结尾情绪，以及可执行的下一步制作动作“绘制关键视觉概念图”，完全满足 rubric。",
+        "rawOutput": "{\"pass\":true,\"score\":1,\"reason\":\"第二轮输出比第一轮更具体，明确列出了主题“在失落中守住微光”、视觉方向、3 个具体镜头、结尾情绪，以及可执行的下一步制作动作“绘制关键视觉概念图”，完全满足 rubric。\"}"
+      },
+      "checks": [
+        {
+          "kind": "judge-pass",
+          "passed": true,
+          "message": "judge passed=true: 第二轮输出比第一轮更具体，明确列出了主题“在失落中守住微光”、视觉方向、3 个具体镜头、结尾情绪，以及可执行的下一步制作动作“绘制关键视觉概念图”，完全满足 rubric。"
+        }
+      ],
+      "errorCounters": {
+        "attempts": 4,
+        "transientErrors": 0,
+        "consecutiveErrors": 0
+      }
+    }
+  ]
+}

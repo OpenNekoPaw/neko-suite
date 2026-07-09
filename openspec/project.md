@@ -586,16 +586,15 @@ workspace/media-library file, or generated asset store and passed as stable
 JSON refs/projections. Do not move base64 payloads or cache paths through chat,
 Webview messages, Canvas nodes, or package manifests as durable data.
 
-Agent development validation must include real API evidence whenever a change
-affects provider/model selection, AI SDK projection, prompt or Skill behavior,
-tool schemas, AgentSession workflow, validator/recovery policy, or TUI/GUI
-projection of live Agent events. Default CI remains mock-only and key-free, but
-local Agent validation for these surfaces must load an explicit user-owned
-`config.toml` through `NEKO_AGENT_TEST_CONFIG` and run the relevant
-`test:agent:real:*` lane. If credentials, network, provider availability, or VS
-Code runtime setup prevent the run, record the attempted command, reason, and
-residual risk; do not substitute mock-only, browser-only, jsdom-only, or
-result-only evidence for a real-model or VS Code runtime requirement.
+Agent development validation must include TUI debug automation eval evidence
+whenever a change affects provider/model selection, AI SDK projection, prompt or
+Skill behavior, tool schemas, AgentSession workflow, validator/recovery policy,
+or TUI/GUI projection of live Agent events. Default CI remains key-free, but
+local Agent validation for these surfaces must run a focused `scripts/agent-eval`
+scenario or record the attempted command, reason it could not run, and residual
+risk. Do not substitute mock-only, browser-only, jsdom-only, direct Agent turn
+injection, or result-only evidence for TUI debug automation eval or VS Code
+runtime requirements.
 
 ### Entity, Search, And Cache
 
@@ -726,11 +725,11 @@ Recommended commands by impact:
 - Rust engine: `pnpm ci:local:rust` or targeted `cargo test`/`cargo clippy`.
 - Proto: `pnpm ci:local:proto`.
 - Architecture: `pnpm check`, plus `pnpm check:agent-boundaries` for Agent work.
-- Agent model/runtime/provider/TUI/GUI behavior: focused mock tests plus the
-  relevant explicit real API lane using
-  `NEKO_AGENT_TEST_CONFIG=/path/to/config.toml pnpm test:agent:real:<lane>`.
-  CI and ordinary `pnpm test` must remain mock-only and must not require real
-  credentials.
+- Agent model/runtime/provider/TUI behavior: focused key-free tests plus a
+  focused external eval run through `scripts/agent-eval` and TUI debug
+  automation, or an explicit residual-risk note when provider credentials,
+  network, model access, local fixtures, controller model, or judge model are
+  unavailable.
 - Residual/debt terms or redundant code: `pnpm check:legacy-debt` and
   `pnpm check:unused`, or record that `pnpm ci:local` / `pnpm check:quality`
   covered them.

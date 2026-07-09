@@ -307,32 +307,32 @@ pnpm ci:local:rust       # Rust engine 相关改动
 pnpm ci:local:proto      # Proto 契约与生成类型同步
 ```
 
-Agent 开发需要额外区分 mock 基线和真实 API 验收。CI 和默认 `pnpm test`
-保持 mock-only，不需要真实凭据；但本地改动如果影响 provider/model 选择、
-AI SDK message projection、prompt / Skill 行为、tool schema、AgentSession
-workflow、validator/recovery 策略，或 TUI/GUI 对实时 Agent 事件的投影，必须
-加载显式 `config.toml` 并运行相关 real lane：
+Agent 开发需要额外区分 key-free 基线和 eval 场景验收。CI 和默认 `pnpm test`
+保持 key-free；但本地改动如果影响 provider/model 选择、AI SDK message
+projection、prompt / Skill 行为、tool schema、AgentSession workflow、
+validator/recovery 策略，或 TUI/GUI 对实时 Agent 事件的投影，必须运行聚焦的
+`scripts/agent-eval` 场景，或记录为何无法运行及残余风险。
 
 新增 Agent 功能的默认开发/验收顺序是：先定义共享 contract、runtime path 和
-path-level 测试；再用 mock、real workflow 和 real TUI lane 验证 Agent 核心
-行为、Skill/Tool/prompt 效果、长时间任务、失败诊断和稳定性；确认核心路径可用后，
-再用 VS Code Extension Development Host + `vscode-extension-debugger` 验证
-Webview UI 投影、交互、`invokeSkill` / active Skill 指示器和 UI Skill 使用效果。
-Webview 验收不能替代 Agent/TUI 核心行为验证，TUI/headless 验收也不能替代
-VS Code Webview runtime 验收。
+path-level 测试；再用 focused unit/contract tests 和 TUI debug automation eval
+验证 Agent 核心行为、Skill/Tool/prompt 效果、长时间任务、失败诊断和稳定性；
+确认核心路径可用后，再用 VS Code Extension Development Host +
+`vscode-extension-debugger` 验证 Webview UI 投影、交互、`invokeSkill` /
+active Skill 指示器和 UI Skill 使用效果。Webview 验收不能替代 Agent/TUI 核心
+行为验证，TUI debug automation eval 也不能替代 VS Code Webview runtime 验收。
 
 ```bash
 pnpm test:agent:mock
-NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:platform
-NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:workflow
-NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:tui
-NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:gui
+node scripts/agent-eval/protocol-smoke.mjs \
+  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
+  --case cat-play-image-analysis \
+  --dry-run
 ```
 
-如果本地缺少 `config.toml`、凭据、网络/provider 可用性或 VS Code debugger
-运行条件，交付说明必须记录尝试过的命令、未能运行的原因和残余风险；不能用
-mock-only、browser-only、jsdom-only 或只看最终文本的证据替代真实 API /
-VS Code Webview runtime 验收。
+如果本地缺少 provider 凭据、网络/provider 可用性、模型访问、creative fixture
+或 VS Code debugger 运行条件，交付说明必须记录尝试过的 eval 命令、未能运行的
+原因和残余风险；不能用 mock-only、browser-only、jsdom-only 或只看最终文本的
+证据替代 TUI debug automation eval / VS Code Webview runtime 验收。
 
 当修改 `.github/workflows/ci.yml`、依赖安装、Corepack/pnpm、FFmpeg setup 或 Linux runner shell 逻辑时，可用 `act` 做 GitHub Actions 形状预检：
 

@@ -878,7 +878,6 @@ Update:
 ```text
 packages/neko-agent/package.json
 packages/neko-agent/vitest.config.ts
-packages/neko-agent/vitest.real-api.config.ts
 packages/neko-agent/packages/extension/package.json
 packages/neko-agent/packages/cli-tui/package.json
 packages/neko-agent/packages/cli-tui/build-neko.ts

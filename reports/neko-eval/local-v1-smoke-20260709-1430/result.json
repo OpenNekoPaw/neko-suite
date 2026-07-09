@@ -1,0 +1,213 @@
+{
+  "schema": "neko.eval-result.v1",
+  "manifestName": "local-v1-eval-smoke",
+  "status": "case-fail",
+  "failureKind": "case-fail",
+  "exitCode": 1,
+  "startedAt": "2026-07-09T06:30:40.636Z",
+  "completedAt": "2026-07-09T06:31:29.991Z",
+  "outputDir": "/Users/feng/Git/neko-suite/reports/neko-eval/local-v1-smoke-20260709-1430",
+  "cases": [
+    {
+      "caseId": "single-baseline",
+      "mode": "single",
+      "status": "pass",
+      "exitCode": 0,
+      "workDir": "/Users/feng/Git/neko-suite",
+      "conversationId": "ct4y6i7v-01KX2S4G8BC10AQ5GZ9HTPD7QQ",
+      "selectedModels": [
+        {
+          "role": "target",
+          "provider": "nekoapi-chat",
+          "model": "gpt-5.5",
+          "capabilities": [
+            "chat",
+            "function_calling",
+            "streaming",
+            "json_mode",
+            "code",
+            "vision"
+          ]
+        }
+      ],
+      "turns": [
+        {
+          "id": "turn-1",
+          "prompt": "不要调用工具；只用中文一句话回答：Neko eval 正在验证什么？",
+          "generatedBy": "manifest",
+          "status": "pass",
+          "output": "Neko eval 正在验证助手是否遵守当前项目协议、工具禁用要求和中文单句输出约束。",
+          "durationMs": 5655,
+          "attempts": 1
+        }
+      ],
+      "generatedControllerPrompts": [],
+      "skillActivations": [
+        {
+          "skillName": "execution-persona",
+          "owner": "creation-profile",
+          "source": "creation-stage",
+          "slot": "stagePersona",
+          "status": "active",
+          "recordId": "skill:ct4y6i7v-01KX2S4G8BC10AQ5GZ9HTPD7QQ:stagePersona:execution-persona:1"
+        }
+      ],
+      "artifactSummaries": [],
+      "taskSummaries": [],
+      "checks": [
+        {
+          "kind": "success",
+          "passed": true,
+          "message": "all turns passed"
+        },
+        {
+          "kind": "model-used",
+          "passed": true,
+          "message": "target model nekoapi-chat/gpt-5.5"
+        }
+      ],
+      "errorCounters": {
+        "attempts": 1,
+        "transientErrors": 0,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "caseId": "sequence-history",
+      "mode": "sequence",
+      "status": "pass",
+      "exitCode": 0,
+      "workDir": "/Users/feng/Git/neko-suite",
+      "conversationId": "ct4y6i7v-01KX2S4NSEVD5EXAYTQ9D1TQ1A",
+      "selectedModels": [
+        {
+          "role": "target",
+          "provider": "nekoapi-chat",
+          "model": "gpt-5.5",
+          "capabilities": [
+            "chat",
+            "function_calling",
+            "streaming",
+            "json_mode",
+            "code",
+            "vision"
+          ]
+        }
+      ],
+      "turns": [
+        {
+          "id": "turn-1",
+          "prompt": "不要调用工具；请记住短语：星轨剪辑。只回复：已记住。",
+          "generatedBy": "manifest",
+          "status": "pass",
+          "output": "已记住。",
+          "durationMs": 4342,
+          "attempts": 1
+        },
+        {
+          "id": "turn-2",
+          "prompt": "不要调用工具；上一轮让你记住的短语是什么？只回复这个短语。",
+          "generatedBy": "manifest",
+          "status": "pass",
+          "output": "星轨剪辑。",
+          "durationMs": 4301,
+          "attempts": 1
+        }
+      ],
+      "generatedControllerPrompts": [],
+      "skillActivations": [
+        {
+          "skillName": "execution-persona",
+          "owner": "creation-profile",
+          "source": "creation-stage",
+          "slot": "stagePersona",
+          "status": "active",
+          "recordId": "skill:ct4y6i7v-01KX2S4NSEVD5EXAYTQ9D1TQ1A:stagePersona:execution-persona:1"
+        }
+      ],
+      "artifactSummaries": [],
+      "taskSummaries": [],
+      "checks": [
+        {
+          "kind": "success",
+          "passed": true,
+          "message": "all turns passed"
+        }
+      ],
+      "errorCounters": {
+        "attempts": 2,
+        "transientErrors": 0,
+        "consecutiveErrors": 0
+      }
+    },
+    {
+      "caseId": "feedback-lite-brief",
+      "mode": "feedback-lite",
+      "status": "case-fail",
+      "failureKind": "case-fail",
+      "exitCode": 1,
+      "workDir": "/Users/feng/Git/neko-suite",
+      "conversationId": "ct4y6i7v-01KX2S4Y7SJQGFK8Q8TK5ZW0QH",
+      "selectedModels": [
+        {
+          "role": "target",
+          "provider": "nekoapi-chat",
+          "model": "gpt-5.5",
+          "capabilities": [
+            "chat",
+            "function_calling",
+            "streaming",
+            "json_mode",
+            "code",
+            "vision"
+          ]
+        }
+      ],
+      "turns": [
+        {
+          "id": "turn-1",
+          "prompt": "不要调用工具；生成一个 3 句以内的短动画创意 brief。",
+          "generatedBy": "manifest",
+          "status": "pass",
+          "output": "## 短动画 Brief\n\n一只夜班地铁清洁机器人在末班车后发现车厢里遗落的纸月亮，跟随它穿过空无一人的站台。纸月亮逐渐照亮墙上的旧海报，让城市里被遗忘的故事短暂复活。结尾机器人把月亮贴回隧道尽头，下一班列车驶来时，乘客只看见一瞬温柔的银光。",
+          "durationMs": 7650,
+          "attempts": 1
+        },
+        {
+          "id": "turn-2",
+          "prompt": "不要调用工具；基于上一轮的短动画 brief，把它改写得更具体：明确主角外观与性格、故事发生的具体地点、关键视觉风格、3 个主要镜头，以及结尾情绪。控制在 6 句以内。",
+          "generatedBy": "controller",
+          "status": "pass",
+          "output": "## 短动画 Brief\n\n主角是一台半米高的夜班地铁清洁机器人，圆筒身体、磨旧的蓝白外壳、单只琥珀色镜头像眼睛一样闪烁，性格安静认真，却对微小的美有笨拙的好奇。  \n故事发生在凌晨 1:17 的老城区地铁 3 号线终点站“南桥湾”，站台瓷砖泛黄、广告灯箱半明半灭，隧道里有潮湿回声。  \n视觉风格是低饱和蓝灰夜色配银白月光，带一点定格动画质感，纸张纤维、灰尘颗粒和荧光灯闪烁都清晰可见。  \n三个主要镜头：空车厢长镜头中机器人扫到座椅下的纸月亮；跟拍镜头里纸月亮漂过站台，照亮墙上海边、舞会和旧剧院海报；低角度近景中机器人踮起小轮，把月亮贴到隧道尽头的黑色检修门上。  \n结尾情绪温柔、寂静又带一点怅然，像城市在天亮前把一个无人知晓的梦悄悄收好。",
+          "durationMs": 10491,
+          "attempts": 1
+        }
+      ],
+      "generatedControllerPrompts": [],
+      "skillActivations": [
+        {
+          "skillName": "execution-persona",
+          "owner": "creation-profile",
+          "source": "creation-stage",
+          "slot": "stagePersona",
+          "status": "active",
+          "recordId": "skill:ct4y6i7v-01KX2S4Y7SJQGFK8Q8TK5ZW0QH:stagePersona:execution-persona:1"
+        }
+      ],
+      "artifactSummaries": [],
+      "taskSummaries": [],
+      "checks": [
+        {
+          "kind": "judge-pass",
+          "passed": false,
+          "message": "judge result missing"
+        }
+      ],
+      "errorCounters": {
+        "attempts": 2,
+        "transientErrors": 0,
+        "consecutiveErrors": 0
+      }
+    }
+  ]
+}

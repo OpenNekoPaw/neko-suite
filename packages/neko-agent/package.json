@@ -415,11 +415,7 @@
     "watch": "pnpm run compile:extension -- --watch",
     "lint": "eslint packages/extension/src packages/agent/src packages/platform/src packages/webview/src",
     "test": "vitest",
-    "test:agent:mock": "vitest --run test-utils/src/real-api/real-api-harness.test.ts packages/platform/src/config/__tests__/user-config.test.ts",
-    "test:agent:real:platform": "NEKO_AGENT_REAL_API=1 vitest --run --config vitest.real-api.config.ts packages/platform/src/__tests__/real-api-smoke.test.ts",
-    "test:agent:real:workflow": "NEKO_AGENT_REAL_API=1 vitest --run --config vitest.real-api.config.ts packages/agent/src/__tests__/real-api-agent-workflow.test.ts",
-    "test:agent:real:tui": "NEKO_AGENT_REAL_API=1 vitest --run --config vitest.real-api.config.ts packages/cli-tui/src/__tests__/real-api-tui-projection.test.ts",
-    "test:agent:real:gui": "cd ../.. && NEKO_AGENT_REAL_API=1 node scripts/smoke-agent-real-gui.mjs --require-bridge --require-assistant-text",
+    "test:agent:mock": "vitest --run packages/platform/src/config/__tests__/user-config.test.ts",
     "package": "vsce package --no-dependencies"
   },
   "devDependencies": {

@@ -1,0 +1,31 @@
+{
+  "schema": "neko.eval.v1",
+  "name": "local-single-eval-smoke",
+  "defaults": {
+    "workDir": "/Users/feng/Git/neko-suite",
+    "maxIterations": 4,
+    "timeoutMs": 120000,
+    "stream": false,
+    "retry": {
+      "maxAttemptsPerTurn": 1,
+      "maxConsecutiveErrors": 1
+    }
+  },
+  "cases": [
+    {
+      "id": "single-baseline",
+      "mode": "single",
+      "checks": [
+        {
+          "kind": "success"
+        },
+        {
+          "kind": "error-rate",
+          "maxTransientErrors": 0,
+          "maxConsecutiveErrors": 0
+        }
+      ],
+      "prompt": "不要调用工具；只用中文一句话回答：Neko eval 正在验证什么？"
+    }
+  ]
+}

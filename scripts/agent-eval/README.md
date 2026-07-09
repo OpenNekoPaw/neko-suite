@@ -7,14 +7,21 @@ Skill, EPUB, provider, or TUI business logic.
 ## Boundaries
 
 - Target Agent turns are submitted through the debug automation protocol.
-- Controller and judge model calls, when added by eval manifests, must use real
-  configured APIs.
+- Controller and judge model calls, when added by eval manifests, must use the
+  configured external provider/API endpoints.
 - Mock providers and eval-only fake business tools do not count as Agent
   behavior acceptance.
 - Protocol parser, invalid request, stdio framing, and timeout classification
   tests may remain key-free.
 - Controller or judge API unavailability is infrastructure fail.
 - Bad controller prompts or bad target behavior are case fail.
+
+## Test Case Design
+
+Use [`test-cases.md`](./test-cases.md) as the source for eval case categories,
+required evidence, manifest shape, and quality rubric. It covers single prompts,
+message queues, closed-loop feedback, async/concurrent/iterative tasks, Skill
+activation/triggering, and model/provider/profile binding.
 
 ## Exit Codes
 
@@ -43,7 +50,7 @@ node scripts/agent-eval/protocol-smoke.mjs --cwd /tmp/neko-test --prompt "hello"
 
 ## Creative Workflow Scenarios
 
-The initial real-API scenario manifest is:
+The initial creative workflow eval scenario manifest is:
 
 ```bash
 scripts/agent-eval/scenarios/creative-workflows.scenarios.json

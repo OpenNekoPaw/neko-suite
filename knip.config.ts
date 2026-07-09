@@ -15,6 +15,8 @@ const config: KnipConfig = {
   ignore: [
     // Skills are runtime CLI scripts, not imported modules
     'skills/**',
+    // Agent eval scripts are developer CLIs invoked directly from docs and PR evidence.
+    'scripts/agent-eval/*.mjs',
   ],
   ignoreBinaries: [
     // Root package scripts invoke this local CI wrapper directly.

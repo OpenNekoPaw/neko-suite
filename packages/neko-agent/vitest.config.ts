@@ -27,11 +27,6 @@ export default defineConfig({
       'packages/platform/src/task/__test__/**',
       // media-generation-service depends on deprecated task-manager path
       'packages/platform/src/media/__tests__/media-generation-service.test.ts',
-      // Real API integration tests — require network + API keys, run via `test:integration`
-      'packages/platform/src/__tests__/integration.test.ts',
-      'packages/platform/src/__tests__/real-api-smoke.test.ts',
-      'packages/agent/src/__tests__/real-api-agent-workflow.test.ts',
-      'packages/cli-tui/src/__tests__/real-api-tui-projection.test.ts',
     ],
     coverage: {
       provider: 'v8',
@@ -54,7 +49,6 @@ export default defineConfig({
       '@neko/skills': path.resolve(__dirname, '../neko-skills/src'),
       '@neko-agent/types': path.resolve(__dirname, 'packages/agent-types/src'),
       '@neko-agent/test-utils': path.resolve(__dirname, 'test-utils/src'),
-      '@neko-agent/test-utils/real-api': path.resolve(__dirname, 'test-utils/src/real-api/index.ts'),
       '@neko/neko-client': path.resolve(__dirname, '../neko-client/src'),
       // Handler tests mock vscode via vi.mock('vscode') — alias ensures resolution
       'vscode': path.resolve(__dirname, 'packages/extension/src/__mocks__/vscode.ts'),
