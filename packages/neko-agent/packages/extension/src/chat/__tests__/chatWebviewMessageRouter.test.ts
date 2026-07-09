@@ -6,6 +6,7 @@ import {
   type ChatWebviewMessageRouterDeps,
 } from '../chatWebviewMessageRouter';
 import {
+  createAgentHostRouteCoverageDiagnostics,
   WEBVIEW_TO_EXTENSION_MESSAGE_TYPES,
   type WebviewToExtensionMessage,
 } from '@neko-agent/types';
@@ -168,6 +169,22 @@ describe('handleChatWebviewMessage', () => {
     expect(missing).toEqual([]);
     expect(configTypes.has('getSkills')).toBe(false);
     expect(chatTypes.has('getSkills')).toBe(true);
+  });
+
+  it('classifies every VSCode Agent host route as implemented', () => {
+    const implementedRoutes: Partial<
+      Record<WebviewToExtensionMessage['type'], 'implemented'>
+    > = {};
+    for (const type of [...CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES, ...CONFIG_BRIDGE_MESSAGE_TYPES]) {
+      implementedRoutes[type] = 'implemented';
+    }
+
+    expect(
+      createAgentHostRouteCoverageDiagnostics({
+        hostKind: 'vscode',
+        routes: implementedRoutes,
+      }),
+    ).toEqual([]);
   });
 
   it('routes sendMessage to the message handler with explicit conversation state', () => {

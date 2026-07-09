@@ -57,6 +57,20 @@ export {
   isNekoEngineFrameServerResult,
   type NekoEngineFrameServerResult,
 } from './engine-bridge-contract';
+export type {
+  AgentHostKind,
+  AgentHostRouteCoverageDiagnostic,
+  AgentHostRouteCoverageInput,
+  AgentHostRouteSupport,
+  AgentHostRuntimeAdapter,
+  AgentHostRuntimeSubscription,
+  AgentWebviewToHostMessageType,
+  AgentWebviewToHostMessageTypeCoverage,
+} from './agent-host-runtime-adapter';
+export {
+  AGENT_WEBVIEW_TO_HOST_MESSAGE_TYPES,
+  createAgentHostRouteCoverageDiagnostics,
+} from './agent-host-runtime-adapter';
 export type { EnabledStateRecord } from './enabled-state';
 export type { AgentLegacyCreationTrace } from './legacy-trace';
 export type {
@@ -546,6 +560,7 @@ export {
   isSessionMode,
   parseSendMessageWebviewMessage,
   parseWebviewToExtensionMessage,
+  NEKO_AGENT_HOST_MESSAGE_EVENT,
   WEBVIEW_TO_EXTENSION_MESSAGE_TYPES,
 } from './webview-protocol';
 

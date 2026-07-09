@@ -81,6 +81,7 @@ import type {
   PluginTransferTargetRef,
 } from './plugin-transfer-contract';
 import type { AgentConfigDiagnostic } from './config-diagnostic';
+export { NEKO_AGENT_HOST_MESSAGE_EVENT } from './host-message-event';
 
 export type ProtocolModelCategory = ModelType;
 
