@@ -104,8 +104,6 @@ describe('ContentOverlay', () => {
     expect(host.querySelector('[data-content-block-id="shot-generated-preview"]')).not.toBeNull();
     expect(host.querySelector('[data-shot-creator-details="true"]')).toBeNull();
     expect(host.textContent).not.toContain('Edit details and advanced metadata');
-    expect(host.textContent).toContain('A dense shot with enough metadata to require scrolling.');
-    expect(host.textContent).toContain('The creator-facing summary stays readable.');
     expect(host.textContent).toContain('Lead (primary)');
     expect(host.textContent).toContain('The useful content stays visible.');
     expect(host.querySelector('[data-shot-creator-prompt="true"]')).not.toBeNull();
@@ -121,6 +119,11 @@ describe('ContentOverlay', () => {
     ).toBe('Semantic video prompt should stay in the creator surface.');
     expect(host.querySelector('[data-content-block-id="shot-visual-description"]')).toBeNull();
     expect(host.querySelector('[data-content-block-id="shot-generation-prompt"]')).toBeNull();
+    expect(host.querySelector('[data-shot-creator-summary-item="visual-action"]')).toBeNull();
+    expect(host.textContent).not.toContain(
+      'A dense shot with enough metadata to require scrolling.',
+    );
+    expect(host.textContent).not.toContain('The creator-facing summary stays readable.');
   });
 
   it('shows an assembled prompt in the creator summary when no custom prompt is set', () => {
@@ -167,6 +170,55 @@ describe('ContentOverlay', () => {
     expect(videoPrompt?.value).toContain('White title page with calligraphy.');
     expect(videoPrompt?.value).toContain('Style: minimal ink');
     expect(videoPrompt?.value).toContain('Sound: soft ambient tone');
+  });
+
+  it('keeps image prompt text out of the shot summary visual/action row', () => {
+    const duplicatedPrompt =
+      '图像编辑：以 P04#panel_1 为输入，保留左侧巨大垂直建筑、狭窄桥面、两名人物背影和黑白网点线稿。';
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 4,
+          visualDescription: duplicatedPrompt,
+          characterAction: duplicatedPrompt,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              imagePromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-no-duplicate:image:prompt',
+                blockKind: 'image',
+                text: duplicatedPrompt,
+              },
+            },
+          },
+        },
+      }),
+      id: 'shot-overlay-no-duplicate',
+    } as CanvasNode;
+
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+    });
+
+    act(() => {
+      root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
+    });
+
+    expect(host.querySelector('[data-shot-creator-summary-item="visual-action"]')).toBeNull();
+    const summaryText = Array.from(host.querySelectorAll('[data-shot-creator-summary-value]'))
+      .map((value) => value.textContent ?? '')
+      .join('\n');
+    expect(summaryText).not.toContain(duplicatedPrompt);
+    expect(
+      host.querySelector<HTMLTextAreaElement>('[data-shot-creator-prompt-block-input="image"]')
+        ?.value,
+    ).toBe(duplicatedPrompt);
   });
 
   it('renders semantic prompt spans, alignment state, and prompt diagnostics', () => {
@@ -245,7 +297,6 @@ describe('ContentOverlay', () => {
     });
 
     const videoEditor = host.querySelector('[data-shot-creator-prompt-block-editor="video"]');
-    const voiceEditor = host.querySelector('[data-shot-creator-prompt-block-editor="voice"]');
     const videoPromptDisplay = videoEditor?.querySelector('[data-semantic-prompt-text="true"]');
     expect(videoEditor).not.toBeNull();
     expect(videoPromptDisplay).not.toBeNull();
@@ -260,7 +311,9 @@ describe('ContentOverlay', () => {
     expect(
       videoEditor?.querySelector('[data-semantic-prompt-span-kind="resource"]'),
     ).not.toBeNull();
-    expect(voiceEditor?.querySelector('[data-semantic-prompt-span-kind="voice"]')).not.toBeNull();
+    expect(videoEditor?.querySelector('[data-semantic-prompt-span-kind="voice"]')).not.toBeNull();
+    expect(host.querySelector('[data-shot-creator-prompt-block-editor="voice"]')).toBeNull();
+    expect(host.textContent).not.toContain('Voice prompt');
     const semanticPromptSpans = Array.from(
       videoEditor?.querySelectorAll('[data-semantic-prompt-span-kind]') ?? [],
     );
@@ -273,6 +326,12 @@ describe('ContentOverlay', () => {
       expect(span.className).not.toContain('text-amber-800');
     }
     expect(videoEditor?.textContent).toContain(videoPromptText);
+    expect(videoEditor?.textContent).toContain(voicePromptText);
+    expect(
+      videoEditor?.querySelector<HTMLTextAreaElement>(
+        '[data-shot-creator-prompt-block-input="video"]',
+      )?.value,
+    ).toBe(`${videoPromptText}\n\n${voicePromptText}`);
     expect(
       videoEditor?.querySelector('[data-semantic-prompt-span-kind="scene"]')?.getAttribute('title'),
     ).toContain('Scene location');
@@ -289,6 +348,68 @@ describe('ContentOverlay', () => {
     expect(host.textContent).toContain('Scene video prompt: In sync');
     expect(host.textContent).toContain('Dialogue: Suggestion pending');
     expect(host.textContent).toContain('Review wet hair as character appearance.');
+  });
+
+  it('absorbs existing voice prompt text into the video prompt when edited', async () => {
+    const videoPromptText = 'Camera follows Ren across the rain-slick alley.';
+    const voicePromptText = 'Ren whispers: Stay close.';
+    const node = {
+      ...buildCanvasNode({
+        type: 'shot',
+        position: { x: 0, y: 0 },
+        zIndex: 0,
+        preset: 'shot.basic',
+        data: {
+          shotNumber: 12,
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-absorb-voice:video:prompt',
+                blockKind: 'video',
+                text: videoPromptText,
+              },
+              voicePromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'shot-overlay-absorb-voice:voice:prompt',
+                blockKind: 'voice',
+                text: voicePromptText,
+              },
+            },
+          },
+        },
+      }),
+      id: 'shot-overlay-absorb-voice',
+    } as CanvasNode;
+    const updateNodeData = vi.fn();
+    useCanvasStore.setState({
+      canvasData: createCanvasData([node]),
+      selection: { nodeIds: [node.id], connectionIds: [] },
+      updateNodeData,
+    });
+
+    act(() => {
+      root.render(<ContentOverlay nodeId={node.id} onClose={() => undefined} />);
+    });
+
+    const textarea = host.querySelector<HTMLTextAreaElement>(
+      '[data-shot-creator-prompt-block-input="video"]',
+    );
+    expect(textarea?.value).toBe(`${videoPromptText}\n\n${voicePromptText}`);
+
+    await act(async () => {
+      setTextareaValue(textarea!, `${videoPromptText}\n\n${voicePromptText}\nHold on their hands.`);
+      textarea!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      textarea!.dispatchEvent(new Event('focusout', { bubbles: true }));
+    });
+
+    const payload = updateNodeData.mock.calls[0]?.[1] as Record<string, unknown> | undefined;
+    const promptBlocks = readRecord(readRecord(payload?.storyboardPrompt)?.promptBlocks);
+    expect(readRecord(promptBlocks?.videoPromptDocument)?.text).toContain(voicePromptText);
+    expect(promptBlocks).not.toHaveProperty('voicePromptDocument');
   });
 
   it('renders capability-driven storyboard parameters in shot prompt details', () => {
@@ -518,13 +639,7 @@ describe('ContentOverlay', () => {
       '[data-shot-creator-prompt-block-input="image"]',
     );
     expect(imageTextarea?.getAttribute('placeholder')).toBeNull();
-    const summaryValues = Array.from(host.querySelectorAll('[data-shot-creator-summary-value]'));
-    expect(
-      summaryValues.some((value) => value.querySelector('[data-markdown-inline-strong="true"]')),
-    ).toBe(true);
-    expect(
-      summaryValues.some((value) => value.querySelector('[data-markdown-resource-reference="true"]')),
-    ).toBe(true);
+    expect(host.querySelector('[data-shot-creator-summary-item="visual-action"]')).toBeNull();
   });
 
   it('commits prompt edits as semantic storyboardPrompt and cancels Escape edits', async () => {

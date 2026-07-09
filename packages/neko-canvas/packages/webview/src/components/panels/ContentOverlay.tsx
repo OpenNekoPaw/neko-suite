@@ -69,17 +69,13 @@ const STORYBOARD_PROMPT_BLOCKS = [
     labelKey: 'content.overlayShotPromptBlockImage',
     placeholderKey: 'content.overlayShotPromptImagePlaceholder',
   },
-  {
-    kind: 'voice',
-    labelKey: 'content.overlayShotPromptBlockVoice',
-    placeholderKey: 'content.overlayShotPromptVoicePlaceholder',
-  },
 ] as const satisfies readonly {
   readonly kind: CanvasStoryboardPromptBlockKind;
   readonly labelKey: string;
   readonly placeholderKey: string;
 }[];
 
+const SHOT_VIDEO_VOICE_PROMPT_SEPARATOR = '\n\n';
 type ShotPromptDrafts = Record<CanvasStoryboardPromptBlockKind, string>;
 type ShotPromptBlockSources = Record<CanvasStoryboardPromptBlockKind, string>;
 
@@ -377,10 +373,6 @@ function ShotCreatorSummary({
     readString(data, 'cameraMovement'),
   ]);
   const characters = readShotCreatorCharacterNames(data).join(', ');
-  const visual = joinDisplayValues([
-    readString(data, 'visualDescription'),
-    readString(data, 'characterAction'),
-  ]);
   const audio = joinDisplayValues([
     readString(data, 'dialogue'),
     readString(data, 'voiceOver'),
@@ -397,18 +389,19 @@ function ShotCreatorSummary({
   return (
     <div className="grid min-w-0 gap-3 rounded border border-gray-200 bg-white p-3 text-xs text-gray-700 md:grid-cols-2">
       <ShotCreatorSummaryItem
+        id="duration"
         label={t('preset.shot.duration')}
         value={duration === undefined ? '' : t('scene.shotDuration', { seconds: duration })}
       />
-      <ShotCreatorSummaryItem label={t('scene.column.camera')} value={camera} />
-      <ShotCreatorSummaryItem label={t('preset.shot.characters')} value={characters} />
-      <ShotCreatorSummaryItem label={t('scene.column.tagsStyle')} value={tags} />
+      <ShotCreatorSummaryItem id="camera" label={t('scene.column.camera')} value={camera} />
       <ShotCreatorSummaryItem
-        label={t('scene.column.visualAction')}
-        value={visual}
-        className="md:col-span-2"
+        id="characters"
+        label={t('preset.shot.characters')}
+        value={characters}
       />
+      <ShotCreatorSummaryItem id="tags-style" label={t('scene.column.tagsStyle')} value={tags} />
       <ShotCreatorSummaryItem
+        id="dialogue-sfx"
         label={t('scene.column.dialogueSfx')}
         value={audio}
         className="md:col-span-2"
@@ -497,12 +490,17 @@ function ShotCreatorPromptEditor({
           {formatShotPromptSourceLabel(projection?.source ?? 'empty')}
         </span>
       </div>
-      <div className="grid min-w-0 gap-2 md:grid-cols-3">
+      <div className="grid min-w-0 gap-2 md:grid-cols-2">
         {STORYBOARD_PROMPT_BLOCKS.map((block) => {
-          const document = readPromptDocument(
-            storyboardPromptState?.promptBlocks ?? {},
-            block.kind,
-          );
+          const promptBlocks = storyboardPromptState?.promptBlocks ?? {};
+          const document =
+            block.kind === 'video'
+              ? createVideoPromptDisplayDocument({
+                  videoDocument: promptBlocks.videoPromptDocument,
+                  voiceDocument: promptBlocks.voicePromptDocument,
+                  videoText: drafts.video,
+                })
+              : readPromptDocument(promptBlocks, block.kind);
           return (
             <div key={block.kind} className="min-w-0" data-shot-creator-prompt-block={block.kind}>
               <div className="mb-1 flex min-w-0 items-center justify-between gap-2">
@@ -819,9 +817,12 @@ function resolveShotPromptDrafts(
 ): ShotPromptDrafts {
   return {
     image: state?.promptBlocks?.imagePromptDocument?.text ?? '',
-    video:
-      state?.promptBlocks?.videoPromptDocument?.text ??
-      (projection?.source === 'assembled' ? projection.prompt : ''),
+    video: createCombinedVideoPromptText({
+      videoText:
+        state?.promptBlocks?.videoPromptDocument?.text ??
+        (projection?.source === 'assembled' ? projection.prompt : ''),
+      voiceText: state?.promptBlocks?.voicePromptDocument?.text,
+    }),
     voice: state?.promptBlocks?.voicePromptDocument?.text ?? '',
   };
 }
@@ -832,7 +833,8 @@ function resolveShotPromptBlockSources(
 ): ShotPromptBlockSources {
   return {
     image: state?.promptBlocks?.imagePromptDocument ? 'semantic-prompt-document' : 'empty',
-    video: state?.promptBlocks?.videoPromptDocument
+    video:
+      state?.promptBlocks?.videoPromptDocument || state?.promptBlocks?.voicePromptDocument
       ? 'semantic-prompt-document'
       : projection?.source === 'assembled'
         ? 'assembled'
@@ -852,6 +854,9 @@ function createEditedStoryboardPromptState(
   const editProjection = projectPromptEdit(node.id, blockKind, text, existingDocument);
   const nextDocument = editProjection.document;
   writePromptDocument(promptBlocks, blockKind, nextDocument);
+  if (blockKind === 'video') {
+    delete promptBlocks.voicePromptDocument;
+  }
   const diagnostics = mergePromptEditDiagnostics(
     existingState?.diagnostics,
     blockKind,
@@ -934,6 +939,82 @@ function writePromptDocument(
       if (document) blocks.voicePromptDocument = document;
       else delete blocks.voicePromptDocument;
   }
+}
+
+function createCombinedVideoPromptText(input: {
+  readonly videoText?: string;
+  readonly voiceText?: string;
+}): string {
+  const videoText = input.videoText ?? '';
+  const voiceText = input.voiceText ?? '';
+  if (!videoText) return voiceText;
+  if (!voiceText) return videoText;
+  const trimmedVoice = voiceText.trim();
+  if (trimmedVoice && videoText.includes(trimmedVoice)) {
+    return videoText;
+  }
+  return `${videoText}${SHOT_VIDEO_VOICE_PROMPT_SEPARATOR}${voiceText}`;
+}
+
+function createVideoPromptDisplayDocument(input: {
+  readonly videoDocument?: CanvasStoryboardSemanticPromptDocument;
+  readonly voiceDocument?: CanvasStoryboardSemanticPromptDocument;
+  readonly videoText: string;
+}): CanvasStoryboardSemanticPromptDocument | undefined {
+  if (!input.voiceDocument) {
+    return input.videoDocument;
+  }
+  const videoDocument = input.videoDocument;
+  const voiceText = input.voiceDocument.text;
+  const voiceOffset = readEmbeddedVoicePromptOffset(input.videoText, videoDocument?.text ?? '', voiceText);
+  const shiftedVoiceSpans =
+    voiceOffset === undefined
+      ? []
+      : (input.voiceDocument.spans ?? []).map((span) => shiftSemanticPromptSpan(span, voiceOffset));
+  const baseDocument = videoDocument ?? input.voiceDocument;
+  return {
+    ...baseDocument,
+    blockKind: 'video',
+    text: input.videoText,
+    spans: [...(videoDocument?.spans ?? []), ...shiftedVoiceSpans],
+    fieldProjections: [
+      ...(videoDocument?.fieldProjections ?? []),
+      ...(input.voiceDocument.fieldProjections ?? []),
+    ],
+    profileId:
+      videoDocument?.profileId ??
+      input.voiceDocument.profileId ??
+      'canvas.storyboard.semantic-prompt',
+  };
+}
+
+function readEmbeddedVoicePromptOffset(
+  combinedText: string,
+  originalVideoText: string,
+  voiceText: string,
+): number | undefined {
+  if (!voiceText) return undefined;
+  const appendedText = `${originalVideoText}${SHOT_VIDEO_VOICE_PROMPT_SEPARATOR}${voiceText}`;
+  if (combinedText === appendedText) {
+    return originalVideoText.length + SHOT_VIDEO_VOICE_PROMPT_SEPARATOR.length;
+  }
+  const trimmedVoice = voiceText.trim();
+  if (!trimmedVoice) return undefined;
+  const index = combinedText.indexOf(trimmedVoice);
+  return index >= 0 ? index : undefined;
+}
+
+function shiftSemanticPromptSpan(
+  span: CanvasAuthoringSemanticPromptSpan,
+  offset: number,
+): CanvasAuthoringSemanticPromptSpan {
+  return {
+    ...span,
+    range: {
+      start: span.range.start + offset,
+      end: span.range.end + offset,
+    },
+  };
 }
 
 function resolvePromptDisplayDocument(
@@ -1217,16 +1298,18 @@ function formatShotPromptSourceLabel(source: string): string {
 }
 
 function ShotCreatorSummaryItem({
+  id,
   label,
   value,
   className,
 }: {
+  id: string;
   label: string;
   value: string;
   className?: string;
 }) {
   return (
-    <div className={`min-w-0 ${className ?? ''}`}>
+    <div className={`min-w-0 ${className ?? ''}`} data-shot-creator-summary-item={id}>
       <div className="mb-1 text-[11px] text-gray-500">{label}</div>
       <div
         className="max-h-32 min-h-[1.25rem] overflow-y-auto whitespace-pre-wrap break-words text-[12px] leading-5 text-gray-900"
