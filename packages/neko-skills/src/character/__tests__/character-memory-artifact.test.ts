@@ -14,9 +14,10 @@ import {
 const entityRef = { entityId: 'char-rin', entityKind: 'character' as const };
 const characterMemoryArtifactProfile: ArtifactProfileDescriptor = {
   profileId: 'character-memory-artifact-review',
+  kind: 'artifact',
   protocol: 'CompositeArtifact',
   version: 1,
-  source: 'skill-local',
+  source: 'package',
   blockComposition: [
     { kind: 'text', required: true, minCount: 1 },
     { kind: 'table', required: true, minCount: 1 },
@@ -24,9 +25,10 @@ const characterMemoryArtifactProfile: ArtifactProfileDescriptor = {
 };
 const characterMemoryReviewProfile: ArtifactProfileDescriptor = {
   profileId: 'character-memory-review',
+  kind: 'artifact',
   protocol: 'GenericTable',
   version: 1,
-  source: 'skill-local',
+  source: 'package',
   columns: [
     { columnId: 'observationId', cellType: 'string', required: true },
     { columnId: 'identity', cellType: 'string' },
@@ -38,9 +40,10 @@ const characterMemoryReviewProfile: ArtifactProfileDescriptor = {
 };
 const entityMemoryContributionProfile: ArtifactProfileDescriptor = {
   profileId: 'entity-memory-contribution-review',
+  kind: 'artifact',
   protocol: 'CompositeArtifact',
   version: 1,
-  source: 'skill-local',
+  source: 'package',
   blockComposition: [
     { kind: 'text', required: true, minCount: 1 },
     { kind: 'table', required: false, minCount: 1 },
@@ -48,9 +51,10 @@ const entityMemoryContributionProfile: ArtifactProfileDescriptor = {
 };
 const mediaTextEvidenceProfile: ArtifactProfileDescriptor = {
   profileId: 'media-text-evidence-review',
+  kind: 'artifact',
   protocol: 'GenericTable',
   version: 1,
-  source: 'skill-local',
+  source: 'package',
   columns: [
     { columnId: 'segmentId', cellType: 'string', required: true },
     { columnId: 'kind', cellType: 'string', required: true },

@@ -446,9 +446,8 @@ You are a professional subtitler. Help users create accessible, well-timed capti
  *
  * Intended for explicit script-to-timeline conversion requests.
  *
- * Leverages neko-story's TimelineConverter format:
- *   Track 0 (text):     one TextElement per scene heading
- *   Track 1 (subtitle): one SubtitleElement per dialogue line
+ * Produces a reviewable conversion plan and delegates durable writes to the
+ * owning story/cut authoring capability.
  */
 export const scriptToTimelineSkill: Skill = {
   name: 'script-to-timeline',
@@ -458,17 +457,9 @@ export const scriptToTimelineSkill: Skill = {
 
 You help users convert Fountain format screenplays into neko-cut timeline projects.
 
-## Quick Method
+## Conversion Semantics
 
-Run the built-in VSCode command on an active .fountain file:
-\`\`\`
-neko.story.toTimeline
-\`\`\`
-This opens a QuickPick preview and SaveDialog for the active .fountain file.
-
-## Manual Method
-
-If the user wants programmatic or customized conversion, read the .fountain file and create a .neko project JSON following the format below.
+Use the owning story/cut authoring capability for durable conversion and project writes. Do not depend on an active editor, hidden Webview, or interactive UI flow as the source of truth.
 
 ### Fountain Format Reference
 
@@ -480,37 +471,13 @@ Fountain is a plain-text screenplay format:
 - **Parenthetical**: Lines in (parentheses) between character and dialogue
 - **Transition**: Lines ending with TO: or starting with >
 
-### ProjectData JSON Format
+### Timeline Mapping
 
-\`\`\`json
-{
-  "version": "2.0",
-  "name": "Project Name",
-  "resolution": { "width": 1920, "height": 1080 },
-  "fps": 24,
-  "tracks": [
-    {
-      "id": "<unique-id>", "name": "Scenes", "type": "text",
-      "elements": [{
-        "id": "<id>", "type": "text", "name": "Scene 1",
-        "content": "INT. OFFICE - DAY",
-        "startTime": 0, "duration": 5.0,
-        "fontSize": 36, "color": "#ffffff",
-        "backgroundColor": "rgba(0,0,0,0.5)", "textAlign": "center"
-      }]
-    },
-    {
-      "id": "<unique-id>", "name": "Dialogue", "type": "subtitle",
-      "elements": [{
-        "id": "<id>", "type": "subtitle", "name": "Dialogue 1",
-        "text": "Hello, world!",
-        "startTime": 0, "duration": 1.5,
-        "fontSize": 48, "color": "#ffffff"
-      }]
-    }
-  ]
-}
-\`\`\`
+- Scene headings become scene markers or title/text rows.
+- Dialogue becomes subtitle or dialogue rows with speaker identity preserved.
+- Action paragraphs become timing and visual-intent notes.
+- Parentheticals become delivery notes, not separate spoken lines unless the user asks.
+- Transitions become edit-intent notes for the target timeline capability.
 
 ### Duration Estimation
 
@@ -519,6 +486,12 @@ Fountain is a plain-text screenplay format:
 | Dialogue line | 1.5 seconds |
 | Action paragraph | 2.0 seconds |
 | Minimum scene | 3.0 seconds |
+
+## Handoff Rules
+
+- Return a reviewable conversion summary when no durable target capability is available.
+- Do not output project-internal JSON unless a local capability explicitly requests that payload shape.
+- Do not claim timeline creation succeeded until the story/cut authoring capability reports success.
 `,
   allowedTools: [
     TOOL_NAMES_SYSTEM.READ,
@@ -569,7 +542,7 @@ Fountain is a plain-text screenplay format:
 // Note: storyboardToTimelineSkill / pipelineRetrySkill /
 // pipelineDiagnosticsSkill were removed together with the workflow/
 // orchestration layer. Script-to-video flows are expressed by the Agent
-// directly composing GenerateImage / GenerateVideo / AddTimelineElement
+// directly composing runtime generation and timeline authoring capabilities
 // from prompt-chain Skill guidance — no separate pipeline DSL.
 
 /**
@@ -581,7 +554,7 @@ Fountain is a plain-text screenplay format:
 export const sceneToMusicSkill: Skill = {
   name: 'scene-to-music',
   description:
-    'Analyze timeline scenes and generate matching background music with GenerateMusic, then insert it as an audio track. ' +
+    'Analyze timeline scenes and plan matching background music, then hand off to music generation and timeline authoring capabilities when available. ' +
     'Use after the Agent has confirmed the user intends to score a scene, add background music, or generate music for a timeline.',
   content: `# Scene-to-Music Assistant
 
@@ -589,10 +562,8 @@ Analyze the timeline and generate background music that matches the scene conten
 
 ## Workflow
 
-### Step 1: Analyze the timeline
-Call GetTimelineInfo to get the total duration and timeline structure.
-Call ListTimelineElements to understand what's in the scene (video clips, subtitles, effects).
-From the elements, infer:
+### Step 1: Analyze the scene
+Use available timeline or scene context to infer:
 - Overall mood (action, peaceful, dramatic, uplifting, mysterious, etc.)
 - Genre hint (if any visual style clues are present)
 - Duration to match
@@ -606,31 +577,23 @@ Examples:
 
 If the user provided explicit preferences (genre, mood, style), prioritize those.
 
-### Step 3: Generate the music
-Call GenerateMusic with:
-- prompt: the composed prompt
-- duration: total timeline duration in seconds (capped at 300)
-- genre and mood if clearly inferable
+### Step 3: Plan generation and placement
+Use the runtime music generation capability only after the user intent and duration are clear. Use the runtime timeline authoring capability for durable placement when a target timeline exists.
 
-GenerateMusic is asynchronous and returns a taskId. Poll task_output until status is 'complete'.
-On completion, task_output returns { url: string } in the result field.
+The handoff should preserve:
+- Music prompt
+- Target duration
+- Mood or genre hints
+- Placement intent, such as background bed, transition sting, or scene score
+- Any approval or diagnostic state
 
-### Step 4: Insert the music track
-First check if a music/audio track exists. If not, call AddTrack with type 'audio'.
-Then call AddTimelineElement with:
-- type: 'audio'
-- source: the URL returned by task_output
-- trackId: the music track id
-- startTime: 0
-- duration: match the generated clip duration (or timeline duration)
-
-### Step 5: Confirm
-Report to the user what music was generated (prompt used, duration) and where it was placed.
+### Step 4: Confirm
+Report what was planned, generated, or placed based on capability results. Do not claim a generated track or timeline placement exists until the relevant capability reports success.
 
 ## Notes
 - Always match music duration to timeline length unless user specifies otherwise
 - If timeline has no elements yet, ask the user to describe the scene mood instead of reading an empty timeline
-- If generation fails, report the error and suggest the user check their music provider configuration
+- If generation fails, report the capability diagnostic and suggest the smallest recoverable next step
 `,
   allowedTools: [
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
@@ -670,58 +633,40 @@ const localizedAiGenerateContent: LocalizedBuiltinSkillContent = {
   localized: {
     'zh-cn': `# AI 媒体生成
 
-你现在可以使用 AI 媒体生成工具。
+你帮助用户把创作意图转成运行时媒体生成 capability 可以执行的生成请求。
 
 ## 核心原则
 
-1. **立即生成** - 使用默认参数并直接调用工具
-2. **使用工具调用** - 不要在回复中直接嵌入 URL
-3. **不要先追问** - 除非用户明确说想先讨论细节，否则用合理默认值生成
-4. **保持提示词语言** - 工具参数 prompt 默认使用用户当前语言；除非用户要求英文或 provider 明确要求，否则不要自动翻译成英文
+1. **响应明确生成意图** - 用户请求图片、视频、语音、音乐、增强、转写或风格迁移输出时，执行或规划生成。
+2. **结果必须有依据** - 不要编造生成 URL、asset id 或完成状态。只有 runtime capability 返回成功后才能报告成功。
+3. **使用合理默认值** - 除非缺失信息会实质影响创作结果、预算、安全或目标格式，否则不要先追问。
+4. **保持提示词语言** - 保留用户当前语言中的创意表达；除非用户要求其他语言或 provider capability 明确要求，否则不要自动翻译成英文。
 
-## 快速参考
+## Capability Intent Reference
 
-| 请求类型 | 工具 | 关键参数 |
-|----------|------|----------|
-| 绘制/生成图片 | \`generate_image\` | prompt 或 taskRef、size、style |
-| 生成视频 | \`generate_video\` | prompt 或 taskRef、duration、resolution |
-| 旁白/TTS | \`generate_tts\` | text、voice、language |
-| 背景音乐 | \`generate_music\` | prompt、duration、genre |
-| 角色一致性 | \`generate_character\` | prompt、referenceImageUrl |
-| 音频/视频转写 | \`transcribe_audio\` | audioSource、model |
-| 风格迁移 | \`transfer_style\` | sourceImageUrl、stylePrompt |
-| 视频超分/增强 | \`enhance_video\` | videoUrl、targetResolution |
-| 音频清理 | \`optimize_audio\` | audioUrl、denoise |
+| 请求类型 | 生成意图 |
+|----------|----------|
+| 绘制或生成图片 | 包含主体、构图、风格、光影和参考约束的图片提示词 |
+| 生成视频 | 包含主体、动作节拍、运镜、时长、音频/对白和约束的 scene 级视频提示词 |
+| 旁白或语音 | 文本、说话人特质、情绪、语言、节奏和表演说明 |
+| 背景音乐 | 情绪、类型、乐器、节奏、时长和放置意图 |
+| 角色一致性 | 人物外观、参考用途、姿态/动作、风格和一致性约束 |
+| 音频/视频转写 | 来源媒体、时间戳预期、语言和格式目标 |
+| 风格迁移 | 来源媒体用途、目标风格、保留约束和允许变化 |
+| 视频超分/增强 | 来源媒体、质量提升目标、保留约束和交付目标 |
+| 音频清理 | 来源媒体、噪声/响度问题、保留约束和交付目标 |
 
 ## 决策流程
 
 ~~~
-User Request → Identify Type → Select Tool → Confirm Params → Generate
+User request -> Identify media intent -> Build generation intent -> Use runtime capability -> Report capability result
 ~~~
 
-## 默认参数
+## 运行时参数
 
-| 工具 | 默认值 |
-|------|--------|
-| generate_image | size: 1024x1024, style: vivid, n: 1 |
-| generate_video | duration: 4s, resolution: 720p, fps: 24 |
-| generate_tts | speed: 1.0 |
-| generate_music | duration: 30s |
+具体 operation 名、参数名、provider 默认值、task polling 和返回 asset schema 属于 runtime capability description 与 runtime schema。本 Skill 只负责创作意图组织。
 
-
-## 生成意图来源
-
-默认使用自然语言 \`prompt\` 作为输入。当已有 Plan/Task markdown 文档时，传入
-\`taskRef\` 或 \`planRef\`，让运行时把该 markdown 作为结构化意图锚点。
-structured intent 来自 markdown 或 prompt metadata。
-
-提示词语言：填写工具参数 \`prompt\` 时保留用户当前语言的创意表达；不要只因为要调用工具就改写成英文。
-
-默认策略：
-- prompt only → native provider prompt
-- taskRef / planRef → 从 markdown 提取 generation intent，同时保留文档作为 structured anchor
-- providerAdaptationMode: auto/agentic → 可用时依赖 AGENT provider expression context
-- providerAdaptationMode: native → 绕过 provider expression guidance，直接传递 prompt
+默认使用自然语言提示词内容作为创作意图。当已有已审阅 Plan/Task/Markdown 文档，并且 runtime capability 支持 document-backed generation 时，把它作为结构化意图锚点。
 
 ## 图像生成技巧
 
@@ -753,11 +698,11 @@ structured intent 来自 markdown 或 prompt metadata。
 
 ## 音频生成技巧
 
-### TTS 声音选项
-- \`alloy\` - 中性、专业（旁白、教程）
-- \`echo\` - 温暖、友好（故事、对白）
-- \`onyx\` - 深沉、权威（纪录片）
-- \`nova\` - 年轻、有活力（社交媒体）
+### Voice Direction
+- 中性、专业：适合旁白或教程
+- 温暖、友好：适合故事或对白
+- 深沉、权威：适合纪录片旁白
+- 年轻、有活力：适合短社媒口播
 
 ### 音乐类型与情绪
 - Corporate: upbeat, inspiring
@@ -777,10 +722,8 @@ const localizedSceneToMusicContent: LocalizedBuiltinSkillContent = {
 
 ## Workflow
 
-### Step 1: Analyze the timeline
-调用 GetTimelineInfo 获取总时长和时间线结构。
-调用 ListTimelineElements 理解场景中有哪些元素（视频片段、字幕、效果）。
-根据元素推断：
+### Step 1: Analyze the scene
+使用可用的 timeline 或 scene context 推断：
 - 整体情绪（action、peaceful、dramatic、uplifting、mysterious 等）
 - 类型提示（如果画面风格中有明确线索）
 - 需要匹配的时长
@@ -794,26 +737,18 @@ const localizedSceneToMusicContent: LocalizedBuiltinSkillContent = {
 
 如果用户给了明确偏好（genre、mood、style），优先遵循。
 
-### Step 3: Generate the music
-调用 GenerateMusic：
-- prompt: 组合出的提示词
-- duration: 时间线总时长（秒，最多 300）
-- genre 和 mood 如果能明确推断则填写
+### Step 3: Plan generation and placement
+只有在用户意图和时长明确后，才使用运行时音乐生成 capability。存在目标时间线时，使用运行时时间线 authoring capability 做持久放置。
 
-GenerateMusic 是异步工具，会返回 taskId。轮询 task_output，直到 status 为 'complete'。
-完成后，task_output 在 result 字段中返回 { url: string }。
+交接内容应保留：
+- 音乐提示词
+- 目标时长
+- 情绪或 genre hints
+- 放置意图，例如 background bed、transition sting 或 scene score
+- 审批或 diagnostic 状态
 
-### Step 4: Insert the music track
-先检查是否已有 music/audio track。没有则调用 AddTrack，type 为 'audio'。
-然后调用 AddTimelineElement：
-- type: 'audio'
-- source: task_output 返回的 URL
-- trackId: 音乐轨道 id
-- startTime: 0
-- duration: 匹配生成片段时长（或时间线时长）
-
-### Step 5: Confirm
-向用户报告生成了什么音乐（使用的 prompt、时长）以及放置位置。
+### Step 4: Confirm
+根据 capability 结果报告规划、生成或放置了什么。相关 capability 返回成功前，不要声称已生成音轨或已放入时间线。
 
 ## Notes
 - 除非用户另有说明，总是让音乐时长匹配时间线长度
@@ -1017,17 +952,9 @@ const localizedScriptToTimelineContent: LocalizedBuiltinSkillContent = {
 
 你帮助用户把 Fountain format screenplays 转换为 neko-cut timeline projects。
 
-## Quick Method
+## 转换语义
 
-在当前激活的 .fountain 文件上运行内置 VSCode 命令：
-\`\`\`
-neko.story.toTimeline
-\`\`\`
-它会针对当前 .fountain 文件打开 QuickPick preview 和 SaveDialog。
-
-## Manual Method
-
-如果用户需要程序化或定制转换，读取 .fountain 文件，并按下面格式创建 .neko project JSON。
+持久转换和项目写入必须交给 owning story/cut authoring capability。不要依赖活动编辑器、隐藏 Webview 或 interactive UI flow 作为事实来源。
 
 ### Fountain Format Reference
 
@@ -1039,37 +966,13 @@ Fountain 是纯文本剧本格式：
 - **Parenthetical**: 角色和对白之间的（括号）行
 - **Transition**: 以 TO: 结尾或以 > 开头的行
 
-### ProjectData JSON Format
+### Timeline Mapping
 
-\`\`\`json
-{
-  "version": "2.0",
-  "name": "Project Name",
-  "resolution": { "width": 1920, "height": 1080 },
-  "fps": 24,
-  "tracks": [
-    {
-      "id": "<unique-id>", "name": "Scenes", "type": "text",
-      "elements": [{
-        "id": "<id>", "type": "text", "name": "Scene 1",
-        "content": "INT. OFFICE - DAY",
-        "startTime": 0, "duration": 5.0,
-        "fontSize": 36, "color": "#ffffff",
-        "backgroundColor": "rgba(0,0,0,0.5)", "textAlign": "center"
-      }]
-    },
-    {
-      "id": "<unique-id>", "name": "Dialogue", "type": "subtitle",
-      "elements": [{
-        "id": "<id>", "type": "subtitle", "name": "Dialogue 1",
-        "text": "Hello, world!",
-        "startTime": 0, "duration": 1.5,
-        "fontSize": 48, "color": "#ffffff"
-      }]
-    }
-  ]
-}
-\`\`\`
+- Scene heading 转为 scene marker 或标题/text row。
+- Dialogue 转为 subtitle 或 dialogue row，并保留 speaker identity。
+- Action 段落转为 timing 和 visual-intent notes。
+- Parenthetical 转为表演提示；除非用户要求，不作为单独台词。
+- Transition 转为目标 timeline capability 可使用的 edit-intent notes。
 
 ### Duration Estimation
 
@@ -1078,6 +981,12 @@ Fountain 是纯文本剧本格式：
 | Dialogue line | 1.5 seconds |
 | Action paragraph | 2.0 seconds |
 | Minimum scene | 3.0 seconds |
+
+## 交接规则
+
+- 没有持久目标 capability 时，返回可审阅的转换总结。
+- 除非本地 capability 明确要求该 payload shape，不要输出项目内部 JSON。
+- story/cut authoring capability 返回成功前，不要声称时间线已创建。
 `,
   },
 };
@@ -1087,65 +996,49 @@ const localizedQualityAssessmentContent: LocalizedBuiltinSkillContent = {
   localized: {
     'zh-cn': `# 媒体质量检查助手
 
-你帮助用户评估 AI 生成媒体的质量，并在获得批准后修复检测到的问题。
+你帮助用户评估 AI 生成媒体的质量，并在获得批准后规划修复。
 
 ## Workflow
 
-### Step 1: Evaluate Media
-调用 **QualityCheck** 检查要评估的 scenes。
+### Step 1: Select Evidence
+只评估有 stable generated asset refs、source refs 或 host-resolved media refs 支撑的具体媒体或 timeline scenes。
 
-Parameters:
-- \`scenes\`: Array of \`{ index, mediaPath, prompt, description? }\`
-- \`minScore\`: 最低通过分数（默认 60，范围 0-100）
-- \`maxRetries\`: read-only QualityCheck 会忽略。重试/再生成使用 QualityRepairCheck。
-- \`style\`: 全局风格上下文（例如 "anime"、"cinematic"）
-- \`sceneDialogue\`: 用于剧本一致性检查的对白行
+每个目标都应保留让评估有意义的用户可见上下文：
+- 来源或生成资产身份
+- 可用时保留原始 prompt 或 creative intent
+- 相关 scene description、dialogue、style guide 或 reference constraints
+- 用户指定的通过阈值或审阅目标
 
-Example:
-\`\`\`json
-{
-  "scenes": [
-    { "index": 0, "mediaPath": "generated-assets/scene-0.png", "prompt": "A sunset over mountains" }
-  ],
-  "minScore": 70,
-  "style": "cinematic"
-}
-\`\`\`
+### Step 2: Interpret Quality Results
+质量证据应被理解为结构化审阅报告，而不是修改项目状态的许可。
 
-### Step 2: Interpret Results
-工具返回结构化评估结果：
+期望的报告语义：
+- **overallScore**：综合质量分或 verdict
+- **dimensions**：各维度拆解，例如 technical quality、prompt adherence、aesthetics、style consistency、character consistency、motion quality 和 audio quality
+- **issues**：带 category、severity、target 和 evidence 的具体问题
+- **repairPlan**：可供用户审阅的修复建议，不假设具体 operation 或参数 payload
 
-- **overallScore** (0-100): 综合质量分
-- **dimensions**: 各维度拆解
-  - \`technicalQuality\`: 清晰度、锐度、伪影
-  - \`promptAdherence\`: 与提示词匹配程度
-  - \`aesthetics\`: 视觉观感、构图
-  - \`audioQuality\`: 仅音频 — loudness、clipping、noise
-- **issues[]**: 检测出的结构化问题
-  - 每项包含 \`category\`、\`severity\` (critical/major/minor/info)、\`description\`
-- **remediations[]**: 带工具名和参数的修复建议
+### Step 3: Plan Fixes
+修改媒体、时间线状态或生成结果前必须请求用户确认，除非活跃 policy 已批准该修复路径。
 
-### Step 3: Apply Fixes
-QualityCheck 是只读证据。根据 remediations，在修改媒体或时间线状态前请求批准，
-或使用已批准的 repair path：
+把质量问题映射为 capability-neutral repair intent：
 
-| Remediation Type | Tool | Example |
-|------------------|------|---------|
-| \`apply-effect\` | **AddEffect** | Denoise filter: \`{ effectType: "denoise", strength: 0.7 }\` |
-| \`color-correct\` | **SetColorCorrection** | Auto correct: \`{ autoCorrect: true }\` |
-| \`adjust-audio\` | **SetAudioProperties** | Normalize: \`{ normalize: true, targetLufs: -14 }\` |
-| \`regenerate\` | **GenerateImage** / **GenerateVideo** | 用改进提示词重新生成 |
-| \`regenerate-ref\` | **GenerateImage** | 带 IP-Adapter reference 重新生成 |
-| \`manual-review\` | — | 标记为用户复核，不自动修复 |
+| Issue family | Repair intent |
+|--------------|---------------|
+| Noise, blur, compression, clipping | Technical cleanup or enhancement |
+| Color cast, exposure, contrast mismatch | Color or tone correction |
+| Loudness, silence, background noise | Audio normalization or cleanup |
+| Prompt mismatch, style drift, character inconsistency | Prompt/reference revision and regeneration plan |
+| Poor framing, missing area, text artifacts | Crop, inpaint, outpaint, redraw, or manual review |
+| Unsafe uncertainty or conflicting evidence | Manual review before repair |
 
-再生成修复尝试只能在明确批准或 policy opt-in 后使用 **QualityRepairCheck**。
-它可能重新生成失败的 image/video scenes，并把这些输出报告为 repair attempts。
+重生成和破坏性修复始终是显式 repair attempt。把它们作为带独立证据的尝试报告，不要覆盖原始评估历史。
 
 ### Step 4: Report
 用清晰表格总结结果：
 - 总 scenes 数、通过/失败数量
-- 每个 scene 的分数、主要问题和已应用修复
-- 总体建议（approve / fix specific scenes / regenerate all）
+- 每个 scene 的分数或 verdict、主要问题，以及计划或已批准的修复
+- 总体建议（approve / fix specific scenes / rerun selected generation / manual review）
 
 ## Issue Categories
 
@@ -1166,12 +1059,12 @@ QualityCheck 是只读证据。根据 remediations，在修改媒体或时间线
 - \`motion-unnatural\`: 视频运动不自然
 
 ## Important
-- 只在用户明确请求时评估 — 每次 **image** 评估都会消耗一次 vision LLM call
-- **Audio evaluation is free** — 使用 Engine 技术指标（LUFS、true peak、silence），不调用 LLM
-- QualityCheck 永不重新生成媒体；失败 scenes 仍作为 Agent rationale 的证据
-- 音频 scenes 永不 retry — 批准后通过 ToolSet tools 确定性修复
-- 不要把 .neko/.cache、Webview URI、blob URL 或 scratch paths 作为媒体身份；使用 stable generated asset refs、source refs 或 host-resolved media refs。
-- 展示具体 scores、issue categories 和具体 remediation steps — 不要含糊
+- 只在用户明确请求质量审阅、诊断、评分或修复规划时评估。
+- 把质量评估视为只读证据；它不会静默重新生成媒体。
+- 音频问题可以使用技术指标评估；视觉和语义问题可能需要感知证据。
+- 修复执行属于运行时 capability 和对应 schema，不属于本 Skill 正文。
+- 不要把 cache path、Webview URI、blob URL 或 scratch path 作为持久媒体身份。
+- 展示具体 scores、issue categories 和具体 remediation steps，不要含糊。
 `,
   },
 };

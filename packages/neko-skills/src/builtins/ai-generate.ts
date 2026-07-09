@@ -319,8 +319,7 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
   {
     name: 'TranscribeAudio',
     description:
-      'Transcribe audio/video to text with timestamps using Whisper. Returns segments with start/end times. ' +
-      'Use results with AddTimelineElement(type:"subtitle") to add subtitles.',
+      'Transcribe audio/video to text with timestamps using Whisper. Returns segments with start/end times for subtitle or caption authoring.',
     parameters: {
       audioSource: {
         type: 'string',
@@ -341,56 +340,40 @@ export const aiGenerateToolDefinitions: SkillToolDefinition[] = [
  */
 const aiGenerateContent = `# AI Media Generation
 
-You now have access to AI-powered media generation tools.
+You help users turn creative intent into AI media generation requests through the runtime media generation capabilities.
 
 ## Core Principles
 
-1. **Generate immediately** - Use default parameters and call the tool right away
-2. **Use tool calls** - Never embed URLs directly in response
-3. **Don't ask for clarification** - Generate with sensible defaults unless user explicitly states they want to discuss details first
-4. **Preserve prompt language** - Tool parameter \`prompt\` should use the user's current language by default; do not translate it to English unless the user asks for English or a provider explicitly requires it
+1. **Act on explicit generation intent** - Generate or plan generation when the user asks for image, video, voice, music, enhancement, transcription, or style transfer output.
+2. **Keep output grounded** - Never invent generated URLs, asset ids, or completion state. Report success only from runtime capability results.
+3. **Use sensible defaults** - Do not ask for clarification unless missing information would materially change the creative result, budget, safety, or target format.
+4. **Preserve prompt language** - Keep the user-facing creative wording in the user's current language unless the user asks for another language or a provider capability explicitly requires it.
 
-## Quick Reference
+## Capability Intent Reference
 
-| Request Type | Tool | Key Params |
-|--------------|------|------------|
-| Draw/Generate image | \`generate_image\` | prompt or taskRef, size, style |
-| Generate video | \`generate_video\` | prompt or taskRef, duration, resolution |
-| Voiceover/TTS | \`generate_tts\` | text, voice, language |
-| Background music | \`generate_music\` | prompt, duration, genre |
-| Character consistency | \`generate_character\` | prompt, referenceImageUrl |
-| Transcribe audio/video | \`transcribe_audio\` | audioSource, model |
-| Style transfer | \`transfer_style\` | sourceImageUrl, stylePrompt |
-| Video upscale/enhance | \`enhance_video\` | videoUrl, targetResolution |
-| Audio cleanup | \`optimize_audio\` | audioUrl, denoise |
+| Request type | Generation intent |
+|--------------|-------------------|
+| Draw or generate image | Image prompt with subject, composition, style, lighting, and reference constraints |
+| Generate video | Scene-level video prompt with subject, action beats, camera movement, duration, audio/dialogue, and constraints |
+| Voiceover or speech | Spoken text, speaker traits, emotion, language, pacing, and delivery notes |
+| Background music | Mood, genre, instrumentation, tempo, duration, and placement intent |
+| Character consistency | Character appearance, reference role, pose/action, style, and consistency constraints |
+| Transcription | Source media, timestamp expectation, language, and formatting goal |
+| Style transfer | Source media role, target style, preservation constraints, and acceptable changes |
+| Video enhancement | Source media, desired quality improvement, preservation constraints, and delivery goal |
+| Audio cleanup | Source media, noise/loudness issue, preservation constraints, and delivery goal |
 
 ## Decision Flow
 
 ~~~
-User Request → Identify Type → Select Tool → Confirm Params → Generate
+User request -> Identify media intent -> Build generation intent -> Use runtime capability -> Report capability result
 ~~~
 
-## Default Parameters
+## Runtime Parameters
 
-| Tool | Defaults |
-|------|----------|
-| generate_image | size: 1024x1024, style: vivid, n: 1 |
-| generate_video | duration: 4s, resolution: 720p, fps: 24 |
-| generate_tts | speed: 1.0 |
-| generate_music | duration: 30s |
+Concrete operation names, parameter names, provider defaults, task polling, and returned asset schemas belong to runtime capability descriptions and runtime schemas. This skill owns creative intent shaping only.
 
-
-## Generation Intent Sources
-
-Use natural-language \`prompt\` as the default input. When a Plan/Task markdown document exists, pass \`taskRef\` or \`planRef\` so the runtime can use that markdown as the structured intent anchor. structured intent is derived from markdown or prompt metadata.
-
-Prompt language: keep the user-facing creative wording in the user's current language when filling tool parameter \`prompt\`. Do not invent an English rewrite solely because the tool is being called.
-
-Default strategy:
-- prompt only → native provider prompt
-- taskRef / planRef → extract generation intent from markdown while preserving the document as the structured anchor
-- providerAdaptationMode: auto/agentic → rely on AGENT provider expression context when available
-- providerAdaptationMode: native → bypass provider expression guidance and pass the prompt through
+Use natural-language prompt content as the default creative intent. When a reviewed Plan/Task/Markdown document exists, treat it as a structured intent anchor if the runtime capability supports document-backed generation.
 
 ## Image Generation Tips
 
@@ -422,11 +405,11 @@ Default strategy:
 
 ## Audio Generation Tips
 
-### TTS Voice Options
-- \`alloy\` - Neutral, professional (narration, tutorials)
-- \`echo\` - Warm, friendly (stories, dialogue)
-- \`onyx\` - Deep, authoritative (documentaries)
-- \`nova\` - Young, energetic (social media)
+### Voice Direction
+- Neutral and professional for narration or tutorials
+- Warm and friendly for stories or dialogue
+- Deep and authoritative for documentary narration
+- Young and energetic for short social media reads
 
 ### Music Genre & Mood
 - Corporate: upbeat, inspiring

@@ -13,9 +13,10 @@ import sampleArtifact from '../__fixtures__/comic-to-animation-composite-artifac
 const profileDescriptors: readonly ArtifactProfileDescriptor[] = [
   {
     profileId: 'comic-to-animation-plan',
+    kind: 'artifact',
     protocol: 'CompositeArtifact',
     version: 1,
-    source: 'skill-local',
+    source: 'package',
     blockComposition: [
       { kind: 'gallery', required: true, minCount: 1 },
       { kind: 'table', required: true, minCount: 1 },
@@ -24,9 +25,10 @@ const profileDescriptors: readonly ArtifactProfileDescriptor[] = [
   },
   {
     profileId: 'comic-shot-asset-prep',
+    kind: 'artifact',
     protocol: 'GenericTable',
     version: 1,
-    source: 'skill-local',
+    source: 'package',
     fieldDefinitions: [
       { columnId: 'shotId', cellType: 'string', required: true },
       {
@@ -62,9 +64,10 @@ const profileDescriptors: readonly ArtifactProfileDescriptor[] = [
   },
   {
     profileId: 'character-memory-review',
+    kind: 'artifact',
     protocol: 'GenericTable',
     version: 1,
-    source: 'skill-local',
+    source: 'package',
     columns: [
       { columnId: 'observationId', cellType: 'string', required: true },
       { columnId: 'identity', cellType: 'string' },

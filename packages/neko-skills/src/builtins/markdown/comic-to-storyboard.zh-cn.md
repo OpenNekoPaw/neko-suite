@@ -4,24 +4,16 @@
 
 本 Skill 只负责分析和分镜规划。不生成图片，不生成视频，不创建 Canvas 节点，不写 Cut 时间线，不导出文件，也不输出生产 JSON。用户需要动画、生成、Canvas 交付、Cut 装配或导出时，先完成可审阅表格，再通过对应 lifecycle capability 或聚焦媒体 Skill 交接。
 
-只有当用户要求创建或更新分镜、镜头拆解、漫画改编表或 webtoon 分镜时才使用本 Skill。仅内容理解，例如“分析这个 EPUB”“阅读前 10 页”“总结/OCR 这本漫画”、检查分格顺序、人物/场景分析或质量诊断，应停留在普通读取/分析工具调用，不输出分镜表。
+只有当用户要求创建或更新分镜、镜头拆解、漫画改编表或 webtoon 分镜时才使用本 Skill。仅内容理解，例如“分析这个 EPUB”“阅读前 10 页”“总结/OCR 这本漫画”、检查分格顺序、人物/场景分析或质量诊断，应停留在普通 content/perception 分析，不输出分镜表。
 
 ## 工作流
 
 ### 1. 获取视觉证据
 
 1. 上下文没有图片时，请用户提供漫画图片。
-2. EPUB/CBZ/CBR/PDF 漫画文件先使用 ReadDocument。
-   - 优先用 mode="manifest" 查看页数/章节，再用 mode="range" 和 max_images 读取要分析的页。
-   - 只有 manifest 的 ReadDocument 结果不是视觉证据，不能直接用来写分镜行。如果 manifest 没有返回 `imageInfo[]`，继续用 ReadDocument mode="content" 或 mode="next" 携带返回 cursor，或用 mode="range" 读取请求页范围，再输出表格。
-   - QuerySemanticCoverage 只能检查已有可复用语义证据，不能读取图片像素，也不能替代 ReadImage。
-   - 只有用户要求复用已有分析，或正在处理大范围重复分析时，才先调用 QuerySemanticCoverage。结果是 missing、stale、partial 或 failed 时，继续使用 ReadDocument 和 ReadImage。
-   - 不要检查 `.neko/.cache`、`.neko/semantic-index`、SQLite、FTS、vector store、scratch path、Webview URI 或 provider-private payload。
-   - 使用 ReadDocument.imageInfo 获取宽、高、mimeType、byteSize 和页面比例。不要为了探测图片元数据运行 Python/PIL、file、sips、identify、unzip、unrar、7z 或其他外部命令。
-   - 只有在 ReadDocument 返回包含稳定资源数据的 `imageInfo[]` 后，才使用 ReadImage mode="metadata" 暴露页面图片；把这些条目原样作为结构化 `images[]` 传入，以保留 alias、locator、页面标签和资源身份。metadata/感知卡结果只用于建立稳定资源引用，并把图片作为原生多模态附件暴露给当前选择的聊天模型，本身不是视觉分析步骤；ReadImage 成功后，必须继续让当前具备 vision 能力的原生多模态 Agent 推理检查这些已暴露图片。如果 ReadDocument 没有返回 `imageInfo[]`，继续用 ReadDocument mode="content"、mode="next" 或 mode="range" 读取请求页窗口，再诊断图片引用链不可用；不要编造 `P1`、`page_1` 或文档 entry path。
-   - 不要为同一张文档图片编造第二个图片访问路径。
-3. 必须让当前原生多模态模型分析返回的图片后，再判断角色、对白/OCR、分格数量、动作或镜头。QuerySemanticCoverage 结果、感知卡/metadata、缩略图、imageInfo 文件名/尺寸列表本身不是视觉分析。只有拿到像素级视觉描述、OCR/分格边界，或模型已经直接检查图片像素时，才算视觉分析完成。如果工具结果只暴露 metadata/感知卡，先继续让当前具备 vision 能力的聊天模型基于 ReadImage 的原生多模态附件分析图片。只有确认运行时/模型仍无法提供图片像素、视觉描述、OCR 或分格边界时，才输出纯文本诊断和下一步；不要输出分镜表，不要编造检测到的总分格数，不要写 `needs-*` 占位提示词，不要输出任何 Markdown 表格，包括 page/assetId/尺寸清单、资源 metadata 表、字段空表头、计划表或 creative table 骨架。
-4. 请求页数超过单次读取工具可暴露上限时，明确分批处理，并基于已检查证据继续产出分镜。不要重复读取同一批页面，也不要切换工具强行凑齐完美批次。
+2. 按运行时 content/perception 能力说明暴露 EPUB/CBZ/CBR/PDF 页面或图片序列。保留 host 提供的稳定资源身份和 alias；不要为同一张文档图片编造第二个访问路径。
+3. 必须通过当前视觉证据链分析返回的图片后，再判断角色、对白/OCR、分格数量、动作或镜头。metadata/感知卡、缩略图、文件名、尺寸列表和页码本身不是视觉证据。只有拿到像素级视觉描述、OCR/分格边界，或模型已经直接检查图片像素时，才算视觉分析完成。只有确认运行时/模型仍无法提供图片像素、视觉描述、OCR 或分格边界时，才输出纯文本诊断和下一步；不要输出分镜表，不要编造检测到的总分格数，不要写 `needs-*` 占位提示词，不要输出任何 Markdown 表格，包括 page/assetId/尺寸清单、资源 metadata 表、字段空表头、计划表或 creative table 骨架。
+4. 请求页数超过单次读取调用可暴露上限时，明确分批处理，并基于已检查证据继续产出分镜。不要重复读取同一批页面，也不要切换 capability 强行凑齐完美批次。
 
 ### 2. 先读分格，再写行
 
@@ -37,21 +29,21 @@
 
 输出表格前，先建立内部图片索引和分格映射：
 
-- 记录每张可引用图片的真实工具结果身份、mimeType、页码/章节/标签、尺寸，以及工具返回的稳定资源身份。
-- 记录每一批图片的 alias scope，例如 tool call id、源文档 id 或 aliasScope。`page_1`、`P1`、`image_1` 这类 alias 只在该 scope 内有意义。
-- 优先使用工具返回的显式 alias/label。没有时，才在当前图片索引内派生 `P1`、`P2`、`page_2#panel_1` 这类 scoped token。
+- 记录每张可引用图片的真实 capability-result identity、mimeType、页码/章节/标签、尺寸，以及 runtime capability 返回的稳定资源身份。
+- 记录每一批图片的 alias scope，例如 result id、源文档 id 或 aliasScope。`page_1`、`P1`、`image_1` 这类 alias 只在该 scope 内有意义。
+- 优先使用 runtime capability 返回的显式 alias/label。没有时，才在当前图片索引内派生 `P1`、`P2`、`page_2#panel_1` 这类 scoped token。
 - 不要把聊天附件顺序当成资源身份。
 - 不要使用猜测的显示文件名，例如 `read-image-cover.jpg` 或 `read-image-*.jpg`，除非该精确 token 是当前图片索引里的真实 alias/label。
-- 如果工具只返回整页图，也要记录“页面到分格”的映射，并使用 `P1#panel_1` 这类后缀；不要假装已经有独立分格图。
+- 如果 runtime capability 只返回整页图，也要记录“页面到分格”的映射，并使用 `P1#panel_1` 这类后缀；不要假装已经有独立分格图。
 - 多个 shot 可以引用同一页图。用 `sourcePanel`、`decisionReason` 或其他扩展列说明页面/分格对应关系。
-- 如果图片没有稳定绑定，在 `nextAction` 用用户语言说明缺失绑定，不要猜文件名，也不要默认输出 `reviewStatus`。
+- 如果图片没有稳定绑定，在 `nextAction` 用用户语言说明缺失绑定，不要猜文件名，也不要默认输出状态列。
 - 图片索引只供内部选择 `source` token 和分格映射使用。最终回复不得输出“资源索引”“图片索引”“Resource Index”表、候选图片清单、感知卡索引、尺寸/MIME 列表或每个 token 的缩略图展示。
 
 ## 输出契约
 
 普通审阅输出时，先给简洁说明，再输出一张 Markdown creative table。这张表就是分镜表；不要引入第二个产物名，也不要说之后再转换。
 
-通用 Markdown 扩展语法、图片渲染、`@` 引用、Neko resource-reference 和 semantic prompt span 由系统提示词与 shared Markdown/profile 层负责；本 Skill 不定义 Markdown renderer 行为，只选择分镜表字段、证据约束和分镜提示词内容。
+Markdown 解析、扩展语法、引用渲染和 semantic prompt span projection 由系统提示词与 shared Markdown/profile 层负责；本 Skill 只选择分镜表字段、证据约束和分镜提示词内容。
 
 普通聊天回复不要输出 YAML frontmatter 或创作文档元数据。禁止输出 `---`、`id:`、`kind: draft`、`status: draft`、`domain: storyboard` 或 `referenceChain:` 这类块/键。它们只属于 host/runtime 持久化的创作文档，不属于分镜 creative table。
 
@@ -61,18 +53,18 @@
 
 `scene`, `shot`, `source`, `imagePrompt`, `videoPrompt`, `duration`, `dialogue`
 
-普通 Agent 聊天输出不要默认追加 `reviewStatus`。状态由 Canvas 审阅面板或 Agent 异步任务管理展示，不属于分镜表主体验。`nextAction` 可在需要给出下一步时追加，但它只是审阅 hint，不是 Canvas 的 nextCreativeState 或可信 action。`sourcePanel`、`decision`、`decisionReason`、`requiresSplit`、`duplicateOf`、`contentType`、`ocrNotes`、`risk` 等只作为扩展 metadata，在确有证据或审阅价值时追加到主字段之后。
+普通 Agent 聊天输出不要默认追加状态列。状态由 Canvas 审阅面板或 Agent 异步任务管理展示，不属于分镜表主体验。`nextAction` 可在需要给出下一步时追加，但它只是审阅 hint，不是 Canvas 的 nextCreativeState 或可信 action。`sourcePanel`、`decision`、`decisionReason`、`requiresSplit`、`duplicateOf`、`contentType`、`ocrNotes`、`risk` 等只作为扩展 metadata，在确有证据或审阅价值时追加到主字段之后。
 
-validator 支持开放的审阅 metadata，不要求证据不足或任务不需要时填齐所有推荐字段。聊天分镜输出仍必须包含 `scene` + `shot`，并且包含 `source`，或至少一个提示词槽（prompt slot）/ 兼容字段 `prompt`。
+runtime artifact profile 和 shared descriptor 负责字段 validation、显示标签、renderer 和开放审阅 metadata。本 Skill 只选择要写入的分镜字段，不定义 Canvas validation 或 renderer 行为。聊天分镜输出仍必须包含 `scene` + `shot`，并且包含 `source`，或至少一个提示词槽（prompt slot）。
 
 规则：
 
 - 中文/本地化表头如 `场景`、`镜头`、`来源`、`图像提示词`、`建议操作` 可用于解析用户已有表格或旧输出，但本 Skill 新生成的已知字段表头应使用规范字段 id。
-- 除规范字段 id、资源 token、用户明确给定的专有名词和必要工具名外，正文说明、表格单元格、图片提示词、视频提示词、台词和下一步操作必须使用用户当前语言。中文请求不要混入 `needs-review`、`reference-only`、`split`、`title-card` 这类英文状态码；英文请求也不要混入中文占位说明。
+- 除规范字段 id、资源 token、用户明确给定的专有名词和必要 runtime capability identifier 外，正文说明、表格单元格、图片提示词、视频提示词、台词和下一步操作必须使用用户当前语言。中文请求不要混入 `needs-review`、`reference-only`、`split`、`title-card` 这类英文状态码；英文请求也不要混入中文占位说明。
 - `needs-*`、`missing`、`stale`、`partial`、`failed`、`skip/split/merge/keep` 等内部状态或决策值只能用于明确的诊断说明或扩展 metadata，不能写进 `imagePrompt`、`videoPrompt`、`duration`、`dialogue` 或面向用户的摘要指标。
 - 绝不能把简化的页级分析表当作分镜表输出。禁止作为主表头的字段包括 `页码`、`景别/构图`、`节奏/情绪`、`page`、`image reference`、`analysis` 或 `suggestion`。`画面内容`、`图像提示词`、`建议操作` 等本地化表头只适用于已有表格的修复/校验，不作为新输出的首选表头。
 - 不要说分镜锚点之后再补。`scene`、`shot` 和 `source`/prompt-slot 锚点必须现在就出现在唯一主表中。
-- 如果 ReadImage 在尝试原生多模态投影后仍只返回 metadata、感知卡、文件名、尺寸、页码、缩略图或资源引用，而没有像素级视觉描述/OCR/分格边界，不要输出分镜表。应输出简短诊断：视觉分析未完成、当前不能可靠生成分镜和提示词、下一步需要恢复或运行原生多模态视觉分析。
+- 如果当前证据在尝试视觉投影后仍只包含 metadata、感知卡、文件名、尺寸、页码、缩略图或资源引用，而没有像素级视觉描述/OCR/分格边界，不要输出分镜表。应输出简短诊断：视觉分析未完成、当前不能可靠生成分镜和提示词、下一步需要恢复或运行视觉分析。
 - 视觉分析未完成的诊断回复必须是纯文本。不要输出 page/assetId/尺寸表、资源清单表、感知卡表、字段列表表、空分镜表头、空 creative table、计划表或“可发送 Canvas”的占位产物。
 - 如果已经有页级视觉描述但分格边界不完整，可以输出保守的页级 shot 行；此时 `imagePrompt` / `videoPrompt` 必须留空或写成明确可执行的保守提示词，不能写 `needs-panel-analysis`、`needs-ocr`、`needs-prompt` 等状态码。
 - 不要再输出第二张“分镜结构建议”表。保留、跳过、拆分、合并和下一步规划需要保留时，用用户语言写入扩展 metadata，例如 `decisionReason` 和 `nextAction`；不要让它们挤占主提示词审阅体验。
@@ -91,7 +83,6 @@ validator 支持开放的审阅 metadata，不要求证据不足或任务不需�
 - `imagePrompt` 必须说明具体图像任务和优化方式，例如保留参考构图/角色一致性、裁切分格、去除对白气泡/文字、补全遮挡区域、上色、重绘线稿、扩图、统一风格、增强光影或修复透视。图像编辑提示词应采用“输入/目标/步骤/输出约束”的完整句式；图像生成提示词应采用“主体/场景/构图/风格/光影/约束”的完整句式。不能只写“图像参考”“needs-panel-analysis”“确认是否转换”等非生成内容。
 - `videoPrompt` 必须说明 scene 级镜头序列、主体动作节拍、环境变化、节奏、总时长意图和约束，例如从建立镜头到特写、慢速推近、横移、定格、轻微视差、人物回头、雨水/光线变化、保持参考图构图、不新增来源分格外动作。视频提示词应采用“scene 参考/主体与情绪/场景/按镜号动作节拍/运镜连接/环境变化/对白或无对白/总时长/约束”的完整句式。不能只写“单镜视频生成：needs-panel-analysis”、单个 shot 动作或泛泛“生成视频”。
 - `nextAction` 必须和提示词意图一致：图片编辑/准备应提示先处理或编辑参考素材；没有可用参考但需要图片生成时应提示生成参考图；参考可用且视频提示词完整时才提示生成视频；视频提示词不完整时应提示优化视频提示词。
-- 兼容字段 `prompt` 仍可用于旧输出和通用图像生成，但新的输出应优先使用 `imagePrompt` 或 `videoPrompt`。
 - 每行代表一个 shot 或视频节拍；scene 列负责把多行归组到同一场景。
 - `videoPrompt` 必须概括同一 scene 内多个 shot/video beat 如何连接；用文本明确“场景视频生成”或“视频编辑”，不要写“单镜视频生成”。
 - 分镜提示词可以面向图像生成/编辑和 scene 级视频生成/编辑。视频模型支持只用通用语义表达，不要硬编码 provider payload、外部 API JSON 或内部 job contract。若提到 Seedance/Volcengine 类场景，也只描述为场景视频生成用途。
@@ -102,7 +93,7 @@ validator 支持开放的审阅 metadata，不要求证据不足或任务不需�
 - 只有重复或需要合并到另一来源/shot 时才填写 `duplicateOf`；否则留空。
 - `source` 使用当前图片索引中的稳定可读 token，例如 `P1`、`P1#panel_2`、`page_2#panel_1` 或 `P3,P4`。
 - `sourcePanel` 表达分格位置、裁切意图或页面/分格映射，例如 `右上分格`、`panel 2` 或 `整页宽幅裁切`。
-- 单元格要可审阅但必须保持生成语义完整。会影响生成的场景、人物形象、动作、运镜、风格、语音情绪等内容必须写进 `imagePrompt` / `videoPrompt` / `voicePrompt` 语义中；不确定性、证据来源和审阅说明放进扩展 metadata。
+- 单元格要可审阅但必须保持生成语义完整。会影响生成的场景、人物形象、动作、运镜、风格、对白表达和语音情绪等内容必须写进 `imagePrompt`、`videoPrompt` 或 `dialogue` 语义中；不确定性、证据来源和审阅说明放进扩展 metadata。
 
 ### 生成有效提示词写法
 
@@ -125,12 +116,12 @@ validator 支持开放的审阅 metadata，不要求证据不足或任务不需�
 
 ### 字段角色
 
-- 主提示词字段：`imagePrompt`、scene 级 `videoPrompt`、必要时的 `voicePrompt` / `dialogue`。这些字段承载会影响生成的内容。
+- 主提示词字段：`imagePrompt`、scene 级 `videoPrompt`、必要时的 `dialogue`。这些字段承载会影响生成的内容。
 - 参数/引用字段：`source`、`duration`、`dialogue`。这些可进入 Canvas reference media、generation params 或 voice prompt。
-- 扩展 metadata：`sourcePanel`、`decision`、`decisionReason`、`requiresSplit`、`requiresTextRemoval`、`requiresInpaint`、`referenceImage`、`styleRef`、`ocrNotes`、`risk`、`nextAction` 等。它们用于审阅、证据、诊断和建议，不会隐式影响生成。`reviewStatus` 属于 Canvas/任务状态，普通 Agent 聊天分镜表不要默认输出。
+- 扩展 metadata：`sourcePanel`、`decision`、`decisionReason`、`requiresSplit`、`requiresTextRemoval`、`requiresInpaint`、`referenceImage`、`styleRef`、`ocrNotes`、`risk`、`nextAction` 等。它们用于审阅、证据、诊断和建议，不会隐式影响生成。状态属于 Canvas/任务状态，普通 Agent 聊天分镜表不要默认输出。
 - 扩展字段只有被 Canvas field/profile descriptor 接受，或被 Agent/用户明确提升为 prompt span、generation param、reference/action payload 后，才具有生产语义。
 - `nextAction` 只是计划文本，不是可信执行 action。
-- `actionId`、`resultRef`、`executionStatus` 和生成结果 ref 等执行字段属于可信 lifecycle 字段。除非有本地 capability/tool 结果明确支撑，本 Skill 的普通输出应省略它们。
+- `actionId`、`resultRef`、`executionStatus` 和生成结果 ref 等执行字段属于可信 lifecycle 字段。除非有本地 capability 结果明确支撑，本 Skill 的普通输出应省略它们。
 
 提示词槽是后续生成或修复动作的重要输入。`source`、`duration`、`dialogue` 帮助 Canvas 建立 reference media 和 generation params；扩展 metadata 帮助 Canvas/Agent 展示 diagnostics 和审阅规划。
 
@@ -140,26 +131,19 @@ validator 支持开放的审阅 metadata，不要求证据不足或任务不需�
 
 - 遵守系统提示词中的 Markdown 扩展协议。本节只说明分镜表 `source` 单元格如何表达漫画页/分格来源。
 - 推荐普通 token：`P1`、`P1#panel_2`、`page_2#panel_1`、`P3,P4`。
-- 只有当前工具/host 资源索引中存在完全相同 target 时，才在 `source` 单元格使用标准 CommonMark 图片，例如 `![P1](P1)` 或 `![panel](page_2#panel_1)`。alt text 只是展示文字，target 才是资源身份。
-- 如果看不到稳定资源绑定，使用普通 token，并在 `nextAction` 用用户语言说明需要绑定资源，不要编造 Markdown 图片或输出 `needs-resource-binding` 状态码。
-- CommonMark 图片 target 可以是稳定 token，也可以是工具返回的稳定文档图片路径，例如 `![page](image/moe-010564.jpg)`。不要使用相对项目路径，除非工具/资源索引返回了完全相同的 token。
+- 只有当前 host/shared Markdown 层为完全相同的页或分格暴露了可解析稳定 target 时，才使用 Markdown 图片或 resource-reference 语法。否则使用普通 token，并在 `nextAction` 用用户语言说明需要绑定资源。
 - `#panel_1`、`#crop_top` 等后缀表示 base image token 上的分格/裁切意图，不是另一张资源。
 - 不要写 render URI、Webview URI、blob URL、`.neko/.cache` 路径、provider cache path、系统临时路径、Engine token、base64 图片数据、绝对私有路径、provider-private handle 或领域节点 JSON。
-- `![[...]]` / `[[...#...]]` 这类 Neko resource-reference 只有在当前 host 明确启用并能解析稳定身份时才可使用；普通分镜表优先使用 source token 或 CommonMark 图片 target。
 
 ## Canvas 交接
 
-当用户要求“生成分镜表并发送到 Canvas”时，先完成并输出唯一的 Markdown creative table。不要用 Canvas 工具替代分镜表生成。
+当用户要求“生成分镜表并发送到 Canvas”时，先完成并输出唯一的 Markdown creative table。不要用 Canvas authoring capability 替代分镜表生成。
 
-分镜初稿必须先作为可见 assistant Markdown 块出现在聊天中，才能调用任何 Canvas Markdown 工具。不要把初次生成的表格藏进 `canvas.validateMarkdownStoryboard`、`canvas.createStoryboardFromMarkdown`、`canvas.ingestMarkdown` 或其他工具参数里。如果当前还没有可见 assistant Markdown 块或 UI handoff 来源，先输出表格并停止；等待用户/UI 的 Send to Canvas handoff 后再调用 Canvas 工具。
+分镜初稿必须先作为可见 assistant Markdown 块出现在聊天中，才能尝试 Canvas 交接。不要把初次生成的表格藏进不可见运行时参数里。如果当前还没有可见 assistant Markdown 块或 UI handoff 来源，先输出表格并停止；等待用户/UI 的 Send to Canvas handoff 后再使用 Canvas 能力。
 
-这张表已经存在后，再使用运行时工具列表中可用的 Canvas lifecycle tool/capability。本地 UI/tool adapter 会携带真实稳定 resource refs。除非 Canvas capability/tool 返回成功，不要声称 Canvas 成功。
+这张表已经存在后，再使用运行时 Canvas capability context 中可用的 Canvas authoring lifecycle capability。运行时 adapter 会携带真实稳定 resource refs。除非 Canvas capability 返回成功，不要声称 Canvas 成功。
 
-生产 scene/shot 节点使用 canvas.createStoryboardFromMarkdown。将已完成的表格作为 Markdown 来源传入，并在工具支持时传入 `profileHint=storyboard`、`mode=create-nodes` 和显式 approval context。如果 Canvas 阻塞创建，报告 diagnostics，并修复表格、审批或资源绑定后再重试。
-
-“作为 Markdown/Markdown 发送”表示 Markdown 是来源格式/传输格式，不是 review-only 请求。如果 canvas.createStoryboardFromMarkdown 没有作为可调用工具暴露，报告 Canvas tool-surface blocked，不要用 canvas.ingestMarkdown 替代。
-
-canvas.ingestMarkdown 只能作为 review-only 表格/草稿摄入。只有用户明确需要 Canvas 审阅表格/草稿节点时才使用它，不要把 review-only table 节点说成生产分镜交付成功。
+具体 operation、目标选择、审批要求、节点/profile validation，以及交接后创建生产 scene/shot 节点还是 review-only 表格，由 Canvas 子包负责。严格遵循 Canvas diagnostics；如果 Canvas 阻塞创建，报告诊断，并修复表格、审批、目标或资源绑定后再重试。除非用户明确要求 review-only Canvas 内容，不要把 review-only 表格/草稿路径替代为生产分镜交付。
 
 变更生产节点前，先走 validation 或 review action。不要输出领域节点 JSON 或其他项目内部交接对象。
 

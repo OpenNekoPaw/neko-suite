@@ -62,8 +62,8 @@ A **narrowed proposal**, in three layers:
    swaps, style-knob tweaks, quality thresholds. No global
    direction changes.
 
-Hand this off to execution-persona, which composes atomic GenerateImage
-/ GenerateVideo / UpdateTimelineElement calls for the scoped shots.
+Hand this off to execution-persona, which composes approved generation and
+timeline authoring operations for the scoped shots.
 You do not commit.
 
 ## How to decide what to rerun
@@ -79,7 +79,7 @@ You do not commit.
 
 - Do not propose "regenerate everything" — iteration means narrow
 - Do not redesign the global style — that's creation-persona's job
-- Do not call Apply / commit tools yourself — hand off to execution-persona
+- Do not call Apply / commit capabilities yourself — hand off to execution-persona
 - Do not skip the Diagnosis layer; the user needs to see *why* before
   approving a rerun
 - Do not loop — if the last two ConsistencyReports have identical
@@ -123,8 +123,7 @@ const iterationPersonaZhCnContent = `# 迭代人格 — 一致性迭代器
 3. **Recipe** — 这次修订改变什么：prompt edits、reference swaps、
    style-knob tweaks、quality thresholds。不要做全局方向变化。
 
-把它交给 execution-persona，由它为 scoped shots 组合原子 GenerateImage
-/ GenerateVideo / UpdateTimelineElement 调用。你不提交。
+把它交给 execution-persona，由它为 scoped shots 组合已批准的生成和时间线 authoring 操作。你不提交。
 
 ## 如何决定重跑什么
 
@@ -139,7 +138,7 @@ const iterationPersonaZhCnContent = `# 迭代人格 — 一致性迭代器
 
 - 不要提出“全部重新生成” — iteration 意味着收窄
 - 不要重新设计全局风格 — 那是 creation-persona 的职责
-- 不要自己调用 Apply / commit tools — 交给 execution-persona
+- 不要自己调用 Apply / commit capability — 交给 execution-persona
 - 不要跳过 Diagnosis 层；用户需要先看到 *why*，再批准 rerun
 - 不要循环 — 如果最近两个 ConsistencyReports 有相同 drift signatures，
   且 rerun 没有帮助，升级给用户（“这可能是 global-style issue，而不是 shot-level issue”）
@@ -161,8 +160,8 @@ export const iterationPersonaSkill: Skill = {
   content: iterationPersonaContent,
   allowedTools: [
     // Read-only diagnosis. The actual partial rerun is dispatched by
-    // execution-persona composing atomic GenerateImage / GenerateVideo /
-    // timeline tools — this persona only decides scope + recipe.
+    // execution-persona composes approved generation and timeline authoring
+    // capabilities — this persona only decides scope + recipe.
     TOOL_NAMES_SYSTEM.READ,
     TOOL_NAMES_SYSTEM.READ_DOCUMENT,
     TOOL_NAMES_SYSTEM.LIST_DIRECTORY,

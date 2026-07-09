@@ -81,19 +81,25 @@ describe('@neko/skills builtins', () => {
     );
   });
 
-  it('keeps comic storyboard visual evidence contract aligned with ReadImage native multimodal flow', () => {
+  it('keeps comic storyboard visual evidence contract aligned with runtime perception capabilities', () => {
     const english = getComicToStoryboardSkill().content;
     const zhCn = getComicToStoryboardSkill('zh-CN').content;
 
-    expect(english).toContain('native multimodal attachments');
-    expect(english).toContain('vision-capable native multimodal Agent reasoning');
+    expect(english).toContain('runtime content/perception capability guidance');
+    expect(english).toContain('current visual evidence path');
+    expect(english).toContain('Metadata, perception cards, thumbnails, filenames, dimensions, and page labels alone are not visual evidence.');
     expect(english).toContain('do not output any Markdown table');
-    expect(english).not.toContain('non metadata');
+    expect(english).not.toContain('ReadDocument');
+    expect(english).not.toContain('ReadImage');
+    expect(english).not.toContain('QuerySemanticCoverage');
 
-    expect(zhCn).toContain('原生多模态附件');
-    expect(zhCn).toContain('具备 vision 能力');
+    expect(zhCn).toContain('运行时 content/perception 能力说明');
+    expect(zhCn).toContain('当前视觉证据链');
+    expect(zhCn).toContain('metadata/感知卡、缩略图、文件名、尺寸列表和页码本身不是视觉证据。');
     expect(zhCn).toContain('不要输出任何 Markdown 表格');
-    expect(zhCn).not.toContain('非 metadata');
+    expect(zhCn).not.toContain('ReadDocument');
+    expect(zhCn).not.toContain('ReadImage');
+    expect(zhCn).not.toContain('QuerySemanticCoverage');
   });
 
   it('keeps comic storyboard prompts actionable for image and video generation/editing', () => {
@@ -195,33 +201,32 @@ describe('@neko/skills builtins', () => {
       'When the user asks to generate a storyboard and send it to Canvas, first finish and output the single Markdown creative table.',
     );
     expect(english).toContain(
-      'Do not call Canvas tools instead of generating the storyboard table.',
+      'Do not use Canvas authoring capabilities instead of generating the storyboard table.',
     );
     expect(english).toContain(
-      'The first storyboard draft must be visible as an assistant Markdown block before any Canvas Markdown tool is called.',
+      'The first storyboard draft must be visible as an assistant Markdown block before any Canvas handoff is attempted.',
     );
     expect(english).toContain('If no visible assistant Markdown block or UI handoff source exists yet');
-    expect(english).toContain(
-      'Use canvas.createStoryboardFromMarkdown for production scene/shot nodes.',
-    );
-    expect(english).toContain(
-      '"Send as Markdown" means Markdown is the source format/transport',
-    );
-    expect(english).toContain('report Canvas tool-surface blocked');
-    expect(english).toContain('canvas.ingestMarkdown is only a review-only table fallback.');
+    expect(english).toContain('Canvas authoring lifecycle capability');
+    expect(english).toContain('runtime Canvas capability context');
+    expect(english).toContain('The Canvas package owns concrete operations');
+    expect(english).toContain('Do not substitute a review-only table/draft path');
+    expect(english).not.toContain('canvas.createStoryboardFromMarkdown');
+    expect(english).not.toContain('canvas.ingestMarkdown');
 
     expect(zhCn).toContain(
       '当用户要求“生成分镜表并发送到 Canvas”时，先完成并输出唯一的 Markdown creative table。',
     );
-    expect(zhCn).toContain('不要用 Canvas 工具替代分镜表生成。');
+    expect(zhCn).toContain('不要用 Canvas authoring capability 替代分镜表生成。');
     expect(zhCn).toContain('分镜初稿必须先作为可见 assistant Markdown 块出现在聊天中');
+    expect(zhCn).toContain('不可见运行时参数');
     expect(zhCn).toContain('先输出表格并停止');
-    expect(zhCn).toContain('生产 scene/shot 节点使用 canvas.createStoryboardFromMarkdown。');
-    expect(zhCn).toContain(
-      '“作为 Markdown/Markdown 发送”表示 Markdown 是来源格式/传输格式',
-    );
-    expect(zhCn).toContain('报告 Canvas tool-surface blocked');
-    expect(zhCn).toContain('canvas.ingestMarkdown 只能作为 review-only 表格/草稿摄入。');
+    expect(zhCn).toContain('Canvas authoring lifecycle capability');
+    expect(zhCn).toContain('运行时 Canvas capability context');
+    expect(zhCn).toContain('具体 operation、目标选择、审批要求');
+    expect(zhCn).toContain('不要把 review-only 表格/草稿路径替代为生产分镜交付');
+    expect(zhCn).not.toContain('canvas.createStoryboardFromMarkdown');
+    expect(zhCn).not.toContain('canvas.ingestMarkdown');
   });
 
   it('keeps image-to-shot prompt guidance aligned with storyboard prompt style', () => {
@@ -236,11 +241,85 @@ describe('@neko/skills builtins', () => {
       'Prefer time-coded beats for long scenes or intents over 10 seconds.',
     );
     expect(english).toContain('Every non-empty prompt must answer');
+    expect(english).toContain('Do not add a status column by default.');
+    expect(english).not.toContain('reviewStatus');
 
     expect(zhCn).toContain('资源引用必须说明用途。');
     expect(zhCn).toContain('场景意图 / 参考资源用途');
     expect(zhCn).toContain('长 scene 或 10 秒以上意图优先分时段描述。');
     expect(zhCn).toContain('每个非空提示词都必须能回答');
+    expect(zhCn).toContain('默认不要添加状态列。');
+    expect(zhCn).not.toContain('reviewStatus');
+  });
+
+  it('keeps generic Markdown and Canvas authoring details out of storyboard domain skills', () => {
+    const english = getComicToStoryboardSkill().content;
+    const zhCn = getComicToStoryboardSkill('zh-CN').content;
+    const allMarkdownSkillContent = getBuiltinSkills()
+      .filter((skill) => localizedBuiltinPromptNames.includes(skill.name))
+      .map((skill) => skill.content)
+      .join('\n');
+    const allMarkdownSkillContentZhCn = getBuiltinSkills({ locale: 'zh-CN' })
+      .filter((skill) => localizedBuiltinPromptNames.includes(skill.name))
+      .map((skill) => skill.content)
+      .join('\n');
+
+    expect(english).toContain('shared Markdown/profile layer');
+    expect(english).toContain('This skill only chooses storyboard fields');
+    expect(english).not.toContain('Markdown renderer behavior');
+    expect(english).not.toContain('voicePrompt');
+
+    expect(zhCn).toContain('shared Markdown/profile 层');
+    expect(zhCn).toContain('本 Skill 只选择分镜表字段');
+    expect(zhCn).not.toContain('Markdown renderer 行为');
+    expect(zhCn).not.toContain('voicePrompt');
+
+    expect(allMarkdownSkillContent).not.toContain('reviewStatus');
+    expect(allMarkdownSkillContentZhCn).not.toContain('reviewStatus');
+  });
+
+  it('keeps concrete tool protocols out of builtin skill prompt content', () => {
+    const allPromptContent = [
+      ...getBuiltinSkills().map((skill) => skill.content),
+      ...getBuiltinSkills({ locale: 'zh-CN' }).map((skill) => skill.content),
+    ].join('\n');
+    const disallowedPromptTokens = [
+      'ReadDocument',
+      'ReadImage',
+      'QuerySemanticCoverage',
+      'GenerateImage',
+      'TransformImage',
+      'GenerateVideo',
+      'GenerateMusic',
+      'QualityCheck',
+      'QualityRepairCheck',
+      'AddEffect',
+      'SetColorCorrection',
+      'SetAudioProperties',
+      'AddTimelineElement',
+      'UpdateTimelineElement',
+      'AddTrack',
+      'TaskWrite',
+      'GetTimelineInfo',
+      'ListTimelineElements',
+      'task_output',
+      'canvas.createStoryboardFromMarkdown',
+      'canvas.ingestMarkdown',
+      'neko.story.toTimeline',
+      'neko.<domain>.authoring',
+      'QuickPick',
+      'SaveDialog',
+      'VSCode command',
+      'Parameters:',
+      'Key Params',
+      'Default Parameters',
+      '工具参数',
+      '带工具名和参数',
+    ];
+
+    for (const token of disallowedPromptTokens) {
+      expect(allPromptContent).not.toContain(token);
+    }
   });
 
   it('owns all non-runtime builtin skill and tool group definitions', () => {
@@ -310,7 +389,7 @@ describe('@neko/skills builtins', () => {
     ).not.toContain('AI Media Generation');
     expect(
       getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')?.content,
-    ).toContain('工具参数 prompt 默认使用用户当前语言');
+    ).toContain('保留用户当前语言中的创意表达');
     expect(
       getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')?.content,
     ).not.toContain('[Subject] + [Style] + [Details] + [Atmosphere] + [Technical]');

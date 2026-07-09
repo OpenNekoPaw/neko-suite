@@ -107,7 +107,7 @@ They walk side by side in silence.
    parentheticals, forced markers, and all other elements).
 
 7. **Save to file**:
-   - Use Write tool to save as \`.fountain\` file
+   - Save through the runtime file authoring capability as a \`.fountain\` file
    - Suggest filename based on title
 
 ### Phase 3: Iterative Refinement
@@ -295,7 +295,7 @@ Before finalizing script:
 
 Suggest to user:
 1. **Preview in neko-story** - Open .fountain file in VSCode for syntax highlighting
-2. **Convert to timeline** - Use script-to-timeline skill or \`neko.story.toTimeline\` command
+2. **Convert to timeline** - Use the script-to-timeline skill or Story/Cut authoring capability
 3. **Generate storyboard** - Use storyboard-to-timeline skill to create video
 4. **Refine and iterate** - Make changes based on visual preview
 `;
@@ -582,7 +582,7 @@ Try again.
 
 建议用户：
 1. **在 neko-story 中预览** - 在 VSCode 打开 .fountain 文件以查看语法高亮
-2. **转换为时间线** - 使用 script-to-timeline skill 或 \`neko.story.toTimeline\` 命令
+2. **转换为时间线** - 使用 script-to-timeline skill 或 Story/Cut authoring capability
 3. **生成分镜** - 使用 storyboard-to-timeline skill 创建视频方案
 4. **继续润色迭代** - 根据视觉预览继续修改
 `;

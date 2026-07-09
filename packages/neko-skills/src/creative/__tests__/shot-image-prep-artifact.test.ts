@@ -14,9 +14,10 @@ import {
 
 const prepArtifactProfile: ArtifactProfileDescriptor = {
   profileId: 'comic-shot-image-prep-review',
+  kind: 'artifact',
   protocol: 'CompositeArtifact',
   version: 1,
-  source: 'shared',
+  source: 'package',
   blockComposition: [
     { kind: 'text', required: true, minCount: 1 },
     { kind: 'table', required: true, minCount: 1 },

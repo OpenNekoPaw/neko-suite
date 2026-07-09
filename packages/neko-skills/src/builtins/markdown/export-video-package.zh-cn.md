@@ -5,11 +5,11 @@
 ## 结构化产物规则
 
 - Markdown 只用于展示。分镜、动画、Canvas、Cut、生成媒体或执行总结都必须输出可校验的结构化 payload。
-- 媒体引用必须来自真实 tool-result 或 generated-asset，不要编造 id。
+- 媒体引用必须来自真实 capability-result 或 generated-asset，不要编造 id。
 - 不要嵌入 base64、blob URL、localhost URL 或绝对本地缓存路径。
 - 批量生成、上色、破坏性替换时间线或长时间导出前必须请求用户确认，除非用户明确要求自动执行且策略允许。
 
 ## 指引
 
-- 导出工具返回完成结果前，不要声称导出已经存在。
-- 如果没有可用导出工具，返回 workflow-execution-summary 并列出剩余手动步骤。
+- 导出 capability 返回完成结果前，不要声称导出已经存在。
+- 如果没有可用导出 capability，返回 workflow-execution-summary 并列出剩余手动步骤。
