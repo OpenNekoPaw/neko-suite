@@ -169,11 +169,11 @@ model_id = "neko-gateway-tts"
 
 从 `.neko/skills/<name>/SKILL.md` 加载技能（YAML frontmatter + Markdown body），3-track 原子注入/移除：
 
-| Track | 注入内容                                      |
-| ----- | --------------------------------------------- |
-| A     | 系统提示词 section（SystemPromptComposer）    |
-| B     | 权限允许规则（PermissionHooks）               |
-| C     | 工具白名单（ToolGuard，运行时 isToolAllowed） |
+| Track | 注入内容                                                     |
+| ----- | ------------------------------------------------------------ |
+| A     | Skill prompt content section（SystemPromptComposer）          |
+| B     | 权限允许规则（PermissionHooks）                              |
+| C     | 机器可读 tool policy（ToolGuard，运行时 `isToolAllowed`）     |
 
 显式输入触发被拆成独立命名空间：
 
@@ -188,7 +188,9 @@ model_id = "neko-gateway-tts"
 
 命令工件支持参数插值（`$ARGUMENTS`, `$1-$99`）。`$skill args` 会把尾随参数传给现有 Skill 注入路径；若存在同名 `/review` 命令和 `$review` Skill，前缀决定命名空间，二者不会互相兜底。
 
-自然语言不会经过 Extension/Webview 关键词触发或代码侧候选路由，也不会在 Agent reasoning 前注入 Skill prompt、切换 active Skill、改变 model override 或工具白名单。用户新增 Skill 想让 Agent 更稳定地理解其用途，应在 `SKILL.md` frontmatter 中提供 Agent-readable 的 `description`、`domain`、`mediaWorkflow.useCases`、`nonGoals`、`inputArtifacts`、`producedArtifacts` 和 `operations`；详见 [`docs/skill-authoring.md`](docs/skill-authoring.md)。
+自然语言不会经过 Extension/Webview 关键词触发或代码侧候选路由，也不会在 Agent reasoning 前注入 Skill prompt、切换 active Skill、改变 model override 或 tool policy。用户新增 Skill 想让 Agent 更稳定地理解其用途，应在 `SKILL.md` frontmatter 中提供 Agent-readable 的 `description`、`domain`、`mediaWorkflow.useCases`、`nonGoals`、`inputArtifacts`、`producedArtifacts` 和 `operations`；详见 [`docs/skill-authoring.md`](docs/skill-authoring.md)。
+
+Skill Markdown 正文只描述领域方法、创作语义、输出标准和示例；具体工具协议、命令参数、轮询/任务协议、资源授权、缓存/Webview/path 协议和子包 authoring lifecycle 归系统提示词、子包 capability prompt、tool schema 或 runtime catalog。
 
 ### 工具系统
 

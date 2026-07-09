@@ -147,6 +147,25 @@ newapi | openai-chat | openai-responses | anthropic | google | ollama
 
 旧字段 `protocol` 仍可读取，用于已有配置的 adapter override；新配置请优先使用 `protocol_profile`。配置非法值会直接显示配置诊断，不会 fallback 到 NewAPI、官方账号或首个可用模型。
 
+### `models[].provider_expression_profile_id`
+
+`provider_expression_profile_id` 是模型目录对 Provider/model Expression Profile 的引用，不是 TOML 内联提示词。该 profile 必须由内置能力、Skill/package、market、personal 或 project profile package 通过 Agent profile registry 贡献。
+
+```toml
+[[models]]
+id = "neko-gateway-gpt-image-2"
+name = "gpt-image-2"
+provider_id = "neko-gateway"
+type = "image"
+capabilities = ["text_to_image"]
+provider_expression_profile_id = "provider-expression:openai:gpt-image-2"
+enabled = true
+```
+
+Agent turn assembly 会在选中媒体模型时通过 registry 解析该 id。缺失或 provider/model 不匹配会生成可见 diagnostic，不会把 TOML 当成 expression profile schema，也不会编造 provider-specific guidance。
+
+用户 TOML 不能定义 Artifact Profile、Creation Profile 或 Provider/model Expression Profile schema。`[[artifact_profiles]]`、`[[creation_profiles]]`、`[[provider_expression_profiles]]` 属于不支持的 schema section，会被配置读取诊断拒绝。要分发 profile，请使用 profile contribution package。
+
 ## 工作原理
 
 生成工具必须拿到明确的模型路由：
