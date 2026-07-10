@@ -112,11 +112,103 @@ describe('AgentTaskResultObservationRuntime', () => {
     expect(recordTaskResultObservation).not.toHaveBeenCalled();
     runtime.dispose();
   });
+
+  it('waits for explicit wait-all task groups before dispatching follow-up', async () => {
+    const first = createTaskWithAutoResumePolicy({
+      id: 'task-1',
+      group: {
+        taskGroupId: 'group-1',
+        resultDeliveryPolicy: 'wait-all',
+        expectedTaskIds: ['task-1', 'task-2'],
+      },
+    });
+    const second = createTaskWithAutoResumePolicy({
+      id: 'task-2',
+      group: {
+        taskGroupId: 'group-1',
+        resultDeliveryPolicy: 'wait-all',
+        expectedTaskIds: ['task-1', 'task-2'],
+      },
+    });
+    const terminalTasks: Task[] = [first];
+    const tasks: AgentTaskResultObservationRuntimeTaskPort = {
+      onTerminalTask: () => () => undefined,
+      list: vi.fn(async () => terminalTasks),
+    };
+    const recordTaskResultObservation = vi.fn(async (input) =>
+      input.deliveryPolicy?.kind === 'append-observation'
+        ? {
+            observationRecorded: true,
+            evidenceRecorded: true,
+            followUpRecorded: false,
+            eventIds: ['event-1'],
+            deliveryDecision: { kind: 'append-observation' as const },
+          }
+        : createAutoResumeRecord(input),
+    );
+    const dispatchIdleAgentTurn = vi.fn(async () => undefined);
+    const runtime = createAgentTaskResultObservationRuntime({
+      tasks,
+      agents: {
+        get: () => ({ recordTaskResultObservation }),
+        isRunning: () => false,
+      },
+      continuation: { dispatchIdleAgentTurn },
+    });
+
+    await runtime.handleTerminalTask(first);
+    expect(dispatchIdleAgentTurn).not.toHaveBeenCalled();
+    expect(recordTaskResultObservation.mock.calls[0]?.[0].deliveryPolicy).toEqual({
+      kind: 'append-observation',
+    });
+
+    terminalTasks.push(second);
+    await runtime.handleTerminalTask(second);
+    expect(dispatchIdleAgentTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-2' }),
+    );
+    runtime.dispose();
+  });
+
+  it('does not infer task groups when explicit group metadata is missing', async () => {
+    const first = createTaskWithAutoResumePolicy({ id: 'task-1' });
+    const second = createTaskWithAutoResumePolicy({ id: 'task-2' });
+    const tasks: AgentTaskResultObservationRuntimeTaskPort = {
+      onTerminalTask: () => () => undefined,
+      list: vi.fn(async () => [first, second]),
+    };
+    const recordTaskResultObservation = vi.fn(async (input) => createAutoResumeRecord(input));
+    const dispatchIdleAgentTurn = vi.fn(async () => undefined);
+    const runtime = createAgentTaskResultObservationRuntime({
+      tasks,
+      agents: {
+        get: () => ({ recordTaskResultObservation }),
+        isRunning: () => false,
+      },
+      continuation: { dispatchIdleAgentTurn },
+    });
+
+    await runtime.handleTerminalTask(first);
+
+    expect(recordTaskResultObservation.mock.calls[0]?.[0].deliveryPolicy).toEqual({
+      kind: 'auto-resume-agent',
+      prompt: 'Continue',
+    });
+    expect(dispatchIdleAgentTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-1' }),
+    );
+    runtime.dispose();
+  });
 });
 
-function createTaskWithAutoResumePolicy(): Task {
+function createTaskWithAutoResumePolicy(
+  options: {
+    readonly id?: string;
+    readonly group?: NonNullable<Task['lifecycle']>['resultDeliveryGroup'];
+  } = {},
+): Task {
   return {
-    id: 'task-1',
+    id: options.id ?? 'task-1',
     type: 'image_generation',
     status: 'completed',
     input: {
@@ -140,6 +232,36 @@ function createTaskWithAutoResumePolicy(): Task {
       interruptPolicy: 'detach-and-continue',
       recoverPolicy: 'snapshot-only',
       resultDeliveryPolicy: { kind: 'auto-resume-agent', prompt: 'Continue' },
+      ...(options.group ? { resultDeliveryGroup: options.group } : {}),
+    },
+  };
+}
+
+function createAutoResumeRecord(input: {
+  readonly observation: {
+    readonly conversationId: string;
+    readonly runId: string;
+    readonly id: string;
+    readonly taskId: string;
+  };
+}) {
+  return {
+    observationRecorded: true,
+    evidenceRecorded: true,
+    followUpRecorded: true,
+    eventIds: ['event-1'],
+    deliveryDecision: {
+      kind: 'auto-resume-agent' as const,
+      followUpRequest: {
+        id: 'followup-1',
+        conversationId: input.observation.conversationId,
+        runId: input.observation.runId,
+        observationId: input.observation.id,
+        taskId: input.observation.taskId,
+        policy: { kind: 'auto-resume-agent' as const, prompt: 'Continue' },
+        prompt: 'Continue',
+        createdAt: 30,
+      },
     },
   };
 }

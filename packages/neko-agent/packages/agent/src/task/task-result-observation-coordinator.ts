@@ -19,7 +19,8 @@ import type {
 export type AgentTaskResultObservationCoordinatorDiagnosticCode =
   | AgentTaskResultObservationError['code']
   | 'recording-failed'
-  | 'followup-dispatch-failed';
+  | 'followup-dispatch-failed'
+  | 'invalid-task-group';
 
 export interface AgentTaskResultObservationCoordinatorDiagnostic {
   readonly code: AgentTaskResultObservationCoordinatorDiagnosticCode;
@@ -31,7 +32,9 @@ export interface AgentTaskResultObservationCoordinatorDiagnostic {
 }
 
 export interface AgentTaskResultObservationRecordPort {
-  record(input: RecordAgentTaskResultObservationInput): Promise<RecordAgentTaskResultObservationResult>;
+  record(
+    input: RecordAgentTaskResultObservationInput,
+  ): Promise<RecordAgentTaskResultObservationResult>;
 }
 
 export interface AgentTaskResultFollowUpScheduler {
@@ -50,11 +53,7 @@ export interface HandleAgentTaskResultTerminalInput {
 }
 
 export interface HandleAgentTaskResultTerminalResult {
-  readonly status:
-    | 'ignored'
-    | 'recorded'
-    | 'recorded-and-followup-requested'
-    | 'diagnostic';
+  readonly status: 'ignored' | 'recorded' | 'recorded-and-followup-requested' | 'diagnostic';
   readonly recording?: RecordAgentTaskResultObservationResult;
   readonly deliveryDecision?: AgentTaskResultDeliveryDecision;
   readonly diagnostic?: AgentTaskResultObservationCoordinatorDiagnostic;
@@ -177,14 +176,19 @@ export function createAgentTaskResultObservationCoordinator(
   return new AgentTaskResultObservationCoordinator(options);
 }
 
-function readDiagnosticRunId(task: Task, error: AgentTaskResultObservationError): string | undefined {
+function readDiagnosticRunId(
+  task: Task,
+  error: AgentTaskResultObservationError,
+): string | undefined {
   if (
     error.code === 'run-lease-mismatch' &&
     typeof error.details?.['eventLease'] === 'object' &&
     error.details['eventLease'] !== null
   ) {
     const eventLease = error.details['eventLease'] as Record<string, unknown>;
-    return typeof eventLease['runId'] === 'string' ? eventLease['runId'] : task.lifecycle?.ownerRunId;
+    return typeof eventLease['runId'] === 'string'
+      ? eventLease['runId']
+      : task.lifecycle?.ownerRunId;
   }
 
   return task.lifecycle?.ownerRunId;

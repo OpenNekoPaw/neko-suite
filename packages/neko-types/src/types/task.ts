@@ -59,9 +59,7 @@ export type TaskCostPhase = 'idle' | 'token-active' | 'external-wait' | 'local-f
  * Task interruption policy used when the owning Agent conversation is stopped.
  */
 export type TaskInterruptPolicy =
-  | 'cancel-with-agent'
-  | 'detach-and-continue'
-  | 'finish-critical-step';
+  'cancel-with-agent' | 'detach-and-continue' | 'finish-critical-step';
 
 /**
  * Recovery policy used after Extension Host restart or process interruption.
@@ -75,6 +73,18 @@ export interface TaskRunLease {
   readonly conversationId: string;
   readonly runId: string;
   readonly runStartedAt?: number;
+}
+
+export type TaskResultDeliveryGroupPolicy =
+  'wait-all' | 'continue-on-each' | 'continue-on-threshold';
+
+export interface TaskResultDeliveryGroupMetadata {
+  readonly taskGroupId: string;
+  readonly resultDeliveryPolicy: TaskResultDeliveryGroupPolicy;
+  readonly expectedTaskIds?: readonly string[];
+  readonly parentMessageId?: string;
+  readonly parentToolCallId?: string;
+  readonly thresholdCount?: number;
 }
 
 /**
@@ -100,6 +110,8 @@ export interface TaskLifecycleMetadata {
   readonly recoverPolicy: TaskRecoverPolicy;
   /** How an Agent-owned terminal task result is delivered back to the Agent */
   readonly resultDeliveryPolicy?: AgentTaskResultDeliveryPolicy;
+  /** Explicit batch/group result delivery contract declared by the task submitter */
+  readonly resultDeliveryGroup?: TaskResultDeliveryGroupMetadata;
 }
 
 /**
@@ -121,9 +133,9 @@ export function createTaskLifecycleMetadata(
   };
 }
 
-export function extractTaskRunLease(
-  input: { readonly lifecycle?: Partial<TaskLifecycleMetadata> | null },
-): TaskRunLease | null {
+export function extractTaskRunLease(input: {
+  readonly lifecycle?: Partial<TaskLifecycleMetadata> | null;
+}): TaskRunLease | null {
   const conversationId = input.lifecycle?.ownerConversationId?.trim();
   const runId = input.lifecycle?.ownerRunId?.trim();
   if (!conversationId || !runId) {

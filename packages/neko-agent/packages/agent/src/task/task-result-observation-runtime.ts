@@ -145,6 +145,7 @@ export class AgentTaskResultObservationRuntime {
     task: Task,
     options: AgentTaskResultObservationTerminalOptions,
   ): Promise<void> {
+    const deliveryPolicy = await this.resolveDeliveryPolicyForTask(task, options);
     const coordinator = createAgentTaskResultObservationCoordinator({
       recorder: {
         record: (input) => this.recordObservation(input),
@@ -162,9 +163,36 @@ export class AgentTaskResultObservationRuntime {
       source: options.source ?? 'task-manager',
       ...(options.parentMessageId ? { parentMessageId: options.parentMessageId } : {}),
       ...(options.parentToolCallId ? { parentToolCallId: options.parentToolCallId } : {}),
-      ...(options.deliveryPolicy ? { deliveryPolicy: options.deliveryPolicy } : {}),
+      ...(deliveryPolicy ? { deliveryPolicy } : {}),
       ...(options.now !== undefined ? { now: options.now } : {}),
     });
+  }
+
+  private async resolveDeliveryPolicyForTask(
+    task: Task,
+    options: AgentTaskResultObservationTerminalOptions,
+  ): Promise<AgentTaskResultDeliveryPolicy | undefined> {
+    if (options.deliveryPolicy) return options.deliveryPolicy;
+    const group = task.lifecycle?.resultDeliveryGroup;
+    if (!group || group.resultDeliveryPolicy !== 'wait-all') {
+      return undefined;
+    }
+    if (!group.expectedTaskIds || group.expectedTaskIds.length === 0) {
+      this.emitDiagnostic({
+        code: 'invalid-task-group',
+        conversationId: task.lifecycle?.ownerConversationId,
+        runId: task.lifecycle?.ownerRunId,
+        taskId: task.id,
+        message: `Task group ${group.taskGroupId} wait-all delivery requires explicit expectedTaskIds.`,
+      });
+      return { kind: 'append-observation' };
+    }
+    const terminalTasks = (
+      await Promise.all(TERMINAL_TASK_STATUSES.map((status) => this.options.tasks.list(status)))
+    ).flat();
+    const terminalIds = new Set(terminalTasks.map((item) => item.id));
+    const allExpectedTerminal = group.expectedTaskIds.every((taskId) => terminalIds.has(taskId));
+    return allExpectedTerminal ? undefined : { kind: 'append-observation' };
   }
 
   private async recordObservation(

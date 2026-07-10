@@ -17,6 +17,7 @@ session.create -> message.submit -> session.waitForIdle -> session.facts -> sess
 - `skillActivations`：Skill lifecycle 可见记录。
 - `tasks`：异步任务 id、type、status、progress、error。
 - `messageQueue`：消息队列快照、pending count、version。
+- `continuations`：内部续跑 source、display kind、parent/task/subagent/observation metadata 和执行状态；不得通过解析终端文本判断。
 - `runtimeErrors`：TUI/Agent runtime 可见错误。
 - `canvas`：Canvas 相关消息和 tool call 摘要。
 

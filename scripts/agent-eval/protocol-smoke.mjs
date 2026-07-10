@@ -78,6 +78,20 @@ export function assertSuccessfulFacts(facts) {
     );
   }
 
+  const internalContinuationUserTurns = turns.filter(
+    (turn) =>
+      turn?.role === 'user' &&
+      typeof turn.content === 'string' &&
+      /Continue from the completed async task result\.|completed async task result|completed subagent result/i.test(
+        turn.content,
+      ),
+  );
+  if (internalContinuationUserTurns.length > 0) {
+    throw new Error(
+      'debug automation projected internal continuation prompts as user-authored messages',
+    );
+  }
+
   const assistantTurns = turns.filter((turn) => turn?.role === 'assistant');
   const finalAssistant = assistantTurns.at(-1);
   if (!finalAssistant || typeof finalAssistant.content !== 'string' || finalAssistant.content.trim().length === 0) {

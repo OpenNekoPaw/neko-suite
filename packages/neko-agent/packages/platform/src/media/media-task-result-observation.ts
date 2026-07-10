@@ -5,6 +5,7 @@ import type {
   ResourceRef,
   Task,
   TaskLifecycleMetadata,
+  TaskResultDeliveryGroupMetadata,
   TaskStatus,
   TaskType,
 } from '@neko/shared';
@@ -53,6 +54,7 @@ export function toMediaTaskResultObservationTask(
 ): Task {
   const task = input.mediaTask;
   const deliveryPolicy = readMediaTaskResultDeliveryPolicy(task.request.metadata);
+  const resultDeliveryGroup = readMediaTaskResultDeliveryGroup(task.request.metadata);
   const ownerRunId = readMediaTaskRunId(task.request.metadata);
   const ownerRunStartedAt = readMediaTaskRunStartedAt(task.request.metadata);
   const lifecycle: TaskLifecycleMetadata = {
@@ -64,6 +66,7 @@ export function toMediaTaskResultObservationTask(
     interruptPolicy: 'detach-and-continue',
     recoverPolicy: 'snapshot-only',
     ...(deliveryPolicy ? { resultDeliveryPolicy: deliveryPolicy } : {}),
+    ...(resultDeliveryGroup ? { resultDeliveryGroup } : {}),
   };
   const outputData = buildMediaTaskResultObservationData(input);
   const error = input.error ?? formatMediaTaskError(task);
@@ -114,6 +117,43 @@ export function readMediaTaskResultDeliveryPolicy(
     default:
       return undefined;
   }
+}
+
+export function readMediaTaskResultDeliveryGroup(
+  metadata: Record<string, unknown> | undefined,
+): TaskResultDeliveryGroupMetadata | undefined {
+  const value = metadata?.['resultDeliveryGroup'] ?? metadata?.['agentTaskResultDeliveryGroup'];
+  if (!isRecord(value)) return undefined;
+  const taskGroupId = value['taskGroupId'];
+  const resultDeliveryPolicy = value['resultDeliveryPolicy'];
+  if (typeof taskGroupId !== 'string' || !taskGroupId.trim()) return undefined;
+  if (
+    resultDeliveryPolicy !== 'wait-all' &&
+    resultDeliveryPolicy !== 'continue-on-each' &&
+    resultDeliveryPolicy !== 'continue-on-threshold'
+  ) {
+    return undefined;
+  }
+  return {
+    taskGroupId,
+    resultDeliveryPolicy,
+    ...(Array.isArray(value['expectedTaskIds'])
+      ? {
+          expectedTaskIds: value['expectedTaskIds'].filter(
+            (id): id is string => typeof id === 'string',
+          ),
+        }
+      : {}),
+    ...(typeof value['parentMessageId'] === 'string'
+      ? { parentMessageId: value['parentMessageId'] }
+      : {}),
+    ...(typeof value['parentToolCallId'] === 'string'
+      ? { parentToolCallId: value['parentToolCallId'] }
+      : {}),
+    ...(typeof value['thresholdCount'] === 'number'
+      ? { thresholdCount: value['thresholdCount'] }
+      : {}),
+  };
 }
 
 function readMediaTaskRunId(metadata: Record<string, unknown> | undefined): string | undefined {
@@ -223,7 +263,9 @@ function readAssetLocalPath(asset: MediaTaskResultObservationAssetInput): string
   return typeof asset.path === 'string' && asset.path.length > 0 ? asset.path : undefined;
 }
 
-function readAssetResourceRef(asset: MediaTaskResultObservationAssetInput): ResourceRef | undefined {
+function readAssetResourceRef(
+  asset: MediaTaskResultObservationAssetInput,
+): ResourceRef | undefined {
   return isResourceRef(asset.resourceRef) ? asset.resourceRef : undefined;
 }
 

@@ -19,6 +19,8 @@
         { "kind": "final-answer-non-empty" },
         { "kind": "task-created", "type": "image_generation" },
         { "kind": "task-terminal", "type": "image_generation", "status": "completed" },
+        { "kind": "no-user-internal-continuation" },
+        { "kind": "continuation-facts-present", "source": "task-result-continuation" },
         { "kind": "final-answer-contains", "text": ["猫", "玩耍", "画面"] },
         {
           "kind": "conditional-regeneration-when-quality-issue",

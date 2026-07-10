@@ -579,7 +579,25 @@ export interface MessageCancelledMessage {
   conversationId: string;
 }
 
-export type AgentQueuedMessageSource = 'composer' | 'task-result-observation';
+export type AgentTurnSource =
+  'user' | 'task-result-continuation' | 'subagent-result-continuation' | 'system-continuation';
+
+export type AgentQueuedMessageSource = AgentTurnSource | 'composer' | 'task-result-observation';
+
+export type AgentQueuedMessageDisplayKind =
+  'user-message' | 'task-continuation' | 'subagent-continuation' | 'system-continuation';
+
+export interface AgentContinuationMetadata {
+  readonly observationId?: string;
+  readonly taskId?: string;
+  readonly taskGroupId?: string;
+  readonly subagentId?: string;
+  readonly parentMessageId?: string;
+  readonly parentToolCallId?: string;
+  readonly runId?: string;
+  readonly status?: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'discarded';
+  readonly policy?: string;
+}
 
 export interface AgentQueuedMessageItem {
   id: string;
@@ -588,6 +606,8 @@ export interface AgentQueuedMessageItem {
   createdAt: number;
   updatedAt?: number;
   source: AgentQueuedMessageSource;
+  displayKind?: AgentQueuedMessageDisplayKind;
+  metadata?: AgentContinuationMetadata;
 }
 
 export interface AgentMessageQueueSnapshot {

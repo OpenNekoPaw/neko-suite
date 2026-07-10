@@ -91,7 +91,10 @@ describe('createTaskTool', () => {
     it('should allow host-contributed SubAgent types without a fixed domain enum', () => {
       const tool = createTaskTool(manager);
       const params = tool.parameters as {
-        readonly properties: Record<string, { readonly enum?: readonly string[]; readonly type: string }>;
+        readonly properties: Record<
+          string,
+          { readonly enum?: readonly string[]; readonly type: string }
+        >;
       };
 
       expect(params.properties.subagent_type).toEqual(
@@ -113,16 +116,12 @@ describe('createTaskTool', () => {
       const task = byName.get('task');
       const taskOutput = byName.get('task_output');
       const taskParameters = task?.parameters as
-        | { properties?: Record<string, { description?: string }> }
-        | undefined;
+        { properties?: Record<string, { description?: string }> } | undefined;
       const outputParameters = taskOutput?.parameters as
-        | { properties?: Record<string, { description?: string }> }
-        | undefined;
+        { properties?: Record<string, { description?: string }> } | undefined;
 
       expect(task?.description).toContain('启动一个 SubAgent');
-      expect(taskParameters?.properties?.prompt?.description).toBe(
-        '给 SubAgent 的详细任务说明。',
-      );
+      expect(taskParameters?.properties?.prompt?.description).toBe('给 SubAgent 的详细任务说明。');
       expect(taskOutput?.description).toContain('获取后台 SubAgent 任务的输出');
       expect(outputParameters?.properties?.task_id?.description).toBe('SubAgent 任务 ID。');
       expect(task?.description).not.toContain('Launch a SubAgent');
@@ -144,6 +143,10 @@ describe('createTaskTool', () => {
       expect(result.success).toBe(true);
       expect(result.data).toBeDefined();
       expect((result.data as SubAgentResult).status).toBe('completed');
+      expect((result.data as Record<string, unknown>).continuation).toMatchObject({
+        source: 'subagent-result-continuation',
+        status: 'completed',
+      });
     });
 
     it('should return immediately in background mode', async () => {
@@ -370,6 +373,11 @@ describe('createTaskOutputTool', () => {
 
       expect(result.success).toBe(true);
       expect((result.data as SubAgentResult).status).toBe('completed');
+      expect((result.data as Record<string, unknown>).continuation).toMatchObject({
+        source: 'subagent-result-continuation',
+        subagentId: 'test-id',
+        summary: 'Done',
+      });
     });
 
     it('should return status for running SubAgent in non-blocking mode', async () => {

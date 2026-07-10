@@ -6,6 +6,7 @@
 
 import type {
   AgentTaskResultDeliveryPolicy,
+  TaskResultDeliveryGroupMetadata,
   TaskInput,
   TaskOutput,
   TaskRecoveryInfo,
@@ -879,6 +880,7 @@ export function createMediaTaskInput(
   const ownerRunId = readMediaRequestOwnerRunId(request.metadata);
   const ownerRunStartedAt = readMediaRequestOwnerRunStartedAt(request.metadata);
   const resultDeliveryPolicy = readMediaRequestResultDeliveryPolicy(request.metadata);
+  const resultDeliveryGroup = readMediaRequestResultDeliveryGroup(request.metadata);
 
   return {
     type: typeMap[generationType] || 'image_generation',
@@ -891,6 +893,7 @@ export function createMediaTaskInput(
       interruptPolicy: 'detach-and-continue',
       recoverPolicy: 'resume-polling',
       ...(resultDeliveryPolicy ? { resultDeliveryPolicy } : {}),
+      ...(resultDeliveryGroup ? { resultDeliveryGroup } : {}),
     },
     payload: {
       generationType,
@@ -926,6 +929,49 @@ function readMediaRequestOwnerRunStartedAt(
 ): number | undefined {
   const value = metadata?.['runStartedAt'];
   return typeof value === 'number' ? value : undefined;
+}
+
+function readMediaRequestResultDeliveryGroup(
+  metadata: Record<string, unknown> | undefined,
+): TaskResultDeliveryGroupMetadata | undefined {
+  if (!metadata) return undefined;
+  const value = metadata['resultDeliveryGroup'] ?? metadata['agentTaskResultDeliveryGroup'];
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error('Media task result delivery group must be an object.');
+  }
+  const taskGroupId = value['taskGroupId'];
+  const resultDeliveryPolicy = value['resultDeliveryPolicy'];
+  if (typeof taskGroupId !== 'string' || !taskGroupId.trim()) {
+    throw new Error('Media task result delivery group taskGroupId must be a non-empty string.');
+  }
+  if (
+    resultDeliveryPolicy !== 'wait-all' &&
+    resultDeliveryPolicy !== 'continue-on-each' &&
+    resultDeliveryPolicy !== 'continue-on-threshold'
+  ) {
+    throw new Error('Unknown media task result delivery group policy.');
+  }
+  return {
+    taskGroupId,
+    resultDeliveryPolicy,
+    ...(Array.isArray(value['expectedTaskIds'])
+      ? {
+          expectedTaskIds: value['expectedTaskIds'].filter(
+            (id): id is string => typeof id === 'string',
+          ),
+        }
+      : {}),
+    ...(typeof value['parentMessageId'] === 'string'
+      ? { parentMessageId: value['parentMessageId'] }
+      : {}),
+    ...(typeof value['parentToolCallId'] === 'string'
+      ? { parentToolCallId: value['parentToolCallId'] }
+      : {}),
+    ...(typeof value['thresholdCount'] === 'number'
+      ? { thresholdCount: value['thresholdCount'] }
+      : {}),
+  };
 }
 
 function readMediaRequestResultDeliveryPolicy(

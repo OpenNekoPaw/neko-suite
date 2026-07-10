@@ -356,6 +356,7 @@ Launch multiple SubAgents in a single turn for independent tasks:
             ...resultMetadata,
             ...result,
             subAgentId,
+            continuation: buildSubAgentResultContinuationSummary(subAgentId, result),
           },
           error: result.error,
         };
@@ -493,6 +494,7 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
           data: {
             ...result,
             subAgentId: task_id,
+            continuation: buildSubAgentResultContinuationSummary(task_id, result),
           },
           error: result.error,
         };
@@ -510,6 +512,21 @@ export function createTaskOutputTool(subAgentManager: ISubAgentManager): Tool {
         };
       }
     },
+  };
+}
+
+function buildSubAgentResultContinuationSummary(
+  subAgentId: string,
+  result: import('./types').SubAgentResult,
+): Record<string, unknown> {
+  return {
+    source: 'subagent-result-continuation',
+    subagentId: subAgentId,
+    status: result.status,
+    ...(result.response ? { summary: result.response } : {}),
+    ...(result.error ? { issues: [result.error] } : {}),
+    ...(result.duration !== undefined ? { duration: result.duration } : {}),
+    ...(result.iterations !== undefined ? { iterations: result.iterations } : {}),
   };
 }
 

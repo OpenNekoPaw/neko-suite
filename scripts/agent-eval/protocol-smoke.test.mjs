@@ -371,6 +371,16 @@ describe('agent eval protocol smoke request sequencing', () => {
     expect(() => assertSuccessfulFacts({ runtimeErrors: [], turns: [] })).toThrow(
       'debug automation completed without a non-empty assistant response',
     );
+
+    expect(() =>
+      assertSuccessfulFacts({
+        runtimeErrors: [],
+        turns: [
+          { role: 'user', content: 'Continue from the completed async task result.' },
+          { role: 'assistant', content: 'ok' },
+        ],
+      }),
+    ).toThrow('internal continuation prompts as user-authored messages');
   });
 
   it('accepts completed runs with a non-empty assistant answer and no runtime errors', () => {
