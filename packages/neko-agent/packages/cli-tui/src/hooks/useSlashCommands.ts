@@ -68,6 +68,9 @@ interface SlashCommandSessionActions {
   cancelQueuedMessage?: NonNullable<
     import('./useAgentSession').AgentSessionHandle['cancelQueuedMessage']
   >;
+  discardQueuedContinuation?: NonNullable<
+    import('./useAgentSession').AgentSessionHandle['discardQueuedContinuation']
+  >;
   editQueuedMessage?: NonNullable<
     import('./useAgentSession').AgentSessionHandle['editQueuedMessage']
   >;
@@ -213,19 +216,19 @@ function createInkRouterContext(
 ): TuiCommandRouterContext {
   const config = useConfigStore.getState().config;
   return {
-      slash: {
-        locale: detectTuiLocale(),
-        config,
-        skillService: sessionActions.getSkillService?.(),
-        toolRegistry: sessionActions.getToolRegistry?.(),
-        conversationStorage: sessionActions.getConversationStorage?.(),
-        currentConversationId: sessionActions.getCurrentConversationId?.(),
-        onResumeConversation: sessionActions.resumeConversation,
-        getHistory: sessionActions.getHistory,
-        onConfigUpdate: (updates) => {
-          useConfigStore.getState().setConfig(updates);
-          sessionActions.syncRuntimeState?.();
-        },
+    slash: {
+      locale: detectTuiLocale(),
+      config,
+      skillService: sessionActions.getSkillService?.(),
+      toolRegistry: sessionActions.getToolRegistry?.(),
+      conversationStorage: sessionActions.getConversationStorage?.(),
+      currentConversationId: sessionActions.getCurrentConversationId?.(),
+      onResumeConversation: sessionActions.resumeConversation,
+      getHistory: sessionActions.getHistory,
+      onConfigUpdate: (updates) => {
+        useConfigStore.getState().setConfig(updates);
+        sessionActions.syncRuntimeState?.();
+      },
     },
     ports: {
       output: {
@@ -292,6 +295,29 @@ function createInkRouterContext(
           sessionActions.syncRuntimeState?.();
         },
       },
+      perception: {
+        listPerceptionModelOptions: () =>
+          listChatModelOptions(useConfigStore.getState().config.workDir).filter(
+            (option) => option.category === 'llm',
+          ),
+        getCurrentPerceptionModels: () => useConfigStore.getState().config.perceptionModels ?? {},
+        setPerceptionModel: (category, model) => {
+          const config = useConfigStore.getState().config;
+          const current = config.perceptionModels ?? {};
+          const next = { ...current };
+          if (model === 'auto') {
+            delete next[category];
+          } else {
+            next[category] = model.optionId ?? `${model.providerId}:${model.modelId}`;
+          }
+          useConfigStore.getState().setConfig({ perceptionModels: next });
+          sessionActions.syncRuntimeState?.();
+        },
+        resetPerceptionModels: () => {
+          useConfigStore.getState().setConfig({ perceptionModels: {} });
+          sessionActions.syncRuntimeState?.();
+        },
+      },
       parameters: {
         getConfig: () => useConfigStore.getState().config.llmConfig,
         validate: (llmConfig) =>
@@ -337,6 +363,12 @@ function createInkRouterContext(
               }
               return sessionActions.cancelQueuedMessage(queueItemId);
             },
+            discardContinuation: (queueItemId) => {
+              if (!sessionActions.discardQueuedContinuation) {
+                throw new Error('Queue continuation discard is not available for this session.');
+              }
+              return sessionActions.discardQueuedContinuation(queueItemId);
+            },
             edit: (queueItemId, content) => {
               if (!sessionActions.editQueuedMessage) {
                 throw new Error('Queue edit is not available for this session.');
@@ -379,6 +411,7 @@ function createInkRouterContext(
             tokensTotal: status.usage.total,
             chatModelIdentity: formatConfigChatModel(useConfigStore.getState().config),
             mediaModelSummary: formatMediaModelSummary(useConfigStore.getState().config),
+            perceptionModelSummary: formatPerceptionModelSummary(useConfigStore.getState().config),
             llmParameterSummary: formatLlmParameterSummary(useConfigStore.getState().config),
             activeSkillSummary: formatActiveSkillSummary(status.activeSkillLifecycleRecords),
             queueCount: status.messageQueue.snapshot?.pendingCount ?? 0,
@@ -489,6 +522,16 @@ function formatMediaModelSummary(config: {
   const media = config.defaultMediaModels ?? {};
   const entries = (['image', 'video', 'audio'] as const)
     .map((category) => (media[category] ? `${category}=${media[category]}` : undefined))
+    .filter((entry): entry is string => Boolean(entry));
+  return entries.length > 0 ? entries.join(', ') : undefined;
+}
+
+function formatPerceptionModelSummary(config: {
+  perceptionModels?: { image?: string; video?: string; audio?: string };
+}): string | undefined {
+  const perception = config.perceptionModels ?? {};
+  const entries = (['image', 'video', 'audio'] as const)
+    .map((category) => (perception[category] ? `${category}=${perception[category]}` : undefined))
     .filter((entry): entry is string => Boolean(entry));
   return entries.length > 0 ? entries.join(', ') : undefined;
 }

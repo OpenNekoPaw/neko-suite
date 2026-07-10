@@ -10,6 +10,7 @@ import type { AgentCapabilityProvider, IService } from '@neko/shared';
 import type { MediaTask } from '@neko/platform';
 import { DEFAULT_CLI_CONFIG, type CLIConfig } from '../../core/types';
 import { useAgentStore } from '../../stores/agent-store';
+import { useConversationStore } from '../../stores/conversation-store';
 import { useAgentSession } from '../useAgentSession';
 
 const runtimeMocks = vi.hoisted(() => ({
@@ -17,9 +18,12 @@ const runtimeMocks = vi.hoisted(() => ({
   latestSession: undefined as Record<string, unknown> | undefined,
   tokenCount: 0,
   executeEvents: [] as AgentEvent[],
+  recordDeliveryKind: 'append-observation' as 'append-observation' | 'auto-resume-agent',
   recordTaskResultObservation: vi.fn(),
   patchToolResult: vi.fn(),
   createAgentRuntimeSession: vi.fn(),
+  latestTaskResultObservationRuntimeOptions: undefined as
+    Parameters<typeof import('@neko/agent').createAgentTaskResultObservationRuntime>[0] | undefined,
 }));
 
 const platformMocks = vi.hoisted(() => ({
@@ -37,11 +41,23 @@ vi.mock('@neko/agent/runtime', async () => {
   };
 });
 
+vi.mock('@neko/agent', async () => {
+  const actual = await vi.importActual<typeof import('@neko/agent')>('@neko/agent');
+  return {
+    ...actual,
+    createAgentTaskResultObservationRuntime: (
+      options: Parameters<typeof actual.createAgentTaskResultObservationRuntime>[0],
+    ) => {
+      runtimeMocks.latestTaskResultObservationRuntimeOptions = options;
+      return actual.createAgentTaskResultObservationRuntime(options);
+    },
+  };
+});
+
 vi.mock('../../core/platform-bootstrap', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../core/platform-bootstrap')>(
-      '../../core/platform-bootstrap',
-    );
+  const actual = await vi.importActual<typeof import('../../core/platform-bootstrap')>(
+    '../../core/platform-bootstrap',
+  );
   return {
     ...actual,
     createCLIPlatform: platformMocks.createCLIPlatform,
@@ -53,14 +69,39 @@ let tempRoot: string;
 beforeEach(async () => {
   runtimeMocks.latestFactoryConfig = undefined;
   runtimeMocks.latestSession = undefined;
+  runtimeMocks.latestTaskResultObservationRuntimeOptions = undefined;
   runtimeMocks.tokenCount = 0;
   runtimeMocks.executeEvents = [];
-  runtimeMocks.recordTaskResultObservation.mockResolvedValue({
-    observationRecorded: true,
-    evidenceRecorded: true,
-    followUpRecorded: false,
-    eventIds: ['event-1'],
-    deliveryDecision: { kind: 'append-observation' },
+  runtimeMocks.recordDeliveryKind = 'append-observation';
+  runtimeMocks.recordTaskResultObservation.mockImplementation(async (input) => {
+    if (runtimeMocks.recordDeliveryKind === 'auto-resume-agent') {
+      return {
+        observationRecorded: true,
+        evidenceRecorded: true,
+        followUpRecorded: true,
+        eventIds: ['event-1'],
+        deliveryDecision: {
+          kind: 'auto-resume-agent' as const,
+          followUpRequest: {
+            id: 'followup-1',
+            conversationId: input.observation.conversationId,
+            runId: input.observation.runId,
+            observationId: input.observation.id,
+            taskId: input.observation.taskId,
+            policy: { kind: 'auto-resume-agent' as const, prompt: 'Continue' },
+            prompt: 'Continue from the completed async task result.',
+            createdAt: 30,
+          },
+        },
+      };
+    }
+    return {
+      observationRecorded: true,
+      evidenceRecorded: true,
+      followUpRecorded: false,
+      eventIds: ['event-1'],
+      deliveryDecision: { kind: 'append-observation' as const },
+    };
   });
   runtimeMocks.patchToolResult.mockResolvedValue(undefined);
   runtimeMocks.createAgentRuntimeSession.mockImplementation(
@@ -91,6 +132,7 @@ beforeEach(async () => {
 afterEach(async () => {
   cleanup();
   useAgentStore.getState().reset();
+  useConversationStore.getState().clearMessages();
   await fs.rm(tempRoot, { recursive: true, force: true });
   runtimeMocks.createAgentRuntimeSession.mockReset();
   runtimeMocks.recordTaskResultObservation.mockReset();
@@ -125,9 +167,10 @@ describe('useAgentSession runtime assembly', () => {
         authorizedReadRoots: expect.arrayContaining([tempRoot]),
         contextSettings: { maxTokens: 12345 },
         projectMemoryFilePath: path.join(tempRoot, '.neko', 'memory.md'),
-        capabilityPromptFragments: [
+        capabilityPromptFragments: expect.arrayContaining([
           { id: 'probe:prompt-fragment', content: 'Use the probe capability.' },
-        ],
+          expect.objectContaining({ id: 'external-research:usage-boundary' }),
+        ]),
       }),
     );
   });
@@ -244,6 +287,63 @@ describe('useAgentSession runtime assembly', () => {
     );
     expect(useAgentStore.getState().usage).toEqual({ input: 1, output: 2, total: 3 });
   });
+
+  it('dispatches task-result continuations without adding user transcript messages', async () => {
+    const readyStates: boolean[] = [];
+    runtimeMocks.executeEvents = [
+      { type: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+    ];
+
+    render(
+      React.createElement(RuntimeAssemblyProbe, {
+        config: {
+          ...DEFAULT_CLI_CONFIG,
+          workDir: tempRoot,
+          providerRequiresApiKey: false,
+        },
+        capabilityProviders: [],
+        onReady: (ready: boolean) => {
+          readyStates.push(ready);
+        },
+      }),
+    );
+
+    await waitFor(() => readyStates.includes(true));
+    await runtimeMocks.latestTaskResultObservationRuntimeOptions?.continuation?.dispatchIdleAgentTurn?.(
+      {
+        id: 'followup-1',
+        conversationId: 'conv-1',
+        runId: 'run-1',
+        observationId: 'obs-1',
+        taskId: 'task-1',
+        policy: { kind: 'auto-resume-agent', prompt: 'Continue' },
+        prompt: 'Continue from the completed async task result.',
+        createdAt: 30,
+      },
+    );
+
+    const session = runtimeMocks.latestSession as { execute: ReturnType<typeof vi.fn> };
+    expect(session.execute).toHaveBeenCalledWith(
+      'Continue from the completed async task result.',
+      expect.any(Object),
+    );
+    expect(
+      useConversationStore
+        .getState()
+        .messages.some(
+          (message) =>
+            message.role === 'user' &&
+            message.content.includes('Continue from the completed async task result.'),
+        ),
+    ).toBe(false);
+    expect(
+      useConversationStore
+        .getState()
+        .messages.some(
+          (message) => message.role === 'system' && message.source === 'task-result-continuation',
+        ),
+    ).toBe(true);
+  });
 });
 
 function RuntimeAssemblyProbe(props: {
@@ -358,7 +458,8 @@ function createMockAgentSession(tokenCount: number): Record<string, unknown> {
     confirmTool: vi.fn(),
     isRunning: vi.fn(() => false),
     execute: vi.fn(async function* () {
-      for (const event of runtimeMocks.executeEvents) {
+      const events = runtimeMocks.executeEventBatches?.shift() ?? runtimeMocks.executeEvents;
+      for (const event of events) {
         yield event;
       }
     }),
@@ -384,7 +485,7 @@ function createMockPlatform(): Record<string, unknown> {
   };
 }
 
-function createCompletedMediaTask(): MediaTask {
+function createCompletedMediaTask(options: { readonly deliveryPolicy?: unknown } = {}): MediaTask {
   const createdAt = new Date('2026-01-01T00:00:00.000Z');
   const completedAt = new Date('2026-01-01T00:00:03.000Z');
   return {
@@ -403,7 +504,7 @@ function createCompletedMediaTask(): MediaTask {
       metadata: {
         runId: 'run-1',
         runStartedAt: 101,
-        resultDeliveryPolicy: { kind: 'append-observation' },
+        resultDeliveryPolicy: options.deliveryPolicy ?? { kind: 'append-observation' },
       },
     },
   };

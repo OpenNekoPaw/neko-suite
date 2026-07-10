@@ -99,6 +99,7 @@ export function App({
     listTasks,
     promoteQueuedMessage,
     cancelQueuedMessage,
+    discardQueuedContinuation,
     editQueuedMessage,
     activateSkill,
     deactivateSkill,
@@ -134,33 +135,36 @@ export function App({
     };
   }, [automation]);
 
-  const refreshReferenceSuggestions = useCallback((query = '') => {
-    let cancelled = false;
-    const requestId = referenceRequestIdRef.current + 1;
-    referenceRequestIdRef.current = requestId;
-    void createTuiReferenceSuggestions({
-      workspaceRoot: config.workDir,
-      query,
-      referenceContributors: getReferenceContributors(),
-    }).then(
-      (suggestions) => {
-        if (!cancelled && referenceRequestIdRef.current === requestId) {
-          setReferenceSuggestions(suggestions);
-        }
-      },
-      (error) => {
-        if (!cancelled && referenceRequestIdRef.current === requestId) {
-          const message = error instanceof Error ? error.message : String(error);
-          useConversationStore
-            .getState()
-            .addError(new Error(`Reference suggestion error: ${message}`));
-        }
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [config.workDir, getReferenceContributors, slashCommands]);
+  const refreshReferenceSuggestions = useCallback(
+    (query = '') => {
+      let cancelled = false;
+      const requestId = referenceRequestIdRef.current + 1;
+      referenceRequestIdRef.current = requestId;
+      void createTuiReferenceSuggestions({
+        workspaceRoot: config.workDir,
+        query,
+        referenceContributors: getReferenceContributors(),
+      }).then(
+        (suggestions) => {
+          if (!cancelled && referenceRequestIdRef.current === requestId) {
+            setReferenceSuggestions(suggestions);
+          }
+        },
+        (error) => {
+          if (!cancelled && referenceRequestIdRef.current === requestId) {
+            const message = error instanceof Error ? error.message : String(error);
+            useConversationStore
+              .getState()
+              .addError(new Error(`Reference suggestion error: ${message}`));
+          }
+        },
+      );
+      return () => {
+        cancelled = true;
+      };
+    },
+    [config.workDir, getReferenceContributors, slashCommands],
+  );
 
   useEffect(() => refreshReferenceSuggestions(), [refreshReferenceSuggestions]);
 
@@ -178,6 +182,7 @@ export function App({
     listTasks,
     promoteQueuedMessage,
     cancelQueuedMessage,
+    discardQueuedContinuation,
     editQueuedMessage,
     activateSkill,
     deactivateSkill,

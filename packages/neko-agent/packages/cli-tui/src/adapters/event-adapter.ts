@@ -205,7 +205,7 @@ export function createEventAdapter(deps: EventAdapterDeps): IEventAdapter {
           }
           if (event.queuedMessageItem) {
             conversationStore().addSystemMessage(
-              `Queued message: ${event.queuedMessageItem.id} (${event.pendingCount ?? 1} pending)`,
+              formatQueuedMessageSystemText(event.queuedMessageItem, event.pendingCount ?? 1),
             );
           }
           break;
@@ -226,6 +226,24 @@ export function createEventAdapter(deps: EventAdapterDeps): IEventAdapter {
       currentDelta = '';
     },
   };
+}
+
+function formatQueuedMessageSystemText(
+  item: import('@neko-agent/types').AgentQueuedMessageItem,
+  pendingCount: number,
+): string {
+  if (item.source === 'task-result-continuation' || item.source === 'task-result-observation') {
+    const suffix = item.metadata?.taskId ? ` ${item.metadata.taskId}` : ` ${item.id}`;
+    return `Task continuation queued:${suffix} (${pendingCount} pending)`;
+  }
+  if (item.source === 'subagent-result-continuation') {
+    const suffix = item.metadata?.subagentId ? ` ${item.metadata.subagentId}` : ` ${item.id}`;
+    return `Subagent result continuation queued:${suffix} (${pendingCount} pending)`;
+  }
+  if (item.source === 'system-continuation') {
+    return `System continuation queued: ${item.id} (${pendingCount} pending)`;
+  }
+  return `Queued message: ${item.id} (${pendingCount} pending)`;
 }
 
 function createStoreAccessor<TStore>(store: StoreAccessor<TStore>): () => TStore {

@@ -155,6 +155,7 @@ export interface TuiQueuePorts {
   readonly getSnapshot: () => AgentMessageQueueSnapshot;
   readonly promote: (queueItemId: string) => AgentQueuedMessageItem;
   readonly cancel: (queueItemId: string) => AgentQueuedMessageItem;
+  readonly discardContinuation?: (queueItemId: string) => AgentQueuedMessageItem;
   readonly edit: (queueItemId: string, content: string) => AgentQueuedMessageItem;
 }
 
@@ -1319,18 +1320,31 @@ function handleQueue(input: string, context: TuiCommandRouterContext): TuiComman
     if (!queueItemId) {
       return handled({
         error:
-          'Usage: /queue list | /queue promote <id> | /queue cancel <id> | /queue edit <id> <text>',
+          'Usage: /queue list | /queue promote <id> | /queue send-now <id> | /queue cancel <id> | /queue discard <id> | /queue edit <id> <text>',
       });
     }
 
-    if (subcommand === 'promote') {
+    if (subcommand === 'promote' || subcommand === 'send-now') {
       const item = queuePorts.promote(queueItemId);
-      return handled({ output: `Queued message promoted: ${item.id}` });
+      return handled({
+        output:
+          subcommand === 'send-now'
+            ? `Queued message scheduled for immediate send: ${item.id}`
+            : `Queued message promoted: ${item.id}`,
+      });
     }
 
     if (subcommand === 'cancel') {
       const item = queuePorts.cancel(queueItemId);
       return handled({ output: `Queued message cancelled: ${item.id}` });
+    }
+
+    if (subcommand === 'discard') {
+      if (!queuePorts.discardContinuation) {
+        throw new Error('Queue continuation discard is not available for this session.');
+      }
+      const item = queuePorts.discardContinuation(queueItemId);
+      return handled({ output: `Queued continuation discarded: ${item.id}` });
     }
 
     if (subcommand === 'edit') {

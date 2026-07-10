@@ -10,6 +10,7 @@ import { useRef, useCallback, useEffect, useState } from 'react';
 import {
   MCPManager,
   createAllMCPTools,
+  createMcpToolCreationOptionsForExternalResearch,
   createPlanModeCreationMetadata,
   createSkillService,
   createNodeSkillLoader,
@@ -42,6 +43,7 @@ import {
   buildAgentRuntimeSessionFactoryConfig,
   buildAgentWorkspaceRuntimeSessionAssemblyInput,
   createAgentCapabilityRuntimeRegistries,
+  createExternalResearchCapabilityProviderFromMcpConfig,
   createAgentRuntimeSession,
 } from '@neko/agent/runtime';
 import {
@@ -53,6 +55,13 @@ import {
 } from '@neko/platform';
 import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import type { AgentLlmConfig, AgentPhase } from '@neko-agent/types';
+import type {
+  AgentContinuationMetadata,
+  AgentQueuedMessageDisplayKind,
+  AgentQueuedMessageItem,
+  AgentQueuedMessageSource,
+  AgentTurnSource,
+} from '@neko-agent/types';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { CLIConfig } from '../core/types';
@@ -132,6 +141,20 @@ type RuntimeTerminalTimelineMessage = Extract<
   TerminalTimelineMessage
 >;
 
+interface ExecutePromptOptions {
+  readonly metadata?: Record<string, unknown>;
+  readonly source?: AgentTurnSource;
+  readonly displayKind?: AgentQueuedMessageDisplayKind | 'user-message';
+  readonly continuationMetadata?: AgentContinuationMetadata;
+}
+
+interface SubmitInternalContinuationInput {
+  readonly prompt: string;
+  readonly source: Exclude<AgentTurnSource, 'user'>;
+  readonly displayKind?: AgentQueuedMessageDisplayKind;
+  readonly metadata?: AgentContinuationMetadata;
+}
+
 export interface UseAgentSessionOptions {
   readonly config: CLIConfig;
   /** Optional Platform Service (from VSCode extension) */
@@ -170,6 +193,10 @@ export interface AgentSessionHandle {
   promoteQueuedMessage: (queueItemId: string) => import('@neko-agent/types').AgentQueuedMessageItem;
   /** Cancel a queued message without cancelling the active turn. */
   cancelQueuedMessage: (queueItemId: string) => import('@neko-agent/types').AgentQueuedMessageItem;
+  /** Explicitly discard a queued internal continuation. */
+  discardQueuedContinuation: (
+    queueItemId: string,
+  ) => import('@neko-agent/types').AgentQueuedMessageItem;
   /** Edit a queued message item. */
   editQueuedMessage: (
     queueItemId: string,
@@ -277,6 +304,9 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const messageQueueRef = useRef<TuiMessageQueue | null>(null);
   const drainingQueueRef = useRef(false);
   const submitRef = useRef<AgentSessionHandle['submit'] | null>(null);
+  const submitInternalContinuationRef = useRef<
+    ((input: SubmitInternalContinuationInput) => Promise<void>) | null
+  >(null);
   const workspaceRuntimeStateErrorRef = useRef<string | null>(null);
   const taskSummaryErrorRef = useRef<string | null>(null);
   const isReadyRef = useRef(false);
@@ -483,7 +513,10 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         // 2. Tool Registry
         const toolRegistry = new ToolRegistry();
         toolRegistryRef.current = toolRegistry;
-        const mcpTools = await createAllMCPTools(mcpManager);
+        const mcpTools = await createAllMCPTools(
+          mcpManager,
+          createMcpToolCreationOptionsForExternalResearch(config.externalResearch),
+        );
         toolRegistry.registerMany(mcpTools);
 
         const contentPolicy = createNodeWorkspaceContentPolicy({ workDir: config.workDir });
@@ -557,12 +590,16 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           providerExpressionProfileRegistry: profileRegistries.providerExpressionProfileRegistry,
           locale: detectedLocale,
         });
-        const capabilityLoadResult = capabilityLoader.registerProviders(
-          withTuiDefaultCapabilityProviders({
+        const capabilityLoadResult = capabilityLoader.registerProviders([
+          ...withTuiDefaultCapabilityProviders({
             workDir: config.workDir,
             capabilityProviders,
           }),
-        );
+          createExternalResearchCapabilityProviderFromMcpConfig({
+            config: config.externalResearch,
+            mcpManager,
+          }),
+        ]);
         capabilityLoadResultRef.current = capabilityLoadResult;
         setCapabilityRevision((revision) => revision + 1);
 
@@ -721,11 +758,22 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
                 .addSystemMessage(`Task result is ready. Continue with: ${request.prompt}`);
             },
             dispatchIdleAgentTurn: async (request) => {
-              const submit = submitRef.current;
-              if (!submit) {
+              const submitInternalContinuation = submitInternalContinuationRef.current;
+              if (!submitInternalContinuation) {
                 throw new Error('TUI submit port is not initialized for task-result follow-up');
               }
-              await submit(request.prompt);
+              await submitInternalContinuation({
+                prompt: request.prompt,
+                source: 'task-result-continuation',
+                displayKind: 'task-continuation',
+                metadata: {
+                  observationId: request.observationId,
+                  taskId: request.taskId,
+                  runId: request.runId,
+                  status: 'queued',
+                  policy: request.policy.kind,
+                },
+              });
             },
           },
           onDiagnostic: (diagnostic) => {
@@ -798,7 +846,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const executePrompt = useCallback(
-    async (prompt: string, metadataOverrides?: Record<string, unknown>): Promise<void> => {
+    async (prompt: string, options: ExecutePromptOptions = {}): Promise<void> => {
       const session = sessionRef.current;
       const adapter = adapterRef.current;
       const inputProcessor = inputProcessorRef.current;
@@ -820,7 +868,16 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       }
 
       adapter.reset();
-      useConversationStore.getState().addUserMessage(prompt);
+      if (!options.source || options.source === 'user') {
+        useConversationStore.getState().addUserMessage(prompt);
+      } else {
+        useConversationStore.getState().addSystemMessage({
+          content: formatContinuationSystemMessage(options),
+          source: options.source,
+          displayKind: options.displayKind ?? displayKindForTurnSource(options.source),
+          metadata: options.continuationMetadata,
+        });
+      }
       useAgentStore.getState().setRunning();
       if (!conversationTitleRef.current) {
         conversationTitleRef.current = deriveConversationTitle([{ role: 'user', content: prompt }]);
@@ -829,7 +886,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
       const creationMetadata = mergeCreationExecutionMetadata(
         session.getExecutionMode() === 'plan' ? createPlanModeCreationMetadata() : undefined,
-        metadataOverrides,
+        options.metadata,
       );
       const currentConfig = useConfigStore.getState().config;
       const metadata = mergeTuiMediaModelMetadata(
@@ -837,6 +894,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         currentConfig.defaultMediaModels,
         currentConfig.chatModel?.providerId ?? currentConfig.provider,
         listChatModelOptions(currentConfig.workDir),
+        currentConfig.perceptionModels,
       );
 
       let finalUsage: AgentUsageSnapshot | undefined;
@@ -952,7 +1010,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
           releasedQueuedMessageItem: released,
           messageQueueSnapshot: snapshot,
         } satisfies AgentEvent);
-        await executePrompt(released.content);
+        await executePrompt(released.content, {
+          source: normalizeTurnSource(released.source),
+          displayKind: released.displayKind,
+          ...(released.metadata ? { continuationMetadata: released.metadata } : {}),
+          ...(released.metadata ? { metadata: { continuation: released.metadata } } : {}),
+        });
       }
     } finally {
       drainingQueueRef.current = false;
@@ -986,7 +1049,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
               'Prompts with execution metadata cannot be queued while an Agent turn is running.',
             );
           }
-          const item = queue.enqueue(prompt);
+          const item = queue.enqueue({
+            content: prompt,
+            source: 'user',
+            displayKind: 'user-message',
+          });
           const snapshot = queue.snapshot();
           useAgentStore.getState().setMessageQueueSnapshot(snapshot);
           syncWorkspaceRuntimeState({ status: 'running' });
@@ -1006,12 +1073,73 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       }
 
       try {
-        await executePrompt(prompt, executionOverrides?.metadata);
+        await executePrompt(prompt, { metadata: executionOverrides?.metadata, source: 'user' });
         await drainQueuedPrompts();
 
         if (useAgentStore.getState().executionMode === 'plan') {
           useUIStore.getState().showPlanReview();
         }
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        useAgentStore.getState().setError(err);
+        useConversationStore.getState().addError(err);
+        void refreshTaskSummary();
+        syncWorkspaceRuntimeState({ status: 'error', phase: 'idle', errorMessage: err.message });
+      }
+    },
+    [drainQueuedPrompts, executePrompt, refreshTaskSummary, syncWorkspaceRuntimeState],
+  );
+
+  const submitInternalContinuation = useCallback(
+    async (input: SubmitInternalContinuationInput): Promise<void> => {
+      if (initPromiseRef.current) {
+        await initPromiseRef.current;
+      }
+
+      const session = sessionRef.current;
+      const adapter = adapterRef.current;
+      if (!session || !adapter) {
+        throw new Error('Session not initialized');
+      }
+
+      const displayKind = input.displayKind ?? displayKindForTurnSource(input.source);
+      const continuationMetadata: AgentContinuationMetadata = {
+        ...input.metadata,
+        status: input.metadata?.status ?? 'queued',
+      };
+
+      if (session.isRunning() || useAgentStore.getState().status === 'running') {
+        const queue = messageQueueRef.current;
+        if (!queue) {
+          throw new Error('Message queue is not initialized');
+        }
+        const item = queue.enqueue({
+          content: input.prompt,
+          source: input.source,
+          displayKind,
+          metadata: continuationMetadata,
+        });
+        const snapshot = queue.snapshot();
+        useAgentStore.getState().setMessageQueueSnapshot(snapshot);
+        syncWorkspaceRuntimeState({ status: 'running' });
+        adapter.handleEvent({
+          type: 'messageQueued',
+          content: formatQueuedContinuationEvent(item),
+          pendingCount: snapshot.pendingCount,
+          queuedMessageItem: item,
+          messageQueueSnapshot: snapshot,
+        });
+        return;
+      }
+
+      try {
+        await executePrompt(input.prompt, {
+          source: input.source,
+          displayKind,
+          continuationMetadata,
+          metadata: { continuation: continuationMetadata },
+        });
+        await drainQueuedPrompts();
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         useAgentStore.getState().setError(err);
@@ -1072,6 +1200,26 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       }
       const item = queue.cancel(queueItemId);
       useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+      syncWorkspaceRuntimeState();
+      return item;
+    },
+    [syncWorkspaceRuntimeState],
+  );
+
+  const discardQueuedContinuation = useCallback(
+    (queueItemId: string) => {
+      const queue = messageQueueRef.current;
+      if (!queue) {
+        throw new Error('Message queue is not initialized');
+      }
+      const item = queue.discardContinuation(queueItemId);
+      useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+      useConversationStore.getState().addSystemMessage({
+        content: `Continuation discarded: ${item.id}`,
+        source: normalizeTurnSource(item.source),
+        displayKind: item.displayKind ?? displayKindForTurnSource(normalizeTurnSource(item.source)),
+        metadata: item.metadata,
+      });
       syncWorkspaceRuntimeState();
       return item;
     },
@@ -1371,12 +1519,16 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
 
   useEffect(() => {
     submitRef.current = submit;
+    submitInternalContinuationRef.current = submitInternalContinuation;
     return () => {
       if (submitRef.current === submit) {
         submitRef.current = null;
       }
+      if (submitInternalContinuationRef.current === submitInternalContinuation) {
+        submitInternalContinuationRef.current = null;
+      }
     };
-  }, [submit]);
+  }, [submit, submitInternalContinuation]);
 
   return {
     submit,
@@ -1391,6 +1543,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     listTasks,
     promoteQueuedMessage,
     cancelQueuedMessage,
+    discardQueuedContinuation,
     editQueuedMessage,
     validateLlmConfig,
     applyLlmConfig,
@@ -1627,6 +1780,44 @@ function formatRunningTaskSummary(tasks: readonly Task[]): string | null {
 
 function trimTaskId(taskId: string): string {
   return taskId.length > 28 ? `${taskId.slice(0, 25)}...` : taskId;
+}
+
+function normalizeTurnSource(source: AgentQueuedMessageSource): AgentTurnSource {
+  if (source === 'composer') return 'user';
+  if (source === 'task-result-observation') return 'task-result-continuation';
+  return source;
+}
+
+function displayKindForTurnSource(source: AgentTurnSource): AgentQueuedMessageDisplayKind {
+  if (source === 'task-result-continuation') return 'task-continuation';
+  if (source === 'subagent-result-continuation') return 'subagent-continuation';
+  if (source === 'system-continuation') return 'system-continuation';
+  return 'user-message';
+}
+
+function formatContinuationSystemMessage(options: ExecutePromptOptions): string {
+  const metadata = options.continuationMetadata;
+  if (options.source === 'task-result-continuation') {
+    const task = metadata?.taskId ? ` ${trimTaskId(metadata.taskId)}` : '';
+    return `Task result ready${task}. Continuing from the completed async result.`;
+  }
+  if (options.source === 'subagent-result-continuation') {
+    const subagent = metadata?.subagentId ? ` ${metadata.subagentId}` : '';
+    return `Subagent result ready${subagent}. Continuing from the completed subagent result.`;
+  }
+  return 'System continuation ready. Continuing Agent execution.';
+}
+
+function formatQueuedContinuationEvent(item: AgentQueuedMessageItem): string {
+  if (normalizeTurnSource(item.source) === 'task-result-continuation') {
+    const task = item.metadata?.taskId ? ` ${trimTaskId(item.metadata.taskId)}` : '';
+    return `Task continuation queued${task}`;
+  }
+  if (normalizeTurnSource(item.source) === 'subagent-result-continuation') {
+    const subagent = item.metadata?.subagentId ? ` ${item.metadata.subagentId}` : '';
+    return `Subagent result continuation queued${subagent}`;
+  }
+  return `System continuation queued: ${item.id}`;
 }
 
 function deriveConversationTitle(messages: readonly ChatMessage[]): string {
