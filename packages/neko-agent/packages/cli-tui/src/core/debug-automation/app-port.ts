@@ -3,12 +3,14 @@ import type { Task } from '@neko/shared';
 import { useAgentStore } from '../../stores/agent-store';
 import { useConfigStore } from '../../stores/config-store';
 import { useConversationStore } from '../../stores/conversation-store';
+import { useUIStore } from '../../stores/ui-store';
 import type { Message } from '../../types/state';
 import type {
   TuiDebugAutomationAppPort,
   TuiDebugAutomationCanvasFacts,
   TuiDebugAutomationIdleConcern,
   TuiDebugAutomationIdleState,
+  TuiDebugAutomationMarkdownFacts,
   TuiDebugAutomationSessionFacts,
   TuiDebugAutomationToolCallSummary,
   TuiDebugAutomationTurnSummary,
@@ -26,6 +28,7 @@ export interface TuiAutomationSessionHandle {
 
 export interface TuiAutomationAppPortOptions {
   readonly readHandle: () => TuiAutomationSessionHandle;
+  readonly readMarkdownFacts: () => TuiDebugAutomationMarkdownFacts;
 }
 
 export function createTuiAutomationAppPort(
@@ -51,6 +54,10 @@ export function createTuiAutomationAppPort(
         );
       }
       await handle.submit(input.prompt);
+    },
+
+    resizeTerminal(input): void {
+      useUIStore.getState().setTerminalSize({ columns: input.columns, rows: input.rows });
     },
 
     async waitForIdle(input): Promise<TuiDebugAutomationIdleState> {
@@ -84,6 +91,7 @@ export function createTuiAutomationAppPort(
         continuations: readContinuationFacts(handle.getMessageQueueSnapshot()),
         runtimeErrors: readRuntimeErrors(),
         canvas: readCanvasFacts(),
+        markdown: options.readMarkdownFacts(),
       };
     },
   };

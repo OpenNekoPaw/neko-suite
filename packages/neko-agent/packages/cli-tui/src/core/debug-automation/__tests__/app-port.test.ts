@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  createTuiAutomationAppPort,
   readContinuationFacts,
   readMessageSummaryContent,
   readMessageToolCallSummaries,
 } from '../app-port';
 import type { Message } from '../../../types/state';
 import { useConversationStore } from '../../../stores/conversation-store';
+import { useUIStore } from '../../../stores/ui-store';
 
 afterEach(() => {
   useConversationStore.getState().clearMessages();
@@ -126,6 +128,32 @@ describe('readContinuationFacts', () => {
         status: 'queued',
       }),
     ]);
+  });
+});
+
+describe('createTuiAutomationAppPort', () => {
+  it('exposes bounded Markdown facts and applies generic terminal resize through the UI store', async () => {
+    const markdown = {
+      pathEvents: [{ type: 'session-created' as const, key: 'assistant-1' }],
+      droppedPathEventCount: 2,
+    };
+    const port = createTuiAutomationAppPort({
+      readHandle: () => ({
+        isReady: true,
+        submit: async () => undefined,
+        listTasks: async () => [],
+        getCurrentConversationId: () => 'tui-2026-01-01T00-00-00-000Z-test',
+        getHistory: () => [],
+        getMessageQueueSnapshot: () => null,
+      }),
+      readMarkdownFacts: () => markdown,
+    });
+
+    port.resizeTerminal({ columns: 42, rows: 18 });
+    const facts = await port.readFacts({ sessionId: 'debug-session-1', includeHistory: false });
+
+    expect(useUIStore.getState().terminalSize).toEqual({ columns: 42, rows: 18 });
+    expect(facts.markdown).toEqual(markdown);
   });
 });
 

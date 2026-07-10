@@ -6,6 +6,7 @@ import type {
 } from '@neko-agent/types';
 import type { Task } from '@neko/shared';
 import type { Message } from '../../types/state';
+import type { TerminalMarkdownPathEvent } from '../../markdown/path-observer';
 
 export const TUI_DEBUG_AUTOMATION_REQUEST_SCHEMA = 'neko.tui-debug-automation.request.v1';
 export const TUI_DEBUG_AUTOMATION_RESPONSE_SCHEMA = 'neko.tui-debug-automation.response.v1';
@@ -14,6 +15,7 @@ export type TuiDebugAutomationMethod =
   | 'session.create'
   | 'session.resume'
   | 'message.submit'
+  | 'terminal.resize'
   | 'session.waitForIdle'
   | 'session.facts'
   | 'session.dispose';
@@ -75,6 +77,17 @@ export interface TuiDebugAutomationSessionRefParams {
 
 export interface TuiDebugAutomationMessageSubmitParams extends TuiDebugAutomationSessionRefParams {
   readonly prompt: string;
+}
+
+export interface TuiDebugAutomationTerminalResizeParams extends TuiDebugAutomationSessionRefParams {
+  readonly columns: number;
+  readonly rows: number;
+}
+
+export interface TuiDebugAutomationTerminalResized {
+  readonly sessionId: string;
+  readonly columns: number;
+  readonly rows: number;
 }
 
 export interface TuiDebugAutomationWaitForIdleParams extends TuiDebugAutomationSessionRefParams {
@@ -158,6 +171,11 @@ export interface TuiDebugAutomationCanvasFacts {
   readonly toolCallSummaries: readonly TuiDebugAutomationToolCallSummary[];
 }
 
+export interface TuiDebugAutomationMarkdownFacts {
+  readonly pathEvents: readonly TerminalMarkdownPathEvent[];
+  readonly droppedPathEventCount: number;
+}
+
 export interface TuiDebugAutomationSessionFacts {
   readonly sessionId: string;
   readonly conversationId: string;
@@ -172,6 +190,7 @@ export interface TuiDebugAutomationSessionFacts {
   readonly continuations: readonly TuiDebugAutomationContinuationFact[];
   readonly runtimeErrors: readonly string[];
   readonly canvas: TuiDebugAutomationCanvasFacts;
+  readonly markdown: TuiDebugAutomationMarkdownFacts;
 }
 
 export interface TuiDebugAutomationAppPort {
@@ -179,6 +198,7 @@ export interface TuiDebugAutomationAppPort {
   isReady(): boolean;
   getConversationId(): string;
   submitMessage(input: { readonly prompt: string }): Promise<void>;
+  resizeTerminal(input: { readonly columns: number; readonly rows: number }): void;
   waitForIdle(input: {
     readonly timeoutMs: number;
     readonly pollIntervalMs: number;
@@ -192,4 +212,6 @@ export interface TuiDebugAutomationAppPort {
 export interface TuiDebugAutomationController {
   bind(port: TuiDebugAutomationAppPort): void;
   unbind(port: TuiDebugAutomationAppPort): void;
+  readMarkdownFacts(): TuiDebugAutomationMarkdownFacts;
+  dispose(): void;
 }

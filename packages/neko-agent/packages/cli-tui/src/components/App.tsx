@@ -128,6 +128,7 @@ export function App({
     }
     const port = createTuiAutomationAppPort({
       readHandle: () => agentSessionRef.current,
+      readMarkdownFacts: () => automation.readMarkdownFacts(),
     });
     automation.bind(port);
     return () => {

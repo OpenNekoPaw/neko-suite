@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   TuiDebugAutomationProtocolError,
   parseTuiDebugAutomationRequest,
+  readRequiredPositiveIntegerParam,
   validateTuiDebugAutomationTimeout,
 } from '../protocol';
 import { TUI_DEBUG_AUTOMATION_REQUEST_SCHEMA } from '../types';
@@ -42,10 +43,37 @@ describe('TUI debug automation protocol', () => {
     ).toThrow('Unknown debug automation method');
   });
 
-  it('validates timeout values without provider credentials', () => {
-    expect(validateTuiDebugAutomationTimeout(undefined, { defaultMs: 42, label: 'timeoutMs' })).toBe(
-      42,
+  it('accepts terminal.resize and validates its positive integer bounds', () => {
+    const request = parseTuiDebugAutomationRequest(
+      JSON.stringify({
+        schema: TUI_DEBUG_AUTOMATION_REQUEST_SCHEMA,
+        id: 'resize-1',
+        method: 'terminal.resize',
+        params: { sessionId: 'debug-session-1', columns: 120, rows: 40 },
+      }),
     );
+    expect(request.method).toBe('terminal.resize');
+
+    const method = 'terminal.resize' as const;
+    expect(readRequiredPositiveIntegerParam({ columns: 1 }, 'columns', method, 1_000)).toBe(1);
+    expect(readRequiredPositiveIntegerParam({ columns: 1_000 }, 'columns', method, 1_000)).toBe(
+      1_000,
+    );
+    expect(() =>
+      readRequiredPositiveIntegerParam({ columns: 0 }, 'columns', method, 1_000),
+    ).toThrow('positive integer');
+    expect(() =>
+      readRequiredPositiveIntegerParam({ columns: 1.5 }, 'columns', method, 1_000),
+    ).toThrow('positive integer');
+    expect(() =>
+      readRequiredPositiveIntegerParam({ columns: 1_001 }, 'columns', method, 1_000),
+    ).toThrow('<= 1000');
+  });
+
+  it('validates timeout values without provider credentials', () => {
+    expect(
+      validateTuiDebugAutomationTimeout(undefined, { defaultMs: 42, label: 'timeoutMs' }),
+    ).toBe(42);
     expect(() =>
       validateTuiDebugAutomationTimeout(0, { defaultMs: 42, label: 'timeoutMs' }),
     ).toThrow('positive integer');

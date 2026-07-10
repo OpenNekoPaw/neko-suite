@@ -169,6 +169,23 @@ export function readRequiredStringParam(
   return value;
 }
 
+export function readRequiredPositiveIntegerParam(
+  params: Record<string, unknown>,
+  key: string,
+  method: TuiDebugAutomationMethod,
+  max: number,
+): number {
+  const value = params[key];
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0 || value > max) {
+    throw new TuiDebugAutomationProtocolError(
+      'invalid-request',
+      `${method} params.${key} must be a positive integer <= ${max}.`,
+      { key, received: value, max },
+    );
+  }
+  return value;
+}
+
 export function readOptionalStringParam(
   params: Record<string, unknown>,
   key: string,
@@ -214,6 +231,7 @@ function isTuiDebugAutomationMethod(value: unknown): value is TuiDebugAutomation
     value === 'session.create' ||
     value === 'session.resume' ||
     value === 'message.submit' ||
+    value === 'terminal.resize' ||
     value === 'session.waitForIdle' ||
     value === 'session.facts' ||
     value === 'session.dispose'

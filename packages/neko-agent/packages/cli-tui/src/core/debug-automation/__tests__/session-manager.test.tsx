@@ -1,24 +1,28 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TuiAutomationEmptyReadStream, TuiDebugAutomationSessionManager } from '../session-manager';
-import type { TuiDebugAutomationAppPort } from '../types';
+import type { TuiDebugAutomationAppPort, TuiDebugAutomationController } from '../types';
+import { emitTerminalMarkdownPathEvent } from '../../../markdown/path-observer';
 
 const mockState = vi.hoisted(
   (): {
     renderedAppProps?: {
-      readonly automation?: { bind(port: TuiDebugAutomationAppPort): void };
+      readonly automation?: TuiDebugAutomationController;
       readonly resumeConversationId?: string;
       readonly initialPrompt?: string;
     };
     submittedPrompts: string[];
+    terminalSizes: Array<{ columns: number; rows: number }>;
   } => ({
     submittedPrompts: [],
+    terminalSizes: [],
   }),
 );
 
 vi.mock('ink', () => ({
   render: (element: { readonly props?: typeof mockState.renderedAppProps }) => {
     mockState.renderedAppProps = element.props;
+    emitTerminalMarkdownPathEvent({ type: 'session-created', key: 'assistant-before-bind' });
     element.props?.automation?.bind(createFakePort());
     return {
       unmount: vi.fn(),
@@ -56,6 +60,7 @@ vi.mock('../../../components/App', () => ({
 beforeEach(() => {
   mockState.renderedAppProps = undefined;
   mockState.submittedPrompts = [];
+  mockState.terminalSizes = [];
 });
 
 describe('TuiDebugAutomationSessionManager', () => {
@@ -95,6 +100,28 @@ describe('TuiDebugAutomationSessionManager', () => {
     });
 
     expect(mockState.submittedPrompts).toEqual(['hello']);
+
+    await manager.handle({
+      schema: 'neko.tui-debug-automation.request.v1',
+      id: '3',
+      method: 'terminal.resize',
+      params: { sessionId: 'debug-session-test', columns: 44, rows: 20 },
+    });
+    const facts = await manager.handle({
+      schema: 'neko.tui-debug-automation.request.v1',
+      id: '4',
+      method: 'session.facts',
+      params: { sessionId: 'debug-session-test' },
+    });
+
+    expect(mockState.terminalSizes).toEqual([{ columns: 44, rows: 20 }]);
+    expect(facts).toMatchObject({
+      markdown: {
+        pathEvents: [{ type: 'session-created', key: 'assistant-before-bind' }],
+        droppedPathEventCount: 0,
+      },
+    });
+    await manager.disposeAll();
   });
 
   it('fails visibly for non-canonical resume conversation ids before mounting App', async () => {
@@ -122,6 +149,9 @@ function createFakePort(): TuiDebugAutomationAppPort {
     async submitMessage(input) {
       mockState.submittedPrompts.push(input.prompt);
     },
+    resizeTerminal(input) {
+      mockState.terminalSizes.push(input);
+    },
     async waitForIdle() {
       return {
         turnIdle: { idle: true, terminal: true, status: 'idle' },
@@ -145,6 +175,10 @@ function createFakePort(): TuiDebugAutomationAppPort {
         continuations: [],
         runtimeErrors: [],
         canvas: { messageSummaries: [], toolCallSummaries: [] },
+        markdown: mockState.renderedAppProps?.automation?.readMarkdownFacts() ?? {
+          pathEvents: [],
+          droppedPathEventCount: 0,
+        },
       };
     },
   };

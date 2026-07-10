@@ -6,9 +6,14 @@ import { loadConfig, validateConfig } from '../config';
 import { App } from '../../components/App';
 import { assertCanonicalTuiConversationId } from '../tui-conversation-id';
 import {
+  subscribeTerminalMarkdownPathEvents,
+  type TerminalMarkdownPathEvent,
+} from '../../markdown/path-observer';
+import {
   assertRecordParams,
   readOptionalBooleanParam,
   readOptionalStringParam,
+  readRequiredPositiveIntegerParam,
   readRequiredStringParam,
   validateTuiDebugAutomationTimeout,
   TuiDebugAutomationProtocolError,
@@ -18,6 +23,7 @@ import type {
   TuiDebugAutomationController,
   TuiDebugAutomationDisposeParams,
   TuiDebugAutomationFactsParams,
+  TuiDebugAutomationMarkdownFacts,
   TuiDebugAutomationMessageSubmitParams,
   TuiDebugAutomationRequest,
   TuiDebugAutomationSessionCreateParams,
@@ -25,12 +31,17 @@ import type {
   TuiDebugAutomationSessionFacts,
   TuiDebugAutomationSessionRefParams,
   TuiDebugAutomationSessionResumeParams,
+  TuiDebugAutomationTerminalResizeParams,
+  TuiDebugAutomationTerminalResized,
   TuiDebugAutomationWaitForIdleParams,
 } from './types';
 
 const DEFAULT_READY_TIMEOUT_MS = 30_000;
 const DEFAULT_IDLE_TIMEOUT_MS = 120_000;
 const DEFAULT_IDLE_POLL_INTERVAL_MS = 100;
+const MAX_TERMINAL_COLUMNS = 1_000;
+const MAX_TERMINAL_ROWS = 1_000;
+const MAX_MARKDOWN_PATH_EVENTS = 2_048;
 
 export interface TuiDebugAutomationSessionManagerOptions {
   readonly defaultWorkDir: string;
@@ -54,6 +65,8 @@ export class TuiDebugAutomationSessionManager {
         return this.resumeSession(readResumeParams(request));
       case 'message.submit':
         return this.submitMessage(readMessageSubmitParams(request));
+      case 'terminal.resize':
+        return this.resizeTerminal(readTerminalResizeParams(request));
       case 'session.waitForIdle':
         return this.waitForIdle(readWaitForIdleParams(request));
       case 'session.facts':
@@ -92,21 +105,27 @@ export class TuiDebugAutomationSessionManager {
     const controller = new TuiDebugAutomationAppController(sessionId);
     const output = new TuiAutomationNullWriteStream();
     const input = new TuiAutomationEmptyReadStream();
-    const instance = render(
-      <App
-        config={config}
-        initialPrompt={params.initialPrompt}
-        resumeConversationId={resumeConversationId}
-        automation={controller}
-      />,
-      {
-        stdout: output.asWriteStream(),
-        stderr: output.asWriteStream(),
-        stdin: input.asReadStream(),
-        patchConsole: false,
-        exitOnCtrlC: false,
-      },
-    );
+    let instance: Instance;
+    try {
+      instance = render(
+        <App
+          config={config}
+          initialPrompt={params.initialPrompt}
+          resumeConversationId={resumeConversationId}
+          automation={controller}
+        />,
+        {
+          stdout: output.asWriteStream(),
+          stderr: output.asWriteStream(),
+          stdin: input.asReadStream(),
+          patchConsole: false,
+          exitOnCtrlC: false,
+        },
+      );
+    } catch (error) {
+      controller.dispose();
+      throw error;
+    }
     const record = new TuiDebugAutomationSessionRecord(sessionId, controller, instance);
     this.sessions.set(sessionId, record);
 
@@ -126,7 +145,11 @@ export class TuiDebugAutomationSessionManager {
 
   private async submitMessage(
     params: TuiDebugAutomationMessageSubmitParams,
-  ): Promise<{ readonly sessionId: string; readonly conversationId: string; readonly queued: boolean }> {
+  ): Promise<{
+    readonly sessionId: string;
+    readonly conversationId: string;
+    readonly queued: boolean;
+  }> {
     const session = this.requireSession(params);
     const before = await session.readFacts(false);
     await session.port.submitMessage({ prompt: params.prompt });
@@ -138,6 +161,15 @@ export class TuiDebugAutomationSessionManager {
       conversationId: after.conversationId,
       queued: afterPending > beforePending,
     };
+  }
+
+  private async resizeTerminal(
+    params: TuiDebugAutomationTerminalResizeParams,
+  ): Promise<TuiDebugAutomationTerminalResized> {
+    const session = this.requireSession(params);
+    session.port.resizeTerminal({ columns: params.columns, rows: params.rows });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    return { sessionId: params.sessionId, columns: params.columns, rows: params.rows };
   }
 
   private async waitForIdle(params: TuiDebugAutomationWaitForIdleParams): Promise<unknown> {
@@ -161,9 +193,10 @@ export class TuiDebugAutomationSessionManager {
     return session.readFacts(params.includeHistory === true);
   }
 
-  private disposeSession(
-    params: TuiDebugAutomationDisposeParams,
-  ): { readonly sessionId: string; readonly disposed: true } {
+  private disposeSession(params: TuiDebugAutomationDisposeParams): {
+    readonly sessionId: string;
+    readonly disposed: true;
+  } {
     const session = this.requireSession(params);
     session.dispose();
     this.sessions.delete(params.sessionId);
@@ -173,7 +206,9 @@ export class TuiDebugAutomationSessionManager {
     };
   }
 
-  private requireSession(params: TuiDebugAutomationSessionRefParams): TuiDebugAutomationSessionRecord {
+  private requireSession(
+    params: TuiDebugAutomationSessionRefParams,
+  ): TuiDebugAutomationSessionRecord {
     const session = this.sessions.get(params.sessionId);
     if (!session) {
       throw new TuiDebugAutomationProtocolError(
@@ -248,14 +283,26 @@ class TuiDebugAutomationSessionRecord {
     this.disposed = true;
     this.instance.unmount();
     this.instance.cleanup();
+    this.controller.dispose();
   }
 }
 
 class TuiDebugAutomationAppController implements TuiDebugAutomationController {
   currentPort: TuiDebugAutomationAppPort | null = null;
   private readonly waiters: Array<(port: TuiDebugAutomationAppPort) => void> = [];
+  private readonly markdownPathEvents: TerminalMarkdownPathEvent[] = [];
+  private droppedMarkdownPathEventCount = 0;
+  private readonly unsubscribeMarkdownPathEvents: () => void;
 
-  constructor(readonly sessionId: string) {}
+  constructor(readonly sessionId: string) {
+    this.unsubscribeMarkdownPathEvents = subscribeTerminalMarkdownPathEvents((event) => {
+      if (this.markdownPathEvents.length >= MAX_MARKDOWN_PATH_EVENTS) {
+        this.markdownPathEvents.shift();
+        this.droppedMarkdownPathEventCount += 1;
+      }
+      this.markdownPathEvents.push(event);
+    });
+  }
 
   bind(port: TuiDebugAutomationAppPort): void {
     if (port.ownerKind !== 'tui-app-session-owner') {
@@ -274,6 +321,17 @@ class TuiDebugAutomationAppController implements TuiDebugAutomationController {
     if (this.currentPort === port) {
       this.currentPort = null;
     }
+  }
+
+  readMarkdownFacts(): TuiDebugAutomationMarkdownFacts {
+    return {
+      pathEvents: [...this.markdownPathEvents],
+      droppedPathEventCount: this.droppedMarkdownPathEventCount,
+    };
+  }
+
+  dispose(): void {
+    this.unsubscribeMarkdownPathEvents();
   }
 
   waitForPort(timeoutMs: number): Promise<TuiDebugAutomationAppPort> {
@@ -306,11 +364,9 @@ class TuiDebugAutomationAppController implements TuiDebugAutomationController {
         return;
       }
       if (Date.now() - startedAt >= timeoutMs) {
-        const facts = await port
-          .readFacts({ sessionId, includeHistory: false })
-          .catch((error) => ({
-            factReadError: error instanceof Error ? error.message : String(error),
-          }));
+        const facts = await port.readFacts({ sessionId, includeHistory: false }).catch((error) => ({
+          factReadError: error instanceof Error ? error.message : String(error),
+        }));
         throw new TuiDebugAutomationProtocolError(
           'session-timeout',
           `Timed out waiting for TUI session readiness for ${this.sessionId}.`,
@@ -364,7 +420,9 @@ export class TuiAutomationEmptyReadStream extends Readable {
   }
 }
 
-function readCreateParams(request: TuiDebugAutomationRequest): TuiDebugAutomationSessionCreateParams {
+function readCreateParams(
+  request: TuiDebugAutomationRequest,
+): TuiDebugAutomationSessionCreateParams {
   const params = assertRecordParams(request.params, request.method);
   return {
     workDir: readOptionalStringParam(params, 'workDir'),
@@ -375,7 +433,9 @@ function readCreateParams(request: TuiDebugAutomationRequest): TuiDebugAutomatio
   };
 }
 
-function readResumeParams(request: TuiDebugAutomationRequest): TuiDebugAutomationSessionResumeParams {
+function readResumeParams(
+  request: TuiDebugAutomationRequest,
+): TuiDebugAutomationSessionResumeParams {
   const params = assertRecordParams(request.params, request.method);
   return {
     ...readCreateParams(request),
@@ -390,6 +450,22 @@ function readMessageSubmitParams(
   return {
     sessionId: readRequiredStringParam(params, 'sessionId', request.method),
     prompt: readRequiredStringParam(params, 'prompt', request.method),
+  };
+}
+
+function readTerminalResizeParams(
+  request: TuiDebugAutomationRequest,
+): TuiDebugAutomationTerminalResizeParams {
+  const params = assertRecordParams(request.params, request.method);
+  return {
+    sessionId: readRequiredStringParam(params, 'sessionId', request.method),
+    columns: readRequiredPositiveIntegerParam(
+      params,
+      'columns',
+      request.method,
+      MAX_TERMINAL_COLUMNS,
+    ),
+    rows: readRequiredPositiveIntegerParam(params, 'rows', request.method, MAX_TERMINAL_ROWS),
   };
 }
 
@@ -419,10 +495,7 @@ function readDisposeParams(request: TuiDebugAutomationRequest): TuiDebugAutomati
   };
 }
 
-function readOptionalNumberParam(
-  params: Record<string, unknown>,
-  key: string,
-): number | undefined {
+function readOptionalNumberParam(params: Record<string, unknown>, key: string): number | undefined {
   const value = params[key];
   if (value === undefined) {
     return undefined;
