@@ -640,7 +640,7 @@ describe('markdown resource rendering presenter', () => {
     expect(projection.mentions?.[0]?.ref).toBeUndefined();
     expect(projection.diagnostics).toEqual([
       expect.objectContaining({
-        code: 'ambiguous-mention-reference',
+        code: 'MD_MENTION_AMBIGUOUS',
         token: '@Rin',
       }),
     ]);
@@ -661,7 +661,7 @@ describe('markdown resource rendering presenter', () => {
     ]);
     expect(projection.diagnostics).toEqual([
       expect.objectContaining({
-        code: 'missing-mention-reference',
+        code: 'MD_MENTION_MISSING',
         token: '@UnknownCharacter',
       }),
     ]);
@@ -673,7 +673,7 @@ describe('markdown resource rendering presenter', () => {
       promptSpans: [
         {
           kind: 'scene',
-          range: { start: 0, end: 14 },
+          range: { startOffset: 0, endOffset: 14 },
           fieldId: 'scene.location',
           label: 'Alley',
           tone: 'scene',
@@ -687,7 +687,7 @@ describe('markdown resource rendering presenter', () => {
     expect(projection.promptSpans).toEqual([
       {
         kind: 'scene',
-        range: { start: 0, end: 14 },
+        range: { startOffset: 0, endOffset: 14 },
         fieldId: 'scene.location',
         label: 'Alley',
         tone: 'scene',

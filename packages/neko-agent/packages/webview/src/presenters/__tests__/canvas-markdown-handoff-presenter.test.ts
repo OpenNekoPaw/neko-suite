@@ -246,13 +246,13 @@ describe('canvas markdown handoff presenter', () => {
             status: 'bound',
             ref: { kind: 'character', id: 'character-rin', namespace: 'entity' },
             candidates: [],
-            range: { start: 0, end: 4 },
+            range: { startOffset: 0, endOffset: 4 },
           },
         ],
         promptSpans: [
           {
             kind: 'character',
-            range: { start: 0, end: 4 },
+            range: { startOffset: 0, endOffset: 4 },
             fieldId: 'character.ref',
             label: 'Rin',
             ref: { kind: 'character', id: 'character-rin', namespace: 'entity' },
@@ -266,7 +266,7 @@ describe('canvas markdown handoff presenter', () => {
             code: 'prompt-span-needs-review',
             message: 'Prompt span needs review.',
             token: '@Rin',
-            range: { start: 0, end: 4 },
+            range: { startOffset: 0, endOffset: 4 },
           },
         ],
       },
@@ -318,7 +318,10 @@ describe('canvas markdown handoff presenter', () => {
       promptSpans: [
         {
           kind: 'character',
-          range: { start: markdown.indexOf('@Rin'), end: markdown.indexOf('@Rin') + 4 },
+          range: {
+            startOffset: markdown.indexOf('@Rin'),
+            endOffset: markdown.indexOf('@Rin') + 4,
+          },
           fieldId: 'character.ref',
           label: 'Rin',
           ref: { kind: 'character', id: 'character-rin', namespace: 'entity' },
@@ -326,7 +329,10 @@ describe('canvas markdown handoff presenter', () => {
         },
         {
           kind: 'voice',
-          range: { start: markdown.indexOf('whisper'), end: markdown.indexOf('whisper') + 7 },
+          range: {
+            startOffset: markdown.indexOf('whisper'),
+            endOffset: markdown.indexOf('whisper') + 7,
+          },
           fieldId: 'voice.cue',
           label: 'whisper',
           tone: 'voice',

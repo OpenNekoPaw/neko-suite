@@ -6,10 +6,12 @@ import {
 import type {
   CanvasAuthoringHandoffDiagnostic,
   CanvasAuthoringHandoffPromptSpan,
+  CanvasAuthoringHandoffSourceRange,
   CanvasAuthoringHandoffStableRef,
   PluginTransferProvenance,
   PluginTransferTargetRef,
 } from '@neko-agent/types';
+import type { MarkdownSourceRange } from '@neko/markdown';
 import type { MarkdownResourceRenderingProjection } from './markdown-resource-rendering-presenter';
 
 export interface CanvasMarkdownHandoffRequest {
@@ -98,7 +100,7 @@ function projectCanvasMarkdownDiagnostics(
       code: diagnostic.code,
       message: diagnostic.message,
       ...(diagnostic.token ? { token: diagnostic.token } : {}),
-      ...(diagnostic.range ? { range: diagnostic.range } : {}),
+      ...(diagnostic.range ? { range: projectCanvasMarkdownSourceRange(diagnostic.range) } : {}),
     })) ?? []
   );
 }
@@ -109,7 +111,7 @@ function projectCanvasMarkdownPromptSpans(
   return (
     projection?.promptSpans?.map((span) => ({
       kind: span.kind,
-      range: span.range,
+      range: projectCanvasMarkdownSourceRange(span.range),
       ...(span.fieldId ? { fieldId: span.fieldId } : {}),
       ...(span.label ? { label: span.label } : {}),
       ...(span.ref ? { ref: span.ref } : {}),
@@ -117,6 +119,15 @@ function projectCanvasMarkdownPromptSpans(
       ...(span.tooltip ? { tooltip: span.tooltip } : {}),
     })) ?? []
   );
+}
+
+function projectCanvasMarkdownSourceRange(
+  range: MarkdownSourceRange,
+): CanvasAuthoringHandoffSourceRange {
+  return {
+    start: range.startOffset,
+    end: range.endOffset,
+  };
 }
 
 function projectCanvasMarkdownResources(
