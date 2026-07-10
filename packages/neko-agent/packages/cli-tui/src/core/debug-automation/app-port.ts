@@ -191,11 +191,46 @@ function readTurnSummaries(): readonly TuiDebugAutomationTurnSummary[] {
   return useConversationStore.getState().messages.map((message) => ({
     id: message.id,
     role: message.role,
-    content: message.content,
+    content: readMessageSummaryContent(message),
     ...(message.isError ? { isError: true } : {}),
-    toolCalls: message.toolCalls.map(projectToolCallSummary),
+    toolCalls: readMessageToolCallSummaries(message),
     timestamp: message.timestamp,
   }));
+}
+
+export function readMessageSummaryContent(message: Message): string {
+  if (message.content.trim().length > 0) {
+    return message.content;
+  }
+  const timelineText = (message.timelineRows ?? [])
+    .filter((row) => row.kind === 'assistant_text' && row.content)
+    .map((row) => row.content)
+    .join('');
+  return timelineText || message.content;
+}
+
+export function readMessageToolCallSummaries(
+  message: Message,
+): readonly TuiDebugAutomationToolCallSummary[] {
+  const summaries = new Map<string, TuiDebugAutomationToolCallSummary>();
+  for (const toolCall of message.toolCalls) {
+    summaries.set(toolCall.id, projectToolCallSummary(toolCall));
+  }
+  for (const row of message.timelineRows ?? []) {
+    if (row.kind !== 'tool' || !row.toolCallId || !row.toolName) continue;
+    const existing = summaries.get(row.toolCallId);
+    summaries.set(row.toolCallId, {
+      id: row.toolCallId,
+      name: row.toolName,
+      status: row.status,
+      ...(existing?.arguments ? { arguments: existing.arguments } : {}),
+      ...(existing?.result !== undefined ? { result: existing.result } : {}),
+      ...(row.resultSummary ? { result: row.resultSummary } : {}),
+      ...(existing?.error ? { error: existing.error } : {}),
+      ...(row.diagnosticCode ? { error: row.diagnosticCode } : {}),
+    });
+  }
+  return [...summaries.values()];
 }
 
 function readRuntimeErrors(): readonly string[] {

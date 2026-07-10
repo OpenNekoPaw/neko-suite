@@ -112,7 +112,7 @@ export class TuiDebugAutomationSessionManager {
 
     try {
       const port = await controller.waitForPort(DEFAULT_READY_TIMEOUT_MS);
-      await controller.waitUntilReady(DEFAULT_READY_TIMEOUT_MS);
+      await controller.waitUntilReady(DEFAULT_READY_TIMEOUT_MS, sessionId);
       return {
         sessionId,
         conversationId: port.getConversationId(),
@@ -298,7 +298,7 @@ class TuiDebugAutomationAppController implements TuiDebugAutomationController {
     });
   }
 
-  async waitUntilReady(timeoutMs: number): Promise<void> {
+  async waitUntilReady(timeoutMs: number, sessionId: string): Promise<void> {
     const startedAt = Date.now();
     for (;;) {
       const port = await this.waitForPort(timeoutMs);
@@ -306,9 +306,15 @@ class TuiDebugAutomationAppController implements TuiDebugAutomationController {
         return;
       }
       if (Date.now() - startedAt >= timeoutMs) {
+        const facts = await port
+          .readFacts({ sessionId, includeHistory: false })
+          .catch((error) => ({
+            factReadError: error instanceof Error ? error.message : String(error),
+          }));
         throw new TuiDebugAutomationProtocolError(
           'session-timeout',
           `Timed out waiting for TUI session readiness for ${this.sessionId}.`,
+          facts,
         );
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -334,14 +340,22 @@ class TuiAutomationNullWriteStream extends Writable {
   }
 }
 
-class TuiAutomationEmptyReadStream extends Readable {
-  readonly isTTY = false;
+export class TuiAutomationEmptyReadStream extends Readable {
+  readonly isTTY = true;
 
   override _read(): void {
     // Automation submits through the TUI input adapter instead of terminal stdin.
   }
 
   setRawMode(_mode: boolean): this {
+    return this;
+  }
+
+  ref(): this {
+    return this;
+  }
+
+  unref(): this {
     return this;
   }
 

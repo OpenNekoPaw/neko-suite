@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { TuiDebugAutomationSessionManager } from '../session-manager';
+import { TuiAutomationEmptyReadStream, TuiDebugAutomationSessionManager } from '../session-manager';
 import type { TuiDebugAutomationAppPort } from '../types';
 
 const mockState = vi.hoisted(
@@ -59,6 +59,15 @@ beforeEach(() => {
 });
 
 describe('TuiDebugAutomationSessionManager', () => {
+  it('provides an Ink-compatible automation stdin without reading terminal input', () => {
+    const input = new TuiAutomationEmptyReadStream();
+
+    expect(input.isTTY).toBe(true);
+    expect(input.setRawMode(true)).toBe(input);
+    expect(input.ref()).toBe(input);
+    expect(input.unref()).toBe(input);
+  });
+
   it('mounts the complete TUI App owner and submits through the bound app port', async () => {
     const manager = new TuiDebugAutomationSessionManager({
       defaultWorkDir: '/workspace',
