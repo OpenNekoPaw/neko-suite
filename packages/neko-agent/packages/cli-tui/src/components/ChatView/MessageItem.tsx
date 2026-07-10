@@ -14,6 +14,7 @@ import { INK_TOOL_ICONS, tokens } from '../../theme/tokens';
 import { ThinkingBlock } from './ThinkingBlock';
 import { TodoList } from './TodoList';
 import { CanonicalMarkdownRenderer } from '../Markdown/CanonicalMarkdownRenderer';
+import { ReferenceAwareText } from '../shared/ReferenceAwareText';
 
 interface MessageItemProps {
   readonly message: Message;
@@ -32,10 +33,10 @@ export function MessageItem({
   if (message.role === 'user') {
     return (
       <Box flexDirection="column" marginBottom={1}>
-        <Text bold>
-          {'❯ '}
-          {message.content}
-        </Text>
+        <Box>
+          <Text bold>{'❯ '}</Text>
+          <ReferenceAwareText text={message.content} bold />
+        </Box>
       </Box>
     );
   }
