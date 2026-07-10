@@ -20,6 +20,7 @@ import {
   type InputSuggestionOption,
 } from './input-suggestions';
 import { formatTuiLabel, getTuiLabels } from '../../core/tui-locale';
+import { ReferenceAwareText } from '../shared/ReferenceAwareText';
 
 interface InputEditorProps {
   /** Called when user submits a prompt */
@@ -321,10 +322,11 @@ export function InputEditor({
               <Text color={disabled ? tokens.muted : undefined} bold>
                 {idx === 0 ? `${prompt} ` : '  '}
               </Text>
-              <Text color={disabled ? tokens.muted : undefined}>
-                {line}
-                {idx === lines.length - 1 && !disabled ? <Text color={tokens.muted}>▋</Text> : null}
-              </Text>
+              <ReferenceAwareText
+                text={line}
+                color={disabled ? tokens.muted : undefined}
+                showCursor={idx === lines.length - 1 && !disabled}
+              />
             </Box>
           ))
         )}

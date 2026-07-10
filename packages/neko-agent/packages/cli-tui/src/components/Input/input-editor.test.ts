@@ -184,6 +184,36 @@ describe('InputEditor prefix suggestions', () => {
     expect(onSubmit).toHaveBeenCalledWith('@docs/story.md summarize');
   });
 
+  it('renders a selected durable reference compactly while submitting its full token', async () => {
+    const onSubmit = vi.fn();
+    const durableReference = '@${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub ';
+    const instance = render(
+      React.createElement(InputEditor, {
+        onSubmit,
+        references: [
+          {
+            trigger: '@',
+            name: '[Kmoe][BLAME！(新裝版)]卷01.epub',
+            insertText: durableReference,
+            kind: 'file',
+          },
+        ],
+      }),
+    );
+
+    await writeInput(instance, '@BLAME');
+    await writeInput(instance, '\r');
+    await writeInput(instance, '分析前10页，生成分镜表，发送canvas');
+
+    expect(instance.lastFrame()).toContain('@[Kmoe][BLAME！(新裝版)]卷01.epub');
+    expect(instance.lastFrame()).not.toContain('${A}/epub/animation/Blame/');
+
+    await writeInput(instance, '\r');
+    expect(onSubmit).toHaveBeenCalledWith(
+      '@${A}/epub/animation/Blame/[Kmoe][BLAME！(新裝版)]卷01.epub 分析前10页，生成分镜表，发送canvas',
+    );
+  });
+
   it('notifies hosts when the active reference query changes', async () => {
     const onReferenceQueryChange = vi.fn();
     const instance = render(
