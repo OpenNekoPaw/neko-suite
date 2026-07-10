@@ -49,13 +49,15 @@ describe('@neko/markdown extension projection', () => {
     expect(projection.diagnostics).toEqual([
       expect.objectContaining({
         severity: 'warning',
-        code: 'unsupported-resource-reference-markdown-extension',
-        token: 'cover.png',
+        code: 'MD_RESOURCE_REFERENCE_UNSUPPORTED',
+        phase: 'resolve',
+        parameters: { token: 'cover.png' },
       }),
       expect.objectContaining({
         severity: 'warning',
-        code: 'unsupported-resource-reference-markdown-extension',
-        token: 'script.md#Scene 2',
+        code: 'MD_RESOURCE_REFERENCE_UNSUPPORTED',
+        phase: 'resolve',
+        parameters: { token: 'script.md#Scene 2' },
       }),
     ]);
     expect(projection.source).toBe('![[cover.png]] and [[script.md#Scene 2]]');
@@ -120,8 +122,9 @@ describe('@neko/markdown extension projection', () => {
     expect(projection.diagnostics).toEqual([
       expect.objectContaining({
         severity: 'error',
-        code: 'ambiguous-mention-reference',
-        token: '@Aki',
+        code: 'MD_MENTION_AMBIGUOUS',
+        phase: 'resolve',
+        parameters: { token: '@Aki' },
       }),
     ]);
   });
@@ -141,7 +144,7 @@ describe('@neko/markdown extension projection', () => {
         label: 'script.md',
       }),
     ]);
-    expect(projection.diagnostics.map((diagnostic) => diagnostic.token)).toEqual([
+    expect(projection.diagnostics.map((diagnostic) => diagnostic.parameters.token)).toEqual([
       '@Aki',
       '@script.md',
     ]);
