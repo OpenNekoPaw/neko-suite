@@ -21,7 +21,7 @@
 - [x] 3.3 Replace new TUI conversation ids with canonical workspace-scoped conversation ids.
 - [x] 3.4 Reject existing persisted `cli-*` conversation records instead of keeping a resume compatibility path.
 - [x] 3.5 Remove, privatize, or convert old readline `runInteractive` public API usage into a fail-closed diagnostic shim.
-- [x] 3.6 Keep `run`, `experiment`, `completion`, and `real-api-suite` classified as headless/validation paths with tests that do not count them as interactive resume coverage.
+- [x] 3.6 Keep `experiment` as a validation utility, keep `completion` as a utility command, and route scripted Agent behavior acceptance through `scripts/agent-eval` plus TUI debug automation rather than alternate session runners.
 
 ## 4. Skill And Command Catalog Alignment
 
@@ -57,7 +57,7 @@
 - [x] 8.1 Run focused unit and integration tests for config snapshots, TUI session startup/resume, Webview Agent runner assembly, Skill catalog, command catalog, task scope, and resource cache.
 - [x] 8.2 Run Agent architecture and boundary checks, including `pnpm check:agent-boundaries` and any focused dependency-boundary tests touched by the change.
 - [x] 8.3 Run `pnpm check:legacy-debt` and `pnpm check:unused` after legacy path cleanup, or record the broader command that covers them.
-- [x] 8.4 Run the relevant real API validation lane with `NEKO_AGENT_TEST_CONFIG=/path/to/config.toml` for provider/model selection and live TUI/Webview event behavior, or record why it could not run and the residual risk.
+- [x] 8.4 Run a focused `scripts/agent-eval` case through TUI debug automation for provider/model selection and live Agent event behavior, or record why it could not run and the residual risk.
 - [x] 8.5 Run VS Code Extension Development Host Webview runtime smoke for changed Webview message/config/command/session paths.
 - [x] 8.6 Update Chinese and English architecture or package docs when public entrypoints, config policy, Skill source policy, or task/cache scope behavior changes.
 
@@ -67,5 +67,5 @@ Validation notes on 2026-07-08:
 - `pnpm check:agent-boundaries`, `pnpm check:legacy-debt`, `pnpm check:unused`, and `pnpm smoke:webview:runtime` were attempted; the pnpm wrapper stopped before script execution because the local pnpm 11 deps-status install rejected ignored build scripts. Equivalent direct commands were run.
 - `node scripts/check-neko-agent-boundaries.mjs` still fails on pre-existing expired compatibility exceptions, but reports no boundary findings and no LCD register findings for this change.
 - `node scripts/check-legacy-debt-surfaces.mjs` and `./node_modules/.bin/knip` still fail on broader repository baseline items; this change removed its new production `legacy`/unlisted-dependency hits before completion.
-- Real API lane was not run because `NEKO_AGENT_TEST_CONFIG` was not set in this environment. Residual risk: live provider/model event behavior still needs a credentialed local config run.
+- A credentialed TUI debug automation evaluation was not run in the original validation environment. Residual risk: live provider/model event behavior still needs a focused `scripts/agent-eval` run.
 - VS Code Extension Development Host smoke passed through `vscode-extension-debugger`: debugger reachable on port 9222, `neko.neko-agent` webview target visible, snapshot rendered the Agent UI, and console capture only showed the documented VS Code `local-network-access` warning.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Neko Agent Evaluation"
+  short_description: "Create and verify script-driven Agent evaluations"
+  default_prompt: "Use $neko-agent-evaluation to plan, create, run, and analyze a focused evaluation for this Agent change."

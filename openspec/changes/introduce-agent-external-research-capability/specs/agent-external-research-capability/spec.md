@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: External research is opt-in
-Agent external research capability SHALL be disabled by default and SHALL register `WebSearch` or `WebFetch` only when external research configuration enables a supported mode and resolves a valid provider.
+Agent external research capability SHALL be disabled by default. It SHALL register `WebSearch` only when external research configuration enables `indexed` or `live` mode and resolves a valid provider, and SHALL register `WebFetch` only when external research configuration enables `live` mode and resolves a valid provider.
 
 #### Scenario: Default configuration disables external research
 - **WHEN** a new Agent session is created with default configuration
@@ -116,6 +116,11 @@ MCP tools bound to external research SHALL be called by the external research ad
 #### Scenario: Bound search tool is registered
 - **WHEN** an MCP tool is bound as the external research search tool
 - **THEN** Agent MUST expose `WebSearch` as the model-visible research tool
+- **AND** Agent MUST NOT expose the bound raw `mcp__server__tool` tool to the model by default
+
+#### Scenario: Bound fetch tool is registered
+- **WHEN** an MCP tool is bound as the external research fetch tool and live mode is active
+- **THEN** Agent MUST expose `WebFetch` as the model-visible fetch tool
 - **AND** Agent MUST NOT expose the bound raw `mcp__server__tool` tool to the model by default
 
 #### Scenario: Raw MCP exposure is explicitly enabled separately

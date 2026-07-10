@@ -1,4 +1,0 @@
-Neko TUI real API skill fixture.
-
-Evidence marker: SKILL_FIXTURE_FILE_OK.
-This file is intentionally small so skill and long-task cases can read it safely.

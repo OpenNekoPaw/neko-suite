@@ -80,6 +80,14 @@ Source of truth:
    pnpm smoke:webview:runtime
    ```
 
+   For Agent evaluation harness, scenario manifest, debug automation protocol, or exported fact-contract changes:
+
+   ```bash
+   pnpm test:agent:eval
+   ```
+
+   This is a key-free harness gate, not real Agent behavior acceptance. If the change can alter prompt or Skill behavior, capability/tool registration or routing, provider/model selection, AgentSession multi-turn/queue/async/recovery behavior, or TUI Agent event projection, use `neko-agent-evaluation` to produce focused path-level evidence. Review the recorded blocking condition and residual risk when a real case could not run. Do not infer that manifest assertions passed unless the current runner executed an evaluator for them.
+
    For Extension Webview visual, layout, interaction, focus, CSP, media preview, or lifecycle changes, use `pnpm smoke:webview:runtime` or an equivalent `vscode-extension-debugger` Skill run. Do not use Chrome, the generic Browser plugin, Playwright, or a Vite localhost page as the default validation path unless the user explicitly asks for browser-compatibility testing.
 
    Treat VS Code container-level Webview warnings as known benign runtime noise when the stack points to VS Code Workbench `webviewElement` / `overlayWebview` creation, especially:
@@ -131,7 +139,7 @@ Add domain checks as needed:
 - Webview/UX: component reuse audit, layout, theme, focus, keyboard, i18n, and runtime evidence from `pnpm smoke:webview:runtime` or an equivalent VS Code debugger Skill run; Chrome/Browser/Playwright screenshots do not count as default VS Code Webview acceptance evidence.
 - Engine/media: `cargo test`, CLI smoke, `serve` integration, performance before/after when relevant.
 - Proto/shared: generated types are synchronized and callers are migrated.
-- Agent/AI: tool contracts, permissions, Journal/traceability, failure recovery.
+- Agent/AI: tool contracts, permissions, Journal/traceability, failure recovery, and whether the change triggers `neko-agent-evaluation`. When triggered, check focused canonical-path evidence, forbidden-fallback evidence, assertion support in the current runner, and either a real TUI debug automation result or an explicit blocking condition with residual risk. Protocol-only, mock-only, or final-text-only results do not count as Agent behavior acceptance.
 - Content access/cache/path: intent-aware access, transparent resource cache, path variable resolution, Engine-backed binary/media reads, Host text/project-file reads, authorized Webview projection, and stable `ResourceRef`/source-ref transfer.
 - Assets/market: manifest/schema compatibility, path safety, cache invalidation, trust boundaries.
 

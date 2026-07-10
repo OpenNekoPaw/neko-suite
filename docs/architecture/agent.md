@@ -388,6 +388,16 @@ Evaluation 是横切审阅面，不是默认 IDC 阶段，也不是独立 workfl
 - Recovery 不得绕过 Approval/Policy，也不得把 evaluator 建议直接写入 confirmed fact。
 - 普通用户流不应隐式插入消融或评测节点；研发验证与普通创作主路径分离。
 
+### 开发期 Agent Evaluation
+
+开发期 Agent evaluation 是仓库脚本能力，不是 Agent 产品能力或独立的 CLI 业务编排：
+
+- `packages/neko-agent` 只提供通用的 `debug automation --stdio` 控制面和事实投影；session、输入队列、Skill 生命周期、任务观察和产物投影必须继续走 canonical TUI runtime。
+- `scripts/agent-eval` 拥有 manifest、场景编排、controller/judge、确定性断言、post-check、报告和退出码；不得把这些职责重新放回 `cli-tui`、Agent capability 或 runtime Skill。
+- debug automation 只能增加对本地开发自动化普遍有用的控制或可观察事实，不能暴露 evaluation-specific pass/fail、rubric 或报告概念。
+- Agent 行为验收必须断言 canonical path、禁止 fallback 的证据和 assertion-level 结果；只看最终文本、mock-only 或 direct turn injection 不能替代真实路径证据。
+- 原始运行产物保留在本地忽略目录；需要进入 OpenSpec、PR 或发布记录时，提交经过脱敏的命令、case id、证据摘要、失败分类和残余风险。
+
 | Recovery signal  | 含义                                      | 约束                            |
 | ---------------- | ----------------------------------------- | ------------------------------- |
 | retry-tool       | 同一工具参数或小范围修正后重试            | 只适合幂等或可回滚工具          |

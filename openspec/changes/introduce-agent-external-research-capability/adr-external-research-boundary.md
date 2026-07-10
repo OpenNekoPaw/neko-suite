@@ -12,7 +12,7 @@ The risk is two-sided: without external research, Agent remains limited by model
 
 ## Decision
 
-Introduce an opt-in `external-research` capability. The capability registers `WebSearch` and `WebFetch` only when enabled and backed by a valid `ExternalResearchProvider`.
+Introduce an opt-in `external-research` capability. The capability registers `WebSearch` only when `indexed` or `live` mode is enabled and backed by a valid `ExternalResearchProvider`; it registers `WebFetch` only in `live` mode.
 
 The first real provider path is MCP-backed. Neko provides the adapter from user-configured MCP search/fetch capabilities into `ExternalResearchProvider`; it does not bundle, operate, or require a Neko-owned third-party search service. The actual search capability may still come from a third-party service, hosted model search, local search appliance, or another user-owned MCP-backed implementation.
 

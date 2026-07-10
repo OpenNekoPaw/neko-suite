@@ -67,6 +67,7 @@ Neko Suite 采用“架构优先、契约优先、风险分级、证据驱动”
 | 架构边界                      | `pnpm check`                                    |
 | 未使用/冗余代码               | `pnpm check:unused`                             |
 | Agent 边界                    | `pnpm check:agent-boundaries`                   |
+| Agent eval harness（key-free） | `pnpm test:agent:eval`                          |
 | 3D Route A 边界               | `pnpm check:3d-route-a-boundaries`              |
 | 残留/债务关键词扫描           | `pnpm check:legacy-debt`                        |
 | 代码债务台账                  | `pnpm check:legacy-debt:ledger`                 |
@@ -85,9 +86,9 @@ Neko Suite 采用“架构优先、契约优先、风险分级、证据驱动”
 
 ## Agent Debug Automation 证据
 
-影响 AgentSession 多轮流程、对话历史、turn 执行、反馈提示词流、Skill 生命周期、Agent-owned Skill 触发、provider/model 路由、controller/judge 行为、产物生成工作流或真实 API 场景验收的变更，应记录聚焦的 TUI debug automation 证据。
+影响 AgentSession 多轮流程、对话历史、turn 执行、反馈提示词流、Skill 生命周期、Agent-owned Skill 触发、capability/tool 注册或路由、provider/model 路由、controller/judge 行为、异步任务观察、产物生成工作流或真实 API 场景验收的变更，应使用 `.codex/skills/neko-agent-evaluation/SKILL.md` 规划并记录聚焦的 TUI debug automation 证据。
 
-TUI debug automation 是 opt-in 的真实 TUI runtime 验收入口，不进入默认 key-free CI，也不提供 mock lane。外部 eval 脚本可以负责 manifest、controller、judge、check 和 report，但不得 import Agent、Canvas、media、Skill 或 provider 的业务内部实现来替代真实 TUI 行为。
+`pnpm test:agent:eval` 验证 scenario/runner、协议处理、失败分类和其他 key-free harness 行为，应进入本地与 GitHub CI 门禁；它不等于真实 Agent 行为验收。TUI debug automation 真实 case 是 opt-in 的真实 TUI runtime 验收入口，不进入默认 key-free CI，也不提供 mock lane。外部 eval 脚本可以负责 manifest、controller、judge、check 和 report，但不得 import Agent、Canvas、media、Skill 或 provider 的业务内部实现来替代真实 TUI 行为。
 
 debug automation 必须复用完整 TUI App/session owner，并通过 TUI 输入队列提交消息。直接调用 Agent turn runner、绕过 TUI 输入队列或替换 runtime assembly 的结果不能作为 debug automation evidence。
 
@@ -96,11 +97,13 @@ debug automation 必须复用完整 TUI App/session owner，并通过 TUI 输入
 交付说明或 PR 中的 debug automation 证据应包含：
 
 - manifest 路径或 intended manifest。
-- 实际命令，例如外部 eval 脚本启动 `neko debug automation --stdio` 后提交的 case。
+- 实际命令，例如 `node scripts/agent-eval/protocol-smoke.mjs --manifest <manifest> --case <case-id>`；脚本应通过通用 debug automation 接口驱动 TUI runtime。
 - 输出目录、`result.json` / `summary.md` 路径和退出码。
 - target/controller/judge 的 provider/model identity。
 - 若未运行，明确记录阻塞原因，例如 credentials、provider availability、network、quota、model access、local workspace fixture、controller model 或 judge model 不可用。
 - 剩余风险。
+
+证据结论必须以当前 runner 实际执行的 assertion evaluator 为准。manifest 中只有元数据但没有可执行 evaluator 的 assertion，不得声称已经通过；仅有进程退出码或非空最终回答也不得替代 canonical-path 和 forbidden-fallback 证据。
 
 自然语言 Skill 触发证据必须区分 Agent 主动激活 Skill 和“没有激活但输出看起来不错”。对 `trigger: "natural-language"` 的 Skill case，缺少 Agent-owned activation 应视为 case fail，而不是通过 judge 文本弥补。
 

@@ -1,1 +1,0 @@
-./packages/neko-agent/neko real-api-suite --manifest reports/tui-real-api/extended-current-build/manifest.json --output-dir reports/tui-real-api/extended-current-build/run

@@ -61,7 +61,7 @@ This change treats the problem as a local product boundary issue: one VS Code cl
 - Unit tests should poison old config reads, old Skill loaders, and readline interactive paths to prove canonical paths are hit.
 - Contract tests should cover effective config snapshots, canonical conversation ids, command catalog projection, Skill source precedence, and task scope classification.
 - Integration tests should cover Webview/Extension handlers and TUI hooks using the same workspace fixtures.
-- Agent behavior changes should run focused mock tests plus an explicit real API lane when provider/model selection, prompt/Skill behavior, or live event projection changes.
+- Agent behavior changes should run focused key-free tests plus a `scripts/agent-eval` case through TUI debug automation when provider/model selection, prompt/Skill behavior, or live event projection changes.
 
 **Proportionality**
 
@@ -99,7 +99,7 @@ Rejected alternative: keep TUI reading raw user/workspace TOML while Webview rea
 
 Default TUI startup, initial prompt, and resume will use the Ink TUI session path. TUI conversations and resume requests will use canonical `createConversationId(workDir)` ids. Old `cli-*` ids fail visibly instead of loading pre-migration records. The old readline `runInteractive` path will be removed.
 
-`neko run`, `experiment`, and `real-api-suite` may remain headless automation/validation lanes, but they are not the interactive session owner.
+`experiment` may remain a dedicated ablation utility. Scripted Agent behavior acceptance uses `scripts/agent-eval` through TUI debug automation; removed headless Agent runners and package-local real API suites must not return as alternate session owners.
 
 Rejected alternative: keep `--resume` on readline because it already supports prompt input. That preserves two interactive products and prevents path-level validation of TUI session ownership.
 

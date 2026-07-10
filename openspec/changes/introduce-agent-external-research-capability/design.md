@@ -262,7 +262,7 @@ Rejected alternative: Write saved research directly to `.neko/memory.md`. That w
 
 1. Add shared external research DTOs, config defaults, and provider port contracts.
 2. Remove or conditionalize current resident/core `WebSearch` metadata so disabled mode cannot advertise unavailable tools.
-3. Add capability provider registration that exposes `WebSearch`/`WebFetch` only when config mode and provider resolution succeed.
+3. Add capability provider registration that exposes `WebSearch` only when config mode and provider resolution succeed, and exposes `WebFetch` only in `live` mode.
 4. Implement fake provider tests and permission/domain/URL safety tests before adding a real provider adapter.
 5. Add the MCP-backed provider adapter behind `ExternalResearchProvider`.
 6. Wire timeline/source projection and explicit `ResearchNote` persistence action.

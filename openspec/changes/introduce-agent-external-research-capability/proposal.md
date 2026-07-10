@@ -6,7 +6,7 @@ This change introduces an opt-in external research capability for cited creative
 
 ## What Changes
 
-- Add an `external-research` Agent capability that registers `WebSearch` and `WebFetch` only when external research is explicitly enabled.
+- Add an `external-research` Agent capability that registers `WebSearch` only when external research is explicitly enabled and registers `WebFetch` only in `live` mode.
 - Add an `ExternalResearchProvider` contract so Agent runtime can call provider adapters without binding to a specific web search vendor, MCP server, or hosted model API.
 - Use a user-configured MCP-backed adapter as the first real provider path; Neko supplies the adapter boundary, while the configured MCP server owns the actual external search/fetch service.
 - Add cited research artifact contracts: `ResearchSource` for source/provenance metadata and `ResearchNote` for user-confirmed local research material.
@@ -44,7 +44,7 @@ This change introduces an opt-in external research capability for cited creative
 
 ### New Capabilities
 
-- `agent-external-research-capability`: Defines opt-in external research behavior for `WebSearch`, `WebFetch`, provider adapters, configuration defaults, permission/domain policy, cited source metadata, user-confirmed research notes, and separation from project search and project memory.
+- `agent-external-research-capability`: Defines opt-in external research behavior for `WebSearch`, live-only `WebFetch`, provider adapters, configuration defaults, permission/domain policy, cited source metadata, user-confirmed research notes, and separation from project search and project memory.
 
 ### Modified Capabilities
 
