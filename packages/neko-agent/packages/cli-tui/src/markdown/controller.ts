@@ -173,15 +173,6 @@ export class TerminalMarkdownController {
       return;
     }
 
-    const stableEndOffset =
-      this.#snapshot.result.status === 'ready' ? this.#snapshot.result.snapshot.stableEndOffset : 0;
-    const mutableTailCodeUnits = source.length - stableEndOffset;
-    if (mutableTailCodeUnits <= this.#policy.mutableTailImmediateUpdateCodeUnits) {
-      this.#cancelPendingSource();
-      this.#applySource(source, false);
-      return;
-    }
-
     this.#pendingSource = source;
     emitTerminalMarkdownPathEvent({
       type: 'source-update-coalesced',

@@ -2,6 +2,7 @@ import React from 'react';
 import { render } from 'ink-testing-library';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useUIStore } from '../../stores/ui-store';
+import { DEFAULT_MARKDOWN_RESOURCE_POLICY } from '../../markdown/resource-policy';
 import {
   subscribeTerminalMarkdownPathEvents,
   type TerminalMarkdownPathEvent,
@@ -11,6 +12,7 @@ import { CanonicalMarkdownRenderer } from './CanonicalMarkdownRenderer';
 const originalNoColor = process.env.NO_COLOR;
 const originalLocale = process.env.NEKO_LOCALE;
 afterEach(() => {
+  vi.useRealTimers();
   if (originalNoColor === undefined) delete process.env.NO_COLOR;
   else process.env.NO_COLOR = originalNoColor;
   if (originalLocale === undefined) delete process.env.NEKO_LOCALE;
@@ -18,7 +20,8 @@ afterEach(() => {
 });
 
 describe('CanonicalMarkdownRenderer', () => {
-  it('keeps one session from first delta through same-session finalization', () => {
+  it('keeps one session from first delta through same-session finalization', async () => {
+    vi.useFakeTimers();
     process.env.NO_COLOR = '1';
     process.env.NEKO_LOCALE = 'en-US';
     useUIStore.getState().setTerminalSize({ columns: 40, rows: 20 });
@@ -31,12 +34,15 @@ describe('CanonicalMarkdownRenderer', () => {
     view.rerender(
       <CanonicalMarkdownRenderer sessionKey="message-1" source="**hello**" isFinal={false} />,
     );
+    expect(view.lastFrame()).toContain('hel');
+    await vi.advanceTimersByTimeAsync(DEFAULT_MARKDOWN_RESOURCE_POLICY.streamingCoalesceDelayMs);
     expect(view.lastFrame()).toContain('hello');
     view.rerender(
       <CanonicalMarkdownRenderer sessionKey="message-1" source="**hello**" isFinal={true} />,
     );
     expect(view.lastFrame()).toContain('hello');
     unsubscribe();
+    vi.useRealTimers();
 
     expect(events.filter((event) => event.type === 'session-created')).toHaveLength(1);
     expect(events.filter((event) => event.type === 'source-updated')).toHaveLength(3);
@@ -72,7 +78,7 @@ describe('CanonicalMarkdownRenderer', () => {
         isFinal={true}
       />,
     );
-    await vi.advanceTimersByTimeAsync(24);
+    await vi.advanceTimersByTimeAsync(DEFAULT_MARKDOWN_RESOURCE_POLICY.streamingCoalesceDelayMs);
     unsubscribe();
     vi.useRealTimers();
 

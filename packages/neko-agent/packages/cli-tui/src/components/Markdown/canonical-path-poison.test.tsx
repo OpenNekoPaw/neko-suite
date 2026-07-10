@@ -51,7 +51,8 @@ describe('assistant Markdown canonical-path poison gates', () => {
     unsubscribe();
 
     expect(events.filter((event) => event.type === 'session-created')).toHaveLength(1);
-    expect(events.filter((event) => event.type === 'source-updated')).toHaveLength(3);
+    expect(events.filter((event) => event.type === 'source-updated')).toHaveLength(2);
+    expect(events.filter((event) => event.type === 'source-update-coalesced')).toHaveLength(1);
     expect(events.filter((event) => event.type === 'session-finalized')).toHaveLength(1);
   });
 

@@ -6,6 +6,7 @@ import {
   type TerminalMarkdownPathEvent,
 } from '../../markdown/path-observer';
 import { useUIStore } from '../../stores/ui-store';
+import { DEFAULT_MARKDOWN_RESOURCE_POLICY } from '../../markdown/resource-policy';
 import { CanonicalMarkdownRenderer } from './CanonicalMarkdownRenderer';
 
 const originalStdoutTty = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY');
@@ -95,7 +96,7 @@ describe.sequential('CanonicalMarkdownRenderer focused Ink runtime fixture', () 
     view.rerender(
       <CanonicalMarkdownRenderer sessionKey="runtime-resize" source={source} isFinal={true} />,
     );
-    await vi.advanceTimersByTimeAsync(24);
+    await vi.advanceTimersByTimeAsync(DEFAULT_MARKDOWN_RESOURCE_POLICY.streamingCoalesceDelayMs);
 
     const narrowFrame = view.lastFrame() ?? '';
     expect(narrowFrame).toContain('Name');
@@ -153,7 +154,8 @@ describe.sequential('CanonicalMarkdownRenderer focused Ink runtime fixture', () 
     expect(view.lastFrame()).toContain('const value = 1;');
     expect(view.lastFrame()).toContain('two');
     expect(events.filter((event) => event.type === 'session-created')).toHaveLength(1);
-    expect(events.filter((event) => event.type === 'source-updated')).toHaveLength(3);
+    expect(events.filter((event) => event.type === 'source-updated')).toHaveLength(2);
+    expect(events.filter((event) => event.type === 'source-update-coalesced')).toHaveLength(1);
     expect(events.filter((event) => event.type === 'session-finalized')).toHaveLength(1);
     view.unmount();
     unsubscribe();

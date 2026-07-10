@@ -1,5 +1,4 @@
 export interface MarkdownResourcePolicy {
-  readonly mutableTailImmediateUpdateCodeUnits: number;
   readonly streamingCoalesceDelayMs: number;
   readonly tableGridMaxCells: number;
   readonly highlightMaxBytes: number;
@@ -14,12 +13,12 @@ export interface MarkdownResourcePolicy {
 
 /**
  * Package-local deterministic budgets. They are implementation guardrails, not user settings.
- * Defaults are intentionally above ordinary assistant output while bounding quadratic table
- * search, grammar work, and retained presentation state.
+ * Streaming presentation is capped at 20 frames per second so token bursts cannot monopolize
+ * the Ink event loop. Remaining defaults are intentionally above ordinary assistant output while
+ * bounding quadratic table search, grammar work, and retained presentation state.
  */
 export const DEFAULT_MARKDOWN_RESOURCE_POLICY: MarkdownResourcePolicy = Object.freeze({
-  mutableTailImmediateUpdateCodeUnits: 8_192,
-  streamingCoalesceDelayMs: 24,
+  streamingCoalesceDelayMs: 50,
   tableGridMaxCells: 1_024,
   highlightMaxBytes: 256 * 1_024,
   highlightMaxLines: 4_096,

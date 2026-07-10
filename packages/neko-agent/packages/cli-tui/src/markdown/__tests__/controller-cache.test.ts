@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MarkdownRevision, MarkdownSessionId } from '@neko/markdown';
 import { getTuiLabels } from '../../core/tui-locale';
 import { DeterministicLruCache } from '../cache';
@@ -17,9 +17,11 @@ import type { TerminalResourceTargetResolver } from '../resource-target';
 
 const labels = getTuiLabels('en').markdown;
 
+afterEach(() => vi.useRealTimers());
+
 describe('TerminalMarkdownController', () => {
-  it('updates immediately at the mutable-tail limit and coalesces limit plus one latest-only', () => {
-    vi.useFakeTimers();
+  it('coalesces every non-final source update and applies only the latest source per window', () => {
+    const scheduled: Array<() => void> = [];
     const events: TerminalMarkdownPathEvent[] = [];
     const unsubscribe = subscribeTerminalMarkdownPathEvents((event) => events.push(event));
     const controller = new TerminalMarkdownController({
@@ -29,30 +31,31 @@ describe('TerminalMarkdownController', () => {
       viewportWidth: 40,
       supportsUnicode: true,
       labels,
-      policy: {
-        ...DEFAULT_MARKDOWN_RESOURCE_POLICY,
-        mutableTailImmediateUpdateCodeUnits: 4,
-        streamingCoalesceDelayMs: 10,
+      schedule(callback) {
+        scheduled.push(callback);
+        return scheduled.length as unknown as ReturnType<typeof setTimeout>;
+      },
+      cancelScheduled() {
+        // The source coalescing callback has not started in this deterministic fixture.
       },
     });
 
+    controller.updateSource('a', false);
+    controller.updateSource('ab', false);
     controller.updateSource('abc', false);
+
+    expect(controller.getSnapshot().source).toBe('');
+    expect(scheduled).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'source-update-coalesced')).toHaveLength(3);
+    expect(events.filter((event) => event.type === 'source-updated')).toHaveLength(1);
+
+    scheduled[0]?.();
+
     expect(controller.getSnapshot().source).toBe('abc');
-    controller.updateSource('abcd', false);
-    expect(controller.getSnapshot().source).toBe('abcd');
-    controller.updateSource('abcde', false);
-    controller.updateSource('abcdef', false);
-    expect(controller.getSnapshot().source).toBe('abcd');
-    expect(events.filter((event) => event.type === 'source-update-coalesced')).toHaveLength(2);
-    vi.advanceTimersByTime(9);
-    expect(controller.getSnapshot().source).toBe('abcd');
-    vi.advanceTimersByTime(1);
-    expect(controller.getSnapshot().source).toBe('abcdef');
-    expect(events.filter((event) => event.type === 'source-updated')).toHaveLength(4);
+    expect(events.filter((event) => event.type === 'source-updated')).toHaveLength(2);
 
     controller.dispose();
     unsubscribe();
-    vi.useRealTimers();
   });
 
   it('finalizes the latest pending source immediately on the same session', () => {
@@ -123,7 +126,8 @@ describe('TerminalMarkdownController', () => {
     unsubscribe();
   });
 
-  it('bounds revision-associated resource resolutions by entry and node budgets', () => {
+  it('bounds revision-associated resource resolutions by entry and node budgets', async () => {
+    vi.useFakeTimers();
     const resolver = new CountingTargetResolver();
     const controller = new TerminalMarkdownController({
       key: 'resolution-cache',
@@ -147,6 +151,7 @@ describe('TerminalMarkdownController', () => {
     expect(resolver.invocations).toBe(1);
 
     controller.updateSource('[a](https://a.test) [b](https://b.test)', false);
+    await vi.advanceTimersByTimeAsync(DEFAULT_MARKDOWN_RESOURCE_POLICY.streamingCoalesceDelayMs);
     expect(controller.cacheStats().resolution).toMatchObject({
       entries: 1,
       weight: 2,
@@ -156,7 +161,8 @@ describe('TerminalMarkdownController', () => {
     controller.dispose();
   });
 
-  it('deterministically retains two revisions and evicts the oldest on the third', () => {
+  it('deterministically retains two revisions and evicts the oldest on the third', async () => {
+    vi.useFakeTimers();
     const resolver = new CountingTargetResolver();
     const controller = new TerminalMarkdownController({
       key: 'revision-caches',
@@ -183,6 +189,7 @@ describe('TerminalMarkdownController', () => {
       layout: { entries: 1, evictions: 0 },
     });
     controller.updateSource('[a](https://a.test) [b](https://b.test)', false);
+    await vi.advanceTimersByTimeAsync(DEFAULT_MARKDOWN_RESOURCE_POLICY.streamingCoalesceDelayMs);
     expect(controller.cacheStats()).toMatchObject({
       parseAssociated: { entries: 2, evictions: 0 },
       resolution: { entries: 2, evictions: 0 },
@@ -190,6 +197,7 @@ describe('TerminalMarkdownController', () => {
       layout: { entries: 2, evictions: 0 },
     });
     controller.updateSource('[a](https://a.test) [b](https://b.test) [c](https://c.test)', false);
+    await vi.advanceTimersByTimeAsync(DEFAULT_MARKDOWN_RESOURCE_POLICY.streamingCoalesceDelayMs);
     expect(controller.cacheStats()).toMatchObject({
       parseAssociated: { entries: 2, evictions: 1 },
       resolution: { entries: 2, evictions: 1 },
@@ -201,6 +209,7 @@ describe('TerminalMarkdownController', () => {
   });
 
   it('caches deterministic plain highlight results across document revisions', async () => {
+    vi.useFakeTimers();
     const highlighter = new CountingPlainHighlighter();
     const source = '```unknown\nvalue\n```';
     const controller = new TerminalMarkdownController({
@@ -223,6 +232,7 @@ describe('TerminalMarkdownController', () => {
   });
 
   it('applies whole-block highlight tokens and rejects stale async completion', async () => {
+    vi.useFakeTimers();
     const highlighter = new DeferredHighlighter();
     const events: TerminalMarkdownPathEvent[] = [];
     const unsubscribe = subscribeTerminalMarkdownPathEvents((event) => events.push(event));
@@ -237,6 +247,7 @@ describe('TerminalMarkdownController', () => {
     });
     expect(highlighter.requests).toHaveLength(1);
     controller.updateSource('```ts\nconst first = 1;\n```\n\n```ts\nconst second = 2;\n```', false);
+    await vi.advanceTimersByTimeAsync(DEFAULT_MARKDOWN_RESOURCE_POLICY.streamingCoalesceDelayMs);
     expect(highlighter.requests.length).toBeGreaterThanOrEqual(3);
 
     highlighter.resolve(0, highlighted(highlighter.requests[0]));
