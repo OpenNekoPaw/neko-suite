@@ -7,7 +7,7 @@
  * Output: packages/neko-agent/neko
  */
 import { existsSync, readFileSync, renameSync, readdirSync, statSync } from 'fs';
-import { isAbsolute, join, resolve } from 'path';
+import { dirname, isAbsolute, join, resolve } from 'path';
 
 const outdir = resolve(import.meta.dir, '../../');
 const stubPath = resolve(import.meta.dir, 'src/stubs/react-devtools-core.ts');
@@ -65,6 +65,11 @@ const result = await Bun.build({
       name: 'workspace-and-pnpm-resolution',
       setup(build) {
         build.onResolve({ filter: /.*/ }, (args) => {
+          const packageImportPath = resolvePackageImport(args.path, args.importer);
+          if (packageImportPath) {
+            return { path: packageImportPath, namespace: 'file' };
+          }
+
           const workspacePath = resolveWorkspacePackage(args.path);
           if (workspacePath) {
             return { path: workspacePath, namespace: 'file' };
@@ -85,9 +90,7 @@ const result = await Bun.build({
         build.onResolve({ filter: /\.md\?raw$/ }, (args) => {
           const markdownPath = args.path.replace(/\?raw$/, '');
           return {
-            path: isAbsolute(markdownPath)
-              ? markdownPath
-              : resolve(args.resolveDir, markdownPath),
+            path: isAbsolute(markdownPath) ? markdownPath : resolve(args.resolveDir, markdownPath),
             namespace: 'raw-markdown',
           };
         });
@@ -114,6 +117,39 @@ if (outputPath) {
   const finalPath = join(outdir, 'neko');
   renameSync(outputPath, finalPath);
   console.log(`Built: ${finalPath}`);
+}
+
+function resolvePackageImport(specifier: string, importer: string): string | undefined {
+  if (!specifier.startsWith('#') || !importer) return undefined;
+  const packageRoot = findOwningPackageRoot(dirname(importer));
+  if (!packageRoot) return undefined;
+  const packageJson = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as {
+    readonly imports?: unknown;
+  };
+  if (!isRecord(packageJson.imports)) return undefined;
+  const target = readConditionalPackageImport(packageJson.imports[specifier]);
+  if (!target || !target.startsWith('./')) return undefined;
+  return resolveFileCandidate(resolve(packageRoot, target));
+}
+
+function findOwningPackageRoot(startDirectory: string): string | undefined {
+  let current = startDirectory;
+  while (true) {
+    if (existsSync(resolve(current, 'package.json'))) return current;
+    const parent = dirname(current);
+    if (parent === current) return undefined;
+    current = parent;
+  }
+}
+
+function readConditionalPackageImport(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (!isRecord(value)) return undefined;
+  for (const key of ['bun', 'node', 'import', 'default']) {
+    const candidate = readConditionalPackageImport(value[key]);
+    if (candidate) return candidate;
+  }
+  return undefined;
 }
 
 function resolveWorkspacePackage(specifier: string): string | undefined {
@@ -189,7 +225,8 @@ function readPackageExport(
   const exports = packageJson.exports;
   if (!subpath) {
     if (typeof exports === 'string') return exports;
-    if (isRecord(exports)) return readConditionalExport(exports['.']) ?? readConditionalExport(exports);
+    if (isRecord(exports))
+      return readConditionalExport(exports['.']) ?? readConditionalExport(exports);
     return undefined;
   }
   if (!isRecord(exports)) return undefined;

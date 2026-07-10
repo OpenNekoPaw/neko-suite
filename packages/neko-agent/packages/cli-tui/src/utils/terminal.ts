@@ -1,44 +1,36 @@
 /**
  * Terminal Capability Detection
  *
- * Detects terminal features and respects environment variables
- * for accessibility: NO_COLOR, TERM, FORCE_COLOR, etc.
+ * Detects terminal features and respects environment variables for accessibility.
+ * The result is host data consumed by presentation adapters; Markdown does not infer
+ * capabilities from source content.
  */
-
 export interface TerminalCapabilities {
-  /** Whether the terminal supports color output */
   readonly supportsColor: boolean;
-  /** Whether Unicode characters are supported */
   readonly supportsUnicode: boolean;
-  /** Whether the terminal supports 256 colors or truecolor */
   readonly supportsExtendedColor: boolean;
-  /** Whether running in a CI environment */
+  readonly supportsHyperlinks: boolean;
   readonly isCI: boolean;
-  /** Terminal columns */
   readonly columns: number;
-  /** Terminal rows */
   readonly rows: number;
 }
 
-/**
- * Detect terminal capabilities from environment variables.
- *
- * Respects:
- * - NO_COLOR: https://no-color.org
- * - FORCE_COLOR: Force color output
- * - TERM: Terminal type
- * - CI: CI environment detection
- */
-export function detectCapabilities(): TerminalCapabilities {
-  const env = process.env;
+export interface TerminalCapabilityInput {
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  readonly isTTY?: boolean;
+  readonly columns?: number;
+  readonly rows?: number;
+}
 
-  // NO_COLOR takes highest priority (https://no-color.org)
+export function detectCapabilities(input: TerminalCapabilityInput = {}): TerminalCapabilities {
+  const env = input.env ?? process.env;
+  const isTTY = input.isTTY ?? process.stdout.isTTY === true;
   const noColor = env['NO_COLOR'] !== undefined;
   const forceColor = env['FORCE_COLOR'] !== undefined && env['FORCE_COLOR'] !== '0';
   const term = env['TERM'] ?? '';
 
-  const supportsColor =
-    forceColor || (!noColor && term !== 'dumb' && process.stdout.isTTY === true);
+  // NO_COLOR has higher priority than FORCE_COLOR by contract.
+  const supportsColor = !noColor && (forceColor || (term !== 'dumb' && isTTY));
   const supportsUnicode = !term.startsWith('linux') && term !== 'dumb';
   const supportsExtendedColor =
     supportsColor &&
@@ -46,7 +38,6 @@ export function detectCapabilities(): TerminalCapabilities {
       term.includes('truecolor') ||
       env['COLORTERM'] === 'truecolor' ||
       env['COLORTERM'] === '24bit');
-
   const isCI =
     env['CI'] !== undefined ||
     env['GITHUB_ACTIONS'] !== undefined ||
@@ -57,15 +48,13 @@ export function detectCapabilities(): TerminalCapabilities {
     supportsColor,
     supportsUnicode,
     supportsExtendedColor,
+    supportsHyperlinks: detectHyperlinks(env, term, isTTY),
     isCI,
-    columns: process.stdout.columns ?? 80,
-    rows: process.stdout.rows ?? 24,
+    columns: input.columns ?? process.stdout.columns ?? 80,
+    rows: input.rows ?? process.stdout.rows ?? 24,
   };
 }
 
-/**
- * Get fallback characters when Unicode is not supported.
- */
 export function getFallbackChars(capabilities: TerminalCapabilities) {
   if (capabilities.supportsUnicode) {
     return {
@@ -77,7 +66,7 @@ export function getFallbackChars(capabilities: TerminalCapabilities) {
       barEmpty: '░',
       thinking: '💭',
       border: { tl: '╭', tr: '╮', bl: '╰', br: '╯', h: '─', v: '│' },
-    };
+    } as const;
   }
 
   return {
@@ -89,5 +78,20 @@ export function getFallbackChars(capabilities: TerminalCapabilities) {
     barEmpty: '-',
     thinking: '[T]',
     border: { tl: '+', tr: '+', bl: '+', br: '+', h: '-', v: '|' },
-  };
+  } as const;
+}
+
+function detectHyperlinks(
+  env: Readonly<Record<string, string | undefined>>,
+  term: string,
+  isTTY: boolean,
+): boolean {
+  if (!isTTY || term === 'dumb') return false;
+  if (env['WT_SESSION'] !== undefined) return true;
+  if (env['TERM_PROGRAM'] === 'iTerm.app' || env['TERM_PROGRAM'] === 'WezTerm') return true;
+  if (env['VTE_VERSION'] !== undefined) {
+    const version = Number.parseInt(env['VTE_VERSION'] ?? '', 10);
+    return Number.isFinite(version) && version >= 5000;
+  }
+  return false;
 }

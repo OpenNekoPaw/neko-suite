@@ -16,8 +16,8 @@
     "build:exe": "sh scripts/build-exe.sh",
     "build:bundle": "esbuild src/cli.tsx --bundle --platform=node --target=node18 --format=esm --outfile=dist/cli.bundle.js --minify --external:fsevents --external:ink --external:react --external:yoga-wasm-web",
     "dev": "tsx src/cli.tsx",
-    "test": "vitest --passWithNoTests",
-    "test:run": "vitest --run --passWithNoTests"
+    "test": "vitest --root ../.. packages/cli-tui/src",
+    "test:run": "vitest --root ../.. --run packages/cli-tui/src"
   },
   "pkg": {
     "assets": [],
@@ -31,19 +31,23 @@
     "@neko/content": "workspace:*",
     "@neko/entity": "workspace:*",
     "@neko/host": "workspace:*",
+    "@neko/markdown": "workspace:*",
     "@neko/market-core": "workspace:*",
     "@neko/platform": "workspace:*",
     "@neko/search": "workspace:*",
-    "@neko/skills": "workspace:*",
-    "neko-assets": "workspace:*",
     "@neko/shared": "workspace:*",
+    "@neko/skills": "workspace:*",
     "adm-zip": "^0.5.16",
-    "ink": "^5.0.1",
-    "react": "^18.3.1",
-    "zustand": "^5.0.0",
+    "chalk": "^5.3.0",
     "commander": "^12.0.0",
     "epub2": "^3.0.2",
-    "chalk": "^5.3.0"
+    "ink": "^5.0.1",
+    "lowlight": "^3.3.0",
+    "neko-assets": "workspace:*",
+    "react": "^18.3.1",
+    "string-width": "^7.2.0",
+    "unicode-segmenter": "^0.17.0",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.0",

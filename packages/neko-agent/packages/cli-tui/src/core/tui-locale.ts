@@ -27,6 +27,17 @@ export interface TuiLabels {
   readonly mediaCategories: Readonly<Record<string, string>>;
   readonly referenceSources: Readonly<Record<string, string>>;
   readonly suggestionKinds: Readonly<Record<string, string>>;
+  readonly markdown: {
+    readonly fatalTitle: string;
+    readonly syntheticColumn: string;
+    readonly unresolved: string;
+    readonly image: string;
+    readonly linkTarget: string;
+    readonly unsafeControl: string;
+    readonly unsupportedDestination: string;
+    readonly tableGridBudgetExceeded: string;
+    readonly highlightLimitExceeded: string;
+  };
 }
 
 const TUI_LABELS: Readonly<Record<TuiLocale, TuiLabels>> = {
@@ -88,6 +99,17 @@ const TUI_LABELS: Readonly<Record<TuiLocale, TuiLabels>> = {
       character: 'character',
       scene: 'scene',
     },
+    markdown: {
+      fatalTitle: 'Markdown rendering failed',
+      syntheticColumn: 'Column {index}',
+      unresolved: 'unresolved: {label}',
+      image: 'image: {alt}',
+      linkTarget: 'target: {target}',
+      unsafeControl: 'unsafe terminal control {control}',
+      unsupportedDestination: 'unsupported destination: {target}',
+      tableGridBudgetExceeded: 'table grid budget exceeded ({cells} cells); using record layout',
+      highlightLimitExceeded: 'syntax highlighting limit exceeded; showing complete plain code',
+    },
   },
   zh: {
     sessionModes: {
@@ -147,6 +169,17 @@ const TUI_LABELS: Readonly<Record<TuiLocale, TuiLabels>> = {
       character: '角色',
       scene: '场景',
     },
+    markdown: {
+      fatalTitle: 'Markdown 渲染失败',
+      syntheticColumn: '第 {index} 列',
+      unresolved: '未解析：{label}',
+      image: '图像：{alt}',
+      linkTarget: '目标：{target}',
+      unsafeControl: '不安全的终端控制字符 {control}',
+      unsupportedDestination: '不支持的目标：{target}',
+      tableGridBudgetExceeded: '表格网格预算已超出（{cells} 个单元格），已改用记录布局',
+      highlightLimitExceeded: '语法高亮超出限制，已完整显示为纯代码',
+    },
   },
 };
 
@@ -166,6 +199,16 @@ export function getTuiLabels(locale: TuiLocale = detectTuiLocale()): TuiLabels {
 
 export function formatTuiLabel(labels: Readonly<Record<string, string>>, value: string): string {
   return labels[value] ?? value;
+}
+
+export function formatTuiTemplate(
+  template: string,
+  parameters: Readonly<Record<string, string | number>>,
+): string {
+  return template.replace(/\{([A-Za-z][A-Za-z0-9]*)\}/g, (placeholder, key: string) => {
+    const value = parameters[key];
+    return value === undefined ? placeholder : String(value);
+  });
 }
 
 function readExplicitTuiLocale(env: Record<string, string | undefined>): string | undefined {

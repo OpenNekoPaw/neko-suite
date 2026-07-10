@@ -12,7 +12,7 @@ export default defineConfig({
       '../neko-skills/src/**/*.test.ts',
       'packages/agent/src/**/*.test.ts',
       'packages/agent-types/src/**/*.test.ts',
-      'packages/cli-tui/src/**/*.test.ts',
+      'packages/cli-tui/src/**/*.test.{ts,tsx}',
       'test-utils/src/**/*.test.ts',
     ],
     exclude: [

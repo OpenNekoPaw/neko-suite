@@ -1,3 +1,5 @@
+import type { MarkdownSemanticRole, SyntaxTokenRole } from '../markdown/contracts';
+
 /**
  * Theme Token Types
  *
@@ -70,6 +72,7 @@ export interface ThemeTokens {
     readonly approve: InkColor;
     readonly reject: InkColor;
   };
+  /** @deprecated Legacy code renderer tokens; removed with the regex highlighter. */
   readonly code: {
     readonly keyword: InkColor;
     readonly string: InkColor;
@@ -77,4 +80,8 @@ export interface ThemeTokens {
     readonly comment: InkColor;
     readonly function: InkColor;
   };
+
+  // Markdown presentation roles. Background is intentionally inherited.
+  readonly markdown: Readonly<Record<MarkdownSemanticRole, InkColor>>;
+  readonly syntax: Readonly<Record<SyntaxTokenRole, InkColor>>;
 }

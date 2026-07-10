@@ -11,10 +11,9 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { Message, TerminalTimelineRow } from '../../types/state';
 import { INK_TOOL_ICONS, tokens } from '../../theme/tokens';
-import { StreamingText } from './StreamingText';
 import { ThinkingBlock } from './ThinkingBlock';
 import { TodoList } from './TodoList';
-import { MarkdownRenderer } from '../Markdown/MarkdownRenderer';
+import { CanonicalMarkdownRenderer } from '../Markdown/CanonicalMarkdownRenderer';
 
 interface MessageItemProps {
   readonly message: Message;
@@ -88,10 +87,12 @@ export function MessageItem({
       ))}
 
       {/* 3. Streaming text or final markdown */}
-      {isStreaming ? (
-        <StreamingText content={currentDelta} isStreaming={true} />
-      ) : message.content ? (
-        <MarkdownRenderer content={message.content} />
+      {isStreaming || message.content ? (
+        <CanonicalMarkdownRenderer
+          sessionKey={message.id}
+          source={isStreaming ? currentDelta : message.content}
+          isFinal={!isStreaming}
+        />
       ) : null}
 
       {/* 4. Todo list */}
@@ -103,10 +104,12 @@ export function MessageItem({
 function TimelineRowLine({ row }: { readonly row: TerminalTimelineRow }): React.JSX.Element {
   switch (row.kind) {
     case 'assistant_text':
-      return row.status === 'streaming' ? (
-        <StreamingText content={row.content ?? ''} isStreaming={true} />
-      ) : row.content ? (
-        <MarkdownRenderer content={row.content} />
+      return row.status === 'streaming' || row.content ? (
+        <CanonicalMarkdownRenderer
+          sessionKey={row.id}
+          source={row.content ?? ''}
+          isFinal={row.status !== 'streaming'}
+        />
       ) : (
         <Box />
       );

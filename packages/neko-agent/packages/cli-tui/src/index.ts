@@ -94,8 +94,7 @@ export { StatusBar } from './components/StatusBar/StatusBar';
 export { ToolApprovalPanel } from './components/ToolApproval/ToolApprovalPanel';
 export { DiffPreview } from './components/ToolApproval/DiffPreview';
 export { CommandPreview } from './components/ToolApproval/CommandPreview';
-export { MarkdownRenderer } from './components/Markdown/MarkdownRenderer';
-export { CodeBlock } from './components/Markdown/CodeBlock';
+export { CanonicalMarkdownRenderer } from './components/Markdown/CanonicalMarkdownRenderer';
 export { ThinkingBlock } from './components/ChatView/ThinkingBlock';
 export { TodoList } from './components/ChatView/TodoList';
 export { TokenUsage as TokenUsageBar } from './components/StatusBar/TokenUsage';
@@ -104,9 +103,13 @@ export { TokenUsage as TokenUsageBar } from './components/StatusBar/TokenUsage';
 export { ErrorBoundary } from './components/shared/ErrorBoundary';
 
 // Utils
-export { parseMarkdown, parseInline, type MarkdownNode } from './utils/markdown-parser';
-export { highlightLine, highlightCode, type HighlightToken } from './utils/syntax-highlight';
-export { detectCapabilities, getFallbackChars, type TerminalCapabilities } from './utils/terminal';
+export {
+  detectCapabilities,
+  getFallbackChars,
+  type TerminalCapabilities,
+  type TerminalCapabilityInput,
+} from './utils/terminal';
+export * from './markdown';
 
 // Hooks
 export { useAgentSession } from './hooks/useAgentSession';
