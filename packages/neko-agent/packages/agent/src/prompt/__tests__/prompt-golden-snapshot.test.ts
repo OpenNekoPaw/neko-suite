@@ -94,6 +94,12 @@ describe('prompt golden snapshots', () => {
       expect(prompt).toMatch(/artifact profile|当前 artifact profile/);
       expect(prompt).toMatch(/runtime capability contract/);
       expect(prompt).toMatch(/validation requirements/);
+      expect(prompt).toMatch(
+        /newly created assets, report completion only after|新资产生成时，只有相应工具或 runtime capability 返回成功后/,
+      );
+      expect(prompt).toMatch(
+        /do not claim generated, written, exported, sent, or completed output|不得把预期内容描述成已完成结果/,
+      );
       expect(prompt).toMatch(/domain node JSON|领域节点 JSON/);
       expect(prompt).toMatch(
         /must not override a domain skill's output contract|不能覆盖领域 Skill 的输出契约/,
