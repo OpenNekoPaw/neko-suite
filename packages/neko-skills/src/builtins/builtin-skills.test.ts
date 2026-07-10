@@ -322,6 +322,18 @@ describe('@neko/skills builtins', () => {
     }
   });
 
+  it('keeps media generation completion claims grounded in runtime capability results', () => {
+    expect(aiGenerateSkill.content).toContain(
+      'Start media generation by submitting the appropriate runtime media capability',
+    );
+    expect(aiGenerateSkill.content).toContain(
+      'report success only from confirmed runtime capability results',
+    );
+    expect(aiGenerateSkill.content).toContain(
+      'before success is confirmed, describe only planned, submitted, pending, blocked, or failed state',
+    );
+  });
+
   it('owns all non-runtime builtin skill and tool group definitions', () => {
     expect(aiGenerateSkill.name).toBe('ai-generate');
     expect(aiGenerateToolDefinitions.map((definition) => definition.name)).toContain(
