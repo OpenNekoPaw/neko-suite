@@ -44,7 +44,9 @@ export interface UISlice {
   readonly pendingSelection: PendingSelection | null;
   /** Whether a plan review prompt is waiting for user decision */
   readonly pendingPlanReview: boolean;
+  /** Rows above the live bottom; zero means follow new output. */
   readonly scrollOffset: number;
+  readonly scrollLimit: number;
   readonly inputFocused: boolean;
   readonly slashMenuOpen: boolean;
   readonly terminalSize: TerminalSize;
@@ -57,6 +59,7 @@ export interface UISlice {
   showPlanReview: () => void;
   dismissPlanReview: () => void;
   setScrollOffset: (offset: number) => void;
+  setScrollLimit: (limit: number) => void;
   scrollUp: (lines?: number) => void;
   scrollDown: (lines?: number) => void;
   scrollToBottom: () => void;
@@ -70,6 +73,7 @@ export const useUIStore = create<UISlice>((set) => ({
   pendingSelection: null,
   pendingPlanReview: false,
   scrollOffset: 0,
+  scrollLimit: 0,
   inputFocused: true,
   slashMenuOpen: false,
   terminalSize: {
@@ -102,18 +106,33 @@ export const useUIStore = create<UISlice>((set) => ({
   },
 
   setScrollOffset: (offset) => {
-    set({ scrollOffset: Math.max(0, offset) });
+    set((state) => ({
+      scrollOffset: Math.min(state.scrollLimit, normalizeScrollRows(offset)),
+    }));
+  },
+
+  setScrollLimit: (limit) => {
+    set((state) => {
+      const scrollLimit = normalizeScrollRows(limit);
+      if (scrollLimit === state.scrollLimit) return state;
+      const growth = Math.max(0, scrollLimit - state.scrollLimit);
+      return {
+        scrollLimit,
+        scrollOffset:
+          state.scrollOffset === 0 ? 0 : Math.min(scrollLimit, state.scrollOffset + growth),
+      };
+    });
   },
 
   scrollUp: (lines = 3) => {
     set((state) => ({
-      scrollOffset: Math.max(0, state.scrollOffset - lines),
+      scrollOffset: Math.min(state.scrollLimit, state.scrollOffset + normalizeScrollRows(lines)),
     }));
   },
 
   scrollDown: (lines = 3) => {
     set((state) => ({
-      scrollOffset: state.scrollOffset + lines,
+      scrollOffset: Math.max(0, state.scrollOffset - normalizeScrollRows(lines)),
     }));
   },
 
@@ -133,3 +152,10 @@ export const useUIStore = create<UISlice>((set) => ({
     set({ terminalSize: size });
   },
 }));
+
+function normalizeScrollRows(value: number): number {
+  if (!Number.isFinite(value)) {
+    throw new Error('TUI scroll rows must be finite.');
+  }
+  return Math.max(0, Math.floor(value));
+}

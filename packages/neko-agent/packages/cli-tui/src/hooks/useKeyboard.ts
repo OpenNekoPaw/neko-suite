@@ -30,10 +30,24 @@ export interface KeyboardActions {
 export function useKeyboard(actions: KeyboardActions): void {
   const status = useAgentStore((s) => s.status);
   const pendingApproval = useUIStore((s) => s.pendingApproval);
+  const pendingSelection = useUIStore((s) => s.pendingSelection);
+  const pendingPlanReview = useUIStore((s) => s.pendingPlanReview);
+  const terminalRows = useUIStore((s) => s.terminalSize.rows);
+  const keyboardBlocked = Boolean(pendingApproval || pendingSelection || pendingPlanReview);
 
   useInput((_input, key) => {
-    // Don't intercept when approval panel is active — it handles its own keys
-    if (pendingApproval) return;
+    // Modal surfaces own their keyboard input while active.
+    if (keyboardBlocked) return;
+
+    const pageRows = Math.max(3, terminalRows - 6);
+    if (key.pageUp) {
+      useUIStore.getState().scrollUp(pageRows);
+      return;
+    }
+    if (key.pageDown) {
+      useUIStore.getState().scrollDown(pageRows);
+      return;
+    }
 
     // Escape → cancel running agent
     if (key.escape && status === 'running') {

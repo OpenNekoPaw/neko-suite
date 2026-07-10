@@ -24,7 +24,7 @@ import { formatTuiLabel, getTuiLabels } from '../../core/tui-locale';
 interface InputEditorProps {
   /** Called when user submits a prompt */
   readonly onSubmit: (text: string) => void;
-  /** Whether input is disabled (agent running) */
+  /** Whether a modal surface currently owns keyboard input. */
   readonly disabled?: boolean;
   /** Prompt prefix character */
   readonly prompt?: string;
@@ -127,157 +127,160 @@ export function InputEditor({
     onReferenceQueryChange?.(activeMenu.filterText);
   }, [activeMenu?.filterText, activeMenu?.trigger, onReferenceQueryChange]);
 
-  useInput((input, key) => {
-    if (disabled) return;
+  useInput(
+    (input, key) => {
+      if (disabled) return;
 
-    for (const event of normalizeInputEvents(input, key)) {
-      const eventInput = event.input;
-      const eventKey = event.key;
-      const currentValue = valueRef.current;
-      const currentMenuOpen = menuOpenRef.current;
-      const currentMenuIndex = menuIndexRef.current;
-      const currentMenu = deriveInputSuggestionMenu(currentValue, {
-        commands,
-        skills,
-        references,
-      });
-      const currentFiltered = currentMenu?.options ?? [];
-      const isReturnKey = eventKey.return || eventInput === '\r' || eventInput === '\n';
-      const isBackspaceKey =
-        eventKey.backspace || eventKey.delete || eventInput === '\b' || eventInput === '\u007F';
-      const isEscapeKey = eventKey.escape || eventInput === '\u001B';
+      for (const event of normalizeInputEvents(input, key)) {
+        const eventInput = event.input;
+        const eventKey = event.key;
+        const currentValue = valueRef.current;
+        const currentMenuOpen = menuOpenRef.current;
+        const currentMenuIndex = menuIndexRef.current;
+        const currentMenu = deriveInputSuggestionMenu(currentValue, {
+          commands,
+          skills,
+          references,
+        });
+        const currentFiltered = currentMenu?.options ?? [];
+        const isReturnKey = eventKey.return || eventInput === '\r' || eventInput === '\n';
+        const isBackspaceKey =
+          eventKey.backspace || eventKey.delete || eventInput === '\b' || eventInput === '\u007F';
+        const isEscapeKey = eventKey.escape || eventInput === '\u001B';
 
-      // --- Menu open: intercept navigation keys ---
-      if (currentMenuOpen) {
-        if (isEscapeKey) {
-          updateMenuOpen(false);
-          return;
-        }
-
-        if (eventKey.upArrow) {
-          updateMenuIndex(Math.max(0, currentMenuIndex - 1));
-          return;
-        }
-
-        if (eventKey.downArrow) {
-          updateMenuIndex(Math.min(currentFiltered.length - 1, currentMenuIndex + 1));
-          return;
-        }
-
-        // Tab or Enter on menu → select command and fill input
-        if (eventKey.tab || (isReturnKey && !eventKey.shift)) {
-          const selected = currentFiltered[currentMenuIndex];
-          if (selected) {
-            updateValue(selectInputSuggestion(selected));
+        // --- Menu open: intercept navigation keys ---
+        if (currentMenuOpen) {
+          if (isEscapeKey) {
             updateMenuOpen(false);
+            return;
+          }
+
+          if (eventKey.upArrow) {
+            updateMenuIndex(Math.max(0, currentMenuIndex - 1));
+            return;
+          }
+
+          if (eventKey.downArrow) {
+            updateMenuIndex(Math.min(currentFiltered.length - 1, currentMenuIndex + 1));
+            return;
+          }
+
+          // Tab or Enter on menu → select command and fill input
+          if (eventKey.tab || (isReturnKey && !eventKey.shift)) {
+            const selected = currentFiltered[currentMenuIndex];
+            if (selected) {
+              updateValue(selectInputSuggestion(selected));
+              updateMenuOpen(false);
+              updateMenuIndex(0);
+            }
+            return;
+          }
+
+          // Backspace in menu
+          if (isBackspaceKey) {
+            const next = currentValue.slice(0, -1);
+            if (!deriveInputSuggestionMenu(next, { commands, skills, references })) {
+              updateMenuOpen(false);
+            }
+            updateValue(next);
+            updateMenuIndex(0);
+            return;
+          }
+
+          // Regular typing while menu open — update filter
+          if (eventInput && !eventKey.ctrl && !eventKey.meta && isPrintableInput(eventInput)) {
+            const next = currentValue + eventInput;
+            if (!deriveInputSuggestionMenu(next, { commands, skills, references })) {
+              updateMenuOpen(false);
+            }
+            updateValue(next);
+            updateMenuIndex(0);
+            return;
+          }
+
+          return;
+        }
+
+        // --- Normal mode ---
+
+        // Enter → submit
+        if (isReturnKey && !eventKey.shift) {
+          const trimmed = currentValue.trim();
+          if (!trimmed) return;
+
+          if (trimmed.startsWith('/') && onSlashCommand) {
+            onSlashCommand(trimmed);
+            updateValue('');
+            return;
+          }
+
+          if (trimmed.startsWith('$') && onSkillInvocation) {
+            onSkillInvocation(trimmed);
+            updateValue('');
+            return;
+          }
+
+          addToHistory(trimmed);
+          onSubmit(trimmed);
+          updateValue('');
+          return;
+        }
+
+        // Shift+Enter or Ctrl+J → newline
+        if ((eventKey.return && eventKey.shift) || (eventInput === 'j' && eventKey.ctrl)) {
+          updateValue(currentValue + '\n');
+          return;
+        }
+
+        // Up arrow → previous history entry
+        if (eventKey.upArrow) {
+          const history = historyRef.current;
+          if (history.length === 0) return;
+          const idx = Math.min(historyIndexRef.current + 1, history.length - 1);
+          historyIndexRef.current = idx;
+          const entry = history[idx];
+          if (entry !== undefined) updateValue(entry);
+          return;
+        }
+
+        // Down arrow → next history entry
+        if (eventKey.downArrow) {
+          if (historyIndexRef.current <= 0) {
+            historyIndexRef.current = -1;
+            updateValue('');
+            return;
+          }
+          historyIndexRef.current -= 1;
+          const entry = historyRef.current[historyIndexRef.current];
+          if (entry !== undefined) updateValue(entry);
+          return;
+        }
+
+        // Backspace
+        if (isBackspaceKey) {
+          updateValue(currentValue.slice(0, -1));
+          return;
+        }
+
+        // Ignore other control keys
+        if (eventKey.ctrl || eventKey.meta) return;
+
+        // Regular character input
+        if (eventInput && isPrintableInput(eventInput)) {
+          const next = currentValue + eventInput;
+          updateValue(next);
+          historyIndexRef.current = -1;
+
+          // Open menu when typing `/` at the start
+          if (deriveInputSuggestionMenu(next, { commands, skills, references })) {
+            updateMenuOpen(true);
             updateMenuIndex(0);
           }
-          return;
-        }
-
-        // Backspace in menu
-        if (isBackspaceKey) {
-          const next = currentValue.slice(0, -1);
-          if (!deriveInputSuggestionMenu(next, { commands, skills, references })) {
-            updateMenuOpen(false);
-          }
-          updateValue(next);
-          updateMenuIndex(0);
-          return;
-        }
-
-        // Regular typing while menu open — update filter
-        if (eventInput && !eventKey.ctrl && !eventKey.meta && isPrintableInput(eventInput)) {
-          const next = currentValue + eventInput;
-          if (!deriveInputSuggestionMenu(next, { commands, skills, references })) {
-            updateMenuOpen(false);
-          }
-          updateValue(next);
-          updateMenuIndex(0);
-          return;
-        }
-
-        return;
-      }
-
-      // --- Normal mode ---
-
-      // Enter → submit
-      if (isReturnKey && !eventKey.shift) {
-        const trimmed = currentValue.trim();
-        if (!trimmed) return;
-
-        if (trimmed.startsWith('/') && onSlashCommand) {
-          onSlashCommand(trimmed);
-          updateValue('');
-          return;
-        }
-
-        if (trimmed.startsWith('$') && onSkillInvocation) {
-          onSkillInvocation(trimmed);
-          updateValue('');
-          return;
-        }
-
-        addToHistory(trimmed);
-        onSubmit(trimmed);
-        updateValue('');
-        return;
-      }
-
-      // Shift+Enter or Ctrl+J → newline
-      if ((eventKey.return && eventKey.shift) || (eventInput === 'j' && eventKey.ctrl)) {
-        updateValue(currentValue + '\n');
-        return;
-      }
-
-      // Up arrow → previous history entry
-      if (eventKey.upArrow) {
-        const history = historyRef.current;
-        if (history.length === 0) return;
-        const idx = Math.min(historyIndexRef.current + 1, history.length - 1);
-        historyIndexRef.current = idx;
-        const entry = history[idx];
-        if (entry !== undefined) updateValue(entry);
-        return;
-      }
-
-      // Down arrow → next history entry
-      if (eventKey.downArrow) {
-        if (historyIndexRef.current <= 0) {
-          historyIndexRef.current = -1;
-          updateValue('');
-          return;
-        }
-        historyIndexRef.current -= 1;
-        const entry = historyRef.current[historyIndexRef.current];
-        if (entry !== undefined) updateValue(entry);
-        return;
-      }
-
-      // Backspace
-      if (isBackspaceKey) {
-        updateValue(currentValue.slice(0, -1));
-        return;
-      }
-
-      // Ignore other control keys
-      if (eventKey.ctrl || eventKey.meta) return;
-
-      // Regular character input
-      if (eventInput && isPrintableInput(eventInput)) {
-        const next = currentValue + eventInput;
-        updateValue(next);
-        historyIndexRef.current = -1;
-
-        // Open menu when typing `/` at the start
-        if (deriveInputSuggestionMenu(next, { commands, skills, references })) {
-          updateMenuOpen(true);
-          updateMenuIndex(0);
         }
       }
-    }
-  });
+    },
+    { isActive: !disabled },
+  );
 
   const lines = value.split('\n');
   const isMultiLine = lines.length > 1;

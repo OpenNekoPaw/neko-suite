@@ -1,6 +1,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from 'ink-testing-library';
+import { useAgentStore } from '../../stores/agent-store';
 import { InputEditor } from './InputEditor';
 import {
   createTuiSkillInvocationCatalog,
@@ -11,6 +12,7 @@ const originalNekoLocale = process.env.NEKO_LOCALE;
 
 beforeEach(() => {
   process.env.NEKO_LOCALE = 'en';
+  useAgentStore.getState().reset();
 });
 
 afterEach(() => {
@@ -23,6 +25,22 @@ afterEach(() => {
 });
 
 describe('InputEditor prefix suggestions', () => {
+  it('remains editable while an agent turn is running', async () => {
+    useAgentStore.getState().setRunning();
+    const onSubmit = vi.fn();
+    const instance = render(
+      React.createElement(InputEditor, {
+        onSubmit,
+      }),
+    );
+
+    await writeInput(instance, 'queued prompt');
+    expect(instance.lastFrame()).toContain('queued prompt');
+
+    await writeInput(instance, '\r');
+    expect(onSubmit).toHaveBeenCalledWith('queued prompt');
+  });
+
   it('opens Skill suggestions for a bare dollar trigger when skills are available', async () => {
     const instance = render(
       React.createElement(InputEditor, {
@@ -177,9 +195,7 @@ describe('InputEditor prefix suggestions', () => {
 
     await writeInput(instance, '@cases');
 
-    await waitFor(() =>
-      onReferenceQueryChange.mock.calls.some(([query]) => query === 'cases'),
-    );
+    await waitFor(() => onReferenceQueryChange.mock.calls.some(([query]) => query === 'cases'));
   });
 
   it('closes the active namespace menu on Escape without submitting', async () => {

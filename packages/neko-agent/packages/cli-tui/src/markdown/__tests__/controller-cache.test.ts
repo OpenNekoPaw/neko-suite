@@ -69,7 +69,6 @@ describe('TerminalMarkdownController', () => {
       labels,
       policy: {
         ...DEFAULT_MARKDOWN_RESOURCE_POLICY,
-        mutableTailImmediateUpdateCodeUnits: 2,
         streamingCoalesceDelayMs: 50,
       },
     });

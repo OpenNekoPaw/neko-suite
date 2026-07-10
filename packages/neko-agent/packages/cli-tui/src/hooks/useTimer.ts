@@ -32,7 +32,7 @@ export function useTimer(): number {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      if (status === 'idle' && startTime === null) {
+      if (startTime === null) {
         setElapsed(0);
       }
     }

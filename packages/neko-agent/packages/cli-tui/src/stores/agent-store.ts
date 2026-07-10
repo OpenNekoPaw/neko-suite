@@ -79,11 +79,15 @@ export const useAgentStore = create<AgentSlice>((set) => ({
   ...initialState,
 
   setRunning: () => {
-    set({ status: 'running', startTime: Date.now(), error: null });
+    set((state) => ({
+      status: 'running',
+      startTime: state.startTime ?? Date.now(),
+      error: null,
+    }));
   },
 
   setIdle: () => {
-    set({ status: 'idle' });
+    set({ status: 'idle', startTime: null });
   },
 
   setWaitingConfirmation: () => {
@@ -91,7 +95,7 @@ export const useAgentStore = create<AgentSlice>((set) => ({
   },
 
   setError: (error) => {
-    set({ status: 'error', error });
+    set({ status: 'error', startTime: null, error });
   },
 
   setIteration: (current, max) => {
