@@ -6,6 +6,7 @@
  */
 
 import type { AgentEvent, ExecutionMode, IJournalWriter } from './types';
+import { randomUUID } from 'node:crypto';
 
 // =============================================================================
 // Types
@@ -57,8 +58,7 @@ export interface JournalWriterOptions {
  * Create a stable journal entry ID with a sortable timestamp prefix.
  */
 export function createJournalEntryId(now = Date.now()): string {
-  const crypto = require('node:crypto') as typeof import('node:crypto');
-  return `${now.toString(36)}-${crypto.randomUUID()}`;
+  return `${now.toString(36)}-${randomUUID()}`;
 }
 
 // =============================================================================

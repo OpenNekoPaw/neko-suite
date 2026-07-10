@@ -10,6 +10,7 @@ import type { JournalFsOps } from './journal-writer';
 import { JournalReader } from './journal-reader';
 import type { JournalReaderFsOps } from './journal-reader';
 import * as path from 'path';
+import * as nodeFs from 'node:fs/promises';
 
 // =============================================================================
 // Types
@@ -123,23 +124,22 @@ export function createJournalStorage(fsOps: JournalStorageFsOps, baseDir?: strin
  * Create a JournalStorage backed by Node.js fs/promises.
  */
 export function createNodeJournalStorage(baseDir?: string): JournalStorage {
-  const fs = require('node:fs/promises') as typeof import('node:fs/promises');
   return createJournalStorage(
     {
-      appendFile: (p, data) => fs.appendFile(p, data),
-      mkdir: (p, opts) => fs.mkdir(p, opts).then(() => undefined),
-      readFile: (p) => fs.readFile(p, 'utf-8'),
+      appendFile: (p, data) => nodeFs.appendFile(p, data),
+      mkdir: (p, opts) => nodeFs.mkdir(p, opts).then(() => undefined),
+      readFile: (p) => nodeFs.readFile(p, 'utf-8'),
       exists: async (p) => {
         try {
-          await fs.access(p);
+          await nodeFs.access(p);
           return true;
         } catch {
           return false;
         }
       },
-      readdir: (p) => fs.readdir(p),
-      stat: (p) => fs.stat(p),
-      unlink: (p) => fs.unlink(p),
+      readdir: (p) => nodeFs.readdir(p),
+      stat: (p) => nodeFs.stat(p),
+      unlink: (p) => nodeFs.unlink(p),
     },
     baseDir,
   );

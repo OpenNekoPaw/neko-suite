@@ -3,6 +3,8 @@
  */
 
 import type { ITaskStorage, SerializableTask } from '@neko/shared';
+import * as nodeFs from 'node:fs';
+import * as nodePath from 'node:path';
 import { getLogger } from '../utils/logger';
 import {
   buildTaskStorageCleanupPlan,
@@ -387,20 +389,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Create a file-based task storage with Node.js fs operations
  */
 export function createFileTaskStorage(filePath: string): FileTaskStorage {
-  // Lazy import to avoid issues in non-Node environments
-  const fs = require('fs') as typeof import('fs');
-  const path = require('path') as typeof import('path');
-
   return new FileTaskStorage({
     filePath,
-    readFile: (p) => fs.promises.readFile(p, 'utf-8'),
+    readFile: (p) => nodeFs.promises.readFile(p, 'utf-8'),
     writeFile: async (p, content) => {
-      await fs.promises.mkdir(path.dirname(p), { recursive: true });
-      await fs.promises.writeFile(p, content, 'utf-8');
+      await nodeFs.promises.mkdir(nodePath.dirname(p), { recursive: true });
+      await nodeFs.promises.writeFile(p, content, 'utf-8');
     },
     exists: async (p) => {
       try {
-        await fs.promises.access(p);
+        await nodeFs.promises.access(p);
         return true;
       } catch {
         return false;
@@ -410,12 +408,11 @@ export function createFileTaskStorage(filePath: string): FileTaskStorage {
 }
 
 export function getWorkspaceVisibleAgentTaskRecordsFilePath(workspaceRoot: string): string {
-  const path = require('path') as typeof import('path');
   const root = workspaceRoot.trim();
   if (!root) {
     throw new Error('Workspace-visible Agent task records require a workspace root');
   }
-  return path.join(root, '.neko', 'tasks.json');
+  return nodePath.join(root, '.neko', 'tasks.json');
 }
 
 export function createFileWorkspaceVisibleAgentTaskStorage(options: {
@@ -424,22 +421,20 @@ export function createFileWorkspaceVisibleAgentTaskStorage(options: {
   readonly writerId?: string;
   readonly now?: () => number;
 }): WorkspaceVisibleAgentTaskStorage {
-  const fs = require('fs') as typeof import('fs');
-  const path = require('path') as typeof import('path');
   const filePath =
     options.filePath ?? getWorkspaceVisibleAgentTaskRecordsFilePath(options.workspaceRoot);
 
   return new WorkspaceVisibleAgentTaskStorage({
     workspaceRoot: options.workspaceRoot,
     filePath,
-    readFile: (p) => fs.promises.readFile(p, 'utf-8'),
+    readFile: (p) => nodeFs.promises.readFile(p, 'utf-8'),
     writeFile: async (p, content) => {
-      await fs.promises.mkdir(path.dirname(p), { recursive: true });
-      await fs.promises.writeFile(p, content, 'utf-8');
+      await nodeFs.promises.mkdir(nodePath.dirname(p), { recursive: true });
+      await nodeFs.promises.writeFile(p, content, 'utf-8');
     },
     exists: async (p) => {
       try {
-        await fs.promises.access(p);
+        await nodeFs.promises.access(p);
         return true;
       } catch {
         return false;

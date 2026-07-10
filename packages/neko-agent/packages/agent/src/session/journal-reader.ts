@@ -9,6 +9,7 @@ import type { ChatMessage, CreativeVersionEntry } from '@neko/shared';
 import type { ExecutionMode } from './types';
 import type { JournalEntry, SubAgentRef, StateSnapshot } from './journal-writer';
 import { projectJournalEntriesToHistory } from './working-memory';
+import { createHash } from 'node:crypto';
 
 // =============================================================================
 // Types
@@ -161,7 +162,6 @@ function createFallbackJournalEntryId(
   rawLine: string,
   lineIndex: number,
 ): string {
-  const crypto = require('node:crypto') as typeof import('node:crypto');
-  const digest = crypto.createHash('sha1').update(rawLine).digest('hex').slice(0, 12);
+  const digest = createHash('sha1').update(rawLine).digest('hex').slice(0, 12);
   return `fallback-${seq}-${ts}-${lineIndex.toString(36)}-${digest}`;
 }

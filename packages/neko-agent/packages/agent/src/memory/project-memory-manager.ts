@@ -8,6 +8,7 @@
  */
 
 import * as nodePath from 'node:path';
+import * as nodeFs from 'node:fs/promises';
 import type { IProjectMemoryManager, ProjectMemoryFileOps } from '@neko/shared';
 import { getLogger } from '../utils/logger';
 
@@ -207,21 +208,18 @@ export class FileProjectMemoryManager implements IProjectMemoryManager {
  * @param filePath Absolute path to the memory file (e.g. `workDir/.neko/memory.md`)
  */
 export function createFileProjectMemoryManager(filePath: string): FileProjectMemoryManager {
-  // Lazy import fs to avoid bundling issues in non-Node environments
-  const fs = require('node:fs/promises') as typeof import('node:fs/promises');
-
   const fileOps: ProjectMemoryFileOps = {
-    readFile: (p) => fs.readFile(p, 'utf-8'),
-    writeFile: (p, content) => fs.writeFile(p, content, 'utf-8'),
+    readFile: (p) => nodeFs.readFile(p, 'utf-8'),
+    writeFile: (p, content) => nodeFs.writeFile(p, content, 'utf-8'),
     exists: async (p) => {
       try {
-        await fs.access(p);
+        await nodeFs.access(p);
         return true;
       } catch {
         return false;
       }
     },
-    mkdir: (p) => fs.mkdir(p, { recursive: true }).then(() => undefined),
+    mkdir: (p) => nodeFs.mkdir(p, { recursive: true }).then(() => undefined),
   };
 
   return new FileProjectMemoryManager(filePath, fileOps);

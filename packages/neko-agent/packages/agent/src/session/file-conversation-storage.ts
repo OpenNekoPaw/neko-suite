@@ -8,6 +8,9 @@ import type { ConversationSummary, IJournalProjection } from './journal-projecti
 import { JournalProjection } from './journal-projection';
 import { ConversationIndexStore, type IConversationIndexStore } from './conversation-index-store';
 import { getLogger } from '../utils/logger';
+import * as nodeFs from 'node:fs';
+import * as nodePath from 'node:path';
+import * as nodeOs from 'node:os';
 
 const logger = getLogger('FileConversationStorage');
 
@@ -222,34 +225,30 @@ function cloneRecord(record: ConversationRecord): ConversationRecord {
  * Runtime defaults to Journal + conversations-index.json only.
  */
 export function createFileConversationStorage(workDir: string): FileConversationStorage {
-  const fs = require('fs') as typeof import('fs');
-  const path = require('path') as typeof import('path');
-  const os = require('os') as typeof import('os');
-
-  const indexFilePath = path.join(os.homedir(), '.neko', 'conversations-index.json');
-  const journalsDir = path.join(os.homedir(), '.neko', 'journals');
+  const indexFilePath = nodePath.join(nodeOs.homedir(), '.neko', 'conversations-index.json');
+  const journalsDir = nodePath.join(nodeOs.homedir(), '.neko', 'journals');
 
   return new FileConversationStorage({
     indexFilePath,
     workDir,
-    readFile: (p) => fs.promises.readFile(p, 'utf-8'),
+    readFile: (p) => nodeFs.promises.readFile(p, 'utf-8'),
     writeFile: async (p, content) => {
-      await fs.promises.mkdir(path.dirname(p), { recursive: true });
-      await fs.promises.writeFile(p, content, 'utf-8');
+      await nodeFs.promises.mkdir(nodePath.dirname(p), { recursive: true });
+      await nodeFs.promises.writeFile(p, content, 'utf-8');
     },
     exists: async (p) => {
       try {
-        await fs.promises.access(p);
+        await nodeFs.promises.access(p);
         return true;
       } catch {
         return false;
       }
     },
     journalProjection: new JournalProjection(journalsDir, {
-      readFile: (p) => fs.promises.readFile(p, 'utf-8'),
+      readFile: (p) => nodeFs.promises.readFile(p, 'utf-8'),
       exists: async (p) => {
         try {
-          await fs.promises.access(p);
+          await nodeFs.promises.access(p);
           return true;
         } catch {
           return false;

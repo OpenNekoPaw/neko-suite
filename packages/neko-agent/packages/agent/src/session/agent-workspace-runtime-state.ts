@@ -5,6 +5,10 @@ import type {
 } from '@neko/shared';
 import type { AgentMessageQueueSnapshot, AgentPhase } from '@neko-agent/types';
 import { getConversationWorkDirHash } from './conversation-id';
+import * as nodeCrypto from 'node:crypto';
+import * as nodeFs from 'node:fs';
+import * as nodeOs from 'node:os';
+import * as nodePath from 'node:path';
 
 export type AgentWorkspaceRuntimeStateSource = 'extension' | 'tui';
 export type AgentWorkspaceRuntimeStatus =
@@ -260,39 +264,35 @@ export function createFileAgentWorkspaceRuntimeStateRuntime(options: {
   readonly source: AgentWorkspaceRuntimeStateSource;
   readonly now?: () => number;
 }): AgentWorkspaceRuntimeStateRuntime {
-  const crypto = require('crypto') as typeof import('crypto');
-  const fs = require('fs') as typeof import('fs');
-  const path = require('path') as typeof import('path');
-
   return createAgentWorkspaceRuntimeStateRuntime({
     ...options,
     filePath: getAgentWorkspaceRuntimeStateFilePath(options.workDir),
     fs: {
-      readFile: (filePath) => fs.promises.readFile(filePath, 'utf-8'),
+      readFile: (filePath) => nodeFs.promises.readFile(filePath, 'utf-8'),
       writeFile: async (filePath, content) => {
-        const directory = path.dirname(filePath);
-        const tempPath = path.join(
+        const directory = nodePath.dirname(filePath);
+        const tempPath = nodePath.join(
           directory,
-          `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${crypto
+          `.${nodePath.basename(filePath)}.${process.pid}.${Date.now()}.${nodeCrypto
             .randomBytes(6)
             .toString('hex')}.tmp`,
         );
-        await fs.promises.mkdir(directory, { recursive: true });
+        await nodeFs.promises.mkdir(directory, { recursive: true });
         try {
-          await fs.promises.writeFile(tempPath, content, 'utf-8');
-          await fs.promises.rename(tempPath, filePath);
+          await nodeFs.promises.writeFile(tempPath, content, 'utf-8');
+          await nodeFs.promises.rename(tempPath, filePath);
         } catch (error) {
-          await fs.promises.rm(tempPath, { force: true }).catch(() => undefined);
+          await nodeFs.promises.rm(tempPath, { force: true }).catch(() => undefined);
           throw error;
         }
       },
       renameFile: async (sourcePath, targetPath) => {
-        await fs.promises.mkdir(path.dirname(targetPath), { recursive: true });
-        await fs.promises.rename(sourcePath, targetPath);
+        await nodeFs.promises.mkdir(nodePath.dirname(targetPath), { recursive: true });
+        await nodeFs.promises.rename(sourcePath, targetPath);
       },
       exists: async (filePath) => {
         try {
-          await fs.promises.access(filePath);
+          await nodeFs.promises.access(filePath);
           return true;
         } catch {
           return false;
@@ -303,10 +303,14 @@ export function createFileAgentWorkspaceRuntimeStateRuntime(options: {
 }
 
 export function getAgentWorkspaceRuntimeStateFilePath(workDir: string): string {
-  const path = require('path') as typeof import('path');
-  const os = require('os') as typeof import('os');
   const workspaceHash = getConversationWorkDirHash(workDir);
-  return path.join(os.homedir(), '.neko', 'workspaces', workspaceHash, 'agent-runtime-state.json');
+  return nodePath.join(
+    nodeOs.homedir(),
+    '.neko',
+    'workspaces',
+    workspaceHash,
+    'agent-runtime-state.json',
+  );
 }
 
 export function createEmptyAgentWorkspaceRuntimeState(input: {
