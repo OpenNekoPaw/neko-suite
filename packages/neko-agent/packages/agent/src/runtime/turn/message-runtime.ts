@@ -86,7 +86,6 @@ export interface AgentMessageIdOptions {
 export interface AgentMessageRuntimeRequest {
   readonly conversationId: string;
   readonly messageText: string;
-  readonly userMessageVisibility?: 'visible' | 'hidden';
   readonly pendingMessageSource?: AgentPendingMessageSource;
   readonly sessionMode: SessionMode;
   readonly chatModel?: ModelRef<'llm'>;
@@ -982,10 +981,7 @@ export async function runAgentMessageTurnRuntime(
     now: input.now,
   });
 
-  const shouldPersistUserMessage = input.request.userMessageVisibility !== 'hidden';
-  if (shouldPersistUserMessage) {
-    input.persistUserMessage(conversationId, prepared.userMessage);
-  }
+  input.persistUserMessage(conversationId, prepared.userMessage);
   input.postMessage(buildThinkingMessage(conversationId));
 
   if (prepared.route.kind === 'media' && input.executeMediaTurn) {
@@ -1018,9 +1014,7 @@ export async function runAgentMessageTurnRuntime(
       locale: input.request.locale,
     });
     if (result?.status === 'queued') {
-      if (shouldPersistUserMessage) {
-        input.removeUserMessage?.(conversationId, prepared.userMessage.id);
-      }
+      input.removeUserMessage?.(conversationId, prepared.userMessage.id);
       return { status: 'agent-queued', pendingCount: result.pendingCount };
     }
     if (result?.status === 'precondition-unmet') {

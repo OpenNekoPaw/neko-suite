@@ -9,10 +9,16 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import type { Platform } from '@neko/platform';
-import type { Task, TaskLifecycleMetadata, TaskStatus } from '@neko/shared';
+import type {
+  AgentTaskResultFollowUpRequest,
+  Task,
+  TaskLifecycleMetadata,
+  TaskStatus,
+} from '@neko/shared';
 import {
   buildAgentCapabilityActivationProgressMessage,
   buildGlobalErrorMessage,
+  buildThinkingMessage,
 } from '@neko-agent/types';
 import type { IAgentManager } from '../ai/agentManager';
 import type { IAgentRunner } from '../ai/agentRunner';
@@ -319,6 +325,43 @@ export class AgentMessageTurnHandler {
       },
       generateMessageId: () => createAgentMessageId(),
       now: () => Date.now(),
+    });
+  }
+
+  async handleTaskResultContinuation(
+    webview: vscode.Webview,
+    request: AgentTaskResultFollowUpRequest,
+  ): Promise<void> {
+    if (!this._agentManager || !this._platform) {
+      throw new Error('Cannot dispatch task-result continuation without Agent runtime services');
+    }
+
+    const localizedRequest: AgentMessageRuntimeRequest = {
+      conversationId: request.conversationId,
+      messageText: request.prompt,
+      pendingMessageSource: 'task-result-continuation',
+      sessionMode: 'agent',
+      locale: vscode.env.language,
+    };
+    const resolvedRequest = this._resolveAgentTurnRequest(webview, localizedRequest);
+    if (!resolvedRequest) {
+      return;
+    }
+
+    this._skillHandler?.bindConversationWebview(webview, resolvedRequest.conversationId);
+    void webview.postMessage(buildThinkingMessage(resolvedRequest.conversationId));
+    await this._agentTurnBridge.execute({
+      webview,
+      conversationId: resolvedRequest.conversationId,
+      message: resolvedRequest.messageText,
+      pendingMessageSource: 'task-result-continuation',
+      chatModel: resolvedRequest.chatModel,
+      agentModels: resolvedRequest.agentModels,
+      llmConfig: resolvedRequest.llmConfig,
+      llmRuntimeOptions: resolvedRequest.llmRuntimeOptions,
+      mediaModels: resolvedRequest.mediaModels,
+      executionOverrides: resolvedRequest.executionOverrides,
+      locale: resolvedRequest.locale,
     });
   }
 

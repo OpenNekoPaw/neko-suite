@@ -38,7 +38,7 @@ export interface AgentPendingMessageItem {
   readonly source: AgentPendingMessageSource;
 }
 
-export type AgentPendingMessageSource = 'composer' | 'task-result-observation';
+export type AgentPendingMessageSource = 'composer' | 'task-result-continuation';
 
 export interface EnqueuePendingMessageInput {
   readonly conversationId: string;

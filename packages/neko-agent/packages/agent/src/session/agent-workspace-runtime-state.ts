@@ -542,7 +542,6 @@ function isQueuedMessageSource(
   return (
     value === 'composer' ||
     value === 'user' ||
-    value === 'task-result-observation' ||
     value === 'task-result-continuation' ||
     value === 'subagent-result-continuation' ||
     value === 'system-continuation'

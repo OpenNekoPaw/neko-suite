@@ -244,11 +244,9 @@ function isContinuationSource(
   source:
     | import('@neko-agent/types').AgentQueuedMessageSource
     | import('@neko-agent/types').AgentTurnSource,
-): source is
-  Exclude<import('@neko-agent/types').AgentTurnSource, 'user'> | 'task-result-observation' {
+): source is Exclude<import('@neko-agent/types').AgentTurnSource, 'user'> {
   return (
     source === 'task-result-continuation' ||
-    source === 'task-result-observation' ||
     source === 'subagent-result-continuation' ||
     source === 'system-continuation'
   );
@@ -257,7 +255,6 @@ function isContinuationSource(
 function normalizeContinuationSource(
   source: import('@neko-agent/types').AgentQueuedMessageSource,
 ): Exclude<import('@neko-agent/types').AgentTurnSource, 'user'> {
-  if (source === 'task-result-observation') return 'task-result-continuation';
   if (source === 'task-result-continuation') return source;
   if (source === 'subagent-result-continuation') return source;
   return 'system-continuation';

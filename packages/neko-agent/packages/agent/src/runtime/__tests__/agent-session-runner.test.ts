@@ -220,7 +220,7 @@ describe('AgentSessionRunner', () => {
     const queued = runner.enqueuePendingMessage({
       conversationId: 'conv-1',
       content: 'continue from task',
-      source: 'task-result-observation',
+      source: 'task-result-continuation',
       now: 1000,
     });
 
@@ -228,7 +228,7 @@ describe('AgentSessionRunner', () => {
       expect.objectContaining({
         conversationId: 'conv-1',
         content: 'continue from task',
-        source: 'task-result-observation',
+        source: 'task-result-continuation',
       }),
     );
 

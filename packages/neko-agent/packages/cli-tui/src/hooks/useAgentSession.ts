@@ -1784,7 +1784,6 @@ function trimTaskId(taskId: string): string {
 
 function normalizeTurnSource(source: AgentQueuedMessageSource): AgentTurnSource {
   if (source === 'composer') return 'user';
-  if (source === 'task-result-observation') return 'task-result-continuation';
   return source;
 }
 

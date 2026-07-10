@@ -566,42 +566,6 @@ describe('message runtime helpers', () => {
     );
   });
 
-  it('executes hidden follow-up prompts without persisting them as user messages', async () => {
-    const persistUserMessage = vi.fn();
-    const executeAgentTurn = vi.fn(async () => undefined);
-
-    await expect(
-      runAgentMessageTurnRuntime({
-        request: {
-          conversationId: 'conv-1',
-          messageText:
-            'Continue from the completed async task result.\n\nObservation: Task task-1 failed.',
-          userMessageVisibility: 'hidden',
-          pendingMessageSource: 'task-result-observation',
-          sessionMode: 'agent',
-        },
-        processAttachments: async () => ({
-          textContent: '',
-          imageAttachments: [],
-        }),
-        persistUserMessage,
-        postMessage: vi.fn(),
-        executeAgentTurn,
-        generateMessageId: () => 'user-hidden',
-        now: () => 123,
-      }),
-    ).resolves.toEqual({ status: 'agent-dispatched' });
-
-    expect(persistUserMessage).not.toHaveBeenCalled();
-    expect(executeAgentTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        conversationId: 'conv-1',
-        pendingMessageSource: 'task-result-observation',
-        message: expect.stringContaining('Continue from the completed async task result.'),
-      }),
-    );
-  });
-
   it('removes the prewritten user message when the agent turn is queued', async () => {
     const removeUserMessage = vi.fn();
     const executeAgentTurn = vi.fn(async () => ({ status: 'queued' as const, pendingCount: 1 }));

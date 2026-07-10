@@ -22,7 +22,7 @@ describe('TaskResultObservationCoordinator', () => {
       conversationId: 'conv-1',
       content: 'Continue',
       createdAt: 30,
-      source: 'task-result-observation' as const,
+      source: 'task-result-continuation' as const,
     }));
     const recordTaskResultObservation = vi.fn(async (input) => ({
       observationRecorded: true,
@@ -82,7 +82,7 @@ describe('TaskResultObservationCoordinator', () => {
     expect(enqueuePendingMessage).toHaveBeenCalledWith({
       conversationId: 'conv-1',
       content: 'Continue',
-      source: 'task-result-observation',
+      source: 'task-result-continuation',
     });
     coordinator.dispose();
   });

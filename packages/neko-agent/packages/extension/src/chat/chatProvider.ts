@@ -863,14 +863,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
     this._conversations.switchTo(request.conversationId);
     this._syncCanvasAmbientScopeFromActiveConversation();
     void this._conversationMessageHandler.sendActiveConversation();
-    await this._messages.handleUserMessage(webview, {
-      conversationId: request.conversationId,
-      messageText: request.prompt,
-      userMessageVisibility: 'hidden',
-      pendingMessageSource: 'task-result-observation',
-      sessionMode: 'agent',
-      locale: vscode.env.language,
-    });
+    await this._messages.handleTaskResultContinuation(webview, request);
   }
 
   /**

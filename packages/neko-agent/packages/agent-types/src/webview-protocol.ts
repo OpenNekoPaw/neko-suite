@@ -582,7 +582,7 @@ export interface MessageCancelledMessage {
 export type AgentTurnSource =
   'user' | 'task-result-continuation' | 'subagent-result-continuation' | 'system-continuation';
 
-export type AgentQueuedMessageSource = AgentTurnSource | 'composer' | 'task-result-observation';
+export type AgentQueuedMessageSource = AgentTurnSource | 'composer';
 
 export type AgentQueuedMessageDisplayKind =
   'user-message' | 'task-continuation' | 'subagent-continuation' | 'system-continuation';

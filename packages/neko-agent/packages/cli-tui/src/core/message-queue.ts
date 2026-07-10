@@ -283,7 +283,7 @@ function normalizeEnqueueInput(
 function defaultDisplayKindForSource(
   source: AgentQueuedMessageSource,
 ): AgentQueuedMessageDisplayKind {
-  if (source === 'task-result-continuation' || source === 'task-result-observation') {
+  if (source === 'task-result-continuation') {
     return 'task-continuation';
   }
   if (source === 'subagent-result-continuation') {

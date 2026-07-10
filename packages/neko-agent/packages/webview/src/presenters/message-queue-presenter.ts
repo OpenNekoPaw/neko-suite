@@ -63,30 +63,48 @@ export function projectAuthoritativeQueuedMessagesIntoTranscript(
 export function projectReleasedQueuedMessageIntoTranscript(
   input: ReleasedQueuedMessageProjectionInput,
 ): Message[] {
-  const releasedMessageId = buildReleasedQueuedMessageId(input.item.id);
   const withoutPendingItems = removeTrailingVisibleQueueMirrors(
     projectQueuedMessagesCleared(input.messages),
     [input.item],
   );
+
+  switch (input.item.source) {
+    case 'task-result-continuation':
+    case 'subagent-result-continuation':
+    case 'system-continuation':
+    case 'user':
+      return withoutPendingItems;
+    case 'composer':
+      return projectReleasedComposerMessage(withoutPendingItems, input.item);
+    default:
+      return assertNeverQueuedMessageSource(input.item.source);
+  }
+}
+
+function projectReleasedComposerMessage(
+  messages: readonly Message[],
+  item: AgentQueuedMessageItem,
+): Message[] {
+  const releasedMessageId = buildReleasedQueuedMessageId(item.id);
   if (
-    withoutPendingItems.some(
+    messages.some(
       (message) =>
         message.id === releasedMessageId ||
         (message.role === 'user' &&
-          message.content === input.item.content &&
-          message.timestamp === input.item.createdAt),
+          message.content === item.content &&
+          message.timestamp === item.createdAt),
     )
   ) {
-    return withoutPendingItems;
+    return [...messages];
   }
 
   return [
-    ...withoutPendingItems,
+    ...messages,
     {
       id: releasedMessageId,
       role: 'user',
-      content: input.item.content,
-      timestamp: input.item.createdAt,
+      content: item.content,
+      timestamp: item.createdAt,
     },
   ];
 }
@@ -157,6 +175,10 @@ function isVisibleQueueMirrorMessage(message: Message, item: AgentQueuedMessageI
 
 function isQueueMirrorTimestamp(messageTimestamp: number, itemCreatedAt: number): boolean {
   return Math.abs(itemCreatedAt - messageTimestamp) <= QUEUE_MIRROR_MATCH_WINDOW_MS;
+}
+
+function assertNeverQueuedMessageSource(source: never): never {
+  throw new Error(`Unsupported queued message source: ${String(source)}`);
 }
 
 function buildReleasedQueuedMessageId(queueItemId: string): string {

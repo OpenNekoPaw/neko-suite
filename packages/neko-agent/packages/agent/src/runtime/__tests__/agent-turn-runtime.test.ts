@@ -715,7 +715,7 @@ describe('executeAgentTurn', () => {
       conversationId: 'conv-1',
       content: 'Continue from the completed async task result.',
       createdAt: 456,
-      source: 'task-result-observation' as const,
+      source: 'task-result-continuation' as const,
     };
     vi.mocked(agentRunner.dequeuePendingMessage)
       .mockReturnValueOnce(queuedMessage)

@@ -232,7 +232,7 @@ function formatQueuedMessageSystemText(
   item: import('@neko-agent/types').AgentQueuedMessageItem,
   pendingCount: number,
 ): string {
-  if (item.source === 'task-result-continuation' || item.source === 'task-result-observation') {
+  if (item.source === 'task-result-continuation') {
     const suffix = item.metadata?.taskId ? ` ${item.metadata.taskId}` : ` ${item.id}`;
     return `Task continuation queued:${suffix} (${pendingCount} pending)`;
   }

@@ -374,7 +374,7 @@ function createMockAgentRunner() {
     conversationId: string;
     content: string;
     createdAt: number;
-    source: 'composer' | 'task-result-observation';
+    source: 'composer' | 'task-result-continuation';
   }> = [];
   return {
     getHistory: vi.fn().mockReturnValue([]),
@@ -387,7 +387,7 @@ function createMockAgentRunner() {
         conversationId: string;
         content: string;
         now?: number;
-        source?: 'composer' | 'task-result-observation';
+        source?: 'composer' | 'task-result-continuation';
       }) => {
         const item = {
           id: `queue-${pendingMessages.length + 1}`,
@@ -556,9 +556,7 @@ describe('AgentMessageTurnHandler', () => {
 
   describe('Agent-first Skill activation boundary', () => {
     it('injects media library roots into the Agent turn read policy', async () => {
-      (vscode.workspace as any).workspaceFolders = [
-        { uri: { fsPath: '/workspace/neko-test' } },
-      ];
+      (vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: '/workspace/neko-test' } }];
       vi.mocked(vscode.extensions.getExtension).mockReturnValue({
         isActive: true,
         exports: {
@@ -1170,21 +1168,29 @@ describe('AgentMessageTurnHandler', () => {
       );
     });
 
-    it('does not store hidden task-result follow-up prompts as user messages', async () => {
+    it('dispatches task-result continuations without storing user transcript messages', async () => {
       const webview = createMockWebview();
       const conversations = createMockConversations();
       const agentRunner = createMockAgentRunner();
+      const settings = createMockSettings();
+      settings.selectedProviderId = 'anthropic';
+      settings.selectedModelId = 'claude-3';
       const handler = buildHandler({
         conversations,
         agentManager: createMockAgentManager(agentRunner),
+        settings,
       });
 
-      await handler.handleUserMessage(
-        webview as any,
-        createChatModelRequest('Continue from the completed async task result.', {
-          userMessageVisibility: 'hidden',
-        }),
-      );
+      await handler.handleTaskResultContinuation(webview as any, {
+        id: 'followup-1',
+        conversationId: 'conv-1',
+        runId: 'run-1',
+        observationId: 'observation-1',
+        taskId: 'task-1',
+        policy: { kind: 'auto-resume-agent', prompt: 'Continue' },
+        prompt: 'Continue from the completed async task result.',
+        createdAt: 123,
+      });
 
       expect(conversations.addMessageToConversation).not.toHaveBeenCalledWith(
         expect.any(String),

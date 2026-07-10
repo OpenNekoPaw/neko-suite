@@ -33,7 +33,7 @@ export interface AgentTaskResultObservationRuntimeAgentPort {
   enqueuePendingMessage?(input: {
     readonly conversationId: string;
     readonly content: string;
-    readonly source: 'task-result-observation';
+    readonly source: 'task-result-continuation';
   }): unknown;
 }
 
@@ -224,7 +224,7 @@ export class AgentTaskResultObservationRuntime {
       const queued = agent.enqueuePendingMessage({
         conversationId: request.conversationId,
         content: request.prompt,
-        source: 'task-result-observation',
+        source: 'task-result-continuation',
       });
       if (!queued) {
         throw new Error('Agent was running but did not accept task-result follow-up queue item');

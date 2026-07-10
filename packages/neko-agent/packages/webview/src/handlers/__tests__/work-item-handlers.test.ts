@@ -1398,6 +1398,71 @@ describe('work item message handlers', () => {
     ]);
   });
 
+  it('keeps released task-result observations on the control plane instead of adding user messages', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '生成图片',
+          timestamp: 1,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '图片已生成',
+          timestamp: 2,
+        },
+      ],
+      currentStreaming: {
+        isThinking: false,
+        streamingMessageId: null,
+        queuedMessageCount: 1,
+        queuedMessages: [
+          {
+            id: 'task-observation-1',
+            conversationId: 'conv-a',
+            content: 'Continue from the completed async task result.',
+            createdAt: 10,
+            source: 'task-result-continuation',
+          },
+        ],
+        messageQueueVersion: 1,
+      },
+    });
+
+    dispatch(
+      streamingHandlers,
+      {
+        type: 'messageQueued',
+        conversationId: 'conv-a',
+        pendingCount: 0,
+        releasedItem: {
+          id: 'task-observation-1',
+          conversationId: 'conv-a',
+          content: 'Continue from the completed async task result.',
+          createdAt: 10,
+          source: 'task-result-continuation',
+        },
+        snapshot: {
+          conversationId: 'conv-a',
+          pendingCount: 0,
+          version: 2,
+          items: [],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.streaming().isThinking).toBe(true);
+    expect(harness.streaming().queuedMessageCount).toBe(0);
+    expect(harness.messages()).toEqual([
+      expect.objectContaining({ id: 'user-1', role: 'user', content: '生成图片' }),
+      expect.objectContaining({ id: 'assistant-1', role: 'assistant', content: '图片已生成' }),
+    ]);
+  });
+
   it('does not release local queue items on queue acknowledgement events', () => {
     const harness = createContextHarness({
       activeConversationId: 'conv-a',

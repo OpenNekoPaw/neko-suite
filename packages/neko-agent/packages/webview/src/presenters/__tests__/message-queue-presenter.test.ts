@@ -144,6 +144,26 @@ describe('message queue presenter', () => {
     ).toEqual([releasedMessage]);
   });
 
+  it('does not project released task-result observations into the visible transcript', () => {
+    const messages = [
+      message({ id: 'user-1', role: 'user', content: '生成图片' }),
+      message({ id: 'assistant-1', role: 'assistant', content: '图片已生成' }),
+    ];
+
+    expect(
+      projectReleasedQueuedMessageIntoTranscript({
+        messages,
+        item: {
+          id: 'task-observation-1',
+          conversationId: 'conv-1',
+          content: 'Continue from the completed async task result.',
+          createdAt: 123,
+          source: 'task-result-continuation',
+        },
+      }),
+    ).toEqual(messages);
+  });
+
   it('projects optimistic queued messages as non-authoritative composer items', () => {
     const item = projectOptimisticQueuedMessageItem({
       conversationId: 'conv-1',
