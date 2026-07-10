@@ -81,6 +81,7 @@ export function createTuiAutomationAppPort(
           ...(task.error ? { error: task.error } : {}),
         })),
         messageQueue: handle.getMessageQueueSnapshot(),
+        continuations: readContinuationFacts(handle.getMessageQueueSnapshot()),
         runtimeErrors: readRuntimeErrors(),
         canvas: readCanvasFacts(),
       };
@@ -123,22 +124,29 @@ async function readTuiAutomationIdleState(
       ? idleConcern(agentState.status, true)
       : busyConcern(agentState.status);
   const backgroundTasksIdle =
-    runningTasks.length === 0
-      ? idleConcern('idle', true)
-      : busyConcern('running', taskDiagnostic);
+    runningTasks.length === 0 ? idleConcern('idle', true) : busyConcern('running', taskDiagnostic);
   const mediaDeliveryIdle = backgroundTasksIdle;
   const taskResultObservationIdle = backgroundTasksIdle;
+  const queuedContinuations = (handle.getMessageQueueSnapshot()?.items ?? []).filter((item) =>
+    isContinuationSource(item.source),
+  );
+  const continuationQueueIdle =
+    queuedContinuations.length === 0
+      ? idleConcern('idle', true)
+      : busyConcern('queued', `${queuedContinuations.length} continuation(s) pending.`);
 
   return {
     turnIdle,
     backgroundTasksIdle,
     mediaDeliveryIdle,
     taskResultObservationIdle,
+    continuationQueueIdle,
     fullyIdle:
       turnIdle.idle &&
       backgroundTasksIdle.idle &&
       mediaDeliveryIdle.idle &&
-      taskResultObservationIdle.idle,
+      taskResultObservationIdle.idle &&
+      continuationQueueIdle.idle,
   };
 }
 
@@ -191,11 +199,82 @@ function readTurnSummaries(): readonly TuiDebugAutomationTurnSummary[] {
   return useConversationStore.getState().messages.map((message) => ({
     id: message.id,
     role: message.role,
+    ...(message.source ? { source: message.source } : {}),
+    ...(message.displayKind ? { displayKind: message.displayKind } : {}),
+    ...(message.metadata ? { metadata: message.metadata } : {}),
     content: readMessageSummaryContent(message),
     ...(message.isError ? { isError: true } : {}),
     toolCalls: readMessageToolCallSummaries(message),
     timestamp: message.timestamp,
   }));
+}
+
+export function readContinuationFacts(
+  queueSnapshot: import('@neko-agent/types').AgentMessageQueueSnapshot | null,
+): import('./types').TuiDebugAutomationContinuationFact[] {
+  const facts: import('./types').TuiDebugAutomationContinuationFact[] = [];
+  for (const message of useConversationStore.getState().messages) {
+    if (!message.source || !isContinuationSource(message.source)) continue;
+    facts.push({
+      id: message.id,
+      source: message.source,
+      displayKind: normalizeContinuationDisplayKind(message.displayKind),
+      promptSummary: readMessageSummaryContent(message),
+      ...(message.metadata ? { metadata: message.metadata } : {}),
+      status: message.metadata?.status ?? 'running',
+      timestamp: message.timestamp,
+    });
+  }
+  for (const item of queueSnapshot?.items ?? []) {
+    if (!isContinuationSource(item.source)) continue;
+    facts.push({
+      id: item.id,
+      source: normalizeContinuationSource(item.source),
+      displayKind: item.displayKind ?? normalizeContinuationDisplayKind(item.displayKind),
+      promptSummary: item.content.slice(0, 160),
+      ...(item.metadata ? { metadata: item.metadata } : {}),
+      status: item.metadata?.status ?? 'queued',
+      timestamp: item.createdAt,
+    });
+  }
+  return facts;
+}
+
+function isContinuationSource(
+  source:
+    | import('@neko-agent/types').AgentQueuedMessageSource
+    | import('@neko-agent/types').AgentTurnSource,
+): source is
+  Exclude<import('@neko-agent/types').AgentTurnSource, 'user'> | 'task-result-observation' {
+  return (
+    source === 'task-result-continuation' ||
+    source === 'task-result-observation' ||
+    source === 'subagent-result-continuation' ||
+    source === 'system-continuation'
+  );
+}
+
+function normalizeContinuationSource(
+  source: import('@neko-agent/types').AgentQueuedMessageSource,
+): Exclude<import('@neko-agent/types').AgentTurnSource, 'user'> {
+  if (source === 'task-result-observation') return 'task-result-continuation';
+  if (source === 'task-result-continuation') return source;
+  if (source === 'subagent-result-continuation') return source;
+  return 'system-continuation';
+}
+
+function normalizeContinuationDisplayKind(
+  displayKind:
+    import('@neko-agent/types').AgentQueuedMessageDisplayKind | Message['displayKind'] | undefined,
+): import('@neko-agent/types').AgentQueuedMessageDisplayKind {
+  if (
+    displayKind === 'task-continuation' ||
+    displayKind === 'subagent-continuation' ||
+    displayKind === 'system-continuation'
+  ) {
+    return displayKind;
+  }
+  return 'system-continuation';
 }
 
 export function readMessageSummaryContent(message: Message): string {
@@ -262,7 +341,9 @@ function messageContainsCanvasSignal(message: Message): boolean {
   );
 }
 
-function projectToolCallSummary(toolCall: Message['toolCalls'][number]): TuiDebugAutomationToolCallSummary {
+function projectToolCallSummary(
+  toolCall: Message['toolCalls'][number],
+): TuiDebugAutomationToolCallSummary {
   return {
     id: toolCall.id,
     name: toolCall.name,

@@ -1,4 +1,9 @@
-import type { AgentMessageQueueSnapshot } from '@neko-agent/types';
+import type {
+  AgentContinuationMetadata,
+  AgentMessageQueueSnapshot,
+  AgentQueuedMessageDisplayKind,
+  AgentTurnSource,
+} from '@neko-agent/types';
 import type { Task } from '@neko/shared';
 import type { Message } from '../../types/state';
 
@@ -60,8 +65,7 @@ export interface TuiDebugAutomationSessionCreateParams {
   readonly initialPrompt?: string;
 }
 
-export interface TuiDebugAutomationSessionResumeParams
-  extends TuiDebugAutomationSessionCreateParams {
+export interface TuiDebugAutomationSessionResumeParams extends TuiDebugAutomationSessionCreateParams {
   readonly conversationId: string;
 }
 
@@ -69,13 +73,11 @@ export interface TuiDebugAutomationSessionRefParams {
   readonly sessionId: string;
 }
 
-export interface TuiDebugAutomationMessageSubmitParams
-  extends TuiDebugAutomationSessionRefParams {
+export interface TuiDebugAutomationMessageSubmitParams extends TuiDebugAutomationSessionRefParams {
   readonly prompt: string;
 }
 
-export interface TuiDebugAutomationWaitForIdleParams
-  extends TuiDebugAutomationSessionRefParams {
+export interface TuiDebugAutomationWaitForIdleParams extends TuiDebugAutomationSessionRefParams {
   readonly timeoutMs?: number;
   readonly pollIntervalMs?: number;
 }
@@ -110,6 +112,7 @@ export interface TuiDebugAutomationIdleState {
   readonly backgroundTasksIdle: TuiDebugAutomationIdleConcern;
   readonly mediaDeliveryIdle: TuiDebugAutomationIdleConcern;
   readonly taskResultObservationIdle: TuiDebugAutomationIdleConcern;
+  readonly continuationQueueIdle?: TuiDebugAutomationIdleConcern;
   readonly fullyIdle: boolean;
 }
 
@@ -122,9 +125,22 @@ export interface TuiDebugAutomationModelIdentity {
 export interface TuiDebugAutomationTurnSummary {
   readonly id: string;
   readonly role: Message['role'];
+  readonly source?: AgentTurnSource;
+  readonly displayKind?: Message['displayKind'];
+  readonly metadata?: AgentContinuationMetadata;
   readonly content: string;
   readonly isError?: boolean;
   readonly toolCalls: readonly TuiDebugAutomationToolCallSummary[];
+  readonly timestamp: number;
+}
+
+export interface TuiDebugAutomationContinuationFact {
+  readonly id: string;
+  readonly source: Exclude<AgentTurnSource, 'user'>;
+  readonly displayKind: AgentQueuedMessageDisplayKind;
+  readonly promptSummary?: string;
+  readonly metadata?: AgentContinuationMetadata;
+  readonly status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'discarded';
   readonly timestamp: number;
 }
 
@@ -153,6 +169,7 @@ export interface TuiDebugAutomationSessionFacts {
   readonly skillActivations: readonly unknown[];
   readonly tasks: readonly Pick<Task, 'id' | 'type' | 'status' | 'progress' | 'error'>[];
   readonly messageQueue: AgentMessageQueueSnapshot | null;
+  readonly continuations: readonly TuiDebugAutomationContinuationFact[];
   readonly runtimeErrors: readonly string[];
   readonly canvas: TuiDebugAutomationCanvasFacts;
 }

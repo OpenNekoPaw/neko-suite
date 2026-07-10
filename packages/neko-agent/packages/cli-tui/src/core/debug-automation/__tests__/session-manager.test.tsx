@@ -142,6 +142,7 @@ function createFakePort(): TuiDebugAutomationAppPort {
         skillActivations: [],
         tasks: [],
         messageQueue: null,
+        continuations: [],
         runtimeErrors: [],
         canvas: { messageSummaries: [], toolCallSummaries: [] },
       };

@@ -8,6 +8,9 @@
 import { create } from 'zustand';
 import type { Message, TerminalTimelineRow, ToolCallState, TodoItem } from '../types/state';
 
+type SystemMessageInput =
+  string | Omit<Message, 'id' | 'role' | 'toolCalls' | 'todos' | 'timestamp'>;
+
 let messageCounter = 0;
 function nextId(): string {
   return `msg-${++messageCounter}-${Date.now()}`;
@@ -36,7 +39,7 @@ export interface ConversationSlice {
   applyTimelineRows: (rows: readonly TerminalTimelineRow[]) => void;
   updateTodos: (todos: TodoItem[]) => void;
   addError: (error: Error) => void;
-  addSystemMessage: (content: string) => void;
+  addSystemMessage: (input: SystemMessageInput) => void;
   replaceMessages: (messages: Message[]) => void;
   clearMessages: () => void;
 }
@@ -202,18 +205,19 @@ export const useConversationStore = create<ConversationSlice>((set) => ({
     }));
   },
 
-  addSystemMessage: (content) => {
+  addSystemMessage: (input) => {
+    const messageInput = typeof input === 'string' ? { content: input } : input;
     set((state) => ({
       messages: [
         ...state.messages,
         {
           id: nextId(),
           role: 'system' as const,
-          content,
+          ...messageInput,
           toolCalls: [],
           todos: [],
           timestamp: Date.now(),
-          isError: false,
+          isError: messageInput.isError ?? false,
         },
       ],
     }));

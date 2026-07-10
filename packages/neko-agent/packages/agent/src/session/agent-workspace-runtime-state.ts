@@ -530,6 +530,8 @@ function parseQueuedMessageItem(
     content: value.content,
     createdAt: value.createdAt,
     source: value.source,
+    ...(isQueuedMessageDisplayKind(value.displayKind) ? { displayKind: value.displayKind } : {}),
+    ...(isRecord(value.metadata) ? { metadata: parseContinuationMetadata(value.metadata) } : {}),
     ...(isFiniteNumber(value.updatedAt) ? { updatedAt: value.updatedAt } : {}),
   };
 }
@@ -537,7 +539,60 @@ function parseQueuedMessageItem(
 function isQueuedMessageSource(
   value: unknown,
 ): value is AgentMessageQueueSnapshot['items'][number]['source'] {
-  return value === 'composer' || value === 'task-result-observation';
+  return (
+    value === 'composer' ||
+    value === 'user' ||
+    value === 'task-result-observation' ||
+    value === 'task-result-continuation' ||
+    value === 'subagent-result-continuation' ||
+    value === 'system-continuation'
+  );
+}
+
+function isQueuedMessageDisplayKind(
+  value: unknown,
+): value is NonNullable<AgentMessageQueueSnapshot['items'][number]['displayKind']> {
+  return (
+    value === 'user-message' ||
+    value === 'task-continuation' ||
+    value === 'subagent-continuation' ||
+    value === 'system-continuation'
+  );
+}
+
+function parseContinuationMetadata(
+  value: Record<string, unknown>,
+): NonNullable<AgentMessageQueueSnapshot['items'][number]['metadata']> {
+  return {
+    ...(typeof value.observationId === 'string' ? { observationId: value.observationId } : {}),
+    ...(typeof value.taskId === 'string' ? { taskId: value.taskId } : {}),
+    ...(typeof value.taskGroupId === 'string' ? { taskGroupId: value.taskGroupId } : {}),
+    ...(typeof value.subagentId === 'string' ? { subagentId: value.subagentId } : {}),
+    ...(typeof value.parentMessageId === 'string'
+      ? { parentMessageId: value.parentMessageId }
+      : {}),
+    ...(typeof value.parentToolCallId === 'string'
+      ? { parentToolCallId: value.parentToolCallId }
+      : {}),
+    ...(typeof value.runId === 'string' ? { runId: value.runId } : {}),
+    ...(isContinuationStatus(value.status) ? { status: value.status } : {}),
+    ...(typeof value.policy === 'string' ? { policy: value.policy } : {}),
+  };
+}
+
+function isContinuationStatus(
+  value: unknown,
+): value is NonNullable<
+  NonNullable<AgentMessageQueueSnapshot['items'][number]['metadata']>['status']
+> {
+  return (
+    value === 'queued' ||
+    value === 'running' ||
+    value === 'completed' ||
+    value === 'failed' ||
+    value === 'cancelled' ||
+    value === 'discarded'
+  );
 }
 
 function parseModelSelection(value: unknown): AgentWorkspaceRuntimeModelSelection | undefined {

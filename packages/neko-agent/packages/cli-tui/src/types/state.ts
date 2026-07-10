@@ -6,7 +6,12 @@
  */
 
 import type { AgentResult } from '@neko/agent';
-import type { AgentMessageQueueSnapshot } from '@neko-agent/types';
+import type {
+  AgentContinuationMetadata,
+  AgentMessageQueueSnapshot,
+  AgentQueuedMessageDisplayKind,
+  AgentTurnSource,
+} from '@neko-agent/types';
 
 export type TerminalTimelineRowKind =
   'assistant_text' | 'thinking' | 'tool' | 'task' | 'media' | 'error' | 'diagnostic';
@@ -56,6 +61,9 @@ export interface TerminalTimelineRow {
 export interface Message {
   readonly id: string;
   readonly role: 'user' | 'assistant' | 'system';
+  readonly source?: AgentTurnSource;
+  readonly displayKind?: AgentQueuedMessageDisplayKind | 'assistant-message' | 'system-note';
+  readonly metadata?: AgentContinuationMetadata;
   content: string;
   thinking?: string;
   toolCalls: ToolCallState[];

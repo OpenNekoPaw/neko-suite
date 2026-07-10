@@ -1,6 +1,15 @@
-import { describe, expect, it } from 'vitest';
-import { readMessageSummaryContent, readMessageToolCallSummaries } from '../app-port';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  readContinuationFacts,
+  readMessageSummaryContent,
+  readMessageToolCallSummaries,
+} from '../app-port';
 import type { Message } from '../../../types/state';
+import { useConversationStore } from '../../../stores/conversation-store';
+
+afterEach(() => {
+  useConversationStore.getState().clearMessages();
+});
 
 describe('readMessageSummaryContent', () => {
   it('uses explicit message content when present', () => {
@@ -72,6 +81,50 @@ describe('readMessageToolCallSummaries', () => {
         status: 'success',
         result: '402 pages',
       },
+    ]);
+  });
+});
+
+describe('readContinuationFacts', () => {
+  it('reports executed and queued continuations without user-message parsing', () => {
+    useConversationStore.getState().addSystemMessage({
+      content: 'Task result ready task-1. Continuing from the completed async result.',
+      source: 'task-result-continuation',
+      displayKind: 'task-continuation',
+      metadata: { taskId: 'task-1', observationId: 'obs-1', status: 'running' },
+    });
+
+    expect(
+      readContinuationFacts({
+        conversationId: 'conv-1',
+        pendingCount: 1,
+        version: 1,
+        items: [
+          {
+            id: 'queue-1',
+            conversationId: 'conv-1',
+            content: 'Continue from subagent result',
+            createdAt: 10,
+            source: 'subagent-result-continuation',
+            displayKind: 'subagent-continuation',
+            metadata: { subagentId: 'subagent-1', status: 'queued' },
+          },
+        ],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        source: 'task-result-continuation',
+        displayKind: 'task-continuation',
+        metadata: expect.objectContaining({ taskId: 'task-1', observationId: 'obs-1' }),
+        status: 'running',
+      }),
+      expect.objectContaining({
+        id: 'queue-1',
+        source: 'subagent-result-continuation',
+        displayKind: 'subagent-continuation',
+        metadata: expect.objectContaining({ subagentId: 'subagent-1' }),
+        status: 'queued',
+      }),
     ]);
   });
 });

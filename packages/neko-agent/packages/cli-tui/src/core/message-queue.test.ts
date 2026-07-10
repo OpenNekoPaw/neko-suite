@@ -45,6 +45,57 @@ describe('createTuiMessageQueue', () => {
     expect(queue.dequeue()).toBeNull();
   });
 
+  it('tracks continuation source metadata and prevents prompt editing', () => {
+    const queue = createTuiMessageQueue({ conversationId: 'conv-1', now: () => 1000 });
+
+    const item = queue.enqueue({
+      content: 'Continue from task result',
+      source: 'task-result-continuation',
+      metadata: { taskId: 'task-1', observationId: 'obs-1' },
+    });
+
+    expect(item).toMatchObject({
+      source: 'task-result-continuation',
+      displayKind: 'task-continuation',
+      metadata: { taskId: 'task-1', observationId: 'obs-1' },
+    });
+    expect(() => queue.edit(item.id, 'changed')).toThrow('Queued continuation cannot be edited');
+  });
+
+  it('dequeues continuations before user messages by default', () => {
+    const queue = createTuiMessageQueue({ conversationId: 'conv-1', now: () => 1000 });
+    const user = queue.enqueue('later user prompt');
+    const continuation = queue.enqueue({
+      content: 'Continue from task result',
+      source: 'task-result-continuation',
+      metadata: { taskId: 'task-1' },
+    });
+
+    expect(queue.snapshot().items.map((item) => item.id)).toEqual([user.id, continuation.id]);
+    expect(queue.dequeue()?.id).toBe(continuation.id);
+    expect(queue.dequeue()?.id).toBe(user.id);
+  });
+
+  it('discards continuations explicitly without treating user messages as continuations', () => {
+    const queue = createTuiMessageQueue({ conversationId: 'conv-1', now: () => 1000 });
+    const user = queue.enqueue('user prompt');
+    const continuation = queue.enqueue({
+      content: 'Continue from task result',
+      source: 'task-result-continuation',
+      metadata: { taskId: 'task-1' },
+    });
+
+    expect(() => queue.discardContinuation(user.id)).toThrow(
+      'Queued user message cannot be discarded as a continuation',
+    );
+    expect(queue.discardContinuation(continuation.id, 2000)).toMatchObject({
+      id: continuation.id,
+      updatedAt: 2000,
+      metadata: { taskId: 'task-1', status: 'discarded' },
+    });
+    expect(queue.snapshot().items.map((item) => item.id)).toEqual([user.id]);
+  });
+
   it('rejects stale ids and non-queueable input visibly', () => {
     const queue = createTuiMessageQueue({ conversationId: 'conv-1' });
 
@@ -64,7 +115,7 @@ describe('formatTuiQueueSnapshot', () => {
     queue.enqueue('draft next scene');
 
     expect(formatTuiQueueSnapshot(queue.snapshot())).toBe(
-      ['Queue: 1 pending (version 1)', '1. queue-1 draft next scene'].join('\n'),
+      ['Queue: 1 pending (version 1)', '1. queue-1 [user] draft next scene'].join('\n'),
     );
   });
 });

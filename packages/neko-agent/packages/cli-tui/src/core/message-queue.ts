@@ -1,4 +1,10 @@
-import type { AgentMessageQueueSnapshot, AgentQueuedMessageItem } from '@neko-agent/types';
+import type {
+  AgentContinuationMetadata,
+  AgentMessageQueueSnapshot,
+  AgentQueuedMessageDisplayKind,
+  AgentQueuedMessageItem,
+  AgentQueuedMessageSource,
+} from '@neko-agent/types';
 
 export type TuiQueueOperationErrorCode = 'stale-item' | 'invalid-queue-operation' | 'not-queueable';
 
@@ -13,11 +19,22 @@ export class TuiMessageQueueError extends Error {
   }
 }
 
+export interface EnqueueTuiMessageQueueInput {
+  readonly content: string;
+  readonly source?: AgentQueuedMessageSource;
+  readonly displayKind?: AgentQueuedMessageDisplayKind;
+  readonly metadata?: AgentContinuationMetadata;
+  readonly now?: number;
+}
+
+type EnqueueTuiMessageQueueArgument = string | EnqueueTuiMessageQueueInput;
+
 export interface TuiMessageQueue {
-  enqueue(content: string, now?: number): AgentQueuedMessageItem;
+  enqueue(input: EnqueueTuiMessageQueueArgument, now?: number): AgentQueuedMessageItem;
   snapshot(): AgentMessageQueueSnapshot;
   promote(queueItemId: string): AgentQueuedMessageItem;
   cancel(queueItemId: string): AgentQueuedMessageItem;
+  discardContinuation(queueItemId: string, now?: number): AgentQueuedMessageItem;
   edit(queueItemId: string, content: string, now?: number): AgentQueuedMessageItem;
   dequeue(): AgentQueuedMessageItem | null;
   clear(): void;
@@ -40,18 +57,19 @@ class DefaultTuiMessageQueue implements TuiMessageQueue {
 
   constructor(private readonly options: TuiMessageQueueOptions) {}
 
-  enqueue(content: string, now = this.readNow()): AgentQueuedMessageItem {
-    const normalized = content.trim();
+  enqueue(input: EnqueueTuiMessageQueueArgument, now = this.readNow()): AgentQueuedMessageItem {
+    const normalizedInput = normalizeEnqueueInput(input, now);
+    const normalized = normalizedInput.content.trim();
     if (!normalized) {
       throw new TuiMessageQueueError('not-queueable', 'Queued message cannot be empty.');
     }
-    if (normalized.startsWith('/')) {
+    if (isUserQueueSource(normalizedInput.source) && normalized.startsWith('/')) {
       throw new TuiMessageQueueError(
         'not-queueable',
         'Commands cannot be queued while an Agent turn is running.',
       );
     }
-    if (normalized.startsWith('$')) {
+    if (isUserQueueSource(normalizedInput.source) && normalized.startsWith('$')) {
       throw new TuiMessageQueueError(
         'not-queueable',
         'Skill invocations cannot be queued while an Agent turn is running.',
@@ -62,8 +80,10 @@ class DefaultTuiMessageQueue implements TuiMessageQueue {
       id: this.nextId(),
       conversationId: this.options.conversationId,
       content: normalized,
-      createdAt: now,
-      source: 'composer',
+      createdAt: normalizedInput.now,
+      source: normalizedInput.source,
+      displayKind: normalizedInput.displayKind,
+      ...(normalizedInput.metadata ? { metadata: normalizedInput.metadata } : {}),
     };
     this.items.push(item);
     this.bumpVersion();
@@ -92,6 +112,33 @@ class DefaultTuiMessageQueue implements TuiMessageQueue {
     return { ...item };
   }
 
+  discardContinuation(queueItemId: string, now = this.readNow()): AgentQueuedMessageItem {
+    const index = this.findIndex(queueItemId);
+    const item = this.items[index];
+    if (!item) {
+      throw new TuiMessageQueueError(
+        'stale-item',
+        `Unknown queue item: ${queueItemId}`,
+        queueItemId,
+      );
+    }
+    if (isUserQueueSource(item.source)) {
+      throw new TuiMessageQueueError(
+        'invalid-queue-operation',
+        `Queued user message cannot be discarded as a continuation: ${queueItemId}`,
+        queueItemId,
+      );
+    }
+    this.items.splice(index, 1);
+    const discarded: AgentQueuedMessageItem = {
+      ...item,
+      updatedAt: now,
+      metadata: { ...item.metadata, status: 'discarded' },
+    };
+    this.bumpVersion();
+    return discarded;
+  }
+
   edit(queueItemId: string, content: string, now = this.readNow()): AgentQueuedMessageItem {
     const normalized = content.trim();
     if (!normalized) {
@@ -110,6 +157,13 @@ class DefaultTuiMessageQueue implements TuiMessageQueue {
         queueItemId,
       );
     }
+    if (!isUserQueueSource(current.source)) {
+      throw new TuiMessageQueueError(
+        'invalid-queue-operation',
+        `Queued continuation cannot be edited as a user message: ${queueItemId}`,
+        queueItemId,
+      );
+    }
     const next: AgentQueuedMessageItem = {
       ...current,
       content: normalized,
@@ -121,7 +175,9 @@ class DefaultTuiMessageQueue implements TuiMessageQueue {
   }
 
   dequeue(): AgentQueuedMessageItem | null {
-    const item = this.items.shift();
+    const continuationIndex = this.items.findIndex((item) => !isUserQueueSource(item.source));
+    const index = continuationIndex >= 0 ? continuationIndex : 0;
+    const item = this.items.splice(index, 1)[0];
     if (!item) {
       return null;
     }
@@ -188,7 +244,9 @@ export function formatTuiQueueSnapshot(snapshot: AgentMessageQueueSnapshot): str
   }
   return [
     `Queue: ${snapshot.pendingCount} pending (version ${snapshot.version})`,
-    ...snapshot.items.map((item, index) => `${index + 1}. ${item.id} ${item.content}`),
+    ...snapshot.items.map(
+      (item, index) => `${index + 1}. ${item.id} [${item.source}] ${item.content}`,
+    ),
   ].join('\n');
 }
 
@@ -197,4 +255,46 @@ export function formatTuiQueueError(error: unknown): string {
     return `${error.code}: ${error.message}`;
   }
   return error instanceof Error ? error.message : String(error);
+}
+
+function normalizeEnqueueInput(
+  input: EnqueueTuiMessageQueueArgument,
+  defaultNow: number,
+): Required<Pick<EnqueueTuiMessageQueueInput, 'content' | 'source' | 'displayKind' | 'now'>> &
+  Pick<EnqueueTuiMessageQueueInput, 'metadata'> {
+  if (typeof input === 'string') {
+    return {
+      content: input,
+      source: 'user',
+      displayKind: 'user-message',
+      now: defaultNow,
+    };
+  }
+  const source = input.source ?? 'user';
+  return {
+    content: input.content,
+    source,
+    displayKind: input.displayKind ?? defaultDisplayKindForSource(source),
+    now: input.now ?? defaultNow,
+    ...(input.metadata ? { metadata: input.metadata } : {}),
+  };
+}
+
+function defaultDisplayKindForSource(
+  source: AgentQueuedMessageSource,
+): AgentQueuedMessageDisplayKind {
+  if (source === 'task-result-continuation' || source === 'task-result-observation') {
+    return 'task-continuation';
+  }
+  if (source === 'subagent-result-continuation') {
+    return 'subagent-continuation';
+  }
+  if (source === 'system-continuation') {
+    return 'system-continuation';
+  }
+  return 'user-message';
+}
+
+function isUserQueueSource(source: AgentQueuedMessageSource): boolean {
+  return source === 'user' || source === 'composer';
 }
