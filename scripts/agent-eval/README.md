@@ -23,9 +23,28 @@ required evidence, manifest shape, and quality rubric. It covers single prompts,
 message queues, closed-loop feedback, async/concurrent/iterative tasks, Skill
 activation/triggering, and model/provider/profile binding.
 
+Use [`.codex/skills/neko-agent-evaluation/SKILL.md`](../../.codex/skills/neko-agent-evaluation/SKILL.md)
+to decide whether a change requires evaluation and to define canonical-path,
+forbidden-fallback, observability, and residual-risk evidence.
+
+## Development Gate
+
+Run the key-free harness tests after changing this directory, scenario
+manifests, the debug automation protocol, or exported fact contracts:
+
+```bash
+pnpm test:agent:eval
+```
+
+This command runs in `pnpm ci:local` and GitHub CI. It validates harness and
+protocol behavior; it does not replace a real TUI Agent case. Only assertions
+with evaluators actually executed by the current runner count as passed.
+Metadata printed by `--dry-run`, a zero exit code, or a non-empty final answer
+must not be reported as complete scenario acceptance on their own.
+
 ## Exit Codes
 
-- `0`: pass
+- `0`: runner-supported checks passed
 - `1`: case fail
 - `2`: infrastructure fail
 - `3`: manifest/config invalid
@@ -36,7 +55,7 @@ Run a single prompt through the local developer automation protocol:
 
 ```bash
 node scripts/agent-eval/protocol-smoke.mjs \
-  --cwd /Users/feng/Git/neko-test \
+  --cwd "$HOME/Git/neko-test" \
   --prompt "Generate a cat playing image and analyze the image content"
 ```
 
@@ -66,7 +85,7 @@ node scripts/agent-eval/protocol-smoke.mjs \
   --dry-run
 ```
 
-Run the cat image generation and analysis case through debug automation:
+Run the cat image generation, image analysis, and conditional regeneration case through debug automation:
 
 ```bash
 node scripts/agent-eval/protocol-smoke.mjs \
@@ -77,7 +96,7 @@ node scripts/agent-eval/protocol-smoke.mjs \
 The EPUB cases use `${A}` as the asset root. Export it before running:
 
 ```bash
-export A=/Users/feng/Git/neko-test
+export A="$HOME/Git/neko-test"
 ```
 
 Run the BLAME storyboard-to-Canvas case:
@@ -87,6 +106,10 @@ node scripts/agent-eval/protocol-smoke.mjs \
   --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
   --case blame-epub-storyboard-to-canvas
 ```
+
+This case validates EPUB image analysis, storyboard table generation, and a
+Canvas handoff. After the Agent run, run `canvas-json-check.mjs` against the
+Canvas JSON file generated in `$HOME/Git/neko-test`.
 
 Run the lamp-god animation planning case:
 
@@ -106,7 +129,7 @@ that is expected to create a Canvas JSON file:
 
 ```bash
 node scripts/agent-eval/canvas-json-check.mjs \
-  --file /Users/feng/Git/neko-test/path/to/canvas.json \
+  --file "$HOME/Git/neko-test/path/to/canvas.json" \
   --expect storyboard \
   --expect nodes
 ```
