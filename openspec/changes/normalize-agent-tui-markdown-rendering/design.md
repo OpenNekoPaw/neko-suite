@@ -1028,3 +1028,21 @@ Focused validation SHALL distinguish key-free evaluation-harness health from rea
 - Disable input while the Agent runs: rejected because it prevents queued follow-up prompts without a modal ownership reason.
 - Express scroll position from the history top: rejected because streaming growth changes the bottom boundary and makes follow-mode/reading-anchor behavior harder to state and test.
 - Depend on native terminal scrollback for the full transcript: rejected because every render can grow/reflow terminal output and cannot preserve an application-level reading anchor reliably.
+
+## Compact `@` Reference Presentation
+
+### Decision
+
+TUI input and user-message history SHALL treat the authored prompt as the canonical source and apply compact reference rendering only as a terminal presentation projection. A path-backed token such as `@${A}/epub/animation/Blame/book.epub` SHALL display as `@book.epub` with the existing informational theme role, while submission, history storage, queueing, and Agent execution retain the complete durable token.
+
+The package-local projection SHALL recognize only boundary-delimited unquoted references and quoted references, preserve surrounding text and multiple references, and avoid treating email-like text as a reference. It SHALL support path-backed and identifier-backed references without EPUB-specific behavior.
+
+### Runtime boundary and legacy-path audit
+
+`InputEditor` owns raw editing and submission. `ReferenceAwareText` owns terminal-only segmentation, compact labels, and reference color. `MessageItem` reuses the same presentation component for user history. Neither component may construct or mutate Agent input.
+
+The existing TUI `InputProcessor` preprocessing path remains required for ordinary workspace file references because the current runtime-session assembly does not inject that processor into the shared message runtime. Durable variable references such as `@${A}/...` and durable identifier schemes are explicitly excluded from workspace file loading, so the EPUB example is not expanded into a `## Referenced Files` payload. Removing that preprocessing path in this bounded change would break workspace-file references rather than clean up a duplicate successful path.
+
+### Acceptance
+
+Deterministic tests SHALL prove that the input frame and user-message history omit the long parent path, the compact filename remains visible, surrounding text and multiple/quoted references remain intact, email-like text is not projected, and `onSubmit` plus stored message content retain the exact original durable token.

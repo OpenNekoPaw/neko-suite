@@ -272,3 +272,20 @@ Risk is **L3** because the change replaces an AI assistant rendering path, adds 
 - Bun exact package-import support and the runner's timing-based resize settlement have the extension conditions described in the quality-review suggestions.
 - The Agent Webview still owns direct `react-markdown`/remark presentation. `webview-audit.md` records the entry points and dependency surface, and linked change `migrate-agent-webview-to-normalized-markdown` contains proposal, design, capability spec, tasks, dependency cleanup, shared-fixture requirements, Extension Development Host acceptance, and a legacy-parser poison removal gate.
 - Cross-host semantic unification therefore remains not Accepted in `docs/architecture/adr-unified-markdown-resource-rendering.md`. This TUI change must not be archived merely because its own acceptance evidence is complete; the linked Webview implementation/removal gate remains outstanding.
+
+## Compact reference presentation follow-up
+
+The TUI now renders selected path references compactly in both the active editor and historical user messages through one package-local `ReferenceAwareText` projection. The editor and conversation store continue to own the complete authored string; presentation never rewrites the prompt.
+
+Focused verification:
+
+```text
+pnpm --dir packages/neko-agent exec vitest --run --root ../.. \
+  packages/cli-tui/src/components/Input/input-editor.test.ts \
+  packages/cli-tui/src/components/shared/reference-presentation.test.ts \
+  packages/cli-tui/src/components/ChatView/MessageItem.reference.test.tsx \
+  packages/cli-tui/src/components/ChatView/ChatView.runtime.test.tsx
+# 4 files / 18 tests passed
+```
+
+The package-wide CLI test command still reports 20 pre-existing failures across experiment, localization/status snapshots, Skill catalog identity, and one assistant-streaming whitespace assertion; the focused reference lane is green. The CLI TypeScript project check is also blocked by existing cross-package strict errors and reports no error in the compact-reference files.

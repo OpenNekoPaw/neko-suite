@@ -119,3 +119,10 @@
 - [x] 13.2 Coalesce every non-final Markdown source update through one latest-only trailing-edge window while keeping finalization immediate.
 - [x] 13.3 Define timer and scroll lifecycle contracts, preserve the user's reading anchor as content grows, and keep input active while the Agent is running unless a modal owns the keyboard.
 - [x] 13.4 Run focused CLI tests, CLI/extension builds, the key-free Agent evaluation harness, scenario dry-run, OpenSpec validation, and repository quality gates; record unrelated workspace failures and the remaining real-provider/manual-terminal blockers.
+
+## 14. Compact Reference Presentation
+
+- [x] 14.1 Add a package-local terminal presentation contract that segments boundary-delimited and quoted `@` references, renders path-backed references by compact basename, and preserves identifier references and surrounding text.
+- [x] 14.2 Use the same presentation component in `InputEditor` and user `MessageItem` rendering while retaining the full raw value for submission and conversation storage.
+- [x] 14.3 Add exact EPUB regression coverage plus multiple-reference, quoted-reference, identifier-reference, and email-boundary tests.
+- [x] 14.4 Audit the TUI file preprocessing path and retain it for workspace-file loading; verify durable `${VAR}` and identifier references are excluded from content expansion and continue to the Agent as complete tokens.
