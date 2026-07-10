@@ -261,6 +261,25 @@ TUI/headless 特有的 bootstrap 层（`createCLIPlatform()`）负责：
 | `hooks/`      | useAgentSession + useKeyboardShortcuts                     |
 | `core/`       | createCLIPlatform + bootstrap                              |
 
+#### TUI Markdown canonical presentation
+
+Assistant Markdown from the first streaming delta through finalization uses one message/timeline-scoped `MarkdownStreamingSession` from `@neko/markdown`. Historical finalized content enters the same path as an immediately finalized session; `StreamingText` is not an assistant Markdown renderer.
+
+```text
+authoritative assistant source
+  -> @neko/markdown normalized session/document
+  -> cli-tui terminal projector
+  -> adaptive table/code/text layout
+  -> renderer-owned safe ANSI/OSC encoding
+  -> thin Ink Text component
+```
+
+The semantic parser/document is shared, while terminal projection remains `cli-tui`-local. `TerminalTextMetrics`, Unicode/ASCII borders, terminal theme/capability resolution, table modes, whole-block highlighting, resize reflow and ANSI/OSC trust handling are terminal presentation responsibilities and do not belong in `@neko/markdown` or `@neko/ui`.
+
+All source-backed ranges use half-open UTF-16 offsets `[startOffset, endOffset)`. Resize changes projection/layout generations against the same document revision and must not reparse. Resource/link resolution is immutable and revision-associated; arbitrary provider terminal controls and unvalidated local/file targets remain inert. Resource budgets and caches are centralized in package-local `MarkdownResourcePolicy`, not user settings.
+
+The removed TUI regex parser, line-regex highlighter, final-only renderer and assistant `StreamingText` Markdown path have no fallback. Agent Webview migration is separately tracked by `openspec/changes/migrate-agent-webview-to-normalized-markdown`; cross-host semantic unification is not complete until its legacy parser poison and Extension Development Host gates pass.
+
 ---
 
 ## 统一 Runtime Bootstrap

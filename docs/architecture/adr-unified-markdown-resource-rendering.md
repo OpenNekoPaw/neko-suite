@@ -2,7 +2,7 @@
 
 状态：Accepted
 日期：2026-06-29
-更新：2026-07-06
+更新：2026-07-10
 范围：`neko-agent`、`neko-canvas`、`@neko/markdown`、`@neko/shared`、`@neko/ui`、Agent Webview Markdown、Canvas authoring capabilities、Canvas 文本/表格/分镜节点、CompositeArtifact / GenericTable、Markdown 文档和资源投影。
 
 本文记录 Neko Suite 对 “Agent 生成 Markdown、Agent Webview 增强渲染、Canvas 通过 MCP 式能力创建/校验/渲染内容” 的系统级边界。它补充 [`cache-file-access-and-paths.md`](cache-file-access-and-paths.md)、[`adr-agent-autonomous-filmmaking-creation-boundary.md`](adr-agent-autonomous-filmmaking-creation-boundary.md)、[`adr-markdown-storyboard-draft-protocol.md`](adr-markdown-storyboard-draft-protocol.md)、[`adr-canvas-cut-playback-route-and-timeline-boundary.md`](adr-canvas-cut-playback-route-and-timeline-boundary.md) 和 [`proto-and-wire-contracts.md`](proto-and-wire-contracts.md)。
@@ -10,6 +10,8 @@
 > 2026-07-06 更新：本文早期把默认 `Send to Canvas` 描述为直接调用 `canvas.ingestMarkdown`。当前 canonical path 已收敛为：Agent Webview 创建 Agent-visible Canvas authoring handoff intent；Agent 自主决定是否激活 `canvas-authoring` Skill、查询 Canvas authoring catalog/context、选择 Canvas Markdown capability 或其它 Canvas tool。`canvas.ingestMarkdown` 等 Markdown capabilities 仍是 Canvas-owned tools，但不再由 Webview/Extension 作为按钮副作用直接调用。
 
 > 2026-07-06 更新：Markdown 分镜表的生产导入已经收敛到 Canvas semantic storyboard authoring。`canvas.createStoryboardFromMarkdown` 创建 `storyboardPrompt` semantic prompt documents；Markdown 中名为 `Generation Prompt` 或 `generationPrompt` 的列只作为 prompt 输入，不重新写入 `/generationPrompt` 作为分镜提示词权威。
+
+> 2026-07-10 更新：`@neko/markdown` normalized document/session contract 与 Agent TUI canonical terminal adapter 已落地；Agent Webview 仍直接使用 `react-markdown + remark-gfm`。因此本文的 Canvas/resource boundary 继续为 Accepted，但“所有 Markdown host 已语义统一”仍是**未接受/未完成**结论。移除 gate 由 [`migrate-agent-webview-to-normalized-markdown`](../../openspec/changes/migrate-agent-webview-to-normalized-markdown/) 跟踪。
 
 ## 背景
 
@@ -282,15 +284,17 @@ Agent Webview 的 `Send to Canvas` 是快捷 handoff，而不是 Canvas 命令�
 
 Agent Webview Markdown renderer 应支持资源增强渲染，但只作为当前消息的展示投影。该能力必须分阶段实施，避免把 Neko resource-reference parser、文档 resolver 和 Canvas capability 同时塞进同一轮变更。
 
-当前实现阶段：
+当前宿主状态（2026-07-10）：
 
-- 保持 `react-markdown + remark-gfm` 的普通 Markdown/GFM 渲染。
-- `@neko/markdown` core 提供 host-agnostic projection：GFM creative tables、CommonMark images、`@` mentions、Neko resource-reference token、semantic prompt spans、diagnostics 和 handoff refs。
-- Agent Webview 消费 `@neko/markdown` projection，负责 React composition、resource thumbnail/chip display 和 handoff payload 组装。
-- `![[...]]` / `[[...]]` 在 resolver-backed 完整实现前必须保留文本并返回 unsupported diagnostic，不能被当作稳定资源成功解析。
-- Send to Canvas 通过 `requestCanvasAuthoringHandoff` 进入 Agent，不直接调用 Canvas capability。
+- `@neko/markdown` 已拥有 authoritative source、exhaustive CommonMark/GFM normalized nodes、半开 UTF-16 ranges、annotations、resolution association、diagnostics 和 append/finalize `MarkdownStreamingSession`。
+- Agent TUI assistant Markdown 已从首 delta 到 finalize 统一进入 normalized session → terminal projector → layout/highlighter → safe encoder → thin Ink adapter；resize 对同一 revision reflow，不重新 parse。
+- TUI 的 regex parser、逐行 regex highlighter、final-only renderer 和 assistant `StreamingText` Markdown path 已移除且不得 fallback。
+- Agent Webview **尚未迁移**：普通 Markdown/GFM 仍由 `react-markdown + remark-gfm` 直接解释；creative table、code language 和部分 React components 仍依赖该 parser AST，同时另行消费部分 `@neko/markdown` extension/resource projection。
+- 因此 cross-host semantic unification 仍未 Accepted。Webview 必须完成 normalized adapter、shared fixtures、direct dependency cleanup、legacy parser poison 和 Extension Development Host runtime acceptance 后，才能移除此 gate。
+- Webview 审计见 [`webview-audit.md`](../../openspec/changes/normalize-agent-tui-markdown-rendering/webview-audit.md)，实施变更见 [`migrate-agent-webview-to-normalized-markdown`](../../openspec/changes/migrate-agent-webview-to-normalized-markdown/)。
+- `![[...]]` / `[[...]]` 在 resolver-backed 完整实现前必须保留文本并返回 unsupported diagnostic，不能被当作稳定资源成功解析；Send to Canvas 仍通过 `requestCanvasAuthoringHandoff` 进入 Agent，不直接调用 Canvas capability。
 
-第二阶段：
+后续资源增强阶段：
 
 - 新增独立 Markdown resource extension parser，支持 Neko resource-reference embed/link（语法借鉴文件引用体验，但不是 Obsidian 兼容层）。
 - 接入 document/resource resolver。
@@ -416,7 +420,7 @@ Markdown token、`![[...]]`、CommonMark image URL 和表格单元格文本都�
 | --- | --- |
 | `neko-agent` | 生成 Markdown/文本/结构化内容、展示增强 Markdown、创建 Agent-visible Canvas handoff、由 Agent runtime 自主选择 Skill/tool |
 | `neko-canvas` | 暴露 authoring catalog、Canvas-owned Skills/tools/capabilities；校验、绑定资源、创建节点、渲染 Canvas 内容 |
-| `@neko/markdown` | Markdown 扩展语法、纯 projection DTO、diagnostics、resolver/renderer adapter contracts；不做 Canvas 校验或 mutation |
+| `@neko/markdown` | authoritative source、normalized CommonMark/GFM/extension nodes、ranges、annotations、diagnostics、streaming session 与 resolution/renderer adapter contracts；不做 Canvas 校验或 mutation |
 | `@neko/shared` | 跨包 DTO：ResourceRef、DocumentArchiveResourceRef、Canvas authoring catalog/result、capability input/output 的最小共享契约 |
 | Extension Host | stable ref -> bytes/cache/renderUri；路径授权、CSP、diagnostics |
 | `@neko/ui` | 可复用的无业务 Markdown/table/resource cell UI 原语，成熟后再提取 |
@@ -431,6 +435,9 @@ Markdown token、`![[...]]`、CommonMark image URL 和表格单元格文本都�
 
 ## 验收要求
 
+- Agent TUI path-level tests 必须证明 first delta、intermediate update、same-session finalize、historical/timeline/failure presentation 只进入 normalized session/projector/layout path，legacy parser/highlighter/final-only/assistant plain path 不可成功。
+- TUI runtime fixture 必须覆盖 color/`NO_COLOR`、Unicode/ASCII、OSC 8/fallback、table mode、code reflow、resize、incomplete streaming finalize 和 provider terminal controls inert。
+- Agent Webview semantic convergence 只有在 linked change 的 direct parser dependency cleanup、shared fixture、legacy poison 和 Extension Development Host runtime gate 全部通过后才可声明完成；普通浏览器/JSDOM 不能替代该 gate。
 - Agent Webview 能把 `![[cover.png]]`、`![[Chapter 1#Section]]`、`![cover](assets/cover.png)`、`@mention` 和 semantic prompt spans 渲染为 projection、预览、文档引用或明确 diagnostic。
 - Send to Canvas 创建 Agent-visible handoff intent，而不是让 Agent/Webview 直接构造 `CanvasNode[]`、调用 Canvas capability 或走旧 plugin-transfer payload。
 - Extension route 测试证明 handoff 不调用 `neko.canvas.importAsset`、Canvas Markdown capabilities 或 Canvas mutation tools。
@@ -453,5 +460,5 @@ Markdown token、`![[...]]`、CommonMark image URL 和表格单元格文本都�
 代价：
 
 - Canvas 需要补齐 capability schema、诊断和创建动作。
-- Agent Webview 需要实现 resource-aware Markdown enhancement。
+- Agent Webview 已有部分 resource-aware Markdown enhancement，但仍需迁移到 normalized document/session adapter 并移除 direct parser；在 linked gate 完成前存在跨宿主语义漂移风险。
 - 旧 `@neko/draft-runtime` 已删除；`neko-composite` 仍保留为已校验结构化工具结果的 rich content 格式，但不再作为新分镜草稿 authoring 默认格式。
