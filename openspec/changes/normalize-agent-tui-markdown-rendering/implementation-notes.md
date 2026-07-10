@@ -124,8 +124,7 @@ The implemented package-local defaults are guardrails rather than user settings:
 
 | Policy                        |                             Default | Enforcement/evidence                                                                                 |
 | ----------------------------- | ----------------------------------: | ---------------------------------------------------------------------------------------------------- |
-| mutable-tail immediate update |             8,192 UTF-16 code units | larger mutable tails coalesce latest-only; boundary and invocation-count tests                       |
-| streaming/resize coalescing   |                               24 ms | enforced by the controller for source and viewport updates                                           |
+| streaming/resize coalescing   |                               50 ms | every non-final source update and resize is latest-only; final source update/finalization is immediate |
 | aligned table grid            |                         1,024 cells | larger tables fail over to linear record layout with `MD_TABLE_GRID_BUDGET_EXCEEDED`                 |
 | whole-block highlight bytes   |                             256 KiB | exact byte boundary tests                                                                            |
 | whole-block highlight lines   |                               4,096 | exact line boundary tests                                                                            |
@@ -136,9 +135,9 @@ The implemented package-local defaults are guardrails rather than user settings:
 | highlight cache               |              2 MiB estimated weight | code bytes + token/diagnostic estimates and deterministic eviction                                   |
 | debug Markdown path facts     |                        2,048 events | oldest event is dropped and the dropped count makes incomplete evidence fail                         |
 | debug terminal resize         |         columns/rows each `1..1000` | protocol validation fails on invalid values                                                          |
-| evaluation resize settlement  |    50 ms after each resize response | allows the 24 ms controller coalescing window and Ink update to settle before the next runner action |
+| evaluation resize settlement  |    50 ms after each resize response | aligns protocol fact collection with the current controller coalescing window                        |
 
-Every enforced parser/TUI limit has deterministic `limit - 1`, `limit`, and `limit + 1` or equivalent entry/weight-retention coverage. The tests avoid wall-clock performance assertions.
+Every enforced parser/TUI resource limit has deterministic `limit - 1`, `limit`, and `limit + 1` or equivalent entry/weight-retention coverage. Temporal cadence uses fake timers and asserts pending-latest, invocation count, immediate finalization, and stale-generation behavior instead of treating delay as a size threshold. The tests avoid wall-clock performance assertions.
 
 ### Standalone build and evaluation runner fixes
 
@@ -147,7 +146,18 @@ Two acceptance blockers were fixed without adding a second runtime path:
 1. `applyScenarioSetup()` now creates the selected scenario `cwd` even when `setup: []`. Setup file operations still pass through the existing workspace-containment resolver. This fixed real cases that used an empty setup list with `/tmp/neko-agent-tui-markdown-eval`.
 2. The Bun standalone build plugin now resolves exact package `imports` entries from the importing package's owning `package.json`, selecting `bun`, `node`, `import`, then `default` conditional targets and accepting only package-relative `./...` targets. This fixed `vfile`'s `#minurl` import, whose unresolved compiled form previously failed as `ReferenceError: isUrl is not defined`.
 
-The protocol runner waits 50 ms after each successful `terminal.resize` response. This is runner-side UI settlement for a generally useful resize control, not an evaluation-specific runtime success flag. It prevents the runner from reading facts before the controller's 24 ms resize coalescing window and Ink update have completed.
+The protocol runner waits 50 ms after each successful `terminal.resize` response. This is runner-side UI settlement for a generally useful resize control, not an evaluation-specific runtime success flag. It aligns fact collection with the controller's current 50 ms latest-only resize window; a future asynchronous settled-generation acknowledgement remains preferable to increasing timing sleeps.
+
+## Runtime responsiveness follow-up
+
+A later runtime regression exposed three coupled symptoms: provider-token redraw bursts caused visible fluctuation, turn time/input appeared frozen during execution, and native-bottom-follow behavior prevented reading earlier output. The canonical path remains unchanged; the fix narrows ownership and redraw cadence:
+
+- `TerminalMarkdownController` now coalesces every non-final source update at 50 ms and keeps only the latest pending source. A final update cancels pending work and immediately finalizes the same session.
+- `AgentStore` preserves the first `startTime` across repeated `running` updates and confirmation/resume, then clears it on `idle` or `error`; `useTimer` returns to zero only when no turn start exists.
+- `UIStore` defines `scrollOffset` as rows above the live bottom and preserves a positive reading offset as the content limit grows. `ChatView` owns a measured, clipped viewport and PageUp/PageDown navigation instead of continuously expanding native terminal scrollback.
+- `InputEditor` remains active during an Agent run. Only explicit modal states disable it, so a follow-up prompt can be queued while output streams.
+
+Regression coverage uses fake timers and Ink/store fixtures for source coalescing, immediate finalization, timer continuity, running input submission, viewport clipping, scroll direction, and reading-anchor preservation. The focused test lane, CLI bundle, Agent extension/Webview compile, key-free Agent evaluation harness, and scenario dry-run passed. The dry-run validates scenario/protocol structure only; this follow-up did not rerun a credentialed real-provider case or a manual terminal-emulator smoke, so terminal-specific residual flicker remains an explicit risk.
 
 ## Verification evidence
 
@@ -237,7 +247,7 @@ No unrelated repository finding was modified or hidden as part of this change.
 
 - **Blocking:** none found in the bounded TUI Markdown/shared-contract/evaluation/build changes.
 - **Suggestion:** the Bun package-import resolver intentionally implements the exact conditional-import shape needed by the current dependency graph, not the complete Node `imports` pattern/array specification. If a future standalone dependency introduces wildcard or array targets, add focused resolver coverage before extending the resolver rather than silently falling through.
-- **Suggestion:** the runner's 50 ms resize settlement is sufficient for the current 24 ms controller window and passed real compiled-binary evaluation, but it remains a timing boundary. If resize processing gains slower asynchronous work, replace the delay with a deterministic settled-generation acknowledgment/fact instead of increasing arbitrary sleeps.
+- **Suggestion:** the runner's 50 ms resize settlement matches the current 50 ms controller window and previously passed compiled-binary evaluation, but it remains a timing boundary with no extra margin. Replace the delay with a deterministic settled-generation acknowledgment/fact before adding slower asynchronous resize work rather than increasing arbitrary sleeps.
 
 ### Risk level and five-layer review
 

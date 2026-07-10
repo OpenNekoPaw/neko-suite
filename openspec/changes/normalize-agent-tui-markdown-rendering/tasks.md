@@ -35,7 +35,7 @@
 - [x] 4.4 Add cancellable/contextual resolution orchestration that consumes a normalized snapshot and produces a separate session/revision-associated resolution snapshot without mutating semantic nodes.
 - [x] 4.5 Implement wrong-session/revision rejection for resolution and other async associations, and classify stale results as discardable control flow rather than user-facing diagnostics.
 - [x] 4.6 Add streaming tests for incomplete fences/tables/lists, stable-prefix identity, mutable-tail reparsing, delta coalescing, active-table holdback, finalization of the same session, cross-session rejection, and complete final semantics.
-- [x] 4.7 Calibrate and implement the mutable-tail immediate-update/coalescing budget in the centralized resource policy, with boundary and invocation-count tests that do not falsely mark unstable syntax as stable.
+- [x] 4.7 Calibrate and implement the latest-only trailing-edge streaming cadence in the centralized resource policy, with fake-timer and invocation-count tests that do not falsely mark unstable syntax as stable.
 
 ## 5. Terminal Text, Theme, Localization, and Encoding Foundations
 
@@ -90,9 +90,9 @@
 
 ## 10. Resource Policy, Cache, and Runtime Acceptance
 
-- [x] 10.1 Centralize source, mutable-tail update, table grid, highlight, and cache limits in one package-local `MarkdownResourcePolicy`; document the evidence used for initial numeric defaults and keep them out of user settings.
+- [x] 10.1 Centralize source, streaming-update cadence, table grid, highlight, and cache policies in one package-local `MarkdownResourcePolicy`; document the evidence used for initial numeric defaults and keep them out of user settings.
 - [x] 10.2 Implement bounded parse-associated, resolution, highlight, projection, and layout caches with complete semantic/theme/capability/viewport/generation keys and deterministic entry/node/estimated-byte eviction.
-- [x] 10.3 Add `limit - 1`, `limit`, and `limit + 1` tests for every enforced resource limit plus deterministic invocation-count/retention assertions that avoid flaky machine-speed gates.
+- [x] 10.3 Add `limit - 1`, `limit`, and `limit + 1` tests for every enforced resource limit plus deterministic fake-timer, invocation-count, and retention assertions for update cadence that avoid flaky machine-speed gates.
 - [x] 10.4 Add a real PTY/Ink acceptance harness or focused runtime fixture covering color-capable output, `NO_COLOR`, ASCII borders, hyperlink fallback, continuous resize, table mode transitions, code reflow, and incomplete fence/table streaming through finalize.
 - [x] 10.5 Verify provider-authored terminal controls remain inert in captured PTY output and only renderer-owned ANSI/OSC sequences appear for resolved styles/validated links.
 
@@ -112,3 +112,10 @@
 - [x] 12.3 Audit every Agent Webview assistant Markdown entry point and direct `react-markdown`/remark parser dependency against the shared normalized contract and fixture corpus.
 - [x] 12.4 Create a linked Webview migration OpenSpec change with owner, proposal, design, capability specs, tasks, dependency cleanup, exhaustive adapter coverage, shared fixtures, runtime acceptance through Extension Development Host, and legacy-parser poison removal gate before archiving this change.
 - [x] 12.5 Re-run OpenSpec validation, confirm the TUI proposal/specs/tasks match implemented behavior, and archive only after all current-change acceptance evidence and the linked Webview change exist.
+
+## 13. Runtime Responsiveness Regression
+
+- [x] 13.1 Add deterministic regression tests for streaming coalescing, timer lifecycle, running input, and the clipped scroll viewport.
+- [x] 13.2 Coalesce every non-final Markdown source update through one latest-only trailing-edge window while keeping finalization immediate.
+- [x] 13.3 Define timer and scroll lifecycle contracts, preserve the user's reading anchor as content grows, and keep input active while the Agent is running unless a modal owns the keyboard.
+- [x] 13.4 Run focused CLI tests, CLI/extension builds, the key-free Agent evaluation harness, scenario dry-run, OpenSpec validation, and repository quality gates; record unrelated workspace failures and the remaining real-provider/manual-terminal blockers.

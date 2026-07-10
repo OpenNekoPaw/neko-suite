@@ -1,6 +1,6 @@
 # Agent TUI Markdown 渲染规范化
 
-状态：Proposed（grilling 已完成，21 项设计决策已确认）
+状态：Proposed（grilling 已完成，22 项设计决策已确认）
 
 ## Why
 

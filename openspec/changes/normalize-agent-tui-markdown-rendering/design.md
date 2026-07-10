@@ -808,11 +808,11 @@ If source exceeds the canonical renderer's hard admission limit, the message bou
 
 Hard limits SHALL be based on deterministic input measurements such as source byte/code-unit count. Machine-speed-dependent wall-clock timeouts SHALL NOT decide semantic parse results.
 
-### Streaming update budget
+### Streaming update cadence
 
-A streaming session SHALL allow at most one parse/update generation to become current at a time. Rapid source deltas MAY be coalesced so that the parser produces a snapshot for the latest accumulated source rather than one snapshot for every provider token.
+A streaming session SHALL allow at most one parse/update generation to become current at a time. Every non-final source update SHALL enter one latest-only trailing-edge window so the parser produces a snapshot for the latest accumulated source rather than reparsing once per provider token. Source size SHALL NOT bypass this cadence through an immediate-update fast path.
 
-When the mutable tail grows beyond the immediate-update budget, the session SHALL reduce update frequency/coalesce deltas rather than falsely mark unstable syntax as stable. Finalization SHALL run the canonical parse/normalize path against the complete final source.
+Finalization SHALL cancel any pending non-final update and immediately run the canonical parse/normalize path against the complete final source. Coalescing SHALL never delay final semantics or create a second renderer/session path.
 
 ### Table layout budget
 
@@ -968,7 +968,7 @@ They SHALL cover accepted HTTP/HTTPS targets, rejected arbitrary `file:`/unknown
 
 ### Resource boundary acceptance
 
-Every enforced resource limit SHALL have `limit - 1`, `limit`, and `limit + 1` coverage. This includes the source hard limit, mutable-tail immediate-update budget, table grid budget, highlight byte/line budget, cache eviction, and resize/delta coalescing.
+Every enforced numeric resource limit SHALL have `limit - 1`, `limit`, and `limit + 1` coverage. This includes the source hard limit, table grid budget, highlight byte/line budget, and cache eviction. Streaming/resize cadence SHALL instead use deterministic fake-timer, pending-latest, invocation-count, finalization, and stale-generation coverage.
 
 Automated performance acceptance SHALL prefer deterministic complexity proxies, invocation counts, retained-entry/byte bounds, and generation behavior. Strict wall-clock thresholds that are unstable across CI machines SHALL NOT be the sole gate.
 
@@ -995,3 +995,36 @@ Because this change affects TUI Agent event projection, implementation SHALL fol
 - Unit tests without PTY/Ink acceptance: rejected because terminal capabilities, ANSI encoding, resize, and scrollback integration are runtime boundaries.
 - Final-message-only tests: rejected because the principal regression risk includes streaming syntax stability and renderer switching.
 - Treat `pnpm test:agent:eval` as real behavior evidence: rejected because it validates the key-free harness rather than an actual provider/model path.
+
+## Decision 22: Bound redraw cadence and make ChatView own a clipped live viewport
+
+状态：Confirmed
+
+### Decision
+
+All non-final assistant Markdown source updates SHALL use one latest-only 50 ms trailing-edge coalescing window. The controller SHALL retain only the newest pending source, and finalization SHALL cancel pending work and immediately update/finalize the same canonical session. There SHALL be no source-size-based immediate parse/layout fast path.
+
+`ChatView` SHALL own a clipped application viewport rather than relying on unbounded native terminal scrollback for the complete conversation. The scroll contract is `scrollOffset = rows above the live bottom`: offset zero follows new output, while a positive offset means the user is reading history. As content grows, the store SHALL increase a positive offset with the new scroll limit so the visible reading anchor remains stable.
+
+The Agent store SHALL own turn timing. The first transition into `running` establishes `startTime`; repeated running updates and confirmation/resume preserve it; terminal `idle` or `error` clears it. Prompt input SHALL remain active during Agent execution and SHALL be disabled only when a selection, plan-review, approval, or another explicit modal owns the keyboard.
+
+### Responsibility boundaries
+
+- `TerminalMarkdownController` owns source-update cadence and same-session finalization.
+- `AgentStore` owns turn status and timer lifecycle.
+- `UIStore` owns bounded scroll state and the rows-above-live-bottom contract.
+- `ChatView` measures content/viewport height, clips overflow, and maps the store contract to a negative content offset.
+- `InputEditor` owns text editing only; the caller decides whether a modal disables it.
+
+### Acceptance
+
+Deterministic tests SHALL prove that every non-final update is coalesced, only the latest pending source is applied, finalization is immediate, repeated running/resume does not reset elapsed time, running input can submit a queued prompt, PageUp/PageDown obey the scroll contract, and content growth cannot force a user back to the live bottom.
+
+Focused validation SHALL distinguish key-free evaluation-harness health from real provider/TUI behavior. A scenario dry-run proves manifest/protocol validity only; provider credentials/model execution and manual terminal-emulator observation remain separately reported runtime evidence.
+
+### Rejected alternatives
+
+- Parse small source deltas immediately: rejected because provider token cadence would still trigger full parse/project/layout redraw bursts and visible terminal fluctuation.
+- Disable input while the Agent runs: rejected because it prevents queued follow-up prompts without a modal ownership reason.
+- Express scroll position from the history top: rejected because streaming growth changes the bottom boundary and makes follow-mode/reading-anchor behavior harder to state and test.
+- Depend on native terminal scrollback for the full transcript: rejected because every render can grow/reflow terminal output and cannot preserve an application-level reading anchor reliably.

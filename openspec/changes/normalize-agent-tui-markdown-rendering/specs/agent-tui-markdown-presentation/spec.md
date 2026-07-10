@@ -213,8 +213,9 @@ The TUI SHALL centralize table, highlight, cache, and streaming-update budgets i
 - **THEN** deterministic eviction removes eligible older entries without accepting stale results as current
 
 #### Scenario: Rapid streaming updates are coalesced
-- **WHEN** the mutable tail exceeds the immediate-update budget or provider deltas arrive rapidly
-- **THEN** the TUI/session coalesces updates while preserving current session identity and complete final semantics
+- **WHEN** one or more non-final provider deltas update the current assistant Markdown source
+- **THEN** the TUI/session applies only the latest accumulated source after the configured trailing-edge delay while preserving current session identity
+- **AND** finalization cancels any pending update and immediately parses the complete final source through the same canonical session
 
 ### Requirement: Resize reflows presentation without reparsing
 Viewport resize SHALL invalidate only width-dependent projection/layout work. It MUST NOT reparse unchanged Markdown or mutate the normalized document. Continuous resize SHALL use latest-only/coalesced generations.
@@ -230,6 +231,21 @@ Viewport resize SHALL invalidate only width-dependent projection/layout work. It
 #### Scenario: Old resize result arrives late
 - **WHEN** layout for an older width completes after a newer width generation
 - **THEN** the older result is discarded and cannot replace the current layout
+
+### Requirement: TUI runtime interaction remains live during Agent execution
+The TUI SHALL keep turn timing, prompt input, and application-owned scrolling responsive while assistant Markdown is streaming. Timer ownership SHALL remain with the Agent turn state, input SHALL remain active unless an explicit modal owns the keyboard, and scroll position SHALL be represented relative to the live bottom so new content does not steal a user's reading anchor.
+
+#### Scenario: A running turn keeps elapsed time and prompt input live
+- **WHEN** an Agent turn is running or resumes after confirmation
+- **THEN** elapsed time continues from the original turn start and the prompt editor can accept and submit queued input
+
+#### Scenario: A user reads above the live bottom
+- **WHEN** the user pages upward and new streaming content increases the scrollable range
+- **THEN** the clipped ChatView viewport preserves the same reading anchor instead of forcing the viewport back to the live bottom
+
+#### Scenario: A user returns to the live bottom
+- **WHEN** the user pages down until the offset reaches zero
+- **THEN** subsequent content follows the live bottom without growing native terminal scrollback for the full message history
 
 ### Requirement: Canonical path and terminal behavior are acceptance-gated
 Implementation SHALL include structured semantic/layout assertions, controllable async generation tests, legacy poison tests, resource-boundary triplets, real PTY/Ink checks, and a focused script-driven Neko Agent evaluation for Markdown event projection. Snapshot-only success MUST NOT be treated as sufficient evidence.
