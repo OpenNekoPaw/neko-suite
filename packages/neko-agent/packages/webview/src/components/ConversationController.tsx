@@ -718,6 +718,70 @@ export function ConversationController({
     setIsForegroundConversationActivationPending(false);
   }, []);
 
+  // ---- Message handler ----
+  const { handleMessage, flushTimelineRendering, commitTimelineMarkdownSnapshot } =
+    useMessageHandler({
+      messages,
+      isThinking,
+      activeConversationId,
+      streamingMessageId,
+      queuedMessageCount,
+      queuedMessages,
+      openTabs,
+      activeTabId,
+      isTablessConversationViewRef,
+      pendingForegroundConversationActivationRef,
+      completeForegroundConversationActivation,
+      requestQueuedMessageEdit: (request) => {
+        nextQueuedEditRequestIdRef.current += 1;
+        setQueuedEditRequest({
+          id: nextQueuedEditRequestIdRef.current,
+          conversationId: request.conversationId,
+          item: request.item,
+        });
+      },
+      requestConfigSnapshot,
+      activeConversationIdRef,
+      streamingMessageIdRef,
+      conversationMessagesRef,
+      conversationStreamingRef,
+      setMessages,
+      setIsThinking,
+      setStreamingMessageId,
+      setQueuedMessageCount,
+      setQueuedMessages,
+      setConversations,
+      setActiveConversationId,
+      setOpenTabs,
+      setActiveTabId,
+      setActiveTab,
+      setSettings,
+      setHasConfigSnapshot,
+      selectedModelRef,
+      setSelectedModel,
+      setMediaModelSelection,
+      setWorkItemsByConversation,
+      setPluginsAvailable,
+      setProjectFiles,
+      setMentionItems,
+      mentionSearchFilter,
+      mentionSearchFilterRef,
+      setPluginCommands,
+      setAgentState,
+      conversationAgentStateRef,
+      forceAgentStateUpdate,
+      setSkills,
+      setActiveSkill,
+      setActivationProgressByConversation,
+      updateSettings,
+      setPromptModeForConversation,
+      setShowOnboarding,
+      setGlobalError,
+      conversationTokenCountRef,
+      conversationCompressingRef,
+      forceContextUpdate: triggerForceUpdate,
+    });
+
   const commitConversationTabActivation = useCallback(
     (conversationId: string) => {
       const projection = projectConversationTabActivation({
@@ -725,6 +789,10 @@ export function ConversationController({
         cachedMessages: conversationMessagesRef.current.get(conversationId),
         cachedStreaming: conversationStreamingRef.current.get(conversationId),
       });
+
+      const markdownPublication = projection.streaming.activeTurnTimeline
+        ? commitTimelineMarkdownSnapshot(projection.streaming.activeTurnTimeline)
+        : undefined;
 
       conversationMessagesRef.current.set(projection.activeConversationId, projection.messages);
       conversationStreamingRef.current.set(projection.activeConversationId, projection.streaming);
@@ -736,9 +804,11 @@ export function ConversationController({
       setQueuedMessages(projection.streaming.queuedMessages ?? []);
       activeConversationIdRef.current = projection.activeConversationId;
       setActiveConversationId(projection.activeConversationId);
+      markdownPublication?.publish();
     },
     [
       activeConversationIdRef,
+      commitTimelineMarkdownSnapshot,
       conversationMessagesRef,
       conversationStreamingRef,
       setActiveConversationId,
@@ -758,69 +828,6 @@ export function ConversationController({
     },
     [commitConversationTabActivation],
   );
-
-  // ---- Message handler ----
-  const { handleMessage, flushTimelineRendering } = useMessageHandler({
-    messages,
-    isThinking,
-    activeConversationId,
-    streamingMessageId,
-    queuedMessageCount,
-    queuedMessages,
-    openTabs,
-    activeTabId,
-    isTablessConversationViewRef,
-    pendingForegroundConversationActivationRef,
-    completeForegroundConversationActivation,
-    requestQueuedMessageEdit: (request) => {
-      nextQueuedEditRequestIdRef.current += 1;
-      setQueuedEditRequest({
-        id: nextQueuedEditRequestIdRef.current,
-        conversationId: request.conversationId,
-        item: request.item,
-      });
-    },
-    requestConfigSnapshot,
-    activeConversationIdRef,
-    streamingMessageIdRef,
-    conversationMessagesRef,
-    conversationStreamingRef,
-    setMessages,
-    setIsThinking,
-    setStreamingMessageId,
-    setQueuedMessageCount,
-    setQueuedMessages,
-    setConversations,
-    setActiveConversationId,
-    setOpenTabs,
-    setActiveTabId,
-    setActiveTab,
-    setSettings,
-    setHasConfigSnapshot,
-    selectedModelRef,
-    setSelectedModel,
-    setMediaModelSelection,
-    setWorkItemsByConversation,
-    setPluginsAvailable,
-    setProjectFiles,
-    setMentionItems,
-    mentionSearchFilter,
-    mentionSearchFilterRef,
-    setPluginCommands,
-    setAgentState,
-    conversationAgentStateRef,
-    forceAgentStateUpdate,
-    setSkills,
-    setActiveSkill,
-    setActivationProgressByConversation,
-    updateSettings,
-    setPromptModeForConversation,
-    setShowOnboarding,
-    setGlobalError,
-    conversationTokenCountRef,
-    conversationCompressingRef,
-    forceContextUpdate: triggerForceUpdate,
-  });
 
   useEffect(() => {
     if (!globalError) return;

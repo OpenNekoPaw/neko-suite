@@ -34,12 +34,16 @@ import type {
 } from '@/components/ChatView/InputArea/types';
 import type { BoundActiveSkillIndicator } from './types';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
+import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { ExtensionToWebviewMessage } from './messages';
 import { AgentHostMessages, getAgentHostRuntimeAdapter } from '@/messages';
 import { readAgentTurnTimelineRecoveryRequests } from './timeline-recovery-state';
 import { createTimelineRenderCommitScheduler } from './timeline-render-commit-scheduler';
-import { getAgentMarkdownSessionRegistry } from '@/markdown/agent-markdown-session-registry';
+import {
+  getAgentMarkdownSessionRegistry,
+  type AgentMarkdownSessionPublication,
+} from '@/markdown/agent-markdown-session-registry';
 
 const logger = getLogger('MessageHandler');
 const FOREIGN_FEATURE_HOST_MESSAGE_TYPES = new Set([
@@ -141,6 +145,9 @@ export interface UseMessageHandlerProps {
 export interface UseMessageHandlerReturn {
   handleMessage: (event: MessageEvent<ExtensionToWebviewMessage>) => void;
   flushTimelineRendering: () => void;
+  commitTimelineMarkdownSnapshot: (
+    timeline: ActiveTurnTimelineState,
+  ) => AgentMarkdownSessionPublication;
 }
 
 /**
@@ -399,7 +406,17 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     timelineRenderScheduler.flushAll();
   }, [timelineRenderScheduler]);
 
-  return { handleMessage, flushTimelineRendering };
+  const commitTimelineMarkdownSnapshot = useCallback(
+    (timeline: ActiveTurnTimelineState): AgentMarkdownSessionPublication =>
+      markdownSessionRegistry.commitTimelineSnapshot({
+        conversationId: timeline.conversationId,
+        messageId: timeline.messageId,
+        items: timeline.items,
+      }),
+    [markdownSessionRegistry],
+  );
+
+  return { handleMessage, flushTimelineRendering, commitTimelineMarkdownSnapshot };
 }
 
 function isForeignFeatureHostMessage(message: unknown): boolean {

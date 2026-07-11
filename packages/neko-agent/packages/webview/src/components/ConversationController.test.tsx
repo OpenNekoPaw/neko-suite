@@ -4,12 +4,17 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AgentContextPayload } from '@neko/shared';
 import type {
   AgentQueuedMessageItem,
+  AgentTurnTimelineMessage,
   AgentWorkItem,
   ConversationSummary,
   Message,
   SettingsState,
 } from '@neko-agent/types';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
+import {
+  createAgentMarkdownSessionKey,
+  getAgentMarkdownSessionRegistry,
+} from '@/markdown/agent-markdown-session-registry';
 import { ConversationController } from './ConversationController';
 
 const vscodeMocks = vi.hoisted(() => ({
@@ -35,6 +40,7 @@ vi.mock('@/messages', () => ({
   VSCodeMessages: vscodeMocks,
   getAgentHostRuntimeAdapter: () => ({
     getState: () => undefined,
+    setState: vi.fn(),
   }),
 }));
 
@@ -641,6 +647,50 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('false:false');
   });
 
+  it('rebuilds a disposed Markdown session before a cached Timeline tab is activated from the UI', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-a',
+            },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: timelineSnapshotMessage('conv-b', 'message-b', 'partial **B**'),
+        }),
+      );
+    });
+
+    const registry = getAgentMarkdownSessionRegistry();
+    const key = createAgentMarkdownSessionKey({
+      conversationId: 'conv-b',
+      messageId: 'message-b',
+      itemId: 'text-1',
+    });
+    expect(registry.getSnapshot(key)?.source).toBe('partial **B**');
+    registry.disposeConversation('conv-b');
+    expect(registry.getSnapshot(key)).toBeUndefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
+
+    expect(registry.getSnapshot(key)).toMatchObject({
+      source: 'partial **B**',
+      isFinal: false,
+    });
+  });
+
   it('finalizes orphaned Markdown streaming state when a cached character-role tab is activated from the UI', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
@@ -826,6 +876,41 @@ function message(id: string, content: string): Message {
     role: 'user',
     content,
     timestamp: 1,
+  };
+}
+
+function timelineSnapshotMessage(
+  conversationId: string,
+  messageId: string,
+  content: string,
+): AgentTurnTimelineMessage {
+  return {
+    type: 'agentTurnTimeline',
+    schemaVersion: 2,
+    connectionEpoch: 'epoch-1',
+    conversationId,
+    turnId: `turn-${conversationId}`,
+    messageId,
+    batchKind: 'snapshot',
+    deliveryRevision: 1,
+    operations: [
+      {
+        operation: 'snapshot',
+        item: {
+          conversationId,
+          turnId: `turn-${conversationId}`,
+          messageId,
+          itemId: 'text-1',
+          sequence: 1,
+          itemRevision: 1,
+          kind: 'assistant_text',
+          status: 'streaming',
+          payload: { content, format: 'markdown', sourceGeneration: 1 },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    ],
   };
 }
 

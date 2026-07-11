@@ -10,6 +10,10 @@ import type {
 import type { Message } from '@neko-agent/types';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
 import { MarkdownRenderer } from '@/components/ChatView/MessageContent/MarkdownRenderer';
+import {
+  createAgentMarkdownSessionKey,
+  createAgentMarkdownSessionRegistry,
+} from '@/markdown/agent-markdown-session-registry';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import { conversationHandlers } from '../conversation-handlers';
@@ -184,11 +188,26 @@ describe('character role context isolation', () => {
         completed: false,
         items: new Map(),
       },
-      items: [],
+      items: [
+        {
+          conversationId: 'conv-a',
+          turnId: 'turn-a',
+          messageId: 'assistant-stream',
+          itemId: 'text-1',
+          sequence: 1,
+          itemRevision: 1,
+          kind: 'assistant_text',
+          status: 'streaming',
+          payload: { content: 'partial', format: 'markdown', sourceGeneration: 1 },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
       completed: false,
       synchronization: 'synchronized',
     };
     const cachedMessage = message('assistant-stream', 'assistant', 'partial');
+    const registry = createAgentMarkdownSessionRegistry();
     const harness = createContextHarness({
       activeConversationId: 'conv-a',
       activeTabId: 'tab-a',
@@ -216,6 +235,7 @@ describe('character role context isolation', () => {
       ]),
       includeQueueSetters: true,
     });
+    harness.context.markdownSessionRegistry = registry;
 
     dispatch(
       conversationHandlers,
@@ -231,6 +251,15 @@ describe('character role context isolation', () => {
     );
 
     expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toBe(activeTimeline);
+    expect(
+      registry.getSnapshot(
+        createAgentMarkdownSessionKey({
+          conversationId: 'conv-a',
+          messageId: 'assistant-stream',
+          itemId: 'text-1',
+        }),
+      ),
+    ).toMatchObject({ source: 'partial', isFinal: false });
   });
 
   it('caches ordinary activeConversation updates without replacing an active role session view', () => {
@@ -772,6 +801,89 @@ describe('character role context isolation', () => {
       isThinking: true,
     });
     expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toBe(activeTimeline);
+  });
+
+  it('rebuilds missing Markdown sessions before activating a cached Timeline-owned tab', () => {
+    const registry = createAgentMarkdownSessionRegistry();
+    const canonicalMessage = message('assistant-stream', 'assistant', 'partial **markdown**');
+    const activeTimeline: ActiveTurnTimelineState = {
+      connectionEpoch: 'epoch-1',
+      conversationId: 'conv-a',
+      turnId: 'turn-a',
+      messageId: canonicalMessage.id,
+      deliveryRevision: 1,
+      validationState: {
+        connectionEpoch: 'epoch-1',
+        conversationId: 'conv-a',
+        turnId: 'turn-a',
+        messageId: canonicalMessage.id,
+        deliveryRevision: 1,
+        completed: false,
+        items: new Map(),
+      },
+      items: [
+        {
+          conversationId: 'conv-a',
+          turnId: 'turn-a',
+          messageId: canonicalMessage.id,
+          itemId: 'text-1',
+          sequence: 1,
+          itemRevision: 3,
+          kind: 'assistant_text',
+          status: 'streaming',
+          payload: {
+            content: 'partial **markdown**',
+            format: 'markdown',
+            sourceGeneration: 1,
+          },
+          createdAt: 1,
+          updatedAt: 3,
+        },
+      ],
+      completed: false,
+      synchronization: 'synchronized',
+    };
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      activeTabId: 'tab-b',
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      cachedMessages: new Map([['conv-a', [canonicalMessage]]]),
+      cachedStreaming: new Map([
+        [
+          'conv-a',
+          {
+            isThinking: false,
+            streamingMessageId: canonicalMessage.id,
+            activeTurnTimeline: activeTimeline,
+          },
+        ],
+      ]),
+      openTabs: [
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+      ],
+    });
+    harness.context.markdownSessionRegistry = registry;
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        tabState: { openTabs: harness.openTabs(), activeTabId: 'tab-a' },
+      },
+      harness.context,
+    );
+
+    expect(
+      registry.getSnapshot(
+        createAgentMarkdownSessionKey({
+          conversationId: 'conv-a',
+          messageId: canonicalMessage.id,
+          itemId: 'text-1',
+        }),
+      ),
+    ).toMatchObject({ source: 'partial **markdown**', isFinal: false });
   });
 
   it('clears visible streaming and queue state when switching to an uncached ordinary tab', () => {

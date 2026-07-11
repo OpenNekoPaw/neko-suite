@@ -23,6 +23,7 @@ import {
 import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-presenter';
 import { findActiveTab, isCharacterRoleTab } from '@/presenters/character-role-session-presenter';
 import { shouldActivateForegroundConversation } from './foreground-activation';
+import { commitActiveTurnTimelineMarkdownSnapshot } from './conversation-tab-session-state';
 import { projectQueuedMessagesCleared } from '@/presenters/message-queue-presenter';
 import { getActiveTimelineForMessage } from './timeline-handlers';
 
@@ -228,6 +229,16 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
     context.timelineRenderScheduler?.flushAll();
   }
 
+  const nextStreaming = conversationId
+    ? projectForegroundConversationStreaming(
+        projection.streaming,
+        context.conversationStreamingRef.current.get(conversationId),
+      )
+    : undefined;
+  const markdownPublication = nextStreaming?.activeTurnTimeline
+    ? commitActiveTurnTimelineMarkdownSnapshot(context, nextStreaming.activeTurnTimeline)
+    : undefined;
+
   context.setMessages(projection.messages);
   context.setStreamingMessageId(projection.streaming.streamingMessageId);
   context.streamingMessageIdRef.current = projection.streaming.streamingMessageId;
@@ -236,26 +247,11 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
   context.setQueuedMessages?.(projection.streaming.queuedMessages ?? []);
   context.setActiveConversationId(projection.activeConversationId);
   context.activeConversationIdRef.current = projection.activeConversationId;
-  if (conversationId) {
-    const cachedStreaming = context.conversationStreamingRef.current.get(conversationId);
-    const projectedActiveTurnTimeline = getProjectedActiveTurnTimeline(projection.streaming);
-    const activeTurnTimeline =
-      projectedActiveTurnTimeline !== undefined
-        ? releaseUnavailableTimelineOwnership(projectedActiveTurnTimeline)
-        : getRecoverableCachedActiveTurnTimeline(cachedStreaming);
-    const nextStreaming = {
-      streamingMessageId: projection.streaming.streamingMessageId,
-      isThinking: projection.streaming.isThinking,
-      queuedMessageCount: projection.streaming.queuedMessageCount ?? 0,
-      queuedMessages: projection.streaming.queuedMessages ?? [],
-      ...(projection.streaming.messageQueueVersion !== undefined
-        ? { messageQueueVersion: projection.streaming.messageQueueVersion }
-        : {}),
-      ...(activeTurnTimeline !== undefined ? { activeTurnTimeline } : {}),
-    };
+  if (conversationId && nextStreaming) {
     context.conversationMessagesRef.current.set(conversationId, projection.messages);
     context.conversationStreamingRef.current.set(conversationId, nextStreaming);
   }
+  markdownPublication?.publish();
   context.isTablessConversationViewRef.current = false;
   context.setOpenTabs(projection.openTabs);
   context.setActiveTabId(projection.activeTabId);
@@ -271,6 +267,27 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
     );
   }
 };
+
+function projectForegroundConversationStreaming(
+  streaming: StreamingState,
+  cachedStreaming: StreamingState | undefined,
+): StreamingState {
+  const projectedActiveTurnTimeline = getProjectedActiveTurnTimeline(streaming);
+  const activeTurnTimeline =
+    projectedActiveTurnTimeline !== undefined
+      ? releaseUnavailableTimelineOwnership(projectedActiveTurnTimeline)
+      : getRecoverableCachedActiveTurnTimeline(cachedStreaming);
+  return {
+    streamingMessageId: streaming.streamingMessageId,
+    isThinking: streaming.isThinking,
+    queuedMessageCount: streaming.queuedMessageCount ?? 0,
+    queuedMessages: streaming.queuedMessages ?? [],
+    ...(streaming.messageQueueVersion !== undefined
+      ? { messageQueueVersion: streaming.messageQueueVersion }
+      : {}),
+    ...(activeTurnTimeline !== undefined ? { activeTurnTimeline } : {}),
+  };
+}
 
 function getRecoverableCachedActiveTurnTimeline(
   streaming: StreamingState | undefined,

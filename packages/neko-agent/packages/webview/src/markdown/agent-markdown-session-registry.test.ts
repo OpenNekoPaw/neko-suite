@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentTurnTimelineMessage } from '@neko-agent/types';
+import type { AgentTurnTimelineItem, AgentTurnTimelineMessage } from '@neko-agent/types';
 import {
   createAgentMarkdownSessionKey,
   createAgentMarkdownSessionRegistry,
@@ -83,6 +83,115 @@ describe('agent markdown session registry', () => {
     });
   });
 
+  it('rebuilds a missing streaming session from an authoritative Timeline snapshot', () => {
+    const registry = createAgentMarkdownSessionRegistry();
+    const key = sessionKey();
+    const listener = vi.fn();
+    registry.subscribe(key, listener);
+
+    const publication = registry.commitTimelineSnapshot({
+      conversationId: 'conv-1',
+      messageId: 'message-1',
+      items: [markdownSnapshotItem('partial **markdown**', 4)],
+    });
+
+    expect(registry.getSnapshot(key)).toMatchObject({
+      source: 'partial **markdown**',
+      isFinal: false,
+    });
+    expect(listener).not.toHaveBeenCalled();
+    publication.publish();
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not create a render revision when the authoritative snapshot already matches', () => {
+    const registry = createAgentMarkdownSessionRegistry();
+    const item = markdownSnapshotItem('stable', 2);
+
+    registry
+      .commitTimelineSnapshot({
+        conversationId: 'conv-1',
+        messageId: 'message-1',
+        items: [item],
+      })
+      .publish();
+    const first = registry.getSnapshot(sessionKey());
+    const metricsBefore = registry.metrics();
+
+    registry
+      .commitTimelineSnapshot({
+        conversationId: 'conv-1',
+        messageId: 'message-1',
+        items: [item],
+      })
+      .publish();
+
+    expect(registry.getSnapshot(sessionKey())).toBe(first);
+    expect(registry.metrics()).toMatchObject({
+      createdSessions: metricsBefore.createdSessions,
+      disposedSessions: metricsBefore.disposedSessions,
+      renderRevisions: metricsBefore.renderRevisions,
+      notifications: metricsBefore.notifications,
+    });
+  });
+
+  it('removes sessions omitted by the authoritative message snapshot and publishes once', () => {
+    const registry = createAgentMarkdownSessionRegistry();
+    const retainedKey = sessionKey('conv-1', 'text-1');
+    const removedKey = sessionKey('conv-1', 'text-2');
+    const retainedListener = vi.fn();
+    const removedListener = vi.fn();
+    registry.subscribe(retainedKey, retainedListener);
+    registry.subscribe(removedKey, removedListener);
+
+    registry
+      .commitTimelineSnapshot({
+        conversationId: 'conv-1',
+        messageId: 'message-1',
+        items: [
+          markdownSnapshotItem('retained', 1, 'streaming', 1, 'text-1'),
+          markdownSnapshotItem('removed', 1, 'streaming', 1, 'text-2'),
+        ],
+      })
+      .publish();
+    retainedListener.mockClear();
+    removedListener.mockClear();
+
+    registry
+      .commitTimelineSnapshot({
+        conversationId: 'conv-1',
+        messageId: 'message-1',
+        items: [markdownSnapshotItem('retained', 1, 'streaming', 1, 'text-1')],
+      })
+      .publish();
+
+    expect(registry.getSnapshot(retainedKey)?.source).toBe('retained');
+    expect(registry.getSnapshot(removedKey)).toBeUndefined();
+    expect(retainedListener).not.toHaveBeenCalled();
+    expect(removedListener).toHaveBeenCalledTimes(1);
+    expect(registry.metrics()).toMatchObject({ activeSessions: 1, disposedSessions: 1 });
+  });
+
+  it('replaces stale registry state with the authoritative Timeline snapshot', () => {
+    const registry = createAgentMarkdownSessionRegistry();
+    registry.applyTimelineDeliveries([appendMessage(1, 1, 'stale')]);
+    const staleSessionId = registry.getSnapshot(sessionKey())?.sessionId;
+
+    registry
+      .commitTimelineSnapshot({
+        conversationId: 'conv-1',
+        messageId: 'message-1',
+        items: [markdownSnapshotItem('canonical', 5, 'complete', 2)],
+      })
+      .publish();
+
+    expect(registry.getSnapshot(sessionKey())).toMatchObject({
+      source: 'canonical',
+      isFinal: true,
+    });
+    expect(registry.getSnapshot(sessionKey())?.sessionId).not.toBe(staleSessionId);
+  });
+
   it('replaces a source generation explicitly and finalizes the replacement session', () => {
     const registry = createAgentMarkdownSessionRegistry();
     const key = sessionKey();
@@ -151,11 +260,11 @@ describe('agent markdown session registry', () => {
   });
 });
 
-function sessionKey(conversationId = 'conv-1'): string {
+function sessionKey(conversationId = 'conv-1', itemId = 'text-1'): string {
   return createAgentMarkdownSessionKey({
     conversationId,
     messageId: 'message-1',
-    itemId: 'text-1',
+    itemId,
   });
 }
 
@@ -229,5 +338,27 @@ function completeMessage(
       },
     ],
     completion: { status: 'completed', completedAt: itemRevision },
+  };
+}
+
+function markdownSnapshotItem(
+  content: string,
+  itemRevision: number,
+  status: 'streaming' | 'complete' = 'streaming',
+  sourceGeneration = 1,
+  itemId = 'text-1',
+): AgentTurnTimelineItem {
+  return {
+    conversationId: 'conv-1',
+    turnId: 'turn-1',
+    messageId: 'message-1',
+    itemId,
+    sequence: itemId === 'text-1' ? 1 : 2,
+    itemRevision,
+    kind: 'assistant_text',
+    status,
+    payload: { content, format: 'markdown', sourceGeneration },
+    createdAt: 1,
+    updatedAt: itemRevision,
   };
 }

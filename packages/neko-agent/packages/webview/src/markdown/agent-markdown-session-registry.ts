@@ -23,12 +23,20 @@ export interface AgentMarkdownSessionPublication {
   publish(): void;
 }
 
+export interface AgentMarkdownTimelineSnapshot {
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly items: readonly AgentTurnTimelineItem[];
+}
+
 export interface AgentMarkdownSessionRegistry {
   /** Commit parser/session state without notifying React subscribers. */
   commitTimelineDeliveries(
     deliveries: readonly AgentTurnTimelineMessage[],
   ): AgentMarkdownSessionPublication;
   applyTimelineDeliveries(deliveries: readonly AgentTurnTimelineMessage[]): void;
+  /** Reconcile sessions from the canonical in-memory Timeline before a cached view is shown. */
+  commitTimelineSnapshot(snapshot: AgentMarkdownTimelineSnapshot): AgentMarkdownSessionPublication;
   getSnapshot(sessionKey: string): MarkdownStreamingSnapshot | undefined;
   subscribe(sessionKey: string, listener: () => void): () => void;
   disposeConversation(conversationId: string): void;
@@ -38,6 +46,7 @@ export interface AgentMarkdownSessionRegistry {
 
 interface RegistryEntry {
   readonly conversationId: string;
+  readonly messageId: string;
   readonly sourceGeneration: number;
   readonly session: MarkdownStreamingSession;
   itemRevision: number;
@@ -52,6 +61,7 @@ type MarkdownTimelineItem = Extract<
 interface PendingSessionMutation {
   readonly sessionKey: string;
   readonly conversationId: string;
+  readonly messageId: string;
   readonly sourceGeneration: number;
   readonly itemRevision: number;
   readonly mode: 'append' | 'replace' | 'snapshot';
@@ -90,6 +100,7 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
     const snapshot = requireReadySnapshot(result, mutation.sessionKey);
     entries.set(mutation.sessionKey, {
       conversationId: mutation.conversationId,
+      messageId: mutation.messageId,
       sourceGeneration: mutation.sourceGeneration,
       session,
       itemRevision: mutation.itemRevision,
@@ -123,16 +134,9 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
     renderRevisions += 1;
   };
 
-  const commitTimelineDeliveries = (
-    deliveries: readonly AgentTurnTimelineMessage[],
+  const createPublication = (
+    affectedSessionKeys: ReadonlySet<string>,
   ): AgentMarkdownSessionPublication => {
-    const mutations = collectSessionMutations(deliveries);
-    const affectedSessionKeys: string[] = [];
-    for (const mutation of mutations.values()) {
-      if (mutation.mode === 'append') appendEntry(mutation);
-      else replaceEntry(mutation);
-      affectedSessionKeys.push(mutation.sessionKey);
-    }
     let published = false;
     return {
       publish(): void {
@@ -145,11 +149,60 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
     };
   };
 
+  const commitTimelineDeliveries = (
+    deliveries: readonly AgentTurnTimelineMessage[],
+  ): AgentMarkdownSessionPublication => {
+    const mutations = collectSessionMutations(deliveries);
+    const affectedSessionKeys = new Set<string>();
+    for (const mutation of mutations.values()) {
+      if (mutation.mode === 'append') appendEntry(mutation);
+      else replaceEntry(mutation);
+      affectedSessionKeys.add(mutation.sessionKey);
+    }
+    return createPublication(affectedSessionKeys);
+  };
+
+  const commitTimelineSnapshot = (
+    snapshot: AgentMarkdownTimelineSnapshot,
+  ): AgentMarkdownSessionPublication => {
+    const mutations = collectSnapshotMutations(snapshot);
+    const expectedSessionKeys = new Set(mutations.keys());
+    const affectedSessionKeys = new Set<string>();
+
+    for (const [sessionKey, entry] of entries) {
+      if (
+        entry.conversationId !== snapshot.conversationId ||
+        entry.messageId !== snapshot.messageId ||
+        expectedSessionKeys.has(sessionKey)
+      ) {
+        continue;
+      }
+      entries.delete(sessionKey);
+      disposedSessions += 1;
+      affectedSessionKeys.add(sessionKey);
+    }
+
+    for (const mutation of mutations.values()) {
+      const entry = entries.get(mutation.sessionKey);
+      const isMatching =
+        entry?.sourceGeneration === mutation.sourceGeneration &&
+        entry.itemRevision === mutation.itemRevision &&
+        entry.snapshot.source === mutation.source &&
+        entry.snapshot.isFinal === mutation.complete;
+      if (isMatching) continue;
+      replaceEntry(mutation);
+      affectedSessionKeys.add(mutation.sessionKey);
+    }
+
+    return createPublication(affectedSessionKeys);
+  };
+
   return {
     commitTimelineDeliveries,
     applyTimelineDeliveries(deliveries): void {
       commitTimelineDeliveries(deliveries).publish();
     },
+    commitTimelineSnapshot,
     getSnapshot(sessionKey): MarkdownStreamingSnapshot | undefined {
       return entries.get(sessionKey)?.snapshot;
     },
@@ -237,6 +290,7 @@ function collectOperationMutation(
     pending.set(sessionKey, {
       sessionKey,
       conversationId: delivery.conversationId,
+      messageId: delivery.messageId,
       sourceGeneration: operation.sourceGeneration,
       itemRevision: operation.itemRevision,
       mode: 'append',
@@ -268,6 +322,7 @@ function collectOperationMutation(
     pending.set(sessionKey, {
       sessionKey,
       conversationId: delivery.conversationId,
+      messageId: delivery.messageId,
       sourceGeneration: item.payload.sourceGeneration,
       itemRevision: item.itemRevision,
       mode: 'append',
@@ -280,12 +335,43 @@ function collectOperationMutation(
   pending.set(sessionKey, {
     sessionKey,
     conversationId: delivery.conversationId,
+    messageId: delivery.messageId,
     sourceGeneration: item.payload.sourceGeneration,
     itemRevision: item.itemRevision,
     mode: operation.operation === 'snapshot' ? 'snapshot' : 'replace',
     source: item.payload.content,
     complete,
   });
+}
+
+function collectSnapshotMutations(
+  snapshot: AgentMarkdownTimelineSnapshot,
+): Map<string, PendingSessionMutation> {
+  const mutations = new Map<string, PendingSessionMutation>();
+  for (const item of snapshot.items) {
+    if (!isMarkdownTimelineItem(item)) continue;
+    if (item.conversationId !== snapshot.conversationId || item.messageId !== snapshot.messageId) {
+      throw new Error(
+        `Markdown Timeline snapshot identity mismatch for ${item.itemId}: expected ${snapshot.conversationId}/${snapshot.messageId}, received ${item.conversationId}/${item.messageId}.`,
+      );
+    }
+    const sessionKey = createAgentMarkdownSessionKey({
+      conversationId: snapshot.conversationId,
+      messageId: snapshot.messageId,
+      itemId: item.itemId,
+    });
+    mutations.set(sessionKey, {
+      sessionKey,
+      conversationId: snapshot.conversationId,
+      messageId: snapshot.messageId,
+      sourceGeneration: item.payload.sourceGeneration,
+      itemRevision: item.itemRevision,
+      mode: 'snapshot',
+      source: item.payload.content,
+      complete: item.status !== 'streaming',
+    });
+  }
+  return mutations;
 }
 
 function isMarkdownTimelineItem(item: AgentTurnTimelineItem): item is MarkdownTimelineItem {
