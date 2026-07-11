@@ -69,6 +69,10 @@ import {
   createHostContentPathResolver,
   getHostContentAuthorizedReadRoots,
 } from '@neko/shared/vscode/extension';
+import {
+  registerStreamLifecycleAcceptanceCommands,
+  StreamLifecycleAcceptanceController,
+} from './debug/streamLifecycleAcceptance';
 
 const LOG_LEVEL_NAMES: Record<LogLevel, string> = {
   [LogLevel.Debug]: 'debug',
@@ -222,8 +226,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   setCapabilityRuntimeExternalProcessorRuntime(externalProcessorRegistryService.runtime);
   context.subscriptions.push(externalProcessorRegistryService);
 
+  // Development acceptance traffic uses the canonical Timeline delivery path but
+  // is isolated from product capabilities and conversation persistence.
+  const streamLifecycleAcceptance =
+    context.extensionMode === vscode.ExtensionMode.Development
+      ? new StreamLifecycleAcceptanceController()
+      : undefined;
+
   // Create chat view provider
-  const chatViewProvider = new ChatViewProvider(context.extensionUri, context);
+  const chatViewProvider = new ChatViewProvider(context.extensionUri, context, {
+    ...(streamLifecycleAcceptance ? { timelineSnapshotRouter: streamLifecycleAcceptance } : {}),
+  });
+
+  if (streamLifecycleAcceptance) {
+    await registerStreamLifecycleAcceptanceCommands({
+      context,
+      chatViewProvider,
+      controller: streamLifecycleAcceptance,
+    });
+  }
 
   // Register chat view
   context.subscriptions.push(

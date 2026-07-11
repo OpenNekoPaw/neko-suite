@@ -146,6 +146,118 @@ describe('AgentStreamProcessor', () => {
       expect(result.contentBlocks).toEqual([]);
     });
 
+    it('returns a typed all-success lifecycle after terminal delivery and snapshot retention', async () => {
+      const result = await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          { type: 'text', content: 'Hello' },
+          { type: 'done', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        ]),
+        callbacks,
+      );
+
+      expect(result.terminalStatus).toBe('completed');
+      expect(result.lifecycle).toEqual({
+        terminalDelivery: {
+          status: 'delivered',
+          deliveryRevision: expect.any(Number),
+          finalBlocksDelivered: true,
+        },
+        activeTurnResynchronization: {
+          status: 'available',
+          deliveryRevision: expect.any(Number),
+        },
+      });
+    });
+
+    it('keeps model completion separate when the Webview endpoint is unavailable', async () => {
+      webview.postMessage.mockResolvedValue(false);
+
+      const result = await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          { type: 'text', content: 'Retained answer' },
+          { type: 'done', usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 } },
+        ]),
+        callbacks,
+      );
+
+      expect(result.terminalStatus).toBe('completed');
+      expect(result.accumulatedResponse).toBe('Retained answer');
+      expect(result.lifecycle.terminalDelivery).toMatchObject({
+        status: 'unavailable',
+        finalBlocksDelivered: false,
+        diagnostic: 'endpoint-unavailable',
+      });
+      expect(result.lifecycle.activeTurnResynchronization.status).toBe('available');
+    });
+
+    it('marks AbortError streams cancelled while retaining final partial content', async () => {
+      const cancellation = new Error('cancelled by user');
+      cancellation.name = 'AbortError';
+
+      const result = await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          { type: 'text', content: 'Partial answer' },
+          { type: 'error', error: cancellation },
+        ]),
+        callbacks,
+      );
+
+      expect(result.terminalStatus).toBe('cancelled');
+      expect(result.accumulatedResponse).toBe('Partial answer');
+      expect(
+        getPostedTimelineMessages(webview).find((message) => message.completion)?.completion,
+      ).toMatchObject({ status: 'cancelled' });
+      expect(result.lifecycle.terminalDelivery.status).toBe('delivered');
+    });
+
+    it('rejects late delivery and partial persistence callbacks after disposal', async () => {
+      const resume = createDeferred<void>();
+      let now = 1_000;
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+      const conversations = { upsertMessageToConversation: vi.fn() };
+      processor = new AgentStreamProcessor({ conversations: conversations as any });
+      async function* delayedEvents() {
+        yield { type: 'text' as const, content: 'before dispose' };
+        await resume.promise;
+        yield { type: 'text' as const, content: ' after dispose' };
+      }
+
+      const processing = processor.processStream(
+        webview as any,
+        'conv-1',
+        delayedEvents(),
+        callbacks,
+      );
+      await waitForCondition(
+        () => conversations.upsertMessageToConversation.mock.calls.length === 1,
+      );
+      const postedBeforeDispose = webview.postMessage.mock.calls.length;
+
+      processor.dispose();
+      now += 300;
+      resume.resolve();
+      const result = await processing;
+      nowSpy.mockRestore();
+
+      expect(conversations.upsertMessageToConversation).toHaveBeenCalledTimes(1);
+      expect(webview.postMessage).toHaveBeenCalledTimes(postedBeforeDispose);
+      expect(result.accumulatedResponse).toBe('before dispose after dispose');
+      expect(result.lifecycle.terminalDelivery).toMatchObject({
+        status: 'unavailable',
+        diagnostic: 'disposed',
+      });
+      expect(result.lifecycle.activeTurnResynchronization).toEqual({
+        status: 'unavailable',
+        diagnostic: 'disposed',
+      });
+    });
+
     it('should handle thinking_content events', async () => {
       const events = toAsyncIterable([
         { type: 'thinking_content', thinking: 'Let me think...' },
@@ -2085,7 +2197,110 @@ describe('AgentStreamProcessor', () => {
       });
     });
 
-    it('serves an exact retained snapshot and rejects endpoint generation mismatch', async () => {
+    it('releases Timeline channels on conversation clear and Extension disposal', async () => {
+      processor = new AgentStreamProcessor({
+        createTimelineConnectionEpoch: () => 'epoch-lifecycle',
+      });
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([{ type: 'text_delta', content: 'retained' }, { type: 'done' }]),
+        callbacks,
+      );
+      const request = {
+        type: 'requestAgentTurnTimelineSnapshot',
+        schemaVersion: 2,
+        connectionEpoch: 'epoch-lifecycle',
+        conversationId: 'conv-1',
+        turnId: 'turn-assistant-stream',
+        messageId: 'assistant-stream',
+        reason: 'webview-reload',
+        lastAppliedDeliveryRevision: 0,
+      } as const;
+
+      processor.clearConversation('conv-1');
+
+      expect(
+        processor.getTimelineDeliveryMetrics({
+          conversationId: 'conv-1',
+          turnId: 'turn-assistant-stream',
+          messageId: 'assistant-stream',
+        }),
+      ).toBeUndefined();
+      await expect(
+        processor.requestTimelineSnapshot(webview as any, request),
+      ).resolves.toMatchObject({
+        type: 'agentTurnTimelineDiagnostic',
+        code: 'turn-snapshot-unavailable',
+      });
+
+      await processor.processStream(
+        webview as any,
+        'conv-2',
+        toAsyncIterable([{ type: 'text_delta', content: 'second' }, { type: 'done' }]),
+        { ...callbacks, messageId: 'assistant-second' },
+      );
+      processor.dispose();
+
+      expect(
+        processor.getTimelineDeliveryMetrics({
+          conversationId: 'conv-2',
+          turnId: 'turn-assistant-second',
+          messageId: 'assistant-second',
+        }),
+      ).toBeUndefined();
+    });
+
+    it('retains only the latest turn channel for one conversation', async () => {
+      let epoch = 0;
+      processor = new AgentStreamProcessor({
+        createTimelineConnectionEpoch: () => `epoch-${++epoch}`,
+      });
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([{ type: 'text_delta', content: 'first' }, { type: 'done' }]),
+        callbacks,
+      );
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([{ type: 'text_delta', content: 'second' }, { type: 'done' }]),
+        { ...callbacks, messageId: 'assistant-second' },
+      );
+
+      expect(
+        processor.getTimelineDeliveryMetrics({
+          conversationId: 'conv-1',
+          turnId: 'turn-assistant-stream',
+          messageId: 'assistant-stream',
+        }),
+      ).toBeUndefined();
+      expect(
+        processor.getTimelineDeliveryMetrics({
+          conversationId: 'conv-1',
+          turnId: 'turn-assistant-second',
+          messageId: 'assistant-second',
+        }),
+      ).toBeDefined();
+      await expect(
+        processor.requestTimelineSnapshot(webview as any, {
+          type: 'requestAgentTurnTimelineSnapshot',
+          schemaVersion: 2,
+          connectionEpoch: 'epoch-1',
+          conversationId: 'conv-1',
+          turnId: 'turn-assistant-stream',
+          messageId: 'assistant-stream',
+          reason: 'webview-reload',
+          lastAppliedDeliveryRevision: 0,
+        }),
+      ).resolves.toMatchObject({
+        type: 'agentTurnTimelineDiagnostic',
+        code: 'turn-snapshot-unavailable',
+      });
+    });
+
+    it('rebinds a recreated Webview with the retained epoch and rejects epoch mismatch', async () => {
       processor = new AgentStreamProcessor({
         createTimelineConnectionEpoch: () => 'epoch-snapshot',
       });
@@ -2110,8 +2325,9 @@ describe('AgentStreamProcessor', () => {
         lastAppliedDeliveryRevision: 1,
       } as const;
 
-      const snapshot = await processor.requestTimelineSnapshot(webview as any, request);
-      const mismatch = await processor.requestTimelineSnapshot(webview as any, {
+      const recreatedWebview = createMockWebview();
+      const snapshot = await processor.requestTimelineSnapshot(recreatedWebview as any, request);
+      const mismatch = await processor.requestTimelineSnapshot(recreatedWebview as any, {
         ...request,
         connectionEpoch: 'epoch-stale',
       });

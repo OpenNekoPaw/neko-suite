@@ -326,15 +326,12 @@ describe('AgentTimelineDeliveryChannel', () => {
     expect(channel.metrics().failedDeliveries).toBe(2);
   });
 
-  it('rejects a stale endpoint generation before state mutation', () => {
+  it('rejects a different turn identity before state mutation', () => {
     const { channel } = createChannel();
-    const stale = buildAgentTurnTimelineMessage({
-      ...identity,
-      connectionEpoch: 'epoch-stale',
-      batchKind: 'delta',
-      deliveryRevision: 1,
-      operations: [append('x', 1)],
-    });
+    const stale = {
+      ...message(1, [append('x', 1)]),
+      messageId: 'msg-stale',
+    };
 
     expect(() => channel.enqueue(stale)).toThrow(/different identity/);
     expect(channel.metrics().inputBatches).toBe(0);
@@ -366,6 +363,13 @@ describe('AgentTimelineDeliveryChannel', () => {
     const { channel, timer, port } = createChannel({ deliverFirstAppendImmediately: false });
     void channel.enqueue(message(1, [append('pending', 1)]));
     expect(timer.pendingCount()).toBe(1);
+    expect(channel.metrics()).toMatchObject({
+      pendingOperations: 1,
+      pendingTextBytes: 7,
+      timerScheduled: true,
+      accepting: true,
+      disposed: false,
+    });
 
     const result = await channel.dispose();
     const late = await channel.enqueue(message(2, [append('late', 2)]));
@@ -373,6 +377,13 @@ describe('AgentTimelineDeliveryChannel', () => {
     expect(result.delivered).toBe(true);
     expect(port.messages).toHaveLength(1);
     expect(timer.pendingCount()).toBe(0);
+    expect(channel.metrics()).toMatchObject({
+      pendingOperations: 0,
+      pendingTextBytes: 0,
+      timerScheduled: false,
+      accepting: false,
+      disposed: true,
+    });
     expect(late.diagnostic).toBe('disposed');
     expect(deliveredText(port.messages)).toBe('pending');
   });

@@ -57,6 +57,7 @@ import { getLogger } from '../../base';
 import {
   AgentTimelineDeliveryChannel,
   type AgentTimelineDeliveryMetrics,
+  type AgentTimelineDeliveryResult,
 } from './agentTimelineDeliveryScheduler';
 
 const logger = getLogger('AgentStreamProcessor');
@@ -75,13 +76,40 @@ interface MediaUnderstandingModelOverrides {
 /**
  * Stream processing result
  */
+export type AgentStreamTerminalDeliveryResult =
+  | {
+      readonly status: 'delivered';
+      readonly deliveryRevision: number;
+      readonly finalBlocksDelivered: true;
+    }
+  | {
+      readonly status: 'unavailable';
+      readonly deliveryRevision: number;
+      readonly finalBlocksDelivered: boolean;
+      readonly diagnostic: 'endpoint-unavailable' | 'disposed';
+    };
+
+export type AgentStreamResynchronizationResult =
+  | { readonly status: 'available'; readonly deliveryRevision: number }
+  | {
+      readonly status: 'unavailable';
+      readonly diagnostic: 'turn-snapshot-unavailable' | 'disposed';
+    };
+
+export interface AgentStreamLifecycleResult {
+  readonly terminalDelivery: AgentStreamTerminalDeliveryResult;
+  readonly activeTurnResynchronization: AgentStreamResynchronizationResult;
+}
+
 export interface StreamProcessingResult {
   accumulatedResponse: string;
   accumulatedThinking: string;
   hasError: boolean;
   errorMessage?: string;
+  terminalStatus: 'completed' | 'cancelled' | 'failed';
   collectedToolCalls: readonly CollectedToolCall[];
   contentBlocks: readonly ContentBlock[];
+  lifecycle: AgentStreamLifecycleResult;
 }
 
 /**
@@ -148,7 +176,7 @@ export interface AgentStreamProcessorDeps {
  * Processor for agent event streams
  */
 interface ActiveTimelineChannel {
-  readonly webview: vscode.Webview;
+  readonly endpoint: { current: vscode.Webview };
   readonly channel: AgentTimelineDeliveryChannel;
   readonly accumulator: AgentTurnTimelineAccumulator;
 }
@@ -185,21 +213,22 @@ export class AgentStreamProcessor {
     const turnId = `turn-${callbacks.messageId}`;
     const connectionEpoch = this.createConnectionEpoch();
     const channelKey = toTimelineChannelKey(conversationId, turnId, callbacks.messageId);
-    const previousChannel = this.activeTimelineChannels.get(channelKey);
-    if (previousChannel) void previousChannel.channel.dispose();
+    this.disposeTimelineChannelsForConversation(conversationId);
 
     const timelineAccumulator = createAgentTurnTimelineAccumulator({
       conversationId,
       messageId: callbacks.messageId,
     });
-    const timelineChannel = new AgentTimelineDeliveryChannel(
+    const endpoint = { current: webview };
+    const timelineChannel: AgentTimelineDeliveryChannel = new AgentTimelineDeliveryChannel(
       { connectionEpoch, conversationId, turnId, messageId: callbacks.messageId },
       {
-        postMessage: async (message) => {
+        postMessage: async (message): Promise<boolean> => {
           const active = this.activeTimelineChannels.get(channelKey);
-          if (active?.channel !== timelineChannel || active.webview !== webview) return false;
+          if (active?.accumulator !== timelineAccumulator) return false;
+          const targetWebview = endpoint.current;
           const projectedMessage = await projectTimelineMessageResourcesForWebview(
-            webview,
+            targetWebview,
             message,
             {
               localResourceAccess: this.deps.localResourceAccess,
@@ -207,27 +236,50 @@ export class AgentStreamProcessor {
             },
           );
           this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
-          return webview.postMessage(projectedMessage);
+          return targetWebview.postMessage(projectedMessage);
         },
       },
     );
     this.activeTimelineChannels.set(channelKey, {
-      webview,
+      endpoint,
       channel: timelineChannel,
       accumulator: timelineAccumulator,
     });
 
+    let terminalTimelineDelivery: AgentTimelineDeliveryResult | undefined;
+    let finalBlocksDelivered = false;
+    let finalBlocksDeliveryAttempted = false;
+    const isActiveTurn = (): boolean =>
+      this.activeTimelineChannels.get(channelKey)?.accumulator === timelineAccumulator;
+
     const postProjectedMessage = async (message: AgentEventStreamRuntimeMessage) => {
       if (message.type === 'agentTurnTimelineUpdate') {
-        await timelineChannel.enqueue(message);
+        const delivery = await timelineChannel.enqueue(message);
+        if (message.completion) terminalTimelineDelivery = delivery;
         return;
       }
       await timelineChannel.flush();
-      const projectedMessage = await projectStreamMessageResourcesForWebview(webview, message, {
-        localResourceAccess: this.deps.localResourceAccess,
-        contentAccessRuntime: this.deps.contentAccessRuntime,
-      });
-      await webview.postMessage(projectedMessage);
+      let delivered = false;
+      if (isActiveTurn()) {
+        const targetWebview = endpoint.current;
+        const projectedMessage = await projectStreamMessageResourcesForWebview(
+          targetWebview,
+          message,
+          {
+            localResourceAccess: this.deps.localResourceAccess,
+            contentAccessRuntime: this.deps.contentAccessRuntime,
+          },
+        );
+        try {
+          delivered = await targetWebview.postMessage(projectedMessage);
+        } catch {
+          delivered = false;
+        }
+      }
+      if (message.type === 'streamComplete') {
+        finalBlocksDeliveryAttempted = true;
+        finalBlocksDelivered = delivered;
+      }
     };
 
     const result = await this.streamRuntime.process({
@@ -242,7 +294,7 @@ export class AgentStreamProcessor {
       postMessage: postProjectedMessage,
       onPhaseChange: callbacks.onPhaseChange,
       onPartialAssistantMessage: (message) => {
-        this.upsertPartialAssistantMessage(conversationId, message);
+        if (isActiveTurn()) this.upsertPartialAssistantMessage(conversationId, message);
       },
       projectCompositeBlock: maybeAttachInferredEntityMemoryContribution,
       backgroundTasks: {
@@ -345,9 +397,11 @@ export class AgentStreamProcessor {
       },
     });
 
-    await timelineChannel.flush();
+    const flushedDelivery = await timelineChannel.flush();
+    const effectiveTerminalDelivery = terminalTimelineDelivery ?? flushedDelivery;
+    const resynchronization = await timelineChannel.snapshot(timelineAccumulator.snapshot());
 
-    if (this.deps.getContextTokenCount) {
+    if (this.deps.getContextTokenCount && isActiveTurn()) {
       try {
         const tokenCount = this.deps.getContextTokenCount(conversationId);
         if (Number.isFinite(tokenCount) && tokenCount >= 0) {
@@ -362,7 +416,36 @@ export class AgentStreamProcessor {
       }
     }
 
-    return result;
+    if (result.terminalStatus === undefined) {
+      throw new Error('Agent stream runtime completed without a terminal status.');
+    }
+
+    const terminalDelivery: AgentStreamTerminalDeliveryResult =
+      effectiveTerminalDelivery.delivered && finalBlocksDeliveryAttempted && finalBlocksDelivered
+        ? {
+            status: 'delivered',
+            deliveryRevision: effectiveTerminalDelivery.deliveryRevision,
+            finalBlocksDelivered: true,
+          }
+        : {
+            status: 'unavailable',
+            deliveryRevision: effectiveTerminalDelivery.deliveryRevision,
+            finalBlocksDelivered,
+            diagnostic: effectiveTerminalDelivery.diagnostic ?? 'endpoint-unavailable',
+          };
+    const activeTurnResynchronization: AgentStreamResynchronizationResult =
+      resynchronization.available
+        ? {
+            status: 'available',
+            deliveryRevision: resynchronization.message.deliveryRevision,
+          }
+        : { status: 'unavailable', diagnostic: resynchronization.diagnostic };
+
+    return {
+      ...result,
+      terminalStatus: result.terminalStatus,
+      lifecycle: { terminalDelivery, activeTurnResynchronization },
+    };
   }
 
   private upsertPartialAssistantMessage(conversationId: string, message: Message): void {
@@ -483,12 +566,10 @@ export class AgentStreamProcessor {
     const key = toTimelineChannelKey(request.conversationId, request.turnId, request.messageId);
     const active = this.activeTimelineChannels.get(key);
     if (!active) return buildSnapshotDiagnostic(request, 'turn-snapshot-unavailable');
-    if (
-      active.webview !== webview ||
-      request.connectionEpoch !== active.channel.snapshotIdentity().connectionEpoch
-    ) {
+    if (request.connectionEpoch !== active.channel.snapshotIdentity().connectionEpoch) {
       return buildSnapshotDiagnostic(request, 'identity-mismatch');
     }
+    active.endpoint.current = webview;
     const snapshot = await active.channel.snapshot(active.accumulator.snapshot());
     return snapshot.available
       ? snapshot.message
@@ -507,17 +588,21 @@ export class AgentStreamProcessor {
 
   clearConversation(conversationId: string): void {
     this.streamRuntime.clearConversation(conversationId);
-    for (const [key, active] of this.activeTimelineChannels) {
-      if (!key.startsWith(`${conversationId}\u0000`)) continue;
-      this.activeTimelineChannels.delete(key);
-      void active.channel.dispose();
-    }
+    this.disposeTimelineChannelsForConversation(conversationId);
   }
 
   dispose(): void {
     this.streamRuntime.dispose();
     for (const active of this.activeTimelineChannels.values()) void active.channel.dispose();
     this.activeTimelineChannels.clear();
+  }
+
+  private disposeTimelineChannelsForConversation(conversationId: string): void {
+    for (const [key, active] of this.activeTimelineChannels) {
+      if (active.channel.snapshotIdentity().conversationId !== conversationId) continue;
+      this.activeTimelineChannels.delete(key);
+      void active.channel.dispose();
+    }
   }
 
   private createConnectionEpoch(): string {
@@ -634,7 +719,7 @@ function projectStreamMessageResourcesForWebview(
     }));
   }
 
-  if (message.type === 'agentTurnTimelineUpdate') {
+  if (message.type === 'agentTurnTimelineUpdate' || message.type === 'agentTurnTimeline') {
     const projectedOperations = Promise.all(
       message.operations.map(async (operation) => {
         if (!('item' in operation)) {

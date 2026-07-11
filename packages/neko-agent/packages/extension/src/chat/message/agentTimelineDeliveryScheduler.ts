@@ -57,6 +57,11 @@ export interface AgentTimelineDeliveryMetrics {
   readonly flushCount: number;
   readonly maximumFlushLatencyMs: number;
   readonly failedDeliveries: number;
+  readonly pendingOperations: number;
+  readonly pendingTextBytes: number;
+  readonly timerScheduled: boolean;
+  readonly accepting: boolean;
+  readonly disposed: boolean;
 }
 
 export interface AgentTimelineDeliveryResult {
@@ -184,7 +189,14 @@ export class AgentTimelineDeliveryChannel {
   }
 
   metrics(): AgentTimelineDeliveryMetrics {
-    return { ...this.mutableMetrics };
+    return {
+      ...this.mutableMetrics,
+      pendingOperations: this.pendingOperations.length,
+      pendingTextBytes: this.pendingTextBytes,
+      timerScheduled: this.timerHandle !== undefined,
+      accepting: this.accepting,
+      disposed: this.disposed,
+    };
   }
 
   async dispose(): Promise<AgentTimelineDeliveryResult> {
