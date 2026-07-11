@@ -56,9 +56,9 @@ const TUI_LOCAL_COMMANDS: readonly TuiLocalCommandEffect[] = [
   {
     name: 'queue',
     surface: 'tui',
-    description: 'List, promote, cancel, or edit queued prompts',
+    description: 'List, send next, cancel, or edit queued prompts',
     descriptions: {
-      en: 'List, promote, cancel, or edit queued prompts',
+      en: 'List, send next, cancel, or edit queued prompts',
       zh: '列出、提升、取消或编辑队列中的提示',
     },
   },

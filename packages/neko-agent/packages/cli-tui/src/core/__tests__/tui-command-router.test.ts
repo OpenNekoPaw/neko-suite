@@ -63,14 +63,29 @@ describe('handleTuiControlCommand', () => {
     expect(result.output).toContain('anthropic:gpt-5.3-codex  Anthropic / GPT 5.3 Codex');
     expect(result.output).toContain('Available media models:');
     expect(result.output).toContain('image openai:gpt-image-1  OpenAI / GPT Image');
+    expect(result.output).toContain('Perception Models:');
+    expect(result.output).toContain('image: google:gemini-flash (Google / Gemini Flash)');
     expect(result.output).toContain(
       '/model <image|video|audio> <provider:model|provider/model|model-id|none>',
+    );
+    expect(result.output).toContain(
+      '/model perception <image|video|audio> <provider:model|provider/model|model-id|auto>',
     );
   });
 
   it('opens the chat model selector for /model chat without a model argument', async () => {
     const context = createContext({
       selectedMenuItem: 'anthropic:gpt-5.3-codex',
+      chatModelOptions: [
+        {
+          id: 'anthropic:gpt-5.3-codex',
+          label: 'Anthropic / GPT 5.3 Codex',
+          providerId: 'anthropic',
+          modelId: 'gpt-5.3-codex',
+          providerExpressionProfileId: 'provider-expression:anthropic:gpt-5.3-codex',
+          category: 'llm',
+        },
+      ],
     });
 
     const result = await handleTuiControlCommand('/model chat', context);
@@ -169,6 +184,51 @@ describe('handleTuiControlCommand', () => {
       'Unknown video model identity: openai:gpt-image-1. Use /model video to list available models.',
     );
     expect(context.ports.media?.setMediaModel).not.toHaveBeenCalled();
+  });
+
+  it('lists and selects perception model identities through /model perception', async () => {
+    const context = createContext();
+
+    const listed = await handleTuiControlCommand('/model perception image status', context);
+    const selected = await handleTuiControlCommand(
+      '/model perception image google:gemini-flash',
+      context,
+    );
+
+    expect(listed.output).toContain('Image perception model: google:gemini-flash');
+    expect(listed.output).toContain('google:gemini-flash  Google / Gemini Flash');
+    expect(selected.output).toBe(
+      'image perception model set to: google:gemini-flash (Google / Gemini Flash)',
+    );
+    expect(context.ports.perception?.setPerceptionModel).toHaveBeenCalledWith('image', {
+      providerId: 'google',
+      modelId: 'gemini-flash',
+      providerExpressionProfileId: 'provider-expression:google:gemini-flash',
+      optionId: 'google:gemini-flash',
+      label: 'Google / Gemini Flash',
+      category: 'llm',
+      capabilities: ['chat', 'vision', 'vision_video'],
+    });
+  });
+
+  it('routes /perception auto through perception ports', async () => {
+    const context = createContext();
+
+    const result = await handleTuiControlCommand('/perception image auto', context);
+
+    expect(result.output).toBe('image perception model set to automatic selection.');
+    expect(context.ports.perception?.setPerceptionModel).toHaveBeenCalledWith('image', 'auto');
+  });
+
+  it('rejects perception models without the requested capability visibly', async () => {
+    const context = createContext();
+
+    const result = await handleTuiControlCommand('/perception audio google:gemini-flash', context);
+
+    expect(result.error).toBe(
+      'Unknown audio perception model identity: google:gemini-flash. Use /perception audio to list available models.',
+    );
+    expect(context.ports.perception?.setPerceptionModel).not.toHaveBeenCalled();
   });
 
   it('lists and selects explicit media model identities', async () => {
@@ -332,11 +392,21 @@ describe('handleTuiControlCommand', () => {
 
     const listed = await handleTuiControlCommand('/queue list', context);
     const promoted = await handleTuiControlCommand(`/queue promote ${second.id}`, context);
+    const sentNext = await handleTuiControlCommand(`/queue send-next ${first.id}`, context);
+    const sentNow = await handleTuiControlCommand(`/queue send-now ${first.id}`, context);
     const edited = await handleTuiControlCommand(`/queue edit ${first.id} first revised`, context);
     const cancelled = await handleTuiControlCommand(`/queue cancel ${second.id}`, context);
 
     expect(listed.output).toContain('Queue: 2 pending');
-    expect(promoted.output).toBe(`Queued message promoted: ${second.id}`);
+    expect(promoted.output).toBe(
+      `Queued message scheduled as next eligible user message: ${second.id}`,
+    );
+    expect(sentNext.output).toBe(
+      `Queued message scheduled as next eligible user message: ${first.id}`,
+    );
+    expect(sentNow.error).toBe(
+      'The send-now command cannot interrupt the active turn. Use /queue send-next <id> or /queue promote <id>.',
+    );
     expect(edited.output).toBe(`Queued message edited: ${first.id}`);
     expect(cancelled.output).toBe(`Queued message cancelled: ${second.id}`);
     expect(queue.snapshot().items).toEqual([
@@ -576,6 +646,23 @@ function createContext(
       providerExpressionProfileId: 'provider-expression:anthropic:gpt-5.3-codex',
       category: 'llm',
     },
+    {
+      id: 'google:gemini-flash',
+      label: 'Google / Gemini Flash',
+      providerId: 'google',
+      modelId: 'gemini-flash',
+      providerExpressionProfileId: 'provider-expression:google:gemini-flash',
+      category: 'llm',
+      capabilities: ['chat', 'vision', 'vision_video'],
+    },
+    {
+      id: 'google:gemini-audio',
+      label: 'Google / Gemini Audio',
+      providerId: 'google',
+      modelId: 'gemini-audio',
+      category: 'llm',
+      capabilities: ['chat', 'audio'],
+    },
   ];
   const mediaModelOptions = overrides.mediaModelOptions ?? [
     {
@@ -600,6 +687,9 @@ function createContext(
         ...DEFAULT_CLI_CONFIG,
         defaultMediaModels: {
           image: 'openai:gpt-image-1',
+        },
+        perceptionModels: {
+          image: 'google:gemini-flash',
         },
         llmConfig: {
           reasoningPreset: 'deep',
@@ -648,6 +738,12 @@ function createContext(
         getCurrentMediaModels: vi.fn(() => ({ image: 'openai:gpt-image-1' })),
         setMediaModel: vi.fn(),
         resetMediaModels: vi.fn(),
+      },
+      perception: {
+        listPerceptionModelOptions: vi.fn(() => chatModelOptions),
+        getCurrentPerceptionModels: vi.fn(() => ({ image: 'google:gemini-flash' })),
+        setPerceptionModel: vi.fn(),
+        resetPerceptionModels: vi.fn(),
       },
       parameters: {
         getConfig: vi.fn(() => ({ reasoningPreset: 'deep' as const })),
@@ -743,31 +839,31 @@ function createContext(
             ({
               getProviderSummaries: vi.fn(
                 (): ReturnType<TuiCapabilityPorts['getProviderSummaries']> => [
-                {
-                  providerId: 'neko-assets',
-                  version: '1.0.0',
-                  loaded: [{ kind: 'tool' as const, name: 'assets.list' }],
-                  skipped: [],
-                },
-                {
-                  providerId: 'neko-cut',
-                  version: '1.0.0',
-                  loaded: [],
-                  skipped: [
-                    {
-                      level: 'warn' as const,
-                      providerId: 'neko-cut',
-                      contributionKind: 'provider' as const,
-                      code: 'capability.provider.host-not-supported',
-                      reason: 'host-not-supported',
-                      message: 'Provider is not TUI-safe.',
-                      host: 'tui',
-                    },
-                  ],
-                },
-              ]),
-              getDiagnostics: vi.fn(
-                (): ReturnType<TuiCapabilityPorts['getDiagnostics']> => [
+                  {
+                    providerId: 'neko-assets',
+                    version: '1.0.0',
+                    loaded: [{ kind: 'tool' as const, name: 'assets.list' }],
+                    skipped: [],
+                  },
+                  {
+                    providerId: 'neko-cut',
+                    version: '1.0.0',
+                    loaded: [],
+                    skipped: [
+                      {
+                        level: 'warn' as const,
+                        providerId: 'neko-cut',
+                        contributionKind: 'provider' as const,
+                        code: 'capability.provider.host-not-supported',
+                        reason: 'host-not-supported',
+                        message: 'Provider is not TUI-safe.',
+                        host: 'tui',
+                      },
+                    ],
+                  },
+                ],
+              ),
+              getDiagnostics: vi.fn((): ReturnType<TuiCapabilityPorts['getDiagnostics']> => [
                 {
                   level: 'warn' as const,
                   providerId: 'neko-cut',
@@ -791,6 +887,7 @@ function createContext(
           tokensTotal: 42,
           chatModelIdentity: 'anthropic:claude-sonnet-4-20250514',
           mediaModelSummary: 'image=openai:gpt-image-1',
+          perceptionModelSummary: 'image=google:gemini-flash',
           llmParameterSummary: 'reasoning=deep',
           queueCount: overrides.queue?.snapshot().pendingCount ?? 0,
           runningTaskSummary: overrides.tasks
@@ -803,15 +900,13 @@ function createContext(
   };
 }
 
-function createTask(
-  overrides: {
-    readonly id: string;
-    readonly status: Task['status'];
-    readonly progress: number;
-    readonly payload?: Record<string, unknown>;
-    readonly lifecycle?: Partial<NonNullable<Task['lifecycle']>>;
-  },
-): Task {
+function createTask(overrides: {
+  readonly id: string;
+  readonly status: Task['status'];
+  readonly progress: number;
+  readonly payload?: Record<string, unknown>;
+  readonly lifecycle?: Partial<NonNullable<Task['lifecycle']>>;
+}): Task {
   return {
     id: overrides.id,
     type: 'image_generation',

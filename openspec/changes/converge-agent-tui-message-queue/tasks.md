@@ -7,8 +7,8 @@
 ## 2. Composer Queue Panel
 
 - [x] 2.1 Add an Agent-local `MessageQueuePanel` directly above `InputEditor` with stable collapsed height and ordered content previews.
-- [ ] 2.2 Wire promote/send-next and cancel controls to existing session queue operations while preserving composer focus.
-- [ ] 2.3 Add edit-to-composer flow that does not silently overwrite a non-empty draft and rejects editing internal continuations visibly.
+- [x] 2.2 Wire promote/send-next and cancel controls to existing session queue operations while preserving composer focus.
+- [x] 2.3 Add edit-to-composer flow that does not silently overwrite a non-empty draft and rejects editing internal continuations visibly.
 - [ ] 2.4 Add Ink component tests for placement, empty hiding, truncation, action wiring, source-specific controls, and draft conflict handling.
 
 ## 3. Transcript Boundary Cleanup
@@ -19,10 +19,10 @@
 
 ## 4. Command And Ordering Semantics
 
-- [ ] 4.1 Add canonical `/queue send-next <id>` behavior and make `/queue send-now <id>` fail visibly with migration guidance.
-- [ ] 4.2 Define queue presenter copy and runtime tests for internal continuation priority versus promoted user-message priority.
-- [ ] 4.3 Add exact-id/source release-order tests for mixed user and continuation queues.
-- [ ] 4.4 Update command help, tests, and automation fixtures for the canonical terminology.
+- [x] 4.1 Add canonical `/queue send-next <id>` behavior and make `/queue send-now <id>` fail visibly with migration guidance.
+- [x] 4.2 Define queue presenter copy and runtime tests for internal continuation priority versus promoted user-message priority.
+- [x] 4.3 Add exact-id/source release-order tests for mixed user and continuation queues.
+- [x] 4.4 Update command help, tests, and automation fixtures for the canonical terminology.
 
 ## 5. Cancellation And Resume Policy
 

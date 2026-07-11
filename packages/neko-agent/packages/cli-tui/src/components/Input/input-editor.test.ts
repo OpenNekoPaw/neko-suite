@@ -311,6 +311,50 @@ describe('InputEditor prefix suggestions', () => {
     expect(instance.lastFrame()).toContain('[素材]');
     expect(instance.lastFrame()).not.toContain('more');
   });
+  it('moves a queued message into an empty composer only after its queue mutation succeeds', async () => {
+    const apply = vi.fn(() => true);
+    const onConflict = vi.fn();
+    const instance = render(
+      React.createElement(InputEditor, {
+        onSubmit: vi.fn(),
+        draftRequest: {
+          id: 'queue-1:1',
+          content: 'Edit queued message',
+          apply,
+          onConflict,
+        },
+      }),
+    );
+
+    await waitFor(() => instance.lastFrame()?.includes('Edit queued message') === true);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(onConflict).not.toHaveBeenCalled();
+  });
+
+  it('keeps a queued message unchanged when the composer already has a draft', async () => {
+    const apply = vi.fn(() => true);
+    const onConflict = vi.fn();
+    const instance = render(React.createElement(InputEditor, { onSubmit: vi.fn() }));
+    await writeInput(instance, 'existing draft');
+
+    instance.rerender(
+      React.createElement(InputEditor, {
+        onSubmit: vi.fn(),
+        draftRequest: {
+          id: 'queue-1:1',
+          content: 'queued content',
+          apply,
+          onConflict,
+        },
+      }),
+    );
+    await waitFor(() => onConflict.mock.calls.length === 1);
+
+    expect(instance.lastFrame()).toContain('existing draft');
+    expect(instance.lastFrame()).not.toContain('queued content');
+    expect(apply).not.toHaveBeenCalled();
+    expect(onConflict).toHaveBeenCalledWith('existing draft');
+  });
 });
 
 async function writeInput(instance: ReturnType<typeof render>, value: string): Promise<void> {

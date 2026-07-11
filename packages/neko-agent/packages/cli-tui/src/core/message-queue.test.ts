@@ -76,6 +76,26 @@ describe('createTuiMessageQueue', () => {
     expect(queue.dequeue()?.id).toBe(user.id);
   });
 
+  it('keeps continuation priority ahead of a promoted user message by exact id and source', () => {
+    const queue = createTuiMessageQueue({ conversationId: 'conv-1', now: () => 1000 });
+    const firstUser = queue.enqueue('first user prompt');
+    const continuation = queue.enqueue({
+      content: 'Continue from task result',
+      source: 'task-result-continuation',
+      metadata: { taskId: 'task-1' },
+    });
+    const promotedUser = queue.enqueue('promoted user prompt');
+
+    queue.promote(promotedUser.id);
+
+    expect(queue.dequeue()).toMatchObject({
+      id: continuation.id,
+      source: 'task-result-continuation',
+    });
+    expect(queue.dequeue()).toMatchObject({ id: promotedUser.id, source: 'user' });
+    expect(queue.dequeue()).toMatchObject({ id: firstUser.id, source: 'user' });
+  });
+
   it('discards continuations explicitly without treating user messages as continuations', () => {
     const queue = createTuiMessageQueue({ conversationId: 'conv-1', now: () => 1000 });
     const user = queue.enqueue('user prompt');

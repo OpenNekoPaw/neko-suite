@@ -1,12 +1,13 @@
 import React from 'react';
-import { render } from 'ink-testing-library';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, render } from 'ink-testing-library';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useAgentStore } from '../../stores/agent-store';
 import { MessageQueuePanel } from './MessageQueuePanel';
 
 const originalLocale = process.env.NEKO_LOCALE;
 
 afterEach(() => {
+  cleanup();
   useAgentStore.getState().reset();
   if (originalLocale === undefined) {
     delete process.env.NEKO_LOCALE;
@@ -53,6 +54,60 @@ describe('MessageQueuePanel', () => {
     expect(frame).not.toContain('queue-internal-1');
   });
 
+  it('wires send-next, edit, and cancel shortcuts to the first visible user message', async () => {
+    process.env.NEKO_LOCALE = 'en-US';
+    useAgentStore.getState().setMessageQueueSnapshot({
+      conversationId: 'conv-1',
+      pendingCount: 1,
+      version: 1,
+      items: [
+        {
+          id: 'queue-1',
+          conversationId: 'conv-1',
+          content: 'Revise the storyboard',
+          createdAt: 1,
+          source: 'user',
+        },
+      ],
+    });
+    const onSendNext = vi.fn();
+    const onEdit = vi.fn();
+    const onCancel = vi.fn();
+    const view = render(
+      <MessageQueuePanel onSendNext={onSendNext} onEdit={onEdit} onCancel={onCancel} />,
+    );
+
+    expect(view.lastFrame()).toContain('Queue shortcuts: ^N Send next · ^E Edit · ^X Cancel');
+    await writeInput(view, '\x0e');
+    await writeInput(view, '\x05');
+    await writeInput(view, '\x18');
+
+    expect(onSendNext).toHaveBeenCalledWith('queue-1');
+    expect(onEdit).toHaveBeenCalledWith('queue-1');
+    expect(onCancel).toHaveBeenCalledWith('queue-1');
+  });
+
+  it('does not expose user-edit shortcuts for an internal continuation', () => {
+    useAgentStore.getState().setMessageQueueSnapshot({
+      conversationId: 'conv-1',
+      pendingCount: 1,
+      version: 1,
+      items: [
+        {
+          id: 'task-1',
+          conversationId: 'conv-1',
+          content: 'Continue task',
+          createdAt: 1,
+          source: 'task-result-continuation',
+        },
+      ],
+    });
+
+    const frame = render(<MessageQueuePanel />).lastFrame()!;
+    expect(frame).not.toContain('^E');
+    expect(frame).not.toContain('^X');
+  });
+
   it('distinguishes priority continuations and collapses extra rows', () => {
     process.env.NEKO_LOCALE = 'zh-CN';
     useAgentStore.getState().setMessageQueueSnapshot({
@@ -91,3 +146,9 @@ describe('MessageQueuePanel', () => {
     expect(frame).toContain('+1 条');
   });
 });
+
+async function writeInput(instance: ReturnType<typeof render>, value: string): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  instance.stdin.write(value);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}

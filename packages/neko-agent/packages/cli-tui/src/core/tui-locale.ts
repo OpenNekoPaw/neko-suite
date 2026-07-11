@@ -38,6 +38,8 @@ export interface TuiLabels {
     readonly edit: string;
     readonly cancel: string;
     readonly pausedAfterCancel: string;
+    readonly keyboardActions: string;
+    readonly draftConflict: string;
   };
   readonly mediaCategories: Readonly<Record<string, string>>;
   readonly referenceSources: Readonly<Record<string, string>>;
@@ -100,6 +102,8 @@ const TUI_LABELS: Readonly<Record<TuiLocale, TuiLabels>> = {
       edit: 'Edit',
       cancel: 'Cancel',
       pausedAfterCancel: 'Queue paused after cancellation',
+      keyboardActions: 'Queue shortcuts',
+      draftConflict: 'Composer already contains a draft; queued message was not changed',
     },
     mediaCategories: {
       image: 'image',
@@ -185,6 +189,8 @@ const TUI_LABELS: Readonly<Record<TuiLocale, TuiLabels>> = {
       edit: '编辑',
       cancel: '取消',
       pausedAfterCancel: '当前任务取消后队列已暂停',
+      keyboardActions: '队列快捷键',
+      draftConflict: '输入框已有草稿，排队消息未发生变更',
     },
     mediaCategories: {
       image: '图像',

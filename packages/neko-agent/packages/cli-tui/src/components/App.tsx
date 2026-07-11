@@ -13,7 +13,7 @@ import { Box } from 'ink';
 import type { CLIConfig } from '../core/types';
 import type { AgentCapabilityProvider, IService } from '@neko/shared';
 import { ChatView } from './ChatView/ChatView';
-import { InputEditor } from './Input/InputEditor';
+import { InputEditor, type InputEditorDraftRequest } from './Input/InputEditor';
 import { MessageQueuePanel } from './Input/MessageQueuePanel';
 import { StatusBar } from './StatusBar/StatusBar';
 import { ToolApprovalPanel } from './ToolApproval/ToolApprovalPanel';
@@ -29,6 +29,7 @@ import { useConversationStore } from '../stores/conversation-store';
 import { useConfigStore } from '../stores/config-store';
 import { useUIStore } from '../stores/ui-store';
 import { createTuiSkillInvocationCatalog } from '../core/slash-command-catalog';
+import { getTuiLabels } from '../core/tui-locale';
 import {
   createTuiAutomationAppPort,
   type TuiAutomationSessionHandle,
@@ -66,6 +67,9 @@ export function App({
   >([]);
   const submittedInitialPromptRef = useRef<string | null>(null);
   const referenceRequestIdRef = useRef(0);
+  const queueDraftRequestIdRef = useRef(0);
+  const [queueDraftRequest, setQueueDraftRequest] = useState<InputEditorDraftRequest | null>(null);
+  const [queueActionNotice, setQueueActionNotice] = useState<string | null>(null);
 
   // Track terminal size changes
   useTerminalSize();
@@ -284,6 +288,66 @@ export function App({
       }
     : null;
 
+  const handleQueueSendNext = useCallback(
+    (queueItemId: string) => {
+      try {
+        promoteQueuedMessage(queueItemId);
+        setQueueActionNotice(null);
+      } catch (error) {
+        setQueueActionNotice(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [promoteQueuedMessage],
+  );
+
+  const handleQueueCancel = useCallback(
+    (queueItemId: string) => {
+      try {
+        cancelQueuedMessage(queueItemId);
+        setQueueActionNotice(null);
+      } catch (error) {
+        setQueueActionNotice(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [cancelQueuedMessage],
+  );
+
+  const handleQueueEdit = useCallback(
+    (queueItemId: string) => {
+      const item = getMessageQueueSnapshot()?.items.find(
+        (candidate) => candidate.id === queueItemId,
+      );
+      if (!item) {
+        setQueueActionNotice(`Unknown queue item: ${queueItemId}`);
+        return;
+      }
+      if (item.source !== 'user' && item.source !== 'composer') {
+        setQueueActionNotice(`Queued continuation cannot be edited: ${queueItemId}`);
+        return;
+      }
+
+      queueDraftRequestIdRef.current += 1;
+      setQueueDraftRequest({
+        id: `${queueItemId}:${queueDraftRequestIdRef.current}`,
+        content: item.content,
+        apply: () => {
+          try {
+            cancelQueuedMessage(queueItemId);
+            setQueueActionNotice(null);
+            return true;
+          } catch (error) {
+            setQueueActionNotice(error instanceof Error ? error.message : String(error));
+            return false;
+          }
+        },
+        onConflict: () => {
+          setQueueActionNotice(getTuiLabels().queue.draftConflict);
+        },
+      });
+    },
+    [cancelQueuedMessage, getMessageQueueSnapshot],
+  );
+
   const inputDisabled = !!pendingSelection || pendingPlanReview;
   const skillSuggestions = createTuiSkillInvocationCatalog(
     getSkillService()
@@ -325,7 +389,13 @@ export function App({
 
         {/* Pending next-turn messages stay outside the conversation transcript. */}
         <ErrorBoundary label="MessageQueuePanel">
-          <MessageQueuePanel />
+          <MessageQueuePanel
+            disabled={inputDisabled}
+            notice={queueActionNotice}
+            onSendNext={handleQueueSendNext}
+            onEdit={handleQueueEdit}
+            onCancel={handleQueueCancel}
+          />
         </ErrorBoundary>
 
         {/* Input — fixed at bottom, with slash command support */}
@@ -338,6 +408,7 @@ export function App({
           skills={skillSuggestions}
           references={referenceSuggestions}
           onReferenceQueryChange={refreshReferenceSuggestions}
+          draftRequest={queueDraftRequest}
         />
 
         {/* Status bar — fixed at very bottom */}

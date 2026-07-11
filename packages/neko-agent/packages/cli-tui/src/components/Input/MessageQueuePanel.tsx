@@ -1,19 +1,51 @@
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import type { TuiQueueRowKind } from '../../core/message-queue-presenter';
 import { presentTuiMessageQueue } from '../../core/message-queue-presenter';
 import { getTuiLabels } from '../../core/tui-locale';
 import { useAgentStore } from '../../stores/agent-store';
 import { tokens } from '../../theme/tokens';
 
-export function MessageQueuePanel(): React.JSX.Element | null {
+export interface MessageQueuePanelProps {
+  readonly disabled?: boolean;
+  readonly notice?: string | null;
+  readonly onSendNext?: (queueItemId: string) => void;
+  readonly onEdit?: (queueItemId: string) => void;
+  readonly onCancel?: (queueItemId: string) => void;
+}
+
+export function MessageQueuePanel({
+  disabled = false,
+  notice,
+  onSendNext,
+  onEdit,
+  onCancel,
+}: MessageQueuePanelProps): React.JSX.Element | null {
   const snapshot = useAgentStore((state) => state.messageQueue.snapshot);
-  if (!snapshot || snapshot.pendingCount === 0) {
+  const labels = getTuiLabels();
+  const presentation =
+    snapshot && snapshot.pendingCount > 0 ? presentTuiMessageQueue(snapshot) : null;
+  const actionableRow = presentation?.rows.find((row) => row.canEdit && row.canCancel);
+
+  useInput(
+    (input, key) => {
+      if (!actionableRow || !key.ctrl) {
+        return;
+      }
+      if (input === 'n') {
+        onSendNext?.(actionableRow.id);
+      } else if (input === 'e') {
+        onEdit?.(actionableRow.id);
+      } else if (input === 'x') {
+        onCancel?.(actionableRow.id);
+      }
+    },
+    { isActive: !disabled && Boolean(actionableRow) },
+  );
+
+  if (!presentation) {
     return null;
   }
-
-  const labels = getTuiLabels();
-  const presentation = presentTuiMessageQueue(snapshot);
 
   return (
     <Box
@@ -46,6 +78,14 @@ export function MessageQueuePanel(): React.JSX.Element | null {
           +{presentation.hiddenCount} {labels.queue.moreItems}
         </Text>
       ) : null}
+      {actionableRow ? (
+        <Text color={tokens.muted}>
+          {labels.queue.keyboardActions}: ^N {labels.queue.sendNext}
+          {presentation.hasPriorityContinuation ? ` (${labels.queue.nextUserMessage})` : ''} · ^E{' '}
+          {labels.queue.edit} · ^X {labels.queue.cancel}
+        </Text>
+      ) : null}
+      {notice ? <Text color={tokens.warning}>{notice}</Text> : null}
       <Text color={tokens.muted}>{labels.queue.commandHint}</Text>
     </Box>
   );

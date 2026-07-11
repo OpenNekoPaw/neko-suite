@@ -22,6 +22,13 @@ import {
 import { formatTuiLabel, getTuiLabels } from '../../core/tui-locale';
 import { ReferenceAwareText } from '../shared/ReferenceAwareText';
 
+export interface InputEditorDraftRequest {
+  readonly id: string;
+  readonly content: string;
+  readonly apply: () => boolean;
+  readonly onConflict: (currentDraft: string) => void;
+}
+
 interface InputEditorProps {
   /** Called when user submits a prompt */
   readonly onSubmit: (text: string) => void;
@@ -41,6 +48,8 @@ interface InputEditorProps {
   readonly references?: readonly InputSuggestionOption[];
   /** Called when the active `@` filter changes so hosts can refresh references lazily. */
   readonly onReferenceQueryChange?: (query: string) => void;
+  /** Moves a queued user message into an empty composer without silently replacing a draft. */
+  readonly draftRequest?: InputEditorDraftRequest | null;
 }
 
 const MAX_HISTORY = 50;
@@ -77,6 +86,7 @@ export function InputEditor({
   skills = [],
   references = [],
   onReferenceQueryChange,
+  draftRequest,
 }: InputEditorProps): React.JSX.Element {
   const [value, setValue] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -86,6 +96,7 @@ export function InputEditor({
   const valueRef = useRef(value);
   const menuOpenRef = useRef(menuOpen);
   const menuIndexRef = useRef(menuIndex);
+  const handledDraftRequestIdRef = useRef<string | null>(null);
 
   const activeMenu = menuOpen
     ? deriveInputSuggestionMenu(value, { commands, skills, references })
@@ -120,6 +131,27 @@ export function InputEditor({
     menuIndexRef.current = next;
     setMenuIndex(next);
   }, []);
+
+  useEffect(() => {
+    if (!draftRequest || handledDraftRequestIdRef.current === draftRequest.id) {
+      return;
+    }
+    handledDraftRequestIdRef.current = draftRequest.id;
+
+    const currentDraft = valueRef.current;
+    if (currentDraft.trim()) {
+      draftRequest.onConflict(currentDraft);
+      return;
+    }
+    if (!draftRequest.apply()) {
+      return;
+    }
+
+    updateValue(draftRequest.content);
+    updateMenuOpen(false);
+    updateMenuIndex(0);
+    historyIndexRef.current = -1;
+  }, [draftRequest, updateMenuIndex, updateMenuOpen, updateValue]);
 
   useEffect(() => {
     if (activeMenu?.trigger !== '@') {
