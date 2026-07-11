@@ -1,8 +1,10 @@
 import {
   createAgentMarkdownSessionKey,
   createAgentMarkdownSessionRegistry,
+  getAgentMarkdownSessionRegistry,
 } from '@/markdown/agent-markdown-session-registry';
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import { cleanup, render } from '@testing-library/react';
+import { createElement, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type {
   AgentBackgroundTask,
@@ -35,6 +37,8 @@ import { subAgentHandlers } from '../subagent-handlers';
 import { streamingHandlers } from '../streaming-handlers';
 import { taskHandlers } from '../task-handlers';
 import { timelineHandlers } from '../timeline-handlers';
+import { createTimelineRenderCommitScheduler } from '../timeline-render-commit-scheduler';
+import { MarkdownRenderer } from '@/components/ChatView/MessageContent/MarkdownRenderer';
 import { toolHandlers } from '../tool-handlers';
 import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
 import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
@@ -565,6 +569,76 @@ describe('work item message handlers', () => {
       { phase: 'conversation-commit', markdownSource: 'ab', conversationSource: 'ab' },
       { phase: 'markdown-publish', markdownSource: 'ab', conversationSource: 'ab' },
     ]);
+  });
+
+  it('flushes a pending Timeline text delivery before a compatibility streamText message renders', () => {
+    const frameCallbacks: Array<() => void> = [];
+    const scheduler = createTimelineRenderCommitScheduler({
+      request(callback) {
+        frameCallbacks.push(callback);
+        return frameCallbacks.length;
+      },
+      cancel() {},
+    });
+    const registry = getAgentMarkdownSessionRegistry();
+    registry.disposeAll();
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+      timelineRenderScheduler: scheduler,
+      markdownSessionRegistry: registry,
+    });
+
+    try {
+      dispatch(
+        timelineHandlers,
+        timelineMessage([textTimelineItem('text-1', 1, 'Timeline text')]),
+        harness.context,
+      );
+      expect(scheduler.metrics().pendingDeliveries).toBe(1);
+
+      dispatch(
+        streamingHandlers,
+        {
+          type: 'streamText',
+          conversationId: 'conv-a',
+          messageId: 'msg-a',
+          content: 'Timeline text',
+        },
+        harness.context,
+      );
+
+      expect(scheduler.metrics().pendingDeliveries).toBe(0);
+      const block = harness.messages()[0]?.contentBlocks?.[0];
+      if (!block || block.type !== 'text') {
+        throw new Error('Expected Timeline-owned streaming text block.');
+      }
+      const timelineItemId = block.id;
+      if (timelineItemId !== 'text-1') {
+        throw new Error(`Expected Timeline item text-1, received ${String(timelineItemId)}.`);
+      }
+      const timelineContent = block.content;
+      if (timelineContent !== 'Timeline text') {
+        throw new Error(`Expected canonical Timeline text, received ${String(timelineContent)}.`);
+      }
+      expect(() =>
+        render(
+          createElement(MarkdownRenderer, {
+            content: timelineContent,
+            isStreaming: block.isStreaming,
+            sessionKey: createAgentMarkdownSessionKey({
+              conversationId: 'conv-a',
+              messageId: 'msg-a',
+              itemId: timelineItemId,
+            }),
+          }),
+        ),
+      ).not.toThrow();
+    } finally {
+      cleanup();
+      registry.disposeAll();
+      scheduler.dispose();
+    }
   });
 
   it('requests one snapshot on a revision gap and resumes only after the snapshot', () => {
@@ -2194,6 +2268,8 @@ interface ContextHarnessOptions {
   nonCurrentMessages?: Map<string, Message[]>;
   currentStreaming?: StreamingState;
   nonCurrentStreaming?: Map<string, StreamingState>;
+  timelineRenderScheduler?: NonNullable<MessageHandlerContext['timelineRenderScheduler']>;
+  markdownSessionRegistry?: NonNullable<MessageHandlerContext['markdownSessionRegistry']>;
 }
 
 interface ContextHarness {
@@ -2347,8 +2423,10 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     forceUpdate: () => undefined,
     isCurrentConversation: (conversationId?: string) =>
       conversationId === activeConversationIdRef.current,
-    timelineRenderScheduler: createImmediateTimelineRenderScheduler(),
-    markdownSessionRegistry: createAgentMarkdownSessionRegistry(),
+    timelineRenderScheduler:
+      options.timelineRenderScheduler ?? createImmediateTimelineRenderScheduler(),
+    markdownSessionRegistry:
+      options.markdownSessionRegistry ?? createAgentMarkdownSessionRegistry(),
     updateNonCurrentConversation: (conversationId, updater) => {
       const existingMessages = conversationMessagesRef.current.get(conversationId) ?? [];
       const existingStreaming = conversationStreamingRef.current.get(conversationId) ?? {

@@ -64,12 +64,7 @@ const handleThinking: MessageHandler<'thinking'> = (message: ThinkingMessage, co
  * Handle 'streamText' message - Streaming text chunk
  */
 const handleStreamText: MessageHandler<'streamText'> = (message: StreamTextMessage, context) => {
-  const activeTimeline = getActiveTimelineForMessage(
-    context,
-    message.conversationId,
-    message.messageId,
-  );
-  if (activeTimeline) {
+  if (shouldIgnoreCompatibilityStream(context, message.conversationId, message.messageId)) {
     return;
   }
 
@@ -93,12 +88,7 @@ const handleAssistantTextReplacement: MessageHandler<'assistantTextReplacement'>
   message: AssistantTextReplacementMessage,
   context,
 ) => {
-  const activeTimeline = getActiveTimelineForMessage(
-    context,
-    message.conversationId,
-    message.messageId,
-  );
-  if (activeTimeline) {
+  if (shouldIgnoreCompatibilityStream(context, message.conversationId, message.messageId)) {
     return;
   }
 
@@ -183,12 +173,7 @@ const handleStreamThinking: MessageHandler<'streamThinking'> = (
   message: StreamThinkingMessage,
   context,
 ) => {
-  const activeTimeline = getActiveTimelineForMessage(
-    context,
-    message.conversationId,
-    message.messageId,
-  );
-  if (activeTimeline) {
+  if (shouldIgnoreCompatibilityStream(context, message.conversationId, message.messageId)) {
     return;
   }
 
@@ -207,6 +192,18 @@ const handleStreamThinking: MessageHandler<'streamThinking'> = (
     };
   });
 };
+
+/** Commit the canonical Timeline before deciding whether a legacy stream event is redundant. */
+function shouldIgnoreCompatibilityStream(
+  context: MessageHandlerContext,
+  conversationId: string | undefined,
+  messageId: string | undefined,
+): boolean {
+  if (conversationId) {
+    context.timelineRenderScheduler?.flushConversation(conversationId);
+  }
+  return getActiveTimelineForMessage(context, conversationId, messageId) !== null;
+}
 
 /**
  * Handle 'messageQueued' message - Message was queued while agent is running
