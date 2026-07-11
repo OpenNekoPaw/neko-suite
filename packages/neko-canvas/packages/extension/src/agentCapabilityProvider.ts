@@ -92,6 +92,7 @@ import {
 } from '@neko/shared';
 import { resolveCharacterBindingsForNames } from '@neko/shared/vscode/extension';
 import { getRootLogger } from './utils/logger';
+import { toCanvasStableMediaResourceRef } from './canvasMediaResourceAdapter';
 
 /**
  * Create the NekoCanvas capability provider.
@@ -1121,8 +1122,7 @@ type CanvasToolExecuteOptions = Parameters<Tool['execute']>[1];
 const CANVAS_MARKDOWN_RESOURCE_CONTRACT_DESCRIPTION =
   'Resource wrappers must preserve field contracts: unified ResourceRef values use resourceRef; document-entry DocumentArchiveResourceRef values must use documentResourceRef.';
 const CANVAS_VISIBLE_ASSISTANT_MARKDOWN_PROVENANCE_LABEL = 'assistant-markdown-block';
-const CANVAS_STORYBOARD_VISIBLE_SOURCE_REQUIRED_CODE =
-  'canvas-storyboard-visible-source-required';
+const CANVAS_STORYBOARD_VISIBLE_SOURCE_REQUIRED_CODE = 'canvas-storyboard-visible-source-required';
 const CANVAS_STORYBOARD_VISIBLE_SOURCE_REQUIRED_MESSAGE =
   'Canvas storyboard review ingestion requires a visible assistant Markdown block source or UI handoff source.';
 
@@ -4672,41 +4672,43 @@ function createVideoKeyframeTool(
 
         const firstNodeData = firstNode.data as Record<string, unknown>;
         const lastNodeData = lastNode.data as Record<string, unknown>;
-        const firstFrameRefs = collectShotKeyframeReferenceDescriptors(
-          firstFrameNodeId,
-          firstNodeData,
-        );
-        const lastFrameRefs = collectShotKeyframeReferenceDescriptors(
-          lastFrameNodeId,
-          lastNodeData,
-        );
-        const firstFrameData = readShotGeneratedImageFallback(firstNodeData);
-        const lastFrameData = readShotGeneratedImageFallback(lastNodeData);
+        const firstFrameMediaRef = readShotPreparedKeyframeRef(firstNodeData);
+        const lastFrameMediaRef = readShotPreparedKeyframeRef(lastNodeData);
 
-        if (!firstFrameData && firstFrameRefs.length === 0) {
+        if (!firstFrameMediaRef) {
           return {
             success: false,
-            error: `First frame node "${firstFrameNodeId}" has no generated image or prepared keyframe reference. Run canvas_generate_image first.`,
+            error: `First frame node "${firstFrameNodeId}" has no durable prepared keyframe reference. Run canvas_generate_image and promote its output first.`,
+          };
+        }
+        if (!lastFrameMediaRef) {
+          return {
+            success: false,
+            error: `Last frame node "${lastFrameNodeId}" has no durable prepared keyframe reference. Run canvas_generate_image and promote its output first.`,
           };
         }
 
-        // Build prompt from target node's visual description
+        let startFrameRef;
+        let endFrameRef;
+        try {
+          startFrameRef = toCanvasStableMediaResourceRef(firstFrameMediaRef);
+          endFrameRef = toCanvasStableMediaResourceRef(lastFrameMediaRef);
+        } catch (error) {
+          return {
+            success: false,
+            error: `Keyframe media identity is not durable: ${String(error)}`,
+          };
+        }
+
+        // Build prompt from target node's visual description. Canvas node ids are local
+        // lookup handles only and are not forwarded as provider media identity.
         const visualDesc = (targetNode.data as Record<string, unknown>)['visualDescription'] as
           string | undefined;
         const shotNumber = (targetNode.data as Record<string, unknown>)['shotNumber'] as
           number | undefined;
         const prompt = visualDesc?.trim() || `Shot ${shotNumber ?? ''} video clip`;
         const lineage = extractCanvasNodeGenerationLineage(targetNode);
-        const metadata: Record<string, unknown> = {
-          sourceNodeId: lineage?.sourceNodeId ?? nodeId,
-        };
-        if (lastFrameData) {
-          metadata['lastFrameUrl'] = lastFrameData;
-        }
-        const referenceDescriptors = [...firstFrameRefs, ...lastFrameRefs];
-        if (referenceDescriptors.length > 0) {
-          metadata['referenceDescriptors'] = referenceDescriptors;
-        }
+        const metadata: Record<string, unknown> = {};
         if (lineage?.characterIds && lineage.characterIds.length > 0) {
           metadata['characterIds'] = [...lineage.characterIds];
         }
@@ -4718,10 +4720,12 @@ function createVideoKeyframeTool(
         try {
           task = await media.generateVideo({
             prompt,
+            operation: 'generate-from-keyframes',
+            startFrameRef,
+            endFrameRef,
             aspectRatio,
             duration,
-            ...(firstFrameData ? { referenceImageUrl: firstFrameData } : {}),
-            metadata,
+            ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
           });
         } catch (err) {
           await api.nodes.update(nodeId, { generationStatus: 'error' });

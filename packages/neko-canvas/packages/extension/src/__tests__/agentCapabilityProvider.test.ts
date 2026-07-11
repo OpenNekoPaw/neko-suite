@@ -202,12 +202,15 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(providerSource).not.toContain("['generatedImage'] as string | undefined");
   });
 
-  it('carries stable keyframe descriptors through video keyframe generation metadata', () => {
-    expect(providerSource).toContain('firstFrameRefs = collectShotKeyframeReferenceDescriptors');
-    expect(providerSource).toContain('lastFrameRefs = collectShotKeyframeReferenceDescriptors');
-    expect(providerSource).toContain("metadata['referenceDescriptors'] = referenceDescriptors");
-    expect(providerSource).toContain('referenceImageUrl: firstFrameData');
-    expect(providerSource).not.toContain("['generatedImage'] as\n          | string");
+  it('routes first/end frames through canonical stable keyframe identity', () => {
+    expect(providerSource).toContain('toCanvasStableMediaResourceRef(firstFrameMediaRef)');
+    expect(providerSource).toContain('toCanvasStableMediaResourceRef(lastFrameMediaRef)');
+    expect(providerSource).toContain("operation: 'generate-from-keyframes'");
+    expect(providerSource).toContain('startFrameRef');
+    expect(providerSource).toContain('endFrameRef');
+    expect(providerSource).not.toContain('referenceImageUrl: firstFrameData');
+    expect(providerSource).not.toContain("metadata['lastFrameUrl']");
+    expect(providerSource).not.toContain("metadata['referenceDescriptors'] = referenceDescriptors");
   });
 
   it('registers additive composable Canvas Agent tools', () => {
@@ -415,8 +418,12 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(authoringSkillZh?.content).toContain(
       'Canvas handoff 前，必须已经存在完成的来源分镜 creative table。',
     );
-    expect(authoringSkillZh?.content).toContain('来源分镜表必须是可见 assistant Markdown 块或 UI handoff 来源。');
-    expect(authoringSkillZh?.content).toContain('不要用 Canvas handoff 跳过漫画/页面视觉分析或分镜表生成。');
+    expect(authoringSkillZh?.content).toContain(
+      '来源分镜表必须是可见 assistant Markdown 块或 UI handoff 来源。',
+    );
+    expect(authoringSkillZh?.content).toContain(
+      '不要用 Canvas handoff 跳过漫画/页面视觉分析或分镜表生成。',
+    );
     expect(createStoryboardTool?.description).toContain(
       'Requires a completed storyboard creative table',
     );
@@ -1176,7 +1183,9 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
     expect(authoringSkill?.description).toContain('Canvas authoring');
     expect(authoringSkill?.content).toContain('# Canvas Authoring');
     expect(authoringSkill?.content).toContain('先查看 Canvas 拥有的 authoring catalog');
-    expect(authoringSkill?.content).toContain('完成的分镜 creative table 应成为 Canvas scene 和 shot 节点');
+    expect(authoringSkill?.content).toContain(
+      '完成的分镜 creative table 应成为 Canvas scene 和 shot 节点',
+    );
     expect(authoringSkill?.content).toContain(
       '“作为 Markdown/Markdown 发送”表示 Markdown 是来源格式/传输格式',
     );
