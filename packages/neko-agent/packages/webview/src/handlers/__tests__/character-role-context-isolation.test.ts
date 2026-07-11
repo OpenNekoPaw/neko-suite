@@ -1535,6 +1535,8 @@ function createImmediateTimelineRenderScheduler(): NonNullable<
       commit([message]);
     },
     flushConversation(): void {},
+    discardTurn(): void {},
+    discardConversation(): void {},
     flushAll(): void {},
     dispose(): void {},
     metrics: () => ({

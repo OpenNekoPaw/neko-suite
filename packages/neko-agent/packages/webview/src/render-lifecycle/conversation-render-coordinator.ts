@@ -15,6 +15,7 @@ type DisposalMutation = Extract<ConversationRenderMutation, { readonly kind: 'di
 
 export class ConversationRenderCoordinator {
   private readonly snapshots = new Map<string, ConversationRenderSnapshot>();
+  private readonly disposedRevisions = new Map<string, number>();
   private readonly revisionListeners = new Map<string, Set<() => void>>();
   private foregroundId: string | null = null;
 
@@ -27,7 +28,15 @@ export class ConversationRenderCoordinator {
   }
 
   revision(conversationId: string): number {
-    return this.snapshots.get(conversationId)?.revision ?? 0;
+    return (
+      this.snapshots.get(conversationId)?.revision ??
+      this.disposedRevisions.get(conversationId) ??
+      0
+    );
+  }
+
+  isDisposed(conversationId: string): boolean {
+    return this.disposedRevisions.has(conversationId);
   }
 
   subscribeRevision(conversationId: string, listener: () => void): () => void {
@@ -42,12 +51,13 @@ export class ConversationRenderCoordinator {
 
   ingest(mutation: RevisionedMutation): ConversationRenderSnapshot {
     const current = this.snapshots.get(mutation.conversationId);
-    if (current?.retention === 'disposed') {
+    const disposedRevision = this.disposedRevisions.get(mutation.conversationId);
+    if (disposedRevision !== undefined) {
       throw lifecycleError({
         code: 'conversation-disposed',
         message: `Conversation ${mutation.conversationId} cannot accept ${mutation.kind} after disposal.`,
         conversationId: mutation.conversationId,
-        currentRevision: current.revision,
+        currentRevision: disposedRevision,
         targetRevision: mutation.baseRevision,
       });
     }
@@ -72,18 +82,20 @@ export class ConversationRenderCoordinator {
 
   prepareActivation(mutation: ActivationMutation): ConversationActivationTransaction {
     const current = this.snapshots.get(mutation.conversationId);
-    if (!current || current.retention === 'disposed') {
+    const disposedRevision = this.disposedRevisions.get(mutation.conversationId);
+    if (!current || disposedRevision !== undefined) {
       throw lifecycleError({
         code:
-          current?.retention === 'disposed'
+          disposedRevision !== undefined
             ? 'conversation-disposed'
             : 'conversation-snapshot-unavailable',
-        message: current
-          ? `Conversation ${mutation.conversationId} is disposed.`
-          : `Conversation ${mutation.conversationId} has no retained render snapshot.`,
+        message:
+          disposedRevision !== undefined
+            ? `Conversation ${mutation.conversationId} is disposed.`
+            : `Conversation ${mutation.conversationId} has no retained render snapshot.`,
         conversationId: mutation.conversationId,
         activationSource: mutation.source,
-        currentRevision: current?.revision,
+        currentRevision: disposedRevision,
       });
     }
 
@@ -129,20 +141,21 @@ export class ConversationRenderCoordinator {
   }
 
   dispose(mutation: DisposalMutation): ConversationRenderSnapshot {
+    const existingDisposedRevision = this.disposedRevisions.get(mutation.conversationId);
+    if (existingDisposedRevision !== undefined) {
+      throw lifecycleError({
+        code: 'conversation-disposed',
+        message: `Conversation ${mutation.conversationId} is already disposed.`,
+        conversationId: mutation.conversationId,
+        currentRevision: existingDisposedRevision,
+      });
+    }
     const current = this.snapshots.get(mutation.conversationId);
     if (!current) {
       throw lifecycleError({
         code: 'conversation-snapshot-unavailable',
         message: `Conversation ${mutation.conversationId} has no render snapshot to dispose.`,
         conversationId: mutation.conversationId,
-      });
-    }
-    if (current.retention === 'disposed') {
-      throw lifecycleError({
-        code: 'conversation-disposed',
-        message: `Conversation ${mutation.conversationId} is already disposed.`,
-        conversationId: mutation.conversationId,
-        currentRevision: current.revision,
       });
     }
 
@@ -152,9 +165,11 @@ export class ConversationRenderCoordinator {
       visibility: 'background',
       retention: 'disposed',
     };
-    this.snapshots.set(mutation.conversationId, disposed);
+    this.snapshots.delete(mutation.conversationId);
+    this.disposedRevisions.set(mutation.conversationId, disposed.revision);
     if (this.foregroundId === mutation.conversationId) this.foregroundId = null;
     this.publishRevisions([mutation.conversationId]);
+    this.revisionListeners.delete(mutation.conversationId);
     return disposed;
   }
 

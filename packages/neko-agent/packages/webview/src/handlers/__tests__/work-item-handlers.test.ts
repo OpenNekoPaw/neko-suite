@@ -2638,6 +2638,8 @@ function createImmediateTimelineRenderScheduler(): NonNullable<
       renderCommits += 1;
     },
     flushConversation(): void {},
+    discardTurn(): void {},
+    discardConversation(): void {},
     flushAll(): void {},
     dispose(): void {
       disposed = true;

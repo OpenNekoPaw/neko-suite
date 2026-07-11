@@ -20,6 +20,8 @@ export interface TimelineRenderCommitScheduler {
     commit: (messages: readonly AgentTurnTimelineMessage[]) => void,
   ): void;
   flushConversation(conversationId: string): void;
+  discardTurn(conversationId: string, messageId: string): void;
+  discardConversation(conversationId: string): void;
   flushAll(): void;
   dispose(): void;
   metrics(): TimelineRenderCommitSchedulerMetrics;
@@ -59,11 +61,22 @@ export function createTimelineRenderCommitScheduler(
     cancelFrameIfIdle();
   };
 
-  const flushMatching = (predicate: (message: AgentTurnTimelineMessage) => boolean): void => {
-    for (const [key, entry] of Array.from(pending.entries())) {
+  const matchingKeys = (predicate: (message: AgentTurnTimelineMessage) => boolean): string[] => {
+    const keys: string[] = [];
+    for (const [key, entry] of pending) {
       const first = entry.messages[0];
-      if (first && predicate(first)) flushKey(key);
+      if (first && predicate(first)) keys.push(key);
     }
+    return keys;
+  };
+
+  const flushMatching = (predicate: (message: AgentTurnTimelineMessage) => boolean): void => {
+    for (const key of matchingKeys(predicate)) flushKey(key);
+  };
+
+  const discardMatching = (predicate: (message: AgentTurnTimelineMessage) => boolean): void => {
+    for (const key of matchingKeys(predicate)) pending.delete(key);
+    cancelFrameIfIdle();
   };
 
   const scheduleFrame = (): void => {
@@ -101,6 +114,14 @@ export function createTimelineRenderCommitScheduler(
     },
     flushConversation(conversationId): void {
       flushMatching((message) => message.conversationId === conversationId);
+    },
+    discardTurn(conversationId, messageId): void {
+      discardMatching(
+        (message) => message.conversationId === conversationId && message.messageId === messageId,
+      );
+    },
+    discardConversation(conversationId): void {
+      discardMatching((message) => message.conversationId === conversationId);
     },
     flushAll(): void {
       for (const key of Array.from(pending.keys())) flushKey(key);

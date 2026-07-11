@@ -752,69 +752,73 @@ export function ConversationController({
   }, []);
 
   // ---- Message handler ----
-  const { handleMessage, flushTimelineRendering, commitTimelineMarkdownSnapshot } =
-    useMessageHandler({
-      messages,
-      isThinking,
-      activeConversationId,
-      streamingMessageId,
-      queuedMessageCount,
-      queuedMessages,
-      openTabs,
-      activeTabId,
-      isTablessConversationViewRef,
-      pendingForegroundConversationActivationRef,
-      completeForegroundConversationActivation,
-      requestQueuedMessageEdit: (request) => {
-        nextQueuedEditRequestIdRef.current += 1;
-        setQueuedEditRequest({
-          id: nextQueuedEditRequestIdRef.current,
-          conversationId: request.conversationId,
-          item: request.item,
-        });
-      },
-      requestConfigSnapshot,
-      activeConversationIdRef,
-      streamingMessageIdRef,
-      conversationMessagesRef,
-      conversationStreamingRef,
-      conversationRenderCoordinator,
-      setMessages,
-      setIsThinking,
-      setStreamingMessageId,
-      setQueuedMessageCount,
-      setQueuedMessages,
-      setConversations,
-      setActiveConversationId,
-      setOpenTabs,
-      setActiveTabId,
-      setActiveTab,
-      setSettings,
-      setHasConfigSnapshot,
-      selectedModelRef,
-      setSelectedModel,
-      setMediaModelSelection,
-      setWorkItemsByConversation,
-      setPluginsAvailable,
-      setProjectFiles,
-      setMentionItems,
-      mentionSearchFilter,
-      mentionSearchFilterRef,
-      setPluginCommands,
-      setAgentState,
-      conversationAgentStateRef,
-      forceAgentStateUpdate,
-      setSkills,
-      setActiveSkill,
-      setActivationProgressByConversation,
-      updateSettings,
-      setPromptModeForConversation,
-      setShowOnboarding,
-      setGlobalError,
-      conversationTokenCountRef,
-      conversationCompressingRef,
-      forceContextUpdate: triggerForceUpdate,
-    });
+  const {
+    handleMessage,
+    flushTimelineRendering,
+    commitTimelineMarkdownSnapshot,
+    disposeConversationRendering,
+  } = useMessageHandler({
+    messages,
+    isThinking,
+    activeConversationId,
+    streamingMessageId,
+    queuedMessageCount,
+    queuedMessages,
+    openTabs,
+    activeTabId,
+    isTablessConversationViewRef,
+    pendingForegroundConversationActivationRef,
+    completeForegroundConversationActivation,
+    requestQueuedMessageEdit: (request) => {
+      nextQueuedEditRequestIdRef.current += 1;
+      setQueuedEditRequest({
+        id: nextQueuedEditRequestIdRef.current,
+        conversationId: request.conversationId,
+        item: request.item,
+      });
+    },
+    requestConfigSnapshot,
+    activeConversationIdRef,
+    streamingMessageIdRef,
+    conversationMessagesRef,
+    conversationStreamingRef,
+    conversationRenderCoordinator,
+    setMessages,
+    setIsThinking,
+    setStreamingMessageId,
+    setQueuedMessageCount,
+    setQueuedMessages,
+    setConversations,
+    setActiveConversationId,
+    setOpenTabs,
+    setActiveTabId,
+    setActiveTab,
+    setSettings,
+    setHasConfigSnapshot,
+    selectedModelRef,
+    setSelectedModel,
+    setMediaModelSelection,
+    setWorkItemsByConversation,
+    setPluginsAvailable,
+    setProjectFiles,
+    setMentionItems,
+    mentionSearchFilter,
+    mentionSearchFilterRef,
+    setPluginCommands,
+    setAgentState,
+    conversationAgentStateRef,
+    forceAgentStateUpdate,
+    setSkills,
+    setActiveSkill,
+    setActivationProgressByConversation,
+    updateSettings,
+    setPromptModeForConversation,
+    setShowOnboarding,
+    setGlobalError,
+    conversationTokenCountRef,
+    conversationCompressingRef,
+    forceContextUpdate: triggerForceUpdate,
+  });
 
   const commitConversationTabActivation = useCallback(
     (conversationId: string, source: ConversationActivationSource) => {
@@ -1173,6 +1177,7 @@ export function ConversationController({
 
   const cleanupClosedConversation = useCallback(
     (conversationId: string) => {
+      disposeConversationRendering(conversationId, 'conversation-delete');
       cleanupConversation(conversationId);
       conversationMessagesRef.current.delete(conversationId);
       conversationStreamingRef.current.delete(conversationId);
@@ -1181,6 +1186,7 @@ export function ConversationController({
     },
     [
       cleanupConversation,
+      disposeConversationRendering,
       conversationMessagesRef,
       conversationStreamingRef,
       conversationAgentStateRef,

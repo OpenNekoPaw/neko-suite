@@ -63,6 +63,39 @@ describe('timeline render commit scheduler', () => {
     expect(frame.pending()).toBe(0);
   });
 
+  it('discards one conversation without committing it or disturbing another owner', () => {
+    const frame = createFrameHarness();
+    const scheduler = createTimelineRenderCommitScheduler(frame.port);
+    const commitA = vi.fn();
+    const commitB = vi.fn();
+
+    scheduler.enqueue(appendMessage(1, 'a', 'conv-a'), commitA);
+    scheduler.enqueue(appendMessage(1, 'b', 'conv-b'), commitB);
+    scheduler.discardConversation('conv-a');
+
+    expect(commitA).not.toHaveBeenCalled();
+    expect(scheduler.metrics().pendingDeliveries).toBe(1);
+    expect(frame.pending()).toBe(1);
+
+    frame.flush();
+    expect(commitA).not.toHaveBeenCalled();
+    expect(commitB).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels an idle frame when the last pending turn is discarded', () => {
+    const frame = createFrameHarness();
+    const scheduler = createTimelineRenderCommitScheduler(frame.port);
+    const commit = vi.fn();
+
+    scheduler.enqueue(appendMessage(1, 'a', 'conv-a'), commit);
+    scheduler.discardTurn('conv-a', 'message-1');
+
+    expect(frame.pending()).toBe(0);
+    expect(scheduler.metrics().pendingDeliveries).toBe(0);
+    frame.flush();
+    expect(commit).not.toHaveBeenCalled();
+  });
+
   it('flushes one conversation independently and cancels all pending work on disposal', () => {
     const frame = createFrameHarness();
     const scheduler = createTimelineRenderCommitScheduler(frame.port);

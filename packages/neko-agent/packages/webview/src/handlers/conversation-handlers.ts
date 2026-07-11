@@ -102,7 +102,7 @@ const handleHistoryCleared: MessageHandler<'historyCleared'> = (
   const conversationId = message.conversationId;
   if (!conversationId) return;
 
-  context.timelineRenderScheduler?.flushConversation(conversationId);
+  context.timelineRenderScheduler?.discardConversation(conversationId);
   context.markdownSessionRegistry?.disposeConversation(conversationId);
   const projection = projectHistoryClearedConversation();
   if (context.isCurrentConversation(conversationId)) {
@@ -143,8 +143,12 @@ const handleConversationLifecycleResult: MessageHandler<'conversationLifecycleRe
   const state = message.state;
   if (!state) return;
   if (state === 'deleted') {
-    context.timelineRenderScheduler?.flushConversation(message.conversationId);
-    context.markdownSessionRegistry?.disposeConversation(message.conversationId);
+    if (context.disposeConversationRendering) {
+      context.disposeConversationRendering(message.conversationId, 'conversation-delete');
+    } else {
+      context.timelineRenderScheduler?.discardConversation(message.conversationId);
+      context.markdownSessionRegistry?.disposeConversation(message.conversationId);
+    }
     context.conversationMessagesRef.current.delete(message.conversationId);
     context.conversationStreamingRef.current.delete(message.conversationId);
   }
@@ -256,6 +260,9 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
         context.conversationStreamingRef.current.get(conversationId),
       )
     : undefined;
+  if (conversationId && nextStreaming) {
+    releaseReplacedActiveTurn(context, conversationId, nextStreaming.activeTurnTimeline?.messageId);
+  }
   if (conversationId && nextStreaming) {
     const coordinator = context.conversationRenderCoordinator;
     if (!coordinator) {
@@ -396,6 +403,22 @@ function isActiveTurnTimelineState(
 /**
  * All conversation handler registrations
  */
+function releaseReplacedActiveTurn(
+  context: MessageHandlerContext,
+  conversationId: string,
+  nextMessageId: string | undefined,
+): void {
+  const previousMessageId =
+    context.conversationStreamingRef.current.get(conversationId)?.activeTurnTimeline?.messageId;
+  if (!previousMessageId || previousMessageId === nextMessageId) return;
+  if (context.releaseTurnRendering) {
+    context.releaseTurnRendering(conversationId, previousMessageId);
+    return;
+  }
+  context.timelineRenderScheduler?.discardTurn(conversationId, previousMessageId);
+  context.markdownSessionRegistry?.releaseTurn(conversationId, previousMessageId);
+}
+
 export const conversationHandlers: HandlerRegistration[] = [
   defineHandler('error', handleError),
   defineHandler('globalError', handleGlobalError),

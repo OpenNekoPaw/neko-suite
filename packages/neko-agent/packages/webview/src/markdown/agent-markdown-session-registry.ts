@@ -39,6 +39,7 @@ export interface AgentMarkdownSessionRegistry {
   commitTimelineSnapshot(snapshot: AgentMarkdownTimelineSnapshot): AgentMarkdownSessionPublication;
   getSnapshot(sessionKey: string): MarkdownStreamingSnapshot | undefined;
   subscribe(sessionKey: string, listener: () => void): () => void;
+  releaseTurn(conversationId: string, messageId: string): void;
   disposeConversation(conversationId: string): void;
   disposeAll(): void;
   metrics(): AgentMarkdownSessionRegistryMetrics;
@@ -162,6 +163,21 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
     return createPublication(affectedSessionKeys);
   };
 
+  const disposeMatching = (predicate: (sessionKey: string) => boolean): void => {
+    const affectedKeys = new Set<string>();
+    for (const sessionKey of entries.keys()) {
+      if (predicate(sessionKey)) affectedKeys.add(sessionKey);
+    }
+    for (const sessionKey of listeners.keys()) {
+      if (predicate(sessionKey)) affectedKeys.add(sessionKey);
+    }
+    for (const sessionKey of affectedKeys) {
+      if (entries.delete(sessionKey)) disposedSessions += 1;
+      notify(sessionKey);
+      listeners.delete(sessionKey);
+    }
+  };
+
   const commitTimelineSnapshot = (
     snapshot: AgentMarkdownTimelineSnapshot,
   ): AgentMarkdownSessionPublication => {
@@ -215,13 +231,11 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
         if (subscribers.size === 0) listeners.delete(sessionKey);
       };
     },
+    releaseTurn(conversationId, messageId): void {
+      disposeMatching((sessionKey) => belongsToTurn(sessionKey, conversationId, messageId));
+    },
     disposeConversation(conversationId): void {
-      for (const [sessionKey, entry] of entries) {
-        if (entry.conversationId !== conversationId) continue;
-        entries.delete(sessionKey);
-        disposedSessions += 1;
-        notify(sessionKey);
-      }
+      disposeMatching((sessionKey) => belongsToConversation(sessionKey, conversationId));
     },
     disposeAll(): void {
       disposedSessions += entries.size;
@@ -244,6 +258,14 @@ export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegist
       };
     },
   };
+}
+
+function belongsToConversation(sessionKey: string, conversationId: string): boolean {
+  return sessionKey.startsWith(`${conversationId}\u0000`);
+}
+
+function belongsToTurn(sessionKey: string, conversationId: string, messageId: string): boolean {
+  return sessionKey.startsWith(`${conversationId}\u0000${messageId}\u0000`);
 }
 
 export function createAgentMarkdownSessionKey(input: {

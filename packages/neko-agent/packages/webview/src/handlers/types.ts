@@ -157,6 +157,11 @@ export interface HelperContext {
   markdownSessionRegistry?: AgentMarkdownSessionRegistry;
   /** Canonical Webview-local owner for conversation render snapshots and activation. */
   conversationRenderCoordinator?: ConversationRenderCoordinator;
+  releaseTurnRendering?: (conversationId: string, messageId: string) => void;
+  disposeConversationRendering?: (
+    conversationId: string,
+    reason: 'conversation-delete' | 'confirmed-empty-conversation',
+  ) => void;
   isCurrentConversation: (conversationId?: string) => boolean;
   updateNonCurrentConversation: (
     conversationId: string,

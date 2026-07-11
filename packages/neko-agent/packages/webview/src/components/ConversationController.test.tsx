@@ -30,6 +30,7 @@ const vscodeMocks = vi.hoisted(() => ({
   updateTabState: vi.fn(),
   newConversation: vi.fn(),
   switchConversation: vi.fn(),
+  deleteConversation: vi.fn(),
   searchProjectFiles: vi.fn(),
   getContextTokenCount: vi.fn(),
   getTasks: vi.fn(),
@@ -941,6 +942,90 @@ describe('ConversationController entry state', () => {
     ).toMatchObject({ source: 'strict **markdown**', isFinal: false });
   });
 
+  it('disposes only the deleted background conversation render resources', () => {
+    vi.clearAllMocks();
+    render(
+      <ConversationController
+        {...createProps({
+          history: [
+            { id: 'conv-a', title: 'Chat A', messageCount: 1, updatedAt: 2 },
+            { id: 'conv-b', title: 'Chat B', messageCount: 1, updatedAt: 1 },
+          ],
+        })}
+      />,
+    );
+
+    const registry = getAgentMarkdownSessionRegistry();
+    registry.applyTimelineDeliveries([
+      timelineSnapshotMessage('conv-a', 'message-a', 'markdown A'),
+      timelineSnapshotMessage('conv-b', 'message-b', 'markdown B'),
+    ]);
+    const keyA = createAgentMarkdownSessionKey({
+      conversationId: 'conv-a',
+      messageId: 'message-a',
+      itemId: 'text-1',
+    });
+    const keyB = createAgentMarkdownSessionKey({
+      conversationId: 'conv-b',
+      messageId: 'message-b',
+      itemId: 'text-1',
+    });
+    expect(registry.getSnapshot(keyA)).toBeDefined();
+    expect(registry.getSnapshot(keyB)).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Chat A' }));
+
+    expect(vscodeMocks.deleteConversation).toHaveBeenCalledWith('conv-a');
+    expect(registry.getSnapshot(keyA)).toBeUndefined();
+    expect(registry.getSnapshot(keyB)?.source).toBe('markdown B');
+  });
+
+  it('retains conversation render resources across hide/reveal and tears them down on pagehide', () => {
+    vi.clearAllMocks();
+    const visibility = vi.spyOn(document, 'visibilityState', 'get');
+    visibility.mockReturnValue('visible');
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [{ id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' }],
+              activeTabId: 'tab-a',
+            },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: timelineSnapshotMessage('conv-a', 'message-a', 'retained **markdown**'),
+        }),
+      );
+    });
+
+    const key = createAgentMarkdownSessionKey({
+      conversationId: 'conv-a',
+      messageId: 'message-a',
+      itemId: 'text-1',
+    });
+    const registry = getAgentMarkdownSessionRegistry();
+    expect(registry.getSnapshot(key)?.source).toBe('retained **markdown**');
+
+    act(() => {
+      visibility.mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      visibility.mockReturnValue('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(registry.getSnapshot(key)?.source).toBe('retained **markdown**');
+
+    act(() => window.dispatchEvent(new Event('pagehide')));
+    expect(registry.getSnapshot(key)).toBeUndefined();
+    visibility.mockRestore();
+  });
+
   it('rebuilds a disposed Markdown session before a cached Timeline tab is activated from the UI', () => {
     vi.clearAllMocks();
     render(<ConversationController {...createProps()} />);
@@ -1151,13 +1236,17 @@ function createProps(
           </div>
         ))}
         {options.history?.map((conversation) => (
-          <button
-            key={conversation.id}
-            type="button"
-            onClick={() => props.onOpenConversation(conversation.id, conversation.title)}
-          >
-            Open {conversation.title}
-          </button>
+          <div key={conversation.id}>
+            <button
+              type="button"
+              onClick={() => props.onOpenConversation(conversation.id, conversation.title)}
+            >
+              Open {conversation.title}
+            </button>
+            <button type="button" onClick={() => props.onDeleteConversation(conversation.id)}>
+              Delete {conversation.title}
+            </button>
+          </div>
         ))}
         <span data-testid="tab-count">{props.tabs.length}</span>
       </div>

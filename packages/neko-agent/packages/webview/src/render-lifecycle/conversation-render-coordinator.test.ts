@@ -199,6 +199,50 @@ describe('ConversationRenderCoordinator', () => {
     );
   });
 
+  it('clears only the disposed conversation snapshot and viewport intent', () => {
+    const coordinator = new ConversationRenderCoordinator();
+    const listenerA = vi.fn();
+    const listenerB = vi.fn();
+    coordinator.ingest(hostSnapshot('conv-a', 0, [message('a')]));
+    coordinator.ingest(hostSnapshot('conv-b', 0, [message('b')]));
+    coordinator.ingest({
+      kind: 'viewport-update',
+      conversationId: 'conv-a',
+      baseRevision: 1,
+      viewport: { followMode: 'detached', anchorMessageId: 'a', anchorOffset: 12 },
+    });
+    coordinator.subscribeRevision('conv-a', listenerA);
+    coordinator.subscribeRevision('conv-b', listenerB);
+
+    const disposed = coordinator.dispose({
+      kind: 'disposal',
+      conversationId: 'conv-a',
+      reason: 'conversation-delete',
+    });
+
+    expect(disposed).toMatchObject({ retention: 'disposed', revision: 3 });
+    expect(coordinator.read('conv-a')).toBeUndefined();
+    expect(coordinator.isDisposed('conv-a')).toBe(true);
+    expect(coordinator.revision('conv-a')).toBe(3);
+    expect(coordinator.read('conv-b')).toMatchObject({
+      messages: [expect.objectContaining({ id: 'b' })],
+      viewport: { followMode: 'follow-tail' },
+    });
+    expect(listenerA).toHaveBeenCalledTimes(1);
+    expect(listenerB).not.toHaveBeenCalled();
+    expect(() =>
+      coordinator.dispose({
+        kind: 'disposal',
+        conversationId: 'conv-a',
+        reason: 'conversation-delete',
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        diagnostic: expect.objectContaining({ code: 'conversation-disposed' }),
+      }),
+    );
+  });
+
   it('makes activation publication single-use and validates the visible commit identity', () => {
     const coordinator = new ConversationRenderCoordinator();
     coordinator.ingest(hostSnapshot('conv-a', 0, []));

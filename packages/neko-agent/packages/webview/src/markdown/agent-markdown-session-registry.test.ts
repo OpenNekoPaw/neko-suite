@@ -224,6 +224,10 @@ describe('agent markdown session registry', () => {
 
   it('keeps concurrent conversations isolated and disposes only the selected owner', () => {
     const registry = createAgentMarkdownSessionRegistry();
+    const listenerA = vi.fn();
+    const listenerB = vi.fn();
+    registry.subscribe(sessionKey('conv-a'), listenerA);
+    registry.subscribe(sessionKey('conv-b'), listenerB);
     registry.applyTimelineDeliveries([
       appendMessage(1, 1, 'a', 1, 'conv-a'),
       appendMessage(1, 1, 'b', 1, 'conv-b'),
@@ -233,7 +237,57 @@ describe('agent markdown session registry', () => {
 
     expect(registry.getSnapshot(sessionKey('conv-a'))).toBeUndefined();
     expect(registry.getSnapshot(sessionKey('conv-b'))?.source).toBe('b');
-    expect(registry.metrics()).toMatchObject({ activeSessions: 1, disposedSessions: 1 });
+    expect(listenerA).toHaveBeenCalledTimes(2);
+    expect(listenerB).toHaveBeenCalledTimes(1);
+    expect(registry.metrics()).toMatchObject({
+      activeSessions: 1,
+      disposedSessions: 1,
+      activeSubscriptions: 1,
+    });
+  });
+
+  it('releases only the selected active turn sessions and subscriptions', () => {
+    const registry = createAgentMarkdownSessionRegistry();
+    const releasedKey = sessionKey('conv-a');
+    const retainedKey = createAgentMarkdownSessionKey({
+      conversationId: 'conv-a',
+      messageId: 'message-2',
+      itemId: 'text-1',
+    });
+    const releasedListener = vi.fn();
+    const retainedListener = vi.fn();
+    registry.subscribe(releasedKey, releasedListener);
+    registry.subscribe(retainedKey, retainedListener);
+    registry.applyTimelineDeliveries([appendMessage(1, 1, 'a', 1, 'conv-a')]);
+    registry
+      .commitTimelineSnapshot({
+        conversationId: 'conv-a',
+        messageId: 'message-2',
+        items: [
+          {
+            conversationId: 'conv-a',
+            turnId: 'turn-2',
+            messageId: 'message-2',
+            itemId: 'text-1',
+            sequence: 1,
+            itemRevision: 1,
+            kind: 'assistant_text',
+            status: 'streaming',
+            payload: { content: 'b', format: 'markdown', sourceGeneration: 1 },
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      })
+      .publish();
+
+    registry.releaseTurn('conv-a', 'message-1');
+
+    expect(registry.getSnapshot(releasedKey)).toBeUndefined();
+    expect(registry.getSnapshot(retainedKey)?.source).toBe('b');
+    expect(releasedListener).toHaveBeenCalledTimes(2);
+    expect(retainedListener).toHaveBeenCalledTimes(1);
+    expect(registry.metrics()).toMatchObject({ activeSessions: 1, activeSubscriptions: 1 });
   });
 
   it('disposes all sessions and subscriptions without preventing a later remount', () => {

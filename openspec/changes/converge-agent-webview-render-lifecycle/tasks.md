@@ -44,8 +44,8 @@
 
 ## 6. Converge Cleanup and Remove Bypass Paths
 
-- [ ] 6.1 Implement and test separate conversation disposal, active-turn resource release, component detach, Webview realm teardown, and hide/reveal handling.
-- [ ] 6.2 Ensure disposing one conversation clears only its scheduled frames, Markdown sessions/subscriptions, render snapshot, and viewport intent.
+- [x] 6.1 Implement and test separate conversation disposal, active-turn resource release, component detach, Webview realm teardown, and hide/reveal handling.
+- [x] 6.2 Ensure disposing one conversation clears only its scheduled frames, Markdown sessions/subscriptions, render snapshot, and viewport intent.
 - [x] 6.3 Make React StrictMode cleanup/remount reconstruct derived resources from canonical snapshots without treating effect cleanup as permanent conversation deletion.
 - [ ] 6.4 Remove writable direct access to migrated per-conversation maps and delete redundant activation/projector helpers inside the scoped replacement boundary.
 - [ ] 6.5 Add static/source tests or poisoned adapters proving production code cannot perform a successful foreground activation or background visible-state write outside the coordinator.

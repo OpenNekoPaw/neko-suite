@@ -45,9 +45,9 @@ import type { ExtensionToWebviewMessage } from './messages';
 import { AgentHostMessages, getAgentHostRuntimeAdapter } from '@/messages';
 import { readAgentTurnTimelineRecoveryRequests } from './timeline-recovery-state';
 import {
-  createTimelineRenderCommitScheduler,
-  type TimelineRenderCommitScheduler,
-} from './timeline-render-commit-scheduler';
+  createConversationRenderRuntimeLifecycle,
+  type ConversationRenderRuntimeLifecycle,
+} from '@/render-lifecycle/conversation-render-runtime-lifecycle';
 import {
   getAgentMarkdownSessionRegistry,
   type AgentMarkdownSessionPublication,
@@ -157,32 +157,42 @@ export interface UseMessageHandlerReturn {
   commitTimelineMarkdownSnapshot: (
     timeline: ActiveTurnTimelineState,
   ) => AgentMarkdownSessionPublication;
+  releaseTurnRendering: (conversationId: string, messageId: string) => void;
+  disposeConversationRendering: (
+    conversationId: string,
+    reason: 'conversation-delete' | 'confirmed-empty-conversation',
+  ) => void;
 }
 
 /**
  * Custom hook for message handling
  */
 export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHandlerReturn {
-  const timelineRenderSchedulerOwnerRef = useRef<TimelineRenderCommitScheduler | null>(null);
-  timelineRenderSchedulerOwnerRef.current ??= createTimelineRenderCommitScheduler();
-  const timelineRenderSchedulerFacadeRef = useRef<TimelineRenderCommitScheduler | null>(null);
-  timelineRenderSchedulerFacadeRef.current ??= createRestartableTimelineRenderSchedulerFacade(
-    timelineRenderSchedulerOwnerRef,
-  );
-  const timelineRenderScheduler = timelineRenderSchedulerFacadeRef.current;
   const markdownSessionRegistry = getAgentMarkdownSessionRegistry();
+  const renderRuntimeRef = useRef<ConversationRenderRuntimeLifecycle | null>(null);
+  renderRuntimeRef.current ??= createConversationRenderRuntimeLifecycle({
+    coordinator: props.conversationRenderCoordinator,
+    markdown: markdownSessionRegistry,
+  });
+  const renderRuntime = renderRuntimeRef.current;
+  const timelineRenderScheduler = renderRuntime.scheduler;
   useEffect(() => {
-    if (timelineRenderSchedulerOwnerRef.current?.metrics().disposed !== false) {
-      timelineRenderSchedulerOwnerRef.current = createTimelineRenderCommitScheduler();
-    }
+    renderRuntime.attachComponent();
+    const handleVisibilityChange = (): void => {
+      renderRuntime.setVisibility(document.visibilityState === 'hidden' ? 'hidden' : 'visible');
+    };
+    const handlePageHide = (): void => renderRuntime.disposeRealm();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
     for (const request of readAgentTurnTimelineRecoveryRequests(getAgentHostRuntimeAdapter())) {
       AgentHostMessages.requestAgentTurnTimelineSnapshot(request);
     }
     return () => {
-      timelineRenderSchedulerOwnerRef.current?.dispose();
-      markdownSessionRegistry.disposeAll();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+      renderRuntime.detachComponent();
     };
-  }, [markdownSessionRegistry]);
+  }, [renderRuntime]);
 
   const {
     messages,
@@ -351,6 +361,8 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       timelineRenderScheduler,
       markdownSessionRegistry,
       conversationRenderCoordinator,
+      releaseTurnRendering: renderRuntime.releaseTurn,
+      disposeConversationRendering: renderRuntime.disposeConversation,
       pendingForegroundConversationActivationRef,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,
@@ -411,6 +423,7 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       timelineRenderScheduler,
       markdownSessionRegistry,
       conversationRenderCoordinator,
+      renderRuntime,
       pendingForegroundConversationActivationRef,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,
@@ -446,25 +459,12 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     [markdownSessionRegistry],
   );
 
-  return { handleMessage, flushTimelineRendering, commitTimelineMarkdownSnapshot };
-}
-
-function createRestartableTimelineRenderSchedulerFacade(
-  ownerRef: MutableRefObject<TimelineRenderCommitScheduler | null>,
-): TimelineRenderCommitScheduler {
-  const requireOwner = (): TimelineRenderCommitScheduler => {
-    const owner = ownerRef.current;
-    if (!owner) {
-      throw new Error('Timeline render scheduler owner is unavailable.');
-    }
-    return owner;
-  };
   return {
-    enqueue: (message, commit) => requireOwner().enqueue(message, commit),
-    flushConversation: (conversationId) => requireOwner().flushConversation(conversationId),
-    flushAll: () => requireOwner().flushAll(),
-    dispose: () => requireOwner().dispose(),
-    metrics: () => requireOwner().metrics(),
+    handleMessage,
+    flushTimelineRendering,
+    commitTimelineMarkdownSnapshot,
+    releaseTurnRendering: renderRuntime.releaseTurn,
+    disposeConversationRendering: renderRuntime.disposeConversation,
   };
 }
 
