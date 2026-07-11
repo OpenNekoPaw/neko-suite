@@ -2,6 +2,9 @@ import {
   DEFAULT_CONFIG,
   DEFAULT_EXTENSION_CONFIG,
   MEDIA_MODEL_TYPES,
+  mergeConfigs,
+  normalizeExternalResearchConfig,
+  type ExternalResearchConfig,
   type MediaModelType,
   type ModelRefConfig,
   type UnifiedConfig,
@@ -50,6 +53,7 @@ export interface EffectiveAgentWorkspaceConfigSnapshot {
   readonly thinkingBudget: number;
   readonly executionMode: AssistantExecutionMode;
   readonly defaultMediaModels: Partial<Record<MediaModelType, string>>;
+  readonly externalResearch: ExternalResearchConfig;
   readonly mcpServers: readonly MCPServerPreset[];
   readonly diagnostics: readonly AssistantConfigDiagnostic[];
   readonly blockingDiagnostic?: AssistantConfigDiagnostic;
@@ -85,8 +89,13 @@ export function resolveEffectiveAgentWorkspaceConfigSnapshot(
     }),
   );
 
-  let providerSelection = resolveProviderSelection(userConfig, workspaceConfig, runtime);
-  let modelSelection = resolveModelSelection(userConfig, workspaceConfig, runtime, providerSelection);
+  const providerSelection = resolveProviderSelection(userConfig, workspaceConfig, runtime);
+  const modelSelection = resolveModelSelection(
+    userConfig,
+    workspaceConfig,
+    runtime,
+    providerSelection,
+  );
   const temperature = resolveScalar({
     key: 'temperature',
     defaultValue: DEFAULT_CONFIG.temperature,
@@ -116,6 +125,9 @@ export function resolveEffectiveAgentWorkspaceConfigSnapshot(
     runtimeValue: runtime?.executionMode,
   });
   const mediaDefaults = resolveMediaDefaults(userConfig, workspaceConfig, runtime);
+  const externalResearch = normalizeExternalResearchConfig(
+    mergeConfigs(userConfig, workspaceConfig).externalResearch,
+  );
 
   const provider = providerSelection.value
     ? input.providers.find((candidate) => candidate.id === providerSelection.value)
@@ -150,6 +162,7 @@ export function resolveEffectiveAgentWorkspaceConfigSnapshot(
     thinkingBudget: thinkingBudget.value,
     executionMode: executionMode.value,
     defaultMediaModels: mediaDefaults.values,
+    externalResearch,
     mcpServers: input.mcpServers.filter((server) => server.enabled !== false),
     diagnostics,
     ...(blockingDiagnostic ? { blockingDiagnostic } : {}),
@@ -174,7 +187,10 @@ function collectWorkspacePolicyDiagnostics(input: {
   const diagnostics: AssistantConfigDiagnostic[] = [];
   if ((input.workspaceConfig.providers?.length ?? 0) > 0) {
     diagnostics.push(
-      buildAssistantConfigAvailabilityDiagnostic('unsupportedWorkspaceProviderDefinition', filePath),
+      buildAssistantConfigAvailabilityDiagnostic(
+        'unsupportedWorkspaceProviderDefinition',
+        filePath,
+      ),
     );
   }
   if ((input.workspaceConfig.models?.length ?? 0) > 0) {
@@ -183,7 +199,9 @@ function collectWorkspacePolicyDiagnostics(input: {
     );
   }
   if (isNonEmptyString(input.workspaceConfig.skillsDir)) {
-    diagnostics.push(buildAssistantConfigAvailabilityDiagnostic('unsupportedSkillSource', filePath));
+    diagnostics.push(
+      buildAssistantConfigAvailabilityDiagnostic('unsupportedSkillSource', filePath),
+    );
   }
   return diagnostics;
 }
@@ -272,7 +290,10 @@ function resolveModelSelection(
   return { value: null, source: 'default' };
 }
 
-function resolveScalar<K extends keyof UnifiedConfig, T extends NonNullable<UnifiedConfig[K]>>(input: {
+function resolveScalar<
+  K extends keyof UnifiedConfig,
+  T extends NonNullable<UnifiedConfig[K]>,
+>(input: {
   readonly key: K;
   readonly defaultValue: T;
   readonly userConfig: UnifiedConfig;

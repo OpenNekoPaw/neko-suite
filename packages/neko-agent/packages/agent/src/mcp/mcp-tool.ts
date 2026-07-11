@@ -32,6 +32,18 @@ export interface MCPToolDiscoveryManager extends MCPToolCallManager {
   getAllTools(): Promise<Array<MCPToolDefinition & { serverId: string }>>;
 }
 
+export interface MCPAdapterOnlyToolBinding {
+  readonly serverId: string;
+  readonly toolName: string;
+}
+
+export interface MCPToolCreationOptions {
+  /** MCP tools reserved for adapter calls and hidden from ordinary model-visible registration. */
+  readonly adapterOnlyTools?: readonly MCPAdapterOnlyToolBinding[];
+  /** Explicit escape hatch for debugging/raw MCP exposure. Defaults to false. */
+  readonly exposeAdapterOnlyTools?: boolean;
+}
+
 /**
  * Truncate description to MAX_DESCRIPTION_LENGTH, appending ellipsis if truncated.
  */
@@ -142,6 +154,7 @@ function isToolParameterType(value: unknown): value is ToolParameterProperty['ty
 export async function createMCPTools(
   mcpManager: MCPToolDiscoveryManager,
   serverId: string,
+  options: MCPToolCreationOptions = {},
 ): Promise<MCPTool[]> {
   const client = mcpManager.getClient(serverId);
   if (!client?.isConnected()) {
@@ -150,7 +163,9 @@ export async function createMCPTools(
 
   try {
     const mcpTools = await client.listTools();
-    return mcpTools.map((tool) => new MCPTool(mcpManager, serverId, tool));
+    return mcpTools
+      .filter((tool) => shouldExposeMcpTool(serverId, tool.name, options))
+      .map((tool) => new MCPTool(mcpManager, serverId, tool));
   } catch (error) {
     logger.error('Failed to create MCP tools', { serverId, error });
     return [];
@@ -160,11 +175,17 @@ export async function createMCPTools(
 /**
  * Create all MCP tools from all connected servers
  */
-export async function createAllMCPTools(mcpManager: MCPToolDiscoveryManager): Promise<MCPTool[]> {
+export async function createAllMCPTools(
+  mcpManager: MCPToolDiscoveryManager,
+  options: MCPToolCreationOptions = {},
+): Promise<MCPTool[]> {
   const tools: MCPTool[] = [];
 
   const allTools = await mcpManager.getAllTools();
   for (const tool of allTools) {
+    if (!shouldExposeMcpTool(tool.serverId, tool.name, options)) {
+      continue;
+    }
     tools.push(
       new MCPTool(mcpManager, tool.serverId, {
         name: tool.name,
@@ -175,4 +196,17 @@ export async function createAllMCPTools(mcpManager: MCPToolDiscoveryManager): Pr
   }
 
   return tools;
+}
+
+function shouldExposeMcpTool(
+  serverId: string,
+  toolName: string,
+  options: MCPToolCreationOptions,
+): boolean {
+  if (options.exposeAdapterOnlyTools === true) {
+    return true;
+  }
+  return !options.adapterOnlyTools?.some(
+    (binding) => binding.serverId === serverId && binding.toolName === toolName,
+  );
 }

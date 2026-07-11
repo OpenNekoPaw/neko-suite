@@ -98,13 +98,7 @@ describe('default agent provider configuration', () => {
       providerId: GOOGLE_PROVIDER_ID,
       type: 'llm',
       enabled: false,
-      capabilities: expect.arrayContaining([
-        'image.understand',
-        'audio.understand',
-        'video.understand',
-        'vision',
-        'llm.chat',
-      ]),
+      capabilities: expect.arrayContaining(['vision', 'audio', 'vision_video', 'llm.chat']),
     });
     if (!geminiVideoModel) throw new Error('Expected default Gemini media understanding model');
     expect(modelSupportsPurpose(geminiVideoModel, 'image.understand')).toBe(true);

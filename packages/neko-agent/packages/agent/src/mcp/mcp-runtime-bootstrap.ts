@@ -1,6 +1,10 @@
-import type { MCPServerConfig, Tool } from '@neko/shared';
+import type { ExternalResearchConfigInput, MCPServerConfig, Tool } from '@neko/shared';
 import { createAllMCPTools } from './mcp-tool';
-import type { MCPToolDiscoveryManager } from './mcp-tool';
+import type {
+  MCPAdapterOnlyToolBinding,
+  MCPToolCreationOptions,
+  MCPToolDiscoveryManager,
+} from './mcp-tool';
 
 export interface MCPRuntimeToolRegistry {
   register(tool: Tool): void;
@@ -19,8 +23,12 @@ export interface MCPRuntimeBootstrapLogger {
 export interface MCPRuntimeBootstrapOptions {
   readonly mcpManager: MCPRuntimeManager;
   readonly toolRegistry: MCPRuntimeToolRegistry;
+  readonly externalResearch?: ExternalResearchConfigInput;
   readonly logger?: MCPRuntimeBootstrapLogger;
-  readonly createTools?: (mcpManager: MCPRuntimeManager) => Promise<readonly Tool[]>;
+  readonly createTools?: (
+    mcpManager: MCPRuntimeManager,
+    options: MCPToolCreationOptions,
+  ) => Promise<readonly Tool[]>;
 }
 
 export interface MCPRuntimeConnectionFailure {
@@ -59,7 +67,10 @@ export async function connectMCPServersRuntime(
   }
 
   const createTools = options.createTools ?? createAllMCPTools;
-  const tools = await createTools(options.mcpManager);
+  const toolCreationOptions = createMcpToolCreationOptionsForExternalResearch(
+    options.externalResearch,
+  );
+  const tools = await createTools(options.mcpManager, toolCreationOptions);
   for (const tool of tools) {
     options.toolRegistry.register(tool);
   }
@@ -68,5 +79,26 @@ export async function connectMCPServersRuntime(
     connectedServerIds,
     failedServers,
     registeredToolCount: tools.length,
+  };
+}
+
+export function createMcpToolCreationOptionsForExternalResearch(
+  externalResearch: ExternalResearchConfigInput | undefined,
+): MCPToolCreationOptions {
+  const mcp = externalResearch?.mcp;
+  if (!mcp) {
+    return {};
+  }
+
+  const adapterOnlyTools: MCPAdapterOnlyToolBinding[] = [
+    { serverId: mcp.serverId, toolName: mcp.searchTool.name },
+  ];
+  if (mcp.fetchTool) {
+    adapterOnlyTools.push({ serverId: mcp.serverId, toolName: mcp.fetchTool.name });
+  }
+
+  return {
+    adapterOnlyTools,
+    exposeAdapterOnlyTools: mcp.exposeBoundToolsAsRawMcp === true,
   };
 }

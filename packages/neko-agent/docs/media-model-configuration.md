@@ -130,7 +130,7 @@ id = "google-gemini-2.5-flash"
 name = "gemini-2.5-flash"
 provider_id = "google"
 type = "llm"
-capabilities = ["chat", "vision", "image.understand", "audio.understand", "video.understand", "function_calling", "streaming", "json_mode"]
+capabilities = ["chat", "vision", "audio", "vision_video", "function_calling", "streaming", "json_mode"]
 enabled = true
 ```
 
@@ -151,7 +151,7 @@ enabled = true
 
 ### `default_model_purposes`
 
-`default_model_purposes` 用于按产品用途绑定模型。TOML key 使用下划线形式，运行时会映射到点号 purpose，例如 `[default_model_purposes.video_understand]` 对应 `video.understand`。
+`default_model_purposes` 用于按产品用途绑定模型。TOML key 使用下划线形式，运行时会映射到点号 purpose，例如 `[default_model_purposes.video_understand]` 对应 `video.understand`。这些 purpose 是产品用途名，不是模型 `capabilities` 字段名。
 
 `image.understand` 表示原生图片/静帧分析模型，适合审美、构图、影视化画面感、图片质量等理解任务。
 
@@ -159,9 +159,23 @@ enabled = true
 
 `video.understand` 表示原生视频分析/审阅模型，适合审美、影视化效果、视频质量等理解任务。
 
-这些理解用途通常由 `type = "llm"` 且声明 `capabilities = ["image.understand", "audio.understand", "video.understand", "vision"]` 的 Gemini 模型承担；不要把它们配置到 `[default_models.image]`、`[default_models.audio]` 或 `[default_models.video]`，这些类型默认值保留给生成模型。
+这些理解用途通常由 `type = "llm"` 的 Gemini 或其他原生多模态对话模型承担；不要把它们配置到 `[default_models.image]`、`[default_models.audio]` 或 `[default_models.video]`，这些类型默认值保留给生成模型。
 
-前端确认入口在 Composer 的媒体模型配置栏中。选择或切换图片、音频、视频生成模型时，同一行会显示对应的 understand 模型：`Configured` 表示来自 `[default_model_purposes.*]` 的显式绑定，`Auto` 表示没有显式绑定但已有启用模型声明对应 understand capability，`Missing` 表示当前 Agent 不会调用该类媒体理解模型。
+理解 purpose 与模型 capability 的对应关系是：
+
+| purpose | 模型 capability | 说明 |
+| --- | --- | --- |
+| `image.understand` | `vision` | 图片/静帧文件理解 |
+| `audio.understand` | `audio` | 独立音频文件理解 |
+| `video.understand` | `vision_video` | 视频文件综合理解 |
+
+`audio`、`vision`、`vision_video` 都是显式能力，互不隐含。`vision_video` 不代表 `vision`，也不要求或代表 `audio`；如果模型同时支持图片和视频理解，需要同时声明 `vision` 与 `vision_video`。如果模型能理解视频文件但不能单独理解音频文件，只声明 `vision_video` 即可。
+
+前端确认入口在 Composer 的媒体模型配置栏中。选择或切换图片、音频、视频生成模型时，同一行会显示对应的 understand 模型：`Configured` 表示来自 `[default_model_purposes.*]` 的显式绑定，`Auto` 表示没有显式绑定但已有启用 LLM 模型声明对应理解 capability，`Missing` 表示当前 Agent 不会调用该类媒体理解模型。
+
+Agent turn 带有单一媒体类型附件时，运行时会用对应 purpose 解析本轮理解模型：图片走 `image.understand`，音频走 `audio.understand`，视频走 `video.understand`。这个路由不会读取 `[default_models.video]` 等生成模型默认值；多媒体类型混合分析留给后续 analysis profile，不在单模型阶段自动拆分。
+
+Composer 中的理解模型下拉选择是会话级覆盖：选择 `Auto` 时继续使用 `default_model_purposes` 或 capability 自动匹配；选择具体模型时只影响当前 Webview 会话发送的 Agent turn，不写回 `config.toml`。
 
 ### `models[].type`
 
@@ -175,7 +189,23 @@ llm | image | video | audio
 
 ### `models[].capabilities`
 
-`capabilities` 是模型元数据，继续支持 `chat`、`function_calling`、`streaming`、`json_mode`、`code`、`vision`、`text_to_image`、`text_to_video`、`text_to_audio`、`text_to_music` 等字段。Neko 内部会把这些元数据映射到产品用途，例如 `text_to_music` 满足 `audio.music.generate`。
+`capabilities` 是模型元数据，当前保留现有稳定字段，不引入 `input.*`、`generate`、`edit` 或 `extend` 这类通用能力字段。
+
+对话/理解模型常用能力：
+
+```text
+chat | function_calling | streaming | json_mode | code | audio | vision | vision_video
+```
+
+其中 `audio`、`vision`、`vision_video` 表示 LLM 的媒体文件理解能力：`audio` 面向独立音频文件，`vision` 面向图片/静帧文件，`vision_video` 面向视频文件综合理解。
+
+生成模型常用能力：
+
+```text
+text_to_image | image_to_image | image_edit | text_to_video | image_to_video | text_to_music | text_to_audio
+```
+
+Neko 内部会把这些元数据映射到产品用途，例如 `text_to_music` 满足 `audio.music.generate`。暂时不要把 provider 特有的新能力强行归入通用 capability；这类能力应先留在 provider adapter、任务 schema 或 provider-specific metadata 中，等跨 provider 语义稳定后再提升为全局 capability。
 
 ### `models[].protocol_profile`
 

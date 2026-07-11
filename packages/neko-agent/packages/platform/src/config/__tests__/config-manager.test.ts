@@ -862,7 +862,7 @@ describe('ConfigManager', () => {
         name: 'gemini-2.5-flash',
         providerId: 'google',
         type: 'llm',
-        capabilities: ['chat', 'vision', 'video.understand'],
+        capabilities: ['chat', 'vision', 'vision_video'],
         enabled: true,
       };
       const proModel: Model = {
@@ -1061,7 +1061,7 @@ describe('ConfigManager', () => {
                 name: 'gemini-2.5-flash',
                 providerId: 'google',
                 type: 'llm',
-                capabilities: ['chat', 'vision', 'video.understand'],
+                capabilities: ['chat', 'vision', 'vision_video'],
                 enabled: true,
               },
             ],

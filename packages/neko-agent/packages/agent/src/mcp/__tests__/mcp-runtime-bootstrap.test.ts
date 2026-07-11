@@ -63,7 +63,7 @@ describe('connectMCPServersRuntime', () => {
     });
 
     expect(connect).toHaveBeenCalledWith('server-a');
-    expect(createTools).toHaveBeenCalledWith(mcpManager);
+    expect(createTools).toHaveBeenCalledWith(mcpManager, {});
     expect(toolRegistry.register).toHaveBeenCalledWith(tool);
     expect(result).toEqual({
       connectedServerIds: ['server-a'],
@@ -93,7 +93,7 @@ describe('connectMCPServersRuntime', () => {
     expect(connect).toHaveBeenCalledTimes(2);
     expect(connect).toHaveBeenNthCalledWith(1, 'server-a');
     expect(connect).toHaveBeenNthCalledWith(2, 'server-b');
-    expect(createTools).toHaveBeenCalledWith(mcpManager);
+    expect(createTools).toHaveBeenCalledWith(mcpManager, {});
     expect(toolRegistry.register).toHaveBeenCalledWith(tool);
     expect(result).toEqual({
       connectedServerIds: ['server-a', 'server-b'],
@@ -140,6 +140,84 @@ describe('connectMCPServersRuntime', () => {
         },
       ],
       registeredToolCount: 1,
+    });
+  });
+
+  it('passes external research MCP bindings as adapter-only raw MCP filters', async () => {
+    const mcpManager = new MCPManager();
+    mcpManager.register(createServer({ id: 'research', name: 'Research' }));
+
+    vi.spyOn(mcpManager, 'connect').mockImplementation(async (serverId) =>
+      createConnectedClient(serverId),
+    );
+    const toolRegistry = { register: vi.fn() };
+    const createTools = vi.fn(async () => [createTool('mcp__research__repo_status')]);
+
+    await connectMCPServersRuntime({
+      mcpManager,
+      toolRegistry,
+      createTools,
+      externalResearch: {
+        mode: 'live',
+        providerId: 'mcp:research',
+        mcp: {
+          serverId: 'research',
+          searchTool: {
+            name: 'web_search',
+            queryArg: 'query',
+            outputSchema: 'neko.externalResearch.search.v1',
+          },
+          fetchTool: {
+            name: 'fetch_url',
+            urlArg: 'url',
+            outputSchema: 'neko.externalResearch.fetch.v1',
+          },
+        },
+      },
+    });
+
+    expect(createTools).toHaveBeenCalledWith(mcpManager, {
+      adapterOnlyTools: [
+        { serverId: 'research', toolName: 'web_search' },
+        { serverId: 'research', toolName: 'fetch_url' },
+      ],
+      exposeAdapterOnlyTools: false,
+    });
+    expect(toolRegistry.register).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'mcp__research__repo_status' }),
+    );
+  });
+
+  it('can pass the explicit raw MCP exposure escape hatch for bound research tools', async () => {
+    const mcpManager = new MCPManager();
+    mcpManager.register(createServer({ id: 'research', name: 'Research' }));
+
+    vi.spyOn(mcpManager, 'connect').mockImplementation(async (serverId) =>
+      createConnectedClient(serverId),
+    );
+    const createTools = vi.fn(async () => []);
+
+    await connectMCPServersRuntime({
+      mcpManager,
+      toolRegistry: { register: vi.fn() },
+      createTools,
+      externalResearch: {
+        mode: 'indexed',
+        mcp: {
+          serverId: 'research',
+          exposeBoundToolsAsRawMcp: true,
+          searchTool: {
+            name: 'web_search',
+            queryArg: 'query',
+            outputSchema: 'neko.externalResearch.search.v1',
+          },
+        },
+      },
+    });
+
+    expect(createTools).toHaveBeenCalledWith(mcpManager, {
+      adapterOnlyTools: [{ serverId: 'research', toolName: 'web_search' }],
+      exposeAdapterOnlyTools: true,
     });
   });
 });

@@ -13,6 +13,7 @@ export {
 } from './mcp-tool';
 export {
   connectMCPServersRuntime,
+  createMcpToolCreationOptionsForExternalResearch,
   type MCPRuntimeBootstrapLogger,
   type MCPRuntimeBootstrapOptions,
   type MCPRuntimeBootstrapResult,

@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { MCPTool } from '../mcp-tool';
-import type { MCPToolDefinition } from '@neko/shared';
+import { MCPTool, createAllMCPTools, createMCPTools } from '../mcp-tool';
+import type { IMCPClient, MCPToolDefinition } from '@neko/shared';
 import type { MCPManager } from '../mcp-manager';
 
 // Mock logger
@@ -21,6 +21,21 @@ function createMockManager(): MCPManager {
   return {
     callTool: vi.fn().mockResolvedValue({ success: true, data: 'ok' }),
   } as unknown as MCPManager;
+}
+
+function createConnectedClient(tools: MCPToolDefinition[]): IMCPClient {
+  return {
+    serverId: 'research',
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    isConnected: () => true,
+    listTools: vi.fn(async () => tools),
+    callTool: vi.fn(async () => ({ content: [] })),
+    listResources: vi.fn(async () => []),
+    readResource: vi.fn(async () => ''),
+    listPrompts: vi.fn(async () => []),
+    getPrompt: vi.fn(async () => ({ messages: [] })),
+  };
 }
 
 describe('MCPTool', () => {
@@ -86,5 +101,74 @@ describe('MCPTool', () => {
 
     expect(mcpTool.description.length).toBe(2048);
     expect(mcpTool.description).toBe(exactDesc); // No truncation needed
+  });
+});
+
+describe('MCP tool adapter-only filtering', () => {
+  it('hides adapter-only MCP tools from per-server raw tool creation by default', async () => {
+    const tools: MCPToolDefinition[] = [
+      { name: 'web_search', description: 'Search', inputSchema: { type: 'object' } },
+      { name: 'repo_status', description: 'Status', inputSchema: { type: 'object' } },
+    ];
+    const manager = {
+      callTool: vi.fn(),
+      getClient: vi.fn(() => createConnectedClient(tools)),
+      getAllTools: vi.fn(),
+    };
+
+    const created = await createMCPTools(manager, 'research', {
+      adapterOnlyTools: [{ serverId: 'research', toolName: 'web_search' }],
+    });
+
+    expect(created.map((tool) => tool.name)).toEqual(['mcp__research__repo_status']);
+  });
+
+  it('hides adapter-only MCP tools from all-server raw tool creation by default', async () => {
+    const manager = {
+      callTool: vi.fn(),
+      getClient: vi.fn(),
+      getAllTools: vi.fn(async () => [
+        {
+          serverId: 'research',
+          name: 'web_search',
+          description: 'Search',
+          inputSchema: { type: 'object' },
+        },
+        {
+          serverId: 'research',
+          name: 'repo_status',
+          description: 'Status',
+          inputSchema: { type: 'object' },
+        },
+      ]),
+    };
+
+    const created = await createAllMCPTools(manager, {
+      adapterOnlyTools: [{ serverId: 'research', toolName: 'web_search' }],
+    });
+
+    expect(created.map((tool) => tool.name)).toEqual(['mcp__research__repo_status']);
+  });
+
+  it('can expose adapter-only MCP tools through an explicit raw MCP escape hatch', async () => {
+    const manager = {
+      callTool: vi.fn(),
+      getClient: vi.fn(),
+      getAllTools: vi.fn(async () => [
+        {
+          serverId: 'research',
+          name: 'web_search',
+          description: 'Search',
+          inputSchema: { type: 'object' },
+        },
+      ]),
+    };
+
+    const created = await createAllMCPTools(manager, {
+      adapterOnlyTools: [{ serverId: 'research', toolName: 'web_search' }],
+      exposeAdapterOnlyTools: true,
+    });
+
+    expect(created.map((tool) => tool.name)).toEqual(['mcp__research__web_search']);
   });
 });

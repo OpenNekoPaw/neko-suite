@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Model } from '../../types/provider';
-import { modelSupportsPurpose } from '../model-purpose-registry';
+import {
+  getModelPurposeCapabilityMatches,
+  MEDIA_UNDERSTANDING_PURPOSE_CAPABILITIES,
+  modelSupportsPurpose,
+} from '../model-purpose-registry';
 
 const providerId = 'neko-gateway';
 
@@ -47,7 +51,7 @@ describe('model-purpose-registry', () => {
         createModel({
           id: 'gemini-video',
           type: 'llm',
-          capabilities: ['chat', 'vision', 'video.understand'],
+          capabilities: ['chat', 'vision_video'],
         }),
         'video.understand',
       ),
@@ -60,7 +64,7 @@ describe('model-purpose-registry', () => {
         createModel({ id: 'vision-only', type: 'llm', capabilities: ['chat', 'vision'] }),
         'image.understand',
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       modelSupportsPurpose(
         createModel({ id: 'tts', type: 'audio', capabilities: ['text_to_audio', 'audio'] }),
@@ -72,7 +76,7 @@ describe('model-purpose-registry', () => {
         createModel({
           id: 'gemini-media',
           type: 'llm',
-          capabilities: ['chat', 'vision', 'image.understand', 'audio.understand'],
+          capabilities: ['chat', 'vision', 'audio'],
         }),
         'image.understand',
       ),
@@ -82,10 +86,53 @@ describe('model-purpose-registry', () => {
         createModel({
           id: 'gemini-media',
           type: 'llm',
-          capabilities: ['chat', 'vision', 'image.understand', 'audio.understand'],
+          capabilities: ['chat', 'vision', 'audio'],
         }),
         'audio.understand',
       ),
     ).toBe(true);
+  });
+
+  it('maps media understanding purposes to canonical current capabilities while reading legacy aliases', () => {
+    expect(MEDIA_UNDERSTANDING_PURPOSE_CAPABILITIES).toEqual({
+      'image.understand': 'vision',
+      'audio.understand': 'audio',
+      'video.understand': 'vision_video',
+    });
+    expect(getModelPurposeCapabilityMatches('image.understand')).toEqual([
+      'vision',
+      'image.understand',
+    ]);
+    expect(getModelPurposeCapabilityMatches('audio.understand')).toEqual([
+      'audio',
+      'audio.understand',
+    ]);
+    expect(getModelPurposeCapabilityMatches('video.understand')).toEqual([
+      'vision_video',
+      'video.understand',
+    ]);
+
+    expect(
+      modelSupportsPurpose(
+        createModel({
+          id: 'legacy-video',
+          type: 'llm',
+          capabilities: ['chat', 'video.understand'],
+        }),
+        'video.understand',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not infer image or standalone audio understanding from video understanding', () => {
+    const videoOnly = createModel({
+      id: 'video-only',
+      type: 'llm',
+      capabilities: ['chat', 'vision_video'],
+    });
+
+    expect(modelSupportsPurpose(videoOnly, 'video.understand')).toBe(true);
+    expect(modelSupportsPurpose(videoOnly, 'image.understand')).toBe(false);
+    expect(modelSupportsPurpose(videoOnly, 'audio.understand')).toBe(false);
   });
 });
