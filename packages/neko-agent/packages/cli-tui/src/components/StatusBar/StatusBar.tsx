@@ -33,6 +33,7 @@ export function StatusBar(): React.JSX.Element {
     `${config.chatModel?.providerId ?? config.provider}:${config.chatModel?.modelId ?? config.model}`,
   );
   const mediaModels = formatMediaModels(config.defaultMediaModels, labels);
+  const perceptionModels = formatMediaModels(config.perceptionModels, labels);
   const tokenBudget = resolveAgentTokenBudget({
     modelId: config.chatModel?.modelId ?? config.model,
     contextWindow: config.chatModel?.contextWindow,
@@ -78,6 +79,14 @@ export function StatusBar(): React.JSX.Element {
       ) : (
         <Text color={tokens.muted}>{labels.chrome.none}</Text>
       )}
+
+      {perceptionModels ? (
+        <>
+          <Text dimColor> | </Text>
+          <Text dimColor>Perception:</Text>
+          <Text>{perceptionModels}</Text>
+        </>
+      ) : null}
 
       {queueSnapshot && queueSnapshot.pendingCount > 0 ? (
         <>

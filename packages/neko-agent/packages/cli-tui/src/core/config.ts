@@ -23,7 +23,7 @@ import {
   getWorkspaceConfigDir,
   getWorkspaceConfigPath,
   getConfigLocations,
-} from '@neko/shared/config/config-reader.ts';
+} from '@neko/shared/config/config-reader';
 import { getEnvKeyMap } from '@neko/shared';
 
 export {
@@ -196,6 +196,7 @@ export function loadConfig(
       verbose: overrides.verbose ?? DEFAULT_CLI_CONFIG.verbose,
       workDir,
       mcpServers,
+      externalResearch: effectiveConfig.externalResearch,
       outputFormat: overrides.outputFormat ?? DEFAULT_CLI_CONFIG.outputFormat,
       thinkingBudget,
       ...(overrides.contextSettings ? { contextSettings: overrides.contextSettings } : {}),

@@ -42,6 +42,12 @@ export interface TerminalTimelineRow {
   readonly content?: string;
   readonly toolCallId?: string;
   readonly toolName?: string;
+  /** Structured tool input retained for debug automation without restoring Message.toolCalls projection. */
+  readonly toolArguments?: Readonly<Record<string, unknown>>;
+  /** Structured tool result retained for deterministic debug automation assertions. */
+  readonly toolResult?: unknown;
+  /** Structured tool failure retained separately from the user-facing result summary. */
+  readonly toolError?: string;
   readonly argsSummary?: string;
   readonly resultSummary?: string;
   readonly backfillSummary?: string;

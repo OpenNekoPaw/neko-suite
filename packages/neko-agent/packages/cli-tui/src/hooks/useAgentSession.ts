@@ -98,7 +98,7 @@ import {
   listRegisteredTuiMcpTools,
   reconnectTuiMcpServer,
 } from '../core/tui-mcp-ports';
-import { loadTuiSessionSkills } from '../core/tui-session-skills';
+import { createTuiSessionSkillRuntime } from '../core/tui-session-skills';
 import { mergeTuiMediaModelMetadata } from '../core/media-model-metadata';
 import { listChatModelOptions } from '../core/config';
 import { useConfigStore } from '../stores/config-store';
@@ -569,11 +569,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         const skillLoader = createNodeSkillLoader(fs, path);
         const skillService = createSkillService();
         skillServiceRef.current = skillService;
-        const loadedSkills = await loadTuiSessionSkills({
+        const sessionSkillRuntime = createTuiSessionSkillRuntime({
           skillLoader,
           config,
           locale: detectedLocale,
         });
+        const loadedSkills = await sessionSkillRuntime.scanSkills();
         for (const skill of loadedSkills) {
           skillService.registry.registerSkill(skill);
         }
@@ -808,6 +809,15 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
             skillService,
             conversationId: conversationIdRef.current,
             lifecycleRuntime: skillLifecycleRuntime,
+            createSkill: async (input) => {
+              const { created, skills } = await sessionSkillRuntime.createSkill(input);
+              for (const skill of skills) {
+                skillService.registry.registerSkill(skill);
+              }
+              setSlashCommands(createTuiSlashCommandCatalog(skills, detectedLocale));
+              setSkillCatalogVersion((version) => version + 1);
+              return created;
+            },
             onProjection: (projection) => {
               useAgentStore.getState().setActiveSkillLifecycleRecords(projection.visibleIndicators);
               syncWorkspaceRuntimeState();

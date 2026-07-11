@@ -13,6 +13,7 @@ import type { TuiArtifactReference } from './artifact-reference-formatter';
 import { formatTuiArtifactReference } from './artifact-reference-formatter';
 import type { CLIConfig } from './types';
 import { getProviderModels } from './config';
+import { supportsPerceptionCategory } from './media-model-metadata';
 import { formatTuiQueueError, formatTuiQueueSnapshot } from './message-queue-format';
 import {
   handleSlashCommand,
@@ -66,6 +67,7 @@ export interface TuiStatusSnapshot {
   readonly runningTaskSummary?: string;
   readonly chatModelIdentity?: string;
   readonly mediaModelSummary?: string;
+  readonly perceptionModelSummary?: string;
   readonly llmParameterSummary?: string;
 }
 
@@ -102,6 +104,16 @@ export interface TuiMediaModelPorts {
     model: TuiModelIdentity | 'none',
   ) => void | Promise<void>;
   readonly resetMediaModels?: () => void | Promise<void>;
+}
+
+export interface TuiPerceptionModelPorts {
+  readonly listPerceptionModelOptions?: () => readonly ChatModelOption[];
+  readonly getCurrentPerceptionModels?: () => Partial<Record<TuiMediaCategory, string>>;
+  readonly setPerceptionModel?: (
+    category: TuiMediaCategory,
+    model: TuiModelIdentity | 'auto',
+  ) => void | Promise<void>;
+  readonly resetPerceptionModels?: () => void | Promise<void>;
 }
 
 export interface TuiParameterValidationResult {
@@ -207,6 +219,7 @@ export interface TuiCommandRouterPorts {
   };
   readonly model?: TuiModelPorts;
   readonly media?: TuiMediaModelPorts;
+  readonly perception?: TuiPerceptionModelPorts;
   readonly parameters?: TuiParameterPorts;
   readonly skill?: TuiSkillPorts;
   readonly context?: TuiContextPorts;
@@ -262,6 +275,9 @@ export async function handleTuiControlCommand(
 
     case 'media':
       return handleMedia(commandText, context);
+
+    case 'perception':
+      return handlePerception(commandText, context);
 
     case 'param':
       return handleParam(commandText, context);
@@ -333,11 +349,15 @@ async function handleModel(
   const forceList = args.length === 0 || args[0] === 'list' || args[0] === 'status';
   const modelPorts = context.ports.model;
   const mediaPorts = context.ports.media;
+  const perceptionPorts = context.ports.perception;
   const allOptions = modelPorts?.listChatModelOptions?.() ?? [];
   const chatOptions = allOptions.filter((option) => !isMediaModelCategory(option.category));
   const mediaOptions =
     mediaPorts?.listMediaModelOptions?.() ??
     allOptions.filter((option) => isMediaModelCategory(option.category));
+  const perceptionOptions =
+    perceptionPorts?.listPerceptionModelOptions?.() ??
+    allOptions.filter((option) => option.category === 'llm');
 
   if (forceList) {
     return handled({
@@ -350,6 +370,8 @@ async function handleModel(
           ...(context.slash.currentMediaOverrides ?? {}),
           ...(mediaPorts?.getCurrentMediaModels?.() ?? {}),
         },
+        perceptionOptions,
+        currentPerceptionModels: perceptionPorts?.getCurrentPerceptionModels?.() ?? {},
       }),
     });
   }
@@ -362,6 +384,10 @@ async function handleModel(
   if (target === 'chat') {
     const chatArg = args.slice(1).join(' ');
     return handleChatModelSelection(chatArg, chatOptions, context);
+  }
+
+  if (target === 'perception' || target === 'perceive') {
+    return handlePerception(`/perception ${args.slice(1).join(' ')}`, context);
   }
 
   if (isTuiMediaCategory(target)) {
@@ -623,6 +649,8 @@ function formatUnifiedModelStatus(input: {
   readonly chatOptions: readonly ChatModelOption[];
   readonly mediaOptions: readonly ChatModelOption[];
   readonly currentMediaModels: Partial<Record<TuiMediaCategory, string>>;
+  readonly perceptionOptions: readonly ChatModelOption[];
+  readonly currentPerceptionModels: Partial<Record<TuiMediaCategory, string>>;
 }): string {
   const currentChat = readCurrentChatModelIdentity(input.config, input.chatOptions);
   const lines = ['Model Selection:', `  chat: ${formatModelIdentity(currentChat)}`];
@@ -638,6 +666,16 @@ function formatUnifiedModelStatus(input: {
       input.currentMediaModels,
     );
     lines.push(`  ${category}: ${label} [${source}]`);
+  }
+
+  lines.push('', 'Perception Models:');
+  for (const category of TUI_MEDIA_CATEGORIES) {
+    const current = input.currentPerceptionModels[category];
+    const option = current
+      ? resolvePerceptionOption(category, current, input.perceptionOptions)
+      : undefined;
+    const label = option ? `${option.id} (${option.label})` : (current ?? 'auto');
+    lines.push(`  ${category}: ${label}`);
   }
 
   if (input.chatOptions.length > 0) {
@@ -666,8 +704,60 @@ function formatUnifiedModelStatus(input: {
     'Usage:',
     '  /model chat <provider:model|provider/model|model-id>',
     '  /model <image|video|audio> <provider:model|provider/model|model-id|none>',
+    '  /model perception <image|video|audio> <provider:model|provider/model|model-id|auto>',
     '  /media <image|video|audio> <provider:model|provider/model|model-id|none>',
+    '  /perception <image|video|audio> <provider:model|provider/model|model-id|auto>',
   );
+  return lines.join('\n');
+}
+
+function formatPerceptionStatus(
+  currentModels: Partial<Record<TuiMediaCategory, string>>,
+  options: readonly ChatModelOption[],
+): string {
+  const lines = ['Perception Model Selection:'];
+  for (const category of TUI_MEDIA_CATEGORIES) {
+    const current = currentModels[category];
+    const option = current ? resolvePerceptionOption(category, current, options) : undefined;
+    const label = option ? `${option.id} (${option.label})` : (current ?? 'auto');
+    lines.push(`  ${category}: ${label}`);
+  }
+  const available = options.filter((option) =>
+    TUI_MEDIA_CATEGORIES.some((category) => supportsPerceptionCategory(option, category)),
+  );
+  if (available.length > 0) {
+    lines.push('', 'Available perception models:');
+    for (const option of available) {
+      const categories = TUI_MEDIA_CATEGORIES.filter((category) =>
+        supportsPerceptionCategory(option, category),
+      ).join(',');
+      lines.push(`  ${categories} ${option.id}  ${option.label}`);
+    }
+  }
+  lines.push(
+    '',
+    'Usage: /perception <image|video|audio> <provider:model|provider/model|model-id|auto>',
+  );
+  lines.push('       /perception reset');
+  return lines.join('\n');
+}
+
+function formatPerceptionCategoryList(
+  category: TuiMediaCategory,
+  current: string | undefined,
+  options: readonly ChatModelOption[],
+): string {
+  const option = current ? resolvePerceptionOption(category, current, options) : undefined;
+  const currentLabel = option ? `${option.id} (${option.label})` : (current ?? 'auto');
+  const lines = [`${capitalize(category)} perception model: ${currentLabel}`];
+  if (options.length > 0) {
+    lines.push('', 'Available models:');
+    for (const candidate of options) {
+      const marker = candidate.id === current || candidate.modelId === current ? '* ' : '  ';
+      lines.push(`  ${marker}${candidate.id}  ${candidate.label}`);
+    }
+  }
+  lines.push('', `Usage: /perception ${category} <provider:model|provider/model|model-id|auto>`);
   return lines.join('\n');
 }
 
@@ -876,6 +966,147 @@ async function handleMedia(
   return handled({ output: `${category} model set to: ${formatModelIdentity(identity)}` });
 }
 
+async function handlePerception(
+  input: string,
+  context: TuiCommandRouterContext,
+): Promise<TuiCommandRouterResult> {
+  const args = input.slice('/perception'.length).trim().split(/\s+/).filter(Boolean);
+  const perceptionPorts = context.ports.perception;
+  const allOptions =
+    perceptionPorts?.listPerceptionModelOptions?.() ??
+    context.ports.model?.listChatModelOptions?.().filter((option) => option.category === 'llm') ??
+    [];
+  const currentModels = perceptionPorts?.getCurrentPerceptionModels?.() ?? {};
+
+  if (args.length === 0 || args[0] === 'list' || args[0] === 'status') {
+    return handled({ output: formatPerceptionStatus(currentModels, allOptions) });
+  }
+
+  const subcommand = args[0]?.toLowerCase();
+  if (subcommand === 'reset') {
+    if (!perceptionPorts?.resetPerceptionModels) {
+      return handled({ error: 'Perception model reset is not available for this session.' });
+    }
+    await perceptionPorts.resetPerceptionModels();
+    return handled({ output: 'Perception model overrides reset to automatic selection.' });
+  }
+
+  if (!isTuiMediaCategory(subcommand)) {
+    return handled({
+      error: `Unknown perception category: "${subcommand ?? ''}". Valid: ${TUI_MEDIA_CATEGORIES.join(', ')}, reset`,
+    });
+  }
+
+  const category = subcommand;
+  const modelArg = args[1];
+  const options = allOptions.filter((option) => supportsPerceptionCategory(option, category));
+
+  if (!modelArg) {
+    const menuResult = await handlePerceptionModelMenuSelection(
+      category,
+      currentModels[category],
+      options,
+      context,
+    );
+    if (menuResult) return menuResult;
+    return handled({
+      output: formatPerceptionCategoryList(category, currentModels[category], options),
+    });
+  }
+
+  if (modelArg === 'list' || modelArg === 'status') {
+    return handled({
+      output: formatPerceptionCategoryList(category, currentModels[category], options),
+    });
+  }
+
+  if (modelArg === 'auto') {
+    return setPerceptionModelSelection(category, 'auto', context);
+  }
+
+  const identity = resolvePerceptionModelIdentity(
+    category,
+    modelArg,
+    options,
+    context.slash.config.provider,
+  );
+  if (!identity) {
+    return handled({
+      error: `Unknown ${category} perception model identity: ${modelArg}. Use /perception ${category} to list available models.`,
+    });
+  }
+
+  return setPerceptionModelSelection(category, identity, context);
+}
+
+async function handlePerceptionModelMenuSelection(
+  category: TuiMediaCategory,
+  current: string | undefined,
+  options: readonly ChatModelOption[],
+  context: TuiCommandRouterContext,
+): Promise<TuiCommandRouterResult | null> {
+  const selectMenuItem = context.ports.model?.selectMenuItem;
+  if (!selectMenuItem || options.length === 0) {
+    return null;
+  }
+
+  const selected = await selectMenuItem({
+    title: `${capitalize(category)} Perception Model`,
+    items: [
+      ...options.map((option) => ({
+        id: option.id,
+        label: option.label,
+        description: `${option.providerId}/${option.modelId}`,
+        active: option.id === current || option.modelId === current,
+      })),
+      {
+        id: '__auto__',
+        label: 'Auto',
+        description: `Use automatic ${category} perception model selection`,
+        active: current === 'auto' || !current,
+      },
+    ],
+  });
+  if (!selected) {
+    return handled();
+  }
+
+  if (selected === '__auto__') {
+    return setPerceptionModelSelection(category, 'auto', context);
+  }
+
+  const identity = resolvePerceptionModelIdentity(
+    category,
+    selected,
+    options,
+    context.slash.config.provider,
+  );
+  if (!identity) {
+    return handled({
+      error: `Unknown ${category} perception model identity selected: ${selected}`,
+    });
+  }
+  return setPerceptionModelSelection(category, identity, context);
+}
+
+async function setPerceptionModelSelection(
+  category: TuiMediaCategory,
+  model: TuiModelIdentity | 'auto',
+  context: TuiCommandRouterContext,
+): Promise<TuiCommandRouterResult> {
+  const perceptionPorts = context.ports.perception;
+  if (!perceptionPorts?.setPerceptionModel) {
+    return handled({ error: 'Perception model selection is not available for this session.' });
+  }
+  await perceptionPorts.setPerceptionModel(category, model);
+  return handled({
+    output:
+      model === 'auto'
+        ? `${category} perception model set to automatic selection.`
+        : `${category} perception model set to: ${formatModelIdentity(model)}`,
+  });
+}
+
 function formatMediaStatus(
   currentModels: Partial<Record<TuiMediaCategory, string>>,
   options: readonly ChatModelOption[],
@@ -990,6 +1221,49 @@ function resolveMediaOption(
       option.category === category &&
       (option.id === identity ||
         option.modelId === identity ||
+        `${option.providerId}:${option.modelId}` === identity ||
+        `${option.providerId}/${option.modelId}` === identity),
+  );
+}
+
+function resolvePerceptionModelIdentity(
+  category: TuiMediaCategory,
+  rawIdentity: string,
+  options: readonly ChatModelOption[],
+  defaultProviderId: string,
+): TuiModelIdentity | null {
+  const option = resolvePerceptionOption(category, rawIdentity, options);
+  if (option) {
+    return { ...chatModelOptionToIdentity(option), category: 'llm' };
+  }
+  if (options.length > 0) {
+    return null;
+  }
+  const explicit = parseExplicitModelIdentity(rawIdentity);
+  if (explicit) {
+    return { ...explicit, category: 'llm' };
+  }
+  return {
+    providerId: defaultProviderId,
+    modelId: rawIdentity,
+    optionId: `${defaultProviderId}:${rawIdentity}`,
+    label: `${defaultProviderId} / ${rawIdentity}`,
+    category: 'llm',
+  };
+}
+
+function resolvePerceptionOption(
+  category: TuiMediaCategory,
+  identity: string,
+  options: readonly ChatModelOption[],
+): ChatModelOption | undefined {
+  return options.find(
+    (option) =>
+      option.category === 'llm' &&
+      supportsPerceptionCategory(option, category) &&
+      (option.id === identity ||
+        option.modelId === identity ||
+        `${option.providerId}:${option.modelId}` === identity ||
         `${option.providerId}/${option.modelId}` === identity),
   );
 }
@@ -1805,6 +2079,9 @@ function handleStatus(context: TuiCommandRouterContext): TuiCommandRouterResult 
       `Mode: ${snapshot.executionMode}`,
       `Status: ${snapshot.agentStatus}`,
       ...(snapshot.mediaModelSummary ? [`Media: ${snapshot.mediaModelSummary}`] : []),
+      ...(snapshot.perceptionModelSummary
+        ? [`Perception: ${snapshot.perceptionModelSummary}`]
+        : []),
       ...(snapshot.llmParameterSummary ? [`Params: ${snapshot.llmParameterSummary}`] : []),
       ...(typeof snapshot.tokensTotal === 'number' ? [`Tokens: ${snapshot.tokensTotal}`] : []),
       ...contextLines,

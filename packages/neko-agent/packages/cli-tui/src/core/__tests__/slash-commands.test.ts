@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FileConversationStorage, type ConversationRecord } from '@neko/agent';
+import { getBuiltinSkills } from '@neko/skills';
+import type { Skill } from '@neko/shared';
 import { handleSkillInvocation, handleSlashCommand, isSkillInvocation } from '../slash-commands';
 import type { CLIConfig } from '../types';
 
@@ -202,6 +204,28 @@ describe('handleSlashCommand', () => {
 });
 
 describe('handleSkillInvocation', () => {
+  it('resolves the system skill-creator through the dollar Skill namespace', async () => {
+    const skillService = createSkillServiceMock(getBuiltinSkills());
+
+    const result = await handleSkillInvocation('$skill-creator create a reusable review skill', {
+      config: createConfig(),
+      skillService: skillService as never,
+    });
+
+    expect(skillService.registry.getSkill).toHaveBeenCalledWith('skill-creator');
+    expect(skillService.registry.getSkillByCommand).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({
+        handled: true,
+        output: 'Skill activated: skill-creator',
+        lifecycleActivation: {
+          skillName: 'skill-creator',
+          args: 'create a reusable review skill',
+        },
+      }),
+    );
+  });
+
   it('applies dollar skill invocations by canonical skill name', async () => {
     const skill = {
       name: 'quality-review',
@@ -267,7 +291,7 @@ describe('handleSkillInvocation', () => {
   });
 });
 
-function createSkillServiceMock(skills: Array<Record<string, unknown>>) {
+function createSkillServiceMock(skills: Array<Partial<Skill>>) {
   return {
     registry: {
       skillCount: skills.length,
@@ -281,7 +305,7 @@ function createSkillServiceMock(skills: Array<Record<string, unknown>>) {
       ensureLoaded: vi.fn(async (name: string) => skills.find((skill) => skill.name === name)),
     },
     skillCount: skills.length,
-    apply: vi.fn(async (skill: Record<string, unknown>, args?: string) => ({
+    apply: vi.fn(async (skill: Partial<Skill>, args?: string) => ({
       name: skill.name,
       systemPrompt: args ? `${skill.content}: ${args}` : skill.content,
       type: 'skill',

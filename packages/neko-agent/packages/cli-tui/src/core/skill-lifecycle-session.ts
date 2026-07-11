@@ -6,6 +6,8 @@ import {
   type SkillService,
 } from '@neko/agent';
 import type {
+  CreateSkillInput,
+  CreateSkillResult,
   Skill,
   SkillLifecycleDeactivationRequest,
   SkillLifecycleDiagnostic,
@@ -30,6 +32,7 @@ export function wireCliSkillLifecycleSession(input: {
   readonly skillService: SkillService;
   readonly conversationId: string;
   readonly lifecycleRuntime: SkillLifecycleRuntime;
+  readonly createSkill?: (input: CreateSkillInput) => Promise<CreateSkillResult>;
   readonly onProjection?: (projection: SkillLifecycleProjection) => void;
 }): CliSkillLifecycleSessionBridge {
   const projectionState: CliSkillLifecycleProjectionState = {
@@ -43,6 +46,7 @@ export function wireCliSkillLifecycleSession(input: {
   };
 
   syncProjection();
+  const createSkill = input.createSkill;
 
   input.session.setSkillProvider({
     listSkills: () =>
@@ -66,6 +70,11 @@ export function wireCliSkillLifecycleSession(input: {
         diagnostics: projection.diagnostics,
       };
     },
+    ...(createSkill
+      ? {
+          createSkill: (request: CreateSkillInput) => createSkill(request),
+        }
+      : {}),
     activateSkill: async (request) => {
       const result = await input.lifecycleRuntime.activate(
         defaultSkillLifecycleRequest({
@@ -236,7 +245,9 @@ function synchronizeSessionProjectionAdapter(
   );
 
   if (projection.toolPolicy.activationTools?.length) {
-    for (const toolSetName of session.activateToolSetsForTools(projection.toolPolicy.activationTools)) {
+    for (const toolSetName of session.activateToolSetsForTools(
+      projection.toolPolicy.activationTools,
+    )) {
       state.activatedToolSets.add(toolSetName);
     }
   }

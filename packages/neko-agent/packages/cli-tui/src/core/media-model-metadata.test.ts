@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildTuiMediaModelMetadata, mergeTuiMediaModelMetadata } from './media-model-metadata';
+import {
+  buildTuiMediaModelMetadata,
+  buildTuiPerceptionModelMetadata,
+  mergeTuiMediaModelMetadata,
+} from './media-model-metadata';
 
 describe('TUI media model metadata', () => {
   it('normalizes default media model option ids into runtime provider/model refs', () => {
@@ -65,11 +69,71 @@ describe('TUI media model metadata', () => {
   });
 
   it('injects media models when no execution metadata exists yet', () => {
-    expect(mergeTuiMediaModelMetadata(undefined, { image: 'openai:gpt-image-1' }, 'anthropic'))
-      .toEqual({
-        mediaModels: {
-          image: { providerId: 'openai', modelId: 'gpt-image-1' },
+    expect(
+      mergeTuiMediaModelMetadata(undefined, { image: 'openai:gpt-image-1' }, 'anthropic'),
+    ).toEqual({
+      mediaModels: {
+        image: { providerId: 'openai', modelId: 'gpt-image-1' },
+      },
+    });
+  });
+
+  it('normalizes perception model option ids into understanding model refs', () => {
+    expect(
+      buildTuiPerceptionModelMetadata({ image: 'google:gemini-flash' }, 'anthropic', [
+        {
+          id: 'google:gemini-flash',
+          label: 'Google / Gemini Flash',
+          providerId: 'google',
+          modelId: 'gemini-flash',
+          category: 'llm',
+          capabilities: ['chat', 'vision'],
+          providerExpressionProfileId: 'provider-expression:google:gemini-flash',
         },
-      });
+      ]),
+    ).toEqual({
+      image: {
+        providerId: 'google',
+        modelId: 'gemini-flash',
+        category: 'llm',
+        providerExpressionProfileId: 'provider-expression:google:gemini-flash',
+      },
+    });
+  });
+
+  it('injects perception models as understandingModels execution metadata', () => {
+    expect(
+      mergeTuiMediaModelMetadata(
+        { traceId: 'trace-1' },
+        { image: 'openai:gpt-image-1' },
+        'anthropic',
+        [
+          {
+            id: 'openai:gpt-image-1',
+            label: 'OpenAI / GPT Image',
+            providerId: 'openai',
+            modelId: 'gpt-image-1',
+            category: 'image',
+          },
+          {
+            id: 'google:gemini-flash',
+            label: 'Google / Gemini Flash',
+            providerId: 'google',
+            modelId: 'gemini-flash',
+            category: 'llm',
+            capabilities: ['chat', 'vision_video'],
+          },
+        ],
+        { video: 'google:gemini-flash' },
+      ),
+    ).toEqual({
+      traceId: 'trace-1',
+      mediaModels: {
+        image: { providerId: 'openai', modelId: 'gpt-image-1' },
+      },
+      understandingModels: {
+        video: { providerId: 'google', modelId: 'gemini-flash', category: 'llm' },
+      },
+    });
   });
 });

@@ -303,15 +303,24 @@ export function readMessageToolCallSummaries(
   for (const row of message.timelineRows ?? []) {
     if (row.kind !== 'tool' || !row.toolCallId || !row.toolName) continue;
     const existing = summaries.get(row.toolCallId);
+    const result =
+      row.toolResult !== undefined
+        ? row.toolResult
+        : existing?.result !== undefined
+          ? existing.result
+          : row.resultSummary;
+    const error = row.toolError ?? existing?.error ?? row.diagnosticCode;
     summaries.set(row.toolCallId, {
       id: row.toolCallId,
       name: row.toolName,
       status: row.status,
-      ...(existing?.arguments ? { arguments: existing.arguments } : {}),
-      ...(existing?.result !== undefined ? { result: existing.result } : {}),
-      ...(row.resultSummary ? { result: row.resultSummary } : {}),
-      ...(existing?.error ? { error: existing.error } : {}),
-      ...(row.diagnosticCode ? { error: row.diagnosticCode } : {}),
+      ...(row.toolArguments
+        ? { arguments: row.toolArguments }
+        : existing?.arguments
+          ? { arguments: existing.arguments }
+          : {}),
+      ...(result !== undefined ? { result } : {}),
+      ...(error ? { error } : {}),
     });
   }
   return [...summaries.values()];

@@ -58,6 +58,45 @@ describe('readMessageSummaryContent', () => {
 });
 
 describe('readMessageToolCallSummaries', () => {
+  it('keeps structured arguments, results, and failures from timeline-only projection', () => {
+    expect(
+      readMessageToolCallSummaries(
+        createMessage({
+          timelineRows: [
+            {
+              id: 'tool-row-create-skill',
+              sequence: 1,
+              kind: 'tool',
+              status: 'error',
+              toolCallId: 'call-create-skill',
+              toolName: 'CreateSkill',
+              toolArguments: {
+                target: 'project',
+                skill: { name: 'portable-review' },
+              },
+              toolResult: { code: 'skill-already-exists' },
+              toolError: 'Skill directory already exists',
+              resultSummary: 'Skill directory already exists',
+              timestamp: 1,
+            },
+          ],
+        }),
+      ),
+    ).toEqual([
+      {
+        id: 'call-create-skill',
+        name: 'CreateSkill',
+        status: 'error',
+        arguments: {
+          target: 'project',
+          skill: { name: 'portable-review' },
+        },
+        result: { code: 'skill-already-exists' },
+        error: 'Skill directory already exists',
+      },
+    ]);
+  });
+
   it('includes tool calls projected as timeline rows', () => {
     expect(
       readMessageToolCallSummaries(

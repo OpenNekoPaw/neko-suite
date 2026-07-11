@@ -89,7 +89,7 @@ export function createTuiDebugAutomationSuccessResponse(
 
 export function createTuiDebugAutomationErrorResponse(
   error: unknown,
-  fallbackRequestId: string | null = null,
+  requestIdHint: string | null = null,
 ): TuiDebugAutomationResponse {
   const protocolError =
     error instanceof TuiDebugAutomationProtocolError
@@ -105,7 +105,7 @@ export function createTuiDebugAutomationErrorResponse(
   };
   return {
     schema: TUI_DEBUG_AUTOMATION_RESPONSE_SCHEMA,
-    id: protocolError.requestId ?? fallbackRequestId,
+    id: protocolError.requestId ?? requestIdHint,
     ok: false,
     error: responseError,
   };

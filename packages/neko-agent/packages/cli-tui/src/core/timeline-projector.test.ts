@@ -28,6 +28,10 @@ describe('createTerminalTimelineProjector', () => {
       ['assistant_text', 'streaming', 'Done.'],
       ['assistant_text', 'complete', 'Done.'],
     ]);
+    expect(rows.find((row) => row.kind === 'tool' && row.status === 'success')).toMatchObject({
+      toolArguments: { path: 'brief.md' },
+      toolResult: { pages: 3 },
+    });
   });
 
   it('anchors tool failures to their originating tool call id', () => {
@@ -53,6 +57,9 @@ describe('createTerminalTimelineProjector', () => {
         status: 'error',
         toolCallId: 'call-fail',
         parent: { kind: 'tool', id: 'call-fail' },
+        toolArguments: { path: 'out.txt' },
+        toolResult: null,
+        toolError: 'Permission denied',
         resultSummary: 'Permission denied',
       }),
     ]);
@@ -94,6 +101,119 @@ describe('createTerminalTimelineProjector', () => {
     expect(rows[0]?.resultSummary).toContain('asset: asset-image-1');
     expect(rows[0]?.resultSummary).toContain('file: neko/generated/image-1.png');
     expect(rows[0]?.resultSummary).not.toContain('blob:');
+  });
+
+  it('keeps structured tool facts when canonical timeline messages replace event rows', () => {
+    const projector = createTerminalTimelineProjector({ now: () => 1000 });
+
+    const rows = projector.projectMessage({
+      type: 'agentTurnTimeline',
+      conversationId: 'conv-1',
+      turnId: 'turn-1',
+      messageId: 'msg-1',
+      events: [
+        {
+          conversationId: 'conv-1',
+          turnId: 'turn-1',
+          messageId: 'msg-1',
+          itemId: 'tool-call-1',
+          sequence: 1,
+          kind: 'tool_call',
+          status: 'failed',
+          parentAnchor: 'turn',
+          payload: {
+            toolCall: {
+              id: 'call-1',
+              name: 'CreateSkill',
+              arguments: {
+                target: 'project',
+                skill: { name: 'portable-review' },
+              },
+              result: {
+                success: false,
+                data: { code: 'skill-already-exists' },
+                error: 'Skill directory already exists',
+              },
+            },
+          },
+          createdAt: 1000,
+          updatedAt: 1001,
+        },
+      ],
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        kind: 'tool',
+        status: 'error',
+        toolCallId: 'call-1',
+        toolArguments: {
+          target: 'project',
+          skill: { name: 'portable-review' },
+        },
+        toolResult: { code: 'skill-already-exists' },
+        toolError: 'Skill directory already exists',
+      }),
+    ]);
+  });
+
+  it('preserves structured tool facts when delayed backfill replaces a canonical row', () => {
+    const projector = createTerminalTimelineProjector({ now: () => 1000 });
+
+    projector.projectMessage({
+      type: 'agentTurnTimeline',
+      conversationId: 'conv-1',
+      turnId: 'turn-1',
+      messageId: 'msg-1',
+      events: [
+        {
+          conversationId: 'conv-1',
+          turnId: 'turn-1',
+          messageId: 'msg-1',
+          itemId: 'tool-call-1',
+          sequence: 1,
+          kind: 'tool_call',
+          status: 'complete',
+          parentAnchor: 'turn',
+          payload: {
+            toolCall: {
+              id: 'call-1',
+              name: 'CreateSkill',
+              arguments: { target: 'project' },
+              result: {
+                success: true,
+                data: { code: 'created', status: 'pending' },
+              },
+            },
+          },
+          createdAt: 1000,
+          updatedAt: 1001,
+        },
+      ],
+    });
+
+    const rows = projector.projectEvent({
+      type: 'tool_result_backfill',
+      toolResultBackfill: {
+        toolCallId: 'call-1',
+        timestamp: 1002,
+        dataPatch: { status: 'completed', fingerprint: 'sha256:abc' },
+      },
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        kind: 'tool',
+        status: 'success',
+        toolCallId: 'call-1',
+        toolArguments: { target: 'project' },
+        toolResult: {
+          code: 'created',
+          status: 'completed',
+          fingerprint: 'sha256:abc',
+        },
+      }),
+    ]);
   });
 
   it('projects task and media progress with task ids and parent identities', () => {

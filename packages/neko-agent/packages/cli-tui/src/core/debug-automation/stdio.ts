@@ -1,3 +1,4 @@
+import { Console } from 'node:console';
 import type { Readable, Writable } from 'node:stream';
 import {
   createTuiDebugAutomationErrorResponse,
@@ -14,22 +15,31 @@ export interface TuiDebugAutomationStdioOptions {
   readonly input: Readable;
   readonly output: Writable;
   readonly handler: TuiDebugAutomationRequestHandler;
+  /** Receives transitive console output while stdout is reserved for protocol frames. */
+  readonly diagnosticOutput?: Writable;
 }
 
 export function runTuiDebugAutomationJsonLineServer(
   options: TuiDebugAutomationStdioOptions,
 ): Promise<void> {
   const { input, output, handler } = options;
+  const restoreConsole = reserveStdoutForProtocol(options.diagnosticOutput ?? process.stderr);
   let buffer = '';
   let closed = false;
+  let closing = false;
   let pending = Promise.resolve();
 
   return new Promise<void>((resolve) => {
-    const cleanup = (): void => {
+    const detachInput = (): void => {
       input.off('data', onData);
       input.off('end', onEnd);
       input.off('close', onEnd);
       input.off('error', onError);
+    };
+
+    const cleanup = (): void => {
+      detachInput();
+      restoreConsole();
     };
 
     const close = (): void => {
@@ -37,6 +47,13 @@ export function runTuiDebugAutomationJsonLineServer(
       closed = true;
       cleanup();
       resolve();
+    };
+
+    const closeAfterPending = (): void => {
+      if (closed || closing) return;
+      closing = true;
+      detachInput();
+      void pending.then(close, close);
     };
 
     const writeResponse = (response: unknown): void => {
@@ -75,17 +92,19 @@ export function runTuiDebugAutomationJsonLineServer(
     }
 
     function onEnd(): void {
+      if (closed || closing) return;
       const trailing = buffer.trim();
       buffer = '';
       if (trailing) {
         handleLine(trailing);
       }
-      void pending.finally(close);
+      closeAfterPending();
     }
 
     function onError(error: Error): void {
+      if (closed || closing) return;
       writeResponse(createTuiDebugAutomationErrorResponse(error));
-      close();
+      closeAfterPending();
     }
 
     input.on('data', onData);
@@ -93,4 +112,49 @@ export function runTuiDebugAutomationJsonLineServer(
     input.once('close', onEnd);
     input.once('error', onError);
   });
+}
+
+interface ConsoleReservation {
+  readonly token: symbol;
+  readonly console: Console;
+}
+
+let consoleReservationBase: Console | undefined;
+const consoleReservations: ConsoleReservation[] = [];
+
+function reserveStdoutForProtocol(diagnosticOutput: Writable): () => void {
+  if (consoleReservations.length === 0) {
+    consoleReservationBase = globalThis.console;
+  }
+
+  const reservation: ConsoleReservation = {
+    token: Symbol('tui-debug-automation-console'),
+    console: new Console({
+      stdout: diagnosticOutput,
+      stderr: diagnosticOutput,
+      colorMode: false,
+    }),
+  };
+  consoleReservations.push(reservation);
+  globalThis.console = reservation.console;
+
+  let restored = false;
+  return () => {
+    if (restored) return;
+    restored = true;
+
+    const index = consoleReservations.findIndex((entry) => entry.token === reservation.token);
+    if (index < 0) return;
+    const wasActive = index === consoleReservations.length - 1;
+    consoleReservations.splice(index, 1);
+    if (!wasActive) return;
+
+    const nextConsole = consoleReservations.at(-1)?.console ?? consoleReservationBase;
+    if (nextConsole !== undefined) {
+      globalThis.console = nextConsole;
+    }
+    if (consoleReservations.length === 0) {
+      consoleReservationBase = undefined;
+    }
+  };
 }

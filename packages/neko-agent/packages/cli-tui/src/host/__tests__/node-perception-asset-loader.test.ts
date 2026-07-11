@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import AdmZipModule from 'adm-zip';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PerceptualAssetRef } from '@neko/shared';
+import { createGeneratedAssetResourceRef } from '@neko/shared/content-access';
 import { createNodeContentAccessRuntime } from '../node-content-access-runtime';
 import { createNodeHostAdapter } from '../node-host-adapter';
 import { createNodePerceptionAssetLoader } from '../node-perception-asset-loader';
@@ -43,6 +44,37 @@ describe('createNodePerceptionAssetLoader', () => {
       assetId: 'asset-1',
       uri: '${A}/images/frame.png',
       mimeType: 'image/png',
+    });
+
+    expect(result).toEqual({
+      kind: 'image',
+      url: `data:image/png;base64,${imageBytes.toString('base64')}`,
+      mimeType: 'image/png',
+    });
+  });
+
+  it('loads generated assets by ResourceRef instead of the display URI', async () => {
+    const workDir = createTempDir();
+    const generatedPath = path.join(workDir, 'neko/generated/image/asset-1.png');
+    const imageBytes = Buffer.from('generated-image-bytes');
+    fs.mkdirSync(path.dirname(generatedPath), { recursive: true });
+    fs.writeFileSync(generatedPath, imageBytes);
+    const resourceRef = createGeneratedAssetResourceRef({
+      assetId: 'asset-1',
+      path: '${WORKSPACE}/neko/generated/image/asset-1.png',
+      mimeType: 'image/png',
+    });
+    const loader = createNodePerceptionAssetLoader(
+      createNodeContentAccessRuntime({
+        host: createNodeWorkspaceContentHostAdapter({ workDir }),
+      }),
+    );
+
+    const result = await loader.load({
+      assetId: 'asset-1',
+      uri: 'generated-assets/non-existent-display-label.png',
+      mimeType: 'image/png',
+      resourceRef,
     });
 
     expect(result).toEqual({

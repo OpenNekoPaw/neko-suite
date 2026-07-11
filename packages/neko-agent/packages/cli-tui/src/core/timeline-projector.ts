@@ -1,4 +1,5 @@
 import type { AgentEvent } from '@neko/agent';
+import { applyToolResultBackfillToResult, type BackfillableToolResult } from '@neko/agent/runtime';
 import type {
   AgentTurnTimelineItem,
   AgentTurnTimelineMessage,
@@ -42,6 +43,7 @@ interface ToolProjectionState {
   readonly name: string;
   readonly arguments: Record<string, unknown>;
   readonly rowId: string;
+  readonly result?: BackfillableToolResult;
 }
 
 interface ActiveTextProjectionState {
@@ -253,6 +255,7 @@ export function createTerminalTimelineProjector(
               status: 'running',
               toolCallId: toolCall.id,
               toolName: toolCall.name,
+              toolArguments: toolCall.arguments,
               argsSummary: summarizeArgs(toolCall.name, toolCall.arguments),
             }),
           );
@@ -287,6 +290,7 @@ export function createTerminalTimelineProjector(
               parent: { kind: 'tool', id: progress.toolCallId },
               toolCallId: progress.toolCallId,
               toolName: progress.toolName || tool.name,
+              toolArguments: tool.arguments,
               progress: progress.percent,
               details: joinDetails(progress.stage, progress.preview),
             }),
@@ -322,6 +326,7 @@ export function createTerminalTimelineProjector(
               parent: { kind: 'tool', id: toolCallId },
               toolCallId,
               toolName: confirmation?.toolCall.name ?? tool.name,
+              toolArguments: tool.arguments,
               confirmationSummary: joinDetails(confirmation?.action, confirmation?.description),
             }),
           ];
@@ -350,14 +355,19 @@ export function createTerminalTimelineProjector(
               ),
             ];
           }
+          const projectedResult = toBackfillableToolResult(result);
+          toolsById.set(result.toolCallId, { ...tool, result: projectedResult });
           rows.push(
             buildRow({
               id: tool.rowId,
               kind: 'tool',
-              status: result.success ? 'success' : 'error',
+              status: projectedResult.success ? 'success' : 'error',
               parent: { kind: 'tool', id: result.toolCallId },
               toolCallId: result.toolCallId,
               toolName: tool.name,
+              toolArguments: tool.arguments,
+              toolResult: projectedResult.data,
+              ...(projectedResult.error ? { toolError: projectedResult.error } : {}),
               resultSummary: summarizeToolResult(result),
             }),
           );
@@ -384,14 +394,19 @@ export function createTerminalTimelineProjector(
               ),
             ];
           }
+          const mergedResult = applyToolResultBackfillToResult(tool.result, backfill).result;
+          toolsById.set(backfill.toolCallId, { ...tool, result: mergedResult });
           return [
             buildRow({
               id: tool.rowId,
               kind: 'tool',
-              status: 'success',
+              status: mergedResult.success ? 'success' : 'error',
               parent: { kind: 'tool', id: backfill.toolCallId },
               toolCallId: backfill.toolCallId,
               toolName: tool.name,
+              toolArguments: tool.arguments,
+              toolResult: mergedResult.data,
+              ...(mergedResult.error ? { toolError: mergedResult.error } : {}),
               backfillSummary: summarizeBackfill(backfill.dataPatch),
             }),
           ];
@@ -424,9 +439,19 @@ export function createTerminalTimelineProjector(
     projectMessage(message) {
       switch (message.type) {
         case 'agentTurnTimeline':
-          return message.events.flatMap((item) =>
-            projectTimelineItem(item, rowsByItemId, buildRow, now),
-          );
+          return message.events.flatMap((item) => {
+            if (item.kind === 'tool_call') {
+              const toolCall = item.payload.toolCall;
+              toolsById.set(toolCall.id, {
+                id: toolCall.id,
+                name: toolCall.name,
+                arguments: toolCall.arguments,
+                rowId: item.itemId,
+                ...(toolCall.result ? { result: toBackfillableToolResult(toolCall.result) } : {}),
+              });
+            }
+            return projectTimelineItem(item, rowsByItemId, buildRow, now);
+          });
         case 'mediaTaskCreated':
         case 'mediaTaskProgress':
         case 'taskCreated':
@@ -442,6 +467,18 @@ export function createTerminalTimelineProjector(
       toolsById.clear();
       rowsByItemId.clear();
     },
+  };
+}
+
+function toBackfillableToolResult(result: {
+  readonly success: boolean;
+  readonly data: unknown;
+  readonly error?: string;
+}): BackfillableToolResult {
+  return {
+    success: result.success,
+    data: result.data,
+    ...(result.error ? { error: result.error } : {}),
   };
 }
 
@@ -506,6 +543,13 @@ function projectTimelineItem(
           ...(parent ? { parent } : {}),
           toolCallId: toolCall.id,
           toolName: toolCall.name,
+          toolArguments: toolCall.arguments,
+          ...(toolCall.result
+            ? {
+                toolResult: toolCall.result.data,
+                ...(toolCall.result.error ? { toolError: toolCall.result.error } : {}),
+              }
+            : {}),
           argsSummary: summarizeArgs(toolCall.name, toolCall.arguments),
           resultSummary: toolCall.result ? summarizeTimelineToolResult(toolCall) : undefined,
           timestamp: item.updatedAt,

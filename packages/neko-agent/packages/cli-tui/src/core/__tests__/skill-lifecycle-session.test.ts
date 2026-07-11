@@ -1,12 +1,45 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SkillRegistry, SkillService, type IAgentSession, type ISkillProvider } from '@neko/agent';
-import type { Skill } from '@neko/shared';
+import type { CreateSkillInput, CreateSkillResult, Skill } from '@neko/shared';
 import {
   createCliSkillLifecycleRuntime,
   wireCliSkillLifecycleSession,
 } from '../skill-lifecycle-session';
 
 describe('wireCliSkillLifecycleSession', () => {
+  it('delegates native creation without changing activation lifecycle state', async () => {
+    const result: CreateSkillResult = {
+      source: 'project',
+      rootId: 'project-agent-skills',
+      relativePath: 'portable-story',
+      absolutePath: '/workspace/.agents/skills/portable-story',
+      fingerprint: 'sha256:portable-story',
+      diagnostics: [],
+    };
+    const createSkill = vi.fn(async (_input: CreateSkillInput) => result);
+    const { provider, lifecycleRuntime, session } = createWiredProvider([], { createSkill });
+    const nativeCreate = provider.createSkill;
+    expect(nativeCreate).toBeTypeOf('function');
+    if (!nativeCreate) {
+      throw new Error('Expected native Skill creation to be wired');
+    }
+    const input: CreateSkillInput = {
+      target: 'project',
+      skill: {
+        name: 'portable-story',
+        description: 'Portable story guidance.',
+        body: '# Portable story',
+      },
+    };
+
+    await expect(nativeCreate(input)).resolves.toEqual(result);
+
+    expect(createSkill).toHaveBeenCalledWith(input);
+    expect(lifecycleRuntime.list('conversation-1')).toEqual([]);
+    expect(session.applySkillInjection).not.toHaveBeenCalled();
+    expect(session.clearActiveSkill).toHaveBeenCalledTimes(1);
+  });
+
   it('activates skills from structured Agent requests without passing the object as skillName', async () => {
     const { provider, lifecycleRuntime } = createWiredProvider([
       createSkill('comic-to-storyboard'),
@@ -77,7 +110,12 @@ describe('wireCliSkillLifecycleSession', () => {
   });
 });
 
-function createWiredProvider(skills: readonly Skill[]): {
+function createWiredProvider(
+  skills: readonly Skill[],
+  options: {
+    readonly createSkill?: (input: CreateSkillInput) => Promise<CreateSkillResult>;
+  } = {},
+): {
   readonly provider: ISkillProvider;
   readonly lifecycleRuntime: ReturnType<typeof createCliSkillLifecycleRuntime>;
   readonly session: IAgentSession;
@@ -104,6 +142,7 @@ function createWiredProvider(skills: readonly Skill[]): {
     skillService,
     lifecycleRuntime,
     conversationId: 'conversation-1',
+    ...(options.createSkill ? { createSkill: options.createSkill } : {}),
   });
 
   return {

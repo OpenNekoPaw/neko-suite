@@ -3,9 +3,13 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SkillSource } from '@neko/shared';
-import { resolveSlashCommandCatalogEntry } from '@neko/agent';
+import { createNodeSkillLoader, resolveSlashCommandCatalogEntry } from '@neko/agent';
 import type { CLIConfig } from '../types';
-import { loadTuiSessionSkills, type TuiSessionSkillLoader } from '../tui-session-skills';
+import {
+  createTuiSessionSkillRuntime,
+  loadTuiSessionSkills,
+  type TuiSessionSkillLoader,
+} from '../tui-session-skills';
 
 let tempRoot: string | undefined;
 
@@ -73,7 +77,7 @@ describe('loadTuiSessionSkills', () => {
     });
 
     expect(loadFromDirectory).toHaveBeenCalledWith(
-      path.join(fixture.homeDir, '.neko', 'skills'),
+      path.join(fixture.homeDir, '.agents', 'skills'),
       'personal',
     );
     expect(loadFromDirectory).toHaveBeenCalledWith(
@@ -81,7 +85,7 @@ describe('loadTuiSessionSkills', () => {
       'personal',
     );
     expect(loadFromDirectory).toHaveBeenCalledWith(
-      path.join(fixture.workDir, '.neko', 'skills'),
+      path.join(fixture.workDir, '.agents', 'skills'),
       'project',
     );
     expect(loadFromDirectory).toHaveBeenCalledWith(
@@ -124,6 +128,58 @@ describe('loadTuiSessionSkills', () => {
         skills,
       }),
     ).toEqual(expect.objectContaining({ source: 'command-artifact' }));
+  });
+
+  it('creates through the shared runtime, refreshes discovery, and keeps lifecycle roots separate', async () => {
+    const fixture = await createFixture();
+    const runtime = createTuiSessionSkillRuntime({
+      skillLoader: createNodeSkillLoader(fs, path),
+      config: createConfig(fixture.workDir),
+      homeDir: fixture.homeDir,
+      locale: 'en',
+    });
+
+    const creation = await runtime.createSkill({
+      target: 'project',
+      skill: {
+        name: 'portable-story',
+        description: 'Portable story guidance.',
+        body: '# Portable story\n\nFollow the story structure.',
+      },
+      resources: [
+        {
+          path: 'references/example.md',
+          encoding: 'utf8',
+          content: '# Example',
+        },
+      ],
+    });
+
+    expect(creation.created).toMatchObject({
+      source: 'project',
+      rootId: 'project-agent-skills',
+      relativePath: 'portable-story',
+      absolutePath: path.join(fixture.workDir, '.agents', 'skills', 'portable-story'),
+    });
+    await expect(
+      fs.readFile(
+        path.join(fixture.workDir, '.agents', 'skills', 'portable-story', 'SKILL.md'),
+        'utf8',
+      ),
+    ).resolves.toContain('name: portable-story');
+    expect(creation.skills).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'portable-story',
+          source: 'project',
+          enabled: true,
+        }),
+      ]),
+    );
+    await expect(fs.stat(path.join(fixture.workDir, '.neko', 'commands'))).resolves.toMatchObject({
+      isDirectory: expect.any(Function),
+    });
+    await expect(fs.access(path.join(fixture.workDir, '.neko', 'skills'))).rejects.toThrow();
   });
 });
 

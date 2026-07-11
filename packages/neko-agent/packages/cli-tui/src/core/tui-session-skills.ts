@@ -11,6 +11,7 @@ import {
   type SkillLoader,
 } from '@neko/agent';
 import { getBuiltinSkills } from '@neko/skills';
+import type { CreateSkillInput, CreateSkillResult } from '@neko/shared';
 import type { CLIConfig } from './types';
 
 export type TuiSessionSkillLoader = Pick<
@@ -19,6 +20,21 @@ export type TuiSessionSkillLoader = Pick<
 >;
 export type TuiSessionSkillLocale = 'en' | 'zh';
 
+export type TuiSessionSkillFileRuntime = Pick<
+  SkillFileRuntime,
+  'scanSkills' | 'getSkills' | 'createSkill'
+>;
+
+export interface TuiSessionSkillCreation {
+  readonly created: CreateSkillResult;
+  readonly skills: readonly Skill[];
+}
+
+export interface TuiSessionSkillRuntime {
+  scanSkills(): Promise<readonly Skill[]>;
+  createSkill(input: CreateSkillInput): Promise<TuiSessionSkillCreation>;
+}
+
 export async function loadTuiSessionSkills(input: {
   readonly skillLoader: TuiSessionSkillLoader;
   readonly config: CLIConfig;
@@ -26,12 +42,6 @@ export async function loadTuiSessionSkills(input: {
   readonly homeDir?: string;
   readonly skillFileRuntime?: Pick<SkillFileRuntime, 'scanSkills'>;
 }): Promise<Skill[]> {
-  const merged = new Map<string, Skill>();
-
-  for (const skill of getBuiltinSkills({ locale: input.locale === 'zh' ? 'zh-CN' : 'en' })) {
-    merged.set(skill.name, skill);
-  }
-
   const runtime =
     input.skillFileRuntime ??
     createTuiSessionSkillFileRuntime({
@@ -39,9 +49,34 @@ export async function loadTuiSessionSkills(input: {
       config: input.config,
       homeDir: input.homeDir,
     });
-  appendTuiSessionSkillScanResult(merged, await runtime.scanSkills());
+  return mergeTuiSessionSkills(input.locale, await runtime.scanSkills());
+}
 
-  return Array.from(merged.values());
+export function createTuiSessionSkillRuntime(input: {
+  readonly skillLoader: TuiSessionSkillLoader;
+  readonly config: CLIConfig;
+  readonly locale: TuiSessionSkillLocale;
+  readonly homeDir?: string;
+  readonly skillFileRuntime?: TuiSessionSkillFileRuntime;
+}): TuiSessionSkillRuntime {
+  const fileRuntime =
+    input.skillFileRuntime ??
+    createTuiSessionSkillFileRuntime({
+      skillLoader: input.skillLoader,
+      config: input.config,
+      homeDir: input.homeDir,
+    });
+
+  return {
+    scanSkills: async () => mergeTuiSessionSkills(input.locale, await fileRuntime.scanSkills()),
+    createSkill: async (createInput) => {
+      const created = await fileRuntime.createSkill(createInput);
+      return {
+        created,
+        skills: mergeTuiSessionSkills(input.locale, await fileRuntime.getSkills()),
+      };
+    },
+  };
 }
 
 export function createTuiSessionSkillFileRuntime(input: {
@@ -56,6 +91,18 @@ export function createTuiSessionSkillFileRuntime(input: {
     homeDir: input.homeDir ?? os.homedir(),
     getWorkspaceRoot: () => input.config.workDir,
   });
+}
+
+function mergeTuiSessionSkills(
+  locale: TuiSessionSkillLocale,
+  result: SkillFileScanResult,
+): Skill[] {
+  const merged = new Map<string, Skill>();
+  for (const skill of getBuiltinSkills({ locale: locale === 'zh' ? 'zh-CN' : 'en' })) {
+    merged.set(skill.name, skill);
+  }
+  appendTuiSessionSkillScanResult(merged, result);
+  return Array.from(merged.values());
 }
 
 function appendTuiSessionSkillScanResult(

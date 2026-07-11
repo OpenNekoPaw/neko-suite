@@ -3,7 +3,11 @@
  */
 
 import type { AgentSessionConfig, MCPServerConfig } from '@neko/agent';
+import type { ExternalResearchConfig } from '@neko/shared';
 import type { AgentLlmConfig } from '@neko-agent/types';
+
+export type TuiMediaCategory = 'image' | 'video' | 'audio';
+export type TuiPerceptionModels = Partial<Record<TuiMediaCategory, string>>;
 
 /**
  * CLI configuration
@@ -34,6 +38,8 @@ export interface CLIConfig {
     video?: string;
     audio?: string;
   };
+  /** Session-only perception model overrides for media understanding. */
+  perceptionModels?: TuiPerceptionModels;
   /** API key (from env or config) */
   apiKey?: string;
   /** API base URL (optional) */
@@ -48,6 +54,8 @@ export interface CLIConfig {
   workDir: string;
   /** MCP server configurations */
   mcpServers: MCPServerConfig[];
+  /** Opt-in external research configuration. */
+  externalResearch?: ExternalResearchConfig;
   /** Output format */
   outputFormat: 'text' | 'json' | 'markdown';
   /** Extended thinking budget in tokens (0 = disabled, Anthropic/DeepSeek only) */
@@ -72,6 +80,7 @@ export const DEFAULT_CLI_CONFIG: CLIConfig = {
   verbose: false,
   workDir: process.cwd(),
   mcpServers: [],
+  externalResearch: undefined,
   outputFormat: 'text',
   thinkingBudget: 0,
 };

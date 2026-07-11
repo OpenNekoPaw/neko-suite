@@ -1,7 +1,7 @@
 import { mergeCreationExecutionMetadata } from '@neko/agent';
 import type { ChatModelOption } from '@neko/shared';
-
-type TuiMediaCategory = 'image' | 'video' | 'audio';
+import type { MediaUnderstandingModelSelections } from '@neko-agent/types';
+import type { TuiMediaCategory, TuiPerceptionModels } from './types';
 
 type TuiMediaModelDefaults = Partial<Record<TuiMediaCategory, string>>;
 
@@ -18,12 +18,21 @@ export function mergeTuiMediaModelMetadata(
   defaults: TuiMediaModelDefaults | undefined,
   defaultProviderId: string,
   modelOptions: readonly ChatModelOption[] = [],
+  perceptionModels?: TuiPerceptionModels,
 ): Record<string, unknown> | undefined {
   const mediaModels = buildTuiMediaModelMetadata(defaults, defaultProviderId, modelOptions);
-  if (Object.keys(mediaModels).length === 0) {
+  const understandingModels = buildTuiPerceptionModelMetadata(
+    perceptionModels,
+    defaultProviderId,
+    modelOptions,
+  );
+  if (Object.keys(mediaModels).length === 0 && Object.keys(understandingModels).length === 0) {
     return metadata;
   }
-  return mergeCreationExecutionMetadata(metadata ?? {}, { mediaModels });
+  return mergeCreationExecutionMetadata(metadata ?? {}, {
+    ...(Object.keys(mediaModels).length > 0 ? { mediaModels } : {}),
+    ...(Object.keys(understandingModels).length > 0 ? { understandingModels } : {}),
+  });
 }
 
 export function buildTuiMediaModelMetadata(
@@ -44,6 +53,26 @@ export function buildTuiMediaModelMetadata(
     }
   }
   return mediaModels;
+}
+
+export function buildTuiPerceptionModelMetadata(
+  perceptionModels: TuiPerceptionModels | undefined,
+  defaultProviderId: string,
+  modelOptions: readonly ChatModelOption[] = [],
+): MediaUnderstandingModelSelections {
+  const understandingModels: MediaUnderstandingModelSelections = {};
+  for (const category of ['image', 'video', 'audio'] as const) {
+    const ref = parseTuiPerceptionModelRef(
+      perceptionModels?.[category],
+      defaultProviderId,
+      category,
+      modelOptions,
+    );
+    if (ref) {
+      understandingModels[category] = ref;
+    }
+  }
+  return understandingModels;
 }
 
 function parseTuiMediaModelRef(
@@ -85,4 +114,59 @@ function parseTuiMediaModelRef(
     throw new Error(`Invalid media model reference: ${ref}`);
   }
   return { providerId, modelId };
+}
+
+function parseTuiPerceptionModelRef(
+  rawRef: string | undefined,
+  defaultProviderId: string,
+  category: TuiMediaCategory,
+  modelOptions: readonly ChatModelOption[],
+): MediaUnderstandingModelSelections[TuiMediaCategory] | null {
+  const ref = rawRef?.trim();
+  if (!ref || ref === 'auto') {
+    return null;
+  }
+
+  const option = modelOptions.find(
+    (candidate) =>
+      candidate.category === 'llm' &&
+      supportsPerceptionCategory(candidate, category) &&
+      (candidate.id === ref ||
+        candidate.modelId === ref ||
+        `${candidate.providerId}:${candidate.modelId}` === ref ||
+        `${candidate.providerId}/${candidate.modelId}` === ref),
+  );
+  if (option) {
+    return {
+      providerId: option.providerId,
+      modelId: option.modelId,
+      category: 'llm',
+      ...(option.providerExpressionProfileId
+        ? { providerExpressionProfileId: option.providerExpressionProfileId }
+        : {}),
+    };
+  }
+
+  const separator = ref.includes('/') ? '/' : ref.includes(':') ? ':' : null;
+  if (!separator) {
+    return { providerId: defaultProviderId, modelId: ref, category: 'llm' };
+  }
+
+  const [providerId, modelId] = ref.split(separator, 2);
+  if (!providerId || !modelId) {
+    throw new Error(`Invalid perception model reference: ${ref}`);
+  }
+  return { providerId, modelId, category: 'llm' };
+}
+
+export function supportsPerceptionCategory(
+  option: ChatModelOption,
+  category: TuiMediaCategory,
+): boolean {
+  const capabilities = new Set(option.capabilities ?? []);
+  if (category === 'image')
+    return capabilities.has('vision') || capabilities.has('image.understand');
+  if (category === 'audio')
+    return capabilities.has('audio') || capabilities.has('audio.understand');
+  return capabilities.has('vision_video') || capabilities.has('video.understand');
 }
