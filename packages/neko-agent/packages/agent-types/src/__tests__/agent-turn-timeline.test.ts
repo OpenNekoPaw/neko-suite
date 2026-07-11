@@ -162,6 +162,38 @@ describe('Agent Timeline V2 contract', () => {
     expect(state.items.size).toBe(5);
   });
 
+  it('accepts semantic error codes without prose and rejects empty error payloads', () => {
+    const codeOnly = batch({
+      deliveryRevision: 1,
+      operations: [
+        {
+          operation: 'upsert',
+          item: {
+            ...identity,
+            itemId: 'error-1',
+            sequence: 1,
+            itemRevision: 1,
+            kind: 'error',
+            status: 'failed',
+            payload: { code: 'agent-error-without-detail' },
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      ],
+    });
+    expect(validateAgentTurnTimelineMessage(codeOnly).diagnostics).toEqual([]);
+
+    const emptyPayload = structuredClone(codeOnly) as unknown as {
+      operations: Array<{ item: { payload: Record<string, unknown> } }>;
+    };
+    emptyPayload.operations[0]!.item.payload = {};
+    expect(
+      validateAgentTurnTimelineMessage(emptyPayload as unknown as AgentTurnTimelineMessage)
+        .diagnostics,
+    ).toEqual([expect.objectContaining({ code: 'invalid-item', itemId: 'error-1' })]);
+  });
+
   it.each([
     [1, 'duplicate-delivery-revision'],
     [0, 'invalid-delivery-revision'],

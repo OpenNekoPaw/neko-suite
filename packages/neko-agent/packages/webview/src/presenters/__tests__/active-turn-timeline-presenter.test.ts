@@ -710,6 +710,24 @@ describe('active turn timeline presenter', () => {
     ]);
   });
 
+  it('owns the Webview fallback when a timeline error has no external detail', () => {
+    const result = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([
+        {
+          ...errorItem('error-1', 1, 'POISON LEGACY PROSE'),
+          payload: { code: 'agent-error-without-detail' },
+        },
+      ]),
+    });
+    const messages = projectMessagesWithActiveTurnTimeline([], result.state);
+
+    expect(messages[0]?.contentBlocks).toMatchObject([
+      { id: 'error-1', content: 'An error occurred' },
+    ]);
+    expect(JSON.stringify(result.state)).not.toContain('POISON LEGACY PROSE');
+  });
+
   it('keeps streamed assistant text visible when storyboard validation fails', () => {
     const streamedTable = '| 镜号 | 画面内容 |\n| --- | --- |\n| 1 | bad |';
     const result = applyAgentTurnTimelineMessage({

@@ -104,7 +104,7 @@ export interface AgentTurnTimelineCompositePayload {
 }
 
 export interface AgentTurnTimelineErrorPayload {
-  readonly message: string;
+  readonly message?: string;
   readonly code?: string;
   readonly details?: Record<string, unknown>;
 }
@@ -810,7 +810,7 @@ function validatePayload(
       valid = isRecord(payload.composite);
       break;
     case 'error':
-      valid = Boolean(readNonEmptyString(payload.message));
+      valid = Boolean(readNonEmptyString(payload.message) || readNonEmptyString(payload.code));
       break;
   }
   if (!valid) {

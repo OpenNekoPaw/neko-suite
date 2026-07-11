@@ -422,7 +422,7 @@ function projectTimelineItemsToContentBlocks(
             id: item.itemId,
             type: 'text',
             timestamp: item.createdAt,
-            content: `Error: ${item.payload.message}`,
+            content: item.payload.message ? `Error: ${item.payload.message}` : 'An error occurred',
             isStreaming: false,
           },
         ];
