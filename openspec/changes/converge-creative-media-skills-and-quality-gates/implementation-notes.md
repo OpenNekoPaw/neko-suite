@@ -857,3 +857,36 @@ git diff --check -- <本批文件>
 - NekoCut Extension 全包直接 `tsc` 仍受既有 DOM lib、timeline/transition/keyframe 和 service signature 基线错误阻塞；本批通过聚焦 Vitest 与 ESLint 验证 invocation contract。
 
 任务 9.5/9.6/9.7 暂不整体勾选：本批完成了旧激活入口、重复 Quality schema、legacy fixture 和 poison assertion 的一个独立子集；其余 evaluation/locale/docs 全量审计、到期 alias、generated asset lifecycle 及其他 fallback 仍需继续处理。
+
+## 17. Quality SubAgent 与 ToolGroup catalog 收敛（2026-07-12）
+
+删除 path-only Quality 工具后继续审计 prompt/capability catalog，发现 `quality-checker` SubAgent preset 和 builtin `media-qa` ToolGroup 仍允许 `QualityRepairCheck`、`QualityCheckConsistency`。这两个名称已没有生产工具注册，继续保留会诱导 Agent 调用未知工具，也会让旧 schema 从 prompt/catalog 回流。
+
+本批调整为：
+
+- `quality-checker.toolPolicy.tools` 仅允许 canonical `QualityCheck`；
+- 英文和中文 SubAgent prompt 均说明单素材与跨镜一致性使用同一 canonical review 入口，并由目标语义选择 Quality profile；
+- `media-qa` ToolGroup 仅发布 `QualityCheck`；
+- 测试 poison `QualityCheckConsistency` prompt 文本，并断言两个 catalog 的工具列表不存在旧工具。
+
+修复/重生成不是另一个 Quality 收集工具：canonical review 返回 evidence、Gate verdict 和 repair plan，实际 mutation 由 `image`、`video`、Cut/Audio/Canvas owning capability 执行，产生新 revision 后再重跑 Gate。跨镜一致性同样是 `cross-shot-consistency` profile，而不是独立 path-only tool。
+
+验证：
+
+```bash
+pnpm --filter @neko/skills exec vitest --run \
+  src/subagent/__tests__/creative-presets.test.ts \
+  src/builtins/builtin-skills.test.ts
+# 2 files, 27 tests passed
+
+pnpm --filter @neko/skills test
+# 33 files, 307 tests passed
+
+pnpm exec tsc --noEmit -p packages/neko-skills/tsconfig.json
+# passed
+
+pnpm exec eslint <本批 4 个 TypeScript 文件>
+# passed
+```
+
+该子集继续推进任务 9.5/9.6/9.7，但不整体勾选；active Agent tool-result validation adapter 中仍存在旧 `QualityRepairCheck` / `QualityCheckConsistency` 输出解释分支，需要与 canonical `QualityGateResult` 证据投影一起迁移，不能只删分支导致 Agent 失去质量反馈。
