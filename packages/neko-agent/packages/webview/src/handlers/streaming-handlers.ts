@@ -44,7 +44,7 @@ import {
   completeActiveTurnTimeline,
   projectMessagesWithActiveTurnTimeline,
 } from '@/presenters/active-turn-timeline-presenter';
-import { getActiveTimelineForMessage } from './timeline-handlers';
+import { hasTimelineOwnershipForMessage } from './timeline-handlers';
 import {
   projectAgentPhaseToStateStore,
   projectAgentStateSnapshot,
@@ -202,7 +202,7 @@ function shouldIgnoreCompatibilityStream(
   if (conversationId) {
     context.timelineRenderScheduler?.flushConversation(conversationId);
   }
-  return getActiveTimelineForMessage(context, conversationId, messageId) !== null;
+  return hasTimelineOwnershipForMessage({ context, conversationId, messageId });
 }
 
 /**

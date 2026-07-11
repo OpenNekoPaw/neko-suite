@@ -641,6 +641,145 @@ describe('work item message handlers', () => {
     }
   });
 
+  it('ignores a late compatibility streamText after Timeline completion', () => {
+    const registry = getAgentMarkdownSessionRegistry();
+    registry.disposeAll();
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      currentMessages: [],
+      markdownSessionRegistry: registry,
+    });
+
+    try {
+      dispatch(
+        timelineHandlers,
+        timelineMessage([textTimelineItem('text-1', 1, 'Timeline text')]),
+        harness.context,
+      );
+      dispatch(
+        timelineHandlers,
+        {
+          ...timelineMessage([], 2),
+          operations: [
+            {
+              operation: 'complete',
+              itemId: 'text-1',
+              itemRevision: 2,
+              kind: 'assistant_text',
+              sourceGeneration: 1,
+              status: 'complete',
+              updatedAt: 2,
+            },
+          ],
+          completion: { status: 'completed', completedAt: 2 },
+        },
+        harness.context,
+      );
+
+      dispatch(
+        streamingHandlers,
+        {
+          type: 'streamText',
+          conversationId: 'conv-a',
+          messageId: 'msg-a',
+          content: 'Timeline text',
+        },
+        harness.context,
+      );
+
+      const blocks = harness.messages()[0]?.contentBlocks ?? [];
+      expect(blocks.map((block) => block.id)).toEqual(['text-1']);
+      const block = blocks[0];
+      if (!block || block.type !== 'text' || typeof block.content !== 'string') {
+        throw new Error('Expected completed Timeline-owned text block.');
+      }
+      const content = block.content;
+      expect(() =>
+        render(
+          createElement(MarkdownRenderer, {
+            content,
+            isStreaming: block.isStreaming,
+            sessionKey: createAgentMarkdownSessionKey({
+              conversationId: 'conv-a',
+              messageId: 'msg-a',
+              itemId: block.id,
+            }),
+          }),
+        ),
+      ).not.toThrow();
+    } finally {
+      cleanup();
+      registry.disposeAll();
+    }
+  });
+
+  it('keeps completed Timeline ownership isolated when another conversation tab is active', () => {
+    const registry = getAgentMarkdownSessionRegistry();
+    registry.disposeAll();
+    const activeMessages: Message[] = [
+      { id: 'msg-b', role: 'assistant', content: 'Conversation B', timestamp: 1 },
+    ];
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      currentMessages: activeMessages,
+      nonCurrentMessages: new Map([['conv-a', []]]),
+      markdownSessionRegistry: registry,
+    });
+
+    try {
+      dispatch(
+        timelineHandlers,
+        timelineMessage([textTimelineItem('text-1', 1, 'Conversation A')]),
+        harness.context,
+      );
+      dispatch(
+        timelineHandlers,
+        {
+          ...timelineMessage([], 2),
+          operations: [
+            {
+              operation: 'complete',
+              itemId: 'text-1',
+              itemRevision: 2,
+              kind: 'assistant_text',
+              sourceGeneration: 1,
+              status: 'complete',
+              updatedAt: 2,
+            },
+          ],
+          completion: { status: 'completed', completedAt: 2 },
+        },
+        harness.context,
+      );
+      dispatch(
+        streamingHandlers,
+        {
+          type: 'streamText',
+          conversationId: 'conv-a',
+          messageId: 'msg-a',
+          content: 'Conversation A',
+        },
+        harness.context,
+      );
+
+      expect(harness.messages()).toEqual(activeMessages);
+      const conversationABlocks =
+        harness.conversationMessages().get('conv-a')?.[0]?.contentBlocks ?? [];
+      expect(conversationABlocks.map((block) => block.id)).toEqual(['text-1']);
+      expect(
+        registry.getSnapshot(
+          createAgentMarkdownSessionKey({
+            conversationId: 'conv-a',
+            messageId: 'msg-a',
+            itemId: 'text-1',
+          }),
+        )?.source,
+      ).toBe('Conversation A');
+    } finally {
+      registry.disposeAll();
+    }
+  });
+
   it('requests one snapshot on a revision gap and resumes only after the snapshot', () => {
     const harness = createContextHarness({ activeConversationId: 'conv-a', currentMessages: [] });
     const requestSnapshot = vi
