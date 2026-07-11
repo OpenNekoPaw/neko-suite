@@ -27,7 +27,7 @@ describe('ConversationPersistenceRuntime', () => {
       }),
     });
 
-    await expect(runtime.persistConversation('conv-1')).resolves.toEqual({
+    await expect(runtime.persistConversation('conv-1')).resolves.toMatchObject({
       kind: 'saved',
       conversationId: 'conv-1',
     });
@@ -59,7 +59,7 @@ describe('ConversationPersistenceRuntime', () => {
       }),
     });
 
-    await expect(runtime.persistConversation('conv-1')).resolves.toEqual({
+    await expect(runtime.persistConversation('conv-1')).resolves.toMatchObject({
       kind: 'skip',
       conversationId: 'conv-1',
       reason: 'missing-work-dir',
@@ -88,18 +88,20 @@ describe('ConversationPersistenceRuntime', () => {
       onWarning,
     });
 
-    expect(runtime.queueConversationSync('conv-1')).toEqual({
+    expect(runtime.queueConversationSync('conv-1')).toMatchObject({
       kind: 'save-queued',
       conversationId: 'conv-1',
     });
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(onWarning).toHaveBeenCalledWith({
-      code: 'save-failed',
-      conversationId: 'conv-1',
-      error,
-    });
+    expect(onWarning).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'save-failed',
+        conversationId: 'conv-1',
+        error,
+      }),
+    );
   });
 
   it('flushes queued saves after metadata is written', async () => {
@@ -120,7 +122,7 @@ describe('ConversationPersistenceRuntime', () => {
       }),
     });
 
-    expect(runtime.queueConversationSync('conv-1')).toEqual({
+    expect(runtime.queueConversationSync('conv-1')).toMatchObject({
       kind: 'save-queued',
       conversationId: 'conv-1',
     });
@@ -148,7 +150,7 @@ describe('ConversationPersistenceRuntime', () => {
       }),
     });
 
-    await expect(runtime.persistConversation('conv-1')).resolves.toEqual({
+    await expect(runtime.persistConversation('conv-1')).resolves.toMatchObject({
       kind: 'deleted',
       conversationId: 'conv-1',
     });
@@ -167,7 +169,7 @@ describe('ConversationPersistenceRuntime', () => {
       getConversation: () => undefined,
     });
 
-    expect(runtime.queueConversationDelete('conv-1')).toEqual({
+    expect(runtime.queueConversationDelete('conv-1')).toMatchObject({
       kind: 'delete-queued',
       conversationId: 'conv-1',
     });
@@ -188,7 +190,7 @@ describe('ConversationPersistenceRuntime', () => {
       getConversation: () => undefined,
     });
 
-    expect(runtime.queueConversationDelete('conv-1')).toEqual({
+    expect(runtime.queueConversationDelete('conv-1')).toMatchObject({
       kind: 'delete-queued',
       conversationId: 'conv-1',
     });

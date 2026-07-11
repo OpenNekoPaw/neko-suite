@@ -8,6 +8,7 @@
 
 import * as vscode from 'vscode';
 import type { Platform } from '@neko/platform';
+import { buildAgentSessionDiagnosticMessage } from '@neko-agent/types';
 import type {
   AgentLlmConfig,
   AgentMediaModelSelections,
@@ -40,10 +41,17 @@ import type { IAgentRunner } from '../../ai/agentRunner';
 import type { IAgentContext } from '../../ai/agentContext';
 import type { IEditorRegistry } from '../../editor/common/editorRegistry';
 import { getCanvasSelection } from '../../services/canvasAmbientContext';
-import type { ConversationBridge } from '../conversationBridge';
+import type {
+  ConversationBridge,
+  ConversationTerminalPersistenceResult,
+} from '../conversationBridge';
 import type { ProviderManager } from '../providerManager';
 import type { SettingsManager } from '../settingsManager';
-import type { AgentStreamProcessor } from './agentStreamProcessor';
+import type {
+  AgentStreamLifecycleResult,
+  AgentStreamProcessor,
+  StreamProcessingResult,
+} from './agentStreamProcessor';
 import type { AccountAiCatalogCache } from '../../services/accountAiCatalogCache';
 import { loadWorkspaceFileIgnoreRules } from '../../services/workspaceIgnoreFilter';
 
@@ -75,6 +83,47 @@ export interface AgentTurnBridgeDeps {
   generateMessageId: () => string;
 }
 
+export type AgentTurnTerminalDeliveryOutcome =
+  | { readonly status: 'delivered'; readonly streamCount: number }
+  | {
+      readonly status: 'unavailable';
+      readonly streamCount: number;
+      readonly diagnostics: readonly ('endpoint-unavailable' | 'disposed')[];
+    }
+  | { readonly status: 'not-applicable'; readonly streamCount: 0 };
+
+export type AgentTurnResynchronizationOutcome =
+  | { readonly status: 'available'; readonly streamCount: number }
+  | {
+      readonly status: 'unavailable';
+      readonly streamCount: number;
+      readonly diagnostics: readonly ('turn-snapshot-unavailable' | 'disposed')[];
+    }
+  | { readonly status: 'not-applicable'; readonly streamCount: 0 };
+
+export type AgentTurnDurabilityOutcome =
+  | { readonly status: 'durable'; readonly result: ConversationTerminalPersistenceResult }
+  | { readonly status: 'failed'; readonly result: ConversationTerminalPersistenceResult }
+  | { readonly status: 'skipped'; readonly reason: 'model-not-completed' };
+
+export type AgentTurnModelOutcome =
+  | { readonly status: 'completed' | 'cancelled'; readonly streamCount: number }
+  | { readonly status: 'failed'; readonly streamCount: number; readonly error?: unknown }
+  | { readonly status: 'precondition-unmet'; readonly streamCount: 0 }
+  | { readonly status: 'queued'; readonly streamCount: 0 };
+
+export interface AgentTurnLifecycleResult {
+  readonly model: AgentTurnModelOutcome;
+  readonly terminalWebviewDelivery: AgentTurnTerminalDeliveryOutcome;
+  readonly activeTurnResynchronization: AgentTurnResynchronizationOutcome;
+  readonly terminalConversationDurability: AgentTurnDurabilityOutcome;
+}
+
+export type AgentTurnBridgeExecutionResult = RunAgentTurnRuntimeResult & {
+  readonly lifecycle: AgentTurnLifecycleResult;
+  readonly conversationDurability?: ConversationTerminalPersistenceResult;
+};
+
 export interface ExecuteAgentTurnForWebviewInput {
   webview: vscode.Webview;
   conversationId: string;
@@ -99,7 +148,7 @@ export class AgentTurnBridge {
     this.timelineContextRuntime = createTimelineContextRuntime();
   }
 
-  async execute(input: ExecuteAgentTurnForWebviewInput): Promise<RunAgentTurnRuntimeResult> {
+  async execute(input: ExecuteAgentTurnForWebviewInput): Promise<AgentTurnBridgeExecutionResult> {
     await this.refreshAccountCatalogForTurn(input.chatModel?.providerId);
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     const workspaceIgnoreRules = workspaceRoot
@@ -126,6 +175,7 @@ export class AgentTurnBridge {
         }
       : undefined;
 
+    const streamResults: StreamProcessingResult[] = [];
     const result = await runAgentTurnRuntime(
       buildAgentTurnRuntimeInput({
         conversationId: input.conversationId,
@@ -180,11 +230,16 @@ export class AgentTurnBridge {
           getActiveEditor: () => this.deps.editorRegistry?.getActiveEditor(),
           getAmbientCanvas: (id) => getCanvasSelection(id),
           timelineContextRuntime: this.timelineContextRuntime,
-          processStream: ({ conversationId, messageId, events, onPhaseChange }) =>
-            this.deps.streamProcessor.processStream(input.webview, conversationId, events, {
-              messageId,
-              onPhaseChange,
-            }),
+          processStream: async ({ conversationId, messageId, events, onPhaseChange }) => {
+            const streamResult = await this.deps.streamProcessor.processStream(
+              input.webview,
+              conversationId,
+              events,
+              { messageId, onPhaseChange },
+            );
+            streamResults.push(streamResult);
+            return streamResult;
+          },
           ensureSubAgentEventSubscription: ({ conversationId, agentRunner }) =>
             this.deps.ensureSubAgentEventSubscription(input.webview, conversationId, agentRunner),
           postMessage: (message) => {
@@ -199,7 +254,57 @@ export class AgentTurnBridge {
         },
       }),
     );
-    return result;
+    const model = summarizeModelOutcome(result, streamResults);
+    const terminalWebviewDelivery = summarizeTerminalDelivery(streamResults);
+    const activeTurnResynchronization = summarizeResynchronization(streamResults);
+    if (result.status !== 'completed') {
+      return {
+        ...result,
+        lifecycle: {
+          model,
+          terminalWebviewDelivery,
+          activeTurnResynchronization,
+          terminalConversationDurability: { status: 'skipped', reason: 'model-not-completed' },
+        },
+      };
+    }
+
+    const conversationDurability = await this.deps.conversations.persistConversationTerminal(
+      input.conversationId,
+    );
+    const lifecycle: AgentTurnLifecycleResult = {
+      model,
+      terminalWebviewDelivery,
+      activeTurnResynchronization,
+      terminalConversationDurability: isDurableConversationResult(conversationDurability)
+        ? { status: 'durable', result: conversationDurability }
+        : { status: 'failed', result: conversationDurability },
+    };
+    if (terminalWebviewDelivery.status === 'unavailable') {
+      await postLifecycleDiagnostic(
+        input.webview,
+        buildAgentSessionDiagnosticMessage({
+          code: 'terminal-webview-delivery-unavailable',
+          severity: 'warning',
+          action: 'deliverTerminalAgentTurn',
+          conversationId: input.conversationId,
+          message: `The model run completed, but terminal Webview delivery was unavailable (${terminalWebviewDelivery.diagnostics.join(', ')}).`,
+        }),
+      );
+    }
+    if (!isDurableConversationResult(conversationDurability)) {
+      await postLifecycleDiagnostic(
+        input.webview,
+        buildAgentSessionDiagnosticMessage({
+          code: 'conversation-durability-failed',
+          severity: 'warning',
+          action: 'persistConversationTerminal',
+          conversationId: input.conversationId,
+          message: describeConversationDurabilityFailure(conversationDurability),
+        }),
+      );
+    }
+    return { ...result, conversationDurability, lifecycle };
   }
 
   private async refreshAccountCatalogForTurn(providerId?: string): Promise<void> {
@@ -211,6 +316,71 @@ export class AgentTurnBridge {
     } catch (error) {
       this.deps.accountAiCatalog.invalidateForAuthFailure(error);
     }
+  }
+}
+
+function summarizeModelOutcome(
+  result: RunAgentTurnRuntimeResult,
+  streams: readonly StreamProcessingResult[],
+): AgentTurnModelOutcome {
+  if (result.status === 'failed') {
+    return { status: 'failed', streamCount: streams.length, error: result.error };
+  }
+  if (result.status === 'precondition-unmet') {
+    return { status: 'precondition-unmet', streamCount: 0 };
+  }
+  if (result.status === 'queued') {
+    return { status: 'queued', streamCount: 0 };
+  }
+  if (streams.some((stream) => stream.terminalStatus === 'failed')) {
+    return { status: 'failed', streamCount: streams.length };
+  }
+  if (streams.some((stream) => stream.terminalStatus === 'cancelled')) {
+    return { status: 'cancelled', streamCount: streams.length };
+  }
+  return { status: 'completed', streamCount: streams.length };
+}
+
+function summarizeTerminalDelivery(
+  streams: readonly StreamProcessingResult[],
+): AgentTurnTerminalDeliveryOutcome {
+  if (streams.length === 0) return { status: 'not-applicable', streamCount: 0 };
+  const unavailable = streams
+    .map((stream) => stream.lifecycle.terminalDelivery)
+    .filter((delivery) => delivery.status === 'unavailable');
+  return unavailable.length === 0
+    ? { status: 'delivered', streamCount: streams.length }
+    : {
+        status: 'unavailable',
+        streamCount: streams.length,
+        diagnostics: unavailable.map((delivery) => delivery.diagnostic),
+      };
+}
+
+function summarizeResynchronization(
+  streams: readonly StreamProcessingResult[],
+): AgentTurnResynchronizationOutcome {
+  if (streams.length === 0) return { status: 'not-applicable', streamCount: 0 };
+  const unavailable = streams
+    .map((stream) => stream.lifecycle.activeTurnResynchronization)
+    .filter((resynchronization) => resynchronization.status === 'unavailable');
+  return unavailable.length === 0
+    ? { status: 'available', streamCount: streams.length }
+    : {
+        status: 'unavailable',
+        streamCount: streams.length,
+        diagnostics: unavailable.map((resynchronization) => resynchronization.diagnostic),
+      };
+}
+
+async function postLifecycleDiagnostic(
+  webview: vscode.Webview,
+  message: ReturnType<typeof buildAgentSessionDiagnosticMessage>,
+): Promise<boolean> {
+  try {
+    return await webview.postMessage(message);
+  } catch {
+    return false;
   }
 }
 
@@ -256,4 +426,20 @@ function resolveSelectedModelTokenMetadata(
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function isDurableConversationResult(result: ConversationTerminalPersistenceResult): boolean {
+  return result.kind === 'saved' || result.kind === 'deleted';
+}
+
+function describeConversationDurabilityFailure(
+  result: ConversationTerminalPersistenceResult,
+): string {
+  if (result.kind === 'failed' || result.kind === 'rejected') {
+    return `The model run completed, but the conversation was not durably saved (${result.diagnostic.code}).`;
+  }
+  if (result.kind === 'skip') {
+    return `The model run completed, but terminal conversation persistence was skipped (${result.reason}).`;
+  }
+  return 'The model run completed, but terminal conversation persistence is unavailable.';
 }

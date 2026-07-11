@@ -43,6 +43,7 @@ import type {
 import type { IJournalWriter } from '../types';
 import { applyAblationToggles } from '../../experiment/apply-toggles';
 import { ToolGroupRegistry } from '../../skill';
+import { createTableHeavyStreamFixture } from '../../../../../test-utils/src/fixtures';
 
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
@@ -4489,7 +4490,8 @@ describe('AgentSession', () => {
     it('yields 4,000 text fragments without journaling or compacting per chunk', async () => {
       const journalWriter = createMockJournalWriter();
       const session = new AgentSession(createConfig({ journalWriter }));
-      const chunks = Array.from({ length: 4_000 }, (_, index) => `c${index}`);
+      const fixture = createTableHeavyStreamFixture();
+      const chunks = fixture.chunks;
       injectMockExecutor(session, [
         ...chunks.map((content, index): AgentStep => ({
           type: 'content_delta',
@@ -4507,7 +4509,15 @@ describe('AgentSession', () => {
 
       const events = await collectEvents(session.execute('stream'));
 
-      expect(events.filter((event) => event.type === 'text_delta')).toHaveLength(4_000);
+      expect(events.filter((event) => event.type === 'text_delta')).toHaveLength(
+        fixture.chunks.length,
+      );
+      expect(
+        events
+          .filter((event) => event.type === 'text_delta')
+          .map((event) => event.content)
+          .join(''),
+      ).toBe(fixture.source);
       expect(events.filter((event) => event.type === 'text')).toHaveLength(0);
       expect(estimateTokens).toHaveBeenCalledTimes(2);
       expect(journalWriter.appendEvent.mock.calls.length).toBeLessThan(10);

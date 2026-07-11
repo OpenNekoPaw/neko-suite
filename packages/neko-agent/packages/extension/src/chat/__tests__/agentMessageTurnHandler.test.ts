@@ -147,6 +147,15 @@ vi.mock('../message/agentStreamProcessor', () => {
         collectedToolCalls: [],
         contentBlocks: [],
         hasError: false,
+        terminalStatus: 'completed',
+        lifecycle: {
+          terminalDelivery: {
+            status: 'delivered',
+            deliveryRevision: 1,
+            finalBlocksDelivered: true,
+          },
+          activeTurnResynchronization: { status: 'available', deliveryRevision: 1 },
+        },
       });
       clearConversation = vi.fn();
       dispose = vi.fn();
@@ -354,8 +363,18 @@ function createMockConversations() {
     get: vi.fn().mockReturnValue({ id: 'conv-1', messages: msgs }),
     getMessages: () => msgs,
     toAgentHistory: vi.fn().mockReturnValue([]),
+    persistConversationTerminal: vi.fn().mockResolvedValue({
+      kind: 'saved',
+      conversationId: 'conv-1',
+      revision: 1,
+    }),
     manager: {
       toAgentHistory: vi.fn().mockReturnValue([]),
+      persistConversationTerminal: vi.fn().mockResolvedValue({
+        kind: 'saved',
+        conversationId: 'conv-1',
+        revision: 1,
+      }),
     },
   };
 }
@@ -1165,6 +1184,92 @@ describe('AgentMessageTurnHandler', () => {
       expect(conversations.addMessageToConversation).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ role: 'user', content: 'test message' }),
+      );
+    });
+
+    it('awaits terminal persistence after the final assistant message enters the conversation', async () => {
+      const webview = createMockWebview();
+      const conversations = createMockConversations();
+      conversations.persistConversationTerminal.mockImplementation(
+        async (conversationId: string) => {
+          expect(conversations.getMessages()).toEqual(
+            expect.arrayContaining([expect.objectContaining({ role: 'assistant' })]),
+          );
+          return { kind: 'saved' as const, conversationId, revision: 2 };
+        },
+      );
+      const handler = buildHandler({ conversations });
+
+      await handler.handleUserMessage(webview as any, createChatModelRequest('test message'));
+
+      expect(conversations.persistConversationTerminal).toHaveBeenCalledWith('conv-1');
+    });
+
+    it('reports terminal Webview delivery failure without changing model completion into an error result', async () => {
+      const webview = createMockWebview();
+      const conversations = createMockConversations();
+      const handler = buildHandler({ conversations });
+      agentStreamProcessorInstances[0]!.processStream.mockResolvedValue({
+        accumulatedResponse: 'mock response',
+        accumulatedThinking: '',
+        collectedToolCalls: [],
+        contentBlocks: [],
+        hasError: false,
+        terminalStatus: 'completed',
+        lifecycle: {
+          terminalDelivery: {
+            status: 'unavailable',
+            deliveryRevision: 2,
+            finalBlocksDelivered: false,
+            diagnostic: 'endpoint-unavailable',
+          },
+          activeTurnResynchronization: { status: 'available', deliveryRevision: 2 },
+        },
+      });
+
+      await handler.handleUserMessage(webview as any, createChatModelRequest('test message'));
+
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sessionDiagnostic',
+          code: 'terminal-webview-delivery-unavailable',
+          severity: 'warning',
+          message: expect.stringContaining('model run completed'),
+        }),
+      );
+      expect(conversations.persistConversationTerminal).toHaveBeenCalledWith('conv-1');
+      expect(conversations.getMessages()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ role: 'assistant' })]),
+      );
+    });
+
+    it('reports terminal durability failure without changing model completion into an error result', async () => {
+      const webview = createMockWebview();
+      const conversations = createMockConversations();
+      conversations.persistConversationTerminal.mockResolvedValue({
+        kind: 'failed',
+        conversationId: 'conv-1',
+        diagnostic: {
+          code: 'write-failed',
+          operation: 'terminal',
+          conversationId: 'conv-1',
+          revision: 2,
+          error: new Error('disk full'),
+        },
+      });
+      const handler = buildHandler({ conversations });
+
+      await handler.handleUserMessage(webview as any, createChatModelRequest('test message'));
+
+      expect(webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'sessionDiagnostic',
+          code: 'conversation-durability-failed',
+          severity: 'warning',
+        }),
+      );
+      expect(conversations.getMessages()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ role: 'assistant' })]),
       );
     });
 

@@ -88,6 +88,20 @@ export {
   type ConversationRecordSavePlanInput,
 } from './conversation-record-projector';
 export {
+  ConversationPersistenceCoordinator,
+  type ConversationPersistenceCoordinatorMetrics,
+  type ConversationPersistenceCoordinatorOptions,
+  type ConversationPersistenceDiagnostic,
+  type ConversationPersistenceDiagnosticCode,
+  type ConversationPersistenceDisposeResult,
+  type ConversationPersistenceFlushResult,
+  type ConversationPersistenceOperationKind,
+  type ConversationPersistenceOperationResult,
+  type ConversationPersistenceStoragePort,
+  type ConversationPersistenceSubmission,
+  type ConversationPersistenceSubmitResult,
+} from './conversation-persistence-coordinator';
+export {
   ConversationPersistenceRuntime,
   createConversationPersistenceRuntime,
   createFileConversationPersistenceRuntime,

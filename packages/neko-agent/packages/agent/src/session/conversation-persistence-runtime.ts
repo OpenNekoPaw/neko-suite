@@ -5,24 +5,31 @@ import {
   type ConversationRecordSavePlan,
 } from './conversation-record-projector';
 import { createFileConversationStorage } from './file-conversation-storage';
+import {
+  ConversationPersistenceCoordinator,
+  type ConversationPersistenceCoordinatorMetrics,
+  type ConversationPersistenceDiagnostic,
+  type ConversationPersistenceDisposeResult,
+  type ConversationPersistenceFlushResult,
+  type ConversationPersistenceOperationResult,
+  type ConversationPersistenceStoragePort,
+  type ConversationPersistenceSubmitResult,
+} from './conversation-persistence-coordinator';
 
-export interface ConversationPersistenceRuntimeStorage {
-  save(record: ConversationRecord): Promise<void>;
-  delete(conversationId: string): Promise<void>;
-  flush?(): Promise<void>;
-  dispose?(): void | Promise<void>;
-}
+export interface ConversationPersistenceRuntimeStorage extends ConversationPersistenceStoragePort {}
 
 export interface ConversationPersistenceRuntimeWarning {
   code: 'save-failed' | 'delete-failed';
   conversationId: string;
   error: unknown;
+  diagnostic?: ConversationPersistenceDiagnostic;
 }
 
 export interface ConversationPersistenceRuntimeOptions {
   workDir?: string | null;
   source?: ConversationSource;
   storage: ConversationPersistenceRuntimeStorage;
+  coordinator?: ConversationPersistenceCoordinator;
   getConversation: (
     conversationId: string,
   ) => ConversationRecordProjectionConversation | null | undefined;
@@ -38,10 +45,22 @@ export type ConversationPersistenceRuntimeResult =
   | {
       kind: 'saved';
       conversationId: string;
+      revision: number;
     }
   | {
       kind: 'deleted';
       conversationId: string;
+      revision: number;
+    }
+  | {
+      kind: 'failed';
+      conversationId: string;
+      diagnostic: ConversationPersistenceDiagnostic;
+    }
+  | {
+      kind: 'rejected';
+      conversationId: string;
+      diagnostic: ConversationPersistenceDiagnostic;
     };
 
 export type ConversationPersistenceRuntimeQueueResult =
@@ -53,73 +72,74 @@ export type ConversationPersistenceRuntimeQueueResult =
   | {
       kind: 'save-queued';
       conversationId: string;
+      revision: number;
     }
   | {
       kind: 'delete-queued';
       conversationId: string;
+      revision: number;
+    }
+  | {
+      kind: 'rejected';
+      conversationId: string;
+      diagnostic: ConversationPersistenceDiagnostic;
     };
 
 export class ConversationPersistenceRuntime {
-  constructor(private readonly options: ConversationPersistenceRuntimeOptions) {}
+  private readonly coordinator: ConversationPersistenceCoordinator;
+
+  constructor(private readonly options: ConversationPersistenceRuntimeOptions) {
+    this.coordinator =
+      options.coordinator ?? new ConversationPersistenceCoordinator({ storage: options.storage });
+  }
 
   async persistConversation(conversationId: string): Promise<ConversationPersistenceRuntimeResult> {
     const plan = this.buildSavePlan(conversationId);
     if (plan.kind === 'skip') {
       if (plan.reason === 'empty-conversation') {
-        await this.options.storage.delete(conversationId);
-        await this.options.storage.flush?.();
-        return { kind: 'deleted', conversationId };
+        return this.awaitSubmission(conversationId, this.coordinator.enqueueDelete(conversationId));
       }
       return { kind: 'skip', conversationId, reason: plan.reason };
     }
 
-    await this.options.storage.save(plan.record);
-    await this.options.storage.flush?.();
-    return { kind: 'saved', conversationId };
+    return this.awaitSubmission(conversationId, this.coordinator.enqueueTerminal(plan.record));
   }
 
   queueConversationSync(conversationId: string): ConversationPersistenceRuntimeQueueResult {
     const plan = this.buildSavePlan(conversationId);
     if (plan.kind === 'skip') {
       if (plan.reason === 'empty-conversation') {
-        this.queueDelete(conversationId);
-        return { kind: 'delete-queued', conversationId };
+        return this.queueDelete(conversationId);
       }
       return { kind: 'skip', conversationId, reason: plan.reason };
     }
 
-    try {
-      void this.options.storage
-        .save(plan.record)
-        .then(
-          () => this.options.storage.flush?.(),
-          (error: unknown) => {
-            this.options.onWarning?.({ code: 'save-failed', conversationId, error });
-          },
-        )
-        .catch((error: unknown) => {
-          this.options.onWarning?.({ code: 'save-failed', conversationId, error });
-        });
-    } catch (error: unknown) {
-      this.options.onWarning?.({ code: 'save-failed', conversationId, error });
+    const submission = this.coordinator.enqueuePartial(plan.record);
+    if (!submission.accepted) {
+      return { kind: 'rejected', conversationId, diagnostic: submission.diagnostic };
     }
-
-    return { kind: 'save-queued', conversationId };
+    this.observeQueuedCompletion(submission.completion, conversationId, 'save-failed');
+    return { kind: 'save-queued', conversationId, revision: submission.revision };
   }
 
   async deleteConversation(conversationId: string): Promise<ConversationPersistenceRuntimeResult> {
-    await this.options.storage.delete(conversationId);
-    await this.options.storage.flush?.();
-    return { kind: 'deleted', conversationId };
+    return this.awaitSubmission(conversationId, this.coordinator.enqueueDelete(conversationId));
   }
 
   queueConversationDelete(conversationId: string): ConversationPersistenceRuntimeQueueResult {
-    this.queueDelete(conversationId);
-    return { kind: 'delete-queued', conversationId };
+    return this.queueDelete(conversationId);
   }
 
-  dispose(): void | Promise<void> {
-    return this.options.storage.dispose?.();
+  flush(): Promise<ConversationPersistenceFlushResult> {
+    return this.coordinator.flush();
+  }
+
+  metrics(): ConversationPersistenceCoordinatorMetrics {
+    return this.coordinator.metrics();
+  }
+
+  dispose(): Promise<ConversationPersistenceDisposeResult> {
+    return this.coordinator.dispose();
   }
 
   private buildSavePlan(conversationId: string): ConversationRecordSavePlan {
@@ -130,22 +150,48 @@ export class ConversationPersistenceRuntime {
     });
   }
 
-  private queueDelete(conversationId: string): void {
-    try {
-      void this.options.storage
-        .delete(conversationId)
-        .then(
-          () => this.options.storage.flush?.(),
-          (error: unknown) => {
-            this.options.onWarning?.({ code: 'delete-failed', conversationId, error });
-          },
-        )
-        .catch((error: unknown) => {
-          this.options.onWarning?.({ code: 'delete-failed', conversationId, error });
-        });
-    } catch (error: unknown) {
-      this.options.onWarning?.({ code: 'delete-failed', conversationId, error });
+  private queueDelete(conversationId: string): ConversationPersistenceRuntimeQueueResult {
+    const submission = this.coordinator.enqueueDelete(conversationId);
+    if (!submission.accepted) {
+      return { kind: 'rejected', conversationId, diagnostic: submission.diagnostic };
     }
+    this.observeQueuedCompletion(submission.completion, conversationId, 'delete-failed');
+    return { kind: 'delete-queued', conversationId, revision: submission.revision };
+  }
+
+  private async awaitSubmission(
+    conversationId: string,
+    submission: ConversationPersistenceSubmitResult,
+  ): Promise<ConversationPersistenceRuntimeResult> {
+    const result = await submission.completion;
+    if (result.kind === 'written') {
+      return result.operation === 'delete'
+        ? { kind: 'deleted', conversationId, revision: result.revision }
+        : { kind: 'saved', conversationId, revision: result.revision };
+    }
+    if (result.kind === 'failed') {
+      return { kind: 'failed', conversationId, diagnostic: result.diagnostic };
+    }
+    if (result.kind === 'rejected') {
+      return { kind: 'rejected', conversationId, diagnostic: result.diagnostic };
+    }
+    throw new Error('Terminal conversation persistence was unexpectedly superseded.');
+  }
+
+  private observeQueuedCompletion(
+    completion: Promise<ConversationPersistenceOperationResult>,
+    conversationId: string,
+    code: ConversationPersistenceRuntimeWarning['code'],
+  ): void {
+    void completion.then((result) => {
+      if (result.kind !== 'failed') return;
+      this.options.onWarning?.({
+        code,
+        conversationId,
+        error: result.diagnostic.error,
+        diagnostic: result.diagnostic,
+      });
+    });
   }
 }
 

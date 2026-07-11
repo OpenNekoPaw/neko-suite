@@ -16,7 +16,11 @@ import {
   type AgentHistoryEntry,
   type AgentWorkspaceRuntimeStateRuntime,
   type AgentWorkspaceRuntimeStatePatch,
+  type ConversationPersistenceCoordinatorMetrics,
+  type ConversationPersistenceDisposeResult,
+  type ConversationPersistenceFlushResult,
   type ConversationPersistenceRuntime,
+  type ConversationPersistenceRuntimeResult,
   type ConversationStorage,
   type DeleteConversationOptions,
 } from '@neko/agent';
@@ -25,6 +29,10 @@ import type { AgentLocalResourceAccess } from '../services/localResourceAccess';
 import { projectMessagesForWebviewResourceDisplay } from './message/webviewResourceProjection';
 
 const logger = getLogger('ConversationBridge');
+
+export type ConversationTerminalPersistenceResult =
+  | ConversationPersistenceRuntimeResult
+  | { readonly kind: 'unavailable'; readonly conversationId: string };
 
 /**
  * VSCode Memento storage adapter for ConversationManager
@@ -50,6 +58,8 @@ export class ConversationBridge {
   private readonly getWorkspaceRoot: (() => string | undefined) | undefined;
   private readonly initialWorkspaceRoot: string | undefined;
   private readonly deletedConversationIds = new Set<string>();
+  private persistenceDisposePromise:
+    Promise<ConversationPersistenceDisposeResult | null> | undefined;
 
   constructor(
     context: vscode.ExtensionContext,
@@ -331,16 +341,45 @@ export class ConversationBridge {
   }
 
   /**
-   * Write conversation metadata to the shared resume layer
-   * (~/.neko/conversations-index.json + journal-backed history).
-   * Best-effort: errors are logged but not rethrown.
+   * Enqueue a coalescible partial record. The storage-scoped coordinator serializes the actual
+   * mutation; asynchronous failures are reported by the runtime warning callback.
    */
   private _queueConversationPersistence(conversationId: string): void {
-    this._persistenceRuntime?.queueConversationSync(conversationId);
+    const result = this._persistenceRuntime?.queueConversationSync(conversationId);
+    if (result?.kind === 'rejected') {
+      logger.warn('Conversation partial persistence was rejected', {
+        conversationId,
+        diagnostic: result.diagnostic,
+      });
+    }
   }
 
   private _queueConversationDelete(conversationId: string): void {
-    this._persistenceRuntime?.queueConversationDelete(conversationId);
+    const result = this._persistenceRuntime?.queueConversationDelete(conversationId);
+    if (result?.kind === 'rejected') {
+      logger.warn('Conversation delete persistence was rejected', {
+        conversationId,
+        diagnostic: result.diagnostic,
+      });
+    }
+  }
+
+  /** Persist the authoritative terminal record after the final message has entered the manager. */
+  persistConversationTerminal(
+    conversationId: string,
+  ): Promise<ConversationTerminalPersistenceResult> {
+    if (!this._persistenceRuntime) {
+      return Promise.resolve({ kind: 'unavailable', conversationId });
+    }
+    return this._persistenceRuntime.persistConversation(conversationId);
+  }
+
+  flushConversationPersistence(): Promise<ConversationPersistenceFlushResult | null> {
+    return this._persistenceRuntime?.flush() ?? Promise.resolve(null);
+  }
+
+  getConversationPersistenceMetrics(): ConversationPersistenceCoordinatorMetrics | null {
+    return this._persistenceRuntime?.metrics() ?? null;
   }
 
   private _queueWorkspaceRuntimeState(conversationId: string, setActive: boolean): void {
@@ -488,17 +527,25 @@ export class ConversationBridge {
     });
   }
 
-  dispose(): void {
+  disposeAsync(): Promise<ConversationPersistenceDisposeResult | null> {
+    if (this.persistenceDisposePromise) return this.persistenceDisposePromise;
     this._conversationManager.flush();
-    try {
-      const result = this._persistenceRuntime?.dispose();
-      if (result && typeof result.then === 'function') {
-        result.catch((error: unknown) => {
-          logger.warn('Failed to dispose conversation persistence runtime', error);
-        });
-      }
-    } catch (error) {
-      logger.warn('Failed to dispose conversation persistence runtime', error);
-    }
+    this.persistenceDisposePromise = this._persistenceRuntime?.dispose() ?? Promise.resolve(null);
+    return this.persistenceDisposePromise;
+  }
+
+  dispose(): void {
+    void this.disposeAsync().then(
+      (result) => {
+        if (result && !result.durable) {
+          logger.warn('Conversation persistence disposal completed without durability', {
+            diagnostics: result.diagnostics,
+          });
+        }
+      },
+      (error: unknown) => {
+        logger.warn('Failed to dispose conversation persistence runtime', error);
+      },
+    );
   }
 }
