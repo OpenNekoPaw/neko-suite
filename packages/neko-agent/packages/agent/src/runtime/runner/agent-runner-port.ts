@@ -29,37 +29,22 @@ export interface AgentRunnerConfirmationRequest {
   readonly details: Record<string, unknown>;
 }
 
-export interface AgentPendingMessageItem {
-  readonly id: string;
-  readonly conversationId: string;
-  readonly content: string;
-  readonly createdAt: number;
-  readonly updatedAt?: number;
-  readonly source: AgentPendingMessageSource;
-}
-
-export type AgentPendingMessageSource = 'composer' | 'task-result-continuation';
+export type AgentPendingMessageItem = import('@neko-agent/types').AgentQueuedMessageItem;
+export type AgentPendingMessageSource = import('@neko-agent/types').AgentQueuedMessageSource;
 
 export interface EnqueuePendingMessageInput {
   readonly conversationId: string;
   readonly content: string;
   readonly now?: number;
   readonly source?: AgentPendingMessageSource;
+  readonly displayKind?: import('@neko-agent/types').AgentQueuedMessageDisplayKind;
+  readonly metadata?: import('@neko-agent/types').AgentContinuationMetadata;
 }
 
-export type AgentPendingMessageQueueErrorCode =
-  'stale-item' | 'invalid-queue-operation' | 'not-queueable';
-
-export class AgentPendingMessageQueueError extends Error {
-  constructor(
-    readonly code: AgentPendingMessageQueueErrorCode,
-    message: string,
-    readonly queueItemId?: string,
-  ) {
-    super(message);
-    this.name = 'AgentPendingMessageQueueError';
-  }
-}
+export {
+  AgentMessageQueueOperationError as AgentPendingMessageQueueError,
+  type AgentMessageQueueOperationErrorCode as AgentPendingMessageQueueErrorCode,
+} from '../session/agent-message-queue';
 
 export type AgentRunnerPortEvent =
   | {

@@ -235,6 +235,60 @@ describe('AgentSessionRunner', () => {
     await collect(first);
   });
 
+  it('preserves pending messages when the active turn is cancelled', async () => {
+    const session = createSession();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+    });
+    runner.setSession(session);
+
+    const first = runner.execute('first', {});
+    await iterator(first).next();
+    const queued = runner.enqueuePendingMessage({
+      conversationId: 'conv-1',
+      content: 'run after explicit resume',
+      now: 1000,
+    });
+
+    runner.cancel();
+
+    expect(runner.getPendingMessageQueue()).toEqual([
+      expect.objectContaining({ id: queued?.id, content: 'run after explicit resume' }),
+    ]);
+    expect(runner.dequeuePendingMessage()).toBeNull();
+    runner.promotePendingMessage(queued!.id);
+    expect(runner.dequeuePendingMessage()?.id).toBe(queued?.id);
+    await collect(first);
+  });
+
+  it('uses shared continuation-priority release semantics', async () => {
+    const session = createSession();
+    const runner = new AgentSessionRunner({
+      buildExecutionContext: () => ({}),
+    });
+    runner.setSession(session);
+
+    const first = runner.execute('first', {});
+    await iterator(first).next();
+    const user = runner.enqueuePendingMessage({
+      conversationId: 'conv-1',
+      content: 'user follow-up',
+      source: 'composer',
+      now: 1000,
+    });
+    const continuation = runner.enqueuePendingMessage({
+      conversationId: 'conv-1',
+      content: 'task continuation',
+      source: 'task-result-continuation',
+      now: 1001,
+    });
+    runner.promotePendingMessage(user!.id);
+
+    expect(runner.dequeuePendingMessage()?.id).toBe(continuation?.id);
+    expect(runner.dequeuePendingMessage()?.id).toBe(user?.id);
+    await collect(first);
+  });
+
   it('does not queue pending messages when idle', () => {
     const session = createSession();
     const runner = new AgentSessionRunner({

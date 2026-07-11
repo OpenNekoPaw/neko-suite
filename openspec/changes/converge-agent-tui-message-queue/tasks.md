@@ -32,7 +32,7 @@
 
 ## 6. Runtime Queue Convergence
 
-- [ ] 6.1 Audit and define the minimal Agent runtime queue/session port used by both TUI and existing runtime queue consumers.
+- [x] 6.1 Audit and define the minimal Agent runtime queue/session port used by both TUI and existing runtime queue consumers.
 - [ ] 6.2 Route TUI enqueue, snapshot, promote, edit, cancel, and release through the explicit-conversation runtime-owned queue port.
 - [ ] 6.3 Add canonical-path tests with the TUI-local queue path poisoned so any fallback fails visibly.
 - [ ] 6.4 Remove `messageQueueRef`, manual `drainQueuedPrompts`, package-local queue mutation ownership, and obsolete count-only compatibility paths.

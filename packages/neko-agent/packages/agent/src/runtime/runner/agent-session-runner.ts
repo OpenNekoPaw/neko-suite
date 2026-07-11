@@ -15,11 +15,11 @@ import type {
   IAgentSession,
 } from '../../session/types';
 import type { ISkillProvider } from '../../tools/core/meta-tools';
+import type { AgentPendingMessageItem, EnqueuePendingMessageInput } from './agent-runner-port';
 import {
-  AgentPendingMessageQueueError,
-  type AgentPendingMessageItem,
-  type EnqueuePendingMessageInput,
-} from './agent-runner-port';
+  createAgentConversationMessageQueue,
+  type AgentConversationMessageQueue,
+} from '../session/agent-message-queue';
 
 export interface AgentSessionRunnerTimer {
   set(callback: () => void, ms: number): unknown;
@@ -75,8 +75,7 @@ export function createAgentSessionRunner<TContext>(
 export class AgentSessionRunner<TContext> {
   private _session?: IAgentSession;
   private _isRunning = false;
-  private _pendingMessages: AgentPendingMessageItem[] = [];
-  private _pendingMessageSequence = 0;
+  private _pendingMessageQueue?: AgentConversationMessageQueue;
   private readonly _pendingConfirmations = new Map<string, PendingConfirmation>();
   private readonly _confirmationTimers = new Map<string, unknown>();
 
@@ -156,7 +155,7 @@ export class AgentSessionRunner<TContext> {
 
   cancel(): void {
     this._session?.cancel();
-    this._pendingMessages = [];
+    this._pendingMessageQueue?.pauseAfterActiveTurnCancel();
     this._clearConfirmationTimers();
     for (const pending of this._pendingConfirmations.values()) {
       pending.resolve(false);
@@ -172,30 +171,21 @@ export class AgentSessionRunner<TContext> {
     if (!this._isRunning) {
       return null;
     }
-    const content = normalizePendingMessageContent(input.content);
-    const item: AgentPendingMessageItem = {
-      id: this._createPendingMessageId(input.conversationId),
-      conversationId: input.conversationId,
-      content,
-      createdAt: input.now ?? Date.now(),
-      source: input.source ?? 'composer',
-    };
-    this._pendingMessages.push(item);
-    return item;
+    return this.ensurePendingMessageQueue(input.conversationId).enqueue({
+      content: input.content,
+      ...(input.now !== undefined ? { now: input.now } : {}),
+      ...(input.source ? { source: input.source } : {}),
+      ...(input.displayKind ? { displayKind: input.displayKind } : {}),
+      ...(input.metadata ? { metadata: input.metadata } : {}),
+    });
   }
 
   getPendingMessageQueue(): readonly AgentPendingMessageItem[] {
-    return this._pendingMessages.map((item) => ({ ...item }));
+    return this._pendingMessageQueue?.snapshot().items ?? [];
   }
 
   removePendingMessage(queueItemId: string): AgentPendingMessageItem {
-    const index = this._findPendingMessageIndex(queueItemId);
-    const item = this._pendingMessages[index];
-    if (!item) {
-      throw new Error(`Pending message queue index invariant violated: ${queueItemId}`);
-    }
-    this._pendingMessages.splice(index, 1);
-    return clonePendingMessageItem(item);
+    return this.requirePendingMessageQueue().remove(queueItemId);
   }
 
   updatePendingMessage(
@@ -203,48 +193,37 @@ export class AgentSessionRunner<TContext> {
     content: string,
     now: number = Date.now(),
   ): AgentPendingMessageItem {
-    const index = this._findPendingMessageIndex(queueItemId);
-    const item = this._pendingMessages[index];
-    if (!item) {
-      throw new Error(`Pending message queue index invariant violated: ${queueItemId}`);
-    }
-    const updated: AgentPendingMessageItem = {
-      ...item,
-      content: normalizePendingMessageContent(content),
-      updatedAt: now,
-    };
-    this._pendingMessages[index] = updated;
-    return clonePendingMessageItem(updated);
+    return this.requirePendingMessageQueue().edit(queueItemId, content, now);
   }
 
   promotePendingMessage(queueItemId: string): AgentPendingMessageItem {
-    const index = this._findPendingMessageIndex(queueItemId);
-    const item = this._pendingMessages[index];
-    if (!item) {
-      throw new Error(`Pending message queue index invariant violated: ${queueItemId}`);
-    }
-    this._pendingMessages.splice(index, 1);
-    this._pendingMessages.unshift(item);
-    return clonePendingMessageItem(item);
+    const queue = this.requirePendingMessageQueue();
+    const item = queue.promote(queueItemId);
+    queue.resume();
+    return item;
   }
 
   dequeuePendingMessage(): AgentPendingMessageItem | null {
-    const item = this._pendingMessages.shift();
-    return item ? clonePendingMessageItem(item) : null;
+    return this._pendingMessageQueue?.releaseNext() ?? null;
   }
 
   drainPendingMessageQueue(): readonly AgentPendingMessageItem[] {
-    const pendingMessages = this._pendingMessages;
-    this._pendingMessages = [];
-    return pendingMessages.map(clonePendingMessageItem);
+    const pendingMessages: AgentPendingMessageItem[] = [];
+    for (;;) {
+      const item = this._pendingMessageQueue?.releaseNext() ?? null;
+      if (!item) {
+        return pendingMessages;
+      }
+      pendingMessages.push(item);
+    }
   }
 
   getPendingMessagesCount(): number {
-    return this._pendingMessages.length;
+    return this._pendingMessageQueue?.snapshot().pendingCount ?? 0;
   }
 
   clearPendingMessages(): void {
-    this._pendingMessages = [];
+    this._pendingMessageQueue?.clear();
   }
 
   getContextTokenCount(): number {
@@ -362,26 +341,33 @@ export class AgentSessionRunner<TContext> {
 
   disposeSession(): void {
     this.cancel();
+    this._pendingMessageQueue?.clear();
     this._session?.dispose();
     this._session = undefined;
     this._isRunning = false;
   }
 
-  private _findPendingMessageIndex(queueItemId: string): number {
-    const index = this._pendingMessages.findIndex((item) => item.id === queueItemId);
-    if (index < 0) {
-      throw new AgentPendingMessageQueueError(
-        'stale-item',
-        `Queued message is no longer pending: ${queueItemId}`,
-        queueItemId,
-      );
+  private ensurePendingMessageQueue(conversationId: string): AgentConversationMessageQueue {
+    const existing = this._pendingMessageQueue;
+    if (existing) {
+      if (existing.conversationId !== conversationId) {
+        throw new Error(
+          `Agent runner queue is bound to conversation ${existing.conversationId}, not ${conversationId}.`,
+        );
+      }
+      return existing;
     }
-    return index;
+    const queue = createAgentConversationMessageQueue({ conversationId });
+    this._pendingMessageQueue = queue;
+    return queue;
   }
 
-  private _createPendingMessageId(conversationId: string): string {
-    this._pendingMessageSequence += 1;
-    return `${conversationId}:queue:${Date.now().toString(36)}:${this._pendingMessageSequence.toString(36)}`;
+  private requirePendingMessageQueue(): AgentConversationMessageQueue {
+    const queue = this._pendingMessageQueue;
+    if (!queue) {
+      throw new Error('Agent runner message queue is not initialized.');
+    }
+    return queue;
   }
 
   private _scheduleConfirmationTimeout(pending: PendingConfirmation): void {
@@ -418,19 +404,4 @@ export class AgentSessionRunner<TContext> {
     }
     this._confirmationTimers.clear();
   }
-}
-
-function normalizePendingMessageContent(content: string): string {
-  const trimmed = content.trim();
-  if (!trimmed) {
-    throw new AgentPendingMessageQueueError(
-      'invalid-queue-operation',
-      'Queued message content cannot be empty.',
-    );
-  }
-  return trimmed;
-}
-
-function clonePendingMessageItem(item: AgentPendingMessageItem): AgentPendingMessageItem {
-  return { ...item };
 }

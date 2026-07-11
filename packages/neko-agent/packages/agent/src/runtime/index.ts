@@ -118,6 +118,15 @@ export {
 } from './session/agent-runtime-pool';
 
 export {
+  AgentMessageQueueOperationError,
+  createAgentConversationMessageQueue,
+  type AgentConversationMessageQueue,
+  type AgentMessageQueueOperationErrorCode,
+  type CreateAgentConversationMessageQueueOptions,
+  type EnqueueAgentMessageInput,
+} from './session/agent-message-queue';
+
+export {
   createAgentRuntimeManager,
   type AgentRuntimeCompressionResult,
   type AgentRuntimeManager,
