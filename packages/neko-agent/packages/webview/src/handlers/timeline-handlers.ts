@@ -36,24 +36,29 @@ const handleAgentTurnTimelineDiagnostic: MessageHandler<'agentTurnTimelineDiagno
   if (diagnostic.conversationId) {
     context.timelineRenderScheduler?.flushConversation(diagnostic.conversationId);
   }
+  let unavailableTimelineState: ReturnType<typeof applyAgentTurnTimelineDiagnostic>['state'] = null;
   updateConversation(
     context,
     diagnostic.conversationId,
     (messages, _streamingMessageId, streaming) => {
-      const result = applyAgentTurnTimelineDiagnostic(
-        streaming.activeTurnTimeline ?? null,
-        diagnostic,
-      );
+      const previousState = streaming.activeTurnTimeline ?? null;
+      const result = applyAgentTurnTimelineDiagnostic(previousState, diagnostic);
+      if (
+        diagnostic.code === 'turn-snapshot-unavailable' &&
+        result.state !== previousState &&
+        result.state?.synchronization === 'unavailable'
+      ) {
+        unavailableTimelineState = result.state;
+      }
       return { messages, activeTurnTimeline: result.state };
     },
   );
-  const diagnosticState = context.conversationStreamingRef.current.get(
-    diagnostic.conversationId ?? '',
-  )?.activeTurnTimeline;
-  if (diagnosticState?.synchronization === 'unavailable') {
-    removeAgentTurnTimelineRecovery(getAgentHostRuntimeAdapter(), diagnosticState);
+  if (unavailableTimelineState) {
+    removeAgentTurnTimelineRecovery(getAgentHostRuntimeAdapter(), unavailableTimelineState);
   }
-  context.setGlobalError(formatTimelineDiagnostics([diagnostic]));
+  if (diagnostic.code !== 'turn-snapshot-unavailable' || unavailableTimelineState) {
+    context.setGlobalError(formatTimelineDiagnostics([diagnostic]));
+  }
 };
 
 function applyTimelineMessagesToConversation(

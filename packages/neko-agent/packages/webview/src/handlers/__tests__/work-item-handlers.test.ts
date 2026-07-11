@@ -887,6 +887,58 @@ describe('work item message handlers', () => {
     requestSnapshot.mockRestore();
   });
 
+  it('does not let a delayed snapshot-unavailable diagnostic reject a newer active turn', () => {
+    const harness = createContextHarness({ activeConversationId: 'conv-a', currentMessages: [] });
+    dispatch(
+      timelineHandlers,
+      {
+        type: 'agentTurnTimeline',
+        schemaVersion: 2,
+        connectionEpoch: 'epoch-current',
+        conversationId: 'conv-a',
+        turnId: 'turn-current',
+        messageId: 'msg-current',
+        batchKind: 'delta',
+        deliveryRevision: 1,
+        operations: [
+          {
+            operation: 'append',
+            item: {
+              ...textTimelineItem('text-current', 1, 'current'),
+              turnId: 'turn-current',
+              messageId: 'msg-current',
+            },
+          },
+        ],
+      },
+      harness.context,
+    );
+
+    dispatch(
+      timelineHandlers,
+      {
+        type: 'agentTurnTimelineDiagnostic',
+        schemaVersion: 2,
+        connectionEpoch: 'epoch-expired',
+        conversationId: 'conv-a',
+        turnId: 'turn-expired',
+        messageId: 'msg-expired',
+        code: 'turn-snapshot-unavailable',
+        message: 'The requested active turn snapshot is unavailable.',
+        deliveryRevision: 1,
+      },
+      harness.context,
+    );
+
+    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toMatchObject({
+      connectionEpoch: 'epoch-current',
+      turnId: 'turn-current',
+      messageId: 'msg-current',
+      synchronization: 'synchronized',
+    });
+    expect(harness.globalError()).toBeNull();
+  });
+
   it('anchors active timeline media tasks from canonical timeline events', () => {
     const harness = createContextHarness({
       activeConversationId: 'conv-a',
