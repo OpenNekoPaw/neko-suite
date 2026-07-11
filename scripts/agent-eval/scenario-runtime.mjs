@@ -18,6 +18,8 @@ export const SUPPORTED_ASSERTION_KINDS = new Set([
   'skill-active',
   'tool-call-succeeded',
   'tool-call-failed',
+  'timeline-order',
+  'active-message-cancelled',
   'markdown-path-events',
 ]);
 
@@ -160,6 +162,10 @@ function evaluateAssertion(assertion, facts) {
       return assertToolCall(assertion, facts, 'success');
     case 'tool-call-failed':
       return assertToolCall(assertion, facts, 'error');
+    case 'timeline-order':
+      return assertTimelineOrder(assertion, facts);
+    case 'active-message-cancelled':
+      return assertActiveMessageCancelled(facts);
     case 'markdown-path-events':
       return assertMarkdownPathEvents(assertion, facts);
     default:
@@ -167,6 +173,53 @@ function evaluateAssertion(assertion, facts) {
   }
 }
 
+function assertTimelineOrder(assertion, facts) {
+  const assistantTurns = arrayOrEmpty(facts?.turns).filter((turn) => turn?.role === 'assistant');
+  const matching = assistantTurns.find((turn) => {
+    const timeline = arrayOrEmpty(turn?.timeline)
+      .slice()
+      .sort((left, right) => left.sequence - right.sequence);
+    let cursor = 0;
+    for (const expected of assertion.sequence) {
+      const index = timeline.findIndex(
+        (row, rowIndex) => rowIndex >= cursor && timelineRowMatches(row, expected),
+      );
+      if (index < 0) return false;
+      cursor = index + 1;
+    }
+    return true;
+  });
+  assertCase(
+    Boolean(matching),
+    `no assistant Timeline observed required order: ${assertion.sequence.map((item) => item.kind).join(' -> ')}`,
+  );
+  return { kind: assertion.kind, ok: true, turnId: matching.id, sequence: assertion.sequence };
+}
+
+function timelineRowMatches(row, expected) {
+  if (row?.kind !== expected.kind) return false;
+  if (expected.status !== undefined && row?.status !== expected.status) return false;
+  if (expected.toolName !== undefined && row?.toolName !== expected.toolName) return false;
+  if (
+    expected.contentContains !== undefined &&
+    !String(row?.content ?? '').includes(expected.contentContains)
+  )
+    return false;
+  return true;
+}
+
+function assertActiveMessageCancelled(facts) {
+  const cancellation = facts?.automation?.messageCancellation;
+  assertCase(
+    cancellation?.accepted === true,
+    'active message cancellation was not accepted while a turn was running',
+  );
+  assertCase(
+    facts?.idle?.fullyIdle === true,
+    'session did not return to fully idle after cancellation',
+  );
+  return { kind: 'active-message-cancelled', ok: true, accepted: true };
+}
 
 function assertMarkdownPathEvents(assertion, facts) {
   const markdown = facts?.markdown;
@@ -174,7 +227,10 @@ function assertMarkdownPathEvents(assertion, facts) {
   const dropped = Number.isInteger(markdown?.droppedPathEventCount)
     ? markdown.droppedPathEventCount
     : 0;
-  assertCase(dropped === 0, `expected complete Markdown path facts, but ${dropped} event(s) were dropped`);
+  assertCase(
+    dropped === 0,
+    `expected complete Markdown path facts, but ${dropped} event(s) were dropped`,
+  );
 
   const forbidden = assertion.forbidden ?? [];
   const observedForbidden = events.filter((event) => forbidden.includes(event?.type));
@@ -208,10 +264,7 @@ function assertMarkdownPathEvents(assertion, facts) {
     const sameRevision = matching.some(([, group]) => {
       const revisions = new Set(
         group
-          .filter(
-            (event) =>
-              event.type === 'layout-created' && widths.has(event.viewportWidth),
-          )
+          .filter((event) => event.type === 'layout-created' && widths.has(event.viewportWidth))
           .map((event) => event.revision),
       );
       return revisions.size === 1;
@@ -562,6 +615,24 @@ function validateAssertion(assertion, scenarioId, index) {
         assertStringArray(assertion.errorContains, `${assertion.kind}.errorContains`);
       }
       break;
+    case 'timeline-order':
+      if (!Array.isArray(assertion.sequence) || assertion.sequence.length < 2) {
+        throw new Error(`${assertion.kind}.sequence must contain at least two entries`);
+      }
+      assertion.sequence.forEach((item, itemIndex) => {
+        assertObject(item, `${assertion.kind}.sequence[${itemIndex}]`);
+        assertNonEmptyString(item.kind, `${assertion.kind}.sequence[${itemIndex}].kind`);
+        if (item.status !== undefined)
+          assertNonEmptyString(item.status, `${assertion.kind}.sequence[${itemIndex}].status`);
+        if (item.toolName !== undefined)
+          assertNonEmptyString(item.toolName, `${assertion.kind}.sequence[${itemIndex}].toolName`);
+        if (item.contentContains !== undefined)
+          assertNonEmptyString(
+            item.contentContains,
+            `${assertion.kind}.sequence[${itemIndex}].contentContains`,
+          );
+      });
+      break;
     case 'markdown-path-events':
       assertStringArray(assertion.required, `${assertion.kind}.required`);
       assertSupportedMarkdownPathEventTypes(assertion.required, `${assertion.kind}.required`);
@@ -582,9 +653,7 @@ function validateAssertion(assertion, scenarioId, index) {
         assertion.sameRevisionForViewportWidths === true &&
         assertion.viewportWidths === undefined
       ) {
-        throw new Error(
-          `${assertion.kind}.sameRevisionForViewportWidths requires viewportWidths`,
-        );
+        throw new Error(`${assertion.kind}.sameRevisionForViewportWidths requires viewportWidths`);
       }
       break;
     default:

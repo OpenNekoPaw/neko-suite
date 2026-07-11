@@ -278,6 +278,43 @@ describe('scenario assertion evaluation', () => {
     ).toThrow('expected CreateSkill tool call with status success');
   });
 
+  it('proves assistant text/tool/text chronology and accepted cancellation from generic facts', () => {
+    const facts = {
+      idle: { fullyIdle: true },
+      automation: { messageCancellation: { accepted: true } },
+      turns: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          timeline: [
+            { sequence: 1, kind: 'assistant_text', status: 'complete', content: 'OPENING' },
+            { sequence: 2, kind: 'tool', status: 'success', toolName: 'Read' },
+            { sequence: 3, kind: 'assistant_text', status: 'complete', content: 'FINAL' },
+          ],
+        },
+      ],
+    };
+    expect(
+      evaluateScenarioAssertions(
+        [
+          {
+            kind: 'timeline-order',
+            sequence: [
+              { kind: 'assistant_text', contentContains: 'OPENING' },
+              { kind: 'tool', toolName: 'Read', status: 'success' },
+              { kind: 'assistant_text', contentContains: 'FINAL' },
+            ],
+          },
+          { kind: 'active-message-cancelled' },
+        ],
+        facts,
+      ),
+    ).toEqual([
+      expect.objectContaining({ kind: 'timeline-order', ok: true, turnId: 'assistant-1' }),
+      expect.objectContaining({ kind: 'active-message-cancelled', ok: true }),
+    ]);
+  });
+
   it('requires one Markdown session key to prove the canonical path and resize reflow', () => {
     const assertion = {
       kind: 'markdown-path-events',

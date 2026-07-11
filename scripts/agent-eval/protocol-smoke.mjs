@@ -24,6 +24,7 @@ export const SUPPORTED_CASE_KINDS = new Set([
   'explicit-skill',
   'triggered-skill',
   'model-binding',
+  'cancellation',
 ]);
 
 const scriptPath = fileURLToPath(import.meta.url);
@@ -64,7 +65,7 @@ export async function main(argv = process.argv.slice(2), io = defaultIo()) {
 
   try {
     const facts = await runSinglePromptProtocol(child, responses, args);
-    assertSuccessfulFacts(facts);
+    assertSuccessfulFacts(facts, { requireFinalAnswer: args.kind !== 'cancellation' });
     const evaluation = await evaluateScenario(args, facts);
     io.stdout.write(
       `${JSON.stringify({ ok: true, setup: setupEvidence, evaluation, facts }, null, 2)}\n`,
@@ -78,7 +79,7 @@ export async function main(argv = process.argv.slice(2), io = defaultIo()) {
   }
 }
 
-export function assertSuccessfulFacts(facts) {
+export function assertSuccessfulFacts(facts, options = { requireFinalAnswer: true }) {
   const runtimeErrors = Array.isArray(facts?.runtimeErrors) ? facts.runtimeErrors : [];
   if (runtimeErrors.length > 0) {
     throw new Error(`debug automation completed with runtime errors: ${runtimeErrors.join('; ')}`);
@@ -112,9 +113,10 @@ export function assertSuccessfulFacts(facts) {
   const assistantTurns = turns.filter((turn) => turn?.role === 'assistant');
   const finalAssistant = assistantTurns.at(-1);
   if (
-    !finalAssistant ||
-    typeof finalAssistant.content !== 'string' ||
-    finalAssistant.content.trim().length === 0
+    options.requireFinalAnswer !== false &&
+    (!finalAssistant ||
+      typeof finalAssistant.content !== 'string' ||
+      finalAssistant.content.trim().length === 0)
   ) {
     throw new Error('debug automation completed without a non-empty assistant response');
   }
@@ -134,6 +136,16 @@ export async function runSinglePromptProtocol(child, responses, args) {
     params: { sessionId, prompt: args.prompt },
   });
 
+  let messageCancellation;
+  if (args.cancelAfterMs !== undefined) {
+    await new Promise((resolve) => setTimeout(resolve, args.cancelAfterMs));
+    messageCancellation = await sendRequest(child, responses, {
+      id: 'cancel',
+      method: 'message.cancel',
+      params: { sessionId },
+    });
+  }
+
   await sendRequest(child, responses, {
     id: 'idle',
     method: 'session.waitForIdle',
@@ -152,7 +164,7 @@ export async function runSinglePromptProtocol(child, responses, args) {
     await new Promise((resolve) => setTimeout(resolve, TERMINAL_RESIZE_SETTLE_MS));
   }
 
-  const facts = await sendRequest(child, responses, {
+  const rawFacts = await sendRequest(child, responses, {
     id: 'facts',
     method: 'session.facts',
     params: {
@@ -160,6 +172,11 @@ export async function runSinglePromptProtocol(child, responses, args) {
       includeHistory: true,
     },
   });
+
+  const facts =
+    messageCancellation === undefined
+      ? rawFacts
+      : { ...rawFacts, automation: { messageCancellation } };
 
   await sendRequest(child, responses, {
     id: 'dispose',
@@ -277,6 +294,10 @@ export function resolveManifestCase(parsed, manifest, options = {}) {
 
   const env = options.env ?? process.env;
   const runtime = validateAndNormalizeScenarioRuntime(scenario, { env });
+  const cancelAfterMs = readOptionalPositiveInteger(
+    scenario.cancelAfterMs,
+    `scenario ${parsed.caseId} cancelAfterMs`,
+  );
   const cwd = parsed.cwd ?? scenario.cwd ?? manifest.defaultCwd;
   return {
     ...parsed,
@@ -290,6 +311,7 @@ export function resolveManifestCase(parsed, manifest, options = {}) {
     setup: runtime.setup,
     postChecks: runtime.postChecks,
     terminalResizes: runtime.terminalResizes,
+    ...(cancelAfterMs !== undefined ? { cancelAfterMs } : {}),
     skills: scenario.skills,
     model: scenario.model,
     provider: scenario.provider,
@@ -330,6 +352,7 @@ export function createDryRunResult(args) {
     setup: args.setup ?? [],
     postChecks: args.postChecks ?? [],
     terminalResizes: args.terminalResizes ?? [],
+    ...(args.cancelAfterMs !== undefined ? { cancelAfterMs: args.cancelAfterMs } : {}),
     skills: args.skills ?? [],
     ...(args.model ? { model: args.model } : {}),
     ...(args.provider ? { provider: args.provider } : {}),
@@ -360,6 +383,14 @@ function readOptionValue(argv, index, arg) {
   const value = argv[index + 1];
   if (!value || value.startsWith('--')) {
     throw new Error(`${arg} requires a value`);
+  }
+  return value;
+}
+
+function readOptionalPositiveInteger(value, label) {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${label} must be a positive integer`);
   }
   return value;
 }

@@ -21,6 +21,34 @@ describe('agent architecture boundary guards', () => {
     expect(source).not.toMatch(/require\(['"]vscode['"]\)/);
   });
 
+  it('keeps the Webview production Markdown path on @neko/markdown without legacy parser dependencies', () => {
+    const packageManifest = JSON.parse(
+      readFileSync(join(packageRoot, 'webview/package.json'), 'utf-8'),
+    ) as {
+      readonly dependencies?: Readonly<Record<string, string>>;
+    };
+    const dependencyNames = Object.keys(packageManifest.dependencies ?? {});
+    const forbiddenDependencies = [
+      'devlop',
+      'hast-util-to-jsx-runtime',
+      'html-url-attributes',
+      'mdast-util-gfm',
+      'micromark-extension-gfm',
+      'react-markdown',
+      'remark-gfm',
+      'remark-parse',
+      'remark-rehype',
+      'unified',
+      'vfile',
+    ];
+    const productionSource = readSourceFiles(webviewSrc, (file) => !isTestFile(file));
+
+    expect(dependencyNames.filter((name) => forbiddenDependencies.includes(name))).toEqual([]);
+    expect(productionSource).not.toMatch(
+      /(?:from\s+|import\()['"](?:react-markdown|remark-gfm|remark-parse|remark-rehype|unified)['"]/,
+    );
+  });
+
   it('keeps Webview projection code from generating durable entity memory contributions', () => {
     const sourceFiles = listFiles(webviewSrc)
       .filter(
@@ -103,7 +131,9 @@ describe('agent architecture boundary guards', () => {
       'types.ts',
     ]);
     const runtimeRootFiles = readdirSync(join(agentSrc, 'runtime'), { withFileTypes: true })
-      .filter((entry) => entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')))
+      .filter(
+        (entry) => entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')),
+      )
       .map((entry) => entry.name)
       .filter((name) => !allowedRuntimeRootFiles.has(name));
 
@@ -349,7 +379,9 @@ describe('agent architecture boundary guards', () => {
       'permission/types.ts',
       'hooks/executor-hooks-factory.ts',
     ]
-      .map((relativePath) => stripTypeScriptComments(readFileSync(join(agentSrc, relativePath), 'utf-8')))
+      .map((relativePath) =>
+        stripTypeScriptComments(readFileSync(join(agentSrc, relativePath), 'utf-8')),
+      )
       .join('\n');
     const forbiddenPermissionToolNames = [
       'GetTimelineInfo',
@@ -370,7 +402,9 @@ describe('agent architecture boundary guards', () => {
       'GetAsset',
     ];
     const violations = forbiddenPermissionToolNames
-      .filter((toolName) => new RegExp(`['"\`]${escapeRegExp(toolName)}['"\`]`).test(permissionSource))
+      .filter((toolName) =>
+        new RegExp(`['"\`]${escapeRegExp(toolName)}['"\`]`).test(permissionSource),
+      )
       .map((toolName) => `Agent permission defaults contain domain tool ${toolName}`);
 
     expect(violations).toEqual([]);
@@ -396,10 +430,7 @@ describe('agent architecture boundary guards', () => {
   });
 
   it('keeps Canvas authoring semantics in Canvas provider, Skill, and catalog contracts', () => {
-    const sourceFiles = [
-      ...listFiles(agentSrc),
-      ...listFiles(join(packageRoot, 'platform/src')),
-    ]
+    const sourceFiles = [...listFiles(agentSrc), ...listFiles(join(packageRoot, 'platform/src'))]
       .filter((file) => file.endsWith('.ts') || file.endsWith('.tsx'))
       .filter((file) => !isTestFile(file))
       .map((file) => ({

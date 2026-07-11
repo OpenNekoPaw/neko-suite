@@ -430,6 +430,33 @@ describe('agent eval protocol smoke request sequencing', () => {
     expect(child.kill).toHaveBeenCalledTimes(1);
   });
 
+  it('sends cancellation before idle wait and retains generic control evidence', async () => {
+    const child = createFakeChild();
+    const facts = { idle: { fullyIdle: true }, turns: [] };
+    const result = await runSinglePromptProtocol(
+      child,
+      responseReader([
+        { ok: true, result: { sessionId: 's1' } },
+        { ok: true, result: { submitted: true } },
+        { ok: true, result: { accepted: true } },
+        { ok: true, result: { fullyIdle: true } },
+        { ok: true, result: facts },
+        { ok: true, result: { disposed: true } },
+      ]),
+      { prompt: 'long response', cancelAfterMs: 1 },
+    );
+
+    expect(child.requests.map((request) => request.method)).toEqual([
+      'session.create',
+      'message.submit',
+      'message.cancel',
+      'session.waitForIdle',
+      'session.facts',
+      'session.dispose',
+    ]);
+    expect(result.automation.messageCancellation).toEqual({ accepted: true });
+  });
+
   it('classifies protocol and runtime failures', () => {
     expect(classifyError(errorWithCode('invalid-request'))).toEqual({
       label: 'manifest/config invalid',
