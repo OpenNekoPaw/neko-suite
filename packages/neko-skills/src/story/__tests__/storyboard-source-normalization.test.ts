@@ -288,6 +288,111 @@ describe('Storyboard source normalization', () => {
     ]);
   });
 
+  it('supports split, rewrite, re-reference, merge, and reorder as one new revision', async () => {
+    const initial = await normalizeStoryboardSource(
+      {
+        profile: 'from-image-sequence',
+        title: 'Editable',
+        images: [resource('edit-a'), resource('edit-b')],
+      },
+      { now: () => NOW },
+    );
+    const replacementRef = resource('replacement');
+    const firstTrace = initial.table?.scenes[0]?.shots[0]?.sourceTrace ?? [];
+    const result = await normalizeStoryboardSource(
+      {
+        profile: 'from-existing-storyboard',
+        storyboard: initial.table!,
+        operations: [
+          {
+            kind: 'split-shot',
+            sceneId: 'image-sequence',
+            shotId: 'image-edit-a-1',
+            shots: [
+              {
+                shotId: 'split-a',
+                shotNumber: 1,
+                duration: 1,
+                visualDescription: 'First half.',
+                characterAction: 'Start motion.',
+                imageStrategy: 'generate-new',
+                generationPrompt: 'First half',
+                sourceTrace: firstTrace,
+              },
+              {
+                shotId: 'split-b',
+                shotNumber: 2,
+                duration: 1,
+                visualDescription: 'Second half.',
+                characterAction: 'Finish motion.',
+                imageStrategy: 'generate-new',
+                generationPrompt: 'Second half',
+                sourceTrace: firstTrace,
+              },
+            ],
+          },
+          {
+            kind: 'rewrite-shot',
+            sceneId: 'image-sequence',
+            shotId: 'split-a',
+            patch: { visualDescription: 'Rewritten first half.' },
+          },
+          {
+            kind: 'replace-reference',
+            sceneId: 'image-sequence',
+            shotId: 'split-b',
+            sourceMediaRefs: [
+              {
+                refId: 'replacement',
+                role: 'source',
+                locator: { type: 'asset', assetId: replacementRef.id },
+                resourceRef: replacementRef,
+              },
+            ],
+          },
+          {
+            kind: 'merge-shots',
+            sceneId: 'image-sequence',
+            shotIds: ['split-a', 'split-b'],
+            shot: {
+              shotId: 'merged',
+              shotNumber: 1,
+              duration: 2,
+              visualDescription: 'Merged rewritten beat.',
+              characterAction: 'Complete the motion.',
+              imageStrategy: 'use-as-reference',
+              sourceMediaRefs: [
+                {
+                  refId: 'replacement',
+                  role: 'source',
+                  locator: { type: 'asset', assetId: replacementRef.id },
+                  resourceRef: replacementRef,
+                },
+              ],
+              sourceTrace: firstTrace,
+            },
+          },
+          {
+            kind: 'reorder-shots',
+            sceneId: 'image-sequence',
+            shotIds: ['image-edit-b-2', 'merged'],
+          },
+        ],
+      },
+      { now: () => '2026-07-11T02:00:00.000Z' },
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.table?.revision?.sequence).toBe(2);
+    expect(result.table?.scenes[0]?.shots.map((shot) => [shot.shotId, shot.shotNumber])).toEqual([
+      ['image-edit-b-2', 1],
+      ['merged', 2],
+    ]);
+    expect(result.table?.scenes[0]?.shots[1]?.sourceMediaRefs?.[0]?.resourceRef).toEqual(
+      replacementRef,
+    );
+  });
+
   it('fails visibly when a durable source or owning capability is missing', async () => {
     const result = await normalizeStoryboardSource(
       {
