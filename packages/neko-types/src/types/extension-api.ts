@@ -165,6 +165,9 @@ export interface NekoCutTimelineElement {
  * Exported by neko-cut extension for timeline manipulation
  */
 export interface NekoCutAPI {
+  /** Package-owned structural, review-render, runtime, and export-readiness facade for .nkv projects. */
+  readonly projectQuality: import('../project-authoring/project-quality').ProjectQualityFacade;
+
   timeline: {
     /**
      * Get information about the current timeline

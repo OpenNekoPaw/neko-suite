@@ -19,15 +19,18 @@ import {
   VSCodeErrorHandler,
   resolveLogLevelSetting,
   watchLogLevel,
+  createVSCodeProjectFileIoAdapter,
 } from '@neko/shared/vscode/extension';
 import { bootstrapCoreServices, logServicesStatus } from './bootstrap';
 import { VideoEditorProvider } from './editor/video/videoEditorProvider';
 import { registerCommands } from './commands';
 import type { NekoCutAPI, ISkillProvider, SkillDef } from '@neko/shared';
+import { classifyWorkspaceMediaPath, resolveWorkspaceMediaPath } from '@neko/shared';
 import { createNekoCutCapabilityProvider } from './agentCapabilityProvider';
 import { TimelineToolExecutor } from './services/TimelineToolExecutor';
 import { TimelineToolBridge } from './services/timelineToolBridge';
 import { NekoCutDashboardTaskSource } from './services/dashboardTaskSource';
+import { CutProjectQualityFacade } from './services/CutProjectQualityFacade';
 import { registerMarketInstallTargets } from './market/registerMarketInstallTargets';
 import type { CanvasCutDraftPayload, CutCanvasDraftImportResult } from '@neko/shared';
 
@@ -64,6 +67,55 @@ export async function activate(
 
   // Create providers
   const videoEditorProvider = new VideoEditorProvider(context);
+  const projectFileAdapter = createVSCodeProjectFileIoAdapter({ vscodeApi: vscode });
+  const projectQuality = new CutProjectQualityFacade({
+    fileOps: projectFileAdapter.fileOps,
+    snapshotSource: {
+      async getSnapshot({ documentUri }) {
+        const document = videoEditorProvider.getProjectDataForDocument(documentUri);
+        return document ? { status: 'available', document } : { status: 'not-open' };
+      },
+    },
+    runtimeProbe: {
+      async probe({ project }) {
+        const available =
+          videoEditorProvider.getExportServiceForDocument(project.documentUri) !== undefined;
+        return {
+          available,
+          ...(available ? { profileId: 'cut-engine-export' } : {}),
+        };
+      },
+    },
+    resolveSourcePath(sourcePath, projectFilePath) {
+      const classification = classifyWorkspaceMediaPath(sourcePath);
+      if (classification.kind !== 'workspace-relative' && classification.kind !== 'variable') {
+        return undefined;
+      }
+      const context = projectFileAdapter.createWorkspaceMediaPathContext({
+        documentUri: vscode.Uri.file(projectFilePath),
+      });
+      const resolved = resolveWorkspaceMediaPath({ source: sourcePath, context });
+      return resolved.status === 'resolved-local' ? resolved.path : undefined;
+    },
+    exportReadinessProbe: {
+      async check({ project }) {
+        const ready =
+          videoEditorProvider.getExportServiceForDocument(project.documentUri) !== undefined;
+        return {
+          ready,
+          diagnostics: ready
+            ? []
+            : [
+                {
+                  code: 'quality-evaluator-failed',
+                  severity: 'error',
+                  message: 'No target-bound Cut export service is registered for this project.',
+                },
+              ],
+        };
+      },
+    },
+  });
 
   // Register custom editor (CustomEditorProvider for .nkv files)
   context.subscriptions.push(
@@ -122,6 +174,7 @@ export async function activate(
   // neko-cut doesn't take a direct dependency on @neko/platform.
   const timelineBridge = new TimelineToolBridge(new TimelineToolExecutor());
   const api: NekoCutAPI & ISkillProvider = {
+    projectQuality,
     timeline: {
       getInfo: () => timelineBridge.getInfo(),
       addElement: (config) => timelineBridge.addElement(config),

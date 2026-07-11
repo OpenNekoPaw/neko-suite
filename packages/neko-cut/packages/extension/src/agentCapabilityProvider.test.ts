@@ -11,6 +11,23 @@ import type { TimelineToolBridge } from './services/timelineToolBridge';
 
 function createApi(): NekoCutAPI {
   return {
+    projectQuality: {
+      validateProject: vi.fn(async () => {
+        throw new Error('Not exercised by capability provider tests.');
+      }),
+      getProjectSnapshot: vi.fn(async () => {
+        throw new Error('Not exercised by capability provider tests.');
+      }),
+      renderPreview: vi.fn(async () => {
+        throw new Error('Not exercised by capability provider tests.');
+      }),
+      probeRuntime: vi.fn(async () => {
+        throw new Error('Not exercised by capability provider tests.');
+      }),
+      checkExportReadiness: vi.fn(async () => {
+        throw new Error('Not exercised by capability provider tests.');
+      }),
+    },
     timeline: {
       getInfo: vi.fn(async () => ({
         duration: 10,
@@ -24,13 +41,11 @@ function createApi(): NekoCutAPI {
       deleteElement: vi.fn(async () => undefined),
       listElements: vi.fn(async () => []),
       reveal: vi.fn(async () => true),
-      importCanvasDraft: vi.fn(
-        async (): Promise<CutCanvasDraftImportResult> => ({
-          accepted: true,
-          status: 'imported',
-          projectUri: 'file:///cut.nkv',
-        }),
-      ),
+      importCanvasDraft: vi.fn(async (): Promise<CutCanvasDraftImportResult> => ({
+        accepted: true,
+        status: 'imported',
+        projectUri: 'file:///cut.nkv',
+      })),
     },
     ai: {
       generateVideoForClip: vi.fn(async () => 'elem-1'),
@@ -96,12 +111,10 @@ describe('createNekoCutCapabilityProvider', () => {
 
   it('routes timeline tool execution through TimelineToolBridge', async () => {
     const bridge = {
-      executeAgentTool: vi.fn(
-        async (): Promise<ToolResult> => ({
-          success: true,
-          data: { trackId: 'track-a' },
-        }),
-      ),
+      executeAgentTool: vi.fn(async (): Promise<ToolResult> => ({
+        success: true,
+        data: { trackId: 'track-a' },
+      })),
     } as unknown as TimelineToolBridge;
 
     const provider = createNekoCutCapabilityProvider(createApi(), bridge);

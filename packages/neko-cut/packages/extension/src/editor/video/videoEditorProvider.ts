@@ -261,7 +261,11 @@ export class VideoEditorProvider implements vscode.CustomEditorProvider<VideoPro
   public getActiveExportService(): ExportService | undefined {
     const uri = this.getActiveDocumentUri();
     if (!uri) return undefined;
-    return this.exportServices.get(uri);
+    return this.getExportServiceForDocument(uri);
+  }
+
+  public getExportServiceForDocument(documentUri: string): ExportService | undefined {
+    return this.exportServices.get(documentUri);
   }
 
   /**
