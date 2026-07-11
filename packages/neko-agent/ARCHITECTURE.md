@@ -121,17 +121,17 @@ Neko Agent 的 VS Code Extension/Webview 与 Terminal TUI/headless 是两个本�
 
 对齐目标不是统一 UI，而是让同一个工作区配置和工作区数据能同时被 TUI 与 Webview 使用。业务逻辑进入共享 runtime/config/catalog/task/cache contract，宿主只提供 adapter 和 presentation。
 
-| 工作区共享业务面          | 共享规则                                                                                                                                                                                                                                     |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Effective config snapshot | `~/.neko/config.toml`、`.neko/config.toml`、环境凭据和账号 catalog 通过共享 resolver 形成同一份快照；Webview 与 TUI 不得分别手写 provider/model/scalar/MCP 解析策略。运行时模型/参数选择只影响当前 session，不自动重写 TOML。                |
-| Session/runtime assembly  | 交互式 Webview 和 TUI 会话都走 `createAgentSessionWithRuntime()` 及 host-neutral runtime bindings；AGENTS overlay、project memory、context settings、capability prompt fragments 和 task projection 在共享路径注入。                         |
-| Conversation identity     | 交互式会话使用 workspace-scoped canonical conversation id。旧 `cli-*` 记录不作为 TUI resume 兼容输入，不读取、不迁移、不重写、不删除；旧 runtime state source 不能作为共享状态成功读入。                                                     |
+| 工作区共享业务面          | 共享规则                                                                                                                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Effective config snapshot | `~/.neko/config.toml`、`.neko/config.toml`、环境凭据和账号 catalog 通过共享 resolver 形成同一份快照；Webview 与 TUI 不得分别手写 provider/model/scalar/MCP 解析策略。运行时模型/参数选择只影响当前 session，不自动重写 TOML。                    |
+| Session/runtime assembly  | 交互式 Webview 和 TUI 会话都走 `createAgentSessionWithRuntime()` 及 host-neutral runtime bindings；AGENTS overlay、project memory、context settings、capability prompt fragments 和 task projection 在共享路径注入。                             |
+| Conversation identity     | 交互式会话使用 workspace-scoped canonical conversation id。旧 `cli-*` 记录不作为 TUI resume 兼容输入，不读取、不迁移、不重写、不删除；旧 runtime state source 不能作为共享状态成功读入。                                                         |
 | Skill/catalog             | 标准来源是 `~/.agents/skills`、`~/.neko/commands`、`.agents/skills`、`.neko/commands`，由共享 Skill file runtime 与 command catalog 解析；`.codex/skills` 或 `skillsDir` 之类非标准来源只能通过显式 source provider 进入，并必须带 diagnostics。 |
-| Command effects           | `/command` 工件、内置命令和 `$skill` 激活使用共享 catalog。TUI-only 或 Extension-only 行为必须注册为 `tui` / `extension` surface scope 的 effect，另一端请求时返回 unavailable diagnostic。                                                  |
-| Async tasks               | 工作区可见任务事实进入 workspace-visible task record；VS Code terminal handle、process handle、recovery token、no-workspace state 等 live lease 是 host-private。                                                                            |
-| Context                   | 项目记忆、AGENTS overlays、context settings、授权读根、capability fragments 通过共享 runtime assembly 进入会话；Webview/TUI 只负责展示或输入采集。                                                                                           |
-| Content access / cache    | 工作区资源使用同一个 project resource-cache root、manifest、quota 和 GC 策略；Extension-private cache 只服务 no-workspace 或 Extension 私有资源，TUI 不反向读取。                                                                            |
-| Dependency injection      | 文档、图片和可选解析依赖通过 host content-access runtime 注入；缺失依赖要返回一致 diagnostic，不能在某个宿主静默 fallback 成空内容。                                                                                                         |
+| Command effects           | `/command` 工件、内置命令和 `$skill` 激活使用共享 catalog。TUI-only 或 Extension-only 行为必须注册为 `tui` / `extension` surface scope 的 effect，另一端请求时返回 unavailable diagnostic。                                                      |
+| Async tasks               | 工作区可见任务事实进入 workspace-visible task record；VS Code terminal handle、process handle、recovery token、no-workspace state 等 live lease 是 host-private。                                                                                |
+| Context                   | 项目记忆、AGENTS overlays、context settings、授权读根、capability fragments 通过共享 runtime assembly 进入会话；Webview/TUI 只负责展示或输入采集。                                                                                               |
+| Content access / cache    | 工作区资源使用同一个 project resource-cache root、manifest、quota 和 GC 策略；Extension-private cache 只服务 no-workspace 或 Extension 私有资源，TUI 不反向读取。                                                                                |
+| Dependency injection      | 文档、图片和可选解析依赖通过 host content-access runtime 注入；缺失依赖要返回一致 diagnostic，不能在某个宿主静默 fallback 成空内容。                                                                                                             |
 
 Host-private 数据不能伪装成共享业务结果。Webview URI、blob URL、Extension memento、VS Code handle、Extension-private cache、TUI 进程 handle、终端尺寸、键盘状态和 headless 报告路径都不是 durable workspace identity。跨宿主请求遇到这些能力时，应返回 host-private/unavailable diagnostic，而不是 no-op、当作普通 prompt、读另一端私有缓存，或回退旧实现。
 
@@ -229,19 +229,70 @@ React 对话界面，通过 postMessage 与 Extension Host 通信。117 个源�
 | `config/`     | 预设配置（providers/prompts/MCP servers）                                         |
 | `i18n/`       | 国际化                                                                            |
 
-### Agent Webview 回合时间线
+### Agent 流式交付、Markdown 与持久化生命周期
 
-Agent Webview 的活动回合使用 `agentTurnTimeline` 作为实时展示顺序的权威来源。Runtime/Extension 为同一回合生成稳定的 `turnId`、`messageId`、`itemId` 和单调 `sequence`，并通过 `@neko-agent/types` 中的 timeline DTO 传递文本、thinking、工具、后台任务、媒体、结构化内容和错误事件。
+长文本生成采用分层背压，而不是让 provider fragment 频率穿透所有边界：
 
-活动回合内的展示规则：
+```text
+provider transport fragments
+  -> turn-scoped semantic accumulator
+  -> explicit Timeline V2 operations
+  -> Extension delivery scheduler
+  -> webview.postMessage delivery batch
+  -> Webview frame commit scheduler
+  -> message/item-scoped MarkdownStreamingSession
+  -> React normalized Markdown adapter
 
-- 流式 Markdown 按当前 timeline 游标即时渲染；工具、任务、媒体、错误等结构事件会关闭前一个文本段，后续文本创建新的 response 段。
-- 工具调用、结果、确认、失败和 backfill 更新同一个 tool timeline item；未知 `toolCallId` 或未知父锚点必须 fail-visible，不能猜测最后一条 assistant message。
-- 工具触发的后台任务和媒体任务通过 `parentToolCallId` 锚定到来源工具；真正无工具来源的媒体/任务必须显式标记为 turn-level。
-- `streamComplete.contentBlocks` 只作为完成历史与 reload 快照保存，不再重新拥有活动回合的可视顺序。
-- Webview handler 将 timeline 投影成普通 assistant `Message.contentBlocks` 供现有 `MessageList`、`ContentBlockItem`、`ToolCallDisplay`、`TaskCard`、`RichContentRenderer` 和 `ProcessRecordsGroup` 渲染；完成历史仍可直接从持久化 `contentBlocks` 渲染。
+conversation snapshots
+  -> storage-scoped persistence coordinator
+  -> serialized local storage mutation
+```
 
-这个时间线是 `neko-agent` 本地 Extension/Webview 边界内的展示契约，不是跨包通用 timeline 框架。只有当其他包出现相同的回合、工具、异步任务生命周期语义时，才考虑提取公共抽象。
+#### 语义流边界
+
+- provider 的 `text_delta` / thinking fragment 是传输片段，不是独立的历史语义步骤。它们只更新当前回合 accumulator，并尽快产生可见增量。
+- working-memory、journal、history 与 context compaction 只在真正的语义事件、回合/模型预算边界或终态发生时更新；禁止按 provider chunk 执行完整投影或 compaction。
+- turn accumulator 只在一个 `conversationId + turnId + messageId` 生命周期内复用。禁止跨 turn 共享 mutable accumulator，也不建立全局 Timeline mutable state。
+
+#### Timeline V2 与 Extension delivery
+
+`agentTurnTimeline` schema version 2 是活动回合显示顺序的权威契约。身份包含稳定的 `conversationId`、`turnId`、`messageId`、`itemId`，以及 Webview endpoint incarnation 的 `connectionEpoch`；source generation 和 revision 都必须显式。live delta 的 `deliveryRevision` 必须连续，缺口表示可能丢失 IPC batch；每个 item 的 `itemRevision` 只要求严格递增，Extension 合并多个 mutation 后允许跳号，item 跳号不得触发 snapshot recovery。
+
+- 文本变更必须使用 `append`、`replace`、`snapshot`、`complete` 中的明确操作；不得通过累计全文、字段 alias 或字符串前缀推断更新语义。
+- `AgentTimelineDeliveryChannel` 在一个活动 turn 内复用，合并相邻 append 和 latest-value progress。tool、error、replace、complete 是 hard flush boundary。
+- delivery scheduler 限制 pending operations、pending text bytes 和 flush latency，并串行调用 `webview.postMessage`。provider chunk 数量不得直接等于跨进程消息数量。
+- Webview reload 或 revision gap 通过显式 snapshot request/response 恢复；snapshot 必须与 connection/conversation/turn/message identity 对齐。不存在的活动 turn 返回 typed diagnostic，不能返回空成功结果。
+- Webview endpoint 重建时复用权威 accumulator/channel 状态并重新绑定 endpoint；同一 mutable channel 不跨 turn 复用。为支持显式 reload recovery，每个 conversation 最多保留最新一个 active/terminal 权威 channel；下一 turn 开始前、conversation clear 或 Extension dispose 时释放，且不保留历史 delta log。
+
+#### Webview commit 与 canonical Markdown
+
+- 一个有效 Timeline delivery batch 只产生一次会话状态 transaction。多个 host delivery 若落在同一 animation frame，会按 item 合并为至多一次 streaming render revision。
+- 会话投影与 Markdown external store 使用同一有序提交边界：先把已接受 delivery 提交到 Markdown session 但不通知订阅者，再提交 conversation refs/React state，最后每个受影响 session 只 publish 一次。Renderer 保留 source identity fail-visible 检查，禁止用 catch、fallback 或关闭检查掩盖跨状态源竞态。
+- completion、replace、error、conversation switch、unmount 与 Webview disposal 必须 flush 或 cancel 待提交 frame，禁止遗失最后一个 delta。
+- 每个 assistant text/thinking item 复用一个 `@neko/markdown` `MarkdownStreamingSession`。append 推进同一个 session；replace 创建新的 source generation；snapshot 只用于 resync；complete finalizes 同一 session。
+- 历史完成消息也进入同一 normalized session/React adapter，不允许 `react-markdown`、final-only parser 或 raw-source success fallback。
+- 原始 fenced Markdown 是视觉 source authority。normalized `codeBlock` node 可投影带 source range/provenance 的 semantic composite metadata，但不得删除原始 fence，也不得把 derived composite 再显示成第二个独立 artifact。
+- normalized contract 的未知 node/schema、活动流缺失 Markdown session 或 source mismatch 都必须 fail-visible。
+
+#### 串行持久化与 completion barrier
+
+- 每个本地 conversation storage authority 复用一个 `ConversationPersistenceCoordinator`；不同 runtime 不得并发写同一 storage scope。
+- partial snapshot 使用 latest-wins coalescing；terminal save/delete 是 required operation，必须可等待。`flush()` 只等待其调用水位，`dispose()` 必须 drain 已接纳写入后再释放 storage。
+- 同进程正常单 turn 不应产生 stale-write；真正的外部 writer conflict 保持 fail-visible，不重试成静默成功。
+- 正常完成顺序是：finalize accumulator → flush terminal Timeline delivery → 发送 final blocks → await terminal persistence → 返回区分 model completion、Webview delivery、resync availability 和 durability 的 typed lifecycle result。
+- cancellation、conversation clear、Webview close 和 Extension deactivation 必须停止 late callbacks，并释放 timer、subscription、delivery channel、Markdown session、frame callback 与 pending write。
+
+#### 实例复用边界
+
+| 实例                                    | 复用范围                                                             | 禁止范围                            |
+| --------------------------------------- | -------------------------------------------------------------------- | ----------------------------------- |
+| semantic accumulator / Timeline channel | 同一 turn；每 conversation 最多保留最新 active/terminal channel 用于显式 reload recovery | 不跨 turn 共享 mutable state，不保留历史 delta log |
+| Extension delivery scheduler            | 同一活动 turn 与 endpoint generation，可在 reload 时 rebind endpoint | 不作为全局 mutable bus              |
+| Markdown streaming session              | 同一 message/item/source generation                                  | replace 后不得继续复用旧 generation |
+| persistence coordinator                 | 同一本地 storage authority 生命周期                                  | 不跨独立 storage authority 共享     |
+| Webview frame scheduler                 | 一个 Webview runtime                                                 | dispose 后不得接收新 delivery       |
+
+这些 coordinator 都留在 owning package：它们分别拥有 Agent 语义、VS Code `postMessage`、Webview frame/DOM 和 conversation storage 生命周期。当前不存在可同时满足这些契约的共享调度器；只有第二个子包出现相同运行环境与生命周期语义时才提取中立抽象。
 
 ### @neko/cli — Terminal TUI 与 headless 工具
 
@@ -326,9 +377,11 @@ Webview → Extension:
   getSettings, updateSettings, invokeSlashCommand,
   clearActiveSkill, planApprove/Reject,
   searchProjectFiles, getTasks, cancelTask,
+  requestAgentTurnTimelineSnapshot,
   requestCanvasAuthoringHandoff
 
 Extension → Webview:
+  agentTurnTimeline (schema v2), agentTurnTimelineDiagnostic,
   thinking, streamText, streamThinking,
   toolCall, toolResult, toolConfirmation,
   streamComplete, agentPhase, error,
@@ -367,12 +420,12 @@ Agent/plugin transfer planner 负责选择包级 authoring 能力，具体 `.nk*
 
 Canonical durable authoring commands:
 
-| 目标 | 命令 |
-| --- | --- |
-| Cut generated clip | `neko.cut.authoring.importGeneratedClip` |
+| 目标                          | 命令                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| Cut generated clip            | `neko.cut.authoring.importGeneratedClip`                                       |
 | Cut storyboard / Canvas draft | `neko.cut.authoring.importStoryboard` / `neko.cut.authoring.importCanvasDraft` |
-| Sketch image source | `neko.sketch.authoring.importImageSource` |
-| Model asset | `neko.model.authoring.importAsset` |
+| Sketch image source           | `neko.sketch.authoring.importImageSource`                                      |
+| Model asset                   | `neko.model.authoring.importAsset`                                             |
 
 旧 UI-bound command id 不是 Agent/Assets 默认投递目标。`neko.cut.importGeneratedClip`、`neko.sketch.importAsset`、`neko.model.importAsset`、隐藏打开编辑器、Webview pending import 或 temp project 都不能作为 durable write 成功路径。package authoring 返回 `ok: false` 时，Agent 展示 diagnostic 并停止，不改用 Webview fallback。
 
@@ -405,8 +458,11 @@ AgentSessionRunner → AgentSession → AgentExecutor（ReAct 循环）
   └─ 上下文 → ContextManager + TokenBudgetManager → 压缩/摘要
          │
          ▼
-AgentStreamProcessor（Extension — 事件翻译）
-  └─ AgentEvent → webview.postMessage
+AgentStreamProcessor（Extension — 语义事件翻译与 delivery barrier）
+  ├─ provider fragment → turn accumulator
+  ├─ semantic event → Timeline V2 operation
+  ├─ delivery scheduler → bounded/serialized webview.postMessage
+  └─ completion barrier → terminal delivery + durable persistence result
 ```
 
 ---

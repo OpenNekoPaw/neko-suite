@@ -27,13 +27,13 @@ This change composes those contracts. It does not create a second session identi
 
 ### Five-layer analysis
 
-| Layer | Decision |
-| --- | --- |
+| Layer          | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Responsibility | `@neko/agent` owns semantic stream classification, authoritative turn accumulation, history commits, and compaction triggers. `@neko-agent/types` owns Timeline DTOs and validation. Extension owns Webview endpoint lifecycle, batching, ordering, IPC, and active-turn snapshot serving. Webview owns one-batch state commits, normalized Markdown session binding, frame scheduling, and React presentation. Conversation persistence runtime owns serialized file scheduling and durability diagnostics. |
-| Dependency | Agent core remains host-neutral and does not import VS Code/React. Extension depends on Agent/types and provides a delivery port. Webview imports only browser-safe contracts and normalized Markdown/UI code. No Webview imports Node/VS Code, and no Extension imports React. No cross-feature package dependency is introduced. |
-| Interface | Transport operations are explicit and revisioned; no string-prefix heuristics. Ports expose enqueue/flush/snapshot/cancel/dispose rather than concrete Webview or file implementations. Terminal delivery and persistence are awaitable. Unknown schema, identity, revision, lifecycle, or normalized node fails visibly. |
-| Extension | Text/thinking/progress coalescing is strategy-based only where event semantics differ; tool/error/terminal boundaries reuse the same ordered channel. A future host can consume Agent deltas without importing the VS Code scheduler. The persistence coordinator supports save/delete/terminal operations without becoming a repository-wide queue framework. |
-| Testing | Pure classifier/projector/scheduler tests use fake clocks and poison legacy paths. Contract tests cover DTO validation and ordering. Persistence tests assert max concurrency one and latest-wins behavior. Extension Development Host replay through real `webview.postMessage` proves lifecycle, exact output, bounded counts, and no reload. Focused Agent evaluation verifies unchanged visible behavior and tool ordering. |
+| Dependency     | Agent core remains host-neutral and does not import VS Code/React. Extension depends on Agent/types and provides a delivery port. Webview imports only browser-safe contracts and normalized Markdown/UI code. No Webview imports Node/VS Code, and no Extension imports React. No cross-feature package dependency is introduced.                                                                                                                                                                           |
+| Interface      | Transport operations are explicit and revisioned; no string-prefix heuristics. Ports expose enqueue/flush/snapshot/cancel/dispose rather than concrete Webview or file implementations. Terminal delivery and persistence are awaitable. Unknown schema, identity, revision, lifecycle, or normalized node fails visibly.                                                                                                                                                                                    |
+| Extension      | Text/thinking/progress coalescing is strategy-based only where event semantics differ; tool/error/terminal boundaries reuse the same ordered channel. A future host can consume Agent deltas without importing the VS Code scheduler. The persistence coordinator supports save/delete/terminal operations without becoming a repository-wide queue framework.                                                                                                                                               |
+| Testing        | Pure classifier/projector/scheduler tests use fake clocks and poison legacy paths. Contract tests cover DTO validation and ordering. Persistence tests assert max concurrency one and latest-wins behavior. Extension Development Host replay through real `webview.postMessage` proves lifecycle, exact output, bounded counts, and no reload. Focused Agent evaluation verifies unchanged visible behavior and tool ordering.                                                                              |
 
 ### Current reusable foundations
 
@@ -146,8 +146,8 @@ interface AgentTurnTimelineBatchMessageV2 {
 Every mutable event carries `itemId`, stable item sequence, and monotonic `itemRevision`. Validation enforces:
 
 - identity matches the envelope;
-- delivery revision is positive and monotonic;
-- item revision is positive and monotonic;
+- live delta delivery revision is positive and contiguous; a gap means an IPC batch may be missing and requires snapshot recovery;
+- item revision is positive and strictly monotonic per item, but may skip values because the Extension can coalesce multiple mutations into one delivered operation;
 - operation fields match the operation kind;
 - append/replace/snapshot/complete transitions are legal;
 - completed items cannot receive later append/update operations;
@@ -173,7 +173,7 @@ Two lifecycle objects are used rather than one cross-layer god object:
    - uses an injected `AgentWebviewDeliveryPort`;
    - flushes, snapshots, cancels, and disposes.
 
-`AgentStreamProcessor` composes them. One channel is reused within a turn and removed after terminal acknowledgement/retention expiry. Mutable channel state is never shared across turns.
+`AgentStreamProcessor` composes them. One channel is reused within a turn. For explicit Webview reload recovery, the processor retains at most the latest active or terminal authoritative channel per conversation; starting the next turn for that conversation disposes the retained predecessor before registering the new channel. Conversation clear and Extension disposal also release it. Mutable channel state is never shared across turns, and historical delta logs are never retained.
 
 **Why:** Agent core owns content semantics; Extension owns host delivery and endpoint lifecycle. A single class spanning both would couple the host-neutral runtime to VS Code.
 
@@ -241,6 +241,8 @@ Behavior:
 - historical source creates one session and immediately finalizes it;
 - item removal, conversation eviction, Webview disposal, and replacement clean up the registry entry;
 - asynchronous resource/highlight results remain revision-associated and stale results are discarded with diagnostics.
+
+Conversation projection and the external Markdown session registry form one ordered Webview commit boundary. The handler first validates and projects the complete delivery batch, then mutates the accepted Markdown sessions without notifying subscribers, commits the conversation refs/React state, and finally publishes each affected Markdown session once. This ordering prevents both transient directions of divergence: new conversation source with an old Markdown snapshot, and new Markdown notifications while conversation props still expose old source. Contract violations remain fail-visible; the renderer source-identity assertion is not disabled or caught.
 
 `MarkdownStreamingSession` currently reparses its current source on append. That is accepted for this change because Extension batching plus Webview frame coalescing bounds parse frequency. Incremental parsing is deferred unless runtime evidence shows the bounded path still misses acceptance budgets.
 
@@ -380,7 +382,7 @@ Path-level tests poison:
 - **[Risk] Batching still reparses a growing document frequently** → Measure render revisions and CPU in the reported fixture; only consider incremental parser work if bounded batching fails the runtime budget.
 - **[Risk] Terminal persistence increases completion latency** → Coalesce partials, serialize writes, measure terminal flush latency, and report durability separately; do not trade away user-data correctness for a false instant success.
 - **[Risk] Multi-window external writes still conflict** → Keep file revision guards and surface external conflict diagnostics. Cross-process merge policy remains owned by session/storage isolation work.
-- **[Risk] Active-turn snapshots retain memory after completion** → Dispose channel state after terminal acknowledgement and a bounded recovery window; tests assert cleanup. Do not retain historical delta logs in memory.
+- **[Risk] Active-turn snapshots retain memory after completion** → Bound retention structurally to one latest active/terminal authoritative channel per conversation. Starting the next turn, clearing the conversation, or disposing the Extension releases the predecessor; tests assert old-turn snapshot unavailability. Do not retain historical delta logs in memory.
 - **[Risk] Two schedulers appear over-designed** → Extension batching owns IPC; Webview frame coalescing owns React. Each is small, local, and protects a real sandbox/lifecycle boundary.
 - **[Risk] Existing dirty working tree complicates implementation** → Implement in scoped commits or an isolated worktree and avoid resetting unrelated changes.
 
@@ -404,6 +406,6 @@ Because this is prelaunch internal protocol work, deployment is an atomic produc
 
 - What exact internal delivery window and soft pending-byte budget meet the Extension Development Host latency/CPU target on supported machines? The implementation should start with benchmarked constants in the 32–50 ms range, not a user setting.
 - Should the first visible text delta bypass the normal coalescing timer to minimize time-to-first-token, or is the bounded delivery window already imperceptible? Decide from runtime measurement.
-- How long should a completed Extension turn accumulator remain available for Webview resynchronization before disposal? Prefer immediate disposal after final durable/Webview acknowledgement unless actual reload races require a short bounded retention window.
+- Should completed-turn recovery also receive a time-based expiry while no newer turn starts? The current local-product boundary is deterministic and structurally bounded: retain only the latest active/terminal authoritative channel per conversation, then release it on the next turn, conversation clear, or Extension disposal. Add a timer only if measured long-idle memory pressure justifies the extra lifecycle race.
 - Does the active `normalize-agent-session-isolation` change already define a connection epoch/request identity contract that this change should reuse verbatim? Resolve before adding fields to `@neko-agent/types`.
 - Should terminal persistence failure alter the existing `creation.run.ended` status enum or remain a separate typed durability diagnostic? Preserve the distinction between model completion and durable save, but align with the owning run-result contract before implementation.

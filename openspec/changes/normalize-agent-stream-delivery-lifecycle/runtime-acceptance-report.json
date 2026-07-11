@@ -1,0 +1,127 @@
+{
+  "identity": {
+    "connectionEpoch": "webview-mrfzyy6w-1",
+    "conversationId": "izbh0142-01KX7YK8SM5H9AYAZGSPZ8M4H4",
+    "turnId": "turn-stream-lifecycle-acceptance-mrfzyy6u",
+    "messageId": "stream-lifecycle-acceptance-mrfzyy6u"
+  },
+  "timeline": {
+    "messages": 4,
+    "deliveryRevisions": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "itemRevisions": [
+      1,
+      2000,
+      4000,
+      4001
+    ],
+    "operations": [
+      {
+        "deliveryRevision": 1,
+        "operation": "append",
+        "itemId": "text-1",
+        "itemRevision": 1,
+        "contentLength": 1
+      },
+      {
+        "deliveryRevision": 2,
+        "operation": "append",
+        "itemId": "text-1",
+        "itemRevision": 2000,
+        "contentLength": 1999
+      },
+      {
+        "deliveryRevision": 3,
+        "operation": "append",
+        "itemId": "text-1",
+        "itemRevision": 4000,
+        "contentLength": 3057
+      },
+      {
+        "deliveryRevision": 4,
+        "operation": "complete",
+        "itemId": "text-1",
+        "itemRevision": 4001,
+        "contentLength": 0,
+        "status": "complete"
+      }
+    ],
+    "appendContentLengths": [
+      1,
+      1999,
+      3057
+    ],
+    "completionCount": 1,
+    "timelineBytes": 13062
+  },
+  "source": {
+    "jsLength": 5057,
+    "utf8Bytes": 9485,
+    "sha256": "c536c75a9b78579a84eec2630713c614b60164de41b8fd59bc32896cf7bfdfde"
+  },
+  "diagnostics": {
+    "count": 0,
+    "errors": 0,
+    "globalError": false,
+    "eventsAlias": 0,
+    "replaceContent": 0
+  },
+  "dom": {
+    "preReload": {
+      "tableCount": 1,
+      "rowCounts": [
+        34
+      ],
+      "tab": "New Chat\n执行中"
+    },
+    "postReload": {
+      "tableCount": 1,
+      "rowCounts": [
+        34
+      ],
+      "tab": "New Chat\n执行中"
+    },
+    "final": {
+      "tableCount": 1,
+      "rowCounts": [
+        85
+      ],
+      "tab": "New Chat\n完成"
+    }
+  },
+  "targetContinuity": {
+    "pageTargetId": "D29C0A3E1B73A73711A8E96023A398D0",
+    "iframeTargetIdBefore": "27A6DA404C3F043AA5CA576D5BAB9784",
+    "iframeTargetIdAfter": "27A6DA404C3F043AA5CA576D5BAB9784",
+    "sameIframeTarget": true
+  },
+  "extensionReport": {
+    "providerChunks": 4000,
+    "persistenceWrites": 0,
+    "timelineMetrics": {
+      "inputBatches": 4001,
+      "inputOperations": 4001,
+      "deliveredBatches": 4,
+      "deliveredOperations": 4,
+      "deliveredBytes": 21918,
+      "pendingBytesHighWaterMark": 5763,
+      "pendingOperationsHighWaterMark": 1,
+      "flushCount": 4,
+      "maximumFlushLatencyMs": 50,
+      "failedDeliveries": 0,
+      "pendingOperations": 0,
+      "pendingTextBytes": 0,
+      "timerScheduled": false,
+      "accepting": true,
+      "disposed": false
+    },
+    "terminalStatus": "completed",
+    "terminalDeliveryStatus": "delivered",
+    "activeTurnResynchronizationStatus": "available",
+    "sameProcessStaleWriteDiagnostics": 0
+  }
+}
