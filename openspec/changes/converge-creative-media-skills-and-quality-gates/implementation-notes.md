@@ -782,3 +782,78 @@ pnpm check:unused
 2. 删除旧 Quality/path-only fixture、dual-read/fallback 和到期 migration alias；
 3. 将 removed identity poison 扩展到 repository-level legacy-debt/unused gate；
 4. 完成全仓 `pnpm check`、`pnpm test`、`pnpm check:legacy-debt`、`pnpm check:unused` 与真实 Agent evaluation。
+
+## 16. 残留 Skill 激活与 path-only Quality 工具导出清理（2026-07-12）
+
+### 16.1 NekoCut 不再激活已删除的 `ai-generate`
+
+审计发现 NekoCut 的两个 Extension command 仍通过 `neko.agent.invokeSkill` 固定发送 `skillName: ai-generate`。这意味着旧 builtin export 虽已删除，跨 Extension 运行时仍可能请求旧身份，形成“catalog 已清理、调用方仍激活”的污染路径。
+
+本批将该边界收敛为显式 canonical Skill：
+
+- 单视频片段生成发送 `video`；
+- 音视频转写并加入字幕时间线发送 `subtitle`；
+- `buildCutAgentSkillInvocation()` 只接受上述白名单，并对 `ai-generate` fail-visible；
+- 不增加新的用户 Skill、Slash command、fallback alias 或通用 registry。
+
+该 helper 只拥有 NekoCut 到 Agent 的跨 Extension invocation payload，未承载 Cut command schema、Provider schema 或创作方法论，因此不会扩大 Skill 内容或复制 capability contract。
+
+### 16.2 删除旧 Quality tool schema 与 Agent wrapper
+
+生产 capability registry 已通过 `createCanonicalQualityCheckTools()` 注册 `QualityCheck`，canonical 输入为 revision-bound `QualityTarget`，且必须提供稳定 `resourceRef` 或 owning `projectRef`。旧代码仍保留另一套可公开导出的工具工厂：
+
+- `createLegacyQualityCheckTools()`；
+- `createLegacyConsistencyCheckTools()`；
+- Agent Extension 的 `qualityCheckTools.ts` / `consistencyCheckTools.ts` wrapper；
+- 基于 `scenes[].mediaPath` 的 `QualityCheck`、`QualityRepairCheck`、`QualityCheckConsistency` 重复 toolDefinitions 和测试 fixture。
+
+这些路径没有生产调用方，但仍能被外部 import 后重新注册，属于运行时成功能力残留，而不是有价值的方法论。本批已删除上述实现、public exports、Agent wrapper 和 legacy fixture；没有迁移其 path-only schema、文件读取 adapter、修复重试协议或本地化参数表。
+
+保留的能力边界为：
+
+- canonical `QualityCheck`：`QualityTarget.resourceRef/projectRef` + revision/digest；
+- cross-shot consistency evaluator：继续作为 canonical Quality Gate profile 内部 evaluator 使用，不再以 path-only 独立工具暴露；
+- perception、audio、frame evaluator ports：继续由 `quality-gate-runtime` 组合，外部感知模型仍只能替换 perception evaluator。
+
+新增 export-surface poison assertion，证明 `@neko/skills` 不再导出两个旧工厂；既有 canonical 测试继续证明即使同时提供合法 target，额外 `mediaPath` 也会在 review handler 运行前被拒绝。
+
+### 16.3 验证
+
+已运行：
+
+```bash
+pnpm --filter neko-cut exec vitest --run \
+  packages/extension/src/services/cutAgentSkillInvocation.test.ts
+# 1 file, 4 tests passed
+
+pnpm --filter @neko/skills test
+# 33 files, 306 tests passed
+
+pnpm --filter @neko-agent/extension exec vitest --run \
+  src/tools/__tests__/capabilityProviders.test.ts \
+  src/tools/__tests__/qualityCapabilityProvider.test.ts
+# 2 files, 7 tests passed
+
+pnpm exec tsc --noEmit -p packages/neko-skills/tsconfig.json
+# passed
+
+pnpm exec eslint \
+  packages/neko-cut/packages/extension/src/extension.ts \
+  packages/neko-cut/packages/extension/src/services/cutAgentSkillInvocation.ts \
+  packages/neko-cut/packages/extension/src/services/cutAgentSkillInvocation.test.ts \
+  packages/neko-skills/src/quality/index.ts \
+  packages/neko-skills/src/quality/__tests__/canonical-quality-tools.test.ts
+# passed
+
+git diff --check -- <本批文件>
+# passed
+```
+
+全仓门禁现状：
+
+- `pnpm check:legacy-debt` 仍失败，但 blocking 从上一批记录的 87 降至 76（`migrate-now: 65`、`needs-review: 11`）；本批删除的旧 Quality factories/wrappers 不再出现在 production debt surface。
+- `pnpm check:unused` 仍为既有基线：1 unused file、5 unused dependencies、2 unlisted dependencies、25 unused exports、2 duplicate exports；未报告本批新增 helper 或 canonical Quality exports。
+- `@neko-agent/extension` 全包 typecheck 被并行工作区中的 perception/session/locale contract 修改阻塞；错误位于 `perception-pipeline.ts`、`read-image-perception-backfill.ts`、`agentMessageTurnHandler.ts` 和 `skillContextRoutes.ts`，与本批删除的无调用方 wrapper 无关。
+- NekoCut Extension 全包直接 `tsc` 仍受既有 DOM lib、timeline/transition/keyframe 和 service signature 基线错误阻塞；本批通过聚焦 Vitest 与 ESLint 验证 invocation contract。
+
+任务 9.5/9.6/9.7 暂不整体勾选：本批完成了旧激活入口、重复 Quality schema、legacy fixture 和 poison assertion 的一个独立子集；其余 evaluation/locale/docs 全量审计、到期 alias、generated asset lifecycle 及其他 fallback 仍需继续处理。
