@@ -55,10 +55,8 @@ import {
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import { shouldActivateForegroundConversation } from '@/handlers/foreground-activation';
 import { ChatWorkspace } from './ChatWorkspace';
-import {
-  isCharacterRoleConversationKind,
-  projectCharacterRoleSessionView,
-} from '@/presenters/character-role-session-presenter';
+import { isCharacterRoleConversationKind } from '@/presenters/character-role-session-presenter';
+import { projectConversationTabActivation } from '@/presenters/conversation-tab-activation-presenter';
 import {
   applyUserMessageToConversationSummaries,
   applyUserMessageToOpenTabs,
@@ -720,14 +718,16 @@ export function ConversationController({
     setIsForegroundConversationActivationPending(false);
   }, []);
 
-  const activateCharacterRoleTab = useCallback(
-    (tab: OpenTab) => {
-      const projection = projectCharacterRoleSessionView({
-        sessionId: tab.conversationId,
-        cachedMessages: conversationMessagesRef.current.get(tab.conversationId),
-        cachedStreaming: conversationStreamingRef.current.get(tab.conversationId),
+  const commitConversationTabActivation = useCallback(
+    (conversationId: string) => {
+      const projection = projectConversationTabActivation({
+        conversationId,
+        cachedMessages: conversationMessagesRef.current.get(conversationId),
+        cachedStreaming: conversationStreamingRef.current.get(conversationId),
       });
 
+      conversationMessagesRef.current.set(projection.activeConversationId, projection.messages);
+      conversationStreamingRef.current.set(projection.activeConversationId, projection.streaming);
       setMessages(projection.messages);
       setStreamingMessageId(projection.streaming.streamingMessageId);
       streamingMessageIdRef.current = projection.streaming.streamingMessageId;
@@ -736,7 +736,6 @@ export function ConversationController({
       setQueuedMessages(projection.streaming.queuedMessages ?? []);
       activeConversationIdRef.current = projection.activeConversationId;
       setActiveConversationId(projection.activeConversationId);
-      setActiveTab('chat');
     },
     [
       activeConversationIdRef,
@@ -752,8 +751,16 @@ export function ConversationController({
     ],
   );
 
+  const activateCharacterRoleTab = useCallback(
+    (tab: OpenTab) => {
+      commitConversationTabActivation(tab.conversationId);
+      setActiveTab('chat');
+    },
+    [commitConversationTabActivation],
+  );
+
   // ---- Message handler ----
-  const { handleMessage } = useMessageHandler({
+  const { handleMessage, flushTimelineRendering } = useMessageHandler({
     messages,
     isThinking,
     activeConversationId,
@@ -1074,29 +1081,9 @@ export function ConversationController({
       };
       setIsForegroundConversationActivationPending(true);
       isTablessConversationViewRef.current = false;
-      const cachedMessages = conversationMessagesRef.current.get(conversationId) ?? [];
-      const cachedStreaming = conversationStreamingRef.current.get(conversationId);
-      setMessages(cachedMessages);
-      setStreamingMessageId(cachedStreaming?.streamingMessageId ?? null);
-      streamingMessageIdRef.current = cachedStreaming?.streamingMessageId ?? null;
-      setIsThinking(cachedStreaming?.isThinking ?? false);
-      setQueuedMessageCount(cachedStreaming?.queuedMessageCount ?? 0);
-      setQueuedMessages(cachedStreaming?.queuedMessages ?? []);
-      activeConversationIdRef.current = conversationId;
-      setActiveConversationId(conversationId);
+      commitConversationTabActivation(conversationId);
     },
-    [
-      activeConversationIdRef,
-      conversationMessagesRef,
-      conversationStreamingRef,
-      setActiveConversationId,
-      setIsThinking,
-      setMessages,
-      setQueuedMessageCount,
-      setQueuedMessages,
-      setStreamingMessageId,
-      streamingMessageIdRef,
-    ],
+    [commitConversationTabActivation],
   );
 
   const handleAllTabsClosed = useCallback(() => {
@@ -1207,6 +1194,13 @@ export function ConversationController({
   ]);
 
   // ---- Tab management ----
+  const prepareCurrentConversationForTabActivation = useCallback(() => {
+    // Persist local UI-only state first; a pending canonical Timeline frame then overwrites
+    // the cache with the newest delivery before the incoming tab reads it.
+    persistCurrentVisibleConversation();
+    flushTimelineRendering();
+  }, [flushTimelineRendering, persistCurrentVisibleConversation]);
+
   const { handleOpenTab, handleCloseTab, handleSwitchTab } = useTabManager({
     openTabs,
     setOpenTabs,
@@ -1216,7 +1210,7 @@ export function ConversationController({
     conversations,
     setActiveTab,
     onAllTabsClosed: handleAllTabsClosed,
-    onBeforeTabActivation: persistCurrentVisibleConversation,
+    onBeforeTabActivation: prepareCurrentConversationForTabActivation,
     onBeforeConversationActivation: handleBeforeConversationActivation,
     onConversationActivated: requestConversationResourceSnapshot,
     onActivateCharacterRoleTab: activateCharacterRoleTab,

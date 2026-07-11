@@ -140,6 +140,7 @@ export interface UseMessageHandlerProps {
  */
 export interface UseMessageHandlerReturn {
   handleMessage: (event: MessageEvent<ExtensionToWebviewMessage>) => void;
+  flushTimelineRendering: () => void;
 }
 
 /**
@@ -394,7 +395,11 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
     [registry, context],
   );
 
-  return { handleMessage };
+  const flushTimelineRendering = useCallback(() => {
+    timelineRenderScheduler.flushAll();
+  }, [timelineRenderScheduler]);
+
+  return { handleMessage, flushTimelineRendering };
 }
 
 function isForeignFeatureHostMessage(message: unknown): boolean {

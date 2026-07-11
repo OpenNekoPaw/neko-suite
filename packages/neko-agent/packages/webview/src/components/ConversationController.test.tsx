@@ -140,6 +140,14 @@ vi.mock('@/components/ChatWorkspace', () => ({
         <span data-testid="workspace-messages">
           {props.messages?.map((message) => message.content).join('|') ?? ''}
         </span>
+        <span data-testid="workspace-streaming-flags">
+          {props.messages
+            ?.map((message) => {
+              const textBlock = message.contentBlocks?.find((block) => block.type === 'text');
+              return `${message.isStreaming === true}:${textBlock?.type === 'text' && textBlock.isStreaming === true}`;
+            })
+            .join('|') ?? ''}
+        </span>
         <span data-testid="workspace-switching">
           {isConversationSwitching ? 'switching' : 'idle'}
         </span>
@@ -594,6 +602,89 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-work-items').textContent).toBe('');
   });
 
+  it('finalizes orphaned Markdown streaming state when a cached ordinary tab is activated from the UI', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'activeConversation',
+            conversation: {
+              id: 'conv-b',
+              title: 'Chat B',
+              messages: [streamingMessage('message-b', 'partial B')],
+            },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-a',
+            },
+          },
+        }),
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Chat B' }));
+
+    expect(screen.getByTestId('workspace-messages').textContent).toBe('partial B');
+    expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('false:false');
+  });
+
+  it('finalizes orphaned Markdown streaming state when a cached character-role tab is activated from the UI', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'activeConversation',
+            conversation: {
+              id: 'conv-role',
+              title: 'Role B',
+              messages: [streamingMessage('message-role', 'partial role')],
+            },
+          },
+        }),
+      );
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+                {
+                  id: 'tab-role',
+                  title: 'Role B',
+                  conversationId: 'conv-role',
+                  kind: 'character-dialogue',
+                },
+              ],
+              activeTabId: 'tab-a',
+            },
+          },
+        }),
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Switch Role B' }));
+
+    expect(screen.getByTestId('workspace-messages').textContent).toBe('partial role');
+    expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('false:false');
+  });
+
   it('does not display the previous conversation transcript after opening a history conversation', () => {
     vi.clearAllMocks();
     render(
@@ -705,9 +796,14 @@ function createProps(
           New
         </button>
         {props.tabs.map((tab) => (
-          <button key={tab.id} type="button" onClick={() => props.onCloseTab(tab.id)}>
-            Close {tab.title}
-          </button>
+          <div key={tab.id}>
+            <button type="button" onClick={() => props.onSwitchTab(tab.id)}>
+              Switch {tab.title}
+            </button>
+            <button type="button" onClick={() => props.onCloseTab(tab.id)}>
+              Close {tab.title}
+            </button>
+          </div>
         ))}
         {options.history?.map((conversation) => (
           <button
@@ -730,6 +826,25 @@ function message(id: string, content: string): Message {
     role: 'user',
     content,
     timestamp: 1,
+  };
+}
+
+function streamingMessage(id: string, content: string): Message {
+  return {
+    id,
+    role: 'assistant',
+    content,
+    timestamp: 1,
+    isStreaming: true,
+    contentBlocks: [
+      {
+        id: `block-${id}`,
+        type: 'text',
+        timestamp: 1,
+        content,
+        isStreaming: true,
+      },
+    ],
   };
 }
 

@@ -9,19 +9,18 @@ import type {
   CharacterDialogueSessionStartedMessage,
 } from './messages';
 import {
-  activateCharacterRoleSessionView,
+  activateConversationTabView,
   persistCurrentVisibleConversation,
-} from './character-role-session-state';
+} from './conversation-tab-session-state';
 
 const handleCharacterDialogueSessionStarted: MessageHandler<'characterDialogueSessionStarted'> = (
   message: CharacterDialogueSessionStartedMessage,
   context,
 ) => {
   persistCurrentVisibleConversation(context);
-  activateCharacterRoleSessionView(context, {
-    sessionId: message.session.sessionId,
-    cachedMessages: [],
-  });
+  context.conversationMessagesRef.current.delete(message.session.sessionId);
+  context.conversationStreamingRef.current.delete(message.session.sessionId);
+  activateConversationTabView(context, message.session.sessionId);
   context.setOpenTabs((prev) => [
     ...prev.filter((tab) => tab.id !== message.tab.id),
     {

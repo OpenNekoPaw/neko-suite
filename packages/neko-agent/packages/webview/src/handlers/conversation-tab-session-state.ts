@@ -1,10 +1,5 @@
-import type { Message } from '@neko-agent/types';
-import {
-  idleStreamingState,
-  projectCharacterRoleSessionView,
-} from '@/presenters/character-role-session-presenter';
-import type { MessageHandlerContext, StreamingState } from './types';
-import { migrateRestoredConversationTabView } from './tab-restore-migration';
+import { projectConversationTabActivation } from '@/presenters/conversation-tab-activation-presenter';
+import type { MessageHandlerContext } from './types';
 
 export function persistCurrentVisibleConversation(context: MessageHandlerContext): void {
   const conversationId = context.activeConversationIdRef.current;
@@ -20,24 +15,17 @@ export function persistCurrentVisibleConversation(context: MessageHandlerContext
   });
 }
 
-export function activateCharacterRoleSessionView(
+export function activateConversationTabView(
   context: MessageHandlerContext,
-  input: {
-    readonly sessionId: string;
-    readonly cachedMessages?: readonly Message[];
-    readonly cachedStreaming?: StreamingState;
-  },
+  conversationId: string,
 ): void {
-  const restored = migrateRestoredConversationTabView({
-    messages: input.cachedMessages,
-    streaming: input.cachedStreaming ?? idleStreamingState(),
-  });
-  const projection = projectCharacterRoleSessionView({
-    sessionId: input.sessionId,
-    cachedMessages: restored.messages,
-    cachedStreaming: restored.streaming,
+  const projection = projectConversationTabActivation({
+    conversationId,
+    cachedMessages: context.conversationMessagesRef.current.get(conversationId),
+    cachedStreaming: context.conversationStreamingRef.current.get(conversationId),
   });
 
+  context.isTablessConversationViewRef.current = false;
   context.conversationMessagesRef.current.set(projection.activeConversationId, projection.messages);
   context.conversationStreamingRef.current.set(
     projection.activeConversationId,
