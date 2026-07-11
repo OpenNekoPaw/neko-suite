@@ -417,6 +417,7 @@ export interface AgentStreamPersistenceSnapshot {
   readonly accumulatedResponse: string;
   readonly accumulatedThinking: string;
   readonly hasError: boolean;
+  readonly terminalStatus?: 'completed' | 'cancelled' | 'failed';
   readonly errorMessage?: string;
   readonly collectedToolCalls: readonly {
     readonly id: string;

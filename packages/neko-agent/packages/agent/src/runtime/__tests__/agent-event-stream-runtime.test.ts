@@ -3,7 +3,6 @@ import { createTableHeavyStreamFixture } from '../../../../../test-utils/src/fix
 import type { AgentEvent } from '../../session/types';
 import type {
   AgentTurnTimelineItem,
-  AgentTurnTimelineMessage,
   AgentTurnTimelineOperation,
   AgentTurnTimelineToolCallItem,
 } from '@neko-agent/types';
@@ -11,6 +10,7 @@ import {
   AgentEventStreamRuntimeProcessor,
   type ObserveAgentStreamBackgroundTaskProgressInput,
   type ProcessAgentEventStreamRuntimeInput,
+  type AgentTurnTimelineAccumulatorUpdate,
 } from '../index';
 
 interface SourceTask {
@@ -134,7 +134,7 @@ describe('agent event stream runtime processor', () => {
 
     const timelineMessages = postMessage.mock.calls
       .map(([message]) => message)
-      .filter(isAgentTurnTimelineMessage);
+      .filter(isAgentTurnTimelineUpdate);
     const timelineItems = extractTimelineItems(timelineMessages);
 
     expect(timelineItems).toEqual(
@@ -193,7 +193,7 @@ describe('agent event stream runtime processor', () => {
 
     const timelineItems = postMessage.mock.calls
       .map(([message]) => message)
-      .filter(isAgentTurnTimelineMessage)
+      .filter(isAgentTurnTimelineUpdate)
       .flatMap(extractTimelineItemsFromMessage);
 
     expect(timelineItems).toEqual([]);
@@ -215,7 +215,7 @@ describe('agent event stream runtime processor', () => {
     });
 
     const operations = extractTimelineOperations(
-      postMessage.mock.calls.map(([message]) => message).filter(isAgentTurnTimelineMessage),
+      postMessage.mock.calls.map(([message]) => message).filter(isAgentTurnTimelineUpdate),
     );
     const appendSources = operations.flatMap((operation) =>
       operation.operation === 'append' && operation.item.kind === 'assistant_text'
@@ -284,7 +284,7 @@ describe('agent event stream runtime processor', () => {
 
     const toolTimelineItems = postMessage.mock.calls
       .map(([message]) => message)
-      .filter(isAgentTurnTimelineMessage)
+      .filter(isAgentTurnTimelineUpdate)
       .flatMap(extractTimelineItemsFromMessage)
       .filter((item) => item.itemId === 'tool-tool-1');
 
@@ -356,7 +356,7 @@ describe('agent event stream runtime processor', () => {
 
     const toolTimelineItems = postMessage.mock.calls
       .map(([message]) => message)
-      .filter(isAgentTurnTimelineMessage)
+      .filter(isAgentTurnTimelineUpdate)
       .flatMap(extractTimelineItemsFromMessage)
       .filter(isTimelineToolCallItem);
     const latestByToolCallId = new Map(
@@ -477,7 +477,7 @@ describe('agent event stream runtime processor', () => {
     expect(
       postMessage.mock.calls
         .map(([message]) => message)
-        .filter(isAgentTurnTimelineMessage)
+        .filter(isAgentTurnTimelineUpdate)
         .flatMap(extractTimelineItemsFromMessage),
     ).toEqual(
       expect.arrayContaining([
@@ -515,7 +515,7 @@ describe('agent event stream runtime processor', () => {
       .find((message) => message.type === 'streamComplete');
     const timelineMessages = postMessage.mock.calls
       .map(([message]) => message)
-      .filter(isAgentTurnTimelineMessage);
+      .filter(isAgentTurnTimelineUpdate);
 
     expect(result.accumulatedResponse).toBe('fixed table');
     expect(result.contentBlocks).toEqual([
@@ -737,7 +737,7 @@ describe('agent event stream runtime processor', () => {
     expect(
       postMessage.mock.calls
         .map(([message]) => message)
-        .filter(isAgentTurnTimelineMessage)
+        .filter(isAgentTurnTimelineUpdate)
         .flatMap(extractTimelineItemsFromMessage),
     ).toEqual(
       expect.arrayContaining([
@@ -779,7 +779,7 @@ describe('agent event stream runtime processor', () => {
 
     const taskTimelineEvents = postMessage.mock.calls
       .map(([message]) => message)
-      .filter(isAgentTurnTimelineMessage)
+      .filter(isAgentTurnTimelineUpdate)
       .flatMap(extractTimelineItemsFromMessage)
       .filter((item) => item.itemId === 'tool-background-task-task-1');
 
@@ -892,7 +892,7 @@ describe('agent event stream runtime processor', () => {
     );
     const completedTaskCallIndex = postMessage.mock.calls.findIndex(
       ([message]) =>
-        isAgentTurnTimelineMessage(message) &&
+        isAgentTurnTimelineUpdate(message) &&
         extractTimelineItemsFromMessage(message).some(
           (item) => item.itemId === 'tool-background-task-task-1' && item.status === 'succeeded',
         ),
@@ -955,7 +955,7 @@ describe('agent event stream runtime processor', () => {
     );
     const completedTaskCallIndex = postMessage.mock.calls.findIndex(
       ([message]) =>
-        isAgentTurnTimelineMessage(message) &&
+        isAgentTurnTimelineUpdate(message) &&
         extractTimelineItemsFromMessage(message).some(
           (item) => item.itemId === 'tool-background-task-task-1' && item.status === 'succeeded',
         ),
@@ -1096,29 +1096,31 @@ describe('agent event stream runtime processor', () => {
   });
 });
 
-function isAgentTurnTimelineMessage(message: unknown): message is AgentTurnTimelineMessage {
+function isAgentTurnTimelineUpdate(
+  message: unknown,
+): message is AgentTurnTimelineAccumulatorUpdate {
   return (
     typeof message === 'object' &&
     message !== null &&
     'type' in message &&
-    message.type === 'agentTurnTimeline'
+    message.type === 'agentTurnTimelineUpdate'
   );
 }
 
 function extractTimelineItems(
-  messages: readonly AgentTurnTimelineMessage[],
+  messages: readonly AgentTurnTimelineAccumulatorUpdate[],
 ): AgentTurnTimelineItem[] {
   return messages.flatMap(extractTimelineItemsFromMessage);
 }
 
 function extractTimelineItemsFromMessage(
-  message: AgentTurnTimelineMessage,
+  message: AgentTurnTimelineAccumulatorUpdate,
 ): AgentTurnTimelineItem[] {
   return message.operations.flatMap((operation) => ('item' in operation ? [operation.item] : []));
 }
 
 function extractTimelineOperations(
-  messages: readonly AgentTurnTimelineMessage[],
+  messages: readonly AgentTurnTimelineAccumulatorUpdate[],
 ): AgentTurnTimelineOperation[] {
   return messages.flatMap((message) => message.operations);
 }

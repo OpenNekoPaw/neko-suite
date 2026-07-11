@@ -191,6 +191,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
             accumulatedResponse: streamState.accumulatedResponse,
             accumulatedThinking: streamState.accumulatedThinking,
             hasError: streamState.hasError,
+            terminalStatus: streamState.terminalStatus,
             ...(streamState.errorMessage ? { errorMessage: streamState.errorMessage } : {}),
             collectedToolCalls: streamState.collectedToolCalls,
             contentBlocks: streamState.contentBlocks,
@@ -215,7 +216,10 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
       projectCompositeBlock: input.projectCompositeBlock,
     });
     await awaitBackgroundTaskCompletions();
-    const finalTimelineMessage = timeline.complete(streamState.contentBlocks);
+    const finalTimelineMessage = timeline.complete(
+      streamState.contentBlocks,
+      streamState.terminalStatus,
+    );
     if (finalTimelineMessage) {
       await input.postMessage(finalTimelineMessage);
     }
@@ -231,6 +235,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
       accumulatedResponse: streamState.accumulatedResponse,
       accumulatedThinking: streamState.accumulatedThinking,
       hasError: streamState.hasError,
+      terminalStatus: streamState.terminalStatus,
       ...(streamState.errorMessage ? { errorMessage: streamState.errorMessage } : {}),
       collectedToolCalls: streamState.collectedToolCalls,
       contentBlocks: streamState.contentBlocks,

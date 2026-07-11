@@ -112,28 +112,22 @@ describe('agent stream state reducer', () => {
     expect(state.accumulatedResponse).toBe('First. Second.');
   });
 
-  it('finalizes fenced composite content into standalone content blocks', () => {
+  it('preserves fenced Markdown source and projects semantic composite metadata', () => {
     const state = createAgentStreamProjectionState();
+    const source =
+      'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","sections":[{"heading":"Shot 1","mediaRefs":[{"toolCallId":"read-1","assetIndex":0}]}]}\n```';
 
-    applyAgentStreamEventToState(
-      state,
-      {
-        type: 'text',
-        content:
-          'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","sections":[{"heading":"Shot 1","mediaRefs":[{"toolCallId":"read-1","assetIndex":0}]}]}\n```',
-      },
-      { now: () => 10 },
-    );
+    applyAgentStreamEventToState(state, { type: 'text', content: source }, { now: () => 10 });
 
     finalizeAgentStreamProjectionState(state);
 
-    expect(state.accumulatedResponse).toBe('Storyboard');
+    expect(state.accumulatedResponse).toBe(source);
     expect(state.contentBlocks).toEqual([
       {
         id: 'block-text-10',
         type: 'text',
         timestamp: 10,
-        content: 'Storyboard',
+        content: source,
         isStreaming: false,
       },
       {
@@ -148,6 +142,14 @@ describe('agent stream state reducer', () => {
               mediaRefs: [{ toolCallId: 'read-1', assetIndex: 0 }],
             },
           ],
+        },
+        compositeSource: {
+          kind: 'normalized-markdown-code-block',
+          sourceBlockId: 'block-text-10',
+          startOffset: 12,
+          endOffset: source.length,
+          language: 'neko-composite',
+          candidateIndex: 0,
         },
       },
     ]);

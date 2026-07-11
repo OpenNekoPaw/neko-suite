@@ -114,14 +114,14 @@ export function createAgentTurnTimelineAccumulator(input: {
   ): AgentTurnTimelineAccumulatorUpdate | null => {
     if (operations.length === 0 && !nextCompletion) return null;
     applyOperationsToAuthoritativeItems(items, operations);
-    if (nextCompletion) completion = nextCompletion;
+    if (nextCompletion) completion = cloneValue(nextCompletion);
     return {
       type: 'agentTurnTimelineUpdate',
       conversationId: input.conversationId,
       turnId,
       messageId: input.messageId,
-      operations,
-      ...(nextCompletion ? { completion: nextCompletion } : {}),
+      operations: operations.map((operation) => cloneValue(operation)),
+      ...(nextCompletion ? { completion: cloneValue(nextCompletion) } : {}),
     };
   };
 
@@ -253,7 +253,7 @@ export function createAgentTurnTimelineAccumulator(input: {
             createdAt: eventTime,
             updatedAt: eventTime,
           };
-          toolItemsByToolCallId.set(toolCall.id, item);
+          toolItemsByToolCallId.set(toolCall.id, cloneValue(item));
           operations.push({ operation: 'upsert', item });
           return buildUpdate(operations);
         }
@@ -287,7 +287,7 @@ export function createAgentTurnTimelineAccumulator(input: {
             },
             updatedAt: eventTime,
           };
-          toolItemsByToolCallId.set(result.toolCallId, item);
+          toolItemsByToolCallId.set(result.toolCallId, cloneValue(item));
           return buildUpdate([{ operation: 'upsert', item }]);
         }
         case 'tool_result_backfill': {
@@ -308,7 +308,7 @@ export function createAgentTurnTimelineAccumulator(input: {
             },
             updatedAt: eventTime,
           };
-          toolItemsByToolCallId.set(backfill.toolCallId, item);
+          toolItemsByToolCallId.set(backfill.toolCallId, cloneValue(item));
           return buildUpdate([{ operation: 'upsert', item }]);
         }
         case 'tool_confirmation': {
@@ -333,7 +333,7 @@ export function createAgentTurnTimelineAccumulator(input: {
             },
             updatedAt: eventTime,
           };
-          toolItemsByToolCallId.set(toolCall.id, item);
+          toolItemsByToolCallId.set(toolCall.id, cloneValue(item));
           return buildUpdate([{ operation: 'upsert', item }]);
         }
         case 'error': {
@@ -400,7 +400,7 @@ export function createAgentTurnTimelineAccumulator(input: {
         workItem.kind === 'media-task'
           ? { ...core, ...anchor, kind: 'media', payload: { workItem } }
           : { ...core, ...anchor, kind: 'task', payload: { workItem } };
-      workItemsById.set(workItem.id, item);
+      workItemsById.set(workItem.id, cloneValue(item));
       return buildUpdate([{ operation: 'upsert', item }]);
     },
     snapshot() {
@@ -414,7 +414,7 @@ export function createAgentTurnTimelineAccumulator(input: {
         items: Array.from(items.values())
           .sort((left, right) => left.sequence - right.sequence)
           .map((item) => cloneTimelineItem(item)),
-        ...(completion ? { completion: { ...completion } } : {}),
+        ...(completion ? { completion: cloneValue(completion) } : {}),
       };
     },
     dispose() {
@@ -481,30 +481,11 @@ function applyOperationsToAuthoritativeItems(
 }
 
 function cloneTimelineItem(item: AgentTurnTimelineItem): AgentTurnTimelineItem {
-  switch (item.kind) {
-    case 'assistant_text':
-      return { ...item, payload: { ...item.payload } };
-    case 'thinking':
-      return { ...item, payload: { ...item.payload } };
-    case 'task':
-      return { ...item, payload: { ...item.payload } };
-    case 'media':
-      return { ...item, payload: { ...item.payload } };
-    case 'composite':
-      return { ...item, payload: { ...item.payload } };
-    case 'error':
-      return { ...item, payload: { ...item.payload } };
-    case 'tool_call':
-      return {
-        ...item,
-        payload: {
-          toolCall: {
-            ...item.payload.toolCall,
-            arguments: { ...item.payload.toolCall.arguments },
-          },
-        },
-      };
-  }
+  return cloneValue(item);
+}
+
+function cloneValue<T>(value: T): T {
+  return structuredClone(value);
 }
 
 function toTimelineStatus(status: AgentWorkItem['status']): AgentTurnTimelineItemStatus {

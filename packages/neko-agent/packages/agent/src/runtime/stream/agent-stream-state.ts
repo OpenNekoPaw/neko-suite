@@ -1,5 +1,4 @@
 import {
-  extractCompositeContentBlocks,
   type AgentArtifactTransferPayload,
   type AgentMessageQueueSnapshot,
   type AgentPhase,
@@ -11,12 +10,12 @@ import {
 import type { AgentEvent } from '../../session';
 import { createPlanContentBlockFromToolResultData } from '../../plan';
 import { applyToolResultBackfillToResult } from '../tool-result-backfill';
+import {
+  projectMarkdownDerivedCompositeBlocks,
+  type AgentStreamCompositeProjector,
+} from './markdown-composite-projection';
 
-type CompositeBlockData = NonNullable<ContentBlock['composite']>;
-
-export type AgentStreamCompositeProjector = (
-  composite: CompositeBlockData,
-) => CompositeBlockData;
+export type { AgentStreamCompositeProjector } from './markdown-composite-projection';
 
 export interface CollectedToolCall {
   id: string;
@@ -30,6 +29,7 @@ export interface AgentStreamProjectionState {
   accumulatedThinking: string;
   hasError: boolean;
   errorMessage?: string;
+  terminalStatus: 'completed' | 'cancelled' | 'failed';
   currentPhase: AgentPhase;
   collectedToolCalls: CollectedToolCall[];
   contentBlocks: ContentBlock[];
@@ -165,6 +165,7 @@ export function createAgentStreamProjectionState(): AgentStreamProjectionState {
     accumulatedResponse: '',
     accumulatedThinking: '',
     hasError: false,
+    terminalStatus: 'completed',
     currentPhase: 'idle',
     collectedToolCalls: [],
     contentBlocks: [],
@@ -333,6 +334,7 @@ export function applyAgentStreamEventToState(
     case 'error':
       state.hasError = true;
       state.errorMessage = event.error?.message || 'An error occurred';
+      state.terminalStatus = event.error?.name === 'AbortError' ? 'cancelled' : 'failed';
       return setPhase(state, 'idle');
     case 'done':
       return setPhase(state, 'idle');
@@ -598,26 +600,17 @@ function finalizeTextContentBlock(
   block: ContentBlock,
   options: AgentStreamFinalizeOptions,
 ): ContentBlock[] {
-  const content = block.content ?? '';
-  const extracted = extractCompositeContentBlocks(content);
-  const text = extracted.composites.length > 0 ? extracted.text : content;
-  const nextBlocks: ContentBlock[] = [];
-  if (text.length > 0) {
-    nextBlocks.push({
-      ...block,
-      content: text,
-      isStreaming: false,
-    });
-  }
-  nextBlocks.push(
-    ...extracted.composites.map((composite, index) => ({
-      id: `${block.id}-composite-${index + 1}`,
-      type: 'composite' as const,
-      timestamp: block.timestamp,
-      composite: options.projectCompositeBlock?.(composite) ?? composite,
-    })),
-  );
-  return nextBlocks;
+  const finalizedTextBlock: ContentBlock = {
+    ...block,
+    isStreaming: false,
+  };
+  return [
+    finalizedTextBlock,
+    ...projectMarkdownDerivedCompositeBlocks({
+      sourceBlock: finalizedTextBlock,
+      projectCompositeBlock: options.projectCompositeBlock,
+    }),
+  ];
 }
 
 function getNow(options: AgentStreamStateOptions): number {
