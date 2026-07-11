@@ -234,7 +234,7 @@ export function createConversationMarkdownTimelineResourceOwner(
   };
 }
 
-export function toConversationStreamingSnapshot(
+function toConversationStreamingSnapshot(
   streaming: ConversationRenderStreamingState,
 ): ConversationStreamingSnapshot {
   const activeTurnTimeline = streaming.activeTurnTimeline ?? null;
@@ -256,7 +256,7 @@ export function toConversationStreamingSnapshot(
   };
 }
 
-export function toConversationRenderStreamingState(
+function toConversationRenderStreamingState(
   streaming: ConversationStreamingSnapshot,
 ): ConversationRenderStreamingState {
   return {
