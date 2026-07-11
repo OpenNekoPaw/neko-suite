@@ -203,9 +203,9 @@ export function createEventAdapter(deps: EventAdapterDeps): IEventAdapter {
               version: current?.version ?? 0,
             });
           }
-          if (event.queuedMessageItem) {
+          if (event.queuedMessageItem && isInternalContinuation(event.queuedMessageItem)) {
             conversationStore().addSystemMessage(
-              formatQueuedMessageSystemText(event.queuedMessageItem, event.pendingCount ?? 1),
+              formatQueuedContinuationSystemText(event.queuedMessageItem, event.pendingCount ?? 1),
             );
           }
           break;
@@ -228,7 +228,11 @@ export function createEventAdapter(deps: EventAdapterDeps): IEventAdapter {
   };
 }
 
-function formatQueuedMessageSystemText(
+function isInternalContinuation(item: import('@neko-agent/types').AgentQueuedMessageItem): boolean {
+  return item.source !== 'user' && item.source !== 'composer';
+}
+
+function formatQueuedContinuationSystemText(
   item: import('@neko-agent/types').AgentQueuedMessageItem,
   pendingCount: number,
 ): string {
@@ -243,7 +247,7 @@ function formatQueuedMessageSystemText(
   if (item.source === 'system-continuation') {
     return `System continuation queued: ${item.id} (${pendingCount} pending)`;
   }
-  return `Queued message: ${item.id} (${pendingCount} pending)`;
+  throw new Error(`User queue item ${item.id} must not be projected into the transcript.`);
 }
 
 function createStoreAccessor<TStore>(store: StoreAccessor<TStore>): () => TStore {

@@ -5,7 +5,7 @@ import { useConversationStore } from '../stores/conversation-store';
 import { useUIStore } from '../stores/ui-store';
 
 describe('createEventAdapter queue projection', () => {
-  it('projects queue snapshots without duplicating released user messages', () => {
+  it('projects user queue snapshots without adding pending items to the transcript', () => {
     resetStores();
     const adapter = createEventAdapter({
       agentStore: useAgentStore.getState,
@@ -63,11 +63,54 @@ describe('createEventAdapter queue projection', () => {
     expect(
       useConversationStore.getState().messages.filter((message) => message.role === 'user'),
     ).toHaveLength(0);
+    expect(useConversationStore.getState().messages).toHaveLength(0);
+  });
+
+  it('keeps source-aware internal continuation activity as a system note', () => {
+    resetStores();
+    const adapter = createEventAdapter({
+      agentStore: useAgentStore.getState,
+      conversationStore: useConversationStore.getState,
+      uiStore: useUIStore.getState,
+    });
+
+    adapter.handleEvent({
+      type: 'messageQueued',
+      pendingCount: 1,
+      queuedMessageItem: {
+        id: 'continuation-1',
+        conversationId: 'conv-1',
+        content: 'Continue after task completion',
+        createdAt: 1000,
+        source: 'task-result-continuation',
+        metadata: { taskId: 'task-123' },
+      },
+      messageQueueSnapshot: {
+        conversationId: 'conv-1',
+        items: [
+          {
+            id: 'continuation-1',
+            conversationId: 'conv-1',
+            content: 'Continue after task completion',
+            createdAt: 1000,
+            source: 'task-result-continuation',
+            metadata: { taskId: 'task-123' },
+          },
+        ],
+        pendingCount: 1,
+        version: 1,
+      },
+    });
+
+    expect(useConversationStore.getState().messages).toEqual([
+      expect.objectContaining({
+        role: 'system',
+        content: 'Task continuation queued: task-123 (1 pending)',
+      }),
+    ]);
     expect(
-      useConversationStore
-        .getState()
-        .messages.some((message) => message.content.includes('Queued message: queue-1')),
-    ).toBe(true);
+      useConversationStore.getState().messages.some((message) => message.role === 'user'),
+    ).toBe(false);
   });
 });
 

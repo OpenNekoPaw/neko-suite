@@ -24,6 +24,21 @@ export interface TuiLabels {
     readonly noMatchingCommands: string;
     readonly startupHelp: string;
   };
+  readonly queue: {
+    readonly nextTurn: string;
+    readonly userMessage: string;
+    readonly taskContinuation: string;
+    readonly subagentContinuation: string;
+    readonly systemContinuation: string;
+    readonly continuationPriority: string;
+    readonly moreItems: string;
+    readonly commandHint: string;
+    readonly sendNext: string;
+    readonly nextUserMessage: string;
+    readonly edit: string;
+    readonly cancel: string;
+    readonly pausedAfterCancel: string;
+  };
   readonly mediaCategories: Readonly<Record<string, string>>;
   readonly referenceSources: Readonly<Record<string, string>>;
   readonly suggestionKinds: Readonly<Record<string, string>>;
@@ -70,6 +85,21 @@ const TUI_LABELS: Readonly<Record<TuiLocale, TuiLabels>> = {
       selectionHint: '↑↓:navigate Enter:select Esc:cancel',
       noMatchingCommands: 'No matching commands',
       startupHelp: 'Type /help for commands, /exit to quit',
+    },
+    queue: {
+      nextTurn: 'Next turn',
+      userMessage: 'message',
+      taskContinuation: 'task continuation',
+      subagentContinuation: 'subagent continuation',
+      systemContinuation: 'system continuation',
+      continuationPriority: 'internal continuation first',
+      moreItems: 'more',
+      commandHint: 'Use /queue list to inspect or manage pending messages',
+      sendNext: 'Send next',
+      nextUserMessage: 'Next user message',
+      edit: 'Edit',
+      cancel: 'Cancel',
+      pausedAfterCancel: 'Queue paused after cancellation',
     },
     mediaCategories: {
       image: 'image',
@@ -140,6 +170,21 @@ const TUI_LABELS: Readonly<Record<TuiLocale, TuiLabels>> = {
       selectionHint: '↑↓:导航 Enter:选择 Esc:取消',
       noMatchingCommands: '无匹配命令',
       startupHelp: '输入 /help 查看命令，输入 /exit 退出',
+    },
+    queue: {
+      nextTurn: '下一轮',
+      userMessage: '消息',
+      taskContinuation: '任务续跑',
+      subagentContinuation: '子代理续跑',
+      systemContinuation: '系统续跑',
+      continuationPriority: '内部续跑优先',
+      moreItems: '条',
+      commandHint: '使用 /queue list 查看或管理排队消息',
+      sendNext: '下一条执行',
+      nextUserMessage: '下一条用户消息',
+      edit: '编辑',
+      cancel: '取消',
+      pausedAfterCancel: '当前任务取消后队列已暂停',
     },
     mediaCategories: {
       image: '图像',

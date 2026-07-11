@@ -14,6 +14,7 @@ import type { CLIConfig } from '../core/types';
 import type { AgentCapabilityProvider, IService } from '@neko/shared';
 import { ChatView } from './ChatView/ChatView';
 import { InputEditor } from './Input/InputEditor';
+import { MessageQueuePanel } from './Input/MessageQueuePanel';
 import { StatusBar } from './StatusBar/StatusBar';
 import { ToolApprovalPanel } from './ToolApproval/ToolApprovalPanel';
 import { SelectionMenu } from './Selection/SelectionMenu';
@@ -321,6 +322,11 @@ export function App({
 
         {/* Plan review menu — shows after plan-mode execution completes */}
         {planReviewSelection ? <SelectionMenu selection={planReviewSelection} /> : null}
+
+        {/* Pending next-turn messages stay outside the conversation transcript. */}
+        <ErrorBoundary label="MessageQueuePanel">
+          <MessageQueuePanel />
+        </ErrorBoundary>
 
         {/* Input — fixed at bottom, with slash command support */}
         <InputEditor

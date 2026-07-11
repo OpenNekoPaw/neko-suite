@@ -1,20 +1,20 @@
 ## 1. Queue Projection Contract
 
-- [ ] 1.1 Add a pure TUI queue presenter that derives visible rows, count, source labels, truncation, and action eligibility from `AgentMessageQueueSnapshot`.
-- [ ] 1.2 Add presenter tests for empty, single, multiple, long-content, user-message, and internal-continuation snapshots.
-- [ ] 1.3 Add terminal localization labels for next-turn queue, send-next, next-user-message, edit, cancel, continuation priority, and paused-after-cancel state.
+- [x] 1.1 Add a pure TUI queue presenter that derives visible rows, count, source labels, truncation, and action eligibility from `AgentMessageQueueSnapshot`.
+- [x] 1.2 Add presenter tests for empty, single, multiple, long-content, user-message, and internal-continuation snapshots.
+- [x] 1.3 Add terminal localization labels for next-turn queue, send-next, next-user-message, edit, cancel, continuation priority, and paused-after-cancel state.
 
 ## 2. Composer Queue Panel
 
-- [ ] 2.1 Add an Agent-local `MessageQueuePanel` directly above `InputEditor` with stable collapsed height and ordered content previews.
+- [x] 2.1 Add an Agent-local `MessageQueuePanel` directly above `InputEditor` with stable collapsed height and ordered content previews.
 - [ ] 2.2 Wire promote/send-next and cancel controls to existing session queue operations while preserving composer focus.
 - [ ] 2.3 Add edit-to-composer flow that does not silently overwrite a non-empty draft and rejects editing internal continuations visibly.
 - [ ] 2.4 Add Ink component tests for placement, empty hiding, truncation, action wiring, source-specific controls, and draft conflict handling.
 
 ## 3. Transcript Boundary Cleanup
 
-- [ ] 3.1 Stop user queue acceptance and release snapshot events from creating generic `Queued message: <id>` transcript system messages.
-- [ ] 3.2 Preserve source-aware task/subagent continuation activity without representing internal continuation prompts as user-authored messages.
+- [x] 3.1 Stop user queue acceptance and release snapshot events from creating generic `Queued message: <id>` transcript system messages.
+- [x] 3.2 Preserve source-aware task/subagent continuation activity without representing internal continuation prompts as user-authored messages.
 - [ ] 3.3 Add adapter/session tests proving pending user items stay out of transcript and enter history only through the executing turn path.
 
 ## 4. Command And Ordering Semantics
