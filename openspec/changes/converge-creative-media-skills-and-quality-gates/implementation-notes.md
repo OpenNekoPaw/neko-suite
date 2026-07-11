@@ -344,4 +344,78 @@ pnpm exec eslint \
 
 - production API 已接入 facade，但尚无能证明 active document URI 与 requested revision 一致的 target-bound preview/runtime/export adapter。因此当前 production preview 明确 unavailable、runtime 为 unavailable、export readiness 为 false；这是 fail-closed 状态，不是完整 Sketch 导出验收。
 - `.nks` 持久化 schema 尚不包含 animation/frame timeline。若未来正式支持动画，必须先扩展 schema/migration 与 owning validator，再允许 animated export readiness。
-- 下一步继续任务 7.2：由 `neko-cut` owning package 提供 `.nkv` ProjectQuality facade；中央 Quality 只消费 facade 证据。
+- 该阶段后续任务 7.2：由 `neko-cut` owning package 提供 `.nkv` ProjectQuality facade；中央 Quality 只消费 facade 证据。
+
+## 11. `.nkv` ProjectQuality facade（2026-07-11）
+
+### 11.1 Owning package、目标绑定与 revision
+
+任务 7.2 已由 `neko-cut` owning package 完成；中央 Quality 只消费共享 `ProjectQualityFacade` 结果，不解析 `.nkv` timeline：
+
+- `NekoCutAPI.projectQuality` 暴露 validate、snapshot、review preview、runtime probe 与 export readiness；
+- live snapshot 必须由请求中的 `documentUri` 精确获取，不使用 active Webview、active editor 或 active export service 作为其他项目的 fallback；
+- target-bound source 返回 `not-open` 时允许读取磁盘，从而支持关闭编辑器后的 reopen/headless validation；返回 `unavailable` 时 fail-closed，不回退旧磁盘内容伪装成功；
+- 对 `loadNkv()` 得到的 canonical `ProjectData` 计算：
+
+```text
+contentDigest = hashStableValue(canonical ProjectData)
+projectRevision = nkv:<contentDigest>
+```
+
+所有 review/runtime/export-readiness adapter 都在 revision/content digest 核对后才可调用；stale request 会在 adapter 前返回 `stale-quality-evidence`。snapshot 使用 hash fingerprint 的稳定 `ResourceRef`，session render URI 仍只是当前会话 display hint。
+
+### 11.2 结构、资源、字幕与音频检查
+
+结构与资源验证复用公开 `.nkv` codec/validator 和 `nkvSourcePathPolicy`，并由 Cut facade 补充 timeline 领域不变量：
+
+- track id 非空且唯一，element id 在全项目非空且唯一；
+- clip `startTime/duration/trimStart/trimEnd` 必须有限且合法；timeline/review range 按裁剪后的有效时长 `duration - trimStart - trimEnd` 计算；
+- audio element 与 audio track、subtitle element 与 subtitle track 必须匹配，字幕文本不得为空；
+- media/audio durable source 只接受 workspace-relative 或 `${VAR}` 路径，远程来源按 schema policy 处理；blob/Webview/cache/runtime handle 和缺失本地资源明确失败；
+- schema/version、element-specific 字段和 audio properties 继续由 `.nkv` validator 负责，facade 不复制 codec。
+
+当前 `.nkv` 只持久化 timeline resolution/fps。container、codec、bitrate 与 output path 属于 Cut export adapter 的运行期设置，因此 facade 明确报告 partial coverage；不会把文件可解析或 ExportService 存在误当作最终成品已经通过。
+
+### 11.3 `.nk*` 质检与时间范围输出语义
+
+本批固定以下边界：
+
+1. **结构检查不导出**：直接验证当前 canonical `.nkv` snapshot、资源、轨道、clip、字幕、音频与 revision。
+2. **指定范围质检使用 review render**：`QualityTarget.mediaRange` 原样传给 Cut-owned `CutProjectReviewRenderer`，生成绑定当前 project revision 的派生 preview `ResourceRef`。它是质检代理/审查渲染，不是正式视频成品。
+3. **未注册 range renderer 时明确失败**：当前生产 Cut 尚无时间范围 review-render adapter，因此 `renderPreview()` 返回 unavailable diagnostic；不能退化成整段正式 export，也不能用 active timeline 截图伪装成功。
+4. **正式成品另走 export Gate**：按时间范围正式导出、完整 deliverable export、pre-export policy、lineage 与 post-export probe/decode/codec/响度/黑帧等验证属于 8.x。7.2 的 readiness 只检查当前 project target 是否存在 target-bound export adapter，并且不会执行 export。
+
+因此，`.nk*` 项目质检不要求先导出成品；需要像素、音频或时序感知证据时，优先渲染指定范围的 review artifact。只有最终交付验收才导出正式成品并执行 post-export verification。
+
+### 11.4 路径级验证与质量自审
+
+已运行：
+
+```bash
+pnpm exec vitest run \
+  packages/neko-cut/packages/extension/src/services/CutProjectQualityFacade.test.ts \
+  packages/neko-cut/packages/extension/src/agentCapabilityProvider.test.ts
+# 2 files, 13 tests passed
+
+pnpm exec eslint \
+  packages/neko-cut/packages/extension/src/services/CutProjectQualityFacade.ts \
+  packages/neko-cut/packages/extension/src/services/CutProjectQualityFacade.test.ts \
+  packages/neko-cut/packages/extension/src/extension.ts \
+  packages/neko-cut/packages/extension/src/agentCapabilityProvider.test.ts \
+  packages/neko-types/src/types/extension-api.ts
+# no findings
+
+pnpm build:neko-cut
+# 5 tasks successful
+```
+
+额外运行 `pnpm exec tsc --noEmit -p packages/neko-cut/packages/extension/tsconfig.json`。全包仍有 198 个既有基线错误；`CutProjectQualityFacade`、`extension.ts`、`agentCapabilityProvider.test.ts` 与 `extension-api.ts` 未出现在错误列表中，因此只记录 focused type evidence，不宣称 Cut Extension 全量 typecheck 通过。
+
+质量自审风险级别为 L3（项目格式、Extension production wiring、shared public API）。未发现阻断项。路径级测试证明 target-bound live snapshot/review/export adapter 被命中，并证明 stale revision 时 adapter 不会执行。没有 Webview UI/交互改动，无需 VSCode runtime visual smoke；没有 prompt、Skill 或 Agent routing 改动，无需真实 Agent evaluation。
+
+### 11.5 剩余限制
+
+- production 已有 target-bound runtime/export-readiness probe，但当前只证明对应 document 的 ExportService 已注册；不证明输出设置完整、正式 export 成功或成品质量通过。
+- production 尚未注册 `CutProjectReviewRenderer`，因此指定 `mediaRange` 的审查渲染仍 fail-visible；后续应复用 Cut/Engine 的 timeline render 能力实现，而不是在中央 Quality 新建 exporter。
+- 正式时间范围导出若成为产品能力，应由 Cut export contract 明确定义 range、音画边界、字幕处理、输出设置与 lineage；不能把 review render 的临时产物直接提升为 deliverable。
+- 下一步任务 7.3 由 `neko-audio` owning package 提供 `.nka` ProjectQuality facade。

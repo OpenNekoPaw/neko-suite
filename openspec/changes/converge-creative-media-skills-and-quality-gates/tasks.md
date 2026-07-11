@@ -72,7 +72,7 @@
 ## 7. Owning `.nk*` Project Validators
 
 - [x] 7.1 Implement or adapt `.nks` ProjectQuality facade for schema/version, resources, layer/frame integrity, revision, preview, and export readiness.
-- [ ] 7.2 Implement or adapt `.nkv` ProjectQuality facade for media refs, clip ranges, tracks, timeline revision, subtitles/audio/output settings, preview, and export readiness.
+- [x] 7.2 Implement or adapt `.nkv` ProjectQuality facade for media refs, clip ranges, tracks, timeline revision, subtitles/audio/output settings, preview, and export readiness.
 - [ ] 7.3 Implement or adapt `.nka` ProjectQuality facade for sources, routing/track mix, duration, loudness/peak readiness, revision, and final-mix preview.
 - [ ] 7.4 Implement or adapt `.nkp` ProjectQuality facade for source refs, parameters, motions, expressions, physics/tracking mappings, adapter availability, and runtime preview.
 - [ ] 7.5 Implement or adapt `.nkm` ProjectQuality facade for scene graph, assets, camera/light/timeline, profile/runtime adapter availability, and render preview.
