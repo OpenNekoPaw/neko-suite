@@ -46,6 +46,36 @@
       }
     },
     {
+      "id": "storyboard-distinct-image-video-prompts",
+      "kind": "single-prompt",
+      "surface": "agent",
+      "prompt": "请使用 $storyboard，根据以下短文生成一场两镜头、可直接进入图片与视频制作的分镜表：夜雨中的黑发青年推开废弃车站铁门，先环顾空站台，再发现远处蓝色信号灯闪烁。",
+      "expectations": [
+        "Agent activates the canonical storyboard Skill.",
+        "The review table keeps shot-level imagePrompt and scene-level videoPrompt as separate production intent.",
+        "The scene has at most one videoPrompt that aggregates both ordered shot beats rather than one video prompt per shot.",
+        "The output does not collapse both intents into a generic 生成提示词 column."
+      ],
+      "assertions": [
+        { "kind": "runtime-errors-empty" },
+        { "kind": "final-answer-non-empty" },
+        { "kind": "skill-active", "name": "storyboard" },
+        { "kind": "final-answer-contains", "text": ["imagePrompt", "videoPrompt"] },
+        { "kind": "final-answer-not-contains", "text": ["| 生成提示词 |", "| **生成提示词** |"] }
+      ],
+      "judge": {
+        "kind": "rubric",
+        "minScore": 4,
+        "rubric": [
+          "是否使用 canonical storyboard Skill 完成分镜创作",
+          "是否为每个镜头提供独立 imagePrompt，而不是复用画面描述冒充",
+          "是否每场最多一条 videoPrompt，并汇总两镜头的有序动作与运镜衔接",
+          "是否避免用单一生成提示词合并图片与视频意图",
+          "分镜表是否保留镜头、来源、时长、对白或声音等审阅信息"
+        ]
+      }
+    },
+    {
       "id": "blame-epub-storyboard-to-canvas",
       "kind": "single-prompt",
       "surface": "agent",

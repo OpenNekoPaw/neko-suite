@@ -81,6 +81,14 @@ Turn a prompt, prose, script, document, comic, ordered image sequence, or existi
 4. Validate the canonical Storyboard before projecting it. Invalid or unsupported sources must return visible diagnostics rather than an invented table.
 5. Treat Canvas as a review projection and Cut as a one-way authoring handoff. Neither becomes a second writable Storyboard truth.
 
+## Review table and prompt invariants
+
+- A reviewable Storyboard keeps distinct \`scene\`, \`shot\`, \`source\`, \`imagePrompt\`, \`videoPrompt\`, \`duration\`, and \`dialogue\` semantics. Never collapse image and video intent into one generic generation-prompt column.
+- \`imagePrompt\` is shot-level and only describes an executable image generation or edit task. Include subject/appearance, scene, composition, style/light, reference role, preserved details, ordered edit steps when applicable, and constraints.
+- \`videoPrompt\` is scene-level. Write at most one per scene, normally on its first shot, and aggregate the ordered shot beats, subject motion, camera transitions, environmental change, dialogue/audio or silence, total duration, reference roles, and constraints.
+- Visual description, camera notes, action summaries, review states, and diagnostics do not substitute for either prompt. Leave a prompt empty when no generation/edit operation is intended; do not fill it with status codes or analysis fragments.
+- Resource aliases must resolve unambiguously inside their declared scope. If a token matches multiple resources, emit a visible binding diagnostic and do not select or invent a source.
+
 Comic interpretation is specialized: OCR, panel segmentation, reading order, speech-bubble association, and cross-panel continuity apply only to the comic profile. Existing-storyboard refinement always creates a new revision when intent or ordering changes.
 `;
 
@@ -95,6 +103,14 @@ const storyboardZhCnContent = `# 分镜
 3. 来源与参考媒体只使用稳定资源引用；cache path、render URI、provider task handle 和 session handle 都不是分镜真值。
 4. 投影前验证 canonical Storyboard；无效或不支持的来源必须返回明确诊断，不能编造表格。
 5. Canvas 只是审阅投影，Cut 只是单向 authoring handoff，二者都不能成为第二份可写分镜真值。
+
+## 审阅表与提示词不变量
+
+- 可审阅分镜必须保持 \`scene\`、\`shot\`、\`source\`、\`imagePrompt\`、\`videoPrompt\`、\`duration\`、\`dialogue\` 的独立语义；禁止把图片与视频意图合并成一个笼统的“生成提示词”列。
+- \`imagePrompt\` 是 shot 级字段，只描述可执行的图片生成或编辑任务；应包含主体/人物外观、场景、构图、风格与光影、参考素材用途、必须保留的细节、必要时按顺序排列的编辑步骤，以及约束。
+- \`videoPrompt\` 是 scene 级字段；每个 scene 最多一个，通常写在第一条 shot，并汇总按镜号排列的动作节拍、主体运动、运镜连接、环境变化、对白/音频或无声、总时长、参考素材用途和约束。
+- 画面描述、景别/运镜备注、动作摘要、审阅状态和诊断都不能替代提示词。没有生成/编辑意图时允许留空，不得用状态码、分析碎片或“待优化”占位。
+- 资源 alias 必须在声明的 scope 内唯一解析；同一 token 匹配多个资源时必须输出明确的绑定诊断，不得选择候选项或编造来源。
 
 漫画解释是专用 profile：OCR、面板切分、阅读顺序、气泡关联和跨格连续性不得默认套用于普通文本或剧本。已有分镜一旦改变意图或顺序，必须创建新修订版。
 `;

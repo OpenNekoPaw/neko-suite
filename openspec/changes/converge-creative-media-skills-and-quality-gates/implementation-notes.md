@@ -419,3 +419,109 @@ pnpm build:neko-cut
 - production 尚未注册 `CutProjectReviewRenderer`，因此指定 `mediaRange` 的审查渲染仍 fail-visible；后续应复用 Cut/Engine 的 timeline render 能力实现，而不是在中央 Quality 新建 exporter。
 - 正式时间范围导出若成为产品能力，应由 Cut export contract 明确定义 range、音画边界、字幕处理、输出设置与 lineage；不能把 review render 的临时产物直接提升为 deliverable。
 - 下一步任务 7.3 由 `neko-audio` owning package 提供 `.nka` ProjectQuality facade。
+
+## 12. Storyboard 图片/视频提示词语义回归修复（2026-07-12）
+
+### 12.1 根因与目标边界
+
+canonical `storyboard` 收敛时只迁移了来源归一化骨架，旧漫画分镜流程中的生产提示词不变量没有进入共享 contract：`StoryboardShotRow` 仅剩模糊的 `generationPrompt`，Story planning 的结构化图片/视频 prompt documents 在归一化时被丢弃，Canvas/Webview projection 也无法读取 canonical prompt。该回归会把图片生成与场景视频生成意图折叠为单一“生成提示词”，并允许资源 alias 冲突与分镜内容混在同一成功表格中。
+
+本批不恢复 `comic-to-storyboard` 或新增动画规划 Skill，而是在既有六个 canonical 媒体 Skill 边界内修复一个真值：
+
+- `imagePrompt` 是 shot-level 图片生成/编辑意图；
+- `videoPrompt` 是 scene-level 视频意图，每 scene 最多一个，表格投影时位于第一条 shot；
+- visual/action/camera/state/diagnostic 不替代 prompt；
+- `generationPrompt` 只作为旧输入迁移来源，新的 Story normalization、Canvas projection 与 Webview review 不再写入或显示它；
+- alias 多资源匹配必须 fail-visible，不得选择候选或编造来源。
+
+### 12.2 Canonical path 与 legacy 隔离
+
+路径级修复覆盖：
+
+```text
+Story planning prompt documents
+  -> source normalization
+  -> canonical StoryboardShotRow.imagePrompt/videoPrompt
+  -> Canvas storyboard prompt state
+  -> Webview review table
+```
+
+共享验证器新增 scene-level `videoPrompt` 不变量：重复 prompt 或非首 shot prompt 返回 `invalid-scene-video-prompt`。图片策略执行优先读取 `imagePrompt`；测试将 deprecated `generationPrompt` poison 为不同文本，证明它不能覆盖 canonical 意图。Canvas projection 将旧 `generationPrompt` 映射为 `imagePrompt` 仅限迁移输入，不再把该字段写入新投影。
+
+### 12.3 Agent evaluation
+
+新增 `storyboard-distinct-image-video-prompts` case，并为 runner 增加通用确定性断言 `final-answer-not-contains`。真实 case 使用显式 `$storyboard`，验证 canonical Skill activation、独立 `imagePrompt`/`videoPrompt` 表头、scene 第一行单一视频提示词，以及不存在通用“生成提示词”列。
+
+真实运行证据：
+
+```text
+provider: nekoapi-chat
+model: gpt-5.5
+assertions: 5/5 passed
+- runtime-errors-empty
+- final-answer-non-empty
+- skill-active(storyboard)
+- final-answer-contains(imagePrompt, videoPrompt)
+- final-answer-not-contains(generic generation-prompt columns)
+```
+
+当前 debug runner 不能在 scenario setup 中构造两个同 scope 的 Markdown/resource aliases，也没有 Storyboard source-binding diagnostic 的通用事实投影，因此 ambiguous alias 的真实 Agent negative case 尚不能确定性执行；本批以 Skill/spec fail-visible 约束和既有 Markdown resource ambiguity tests 覆盖，保留运行态 observability 风险。
+
+### 12.4 验证结果
+
+已运行：
+
+```bash
+pnpm --filter @neko/shared test
+# 156 files, 1431 tests passed
+
+pnpm --filter @neko/skills test
+# 34 files, 320 tests passed
+
+cd packages/neko-agent/packages/webview
+pnpm exec vitest run src/components/ChatView/RichContent/renderers/CompositeRenderers.test.tsx
+# 1 file, 11 tests passed
+
+pnpm test:agent:eval
+# 2 files, 34 tests passed
+
+node scripts/agent-eval/protocol-smoke.mjs \
+  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
+  --case storyboard-distinct-image-video-prompts \
+  --dry-run
+# passed
+
+node scripts/agent-eval/protocol-smoke.mjs \
+  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
+  --case storyboard-distinct-image-video-prompts
+# passed, 5/5 assertions
+
+git diff --check
+# passed
+```
+
+以下全包门禁被工作区中并行的 conversation/tab-state 重构阻塞，本批文件不在错误列表的根因路径中：
+
+```text
+pnpm --filter @neko-agent/webview build
+- failed: switchConversation/activateConversation、tabState revision、UseTabManagerProps 等并行改动尚未同步测试。
+
+pnpm test -- src/components/ChatView/RichContent/renderers/CompositeRenderers.test.tsx
+- package script 实际运行全部 88 个 Webview test files；失败集中于同一 conversation/tab-state 并行改动。
+- 改用精确 vitest 文件命令后，本批 renderer 11/11 通过。
+
+pnpm check:legacy-debt
+- failed on repository baseline: 87 blocking occurrences across 18 migrate-now files and 5 needs-review files。
+- 本批保留的 Storyboard generationPrompt 读取仅属于明确迁移边界；新 normalization/projection 不再写入该字段。
+```
+
+### 12.5 质量自审与剩余风险
+
+风险级别为 L2（共享 Storyboard contract、Skill prompt、Canvas/Webview projection、Agent evaluation）。未发现本批阻断项。依赖方向保持 Story/shared contract 为真值，Canvas 与 Webview 仅消费 projection；未新增顶级 Skill、provider、registry 或平行 DTO。
+
+剩余风险：
+
+- natural-language 自动激活 `storyboard` 的一次真实 evaluation 出现非确定性缺少 activation evidence；最终提交 case 改为显式 `$storyboard`，因此证明 Skill 内容和 canonical path，但不单独证明自然语言路由稳定性；
+- ambiguous alias 尚缺可由通用 debug facts 证明的真实 Agent negative case；
+- deprecated `generationPrompt` 仍存在于旧 Storyboard/Canvas 迁移读取路径，需在存量 migration 完成后由 legacy-debt 任务删除；
+- Webview 全包 build/test 需等待并行 conversation/tab-state 变更完成后重跑。

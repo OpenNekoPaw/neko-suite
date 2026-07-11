@@ -75,6 +75,10 @@ flowchart LR
 
 所有来源输出同一 Storyboard contract。Canvas 只投影视觉节点/ReviewNode，Cut 只消费经过 validation 的 handoff，不成为 Storyboard 真值。
 
+Storyboard 中的生成有效意图必须保持两类独立语义：`imagePrompt` 属于 shot，用于单帧图片生成或编辑；`videoPrompt` 属于 scene，用于汇总该场有序 shot beats、主体动作、运镜衔接、环境变化、声音/对白、总时长与约束。为兼容当前表格投影，scene-level `videoPrompt` 存放在该 scene 第一条 shot，但其语义不得退化为逐镜头视频提示词。画面描述、动作摘要、运镜备注、状态和 diagnostic 都不能替代这两个 prompt，也不得折叠为单一“生成提示词”。Story planning → canonical Storyboard → Canvas/Cut/Webview 的 projection 必须无损保留这两类意图。
+
+旧 `generationPrompt` 仅作为 `imagePrompt` 的受限迁移输入保留，由 canonical Storyboard contract owner 负责移除；新规划和新投影不得写入或显示它，执行时必须优先使用 `imagePrompt`，测试需 poison 旧值以证明 legacy 字段未覆盖 canonical 意图。移除条件是已存量 Storyboard/Canvas prompt migration 完成且 legacy-debt 检查不再发现生产读取方。资源 alias 只能在声明 scope 内唯一绑定；匹配多个资源时必须返回可见 binding diagnostic，并停止生成带虚假来源的 Storyboard 行。
+
 拒绝直接把 `comic-to-storyboard` 改名并扩大 accepted modalities，因为漫画 OCR/panel 约束不适用于普通剧本，且会让一个 prompt 同时承担互斥方法。
 
 ### 3. Image/Video operation vocabulary 与 Provider schema 分离

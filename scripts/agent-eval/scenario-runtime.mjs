@@ -6,6 +6,7 @@ export const SUPPORTED_ASSERTION_KINDS = new Set([
   'runtime-errors-empty',
   'final-answer-non-empty',
   'final-answer-contains',
+  'final-answer-not-contains',
   'no-user-internal-continuation',
   'task-created',
   'task-terminal',
@@ -139,6 +140,8 @@ function evaluateAssertion(assertion, facts) {
       return assertFinalAnswerNonEmpty(facts);
     case 'final-answer-contains':
       return assertFinalAnswerContains(assertion, facts);
+    case 'final-answer-not-contains':
+      return assertFinalAnswerNotContains(assertion, facts);
     case 'no-user-internal-continuation':
       return assertNoUserInternalContinuation(facts);
     case 'task-created':
@@ -308,6 +311,17 @@ function assertFinalAnswerContains(assertion, facts) {
   const missing = assertion.text.filter((text) => !content.includes(text));
   assertCase(missing.length === 0, `final assistant answer is missing: ${missing.join(', ')}`);
   return { kind: assertion.kind, ok: true, matched: assertion.text };
+}
+
+function assertFinalAnswerNotContains(assertion, facts) {
+  const finalAssistant = readFinalAssistant(facts);
+  const content = typeof finalAssistant?.content === 'string' ? finalAssistant.content : '';
+  const present = assertion.text.filter((text) => content.includes(text));
+  assertCase(
+    present.length === 0,
+    `final assistant answer contains forbidden text: ${present.join(', ')}`,
+  );
+  return { kind: assertion.kind, ok: true, absent: assertion.text };
 }
 
 function assertNoUserInternalContinuation(facts) {
@@ -570,6 +584,7 @@ function validateAssertion(assertion, scenarioId, index) {
   assertSupportedKind(assertion, SUPPORTED_ASSERTION_KINDS, scenarioId, 'assertion', index);
   switch (assertion.kind) {
     case 'final-answer-contains':
+    case 'final-answer-not-contains':
       assertStringArray(assertion.text, `${assertion.kind}.text`);
       break;
     case 'task-created':

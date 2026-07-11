@@ -41,6 +41,20 @@ describe('canonical creative media Skill content boundaries', () => {
     },
   );
 
+  it.each([undefined, 'zh-CN'])(
+    'keeps canonical Storyboard image/video prompt semantics distinct (%s)',
+    (locale) => {
+      const storyboard = getCanonicalCreativeMediaSkills(locale).find(
+        (skill) => skill.name === 'storyboard',
+      );
+      expect(storyboard?.content).toContain('`imagePrompt`');
+      expect(storyboard?.content).toContain('`videoPrompt`');
+      expect(storyboard?.content).toMatch(/scene-level|scene 级/);
+      expect(storyboard?.content).toMatch(/Never collapse|禁止把图片与视频意图合并/);
+      expect(storyboard?.content).toMatch(/multiple resources|匹配多个资源/);
+    },
+  );
+
   it('keeps operation ids in machine-readable metadata rather than tool tutorials', () => {
     const skills = new Map(getCanonicalCreativeMediaSkills().map((skill) => [skill.name, skill]));
     expect(skills.get('image')?.mediaWorkflow?.operations).toContain('outpaint');

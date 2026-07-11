@@ -41,6 +41,8 @@
 - [x] 4.7 Add Canvas Storyboard projection adapter and tests proving Canvas node/render state is not canonical Storyboard truth.
 - [x] 4.8 Update Cut handoff adapter to consume validated canonical Storyboard revisions without dual-writing Storyboard truth.
 - [x] 4.9 Add fixture tests for prompt, prose, screenplay, PDF/document, comic/webtoon, image sequence, mixed document, and existing Storyboard sources.
+- [x] 4.10 Restore distinct shot-level `imagePrompt` and scene-level `videoPrompt` invariants in the canonical Storyboard Skill, contract, normalization, projection, and review rendering.
+- [x] 4.11 Add path-level regressions proving Story planning → canonical Storyboard → Canvas/Webview preserves prompt intent, canonical `imagePrompt` wins over deprecated `generationPrompt`, and ambiguous resource aliases fail visibly.
 
 ## 5. Image and Video Capability Convergence
 

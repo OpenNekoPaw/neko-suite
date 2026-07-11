@@ -228,6 +228,28 @@ describe('scenario assertion evaluation', () => {
     ],
   };
 
+  it('asserts required and forbidden final-answer text deterministically', () => {
+    expect(
+      evaluateScenarioAssertions(
+        [
+          { kind: 'final-answer-contains', text: ['portable skill'] },
+          { kind: 'final-answer-not-contains', text: ['generic generation prompt'] },
+        ],
+        facts,
+      ),
+    ).toEqual([
+      expect.objectContaining({ kind: 'final-answer-contains', ok: true }),
+      expect.objectContaining({ kind: 'final-answer-not-contains', ok: true }),
+    ]);
+
+    expect(() =>
+      evaluateScenarioAssertions(
+        [{ kind: 'final-answer-not-contains', text: ['expected conflict'] }],
+        facts,
+      ),
+    ).toThrow('final assistant answer contains forbidden text: expected conflict');
+  });
+
   it('matches structured successful and failed tool-call evidence', () => {
     expect(
       evaluateScenarioAssertions(
