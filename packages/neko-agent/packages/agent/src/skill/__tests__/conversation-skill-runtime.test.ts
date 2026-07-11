@@ -207,6 +207,45 @@ describe('ConversationSkillRuntime', () => {
     });
   });
 
+  it('resolves the bounded quality-assessment alias to the canonical lifecycle skill', async () => {
+    const canonical = createSkill('media-quality-review');
+    const skillService = createSkillService([canonical]);
+    const runtime = new ConversationSkillRuntime({ skillService: skillService as any });
+
+    const result = await runtime.activateLifecycleSkill({
+      skillName: 'quality-assessment',
+      conversationId: 'conv-quality',
+      reason: 'Review the generated image quality.',
+      slot: 'referenceSkill',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        skillName: 'media-quality-review',
+        requestedSkillName: 'quality-assessment',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'legacy-skill-alias',
+            skillName: 'media-quality-review',
+            details: {
+              requestedSkillName: 'quality-assessment',
+              canonicalSkillName: 'media-quality-review',
+            },
+          }),
+        ],
+      }),
+    );
+    expect(skillService.registry.getSkill).toHaveBeenCalledWith('media-quality-review');
+    expect(skillService.registry.ensureLoaded).toHaveBeenCalledWith('media-quality-review');
+    expect(runtime.getActiveLifecycleRecords('conv-quality')).toEqual([
+      expect.objectContaining({ skillName: 'media-quality-review', slot: 'referenceSkill' }),
+    ]);
+    expect(skillService.registry.listSkills().map((skill) => skill.name)).toEqual([
+      'media-quality-review',
+    ]);
+  });
+
   it('returns fail-visible diagnostics for unknown and disabled skill invocation', async () => {
     const disabled = { ...createSkill('disabled-skill'), enabled: false };
     const skillService = createSkillService([disabled]);

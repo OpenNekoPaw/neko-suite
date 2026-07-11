@@ -22,7 +22,6 @@ import {
   mediaQualityReviewSkill,
   mediaToVideoSkill,
   normalizeBuiltinSkillLocale,
-  qualityAssessmentSkill,
   scriptGenerationSkill,
   storyboardSkill,
   validateBuiltinSkillLocaleParity,
@@ -399,7 +398,6 @@ describe('@neko/skills builtins', () => {
       'GenerateImage',
     );
     expect(scriptGenerationSkill.name).toBe('script-generation');
-    expect(qualityAssessmentSkill.name).toBe('quality-assessment');
     expect(storyboardSkill.name).toBe('storyboard');
     expect(imageSkill.name).toBe('image');
     expect(videoSkill.name).toBe('video');

@@ -80,6 +80,8 @@ export interface ISkillProvider {
   activateSkill(input: SkillActivationRequest): SkillProviderMaybePromise<{
     success: boolean;
     message: string;
+    skillName?: string;
+    requestedSkillName?: string;
     allowedTools?: string[];
     lifecycleRecordId?: string;
     diagnostics?: readonly SkillLifecycleDiagnostic[];
@@ -447,12 +449,14 @@ export class ActivateSkillTool extends BuiltinTool {
       return this.error(result.message);
     }
 
+    const activatedSkillName = result.skillName ?? skillName;
     return this.success({
       activated: true,
-      skillName,
+      skillName: activatedSkillName,
+      ...(result.requestedSkillName ? { requestedSkillName: result.requestedSkillName } : {}),
       reason,
       ...(slot ? { slot } : {}),
-      message: formatSkillActivatedMessage(skillName, options?.metadata?.['locale']),
+      message: formatSkillActivatedMessage(activatedSkillName, options?.metadata?.['locale']),
       ...(result.allowedTools ? { allowedTools: result.allowedTools } : {}),
       ...(result.lifecycleRecordId ? { lifecycleRecordId: result.lifecycleRecordId } : {}),
       ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),

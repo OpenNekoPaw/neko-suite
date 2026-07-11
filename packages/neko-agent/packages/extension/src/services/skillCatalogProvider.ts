@@ -79,7 +79,7 @@ const BUILTIN_CATALOG_OVERRIDES: Readonly<Record<string, SkillCatalogPolicy>> = 
   'color-grading': createQuickActionBuiltinCatalog(POST_PRODUCTION_GROUP),
   'audio-mixing': createQuickActionBuiltinCatalog(POST_PRODUCTION_GROUP),
   'subtitle-assistant': createQuickActionBuiltinCatalog(POST_PRODUCTION_GROUP),
-  'quality-assessment': createQuickActionBuiltinCatalog(POST_PRODUCTION_GROUP),
+  'media-quality-review': createQuickActionBuiltinCatalog(POST_PRODUCTION_GROUP),
 };
 
 const SOURCE_PRIORITY: Readonly<Record<SkillCatalogSource, number>> = {

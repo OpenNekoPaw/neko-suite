@@ -102,6 +102,10 @@ export interface AutoActivateSkillInput {
   readonly conversationId: string;
 }
 
+const LEGACY_SKILL_ALIASES: Readonly<Record<string, string>> = {
+  'quality-assessment': 'media-quality-review',
+};
+
 /**
  * Owns per-conversation skill activation state without depending on VSCode.
  *
@@ -178,7 +182,8 @@ export class ConversationSkillRuntime {
   async applySkillInvocation(
     input: ApplySkillInvocationInput,
   ): Promise<SkillApplicationResult | null> {
-    const skillName = normalizeAgentInputTriggerName(input.skillName);
+    const requestedSkillName = normalizeAgentInputTriggerName(input.skillName);
+    const skillName = resolveCanonicalSkillName(requestedSkillName);
     const skillService = this._deps.skillService;
     if (!skillService) {
       return { applied: false, error: 'SkillService not initialized' };
@@ -272,6 +277,8 @@ export class ConversationSkillRuntime {
   async activateDomainSkill(input: ApplySkillInvocationInput): Promise<{
     success: boolean;
     message: string;
+    skillName?: string;
+    requestedSkillName?: string;
     allowedTools?: string[];
     lifecycleRecordId?: string;
     diagnostics?: readonly import('@neko/shared').SkillLifecycleDiagnostic[];
@@ -282,13 +289,24 @@ export class ConversationSkillRuntime {
   async activateLifecycleSkill(input: ApplySkillInvocationInput): Promise<{
     success: boolean;
     message: string;
+    skillName?: string;
+    requestedSkillName?: string;
     allowedTools?: string[];
     lifecycleRecordId?: string;
     diagnostics?: readonly import('@neko/shared').SkillLifecycleDiagnostic[];
   }> {
     const slot = input.slot ?? 'domainSkill';
+    const requestedSkillName = normalizeAgentInputTriggerName(input.skillName);
+    const canonicalSkillName = resolveCanonicalSkillName(requestedSkillName);
+    const aliasDiagnostics = buildLegacySkillAliasDiagnostics(
+      requestedSkillName,
+      canonicalSkillName,
+      input.conversationId,
+      slot,
+    );
     const result = await this.applySkillInvocation({
       ...input,
+      skillName: canonicalSkillName,
       source: input.source ?? 'agent-tool',
       requestedBy: input.requestedBy ?? 'agent',
       reason: input.reason ?? `ActivateSkill requested ${input.skillName}`,
@@ -304,11 +322,15 @@ export class ConversationSkillRuntime {
     const record = this.getActiveLifecycleRecords(input.conversationId).find(
       (candidate) => candidate.slot === slot && candidate.skillName === result.skill?.name,
     );
+    const activatedSkillName = result.skill?.name ?? canonicalSkillName;
     return {
       success: true,
-      message: `Activated skill "${result.skill?.name ?? input.skillName}"`,
+      message: `Activated skill "${activatedSkillName}"`,
+      skillName: activatedSkillName,
+      ...(requestedSkillName !== activatedSkillName ? { requestedSkillName } : {}),
       allowedTools: result.injection?.allowedTools ?? result.skill?.allowedTools,
       ...(record ? { lifecycleRecordId: record.id } : {}),
+      ...(aliasDiagnostics.length > 0 ? { diagnostics: aliasDiagnostics } : {}),
     };
   }
 
@@ -645,6 +667,32 @@ export class ConversationSkillRuntime {
     }
     return this._lifecycleRuntime;
   }
+}
+
+function resolveCanonicalSkillName(skillName: string): string {
+  return LEGACY_SKILL_ALIASES[skillName] ?? skillName;
+}
+
+function buildLegacySkillAliasDiagnostics(
+  requestedSkillName: string,
+  canonicalSkillName: string,
+  conversationId: string,
+  slot: SkillLifecycleSlot,
+): readonly import('@neko/shared').SkillLifecycleDiagnostic[] {
+  if (requestedSkillName === canonicalSkillName) {
+    return [];
+  }
+
+  return [
+    {
+      code: 'legacy-skill-alias',
+      message: `Legacy skill $${requestedSkillName} was replaced by $${canonicalSkillName}.`,
+      conversationId,
+      skillName: canonicalSkillName,
+      slot,
+      details: { requestedSkillName, canonicalSkillName },
+    },
+  ];
 }
 
 function formatSkillInvocationName(skillName: string): string {

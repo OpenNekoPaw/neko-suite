@@ -9,7 +9,6 @@ import { TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA, TOOL_NAMES_SYSTEM } from '@neko/
 import { aiGenerateSkill } from './ai-generate';
 
 import { getScriptGenerationSkill, scriptGenerationSkill } from './script-generation';
-import { qualityAssessmentSkill } from './quality-assessment';
 import {
   getCanonicalCreativeMediaSkills,
   imageSkill,
@@ -56,7 +55,6 @@ export {
 } from './builtin-skill-content';
 export type { BuiltinSkillOptions, LocalizedBuiltinSkillContent };
 export { getScriptGenerationSkill, scriptGenerationSkill } from './script-generation';
-export { qualityAssessmentSkill } from './quality-assessment';
 export {
   CREATIVE_MEDIA_PROFILES,
   CREATIVE_MEDIA_WORKFLOW_STAGES,
@@ -995,84 +993,6 @@ Fountain 是纯文本剧本格式：
   },
 };
 
-const localizedQualityAssessmentContent: LocalizedBuiltinSkillContent = {
-  default: qualityAssessmentSkill.content,
-  localized: {
-    'zh-cn': `# 媒体质量检查助手
-
-你帮助用户评估 AI 生成媒体的质量，并在获得批准后规划修复。
-
-## Workflow
-
-### Step 1: Select Evidence
-只评估有 stable generated asset refs、source refs 或 host-resolved media refs 支撑的具体媒体或 timeline scenes。
-
-每个目标都应保留让评估有意义的用户可见上下文：
-- 来源或生成资产身份
-- 可用时保留原始 prompt 或 creative intent
-- 相关 scene description、dialogue、style guide 或 reference constraints
-- 用户指定的通过阈值或审阅目标
-
-### Step 2: Interpret Quality Results
-质量证据应被理解为结构化审阅报告，而不是修改项目状态的许可。
-
-期望的报告语义：
-- **overallScore**：综合质量分或 verdict
-- **dimensions**：各维度拆解，例如 technical quality、prompt adherence、aesthetics、style consistency、character consistency、motion quality 和 audio quality
-- **issues**：带 category、severity、target 和 evidence 的具体问题
-- **repairPlan**：可供用户审阅的修复建议，不假设具体 operation 或参数 payload
-
-### Step 3: Plan Fixes
-修改媒体、时间线状态或生成结果前必须请求用户确认，除非活跃 policy 已批准该修复路径。
-
-把质量问题映射为 capability-neutral repair intent：
-
-| Issue family | Repair intent |
-|--------------|---------------|
-| Noise, blur, compression, clipping | Technical cleanup or enhancement |
-| Color cast, exposure, contrast mismatch | Color or tone correction |
-| Loudness, silence, background noise | Audio normalization or cleanup |
-| Prompt mismatch, style drift, character inconsistency | Prompt/reference revision and regeneration plan |
-| Poor framing, missing area, text artifacts | Crop, inpaint, outpaint, redraw, or manual review |
-| Unsafe uncertainty or conflicting evidence | Manual review before repair |
-
-重生成和破坏性修复始终是显式 repair attempt。把它们作为带独立证据的尝试报告，不要覆盖原始评估历史。
-
-### Step 4: Report
-用清晰表格总结结果：
-- 总 scenes 数、通过/失败数量
-- 每个 scene 的分数或 verdict、主要问题，以及计划或已批准的修复
-- 总体建议（approve / fix specific scenes / rerun selected generation / manual review）
-
-## Issue Categories
-
-**Technical**（确定性检测）：
-- \`artifact\`: 视觉噪声、模糊、扭曲、畸形
-- \`resolution\`: 细节或锐度不足
-- \`color-distortion\`: 颜色不自然、白平衡问题
-- \`audio-noise\`: 音频背景噪声
-- \`audio-clipping\`: 音频峰值超过安全范围
-- \`loudness-off\`: 响度超出播出范围（-16 到 -12 LUFS）
-
-**Semantic**（LLM 判断）：
-- \`prompt-mismatch\`: 生成内容不匹配提示词
-- \`script-mismatch\`: 不匹配场景描述或对白
-- \`style-drift\`: 与指定全局风格不一致
-- \`character-inconsistency\`: 角色外观与参考不一致
-- \`composition-poor\`: 构图、平衡或视觉流动差
-- \`motion-unnatural\`: 视频运动不自然
-
-## Important
-- 只在用户明确请求质量审阅、诊断、评分或修复规划时评估。
-- 把质量评估视为只读证据；它不会静默重新生成媒体。
-- 音频问题可以使用技术指标评估；视觉和语义问题可能需要感知证据。
-- 修复执行属于运行时 capability 和对应 schema，不属于本 Skill 正文。
-- 不要把 cache path、Webview URI、blob URL 或 scratch path 作为持久媒体身份。
-- 展示具体 scores、issue categories 和具体 remediation steps，不要含糊。
-`,
-  },
-};
-
 export function getAiGenerateSkill(locale?: string): Skill {
   return localizeBuiltinSkill(aiGenerateSkill, localizedAiGenerateContent, locale);
 }
@@ -1099,10 +1019,6 @@ export function getSubtitleSkill(locale?: string): Skill {
 
 export function getScriptToTimelineSkill(locale?: string): Skill {
   return localizeBuiltinSkill(scriptToTimelineSkill, localizedScriptToTimelineContent, locale);
-}
-
-export function getQualityAssessmentSkill(locale?: string): Skill {
-  return localizeBuiltinSkill(qualityAssessmentSkill, localizedQualityAssessmentContent, locale);
 }
 
 // Note: pipelineDiagnosticsSkill removed — pipeline introspection used to

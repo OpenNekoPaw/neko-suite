@@ -19,6 +19,8 @@ export interface ConversationSkillProviderEffects {
   activateLifecycleSkill?(input: SkillActivationRequest): Promise<{
     success: boolean;
     message: string;
+    skillName?: string;
+    requestedSkillName?: string;
     allowedTools?: string[];
     lifecycleRecordId?: string;
     diagnostics?: ActiveSkillLifecycleProjection['diagnostics'];

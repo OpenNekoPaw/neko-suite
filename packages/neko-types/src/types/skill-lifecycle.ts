@@ -52,7 +52,8 @@ export type SkillLifecycleDiagnosticCode =
   | 'model-override-conflict'
   | 'single-injection-slot-blocked'
   | 'expired-record'
-  | 'stale-record';
+  | 'stale-record'
+  | 'legacy-skill-alias';
 
 /**
  * Local mirror of the built-in creation stages used by @neko-agent/types. Kept in Layer 0 as

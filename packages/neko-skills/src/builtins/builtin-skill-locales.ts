@@ -184,13 +184,6 @@ export const builtinSkillLocales: Readonly<Record<string, BuiltinSkillLocaleMap>
       tags: ['导出', '视频', '交付'],
     },
   },
-  'quality-assessment': {
-    'zh-cn': {
-      name: '质量检查',
-      description: '检查媒体质量、伪影、响度、提示词匹配和风格漂移，并给出修复建议。',
-      tags: ['AI', '质量', '检查'],
-    },
-  },
 };
 
 export function localizeBuiltinSkillCatalogText(skill: Skill, locale?: string): Skill {

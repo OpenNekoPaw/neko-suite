@@ -88,11 +88,11 @@ describe('skillCatalogProvider', () => {
         makeSkill('creation-persona', 'Specify persona.'),
         makeSkill('execution-persona', 'Execute persona.'),
         makeSkill('iteration-persona', 'Iterate persona.'),
-        makeSkill('quality-assessment', 'Review quality.'),
+        makeSkill('media-quality-review', 'Review quality.'),
       ],
     });
 
-    expect(skills.map((skill) => skill.id)).toEqual(['quality-assessment']);
+    expect(skills.map((skill) => skill.id)).toEqual(['media-quality-review']);
   });
 
   it('includes project and personal file skills as editable catalog entries', () => {
@@ -193,10 +193,10 @@ describe('skillCatalogProvider', () => {
 
   it('updates synchronous provider snapshot when file scans change', () => {
     const provider = createSkillCatalogProvider({
-      builtinSkills: [makeSkill('quality-assessment', 'Review quality.')],
+      builtinSkills: [makeSkill('media-quality-review', 'Review quality.')],
     });
 
-    expect(provider.getSkills().map((skill) => skill.id)).toEqual(['quality-assessment']);
+    expect(provider.getSkills().map((skill) => skill.id)).toEqual(['media-quality-review']);
 
     provider.updateScanResult(
       makeScanResult({
@@ -205,7 +205,7 @@ describe('skillCatalogProvider', () => {
     );
 
     expect(provider.getSkills().map((skill) => skill.id)).toEqual(
-      expect.arrayContaining(['quality-assessment', 'project-skill']),
+      expect.arrayContaining(['media-quality-review', 'project-skill']),
     );
   });
 

@@ -99,6 +99,52 @@ describe('core meta tools', () => {
     });
   });
 
+  it('projects the canonical skill name and observable legacy alias diagnostic', async () => {
+    const activateSkill = vi.fn(async () => ({
+      success: true,
+      message: 'Activated skill "media-quality-review"',
+      skillName: 'media-quality-review',
+      requestedSkillName: 'quality-assessment',
+      diagnostics: [
+        {
+          code: 'legacy-skill-alias' as const,
+          message: 'Legacy skill $quality-assessment was replaced by $media-quality-review.',
+          skillName: 'media-quality-review',
+        },
+      ],
+    }));
+    const tool = new ActivateSkillTool();
+    tool.setSkillProvider({
+      listSkills: vi.fn(),
+      getActiveSkill: vi.fn(),
+      activateSkill,
+      deactivateSkill: vi.fn(),
+    });
+
+    await expect(
+      tool.execute({
+        skillName: 'quality-assessment',
+        reason: 'Review generated image quality with the canonical media gate.',
+      }),
+    ).resolves.toEqual({
+      success: true,
+      data: {
+        activated: true,
+        skillName: 'media-quality-review',
+        requestedSkillName: 'quality-assessment',
+        reason: 'Review generated image quality with the canonical media gate.',
+        message: 'Activated skill "media-quality-review"',
+        diagnostics: [
+          {
+            code: 'legacy-skill-alias',
+            message: 'Legacy skill $quality-assessment was replaced by $media-quality-review.',
+            skillName: 'media-quality-review',
+          },
+        ],
+      },
+    });
+  });
+
   it('describes and forwards lifecycle slots for supplemental skill activation', async () => {
     const activateSkill = vi.fn(async () => ({
       success: true,
