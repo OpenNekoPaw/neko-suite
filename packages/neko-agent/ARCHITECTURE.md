@@ -274,6 +274,24 @@ conversation snapshots
 - 原始 fenced Markdown 是视觉 source authority。normalized `codeBlock` node 可投影带 source range/provenance 的 semantic composite metadata，但不得删除原始 fence，也不得把 derived composite 再显示成第二个独立 artifact。
 - normalized contract 的未知 node/schema、活动流缺失 Markdown session 或 source mismatch 都必须 fail-visible。
 
+#### Conversation render ownership 与激活事务
+
+- `ConversationRenderCoordinator` 是 Webview 内 canonical 的 per-conversation render owner，统一拥有消息投影、streaming/active Timeline、队列、运行状态、render revision、可见性与 viewport intent。`conversationMessagesRef`、`conversationStreamingRef` 只保留为 React compatibility projection，不是第二事实来源，也不得由 handler 直接写入。
+- UI Conversation Tab、character-role Tab、Extension `tabState` 与 `activeConversation` 必须进入同一个 activation transaction：
+
+  ```text
+  ingest authoritative snapshot
+    -> prepare renderer resources from activeTurnTimeline
+    -> commit visible React state and foreground owner
+    -> publish Markdown external-store observers
+  ```
+
+- 激活准备阶段必须先确认 snapshot identity、revision 与 renderer ownership。Markdown session 缺失、Timeline snapshot 不可用、重复提交或 publication 顺序非法时 fail-visible；禁止回退 raw Markdown、历史 renderer 或空成功结果。
+- background mutation 只能推进 owning conversation snapshot、renderer resource 与订阅 revision；不得写当前 visible state/ref，不得触发前台 scroll/focus effect。Tab badge/status 通过 conversation revision 订阅更新，不要求隐藏 conversation 保持 DOM 渲染。
+- composer enablement、queued-message submission、status、elapsed-time baseline 与 viewport intent 都从当前 active snapshot 派生。elapsed display 的周期 tick 属 UI-local；`follow-tail`/`detached` 与稳定 anchor 按 conversation 保存，切回时恢复，后台更新不得夺取滚动或焦点。
+- cleanup 按 scope 分离：active-turn release 只释放当前 turn renderer 资源；component detach/React StrictMode cleanup 只解除 UI 订阅并允许从 canonical snapshot 重建；hide/reveal 允许 realm 重建和重新激活；Webview realm teardown 释放 frame、Markdown session 与 subscription；conversation disposal 只清理目标 conversation 的 snapshot、scheduled frame、viewport intent 与 renderer resource。
+- `pagehide` realm teardown 清空 Markdown session/subscription 时不得再通知正在卸载的 React subscriber，否则旧 React tree 会在真正销毁前读取已经删除的活动 session。conversation/turn scoped disposal 仍保留 scoped invalidation。
+
 #### 串行持久化与 completion barrier
 
 - 每个本地 conversation storage authority 复用一个 `ConversationPersistenceCoordinator`；不同 runtime 不得并发写同一 storage scope。

@@ -4,7 +4,7 @@
 - [x] 1.2 Add failing characterization tests for normal UI Tab, character-role Tab, Extension `tabState`, and Extension `activeConversation` activation proving their current commit/publication order.
 - [x] 1.3 Add a failing background-stream scenario: conversation A streams, conversation B is foreground, A continues in the background, and returning to A must present its latest Timeline without foreground leakage.
 - [x] 1.4 Add StrictMode/unmount/remount characterization proving renderer-resource disposal cannot invalidate a retained canonical conversation snapshot.
-- [ ] 1.5 Add characterization tests for input/queue availability, status/time freshness, and scroll/focus isolation across conversation switching.
+- [x] 1.5 Add characterization tests for input/queue availability, status/time freshness, and scroll/focus isolation across conversation switching.
 - [x] 1.6 Characterize whether closing a UI Tab permanently disposes the conversation or retains it in the background, and record the product-semantic decision in the design notes before implementing cleanup.
 
 ## 2. Define Canonical Render Lifecycle Contracts
@@ -49,14 +49,14 @@
 - [x] 6.3 Make React StrictMode cleanup/remount reconstruct derived resources from canonical snapshots without treating effect cleanup as permanent conversation deletion.
 - [x] 6.4 Remove writable direct access to migrated per-conversation maps and delete redundant activation/projector helpers inside the scoped replacement boundary.
 - [x] 6.5 Add static/source tests or poisoned adapters proving production code cannot perform a successful foreground activation or background visible-state write outside the coordinator.
-- [ ] 6.6 Run `pnpm check:legacy-debt` and `pnpm check:unused`, fixing only debt introduced or exposed inside this change and recording unrelated worktree blockers.
+- [x] 6.6 Run `pnpm check:legacy-debt` and `pnpm check:unused`, fixing only debt introduced or exposed inside this change and recording unrelated worktree blockers.
 
 ## 7. Validation and Documentation
 
-- [ ] 7.1 Run focused coordinator, Markdown registry, handler, ConversationController, MessageList, queue/input, status, and viewport Vitest suites.
-- [ ] 7.2 Run `pnpm --filter @neko-agent/webview exec tsc --noEmit --pretty false`, the full Webview test suite, Webview production build, and `pnpm --dir packages/neko-agent run compile:webview`.
-- [ ] 7.3 Run repository dependency/boundary checks relevant to Webview and Extension separation, and confirm Webview does not import `vscode` or Node APIs.
-- [ ] 7.4 Run `pnpm smoke:webview:runtime` and a `vscode-extension-debugger` Extension Development Host scenario: A streams, switch to B, A updates in background, use B input, switch back to A, hide/reveal Webview, and verify Markdown/status/time/scroll/focus.
-- [ ] 7.5 Capture runtime console/diagnostic evidence proving no missing normalized Markdown session, unavailable snapshot activation, cross-conversation foreground write, or repeated activation publication.
-- [ ] 7.6 Update `packages/neko-agent/ARCHITECTURE.md` or package-private architecture documentation with render ownership, activation transaction ordering, background isolation, and cleanup scopes.
-- [ ] 7.7 Record final validation commands, performance observations for background Markdown coalescing, remaining risks, and removed bypass paths in `implementation-notes.md` before archive.
+- [x] 7.1 Run focused coordinator, Markdown registry, handler, ConversationController, MessageList, queue/input, status, and viewport Vitest suites.
+- [x] 7.2 Run `pnpm --filter @neko-agent/webview exec tsc --noEmit --pretty false`, the full Webview test suite, Webview production build, and `pnpm --dir packages/neko-agent run compile:webview`.
+- [x] 7.3 Run repository dependency/boundary checks relevant to Webview and Extension separation, and confirm Webview does not import `vscode` or Node APIs.
+- [x] 7.4 Run `pnpm smoke:webview:runtime` and a `vscode-extension-debugger` Extension Development Host scenario: A streams, switch to B, A updates in background, use B input, switch back to A, hide/reveal Webview, and verify Markdown/status/time/scroll/focus.
+- [x] 7.5 Capture runtime console/diagnostic evidence proving no missing normalized Markdown session, unavailable snapshot activation, cross-conversation foreground write, or repeated activation publication.
+- [x] 7.6 Update `packages/neko-agent/ARCHITECTURE.md` or package-private architecture documentation with render ownership, activation transaction ordering, background isolation, and cleanup scopes.
+- [x] 7.7 Record final validation commands, performance observations for background Markdown coalescing, remaining risks, and removed bypass paths in `implementation-notes.md` before archive.
