@@ -67,4 +67,30 @@ describe('StatusBar i18n', () => {
     expect(lastFrame()).toContain('ctx:12.3K/384.0K');
     expect(lastFrame()).not.toContain('ctx:0/384.0K');
   });
+
+  it('shows when pending messages are paused after active-turn cancellation', () => {
+    process.env.NEKO_LOCALE = 'en-US';
+    useConfigStore.getState().replaceConfig(DEFAULT_CLI_CONFIG);
+    useAgentStore.getState().setMessageQueueSnapshot({
+      conversationId: 'conv-1',
+      pendingCount: 1,
+      version: 1,
+      items: [
+        {
+          id: 'queue-1',
+          conversationId: 'conv-1',
+          content: 'Pending follow-up',
+          createdAt: 1,
+          source: 'user',
+        },
+      ],
+    });
+    useAgentStore.getState().setMessageQueuePausedAfterCancel(true);
+
+    const { lastFrame } = render(<StatusBar />);
+
+    expect(lastFrame()).toContain('queue1');
+    expect(lastFrame()).toContain('Queue paused after');
+    expect(lastFrame()).toContain('cancellation');
+  });
 });

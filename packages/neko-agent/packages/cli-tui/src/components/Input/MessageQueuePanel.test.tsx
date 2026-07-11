@@ -145,6 +145,30 @@ describe('MessageQueuePanel', () => {
     expect(frame).toContain('任务续跑: 继续处理任务结果');
     expect(frame).toContain('+1 条');
   });
+
+  it('projects the paused-after-cancel state without hiding accepted messages', () => {
+    process.env.NEKO_LOCALE = 'en-US';
+    useAgentStore.getState().setMessageQueueSnapshot({
+      conversationId: 'conv-1',
+      pendingCount: 1,
+      version: 1,
+      items: [
+        {
+          id: 'queue-1',
+          conversationId: 'conv-1',
+          content: 'Keep this follow-up pending',
+          createdAt: 1,
+          source: 'user',
+        },
+      ],
+    });
+    useAgentStore.getState().setMessageQueuePausedAfterCancel(true);
+
+    const frame = render(<MessageQueuePanel />).lastFrame()!;
+    expect(frame).toContain('Next turn · 1 · Queue paused after cancellation');
+    expect(frame).toContain('Keep this follow-up pending');
+    expect(frame).toContain('^N Send next');
+  });
 });
 
 async function writeInput(instance: ReturnType<typeof render>, value: string): Promise<void> {

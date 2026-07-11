@@ -15,7 +15,7 @@
 
 - [x] 3.1 Stop user queue acceptance and release snapshot events from creating generic `Queued message: <id>` transcript system messages.
 - [x] 3.2 Preserve source-aware task/subagent continuation activity without representing internal continuation prompts as user-authored messages.
-- [ ] 3.3 Add adapter/session tests proving pending user items stay out of transcript and enter history only through the executing turn path.
+- [x] 3.3 Add adapter/session tests proving pending user items stay out of transcript and enter history only through the executing turn path.
 
 ## 4. Command And Ordering Semantics
 
@@ -26,9 +26,9 @@
 
 ## 5. Cancellation And Resume Policy
 
-- [ ] 5.1 Add explicit paused-after-active-turn-cancel state without clearing accepted pending items.
-- [ ] 5.2 Prevent automatic queue drain after Escape until an explicit resume/send-next action occurs.
-- [ ] 5.3 Add tests for Escape preserving queue items, no unexpected next turn, explicit resume, and status/panel projection.
+- [x] 5.1 Add explicit paused-after-active-turn-cancel state without clearing accepted pending items.
+- [x] 5.2 Prevent automatic queue drain after Escape until an explicit resume/send-next action occurs.
+- [x] 5.3 Add tests for Escape preserving queue items, no unexpected next turn, explicit resume, and status/panel projection.
 
 ## 6. Runtime Queue Convergence
 

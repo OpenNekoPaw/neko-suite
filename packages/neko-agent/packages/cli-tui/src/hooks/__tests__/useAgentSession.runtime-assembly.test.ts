@@ -11,13 +11,15 @@ import type { MediaTask } from '@neko/platform';
 import { DEFAULT_CLI_CONFIG, type CLIConfig } from '../../core/types';
 import { useAgentStore } from '../../stores/agent-store';
 import { useConversationStore } from '../../stores/conversation-store';
-import { useAgentSession } from '../useAgentSession';
+import { useAgentSession, type AgentSessionHandle } from '../useAgentSession';
 
 const runtimeMocks = vi.hoisted(() => ({
   latestFactoryConfig: undefined as Record<string, unknown> | undefined,
   latestSession: undefined as Record<string, unknown> | undefined,
   tokenCount: 0,
   executeEvents: [] as AgentEvent[],
+  executionBlocker: undefined as Promise<void> | undefined,
+  releaseExecution: undefined as (() => void) | undefined,
   recordDeliveryKind: 'append-observation' as 'append-observation' | 'auto-resume-agent',
   recordTaskResultObservation: vi.fn(),
   patchToolResult: vi.fn(),
@@ -72,6 +74,8 @@ beforeEach(async () => {
   runtimeMocks.latestTaskResultObservationRuntimeOptions = undefined;
   runtimeMocks.tokenCount = 0;
   runtimeMocks.executeEvents = [];
+  runtimeMocks.executionBlocker = undefined;
+  runtimeMocks.releaseExecution = undefined;
   runtimeMocks.recordDeliveryKind = 'append-observation';
   runtimeMocks.recordTaskResultObservation.mockImplementation(async (input) => {
     if (runtimeMocks.recordDeliveryKind === 'auto-resume-agent') {
@@ -288,6 +292,67 @@ describe('useAgentSession runtime assembly', () => {
     expect(useAgentStore.getState().usage).toEqual({ input: 1, output: 2, total: 3 });
   });
 
+  it('preserves and pauses queued user messages after cancellation until send-next resumes them', async () => {
+    runtimeMocks.executionBlocker = new Promise<void>((resolve) => {
+      runtimeMocks.releaseExecution = resolve;
+    });
+    let sessionHandle: AgentSessionHandle | undefined;
+
+    render(
+      React.createElement(RuntimeSessionProbe, {
+        config: {
+          ...DEFAULT_CLI_CONFIG,
+          workDir: tempRoot,
+          providerRequiresApiKey: false,
+        },
+        onReady: (session) => {
+          sessionHandle = session;
+        },
+      }),
+    );
+
+    await waitFor(() => Boolean(sessionHandle));
+    const activeTurn = sessionHandle!.submit('Active turn');
+    await waitFor(() => useAgentStore.getState().status === 'running');
+    await sessionHandle!.submit('Queued follow-up');
+
+    const queuedItem = sessionHandle!.getMessageQueueSnapshot()?.items[0];
+    expect(queuedItem).toEqual(expect.objectContaining({ content: 'Queued follow-up' }));
+    expect(
+      useConversationStore
+        .getState()
+        .messages.some((message) => message.content === 'Queued follow-up'),
+    ).toBe(false);
+
+    sessionHandle!.cancel();
+    await activeTurn;
+
+    const runtimeSession = runtimeMocks.latestSession as {
+      execute: ReturnType<typeof vi.fn>;
+      cancel: ReturnType<typeof vi.fn>;
+    };
+    expect(runtimeSession.cancel).toHaveBeenCalledTimes(1);
+    expect(runtimeSession.execute).toHaveBeenCalledTimes(1);
+    expect(useAgentStore.getState().messageQueue.pausedAfterCancel).toBe(true);
+    expect(sessionHandle!.getMessageQueueSnapshot()?.items).toEqual([
+      expect.objectContaining({ id: queuedItem!.id, content: 'Queued follow-up' }),
+    ]);
+
+    sessionHandle!.promoteQueuedMessage(queuedItem!.id);
+    await waitFor(() => runtimeSession.execute.mock.calls.length === 2);
+    await waitFor(() => sessionHandle!.getMessageQueueSnapshot()?.pendingCount === 0);
+
+    expect(useAgentStore.getState().messageQueue.pausedAfterCancel).toBe(false);
+    expect(runtimeSession.execute.mock.calls[1]?.[0]).toBe('Queued follow-up');
+    expect(
+      useConversationStore
+        .getState()
+        .messages.some(
+          (message) => message.role === 'user' && message.content === 'Queued follow-up',
+        ),
+    ).toBe(true);
+  });
+
   it('dispatches task-result continuations without adding user transcript messages', async () => {
     const readyStates: boolean[] = [];
     runtimeMocks.executeEvents = [
@@ -413,6 +478,24 @@ function RuntimeSubmitProbe(props: {
   return React.createElement(Text, null, 'runtime-submit-probe');
 }
 
+function RuntimeSessionProbe(props: {
+  readonly config: CLIConfig;
+  readonly onReady: (session: AgentSessionHandle) => void;
+}): React.JSX.Element {
+  const session = useAgentSession({
+    config: props.config,
+    capabilityProviders: [],
+  });
+
+  useEffect(() => {
+    if (session.isReady) {
+      props.onReady(session);
+    }
+  }, [props, session]);
+
+  return React.createElement(Text, null, 'runtime-session-probe');
+}
+
 function createPromptFragmentProvider(): AgentCapabilityProvider {
   return {
     id: 'probe-runtime',
@@ -454,10 +537,11 @@ function createMockAgentSession(tokenCount: number): Record<string, unknown> {
     getHistory: vi.fn(() => []),
     configure: vi.fn(),
     clearHistory: vi.fn(),
-    cancel: vi.fn(),
+    cancel: vi.fn(() => runtimeMocks.releaseExecution?.()),
     confirmTool: vi.fn(),
     isRunning: vi.fn(() => false),
     execute: vi.fn(async function* () {
+      await runtimeMocks.executionBlocker;
       const events = runtimeMocks.executeEventBatches?.shift() ?? runtimeMocks.executeEvents;
       for (const event of events) {
         yield event;

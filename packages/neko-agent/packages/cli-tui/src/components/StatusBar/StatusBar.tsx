@@ -22,6 +22,7 @@ export function StatusBar(): React.JSX.Element {
   const activeSkill = useAgentStore((s) => s.activeSkill);
   const lifecycleRecords = useAgentStore((s) => s.activeSkillLifecycleRecords);
   const queueSnapshot = useAgentStore((s) => s.messageQueue.snapshot);
+  const queuePausedAfterCancel = useAgentStore((s) => s.messageQueue.pausedAfterCancel);
   const runningTaskSummary = useAgentStore((s) => s.tasks.runningSummary);
   const usage = useAgentStore((s) => s.usage);
   const contextTokenCount = useAgentStore((s) => s.contextTokens.count);
@@ -83,6 +84,9 @@ export function StatusBar(): React.JSX.Element {
           <Text dimColor> | </Text>
           <Text color={tokens.warning}>{labels.chrome.queue}:</Text>
           <Text color={tokens.warning}>{queueSnapshot.pendingCount}</Text>
+          {queuePausedAfterCancel ? (
+            <Text color={tokens.warning}> ({labels.queue.pausedAfterCancel})</Text>
+          ) : null}
         </>
       ) : null}
 

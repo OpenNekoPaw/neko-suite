@@ -189,6 +189,8 @@ export interface AgentSessionHandle {
   compactContext: () => Promise<import('@neko/agent').CompressionResult>;
   /** Message queue snapshot for running-turn prompt queueing. */
   getMessageQueueSnapshot: () => import('@neko-agent/types').AgentMessageQueueSnapshot | null;
+  /** Resume automatic draining of accepted pending messages. */
+  resumeQueuedMessages: () => Promise<void>;
   /** Promote a queued message to run next. */
   promoteQueuedMessage: (queueItemId: string) => import('@neko-agent/types').AgentQueuedMessageItem;
   /** Cancel a queued message without cancelling the active turn. */
@@ -303,6 +305,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   const conversationTitleRef = useRef('');
   const messageQueueRef = useRef<TuiMessageQueue | null>(null);
   const drainingQueueRef = useRef(false);
+  const queuePausedAfterCancelRef = useRef(false);
   const submitRef = useRef<AgentSessionHandle['submit'] | null>(null);
   const submitInternalContinuationRef = useRef<
     ((input: SubmitInternalContinuationInput) => Promise<void>) | null
@@ -478,6 +481,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       conversationCreatedAtRef.current = record.createdAt;
       conversationTitleRef.current = record.title;
       messageQueueRef.current = createTuiMessageQueue({ conversationId: record.id });
+      queuePausedAfterCancelRef.current = false;
+      useAgentStore.getState().setMessageQueuePausedAfterCancel(false);
       useAgentStore.getState().setMessageQueueSnapshot(messageQueueRef.current.snapshot());
       useConversationStore
         .getState()
@@ -712,6 +717,8 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         messageQueueRef.current = createTuiMessageQueue({
           conversationId: conversationIdRef.current,
         });
+        queuePausedAfterCancelRef.current = false;
+        useAgentStore.getState().setMessageQueuePausedAfterCancel(false);
         useAgentStore.getState().setMessageQueueSnapshot(messageQueueRef.current.snapshot());
         mediaDeliveryHostRef.current?.dispose();
         const mediaDeliveryHost = new NodeMediaTaskDeliveryHost({
@@ -982,8 +989,13 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     [persistCurrentConversation, refreshTaskSummary, syncWorkspaceRuntimeState],
   );
 
+  const setQueuePausedAfterCancel = useCallback((paused: boolean): void => {
+    queuePausedAfterCancelRef.current = paused;
+    useAgentStore.getState().setMessageQueuePausedAfterCancel(paused);
+  }, []);
+
   const drainQueuedPrompts = useCallback(async (): Promise<void> => {
-    if (drainingQueueRef.current) {
+    if (queuePausedAfterCancelRef.current || drainingQueueRef.current) {
       return;
     }
     drainingQueueRef.current = true;
@@ -995,8 +1007,14 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       }
 
       for (;;) {
+        if (queuePausedAfterCancelRef.current) {
+          useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+          syncWorkspaceRuntimeState();
+          return;
+        }
         const released = queue.dequeue();
         if (!released) {
+          setQueuePausedAfterCancel(false);
           useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
           syncWorkspaceRuntimeState();
           return;
@@ -1020,7 +1038,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     } finally {
       drainingQueueRef.current = false;
     }
-  }, [executePrompt, syncWorkspaceRuntimeState]);
+  }, [executePrompt, setQueuePausedAfterCancel, syncWorkspaceRuntimeState]);
 
   const submit = useCallback(
     async (prompt: string, executionOverrides?: { metadata?: Record<string, unknown> }) => {
@@ -1152,11 +1170,17 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
   );
 
   const cancel = useCallback(() => {
-    sessionRef.current?.cancel();
+    const session = sessionRef.current;
+    const wasRunning =
+      Boolean(session?.isRunning()) || useAgentStore.getState().status === 'running';
+    session?.cancel();
+    if (wasRunning && (messageQueueRef.current?.snapshot().pendingCount ?? 0) > 0) {
+      setQueuePausedAfterCancel(true);
+    }
     useAgentStore.getState().setIdle();
     void refreshTaskSummary();
     syncWorkspaceRuntimeState({ status: 'idle', phase: 'idle' });
-  }, [refreshTaskSummary, syncWorkspaceRuntimeState]);
+  }, [refreshTaskSummary, setQueuePausedAfterCancel, syncWorkspaceRuntimeState]);
 
   const getMessageQueueSnapshot = useCallback(() => {
     return messageQueueRef.current?.snapshot() ?? null;
@@ -1178,6 +1202,31 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     [refreshTaskSummary],
   );
 
+  const resumeQueuedMessages = useCallback(async (): Promise<void> => {
+    const queue = messageQueueRef.current;
+    if (!queue) {
+      throw new Error('Message queue is not initialized');
+    }
+    setQueuePausedAfterCancel(false);
+    if (queue.snapshot().pendingCount === 0) {
+      return;
+    }
+    try {
+      await drainQueuedPrompts();
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      useAgentStore.getState().setError(err);
+      useConversationStore.getState().addError(err);
+      void refreshTaskSummary();
+      syncWorkspaceRuntimeState({ status: 'error', phase: 'idle', errorMessage: err.message });
+    }
+  }, [
+    drainQueuedPrompts,
+    refreshTaskSummary,
+    setQueuePausedAfterCancel,
+    syncWorkspaceRuntimeState,
+  ]);
+
   const promoteQueuedMessage = useCallback(
     (queueItemId: string) => {
       const queue = messageQueueRef.current;
@@ -1187,9 +1236,12 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       const item = queue.promote(queueItemId);
       useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
       syncWorkspaceRuntimeState();
+      if (queuePausedAfterCancelRef.current) {
+        void resumeQueuedMessages();
+      }
       return item;
     },
-    [syncWorkspaceRuntimeState],
+    [resumeQueuedMessages, syncWorkspaceRuntimeState],
   );
 
   const cancelQueuedMessage = useCallback(
@@ -1199,11 +1251,15 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         throw new Error('Message queue is not initialized');
       }
       const item = queue.cancel(queueItemId);
-      useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+      const snapshot = queue.snapshot();
+      if (snapshot.pendingCount === 0) {
+        setQueuePausedAfterCancel(false);
+      }
+      useAgentStore.getState().setMessageQueueSnapshot(snapshot);
       syncWorkspaceRuntimeState();
       return item;
     },
-    [syncWorkspaceRuntimeState],
+    [setQueuePausedAfterCancel, syncWorkspaceRuntimeState],
   );
 
   const discardQueuedContinuation = useCallback(
@@ -1213,7 +1269,11 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
         throw new Error('Message queue is not initialized');
       }
       const item = queue.discardContinuation(queueItemId);
-      useAgentStore.getState().setMessageQueueSnapshot(queue.snapshot());
+      const snapshot = queue.snapshot();
+      if (snapshot.pendingCount === 0) {
+        setQueuePausedAfterCancel(false);
+      }
+      useAgentStore.getState().setMessageQueueSnapshot(snapshot);
       useConversationStore.getState().addSystemMessage({
         content: `Continuation discarded: ${item.id}`,
         source: normalizeTurnSource(item.source),
@@ -1223,7 +1283,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
       syncWorkspaceRuntimeState();
       return item;
     },
-    [syncWorkspaceRuntimeState],
+    [setQueuePausedAfterCancel, syncWorkspaceRuntimeState],
   );
 
   const editQueuedMessage = useCallback(
@@ -1541,6 +1601,7 @@ export function useAgentSession(options: UseAgentSessionOptions): AgentSessionHa
     compactContext,
     getMessageQueueSnapshot,
     listTasks,
+    resumeQueuedMessages,
     promoteQueuedMessage,
     cancelQueuedMessage,
     discardQueuedContinuation,

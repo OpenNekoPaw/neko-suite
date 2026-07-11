@@ -45,6 +45,7 @@ export interface AgentSlice {
   setContextTokenCount: (count: number | null) => void;
   setMessageQueueSnapshot: (snapshot: MessageQueueState['snapshot']) => void;
   setMessageQueueDiagnostic: (diagnostic: string | null) => void;
+  setMessageQueuePausedAfterCancel: (paused: boolean) => void;
   setRunningTaskSummary: (summary: string | null) => void;
   setSessionMode: (mode: SessionMode) => void;
   setExecutionMode: (mode: ExecutionMode) => void;
@@ -67,6 +68,7 @@ const initialState = {
   messageQueue: {
     snapshot: null,
     diagnostic: null,
+    pausedAfterCancel: false,
   } as MessageQueueState,
   tasks: {
     runningSummary: null,
@@ -121,12 +123,13 @@ export const useAgentStore = create<AgentSlice>((set) => ({
   },
 
   setMessageQueueSnapshot: (snapshot) => {
-    set({
+    set((state) => ({
       messageQueue: {
+        ...state.messageQueue,
         snapshot,
         diagnostic: null,
       },
-    });
+    }));
   },
 
   setMessageQueueDiagnostic: (diagnostic) => {
@@ -134,6 +137,15 @@ export const useAgentStore = create<AgentSlice>((set) => ({
       messageQueue: {
         ...state.messageQueue,
         diagnostic,
+      },
+    }));
+  },
+
+  setMessageQueuePausedAfterCancel: (pausedAfterCancel) => {
+    set((state) => ({
+      messageQueue: {
+        ...state.messageQueue,
+        pausedAfterCancel,
       },
     }));
   },

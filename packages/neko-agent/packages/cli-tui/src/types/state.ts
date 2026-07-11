@@ -133,6 +133,7 @@ export interface IterationProgress {
 export interface MessageQueueState {
   readonly snapshot: AgentMessageQueueSnapshot | null;
   readonly diagnostic: string | null;
+  readonly pausedAfterCancel: boolean;
 }
 
 export interface TaskStatusState {

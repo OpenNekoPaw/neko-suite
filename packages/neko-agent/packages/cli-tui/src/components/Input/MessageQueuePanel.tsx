@@ -22,6 +22,7 @@ export function MessageQueuePanel({
   onCancel,
 }: MessageQueuePanelProps): React.JSX.Element | null {
   const snapshot = useAgentStore((state) => state.messageQueue.snapshot);
+  const pausedAfterCancel = useAgentStore((state) => state.messageQueue.pausedAfterCancel);
   const labels = getTuiLabels();
   const presentation =
     snapshot && snapshot.pendingCount > 0 ? presentTuiMessageQueue(snapshot) : null;
@@ -63,6 +64,9 @@ export function MessageQueuePanel({
         </Text>
         {presentation.hasPriorityContinuation ? (
           <Text color={tokens.muted}> · {labels.queue.continuationPriority}</Text>
+        ) : null}
+        {pausedAfterCancel ? (
+          <Text color={tokens.warning}> · {labels.queue.pausedAfterCancel}</Text>
         ) : null}
       </Box>
       {presentation.rows.map((row) => (
