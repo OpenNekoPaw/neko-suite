@@ -85,8 +85,10 @@
   - Validation: `/opt/homebrew/bin/pnpm check` ran and failed in `check:unused` before dependency checks due existing knip findings: unused dependencies, unlisted dependencies, unused exports, duplicate export, and configuration hints.
   - Additional affected checks: `/opt/homebrew/bin/pnpm check:webview-boundaries` passed; `/opt/homebrew/bin/pnpm check:strict-tsconfig` passed; `/opt/homebrew/bin/pnpm check:deps` passed with no dependency violations.
   - Residual risk: `/opt/homebrew/bin/pnpm check:agent-boundaries` failed only on expired compatibility exceptions dated 2026-07-04; it reported no direct dependency boundary findings.
-- [ ] 9.7 Run `pnpm smoke:webview:runtime` or equivalent `vscode-extension-debugger` validation for multi-tab new conversation, switch, Skill indicator, queue/task controls, cancellation, and logs.
-  - Blocked: `/opt/homebrew/bin/pnpm smoke:webview:runtime` failed before runtime validation because no VS Code remote debugging endpoint was listening on `127.0.0.1:9222` (`ECONNREFUSED`). Run this after launching VS Code with remote debugging enabled and a target Agent Webview visible.
+- [x] 9.7 Run `pnpm smoke:webview:runtime` or equivalent `vscode-extension-debugger` validation for multi-tab new conversation, switch, Skill indicator, queue/task controls, cancellation, and logs.
+  - Validation (2026-07-12): `/opt/homebrew/bin/pnpm smoke:webview:runtime` passed with 2 VS Code page targets and 2 Webview targets, including `neko.neko-agent`.
+  - Runtime path evidence: created an empty second chat Tab in the Extension Development Host, switched A→B→A through the actual Webview DOM, verified the foreground transcript returned to A, the input remained enabled, no session lifecycle error/status appeared, and the only console warning was VS Code's benign `local-network-access` warning. The empty test Tab was closed afterward.
+  - Scope note: this rerun directly covers correlated multi-Tab activation/render lifecycle. Skill/queue/task/cancellation/log behaviors retain the focused protocol/runtime evidence recorded in 9.1–9.5.
 - [x] 9.8 Run `pnpm check:legacy-debt` or equivalent quality/debt checks if legacy fallback paths are removed or renamed.
   - Validation: `/opt/homebrew/bin/pnpm check:legacy-debt` ran and failed with 2 blocking `needs-review` fallback occurrences in `packages/neko-agent/packages/agent/src/skill/skill-system-prompt.ts`.
 - [x] 9.9 Run focused tests for per-conversation physical JSONL routing and record residual risk.
@@ -95,3 +97,19 @@
   - Validation: `/opt/homebrew/bin/pnpm check:strict-tsconfig` -> passed.
   - Validation: `/opt/homebrew/bin/pnpm --dir packages/neko-agent exec eslint packages/agent/src/workspace/neko-paths.ts packages/agent/src/workspace/ndjson-event-sink.ts packages/agent/src/session/agent-session.ts packages/agent/src/workspace/__tests__/neko-paths.test.ts packages/agent/src/workspace/__tests__/ndjson-event-sink.test.ts packages/agent/src/session/__tests__/agent-session.test.ts packages/extension/src/services/modelCallJsonlRecorder.ts packages/extension/src/services/__tests__/modelCallJsonlRecorder.test.ts packages/extension/src/bootstrap/serviceBootstrap.ts` -> passed with existing `agent-session.ts` warnings only.
   - Residual risk: `/opt/homebrew/bin/pnpm --dir packages/neko-agent exec tsc -p packages/agent/tsconfig.json --noEmit` still fails on broad existing test type drift outside this log-routing slice; extension tsc covers the new `@neko/agent/workspace` import path.
+
+## 10. Correlated Webview Tab Activation Follow-up
+
+- [x] 10.1 Add protocol, Webview handler, hook, and Extension tests for activation correlation, stale Tab revision rejection, and A→B→C response ordering.
+- [x] 10.2 Extend the Webview protocol with an atomic ordinary-conversation activation request and correlated `activeConversation`/revision responses.
+- [x] 10.3 Replace the ordinary `switchConversation` + effect-driven `updateTabState` dual path with the canonical activation transaction; make non-activation Tab persistence revision checked.
+- [x] 10.4 Reject stale `tabState` responses in the Webview and stale activation/persistence requests in the Extension with fail-visible diagnostics and authoritative reconciliation.
+- [x] 10.5 Narrow foreground activation Timeline flushing from `flushAll()` to the previous foreground conversation partition.
+- [x] 10.6 Add explicit foreground history availability (`loading`/`ready`/`unavailable`) so uncached history is not rendered as an empty transcript.
+- [x] 10.7 Route conversation-owned session diagnostics by `conversationId` while retaining a distinct truly-global diagnostic owner.
+- [x] 10.8 Remove or poison the replaced ordinary switch/persistence path and add execution-path assertions proving it is not used.
+- [x] 10.9 Run focused producer/consumer tests, Webview and Extension typechecks, boundary checks, legacy-debt checks, and VS Code Webview runtime smoke when a debug endpoint is available.
+  - Validation (2026-07-12): Agent types/runtime focused suite -> 4 files / 53 tests passed; Webview activation/render suite -> 6 files / 125 tests passed; Extension activation/router suite -> 2 files / 15 relevant tests passed (49 unrelated tests skipped by name filter); full `chatProvider.test.ts` -> 23 tests passed.
+  - Typechecks: Webview `tsc --noEmit` passed. Extension `tsc --noEmit` was executed and remains blocked only by parallel, out-of-scope changes in `perception-pipeline.ts`, `agentMessageTurnHandler.ts`, `skillContextRoutes.ts`, and `consistencyCheckTools.ts`; no correlated activation file was reported.
+  - Quality gates: `pnpm check:webview-boundaries`, `pnpm check:strict-tsconfig`, focused ESLint, and `git diff --check` passed. `pnpm check:legacy-debt` was executed and remains blocked by repository-wide pre-existing/parallel debt outside this activation slice.
+  - Runtime: `pnpm smoke:webview:runtime` passed and an actual Extension Development Host A→B→A Tab interaction completed without the normalized Markdown/session snapshot/revision errors targeted by this change.

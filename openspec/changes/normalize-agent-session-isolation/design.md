@@ -319,3 +319,41 @@ Rollback is local and non-destructive: revert Webview/Extension/runtime routing 
 - Which terminal/process abstractions currently need leases first: Agent shell tool runs, media task executors, or future user-visible terminal panels?
 - Should stale host snapshots update background cache when local in-flight state exists, or should they be ignored until the run completes?
 - Should workspace-global JSON snapshot stores add optimistic version checks, rely on advisory session-lock diagnostics, or be rebuilt from authoritative per-conversation journals/artifacts after conflicts?
+
+## 2026-07-12 Webview Tab Activation Convergence
+
+### Problem
+
+The Webview data plane is partitioned by `conversationId`, but ordinary Tab activation is still split across two control messages (`switchConversation` and `updateTabState`) and Host projections are not correlated to the activation that requested them. A late `activeConversation` or `tabState` response can therefore compete with a newer foreground selection. Normalized Markdown correctly fails visible when that control-plane race exposes a streaming message before its Timeline-owned Markdown session is active.
+
+### Decision
+
+- Keep one foreground React projection and per-conversation canonical render resources. Do not mount one React/virtual-list/Markdown tree per Tab.
+- Treat an ordinary Tab switch as one activation transaction carrying `activationId`, the complete next `TabState`, and `expectedTabStateRevision`.
+- The Extension owns the accepted monotonic Tab revision. It must reject stale activation or persistence writes and return the current authoritative `tabState` plus a diagnostic.
+- `activeConversation` produced by an activation must echo `{ activationId, tabStateRevision }`; the Webview may cache stale responses but may only project the response whose activation identity matches the pending foreground activation.
+- Uncorrelated `activeConversation` remains valid only for explicit initial/reload queries and new-conversation creation, where the existing new-session identity rule applies.
+- Foreground swaps flush only the previous foreground conversation's Timeline partition. Background conversations remain independently scheduled.
+- A target with no retained render snapshot projects an explicit `loading` availability state until the correlated Host snapshot arrives; it must not masquerade as an empty conversation.
+- Session diagnostics are owned by `conversationId`; only provider/config/auth failures without conversation identity use the global diagnostic owner.
+
+### Canonical Activation Order
+
+```text
+Webview allocate activationId + optimistic expected revision
+→ Webview persist previous foreground viewport/input/render state
+→ Webview flush previous conversation Timeline partition
+→ Webview locally project retained target snapshot or loading state
+→ Webview send one activation transaction with next TabState
+→ Extension compare-and-apply Tab revision + switch active conversation
+→ Extension asynchronously project resources
+→ Extension send correlated activeConversation
+→ Webview cache stale responses; only matching activation commits foreground
+→ Webview prepares Markdown sessions before visible React publication
+```
+
+### Rejected Alternatives
+
+- Permanently mount one React tree per Tab: rejected because it multiplies virtual lists, Markdown subscriptions, focus/scroll ownership, and cleanup paths while not fixing Host message ordering.
+- Restore raw/locally parsed Markdown fallback for streaming: rejected because it hides Timeline/Markdown ownership violations and recreates dual rendering paths.
+- Add more conversation-id inference guards without protocol correlation: rejected because A→B→C ordering cannot be proven from identity alone when multiple responses target open Tabs.

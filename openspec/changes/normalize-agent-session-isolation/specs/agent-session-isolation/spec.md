@@ -236,3 +236,37 @@ The system SHALL remove, poison, or fail-close legacy paths that apply session-s
 - **WHEN** an event arrives for a run that has already completed, been cancelled, or been disposed
 - **THEN** the handler MUST detect it as stale using `conversationId` and `runId`
 - **AND** it MUST NOT mutate the visible session or resurrect completed UI state
+
+### Requirement: Foreground Tab activation is a correlated transaction
+
+An ordinary Agent Tab activation MUST carry a Webview-realm `activationId`, the complete next Tab state, and the expected Host Tab revision. The Host MUST compare-and-apply that revision before switching the active conversation and MUST echo the accepted activation identity and resulting revision on the projected active conversation.
+
+#### Scenario: Rapid A to B to C switching
+
+- **WHEN** activation B begins and activation C supersedes it before B's projected history completes
+- **THEN** B's response MAY refresh B's background canonical snapshot
+- **AND** B's response MUST NOT replace C's foreground projection
+- **AND** only the response matching C's pending `activationId` MAY complete foreground activation
+
+#### Scenario: Stale Tab state replay
+
+- **WHEN** a `tabState` response has a revision older than the Webview's current optimistic or accepted revision
+- **THEN** the Webview MUST reject it without changing open Tabs, active Tab, foreground conversation, Timeline ownership, or Markdown ownership
+
+#### Scenario: Host revision conflict
+
+- **WHEN** an activation or Tab persistence request names an expected revision different from the Host's current revision
+- **THEN** the Host MUST reject the mutation visibly
+- **AND** MUST return the authoritative current Tab state so the Webview can reconcile
+
+### Requirement: Foreground projection distinguishes loading from empty
+
+The Webview MUST represent an uncached conversation history as `loading` until an authoritative Host snapshot arrives. It MUST NOT project `messages: []` as if the conversation were confirmed empty during that interval.
+
+### Requirement: Foreground activation flush is partition-scoped
+
+A foreground Tab swap MUST flush pending Timeline delivery only for the previous foreground `conversationId`. It MUST NOT synchronously flush unrelated background conversations.
+
+### Requirement: Session diagnostics remain session scoped
+
+A diagnostic carrying `conversationId` MUST be stored and projected under that conversation. Switching Tabs MUST NOT display another conversation's diagnostic as a Webview-global error.
