@@ -1,15 +1,10 @@
 import type {
   AgentPhase,
-  AgentTurnTimelineItemStatus,
-  AgentTurnTimelineItem,
-  AgentTurnTimelineMessage,
-  AgentWorkItem,
   ContentBlock,
   Message,
   TaskCreatedMessage,
   TaskUpdatedMessage,
 } from '@neko-agent/types';
-import { buildAgentTurnTimelineMessage } from '@neko-agent/types';
 import type { TaskRunLease } from '@neko/shared';
 import type { AgentEvent } from '../../session/types';
 import {
@@ -34,11 +29,18 @@ import {
 } from './agent-stream-task-observer';
 import type { AgentStreamPersistenceSnapshot } from '../turn/message-runtime';
 import type { AgentStreamBackgroundTaskPersistInput } from './agent-stream-background-task';
-import { applyToolResultBackfillToResult } from '../tool-result-backfill';
 import { buildAgentAssistantMessageFromStream } from '../turn/message-runtime';
+import {
+  createAgentTurnTimelineAccumulator,
+  type AgentTurnTimelineAccumulator,
+  type AgentTurnTimelineAccumulatorUpdate,
+} from './agent-turn-timeline-accumulator';
 
 export type AgentEventStreamRuntimeMessage =
-  AgentStreamProjectionMessage | AgentTurnTimelineMessage | TaskCreatedMessage | TaskUpdatedMessage;
+  | AgentStreamProjectionMessage
+  | AgentTurnTimelineAccumulatorUpdate
+  | TaskCreatedMessage
+  | TaskUpdatedMessage;
 
 export interface AgentEventStreamRuntimeBackgroundTasks<
   TSourceTask = unknown,
@@ -97,6 +99,7 @@ export interface ProcessAgentEventStreamRuntimeInput<
   readonly backgroundTasks?: AgentEventStreamRuntimeBackgroundTasks<TSourceTask, TDeliveryPlan>;
   readonly projectCompositeBlock?: AgentStreamCompositeProjector;
   readonly now?: () => number;
+  readonly timelineAccumulator?: AgentTurnTimelineAccumulator;
 }
 
 const DEFAULT_PARTIAL_ASSISTANT_SNAPSHOT_INTERVAL_MS = 250;
@@ -112,11 +115,13 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     const streamState = createAgentStreamProjectionState();
     const partialSnapshotIntervalMs =
       input.partialAssistantSnapshotIntervalMs ?? DEFAULT_PARTIAL_ASSISTANT_SNAPSHOT_INTERVAL_MS;
-    const timeline = createAgentTurnTimelineProjection({
-      conversationId: input.conversationId,
-      messageId: streamingMessageId,
-      now: input.now,
-    });
+    const timeline =
+      input.timelineAccumulator ??
+      createAgentTurnTimelineAccumulator({
+        conversationId: input.conversationId,
+        messageId: streamingMessageId,
+        now: input.now,
+      });
     const backgroundTaskCompletions: Promise<AgentStreamBackgroundTaskCompletion>[] = [];
     let awaitedBackgroundTaskCompletionCount = 0;
     let lastPartialSnapshotAt = 0;
@@ -254,7 +259,7 @@ export class AgentEventStreamRuntimeProcessor<TSourceTask = unknown, TDeliveryPl
     input: ProcessAgentEventStreamRuntimeInput<TSourceTask, TDeliveryPlan>,
     streamingMessageId: string,
     event: AgentEvent,
-    timeline: AgentTurnTimelineProjection,
+    timeline: AgentTurnTimelineAccumulator,
   ): Promise<AgentStreamBackgroundTaskCompletion> | undefined {
     const backgroundTasks = input.backgroundTasks;
     if (!backgroundTasks) {
@@ -360,363 +365,6 @@ function shouldPostProjectionMessageToWebview(message: AgentStreamProjectionMess
   return false;
 }
 
-function createAgentTurnTimelineProjection(input: {
-  readonly conversationId: string;
-  readonly messageId: string;
-  readonly now?: () => number;
-}): AgentTurnTimelineProjection {
-  const turnId = `turn-${input.messageId}`;
-  let sequence = 0;
-  let activeTextItem: AgentTurnTimelineItem | null = null;
-  let activeThinkingItem: AgentTurnTimelineItem | null = null;
-  const toolItemsByToolCallId = new Map<string, AgentTurnTimelineItem>();
-  const workItemsById = new Map<string, AgentTurnTimelineItem>();
-
-  const nextSequence = () => {
-    sequence += 1;
-    return sequence;
-  };
-
-  const closeText = (eventTime: number): AgentTurnTimelineItem[] => {
-    const events: AgentTurnTimelineItem[] = [];
-    if (activeTextItem?.kind === 'assistant_text' && activeTextItem.status === 'streaming') {
-      activeTextItem = { ...activeTextItem, status: 'complete', updatedAt: eventTime };
-      events.push(activeTextItem);
-      activeTextItem = null;
-    }
-    if (activeThinkingItem?.kind === 'thinking' && activeThinkingItem.status === 'streaming') {
-      activeThinkingItem = { ...activeThinkingItem, status: 'complete', updatedAt: eventTime };
-      events.push(activeThinkingItem);
-      activeThinkingItem = null;
-    }
-    return events;
-  };
-
-  const buildMessage = (
-    events: readonly AgentTurnTimelineItem[],
-    finalContentBlocks?: readonly ContentBlock[],
-  ): AgentTurnTimelineMessage | null => {
-    if (events.length === 0 && (!finalContentBlocks || finalContentBlocks.length === 0)) {
-      return null;
-    }
-    return buildAgentTurnTimelineMessage({
-      conversationId: input.conversationId,
-      turnId,
-      messageId: input.messageId,
-      events,
-      ...(finalContentBlocks ? { finalContentBlocks } : {}),
-    });
-  };
-
-  return {
-    project(event, eventTime) {
-      switch (event.type) {
-        case 'assistant_text_replacement': {
-          const closedThinking = closeThinking(activeThinkingItem, eventTime);
-          if (closedThinking) activeThinkingItem = null;
-          const events: AgentTurnTimelineItem[] = closedThinking ? [closedThinking] : [];
-          if (activeTextItem?.kind === 'assistant_text') {
-            activeTextItem = {
-              ...activeTextItem,
-              payload: {
-                ...activeTextItem.payload,
-                content: '',
-                replaceContent: true,
-              },
-              status: 'streaming',
-              updatedAt: eventTime,
-            };
-            events.push(activeTextItem);
-            return buildMessage(events);
-          }
-
-          activeTextItem = {
-            conversationId: input.conversationId,
-            turnId,
-            messageId: input.messageId,
-            itemId: `text-${nextSequence()}`,
-            sequence,
-            kind: 'assistant_text',
-            status: 'streaming',
-            payload: { content: '', format: 'markdown', replaceContent: true },
-            createdAt: eventTime,
-            updatedAt: eventTime,
-          };
-          events.push(activeTextItem);
-          return buildMessage(events);
-        }
-        case 'thinking_content': {
-          if (activeThinkingItem?.kind === 'thinking') {
-            activeThinkingItem = {
-              ...activeThinkingItem,
-              payload: {
-                ...activeThinkingItem.payload,
-                content: `${activeThinkingItem.payload.content}${event.thinking ?? ''}`,
-              },
-              updatedAt: eventTime,
-            };
-          } else {
-            activeThinkingItem = {
-              conversationId: input.conversationId,
-              turnId,
-              messageId: input.messageId,
-              itemId: `thinking-${nextSequence()}`,
-              sequence,
-              kind: 'thinking',
-              status: 'streaming',
-              payload: { content: event.thinking ?? '' },
-              createdAt: eventTime,
-              updatedAt: eventTime,
-            };
-          }
-          return buildMessage([activeThinkingItem]);
-        }
-        case 'text':
-        case 'text_delta': {
-          const closedThinking = closeThinking(activeThinkingItem, eventTime);
-          if (closedThinking) activeThinkingItem = null;
-          const events: AgentTurnTimelineItem[] = closedThinking ? [closedThinking] : [];
-          if (activeTextItem?.kind === 'assistant_text') {
-            activeTextItem = {
-              ...activeTextItem,
-              payload: {
-                ...activeTextItem.payload,
-                content: `${activeTextItem.payload.content}${event.content ?? ''}`,
-              },
-              updatedAt: eventTime,
-            };
-          } else {
-            activeTextItem = {
-              conversationId: input.conversationId,
-              turnId,
-              messageId: input.messageId,
-              itemId: `text-${nextSequence()}`,
-              sequence,
-              kind: 'assistant_text',
-              status: 'streaming',
-              payload: { content: event.content ?? '', format: 'markdown' },
-              createdAt: eventTime,
-              updatedAt: eventTime,
-            };
-          }
-          events.push(activeTextItem);
-          return buildMessage(events);
-        }
-        case 'tool_call': {
-          const events = closeText(eventTime);
-          const toolCall = event.toolCall;
-          if (!toolCall) {
-            return buildMessage(events);
-          }
-          const item: AgentTurnTimelineItem = {
-            conversationId: input.conversationId,
-            turnId,
-            messageId: input.messageId,
-            itemId: `tool-${toolCall.id}`,
-            sequence: nextSequence(),
-            kind: 'tool_call',
-            status: 'pending',
-            payload: { toolCall },
-            createdAt: eventTime,
-            updatedAt: eventTime,
-          };
-          toolItemsByToolCallId.set(toolCall.id, item);
-          return buildMessage([...events, item]);
-        }
-        case 'tool_result': {
-          const result = event.toolResult;
-          if (!result?.toolCallId) {
-            return null;
-          }
-          const existingItem = toolItemsByToolCallId.get(result.toolCallId);
-          if (!existingItem || existingItem.kind !== 'tool_call') {
-            return null;
-          }
-          const existingToolCall = existingItem.payload.toolCall;
-          const item: AgentTurnTimelineItem = {
-            conversationId: input.conversationId,
-            turnId,
-            messageId: input.messageId,
-            itemId: existingItem.itemId,
-            sequence: existingItem.sequence,
-            kind: 'tool_call',
-            status: result.success ? 'succeeded' : 'failed',
-            payload: {
-              toolCall: {
-                id: result.toolCallId,
-                name: existingToolCall.name,
-                arguments: existingToolCall.arguments,
-                result: {
-                  success: result.success,
-                  data: result.data,
-                  error: result.error,
-                  ...(result.attachments ? { attachments: result.attachments } : {}),
-                  ...(result.perceptionCards ? { perceptionCards: result.perceptionCards } : {}),
-                  ...(result.backfillDiagnostics
-                    ? { backfillDiagnostics: result.backfillDiagnostics }
-                    : {}),
-                  ...(result.artifacts ? { artifacts: result.artifacts } : {}),
-                },
-              },
-            },
-            createdAt: existingItem.createdAt,
-            updatedAt: eventTime,
-          };
-          toolItemsByToolCallId.set(result.toolCallId, item);
-          return buildMessage([item]);
-        }
-        case 'tool_result_backfill': {
-          const backfill = event.toolResultBackfill;
-          if (!backfill?.toolCallId) {
-            return null;
-          }
-          const existingItem = toolItemsByToolCallId.get(backfill.toolCallId);
-          if (!existingItem || existingItem.kind !== 'tool_call') {
-            return null;
-          }
-          const existingToolCall = existingItem.payload.toolCall;
-          const mergedResult = applyToolResultBackfillToResult(existingToolCall.result, backfill);
-          const item: AgentTurnTimelineItem = {
-            ...existingItem,
-            status: mergedResult.result.success ? 'succeeded' : 'failed',
-            payload: {
-              toolCall: {
-                ...existingToolCall,
-                result: mergedResult.result,
-              },
-            },
-            updatedAt: eventTime,
-          };
-          toolItemsByToolCallId.set(backfill.toolCallId, item);
-          return buildMessage([item]);
-        }
-        case 'tool_confirmation': {
-          const toolCall = event.toolConfirmation?.toolCall;
-          if (!toolCall?.id) {
-            return null;
-          }
-          const existingItem = toolItemsByToolCallId.get(toolCall.id);
-          if (!existingItem || existingItem.kind !== 'tool_call') {
-            return null;
-          }
-          const item: AgentTurnTimelineItem = {
-            ...existingItem,
-            status: 'pending',
-            payload: {
-              toolCall: {
-                ...existingItem.payload.toolCall,
-                pendingConfirmation: true,
-                confirmation: {
-                  action: event.toolConfirmation?.action ?? '',
-                  description: event.toolConfirmation?.description ?? '',
-                  details: event.toolConfirmation?.details ?? {},
-                },
-              },
-            },
-            updatedAt: eventTime,
-          };
-          toolItemsByToolCallId.set(toolCall.id, item);
-          return buildMessage([item]);
-        }
-        case 'error': {
-          const events = closeText(eventTime);
-          const errorCode = readErrorCode(event.error);
-          const errorDetails = readErrorDetails(event.error);
-          const item: AgentTurnTimelineItem = {
-            conversationId: input.conversationId,
-            turnId,
-            messageId: input.messageId,
-            itemId: `error-${nextSequence()}`,
-            sequence,
-            kind: 'error',
-            status: 'failed',
-            payload: {
-              message: event.error?.message ?? 'An error occurred',
-              ...(errorCode ? { code: errorCode } : {}),
-              ...(errorDetails ? { details: errorDetails } : {}),
-            },
-            createdAt: eventTime,
-            updatedAt: eventTime,
-          };
-          return buildMessage([...events, item]);
-        }
-        case 'done':
-          return null;
-        default:
-          return null;
-      }
-    },
-    complete(contentBlocks) {
-      const eventTime = input.now?.() ?? Date.now();
-      const events = closeText(eventTime);
-      return buildMessage(events, contentBlocks);
-    },
-    projectWorkItem(workItem) {
-      const eventTime = input.now?.() ?? Date.now();
-      const existing = workItemsById.get(workItem.id);
-      const sequenceValue = existing?.sequence ?? nextSequence();
-      const core = {
-        conversationId: input.conversationId,
-        turnId,
-        messageId: input.messageId,
-        itemId: `${workItem.kind}-${workItem.id}`,
-        sequence: sequenceValue,
-        status: toTimelineStatus(workItem.status),
-        createdAt: existing?.createdAt ?? eventTime,
-        updatedAt: eventTime,
-      };
-      const anchor = workItem.parentToolCallId
-        ? { parentAnchor: 'tool_call' as const, parentToolCallId: workItem.parentToolCallId }
-        : { parentAnchor: 'turn' as const };
-      const item: AgentTurnTimelineItem =
-        workItem.kind === 'media-task'
-          ? {
-              ...core,
-              ...anchor,
-              kind: 'media',
-              payload: { workItem },
-            }
-          : {
-              ...core,
-              ...anchor,
-              kind: 'task',
-              payload: { workItem },
-            };
-      workItemsById.set(workItem.id, item);
-      return buildMessage([item]);
-    },
-  };
-}
-
-interface AgentTurnTimelineProjection {
-  readonly project: (event: AgentEvent, eventTime: number) => AgentTurnTimelineMessage | null;
-  readonly complete: (contentBlocks: readonly ContentBlock[]) => AgentTurnTimelineMessage | null;
-  readonly projectWorkItem: (workItem: AgentWorkItem) => AgentTurnTimelineMessage | null;
-}
-
-function toTimelineStatus(status: AgentWorkItem['status']): AgentTurnTimelineItemStatus {
-  switch (status) {
-    case 'completed':
-      return 'succeeded';
-    case 'failed':
-    case 'cancelled':
-      return 'failed';
-    case 'queued':
-    case 'processing':
-      return 'pending';
-  }
-}
-
-function closeThinking(
-  item: AgentTurnTimelineItem | null,
-  eventTime: number,
-): AgentTurnTimelineItem | null {
-  if (item?.kind !== 'thinking' || item.status !== 'streaming') {
-    return null;
-  }
-  return { ...item, status: 'complete', updatedAt: eventTime };
-}
-
 function isPersistablePartialEvent(event: AgentEvent): boolean {
   return (
     event.type === 'thinking_content' ||
@@ -737,18 +385,6 @@ function isStructuralPartialEvent(event: AgentEvent): boolean {
     event.type === 'tool_result_backfill' ||
     event.type === 'error'
   );
-}
-
-function readErrorCode(error: AgentEvent['error']): string | undefined {
-  if (!isRecord(error)) return undefined;
-  const code = error['code'];
-  return typeof code === 'string' && code.length > 0 ? code : undefined;
-}
-
-function readErrorDetails(error: AgentEvent['error']): Record<string, unknown> | undefined {
-  if (!isRecord(error)) return undefined;
-  const context = error['context'];
-  return isRecord(context) ? context : undefined;
 }
 
 function readBackgroundTaskRunLease(

@@ -88,11 +88,13 @@ import type { ISkillProvider } from '../tools/core/meta-tools';
 import {
   ActivateSkillTool,
   DeactivateSkillTool,
+  CreateSkillTool,
   GetContextTool,
   SetExecutionModeTool,
 } from '../tools/core/meta-tools';
 import { projectMediaModelToolsFromMetadata } from '../tools/media-generation-tool-selection';
 import { stepToEvents, type StreamState } from './step-event-converter';
+import { classifyAgentStepSemantics } from './agent-step-semantics';
 
 import type {
   IAgentSession,
@@ -195,6 +197,13 @@ const WORKFLOW_PERSONA_SKILL_NAMES = new Set([
 /**
  * Agent Session - Unified session management
  */
+interface AgentTurnSemanticPathMetrics {
+  providerFragments: number;
+  semanticSteps: number;
+  workingMemoryMutations: number;
+  compactionChecks: number;
+}
+
 export class AgentSession implements IAgentSession {
   // Configuration
   private _config: AgentSessionConfig;
@@ -273,7 +282,8 @@ export class AgentSession implements IAgentSession {
   // Skill/host-injected validation coordinator. Agent core owns the generic
   // runtime ports and delegates concrete observation/evaluation policies.
   private _validationCoordinator: IValidationCoordinator | null = null;
-  private _creativeProcessRecoveryPolicy: import('@neko/shared').AgentCreativeProcessRecoveryPolicy | null = null;
+  private _creativeProcessRecoveryPolicy:
+    import('@neko/shared').AgentCreativeProcessRecoveryPolicy | null = null;
   private _operationToolAdapterRegistry:
     import('@neko/shared').IOperationToolAdapterRegistry | null = null;
   // Loaded user preferences (ADR §9.3). null when workspace.fsOps
@@ -376,7 +386,8 @@ export class AgentSession implements IAgentSession {
           recordStageTransition: (input) => this._recordValidationStageTransition(input),
         },
         prompt: {
-          setGuidanceContent: (content) => this._promptRuntime.setValidationGuidanceContent(content),
+          setGuidanceContent: (content) =>
+            this._promptRuntime.setValidationGuidanceContent(content),
           syncSystemPrompt: () => this._syncSystemPrompt(),
         },
         diagnostics: {
@@ -781,7 +792,7 @@ export class AgentSession implements IAgentSession {
   }
 
   /**
-   * Wire an ISkillProvider into the meta tools (GetContext, ActivateSkill, DeactivateSkill).
+   * Wire an ISkillProvider into the meta tools (context, creation, lifecycle, execution mode).
    * Called by the extension layer after the skill system is initialized.
    */
   setSkillProvider(provider: ISkillProvider): void {
@@ -795,6 +806,8 @@ export class AgentSession implements IAgentSession {
       } else if (tool instanceof ActivateSkillTool) {
         tool.setSkillProvider(provider);
       } else if (tool instanceof DeactivateSkillTool) {
+        tool.setSkillProvider(provider);
+      } else if (tool instanceof CreateSkillTool) {
         tool.setSkillProvider(provider);
       } else if (tool instanceof SetExecutionModeTool) {
         tool.setSkillProvider(provider);
@@ -1032,6 +1045,13 @@ export class AgentSession implements IAgentSession {
       validationGuidanceAdjustedThisTurn =
         (await this._captureValidationCycle(trace)) || validationGuidanceAdjustedThisTurn;
       await this._updateMemoryRecall(memoryQueryInput);
+      const semanticPathMetrics: AgentTurnSemanticPathMetrics = {
+        providerFragments: 0,
+        semanticSteps: 0,
+        workingMemoryMutations: 0,
+        compactionChecks: 0,
+      };
+      await this._autoCompactAtBoundary(trace, semanticPathMetrics, 'pre-model');
       this._syncSystemPrompt(); // Ensure system prompt is fresh before snapshot
       const messagesSnapshot = [...this._history];
       const activeSkill = this.getActiveSkill();
@@ -1064,6 +1084,13 @@ export class AgentSession implements IAgentSession {
           totalUsage.promptTokens += step.usage.promptTokens;
           totalUsage.completionTokens += step.usage.completionTokens;
           totalUsage.totalTokens += step.usage.totalTokens;
+        }
+
+        const semanticClassification = classifyAgentStepSemantics(step);
+        if (semanticClassification.class === 'transport-fragment') {
+          semanticPathMetrics.providerFragments += 1;
+        } else {
+          semanticPathMetrics.semanticSteps += 1;
         }
 
         // Creative version log: record generation tool results
@@ -1124,58 +1151,9 @@ export class AgentSession implements IAgentSession {
           this.addMessage(entry.message, entry.sourceEventIds);
         }
 
-        // Auto-compact: check if context compression is needed after each step
-        if (this._compressor) {
-          const tokens = this._compressor.estimateTokens(this._history);
-          const compactionTrace = deriveAgentTraceContext(trace, { phase: 'compaction' });
-          logger.debug(
-            'neko.agent.context_compaction.check',
-            withAgentTrace(compactionTrace, {
-              tokens,
-              historyLength: this._history.length,
-              consecutiveFailures: this._compactState.consecutiveFailures,
-              circuitOpen: this._compactState.isCircuitOpen,
-            }),
-          );
-          const compactResult = await autoCompactIfNeeded(
-            this._compressor,
-            this._history,
-            tokens,
-            this._compactState,
-          );
-          if (
-            compactResult.compressed &&
-            compactResult.compressionResult &&
-            compactResult.trigger
-          ) {
-            await this._applyCompressionResult(
-              compactResult.compressionResult,
-              compactResult.trigger,
-              compactionTrace,
-            );
-          } else if (
-            compactResult.trigger &&
-            (compactResult.skipReason === 'compression_failed' ||
-              compactResult.skipReason === 'circuit_opened')
-          ) {
-            await this._logCompactionFailure(
-              compactResult.trigger,
-              compactResult.errorMessage ?? compactResult.skipReason,
-              compactResult.failureCount ?? this._compactState.consecutiveFailures,
-              compactionTrace,
-            );
-          } else if (compactResult.trigger) {
-            logger.debug(
-              'neko.agent.context_compaction.skipped',
-              withAgentTrace(compactionTrace, {
-                trigger: compactResult.trigger,
-                skipReason: compactResult.skipReason,
-                tokens,
-                consecutiveFailures: this._compactState.consecutiveFailures,
-                circuitOpen: this._compactState.isCircuitOpen,
-              }),
-            );
-          }
+        if (projectedStepHistory.length > 0) {
+          semanticPathMetrics.workingMemoryMutations += projectedStepHistory.length;
+          await this._autoCompactAtBoundary(trace, semanticPathMetrics, 'working-memory-mutation');
         }
       }
 
@@ -1200,6 +1178,10 @@ export class AgentSession implements IAgentSession {
           inputTokens: totalUsage.promptTokens,
           outputTokens: totalUsage.completionTokens,
           totalTokens: totalUsage.totalTokens,
+          providerFragments: semanticPathMetrics.providerFragments,
+          semanticSteps: semanticPathMetrics.semanticSteps,
+          workingMemoryMutations: semanticPathMetrics.workingMemoryMutations,
+          compactionChecks: semanticPathMetrics.compactionChecks,
         }),
       );
 
@@ -1311,10 +1293,7 @@ export class AgentSession implements IAgentSession {
     });
     const recordInput = {
       ...input,
-      existingEntries: [
-        ...this._taskResultObservationEntries,
-        ...(input.existingEntries ?? []),
-      ],
+      existingEntries: [...this._taskResultObservationEntries, ...(input.existingEntries ?? [])],
     };
     const result = await recorder.record(recordInput);
     this._taskResultObservationEntries.push(
@@ -1430,7 +1409,8 @@ export class AgentSession implements IAgentSession {
       this._syncSystemPrompt();
       logger.warn('neko.agent.skill.lifecycle.projection.failed', {
         durationMs: Date.now() - startTime,
-        error: error instanceof Error ? { name: error.name, message: error.message } : String(error),
+        error:
+          error instanceof Error ? { name: error.name, message: error.message } : String(error),
       });
       throw error;
     }
@@ -1663,6 +1643,62 @@ export class AgentSession implements IAgentSession {
   // ---------------------------------------------------------------------------
   // Context Management
   // ---------------------------------------------------------------------------
+
+  private async _autoCompactAtBoundary(
+    trace: AgentTraceContext,
+    metrics: AgentTurnSemanticPathMetrics,
+    boundary: 'pre-model' | 'working-memory-mutation',
+  ): Promise<void> {
+    const tokens = this._compressor.estimateTokens(this._history);
+    metrics.compactionChecks += 1;
+    const compactionTrace = deriveAgentTraceContext(trace, { phase: 'compaction' });
+    logger.debug(
+      'neko.agent.context_compaction.check',
+      withAgentTrace(compactionTrace, {
+        boundary,
+        tokens,
+        historyLength: this._history.length,
+        consecutiveFailures: this._compactState.consecutiveFailures,
+        circuitOpen: this._compactState.isCircuitOpen,
+      }),
+    );
+    const compactResult = await autoCompactIfNeeded(
+      this._compressor,
+      this._history,
+      tokens,
+      this._compactState,
+    );
+    if (compactResult.compressed && compactResult.compressionResult && compactResult.trigger) {
+      await this._applyCompressionResult(
+        compactResult.compressionResult,
+        compactResult.trigger,
+        compactionTrace,
+      );
+    } else if (
+      compactResult.trigger &&
+      (compactResult.skipReason === 'compression_failed' ||
+        compactResult.skipReason === 'circuit_opened')
+    ) {
+      await this._logCompactionFailure(
+        compactResult.trigger,
+        compactResult.errorMessage ?? compactResult.skipReason,
+        compactResult.failureCount ?? this._compactState.consecutiveFailures,
+        compactionTrace,
+      );
+    } else if (compactResult.trigger) {
+      logger.debug(
+        'neko.agent.context_compaction.skipped',
+        withAgentTrace(compactionTrace, {
+          boundary,
+          trigger: compactResult.trigger,
+          skipReason: compactResult.skipReason,
+          tokens,
+          consecutiveFailures: this._compactState.consecutiveFailures,
+          circuitOpen: this._compactState.isCircuitOpen,
+        }),
+      );
+    }
+  }
 
   getTokenCount(): number {
     return this._compressor.estimateTokens(this._history);
@@ -2291,9 +2327,7 @@ export class AgentSession implements IAgentSession {
     });
   }
 
-  private _refreshExecutorContextSystemPrompt(
-    context: import('@neko/shared').AgentContext,
-  ): void {
+  private _refreshExecutorContextSystemPrompt(context: import('@neko/shared').AgentContext): void {
     this._syncSystemPrompt();
     const systemMessage = this._history[0];
     if (!systemMessage || systemMessage.role !== 'system') {
@@ -2699,7 +2733,9 @@ function composeBeforeThinkHooks(
   hooks: readonly import('@neko/shared').ExecutorHooks[],
 ): import('@neko/shared').ExecutorHooks {
   const beforeThinkChain: Array<
-    (context: import('@neko/shared').AgentContext) => Promise<import('@neko/shared').AgentContext | void>
+    (
+      context: import('@neko/shared').AgentContext,
+    ) => Promise<import('@neko/shared').AgentContext | void>
   > = [];
   if (base.beforeThink) {
     beforeThinkChain.push((context) => base.beforeThink!(context));

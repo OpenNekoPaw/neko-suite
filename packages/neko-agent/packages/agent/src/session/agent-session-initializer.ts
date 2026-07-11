@@ -142,10 +142,10 @@ export function initializeSession(
     : undefined;
   const creativeSummarizer = classifier
     ? new CreativeSummarizer(classifier, {
-      service: config.service,
-      creativeConfig: typeof creativeOpt === 'object' ? creativeOpt : undefined,
-      locale: config.locale,
-      summarizerConfig: {
+        service: config.service,
+        creativeConfig: typeof creativeOpt === 'object' ? creativeOpt : undefined,
+        locale: config.locale,
+        summarizerConfig: {
           provider: config.providerId,
           model: config.modelId,
         },
@@ -167,6 +167,14 @@ export function initializeSession(
   // Step 2: Tool group registry
   const toolGroupRegistry =
     (config.toolGroupRegistry as ToolGroupRegistry) ?? new ToolGroupRegistry();
+
+  // Ablation marker: extract once at the top level so skill-side flags
+  // (skillDiscovery / skillInjection / dynamicToolSets / toolInjection) can
+  // reach their enforcement points (ToolInjectionManager config, SkillService
+  // setter, SessionComponents for downstream AgentSession use).
+  // createConfiguredExecutor re-extracts from config.hooks on rebuild paths,
+  // so we do not mutate config.hooks here.
+  const ablationMarker = extractAblationMarker(config.hooks);
 
   // Step 3: Tool category registry — categorize tools by loading tier
   const toolCategoryRegistry =
@@ -190,13 +198,13 @@ export function initializeSession(
     }
   }
 
-  // Ablation marker: extract once at the top level so skill-side flags
-  // (skillDiscovery / skillInjection / dynamicToolSets / toolInjection) can
-  // reach their enforcement points (ToolInjectionManager config, SkillService
-  // setter, SessionComponents for downstream AgentSession use).
-  // createConfiguredExecutor re-extracts from config.hooks on rebuild paths,
-  // so we do not mutate config.hooks here.
-  const ablationMarker = extractAblationMarker(config.hooks);
+  if (!ablationMarker?.disableAgentFirstToolEvidence && config.perceptionPipeline) {
+    const perceiveTool = new PerceiveTool({ pipeline: config.perceptionPipeline });
+    if (!config.toolRegistry.get(perceiveTool.name)) {
+      config.toolRegistry.register(perceiveTool);
+    }
+    toolCategoryRegistry.categorizeTool(perceiveTool.name, 'analysis', 'always');
+  }
 
   // Step 4: Tool injection manager — apply ablation overrides on top of
   // DEFAULT_INJECTION_CONFIG. `allowDynamicActivation` false neutralizes
@@ -236,12 +244,6 @@ export function initializeSession(
   }
 
   if (!ablationMarker?.disableAgentFirstToolEvidence) {
-    if (config.perceptionPipeline) {
-      const perceiveTool = new PerceiveTool({ pipeline: config.perceptionPipeline });
-      if (!config.toolRegistry.get(perceiveTool.name)) {
-        config.toolRegistry.register(perceiveTool);
-      }
-    }
     for (const tool of createPerceptionTools({
       ...(config.perceptionClients?.transcribe && {
         transcribeClient: config.perceptionClients.transcribe,
@@ -275,7 +277,10 @@ export function initializeSession(
     toolInjectionManager,
     onToolConfirmation: (request) => callbacks.onToolConfirmation(request),
     ...(callbacks.getActiveArtifactValidationRequirements
-      ? { getActiveArtifactValidationRequirements: callbacks.getActiveArtifactValidationRequirements }
+      ? {
+          getActiveArtifactValidationRequirements:
+            callbacks.getActiveArtifactValidationRequirements,
+        }
       : {}),
   });
 
@@ -478,5 +483,8 @@ export function createConfiguredExecutor(deps: CreateExecutorDeps): {
 }
 
 function collectRegisteredReadOnlyToolNames(toolRegistry: IToolRegistry): string[] {
-  return toolRegistry.list().filter((tool) => tool.isReadOnly).map((tool) => tool.name);
+  return toolRegistry
+    .list()
+    .filter((tool) => tool.isReadOnly)
+    .map((tool) => tool.name);
 }

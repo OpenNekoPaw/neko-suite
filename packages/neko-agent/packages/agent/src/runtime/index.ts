@@ -204,6 +204,40 @@ export {
 } from './capability/capability-runtime-registries';
 
 export {
+  EXTERNAL_RESEARCH_CAPABILITY_PROVIDER_ID,
+  WEB_FETCH_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME,
+  createExternalResearchCapabilityProvider,
+  resolveExternalResearchCapability,
+  type CreateExternalResearchCapabilityProviderOptions,
+  type ExternalResearchProviderResolver,
+} from './capability/external-research-capability-provider';
+
+export {
+  createFakeExternalResearchProvider,
+  type FakeExternalResearchProviderOptions,
+} from './capability/fake-external-research-provider';
+
+export {
+  createMcpExternalResearchProvider,
+  type CreateMcpExternalResearchProviderOptions,
+} from './capability/mcp-external-research-provider';
+
+export { createExternalResearchCapabilityProviderFromMcpConfig } from './capability/external-research-mcp-capability';
+
+export {
+  saveResearchNoteMarkdown,
+  serializeResearchNoteMarkdown,
+  type ResearchNoteMarkdownFs,
+  type SaveResearchNoteMarkdownInput,
+} from './capability/research-note-markdown';
+
+export {
+  projectExternalResearchToolResult,
+  type ExternalResearchTraceProjection,
+} from './capability/external-research-projection';
+
+export {
   createAgentCapabilityInjectionRuntime,
   normalizeManifestCapability,
   normalizeSkillScanCapabilities,
@@ -693,6 +727,13 @@ export {
   type ApplyToolResultBackfillResult,
   type BackfillableToolResult,
 } from './tool-result-backfill';
+
+export {
+  createAgentTurnTimelineAccumulator,
+  type AgentTurnTimelineAccumulator,
+  type AgentTurnTimelineAccumulatorSnapshot,
+  type AgentTurnTimelineAccumulatorUpdate,
+} from './stream/agent-turn-timeline-accumulator';
 
 export {
   AgentEventStreamRuntimeProcessor,

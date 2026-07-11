@@ -100,3 +100,11 @@ export {
   type PreferencesFsOps,
   type LoadResult as PreferencesLoadResult,
 } from './preferences-loader';
+
+export {
+  AGENT_SKILL_ROOT_DIR,
+  AGENT_SKILL_SUBDIR,
+  resolveAgentSkillsDir,
+  resolvePersonalAgentSkillsDir,
+  resolveProjectAgentSkillsDir,
+} from './agent-skill-layout';

@@ -78,10 +78,7 @@ function parseJsonlWrites<T>(writes: readonly { path: string; data: string }[], 
     .map((line) => JSON.parse(line) as T);
 }
 
-function conversationLogPath(
-  conversationId: string,
-  kind: 'events' | 'audits' | 'steps',
-): string {
+function conversationLogPath(conversationId: string, kind: 'events' | 'audits' | 'steps'): string {
   return `/tmp/proj/.neko/logs/conversations/${conversationId}/${kind}.jsonl`;
 }
 
@@ -637,6 +634,26 @@ describe('AgentSession', () => {
       expect(toolRegistry.toToolDefinitions).toHaveBeenCalled();
     });
 
+    it('injects the aggregate perception tool when a perception pipeline is configured', () => {
+      const toolRegistry = new ToolRegistry();
+      const session = new AgentSession(
+        createConfig({
+          toolRegistry,
+          perceptionPipeline: {
+            perceive: vi.fn(),
+          },
+        }),
+      );
+      const toolInjectionManager = (session as unknown as Record<string, unknown>)[
+        '_toolInjectionManager'
+      ] as { getToolsForTurn(input: string): string[] };
+
+      expect(toolRegistry.has(TOOL_NAMES_PERCEPTION.PERCEIVE)).toBe(true);
+      expect(toolInjectionManager.getToolsForTurn('analyze generated image quality')).toContain(
+        TOOL_NAMES_PERCEPTION.PERCEIVE,
+      );
+    });
+
     it('executes registered perception tools after the lazy ToolSet is available', async () => {
       const toolRegistry = new ToolRegistry();
       new AgentSession(
@@ -1190,7 +1207,9 @@ describe('AgentSession', () => {
         })),
         getDecisionHistory: vi.fn(() => []),
       };
-      const session = new AgentSession(createConfig({ creativeProcessRecoveryPolicy, journalWriter }));
+      const session = new AgentSession(
+        createConfig({ creativeProcessRecoveryPolicy, journalWriter }),
+      );
       injectMockExecutor(session, [
         {
           type: 'act',
@@ -1343,8 +1362,7 @@ describe('AgentSession', () => {
       let capturedModelSectionsPrompt = '';
       mockExec.executeStream.mockImplementationOnce(async function* (...args: unknown[]) {
         const serviceOptions = mockExec.updateServiceOptions.mock.calls.at(-1)?.[0] as
-          | { systemPromptSections?: Array<{ content: string }> }
-          | undefined;
+          { systemPromptSections?: Array<{ content: string }> } | undefined;
         capturedModelSectionsPrompt =
           serviceOptions?.systemPromptSections?.map((section) => section.content).join('\n\n') ??
           '';
@@ -1415,9 +1433,7 @@ describe('AgentSession', () => {
         {
           name: executionSkill.name,
           systemPrompt: executionSkill.content,
-          allowedTools: executionSkill.allowedTools
-            ? [...executionSkill.allowedTools]
-            : undefined,
+          allowedTools: executionSkill.allowedTools ? [...executionSkill.allowedTools] : undefined,
           type: 'skill',
         },
         executionSkill,
@@ -1563,8 +1579,7 @@ describe('AgentSession', () => {
         (definition) => definition.function.name === 'GenerateStoryboardFrame',
       )?.function;
       const parameters = tool?.parameters as
-        | { properties?: Record<string, { description?: string }> }
-        | undefined;
+        { properties?: Record<string, { description?: string }> } | undefined;
       expect(tool?.description).toBe('创建图像生成任务。');
       expect(parameters?.properties?.prompt?.description).toBe('图像生成或编辑提示词。');
       expect(tool?.description).not.toContain('Create an image');
@@ -1609,8 +1624,7 @@ describe('AgentSession', () => {
         let capturedModelSectionsPrompt = '';
         mockExec.executeStream.mockImplementationOnce(async function* (...args: unknown[]) {
           const serviceOptions = mockExec.updateServiceOptions.mock.calls.at(-1)?.[0] as
-            | { systemPromptSections?: Array<{ content: string }> }
-            | undefined;
+            { systemPromptSections?: Array<{ content: string }> } | undefined;
           capturedModelSectionsPrompt =
             serviceOptions?.systemPromptSections?.map((section) => section.content).join('\n\n') ??
             '';
@@ -1785,8 +1799,7 @@ describe('AgentSession', () => {
     it('keeps lifecycle ToolGuard restricted when persistent shell allow rules are filtered', () => {
       const session = new AgentSession(config);
       const permHooks = (session as unknown as Record<string, unknown>)['_permissionHooks'] as
-        | { addAllowRule: ReturnType<typeof vi.fn> }
-        | undefined;
+        { addAllowRule: ReturnType<typeof vi.fn> } | undefined;
       if (!permHooks) {
         throw new Error('permission hooks missing');
       }
@@ -1823,8 +1836,7 @@ describe('AgentSession', () => {
         }),
       );
       const permHooks = (session as unknown as Record<string, unknown>)['_permissionHooks'] as
-        | { addAllowRule: (tool: string) => void }
-        | undefined;
+        { addAllowRule: (tool: string) => void } | undefined;
       permHooks?.addAllowRule('ActivateSkill');
       const skillPrompt =
         'Comic storyboard skill: use scene, shot, source, imagePrompt, videoPrompt, duration, dialogue.';
@@ -1908,6 +1920,78 @@ describe('AgentSession', () => {
       expect(capturedSystemPrompts[1]).toContain(skillPrompt);
     });
 
+    it('registers CreateSkill and delegates creation without activating lifecycle state', async () => {
+      const service = createMockService();
+      const toolRegistry = new ToolRegistry();
+      const session = new AgentSession(
+        createConfig({
+          service,
+          toolRegistry,
+          conversationId: 'conversation-skill-creation',
+          systemPrompt: 'Base prompt.',
+          maxIterations: 3,
+        }),
+      );
+      const permHooks = (session as unknown as Record<string, unknown>)['_permissionHooks'] as
+        { addAllowRule: (tool: string) => void } | undefined;
+      permHooks?.addAllowRule('CreateSkill');
+      const createSkill = vi.fn(async () => ({
+        source: 'project' as const,
+        rootId: 'project-agent-skills',
+        relativePath: 'story-review',
+        absolutePath: '/workspace/.agents/skills/story-review',
+        fingerprint: 'sha256:story-review',
+        diagnostics: [],
+      }));
+      const activateSkill = vi.fn();
+      const deactivateSkill = vi.fn();
+      session.setSkillProvider({
+        listSkills: vi.fn(() => []),
+        getActiveSkill: vi.fn(() => null),
+        activateSkill,
+        deactivateSkill,
+        createSkill,
+      });
+
+      const capturedToolNames: string[][] = [];
+      const capturedMessages: ChatMessage[][] = [];
+      vi.mocked(service.chatStream).mockImplementation(async function* (messages, options) {
+        capturedMessages.push([...messages]);
+        capturedToolNames.push((options?.tools ?? []).map((tool) => tool.function.name));
+        if (capturedMessages.length === 1) {
+          yield* responseToStream(
+            toolCallResponse('CreateSkill', {
+              target: 'project',
+              skill: {
+                name: 'story-review',
+                description: 'Review story structure.',
+                body: '# Story Review',
+              },
+            }),
+          );
+          return;
+        }
+        yield* responseToStream(textResponse('Created the portable Skill.'));
+      });
+
+      await collectEvents(session.execute('创建 story-review Skill'));
+
+      expect(capturedToolNames[0]).toContain('CreateSkill');
+      expect(createSkill).toHaveBeenCalledWith({
+        target: 'project',
+        skill: {
+          name: 'story-review',
+          description: 'Review story structure.',
+          body: '# Story Review',
+        },
+      });
+      expect(JSON.stringify(capturedMessages[1])).toContain(
+        '/workspace/.agents/skills/story-review',
+      );
+      expect(activateSkill).not.toHaveBeenCalled();
+      expect(deactivateSkill).not.toHaveBeenCalled();
+    });
+
     it('exposes lifecycle reference skill tools on the next model call without restricting the domain policy', async () => {
       const service = createMockService();
       const toolRegistry = new ToolRegistry();
@@ -1940,8 +2024,7 @@ describe('AgentSession', () => {
         }),
       );
       const permHooks = (session as unknown as Record<string, unknown>)['_permissionHooks'] as
-        | { addAllowRule: (tool: string) => void }
-        | undefined;
+        { addAllowRule: (tool: string) => void } | undefined;
       permHooks?.addAllowRule('ActivateSkill');
       const activateSkill = vi.fn(async () => {
         session.applySkillLifecycleProjection({
@@ -1995,9 +2078,7 @@ describe('AgentSession', () => {
 
       const capturedToolNames: string[][] = [];
       vi.mocked(service.chatStream).mockImplementation(async function* (_messages, options) {
-        capturedToolNames.push(
-          (options?.tools ?? []).map((tool) => tool.function.name),
-        );
+        capturedToolNames.push((options?.tools ?? []).map((tool) => tool.function.name));
         if (capturedToolNames.length === 1) {
           yield* responseToStream(
             toolCallResponse('ActivateSkill', {
@@ -3798,9 +3879,7 @@ describe('AgentSession', () => {
       expect(auditRows[0]!.event.channel).toBe('execution.approve.decided');
       expect(auditRows[0]!.event.decision).toBe('auto-approved');
       expect(auditRows[0]!.event.conversationId).toBe('conv-approval-audit');
-      expect(auditRows[0]!.event.runId).toEqual(
-        expect.stringMatching(/^run-conv-approval-audit-/),
-      );
+      expect(auditRows[0]!.event.runId).toEqual(expect.stringMatching(/^run-conv-approval-audit-/));
     });
 
     it('auto-reject (destructive + non-idempotent) maps to decision="reject"', async () => {
@@ -3952,9 +4031,7 @@ describe('AgentSession', () => {
       const stepRows = parseJsonlWrites<{
         event: { channel: string; conversationId?: string; runId?: string };
       }>(writes, conversationLogPath('conv-durable-log', 'steps'));
-      const applyRow = eventRows.find(
-        (row) => row.event.channel === 'execution.apply.committed',
-      );
+      const applyRow = eventRows.find((row) => row.event.channel === 'execution.apply.committed');
 
       expect(applyRow?.event).toEqual(
         expect.objectContaining({
@@ -4109,9 +4186,7 @@ describe('AgentSession', () => {
       const stepRows = [
         ...parseJsonlWrites<LoggedStepRow>(writes, conversationLogPath('conv-newtab-a', 'events')),
         ...parseJsonlWrites<LoggedStepRow>(writes, conversationLogPath('conv-newtab-b', 'events')),
-      ].filter(
-        (row) => row.event.channel === 'execution.step.completed',
-      );
+      ].filter((row) => row.event.channel === 'execution.step.completed');
       const rowA = stepRows.find((row) => row.event.runId === 'run-newtab-a');
       const rowB = stepRows.find((row) => row.event.runId === 'run-newtab-b');
 
@@ -4153,14 +4228,8 @@ describe('AgentSession', () => {
         event: { channel: string; conversationId?: string; runId?: string };
       };
       const auditRows = [
-        ...parseJsonlWrites<LoggedAuditRow>(
-          writes,
-          conversationLogPath('conv-newtab-a', 'audits'),
-        ),
-        ...parseJsonlWrites<LoggedAuditRow>(
-          writes,
-          conversationLogPath('conv-newtab-b', 'audits'),
-        ),
+        ...parseJsonlWrites<LoggedAuditRow>(writes, conversationLogPath('conv-newtab-a', 'audits')),
+        ...parseJsonlWrites<LoggedAuditRow>(writes, conversationLogPath('conv-newtab-b', 'audits')),
       ];
       expect(auditRows.map((row) => row.event)).toEqual([
         expect.objectContaining({
@@ -4404,6 +4473,155 @@ describe('AgentSession', () => {
       const skipped = session.getStageGuardianIssues().filter((i) => i.code === 'approval-skipped');
       expect(skipped).toHaveLength(1);
       expect(skipped[0]!.detail?.subject).toBe('tool:GenerateImage');
+    });
+  });
+
+  describe('semantic stream boundaries', () => {
+    function spyOnCompactionChecks(session: AgentSession) {
+      const compressor = (
+        session as unknown as {
+          _compressor: { estimateTokens(messages: readonly ChatMessage[]): number };
+        }
+      )._compressor;
+      return vi.spyOn(compressor, 'estimateTokens');
+    }
+
+    it('yields 4,000 text fragments without journaling or compacting per chunk', async () => {
+      const journalWriter = createMockJournalWriter();
+      const session = new AgentSession(createConfig({ journalWriter }));
+      const chunks = Array.from({ length: 4_000 }, (_, index) => `c${index}`);
+      injectMockExecutor(session, [
+        ...chunks.map((content, index): AgentStep => ({
+          type: 'content_delta',
+          content,
+          timestamp: index,
+        })),
+        {
+          type: 'think',
+          content: chunks.join(''),
+          timestamp: chunks.length,
+          usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+        },
+      ]);
+      const estimateTokens = spyOnCompactionChecks(session);
+
+      const events = await collectEvents(session.execute('stream'));
+
+      expect(events.filter((event) => event.type === 'text_delta')).toHaveLength(4_000);
+      expect(events.filter((event) => event.type === 'text')).toHaveLength(0);
+      expect(estimateTokens).toHaveBeenCalledTimes(2);
+      expect(journalWriter.appendEvent.mock.calls.length).toBeLessThan(10);
+      expect(journalWriter.appendEvent).not.toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({ type: 'text_delta' }),
+      );
+      expect(events.at(-1)).toEqual({
+        type: 'done',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      });
+    });
+
+    it('keeps replacement retries transport-only until final text commits', async () => {
+      const session = new AgentSession(createConfig());
+      injectMockExecutor(session, [
+        { type: 'content_delta', content: 'invalid', timestamp: 1 },
+        {
+          type: 'content_delta',
+          content: 'replacement',
+          deltaKind: 'assistant_text_replacement',
+          replacement: { reason: 'output-validation-retry', attempt: 2 },
+          timestamp: 2,
+        },
+        { type: 'think', content: 'replacement', timestamp: 3 },
+      ]);
+      const estimateTokens = spyOnCompactionChecks(session);
+
+      const events = await collectEvents(session.execute('retry'));
+
+      expect(events.filter((event) => event.type === 'text_delta')).toHaveLength(1);
+      expect(events.filter((event) => event.type === 'assistant_text_replacement')).toHaveLength(1);
+      expect(session.getHistory().filter((message) => message.role === 'assistant')).toEqual([
+        expect.objectContaining({ content: 'replacement' }),
+      ]);
+      expect(estimateTokens).toHaveBeenCalledTimes(2);
+    });
+
+    it('projects thinking once at the semantic boundary rather than per display fragment', async () => {
+      const session = new AgentSession(createConfig());
+      injectMockExecutor(session, [
+        { type: 'content_delta', content: 'visible', timestamp: 1 },
+        {
+          type: 'think',
+          content: 'visible',
+          thinking: 'private reasoning summary',
+          timestamp: 2,
+        },
+      ]);
+      const estimateTokens = spyOnCompactionChecks(session);
+
+      const events = await collectEvents(session.execute('thinking'));
+
+      expect(events.filter((event) => event.type === 'thinking_content')).toEqual([
+        expect.objectContaining({ thinking: 'private reasoning summary' }),
+      ]);
+      expect(estimateTokens).toHaveBeenCalledTimes(2);
+    });
+
+    it('checks compaction at each tool-backed working-memory mutation', async () => {
+      const session = new AgentSession(createConfig());
+      injectMockExecutor(session, [
+        {
+          type: 'think',
+          content: '',
+          toolCalls: [{ id: 'call-1', name: 'Read', arguments: {} }],
+          timestamp: 1,
+        },
+        {
+          type: 'act',
+          content: '',
+          toolResults: [{ callId: 'call-1', name: 'Read', success: true, data: 'ok' }],
+          timestamp: 2,
+        },
+        { type: 'observe', content: '', timestamp: 3 },
+        { type: 'respond', content: 'done', timestamp: 4 },
+      ]);
+      const estimateTokens = spyOnCompactionChecks(session);
+
+      await collectEvents(session.execute('tools'));
+
+      expect(estimateTokens).toHaveBeenCalledTimes(4);
+      expect(session.getHistory().map((message) => message.role)).toEqual([
+        'system',
+        'user',
+        'assistant',
+        'tool',
+        'assistant',
+      ]);
+    });
+
+    it('isolates semantic and compaction counts across concurrent sessions', async () => {
+      const sessionA = new AgentSession(createConfig({ conversationId: 'conversation-a' }));
+      const sessionB = new AgentSession(createConfig({ conversationId: 'conversation-b' }));
+      injectMockExecutor(sessionA, [
+        { type: 'content_delta', content: 'A', timestamp: 1 },
+        { type: 'think', content: 'A', timestamp: 2 },
+      ]);
+      injectMockExecutor(sessionB, [
+        { type: 'content_delta', content: 'B', timestamp: 1 },
+        { type: 'think', content: 'B', timestamp: 2 },
+      ]);
+      const estimateA = spyOnCompactionChecks(sessionA);
+      const estimateB = spyOnCompactionChecks(sessionB);
+
+      await Promise.all([
+        collectEvents(sessionA.execute('a')),
+        collectEvents(sessionB.execute('b')),
+      ]);
+
+      expect(estimateA).toHaveBeenCalledTimes(2);
+      expect(estimateB).toHaveBeenCalledTimes(2);
+      expect(sessionA.getHistory().at(-1)?.content).toBe('A');
+      expect(sessionB.getHistory().at(-1)?.content).toBe('B');
     });
   });
 });
