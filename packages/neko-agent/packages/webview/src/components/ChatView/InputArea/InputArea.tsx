@@ -59,6 +59,8 @@ import type {
 interface InputAreaProps {
   inputValue: string;
   isThinking: boolean;
+  /** Conversation-owned run state for queue/send/stop behavior. */
+  isRunActive?: boolean;
   queuedMessageCount?: number;
   queuedMessages?: readonly AgentQueuedMessageItem[];
   droppedFiles?: MessageAttachment[];
@@ -95,6 +97,7 @@ type InputAreaTranslator = (key: string, params?: Record<string, string | number
 export function InputArea({
   inputValue,
   isThinking,
+  isRunActive = isThinking,
   queuedMessageCount = 0,
   queuedMessages = [],
   droppedFiles,
@@ -568,7 +571,7 @@ export function InputArea({
 
   const handleSend = () => {
     if (disabled) return;
-    if (isThinking && !inputAreaProjection.canQueue) return;
+    if (isRunActive && !inputAreaProjection.canQueue) return;
     closeEntryPromptMenu();
     const outboundMessageText = appendSelectedFileReferencesToMessage(
       inputValue,
@@ -750,7 +753,7 @@ export function InputArea({
     contextChipCount: contextChips.length,
     ambientNodeCount: ambientNodes.length,
     mediaModelCallCount,
-    isThinking,
+    isThinking: isRunActive,
     queuedMessageCount: projectedQueuedMessageCount,
     disabled,
     sessionMode,
@@ -984,7 +987,7 @@ export function InputArea({
             )}
 
             {/* Send */}
-            {(!isThinking || inputAreaProjection.canQueue) && (
+            {(!isRunActive || inputAreaProjection.canQueue) && (
               <button
                 type="button"
                 onClick={handleSend}
@@ -1004,7 +1007,7 @@ export function InputArea({
             )}
 
             {/* Stop current run */}
-            {isThinking && (
+            {isRunActive && (
               <button
                 type="button"
                 onClick={onCancel}

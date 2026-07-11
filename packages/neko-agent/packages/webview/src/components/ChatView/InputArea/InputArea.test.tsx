@@ -1346,6 +1346,37 @@ describe('InputArea composer controls', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
+  it('uses the conversation run contract for queue and stop controls without thinking visuals', () => {
+    const onSend = vi.fn();
+    const onCancel = vi.fn();
+
+    render(
+      <Harness>
+        <InputArea
+          inputValue="继续处理 Timeline"
+          isThinking={false}
+          isRunActive={true}
+          onInputChange={vi.fn()}
+          onSend={onSend}
+          onCancel={onCancel}
+        />
+      </Harness>,
+    );
+
+    expect(screen.getByTitle('加入队列').className).toContain('agent-composer-queue');
+    expect(screen.getByTitle('取消 (Esc)').className).toContain('agent-composer-stop');
+
+    fireEvent.click(screen.getByTitle('加入队列'));
+    expect(onSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageText: '继续处理 Timeline',
+      }),
+    );
+
+    fireEvent.click(screen.getByTitle('取消 (Esc)'));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
   it('shows locally queued message text before the runtime pending count arrives', () => {
     render(
       <Harness>

@@ -29,6 +29,8 @@ interface ChatViewProps {
   messages: Message[];
   inputValue: string;
   isThinking: boolean;
+  /** Conversation-owned run state used by composer controls; independent from thinking visuals. */
+  isRunActive?: boolean;
   queuedMessageCount?: number;
   queuedMessages?: readonly AgentQueuedMessageItem[];
   streamingMessageId: string | null;
@@ -90,6 +92,7 @@ export function ChatView({
   messages,
   inputValue,
   isThinking,
+  isRunActive = isThinking,
   queuedMessageCount = 0,
   queuedMessages = [],
   streamingMessageId,
@@ -155,7 +158,7 @@ export function ChatView({
   }, []);
 
   return (
-    <DropZone onFilesDropped={handleFilesDropped} disabled={isThinking}>
+    <DropZone onFilesDropped={handleFilesDropped} disabled={isRunActive}>
       <div className="agent-chat-view flex-1 flex flex-col overflow-hidden relative h-full">
         {conversationKind === 'character-dialogue' && characterDialogueSession && (
           <CharacterDialogueHeader session={characterDialogueSession} />
@@ -220,6 +223,7 @@ export function ChatView({
         <InputArea
           inputValue={inputValue}
           isThinking={isThinking}
+          isRunActive={isRunActive}
           queuedMessageCount={queuedMessageCount}
           queuedMessages={queuedMessages}
           droppedFiles={droppedFiles}

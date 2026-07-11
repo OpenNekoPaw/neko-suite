@@ -111,6 +111,8 @@ vi.mock('@/components/ChatWorkspace', () => ({
     activeConversationId?: string | null;
     activeTabConversationId?: string | null;
     messages?: Message[];
+    isThinking?: boolean;
+    streamingMessageId?: string | null;
     isForegroundConversationActivationPending?: boolean;
     queuedMessages?: readonly AgentQueuedMessageItem[];
     activationProgress?: readonly ActivationProgressTimeline[];
@@ -157,6 +159,9 @@ vi.mock('@/components/ChatWorkspace', () => ({
         </span>
         <span data-testid="workspace-switching">
           {isConversationSwitching ? 'switching' : 'idle'}
+        </span>
+        <span data-testid="workspace-composer-mode">
+          {props.isThinking || props.streamingMessageId ? 'queue-enabled' : 'send-enabled'}
         </span>
         <span data-testid="workspace-activation-progress">
           {props.activationProgress?.map((timeline) => timeline.name).join(',') ?? 'none'}
@@ -707,6 +712,62 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('false:false');
   });
 
+  it('updates a background tab status from its canonical render revision', () => {
+    vi.clearAllMocks();
+    render(<ConversationController {...createProps()} />);
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-b',
+            },
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('tab-status-tab-a').textContent).toBe('none');
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: timelineSnapshotMessage('conv-a', 'message-a', 'background A'),
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
+    expect(screen.getByTestId('workspace-composer-mode').textContent).toBe('send-enabled');
+    expect(screen.getByTestId('tab-status-tab-a').textContent).toBe('running');
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'tabState',
+            tabState: {
+              openTabs: [
+                { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+                { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+              ],
+              activeTabId: 'tab-a',
+            },
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-a');
+    expect(screen.getByTestId('workspace-composer-mode').textContent).toBe('queue-enabled');
+  });
+
   it('keeps Timeline and Markdown resources usable after StrictMode effect replay', () => {
     vi.clearAllMocks();
     render(
@@ -952,6 +1013,7 @@ function createProps(
             <button type="button" onClick={() => props.onCloseTab(tab.id)}>
               Close {tab.title}
             </button>
+            <span data-testid={`tab-status-${tab.id}`}>{tab.displayStatus ?? 'none'}</span>
           </div>
         ))}
         {options.history?.map((conversation) => (

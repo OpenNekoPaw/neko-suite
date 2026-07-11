@@ -736,6 +736,7 @@ export function ChatWorkspace({
         messages={messages}
         inputValue={inputValue}
         isThinking={isThinking}
+        isRunActive={isThinking || streamingMessageId !== null}
         queuedMessageCount={queuedMessageCount}
         queuedMessages={queuedMessages}
         streamingMessageId={streamingMessageId}
