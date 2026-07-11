@@ -798,13 +798,14 @@ describe('message presenter', () => {
     ]);
   });
 
-  it('projects fenced composite content into content blocks when streaming completes', () => {
+  it('preserves fenced Markdown source when local streaming completes', () => {
+    const source =
+      'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","sections":[{"heading":"Shot 1","mediaRefs":[{"toolCallId":"read-1","assetIndex":0,"caption":"原图"}]}]}\n```';
     const created = projectStreamingTextIntoMessages({
       messages: [],
       streamingMessageId: null,
       messageId: 'msg-1',
-      content:
-        'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","sections":[{"heading":"Shot 1","mediaRefs":[{"toolCallId":"read-1","assetIndex":0,"caption":"原图"}]}]}\n```',
+      content: source,
       now: () => 1000,
     });
 
@@ -816,40 +817,28 @@ describe('message presenter', () => {
     expect(completed.messages).toMatchObject([
       {
         id: 'msg-1',
-        content: 'Storyboard',
+        content: source,
         isStreaming: false,
         contentBlocks: [
           {
             id: 'block-msg-1',
             type: 'text',
-            content: 'Storyboard',
+            content: source,
             isStreaming: false,
-          },
-          {
-            id: 'block-msg-1-composite-1',
-            type: 'composite',
-            composite: {
-              template: 'storyboard-table',
-              sections: [
-                {
-                  heading: 'Shot 1',
-                  mediaRefs: [{ toolCallId: 'read-1', assetIndex: 0, caption: '原图' }],
-                },
-              ],
-            },
           },
         ],
       },
     ]);
   });
 
-  it('uses runtime-projected composite content blocks when streaming completes', () => {
+  it('uses runtime-projected composite metadata without replacing Markdown source', () => {
+    const source =
+      'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","sections":[{"heading":"主要角色观察","content":"| 角色 | 观察 |\\n| --- | --- |\\n| 瑞德 | 红色围巾。 |"}]}\n```';
     const created = projectStreamingTextIntoMessages({
       messages: [],
       streamingMessageId: null,
       messageId: 'msg-1',
-      content:
-        'Storyboard\n\n```neko-composite\n{"template":"storyboard-table","sections":[{"heading":"主要角色观察","content":"| 角色 | 观察 |\\n| --- | --- |\\n| 瑞德 | 红色围巾。 |"}]}\n```',
+      content: source,
       now: () => 1000,
     });
 
@@ -861,7 +850,7 @@ describe('message presenter', () => {
           id: 'block-msg-1',
           type: 'text',
           timestamp: 1000,
-          content: 'Storyboard',
+          content: source,
           isStreaming: false,
         },
         {
@@ -885,10 +874,22 @@ describe('message presenter', () => {
               },
             ],
           },
+          compositeSource: {
+            kind: 'normalized-markdown-code-block',
+            sourceBlockId: 'block-msg-1',
+            startOffset: 12,
+            endOffset: source.length,
+            language: 'neko-composite',
+            candidateIndex: 0,
+          },
         },
       ],
     });
 
+    expect(completed.messages[0]?.content).toBe(source);
+    expect(completed.messages[0]?.contentBlocks?.[1]?.compositeSource).toMatchObject({
+      sourceBlockId: 'block-msg-1',
+    });
     expect(completed.messages[0]?.contentBlocks?.[1]?.composite).toMatchObject({
       extensions: {
         'neko.entityMemoryContributionPayload': {
@@ -899,13 +900,14 @@ describe('message presenter', () => {
     });
   });
 
-  it('extracts uppercase neko composite artifacts when completing local streaming blocks', () => {
+  it('preserves uppercase structured fences for normalized historical rendering', () => {
+    const source =
+      'Storyboard\n\n```NEKO\n{"schemaVersion":1,"kind":"composite-artifact","artifactId":"artifact-storyboard","blocks":[{"blockId":"storyboard-domain","kind":"domain","domainKind":"StoryboardTable","payload":{"schemaVersion":1,"kind":"storyboard-table","title":"Opening","scenes":[{"sceneId":"scene-1","sceneTitle":"Page 1","shots":[{"shotNumber":1,"duration":3,"visualDescription":"Panel action and composition.","characterAction":"Rin enters the frame.","imageStrategy":"use-as-reference"}]}]}}]}\n```';
     const created = projectStreamingTextIntoMessages({
       messages: [],
       streamingMessageId: null,
       messageId: 'msg-1',
-      content:
-        'Storyboard\n\n```NEKO\n{"schemaVersion":1,"kind":"composite-artifact","artifactId":"artifact-storyboard","blocks":[{"blockId":"storyboard-domain","kind":"domain","domainKind":"StoryboardTable","payload":{"schemaVersion":1,"kind":"storyboard-table","title":"Opening","scenes":[{"sceneId":"scene-1","sceneTitle":"Page 1","shots":[{"shotNumber":1,"duration":3,"visualDescription":"Panel action and composition.","characterAction":"Rin enters the frame.","imageStrategy":"use-as-reference"}]}]}}]}\n```',
+      content: source,
       now: () => 1000,
     });
 
@@ -914,21 +916,15 @@ describe('message presenter', () => {
       streamingMessageId: 'msg-1',
     });
 
-    expect(completed.messages[0]?.content).toBe('Storyboard');
-    expect(completed.messages[0]?.contentBlocks).toHaveLength(2);
-    expect(completed.messages[0]?.contentBlocks?.[1]?.composite).toMatchObject({
-      template: 'storyboard-table',
-      storyboardTable: {
-        kind: 'storyboard-table',
-        title: 'Opening',
-      },
-      sections: [
-        {
-          heading: 'Page 1 / Shot 1',
-          content: 'Panel action and composition.',
-        },
-      ],
-    });
+    expect(completed.messages[0]?.content).toBe(source);
+    expect(completed.messages[0]?.contentBlocks).toEqual([
+      expect.objectContaining({
+        id: 'block-msg-1',
+        type: 'text',
+        content: source,
+        isStreaming: false,
+      }),
+    ]);
   });
 });
 

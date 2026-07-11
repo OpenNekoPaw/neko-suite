@@ -1,8 +1,13 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { registerDefaultRenderers } from '@/components/ChatView/RichContent';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import type { MarkdownResourceRenderingProjection } from '@/presenters/markdown-resource-rendering-presenter';
+import type { AgentTurnTimelineMessage } from '@neko-agent/types';
+import {
+  createAgentMarkdownSessionKey,
+  getAgentMarkdownSessionRegistry,
+} from '@/markdown/agent-markdown-session-registry';
 
 vi.mock('@/i18n/I18nContext', () => ({
   useTranslation: () => ({
@@ -33,7 +38,75 @@ vi.mock('@/i18n', () => ({
   getLocale: () => 'zh-cn',
 }));
 
+afterEach(() => {
+  cleanup();
+  getAgentMarkdownSessionRegistry().disposeAll();
+});
+
 describe('MarkdownRenderer structured artifacts', () => {
+  it('renders Timeline-owned streaming with the canonical normalized session identity', () => {
+    const content = '| A | B |\n| - | - |\n| 1 | 2 |';
+    const key = createTimelineMarkdownSession(content);
+    const timelineSnapshot = getAgentMarkdownSessionRegistry().getSnapshot(key);
+
+    const { container } = render(
+      <MarkdownRenderer sessionKey={key} content={content} isStreaming />,
+    );
+
+    const root = container.querySelector('[data-markdown-session-id]');
+    expect(root?.getAttribute('data-markdown-session-id')).toBe(timelineSnapshot?.sessionId);
+    expect(root?.getAttribute('data-markdown-revision')).toBe('1');
+    expect(root?.getAttribute('data-markdown-final')).toBe('false');
+    expect(screen.getByRole('table')).toBeTruthy();
+  });
+
+  it('immediately finalizes historical Markdown through the same normalized adapter', () => {
+    const content = '| A | B |\n| - | - |\n| 1 | 2 |';
+    const { container } = render(
+      <MarkdownRenderer sessionKey="historical-final" content={content} />,
+    );
+
+    const root = container.querySelector('[data-markdown-session-id]');
+    expect(root?.getAttribute('data-markdown-final')).toBe('true');
+    expect(root?.getAttribute('data-markdown-revision')).toBe('1');
+    expect(screen.getByRole('table')).toBeTruthy();
+  });
+
+  it('renders enriched semantic composites once through their normalized code-block source', () => {
+    const content =
+      '```neko-composite\n{"template":"report","title":"Source title","sections":[{"heading":"Source section","content":"Source content"}]}\n```';
+    render(
+      <MarkdownRenderer
+        sessionKey="historical-derived-composite"
+        content={content}
+        contentBlockId="block-text"
+        siblingBlocks={[
+          {
+            id: 'block-text-composite-1',
+            type: 'composite',
+            timestamp: 1,
+            composite: {
+              template: 'storyboard-table',
+              title: 'Projected title',
+              sections: [{ heading: 'Projected section', content: 'Projected content' }],
+            },
+            compositeSource: {
+              kind: 'normalized-markdown-code-block',
+              sourceBlockId: 'block-text',
+              startOffset: 0,
+              endOffset: content.length,
+              language: 'neko-composite',
+              candidateIndex: 0,
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('storyboard-table')).toBeTruthy();
+    expect(screen.queryByText('asset-gallery')).toBeNull();
+  });
+
   it('renders uppercase neko composite artifacts as storyboard tables', () => {
     renderMarkdown(`Summary.
 
@@ -219,6 +292,7 @@ describe('MarkdownRenderer structured artifacts', () => {
   it('renders storyboard creative tables as Canvas scene review tables', () => {
     const { container } = render(
       <MarkdownRenderer
+        sessionKey="test-storyboard-direct"
         content={[
           '| scene | shot | source | imagePrompt | videoPrompt | duration | dialogue | 自定义审阅 | nextAction |',
           '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
@@ -895,17 +969,62 @@ describe('MarkdownRenderer structured artifacts', () => {
   });
 });
 
+let timelineFixtureSequence = 0;
+
+function createTimelineMarkdownSession(content: string): string {
+  timelineFixtureSequence += 1;
+  const suffix = String(timelineFixtureSequence);
+  const conversationId = `conv-render-${suffix}`;
+  const messageId = `message-render-${suffix}`;
+  const itemId = `text-render-${suffix}`;
+  const sessionKey = createAgentMarkdownSessionKey({ conversationId, messageId, itemId });
+  const delivery: AgentTurnTimelineMessage = {
+    type: 'agentTurnTimeline',
+    schemaVersion: 2,
+    connectionEpoch: 'epoch-render',
+    conversationId,
+    turnId: `turn-render-${suffix}`,
+    messageId,
+    batchKind: 'delta',
+    deliveryRevision: 1,
+    operations: [
+      {
+        operation: 'append',
+        item: {
+          conversationId,
+          turnId: `turn-render-${suffix}`,
+          messageId,
+          itemId,
+          sequence: 1,
+          itemRevision: 1,
+          kind: 'assistant_text',
+          status: 'streaming',
+          payload: { content, format: 'markdown', sourceGeneration: 1 },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    ],
+  };
+  getAgentMarkdownSessionRegistry().applyTimelineDeliveries([delivery]);
+  return sessionKey;
+}
+
 function renderMarkdown(
   content: string,
   isStreaming = false,
   markdownResources?: MarkdownResourceRenderingProjection,
 ) {
   registerDefaultRenderers();
+  const sessionKey = isStreaming
+    ? createTimelineMarkdownSession(content)
+    : `test-render:${content.length}:final`;
   return render(
     <MarkdownRenderer
       content={content}
       isStreaming={isStreaming}
       markdownResources={markdownResources}
+      sessionKey={sessionKey}
     />,
   );
 }

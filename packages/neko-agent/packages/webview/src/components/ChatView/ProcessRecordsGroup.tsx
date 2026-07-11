@@ -10,6 +10,7 @@ import { ChevronIcon, ToolLoadingSpinner } from '@/components/ChatView/ToolCallD
 interface ProcessRecordsGroupProps {
   processGroup: ContentBlockProcessGroupProjection;
   conversationId: string | null;
+  messageId: string;
   workItemIds?: string[];
   siblingBlocks: ContentBlock[];
   ambientToolCalls?: readonly ToolCall[];
@@ -21,6 +22,7 @@ interface ProcessRecordsGroupProps {
 function ProcessRecordsGroupComponent({
   processGroup,
   conversationId,
+  messageId,
   workItemIds,
   siblingBlocks,
   ambientToolCalls,
@@ -93,6 +95,7 @@ function ProcessRecordsGroupComponent({
                   isLast={index === processGroup.projections.length - 1}
                   isStreaming={isStreaming}
                   conversationId={conversationId}
+                  messageId={messageId}
                   workItemIds={workItemIds}
                   siblingBlocks={siblingBlocks}
                   ambientToolCalls={ambientToolCalls}

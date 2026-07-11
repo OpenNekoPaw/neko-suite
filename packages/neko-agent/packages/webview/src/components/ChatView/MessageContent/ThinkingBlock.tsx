@@ -9,12 +9,14 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 interface ThinkingBlockProps {
   content: string;
   isComplete?: boolean;
+  sessionKey: string;
   defaultExpanded?: boolean;
 }
 
 function ThinkingBlockComponent({
   content,
   isComplete = true,
+  sessionKey,
   defaultExpanded = false,
 }: ThinkingBlockProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
@@ -82,6 +84,7 @@ function ThinkingBlockComponent({
             content={content}
             isStreaming={!isComplete}
             className="text-[var(--vscode-descriptionForeground)]"
+            sessionKey={sessionKey}
           />
         </div>
       )}

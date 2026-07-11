@@ -184,6 +184,7 @@ describe('character role context isolation', () => {
       },
       items: [],
       completed: false,
+      synchronization: 'synchronized',
     };
     const cachedMessage = message('assistant-stream', 'assistant', 'partial');
     const harness = createContextHarness({
@@ -490,6 +491,7 @@ describe('character role context isolation', () => {
       },
       items: [],
       completed: false,
+      synchronization: 'synchronized',
     };
     const messageA = message('message-a', 'assistant', 'A 回复');
     const queuedA = queuedMessageItem('queued-a', 'conv-a');

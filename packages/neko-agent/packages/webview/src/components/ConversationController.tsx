@@ -858,6 +858,9 @@ export function ConversationController({
     isTablessConversationViewRef.current = true;
     AgentHostMessages.getConversations();
     AgentHostMessages.getActiveConversation();
+    // The Extension keeps same-process tab state across Webview reloads. Request it
+    // explicitly because Developer: Reload Webviews does not trigger a visibility change.
+    AgentHostMessages.getTabState();
     requestConfigSnapshot();
     AgentHostMessages.getAgentStates();
     AgentHostMessages.getSkills();

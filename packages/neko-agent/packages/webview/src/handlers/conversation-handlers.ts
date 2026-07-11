@@ -88,6 +88,8 @@ const handleHistoryCleared: MessageHandler<'historyCleared'> = (
   const conversationId = message.conversationId;
   if (!conversationId) return;
 
+  context.timelineRenderScheduler?.flushConversation(conversationId);
+  context.markdownSessionRegistry?.disposeConversation(conversationId);
   const projection = projectHistoryClearedConversation();
   if (context.isCurrentConversation(conversationId)) {
     context.setMessages(projection.messages);
@@ -126,6 +128,12 @@ const handleConversationLifecycleResult: MessageHandler<'conversationLifecycleRe
 
   const state = message.state;
   if (!state) return;
+  if (state === 'deleted') {
+    context.timelineRenderScheduler?.flushConversation(message.conversationId);
+    context.markdownSessionRegistry?.disposeConversation(message.conversationId);
+    context.conversationMessagesRef.current.delete(message.conversationId);
+    context.conversationStreamingRef.current.delete(message.conversationId);
+  }
   context.setConversations((previous) => {
     if (state === 'deleted') {
       return previous.filter((conversation) => conversation.id !== message.conversationId);
@@ -213,6 +221,11 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
       );
     }
     return;
+  }
+
+  if (context.activeConversationIdRef.current !== projection.activeConversationId) {
+    // A pending frame belongs to the previous visible conversation and must commit before the view swaps.
+    context.timelineRenderScheduler?.flushAll();
   }
 
   context.setMessages(projection.messages);

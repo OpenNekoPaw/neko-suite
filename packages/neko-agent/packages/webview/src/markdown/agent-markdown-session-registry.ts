@@ -1,0 +1,302 @@
+import {
+  MarkdownStreamingSession,
+  type MarkdownStreamingResult,
+  type MarkdownStreamingSnapshot,
+} from '@neko/markdown';
+import type {
+  AgentTurnTimelineItem,
+  AgentTurnTimelineMessage,
+  AgentTurnTimelineOperation,
+} from '@neko-agent/types';
+
+export interface AgentMarkdownSessionRegistryMetrics {
+  readonly activeSessions: number;
+  readonly createdSessions: number;
+  readonly disposedSessions: number;
+  readonly renderRevisions: number;
+  readonly notifications: number;
+  readonly activeSubscriptions: number;
+}
+
+export interface AgentMarkdownSessionPublication {
+  /** Notify external-store subscribers after the owning conversation commit is visible. */
+  publish(): void;
+}
+
+export interface AgentMarkdownSessionRegistry {
+  /** Commit parser/session state without notifying React subscribers. */
+  commitTimelineDeliveries(
+    deliveries: readonly AgentTurnTimelineMessage[],
+  ): AgentMarkdownSessionPublication;
+  applyTimelineDeliveries(deliveries: readonly AgentTurnTimelineMessage[]): void;
+  getSnapshot(sessionKey: string): MarkdownStreamingSnapshot | undefined;
+  subscribe(sessionKey: string, listener: () => void): () => void;
+  disposeConversation(conversationId: string): void;
+  disposeAll(): void;
+  metrics(): AgentMarkdownSessionRegistryMetrics;
+}
+
+interface RegistryEntry {
+  readonly conversationId: string;
+  readonly sourceGeneration: number;
+  readonly session: MarkdownStreamingSession;
+  itemRevision: number;
+  snapshot: MarkdownStreamingSnapshot;
+}
+
+type MarkdownTimelineItem = Extract<
+  AgentTurnTimelineItem,
+  { readonly kind: 'assistant_text' | 'thinking' }
+>;
+
+interface PendingSessionMutation {
+  readonly sessionKey: string;
+  readonly conversationId: string;
+  readonly sourceGeneration: number;
+  readonly itemRevision: number;
+  readonly mode: 'append' | 'replace' | 'snapshot';
+  readonly source: string;
+  readonly complete: boolean;
+}
+
+let defaultRegistry: AgentMarkdownSessionRegistry | undefined;
+
+export function getAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegistry {
+  defaultRegistry ??= createAgentMarkdownSessionRegistry();
+  return defaultRegistry;
+}
+
+export function createAgentMarkdownSessionRegistry(): AgentMarkdownSessionRegistry {
+  const entries = new Map<string, RegistryEntry>();
+  const listeners = new Map<string, Set<() => void>>();
+  let createdSessions = 0;
+  let disposedSessions = 0;
+  let renderRevisions = 0;
+  let notifications = 0;
+
+  const notify = (sessionKey: string): void => {
+    const subscribers = listeners.get(sessionKey);
+    if (!subscribers) return;
+    notifications += 1;
+    for (const listener of subscribers) listener();
+  };
+
+  const replaceEntry = (mutation: PendingSessionMutation): void => {
+    if (entries.delete(mutation.sessionKey)) disposedSessions += 1;
+    const session = new MarkdownStreamingSession();
+    const result = mutation.complete
+      ? session.finalize(mutation.source)
+      : session.append(mutation.source);
+    const snapshot = requireReadySnapshot(result, mutation.sessionKey);
+    entries.set(mutation.sessionKey, {
+      conversationId: mutation.conversationId,
+      sourceGeneration: mutation.sourceGeneration,
+      session,
+      itemRevision: mutation.itemRevision,
+      snapshot,
+    });
+    createdSessions += 1;
+    renderRevisions += 1;
+  };
+
+  const appendEntry = (mutation: PendingSessionMutation): void => {
+    const entry = entries.get(mutation.sessionKey);
+    if (!entry) {
+      replaceEntry(mutation);
+      return;
+    }
+    if (entry.sourceGeneration !== mutation.sourceGeneration) {
+      throw new Error(
+        `Markdown append generation mismatch for ${mutation.sessionKey}: expected ${entry.sourceGeneration}, received ${mutation.sourceGeneration}.`,
+      );
+    }
+    if (mutation.itemRevision <= entry.itemRevision) {
+      throw new Error(
+        `Markdown item revision must increase for ${mutation.sessionKey}: current ${entry.itemRevision}, received ${mutation.itemRevision}.`,
+      );
+    }
+    const result = mutation.complete
+      ? entry.session.finalize(`${entry.session.source}${mutation.source}`)
+      : entry.session.append(mutation.source);
+    entry.snapshot = requireReadySnapshot(result, mutation.sessionKey);
+    entry.itemRevision = mutation.itemRevision;
+    renderRevisions += 1;
+  };
+
+  const commitTimelineDeliveries = (
+    deliveries: readonly AgentTurnTimelineMessage[],
+  ): AgentMarkdownSessionPublication => {
+    const mutations = collectSessionMutations(deliveries);
+    const affectedSessionKeys: string[] = [];
+    for (const mutation of mutations.values()) {
+      if (mutation.mode === 'append') appendEntry(mutation);
+      else replaceEntry(mutation);
+      affectedSessionKeys.push(mutation.sessionKey);
+    }
+    let published = false;
+    return {
+      publish(): void {
+        if (published) {
+          throw new Error('Markdown Timeline commit publication may only be published once.');
+        }
+        published = true;
+        for (const sessionKey of affectedSessionKeys) notify(sessionKey);
+      },
+    };
+  };
+
+  return {
+    commitTimelineDeliveries,
+    applyTimelineDeliveries(deliveries): void {
+      commitTimelineDeliveries(deliveries).publish();
+    },
+    getSnapshot(sessionKey): MarkdownStreamingSnapshot | undefined {
+      return entries.get(sessionKey)?.snapshot;
+    },
+    subscribe(sessionKey, listener): () => void {
+      const subscribers = listeners.get(sessionKey) ?? new Set<() => void>();
+      subscribers.add(listener);
+      listeners.set(sessionKey, subscribers);
+      return () => {
+        subscribers.delete(listener);
+        if (subscribers.size === 0) listeners.delete(sessionKey);
+      };
+    },
+    disposeConversation(conversationId): void {
+      for (const [sessionKey, entry] of entries) {
+        if (entry.conversationId !== conversationId) continue;
+        entries.delete(sessionKey);
+        disposedSessions += 1;
+        notify(sessionKey);
+      }
+    },
+    disposeAll(): void {
+      disposedSessions += entries.size;
+      const affectedKeys = Array.from(entries.keys());
+      entries.clear();
+      for (const sessionKey of affectedKeys) notify(sessionKey);
+      listeners.clear();
+    },
+    metrics(): AgentMarkdownSessionRegistryMetrics {
+      return {
+        activeSessions: entries.size,
+        createdSessions,
+        disposedSessions,
+        renderRevisions,
+        notifications,
+        activeSubscriptions: Array.from(listeners.values()).reduce(
+          (count, subscribers) => count + subscribers.size,
+          0,
+        ),
+      };
+    },
+  };
+}
+
+export function createAgentMarkdownSessionKey(input: {
+  readonly conversationId: string | null;
+  readonly messageId: string;
+  readonly itemId: string;
+}): string {
+  return [input.conversationId ?? '@detached', input.messageId, input.itemId].join('\u0000');
+}
+
+function collectSessionMutations(
+  deliveries: readonly AgentTurnTimelineMessage[],
+): Map<string, PendingSessionMutation> {
+  const pending = new Map<string, PendingSessionMutation>();
+  for (const delivery of deliveries) {
+    for (const operation of delivery.operations) {
+      collectOperationMutation(delivery, operation, pending);
+    }
+  }
+  return pending;
+}
+
+function collectOperationMutation(
+  delivery: AgentTurnTimelineMessage,
+  operation: AgentTurnTimelineOperation,
+  pending: Map<string, PendingSessionMutation>,
+): void {
+  if (operation.operation === 'complete') {
+    if (operation.kind !== 'assistant_text' && operation.kind !== 'thinking') return;
+    const sessionKey = createAgentMarkdownSessionKey({
+      conversationId: delivery.conversationId,
+      messageId: delivery.messageId,
+      itemId: operation.itemId,
+    });
+    const current = pending.get(sessionKey);
+    if (current) {
+      pending.set(sessionKey, {
+        ...current,
+        itemRevision: operation.itemRevision,
+        complete: true,
+      });
+      return;
+    }
+    pending.set(sessionKey, {
+      sessionKey,
+      conversationId: delivery.conversationId,
+      sourceGeneration: operation.sourceGeneration,
+      itemRevision: operation.itemRevision,
+      mode: 'append',
+      source: '',
+      complete: true,
+    });
+    return;
+  }
+
+  if (!isMarkdownTimelineItem(operation.item)) return;
+  const item = operation.item;
+  const sessionKey = createAgentMarkdownSessionKey({
+    conversationId: delivery.conversationId,
+    messageId: delivery.messageId,
+    itemId: item.itemId,
+  });
+  const complete = item.status !== 'streaming';
+  if (operation.operation === 'append') {
+    const current = pending.get(sessionKey);
+    if (current?.mode === 'append' && current.sourceGeneration === item.payload.sourceGeneration) {
+      pending.set(sessionKey, {
+        ...current,
+        itemRevision: item.itemRevision,
+        source: `${current.source}${item.payload.content}`,
+        complete: current.complete || complete,
+      });
+      return;
+    }
+    pending.set(sessionKey, {
+      sessionKey,
+      conversationId: delivery.conversationId,
+      sourceGeneration: item.payload.sourceGeneration,
+      itemRevision: item.itemRevision,
+      mode: 'append',
+      source: item.payload.content,
+      complete,
+    });
+    return;
+  }
+
+  pending.set(sessionKey, {
+    sessionKey,
+    conversationId: delivery.conversationId,
+    sourceGeneration: item.payload.sourceGeneration,
+    itemRevision: item.itemRevision,
+    mode: operation.operation === 'snapshot' ? 'snapshot' : 'replace',
+    source: item.payload.content,
+    complete,
+  });
+}
+
+function isMarkdownTimelineItem(item: AgentTurnTimelineItem): item is MarkdownTimelineItem {
+  return item.kind === 'assistant_text' || item.kind === 'thinking';
+}
+
+function requireReadySnapshot(
+  result: MarkdownStreamingResult,
+  sessionKey: string,
+): MarkdownStreamingSnapshot {
+  if (result.status === 'ready') return result.snapshot;
+  const details = result.diagnostics.map((diagnostic) => diagnostic.code).join('; ');
+  throw new Error(`Normalized Markdown session failed for ${sessionKey}: ${details}`);
+}

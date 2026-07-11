@@ -19,6 +19,8 @@ import type { MessageHandlerContext, StreamingState } from './types';
  */
 const handleTabState: MessageHandler<'tabState'> = (message: TabStateMessage, context) => {
   if (message.tabState) {
+    // Commit visible Timeline source before replacing the active conversation view.
+    context.timelineRenderScheduler?.flushAll();
     const openTabs = message.tabState.openTabs ?? [];
     const { activeTabId } = message.tabState;
     const isEmptyTabState =

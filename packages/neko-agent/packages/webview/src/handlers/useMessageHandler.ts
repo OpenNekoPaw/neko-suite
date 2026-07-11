@@ -4,7 +4,7 @@
  * Provides message handler registry and context creation.
  */
 
-import { useMemo, useCallback, type MutableRefObject } from 'react';
+import { useMemo, useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import {
   createConfiguredRegistry,
   type MessageHandlerContext,
@@ -36,6 +36,10 @@ import type { BoundActiveSkillIndicator } from './types';
 import type { ActivationProgressTimeline } from '@/presenters/activation-progress-presenter';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { ExtensionToWebviewMessage } from './messages';
+import { AgentHostMessages, getAgentHostRuntimeAdapter } from '@/messages';
+import { readAgentTurnTimelineRecoveryRequests } from './timeline-recovery-state';
+import { createTimelineRenderCommitScheduler } from './timeline-render-commit-scheduler';
+import { getAgentMarkdownSessionRegistry } from '@/markdown/agent-markdown-session-registry';
 
 const logger = getLogger('MessageHandler');
 const FOREIGN_FEATURE_HOST_MESSAGE_TYPES = new Set([
@@ -142,6 +146,24 @@ export interface UseMessageHandlerReturn {
  * Custom hook for message handling
  */
 export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHandlerReturn {
+  const timelineRenderSchedulerRef = useRef<ReturnType<
+    typeof createTimelineRenderCommitScheduler
+  > | null>(null);
+  if (!timelineRenderSchedulerRef.current) {
+    timelineRenderSchedulerRef.current = createTimelineRenderCommitScheduler();
+  }
+  const timelineRenderScheduler = timelineRenderSchedulerRef.current;
+  const markdownSessionRegistry = getAgentMarkdownSessionRegistry();
+  useEffect(() => {
+    for (const request of readAgentTurnTimelineRecoveryRequests(getAgentHostRuntimeAdapter())) {
+      AgentHostMessages.requestAgentTurnTimelineSnapshot(request);
+    }
+    return () => {
+      timelineRenderScheduler.dispose();
+      markdownSessionRegistry.disposeAll();
+    };
+  }, []);
+
   const {
     messages,
     isThinking,
@@ -290,6 +312,8 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       forceUpdate: forceContextUpdate,
       isCurrentConversation,
       updateNonCurrentConversation,
+      timelineRenderScheduler,
+      markdownSessionRegistry,
       pendingForegroundConversationActivationRef,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,
@@ -347,6 +371,8 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
       forceContextUpdate,
       isCurrentConversation,
       updateNonCurrentConversation,
+      timelineRenderScheduler,
+      markdownSessionRegistry,
       pendingForegroundConversationActivationRef,
       completeForegroundConversationActivation,
       requestQueuedMessageEdit,

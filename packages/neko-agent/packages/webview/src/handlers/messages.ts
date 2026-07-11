@@ -12,6 +12,7 @@ export type {
   AgentCapabilityLifecycleResultMessage,
   AgentCapabilityActivationProgressMessage,
   AgentStateSnapshotMessage,
+  AgentTurnTimelineDiagnostic,
   AgentTurnTimelineMessage,
   AmbientCanvasUpdateMessage,
   CompressionErrorMessage,

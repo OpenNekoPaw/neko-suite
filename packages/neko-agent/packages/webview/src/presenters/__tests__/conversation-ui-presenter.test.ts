@@ -409,6 +409,7 @@ describe('conversation UI presenter', () => {
       },
       items: [],
       completed: false,
+      synchronization: 'synchronized',
     };
     const activeSkillA = { conversationId: 'conv-a', skillName: 'skill-a' };
     const activeSkillB = { conversationId: 'conv-b', skillName: 'skill-b' };

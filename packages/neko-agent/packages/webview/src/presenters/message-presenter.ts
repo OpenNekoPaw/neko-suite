@@ -1,5 +1,4 @@
 import {
-  extractCompositeContentBlocks,
   type AgentArtifactTransferPayload,
   type ContentBlock,
   type Message,
@@ -768,23 +767,6 @@ function mergeCompletionContentBlocks(
 }
 
 function completeStreamingContentBlock(block: ContentBlock): ContentBlock[] {
-  if (block.type === 'text') {
-    const extracted = extractCompositeContentBlocks(block.content ?? '');
-    const blocks: ContentBlock[] = [];
-    if (extracted.text.length > 0) {
-      blocks.push({ ...block, content: extracted.text, isStreaming: false });
-    }
-    blocks.push(
-      ...extracted.composites.map((composite, index) => ({
-        id: `${block.id}-composite-${index + 1}`,
-        type: 'composite' as const,
-        timestamp: block.timestamp,
-        composite,
-      })),
-    );
-    return blocks;
-  }
-
   return [
     {
       ...block,

@@ -43,6 +43,7 @@ import {
   type MessageIdentityMap,
 } from '@/components/ChatView/message-identity';
 import { ReferenceToken } from '@/components/ChatView/InputArea/ReferenceToken';
+import { createAgentMarkdownSessionKey } from '@/markdown/agent-markdown-session-registry';
 
 type MessageContextReference = NonNullable<Message['contextReferences']>[number];
 
@@ -115,7 +116,11 @@ function MessageContextReferenceDisplay({ reference }: { reference: MessageConte
       meta={token.meta}
       thumbnailSrc={token.thumbnailSrc}
       onClick={() =>
-        AgentHostMessages.revealContextSource(reference.type, reference.id, reference.navigationData)
+        AgentHostMessages.revealContextSource(
+          reference.type,
+          reference.id,
+          reference.navigationData,
+        )
       }
     />
   );
@@ -127,6 +132,7 @@ function MessageContextReferenceDisplay({ reference }: { reference: MessageConte
 function ContentBlockRenderer({
   projection,
   conversationId,
+  messageId,
   workItemIds,
   pluginsAvailable,
   contextChips,
@@ -141,6 +147,7 @@ function ContentBlockRenderer({
 }: {
   projection: ContentBlockUiProjection;
   conversationId: string | null;
+  messageId: string;
   workItemIds?: string[];
   pluginsAvailable?: PluginsAvailable;
   contextChips?: ReturnType<typeof useMessageActions>['contextChips'];
@@ -157,7 +164,15 @@ function ContentBlockRenderer({
     case 'thinking':
       return (
         <div className="mb-2">
-          <ThinkingBlock content={projection.thinking} isComplete={projection.isThinkingComplete} />
+          <ThinkingBlock
+            content={projection.thinking}
+            isComplete={projection.isThinkingComplete}
+            sessionKey={createAgentMarkdownSessionKey({
+              conversationId,
+              messageId,
+              itemId: projection.id,
+            })}
+          />
         </div>
       );
 
@@ -188,6 +203,11 @@ function ContentBlockRenderer({
             content={projection.content}
             isStreaming={projection.renderStreaming}
             markdownResources={markdownResources}
+            sessionKey={createAgentMarkdownSessionKey({
+              conversationId,
+              messageId,
+              itemId: projection.id,
+            })}
           />
           {canvasMarkdownHandoff && pluginsAvailable && (
             <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-[var(--agent-divider)] pt-1">
@@ -345,6 +365,7 @@ function AssistantContentBlocks({
               key={displayItem.projection.id}
               projection={displayItem.projection}
               conversationId={conversationId}
+              messageId={message.id}
               workItemIds={message.workItemIds}
               pluginsAvailable={pluginsAvailable}
               contextChips={contextChips}
@@ -362,6 +383,7 @@ function AssistantContentBlocks({
               key={displayItem.processGroup.id}
               processGroup={displayItem.processGroup}
               conversationId={conversationId}
+              messageId={message.id}
               workItemIds={message.workItemIds}
               siblingBlocks={contentBlocks}
               isFirst={index === 0}

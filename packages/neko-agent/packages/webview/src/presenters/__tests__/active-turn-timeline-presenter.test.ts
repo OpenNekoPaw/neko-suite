@@ -11,6 +11,7 @@ import type {
 } from '@neko-agent/types';
 import { createResourceFingerprint, createResourceRef } from '@neko/shared';
 import {
+  applyAgentTurnTimelineDiagnostic,
   applyAgentTurnTimelineMessage,
   completeActiveTurnTimeline,
   projectMessagesWithActiveTurnTimeline,
@@ -40,6 +41,77 @@ describe('active turn timeline presenter', () => {
     expect(appended.state?.items[0]?.payload).toMatchObject({ content: 'aabc' });
   });
 
+  it('applies coalesced append revisions without requesting a snapshot', () => {
+    const first = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([textItem('text-1', 1, 'a')]),
+    });
+    const second = applyAgentTurnTimelineMessage({
+      state: first.state,
+      message: timelineMessage(
+        [{ ...textItem('text-1', 1, 'b'.repeat(1_999)), itemRevision: 2_000 }],
+        { deliveryRevision: 2 },
+      ),
+    });
+    const third = applyAgentTurnTimelineMessage({
+      state: second.state,
+      message: timelineMessage(
+        [{ ...textItem('text-1', 1, 'c'.repeat(2_000)), itemRevision: 4_000 }],
+        { deliveryRevision: 3 },
+      ),
+    });
+    const completed = applyAgentTurnTimelineMessage({
+      state: third.state,
+      message: {
+        ...timelineMessage([], { deliveryRevision: 4 }),
+        operations: [
+          {
+            operation: 'complete',
+            itemId: 'text-1',
+            itemRevision: 4_001,
+            kind: 'assistant_text',
+            sourceGeneration: 1,
+            status: 'complete',
+            updatedAt: 4_001,
+          },
+        ],
+      },
+    });
+
+    expect(second.diagnostics).toEqual([]);
+    expect(second.snapshotRequest).toBeUndefined();
+    expect(third.diagnostics).toEqual([]);
+    expect(third.snapshotRequest).toBeUndefined();
+    expect(third.state?.items[0]?.payload).toMatchObject({
+      content: `a${'b'.repeat(1_999)}${'c'.repeat(2_000)}`,
+    });
+    expect(completed.diagnostics).toEqual([]);
+    expect(completed.snapshotRequest).toBeUndefined();
+    expect(completed.state?.items[0]).toMatchObject({
+      itemRevision: 4_001,
+      status: 'complete',
+    });
+  });
+
+  it('rejects stale item revisions without suspending delivery or requesting a snapshot', () => {
+    const active = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([{ ...textItem('text-1', 1, 'a'), itemRevision: 2_000 }]),
+    }).state;
+    const stale = applyAgentTurnTimelineMessage({
+      state: active,
+      message: timelineMessage([{ ...textItem('text-1', 1, 'stale'), itemRevision: 1_999 }], {
+        deliveryRevision: 2,
+      }),
+    });
+
+    expect(stale.state).toBe(active);
+    expect(stale.snapshotRequest).toBeUndefined();
+    expect(stale.diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'stale-item-revision' })]),
+    );
+  });
+
   it('does not apply duplicate or gapped delivery revisions', () => {
     const active = applyAgentTurnTimelineMessage({
       state: null,
@@ -62,10 +134,87 @@ describe('active turn timeline presenter', () => {
     expect(duplicate.diagnostics).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: 'duplicate-delivery-revision' })]),
     );
-    expect(gap.state).toBe(active);
+    expect(gap.state).toEqual({ ...active, synchronization: 'suspended' });
     expect(gap.diagnostics).toEqual(
       expect.arrayContaining([expect.objectContaining({ code: 'delivery-revision-gap' })]),
     );
+    expect(gap.snapshotRequest).toEqual({
+      type: 'requestAgentTurnTimelineSnapshot',
+      schemaVersion: 2,
+      connectionEpoch: 'epoch-1',
+      conversationId: 'conv-1',
+      turnId: 'turn-1',
+      messageId: 'msg-1',
+      reason: 'revision-gap',
+      lastAppliedDeliveryRevision: 1,
+    });
+  });
+
+  it('suspends dependent deltas until one authoritative snapshot resumes the timeline', () => {
+    const active = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([textItem('text-1', 1, 'a')]),
+    }).state;
+    const gap = applyAgentTurnTimelineMessage({
+      state: active,
+      message: timelineMessage([{ ...textItem('text-1', 1, 'lost'), itemRevision: 3 }], {
+        deliveryRevision: 3,
+      }),
+    });
+    const blocked = applyAgentTurnTimelineMessage({
+      state: gap.state,
+      message: timelineMessage([{ ...textItem('text-1', 1, 'blocked'), itemRevision: 4 }], {
+        deliveryRevision: 4,
+      }),
+    });
+    const snapshot = applyAgentTurnTimelineMessage({
+      state: blocked.state,
+      message: timelineMessage([{ ...textItem('text-1', 1, 'authoritative'), itemRevision: 4 }], {
+        deliveryRevision: 4,
+        operation: 'snapshot',
+        batchKind: 'snapshot',
+      }),
+    });
+    const resumed = applyAgentTurnTimelineMessage({
+      state: snapshot.state,
+      message: timelineMessage([{ ...textItem('text-1', 1, '!'), itemRevision: 5 }], {
+        deliveryRevision: 5,
+      }),
+    });
+
+    expect(blocked.state).toBe(gap.state);
+    expect(blocked.snapshotRequest).toBeUndefined();
+    expect(blocked.state?.items[0]?.payload).toMatchObject({ content: 'a' });
+    expect(snapshot.diagnostics).toEqual([]);
+    expect(snapshot.state?.synchronization).toBe('synchronized');
+    expect(resumed.state?.items[0]?.payload).toMatchObject({ content: 'authoritative!' });
+  });
+
+  it('marks a suspended timeline unavailable when snapshot recovery fails', () => {
+    const active = applyAgentTurnTimelineMessage({
+      state: null,
+      message: timelineMessage([textItem('text-1', 1, 'a')]),
+    }).state;
+    const gap = applyAgentTurnTimelineMessage({
+      state: active,
+      message: timelineMessage([{ ...textItem('text-1', 1, 'lost'), itemRevision: 3 }], {
+        deliveryRevision: 3,
+      }),
+    });
+    const result = applyAgentTurnTimelineDiagnostic(gap.state, {
+      type: 'agentTurnTimelineDiagnostic',
+      schemaVersion: 2,
+      connectionEpoch: 'epoch-1',
+      conversationId: 'conv-1',
+      turnId: 'turn-1',
+      messageId: 'msg-1',
+      code: 'turn-snapshot-unavailable',
+      message: 'expired',
+      deliveryRevision: 1,
+    });
+
+    expect(result.state?.synchronization).toBe('unavailable');
+    expect(result.state?.items[0]?.payload).toMatchObject({ content: 'a' });
   });
 
   it('recovers from an authoritative snapshot and continues at the next revision', () => {
@@ -872,7 +1021,7 @@ describe('active turn timeline presenter', () => {
     ]);
   });
 
-  it('keeps incomplete structured payloads as text until timeline completion extracts composites', () => {
+  it('keeps structured Markdown on the same Timeline-owned text block through completion', () => {
     const active = applyAgentTurnTimelineMessage({
       state: null,
       message: timelineMessage([
@@ -907,21 +1056,14 @@ describe('active turn timeline presenter', () => {
       },
     ]);
     expect(completedMessages[0]?.contentBlocks).toMatchObject([
-      { id: 'text-1', type: 'text', isStreaming: false, content: 'Draft:' },
       {
-        id: 'text-1-composite-1',
-        type: 'composite',
-        composite: {
-          template: 'gallery',
-          sections: [
-            {
-              heading: 'Shot',
-              mediaRefs: [{ toolCallId: 'tool-1' }],
-            },
-          ],
-        },
+        id: 'text-1',
+        type: 'text',
+        isStreaming: false,
+        content: expect.stringContaining('```neko-composite'),
       },
     ]);
+    expect(completedMessages[0]?.contentBlocks).toHaveLength(1);
   });
 });
 

@@ -51,6 +51,7 @@ import {
   type CanvasMarkdownCapabilityResult,
 } from '@neko/shared';
 import type { MessageSpeakerIdentity } from '@/components/ChatView/message-identity';
+import { createAgentMarkdownSessionKey } from '@/markdown/agent-markdown-session-registry';
 
 interface ContentBlockItemProps {
   /** The content block to render */
@@ -65,6 +66,8 @@ interface ContentBlockItemProps {
   isStreaming: boolean;
   /** Current conversation for scoped UI actions */
   conversationId: string | null;
+  /** Stable owner message identity for Markdown session reuse. */
+  messageId?: string;
   /** Work items linked to the parent message */
   workItemIds?: string[];
   /** Sibling blocks from the owner message, used for composite media resolution */
@@ -98,6 +101,7 @@ export const ContentBlockItem = memo(function ContentBlockItem({
   isFirst,
   isStreaming,
   conversationId,
+  messageId,
   workItemIds,
   siblingBlocks,
   ambientToolCalls,
@@ -159,7 +163,14 @@ export const ContentBlockItem = memo(function ContentBlockItem({
           </div>
 
           {/* Block content */}
-          {renderBlockContent(projection, conversationId, actions, t, workItemIds)}
+          {renderBlockContent(
+            projection,
+            conversationId,
+            messageId ?? projection.id,
+            actions,
+            t,
+            workItemIds,
+          )}
         </div>
       </div>
     </div>
@@ -195,6 +206,7 @@ function ContentBlockHeaderIcon({
 function renderBlockContent(
   projection: ContentBlockUiProjection,
   conversationId: string | null,
+  messageId: string,
   callbacks: Pick<
     import('@/components/ChatView/MessageActionsContext').MessageActionsContextValue,
     | 'onAcceptDiff'
@@ -214,7 +226,15 @@ function renderBlockContent(
   switch (projection.renderKind) {
     case 'thinking':
       return (
-        <ThinkingBlock content={projection.thinking} isComplete={projection.isThinkingComplete} />
+        <ThinkingBlock
+          content={projection.thinking}
+          isComplete={projection.isThinkingComplete}
+          sessionKey={createAgentMarkdownSessionKey({
+            conversationId,
+            messageId,
+            itemId: projection.id,
+          })}
+        />
       );
 
     case 'markdown': {
@@ -247,6 +267,13 @@ function renderBlockContent(
             content={projection.content}
             isStreaming={projection.renderStreaming}
             markdownResources={markdownResources}
+            contentBlockId={projection.id}
+            siblingBlocks={projection.siblingBlocks}
+            sessionKey={createAgentMarkdownSessionKey({
+              conversationId,
+              messageId,
+              itemId: projection.id,
+            })}
           />
           {canvasMarkdownHandoff && callbacks.pluginsAvailable && (
             <div className="mt-1.5 flex flex-wrap gap-1.5 border-t border-[var(--agent-divider)] pt-1">
@@ -538,9 +565,7 @@ function CanvasLifecycleActionButton({
     >
       <span className="truncate">{formatCanvasLifecycleActionLabel(t, action)}</span>
       {action.requiresApproval && (
-        <span className="text-[10px] opacity-70">
-          {t('chat.canvasLifecycle.approvalRequired')}
-        </span>
+        <span className="text-[10px] opacity-70">{t('chat.canvasLifecycle.approvalRequired')}</span>
       )}
     </button>
   );

@@ -182,6 +182,7 @@ export function MessageList({
                     isLast={item.isLast}
                     isStreaming={item.isStreaming}
                     conversationId={activeConversationId}
+                    messageId={item.messageId}
                     workItemIds={item.workItemIds}
                     siblingBlocks={item.siblingBlocks}
                     ambientToolCalls={item.ambientToolCalls}
@@ -193,6 +194,7 @@ export function MessageList({
                     isFirst={item.isFirst}
                     isStreaming={item.isStreaming}
                     conversationId={activeConversationId}
+                    messageId={item.messageId}
                     workItemIds={item.workItemIds}
                     siblingBlocks={item.siblingBlocks}
                     ambientToolCalls={item.ambientToolCalls}

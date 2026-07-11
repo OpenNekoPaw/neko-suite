@@ -4,21 +4,31 @@
  * 支持 Mermaid 图表渲染
  */
 
-import { cloneElement, Fragment, isValidElement, memo, useMemo, type ReactNode } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import type { Components } from 'react-markdown';
 import {
+  Fragment,
+  isValidElement,
+  memo,
+  useMemo,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
+import {
+  MarkdownStreamingSession,
   projectNekoMarkdownGenerationPromptParts,
+  type MarkdownDefinitionNode,
+  type MarkdownNode,
+  type MarkdownStreamingSnapshot,
+  type MarkdownTableCellNode,
+  type MarkdownTableNode,
   type NekoMarkdownGenerationPromptPartKind,
 } from '@neko/markdown';
 import {
   isCompositeContentFenceLanguage,
   parseCompositeContentJson,
   parseCompositeContentJsonCandidates,
+  type ContentBlock,
 } from '@neko-agent/types';
 import {
-  classifyCreativeTableHeaders,
   isCanvasStoryboardReferenceImageProcessingPrompt,
   resolveCreativeTableField,
   STORYBOARD_CREATIVE_TABLE_PROFILE,
@@ -36,6 +46,7 @@ import {
 import { getLocale, t } from '@/i18n';
 import { CodeBlock } from './CodeBlock';
 import { MermaidBlock } from './MermaidBlock';
+import { getAgentMarkdownSessionRegistry } from '@/markdown/agent-markdown-session-registry';
 
 type MarkdownDisplayLocale = 'en' | 'zh-cn';
 
@@ -44,201 +55,522 @@ interface MarkdownRendererProps {
   isStreaming?: boolean;
   className?: string;
   markdownResources?: MarkdownResourceRenderingProjection;
+  sessionKey: string;
+  contentBlockId?: string;
+  siblingBlocks?: readonly ContentBlock[];
 }
 
-function createMarkdownComponents(
-  isStreaming?: boolean,
-  markdownResources?: MarkdownResourceRenderingProjection,
-  locale: MarkdownDisplayLocale = 'en',
-): Components {
-  return {
-    // Code blocks
-    code({ node, className, children, ...props }) {
-      const match = /language-([^\s]+)/.exec(className || '');
-      const isInline = !match && !className;
-      const code = String(children).replace(/\n$/, '');
-      const language = match?.[1]?.toLowerCase();
+interface NormalizedMarkdownRenderContext {
+  readonly isStreaming: boolean;
+  readonly markdownResources?: MarkdownResourceRenderingProjection;
+  readonly locale: MarkdownDisplayLocale;
+  readonly definitions: ReadonlyMap<string, MarkdownDefinitionNode>;
+  readonly contentBlockId?: string;
+  readonly siblingBlocks?: readonly ContentBlock[];
+}
 
-      if (isInline) {
-        return (
-          <code
-            className="px-1.5 py-0.5 rounded bg-[var(--vscode-textCodeBlock-background)] text-[var(--vscode-textPreformat-foreground)] text-[12px] font-mono break-words"
-            {...props}
-          >
-            {children}
-          </code>
-        );
+function renderNormalizedMarkdownDocument(
+  snapshot: MarkdownStreamingSnapshot,
+  context: Omit<NormalizedMarkdownRenderContext, 'definitions'>,
+): ReactNode {
+  const definitions = collectMarkdownDefinitions(snapshot.document.root);
+  const renderContext: NormalizedMarkdownRenderContext = { ...context, definitions };
+  return projectNormalizedMarkdownDisplayNodes(snapshot.document.root.children).map((node) =>
+    renderNormalizedMarkdownNode(node, renderContext),
+  );
+}
+
+const MARKDOWN_RESOURCE_INDEX_HEADING_RE =
+  /^\s*(?:资源索引|图片索引|资源图片索引|resource\s+index|image\s+index|resource\s+image\s+index)\s*$/i;
+
+function projectNormalizedMarkdownDisplayNodes(
+  nodes: readonly MarkdownNode[],
+): readonly MarkdownNode[] {
+  const visible: MarkdownNode[] = [];
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (!node) continue;
+    if (
+      node.type === 'heading' &&
+      MARKDOWN_RESOURCE_INDEX_HEADING_RE.test(readNormalizedMarkdownPlainText(node))
+    ) {
+      const next = nodes[index + 1];
+      if (next?.type === 'table' && isResourceMetadataInventoryTable(next)) {
+        index += 1;
+        continue;
       }
+    }
+    if (node.type === 'table' && shouldHideNormalizedMarkdownTable(node)) continue;
+    visible.push(node);
+  }
+  return visible;
+}
 
-      if (language === 'mermaid') {
-        return <MermaidBlock code={code} />;
-      }
+function shouldHideNormalizedMarkdownTable(node: MarkdownTableNode): boolean {
+  if (isResourceMetadataInventoryTable(node)) return true;
+  const fields = node.header.cells.map((cell) =>
+    resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, readMarkdownTableCellText(cell)),
+  );
+  return node.rows.length === 0 && shouldRenderCanvasSceneStoryboardFields(fields);
+}
 
-      const structuredContent = projectStructuredCodeBlock(code, language, Boolean(isStreaming));
-      if (structuredContent) {
-        return structuredContent;
-      }
+function isResourceMetadataInventoryTable(node: MarkdownTableNode): boolean {
+  const headers = node.header.cells.map((cell) =>
+    normalizeMarkdownTableHeader(readMarkdownTableCellText(cell)),
+  );
+  if (hasStoryboardCreativeDisplayAnchors(headers)) return false;
+  const hasPage = headers.some((header) =>
+    ['page', 'pageno', 'pagenumber', 'sourcepage', '页', '页码', '页面', '来源页'].includes(header),
+  );
+  const hasAsset = headers.some((header) =>
+    [
+      'asset',
+      'assetid',
+      'resource',
+      'resourceid',
+      'image',
+      'imageid',
+      'source',
+      'token',
+      '感知卡',
+      '图片卡片',
+      '资源',
+      '素材',
+      '来源',
+    ].includes(header),
+  );
+  const hasSize = headers.some((header) =>
+    ['size', 'dimensions', 'resolution', '尺寸', '分辨率'].includes(header),
+  );
+  const hasType = headers.some((header) => ['type', 'mimetype', 'mime', '类型'].includes(header));
+  return (hasPage && hasAsset && hasSize) || (hasAsset && hasSize && hasType);
+}
 
-      return <CodeBlock code={code} language={language} />;
-    },
-    pre({ children }) {
-      return <>{children}</>;
-    },
+function hasStoryboardCreativeDisplayAnchors(headers: readonly string[]): boolean {
+  return (
+    headers.some((header) => header === 'scene' || header === '场景') &&
+    headers.some((header) => header === 'shot' || header === '镜头')
+  );
+}
 
-    // Paragraphs
-    p({ children }) {
+function normalizeMarkdownTableHeader(header: string): string {
+  return header
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_\-/#:：]+/g, '');
+}
+
+function renderNormalizedMarkdownNode(
+  node: MarkdownNode,
+  context: NormalizedMarkdownRenderContext,
+): ReactNode {
+  const children =
+    node.type !== 'table' &&
+    node.type !== 'tableRow' &&
+    node.type !== 'tableCell' &&
+    'children' in node
+      ? node.children.map((child) => renderNormalizedMarkdownNode(child, context))
+      : undefined;
+  switch (node.type) {
+    case 'root':
+      return <Fragment key={node.id}>{children}</Fragment>;
+    case 'paragraph':
       return (
-        <p className="mb-2 last:mb-0">
-          {renderMarkdownInlineExtensions(children, markdownResources)}
+        <p key={node.id} className="mb-2 last:mb-0">
+          {children}
         </p>
       );
-    },
-
-    // Headers
-    h1({ children }) {
+    case 'heading': {
+      const className = headingClassName(node.depth);
+      if (node.depth === 1)
+        return (
+          <h1 key={node.id} className={className}>
+            {children}
+          </h1>
+        );
+      if (node.depth === 2)
+        return (
+          <h2 key={node.id} className={className}>
+            {children}
+          </h2>
+        );
+      if (node.depth === 3)
+        return (
+          <h3 key={node.id} className={className}>
+            {children}
+          </h3>
+        );
+      if (node.depth === 4)
+        return (
+          <h4 key={node.id} className={className}>
+            {children}
+          </h4>
+        );
+      if (node.depth === 5)
+        return (
+          <h5 key={node.id} className={className}>
+            {children}
+          </h5>
+        );
       return (
-        <h1 className="text-lg font-bold mb-2 mt-4 first:mt-0 text-[var(--vscode-foreground)]">
+        <h6 key={node.id} className={className}>
           {children}
-        </h1>
+        </h6>
       );
-    },
-    h2({ children }) {
+    }
+    case 'blockquote':
       return (
-        <h2 className="text-base font-bold mb-2 mt-3 first:mt-0 text-[var(--vscode-foreground)]">
-          {children}
-        </h2>
-      );
-    },
-    h3({ children }) {
-      return (
-        <h3 className="text-sm font-bold mb-1.5 mt-2 first:mt-0 text-[var(--vscode-foreground)]">
-          {children}
-        </h3>
-      );
-    },
-    h4({ children }) {
-      return (
-        <h4 className="text-sm font-semibold mb-1 mt-2 first:mt-0 text-[var(--vscode-foreground)]">
-          {children}
-        </h4>
-      );
-    },
-
-    // Lists
-    ul({ children }) {
-      return <ul className="list-disc list-inside mb-2 space-y-0.5">{children}</ul>;
-    },
-    ol({ children }) {
-      return <ol className="list-decimal list-inside mb-2 space-y-0.5">{children}</ol>;
-    },
-    li({ children }) {
-      return <li className="text-[var(--vscode-foreground)]">{children}</li>;
-    },
-
-    // Links
-    a({ href, children }) {
-      return (
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[var(--vscode-textLink-foreground)] hover:underline"
+        <blockquote
+          key={node.id}
+          className="border-l-2 border-[var(--vscode-textBlockQuote-border)] pl-3 my-2 text-[var(--vscode-textBlockQuote-foreground)]"
         >
-          {children}
-        </a>
-      );
-    },
-
-    // Blockquotes
-    blockquote({ children }) {
-      return (
-        <blockquote className="border-l-2 border-[var(--vscode-textBlockQuote-border)] pl-3 my-2 text-[var(--vscode-textBlockQuote-foreground)]">
           {children}
         </blockquote>
       );
-    },
-
-    // Tables
-    table({ node, children }) {
-      const storyboardProjection = projectStoryboardCreativeTableNode(
-        node,
-        markdownResources,
-        locale,
-      );
-      if (storyboardProjection) {
-        return storyboardProjection;
-      }
-      return (
-        <div className="overflow-x-auto my-2 w-full max-w-full">
-          <table className="w-full border-collapse border border-[var(--vscode-panel-border)]">
-            {children}
-          </table>
-        </div>
-      );
-    },
-    thead({ children }) {
-      return <thead className="bg-[var(--vscode-editorWidget-background)]">{children}</thead>;
-    },
-    tbody({ children }) {
-      return <tbody>{children}</tbody>;
-    },
-    tr({ children }) {
-      return <tr className="border-b border-[var(--vscode-panel-border)]">{children}</tr>;
-    },
-    th({ children }) {
-      return (
-        <th className="px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--vscode-foreground)] border border-[var(--vscode-panel-border)]">
+    case 'list': {
+      const className = `${node.kind === 'ordered' ? 'list-decimal' : 'list-disc'} list-inside mb-2 space-y-0.5`;
+      return node.kind === 'ordered' ? (
+        <ol key={node.id} start={node.start} className={className}>
           {children}
-        </th>
+        </ol>
+      ) : (
+        <ul key={node.id} className={className}>
+          {children}
+        </ul>
       );
-    },
-    td({ children }) {
-      const tokenProjection = projectMarkdownResourceTokenCell(children, markdownResources);
+    }
+    case 'listItem':
       return (
-        <td className="px-3 py-1.5 text-[12px] text-[var(--vscode-foreground)] border border-[var(--vscode-panel-border)]">
-          {tokenProjection ?? renderMarkdownInlineExtensions(children, markdownResources)}
-        </td>
+        <li key={node.id} className="text-[var(--vscode-foreground)]">
+          {node.checked !== undefined && (
+            <input type="checkbox" checked={node.checked} readOnly className="mr-1 align-middle" />
+          )}
+          {children}
+        </li>
       );
-    },
-
-    // Horizontal rule
-    hr() {
-      return <hr className="my-3 border-t border-[var(--vscode-panel-border)]" />;
-    },
-
-    // Strong and emphasis
-    strong({ children }) {
-      return <strong className="font-semibold">{children}</strong>;
-    },
-    em({ children }) {
-      return <em className="italic">{children}</em>;
-    },
-
-    // Strikethrough
-    del({ children }) {
-      return (
-        <del className="line-through text-[var(--vscode-descriptionForeground)]">{children}</del>
+    case 'codeBlock': {
+      const language = node.language.normalized ?? node.language.raw;
+      if (language === 'mermaid') return <MermaidBlock key={node.id} code={node.value} />;
+      const structured = projectStructuredCodeBlock(node, context);
+      return structured ? (
+        <Fragment key={node.id}>{structured}</Fragment>
+      ) : (
+        <CodeBlock key={node.id} code={node.value} language={language} />
       );
-    },
-
-    // Images
-    img({ src }) {
-      const imageProjection = projectMarkdownImageResource(src, markdownResources);
-      if (imageProjection) {
-        return imageProjection;
-      }
+    }
+    case 'thematicBreak':
+      return <hr key={node.id} className="my-3 border-t border-[var(--vscode-panel-border)]" />;
+    case 'html':
       return (
-        <span
-          className="my-2 inline-flex rounded border border-[var(--vscode-inputValidation-warningBorder)] bg-[var(--vscode-inputValidation-warningBackground)] px-2 py-1 text-[11px] text-[var(--vscode-inputValidation-warningForeground)]"
-          data-markdown-image-status="unprojected"
+        <code
+          key={node.id}
+          className="whitespace-pre-wrap text-[11px] text-[var(--vscode-descriptionForeground)]"
+          data-markdown-html="inert"
         >
-          {src
-            ? t('chat.markdown.image.unprojected', { src })
-            : t('chat.markdown.image.missingSource')}
+          {node.value}
+        </code>
+      );
+    case 'definition':
+      return null;
+    case 'text':
+      return node.value;
+    case 'softBreak':
+      return '\n';
+    case 'hardBreak':
+      return <br key={node.id} />;
+    case 'emphasis':
+      return (
+        <em key={node.id} className="italic">
+          {children}
+        </em>
+      );
+    case 'strong':
+      return (
+        <strong key={node.id} className="font-semibold">
+          {children}
+        </strong>
+      );
+    case 'delete':
+      return (
+        <del key={node.id} className="line-through text-[var(--vscode-descriptionForeground)]">
+          {children}
+        </del>
+      );
+    case 'inlineCode':
+      return (
+        <code
+          key={node.id}
+          className="px-1.5 py-0.5 rounded bg-[var(--vscode-textCodeBlock-background)] text-[var(--vscode-textPreformat-foreground)] text-[12px] font-mono break-words"
+        >
+          {node.value}
+        </code>
+      );
+    case 'link':
+      return renderNormalizedMarkdownLink(node.id, node.destination, node.title, children);
+    case 'linkReference': {
+      const definition = context.definitions.get(node.identifier.toLowerCase());
+      return definition ? (
+        renderNormalizedMarkdownLink(node.id, definition.destination, definition.title, children)
+      ) : (
+        <span key={node.id} data-markdown-link-status="unresolved">
+          {children}
         </span>
       );
-    },
+    }
+    case 'image':
+      return (
+        <Fragment key={node.id}>
+          {renderNormalizedMarkdownImage(node.destination, node.altText, context.markdownResources)}
+        </Fragment>
+      );
+    case 'imageReference': {
+      const definition = context.definitions.get(node.identifier.toLowerCase());
+      return (
+        <Fragment key={node.id}>
+          {definition ? (
+            renderNormalizedMarkdownImage(
+              definition.destination,
+              node.altText,
+              context.markdownResources,
+            )
+          ) : (
+            <span data-markdown-image-status="unresolved">{node.altText}</span>
+          )}
+        </Fragment>
+      );
+    }
+    case 'table':
+      return renderNormalizedMarkdownTable(node, context);
+    case 'tableRow':
+    case 'tableCell':
+      throw new Error(`Normalized Markdown ${node.type} must be rendered through its table owner.`);
+    case 'nekoMention':
+      return (
+        <Fragment key={node.id}>
+          {projectMarkdownMentionText(
+            node.raw,
+            context.markdownResources ?? emptyMarkdownResources(),
+          )}
+        </Fragment>
+      );
+    case 'nekoResourceReference':
+      return (
+        <Fragment key={node.id}>
+          {projectMarkdownInlineResourceReference(
+            node.raw,
+            node.target,
+            node.embed,
+            context.markdownResources ?? emptyMarkdownResources(),
+          )}
+        </Fragment>
+      );
+  }
+}
+
+function renderNormalizedMarkdownTable(
+  node: MarkdownTableNode,
+  context: NormalizedMarkdownRenderContext,
+): ReactNode {
+  const storyboard = projectStoryboardCreativeTableNode(
+    node,
+    context.markdownResources,
+    context.locale,
+  );
+  if (storyboard) return <Fragment key={node.id}>{storyboard}</Fragment>;
+  return (
+    <div key={node.id} className="my-2 min-w-0 max-w-full overflow-x-auto">
+      <table className="w-full border-collapse text-left text-[12px]">
+        <thead>
+          <tr>
+            {node.header.cells.map((cell) =>
+              renderNormalizedMarkdownTableCell(cell, true, node, context),
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {node.rows.map((row) => (
+            <tr key={row.id}>
+              {row.cells.map((cell) =>
+                renderNormalizedMarkdownTableCell(cell, false, node, context),
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function renderNormalizedMarkdownTableCell(
+  cell: MarkdownTableCellNode,
+  header: boolean,
+  table: MarkdownTableNode,
+  context: NormalizedMarkdownRenderContext,
+): ReactNode {
+  const children = cell.children.map((child) => renderNormalizedMarkdownNode(child, context));
+  const projected = projectMarkdownResourceTokenCell(children, context.markdownResources);
+  const displayValue = projectCreativeTableCellDisplayValue(cell, header, table, context.locale);
+  const className = 'border border-[var(--vscode-panel-border)] px-2 py-1 align-top';
+  const style = { textAlign: normalizeTableTextAlign(table.alignments[cell.columnIndex]) } as const;
+  const content = displayValue ?? projected ?? children;
+  return header ? (
+    <th
+      key={cell.id}
+      className={`${className} font-semibold bg-[var(--vscode-editorWidget-background)]`}
+      style={style}
+    >
+      {content}
+    </th>
+  ) : (
+    <td key={cell.id} className={className} style={style}>
+      {content}
+    </td>
+  );
+}
+
+function projectCreativeTableCellDisplayValue(
+  cell: MarkdownTableCellNode,
+  header: boolean,
+  table: MarkdownTableNode,
+  locale: MarkdownDisplayLocale,
+): string | undefined {
+  const headers = table.header.cells.map(readMarkdownTableCellText);
+  const fields = headers.map((value) =>
+    resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, value),
+  );
+  if (!shouldLocalizeStoryboardCreativeTable(fields)) return undefined;
+  const field = fields[cell.columnIndex];
+  if (!field) return undefined;
+  if (header) return field.labels[locale];
+  const value = stripInlineMarkdown(readMarkdownTableCellText(cell));
+  return STORYBOARD_CREATIVE_TABLE_VALUE_LABELS[field.id]?.[value.toLowerCase()]?.[locale];
+}
+
+function shouldLocalizeStoryboardCreativeTable(
+  fields: readonly (CreativeTableFieldDescriptor | undefined)[],
+): boolean {
+  const known = fields.filter(
+    (field): field is CreativeTableFieldDescriptor => field !== undefined,
+  );
+  if (known.length < 3) return false;
+  const fieldIds = new Set(known.map((field) => field.id));
+  return fieldIds.has('scene') || fieldIds.has('shot');
+}
+
+const STORYBOARD_CREATIVE_TABLE_VALUE_LABELS: Readonly<
+  Record<string, Readonly<Record<string, Readonly<Record<MarkdownDisplayLocale, string>>>>>
+> = {
+  decision: {
+    keep: { en: 'Keep', 'zh-cn': '保留' },
+    skip: { en: 'Skip', 'zh-cn': '跳过' },
+    merge: { en: 'Merge', 'zh-cn': '合并' },
+    split: { en: 'Split', 'zh-cn': '拆分' },
+    duplicate: { en: 'Duplicate', 'zh-cn': '重复' },
+    'reference-only': { en: 'Reference only', 'zh-cn': '仅作参考' },
+  },
+  reviewStatus: {
+    'needs-review': { en: 'Needs review', 'zh-cn': '待审阅' },
+    'needs-panel-analysis': { en: 'Needs panel analysis', 'zh-cn': '待分析分格' },
+    'needs-resource-binding': { en: 'Needs resource binding', 'zh-cn': '待绑定资源' },
+    'needs-prompt': { en: 'Needs prompt', 'zh-cn': '待补提示词' },
+    approved: { en: 'Approved', 'zh-cn': '已通过' },
+    rejected: { en: 'Rejected', 'zh-cn': '已拒绝' },
+  },
+  contentType: {
+    story: { en: 'Story', 'zh-cn': '正片' },
+    cover: { en: 'Cover', 'zh-cn': '封面' },
+    metadata: { en: 'Metadata', 'zh-cn': '元数据' },
+    reference: { en: 'Reference', 'zh-cn': '参考' },
+    transition: { en: 'Transition', 'zh-cn': '转场' },
+  },
+  requiresSplit: {
+    true: { en: 'Yes', 'zh-cn': '是' },
+    false: { en: 'No', 'zh-cn': '否' },
+  },
+};
+
+function renderNormalizedMarkdownLink(
+  key: string,
+  destination: string,
+  title: string | undefined,
+  children: ReactNode,
+): ReactNode {
+  if (!isSafeMarkdownLink(destination)) {
+    return (
+      <span key={key} title={title} data-markdown-link-status="unsafe">
+        {children}
+      </span>
+    );
+  }
+  return (
+    <a
+      key={key}
+      href={destination}
+      title={title}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-[var(--vscode-textLink-foreground)] hover:underline"
+    >
+      {children}
+    </a>
+  );
+}
+
+function renderNormalizedMarkdownImage(
+  destination: string,
+  altText: string,
+  markdownResources: MarkdownResourceRenderingProjection | undefined,
+): ReactNode {
+  return (
+    projectMarkdownImageResource(destination, markdownResources) ?? (
+      <span
+        className="my-2 inline-flex rounded border border-[var(--vscode-inputValidation-warningBorder)] bg-[var(--vscode-inputValidation-warningBackground)] px-2 py-1 text-[11px] text-[var(--vscode-inputValidation-warningForeground)]"
+        data-markdown-image-status="unprojected"
+      >
+        {altText || destination || t('chat.markdown.image.missingSource')}
+      </span>
+    )
+  );
+}
+
+function collectMarkdownDefinitions(
+  root: MarkdownNode,
+): ReadonlyMap<string, MarkdownDefinitionNode> {
+  const definitions = new Map<string, MarkdownDefinitionNode>();
+  const visit = (node: MarkdownNode): void => {
+    if (node.type === 'definition') definitions.set(node.identifier.toLowerCase(), node);
+    if ('children' in node) for (const child of node.children) visit(child);
   };
+  visit(root);
+  return definitions;
+}
+
+function headingClassName(depth: number): string {
+  if (depth === 1) return 'text-lg font-bold mb-2 mt-4 first:mt-0 text-[var(--vscode-foreground)]';
+  if (depth === 2)
+    return 'text-base font-bold mb-2 mt-3 first:mt-0 text-[var(--vscode-foreground)]';
+  return 'text-sm font-semibold mb-1.5 mt-2 first:mt-0 text-[var(--vscode-foreground)]';
+}
+
+function normalizeTableTextAlign(
+  alignment: MarkdownTableNode['alignments'][number] | undefined,
+): 'left' | 'center' | 'right' | undefined {
+  return alignment === 'unspecified' ? undefined : alignment;
+}
+
+function isSafeMarkdownLink(destination: string): boolean {
+  const value = destination.trim();
+  if (value.startsWith('#') || value.startsWith('/')) return true;
+  try {
+    const url = new URL(value, 'https://neko.invalid/');
+    return url.protocol === 'https:' || url.protocol === 'http:' || url.protocol === 'mailto:';
+  } catch {
+    return false;
+  }
+}
+
+function emptyMarkdownResources(): MarkdownResourceRenderingProjection {
+  return { status: 'none', tokens: [], diagnostics: [] };
 }
 
 function projectMarkdownResourceTokenCell(
@@ -370,69 +702,6 @@ function projectMarkdownImageResource(
   );
 }
 
-function renderMarkdownInlineExtensions(
-  children: ReactNode,
-  markdownResources: MarkdownResourceRenderingProjection | undefined,
-): ReactNode {
-  if (
-    (!markdownResources?.mentions || markdownResources.mentions.length === 0) &&
-    (!markdownResources?.resourceReferences || markdownResources.resourceReferences.length === 0)
-  ) {
-    return children;
-  }
-  return mapMarkdownInlineNode(children, markdownResources);
-}
-
-function mapMarkdownInlineNode(
-  node: ReactNode,
-  markdownResources: MarkdownResourceRenderingProjection,
-): ReactNode {
-  if (typeof node === 'string' || typeof node === 'number') {
-    return projectMarkdownInlineText(String(node), markdownResources);
-  }
-  if (Array.isArray(node)) {
-    return node.map((child, index) => (
-      <Fragment key={index}>{mapMarkdownInlineNode(child, markdownResources)}</Fragment>
-    ));
-  }
-  if (isValidElement<{ children?: ReactNode }>(node) && node.props.children !== undefined) {
-    return cloneElement(node, {
-      children: mapMarkdownInlineNode(node.props.children, markdownResources),
-    });
-  }
-  return node;
-}
-
-function projectMarkdownInlineText(
-  text: string,
-  markdownResources: MarkdownResourceRenderingProjection,
-): ReactNode {
-  const resourceNodes = projectMarkdownResourceReferenceText(text, markdownResources);
-  return flatMapInlineText(resourceNodes, (value) =>
-    projectMarkdownMentionText(value, markdownResources),
-  );
-}
-
-function projectMarkdownResourceReferenceText(
-  text: string,
-  markdownResources: MarkdownResourceRenderingProjection,
-): readonly ReactNode[] {
-  const referenceRegex = /(!?)\[\[([^\]]+)]]/g;
-  const nodes: ReactNode[] = [];
-  let cursor = 0;
-  for (const match of text.matchAll(referenceRegex)) {
-    const raw = match[0] ?? '';
-    const embed = match[1] === '!';
-    const target = match[2] ?? '';
-    const start = match.index ?? 0;
-    if (start > cursor) nodes.push(text.slice(cursor, start));
-    nodes.push(projectMarkdownInlineResourceReference(raw, target, embed, markdownResources));
-    cursor = start + raw.length;
-  }
-  if (cursor < text.length) nodes.push(text.slice(cursor));
-  return nodes.length > 0 ? nodes : [text];
-}
-
 function projectMarkdownMentionText(
   text: string,
   markdownResources: MarkdownResourceRenderingProjection,
@@ -476,15 +745,6 @@ function projectMarkdownMentionText(
     nodes.push(text.slice(cursor));
   }
   return nodes.length > 0 ? nodes : [text];
-}
-
-function flatMapInlineText(
-  nodes: readonly ReactNode[],
-  project: (value: string) => readonly ReactNode[],
-): readonly ReactNode[] {
-  return nodes.flatMap((node) =>
-    typeof node === 'string' || typeof node === 'number' ? project(String(node)) : [node],
-  );
 }
 
 function projectMarkdownInlineResourceReference(
@@ -609,7 +869,7 @@ const STORYBOARD_SCENE_TABLE_MIN_WIDTH = STORYBOARD_SCENE_COLUMNS.reduce(
 );
 
 function projectStoryboardCreativeTableNode(
-  node: unknown,
+  node: MarkdownTableNode,
   markdownResources: MarkdownResourceRenderingProjection | undefined,
   locale: MarkdownDisplayLocale,
 ): ReactNode | null {
@@ -967,74 +1227,51 @@ function deriveStoryboardSceneAction(input: {
   return input.locale === 'zh-cn' ? '生成视频' : 'Generate video';
 }
 
-function readMarkdownTableProjectionFromNode(node: unknown): MarkdownTableProjection | undefined {
-  const rows = collectMarkdownTableRowsFromNode(node);
-  const headerRowIndex = rows.findIndex((row) => row.kind === 'header');
-  const headerRow = rows[headerRowIndex >= 0 ? headerRowIndex : 0];
-  if (!headerRow || headerRow.cells.length < 2) return undefined;
-  const bodyRows = rows
-    .slice((headerRowIndex >= 0 ? headerRowIndex : 0) + 1)
-    .filter((row) => row.cells.length === headerRow.cells.length)
-    .map((row) => row.cells);
-  if (bodyRows.length === 0) return undefined;
-  const fields = headerRow.cells.map((header) =>
-    resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, header),
-  );
+function readMarkdownTableProjectionFromNode(
+  node: MarkdownTableNode,
+): MarkdownTableProjection | undefined {
+  const headers = node.header.cells.map(readMarkdownTableCellText);
+  if (headers.length < 2) return undefined;
+  const rows = node.rows
+    .filter((row) => row.cells.length === headers.length)
+    .map((row) => row.cells.map(readMarkdownTableCellText));
+  if (rows.length === 0) return undefined;
   return {
-    headers: headerRow.cells,
-    rows: bodyRows,
-    fields,
+    headers,
+    rows,
+    fields: headers.map((header) =>
+      resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, header),
+    ),
   };
 }
 
-function collectMarkdownTableRowsFromNode(
-  node: unknown,
-): readonly { readonly kind: 'header' | 'body'; readonly cells: readonly string[] }[] {
-  const rows: Array<{ kind: 'header' | 'body'; cells: string[] }> = [];
-  const visit = (value: unknown): void => {
-    const element = readHastElement(value);
-    if (!element) return;
-    if (element.tagName === 'tr') {
-      const cellElements = element.children
-        .map(readHastElement)
-        .filter((child): child is HastElement =>
-          Boolean(child && (child.tagName === 'th' || child.tagName === 'td')),
-        );
-      if (cellElements.length > 0) {
-        rows.push({
-          kind: cellElements.some((cell) => cell.tagName === 'th') ? 'header' : 'body',
-          cells: cellElements.map((cell) => readHastText(cell).trim()),
-        });
-      }
-      return;
-    }
-    for (const child of element.children) visit(child);
-  };
-  visit(node);
-  return rows;
+function readMarkdownTableCellText(cell: MarkdownTableCellNode): string {
+  return cell.children.map(readNormalizedMarkdownPlainText).join('').trim();
 }
 
-interface HastElement {
-  readonly tagName: string;
-  readonly children: readonly unknown[];
-}
-
-function readHastElement(value: unknown): HastElement | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const record = value as Record<string, unknown>;
-  const tagName = record['tagName'];
-  const children = record['children'];
-  if (typeof tagName !== 'string' || !Array.isArray(children)) return undefined;
-  return { tagName, children };
-}
-
-function readHastText(value: unknown): string {
-  if (!value || typeof value !== 'object') return '';
-  const record = value as Record<string, unknown>;
-  if (record['type'] === 'text' && typeof record['value'] === 'string') return record['value'];
-  const children = record['children'];
-  if (Array.isArray(children)) return children.map(readHastText).join('');
-  return '';
+function readNormalizedMarkdownPlainText(node: MarkdownNode): string {
+  switch (node.type) {
+    case 'text':
+    case 'inlineCode':
+    case 'html':
+      return node.value;
+    case 'softBreak':
+    case 'hardBreak':
+      return '\n';
+    case 'image':
+    case 'imageReference':
+      return node.altText;
+    case 'nekoMention':
+    case 'nekoResourceReference':
+      return node.raw;
+    case 'codeBlock':
+      return node.value;
+    case 'definition':
+    case 'thematicBreak':
+      return '';
+    default:
+      return 'children' in node ? node.children.map(readNormalizedMarkdownPlainText).join('') : '';
+  }
 }
 
 function stripResourcePlacementHint(value: string): string {
@@ -1082,16 +1319,36 @@ function readPlainText(node: ReactNode): string | undefined {
 }
 
 function projectStructuredCodeBlock(
-  code: string,
-  language: string | undefined,
-  isStreaming: boolean,
+  node: Extract<MarkdownNode, { readonly type: 'codeBlock' }>,
+  context: NormalizedMarkdownRenderContext,
 ) {
+  const language = node.language.normalized ?? node.language.raw;
   if (!isCompositeContentFenceLanguage(language)) return null;
 
-  const composites = parseCompositeContentJson(code);
-  const artifacts = composites.length === 0 ? parseCompositeArtifacts(code) : [];
+  const derivedComposites = (context.siblingBlocks ?? [])
+    .filter((block) => {
+      const source = block.compositeSource;
+      return (
+        block.type === 'composite' &&
+        block.composite !== undefined &&
+        source !== undefined &&
+        source.sourceBlockId === context.contentBlockId &&
+        source.startOffset === node.range.startOffset &&
+        source.endOffset === node.range.endOffset
+      );
+    })
+    .sort(
+      (left, right) =>
+        (left.compositeSource?.candidateIndex ?? 0) - (right.compositeSource?.candidateIndex ?? 0),
+    )
+    .flatMap((block) => (block.composite ? [block.composite] : []));
+  const composites =
+    derivedComposites.length > 0 ? derivedComposites : parseCompositeContentJson(node.value);
+  const artifacts = composites.length === 0 ? parseCompositeArtifacts(node.value) : [];
   if (composites.length === 0 && artifacts.length === 0) {
-    if (!isStreaming || !shouldTreatAsStreamingStructuredArtifact(code, language)) return null;
+    if (!context.isStreaming || !shouldTreatAsStreamingStructuredArtifact(node.value, language)) {
+      return null;
+    }
     return <StructuredArtifactPending />;
   }
 
@@ -1371,35 +1628,35 @@ function promptSpanColor(
 
 function MarkdownRendererComponent({
   content,
-  isStreaming,
+  isStreaming = false,
   className,
   markdownResources,
+  sessionKey,
+  contentBlockId,
+  siblingBlocks,
 }: MarkdownRendererProps) {
   const locale = normalizeMarkdownDisplayLocale(getLocale());
-  // Memoize remark plugins
-  const remarkPlugins = useMemo(() => [remarkGfm], []);
-  const displayContent = useMemo(
+  const snapshot = useCanonicalMarkdownSnapshot({ content, isStreaming, sessionKey });
+  const renderedDocument = useMemo(
     () =>
-      localizeMarkdownCreativeTablesForDisplay(
-        removeNonActionableDiagnosticTablesForDisplay(
-          removeMarkdownResourceIndexSectionsForDisplay(content),
-        ),
+      renderNormalizedMarkdownDocument(snapshot, {
+        isStreaming,
+        markdownResources,
         locale,
-      ),
-    [content, locale],
-  );
-  const markdownComponents = useMemo(
-    () => createMarkdownComponents(isStreaming, markdownResources, locale),
-    [isStreaming, markdownResources, locale],
+        contentBlockId,
+        siblingBlocks,
+      }),
+    [contentBlockId, isStreaming, locale, markdownResources, siblingBlocks, snapshot],
   );
 
   return (
     <div
       className={`markdown-content min-w-0 max-w-full overflow-hidden text-[13px] leading-relaxed break-words ${className || ''}`}
+      data-markdown-session-id={snapshot.sessionId}
+      data-markdown-revision={snapshot.revision}
+      data-markdown-final={snapshot.isFinal ? 'true' : 'false'}
     >
-      <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
-        {displayContent}
-      </ReactMarkdown>
+      {renderedDocument}
       <SemanticPromptSpanProjectionList content={content} markdownResources={markdownResources} />
       <SemanticPromptSpanDiagnostics markdownResources={markdownResources} />
       <MarkdownExtensionDiagnostics markdownResources={markdownResources} />
@@ -1408,6 +1665,50 @@ function MarkdownRendererComponent({
         <span className="inline-block w-1.5 h-4 ml-1 bg-[var(--vscode-foreground)] animate-pulse" />
       )}
     </div>
+  );
+}
+
+function useCanonicalMarkdownSnapshot(input: {
+  readonly content: string;
+  readonly isStreaming: boolean;
+  readonly sessionKey: string;
+}): MarkdownStreamingSnapshot {
+  const registry = getAgentMarkdownSessionRegistry();
+  const subscribe = useMemo(
+    () => (listener: () => void) => registry.subscribe(input.sessionKey, listener),
+    [input.sessionKey, registry],
+  );
+  const getSnapshot = useMemo(
+    () => () => registry.getSnapshot(input.sessionKey),
+    [input.sessionKey, registry],
+  );
+  const timelineSnapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return useMemo(() => {
+    if (timelineSnapshot) {
+      if (timelineSnapshot.source !== input.content) {
+        throw new Error(
+          `Normalized Markdown source mismatch for ${input.sessionKey}: Timeline revision ${timelineSnapshot.revision} exposes ${timelineSnapshot.source.length} characters while rendered content exposes ${input.content.length}.`,
+        );
+      }
+      return timelineSnapshot;
+    }
+    if (input.isStreaming) {
+      throw new Error(
+        `Normalized Markdown streaming session is missing for ${input.sessionKey}; active streaming must be Timeline-owned.`,
+      );
+    }
+    return createLocalMarkdownSnapshot(input.content);
+  }, [input.content, input.isStreaming, input.sessionKey, timelineSnapshot]);
+}
+
+function createLocalMarkdownSnapshot(content: string): MarkdownStreamingSnapshot {
+  const session = new MarkdownStreamingSession();
+  const result = session.finalize(content);
+  if (result.status === 'ready') return result.snapshot;
+  throw new Error(
+    `Normalized Markdown local session failed: ${result.diagnostics
+      .map((diagnostic) => diagnostic.code)
+      .join('; ')}.`,
   );
 }
 
@@ -1443,209 +1744,6 @@ function normalizeMarkdownDisplayLocale(locale: string | undefined): MarkdownDis
   return locale?.trim().toLowerCase().startsWith('zh') ? 'zh-cn' : 'en';
 }
 
-const MARKDOWN_RESOURCE_INDEX_HEADING_RE =
-  /^\s{0,3}#{1,6}\s*(?:资源索引|图片索引|资源图片索引|resource\s+index|image\s+index|resource\s+image\s+index)\s*#*\s*$/i;
-
-function removeMarkdownResourceIndexSectionsForDisplay(markdown: string): string {
-  const newline = markdown.includes('\r\n') ? '\r\n' : '\n';
-  const lines = markdown.split(/\r?\n/);
-  const visibleLines: string[] = [];
-  let inFence = false;
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? '';
-    if (/^\s*```/.test(line)) {
-      inFence = !inFence;
-      visibleLines.push(line);
-      continue;
-    }
-    if (!inFence && MARKDOWN_RESOURCE_INDEX_HEADING_RE.test(line)) {
-      const tableStartIndex = findNextNonBlankLineIndex(lines, index + 1);
-      if (isMarkdownTableStart(lines, tableStartIndex)) {
-        index = skipMarkdownTableLines(lines, tableStartIndex) - 1;
-        continue;
-      }
-    }
-    visibleLines.push(line);
-  }
-
-  return visibleLines.join(newline);
-}
-
-function removeNonActionableDiagnosticTablesForDisplay(markdown: string): string {
-  const newline = markdown.includes('\r\n') ? '\r\n' : '\n';
-  const lines = markdown.split(/\r?\n/);
-  const visibleLines: string[] = [];
-  let inFence = false;
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? '';
-    if (/^\s*```/.test(line)) {
-      inFence = !inFence;
-      visibleLines.push(line);
-      continue;
-    }
-    if (!inFence && isMarkdownTableStart(lines, index)) {
-      const headers = parseMarkdownTableCells(line) ?? [];
-      const tableEndIndex = skipMarkdownTableLines(lines, index);
-      const rowCount = countMarkdownTableDataRows(lines, index, headers.length);
-      if (
-        isResourceMetadataInventoryDisplayTable(headers) ||
-        (rowCount === 0 && isStoryboardCreativeDisplayTable(headers))
-      ) {
-        index = tableEndIndex - 1;
-        continue;
-      }
-    }
-    visibleLines.push(line);
-  }
-
-  return visibleLines.join(newline);
-}
-
-function countMarkdownTableDataRows(
-  lines: readonly string[],
-  tableStartIndex: number,
-  headerCellCount: number,
-): number {
-  let count = 0;
-  for (let index = tableStartIndex + 2; index < lines.length; index += 1) {
-    const cells = parseMarkdownTableCells(lines[index] ?? '');
-    if (!cells || cells.length !== headerCellCount) break;
-    if (cells.some((cell) => cell.length > 0)) count += 1;
-  }
-  return count;
-}
-
-function isStoryboardCreativeDisplayTable(headers: readonly string[]): boolean {
-  const fields = headers.map((header) =>
-    resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, header),
-  );
-  return shouldRenderCanvasSceneStoryboardFields(fields);
-}
-
-function isResourceMetadataInventoryDisplayTable(headers: readonly string[]): boolean {
-  const normalizedHeaders = headers.map(normalizeMarkdownTableHeader);
-  if (hasStoryboardCreativeDisplayAnchors(normalizedHeaders)) return false;
-
-  const hasPage = normalizedHeaders.some((header) =>
-    ['page', 'pageno', 'pagenumber', 'sourcepage', '页', '页码', '页面', '来源页'].includes(header),
-  );
-  const hasAsset = normalizedHeaders.some((header) =>
-    [
-      'asset',
-      'assetid',
-      'resource',
-      'resourceid',
-      'image',
-      'imageid',
-      'source',
-      'token',
-      '感知卡',
-      '图片卡片',
-      '资源',
-      '素材',
-      '来源',
-    ].includes(header),
-  );
-  const hasSize = normalizedHeaders.some((header) =>
-    ['size', 'dimensions', 'resolution', '尺寸', '分辨率'].includes(header),
-  );
-  const hasType = normalizedHeaders.some((header) =>
-    ['type', 'mimetype', 'mime', '类型'].includes(header),
-  );
-
-  return (hasPage && hasAsset && hasSize) || (hasAsset && hasSize && hasType);
-}
-
-function hasStoryboardCreativeDisplayAnchors(normalizedHeaders: readonly string[]): boolean {
-  const hasScene = normalizedHeaders.some((header) => header === 'scene' || header === '场景');
-  const hasShot = normalizedHeaders.some((header) => header === 'shot' || header === '镜头');
-  return hasScene && hasShot;
-}
-
-function normalizeMarkdownTableHeader(header: string): string {
-  return header
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_\-/#:：]+/g, '');
-}
-
-function findNextNonBlankLineIndex(lines: readonly string[], startIndex: number): number {
-  let index = startIndex;
-  while (index < lines.length && (lines[index] ?? '').trim().length === 0) {
-    index += 1;
-  }
-  return index;
-}
-
-function isMarkdownTableStart(lines: readonly string[], index: number): boolean {
-  const header = parseMarkdownTableCells(lines[index] ?? '');
-  const separator = parseMarkdownTableCells(lines[index + 1] ?? '');
-  return Boolean(header && separator && isMarkdownTableSeparator(separator));
-}
-
-function skipMarkdownTableLines(lines: readonly string[], tableStartIndex: number): number {
-  let index = tableStartIndex + 2;
-  while (index < lines.length && parseMarkdownTableCells(lines[index] ?? '')) {
-    index += 1;
-  }
-  return index;
-}
-
-function localizeMarkdownCreativeTablesForDisplay(
-  markdown: string,
-  locale: MarkdownDisplayLocale,
-): string {
-  const newline = markdown.includes('\r\n') ? '\r\n' : '\n';
-  const lines = markdown.split(/\r?\n/);
-  let inFence = false;
-
-  for (let index = 0; index < lines.length - 1; index += 1) {
-    const line = lines[index] ?? '';
-    if (/^\s*```/.test(line)) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) continue;
-
-    const separatorLine = lines[index + 1] ?? '';
-    const headers = parseMarkdownTableCells(line);
-    const separator = parseMarkdownTableCells(separatorLine);
-    if (!headers || !separator || !isMarkdownTableSeparator(separator)) continue;
-
-    const classification = classifyCreativeTableHeaders(STORYBOARD_CREATIVE_TABLE_PROFILE, headers);
-    if (!shouldLocalizeStoryboardCreativeTable(classification.knownFields)) continue;
-
-    const fields = headers.map((header) =>
-      resolveCreativeTableField(STORYBOARD_CREATIVE_TABLE_PROFILE, header),
-    );
-    lines[index] = formatMarkdownTableRow(
-      headers.map((header, headerIndex) =>
-        fields[headerIndex] ? fields[headerIndex].labels[locale] : header,
-      ),
-    );
-
-    for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
-      const cells = parseMarkdownTableCells(lines[rowIndex] ?? '');
-      if (!cells) break;
-      lines[rowIndex] = formatMarkdownTableRow(
-        cells.map((cell, cellIndex) => localizeCreativeTableCell(cell, fields[cellIndex], locale)),
-      );
-    }
-  }
-
-  return lines.join(newline);
-}
-
-function shouldLocalizeStoryboardCreativeTable(
-  knownFields: readonly CreativeTableFieldDescriptor[],
-): boolean {
-  if (knownFields.length < 3) return false;
-  const fieldIds = new Set(knownFields.map((field) => field.id));
-  return fieldIds.has('scene') || fieldIds.has('shot');
-}
-
 function parseMarkdownTableCells(line: string): readonly string[] | undefined {
   const trimmed = line.trim();
   if (!trimmed.includes('|')) return undefined;
@@ -1661,57 +1759,9 @@ function isMarkdownTableSeparator(cells: readonly string[]): boolean {
   return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
 }
 
-function formatMarkdownTableRow(cells: readonly string[]): string {
-  return `| ${cells.join(' | ')} |`;
-}
-
-function localizeCreativeTableCell(
-  cell: string,
-  field: CreativeTableFieldDescriptor | undefined,
-  locale: MarkdownDisplayLocale,
-): string {
-  if (!field) return cell;
-  const value = stripInlineMarkdown(cell).trim();
-  if (!value) return cell;
-  const label = STORYBOARD_CREATIVE_TABLE_VALUE_LABELS[field.id]?.[value.toLowerCase()]?.[locale];
-  return label ?? cell;
-}
-
 function stripInlineMarkdown(value: string): string {
   return value.replace(/^`(.+)`$/, '$1').trim();
 }
-
-const STORYBOARD_CREATIVE_TABLE_VALUE_LABELS: Readonly<
-  Record<string, Readonly<Record<string, Readonly<Record<MarkdownDisplayLocale, string>>>>>
-> = {
-  decision: {
-    keep: { en: 'Keep', 'zh-cn': '保留' },
-    skip: { en: 'Skip', 'zh-cn': '跳过' },
-    merge: { en: 'Merge', 'zh-cn': '合并' },
-    split: { en: 'Split', 'zh-cn': '拆分' },
-    duplicate: { en: 'Duplicate', 'zh-cn': '重复' },
-    'reference-only': { en: 'Reference only', 'zh-cn': '仅作参考' },
-  },
-  reviewStatus: {
-    'needs-review': { en: 'Needs review', 'zh-cn': '待审阅' },
-    'needs-panel-analysis': { en: 'Needs panel analysis', 'zh-cn': '待分析分格' },
-    'needs-resource-binding': { en: 'Needs resource binding', 'zh-cn': '待绑定资源' },
-    'needs-prompt': { en: 'Needs prompt', 'zh-cn': '待补提示词' },
-    approved: { en: 'Approved', 'zh-cn': '已通过' },
-    rejected: { en: 'Rejected', 'zh-cn': '已拒绝' },
-  },
-  contentType: {
-    story: { en: 'Story', 'zh-cn': '正片' },
-    cover: { en: 'Cover', 'zh-cn': '封面' },
-    metadata: { en: 'Metadata', 'zh-cn': '元数据' },
-    reference: { en: 'Reference', 'zh-cn': '参考' },
-    transition: { en: 'Transition', 'zh-cn': '转场' },
-  },
-  requiresSplit: {
-    true: { en: 'Yes', 'zh-cn': '是' },
-    false: { en: 'No', 'zh-cn': '否' },
-  },
-};
 
 function formatMarkdownResourceDiagnostic(
   diagnostic: MarkdownResourceDiagnostic | undefined,

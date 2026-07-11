@@ -67,6 +67,36 @@ describe('content block presenter', () => {
     });
   });
 
+  it('keeps Markdown-derived composites as semantic metadata without standalone rendering', () => {
+    const blocks: ContentBlock[] = [
+      {
+        id: 'block-text',
+        type: 'text',
+        timestamp: 20,
+        content: '```neko-composite\n{}\n```',
+      },
+      {
+        id: 'block-text-composite-1',
+        type: 'composite',
+        timestamp: 20,
+        composite: { template: 'report', sections: [{ heading: 'Projected' }] },
+        compositeSource: {
+          kind: 'normalized-markdown-code-block',
+          sourceBlockId: 'block-text',
+          startOffset: 0,
+          endOffset: 25,
+          language: 'neko-composite',
+          candidateIndex: 0,
+        },
+      },
+    ];
+
+    const projections = projectContentBlocksUi(blocks, false, undefined, blocks);
+
+    expect(projections).toHaveLength(1);
+    expect(projections[0]).toMatchObject({ renderKind: 'markdown', siblingBlocks: blocks });
+  });
+
   it('does not mark completed text blocks as streaming while the parent message is still processing', () => {
     const projections = projectContentBlocksUi(
       [

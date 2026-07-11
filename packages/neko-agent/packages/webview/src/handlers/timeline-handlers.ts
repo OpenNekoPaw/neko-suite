@@ -1,58 +1,134 @@
-import { defineHandler } from './types';
-import type { HandlerRegistration, MessageHandler, MessageHandlerContext } from './types';
-import type { AgentTurnTimelineMessage } from './messages';
 import type { AgentTurnTimelineItem } from '@neko-agent/types';
-import { updateConversation } from './message-updater';
+import { flushSync } from 'react-dom';
+import type { AgentMarkdownSessionPublication } from '@/markdown/agent-markdown-session-registry';
+import { AgentHostMessages, getAgentHostRuntimeAdapter } from '@/messages';
 import {
+  applyAgentTurnTimelineDiagnostic,
   applyAgentTurnTimelineMessage,
-  projectMessagesWithActiveTurnTimeline,
   projectActiveTurnTimelineWorkItems,
+  projectMessagesWithActiveTurnTimeline,
 } from '@/presenters/active-turn-timeline-presenter';
 import { upsertWorkItemsForConversation } from '@/presenters/work-item-state-presenter';
+import type { AgentTurnTimelineDiagnostic, AgentTurnTimelineMessage } from './messages';
+import { updateConversation } from './message-updater';
+import {
+  persistAgentTurnTimelineRecovery,
+  removeAgentTurnTimelineRecovery,
+} from './timeline-recovery-state';
+import { defineHandler } from './types';
+import type { HandlerRegistration, MessageHandler, MessageHandlerContext } from './types';
 
 const handleAgentTurnTimeline: MessageHandler<'agentTurnTimeline'> = (
   message: AgentTurnTimelineMessage,
   context,
 ) => {
-  applyTimelineMessageToConversation(message, context);
+  const scheduler = context.timelineRenderScheduler;
+  if (!scheduler) {
+    throw new Error('Agent Timeline handler requires the canonical render commit scheduler.');
+  }
+  scheduler.enqueue(message, (messages) => applyTimelineMessagesToConversation(messages, context));
 };
 
-function applyTimelineMessageToConversation(
-  message: AgentTurnTimelineMessage,
-  context: MessageHandlerContext,
-): void {
+const handleAgentTurnTimelineDiagnostic: MessageHandler<'agentTurnTimelineDiagnostic'> = (
+  diagnostic: AgentTurnTimelineDiagnostic,
+  context,
+) => {
+  if (diagnostic.conversationId) {
+    context.timelineRenderScheduler?.flushConversation(diagnostic.conversationId);
+  }
   updateConversation(
     context,
-    message.conversationId,
+    diagnostic.conversationId,
     (messages, _streamingMessageId, streaming) => {
-      const projection = applyAgentTurnTimelineMessage({
-        state: streaming.activeTurnTimeline ?? null,
-        message,
-      });
-      const wasCompleted = streaming.activeTurnTimeline?.completed === true;
-
-      if (projection.diagnostics.length > 0) {
-        context.setGlobalError(formatTimelineDiagnostics(projection.diagnostics));
-        return {
-          messages,
-          activeTurnTimeline: projection.state,
-        };
-      }
-
-      const workItems = projectActiveTurnTimelineWorkItems(projection.state);
-      if (workItems.length > 0) {
-        context.setWorkItemsByConversation((prev) =>
-          upsertWorkItemsForConversation(prev, message.conversationId, workItems),
-        );
-      }
-      return {
-        messages: projectMessagesWithActiveTurnTimeline(messages, projection.state),
-        streamingMessageId: wasCompleted ? streaming.streamingMessageId : message.messageId,
-        isThinking: false,
-        activeTurnTimeline: projection.state,
-      };
+      const result = applyAgentTurnTimelineDiagnostic(
+        streaming.activeTurnTimeline ?? null,
+        diagnostic,
+      );
+      return { messages, activeTurnTimeline: result.state };
     },
   );
+  const diagnosticState = context.conversationStreamingRef.current.get(
+    diagnostic.conversationId ?? '',
+  )?.activeTurnTimeline;
+  if (diagnosticState?.synchronization === 'unavailable') {
+    removeAgentTurnTimelineRecovery(getAgentHostRuntimeAdapter(), diagnosticState);
+  }
+  context.setGlobalError(formatTimelineDiagnostics([diagnostic]));
+};
+
+function applyTimelineMessagesToConversation(
+  deliveries: readonly AgentTurnTimelineMessage[],
+  context: MessageHandlerContext,
+): void {
+  const firstDelivery = deliveries[0];
+  if (!firstDelivery) return;
+  const markdownSessionRegistry = context.markdownSessionRegistry;
+  if (!markdownSessionRegistry) {
+    throw new Error('Agent Timeline handler requires the canonical Markdown session registry.');
+  }
+  let markdownPublication: AgentMarkdownSessionPublication | undefined;
+  let projectedWorkItems: ReturnType<typeof projectActiveTurnTimelineWorkItems> = [];
+  let snapshotRequest: ReturnType<typeof applyAgentTurnTimelineMessage>['snapshotRequest'];
+  const diagnostics: Array<{ readonly code: string; readonly message: string }> = [];
+  let timelineState: ReturnType<typeof applyAgentTurnTimelineMessage>['state'] = null;
+  const acceptedTimelineDeliveries: AgentTurnTimelineMessage[] = [];
+  let acceptedDeliveries = 0;
+
+  flushSync(() => {
+    updateConversation(
+      context,
+      firstDelivery.conversationId,
+      (messages, _streamingMessageId, streaming) => {
+        let activeState = streaming.activeTurnTimeline ?? null;
+        const wasCompleted = activeState?.completed === true;
+        for (const delivery of deliveries) {
+          const projection = applyAgentTurnTimelineMessage({
+            state: activeState,
+            message: delivery,
+          });
+          activeState = projection.state;
+          timelineState = projection.state;
+          diagnostics.push(...projection.diagnostics);
+          snapshotRequest ??= projection.snapshotRequest;
+          if (projection.diagnostics.length === 0) {
+            acceptedDeliveries += 1;
+            acceptedTimelineDeliveries.push(delivery);
+          }
+        }
+
+        if (acceptedDeliveries === 0) {
+          return { messages, activeTurnTimeline: activeState };
+        }
+        projectedWorkItems = projectActiveTurnTimelineWorkItems(activeState);
+        markdownPublication = markdownSessionRegistry.commitTimelineDeliveries(
+          acceptedTimelineDeliveries,
+        );
+        return {
+          messages: projectMessagesWithActiveTurnTimeline(messages, activeState),
+          streamingMessageId: wasCompleted ? streaming.streamingMessageId : firstDelivery.messageId,
+          isThinking: false,
+          activeTurnTimeline: activeState,
+        };
+      },
+    );
+  });
+
+  // External-store publication must follow the synchronous React props commit.
+  markdownPublication?.publish();
+  if (timelineState) {
+    persistAgentTurnTimelineRecovery(getAgentHostRuntimeAdapter(), timelineState);
+  }
+  if (diagnostics.length > 0) {
+    context.setGlobalError(formatTimelineDiagnostics(diagnostics));
+  }
+  if (snapshotRequest) {
+    AgentHostMessages.requestAgentTurnTimelineSnapshot(snapshotRequest);
+  }
+  if (projectedWorkItems.length > 0) {
+    context.setWorkItemsByConversation((previous) =>
+      upsertWorkItemsForConversation(previous, firstDelivery.conversationId, projectedWorkItems),
+    );
+  }
 }
 
 export function hasActiveTimelineForMessage(input: {
@@ -120,4 +196,5 @@ function formatTimelineDiagnostics(
 
 export const timelineHandlers: HandlerRegistration[] = [
   defineHandler('agentTurnTimeline', handleAgentTurnTimeline),
+  defineHandler('agentTurnTimelineDiagnostic', handleAgentTurnTimelineDiagnostic),
 ];

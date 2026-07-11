@@ -1,6 +1,8 @@
 import type {
+  AgentTurnTimelineDiagnostic,
   AgentTurnTimelineItem,
   AgentTurnTimelineMessage,
+  AgentTurnTimelineSnapshotRequest,
   AgentTurnTimelineValidationDiagnostic,
   AgentTurnTimelineValidationState,
   AgentWorkItem,
@@ -8,7 +10,12 @@ import type {
   Message,
   ToolCall,
 } from '@neko-agent/types';
-import { extractCompositeContentBlocks, validateAgentTurnTimelineMessage } from '@neko-agent/types';
+import {
+  buildAgentTurnTimelineSnapshotRequest,
+  validateAgentTurnTimelineMessage,
+} from '@neko-agent/types';
+
+export type ActiveTurnTimelineSynchronization = 'synchronized' | 'suspended' | 'unavailable';
 
 export interface ActiveTurnTimelineState {
   readonly connectionEpoch: string;
@@ -20,6 +27,7 @@ export interface ActiveTurnTimelineState {
   readonly items: readonly AgentTurnTimelineItem[];
   readonly completed: boolean;
   readonly finalContentBlocks?: readonly ContentBlock[];
+  readonly synchronization: ActiveTurnTimelineSynchronization;
 }
 
 export interface ActiveTurnTimelineApplyInput {
@@ -30,6 +38,12 @@ export interface ActiveTurnTimelineApplyInput {
 export interface ActiveTurnTimelineApplyResult {
   readonly state: ActiveTurnTimelineState | null;
   readonly diagnostics: readonly AgentTurnTimelineValidationDiagnostic[];
+  readonly snapshotRequest?: AgentTurnTimelineSnapshotRequest;
+}
+
+export interface ActiveTurnTimelineDiagnosticApplyResult {
+  readonly state: ActiveTurnTimelineState | null;
+  readonly diagnostic: AgentTurnTimelineDiagnostic;
 }
 
 export interface ActiveTurnTimelineProjection {
@@ -55,11 +69,77 @@ export function applyAgentTurnTimelineMessage(
     };
   }
 
+  if (currentState?.synchronization === 'unavailable' && input.message.batchKind !== 'snapshot') {
+    return {
+      state: currentState,
+      diagnostics: [
+        {
+          code: 'turn-snapshot-unavailable',
+          message:
+            'Timeline deltas are suspended because authoritative resynchronization is unavailable.',
+          deliveryRevision: input.message.deliveryRevision,
+        },
+      ],
+    };
+  }
+  if (currentState?.synchronization === 'suspended' && input.message.batchKind !== 'snapshot') {
+    return {
+      state: currentState,
+      diagnostics: [
+        {
+          code: 'delivery-revision-gap',
+          message: 'Timeline deltas remain suspended until an authoritative snapshot is applied.',
+          deliveryRevision: input.message.deliveryRevision,
+          expectedRevision: currentState.deliveryRevision + 1,
+        },
+      ],
+    };
+  }
+  if (
+    currentState &&
+    input.message.batchKind === 'snapshot' &&
+    input.message.deliveryRevision < currentState.deliveryRevision
+  ) {
+    return {
+      state: currentState,
+      diagnostics: [
+        {
+          code: 'stale-delivery-revision',
+          message: 'Timeline snapshot is older than the last applied delivery revision.',
+          deliveryRevision: input.message.deliveryRevision,
+          expectedRevision: currentState.deliveryRevision,
+        },
+      ],
+    };
+  }
+
   const validationState =
     currentState?.validationState ?? createInitialValidationState(input.message);
   const validation = validateAgentTurnTimelineMessage(input.message, validationState);
   if (!validation.ok || !validation.nextState) {
-    return { state: currentState, diagnostics: validation.diagnostics };
+    const requiresSnapshot = validation.diagnostics.some(
+      (diagnostic) => diagnostic.code === 'delivery-revision-gap',
+    );
+    if (!currentState || !requiresSnapshot) {
+      return { state: currentState, diagnostics: validation.diagnostics };
+    }
+    const alreadySuspended = currentState.synchronization === 'suspended';
+    return {
+      state: { ...currentState, synchronization: 'suspended' },
+      diagnostics: validation.diagnostics,
+      ...(!alreadySuspended
+        ? {
+            snapshotRequest: buildAgentTurnTimelineSnapshotRequest({
+              connectionEpoch: currentState.connectionEpoch,
+              conversationId: currentState.conversationId,
+              turnId: currentState.turnId,
+              messageId: currentState.messageId,
+              reason: 'revision-gap',
+              lastAppliedDeliveryRevision: currentState.deliveryRevision,
+            }),
+          }
+        : {}),
+    };
   }
 
   const nextItems = applyTimelineOperations(
@@ -82,12 +162,30 @@ export function applyAgentTurnTimelineMessage(
       validationState: validation.nextState,
       items: nextItems,
       completed: input.message.completion !== undefined,
+      synchronization: 'synchronized',
       ...(input.message.completion?.finalContentBlocks !== undefined
         ? { finalContentBlocks: input.message.completion.finalContentBlocks }
         : currentState?.finalContentBlocks !== undefined
           ? { finalContentBlocks: currentState.finalContentBlocks }
           : {}),
     },
+  };
+}
+
+export function applyAgentTurnTimelineDiagnostic(
+  state: ActiveTurnTimelineState | null | undefined,
+  diagnostic: AgentTurnTimelineDiagnostic,
+): ActiveTurnTimelineDiagnosticApplyResult {
+  const currentState = state ?? null;
+  if (!currentState || !isSameActiveTurnTimeline(currentState, diagnostic)) {
+    return { state: currentState, diagnostic };
+  }
+  if (diagnostic.code !== 'turn-snapshot-unavailable') {
+    return { state: currentState, diagnostic };
+  }
+  return {
+    state: { ...currentState, synchronization: 'unavailable' },
+    diagnostic,
   };
 }
 
@@ -222,7 +320,10 @@ function applyTimelineOperations(
 
 function isSameActiveTurnTimeline(
   state: ActiveTurnTimelineState | null,
-  message: AgentTurnTimelineMessage,
+  message: Pick<
+    AgentTurnTimelineMessage | AgentTurnTimelineDiagnostic,
+    'connectionEpoch' | 'conversationId' | 'turnId' | 'messageId'
+  >,
 ): boolean {
   return Boolean(
     state &&
@@ -335,49 +436,13 @@ function projectTimelineItemsToContentBlocks(
 function projectAssistantTextItemToContentBlocks(
   item: Extract<AgentTurnTimelineItem, { readonly kind: 'assistant_text' }>,
 ): ContentBlock[] {
-  if (item.status === 'streaming') {
-    return [
-      {
-        id: item.itemId,
-        type: 'text',
-        timestamp: item.createdAt,
-        content: item.payload.content,
-        isStreaming: true,
-      },
-    ];
-  }
-
-  const extracted = extractCompositeContentBlocks(item.payload.content);
-  const blocks: ContentBlock[] = [];
-  if (extracted.text.length > 0) {
-    blocks.push({
-      id: item.itemId,
-      type: 'text',
-      timestamp: item.createdAt,
-      content: extracted.text,
-      isStreaming: false,
-    });
-  }
-  blocks.push(
-    ...extracted.composites.map((composite, index) => ({
-      id: `${item.itemId}-composite-${index + 1}`,
-      type: 'composite' as const,
-      timestamp: item.createdAt,
-      composite,
-    })),
-  );
-
-  if (blocks.length > 0) {
-    return blocks;
-  }
-
   return [
     {
       id: item.itemId,
       type: 'text',
       timestamp: item.createdAt,
-      content: '',
-      isStreaming: false,
+      content: item.payload.content,
+      isStreaming: item.status === 'streaming',
     },
   ];
 }
@@ -440,9 +505,7 @@ function mergeFinalContentBlocksIntoTimelineOrder(
   timelineBlocks: readonly ContentBlock[],
   finalBlocks: readonly ContentBlock[] | undefined,
 ): ContentBlock[] {
-  if (!finalBlocks || finalBlocks.length === 0) {
-    return [...timelineBlocks];
-  }
+  if (!finalBlocks || finalBlocks.length === 0) return [...timelineBlocks];
 
   const finalById = new Map(finalBlocks.map((block) => [block.id, block]));
   const finalByToolCallId = new Map(
@@ -450,59 +513,17 @@ function mergeFinalContentBlocksIntoTimelineOrder(
       block.type === 'tool_call' && block.toolCall?.id ? [[block.toolCall.id, block]] : [],
     ),
   );
-  const finalTextBlocks = finalBlocks.filter((block) => block.type === 'text');
-  const finalThinkingBlocks = finalBlocks.filter((block) => block.type === 'thinking');
-  const finalCompositeBlocks = finalBlocks.filter((block) => block.type === 'composite');
-  let textOrdinal = 0;
-  let thinkingOrdinal = 0;
-  let compositeOrdinal = 0;
-  const usedFinalIds = new Set<string>();
 
-  const merged = timelineBlocks.map((block) => {
-    const ordinalReplacement = (() => {
-      switch (block.type) {
-        case 'text': {
-          const replacement = finalTextBlocks[textOrdinal];
-          textOrdinal += 1;
-          return replacement;
-        }
-        case 'thinking': {
-          const replacement = finalThinkingBlocks[thinkingOrdinal];
-          thinkingOrdinal += 1;
-          return replacement;
-        }
-        case 'composite': {
-          const replacement = finalCompositeBlocks[compositeOrdinal];
-          compositeOrdinal += 1;
-          return replacement;
-        }
-        default:
-          return undefined;
-      }
-    })();
+  return timelineBlocks.map((block) => {
+    // Markdown/thinking source and identity remain owned by the Timeline session.
+    if (block.type === 'text' || block.type === 'thinking') return block;
     const replacement =
       finalById.get(block.id) ??
       (block.type === 'tool_call' && block.toolCall?.id
         ? finalByToolCallId.get(block.toolCall.id)
-        : undefined) ??
-      (ordinalReplacement && !usedFinalIds.has(ordinalReplacement.id)
-        ? ordinalReplacement
         : undefined);
-    if (!replacement) {
-      return block;
-    }
-
-    usedFinalIds.add(replacement.id);
-    return replacement;
+    return replacement ?? block;
   });
-
-  for (const block of finalBlocks) {
-    if (!usedFinalIds.has(block.id)) {
-      merged.push(block);
-    }
-  }
-
-  return merged;
 }
 
 function mergeOptionalIds(
