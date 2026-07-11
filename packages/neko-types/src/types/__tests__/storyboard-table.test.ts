@@ -381,7 +381,57 @@ describe('storyboard table contract', () => {
         expect.objectContaining({
           severity: 'error',
           code: 'image-strategy-missing-prompt',
-          path: ['scenes', 0, 'shots', 0, 'generationPrompt'],
+          path: ['scenes', 0, 'shots', 0, 'imagePrompt'],
+        }),
+      ]),
+    );
+  });
+
+  it('rejects scene-level video prompts duplicated or stored on later shots', () => {
+    const result = validateStoryboardTable({
+      schemaVersion: 1,
+      kind: 'storyboard-table',
+      title: 'Invalid scene video prompts',
+      scenes: [
+        {
+          sceneId: 'scene-1',
+          sceneTitle: 'Scene',
+          shots: [
+            {
+              shotNumber: 1,
+              duration: 3,
+              visualDescription: 'Rin looks up.',
+              characterAction: 'Rin looks up.',
+              imageStrategy: 'generate-new',
+              imagePrompt: 'Create the first frame.',
+              videoPrompt: 'Animate the whole scene.',
+            },
+            {
+              shotNumber: 2,
+              duration: 3,
+              visualDescription: 'The signal flashes.',
+              characterAction: 'Rin turns toward the signal.',
+              imageStrategy: 'generate-new',
+              imagePrompt: 'Create the second frame.',
+              videoPrompt: 'Legacy per-shot video prompt must be rejected.',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: 'error',
+          code: 'invalid-scene-video-prompt',
+          path: ['scenes', 0, 'shots', 0, 'videoPrompt'],
+        }),
+        expect.objectContaining({
+          severity: 'error',
+          code: 'invalid-scene-video-prompt',
+          path: ['scenes', 0, 'shots', 1, 'videoPrompt'],
         }),
       ]),
     );
@@ -1265,7 +1315,8 @@ describe('storyboard table contract', () => {
               visualDescription: 'Generate a frame.',
               characterAction: 'Rin looks up.',
               imageStrategy: 'generate-new',
-              generationPrompt: 'new frame',
+              imagePrompt: 'new canonical frame',
+              generationPrompt: 'legacy frame must not execute',
             },
             {
               shotId: 'shot-transform',
@@ -1295,7 +1346,7 @@ describe('storyboard table contract', () => {
         kind: 'generate-image',
         toolName: 'GenerateImage',
         shotId: 'shot-generate',
-        generationPrompt: 'new frame',
+        generationPrompt: 'new canonical frame',
       }),
       expect.objectContaining({
         kind: 'transform-image',

@@ -212,6 +212,11 @@ export interface StoryboardShotRow {
   readonly soundCue?: string;
   readonly textCues?: readonly StoryboardTextCue[];
   readonly voiceCues?: readonly StoryboardVoiceCue[];
+  /** Shot-level image generation or editing intent. */
+  readonly imagePrompt?: string;
+  /** Scene-level video intent, stored on the first shot of the scene for table projection. */
+  readonly videoPrompt?: string;
+  /** @deprecated Use imagePrompt for canonical Storyboard generation intent. */
   readonly generationPrompt?: string;
   readonly visualStyle?: string;
   readonly referenceImagePath?: string;
@@ -363,6 +368,7 @@ export type StoryboardValidationDiagnosticCode =
   | 'missing-profile-field'
   | 'image-strategy-missing-source'
   | 'image-strategy-missing-prompt'
+  | 'invalid-scene-video-prompt'
   | 'missing-capability'
   | 'generation-denied'
   | 'generation-confirmation-required'
@@ -891,6 +897,10 @@ export function projectCanonicalStoryboardTableToCutHandoff(
   };
 }
 
+function resolveStoryboardImagePrompt(shot: StoryboardShotRow): string | undefined {
+  return shot.imagePrompt?.trim() || shot.generationPrompt?.trim() || undefined;
+}
+
 export function interpretStoryboardImageStrategies(
   input: StoryboardImageStrategyInterpreterInput,
 ): StoryboardImageStrategyInterpreterResult {
@@ -953,21 +963,23 @@ export function interpretStoryboardImageStrategies(
             });
             continue;
           }
+          const imagePrompt = resolveStoryboardImagePrompt(shot);
           actions.push({
             ...base,
             kind: 'generate-image',
             toolName: generationTool.toolName,
-            ...(shot.generationPrompt ? { generationPrompt: shot.generationPrompt } : {}),
+            ...(imagePrompt ? { generationPrompt: imagePrompt } : {}),
             sourceMediaRefs: shot.sourceMediaRefs,
           });
           break;
         }
         case 'generate-new': {
-          if (!shot.generationPrompt?.trim()) {
+          const imagePrompt = resolveStoryboardImagePrompt(shot);
+          if (!imagePrompt) {
             pushBlockedAction(blockedActions, diagnostics, base, 'missing-prompt', {
               code: 'image-strategy-missing-prompt',
-              path: ['scenes', scene.sceneId, 'shots', shotId, 'generationPrompt'],
-              message: 'generate-new requires generationPrompt.',
+              path: ['scenes', scene.sceneId, 'shots', shotId, 'imagePrompt'],
+              message: 'generate-new requires imagePrompt.',
             });
             continue;
           }
@@ -983,7 +995,7 @@ export function interpretStoryboardImageStrategies(
             ...base,
             kind: 'generate-image',
             toolName: generationTool.toolName,
-            generationPrompt: shot.generationPrompt,
+            generationPrompt: imagePrompt,
           });
           break;
         }
@@ -1004,11 +1016,12 @@ export function interpretStoryboardImageStrategies(
             });
             continue;
           }
+          const imagePrompt = resolveStoryboardImagePrompt(shot);
           actions.push({
             ...base,
             kind: 'transform-image',
             toolName: transformTool.toolName,
-            ...(shot.generationPrompt ? { generationPrompt: shot.generationPrompt } : {}),
+            ...(imagePrompt ? { generationPrompt: imagePrompt } : {}),
             sourceMediaRefs: shot.sourceMediaRefs,
           });
           break;
@@ -1344,6 +1357,8 @@ function normalizeShotRow(
   const soundCue = readTrimmedString(record['soundCue']);
   const textCues = normalizeTextCues(record['textCues'], [...path, 'textCues'], diagnostics);
   const voiceCues = normalizeVoiceCues(record['voiceCues'], [...path, 'voiceCues'], diagnostics);
+  const imagePrompt = readTrimmedString(record['imagePrompt']);
+  const videoPrompt = readTrimmedString(record['videoPrompt']);
   const generationPrompt = readTrimmedString(record['generationPrompt']);
   const visualStyle = readTrimmedString(record['visualStyle']);
   const referenceImagePath = readTrimmedString(record['referenceImagePath']);
@@ -1406,6 +1421,8 @@ function normalizeShotRow(
     ...(soundCue ? { soundCue } : {}),
     ...(textCues.length > 0 ? { textCues } : {}),
     ...(voiceCues.length > 0 ? { voiceCues } : {}),
+    ...(imagePrompt ? { imagePrompt } : {}),
+    ...(videoPrompt ? { videoPrompt } : {}),
     ...(generationPrompt ? { generationPrompt } : {}),
     ...(visualStyle ? { visualStyle } : {}),
     ...(referenceImagePath ? { referenceImagePath } : {}),
@@ -1763,6 +1780,7 @@ function validateNormalizedStoryboardTable(
   }
 
   for (const [sceneIndex, scene] of table.scenes.entries()) {
+    validateSceneVideoPrompt(scene, sceneIndex, diagnostics);
     for (const [shotIndex, shot] of scene.shots.entries()) {
       const path = ['scenes', sceneIndex, 'shots', shotIndex] as const;
       validateShotStrategy(shot, path, diagnostics);
@@ -1854,6 +1872,29 @@ function validateCueSpeakerEntityKinds(
   }
 }
 
+function validateSceneVideoPrompt(
+  scene: StoryboardSceneRow,
+  sceneIndex: number,
+  diagnostics: StoryboardValidationDiagnostic[],
+): void {
+  const promptShotIndices = scene.shots.flatMap((shot, shotIndex) =>
+    shot.videoPrompt?.trim() ? [shotIndex] : [],
+  );
+  if (promptShotIndices.length === 0) return;
+
+  for (const shotIndex of promptShotIndices) {
+    if (shotIndex === 0 && promptShotIndices.length === 1) continue;
+    diagnostics.push(
+      storyboardDiagnostic(
+        'error',
+        'invalid-scene-video-prompt',
+        ['scenes', sceneIndex, 'shots', shotIndex, 'videoPrompt'],
+        'videoPrompt is scene-level and must appear at most once on the first shot.',
+      ),
+    );
+  }
+}
+
 function validateShotStrategy(
   shot: StoryboardShotRow,
   path: readonly StoryboardValidationDiagnosticPathSegment[],
@@ -1876,13 +1917,17 @@ function validateShotStrategy(
     );
   }
 
-  if (shot.imageStrategy === 'generate-new' && !shot.generationPrompt?.trim()) {
+  if (
+    shot.imageStrategy === 'generate-new' &&
+    !shot.imagePrompt?.trim() &&
+    !shot.generationPrompt?.trim()
+  ) {
     diagnostics.push(
       storyboardDiagnostic(
         'error',
         'image-strategy-missing-prompt',
-        [...path, 'generationPrompt'],
-        'generate-new requires generationPrompt.',
+        [...path, 'imagePrompt'],
+        'generate-new requires imagePrompt.',
       ),
     );
   }

@@ -60,6 +60,23 @@ const plans: readonly StoryScenePlan[] = [
         characterAction: 'The traveler steps onto the platform.',
         dialogue: 'TRAVELER: I am here.',
         duration: 4,
+        storyboardPrompt: {
+          version: 1,
+          promptBlocks: {
+            imagePromptDocument: {
+              version: 1,
+              documentId: 'shot-1:image',
+              blockKind: 'image',
+              text: 'Generate a wide station keyframe while preserving the traveler design.',
+            },
+            videoPromptDocument: {
+              version: 1,
+              documentId: 'scene-1:video',
+              blockKind: 'video',
+              text: 'Animate the full arrival scene with a slow push-in over four seconds.',
+            },
+          },
+        },
       },
     ],
   },
@@ -114,7 +131,18 @@ describe('Storyboard source normalization', () => {
       contractVersion: 1,
       sourceProfile: profile,
       revision: { sequence: 1, createdAt: NOW },
-      scenes: [{ sceneId: 'scene-1', shots: [{ shotId: 'shot-1' }] }],
+      scenes: [
+        {
+          sceneId: 'scene-1',
+          shots: [
+            {
+              shotId: 'shot-1',
+              imagePrompt: 'Generate a wide station keyframe while preserving the traveler design.',
+              videoPrompt: 'Animate the full arrival scene with a slow push-in over four seconds.',
+            },
+          ],
+        },
+      ],
     });
   });
 
@@ -250,12 +278,14 @@ describe('Storyboard source normalization', () => {
       },
       { now: () => NOW },
     );
+    expect(initial.table?.revision).toBeDefined();
+    if (!initial.table?.revision) return;
     const storyboard: StoryboardTable = {
-      ...initial.table!,
+      ...initial.table,
       projections: [
         {
           target: 'canvas',
-          storyboardRevisionId: initial.table!.revision!.revisionId,
+          storyboardRevisionId: initial.table.revision.revisionId,
           mode: 'read-only-projection',
           createdAt: NOW,
         },
@@ -297,12 +327,14 @@ describe('Storyboard source normalization', () => {
       },
       { now: () => NOW },
     );
+    expect(initial.table).toBeDefined();
+    if (!initial.table) return;
     const replacementRef = resource('replacement');
     const firstTrace = initial.table?.scenes[0]?.shots[0]?.sourceTrace ?? [];
     const result = await normalizeStoryboardSource(
       {
         profile: 'from-existing-storyboard',
-        storyboard: initial.table!,
+        storyboard: initial.table,
         operations: [
           {
             kind: 'split-shot',

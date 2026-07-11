@@ -140,7 +140,8 @@ describe('storyboardPlanner', () => {
               {
                 ...payload.scenes[0]!.shotPlans[0]!,
                 referenceResourceRef: resourceRef,
-                generationPrompt: 'animated comic panel',
+                imagePrompt: 'animated comic panel',
+                videoPrompt: 'Animate the office scene with a slow push-in over four seconds.',
                 characterAction: 'Mika starts typing.',
                 textCues: [
                   {
@@ -228,7 +229,7 @@ describe('storyboardPlanner', () => {
             text: 'animated comic panel',
           }),
           videoPromptDocument: expect.objectContaining({
-            text: expect.stringContaining('Mika starts typing.'),
+            text: 'Animate the office scene with a slow push-in over four seconds.',
           }),
         }),
       }),

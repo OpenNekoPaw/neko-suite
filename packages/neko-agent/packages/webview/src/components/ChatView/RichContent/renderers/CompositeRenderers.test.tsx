@@ -278,7 +278,11 @@ describe('composite rich content renderers', () => {
                       soundCue: '嗡',
                       visualStyle: 'noir manga',
                       vfx: ['blue glow'],
-                      generationPrompt: 'close-up, blue pulse, manga noir',
+                      imagePrompt:
+                        'Create a close-up keyframe with a blue pulse while preserving Rin and the manga composition.',
+                      videoPrompt:
+                        'Animate scene 1 as a slow push-in with a pulsing blue light over four seconds.',
+                      generationPrompt: 'legacy prompt must not render',
                       imageStrategy: 'use-as-reference',
                       decisionReason: 'Keep the manga panel composition as reference.',
                     },
@@ -355,9 +359,15 @@ describe('composite rich content renderers', () => {
     expect(document.body.textContent).toContain('Narration: 她终于看见线索。');
     expect(document.body.textContent).toContain('SFX Text: 嗡');
     expect(document.body.textContent).toContain('Background Text: CAFE');
-    expect(document.body.textContent).not.toContain('close-up, blue pulse, manga noir');
+    expect(document.body.textContent).toContain(
+      'Create a close-up keyframe with a blue pulse while preserving Rin and the manga composition.',
+    );
+    expect(document.body.textContent).toContain(
+      'Animate scene 1 as a slow push-in with a pulsing blue light over four seconds.',
+    );
+    expect(document.body.textContent).not.toContain('legacy prompt must not render');
     expect(document.body.textContent).not.toContain('noir manga');
-    expect(document.body.textContent).toContain('animated blue pulse under the table');
+    expect(document.body.textContent).not.toContain('animated blue pulse under the table');
     expect(document.body.textContent).toContain('Process reference');
     expect(document.body.textContent).toContain('reference media');
     expect(screen.getByAltText('Original panel')).toBeTruthy();

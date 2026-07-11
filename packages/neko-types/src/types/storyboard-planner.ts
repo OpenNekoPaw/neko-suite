@@ -31,6 +31,8 @@ export interface StoryShotPlan {
   readonly soundCue?: string;
   readonly textCues?: readonly StoryboardTextCue[];
   readonly voiceCues?: readonly StoryboardVoiceCue[];
+  readonly imagePrompt?: string;
+  readonly videoPrompt?: string;
   readonly generationPrompt?: string;
   readonly storyboardPrompt?: CanvasStoryboardPromptState;
   readonly visualStyle?: string;
@@ -69,6 +71,8 @@ export interface CanvasStoryboardShotPlan {
   readonly soundCue?: string;
   readonly textCues?: readonly StoryboardTextCue[];
   readonly voiceCues?: readonly StoryboardVoiceCue[];
+  readonly imagePrompt?: string;
+  readonly videoPrompt?: string;
   readonly generationPrompt?: string;
   readonly storyboardPrompt?: CanvasStoryboardPromptState;
   readonly visualStyle?: string;

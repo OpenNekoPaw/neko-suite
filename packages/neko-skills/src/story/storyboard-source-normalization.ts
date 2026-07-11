@@ -716,20 +716,36 @@ function mapPlansToShots(
       ...(plan.soundCue ? { soundCue: plan.soundCue } : {}),
       ...(plan.textCues ? { textCues: plan.textCues } : {}),
       ...(plan.voiceCues ? { voiceCues: plan.voiceCues } : {}),
-      ...(image || plan.referenceResourceRef
-        ? plan.generationPrompt
-          ? { generationPrompt: plan.generationPrompt }
-          : {}
-        : {
-            generationPrompt:
-              plan.generationPrompt ?? plan.visualDescription ?? `Storyboard shot ${shotNumber}`,
-          }),
+      ...normalizePlannedPrompts(plan, shotNumber, Boolean(image || plan.referenceResourceRef)),
       ...(plan.visualStyle ? { visualStyle: plan.visualStyle } : {}),
       ...(plan.vfx ? { vfx: plan.vfx } : {}),
       ...createPlannedSourceMediaRefs(image, plan.referenceResourceRef, shotNumber),
       sourceTrace: [trace],
     };
   });
+}
+
+function normalizePlannedPrompts(
+  plan: StoryShotPlan,
+  shotNumber: number,
+  hasReferenceMedia: boolean,
+): Pick<StoryboardShotRow, 'imagePrompt' | 'videoPrompt'> {
+  const imagePrompt =
+    plan.imagePrompt?.trim() ||
+    plan.storyboardPrompt?.promptBlocks?.imagePromptDocument?.text.trim() ||
+    plan.generationPrompt?.trim() ||
+    (!hasReferenceMedia
+      ? plan.visualDescription?.trim() || `Storyboard shot ${shotNumber}`
+      : undefined);
+  const videoPrompt =
+    plan.videoPrompt?.trim() ||
+    plan.storyboardPrompt?.promptBlocks?.videoPromptDocument?.text.trim() ||
+    undefined;
+
+  return {
+    ...(imagePrompt ? { imagePrompt } : {}),
+    ...(videoPrompt ? { videoPrompt } : {}),
+  };
 }
 
 function createPlannedSourceMediaRefs(
@@ -877,7 +893,7 @@ function defaultShot(
     visualDescription: description || `Shot ${shotNumber}`,
     characterAction: description || 'Establish the story beat.',
     imageStrategy: 'generate-new',
-    generationPrompt: description || `Storyboard shot ${shotNumber}`,
+    imagePrompt: description || `Storyboard shot ${shotNumber}`,
     sourceTrace: [trace],
     ...extra,
   };

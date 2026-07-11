@@ -273,7 +273,7 @@ function SemanticStoryboardTableRow({ row }: { row: SemanticStoryboardRow }) {
   const supplementalAudio = formatSupplementalAudio(shot, t);
   const cueDisplay = compactStrings([dialogue, supplementalAudio]).join('\n');
   const imagePrompt = formatShotImagePrompt(shot);
-  const videoPrompt = formatSceneVideoPrompt(row.animationOverlay);
+  const videoPrompt = formatSceneVideoPrompt(shot, row.animationOverlay);
   const referenceMediaLabel = formatShotReferenceMediaLabel(shot, t);
   const state = resolveStoryboardSceneReviewState({
     shot,
@@ -466,14 +466,17 @@ function ProjectedStoryboardRows({ sections }: { sections: readonly ResolvedComp
   );
 }
 
-function formatShotImagePrompt(_shot: StoryboardShotRow): string | undefined {
-  return undefined;
+function formatShotImagePrompt(shot: StoryboardShotRow): string | undefined {
+  return shot.imagePrompt?.trim() || undefined;
 }
 
 function formatSceneVideoPrompt(
+  shot: StoryboardShotRow,
   animationOverlay: StoryboardShotPlanOverlay | undefined,
 ): string | undefined {
-  return animationOverlay?.videoPromptIntent?.positive?.trim() || undefined;
+  return (
+    shot.videoPrompt?.trim() || animationOverlay?.videoPromptIntent?.positive?.trim() || undefined
+  );
 }
 
 function formatShotReferenceMediaLabel(

@@ -161,6 +161,8 @@ export interface CanvasStoryboardNextCreativeState {
 }
 
 export type CanvasStoryboardMigrationSource =
+  | 'imagePrompt'
+  | 'videoPrompt'
   | 'generationPrompt'
   | 'promptSlots'
   | 'visualDescription'
@@ -712,6 +714,11 @@ export function migrateLegacyCanvasStoryboardShot(
 
   const imagePromptCandidates = uniqueMigrationPromptCandidates([
     {
+      source: 'imagePrompt',
+      sourceField: '/imagePrompt',
+      text: readString(data, 'imagePrompt'),
+    },
+    {
       source: 'promptSlots',
       sourceField: '/promptSlots',
       text: firstPromptSlotText(promptSlots, 'image'),
@@ -743,7 +750,9 @@ export function migrateLegacyCanvasStoryboardShot(
   }
   const imagePromptCandidate = imagePromptCandidates[0];
   const imagePromptText = imagePromptCandidate?.text;
+  const directVideoPrompt = readString(data, 'videoPrompt');
   const videoPromptText =
+    directVideoPrompt ??
     firstPromptSlotText(promptSlots, 'video') ??
     readString(asRecord(data['generatedVideoAsset']), 'prompt') ??
     assembleLegacyVideoPrompt(data);
@@ -770,11 +779,13 @@ export function migrateLegacyCanvasStoryboardShot(
             shotKey,
             blockKind: 'video',
             text: videoPromptText,
-            sourceField: firstPromptSlotText(promptSlots, 'video')
-              ? '/promptSlots'
-              : readString(asRecord(data['generatedVideoAsset']), 'prompt')
-                ? '/generatedVideoAsset/prompt'
-                : '/visualDescription',
+            sourceField: directVideoPrompt
+              ? '/videoPrompt'
+              : firstPromptSlotText(promptSlots, 'video')
+                ? '/promptSlots'
+                : readString(asRecord(data['generatedVideoAsset']), 'prompt')
+                  ? '/generatedVideoAsset/prompt'
+                  : '/visualDescription',
             migratedAt,
           }),
         }
