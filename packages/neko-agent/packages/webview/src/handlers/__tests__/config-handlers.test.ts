@@ -268,6 +268,7 @@ function createContext(): MessageHandlerContext {
     setActiveSkill: vi.fn(),
     setActivationProgressByConversation: vi.fn(),
     setGlobalError: vi.fn(),
+    reportConversationDiagnostic: vi.fn(),
     conversationTokenCountRef: { current: new Map() },
     conversationCompressingRef: { current: new Map() },
     forceUpdate: vi.fn(),

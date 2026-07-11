@@ -14,6 +14,7 @@ const translations: Record<string, string> = {
   'chat.agentRun.phase.acting': 'Acting',
   'chat.agentRun.actingWithTool': '{phase}: {tool}',
   'chat.agentRun.elapsedLabel': 'Elapsed time for this run',
+  'chat.conversation.loading': 'Loading conversation history...',
 };
 
 vi.mock('@/i18n/I18nContext', () => ({
@@ -56,6 +57,34 @@ describe('ChatView empty state', () => {
     expect(screen.getByTestId('input-area')).toBeTruthy();
   });
 
+  it('renders explicit loading and unavailable states instead of an empty transcript', () => {
+    const { rerender } = renderChatView({
+      foregroundConversationAvailability: { kind: 'loading' },
+    });
+
+    expect(screen.getByRole('status').textContent).toBe('Loading conversation history...');
+    expect(screen.queryByTestId('message-list')).toBeNull();
+
+    rerender(
+      <ChatView
+        messages={[]}
+        inputValue=""
+        isThinking={false}
+        streamingMessageId={null}
+        activeConversationId="conv-1"
+        foregroundConversationAvailability={{
+          kind: 'unavailable',
+          diagnostic: 'Activation was rejected.',
+        }}
+        onInputChange={vi.fn()}
+        onSend={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('alert').textContent).toBe('Activation was rejected.');
+    expect(screen.queryByTestId('message-list')).toBeNull();
+  });
+
   it('does not render ordinary assistant suggestions in empty Character Dialogue sessions', () => {
     renderChatView({
       conversationKind: 'character-dialogue',
@@ -90,7 +119,7 @@ describe('ChatView empty state', () => {
 });
 
 function renderChatView(overrides: Partial<React.ComponentProps<typeof ChatView>> = {}) {
-  render(
+  return render(
     <ChatView
       messages={[]}
       inputValue=""

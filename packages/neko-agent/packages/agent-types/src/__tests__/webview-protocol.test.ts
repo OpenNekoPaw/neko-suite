@@ -639,11 +639,13 @@ describe('webview protocol parser', () => {
     expect(
       parseWebviewToExtensionMessage({
         type: 'updateTabState',
+        expectedTabStateRevision: 3,
         openTabs,
         activeTabId: 'tab-embody',
       }),
     ).toEqual({
       type: 'updateTabState',
+      expectedTabStateRevision: 3,
       openTabs: [
         expect.objectContaining({
           kind: 'embody-character',
@@ -656,6 +658,7 @@ describe('webview protocol parser', () => {
     expect(
       parseWebviewToExtensionMessage({
         type: 'updateTabState',
+        expectedTabStateRevision: 3,
         openTabs: [
           {
             id: 'tab-embody',
@@ -671,6 +674,7 @@ describe('webview protocol parser', () => {
       }),
     ).toEqual({
       type: 'updateTabState',
+      expectedTabStateRevision: 3,
       openTabs: [
         {
           id: 'tab-embody',

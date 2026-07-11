@@ -187,11 +187,27 @@ describe('messages', () => {
         expect(mockPostMessage).toHaveBeenCalledWith({ type: 'newConversation' });
       });
 
-      it('should post switchConversation with ID', () => {
-        VSCodeMessages.switchConversation('conv-123');
-        expect(mockPostMessage).toHaveBeenCalledWith({
-          type: 'switchConversation',
+      it('should post an atomic activateConversation request', () => {
+        VSCodeMessages.activateConversation({
+          activationId: 4,
           conversationId: 'conv-123',
+          tabId: 'tab-123',
+          expectedTabStateRevision: 7,
+          tabState: {
+            openTabs: [{ id: 'tab-123', title: 'Chat', conversationId: 'conv-123' }],
+            activeTabId: 'tab-123',
+          },
+        });
+        expect(mockPostMessage).toHaveBeenCalledWith({
+          type: 'activateConversation',
+          activationId: 4,
+          conversationId: 'conv-123',
+          tabId: 'tab-123',
+          expectedTabStateRevision: 7,
+          tabState: {
+            openTabs: [{ id: 'tab-123', title: 'Chat', conversationId: 'conv-123' }],
+            activeTabId: 'tab-123',
+          },
         });
       });
 

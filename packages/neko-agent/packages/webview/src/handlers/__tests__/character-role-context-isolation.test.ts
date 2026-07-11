@@ -3,6 +3,7 @@ import { cleanup, render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type {
   AgentQueuedMessageItem,
+  AgentSessionDiagnosticMessage,
   AgentTurnTimelineAssistantTextItem,
   AgentTurnTimelineMessage,
   ConversationSummary,
@@ -102,6 +103,37 @@ describe('character role context isolation', () => {
     expect(harness.globalError()).toBe('Conversation has active creative AI runs.');
   });
 
+  it('routes session diagnostics to their owning conversation without mutating global error state', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-front',
+      activeTabId: 'tab-front',
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      openTabs: [{ id: 'tab-front', title: 'Front', conversationId: 'conv-front' }],
+    });
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'sessionDiagnostic',
+        code: 'stale-tab-state-revision',
+        severity: 'error',
+        action: 'activate-conversation',
+        conversationId: 'conv-background',
+        message: 'Background activation was rejected.',
+      },
+      harness.context,
+    );
+
+    expect(harness.globalError()).toBeNull();
+    expect(harness.conversationDiagnostics()).toEqual([
+      expect.objectContaining({
+        conversationId: 'conv-background',
+        code: 'stale-tab-state-revision',
+      }),
+    ]);
+  });
+
   it('keeps active conversation refs aligned for ordinary activeConversation updates', () => {
     const ordinaryMessage = message('ordinary-message', 'assistant', '普通 Agent 回复');
     const harness = createContextHarness({
@@ -130,6 +162,47 @@ describe('character role context isolation', () => {
     expect(harness.context.streamingMessageIdRef.current).toBeNull();
     expect(harness.messages()).toEqual([ordinaryMessage]);
     expect(harness.streaming()).toEqual({ isThinking: false, streamingMessageId: null });
+  });
+
+  it('flushes only the previous foreground partition during a conversation swap', () => {
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      activeTabId: 'tab-b',
+      currentMessages: [message('message-a', 'assistant', 'A')],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      openTabs: [
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+      ],
+    });
+    const flushedConversations: string[] = [];
+    let flushAllCount = 0;
+    harness.context.timelineRenderScheduler = {
+      ...createImmediateTimelineRenderScheduler(),
+      flushConversation(conversationId): void {
+        flushedConversations.push(conversationId);
+      },
+      flushAll(): void {
+        flushAllCount += 1;
+      },
+    };
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-b',
+          title: 'Chat B',
+          messages: [message('message-b', 'assistant', 'B')],
+        },
+      },
+      harness.context,
+    );
+
+    expect(flushedConversations).toEqual(['conv-a']);
+    expect(flushAllCount).toBe(0);
+    expect(harness.activeConversationId()).toBe('conv-b');
   });
 
   it('synchronizes foreground activeConversation messages and queue state into the session cache', () => {
@@ -375,6 +448,8 @@ describe('character role context isolation', () => {
       pendingForegroundActivation: {
         reason: 'switch-conversation',
         conversationId: 'conv-c',
+        activationId: 2,
+        tabStateRevision: 2,
       },
     });
 
@@ -382,6 +457,7 @@ describe('character role context isolation', () => {
       conversationHandlers,
       {
         type: 'activeConversation',
+        activation: { activationId: 1, tabStateRevision: 1 },
         conversation: {
           id: 'conv-b',
           title: 'Chat B',
@@ -399,12 +475,15 @@ describe('character role context isolation', () => {
     expect(harness.pendingForegroundActivation()).toEqual({
       reason: 'switch-conversation',
       conversationId: 'conv-c',
+      activationId: 2,
+      tabStateRevision: 2,
     });
 
     dispatch(
       conversationHandlers,
       {
         type: 'activeConversation',
+        activation: { activationId: 2, tabStateRevision: 2 },
         conversation: {
           id: 'conv-c',
           title: 'Chat C',
@@ -488,6 +567,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: {
           openTabs: [
             { id: 'tab-conv-a', title: 'Ordinary chat', conversationId: 'conv-a' },
@@ -540,6 +620,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: {
           openTabs: harness.openTabs(),
           activeTabId: 'tab-a',
@@ -594,6 +675,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: {
           openTabs: harness.openTabs(),
           activeTabId: roleTab.id,
@@ -664,6 +746,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: { openTabs: harness.openTabs(), activeTabId: 'tab-a' },
       },
       harness.context,
@@ -798,6 +881,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: { openTabs: harness.openTabs(), activeTabId: 'tab-a' },
       },
       harness.context,
@@ -858,6 +942,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: { openTabs: harness.openTabs(), activeTabId: 'tab-a' },
       },
       harness.context,
@@ -950,6 +1035,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: { openTabs: harness.openTabs(), activeTabId: 'tab-a' },
       },
       harness.context,
@@ -1023,6 +1109,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: {
           openTabs: [
             { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
@@ -1082,6 +1169,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: {
           openTabs: [{ id: 'tab-conv-a', title: 'Ordinary chat', conversationId: 'conv-a' }],
           activeTabId: 'tab-conv-a',
@@ -1117,6 +1205,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: {
           openTabs: [{ id: 'tab-conv-a', title: 'Ordinary chat', conversationId: 'conv-a' }],
           activeTabId: 'tab-conv-a',
@@ -1182,6 +1271,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: {
           openTabs: [{ id: 'tab-conv-a', title: 'Ordinary chat', conversationId: 'conv-a' }],
           activeTabId: 'tab-conv-a',
@@ -1223,6 +1313,7 @@ describe('character role context isolation', () => {
       tabHandlers,
       {
         type: 'tabState',
+        revision: 1,
         tabState: {
           openTabs: [],
           activeTabId: null,
@@ -1293,6 +1384,7 @@ interface ContextHarness {
   conversationStreaming(): Map<string, StreamingState>;
   conversations(): ConversationSummary[];
   globalError(): string | null;
+  conversationDiagnostics(): AgentSessionDiagnosticMessage[];
   pendingForegroundActivation(): PendingForegroundConversationActivation | null;
   completedForegroundActivations(): string[];
 }
@@ -1307,6 +1399,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
   let pluginsAvailable: PluginsAvailable = {};
   let conversations: ConversationSummary[] = options.conversations ?? [];
   let globalError: string | null = null;
+  const conversationDiagnostics: AgentSessionDiagnosticMessage[] = [];
   const activeConversationIdRef = ref<string | null>(options.activeConversationId);
   const streamingMessageIdRef = ref<string | null>(streaming.streamingMessageId);
   const isTablessConversationViewRef = ref(options.isTablessConversationView ?? false);
@@ -1374,6 +1467,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     activeTabId,
     isTablessConversationViewRef,
     pendingForegroundConversationActivationRef,
+    tabStateRevisionRef: ref(0),
     completeForegroundConversationActivation: (conversationId) => {
       const pending = pendingForegroundConversationActivationRef.current;
       if (!pending) return;
@@ -1419,6 +1513,9 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
         globalError = next;
       },
     ),
+    reportConversationDiagnostic: (diagnostic) => {
+      conversationDiagnostics.push(diagnostic);
+    },
     conversationTokenCountRef: ref(new Map()),
     conversationCompressingRef: ref(new Map()),
     forceUpdate: () => undefined,
@@ -1494,6 +1591,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     conversationStreaming: () => conversationStreamingRef.current,
     conversations: () => conversations,
     globalError: () => globalError,
+    conversationDiagnostics: () => [...conversationDiagnostics],
     pendingForegroundActivation: () => pendingForegroundConversationActivationRef.current,
     completedForegroundActivations: () => completedForegroundActivations,
   };

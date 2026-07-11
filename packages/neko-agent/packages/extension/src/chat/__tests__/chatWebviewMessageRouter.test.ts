@@ -144,6 +144,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     } as any,
     refreshConfigSnapshot: vi.fn(),
     sendTabState: vi.fn(),
+    activateConversation: vi.fn(),
     updateTabState: vi.fn(),
     syncCanvasAmbientScopeFromActiveConversation: vi.fn(),
     resolveLifecycleCapabilityDescriptor: vi.fn((capabilityId: string) =>
@@ -431,13 +432,24 @@ describe('handleChatWebviewMessage', () => {
     });
   });
 
-  it('syncs ambient scope after switching conversations', () => {
+  it('routes ordinary conversation switches through atomic activation', () => {
     const deps = createDeps();
+    const message = {
+      type: 'activateConversation' as const,
+      activationId: 2,
+      conversationId: 'conv-2',
+      tabId: 'tab-2',
+      expectedTabStateRevision: 4,
+      tabState: {
+        openTabs: [{ id: 'tab-2', title: 'Chat 2', conversationId: 'conv-2' }],
+        activeTabId: 'tab-2',
+      },
+    };
 
-    handleChatWebviewMessage({ type: 'switchConversation', conversationId: 'conv-2' }, deps);
+    handleChatWebviewMessage(message, deps);
 
-    expect(deps.conversationMessageHandler.handleSwitchConversation).toHaveBeenCalledWith('conv-2');
-    expect(deps.syncCanvasAmbientScopeFromActiveConversation).toHaveBeenCalledTimes(1);
+    expect(deps.activateConversation).toHaveBeenCalledWith(message);
+    expect(deps.conversationMessageHandler.handleSwitchConversation).not.toHaveBeenCalled();
   });
 
   it('routes delete conversation activation intent to the conversation handler', () => {

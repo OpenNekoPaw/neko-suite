@@ -129,12 +129,15 @@ describe('chatProvider', () => {
         openTabs: [expect.objectContaining({ conversationId: 'conv-history' })],
       }),
     );
-    expect(webview.postMessage).toHaveBeenCalledWith({
-      type: 'activeConversation',
-      conversation: null,
-    });
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'activeConversation',
+        conversation: null,
+      }),
+    );
     expect(webview.postMessage).toHaveBeenCalledWith({
       type: 'tabState',
+      revision: expect.any(Number),
       tabState: { openTabs: [], activeTabId: null },
     });
 
@@ -186,12 +189,15 @@ describe('chatProvider', () => {
       openTabs: [],
       activeTabId: null,
     });
-    expect(webview.postMessage).toHaveBeenCalledWith({
-      type: 'activeConversation',
-      conversation: null,
-    });
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'activeConversation',
+        conversation: null,
+      }),
+    );
     expect(webview.postMessage).toHaveBeenCalledWith({
       type: 'tabState',
+      revision: expect.any(Number),
       tabState: { openTabs: [], activeTabId: null },
     });
 
@@ -232,7 +238,12 @@ describe('chatProvider', () => {
 
     const receiveFirstMessage = vi.mocked(firstWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
-    await receiveFirstMessage?.({ type: 'updateTabState', openTabs: [], activeTabId: null });
+    await receiveFirstMessage?.({
+      type: 'updateTabState',
+      openTabs: [],
+      activeTabId: null,
+      expectedTabStateRevision: 0,
+    });
 
     const secondWebview = vscode.createMockWebview();
     provider.resolveWebviewView(
@@ -252,12 +263,15 @@ describe('chatProvider', () => {
     await receiveSecondMessage?.({ type: 'getTabState' });
     await flushWebviewAsyncWork();
 
-    expect(secondWebview.postMessage).toHaveBeenCalledWith({
-      type: 'activeConversation',
-      conversation: null,
-    });
+    expect(secondWebview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'activeConversation',
+        conversation: null,
+      }),
+    );
     expect(secondWebview.postMessage).toHaveBeenCalledWith({
       type: 'tabState',
+      revision: expect.any(Number),
       tabState: { openTabs: [], activeTabId: null },
     });
 
@@ -300,9 +314,15 @@ describe('chatProvider', () => {
     const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
     await receiveMessage?.({
-      type: 'updateTabState',
-      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
-      activeTabId: 'tab-history',
+      type: 'activateConversation',
+      activationId: 1,
+      conversationId: 'conv-history',
+      tabId: 'tab-history',
+      expectedTabStateRevision: 0,
+      tabState: {
+        openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+        activeTabId: 'tab-history',
+      },
     });
 
     const providerInternals = provider as unknown as {
@@ -324,7 +344,12 @@ describe('chatProvider', () => {
       dispose: vi.fn(),
     };
 
-    await receiveMessage?.({ type: 'updateTabState', openTabs: [], activeTabId: null });
+    await receiveMessage?.({
+      type: 'updateTabState',
+      openTabs: [],
+      activeTabId: null,
+      expectedTabStateRevision: 1,
+    });
     expect(providerInternals._conversations.getActiveId()).toBe('conv-history');
 
     provider.dispose();
@@ -366,9 +391,15 @@ describe('chatProvider', () => {
     const receiveFirstMessage = vi.mocked(firstWebview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
     await receiveFirstMessage?.({
-      type: 'updateTabState',
-      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
-      activeTabId: 'tab-history',
+      type: 'activateConversation',
+      activationId: 1,
+      conversationId: 'conv-history',
+      tabId: 'tab-history',
+      expectedTabStateRevision: 0,
+      tabState: {
+        openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+        activeTabId: 'tab-history',
+      },
     });
 
     const secondWebview = vscode.createMockWebview();
@@ -389,21 +420,24 @@ describe('chatProvider', () => {
     await receiveSecondMessage?.({ type: 'getTabState' });
     await flushWebviewAsyncWork();
 
-    expect(secondWebview.postMessage).toHaveBeenCalledWith({
-      type: 'activeConversation',
-      conversation: expect.objectContaining({
-        id: 'conv-history',
-        title: 'History',
-        messages: [
-          expect.objectContaining({
-            id: 'msg-1',
-            content: 'persisted transcript',
-          }),
-        ],
+    expect(secondWebview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'activeConversation',
+        conversation: expect.objectContaining({
+          id: 'conv-history',
+          title: 'History',
+          messages: [
+            expect.objectContaining({
+              id: 'msg-1',
+              content: 'persisted transcript',
+            }),
+          ],
+        }),
       }),
-    });
+    );
     expect(secondWebview.postMessage).toHaveBeenCalledWith({
       type: 'tabState',
+      revision: expect.any(Number),
       tabState: {
         openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
         activeTabId: 'tab-history',
@@ -413,7 +447,7 @@ describe('chatProvider', () => {
     provider.dispose();
   });
 
-  it('sends the active conversation when tab state synchronization switches to a history conversation', async () => {
+  it('atomically activates a history conversation and echoes activation correlation', async () => {
     const now = Date.now();
     const historicalConversation = {
       id: 'conv-history',
@@ -456,9 +490,15 @@ describe('chatProvider', () => {
     vi.mocked(webview.postMessage).mockClear();
 
     await receiveMessage?.({
-      type: 'updateTabState',
-      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
-      activeTabId: 'tab-history',
+      type: 'activateConversation',
+      activationId: 1,
+      conversationId: 'conv-history',
+      tabId: 'tab-history',
+      expectedTabStateRevision: 0,
+      tabState: {
+        openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+        activeTabId: 'tab-history',
+      },
     });
     await flushWebviewAsyncWork();
 
@@ -466,24 +506,175 @@ describe('chatProvider', () => {
       openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
       activeTabId: 'tab-history',
     });
-    expect(webview.postMessage).toHaveBeenCalledWith({
-      type: 'activeConversation',
-      conversation: expect.objectContaining({
-        id: 'conv-history',
-        title: 'History',
-        messages: [
-          expect.objectContaining({
-            id: 'msg-1',
-            content: 'persisted transcript',
-          }),
-        ],
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'activeConversation',
+        activation: {
+          activationId: 1,
+          tabStateRevision: 1,
+        },
+        conversation: expect.objectContaining({
+          id: 'conv-history',
+          title: 'History',
+          messages: [
+            expect.objectContaining({
+              id: 'msg-1',
+              content: 'persisted transcript',
+            }),
+          ],
+        }),
       }),
+    );
+
+    provider.dispose();
+  });
+
+  it('rejects a stale atomic activation without switching or emitting a correlated snapshot', async () => {
+    const now = Date.now();
+    const historicalConversation = {
+      id: 'conv-history',
+      title: 'History',
+      messages: [{ id: 'msg-1', role: 'user', content: 'persisted transcript', timestamp: now }],
+      createdAt: now,
+      updatedAt: now,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [['conv-history', historicalConversation]],
+        activeId: null,
+      },
+    });
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    vi.mocked(webview.postMessage).mockClear();
+
+    await receiveMessage?.({
+      type: 'activateConversation',
+      activationId: 7,
+      conversationId: 'conv-history',
+      tabId: 'tab-history',
+      expectedTabStateRevision: 1,
+      tabState: {
+        openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+        activeTabId: 'tab-history',
+      },
+    });
+    await flushWebviewAsyncWork();
+
+    const providerInternals = provider as unknown as {
+      _conversations: { getActiveId(): string | null };
+    };
+    expect(providerInternals._conversations.getActiveId()).toBeNull();
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'sessionDiagnostic',
+        code: 'stale-tab-state-revision',
+        action: 'activate-conversation',
+        conversationId: 'conv-history',
+        tabId: 'tab-history',
+      }),
+    );
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'tabState',
+      revision: 0,
+      tabState: { openTabs: [], activeTabId: null },
+    });
+    expect(webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'activeConversation', activation: expect.anything() }),
+    );
+
+    provider.dispose();
+  });
+
+  it('poisons ordinary conversation switching through the legacy tab-state mutation path', async () => {
+    const now = Date.now();
+    const historicalConversation = {
+      id: 'conv-history',
+      title: 'History',
+      messages: [{ id: 'msg-1', role: 'user', content: 'persisted transcript', timestamp: now }],
+      createdAt: now,
+      updatedAt: now,
+      resumable: false,
+      tokenCount: 1,
+    };
+    const context = createMockContext({
+      conversations: {
+        conversations: [['conv-history', historicalConversation]],
+        activeId: null,
+      },
+    });
+    const webview = vscode.createMockWebview();
+    const provider = new ChatViewProvider(vscode.Uri.file('/ext/neko-agent'), context, {
+      localResourceAccess: createImmediateLocalResourceAccess(),
+    });
+
+    provider.resolveWebviewView(
+      {
+        webview,
+        visible: true,
+        onDidChangeVisibility: vi.fn(() => ({ dispose: vi.fn() })),
+      } as never,
+      {} as never,
+      {} as never,
+    );
+    await Promise.resolve();
+
+    const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
+      ((message: unknown) => void | Promise<void>) | undefined;
+    vi.mocked(webview.postMessage).mockClear();
+
+    await receiveMessage?.({
+      type: 'updateTabState',
+      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+      activeTabId: 'tab-history',
+      expectedTabStateRevision: 0,
+    });
+
+    const providerInternals = provider as unknown as {
+      _conversations: { getActiveId(): string | null };
+    };
+    expect(providerInternals._conversations.getActiveId()).toBeNull();
+    expect(context.workspaceState.update).not.toHaveBeenCalledWith('neko.tabState', {
+      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+      activeTabId: 'tab-history',
+    });
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'sessionDiagnostic',
+        code: 'invalid-conversation-activation',
+        action: 'tab-state-mutation',
+        conversationId: 'conv-history',
+        tabId: 'tab-history',
+      }),
+    );
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: 'tabState',
+      revision: 0,
+      tabState: { openTabs: [], activeTabId: null },
     });
 
     provider.dispose();
   });
 
-  it('logs tab state updates with tab and conversation identity', async () => {
+  it('logs atomic tab state persistence with tab, conversation, and revision identity', async () => {
     const logger = createSpyLogger();
     setRootLogger(logger);
     const now = Date.now();
@@ -521,20 +712,23 @@ describe('chatProvider', () => {
     const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
     await receiveMessage?.({
-      type: 'updateTabState',
-      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
-      activeTabId: 'tab-history',
+      type: 'activateConversation',
+      activationId: 1,
+      conversationId: 'conv-history',
+      tabId: 'tab-history',
+      expectedTabStateRevision: 0,
+      tabState: {
+        openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+        activeTabId: 'tab-history',
+      },
     });
 
     expect(logger.debug).toHaveBeenCalledWith(
-      'neko.agent.tab_state.update',
+      'neko.agent.tab_state.persist',
       expect.objectContaining({
         tabId: 'tab-history',
         conversationId: 'conv-history',
-        sync: expect.objectContaining({
-          kind: 'switched',
-          conversationId: 'conv-history',
-        }),
+        revision: 1,
       }),
     );
 
@@ -590,9 +784,15 @@ describe('chatProvider', () => {
     const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
     await receiveMessage?.({
-      type: 'updateTabState',
-      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
-      activeTabId: 'tab-history',
+      type: 'activateConversation',
+      activationId: 1,
+      conversationId: 'conv-history',
+      tabId: 'tab-history',
+      expectedTabStateRevision: 5,
+      tabState: {
+        openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+        activeTabId: 'tab-history',
+      },
     });
 
     expect(logger.warn).toHaveBeenCalledWith(
@@ -653,9 +853,15 @@ describe('chatProvider', () => {
     const receiveMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0]?.[0] as
       ((message: unknown) => void | Promise<void>) | undefined;
     await receiveMessage?.({
-      type: 'updateTabState',
-      openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
-      activeTabId: 'tab-history',
+      type: 'activateConversation',
+      activationId: 1,
+      conversationId: 'conv-history',
+      tabId: 'tab-history',
+      expectedTabStateRevision: 0,
+      tabState: {
+        openTabs: [{ id: 'tab-history', title: 'History', conversationId: 'conv-history' }],
+        activeTabId: 'tab-history',
+      },
     });
 
     vi.mocked(webview.postMessage).mockClear();

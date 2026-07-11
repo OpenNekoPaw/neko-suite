@@ -214,6 +214,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     setActiveSkill: noopDispatch(),
     setActivationProgressByConversation: noopDispatch(),
     setGlobalError: noopDispatch(),
+    reportConversationDiagnostic: () => undefined,
     conversationTokenCountRef: ref(new Map()),
     conversationCompressingRef: ref(new Map()),
     forceUpdate: () => undefined,

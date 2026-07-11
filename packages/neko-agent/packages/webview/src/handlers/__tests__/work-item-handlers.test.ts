@@ -2697,6 +2697,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
     requestQueuedMessageEdit: (request) => {
       queuedEditRequest = request;
     },
+    reportConversationDiagnostic: vi.fn(),
     conversationTokenCountRef: ref(new Map()),
     conversationCompressingRef: ref(new Map()),
     forceUpdate: () => undefined,

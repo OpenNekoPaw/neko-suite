@@ -29,7 +29,7 @@ const vscodeMocks = vi.hoisted(() => ({
   getTabState: vi.fn(),
   updateTabState: vi.fn(),
   newConversation: vi.fn(),
-  switchConversation: vi.fn(),
+  activateConversation: vi.fn(),
   deleteConversation: vi.fn(),
   searchProjectFiles: vi.fn(),
   getContextTokenCount: vi.fn(),
@@ -118,6 +118,10 @@ vi.mock('@/components/ChatWorkspace', () => ({
     streamingMessageId?: string | null;
     agentState?: AgentState | null;
     isForegroundConversationActivationPending?: boolean;
+    foregroundConversationAvailability?: {
+      kind: 'ready' | 'loading' | 'unavailable';
+      diagnostic?: string;
+    };
     queuedMessages?: readonly AgentQueuedMessageItem[];
     activationProgress?: readonly ActivationProgressTimeline[];
     activeSkill?: { skillName: string } | null;
@@ -165,6 +169,12 @@ vi.mock('@/components/ChatWorkspace', () => ({
         </span>
         <span data-testid="workspace-switching">
           {isConversationSwitching ? 'switching' : 'idle'}
+        </span>
+        <span data-testid="workspace-availability">
+          {props.foregroundConversationAvailability?.kind ?? 'ready'}
+          {props.foregroundConversationAvailability?.diagnostic
+            ? `:${props.foregroundConversationAvailability.diagnostic}`
+            : ''}
         </span>
         <span data-testid="workspace-composer-mode">
           {props.isThinking || props.streamingMessageId ? 'queue-enabled' : 'send-enabled'}
@@ -1114,6 +1124,60 @@ describe('ConversationController entry state', () => {
     expect(screen.getByTestId('workspace-streaming-flags').textContent).toBe('false:false');
   });
 
+  it('keeps activation rejection diagnostics scoped to the requested conversation', () => {
+    vi.clearAllMocks();
+    render(
+      <ConversationController
+        {...createProps({
+          history: [
+            { id: 'conv-a', title: 'Conversation A', messageCount: 1, updatedAt: 2 },
+            { id: 'conv-b', title: 'Conversation B', messageCount: 1, updatedAt: 1 },
+          ],
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Conversation A' }));
+    expect(screen.getByTestId('workspace-availability').textContent).toBe('loading');
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'sessionDiagnostic',
+            code: 'stale-tab-state-revision',
+            severity: 'error',
+            action: 'activate-conversation',
+            conversationId: 'conv-a',
+            message: 'Activation revision was stale.',
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('workspace-availability').textContent).toContain('unavailable');
+    expect(screen.getByTestId('workspace-availability').textContent).toContain(
+      'stale-tab-state-revision',
+    );
+    expect(screen.queryByText('全局错误')).toBeNull();
+
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: {
+            type: 'sessionDiagnostic',
+            code: 'conversation-durability-failed',
+            severity: 'error',
+            conversationId: 'conv-b',
+            message: 'Background persistence failed.',
+          },
+        }),
+      );
+    });
+
+    expect(screen.queryByText('Background persistence failed.')).toBeNull();
+  });
+
   it('does not display the previous conversation transcript after opening a history conversation', () => {
     vi.clearAllMocks();
     render(
@@ -1128,13 +1192,24 @@ describe('ConversationController entry state', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Open 分析前10页，生成分镜表' }));
-    expect(vscodeMocks.switchConversation).toHaveBeenCalledWith('conv-a');
+    expect(vscodeMocks.activateConversation).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: 'conv-a' }),
+    );
+    const activationA = vscodeMocks.activateConversation.mock.calls.at(-1)?.[0] as {
+      activationId: number;
+      expectedTabStateRevision: number;
+    };
+    expect(screen.getByTestId('workspace-availability').textContent).toBe('loading');
 
     act(() => {
       window.dispatchEvent(
         new MessageEvent('message', {
           data: {
             type: 'activeConversation',
+            activation: {
+              activationId: activationA.activationId,
+              tabStateRevision: activationA.expectedTabStateRevision + 1,
+            },
             conversation: {
               id: 'conv-a',
               title: '分析前10页，生成分镜表',
@@ -1151,7 +1226,13 @@ describe('ConversationController entry state', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open 生成猫猫玩耍的图片' }));
 
-    expect(vscodeMocks.switchConversation).toHaveBeenCalledWith('conv-b');
+    expect(vscodeMocks.activateConversation).toHaveBeenCalledWith(
+      expect.objectContaining({ conversationId: 'conv-b' }),
+    );
+    const activationB = vscodeMocks.activateConversation.mock.calls.at(-1)?.[0] as {
+      activationId: number;
+      expectedTabStateRevision: number;
+    };
     expect(screen.getByTestId('workspace-tab-conversation').textContent).toBe('conv-b');
     expect(screen.getByTestId('workspace-switching').textContent).toBe('switching');
     expect(screen.getByTestId('workspace-messages').textContent).toBe('');
@@ -1161,6 +1242,10 @@ describe('ConversationController entry state', () => {
         new MessageEvent('message', {
           data: {
             type: 'activeConversation',
+            activation: {
+              activationId: activationB.activationId,
+              tabStateRevision: activationB.expectedTabStateRevision + 1,
+            },
             conversation: {
               id: 'conv-b',
               title: '生成猫猫玩耍的图片',
