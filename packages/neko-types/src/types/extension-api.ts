@@ -749,6 +749,9 @@ export interface SketchSelectionData {
  * Exported by neko-sketch extension for programmatic canvas access.
  */
 export interface NekoSketchAPI {
+  /** Package-owned structural, preview, runtime, and export-readiness facade for .nks projects. */
+  readonly projectQuality: import('../project-authoring/project-quality').ProjectQualityFacade;
+
   /**
    * Import an image (base64-encoded PNG/JPEG) into the active sketch canvas
    * as a new raster layer. No-ops silently when no sketch editor is open.

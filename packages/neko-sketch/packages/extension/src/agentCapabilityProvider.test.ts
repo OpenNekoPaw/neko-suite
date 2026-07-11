@@ -459,6 +459,7 @@ function createApi(
   } = {},
 ): NekoSketchAPI {
   return {
+    projectQuality: createProjectQualityFacadeStub(),
     importImageData: () => {},
     applyAIImageResult: overrides.applyAIImageResult ?? (async () => true),
     createAIContextSnapshot: async () => overrides.contextSnapshot ?? null,
@@ -472,6 +473,19 @@ function createApi(
     getCanvasImageData: async () => overrides.canvasImageData ?? null,
     getLayerImageData: async () => overrides.layerImageData ?? null,
     getSelectionMask: async () => overrides.selection ?? null,
+  };
+}
+
+function createProjectQualityFacadeStub(): NekoSketchAPI['projectQuality'] {
+  const notExpected = async (): Promise<never> => {
+    throw new Error('ProjectQuality facade is not expected in capability provider tests.');
+  };
+  return {
+    validateProject: notExpected,
+    getProjectSnapshot: notExpected,
+    renderPreview: notExpected,
+    probeRuntime: notExpected,
+    checkExportReadiness: notExpected,
   };
 }
 
