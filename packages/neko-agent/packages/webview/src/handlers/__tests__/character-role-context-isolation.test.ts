@@ -648,6 +648,76 @@ describe('character role context isolation', () => {
     expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toBeNull();
   });
 
+  it('does not recover unavailable Timeline ownership from a newer activeConversation snapshot', () => {
+    const cachedMessage = legacyStreamingMessage('unavailable-message');
+    const persistedMessage = {
+      ...cachedMessage,
+      content: 'newer authoritative partial',
+      contentBlocks: cachedMessage.contentBlocks?.map((block) =>
+        block.type === 'text' ? { ...block, content: 'newer authoritative partial' } : block,
+      ),
+    };
+    const unavailableTimeline: ActiveTurnTimelineState = {
+      connectionEpoch: 'epoch-1',
+      conversationId: 'conv-a',
+      turnId: 'turn-a',
+      messageId: cachedMessage.id,
+      deliveryRevision: 1,
+      validationState: {
+        connectionEpoch: 'epoch-1',
+        conversationId: 'conv-a',
+        turnId: 'turn-a',
+        messageId: cachedMessage.id,
+        deliveryRevision: 1,
+        completed: false,
+        items: new Map(),
+      },
+      items: [],
+      completed: false,
+      synchronization: 'unavailable',
+    };
+    const harness = createContextHarness({
+      activeConversationId: 'conv-a',
+      activeTabId: 'tab-a',
+      currentMessages: [cachedMessage],
+      currentStreaming: {
+        isThinking: true,
+        streamingMessageId: cachedMessage.id,
+        activeTurnTimeline: unavailableTimeline,
+      },
+      cachedMessages: new Map([['conv-a', [cachedMessage]]]),
+      cachedStreaming: new Map([
+        [
+          'conv-a',
+          {
+            isThinking: true,
+            streamingMessageId: cachedMessage.id,
+            activeTurnTimeline: unavailableTimeline,
+          },
+        ],
+      ]),
+      openTabs: [{ id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' }],
+    });
+
+    dispatch(
+      conversationHandlers,
+      {
+        type: 'activeConversation',
+        conversation: {
+          id: 'conv-a',
+          title: 'Chat A',
+          messages: [persistedMessage],
+        },
+      },
+      harness.context,
+    );
+
+    expect(harness.messages()).toEqual([persistedMessage]);
+    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).not.toBe(
+      unavailableTimeline,
+    );
+  });
+
   it('preserves canonical Timeline-owned streaming state during tab restoration', () => {
     const canonicalMessage = legacyStreamingMessage('canonical-message');
     const activeTimeline: ActiveTurnTimelineState = {

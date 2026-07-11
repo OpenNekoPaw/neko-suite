@@ -241,7 +241,7 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
     const projectedActiveTurnTimeline = getProjectedActiveTurnTimeline(projection.streaming);
     const activeTurnTimeline =
       projectedActiveTurnTimeline !== undefined
-        ? projectedActiveTurnTimeline
+        ? releaseUnavailableTimelineOwnership(projectedActiveTurnTimeline)
         : getRecoverableCachedActiveTurnTimeline(cachedStreaming);
     const nextStreaming = {
       streamingMessageId: projection.streaming.streamingMessageId,
@@ -278,7 +278,13 @@ function getRecoverableCachedActiveTurnTimeline(
   if (!streaming?.isThinking || !streaming.streamingMessageId) {
     return undefined;
   }
-  return getProjectedActiveTurnTimeline(streaming);
+  return releaseUnavailableTimelineOwnership(getProjectedActiveTurnTimeline(streaming));
+}
+
+function releaseUnavailableTimelineOwnership(
+  timeline: StreamingState['activeTurnTimeline'],
+): StreamingState['activeTurnTimeline'] {
+  return timeline?.synchronization === 'unavailable' ? null : timeline;
 }
 
 function getProjectedActiveTurnTimeline(streaming: object): StreamingState['activeTurnTimeline'] {
