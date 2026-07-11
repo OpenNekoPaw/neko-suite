@@ -115,6 +115,43 @@ describe('skillCatalogProvider', () => {
     });
   });
 
+  it('derives file catalog facts from the scan bucket and ignores poisoned runtime metadata', () => {
+    const poisoned = makeSkill('portable-review', 'Portable description.', 'builtin');
+    poisoned.catalog = {
+      role: 'persona',
+      source: 'builtin',
+      visibility: 'hidden',
+      editable: false,
+      actions: [{ id: 'run' }],
+    };
+    poisoned.nekoOverlay = {
+      schemaVersion: 1,
+      interface: {
+        displayName: 'Portable Review',
+        shortDescription: 'Overlay description.',
+        iconSmall: 'check-circle',
+      },
+    };
+
+    const skills = buildSkillDefs({
+      builtinSkills: [],
+      scan: makeScanResult({ project: [poisoned] }),
+    });
+
+    expect(findSkill(skills, 'portable-review')).toMatchObject({
+      name: 'Portable Review',
+      description: 'Overlay description',
+      icon: 'check-circle',
+      catalog: {
+        role: 'standalone',
+        source: 'project',
+        visibility: 'primary',
+        editable: true,
+        actions: [{ id: 'run' }, { id: 'edit' }, { id: 'reveal' }, { id: 'duplicate' }],
+      },
+    });
+  });
+
   it('applies deterministic source precedence for duplicate ids', () => {
     const skills = buildSkillDefs({
       builtinSkills: [makeSkill('review', 'Builtin review.', 'builtin')],
@@ -216,6 +253,11 @@ function makeSkill(name: string, description: string, source: Skill['source'] = 
     source,
     enabled: true,
     icon: 'sparkle',
+    portableDefinition: {
+      name,
+      description,
+      body: `# ${name}`,
+    },
   };
 }
 

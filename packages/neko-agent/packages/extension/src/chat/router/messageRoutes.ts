@@ -12,6 +12,26 @@ export function tryHandleMessageRoute(
   const { webview } = deps;
 
   switch (message.type) {
+    case 'requestAgentTurnTimelineSnapshot':
+      if (deps.messages) {
+        void deps.messages.requestAgentTurnTimelineSnapshot(webview, message);
+      } else {
+        void webview.postMessage({
+          type: 'agentTurnTimelineDiagnostic',
+          schemaVersion: message.schemaVersion,
+          connectionEpoch: message.connectionEpoch,
+          conversationId: message.conversationId,
+          turnId: message.turnId,
+          messageId: message.messageId,
+          code: 'turn-snapshot-unavailable',
+          message: 'Active turn snapshot service is unavailable.',
+          ...(message.lastAppliedDeliveryRevision !== undefined
+            ? { deliveryRevision: message.lastAppliedDeliveryRevision }
+            : {}),
+        });
+      }
+      return true;
+
     case 'sendMessage':
       if (deps.characterDialogue?.hasSession(message.conversationId)) {
         void deps.characterDialogue.routeUserMessage(message.conversationId, message.message);

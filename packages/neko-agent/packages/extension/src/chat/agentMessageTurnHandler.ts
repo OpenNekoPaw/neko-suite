@@ -19,6 +19,7 @@ import {
   buildAgentCapabilityActivationProgressMessage,
   buildGlobalErrorMessage,
   buildThinkingMessage,
+  type AgentTurnTimelineSnapshotRequest,
 } from '@neko-agent/types';
 import type { IAgentManager } from '../ai/agentManager';
 import type { IAgentRunner } from '../ai/agentRunner';
@@ -212,6 +213,14 @@ export class AgentMessageTurnHandler {
     return this._agentStateRuntime.snapshot();
   }
 
+  async requestAgentTurnTimelineSnapshot(
+    webview: vscode.Webview,
+    request: AgentTurnTimelineSnapshotRequest,
+  ): Promise<void> {
+    const response = await this._streamProcessor.requestTimelineSnapshot(webview, request);
+    await webview.postMessage(response);
+  }
+
   clearAgentState(conversationId: string): void {
     this._agentStateRuntime.clear(conversationId);
     this._clearSubAgentEventSubscription(conversationId);
@@ -301,6 +310,7 @@ export class AgentMessageTurnHandler {
               imageAttachments,
               mediaModel,
               mediaModels,
+              understandingModels,
               executionOverrides,
               locale,
             }) =>
@@ -316,6 +326,7 @@ export class AgentMessageTurnHandler {
                 imageAttachments,
                 mediaModel,
                 mediaModels,
+                understandingModels,
                 executionOverrides,
                 locale,
               })
@@ -374,6 +385,8 @@ export class AgentMessageTurnHandler {
       chatModel: request.chatModel,
       agentModels: request.agentModels,
       llmConfig: request.llmConfig,
+      attachments: request.attachments,
+      understandingModels: request.understandingModels,
       settings: this._settings,
       providers: this._providers,
       platform: this._platform,
@@ -397,6 +410,7 @@ export class AgentMessageTurnHandler {
       ...request,
       chatModel: resolved.chatModel,
       agentModels: resolved.agentModels,
+      understandingModels: resolved.understandingModels ?? request.understandingModels,
       llmConfig: resolved.llmConfig,
       llmRuntimeOptions: resolved.llmRuntimeOptions,
     };

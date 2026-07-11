@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Skill } from '@neko/shared';
+import type { CreateSkillInput, Skill } from '@neko/shared';
 import { executeSkillCatalogAction } from '../skillCatalogActions';
 
 describe('skillCatalogActions', () => {
@@ -54,7 +54,7 @@ describe('skillCatalogActions', () => {
 
     expect(deps.skillFileService.getSkillFilePath).toHaveBeenCalledWith('review', 'project');
     expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith(
-      '/workspace/.neko/skills/review/SKILL.md',
+      '/workspace/.agents/skills/review/SKILL.md',
     );
     expect(vscode.window.showTextDocument).toHaveBeenCalledWith({}, { preview: false });
   });
@@ -79,11 +79,11 @@ describe('skillCatalogActions', () => {
     expect(deps.skillFileService.getSkillDirectory).toHaveBeenCalledWith('review', 'personal');
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
       'revealFileInOS',
-      expect.objectContaining({ fsPath: '/home/.neko/skills/review' }),
+      expect.objectContaining({ fsPath: '/home/.agents/skills/review' }),
     );
   });
 
-  it('forks built-in skills into project skills and preserves manifest catalog metadata', async () => {
+  it('forks built-in skills as portable packages without persisting Host catalog facts', async () => {
     const deps = createDeps({
       catalog: [
         {
@@ -102,9 +102,20 @@ describe('skillCatalogActions', () => {
       builtins: [
         {
           ...makeSkill('comic-to-storyboard'),
-          content: '# builtin body',
-          version: '1.0.0',
-          domain: 'media',
+          content: '# legacy builtin body',
+          portableDefinition: {
+            name: 'comic-to-storyboard',
+            description: 'Convert comics into storyboard guidance.',
+            body: '# Portable builtin body',
+            license: 'MIT',
+            allowedTools: ['Read'],
+          },
+          nekoOverlay: {
+            schemaVersion: 1,
+            interface: {
+              displayName: 'Comic to Storyboard',
+            },
+          },
         },
       ],
     });
@@ -122,28 +133,29 @@ describe('skillCatalogActions', () => {
       deps,
     );
 
-    expect(deps.skillFileService.createSkillFile).toHaveBeenCalledWith(
-      'comic-to-storyboard',
-      'project',
-      '# builtin body',
-      expect.any(String),
-    );
-    expect(deps.skillFileService.writeSkillManifest).toHaveBeenCalledWith(
-      'comic-to-storyboard',
-      'project',
+    expect(deps.skillFileService.createSkill).toHaveBeenCalledWith({
+      target: 'project',
+      skill: {
+        name: 'comic-to-storyboard',
+        description: 'Convert comics into storyboard guidance.',
+        body: '# Portable builtin body',
+        license: 'MIT',
+        allowedTools: ['Read'],
+      },
+      neko: {
+        schemaVersion: 1,
+        interface: {
+          displayName: 'Comic to Storyboard',
+        },
+      },
+    });
+    expect(deps.skillFileService.createSkill).not.toHaveBeenCalledWith(
       expect.objectContaining({
-        version: '1.0.0',
-        domain: 'media',
-        catalog: expect.objectContaining({
-          role: 'focused-skill',
-          editable: true,
-          groupId: 'media-to-video',
-          parentSkillIds: ['media-to-video'],
-        }),
+        catalog: expect.anything(),
       }),
     );
     expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith(
-      '/workspace/.neko/skills/comic-to-storyboard/SKILL.md',
+      '/workspace/.agents/skills/comic-to-storyboard/SKILL.md',
     );
   });
 
@@ -170,9 +182,16 @@ describe('skillCatalogActions', () => {
       deps,
     );
 
-    expect(deps.skillFileService.createSkillFile).toHaveBeenCalledWith('new-skill', 'project');
+    expect(deps.skillFileService.createSkill).toHaveBeenCalledWith({
+      target: 'project',
+      skill: {
+        name: 'new-skill',
+        description: 'Reusable guidance for new-skill.',
+        body: '# new-skill\n\nAdd instructions here.\n',
+      },
+    });
     expect(deps.skillFileService.duplicateSkillDirectory).toHaveBeenCalledWith(
-      '/workspace/.neko/skills/review',
+      '/workspace/.agents/skills/review',
       'review-copy',
       'personal',
     );
@@ -239,22 +258,27 @@ function createDeps(input: {
     skillFileService: {
       getSkillFilePath: vi.fn((skillName: string, source: 'project' | 'personal') =>
         source === 'project'
-          ? `/workspace/.neko/skills/${skillName}/SKILL.md`
-          : `/home/.neko/skills/${skillName}/SKILL.md`,
+          ? `/workspace/.agents/skills/${skillName}/SKILL.md`
+          : `/home/.agents/skills/${skillName}/SKILL.md`,
       ),
       getSkillDirectory: vi.fn((skillName: string, source: 'project' | 'personal') =>
         source === 'project'
-          ? `/workspace/.neko/skills/${skillName}`
-          : `/home/.neko/skills/${skillName}`,
+          ? `/workspace/.agents/skills/${skillName}`
+          : `/home/.agents/skills/${skillName}`,
       ),
-      createSkillFile: vi.fn(
-        async (skillName: string, source: 'project' | 'personal') =>
-          `${source === 'project' ? '/workspace/.neko/skills' : '/home/.neko/skills'}/${skillName}/SKILL.md`,
-      ),
-      writeSkillManifest: vi.fn(async () => '/workspace/.neko/skills/skill/manifest.json'),
+      createSkill: vi.fn(async (input: CreateSkillInput) => ({
+        source: input.target,
+        rootId: `${input.target}-agent-skills`,
+        relativePath: input.skill.name,
+        absolutePath: `${
+          input.target === 'project' ? '/workspace/.agents/skills' : '/home/.agents/skills'
+        }/${input.skill.name}`,
+        fingerprint: `sha256:${input.skill.name}`,
+        diagnostics: [],
+      })),
       duplicateSkillDirectory: vi.fn(
         async (_sourceDir: string, skillName: string, source: 'project' | 'personal') =>
-          `${source === 'project' ? '/workspace/.neko/skills' : '/home/.neko/skills'}/${skillName}`,
+          `${source === 'project' ? '/workspace/.agents/skills' : '/home/.agents/skills'}/${skillName}`,
       ),
       triggerRescan: vi.fn(async () => undefined),
       getSkills: vi.fn(async () => ({

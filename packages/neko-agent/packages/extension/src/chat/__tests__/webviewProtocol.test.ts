@@ -22,6 +22,41 @@ describe('parseSendMessageWebviewMessage', () => {
     );
   });
 
+  it('accepts agent-scoped media understanding model refs', () => {
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'analyze this video',
+        sessionMode: 'agent',
+        understandingModels: {
+          video: { providerId: 'google', modelId: 'gemini-video-pro', category: 'llm' },
+        },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        understandingModels: {
+          video: { providerId: 'google', modelId: 'gemini-video-pro', category: 'llm' },
+        },
+      }),
+    );
+  });
+
+  it('rejects understanding model refs outside agent mode', () => {
+    expect(
+      parseSendMessageWebviewMessage({
+        type: 'sendMessage',
+        conversationId: 'conv-1',
+        message: 'draw',
+        sessionMode: 'image',
+        mediaModel: { providerId: 'openai', modelId: 'gpt-image', category: 'image' },
+        understandingModels: {
+          image: { providerId: 'google', modelId: 'gemini-image', category: 'llm' },
+        },
+      }),
+    ).toBeNull();
+  });
+
   it('rejects missing conversationId', () => {
     expect(
       parseSendMessageWebviewMessage({

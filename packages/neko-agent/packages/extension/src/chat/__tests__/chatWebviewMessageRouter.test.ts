@@ -67,6 +67,7 @@ function createDeps(): ChatWebviewMessageRouterDeps {
     messages: {
       handleUserMessage: vi.fn(),
       searchProjectFiles: vi.fn(),
+      requestAgentTurnTimelineSnapshot: vi.fn(),
     } as any,
     characterDialogue: {
       hasSession: vi.fn(() => false),
@@ -172,9 +173,7 @@ describe('handleChatWebviewMessage', () => {
   });
 
   it('classifies every VSCode Agent host route as implemented', () => {
-    const implementedRoutes: Partial<
-      Record<WebviewToExtensionMessage['type'], 'implemented'>
-    > = {};
+    const implementedRoutes: Partial<Record<WebviewToExtensionMessage['type'], 'implemented'>> = {};
     for (const type of [...CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES, ...CONFIG_BRIDGE_MESSAGE_TYPES]) {
       implementedRoutes[type] = 'implemented';
     }
@@ -731,9 +730,7 @@ describe('handleChatWebviewMessage', () => {
     await flushAsyncWork();
 
     const routedRequest = (deps.messages?.handleUserMessage as any).mock.calls[0]?.[1];
-    expect(routedRequest.messageText).toContain(
-      '“作为 Markdown/Markdown 发送”只表示来源格式',
-    );
+    expect(routedRequest.messageText).toContain('“作为 Markdown/Markdown 发送”只表示来源格式');
     expect(routedRequest.messageText).toContain('默认仍使用 canvas.createStoryboardFromMarkdown');
     expect(routedRequest.messageText).toContain(
       '没有暴露为可调用工具时，报告 Canvas tool-surface blocked',
@@ -1559,6 +1556,28 @@ describe('handleChatWebviewMessage', () => {
     handleChatWebviewMessage({ type: 'getSkills' }, deps);
 
     expect(deps.skillHandler.sendSkillsList).toHaveBeenCalledWith(deps.webview);
+  });
+
+  it('routes active Timeline snapshot requests to the owning stream processor', () => {
+    const deps = createDeps();
+    const request = {
+      type: 'requestAgentTurnTimelineSnapshot',
+      schemaVersion: 2,
+      connectionEpoch: 'epoch-1',
+      conversationId: 'conv-1',
+      turnId: 'turn-msg-1',
+      messageId: 'msg-1',
+      reason: 'revision-gap',
+      lastAppliedDeliveryRevision: 2,
+    } as const;
+
+    handleChatWebviewMessage(request, deps);
+
+    expect(deps.messages?.requestAgentTurnTimelineSnapshot).toHaveBeenCalledWith(
+      deps.webview,
+      request,
+    );
+    expect(deps.webview.postMessage).not.toHaveBeenCalled();
   });
 
   it('routes lifecycle config snapshot refresh without calling settings directly', () => {

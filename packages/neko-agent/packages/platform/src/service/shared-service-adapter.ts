@@ -255,8 +255,11 @@ function projectModelCapabilitiesToInputModalities(
       capabilitySet.has('image.understand') ||
       capabilitySet.has('vision') ||
       capabilitySet.has('llm.vision'),
-    video: capabilitySet.has('video.understand'),
-    audio: capabilitySet.has('audio.understand') || capabilitySet.has('audio.asr') ? true : false,
+    video: capabilitySet.has('vision_video') || capabilitySet.has('video.understand'),
+    audio:
+      capabilitySet.has('audio') ||
+      capabilitySet.has('audio.understand') ||
+      capabilitySet.has('audio.asr'),
   };
 }
 

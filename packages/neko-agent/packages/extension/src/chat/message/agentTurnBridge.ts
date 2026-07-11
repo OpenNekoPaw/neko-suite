@@ -11,6 +11,7 @@ import type { Platform } from '@neko/platform';
 import type {
   AgentLlmConfig,
   AgentMediaModelSelections,
+  MediaUnderstandingModelSelections,
   AgentModelSlots,
   AgentPhase,
   MediaModelCategory,
@@ -86,6 +87,7 @@ export interface ExecuteAgentTurnForWebviewInput {
   imageAttachments?: readonly { type: 'base64'; media_type: string; data: string }[];
   mediaModel?: ModelRef<MediaModelCategory>;
   mediaModels?: AgentMediaModelSelections;
+  understandingModels?: MediaUnderstandingModelSelections;
   executionOverrides?: AgentMessageExecutionOverrides;
   locale?: string;
 }
@@ -139,6 +141,7 @@ export class AgentTurnBridge {
         modelCapabilities: resolveSelectedModelCapabilities(this.deps.providers, input.chatModel),
         mediaModel: input.mediaModel,
         mediaModels: input.mediaModels,
+        understandingModels: input.understandingModels,
         imageAttachments: input.imageAttachments,
         executionOverrides: input.executionOverrides,
         settings: {

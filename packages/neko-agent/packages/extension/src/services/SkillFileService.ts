@@ -7,8 +7,8 @@
  * 3. 提供事件接口通知 UI 更新
  *
  * 目录结构：
- * - 用户 Skills: ~/.neko/skills/<name>/SKILL.md
- * - 工作区 Skills: .neko/skills/<name>/SKILL.md
+ * - 用户 Skills: ~/.agents/skills/<name>/SKILL.md
+ * - 工作区 Skills: .agents/skills/<name>/SKILL.md
  * - 用户 Commands: ~/.neko/commands/<name>.md
  * - 工作区 Commands: .neko/commands/<name>.md
  */
@@ -18,7 +18,12 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { getLogger } from '../base';
-import type { ConfiguredSkill, ConfiguredSlashCommand, SkillManifest } from '@neko/shared';
+import type {
+  ConfiguredSkill,
+  ConfiguredSlashCommand,
+  CreateSkillInput,
+  CreateSkillResult,
+} from '@neko/shared';
 import {
   SKILL_FILE_WATCH_DEBOUNCE_MS,
   SKILL_PATH_TRIGGER_DEBOUNCE_MS,
@@ -101,7 +106,7 @@ export class SkillFileService implements vscode.Disposable {
   // ==========================================================================
 
   /**
-   * Get user skills directory path (~/.neko/skills/)
+   * Get user skills directory path (~/.agents/skills/)
    */
   getUserSkillsDir(): string {
     return this.runtime.getUserSkillsDir();
@@ -115,7 +120,7 @@ export class SkillFileService implements vscode.Disposable {
   }
 
   /**
-   * Get workspace skills directory path (.neko/skills/)
+   * Get workspace skills directory path (.agents/skills/)
    */
   getWorkspaceSkillsDir(): string | null {
     return this.runtime.getWorkspaceSkillsDir();
@@ -184,24 +189,13 @@ export class SkillFileService implements vscode.Disposable {
   // ==========================================================================
 
   /**
-   * Create a new skill file
-   * @param skillName - The name of the skill
-   * @param source - 'personal' or 'project'
-   * @param content - Optional initial content (defaults to template)
-   * @returns The full path to the created file
+   * Atomically create a complete portable Skill package.
+   * Creation refreshes discovery but does not activate the Skill.
    */
-  async createSkillFile(
-    skillName: string,
-    source: 'personal' | 'project',
-    content?: string,
-    description?: string,
-  ): Promise<string> {
-    return this.runtime.createSkillFile({
-      skillName,
-      source,
-      content,
-      description,
-    });
+  async createSkill(input: CreateSkillInput): Promise<CreateSkillResult> {
+    const result = await this.runtime.createSkill(input);
+    this._onSkillsChanged.fire(await this.runtime.getSkills());
+    return result;
   }
 
   getSkillDirectory(skillName: string, source: 'personal' | 'project'): string | null {
@@ -212,21 +206,6 @@ export class SkillFileService implements vscode.Disposable {
   getSkillFilePath(skillName: string, source: 'personal' | 'project'): string | null {
     const skillDir = this.getSkillDirectory(skillName, source);
     return skillDir ? path.join(skillDir, 'SKILL.md') : null;
-  }
-
-  async writeSkillManifest(
-    skillName: string,
-    source: 'personal' | 'project',
-    manifest: SkillManifest,
-  ): Promise<string> {
-    const skillDir = this.getSkillDirectory(skillName, source);
-    if (!skillDir) {
-      throw new Error('No workspace folder open for project skills');
-    }
-    await fs.mkdir(skillDir, { recursive: true });
-    const manifestPath = path.join(skillDir, 'manifest.json');
-    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
-    return manifestPath;
   }
 
   /**

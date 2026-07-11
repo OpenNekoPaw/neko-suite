@@ -13,6 +13,7 @@ export type { ChatWebviewMessageRouterDeps } from './router/types';
 
 export const CHAT_WEBVIEW_MESSAGE_ROUTER_TYPES = [
   'sendMessage',
+  'requestAgentTurnTimelineSnapshot',
   'searchProjectFiles',
   'startCharacterDialogueFromSlash',
   'mermaidError',

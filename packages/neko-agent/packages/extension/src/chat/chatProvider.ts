@@ -640,6 +640,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider, vscode.Disp
               applySkillInjection: (conversationId, injection, skill) =>
                 skillRuntime.applySkillInjection(conversationId, injection, skill),
               clearActiveSkill: (conversationId) => skillRuntime.clearActiveSkill(conversationId),
+              createSkill: async (_conversationId, input) => {
+                const result = await skillFileService.createSkill(input);
+                await skillLazySync.resync();
+                return result;
+              },
             }),
           );
         }

@@ -1,6 +1,6 @@
 import type {
   Skill,
-  SkillCatalogManifest,
+  SkillCatalogPolicy,
   SkillCatalogMeta,
   SkillDef,
   SkillLocalizedText,
@@ -11,6 +11,7 @@ import {
   type SkillCatalogSource,
   type SkillCatalogRole,
 } from '@neko/shared';
+import { projectSkillHostProjection } from '@neko/agent/skill';
 import type { SkillScanResult } from './SkillFileService';
 
 type SkillLocaleMap = Readonly<Record<string, SkillLocalizedText>>;
@@ -36,14 +37,14 @@ const SCRIPT_WORKFLOW_GROUP = 'script-workflow';
 const AI_GENERATION_GROUP = 'ai-generation';
 const POST_PRODUCTION_GROUP = 'post-production';
 
-const BUILTIN_FORK_ACTIONS: NonNullable<SkillCatalogManifest['actions']> = [
+const BUILTIN_FORK_ACTIONS: NonNullable<SkillCatalogPolicy['actions']> = [
   'run',
   { id: 'fork', targetSource: 'project' },
 ];
 
 const PERSONA_SKILL_NAMES = new Set(['creation-persona', 'execution-persona', 'iteration-persona']);
 
-const BUILTIN_CATALOG_OVERRIDES: Readonly<Record<string, SkillCatalogManifest>> = {
+const BUILTIN_CATALOG_OVERRIDES: Readonly<Record<string, SkillCatalogPolicy>> = {
   [MEDIA_TO_VIDEO_GROUP]: {
     role: 'orchestrator',
     groupId: MEDIA_TO_VIDEO_GROUP,
@@ -153,21 +154,45 @@ export function toBuiltinSkillDef(skill: Skill, locales?: SkillLocaleMap): Skill
   };
 }
 
-export function toFileSkillDef(skill: ConfiguredSkill): SkillDef {
-  const catalog = toSkillCatalogEntry(skill, {
-    displayName: formatSkillName(skill.name),
-    command: 'neko.agent.invokeSkill',
-    source: skill.source,
-  });
+export function toFileSkillDef(
+  skill: ConfiguredSkill,
+  source: 'project' | 'personal' = requireEditableFileSkillSource(skill.source),
+): SkillDef {
+  const portable = skill.portableDefinition;
+  if (!portable) {
+    throw new Error(`File Skill "${skill.name}" is missing its portable definition`);
+  }
+
+  const host = projectSkillHostProjection(skill, { source });
+  const entry = toSkillCatalogEntry(
+    {
+      name: portable.name,
+      description: skill.nekoOverlay?.interface?.shortDescription ?? portable.description,
+      icon: skill.nekoOverlay?.interface?.iconSmall,
+      source: host.source,
+      tags: skill.tags,
+    },
+    {
+      displayName: skill.nekoOverlay?.interface?.displayName ?? formatSkillName(portable.name),
+      command: 'neko.agent.invokeSkill',
+      source: host.source,
+      catalog: {
+        role: 'standalone',
+        visibility: 'primary',
+        editable: host.editable,
+        actions: host.catalogActions,
+      },
+    },
+  );
 
   return {
-    id: catalog.id,
-    name: catalog.name,
-    description: shortenDescription(catalog.description),
-    icon: catalog.icon,
-    command: catalog.command ?? 'neko.agent.invokeSkill',
-    tags: catalog.tags,
-    catalog: catalog.catalog,
+    id: entry.id,
+    name: entry.name,
+    description: shortenDescription(entry.description),
+    icon: entry.icon,
+    command: entry.command ?? 'neko.agent.invokeSkill',
+    tags: entry.tags,
+    catalog: entry.catalog,
   };
 }
 
@@ -187,12 +212,19 @@ export function applySkillSourcePrecedence(skills: readonly SkillDef[]): SkillDe
 function toFileSkillDefs(scan: SkillScanResult | undefined): SkillDef[] {
   if (!scan) return [];
   return [
-    ...scan.personal.skills.map((skill) => toFileSkillDef({ ...skill, enabled: true })),
-    ...scan.project.skills.map((skill) => toFileSkillDef({ ...skill, enabled: true })),
+    ...scan.personal.skills.map((skill) => toFileSkillDef({ ...skill, enabled: true }, 'personal')),
+    ...scan.project.skills.map((skill) => toFileSkillDef({ ...skill, enabled: true }, 'project')),
   ];
 }
 
-function createBuiltinCatalog(skill: Skill): SkillCatalogManifest {
+function requireEditableFileSkillSource(source: Skill['source']): 'project' | 'personal' {
+  if (source === 'project' || source === 'personal') {
+    return source;
+  }
+  throw new Error(`File Skill catalog projection requires an editable source, received: ${source}`);
+}
+
+function createBuiltinCatalog(skill: Skill): SkillCatalogPolicy {
   if (PERSONA_SKILL_NAMES.has(skill.name)) {
     return {
       role: 'persona',
@@ -215,10 +247,7 @@ function createBuiltinCatalog(skill: Skill): SkillCatalogManifest {
   };
 }
 
-function createFocusedBuiltinCatalog(
-  groupId: string,
-  parentSkillId = groupId,
-): SkillCatalogManifest {
+function createFocusedBuiltinCatalog(groupId: string, parentSkillId = groupId): SkillCatalogPolicy {
   return {
     role: 'focused-skill',
     groupId,
@@ -229,7 +258,7 @@ function createFocusedBuiltinCatalog(
   };
 }
 
-function createQuickActionBuiltinCatalog(groupId: string): SkillCatalogManifest {
+function createQuickActionBuiltinCatalog(groupId: string): SkillCatalogPolicy {
   return {
     role: 'quick-action',
     groupId,

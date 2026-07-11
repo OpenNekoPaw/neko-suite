@@ -16,6 +16,7 @@ import { createMediaTaskProgressView } from '@neko/platform/media/media-task-vie
 import type { MediaTaskProgressDeliveryPlan } from '@neko/platform/media/media-task-progress-plan';
 import {
   AgentEventStreamRuntimeProcessor,
+  createAgentTurnTimelineAccumulator,
   persistAgentStreamBackgroundTaskResultUrls,
   type BackfillSink,
   type AgentEventStreamRuntimeMessage,
@@ -23,6 +24,7 @@ import {
   type AgentStreamBackgroundTaskObservedProgress,
   type CollectedToolCall,
   type IPerceptionPipeline,
+  type AgentTurnTimelineAccumulator,
 } from '@neko/agent/runtime';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
 import type { AgentEvent } from '@neko/agent';
@@ -32,7 +34,14 @@ import {
   type Task,
   type ToolResultBackfillPayload,
 } from '@neko/shared';
-import { type AgentPhase, type ContentBlock, type Message } from '@neko-agent/types';
+import {
+  type AgentPhase,
+  type AgentTurnTimelineDiagnostic,
+  type AgentTurnTimelineMessage,
+  type AgentTurnTimelineSnapshotRequest,
+  type ContentBlock,
+  type Message,
+} from '@neko-agent/types';
 import type { ConversationBridge } from '../conversationBridge';
 import type { GeneratedAssetIndex } from '@neko/platform/media/generated-asset-index';
 import { maybeAttachInferredEntityMemoryContribution } from '@neko/skills';
@@ -45,8 +54,23 @@ import {
 } from './entityMemoryContributionAutomation';
 import { projectValueForWebviewResourceDisplay } from './webviewResourceProjection';
 import { getLogger } from '../../base';
+import {
+  AgentTimelineDeliveryChannel,
+  type AgentTimelineDeliveryMetrics,
+} from './agentTimelineDeliveryScheduler';
 
 const logger = getLogger('AgentStreamProcessor');
+
+interface MediaUnderstandingModelOverride {
+  readonly providerId: string;
+  readonly modelId: string;
+}
+
+interface MediaUnderstandingModelOverrides {
+  readonly image?: MediaUnderstandingModelOverride;
+  readonly audio?: MediaUnderstandingModelOverride;
+  readonly video?: MediaUnderstandingModelOverride;
+}
 
 /**
  * Stream processing result
@@ -104,6 +128,8 @@ export interface AgentStreamProcessorDeps {
   getContextTokenCount?: (conversationId: string) => number;
   /** Optional host-side automation for reviewable entity memory contribution envelopes. */
   entityMemoryContributionAutomation?: EntityMemoryContributionAutomationPort;
+  /** Testable endpoint epoch source. */
+  createTimelineConnectionEpoch?: () => string;
   /** Optional adapter for durable Agent task-result observations. */
   taskResultObservations?: {
     handleTerminalTask(
@@ -121,12 +147,20 @@ export interface AgentStreamProcessorDeps {
 /**
  * Processor for agent event streams
  */
+interface ActiveTimelineChannel {
+  readonly webview: vscode.Webview;
+  readonly channel: AgentTimelineDeliveryChannel;
+  readonly accumulator: AgentTurnTimelineAccumulator;
+}
+
 export class AgentStreamProcessor {
   private readonly mediaDeliveryHost: MediaTaskDeliveryHost;
   private readonly streamRuntime = new AgentEventStreamRuntimeProcessor<
     MediaTask,
     MediaTaskProgressDeliveryPlan
   >();
+  private readonly activeTimelineChannels = new Map<string, ActiveTimelineChannel>();
+  private nextTimelineConnectionEpoch = 1;
 
   constructor(private deps: AgentStreamProcessorDeps) {
     this.mediaDeliveryHost =
@@ -148,18 +182,58 @@ export class AgentStreamProcessor {
     callbacks: StreamCallbacks,
   ): Promise<StreamProcessingResult> {
     const media = this.deps.platform?.media;
+    const turnId = `turn-${callbacks.messageId}`;
+    const connectionEpoch = this.createConnectionEpoch();
+    const channelKey = toTimelineChannelKey(conversationId, turnId, callbacks.messageId);
+    const previousChannel = this.activeTimelineChannels.get(channelKey);
+    if (previousChannel) void previousChannel.channel.dispose();
+
+    const timelineAccumulator = createAgentTurnTimelineAccumulator({
+      conversationId,
+      messageId: callbacks.messageId,
+    });
+    const timelineChannel = new AgentTimelineDeliveryChannel(
+      { connectionEpoch, conversationId, turnId, messageId: callbacks.messageId },
+      {
+        postMessage: async (message) => {
+          const active = this.activeTimelineChannels.get(channelKey);
+          if (active?.channel !== timelineChannel || active.webview !== webview) return false;
+          const projectedMessage = await projectTimelineMessageResourcesForWebview(
+            webview,
+            message,
+            {
+              localResourceAccess: this.deps.localResourceAccess,
+              contentAccessRuntime: this.deps.contentAccessRuntime,
+            },
+          );
+          this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
+          return webview.postMessage(projectedMessage);
+        },
+      },
+    );
+    this.activeTimelineChannels.set(channelKey, {
+      webview,
+      channel: timelineChannel,
+      accumulator: timelineAccumulator,
+    });
+
     const postProjectedMessage = async (message: AgentEventStreamRuntimeMessage) => {
+      if (message.type === 'agentTurnTimelineUpdate') {
+        await timelineChannel.enqueue(message);
+        return;
+      }
+      await timelineChannel.flush();
       const projectedMessage = await projectStreamMessageResourcesForWebview(webview, message, {
         localResourceAccess: this.deps.localResourceAccess,
         contentAccessRuntime: this.deps.contentAccessRuntime,
       });
-      this.deps.dashboardWorkItems?.acceptWebviewMessage(message);
       await webview.postMessage(projectedMessage);
     };
 
     const result = await this.streamRuntime.process({
       conversationId,
       messageId: callbacks.messageId,
+      timelineAccumulator,
       events: observeEntityMemoryContributionAutomation({
         events,
         automation: this.deps.entityMemoryContributionAutomation,
@@ -235,6 +309,7 @@ export class AgentStreamProcessor {
               toolCallId: context.toolCallId,
               taskId: context.taskId,
               assets: delivery.deliveryPlan.generatedAssets,
+              understandingModels: readMediaTaskUnderstandingModels(task),
             });
           }
           return {
@@ -269,6 +344,8 @@ export class AgentStreamProcessor {
         onTerminalTask: (event) => this.recordTerminalMediaTaskObservation(event),
       },
     });
+
+    await timelineChannel.flush();
 
     if (this.deps.getContextTokenCount) {
       try {
@@ -340,6 +417,7 @@ export class AgentStreamProcessor {
     readonly toolCallId: string;
     readonly taskId: string;
     readonly assets: readonly GeneratedAsset[];
+    readonly understandingModels?: MediaUnderstandingModelOverrides;
   }): Promise<void> {
     const sink = this.deps.mediaBackfill?.backfillSink;
     const pipeline = this.deps.mediaBackfill?.perceptionPipeline;
@@ -388,6 +466,7 @@ export class AgentStreamProcessor {
       await pipeline.perceive({
         asset: { assetId: asset.id, ref: assetRef },
         sourceToolCallId: input.toolCallId,
+        ...(input.understandingModels ? { understandingModels: input.understandingModels } : {}),
         policy: {
           timing: 'on-completion',
           layers: [0],
@@ -397,13 +476,97 @@ export class AgentStreamProcessor {
     }
   }
 
+  async requestTimelineSnapshot(
+    webview: vscode.Webview,
+    request: AgentTurnTimelineSnapshotRequest,
+  ): Promise<AgentTurnTimelineMessage | AgentTurnTimelineDiagnostic> {
+    const key = toTimelineChannelKey(request.conversationId, request.turnId, request.messageId);
+    const active = this.activeTimelineChannels.get(key);
+    if (!active) return buildSnapshotDiagnostic(request, 'turn-snapshot-unavailable');
+    if (
+      active.webview !== webview ||
+      request.connectionEpoch !== active.channel.snapshotIdentity().connectionEpoch
+    ) {
+      return buildSnapshotDiagnostic(request, 'identity-mismatch');
+    }
+    const snapshot = await active.channel.snapshot(active.accumulator.snapshot());
+    return snapshot.available
+      ? snapshot.message
+      : buildSnapshotDiagnostic(request, snapshot.diagnostic);
+  }
+
+  getTimelineDeliveryMetrics(input: {
+    readonly conversationId: string;
+    readonly turnId: string;
+    readonly messageId: string;
+  }): AgentTimelineDeliveryMetrics | undefined {
+    return this.activeTimelineChannels
+      .get(toTimelineChannelKey(input.conversationId, input.turnId, input.messageId))
+      ?.channel.metrics();
+  }
+
   clearConversation(conversationId: string): void {
     this.streamRuntime.clearConversation(conversationId);
+    for (const [key, active] of this.activeTimelineChannels) {
+      if (!key.startsWith(`${conversationId}\u0000`)) continue;
+      this.activeTimelineChannels.delete(key);
+      void active.channel.dispose();
+    }
   }
 
   dispose(): void {
     this.streamRuntime.dispose();
+    for (const active of this.activeTimelineChannels.values()) void active.channel.dispose();
+    this.activeTimelineChannels.clear();
   }
+
+  private createConnectionEpoch(): string {
+    return (
+      this.deps.createTimelineConnectionEpoch?.() ??
+      `webview-${Date.now().toString(36)}-${this.nextTimelineConnectionEpoch++}`
+    );
+  }
+}
+
+function toTimelineChannelKey(conversationId: string, turnId: string, messageId: string): string {
+  return `${conversationId}\u0000${turnId}\u0000${messageId}`;
+}
+
+function buildSnapshotDiagnostic(
+  request: AgentTurnTimelineSnapshotRequest,
+  code: 'identity-mismatch' | 'turn-snapshot-unavailable' | 'disposed',
+): AgentTurnTimelineDiagnostic {
+  return {
+    type: 'agentTurnTimelineDiagnostic',
+    schemaVersion: request.schemaVersion,
+    connectionEpoch: request.connectionEpoch,
+    conversationId: request.conversationId,
+    turnId: request.turnId,
+    messageId: request.messageId,
+    code: code === 'disposed' ? 'turn-snapshot-unavailable' : code,
+    message:
+      code === 'identity-mismatch'
+        ? 'Timeline snapshot request does not match the active Webview endpoint generation.'
+        : 'The requested active turn snapshot is unavailable.',
+    ...(request.lastAppliedDeliveryRevision !== undefined
+      ? { deliveryRevision: request.lastAppliedDeliveryRevision }
+      : {}),
+  };
+}
+
+async function projectTimelineMessageResourcesForWebview(
+  webview: vscode.Webview,
+  message: AgentTurnTimelineMessage,
+  options: {
+    readonly localResourceAccess?: AgentLocalResourceAccess;
+    readonly contentAccessRuntime?: AgentContentAccessRuntime;
+  },
+): Promise<AgentTurnTimelineMessage> {
+  const projected = await projectStreamMessageResourcesForWebview(webview, message, options);
+  if (projected.type !== 'agentTurnTimeline') {
+    throw new Error('Timeline resource projection returned a non-Timeline message.');
+  }
+  return projected;
 }
 
 function readBackgroundTaskError(value: unknown): string | undefined {
@@ -412,12 +575,12 @@ function readBackgroundTaskError(value: unknown): string | undefined {
 
 function projectStreamMessageResourcesForWebview(
   webview: vscode.Webview,
-  message: AgentEventStreamRuntimeMessage,
+  message: AgentEventStreamRuntimeMessage | AgentTurnTimelineMessage,
   options: {
     readonly localResourceAccess?: AgentLocalResourceAccess;
     readonly contentAccessRuntime?: AgentContentAccessRuntime;
   },
-): Promise<AgentEventStreamRuntimeMessage> {
+): Promise<AgentEventStreamRuntimeMessage | AgentTurnTimelineMessage> {
   const projectValue = (value: unknown) =>
     projectValueForWebviewResourceDisplay(value, {
       webview,
@@ -471,19 +634,43 @@ function projectStreamMessageResourcesForWebview(
     }));
   }
 
-  if (message.type === 'agentTurnTimeline') {
-    return Promise.all([
-      projectValue(message.events),
-      message.finalContentBlocks ? projectValue(message.finalContentBlocks) : undefined,
-    ]).then(([events, finalContentBlocks]) => ({
-      ...message,
-      events: Array.isArray(events) ? (events as typeof message.events) : message.events,
-      ...(finalContentBlocks && Array.isArray(finalContentBlocks)
-        ? { finalContentBlocks: finalContentBlocks as typeof message.finalContentBlocks }
-        : message.finalContentBlocks
-          ? { finalContentBlocks: message.finalContentBlocks }
+  if (message.type === 'agentTurnTimelineUpdate') {
+    const projectedOperations = Promise.all(
+      message.operations.map(async (operation) => {
+        if (!('item' in operation)) {
+          return operation;
+        }
+        const projectedItem = await projectValue(operation.item);
+        return {
+          ...operation,
+          item: isRecord(projectedItem) ? projectedItem : operation.item,
+        } as typeof operation;
+      }),
+    );
+    const projectedFinalContentBlocks = message.completion?.finalContentBlocks
+      ? projectValue(message.completion.finalContentBlocks)
+      : undefined;
+    return Promise.all([projectedOperations, projectedFinalContentBlocks]).then(
+      ([operations, finalContentBlocks]) => ({
+        ...message,
+        operations,
+        ...(message.completion
+          ? {
+              completion: {
+                ...message.completion,
+                ...(Array.isArray(finalContentBlocks)
+                  ? {
+                      finalContentBlocks:
+                        finalContentBlocks as typeof message.completion.finalContentBlocks,
+                    }
+                  : message.completion.finalContentBlocks
+                    ? { finalContentBlocks: message.completion.finalContentBlocks }
+                    : {}),
+              },
+            }
           : {}),
-    }));
+      }),
+    );
   }
 
   return Promise.resolve(message);
@@ -519,6 +706,34 @@ function waitForMediaTask(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readMediaTaskUnderstandingModels(
+  task: MediaTask,
+): MediaUnderstandingModelOverrides | undefined {
+  const raw = task.request.metadata?.understandingModels;
+  if (!isRecord(raw)) return undefined;
+
+  const image = readUnderstandingModelOverride(raw.image);
+  const audio = readUnderstandingModelOverride(raw.audio);
+  const video = readUnderstandingModelOverride(raw.video);
+  if (!image && !audio && !video) return undefined;
+
+  return {
+    ...(image ? { image } : {}),
+    ...(audio ? { audio } : {}),
+    ...(video ? { video } : {}),
+  };
+}
+
+function readUnderstandingModelOverride(
+  value: unknown,
+): MediaUnderstandingModelOverride | undefined {
+  if (!isRecord(value)) return undefined;
+  const providerId = typeof value.providerId === 'string' ? value.providerId.trim() : '';
+  const modelId = typeof value.modelId === 'string' ? value.modelId.trim() : '';
+  if (!providerId || !modelId) return undefined;
+  return { providerId, modelId };
 }
 
 function toPerceptualAssetRef(

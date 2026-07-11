@@ -21,10 +21,12 @@ async function loadPerceptionAsset(
   contentAccessRuntime: AgentContentAccessRuntime | undefined,
 ): Promise<ProviderReadyAssetPayload> {
   const mimeType = ref.mimeType || getMimeType(ref.uri);
-  if (ref.uri.startsWith('data:')) {
+  const hasStableResourceRef =
+    ref.resourceRef !== undefined || ref.documentResourceRef !== undefined;
+  if (!hasStableResourceRef && ref.uri.startsWith('data:')) {
     return { kind: resolveProviderPayloadKind(mimeType), url: ref.uri, mimeType };
   }
-  if (ref.uri.startsWith('http://') || ref.uri.startsWith('https://')) {
+  if (!hasStableResourceRef && (ref.uri.startsWith('http://') || ref.uri.startsWith('https://'))) {
     return { kind: resolveProviderPayloadKind(mimeType), url: ref.uri, mimeType };
   }
 
@@ -53,6 +55,9 @@ async function loadPerceptionAsset(
 }
 
 function createPerceptionAssetSource(ref: PerceptualAssetRef): ContentSourceRef {
+  if (ref.resourceRef) {
+    return ref.resourceRef;
+  }
   if (ref.documentResourceRef) {
     return createDocumentEntrySource(ref.documentResourceRef);
   }

@@ -167,6 +167,7 @@ export async function bootstrapCoreServices(
   connectMCPServersRuntime({
     mcpManager,
     toolRegistry,
+    externalResearch: platform.config.getEffectiveAgentWorkspaceConfigSnapshot().externalResearch,
     logger,
   }).catch((error) => {
     logger.error('Failed to connect MCP servers:', error);

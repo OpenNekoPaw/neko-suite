@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentContentAccessRuntime } from '@neko/agent/runtime';
-import type { PerceptualAssetRef } from '@neko/shared';
+import {
+  createResourceFingerprint,
+  createResourceRef,
+  type PerceptualAssetRef,
+} from '@neko/shared';
+import { createReadImageTool } from '../../tools/readImageTool';
 import { createLocalPerceptionAssetLoader } from '../perceptionAssetLoader';
 
 describe('createLocalPerceptionAssetLoader', () => {
@@ -118,6 +123,67 @@ describe('createLocalPerceptionAssetLoader', () => {
       kind: 'image',
       url: `data:image/jpeg;base64,${bytes.toString('base64')}`,
       mimeType: 'image/jpeg',
+    });
+  });
+
+  it('keeps generated ResourceRef identity through ReadImage and native asset loading', async () => {
+    const bytes = Buffer.from('generated-image-bytes');
+    const runtime = createContentAccessRuntime(bytes, 'image/png');
+    vi.mocked(runtime.resolveImageMetadata).mockResolvedValueOnce({
+      status: 'ready',
+      diagnostics: [],
+      mimeType: 'image/png',
+      width: 1024,
+      height: 1024,
+      sizeBytes: bytes.byteLength,
+    });
+    const generatedResourceRef = createResourceRef({
+      id: 'res-generated-1',
+      scope: 'project',
+      provider: 'generated-asset',
+      kind: 'generated',
+      source: {
+        kind: 'generated-asset',
+        generatedAssetId: 'generated-1',
+        filePath: '${WORKSPACE}/neko/generated/image/task_1_0.png',
+      },
+      locator: { kind: 'generated-asset', assetId: 'generated-1' },
+      fingerprint: createResourceFingerprint({
+        strategy: 'provider',
+        value: 'generated-1',
+        providerId: 'generated-asset',
+      }),
+    });
+
+    const readResult = await createReadImageTool({ contentAccessRuntime: runtime }).execute({
+      images: [
+        {
+          label: 'generated-assets/non-existent-display-label.png',
+          resourceRef: generatedResourceRef,
+        },
+      ],
+    });
+
+    expect(readResult.success).toBe(true);
+    expect(readResult.data).toMatchObject({
+      images: [{ portableForTransfer: true, resourceRef: generatedResourceRef }],
+    });
+    const assetRef = readResult.perceptionCards?.[0]?.perceptual?.thumbnailRef;
+    expect(assetRef).toMatchObject({ resourceRef: generatedResourceRef });
+    if (!assetRef) throw new Error('ReadImage did not return a thumbnail asset ref.');
+
+    const loaded = await createLocalPerceptionAssetLoader(runtime).load(assetRef);
+
+    expect(runtime.loadProviderAsset).toHaveBeenLastCalledWith({
+      caller: 'perception-asset-loader',
+      source: generatedResourceRef,
+      preferredTarget: 'bytes',
+      mimeTypeHint: 'image/png',
+    });
+    expect(loaded).toEqual({
+      kind: 'image',
+      url: `data:image/png;base64,${bytes.toString('base64')}`,
+      mimeType: 'image/png',
     });
   });
 

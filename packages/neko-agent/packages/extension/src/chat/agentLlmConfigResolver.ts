@@ -1,11 +1,20 @@
 import type { Platform } from '@neko/platform';
 import { projectLlmParameters, type LlmParameterDiagnostic } from '@neko/platform';
-import type { AgentLlmConfig, AgentModelSlot, AgentModelSlots, ModelRef } from '@neko-agent/types';
+import type {
+  AgentLlmConfig,
+  AgentModelSlot,
+  AgentModelSlots,
+  MediaUnderstandingModelSelections,
+  ModelRef,
+} from '@neko-agent/types';
 import type { AgentLlmRuntimeOptions } from '@neko/agent/runtime';
+import type { MessageAttachment } from '@neko/shared';
 import type { ProviderManager } from './providerManager';
 import type { SettingsManager } from './settingsManager';
 
 export type AgentLlmConfigDiagnosticCode =
+  | 'conflicting-media-understanding-purposes'
+  | 'missing-media-understanding-model'
   | 'unsupported-agent-model-slot'
   | 'conflicting-primary-model'
   | 'missing-primary-model'
@@ -30,6 +39,8 @@ export interface ResolveAgentLlmConfigInput {
   readonly chatModel?: ModelRef<'llm'>;
   readonly agentModels?: AgentModelSlots;
   readonly llmConfig?: AgentLlmConfig;
+  readonly attachments?: readonly MessageAttachment[];
+  readonly understandingModels?: MediaUnderstandingModelSelections;
   readonly settings: SettingsManager;
   readonly providers: ProviderManager;
   readonly platform?: Platform;
@@ -40,6 +51,7 @@ export type ResolveAgentLlmConfigResult =
       readonly ok: true;
       readonly chatModel?: ModelRef<'llm'>;
       readonly agentModels?: AgentModelSlots;
+      readonly understandingModels?: MediaUnderstandingModelSelections;
       readonly llmConfig?: AgentLlmConfig;
       readonly llmRuntimeOptions?: AgentLlmRuntimeOptions;
     }
@@ -60,8 +72,34 @@ export function resolveAgentLlmConfigForTurn(
   const diagnostics: AgentLlmConfigDiagnostic[] = [];
   diagnostics.push(...validateUnsupportedSlots(input.agentModels));
 
-  const primaryModel = input.agentModels?.primary;
-  if (primaryModel && input.chatModel && !sameModelRef(primaryModel, input.chatModel)) {
+  const resolvedPrimaryCandidate =
+    input.agentModels?.primary ?? input.chatModel ?? resolveDefaultPrimaryModel(input);
+  const mediaUnderstandingResolution = resolveMediaUnderstandingPrimaryModel(input);
+  if (mediaUnderstandingResolution.status === 'blocked') {
+    diagnostics.push(...mediaUnderstandingResolution.diagnostics);
+    return { ok: false, diagnostics };
+  }
+
+  const mediaUnderstandingModel =
+    mediaUnderstandingResolution.status === 'resolved'
+      ? mediaUnderstandingResolution.model
+      : undefined;
+  const mediaUnderstandingCategory =
+    mediaUnderstandingResolution.status === 'resolved'
+      ? purposeToCategory(mediaUnderstandingResolution.purpose)
+      : undefined;
+  const primaryModel =
+    mediaUnderstandingModel &&
+    resolvedPrimaryCandidate &&
+    sameModelRef(mediaUnderstandingModel, resolvedPrimaryCandidate)
+      ? mediaUnderstandingModel
+      : input.agentModels?.primary;
+  if (
+    primaryModel &&
+    input.chatModel &&
+    !mediaUnderstandingModel &&
+    !sameModelRef(primaryModel, input.chatModel)
+  ) {
     diagnostics.push({
       code: 'conflicting-primary-model',
       slot: 'primary',
@@ -91,9 +129,111 @@ export function resolveAgentLlmConfigForTurn(
     ok: true,
     chatModel: resolvedPrimary,
     agentModels: { primary: resolvedPrimary },
+    ...(mediaUnderstandingModel &&
+    mediaUnderstandingCategory &&
+    !sameModelRef(mediaUnderstandingModel, resolvedPrimary)
+      ? {
+          understandingModels: {
+            ...input.understandingModels,
+            [mediaUnderstandingCategory]: mediaUnderstandingModel,
+          },
+        }
+      : {}),
     ...(input.llmConfig ? { llmConfig: input.llmConfig } : {}),
     ...(projection.runtimeOptions ? { llmRuntimeOptions: projection.runtimeOptions } : {}),
   };
+}
+
+type MediaUnderstandingPurpose = 'image.understand' | 'audio.understand' | 'video.understand';
+
+type MediaUnderstandingPrimaryResolution =
+  | { readonly status: 'none' }
+  | {
+      readonly status: 'resolved';
+      readonly purpose: MediaUnderstandingPurpose;
+      readonly model: ModelRef<'llm'>;
+    }
+  | { readonly status: 'blocked'; readonly diagnostics: readonly AgentLlmConfigDiagnostic[] };
+
+function resolveMediaUnderstandingPrimaryModel(
+  input: ResolveAgentLlmConfigInput,
+): MediaUnderstandingPrimaryResolution {
+  const purposes = getRequestedMediaUnderstandingPurposes(input.attachments);
+  if (purposes.length === 0) {
+    return { status: 'none' };
+  }
+
+  if (purposes.length > 1) {
+    return {
+      status: 'blocked',
+      diagnostics: [
+        {
+          code: 'conflicting-media-understanding-purposes',
+          slot: 'primary',
+          message:
+            'This Agent turn includes multiple media understanding types. Send image, audio, and video analysis separately until multi-model media analysis profiles are available.',
+        },
+      ],
+    };
+  }
+
+  const purpose = purposes[0];
+  const selected = input.understandingModels?.[purposeToCategory(purpose)];
+  if (selected) {
+    return { status: 'resolved', purpose, model: selected };
+  }
+
+  const configured = input.platform?.config.resolveModelRefForPurpose(purpose);
+  if (!configured) {
+    return {
+      status: 'blocked',
+      diagnostics: [
+        {
+          code: 'missing-media-understanding-model',
+          slot: 'primary',
+          message: `No configured Agent model supports ${purpose}. Configure [default_model_purposes.${purposeToTomlKey(purpose)}] or enable a model with the ${purpose} capability.`,
+        },
+      ],
+    };
+  }
+
+  return {
+    status: 'resolved',
+    purpose,
+    model: {
+      providerId: configured.providerId,
+      modelId: configured.modelId,
+      category: 'llm',
+    },
+  };
+}
+
+function getRequestedMediaUnderstandingPurposes(
+  attachments: readonly MessageAttachment[] | undefined,
+): readonly MediaUnderstandingPurpose[] {
+  const purposes = new Set<MediaUnderstandingPurpose>();
+  for (const attachment of attachments ?? []) {
+    if (attachment.type === 'image') {
+      purposes.add('image.understand');
+    } else if (attachment.type === 'audio') {
+      purposes.add('audio.understand');
+    } else if (attachment.type === 'video') {
+      purposes.add('video.understand');
+    }
+  }
+  return [...purposes];
+}
+
+function purposeToTomlKey(purpose: MediaUnderstandingPurpose): string {
+  return purpose.split('.').join('_');
+}
+
+function purposeToCategory(
+  purpose: MediaUnderstandingPurpose,
+): keyof MediaUnderstandingModelSelections {
+  if (purpose === 'image.understand') return 'image';
+  if (purpose === 'audio.understand') return 'audio';
+  return 'video';
 }
 
 export function formatAgentLlmConfigDiagnostics(

@@ -38,7 +38,10 @@ import {
   registerCanvasAmbientExtensionBridge,
   subscribeCanvasSelection,
 } from './services/canvasAmbientExtensionBridge';
-import { createAgentCapabilityRuntimeRegistries } from '@neko/agent/runtime';
+import {
+  createAgentCapabilityRuntimeRegistries,
+  createExternalResearchCapabilityProviderFromMcpConfig,
+} from '@neko/agent/runtime';
 import { registerEntityContributionAutomationCommand } from '@neko/entity/host-vscode';
 import {
   bootstrapCapabilities,
@@ -201,6 +204,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<ISkill
   );
   capabilityDiscovery.registerProvider(
     createSemanticCoverageCapabilityProvider(),
+    agentOwnedCapabilityContext,
+  );
+  capabilityDiscovery.registerProvider(
+    createExternalResearchCapabilityProviderFromMcpConfig({
+      config:
+        bootstrapResult.platform.config.getEffectiveAgentWorkspaceConfigSnapshot().externalResearch,
+      mcpManager: bootstrapResult.mcpManager,
+    }),
     agentOwnedCapabilityContext,
   );
 

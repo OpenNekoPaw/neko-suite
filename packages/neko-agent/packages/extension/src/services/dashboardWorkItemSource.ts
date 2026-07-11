@@ -187,11 +187,15 @@ export class AgentDashboardWorkItemSource implements DashboardTaskSource, vscode
   }
 
   private upsertTimelineWorkItems(message: AgentTurnTimelineMessage): void {
-    for (const event of message.events) {
-      if (event.kind !== 'task' && event.kind !== 'media') {
+    for (const operation of message.operations) {
+      if (!('item' in operation)) {
         continue;
       }
-      this.upsertWorkItem(message.conversationId, event.payload.workItem);
+      const item = operation.item;
+      if (item.kind !== 'task' && item.kind !== 'media') {
+        continue;
+      }
+      this.upsertWorkItem(message.conversationId, item.payload.workItem);
     }
   }
 

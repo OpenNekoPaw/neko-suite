@@ -4,12 +4,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentStreamProcessor } from '../agentStreamProcessor';
-import type { AgentTurnTimelineMessage } from '@neko-agent/types';
+import type { AgentTurnTimelineItem, AgentTurnTimelineMessage } from '@neko-agent/types';
 import type { EntityMemoryContribution } from '@neko/shared';
-import {
-  evaluateAgentTaskResultDelivery,
-  normalizeAgentTaskResultObservation,
-} from '@neko/agent';
+import { evaluateAgentTaskResultDelivery, normalizeAgentTaskResultObservation } from '@neko/agent';
 
 vi.mock('vscode', () => ({
   Uri: {
@@ -61,14 +58,32 @@ function getPostedTimelineMessages(
     .filter((message): message is AgentTurnTimelineMessage => message.type === 'agentTurnTimeline');
 }
 
+function getTimelineItems(message: AgentTurnTimelineMessage): AgentTurnTimelineItem[] {
+  return message.operations.flatMap((operation) => ('item' in operation ? [operation.item] : []));
+}
+
+function getPostedTimelineItems(
+  webview: ReturnType<typeof createMockWebview>,
+): AgentTurnTimelineItem[] {
+  return getPostedTimelineMessages(webview).flatMap(getTimelineItems);
+}
+
 function getPostedTimelineToolResult(
   webview: ReturnType<typeof createMockWebview>,
   toolCallId: string,
 ) {
-  return getPostedTimelineMessages(webview)
-    .flatMap((message) => message.events)
+  return getPostedTimelineItems(webview)
     .filter((item) => item.kind === 'tool_call' && item.payload.toolCall.id === toolCallId)
     .at(-1)?.payload.toolCall.result;
+}
+
+function deliveredTextFromTimeline(messages: readonly AgentTurnTimelineMessage[]): string {
+  return messages
+    .flatMap((message) => message.operations)
+    .filter((operation) => operation.operation === 'append' || operation.operation === 'snapshot')
+    .filter((operation) => operation.item.kind === 'assistant_text')
+    .map((operation) => operation.item.payload.content)
+    .join('');
 }
 
 function waitForMicrotasks(): Promise<void> {
@@ -145,7 +160,11 @@ describe('AgentStreamProcessor', () => {
       expect(result.contentBlocks[0]!.thinking).toBe('Let me think... about this.');
       expect(callbacks.onPhaseChange).toHaveBeenCalledWith('thinking', undefined);
 
-      expect(getPostedTimelineMessages(webview)[0]?.events[0]).toMatchObject({
+      expect(
+        getPostedTimelineMessages(webview)[0]
+          ? getTimelineItems(getPostedTimelineMessages(webview)[0]!)[0]
+          : undefined,
+      ).toMatchObject({
         kind: 'thinking',
         payload: { content: 'Let me think...' },
       });
@@ -305,7 +324,7 @@ describe('AgentStreamProcessor', () => {
         error: undefined,
       });
 
-      expect(getPostedTimelineMessages(webview).flatMap((message) => message.events)).toEqual(
+      expect(getPostedTimelineItems(webview)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: 'tool_call',
@@ -689,7 +708,7 @@ describe('AgentStreamProcessor', () => {
         '/tmp/page-1.jpg',
         'neko-agent.stream-tool-result',
       );
-      expect(getPostedTimelineMessages(webview).flatMap((message) => message.events)).toEqual(
+      expect(getPostedTimelineItems(webview)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: 'tool_call',
@@ -827,24 +846,27 @@ describe('AgentStreamProcessor', () => {
       expect(dashboardWorkItems.acceptWebviewMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'agentTurnTimeline',
-          events: expect.arrayContaining([
+          operations: expect.arrayContaining([
             expect.objectContaining({
-              kind: 'tool_call',
-              payload: {
-                toolCall: expect.objectContaining({
-                  result: {
-                    data: expect.objectContaining({
-                      images: [
-                        expect.not.objectContaining({
-                          renderUri: expect.any(String),
-                        }),
-                      ],
-                    }),
-                    success: true,
-                    error: undefined,
-                  },
-                }),
-              },
+              operation: 'upsert',
+              item: expect.objectContaining({
+                kind: 'tool_call',
+                payload: {
+                  toolCall: expect.objectContaining({
+                    result: {
+                      data: expect.objectContaining({
+                        images: [
+                          expect.not.objectContaining({
+                            renderUri: expect.any(String),
+                          }),
+                        ],
+                      }),
+                      success: true,
+                      error: undefined,
+                    },
+                  }),
+                },
+              }),
             }),
           ]),
         }),
@@ -1036,7 +1058,7 @@ describe('AgentStreamProcessor', () => {
         'neko-agent.stream-tool-result',
       );
       const timelineTool = getPostedTimelineMessages(webview)
-        .flatMap((message) => message.events)
+        .flatMap(getTimelineItems)
         .filter((item) => item.kind === 'tool_call' && item.payload.toolCall.id === 'tc-read-image')
         .at(-1);
       expect(timelineTool).toMatchObject({
@@ -1090,7 +1112,7 @@ describe('AgentStreamProcessor', () => {
 
       await processor.processStream(webview as any, 'conv-1', events, callbacks);
 
-      expect(getPostedTimelineMessages(webview).flatMap((message) => message.events)).toEqual(
+      expect(getPostedTimelineItems(webview)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: 'tool_call',
@@ -1121,7 +1143,7 @@ describe('AgentStreamProcessor', () => {
       expect(result.hasError).toBe(true);
       expect(result.errorMessage).toBe('Rate limited');
       expect(callbacks.onPhaseChange).toHaveBeenCalledWith('idle', undefined);
-      expect(getPostedTimelineMessages(webview).flatMap((message) => message.events)).toEqual(
+      expect(getPostedTimelineItems(webview)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: 'error',
@@ -1299,24 +1321,27 @@ describe('AgentStreamProcessor', () => {
       const timelineMessages = posted.filter(
         (message): message is AgentTurnTimelineMessage => message.type === 'agentTurnTimeline',
       );
-      expect(timelineMessages.map((message) => message.events.map((item) => item.itemId))).toEqual([
-        ['text-1'],
-        ['text-1', 'tool-tc-1'],
-        ['tool-tc-1'],
-        ['text-3'],
-        ['text-3'],
-      ]);
       expect(
-        timelineMessages[1]!.events.map((item) => ({
-          itemId: item.itemId,
-          sequence: item.sequence,
-          status: item.status,
-        })),
-      ).toEqual([
-        { itemId: 'text-1', sequence: 1, status: 'complete' },
-        { itemId: 'tool-tc-1', sequence: 2, status: 'pending' },
-      ]);
-      expect(timelineMessages[2]!.events[0]).toMatchObject({
+        timelineMessages.map((message) => getTimelineItems(message).map((item) => item.itemId)),
+      ).toEqual([['text-1'], ['tool-tc-1'], ['tool-tc-1'], ['text-3'], []]);
+      expect(timelineMessages[1]!.operations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            operation: 'complete',
+            itemId: 'text-1',
+            status: 'complete',
+          }),
+          expect.objectContaining({
+            operation: 'upsert',
+            item: expect.objectContaining({
+              itemId: 'tool-tc-1',
+              sequence: 2,
+              status: 'pending',
+            }),
+          }),
+        ]),
+      );
+      expect(getTimelineItems(timelineMessages[2]!)[0]).toMatchObject({
         itemId: 'tool-tc-1',
         sequence: 2,
         status: 'succeeded',
@@ -1327,11 +1352,9 @@ describe('AgentStreamProcessor', () => {
           },
         },
       });
-      expect(timelineMessages[4]!.finalContentBlocks?.map((block) => block.type)).toEqual([
-        'text',
-        'tool_call',
-        'text',
-      ]);
+      expect(
+        timelineMessages[4]!.completion?.finalContentBlocks?.map((block) => block.type),
+      ).toEqual(['text', 'tool_call', 'text']);
     });
 
     it('should send full background task views for task progress updates', async () => {
@@ -1410,7 +1433,7 @@ describe('AgentStreamProcessor', () => {
       });
       await processing;
 
-      expect(getPostedTimelineMessages(webview).flatMap((message) => message.events)).toEqual(
+      expect(getPostedTimelineItems(webview)).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: 'task',
@@ -1683,7 +1706,13 @@ describe('AgentStreamProcessor', () => {
         outputs: [{ type: 'image', url: 'https://example.com/image.png', mimeType: 'image/png' }],
         request: {
           prompt: 'Generate a cat',
-          metadata: { conversationId: 'conv-1', runId: 'run-media' },
+          metadata: {
+            conversationId: 'conv-1',
+            runId: 'run-media',
+            understandingModels: {
+              image: { providerId: 'google', modelId: 'gemini-flash' },
+            },
+          },
         },
       };
       waitForTask.resolve(completedTask);
@@ -1719,6 +1748,9 @@ describe('AgentStreamProcessor', () => {
             }),
           }),
           sourceToolCallId: 'tc-media',
+          understandingModels: {
+            image: { providerId: 'google', modelId: 'gemini-flash' },
+          },
           policy: expect.objectContaining({ timing: 'on-completion', layers: [0] }),
         }),
       );
@@ -2020,6 +2052,78 @@ describe('AgentStreamProcessor', () => {
 
       expect(unsubscribeA).toHaveBeenCalledTimes(1);
       expect(unsubscribeB).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Timeline delivery scheduling and resynchronization', () => {
+    it('bounds postMessage batches for a 4,000-fragment text stream and preserves exact source', async () => {
+      processor = new AgentStreamProcessor({
+        createTimelineConnectionEpoch: () => 'epoch-burst',
+      });
+      const source = 'x'.repeat(4_000);
+      const events = toAsyncIterable([
+        ...Array.from(source, (content) => ({ type: 'text_delta' as const, content })),
+        { type: 'done' as const },
+      ]);
+
+      const result = await processor.processStream(webview as any, 'conv-1', events, callbacks);
+      const timelineMessages = getPostedTimelineMessages(webview);
+
+      expect(result.accumulatedResponse).toBe(source);
+      expect(deliveredTextFromTimeline(timelineMessages)).toBe(source);
+      expect(timelineMessages.length).toBeLessThanOrEqual(3);
+      expect(
+        processor.getTimelineDeliveryMetrics({
+          conversationId: 'conv-1',
+          turnId: 'turn-assistant-stream',
+          messageId: 'assistant-stream',
+        }),
+      ).toMatchObject({
+        inputBatches: 4_001,
+        deliveredBatches: timelineMessages.length,
+        failedDeliveries: 0,
+      });
+    });
+
+    it('serves an exact retained snapshot and rejects endpoint generation mismatch', async () => {
+      processor = new AgentStreamProcessor({
+        createTimelineConnectionEpoch: () => 'epoch-snapshot',
+      });
+      await processor.processStream(
+        webview as any,
+        'conv-1',
+        toAsyncIterable([
+          { type: 'text_delta', content: 'table ' },
+          { type: 'text_delta', content: '| A | B |' },
+          { type: 'done' },
+        ]),
+        callbacks,
+      );
+      const request = {
+        type: 'requestAgentTurnTimelineSnapshot',
+        schemaVersion: 2,
+        connectionEpoch: 'epoch-snapshot',
+        conversationId: 'conv-1',
+        turnId: 'turn-assistant-stream',
+        messageId: 'assistant-stream',
+        reason: 'revision-gap',
+        lastAppliedDeliveryRevision: 1,
+      } as const;
+
+      const snapshot = await processor.requestTimelineSnapshot(webview as any, request);
+      const mismatch = await processor.requestTimelineSnapshot(webview as any, {
+        ...request,
+        connectionEpoch: 'epoch-stale',
+      });
+
+      expect(snapshot.type).toBe('agentTurnTimeline');
+      if (snapshot.type !== 'agentTurnTimeline') throw new Error('Expected Timeline snapshot.');
+      expect(snapshot.batchKind).toBe('snapshot');
+      expect(deliveredTextFromTimeline([snapshot])).toBe('table | A | B |');
+      expect(mismatch).toMatchObject({
+        type: 'agentTurnTimelineDiagnostic',
+        code: 'identity-mismatch',
+      });
     });
   });
 

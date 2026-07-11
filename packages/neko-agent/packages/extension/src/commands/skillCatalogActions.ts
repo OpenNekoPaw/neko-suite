@@ -1,9 +1,9 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import type {
   Skill,
   SkillCatalogActionRequest,
   SkillCatalogEditableSource,
-  SkillCatalogMeta,
   SkillCatalogRef,
   SkillCatalogSource,
 } from '@neko/shared';
@@ -26,7 +26,6 @@ export interface SkillCatalogActionHostOptions {
 interface SkillActionResolution {
   readonly source: SkillCatalogSource;
   readonly skillName: string;
-  readonly catalog?: SkillCatalogMeta;
   readonly skillFilePath?: string;
   readonly skillDirectory?: string;
   readonly builtinSkill?: Skill;
@@ -117,7 +116,6 @@ function resolveSkillActionRequest(
     return {
       source: ref.source,
       skillName: ref.id,
-      catalog: entry.catalog,
       skillFilePath,
       skillDirectory,
       builtinSkill,
@@ -127,7 +125,6 @@ function resolveSkillActionRequest(
   return {
     source: ref.source,
     skillName: ref.id,
-    catalog: entry.catalog,
     builtinSkill,
   };
 }
@@ -184,32 +181,18 @@ async function forkSkill(
   }
   const targetSource = request.targetSource ?? 'project';
   assertEditableTargetSource(targetSource);
-  const filePath = await options.skillFileService.createSkillFile(
-    builtin.name,
-    targetSource,
-    builtin.content,
-    builtin.description,
-  );
-  await options.skillFileService.writeSkillManifest(builtin.name, targetSource, {
-    version: builtin.version,
-    domain: builtin.domain,
-    requiredSubpackages: builtin.requiredSubpackages,
-    autoInvoke: builtin.autoInvoke,
-    referencedAssets: builtin.referencedAssets,
-    referencedSkills: builtin.referencedSkills,
-    mediaWorkflow: builtin.mediaWorkflow,
-    compliance: builtin.compliance,
-    catalog: {
-      role: resolution.catalog?.role ?? builtin.catalog?.role ?? 'standalone',
-      groupId: resolution.catalog?.groupId ?? builtin.catalog?.groupId,
-      parentSkillIds: resolution.catalog?.parentSkillIds ?? builtin.catalog?.parentSkillIds,
-      visibility: resolution.catalog?.visibility ?? builtin.catalog?.visibility,
-      editable: true,
-      actions: ['run', 'edit', 'reveal', 'duplicate'],
+  const result = await options.skillFileService.createSkill({
+    target: targetSource,
+    skill: builtin.portableDefinition ?? {
+      name: builtin.name,
+      description: builtin.description,
+      body: builtin.content,
+      ...(builtin.allowedTools ? { allowedTools: builtin.allowedTools } : {}),
     },
+    ...(builtin.nekoOverlay ? { neko: builtin.nekoOverlay } : {}),
   });
   await rescanSkills(options.skillFileService, options.skillCatalogProvider);
-  await openSkillFile(filePath);
+  await openSkillFile(path.join(result.absolutePath, 'SKILL.md'));
 }
 
 async function createSkill(
@@ -222,9 +205,16 @@ async function createSkill(
   if (!skillName || !SKILL_NAME_RE.test(skillName)) {
     throw new Error('Skill name must contain only lowercase letters, numbers, and hyphens');
   }
-  const filePath = await options.skillFileService.createSkillFile(skillName, targetSource);
+  const result = await options.skillFileService.createSkill({
+    target: targetSource,
+    skill: {
+      name: skillName,
+      description: `Reusable guidance for ${skillName}.`,
+      body: `# ${skillName}\n\nAdd instructions here.\n`,
+    },
+  });
   await rescanSkills(options.skillFileService, options.skillCatalogProvider);
-  await openSkillFile(filePath);
+  await openSkillFile(path.join(result.absolutePath, 'SKILL.md'));
 }
 
 async function duplicateSkill(
@@ -244,7 +234,7 @@ async function duplicateSkill(
     targetSource,
   );
   await rescanSkills(options.skillFileService, options.skillCatalogProvider);
-  await openSkillFile(`${newSkillDir}/SKILL.md`);
+  await openSkillFile(path.join(newSkillDir, 'SKILL.md'));
 }
 
 async function rescanSkills(
