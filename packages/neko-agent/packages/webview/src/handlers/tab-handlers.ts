@@ -13,6 +13,7 @@ import {
   persistCurrentVisibleConversation,
 } from './character-role-session-state';
 import type { MessageHandlerContext, StreamingState } from './types';
+import { migrateRestoredConversationTabView } from './tab-restore-migration';
 
 /**
  * Handle 'tabState' message - Restore tab state from extension
@@ -78,8 +79,11 @@ export const tabHandlers: HandlerRegistration[] = [defineHandler('tabState', han
 function activateOrdinaryTabView(context: MessageHandlerContext, conversationId: string): void {
   const cachedMessages = context.conversationMessagesRef.current.get(conversationId);
   const cachedStreaming = context.conversationStreamingRef.current.get(conversationId);
-  const messages = cachedMessages ?? [];
-  const streaming = normalizeStreamingState(cachedStreaming);
+  const restored = migrateRestoredConversationTabView({
+    messages: cachedMessages,
+    streaming: normalizeStreamingState(cachedStreaming),
+  });
+  const { messages, streaming } = restored;
 
   context.isTablessConversationViewRef.current = false;
   context.setMessages(messages);

@@ -4,6 +4,7 @@ import {
   projectCharacterRoleSessionView,
 } from '@/presenters/character-role-session-presenter';
 import type { MessageHandlerContext, StreamingState } from './types';
+import { migrateRestoredConversationTabView } from './tab-restore-migration';
 
 export function persistCurrentVisibleConversation(context: MessageHandlerContext): void {
   const conversationId = context.activeConversationIdRef.current;
@@ -27,10 +28,14 @@ export function activateCharacterRoleSessionView(
     readonly cachedStreaming?: StreamingState;
   },
 ): void {
+  const restored = migrateRestoredConversationTabView({
+    messages: input.cachedMessages,
+    streaming: input.cachedStreaming ?? idleStreamingState(),
+  });
   const projection = projectCharacterRoleSessionView({
     sessionId: input.sessionId,
-    cachedMessages: input.cachedMessages,
-    cachedStreaming: input.cachedStreaming ?? idleStreamingState(),
+    cachedMessages: restored.messages,
+    cachedStreaming: restored.streaming,
   });
 
   context.conversationMessagesRef.current.set(projection.activeConversationId, projection.messages);

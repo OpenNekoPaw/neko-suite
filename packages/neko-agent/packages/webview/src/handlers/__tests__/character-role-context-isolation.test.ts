@@ -1,4 +1,5 @@
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import { createElement, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import { cleanup, render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type {
   AgentQueuedMessageItem,
@@ -8,6 +9,7 @@ import type {
 } from '@neko-agent/types';
 import type { Message } from '@neko-agent/types';
 import type { AgentWorkItemStore } from '@/components/AgentWorkItem';
+import { MarkdownRenderer } from '@/components/ChatView/MessageContent/MarkdownRenderer';
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import { conversationHandlers } from '../conversation-handlers';
@@ -471,6 +473,235 @@ describe('character role context isolation', () => {
       queuedMessageCount: 0,
       queuedMessages: [],
     });
+  });
+
+  it('finalizes orphaned legacy Markdown streaming blocks when restoring an ordinary tab', () => {
+    const orphanedMessage = legacyStreamingMessage('orphaned-ordinary');
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      activeTabId: 'tab-b',
+      currentMessages: [message('message-b', 'assistant', 'B 回复')],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      cachedMessages: new Map([['conv-a', [orphanedMessage]]]),
+      cachedStreaming: new Map([
+        [
+          'conv-a',
+          {
+            isThinking: true,
+            streamingMessageId: orphanedMessage.id,
+            queuedMessageCount: 0,
+          },
+        ],
+      ]),
+      openTabs: [
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+      ],
+    });
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        tabState: {
+          openTabs: harness.openTabs(),
+          activeTabId: 'tab-a',
+        },
+      },
+      harness.context,
+    );
+
+    expectRestoredMarkdownDoesNotRequireTimelineSession(harness.messages()[0]);
+    expect(harness.messages()[0]).toMatchObject({
+      id: orphanedMessage.id,
+      isStreaming: false,
+      contentBlocks: [
+        { id: `block-thinking-${orphanedMessage.id}`, isThinkingComplete: true },
+        { id: `block-text-${orphanedMessage.id}`, isStreaming: false },
+      ],
+    });
+    expect(harness.streaming()).toMatchObject({
+      streamingMessageId: null,
+      isThinking: false,
+    });
+  });
+
+  it('finalizes orphaned legacy Markdown streaming blocks when restoring a character-role tab', () => {
+    const orphanedMessage = legacyStreamingMessage('orphaned-role');
+    const roleTab: OpenTab = {
+      id: 'tab-role',
+      title: 'Embody: 小橘',
+      conversationId: 'role-session',
+      kind: 'embody-character',
+    };
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      activeTabId: 'tab-b',
+      currentMessages: [message('message-b', 'assistant', 'B 回复')],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      cachedMessages: new Map([['role-session', [orphanedMessage]]]),
+      cachedStreaming: new Map([
+        [
+          'role-session',
+          {
+            isThinking: true,
+            streamingMessageId: orphanedMessage.id,
+            queuedMessageCount: 0,
+          },
+        ],
+      ]),
+      openTabs: [{ id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' }, roleTab],
+    });
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        tabState: {
+          openTabs: harness.openTabs(),
+          activeTabId: roleTab.id,
+        },
+      },
+      harness.context,
+    );
+
+    expectRestoredMarkdownDoesNotRequireTimelineSession(harness.messages()[0]);
+    expect(harness.messages()[0]).toMatchObject({
+      id: orphanedMessage.id,
+      isStreaming: false,
+      contentBlocks: [
+        { id: `block-thinking-${orphanedMessage.id}`, isThinkingComplete: true },
+        { id: `block-text-${orphanedMessage.id}`, isStreaming: false },
+      ],
+    });
+    expect(harness.streaming()).toMatchObject({
+      streamingMessageId: null,
+      isThinking: false,
+    });
+  });
+
+  it('releases unavailable Timeline ownership when restoring a tab', () => {
+    const unavailableMessage = legacyStreamingMessage('unavailable-message');
+    const unavailableTimeline: ActiveTurnTimelineState = {
+      connectionEpoch: 'epoch-1',
+      conversationId: 'conv-a',
+      turnId: 'turn-a',
+      messageId: unavailableMessage.id,
+      deliveryRevision: 1,
+      validationState: {
+        connectionEpoch: 'epoch-1',
+        conversationId: 'conv-a',
+        turnId: 'turn-a',
+        messageId: unavailableMessage.id,
+        deliveryRevision: 1,
+        completed: false,
+        items: new Map(),
+      },
+      items: [],
+      completed: false,
+      synchronization: 'unavailable',
+    };
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      activeTabId: 'tab-b',
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      cachedMessages: new Map([['conv-a', [unavailableMessage]]]),
+      cachedStreaming: new Map([
+        [
+          'conv-a',
+          {
+            isThinking: true,
+            streamingMessageId: unavailableMessage.id,
+            activeTurnTimeline: unavailableTimeline,
+          },
+        ],
+      ]),
+      openTabs: [
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+      ],
+    });
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        tabState: { openTabs: harness.openTabs(), activeTabId: 'tab-a' },
+      },
+      harness.context,
+    );
+
+    expectRestoredMarkdownDoesNotRequireTimelineSession(harness.messages()[0]);
+    expect(harness.messages()[0]).toMatchObject({
+      id: unavailableMessage.id,
+      isStreaming: false,
+      contentBlocks: [
+        { id: `block-thinking-${unavailableMessage.id}`, isThinkingComplete: true },
+        { id: `block-text-${unavailableMessage.id}`, isStreaming: false },
+      ],
+    });
+    expect(harness.streaming()).toMatchObject({
+      streamingMessageId: null,
+      isThinking: false,
+    });
+    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toBeNull();
+  });
+
+  it('preserves canonical Timeline-owned streaming state during tab restoration', () => {
+    const canonicalMessage = legacyStreamingMessage('canonical-message');
+    const activeTimeline: ActiveTurnTimelineState = {
+      connectionEpoch: 'epoch-1',
+      conversationId: 'conv-a',
+      turnId: 'turn-a',
+      messageId: canonicalMessage.id,
+      deliveryRevision: 1,
+      validationState: {
+        connectionEpoch: 'epoch-1',
+        conversationId: 'conv-a',
+        turnId: 'turn-a',
+        messageId: canonicalMessage.id,
+        deliveryRevision: 1,
+        completed: false,
+        items: new Map(),
+      },
+      items: [],
+      completed: false,
+      synchronization: 'synchronized',
+    };
+    const canonicalStreaming: StreamingState = {
+      isThinking: true,
+      streamingMessageId: canonicalMessage.id,
+      activeTurnTimeline: activeTimeline,
+    };
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      activeTabId: 'tab-b',
+      currentMessages: [],
+      currentStreaming: { isThinking: false, streamingMessageId: null },
+      cachedMessages: new Map([['conv-a', [canonicalMessage]]]),
+      cachedStreaming: new Map([['conv-a', canonicalStreaming]]),
+      openTabs: [
+        { id: 'tab-a', title: 'Chat A', conversationId: 'conv-a' },
+        { id: 'tab-b', title: 'Chat B', conversationId: 'conv-b' },
+      ],
+    });
+
+    dispatch(
+      tabHandlers,
+      {
+        type: 'tabState',
+        tabState: { openTabs: harness.openTabs(), activeTabId: 'tab-a' },
+      },
+      harness.context,
+    );
+
+    expect(harness.messages()[0]).toEqual(canonicalMessage);
+    expect(harness.streaming()).toMatchObject({
+      streamingMessageId: canonicalMessage.id,
+      isThinking: true,
+    });
+    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toBe(activeTimeline);
   });
 
   it('clears visible streaming and queue state when switching to an uncached ordinary tab', () => {
@@ -991,6 +1222,51 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
 
 function message(id: string, role: Message['role'], content: string): Message {
   return { id, role, content, timestamp: 1 };
+}
+
+function legacyStreamingMessage(id: string): Message {
+  return {
+    id,
+    role: 'assistant',
+    content: '仍在流式输出',
+    timestamp: 1,
+    isStreaming: true,
+    contentBlocks: [
+      {
+        id: `block-thinking-${id}`,
+        type: 'thinking',
+        timestamp: 1,
+        thinking: '思考中',
+        isThinkingComplete: false,
+      },
+      {
+        id: `block-text-${id}`,
+        type: 'text',
+        timestamp: 2,
+        content: '| A | B |\n| - | - |\n| 1 | 2 |',
+        isStreaming: true,
+      },
+    ],
+  };
+}
+
+function expectRestoredMarkdownDoesNotRequireTimelineSession(message: Message | undefined): void {
+  const textBlock = message?.contentBlocks?.find((block) => block.type === 'text');
+  if (!message || !textBlock?.content) {
+    throw new Error('Expected restored text content block.');
+  }
+  const content = textBlock.content;
+
+  expect(() =>
+    render(
+      createElement(MarkdownRenderer, {
+        sessionKey: `${message.id}:${textBlock.id}`,
+        content,
+        isStreaming: textBlock.isStreaming,
+      }),
+    ),
+  ).not.toThrow();
+  cleanup();
 }
 
 function queuedMessageItem(id: string, conversationId: string): AgentQueuedMessageItem {
