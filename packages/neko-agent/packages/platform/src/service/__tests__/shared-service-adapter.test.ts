@@ -406,7 +406,7 @@ describe('projectProviderAwareMessages', () => {
     });
   });
 
-  it('rejects tool perception images when selected model lacks vision capability', async () => {
+  it('keeps tool perception evidence usable when the selected chat model lacks vision', async () => {
     const messages: ChatMessage[] = [
       { role: 'user', content: 'analyze the exposed page image' },
       {
@@ -419,20 +419,64 @@ describe('projectProviderAwareMessages', () => {
         }),
       },
     ];
+    const assetLoader = { load: vi.fn() };
 
-    await expect(
-      projectProviderAwareMessages({
-        messages,
-        providerId: 'custom-direct',
-        modelId: 'text-only',
-        modelCapabilities: ['chat'],
-        assetLoader: {
-          load: async () => ({ kind: 'image', url: 'data:image/png;base64,thumb' }),
-        },
-      }),
-    ).rejects.toMatchObject({
-      code: 'CHAT_MODEL_NATIVE_MULTIMODAL_UNSUPPORTED',
+    const projected = await projectProviderAwareMessages({
+      messages,
+      providerId: 'custom-direct',
+      modelId: 'text-only',
+      modelCapabilities: ['chat'],
+      assetLoader,
     });
+
+    expect(assetLoader.load).not.toHaveBeenCalled();
+    expect(projected).toHaveLength(3);
+    expect(projected[2]).toEqual({
+      role: 'user',
+      content: [
+        expect.objectContaining({ type: 'text', text: expect.stringContaining('rainy street') }),
+        expect.objectContaining({
+          type: 'text',
+          text: expect.stringContaining('does not support native image input'),
+        }),
+      ],
+    });
+    expect(JSON.stringify(projected[2])).not.toContain('imageUrl');
+  });
+
+  it('keeps ReadImage metadata visible and requests external perception instead of terminating a text-only turn', async () => {
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'analyze the generated cat image quality' },
+      {
+        role: 'tool',
+        toolCallId: 'call-read-image',
+        content: JSON.stringify({
+          schema: 'neko.tool-result.v1',
+          data: { mode: 'metadata', analysis: 'custom' },
+          perceptionCards: [readImageMetadataCard()],
+        }),
+      },
+    ];
+
+    const projected = await projectProviderAwareMessages({
+      messages,
+      providerId: 'deepseek-chat',
+      modelId: 'deepseek-v4-flash',
+      modelCapabilities: ['chat'],
+    });
+
+    expect(projected).toHaveLength(3);
+    expect(projected[2]).toEqual({
+      role: 'user',
+      content: [
+        expect.objectContaining({ type: 'text', text: expect.stringContaining('1024x1024') }),
+        expect.objectContaining({
+          type: 'text',
+          text: expect.stringContaining('runtime perception'),
+        }),
+      ],
+    });
+    expect(JSON.stringify(projected[2])).not.toContain('imageUrl');
   });
 
   it('rejects tool perception images when native asset projection fails for a vision model', async () => {
@@ -579,6 +623,30 @@ function imageCard(): PerceptionCard {
       thumbnailRef: {
         assetId: 'thumb-1',
         uri: '${WORKSPACE}/thumb.png',
+        mimeType: 'image/png',
+      },
+    },
+  };
+}
+
+function readImageMetadataCard(): PerceptionCard {
+  return {
+    version: 1,
+    assetId: 'read-image-res_3z6xxu',
+    modality: 'image',
+    createdAt: 1,
+    layerStatus: { layer0: 'complete', layer1: 'skipped', layer2: 'complete' },
+    structural: {
+      format: 'png',
+      mimeType: 'image/png',
+      byteSize: 1_347_289,
+      width: 1024,
+      height: 1024,
+    },
+    perceptual: {
+      thumbnailRef: {
+        assetId: 'read-image-res_3z6xxu',
+        uri: 'generated-assets/cat.png',
         mimeType: 'image/png',
       },
     },

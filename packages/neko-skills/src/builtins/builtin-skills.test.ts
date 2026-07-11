@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TOOL_NAMES_PERCEPTION } from '@neko/shared';
 
 import {
   aiGenerateSkill,
@@ -404,6 +405,7 @@ describe('@neko/skills builtins', () => {
     expect(videoSkill.name).toBe('video');
     expect(mediaProductionSkill.name).toBe('media-production');
     expect(mediaQualityReviewSkill.name).toBe('media-quality-review');
+    expect(mediaQualityReviewSkill.allowedTools).toContain(TOOL_NAMES_PERCEPTION.PERCEIVE);
     expect(creationPersonaSkill.name).toBe('creation-persona');
     expect(executionPersonaSkill.name).toBe('execution-persona');
     expect(iterationPersonaSkill.name).toBe('iteration-persona');

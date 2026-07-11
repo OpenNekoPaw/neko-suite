@@ -219,17 +219,24 @@ export async function projectProviderAwareMessages(
     locale: input.locale,
   });
 
+  let projectedMessage = result.message;
   if (result.diagnostics.length > 0) {
     logger.warn('Provider-aware perception projection degraded', {
       diagnostics: result.diagnostics,
     });
-    assertNoUnsupportedNativeMultimodalInputs(result.diagnostics);
+    assertNoUnsupportedNativeMultimodalInputs(packet, result.diagnostics);
     assertNoUnavailableNativeMultimodalAssets(result.diagnostics);
+    projectedMessage = appendToolPerceptionRecoveryDiagnostics(
+      projectedMessage,
+      packet,
+      perceptionCards,
+      result.diagnostics,
+    );
   }
 
   return [
     ...input.messages.filter((message) => readMultimodalContextPacket(message) === undefined),
-    result.message,
+    projectedMessage,
   ];
 }
 
@@ -264,10 +271,13 @@ function projectModelCapabilitiesToInputModalities(
 }
 
 function assertNoUnsupportedNativeMultimodalInputs(
+  packet: import('@neko/shared').MultimodalContextPacket,
   diagnostics: readonly ProjectionDiagnostic[],
 ): void {
   const unsupported = diagnostics.find(
-    (diagnostic) => diagnostic.code === 'provider-input-modality-unsupported',
+    (diagnostic) =>
+      diagnostic.code === 'provider-input-modality-unsupported' &&
+      packet.perceptionInputs.some((input) => input.modality === diagnostic.modality),
   );
   if (!unsupported) {
     return;
@@ -283,6 +293,39 @@ function assertNoUnsupportedNativeMultimodalInputs(
       diagnostics,
     },
   });
+}
+
+function appendToolPerceptionRecoveryDiagnostics(
+  message: ChatMessage,
+  packet: import('@neko/shared').MultimodalContextPacket,
+  perceptionCards: readonly PerceptionCard[],
+  diagnostics: readonly ProjectionDiagnostic[],
+): ChatMessage {
+  if (perceptionCards.length === 0) {
+    return message;
+  }
+
+  const toolOnlyUnsupported = diagnostics.filter(
+    (diagnostic) =>
+      diagnostic.code === 'provider-input-modality-unsupported' &&
+      !packet.perceptionInputs.some((input) => input.modality === diagnostic.modality),
+  );
+  if (toolOnlyUnsupported.length === 0) {
+    return message;
+  }
+
+  const recoveryText = [
+    ...toolOnlyUnsupported.map((diagnostic) => diagnostic.message),
+    'The tool-provided structural or semantic evidence above remains available as text. When visual evidence is missing or stale, use runtime perception with the stable asset or resource reference before assessing visual quality.',
+  ].join('\n');
+  const content = Array.isArray(message.content)
+    ? [...message.content, { type: 'text' as const, text: recoveryText }]
+    : [
+        { type: 'text' as const, text: message.content },
+        { type: 'text' as const, text: recoveryText },
+      ];
+
+  return { ...message, content };
 }
 
 function assertNoUnavailableNativeMultimodalAssets(

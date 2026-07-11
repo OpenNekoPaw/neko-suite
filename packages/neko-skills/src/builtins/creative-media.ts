@@ -4,6 +4,7 @@ import {
   STORYBOARD_SOURCE_PROFILE_IDS,
   TOOL_NAMES_CANVAS,
   TOOL_NAMES_MEDIA,
+  TOOL_NAMES_PERCEPTION,
   TOOL_NAMES_QUALITY,
   TOOL_NAMES_SYSTEM,
   TOOL_NAMES_TIMELINE,
@@ -358,6 +359,7 @@ export const mediaQualityReviewSkill: Skill = {
     'Review creative assets, Storyboards, projects, final cuts, and exported deliverables with revision-bound evidence and policy-driven Gates.',
   content: qualityContent,
   allowedTools: [
+    TOOL_NAMES_PERCEPTION.PERCEIVE,
     TOOL_NAMES_QUALITY.QUALITY_CHECK,
     TOOL_NAMES_QUALITY.QUALITY_REPAIR_CHECK,
     TOOL_NAMES_TIMELINE.GET_TIMELINE_INFO,
