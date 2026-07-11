@@ -57,6 +57,41 @@ describe('canonical quality tools', () => {
     expect(review).not.toHaveBeenCalled();
   });
 
+  it('rejects malformed optional target fields instead of silently dropping them', async () => {
+    const review = vi.fn();
+    const [tool] = createCanonicalQualityCheckTools({ review });
+
+    await expect(
+      tool?.execute({
+        target: {
+          ...canonicalTarget(),
+          mediaRange: { startSeconds: 'zero', endSeconds: 1 },
+        },
+      }),
+    ).rejects.toThrow('invalid-quality-target: mediaRange fields must be numbers');
+    expect(review).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed resourceRef even when a valid projectRef is also supplied', async () => {
+    const review = vi.fn();
+    const [tool] = createCanonicalQualityCheckTools({ review });
+
+    await expect(
+      tool?.execute({
+        target: {
+          ...canonicalTarget(),
+          resourceRef: { id: 'not-a-resource-ref' },
+          projectRef: {
+            domain: 'cut',
+            documentUri: 'project://movie.nkv',
+            projectRevision: 'rev-1',
+          },
+        },
+      }),
+    ).rejects.toThrow('invalid-quality-target: resourceRef is malformed');
+    expect(review).not.toHaveBeenCalled();
+  });
+
   it('rejects targets without a durable revision or digest', async () => {
     const review = vi.fn();
     const [tool] = createCanonicalQualityCheckTools({ review });

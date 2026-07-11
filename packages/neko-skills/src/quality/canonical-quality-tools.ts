@@ -91,12 +91,12 @@ function parseQualityTarget(value: unknown): QualityTarget {
   const version = value['version'];
   const targetId = readNonEmptyString(value['targetId']);
   const kind = readTargetKind(value['kind']);
-  const resourceRef = isResourceRef(value['resourceRef']) ? value['resourceRef'] : undefined;
+  const resourceRef = parseResourceRef(value['resourceRef']);
   const projectRef = parseProjectRef(value['projectRef']);
   const revision = readNonEmptyString(value['revision']);
   const contentDigest = readNonEmptyString(value['contentDigest']);
   const mediaRange = parseMediaRange(value['mediaRange']);
-  const expectedIntent = isRecord(value['expectedIntent']) ? value['expectedIntent'] : undefined;
+  const expectedIntent = parseExpectedIntent(value['expectedIntent']);
   const lineage = parseLineage(value['lineage']);
 
   if (version !== MEDIA_QUALITY_CONTRACT_VERSION || !targetId || !kind) {
@@ -187,14 +187,29 @@ function defaultEvaluatorClasses(kind: QualityTargetKind): readonly QualityEvalu
   return ['technical', 'perception'];
 }
 
+function parseResourceRef(value: unknown): QualityTarget['resourceRef'] | undefined {
+  if (value === undefined) return undefined;
+  if (!isResourceRef(value)) {
+    throw new Error('invalid-quality-target: resourceRef is malformed.');
+  }
+  return value;
+}
+
 function parseProjectRef(value: unknown): QualityProjectRef | undefined {
   if (value === undefined) return undefined;
-  if (!isRecord(value)) return undefined;
+  if (!isRecord(value)) {
+    throw new Error('invalid-quality-target: projectRef must be an object.');
+  }
   const domain = value['domain'];
   const documentUri = readNonEmptyString(value['documentUri']);
   const projectRevision = readNonEmptyString(value['projectRevision']);
-  const contentDigest = readNonEmptyString(value['contentDigest']);
-  if (!isProjectDomain(domain) || !documentUri || !projectRevision) return undefined;
+  const contentDigest = readOptionalNonEmptyString(
+    value['contentDigest'],
+    'projectRef.contentDigest',
+  );
+  if (!isProjectDomain(domain) || !documentUri || !projectRevision) {
+    throw new Error('invalid-quality-target: projectRef fields are missing or invalid.');
+  }
   return {
     domain,
     documentUri,
@@ -205,13 +220,17 @@ function parseProjectRef(value: unknown): QualityProjectRef | undefined {
 
 function parseLineage(value: unknown): readonly QualityLineageRef[] | undefined {
   if (value === undefined) return undefined;
-  if (!Array.isArray(value)) return undefined;
+  if (!Array.isArray(value)) {
+    throw new Error('invalid-quality-target: lineage must be an array.');
+  }
   const lineage: QualityLineageRef[] = [];
   for (const item of value) {
-    if (!isRecord(item) || !isLineageRelation(item['relation'])) return undefined;
-    const resourceRef = isResourceRef(item['resourceRef']) ? item['resourceRef'] : undefined;
+    if (!isRecord(item) || !isLineageRelation(item['relation'])) {
+      throw new Error('invalid-quality-target: lineage entry is malformed.');
+    }
+    const resourceRef = parseResourceRef(item['resourceRef']);
     const projectRef = parseProjectRef(item['projectRef']);
-    const revision = readNonEmptyString(item['revision']);
+    const revision = readOptionalNonEmptyString(item['revision'], 'lineage.revision');
     lineage.push({
       relation: item['relation'],
       ...(resourceRef ? { resourceRef } : {}),
@@ -224,11 +243,23 @@ function parseLineage(value: unknown): readonly QualityLineageRef[] | undefined 
 
 function parseMediaRange(value: unknown): MediaTimeRange | undefined {
   if (value === undefined) return undefined;
-  if (!isRecord(value)) return undefined;
+  if (!isRecord(value)) {
+    throw new Error('invalid-quality-target: mediaRange must be an object.');
+  }
   const startSeconds = value['startSeconds'];
   const endSeconds = value['endSeconds'];
-  if (typeof startSeconds !== 'number' || typeof endSeconds !== 'number') return undefined;
+  if (typeof startSeconds !== 'number' || typeof endSeconds !== 'number') {
+    throw new Error('invalid-quality-target: mediaRange fields must be numbers.');
+  }
   return { startSeconds, endSeconds };
+}
+
+function parseExpectedIntent(value: unknown): Readonly<Record<string, unknown>> | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw new Error('invalid-quality-target: expectedIntent must be an object.');
+  }
+  return value;
 }
 
 function parseProfileId(value: unknown): QualityProfileId | undefined {
@@ -324,6 +355,15 @@ function readNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function readOptionalNonEmptyString(value: unknown, field: string): string | undefined {
+  if (value === undefined) return undefined;
+  const parsed = readNonEmptyString(value);
+  if (!parsed) {
+    throw new Error(`invalid-quality-target: ${field} must be a non-empty string.`);
+  }
+  return parsed;
 }
 
 function isProjectDomain(value: unknown): value is QualityProjectRef['domain'] {
