@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   isEntityMemoryContribution,
+  MEDIA_PRODUCTION_ANIMATION_PLAN_PROFILE_ID,
+  MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID,
   projectCompositeArtifactToCutStoryboardPayload,
   validateCompositeArtifact,
   type ArtifactProfileDescriptor,
@@ -8,11 +10,11 @@ import {
   type CompositeArtifactBlock,
   type CompositeArtifactDomainBlock,
 } from '@neko/shared';
-import sampleArtifact from '../__fixtures__/comic-to-animation-composite-artifact.json';
+import sampleArtifact from '../__fixtures__/media-production-from-comic-artifact.json';
 
 const profileDescriptors: readonly ArtifactProfileDescriptor[] = [
   {
-    profileId: 'comic-to-animation-plan',
+    profileId: MEDIA_PRODUCTION_ANIMATION_PLAN_PROFILE_ID,
     kind: 'artifact',
     protocol: 'CompositeArtifact',
     version: 1,
@@ -24,7 +26,7 @@ const profileDescriptors: readonly ArtifactProfileDescriptor[] = [
     ],
   },
   {
-    profileId: 'comic-shot-asset-prep',
+    profileId: MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID,
     kind: 'artifact',
     protocol: 'GenericTable',
     version: 1,
@@ -79,7 +81,7 @@ const profileDescriptors: readonly ArtifactProfileDescriptor[] = [
   },
 ];
 
-describe('comic-to-animation composite artifact sample', () => {
+describe('media-production/from-comic composite artifact sample', () => {
   it('validates the review-only sample with Skill-local profile descriptors', () => {
     const result = validateCompositeArtifact(sampleArtifact, {
       profiles: profileDescriptors,

@@ -9,7 +9,8 @@ import type {
   StoryboardTable,
 } from '@neko/shared';
 import {
-  buildComicShotAssetPrepTable,
+  MEDIA_PRODUCTION_SHOT_IMAGE_PREP_REVIEW_PROFILE_ID,
+  buildShotImagePrepTable,
   deriveShotImagePrepPlansFromStoryboard,
   validateShotImagePrepPlans,
 } from '@neko/shared';
@@ -46,7 +47,7 @@ export function buildShotImagePrepReviewArtifact(
   const diagnostics = [...(input.diagnostics ?? []), ...validation.diagnostics].map(
     projectShotImagePrepDiagnostic,
   );
-  const table = buildComicShotAssetPrepTable(input.plans, {
+  const table = buildShotImagePrepTable(input.plans, {
     tableId: `${input.artifactId}-table`,
     title: input.title,
     includeProfileVersion: true,
@@ -56,7 +57,7 @@ export function buildShotImagePrepReviewArtifact(
     schemaVersion: 1,
     kind: 'composite-artifact',
     artifactId: input.artifactId,
-    profile: 'comic-shot-image-prep-review',
+    profile: MEDIA_PRODUCTION_SHOT_IMAGE_PREP_REVIEW_PROFILE_ID,
     profileVersion: 1,
     title: input.title,
     blocks: [
@@ -68,9 +69,9 @@ export function buildShotImagePrepReviewArtifact(
         format: 'plain',
       },
       {
-        blockId: 'comic-shot-asset-prep',
+        blockId: 'shot-image-prep',
         kind: 'table',
-        title: 'Comic Shot Asset Prep',
+        title: 'Shot Image Prep',
         table,
       },
       ...(diagnostics.length > 0

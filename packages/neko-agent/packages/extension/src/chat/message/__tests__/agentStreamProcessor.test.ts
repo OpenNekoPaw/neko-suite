@@ -552,7 +552,7 @@ describe('AgentStreamProcessor', () => {
           schemaVersion: 1,
           kind: 'composite-artifact',
           artifactId: 'comic-storyboard-plan',
-          profile: 'comic-to-animation-plan',
+          profile: 'media-production.animation-plan',
           title: 'Comic Storyboard Plan',
           extensions: {
             'neko.entityMemoryContributionPayload': contribution,
@@ -647,7 +647,7 @@ describe('AgentStreamProcessor', () => {
           schemaVersion: 1,
           kind: 'composite-artifact',
           artifactId: 'comic-storyboard-plan',
-          profile: 'comic-to-animation-plan',
+          profile: 'media-production.animation-plan',
           title: 'Comic Storyboard Plan',
           extensions: {
             'neko.entityMemoryContributionPayload': contribution,

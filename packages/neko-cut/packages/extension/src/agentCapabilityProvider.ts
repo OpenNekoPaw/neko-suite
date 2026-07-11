@@ -23,7 +23,15 @@ import type {
   PromptFragment,
   CanvasCutDraftPayload,
 } from '@neko/shared';
-import { TOOL_NAMES_CANVAS, TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA } from '@neko/shared';
+import {
+  MEDIA_PRODUCTION_ANIMATION_PLAN_PROFILE_ID,
+  MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID,
+  MEDIA_PRODUCTION_SHOT_IMAGE_PREP_REVIEW_PROFILE_ID,
+  STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
+  TOOL_NAMES_CANVAS,
+  TOOL_NAMES_MEDIA,
+  TOOL_NAMES_TIMELINE,
+} from '@neko/shared';
 import { TimelineToolBridge } from './services/timelineToolBridge';
 
 /**
@@ -72,7 +80,12 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
         {
           id: 'renderer:neko-cut:generic-artifact-preview',
           accepts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
-          profiles: ['comic-shot-asset-prep', 'comic-to-animation-plan', 'manga-to-video'],
+          profiles: [
+            MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID,
+            MEDIA_PRODUCTION_SHOT_IMAGE_PREP_REVIEW_PROFILE_ID,
+            MEDIA_PRODUCTION_ANIMATION_PLAN_PROFILE_ID,
+            STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
+          ],
           lazy: true,
         },
       ],
@@ -81,7 +94,7 @@ class NekoCutCapabilityProviderImpl implements AgentCapabilityProvider {
           id: 'projector:storyboard-to-cut',
           accepts: ['StoryboardTable'],
           produces: ['CutStoryboardImportPayload'],
-          profiles: ['manga-to-video'],
+          profiles: [STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID],
           lazy: true,
         },
       ],

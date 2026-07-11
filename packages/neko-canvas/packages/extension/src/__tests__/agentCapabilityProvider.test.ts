@@ -9,6 +9,10 @@ import type {
 } from '@neko/shared';
 import {
   CANVAS_STORYBOARD_ACTION_INTENT_IDS,
+  MEDIA_PRODUCTION_ANIMATION_PLAN_PROFILE_ID,
+  MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID,
+  MEDIA_PRODUCTION_SHOT_IMAGE_PREP_REVIEW_PROFILE_ID,
+  STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
   CANVAS_STORYBOARD_ADVANCED_PARAMETER_IDS,
   TOOL_NAMES_CANVAS,
   validateCanvasAuthoringCatalog,
@@ -308,6 +312,23 @@ describe('agentCapabilityProvider storyboard export contracts', () => {
   it('exposes Canvas authoring as a provider-owned capability family', () => {
     const provider = createNekoCanvasCapabilityProvider(createApi());
     const facets = provider.getArtifactFacets({ extensionContext: {} });
+
+    const renderer = facets.renderers.find(
+      (candidate) => candidate.id === 'renderer:neko-canvas:generic-artifact-preview',
+    );
+    expect(renderer?.profiles).toEqual([
+      MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID,
+      MEDIA_PRODUCTION_SHOT_IMAGE_PREP_REVIEW_PROFILE_ID,
+      MEDIA_PRODUCTION_ANIMATION_PLAN_PROFILE_ID,
+      STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
+    ]);
+    for (const legacyProfile of [
+      'comic-shot-asset-prep',
+      'comic-to-animation-plan',
+      'manga-to-video',
+    ]) {
+      expect(renderer?.profiles).not.toContain(legacyProfile);
+    }
 
     expect(facets.capabilities).toEqual(
       expect.arrayContaining([

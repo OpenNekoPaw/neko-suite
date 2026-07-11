@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "kind": "composite-artifact",
-  "artifactId": "sample-comic-to-animation-plan",
-  "profile": "comic-to-animation-plan",
+  "artifactId": "sample-media-production-from-comic",
+  "profile": "media-production.animation-plan",
   "profileVersion": 1,
-  "title": "Comic to Animation Plan",
+  "title": "Media Production from Comic",
   "blocks": [
     {
       "blockId": "summary",
@@ -38,10 +38,10 @@
       "table": {
         "schemaVersion": 1,
         "kind": "generic-table",
-        "tableId": "comic-shot-plan",
-        "profile": "comic-shot-asset-prep",
+        "tableId": "shot-image-prep-plan",
+        "profile": "media-production.shot-image-prep",
         "profileVersion": 1,
-        "title": "Comic Shot Asset Prep",
+        "title": "Shot Image Prep",
         "columns": [
           {
             "columnId": "shotId",
@@ -126,10 +126,10 @@
         ],
         "actions": [
           {
-            "actionId": "projector:comic-shot-plan-to-storyboard",
+            "actionId": "projector:shot-image-prep-plan-to-storyboard",
             "kind": "transform",
             "label": "Project to StoryboardTable",
-            "projectorId": "projector:comic-shot-plan-to-storyboard"
+            "projectorId": "projector:shot-image-prep-plan-to-storyboard"
           }
         ]
       }
@@ -143,7 +143,7 @@
       "payload": {
         "schemaVersion": 1,
         "kind": "storyboard-table",
-        "profile": "manga-to-video",
+        "profile": "from-comic",
         "title": "Storyboard",
         "scenes": [
           {
@@ -562,7 +562,7 @@
       ]
     },
     "neko.sample": {
-      "scenario": "comic-to-animation",
+      "scenario": "media-production/from-comic",
       "reviewOnly": true
     }
   }

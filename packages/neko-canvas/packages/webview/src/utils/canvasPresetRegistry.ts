@@ -1283,8 +1283,8 @@ function actionBlock(id: string, action: string, label: string): CanvasBlock {
       disabledReasonPath: '/shotImagePrepPlan/diagnostics',
       requiresCapability:
         action === 'run-shot-prep' || action === 'estimate-batch-cost'
-          ? 'comic-image-prep-pipeline'
-          : 'comic-shot-asset-prep.review',
+          ? 'image-prep-pipeline'
+          : 'shot-image-prep.review',
     },
   };
 }

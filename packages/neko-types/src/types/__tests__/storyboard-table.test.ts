@@ -5,11 +5,13 @@ import type {
   StoryboardValidationDiagnostic,
 } from '../storyboard-table';
 import {
+  STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
   STORYBOARD_GENERATED_MEDIA_ROLES,
   STORYBOARD_SCENE_REQUIRED_FIELDS,
   STORYBOARD_SHOT_IMAGE_STRATEGIES,
   STORYBOARD_SHOT_REQUIRED_FIELDS,
   STORYBOARD_SOURCE_MEDIA_ROLES,
+  STORYBOARD_TABLE_PROFILES,
   STORYBOARD_TABLE_REQUIRED_FIELDS,
   classifyStoryboardMediaIdentity,
   interpretStoryboardImageStrategies,
@@ -30,14 +32,17 @@ describe('storyboard table contract', () => {
       'characterAction',
       'imageStrategy',
     ]);
+    expect(STORYBOARD_TABLE_PROFILES).toContain('from-comic');
+    expect(STORYBOARD_TABLE_PROFILES).not.toContain('manga-to-video');
   });
 
   it('accepts a strict semantic storyboard table with layered media refs', () => {
-    const profile: StoryboardTableProfile = 'manga-to-video';
+    const profile: StoryboardTableProfile = 'from-comic';
     const table: StoryboardTable = {
       schemaVersion: 1,
       kind: 'storyboard-table',
       profile,
+      sourceProfile: STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
       source: {
         type: 'document',
         sourceUri: '${WORKSPACE}/books/page-01.cbz',
@@ -88,7 +93,7 @@ describe('storyboard table contract', () => {
                 },
               ],
               extensions: {
-                'neko.mangaToVideo': {
+                'neko.fromComic': {
                   panelId: 'page-01-panel-02',
                   motionHint: 'slow push-in',
                 },
@@ -104,7 +109,8 @@ describe('storyboard table contract', () => {
       },
     };
 
-    expect(table.profile).toBe('manga-to-video');
+    expect(table.profile).toBe('from-comic');
+    expect(table.sourceProfile).toBe(STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID);
     expect(table.scenes[0]?.shots[0]?.sourceMediaRefs?.[0]?.locator.type).toBe('tool-result');
     expect(JSON.parse(JSON.stringify(table))).toEqual(table);
   });
@@ -168,7 +174,8 @@ describe('storyboard table contract', () => {
       value: {
         schemaVersion: 1,
         kind: 'storyboard-table',
-        profile: 'manga-to-video',
+        profile: 'from-comic',
+        sourceProfile: STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
         title: 'P11-P20',
         scenes: [
           {
@@ -558,7 +565,7 @@ describe('storyboard table contract', () => {
       {
         schemaVersion: 1,
         kind: 'storyboard-table',
-        profile: 'manga-to-video',
+        sourceProfile: 'from-comic',
         title: 'Runtime refs',
         scenes: [
           {
@@ -1454,6 +1461,16 @@ describe('canonical storyboard contract', () => {
         projections: [{ ...table.projections[0], storyboardRevisionId: 'old-revision' }],
       }).diagnostics,
     ).toEqual([expect.objectContaining({ code: 'invalid-projection-handoff' })]);
+
+    const { sourceProfile: _sourceProfile, ...profileOnlyTable } = table;
+    expect(
+      validateCanonicalStoryboardTable({
+        ...profileOnlyTable,
+        profile: STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
+      }).diagnostics,
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'unsupported-source-profile' })]),
+    );
   });
 
   it('rejects unsupported source profiles and runtime-only source refs', () => {

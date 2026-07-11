@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COMIC_SHOT_ASSET_PREP_PROFILE,
+  SHOT_IMAGE_PREP_PROFILE,
+  MEDIA_PRODUCTION_SHOT_IMAGE_PREP_REVIEW_PROFILE_ID,
   validateCompositeArtifact,
   type ArtifactProfileDescriptor,
   type ShotImagePrepPlan,
@@ -13,7 +14,7 @@ import {
 } from '../shot-image-prep-artifact';
 
 const prepArtifactProfile: ArtifactProfileDescriptor = {
-  profileId: 'comic-shot-image-prep-review',
+  profileId: MEDIA_PRODUCTION_SHOT_IMAGE_PREP_REVIEW_PROFILE_ID,
   kind: 'artifact',
   protocol: 'CompositeArtifact',
   version: 1,
@@ -53,7 +54,7 @@ describe('shot image prep artifact projection', () => {
     expect(
       validateCompositeArtifact(result.artifact, {
         persisted: true,
-        profiles: [prepArtifactProfile, COMIC_SHOT_ASSET_PREP_PROFILE],
+        profiles: [prepArtifactProfile, SHOT_IMAGE_PREP_PROFILE],
         resolvedSchemaRefs: [
           'neko.shot-image-prep.image-audit',
           'neko.shot-image-prep.mask-refs',

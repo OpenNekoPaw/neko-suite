@@ -180,7 +180,7 @@ describe('PropertyPanel node properties registry', () => {
       items.find((item) => item.kind === 'action' && item.action === 'run-shot-prep'),
     ).toMatchObject({
       disabledReasonPath: '/shotImagePrepPlan/diagnostics',
-      requiresCapability: 'comic-image-prep-pipeline',
+      requiresCapability: 'image-prep-pipeline',
     });
     expect(
       items.some(

@@ -46,16 +46,14 @@ vi.mock('@/i18n/I18nContext', () => ({
         'chat.canvasLifecycle.badge.creativeTable': '创作表格',
         'chat.canvasLifecycle.blocked': '已阻止',
         'chat.canvasLifecycle.diagnosticSeverity.warning': '警告',
-        'chat.canvasLifecycle.diagnostic.canvasCreativeProfileUnsupported':
-          '不支持的创作配置。',
+        'chat.canvasLifecycle.diagnostic.canvasCreativeProfileUnsupported': '不支持的创作配置。',
         'chat.canvasLifecycle.reviewArtifact': `审阅产物：${String(vars?.['artifact'] ?? '')}`,
         'chat.canvasLifecycle.changedRefs': `变更引用：${String(vars?.['refs'] ?? '')}`,
         'chat.canvasLifecycle.approvalRequired': '需确认',
         'chat.canvasLifecycle.action.createStoryboardNodes': '创建分镜节点',
         'chat.canvasLifecycle.disabled.conversationUnavailable': '对话不可用',
         'chat.canvasLifecycle.disabled.unsupportedActionPayload': '不支持的动作载荷',
-      })[key] ??
-      (vars?.['count'] !== undefined ? `${String(vars['count'])} ${key}` : key),
+      })[key] ?? (vars?.['count'] !== undefined ? `${String(vars['count'])} ${key}` : key),
   }),
 }));
 
@@ -168,7 +166,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
                 schemaVersion: 1,
                 kind: 'composite-artifact',
                 artifactId: 'artifact-1',
-                profile: 'comic-shot-asset-prep',
+                profile: 'media-production.shot-image-prep',
                 title: 'Comic shot plan',
                 blocks: [{ blockId: 'summary', kind: 'text', text: 'Review shots.' }],
                 suggestedActions: [
@@ -189,7 +187,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
     expect(screen.getByText('Comic shot plan')).toBeTruthy();
     expect(screen.getByText('Review shots.')).toBeTruthy();
     expect(screen.getByText('text')).toBeTruthy();
-    expect(screen.getByText('comic-shot-asset-prep')).toBeTruthy();
+    expect(screen.getByText('media-production.shot-image-prep')).toBeTruthy();
     expect(screen.getByText('canvas.ingestMarkdown')).toBeTruthy();
     expect(screen.getByText(/disabled: Provider unavailable/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /import/i })).toBeNull();
@@ -215,7 +213,7 @@ describe('ContentBlockItem Canvas transfer actions', () => {
                 schemaVersion: 1,
                 kind: 'composite-artifact',
                 artifactId: 'artifact-1',
-                profile: 'comic-to-animation-plan',
+                profile: 'media-production.animation-plan',
                 title: 'Comic shot plan',
                 blocks: [
                   {

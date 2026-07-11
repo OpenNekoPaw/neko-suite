@@ -163,8 +163,8 @@ describe('agent-capability-injection-runtime', () => {
         ],
         profiles: [
           {
-            id: 'profile:comic-shot-asset-prep',
-            profileId: 'comic-shot-asset-prep',
+            id: 'profile:media-production.shot-image-prep',
+            profileId: 'media-production.shot-image-prep',
             protocol: 'GenericTable',
             version: 1,
             descriptorRef: '${WORKSPACE}/.agents/skills/comic/profiles/asset-prep.profile.json',
@@ -174,7 +174,7 @@ describe('agent-capability-injection-runtime', () => {
           {
             id: 'renderer:generic-artifact',
             accepts: ['CompositeArtifact', 'GenericTable'],
-            profiles: ['comic-shot-asset-prep'],
+            profiles: ['media-production.shot-image-prep'],
             lazy: true,
           },
         ],
@@ -355,7 +355,7 @@ describe('agent-capability-injection-runtime', () => {
       metadata: {
         mediaWorkflow: {
           producedArtifacts: ['CompositeArtifact'],
-          artifactProfiles: ['comic-shot-asset-prep'],
+          artifactProfiles: ['media-production.shot-image-prep'],
           referencedCapabilities: ['canvas.ingestMarkdown'],
           suggestedProjectors: ['capability:canvas.ingestMarkdown'],
         },

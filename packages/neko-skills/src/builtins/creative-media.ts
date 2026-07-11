@@ -1,6 +1,7 @@
 import type { Skill } from '@neko/shared';
 import {
   IMAGE_OPERATION_IDS,
+  MEDIA_PRODUCTION_FROM_COMIC_PROFILE_ID,
   STORYBOARD_SOURCE_PROFILE_IDS,
   TOOL_NAMES_CANVAS,
   TOOL_NAMES_MEDIA,
@@ -31,7 +32,11 @@ export const CREATIVE_MEDIA_PROFILES: readonly CreativeMediaProfileDescriptor[] 
     ownerSkill: 'storyboard' as const,
     kind: 'source' as const,
   })),
-  { id: 'media-production/from-comic', ownerSkill: 'media-production', kind: 'source' },
+  {
+    id: MEDIA_PRODUCTION_FROM_COMIC_PROFILE_ID,
+    ownerSkill: 'media-production',
+    kind: 'source',
+  },
   ...IMAGE_OPERATION_IDS.map((operation) => ({
     id: `image/${operation}`,
     ownerSkill: 'image' as const,
@@ -391,7 +396,7 @@ export const mediaProductionSkill: Skill = {
       'project-revision',
       'exported-deliverable',
     ],
-    artifactProfiles: ['media-production/from-comic'],
+    artifactProfiles: [MEDIA_PRODUCTION_FROM_COMIC_PROFILE_ID],
     referencedCapabilities: ['media.production-orchestration'],
     validationRequirements: ['asset-quality-gate', 'pre-export-gate', 'post-export-gate'],
     operations: CREATIVE_MEDIA_WORKFLOW_STAGES.map((stage) => stage.id),

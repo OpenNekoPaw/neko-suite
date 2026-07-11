@@ -1,5 +1,5 @@
 import {
-  COMIC_SHOT_ASSET_PREP_PROFILE,
+  SHOT_IMAGE_PREP_PROFILE,
   type ArtifactProfileDescriptor,
   type CreationProfileDescriptor,
 } from '@neko/shared';
@@ -50,7 +50,7 @@ export const IDC_DEFAULT_CREATION_PROFILE: CreationProfileDescriptor = {
 };
 
 export const BUILTIN_ARTIFACT_PROFILES: readonly ArtifactProfileDescriptor[] = [
-  COMIC_SHOT_ASSET_PREP_PROFILE,
+  SHOT_IMAGE_PREP_PROFILE,
 ];
 
 export const BUILTIN_CREATION_PROFILES: readonly CreationProfileDescriptor[] = [

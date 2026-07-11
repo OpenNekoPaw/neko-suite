@@ -11,12 +11,14 @@ export const STORYBOARD_TABLE_SCHEMA_VERSION = 1 as const;
 export const STORYBOARD_TABLE_KIND = 'storyboard-table' as const;
 export const STORYBOARD_CANONICAL_CONTRACT_VERSION = 1 as const;
 
+export const STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID = 'from-comic' as const;
+
 export const STORYBOARD_SOURCE_PROFILE_IDS = [
   'from-prompt',
   'from-text',
   'from-script',
   'from-document',
-  'from-comic',
+  STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
   'from-image-sequence',
   'from-existing-storyboard',
 ] as const;
@@ -25,7 +27,7 @@ export const STORYBOARD_PROJECTION_TARGETS = ['canvas', 'cut'] as const;
 
 export const STORYBOARD_TABLE_PROFILES = [
   'script-breakdown',
-  'manga-to-video',
+  STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
   'image-sequence',
   'ad-storyboard',
   'short-video',
@@ -1784,7 +1786,7 @@ function validateNormalizedStoryboardTable(
     for (const [shotIndex, shot] of scene.shots.entries()) {
       const path = ['scenes', sceneIndex, 'shots', shotIndex] as const;
       validateShotStrategy(shot, path, diagnostics);
-      validateProfileSourceMediaRefs(table.profile, shot, path, diagnostics, options);
+      validateProfileSourceMediaRefs(table, shot, path, diagnostics, options);
       validateLayeredMediaRefs(
         shot.sourceMediaRefs,
         'source',
@@ -1934,14 +1936,14 @@ function validateShotStrategy(
 }
 
 function validateProfileSourceMediaRefs(
-  profile: StoryboardTableProfile | undefined,
+  table: StoryboardTable,
   shot: StoryboardShotRow,
   path: readonly StoryboardValidationDiagnosticPathSegment[],
   diagnostics: StoryboardValidationDiagnostic[],
   options: StoryboardValidationOptions,
 ): void {
-  if (profile !== 'manga-to-video' && profile !== 'image-sequence') return;
-  if (!isSourceBackedStoryboardImageStrategy(shot.imageStrategy)) return;
+  const profile = sourceBackedStoryboardProfile(table);
+  if (!profile || !isSourceBackedStoryboardImageStrategy(shot.imageStrategy)) return;
 
   const sourceRefs = shot.sourceMediaRefs ?? [];
   if (sourceRefs.length === 0) return;
@@ -1962,6 +1964,13 @@ function validateProfileSourceMediaRefs(
       },
     ),
   );
+}
+
+function sourceBackedStoryboardProfile(table: StoryboardTable): string | undefined {
+  return table.sourceProfile === STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID ||
+    table.sourceProfile === 'from-image-sequence'
+    ? table.sourceProfile
+    : undefined;
 }
 
 function validateLayeredMediaRefs(
@@ -2269,13 +2278,16 @@ function validateProfileHints(table: StoryboardTable): readonly StoryboardValida
           ),
         );
       }
-      if (table.profile === 'manga-to-video' && (shot.sourceMediaRefs ?? []).length === 0) {
+      if (
+        table.sourceProfile === STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID &&
+        (shot.sourceMediaRefs ?? []).length === 0
+      ) {
         diagnostics.push(
           storyboardDiagnostic(
             'profileHint',
             'missing-profile-field',
             [...path, 'sourceMediaRefs'],
-            'manga-to-video profile recommends sourceMediaRefs.',
+            'from-comic profile recommends sourceMediaRefs.',
           ),
         );
       }

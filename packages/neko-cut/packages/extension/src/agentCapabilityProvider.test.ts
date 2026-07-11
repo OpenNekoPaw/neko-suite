@@ -5,7 +5,14 @@ import type {
   NekoCutAPI,
   ToolResult,
 } from '@neko/shared';
-import { TOOL_NAMES_MEDIA, TOOL_NAMES_TIMELINE } from '@neko/shared';
+import {
+  MEDIA_PRODUCTION_ANIMATION_PLAN_PROFILE_ID,
+  MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID,
+  MEDIA_PRODUCTION_SHOT_IMAGE_PREP_REVIEW_PROFILE_ID,
+  STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
+  TOOL_NAMES_MEDIA,
+  TOOL_NAMES_TIMELINE,
+} from '@neko/shared';
 import { createNekoCutCapabilityProvider } from './agentCapabilityProvider';
 import type { TimelineToolBridge } from './services/timelineToolBridge';
 
@@ -160,6 +167,12 @@ describe('createNekoCutCapabilityProvider', () => {
         {
           id: 'renderer:neko-cut:generic-artifact-preview',
           accepts: ['CompositeArtifact', 'GenericTable', 'StoryboardTable'],
+          profiles: [
+            MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID,
+            MEDIA_PRODUCTION_SHOT_IMAGE_PREP_REVIEW_PROFILE_ID,
+            MEDIA_PRODUCTION_ANIMATION_PLAN_PROFILE_ID,
+            STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID,
+          ],
           lazy: true,
         },
       ],
@@ -168,6 +181,7 @@ describe('createNekoCutCapabilityProvider', () => {
           id: 'projector:storyboard-to-cut',
           accepts: ['StoryboardTable'],
           produces: ['CutStoryboardImportPayload'],
+          profiles: [STORYBOARD_FROM_COMIC_SOURCE_PROFILE_ID],
           lazy: true,
         },
       ],

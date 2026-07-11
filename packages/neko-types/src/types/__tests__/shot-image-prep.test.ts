@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { validateGenericTable } from '../composite-artifact';
+import { MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID } from '../media-production';
+import * as shotImagePrepContract from '../shot-image-prep';
 import type { StoryboardMediaRef, StoryboardTable } from '../storyboard-table';
 import {
-  COMIC_SHOT_ASSET_PREP_PROFILE,
-  buildComicShotAssetPrepTable,
+  SHOT_IMAGE_PREP_PROFILE,
+  buildShotImagePrepTable,
   deriveShotImagePrepPlansFromStoryboard,
   projectShotImageRegenerationRecommendation,
   transitionShotImagePrepStatus,
@@ -113,11 +115,16 @@ describe('shot image prep contracts', () => {
     );
   });
 
-  it('defines a shared comic-shot-asset-prep table profile', () => {
-    const table = buildComicShotAssetPrepTable([makePlan()], { includeProfileVersion: true });
+  it('defines a shared media-production.shot-image-prep table profile', () => {
+    const table = buildShotImagePrepTable([makePlan()], { includeProfileVersion: true });
+
+    expect(SHOT_IMAGE_PREP_PROFILE.profileId).toBe(MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID);
+    expect(table.profile).toBe(MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID);
+    expect(shotImagePrepContract).not.toHaveProperty('COMIC_SHOT_ASSET_PREP_PROFILE');
+    expect(shotImagePrepContract).not.toHaveProperty('COMIC_SHOT_ASSET_PREP_PROFILE_ID');
 
     const result = validateGenericTable(table, {
-      profiles: [COMIC_SHOT_ASSET_PREP_PROFILE],
+      profiles: [SHOT_IMAGE_PREP_PROFILE],
       persisted: true,
       resolvedSchemaRefs: [
         'neko.shot-image-prep.image-audit',
@@ -148,7 +155,7 @@ describe('shot image prep contracts', () => {
   });
 
   it('diagnoses malformed prep profile tables', () => {
-    const table = buildComicShotAssetPrepTable([makePlan()], { includeProfileVersion: true });
+    const table = buildShotImagePrepTable([makePlan()], { includeProfileVersion: true });
     const result = validateGenericTable(
       {
         ...table,
@@ -174,7 +181,7 @@ describe('shot image prep contracts', () => {
         ],
       },
       {
-        profiles: [COMIC_SHOT_ASSET_PREP_PROFILE],
+        profiles: [SHOT_IMAGE_PREP_PROFILE],
         persisted: true,
         resolvedSchemaRefs: [
           'neko.shot-image-prep.image-audit',
@@ -304,7 +311,7 @@ describe('shot image prep contracts', () => {
         },
       },
     });
-    expect(buildComicShotAssetPrepTable(result.plans).rows[0]?.cells['imageAudit']).toEqual({
+    expect(buildShotImagePrepTable(result.plans).rows[0]?.cells['imageAudit']).toEqual({
       type: 'json',
       value: expect.objectContaining({
         orientation: 'rotate-90',
@@ -417,7 +424,8 @@ function makeStoryboard(): StoryboardTable {
   return {
     schemaVersion: 1,
     kind: 'storyboard-table',
-    profile: 'manga-to-video',
+    profile: 'from-comic',
+    sourceProfile: 'from-comic',
     title: 'Comic shots',
     scenes: [
       {
@@ -464,7 +472,8 @@ function makeStoryboardWithComicImageAudit(): StoryboardTable {
   return {
     schemaVersion: 1,
     kind: 'storyboard-table',
-    profile: 'manga-to-video',
+    profile: 'from-comic',
+    sourceProfile: 'from-comic',
     title: 'Comic shot audit',
     scenes: [
       {

@@ -12,6 +12,7 @@ import type {
   GenericTableRow,
 } from './composite-artifact';
 import type { CreativeEntityRef } from './creative-entity-asset-composition';
+import { MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID } from './media-production';
 import type { PerceptionCardRef } from './media-semantic-index';
 import type {
   StoryboardMediaRef,
@@ -23,8 +24,7 @@ import type {
 
 export const SHOT_IMAGE_PREP_SCHEMA_VERSION = 1 as const;
 export const SHOT_IMAGE_PREP_KIND = 'shot-image-prep-plan' as const;
-export const COMIC_SHOT_ASSET_PREP_PROFILE_ID = 'comic-shot-asset-prep' as const;
-export const COMIC_SHOT_ASSET_PREP_PROFILE_VERSION = 1 as const;
+export const SHOT_IMAGE_PREP_PROFILE_VERSION = 1 as const;
 
 export const SHOT_IMAGE_PREP_OPERATIONS = [
   'crop-panel',
@@ -96,11 +96,7 @@ export type ShotImagePrepComicImageAuditOrientation =
   (typeof SHOT_IMAGE_PREP_COMIC_IMAGE_AUDIT_ORIENTATIONS)[number];
 
 export type ShotImageRegenerationRecommendationDecision =
-  | 'not-needed'
-  | 'transform-source'
-  | 'regenerate'
-  | 'blocked'
-  | 'unknown';
+  'not-needed' | 'transform-source' | 'regenerate' | 'blocked' | 'unknown';
 
 export interface ShotImageRegenerationRecommendation {
   readonly decision: ShotImageRegenerationRecommendationDecision;
@@ -165,13 +161,7 @@ export type ShotImagePrepJsonRecord = {
 export interface CharacterReferenceRef {
   readonly entityRef: CreativeEntityRef;
   readonly role?:
-    | 'identity'
-    | 'appearance'
-    | 'outfit'
-    | 'expression'
-    | 'pose'
-    | 'voice'
-    | 'continuity';
+    'identity' | 'appearance' | 'outfit' | 'expression' | 'pose' | 'voice' | 'continuity';
   readonly assetRefs?: readonly StoryboardMediaRef[];
   readonly memoryObservationIds?: readonly string[];
   readonly confidence?: number;
@@ -261,13 +251,13 @@ export interface DeriveShotImagePrepPlansResult {
   readonly diagnostics: readonly ShotImagePrepDiagnostic[];
 }
 
-export const COMIC_SHOT_ASSET_PREP_PROFILE: ArtifactProfileDescriptor = {
-  profileId: COMIC_SHOT_ASSET_PREP_PROFILE_ID,
+export const SHOT_IMAGE_PREP_PROFILE: ArtifactProfileDescriptor = {
+  profileId: MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID,
   kind: 'artifact',
   protocol: 'GenericTable',
-  version: COMIC_SHOT_ASSET_PREP_PROFILE_VERSION,
+  version: SHOT_IMAGE_PREP_PROFILE_VERSION,
   source: 'builtin',
-  title: 'Comic Shot Asset Prep',
+  title: 'Shot Image Prep',
   fieldDefinitions: [
     { columnId: 'shotId', cellType: 'string', required: true },
     {
@@ -492,7 +482,7 @@ export function deriveShotImagePrepPlansFromStoryboard(
   return { plans, diagnostics };
 }
 
-export function buildComicShotAssetPrepTable(
+export function buildShotImagePrepTable(
   plans: readonly ShotImagePrepPlan[],
   options: {
     readonly tableId?: string;
@@ -503,15 +493,13 @@ export function buildComicShotAssetPrepTable(
   return {
     schemaVersion: 1,
     kind: 'generic-table',
-    tableId: options.tableId ?? 'comic-shot-asset-prep',
-    profile: COMIC_SHOT_ASSET_PREP_PROFILE_ID,
-    ...(options.includeProfileVersion
-      ? { profileVersion: COMIC_SHOT_ASSET_PREP_PROFILE_VERSION }
-      : {}),
-    title: options.title ?? 'Comic Shot Asset Prep',
-    columns: comicShotAssetPrepColumns(),
+    tableId: options.tableId ?? 'shot-image-prep',
+    profile: MEDIA_PRODUCTION_SHOT_IMAGE_PREP_PROFILE_ID,
+    ...(options.includeProfileVersion ? { profileVersion: SHOT_IMAGE_PREP_PROFILE_VERSION } : {}),
+    title: options.title ?? 'Shot Image Prep',
+    columns: shotImagePrepColumns(),
     rows: plans.map(projectPlanToRow),
-    actions: COMIC_SHOT_ASSET_PREP_PROFILE.suggestedActions,
+    actions: SHOT_IMAGE_PREP_PROFILE.suggestedActions,
   };
 }
 
@@ -949,7 +937,7 @@ function readImageAuditMetadata(plan: ShotImagePrepPlan): ArtifactJsonValue | un
   return imageAudit !== undefined && isJsonValue(imageAudit) ? imageAudit : undefined;
 }
 
-function comicShotAssetPrepColumns(): readonly GenericTableColumn[] {
+function shotImagePrepColumns(): readonly GenericTableColumn[] {
   return [
     { columnId: 'shotId', label: 'Shot', cellType: 'string', required: true },
     { columnId: 'sourcePanel', label: 'Source', cellType: 'media-preview' },
