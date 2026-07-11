@@ -13,7 +13,7 @@
 - `session/`：session bootstrap、runtime pool、runtime session controller、host bindings。
 - `runner/`：一个已配置 session 的执行端口、取消、确认、pending message queue。
 - `turn/`：单个用户消息 turn 的 provider/model selection、prompt/context/attachment assembly、stream persistence。
-- `capability/`：消费 `AgentCapabilityProvider` contribution、Skill/manifest capability 投影、External Processor 能力注入。
+- `capability/`：消费 `AgentCapabilityProvider` contribution、portable Skill / Host overlay capability 投影、External Processor 能力注入。
 - `stream/`：Agent event stream projection、stream state、background task observation。
 
 这与 Codex/OpenCode 等 coding agent 的代码结构有相似点：都有 session、turn/run loop、tool/capability registry、permission/approval、skill/plugin、history/state 和多前端投影。但 Neko Suite 的产品边界不同：

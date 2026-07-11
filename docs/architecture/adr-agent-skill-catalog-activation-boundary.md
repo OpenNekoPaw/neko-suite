@@ -18,7 +18,7 @@
 User message
   -> Agent 可通过 GetContext 查看 registeredSkills/catalog metadata
   -> Agent 自主判断是否调用 ActivateSkill
-  -> Runtime 校验 Skill 是否存在、启用、满足 metadata tool hints/subpackage/trust 约束
+  -> Runtime 校验 Skill 是否存在、启用，并解析 portable tool hints、Neko overlay dependencies、compatibility 与 trust 约束
   -> SkillInjectionCoordinator 注入 Skill prompt content，并让 runtime/capability 投影 tool policy
 ```
 
@@ -39,24 +39,24 @@ Skill 激活 canonical path 只有：
 
 ## 职责边界
 
-| 层 | 职责 |
-| --- | --- |
-| Agent | 读取 `GetContext.registeredSkills`，结合用户意图、上下文、工具可用性和 Skill metadata 决定是否 `ActivateSkill`。 |
-| Runtime | 校验 Skill 存在、启用、内容可加载、allowedTools、subpackage、trust 等真实边界，并执行注入。 |
-| Extension | 转发显式 Skill invocation 和 active Skill 状态；不做自然语言候选解析。 |
-| Webview | 展示 active Skill indicator 和显式 Skill catalog/命令入口；不展示代码生成的候选 chips。 |
-| Skill author | 用 `description`、`domain`、`referencedSkills`、`mediaWorkflow` 等 metadata 帮助 Agent 理解 Skill 能力。 |
+| 层           | 职责                                                                                                                                         |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent        | 读取 `GetContext.registeredSkills`，结合用户意图、上下文、工具可用性和 Skill metadata 决定是否 `ActivateSkill`。                             |
+| Runtime      | 校验 Skill 存在、启用、portable core/overlay 有效、依赖兼容、trust 和当前 tool/capability policy 等真实边界，并执行注入。                    |
+| Extension    | 转发显式 Skill invocation 和 active Skill 状态；不做自然语言候选解析。                                                                       |
+| Webview      | 展示 active Skill indicator 和显式 Skill catalog/命令入口；不展示代码生成的候选 chips。                                                      |
+| Skill author | 用 portable `name` / `description`、可选 string metadata 和必要的 `agents/neko.yaml` dependencies/relationships 帮助 Agent 理解 Skill 能力。 |
 
 ## 用户新增 Skill
 
 用户、项目、市场和插件 Skill 仍是一等能力，但进入方式不是代码候选索引，而是 Agent-readable catalog：
 
-- `name` / `description`：最小 catalog 信息。
-- `domain` / `tags`：帮助 Agent 判断领域。
-- `mediaWorkflow.useCases`：适合激活的典型请求。
-- `mediaWorkflow.nonGoals`：不应激活的场景，尤其是分析、摘要、OCR 等非生产请求。
-- `mediaWorkflow.inputArtifacts` / `producedArtifacts` / `operations`：帮助 Agent 判断输入、输出和操作意图。
-- `referencedSkills`：帮助 Agent 发现编排 Skill 与聚焦 Skill 的关系。
+- `name` / `description`：portable core 的最小 catalog 信息；`description` 同时写清适用与不适用边界。
+- `metadata`：可选 string-to-string map；Neko 小型领域标签使用 `neko.domain`、`neko.tags` 等 namespaced keys。
+- `allowed-tools`：可选 portable tool hint，只作为兼容性和 policy 输入，不授予工具。
+- `agents/neko.yaml.dependencies`：只有确实需要时才声明 Neko capability/profile reference。
+- `agents/neko.yaml.relationships.skills`：只有确实需要时才描述 Skill 关系，不表示自动激活顺序。
+- `source`、path、enabled、editable、trust 和 catalog actions 由 Host/Registry 投影，不能由作者声明。
 
 新增 Skill 不需要修改 `neko-agent` 生产代码。只要 registry/catalog 能把 metadata 投影到 `GetContext.registeredSkills`，Agent 就能在上下文中推理是否激活。
 

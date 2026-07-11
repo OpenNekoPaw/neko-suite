@@ -17,7 +17,7 @@
 `neko-agent` 同时存在三类容易混淆的触发面：
 
 - IDC：Intent-Driven Creation，面向创作目标的 Draft -> Plan -> Apply 运行骨架。
-- Skill：领域方法、prompt fragments、创作语义、输出标准、适用场景和 trust/host requirements 的能力包；`allowedTools` 等只作为机器可读 metadata/policy 输入。
+- Skill：领域方法、prompt fragments、创作语义、输出标准、适用场景和 trust/host requirements 的能力包；portable `allowed-tools` 或 Host overlay dependencies 只作为机器可读 metadata/policy 输入。
 - Plan Mode：用户主动进入的规划/审查模式，限制 Apply 和副作用工具。
 
 这些触发面服务不同问题，但都会影响同一 Agent turn 的 system prompt、tool schemas、权限模式、active Skill 状态、artifact contract 和用户审批体验。如果边界不清，典型故障包括：
@@ -44,26 +44,26 @@ User / Webview / CLI input
 
 三者职责如下：
 
-| 触发面 | 负责 | 不负责 |
-| ------ | ---- | ------ |
-| IDC | 创作阶段、runId、Draft/Plan/Apply 顺序、artifact expectation、Observe/Evaluate 回路 | 选择某个领域 Skill 的业务规则细节 |
-| Skill | 领域方法、prompt fragments、创作语义、输出标准、输入/输出 artifact 描述、trust/host requirement；metadata 可声明所需工具 | 拥有工作流引擎、跳过 IDC、直接保存项目事实、在正文描述工具协议 |
-| Plan Mode | 用户主动要求先规划和审查，禁止 Apply，切换 permission mode | 自动选择领域 Skill，自动证明计划可执行 |
-| Tool | 原子能力、参数 schema、权限、结果和 provenance | 决定是否进入 Draft/Plan 或替代用户审批 |
-| Webview/Extension | 发送 typed intent、展示 projection、转发确认 | 在 Agent reasoning 前用关键词选择 Skill 或推导 IDC 策略 |
+| 触发面            | 负责                                                                                                                     | 不负责                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| IDC               | 创作阶段、runId、Draft/Plan/Apply 顺序、artifact expectation、Observe/Evaluate 回路                                      | 选择某个领域 Skill 的业务规则细节                              |
+| Skill             | 领域方法、prompt fragments、创作语义、输出标准、输入/输出 artifact 描述、trust/host requirement；metadata 可声明所需工具 | 拥有工作流引擎、跳过 IDC、直接保存项目事实、在正文描述工具协议 |
+| Plan Mode         | 用户主动要求先规划和审查，禁止 Apply，切换 permission mode                                                               | 自动选择领域 Skill，自动证明计划可执行                         |
+| Tool              | 原子能力、参数 schema、权限、结果和 provenance                                                                           | 决定是否进入 Draft/Plan 或替代用户审批                         |
+| Webview/Extension | 发送 typed intent、展示 projection、转发确认                                                                             | 在 Agent reasoning 前用关键词选择 Skill 或推导 IDC 策略        |
 
 ## 触发规则
 
-| 输入/事件 | 默认行为 | 约束 |
-| --------- | -------- | ---- |
-| 自然语言只读问题 | 直接回答或轻量 Apply | 不自动激活 Skill；Agent 可通过 `GetContext` 后调用 `ActivateSkill` |
-| 自然语言多步骤创作 | 启动 IDC，默认 Draft -> Plan -> Apply | 媒体生成、批量变更、写项目事实和高成本请求必须显式经过 Draft/Plan |
-| `$skill args` | 显式 Skill 激活，并作为 `prompt-chain-skill` 进入 IDC | Skill schema 不直接控制 IDC routing；显式执行路径必须注入 IDC metadata |
-| Webview `invokeSkill` | 显式 Skill 激活 | 与 `$skill` 保持同等语义；创作类 Skill 不应只改 active Skill 而不带 IDC intent |
-| Agent `ActivateSkill` | Agent 自主激活领域 Skill | 不替代当前 IDC stage；激活后仍受 stage、permission 和 approval 限制 |
-| `/plan` 或 `setPromptMode: plan` | 切换 Plan Mode | 强制 Draft/Plan，禁止 Apply；不自动选择业务 Skill |
-| 引用 `@draft-*` / `@plan-*` | 恢复或继续 IDC artifact | 继续路径应保留原 run/artifact provenance |
-| 高风险或不可逆操作 | 强制 Draft/Plan/Approval | 不允许通过 Skill metadata 静默越权 |
+| 输入/事件                        | 默认行为                                              | 约束                                                                           |
+| -------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 自然语言只读问题                 | 直接回答或轻量 Apply                                  | 不自动激活 Skill；Agent 可通过 `GetContext` 后调用 `ActivateSkill`             |
+| 自然语言多步骤创作               | 启动 IDC，默认 Draft -> Plan -> Apply                 | 媒体生成、批量变更、写项目事实和高成本请求必须显式经过 Draft/Plan              |
+| `$skill args`                    | 显式 Skill 激活，并作为 `prompt-chain-skill` 进入 IDC | Skill schema 不直接控制 IDC routing；显式执行路径必须注入 IDC metadata         |
+| Webview `invokeSkill`            | 显式 Skill 激活                                       | 与 `$skill` 保持同等语义；创作类 Skill 不应只改 active Skill 而不带 IDC intent |
+| Agent `ActivateSkill`            | Agent 自主激活领域 Skill                              | 不替代当前 IDC stage；激活后仍受 stage、permission 和 approval 限制            |
+| `/plan` 或 `setPromptMode: plan` | 切换 Plan Mode                                        | 强制 Draft/Plan，禁止 Apply；不自动选择业务 Skill                              |
+| 引用 `@draft-*` / `@plan-*`      | 恢复或继续 IDC artifact                               | 继续路径应保留原 run/artifact provenance                                       |
+| 高风险或不可逆操作               | 强制 Draft/Plan/Approval                              | 不允许通过 Skill metadata 静默越权                                             |
 
 ## 冲突与干扰处理
 
@@ -92,7 +92,7 @@ Intent
 
 ### 2. Plan Mode 不得被 Skill 绕过
 
-Plan Mode 是用户主动审查边界。即使 active Skill 的 `allowedTools` metadata 包含生成或写入类工具，Plan Mode 下仍只能执行只读工具和允许的计划文件写入。Skill tool metadata 是能力提示，不是越过模式和审批的授权。
+Plan Mode 是用户主动审查边界。即使 active Skill 的 portable `allowed-tools` 或 Host overlay dependencies 包含生成或写入能力，Plan Mode 下仍只能执行只读工具和允许的计划文件写入。Skill metadata 是能力提示，不是越过模式和审批的授权。
 
 ### 3. Persona Skill 与业务 Skill 应拆分语义槽
 

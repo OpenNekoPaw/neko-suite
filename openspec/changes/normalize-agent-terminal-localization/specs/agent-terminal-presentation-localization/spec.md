@@ -446,11 +446,45 @@ The existing `cli-tui` package Presenter SHALL localize only the row label and r
 
 ### Requirement: Migration completeness is enforced by focused quality gates
 
-The implementation SHALL maintain an owned-output inventory and migrate the model/media/perception command family as the first slice through command-family semantic results and statically dispatched canonical Presenters. First-slice readiness SHALL NOT mark the capability complete.
+The OpenSpec task list SHALL be the owned-output inventory and migration checklist, tracking output families and sinks rather than duplicating every translation key. This change SHALL NOT create a separate inventory document, localization manifest, runtime output registry or second release checklist. Implementation SHALL proceed in the order shared strict primitive → invocation locale/bootstrap context → owner bundles → model/media/perception first slice → remaining human-output inventory → legacy removal and complete gates. The model/media/perception command family SHALL be the first slice through command-family semantic results and statically dispatched canonical Presenters. First-slice readiness SHALL NOT mark the capability complete. Each command family SHALL migrate as one unit containing its semantic handler result, Presenter, bundles, tests and deletion or poisoning of obsolete prose/formatter/key paths. Unmigrated families MAY remain visibly unmigrated during sequencing, but a migrated family SHALL NOT retain dual successful projections and the new path SHALL NOT wrap legacy English.
 
 Built-in localization SHALL be guarded by owner-derived typed keys, exact key/placeholder parity, strict-translator failure tests, table-driven `en`/`zh-cn` command-family matrices, deterministic formatter tests with fixed locale/time-zone/input, semantic row/order assertions, a small manually reviewed golden set for `/status`, Commander help and the first command family, router/Ink shared-context identity tests, concrete prompt-locale propagation/inheritance/resume tests, human/machine channel and protocol-exclusivity tests, Commander parse-diagnostic projection tests, plain-text bundle tests, legacy-helper/detector/`zh` fallback removal-or-poison tests, Webview `I18nService` compatibility tests, owned-output inventory closure, existing repository checks and focused review-time residual searches. This change SHALL NOT introduce ICU MessageFormat, Fluent, a generic terminal/document AST, a formatter registry, locale-specific Presenter copies, a global CJK post-processor, configurable punctuation/spacing/unit profiles, reverse parsing of rendered English, a dedicated TypeScript AST checker or localization-gate exception framework. Formatter and Presenter tests SHALL NOT require production code to expose otherwise-internal formatting state. Golden output SHALL NOT be created for every message or updated without manual review; Ink width/styling tests SHALL remain adapter tests rather than bundle-parity tests. Silent legacy fallback SHALL NOT be used. Shared slash-command paths SHALL NOT wrap legacy English in a Presenter, detect/translate completed prose, map prose back to message keys or retain dual semantic/string success paths. After migration, package-local `TuiLocale = 'en' | 'zh'`, `detectTuiLocale`, `getTuiLabels`, `formatTuiTemplate`, `formatTuiLabel` and `TUI_LABELS` SHALL be removed together with legacy `NEKO_LOCALE`, macOS `defaults` locale probing and module-level locale caching. No `zh` compatibility alias or wrapper SHALL remain; terminal code SHALL use shared `SupportedLocale` with `zh-cn`. Internal terminal message-key renames SHALL cut over atomically across the canonical English bundle, `zh-cn` bundle, Presenter calls and tests. Deprecated-key aliases, old-to-new maps, dual keys and missing-key fallback SHALL NOT remain; focused migration tests MAY poison removed keys.
 
-Capability Complete SHALL require migration of every inventory entry, removal or poisoning of obsolete success paths, passing package/type/quality tests and required focused Agent evaluations.
+This change SHALL NOT introduce a terminal-localization feature flag, staged/percentage rollout, experiment cohort, remote kill switch, legacy locale mode or fallback to the old English runtime. Invalid canonical bootstrap SHALL fail visibly. It SHALL NOT add localization telemetry or analytics for user locale, message-key use, fallback frequency or command language; existing local logging MAY report an explicit bootstrap diagnostic without a localization event schema or pipeline.
+
+Acceptance SHALL have three layers: focused `@neko/shared/i18n`, `@neko/agent` and `@neko/cli` tests including first-slice matrices; impact-selected repository type/test/legacy-debt/unused gates; and focused Agent evaluation only when implementation changes prompt-locale propagation, built-in prompt/Skill/capability/tool-description, AgentSession/SubAgent, validation/recovery or TUI Agent event projection. A key-free harness self-test SHALL NOT be represented as real Agent behavior evidence, and no localization-specific CI or release service SHALL be added.
+
+Documentation SHALL record stable contracts rather than migration logs, command output, timelines or completion diaries. OpenSpec SHALL own active design/tasks; implementation completion SHALL update existing Agent/CLI package or domain architecture documentation only where a long-lived contract or user-facing behavior changed. No separate decision record SHALL be added. README or paired-language documentation SHALL change only when its semantics are affected.
+
+Capability Complete and archival SHALL use one checklist and require every task/inventory family closed, bundle/key/placeholder gates passing, canonical human output routed through Presenters, machine/protocol output locale-neutral, touched built-in prompt paths receiving one concrete prompt locale, obsolete detectors/aliases/environment entrypoints/formatters/keys/dual success paths removed or poisoned, focused/repository/required evaluation gates passing, and verification commands/evidence/residual risk recorded. This change SHALL NOT add a readiness service, runtime localization status, maturity score, percentage-completion API or second release checklist.
+
+#### Scenario: Task list is the only migration inventory
+- **WHEN** implementation discovers another Neko-owned human output family
+- **THEN** the corresponding OpenSpec task is expanded without creating a separate inventory document, manifest or runtime registry
+
+#### Scenario: Implementation follows the dependency order
+- **WHEN** localization implementation begins
+- **THEN** shared translation and invocation composition are established before the first command slice, and complete gates run only after the remaining inventory and legacy removal
+
+#### Scenario: A migrated family has one successful path
+- **WHEN** a command family adopts semantic results and its Presenter
+- **THEN** its obsolete prose, formatter and message-key paths are deleted or poisoned in the same migration unit rather than retained behind a compatibility adapter
+
+#### Scenario: Canonical localization is not feature flagged
+- **WHEN** the new terminal bootstrap is integrated
+- **THEN** it is the only canonical mode and an invalid contract fails visibly without falling back to a legacy English runtime
+
+#### Scenario: Locale behavior creates no analytics subsystem
+- **WHEN** terminal localization runs or fails bootstrap validation
+- **THEN** no locale/key/fallback/command-language telemetry is emitted, while an existing local logger may record an explicit diagnostic
+
+#### Scenario: Agent evaluation is impact driven
+- **WHEN** an implementation slice changes only bundle or Presenter projection and does not touch prompt/routing/event-projection paths
+- **THEN** focused and repository gates apply without inventing a localization-specific Agent evaluation or CI service
+
+#### Scenario: Documentation contains stable contracts only
+- **WHEN** implementation is completed
+- **THEN** existing affected package/domain/user documentation is updated as needed without separate decision records, migration logs, command-output diaries or timelines
 
 #### Scenario: First slice does not complete the capability
 - **WHEN** model/media/perception localization tests pass but other inventory entries remain
@@ -494,4 +528,4 @@ Capability Complete SHALL require migration of every inventory entry, removal or
 
 #### Scenario: Capability completion closes the inventory
 - **WHEN** the change is proposed for implementation completion
-- **THEN** every owned-output inventory entry, strict bundle gate, locale matrix, package/existing-repository check and required evaluation has passed, with focused residual-search evidence recorded
+- **THEN** the single task/inventory checklist, Presenter and machine-channel contracts, prompt-locale propagation, legacy removal, focused/repository/required evaluation gates and verification evidence are all complete without a readiness service or second checklist

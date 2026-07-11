@@ -12,12 +12,12 @@
 
 Neko 需要把四类边界分开：
 
-| 层 | 职责 | 不负责 |
-| --- | --- | --- |
-| 默认提示词 | Agent 身份、项目背景、全局原则、通用工具纪律、跨领域安全边界 | 具体领域字段、分镜表 profile、Canvas/Cut 私有 DTO、旧协议兼容 |
-| Skill 提示词 | 应用场景、领域工作流、输出标准、交互方式、允许的 capability 和 profile | 全局身份重写、运行时权限授予、伪造工具结果 |
-| Validator | 机器可判定的 correctness gate、诊断、失败可见 | 创作推理、字段发明、替代 capability 执行 |
-| Capability/Tool | 真实读取、转换、写入、执行和审批边界 | 从 prompt 文本猜测成功、接受 runtime-only 资源投影 |
+| 层              | 职责                                                                   | 不负责                                                        |
+| --------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------- |
+| 默认提示词      | Agent 身份、项目背景、全局原则、通用工具纪律、跨领域安全边界           | 具体领域字段、分镜表 profile、Canvas/Cut 私有 DTO、旧协议兼容 |
+| Skill 提示词    | 应用场景、领域工作流、输出标准、交互方式、允许的 capability 和 profile | 全局身份重写、运行时权限授予、伪造工具结果                    |
+| Validator       | 机器可判定的 correctness gate、诊断、失败可见                          | 创作推理、字段发明、替代 capability 执行                      |
+| Capability/Tool | 真实读取、转换、写入、执行和审批边界                                   | 从 prompt 文本猜测成功、接受 runtime-only 资源投影            |
 
 ## 决策
 
@@ -69,8 +69,8 @@ Skill 提示词应提供：
 - 领域工作流和交互方式。
 - 输出标准：字段、表格、层次、示例和禁止项。
 - 资源引用规则：如何引用 host 已授权的素材，缺少绑定时如何诊断。
-- 相关 capability/tool：只声明可调用意图和成功条件，不伪造调用结果。
-- 对应 validator id：例如 `creative-table.storyboard`。
+- 相关 capability/profile：具体 id 进入机器可读 metadata、`agents/neko.yaml` 或 runtime catalog；正文只描述领域意图和成功条件，不写工具教程，也不伪造调用结果。
+- 对应 validator id：由 Artifact/Profile Registry 或机器可读依赖声明，例如 `creative-table.storyboard`。
 
 Skill 提示词可以包含领域字段和示例，但示例必须能被对应 validator 通过。Skill 新增字段时，应同步更新 profile validator 或把字段标记为可扩展 metadata。
 
@@ -92,9 +92,10 @@ Validator 是通用运行时加 profile 规则的组合：
 
 Capability/tool 是执行边界。Agent 或 Webview 不能因为 Markdown 看起来正确就声称 Canvas、Cut、Model 已成功处理。
 
-- `validate` 不产生副作用。
-- `review` 可创建可审阅草稿或预览。
-- `apply` 和 `execute` 需要审批并写入真实节点、项目事实或生成结果。
+- 每个 capability/operation 必须由自己的 schema 和 policy 声明副作用、审批、trust、validation 与 recovery；`validate`、`review`、`apply` 不是 Agent 全局强制状态机。
+- 一个具体的 validator 应保持只读；一个具体的 review operation 是否产生预览或草稿，由 owning domain contract 决定。
+- 写入真实节点、项目事实或生成结果是否需要审批，由通用 capability/tool policy 和风险边界决定，不能只根据 operation 名称推导。
+- Agent 原生 `CreateSkill` 可以在输入完整且通用文件 policy 允许时直接写入 canonical Skill 目录，不要求先产生 draft/review/apply；详见 [`adr-agent-skill-creator-and-validation.md`](adr-agent-skill-creator-and-validation.md)。
 - 运行时投影如 Webview URI、blob URL、cache path 不能进入持久契约。
 
 ## 与 Creative Table 的关系
@@ -103,11 +104,11 @@ Creative table 不是默认提示词能力，而是 Skill/Profile 能力。
 
 一个 storyboard creative table 至少应覆盖三层创作信息：
 
-| 层 | 目的 | 例子 |
-| --- | --- | --- |
+| 层     | 目的                                       | 例子                                                                                                     |
+| ------ | ------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
 | 审阅层 | 用户审阅素材、场景、人物、画面、决策和证据 | `scene`、`shot`、`source`、`sourcePanel`、`decision`、`visual`、`characters`、`dialogue`、`reviewStatus` |
-| 计划层 | 后续操作、镜头拆分、去重、补全、生成提示词 | `duration`、`motion`、`prompt`、`decisionReason`、`requiresSplit`、`duplicateOf`、`nextAction` |
-| 执行层 | 真实执行动作、结果引用、状态和诊断 | action id、target、result refs、execution status、diagnostic |
+| 计划层 | 后续操作、镜头拆分、去重、补全、生成提示词 | `duration`、`motion`、`prompt`、`decisionReason`、`requiresSplit`、`duplicateOf`、`nextAction`           |
+| 执行层 | 真实执行动作、结果引用、状态和诊断         | action id、target、result refs、execution status、diagnostic                                             |
 
 Generic table 可以作为 display-only 兜底，但不能被呈现为 creative table 成功。若 Skill 要求 creative table，validator 应阻止简化表格通过。
 

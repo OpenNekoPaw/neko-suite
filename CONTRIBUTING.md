@@ -304,41 +304,53 @@ If `pnpm ci:local` was run, it already covers `pnpm check` and `pnpm check:quali
 Before opening a PR, run the local CI-equivalent checks that match the impact area:
 
 ```bash
-pnpm ci:local            # General TS/Webview/Extension quality gate
+pnpm ci:local            # General gates plus key-free Agent eval harness tests
 pnpm ci:local:rust       # Rust engine changes
 pnpm ci:local:proto      # Proto contract and generated type sync
 ```
 
-Agent development must separate the mock baseline from real API acceptance.
-CI and the default `pnpm test` remain mock-only and must not require real
-credentials. Local changes that affect provider/model selection, AI SDK message
-projection, prompt or Skill behavior, tool schemas, AgentSession workflow,
-validator/recovery policy, or TUI/GUI projection of live Agent events must load
-an explicit `config.toml` and run the relevant real lane:
+Agent development must separate the key-free baseline from evaluation scenario
+acceptance. CI and the default `pnpm test` remain key-free. Local changes that
+affect provider/model selection, AI SDK message projection, prompt or Skill
+behavior, tool schemas, AgentSession workflow, validator/recovery policy, or
+TUI/GUI projection of live Agent events must run a focused
+`scripts/agent-eval` scenario or record why it could not run and the residual
+risk. Use `.codex/skills/neko-agent-evaluation/SKILL.md` to plan the case,
+canonical path, forbidden fallback, and evidence. Do not restore `neko eval` or
+create a second orchestration path inside Neko Agent.
 
 The default development and acceptance order for new Agent features is: define
 the shared contract, runtime path, and path-level tests first; validate Agent
 core behavior, Skill/Tool/prompt effects, long-running tasks, failure
-diagnostics, and stability through mock, real workflow, and real TUI lanes; then
-validate Webview UI projection, interactions, the `invokeSkill` / active Skill
-indicator, and UI Skill behavior through VS Code Extension Development Host +
-the `vscode-extension-debugger` Skill. Webview acceptance does not replace
-Agent/TUI core behavior validation, and TUI/headless acceptance does not replace
-VS Code Webview runtime acceptance.
+diagnostics, and stability through focused unit/contract tests and TUI debug
+automation evaluation; then validate Webview UI projection, interactions, the
+`invokeSkill` / active Skill indicator, and UI Skill behavior through VS Code
+Extension Development Host plus the `vscode-extension-debugger` Skill. Webview
+acceptance does not replace Agent/TUI core behavior validation, and TUI debug
+automation evaluation does not replace VS Code Webview runtime acceptance.
 
 ```bash
+pnpm test:agent:eval
 pnpm test:agent:mock
-NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:platform
-NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:workflow
-NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:tui
-NEKO_AGENT_TEST_CONFIG="$HOME/.neko/config.toml" pnpm test:agent:real:gui
+node scripts/agent-eval/protocol-smoke.mjs \
+  --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
+  --case cat-play-image-analysis \
+  --dry-run
 ```
 
-If a local machine lacks `config.toml`, credentials, provider/network
-availability, or VS Code debugger setup, delivery notes must record the
-attempted command, why it could not run, and the residual risk. Mock-only,
-browser-only, jsdom-only, or final-text-only evidence does not replace real API
-or VS Code Webview runtime acceptance for those Agent surfaces.
+`pnpm test:agent:eval` is a key-free harness test included in `pnpm ci:local`
+and GitHub CI. It proves runner, manifest/protocol, and failure-classification
+behavior; it does not replace a real TUI Agent case. Real-case conclusions must
+also match assertion evaluators actually executed by the current runner.
+Metadata-only assertions, a zero exit code, or a non-empty final answer must not
+be described as complete scenario acceptance.
+
+When credentials, network, provider/model access, and fixtures are available,
+run the same focused case without `--dry-run`. If the real case or VS Code
+debugger runtime cannot run, delivery notes must record the attempted command,
+blocking condition, and residual risk. Mock-only, browser-only, jsdom-only,
+direct-turn-injection-only, or final-text-only evidence does not replace TUI
+debug automation evaluation or VS Code Webview runtime acceptance.
 
 When changing `.github/workflows/ci.yml`, dependency installation, Corepack/pnpm, FFmpeg setup, or Linux runner shell logic, use `act` as a local GitHub Actions shape check:
 

@@ -212,7 +212,7 @@ Personal/local processor 的 UX 必须是显式添加：Settings 项、命令面
 
 Processor catalog 可以投影给 Agent 作为只读能力清单，但注册不等于注入、不等于允许执行。Agent 仍需经过 permission policy、trust policy 和 approval gate。
 
-Manifest version 和 schema 必须显式声明。未知 schema、缺少 version、未知 processor kind、未知 root alias 或非法参数模板应 fail-visible。Processor manifest、Skill manifest、Market manifest 和 provider-card 可以有各自领域字段，但 trust、permission、host requirement、install target 和 diagnostics 必须映射到共享 Capability/Market contract，不能各自发明互不兼容的权限字段。
+Manifest version 和 schema 必须显式声明。未知 schema、缺少 version、未知 processor kind、未知 root alias 或非法参数模板应 fail-visible。Processor manifest、portable Skill package / Host overlay、Market manifest 和 provider-card 可以有各自领域字段，但 trust、permission、host requirement、install target 和 diagnostics 必须映射到共享 Capability/Market contract，不能各自发明互不兼容的权限字段。
 
 环境变量不使用全量继承。Processor manifest 必须声明 env profile：允许从 host 继承的 key、可由用户配置的 key、运行时注入的 key，以及必须剔除的 secret key。常见 GPU/工具链变量可以通过 profile 复用，例如 `CUDA_VISIBLE_DEVICES`、`HIP_VISIBLE_DEVICES`、`VIRTUAL_ENV`、`PATH` 的受限段、`PYTHONPATH` 的受限段、`BLENDER_USER_SCRIPTS`。Profile 是 processor contract 的一部分，不能让 Agent 在运行时任意追加 env。
 
@@ -346,7 +346,7 @@ Developer Mode 可以允许本地命令和更宽的 processor 调试能力，但
 | Project/personal UX | `.neko/processors/*.neko-processor.json` 和用户级 `${NEKO_HOME}/processors/` 已确定为初始入口，但 UI/CLI 仍可能暴露不一致的添加、禁用和诊断体验。 | Settings、命令面板、管理 UI 和 CLI 必须共用同一用户级 registry 记录；不得扫描 HOME、`PATH`、Downloads 或工具安装目录。 |
 | Extension private root | `extensionPrivateResources` 如果和 `resourceCache` 混用，可能把 extension 私有缓存误写入 Canvas、Storyboard 或项目事实。 | `extensionPrivateResources` 是合法 root alias，但只允许 host-private/session 输出；跨包交付必须 promote 到 project-scope `resourceCache`、Create Asset 或正式素材库路径。 |
 | Manifest 格式迁移 | Canonical JSON 已确定；如果未来提供 TOML/YAML 作者输入，可能引入多 schema validator 或行为差异。 | TOML/YAML 只能是转换输入，转换后必须落同一 JSON contract；runtime、Market install target 和测试只以 JSON contract 为准。 |
-| Market 对齐 | Provider-card、Skill manifest 和 Market package 已有 trust/capability 语义，processor 若独立扩展会破坏能力治理。 | Market processor package 必须复用 Market install target、publisher、trustLevel、version、entitlement、revocation 和 diagnostics，并映射到 Capability Protocol 的 `core` / `community` / `untrusted`。 |
+| Market 对齐 | Provider-card、Skill Host projection 和 Market package 已有 trust/capability 语义，processor 若独立扩展会破坏能力治理。 | Market processor package 必须复用 Market install target、publisher、trustLevel、version、entitlement、revocation 和 diagnostics，并映射到 Capability Protocol 的 `core` / `community` / `untrusted`。 |
 | 链式编排边界 | 用户需要 remove background、upscale、style transfer 等链式工作流；如果 Skill 或 processor 把链路折叠成 shell pipeline，会失去逐步审批和 provenance。 | 链式处理必须由 Agent workflow、Skill 显式规划或未来 typed workflow graph 创建多个 processor invocation；每一步独立 registry resolve、approval、output root 和 diagnostic。 |
 | 中间资源生命周期 | 链式处理成功或失败后，中间 `ResourceRef` 如果既不清理也不标记 retention，会导致缓存膨胀；如果立即删除，又会破坏重试和调试。 | 中间输出必须带 retention hint、run/stage/provenance；成功链路中间产物可 GC，失败上游产物默认 debug retention，长期保存必须显式 promote。 |
 | ResourceCacheService owner | 如果 Agent runtime 直接操作缓存文件或各 processor 自行实现 cleanup，会重新出现路径泄漏、CSP 和 GC 不一致问题。 | Agent runtime 只能通过 `ProcessorResourcePort` 表达资源 intent；Extension Host 的 `ResourceCacheService` 是 retention、GC、pin/promote 前置校验 owner。 |

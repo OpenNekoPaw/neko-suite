@@ -140,6 +140,18 @@ Exact equality of built-in `en` and `zh-cn` message keys and interpolation place
 
 The finite list of production human-output sites that must be migrated before the localization capability can be considered complete.
 
+## Command-family migration unit
+
+The indivisible migration boundary containing one command family's semantic handler result, Presenter, owner messages, tests and deletion or poisoning of obsolete prose, formatter and message-key paths. An unmigrated family may remain visibly old during sequencing, but a migrated family has one successful projection.
+
+## Three-layer acceptance
+
+The implementation evidence model: focused shared/Agent/CLI tests, impact-selected repository quality gates, and focused Agent evaluation only when prompt, capability, session, validation/recovery or TUI event-projection paths are actually changed. It is not a separate localization CI or release service.
+
+## Single completion checklist
+
+The OpenSpec task/inventory checklist used for Capability Complete and archival. It closes output families, canonical presentation and machine contracts, prompt-locale propagation, legacy removal, required gates, evidence and residual risks without a second inventory, readiness service, maturity score or runtime completion API.
+
 ## First Slice Ready
 
 The model/media/perception command family has passed its scoped semantic, locale and legacy-path tests. It does not mean the full terminal capability is complete.

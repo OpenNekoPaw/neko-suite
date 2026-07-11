@@ -63,12 +63,12 @@ Creation
 
 其中：
 
-| 概念 | 职责 | 不负责 |
-| ---- | ---- | ------ |
-| `creationId` | 标识一个长期创作对象，例如一支短片、一个动画片段或一个宣传视频 | 标识单次生成行为 |
-| `iterationId` / `attemptId` | 标识一次生成、修订、审查或恢复行为 | 定位媒体文件 |
-| `ResourceRef` / `assetRef` | 标识可管理媒体资源 | 记录完整创作过程 |
-| 文本 artifact | 承载剧本、创作理解稿、执行方案、任务进度、提示词等可直接分析内容 | 承载二进制媒体授权和预览 |
+| 概念                        | 职责                                                             | 不负责                   |
+| --------------------------- | ---------------------------------------------------------------- | ------------------------ |
+| `creationId`                | 标识一个长期创作对象，例如一支短片、一个动画片段或一个宣传视频   | 标识单次生成行为         |
+| `iterationId` / `attemptId` | 标识一次生成、修订、审查或恢复行为                               | 定位媒体文件             |
+| `ResourceRef` / `assetRef`  | 标识可管理媒体资源                                               | 记录完整创作过程         |
+| 文本 artifact               | 承载剧本、创作理解稿、执行方案、任务进度、提示词等可直接分析内容 | 承载二进制媒体授权和预览 |
 
 ### 2. IDC 是创作过程骨架
 
@@ -129,11 +129,11 @@ checklist.md
 
 ### 4. Skill 是能力包，prompt-chain 是动态指导
 
-Skill 提供领域方法、prompt fragments、创作语义、输出标准、输入输出 artifact 描述、trust/host requirement 和 SKILL.md 中的 prompt-chain 指导。`allowedTools` 等工具范围只能作为机器可读 metadata/policy 输入，不能在 Skill 正文中变成具体工具协议、命令参数或子包 authoring 细节。
+Skill 提供领域方法、prompt fragments、创作语义、输出标准、输入输出 artifact 描述、trust/host requirement 和 SKILL.md 中的 prompt-chain 指导。Portable `allowed-tools` 或 Host overlay dependencies 只能作为机器可读 metadata/policy 输入，不能在 Skill 正文中变成具体工具协议、命令参数或子包 authoring 细节。
 
 prompt-chain 表示 Skill 对执行流程的动态建议，例如先拆剧本、再生成分镜、再检查角色一致性、再生成视频。Agent 可以根据上下文选择执行、跳过、重排、重复或切换 Skill。
 
-Skill manifest 中的 catalog、mediaWorkflow 等字段只允许表达发现、验证、展示和能力 hint，不允许承载 workflow 顺序、分支或执行 DSL。实际执行判断仍属于 Agent runtime 和 IDC。
+Skill 的 portable metadata 和可选 `agents/neko.yaml` 只允许表达发现、兼容性、界面和结构化依赖/关系，不允许承载 workflow 顺序、分支或执行 DSL。source、catalog actions、trust 和 enablement 由 Host/Registry 投影，实际执行判断仍属于 Agent runtime 和 IDC。
 
 ### 5. 文本直接分析，媒体走稳定资源引用
 
@@ -189,14 +189,7 @@ interface CreationIteration {
   readonly creationId: string;
   readonly idcStage?: 'draft' | 'plan' | 'apply';
   readonly activity:
-    | 'analyze'
-    | 'plan'
-    | 'generate'
-    | 'edit'
-    | 'review'
-    | 'repair'
-    | 'handoff'
-    | 'observe';
+    'analyze' | 'plan' | 'generate' | 'edit' | 'review' | 'repair' | 'handoff' | 'observe';
   readonly reason?: string;
   readonly skillRecordIds: readonly string[];
   readonly promptChainId?: string;
@@ -296,11 +289,11 @@ Workflow projection       = 可选 UI/兼容投影，不参与决策
 
 当前 IDC 阶段、创作文档路径、Skill 生命周期和事件频道已有骨架。后续收敛应优先补齐 Creation 域模型、prompt-chain 追踪和媒体 `ResourceRef` 路径级验证。
 
-| 优先级 | 收敛项 | 目标 |
-| ------ | ------ | ---- |
-| P0 | 在 `agent-types` 定义 `Creation` / `CreationIteration` / `CreationEvent` contract | 作为媒体追踪、质量审查、iteration journal 和后续 UI projection 的锚点 |
-| P1 | 为 prompt-chain 建立最小可测试 contract | 记录 checkpoint、skip、reorder 和 completion 事件，证明 Agent 动态执行而不是固定 workflow |
-| P2 | 建立端到端媒体路径测试 | 覆盖生成媒体 -> Storyboard -> Canvas -> Cut -> Preview，全程使用 `ResourceRef` / `assetRef`，不回退到 cache path、Webview URI 或临时绝对路径 |
+| 优先级 | 收敛项                                                                            | 目标                                                                                                                                         |
+| ------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0     | 在 `agent-types` 定义 `Creation` / `CreationIteration` / `CreationEvent` contract | 作为媒体追踪、质量审查、iteration journal 和后续 UI projection 的锚点                                                                        |
+| P1     | 为 prompt-chain 建立最小可测试 contract                                           | 记录 checkpoint、skip、reorder 和 completion 事件，证明 Agent 动态执行而不是固定 workflow                                                    |
+| P2     | 建立端到端媒体路径测试                                                            | 覆盖生成媒体 -> Storyboard -> Canvas -> Cut -> Preview，全程使用 `ResourceRef` / `assetRef`，不回退到 cache path、Webview URI 或临时绝对路径 |
 
 补充收敛方向：
 

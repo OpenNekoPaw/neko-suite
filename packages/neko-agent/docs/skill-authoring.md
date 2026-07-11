@@ -1,120 +1,212 @@
 # Skill Authoring
 
-本文说明用户、项目、市场和插件 Skill 如何通过自描述 metadata 进入 Agent 可读 catalog。自然语言输入不再经过代码侧候选路由；Agent 会在需要时通过 `GetContext` 查看 registered Skills，并自主决定是否调用 `ActivateSkill`。
+本文定义 Neko Agent 的 canonical Skill 创作格式。目标格式遵循开放 [Agent Skills Specification](https://agentskills.io/specification)：`SKILL.md` 是唯一必需文件，Neko-specific 信息只在确有需要时进入 `agents/neko.yaml`。
 
-## Agent-readable metadata
+> `.neko/skills` 和 Skill 根目录 `manifest.json` 仅属于显式 legacy migration 输入，不参与 canonical 创建、发现或加载。架构决策见 [`adr-agent-skill-creator-and-validation.md`](../../../docs/architecture/adr-agent-skill-creator-and-validation.md)。
 
-`SKILL.md` 至少需要稳定的 `name` 和 `description`。如果希望 Agent 更准确地判断何时激活 Skill，推荐补充 `domain`、`referencedSkills` 和 `mediaWorkflow`：
+## 目录结构
+
+最小 Skill：
+
+```text
+skill-name/
+└── SKILL.md
+```
+
+按需扩展：
+
+```text
+skill-name/
+├── SKILL.md
+├── scripts/                 # 可选：确定性脚本
+├── references/              # 可选：按需加载的长资料
+├── assets/                  # 可选：模板、图标、字体和输出资源
+└── agents/
+    └── neko.yaml            # 可选：Neko UI 和结构化依赖
+```
+
+不要创建空目录、空 `agents/neko.yaml` 或 Skill 根目录 `manifest.json`。
+
+## 最小 `SKILL.md`
+
+```markdown
+---
+name: epub-character-index
+description: Build a reusable character index from EPUB chapters for story planning. Use when the user needs structured recurring-character evidence; do not use for a chapter-only summary.
+---
+
+# EPUB Character Index
+
+Follow the supplied chapter order, distinguish direct evidence from inference, and produce a concise character index with source locations.
+```
+
+`name` 和 `description` 必需：
+
+- `name` 必须与父目录名一致。
+- 名称最多 64 个字符，只使用小写字母、数字和连字符；不能以连字符开头或结尾，不能出现连续连字符。
+- `description` 同时说明“做什么”和“何时/何时不应使用”。Agent catalog 主要依靠它判断是否需要激活 Skill。
+
+## 可选 portable metadata
+
+开放规范允许 `license`、`compatibility`、`metadata` 和 `allowed-tools`：
 
 ```yaml
 ---
 name: epub-character-index
-description: Build a character index from EPUB chapters for story planning.
-source: project
-enabled: true
-domain: story
-allowedTools:
-  - ReadDocument
-mediaWorkflow:
-  useCases:
-    - Extract recurring characters from EPUB chapters
-    - Build a CharacterIndex for story planning
-  nonGoals:
-    - Summarize an EPUB chapter without creating a character index
-    - Generate images, video, or timeline assets
-  acceptedModalities:
-    - epub
-    - document
-  inputArtifacts:
-    - EPUB
-    - chapter-text
-  producedArtifacts:
-    - CharacterIndex
-  profileReferences:
-    - kind: artifact
-      relationship: produces
-      profileId: studio.character-index
-      versionRange: ">=1"
-  tags:
-    - epub
-    - character
-    - story
-  operations:
-    - extract-characters
-    - build-character-index
-  optionalTools:
-    - QuerySemanticCoverage
-  costLevel: low
-  riskLevel: low
+description: Build a reusable character index from EPUB chapters for story planning. Use for structured recurring-character evidence, not for a chapter-only summary.
+license: Apache-2.0
+compatibility: Requires an EPUB reader and a host that can emit the requested character-index artifact.
+metadata:
+  neko.domain: story
+  neko.tags: 'epub,character,story'
+allowed-tools: 'ReadDocument'
 ---
 ```
 
-## 字段语义
+字段边界：
 
-- `description`：用于 Skill catalog 和 Agent 对能力的第一层理解。缺失描述会让 Agent 难以安全判断是否激活。
-- `domain`：标明 Skill 所属领域，例如 `story`、`media`、`quality`。
-- `useCases`：说明适合激活该 Skill 的典型请求，比在正文堆触发词更稳定。
-- `nonGoals`：说明不应激活该 Skill 的场景，尤其是摘要、OCR、普通分析等非生产请求。
-- `acceptedModalities` / `inputArtifacts`：说明输入类型，例如 `comic`、`epub`、`StoryboardTable`。
-- `producedArtifacts`：说明输出产物，例如 `CharacterIndex`、`StoryboardTable`、`cut-storyboard-payload`。
-- `profileReferences`：声明 Skill 消费、产出、要求或偏好的 shared profile id。Skill 可以与 profile 同包分发，但 durable artifact/creation/provider expression profile 仍要先作为独立 contribution 注册。
-- `mediaWorkflow.artifactProfiles`：仍兼容旧 shorthand，会被规范化为 `relationship = "produces"` 的 Artifact Profile reference；新 Skill 推荐使用 `profileReferences` 表达 kind、relationship 和版本约束。
-- `operations`：用动词描述能力，例如 `extract-characters`、`create-storyboard`。
-- `allowedTools` / `optionalTools` / `requiredSubpackages`：机器可读 metadata，由激活 runtime 校验真实工具、能力目录和子包边界；缺失时应 fail-visible，而不是静默降级。
-- `referencedSkills`：声明编排 Skill 与聚焦 Skill 的关系，帮助 Agent 决定是否切换或激活更具体的 Skill。
+- `compatibility` 是人类可读的环境说明，不授予 capability 或 tool。
+- `metadata` 必须是 string-to-string map；Neko 小型扩展使用 `neko.*` 命名空间。
+- 不要增加顶层嵌套 `neko:`。
+- `allowed-tools` 是实验性、宿主相关的最小工具提示。Host 可以不支持某个名称；Neko 会在运行时解析真实可用性。
+- 不在 frontmatter 写 `source`、`enabled`、`editable`、`path`、`trust`、catalog actions 或 package version；这些由 Host/Registry 或 Marketplace 拥有。
+
+## 可选 `agents/neko.yaml`
+
+只有 Skill 需要 Neko-specific UI 或结构化 capability/profile 引用时才创建：
+
+```yaml
+schema_version: 1
+
+interface:
+  display_name: 'EPUB Character Index'
+  short_description: 'Build structured character indexes'
+  icon_small: './assets/character-index.svg'
+  default_prompt: 'Use $epub-character-index to build a character index from this EPUB.'
+
+dependencies:
+  capabilities:
+    - id: 'story.character-index'
+      requirement: required
+  profiles:
+    - id: 'studio.character-index'
+      kind: artifact
+      relationship: produces
+      version_range: '>=1'
+
+relationships:
+  skills:
+    - name: 'story-planning'
+      relationship: complements
+```
+
+规则：
+
+- icon 和其他文件路径必须是 Skill 根目录内的相对路径。
+- 只引用已注册或可安装的 Neko capability/profile id；依赖不会自动安装子包或扩大权限。
+- Skill 关系只描述 discovery/组合语义，不表示自动激活顺序。
+- 不把 workflow steps、工具参数、项目素材、cost/risk policy、compliance 审批、source 或 catalog action 放进 overlay。
+- `agents/openai.yaml` 等其他宿主文件可以与 `agents/neko.yaml` 并存。Neko 不应修改它们。
+
+Overlay 只引用 Profile，不定义 durable Profile。只要 Profile 会被 artifact 保存、项目事实引用、其他 Skill 复用或 UI/domain validator 读取，就应由 Artifact/Profile Registry 或 profile contribution 拥有；profile-only package 可以独立分发，不需要附带一个占位 Skill。
+
+## `manifest.json` 字段迁移
+
+新 Skill 不创建根目录 `manifest.json`。常见 legacy 字段按以下方式处理：
+
+| Legacy field                           | 新位置/owner                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------------- |
+| `domain`、`tags`                       | `SKILL.md.metadata` 中的 `neko.domain`、`neko.tags`                          |
+| `referencedSkills`                     | 必要时使用 `agents/neko.yaml.relationships.skills`                           |
+| `profileReferences`                    | `agents/neko.yaml.dependencies.profiles`                                     |
+| `referencedCapabilities`               | `agents/neko.yaml.dependencies.capabilities`                                 |
+| `optionalTools`                        | 适合 portable tool hint 时使用 `allowed-tools`；否则引用 Neko capability     |
+| `version`                              | Marketplace/plugin package manifest；本地编辑由 Host fingerprint 识别        |
+| `source`、`enabled`、`catalog`         | Host/Registry runtime projection                                             |
+| `requiredSubpackages`                  | 不再手写，由 registry 从 capability/tool/profile 解析                        |
+| `referencedAssets`                     | bundled 文件放 `assets/`；项目资产通过请求上下文和 ResourceRef/Artifact 绑定 |
+| `costLevel`、`riskLevel`、`compliance` | owning capability/operation/发布 policy                                      |
+
+不要把整个 legacy manifest 原样复制到 `agents/neko.yaml`。
 
 ## Prompt content 边界
 
-Skill Markdown 正文只描述扩展能力、领域方法论、创作语义、任务判断、输出风格和提示词写作规则。它不应该包含具体工具名教程、命令名、参数表、轮询/任务协议、UI 命令流程、缓存/Webview/path 协议或子包 authoring 细节。
+Skill 正文负责：
 
-这些信息的归属是：
+- 适用与不适用场景；
+- 领域方法和决策启发；
+- 创作语义、输出标准、示例和质量检查；
+- 缺少输入或证据时的 fail-visible 行为。
 
-- 系统提示词：默认 Agent 行为、通用工具协议、Markdown/引用/视觉证据、安全边界和失败处理。
-- 子包 capability prompt / tool schema：领域工具、operation 名称、参数 schema、validation、diagnostics、资源绑定、authoring lifecycle 和能力目录。
-- Skill frontmatter metadata：`allowedTools`、`optionalTools`、`profileReferences`、`operations`、`inputArtifacts`、`producedArtifacts` 等机器可读提示。
-- Skill Markdown 正文：领域方法、创作语义、输出标准和示例，不承担运行时协议。
+Skill 正文不负责：
 
-新增或修改 Skill 时，应维护防回流测试，确保正文没有重新包含系统提示词或子包 capability 拥有的工具协议。
+- 具体工具名教程、命令名、参数表和轮询协议；
+- Webview、Extension message、cache、绝对路径、临时路径或 `asWebviewUri` 协议；
+- 子包内部 schema、Canvas/Cut/Model 私有 DTO 或 authoring lifecycle；
+- 通过文本授予工具、trust、model、provider 或项目写入权限。
+
+这些信息分别属于系统提示词、capability prompt、tool schema、Profile/Artifact Registry 和 Host policy。工具名只在 `allowed-tools`、overlay dependencies、tool registry、schema 或测试 fixture 等机器可读位置出现。
+
+新增或修改 Neko 第一方 Skill 时，维护防回流测试，避免正文重新包含 Runtime 已拥有的工具协议。
+
+## 创建方式
+
+三种方式都合法：
+
+1. **Agent 原生 `CreateSkill`**：推荐默认路径。Agent 先形成完整定义，再由 typed capability 预检并原子写入。
+2. **通用文件能力**：可直接创建或编辑 canonical 目录，服从相同 sandbox、workspace trust 和路径 policy。
+3. **用户手工创建/编辑**：保存后由 watcher/rescan 发现。
+
+系统 `skill-creator` Skill 用于访谈、结构选择、精简正文、资源拆分、验证和 forward-testing。它是创作指导，不是唯一写入入口，也不拥有额外权限。
+
+`draft`、`review`、`apply` 是可选创作 UX：
+
+- 可以先展示草稿，也可以在请求已经完整时直接创建。
+- `ValidateSkill` 可以独立运行且不写文件，但不是 `CreateSkill` 的强制前置步骤。
+- `CreateSkill` 不要求 `applySkillDraft` 或 Skill-specific approval；是否需要确认由通用文件写入和 Host policy 决定。
+- 目标同名目录已存在时 create 必须报 conflict；更新使用编辑或独立 update 能力。
+
+## Canonical roots
+
+Neko 新的可写 roots：
+
+- 项目：`<workspace>/.agents/skills/<skill-name>/`
+- 个人：`${HOME}/.agents/skills/<skill-name>/`
+
+Builtin、Marketplace 和 plugin Skills 位于各自 Host 管理目录，但每个 Skill package 使用相同 portable shape。
+
+旧 `<workspace>/.neko/skills/` 和 `${HOME}/.neko/skills/` 只作为显式迁移输入。不要手工双写新旧目录；迁移发生冲突或无法映射字段时应先处理 diagnostic，不能静默覆盖或删除旧 Skill。
+
+## 验证与兼容性
+
+Neko 分开报告：
+
+1. **Portable validity**：`SKILL.md`、名称、frontmatter 和资源路径是否符合开放规范。
+2. **Neko overlay validity**：`agents/neko.yaml` schema 是否有效。
+3. **Neko compatibility**：当前 Host 是否具备声明的 tool、runtime、capability、profile 和 trust。
+4. **Neko first-party quality**：内置/发布 Skill 的 prompt boundary、locale、fixtures 和领域质量。
+
+外部 Skill 不符合 Neko 内部写作模板，不等于不符合开放规范。反之，格式有效也不保证当前机器可执行其脚本或依赖；缺失依赖必须显示 `incompatible` diagnostic，不能静默降级。
 
 ## 激活边界
 
-metadata 只帮助 Agent 理解 Skill。它不会自动激活 Skill，也不会注入 prompt、model override 或改变 tool policy。
+创建或发现 Skill 不会自动激活它，也不会改变 tool/model/trust policy。Skill 也不在 frontmatter 或 overlay 中声明 `slot`、`lifetime`、`clearable`；这些由激活来源和 Runtime lifecycle policy 决定。
 
-Profile metadata 也不会在注册时直接注入提示词。运行时只在 Agent turn assembly 阶段，根据 active Skill、selected Creation Profile、resolved Artifact Profile、provider/model expression profile、policy 和 context budget 组合 prompt/schema/tool-policy。未知 profile id、版本不兼容或 host/trust 不满足时会产生可见 diagnostic。
+合法激活路径仍是：
 
-合法激活路径只有：
+- 用户输入 `$skill-name` 或使用显式 Skill UI；
+- Agent 调用 `ActivateSkill`；
+- Runtime 内部经过同一 activation owner 的显式路径。
 
-- 用户输入 `$skill-name`。
-- Webview 发送显式 `invokeSkill`。
-- Agent 调用 `ActivateSkill`。
+若同名 Skill 来自不同 source 且无法唯一解析，Host 应要求明确 source 或返回歧义 diagnostic，而不是按隐藏优先级静默选择。
 
-自然语言命中 metadata 后，Agent 可以继续普通回答、询问澄清问题，或在判断确实需要专业指导时调用 `ActivateSkill`。
+## 跨应用复用检查清单
 
-## 生命周期、槽位与清理
+要让 Skill 更容易被其他应用复用：
 
-激活后的 Skill 会成为会话内的生命周期记录，而不是直接成为一段需要手工拼接/拆除的 prompt。运行时会在每轮请求前从这些记录投影出 prompt、工具策略、模型覆盖和 UI 指示器。
-
-当前运行时槽位包括：
-
-- `domainSkill`：用户 `$skill-name`、Webview `invokeSkill`、Agent `ActivateSkill` 的默认槽位。默认同一时间只有一个，可由用户或 Agent 清理。
-- `stagePersona`：Agent creation stage 人格槽位，由运行时根据当前 profile/stage 创建和清理；通常锁定，用户不能手工清除。
-- `referenceSkill`：参考型指导槽位，可多记录共存，适合后续用于只读背景指导。
-- `ephemeralSkill`：回合级临时槽位，运行时在回合结束后清理。
-- `promptChainSkill`：Skill 方法指导槽位，用于 prompt-chain guidance，不代表可执行 workflow。
-- `workflowSkill`：旧别名，只能作为 legacy trace 兼容语义；新 Skill 作者应使用 `promptChainSkill`/method guidance 表达。
-
-Skill 作者不要在 `SKILL.md` 中假设自己总是唯一活跃 Skill，也不要依赖清理时反向撤销上一轮 prompt。`allowedTools` 应描述该 Skill 自身需要的最小工具集合，但只作为 metadata/policy 输入；多个 Skill 共存时，运行时会按生命周期策略组合或拒绝冲突，不能靠某个 Skill 声明来扩大更高优先级的 Plan Mode、审批模式、workspace trust 或 IDC 阶段限制。
-
-现阶段 Skill frontmatter 不声明默认 `slot`、`lifetime` 或 `clearable`。这些由激活来源和运行时策略决定：
-
-- 显式用户/Agent 激活通常是 `domainSkill` + `conversation untilCleared`。
-- Agent stage persona 是 `stagePersona` + stage/profile lifetime；`idc-stage` 只表示默认 IDC profile 的 legacy/default 兼容语义。
-- Prompt-chain 方法指导是 `promptChainSkill`，不是 workflow/run 执行记录。
-
-如果未来允许 manifest 声明生命周期偏好，也必须先经过运行时策略校验；未知槽位、锁定记录清理、同名多记录清理和工具/model 冲突都应 fail-visible。
-
-## Profile 分发
-
-Profile 可以随 Skill package 分发，也可以通过 profile-only package 单独分发。后者适合共享工作室标准表结构、creation lifecycle 或 provider/model expression guidance，而不需要附带一个假 Skill。profile-only package 只进入 profile catalog，不会成为可激活 Skill。
-
-Skill-local profile 只能用于非持久、非共享的临时 reasoning shape。只要 profile 会被 artifact 保存、项目事实引用、其他 Skill 复用或 UI/domain validator 读取，就应作为 Artifact Profile、Creation Profile 或 Provider/model Expression Profile contribution 注册。
+- 保持 `SKILL.md` 自足，Neko-specific 结构只放 `agents/neko.yaml`。
+- 使用相对路径，不写用户机器绝对路径、cache、Webview URI 或临时文件。
+- 不假设其他宿主认识 Neko capability；在 `compatibility` 中说明必要环境。
+- instruction-only 优先；确实需要确定性行为时再加入 scripts。
+- 保留其他宿主的 `agents/*` 文件，不重写未知 metadata。
+- 用目标宿主分别验证。格式可移植不等于工具名、脚本 runtime、sandbox 和输出 artifact 完全兼容。

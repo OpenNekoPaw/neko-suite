@@ -302,7 +302,7 @@ pnpm check:unused        # 检查未使用文件、导出和依赖
 提交 PR 前按影响范围运行本地 CI 等价检查：
 
 ```bash
-pnpm ci:local            # TS/Webview/Extension 通用质量门禁
+pnpm ci:local            # TS/Webview/Extension 通用门禁，包含 key-free Agent eval harness 自测
 pnpm ci:local:rust       # Rust engine 相关改动
 pnpm ci:local:proto      # Proto 契约与生成类型同步
 ```
@@ -311,7 +311,9 @@ Agent 开发需要额外区分 key-free 基线和 eval 场景验收。CI 和默�
 保持 key-free；但本地改动如果影响 provider/model 选择、AI SDK message
 projection、prompt / Skill 行为、tool schema、AgentSession workflow、
 validator/recovery 策略，或 TUI/GUI 对实时 Agent 事件的投影，必须运行聚焦的
-`scripts/agent-eval` 场景，或记录为何无法运行及残余风险。
+`scripts/agent-eval` 场景，或记录为何无法运行及残余风险。使用
+`.codex/skills/neko-agent-evaluation/SKILL.md` 规划 case、canonical path、禁止的
+fallback 和证据；不要在 Neko Agent 内恢复 `neko eval` 或建立第二套编排。
 
 新增 Agent 功能的默认开发/验收顺序是：先定义共享 contract、runtime path 和
 path-level 测试；再用 focused unit/contract tests 和 TUI debug automation eval
@@ -322,12 +324,19 @@ active Skill 指示器和 UI Skill 使用效果。Webview 验收不能替代 Age
 行为验证，TUI debug automation eval 也不能替代 VS Code Webview runtime 验收。
 
 ```bash
+pnpm test:agent:eval
 pnpm test:agent:mock
 node scripts/agent-eval/protocol-smoke.mjs \
   --manifest scripts/agent-eval/scenarios/creative-workflows.scenarios.json \
   --case cat-play-image-analysis \
   --dry-run
 ```
+
+`pnpm test:agent:eval` 是 key-free harness 自测，已经纳入 `pnpm ci:local` 和
+GitHub CI；它只证明 runner、manifest/protocol 和失败分类等 harness 行为，不能
+替代真实 TUI Agent case。真实 case 的结论还必须以当前 runner 实际执行的
+assertion evaluator 为准，不能把 metadata-only assertion、退出码为 0 或非空最终
+回答描述为完整场景验收。
 
 如果本地缺少 provider 凭据、网络/provider 可用性、模型访问、creative fixture
 或 VS Code debugger 运行条件，交付说明必须记录尝试过的 eval 命令、未能运行的

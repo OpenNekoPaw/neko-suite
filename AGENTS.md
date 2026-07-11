@@ -182,6 +182,8 @@
   - `pnpm check`
   - 残留/债务或冗余相关改动：运行 `pnpm check:legacy-debt`、`pnpm check:unused`，或说明已由 `pnpm ci:local` / `pnpm check:quality` 覆盖。
   - Rust 相关改动：`cd packages/neko-engine && cargo test`
+  - Agent evaluation harness、scenario manifest、debug automation 协议或 facts 契约改动：运行 `pnpm test:agent:eval`；该命令是 key-free harness 自测，不得描述为真实 Agent 行为验收。
+  - prompt、Skill、capability/tool registration 或 routing、provider/model、AgentSession 多轮/队列/异步任务、validation/recovery 或 TUI Agent event projection 改动：使用 `.codex/skills/neko-agent-evaluation/SKILL.md` 规划并运行聚焦的脚本驱动 evaluation；无法运行真实 case 时，交付说明必须记录阻塞条件和残余风险。
   - Webview 视觉/交互改动：运行 `pnpm smoke:webview:runtime` 或等价的 `vscode-extension-debugger` Skill 验证；仅浏览器/Vite/Chrome/Playwright 验证不足以证明 VS Code Webview 运行态正确。
 - 重点关注以下架构规则：
   - 禁止循环依赖

@@ -96,7 +96,7 @@ packages/
 
 Webview/Extension 与 Terminal TUI/headless 是不同本地宿主，功能差异需要保留：Webview 可以拥有 VS Code API、`postMessage`、Webview URI、watcher、memento/recovery 和 Extension command；TUI/headless 可以拥有 Ink 终端交互、进程生命周期、stdout/stderr 报告和真实 API 验证 lane。
 
-共享的是同一工作区的业务逻辑和数据面，而不是 UI 表现。Webview 和 TUI 必须通过共享 runtime/config/catalog/task/cache contract 使用以下输入：`~/.neko/config.toml`、`.neko/config.toml`、workspace-scoped canonical conversation id、`~/.neko/skills`、`~/.neko/commands`、`.neko/skills`、`.neko/commands`、workspace-visible task record、project memory、AGENTS overlays、context settings、授权读根，以及 `.neko/.cache/resources` 下的 project resource-cache manifest/quota/GC 策略。运行时模型/参数选择只影响当前 session，不自动重写 TOML；`skillsDir` 之类非标准 Skill 来源不能让 TUI/headless 单独看到不同 catalog。
+共享的是同一工作区的业务逻辑和数据面，而不是 UI 表现。Webview 和 TUI 必须通过共享 runtime/config/catalog/task/cache contract 使用以下输入：`~/.neko/config.toml`、`.neko/config.toml`、workspace-scoped canonical conversation id、`~/.agents/skills`、`~/.neko/commands`、`.agents/skills`、`.neko/commands`、workspace-visible task record、project memory、AGENTS overlays、context settings、授权读根，以及 `.neko/.cache/resources` 下的 project resource-cache manifest/quota/GC 策略。运行时模型/参数选择只影响当前 session，不自动重写 TOML；`skillsDir` 之类非标准 Skill 来源不能让 TUI/headless 单独看到不同 catalog。
 
 Host-private 能力不互通，也不能伪装为共享成功结果。VS Code handle、Webview URI、Extension-private cache、memento/recovery、TUI process handle、终端键盘状态和 headless 报告路径跨宿主请求时必须返回 host-private 或 unavailable diagnostic，不允许 no-op、转成普通 prompt、读取另一端私有缓存或回退旧实现。旧 `cli-*` conversation id 不作为 TUI resume 兼容输入；共享 command catalog 的 surface scope 使用 `tui` / `extension`。
 
@@ -167,7 +167,7 @@ model_id = "neko-gateway-tts"
 
 ### 技能系统
 
-从 `.neko/skills/<name>/SKILL.md` 加载技能（YAML frontmatter + Markdown body），3-track 原子注入/移除：
+从 `.agents/skills/<name>/SKILL.md` 或 `~/.agents/skills/<name>/SKILL.md` 加载技能（YAML frontmatter + Markdown body），3-track 原子注入/移除：
 
 | Track | 注入内容                                                     |
 | ----- | ------------------------------------------------------------ |
@@ -184,7 +184,7 @@ model_id = "neko-gateway-tts"
 | `@`      | 文件、素材、实体或上下文引用                                                               | `@scene.md`                            |
 | 自然语言 | 普通对话输入，由 Agent 通过 `GetContext` 查看 Skill catalog 后自主判断是否 `ActivateSkill` | `帮我审一下这次修改`                   |
 
-`/skills` 是 Skill 管理命令，用于查看、检查 active Skill 或清除 active Skill；直接应用某个 Skill 使用 `$skill-name`。普通 `.neko/skills/<name>/SKILL.md` 不再自动生成 `/skill` 入口，即使旧 frontmatter 里仍带 `command` 字段也只视为 prelaunch migration 元数据。需要 `/command` 体验时，应把提示词写成 `.neko/commands/<command>.md` 命令工件；命令工件复用 Skill 注入 runtime，并显式标记为 `entryPointKind: "command-artifact"`。
+`/skills` 是 Skill 管理命令，用于查看、检查 active Skill 或清除 active Skill；直接应用某个 Skill 使用 `$skill-name`。普通 `.agents/skills/<name>/SKILL.md` 不再自动生成 `/skill` 入口，即使旧 frontmatter 里仍带 `command` 字段也只视为 prelaunch migration 元数据。需要 `/command` 体验时，应把提示词写成 `.neko/commands/<command>.md` 命令工件；命令工件复用 Skill 注入 runtime，并显式标记为 `entryPointKind: "command-artifact"`。
 
 命令工件支持参数插值（`$ARGUMENTS`, `$1-$99`）。`$skill args` 会把尾随参数传给现有 Skill 注入路径；若存在同名 `/review` 命令和 `$review` Skill，前缀决定命名空间，二者不会互相兜底。
 
