@@ -527,10 +527,10 @@ function createDeferred<T>(): Deferred<T> {
 
 function classifyFailure(
   error: unknown,
-  fallback: 'write-failed' | 'flush-failed',
+  defaultCode: 'write-failed' | 'flush-failed',
 ): 'external-conflict' | 'write-failed' | 'flush-failed' {
   if (isRecord(error) && error['code'] === 'stale-json-file-write') return 'external-conflict';
-  return fallback;
+  return defaultCode;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

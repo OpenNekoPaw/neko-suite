@@ -28,17 +28,7 @@ const config: KnipConfig = {
     'esbuild', // Used as CLI bundler, not imported
     'sharp', // Native binary, loaded at runtime
     '@img/sharp-wasm32', // Sharp WASM fallback
-    // Markdown rendering peer dependencies (used by react-markdown/remark-gfm)
-    'remark-parse',
-    'remark-rehype',
-    'unified',
-    'vfile',
-    'mdast-util-gfm',
-    'micromark-extension-gfm',
-    'hast-util-to-jsx-runtime',
-    'html-url-attributes',
     'clsx',
-    'devlop',
   ],
   ignoreIssues: {
     // Internal editor API surfaces: intentionally exported for feature modules
