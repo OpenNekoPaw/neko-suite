@@ -280,3 +280,68 @@ pnpm test:agent:eval
 - project target 仍需要 owning package 提供 validator/evidence facade；中央 Quality 不解析 `.nk*`。
 - CLI/TUI 尚未注册等价 Quality provider；本批只证明 VSCode Extension production discovery 路径。
 - 尚未运行由当前源码构建并由真实 provider 支持的 `cat-play-image-analysis`；`pnpm test:agent:eval` 仅是 key-free harness 自测，不能替代真实 Agent 行为验收。
+
+## 10. `.nks` ProjectQuality facade（2026-07-11）
+
+### 10.1 Owning package 与依赖边界
+
+任务 7.1 已由 `neko-sketch` owning package 完成，中央 Quality 仍不解析 `.nks`：
+
+- `NekoSketchAPI.projectQuality` 暴露共享的 `ProjectQualityFacade` 契约；
+- `.nks` 读取复用 `ProjectFileOps`，迁移复用公开子路径 `@neko/shared/nks`，资源检查复用 `nksSourcePathPolicy` 与 durable resource diagnostics；
+- 未依赖 `neko-canvas`、`neko-cut` 或 `neko-agent` 内部实现，也未新建第二套项目 IO、路径解析或质量 DTO；
+- preview、runtime、export readiness 通过 Sketch-owned 小接口注入。没有与目标 document/revision 绑定的 adapter 时明确返回 unavailable/not-ready，不把“任意活动编辑器”、Webview URI、cache path 或文件存在性猜测成可用证据。
+
+### 10.2 Revision、结构与资源证据
+
+当前 `.nks` schema 没有持久化 revision 字段，因此 facade 对迁移后的 canonical document 计算稳定内容摘要：
+
+```text
+contentDigest = hashStableValue(migrateNks(document).data)
+projectRevision = nks:<contentDigest>
+```
+
+所有操作先重新读取当前文件并核对 revision/content digest；旧 request 在 preview/runtime/export adapter 运行前以 `stale-quality-evidence` 失败。snapshot 使用带 hash fingerprint 的稳定 `ResourceRef`，session render URI 仅是 display hint，不是持久证据身份。
+
+结构验证覆盖：
+
+- JSON root、受支持 schema version、canvas、viewport、palette、brush preset 容器；
+- layer required fields、合法 layer type/blend mode、布尔状态、有限 geometry/opacity；
+- 非空且唯一的 layer id、group children 约束、mask target 存在且不能自引用；
+- source ref schema、相对 durable path、runtime/cache handle 拒绝、资源存在性；
+- 当前 `.nks` 不持久化 Webview `frameLayers`/animation timeline。文件中出现相关未知字段时拒绝静默忽略；目标要求 frame animation 时 export readiness 必须为 false。
+
+迁移 warning 保留在成功 envelope diagnostics 中，不再被 success helper 丢弃；加载失败也保持调用方请求的真实 operation，避免 preview/export 错误伪装为 `validate-project`。
+
+### 10.3 路径级验证与质量自审
+
+已运行：
+
+```bash
+pnpm --dir packages/neko-sketch exec vitest --run \
+  packages/extension/src/services/SketchProjectQualityFacade.test.ts \
+  packages/extension/src/services/SketchProjectAuthoringService.test.ts \
+  packages/extension/src/agentCapabilityProvider.test.ts
+# 3 files, 30 tests passed
+
+pnpm --filter @neko-sketch/extension build
+# esbuild succeeded
+
+pnpm exec eslint \
+  packages/neko-sketch/packages/extension/src/services/SketchProjectQualityFacade.ts \
+  packages/neko-sketch/packages/extension/src/services/SketchProjectQualityFacade.test.ts \
+  packages/neko-sketch/packages/extension/src/extension.ts \
+  packages/neko-sketch/packages/extension/src/agentCapabilityProvider.test.ts \
+  packages/neko-types/src/types/extension-api.ts
+# no findings
+```
+
+额外使用 `module=esnext`、`moduleResolution=bundler` 执行 Sketch Extension typecheck。该包仍有既有 `agentCapabilityProvider`、`SketchEditorProvider`、PSD integration test 和 `SketchProjectAuthoringService` 类型基线错误；本批 `SketchProjectQualityFacade` 与 `extension-api.ts` 未出现在错误列表中，因此只记录 focused type evidence，不宣称全包 typecheck 通过。
+
+质量自审风险级别为 L3（项目格式 + shared public Extension API）。未发现阻断项。没有 Webview UI/交互修改，无需 runtime visual smoke；没有 Agent prompt/Skill/capability routing 修改，无需新增真实 Agent evaluation。
+
+### 10.4 剩余限制
+
+- production API 已接入 facade，但尚无能证明 active document URI 与 requested revision 一致的 target-bound preview/runtime/export adapter。因此当前 production preview 明确 unavailable、runtime 为 unavailable、export readiness 为 false；这是 fail-closed 状态，不是完整 Sketch 导出验收。
+- `.nks` 持久化 schema 尚不包含 animation/frame timeline。若未来正式支持动画，必须先扩展 schema/migration 与 owning validator，再允许 animated export readiness。
+- 下一步继续任务 7.2：由 `neko-cut` owning package 提供 `.nkv` ProjectQuality facade；中央 Quality 只消费 facade 证据。
