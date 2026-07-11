@@ -745,7 +745,7 @@ with:
 validationRequirements: ['CanvasMarkdownCapabilityInput'],
 ```
 
-In `packages/neko-agent/packages/agent/src/skill/builtins/media-to-video.ts`, remove `creative-table.storyboard` from `artifactProfiles` and `validationRequirements` arrays while keeping `storyboard`, `comic-shot-asset-prep`, and `CanvasMarkdownCapabilityInput`.
+This dated `media-to-video` step has been superseded by the canonical creative-media taxonomy. Current metadata uses the `media-production/from-comic` source profile, typed internal `media-production.shot-image-prep` artifacts, and package-owned Canvas authoring validation; do not restore the removed stage-Skill metadata path.
 
 Update tests that expect `creative-table.storyboard` so they expect Canvas Markdown validation requirements only:
 

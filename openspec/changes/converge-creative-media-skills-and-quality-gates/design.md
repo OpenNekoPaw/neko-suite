@@ -209,6 +209,18 @@ Preview 是派生资源，使用稳定 target/revision 作为证据身份；rend
 
 未知 Skill/profile/operation、Provider 不支持、缺失 authoring target、缺失 validator、未知 `.nk*` 版本、stale evidence、无法 materialize ResourceRef、export lineage 不匹配和旧入口命中均返回明确 diagnostic；不得 fallback 到旧 Skill、裸路径、active Webview 或默认成功。
 
+### 8.1 来源 profile、Artifact profile 与内部 stage identity 分层
+
+profile identity 不再使用同一个字符串同时承担用户入口、Storyboard 来源和 Agent artifact registry 身份：
+
+- 用户级媒体制作来源 profile 使用 `media-production/from-comic`，只表达“漫画素材进入媒体制作编排”的入口语义；
+- canonical Storyboard 在 `sourceProfile` 中使用 `from-comic`，`table.profile` 只保留表格展示/authoring profile 语义，不得作为缺失 `sourceProfile` 时的兼容读取；
+- 内部 stage artifact 使用 typed identity：`media-production.animation-plan`、`media-production.shot-image-prep`、`media-production.shot-image-prep-review`。
+
+`ArtifactProfileDescriptor` 遵循共享 Agent profile id contract `^[a-z0-9][a-z0-9._:-]{0,127}$`，因此 `/` 不得进入 artifact registry。点号形式只用于内部 artifact/stage identity；斜杠形式保留给用户/source profile taxonomy。Canvas/Cut renderer catalog 可以同时声明其实际消费的 Storyboard source profile 和 artifact profile，但不得把 `media-production/from-comic` 注册成 artifact descriptor。
+
+迁移采用破坏性 canonicalization：旧 profile symbol、fixture 文件名和 registry entry 不保留 alias；canonical registry 测试必须证明新 descriptor 可解析，并将旧 identity poison 为 `undefined`。这避免只隐藏 Skill 列表后仍由 artifact renderer、fixture 或 Agent registry 恢复旧路径。
+
 ### 9. 拒绝的替代方案
 
 - **只改 Skill 名称**：不能解决 contract、能力发现、质量证据和阶段重复。

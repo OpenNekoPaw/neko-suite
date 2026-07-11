@@ -639,7 +639,7 @@ git diff --check -- packages/neko-audio \
 
 旧 `ai-generate` 的“只有 capability 确认后才能宣称生成成功”约束迁入 canonical `image`/`video`；pending/blocked/failed 状态不会被描述为已生成。
 
-没有把 220 行漫画专用 prompt 整体搬入 canonical Skill。运行时工具名、参数表、轮询协议、Canvas/Cut command 和 provider schema 均已丢弃，避免 Skill 再次膨胀。仍在代码中的 `comic-to-animation-plan`、`comic-shot-asset-prep`、`manga-to-video` artifact/profile fixture 属于下一批 contract identity 迁移；它们不再对应可激活 Skill，但继续存在会污染 capability catalog，因此任务 9.5/9.6 暂不标记完成。
+没有把 220 行漫画专用 prompt 整体搬入 canonical Skill。运行时工具名、参数表、轮询协议、Canvas/Cut command 和 provider schema 均已丢弃，避免 Skill 再次膨胀。该批次识别出的旧 artifact/profile identity 已在后续第 15 节迁移；任务 9.5/9.6 仍不标记完成，因为 evaluation manifest、locale/docs 全量迁移、旧 Quality/path-only fixture 与其他 fallback 尚未完成。
 
 ### 14.3 验证与提交
 
@@ -671,8 +671,114 @@ git diff --check -- packages/neko-skills
 
 剩余清理按以下顺序继续：
 
-1. 将 capability/artifact fixtures 中的旧 profile identity 收敛到 canonical `media-production/from-comic` 和 typed internal stage identity；
-2. 更新 Agent prompts、capability catalogs、eval manifests 和跨包 fixtures；
-3. 删除旧 Quality/path-only fixture、dual-read/fallback；
-4. 增加 runtime activation poison test 和 repository legacy-debt/unused assertions；
-5. 最后删除到期 migration alias，而不是先隐藏 catalog 后保留旧实现。
+1. 完成 Agent prompts、eval manifests、locale metadata 和其余跨包文档的 canonical identity 审计；
+2. 删除旧 Quality/path-only fixture、dual-read/fallback；
+3. 扩展 repository legacy-debt/unused assertions，覆盖所有到期名称和默认成功路径；
+4. 最后删除到期 migration alias，而不是先隐藏 catalog 后保留旧实现。
+
+## 15. 媒体制作来源与 Artifact profile identity 收敛（2026-07-12）
+
+### 15.1 Identity 分层与 contract 约束
+
+本批没有创建新的 stage Skill，而是将仍可能从 artifact/capability 路径恢复旧语义的 profile identity 收敛为三层：
+
+| 层级                | Canonical identity                                                                                               | 用途                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 用户级媒体制作来源  | `media-production/from-comic`                                                                                    | Skill metadata 和场景/evaluation taxonomy                                    |
+| Storyboard 来源     | `from-comic`                                                                                                     | `StoryboardTable.sourceProfile`、Storyboard 投影和来源约束                   |
+| 内部 artifact/stage | `media-production.animation-plan`、`media-production.shot-image-prep`、`media-production.shot-image-prep-review` | Agent artifact registry、GenericTable/CompositeArtifact、Canvas/Cut renderer |
+
+共享 `ArtifactProfileDescriptor` id contract 为 `^[a-z0-9][a-z0-9._:-]{0,127}$`，不允许 `/`。因此 `media-production/from-comic` 不注册为 artifact profile；内部 stage identity 使用 `.`，并从 `@neko/shared` 的 `media-production.ts` 统一导出。
+
+Storyboard 的 canonical 来源字段是 `sourceProfile`。`table.profile` 即使使用 `from-comic`，也不能补偿缺失的 `sourceProfile`；canonical validator 会返回 `unsupported-source-profile`。这移除了本批实现过程中短暂出现的 profile/sourceProfile 双读设计，避免形成新的 compatibility fallback。
+
+### 15.2 运行时导出、fixture 与 capability catalog 清理
+
+已完成：
+
+- `COMIC_SHOT_ASSET_PREP_*`、`buildComicShotAssetPrepTable` 和对应旧 column helper 不保留导出 alias，统一为 `SHOT_IMAGE_PREP_*`、`buildShotImagePrepTable`；
+- Agent builtin artifact registry 只注册 `media-production.shot-image-prep`，并用 poison assertion 证明旧 registry identity 返回 `undefined`；
+- Canvas/Cut renderer catalog 只声明三个 typed internal artifact profile 与 `from-comic` Storyboard profile；Cut projector 只接受 `from-comic`；
+- Canvas Webview capability identity 从漫画专用 pipeline/review 名称收敛为通用 image-prep/shot-image-prep identity；
+- composite artifact fixture/test 文件改名为 `media-production-from-comic-artifact.*`，外层 animation plan、内层 shot image prep、Storyboard source profile 和 scenario metadata 分别使用所属层级的 canonical identity；
+- Agent runtime、stream processor 和 Webview fixture 已更新，旧名称只允许出现在显式 negative/poison assertion 中，不再作为可成功 registry、renderer 或 fixture identity。
+
+代码提交：
+
+```text
+ad07f9acd refactor(media): canonicalize production artifact profiles
+```
+
+### 15.3 验证结果
+
+已通过：
+
+```bash
+pnpm --filter @neko/shared test
+# 156 files, 1431 tests passed
+
+pnpm --filter @neko/skills test
+# 34 files, 320 tests passed
+
+cd packages/neko-agent && pnpm exec vitest --run \
+  packages/agent/src/runtime/__tests__/capability-runtime-registries.test.ts \
+  packages/agent/src/runtime/__tests__/agent-capability-injection-runtime.test.ts
+# 2 files, 23 tests passed
+
+pnpm --filter @neko-agent/webview exec vitest --run \
+  src/components/ChatView/ContentBlockItem.test.tsx
+# 1 file, 10 tests passed
+
+pnpm --filter @neko-agent/extension exec vitest --run \
+  src/chat/message/__tests__/agentStreamProcessor.test.ts
+# 1 file, 45 tests passed
+
+pnpm --filter neko-canvas exec vitest --run \
+  packages/extension/src/__tests__/agentCapabilityProvider.test.ts
+# 1 file, 41 tests passed
+
+pnpm --filter neko-canvas exec vitest --run \
+  packages/webview/src/components/panels/PropertyPanel.test.ts \
+  -t "enumerates migrated Shot bindings before legacy branches"
+# 1 passed, 6 skipped
+
+pnpm --filter neko-cut exec vitest --run \
+  packages/extension/src/agentCapabilityProvider.test.ts
+# 1 file, 5 tests passed
+
+pnpm exec eslint <本批 21 个 TypeScript/TSX 文件>
+# 0 errors；8 个既有 warning，均不位于本批 identity 修改行
+
+git diff --cached --check
+# passed
+```
+
+类型检查结果：
+
+- `packages/neko-skills/tsconfig.json` 与 `packages/neko-agent/packages/webview/tsconfig.json` 通过；
+- Canvas extension 仍被既有 `moduleResolution`/`@neko/shared` 解析问题和既有 implicit-any 阻塞；
+- Cut extension 仍被既有 DOM/WebCodecs lib 配置问题阻塞；
+- Agent/Extension 仍被并行开发中的 perception、terminal localization、runtime fixture 和旧 consistency-check import 问题阻塞；这些错误未指向本批 profile identity 文件，聚焦测试已覆盖本批执行路径。
+
+清理门禁已执行但被仓库既有/并行债务阻塞：
+
+```bash
+pnpm check:legacy-debt
+# failed: 87 blocking occurrences（migrate-now=76, needs-review=11）
+# 主要来自尚未到期的 Skill migration alias、Agent/CLI 并行改动与既有 debt ledger；本批新增 profile 文件未形成新的 blocking hotspot。
+
+pnpm check:unused
+# failed: 1 unused file、5 unused dependencies、2 unlisted dependencies、25 unused exports、2 duplicate exports
+# 输出未列出本批新增 canonical profile constants、builders 或 fixtures。
+```
+
+仓库残留搜索中，旧 artifact/profile identity 只存在于 `not.toContain`、`toBeUndefined`、`not.toHaveProperty` 等 negative/poison assertions；生产 catalog、registry、fixture 和 renderer 中无成功引用。
+
+### 15.4 尚未完成
+
+本批只完成 9.5/9.6/9.7 中的 artifact/profile fixture 与 registry 子集，因此不勾选整项任务。后续仍需：
+
+1. 审计并迁移剩余 Agent prompt、evaluation manifest、locale metadata 和文档；
+2. 删除旧 Quality/path-only fixture、dual-read/fallback 和到期 migration alias；
+3. 将 removed identity poison 扩展到 repository-level legacy-debt/unused gate；
+4. 完成全仓 `pnpm check`、`pnpm test`、`pnpm check:legacy-debt`、`pnpm check:unused` 与真实 Agent evaluation。
