@@ -36,15 +36,6 @@ export type {
 } from './media-quality-runtime';
 
 export {
-  createLegacyConsistencyCheckTools,
-  createLegacyQualityCheckTools,
-} from './quality-check-tools';
-export type {
-  ConsistencyCheckToolsDeps as LegacyConsistencyCheckToolsDeps,
-  QualityCheckToolsDeps as LegacyQualityCheckToolsDeps,
-} from './quality-check-tools';
-
-export {
   createQualityReviewEvidence,
   createQualityReviewValidationAdapter,
   createQualityReviewValidationSignal,

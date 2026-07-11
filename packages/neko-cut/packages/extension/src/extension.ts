@@ -27,6 +27,10 @@ import { registerCommands } from './commands';
 import type { NekoCutAPI, ISkillProvider, SkillDef } from '@neko/shared';
 import { classifyWorkspaceMediaPath, resolveWorkspaceMediaPath } from '@neko/shared';
 import { createNekoCutCapabilityProvider } from './agentCapabilityProvider';
+import {
+  buildCutAgentSkillInvocation,
+  type CutAgentSkillName,
+} from './services/cutAgentSkillInvocation';
 import { TimelineToolExecutor } from './services/TimelineToolExecutor';
 import { TimelineToolBridge } from './services/timelineToolBridge';
 import { NekoCutDashboardTaskSource } from './services/dashboardTaskSource';
@@ -292,6 +296,7 @@ export async function activate(
         }
 
         await sendCutSkillIntentToAgent(
+          'video',
           `Generate a video clip for the active NekoCut timeline from this prompt: ${prompt}`,
         );
         return undefined;
@@ -305,6 +310,7 @@ export async function activate(
       if (!filePath) return;
 
       await sendCutSkillIntentToAgent(
+        'subtitle',
         `Transcribe this audio/video file and add word-timed subtitles to the active NekoCut timeline: ${filePath}`,
       );
     }),
@@ -351,16 +357,15 @@ async function promptForMediaFilePath(): Promise<string | undefined> {
   return selected?.[0]?.fsPath;
 }
 
-async function sendCutSkillIntentToAgent(intent: string): Promise<void> {
+async function sendCutSkillIntentToAgent(
+  skillName: CutAgentSkillName,
+  intent: string,
+): Promise<void> {
   try {
-    await vscode.commands.executeCommand('neko.agent.invokeSkill', {
-      skillName: 'ai-generate',
-      intent,
-      skill: {
-        name: 'NekoCut',
-        description: 'NekoCut timeline AI workflow',
-      },
-    });
+    await vscode.commands.executeCommand(
+      'neko.agent.invokeSkill',
+      buildCutAgentSkillInvocation(skillName, intent),
+    );
   } catch (error) {
     getRootLogger().warn('Failed to forward NekoCut skill intent to neko-agent', { error });
     vscode.window.showWarningMessage('Neko Agent is required to run this skill.');
