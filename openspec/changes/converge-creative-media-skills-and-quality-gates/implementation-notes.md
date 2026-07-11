@@ -218,7 +218,7 @@ pnpm --dir packages/neko-agent exec vitest --run \
 ### 9.1 API-first 工具与身份边界
 
 - `@neko/skills` 新增 canonical `QualityCheck` tool adapter，输入只接受 `QualityTarget`、可选 profile 和 policy。
-- `QualityTarget` 必须带稳定 `ResourceRef` 或 owning-project reference，并满足 revision/content digest 契约；未知 contract version、target kind、profile、policy 字段均 fail-visible。
+- `QualityTarget` 必须带稳定 `ResourceRef` 或 owning-project reference，并满足 revision/content digest 契约；未知 contract version、target kind、profile、policy 字段均 fail-visible。后续修复提交 `dadae7eff` 进一步保证 malformed `resourceRef`、`projectRef`、lineage、media range 和 expected intent 不会被静默丢弃。
 - 顶层 `mediaPath`、旧 `scenes[].mediaPath` 和缺少 durable revision/digest 的 target 在进入 review handler 前被 poison；不会从裸路径推导 durable identity，也不会触发内容访问。
 - Tool schema 和参数解析保留在 capability/tool contract 层；`media-quality-review` Skill 正文没有加入工具名教程、参数表或运行时协议。
 
@@ -251,7 +251,7 @@ pnpm --filter @neko/skills exec vitest --run \
   src/quality/__tests__/canonical-quality-tools.test.ts \
   src/quality/__tests__/quality-gate-runtime.test.ts \
   src/builtins/builtin-skills.test.ts
-# 31/31
+# 33/33
 
 pnpm --dir packages/neko-agent exec vitest --run \
   packages/extension/src/tools/__tests__/qualityCapabilityProvider.test.ts \
