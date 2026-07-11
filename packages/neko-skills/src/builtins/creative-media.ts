@@ -89,7 +89,21 @@ Turn a prompt, prose, script, document, comic, ordered image sequence, or existi
 - Visual description, camera notes, action summaries, review states, and diagnostics do not substitute for either prompt. Leave a prompt empty when no generation/edit operation is intended; do not fill it with status codes or analysis fragments.
 - Resource aliases must resolve unambiguously inside their declared scope. If a token matches multiple resources, emit a visible binding diagnostic and do not select or invent a source.
 
-Comic interpretation is specialized: OCR, panel segmentation, reading order, speech-bubble association, and cross-panel continuity apply only to the comic profile. Existing-storyboard refinement always creates a new revision when intent or ordering changes.
+## Comic source profile
+
+- Require actual pixel-level visual evidence, OCR, or panel boundaries before claiming panel count, dialogue, action, or camera. Metadata, thumbnails, filenames, dimensions, and page labels alone are not visual evidence. When evidence is unavailable, return plain diagnostics and do not invent or output a Storyboard table.
+- Determine orientation and reading order before mapping panels. Classify dialogue, narration/caption, visible SFX, signs/background text, and unknown text separately; only spoken dialogue belongs in \`dialogue\`.
+- Decide keep, skip, merge, split, or transition-only use before creating shots. A page may produce multiple shots, and covers, copyright/contents pages, blanks, ads, duplicates, or pure metadata do not become story shots by default.
+- Build source trace from stable scoped resource identities. Attachment order and guessed filenames are not identity; a full-page source may be referenced by a stable page-plus-panel locator without pretending that a separate panel asset exists.
+
+## Generation-effective prompt checks
+
+- A non-empty prompt must be executable rather than a fragment, review label, or visual-analysis note. State reference purpose and check ambiguous references, conflicting instructions, overloaded content, unassigned resources, and duration mismatch.
+- Image generation prompts cover appearance, environment, composition/camera, style/color/light, reference consistency, and constraints. Image edits additionally state what to preserve and the ordered crop/split/rotate/colorize/redraw/remove-text/inpaint/outpaint/upscale/style-normalization operations.
+- Scene video prompts cover source/reference roles, characters and emotion, ordered or time-coded action beats, camera transitions, environmental change/effects, dialogue/narration/SFX or silence, pacing, total duration, and constraints. Long scenes should use explicit beat or time segments instead of an overloaded paragraph.
+- When a reference image is directly usable and no image operation is intended, leave \`imagePrompt\` empty instead of inventing edit work.
+
+Finish the single reviewable Storyboard projection before any requested Canvas handoff. The visible review projection is not a substitute for durable Canvas authoring, and Canvas authoring cannot replace the initial Storyboard review. Existing-storyboard refinement always creates a new revision when intent or ordering changes.
 `;
 
 const storyboardZhCnContent = `# 分镜
@@ -112,7 +126,21 @@ const storyboardZhCnContent = `# 分镜
 - 画面描述、景别/运镜备注、动作摘要、审阅状态和诊断都不能替代提示词。没有生成/编辑意图时允许留空，不得用状态码、分析碎片或“待优化”占位。
 - 资源 alias 必须在声明的 scope 内唯一解析；同一 token 匹配多个资源时必须输出明确的绑定诊断，不得选择候选项或编造来源。
 
-漫画解释是专用 profile：OCR、面板切分、阅读顺序、气泡关联和跨格连续性不得默认套用于普通文本或剧本。已有分镜一旦改变意图或顺序，必须创建新修订版。
+## 漫画来源 profile
+
+- 只有获得实际像素级视觉证据、OCR 或分格边界后，才能判断分格数、对白、动作或镜头；metadata、缩略图、文件名、尺寸和页码本身不是视觉证据。证据不可用时只返回明确诊断，不得编造或输出分镜表。
+- 映射分格前先判断方向和阅读顺序。对白、旁白/字幕框、可见音效字、标牌/环境文字和未知文字必须分别分类；只有明确说出的内容进入 \`dialogue\`。
+- 创建镜头前先决定 keep、skip、merge、split 或仅作为转场证据。一页可以产生多个镜头；封面、版权/目录页、空白、广告、重复页和纯 metadata 默认不进入正文镜头。
+- 来源追踪只使用稳定且有 scope 的资源身份；附件顺序和猜测文件名不是身份。整页来源可以用稳定的“页+分格”定位引用，但不得假装独立分格素材已经存在。
+
+## 生成有效提示词检查
+
+- 非空提示词必须可执行，不能只是碎片、审阅标签或视觉分析笔记。必须说明参考用途，并检查引用模糊、指令冲突、内容过载、素材无归属和时长不匹配。
+- 图片生成提示词覆盖人物/主体外观、环境、构图/镜头、风格/色彩/光影、参考一致性和约束；图片编辑还要说明保留内容，以及按顺序执行的裁切/切分/旋转/上色/重绘/去文字/局部重绘/扩图/放大/风格统一操作。
+- scene 视频提示词覆盖来源/参考用途、人物与情绪、按镜号或时间段排列的动作节拍、运镜连接、环境变化/特效、对白/旁白/音效或无声、节奏、总时长和约束；长 scene 应使用明确节拍或时间段，不能堆成过载段落。
+- 参考图可直接使用且没有图片处理意图时，\`imagePrompt\` 应留空，不得为了填表编造编辑任务。
+
+用户要求 Canvas 交付时，也必须先完成唯一的可审阅 Storyboard 投影。可见审阅投影不能冒充持久 Canvas authoring，Canvas authoring 也不能替代首次分镜审阅。已有分镜一旦改变意图或顺序，必须创建新修订版。
 `;
 
 const imageContent = `# Image
@@ -125,7 +153,8 @@ Plan or perform one capability-neutral image operation: generation, editing, inp
 2. Preserve stable input references, masks, composition intent, style constraints, requested dimensions, and output count.
 3. Negotiate adapter support, required inputs, model/provider requirements, and limits before execution.
 4. If support is degraded or unavailable, report the declared diagnostic and smallest recoverable alternative.
-5. Validate output existence, readability, media type, and requested basic dimensions locally. Do not claim aesthetic, character-consistency, or policy approval without QualityEvidence.
+5. Submit execution through the negotiated runtime capability and claim a produced asset only from a confirmed runtime capability result. Before confirmation, report only planned, submitted, pending, blocked, or failed state.
+6. Validate output existence, readability, media type, and requested basic dimensions locally. Do not claim aesthetic, character-consistency, or policy approval without QualityEvidence.
 
 Selection-, layer-, paint-, and project-format mutations remain owned by the relevant image authoring capability; this Skill expresses creative operation intent without importing package internals.
 `;
@@ -140,7 +169,8 @@ const imageZhCnContent = `# 图片
 2. 保留稳定输入引用、mask、构图意图、风格约束、目标尺寸和输出数量。
 3. 执行前协商 adapter 支持等级、必需输入、模型/provider 要求和限制。
 4. 能力降级或不可用时，返回声明过的诊断和最小可恢复替代方案。
-5. 本地只验证产物存在、可读、媒体类型和基础尺寸；没有 QualityEvidence 时不得宣称审美、角色一致性或策略验收通过。
+5. 通过已协商的运行时 capability 提交执行，只有收到确认结果后才能声称素材已生成；确认前只能报告 planned、submitted、pending、blocked 或 failed。
+6. 本地只验证产物存在、可读、媒体类型和基础尺寸；没有 QualityEvidence 时不得宣称审美、角色一致性或策略验收通过。
 
 选区、图层、绘画和项目格式变更仍由对应图片 authoring capability 负责；本 Skill 只表达创作操作意图，不导入子包内部实现。
 `;
@@ -155,7 +185,8 @@ Create or transform a single video clip from a prompt, image, keyframes, or refe
 2. Preserve stable source, start-frame, and end-frame references together with motion, camera, duration, audio, and style intent.
 3. Negotiate explicit adapter support and limits before execution. End-frame conditioning, restyling, enhancement, or extension must never be assumed.
 4. Return visible degraded or unsupported diagnostics when the requested semantics cannot be honored.
-5. Validate the returned clip structurally and technically at operation scope. Broader visual consistency and final-cut approval require media-quality-review evidence.
+5. Claim a generated or transformed clip only from a confirmed runtime capability result. Before confirmation, report only planned, submitted, pending, blocked, or failed state.
+6. Validate the returned clip structurally and technically at operation scope. Broader visual consistency and final-cut approval require media-quality-review evidence.
 `;
 
 const videoZhCnContent = `# 视频
@@ -168,7 +199,8 @@ const videoZhCnContent = `# 视频
 2. 保留稳定的来源、首帧、尾帧引用，以及动作、运镜、时长、音频和风格意图。
 3. 执行前显式协商 adapter 支持和限制，不能默认 provider 支持尾帧约束、风格转换、增强或延长。
 4. 无法满足请求语义时返回明确的 degraded 或 unsupported 诊断。
-5. operation 范围内只做结构和技术验证；更广泛的视觉一致性与成片审批需要 media-quality-review 证据。
+5. 只有运行时 capability 返回确认结果后才能声称片段已生成或转换；确认前只能报告 planned、submitted、pending、blocked 或 failed。
+6. operation 范围内只做结构和技术验证；更广泛的视觉一致性与成片审批需要 media-quality-review 证据。
 `;
 
 const mediaProductionContent = `# Media Production

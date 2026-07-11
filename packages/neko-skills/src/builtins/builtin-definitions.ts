@@ -6,8 +6,6 @@
 
 import type { Skill } from '@neko/shared';
 import { TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA, TOOL_NAMES_SYSTEM } from '@neko/shared';
-import { aiGenerateSkill } from './ai-generate';
-
 import { getScriptGenerationSkill, scriptGenerationSkill } from './script-generation';
 import {
   getCanonicalCreativeMediaSkills,
@@ -25,29 +23,6 @@ import type { BuiltinSkillOptions, LocalizedBuiltinSkillContent } from './builti
 import { localizeBuiltinSkill } from './builtin-skill-content';
 import { localizeBuiltinSkillCatalogText } from './builtin-skill-locales';
 
-// Re-export ai-generate for external use
-export { aiGenerateSkill };
-export { aiGenerateToolDefinitions } from './ai-generate';
-
-// Re-export package-owned creative workflow skills
-export {
-  animationPlanToCutSkill,
-  comicToAnimationSkill,
-  exportVideoPackageSkill,
-  getAnimationPlanToCutSkill,
-  getComicToAnimationSkill,
-  getExportVideoPackageSkill,
-  getGeneratedShotAssemblySkill,
-  getImageToShotSkill,
-  getMediaToVideoSkill,
-  getMediaWorkflowBuiltinSkills,
-  getStoryboardToAnimationPlanSkill,
-  generatedShotAssemblySkill,
-  imageToShotSkill,
-  mediaToVideoSkill,
-  storyboardToAnimationPlanSkill,
-} from './media-to-video';
-export { comicToStoryboardSkill, getComicToStoryboardSkill } from './comic-to-storyboard';
 export {
   normalizeBuiltinSkillLocale,
   selectBuiltinSkillContent,
@@ -626,91 +601,6 @@ Report what was planned, generated, or placed based on capability results. Do no
   },
 };
 
-const localizedAiGenerateContent: LocalizedBuiltinSkillContent = {
-  default: aiGenerateSkill.content,
-  localized: {
-    'zh-cn': `# AI 媒体生成
-
-你帮助用户把创作意图转成运行时媒体生成 capability 可以执行的生成请求。
-
-## 核心原则
-
-1. **响应明确生成意图** - 用户请求图片、视频、语音、音乐、增强、转写或风格迁移输出时，执行或规划生成。
-2. **结果必须有依据** - 不要编造生成 URL、asset id 或完成状态。只有 runtime capability 返回成功后才能报告成功。
-3. **使用合理默认值** - 除非缺失信息会实质影响创作结果、预算、安全或目标格式，否则不要先追问。
-4. **保持提示词语言** - 保留用户当前语言中的创意表达；除非用户要求其他语言或 provider capability 明确要求，否则不要自动翻译成英文。
-
-## Capability Intent Reference
-
-| 请求类型 | 生成意图 |
-|----------|----------|
-| 绘制或生成图片 | 包含主体、构图、风格、光影和参考约束的图片提示词 |
-| 生成视频 | 包含主体、动作节拍、运镜、时长、音频/对白和约束的 scene 级视频提示词 |
-| 旁白或语音 | 文本、说话人特质、情绪、语言、节奏和表演说明 |
-| 背景音乐 | 情绪、类型、乐器、节奏、时长和放置意图 |
-| 角色一致性 | 人物外观、参考用途、姿态/动作、风格和一致性约束 |
-| 音频/视频转写 | 来源媒体、时间戳预期、语言和格式目标 |
-| 风格迁移 | 来源媒体用途、目标风格、保留约束和允许变化 |
-| 视频超分/增强 | 来源媒体、质量提升目标、保留约束和交付目标 |
-| 音频清理 | 来源媒体、噪声/响度问题、保留约束和交付目标 |
-
-## 决策流程
-
-~~~
-User request -> Identify media intent -> Build generation intent -> Use runtime capability -> Report capability result
-~~~
-
-## 运行时参数
-
-具体 operation 名、参数名、provider 默认值、task polling 和返回 asset schema 属于 runtime capability description 与 runtime schema。本 Skill 只负责创作意图组织。
-
-默认使用自然语言提示词内容作为创作意图。当已有已审阅 Plan/Task/Markdown 文档，并且 runtime capability 支持 document-backed generation 时，把它作为结构化意图锚点。
-
-## 图像生成技巧
-
-### 提示词结构
-主体 + 风格 + 细节 + 氛围 + 技术要求
-
-### 尺寸选择
-- 社交媒体封面：1792x1024 (16:9)
-- 方形头像：1024x1024 (1:1)
-- 手机壁纸：1024x1792 (9:16)
-
-### 风格关键词
-- 艺术风格：油画、水彩、数字艺术、日系动画、像素艺术
-- 光线：黄金时刻、柔和光、戏剧化光线、霓虹灯
-- 技术要求：4k、高细节、清晰对焦、浅景深
-
-## 视频生成技巧
-
-### 包含镜头指令
-- \`static shot\` - 固定机位
-- \`slow pan\` - 缓慢横移
-- \`zoom in/out\` - 推近/拉远
-- \`tracking shot\` - 跟随主体
-
-### 时长建议
-- Logo animation: 2-4s
-- Product showcase: 5-8s
-- Background loop: 8-15s
-
-## 音频生成技巧
-
-### Voice Direction
-- 中性、专业：适合旁白或教程
-- 温暖、友好：适合故事或对白
-- 深沉、权威：适合纪录片旁白
-- 年轻、有活力：适合短社媒口播
-
-### 音乐类型与情绪
-- Corporate: upbeat, inspiring
-- Ambient: calm, peaceful
-- Cinematic: dramatic, epic
-- Lofi: calm, relaxing
-`,
-  },
-};
-
 const localizedSceneToMusicContent: LocalizedBuiltinSkillContent = {
   default: sceneToMusicSkill.content,
   localized: {
@@ -992,10 +882,6 @@ Fountain 是纯文本剧本格式：
 `,
   },
 };
-
-export function getAiGenerateSkill(locale?: string): Skill {
-  return localizeBuiltinSkill(aiGenerateSkill, localizedAiGenerateContent, locale);
-}
 
 export function getSceneToMusicSkill(locale?: string): Skill {
   return localizeBuiltinSkill(sceneToMusicSkill, localizedSceneToMusicContent, locale);

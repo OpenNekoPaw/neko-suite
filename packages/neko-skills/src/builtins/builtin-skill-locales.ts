@@ -72,13 +72,6 @@ export const builtinSkillLocales: Readonly<Record<string, BuiltinSkillLocaleMap>
       tags: ['迭代', '一致性', '局部重跑'],
     },
   },
-  'ai-generate': {
-    'zh-cn': {
-      name: 'AI 媒体生成',
-      description: '生成图片、视频、语音和背景音乐等 AI 媒体内容。',
-      tags: ['AI', '生成'],
-    },
-  },
   'scene-to-music': {
     'zh-cn': {
       name: '场景配乐',
@@ -126,62 +119,6 @@ export const builtinSkillLocales: Readonly<Record<string, BuiltinSkillLocaleMap>
       name: '剧本转时间线',
       description: '将 Fountain 剧本转换为 NekoCut 时间线项目，生成场景和对白字幕轨道。',
       tags: ['AI', '剧本', '时间线'],
-    },
-  },
-  'comic-to-storyboard': {
-    'zh-cn': {
-      name: '漫画转分镜表',
-      description: '分析漫画或分镜页，提取画格、对白和镜头信息并转换为结构化分镜表。',
-      tags: ['AI', '漫画', '分镜'],
-    },
-  },
-  'comic-to-animation': {
-    'zh-cn': {
-      name: '漫画转动画',
-      description: '编排漫画分镜、镜头图像准备、生成审批、Canvas 审阅、Cut 装配和导出交接。',
-      tags: ['AI', '漫画', '动画', '视频'],
-    },
-  },
-  'media-to-video': {
-    'zh-cn': {
-      name: '媒体转视频',
-      description: '根据素材类型编排漫画分镜、图片转镜头、动画计划、Cut 装配和导出子技能。',
-      tags: ['AI', '视频', '编排', '分镜'],
-    },
-  },
-  'image-to-shot': {
-    'zh-cn': {
-      name: '图片转镜头',
-      description: '将静态图片或图像序列转换为结构化镜头计划与分镜表行。',
-      tags: ['AI', '图片', '镜头', '分镜'],
-    },
-  },
-  'storyboard-to-animation-plan': {
-    'zh-cn': {
-      name: '分镜转动画计划',
-      description: '把 StoryboardTable 分镜表转换为包含运动、镜头、生成和连续性建议的动画计划。',
-      tags: ['AI', '分镜', '动画', '镜头'],
-    },
-  },
-  'animation-plan-to-cut': {
-    'zh-cn': {
-      name: '动画计划转 Cut',
-      description: '将已验证的动画计划或分镜表投射为可装配到 NekoCut 时间线的载荷。',
-      tags: ['Cut', '时间线', '装配'],
-    },
-  },
-  'generated-shot-assembly': {
-    'zh-cn': {
-      name: '生成镜头装配',
-      description: '把生成的图片、视频、音频和字幕引用整理为一致的媒体转视频执行摘要。',
-      tags: ['AI', '装配', '生成素材'],
-    },
-  },
-  'export-video-package': {
-    'zh-cn': {
-      name: '视频导出打包',
-      description: '为最终视频产物准备交付、导出或打包信息，并附带验证诊断。',
-      tags: ['导出', '视频', '交付'],
     },
   },
 };

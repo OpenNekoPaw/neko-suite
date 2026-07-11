@@ -1,26 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { TOOL_NAMES_PERCEPTION } from '@neko/shared';
+import * as builtinExports from './index';
 
 import {
-  aiGenerateSkill,
-  aiGenerateToolDefinitions,
   builtinSkills,
   builtinSkillLocales,
   builtinToolGroups,
   CREATIVE_MEDIA_PROFILES,
   CREATIVE_MEDIA_WORKFLOW_STAGES,
-  comicToStoryboardSkill,
   creationPersonaSkill,
   executionPersonaSkill,
   getBuiltinSkills,
   getCanonicalCreativeMediaSkills,
-  getComicToStoryboardSkill,
-  getMediaWorkflowBuiltinSkills,
   imageSkill,
   iterationPersonaSkill,
   mediaProductionSkill,
   mediaQualityReviewSkill,
-  mediaToVideoSkill,
   normalizeBuiltinSkillLocale,
   scriptGenerationSkill,
   storyboardSkill,
@@ -64,16 +59,32 @@ describe('@neko/skills builtins', () => {
     expect(skill?.content).toContain('A root `manifest.json` is not part');
   });
 
-  it('retains legacy exports while returning only canonical media workflow skills', () => {
-    expect(comicToStoryboardSkill.name).toBe('comic-to-storyboard');
-    expect(mediaToVideoSkill.name).toBe('media-to-video');
-    expect(getMediaWorkflowBuiltinSkills().map((skill) => skill.name)).toEqual([
-      'storyboard',
-      'image',
-      'video',
-      'media-production',
-      'media-quality-review',
-    ]);
+  it('removes legacy creative Skill runtime exports instead of only hiding them from the catalog', () => {
+    const removedExports = [
+      'aiGenerateSkill',
+      'aiGenerateToolDefinitions',
+      'comicToStoryboardSkill',
+      'getComicToStoryboardSkill',
+      'mediaToVideoSkill',
+      'getMediaToVideoSkill',
+      'comicToAnimationSkill',
+      'getComicToAnimationSkill',
+      'imageToShotSkill',
+      'getImageToShotSkill',
+      'storyboardToAnimationPlanSkill',
+      'getStoryboardToAnimationPlanSkill',
+      'animationPlanToCutSkill',
+      'getAnimationPlanToCutSkill',
+      'generatedShotAssemblySkill',
+      'getGeneratedShotAssemblySkill',
+      'exportVideoPackageSkill',
+      'getExportVideoPackageSkill',
+      'getMediaWorkflowBuiltinSkills',
+    ];
+
+    for (const exportName of removedExports) {
+      expect(Object.hasOwn(builtinExports, exportName), exportName).toBe(false);
+    }
   });
 
   it('registers canonical creative skills once and keeps profiles and stages out of the peer catalog', () => {
@@ -137,12 +148,18 @@ describe('@neko/skills builtins', () => {
     );
   });
 
-  it('keeps localized builtin skill content in the skills package', () => {
+  it('keeps localized canonical builtin skill content in the skills package', () => {
     expect(normalizeBuiltinSkillLocale('zh-CN')).toBe('zh-cn');
     expect(normalizeBuiltinSkillLocale('zh-TW')).toBe('zh-cn');
-    expect(getComicToStoryboardSkill('zh-CN').description).toContain('分镜');
-    expect(getComicToStoryboardSkill('zh-TW').description).toContain('分镜');
-    expect(getComicToStoryboardSkill('en-US')).toBe(comicToStoryboardSkill);
+    expect(
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'storyboard')?.content,
+    ).toContain('漫画来源 profile');
+    expect(
+      getBuiltinSkills({ locale: 'zh-TW' }).find((skill) => skill.name === 'storyboard')?.content,
+    ).toContain('漫画来源 profile');
+    expect(getBuiltinSkills({ locale: 'en-US' }).find((skill) => skill.name === 'storyboard')).toBe(
+      storyboardSkill,
+    );
   });
 
   it('projects localized builtin skill descriptions into runtime skill definitions', () => {
@@ -160,180 +177,92 @@ describe('@neko/skills builtins', () => {
     );
   });
 
-  it('keeps comic storyboard visual evidence contract aligned with runtime perception capabilities', () => {
-    const english = getComicToStoryboardSkill().content;
-    const zhCn = getComicToStoryboardSkill('zh-CN').content;
+  it('migrates comic visual-evidence methodology into the canonical storyboard Skill', () => {
+    const english = storyboardSkill.content;
+    const zhCn = getBuiltinSkills({ locale: 'zh-CN' }).find(
+      (skill) => skill.name === 'storyboard',
+    )?.content;
 
-    expect(english).toContain('runtime content/perception capability guidance');
-    expect(english).toContain('current visual evidence path');
+    expect(english).toContain('actual pixel-level visual evidence, OCR, or panel boundaries');
     expect(english).toContain(
-      'Metadata, perception cards, thumbnails, filenames, dimensions, and page labels alone are not visual evidence.',
+      'Metadata, thumbnails, filenames, dimensions, and page labels alone are not visual evidence.',
     );
-    expect(english).toContain('do not output any Markdown table');
+    expect(english).toContain('do not invent or output a Storyboard table');
     expect(english).not.toContain('ReadDocument');
     expect(english).not.toContain('ReadImage');
     expect(english).not.toContain('QuerySemanticCoverage');
 
-    expect(zhCn).toContain('运行时 content/perception 能力说明');
-    expect(zhCn).toContain('当前视觉证据链');
-    expect(zhCn).toContain('metadata/感知卡、缩略图、文件名、尺寸列表和页码本身不是视觉证据。');
-    expect(zhCn).toContain('不要输出任何 Markdown 表格');
+    expect(zhCn).toContain('实际像素级视觉证据、OCR 或分格边界');
+    expect(zhCn).toContain('metadata、缩略图、文件名、尺寸和页码本身不是视觉证据。');
+    expect(zhCn).toContain('不得编造或输出分镜表');
     expect(zhCn).not.toContain('ReadDocument');
     expect(zhCn).not.toContain('ReadImage');
     expect(zhCn).not.toContain('QuerySemanticCoverage');
   });
 
-  it('keeps comic storyboard prompts actionable for image and video generation/editing', () => {
-    const english = getComicToStoryboardSkill().content;
-    const zhCn = getComicToStoryboardSkill('zh-CN').content;
+  it('migrates generation-effective comic prompt constraints without restoring a stage Skill', () => {
+    const english = storyboardSkill.content;
+    const zhCn = getBuiltinSkills({ locale: 'zh-CN' }).find(
+      (skill) => skill.name === 'storyboard',
+    )?.content;
 
     expect(english).toContain(
-      'Image generation prompts must include character appearance, scene/location, composition/camera, style/color/lighting, and reference-consistency constraints.',
+      'Image generation prompts cover appearance, environment, composition/camera',
     );
     expect(english).toContain(
-      'Image edit prompts must describe ordered operations such as crop/split/rotate/colorize/redraw/remove text/inpaint/outpaint/upscale/style normalization.',
+      'crop/split/rotate/colorize/redraw/remove-text/inpaint/outpaint/upscale',
     );
-    expect(english).toContain(
-      "Video prompts must summarize the scene's source/reference, character, scene, emotion, shot-ordered action beats, dialogue or silence, camera movement, environmental change, pacing/total duration, and constraints.",
-    );
-    expect(english).toContain(
-      '`videoPrompt` is scene-level. Write at most one video prompt per scene, preferably on the first row of that scene.',
-    );
-    expect(english).toContain(
-      'Do not write shot-level or single-shot video prompts in new storyboard output.',
-    );
-    expect(english).toContain(
-      'Prompt cells are generation instructions, not visual-analysis notes or review labels.',
-    );
-    expect(english).toContain(
-      'Do not write prompt fragments like only "crop the standing character panel", "black-haired man walks past bodies", or "low-angle follow".',
-    );
-    expect(english).toContain(
-      'When a reference image is directly usable, leave `imagePrompt` blank instead of inventing image-edit work.',
-    );
-    expect(english).toContain('Resource references must state their purpose.');
-    expect(english).toContain(
-      'Use the base shape "scene intent / reference resources and their roles / subject characters and emotion / scene environment / shot-numbered or time-coded action beats / camera transitions / environmental change or effects / dialogue, narration, SFX, or silence / total duration / constraints".',
-    );
-    expect(english).toContain('For long scenes or intents over 10 seconds');
-    expect(english).toContain('Operation-specific prompt intent:');
-    expect(english).toContain('`generate-video`: write a complete scene video generation prompt');
-    expect(english).toContain(
-      '`edit-video`: write what to preserve, what to modify, and how scene, character, action, dialogue, camera, background, effects, or audio should change.',
-    );
-    expect(english).toContain(
-      '`process-reference` / `optimize-image-prompt`: write image preparation or image generation steps, not a video prompt.',
-    );
-    expect(english).toContain(
-      'Common prompt failure checks: ambiguous references, conflicting instructions, overloaded content, unassigned resources, and duration mismatch.',
-    );
-    expect(english).toContain('not extra table fields or Canvas schema');
-    expect(english).toContain('Prompt self-check: every non-empty `imagePrompt` / `videoPrompt`');
+    expect(english).toContain('Scene video prompts cover source/reference roles');
+    expect(english).toContain('ordered or time-coded action beats');
+    expect(english).toContain('Long scenes should use explicit beat or time segments');
+    expect(english).toContain('ambiguous references, conflicting instructions, overloaded content');
+    expect(english).toContain('leave `imagePrompt` empty instead of inventing edit work');
+    expect(english).toContain('`videoPrompt` is scene-level');
 
-    expect(zhCn).toContain(
-      '图片生成提示词必须包含人物外观、场景/地点、构图/镜头、风格/色彩/光影和参考一致性约束。',
-    );
-    expect(zhCn).toContain(
-      '图片编辑提示词必须写清有顺序的操作步骤，例如裁切/切分/旋转/上色/重绘/去文字/局部重绘/扩图/放大/统一风格。',
-    );
-    expect(zhCn).toContain(
-      '视频提示词必须按 scene 汇总来源/参考、人物、场景、情绪、按镜号排列的动作节拍、对白或无对白、运镜、环境变化、节奏/总时长和约束。',
-    );
-    expect(zhCn).toContain(
-      '`videoPrompt` 是 scene 级字段。每个 scene 最多写一个视频提示词，优先写在该 scene 的第一行；同一 scene 的后续 shot 行默认继承该 scene 的视频提示词，除非新 scene 开始。',
-    );
-    expect(zhCn).toContain('新的分镜输出不要写 shot 级或单镜视频提示词。');
-    expect(zhCn).toContain('提示词单元格是生成指导，不是视觉分析笔记、审阅标签或操作摘要。');
-    expect(zhCn).toContain(
-      '不要只写“裁切主角站立分格”“黑发男性从尸体旁走过”“镜头低角度跟随”这类提示词碎片。',
-    );
-    expect(zhCn).toContain(
-      '参考图可直接用于视频时，`imagePrompt` 留空，不要为了填表编造图像编辑任务。',
-    );
-    expect(zhCn).toContain('资源引用必须说明用途。');
-    expect(zhCn).toContain(
-      '基础结构是“场景意图 / 参考资源及用途 / 主体人物与情绪 / 场景环境 / 按镜号或时间段排列的动作节拍 / 运镜连接 / 环境变化或特效 / 对白、旁白、音效或无对白 / 总时长 / 约束”。',
-    );
-    expect(zhCn).toContain('长 scene 或 10 秒以上意图');
-    expect(zhCn).toContain('按操作类型写提示词意图：');
-    expect(zhCn).toContain(
-      '`generate-video`：写完整场景视频生成提示词，包含主体/人物、场景、情绪、按镜号或时间段排列的节拍、运镜、转场/特效、音频/对白、风格、时长和约束。',
-    );
-    expect(zhCn).toContain(
-      '`edit-video`：写清保留什么、修改什么，以及场景、人物、动作、对白、镜头、背景、特效或音频如何变化。',
-    );
-    expect(zhCn).toContain(
-      '`process-reference` / `optimize-image-prompt`：写图片准备或图片生成步骤，不要写成视频提示词。',
-    );
-    expect(zhCn).toContain(
-      '常见提示词错误自检：引用模糊、指令冲突、内容过载、素材无归属、时长不匹配。',
-    );
-    expect(zhCn).toContain('不是新增表格字段或 Canvas schema');
-    expect(zhCn).toContain('提示词自检：每个非空 `imagePrompt` / `videoPrompt`');
+    expect(zhCn).toContain('图片生成提示词覆盖人物/主体外观、环境、构图/镜头');
+    expect(zhCn).toContain('裁切/切分/旋转/上色/重绘/去文字/局部重绘/扩图/放大/风格统一');
+    expect(zhCn).toContain('scene 视频提示词覆盖来源/参考用途');
+    expect(zhCn).toContain('按镜号或时间段排列的动作节拍');
+    expect(zhCn).toContain('长 scene 应使用明确节拍或时间段');
+    expect(zhCn).toContain('引用模糊、指令冲突、内容过载');
+    expect(zhCn).toContain('`imagePrompt` 应留空，不得为了填表编造编辑任务');
+    expect(zhCn).toContain('`videoPrompt` 是 scene 级字段');
   });
 
-  it('keeps comic storyboard Canvas handoff after the reviewable table is complete', () => {
-    const english = getComicToStoryboardSkill().content;
-    const zhCn = getComicToStoryboardSkill('zh-CN').content;
+  it('keeps Canvas handoff after the canonical review projection', () => {
+    const english = storyboardSkill.content;
+    const zhCn = getBuiltinSkills({ locale: 'zh-CN' }).find(
+      (skill) => skill.name === 'storyboard',
+    )?.content;
 
     expect(english).toContain(
-      'When the user asks to generate a storyboard and send it to Canvas, first finish and output the single Markdown creative table.',
+      'Finish the single reviewable Storyboard projection before any requested Canvas handoff.',
     );
-    expect(english).toContain(
-      'Do not use Canvas authoring capabilities instead of generating the storyboard table.',
-    );
-    expect(english).toContain(
-      'The first storyboard draft must be visible as an assistant Markdown block before any Canvas handoff is attempted.',
-    );
-    expect(english).toContain(
-      'If no visible assistant Markdown block or UI handoff source exists yet',
-    );
-    expect(english).toContain('Canvas authoring lifecycle capability');
-    expect(english).toContain('runtime Canvas capability context');
-    expect(english).toContain('The Canvas package owns concrete operations');
-    expect(english).toContain('Do not substitute a review-only table/draft path');
+    expect(english).toContain('Canvas authoring cannot replace the initial Storyboard review');
     expect(english).not.toContain('canvas.createStoryboardFromMarkdown');
     expect(english).not.toContain('canvas.ingestMarkdown');
 
-    expect(zhCn).toContain(
-      '当用户要求“生成分镜表并发送到 Canvas”时，先完成并输出唯一的 Markdown creative table。',
-    );
-    expect(zhCn).toContain('不要用 Canvas authoring capability 替代分镜表生成。');
-    expect(zhCn).toContain('分镜初稿必须先作为可见 assistant Markdown 块出现在聊天中');
-    expect(zhCn).toContain('不可见运行时参数');
-    expect(zhCn).toContain('先输出表格并停止');
-    expect(zhCn).toContain('Canvas authoring lifecycle capability');
-    expect(zhCn).toContain('运行时 Canvas capability context');
-    expect(zhCn).toContain('具体 operation、目标选择、审批要求');
-    expect(zhCn).toContain('不要把 review-only 表格/草稿路径替代为生产分镜交付');
+    expect(zhCn).toContain('必须先完成唯一的可审阅 Storyboard 投影');
+    expect(zhCn).toContain('Canvas authoring 也不能替代首次分镜审阅');
     expect(zhCn).not.toContain('canvas.createStoryboardFromMarkdown');
     expect(zhCn).not.toContain('canvas.ingestMarkdown');
   });
 
-  it('keeps generic Markdown and Canvas authoring details out of storyboard domain skills', () => {
-    const english = getComicToStoryboardSkill().content;
-    const zhCn = getComicToStoryboardSkill('zh-CN').content;
-    const allMarkdownSkillContent = getBuiltinSkills()
-      .filter((skill) => localizedBuiltinPromptNames.includes(skill.name))
-      .map((skill) => skill.content)
-      .join('\n');
-    const allMarkdownSkillContentZhCn = getBuiltinSkills({ locale: 'zh-CN' })
-      .filter((skill) => localizedBuiltinPromptNames.includes(skill.name))
-      .map((skill) => skill.content)
-      .join('\n');
+  it('keeps renderer and package-specific authoring protocols out of canonical storyboard guidance', () => {
+    const english = storyboardSkill.content;
+    const zhCn = getBuiltinSkills({ locale: 'zh-CN' }).find(
+      (skill) => skill.name === 'storyboard',
+    )?.content;
+    const allPromptContent = [
+      ...getBuiltinSkills().map((skill) => skill.content),
+      ...getBuiltinSkills({ locale: 'zh-CN' }).map((skill) => skill.content),
+    ].join('\n');
 
-    expect(english).toContain('shared Markdown/profile layer');
-    expect(english).toContain('This skill only chooses storyboard fields');
     expect(english).not.toContain('Markdown renderer behavior');
     expect(english).not.toContain('voicePrompt');
-
-    expect(zhCn).toContain('shared Markdown/profile 层');
-    expect(zhCn).toContain('本 Skill 只选择分镜表字段');
     expect(zhCn).not.toContain('Markdown renderer 行为');
     expect(zhCn).not.toContain('voicePrompt');
-
-    expect(allMarkdownSkillContent).not.toContain('reviewStatus');
-    expect(allMarkdownSkillContentZhCn).not.toContain('reviewStatus');
+    expect(allPromptContent).not.toContain('reviewStatus');
   });
 
   it('keeps concrete tool protocols out of builtin skill prompt content', () => {
@@ -381,22 +310,13 @@ describe('@neko/skills builtins', () => {
   });
 
   it('keeps media generation completion claims grounded in runtime capability results', () => {
-    expect(aiGenerateSkill.content).toContain(
-      'Start media generation by submitting the appropriate runtime media capability',
-    );
-    expect(aiGenerateSkill.content).toContain(
-      'report success only from confirmed runtime capability results',
-    );
-    expect(aiGenerateSkill.content).toContain(
-      'before success is confirmed, describe only planned, submitted, pending, blocked, or failed state',
-    );
+    for (const skill of [imageSkill, videoSkill]) {
+      expect(skill.content).toContain('confirmed runtime capability result');
+      expect(skill.content).toContain('planned, submitted, pending, blocked, or failed');
+    }
   });
 
   it('owns all non-runtime builtin skill and tool group definitions', () => {
-    expect(aiGenerateSkill.name).toBe('ai-generate');
-    expect(aiGenerateToolDefinitions.map((definition) => definition.name)).toContain(
-      'GenerateImage',
-    );
     expect(scriptGenerationSkill.name).toBe('script-generation');
     expect(storyboardSkill.name).toBe('storyboard');
     expect(imageSkill.name).toBe('image');
