@@ -56,7 +56,13 @@ const handleAgentTurnTimelineDiagnostic: MessageHandler<'agentTurnTimelineDiagno
   if (unavailableTimelineState) {
     removeAgentTurnTimelineRecovery(getAgentHostRuntimeAdapter(), unavailableTimelineState);
   }
-  if (diagnostic.code !== 'turn-snapshot-unavailable' || unavailableTimelineState) {
+  const belongsToForegroundConversation =
+    !diagnostic.conversationId ||
+    context.activeConversationIdRef.current === diagnostic.conversationId;
+  if (
+    belongsToForegroundConversation &&
+    (diagnostic.code !== 'turn-snapshot-unavailable' || unavailableTimelineState)
+  ) {
     context.setGlobalError(formatTimelineDiagnostics([diagnostic]));
   }
 };
@@ -123,8 +129,18 @@ function applyTimelineMessagesToConversation(
   if (timelineState) {
     persistAgentTurnTimelineRecovery(getAgentHostRuntimeAdapter(), timelineState);
   }
-  if (diagnostics.length > 0) {
-    context.setGlobalError(formatTimelineDiagnostics(diagnostics));
+  const foregroundDiagnostics = diagnostics.filter(
+    (diagnostic) =>
+      !(
+        diagnostic.code === 'delivery-revision-gap' &&
+        timelineState?.synchronization === 'suspended'
+      ),
+  );
+  if (
+    foregroundDiagnostics.length > 0 &&
+    context.activeConversationIdRef.current === firstDelivery.conversationId
+  ) {
+    context.setGlobalError(formatTimelineDiagnostics(foregroundDiagnostics));
   }
   if (snapshotRequest) {
     AgentHostMessages.requestAgentTurnTimelineSnapshot(snapshotRequest);

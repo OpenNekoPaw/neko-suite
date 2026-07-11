@@ -786,6 +786,48 @@ describe('work item message handlers', () => {
     }
   });
 
+  it('does not publish a background conversation revision gap into the foreground tab', () => {
+    const foregroundMessages: Message[] = [
+      { id: 'msg-b', role: 'assistant', content: 'Conversation B', timestamp: 1 },
+    ];
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      currentMessages: foregroundMessages,
+      nonCurrentMessages: new Map([['conv-a', []]]),
+    });
+    const requestSnapshot = vi
+      .spyOn(AgentHostMessages, 'requestAgentTurnTimelineSnapshot')
+      .mockImplementation(() => undefined);
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([textTimelineItem('text-1', 1, 'a')]),
+      harness.context,
+    );
+    dispatch(
+      timelineHandlers,
+      timelineMessage([{ ...textTimelineItem('text-1', 1, 'lost'), itemRevision: 2 }], 3),
+      harness.context,
+    );
+
+    expect(requestSnapshot).toHaveBeenCalledTimes(1);
+    expect(requestSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-a',
+        reason: 'revision-gap',
+        lastAppliedDeliveryRevision: 1,
+      }),
+    );
+    expect(harness.messages()).toEqual(foregroundMessages);
+    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toMatchObject({
+      conversationId: 'conv-a',
+      synchronization: 'suspended',
+    });
+    expect(harness.globalError()).toBeNull();
+
+    requestSnapshot.mockRestore();
+  });
+
   it('requests one snapshot on a revision gap and resumes only after the snapshot', () => {
     const harness = createContextHarness({ activeConversationId: 'conv-a', currentMessages: [] });
     const requestSnapshot = vi
@@ -816,6 +858,7 @@ describe('work item message handlers', () => {
     expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline?.synchronization).toBe(
       'suspended',
     );
+    expect(harness.globalError()).toBeNull();
 
     dispatch(
       timelineHandlers,
@@ -885,6 +928,45 @@ describe('work item message handlers', () => {
     );
     expect(harness.globalError()).toContain('turn-snapshot-unavailable');
     requestSnapshot.mockRestore();
+  });
+
+  it('does not publish a background snapshot-unavailable diagnostic into the foreground tab', () => {
+    const foregroundMessages: Message[] = [
+      { id: 'msg-b', role: 'assistant', content: 'Conversation B', timestamp: 1 },
+    ];
+    const harness = createContextHarness({
+      activeConversationId: 'conv-b',
+      currentMessages: foregroundMessages,
+      nonCurrentMessages: new Map([['conv-a', []]]),
+    });
+
+    dispatch(
+      timelineHandlers,
+      timelineMessage([textTimelineItem('text-1', 1, 'retained')]),
+      harness.context,
+    );
+    dispatch(
+      timelineHandlers,
+      {
+        type: 'agentTurnTimelineDiagnostic',
+        schemaVersion: 2,
+        connectionEpoch: 'epoch-1',
+        conversationId: 'conv-a',
+        turnId: 'turn-msg-a',
+        messageId: 'msg-a',
+        code: 'turn-snapshot-unavailable',
+        message: 'expired',
+        deliveryRevision: 1,
+      },
+      harness.context,
+    );
+
+    expect(harness.messages()).toEqual(foregroundMessages);
+    expect(harness.conversationStreaming().get('conv-a')?.activeTurnTimeline).toMatchObject({
+      conversationId: 'conv-a',
+      synchronization: 'unavailable',
+    });
+    expect(harness.globalError()).toBeNull();
   });
 
   it('does not let a delayed snapshot-unavailable diagnostic reject a newer active turn', () => {
