@@ -5,8 +5,7 @@ import type {
 
 export const NEKO_PROJECT_AUTHORING_CONTRACT_VERSION = 1 as const;
 
-export type NekoProjectAuthoringContractVersion =
-  typeof NEKO_PROJECT_AUTHORING_CONTRACT_VERSION;
+export type NekoProjectAuthoringContractVersion = typeof NEKO_PROJECT_AUTHORING_CONTRACT_VERSION;
 
 export type NekoProjectAuthoringTargetKind = 'active' | 'file' | 'new';
 
@@ -79,23 +78,13 @@ export interface NekoProjectAuthoringResult<TData = unknown> {
 }
 
 export type NekoProjectAuthoringOperationKind =
-  | 'document-authoring'
-  | 'interactive-editor'
-  | 'projection-only';
+  'document-authoring' | 'interactive-editor' | 'projection-only';
 
 export type NekoProjectAuthoringClientKind =
-  | 'vscode'
-  | 'tui'
-  | 'electron'
-  | 'agent'
-  | 'assets'
-  | 'package-api';
+  'vscode' | 'tui' | 'electron' | 'agent' | 'assets' | 'package-api';
 
 export type NekoProjectAuthoringCommandDisposition =
-  | 'canonical-authoring'
-  | 'ui-only-wrapper'
-  | 'removed'
-  | 'fail-closed-migration-diagnostic';
+  'canonical-authoring' | 'ui-only-wrapper' | 'removed' | 'fail-closed-migration-diagnostic';
 
 export interface NekoProjectAuthoringCommandDescriptor {
   readonly commandId: string;
@@ -287,7 +276,10 @@ export function isNekoProjectAuthoringClientKind(
 }
 
 export function isNekoProjectAuthoringRuntimeHandleValue(value: unknown): boolean {
-  return typeof value === 'string' && RUNTIME_HANDLE_VALUE_PATTERNS.some((pattern) => pattern.test(value));
+  return (
+    typeof value === 'string' &&
+    RUNTIME_HANDLE_VALUE_PATTERNS.some((pattern) => pattern.test(value))
+  );
 }
 
 export function validateNekoProjectAuthoringTarget(
@@ -486,15 +478,16 @@ export function validateNekoProjectAuthoringAdapterDescriptor(
     );
   }
   if (descriptor.coreSource) {
-    diagnostics.push(...scanNekoProjectAuthoringCoreDependencies(descriptor.coreSource).diagnostics);
+    diagnostics.push(
+      ...scanNekoProjectAuthoringCoreDependencies(descriptor.coreSource).diagnostics,
+    );
   }
   return { ok: !hasNekoProjectAuthoringErrors(diagnostics), diagnostics };
 }
 
 export function scanNekoProjectAuthoringStaticGuards(
   source: string,
-  rules: readonly NekoProjectAuthoringStaticGuardRule[] =
-    NEKO_PROJECT_AUTHORING_DEFAULT_STATIC_GUARD_RULES,
+  rules: readonly NekoProjectAuthoringStaticGuardRule[] = NEKO_PROJECT_AUTHORING_DEFAULT_STATIC_GUARD_RULES,
 ): NekoProjectAuthoringStaticGuardResult {
   const diagnostics = rules.flatMap((rule) => {
     const matched =
@@ -517,3 +510,5 @@ export function scanNekoProjectAuthoringCoreDependencies(
 ): NekoProjectAuthoringStaticGuardResult {
   return scanNekoProjectAuthoringStaticGuards(source, CORE_UI_DEPENDENCY_RULES);
 }
+
+export * from './project-quality';

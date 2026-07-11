@@ -28,16 +28,16 @@ export function createMarkdownRenderableTokens({
   const candidates: MarkdownRenderableToken[] = [
     ...projection.images.map((image) => ({
       kind: 'commonmark-image' as const,
-      start: image.range.start,
-      end: image.range.end,
-      raw: value.slice(image.range.start, image.range.end),
+      start: image.range.startOffset,
+      end: image.range.endOffset,
+      raw: value.slice(image.range.startOffset, image.range.endOffset),
       display: image.altText || image.lookupToken,
       title: image.rawTarget,
     })),
     ...projection.resourceReferences.map((reference) => ({
       kind: 'resource-reference' as const,
-      start: reference.range.start,
-      end: reference.range.end,
+      start: reference.range.startOffset,
+      end: reference.range.endOffset,
       raw: reference.raw,
       display: reference.target,
       title: reference.target,
@@ -46,8 +46,8 @@ export function createMarkdownRenderableTokens({
     })),
     ...projection.mentions.map((mention) => ({
       kind: 'mention' as const,
-      start: mention.range.start,
-      end: mention.range.end,
+      start: mention.range.startOffset,
+      end: mention.range.endOffset,
       raw: mention.raw,
       display: mention.raw,
       title: mention.ref ? `${mention.ref.kind}:${mention.ref.id}` : mention.raw,
@@ -55,10 +55,10 @@ export function createMarkdownRenderableTokens({
     })),
     ...semanticSpans.map((span) => ({
       kind: 'semantic-span' as const,
-      start: span.range.start,
-      end: span.range.end,
-      raw: value.slice(span.range.start, span.range.end),
-      display: value.slice(span.range.start, span.range.end),
+      start: span.range.startOffset,
+      end: span.range.endOffset,
+      raw: value.slice(span.range.startOffset, span.range.endOffset),
+      display: value.slice(span.range.startOffset, span.range.endOffset),
       title: span.tooltip ?? span.label ?? span.kind,
       span,
     })),
@@ -90,7 +90,9 @@ export function renderMarkdownInlineSegments({
     }
 
     const key = `${token.kind}-${token.start}-${token.end}-${index}`;
-    nodes.push(renderToken?.({ token, key }) ?? renderDefaultMarkdownToken(token, key, spanVariant));
+    nodes.push(
+      renderToken?.({ token, key }) ?? renderDefaultMarkdownToken(token, key, spanVariant),
+    );
     cursor = token.end;
   });
 
@@ -182,10 +184,7 @@ export function renderDefaultMarkdownToken(
   }
 }
 
-function getTokenText(
-  token: MarkdownRenderableToken,
-  spanVariant: 'compact' | 'editor',
-): string {
+function getTokenText(token: MarkdownRenderableToken, spanVariant: 'compact' | 'editor'): string {
   return spanVariant === 'editor' ? token.raw : token.display;
 }
 
@@ -288,10 +287,7 @@ function getMarkdownReferenceClassName(kind: 'image' | 'embed' | 'link'): string
   }
 }
 
-function getSemanticSpanClassName(
-  kind: string | undefined,
-  variant: 'compact' | 'editor',
-): string {
+function getSemanticSpanClassName(kind: string | undefined, variant: 'compact' | 'editor'): string {
   const base =
     variant === 'editor'
       ? 'box-decoration-clone rounded-sm border px-0.5 py-[1px] font-medium text-current underline decoration-2 underline-offset-[3px] shadow-sm'

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PROJECT_SEARCH_PARTITION_KINDS,
   canRunSemanticIndexingWorkOnTrigger,
   canSemanticIndexingWorkBlockProjectOpen,
   isProjectIndexFreshness,
@@ -45,6 +46,13 @@ describe('project cache/search contracts', () => {
     expect(isProjectSearchScopeKind('panel')).toBe(false);
     expect(isProjectIndexFreshness('fresh')).toBe(true);
     expect(isProjectIndexFreshness('unknown')).toBe(false);
+  });
+
+  it('keeps project search partitions local and excludes external research providers', () => {
+    expect(PROJECT_SEARCH_PARTITION_KINDS).not.toContain('external-research' as never);
+    expect(PROJECT_SEARCH_PARTITION_KINDS).not.toContain('web-search' as never);
+    expect(isProjectSearchPartitionKind('external-research')).toBe(false);
+    expect(isProjectSearchPartitionKind('web-search')).toBe(false);
   });
 
   it('accepts typed search queries with optional context and filters', () => {

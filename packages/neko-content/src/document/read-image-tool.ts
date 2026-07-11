@@ -231,13 +231,10 @@ export async function executeReadImage(
       ...(image.input.aliasScope ? { aliasScope: image.input.aliasScope } : {}),
       ...(image.input.sourceDocumentId ? { sourceDocumentId: image.input.sourceDocumentId } : {}),
       ...(image.input.entryPath ? { entryPath: image.input.entryPath } : {}),
-      portableForTransfer:
-        image.input.portableForTransfer ?? image.input.managedResourceRef?.scope === 'project',
+      portableForTransfer: image.input.portableForTransfer ?? false,
       ...(image.input.nonPortableReason
         ? { nonPortableReason: image.input.nonPortableReason }
-        : image.input.managedResourceRef && image.input.managedResourceRef.scope !== 'project'
-          ? { nonPortableReason: 'no-workspace-or-extension-private-scratch' }
-          : {}),
+        : {}),
       ...(image.input.label ? { label: image.input.label } : {}),
       ...(image.metadata.width !== undefined ? { width: image.metadata.width } : {}),
       ...(image.metadata.height !== undefined ? { height: image.metadata.height } : {}),
@@ -246,14 +243,31 @@ export async function executeReadImage(
       ...(image.input.metadata ? { metadata: image.input.metadata } : {}),
       ...(image.input.resourceRef ? { resourceRef: image.input.resourceRef } : {}),
     }));
-    const perceptionCards = results.map((image, index) =>
-      createReadImagePerceptionCard({
+    const perceptionCards = results.map((image, index) => {
+      const loadedImage = loaded[index];
+      if (!loadedImage) {
+        throw new Error(`ReadImage result ${index + 1} is missing its loaded image.`);
+      }
+      return createReadImagePerceptionCard({
         image,
-        loaded: loaded[index]!,
+        loaded: loadedImage,
         createdAt: deps.now?.() ?? Date.now(),
         index,
-      }),
-    );
+      });
+    });
+    const attachments = perceptionCards.map((card, index) => {
+      const image = results[index];
+      const assetRef = card.perceptual?.keyframeRefs?.[0];
+      if (!image || !assetRef) {
+        throw new Error(`ReadImage result ${index + 1} is missing its perceptual asset ref.`);
+      }
+      return {
+        type: 'image' as const,
+        path: assetRef.uri,
+        ...(image.mimeType ? { mimeType: image.mimeType } : {}),
+        assetRef,
+      };
+    });
 
     return {
       success: true,
@@ -264,12 +278,7 @@ export async function executeReadImage(
         imageCount: images.length,
         imagesTruncated: selected.length < images.length,
       } satisfies ReadImageResultData,
-      attachments: results.map((image, index) => ({
-        type: 'image' as const,
-        path: perceptionCards[index]!.perceptual!.keyframeRefs![0]!.uri,
-        ...(image.mimeType ? { mimeType: image.mimeType } : {}),
-        assetRef: perceptionCards[index]!.perceptual!.keyframeRefs![0]!,
-      })),
+      attachments,
       perceptionCards,
     };
   } catch (error) {
@@ -347,18 +356,29 @@ function restoreManagedResourceRef(
       input.resourceRef,
       deps.resolveResourceScope?.() ?? 'project',
     );
-    return {
-      ...input,
-      managedResourceRef,
-      portableForTransfer: input.portableForTransfer ?? managedResourceRef.scope === 'project',
-      ...(input.nonPortableReason
-        ? { nonPortableReason: input.nonPortableReason }
-        : managedResourceRef.scope !== 'project'
-          ? { nonPortableReason: 'workspace-required-for-transfer' }
-          : {}),
-    };
+    return withResourceTransferMetadata(input, managedResourceRef, { managedResourceRef });
+  }
+  if (input.resourceRef && isResourceRef(input.resourceRef)) {
+    return withResourceTransferMetadata(input, input.resourceRef);
   }
   return input;
+}
+
+function withResourceTransferMetadata(
+  input: ReadImageInputImage,
+  resourceRef: ResourceRef,
+  extra: Pick<InternalReadImageInputImage, 'managedResourceRef'> = {},
+): InternalReadImageInputImage {
+  return {
+    ...input,
+    ...extra,
+    portableForTransfer: input.portableForTransfer ?? resourceRef.scope === 'project',
+    ...(input.nonPortableReason
+      ? { nonPortableReason: input.nonPortableReason }
+      : resourceRef.scope !== 'project'
+        ? { nonPortableReason: 'workspace-required-for-transfer' }
+        : {}),
+  };
 }
 
 async function createReadImageSource(input: InternalReadImageInputImage): Promise<ResourceRef> {
@@ -484,6 +504,9 @@ function createReadImagePerceptionCard(input: {
     assetId,
     uri: selectPerceptualAssetUri(input.image, input.loaded.resolvedPath),
     mimeType,
+    ...(input.image.resourceRef && isResourceRef(input.image.resourceRef)
+      ? { resourceRef: input.image.resourceRef }
+      : {}),
     ...(input.image.resourceRef && isDocumentArchiveResourceRef(input.image.resourceRef)
       ? { documentResourceRef: input.image.resourceRef }
       : {}),

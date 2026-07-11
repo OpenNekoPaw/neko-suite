@@ -803,7 +803,24 @@ describe('NodeContentDispatcher', () => {
         position: { x: 0, y: 0 },
         zIndex: 0,
         preset: 'scene.basic',
-        data: { sceneTitle: 'Arrival', sceneNumber: 1 },
+        data: {
+          sceneTitle: 'Arrival',
+          sceneNumber: 1,
+          location: 'Bridge',
+          modelName: 'Video Model A',
+          resolution: '1280x720',
+          storyboardPrompt: {
+            version: CANVAS_STORYBOARD_PROMPT_STATE_VERSION,
+            promptBlocks: {
+              videoPromptDocument: {
+                version: CANVAS_STORYBOARD_PROMPT_DOCUMENT_VERSION,
+                documentId: 'scene-1:video:prompt',
+                blockKind: 'video',
+                text: 'Scene-level camera and motion prompt.',
+              },
+            },
+          },
+        },
       }),
       id: 'scene-1',
       container: { policy: 'scene', childIds: ['shot-1'] },
@@ -833,18 +850,26 @@ describe('NodeContentDispatcher', () => {
       }),
     );
 
-    expect(markup).toContain('Assign selected');
-    expect(markup).toContain('Auto layout');
+    expect(markup).not.toContain('Assign selected');
+    expect(markup).not.toContain('Auto layout');
+    expect(markup).not.toContain('Batch generate');
     expect(markup).toContain('data-child-slot-id="scene-children"');
     expect(markup).toContain('data-child-slot-variant="summary-large"');
     expect(markup).toContain('data-child-slot-kind="scene-shot-table"');
     expect(markup).toContain('data-scene-review-surface="true"');
     expect(markup).toContain('data-scene-view-mode="storyboard-table"');
+    expect(markup).toContain('data-scene-review-header="true"');
+    expect(markup).toContain('data-scene-review-title="true"');
+    expect(markup).toContain('Scene 1 · Arrival');
+    expect(markup).toContain('Bridge');
+    expect(markup).toContain('data-scene-review-metric="resolution"');
+    expect(markup).toContain('data-scene-review-metric="model"');
+    expect(markup).toContain('Scene-level camera and motion prompt.');
     expect(markup).toContain('data-scene-shot-table="true"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-1"');
     expect(markup).toContain('data-scene-shot-table-column="reference-media"');
     expect(markup).toContain('data-scene-shot-table-column="image-prompt"');
-    expect(markup).toContain('data-scene-shot-table-column="video-prompt"');
+    expect(markup).not.toContain('data-scene-shot-table-column="video-prompt"');
     expect(markup).toContain('data-scene-shot-table-column="state"');
     expect(markup).toContain('data-scene-shot-table-column="action"');
     expect(markup).toContain('Storyboard Table');
@@ -1008,9 +1033,7 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('Image prompt skipped');
     expect(markup).toContain('data-semantic-prompt-text="true"');
     expect(markup).toContain('data-semantic-prompt-visual-style="subtle"');
-    expect(markup).toContain('data-semantic-prompt-span-kind="camera"');
     expect(markup).toContain('text-current');
-    expect(markup).toContain('slow camera drift');
     expect(markup).toContain('data-scene-shot-action-id="generate-video"');
   });
 
@@ -1088,9 +1111,8 @@ describe('NodeContentDispatcher', () => {
 
     expect(markup).toContain('data-scene-video-prompt-summary="true"');
     expect(markup).toContain('data-scene-shot-table-cell="image-prompt"');
-    expect(markup).toContain('data-scene-shot-table-cell="video-prompt"');
+    expect(markup).not.toContain('data-scene-shot-table-cell="video-prompt"');
     expect(markup).toContain('data-markdown-inline-strong="true"');
-    expect(markup).toContain('data-markdown-inline-emphasis="true"');
     expect(markup).toContain('data-markdown-inline-code="true"');
     expect(markup).toContain('data-markdown-mention="true"');
     expect(markup).toContain('data-markdown-image-reference="true"');
@@ -1100,8 +1122,6 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-markdown-generation-prompt-part-kind="intent"');
     expect(markup).toContain('data-markdown-generation-prompt-part-kind="reference"');
     expect(markup).toContain('data-markdown-generation-prompt-part-kind="operation"');
-    expect(markup).toContain('data-markdown-generation-prompt-part-kind="camera"');
-    expect(markup).toContain('data-markdown-generation-prompt-part-kind="constraint"');
   });
 
   it('renders fixed storyboard next-action buttons from semantic next state', () => {
@@ -1479,13 +1499,13 @@ describe('NodeContentDispatcher', () => {
     expect(markup).toContain('data-child-slot-card-max-height="280"');
     expect(markup).toContain('data-scene-shot-table="true"');
     expect(markup).toContain('overflow-auto');
-    expect(markup).toContain('min-width:1160px');
+    expect(markup).toContain('min-width:912px');
     expect(markup).toContain('data-scene-prompt-cell-text="true"');
     expect(markup).not.toContain('data-scene-prompt-cell-text="true"><div class="line-clamp');
     expect(markup).not.toContain('max-h-[720px]');
     expect(markup).toContain('data-scene-shot-table-column="reference-media"');
     expect(markup).toContain('data-scene-shot-table-column="image-prompt"');
-    expect(markup).toContain('data-scene-shot-table-column="video-prompt"');
+    expect(markup).not.toContain('data-scene-shot-table-column="video-prompt"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-1"');
     expect(markup).toContain('data-scene-shot-table-row-id="shot-2"');
     expect(markup).toContain('Optimize scene video prompt');
@@ -1608,7 +1628,6 @@ describe('NodeContentDispatcher', () => {
       'shot',
       'reference-media',
       'image-prompt',
-      'video-prompt',
       'duration',
       'dialogue',
       'state',

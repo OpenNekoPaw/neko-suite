@@ -6,6 +6,11 @@
 
 import type { UnifiedConfig, NormalizedConfig } from './types';
 import { DEFAULT_CONFIG } from './types';
+import {
+  normalizeExternalResearchConfig,
+  type ExternalResearchConfigInput,
+  type ExternalResearchMcpProviderConfig,
+} from '../types/external-research';
 
 // =============================================================================
 // Configuration Merging
@@ -61,6 +66,11 @@ export function mergeConfigs(base: UnifiedConfig, override: UnifiedConfig): Unif
   merged.models = mergeArrayById(base.models, override.models);
   merged.mcpServers = mergeArrayById(base.mcpServers, override.mcpServers);
 
+  merged.externalResearch = mergeExternalResearchConfig(
+    base.externalResearch,
+    override.externalResearch,
+  );
+
   // Merge override objects
   merged.providerOverrides = mergeOverrides(base.providerOverrides, override.providerOverrides);
   merged.modelOverrides = mergeOverrides(base.modelOverrides, override.modelOverrides);
@@ -93,6 +103,99 @@ export function mergeConfigs(base: UnifiedConfig, override: UnifiedConfig): Unif
   }
 
   return merged;
+}
+
+function mergeExternalResearchConfig(
+  base?: ExternalResearchConfigInput,
+  override?: ExternalResearchConfigInput,
+): ExternalResearchConfigInput | undefined {
+  if (!base && !override) {
+    return undefined;
+  }
+
+  return removeUndefined({
+    ...base,
+    ...override,
+    mcp: mergeExternalResearchMcpConfig(base?.mcp, override?.mcp),
+  });
+}
+
+function mergeExternalResearchMcpConfig(
+  base?: ExternalResearchMcpProviderConfig,
+  override?: ExternalResearchMcpProviderConfig,
+): ExternalResearchMcpProviderConfig | undefined {
+  if (!base && !override) {
+    return undefined;
+  }
+
+  const serverId = override?.serverId ?? base?.serverId;
+  const searchTool =
+    base?.searchTool || override?.searchTool
+      ? {
+          ...base?.searchTool,
+          ...override?.searchTool,
+        }
+      : undefined;
+
+  if (!serverId || !searchTool?.name || !searchTool.queryArg || !searchTool.outputSchema) {
+    return undefined;
+  }
+
+  const fetchTool =
+    base?.fetchTool || override?.fetchTool
+      ? {
+          ...base?.fetchTool,
+          ...override?.fetchTool,
+        }
+      : undefined;
+  const completeFetchTool =
+    fetchTool?.name && fetchTool.urlArg && fetchTool.outputSchema
+      ? {
+          name: fetchTool.name,
+          urlArg: fetchTool.urlArg,
+          outputSchema: fetchTool.outputSchema,
+          ...(fetchTool.maxContentTokensArg !== undefined
+            ? { maxContentTokensArg: fetchTool.maxContentTokensArg }
+            : {}),
+          ...(fetchTool.allowedDomainsArg !== undefined
+            ? { allowedDomainsArg: fetchTool.allowedDomainsArg }
+            : {}),
+          ...(fetchTool.blockedDomainsArg !== undefined
+            ? { blockedDomainsArg: fetchTool.blockedDomainsArg }
+            : {}),
+        }
+      : undefined;
+
+  return {
+    serverId,
+    searchTool: {
+      name: searchTool.name,
+      queryArg: searchTool.queryArg,
+      outputSchema: searchTool.outputSchema,
+      ...(searchTool.maxResultsArg !== undefined
+        ? { maxResultsArg: searchTool.maxResultsArg }
+        : {}),
+      ...(searchTool.allowedDomainsArg !== undefined
+        ? { allowedDomainsArg: searchTool.allowedDomainsArg }
+        : {}),
+      ...(searchTool.blockedDomainsArg !== undefined
+        ? { blockedDomainsArg: searchTool.blockedDomainsArg }
+        : {}),
+    },
+    ...(completeFetchTool ? { fetchTool: completeFetchTool } : {}),
+    ...((override?.exposeBoundToolsAsRawMcp ?? base?.exposeBoundToolsAsRawMcp) !== undefined
+      ? {
+          exposeBoundToolsAsRawMcp:
+            override?.exposeBoundToolsAsRawMcp ?? base?.exposeBoundToolsAsRawMcp,
+        }
+      : {}),
+  };
+}
+
+function removeUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  ) as Partial<T>;
 }
 
 /**
@@ -210,6 +313,7 @@ export function normalizeConfig(config: UnifiedConfig): NormalizedConfig {
     providers: arrayToMap(providers),
     models: arrayToMap(models),
     mcpServers: arrayToMap(mcpServers),
+    externalResearch: normalizeExternalResearchConfig(config.externalResearch),
   };
 }
 

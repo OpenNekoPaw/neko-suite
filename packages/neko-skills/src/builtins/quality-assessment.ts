@@ -106,10 +106,6 @@ Summarize results in a clear table:
   icon: '📊',
   source: 'builtin',
   enabled: true,
-  // Slash command: /quality-check
-  command: 'quality-check',
-  argumentHint: '[media path or scene indices]',
-  supportsArguments: true,
   domain: 'media',
   mediaWorkflow: {
     useCases: [

@@ -5,9 +5,23 @@ import {
   type DocumentArchiveResourceRef,
 } from './document-reading';
 import { isResourceRef, type ResourceRef } from './resource-cache';
+import { validateDurableResourceRef } from './durable-resource-ref';
 
 export const STORYBOARD_TABLE_SCHEMA_VERSION = 1 as const;
 export const STORYBOARD_TABLE_KIND = 'storyboard-table' as const;
+export const STORYBOARD_CANONICAL_CONTRACT_VERSION = 1 as const;
+
+export const STORYBOARD_SOURCE_PROFILE_IDS = [
+  'from-prompt',
+  'from-text',
+  'from-script',
+  'from-document',
+  'from-comic',
+  'from-image-sequence',
+  'from-existing-storyboard',
+] as const;
+
+export const STORYBOARD_PROJECTION_TARGETS = ['canvas', 'cut'] as const;
 
 export const STORYBOARD_TABLE_PROFILES = [
   'script-breakdown',
@@ -102,6 +116,48 @@ export type StoryboardExtensionMap = Readonly<
   Record<StoryboardExtensionNamespace, StoryboardSerializableValue>
 >;
 
+export type StoryboardSourceProfileId = (typeof STORYBOARD_SOURCE_PROFILE_IDS)[number];
+
+export type StoryboardProjectionTarget = (typeof STORYBOARD_PROJECTION_TARGETS)[number];
+
+export interface StoryboardRevisionIdentity {
+  readonly revisionId: string;
+  readonly sequence: number;
+  readonly contentDigest: string;
+  readonly parentRevisionId?: string;
+  readonly createdAt: string;
+}
+
+export interface StoryboardSourceRegion {
+  readonly page?: number;
+  readonly startOffset?: number;
+  readonly endOffset?: number;
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number;
+  readonly height?: number;
+}
+
+export interface StoryboardSourceTrace {
+  readonly traceId: string;
+  readonly sourceProfile: StoryboardSourceProfileId;
+  readonly sourceRef?: ResourceRef;
+  readonly sourceDocumentRef?: DocumentArchiveResourceRef;
+  readonly sourceRevisionId?: string;
+  readonly sourceSceneId?: string;
+  readonly sourceShotId?: string;
+  readonly sourceRegion?: StoryboardSourceRegion;
+  readonly label?: string;
+}
+
+export interface StoryboardProjectionHandoff {
+  readonly target: StoryboardProjectionTarget;
+  readonly storyboardRevisionId: string;
+  readonly mode: 'read-only-projection' | 'one-way-handoff';
+  readonly artifactRef?: ResourceRef;
+  readonly createdAt: string;
+}
+
 export type StoryboardTableSourceType = 'story' | 'agent' | 'document' | 'image' | 'manual';
 
 export interface StoryboardTableSource {
@@ -116,6 +172,11 @@ export interface StoryboardTable {
   readonly schemaVersion: typeof STORYBOARD_TABLE_SCHEMA_VERSION;
   readonly kind: typeof STORYBOARD_TABLE_KIND;
   readonly profile?: StoryboardTableProfile;
+  readonly contractVersion?: typeof STORYBOARD_CANONICAL_CONTRACT_VERSION;
+  readonly revision?: StoryboardRevisionIdentity;
+  readonly sourceProfile?: StoryboardSourceProfileId;
+  readonly sourceTrace?: readonly StoryboardSourceTrace[];
+  readonly projections?: readonly StoryboardProjectionHandoff[];
   readonly source?: StoryboardTableSource;
   readonly title: string;
   readonly scenes: readonly StoryboardSceneRow[];
@@ -130,6 +191,7 @@ export interface StoryboardSceneRow {
   readonly timeOfDay?: string;
   readonly summary?: string;
   readonly shots: readonly StoryboardShotRow[];
+  readonly sourceTrace?: readonly StoryboardSourceTrace[];
   readonly extensions?: StoryboardExtensionMap;
 }
 
@@ -159,6 +221,7 @@ export interface StoryboardShotRow {
   readonly generatedMediaRefs?: readonly StoryboardMediaRef[];
   readonly mediaRefs?: readonly StoryboardMediaRef[];
   readonly decisionReason?: string;
+  readonly sourceTrace?: readonly StoryboardSourceTrace[];
   readonly extensions?: StoryboardExtensionMap;
 }
 
@@ -276,6 +339,7 @@ export type StoryboardValidationDiagnosticSeverity =
   'error' | 'warning' | 'suggestion' | 'profileHint';
 
 export type StoryboardValidationDiagnosticCode =
+  | CanonicalStoryboardDiagnosticCode
   | 'invalid-root'
   | 'invalid-schema-version'
   | 'invalid-kind'
@@ -325,6 +389,111 @@ export interface StoryboardValidationResult {
 
 export interface StoryboardValidationOptions extends StoryboardMediaIdentityClassificationOptions {}
 
+export type CanonicalStoryboardDiagnosticCode =
+  | 'missing-canonical-contract'
+  | 'unsupported-source-profile'
+  | 'invalid-storyboard-revision'
+  | 'invalid-source-trace'
+  | 'invalid-projection-handoff';
+
+export interface CanonicalStoryboardValidationResult {
+  readonly ok: boolean;
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
+}
+
+export function validateCanonicalStoryboardTable(
+  table: StoryboardTable,
+): CanonicalStoryboardValidationResult {
+  const diagnostics: StoryboardValidationDiagnostic[] = [
+    ...validateStoryboardTable(table).diagnostics,
+  ];
+  if (table.contractVersion !== STORYBOARD_CANONICAL_CONTRACT_VERSION) {
+    diagnostics.push(
+      createCanonicalStoryboardDiagnostic(
+        'missing-canonical-contract',
+        'Canonical Storyboard requires the current contractVersion.',
+        ['contractVersion'],
+      ),
+    );
+  }
+  if (!table.revision || !isValidStoryboardRevision(table.revision)) {
+    diagnostics.push(
+      createCanonicalStoryboardDiagnostic(
+        'invalid-storyboard-revision',
+        'Canonical Storyboard requires a stable revision id, positive sequence, content digest, and timestamp.',
+        ['revision'],
+      ),
+    );
+  }
+  if (
+    !table.sourceProfile ||
+    !STORYBOARD_SOURCE_PROFILE_IDS.some((profile) => profile === table.sourceProfile)
+  ) {
+    diagnostics.push(
+      createCanonicalStoryboardDiagnostic(
+        'unsupported-source-profile',
+        'Canonical Storyboard requires a supported source profile.',
+        ['sourceProfile'],
+      ),
+    );
+  }
+  if (!table.sourceTrace || table.sourceTrace.length === 0) {
+    diagnostics.push(
+      createCanonicalStoryboardDiagnostic(
+        'invalid-source-trace',
+        'Canonical Storyboard requires at least one source-trace entry.',
+        ['sourceTrace'],
+      ),
+    );
+  } else {
+    validateCanonicalSourceTrace(table.sourceTrace, ['sourceTrace'], diagnostics);
+  }
+  table.scenes.forEach((scene, sceneIndex) => {
+    if (scene.sourceTrace) {
+      validateCanonicalSourceTrace(
+        scene.sourceTrace,
+        ['scenes', sceneIndex, 'sourceTrace'],
+        diagnostics,
+      );
+    }
+    scene.shots.forEach((shot, shotIndex) => {
+      if (shot.sourceTrace) {
+        validateCanonicalSourceTrace(
+          shot.sourceTrace,
+          ['scenes', sceneIndex, 'shots', shotIndex, 'sourceTrace'],
+          diagnostics,
+        );
+      }
+    });
+  });
+  table.projections?.forEach((projection, index) => {
+    if (
+      !STORYBOARD_PROJECTION_TARGETS.some((target) => target === projection.target) ||
+      !projection.storyboardRevisionId.trim() ||
+      projection.storyboardRevisionId !== table.revision?.revisionId ||
+      !Number.isFinite(Date.parse(projection.createdAt))
+    ) {
+      diagnostics.push(
+        createCanonicalStoryboardDiagnostic(
+          'invalid-projection-handoff',
+          'Storyboard projection must bind to the current revision and a supported projection target.',
+          ['projections', index],
+        ),
+      );
+    }
+    if (projection.artifactRef && !validateDurableResourceRef(projection.artifactRef).ok) {
+      diagnostics.push(
+        createCanonicalStoryboardDiagnostic(
+          'invalid-projection-handoff',
+          'Storyboard projection artifactRef must be a valid ResourceRef.',
+          ['projections', index, 'artifactRef'],
+        ),
+      );
+    }
+  });
+  return { ok: !hasBlockingStoryboardDiagnostics(diagnostics), diagnostics };
+}
+
 export interface StoryboardCutStoryboardShotBase {
   readonly id: string;
   readonly shotNumber: number;
@@ -369,6 +538,12 @@ export interface ProjectStoryboardTableToCutOptions {
   readonly projectName?: string;
   readonly resolveImagePath?: (context: StoryboardMediaResolverContext) => string | undefined;
   readonly resolveImageDataUrl?: (context: StoryboardMediaResolverContext) => string | undefined;
+}
+
+export interface CanonicalStoryboardCutHandoffResult {
+  readonly payload?: StoryboardCutStoryboardPayload;
+  readonly handoff?: StoryboardProjectionHandoff;
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
 }
 
 export type StoryboardImageGenerationPolicy = 'allow' | 'deny' | 'confirm';
@@ -672,6 +847,50 @@ export function projectStoryboardTableToCutPayload(
   return shots.length > 0 ? { projectName: options.projectName ?? table.title, shots } : null;
 }
 
+export function projectCanonicalStoryboardTableToCutHandoff(
+  table: StoryboardTable,
+  options: ProjectStoryboardTableToCutOptions = {},
+  handoffOptions: {
+    readonly artifactRef?: ResourceRef;
+    readonly now?: () => string;
+  } = {},
+): CanonicalStoryboardCutHandoffResult {
+  const validation = validateCanonicalStoryboardTable(table);
+  if (!validation.ok || !table.revision) {
+    return { diagnostics: validation.diagnostics };
+  }
+  if (handoffOptions.artifactRef) {
+    const artifactValidation = validateDurableResourceRef(handoffOptions.artifactRef);
+    if (!artifactValidation.ok) {
+      return {
+        diagnostics: artifactValidation.diagnostics.map((diagnostic) =>
+          createCanonicalStoryboardDiagnostic(
+            'invalid-projection-handoff',
+            diagnostic.message,
+            diagnostic.path,
+          ),
+        ),
+      };
+    }
+  }
+
+  const payload = projectStoryboardTableToCutPayload(table, options);
+  if (!payload) {
+    return { diagnostics: validation.diagnostics };
+  }
+  return {
+    payload,
+    handoff: {
+      target: 'cut',
+      storyboardRevisionId: table.revision.revisionId,
+      mode: 'one-way-handoff',
+      ...(handoffOptions.artifactRef ? { artifactRef: handoffOptions.artifactRef } : {}),
+      createdAt: handoffOptions.now?.() ?? new Date().toISOString(),
+    },
+    diagnostics: validation.diagnostics,
+  };
+}
+
 export function interpretStoryboardImageStrategies(
   input: StoryboardImageStrategyInterpreterInput,
 ): StoryboardImageStrategyInterpreterResult {
@@ -809,6 +1028,14 @@ function normalizeSemanticStoryboardTable(
   const kind = root['kind'];
   const title = readTrimmedString(root['title']);
   const profile = normalizeProfile(root['profile'], diagnostics);
+  const contractVersion =
+    root['contractVersion'] === STORYBOARD_CANONICAL_CONTRACT_VERSION
+      ? STORYBOARD_CANONICAL_CONTRACT_VERSION
+      : undefined;
+  const revision = normalizeStoryboardRevision(root['revision']);
+  const sourceProfile = normalizeStoryboardSourceProfile(root['sourceProfile']);
+  const sourceTrace = normalizeCanonicalSourceTraces(root['sourceTrace']);
+  const projections = normalizeStoryboardProjectionHandoffs(root['projections']);
   const source = normalizeStoryboardTableSource(root['source'], diagnostics);
   const extensions = normalizeExtensions(root['extensions'], ['extensions'], diagnostics);
   const scenes = normalizeSceneRows(root['scenes'], diagnostics);
@@ -857,6 +1084,11 @@ function normalizeSemanticStoryboardTable(
     schemaVersion: 1,
     kind: 'storyboard-table',
     ...(profile ? { profile } : {}),
+    ...(contractVersion ? { contractVersion } : {}),
+    ...(revision ? { revision } : {}),
+    ...(sourceProfile ? { sourceProfile } : {}),
+    ...(sourceTrace.length > 0 ? { sourceTrace } : {}),
+    ...(projections ? { projections } : {}),
     ...(source ? { source } : {}),
     title,
     scenes,
@@ -982,6 +1214,7 @@ function normalizeSceneRow(
   const timeOfDay = readTrimmedString(record['timeOfDay']);
   const summary = readTrimmedString(record['summary']);
   const shots = normalizeShotRows(record['shots'], sceneIndex, diagnostics);
+  const sourceTrace = normalizeCanonicalSourceTraces(record['sourceTrace']);
   const extensions = normalizeExtensions(
     record['extensions'],
     [...path, 'extensions'],
@@ -1014,6 +1247,7 @@ function normalizeSceneRow(
     ...(timeOfDay ? { timeOfDay } : {}),
     ...(summary ? { summary } : {}),
     shots,
+    ...(sourceTrace.length > 0 ? { sourceTrace } : {}),
     ...(extensions ? { extensions } : {}),
   };
 }
@@ -1114,6 +1348,7 @@ function normalizeShotRow(
   const visualStyle = readTrimmedString(record['visualStyle']);
   const referenceImagePath = readTrimmedString(record['referenceImagePath']);
   const decisionReason = readTrimmedString(record['decisionReason']);
+  const sourceTrace = normalizeCanonicalSourceTraces(record['sourceTrace']);
 
   if (shotNumber === undefined) {
     diagnostics.push(missingRequiredDiagnostic([...path, 'shotNumber'], 'shotNumber'));
@@ -1180,6 +1415,7 @@ function normalizeShotRow(
     ...(normalizedGeneratedRefs.length > 0 ? { generatedMediaRefs: normalizedGeneratedRefs } : {}),
     ...(normalizedMediaRefs.length > 0 ? { mediaRefs: normalizedMediaRefs } : {}),
     ...(decisionReason ? { decisionReason } : {}),
+    ...(sourceTrace.length > 0 ? { sourceTrace } : {}),
     ...(normalizedExtensions ? { extensions: normalizedExtensions } : {}),
   };
 }
@@ -1369,6 +1605,152 @@ function mergeStoryboardSourceImageExtension(
     ...(extensions ?? {}),
     [STORYBOARD_SOURCE_IMAGE_EXTENSION]: sourceImage,
   };
+}
+
+function normalizeStoryboardRevision(value: unknown): StoryboardRevisionIdentity | undefined {
+  const record = readStoryboardRecord(value);
+  if (!record) return undefined;
+  const revisionId = readTrimmedString(record['revisionId']);
+  const sequence = readOptionalPositiveNumber(record['sequence']);
+  const contentDigest = readTrimmedString(record['contentDigest']);
+  const parentRevisionId = readTrimmedString(record['parentRevisionId']);
+  const createdAt = readTrimmedString(record['createdAt']);
+  if (!revisionId || sequence === undefined || !contentDigest || !createdAt) return undefined;
+  return {
+    revisionId,
+    sequence,
+    contentDigest,
+    ...(parentRevisionId ? { parentRevisionId } : {}),
+    createdAt,
+  };
+}
+
+function normalizeStoryboardSourceProfile(value: unknown): StoryboardSourceProfileId | undefined {
+  return typeof value === 'string' &&
+    STORYBOARD_SOURCE_PROFILE_IDS.some((profile) => profile === value)
+    ? (value as StoryboardSourceProfileId)
+    : undefined;
+}
+
+function normalizeCanonicalSourceTraces(value: unknown): readonly StoryboardSourceTrace[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const record = readStoryboardRecord(item);
+    if (!record) return [];
+    const traceId = readTrimmedString(record['traceId']);
+    const sourceProfile = normalizeStoryboardSourceProfile(record['sourceProfile']);
+    const sourceRef = isResourceRef(record['sourceRef']) ? record['sourceRef'] : undefined;
+    const sourceDocumentRef = parseDocumentArchiveResourceRef(record['sourceDocumentRef']);
+    if (!traceId || !sourceProfile || (sourceRef ? 1 : 0) + (sourceDocumentRef ? 1 : 0) !== 1) {
+      return [];
+    }
+    const sourceRevisionId = readTrimmedString(record['sourceRevisionId']);
+    const sourceSceneId = readTrimmedString(record['sourceSceneId']);
+    const sourceShotId = readTrimmedString(record['sourceShotId']);
+    const label = readTrimmedString(record['label']);
+    const sourceRegion = normalizeStoryboardSourceRegion(record['sourceRegion']);
+    return [
+      {
+        traceId,
+        sourceProfile,
+        ...(sourceRef ? { sourceRef } : {}),
+        ...(sourceDocumentRef ? { sourceDocumentRef } : {}),
+        ...(sourceRevisionId ? { sourceRevisionId } : {}),
+        ...(sourceSceneId ? { sourceSceneId } : {}),
+        ...(sourceShotId ? { sourceShotId } : {}),
+        ...(sourceRegion ? { sourceRegion } : {}),
+        ...(label ? { label } : {}),
+      },
+    ];
+  });
+}
+
+function normalizeStoryboardSourceRegion(value: unknown): StoryboardSourceRegion | undefined {
+  const record = readStoryboardRecord(value);
+  if (!record) return undefined;
+  const fields = ['page', 'startOffset', 'endOffset', 'x', 'y', 'width', 'height'] as const;
+  const normalized: Partial<Record<(typeof fields)[number], number>> = {};
+  for (const field of fields) {
+    const candidate = record[field];
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) normalized[field] = candidate;
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeStoryboardProjectionHandoffs(
+  value: unknown,
+): readonly StoryboardProjectionHandoff[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.flatMap((item) => {
+    const record = readStoryboardRecord(item);
+    if (!record) return [];
+    const target = record['target'];
+    const storyboardRevisionId = readTrimmedString(record['storyboardRevisionId']);
+    const mode = record['mode'];
+    const createdAt = readTrimmedString(record['createdAt']);
+    const artifactRef = isResourceRef(record['artifactRef']) ? record['artifactRef'] : undefined;
+    if (
+      !STORYBOARD_PROJECTION_TARGETS.some((candidate) => candidate === target) ||
+      !storyboardRevisionId ||
+      (mode !== 'read-only-projection' && mode !== 'one-way-handoff') ||
+      !createdAt
+    ) {
+      return [];
+    }
+    return [
+      {
+        target: target as StoryboardProjectionTarget,
+        storyboardRevisionId,
+        mode,
+        ...(artifactRef ? { artifactRef } : {}),
+        createdAt,
+      },
+    ];
+  });
+}
+
+function isValidStoryboardRevision(revision: StoryboardRevisionIdentity): boolean {
+  return (
+    revision.revisionId.trim().length > 0 &&
+    Number.isInteger(revision.sequence) &&
+    revision.sequence > 0 &&
+    revision.contentDigest.trim().length > 0 &&
+    Number.isFinite(Date.parse(revision.createdAt))
+  );
+}
+
+function validateCanonicalSourceTrace(
+  traces: readonly StoryboardSourceTrace[],
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+  diagnostics: StoryboardValidationDiagnostic[],
+): void {
+  traces.forEach((trace, index) => {
+    const identityCount = (trace.sourceRef ? 1 : 0) + (trace.sourceDocumentRef ? 1 : 0);
+    if (
+      !trace.traceId.trim() ||
+      !STORYBOARD_SOURCE_PROFILE_IDS.some((profile) => profile === trace.sourceProfile) ||
+      identityCount !== 1 ||
+      (trace.sourceRef !== undefined && !validateDurableResourceRef(trace.sourceRef).ok) ||
+      (trace.sourceDocumentRef !== undefined &&
+        parseDocumentArchiveResourceRef(trace.sourceDocumentRef) === undefined)
+    ) {
+      diagnostics.push(
+        createCanonicalStoryboardDiagnostic(
+          'invalid-source-trace',
+          'Source trace requires an id, supported profile, and exactly one valid stable source reference.',
+          [...path, index],
+        ),
+      );
+    }
+  });
+}
+
+function createCanonicalStoryboardDiagnostic(
+  code: CanonicalStoryboardDiagnosticCode,
+  message: string,
+  path: readonly StoryboardValidationDiagnosticPathSegment[],
+): StoryboardValidationDiagnostic {
+  return { code, severity: 'error', message, path };
 }
 
 function validateNormalizedStoryboardTable(

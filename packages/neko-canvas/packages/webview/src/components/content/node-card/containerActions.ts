@@ -5,25 +5,7 @@ export type ContainerActionDescriptorRegistry = Partial<
   Record<CanvasNode['type'], readonly ContainerActionDescriptor[]>
 >;
 
-const SCENE_ACTIONS: readonly ContainerActionDescriptor[] = [
-  {
-    id: 'assign-selected-children',
-    label: 'preset.scene.assignSelected',
-    visibleWhen: 'selected',
-    enabledWhen: 'has-selection',
-  },
-  {
-    id: 'auto-layout',
-    label: 'preset.scene.autoLayout',
-    visibleWhen: 'has-children',
-  },
-  {
-    id: 'batch-generate',
-    label: 'preset.scene.batchGenerate',
-    visibleWhen: 'has-children',
-    enabledWhen: 'not-generating',
-  },
-];
+const SCENE_ACTIONS: readonly ContainerActionDescriptor[] = [];
 
 const GALLERY_ACTIONS: readonly ContainerActionDescriptor[] = [
   {

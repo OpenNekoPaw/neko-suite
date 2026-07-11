@@ -13,3 +13,5 @@ export {
   type ScriptSceneSpan,
   type SearchResult,
 } from './script-scene-search-runtime';
+
+export * from './storyboard-source-normalization';

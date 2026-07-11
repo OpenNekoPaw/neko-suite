@@ -183,6 +183,7 @@ export interface ToolParameters {
   properties: Record<string, ToolParameterProperty>;
   required?: string[];
   anyOf?: Array<{ required: string[] }>;
+  additionalProperties?: boolean;
 }
 
 /**

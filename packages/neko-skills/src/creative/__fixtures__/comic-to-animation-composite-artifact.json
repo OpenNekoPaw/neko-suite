@@ -43,7 +43,12 @@
         "profileVersion": 1,
         "title": "Comic Shot Asset Prep",
         "columns": [
-          { "columnId": "shotId", "label": "Shot", "cellType": "string", "required": true },
+          {
+            "columnId": "shotId",
+            "label": "Shot",
+            "cellType": "string",
+            "required": true
+          },
           {
             "columnId": "sourcePanel",
             "label": "Source Panel",
@@ -58,15 +63,26 @@
             "required": true,
             "schemaRef": "neko.motion-plan.v1"
           },
-          { "columnId": "dialogue", "label": "Dialogue", "cellType": "string" },
-          { "columnId": "review", "label": "Review", "cellType": "status" }
+          {
+            "columnId": "dialogue",
+            "label": "Dialogue",
+            "cellType": "string"
+          },
+          {
+            "columnId": "review",
+            "label": "Review",
+            "cellType": "status"
+          }
         ],
         "rows": [
           {
             "rowId": "shot-1",
             "status": "needs-review",
             "cells": {
-              "shotId": { "type": "string", "value": "shot-1" },
+              "shotId": {
+                "type": "string",
+                "value": "shot-1"
+              },
               "sourcePanel": {
                 "type": "media-preview",
                 "value": {
@@ -90,8 +106,14 @@
                   "camera": "slow push-in"
                 }
               },
-              "dialogue": { "type": "string", "value": "We have to run." },
-              "review": { "type": "status", "value": "needs-review" }
+              "dialogue": {
+                "type": "string",
+                "value": "We have to run."
+              },
+              "review": {
+                "type": "status",
+                "value": "needs-review"
+              }
             },
             "actions": [
               {
@@ -193,13 +215,108 @@
                       "assetIndex": 0
                     },
                     "label": "Page 1 Panel 1",
-                    "mimeType": "image/png"
+                    "mimeType": "image/png",
+                    "resourceRef": {
+                      "id": "comic-panel-1",
+                      "scope": "project",
+                      "provider": "fixture",
+                      "kind": "media",
+                      "source": {
+                        "kind": "media-library",
+                        "mediaLibraryId": "comic-panel-1",
+                        "identity": {
+                          "hash": "panel-1-hash"
+                        }
+                      },
+                      "fingerprint": {
+                        "strategy": "hash",
+                        "value": "panel-1-hash"
+                      }
+                    }
+                  }
+                ],
+                "sourceTrace": [
+                  {
+                    "traceId": "comic-panel-1:root",
+                    "sourceProfile": "from-comic",
+                    "sourceRef": {
+                      "id": "comic-panel-1",
+                      "scope": "project",
+                      "provider": "fixture",
+                      "kind": "media",
+                      "source": {
+                        "kind": "media-library",
+                        "mediaLibraryId": "comic-panel-1",
+                        "identity": {
+                          "hash": "panel-1-hash"
+                        }
+                      },
+                      "fingerprint": {
+                        "strategy": "hash",
+                        "value": "panel-1-hash"
+                      }
+                    }
                   }
                 ]
               }
+            ],
+            "sourceTrace": [
+              {
+                "traceId": "comic-panel-1:root",
+                "sourceProfile": "from-comic",
+                "sourceRef": {
+                  "id": "comic-panel-1",
+                  "scope": "project",
+                  "provider": "fixture",
+                  "kind": "media",
+                  "source": {
+                    "kind": "media-library",
+                    "mediaLibraryId": "comic-panel-1",
+                    "identity": {
+                      "hash": "panel-1-hash"
+                    }
+                  },
+                  "fingerprint": {
+                    "strategy": "hash",
+                    "value": "panel-1-hash"
+                  }
+                }
+              }
             ]
           }
-        ]
+        ],
+        "contractVersion": 1,
+        "sourceProfile": "from-comic",
+        "revision": {
+          "revisionId": "storyboard-comic-fixture-v1",
+          "sequence": 1,
+          "contentDigest": "comic-fixture-v1",
+          "createdAt": "2026-07-11T00:00:00.000Z"
+        },
+        "sourceTrace": [
+          {
+            "traceId": "comic-panel-1:root",
+            "sourceProfile": "from-comic",
+            "sourceRef": {
+              "id": "comic-panel-1",
+              "scope": "project",
+              "provider": "fixture",
+              "kind": "media",
+              "source": {
+                "kind": "media-library",
+                "mediaLibraryId": "comic-panel-1",
+                "identity": {
+                  "hash": "panel-1-hash"
+                }
+              },
+              "fingerprint": {
+                "strategy": "hash",
+                "value": "panel-1-hash"
+              }
+            }
+          }
+        ],
+        "projections": []
       }
     },
     {
@@ -219,38 +336,74 @@
             "cellType": "string",
             "required": true
           },
-          { "columnId": "identity", "label": "Identity", "cellType": "string" },
+          {
+            "columnId": "identity",
+            "label": "Identity",
+            "cellType": "string"
+          },
           {
             "columnId": "reviewStatus",
             "label": "Review Status",
             "cellType": "status",
             "required": true
           },
-          { "columnId": "dimensions", "label": "Dimensions", "cellType": "tags" },
-          { "columnId": "traits", "label": "Traits", "cellType": "json" },
-          { "columnId": "source", "label": "Source", "cellType": "json" }
+          {
+            "columnId": "dimensions",
+            "label": "Dimensions",
+            "cellType": "tags"
+          },
+          {
+            "columnId": "traits",
+            "label": "Traits",
+            "cellType": "json"
+          },
+          {
+            "columnId": "source",
+            "label": "Source",
+            "cellType": "json"
+          }
         ],
         "rows": [
           {
             "rowId": "obs-rin-shot-1",
             "status": "needs-review",
             "cells": {
-              "observationId": { "type": "string", "value": "obs-rin-shot-1" },
-              "identity": { "type": "string", "value": "char-rin" },
-              "reviewStatus": { "type": "status", "value": "draft" },
-              "dimensions": { "type": "tags", "value": ["appearance", "outfit", "voice"] },
+              "observationId": {
+                "type": "string",
+                "value": "obs-rin-shot-1"
+              },
+              "identity": {
+                "type": "string",
+                "value": "char-rin"
+              },
+              "reviewStatus": {
+                "type": "status",
+                "value": "draft"
+              },
+              "dimensions": {
+                "type": "tags",
+                "value": ["appearance", "outfit", "voice"]
+              },
               "traits": {
                 "type": "json",
                 "value": {
                   "confidence": 0.82,
                   "traits": [
-                    { "dimension": "appearance", "value": "Short dark hair", "confidence": 0.8 },
+                    {
+                      "dimension": "appearance",
+                      "value": "Short dark hair",
+                      "confidence": 0.8
+                    },
                     {
                       "dimension": "outfit",
                       "value": "Hooded jacket and messenger bag",
                       "confidence": 0.84
                     },
-                    { "dimension": "voice", "value": "Urgent shouted delivery", "confidence": 0.7 }
+                    {
+                      "dimension": "voice",
+                      "value": "Urgent shouted delivery",
+                      "confidence": 0.7
+                    }
                   ]
                 }
               },
@@ -262,7 +415,10 @@
                     "kind": "tool-result",
                     "toolCallId": "read-comic",
                     "assetIndex": 0,
-                    "range": { "shotId": "shot-1", "panelId": "panel-1" }
+                    "range": {
+                      "shotId": "shot-1",
+                      "panelId": "panel-1"
+                    }
                   }
                 }
               }
@@ -356,7 +512,10 @@
             "kind": "tool-result",
             "toolCallId": "read-comic",
             "assetIndex": 0,
-            "range": { "shotId": "shot-1", "panelId": "panel-1" }
+            "range": {
+              "shotId": "shot-1",
+              "panelId": "panel-1"
+            }
           },
           "provenance": {
             "source": "comic",

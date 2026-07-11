@@ -16,6 +16,7 @@ import {
   normalizeStoryboardTable,
   projectStoryboardTableToCutPayload,
   validateStoryboardTable,
+  validateCanonicalStoryboardTable,
 } from '../storyboard-table';
 
 describe('storyboard table contract', () => {
@@ -1344,3 +1345,98 @@ function sourceMediaRef(refId: string) {
     },
   };
 }
+
+describe('canonical storyboard contract', () => {
+  it('requires source profile, stable trace, revision, and revision-bound projections', () => {
+    const resource = {
+      id: 'story-source-1',
+      scope: 'project',
+      provider: 'workspace',
+      kind: 'document',
+      source: { kind: 'file', projectRelativePath: 'story/script.md' },
+      fingerprint: { strategy: 'hash', value: 'sha256:script-v1' },
+    } as const;
+    const table = {
+      schemaVersion: 1,
+      kind: 'storyboard-table',
+      contractVersion: 1,
+      sourceProfile: 'from-script',
+      revision: {
+        revisionId: 'storyboard-revision-1',
+        sequence: 1,
+        contentDigest: 'sha256:storyboard-v1',
+        createdAt: '2026-07-11T00:00:00.000Z',
+      },
+      sourceTrace: [{ traceId: 'trace-1', sourceProfile: 'from-script', sourceRef: resource }],
+      projections: [
+        {
+          target: 'cut',
+          storyboardRevisionId: 'storyboard-revision-1',
+          mode: 'one-way-handoff',
+          createdAt: '2026-07-11T00:00:00.000Z',
+        },
+      ],
+      title: 'Canonical storyboard',
+      scenes: [
+        {
+          sceneId: 'scene-1',
+          sceneTitle: 'Opening',
+          shots: [
+            {
+              shotId: 'shot-1',
+              shotNumber: 1,
+              duration: 2,
+              visualDescription: 'A door opens.',
+              characterAction: 'The hero enters.',
+              imageStrategy: 'generate-new',
+              generationPrompt: 'A cinematic door opens as the hero enters.',
+            },
+          ],
+        },
+      ],
+    } as const;
+
+    expect(validateCanonicalStoryboardTable(table)).toEqual({ ok: true, diagnostics: [] });
+    expect(
+      validateCanonicalStoryboardTable({
+        ...table,
+        projections: [{ ...table.projections[0], storyboardRevisionId: 'old-revision' }],
+      }).diagnostics,
+    ).toEqual([expect.objectContaining({ code: 'invalid-projection-handoff' })]);
+  });
+
+  it('rejects unsupported source profiles and runtime-only source refs', () => {
+    const table = {
+      schemaVersion: 1,
+      kind: 'storyboard-table',
+      contractVersion: 1,
+      sourceProfile: 'from-prompt',
+      revision: {
+        revisionId: 'storyboard-revision-1',
+        sequence: 1,
+        contentDigest: 'sha256:storyboard-v1',
+        createdAt: '2026-07-11T00:00:00.000Z',
+      },
+      sourceTrace: [
+        {
+          traceId: 'trace-1',
+          sourceProfile: 'from-prompt',
+          sourceRef: {
+            id: 'runtime-source',
+            scope: 'project',
+            provider: 'workspace',
+            kind: 'media',
+            source: { kind: 'file', uri: 'vscode-webview://panel/source.png' },
+            fingerprint: { strategy: 'none', value: 'runtime' },
+          },
+        },
+      ],
+      title: 'Invalid canonical storyboard',
+      scenes: [],
+    } as const;
+
+    expect(validateCanonicalStoryboardTable(table).diagnostics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'invalid-source-trace' })]),
+    );
+  });
+});

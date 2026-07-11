@@ -1,5 +1,6 @@
 import type { AgentObservationModality } from './agent-observation';
 import type { DocumentArchiveResourceRef } from './document-reading';
+import type { ResourceRef } from './resource-cache';
 import type { ToolResultArtifactTransfer, ToolResultAttachment } from './tool';
 
 export type PerceptionLayerStatus = 'pending' | 'complete' | 'skipped' | 'failed';
@@ -14,12 +15,14 @@ export type PerceptionLayer = 0 | 1 | 2;
 export interface PerceptualAssetRef {
   readonly assetId: string;
   /**
-   * Stable asset URI. Persist relative paths or ${VAR}/path values only.
-   * Host-specific file://, webview URI, absolute paths, and inline payloads
-   * belong in adapters.
+   * Portable display/load locator used only when no stable reference is present.
+   * Persist relative paths or ${VAR}/path values only.
+   * When a stable resource reference is present, adapters must resolve that reference
+   * instead of interpreting this value as a local file path.
    */
   readonly uri: string;
   readonly mimeType: string;
+  readonly resourceRef?: ResourceRef;
   readonly documentResourceRef?: DocumentArchiveResourceRef;
   readonly label?: string;
   readonly timestampMs?: number;
@@ -107,6 +110,11 @@ export interface PerceiveToolInput {
     readonly language?: string;
     readonly timeRange?: { readonly startMs: number; readonly endMs: number };
     readonly frameDensity?: 'sparse' | 'normal' | 'dense';
+    readonly understandingModels?: {
+      readonly image?: { readonly providerId: string; readonly modelId: string };
+      readonly audio?: { readonly providerId: string; readonly modelId: string };
+      readonly video?: { readonly providerId: string; readonly modelId: string };
+    };
   };
 }
 

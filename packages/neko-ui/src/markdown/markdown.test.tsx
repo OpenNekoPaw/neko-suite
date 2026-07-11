@@ -70,7 +70,7 @@ describe('@neko/ui markdown primitives', () => {
     const result = projectMarkdownForUi({
       value: 'short',
       profile: 'semantic-prompt',
-      semanticSpans: [{ kind: 'scene', range: { start: 0, end: 99 } }],
+      semanticSpans: [{ kind: 'scene', range: { startOffset: 0, endOffset: 99 } }],
     });
 
     expect(result.diagnostics).toContainEqual(
@@ -86,8 +86,8 @@ describe('@neko/ui markdown primitives', () => {
       value: 'Rainy hallway',
       profile: 'semantic-prompt',
       semanticSpans: [
-        { kind: 'scene', range: { start: 0, end: 8 } },
-        { kind: 'camera', range: { start: 6, end: 13 } },
+        { kind: 'scene', range: { startOffset: 0, endOffset: 8 } },
+        { kind: 'camera', range: { startOffset: 6, endOffset: 13 } },
       ],
     });
 
@@ -104,7 +104,7 @@ describe('@neko/ui markdown primitives', () => {
     const result = projectMarkdownForUi({
       value,
       profile: 'semantic-prompt',
-      semanticSpans: [{ kind: 'resource', range: { start: 0, end: value.length } }],
+      semanticSpans: [{ kind: 'resource', range: { startOffset: 0, endOffset: value.length } }],
     });
 
     const tokens = createMarkdownRenderableTokens({
@@ -125,13 +125,15 @@ describe('@neko/ui markdown primitives', () => {
         <>
           <MarkdownInlineText
             value="**bold** and ![[cover]]"
-            semanticSpans={[{ kind: 'scene', range: { start: 0, end: 8 } }]}
+            semanticSpans={[{ kind: 'scene', range: { startOffset: 0, endOffset: 8 } }]}
           />
           <MarkdownDiagnostics
             diagnostics={[
               {
                 severity: 'warning',
                 code: 'missing-resource',
+                phase: 'resolve',
+                parameters: {},
                 message: 'Resource is unresolved.',
                 source: 'caller',
               },

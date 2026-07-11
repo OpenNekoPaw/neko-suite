@@ -76,7 +76,11 @@ export {
   type FieldBindingReadResult,
   type FieldBindingWriteResult,
 } from './fieldBinding';
-export { createStoryboardPayload, applyStoryboardPayloadToCanvas } from './storyboardPlanner';
+export {
+  createStoryboardPayload,
+  projectCanonicalStoryboardToCanvasPayload,
+  applyStoryboardPayloadToCanvas,
+} from './storyboardPlanner';
 export {
   applyCanvasHeadlessAuthoringOperations,
   assertNoRuntimeResourceIdentity,

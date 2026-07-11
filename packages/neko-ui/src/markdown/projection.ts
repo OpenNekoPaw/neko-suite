@@ -18,19 +18,20 @@ export function projectMarkdownForUi({
   semanticSpans = [],
   diagnostics = [],
 }: MarkdownProjectionInput): MarkdownProjectionResult {
-  const options = createProjectionOptions(profile, projectionOptions, semanticSpans);
+  const spanValidation = validateAndFilterSemanticSpans(value, semanticSpans);
+  const options = createProjectionOptions(profile, projectionOptions, spanValidation.spans);
   const projection = projectNekoMarkdownExtensions(value, options);
-  const invalidSpanDiagnostics = validateSemanticSpans(value, semanticSpans);
   return {
     profile,
     projection,
-    semanticSpans,
+    semanticSpans: spanValidation.spans,
     diagnostics: [
-      ...projection.diagnostics.map((diagnostic) => ({
+      ...projection.diagnostics.map((diagnostic): MarkdownUiDiagnostic => ({
         ...diagnostic,
-        source: 'projection' as const,
+        message: formatMarkdownUiDiagnostic(diagnostic),
+        source: 'projection',
       })),
-      ...invalidSpanDiagnostics,
+      ...spanValidation.diagnostics,
       ...diagnostics,
     ],
   };
@@ -65,56 +66,113 @@ export function validateSemanticSpans(
   value: string,
   semanticSpans: readonly MarkdownSemanticSpan[],
 ): readonly MarkdownUiDiagnostic[] {
+  return validateAndFilterSemanticSpans(value, semanticSpans).diagnostics;
+}
+
+function validateAndFilterSemanticSpans(
+  value: string,
+  semanticSpans: readonly MarkdownSemanticSpan[],
+): {
+  readonly spans: readonly MarkdownSemanticSpan[];
+  readonly diagnostics: readonly MarkdownUiDiagnostic[];
+} {
   const diagnostics: MarkdownUiDiagnostic[] = [];
-  const validSpans: MarkdownSemanticSpan[] = [];
+  const inBoundsSpans: MarkdownSemanticSpan[] = [];
 
   for (const span of semanticSpans) {
-    if (!Number.isInteger(span.range.start) || !Number.isInteger(span.range.end)) {
-      diagnostics.push({
-        severity: 'error',
-        code: 'markdown-ui-invalid-span-range',
-        message: 'Semantic span range must use integer offsets.',
-        range: normalizeInvalidRange(value),
-        source: 'editor',
-      });
+    if (!Number.isInteger(span.range.startOffset) || !Number.isInteger(span.range.endOffset)) {
+      diagnostics.push(
+        createEditorDiagnostic(
+          'markdown-ui-invalid-span-range',
+          'Semantic span range must use integer offsets.',
+          normalizeInvalidRange(value),
+        ),
+      );
       continue;
     }
 
     if (
-      span.range.start < 0 ||
-      span.range.end <= span.range.start ||
-      span.range.end > value.length
+      span.range.startOffset < 0 ||
+      span.range.endOffset <= span.range.startOffset ||
+      span.range.endOffset > value.length
     ) {
-      diagnostics.push({
-        severity: 'error',
-        code: 'markdown-ui-invalid-span-range',
-        message: 'Semantic span range is outside the current text.',
-        range: normalizeInvalidRange(value),
-        source: 'editor',
-      });
+      diagnostics.push(
+        createEditorDiagnostic(
+          'markdown-ui-invalid-span-range',
+          'Semantic span range is outside the current text.',
+          normalizeInvalidRange(value),
+        ),
+      );
       continue;
     }
 
-    validSpans.push(span);
+    inBoundsSpans.push(span);
   }
 
+  const spans: MarkdownSemanticSpan[] = [];
   let cursor = 0;
-  for (const span of [...validSpans].sort((left, right) => left.range.start - right.range.start)) {
-    if (span.range.start < cursor) {
-      diagnostics.push({
-        severity: 'error',
-        code: 'markdown-ui-overlapping-span-range',
-        message: 'Semantic span ranges must not overlap.',
-        range: span.range,
-        source: 'editor',
-      });
+  for (const span of [...inBoundsSpans].sort(
+    (left, right) => left.range.startOffset - right.range.startOffset,
+  )) {
+    if (span.range.startOffset < cursor) {
+      diagnostics.push(
+        createEditorDiagnostic(
+          'markdown-ui-overlapping-span-range',
+          'Semantic span ranges must not overlap.',
+          span.range,
+        ),
+      );
+      continue;
     }
-    cursor = Math.max(cursor, span.range.end);
+    spans.push(span);
+    cursor = span.range.endOffset;
   }
 
-  return diagnostics;
+  return { spans, diagnostics };
 }
 
-function normalizeInvalidRange(value: string): { start: number; end: number } {
-  return { start: 0, end: Math.min(value.length, 1) };
+function createEditorDiagnostic(
+  code: string,
+  message: string,
+  range: MarkdownUiDiagnostic['range'],
+): MarkdownUiDiagnostic {
+  return {
+    severity: 'error',
+    code,
+    phase: 'project',
+    parameters: {},
+    message,
+    ...(range ? { range } : {}),
+    source: 'editor',
+  };
+}
+
+function normalizeInvalidRange(value: string): { startOffset: number; endOffset: number } {
+  return { startOffset: 0, endOffset: Math.min(value.length, 1) };
+}
+
+function formatMarkdownUiDiagnostic(
+  diagnostic: import('@neko/markdown').NekoMarkdownDiagnostic,
+): string {
+  const token = String(diagnostic.parameters['token'] ?? '');
+  switch (diagnostic.code) {
+    case 'MD_RESOURCE_REFERENCE_UNSUPPORTED':
+      return 'Markdown resource references are unsupported in this context.';
+    case 'MD_RESOURCE_REFERENCE_AMBIGUOUS':
+      return `Markdown resource reference "${token}" is ambiguous.`;
+    case 'MD_RESOURCE_REFERENCE_MISSING':
+      return `Markdown resource reference "${token}" could not be resolved.`;
+    case 'MD_MENTION_AMBIGUOUS':
+      return `Markdown mention "${token}" is ambiguous.`;
+    case 'MD_MENTION_MISSING':
+      return `Markdown mention "${token}" could not be resolved.`;
+    case 'MD_RAW_HTML_PRESERVED':
+      return 'Raw HTML is preserved as inert Markdown content.';
+    case 'MD_TABLE_ROW_WIDTH_MISMATCH':
+      return 'Markdown table rows have different cell counts.';
+    case 'MD_UNSAFE_DESTINATION':
+      return 'Markdown contains a destination that the host must not activate.';
+    default:
+      return diagnostic.externalDetail?.detail ?? diagnostic.code;
+  }
 }

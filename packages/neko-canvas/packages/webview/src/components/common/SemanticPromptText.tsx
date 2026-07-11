@@ -103,14 +103,16 @@ export function createCanvasMarkdownSemanticSpans(
   let cursor = 0;
   const sorted = spans
     .filter((span) => isValidSpanRange(text, span))
-    .sort((left, right) => left.range.start - right.range.start || left.range.end - right.range.end);
+    .sort(
+      (left, right) => left.range.start - right.range.start || left.range.end - right.range.end,
+    );
 
   for (const span of sorted) {
     if (span.range.start < cursor) continue;
     result.push({
       id: span.id,
       kind: span.kind,
-      range: span.range,
+      range: { startOffset: span.range.start, endOffset: span.range.end },
       fieldId: span.fieldId,
       label: getSemanticPromptSpanKindLabel(span.kind),
       tooltip: formatSemanticPromptSpanTitle(text, span),
@@ -157,7 +159,10 @@ function clampPromptOffset(value: number, textLength: number): number {
   return Math.min(Math.max(Math.trunc(value), 0), textLength);
 }
 
-function getSemanticPromptSpanClassName(kind: string | undefined, variant: 'compact' | 'editor'): string {
+function getSemanticPromptSpanClassName(
+  kind: string | undefined,
+  variant: 'compact' | 'editor',
+): string {
   const base =
     variant === 'editor'
       ? 'rounded-sm border px-0.5 py-[1px] font-medium text-current underline decoration-2 underline-offset-[3px] shadow-sm box-decoration-clone'

@@ -14,6 +14,7 @@ import type { ConfiguredProvider } from './provider';
 import type { ShellExecutionMode } from './settings';
 import type { NpcProfileSource } from '@neko/shared';
 import type { AgentConfigDiagnostic } from './config-diagnostic';
+import type { ModelRef } from './webview-protocol';
 
 // ---------------------------------------------------------------------------
 // Tabs & Conversations
@@ -129,6 +130,10 @@ export interface MediaUnderstandingModelStatus {
 export type MediaUnderstandingModels = Record<
   MediaUnderstandingCategory,
   MediaUnderstandingModelStatus
+>;
+
+export type MediaUnderstandingModelSelections = Partial<
+  Record<MediaUnderstandingCategory, ModelRef<'llm'>>
 >;
 
 // ---------------------------------------------------------------------------

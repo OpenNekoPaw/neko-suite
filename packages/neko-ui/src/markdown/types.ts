@@ -3,15 +3,13 @@ import type {
   NekoMarkdownExtensionProjection,
   NekoMarkdownProjectOptions,
   NekoMarkdownReferenceStatus,
+  NekoMarkdownSourceRange,
 } from '@neko/markdown';
 import type React from 'react';
 
 export type MarkdownEditorProfile = 'plain-markdown' | 'resource-markdown' | 'semantic-prompt';
 
-export interface MarkdownSourceRange {
-  readonly start: number;
-  readonly end: number;
-}
+export type MarkdownSourceRange = NekoMarkdownSourceRange;
 
 export interface MarkdownSemanticSpan {
   readonly id?: string;
@@ -47,6 +45,8 @@ export interface MarkdownRenderableToken {
 export type MarkdownDiagnosticSource = 'projection' | 'caller' | 'editor';
 
 export interface MarkdownUiDiagnostic extends NekoMarkdownDiagnostic {
+  /** Host-owned localized or display-ready message. */
+  readonly message: string;
   readonly source?: MarkdownDiagnosticSource;
 }
 

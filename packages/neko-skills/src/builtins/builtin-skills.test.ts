@@ -6,25 +6,38 @@ import {
   builtinSkills,
   builtinSkillLocales,
   builtinToolGroups,
+  CREATIVE_MEDIA_PROFILES,
+  CREATIVE_MEDIA_WORKFLOW_STAGES,
   comicToStoryboardSkill,
   creationPersonaSkill,
   executionPersonaSkill,
   getBuiltinSkills,
+  getCanonicalCreativeMediaSkills,
   getComicToStoryboardSkill,
   getMediaWorkflowBuiltinSkills,
+  imageSkill,
   iterationPersonaSkill,
+  mediaProductionSkill,
+  mediaQualityReviewSkill,
   mediaToVideoSkill,
   normalizeBuiltinSkillLocale,
   qualityAssessmentSkill,
   scriptGenerationSkill,
+  storyboardSkill,
   validateBuiltinSkillLocaleParity,
+  videoSkill,
 } from './index';
 
 const localizedBuiltinPromptNames = [
   'creation-persona',
   'execution-persona',
   'iteration-persona',
-  'ai-generate',
+  'skill-creator',
+  'storyboard',
+  'image',
+  'video',
+  'media-production',
+  'media-quality-review',
   'scene-to-music',
   'video-editing',
   'color-grading',
@@ -32,30 +45,96 @@ const localizedBuiltinPromptNames = [
   'subtitle-assistant',
   'script-generation',
   'script-to-timeline',
-  'media-to-video',
-  'comic-to-animation',
-  'comic-to-storyboard',
-  'image-to-shot',
-  'storyboard-to-animation-plan',
-  'animation-plan-to-cut',
-  'generated-shot-assembly',
-  'export-video-package',
-  'quality-assessment',
 ];
 
 describe('@neko/skills builtins', () => {
-  it('exports comic storyboard and media workflow skill definitions', () => {
+  it('registers system skill-creator for explicit dollar Skill invocation', () => {
+    const skill = getBuiltinSkills().find((candidate) => candidate.name === 'skill-creator');
+
+    expect(skill).toEqual(
+      expect.objectContaining({
+        name: 'skill-creator',
+        source: 'builtin',
+        enabled: true,
+      }),
+    );
+    expect(skill?.command).toBeUndefined();
+    expect(skill?.content).toContain('Any host-supported authoring path may create');
+    expect(skill?.content).toContain('not mandatory Skill-creation gates');
+    expect(skill?.content).toContain('A root `manifest.json` is not part');
+  });
+
+  it('retains legacy exports while returning only canonical media workflow skills', () => {
     expect(comicToStoryboardSkill.name).toBe('comic-to-storyboard');
     expect(mediaToVideoSkill.name).toBe('media-to-video');
     expect(getMediaWorkflowBuiltinSkills().map((skill) => skill.name)).toEqual([
+      'storyboard',
+      'image',
+      'video',
+      'media-production',
+      'media-quality-review',
+    ]);
+  });
+
+  it('registers canonical creative skills once and keeps profiles and stages out of the peer catalog', () => {
+    const canonicalNames = [
+      'storyboard',
+      'image',
+      'video',
+      'media-production',
+      'media-quality-review',
+    ];
+    const legacyPeerNames = [
+      'ai-generate',
       'media-to-video',
       'comic-to-animation',
+      'comic-to-storyboard',
       'image-to-shot',
       'storyboard-to-animation-plan',
       'animation-plan-to-cut',
       'generated-shot-assembly',
       'export-video-package',
-    ]);
+      'quality-assessment',
+    ];
+    const registeredSkills = getBuiltinSkills();
+    const registeredNames = registeredSkills.map((skill) => skill.name);
+
+    for (const name of canonicalNames) {
+      expect(registeredNames.filter((candidate) => candidate === name)).toHaveLength(1);
+    }
+    for (const name of legacyPeerNames) {
+      expect(registeredNames).not.toContain(name);
+    }
+    expect(getCanonicalCreativeMediaSkills().map((skill) => skill.name)).toEqual(canonicalNames);
+    expect(CREATIVE_MEDIA_PROFILES.map((profile) => profile.id)).toEqual(
+      expect.arrayContaining([
+        'storyboard/from-comic',
+        'media-production/from-comic',
+        'image/outpaint',
+        'video/generate-from-keyframes',
+      ]),
+    );
+    expect(CREATIVE_MEDIA_WORKFLOW_STAGES.map((stage) => stage.id)).toEqual(
+      expect.arrayContaining(['animation-planning', 'generated-shot-assembly', 'preflight-export']),
+    );
+    for (const profile of CREATIVE_MEDIA_PROFILES) {
+      expect(registeredNames).not.toContain(profile.id);
+    }
+    for (const stage of CREATIVE_MEDIA_WORKFLOW_STAGES) {
+      expect(registeredNames).not.toContain(stage.id);
+    }
+    for (const skill of registeredSkills) {
+      expect(skill.command).toBeUndefined();
+      expect(skill.toolDefinitions).toBeUndefined();
+    }
+  });
+
+  it('exposes capability-neutral canonical image guidance without broad quality claims', () => {
+    expect(imageSkill.content).toContain('capability-neutral image operation');
+    expect(imageSkill.content).toContain('Negotiate adapter support');
+    expect(imageSkill.content).toContain(
+      'Do not claim aesthetic, character-consistency, or policy approval without QualityEvidence',
+    );
   });
 
   it('keeps localized builtin skill content in the skills package', () => {
@@ -72,9 +151,9 @@ describe('@neko/skills builtins', () => {
     expect(zhCnSkills.find((skill) => skill.name === 'video-editing')?.description).toContain(
       '剪切',
     );
-    expect(zhCnSkills.find((skill) => skill.name === 'ai-generate')?.description).toContain('图片');
-    expect(zhCnSkills.find((skill) => skill.name === 'comic-to-storyboard')?.description).toContain(
-      '分镜',
+    expect(zhCnSkills.find((skill) => skill.name === 'image')?.description).toContain('图片');
+    expect(zhCnSkills.find((skill) => skill.name === 'storyboard')?.description).toContain(
+      'canonical Storyboard',
     );
     expect(zhCnSkills.find((skill) => skill.name === 'video-editing')?.description).not.toContain(
       'Video editing assistant',
@@ -87,7 +166,9 @@ describe('@neko/skills builtins', () => {
 
     expect(english).toContain('runtime content/perception capability guidance');
     expect(english).toContain('current visual evidence path');
-    expect(english).toContain('Metadata, perception cards, thumbnails, filenames, dimensions, and page labels alone are not visual evidence.');
+    expect(english).toContain(
+      'Metadata, perception cards, thumbnails, filenames, dimensions, and page labels alone are not visual evidence.',
+    );
     expect(english).toContain('do not output any Markdown table');
     expect(english).not.toContain('ReadDocument');
     expect(english).not.toContain('ReadImage');
@@ -136,9 +217,7 @@ describe('@neko/skills builtins', () => {
     );
     expect(english).toContain('For long scenes or intents over 10 seconds');
     expect(english).toContain('Operation-specific prompt intent:');
-    expect(english).toContain(
-      '`generate-video`: write a complete scene video generation prompt',
-    );
+    expect(english).toContain('`generate-video`: write a complete scene video generation prompt');
     expect(english).toContain(
       '`edit-video`: write what to preserve, what to modify, and how scene, character, action, dialogue, camera, background, effects, or audio should change.',
     );
@@ -206,7 +285,9 @@ describe('@neko/skills builtins', () => {
     expect(english).toContain(
       'The first storyboard draft must be visible as an assistant Markdown block before any Canvas handoff is attempted.',
     );
-    expect(english).toContain('If no visible assistant Markdown block or UI handoff source exists yet');
+    expect(english).toContain(
+      'If no visible assistant Markdown block or UI handoff source exists yet',
+    );
     expect(english).toContain('Canvas authoring lifecycle capability');
     expect(english).toContain('runtime Canvas capability context');
     expect(english).toContain('The Canvas package owns concrete operations');
@@ -227,29 +308,6 @@ describe('@neko/skills builtins', () => {
     expect(zhCn).toContain('不要把 review-only 表格/草稿路径替代为生产分镜交付');
     expect(zhCn).not.toContain('canvas.createStoryboardFromMarkdown');
     expect(zhCn).not.toContain('canvas.ingestMarkdown');
-  });
-
-  it('keeps image-to-shot prompt guidance aligned with storyboard prompt style', () => {
-    const english = getBuiltinSkills().find((skill) => skill.name === 'image-to-shot')?.content;
-    const zhCn = getBuiltinSkills({ locale: 'zh-CN' }).find(
-      (skill) => skill.name === 'image-to-shot',
-    )?.content;
-
-    expect(english).toContain('Resource references must state their purpose.');
-    expect(english).toContain('scene intent / reference resource roles');
-    expect(english).toContain(
-      'Prefer time-coded beats for long scenes or intents over 10 seconds.',
-    );
-    expect(english).toContain('Every non-empty prompt must answer');
-    expect(english).toContain('Do not add a status column by default.');
-    expect(english).not.toContain('reviewStatus');
-
-    expect(zhCn).toContain('资源引用必须说明用途。');
-    expect(zhCn).toContain('场景意图 / 参考资源用途');
-    expect(zhCn).toContain('长 scene 或 10 秒以上意图优先分时段描述。');
-    expect(zhCn).toContain('每个非空提示词都必须能回答');
-    expect(zhCn).toContain('默认不要添加状态列。');
-    expect(zhCn).not.toContain('reviewStatus');
   });
 
   it('keeps generic Markdown and Canvas authoring details out of storyboard domain skills', () => {
@@ -341,6 +399,11 @@ describe('@neko/skills builtins', () => {
     );
     expect(scriptGenerationSkill.name).toBe('script-generation');
     expect(qualityAssessmentSkill.name).toBe('quality-assessment');
+    expect(storyboardSkill.name).toBe('storyboard');
+    expect(imageSkill.name).toBe('image');
+    expect(videoSkill.name).toBe('video');
+    expect(mediaProductionSkill.name).toBe('media-production');
+    expect(mediaQualityReviewSkill.name).toBe('media-quality-review');
     expect(creationPersonaSkill.name).toBe('creation-persona');
     expect(executionPersonaSkill.name).toBe('execution-persona');
     expect(iterationPersonaSkill.name).toBe('iteration-persona');
@@ -350,8 +413,7 @@ describe('@neko/skills builtins', () => {
       builtinSkills.map((skill) => skill.name),
     );
     expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'comic-to-storyboard')
-        ?.content,
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'storyboard')?.content,
     ).toContain('分镜');
     expect(
       getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'script-generation')
@@ -394,36 +456,37 @@ describe('@neko/skills builtins', () => {
         ?.content,
     ).not.toContain('Video Editing Assistant');
     expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')?.content,
-    ).toContain('AI 媒体生成');
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'image')?.content,
+    ).toContain('capability-neutral 图片操作');
     expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')?.content,
-    ).not.toContain('AI Media Generation');
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'image')?.content,
+    ).not.toContain('# Image');
     expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')?.content,
-    ).toContain('保留用户当前语言中的创意表达');
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'image')?.content,
+    ).toContain('协商 adapter 支持等级');
     expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'ai-generate')?.content,
-    ).not.toContain('[Subject] + [Style] + [Details] + [Atmosphere] + [Technical]');
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'image')?.content,
+    ).not.toContain('GenerateImage');
     expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'quality-assessment')
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'media-quality-review')
         ?.content,
-    ).toContain('媒体质量检查助手');
+    ).toContain('媒体质量审查');
     expect(
-      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'quality-assessment')
+      getBuiltinSkills({ locale: 'zh-CN' }).find((skill) => skill.name === 'media-quality-review')
         ?.content,
-    ).not.toContain('Media Quality Assessment Assistant');
+    ).not.toContain('# Media Quality Review');
   });
 
-  it('owns builtin skill catalog display localization metadata', () => {
-    expect(builtinSkillLocales['comic-to-storyboard']?.['zh-cn']).toEqual(
+  it('owns canonical builtin skill catalog display localization metadata', () => {
+    expect(builtinSkillLocales.storyboard?.['zh-cn']).toEqual(
       expect.objectContaining({
-        name: '漫画转分镜表',
-        description: expect.stringContaining('结构化分镜表'),
-        tags: expect.arrayContaining(['AI', '漫画', '分镜']),
+        name: '分镜',
+        description: expect.stringContaining('canonical Storyboard'),
+        tags: expect.arrayContaining(['分镜', '镜头', '来源归一化']),
       }),
     );
-    expect(builtinSkillLocales['media-to-video']?.['zh-cn']?.name).toBe('媒体转视频');
+    expect(builtinSkillLocales['media-production']?.['zh-cn']?.name).toBe('媒体制作');
+    expect(builtinSkillLocales['media-quality-review']?.['zh-cn']?.name).toBe('媒体质量审查');
     expect(builtinSkillLocales['creation-persona']?.['zh-cn']?.description).toContain('共创伙伴');
   });
 

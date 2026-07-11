@@ -50,7 +50,12 @@ import { useCanvasStore } from '../../stores/canvasStore';
 import { useClipboardStore } from '../../stores/clipboardStore';
 import { useHistoryStore } from '../../stores/historyStore';
 import { getGlobalVSCodeApi } from '../../utils/vscode';
-import type { CardActionDescriptor, CardBadge, CardPreviewSource } from './node-card';
+import type {
+  CardActionDescriptor,
+  CardBadge,
+  CardPreviewAspectRatio,
+  CardPreviewSource,
+} from './node-card';
 import type { NodeCardVariant } from './node-card';
 import { t } from '../../i18n';
 import { resolveCanvasStatusLabel } from '../../i18n/canvasValueLabels';
@@ -248,6 +253,7 @@ function renderChildSlotContent({
         <SceneShotRail
           parentNode={parentNode}
           childNodes={childNodes}
+          rows={projectSceneShotTableRows(parentNode, childNodes)}
           context={context}
           slotLayout={slotLayout}
         />
@@ -598,6 +604,10 @@ function SceneShotReviewSurface({
     [childNodes, parentNode],
   );
   const scenePromptState = useMemo(() => readSceneStoryboardPromptState(parentNode), [parentNode]);
+  const sceneSummary = useMemo(
+    () => createSceneReviewSummary(parentNode, rows),
+    [parentNode, rows],
+  );
   const activeColumns = useMemo(
     () => resolveSceneShotTableColumns(columnProfileId),
     [columnProfileId],
@@ -635,6 +645,7 @@ function SceneShotReviewSurface({
       data-scene-review-surface="true"
       data-scene-view-mode={viewMode}
     >
+      <SceneReviewHeader summary={sceneSummary} promptState={scenePromptState} />
       <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-2 text-[11px] text-gray-600">
         <div
           className="flex flex-shrink-0 overflow-hidden rounded border border-gray-200 bg-white"
@@ -753,46 +764,89 @@ function SceneShotReviewSurface({
         <SceneShotRail
           parentNode={parentNode}
           childNodes={childNodes}
+          rows={rows}
           context={context}
           slotLayout={slotLayout}
         />
       ) : (
-        <>
-          <SceneVideoPromptSummary promptState={scenePromptState} />
-          <SceneShotTable
-            parentNode={parentNode}
-            rows={visibleRows}
-            columns={activeColumns}
-            context={context}
-          />
-        </>
+        <SceneShotTable
+          parentNode={parentNode}
+          rows={visibleRows}
+          columns={activeColumns}
+          context={context}
+        />
       )}
     </div>
   );
 }
 
-function SceneVideoPromptSummary({
+interface SceneReviewSummary {
+  readonly title: string;
+  readonly metaLine: string;
+  readonly metrics: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly value: string;
+  }[];
+}
+
+function SceneReviewHeader({
+  summary,
   promptState,
 }: {
+  summary: SceneReviewSummary;
   promptState?: CanvasStoryboardPromptState;
 }): React.ReactNode {
   const document = promptState?.promptBlocks?.videoPromptDocument;
-  if (!document?.text) return null;
   return (
     <section
-      className="mx-2 min-w-0 rounded border border-gray-200 bg-white px-2 py-1.5 text-[11px] text-gray-700"
-      data-scene-video-prompt-summary="true"
+      className="mx-2 min-w-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-700 shadow-sm"
+      data-scene-review-header="true"
     >
-      <div className="mb-1 text-[10px] font-medium uppercase tracking-normal text-gray-500">
-        {t('scene.column.videoPrompt')}
+      <div className="mb-2 flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div
+            className="truncate text-[12px] font-semibold text-slate-900"
+            data-scene-review-title="true"
+          >
+            {summary.title}
+          </div>
+          {summary.metaLine ? (
+            <div
+              className="mt-0.5 truncate text-[10px] text-slate-500"
+              data-scene-review-meta="true"
+            >
+              {summary.metaLine}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex min-w-0 flex-wrap justify-end gap-1" data-scene-review-metrics="true">
+          {summary.metrics.map((metric) => (
+            <span
+              key={metric.id}
+              className="inline-flex max-w-full items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] leading-none text-slate-600"
+              data-scene-review-metric={metric.id}
+              title={`${metric.label}: ${metric.value}`}
+            >
+              <span className="text-slate-400">{metric.label}</span>
+              <span className="truncate font-medium text-slate-700">{metric.value}</span>
+            </span>
+          ))}
+        </div>
       </div>
-      <SemanticPromptText
-        text={document.text}
-        spans={document.spans}
-        ariaLabel={t('scene.column.videoPrompt')}
-        className="line-clamp-3 min-w-0 whitespace-pre-wrap break-words text-[11px] leading-[1.35] text-gray-700"
-        placeholderClassName="text-gray-400"
-      />
+      <div data-scene-video-prompt-summary="true">
+        <div className="mb-1 text-[10px] font-medium uppercase tracking-normal text-slate-500">
+          {t('scene.column.videoPrompt')}
+        </div>
+        <SemanticPromptText
+          text={document?.text ?? ''}
+          spans={document?.spans}
+          placeholder={t('scene.valueUnavailable')}
+          ariaLabel={t('scene.column.videoPrompt')}
+          className="line-clamp-3 min-w-0 whitespace-pre-wrap break-words rounded border border-slate-200 bg-slate-50/70 px-2 py-1.5 text-[11px] leading-[1.45] text-slate-700"
+          placeholderClassName="text-slate-400"
+        />
+      </div>
     </section>
   );
 }
@@ -960,9 +1014,7 @@ function renderSceneShotTableCell(
         </button>
       );
     case 'reference-media':
-      return (
-        <SceneReferenceMediaCell row={row} />
-      );
+      return <SceneReferenceMediaCell row={row} />;
     case 'image-prompt':
       return (
         <ScenePromptCellText
@@ -1172,6 +1224,113 @@ function BoundedSceneCellText({
       {value || <span className="text-gray-400">{placeholder}</span>}
     </div>
   );
+}
+
+function SceneShotCardParam({ label, value }: { label: string; value: string }): React.ReactNode {
+  if (!value) return null;
+  return (
+    <span
+      className="inline-flex max-w-full items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] leading-none text-slate-600"
+      title={`${label}: ${value}`}
+    >
+      <span className="text-slate-400">{label}</span>
+      <span className="truncate">{value}</span>
+    </span>
+  );
+}
+
+function createSceneReviewSummary(
+  sceneNode: CanvasNode,
+  rows: readonly SceneShotTableRow[],
+): SceneReviewSummary {
+  const data = readRecordValue(sceneNode.data);
+  const title = formatSceneReviewTitle(data);
+  const metaLine = [readString(data, 'location'), readString(data, 'timeOfDay')]
+    .filter((value): value is string => Boolean(value))
+    .join(' · ');
+  const totalSeconds = rows.reduce((total, row) => total + readSceneRowSeconds(row.duration), 0);
+  const metrics = [
+    {
+      id: 'shots',
+      label: t('scene.metricShots'),
+      value: t('scene.shotCountCompact', { count: rows.length }),
+    },
+    {
+      id: 'duration',
+      label: t('scene.metricTotalDuration'),
+      value:
+        totalSeconds > 0
+          ? t('scene.totalDuration', { seconds: formatDurationValue(totalSeconds) })
+          : t('scene.valueUnavailable'),
+    },
+    {
+      id: 'resolution',
+      label: t('scene.metricResolution'),
+      value: resolveSceneResolutionLabel(data),
+    },
+    {
+      id: 'model',
+      label: t('scene.metricModel'),
+      value:
+        readString(data, 'modelName') ?? readString(data, 'modelId') ?? t('scene.valueUnavailable'),
+    },
+    {
+      id: 'status',
+      label: t('scene.metricStatus'),
+      value: resolveSceneStatusSummary(rows),
+    },
+  ];
+  return { title, metaLine, metrics };
+}
+
+function formatSceneReviewTitle(data: Record<string, unknown>): string {
+  const sceneNumber = readNumber(data, 'sceneNumber');
+  const title = readString(data, 'sceneTitle');
+  if (sceneNumber !== undefined && title)
+    return `${t('preset.scene.number')} ${sceneNumber} · ${title}`;
+  if (sceneNumber !== undefined) return `${t('preset.scene.number')} ${sceneNumber}`;
+  return title ?? t('node.sceneGroup');
+}
+
+function resolveSceneResolutionLabel(data: Record<string, unknown>): string {
+  const resolution = readString(data, 'resolution');
+  if (resolution) return resolution;
+  const width = readNumber(data, 'width') ?? readNumber(data, 'videoWidth');
+  const height = readNumber(data, 'height') ?? readNumber(data, 'videoHeight');
+  if (width !== undefined && height !== undefined) return `${width}x${height}`;
+  return readString(data, 'aspectRatio') ?? t('scene.valueUnavailable');
+}
+
+function resolveSceneStatusSummary(rows: readonly SceneShotTableRow[]): string {
+  if (rows.length === 0) return t('scene.valueUnavailable');
+  const blockedCount = rows.filter(
+    (row) => row.stateSeverity === 'blocked' || row.stateSeverity === 'error',
+  ).length;
+  if (blockedCount > 0) return t('scene.statusBlockedCount', { count: blockedCount });
+  const pendingCount = rows.filter((row) => row.nextActionId).length;
+  if (pendingCount > 0) return t('scene.statusPendingCount', { count: pendingCount });
+  return t('scene.statusReady');
+}
+
+function readSceneRowSeconds(value: string): number {
+  const match = value.match(/(\d+(?:\.\d+)?)/u);
+  return match ? Number(match[1]) : 0;
+}
+
+function formatDurationValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function resolvePreviewAspectRatio(
+  previewSource: CardPreviewSource,
+): CardPreviewAspectRatio | 'none' {
+  if (
+    previewSource.renderForm === 'asset-thumbnail' ||
+    previewSource.renderForm === 'media-poster'
+  ) {
+    return previewSource.aspectRatio;
+  }
+  return 'none';
 }
 
 function GroupChildSummaryCard({
@@ -1479,15 +1638,18 @@ function GalleryChildCard({
 function SceneShotRail({
   parentNode,
   childNodes,
+  rows,
   context,
   slotLayout,
 }: {
   parentNode: CanvasNode;
   childNodes: readonly CanvasNode[];
+  rows: readonly SceneShotTableRow[];
   context: ContainerRendererProps['context'];
   slotLayout: ChildSlotLayout;
 }): React.ReactNode {
   const shotNodes = childNodes.filter((child) => child.type === 'shot');
+  const rowByNodeId = useMemo(() => new Map(rows.map((row) => [row.node.id, row])), [rows]);
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
@@ -1510,6 +1672,7 @@ function SceneShotRail({
               key={childNode.id}
               parentNode={parentNode}
               childNode={childNode}
+              row={rowByNodeId.get(childNode.id)}
               index={index}
               context={context}
               style={slotLayout.cardStyle}
@@ -1524,12 +1687,14 @@ function SceneShotRail({
 function SceneShotRailCard({
   parentNode,
   childNode,
+  row,
   index,
   context,
   style,
 }: {
   parentNode: CanvasNode;
   childNode: CanvasNode;
+  row?: SceneShotTableRow;
   index: number;
   context: ContainerRendererProps['context'];
   style?: React.CSSProperties;
@@ -1538,7 +1703,9 @@ function SceneShotRailCard({
   const previewSource = policy.resolvePreviewSource(childNode);
   const title = policy.resolveTitle(childNode, parentNode);
   const subtitle =
-    policy.resolveSubtitle?.(childNode) ?? readString(childNode.data, 'visualDescription');
+    row?.imagePrompt ||
+    policy.resolveSubtitle?.(childNode) ||
+    readString(childNode.data, 'visualDescription');
   const badges = policy.resolveBadges?.(childNode) ?? [];
   const actions = policy.resolveActions?.(childNode, parentNode) ?? [];
   const visibleActions = actions.filter((action) =>
@@ -1552,6 +1719,14 @@ function SceneShotRailCard({
   const isSelected = context.selectedNodeIds.includes(childNode.id);
   const isPlaybackActive = useCanvasStore((state) => state.activePlayingNodeId === childNode.id);
   const duration = readNumber(childNode.data, 'duration');
+  const stateLabel = row ? formatSceneShotStateLabel(row.stateId, row.state) : undefined;
+  const stateTone = row
+    ? row.stateSeverity === 'blocked' || row.stateSeverity === 'error'
+      ? 'error'
+      : row.stateSeverity === 'warning' || row.diagnosticCount > 0
+        ? 'warning'
+        : 'neutral'
+    : undefined;
 
   const handleSelect = useCallback(
     (event: React.MouseEvent) => {
@@ -1622,24 +1797,45 @@ function SceneShotRailCard({
           <span className={getChildBadgeClassName(badges[0].tone)}>{badges[0].label}</span>
         ) : null}
       </div>
-      <div className="flex min-h-0 flex-1 gap-2 px-2 py-2">
-        <div className="w-[96px] flex-shrink-0">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 px-2 py-2">
+        <div
+          className="flex h-[210px] min-w-0 items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50 [&_img]:max-h-[210px] [&_img]:max-w-full"
+          data-scene-shot-card-preview="true"
+          data-scene-shot-card-preview-aspect={resolvePreviewAspectRatio(previewSource)}
+        >
           <CardPreviewSlot
             source={previewSource}
             title={title}
             variant="summary-large"
+            imageFit="contain"
             interactionRenderMode={context.interactionRenderMode}
           />
         </div>
-        <div className="flex min-w-0 flex-1 flex-col text-left">
-          <div className="line-clamp-3 min-h-[44px] text-[10px] leading-4 text-gray-600">
+        <div className="flex min-w-0 flex-1 flex-col gap-1 text-left">
+          <div
+            className="line-clamp-3 min-h-[42px] text-[10px] leading-4 text-slate-700"
+            data-scene-shot-card-prompt="true"
+          >
             {subtitle || t('scene.shotVisualFallback')}
           </div>
-          {duration !== undefined ? (
-            <div className="mt-1 text-[10px] leading-none text-gray-400">
-              {t('scene.shotDuration', { seconds: duration })}
-            </div>
-          ) : null}
+          <div className="flex min-w-0 flex-wrap gap-1" data-scene-shot-card-params="true">
+            <SceneShotCardParam
+              label={t('scene.column.duration')}
+              value={
+                row?.duration ||
+                (duration !== undefined ? t('scene.shotDuration', { seconds: duration }) : '')
+              }
+            />
+            {stateLabel && stateTone ? (
+              <span
+                className={getSceneStatusBadgeClassName(stateTone)}
+                data-scene-shot-card-status="true"
+              >
+                {stateLabel}
+              </span>
+            ) : null}
+            <SceneShotCardParam label={t('scene.column.mediaRefs')} value={row?.mediaRefs ?? ''} />
+          </div>
         </div>
       </div>
       <div className="flex min-w-0 items-center gap-1 border-t border-gray-100 px-2 py-1.5">
@@ -1918,7 +2114,7 @@ function getChildDetailCardClassName(variant: NodeCardVariant, isPlaybackActive 
 
 function getSceneShotRailCardClassName(isSelected: boolean, isPlaybackActive = false): string {
   const base =
-    'flex w-[260px] flex-shrink-0 cursor-pointer flex-col overflow-hidden rounded border bg-white text-left shadow-sm outline-none transition-colors focus:border-[var(--node-selected)] focus:ring-1 focus:ring-[var(--node-selected)]';
+    'flex w-[320px] flex-shrink-0 cursor-pointer flex-col overflow-hidden rounded border bg-white text-left shadow-sm outline-none transition-colors focus:border-[var(--node-selected)] focus:ring-1 focus:ring-[var(--node-selected)]';
   return isSelected || isPlaybackActive
     ? `${base} border-[var(--node-selected)] ring-1 ring-[var(--node-selected)]`
     : `${base} border-gray-200 hover:border-blue-300`;
@@ -2048,10 +2244,7 @@ function listPromptDocumentRefsForAction(
     : undefined;
   const refs = [
     promptDocumentRef('image', shotState?.promptBlocks?.imagePromptDocument),
-    promptDocumentRef(
-      'video',
-      shotState?.promptBlocks?.videoPromptDocument ?? sceneVideoDocument,
-    ),
+    promptDocumentRef('video', shotState?.promptBlocks?.videoPromptDocument ?? sceneVideoDocument),
     promptDocumentRef('voice', shotState?.promptBlocks?.voicePromptDocument),
   ].filter((ref): ref is NonNullable<typeof ref> => Boolean(ref));
   if (refs.length === 0) {

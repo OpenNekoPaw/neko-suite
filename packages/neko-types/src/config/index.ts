@@ -36,6 +36,11 @@ export type {
   MarketConfig,
 } from './types';
 
+export type {
+  ExternalResearchConfig,
+  ExternalResearchConfigInput,
+} from '../types/external-research';
+
 export {
   DEFAULT_CONFIG,
   DEFAULT_EXTENSION_CONFIG,
@@ -54,6 +59,10 @@ export type {
   TomlMediaEndpoints,
   TomlModelConfig,
   TomlMcpServerConfig,
+  TomlExternalResearchConfig,
+  TomlExternalResearchMcpProviderConfig,
+  TomlExternalResearchMcpSearchToolBinding,
+  TomlExternalResearchMcpFetchToolBinding,
   TomlConfigValidationIssue,
 } from './toml-config';
 

@@ -73,6 +73,7 @@ export * from './message';
 // Configuration
 export * from './config';
 export * from './agent-ai-source';
+export * from './external-research';
 
 // AI Actions
 export * from './aiAction';
@@ -128,6 +129,7 @@ export * from './memory';
 
 // Skill types (Claude-compatible skills and slash commands)
 export * from './skill';
+export * from './portable-skill';
 
 // Skill lifecycle types (activation records and request-time projection)
 export * from './skill-lifecycle';
@@ -404,3 +406,7 @@ export * from './creative-entity-graph';
 
 // Creative entity asset composition contracts
 export * from './creative-entity-asset-composition';
+
+export * from './durable-resource-ref';
+export * from './creative-media-operations';
+export * from './media-quality';

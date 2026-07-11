@@ -1,48 +1,34 @@
 /**
  * Builtin Skills - Creative Media Domain
  *
- * Skills with a `command` field are also registered as slash commands.
+ * Ordinary builtin Skills are activated explicitly through $skill or Agent activation.
  */
 
 import type { Skill } from '@neko/shared';
 import { TOOL_NAMES_TIMELINE, TOOL_NAMES_MEDIA, TOOL_NAMES_SYSTEM } from '@neko/shared';
-import { aiGenerateSkill, aiGenerateToolDefinitions } from './ai-generate';
-import {
-  animationPlanToCutSkill,
-  comicToAnimationSkill,
-  exportVideoPackageSkill,
-  getAnimationPlanToCutSkill,
-  getComicToAnimationSkill,
-  getExportVideoPackageSkill,
-  getGeneratedShotAssemblySkill,
-  getImageToShotSkill,
-  getMediaToVideoSkill,
-  getStoryboardToAnimationPlanSkill,
-  generatedShotAssemblySkill,
-  imageToShotSkill,
-  mediaToVideoSkill,
-  storyboardToAnimationPlanSkill,
-} from './media-to-video';
-import { comicToStoryboardSkill, getComicToStoryboardSkill } from './comic-to-storyboard';
+import { aiGenerateSkill } from './ai-generate';
+
 import { getScriptGenerationSkill, scriptGenerationSkill } from './script-generation';
 import { qualityAssessmentSkill } from './quality-assessment';
+import {
+  getCanonicalCreativeMediaSkills,
+  imageSkill,
+  mediaProductionSkill,
+  mediaQualityReviewSkill,
+  storyboardSkill,
+  videoSkill,
+} from './creative-media';
 import { creationPersonaSkill, getCreationPersonaSkill } from './creation-persona';
 import { executionPersonaSkill, getExecutionPersonaSkill } from './execution-persona';
 import { getIterationPersonaSkill, iterationPersonaSkill } from './iteration-persona';
-import type {
-  BuiltinSkillLocale,
-  BuiltinSkillOptions,
-  LocalizedBuiltinSkillContent,
-} from './builtin-skill-content';
-import {
-  localizeBuiltinSkill,
-  normalizeBuiltinSkillLocale,
-  selectBuiltinSkillContent,
-} from './builtin-skill-content';
+import { getSkillCreatorSkill, skillCreatorSkill } from './skill-creator';
+import type { BuiltinSkillOptions, LocalizedBuiltinSkillContent } from './builtin-skill-content';
+import { localizeBuiltinSkill } from './builtin-skill-content';
 import { localizeBuiltinSkillCatalogText } from './builtin-skill-locales';
 
 // Re-export ai-generate for external use
-export { aiGenerateSkill, aiGenerateToolDefinitions };
+export { aiGenerateSkill };
+export { aiGenerateToolDefinitions } from './ai-generate';
 
 // Re-export package-owned creative workflow skills
 export {
@@ -67,16 +53,28 @@ export {
   normalizeBuiltinSkillLocale,
   selectBuiltinSkillContent,
   type BuiltinSkillLocale,
-  type BuiltinSkillOptions,
-  type LocalizedBuiltinSkillContent,
 } from './builtin-skill-content';
+export type { BuiltinSkillOptions, LocalizedBuiltinSkillContent };
 export { getScriptGenerationSkill, scriptGenerationSkill } from './script-generation';
 export { qualityAssessmentSkill } from './quality-assessment';
+export {
+  CREATIVE_MEDIA_PROFILES,
+  CREATIVE_MEDIA_WORKFLOW_STAGES,
+  getCanonicalCreativeMediaSkills,
+  imageSkill,
+  mediaProductionSkill,
+  mediaQualityReviewSkill,
+  storyboardSkill,
+  videoSkill,
+  type CreativeMediaProfileDescriptor,
+  type CreativeMediaWorkflowStageDescriptor,
+} from './creative-media';
 
 // Creation stage persona skills (docs/architecture/agent-unified-workflow.md §4)
 export { creationPersonaSkill, getCreationPersonaSkill } from './creation-persona';
 export { executionPersonaSkill, getExecutionPersonaSkill } from './execution-persona';
 export { getIterationPersonaSkill, iterationPersonaSkill } from './iteration-persona';
+export { getSkillCreatorSkill, skillCreatorSkill } from './skill-creator';
 
 // =============================================================================
 // Creative Skills (Semantic Discovery)
@@ -95,6 +93,10 @@ export const videoEditingSkill: Skill = {
 
 You are an expert video editor. Help users with timeline-based editing tasks.
 
+## Boundary
+
+Plan edits in timeline terms and delegate durable project mutation, revision creation, validation, and persistence to the owning Cut capability. Do not duplicate package-specific command sequences, payload schemas, or project internals in this Skill.
+
 ## Core Operations
 
 | Task | Description |
@@ -110,7 +112,7 @@ You are an expert video editor. Help users with timeline-based editing tasks.
 1. **Preserve quality** - Work with original resolution when possible
 2. **Smooth transitions** - 0.5-1s duration for most transitions
 3. **Audio sync** - Always check audio alignment after cuts
-4. **Save often** - Recommend auto-save intervals
+4. **Revision safety** - Treat accepted edits as a new project revision and recheck affected quality evidence
 
 ## Common Workflows
 
@@ -160,6 +162,7 @@ You are an expert video editor. Help users with timeline-based editing tasks.
   enabled: true,
   domain: 'cut',
   mediaWorkflow: {
+    referencedCapabilities: ['cut.timeline-authoring'],
     useCases: [
       'Edit video timeline clips with cuts, trims, transitions, timing, and track operations',
       'Adjust an existing Cut timeline or video edit after the user requests timeline changes',
@@ -605,9 +608,6 @@ Report what was planned, generated, or placed based on capability results. Do no
   icon: '🎵',
   source: 'builtin',
   enabled: true,
-  command: 'scene-to-music',
-  argumentHint: '[mood or style hint]',
-  supportsArguments: true,
   domain: 'audio',
   mediaWorkflow: {
     useCases: [
@@ -765,6 +765,10 @@ const localizedVideoEditingContent: LocalizedBuiltinSkillContent = {
 
 你是专业视频剪辑师。帮助用户完成基于时间线的剪辑任务。
 
+## 边界
+
+使用时间线语义规划剪辑，并把持久项目修改、修订创建、验证和保存交给 owning Cut capability。不要在本 Skill 中复制子包专属命令序列、payload schema 或项目内部结构。
+
 ## Core Operations
 
 | Task | Description |
@@ -780,7 +784,7 @@ const localizedVideoEditingContent: LocalizedBuiltinSkillContent = {
 1. **保留质量** - 尽可能使用原始分辨率
 2. **平滑转场** - 大多数转场使用 0.5-1s
 3. **音频同步** - 每次剪切后检查音频对齐
-4. **经常保存** - 建议设置自动保存间隔
+4. **修订安全** - 已接受的剪辑应形成新项目修订，并重新检查受影响的质量证据
 
 ## Common Workflows
 
@@ -1109,66 +1113,43 @@ export function getQualityAssessmentSkill(locale?: string): Skill {
 /**
  * All builtin skills (semantic discovery)
  *
- * Creative media skills only. System operation skills (file-operations, git, shell)
- * have been removed as they are too generic.
+ * System guidance and creative media skills. Generic system operation skills
+ * (file-operations, git, shell) remain excluded because they are host capabilities,
+ * not reusable domain guidance.
  */
 export const builtinSkills: Skill[] = [
-  // Creation stage personas (Specify / Implement / Iteration)
   creationPersonaSkill,
   executionPersonaSkill,
   iterationPersonaSkill,
-  // AI Generation
-  aiGenerateSkill,
+  skillCreatorSkill,
+  storyboardSkill,
+  imageSkill,
+  videoSkill,
+  mediaProductionSkill,
+  mediaQualityReviewSkill,
   sceneToMusicSkill,
-  // Video Editing
   videoEditingSkill,
   colorGradingSkill,
   audioMixingSkill,
   subtitleSkill,
-  // Script Creation
   scriptGenerationSkill,
   scriptToTimelineSkill,
-  // Multi-modal adaptation
-  mediaToVideoSkill,
-  comicToAnimationSkill,
-  comicToStoryboardSkill,
-  imageToShotSkill,
-  storyboardToAnimationPlanSkill,
-  animationPlanToCutSkill,
-  generatedShotAssemblySkill,
-  exportVideoPackageSkill,
-  // Quality Assessment
-  qualityAssessmentSkill,
 ];
 
 export function getBuiltinSkills(options: BuiltinSkillOptions = {}): Skill[] {
   const skills = [
-    // Creation stage personas (Specify / Implement / Iteration)
     getCreationPersonaSkill(options.locale),
     getExecutionPersonaSkill(options.locale),
     getIterationPersonaSkill(options.locale),
-    // AI Generation
-    getAiGenerateSkill(options.locale),
+    getSkillCreatorSkill(options.locale),
+    ...getCanonicalCreativeMediaSkills(options.locale),
     getSceneToMusicSkill(options.locale),
-    // Video Editing
     getVideoEditingSkill(options.locale),
     getColorGradingSkill(options.locale),
     getAudioMixingSkill(options.locale),
     getSubtitleSkill(options.locale),
-    // Script Creation
     getScriptGenerationSkill(options.locale),
     getScriptToTimelineSkill(options.locale),
-    // Multi-modal adaptation
-    getMediaToVideoSkill(options.locale),
-    getComicToAnimationSkill(options.locale),
-    getComicToStoryboardSkill(options.locale),
-    getImageToShotSkill(options.locale),
-    getStoryboardToAnimationPlanSkill(options.locale),
-    getAnimationPlanToCutSkill(options.locale),
-    getGeneratedShotAssemblySkill(options.locale),
-    getExportVideoPackageSkill(options.locale),
-    // Quality Assessment
-    getQualityAssessmentSkill(options.locale),
   ];
   return skills.map((skill) => localizeBuiltinSkillCatalogText(skill, options.locale));
 }

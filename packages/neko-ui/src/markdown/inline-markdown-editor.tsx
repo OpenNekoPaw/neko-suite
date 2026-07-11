@@ -104,6 +104,8 @@ export function InlineMarkdownEditor<TContext = unknown>({
             {
               severity: 'info' as const,
               code: 'markdown-ui-no-completions',
+              phase: 'project' as const,
+              parameters: {},
               message: 'No completions are available for this trigger.',
               source: 'editor' as const,
             },

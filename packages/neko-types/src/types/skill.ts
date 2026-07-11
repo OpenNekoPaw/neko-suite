@@ -4,7 +4,7 @@
  * This module defines two distinct concepts:
  *
  * 1. **Skill** - Semantic discovery, auto-triggered based on description matching
- *    - Located in: `.neko/skills/` (project) or `~/.neko/skills/` (personal)
+ *    - Located in: `.agents/skills/` (project) or `~/.agents/skills/` (personal)
  *    - Triggered by: Semantic matching of user input against description
  *    - Arguments: NOT supported (no $ARGUMENTS, $1, $2)
  *    - File structure: skill-name/SKILL.md + support files
@@ -18,6 +18,11 @@
  * @see https://docs.anthropic.com/en/docs/claude-code/skills
  */
 
+import type {
+  NekoSkillHostProjection,
+  NekoSkillOverlay,
+  PortableSkillDefinition,
+} from './portable-skill';
 import {
   isAgentProfileKind,
   isAgentProfileRelationship,
@@ -90,10 +95,10 @@ export type SkillCatalogSource = SkillSource | 'plugin';
  * Skill directory locations
  */
 export const SKILL_DIRECTORIES = {
-  /** Project-level skills: .neko/skills/ in project root */
-  project: '.neko/skills',
-  /** Personal skills: ~/.neko/skills/ */
-  personal: '~/.neko/skills',
+  /** Project-level skills: .agents/skills/ in project root */
+  project: '.agents/skills',
+  /** Personal skills: ~/.agents/skills/ */
+  personal: '~/.agents/skills',
 } as const;
 
 /**
@@ -256,10 +261,15 @@ export interface SkillCatalogAction {
 export type SkillCatalogActionInput = SkillCatalogActionId | SkillCatalogAction;
 
 /**
- * Non-orchestrating catalog metadata read from manifest.json.
+ * Host-owned catalog policy input.
  *
- * This block is display/management metadata only. Workflow ordering, branching,
- * routes and executable stages stay in SKILL.md prompt-chain text.
+ * This block is display/management metadata only. It is supplied by the Host
+ * catalog/registry policy and is never read from a Skill package root manifest.
+ * Workflow ordering, branching, routes, and executable stages stay in Skill
+ * prompt content.
+ *
+ * @deprecated Prefer `SkillCatalogPolicy`; this compatibility name remains for
+ * existing Host policy call sites and explicit legacy migration only.
  */
 export interface SkillCatalogManifest {
   readonly role?: SkillCatalogRole;
@@ -269,6 +279,9 @@ export interface SkillCatalogManifest {
   readonly editable?: boolean;
   readonly actions?: readonly SkillCatalogActionInput[];
 }
+
+/** Host-owned input used to project runtime catalog metadata. */
+export type SkillCatalogPolicy = SkillCatalogManifest;
 
 export interface SkillCatalogMeta {
   readonly role: SkillCatalogRole;
@@ -319,8 +332,7 @@ export interface SkillCatalogProjectable {
   readonly tags?: readonly string[];
   readonly enabled?: boolean;
   readonly mediaWorkflow?: Pick<SkillMediaWorkflowHint, 'tags'>;
-  readonly manifest?: { readonly catalog?: SkillCatalogManifest };
-  readonly catalog?: SkillCatalogManifest;
+  readonly catalog?: SkillCatalogPolicy;
 }
 
 export interface SkillCatalogProjectionOptions {
@@ -331,7 +343,7 @@ export interface SkillCatalogProjectionOptions {
   readonly command?: string;
   readonly tags?: readonly string[];
   readonly locales?: Readonly<Record<string, SkillCatalogLocalizedText>>;
-  readonly catalog?: SkillCatalogManifest;
+  readonly catalog?: SkillCatalogPolicy;
   readonly editable?: boolean;
   readonly defaultSource?: SkillCatalogSource;
   readonly defaultRole?: SkillCatalogRole;
@@ -490,13 +502,12 @@ export interface Skill {
   supportsArguments?: boolean;
 
   // ===========================================================================
-  // SDD metadata (agent-unified-workflow.md §5.2.1)
+  // Legacy flattened metadata compatibility
   //
-  // These fields capture the Skill's contract beyond "what tools it may
-  // call". They are declarative: runtime components (StageGuardian,
-  // subpackage-dependency guard, compliance audit) consume them. See
-  // docs/architecture/agent-unified-workflow.md §5.2.1 for the authoritative
-  // schema.
+  // Existing runtime contributors may still project these fields while the
+  // explicit migration boundary is in use. Canonical file loading does not read
+  // them from a root manifest. New author and Host data belongs in
+  // portableDefinition, nekoOverlay, or hostProjection below.
   // ===========================================================================
 
   /**
@@ -558,6 +569,15 @@ export interface Skill {
 
   /** UI catalog metadata. Display/management only; not workflow ordering. */
   catalog?: SkillCatalogMeta;
+
+  /** Portable author-owned definition parsed from SKILL.md. */
+  portableDefinition?: PortableSkillDefinition;
+
+  /** Optional validated Neko Host overlay parsed from agents/neko.yaml. */
+  nekoOverlay?: NekoSkillOverlay;
+
+  /** Host/Registry-owned runtime facts; never populated from author metadata. */
+  hostProjection?: NekoSkillHostProjection;
 }
 
 // =============================================================================
@@ -838,7 +858,9 @@ export interface ISkillService {
 // =============================================================================
 
 /**
- * YAML frontmatter from SKILL.md file
+ * Legacy/runtime-compatible frontmatter projection. Canonical Skill authoring uses
+ * `PortableSkillDefinition`; Host-owned fields remain here only for existing runtime DTOs
+ * and explicit legacy migration compatibility.
  */
 export interface SkillFrontmatter {
   /** Skill name (required) */
@@ -894,38 +916,22 @@ export interface SkillFrontmatter {
    */
   'market-id'?: string;
 
-  // Note: Skill metadata (version, domain, requiredSubpackages, autoInvoke,
-  // referencedAssets, referencedSkills, compliance) lives
-  // in a sibling `manifest.json` file — see SkillManifest below. SKILL.md
-  // frontmatter is reserved for document metadata only (fields that also
-  // shape how Claude / Agent reads the document). Rationale: Skill body is
-  // consumed by the LLM as natural language; structural configuration that
-  // only the runtime cares about should not clutter the prompt window nor
-  // the author-facing YAML block.
+  // Legacy manifest-era fields are projected onto `Skill` only by explicit
+  // migration/compatibility adapters. Canonical packages use portable SKILL.md
+  // plus optional agents/neko.yaml and never author a root manifest.
 }
 
 // =============================================================================
-// SkillManifest — sibling `manifest.json` for SDD configuration
+// Legacy Skill manifest compatibility
 // =============================================================================
 
 /**
- * Configuration metadata that lives in `{skill-dir}/manifest.json`, not in
- * SKILL.md frontmatter. The manifest is the program-facing contract — only
- * runtime code (loader / marketplace installer / activation guard) reads it.
+ * Legacy Neko Skill metadata retained for explicit migration and compatibility
+ * validation. It is not the canonical authoring contract and normal Skill loading
+ * must not read a root `manifest.json`. Representable author metadata migrates to
+ * portable `SKILL.md` or `agents/neko.yaml`; Host facts stay Host-owned.
  *
- * See agent-unified-workflow.md §5.2.1. The split between manifest and
- * SKILL.md matches the division of labour:
- *
- *   - **manifest.json** (this type): fields the runtime must inspect before
- *     running the Skill — version compatibility, subpackage dependencies,
- *     autoInvoke flag, compliance rules. Machine-readable JSON; validated
- *     at market install time and at Skill activation.
- *   - **SKILL.md body**: fields the Agent needs to understand semantically
- *     — description, persona, prompt-chain workflow guidance.
- *     Natural language; consumed as a system prompt.
- *
- * Optional so older skills (manifest-less) keep loading; the validator
- * emits warnings rather than errors for missing fields.
+ * @deprecated Use portable Skill and Neko overlay contracts for new code.
  */
 export interface SkillManifest {
   /** Semver version string. Required by the SDD spec for audit tracing. */
@@ -1193,7 +1199,7 @@ export function toSkillCatalogMeta(
   skill: SkillCatalogProjectable,
   options: SkillCatalogProjectionOptions = {},
 ): SkillCatalogMeta {
-  const catalog = options.catalog ?? skill.catalog ?? skill.manifest?.catalog;
+  const catalog = options.catalog ?? skill.catalog;
   const source = options.source ?? skill.source ?? options.defaultSource ?? 'plugin';
   const role = catalog?.role ?? options.defaultRole ?? 'standalone';
   const visibility =
@@ -1505,7 +1511,7 @@ export function validateSkill(skill: Partial<Skill>): SkillValidationResult {
     validateSkillPromptChainLanguage(skill.content, warnings);
   }
 
-  validateSkillManifest(skill, errors, warnings);
+  validateLegacySkillMetadata(skill, errors, warnings, false);
   return { valid: errors.length === 0, errors, warnings };
 }
 
@@ -1523,21 +1529,35 @@ function validateSkillPromptChainLanguage(content: string, warnings: string[]): 
   );
 }
 
+/** @deprecated Explicit legacy migration/compatibility validation only. */
 export function validateSkillManifest(
   manifest: Partial<SkillManifest>,
   errors: string[] = [],
   warnings: string[] = [],
 ): SkillValidationResult {
-  // version: warn if missing, error if malformed.
+  return validateLegacySkillMetadata(manifest, errors, warnings, true);
+}
+
+function validateLegacySkillMetadata(
+  manifest: Partial<SkillManifest>,
+  errors: string[],
+  warnings: string[],
+  warnMissingRecommendedFields: boolean,
+): SkillValidationResult {
+  // version: explicit legacy validation warns if missing; canonical runtime projections do not.
   if (manifest.version === undefined) {
-    warnings.push('Missing SDD metadata field: version (recommended, semver string)');
+    if (warnMissingRecommendedFields) {
+      warnings.push('Missing legacy metadata field: version (recommended, semver string)');
+    }
   } else if (typeof manifest.version !== 'string' || !SEMVER_RE.test(manifest.version)) {
     errors.push(`Invalid version "${manifest.version}" — must be a semver string (e.g. "1.0.0")`);
   }
 
-  // domain: warn if missing, error if empty string.
+  // domain: explicit legacy validation warns if missing; canonical projections do not.
   if (manifest.domain === undefined) {
-    warnings.push('Missing SDD metadata field: domain (recommended, e.g. "cut" / "story")');
+    if (warnMissingRecommendedFields) {
+      warnings.push('Missing legacy metadata field: domain (recommended, e.g. "cut" / "story")');
+    }
   } else if (typeof manifest.domain !== 'string' || manifest.domain.trim().length === 0) {
     errors.push('Field "domain" must be a non-empty string');
   }
@@ -1908,21 +1928,16 @@ export function validateCommand(command: Partial<SlashCommand>): SkillValidation
 }
 
 /**
- * Create a Skill from its sources.
+ * Create the runtime Skill projection from parsed content and Host-owned source facts.
+ * Canonical parsing/validation happens before this compatibility constructor and does
+ * not read a root `manifest.json`.
  *
- * SKILL.md frontmatter is the document-facing surface (name, description,
- * persona fields that also shape the prompt). SDD configuration fields
- * live in a sibling `manifest.json` loaded separately and merged here —
- * keeping the prompt-visible YAML lean while still giving the runtime a
- * single `Skill` snapshot to reason about.
- *
- * @param frontmatter Parsed YAML frontmatter from SKILL.md
+ * @param frontmatter Parsed portable or compatibility frontmatter projection
  * @param content SKILL.md body content
  * @param source Skill source (builtin, personal, project)
  * @param directoryPath Skill directory path
  * @param supportFileRefs Referenced support file paths (progressive disclosure)
- * @param toolDefinitions Tool definitions loaded from tools.md
- * @param manifest Optional manifest.json contents (SDD metadata)
+ * @param toolDefinitions Tool definitions supplied by the owning runtime adapter
  */
 export function createSkill(
   frontmatter: SkillFrontmatter,
@@ -1931,7 +1946,6 @@ export function createSkill(
   directoryPath?: string,
   supportFileRefs?: string[],
   toolDefinitions?: SkillToolDefinition[],
-  manifest?: SkillManifest,
 ): Skill {
   return {
     name: frontmatter.name,
@@ -1947,22 +1961,12 @@ export function createSkill(
     source,
     directoryPath,
     enabled: frontmatter.enabled ?? true,
-    // SDD metadata (§5.2.1) — pulled from manifest.json, not frontmatter.
-    version: manifest?.version,
-    domain: manifest?.domain,
-    requiredSubpackages: manifest?.requiredSubpackages,
-    autoInvoke: manifest?.autoInvoke,
-    referencedAssets: manifest?.referencedAssets,
-    referencedSkills: manifest?.referencedSkills,
-    mediaWorkflow: manifest?.mediaWorkflow,
-    compliance: manifest?.compliance,
     catalog: toSkillCatalogMeta(
       {
         name: frontmatter.name,
         description: frontmatter.description,
         icon: frontmatter.icon,
         source,
-        manifest,
       },
       { source },
     ),
@@ -2003,7 +2007,7 @@ export function extractSupportFileRefs(content: string): string[] {
 
   while ((match = linkRegex.exec(content)) !== null) {
     const path = match[2];
-    if (path && !path.startsWith('http') && !path.startsWith('/')) {
+    if (path && !/^https?:\/\//i.test(path)) {
       refs.push(path);
     }
   }

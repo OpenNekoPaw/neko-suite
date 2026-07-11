@@ -6,6 +6,7 @@ import {
   TOOL_NAMES_TIMELINE,
 } from '@neko/shared';
 import { localizeBuiltinSkill } from './builtin-skill-content';
+import { getCanonicalCreativeMediaSkills } from './creative-media';
 import animationPlanToCutContent from './markdown/animation-plan-to-cut.md?raw';
 import animationPlanToCutZhCnContent from './markdown/animation-plan-to-cut.zh-cn.md?raw';
 import exportVideoPackageContent from './markdown/export-video-package.md?raw';
@@ -443,13 +444,5 @@ export function getExportVideoPackageSkill(locale?: string): Skill {
 }
 
 export function getMediaWorkflowBuiltinSkills(locale?: string): Skill[] {
-  return [
-    getMediaToVideoSkill(locale),
-    getComicToAnimationSkill(locale),
-    getImageToShotSkill(locale),
-    getStoryboardToAnimationPlanSkill(locale),
-    getAnimationPlanToCutSkill(locale),
-    getGeneratedShotAssemblySkill(locale),
-    getExportVideoPackageSkill(locale),
-  ];
+  return getCanonicalCreativeMediaSkills(locale);
 }

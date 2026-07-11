@@ -6,12 +6,13 @@ import type {
 import type {
   ProjectStoryboardTableToCutOptions,
   StoryboardCutStoryboardPayload,
+  StoryboardProjectionHandoff,
   StoryboardTable,
   StoryboardValidationDiagnostic,
 } from './storyboard-table';
 import {
   normalizeStoryboardTable,
-  projectStoryboardTableToCutPayload,
+  projectCanonicalStoryboardTableToCutHandoff,
   validateStoryboardTable,
 } from './storyboard-table';
 
@@ -34,6 +35,7 @@ export interface ArtifactCutStoryboardProjectionInput extends ArtifactStoryboard
 
 export interface ArtifactCutStoryboardProjectionResult extends ArtifactStoryboardDomainProjectionResult {
   readonly payload?: StoryboardCutStoryboardPayload;
+  readonly handoff?: StoryboardProjectionHandoff;
 }
 
 export function projectCompositeArtifactToStoryboardTable(
@@ -81,25 +83,33 @@ export function projectCompositeArtifactToCutStoryboardPayload(
     return storyboard;
   }
 
-  const payload = projectStoryboardTableToCutPayload(storyboard.table, input.options);
-  if (!payload) {
+  const projection = projectCanonicalStoryboardTableToCutHandoff(storyboard.table, input.options);
+  if (!projection.payload || !projection.handoff) {
+    const projectionDiagnostics = mapStoryboardDiagnostics(
+      projection.diagnostics,
+      storyboard.block?.blockId ?? ARTIFACT_DOMAIN_STORYBOARD_TABLE,
+    );
     return {
       ...storyboard,
-      diagnostics: [
-        ...storyboard.diagnostics,
-        artifactProjectionDiagnostic(
-          'warning',
-          'missing-required-field',
-          ['blocks', storyboard.block?.blockId ?? ARTIFACT_DOMAIN_STORYBOARD_TABLE],
-          'StoryboardTable does not contain projectable image refs for Cut import.',
-        ),
-      ],
+      diagnostics:
+        projectionDiagnostics.length > 0
+          ? [...storyboard.diagnostics, ...projectionDiagnostics]
+          : [
+              ...storyboard.diagnostics,
+              artifactProjectionDiagnostic(
+                'warning',
+                'missing-required-field',
+                ['blocks', storyboard.block?.blockId ?? ARTIFACT_DOMAIN_STORYBOARD_TABLE],
+                'StoryboardTable does not contain projectable image refs for Cut import.',
+              ),
+            ],
     };
   }
 
   return {
     ...storyboard,
-    payload,
+    payload: projection.payload,
+    handoff: projection.handoff,
   };
 }
 

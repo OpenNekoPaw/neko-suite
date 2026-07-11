@@ -92,7 +92,6 @@ export const DEFAULT_SCENE_SHOT_TABLE_COLUMNS = [
   'shot',
   'reference-media',
   'image-prompt',
-  'video-prompt',
   'duration',
   'dialogue',
   'state',

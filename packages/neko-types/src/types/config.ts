@@ -258,6 +258,7 @@ export type ModelCapability =
   | 'embedding'
   | 'code'
   | 'audio'
+  | 'vision_video'
   | 'reasoning'
   // Media generation capabilities
   | 'text_to_image'
@@ -303,6 +304,7 @@ export const KNOWN_MODEL_CAPABILITIES = [
   'embedding',
   'code',
   'audio',
+  'vision_video',
   'reasoning',
   'text_to_image',
   'image.generate',

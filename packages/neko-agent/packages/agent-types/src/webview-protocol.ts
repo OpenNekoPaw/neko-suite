@@ -58,6 +58,7 @@ import type {
   SettingsState,
   SsoSession,
   TabState,
+  MediaUnderstandingModelSelections,
 } from './ui';
 import type { PluginSlashCommandInvocation } from './plugin-slash-command';
 import type {
@@ -68,9 +69,21 @@ import type {
 } from './work-item';
 import type { DashboardTask } from '@neko/shared/types/dashboard-task';
 import type { AgentArtifactTransferPayload } from './artifact-transfer';
-import type { AgentTurnTimelineItem, AgentTurnTimelineMessage } from './agent-turn-timeline';
-import { assertValidAgentTurnTimelineMessage } from './agent-turn-timeline';
-export { validateAgentTurnTimelineMessage } from './agent-turn-timeline';
+import type {
+  AgentTurnTimelineDiagnostic,
+  AgentTurnTimelineMessage,
+  AgentTurnTimelineOperation,
+  AgentTurnTimelineSnapshotRequest,
+} from './agent-turn-timeline';
+import {
+  AGENT_TURN_TIMELINE_SCHEMA_VERSION,
+  assertValidAgentTurnTimelineMessage,
+  validateAgentTurnTimelineSnapshotRequest,
+} from './agent-turn-timeline';
+export {
+  validateAgentTurnTimelineMessage,
+  validateAgentTurnTimelineSnapshotRequest,
+} from './agent-turn-timeline';
 import type {
   PluginTransferAssetRef,
   PluginTransferCutStoryboardPayload,
@@ -139,6 +152,7 @@ export interface SendMessageWebviewMessage {
   llmConfig?: AgentLlmConfig;
   mediaModel?: ModelRef<MediaModelCategory>;
   mediaModels?: AgentMediaModelSelections;
+  understandingModels?: MediaUnderstandingModelSelections;
   attachments?: MessageAttachment[];
   contextPayloads?: AgentContextPayload[];
   fileReferences?: AgentFileReference[];
@@ -452,6 +466,8 @@ export interface WebviewKeyboardEditableWebviewMessage {
   editable: boolean;
 }
 
+export type { AgentTurnTimelineSnapshotRequest };
+
 export type WebviewToExtensionMessage =
   | SendMessageWebviewMessage
   | SearchProjectFilesWebviewMessage
@@ -489,7 +505,8 @@ export type WebviewToExtensionMessage =
   | SsoLoginWebviewMessage
   | RevealContextSourceWebviewMessage
   | WebviewKeyboardFocusWebviewMessage
-  | WebviewKeyboardEditableWebviewMessage;
+  | WebviewKeyboardEditableWebviewMessage
+  | AgentTurnTimelineSnapshotRequest;
 
 export interface ProjectFileMentionInfo {
   path: string;
@@ -1062,7 +1079,7 @@ export interface AmbientCanvasUpdateMessage {
   nodes?: Array<{ nodeId: string; type: string; summary: string }>;
 }
 
-export type { AgentTurnTimelineMessage };
+export type { AgentTurnTimelineDiagnostic, AgentTurnTimelineMessage };
 
 export type ExtensionToWebviewMessage =
   | ThinkingMessage
@@ -1126,7 +1143,8 @@ export type ExtensionToWebviewMessage =
   | PrefillInputMessage
   | InjectContextMessage
   | AmbientCanvasUpdateMessage
-  | AgentTurnTimelineMessage;
+  | AgentTurnTimelineMessage
+  | AgentTurnTimelineDiagnostic;
 
 export type MessageOfType<T extends ExtensionToWebviewMessage['type']> = Extract<
   ExtensionToWebviewMessage,
@@ -1242,6 +1260,7 @@ export const WEBVIEW_TO_EXTENSION_MESSAGE_TYPES = [
   'revealContextSource',
   'webviewKeyboardFocus',
   'webviewKeyboardEditable',
+  'requestAgentTurnTimelineSnapshot',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
 const PROMPT_MODES: readonly SetPromptModeWebviewMessage['mode'][] = ['default', 'plan'];
@@ -1345,25 +1364,49 @@ export function buildStreamCompleteMessage(input: {
 }
 
 export function buildAgentTurnTimelineMessage(input: {
+  readonly connectionEpoch: string;
   readonly conversationId: string;
   readonly turnId: string;
   readonly messageId: string;
-  readonly events: readonly AgentTurnTimelineItem[];
-  readonly finalContentBlocks?: readonly ContentBlock[];
+  readonly batchKind: 'delta' | 'snapshot';
+  readonly deliveryRevision: number;
+  readonly operations: readonly AgentTurnTimelineOperation[];
+  readonly completion?: AgentTurnTimelineMessage['completion'];
 }): AgentTurnTimelineMessage {
   const conversationId = requireBuilderConversationId(input.conversationId, 'agentTurnTimeline');
   const message: AgentTurnTimelineMessage = {
     type: 'agentTurnTimeline',
+    schemaVersion: AGENT_TURN_TIMELINE_SCHEMA_VERSION,
+    connectionEpoch: input.connectionEpoch,
     conversationId,
     turnId: input.turnId,
     messageId: input.messageId,
-    events: input.events,
-    ...(input.finalContentBlocks && input.finalContentBlocks.length > 0
-      ? { finalContentBlocks: input.finalContentBlocks }
-      : {}),
+    batchKind: input.batchKind,
+    deliveryRevision: input.deliveryRevision,
+    operations: input.operations,
+    ...(input.completion ? { completion: input.completion } : {}),
   };
   assertValidAgentTurnTimelineMessage(message);
   return message;
+}
+
+export function buildAgentTurnTimelineSnapshotRequest(
+  input: Omit<AgentTurnTimelineSnapshotRequest, 'type' | 'schemaVersion'>,
+): AgentTurnTimelineSnapshotRequest {
+  const request: AgentTurnTimelineSnapshotRequest = {
+    type: 'requestAgentTurnTimelineSnapshot',
+    schemaVersion: AGENT_TURN_TIMELINE_SCHEMA_VERSION,
+    ...input,
+  };
+  const result = validateAgentTurnTimelineSnapshotRequest(request);
+  if (!result.ok) {
+    throw new Error(
+      `Invalid Agent turn timeline snapshot request: ${result.diagnostics
+        .map((diagnostic) => `${diagnostic.code}: ${diagnostic.message}`)
+        .join('; ')}`,
+    );
+  }
+  return request;
 }
 
 export function buildErrorMessage(input: {
@@ -1759,6 +1802,27 @@ export function parseWebviewToExtensionMessage(raw: unknown): WebviewToExtension
   if (!isRecord(raw) || typeof raw.type !== 'string') return null;
 
   const type = raw.type;
+  if (type === 'requestAgentTurnTimelineSnapshot') {
+    const result = validateAgentTurnTimelineSnapshotRequest(raw);
+    if (!result.ok) return null;
+    const connectionEpoch = requiredString(raw.connectionEpoch);
+    const conversationId = requiredString(raw.conversationId);
+    const turnId = requiredString(raw.turnId);
+    const messageId = requiredString(raw.messageId);
+    if (!connectionEpoch || !conversationId || !turnId || !messageId) return null;
+    return {
+      type: 'requestAgentTurnTimelineSnapshot',
+      schemaVersion: AGENT_TURN_TIMELINE_SCHEMA_VERSION,
+      connectionEpoch,
+      conversationId,
+      turnId,
+      messageId,
+      reason: raw.reason === 'webview-initialization' ? 'webview-initialization' : 'revision-gap',
+      ...(typeof raw.lastAppliedDeliveryRevision === 'number'
+        ? { lastAppliedDeliveryRevision: raw.lastAppliedDeliveryRevision }
+        : {}),
+    };
+  }
   if (type === 'sendMessage') {
     return parseSendMessageWebviewMessage(raw);
   }
@@ -1901,6 +1965,12 @@ export function parseSendMessageWebviewMessage(raw: unknown): SendMessageWebview
       : Array.isArray(raw.attachments)
         ? (raw.attachments as MessageAttachment[])
         : null;
+  const understandingModels =
+    raw.understandingModels === undefined
+      ? undefined
+      : parseMediaUnderstandingModelSelections(raw.understandingModels);
+  if (raw.understandingModels !== undefined && !understandingModels) return null;
+
   if (attachments === null) return null;
 
   const contextPayloads =
@@ -1930,6 +2000,7 @@ export function parseSendMessageWebviewMessage(raw: unknown): SendMessageWebview
   } else {
     if (!mediaModel || mediaModel.category !== raw.sessionMode) return null;
     if (mediaModels) return null;
+    if (understandingModels) return null;
     if (agentModels || llmConfig) return null;
   }
 
@@ -1943,6 +2014,7 @@ export function parseSendMessageWebviewMessage(raw: unknown): SendMessageWebview
     ...(llmConfig ? { llmConfig } : {}),
     ...(mediaModel ? { mediaModel } : {}),
     ...(mediaModels ? { mediaModels } : {}),
+    ...(understandingModels ? { understandingModels } : {}),
     ...(attachments ? { attachments } : {}),
     ...(contextPayloads ? { contextPayloads } : {}),
     ...(fileReferences ? { fileReferences } : {}),
@@ -3199,6 +3271,22 @@ function parseAgentModelSlots(value: unknown): AgentModelSlots | null {
     const model = parseModelRef(value[key], 'llm');
     if (!model) return null;
     selections[key] = model;
+  }
+
+  return Object.keys(selections).length > 0 ? selections : null;
+}
+
+function parseMediaUnderstandingModelSelections(
+  value: unknown,
+): MediaUnderstandingModelSelections | null {
+  if (!isRecord(value)) return null;
+
+  const selections: MediaUnderstandingModelSelections = {};
+  for (const category of AGENT_MEDIA_CATEGORIES) {
+    if (value[category] === undefined) continue;
+    const model = parseModelRef(value[category], 'llm');
+    if (!model) return null;
+    selections[category] = model;
   }
 
   return Object.keys(selections).length > 0 ? selections : null;

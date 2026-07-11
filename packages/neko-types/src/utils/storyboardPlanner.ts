@@ -4,11 +4,13 @@ import type {
   CanvasStoryboardPayload,
   CanvasStoryboardScenePlan,
   CanvasStoryboardShotPlan,
+  CanonicalCanvasStoryboardProjectionResult,
   CreateStoryboardPayloadOptions,
   CreatedCanvasStoryboard,
   StoryScenePlan,
   StoryShotPlan,
 } from '../types/storyboard-planner';
+import { validateCanonicalStoryboardTable, type StoryboardTable } from '../types/storyboard-table';
 import type { ShotCharacter } from '../types/canvas';
 import type {
   CanvasCompositeConnectionSpec,
@@ -99,6 +101,72 @@ function createStoryboardPayloadScope(
   return undefined;
 }
 
+export function projectCanonicalStoryboardToCanvasPayload(
+  table: StoryboardTable,
+): CanonicalCanvasStoryboardProjectionResult {
+  const validation = validateCanonicalStoryboardTable(table);
+  if (!validation.ok || !table.revision) {
+    return { diagnostics: validation.diagnostics };
+  }
+
+  const scenes: CanvasStoryboardScenePlan[] = table.scenes.map((scene, sceneIndex) => ({
+    sceneId: scene.sceneId,
+    sceneTitle: scene.sceneTitle,
+    sceneNumber: scene.sceneNumber ?? sceneIndex + 1,
+    ...(scene.location ? { location: scene.location } : {}),
+    ...(scene.timeOfDay ? { timeOfDay: scene.timeOfDay } : {}),
+    shotPlans: scene.shots.map((shot): CanvasStoryboardShotPlan => ({
+      ...(shot.shotId ? { shotId: shot.shotId } : {}),
+      shotNumber: shot.shotNumber,
+      duration: shot.duration,
+      visualDescription: shot.visualDescription,
+      characters: (shot.characters ?? []).map((character) => ({
+        ...(character.characterId ? { characterId: character.characterId } : {}),
+        ...(character.entityRef ? { entityRef: character.entityRef } : {}),
+        ...(character.candidateId ? { candidateId: character.candidateId } : {}),
+        characterName: character.name,
+        ...(character.action ? { action: character.action } : {}),
+        ...(character.emotion ? { emotion: character.emotion } : {}),
+        ...(character.continuityNotes ? { continuityNotes: character.continuityNotes } : {}),
+        ...(character.appearanceNotes ? { appearanceNotes: character.appearanceNotes } : {}),
+      })),
+      shotScale: shot.shotScale ?? 'MS',
+      ...(shot.cameraMovement ? { cameraMovement: shot.cameraMovement } : {}),
+      ...(shot.cameraAngle ? { cameraAngle: shot.cameraAngle } : {}),
+      characterAction: shot.characterAction,
+      emotion: shot.emotion ?? [],
+      sceneTags: shot.sceneTags ?? [],
+      ...(shot.dialogue ? { dialogue: shot.dialogue } : {}),
+      ...(shot.voiceOver ? { voiceOver: shot.voiceOver } : {}),
+      ...(shot.soundCue ? { soundCue: shot.soundCue } : {}),
+      ...(shot.textCues ? { textCues: shot.textCues } : {}),
+      ...(shot.voiceCues ? { voiceCues: shot.voiceCues } : {}),
+      ...(shot.generationPrompt ? { generationPrompt: shot.generationPrompt } : {}),
+      ...(shot.visualStyle ? { visualStyle: shot.visualStyle } : {}),
+      ...(shot.vfx ? { vfx: shot.vfx } : {}),
+      ...(shot.sourceMediaRefs ? { sourceMediaRefs: shot.sourceMediaRefs } : {}),
+      ...(shot.generatedMediaRefs ? { generatedMediaRefs: shot.generatedMediaRefs } : {}),
+      ...(shot.mediaRefs ? { mediaRefs: shot.mediaRefs } : {}),
+      ...(shot.sourceMediaRefs?.[0]?.resourceRef
+        ? { referenceResourceRef: shot.sourceMediaRefs[0].resourceRef }
+        : {}),
+    })),
+  }));
+  const sourceStoryboardRef = `storyboard:${table.revision.revisionId}`;
+  return {
+    payload: {
+      mode: 'semantic',
+      sourceScriptUri: table.source?.sourceUri ?? sourceStoryboardRef,
+      sourceStoryboardRevisionId: table.revision.revisionId,
+      projectionMode: 'read-only-projection',
+      creativeScope: createStoryboardPayloadScope(sourceStoryboardRef, scenes),
+      scenes,
+      diagnostics: validation.diagnostics,
+    },
+    diagnostics: validation.diagnostics,
+  };
+}
+
 export async function applyStoryboardPayloadToCanvas(
   api: Pick<NekoCanvasAPI, 'nodes'>,
   payload: CanvasStoryboardPayload,
@@ -122,6 +190,8 @@ export async function applyStoryboardPayloadToCanvas(
       data: {
         sceneId: scene.sceneId,
         sourceScriptUri: payload.sourceScriptUri,
+        sourceStoryboardRevisionId: payload.sourceStoryboardRevisionId,
+        storyboardProjectionMode: payload.projectionMode,
         sceneTitle: scene.sceneTitle,
         sceneNumber: scene.sceneNumber,
         location: scene.location,
@@ -136,7 +206,11 @@ export async function applyStoryboardPayloadToCanvas(
           {
             type: 'shot',
             position: { x: shotX, y: shotY },
-            data: createCanvasStoryboardShotNodeData(shot, options),
+            data: {
+              ...createCanvasStoryboardShotNodeData(shot, options),
+              sourceStoryboardRevisionId: payload.sourceStoryboardRevisionId,
+              storyboardProjectionMode: payload.projectionMode,
+            },
           },
         ];
       }),

@@ -10,23 +10,16 @@ export interface AgentHostRuntimeAdapter {
   readonly hostKind: AgentHostKind;
   readonly runtimeId: string;
   send(message: WebviewToExtensionMessage): void;
-  subscribe(
-    listener: (message: ExtensionToWebviewMessage) => void,
-  ): AgentHostRuntimeSubscription;
+  subscribe(listener: (message: ExtensionToWebviewMessage) => void): AgentHostRuntimeSubscription;
   getState<T>(): T | undefined;
   setState<T>(state: T): void;
 }
 
-export type AgentHostRouteSupport =
-  | 'implemented'
-  | 'unsupported'
-  | 'host-inapplicable';
+export type AgentHostRouteSupport = 'implemented' | 'unsupported' | 'host-inapplicable';
 
 export interface AgentHostRouteCoverageInput {
   readonly hostKind: AgentHostKind;
-  readonly routes: Partial<
-    Record<AgentWebviewToHostMessageType, AgentHostRouteSupport>
-  >;
+  readonly routes: Partial<Record<AgentWebviewToHostMessageType, AgentHostRouteSupport>>;
 }
 
 export interface AgentHostRouteCoverageDiagnostic {
@@ -100,10 +93,10 @@ export const AGENT_WEBVIEW_TO_HOST_MESSAGE_TYPES = [
   'revealContextSource',
   'webviewKeyboardFocus',
   'webviewKeyboardEditable',
+  'requestAgentTurnTimelineSnapshot',
 ] as const satisfies readonly WebviewToExtensionMessage['type'][];
 
-export type AgentWebviewToHostMessageType =
-  (typeof AGENT_WEBVIEW_TO_HOST_MESSAGE_TYPES)[number];
+export type AgentWebviewToHostMessageType = (typeof AGENT_WEBVIEW_TO_HOST_MESSAGE_TYPES)[number];
 
 type AssertNever<T extends never> = T;
 export type AgentWebviewToHostMessageTypeCoverage = AssertNever<

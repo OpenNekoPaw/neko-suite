@@ -8,6 +8,15 @@ import type {
   ProtocolVariant,
   TypeDefaultModels,
 } from '../types/config';
+import type {
+  ExternalResearchConfigInput,
+  ExternalResearchFetchOutputSchema,
+  ExternalResearchMcpFetchToolBinding,
+  ExternalResearchMcpProviderConfig,
+  ExternalResearchMcpSearchToolBinding,
+  ExternalResearchMode,
+  ExternalResearchSearchOutputSchema,
+} from '../types/external-research';
 import {
   AUTH_TYPES,
   MODEL_TYPES,
@@ -42,6 +51,7 @@ export interface NekoTomlConfig {
   readonly providers?: readonly TomlProviderConfig[];
   readonly models?: readonly TomlModelConfig[];
   readonly mcp_servers?: readonly TomlMcpServerConfig[];
+  readonly external_research?: TomlExternalResearchConfig;
   readonly artifact_profiles?: unknown;
   readonly creation_profiles?: unknown;
   readonly provider_expression_profiles?: unknown;
@@ -137,6 +147,43 @@ export interface TomlMcpServerConfig {
   readonly request_timeout?: number;
 }
 
+export interface TomlExternalResearchConfig {
+  readonly mode?: ExternalResearchMode;
+  readonly provider_id?: string;
+  readonly require_approval_for_live?: boolean;
+  readonly allow_project_context_in_query?: boolean;
+  readonly max_results?: number;
+  readonly max_fetch_content_tokens?: number;
+  readonly allowed_domains?: readonly string[];
+  readonly blocked_domains?: readonly string[];
+  readonly mcp?: TomlExternalResearchMcpProviderConfig;
+}
+
+export interface TomlExternalResearchMcpProviderConfig {
+  readonly server_id: string;
+  readonly search_tool: TomlExternalResearchMcpSearchToolBinding;
+  readonly fetch_tool?: TomlExternalResearchMcpFetchToolBinding;
+  readonly expose_bound_tools_as_raw_mcp?: boolean;
+}
+
+export interface TomlExternalResearchMcpSearchToolBinding {
+  readonly name: string;
+  readonly query_arg: string;
+  readonly max_results_arg?: string;
+  readonly allowed_domains_arg?: string;
+  readonly blocked_domains_arg?: string;
+  readonly output_schema: ExternalResearchSearchOutputSchema;
+}
+
+export interface TomlExternalResearchMcpFetchToolBinding {
+  readonly name: string;
+  readonly url_arg: string;
+  readonly max_content_tokens_arg?: string;
+  readonly allowed_domains_arg?: string;
+  readonly blocked_domains_arg?: string;
+  readonly output_schema: ExternalResearchFetchOutputSchema;
+}
+
 export interface TomlConfigValidationIssue {
   readonly code:
     | 'unsupportedVersion'
@@ -201,6 +248,9 @@ export function tomlToUnifiedConfig(config: NekoTomlConfig): UnifiedConfig {
     ...(config.providers ? { providers: config.providers.map(tomlProviderToRuntime) } : {}),
     ...(config.models ? { models: config.models.map(tomlModelToRuntime) } : {}),
     ...(config.mcp_servers ? { mcpServers: config.mcp_servers.map(tomlMcpServerToRuntime) } : {}),
+    ...(config.external_research !== undefined
+      ? { externalResearch: tomlExternalResearchToRuntime(config.external_research) }
+      : {}),
     ...(config.provider_overrides
       ? {
           providerOverrides: mapRecordValues(
@@ -267,6 +317,9 @@ export function unifiedConfigToToml(config: UnifiedConfig): NekoTomlConfig {
     ...(config.providers ? { providers: config.providers.map(runtimeProviderToToml) } : {}),
     ...(config.models ? { models: config.models.map(runtimeModelToToml) } : {}),
     ...(config.mcpServers ? { mcp_servers: config.mcpServers.map(runtimeMcpServerToToml) } : {}),
+    ...(config.externalResearch !== undefined
+      ? { external_research: runtimeExternalResearchToToml(config.externalResearch) }
+      : {}),
     ...(config.providerOverrides
       ? {
           provider_overrides: mapRecordValues(
@@ -1021,6 +1074,116 @@ function runtimeMcpServerToToml(server: MCPServerConfig): TomlMcpServerConfig {
     tools: server.tools,
     request_timeout: server.requestTimeout,
   }) as TomlMcpServerConfig;
+}
+
+function tomlExternalResearchToRuntime(
+  config: TomlExternalResearchConfig,
+): ExternalResearchConfigInput {
+  return removeUndefined({
+    mode: config.mode,
+    providerId: config.provider_id,
+    requireApprovalForLive: config.require_approval_for_live,
+    allowProjectContextInQuery: config.allow_project_context_in_query,
+    maxResults: config.max_results,
+    maxFetchContentTokens: config.max_fetch_content_tokens,
+    allowedDomains: config.allowed_domains ? [...config.allowed_domains] : undefined,
+    blockedDomains: config.blocked_domains ? [...config.blocked_domains] : undefined,
+    mcp: config.mcp ? tomlExternalResearchMcpToRuntime(config.mcp) : undefined,
+  });
+}
+
+function runtimeExternalResearchToToml(
+  config: ExternalResearchConfigInput,
+): TomlExternalResearchConfig {
+  return removeUndefined({
+    mode: config.mode,
+    provider_id: config.providerId,
+    require_approval_for_live: config.requireApprovalForLive,
+    allow_project_context_in_query: config.allowProjectContextInQuery,
+    max_results: config.maxResults,
+    max_fetch_content_tokens: config.maxFetchContentTokens,
+    allowed_domains: config.allowedDomains,
+    blocked_domains: config.blockedDomains,
+    mcp: config.mcp ? runtimeExternalResearchMcpToToml(config.mcp) : undefined,
+  }) as TomlExternalResearchConfig;
+}
+
+function tomlExternalResearchMcpToRuntime(
+  config: TomlExternalResearchMcpProviderConfig,
+): ExternalResearchMcpProviderConfig {
+  return removeUndefined({
+    serverId: config.server_id,
+    searchTool: tomlExternalResearchSearchToolToRuntime(config.search_tool),
+    fetchTool: config.fetch_tool
+      ? tomlExternalResearchFetchToolToRuntime(config.fetch_tool)
+      : undefined,
+    exposeBoundToolsAsRawMcp: config.expose_bound_tools_as_raw_mcp,
+  }) as ExternalResearchMcpProviderConfig;
+}
+
+function runtimeExternalResearchMcpToToml(
+  config: ExternalResearchMcpProviderConfig,
+): TomlExternalResearchMcpProviderConfig {
+  return removeUndefined({
+    server_id: config.serverId,
+    search_tool: runtimeExternalResearchSearchToolToToml(config.searchTool),
+    fetch_tool: config.fetchTool
+      ? runtimeExternalResearchFetchToolToToml(config.fetchTool)
+      : undefined,
+    expose_bound_tools_as_raw_mcp: config.exposeBoundToolsAsRawMcp,
+  }) as TomlExternalResearchMcpProviderConfig;
+}
+
+function tomlExternalResearchSearchToolToRuntime(
+  binding: TomlExternalResearchMcpSearchToolBinding,
+): ExternalResearchMcpSearchToolBinding {
+  return removeUndefined({
+    name: binding.name,
+    queryArg: binding.query_arg,
+    maxResultsArg: binding.max_results_arg,
+    allowedDomainsArg: binding.allowed_domains_arg,
+    blockedDomainsArg: binding.blocked_domains_arg,
+    outputSchema: binding.output_schema,
+  }) as ExternalResearchMcpSearchToolBinding;
+}
+
+function runtimeExternalResearchSearchToolToToml(
+  binding: ExternalResearchMcpSearchToolBinding,
+): TomlExternalResearchMcpSearchToolBinding {
+  return removeUndefined({
+    name: binding.name,
+    query_arg: binding.queryArg,
+    max_results_arg: binding.maxResultsArg,
+    allowed_domains_arg: binding.allowedDomainsArg,
+    blocked_domains_arg: binding.blockedDomainsArg,
+    output_schema: binding.outputSchema,
+  }) as TomlExternalResearchMcpSearchToolBinding;
+}
+
+function tomlExternalResearchFetchToolToRuntime(
+  binding: TomlExternalResearchMcpFetchToolBinding,
+): ExternalResearchMcpFetchToolBinding {
+  return removeUndefined({
+    name: binding.name,
+    urlArg: binding.url_arg,
+    maxContentTokensArg: binding.max_content_tokens_arg,
+    allowedDomainsArg: binding.allowed_domains_arg,
+    blockedDomainsArg: binding.blocked_domains_arg,
+    outputSchema: binding.output_schema,
+  }) as ExternalResearchMcpFetchToolBinding;
+}
+
+function runtimeExternalResearchFetchToolToToml(
+  binding: ExternalResearchMcpFetchToolBinding,
+): TomlExternalResearchMcpFetchToolBinding {
+  return removeUndefined({
+    name: binding.name,
+    url_arg: binding.urlArg,
+    max_content_tokens_arg: binding.maxContentTokensArg,
+    allowed_domains_arg: binding.allowedDomainsArg,
+    blocked_domains_arg: binding.blockedDomainsArg,
+    output_schema: binding.outputSchema,
+  }) as TomlExternalResearchMcpFetchToolBinding;
 }
 
 function tomlMcpServerOverrideToRuntime(

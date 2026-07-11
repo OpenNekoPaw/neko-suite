@@ -95,6 +95,9 @@ export interface CanvasStoryboardScenePlan {
 export interface CanvasStoryboardPayload {
   readonly mode: StoryboardImportMode;
   readonly sourceScriptUri: string;
+  /** Canonical Storyboard revision projected into Canvas; Canvas remains read-only projection state. */
+  readonly sourceStoryboardRevisionId?: string;
+  readonly projectionMode?: 'read-only-projection';
   readonly creativeScope?: CanvasCreativeScope;
   readonly relatedBoards?: readonly CanvasRelatedBoardRef[];
   readonly scenes: readonly CanvasStoryboardScenePlan[];
@@ -136,4 +139,9 @@ export interface CreatedCanvasStoryboard {
 export interface CreateStoryboardPayloadResult {
   readonly payload: CanvasStoryboardPayload;
   readonly sourceIndex: NekoStoryScriptIndex;
+}
+
+export interface CanonicalCanvasStoryboardProjectionResult {
+  readonly payload?: CanvasStoryboardPayload;
+  readonly diagnostics: readonly StoryboardValidationDiagnostic[];
 }

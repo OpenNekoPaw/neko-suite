@@ -4,6 +4,50 @@ import { normalizeBuiltinSkillLocale } from './builtin-skill-content';
 export type BuiltinSkillLocaleMap = Readonly<Record<string, SkillLocalizedText>>;
 
 export const builtinSkillLocales: Readonly<Record<string, BuiltinSkillLocaleMap>> = {
+  storyboard: {
+    'zh-cn': {
+      name: '分镜',
+      description:
+        '从提示词、文本、剧本、文档、漫画、图片序列或已有修订版创建 canonical Storyboard。',
+      tags: ['分镜', '镜头', '来源归一化'],
+    },
+  },
+  image: {
+    'zh-cn': {
+      name: '图片',
+      description: '通过 capability-neutral 操作生成、编辑、扩展、增强、融合、上色或切分图片。',
+      tags: ['图片', '生成', '编辑'],
+    },
+  },
+  video: {
+    'zh-cn': {
+      name: '视频',
+      description: '从提示词、图片、关键帧或参考视频生成和转换单个视频片段。',
+      tags: ['视频', '生成', '转换'],
+    },
+  },
+  'media-production': {
+    'zh-cn': {
+      name: '媒体制作',
+      description:
+        '编排从来源归一化、分镜、生成和质量 Gate 到项目 authoring、导出与交付验证的完整流程。',
+      tags: ['媒体制作', '编排', '导出'],
+    },
+  },
+  'media-quality-review': {
+    'zh-cn': {
+      name: '媒体质量审查',
+      description: '使用修订版绑定证据和策略 Gate 审查创作素材、项目、成片与导出交付物。',
+      tags: ['媒体质量', '证据', 'Gate'],
+    },
+  },
+  'skill-creator': {
+    'zh-cn': {
+      name: 'Skill 创建指导',
+      description: '指导设计、创建、改进、验证和 forward-test 可复用、可移植的 Agent Skill 包。',
+      tags: ['Agent', 'Skill', '创作'],
+    },
+  },
   'creation-persona': {
     'zh-cn': {
       name: '创作人格',

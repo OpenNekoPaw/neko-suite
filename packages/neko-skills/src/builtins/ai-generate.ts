@@ -441,7 +441,6 @@ export const aiGenerateSkill: Skill = {
     // TODO(P1): implement when tools are available:
     // GenerateCharacter, TransferStyle, EnhanceVideo, OptimizeAudio
   ],
-  toolDefinitions: aiGenerateToolDefinitions,
   icon: '🎨',
   source: 'builtin',
   enabled: true,

@@ -296,6 +296,12 @@ describe('content access tools', () => {
     });
 
     expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      images: [{ portableForTransfer: true, resourceRef }],
+    });
+    expect(result.perceptionCards?.[0]?.perceptual?.thumbnailRef).toMatchObject({
+      resourceRef,
+    });
     expect(runtime.loadProviderAsset).toHaveBeenCalledWith(
       expect.objectContaining({
         caller: 'read-image',

@@ -1,21 +1,9 @@
 /**
- * validateSkill + validateSkillManifest SDD metadata tests (B1 + B1.5)
+ * Legacy Skill metadata compatibility validation.
  *
- * Covers agent-unified-workflow.md §5.2.1 manifest fields:
- *   version, domain, requiredSubpackages, autoInvoke,
- *   referencedAssets, referencedSkills, mediaWorkflow, compliance.
- *
- * The SDD manifest lives in a sibling `manifest.json` — separate from
- * SKILL.md frontmatter — so configuration that only the runtime cares
- * about stays out of the prompt window. Two surfaces to cover:
- *
- *   - `validateSkill(skill)`: runtime snapshot (manifest merged into Skill);
- *     used by the loader after createSkill().
- *   - `validateSkillManifest(manifest)`: bare manifest pass used by the
- *     marketplace installer and by the activation guard.
- *
- * Missing version / domain warn; deterministic runtime fields are
- * shape-checked when present.
+ * These tests preserve deterministic diagnostics for old flattened runtime snapshots
+ * and explicit migration inputs. Canonical Skill authoring uses portable `SKILL.md`
+ * plus optional `agents/neko.yaml`; normal loading never reads a root manifest.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -50,7 +38,7 @@ function baseManifest(overrides: Partial<SkillManifest> = {}): Partial<SkillMani
   };
 }
 
-describe('validateSkill — SDD metadata §5.2.1', () => {
+describe('validateSkill — runtime projection compatibility', () => {
   describe('base invariants', () => {
     it('requires slash-routable lowercase hyphen skill names', () => {
       for (const name of ['Bad Name', '中文-skill', 'skill_name']) {
@@ -93,10 +81,10 @@ describe('validateSkill — SDD metadata §5.2.1', () => {
       expect(r.valid).toBe(true);
     });
 
-    it('warns when version is missing', () => {
+    it('does not require a legacy version on canonical runtime projections', () => {
       const r = validateSkill(baseSkill({ version: undefined }));
       expect(r.valid).toBe(true);
-      expect(r.warnings.some((w) => w.includes('version'))).toBe(true);
+      expect(r.warnings.some((w) => w.includes('version'))).toBe(false);
     });
 
     it('errors on a malformed version', () => {
@@ -107,10 +95,10 @@ describe('validateSkill — SDD metadata §5.2.1', () => {
   });
 
   describe('domain', () => {
-    it('warns when domain is missing', () => {
+    it('does not require a legacy domain on canonical runtime projections', () => {
       const r = validateSkill(baseSkill({ domain: undefined }));
       expect(r.valid).toBe(true);
-      expect(r.warnings.some((w) => w.includes('domain'))).toBe(true);
+      expect(r.warnings.some((w) => w.includes('domain'))).toBe(false);
     });
 
     it('errors on an empty domain', () => {
@@ -288,7 +276,7 @@ describe('validateSkill — SDD metadata §5.2.1', () => {
   });
 
   describe('backwards compatibility', () => {
-    it('Skills without any SDD metadata are still valid (only warnings)', () => {
+    it('portable runtime projections are valid without legacy metadata warnings', () => {
       const r = validateSkill({
         name: 'legacy',
         description: 'A legacy skill that predates the SDD block.',
@@ -297,21 +285,20 @@ describe('validateSkill — SDD metadata §5.2.1', () => {
         enabled: true,
       });
       expect(r.valid).toBe(true);
-      // Missing version + domain both warn, but nothing errors.
-      expect(r.warnings.length).toBeGreaterThanOrEqual(2);
+      expect(r.warnings).toEqual([]);
       expect(r.errors.length).toBe(0);
     });
   });
 });
 
-describe('validateSkillManifest — standalone manifest pass', () => {
-  it('a well-formed manifest is valid', () => {
+describe('validateSkillManifest — explicit legacy compatibility pass', () => {
+  it('accepts well-formed legacy metadata', () => {
     const r = validateSkillManifest(baseManifest());
     expect(r.valid).toBe(true);
     expect(r.errors).toEqual([]);
   });
 
-  it('empty manifest warns on missing version + domain but does not error', () => {
+  it('empty legacy metadata warns on missing version + domain but does not error', () => {
     const r = validateSkillManifest({});
     expect(r.valid).toBe(true);
     expect(r.warnings.length).toBeGreaterThanOrEqual(2);
@@ -347,7 +334,7 @@ describe('validateSkillManifest — standalone manifest pass', () => {
     expect(r.errors.some((e) => e.includes('asset://'))).toBe(true);
   });
 
-  it('accepts a prompt-chain era metadata block loaded from manifest.json', () => {
+  it('accepts a prompt-chain era legacy metadata block', () => {
     const r = validateSkillManifest({
       version: '1.2.0',
       domain: 'cut',
@@ -399,7 +386,7 @@ describe('validateSkillManifest — standalone manifest pass', () => {
     expect(r.errors).toEqual([]);
   });
 
-  it('accepts media workflow hints without requiring them on manifest-less skills', () => {
+  it('accepts media workflow hints without requiring them on portable runtime projections', () => {
     const skill = baseSkill({
       mediaWorkflow: {
         acceptedModalities: ['image'],
@@ -575,31 +562,31 @@ describe('skill catalog projection metadata', () => {
     expect(entry.tags).toEqual(['plugin']);
   });
 
-  it('projects manifest catalog metadata without loading full Markdown content', () => {
-    const entry = toLazySkillCatalogEntry({
+  it('ignores legacy root manifest catalog metadata during normal projection', () => {
+    const legacyLikeSkill = {
       name: 'comic-paneling',
       description: 'Analyze comic panels.',
       icon: 'book-open',
-      source: 'project',
+      source: 'project' as const,
       manifest: {
         catalog: {
           role: 'focused-skill',
-          groupId: 'media-to-video',
-          parentSkillIds: ['media-to-video'],
-          visibility: 'advanced',
-          actions: ['run', 'edit', 'reveal'],
+          groupId: 'poisoned-group',
+          visibility: 'hidden',
+          editable: false,
+          actions: ['run'],
         },
       },
-    });
+    };
 
-    expect(entry.catalog).toMatchObject({
-      role: 'focused-skill',
+    const entry = toLazySkillCatalogEntry(legacyLikeSkill);
+
+    expect(entry.catalog).toEqual({
+      role: 'standalone',
       source: 'project',
-      groupId: 'media-to-video',
-      parentSkillIds: ['media-to-video'],
-      visibility: 'advanced',
+      visibility: 'primary',
       editable: true,
-      actions: [{ id: 'run' }, { id: 'edit' }, { id: 'reveal' }],
+      actions: [{ id: 'run' }, { id: 'edit' }, { id: 'reveal' }, { id: 'duplicate' }],
     });
   });
 

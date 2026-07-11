@@ -7,6 +7,11 @@
  * - Workspace config: .neko/config.toml
  */
 
+import { DEFAULT_EXTERNAL_RESEARCH_CONFIG } from '../types/external-research';
+import type {
+  ExternalResearchConfig,
+  ExternalResearchConfigInput,
+} from '../types/external-research';
 import type {
   ProviderConfig,
   ModelConfig,
@@ -95,6 +100,9 @@ export interface UnifiedConfig {
   /** MCP server configurations */
   mcpServers?: MCPServerConfig[];
 
+  /** Opt-in external research configuration. */
+  externalResearch?: ExternalResearchConfigInput;
+
   // ==========================================================================
   // Override Configuration
   // ==========================================================================
@@ -176,6 +184,9 @@ export interface NormalizedConfig {
 
   /** MCP server configurations (keyed by ID) */
   mcpServers: Map<string, MCPServerConfig>;
+
+  /** Normalized external research configuration. */
+  externalResearch: ExternalResearchConfig;
 }
 
 // =============================================================================
@@ -192,6 +203,7 @@ export const DEFAULT_CONFIG: Omit<NormalizedConfig, 'providers' | 'models' | 'mc
   temperature: 0.7,
   verbose: false,
   outputFormat: 'text',
+  externalResearch: DEFAULT_EXTERNAL_RESEARCH_CONFIG,
 };
 
 /**
