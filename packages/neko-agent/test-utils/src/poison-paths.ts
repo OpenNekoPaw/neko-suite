@@ -17,7 +17,12 @@ export type AgentPoisonPathName =
   | 'readlineInteractiveResume'
   | 'tuiRawConfigRead'
   | 'tuiLocalSkillDirectoryLoad'
-  | 'resultOnlyCommandSuccessPath';
+  | 'resultOnlyCommandSuccessPath'
+  | 'cumulativeTimelineSnapshotPerDelta'
+  | 'timelineStringPrefixMerge'
+  | 'perChunkCompactionCheck'
+  | 'directLegacyMarkdownParse'
+  | 'concurrentConversationStorageWrite';
 
 export type AgentPoisonPaths = Readonly<Record<AgentPoisonPathName, PoisonPath>>;
 
@@ -53,5 +58,14 @@ export function createAgentPoisonPaths(): AgentPoisonPaths {
     tuiRawConfigRead: createPoisonPath('TUI raw config read'),
     tuiLocalSkillDirectoryLoad: createPoisonPath('TUI local Skill directory load'),
     resultOnlyCommandSuccessPath: createPoisonPath('result-only command success path'),
+    cumulativeTimelineSnapshotPerDelta: createPoisonPath(
+      'cumulative Timeline snapshot per provider delta',
+    ),
+    timelineStringPrefixMerge: createPoisonPath('Timeline string-prefix merge inference'),
+    perChunkCompactionCheck: createPoisonPath('context compaction check per provider chunk'),
+    directLegacyMarkdownParse: createPoisonPath('direct legacy Agent Webview Markdown parse'),
+    concurrentConversationStorageWrite: createPoisonPath(
+      'concurrent same-storage conversation write',
+    ),
   };
 }

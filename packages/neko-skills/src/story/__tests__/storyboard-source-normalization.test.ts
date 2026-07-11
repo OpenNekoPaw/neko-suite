@@ -147,7 +147,11 @@ describe('Storyboard source normalization', () => {
 
   it('routes PDF prose through Content extraction without treating archive path as media', async () => {
     const extractor: StoryboardDocumentExtractionPort = {
-      extract: vi.fn(async () => ({ route: 'text', title: 'PDF Story', text: 'A city wakes.' })),
+      extract: vi.fn(async () => ({
+        route: 'text' as const,
+        title: 'PDF Story',
+        text: 'A city wakes.',
+      })),
     };
     const result = await normalizeStoryboardSource(
       { profile: 'from-document', sourceDocumentRef: documentRef },
@@ -164,7 +168,7 @@ describe('Storyboard source normalization', () => {
     const image = resource('document-image');
     const extractor: StoryboardDocumentExtractionPort = {
       extract: vi.fn(async () => ({
-        route: 'mixed',
+        route: 'mixed' as const,
         text: 'A map reveals the route.',
         images: [image],
       })),

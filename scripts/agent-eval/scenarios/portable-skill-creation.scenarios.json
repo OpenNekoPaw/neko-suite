@@ -1,0 +1,242 @@
+{
+  "schema": "neko.agent-eval.scenarios.v1",
+  "defaultCwd": "/tmp/neko-agent-portable-skill-eval",
+  "defaultTimeoutMs": 180000,
+  "cases": [
+    {
+      "id": "explicit-system-skill-creator",
+      "kind": "explicit-skill",
+      "surface": "agent",
+      "prompt": "$skill-creator 请说明如何设计一个可复用的代码审查 Skill，只给出可移植包结构和验证建议，不要创建或修改文件。",
+      "expectations": [
+        "$skill-creator 通过 Skill namespace 激活",
+        "激活记录指向 builtin skill-creator",
+        "不依赖 slash command alias"
+      ],
+      "assertions": [
+        {
+          "kind": "skill-active",
+          "name": "skill-creator"
+        }
+      ]
+    },
+    {
+      "id": "native-create-project-skill",
+      "kind": "single-prompt",
+      "surface": "agent",
+      "setup": [
+        {
+          "kind": "remove-path",
+          "path": ".agents/skills/eval-native-create-project-skill"
+        },
+        {
+          "kind": "remove-path",
+          "path": ".neko/skills/eval-native-create-project-skill"
+        },
+        {
+          "kind": "write-file",
+          "path": ".neko/skills/eval-native-create-project-skill/SKILL.md",
+          "content": "LEGACY_POISON_SKILL_MUST_REMAIN_UNCHANGED\n"
+        },
+        {
+          "kind": "write-file",
+          "path": ".neko/skills/eval-native-create-project-skill/manifest.json",
+          "content": "{ invalid legacy manifest"
+        }
+      ],
+      "prompt": "请务必调用原生 CreateSkill 能力一次，在 project 目标创建一个完整的 portable Skill。参数要求：skill.name 为 eval-native-create-project-skill，description 为 Evaluate canonical portable Skill creation.，body 为 # Eval Native Create Project Skill\n\nUse canonical portable Skill guidance.；resources 包含 references/checklist.md（utf8，内容为 # Checklist\n\n- canonical path）；不要读取、迁移、修改或删除 .neko/skills 中的同名 legacy poison；不要用普通文件写入替代 CreateSkill。完成后简要报告结果路径。",
+      "expectations": [
+        "原生 CreateSkill 成功",
+        "结果和文件均指向 .agents/skills",
+        "legacy poison 未被读取、覆盖或删除",
+        "canonical package 不包含 root manifest.json"
+      ],
+      "assertions": [
+        {
+          "kind": "tool-call-succeeded",
+          "name": "CreateSkill",
+          "arguments": {
+            "target": "project",
+            "skill": {
+              "name": "eval-native-create-project-skill"
+            }
+          },
+          "result": {
+            "created": true,
+            "source": "project",
+            "relativePath": "eval-native-create-project-skill"
+          },
+          "resultContains": [
+            ".agents/skills/eval-native-create-project-skill"
+          ]
+        }
+      ],
+      "postChecks": [
+        {
+          "kind": "file-exists",
+          "path": ".agents/skills/eval-native-create-project-skill/SKILL.md",
+          "contains": [
+            "name: eval-native-create-project-skill",
+            "description: Evaluate canonical portable Skill creation.",
+            "# Eval Native Create Project Skill",
+            "Use canonical portable Skill guidance."
+          ]
+        },
+        {
+          "kind": "file-exists",
+          "path": ".agents/skills/eval-native-create-project-skill/references/checklist.md",
+          "equals": "# Checklist\n\n- canonical path"
+        },
+        {
+          "kind": "file-absent",
+          "path": ".agents/skills/eval-native-create-project-skill/manifest.json"
+        },
+        {
+          "kind": "file-exists",
+          "path": ".neko/skills/eval-native-create-project-skill/SKILL.md",
+          "equals": "LEGACY_POISON_SKILL_MUST_REMAIN_UNCHANGED\n"
+        },
+        {
+          "kind": "file-exists",
+          "path": ".neko/skills/eval-native-create-project-skill/manifest.json",
+          "equals": "{ invalid legacy manifest"
+        }
+      ]
+    },
+    {
+      "id": "native-create-rejects-invalid-skill",
+      "kind": "single-prompt",
+      "surface": "agent",
+      "setup": [
+        {
+          "kind": "remove-path",
+          "path": ".agents/skills/eval-invalid-skill"
+        }
+      ],
+      "prompt": "请调用原生 CreateSkill 能力一次并保留运行时失败结果，不要自行修正输入，也不要改用普通文件写入。target 使用 project；skill.name 故意使用非法名称 Invalid Skill Name；description 为 Evaluate invalid Skill rejection.；body 为 # Invalid Skill。",
+      "expectations": [
+        "CreateSkill 返回 invalid-skill",
+        "不会创建 canonical target"
+      ],
+      "assertions": [
+        {
+          "kind": "tool-call-failed",
+          "name": "CreateSkill",
+          "arguments": {
+            "target": "project",
+            "skill": {
+              "name": "Invalid Skill Name"
+            }
+          },
+          "result": {
+            "code": "invalid-skill"
+          }
+        }
+      ],
+      "postChecks": [
+        {
+          "kind": "file-absent",
+          "path": ".agents/skills/eval-invalid-skill"
+        }
+      ]
+    },
+    {
+      "id": "native-create-rejects-resource-traversal",
+      "kind": "single-prompt",
+      "surface": "agent",
+      "setup": [
+        {
+          "kind": "remove-path",
+          "path": ".agents/skills/eval-traversal-skill"
+        },
+        {
+          "kind": "remove-path",
+          "path": ".agents/skills/escape.txt"
+        }
+      ],
+      "prompt": "请调用原生 CreateSkill 能力一次并保留运行时失败结果，不要自行修正资源路径，也不要改用普通文件写入。target 使用 project；skill.name 为 eval-traversal-skill，description 为 Evaluate traversal rejection.，body 为 # Eval Traversal Skill；resources 只包含一个 utf8 资源，path 故意使用 ../escape.txt，content 为 MUST_NOT_ESCAPE。",
+      "expectations": [
+        "CreateSkill 返回 invalid-resource-path",
+        "不会提交 canonical package",
+        "不会写出 traversal 资源"
+      ],
+      "assertions": [
+        {
+          "kind": "tool-call-failed",
+          "name": "CreateSkill",
+          "arguments": {
+            "target": "project",
+            "skill": {
+              "name": "eval-traversal-skill"
+            },
+            "resources": [
+              {
+                "path": "../escape.txt"
+              }
+            ]
+          },
+          "result": {
+            "code": "invalid-resource-path"
+          }
+        }
+      ],
+      "postChecks": [
+        {
+          "kind": "file-absent",
+          "path": ".agents/skills/eval-traversal-skill"
+        },
+        {
+          "kind": "file-absent",
+          "path": ".agents/skills/escape.txt"
+        }
+      ]
+    },
+    {
+      "id": "native-create-rejects-existing-target",
+      "kind": "single-prompt",
+      "surface": "agent",
+      "setup": [
+        {
+          "kind": "remove-path",
+          "path": ".agents/skills/eval-existing-target-skill"
+        },
+        {
+          "kind": "write-file",
+          "path": ".agents/skills/eval-existing-target-skill/SKILL.md",
+          "content": "CONFLICT_SENTINEL_DO_NOT_OVERWRITE\n"
+        }
+      ],
+      "prompt": "请调用原生 CreateSkill 能力一次并保留运行时冲突结果，不要覆盖、合并、删除现有目录，也不要改用普通文件写入。target 使用 project；skill.name 为 eval-existing-target-skill，description 为 Evaluate canonical target conflict.，body 为 # Replacement Must Not Commit。",
+      "expectations": [
+        "CreateSkill 返回 skill-already-exists",
+        "现有 canonical sentinel 原样保留"
+      ],
+      "assertions": [
+        {
+          "kind": "tool-call-failed",
+          "name": "CreateSkill",
+          "arguments": {
+            "target": "project",
+            "skill": {
+              "name": "eval-existing-target-skill"
+            }
+          },
+          "result": {
+            "code": "skill-already-exists"
+          }
+        }
+      ],
+      "postChecks": [
+        {
+          "kind": "file-exists",
+          "path": ".agents/skills/eval-existing-target-skill/SKILL.md",
+          "equals": "CONFLICT_SENTINEL_DO_NOT_OVERWRITE\n"
+        },
+        {
+          "kind": "file-absent",
+          "path": ".agents/skills/eval-existing-target-skill/manifest.json"
+        }
+      ]
+    }
+  ]
+}

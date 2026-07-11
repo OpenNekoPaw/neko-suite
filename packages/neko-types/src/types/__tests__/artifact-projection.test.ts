@@ -151,9 +151,37 @@ function makeArtifact(table: StoryboardTable): CompositeArtifact {
 }
 
 function makeStoryboardTable(overrides: Partial<StoryboardTable> = {}): StoryboardTable {
+  const sourceRef = {
+    id: 'artifact-storyboard-source',
+    scope: 'project' as const,
+    provider: 'fixture',
+    kind: 'storyboard-reference' as const,
+    source: {
+      kind: 'file' as const,
+      projectRelativePath: 'storyboards/artifact-source.json',
+      identity: { hash: 'artifact-source-hash' },
+    },
+    fingerprint: { strategy: 'hash' as const, value: 'artifact-source-hash' },
+  };
   return {
     schemaVersion: 1,
     kind: 'storyboard-table',
+    contractVersion: 1,
+    sourceProfile: 'from-existing-storyboard',
+    revision: {
+      revisionId: 'artifact-storyboard-v1',
+      sequence: 1,
+      contentDigest: 'artifact-storyboard-digest',
+      createdAt: '2026-07-11T00:00:00.000Z',
+    },
+    sourceTrace: [
+      {
+        traceId: 'artifact-storyboard-source:root',
+        sourceProfile: 'from-existing-storyboard',
+        sourceRef,
+      },
+    ],
+    projections: [],
     title: 'Artifact Storyboard',
     scenes: [
       {

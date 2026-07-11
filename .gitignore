@@ -8,6 +8,13 @@
 .vscode/
 .idea/
 .codex/
+# 仓库级 Agent evaluation Skill 需要进入版本控制；其余本地 Codex 状态继续忽略
+!.codex/
+.codex/*
+!.codex/skills/
+.codex/skills/*
+!.codex/skills/neko-agent-evaluation/
+!.codex/skills/neko-agent-evaluation/**
 
 # 依赖库
 node_modules/
@@ -38,6 +45,9 @@ test/
 .vscode-test/
 test-results/
 playwright-report/
+
+# 本地 Agent evaluation 运行证据（提交稳定摘要，不提交原始运行产物）
+reports/neko-eval/
 
 # 缓存
 .npm-cache/

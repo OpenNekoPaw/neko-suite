@@ -17,8 +17,13 @@ describe('poison path helpers', () => {
     const paths = createAgentPoisonPaths();
 
     expect(Object.keys(paths).sort()).toEqual([
+      'concurrentConversationStorageWrite',
+      'cumulativeTimelineSnapshotPerDelta',
+      'directLegacyMarkdownParse',
+      'perChunkCompactionCheck',
       'readlineInteractiveResume',
       'resultOnlyCommandSuccessPath',
+      'timelineStringPrefixMerge',
       'tuiLocalSkillDirectoryLoad',
       'tuiRawConfigRead',
     ]);

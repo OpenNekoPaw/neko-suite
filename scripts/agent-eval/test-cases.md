@@ -93,7 +93,7 @@ create session -> submit prompt -> wait idle -> read facts -> assert final answe
 }
 ```
 
-当前 runner 状态：`protocol-smoke.mjs` 已支持基础单 prompt smoke。
+当前 runner 状态：`protocol-smoke.mjs` 已支持基础单 prompt smoke，并执行 `runtime-errors-empty`、`final-answer-non-empty`、`final-answer-contains` 等确定性断言；未注册断言会在 spawn 前 fail-visible。
 
 ## 2. 一组提示词输出：消息队列
 
@@ -234,7 +234,7 @@ submit generation prompt
 }
 ```
 
-当前 runner 状态：基础 kind 可被 manifest 接受；任务/产物/rubric 断言需要继续扩展 runner。
+当前 runner 状态：基础 kind、`task-created`、`task-terminal`、continuation 与确定性最终答案断言已接入；产物语义和 rubric judge 仍需继续扩展。
 
 ## 5. Agent 并发任务处理结果：批量生成素材/评审质量
 
@@ -396,7 +396,7 @@ create session without pre-activated skill
 }
 ```
 
-当前 runner 状态：kind 和 manifest 字段已接受；自动触发路径断言需要继续扩展 runner。
+当前 runner 状态：kind 和 `skill-triggered` 断言已接入 `skillActivations` facts；更细的 capability trace 与触发理由仍需继续扩展。
 
 ## 9. 指定模型能力：chat/audio/image/video provider、模型 ID、profile
 
@@ -439,7 +439,12 @@ create session with chat model override
   },
   "prompt": "用指定图片模型生成奇幻森林概念图，并用指定 chat 模型评审画面层次",
   "assertions": [
-    { "kind": "chat-model-is", "providerId": "openai", "modelId": "gpt-4.1", "profileId": "creative-review" },
+    {
+      "kind": "chat-model-is",
+      "providerId": "openai",
+      "modelId": "gpt-4.1",
+      "profileId": "creative-review"
+    },
     { "kind": "media-model-is", "category": "image", "providerId": "fal", "modelId": "imagen4" },
     { "kind": "no-model-fallback" }
   ]

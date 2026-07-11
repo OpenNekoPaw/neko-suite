@@ -6,11 +6,17 @@ import { once } from 'node:events';
 import { createInterface } from 'node:readline';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  applyScenarioSetup,
+  evaluateScenario,
+  validateAndNormalizeScenarioRuntime,
+} from './scenario-runtime.mjs';
 
 export const EXIT_CASE_FAIL = 1;
 export const EXIT_INFRASTRUCTURE_FAIL = 2;
 export const EXIT_CONFIG_INVALID = 3;
 export const REQUEST_SCHEMA = 'neko.tui-debug-automation.request.v1';
+const TERMINAL_RESIZE_SETTLE_MS = 50;
 export const SUPPORTED_CASE_KINDS = new Set([
   undefined,
   'single-prompt',
@@ -39,6 +45,14 @@ export async function main(argv = process.argv.slice(2), io = defaultIo()) {
     return EXIT_CONFIG_INVALID;
   }
 
+  let setupEvidence;
+  try {
+    setupEvidence = await applyScenarioSetup(args);
+  } catch (error) {
+    io.stderr.write(`infrastructure fail: scenario setup failed: ${formatErrorMessage(error)}\n`);
+    return EXIT_INFRASTRUCTURE_FAIL;
+  }
+
   const command = io.env.NEKO_DEBUG_COMMAND ?? './packages/neko-agent/neko';
   const child = io.spawn(command, ['debug', 'automation', '--stdio', '-C', args.cwd], {
     cwd: io.cwd(),
@@ -51,7 +65,10 @@ export async function main(argv = process.argv.slice(2), io = defaultIo()) {
   try {
     const facts = await runSinglePromptProtocol(child, responses, args);
     assertSuccessfulFacts(facts);
-    io.stdout.write(`${JSON.stringify({ ok: true, facts }, null, 2)}\n`);
+    const evaluation = await evaluateScenario(args, facts);
+    io.stdout.write(
+      `${JSON.stringify({ ok: true, setup: setupEvidence, evaluation, facts }, null, 2)}\n`,
+    );
     return 0;
   } catch (error) {
     child.kill();
@@ -94,7 +111,11 @@ export function assertSuccessfulFacts(facts) {
 
   const assistantTurns = turns.filter((turn) => turn?.role === 'assistant');
   const finalAssistant = assistantTurns.at(-1);
-  if (!finalAssistant || typeof finalAssistant.content !== 'string' || finalAssistant.content.trim().length === 0) {
+  if (
+    !finalAssistant ||
+    typeof finalAssistant.content !== 'string' ||
+    finalAssistant.content.trim().length === 0
+  ) {
     throw new Error('debug automation completed without a non-empty assistant response');
   }
 }
@@ -121,6 +142,15 @@ export async function runSinglePromptProtocol(child, responses, args) {
       timeoutMs: args.timeoutMs ?? 120_000,
     },
   });
+
+  for (const [index, resize] of (args.terminalResizes ?? []).entries()) {
+    await sendRequest(child, responses, {
+      id: `resize-${index + 1}`,
+      method: 'terminal.resize',
+      params: { sessionId, columns: resize.columns, rows: resize.rows },
+    });
+    await new Promise((resolve) => setTimeout(resolve, TERMINAL_RESIZE_SETTLE_MS));
+  }
 
   const facts = await sendRequest(child, responses, {
     id: 'facts',
@@ -246,6 +276,7 @@ export function resolveManifestCase(parsed, manifest, options = {}) {
   }
 
   const env = options.env ?? process.env;
+  const runtime = validateAndNormalizeScenarioRuntime(scenario, { env });
   const cwd = parsed.cwd ?? scenario.cwd ?? manifest.defaultCwd;
   return {
     ...parsed,
@@ -255,8 +286,10 @@ export function resolveManifestCase(parsed, manifest, options = {}) {
     prompt: scenario.prompt,
     timeoutMs: parsed.timeoutMs ?? scenario.timeoutMs ?? manifest.defaultTimeoutMs,
     expectations: scenario.expectations,
-    assertions: scenario.assertions,
-    postChecks: scenario.postChecks,
+    assertions: runtime.assertions,
+    setup: runtime.setup,
+    postChecks: runtime.postChecks,
+    terminalResizes: runtime.terminalResizes,
     skills: scenario.skills,
     model: scenario.model,
     provider: scenario.provider,
@@ -294,7 +327,9 @@ export function createDryRunResult(args) {
     timeoutMs: args.timeoutMs,
     expectations: args.expectations ?? [],
     assertions: args.assertions ?? [],
+    setup: args.setup ?? [],
     postChecks: args.postChecks ?? [],
+    terminalResizes: args.terminalResizes ?? [],
     skills: args.skills ?? [],
     ...(args.model ? { model: args.model } : {}),
     ...(args.provider ? { provider: args.provider } : {}),

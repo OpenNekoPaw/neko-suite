@@ -221,7 +221,13 @@ function buildReport(allMatches, sourceFiles) {
       terms,
       includedExtensions: [...includedExtensions].sort(),
       excludedDirectories: [...excludedDirectories].sort(),
-      nonTestExclusions: ['**/__tests__/**', '**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
+      nonTestExclusions: [
+        '**/__tests__/**',
+        '**/*.test.ts',
+        '**/*.test.tsx',
+        '**/*.spec.ts',
+        '**/*.spec.tsx',
+      ],
       ledgerPath,
     },
     scopes: {
@@ -234,8 +240,14 @@ function buildReport(allMatches, sourceFiles) {
     },
     qualityGate: buildQualityGate(nonTestMatches),
     hotspots: {
-      packages: topRows(groupMatches(nonTestMatches, (match) => match.packageName), 20),
-      files: topRows(groupMatches(nonTestMatches, (match) => match.file), 40),
+      packages: topRows(
+        groupMatches(nonTestMatches, (match) => match.packageName),
+        20,
+      ),
+      files: topRows(
+        groupMatches(nonTestMatches, (match) => match.file),
+        40,
+      ),
     },
     examples: representativeExamples(nonTestMatches, 30),
     needsReview: nonTestMatches
@@ -246,7 +258,9 @@ function buildReport(allMatches, sourceFiles) {
 }
 
 function buildQualityGate(nonTestMatches) {
-  const failingMatches = nonTestMatches.filter((match) => failingProductionSemanticClasses.has(match.semanticClass));
+  const failingMatches = nonTestMatches.filter((match) =>
+    failingProductionSemanticClasses.has(match.semanticClass),
+  );
   const classes = {};
   for (const semanticClass of failingProductionSemanticClasses) {
     const matches = failingMatches.filter((match) => match.semanticClass === semanticClass);
@@ -324,7 +338,10 @@ function groupMatches(scopeMatches, keyFn) {
     group.occurrences += 1;
     group.termCounts[match.term] += 1;
     group.files.add(match.file);
-    group.semanticClasses.set(match.semanticClass, (group.semanticClasses.get(match.semanticClass) ?? 0) + 1);
+    group.semanticClasses.set(
+      match.semanticClass,
+      (group.semanticClasses.get(match.semanticClass) ?? 0) + 1,
+    );
     if (group.examples.length < 3) {
       group.examples.push(formatExample(match));
     }
@@ -335,13 +352,17 @@ function groupMatches(scopeMatches, keyFn) {
     occurrences: group.occurrences,
     termCounts: group.termCounts,
     files: group.files.size,
-    semanticClasses: Object.fromEntries([...group.semanticClasses.entries()].sort((a, b) => b[1] - a[1])),
+    semanticClasses: Object.fromEntries(
+      [...group.semanticClasses.entries()].sort((a, b) => b[1] - a[1]),
+    ),
     examples: group.examples,
   }));
 }
 
 function topRows(rows, limit) {
-  return rows.sort((a, b) => b.occurrences - a.occurrences || a.key.localeCompare(b.key)).slice(0, limit);
+  return rows
+    .sort((a, b) => b.occurrences - a.occurrences || a.key.localeCompare(b.key))
+    .slice(0, limit);
 }
 
 function representativeExamples(scopeMatches, limit) {
@@ -364,9 +385,13 @@ function representativeExamples(scopeMatches, limit) {
 function cleanupCandidates(scopeMatches) {
   const byFile = groupMatches(
     scopeMatches.filter((match) =>
-      ['delete-now', 'migrate-now', 'boundary-canonicalizer', 'presentation-default', 'needs-review'].includes(
-        match.semanticClass,
-      ),
+      [
+        'delete-now',
+        'migrate-now',
+        'boundary-canonicalizer',
+        'presentation-default',
+        'needs-review',
+      ].includes(match.semanticClass),
     ),
     (match) => match.file,
   );
@@ -408,7 +433,10 @@ function classifySurface(file, line, term) {
   if (containsAny(lowerLine, ['false positive', 'knip', 'dynamic import']) && term !== 'fallback') {
     return 'false-positive-word';
   }
-  if (containsAny(lowerFile, ['vitest.config.ts']) && containsAny(lowerLine, ['deprecated task-manager'])) {
+  if (
+    containsAny(lowerFile, ['vitest.config.ts']) &&
+    containsAny(lowerLine, ['deprecated task-manager'])
+  ) {
     return 'false-positive-word';
   }
   if (isDomainDeprecatedSurface(lowerFile, lowerLine, term)) {
@@ -479,7 +507,13 @@ function isDomainDeprecatedSurface(lowerFile, lowerLine, term) {
       'creativeentityservice.ts',
       'execution-persona.ts',
     ]) ||
-    containsAny(lowerLine, ['deprecated status', "status: 'deprecated'", '"deprecated"', "'deprecated'", 'deprecated:'])
+    containsAny(lowerLine, [
+      'deprecated status',
+      "status: 'deprecated'",
+      '"deprecated"',
+      "'deprecated'",
+      'deprecated:',
+    ])
   );
 }
 
@@ -494,8 +528,13 @@ function isDomainFallbackSurface(lowerFile, lowerLine) {
 
 function isDeleteNowSurface(lowerFile, lowerLine) {
   return (
-    containsAny(lowerLine, ['delete-now', 'dead code', 'unused file', 'remove this shim', 're-export shim']) ||
-    lowerFile.endsWith('/components/content/index.ts')
+    containsAny(lowerLine, [
+      'delete-now',
+      'dead code',
+      'unused file',
+      'remove this shim',
+      're-export shim',
+    ]) || lowerFile.endsWith('/components/content/index.ts')
   );
 }
 
@@ -536,6 +575,7 @@ function isBoundaryCanonicalizerSurface(lowerFile, lowerLine) {
   return (
     containsAny(lowerFile, [
       'migrator',
+      'migration.ts',
       'normalization',
       'normalizer',
       'resource-cache-provider',
@@ -731,7 +771,9 @@ function validateLedger(report) {
   } catch (error) {
     return {
       ledgerPath,
-      errors: [`Invalid JSON in ${ledgerPath}: ${error instanceof Error ? error.message : String(error)}`],
+      errors: [
+        `Invalid JSON in ${ledgerPath}: ${error instanceof Error ? error.message : String(error)}`,
+      ],
       warnings,
       checkedEntries: 0,
     };
@@ -790,7 +832,11 @@ function validateLedgerRoot(ledger, errors) {
   if (ledger.scope !== 'non-agent') {
     errors.push('Ledger scope must be "non-agent".');
   }
-  if (!ledger.semanticClasses || typeof ledger.semanticClasses !== 'object' || Array.isArray(ledger.semanticClasses)) {
+  if (
+    !ledger.semanticClasses ||
+    typeof ledger.semanticClasses !== 'object' ||
+    Array.isArray(ledger.semanticClasses)
+  ) {
     errors.push('Ledger semanticClasses must be an object.');
   } else {
     for (const semanticClass of requiredSemanticClasses) {
@@ -834,7 +880,11 @@ function validateLedgerEntry(entry, errors, warnings) {
     errors.push(`${id}: paths must be a non-empty array.`);
   }
 
-  if (!entry.validation || !Array.isArray(entry.validation.commands) || entry.validation.commands.length === 0) {
+  if (
+    !entry.validation ||
+    !Array.isArray(entry.validation.commands) ||
+    entry.validation.commands.length === 0
+  ) {
     errors.push(`${id}: validation.commands must be a non-empty array.`);
   }
 
@@ -850,7 +900,9 @@ function validateLedgerEntry(entry, errors, warnings) {
       continue;
     }
     if (path.startsWith('packages/neko-agent/')) {
-      errors.push(`${id}: Agent path belongs in agent-code-debt-lcd-register.json, not ${ledgerPath}.`);
+      errors.push(
+        `${id}: Agent path belongs in agent-code-debt-lcd-register.json, not ${ledgerPath}.`,
+      );
     }
     if (entry.status !== 'removed' && !path.includes('*') && !existsSync(resolve(repoRoot, path))) {
       warnings.push(`${id}: path does not currently exist: ${path}`);
@@ -866,7 +918,9 @@ function validateRequiredCoverage(ledger, entriesById, report, errors, warnings)
     const id = coverage?.id ?? '<missing-coverage-id>';
     const entry = entriesById.get(coverage?.ledgerEntryId);
     if (!entry) {
-      errors.push(`${id}: requiredCoverage references missing ledger entry ${String(coverage?.ledgerEntryId)}.`);
+      errors.push(
+        `${id}: requiredCoverage references missing ledger entry ${String(coverage?.ledgerEntryId)}.`,
+      );
       continue;
     }
     if (entry.status === 'removed' && coverage.allowRemovedEntry !== true) {
@@ -877,19 +931,27 @@ function validateRequiredCoverage(ledger, entriesById, report, errors, warnings)
       continue;
     }
 
-    const matchedFiles = [...nonTestFiles].filter((file) => matchesGlob(file, coverage.pathPattern));
+    const matchedFiles = [...nonTestFiles].filter((file) =>
+      matchesGlob(file, coverage.pathPattern),
+    );
     if (
       coverage.requiredWhileMatched !== false &&
       matchedFiles.length === 0 &&
       !(entry.status === 'removed' && coverage.allowRemovedEntry === true)
     ) {
-      warnings.push(`${id}: required coverage pattern currently has no matches: ${coverage.pathPattern}`);
+      warnings.push(
+        `${id}: required coverage pattern currently has no matches: ${coverage.pathPattern}`,
+      );
     }
 
     const entryPaths = Array.isArray(entry.paths) ? entry.paths : [];
-    const covered = entryPaths.some((path) => matchesGlob(coverage.pathPattern, path) || matchesGlob(path, coverage.pathPattern));
+    const covered = entryPaths.some(
+      (path) => matchesGlob(coverage.pathPattern, path) || matchesGlob(path, coverage.pathPattern),
+    );
     if (!covered) {
-      errors.push(`${id}: ledger entry ${entry.id} does not list coverage path ${coverage.pathPattern}.`);
+      errors.push(
+        `${id}: ledger entry ${entry.id} does not list coverage path ${coverage.pathPattern}.`,
+      );
     }
   }
 }
@@ -940,14 +1002,18 @@ function collectFilesWithTermMatches(includeTests) {
 }
 
 function addCoverageWarnings(report, entries, warnings) {
-  const coveredPatterns = entries.flatMap((entry) => (Array.isArray(entry.paths) ? entry.paths : []));
+  const coveredPatterns = entries.flatMap((entry) =>
+    Array.isArray(entry.paths) ? entry.paths : [],
+  );
   for (const row of report.cleanupCandidates.slice(0, 12)) {
     if (row.key.startsWith('packages/neko-agent/')) {
       continue;
     }
     const covered = coveredPatterns.some((pattern) => matchesGlob(row.key, pattern));
     if (!covered && row.occurrences >= 10) {
-      warnings.push(`High-volume cleanup candidate lacks ledger path coverage: ${row.key} (${row.occurrences})`);
+      warnings.push(
+        `High-volume cleanup candidate lacks ledger path coverage: ${row.key} (${row.occurrences})`,
+      );
     }
   }
 }
@@ -1011,7 +1077,9 @@ function printHumanReport(report) {
   console.log('');
   console.log('Representative examples');
   for (const example of report.examples.slice(0, 12)) {
-    console.log(`- ${example.file}:${example.line} [${example.semanticClass}/${example.term}] ${example.text}`);
+    console.log(
+      `- ${example.file}:${example.line} [${example.semanticClass}/${example.term}] ${example.text}`,
+    );
   }
 }
 
@@ -1032,8 +1100,12 @@ function printQualityGate(qualityGate) {
 }
 
 function printScope(label, scope) {
-  console.log(`${label}: ${scope.occurrences} occurrences in ${scope.filesWithMatches}/${scope.filesScanned} files`);
-  console.log(`  legacy=${scope.termCounts.legacy}, fallback=${scope.termCounts.fallback}, deprecated=${scope.termCounts.deprecated}`);
+  console.log(
+    `${label}: ${scope.occurrences} occurrences in ${scope.filesWithMatches}/${scope.filesScanned} files`,
+  );
+  console.log(
+    `  legacy=${scope.termCounts.legacy}, fallback=${scope.termCounts.fallback}, deprecated=${scope.termCounts.deprecated}`,
+  );
 }
 
 function printSemanticClassSummary(classes) {
@@ -1080,15 +1152,27 @@ function printValidation(result) {
 function runSelfTest() {
   const cases = [
     {
-      value: classifySurface('packages/neko-types/src/generated/timeline.engine.ts', 'legacy field', 'legacy'),
+      value: classifySurface(
+        'packages/neko-types/src/generated/timeline.engine.ts',
+        'legacy field',
+        'legacy',
+      ),
       expected: 'generated-source',
     },
     {
-      value: classifySurface('packages/neko-market/packages/core/src/status.ts', "status: 'deprecated'", 'deprecated'),
+      value: classifySurface(
+        'packages/neko-market/packages/core/src/status.ts',
+        "status: 'deprecated'",
+        'deprecated',
+      ),
       expected: 'domain-status',
     },
     {
-      value: classifySurface('packages/neko-preview/packages/webview/src/Viewer.tsx', 'const fallbackLabel = "Open";', 'fallback'),
+      value: classifySurface(
+        'packages/neko-preview/packages/webview/src/Viewer.tsx',
+        'const fallbackLabel = "Open";',
+        'fallback',
+      ),
       expected: 'presentation-default',
     },
     {
@@ -1116,11 +1200,27 @@ function runSelfTest() {
       expected: 'domain-status',
     },
     {
-      value: classifySurface('packages/neko-client/src/EngineClient.ts', 'fallback to cpu when gpu fails', 'fallback'),
+      value: classifySurface(
+        'packages/neko-agent/packages/agent/src/skill/legacy-skill-migration.ts',
+        "const LEGACY_MANIFEST_FILE = 'manifest.json';",
+        'legacy',
+      ),
+      expected: 'boundary-canonicalizer',
+    },
+    {
+      value: classifySurface(
+        'packages/neko-client/src/EngineClient.ts',
+        'fallback to cpu when gpu fails',
+        'fallback',
+      ),
       expected: 'runtime-resilience',
     },
     {
-      value: classifySurface('knip.config.ts', "'@img/sharp-wasm32', // Sharp WASM fallback", 'fallback'),
+      value: classifySurface(
+        'knip.config.ts',
+        "'@img/sharp-wasm32', // Sharp WASM fallback",
+        'fallback',
+      ),
       expected: 'runtime-resilience',
     },
     {
@@ -1152,7 +1252,10 @@ function runSelfTest() {
       expected: 'failed',
     },
     {
-      value: matchesGlob('packages/neko-types/src/types/storyboard-table.ts', 'packages/neko-types/src/types/*.ts'),
+      value: matchesGlob(
+        'packages/neko-types/src/types/storyboard-table.ts',
+        'packages/neko-types/src/types/*.ts',
+      ),
       expected: true,
     },
   ];

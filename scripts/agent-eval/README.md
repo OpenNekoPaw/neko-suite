@@ -42,6 +42,25 @@ with evaluators actually executed by the current runner count as passed.
 Metadata printed by `--dry-run`, a zero exit code, or a non-empty final answer
 must not be reported as complete scenario acceptance on their own.
 
+## Executable Scenario Evidence
+
+`protocol-smoke.mjs` validates the selected case before spawning the TUI. Unknown
+case kinds, assertion kinds, setup operations, and post-check kinds are
+configuration errors rather than ignored metadata.
+
+The script-owned scenario runtime currently supports:
+
+- contained workspace fixtures: `remove-path`, `write-file`;
+- runtime/final-answer/task/continuation/Skill/tool-call assertions;
+- deterministic structured `tool-call-succeeded` and `tool-call-failed`
+  matching against `turns[].toolCalls[]`;
+- contained `file-exists` and `file-absent` checks plus `canvas-json` checks.
+
+Fixture writes and removals are restricted to relative paths below the selected
+`cwd`, reject traversal and symlink crossings, and should still be run only in a
+dedicated evaluation workspace. Successful output includes separate `setup`,
+`evaluation.assertions`, `evaluation.postChecks`, and raw `facts` evidence.
+
 ## Exit Codes
 
 - `0`: runner-supported checks passed
@@ -66,6 +85,33 @@ Override it with `NEKO_DEBUG_COMMAND` when testing an unbundled CLI:
 NEKO_DEBUG_COMMAND="./node_modules/.bin/tsx packages/neko-agent/packages/cli-tui/src/cli.tsx" \
 node scripts/agent-eval/protocol-smoke.mjs --cwd /tmp/neko-test --prompt "hello"
 ```
+
+## Portable Skill Creation Scenarios
+
+Native portable Skill creation acceptance cases are defined in:
+
+```bash
+scripts/agent-eval/scenarios/portable-skill-creation.scenarios.json
+```
+
+They cover canonical project creation, invalid Skill rejection, resource-path
+traversal rejection, existing-target conflict, `.agents/skills` path evidence,
+absence of a canonical root `manifest.json`, and unchanged poisoned
+`.neko/skills` input. The manifest uses a dedicated temporary workspace at
+`/tmp/neko-agent-portable-skill-eval`.
+
+Validate any case without starting a provider-backed Agent:
+
+```bash
+node scripts/agent-eval/protocol-smoke.mjs \
+  --manifest scripts/agent-eval/scenarios/portable-skill-creation.scenarios.json \
+  --case native-create-project-skill \
+  --dry-run
+```
+
+Run the real focused case through TUI debug automation by removing `--dry-run`.
+Provider credentials and an available chat model are required for real Agent
+behavior acceptance.
 
 ## Creative Workflow Scenarios
 
@@ -136,3 +182,41 @@ node scripts/agent-eval/canvas-json-check.mjs \
 
 This checks file existence, JSON parseability, and expected content in the JSON
 string. It does not inspect Canvas Webview memory.
+
+## TUI Markdown Rendering Scenarios
+
+Focused normalized Markdown/TUI cases are defined in:
+
+```bash
+scripts/agent-eval/scenarios/tui-markdown-rendering.scenarios.json
+```
+
+They cover mixed CommonMark/GFM, aligned and ragged tables, escaped pipes, multiline code, CJK/emoji/combining text, incomplete table/fence streaming, terminal resize, and provider-authored ESC/CSI/OSC/BEL/C0/C1 payloads.
+
+The TUI debug automation contract exposes generally useful Markdown path facts under `session.facts.markdown`:
+
+- `pathEvents`: bounded canonical-path events such as `session-created`, `source-updated`, `document-projected`, `layout-created` and `session-finalized`;
+- `droppedPathEventCount`: overflow evidence; runner assertions fail when facts are incomplete.
+
+`terminal.resize` is a general automation control with integer `columns`/`rows` in `1..1000`; it updates the TUI terminal-size store for the selected debug session. Scenario manifests may declare ordered `terminalResizes` after Agent idle.
+
+`markdown-path-events` is runner-owned assertion semantics, not an eval-specific runtime pass/fail field. It can require events for the same Markdown key, require observed viewport widths, and prove those widths reflow the same document revision.
+
+Validate the manifest/case and protocol without a provider:
+
+```bash
+node scripts/agent-eval/protocol-smoke.mjs \
+  --manifest scripts/agent-eval/scenarios/tui-markdown-rendering.scenarios.json \
+  --case mixed-gfm-unicode-resize \
+  --dry-run
+```
+
+Run the real focused Agent/provider case by removing `--dry-run`:
+
+```bash
+node scripts/agent-eval/protocol-smoke.mjs \
+  --manifest scripts/agent-eval/scenarios/tui-markdown-rendering.scenarios.json \
+  --case mixed-gfm-unicode-resize
+```
+
+`pnpm test:agent:eval` and dry-run validation are key-free harness evidence only. They must not be reported as provider/model behavior acceptance. A real case requires available provider/model credentials and network/controller access; blockers and residual risk must be recorded explicitly.

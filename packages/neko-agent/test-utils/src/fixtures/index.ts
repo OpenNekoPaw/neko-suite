@@ -202,3 +202,12 @@ export {
   type AgentWorkspaceRuntimeFixtureOptions,
   type AgentWorkspaceRuntimeFixturePaths,
 } from './workspace-runtime';
+
+export {
+  TABLE_HEAVY_STREAM_CHUNK_COUNT,
+  TABLE_HEAVY_STREAM_SOURCE_LENGTH,
+  createAgentStreamRegressionCounters,
+  createTableHeavyStreamFixture,
+  type AgentStreamRegressionCounters,
+  type TableHeavyStreamFixture,
+} from './table-heavy-stream';

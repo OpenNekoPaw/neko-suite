@@ -49,6 +49,39 @@ describe('agent eval protocol smoke case handling', () => {
     });
   });
 
+  it('preserves generic terminal resize sequences for Markdown path evaluation', () => {
+    const args = resolveManifestCase(
+      { caseId: 'markdown-resize' },
+      {
+        ...BASE_MANIFEST,
+        cases: [
+          {
+            id: 'markdown-resize',
+            kind: 'single-prompt',
+            prompt: '输出 Markdown 表格和代码块',
+            terminalResizes: [
+              { columns: 80, rows: 24 },
+              { columns: 24, rows: 20 },
+            ],
+            assertions: [
+              {
+                kind: 'markdown-path-events',
+                required: ['session-created', 'layout-created', 'session-finalized'],
+                viewportWidths: [80, 24],
+                sameRevisionForViewportWidths: true,
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(args.terminalResizes).toEqual([
+      { columns: 80, rows: 24 },
+      { columns: 24, rows: 20 },
+    ]);
+  });
+
   it('handles async task cases as single prompt runs with task assertions', () => {
     const args = resolveManifestCase(
       { caseId: 'async' },
@@ -143,6 +176,25 @@ describe('agent eval protocol smoke case handling', () => {
     expect(createSessionParams(args)).toEqual({ provider: 'openai', model: 'gpt-4.1' });
   });
 
+  it('rejects unsupported assertion kinds before spawning the runner', () => {
+    expect(() =>
+      resolveManifestCase(
+        { caseId: 'unsupported-assertion' },
+        {
+          ...BASE_MANIFEST,
+          cases: [
+            {
+              id: 'unsupported-assertion',
+              kind: 'single-prompt',
+              prompt: 'do not spawn',
+              assertions: [{ kind: 'metadata-only-check' }],
+            },
+          ],
+        },
+      ),
+    ).toThrow('assertion[0] kind metadata-only-check is not supported');
+  });
+
   it('rejects documented multi-step case kinds until the runner implements them', () => {
     const unsupportedKinds = [
       'message-queue',
@@ -188,13 +240,27 @@ describe('agent eval protocol smoke case handling', () => {
           {
             id: 'canvas',
             prompt: '生成分镜表并发送到 canvas',
-            postChecks: [{ kind: 'canvas-json', expect: ['storyboard', 'nodes'] }],
+            postChecks: [
+              {
+                kind: 'canvas-json',
+                root: '/workspace',
+                glob: '**/*.canvas.json',
+                expect: ['storyboard', 'nodes'],
+              },
+            ],
           },
         ],
       },
     );
 
-    expect(args.postChecks).toEqual([{ kind: 'canvas-json', expect: ['storyboard', 'nodes'] }]);
+    expect(args.postChecks).toEqual([
+      {
+        kind: 'canvas-json',
+        root: '/workspace',
+        glob: '**/*.canvas.json',
+        expect: ['storyboard', 'nodes'],
+      },
+    ]);
   });
 });
 
@@ -248,6 +314,48 @@ describe('agent eval protocol smoke CLI handling', () => {
     });
   });
 
+  it('dry-runs every portable Skill creation case with executable evidence', async () => {
+    const cases = [
+      ['explicit-system-skill-creator', 'skill-active'],
+      ['native-create-project-skill', 'tool-call-succeeded'],
+      ['native-create-rejects-invalid-skill', 'tool-call-failed'],
+      ['native-create-rejects-resource-traversal', 'tool-call-failed'],
+      ['native-create-rejects-existing-target', 'tool-call-failed'],
+    ];
+
+    for (const [caseId, assertionKind] of cases) {
+      const stdout = createWritableCapture();
+      const stderr = createWritableCapture();
+      const spawn = vi.fn();
+      const code = await main(
+        [
+          '--manifest',
+          'scripts/agent-eval/scenarios/portable-skill-creation.scenarios.json',
+          '--case',
+          caseId,
+          '--dry-run',
+        ],
+        {
+          stdout,
+          stderr,
+          env: {},
+          cwd: () => '/repo',
+          spawn,
+        },
+      );
+
+      expect(code).toBe(0);
+      expect(spawn).not.toHaveBeenCalled();
+      expect(stderr.text()).toBe('');
+      expect(JSON.parse(stdout.text())).toMatchObject({
+        ok: true,
+        dryRun: true,
+        caseId,
+        assertions: [expect.objectContaining({ kind: assertionKind })],
+      });
+    }
+  });
+
   it('returns config invalid for unsupported target case kinds before spawning', async () => {
     const stdout = createWritableCapture();
     const stderr = createWritableCapture();
@@ -287,6 +395,8 @@ describe('agent eval protocol smoke request sequencing', () => {
           { ok: true, result: { sessionId: 's1' } },
           { ok: true, result: { submitted: true } },
           { ok: true, result: { fullyIdle: true } },
+          { ok: true, result: { columns: 80, rows: 24 } },
+          { ok: true, result: { columns: 24, rows: 20 } },
           { ok: true, result: facts },
           { ok: true, result: { disposed: true } },
         ]),
@@ -294,6 +404,10 @@ describe('agent eval protocol smoke request sequencing', () => {
           prompt: 'hello',
           timeoutMs: 1234,
           model: { chat: { providerId: 'openai', modelId: 'gpt-4.1' } },
+          terminalResizes: [
+            { columns: 80, rows: 24 },
+            { columns: 24, rows: 20 },
+          ],
         },
       ),
     ).resolves.toBe(facts);
@@ -302,12 +416,16 @@ describe('agent eval protocol smoke request sequencing', () => {
       'session.create',
       'message.submit',
       'session.waitForIdle',
+      'terminal.resize',
+      'terminal.resize',
       'session.facts',
       'session.dispose',
     ]);
     expect(child.requests[0].params).toEqual({ provider: 'openai', model: 'gpt-4.1' });
     expect(child.requests[1].params).toEqual({ sessionId: 's1', prompt: 'hello' });
     expect(child.requests[2].params).toEqual({ sessionId: 's1', timeoutMs: 1234 });
+    expect(child.requests[3].params).toEqual({ sessionId: 's1', columns: 80, rows: 24 });
+    expect(child.requests[4].params).toEqual({ sessionId: 's1', columns: 24, rows: 20 });
     expect(child.stdin.end).toHaveBeenCalledTimes(1);
     expect(child.kill).toHaveBeenCalledTimes(1);
   });
