@@ -37,6 +37,10 @@ import type { ActivationProgressTimeline } from '@/presenters/activation-progres
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import type { MediaModelSelection } from '@/hooks/useUIState';
 import type { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
+import {
+  commitLegacyConversationCache,
+  ingestLegacyConversationRenderSnapshot,
+} from '@/render-lifecycle/legacy-conversation-render-adapter';
 import type { ExtensionToWebviewMessage } from './messages';
 import { AgentHostMessages, getAgentHostRuntimeAdapter } from '@/messages';
 import { readAgentTurnTimelineRecoveryRequests } from './timeline-recovery-state';
@@ -261,8 +265,18 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
         activeTurnTimeline: null,
       };
       const updated = updater(currentMessages, currentStreaming);
-      conversationMessagesRef.current.set(conversationId, updated.messages);
-      conversationStreamingRef.current.set(conversationId, updated.streaming);
+      const snapshot = ingestLegacyConversationRenderSnapshot({
+        coordinator: conversationRenderCoordinator,
+        conversationId,
+        messages: updated.messages,
+        streaming: updated.streaming,
+        kind: 'timeline-commit',
+      });
+      commitLegacyConversationCache({
+        snapshot,
+        conversationMessagesRef,
+        conversationStreamingRef,
+      });
       if (
         currentStreaming.streamingMessageId !== updated.streaming.streamingMessageId ||
         currentStreaming.isThinking !== updated.streaming.isThinking ||
@@ -271,7 +285,12 @@ export function useMessageHandler(props: UseMessageHandlerProps): UseMessageHand
         forceContextUpdate();
       }
     },
-    [conversationMessagesRef, conversationStreamingRef, forceContextUpdate],
+    [
+      conversationMessagesRef,
+      conversationRenderCoordinator,
+      conversationStreamingRef,
+      forceContextUpdate,
+    ],
   );
 
   // Create context object

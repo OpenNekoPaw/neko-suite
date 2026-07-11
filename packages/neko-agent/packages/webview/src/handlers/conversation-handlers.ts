@@ -5,7 +5,12 @@
  */
 
 import { defineHandler } from './types';
-import type { MessageHandler, HandlerRegistration, StreamingState } from './types';
+import type {
+  MessageHandler,
+  HandlerRegistration,
+  MessageHandlerContext,
+  StreamingState,
+} from './types';
 import type {
   ErrorMessage,
   GlobalErrorMessage,
@@ -15,6 +20,7 @@ import type {
   ConversationLifecycleResultMessage,
   ActiveConversationMessage,
 } from './messages';
+import type { Message } from '@neko-agent/types';
 import {
   projectActiveConversation,
   projectConversationError,
@@ -28,8 +34,10 @@ import { projectQueuedMessagesCleared } from '@/presenters/message-queue-present
 import { getActiveTimelineForMessage } from './timeline-handlers';
 import {
   commitConversationRenderActivation,
+  commitLegacyConversationCache,
   createConversationMarkdownTimelineResourceOwner,
   createConversationVisibleStatePort,
+  ingestLegacyConversationRenderSnapshot,
 } from '@/render-lifecycle/legacy-conversation-render-adapter';
 
 /**
@@ -200,8 +208,12 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
       !shouldActivateForeground)
   ) {
     if (conversationId) {
-      context.conversationMessagesRef.current.set(conversationId, projection.messages);
-      context.conversationStreamingRef.current.set(conversationId, projection.streaming);
+      cacheConversationProjection(
+        context,
+        conversationId,
+        projection.messages,
+        projection.streaming,
+      );
 
       const activeConversationId = projection.activeConversationId;
       if (activeConversationId && projection.workItems.length > 0) {
@@ -215,8 +227,12 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
 
   if (isActiveCharacterRoleTab && !shouldActivateForeground) {
     if (conversationId) {
-      context.conversationMessagesRef.current.set(conversationId, projection.messages);
-      context.conversationStreamingRef.current.set(conversationId, projection.streaming);
+      cacheConversationProjection(
+        context,
+        conversationId,
+        projection.messages,
+        projection.streaming,
+      );
     }
     context.setOpenTabs(projection.openTabs);
 
@@ -294,6 +310,29 @@ const handleActiveConversation: MessageHandler<'activeConversation'> = (
     );
   }
 };
+
+function cacheConversationProjection(
+  context: MessageHandlerContext,
+  conversationId: string,
+  messages: readonly Message[],
+  streaming: StreamingState,
+): void {
+  const coordinator = context.conversationRenderCoordinator;
+  if (!coordinator) {
+    throw new Error('Conversation caching requires the canonical render coordinator.');
+  }
+  const snapshot = ingestLegacyConversationRenderSnapshot({
+    coordinator,
+    conversationId,
+    messages,
+    streaming,
+  });
+  commitLegacyConversationCache({
+    snapshot,
+    conversationMessagesRef: context.conversationMessagesRef,
+    conversationStreamingRef: context.conversationStreamingRef,
+  });
+}
 
 function projectForegroundConversationStreaming(
   streaming: StreamingState,

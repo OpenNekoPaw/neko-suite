@@ -42,6 +42,11 @@ import { MarkdownRenderer } from '@/components/ChatView/MessageContent/MarkdownR
 import { toolHandlers } from '../tool-handlers';
 import type { HandlerRegistration, MessageHandlerContext, StreamingState } from '../types';
 import { projectMarkdownResourceRendering } from '@/presenters/markdown-resource-rendering-presenter';
+import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
+import {
+  commitLegacyConversationCache,
+  ingestLegacyConversationRenderSnapshot,
+} from '@/render-lifecycle/legacy-conversation-render-adapter';
 
 describe('work item message handlers', () => {
   it('stores plugin availability for TaskCard send-to menus', () => {
@@ -383,6 +388,7 @@ describe('work item message handlers', () => {
       isThinking: false,
       streamingMessageId: null,
       queuedMessageCount: 0,
+      queuedMessages: [],
     });
     expect(harness.workItems().get('conv-b')?.get('media-b')).toMatchObject({
       kind: 'media-task',
@@ -2566,6 +2572,7 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
       options.timelineRenderScheduler ?? createImmediateTimelineRenderScheduler(),
     markdownSessionRegistry:
       options.markdownSessionRegistry ?? createAgentMarkdownSessionRegistry(),
+    conversationRenderCoordinator: new ConversationRenderCoordinator(),
     updateNonCurrentConversation: (conversationId, updater) => {
       const existingMessages = conversationMessagesRef.current.get(conversationId) ?? [];
       const existingStreaming = conversationStreamingRef.current.get(conversationId) ?? {
@@ -2574,8 +2581,24 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
         queuedMessageCount: 0,
       };
       const result = updater(existingMessages, existingStreaming);
-      conversationMessagesRef.current.set(conversationId, result.messages);
-      conversationStreamingRef.current.set(conversationId, result.streaming);
+      const coordinator = context.conversationRenderCoordinator;
+      if (!coordinator) {
+        throw new Error(
+          'Background conversation updates require the canonical render coordinator.',
+        );
+      }
+      const snapshot = ingestLegacyConversationRenderSnapshot({
+        coordinator,
+        conversationId,
+        messages: result.messages,
+        streaming: result.streaming,
+        kind: 'timeline-commit',
+      });
+      commitLegacyConversationCache({
+        snapshot,
+        conversationMessagesRef,
+        conversationStreamingRef,
+      });
     },
     setConversations: noopDispatch(),
     setActiveConversationId: noopDispatch(),

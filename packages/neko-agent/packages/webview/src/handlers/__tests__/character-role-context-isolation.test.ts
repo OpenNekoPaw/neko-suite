@@ -19,6 +19,10 @@ import {
 import type { PluginsAvailable } from '@/components/ChatView/SendToMenu';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
 import { ConversationRenderCoordinator } from '@/render-lifecycle/conversation-render-coordinator';
+import {
+  commitLegacyConversationCache,
+  ingestLegacyConversationRenderSnapshot,
+} from '@/render-lifecycle/legacy-conversation-render-adapter';
 import { conversationHandlers } from '../conversation-handlers';
 import { tabHandlers } from '../tab-handlers';
 import { timelineHandlers } from '../timeline-handlers';
@@ -839,6 +843,16 @@ describe('character role context isolation', () => {
       id: 'message-conv-a',
       content: 'latest **A** output',
     });
+    expect(harness.context.conversationRenderCoordinator?.read('conv-a')).toMatchObject({
+      conversationId: 'conv-a',
+      visibility: 'background',
+      messages: [
+        expect.objectContaining({
+          id: 'message-conv-a',
+          content: 'latest **A** output',
+        }),
+      ],
+    });
 
     dispatch(
       tabHandlers,
@@ -850,6 +864,9 @@ describe('character role context isolation', () => {
     );
 
     expect(harness.activeConversationId()).toBe('conv-a');
+    expect(harness.context.conversationRenderCoordinator?.foregroundConversationId()).toBe(
+      'conv-a',
+    );
     expect(harness.messages()[0]).toMatchObject({
       id: 'message-conv-a',
       content: 'latest **A** output',
@@ -1415,8 +1432,24 @@ function createContextHarness(options: ContextHarnessOptions): ContextHarness {
         queuedMessageCount: 0,
       };
       const result = updater(existingMessages, existingStreaming);
-      conversationMessagesRef.current.set(conversationId, result.messages);
-      conversationStreamingRef.current.set(conversationId, result.streaming);
+      const coordinator = context.conversationRenderCoordinator;
+      if (!coordinator) {
+        throw new Error(
+          'Background conversation updates require the canonical render coordinator.',
+        );
+      }
+      const snapshot = ingestLegacyConversationRenderSnapshot({
+        coordinator,
+        conversationId,
+        messages: result.messages,
+        streaming: result.streaming,
+        kind: 'timeline-commit',
+      });
+      commitLegacyConversationCache({
+        snapshot,
+        conversationMessagesRef,
+        conversationStreamingRef,
+      });
     },
     setConversations: createSetter(
       () => conversations,

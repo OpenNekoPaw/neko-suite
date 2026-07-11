@@ -59,8 +59,10 @@ import { isCharacterRoleConversationKind } from '@/presenters/character-role-ses
 import { projectConversationTabActivation } from '@/presenters/conversation-tab-activation-presenter';
 import {
   commitConversationRenderActivation,
+  commitLegacyConversationCache,
   createConversationMarkdownTimelineResourceOwner,
   createConversationVisibleStatePort,
+  ingestLegacyConversationRenderSnapshot,
 } from '@/render-lifecycle/legacy-conversation-render-adapter';
 import type { ConversationActivationSource } from '@/render-lifecycle/conversation-render-contract';
 import {
@@ -575,7 +577,6 @@ export function ConversationController({
           ? cachedMessages
           : [...cachedMessages, event.message];
 
-      conversationMessagesRef.current.set(event.conversationId, nextMessages);
       const currentStreaming = conversationStreamingRef.current.get(event.conversationId);
       const nextQueuedMessages =
         currentStreaming?.queuedMessages && currentStreaming.queuedMessages.length > 0
@@ -583,15 +584,26 @@ export function ConversationController({
           : optimisticQueuedItem
             ? [optimisticQueuedItem]
             : queuedMessages;
-      conversationStreamingRef.current.set(event.conversationId, {
-        ...(currentStreaming ?? {}),
-        streamingMessageId: event.message.isQueued
-          ? (currentStreaming?.streamingMessageId ?? streamingMessageIdRef.current)
-          : null,
-        isThinking: true,
-        queuedMessageCount: currentStreaming?.queuedMessageCount ?? (optimisticQueuedItem ? 1 : 0),
-        queuedMessages: nextQueuedMessages,
-        messageQueueVersion: currentStreaming?.messageQueueVersion,
+      const snapshot = ingestLegacyConversationRenderSnapshot({
+        coordinator: conversationRenderCoordinator,
+        conversationId: event.conversationId,
+        messages: nextMessages,
+        streaming: {
+          ...(currentStreaming ?? {}),
+          streamingMessageId: event.message.isQueued
+            ? (currentStreaming?.streamingMessageId ?? streamingMessageIdRef.current)
+            : null,
+          isThinking: true,
+          queuedMessageCount:
+            currentStreaming?.queuedMessageCount ?? (optimisticQueuedItem ? 1 : 0),
+          queuedMessages: nextQueuedMessages,
+          messageQueueVersion: currentStreaming?.messageQueueVersion,
+        },
+      });
+      commitLegacyConversationCache({
+        snapshot,
+        conversationMessagesRef,
+        conversationStreamingRef,
       });
       if (event.conversationId === activeConversationIdRef.current && optimisticQueuedItem) {
         setQueuedMessageCount((currentCount) => Math.max(currentCount, nextQueuedMessages.length));
@@ -620,6 +632,7 @@ export function ConversationController({
     [
       activeConversationIdRef,
       conversationMessagesRef,
+      conversationRenderCoordinator,
       conversationStreamingRef,
       messages,
       queuedMessages,

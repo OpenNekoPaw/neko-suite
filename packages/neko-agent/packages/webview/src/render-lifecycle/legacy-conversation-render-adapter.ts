@@ -41,6 +41,39 @@ export interface ConversationVisibleStateAdapterInput {
   readonly setActiveConversationId: Dispatch<SetStateAction<string | null>>;
 }
 
+export function ingestLegacyConversationRenderSnapshot(input: {
+  readonly coordinator: ConversationRenderCoordinator;
+  readonly conversationId: string;
+  readonly messages: readonly Message[];
+  readonly streaming: LegacyConversationStreamingState;
+  readonly kind?: 'host-snapshot' | 'timeline-commit';
+}): ConversationRenderSnapshot {
+  const baseRevision = input.coordinator.read(input.conversationId)?.revision ?? 0;
+  return input.coordinator.ingest({
+    kind: input.kind ?? 'host-snapshot',
+    conversationId: input.conversationId,
+    baseRevision,
+    messages: input.messages,
+    streaming: toConversationStreamingSnapshot(input.streaming),
+  });
+}
+
+export function commitLegacyConversationCache(input: {
+  readonly snapshot: ConversationRenderSnapshot;
+  readonly conversationMessagesRef: MutableRefObject<Map<string, Message[]>>;
+  readonly conversationStreamingRef: MutableRefObject<
+    Map<string, LegacyConversationStreamingState>
+  >;
+}): void {
+  input.conversationMessagesRef.current.set(input.snapshot.conversationId, [
+    ...input.snapshot.messages,
+  ]);
+  input.conversationStreamingRef.current.set(
+    input.snapshot.conversationId,
+    toLegacyConversationStreamingState(input.snapshot.streaming),
+  );
+}
+
 export function commitConversationRenderActivation(input: {
   readonly coordinator: ConversationRenderCoordinator;
   readonly source: ConversationActivationSource;
@@ -73,8 +106,11 @@ export function createConversationVisibleStatePort(
     commit(snapshot): void {
       const streaming = toLegacyConversationStreamingState(snapshot.streaming);
       const messages = [...snapshot.messages];
-      input.conversationMessagesRef.current.set(snapshot.conversationId, messages);
-      input.conversationStreamingRef.current.set(snapshot.conversationId, streaming);
+      commitLegacyConversationCache({
+        snapshot,
+        conversationMessagesRef: input.conversationMessagesRef,
+        conversationStreamingRef: input.conversationStreamingRef,
+      });
       input.setMessages(messages);
       input.setStreamingMessageId(streaming.streamingMessageId);
       input.streamingMessageIdRef.current = streaming.streamingMessageId;

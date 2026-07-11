@@ -9,6 +9,10 @@
 import type { MessageHandlerContext, StreamingState } from './types';
 import type { AgentQueuedMessageItem, Message } from '@neko-agent/types';
 import type { ActiveTurnTimelineState } from '@/presenters/active-turn-timeline-presenter';
+import {
+  commitLegacyConversationCache,
+  ingestLegacyConversationRenderSnapshot,
+} from '@/render-lifecycle/legacy-conversation-render-adapter';
 
 /**
  * Result of a conversation update that may change streaming state.
@@ -92,9 +96,23 @@ export function updateConversation(
           : (currentStreaming.activeTurnTimeline ?? null),
     };
 
-    context.conversationMessagesRef.current.set(conversationId, result.messages);
-    context.conversationStreamingRef.current.set(conversationId, nextStreaming);
-    context.setMessages(result.messages);
+    const coordinator = context.conversationRenderCoordinator;
+    if (!coordinator) {
+      throw new Error('Conversation updates require the canonical render coordinator.');
+    }
+    const snapshot = ingestLegacyConversationRenderSnapshot({
+      coordinator,
+      conversationId,
+      messages: result.messages,
+      streaming: nextStreaming,
+      kind: 'timeline-commit',
+    });
+    commitLegacyConversationCache({
+      snapshot,
+      conversationMessagesRef: context.conversationMessagesRef,
+      conversationStreamingRef: context.conversationStreamingRef,
+    });
+    context.setMessages([...snapshot.messages]);
     context.streamingMessageIdRef.current = nextStreaming.streamingMessageId;
     context.setStreamingMessageId(nextStreaming.streamingMessageId);
     context.setIsThinking(nextStreaming.isThinking);

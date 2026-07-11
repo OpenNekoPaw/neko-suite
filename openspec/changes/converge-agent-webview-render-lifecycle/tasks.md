@@ -34,7 +34,7 @@
 
 ## 5. Isolate Background Projection, Input, Status, and Viewport
 
-- [ ] 5.1 Route non-current conversation Timeline/message/queue/status mutations through coordinator ingestion without touching visible React state or foreground refs.
+- [x] 5.1 Route non-current conversation Timeline/message/queue/status mutations through coordinator ingestion without touching visible React state or foreground refs.
 - [ ] 5.2 Make Tab badge/status projection subscribe to the owning conversation revision without forcing hidden conversation DOM rendering.
 - [ ] 5.3 Make composer enablement and queued-message submission derive from the active conversation snapshot rather than a global running-task flag.
 - [ ] 5.4 Make thinking/running status and elapsed-time baseline switch immediately with the active snapshot; keep periodic elapsed display ticking UI-local.
