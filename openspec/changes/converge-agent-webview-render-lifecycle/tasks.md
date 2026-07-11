@@ -9,14 +9,14 @@
 
 ## 2. Define Canonical Render Lifecycle Contracts
 
-- [ ] 2.1 Define readonly `ConversationRenderSnapshot`, streaming sub-snapshot, viewport intent, revision, retention, visibility, and Timeline synchronization types in the Webview owning package.
-- [ ] 2.2 Define discriminated `ConversationRenderMutation` inputs for host snapshots, Timeline commits, queue/status updates, completion, activation, and disposal without introducing a generic application action system.
-- [ ] 2.3 Define `ConversationVisibleStatePort`, Markdown Timeline resource owner, activation commit/publication, and diagnostic contracts.
-- [ ] 2.4 Add contract tests for monotonic revisions, single foreground ownership, unavailable Timeline release, single-use publication, identity mismatch, and mutation after disposal.
+- [x] 2.1 Define readonly `ConversationRenderSnapshot`, streaming sub-snapshot, viewport intent, revision, retention, visibility, and Timeline synchronization types in the Webview owning package.
+- [x] 2.2 Define discriminated `ConversationRenderMutation` inputs for host snapshots, Timeline commits, queue/status updates, completion, activation, and disposal without introducing a generic application action system.
+- [x] 2.3 Define `ConversationVisibleStatePort`, Markdown Timeline resource owner, activation commit/publication, and diagnostic contracts.
+- [x] 2.4 Add contract tests for monotonic revisions, single foreground ownership, unavailable Timeline release, single-use publication, identity mismatch, and mutation after disposal.
 
 ## 3. Implement the Conversation Render Coordinator
 
-- [ ] 3.1 Implement a pure `ConversationRenderCoordinator` with per-conversation immutable snapshots and focused read/ingest/prepare-activation/dispose operations.
+- [x] 3.1 Implement a pure `ConversationRenderCoordinator` with per-conversation immutable snapshots and focused read/ingest/prepare-activation/dispose operations.
 - [ ] 3.2 Move writes to `conversationMessagesRef` and `conversationStreamingRef` behind the coordinator while retaining transitional read adapters only where required.
 - [ ] 3.3 Integrate the existing Timeline frame scheduler so coalesced foreground and background commits advance only the owning conversation revision.
 - [ ] 3.4 Integrate Markdown `commitTimelineSnapshot()` through the narrow resource owner and preserve commit-visible-state-before-publish ordering.
